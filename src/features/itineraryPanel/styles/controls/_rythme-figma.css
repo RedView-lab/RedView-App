@@ -1,0 +1,314 @@
+/* Rythme section — Pixel-perfect Figma node 6043:105672 */
+
+.rvi-rythme-figma {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: 'Rethink Sans', system-ui, -apple-system, sans-serif;
+  color: #ffffff;
+}
+
+/* ── Row 1 : Date & Heure ──────────────────────────────── */
+.rvi-rythme-figma__row-datetime {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+}
+
+.rvi-rythme-figma__datetime-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+}
+
+.rvi-rythme-figma__label-sm {
+  font-family: 'Rethink Sans', sans-serif;
+  font-style: normal;
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 16px;
+  color: #ffffff;
+  opacity: 0.64;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.rvi-rythme-figma__chip-btn {
+  height: 36px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: #ffffff;
+  font-family: 'Rethink Sans', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1;
+  box-sizing: border-box;
+  outline: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  flex: 1;
+  min-width: 0;
+  justify-content: center;
+}
+
+.rvi-rythme-figma__chip-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.rvi-rythme-figma__chip-btn svg {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+/* ── Labels (14px Regular) ─────────────────────────────── */
+.rvi-rythme-figma__label-title {
+  font-family: 'Rethink Sans', sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 19.5px;
+  color: #ffffff;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Row 2 : Duo (Niveau de pratique & Personnalisé) ───── */
+.rvi-rythme-figma__row-duo {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+  align-items: flex-start;
+}
+
+.rvi-rythme-figma__col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+}
+
+.rvi-rythme-figma__card-btn {
+  height: 36px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  cursor: pointer;
+  color: #ffffff;
+  font-family: 'Rethink Sans', sans-serif;
+  font-style: normal;
+  font-weight: 500;
+  font-size: 15px;
+  letter-spacing: -0.0133em;
+  width: 100%;
+  box-sizing: border-box;
+  outline: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  user-select: none;
+}
+
+.rvi-rythme-figma__card-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.rvi-rythme-figma__card-btn--fit-active {
+  background: rgba(229, 57, 53, 0.14);
+  border-color: rgba(229, 57, 53, 0.35);
+  color: #ff8a80;
+}
+
+.rvi-rythme-figma__card-btn--fit-active:hover {
+  background: rgba(229, 57, 53, 0.22);
+}
+
+.rvi-rythme-figma__card-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  text-align: left;
+}
+
+/* ── Row 3 : Trio (FTP / Poids / Pneus) ─────────────────── */
+.rvi-rythme-figma__row-trio {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+  align-items: flex-start;
+}
+
+.rvi-rythme-figma__card-input {
+  height: 36px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  box-sizing: border-box;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.rvi-rythme-figma__card-input:hover {
+  background: rgba(255, 255, 255, 0.10);
+}
+
+.rvi-rythme-figma__card-input:focus-within {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.rvi-rythme-figma__card-input input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #ffffff;
+  font-family: 'Rethink Sans', sans-serif;
+  font-style: normal;
+  font-weight: 500;
+  font-size: 15px;
+  letter-spacing: -0.0133em;
+  padding: 0;
+  margin: 0;
+}
+
+.rvi-rythme-figma__card-input input::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.rvi-rythme-figma__card-input input::-webkit-outer-spin-button,
+.rvi-rythme-figma__card-input input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.rvi-rythme-figma__card-input input[type=number] {
+  -moz-appearance: textfield;
+}
+
+.rvi-rythme-figma__unit {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+  user-select: none;
+  pointer-events: none;
+}
+
+/* ── Row 4 : Checkbox Appliquer à tous les itinéraires ─── */
+.rvi-rythme-figma__apply-all {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 0;
+  margin-top: 2px;
+}
+
+.rvi-rythme-figma__checkbox {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  box-sizing: border-box;
+}
+
+.rvi-rythme-figma__apply-all:hover .rvi-rythme-figma__checkbox {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.rvi-rythme-figma__checkbox--checked {
+  background: #e53935;
+  border-color: #e53935;
+}
+
+.rvi-rythme-figma__apply-all-label {
+  font-family: 'Rethink Sans', sans-serif;
+  font-style: normal;
+  font-weight: 500;
+  font-size: 13px;
+  line-height: 16px;
+  color: #ffffff;
+  opacity: 0.64;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Dropdown popover for Niveau de pratique */
+.rvi-rythme-figma__menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: #18191c;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 100;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+}
+
+.rvi-rythme-figma__menu-item {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.85);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.rvi-rythme-figma__menu-item:hover {
+  background: rgba(255, 255, 255, 0.10);
+  color: #ffffff;
+}
+
+.rvi-rythme-figma__menu-item--selected {
+  background: rgba(229, 57, 53, 0.15);
+  color: #ff8a80;
+}

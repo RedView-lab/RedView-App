@@ -22,7 +22,8 @@ export interface PredictionConfig {
   target_duration_h?: number;
   surface_types?: number[];
   ambient_temperature_c?: number;
-  headwind_ms?: number;
+  stop_strategy?: 'auto' | 'none' | 'ultra';
+  sleep_strategy?: 'none' | 'sleep_stops' | 'micro_naps';
   gender?: Gender;
 }
 

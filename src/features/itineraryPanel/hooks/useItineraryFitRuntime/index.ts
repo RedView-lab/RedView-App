@@ -297,6 +297,12 @@ export function useItineraryFitRuntime({
             it.id === itineraryId
               ? {
                   ...it,
+                  rhythm: {
+                    ...it.rhythm,
+                    usePastActivities: true,
+                    // Clear hardcoded default FTP so .fit files' virtual FTP is automatically used
+                    ftp: it.rhythm.ftp === 260 || it.rhythm.ftp === 300 ? null : it.rhythm.ftp,
+                  },
                   fitUploads: storedUploads,
                   prediction: undefined,
                   pendingFitRecompute: true,

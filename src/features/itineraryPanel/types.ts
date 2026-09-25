@@ -171,6 +171,8 @@ export interface RhythmState {
   /** Prediction engine gender override. `default` lets the backend decide. */
   gender?: RhythmGender;
   usePastActivities: boolean;
+  practiceLevel?: string | null;
+  applyToAllItineraries?: boolean;
   ftp: number | null;
   systemWeightKg: number | null;
   tiresMm: number | null;

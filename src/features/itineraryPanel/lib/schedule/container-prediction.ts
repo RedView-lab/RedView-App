@@ -15,6 +15,7 @@ export function buildPredictionConfigFromRhythm(
 ): PredictionConfig {
   const config: PredictionConfig = {
     pacing_factor: 1,
+    stop_strategy: 'auto',
   };
 
   const maxRoutePoints = resolvePredictionMaxRoutePoints(routePoints);
@@ -26,6 +27,9 @@ export function buildPredictionConfigFromRhythm(
     config.gender = rhythm.gender;
   }
 
+  // Only override FTP if explicitly entered as a positive number by the user.
+  // When left blank (null / undefined / empty), config.ftp_w remains undefined
+  // so the prediction engine automatically uses the virtual FTP derived from the .fit files!
   if (typeof rhythm.ftp === 'number' && rhythm.ftp > 0) {
     config.ftp_w = rhythm.ftp;
   }
@@ -42,6 +46,26 @@ export function buildPredictionConfigFromRhythm(
     if (startTimeH !== null) {
       config.start_time_h = startTimeH;
     }
+  }
+
+  // Practice level pacing modulation
+  if (rhythm.practiceLevel) {
+    const lvl = rhythm.practiceLevel.toLowerCase();
+    if (lvl.includes('debutant')) {
+      config.pacing_factor = 0.85;
+    } else if (lvl.includes('intermediaire')) {
+      config.pacing_factor = 1.0;
+    } else if (lvl.includes('avance')) {
+      config.pacing_factor = 1.05;
+    } else if (lvl.includes('expert')) {
+      config.pacing_factor = 1.10;
+    }
+  }
+
+  // Tire width effect on rolling resistance (Crr)
+  if (typeof rhythm.tiresMm === 'number' && rhythm.tiresMm > 0) {
+    // 25-28mm road: ~0.0045, 32-35mm allroad: ~0.0050, 40-50mm gravel: ~0.0058
+    config.crr = 0.0035 + (rhythm.tiresMm * 0.000045);
   }
 
   return config;

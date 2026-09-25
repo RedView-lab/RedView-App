@@ -1,17 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { readDocumentAppLocale, translateAppText, useAppI18n } from '@/shared/i18n';
-import { ActionButtonStack, CheckboxField, PanelSelect, ToggleRow } from '../components/controls';
+import { ActionButtonStack, ToggleRow } from '../components/controls';
 import { Collapse } from '../components/shell';
 import { PauseIntervalList, PoiPauseGrid } from './rythme/components';
 import { CalendarPopover } from '../components/calendar';
-import {
-  IconCalendar,
-  IconClock,
-  IconUpload,
-  IconInfo,
-  IconPlus,
-} from '../components/icons';
-import type { PauseIntervalRow, RhythmGender, RhythmState } from '../types';
+import { IconInfo, IconPlus } from '../components/icons';
+import type { PauseIntervalRow, RhythmState } from '../types';
 
 interface RythmeSectionProps {
   rhythm: RhythmState;
@@ -25,29 +19,15 @@ interface RythmeSectionProps {
   resultLabel?: string | null;
 }
 
-function ChipInput({
-  value,
-  placeholder,
-  onChange,
-  ariaLabel,
-}: {
-  value: string;
-  placeholder?: string;
-  onChange?: (v: string) => void;
-  ariaLabel?: string;
-}) {
-  return (
-    <div className="rvi-chip-input">
-      <input
-        className="rvi-chip-input__native"
-        value={value}
-        onChange={(e) => onChange?.(e.target.value)}
-        placeholder={placeholder}
-        aria-label={ariaLabel}
-      />
-    </div>
-  );
-}
+const PRACTICE_LEVELS = [
+  { id: 'debutant', label: 'Débutant' },
+  { id: 'intermediaire', label: 'Intermédiaire' },
+  { id: 'avance', label: 'Avancé' },
+  { id: 'expert', label: 'Expert' },
+  { id: 'personnalise', label: 'Personnalisé' },
+] as const;
+
+const TIRE_OPTIONS = [28, 30, 32, 35, 38, 40, 45, 50];
 
 function parseTimeDigits(timeStr: string | null | undefined): [string, string, string, string] {
   if (!timeStr) return ['0', '0', '0', '0'];
@@ -80,17 +60,13 @@ function TimeChipInput({
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Tab') {
-      return;
-    }
-
+    if (event.key === 'Tab') return;
     if (event.key === 'Enter') {
       event.preventDefault();
       setActiveSlot(null);
       inputRef.current?.blur();
       return;
     }
-
     if (event.key === 'Escape') {
       event.preventDefault();
       const reverted = parseTimeDigits(displayTime);
@@ -102,25 +78,21 @@ function TimeChipInput({
     }
 
     const currentSlot = activeSlot ?? 0;
-
     if (event.key === 'ArrowLeft') {
       event.preventDefault();
       setActiveSlot(Math.max(0, currentSlot - 1));
       return;
     }
-
     if (event.key === 'ArrowRight') {
       event.preventDefault();
       setActiveSlot(Math.min(3, currentSlot + 1));
       return;
     }
-
     if (event.key === ':' || event.key === 'h' || event.key === 'H') {
       event.preventDefault();
       setActiveSlot(2);
       return;
     }
-
     if (event.key === 'Backspace') {
       event.preventDefault();
       const next: [string, string, string, string] = [...digits];
@@ -130,142 +102,63 @@ function TimeChipInput({
       setActiveSlot(Math.max(0, currentSlot - 1));
       return;
     }
-
     if (event.key >= '0' && event.key <= '9') {
       event.preventDefault();
       const next: [string, string, string, string] = [...digits];
-
       if (currentSlot === 0) {
-        if (event.key === '0' || event.key === '1') {
-          next[0] = event.key;
-          setDigits(next);
-          commitTime(next);
-          setActiveSlot(1);
-        } else if (event.key === '2') {
-          next[0] = '2';
-          if (next[1] > '3') next[1] = '3';
-          setDigits(next);
-          commitTime(next);
-          setActiveSlot(1);
-        } else {
-          // Shortcut: e.g. '8' -> 08:xx
-          next[0] = '0';
-          next[1] = event.key;
-          setDigits(next);
-          commitTime(next);
-          setActiveSlot(2);
-        }
+        if (event.key <= '2') next[0] = event.key;
       } else if (currentSlot === 1) {
-        if (next[0] === '2' && event.key > '3') {
-          next[1] = '3';
-        } else {
-          next[1] = event.key;
-        }
-        setDigits(next);
-        commitTime(next);
-        setActiveSlot(2);
+        if (next[0] === '2' && event.key > '3') next[1] = '3';
+        else next[1] = event.key;
       } else if (currentSlot === 2) {
-        if (event.key >= '0' && event.key <= '5') {
-          next[2] = event.key;
-        } else {
-          next[2] = '5';
-        }
-        setDigits(next);
-        commitTime(next);
-        setActiveSlot(3);
+        if (event.key <= '5') next[2] = event.key;
       } else if (currentSlot === 3) {
         next[3] = event.key;
-        setDigits(next);
-        commitTime(next);
-        setActiveSlot(3);
       }
-      return;
+      setDigits(next);
+      commitTime(next);
+      setActiveSlot(Math.min(3, currentSlot + 1));
     }
-
-    event.preventDefault();
   };
 
   return (
     <div
-      className="rvi-time-input"
+      className="rvi-rythme-figma__chip-btn"
+      style={{ width: 95, flex: 'none', cursor: 'text' }}
       onClick={() => {
-        if (activeSlot === null) {
-          setActiveSlot(0);
-        }
         inputRef.current?.focus();
+        if (activeSlot === null) setActiveSlot(0);
       }}
+      role="group"
+      aria-label={ariaLabel}
     >
-      <span className="rvi-time-input__icon" aria-hidden="true">
-        <IconClock size={12} />
-      </span>
-      <div className="rvi-time-input__display">
-        <span
-          className={`rvi-time-input__digit ${activeSlot === 0 ? 'is-active' : ''}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            setActiveSlot(0);
-            inputRef.current?.focus();
-          }}
-        >
-          {digits[0]}
-        </span>
-        <span
-          className={`rvi-time-input__digit ${activeSlot === 1 ? 'is-active' : ''}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            setActiveSlot(1);
-            inputRef.current?.focus();
-          }}
-        >
-          {digits[1]}
-        </span>
-        <span className="rvi-time-input__colon">:</span>
-        <span
-          className={`rvi-time-input__digit ${activeSlot === 2 ? 'is-active' : ''}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            setActiveSlot(2);
-            inputRef.current?.focus();
-          }}
-        >
-          {digits[2]}
-        </span>
-        <span
-          className={`rvi-time-input__digit ${activeSlot === 3 ? 'is-active' : ''}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            setActiveSlot(3);
-            inputRef.current?.focus();
-          }}
-        >
-          {digits[3]}
-        </span>
-      </div>
       <input
         ref={inputRef}
         type="text"
-        inputMode="numeric"
-        value=""
-        onChange={() => {}}
+        className="sr-only"
+        tabIndex={0}
         onFocus={() => {
           if (activeSlot === null) setActiveSlot(0);
         }}
-        onBlur={() => {
-          setActiveSlot(null);
-        }}
+        onBlur={() => setActiveSlot(null)}
         onKeyDown={handleKeyDown}
-        className="rvi-time-input__hidden-input"
         aria-label={ariaLabel}
       />
+      {/* Clock Icon 12x12 */}
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0 }}>
+        <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.2" />
+        <path d="M6 3.5V6L7.5 7.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      <span style={{ display: 'inline-flex', alignItems: 'center', userSelect: 'none' }}>
+        <span>{digits[0]}</span>
+        <span>{digits[1]}</span>
+        <span style={{ margin: '0 2px', opacity: 0.8 }}>:</span>
+        <span>{digits[2]}</span>
+        <span>{digits[3]}</span>
+      </span>
     </div>
   );
 }
-
-const GENDER_OPTIONS: ReadonlyArray<{ value: RhythmGender; label: string }> = [
-  { value: 'default', label: 'Défaut' },
-  { value: 'male', label: 'Homme' },
-  { value: 'female', label: 'Femme' },
-];
 
 export function RythmeSection({
   rhythm,
@@ -281,176 +174,304 @@ export function RythmeSection({
   const { locale, t } = useAppI18n();
   const dateChipRef = useRef<HTMLButtonElement | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [levelMenuOpen, setLevelMenuOpen] = useState(false);
+  const [tiresMenuOpen, setTiresMenuOpen] = useState(false);
+  const levelRef = useRef<HTMLDivElement | null>(null);
+  const tiresRef = useRef<HTMLDivElement | null>(null);
+
   const displayTime = rhythm.startTime || '00:00';
+  const hasFitFiles = Boolean(uploadFitLabel && uploadFitLabel.length > 0);
+
+  // Close popovers when clicking outside
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (levelRef.current && !levelRef.current.contains(e.target as Node)) {
+        setLevelMenuOpen(false);
+      }
+      if (tiresRef.current && !tiresRef.current.contains(e.target as Node)) {
+        setTiresMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  const currentLevelLabel = useMemo(() => {
+    const found = PRACTICE_LEVELS.find((l) => l.id === rhythm.practiceLevel);
+    if (found) return found.label;
+    if (hasFitFiles) return 'Personnalisé';
+    return 'Débutant';
+  }, [rhythm.practiceLevel, hasFitFiles]);
 
   return (
     <div className="rvi-params">
       <div className="rvi-divider" />
 
-      {/* Départ / Heure */}
-      <div className="rvi-row rvi-row--rhythm-header">
-        <div className="rvi-lfield">
-          <span className="rvi-lfield__label">{t('Départ :')}</span>
-          <button
-            type="button"
-            ref={dateChipRef}
-            className="rvi-datechip"
-            onClick={() => setCalendarOpen((v) => !v)}
-            aria-haspopup="dialog"
-            aria-expanded={calendarOpen}
-            aria-label={t('Date de départ')}
-          >
-            <span className="rvi-datechip__icon">
-              <IconCalendar size={12} />
-            </span>
-            <span>
-              {rhythm.startDate ? formatDateForLocale(rhythm.startDate, locale) : '--/--/--'}
-            </span>
-          </button>
-          <CalendarPopover
-            open={calendarOpen}
-            anchorRef={dateChipRef}
-            onClose={() => setCalendarOpen(false)}
-            value={rhythm.startDate}
-            onSelect={(iso) => onChange?.('startDate', iso)}
-          />
-        </div>
-        <div className="rvi-lfield">
-          <span className="rvi-lfield__label">{t('Heure :')}</span>
-          <TimeChipInput
-            displayTime={displayTime}
-            ariaLabel={t('Heure de départ')}
-            onChange={(nextValue) => onChange?.('startTime', nextValue)}
-          />
-        </div>
-      </div>
-
-      {/* Activités passées + FTP */}
-      <div className="rvi-row rvi-row--rhythm-upload">
-        <CheckboxField
-          checked={rhythm.usePastActivities}
-          onToggle={(v) => onChange?.('usePastActivities', v)}
-          label="Activités passées"
-          trailing={
+      <div className="rvi-rythme-figma">
+        {/* ── ROW 1 : Départ & Heure ── */}
+        <div className="rvi-rythme-figma__row-datetime">
+          {/* Départ */}
+          <div className="rvi-rythme-figma__datetime-group">
+            <span className="rvi-rythme-figma__label-sm">{t('Départ :')}</span>
             <button
               type="button"
-              className="rvi-uploadchip"
-              onClick={onUploadFit}
-              aria-label={t('Uploader un fichier .fit')}
+              ref={dateChipRef}
+              className="rvi-rythme-figma__chip-btn"
+              onClick={() => setCalendarOpen((v) => !v)}
+              aria-haspopup="dialog"
+              aria-expanded={calendarOpen}
+              aria-label={t('Date de départ')}
             >
-              <span className="rvi-uploadchip__icon">
-                <IconUpload size={8} />
+              {/* Calendar Icon 10x10 */}
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                <path
+                  d="M9.5 2H2.5C1.94772 2 1.5 2.44772 1.5 3V10C1.5 10.5523 1.94772 11 2.5 11H9.5C10.0523 11 10.5 10.5523 10.5 10V3C10.5 2.44772 10.0523 2 9.5 2Z"
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M8 1V3M4 1V3M1.5 5H10.5"
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span>
+                {rhythm.startDate ? formatDateForLocale(rhythm.startDate, locale) : '--/--/--'}
               </span>
-              <span className="rvi-uploadchip__text">{uploadFitLabel ?? t('Upload .fit')}</span>
             </button>
-          }
-        />
-        <CheckboxField
-          checked={rhythm.ftp !== null}
-          onToggle={(v) => onChange?.('ftp', v ? rhythm.ftp ?? 300 : null)}
-          label="FTP :"
-          trailing={
-            <ChipInput
-              value={rhythm.ftp !== null ? String(rhythm.ftp) : ''}
-              placeholder="300"
-              onChange={(v) => {
-                const n = parseInt(v, 10);
-                onChange?.('ftp', Number.isFinite(n) ? n : null);
-              }}
-              ariaLabel={t('FTP')}
+            <CalendarPopover
+              open={calendarOpen}
+              anchorRef={dateChipRef}
+              onClose={() => setCalendarOpen(false)}
+              value={rhythm.startDate}
+              onSelect={(iso) => onChange?.('startDate', iso)}
             />
-          }
-        />
-      </div>
+          </div>
 
-      {/* Poids + Pneus */}
-      <div className="rvi-row rvi-row--rhythm-weight">
-        <CheckboxField
-          checked={rhythm.systemWeightKg !== null}
-          onToggle={(v) =>
-            onChange?.('systemWeightKg', v ? rhythm.systemWeightKg ?? 95 : null)
-          }
-          label="Poids système :"
-          trailing={
-            <ChipInput
-              value={rhythm.systemWeightKg !== null ? `${rhythm.systemWeightKg} kg` : ''}
-              placeholder="95 kg"
-              onChange={(v) => {
-                const n = parseInt(v, 10);
-                onChange?.('systemWeightKg', Number.isFinite(n) ? n : null);
-              }}
-              ariaLabel={t('Poids système')}
+          {/* Heure */}
+          <div className="rvi-rythme-figma__datetime-group" style={{ justifyContent: 'flex-end' }}>
+            <span className="rvi-rythme-figma__label-sm">{t('Heure :')}</span>
+            <TimeChipInput
+              displayTime={displayTime}
+              ariaLabel={t('Heure de départ')}
+              onChange={(nextValue) => onChange?.('startTime', nextValue)}
             />
-          }
-        />
-        <CheckboxField
-          checked={rhythm.tiresMm !== null}
-          onToggle={(v) => onChange?.('tiresMm', v ? rhythm.tiresMm ?? 35 : null)}
-          label="Pneus :"
-          trailing={
-            <ChipInput
-              value={rhythm.tiresMm !== null ? `${rhythm.tiresMm}mm` : ''}
-              placeholder="35mm"
-              onChange={(v) => {
-                const n = parseInt(v, 10);
-                onChange?.('tiresMm', Number.isFinite(n) ? n : null);
-              }}
-              ariaLabel={t('Pneus')}
-            />
-          }
-        />
-      </div>
+          </div>
+        </div>
 
-      {/* Météo + Surfaces */}
-      <div className="rvi-row rvi-row--rhythm-weather">
-        <CheckboxField
-          checked={rhythm.useWeather}
-          onToggle={(v) => onChange?.('useWeather', v)}
-          label="Météo"
-          trailing={
-            <ChipInput
-              value={rhythm.useWeather ? `${rhythm.weatherWeight}%` : ''}
-              placeholder={`${rhythm.weatherWeight}%`}
-              onChange={(v) => {
-                const n = parseInt(v, 10);
-                if (Number.isFinite(n)) onChange?.('weatherWeight', n);
-              }}
-              ariaLabel={t('Poids météo')}
-            />
-          }
-        />
-        <CheckboxField
-          checked={rhythm.useSurfaces}
-          onToggle={(v) => onChange?.('useSurfaces', v)}
-          label="Surfaces"
-          trailing={
-            <ChipInput
-              value={rhythm.useSurfaces ? `${rhythm.surfacesWeight}%` : ''}
-              placeholder={`${rhythm.surfacesWeight}%`}
-              onChange={(v) => {
-                const n = parseInt(v, 10);
-                if (Number.isFinite(n)) onChange?.('surfacesWeight', n);
-              }}
-              ariaLabel={t('Poids surfaces')}
-            />
-          }
-        />
-      </div>
+        {/* ── ROW 2 : Niveau de pratique & Personnalisé ── */}
+        <div className="rvi-rythme-figma__row-duo">
+          {/* Col 1 : Niveau de pratique */}
+          <div className="rvi-rythme-figma__col" ref={levelRef} style={{ position: 'relative' }}>
+            <span className="rvi-rythme-figma__label-title">{t('Niveau de pratique')}</span>
+            <button
+              type="button"
+              className="rvi-rythme-figma__card-btn"
+              onClick={() => setLevelMenuOpen((v) => !v)}
+              aria-label={t('Niveau de pratique')}
+              aria-haspopup="listbox"
+              aria-expanded={levelMenuOpen}
+            >
+              <span className="rvi-rythme-figma__card-text">{currentLevelLabel}</span>
+              {/* Chevron vertical 18x18 */}
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0, opacity: 0.7 }}>
+                <path
+                  d="M6.5 7.5L10 4L13.5 7.5M6.5 12.5L10 16L13.5 12.5"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
 
-      <div className="rvi-row">
-        <div className="rvi-lfield">
-          <span className="rvi-lfield__label">{t('Sexe :')}</span>
-          <PanelSelect<RhythmGender>
-            value={rhythm.gender ?? 'default'}
-            onChange={(value) => onChange?.('gender', value)}
-            ariaLabel={t('Sexe pour la prédiction')}
-            options={GENDER_OPTIONS}
-          />
+            {levelMenuOpen && (
+              <div className="rvi-rythme-figma__menu" role="listbox">
+                {PRACTICE_LEVELS.map((lvl) => (
+                  <button
+                    key={lvl.id}
+                    type="button"
+                    className={`rvi-rythme-figma__menu-item${
+                      rhythm.practiceLevel === lvl.id ? ' rvi-rythme-figma__menu-item--selected' : ''
+                    }`}
+                    onClick={() => {
+                      onChange?.('practiceLevel', lvl.id);
+                      setLevelMenuOpen(false);
+                    }}
+                    role="option"
+                    aria-selected={rhythm.practiceLevel === lvl.id}
+                  >
+                    <span>{lvl.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Col 2 : Personnalisé (.fit de référence) */}
+          <div className="rvi-rythme-figma__col">
+            <span className="rvi-rythme-figma__label-title">{t('Personnalisé')}</span>
+            <button
+              type="button"
+              className={`rvi-rythme-figma__card-btn${
+                hasFitFiles ? ' rvi-rythme-figma__card-btn--fit-active' : ''
+              }`}
+              onClick={onUploadFit}
+              aria-label={t('.fit de référence')}
+              title={hasFitFiles ? t('Cliquer pour remplacer ou ajouter des fichiers .fit') : t('Uploader des fichiers .fit')}
+            >
+              {/* Upload Icon */}
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
+                <path
+                  d="M7 9V2M7 2L4.5 4.5M7 2L9.5 4.5M2 8V11C2 11.5523 2.44772 12 3 12H11C11.5523 12 12 11.5523 12 11V8"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span className="rvi-rythme-figma__card-text">
+                {hasFitFiles ? `${uploadFitLabel}` : t('.fit de référence')}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* ── ROW 3 : Trio (FTP / Poids / Pneus) — MÉTÉO RETIRÉE COMME DEMANDÉ ── */}
+        <div className="rvi-rythme-figma__row-trio">
+          {/* Col 1 : FTP */}
+          <div className="rvi-rythme-figma__col">
+            <span className="rvi-rythme-figma__label-title">{t('FTP')}</span>
+            <div className="rvi-rythme-figma__card-input">
+              <input
+                type="number"
+                value={rhythm.ftp !== null ? rhythm.ftp : ''}
+                placeholder={hasFitFiles ? 'Auto' : 'N/A'}
+                onChange={(e) => {
+                  const val = e.target.value.trim();
+                  if (!val) {
+                    // Non renseigné: remis à null pour utiliser les .fit automatiquement!
+                    onChange?.('ftp', null);
+                  } else {
+                    const n = parseInt(val, 10);
+                    onChange?.('ftp', Number.isFinite(n) && n > 0 ? n : null);
+                  }
+                }}
+                aria-label={t('FTP')}
+              />
+              {rhythm.ftp !== null && rhythm.ftp > 0 ? (
+                <span className="rvi-rythme-figma__unit">W</span>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Col 2 : Poids */}
+          <div className="rvi-rythme-figma__col">
+            <span className="rvi-rythme-figma__label-title">{t('Poids')}</span>
+            <div className="rvi-rythme-figma__card-input">
+              <input
+                type="number"
+                value={rhythm.systemWeightKg !== null ? rhythm.systemWeightKg : ''}
+                placeholder="Auto"
+                onChange={(e) => {
+                  const val = e.target.value.trim();
+                  if (!val) {
+                    onChange?.('systemWeightKg', null);
+                  } else {
+                    const n = parseInt(val, 10);
+                    onChange?.('systemWeightKg', Number.isFinite(n) && n > 0 ? n : null);
+                  }
+                }}
+                aria-label={t('Poids')}
+              />
+              {rhythm.systemWeightKg !== null && rhythm.systemWeightKg > 0 ? (
+                <span className="rvi-rythme-figma__unit">kg</span>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Col 3 : Pneus */}
+          <div className="rvi-rythme-figma__col" ref={tiresRef} style={{ position: 'relative' }}>
+            <span className="rvi-rythme-figma__label-title">{t('Pneus')}</span>
+            <button
+              type="button"
+              className="rvi-rythme-figma__card-btn"
+              style={{ padding: '0 8px' }}
+              onClick={() => setTiresMenuOpen((v) => !v)}
+              aria-label={t('Largeur de pneus')}
+              aria-haspopup="listbox"
+              aria-expanded={tiresMenuOpen}
+            >
+              <span className="rvi-rythme-figma__card-text">
+                {rhythm.tiresMm ? `${rhythm.tiresMm}mm` : '35mm'}
+              </span>
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0, opacity: 0.7 }}>
+                <path d="M6.5 8L10 12L13.5 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+
+            {tiresMenuOpen && (
+              <div className="rvi-rythme-figma__menu" style={{ maxHeight: 180, overflowY: 'auto' }} role="listbox">
+                {TIRE_OPTIONS.map((mm) => (
+                  <button
+                    key={mm}
+                    type="button"
+                    className={`rvi-rythme-figma__menu-item${
+                      (rhythm.tiresMm ?? 35) === mm ? ' rvi-rythme-figma__menu-item--selected' : ''
+                    }`}
+                    onClick={() => {
+                      onChange?.('tiresMm', mm);
+                      setTiresMenuOpen(false);
+                    }}
+                    role="option"
+                    aria-selected={(rhythm.tiresMm ?? 35) === mm}
+                  >
+                    <span>{mm}mm</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── ROW 4 : Appliquer à tous les itinéraires ── */}
+        <div
+          className="rvi-rythme-figma__apply-all"
+          onClick={() => onChange?.('applyToAllItineraries', !rhythm.applyToAllItineraries)}
+          role="checkbox"
+          aria-checked={Boolean(rhythm.applyToAllItineraries)}
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === ' ' || e.key === 'Enter') {
+              e.preventDefault();
+              onChange?.('applyToAllItineraries', !rhythm.applyToAllItineraries);
+            }
+          }}
+        >
+          <div
+            className={`rvi-rythme-figma__checkbox${
+              rhythm.applyToAllItineraries ? ' rvi-rythme-figma__checkbox--checked' : ''
+            }`}
+          >
+            {rhythm.applyToAllItineraries && (
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <path d="M2 5.5L4 7.5L8 3" stroke="#FFFFFF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+          </div>
+          <span className="rvi-rythme-figma__apply-all-label">
+            {t('Appliquer à tous les itinéraires')}
+          </span>
         </div>
       </div>
 
-      <div className="rvi-divider" />
+      <div className="rvi-divider" style={{ marginTop: 8 }} />
 
+      {/* Pauses favoris */}
       <ToggleRow
         checked={rhythm.pauseAtFavoritePois}
         onChange={(v) => onChange?.('pauseAtFavoritePois', v)}
@@ -469,11 +490,11 @@ export function RythmeSection({
 
       <div className="rvi-divider" />
 
+      {/* Pauses par intervalle */}
       <ToggleRow
         checked={rhythm.pauseEveryIntervalEnabled}
         onChange={(v) => {
           onChange?.('pauseEveryIntervalEnabled', v);
-          // First time we turn it on with no rows yet → seed one row.
           if (v && rhythm.pauseIntervals.length === 0) {
             onChange?.('pauseIntervals', [createPauseRow(1)]);
           }
@@ -512,6 +533,7 @@ export function RythmeSection({
 
       <div className="rvi-divider" />
 
+      {/* Bouton de calcul */}
       <ActionButtonStack
         primaryLabel={t('Calculer')}
         onPrimaryClick={onCalculate}
@@ -533,7 +555,6 @@ function formatDateForLocale(iso: string, locale: 'fr' | 'en'): string {
   }).format(d);
 }
 
-/** Default new pause row: 5 min duration every hour. */
 function createPauseRow(index: number): PauseIntervalRow {
   return {
     id: `pause-${Date.now()}-${index}`,
@@ -543,7 +564,6 @@ function createPauseRow(index: number): PauseIntervalRow {
   };
 }
 
-/** Re-numbers rows after add/remove so labels stay sequential. */
 function relabel(rows: PauseIntervalRow[]): PauseIntervalRow[] {
   const pauseLabel = translateAppText('Pause', undefined, readDocumentAppLocale());
   return rows.map((r, i) => ({ ...r, label: `${pauseLabel} ${i + 1}` }));
