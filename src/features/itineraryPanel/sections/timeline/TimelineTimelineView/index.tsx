@@ -41,6 +41,7 @@ export function TimelineTimelineView({
   hourZoom = 1,
   selectedIds,
   filters,
+  onSelectRow,
   onToggleSelect,
   onToggleVisibility,
   onMovePause,
@@ -446,6 +447,7 @@ export function TimelineTimelineView({
         pixelsPerMinute={pixelsPerMinute}
         canvasHeight={canvasHeight}
         selectedIds={selectedIds}
+        onSelectRow={onSelectRow}
         onToggleSelect={onToggleSelect}
         onToggleVisibility={onToggleVisibility}
         onMovePauseScheduled={handleMovePauseScheduled}

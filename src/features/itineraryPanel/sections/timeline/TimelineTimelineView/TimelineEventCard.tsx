@@ -10,7 +10,7 @@ import {
   IconTrash,
 } from '../../../components/icons';
 import { KindBadge } from '../KindBadge';
-import type { PoiCategory } from '../../../types';
+import type { PoiCategory, TimelineItem } from '../../../types';
 import type { TimelineEvent } from './types';
 import { formatDistanceLabel, formatLegDuration, formatPauseDuration } from './utils';
 
@@ -32,6 +32,8 @@ interface TimelineEventCardProps {
   editingPauseDuration: PauseDurationEditState | null;
   pauseDurationInputRef: RefObject<HTMLInputElement | null>;
   dragStateId?: string;
+  selectedIds?: ReadonlySet<string>;
+  onSelectRow?: (id: string, item: TimelineItem) => void;
   onToggleSelect?: (id: string, selected: boolean) => void;
   onToggleVisibility?: (id: string, visible: boolean) => void;
   onToggleFavorite?: (id: string, favorite: boolean) => void;
@@ -64,6 +66,7 @@ export function TimelineEventCard({
   editingPauseDuration,
   pauseDurationInputRef,
   dragStateId,
+  onSelectRow,
   onToggleSelect,
   onToggleVisibility,
   onToggleFavorite,
@@ -97,12 +100,16 @@ export function TimelineEventCard({
       className={`rvi-tl-schedule__event${selected ? ' is-selected' : ''}`}
       style={eventStyle}
       data-kind={event.item.kind}
+      data-timeline-id={event.item.id}
     >
       <button
         type="button"
         className="rvi-tl-schedule__event-card"
         aria-pressed={selected}
-        onClick={() => onToggleSelect?.(event.item.id, !selected)}
+        onClick={() => {
+          onToggleSelect?.(event.item.id, !selected);
+          onSelectRow?.(event.item.id, event.item);
+        }}
       >
         <span className="rvi-tl-schedule__event-main">
           <span className="rvi-tl-schedule__event-icon" aria-hidden>

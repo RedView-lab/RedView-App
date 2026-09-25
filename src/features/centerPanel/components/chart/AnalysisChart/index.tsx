@@ -48,6 +48,7 @@ export const AnalysisChart = memo(function AnalysisChart({
   poiAnnotations = [],
   alertAnnotations = [],
   dayNightOverlay = null,
+  pauseOverlay = null,
   axis1Metric,
   axis2Metric,
   xMode,
@@ -326,6 +327,25 @@ export const AnalysisChart = memo(function AnalysisChart({
         .filter((window) => window.endRatio - window.startRatio > 1e-4),
     [dayNightOverlay, plotXDomain],
   );
+
+  const pauseBands = useMemo(
+    () =>
+      (pauseOverlay?.pauseWindows ?? [])
+        .map((window) => ({
+          id: window.id,
+          startRatio: ratioFor(window.startX, plotXDomain),
+          endRatio: ratioFor(window.endX, plotXDomain),
+          label: window.label,
+          durationMin: window.durationMin,
+        }))
+        .filter(
+          (window) =>
+            window.endRatio > 0 &&
+            window.startRatio < 1 &&
+            window.endRatio - window.startRatio > 1e-4,
+        ),
+    [pauseOverlay, plotXDomain],
+  );
   const nightFrames = useMemo(() => {
     if (dayNightBands.length === 0) return [];
 
@@ -525,6 +545,7 @@ export const AnalysisChart = memo(function AnalysisChart({
       plotAreaRef={plotAreaRef}
       handlePlotClick={handlePlotClick}
       dayNightBands={dayNightBands}
+      pauseBands={pauseBands}
       yPositions={yPositions}
       y2Positions={y2Positions}
       xPositions={xPositions}

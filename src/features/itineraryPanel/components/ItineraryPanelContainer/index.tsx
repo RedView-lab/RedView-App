@@ -40,6 +40,7 @@ import type {
   RhythmState,
   RoadTypesState,
   RouteProfile,
+  TimelineItem,
 } from '../../types';
 import { mergePoiFeatureFavorites } from './poiFeatureUtils';
 
@@ -435,6 +436,68 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     });
   }, [setProject]);
 
+  const [selectedTimelineIds, setSelectedTimelineIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    setSelectedTimelineIds([]);
+  }, [project.activeItineraryId]);
+
+  const centerTimelineRowInList = useCallback((itemId: string) => {
+    window.requestAnimationFrame(() => {
+      const rowEl = document.querySelector<HTMLElement>(`[data-timeline-id="${itemId}"]`);
+      if (!rowEl) return;
+
+      let container: HTMLElement | null = rowEl.parentElement;
+      while (container) {
+        const style = window.getComputedStyle(container);
+        const overflowY = style.overflowY;
+        if ((overflowY === 'auto' || overflowY === 'scroll') && container.scrollHeight > container.clientHeight) {
+          break;
+        }
+        container = container.parentElement;
+      }
+
+      if (container) {
+        const rowRect = rowEl.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        const targetScrollTop =
+          container.scrollTop +
+          (rowRect.top - containerRect.top) -
+          (container.clientHeight / 2) +
+          (rowRect.height / 2);
+
+        container.scrollTo({
+          top: Math.max(0, targetScrollTop),
+          behavior: 'smooth',
+        });
+      } else {
+        rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+  }, []);
+
+  const handleMapPoiSelect = useCallback(
+    (feature: PoiFeature) => {
+      const currentActive = activeItineraryRef.current;
+      if (!currentActive) return;
+
+      const matchingItem = currentActive.timeline.find((item) => {
+        if (item.kind === 'poi' && item.osmId != null && item.osmId === feature.id) return true;
+        if (item.id === `poi-${feature.id}`) return true;
+        if (item.lat != null && item.lon != null) {
+          return Math.abs(item.lat - feature.lat) < 0.0001 && Math.abs(item.lon - feature.lon) < 0.0001;
+        }
+        return false;
+      });
+
+      if (matchingItem) {
+        setSelectedTimelineIds([matchingItem.id]);
+        centerTimelineRowInList(matchingItem.id);
+      }
+    },
+    [centerTimelineRowInList],
+  );
+
   const {
     cancelSearchCorridor,
     loading: poiLoading,
@@ -444,6 +507,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     searchCorridor,
     hasGpxRoute,
     hasEnabledCategories,
+    openPoiMarker,
   } = useItineraryPoiMap(
     map,
     isMapLoaded,
@@ -462,7 +526,37 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
       onToggleManualTrace: poiHandlers.handlePoiManualTraceToggle,
       onOpenStreetView: poiHandlers.handlePoiStreetView,
       onDelete: poiHandlers.handlePoiDelete,
+      onSelectPoi: handleMapPoiSelect,
     },
+  );
+
+  const handleSelectTimelineRow = useCallback(
+    (id: string, item: TimelineItem) => {
+      setSelectedTimelineIds([id]);
+      if (item.kind === 'poi') {
+        const opened = openPoiMarker(
+          item.osmId ?? item.id,
+          item.poiCategory,
+          item.lat != null && item.lon != null ? { lat: item.lat, lon: item.lon } : undefined,
+        );
+        if (!opened && map && item.lat != null && item.lon != null) {
+          map.flyTo({
+            center: [item.lon, item.lat],
+            zoom: Math.max(map.getZoom(), 15),
+            duration: 800,
+            essential: true,
+          });
+        }
+      } else if (map && item.lat != null && item.lon != null) {
+        map.flyTo({
+          center: [item.lon, item.lat],
+          zoom: Math.max(map.getZoom(), 15),
+          duration: 800,
+          essential: true,
+        });
+      }
+    },
+    [map, openPoiMarker],
   );
 
   const duplicateActiveItinerary = useCallback(() => {
@@ -726,6 +820,9 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         poiError={poiError}
         poiLoadDisabled={poiLoadDisabled}
         poiLoadDisabledReason={poiLoadDisabledReason}
+        selectedTimelineIds={selectedTimelineIds}
+        onSelectTimelineRow={handleSelectTimelineRow}
+        onSelectionTimelineChange={setSelectedTimelineIds}
         onChangeTimelineView={timelineCallbacks.handleChangeTimelineView}
         onAddTimelineItem={timelineCallbacks.handleAddTimelineItem}
         onToggleTimelineItem={timelineCallbacks.handleToggleTimelineItem}

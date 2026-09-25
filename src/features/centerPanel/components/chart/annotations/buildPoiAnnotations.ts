@@ -1,9 +1,12 @@
 import type { PredictionResult } from '@/features/fitPredictor';
+import { buildPauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule';
 import { poiLabel } from '@/features/itineraryPanel/sections/timeline/KindBadge';
 import { buildScheduledTimelineState, parseStartReference } from '@/features/itineraryPanel/sections/timeline/TimelineTimelineView/utils';
 import type { Itinerary, PoiCategory, TimelineItem } from '@/features/itineraryPanel/types';
 import { translateAppText } from '@/shared/i18n';
 import type { AxisMode } from '../series';
+import { projectPredictionElapsedHoursToX } from '../series/timeline';
+import { projectElapsedHoursToX } from '../seriesPredictionMath';
 import { normalizeRouteProfile as normalizeChartRouteProfile } from '../series/routeProfile';
 
 const predictionTimelineCache = new WeakMap<PredictionResult, TimelineSample[] | null>();
@@ -58,6 +61,11 @@ export function buildPoiAnnotationsForItinerary(
   const timeline = xMode === 'distance' ? null : getPredictionTimeline(prediction);
   if (xMode !== 'distance' && (!timeline || timeline.length < 2)) return [];
 
+  const pauseSchedule =
+    xMode === 'distance' || !itinerary
+      ? null
+      : buildPauseAwareSchedule(itinerary, prediction);
+
   const result: ChartPoiAnnotation[] = [];
 
   const addAnnotation = (
@@ -69,18 +77,46 @@ export function buildPoiAnnotationsForItinerary(
       kind: 'poi' | 'pause' | 'waypoint';
       poiCategory?: PoiCategory;
       durationMin?: number | null;
+      entityId?: string;
     },
   ) => {
     if (!Number.isFinite(distanceKm)) return;
     const distanceM = distanceKm * 1000;
-    const x =
-      xMode === 'distance'
-        ? distanceKm
-        : projectElapsedHoursToX(
-            interpolateElapsedHoursFromTimeline(timeline, distanceM),
-            xMode,
-            itinerary.rhythm.startTime,
-          );
+
+    let x: number;
+    if (xMode === 'distance') {
+      x = distanceKm;
+    } else if (extra.kind === 'pause' && extra.entityId && pauseSchedule) {
+      const anchor = pauseSchedule.stopAnchors.find((a) => a.id === extra.entityId);
+      if (anchor) {
+        x = projectElapsedHoursToX(
+          anchor.scheduledElapsedSeconds / 3600,
+          xMode,
+          itinerary.rhythm.startTime,
+        );
+      } else {
+        const elapsedHours =
+          interpolateElapsedHoursFromTimeline(timeline, distanceM) ??
+          (distanceM / (20 / 3.6)) / 3600;
+        x = projectPredictionElapsedHoursToX(
+          elapsedHours,
+          xMode,
+          itinerary.rhythm.startTime,
+          pauseSchedule,
+        );
+      }
+    } else {
+      const elapsedHours =
+        interpolateElapsedHoursFromTimeline(timeline, distanceM) ??
+        (distanceM / (20 / 3.6)) / 3600;
+      x = projectPredictionElapsedHoursToX(
+        elapsedHours,
+        xMode,
+        itinerary.rhythm.startTime,
+        pauseSchedule,
+      );
+    }
+
     const y = interpolateElevation(profile, distanceM);
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
 
@@ -131,6 +167,7 @@ export function buildPoiAnnotationsForItinerary(
         {
           kind: 'pause',
           durationMin: row.durationMin ?? 15,
+          entityId: row.id,
         },
       );
     }
@@ -160,6 +197,7 @@ export function buildPoiAnnotationsForItinerary(
             {
               kind: 'pause',
               durationMin: autoPause.durationMin ?? 15,
+              entityId: autoPause.id,
             },
           );
         }
@@ -301,24 +339,5 @@ function interpolateElevation(profile: ElevationSample[], distanceM: number): nu
   if (spanM <= 0) return start.elevationM;
   const t = (distanceM - start.distanceM) / spanM;
   return start.elevationM + (end.elevationM - start.elevationM) * t;
-}
-
-function projectElapsedHoursToX(
-  elapsedHours: number | null,
-  xMode: AxisMode,
-  startTime?: string | null,
-): number {
-  if (!Number.isFinite(elapsedHours)) return Number.NaN;
-  if (xMode !== 'heure') return elapsedHours as number;
-  return (elapsedHours as number) + parseStartTimeHours(startTime);
-}
-
-function parseStartTimeHours(startTime?: string | null): number {
-  if (!startTime) return 0;
-  const [hoursRaw, minutesRaw] = startTime.split(':');
-  const hours = Number.parseInt(hoursRaw ?? '', 10);
-  const minutes = Number.parseInt(minutesRaw ?? '', 10);
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return 0;
-  return hours + minutes / 60;
 }
 

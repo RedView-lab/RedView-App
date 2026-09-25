@@ -63,6 +63,7 @@ export function buildScheduledTimelineState(
     ...baseItems.map((entry) => ({
       id: entry.item.id,
       kind: entry.item.kind,
+      label: entry.item.label,
       rideElapsedSeconds: entry.rideElapsedSeconds,
       distanceKm: entry.distanceKm,
       durationMin: resolveTimelineStopDurationMin(entry.item),
@@ -73,6 +74,7 @@ export function buildScheduledTimelineState(
     ...autoPauses.map((entry) => ({
       id: entry.id,
       kind: entry.source === 'favorite-poi' ? 'favoritePoiPause' as const : 'intervalPause' as const,
+      label: entry.label,
       rideElapsedSeconds: entry.rideElapsedSeconds,
       distanceKm: entry.distanceKm,
       durationMin: entry.durationMin,
@@ -116,6 +118,7 @@ export function buildScheduledTimelineState(
     if (entity.durationMin > 0) {
       stopAnchors.push({
         id: entity.id,
+        label: entity.label?.trim() || 'Pause',
         rideElapsedSeconds: entity.rideElapsedSeconds,
         scheduledElapsedSeconds,
         durationMin: entity.durationMin,

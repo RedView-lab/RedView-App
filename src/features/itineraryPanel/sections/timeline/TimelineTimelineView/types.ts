@@ -11,6 +11,7 @@ export interface TimelineTimelineViewProps {
   hourZoom?: number;
   selectedIds?: ReadonlySet<string>;
   filters?: TimelineFilterState;
+  onSelectRow?: (id: string, item: TimelineItem) => void;
   onToggleSelect?: (id: string, selected: boolean) => void;
   onToggleVisibility?: (id: string, visible: boolean) => void;
   onMovePause?: (id: string, distanceKm: number) => void;
@@ -58,6 +59,7 @@ export interface TimedAutoPause {
 
 export interface TimelineStopAnchor {
   id: string;
+  label?: string;
   rideElapsedSeconds: number;
   scheduledElapsedSeconds: number;
   durationMin: number;

@@ -34,6 +34,7 @@ export interface UsePoiPopupActions {
   onToggleManualTrace?: (feature: PoiFeature, nextEnabled: boolean) => void;
   onOpenStreetView?: (feature: PoiFeature) => void;
   onDelete?: (feature: PoiFeature) => void;
+  onSelectPoi?: (feature: PoiFeature) => void;
 }
 
 const DEFAULT_POPUP_STATE: PoiPopupState = {

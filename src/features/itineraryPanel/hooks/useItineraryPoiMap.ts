@@ -60,6 +60,11 @@ export interface UseItineraryPoiMapResult {
   hasEnabledCategories: boolean;
   /** Effective radius (max of enabled rows) used by the corridor search. */
   radiusM: number;
+  openPoiMarker: (
+    poiId: number | string,
+    category?: string,
+    coords?: { lat: number; lon: number },
+  ) => boolean;
 }
 
 /**
@@ -136,7 +141,15 @@ export function useItineraryPoiMap(
   const gpxRoute = active?.gpxRoute ?? null;
   const persistedPoiFeatures = active?.poiFeatures ?? null;
 
-  const { loading, error, poiCount, corridorProgress, searchCorridor, cancelSearchCorridor } = usePoi(
+  const {
+    loading,
+    error,
+    poiCount,
+    corridorProgress,
+    searchCorridor,
+    cancelSearchCorridor,
+    openPoiMarker,
+  } = usePoi(
     map,
     isMapLoaded,
     enabledCategories,
@@ -160,5 +173,6 @@ export function useItineraryPoiMap(
     hasGpxRoute: gpxRoute !== null,
     hasEnabledCategories: enabledCategories.size > 0,
     radiusM,
+    openPoiMarker,
   };
 }

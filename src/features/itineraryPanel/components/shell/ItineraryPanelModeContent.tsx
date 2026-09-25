@@ -22,7 +22,6 @@ import { TracageSection } from '../../sections/TracageSection';
 
 type VisiblePanelMode = Exclude<PanelMode, 'nutrition'>;
 
-const DEFAULT_DOCK_HEIGHT_PX = 320;
 const MIN_DOCK_HEIGHT_PX = 180;
 const MIN_MODE_CONTENT_HEIGHT_PX = 168;
 
@@ -106,9 +105,14 @@ export function ItineraryPanelModeContent({
   uploadFitLabel,
 }: ItineraryPanelModeContentProps) {
   const splitRef = useRef<HTMLDivElement | null>(null);
-  const dragStateRef = useRef<{ startY: number; startHeight: number } | null>(null);
+  const dockSlotRef = useRef<HTMLDivElement | null>(null);
+  const dragStateRef = useRef<{
+    startY: number;
+    startHeight: number;
+    naturalHeight: number;
+  } | null>(null);
   const [splitHeight, setSplitHeight] = useState(0);
-  const [dockHeights, setDockHeights] = useState<Partial<Record<VisiblePanelMode, number>>>({});
+  const [customDockHeight, setCustomDockHeight] = useState<number | null>(null);
   const [isDockResizing, setIsDockResizing] = useState(false);
   const routeResultLabel = active ? buildRouteResultLabel(active) : null;
   const rhythmResultLabel = active ? buildRhythmResultLabel(active) : null;
@@ -175,6 +179,16 @@ export function ItineraryPanelModeContent({
       break;
   }
 
+  // When switching active mode (e.g. Rythme -> Tracage), reset custom dock height
+  // so the dock immediately hugs the active mode's natural height and fills the rest of the panel.
+  useEffect(() => {
+    setCustomDockHeight(null);
+  }, [activeMode]);
+
+  useEffect(() => {
+    setCustomDockHeight(null);
+  }, [collapsed]);
+
   useEffect(() => {
     const node = splitRef.current;
     if (!node || typeof ResizeObserver === 'undefined') return;
@@ -188,35 +202,11 @@ export function ItineraryPanelModeContent({
     return () => observer.disconnect();
   }, []);
 
-  const minDockHeight = useMemo(() => {
-    if (splitHeight <= 0) return MIN_DOCK_HEIGHT_PX;
-    return Math.max(180, Math.min(MIN_DOCK_HEIGHT_PX, Math.round(splitHeight * 0.34)));
-  }, [splitHeight]);
-
-  const maxDockHeight = useMemo(() => {
-    if (splitHeight <= 0) return DEFAULT_DOCK_HEIGHT_PX;
-    return Math.max(minDockHeight, splitHeight - MIN_MODE_CONTENT_HEIGHT_PX);
-  }, [minDockHeight, splitHeight]);
-
-  const defaultDockHeight = useMemo(() => {
-    if (splitHeight <= 0) return DEFAULT_DOCK_HEIGHT_PX;
-    const proportionalHeight = Math.round(splitHeight * 0.42);
-    return clamp(proportionalHeight, minDockHeight, maxDockHeight);
-  }, [maxDockHeight, minDockHeight, splitHeight]);
-
-  const resolvedDockHeight = useMemo(() => {
-    const storedHeight = dockHeights[activeMode];
-    return clamp(storedHeight ?? defaultDockHeight, minDockHeight, maxDockHeight);
-  }, [activeMode, defaultDockHeight, dockHeights, maxDockHeight, minDockHeight]);
-
-  const dockExpandProgress = useMemo(() => {
-    if (maxDockHeight <= defaultDockHeight) return 0;
-    return clamp(
-      (resolvedDockHeight - defaultDockHeight) / (maxDockHeight - defaultDockHeight),
-      0,
-      1,
-    );
-  }, [defaultDockHeight, maxDockHeight, resolvedDockHeight]);
+  const effectiveDockMin = customDockHeight !== null ? customDockHeight : MIN_DOCK_HEIGHT_PX;
+  const maxModeHeight = useMemo(() => {
+    if (splitHeight <= 0) return undefined;
+    return Math.max(MIN_MODE_CONTENT_HEIGHT_PX, splitHeight - effectiveDockMin - 12);
+  }, [effectiveDockMin, splitHeight]);
 
   useEffect(() => {
     if (!isDockResizing) return;
@@ -229,15 +219,18 @@ export function ItineraryPanelModeContent({
     const handlePointerMove = (event: PointerEvent) => {
       const dragState = dragStateRef.current;
       if (!dragState) return;
-      const nextHeight = clamp(
-        dragState.startHeight - (event.clientY - dragState.startY),
-        minDockHeight,
-        maxDockHeight,
+      const deltaY = dragState.startY - event.clientY;
+      const nextHeight = Math.round(dragState.startHeight + deltaY);
+      const maxAllowedDockHeight = Math.max(
+        MIN_DOCK_HEIGHT_PX,
+        splitHeight - MIN_MODE_CONTENT_HEIGHT_PX - 12,
       );
-      setDockHeights((current) => {
-        if (current[activeMode] === nextHeight) return current;
-        return { ...current, [activeMode]: nextHeight };
-      });
+
+      if (nextHeight <= dragState.naturalHeight) {
+        setCustomDockHeight(null);
+      } else {
+        setCustomDockHeight(Math.min(nextHeight, maxAllowedDockHeight));
+      }
     };
 
     const stopResize = () => {
@@ -256,20 +249,25 @@ export function ItineraryPanelModeContent({
       window.removeEventListener('pointerup', stopResize);
       window.removeEventListener('pointercancel', stopResize);
     };
-  }, [activeMode, isDockResizing, maxDockHeight, minDockHeight]);
+  }, [isDockResizing, splitHeight]);
 
   const handleDockResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
+    const currentDockHeight = Math.round(
+      dockSlotRef.current?.getBoundingClientRect().height ?? MIN_DOCK_HEIGHT_PX,
+    );
     dragStateRef.current = {
       startY: event.clientY,
-      startHeight: resolvedDockHeight,
+      startHeight: customDockHeight ?? currentDockHeight,
+      naturalHeight: currentDockHeight,
     };
     setIsDockResizing(true);
   };
 
   const modeLayoutStyle = {
-    '--rvi-main-dispawn': (collapsed ? 1 : dockExpandProgress).toFixed(3),
-    '--rvi-dock-height': `${resolvedDockHeight}px`,
+    '--rvi-min-dock-height': `${MIN_DOCK_HEIGHT_PX}px`,
+    ...(maxModeHeight !== undefined ? { '--rvi-mode-max-height': `${maxModeHeight}px` } : {}),
+    ...(customDockHeight !== null ? { '--rvi-dock-custom-height': `${customDockHeight}px` } : {}),
   } as CSSProperties;
 
   return (
@@ -285,13 +283,14 @@ export function ItineraryPanelModeContent({
         </Collapse>
       </div>
 
-      <div className="rvi-panel__dock-slot">
+      <div ref={dockSlotRef} className="rvi-panel__dock-slot">
         <div
           role="separator"
           aria-orientation="horizontal"
           aria-label="Redimensionner la feuille de route"
           className={`rvi-panel__dock-resize-hitbox${isDockResizing ? ' is-dragging' : ''}`}
           onPointerDown={handleDockResizeStart}
+          onDoubleClick={() => setCustomDockHeight(null)}
         >
           <span className="rvi-panel__dock-resize-grip" aria-hidden />
         </div>
@@ -302,9 +301,6 @@ export function ItineraryPanelModeContent({
   );
 }
 
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
-}
 
 function buildRouteResultLabel(active: Itinerary): string | null {
   const distanceKm = active.metrics?.distanceKm

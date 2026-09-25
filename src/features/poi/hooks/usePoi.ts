@@ -281,5 +281,20 @@ export function usePoi(
     syncRenderedFeatures(seed);
   }, [map, isMapLoaded, initialFeaturesKey, buildRenderableFeatures, syncRenderedFeatures]);
 
-  return { loading, error, poiCount, corridorProgress, searchCorridor, cancelSearchCorridor };
+  const openPoiMarker = useCallback(
+    (poiId: number | string, category?: string, coords?: { lat: number; lon: number }) => {
+      return managerRef.current?.openPoi(poiId, category, coords) ?? false;
+    },
+    [],
+  );
+
+  return {
+    loading,
+    error,
+    poiCount,
+    corridorProgress,
+    searchCorridor,
+    cancelSearchCorridor,
+    openPoiMarker,
+  };
 }

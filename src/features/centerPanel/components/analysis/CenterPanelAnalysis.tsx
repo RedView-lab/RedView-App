@@ -110,6 +110,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
     poiAnnotations,
     alertAnnotations,
     dayNightOverlay,
+    pauseOverlay,
   } = useAnalysisChartData({
     itineraries,
     predictions,
@@ -308,6 +309,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
           poiAnnotations={poiAnnotations}
           alertAnnotations={alertAnnotations}
           dayNightOverlay={dayNightOverlay}
+          pauseOverlay={pauseOverlay}
           axis1Metric={axis1Value}
           axis2Metric={axis2Value}
           xMode={xMode}

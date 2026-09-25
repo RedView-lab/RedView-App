@@ -1,6 +1,8 @@
 import type { PredictionResult } from '@/features/fitPredictor';
+import { buildPauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule';
 import type { Itinerary, ItineraryRouteAuditFinding } from '@/features/itineraryPanel/types';
 import type { AxisMode } from '../series';
+import { projectPredictionElapsedHoursToX } from '../series/timeline';
 import {
   getRoutePointDistances,
   normalizeRouteProfile as normalizeChartRouteProfile,
@@ -58,6 +60,11 @@ export function buildRouteAuditAnnotationsForItinerary(
   const routeIndexByCoord = getRouteIndexByCoord(routePoints);
   const routePointDistances = getRoutePointDistances(routePoints);
 
+  const pauseSchedule =
+    xMode === 'distance' || !itinerary
+      ? null
+      : buildPauseAwareSchedule(itinerary, prediction);
+
   const result: ChartAlertAnnotation[] = [];
   for (const finding of findings) {
     const distanceM = distanceForFinding(finding, routePointDistances, routeIndexByCoord);
@@ -66,10 +73,12 @@ export function buildRouteAuditAnnotationsForItinerary(
     const x =
       xMode === 'distance'
         ? distanceM / 1000
-        : projectElapsedHoursToX(
-            interpolateElapsedHoursFromTimeline(timeline, distanceM),
+        : projectPredictionElapsedHoursToX(
+            interpolateElapsedHoursFromTimeline(timeline, distanceM) ??
+              (distanceM / (20 / 3.6)) / 3600,
             xMode,
             itinerary.rhythm.startTime,
+            pauseSchedule,
           );
     const y = interpolateElevation(profile, distanceM);
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
@@ -249,30 +258,6 @@ function interpolateElevation(profile: ElevationSample[], distanceM: number): nu
   if (spanM <= 0) return start.elevationM;
   const t = (distanceM - start.distanceM) / spanM;
   return start.elevationM + (end.elevationM - start.elevationM) * t;
-}
-
-function projectElapsedHoursToX(
-  elapsedHours: number | null,
-  xMode: AxisMode,
-  startTime: string | null | undefined,
-): number {
-  if (!Number.isFinite(elapsedHours)) return Number.NaN;
-  if (xMode === 'temps') return elapsedHours as number;
-  if (xMode === 'heure') {
-    const hoursOffset = parseStartTimeHours(startTime);
-    return ((elapsedHours as number) + hoursOffset) % 24;
-  }
-  return Number.NaN;
-}
-
-function parseStartTimeHours(startTime: string | null | undefined): number {
-  if (!startTime) return 0;
-  const match = /^(\d{1,2}):(\d{2})/.exec(startTime.trim());
-  if (!match) return 0;
-  const hours = Number(match[1]);
-  const minutes = Number(match[2]);
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return 0;
-  return hours + minutes / 60;
 }
 
 function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {

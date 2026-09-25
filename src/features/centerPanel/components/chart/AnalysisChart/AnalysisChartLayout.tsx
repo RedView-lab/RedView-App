@@ -22,6 +22,13 @@ interface AnalysisChartLayoutProps {
   plotAreaRef: RefObject<HTMLDivElement | null>;
   handlePlotClick: (event: ReactMouseEvent<HTMLDivElement>) => void;
   dayNightBands: Array<{ id: string; startRatio: number; endRatio: number }>;
+  pauseBands?: Array<{
+    id: string;
+    startRatio: number;
+    endRatio: number;
+    label?: string;
+    durationMin?: number;
+  }>;
   yPositions: Array<{ value: number; ratio: number }>;
   y2Positions: Array<{ value: number; ratio: number }>;
   xPositions: Array<{ value: number; ratio: number }>;
@@ -61,6 +68,7 @@ export function AnalysisChartLayout({
   plotAreaRef,
   handlePlotClick,
   dayNightBands,
+  pauseBands = [],
   yPositions,
   y2Positions,
   xPositions,
@@ -112,6 +120,23 @@ export function AnalysisChartLayout({
                 style={{ left: `${startRatio * 100}%`, width: `${(endRatio - startRatio) * 100}%` }}
               />
             ))}
+            {pauseBands.map(({ id, startRatio, endRatio, label, durationMin }) => {
+              const clampedStart = Math.max(0, startRatio);
+              const clampedEnd = Math.min(1, endRatio);
+              const width = clampedEnd - clampedStart;
+              if (width <= 0) return null;
+              return (
+                <div
+                  key={id}
+                  className="rvchart__pause-band"
+                  style={{
+                    left: `${clampedStart * 100}%`,
+                    width: `${width * 100}%`,
+                  }}
+                  title={label ? `${label}${durationMin ? ` · ${durationMin} min` : ''}` : undefined}
+                />
+              );
+            })}
             {dayNightBands.map(({ id, startRatio, endRatio }) =>
               endRatio - startRatio > 0.06 ? (
                 <div

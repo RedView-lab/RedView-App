@@ -104,6 +104,14 @@
   background: rgba(255, 166, 48, 0.14);
 }
 
+.rvchart__pause-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+}
+
 .rvchart__day-night-corner-icon {
   position: absolute;
   top: 4px;

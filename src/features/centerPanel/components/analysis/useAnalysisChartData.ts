@@ -7,6 +7,7 @@ import {
 } from '@/features/itineraryPanel/lineage/itineraryLineage';
 import {
   buildChartDayNightOverlay,
+  buildChartPauseOverlay,
   buildPoiAnnotationsForItinerary,
   buildRouteAuditAnnotationsForItinerary,
   buildSeriesFromPrediction,
@@ -18,6 +19,7 @@ import {
   type ChartAlertAnnotation,
   type ChartBackdropProfile,
   type ChartDayNightOverlay,
+  type ChartPauseOverlay,
   type ChartPoiAnnotation,
   type ChartSeries,
 } from '../chart';
@@ -256,6 +258,28 @@ export function useAnalysisChartData({
     });
   }, [activeItinerary, dayNightStartReady, filters.jourNuit, predictions, xMode]);
 
+  const pauseOverlay = useMemo<ChartPauseOverlay | null>(() => {
+    if (filters.pause === false) return null;
+    if (xMode === 'distance') return null;
+
+    const targetItinerary =
+      activeItinerary && activeItinerary.analysisVisible !== false
+        ? activeItinerary
+        : (preparedChartNodes[0]?.itinerary ?? null);
+
+    if (!targetItinerary) return null;
+
+    const prediction =
+      (predictions?.[targetItinerary.id] as never) ?? targetItinerary.prediction ?? null;
+    if (!prediction) return null;
+
+    return buildChartPauseOverlay({
+      itinerary: targetItinerary,
+      prediction,
+      xMode,
+    });
+  }, [activeItinerary, filters.pause, predictions, preparedChartNodes, xMode]);
+
   return {
     preparedChartNodes,
     visibleChartNodes,
@@ -265,5 +289,6 @@ export function useAnalysisChartData({
     poiAnnotations,
     alertAnnotations,
     dayNightOverlay,
+    pauseOverlay,
   };
 }

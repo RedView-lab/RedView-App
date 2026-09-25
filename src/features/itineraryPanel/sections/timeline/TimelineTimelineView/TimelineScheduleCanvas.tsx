@@ -14,7 +14,7 @@ import {
   TIMELINE_VIEWPORT_TOP_INSET_PX,
 } from './constants';
 import { formatPauseDurationInput, parsePauseDurationInput } from '../../../lib/schedule';
-import type { PoiCategory } from '../../../types';
+import type { PoiCategory, TimelineItem } from '../../../types';
 import type {
   KmMarker,
   StartReference,
@@ -51,6 +51,7 @@ interface TimelineScheduleCanvasProps {
   pixelsPerMinute: number;
   canvasHeight: number;
   selectedIds?: ReadonlySet<string>;
+  onSelectRow?: (id: string, item: TimelineItem) => void;
   onToggleSelect?: (id: string, selected: boolean) => void;
   onToggleVisibility?: (id: string, visible: boolean) => void;
   onMovePauseScheduled?: (id: string, scheduledElapsedSeconds: number) => void;
@@ -99,6 +100,7 @@ export function TimelineScheduleCanvas({
   pixelsPerMinute,
   canvasHeight,
   selectedIds,
+  onSelectRow,
   onToggleSelect,
   onToggleVisibility,
   onMovePauseScheduled,
@@ -390,6 +392,8 @@ export function TimelineScheduleCanvas({
               editingPauseDuration={editingPauseDuration}
               pauseDurationInputRef={pauseDurationInputRef}
               dragStateId={dragState?.id}
+              selectedIds={selectedIds}
+              onSelectRow={onSelectRow}
               onToggleSelect={onToggleSelect}
               onToggleVisibility={onToggleVisibility}
               onToggleFavorite={onToggleFavorite}

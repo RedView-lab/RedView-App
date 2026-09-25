@@ -64,6 +64,8 @@ interface TimelinePanelProps {
     place: { name: string; fullName: string; lat: number; lon: number },
   ) => void;
 
+  selectedIds?: string[];
+  onSelectRow?: (id: string, item: TimelineItem) => void;
   /** Optional multi-select callback. */
   onSelectionChange?: (selectedIds: string[]) => void;
 }
@@ -76,6 +78,8 @@ export function TimelinePanel({
   railConfig,
   isFullscreen,
   tableSettings,
+  selectedIds: selectedIdsProp,
+  onSelectRow,
   onChangeView,
   onOpenSettings,
   onToggleFullscreen,
@@ -92,8 +96,14 @@ export function TimelinePanel({
   onSelectionChange,
 }: TimelinePanelProps) {
   const { t } = useAppI18n();
-  // Selection is local UI state; parent is notified via onSelectionChange.
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [localSelectedIds, setLocalSelectedIds] = useState<Set<string>>(() => new Set());
+  const selectedIds = useMemo(() => {
+    if (selectedIdsProp !== undefined) {
+      return new Set(selectedIdsProp);
+    }
+    return localSelectedIds;
+  }, [selectedIdsProp, localSelectedIds]);
+
   const [addMenuAnchor, setAddMenuAnchor] = useState<HTMLElement | null>(null);
   const [timelineEditOpen, setTimelineEditOpen] = useState(false);
   const [timelineMarkerStepKm, setTimelineMarkerStepKm] = useState(50);
@@ -112,13 +122,13 @@ export function TimelinePanel({
   const handleChangeTableSettings = onChangeTableSettings ?? setLocalTableSettings;
 
   const handleToggleSelect = (id: string, selected: boolean) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (selected) next.add(id);
-      else next.delete(id);
-      onSelectionChange?.(Array.from(next));
-      return next;
-    });
+    const next = new Set(selectedIds);
+    if (selected) next.add(id);
+    else next.delete(id);
+    if (selectedIdsProp === undefined) {
+      setLocalSelectedIds(next);
+    }
+    onSelectionChange?.(Array.from(next));
   };
 
   const handleOpenKindMenu = (event: MouseEvent<HTMLButtonElement>) => {
@@ -269,6 +279,7 @@ export function TimelinePanel({
                 handleChangeTableSettings({ ...resolvedTableSettings, sort: next })
               }
               selectedIds={selectedIds}
+              onSelectRow={onSelectRow}
               onToggleSelect={handleToggleSelect}
               onToggleVisibility={onToggleItem}
               onToggleFavorite={onFavoriteItem}
@@ -291,6 +302,7 @@ export function TimelinePanel({
             markerStepKm={timelineMarkerStepKm}
             hourZoom={timelineZoomLevel}
             selectedIds={selectedIds}
+            onSelectRow={onSelectRow}
             onToggleSelect={handleToggleSelect}
             onToggleVisibility={onToggleItem}
             onMovePause={onMovePause}

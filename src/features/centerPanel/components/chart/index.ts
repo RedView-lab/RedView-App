@@ -32,3 +32,10 @@ export type {
   ChartDayNightOverlay,
   ChartDayNightWindow,
 } from './dayNight';
+
+export { buildChartPauseOverlay } from './pause';
+export type {
+  ChartPauseOverlay,
+  ChartPauseWindow,
+} from './pause';
+

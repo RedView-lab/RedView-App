@@ -1,6 +1,7 @@
 import type { ChartAlertAnnotation } from '../annotations/buildRouteAuditAnnotations';
 import type { ChartPoiAnnotation } from '../annotations/buildPoiAnnotations';
 import type { ChartDayNightOverlay } from '../dayNight';
+import type { ChartPauseOverlay } from '../pause';
 import type {
   AxisDomain,
   AxisMetricId,
@@ -29,6 +30,7 @@ export interface AnalysisChartProps {
   poiAnnotations?: ChartPoiAnnotation[];
   alertAnnotations?: ChartAlertAnnotation[];
   dayNightOverlay?: ChartDayNightOverlay | null;
+  pauseOverlay?: ChartPauseOverlay | null;
   axis1Metric: AxisMetricId;
   axis2Metric: AxisMetricId | null;
   xMode: AxisMode;

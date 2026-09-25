@@ -23,6 +23,7 @@ interface TimelineRowProps {
   /** Optional inline style — used by the Timeline view to absolutely-position. */
   style?: React.CSSProperties;
   selected?: boolean;
+  onSelectRow?: (id: string, item: TimelineItem) => void;
   onToggleSelect?: (id: string, selected: boolean) => void;
   onToggleVisibility?: (id: string, visible: boolean) => void;
   onToggleFavorite?: (id: string, favorite: boolean) => void;
@@ -273,6 +274,7 @@ export function TimelineRow({
   compact = false,
   style,
   selected = false,
+  onSelectRow,
   onToggleSelect,
   onToggleVisibility,
   onToggleFavorite,
@@ -306,6 +308,14 @@ export function TimelineRow({
       }${selected ? ' is-selected' : ''}`}
       style={style}
       data-kind={item.kind}
+      data-timeline-id={item.id}
+      onClick={(e) => {
+        const target = e.target as HTMLElement | null;
+        if (target?.closest('button, input, select, label, .rvi-tl-row__check, .rvi-tl-row__actions')) {
+          return;
+        }
+        onSelectRow?.(item.id, item);
+      }}
     >
       <label className="rvi-tl-row__check" aria-label={t('Sélectionner')}>
         <input

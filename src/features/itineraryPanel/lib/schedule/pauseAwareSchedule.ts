@@ -4,6 +4,9 @@ import type { TimelineStopAnchor } from '../../sections/timeline/TimelineTimelin
 import type { Itinerary } from '../../types';
 
 export interface PauseAwarePauseSpan {
+  id?: string;
+  label?: string;
+  durationMin?: number;
   distanceM: number;
   durationSeconds: number;
   startRideSeconds: number;
@@ -41,6 +44,9 @@ export function buildPauseAwareSchedule(
       const durationSeconds = anchor.durationMin * 60;
       const distanceM = distanceAtElapsedSeconds(prediction, anchor.rideElapsedSeconds);
       return {
+        id: anchor.id,
+        label: anchor.label,
+        durationMin: anchor.durationMin,
         distanceM: Number.isFinite(distanceM) ? (distanceM as number) : Number.NaN,
         durationSeconds,
         startRideSeconds: anchor.rideElapsedSeconds,
@@ -71,7 +77,7 @@ export function projectRideElapsedSecondsToScheduledSeconds(
 ): number {
   let scheduledElapsedSeconds = rideElapsedSeconds;
   for (const anchor of stopAnchors) {
-    if (rideElapsedSeconds <= anchor.rideElapsedSeconds) break;
+    if (rideElapsedSeconds <= anchor.rideElapsedSeconds + 0.05) break;
     scheduledElapsedSeconds += anchor.durationMin * 60;
   }
   return scheduledElapsedSeconds;

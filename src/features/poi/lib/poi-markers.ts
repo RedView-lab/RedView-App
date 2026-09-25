@@ -49,6 +49,7 @@ interface PoiMarkerEntry {
   marker: mapboxgl.Marker;
   popup: mapboxgl.Popup;
   signature: string;
+  feature: PoiFeature;
 }
 
 export function getMarkerKey(feature: PoiFeature): string {
@@ -222,6 +223,63 @@ export class PoiMarkerManager {
     this.registry.clear();
   }
 
+  /**
+   * Opens the popup for a POI and centers the map on it.
+   */
+  openPoi(poiId: number | string, category?: string, coords?: { lat: number; lon: number }): boolean {
+    const idStr = String(poiId);
+    const cleanId = idStr.replace(/^poi-/, '');
+    let targetEntry: PoiMarkerEntry | null = null;
+
+    for (const [key, entry] of this.registry.entries()) {
+      if (
+        key === idStr ||
+        key.endsWith(`:${idStr}`) ||
+        key.endsWith(`:${cleanId}`) ||
+        String(entry.feature.id) === idStr ||
+        String(entry.feature.id) === cleanId ||
+        (category && (key === `${category}:${idStr}` || key === `${category}:${cleanId}`))
+      ) {
+        targetEntry = entry;
+        break;
+      }
+    }
+
+    if (!targetEntry && coords) {
+      for (const entry of this.registry.values()) {
+        const dLat = Math.abs(entry.feature.lat - coords.lat);
+        const dLon = Math.abs(entry.feature.lon - coords.lon);
+        if (dLat < 0.0001 && dLon < 0.0001) {
+          targetEntry = entry;
+          break;
+        }
+      }
+    }
+
+    if (!targetEntry) return false;
+
+    // Close any other open popups
+    for (const other of this.registry.values()) {
+      if (other !== targetEntry && other.popup.isOpen()) {
+        other.popup.remove();
+      }
+    }
+
+    if (!targetEntry.popup.isOpen()) {
+      targetEntry.marker.togglePopup();
+    }
+
+    const lngLat = targetEntry.marker.getLngLat();
+    this.map.flyTo({
+      center: [lngLat.lng, lngLat.lat],
+      zoom: Math.max(this.map.getZoom(), 15),
+      duration: 800,
+      essential: true,
+    });
+
+    return true;
+  }
+
   private createEntry(feature: PoiFeature): PoiMarkerEntry {
     const popup = new mapboxgl.Popup({
       className: 'rv-poi-popup',
@@ -248,10 +306,18 @@ export class PoiMarkerManager {
     };
 
     // Re-resolve state from the itinerary every time the popup reopens.
-    popup.on('open', () => refresh());
+    popup.on('open', () => {
+      refresh();
+      this.getActions().onSelectPoi?.(feature);
+    });
+
+    const markerEl = createMarkerElement(feature);
+    markerEl.addEventListener('click', () => {
+      this.getActions().onSelectPoi?.(feature);
+    });
 
     const marker = new mapboxgl.Marker({
-      element: createMarkerElement(feature),
+      element: markerEl,
       anchor: 'bottom',
       pitchAlignment: 'viewport',
       rotationAlignment: 'viewport',
@@ -267,6 +333,7 @@ export class PoiMarkerManager {
       marker,
       popup,
       signature: getMarkerSignature(feature),
+      feature,
     };
 
     applyMarkerVisualState(entry, this.map.getZoom());

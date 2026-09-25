@@ -588,6 +588,9 @@ export interface ItineraryPanelProps {
   poiLoadDisabledReason?: string | null;
 
   // timeline
+  selectedTimelineIds?: string[];
+  onSelectTimelineRow?: (id: string, item: TimelineItem) => void;
+  onSelectionTimelineChange?: (selectedIds: string[]) => void;
   onChangeTimelineView?: (view: TimelineView) => void;
   onAddTimelineItem?: (kind: TimelineAddItemKind, options?: TimelineAddItemOptions) => void;
   onToggleTimelineItem?: (id: string, visible: boolean) => void;

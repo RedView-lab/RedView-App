@@ -44,6 +44,7 @@ interface TimelineSheetViewProps {
   sort: TimelineTableSortState | null;
   onChangeSort: (next: TimelineTableSortState | null) => void;
   selectedIds?: ReadonlySet<string>;
+  onSelectRow?: (id: string, item: TimelineItem) => void;
   onToggleSelect?: (id: string, selected: boolean) => void;
   onToggleVisibility?: (id: string, visible: boolean) => void;
   onToggleFavorite?: (id: string, favorite: boolean) => void;
@@ -119,6 +120,7 @@ export function TimelineSheetView({
   sort,
   onChangeSort,
   selectedIds,
+  onSelectRow,
   onToggleSelect,
   onToggleVisibility,
   onToggleFavorite,
@@ -251,6 +253,7 @@ export function TimelineSheetView({
                 <div
                   key={item.id}
                   className="rvi-tl-list__item"
+                  data-timeline-id={item.id}
                   role="row"
                   style={{ animationDelay: `${Math.min(rowIndex * 18, 240)}ms` }}
                 >
@@ -258,6 +261,7 @@ export function TimelineSheetView({
                     item={item}
                     selected={selectedIds?.has(item.id) === true}
                     onToggleSelect={onToggleSelect}
+                    onSelectRow={onSelectRow}
                     onToggleVisibility={onToggleVisibility}
                     onToggleFavorite={onToggleFavorite}
                     onRemove={onRemove}
@@ -333,7 +337,15 @@ export function TimelineSheetView({
               role="row"
               className={`rvi-tl-tr${selected ? ' is-selected' : ''}`}
               data-kind={item.kind}
+              data-timeline-id={item.id}
               style={{ animationDelay: `${Math.min(rowIndex * 18, 240)}ms` }}
+              onClick={(e) => {
+                const target = e.target as HTMLElement | null;
+                if (target?.closest('button, input, select, label, .rvi-tl-td__check, .rvi-tl-td--actions')) {
+                  return;
+                }
+                onSelectRow?.(item.id, item);
+              }}
             >
               <div className="rvi-tl-td rvi-tl-td--sticky-left rvi-tl-td--check" role="cell">
                 <label className="rvi-tl-td__check">
