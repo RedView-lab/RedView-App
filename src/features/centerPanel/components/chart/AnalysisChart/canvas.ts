@@ -100,6 +100,12 @@ function prepareCanvas2d(
   return ctx;
 }
 
+function rawYRatio(value: number, domain: AxisDomain): number {
+  const span = domain.max - domain.min;
+  if (span <= 0) return 0.5;
+  return (value - domain.min) / span;
+}
+
 function drawCanvasLine(
   ctx: CanvasRenderingContext2D,
   points: { x: number; y: number }[],
@@ -116,7 +122,7 @@ function drawCanvasLine(
   ctx.beginPath();
   points.forEach((point, index) => {
     const x = ratioFor(point.x, xDomain) * width;
-    const y = (1 - ratioFor(point.y, yDomain)) * height;
+    const y = (1 - rawYRatio(point.y, yDomain)) * height;
     if (index === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   });
@@ -143,7 +149,7 @@ function drawCanvasArea(
   ctx.beginPath();
   points.forEach((point, index) => {
     const x = ratioFor(point.x, xDomain) * width;
-    const y = (1 - ratioFor(point.y, yDomain)) * height;
+    const y = (1 - rawYRatio(point.y, yDomain)) * height;
     if (index === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   });

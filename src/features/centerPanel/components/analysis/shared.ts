@@ -136,7 +136,6 @@ export function normalizeAnalysisState(
     ...fallback.filters,
     ...(state?.filters ?? {}),
   };
-  if (filters.poi) filters.pente = true;
 
   const rawAxis2 = state?.axis2;
   const isLegacyDuplicateAltitude =

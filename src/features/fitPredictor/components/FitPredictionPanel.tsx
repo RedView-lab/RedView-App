@@ -97,7 +97,10 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
 
   const hasResult = Boolean(predictionResult || comparisonResult);
   const panelVisible = open || busy || Boolean(error) || hasResult;
-  const hasMandatoryFields = ftpWatts !== '' && riderWeightKg !== '' && bikeWeightKg !== '';
+  const hasMandatoryFields =
+    (fitFiles.length > 0 || ftpWatts !== '') &&
+    (fitFiles.length > 0 || riderWeightKg !== '') &&
+    bikeWeightKg !== '';
   const canRunRoute = fitFiles.length > 0 && Boolean(gpxFile) && hasMandatoryFields && !busy;
   const canRunCompare = fitFiles.length > 0 && Boolean(validationFile) && hasMandatoryFields && !busy;
   const canRun = mode === 'route' ? canRunRoute : canRunCompare;
@@ -299,14 +302,16 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
 
           <div style={cardStyle}>
             <div style={cardHeaderStyle}>
-              <span style={sectionTitleStyle}>Profil coureur (obligatoire)</span>
+              <span style={sectionTitleStyle}>
+                Profil coureur {fitFiles.length > 0 ? '(auto-déduit ou manuel)' : '(obligatoire)'}
+              </span>
               {computedWkg > 0 && (
                 <span style={{ fontSize: 12, fontWeight: 700, color: wkgColor }}>{computedWkg.toFixed(2)} W/kg</span>
               )}
             </div>
             <div style={{ ...configGridStyle, gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
               <div style={configFieldStyle}>
-                <label style={fieldLabelStyle}>FTP (W) *</label>
+                <label style={fieldLabelStyle}>FTP (W) {fitFiles.length > 0 ? '(auto)' : '*'}</label>
                 <input
                   type="number"
                   min="50"
@@ -314,12 +319,12 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
                   step="1"
                   value={ftpWatts}
                   onChange={(event) => setFtpWatts(event.target.value)}
-                  placeholder="ex: 250"
-                  style={{ ...textInputStyle, ...(ftpWatts === '' ? requiredInputStyle : null) }}
+                  placeholder={fitFiles.length > 0 ? 'Auto (estimé)' : 'ex: 250'}
+                  style={{ ...textInputStyle, ...(ftpWatts === '' && fitFiles.length === 0 ? requiredInputStyle : null) }}
                 />
               </div>
               <div style={configFieldStyle}>
-                <label style={fieldLabelStyle}>Coureur (kg) *</label>
+                <label style={fieldLabelStyle}>Coureur (kg) {fitFiles.length > 0 ? '(auto)' : '*'}</label>
                 <input
                   type="number"
                   min="40"
@@ -327,12 +332,12 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
                   step="0.5"
                   value={riderWeightKg}
                   onChange={(event) => setRiderWeightKg(event.target.value)}
-                  placeholder="ex: 72"
-                  style={{ ...textInputStyle, ...(riderWeightKg === '' ? requiredInputStyle : null) }}
+                  placeholder={fitFiles.length > 0 ? (gender === 'female' ? '56 (défaut)' : '70 (défaut)') : 'ex: 70'}
+                  style={{ ...textInputStyle, ...(riderWeightKg === '' && fitFiles.length === 0 ? requiredInputStyle : null) }}
                 />
               </div>
               <div style={configFieldStyle}>
-                <label style={fieldLabelStyle}>Velo + equip (kg) *</label>
+                <label style={fieldLabelStyle}>Vélo + équip (kg) *</label>
                 <input
                   type="number"
                   min="5"

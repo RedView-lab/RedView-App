@@ -38,7 +38,6 @@ import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import { hasProjectTracedContent } from '@/features/itineraryPanel/lib/project';
 import { MapViewportControls } from '@/features/mapViewportControls';
 import type { MapViewport } from '@/features/map3d/lib/viewport-persist';
-import { FeedbackTriggerButton } from '@/shared/components/FeedbackTriggerButton';
 import { useAppI18n } from '@/shared/i18n';
 import { DashboardPlaceSearch } from './DashboardPlaceSearch';
 import type { DashboardFilterId } from './DashboardPlaceSearch.types';
@@ -314,15 +313,7 @@ export function DashboardEditor({
 
 
 
-      <FeedbackTriggerButton
-        variant="floating"
-        style={{
-          position: 'absolute',
-          bottom: 18,
-          right: isRightPanelCollapsed || isMapFocusMode ? 18 : panelWidth + 24,
-          zIndex: 32,
-        }}
-      />
+
 
       {mapLoaded && shouldRenderPanelMapBlurMirrors && leftPanelOpen && (
         <MapBlurMirror

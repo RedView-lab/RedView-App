@@ -1,7 +1,6 @@
-import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
 import { useAppI18n } from '@/shared/i18n';
 import { ColorPalettePicker } from '@/features/controlPanel/components/ColorPalettePicker';
-import { IconCheck, IconChevronDown } from '../CenterPanelIcons';
+import { IconChevronDown } from '../CenterPanelIcons';
 
 export interface AxisOption {
   value: string;
@@ -71,14 +70,13 @@ export function AxisDropdown({
 
         {isOpen ? (
           <div className="rvc-center-analysis__dropdown" role="listbox" aria-label={translatedAxisLabel}>
-            <MapCanvasGlassBackdrop blur={30} saturate={1.8} tint="rgba(20, 22, 28, 0.85)" />
             <div className="rvc-center-analysis__dropdown-list">
               {options.map((option) => {
                 const selected = value === option.value;
                 return (
                   <button
                     key={option.value}
-                    className="rvc-center-analysis__dropdown-option"
+                    className={`rvc-center-analysis__dropdown-option${selected ? ' is-selected' : ''}`}
                     type="button"
                     role="option"
                     aria-selected={selected}
@@ -93,7 +91,6 @@ export function AxisDropdown({
                     >
                       {t(option.label)}
                     </span>
-                    {selected ? <IconCheck size={16} className="rvc-center-analysis__dropdown-check" /> : null}
                   </button>
                 );
               })}

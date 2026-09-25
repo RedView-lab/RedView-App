@@ -11,8 +11,6 @@ import {
   buildRouteAuditAnnotationsForItinerary,
   buildSeriesFromPrediction,
   computeXDomain,
-  isInclinationMetric,
-  isWeatherMetric,
   unitForMetric,
   type AxisDomain,
   type AxisMetricId,
@@ -165,12 +163,7 @@ export function useAnalysisChartData({
     return result;
   }, [axis1Color, axis2Color, axis1Value, axis2Value, preparedChartNodes]);
 
-  const showAltitudeBackdrop =
-    filters.pente ||
-    isInclinationMetric(axis1Value) ||
-    Boolean(axis2Value && isInclinationMetric(axis2Value)) ||
-    isWeatherMetric(axis1Value) ||
-    Boolean(axis2Value && isWeatherMetric(axis2Value));
+  const showAltitudeBackdrop = Boolean(filters.pente);
 
   const altitudeBackdropProfiles = useMemo<ChartBackdropProfile[]>(() => {
     if (!showAltitudeBackdrop) return [];

@@ -174,21 +174,33 @@ export const AnalysisChart = memo(function AnalysisChart({
     };
   }, [normalizedYOffset, yNiceBase, yVisibleFraction]);
 
-  const y2Nice = useMemo(() => {
+  const y2NiceBase = useMemo(() => {
     if (!axis2Metric) return { domain: { min: 0, max: 1 }, ticks: [] };
     const target = yTicks.length || DEFAULT_TICK_COUNT;
     const forceZero = axis2Metric !== 'Altitude' && !isInclinationMetric(axis2Metric);
     return buildNiceDomain(rawY2Domain.min, rawY2Domain.max, target, { forceZero });
   }, [axis2Metric, rawY2Domain, yTicks.length]);
 
-  const plotY2Domain = y2Nice.domain;
-  const y2Ticks = useMemo(
-    () =>
-      axis2Metric
-        ? buildInterpolatedTicks(plotY2Domain.max, plotY2Domain.min, yTicks.length)
-        : [],
-    [axis2Metric, plotY2Domain.max, plotY2Domain.min, yTicks.length],
-  );
+  const { plotY2Domain, y2Ticks } = useMemo(() => {
+    if (!axis2Metric) {
+      return { plotY2Domain: { min: 0, max: 1 }, y2Ticks: [] };
+    }
+    if (yVisibleFraction >= 0.999) {
+      return {
+        plotY2Domain: y2NiceBase.domain,
+        y2Ticks: buildInterpolatedTicks(y2NiceBase.domain.max, y2NiceBase.domain.min, yTicks.length),
+      };
+    }
+    const fullSpan = y2NiceBase.domain.max - y2NiceBase.domain.min;
+    const visibleSpan = Math.max(1, fullSpan * yVisibleFraction);
+    const startRatio = normalizedYOffset * (1 - yVisibleFraction);
+    const effectiveMin = y2NiceBase.domain.min + startRatio * fullSpan;
+    const effectiveMax = effectiveMin + visibleSpan;
+    return {
+      plotY2Domain: { min: effectiveMin, max: effectiveMax },
+      y2Ticks: buildInterpolatedTicks(effectiveMax, effectiveMin, yTicks.length),
+    };
+  }, [axis2Metric, normalizedYOffset, y2NiceBase, yTicks.length, yVisibleFraction]);
 
   const xPositions = useMemo(
     () => xTicks.map((value) => ({ value, ratio: ratioFor(value, plotXDomain) })),
@@ -234,14 +246,28 @@ export const AnalysisChart = memo(function AnalysisChart({
     return { min: domain.min, max: domain.max + range * 0.14 };
   }, [backdropProfiles]);
 
-  const backdropYDomain = useMemo<AxisDomain | null>(() => {
+  const backdropNiceBase = useMemo(() => {
     if (!rawBackdropYDomain) return null;
     const target =
       plotSize.height > 0
         ? Math.max(2, Math.round(plotSize.height / Y_MAJOR_TARGET_PX))
         : DEFAULT_TICK_COUNT;
-    return buildNiceDomain(rawBackdropYDomain.min, rawBackdropYDomain.max, target).domain;
+    return buildNiceDomain(rawBackdropYDomain.min, rawBackdropYDomain.max, target);
   }, [plotSize.height, rawBackdropYDomain]);
+
+  const backdropYDomain = useMemo<AxisDomain | null>(() => {
+    if (!backdropNiceBase) return null;
+    if (yVisibleFraction >= 0.999) {
+      return backdropNiceBase.domain;
+    }
+    const fullSpan = backdropNiceBase.domain.max - backdropNiceBase.domain.min;
+    const visibleSpan = Math.max(1, fullSpan * yVisibleFraction);
+    const startRatio = normalizedYOffset * (1 - yVisibleFraction);
+    return {
+      min: backdropNiceBase.domain.min + startRatio * fullSpan,
+      max: backdropNiceBase.domain.min + startRatio * fullSpan + visibleSpan,
+    };
+  }, [backdropNiceBase, normalizedYOffset, yVisibleFraction]);
 
   const backdropSeries = useMemo(() => {
     if (!backdropYDomain) return [];
@@ -255,8 +281,9 @@ export const AnalysisChart = memo(function AnalysisChart({
 
   const altitudeDomainForAnnotations = useMemo(() => {
     if (axis1Metric === 'Altitude') return plotYDomain;
+    if (axis2Metric === 'Altitude') return plotY2Domain;
     return backdropYDomain ?? plotYDomain;
-  }, [axis1Metric, backdropYDomain, plotYDomain]);
+  }, [axis1Metric, axis2Metric, backdropYDomain, plotY2Domain, plotYDomain]);
 
   const visiblePoiAnnotations = useMemo(() => {
     if (!altitudeDomainForAnnotations || poiAnnotations.length === 0) return [];

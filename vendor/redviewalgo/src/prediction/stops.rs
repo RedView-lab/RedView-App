@@ -13,39 +13,40 @@ pub fn generate_stop_schedule(
             let mut events = Vec::new();
             let riding_h = estimated_riding_time_s / 3600.0;
 
-            // Micro-stops: 8 min every 3h
-            let n_micro = (riding_h / 3.0).floor() as u32;
+            // Micro-stops: 10 min every 2.5h (water fontaine, clothing, bio, stretch)
+            let n_micro = (riding_h / 2.5).floor() as u32;
             for i in 1..=n_micro {
                 events.push(StopEvent {
-                    riding_time_trigger_s: i as f64 * 3.0 * 3600.0,
-                    duration_s: 480.0,
+                    riding_time_trigger_s: i as f64 * 2.5 * 3600.0,
+                    duration_s: 600.0,
                     stop_type: StopType::Micro,
                 });
             }
 
-            // Extended stops: 20 min every 6h (replace overlapping micro-stops)
+            // Extended resupply stops: 35 min every 6h (food, shop, bike check)
             let n_ext = (riding_h / 6.0).floor() as u32;
             for i in 1..=n_ext {
                 let trigger = i as f64 * 6.0 * 3600.0;
-                // Remove micro-stop at same time (extended replaces it)
-                events.retain(|e| (e.riding_time_trigger_s - trigger).abs() > 60.0);
+                // Remove micro-stop within 45 min of extended stop
+                events.retain(|e| (e.riding_time_trigger_s - trigger).abs() > 2700.0);
                 events.push(StopEvent {
                     riding_time_trigger_s: trigger,
-                    duration_s: 1200.0,
+                    duration_s: 2100.0,
                     stop_type: StopType::Extended,
                 });
             }
 
-            // Sleep stops: 90 min every 20h
+            // Sleep / bivouac stops: ~3.75h (13500s) every 18h of riding in ultra events (>18h)
+            // Models realistic sleep cycle: ~3h sleep + 45 min camp/unpack/repack/prep
             if has_sleep_stops {
-                let n_sleep = (riding_h / 20.0).floor() as u32;
+                let n_sleep = (riding_h / 18.0).floor() as u32;
                 for i in 1..=n_sleep {
-                    let trigger = i as f64 * 20.0 * 3600.0;
-                    // Remove any stop within 1h of sleep stop
-                    events.retain(|e| (e.riding_time_trigger_s - trigger).abs() > 3600.0);
+                    let trigger = i as f64 * 18.0 * 3600.0;
+                    // Remove any stop within 2h of sleep stop
+                    events.retain(|e| (e.riding_time_trigger_s - trigger).abs() > 7200.0);
                     events.push(StopEvent {
                         riding_time_trigger_s: trigger,
-                        duration_s: 5400.0,
+                        duration_s: 13500.0,
                         stop_type: StopType::Sleep,
                     });
                 }

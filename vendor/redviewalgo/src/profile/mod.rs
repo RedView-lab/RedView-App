@@ -27,6 +27,11 @@ pub fn build_rider_profile(activities: &[ActivityData], config: &PredictionConfi
     let (gradient_bins, fatigued_bins) = gradient_bins::build_dual_gradient_bins(activities, 0.60);
     let fatigue = fatigue_fit::build_fatigue_model(activities, has_power);
 
+    let default_rider_weight = config.gender.default_rider_weight();
+    let default_bike_weight = config.gender.default_bike_weight();
+    let default_mass = default_rider_weight + default_bike_weight;
+    let default_cda = config.gender.default_cda();
+
     // Auto-estimate from data (always, for fallback / comparison)
     let (auto_ftp, auto_mass, auto_cda) = if has_power {
         let ftp = power_profile::estimate_ftp(activities);
@@ -34,7 +39,13 @@ pub fn build_rider_profile(activities: &[ActivityData], config: &PredictionConfi
         let cda = power_profile::estimate_cda(activities, mass_pass1);
         (ftp, mass_pass1, cda)
     } else {
-        (0.0, DEFAULT_MASS, DEFAULT_CDA)
+        // Physical inversion: estimate virtual FTP from climbing segments
+        let total_mass = config.mass_kg
+            .or_else(|| config.rider_weight_kg.map(|rw| rw + config.bike_weight_kg.unwrap_or(default_bike_weight)))
+            .unwrap_or(default_mass);
+        let cda = config.cda.unwrap_or(default_cda);
+        let vftp = power_profile::estimate_virtual_ftp(activities, total_mass, cda);
+        (vftp, default_mass, default_cda)
     };
 
     // Apply user overrides: FTP
@@ -42,18 +53,18 @@ pub fn build_rider_profile(activities: &[ActivityData], config: &PredictionConfi
 
     // Apply user overrides: weight (split rider + bike)
     let (rider_weight_kg, bike_weight_kg, mass_kg) = if let Some(rw) = config.rider_weight_kg {
-        let bw = config.bike_weight_kg.unwrap_or(DEFAULT_BIKE_WEIGHT);
+        let bw = config.bike_weight_kg.unwrap_or(default_bike_weight);
         (rw, bw, rw + bw)
     } else if let Some(total) = config.mass_kg {
-        // Legacy: single mass_kg provided — assume 80/20 split
-        let bw = (total * 0.12).clamp(6.0, 20.0);
+        // Legacy: single mass_kg provided — assume split
+        let bw = (total * 0.15).clamp(6.0, 20.0);
         let rw = total - bw;
         (rw, bw, total)
     } else {
-        // Auto-estimated total, assume 80/20 split
-        let bw = (auto_mass * 0.12).clamp(6.0, 20.0);
-        let rw = auto_mass - bw;
-        (rw, bw, auto_mass)
+        // Auto-estimated total based on gender defaults
+        let bw = default_bike_weight;
+        let rw = default_rider_weight;
+        (rw, bw, default_mass)
     };
 
     // Compute W/kg — the single most important metric in cycling performance
@@ -63,7 +74,7 @@ pub fn build_rider_profile(activities: &[ActivityData], config: &PredictionConfi
         0.0
     };
 
-    let cda = auto_cda;
+    let cda = config.cda.unwrap_or(auto_cda);
 
     // Compute training D+ statistics from historical activities
     let (training_dplus_per_km, training_max_climb_rate_mh,

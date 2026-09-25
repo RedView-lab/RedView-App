@@ -90,7 +90,7 @@ impl SplineBins {
     }
 
     #[inline]
-    fn lookup_fresh(&self, gradient_pct_val: f64) -> Option<f64> {
+    pub fn lookup_fresh(&self, gradient_pct_val: f64) -> Option<f64> {
         if let Some(ref spline) = self.fresh_spline {
             if gradient_pct_val >= self.fresh_min_g && gradient_pct_val <= self.fresh_max_g {
                 return Some(spline.eval(gradient_pct_val).max(0.5));

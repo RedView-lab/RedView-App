@@ -34,6 +34,31 @@ impl Gender {
             _ => 1.0,
         }
     }
+
+    /// Typical rider body weight (kg) by gender when not explicitly provided.
+    pub fn default_rider_weight(&self) -> f64 {
+        match self {
+            Gender::Female => 56.0,
+            _ => 70.0,
+        }
+    }
+
+    /// Typical bike + equipment weight (kg).
+    pub fn default_bike_weight(&self) -> f64 {
+        match self {
+            Gender::Female => 10.0,
+            _ => 10.0,
+        }
+    }
+
+    /// Typical aerodynamic drag area CdA (m²) by gender.
+    /// Female riders have a ~10-15% smaller frontal area than male riders.
+    pub fn default_cda(&self) -> f64 {
+        match self {
+            Gender::Female => 0.30,
+            _ => 0.35,
+        }
+    }
 }
 
 // ─── Surface type (from OpenStreetMap data) ─────────────────────────────────
@@ -89,7 +114,7 @@ pub enum StopStrategy {
 
 impl Default for StopStrategy {
     fn default() -> Self {
-        StopStrategy::None
+        StopStrategy::Auto
     }
 }
 
@@ -488,7 +513,7 @@ impl Default for PredictionConfig {
             drivetrain_efficiency: None,
             race_aggressiveness: None,
             start_time_h: None,
-            stop_strategy: StopStrategy::None,
+            stop_strategy: StopStrategy::Auto,
             sleep_strategy: SleepStrategy::None,
             surface_types: None,
             ambient_temperature_c: None,

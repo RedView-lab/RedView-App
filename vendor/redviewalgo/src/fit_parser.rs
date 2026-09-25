@@ -193,8 +193,8 @@ fn decode_record_message(payload: &[u8], def: &LocalDef) -> RecordValues {
             6 => v.speed_std = s.map(|x| x / 1000.0),
             7 => v.power = s,
             13 => v.temperature = s,
-            17 => v.alt_enh = s.map(|x| x / 5.0 - 500.0),
-            18 => v.speed_enh = s.map(|x| x / 1000.0),
+            17 | 78 => v.alt_enh = s.map(|x| x / 5.0 - 500.0),
+            18 | 73 => v.speed_enh = s.map(|x| x / 1000.0),
             28 => v.frac_cadence = s.map(|x| x / 128.0),
             253 => v.timestamp = s.map(|x| x as u32),
             _ => {}
@@ -597,26 +597,37 @@ fn extract_f64(value: &Value) -> Option<f64> {
 }
 
 /// If FIT-reported distance is missing or zero, recompute from GPS.
+/// Also recomputes speed from GPS dt/distance if speed is missing across the activity.
 fn recompute_distance_if_needed(points: &mut [DataPoint]) {
     let last_dist = points.last().map(|p| p.distance_m).unwrap_or(0.0);
-    if last_dist > 100.0 {
-        return; // FIT distance seems valid
+    if last_dist <= 100.0 {
+        let mut cumulative = 0.0;
+        for i in 0..points.len() {
+            if i == 0 {
+                points[i].distance_m = 0.0;
+                continue;
+            }
+            let d = haversine_distance(
+                points[i - 1].lat,
+                points[i - 1].lon,
+                points[i].lat,
+                points[i].lon,
+            );
+            cumulative += d;
+            points[i].distance_m = cumulative;
+        }
     }
 
-    let mut cumulative = 0.0;
-    for i in 0..points.len() {
-        if i == 0 {
-            points[i].distance_m = 0.0;
-            continue;
+    // Resiliency: if speed was not recorded in FIT, derive from distance and dt
+    let has_speed = points.iter().any(|p| p.speed_ms > 0.5);
+    if !has_speed {
+        for i in 1..points.len() {
+            let dt = points[i].timestamp_s - points[i - 1].timestamp_s;
+            let dd = points[i].distance_m - points[i - 1].distance_m;
+            if dt > 0.0 && dt < 120.0 && dd >= 0.0 {
+                points[i].speed_ms = (dd / dt).min(35.0);
+            }
         }
-        let d = haversine_distance(
-            points[i - 1].lat,
-            points[i - 1].lon,
-            points[i].lat,
-            points[i].lon,
-        );
-        cumulative += d;
-        points[i].distance_m = cumulative;
     }
 }
 

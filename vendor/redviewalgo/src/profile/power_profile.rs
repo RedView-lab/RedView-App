@@ -302,3 +302,86 @@ pub fn estimate_cda_with_crr(activities: &[ActivityData], mass_kg: f64, crr: f64
 
     median(&mut cda_estimates)
 }
+
+/// Estimate virtual FTP when power meter data is absent.
+/// Reconstructs crank power on climbing segments (gradient >= 3.0%, duration >= 180s)
+/// using physical balance: gravity + rolling resistance + aerodynamic drag.
+pub fn estimate_virtual_ftp(activities: &[ActivityData], mass_kg: f64, cda: f64) -> f64 {
+    let mut best_climb_power = 0.0_f64;
+    let mut climb_vam_rates: Vec<f64> = Vec::new();
+
+    for activity in activities {
+        let pts = &activity.points;
+        if pts.len() < 30 {
+            continue;
+        }
+
+        let mut block_start: Option<usize> = None;
+        let mut block_dplus = 0.0_f64;
+
+        for i in 1..pts.len() {
+            let dt = pts[i].timestamp_s - pts[i - 1].timestamp_s;
+            let ddist = pts[i].distance_m - pts[i - 1].distance_m;
+            let dele = pts[i].altitude_m - pts[i - 1].altitude_m;
+
+            if ddist >= 1.0 && dt > 0.0 && dt < 120.0 {
+                let grad = dele / ddist;
+                if grad >= 0.03 && pts[i].speed_ms > 0.8 {
+                    if block_start.is_none() {
+                        block_start = Some(i - 1);
+                    }
+                    if dele > 0.0 {
+                        block_dplus += dele;
+                    }
+                } else if let Some(start) = block_start {
+                    let duration = pts[i - 1].timestamp_s - pts[start].timestamp_s;
+                    let dist = pts[i - 1].distance_m - pts[start].distance_m;
+                    let ele = pts[i - 1].altitude_m - pts[start].altitude_m;
+
+                    if duration >= 180.0 && dist > 100.0 && ele >= 30.0 {
+                        let avg_speed = dist / duration;
+                        let avg_grad = ele / dist;
+                        let avg_alt = (pts[i - 1].altitude_m + pts[start].altitude_m) * 0.5;
+                        let rho = air_density(avg_alt);
+
+                        let theta = avg_grad.atan();
+                        let p_grav = mass_kg * G * (theta.sin() + DEFAULT_CRR * theta.cos()) * avg_speed;
+                        let p_aero = 0.5 * rho * cda * avg_speed.powi(3);
+                        let p_crank = (p_grav + p_aero) / DRIVETRAIN_EFFICIENCY;
+
+                        let vam = (ele / duration) * 3600.0;
+                        climb_vam_rates.push(vam);
+
+                        // If sustained >= 10 min, use 95% factor; if 3-10 min, use 88-92%
+                        let factor = if duration >= 600.0 { 0.95 } else { 0.88 };
+                        best_climb_power = best_climb_power.max(p_crank * factor);
+                    }
+                    block_start = None;
+                    block_dplus = 0.0;
+                }
+            } else {
+                block_start = None;
+                block_dplus = 0.0;
+            }
+        }
+    }
+
+    if best_climb_power > 60.0 {
+        return best_climb_power.clamp(80.0, 450.0);
+    }
+
+    // Fallback: estimate from median VAM if available
+    if !climb_vam_rates.is_empty() {
+        let median_vam = median(&mut climb_vam_rates);
+        // Ferrari formula: W/kg ≈ VAM / (200 + 10 * grad%) ≈ VAM / 260 for ~6% average
+        let rider_kg = (mass_kg - 10.0).max(40.0);
+        let wkg = median_vam / 260.0;
+        let p_est = wkg * rider_kg * 0.95;
+        if p_est > 60.0 {
+            return p_est.clamp(80.0, 450.0);
+        }
+    }
+
+    0.0
+}
+

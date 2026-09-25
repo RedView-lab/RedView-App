@@ -43,11 +43,11 @@ pub fn predict(
         profile.fatigue.decay_lambda = lambda.clamp(0.0, 1.0);
     }
 
-    // Auto-detect stop strategy: if Auto or None + long route, use Ultra
+    // Auto-detect stop strategy: Auto handles micro/resupply stops for rides > 40km, scaling into Ultra
     let effective_stop_strategy = match &config.stop_strategy {
         crate::types::StopStrategy::Auto => {
-            if route.total_distance_m > 200_000.0 {
-                crate::types::StopStrategy::Ultra
+            if route.total_distance_m > 40_000.0 {
+                crate::types::StopStrategy::Auto
             } else {
                 crate::types::StopStrategy::None
             }
@@ -63,17 +63,23 @@ pub fn predict(
         other => other.clone(),
     };
 
-    // Estimate riding time for stop schedule generation (rough: distance / 25 km/h)
-    let estimated_riding_time_s = route.total_distance_m / (25.0 / 3.6);
+    // Estimate riding time accounting for terrain gradient density (D+/km)
+    let base_speed_ms = if route.total_elevation_gain_m > 0.0 && route.total_distance_m > 0.0 {
+        let dplus_per_km = route.total_elevation_gain_m / (route.total_distance_m / 1000.0);
+        ((25.0 - (dplus_per_km * 0.42).min(10.0)) / 3.6).max(3.5)
+    } else {
+        25.0 / 3.6
+    };
+    let estimated_riding_time_s = route.total_distance_m / base_speed_ms;
     let estimated_riding_h = estimated_riding_time_s / 3600.0;
 
-    // Auto-enable sleep stops for ultra events (>24h estimated riding)
+    // Auto-enable sleep stops for ultra events (>18h estimated riding)
     // Sleep deprivation is a major performance factor that cannot be ignored.
     let effective_sleep_strategy = match &config.sleep_strategy {
         SleepStrategy::None => {
-            if estimated_riding_h > 24.0 {
+            if estimated_riding_h > 18.0 {
                 SleepStrategy::SleepStops
-            } else if estimated_riding_h > 12.0 {
+            } else if estimated_riding_h > 10.0 {
                 SleepStrategy::MicroNaps
             } else {
                 SleepStrategy::None

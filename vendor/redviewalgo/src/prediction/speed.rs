@@ -195,7 +195,14 @@ pub fn predict_single_pass(
 ) -> (Vec<PredictionPoint>, f64) {
     let n = route.points.len();
     let use_knn = knn.is_usable();
-    let has_physics = profile.has_power && profile.ftp_w > 50.0;
+    let has_physics = profile.ftp_w > 50.0;
+    // Gender factor: if prediction is based on empirical training data (KNN or gradient bins),
+    // the recorded speeds already reflect her physiology. Avoid double-penalizing.
+    let effective_gender_factor = if use_knn || !profile.gradient_bins.is_empty() {
+        1.0
+    } else {
+        gender_factor
+    };
     let mut pred_points: Vec<PredictionPoint> = Vec::with_capacity(n);
     let mut elapsed_s = 0.0_f64; // total wall-clock time including stops
     let mut riding_s = 0.0_f64; // pure riding time (excludes stops)
@@ -493,8 +500,21 @@ pub fn predict_single_pass(
             );
 
             let fatigue_factor = compute_fatigue_factor(&profile.fatigue, elapsed_h);
+
+            // Physiological power distribution by gradient:
+            // On long endurance/ultra rides, riders sustain threshold/tempo on climbs (>3.5%),
+            // but cruise in Zone 2 on flat terrain (65-72% FTP), and coast on descents.
+            let terrain_power_factor = if rp.gradient_pct > 3.5 {
+                1.0
+            } else if rp.gradient_pct > -1.0 {
+                // Smooth ramp from 0.70 on flat (-1% to 0%) up to 1.0 on steep climbs (>3.5%)
+                0.70 + 0.30 * ((rp.gradient_pct + 1.0) / 4.5).clamp(0.0, 1.0)
+            } else {
+                0.15 // Descending: coasting / soft pedaling
+            };
+
             let effective_power =
-                profile.ftp_w * fatigue_factor * pacing * alt_factor;
+                profile.ftp_w * terrain_power_factor * fatigue_factor * pacing * alt_factor;
             let physics_speed = solve_speed_from_power_with_efficiency(
                 effective_power,
                 mass_kg,
@@ -528,13 +548,25 @@ pub fn predict_single_pass(
             } else {
                 gradient_blend
             };
-            let alpha = ultra_shift * knn_result.confidence;
+
+            // Scale KNN confidence so that a well-populated model is not starved of weight
+            let conf_scaled = (knn_result.confidence * 2.5).clamp(0.25, 1.0);
+            let alpha = (ultra_shift * conf_scaled).clamp(0.15, 0.85);
 
             // Race mode: boost KNN speed slightly (race effort > training)
             let race_factor = if race_mode { 1.05 } else { 1.0 };
 
-            let blended = alpha * knn_result.speed_ms * pacing * race_factor
-                + (1.0 - alpha) * physics_speed;
+            let blended = if rp.gradient_pct < -2.0 {
+                // On descents, riders brake to control speed based on handling, safety and road vision.
+                // Pure unbraked physics terminal velocity (55-65 km/h) is unrealistic for amateur/bikepacking.
+                // Bound physics speed to the rider's observed empirical descent capability.
+                let empirical_descent = spline_bins.lookup_fresh(rp.gradient_pct)
+                    .unwrap_or(33.0 / 3.6);
+                let safe_physics = physics_speed.min(empirical_descent * 1.15).min(42.0 / 3.6);
+                alpha * knn_result.speed_ms * pacing + (1.0 - alpha) * safe_physics
+            } else {
+                alpha * knn_result.speed_ms * pacing * race_factor + (1.0 - alpha) * physics_speed
+            };
             (blended, knn_result.confidence)
         } else if use_knn {
             // KNN only (no power data for physics)
@@ -639,7 +671,7 @@ pub fn predict_single_pass(
             * micro_clamped
             * recovery_factor
             * (1.0 + effective_recovery_boost)
-            * gender_factor;
+            * effective_gender_factor;
 
         // Gradient transition momentum: smooth speed changes to model
         // real-world inertia (rider doesn't instantly change speed at gradient transitions).
