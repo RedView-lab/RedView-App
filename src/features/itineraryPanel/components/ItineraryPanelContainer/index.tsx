@@ -21,6 +21,10 @@ import { useTraceToolOptional } from '@/features/centerPanel/tracer';
 import { usePredictionStoreOptional } from '../../context/PredictionStore';
 import { DEFAULT_PROFILES, getProfilePreset, resolveProfilePresetId } from '../../lib/project';
 import {
+  syncTracageOnActivityChange,
+  type ActivityType,
+} from '../../lib/project/syncTracageParams';
+import {
   getSavedCustomProfiles,
   saveCustomProfileToStorage,
   deleteCustomProfileFromStorage,
@@ -593,11 +597,27 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
                 const copy = structuredClone(itinerary);
                 copy.profileId = id;
                 if (preset) {
-                  copy.priorities = { ...preset.priorities };
-                  copy.roadTypes = {
-                    ...preset.roadTypes,
-                    applyToAllItineraries: copy.roadTypes.applyToAllItineraries,
-                  };
+                  const currentMode = copy.roadTypes.tracingMode ?? 'vitesse';
+                  const currentTolerance = copy.roadTypes.surfaceTolerance ?? 10;
+                  const isActivityType = id === 'road' || id === 'gravel-default' || id === 'mtb';
+                  if (isActivityType) {
+                    const sync = syncTracageOnActivityChange(id as ActivityType, currentMode, currentTolerance);
+                    if (sync.priorities) {
+                      copy.priorities = { ...copy.priorities, ...sync.priorities };
+                    }
+                    copy.roadTypes = {
+                      ...copy.roadTypes,
+                      ...sync.roadTypes,
+                      applyToAllItineraries: copy.roadTypes.applyToAllItineraries,
+                    };
+                  } else {
+                    copy.priorities = { ...preset.priorities };
+                    copy.roadTypes = {
+                      ...preset.roadTypes,
+                      tracingMode: currentMode,
+                      applyToAllItineraries: copy.roadTypes.applyToAllItineraries,
+                    };
+                  }
                 }
                 return copy;
               }),

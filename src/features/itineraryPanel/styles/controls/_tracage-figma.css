@@ -218,6 +218,8 @@
   position: absolute;
   left: 0;
   right: 0;
+  top: 50%;
+  transform: translateY(-50%);
   height: 6px;
   border-radius: 100px;
   background: rgba(255, 255, 255, 0.16);
@@ -227,12 +229,13 @@
 /* Active red line (not white-grey!) without glow */
 .rvi-tracage__slider-fill {
   position: absolute;
-  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
   height: 6px;
   border-radius: 100px;
   background: var(--rvi-red-accent, #c50000);
   pointer-events: none;
-  transition: width 0.18s cubic-bezier(0.2, 0.8, 0.3, 1);
+  transition: left 0.18s cubic-bezier(0.2, 0.8, 0.3, 1), width 0.18s cubic-bezier(0.2, 0.8, 0.3, 1);
 }
 
 .rvi-tracage__slider-fill.is-dragging {
@@ -264,12 +267,26 @@
   cursor: grab;
   z-index: 2;
   transition: left 0.18s cubic-bezier(0.2, 0.8, 0.3, 1);
+  outline: none;
+}
+
+.rvi-tracage__slider-knob:focus-visible {
+  box-shadow: 0 0 0 2px var(--rvi-red-accent, #c50000), 0px 6px 13px 0px rgba(0, 0, 0, 0.15);
+}
+
+.rvi-tracage__slider-knob--min {
+  z-index: 2;
+}
+
+.rvi-tracage__slider-knob--max {
+  z-index: 3;
 }
 
 .rvi-tracage__slider-knob:active,
 .rvi-tracage__slider-knob.is-dragging {
   cursor: grabbing;
   transition: none !important;
+  z-index: 5 !important;
 }
 
 .rvi-tracage__ticks-labels {

@@ -87,25 +87,64 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
   let effectiveFSingletrack = fSingletrack;
   let effectiveFOffroad = fOffroad;
 
-  if (roadTypes.surfacePreference === 'tarmac') {
-    effectiveFRoad = Math.min(effectiveFRoad, 0.85);
-    effectiveFGravel = Math.max(effectiveFGravel, 1.6 * tolFactor);
-    effectiveFSingletrack = Math.max(effectiveFSingletrack, 2.0 * tolFactor);
-    effectiveFOffroad = Math.max(effectiveFOffroad, 2.5 * tolFactor);
-  } else if (roadTypes.surfacePreference === 'paved') {
-    effectiveFRoad = Math.min(effectiveFRoad, 0.9);
-    effectiveFGravel = Math.max(effectiveFGravel, 1.3 * tolFactor);
-    effectiveFSingletrack = Math.max(effectiveFSingletrack, 1.8 * tolFactor);
-    effectiveFOffroad = Math.max(effectiveFOffroad, 2.2 * tolFactor);
-  } else if (roadTypes.surfacePreference === 'gravel') {
-    effectiveFGravel = Math.min(effectiveFGravel, 0.85);
-    effectiveFRoad = Math.max(effectiveFRoad, 1.15);
-    effectiveFOffroad = Math.max(effectiveFOffroad, 1.4 * tolFactor);
-  } else if (roadTypes.surfacePreference === 'other') {
-    effectiveFSingletrack = Math.min(effectiveFSingletrack, 0.85);
-    effectiveFOffroad = Math.min(effectiveFOffroad, 0.95);
-    effectiveFGravel = Math.min(effectiveFGravel, 0.95);
-    effectiveFRoad = Math.max(effectiveFRoad, 1.25);
+  const surfaceOrder = ['tarmac', 'paved', 'gravel', 'other'];
+  const surfaceMin = roadTypes.surfaceMin ?? 'tarmac';
+  const surfaceMax = roadTypes.surfaceMax ?? roadTypes.surfacePreference ?? 'gravel';
+  const minIdx = Math.max(0, surfaceOrder.indexOf(surfaceMin));
+  const maxIdx = Math.max(minIdx, surfaceOrder.indexOf(surfaceMax));
+
+  // If minIdx === maxIdx (superposition: strictly single surface prioritized absolutely)
+  if (minIdx === maxIdx) {
+    switch (surfaceMin) {
+      case 'tarmac':
+        effectiveFRoad = Math.min(effectiveFRoad, 0.75);
+        effectiveFGravel = Math.max(effectiveFGravel, 3.0 * tolFactor);
+        effectiveFSingletrack = Math.max(effectiveFSingletrack, 3.5 * tolFactor);
+        effectiveFOffroad = Math.max(effectiveFOffroad, 4.0 * tolFactor);
+        break;
+      case 'paved':
+        effectiveFRoad = Math.max(effectiveFRoad, 2.0 * tolFactor);
+        effectiveFGravel = Math.max(effectiveFGravel, 3.0 * tolFactor);
+        effectiveFSingletrack = Math.max(effectiveFSingletrack, 3.5 * tolFactor);
+        effectiveFOffroad = Math.max(effectiveFOffroad, 4.0 * tolFactor);
+        break;
+      case 'gravel':
+        effectiveFGravel = Math.min(effectiveFGravel, 0.75);
+        effectiveFRoad = Math.max(effectiveFRoad, 3.0 * tolFactor);
+        effectiveFSingletrack = Math.max(effectiveFSingletrack, 3.0 * tolFactor);
+        effectiveFOffroad = Math.max(effectiveFOffroad, 3.5 * tolFactor);
+        break;
+      case 'other':
+        effectiveFSingletrack = Math.min(effectiveFSingletrack, 0.75);
+        effectiveFOffroad = Math.min(effectiveFOffroad, 0.85);
+        effectiveFGravel = Math.max(effectiveFGravel, 2.5 * tolFactor);
+        effectiveFRoad = Math.max(effectiveFRoad, 3.5 * tolFactor);
+        break;
+    }
+  } else {
+    // Range of surfaces:
+    // If tarmac (0) excluded
+    if (minIdx > 0) {
+      effectiveFRoad = Math.max(effectiveFRoad, 2.5 * tolFactor);
+    } else {
+      effectiveFRoad = Math.min(effectiveFRoad, 0.9);
+    }
+
+    // Gravel (2)
+    if (maxIdx < 2) {
+      effectiveFGravel = Math.max(effectiveFGravel, 2.5 * tolFactor);
+    } else if (minIdx <= 2 && maxIdx >= 2) {
+      effectiveFGravel = Math.min(effectiveFGravel, 0.85);
+    }
+
+    // Other (3: singletrack & offroad)
+    if (maxIdx < 3) {
+      effectiveFSingletrack = Math.max(effectiveFSingletrack, 2.8 * tolFactor);
+      effectiveFOffroad = Math.max(effectiveFOffroad, 3.2 * tolFactor);
+    } else {
+      effectiveFSingletrack = Math.min(effectiveFSingletrack, 0.85);
+      effectiveFOffroad = Math.min(effectiveFOffroad, 0.95);
+    }
   }
 
   const sign = (value: number): number =>

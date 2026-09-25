@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useAppI18n } from '@/shared/i18n';
 import type { PrioritiesState, RoadPreference, RoadTypesState, RouteProfile } from '../types';
 import {
@@ -17,7 +17,7 @@ import { PortalDropdown } from '../components/controls/PortalDropdown';
 import {
   syncTracageOnActivityChange,
   syncTracageOnTracingModeChange,
-  syncTracageOnSurfaceChange,
+  syncTracageOnSurfaceRangeChange,
   type ActivityType,
   type TracingModeType,
   type SurfaceType,
@@ -138,17 +138,35 @@ export function TracageSection({
   });
 
   useEffect(() => {
+    const activeId = activeProfileId || roadTypes.activityType;
     if (
-      activeProfileId &&
-      (ROUTE_PROFILE_PRESETS[activeProfileId] || savedProfiles.some((p) => p.id === activeProfileId))
+      activeId &&
+      (ROUTE_PROFILE_PRESETS[activeId] || savedProfiles.some((p) => p.id === activeId))
     ) {
-      setSelectedBaseId(activeProfileId);
+      setSelectedBaseId(activeId);
     }
-  }, [activeProfileId, savedProfiles]);
+  }, [activeProfileId, roadTypes.activityType, savedProfiles]);
 
-  // Active surface preference
-  const currentSurface: SurfaceType =
-    roadTypes.surfacePreference ?? (roadTypes.gravel === 'prefer' ? 'gravel' : 'tarmac');
+  // Active surface preference range [min, max]
+  const currentSurfaceMin: SurfaceType =
+    roadTypes.surfaceMin ??
+    (selectedBaseId === 'mtb'
+      ? 'paved'
+      : 'tarmac');
+
+  const currentSurfaceMax: SurfaceType =
+    roadTypes.surfaceMax ??
+    roadTypes.surfacePreference ??
+    (selectedBaseId === 'mtb'
+      ? 'other'
+      : selectedBaseId === 'road'
+        ? 'tarmac'
+        : 'gravel');
+
+  const minSurfaceIndex = SURFACES.findIndex((s) => s.id === currentSurfaceMin);
+  const maxSurfaceIndex = SURFACES.findIndex((s) => s.id === currentSurfaceMax);
+  const safeMinIdx = minSurfaceIndex >= 0 ? minSurfaceIndex : 0;
+  const safeMaxIdx = maxSurfaceIndex >= 0 ? Math.max(safeMinIdx, maxSurfaceIndex) : safeMinIdx;
 
   // Active tolerance percent
   const currentTolerance = roadTypes.surfaceTolerance ?? 10;
@@ -158,29 +176,32 @@ export function TracageSection({
 
   // Compare roadTypes against base profile
   const activeBaseSaved = savedProfiles.find((p) => p.id === selectedBaseId);
-  const activeBasePreset = ROUTE_PROFILE_PRESETS[selectedBaseId];
-  const targetRoadTypes = activeBaseSaved
-    ? activeBaseSaved.roadTypes
-    : activeBasePreset
-      ? activeBasePreset.roadTypes
-      : ROUTE_PROFILE_PRESETS['gravel-default'].roadTypes;
+  const basePresetKey: ActivityType =
+    selectedBaseId === 'road'
+      ? 'road'
+      : selectedBaseId === 'mtb'
+        ? 'mtb'
+        : (activeBaseSaved?.basePresetId as ActivityType) || 'gravel-default';
 
-  const isCustomized = !isRoadTypesMatching(roadTypes, targetRoadTypes);
+  const expectedRoadTypes = useMemo(() => {
+    if (activeBaseSaved) {
+      return activeBaseSaved.roadTypes;
+    }
+    return syncTracageOnActivityChange(basePresetKey, currentTracingMode, currentTolerance).roadTypes;
+  }, [activeBaseSaved, basePresetKey, currentTracingMode, currentTolerance]);
+
+  const isCustomized = !isRoadTypesMatching(roadTypes, expectedRoadTypes);
 
   // Resolved active activity name displayed in the top selector
-  const currentActivityName = isCustomized
-    ? activeBaseSaved
-      ? activeBaseSaved.name
-      : getNextCustomProfileName(savedProfiles)
-    : activeBaseSaved
-      ? activeBaseSaved.name
-      : selectedBaseId === 'road'
-        ? t('Route')
-        : selectedBaseId === 'mtb'
-          ? t('VTT')
-          : t('Gravel');
+  const currentActivityName = activeBaseSaved
+    ? activeBaseSaved.name
+    : selectedBaseId === 'road'
+      ? t('Route')
+      : selectedBaseId === 'mtb'
+        ? t('VTT')
+        : t('Gravel');
 
-  const currentActivityIcon = isCustomized || activeBaseSaved ? (
+  const currentActivityIcon = activeBaseSaved ? (
     <IconSlidersFigma size={16} />
   ) : (
     <IconBikeShop size={16} />
@@ -189,10 +210,20 @@ export function TracageSection({
   // Surface slider position and smooth dragging
   const sliderWrapRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [dragPct, setDragPct] = useState<number | null>(null);
+  const [activeDraggingKnob, setActiveDraggingKnob] = useState<'min' | 'max' | 'superposed' | null>(null);
+  const [dragMinPct, setDragMinPct] = useState<number | null>(null);
+  const [dragMaxPct, setDragMaxPct] = useState<number | null>(null);
+  const dragMinIdxRef = useRef<number>(safeMinIdx);
+  const dragMaxIdxRef = useRef<number>(safeMaxIdx);
+  const startClientXRef = useRef<number>(0);
 
-  const activeSurfaceIndex = SURFACES.findIndex((s) => s.id === currentSurface);
-  const activeSurfacePct = activeSurfaceIndex >= 0 ? SURFACES[activeSurfaceIndex].pct : 0;
+  useEffect(() => {
+    dragMinIdxRef.current = safeMinIdx;
+    dragMaxIdxRef.current = safeMaxIdx;
+  }, [safeMinIdx, safeMaxIdx]);
+
+  const activeMinPct = SURFACES[safeMinIdx].pct;
+  const activeMaxPct = SURFACES[safeMaxIdx].pct;
 
   const applyRoadUpdates = (updates: Partial<RoadTypesState>) => {
     (Object.keys(updates) as (keyof RoadTypesState)[]).forEach((key) => {
@@ -215,8 +246,8 @@ export function TracageSection({
       onBatchChangeRoadTypes(syncResult.roadTypes, syncResult.priorities);
     } else {
       applyRoadUpdates(syncResult.roadTypes);
+      onChangeProfile?.(activityId);
     }
-    onChangeProfile?.(activityId);
     setActivityOpen(false);
   };
 
@@ -237,7 +268,7 @@ export function TracageSection({
         ? 'road'
         : selectedBaseId === 'mtb'
           ? 'mtb'
-          : 'gravel-default';
+          : (activeBaseSaved?.basePresetId as ActivityType) || 'gravel-default';
     const syncResult = syncTracageOnTracingModeChange(
       mode,
       currentActivity,
@@ -251,14 +282,14 @@ export function TracageSection({
     setTracingOpen(false);
   };
 
-  const handleSurfaceSelect = (surface: SurfaceType) => {
+  const handleSurfaceRangeSelect = (surfaceMin: SurfaceType, surfaceMax: SurfaceType) => {
     const currentActivity: ActivityType =
       selectedBaseId === 'road'
         ? 'road'
         : selectedBaseId === 'mtb'
           ? 'mtb'
-          : 'gravel-default';
-    const syncResult = syncTracageOnSurfaceChange(surface, currentActivity);
+          : (activeBaseSaved?.basePresetId as ActivityType) || 'gravel-default';
+    const syncResult = syncTracageOnSurfaceRangeChange(surfaceMin, surfaceMax, currentActivity);
 
     if (onBatchChangeRoadTypes) {
       onBatchChangeRoadTypes(syncResult.roadTypes);
@@ -266,6 +297,8 @@ export function TracageSection({
       applyRoadUpdates(syncResult.roadTypes);
     }
   };
+
+
 
   const handleToleranceSelect = (val: number) => {
     onChangeRoadType?.('surfaceTolerance', val);
@@ -283,16 +316,22 @@ export function TracageSection({
       return;
     }
 
-    const presetKey: ActivityType = ROUTE_PROFILE_PRESETS[selectedBaseId]
-      ? (selectedBaseId as ActivityType)
-      : 'gravel-default';
-    const preset = ROUTE_PROFILE_PRESETS[presetKey];
+    const presetKey: ActivityType =
+      selectedBaseId === 'road'
+        ? 'road'
+        : selectedBaseId === 'mtb'
+          ? 'mtb'
+          : 'gravel-default';
+    const syncResult = syncTracageOnActivityChange(
+      presetKey,
+      currentTracingMode,
+      currentTolerance,
+    );
     if (onBatchChangeRoadTypes) {
-      onBatchChangeRoadTypes(preset.roadTypes, preset.priorities);
+      onBatchChangeRoadTypes(syncResult.roadTypes, syncResult.priorities);
     } else {
-      applyRoadUpdates(preset.roadTypes);
+      applyRoadUpdates(syncResult.roadTypes);
     }
-    onChangeProfile?.(presetKey);
   };
 
   const handleSave = () => {
@@ -315,6 +354,8 @@ export function TracageSection({
           elevationPreference: roadTypes.elevationPreference,
           woods: roadTypes.woods,
           surfacePreference: roadTypes.surfacePreference,
+          surfaceMin: roadTypes.surfaceMin,
+          surfaceMax: roadTypes.surfaceMax,
           surfaceTolerance: roadTypes.surfaceTolerance,
           activityType: activeBaseSaved.name,
           tracingMode: roadTypes.tracingMode,
@@ -342,6 +383,8 @@ export function TracageSection({
           elevationPreference: roadTypes.elevationPreference,
           woods: roadTypes.woods,
           surfacePreference: roadTypes.surfacePreference,
+          surfaceMin: roadTypes.surfaceMin,
+          surfaceMax: roadTypes.surfaceMax,
           surfaceTolerance: roadTypes.surfaceTolerance,
           activityType: nextName,
           tracingMode: roadTypes.tracingMode,
@@ -385,22 +428,108 @@ export function TracageSection({
     setIsDragging(true);
 
     const ratio = getRatioFromPointerEvent(e.clientX);
-    const pct = ratio * 100;
-    setDragPct(pct);
+    const clickPct = ratio * 100;
+    const minPct = SURFACES[safeMinIdx].pct;
+    const maxPct = SURFACES[safeMaxIdx].pct;
 
-    const nearestIndex = Math.round(ratio * (SURFACES.length - 1));
-    handleSurfaceSelect(SURFACES[nearestIndex].id);
+    startClientXRef.current = e.clientX;
+
+    // Both knobs superposed on same surface
+    if (safeMinIdx === safeMaxIdx) {
+      const distToKnob = Math.abs(clickPct - minPct);
+      if (distToKnob < 15) {
+        setActiveDraggingKnob('superposed');
+        setDragMinPct(minPct);
+        setDragMaxPct(maxPct);
+        return;
+      } else if (clickPct < minPct) {
+        setActiveDraggingKnob('min');
+        const nearestIndex = Math.min(safeMaxIdx, Math.max(0, Math.round(ratio * (SURFACES.length - 1))));
+        dragMinIdxRef.current = nearestIndex;
+        setDragMinPct(clickPct);
+        handleSurfaceRangeSelect(SURFACES[nearestIndex].id, SURFACES[safeMaxIdx].id);
+        return;
+      } else {
+        setActiveDraggingKnob('max');
+        const nearestIndex = Math.max(safeMinIdx, Math.min(SURFACES.length - 1, Math.round(ratio * (SURFACES.length - 1))));
+        dragMaxIdxRef.current = nearestIndex;
+        setDragMaxPct(clickPct);
+        handleSurfaceRangeSelect(SURFACES[safeMinIdx].id, SURFACES[nearestIndex].id);
+        return;
+      }
+    }
+
+    // Separate knobs: pick closer knob
+    if (clickPct <= minPct) {
+      setActiveDraggingKnob('min');
+      const nearestIndex = Math.min(safeMaxIdx, Math.max(0, Math.round(ratio * (SURFACES.length - 1))));
+      dragMinIdxRef.current = nearestIndex;
+      setDragMinPct(clickPct);
+      handleSurfaceRangeSelect(SURFACES[nearestIndex].id, SURFACES[safeMaxIdx].id);
+    } else if (clickPct >= maxPct) {
+      setActiveDraggingKnob('max');
+      const nearestIndex = Math.max(safeMinIdx, Math.min(SURFACES.length - 1, Math.round(ratio * (SURFACES.length - 1))));
+      dragMaxIdxRef.current = nearestIndex;
+      setDragMaxPct(clickPct);
+      handleSurfaceRangeSelect(SURFACES[safeMinIdx].id, SURFACES[nearestIndex].id);
+    } else {
+      const distMin = Math.abs(clickPct - minPct);
+      const distMax = Math.abs(clickPct - maxPct);
+      if (distMin <= distMax) {
+        setActiveDraggingKnob('min');
+        const nearestIndex = Math.min(safeMaxIdx, Math.max(0, Math.round(ratio * (SURFACES.length - 1))));
+        dragMinIdxRef.current = nearestIndex;
+        setDragMinPct(clickPct);
+        handleSurfaceRangeSelect(SURFACES[nearestIndex].id, SURFACES[safeMaxIdx].id);
+      } else {
+        setActiveDraggingKnob('max');
+        const nearestIndex = Math.max(safeMinIdx, Math.min(SURFACES.length - 1, Math.round(ratio * (SURFACES.length - 1))));
+        dragMaxIdxRef.current = nearestIndex;
+        setDragMaxPct(clickPct);
+        handleSurfaceRangeSelect(SURFACES[safeMinIdx].id, SURFACES[nearestIndex].id);
+      }
+    }
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!isDragging) return;
     e.preventDefault();
-    const ratio = getRatioFromPointerEvent(e.clientX);
-    const pct = ratio * 100;
-    setDragPct(pct);
 
-    const nearestIndex = Math.round(ratio * (SURFACES.length - 1));
-    handleSurfaceSelect(SURFACES[nearestIndex].id);
+    const ratio = getRatioFromPointerEvent(e.clientX);
+    const clickPct = ratio * 100;
+
+    let targetKnob = activeDraggingKnob;
+    if (targetKnob === 'superposed') {
+      const dx = e.clientX - startClientXRef.current;
+      if (Math.abs(dx) > 3) {
+        targetKnob = dx > 0 ? 'max' : 'min';
+        setActiveDraggingKnob(targetKnob);
+      } else {
+        return;
+      }
+    }
+
+    if (targetKnob === 'min') {
+      const maxBoundPct = SURFACES[safeMaxIdx].pct;
+      const clampedPct = Math.max(0, Math.min(maxBoundPct, clickPct));
+      setDragMinPct(clampedPct);
+
+      const nearestIndex = Math.min(safeMaxIdx, Math.max(0, Math.round(ratio * (SURFACES.length - 1))));
+      if (nearestIndex !== dragMinIdxRef.current) {
+        dragMinIdxRef.current = nearestIndex;
+        handleSurfaceRangeSelect(SURFACES[nearestIndex].id, SURFACES[safeMaxIdx].id);
+      }
+    } else if (targetKnob === 'max') {
+      const minBoundPct = SURFACES[safeMinIdx].pct;
+      const clampedPct = Math.max(minBoundPct, Math.min(100, clickPct));
+      setDragMaxPct(clampedPct);
+
+      const nearestIndex = Math.max(safeMinIdx, Math.min(SURFACES.length - 1, Math.round(ratio * (SURFACES.length - 1))));
+      if (nearestIndex !== dragMaxIdxRef.current) {
+        dragMaxIdxRef.current = nearestIndex;
+        handleSurfaceRangeSelect(SURFACES[safeMinIdx].id, SURFACES[nearestIndex].id);
+      }
+    }
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -411,13 +540,41 @@ export function TracageSection({
       // ignore
     }
     setIsDragging(false);
-    setDragPct(null);
+    setActiveDraggingKnob(null);
+    setDragMinPct(null);
+    setDragMaxPct(null);
   };
 
-  // Interpolated knob position: constrained within [19px, 100% - 19px] so it NEVER crops
-  const effectivePct = isDragging && dragPct !== null ? dragPct : activeSurfacePct;
-  const knobLeftStyle = `calc(19px + (100% - 38px) * ${effectivePct / 100})`;
-  const fillWidthStyle = `calc(19px + (100% - 38px) * ${effectivePct / 100})`;
+  const handleTickLabelClick = (index: number) => {
+    if (index < safeMinIdx) {
+      handleSurfaceRangeSelect(SURFACES[index].id, SURFACES[safeMaxIdx].id);
+    } else if (index > safeMaxIdx) {
+      handleSurfaceRangeSelect(SURFACES[safeMinIdx].id, SURFACES[index].id);
+    } else if (index === safeMinIdx && safeMinIdx < safeMaxIdx) {
+      handleSurfaceRangeSelect(SURFACES[index].id, SURFACES[index].id);
+    } else if (index === safeMaxIdx && safeMinIdx < safeMaxIdx) {
+      handleSurfaceRangeSelect(SURFACES[index].id, SURFACES[index].id);
+    } else if (safeMinIdx < index && index < safeMaxIdx) {
+      const distToMin = index - safeMinIdx;
+      const distToMax = safeMaxIdx - index;
+      if (distToMin <= distToMax) {
+        handleSurfaceRangeSelect(SURFACES[index].id, SURFACES[safeMaxIdx].id);
+      } else {
+        handleSurfaceRangeSelect(SURFACES[safeMinIdx].id, SURFACES[index].id);
+      }
+    }
+  };
+
+  // Interpolated knob positions and fill range
+  const effectiveMinPct =
+    isDragging && dragMinPct !== null ? dragMinPct : activeMinPct;
+  const effectiveMaxPct =
+    isDragging && dragMaxPct !== null ? dragMaxPct : activeMaxPct;
+
+  const knobMinLeftStyle = `calc(19px + (100% - 38px) * ${effectiveMinPct / 100})`;
+  const knobMaxLeftStyle = `calc(19px + (100% - 38px) * ${effectiveMaxPct / 100})`;
+  const fillLeftStyle = `calc(19px + (100% - 38px) * ${effectiveMinPct / 100})`;
+  const fillWidthStyle = `calc((100% - 38px) * ${(effectiveMaxPct - effectiveMinPct) / 100})`;
 
   return (
     <div className="rvi-tracage">
@@ -455,7 +612,7 @@ export function TracageSection({
             {/* Standard 3 Presets: Route, Gravel, VTT */}
             <button
               type="button"
-              className={`rvi-tracage__mode-menu-item${selectedBaseId === 'road' && !isCustomized ? ' is-selected' : ''}`}
+              className={`rvi-tracage__mode-menu-item${!activeBaseSaved && selectedBaseId === 'road' ? ' is-selected' : ''}`}
               onClick={() => handleActivitySelect('road')}
             >
               <IconBikeShop size={15} />
@@ -463,7 +620,7 @@ export function TracageSection({
             </button>
             <button
               type="button"
-              className={`rvi-tracage__mode-menu-item${selectedBaseId === 'gravel-default' && !isCustomized ? ' is-selected' : ''}`}
+              className={`rvi-tracage__mode-menu-item${!activeBaseSaved && selectedBaseId === 'gravel-default' ? ' is-selected' : ''}`}
               onClick={() => handleActivitySelect('gravel-default')}
             >
               <IconBikeShop size={15} />
@@ -471,7 +628,7 @@ export function TracageSection({
             </button>
             <button
               type="button"
-              className={`rvi-tracage__mode-menu-item${selectedBaseId === 'mtb' && !isCustomized ? ' is-selected' : ''}`}
+              className={`rvi-tracage__mode-menu-item${!activeBaseSaved && selectedBaseId === 'mtb' ? ' is-selected' : ''}`}
               onClick={() => handleActivitySelect('mtb')}
             >
               <IconBikeShop size={15} />
@@ -486,7 +643,7 @@ export function TracageSection({
                   <div key={cp.id} className="rvi-tracage__mode-menu-item-row">
                     <button
                       type="button"
-                      className={`rvi-tracage__mode-menu-item${selectedBaseId === cp.id && !isCustomized ? ' is-selected' : ''}`}
+                      className={`rvi-tracage__mode-menu-item${selectedBaseId === cp.id ? ' is-selected' : ''}`}
                       onClick={() => handleCustomProfileSelect(cp)}
                     >
                       <IconSlidersFigma size={15} />
@@ -585,28 +742,14 @@ export function TracageSection({
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 onPointerCancel={handlePointerUp}
-                role="slider"
-                aria-label={t('Surfaces')}
-                aria-valuemin={0}
-                aria-valuemax={3}
-                aria-valuenow={activeSurfaceIndex}
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
-                    const next = Math.min(SURFACES.length - 1, activeSurfaceIndex + 1);
-                    handleSurfaceSelect(SURFACES[next].id);
-                  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
-                    const prev = Math.max(0, activeSurfaceIndex - 1);
-                    handleSurfaceSelect(SURFACES[prev].id);
-                  }
-                }}
               >
                 {/* Background track line */}
                 <div className="rvi-tracage__slider-track" />
-                {/* Active RED line */}
+
+                {/* Active RED line connecting min and max */}
                 <div
                   className={`rvi-tracage__slider-fill${isDragging ? ' is-dragging' : ''}`}
-                  style={{ width: fillWidthStyle }}
+                  style={{ left: fillLeftStyle, width: fillWidthStyle }}
                 />
 
                 {/* Discrete 4 Ticks aligned to knob centers */}
@@ -617,40 +760,85 @@ export function TracageSection({
                       : idx === SURFACES.length - 1
                         ? 'calc(100% - 19px)'
                         : `calc(19px + (100% - 38px) * ${s.pct / 100})`;
+                  const isInRange = idx >= safeMinIdx && idx <= safeMaxIdx;
                   return (
                     <div
                       key={s.id}
                       className="rvi-tracage__slider-tick"
                       style={{
                         left: tickLeft,
-                        background:
-                          s.pct <= effectivePct
-                            ? '#ffffff'
-                            : 'rgba(255, 255, 255, 0.28)',
+                        background: isInRange
+                          ? '#ffffff'
+                          : 'rgba(255, 255, 255, 0.28)',
                       }}
                     />
                   );
                 })}
 
-                {/* Knob Pill (38px x 24px) constrained so it NEVER crops on left or right */}
+                {/* Knob Min Pill (38px x 24px) */}
                 <div
-                  className={`rvi-tracage__slider-knob${isDragging ? ' is-dragging' : ''}`}
-                  style={{ left: knobLeftStyle }}
+                  className={`rvi-tracage__slider-knob rvi-tracage__slider-knob--min${activeDraggingKnob === 'min' ? ' is-dragging' : ''}`}
+                  style={{ left: knobMinLeftStyle }}
+                  role="slider"
+                  aria-label={t('Surface minimale')}
+                  aria-valuemin={0}
+                  aria-valuemax={safeMaxIdx}
+                  aria-valuenow={safeMinIdx}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      const next = Math.min(safeMaxIdx, safeMinIdx + 1);
+                      handleSurfaceRangeSelect(SURFACES[next].id, SURFACES[safeMaxIdx].id);
+                    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      const prev = Math.max(0, safeMinIdx - 1);
+                      handleSurfaceRangeSelect(SURFACES[prev].id, SURFACES[safeMaxIdx].id);
+                    }
+                  }}
+                />
+
+                {/* Knob Max Pill (38px x 24px) */}
+                <div
+                  className={`rvi-tracage__slider-knob rvi-tracage__slider-knob--max${activeDraggingKnob === 'max' ? ' is-dragging' : ''}`}
+                  style={{ left: knobMaxLeftStyle }}
+                  role="slider"
+                  aria-label={t('Surface maximale')}
+                  aria-valuemin={safeMinIdx}
+                  aria-valuemax={SURFACES.length - 1}
+                  aria-valuenow={safeMaxIdx}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      const next = Math.min(SURFACES.length - 1, safeMaxIdx + 1);
+                      handleSurfaceRangeSelect(SURFACES[safeMinIdx].id, SURFACES[next].id);
+                    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      const prev = Math.max(safeMinIdx, safeMaxIdx - 1);
+                      handleSurfaceRangeSelect(SURFACES[safeMinIdx].id, SURFACES[prev].id);
+                    }
+                  }}
                 />
               </div>
             </div>
 
             {/* Ticks labels row */}
             <div className="rvi-tracage__ticks-labels">
-              {SURFACES.map((s) => (
-                <span
-                  key={s.id}
-                  className={`rvi-tracage__tick-label${s.id === currentSurface ? ' is-active' : ''}`}
-                  onClick={() => handleSurfaceSelect(s.id)}
-                >
-                  {s.label}
-                </span>
-              ))}
+              {SURFACES.map((s, idx) => {
+                const isActive = idx >= safeMinIdx && idx <= safeMaxIdx;
+                return (
+                  <span
+                    key={s.id}
+                    className={`rvi-tracage__tick-label${isActive ? ' is-active' : ''}`}
+                    onClick={() => handleTickLabelClick(idx)}
+                    onDoubleClick={() => handleSurfaceRangeSelect(s.id, s.id)}
+                    title={t(s.label)}
+                  >
+                    {s.label}
+                  </span>
+                );
+              })}
             </div>
           </div>
 

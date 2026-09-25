@@ -101,6 +101,8 @@ export interface RoadTypesState {
   elevationPreference?: RoadPreference;
   woods?: RoadPreference;
   surfacePreference?: 'tarmac' | 'paved' | 'gravel' | 'other';
+  surfaceMin?: 'tarmac' | 'paved' | 'gravel' | 'other';
+  surfaceMax?: 'tarmac' | 'paved' | 'gravel' | 'other';
   surfaceTolerance?: number;
   activityType?: string;
   tracingMode?: 'vitesse' | 'aventure' | 'comfort';
