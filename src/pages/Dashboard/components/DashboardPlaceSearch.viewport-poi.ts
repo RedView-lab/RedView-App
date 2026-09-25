@@ -1,7 +1,7 @@
 import type { Map as MapboxMap, Marker } from 'mapbox-gl';
 
 import { fetchPoisInBbox } from '@/features/poi/lib/poi-api';
-import { getPoiIconUrl } from '@/features/poi/lib/poi-icons';
+import { getPoiIconUrl, hasDedicatedFavoritePoiIcon } from '@/features/poi/lib/poi-icons';
 import { POI_LABELS, type PoiCategory, type PoiFeature } from '@/features/poi/types';
 
 import { DROPDOWN_VIEWPORT_POI_ICON_URLS } from './DashboardPlaceSearch.constants';
@@ -10,7 +10,10 @@ import type {
   ViewportPoiLodProfile,
 } from './DashboardPlaceSearch.types';
 
-function getDropdownViewportPoiIconUrl(category: PoiCategory): string {
+function getDropdownViewportPoiIconUrl(category: PoiCategory, favorite?: boolean): string {
+  if (favorite) {
+    return getPoiIconUrl(category, true);
+  }
   return DROPDOWN_VIEWPORT_POI_ICON_URLS[category] ?? getPoiIconUrl(category);
 }
 
@@ -146,12 +149,14 @@ export function selectViewportLodPois(
       || feature.name
     );
 
+    const isFavorite = Boolean(feature.favorite);
     // Score de qualité :
+    // - Favori : +50 000 pts (priorité absolue)
     // - Déjà affiché (sticky) : +1000 pts (anti-flicker lors du pan)
     // - Avec nom identifiable : +200 pts
     // - Proximité au centre du viewport : 0 à +100 pts
     const centerProximityBonus = Math.max(0, (1 - centerDistance / maxCenterDistance) * 100);
-    const score = (isSticky ? 1000 : 0) + (hasName ? 200 : 0) + centerProximityBonus;
+    const score = (isFavorite ? 50000 : 0) + (isSticky ? 1000 : 0) + (hasName ? 200 : 0) + centerProximityBonus;
 
     const candidate: RankedCandidate = {
       feature,
@@ -163,7 +168,13 @@ export function selectViewportLodPois(
       score,
     };
 
-    // 2. Bucketing spatial (1 seul POI par cellule pixel)
+    // Les favoris sont conservés sans jamais être écrasés
+    if (isFavorite) {
+      cellBuckets.set(`fav:${key}`, candidate);
+      continue;
+    }
+
+    // 2. Bucketing spatial (1 seul POI non-favori par cellule pixel)
     const cellX = Math.floor(point.x / cellPx);
     const cellY = Math.floor(point.y / cellPx);
     const bucketKey = `${cellX}:${cellY}`;
@@ -174,8 +185,12 @@ export function selectViewportLodPois(
     }
   }
 
-  // 3. Tri et application du plafond strict de performance
-  const selectedCandidates = [...cellBuckets.values()].sort((a, b) => {
+  // 3. Tri et application du plafond avec préservation absolue des favoris
+  const allCandidates = [...cellBuckets.values()];
+  const favoriteCandidates = allCandidates.filter((c) => c.feature.favorite);
+  const regularCandidates = allCandidates.filter((c) => !c.feature.favorite);
+
+  regularCandidates.sort((a, b) => {
     // D'abord les sticky (stabilité visuelle)
     if (a.isSticky !== b.isSticky) {
       return a.isSticky ? -1 : 1;
@@ -188,7 +203,8 @@ export function selectViewportLodPois(
     return a.centerDistance - b.centerDistance;
   });
 
-  const cappedCandidates = selectedCandidates.slice(0, maxDomMarkers);
+  const remainingQuota = Math.max(0, maxDomMarkers - favoriteCandidates.length);
+  const cappedCandidates = [...favoriteCandidates, ...regularCandidates.slice(0, remainingQuota)];
 
   // 4. Tri déterministe pour stabilité du cycle de vie React/DOM
   cappedCandidates.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
@@ -199,8 +215,9 @@ export function selectViewportLodPois(
 export function createViewportPoiMarkerElement(feature: PoiFeature): HTMLButtonElement {
   const element = document.createElement('button');
   element.type = 'button';
-  element.className = 'rvd-viewport-poi-marker';
+  element.className = `rvd-viewport-poi-marker${feature.favorite ? ' is-favorite' : ''}`;
   element.dataset.poiCategory = feature.category;
+  element.style.zIndex = feature.favorite ? '50' : '20';
 
   const poiName =
     feature.tags?.name
@@ -220,12 +237,31 @@ export function createViewportPoiMarkerElement(feature: PoiFeature): HTMLButtonE
 
   const image = document.createElement('img');
   image.className = 'rvd-viewport-poi-marker__img';
-  image.src = getDropdownViewportPoiIconUrl(feature.category);
+  image.src = getDropdownViewportPoiIconUrl(feature.category, feature.favorite === true);
   image.alt = '';
   image.draggable = false;
   image.decoding = 'async';
-
   element.appendChild(image);
+
+  if (feature.favorite && !hasDedicatedFavoritePoiIcon(feature.category)) {
+    const badge = document.createElement('span');
+    badge.className = 'rvd-viewport-poi-marker__fav-badge';
+    badge.setAttribute('aria-hidden', 'true');
+    const badgeIcon = document.createElement('img');
+    badgeIcon.className = 'rvd-viewport-poi-marker__fav-icon';
+    badgeIcon.src = '/svgv2/icone/star-01.svg';
+    badgeIcon.alt = '';
+    badge.appendChild(badgeIcon);
+    element.appendChild(badge);
+  }
+
+  element.addEventListener('mouseenter', () => {
+    element.style.zIndex = '100';
+  });
+  element.addEventListener('mouseleave', () => {
+    element.style.zIndex = feature.favorite ? '50' : '20';
+  });
+
   return element;
 }
 

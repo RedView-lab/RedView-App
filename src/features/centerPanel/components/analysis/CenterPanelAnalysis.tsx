@@ -125,12 +125,25 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
     weatherByItinerary,
   });
 
+  const isSplitArmed = Boolean(routeSplitTool?.armed);
+  const [mapHoverXValue, setMapHoverXValue] = useState<number | null>(null);
+
+  const handleMapHoverXValueChange = useCallback(
+    (xValue: number | null) => {
+      setMapHoverXValue(xValue);
+      setManualHoverXValue(xValue);
+    },
+    [setManualHoverXValue],
+  );
+
   const { updateHoverPoint } = useAnalysisHoverPointMarker({
     map,
     visibleChartNodes,
     activeItinerary,
     xMode,
     predictions,
+    onMapHoverXValueChange: handleMapHoverXValueChange,
+    disabled: isSplitArmed,
   });
 
   const handleHoverXValueChange = useCallback(
@@ -146,6 +159,9 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
       updateHoverPoint(controlledHoverXValue);
     }
   }, [controlledHoverXValue, updateHoverPoint]);
+
+  const chartControlledHoverXValue =
+    Number.isFinite(controlledHoverXValue) ? controlledHoverXValue : mapHoverXValue;
 
   const updateAnalysis = (mut: (draft: AnalysisPanelState) => void) => {
     if (!projectStore) return;
@@ -322,7 +338,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
           onYViewportChange={handleYViewportChange}
           onDetailOffsetChange={handleOffsetChange}
           onHoverXValueChange={handleHoverXValueChange}
-          controlledHoverXValue={controlledHoverXValue}
+          controlledHoverXValue={chartControlledHoverXValue}
           onPlotClick={handleChartClick}
           showSeriesRows={false}
         />

@@ -199,8 +199,6 @@ export function useAnalysisChartData({
     const includePause = Boolean(filters.pause);
     const includeWaypoint = Boolean(filters.waypoint);
 
-    if (!includePoi && !includePause && !includeWaypoint) return [];
-
     const result: ChartPoiAnnotation[] = [];
     for (const node of preparedChartNodes) {
       const { itinerary, prediction, xOffset } = node;
@@ -209,6 +207,7 @@ export function useAnalysisChartData({
           includePoi,
           includePause,
           includeWaypoint,
+          includeFavoritesAlways: true,
         }).map((annotation) => shiftChartX(annotation, xOffset)),
       );
     }

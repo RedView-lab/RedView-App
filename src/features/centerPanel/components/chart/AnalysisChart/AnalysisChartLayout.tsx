@@ -197,40 +197,79 @@ export function AnalysisChartLayout({
                 return (
                   <div
                     key={group.id}
-                    className="rvchart__poi-marker"
+                    className={`rvchart__poi-marker${annotation.favorite ? ' is-favorite' : ''}`}
                     style={{
                       left: `${group.xRatio * 100}%`,
                       top: `${group.yRatio * 100}%`,
+                      zIndex: annotation.favorite ? 30 : 10,
                     }}
                     title={`${annotation.itineraryName} · ${annotation.categoryLabel} · ${annotation.label}`}
                     aria-hidden="true"
                   >
                     {annotation.kind === 'pause' ? (
-                      <img
-                        src="/svgv2/icone/checkpoint-pause.svg"
-                        alt="Pause"
-                        style={{
-                          width: POI_MARKER_SIZE_PX,
-                          height: POI_MARKER_SIZE_PX,
-                          display: 'block',
-                          objectFit: 'contain',
-                          filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))',
-                        }}
-                      />
+                      <span style={{ position: 'relative', display: 'inline-flex' }}>
+                        <img
+                          src="/svgv2/icone/checkpoint-pause.svg"
+                          alt="Pause"
+                          style={{
+                            width: POI_MARKER_SIZE_PX,
+                            height: POI_MARKER_SIZE_PX,
+                            display: 'block',
+                            objectFit: 'contain',
+                            filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))',
+                          }}
+                        />
+                        {annotation.favorite && (
+                          <img
+                            src="/svgv2/icone/star-01.svg"
+                            alt=""
+                            style={{
+                              position: 'absolute',
+                              top: -2,
+                              right: -2,
+                              width: Math.round(POI_MARKER_SIZE_PX * 0.45),
+                              height: Math.round(POI_MARKER_SIZE_PX * 0.45),
+                              pointerEvents: 'none',
+                              filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6))',
+                            }}
+                          />
+                        )}
+                      </span>
                     ) : annotation.kind === 'waypoint' ? (
-                      <img
-                        src="/svgv2/icone/checkpoint-waypoint.svg"
-                        alt="Waypoint"
-                        style={{
-                          width: POI_MARKER_SIZE_PX,
-                          height: POI_MARKER_SIZE_PX,
-                          display: 'block',
-                          objectFit: 'contain',
-                          filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))',
-                        }}
-                      />
+                      <span style={{ position: 'relative', display: 'inline-flex' }}>
+                        <img
+                          src="/svgv2/icone/checkpoint-waypoint.svg"
+                          alt="Waypoint"
+                          style={{
+                            width: POI_MARKER_SIZE_PX,
+                            height: POI_MARKER_SIZE_PX,
+                            display: 'block',
+                            objectFit: 'contain',
+                            filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))',
+                          }}
+                        />
+                        {annotation.favorite && (
+                          <img
+                            src="/svgv2/icone/star-01.svg"
+                            alt=""
+                            style={{
+                              position: 'absolute',
+                              top: -2,
+                              right: -2,
+                              width: Math.round(POI_MARKER_SIZE_PX * 0.45),
+                              height: Math.round(POI_MARKER_SIZE_PX * 0.45),
+                              pointerEvents: 'none',
+                              filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6))',
+                            }}
+                          />
+                        )}
+                      </span>
                     ) : annotation.poiCategory ? (
-                      <PoiBadge category={annotation.poiCategory} size={POI_MARKER_SIZE_PX} />
+                      <PoiBadge
+                        category={annotation.poiCategory}
+                        size={POI_MARKER_SIZE_PX}
+                        favorite={annotation.favorite}
+                      />
                     ) : (
                       <span className="rvchart__poi-marker-fallback">POI</span>
                     )}
@@ -266,53 +305,93 @@ export function AnalysisChartLayout({
                 );
               }
 
+              const hasFavoriteInGroup = group.members.some((m) => m.favorite);
+              const shouldSpread =
+                hasFavoriteInGroup ||
+                shouldExpandPoiCluster(group, visibleFraction, expandedPoiClusterId);
+
               return (
                 <Fragment key={group.id}>
                   {group.members.map((annotation, index) => {
-                    const offsetPx = shouldExpandPoiCluster(
-                      group,
-                      visibleFraction,
-                      expandedPoiClusterId,
-                    )
+                    const offsetPx = shouldSpread
                       ? buildPoiSpreadOffsetPx(index, group.count)
                       : 0;
                     return (
                       <div
                         key={annotation.id}
-                        className="rvchart__poi-marker"
+                        className={`rvchart__poi-marker${annotation.favorite ? ' is-favorite' : ''}`}
                         style={{
                           left: `calc(${annotation.xRatio * 100}% + ${offsetPx}px)`,
                           top: `${annotation.yRatio * 100}%`,
+                          zIndex: annotation.favorite ? 30 + index : 10 + index,
                         }}
                         title={`${annotation.itineraryName} · ${annotation.categoryLabel} · ${annotation.label}`}
                         aria-hidden="true"
                       >
                         {annotation.kind === 'pause' ? (
-                          <img
-                            src="/svgv2/icone/checkpoint-pause.svg"
-                            alt="Pause"
-                            style={{
-                              width: POI_MARKER_SIZE_PX,
-                              height: POI_MARKER_SIZE_PX,
-                              display: 'block',
-                              objectFit: 'contain',
-                              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))',
-                            }}
-                          />
+                          <span style={{ position: 'relative', display: 'inline-flex' }}>
+                            <img
+                              src="/svgv2/icone/checkpoint-pause.svg"
+                              alt="Pause"
+                              style={{
+                                width: POI_MARKER_SIZE_PX,
+                                height: POI_MARKER_SIZE_PX,
+                                display: 'block',
+                                objectFit: 'contain',
+                                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))',
+                              }}
+                            />
+                            {annotation.favorite && (
+                              <img
+                                src="/svgv2/icone/star-01.svg"
+                                alt=""
+                                style={{
+                                  position: 'absolute',
+                                  top: -2,
+                                  right: -2,
+                                  width: Math.round(POI_MARKER_SIZE_PX * 0.45),
+                                  height: Math.round(POI_MARKER_SIZE_PX * 0.45),
+                                  pointerEvents: 'none',
+                                  filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6))',
+                                }}
+                              />
+                            )}
+                          </span>
                         ) : annotation.kind === 'waypoint' ? (
-                          <img
-                            src="/svgv2/icone/checkpoint-waypoint.svg"
-                            alt="Waypoint"
-                            style={{
-                              width: POI_MARKER_SIZE_PX,
-                              height: POI_MARKER_SIZE_PX,
-                              display: 'block',
-                              objectFit: 'contain',
-                              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))',
-                            }}
-                          />
+                          <span style={{ position: 'relative', display: 'inline-flex' }}>
+                            <img
+                              src="/svgv2/icone/checkpoint-waypoint.svg"
+                              alt="Waypoint"
+                              style={{
+                                width: POI_MARKER_SIZE_PX,
+                                height: POI_MARKER_SIZE_PX,
+                                display: 'block',
+                                objectFit: 'contain',
+                                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))',
+                              }}
+                            />
+                            {annotation.favorite && (
+                              <img
+                                src="/svgv2/icone/star-01.svg"
+                                alt=""
+                                style={{
+                                  position: 'absolute',
+                                  top: -2,
+                                  right: -2,
+                                  width: Math.round(POI_MARKER_SIZE_PX * 0.45),
+                                  height: Math.round(POI_MARKER_SIZE_PX * 0.45),
+                                  pointerEvents: 'none',
+                                  filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6))',
+                                }}
+                              />
+                            )}
+                          </span>
                         ) : annotation.poiCategory ? (
-                          <PoiBadge category={annotation.poiCategory} size={POI_MARKER_SIZE_PX} />
+                          <PoiBadge
+                            category={annotation.poiCategory}
+                            size={POI_MARKER_SIZE_PX}
+                            favorite={annotation.favorite}
+                          />
                         ) : (
                           <span className="rvchart__poi-marker-fallback">POI</span>
                         )}

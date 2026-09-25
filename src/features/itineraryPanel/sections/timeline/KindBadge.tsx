@@ -46,6 +46,7 @@ interface KindBadgeProps {
   size?: number;
   /** Required when `kind === 'poi'` — selects the teardrop pin color/icon. */
   poiCategory?: PoiCategory;
+  favorite?: boolean;
 }
 
 /** French labels for the timeline type column. */
@@ -121,6 +122,21 @@ const PROVIDED_TIMELINE_BADGE_URLS: Partial<Record<PoiCategory, string>> = {
   passes: PROVIDED_POI_SVG.refugeBadge,
 };
 
+const PROVIDED_TIMELINE_FAVORITE_BADGE_URLS: Partial<Record<PoiCategory, string>> = {
+  fountains: PROVIDED_POI_SVG.favoriteWater,
+  toilets: PROVIDED_POI_SVG.favoriteToilet,
+  supermarkets: PROVIDED_POI_SVG.favoriteSupermarket,
+  gasStations: PROVIDED_POI_SVG.favoriteFuel,
+  bakeries: PROVIDED_POI_SVG.favoriteBakery,
+  fastFood: PROVIDED_POI_SVG.favoriteFastFood,
+  cafes: PROVIDED_POI_SVG.favoriteCafe,
+  bars: PROVIDED_POI_SVG.favoriteBar,
+  restaurants: PROVIDED_POI_SVG.favoriteRestaurant,
+  hotels: PROVIDED_POI_SVG.favoriteHotelPin,
+  refuges: PROVIDED_POI_SVG.favoriteRefugePin,
+  passes: PROVIDED_POI_SVG.favoriteRefugePin,
+};
+
 /** POI label (FR). */
 export function poiLabel(category: PoiCategory): string {
   switch (category) {
@@ -150,14 +166,24 @@ export function PoiBadge({
   category,
   size = 20,
   hideGlyph = false,
+  favorite = false,
 }: {
   category: PoiCategory;
   size?: number;
   hideGlyph?: boolean;
+  favorite?: boolean;
 }) {
-  const providedUrl = PROVIDED_TIMELINE_BADGE_URLS[category];
+  const favoriteUrl = favorite ? PROVIDED_TIMELINE_FAVORITE_BADGE_URLS[category] : undefined;
+  const providedUrl = favoriteUrl ?? PROVIDED_TIMELINE_BADGE_URLS[category];
   if (providedUrl) {
-    return <ProvidedPoiSvgBadge url={providedUrl} size={size} className="rvi-kind--pin" />;
+    return (
+      <ProvidedPoiSvgBadge
+        url={providedUrl}
+        size={size}
+        className="rvi-kind--pin"
+        showStarBadge={favorite && !favoriteUrl}
+      />
+    );
   }
 
   // Les catégories sans badge designé retombent sur un pin neutre.
@@ -167,7 +193,7 @@ export function PoiBadge({
   return (
     <span
       className="rvi-kind rvi-kind--pin"
-      style={{ width: size, height: size }}
+      style={{ width: size, height: size, position: 'relative', display: 'inline-flex' }}
       aria-hidden
     >
       <IconTeardropPin size={size} color={color} />
@@ -176,6 +202,22 @@ export function PoiBadge({
           <spec.Icon size={glyph} />
         </span>
       ) : null}
+      {favorite && !favoriteUrl && (
+        <img
+          src="/svgv2/icone/star-01.svg"
+          alt=""
+          style={{
+            position: 'absolute',
+            top: -2,
+            right: -2,
+            width: Math.round(size * 0.45),
+            height: Math.round(size * 0.45),
+            pointerEvents: 'none',
+            filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6))',
+          }}
+          draggable={false}
+        />
+      )}
     </span>
   );
 }
@@ -184,29 +226,50 @@ function ProvidedPoiSvgBadge({
   url,
   size,
   className,
+  showStarBadge = false,
 }: {
   url: string;
   size: number;
   className?: string;
+  showStarBadge?: boolean;
 }) {
   return (
     <span
       className={`rvi-kind ${className ?? ''}`.trim()}
-      style={{ width: size, height: size }}
+      style={{ width: size, height: size, position: 'relative', display: 'inline-flex' }}
       aria-hidden
     >
       <img
         src={url}
         alt=""
-        style={{ width: '100%', height: '100%', display: 'block' }}
+        width={size}
+        height={size}
+        style={{ width: size, height: size, display: 'block', objectFit: 'contain' }}
+        draggable={false}
       />
+      {showStarBadge && (
+        <img
+          src="/svgv2/icone/star-01.svg"
+          alt=""
+          style={{
+            position: 'absolute',
+            top: -2,
+            right: -2,
+            width: Math.round(size * 0.45),
+            height: Math.round(size * 0.45),
+            pointerEvents: 'none',
+            filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6))',
+          }}
+          draggable={false}
+        />
+      )}
     </span>
   );
 }
 
 /* ------------------------------ Main badge ------------------------------ */
 
-export function KindBadge({ kind, size = 20, poiCategory }: KindBadgeProps) {
+export function KindBadge({ kind, size = 20, poiCategory, favorite = false }: KindBadgeProps) {
   if (kind === 'start') {
     return (
       <span
@@ -257,7 +320,7 @@ export function KindBadge({ kind, size = 20, poiCategory }: KindBadgeProps) {
 
   // Generic POI row injected by corridor search → use the typed teardrop pin.
   if (kind === 'poi' && poiCategory) {
-    return <PoiBadge category={poiCategory} size={size} />;
+    return <PoiBadge category={poiCategory} size={size} favorite={favorite} />;
   }
 
   if (kind === 'poi') {

@@ -30,7 +30,13 @@ export function buildPoiMarkerGroups(
     groups.push([annotation]);
   }
 
-  return groups.map((members) => {
+  return groups.map((rawMembers) => {
+    const members = [...rawMembers].sort((a, b) => {
+      if (Boolean(a.favorite) !== Boolean(b.favorite)) {
+        return a.favorite ? 1 : -1;
+      }
+      return 0;
+    });
     const count = members.length;
     const avgX = members.reduce((sum, member) => sum + member.xRatio, 0) / count;
     const topY = members.reduce((min, member) => Math.min(min, member.yRatio), members[0].yRatio);
@@ -84,6 +90,9 @@ export function shouldRenderPoiCluster(
   visibleFraction: number,
   expandedPoiClusterId: string | null,
 ): boolean {
+  if (group.members.some((member) => member.favorite)) {
+    return false;
+  }
   return group.count > 1 && !shouldExpandPoiCluster(group, visibleFraction, expandedPoiClusterId);
 }
 

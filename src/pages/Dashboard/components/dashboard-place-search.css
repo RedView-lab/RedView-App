@@ -473,3 +473,26 @@
   transition: transform 140ms cubic-bezier(0.18, 0.84, 0.28, 1);
 }
 
+.rvd-viewport-poi-marker.is-favorite {
+  z-index: 50;
+}
+
+.rvd-viewport-poi-marker__fav-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 11px;
+  height: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+}
+
+.rvd-viewport-poi-marker__fav-icon {
+  width: 11px;
+  height: 11px;
+  display: block;
+}
+

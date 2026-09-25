@@ -43,6 +43,7 @@ interface MarkerRegistryEntry {
   signature: string;
   element: HTMLElement;
   kind: 'start' | 'end' | 'pause' | 'waypoint';
+  spreadOffsetPx?: number;
 }
 
 interface PausePopupState {
@@ -129,12 +130,66 @@ function applyMarkerVisualState(entry: MarkerRegistryEntry, zoom: number): void 
   if (entry.kind === 'pause' || entry.kind === 'waypoint') {
     const visual = getPoiMarkerVisualState(zoom);
     el.style.setProperty('--rv-poi-marker-scale', visual.scale.toFixed(3));
+    const spreadPx = entry.spreadOffsetPx ?? 0;
+    const scaledSpreadPx = Math.round(spreadPx * visual.scale);
+    el.style.setProperty('--rv-poi-spread-x', `${scaledSpreadPx}px`);
     if (entry.popup) {
-      entry.popup.setOffset(visual.popupOffsetPx);
+      entry.popup.setOffset([scaledSpreadPx, visual.popupOffsetPx]);
     }
   } else {
     applyCheckpointZoomVisibility(el, zoom);
   }
+}
+
+function computeCheckpointSpreadOffsets(checkpoints: CheckpointData[]): Map<string, number> {
+  const offsetMap = new Map<string, number>();
+  if (checkpoints.length === 0) return offsetMap;
+
+  const clusters: CheckpointData[][] = [];
+  for (const cp of checkpoints) {
+    let targetCluster: CheckpointData[] | null = null;
+    for (const cluster of clusters) {
+      const anchor = cluster[0];
+      const dLat = (cp.coord[1] - anchor.coord[1]) * 111320;
+      const dLon =
+        (cp.coord[0] - anchor.coord[0]) *
+        111320 *
+        Math.cos(((cp.coord[1] + anchor.coord[1]) / 2) * (Math.PI / 180));
+      const distM = Math.hypot(dLat, dLon);
+      if (distM <= 18) {
+        targetCluster = cluster;
+        break;
+      }
+    }
+    if (targetCluster) {
+      targetCluster.push(cp);
+    } else {
+      clusters.push([cp]);
+    }
+  }
+
+  for (const cluster of clusters) {
+    const N = cluster.length;
+    if (N <= 1) {
+      offsetMap.set(cluster[0].key, 0);
+      continue;
+    }
+
+    // Sort so non-favorites are first, favorites last (rendered on top)
+    cluster.sort((a, b) => {
+      if (Boolean(a.favorite) !== Boolean(b.favorite)) {
+        return a.favorite ? 1 : -1;
+      }
+      return 0;
+    });
+
+    cluster.forEach((cp, idx) => {
+      const centerOffset = idx - (N - 1) / 2;
+      offsetMap.set(cp.key, Math.round(centerOffset * 26));
+    });
+  }
+
+  return offsetMap;
 }
 
 function getRoutePointDistances(points: Array<{ lat: number; lon: number; distanceM?: number }>): number[] {
@@ -462,21 +517,27 @@ function createMarkerElement(
   label: string,
   durationMin?: number | null,
   distanceKm?: number | null,
+  favorite?: boolean,
 ): HTMLElement {
   if (kind === 'pause' || kind === 'waypoint') {
     const el = document.createElement('button');
     el.type = 'button';
-    el.className = `rv-poi-marker rv-poi-marker--${kind}`;
+    el.className = `rv-poi-marker rv-poi-marker--${kind}${favorite ? ' is-favorite rv-poi-marker--favorite' : ''}`;
+    el.style.zIndex = favorite ? '50' : '20';
 
     const kindName = kind === 'pause' ? translateAppText('Pause') : translateAppText('Waypoint');
     const durSuffix = kind === 'pause' && durationMin ? ` · ${durationMin} min` : '';
     const distSuffix = distanceKm != null && distanceKm > 0 ? ` (${distanceKm.toFixed(1)} km)` : '';
+    const favSuffix = favorite ? ` ★` : '';
     const title =
       label && label !== 'Pause' && label !== 'Waypoint'
-        ? `${label}${durSuffix}${distSuffix}`
-        : `${kindName}${durSuffix}${distSuffix}`;
+        ? `${label}${durSuffix}${distSuffix}${favSuffix}`
+        : `${kindName}${durSuffix}${distSuffix}${favSuffix}`;
     el.title = title;
     el.setAttribute('aria-label', title);
+
+    const inner = document.createElement('div');
+    inner.className = 'rv-poi-marker__inner';
 
     const img = document.createElement('img');
     img.className = 'rv-poi-marker__img';
@@ -484,7 +545,31 @@ function createMarkerElement(
     img.alt = '';
     img.draggable = false;
     img.decoding = 'async';
-    el.appendChild(img);
+    inner.appendChild(img);
+
+    if (favorite) {
+      const badge = document.createElement('span');
+      badge.className = 'rv-poi-marker__favorite-badge';
+      badge.setAttribute('aria-hidden', 'true');
+
+      const badgeIcon = document.createElement('img');
+      badgeIcon.className = 'rv-poi-marker__favorite-badge-icon';
+      badgeIcon.src = UI_ICON_URLS.star;
+      badgeIcon.alt = '';
+      badgeIcon.draggable = false;
+      badge.appendChild(badgeIcon);
+
+      inner.appendChild(badge);
+    }
+
+    el.appendChild(inner);
+
+    el.addEventListener('mouseenter', () => {
+      el.style.zIndex = '100';
+    });
+    el.addEventListener('mouseleave', () => {
+      el.style.zIndex = favorite ? '50' : '20';
+    });
 
     return el;
   }
@@ -640,26 +725,65 @@ export function useItineraryCheckpointMarkers({
         });
       }
 
-      // 3. Pauses (if enabled in top bar)
-      if (pausesEnabled) {
-        // 3a. Manual pauses from timeline
-        const pauseRows = itinerary.timeline.filter(
-          (row) => row.kind === 'pause' && row.visible !== false,
+      // 3. Pauses (if enabled in top bar, or if favorite)
+      const pauseRows = itinerary.timeline.filter(
+        (row) => row.kind === 'pause' && row.visible !== false && (pausesEnabled || row.favorite === true),
+      );
+      for (const row of pauseRows) {
+        let coord: [number, number] | null = null;
+        if (row.lat != null && row.lon != null) {
+          coord = [row.lon, row.lat];
+        } else if (routePoints.length >= 2 && Number.isFinite(row.distanceKm)) {
+          const targetM = (row.distanceKm as number) * 1000;
+          const pt = interpolateRoutePointAtDistanceM(routePoints, distancesM, targetM);
+          if (pt) coord = [pt.lon, pt.lat];
+        }
+
+        if (coord) {
+          const key = `${itinerary.id}:pause:${row.id}`;
+          const label = row.label || translateAppText('Pause');
+          const signature = `${key}:${coord[0].toFixed(6)},${coord[1].toFixed(6)}:${label}:${row.distanceKm ?? ''}:${row.durationMin ?? 0}:${row.favorite ? '1' : '0'}`;
+          currentCheckpoints.push({
+            key,
+            kind: 'pause',
+            coord,
+            label,
+            itineraryId: itinerary.id,
+            signature,
+            pauseId: row.id,
+            durationMin: row.durationMin ?? 15,
+            distanceKm: row.distanceKm ?? null,
+            favorite: row.favorite === true,
+          });
+        }
+      }
+
+      // 3b. Auto-generated interval pauses
+      if (
+        pausesEnabled &&
+        itinerary.rhythm?.pauseEveryIntervalEnabled &&
+        itinerary.prediction &&
+        itinerary.prediction.points.length >= 2
+      ) {
+        const reference = parseStartReference(itinerary.rhythm);
+        const { autoPauses } = buildScheduledTimelineState(
+          itinerary.timeline,
+          itinerary.prediction,
+          reference,
+          itinerary.rhythm,
         );
-        for (const row of pauseRows) {
+        for (const autoPause of autoPauses) {
+          if (autoPause.visible === false) continue;
           let coord: [number, number] | null = null;
-          if (row.lat != null && row.lon != null) {
-            coord = [row.lon, row.lat];
-          } else if (routePoints.length >= 2 && Number.isFinite(row.distanceKm)) {
-            const targetM = (row.distanceKm as number) * 1000;
+          if (routePoints.length >= 2 && Number.isFinite(autoPause.distanceKm)) {
+            const targetM = autoPause.distanceKm * 1000;
             const pt = interpolateRoutePointAtDistanceM(routePoints, distancesM, targetM);
             if (pt) coord = [pt.lon, pt.lat];
           }
-
           if (coord) {
-            const key = `${itinerary.id}:pause:${row.id}`;
-            const label = row.label || translateAppText('Pause');
-            const signature = `${key}:${coord[0].toFixed(6)},${coord[1].toFixed(6)}:${label}:${row.distanceKm ?? ''}:${row.durationMin ?? 0}:${row.favorite ? '1' : '0'}`;
+            const key = `${itinerary.id}:pause:${autoPause.id}`;
+            const label = autoPause.label || translateAppText('Pause');
+            const signature = `${key}:${coord[0].toFixed(6)},${coord[1].toFixed(6)}:${label}:${autoPause.distanceKm}:${autoPause.durationMin ?? 0}`;
             currentCheckpoints.push({
               key,
               kind: 'pause',
@@ -667,87 +791,44 @@ export function useItineraryCheckpointMarkers({
               label,
               itineraryId: itinerary.id,
               signature,
-              pauseId: row.id,
-              durationMin: row.durationMin ?? 15,
-              distanceKm: row.distanceKm ?? null,
-              favorite: row.favorite === true,
+              pauseId: autoPause.id,
+              durationMin: autoPause.durationMin ?? 15,
+              distanceKm: autoPause.distanceKm,
             });
-          }
-        }
-
-        // 3b. Auto-generated interval pauses
-        if (
-          itinerary.rhythm?.pauseEveryIntervalEnabled &&
-          itinerary.prediction &&
-          itinerary.prediction.points.length >= 2
-        ) {
-          const reference = parseStartReference(itinerary.rhythm);
-          const { autoPauses } = buildScheduledTimelineState(
-            itinerary.timeline,
-            itinerary.prediction,
-            reference,
-            itinerary.rhythm,
-          );
-          for (const autoPause of autoPauses) {
-            if (autoPause.visible === false) continue;
-            let coord: [number, number] | null = null;
-            if (routePoints.length >= 2 && Number.isFinite(autoPause.distanceKm)) {
-              const targetM = autoPause.distanceKm * 1000;
-              const pt = interpolateRoutePointAtDistanceM(routePoints, distancesM, targetM);
-              if (pt) coord = [pt.lon, pt.lat];
-            }
-            if (coord) {
-              const key = `${itinerary.id}:pause:${autoPause.id}`;
-              const label = autoPause.label || translateAppText('Pause');
-              const signature = `${key}:${coord[0].toFixed(6)},${coord[1].toFixed(6)}:${label}:${autoPause.distanceKm}:${autoPause.durationMin ?? 0}`;
-              currentCheckpoints.push({
-                key,
-                kind: 'pause',
-                coord,
-                label,
-                itineraryId: itinerary.id,
-                signature,
-                pauseId: autoPause.id,
-                durationMin: autoPause.durationMin ?? 15,
-                distanceKm: autoPause.distanceKm,
-              });
-            }
           }
         }
       }
 
-      // 4. Waypoints (if enabled in top bar)
-      if (waypointsEnabled) {
-        const waypointRows = itinerary.timeline.filter(
-          (row) => row.kind === 'waypoint' && row.visible !== false,
-        );
-        for (const row of waypointRows) {
-          let coord: [number, number] | null = null;
-          if (row.lat != null && row.lon != null) {
-            coord = [row.lon, row.lat];
-          } else if (routePoints.length >= 2 && Number.isFinite(row.distanceKm)) {
-            const targetM = (row.distanceKm as number) * 1000;
-            const pt = interpolateRoutePointAtDistanceM(routePoints, distancesM, targetM);
-            if (pt) coord = [pt.lon, pt.lat];
-          }
+      // 4. Waypoints (if enabled in top bar, or if favorite)
+      const waypointRows = itinerary.timeline.filter(
+        (row) => row.kind === 'waypoint' && row.visible !== false && (waypointsEnabled || row.favorite === true),
+      );
+      for (const row of waypointRows) {
+        let coord: [number, number] | null = null;
+        if (row.lat != null && row.lon != null) {
+          coord = [row.lon, row.lat];
+        } else if (routePoints.length >= 2 && Number.isFinite(row.distanceKm)) {
+          const targetM = (row.distanceKm as number) * 1000;
+          const pt = interpolateRoutePointAtDistanceM(routePoints, distancesM, targetM);
+          if (pt) coord = [pt.lon, pt.lat];
+        }
 
-          if (coord) {
-            const key = `${itinerary.id}:waypoint:${row.id}`;
-            const label = row.label || translateAppText('Waypoint');
-            const signature = `${key}:${coord[0].toFixed(6)},${coord[1].toFixed(6)}:${label}:${row.distanceKm ?? ''}:${row.favorite ? '1' : '0'}`;
-            currentCheckpoints.push({
-              key,
-              kind: 'waypoint',
-              coord,
-              label,
-              itineraryId: itinerary.id,
-              signature,
-              waypointId: row.id,
-              rowId: row.id,
-              distanceKm: row.distanceKm ?? null,
-              favorite: row.favorite === true,
-            });
-          }
+        if (coord) {
+          const key = `${itinerary.id}:waypoint:${row.id}`;
+          const label = row.label || translateAppText('Waypoint');
+          const signature = `${key}:${coord[0].toFixed(6)},${coord[1].toFixed(6)}:${label}:${row.distanceKm ?? ''}:${row.favorite ? '1' : '0'}`;
+          currentCheckpoints.push({
+            key,
+            kind: 'waypoint',
+            coord,
+            label,
+            itineraryId: itinerary.id,
+            signature,
+            waypointId: row.id,
+            rowId: row.id,
+            distanceKm: row.distanceKm ?? null,
+            favorite: row.favorite === true,
+          });
         }
       }
     }
@@ -762,10 +843,15 @@ export function useItineraryCheckpointMarkers({
       }
     }
 
+    // Compute spread offsets for superposed / co-located checkpoints
+    const spreadOffsets = computeCheckpointSpreadOffsets(currentCheckpoints);
+
     // Add or update markers
     for (const cp of currentCheckpoints) {
+      const spreadOffsetPx = spreadOffsets.get(cp.key) ?? 0;
       const existing = registry.get(cp.key);
       if (existing) {
+        existing.spreadOffsetPx = spreadOffsetPx;
         if (existing.signature !== cp.signature) {
           existing.marker.setLngLat(cp.coord);
           let kindName = '';
@@ -774,18 +860,44 @@ export function useItineraryCheckpointMarkers({
           else if (cp.kind === 'pause') kindName = translateAppText('Pause');
           else kindName = translateAppText('Waypoint');
           const distSuffix = cp.distanceKm != null && cp.distanceKm > 0 ? ` (${cp.distanceKm.toFixed(1)} km)` : '';
+          const favSuffix = cp.favorite ? ` ★` : '';
           const title =
             cp.label && cp.label !== 'Pause' && cp.label !== 'Waypoint'
-              ? `${cp.label}${distSuffix}`
-              : `${kindName}${distSuffix}`;
+              ? `${cp.label}${distSuffix}${favSuffix}`
+              : `${kindName}${distSuffix}${favSuffix}`;
           existing.element.title = title;
           existing.element.setAttribute('aria-label', title);
           existing.signature = cp.signature;
           applyTracePointDataset(existing.element, cp);
+
+          if (cp.kind === 'pause' || cp.kind === 'waypoint') {
+            existing.element.classList.toggle('is-favorite', Boolean(cp.favorite));
+            existing.element.classList.toggle('rv-poi-marker--favorite', Boolean(cp.favorite));
+            existing.element.style.zIndex = cp.favorite ? '50' : '20';
+
+            const inner = existing.element.querySelector('.rv-poi-marker__inner');
+            if (inner) {
+              const existingBadge = inner.querySelector('.rv-poi-marker__favorite-badge');
+              if (cp.favorite && !existingBadge) {
+                const badge = document.createElement('span');
+                badge.className = 'rv-poi-marker__favorite-badge';
+                badge.setAttribute('aria-hidden', 'true');
+                const badgeIcon = document.createElement('img');
+                badgeIcon.className = 'rv-poi-marker__favorite-badge-icon';
+                badgeIcon.src = UI_ICON_URLS.star;
+                badgeIcon.alt = '';
+                badgeIcon.draggable = false;
+                badge.appendChild(badgeIcon);
+                inner.appendChild(badge);
+              } else if (!cp.favorite && existingBadge) {
+                existingBadge.remove();
+              }
+            }
+          }
         }
         applyMarkerVisualState(existing, currentZoom);
       } else {
-        const element = createMarkerElement(cp.kind, cp.label, cp.durationMin, cp.distanceKm);
+        const element = createMarkerElement(cp.kind, cp.label, cp.durationMin, cp.distanceKm, cp.favorite);
         applyTracePointDataset(element, cp);
         const popup =
           cp.kind === 'pause' && cp.pauseId
@@ -833,6 +945,7 @@ export function useItineraryCheckpointMarkers({
           signature: cp.signature,
           element,
           kind: cp.kind,
+          spreadOffsetPx,
         };
 
         registry.set(cp.key, entry);

@@ -106,19 +106,25 @@ export function usePoi(
   // these two passes is rendered. Nothing else is dropped.
 
   const buildRenderableFeatures = useCallback((features: PoiFeature[]) => {
-    if (features.length === 0 || enabledRef.current.size === 0) return [];
+    if (features.length === 0) return [];
 
-    const filtered = features.filter((feature) => enabledRef.current.has(feature.category));
-    if (filtered.length === 0) return [];
+    const favorites = features.filter((feature) => feature.favorite);
+    const nonFavorites = features.filter(
+      (feature) => !feature.favorite && enabledRef.current.has(feature.category),
+    );
+
+    if (favorites.length === 0 && nonFavorites.length === 0) return [];
 
     const route = gpxRef.current;
-    if (!route || route.points.length < 2) return filtered;
+    if (!route || route.points.length < 2) return [...favorites, ...nonFavorites];
 
-    return filterPoisByLateralDistance(
-      filtered,
+    const filteredNonFavorites = filterPoisByLateralDistance(
+      nonFavorites,
       route.points,
       maxLateralDistanceByCategoryRef.current ?? undefined,
     );
+
+    return [...favorites, ...filteredNonFavorites];
   }, []);
 
   const syncRenderedFeatures = useCallback((features: PoiFeature[]) => {

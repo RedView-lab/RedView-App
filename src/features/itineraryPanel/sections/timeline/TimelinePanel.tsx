@@ -341,7 +341,7 @@ function matchesTimelineFilter(
   view: TimelineView,
   filters: TimelineFilterState,
 ): boolean {
-  if (item.favorite && !filters.favorite) return false;
+  if (item.favorite) return filters.favorite;
   if (item.kind === 'start' || item.kind === 'end') return filters.etape;
   if (item.kind === 'waypoint') return filters.waypoint;
   if (item.kind === 'pause') return filters.pause;

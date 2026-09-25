@@ -5,6 +5,7 @@ import { POI_LABELS, type PoiFeature } from '@/features/poi/types';
 import { FEATURE_TO_PANEL_POI } from '../../lib/schedule';
 import { normalizeItineraryRhythmState } from '../../lib/project';
 import type { Itinerary, ItineraryProject } from '../../types';
+import { cumulativeRouteLengthsM, projectDistanceAlongRouteM, roundDistanceKm } from '../../lib/routes';
 import {
   buildPendingRoutePatchForEditedRow,
   insertTimelineItem,
@@ -80,12 +81,24 @@ export function useItineraryPoiHandlers({
 
   const handlePoiFavoriteToggle = useCallback((feature: PoiFeature, nextEnabled: boolean) => {
     updateActive((it) => {
+      const routePoints = it.gpxRoute?.points ?? [];
+      const cumLengths = routePoints.length >= 2 ? cumulativeRouteLengthsM(routePoints) : null;
+      const calcDistanceKm = (): number | null => {
+        if (routePoints.length >= 2 && cumLengths && feature.lat != null && feature.lon != null) {
+          const distM = projectDistanceAlongRouteM({ lat: feature.lat, lon: feature.lon }, routePoints, cumLengths);
+          if (distM != null) return roundDistanceKm(distM);
+        }
+        return null;
+      };
+
       let poiRow = it.timeline.find((row) => row.kind === 'poi' && row.osmId === feature.id);
       if (poiRow) {
         poiRow.favorite = nextEnabled;
+        if (poiRow.distanceKm == null) {
+          poiRow.distanceKm = calcDistanceKm();
+        }
       } else if (nextEnabled) {
-        const endIndex = it.timeline.findIndex((row) => row.kind === 'end');
-        const insertAt = endIndex >= 0 ? endIndex : it.timeline.length;
+        const distanceKm = calcDistanceKm();
         const panelCategory = FEATURE_TO_PANEL_POI[feature.category];
         poiRow = {
           id: `poi-timeline-${feature.id}`,
@@ -97,8 +110,19 @@ export function useItineraryPoiHandlers({
           poiCategory: panelCategory,
           favorite: true,
           visible: true,
-          distanceKm: null,
+          distanceKm,
         };
+
+        let insertAt = it.timeline.findIndex((row) => row.kind === 'end');
+        if (insertAt < 0) insertAt = it.timeline.length;
+        if (distanceKm != null) {
+          const distIdx = it.timeline.findIndex(
+            (row) =>
+              row.kind !== 'start' &&
+              (row.kind === 'end' || (row.distanceKm != null && row.distanceKm > distanceKm)),
+          );
+          if (distIdx >= 0) insertAt = distIdx;
+        }
         it.timeline.splice(insertAt, 0, poiRow);
       }
       it.poiFeatures = setPoiFeatureFavoriteState(it.poiFeatures, feature.id, nextEnabled);

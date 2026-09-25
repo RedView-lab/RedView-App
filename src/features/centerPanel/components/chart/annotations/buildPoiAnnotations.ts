@@ -9,6 +9,9 @@ import { projectPredictionElapsedHoursToX } from '../series/timeline';
 import { projectElapsedHoursToX } from '../seriesPredictionMath';
 import { normalizeRouteProfile as normalizeChartRouteProfile } from '../series/routeProfile';
 
+import { cumulativeRouteLengthsM, projectDistanceAlongRouteM, roundDistanceKm } from '@/features/itineraryPanel/lib/routes';
+import { FEATURE_TO_PANEL_POI } from '@/features/itineraryPanel/lib/schedule';
+
 const predictionTimelineCache = new WeakMap<PredictionResult, TimelineSample[] | null>();
 const predictionProfileCache = new WeakMap<PredictionResult, ElevationSample[] | null>();
 
@@ -31,6 +34,7 @@ export interface ChartPoiAnnotation {
   kind?: 'poi' | 'pause' | 'waypoint';
   poiCategory?: PoiCategory;
   durationMin?: number | null;
+  favorite?: boolean;
   x: number;
   y: number;
 }
@@ -39,6 +43,7 @@ export interface BuildPoiAnnotationsOptions {
   includePoi?: boolean;
   includePause?: boolean;
   includeWaypoint?: boolean;
+  includeFavoritesAlways?: boolean;
 }
 
 export function buildPoiAnnotationsForItinerary(
@@ -50,8 +55,15 @@ export function buildPoiAnnotationsForItinerary(
   const includePoi = options?.includePoi ?? true;
   const includePause = options?.includePause ?? false;
   const includeWaypoint = options?.includeWaypoint ?? false;
+  const includeFavoritesAlways = options?.includeFavoritesAlways ?? true;
 
-  if (!includePoi && !includePause && !includeWaypoint) return [];
+  const hasFavoritePois =
+    (itinerary.timeline?.some((row) => row.kind === 'poi' && row.favorite) ?? false) ||
+    (itinerary.poiFeatures?.some((f) => f.favorite) ?? false);
+
+  if (!includePoi && !includePause && !includeWaypoint && !(includeFavoritesAlways && hasFavoritePois)) {
+    return [];
+  }
 
   const profile =
     normalizeChartRouteProfile(itinerary.gpxRoute?.points ?? null) ??
@@ -66,6 +78,20 @@ export function buildPoiAnnotationsForItinerary(
       ? null
       : buildPauseAwareSchedule(itinerary, prediction);
 
+  const routePoints = itinerary.gpxRoute?.points ?? [];
+  const cumLengths = routePoints.length >= 2 ? cumulativeRouteLengthsM(routePoints) : null;
+
+  const resolveRowDistanceKm = (row: TimelineItem): number | null => {
+    if (typeof row.distanceKm === 'number' && Number.isFinite(row.distanceKm)) {
+      return row.distanceKm;
+    }
+    if (routePoints.length >= 2 && cumLengths && row.lat != null && row.lon != null) {
+      const distM = projectDistanceAlongRouteM({ lat: row.lat, lon: row.lon }, routePoints, cumLengths);
+      if (distM != null) return roundDistanceKm(distM);
+    }
+    return null;
+  };
+
   const result: ChartPoiAnnotation[] = [];
 
   const addAnnotation = (
@@ -78,6 +104,7 @@ export function buildPoiAnnotationsForItinerary(
       poiCategory?: PoiCategory;
       durationMin?: number | null;
       entityId?: string;
+      favorite?: boolean;
     },
   ) => {
     if (!Number.isFinite(distanceKm)) return;
@@ -129,25 +156,63 @@ export function buildPoiAnnotationsForItinerary(
       kind: extra.kind,
       poiCategory: extra.poiCategory,
       durationMin: extra.durationMin,
+      favorite: extra.favorite,
       x,
       y,
     });
   };
 
   // 1. POI rows
-  if (includePoi) {
-    const poiRows = itinerary.timeline.filter(isVisiblePoiRow);
-    for (const row of poiRows) {
-      addAnnotation(
-        `${itinerary.id}::poi::${row.id}`,
-        row.label?.trim() || poiLabel(row.poiCategory ?? 'fountains'),
-        row.poiCategory ? poiLabel(row.poiCategory) : 'POI',
-        row.distanceKm,
-        {
-          kind: 'poi',
-          poiCategory: row.poiCategory,
-        },
+  const poiRows = (itinerary.timeline ?? []).filter((row) => {
+    if (row.kind !== 'poi' || row.visible === false) return false;
+    if (row.favorite && includeFavoritesAlways) return true;
+    return includePoi;
+  });
+
+  for (const row of poiRows) {
+    const distKm = resolveRowDistanceKm(row);
+    if (distKm == null) continue;
+    addAnnotation(
+      `${itinerary.id}::poi::${row.id}`,
+      row.label?.trim() || poiLabel(row.poiCategory ?? 'fountains'),
+      row.poiCategory ? poiLabel(row.poiCategory) : 'POI',
+      distKm,
+      {
+        kind: 'poi',
+        poiCategory: row.poiCategory,
+        favorite: Boolean(row.favorite),
+      },
+    );
+  }
+
+  // 1b. Extra favorite POIs from itinerary.poiFeatures if not yet in timeline
+  if (includeFavoritesAlways && itinerary.poiFeatures && routePoints.length >= 2 && cumLengths) {
+    const favoriteFeatures = itinerary.poiFeatures.filter((f) => f.favorite);
+    for (const f of favoriteFeatures) {
+      const alreadyPresent = result.some(
+        (r) =>
+          r.id.endsWith(`::poi-timeline-${f.id}`) ||
+          r.id.endsWith(`::poi-${f.id}`) ||
+          r.id.endsWith(`::feature-${f.id}`),
       );
+      if (alreadyPresent) continue;
+
+      const distM = projectDistanceAlongRouteM({ lat: f.lat, lon: f.lon }, routePoints, cumLengths);
+      if (distM != null) {
+        const distKm = roundDistanceKm(distM);
+        const panelCategory = FEATURE_TO_PANEL_POI[f.category];
+        addAnnotation(
+          `${itinerary.id}::poi::feature-${f.id}`,
+          f.name?.trim() || (panelCategory ? poiLabel(panelCategory) : 'POI'),
+          panelCategory ? poiLabel(panelCategory) : 'POI',
+          distKm,
+          {
+            kind: 'poi',
+            poiCategory: panelCategory,
+            favorite: true,
+          },
+        );
+      }
     }
   }
 
@@ -168,6 +233,7 @@ export function buildPoiAnnotationsForItinerary(
           kind: 'pause',
           durationMin: row.durationMin ?? 15,
           entityId: row.id,
+          favorite: Boolean(row.favorite),
         },
       );
     }
@@ -198,6 +264,7 @@ export function buildPoiAnnotationsForItinerary(
               kind: 'pause',
               durationMin: autoPause.durationMin ?? 15,
               entityId: autoPause.id,
+              favorite: Boolean((autoPause as unknown as { favorite?: boolean }).favorite),
             },
           );
         }
@@ -218,16 +285,13 @@ export function buildPoiAnnotationsForItinerary(
         row.distanceKm as number,
         {
           kind: 'waypoint',
+          favorite: Boolean(row.favorite),
         },
       );
     }
   }
 
   return result;
-}
-
-function isVisiblePoiRow(row: TimelineItem): row is TimelineItem & { distanceKm: number } {
-  return row.kind === 'poi' && row.visible !== false && Number.isFinite(row.distanceKm);
 }
 
 function normalizePredictionProfile(

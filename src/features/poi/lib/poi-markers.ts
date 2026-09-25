@@ -44,12 +44,15 @@ const MARKER_MAX_POPUP_OFFSET_PX = 80;
 const MARKER_OCCLUDED_OPACITY = 0;
 
 const FAVORITE_BADGE_ICON_URL = '/svgv2/icone/star-01.svg';
+const SUPERPOSED_PROXIMITY_M = 18;
+const SUPERPOSED_SPREAD_STEP_PX = 26;
 
 interface PoiMarkerEntry {
   marker: mapboxgl.Marker;
   popup: mapboxgl.Popup;
   signature: string;
   feature: PoiFeature;
+  spreadOffsetPx: number;
 }
 
 export function getMarkerKey(feature: PoiFeature): string {
@@ -67,13 +70,65 @@ function getMarkerSignature(feature: PoiFeature): string {
   ].join('|');
 }
 
+function computeSuperposedSpreadOffsets(features: PoiFeature[]): Map<string, number> {
+  const offsetMap = new Map<string, number>();
+  if (features.length === 0) return offsetMap;
+
+  const clusters: PoiFeature[][] = [];
+  for (const feature of features) {
+    let targetCluster: PoiFeature[] | null = null;
+    for (const cluster of clusters) {
+      const anchor = cluster[0];
+      const dLat = (feature.lat - anchor.lat) * 111320;
+      const dLon =
+        (feature.lon - anchor.lon) *
+        111320 *
+        Math.cos(((feature.lat + anchor.lat) / 2) * (Math.PI / 180));
+      const distM = Math.hypot(dLat, dLon);
+      if (distM <= SUPERPOSED_PROXIMITY_M) {
+        targetCluster = cluster;
+        break;
+      }
+    }
+    if (targetCluster) {
+      targetCluster.push(feature);
+    } else {
+      clusters.push([feature]);
+    }
+  }
+
+  for (const cluster of clusters) {
+    const N = cluster.length;
+    if (N <= 1) {
+      offsetMap.set(getMarkerKey(cluster[0]), 0);
+      continue;
+    }
+
+    // Sort so non-favorites are first, favorites last (rendered on top / in front)
+    cluster.sort((a, b) => {
+      if (Boolean(a.favorite) !== Boolean(b.favorite)) {
+        return a.favorite ? 1 : -1;
+      }
+      return 0;
+    });
+
+    cluster.forEach((feature, idx) => {
+      const centerOffset = idx - (N - 1) / 2;
+      offsetMap.set(getMarkerKey(feature), Math.round(centerOffset * SUPERPOSED_SPREAD_STEP_PX));
+    });
+  }
+
+  return offsetMap;
+}
+
 // ── Marker DOM ────────────────────────────────────────────────────────
 
 function createMarkerElement(feature: PoiFeature): HTMLButtonElement {
   const element = document.createElement('button');
   element.type = 'button';
-  element.className = 'rv-poi-marker';
+  element.className = `rv-poi-marker${feature.favorite ? ' is-favorite rv-poi-marker--favorite' : ''}`;
   element.dataset.poiCategory = feature.category;
+  element.style.zIndex = feature.favorite ? '50' : '20';
   element.setAttribute(
     'aria-label',
     feature.name?.trim()
@@ -82,13 +137,16 @@ function createMarkerElement(feature: PoiFeature): HTMLButtonElement {
   );
   element.title = feature.name?.trim() || POI_LABELS[feature.category];
 
+  const inner = document.createElement('div');
+  inner.className = 'rv-poi-marker__inner';
+
   const image = document.createElement('img');
   image.className = 'rv-poi-marker__img';
   image.src = getPoiIconUrl(feature.category, feature.favorite === true);
   image.alt = '';
   image.draggable = false;
   image.decoding = 'async';
-  element.appendChild(image);
+  inner.appendChild(image);
 
   // Categories without a dedicated favorite sprite get a star badge overlay.
   if (feature.favorite && !hasDedicatedFavoritePoiIcon(feature.category)) {
@@ -103,8 +161,17 @@ function createMarkerElement(feature: PoiFeature): HTMLButtonElement {
     badgeIcon.draggable = false;
     badge.appendChild(badgeIcon);
 
-    element.appendChild(badge);
+    inner.appendChild(badge);
   }
+
+  element.appendChild(inner);
+
+  element.addEventListener('mouseenter', () => {
+    element.style.zIndex = '100';
+  });
+  element.addEventListener('mouseleave', () => {
+    element.style.zIndex = feature.favorite ? '50' : '20';
+  });
 
   return element;
 }
@@ -127,17 +194,18 @@ function getMarkerVisualState(zoom: number): PoiMarkerVisualState {
 }
 
 function applyMarkerVisualState(entry: PoiMarkerEntry, zoom: number): void {
-  // No zoom-based culling: every POI inside the requested distance stays on
-  // the map at every zoom level. The previous `zoom < 8` guard wiped the
-  // whole layer as soon as the user zoomed out to frame the GPX track,
-  // which read as "the POIs are missing".
   const el = entry.marker.getElement();
   const visual = getMarkerVisualState(zoom);
   el.style.setProperty(
     '--rv-poi-marker-scale',
     visual.scale.toFixed(3),
   );
-  entry.popup.setOffset(visual.popupOffsetPx);
+  const scaledSpreadPx = Math.round(entry.spreadOffsetPx * visual.scale);
+  el.style.setProperty(
+    '--rv-poi-spread-x',
+    `${scaledSpreadPx}px`,
+  );
+  entry.popup.setOffset([scaledSpreadPx, visual.popupOffsetPx]);
 }
 
 // ── Manager ───────────────────────────────────────────────────────────
@@ -185,11 +253,15 @@ export class PoiMarkerManager {
     return this.registry.size;
   }
 
+  private spreadOffsets = new Map<string, number>();
+
   /**
    * Reconcile rendered markers against `features`: removes stale markers,
    * keeps unchanged ones (same signature) and (re)creates the rest.
+   * Also computes horizontal spread offsets so co-located / superposed POIs all appear.
    */
   sync(features: PoiFeature[]): void {
+    this.spreadOffsets = computeSuperposedSpreadOffsets(features);
     const nextKeys = new Set(features.map(getMarkerKey));
 
     for (const [key, entry] of this.registry) {
@@ -201,11 +273,19 @@ export class PoiMarkerManager {
     for (const feature of features) {
       const key = getMarkerKey(feature);
       const signature = getMarkerSignature(feature);
+      const spreadOffsetPx = this.spreadOffsets.get(key) ?? 0;
       const existing = this.registry.get(key);
-      if (existing && existing.signature === signature) continue;
+
+      if (existing && existing.signature === signature) {
+        if (existing.spreadOffsetPx !== spreadOffsetPx) {
+          existing.spreadOffsetPx = spreadOffsetPx;
+          applyMarkerVisualState(existing, this.map.getZoom());
+        }
+        continue;
+      }
 
       existing?.marker.remove();
-      this.registry.set(key, this.createEntry(feature));
+      this.registry.set(key, this.createEntry(feature, spreadOffsetPx));
     }
   }
 
@@ -280,7 +360,7 @@ export class PoiMarkerManager {
     return true;
   }
 
-  private createEntry(feature: PoiFeature): PoiMarkerEntry {
+  private createEntry(feature: PoiFeature, spreadOffsetPx: number): PoiMarkerEntry {
     const popup = new mapboxgl.Popup({
       className: 'rv-poi-popup',
       closeButton: false,
@@ -334,6 +414,7 @@ export class PoiMarkerManager {
       popup,
       signature: getMarkerSignature(feature),
       feature,
+      spreadOffsetPx,
     };
 
     applyMarkerVisualState(entry, this.map.getZoom());

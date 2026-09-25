@@ -92,13 +92,13 @@ export const AnalysisChart = memo(function AnalysisChart({
 
   const activeHover = useMemo(() => {
     if (Number.isFinite(controlledHoverXValue) && plotSize.width > 0) {
+      const val = controlledHoverXValue as number;
+      if (val < plotXDomain.min - 1e-4 || val > plotXDomain.max + 1e-4) {
+        return null;
+      }
       const span = plotXDomain.max - plotXDomain.min;
       if (span > 0) {
-        const clampedXValue = Math.max(
-          plotXDomain.min,
-          Math.min(plotXDomain.max, controlledHoverXValue as number),
-        );
-        const ratioX = (clampedXValue - plotXDomain.min) / span;
+        const ratioX = (val - plotXDomain.min) / span;
         return { x: ratioX * plotSize.width, ratioX };
       }
     }
