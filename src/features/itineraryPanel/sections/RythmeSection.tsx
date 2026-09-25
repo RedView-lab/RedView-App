@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { readDocumentAppLocale, translateAppText, useAppI18n } from '@/shared/i18n';
 import { ActionButtonStack, ToggleRow } from '../components/controls';
+import { PortalDropdown } from '../components/controls/PortalDropdown';
 import { Collapse } from '../components/shell';
 import { PauseIntervalList, PoiPauseGrid } from './rythme/components';
 import { CalendarPopover } from '../components/calendar';
 import { IconInfo, IconPlus } from '../components/icons';
+import { IconFigmaCheck } from '../components/iconsFigma';
 import type { PauseIntervalRow, RhythmState } from '../types';
 
 interface RythmeSectionProps {
@@ -24,17 +26,72 @@ const PRACTICE_LEVELS = [
   { id: 'intermediaire', label: 'Intermédiaire' },
   { id: 'avance', label: 'Avancé' },
   { id: 'expert', label: 'Expert' },
-  { id: 'personnalise', label: 'Personnalisé' },
 ] as const;
 
 const TIRE_OPTIONS = [28, 30, 32, 35, 38, 40, 45, 50];
 
+function CalendarIcon({ size = 10 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0 }}>
+      <path
+        d="M17.5 8.33366H2.5M13.3333 1.66699V5.00033M6.66667 1.66699V5.00033M6.5 18.3337H13.5C14.9001 18.3337 15.6002 18.3337 16.135 18.0612C16.6054 17.8215 16.9878 17.439 17.2275 16.9686C17.5 16.4339 17.5 15.7338 17.5 14.3337V7.33366C17.5 5.93353 17.5 5.23346 17.2275 4.69868C16.9878 4.22828 16.6054 3.84583 16.135 3.60614C15.6002 3.33366 14.9001 3.33366 13.5 3.33366H6.5C5.09987 3.33366 4.3998 3.33366 3.86502 3.60614C3.39462 3.84583 3.01217 4.22828 2.77248 4.69868C2.5 5.23346 2.5 5.93353 2.5 7.33366V14.3337C2.5 15.7338 2.5 16.4339 2.77248 16.9686C3.01217 17.439 3.39462 17.8215 3.86502 18.0612C4.3998 18.3337 5.09987 18.3337 6.5 18.3337Z"
+        stroke="currentColor"
+        strokeWidth="1.66667"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function ClockIcon({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+      <path
+        d="M12 6V12L16 14M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function ChevronSelectorVerticalIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, opacity: 0.85 }}>
+      <path
+        d="M7 15L12 20L17 15M7 9L12 4L17 9"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function UploadFitIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 36 36" fill="none" style={{ flexShrink: 0 }}>
+      <path
+        d="M27 18V22.2C27 23.8802 27 24.7202 26.673 25.362C26.3854 25.9265 25.9265 26.3854 25.362 26.673C24.7202 27 23.8802 27 22.2 27H13.8C12.1198 27 11.2798 27 10.638 26.673C10.0735 26.3854 9.6146 25.9265 9.32698 25.362C9 24.7202 9 23.8802 9 22.2V18M14 13L18 9L22 13M18 9V21"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function parseTimeDigits(timeStr: string | null | undefined): [string, string, string, string] {
-  if (!timeStr) return ['0', '0', '0', '0'];
-  const [h = '00', m = '00'] = timeStr.split(':');
+  if (!timeStr) return ['0', '9', '3', '0'];
+  const [h = '09', m = '30'] = timeStr.split(':');
   const hPad = h.padStart(2, '0');
   const mPad = m.padStart(2, '0');
-  return [hPad[0] || '0', hPad[1] || '0', mPad[0] || '0', mPad[1] || '0'];
+  return [hPad[0] || '0', hPad[1] || '9', mPad[0] || '3', mPad[1] || '0'];
 }
 
 function TimeChipInput({
@@ -123,8 +180,7 @@ function TimeChipInput({
 
   return (
     <div
-      className="rvi-rythme-figma__chip-btn"
-      style={{ width: 95, flex: 'none', cursor: 'text' }}
+      className="rvi-rythme-figma__time-chip"
       onClick={() => {
         inputRef.current?.focus();
         if (activeSlot === null) setActiveSlot(0);
@@ -135,7 +191,7 @@ function TimeChipInput({
       <input
         ref={inputRef}
         type="text"
-        className="sr-only"
+        className="rvi-rythme-figma__time-sr-input"
         tabIndex={0}
         onFocus={() => {
           if (activeSlot === null) setActiveSlot(0);
@@ -144,17 +200,17 @@ function TimeChipInput({
         onKeyDown={handleKeyDown}
         aria-label={ariaLabel}
       />
-      {/* Clock Icon 12x12 */}
-      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0 }}>
-        <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.2" />
-        <path d="M6 3.5V6L7.5 7.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-      <span style={{ display: 'inline-flex', alignItems: 'center', userSelect: 'none' }}>
-        <span>{digits[0]}</span>
-        <span>{digits[1]}</span>
-        <span style={{ margin: '0 2px', opacity: 0.8 }}>:</span>
-        <span>{digits[2]}</span>
-        <span>{digits[3]}</span>
+      <ClockIcon size={12} />
+      <span className="rvi-rythme-figma__time-digits">
+        <span className="rvi-rythme-figma__time-pill">
+          <span className={activeSlot === 0 ? 'is-active' : ''}>{digits[0]}</span>
+          <span className={activeSlot === 1 ? 'is-active' : ''}>{digits[1]}</span>
+        </span>
+        <span className="rvi-rythme-figma__time-colon">:</span>
+        <span className="rvi-rythme-figma__time-pill">
+          <span className={activeSlot === 2 ? 'is-active' : ''}>{digits[2]}</span>
+          <span className={activeSlot === 3 ? 'is-active' : ''}>{digits[3]}</span>
+        </span>
       </span>
     </div>
   );
@@ -176,39 +232,29 @@ export function RythmeSection({
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [levelMenuOpen, setLevelMenuOpen] = useState(false);
   const [tiresMenuOpen, setTiresMenuOpen] = useState(false);
-  const levelRef = useRef<HTMLDivElement | null>(null);
-  const tiresRef = useRef<HTMLDivElement | null>(null);
+  const levelBtnRef = useRef<HTMLButtonElement | null>(null);
+  const tiresBtnRef = useRef<HTMLButtonElement | null>(null);
 
-  const displayTime = rhythm.startTime || '00:00';
-  const hasFitFiles = Boolean(uploadFitLabel && uploadFitLabel.length > 0);
-
-  // Close popovers when clicking outside
-  useEffect(() => {
-    const handleOutsideClick = (e: MouseEvent) => {
-      if (levelRef.current && !levelRef.current.contains(e.target as Node)) {
-        setLevelMenuOpen(false);
-      }
-      if (tiresRef.current && !tiresRef.current.contains(e.target as Node)) {
-        setTiresMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleOutsideClick);
-    return () => document.removeEventListener('mousedown', handleOutsideClick);
-  }, []);
+  const displayTime = rhythm.startTime || '09:30';
+  const hasFitFiles = Boolean(
+    uploadFitLabel &&
+    uploadFitLabel.length > 0 &&
+    uploadFitLabel !== 'Upload .fit'
+  );
 
   const currentLevelLabel = useMemo(() => {
     const found = PRACTICE_LEVELS.find((l) => l.id === rhythm.practiceLevel);
     if (found) return found.label;
-    if (hasFitFiles) return 'Personnalisé';
     return 'Débutant';
-  }, [rhythm.practiceLevel, hasFitFiles]);
+  }, [rhythm.practiceLevel]);
 
   return (
     <div className="rvi-params">
       <div className="rvi-divider" />
 
+      {/* ── Figma Node 6043:105672 container ── */}
       <div className="rvi-rythme-figma">
-        {/* ── ROW 1 : Départ & Heure ── */}
+        {/* ── ROW 1 : Départ & Heure (Figma node 6025:114207) ── */}
         <div className="rvi-rythme-figma__row-datetime">
           {/* Départ */}
           <div className="rvi-rythme-figma__datetime-group">
@@ -222,25 +268,9 @@ export function RythmeSection({
               aria-expanded={calendarOpen}
               aria-label={t('Date de départ')}
             >
-              {/* Calendar Icon 10x10 */}
-              <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
-                <path
-                  d="M9.5 2H2.5C1.94772 2 1.5 2.44772 1.5 3V10C1.5 10.5523 1.94772 11 2.5 11H9.5C10.0523 11 10.5 10.5523 10.5 10V3C10.5 2.44772 10.0523 2 9.5 2Z"
-                  stroke="currentColor"
-                  strokeWidth="1.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M8 1V3M4 1V3M1.5 5H10.5"
-                  stroke="currentColor"
-                  strokeWidth="1.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+              <CalendarIcon size={10} />
               <span>
-                {rhythm.startDate ? formatDateForLocale(rhythm.startDate, locale) : '--/--/--'}
+                {rhythm.startDate ? formatDateForLocale(rhythm.startDate, locale) : '22/04/26'}
               </span>
             </button>
             <CalendarPopover
@@ -253,7 +283,7 @@ export function RythmeSection({
           </div>
 
           {/* Heure */}
-          <div className="rvi-rythme-figma__datetime-group" style={{ justifyContent: 'flex-end' }}>
+          <div className="rvi-rythme-figma__datetime-group">
             <span className="rvi-rythme-figma__label-sm">{t('Heure :')}</span>
             <TimeChipInput
               displayTime={displayTime}
@@ -263,108 +293,113 @@ export function RythmeSection({
           </div>
         </div>
 
-        {/* ── ROW 2 : Niveau de pratique & Personnalisé ── */}
+        {/* ── ROW 2 : Niveau de pratique & Personalisé ── */}
         <div className="rvi-rythme-figma__row-duo">
           {/* Col 1 : Niveau de pratique */}
-          <div className="rvi-rythme-figma__col" ref={levelRef} style={{ position: 'relative' }}>
+          <div className="rvi-rythme-figma__col">
             <span className="rvi-rythme-figma__label-title">{t('Niveau de pratique')}</span>
             <button
+              ref={levelBtnRef}
               type="button"
-              className="rvi-rythme-figma__card-btn"
+              className={`rvi-rythme-figma__card-btn${levelMenuOpen ? ' is-open' : ''}`}
               onClick={() => setLevelMenuOpen((v) => !v)}
               aria-label={t('Niveau de pratique')}
               aria-haspopup="listbox"
               aria-expanded={levelMenuOpen}
             >
               <span className="rvi-rythme-figma__card-text">{currentLevelLabel}</span>
-              {/* Chevron vertical 18x18 */}
-              <svg width="18" height="18" viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0, opacity: 0.7 }}>
-                <path
-                  d="M6.5 7.5L10 4L13.5 7.5M6.5 12.5L10 16L13.5 12.5"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+              <ChevronSelectorVerticalIcon size={20} />
             </button>
 
-            {levelMenuOpen && (
-              <div className="rvi-rythme-figma__menu" role="listbox">
-                {PRACTICE_LEVELS.map((lvl) => (
-                  <button
-                    key={lvl.id}
-                    type="button"
-                    className={`rvi-rythme-figma__menu-item${
-                      rhythm.practiceLevel === lvl.id ? ' rvi-rythme-figma__menu-item--selected' : ''
-                    }`}
-                    onClick={() => {
-                      onChange?.('practiceLevel', lvl.id);
-                      setLevelMenuOpen(false);
-                    }}
-                    role="option"
-                    aria-selected={rhythm.practiceLevel === lvl.id}
-                  >
-                    <span>{lvl.label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+            <PortalDropdown
+              open={levelMenuOpen}
+              anchorRef={levelBtnRef}
+              onClose={() => setLevelMenuOpen(false)}
+              minWidth={140}
+              align="left"
+              estimatedHeight={180}
+            >
+              {PRACTICE_LEVELS.map((lvl) => (
+                <button
+                  key={lvl.id}
+                  type="button"
+                  className={`rvi-tracage__mode-menu-item${
+                    rhythm.practiceLevel === lvl.id ? ' is-selected' : ''
+                  }`}
+                  onClick={() => {
+                    onChange?.('practiceLevel', lvl.id);
+                    setLevelMenuOpen(false);
+                  }}
+                  role="option"
+                  aria-selected={rhythm.practiceLevel === lvl.id}
+                >
+                  <span>{lvl.label}</span>
+                </button>
+              ))}
+            </PortalDropdown>
           </div>
 
-          {/* Col 2 : Personnalisé (.fit de référence) */}
+          {/* Col 2 : Personalisé (.fit de référence) */}
           <div className="rvi-rythme-figma__col">
-            <span className="rvi-rythme-figma__label-title">{t('Personnalisé')}</span>
+            <span className="rvi-rythme-figma__label-title">{t('Personalisé')}</span>
             <button
               type="button"
-              className={`rvi-rythme-figma__card-btn${
-                hasFitFiles ? ' rvi-rythme-figma__card-btn--fit-active' : ''
-              }`}
+              className="rvi-rythme-figma__card-btn rvi-rythme-figma__card-btn--fit"
               onClick={onUploadFit}
               aria-label={t('.fit de référence')}
               title={hasFitFiles ? t('Cliquer pour remplacer ou ajouter des fichiers .fit') : t('Uploader des fichiers .fit')}
             >
-              {/* Upload Icon */}
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
-                <path
-                  d="M7 9V2M7 2L4.5 4.5M7 2L9.5 4.5M2 8V11C2 11.5523 2.44772 12 3 12H11C11.5523 12 12 11.5523 12 11V8"
-                  stroke="currentColor"
-                  strokeWidth="1.3"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+              <UploadFitIcon size={14} />
               <span className="rvi-rythme-figma__card-text">
-                {hasFitFiles ? `${uploadFitLabel}` : t('.fit de référence')}
+                {hasFitFiles && uploadFitLabel
+                  ? uploadFitLabel
+                  : t('.fit de référence')}
               </span>
             </button>
           </div>
         </div>
 
-        {/* ── ROW 3 : Trio (FTP / Poids / Pneus) — MÉTÉO RETIRÉE COMME DEMANDÉ ── */}
-        <div className="rvi-rythme-figma__row-trio">
+        {/* ── ROW 3 : FTP / Poids / Pneus / Météo (Figma 4 columns) ── */}
+        <div className="rvi-rythme-figma__row-four">
           {/* Col 1 : FTP */}
           <div className="rvi-rythme-figma__col">
             <span className="rvi-rythme-figma__label-title">{t('FTP')}</span>
-            <div className="rvi-rythme-figma__card-input">
+            <div
+              className={`rvi-rythme-figma__card-box${
+                rhythm.ftp !== null && rhythm.ftp > 0 ? ' rvi-rythme-figma__card-box--has-val' : ''
+              }`}
+            >
               <input
-                type="number"
-                value={rhythm.ftp !== null ? rhythm.ftp : ''}
-                placeholder={hasFitFiles ? 'Auto' : 'N/A'}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={rhythm.ftp !== null && rhythm.ftp > 0 ? String(rhythm.ftp) : ''}
+                placeholder="Auto"
+                onKeyDown={(e) => {
+                  if (
+                    ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) ||
+                    e.ctrlKey ||
+                    e.metaKey
+                  ) {
+                    return;
+                  }
+                  if (!/^\d$/.test(e.key)) {
+                    e.preventDefault();
+                  }
+                }}
                 onChange={(e) => {
-                  const val = e.target.value.trim();
-                  if (!val) {
-                    // Non renseigné: remis à null pour utiliser les .fit automatiquement!
+                  const cleaned = e.target.value.replace(/\D/g, '');
+                  if (!cleaned) {
                     onChange?.('ftp', null);
                   } else {
-                    const n = parseInt(val, 10);
+                    const n = parseInt(cleaned, 10);
                     onChange?.('ftp', Number.isFinite(n) && n > 0 ? n : null);
                   }
                 }}
                 aria-label={t('FTP')}
               />
               {rhythm.ftp !== null && rhythm.ftp > 0 ? (
-                <span className="rvi-rythme-figma__unit">W</span>
+                <span className="rvi-rythme-figma__card-unit">W</span>
               ) : null}
             </div>
           </div>
@@ -372,101 +407,133 @@ export function RythmeSection({
           {/* Col 2 : Poids */}
           <div className="rvi-rythme-figma__col">
             <span className="rvi-rythme-figma__label-title">{t('Poids')}</span>
-            <div className="rvi-rythme-figma__card-input">
+            <div
+              className={`rvi-rythme-figma__card-box${
+                rhythm.systemWeightKg !== null && rhythm.systemWeightKg > 0
+                  ? ' rvi-rythme-figma__card-box--has-val'
+                  : ''
+              }`}
+            >
               <input
-                type="number"
-                value={rhythm.systemWeightKg !== null ? rhythm.systemWeightKg : ''}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={
+                  rhythm.systemWeightKg !== null && rhythm.systemWeightKg > 0
+                    ? String(rhythm.systemWeightKg)
+                    : ''
+                }
                 placeholder="Auto"
+                onKeyDown={(e) => {
+                  if (
+                    ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) ||
+                    e.ctrlKey ||
+                    e.metaKey
+                  ) {
+                    return;
+                  }
+                  if (!/^\d$/.test(e.key)) {
+                    e.preventDefault();
+                  }
+                }}
                 onChange={(e) => {
-                  const val = e.target.value.trim();
-                  if (!val) {
+                  const cleaned = e.target.value.replace(/\D/g, '');
+                  if (!cleaned) {
                     onChange?.('systemWeightKg', null);
                   } else {
-                    const n = parseInt(val, 10);
+                    const n = parseInt(cleaned, 10);
                     onChange?.('systemWeightKg', Number.isFinite(n) && n > 0 ? n : null);
                   }
                 }}
                 aria-label={t('Poids')}
               />
               {rhythm.systemWeightKg !== null && rhythm.systemWeightKg > 0 ? (
-                <span className="rvi-rythme-figma__unit">kg</span>
+                <span className="rvi-rythme-figma__card-unit">kg</span>
               ) : null}
             </div>
           </div>
 
           {/* Col 3 : Pneus */}
-          <div className="rvi-rythme-figma__col" ref={tiresRef} style={{ position: 'relative' }}>
+          <div className="rvi-rythme-figma__col">
             <span className="rvi-rythme-figma__label-title">{t('Pneus')}</span>
             <button
+              ref={tiresBtnRef}
               type="button"
-              className="rvi-rythme-figma__card-btn"
-              style={{ padding: '0 8px' }}
+              className={`rvi-rythme-figma__card-box${tiresMenuOpen ? ' is-open' : ''}`}
               onClick={() => setTiresMenuOpen((v) => !v)}
               aria-label={t('Largeur de pneus')}
               aria-haspopup="listbox"
               aria-expanded={tiresMenuOpen}
             >
-              <span className="rvi-rythme-figma__card-text">
-                {rhythm.tiresMm ? `${rhythm.tiresMm}mm` : '35mm'}
-              </span>
-              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0, opacity: 0.7 }}>
-                <path d="M6.5 8L10 12L13.5 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+              <span>{rhythm.tiresMm ? `${rhythm.tiresMm}mm` : '35mm'}</span>
             </button>
 
-            {tiresMenuOpen && (
-              <div className="rvi-rythme-figma__menu" style={{ maxHeight: 180, overflowY: 'auto' }} role="listbox">
-                {TIRE_OPTIONS.map((mm) => (
-                  <button
-                    key={mm}
-                    type="button"
-                    className={`rvi-rythme-figma__menu-item${
-                      (rhythm.tiresMm ?? 35) === mm ? ' rvi-rythme-figma__menu-item--selected' : ''
-                    }`}
-                    onClick={() => {
-                      onChange?.('tiresMm', mm);
-                      setTiresMenuOpen(false);
-                    }}
-                    role="option"
-                    aria-selected={(rhythm.tiresMm ?? 35) === mm}
-                  >
-                    <span>{mm}mm</span>
-                  </button>
-                ))}
-              </div>
-            )}
+            <PortalDropdown
+              open={tiresMenuOpen}
+              anchorRef={tiresBtnRef}
+              onClose={() => setTiresMenuOpen(false)}
+              minWidth={80}
+              align="left"
+              estimatedHeight={200}
+            >
+              {TIRE_OPTIONS.map((mm) => (
+                <button
+                  key={mm}
+                  type="button"
+                  className={`rvi-tracage__mode-menu-item${
+                    (rhythm.tiresMm ?? 35) === mm ? ' is-selected' : ''
+                  }`}
+                  onClick={() => {
+                    onChange?.('tiresMm', mm);
+                    setTiresMenuOpen(false);
+                  }}
+                  role="option"
+                  aria-selected={(rhythm.tiresMm ?? 35) === mm}
+                >
+                  <span>{mm}mm</span>
+                </button>
+              ))}
+            </PortalDropdown>
+          </div>
+
+          {/* Col 4 : Météo */}
+          <div className="rvi-rythme-figma__col">
+            <span className="rvi-rythme-figma__label-title">{t('Météo')}</span>
+            <button
+              type="button"
+              className="rvi-rythme-figma__card-box rvi-rythme-figma__weather-btn"
+              onClick={() => onChange?.('useWeather', !rhythm.useWeather)}
+              aria-label={t('Météo')}
+              role="checkbox"
+              aria-checked={Boolean(rhythm.useWeather)}
+            >
+              <span className={`rvi-rythme-figma__checkbox-box${rhythm.useWeather ? ' is-checked' : ''}`}>
+                {rhythm.useWeather && <IconFigmaCheck size={11} />}
+              </span>
+              <span>{rhythm.useWeather ? t('Oui') : t('Non')}</span>
+            </button>
           </div>
         </div>
 
-        {/* ── ROW 4 : Appliquer à tous les itinéraires ── */}
-        <div
+        {/* ── ROW 4 : Appliquer à tout les itinéraires ── */}
+        <button
+          type="button"
           className="rvi-rythme-figma__apply-all"
           onClick={() => onChange?.('applyToAllItineraries', !rhythm.applyToAllItineraries)}
           role="checkbox"
           aria-checked={Boolean(rhythm.applyToAllItineraries)}
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === ' ' || e.key === 'Enter') {
-              e.preventDefault();
-              onChange?.('applyToAllItineraries', !rhythm.applyToAllItineraries);
-            }
-          }}
         >
-          <div
-            className={`rvi-rythme-figma__checkbox${
-              rhythm.applyToAllItineraries ? ' rvi-rythme-figma__checkbox--checked' : ''
+          <span
+            className={`rvi-rythme-figma__checkbox-box${
+              rhythm.applyToAllItineraries ? ' is-checked' : ''
             }`}
           >
-            {rhythm.applyToAllItineraries && (
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <path d="M2 5.5L4 7.5L8 3" stroke="#FFFFFF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            )}
-          </div>
-          <span className="rvi-rythme-figma__apply-all-label">
-            {t('Appliquer à tous les itinéraires')}
+            {rhythm.applyToAllItineraries && <IconFigmaCheck size={11} />}
           </span>
-        </div>
+          <span className="rvi-rythme-figma__apply-all-label">
+            {t('Appliquer à tout les itinéraires')}
+          </span>
+        </button>
       </div>
 
       <div className="rvi-divider" style={{ marginTop: 8 }} />

@@ -1,4 +1,4 @@
-/* Rythme section — Pixel-perfect Figma node 6043:105672 */
+/* Rythme section — Pixel-perfect Figma node 6043:105672 & 6025:114207 */
 
 .rvi-rythme-figma {
   display: flex;
@@ -10,21 +10,24 @@
   color: #ffffff;
 }
 
-/* ── Row 1 : Date & Heure ──────────────────────────────── */
+/* ── Row 1 : Date & Heure (Figma node 6025:114207) ────── */
 .rvi-rythme-figma__row-datetime {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  align-items: center;
   width: 100%;
+  align-items: center;
+  box-sizing: border-box;
 }
 
 .rvi-rythme-figma__datetime-group {
   display: flex;
   align-items: center;
-  gap: 6px;
-  min-width: 0;
+  justify-content: space-between;
+  gap: 4px;
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .rvi-rythme-figma__label-sm {
@@ -37,16 +40,20 @@
   opacity: 0.64;
   white-space: nowrap;
   user-select: none;
+  flex: 1;
+  min-width: 0;
 }
 
+/* Date rectangle: hugs content, exact Figma ratio */
 .rvi-rythme-figma__chip-btn {
   height: 36px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  padding: 0 10px;
-  display: flex;
+  padding: 0 8px;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   cursor: pointer;
   color: #ffffff;
@@ -57,9 +64,9 @@
   box-sizing: border-box;
   outline: none;
   transition: background-color 0.15s ease, border-color 0.15s ease;
-  flex: 1;
-  min-width: 0;
-  justify-content: center;
+  flex: 0 0 auto;
+  user-select: none;
+  white-space: nowrap;
 }
 
 .rvi-rythme-figma__chip-btn:hover {
@@ -67,9 +74,89 @@
   border-color: rgba(255, 255, 255, 0.14);
 }
 
-.rvi-rythme-figma__chip-btn svg {
-  flex-shrink: 0;
-  opacity: 0.85;
+/* Time rectangle: fixed 95px, exact Figma */
+.rvi-rythme-figma__time-chip {
+  width: 95px;
+  height: 36px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: text;
+  color: #ffffff;
+  font-family: 'Rethink Sans', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  box-sizing: border-box;
+  outline: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  user-select: none;
+  flex: 0 0 95px;
+  position: relative;
+  white-space: nowrap;
+}
+
+.rvi-rythme-figma__time-chip:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.rvi-rythme-figma__time-chip:focus-within {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.rvi-rythme-figma__time-sr-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.rvi-rythme-figma__time-digits {
+  display: inline-flex;
+  align-items: center;
+  font-family: 'Rethink Sans', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  color: #ffffff;
+  line-height: 1;
+}
+
+.rvi-rythme-figma__time-pill {
+  width: 17px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 1px;
+  padding: 0 1px;
+  box-sizing: border-box;
+}
+
+.rvi-rythme-figma__time-pill span {
+  display: inline-block;
+  text-align: center;
+}
+
+.rvi-rythme-figma__time-pill span.is-active {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 2px;
+}
+
+.rvi-rythme-figma__time-colon {
+  padding: 0 1.5px;
+  color: #ffffff;
+  opacity: 0.9;
 }
 
 /* ── Labels (14px Regular) ─────────────────────────────── */
@@ -88,21 +175,23 @@
   text-overflow: ellipsis;
 }
 
-/* ── Row 2 : Duo (Niveau de pratique & Personnalisé) ───── */
+/* ── Row 2 : Duo (Niveau de pratique & Personalisé) ───── */
 .rvi-rythme-figma__row-duo {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   width: 100%;
   align-items: flex-start;
+  box-sizing: border-box;
 }
 
 .rvi-rythme-figma__col {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
   width: 100%;
+  box-sizing: border-box;
 }
 
 .rvi-rythme-figma__card-btn {
@@ -129,19 +218,15 @@
   user-select: none;
 }
 
-.rvi-rythme-figma__card-btn:hover {
+.rvi-rythme-figma__card-btn:hover,
+.rvi-rythme-figma__card-btn.is-open {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.14);
 }
 
-.rvi-rythme-figma__card-btn--fit-active {
-  background: rgba(229, 57, 53, 0.14);
-  border-color: rgba(229, 57, 53, 0.35);
-  color: #ff8a80;
-}
-
-.rvi-rythme-figma__card-btn--fit-active:hover {
-  background: rgba(229, 57, 53, 0.22);
+.rvi-rythme-figma__card-btn--fit {
+  justify-content: flex-start;
+  gap: 6px;
 }
 
 .rvi-rythme-figma__card-text {
@@ -152,40 +237,57 @@
   text-align: left;
 }
 
-/* ── Row 3 : Trio (FTP / Poids / Pneus) ─────────────────── */
-.rvi-rythme-figma__row-trio {
+/* ── Row 3 : 4 Columns (FTP / Poids / Pneus / Météo) ───── */
+.rvi-rythme-figma__row-four {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   width: 100%;
   align-items: flex-start;
+  box-sizing: border-box;
 }
 
-.rvi-rythme-figma__card-input {
+.rvi-rythme-figma__card-box {
   height: 36px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  padding: 0 10px;
+  padding: 0 4px;
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  gap: 2px;
   width: 100%;
   box-sizing: border-box;
+  font-family: 'Rethink Sans', sans-serif;
+  font-style: normal;
+  font-weight: 500;
+  font-size: 15px;
+  letter-spacing: -0.0133em;
+  color: #ffffff;
+  outline: none;
+  user-select: none;
   transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
-.rvi-rythme-figma__card-input:hover {
-  background: rgba(255, 255, 255, 0.10);
+button.rvi-rythme-figma__card-box {
+  cursor: pointer;
 }
 
-.rvi-rythme-figma__card-input:focus-within {
+button.rvi-rythme-figma__card-box:hover,
+button.rvi-rythme-figma__card-box.is-open {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.rvi-rythme-figma__card-box:focus-within {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.22);
 }
 
-.rvi-rythme-figma__card-input input {
+.rvi-rythme-figma__card-box input {
   width: 100%;
+  min-width: 0;
   background: transparent;
   border: none;
   outline: none;
@@ -197,27 +299,66 @@
   letter-spacing: -0.0133em;
   padding: 0;
   margin: 0;
+  text-align: center;
 }
 
-.rvi-rythme-figma__card-input input::placeholder {
-  color: rgba(255, 255, 255, 0.45);
+.rvi-rythme-figma__card-box--has-val input {
+  width: auto;
+  flex: 0 1 auto;
+  text-align: right;
+  max-width: 36px;
 }
 
-.rvi-rythme-figma__card-input input::-webkit-outer-spin-button,
-.rvi-rythme-figma__card-input input::-webkit-inner-spin-button {
+.rvi-rythme-figma__card-box input::placeholder {
+  color: #ffffff;
+  opacity: 0.9;
+}
+
+.rvi-rythme-figma__card-box input::-webkit-outer-spin-button,
+.rvi-rythme-figma__card-box input::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
 
-.rvi-rythme-figma__card-input input[type=number] {
+.rvi-rythme-figma__card-box input[type=number] {
   -moz-appearance: textfield;
 }
 
-.rvi-rythme-figma__unit {
+.rvi-rythme-figma__card-unit {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.7);
   user-select: none;
   pointer-events: none;
+  flex-shrink: 0;
+}
+
+.rvi-rythme-figma__weather-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 4px;
+}
+
+/* ── Checkbox Base (16x16, 4px radius, Figma node 143:3023) ── */
+.rvi-rythme-figma__checkbox-box {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  color: #ffffff;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.rvi-rythme-figma__checkbox-box.is-checked {
+  background: rgba(0, 0, 0, 0.8);
+  border-color: rgba(255, 255, 255, 0.4);
 }
 
 /* ── Row 4 : Checkbox Appliquer à tous les itinéraires ─── */
@@ -227,31 +368,16 @@
   gap: 8px;
   cursor: pointer;
   user-select: none;
-  padding: 4px 0;
+  padding: 2px 0;
   margin-top: 2px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  outline: none;
 }
 
-.rvi-rythme-figma__checkbox {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
-  box-sizing: border-box;
-}
-
-.rvi-rythme-figma__apply-all:hover .rvi-rythme-figma__checkbox {
-  border-color: rgba(255, 255, 255, 0.4);
-}
-
-.rvi-rythme-figma__checkbox--checked {
-  background: #e53935;
-  border-color: #e53935;
+.rvi-rythme-figma__apply-all:hover .rvi-rythme-figma__checkbox-box {
+  border-color: rgba(255, 255, 255, 0.35);
 }
 
 .rvi-rythme-figma__apply-all-label {
@@ -260,55 +386,8 @@
   font-weight: 500;
   font-size: 13px;
   line-height: 16px;
-  color: #ffffff;
-  opacity: 0.64;
+  color: rgba(255, 255, 255, 0.64);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-/* Dropdown popover for Niveau de pratique */
-.rvi-rythme-figma__menu {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  margin-top: 4px;
-  background: #18191c;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
-  padding: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  z-index: 100;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
-}
-
-.rvi-rythme-figma__menu-item {
-  height: 32px;
-  padding: 0 10px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-family: 'Rethink Sans', sans-serif;
-  font-size: 14px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.85);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  text-align: left;
-  transition: background-color 0.12s ease, color 0.12s ease;
-}
-
-.rvi-rythme-figma__menu-item:hover {
-  background: rgba(255, 255, 255, 0.10);
-  color: #ffffff;
-}
-
-.rvi-rythme-figma__menu-item--selected {
-  background: rgba(229, 57, 53, 0.15);
-  color: #ff8a80;
 }
