@@ -14,6 +14,7 @@ import {
   cinematicBearingAtDistance,
   buildRoutePlaybackGeometry,
   buildRouteTrailCoordinates,
+  buildRouteTrailPoints,
   clampDistanceM,
   elapsedSecondsAtDistance,
   formatDistanceLabel,
@@ -152,7 +153,7 @@ export function AnalysisFlyoverProvider({
 
   const playbackTrail = useMemo(() => {
     if (playbackDistanceM == null) return [];
-    return buildRouteTrailCoordinates(routePoints, routeGeometry, playbackDistanceM);
+    return buildRouteTrailPoints(routePoints, routeGeometry, playbackDistanceM);
   }, [playbackDistanceM, routeGeometry, routePoints]);
 
   const { resetCameraState } = useFlyoverCamera({

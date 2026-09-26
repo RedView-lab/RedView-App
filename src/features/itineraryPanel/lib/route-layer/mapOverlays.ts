@@ -43,6 +43,15 @@ import {
   buildRouteHoverPreviewGeoJson,
   type RouteHoverPreviewPoint,
 } from './geojson';
+import type { RouteLayerPoint } from './routeStyle';
+import {
+  ROUTE_PROFILE_Z_OFFSET,
+  ROUTE_SELECTION_CLEARANCE_M,
+  applyRouteElevationProfile,
+  getRouteElevationContext,
+} from './routeElevation';
+import { isValidElevation } from '../route-metrics/elevationSanitizer';
+import { setLayoutPropertyIfChanged, setPaintPropertyIfChanged } from './itineraryLayers';
 
 const analysisHoverVisibilityState = new WeakMap<MapboxMap, boolean>();
 const routeHoverPreviewVisibilityState = new WeakMap<MapboxMap, boolean>();
@@ -272,19 +281,63 @@ export function clearRouteHoverPreview(map: MapboxMap): void {
 
 export function setAnalysisFlyoverProgress(
   map: MapboxMap,
-  coordinates: [number, number][],
+  segment: RouteLayerPoint[] | [number, number][],
   color?: string,
 ): void {
   try {
     const source = ensureAnalysisFlyoverProgressLayers(map);
     if (!source) return;
-    source.setData(buildAnalysisFlyoverProgressGeoJson(coordinates, color));
+
+    if (!segment || segment.length < 2) {
+      clearAnalysisFlyoverProgress(map);
+      return;
+    }
+
+    const isCoordinateArray = Array.isArray(segment[0]);
+    const coords: [number, number][] = isCoordinateArray
+      ? (segment as [number, number][])
+      : (segment as RouteLayerPoint[]).map((pt) => [pt.lon, pt.lat]);
+    const points: RouteLayerPoint[] = isCoordinateArray
+      ? (segment as [number, number][]).map(([lon, lat]) => ({ lon, lat }))
+      : (segment as RouteLayerPoint[]);
+
+    const geoJson = buildAnalysisFlyoverProgressGeoJson(coords, color);
+    const elevationContext = getRouteElevationContext(map);
+    const elevationProfileApplied =
+      elevationContext.scale !== null && points.some((pt) => isValidElevation(pt.elevationM))
+        ? applyRouteElevationProfile(
+            { data: geoJson, requiresLineMetrics: true },
+            points,
+            elevationContext.scale,
+            ROUTE_SELECTION_CLEARANCE_M,
+          )
+        : false;
+
+    const elevationReference = elevationProfileApplied
+      ? 'sea'
+      : elevationContext.scale !== null
+        ? 'ground'
+        : 'none';
+    const zOffset = elevationProfileApplied
+      ? ROUTE_PROFILE_Z_OFFSET
+      : elevationContext.scale !== null
+        ? 0.8
+        : 0;
+
+    source.setData(geoJson);
+
     if (map.getLayer(ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID)) {
-      map.setLayoutProperty(ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID, 'visibility', 'visible');
+      setLayoutPropertyIfChanged(map, ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID, 'line-elevation-reference', elevationReference);
+      setLayoutPropertyIfChanged(map, ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID, 'line-z-offset', zOffset);
+      setPaintPropertyIfChanged(map, ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID, 'line-occlusion-opacity', 0);
+      setLayoutPropertyIfChanged(map, ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID, 'visibility', 'visible');
       map.moveLayer(ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID);
     }
     if (map.getLayer(ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID)) {
-      map.setLayoutProperty(ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID, 'visibility', 'visible');
+      setLayoutPropertyIfChanged(map, ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID, 'line-elevation-reference', elevationReference);
+      setLayoutPropertyIfChanged(map, ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID, 'line-z-offset', zOffset);
+      setPaintPropertyIfChanged(map, ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID, 'line-occlusion-opacity', 0);
+      setLayoutPropertyIfChanged(map, ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID, 'visibility', 'visible');
       map.moveLayer(ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID);
     }
     if (map.getLayer(ANALYSIS_HOVER_HALO_LAYER_ID)) map.moveLayer(ANALYSIS_HOVER_HALO_LAYER_ID);
@@ -299,10 +352,10 @@ export function clearAnalysisFlyoverProgress(map: MapboxMap): void {
     const source = map.getSource(ANALYSIS_FLYOVER_PROGRESS_SOURCE_ID) as GeoJSONSource | undefined;
     source?.setData(buildAnalysisFlyoverProgressGeoJson(null));
     if (map.getLayer(ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID)) {
-      map.setLayoutProperty(ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID, 'visibility', 'none');
+      setLayoutPropertyIfChanged(map, ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID, 'visibility', 'none');
     }
     if (map.getLayer(ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID)) {
-      map.setLayoutProperty(ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID, 'visibility', 'none');
+      setLayoutPropertyIfChanged(map, ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID, 'visibility', 'none');
     }
   } catch {
     /* noop */
@@ -311,15 +364,56 @@ export function clearAnalysisFlyoverProgress(map: MapboxMap): void {
 
 export function setAnalysisSelectedSegment(
   map: MapboxMap,
-  coordinates: [number, number][],
+  segment: RouteLayerPoint[] | [number, number][],
   color?: string,
 ): void {
   try {
     const source = ensureAnalysisSelectionLayers(map);
     if (!source) return;
-    source.setData(buildAnalysisSelectionGeoJson(coordinates, color));
+
+    if (!segment || segment.length < 2) {
+      clearAnalysisSelectedSegment(map);
+      return;
+    }
+
+    const isCoordinateArray = Array.isArray(segment[0]);
+    const coords: [number, number][] = isCoordinateArray
+      ? (segment as [number, number][])
+      : (segment as RouteLayerPoint[]).map((pt) => [pt.lon, pt.lat]);
+    const points: RouteLayerPoint[] = isCoordinateArray
+      ? (segment as [number, number][]).map(([lon, lat]) => ({ lon, lat }))
+      : (segment as RouteLayerPoint[]);
+
+    const geoJson = buildAnalysisSelectionGeoJson(coords, color);
+    const elevationContext = getRouteElevationContext(map);
+    const elevationProfileApplied =
+      elevationContext.scale !== null && points.some((pt) => isValidElevation(pt.elevationM))
+        ? applyRouteElevationProfile(
+            { data: geoJson, requiresLineMetrics: true },
+            points,
+            elevationContext.scale,
+            ROUTE_SELECTION_CLEARANCE_M,
+          )
+        : false;
+
+    const elevationReference = elevationProfileApplied
+      ? 'sea'
+      : elevationContext.scale !== null
+        ? 'ground'
+        : 'none';
+    const zOffset = elevationProfileApplied
+      ? ROUTE_PROFILE_Z_OFFSET
+      : elevationContext.scale !== null
+        ? 0.8
+        : 0;
+
+    source.setData(geoJson);
+
     if (map.getLayer(ANALYSIS_SELECTION_LINE_LAYER_ID)) {
-      map.setLayoutProperty(ANALYSIS_SELECTION_LINE_LAYER_ID, 'visibility', 'visible');
+      setLayoutPropertyIfChanged(map, ANALYSIS_SELECTION_LINE_LAYER_ID, 'line-elevation-reference', elevationReference);
+      setLayoutPropertyIfChanged(map, ANALYSIS_SELECTION_LINE_LAYER_ID, 'line-z-offset', zOffset);
+      setPaintPropertyIfChanged(map, ANALYSIS_SELECTION_LINE_LAYER_ID, 'line-occlusion-opacity', 0);
+      setLayoutPropertyIfChanged(map, ANALYSIS_SELECTION_LINE_LAYER_ID, 'visibility', 'visible');
       map.moveLayer(ANALYSIS_SELECTION_LINE_LAYER_ID);
     }
     if (map.getLayer(ANALYSIS_HOVER_HALO_LAYER_ID)) map.moveLayer(ANALYSIS_HOVER_HALO_LAYER_ID);
@@ -334,7 +428,7 @@ export function clearAnalysisSelectedSegment(map: MapboxMap): void {
     const source = map.getSource(ANALYSIS_SELECTION_SOURCE_ID) as GeoJSONSource | undefined;
     source?.setData(buildAnalysisSelectionGeoJson(null));
     if (map.getLayer(ANALYSIS_SELECTION_LINE_LAYER_ID)) {
-      map.setLayoutProperty(ANALYSIS_SELECTION_LINE_LAYER_ID, 'visibility', 'none');
+      setLayoutPropertyIfChanged(map, ANALYSIS_SELECTION_LINE_LAYER_ID, 'visibility', 'none');
     }
   } catch {
     /* noop */

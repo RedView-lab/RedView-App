@@ -7,6 +7,7 @@ import {
   type CenterPanelAnalysisProps,
   DEFAULT_ANALYSIS_AXIS_COLORS,
   extractRouteSegmentCoordinates,
+  extractRouteSegmentPoints,
   findSplitIndexForChartX,
   lightenColor,
   normalizeAnalysisState,
@@ -288,7 +289,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
         (targetItinerary.prediction as PredictionResult | null | undefined) ??
         null;
 
-      const coords = extractRouteSegmentCoordinates(
+      const segmentPoints = extractRouteSegmentPoints(
         points,
         prediction,
         xMode,
@@ -297,18 +298,18 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
         targetItinerary.rhythm.startTime,
       );
 
-      if (coords.length >= 2) {
-        setAnalysisSelectedSegment(map, coords, '#ffffff');
+      if (segmentPoints.length >= 2) {
+        setAnalysisSelectedSegment(map, segmentPoints, '#ffffff');
 
         let minLon = Infinity;
         let maxLon = -Infinity;
         let minLat = Infinity;
         let maxLat = -Infinity;
-        for (const [lon, lat] of coords) {
-          if (lon < minLon) minLon = lon;
-          if (lon > maxLon) maxLon = lon;
-          if (lat < minLat) minLat = lat;
-          if (lat > maxLat) maxLat = lat;
+        for (const pt of segmentPoints) {
+          if (pt.lon < minLon) minLon = pt.lon;
+          if (pt.lon > maxLon) maxLon = pt.lon;
+          if (pt.lat < minLat) minLat = pt.lat;
+          if (pt.lat > maxLat) maxLat = pt.lat;
         }
 
         const currentPitch = map.getPitch();

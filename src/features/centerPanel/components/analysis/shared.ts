@@ -15,6 +15,7 @@ import type {
   AnalysisPanelState,
   Itinerary,
 } from '@/features/itineraryPanel/types';
+import type { RouteLayerPoint } from '@/features/itineraryPanel/lib/route-layer';
 
 export type FilterKey = keyof AnalysisFiltersState;
 
@@ -129,17 +130,17 @@ export function findSplitIndexForChartX(
 }
 
 /**
- * Extrait les coordonnées géographiques [lon, lat][] d'un tronçon d'itinéraire
+ * Extrait les points complets (avec élévation) d'un tronçon d'itinéraire
  * délimité par une plage [startX, endX] sur l'axe du graphique.
  */
-export function extractRouteSegmentCoordinates(
-  routePoints: Array<{ lat: number; lon: number; distanceM?: number }> | null | undefined,
+export function extractRouteSegmentPoints(
+  routePoints: Array<{ lat: number; lon: number; distanceM?: number; elevationM?: number | null }> | null | undefined,
   prediction: Parameters<typeof locateRoutePointAtX>[1],
   xMode: AxisMode,
   startX: number,
   endX: number,
   startTime?: string | null,
-): [number, number][] {
+): RouteLayerPoint[] {
   if (!routePoints || routePoints.length < 2) return [];
 
   const minX = Math.min(startX, endX);
@@ -161,26 +162,59 @@ export function extractRouteSegmentCoordinates(
   const clampedMax = Math.max(0, Math.min(Math.max(startDistM as number, endDistM as number), totalDistM));
 
   if (clampedMax - clampedMin < 1) {
-    return startPt ? [[startPt.lon, startPt.lat]] : [];
+    return startPt
+      ? [{ lat: startPt.lat, lon: startPt.lon, elevationM: startPt.elevationM, distanceM: startDistM }]
+      : [];
   }
 
-  const coords: [number, number][] = [];
+  const segmentPoints: RouteLayerPoint[] = [];
   if (startPt) {
-    coords.push([startPt.lon, startPt.lat]);
+    segmentPoints.push({
+      lat: startPt.lat,
+      lon: startPt.lon,
+      elevationM: startPt.elevationM,
+      distanceM: startDistM,
+    });
   }
 
   for (let i = 0; i < routePoints.length; i++) {
     const d = distances[i];
     if (d > clampedMin + 0.5 && d < clampedMax - 0.5) {
-      coords.push([routePoints[i].lon, routePoints[i].lat]);
+      segmentPoints.push({
+        lat: routePoints[i].lat,
+        lon: routePoints[i].lon,
+        elevationM: routePoints[i].elevationM,
+        distanceM: d,
+      });
     }
   }
 
   if (endPt) {
-    coords.push([endPt.lon, endPt.lat]);
+    segmentPoints.push({
+      lat: endPt.lat,
+      lon: endPt.lon,
+      elevationM: endPt.elevationM,
+      distanceM: endDistM,
+    });
   }
 
-  return coords;
+  return segmentPoints;
+}
+
+/**
+ * Extrait les coordonnées géographiques [lon, lat][] d'un tronçon d'itinéraire
+ * délimité par une plage [startX, endX] sur l'axe du graphique.
+ */
+export function extractRouteSegmentCoordinates(
+  routePoints: Array<{ lat: number; lon: number; distanceM?: number; elevationM?: number | null }> | null | undefined,
+  prediction: Parameters<typeof locateRoutePointAtX>[1],
+  xMode: AxisMode,
+  startX: number,
+  endX: number,
+  startTime?: string | null,
+): [number, number][] {
+  const points = extractRouteSegmentPoints(routePoints, prediction, xMode, startX, endX, startTime);
+  return points.map((p) => [p.lon, p.lat]);
 }
 
 export function normalizeAnalysisState(

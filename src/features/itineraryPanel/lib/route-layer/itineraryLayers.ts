@@ -86,7 +86,7 @@ function hasRasterLayerAbove(map: MapboxMap, layerId: string): boolean {
   }
 }
 
-function getMountedSourceRequiresLineMetrics(map: MapboxMap, sourceId: string): boolean | null {
+export function getMountedSourceRequiresLineMetrics(map: MapboxMap, sourceId: string): boolean | null {
   try {
     const source = map.getStyle()?.sources?.[sourceId] as { lineMetrics?: boolean } | undefined;
     return typeof source?.lineMetrics === 'boolean' ? source.lineMetrics : null;
@@ -103,7 +103,7 @@ function routeLayerUsesLineGradient(map: MapboxMap, layerId: string): boolean {
   }
 }
 
-function setPaintPropertyIfChanged(
+export function setPaintPropertyIfChanged(
   map: MapboxMap,
   layerId: string,
   property: Parameters<MapboxMap['setPaintProperty']>[1],
@@ -118,7 +118,7 @@ function setPaintPropertyIfChanged(
   }
 }
 
-function setLayoutPropertyIfChanged(
+export function setLayoutPropertyIfChanged(
   map: MapboxMap,
   layerId: string,
   property: Parameters<MapboxMap['setLayoutProperty']>[1],

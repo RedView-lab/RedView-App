@@ -6,6 +6,7 @@ const HEIGHTS_PROPERTY = '__routeHeights';
 const SAMPLE_SPACING_M = 10;
 const MAX_SAMPLES = 16_384;
 const LINE_CLEARANCE_M = 0.8;
+export const ROUTE_SELECTION_CLEARANCE_M = 0.86;
 const EARTH_RADIUS_M = 6_378_137;
 
 // GeoJSON Z coordinates alone do not position native line layers. Evaluate an
@@ -35,9 +36,13 @@ function mercatorY(lat: number): number {
 
 /** Render-only heights. Never mutate route points, metrics, or the terrain. */
 export function applyRouteElevationProfile(
-  spec: RouteLayerRenderSpec,
+  spec: {
+    data: GeoJSON.Feature<GeoJSON.LineString> | GeoJSON.FeatureCollection<GeoJSON.LineString>;
+    requiresLineMetrics?: boolean;
+  },
   points: readonly RouteLayerPoint[],
   scale: number,
+  clearanceM: number = LINE_CLEARANCE_M,
 ): boolean {
   if (points.length < 2) return false;
   const distances = new Float64Array(points.length);
@@ -89,7 +94,7 @@ export function applyRouteElevationProfile(
     const index = total > 0 ? Math.max(0, Math.min(count - 1, distance / total * (count - 1))) : 0;
     const low = Math.floor(index);
     const high = Math.min(count - 1, low + 1);
-    return (smooth[low] + (smooth[high] - smooth[low]) * (index - low)) * scale + LINE_CLEARANCE_M;
+    return (smooth[low] + (smooth[high] - smooth[low]) * (index - low)) * scale + clearanceM;
   };
 
   // Surface runs share a boundary vertex. Sample from one global profile so

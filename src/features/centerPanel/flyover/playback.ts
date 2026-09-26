@@ -1,5 +1,6 @@
 import type { PredictionResult } from '@/features/fitPredictor';
 import type { AxisMode, RouteChartPoint } from '../components/chart';
+import type { RouteLayerPoint } from '@/features/itineraryPanel/lib/route-layer';
 
 const EARTH_RADIUS_M = 6_371_008.8;
 
@@ -119,36 +120,53 @@ export function interpolateRoutePointAtDistance(
   };
 }
 
-export function buildRouteTrailCoordinates(
+export function buildRouteTrailPoints(
   routePoints: RouteChartPoint[] | null | undefined,
   geometry: RoutePlaybackGeometry | null,
   targetDistanceM: number,
-): [number, number][] {
+): RouteLayerPoint[] {
   if (!routePoints || !geometry || routePoints.length === 0) return [];
 
   const clampedDistanceM = clampDistanceM(targetDistanceM, geometry.totalDistanceM);
-  const trail: [number, number][] = [];
+  const trail: RouteLayerPoint[] = [];
   for (let index = 0; index < routePoints.length; index += 1) {
     const point = routePoints[index];
     const pointDistanceM = geometry.distancesM[index] ?? 0;
     if (pointDistanceM > clampedDistanceM) break;
-    trail.push([point.lon, point.lat]);
+    trail.push({
+      lat: point.lat,
+      lon: point.lon,
+      elevationM: point.elevationM,
+      distanceM: pointDistanceM,
+    });
   }
 
   const interpolatedPoint = interpolateRoutePointAtDistance(routePoints, geometry, clampedDistanceM);
   if (!interpolatedPoint) return trail;
 
-  const lastCoordinate = trail[trail.length - 1];
-  const currentCoordinate: [number, number] = [interpolatedPoint.lon, interpolatedPoint.lat];
+  const lastPoint = trail[trail.length - 1];
   if (
-    !lastCoordinate ||
-    Math.abs(lastCoordinate[0] - currentCoordinate[0]) > 1e-8 ||
-    Math.abs(lastCoordinate[1] - currentCoordinate[1]) > 1e-8
+    !lastPoint ||
+    Math.abs(lastPoint.lon - interpolatedPoint.lon) > 1e-8 ||
+    Math.abs(lastPoint.lat - interpolatedPoint.lat) > 1e-8
   ) {
-    trail.push(currentCoordinate);
+    trail.push({
+      lat: interpolatedPoint.lat,
+      lon: interpolatedPoint.lon,
+      elevationM: interpolatedPoint.elevationM,
+      distanceM: clampedDistanceM,
+    });
   }
 
   return trail;
+}
+
+export function buildRouteTrailCoordinates(
+  routePoints: RouteChartPoint[] | null | undefined,
+  geometry: RoutePlaybackGeometry | null,
+  targetDistanceM: number,
+): [number, number][] {
+  return buildRouteTrailPoints(routePoints, geometry, targetDistanceM).map((pt) => [pt.lon, pt.lat]);
 }
 
 function bearingDegrees(from: RoutePlaybackPoint, to: RoutePlaybackPoint): number {

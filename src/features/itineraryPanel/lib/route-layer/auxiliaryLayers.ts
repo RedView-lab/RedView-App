@@ -35,6 +35,7 @@ import {
   buildRouteAuditGeoJson,
   buildRouteHoverPreviewGeoJson,
 } from './geojson';
+import { getMountedSourceRequiresLineMetrics } from './itineraryLayers';
 
 export function ensureAnalysisHoverLayers(map: MapboxMap): GeoJSONSource | null {
   if (!canMutateStyle(map)) return null;
@@ -123,11 +124,27 @@ export function ensureRouteHoverPreviewLayers(map: MapboxMap): GeoJSONSource | n
 
 export function ensureAnalysisFlyoverProgressLayers(map: MapboxMap): GeoJSONSource | null {
   if (!canMutateStyle(map)) return null;
-  const existing = map.getSource(ANALYSIS_FLYOVER_PROGRESS_SOURCE_ID) as GeoJSONSource | undefined;
+  let existing = map.getSource(ANALYSIS_FLYOVER_PROGRESS_SOURCE_ID) as GeoJSONSource | undefined;
+  const mountedSourceRequiresLineMetrics = getMountedSourceRequiresLineMetrics(map, ANALYSIS_FLYOVER_PROGRESS_SOURCE_ID);
+  if (existing && mountedSourceRequiresLineMetrics !== true) {
+    try {
+      if (map.getLayer(ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID)) {
+        map.removeLayer(ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID);
+      }
+      if (map.getLayer(ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID)) {
+        map.removeLayer(ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID);
+      }
+      map.removeSource(ANALYSIS_FLYOVER_PROGRESS_SOURCE_ID);
+    } catch {
+      /* noop */
+    }
+    existing = undefined;
+  }
   if (existing) return existing;
 
   map.addSource(ANALYSIS_FLYOVER_PROGRESS_SOURCE_ID, {
     type: 'geojson',
+    lineMetrics: true,
     data: buildAnalysisFlyoverProgressGeoJson(null),
   });
 
@@ -140,7 +157,7 @@ export function ensureAnalysisFlyoverProgressLayers(map: MapboxMap): GeoJSONSour
       'line-cap': 'round',
       'line-join': 'round',
       'line-elevation-reference': 'ground' as unknown as undefined,
-      'line-z-offset': 4 as unknown as undefined,
+      'line-z-offset': 0.8 as unknown as undefined,
       visibility: 'none',
     },
     paint: {
@@ -162,7 +179,7 @@ export function ensureAnalysisFlyoverProgressLayers(map: MapboxMap): GeoJSONSour
       'line-cap': 'round',
       'line-join': 'round',
       'line-elevation-reference': 'ground' as unknown as undefined,
-      'line-z-offset': 4 as unknown as undefined,
+      'line-z-offset': 0.8 as unknown as undefined,
       visibility: 'none',
     },
     paint: {
@@ -181,11 +198,24 @@ export function ensureAnalysisFlyoverProgressLayers(map: MapboxMap): GeoJSONSour
 
 export function ensureAnalysisSelectionLayers(map: MapboxMap): GeoJSONSource | null {
   if (!canMutateStyle(map)) return null;
-  const existing = map.getSource(ANALYSIS_SELECTION_SOURCE_ID) as GeoJSONSource | undefined;
+  let existing = map.getSource(ANALYSIS_SELECTION_SOURCE_ID) as GeoJSONSource | undefined;
+  const mountedSourceRequiresLineMetrics = getMountedSourceRequiresLineMetrics(map, ANALYSIS_SELECTION_SOURCE_ID);
+  if (existing && mountedSourceRequiresLineMetrics !== true) {
+    try {
+      if (map.getLayer(ANALYSIS_SELECTION_LINE_LAYER_ID)) {
+        map.removeLayer(ANALYSIS_SELECTION_LINE_LAYER_ID);
+      }
+      map.removeSource(ANALYSIS_SELECTION_SOURCE_ID);
+    } catch {
+      /* noop */
+    }
+    existing = undefined;
+  }
   if (existing) return existing;
 
   map.addSource(ANALYSIS_SELECTION_SOURCE_ID, {
     type: 'geojson',
+    lineMetrics: true,
     data: buildAnalysisSelectionGeoJson(null),
   });
 
@@ -198,7 +228,7 @@ export function ensureAnalysisSelectionLayers(map: MapboxMap): GeoJSONSource | n
       'line-cap': 'round',
       'line-join': 'round',
       'line-elevation-reference': 'ground' as unknown as undefined,
-      'line-z-offset': 4 as unknown as undefined,
+      'line-z-offset': 0.86 as unknown as undefined,
       visibility: 'none',
     },
     paint: {
@@ -208,6 +238,7 @@ export function ensureAnalysisSelectionLayers(map: MapboxMap): GeoJSONSource | n
       'line-border-width': 1.5,
       'line-border-color': 'rgba(0, 0, 0, 0.45)',
       'line-occlusion-opacity': 0,
+      'line-emissive-strength': 1.1,
     },
   });
 
