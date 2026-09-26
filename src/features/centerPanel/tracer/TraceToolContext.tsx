@@ -29,11 +29,10 @@ import { translateAppText } from '@/shared/i18n';
 import { isVariantModifierPressed } from '@/shared/lib/platform';
 import { useRouteSplitToolOptional } from '../routeSplit';
 import { useRouteMergeToolOptional } from '../routeMerge';
-import { useRouteHoverPreview } from '../hooks/useRouteHoverPreview';
 import { useTracePointDrag, type TracePointDragCommit } from './useTracePointDrag';
 
-const TRACE_CURSOR = 'url("/svgv2/icone/edit-04.svg") 3 17, crosshair';
-const TRACE_GRABBING_CURSOR = 'grabbing';
+export const TRACE_CURSOR = 'url("/svgv2/icone/edit-04.svg") 3 17, crosshair';
+export const TRACE_GRABBING_CURSOR = 'grabbing';
 
 interface TraceToolContextValue {
   armed: boolean;
@@ -77,15 +76,6 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
 
   /** Vrai pendant qu'une poignée est en cours de déplacement (curseur « grabbing »). */
   const draggingRef = useRef(false);
-
-  // Hover-preview marker: free-follows the cursor (no snap) since every
-  // position is a valid click target for start / end / waypoint. During a drag
-  // it doubles as the drop-target indicator.
-  useRouteHoverPreview({
-    map,
-    armed,
-    color: activeItinerary?.color,
-  });
 
   const buildTracePrompt = useCallback(() => {
     if (!hasStartPoint) return translateAppText('Cliquez sur la carte pour placer le départ');
@@ -310,12 +300,10 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
     };
 
     applyCursor();
-    map.on('mousemove', applyCursor);
     map.on('click', handleClick);
     map.on('contextmenu', handleContextMenu);
 
     return () => {
-      map.off('mousemove', applyCursor);
       map.off('click', handleClick);
       map.off('contextmenu', handleContextMenu);
       canvas.style.cursor = '';

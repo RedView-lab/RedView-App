@@ -74,7 +74,30 @@ export function ensureAnalysisHoverLayers(map: MapboxMap): GeoJSONSource | null 
 export function ensureRouteHoverPreviewLayers(map: MapboxMap): GeoJSONSource | null {
   if (!canMutateStyle(map)) return null;
   const existing = map.getSource(ROUTE_HOVER_PREVIEW_SOURCE_ID) as GeoJSONSource | undefined;
-  if (existing) return existing;
+  if (existing) {
+    try {
+      if (map.getLayer(ROUTE_HOVER_PREVIEW_POINT_LAYER_ID)) {
+        map.setPaintProperty(ROUTE_HOVER_PREVIEW_POINT_LAYER_ID, 'circle-radius', ['coalesce', ['get', 'radius'], 6.5]);
+        map.setPaintProperty(ROUTE_HOVER_PREVIEW_POINT_LAYER_ID, 'circle-stroke-width', 2.5);
+      }
+      if (map.getLayer(ROUTE_HOVER_PREVIEW_HALO_LAYER_ID)) {
+        map.setPaintProperty(
+          ROUTE_HOVER_PREVIEW_HALO_LAYER_ID,
+          'circle-radius',
+          ['case', ['get', 'dimmed'], 8, ['+', ['coalesce', ['get', 'radius'], 6.5], 3]],
+        );
+        map.setPaintProperty(ROUTE_HOVER_PREVIEW_HALO_LAYER_ID, 'circle-color', '#000000');
+        map.setPaintProperty(
+          ROUTE_HOVER_PREVIEW_HALO_LAYER_ID,
+          'circle-opacity',
+          ['case', ['get', 'dimmed'], 0.12, 0.28],
+        );
+      }
+    } catch {
+      /* noop */
+    }
+    return existing;
+  }
 
   map.addSource(ROUTE_HOVER_PREVIEW_SOURCE_ID, {
     type: 'geojson',
@@ -88,12 +111,10 @@ export function ensureRouteHoverPreviewLayers(map: MapboxMap): GeoJSONSource | n
     slot: 'top',
     layout: { visibility: 'none' },
     paint: {
-      // Shrink + soften the halo when dimmed so an out-of-range cursor reads
-      // as "no action here" while staying visible.
-      'circle-radius': ['case', ['get', 'dimmed'], 10, 15],
-      'circle-color': '#ffffff',
-      'circle-opacity': ['case', ['get', 'dimmed'], 0.22, 0.42],
-      'circle-blur': 0.75,
+      'circle-radius': ['case', ['get', 'dimmed'], 8, ['+', ['coalesce', ['get', 'radius'], 6.5], 3]],
+      'circle-color': '#000000',
+      'circle-opacity': ['case', ['get', 'dimmed'], 0.12, 0.28],
+      'circle-blur': 0.6,
       'circle-pitch-alignment': 'viewport',
       'circle-pitch-scale': 'viewport',
       'circle-emissive-strength': 1,
@@ -107,12 +128,12 @@ export function ensureRouteHoverPreviewLayers(map: MapboxMap): GeoJSONSource | n
     slot: 'top',
     layout: { visibility: 'none' },
     paint: {
-      'circle-radius': 8,
+      'circle-radius': ['coalesce', ['get', 'radius'], 6.5],
       'circle-color': '#ffffff',
-      'circle-stroke-width': 3,
+      'circle-stroke-width': 2.5,
       'circle-stroke-color': ['coalesce', ['get', 'color'], '#ff4d4f'],
       'circle-opacity': 1,
-      'circle-stroke-opacity': ['case', ['get', 'dimmed'], 0.45, 0.96],
+      'circle-stroke-opacity': ['case', ['get', 'dimmed'], 0.45, 1],
       'circle-pitch-alignment': 'viewport',
       'circle-pitch-scale': 'viewport',
       'circle-emissive-strength': 1.2,

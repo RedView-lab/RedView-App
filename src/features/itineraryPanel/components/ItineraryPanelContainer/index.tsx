@@ -19,7 +19,9 @@ import { poiFeaturesToTimelineItems } from '../../lib/schedule';
 import { fitToRoute } from '../../lib/route-layer';
 import { useProjectStore } from '../../context/ProjectStore';
 import { useTraceToolOptional } from '@/features/centerPanel/tracer';
+import { useForbiddenZoneToolOptional } from '@/features/centerPanel/forbiddenZones';
 import { usePredictionStoreOptional } from '../../context/PredictionStore';
+import { useItineraryUndoRedoShortcut } from '../../hooks/useItineraryUndoRedoShortcut';
 import { DEFAULT_PROFILES, getProfilePreset, resolveProfilePresetId } from '../../lib/project';
 import {
   syncTracageOnActivityChange,
@@ -150,6 +152,32 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     activeItineraryId: active?.id ?? null,
     itineraryCount: itineraries.length,
     onRemove: removeItinerary,
+  });
+
+  const forbiddenZoneTool = useForbiddenZoneToolOptional();
+  const forbiddenZoneArmed = Boolean(forbiddenZoneTool?.armed);
+  const canUndo = forbiddenZoneArmed ? (forbiddenZoneTool?.canUndoDraft ?? false) : canUndoTraceEdit;
+  const canRedo = forbiddenZoneArmed ? (forbiddenZoneTool?.canRedoDraft ?? false) : canRedoTraceEdit;
+  const handleUndo = useCallback(() => {
+    if (forbiddenZoneArmed) {
+      forbiddenZoneTool?.undoDraft();
+    } else {
+      undoTraceEdit();
+    }
+  }, [forbiddenZoneArmed, forbiddenZoneTool, undoTraceEdit]);
+  const handleRedo = useCallback(() => {
+    if (forbiddenZoneArmed) {
+      forbiddenZoneTool?.redoDraft();
+    } else {
+      redoTraceEdit();
+    }
+  }, [forbiddenZoneArmed, forbiddenZoneTool, redoTraceEdit]);
+
+  useItineraryUndoRedoShortcut({
+    canUndo,
+    canRedo,
+    onUndo: handleUndo,
+    onRedo: handleRedo,
   });
 
   useEffect(() => {

@@ -3,40 +3,49 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
+  useState,
   type ReactNode,
 } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
-import { unprojectClientPoint } from '@/features/map3d/lib/mapPointer';
+import { getMapScreenPoint, unprojectClientPoint } from '@/features/map3d/lib/mapPointer';
 import {
   clearRouteHoverPreview,
   setRouteHoverPreview,
 } from '@/features/itineraryPanel/lib/route-layer';
-import { buildPendingRoutePatchForEditedRow, insertWaypointAtRoutePosition } from '@/features/itineraryPanel/components/ItineraryPanelContainer/timelineMutations';
+import {
+  buildPendingRoutePatchForEditedRow,
+  insertWaypointAtRoutePosition,
+} from '@/features/itineraryPanel/components/ItineraryPanelContainer/timelineMutations';
+import { addItineraryVariantInPlace } from '@/features/itineraryPanel/lib/project';
+import { reverseGeocodeSettlement } from '@/features/itineraryPanel/lib/geocoding';
+import { translateAppText } from '@/shared/i18n';
+import { isVariantModifierPressed } from '@/shared/lib/platform';
 import { useRouteSplitToolOptional } from '../routeSplit';
 import { useTraceToolOptional } from '../tracer';
+import { TRACE_CURSOR } from '../tracer/TraceToolContext';
 import { useRouteMergeToolOptional } from '../routeMerge';
 import { useForbiddenZoneToolOptional } from '../forbiddenZones';
 import {
-  findSplitProjectionForMapHover,
-  projectClickOntoRoute,
+  findContinuousRouteProjection,
+  isClickNearExistingTimelinePoint,
+  MAX_ROUTE_DRAG_CLICK_DISTANCE_PX,
 } from './routeDragWaypointSnap';
 
 /** Minimum pointer movement (in screen pixels) before a press is treated as a drag. */
-const DRAG_THRESHOLD_PX = 6;
+const DRAG_THRESHOLD_PX = 5;
 /** Proximity radius to look for a nearby POI marker when a simple click occurs near one. */
-const POI_CLICK_PROXIMITY_PX = 26;
+const POI_CLICK_PROXIMITY_PX = 24;
 
 interface RouteDragWaypointContextValue {
-  /** Reserved for future consumers; the drag itself is fully effect-driven. */
+  /** True while a route point is actively being dragged. */
   dragging: boolean;
 }
 
 const RouteDragWaypointContext = createContext<RouteDragWaypointContextValue | null>(null);
-
-const ROUTE_DRAG_WAYPOINT_DEFAULT_VALUE: RouteDragWaypointContextValue = { dragging: false };
 
 interface RouteDragWaypointProviderProps {
   children: ReactNode;
@@ -44,15 +53,21 @@ interface RouteDragWaypointProviderProps {
 }
 
 interface DragSession {
-  /** World-space coordinate projected onto the trace where the grab started. */
+  /** World-space coordinate on the trace where the grab started. */
   anchor: { lat: number; lon: number };
   startX: number;
   startY: number;
   isDragging: boolean;
 }
 
-function findNearbyPoiMarker(clientX: number, clientY: number, maxDistancePx = POI_CLICK_PROXIMITY_PX): HTMLElement | null {
-  const direct = document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('.rv-poi-marker, .mapboxgl-marker');
+function findNearbyPoiMarker(
+  clientX: number,
+  clientY: number,
+  maxDistancePx = POI_CLICK_PROXIMITY_PX,
+): HTMLElement | null {
+  const direct = document
+    .elementFromPoint(clientX, clientY)
+    ?.closest<HTMLElement>('.rv-poi-marker, .mapboxgl-marker');
   if (direct) return direct;
 
   const markers = document.querySelectorAll<HTMLElement>('.rv-poi-marker');
@@ -80,62 +95,117 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
   const mergeTool = useRouteMergeToolOptional();
   const forbiddenZoneTool = useForbiddenZoneToolOptional();
 
+  const isTraceMode = Boolean(traceTool?.armed);
+  const otherBlockingToolArmed = Boolean(
+    splitTool?.armed || forbiddenZoneTool?.armed || mergeTool?.armed,
+  );
+
   const activeItinerary = store?.project.itineraries.find(
     (itinerary) => itinerary.id === store.project.activeItineraryId,
   );
-  const routePoints = activeItinerary?.gpxRoute?.source === 'brouter'
-    ? activeItinerary.gpxRoute.points
-    : null;
-  const hasBrouterRoute = (routePoints?.length ?? 0) >= 2;
+  const routePoints = activeItinerary?.gpxRoute?.points ?? null;
+  const hasRoute = (routePoints?.length ?? 0) >= 2;
 
-  // Any explicit tool armed → stand down entirely (neutral cursor, no drag).
-  const otherToolArmed = Boolean(
-    splitTool?.armed || traceTool?.armed || forbiddenZoneTool?.armed || mergeTool?.armed,
-  );
+  // Active in both classic mode and tracing mode, as long as a route exists and no blocking tool is armed.
+  const enabled = Boolean(map) && hasRoute && !otherBlockingToolArmed;
 
-  const enabled = Boolean(map) && hasBrouterRoute && !otherToolArmed;
-
-  // The session lives in a ref so the canvas listeners (attached once) can read
-  // and mutate it without becoming stale closures.
+  const [isDragging, setIsDragging] = useState(false);
   const sessionRef = useRef<DragSession | null>(null);
   const overRouteRef = useRef(false);
-  const dragWasActiveRef = useRef(false);
 
-  // Live values read inside the (stable) DOM handlers. Kept in refs and updated
-  // via an effect so the listeners never go stale, BUT the attach/detach effect
-  // doesn't re-run on every store mutation — otherwise an in-progress grab is
-  // torn down the moment the project object changes identity.
   const storeRef = useRef(store);
   const activeItineraryIdRef = useRef(activeItinerary?.id);
   const routePointsRef = useRef(routePoints);
   const routeColorRef = useRef(activeItinerary?.color);
+  const routeTraceWidthRef = useRef(store?.project.controlPanel?.routes?.traceWidthPx ?? 8);
+  const isTraceModeRef = useRef(isTraceMode);
+
   useEffect(() => {
     storeRef.current = store;
     activeItineraryIdRef.current = activeItinerary?.id;
     routePointsRef.current = routePoints;
     routeColorRef.current = activeItinerary?.color;
+    routeTraceWidthRef.current = store?.project.controlPanel?.routes?.traceWidthPx ?? 8;
+    isTraceModeRef.current = isTraceMode;
   });
 
   const commitDrag = useCallback(
-    (anchorLat: number, anchorLon: number, dropLng: number, dropLat: number) => {
+    (
+      anchorLat: number,
+      anchorLon: number,
+      dropLng: number,
+      dropLat: number,
+      asVariant: boolean = false,
+    ) => {
       const currentStore = storeRef.current;
       const itineraryId = activeItineraryIdRef.current;
       if (!currentStore || !itineraryId) return;
 
-      currentStore.updateItinerary(itineraryId, (it) => {
-        if (it.gpxRoute?.source !== 'brouter' || it.gpxRoute.points.length < 2) return;
+      const variantBox: { current: { createdItineraryId: string; createdItineraryName: string } | null } = {
+        current: null,
+      };
+
+      const committed = currentStore.commitTraceMutation(itineraryId, (draft) => {
+        let targetItinerary = draft.itineraries.find((it) => it.id === itineraryId);
+        if (!targetItinerary) return false;
+        if (asVariant) {
+          const created = addItineraryVariantInPlace(draft, itineraryId);
+          if (!created) return false;
+          const forked = draft.itineraries.find((it) => it.id === created.createdItineraryId);
+          if (!forked) return false;
+          variantBox.current = created;
+          targetItinerary = forked;
+        }
+
+        const currentRoute = targetItinerary.gpxRoute;
+        if (!currentRoute?.points || currentRoute.points.length < 2) {
+          return false;
+        }
+
         const result = insertWaypointAtRoutePosition(
-          it.timeline,
-          it.gpxRoute.points,
+          targetItinerary.timeline,
+          currentRoute.points,
           { lat: anchorLat, lon: anchorLon },
           { lat: dropLat, lon: dropLng },
         );
-        if (!result) return;
-        it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, result.newRowId);
-        delete it.pendingTraceExtension;
-        delete it.routeAudit;
-        it.prediction = null;
+        if (!result) return false;
+
+        if (currentRoute.source === 'brouter') {
+          targetItinerary.pendingRoutePatch = buildPendingRoutePatchForEditedRow(
+            targetItinerary.timeline,
+            result.newRowId,
+          );
+        }
+        delete targetItinerary.pendingTraceExtension;
+        delete targetItinerary.routeAudit;
+        targetItinerary.prediction = null;
+        return true;
       });
+
+      if (!committed) return;
+
+      // Asynchronously resolve settlement name for the newly placed waypoint
+      const targetItId = variantBox.current?.createdItineraryId ?? itineraryId;
+      void reverseGeocodeSettlement(dropLng, dropLat, { maxDistanceMeters: 1000 })
+        .then((settlement) => {
+          const name = settlement?.name?.trim();
+          if (!name) return;
+          currentStore.updateItinerary(targetItId, (it) => {
+            const newlyAdded = it.timeline.find(
+              (row) =>
+                row.kind === 'waypoint' &&
+                row.lat === dropLat &&
+                row.lon === dropLng &&
+                (row.label === translateAppText('Nouveau point') || row.label === 'Nouveau point'),
+            );
+            if (newlyAdded) {
+              newlyAdded.label = name;
+            }
+          });
+        })
+        .catch(() => {
+          /* keep default fallback label */
+        });
     },
     [],
   );
@@ -149,11 +219,17 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
 
     const canvas = map.getCanvas();
     const canvasContainer = map.getCanvasContainer();
-    let rafId: number | null = null;
+    let dragRafId: number | null = null;
+    let hoverRafId: number | null = null;
     let pendingDragLngLat: { lng: number; lat: number } | null = null;
+    let pendingHoverEvent: MouseEvent | null = null;
 
     const applyCursor = (cursor: string) => {
       canvas.style.cursor = cursor;
+    };
+
+    const applyDefaultCursor = () => {
+      applyCursor(isTraceModeRef.current ? TRACE_CURSOR : '');
     };
 
     const reenableDragPan = () => {
@@ -164,47 +240,58 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
       }
     };
 
-    /**
-     * Convert a viewport (clientX/Y) coordinate into an lng/lat.
-     *
-     * Goes through `unprojectClientPoint` rather than `map.unproject` directly:
-     * Mapbox's own events (and therefore the hover preview the user follows)
-     * offset by the canvas *container* rect and apply its CSS scale factor.
-     * Skipping those terms dropped the point hundreds of metres off target.
-     */
     const unprojectClient = (clientX: number, clientY: number) =>
       unprojectClientPoint(map, clientX, clientY);
 
+    const getPreviewRadius = () => {
+      const traceWidth = routeTraceWidthRef.current ?? 8;
+      return Math.max(5.5, Math.min(10, traceWidth / 2 + 2.5));
+    };
+
     const flushDragMove = () => {
-      rafId = null;
+      dragRafId = null;
       const next = pendingDragLngLat;
       pendingDragLngLat = null;
       if (!next) return;
-      // The drag marker follows the cursor verbatim — BRouter snaps it to the
-      // nearest road only on commit, so the preview shows the raw drop target.
+
       setRouteHoverPreview(map, {
         lon: next.lng,
         lat: next.lat,
         color: routeColorRef.current,
+        radius: getPreviewRadius(),
       });
     };
 
     const resetAfterDrag = () => {
-      if (rafId !== null) {
-        window.cancelAnimationFrame(rafId);
-        rafId = null;
+      setIsDragging(false);
+      if (dragRafId !== null) {
+        window.cancelAnimationFrame(dragRafId);
+        dragRafId = null;
       }
       pendingDragLngLat = null;
       reenableDragPan();
-      applyCursor(overRouteRef.current ? 'grab' : '');
-      clearRouteHoverPreview(map);
+      applyCursor(overRouteRef.current ? 'grab' : (isTraceModeRef.current ? TRACE_CURSOR : ''));
+      if (!overRouteRef.current) {
+        clearRouteHoverPreview(map);
+      }
     };
 
-    /**
-     * Window-level move handler active only while a grab is in progress. Bound
-     * on `mousedown` and removed on `mouseup`, so it never competes with idle
-     * hover detection.
-     */
+    const cancelDrag = () => {
+      if (!sessionRef.current) return;
+      setIsDragging(false);
+      window.removeEventListener('mousemove', handleWindowMouseMove, true);
+      window.removeEventListener('mouseup', handleWindowMouseUp, true);
+      window.removeEventListener('keydown', handleKeyDown, true);
+      sessionRef.current = null;
+      resetAfterDrag();
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && sessionRef.current) {
+        cancelDrag();
+      }
+    };
+
     const handleWindowMouseMove = (event: MouseEvent) => {
       const session = sessionRef.current;
       if (!session) return;
@@ -214,19 +301,14 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
       if (!session.isDragging) {
         if (dist < DRAG_THRESHOLD_PX) return;
         session.isDragging = true;
-        dragWasActiveRef.current = true;
+        setIsDragging(true);
         map.dragPan.disable();
         applyCursor('grabbing');
-        setRouteHoverPreview(map, {
-          lon: session.anchor.lon,
-          lat: session.anchor.lat,
-          color: routeColorRef.current,
-        });
       }
 
       const lngLat = unprojectClient(event.clientX, event.clientY);
       pendingDragLngLat = { lng: lngLat.lng, lat: lngLat.lat };
-      if (rafId === null) rafId = window.requestAnimationFrame(flushDragMove);
+      if (dragRafId === null) dragRafId = window.requestAnimationFrame(flushDragMove);
     };
 
     const handleWindowMouseUp = (event: MouseEvent) => {
@@ -234,48 +316,47 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
       const session = sessionRef.current;
       if (!session) return;
 
-      window.removeEventListener('mousemove', handleWindowMouseMove);
-      window.removeEventListener('mouseup', handleWindowMouseUp);
+      window.removeEventListener('mousemove', handleWindowMouseMove, true);
+      window.removeEventListener('mouseup', handleWindowMouseUp, true);
+      window.removeEventListener('keydown', handleKeyDown, true);
 
       sessionRef.current = null;
+      const asVariant = isVariantModifierPressed(event);
 
       if (session.isDragging) {
-        // Legitimate drag gesture: commit new waypoint.
+        // Drag gesture: commit new waypoint at dropped location
         const lngLat = unprojectClient(event.clientX, event.clientY);
-        commitDrag(session.anchor.lat, session.anchor.lon, lngLat.lng, lngLat.lat);
+        commitDrag(session.anchor.lat, session.anchor.lon, lngLat.lng, lngLat.lat, asVariant);
       } else {
-        // Simple click without drag movement: DO NOT alter route.
-        // If a POI marker was targeted or nearby, trigger its click so the popup opens.
+        // Simple click without drag movement
         const nearbyPoi = findNearbyPoiMarker(event.clientX, event.clientY, POI_CLICK_PROXIMITY_PX);
         if (nearbyPoi) {
           nearbyPoi.click();
+        } else {
+          // Add a waypoint at the exact clicked anchor location
+          commitDrag(
+            session.anchor.lat,
+            session.anchor.lon,
+            session.anchor.lon,
+            session.anchor.lat,
+            asVariant,
+          );
         }
       }
 
       resetAfterDrag();
     };
 
-    const cancelDrag = () => {
-      if (!sessionRef.current) return;
-      window.removeEventListener('mousemove', handleWindowMouseMove);
-      window.removeEventListener('mouseup', handleWindowMouseUp);
-      sessionRef.current = null;
-      resetAfterDrag();
-    };
-
-    /**
-     * Capture-phase mousedown on the canvas container.
-     */
     const handleMouseDown = (event: MouseEvent) => {
       if (event.button !== 0) return;
       if (sessionRef.current) return;
 
-      // 1. If clicking directly on a POI marker, popup, or any interactive control, let it handle the click natively.
+      // 1. If clicking directly on a POI marker, checkpoint marker, popup, or interactive control, let it handle natively
       const target = event.target as HTMLElement | null;
       if (
         target &&
         target.closest(
-          '.rv-poi-marker, .mapboxgl-marker, .mapboxgl-popup, .mapboxgl-popup-content, button, a, [role="button"], input, select, textarea',
+          '.rv-poi-marker, .rv-checkpoint-marker, .mapboxgl-marker, .mapboxgl-popup, .mapboxgl-popup-content, button, a, [role="button"], input, select, textarea, [data-rv-trace-point], [data-trace-point]',
         )
       ) {
         return;
@@ -284,22 +365,31 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
       const routePts = routePointsRef.current;
       if (!routePts || routePts.length < 2) return;
 
-      const rect = canvas.getBoundingClientRect();
-      const clickX = event.clientX - rect.left;
-      const clickY = event.clientY - rect.top;
+      const screenPt = getMapScreenPoint(map, event.clientX, event.clientY);
 
-      const projection = findSplitProjectionForMapHover(
+      // Avoid creating duplicate waypoints right on top of existing timeline points (within 16px)
+      const currentTimeline = storeRef.current?.project.itineraries.find(
+        (it) => it.id === activeItineraryIdRef.current,
+      )?.timeline;
+      if (
+        currentTimeline &&
+        isClickNearExistingTimelinePoint(map, currentTimeline, screenPt.x, screenPt.y, 16)
+      ) {
+        return;
+      }
+
+      const projection = findContinuousRouteProjection(
         map,
         routePts,
-        clickX,
-        clickY,
+        screenPt.x,
+        screenPt.y,
+        MAX_ROUTE_DRAG_CLICK_DISTANCE_PX,
       );
       if (!projection?.withinTolerance) return;
 
-      const anchor = projectClickOntoRoute(routePts, projection.snapped.lon, projection.snapped.lat);
-      if (!anchor) return;
+      const anchor = { lat: projection.snapped.lat, lon: projection.snapped.lon };
 
-      // Prevent Mapbox dragPan from stealing pointer before we know if it's a drag or click.
+      // Prevent Mapbox dragPan & map click from stealing pointer before drag or click completes
       event.stopPropagation();
       event.preventDefault();
 
@@ -310,48 +400,88 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
         isDragging: false,
       };
 
-      window.addEventListener('mousemove', handleWindowMouseMove);
-      window.addEventListener('mouseup', handleWindowMouseUp);
+      window.addEventListener('mousemove', handleWindowMouseMove, true);
+      window.addEventListener('mouseup', handleWindowMouseUp, true);
+      window.addEventListener('keydown', handleKeyDown, true);
     };
 
-    const handleHoverMouseMove = (event: MouseEvent) => {
+    const processHover = (event: MouseEvent) => {
+      hoverRafId = null;
       if (sessionRef.current?.isDragging) return;
 
-      // If hovering over a POI marker or UI control, clear the route grab cursor.
       const target = event.target as HTMLElement | null;
       if (
         target &&
         target.closest(
-          '.rv-poi-marker, .mapboxgl-marker, .mapboxgl-popup, button, a, [role="button"]',
+          '.rv-poi-marker, .rv-checkpoint-marker, .mapboxgl-marker, .mapboxgl-popup, button, a, [role="button"]',
         )
       ) {
         if (overRouteRef.current) {
           overRouteRef.current = false;
-          applyCursor('');
+          applyDefaultCursor();
+          clearRouteHoverPreview(map);
         }
         return;
       }
 
       const routePts = routePointsRef.current;
-      if (!routePts || routePts.length < 2) return;
-      const rect = canvas.getBoundingClientRect();
-      const projection = findSplitProjectionForMapHover(
+      if (!routePts || routePts.length < 2) {
+        if (overRouteRef.current) {
+          overRouteRef.current = false;
+          applyDefaultCursor();
+          clearRouteHoverPreview(map);
+        }
+        return;
+      }
+
+      const screenPt = getMapScreenPoint(map, event.clientX, event.clientY);
+
+      const projection = findContinuousRouteProjection(
         map,
         routePts,
-        event.clientX - rect.left,
-        event.clientY - rect.top,
+        screenPt.x,
+        screenPt.y,
+        MAX_ROUTE_DRAG_CLICK_DISTANCE_PX,
       );
+
       const over = projection?.withinTolerance ?? false;
-      if (over !== overRouteRef.current) {
-        overRouteRef.current = over;
-        applyCursor(over ? 'grab' : '');
+
+      if (over && projection) {
+        overRouteRef.current = true;
+        applyCursor('grab');
+        setRouteHoverPreview(map, {
+          lon: projection.snapped.lon,
+          lat: projection.snapped.lat,
+          color: routeColorRef.current,
+          radius: getPreviewRadius(),
+        });
+      } else {
+        if (overRouteRef.current) {
+          overRouteRef.current = false;
+          applyDefaultCursor();
+          clearRouteHoverPreview(map);
+        }
+      }
+    };
+
+    const handleHoverMouseMove = (event: MouseEvent) => {
+      if (sessionRef.current?.isDragging) return;
+      pendingHoverEvent = event;
+      if (hoverRafId === null) {
+        hoverRafId = window.requestAnimationFrame(() => {
+          if (pendingHoverEvent) {
+            processHover(pendingHoverEvent);
+            pendingHoverEvent = null;
+          }
+        });
       }
     };
 
     const handleMouseLeave = () => {
       if (sessionRef.current) return;
       overRouteRef.current = false;
-      applyCursor('');
+      applyDefaultCursor();
+      clearRouteHoverPreview(map);
     };
 
     const handleContextMenu = (event: MouseEvent) => {
@@ -360,34 +490,42 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
       cancelDrag();
     };
 
-    // Capture phase so we run *before* Mapbox's drag-pan handler.
     canvasContainer.addEventListener('mousedown', handleMouseDown, true);
-    canvas.addEventListener('mousemove', handleHoverMouseMove);
-    canvas.addEventListener('mouseleave', handleMouseLeave);
-    canvas.addEventListener('contextmenu', handleContextMenu);
+    canvasContainer.addEventListener('mousemove', handleHoverMouseMove);
+    canvasContainer.addEventListener('mouseleave', handleMouseLeave);
+    canvasContainer.addEventListener('contextmenu', handleContextMenu);
 
     return () => {
       canvasContainer.removeEventListener('mousedown', handleMouseDown, true);
-      canvas.removeEventListener('mousemove', handleHoverMouseMove);
-      canvas.removeEventListener('mouseleave', handleMouseLeave);
-      canvas.removeEventListener('contextmenu', handleContextMenu);
-      window.removeEventListener('mousemove', handleWindowMouseMove);
-      window.removeEventListener('mouseup', handleWindowMouseUp);
-      if (rafId !== null) {
-        window.cancelAnimationFrame(rafId);
-        rafId = null;
+      canvasContainer.removeEventListener('mousemove', handleHoverMouseMove);
+      canvasContainer.removeEventListener('mouseleave', handleMouseLeave);
+      canvasContainer.removeEventListener('contextmenu', handleContextMenu);
+      window.removeEventListener('mousemove', handleWindowMouseMove, true);
+      window.removeEventListener('mouseup', handleWindowMouseUp, true);
+      window.removeEventListener('keydown', handleKeyDown, true);
+
+      if (dragRafId !== null) {
+        window.cancelAnimationFrame(dragRafId);
+        dragRafId = null;
+      }
+      if (hoverRafId !== null) {
+        window.cancelAnimationFrame(hoverRafId);
+        hoverRafId = null;
       }
       pendingDragLngLat = null;
+      pendingHoverEvent = null;
       sessionRef.current = null;
       overRouteRef.current = false;
       reenableDragPan();
-      applyCursor('');
+      applyDefaultCursor();
       clearRouteHoverPreview(map);
-      dragWasActiveRef.current = false;
     };
   }, [commitDrag, enabled, map]);
 
-  const value = ROUTE_DRAG_WAYPOINT_DEFAULT_VALUE;
+  const value = useMemo<RouteDragWaypointContextValue>(
+    () => ({ dragging: isDragging }),
+    [isDragging],
+  );
 
   return (
     <RouteDragWaypointContext.Provider value={value}>

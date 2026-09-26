@@ -1,24 +1,132 @@
+import type { Map as MapboxMap } from 'mapbox-gl';
 import {
   cumulativeRouteLengthsM,
   projectPointAlongRoute,
 } from '@/features/itineraryPanel/lib/routes';
+import type { TimelineItem } from '@/features/itineraryPanel/types';
+import { projectPointToSegment } from '../routeSplit/routeSnap';
+
+/** Maximum screen distance in pixels from the trace line for hover/drag detection. */
+export const MAX_ROUTE_DRAG_CLICK_DISTANCE_PX = 28;
+
+export interface ContinuousRouteProjection {
+  /** Squared pixel distance from the cursor to the nearest segment. */
+  distanceSq: number;
+  /** Segment index start (between points[i] and points[i+1]). */
+  segmentIndex: number;
+  /** Parametric factor along segment, between 0 and 1. */
+  t: number;
+  /** True when cursor is within tolerance of the route line. */
+  withinTolerance: boolean;
+  /** Snapped geographic coordinates (continuously interpolated on the segment). */
+  snapped: { lat: number; lon: number };
+}
 
 /**
- * Geometric helpers for the press-and-drag waypoint tool.
- *
- * Two distinct snapping concerns live here:
- *
- *  1. **Hit-testing** ("is the cursor over the trace?") is handled by
- *     {@link findSplitProjectionForMapHover} in `routeSplit/routeSnap.ts`,
- *     which works in screen space and is therefore correct under 3D pitch.
- *     {@link MAX_ROUTE_GRAB_DISTANCE_PX} is the pixel tolerance reused from it.
- *
- *  2. **Exact world-space anchoring** ("where on the trace did the user grab?")
- *     is handled by {@link projectClickOntoRoute}, which projects the click
- *     onto the polyline in geographic space via `projectPointAlongRoute`.
- *     This returns the interpolated point + its cumulative distance, so the
- *     new waypoint can be inserted at its logical position along the route.
+ * Projects a cursor position (screen coordinates relative to canvas) continuously
+ * onto the polyline in screen space. Glides smoothly along segments without jumping
+ * between vertices, matching Strava and Komoot behavior.
  */
+export function findContinuousRouteProjection(
+  map: MapboxMap,
+  points: Array<{ lat: number; lon: number }>,
+  screenX: number,
+  screenY: number,
+  tolerancePx: number = MAX_ROUTE_DRAG_CLICK_DISTANCE_PX,
+): ContinuousRouteProjection | null {
+  if (points.length < 2) return null;
+
+  let bounds;
+  try {
+    bounds = map.getBounds();
+  } catch {
+    return null;
+  }
+  if (!bounds) return null;
+
+  const marginLon = Math.max(0.01, (bounds.getEast() - bounds.getWest()) * 0.15);
+  const marginLat = Math.max(0.01, (bounds.getNorth() - bounds.getSouth()) * 0.15);
+  const west = bounds.getWest() - marginLon;
+  const east = bounds.getEast() + marginLon;
+  const south = bounds.getSouth() - marginLat;
+  const north = bounds.getNorth() + marginLat;
+
+  let bestDistanceSq = Number.POSITIVE_INFINITY;
+  let bestSegment = 0;
+  let bestT = 0;
+
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const p0 = points[i];
+    const p1 = points[i + 1];
+
+    const minLon = Math.min(p0.lon, p1.lon);
+    const maxLon = Math.max(p0.lon, p1.lon);
+    const minLat = Math.min(p0.lat, p1.lat);
+    const maxLat = Math.max(p0.lat, p1.lat);
+
+    if (maxLon < west || minLon > east || maxLat < south || minLat > north) {
+      continue;
+    }
+
+    try {
+      const s0 = map.project([p0.lon, p0.lat]);
+      const s1 = map.project([p1.lon, p1.lat]);
+
+      const projection = projectPointToSegment(screenX, screenY, s0.x, s0.y, s1.x, s1.y);
+      if (projection.distanceSq < bestDistanceSq) {
+        bestDistanceSq = projection.distanceSq;
+        bestSegment = i;
+        bestT = projection.t;
+      }
+    } catch {
+      /* ignore projection error on out-of-world points */
+    }
+  }
+
+  if (!Number.isFinite(bestDistanceSq)) return null;
+
+  const p0 = points[bestSegment];
+  const p1 = points[bestSegment + 1];
+  const snappedLat = p0.lat + bestT * (p1.lat - p0.lat);
+  const snappedLon = p0.lon + bestT * (p1.lon - p0.lon);
+
+  return {
+    distanceSq: bestDistanceSq,
+    segmentIndex: bestSegment,
+    t: bestT,
+    withinTolerance: bestDistanceSq <= tolerancePx * tolerancePx,
+    snapped: { lat: snappedLat, lon: snappedLon },
+  };
+}
+
+/**
+ * Checks if a click is within proximity of an existing routable checkpoint
+ * (start, end, or waypoint) to avoid creating unintentional duplicate waypoints.
+ */
+export function isClickNearExistingTimelinePoint(
+  map: MapboxMap,
+  timeline: TimelineItem[],
+  clickX: number,
+  clickY: number,
+  thresholdPx = 14,
+): boolean {
+  const thresholdSq = thresholdPx * thresholdPx;
+  for (const item of timeline) {
+    if (item.lat == null || item.lon == null) continue;
+    if (item.kind !== 'start' && item.kind !== 'end' && item.kind !== 'waypoint') continue;
+    try {
+      const pt = map.project([item.lon, item.lat]);
+      const dx = clickX - pt.x;
+      const dy = clickY - pt.y;
+      if (dx * dx + dy * dy <= thresholdSq) {
+        return true;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return false;
+}
 
 /** Re-exported tolerance so the drag tool shares the split tool's hit radius. */
 export {

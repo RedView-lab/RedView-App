@@ -28,6 +28,8 @@ export interface RouteHoverPreviewPoint {
    * split mode). False ⇒ full-strength "clickable" marker.
    */
   dimmed?: boolean;
+  /** Radius of the preview circle in pixels. */
+  radius?: number;
 }
 
 export function buildRouteHoverPreviewGeoJson(
@@ -42,6 +44,7 @@ export function buildRouteHoverPreviewGeoJson(
             properties: {
               color: point.color ?? '#ff4d4f',
               dimmed: Boolean(point.dimmed),
+              radius: point.radius ?? 6.5,
             },
             geometry: {
               type: 'Point',

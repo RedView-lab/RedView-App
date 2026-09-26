@@ -53,3 +53,24 @@ export function unprojectClientPoint(
 export function unprojectMouseEvent(map: MapboxMap, event: MouseEvent): LngLat {
   return unprojectClientPoint(map, event.clientX, event.clientY);
 }
+
+/**
+ * Convertit des coordonnées écran client (clientX, clientY) dans le système de
+ * coordonnées interne du conteneur de canvas Mapbox (identique aux coordonnées
+ * retournées par map.project() et e.point dans les événements Mapbox).
+ */
+export function getMapScreenPoint(
+  map: MapboxMap,
+  clientX: number,
+  clientY: number,
+): { x: number; y: number } {
+  const container = map.getCanvasContainer();
+  const rect = container.getBoundingClientRect();
+  const scaling =
+    container.offsetWidth === rect.width ? 1 : container.offsetWidth / rect.width;
+
+  return {
+    x: (clientX - rect.left) * scaling,
+    y: (clientY - rect.top) * scaling,
+  };
+}

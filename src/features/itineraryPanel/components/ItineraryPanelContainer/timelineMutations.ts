@@ -8,6 +8,7 @@ import { translateAppText } from '@/shared/i18n';
 import {
   cumulativeRouteLengthsM,
   projectPointAlongRoute,
+  roundDistanceKm,
 } from '@/features/itineraryPanel/lib/routes';
 
 function isRoutableTimelineRow(
@@ -149,12 +150,16 @@ export function insertWaypointAtRoutePosition(
   const endIndex = timeline.findIndex((row) => row.kind === 'end');
   if (endIndex >= 0) insertIndex = Math.min(insertIndex, endIndex);
 
+  const isDirectOnRoute =
+    Math.abs(dropLatLon.lat - anchorLonLat.lat) < 1e-6 &&
+    Math.abs(dropLatLon.lon - anchorLonLat.lon) < 1e-6;
+
   const newRowId = `wp-drag-${Date.now()}`;
   const newRow: TimelineItem = {
     id: newRowId,
     kind: 'waypoint',
     label: translateAppText('Nouveau point'),
-    distanceKm: null,
+    distanceKm: isDirectOnRoute ? roundDistanceKm(anchor.distanceM) : null,
     lat: dropLatLon.lat,
     lon: dropLatLon.lon,
   };
