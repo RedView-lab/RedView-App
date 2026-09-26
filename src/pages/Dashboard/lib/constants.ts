@@ -10,7 +10,7 @@ export const COLLAPSED_DRAWER_CLEARANCE = 46;
 export const CENTER_PANEL_HEIGHT_KEY = 'rvc-center-panel-height';
 
 export const LEFT_PANEL_WIDTH_KEY = 'rvi-panel-width';
-export const LEFT_PANEL_WIDTH_MAX = 520;
+export const LEFT_PANEL_WIDTH_MAX = 800;
 export const LEFT_PANEL_WIDTH_DEFAULT = 360;
 
 export const CENTER_PANEL_MIN_WIDTH = 420;

@@ -250,8 +250,6 @@ export function RythmeSection({
 
   return (
     <div className="rvi-params">
-      <div className="rvi-divider" />
-
       {/* ── Figma Node 6043:105672 container ── */}
       <div className="rvi-rythme-figma">
         {/* ── ROW 1 : Départ & Heure (Figma node 6025:114207) ── */}

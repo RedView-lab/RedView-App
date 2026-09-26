@@ -12,7 +12,6 @@ import {
   CENTER_PANEL_RESIZE_HIT_AREA,
   CENTER_PANEL_STACK_GAP,
   CENTER_TOOLBAR_HEIGHT,
-  COLLAPSED_DRAWER_CLEARANCE,
   PANEL_PADDING,
 } from './constants';
 import { clampNumber } from './utils';
@@ -64,17 +63,13 @@ export function getDashboardLayout({
     rightDockContentHeight - exporterPanelHeight - PANEL_PADDING,
   );
 
-  const leftPanelReservedWidth = isMapFocusMode
+  const leftPanelReservedWidth = isMapFocusMode || isLeftPanelCollapsed
     ? PANEL_PADDING
-    : isLeftPanelCollapsed
-      ? COLLAPSED_DRAWER_CLEARANCE
-      : leftPanelWidth + PANEL_PADDING * 2;
+    : leftPanelWidth + PANEL_PADDING * 2;
   const centerPanelBaseRegionLeft = leftPanelReservedWidth;
-  const rightPanelReservedWidth = isMapFocusMode
+  const rightPanelReservedWidth = isMapFocusMode || isRightPanelCollapsed
     ? PANEL_PADDING
-    : isRightPanelCollapsed
-      ? COLLAPSED_DRAWER_CLEARANCE
-      : panelWidth + PANEL_PADDING * 2;
+    : panelWidth + PANEL_PADDING * 2;
   const centerPanelBaseRegionRight = rightPanelReservedWidth;
   const centerPanelRegionLeft = leftPanelReservedWidth;
   const centerPanelRegionRight = rightPanelReservedWidth;

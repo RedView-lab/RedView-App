@@ -34,12 +34,6 @@ interface AnalysisToolbarProps {
    */
   disabledFilters?: Partial<Record<ToolbarFilterKey, string>>;
   /**
-   * Filtres dont le prérequis manque ET qui sont actuellement activés : leur
-   * chip affiche le pop-in en continu, sans survol, tant que l'utilisateur ne
-   * les désactive pas. Renversé par le parent (voir CenterPanelAnalysis).
-   */
-  pinnedFilters?: Partial<Record<ToolbarFilterKey, string>>;
-  /**
    * Modes d'axe X désactivés avec message d'aide en pop-in (ex: Temps / Heures
    * sans heure de départ).
    */
@@ -62,7 +56,6 @@ export function AnalysisToolbar({
   filters,
   onToggleFilter,
   disabledFilters,
-  pinnedFilters,
   disabledXModes,
 }: AnalysisToolbarProps) {
   const { t } = useAppI18n();
@@ -70,21 +63,17 @@ export function AnalysisToolbar({
   const [hoveredXMode, setHoveredXMode] = useState<AxisMode | null>(null);
 
   /**
-   * Un pop-in est affiché quand le filtre correspondant a un prérequis manquant
-   * ET qu'il est soit survolé, soit activé. Ce second cas le rend persistant :
-   * pas besoin de survoler pour voir le message.
+   * Un pop-in d'aide est affiché UNIQUEMENT au survol du chip quand un prérequis
+   * est manquant. Il ne s'affiche jamais de manière permanente quand l'option est cochée.
    */
   const activeHintKey = useMemo<ToolbarFilterKey | null>(() => {
     const found = visibleToolbarFilters.find(
-      ({ key }) =>
-        disabledFilters?.[key] && (hovered === key || (pinnedFilters?.[key] && filters[key])),
+      ({ key }) => Boolean(disabledFilters?.[key]) && hovered === key,
     );
     return found?.key ?? null;
-  }, [disabledFilters, filters, hovered, pinnedFilters]);
+  }, [disabledFilters, hovered]);
 
-  const activeHint = activeHintKey
-    ? disabledFilters?.[activeHintKey] ?? pinnedFilters?.[activeHintKey]
-    : undefined;
+  const activeHint = activeHintKey ? disabledFilters?.[activeHintKey] : undefined;
 
   return (
     <div className="rvc-center-analysis__toolbar">

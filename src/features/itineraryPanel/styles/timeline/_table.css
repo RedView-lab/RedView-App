@@ -58,6 +58,8 @@
   white-space: nowrap;
   transition: color 0.15s ease, background 0.15s ease;
   user-select: none;
+  min-width: 0;
+  overflow: hidden;
 }
 .rvi-tl-th:first-child {
   border-top-left-radius: var(--rvi-radius-md);
@@ -79,8 +81,10 @@
 .rvi-tl-th--center { justify-content: center;     }
 
 .rvi-tl-th__label {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .rvi-tl-th__sort {
   display: inline-flex;
@@ -106,20 +110,78 @@
   clip-path: inset(0 0 50% 0);
 }
 
+/* Column resizer handle on the right edge of each header */
+.rvi-tl-th__resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 7px;
+  bottom: 0;
+  cursor: col-resize;
+  z-index: 5;
+  user-select: none;
+  touch-action: none;
+}
+.rvi-tl-th__resizer::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 3px;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.16);
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+.rvi-tl-th:hover .rvi-tl-th__resizer::after {
+  opacity: 0.6;
+}
+.rvi-tl-th__resizer:hover::after,
+.rvi-tl-th.is-resizing .rvi-tl-th__resizer::after {
+  opacity: 1;
+  background: var(--rvi-red-accent, #c50000);
+  width: 2px;
+  left: 2px;
+}
+
 /* Sticky check + actions edges. */
 .rvi-tl-th--sticky-left,
 .rvi-tl-td--sticky-left {
   position: sticky;
   left: 0;
-  z-index: 2;
-  background: var(--rvi-panel-bg, #0e0e10);
+  z-index: 3;
+  background: rgba(14, 14, 16, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 8px 0 16px -4px rgba(0, 0, 0, 0.45);
+}
+.rvi-tl-th--sticky-left {
+  background: rgba(22, 22, 26, 0.92);
+}
+.rvi-tl-tr:hover .rvi-tl-td--sticky-left {
+  background: rgba(36, 36, 42, 0.92);
+}
+.rvi-tl-tr.is-selected .rvi-tl-td--sticky-left {
+  background: rgba(45, 12, 12, 0.94);
 }
 .rvi-tl-th--sticky-right,
 .rvi-tl-td--sticky-right {
   position: sticky;
   right: 0;
-  z-index: 2;
-  background: var(--rvi-panel-bg, #0e0e10);
+  z-index: 3;
+  background: rgba(14, 14, 16, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: -8px 0 16px -4px rgba(0, 0, 0, 0.45);
+}
+.rvi-tl-th--sticky-right {
+  background: rgba(22, 22, 26, 0.92);
+}
+.rvi-tl-tr:hover .rvi-tl-td--sticky-right {
+  background: rgba(36, 36, 42, 0.92);
+}
+.rvi-tl-tr.is-selected .rvi-tl-td--sticky-right {
+  background: rgba(45, 12, 12, 0.94);
 }
 .rvi-tl-th--check,
 .rvi-tl-td--check {
@@ -160,10 +222,13 @@
 }
 
 .rvi-tl-td {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 4px;
   min-height: 32px;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
   padding: 6px 8px;
   font-size: 13px;
   color: var(--rvi-text);
@@ -194,20 +259,49 @@
 .rvi-tl-td--sticky-left {
   border-top-left-radius: var(--rvi-radius-md);
   border-bottom-left-radius: var(--rvi-radius-md);
+  background: rgba(14, 14, 16, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 8px 0 16px -4px rgba(0, 0, 0, 0.45);
+}
+.rvi-tl-tr:hover .rvi-tl-td--sticky-left {
+  background: rgba(36, 36, 42, 0.92);
+}
+.rvi-tl-tr.is-selected .rvi-tl-td--sticky-left {
+  background: rgba(45, 12, 12, 0.94);
 }
 .rvi-tl-td--sticky-right {
   border-top-right-radius: var(--rvi-radius-md);
   border-bottom-right-radius: var(--rvi-radius-md);
+  background: rgba(14, 14, 16, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: -8px 0 16px -4px rgba(0, 0, 0, 0.45);
+}
+.rvi-tl-tr:hover .rvi-tl-td--sticky-right {
+  background: rgba(36, 36, 42, 0.92);
+}
+.rvi-tl-tr.is-selected .rvi-tl-td--sticky-right {
+  background: rgba(45, 12, 12, 0.94);
 }
 
 .rvi-tl-td--left   { justify-content: flex-start; }
 .rvi-tl-td--right  { justify-content: flex-end;   }
 .rvi-tl-td--center { justify-content: center;     }
 
-.rvi-tl-td__name {
+.rvi-tl-td--name {
   min-width: 0;
   overflow: hidden;
+}
+
+.rvi-tl-td__name {
+  display: inline-block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .rvi-tl-td__name--placeholder {
   color: var(--rvi-text-dim);

@@ -111,8 +111,6 @@ export function PoiSection({
 
   return (
     <div className="rvi-params rvi-params--poi">
-      <div className="rvi-divider" />
-
       {POI_ROWS.map((row) => (
         <div key={row.map((c) => c.key).join('-')} className="rvi-row">
           {row.map((cell) => {

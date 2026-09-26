@@ -22,6 +22,9 @@
   transition: background 0.15s ease, box-shadow 0.15s ease;
   box-sizing: border-box;
   width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .rvi-place-search__input::placeholder {
   color: var(--rvi-text);

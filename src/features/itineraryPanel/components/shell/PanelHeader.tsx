@@ -1,7 +1,6 @@
 import {
   IconClose,
   IconSave,
-  IconShare,
 } from '../icons';
 import { useAppI18n } from '@/shared/i18n';
 
@@ -91,17 +90,6 @@ export function PanelHeader({
             ) : null}
           </div>
         </div>
-      </div>
-      <div className="rvi-header__actions">
-        <button
-          type="button"
-          className="rvi-iconbtn"
-          onClick={onShare}
-          aria-label={t('Partager')}
-          aria-disabled={!savedAt}
-        >
-          <IconShare size={16} />
-        </button>
       </div>
     </header>
   );

@@ -11,7 +11,7 @@
  * The component is fully stateless: selection / visibility / favorite /
  * sort all flow through callbacks.
  */
-import { useMemo, useState, type MouseEventHandler } from 'react';
+import { useCallback, useMemo, useRef, useState, type MouseEventHandler } from 'react';
 import type { PredictionResult } from '@/features/fitPredictor';
 import { useAppI18n } from '@/shared/i18n';
 import type { RhythmState, TimelineItem } from '../../types';
@@ -34,6 +34,19 @@ import {
   parseStartReference,
   resolveTotalDistanceM,
 } from './TimelineTimelineView/utils';
+
+const TIMELINE_COLUMN_WIDTHS_STORAGE_KEY = 'rvi-timeline-column-widths';
+
+function readStoredColumnWidths(): Partial<Record<TimelineColumnId, number>> {
+  try {
+    const raw = localStorage.getItem(TIMELINE_COLUMN_WIDTHS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return typeof parsed === 'object' && parsed !== null ? parsed : {};
+  } catch {
+    return {};
+  }
+}
 
 interface TimelineSheetViewProps {
   items: TimelineItem[];
@@ -133,6 +146,74 @@ export function TimelineSheetView({
   onChangeIntervalPauseDuration,
 }: TimelineSheetViewProps) {
   const { t } = useAppI18n();
+
+  const [columnWidths, setColumnWidths] = useState<Partial<Record<TimelineColumnId, number>>>(() =>
+    readStoredColumnWidths(),
+  );
+  const [resizingColId, setResizingColId] = useState<TimelineColumnId | null>(null);
+  const columnWidthsRef = useRef(columnWidths);
+  columnWidthsRef.current = columnWidths;
+
+  const handleResizeStart = useCallback(
+    (col: TimelineColumnDef, e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const startX = e.clientX;
+      const initialWidth =
+        columnWidthsRef.current[col.id] ?? col.defaultWidth ?? col.minWidth;
+      const minW = col.minWidth ?? 40;
+
+      setResizingColId(col.id);
+
+      const onMouseMove = (moveEvent: MouseEvent) => {
+        const delta = moveEvent.clientX - startX;
+        const nextWidth = Math.max(minW, Math.round(initialWidth + delta));
+        setColumnWidths((prev) => {
+          const next = { ...prev, [col.id]: nextWidth };
+          columnWidthsRef.current = next;
+          return next;
+        });
+      };
+
+      const onMouseUp = () => {
+        setResizingColId(null);
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        try {
+          localStorage.setItem(
+            TIMELINE_COLUMN_WIDTHS_STORAGE_KEY,
+            JSON.stringify(columnWidthsRef.current),
+          );
+        } catch {
+          // ignore
+        }
+      };
+
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    },
+    [],
+  );
+
+  const handleResetColWidth = useCallback((col: TimelineColumnDef, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setColumnWidths((prev) => {
+      const next = { ...prev };
+      delete next[col.id];
+      columnWidthsRef.current = next;
+      try {
+        localStorage.setItem(
+          TIMELINE_COLUMN_WIDTHS_STORAGE_KEY,
+          JSON.stringify(next),
+        );
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
 
   const useCompactListLayout = useMemo(
     () =>
@@ -287,7 +368,7 @@ export function TimelineSheetView({
       <div
         className="rvi-tl-table-grid"
         role="table"
-        style={{ gridTemplateColumns: buildGridTemplate(visibleColumns) }}
+        style={{ gridTemplateColumns: buildGridTemplate(visibleColumns, columnWidths) }}
       >
         {/* ── Header row ─────────────────────────────────────────── */}
         <div className="rvi-tl-thead" role="row">
@@ -297,19 +378,35 @@ export function TimelineSheetView({
           {visibleColumns.map((col) => {
             const isSorted = sort?.columnId === col.id;
             const dir = isSorted ? sort!.direction : null;
+            const isResizingThis = resizingColId === col.id;
             return (
-              <button
+              <div
                 key={col.id}
-                type="button"
                 role="columnheader"
+                tabIndex={0}
                 aria-sort={dir === 'asc' ? 'ascending' : dir === 'desc' ? 'descending' : 'none'}
-                className={`rvi-tl-th ${ALIGN_CLASS[col.align]}${isSorted ? ' is-sorted' : ''}`}
+                className={`rvi-tl-th ${ALIGN_CLASS[col.align]}${isSorted ? ' is-sorted' : ''}${isResizingThis ? ' is-resizing' : ''}`}
                 onClick={() => handleHeaderClick(col.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleHeaderClick(col.id);
+                  }
+                }}
                 title={t(col.label)}
               >
                 <span className="rvi-tl-th__label">{t(col.shortLabel ?? col.label)}</span>
                 <SortIcon direction={dir} />
-              </button>
+                <span
+                  className="rvi-tl-th__resizer"
+                  role="separator"
+                  aria-orientation="vertical"
+                  title={t('Redimensionner la colonne (double-cliquez pour réinitialiser)')}
+                  onMouseDown={(e) => handleResizeStart(col, e)}
+                  onDoubleClick={(e) => handleResetColWidth(col, e)}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
             );
           })}
           <div className="rvi-tl-th rvi-tl-th--sticky-right rvi-tl-th--actions" role="columnheader" aria-hidden>
@@ -363,7 +460,7 @@ export function TimelineSheetView({
                 <div
                   key={col.id}
                   role="cell"
-                  className={`rvi-tl-td ${CELL_ALIGN_CLASS[col.align]}`}
+                  className={`rvi-tl-td rvi-tl-td--${col.id} ${CELL_ALIGN_CLASS[col.align]}`}
                 >
                   {renderCell(col, row, colIndex, {
                     onSelectPlace,
@@ -426,12 +523,19 @@ export function TimelineSheetView({
   );
 }
 
-function buildGridTemplate(cols: TimelineColumnDef[]): string {
+function buildGridTemplate(
+  cols: TimelineColumnDef[],
+  widths: Partial<Record<TimelineColumnId, number>> = {},
+): string {
   // Sticky check (left) + N data columns + sticky actions (right).
   const middle = cols
     .map((c) => {
-      if (c.id === 'name') return `minmax(${c.minWidth}px, 1fr)`;
-      return `minmax(${c.minWidth}px, max-content)`;
+      const customW = widths[c.id];
+      if (typeof customW === 'number' && customW > 0) {
+        return `${Math.max(c.minWidth, customW)}px`;
+      }
+      const initialW = c.defaultWidth ?? c.minWidth;
+      return `${initialW}px`;
     })
     .join(' ');
   return `28px ${middle} 72px`;

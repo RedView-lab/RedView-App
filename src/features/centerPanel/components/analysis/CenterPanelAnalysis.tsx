@@ -231,16 +231,8 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
   const dayNightUnavailable = !dayNightStartReady;
 
   /**
-   * Aide affichée en pop-in sur le chip Jour/nuit tant que la date/heure de
-   * départ manque. Sert à deux choses :
-   * - au survol du chip (`disabledFilters`) ;
-   * - en continu dès que le filtre est ACTIVÉ sans ses prérequis
-   *   (`pinnedFilters`) — l'utilisateur n'a donc pas besoin de survoler.
-   *
-   * Le chip reste volontairement COCHABLE/DÉCOCHABLE (pas de `disabled`) : sinon,
-   * comme `filters.jourNuit` vaut `true` par défaut, le chip serait coché ET
-   * désactivé — impossible à décocher, avec un pop-in qui se réaffiche à chaque
-   * survol. C'est ce clic qui fait disparaître le pop-in épinglé.
+   * Aide affichée en tooltip au survol du chip Jour/nuit tant que la date/heure de
+   * départ manque (`disabledFilters`).
    */
   const dayNightHint = t(
     'Renseigne une date et une heure de départ pour activer Jour/nuit.',
@@ -251,11 +243,15 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
     [dayNightUnavailable, dayNightHint],
   );
 
-  const pinnedFilters = useMemo(
-    () =>
-      dayNightUnavailable && filters.jourNuit ? { jourNuit: dayNightHint } : undefined,
-    [dayNightUnavailable, dayNightHint, filters.jourNuit],
-  );
+  // Par défaut l'option Jour/nuit est désactivée tant que le rythme n'a pas été édité.
+  // Si un projet existant avait conservé l'ancien défaut `jourNuit: true`, on l'aligne sur `false`.
+  useEffect(() => {
+    if (!dayNightStartReady && rawAnalysis?.filters?.jourNuit) {
+      updateAnalysis((draft) => {
+        draft.filters.jourNuit = false;
+      });
+    }
+  }, [dayNightStartReady]);
 
   const hasStartTime = Boolean(activeItinerary?.rhythm.startTime);
   const hourScaleHint = t(
@@ -570,7 +566,6 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
         filters={filters}
         onToggleFilter={toggleFilter}
         disabledFilters={disabledFilters}
-        pinnedFilters={pinnedFilters}
         disabledXModes={disabledXModes}
       />
 

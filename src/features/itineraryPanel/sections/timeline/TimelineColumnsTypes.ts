@@ -65,6 +65,7 @@ export interface TimelineColumnDef {
   defaultOn: boolean;
   align: TimelineColumnAlign;
   minWidth: number;
+  defaultWidth?: number;
   pinned?: boolean;
   custom?: boolean;
   getCell: (ctx: TimelineColumnContext) => TimelineColumnCell;
