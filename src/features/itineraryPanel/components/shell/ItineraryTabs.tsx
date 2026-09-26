@@ -154,9 +154,13 @@ export function ItineraryTabs({
     };
   }, [openMenuId]);
 
-  const resolveProfileLabel = (profileId: string) => {
+  const resolveProfileLabel = (profileId: string, activityType?: string) => {
     const profile = profiles.find((item) => item.id === profileId);
     if (profile) return profile.name;
+    if (activityType) {
+      const actProfile = profiles.find((item) => item.id === activityType);
+      if (actProfile) return actProfile.name;
+    }
     return t('Personnalisé');
   };
 
@@ -173,7 +177,7 @@ export function ItineraryTabs({
           const isActive = it.id === activeId;
           const isEditing = editingId === it.id;
           const isMenuOpen = openMenuId === it.id;
-          const profileLabel = resolveProfileLabel(it.profileId);
+          const profileLabel = resolveProfileLabel(it.profileId, it.roadTypes?.activityType);
           return (
             <div
               key={it.id}

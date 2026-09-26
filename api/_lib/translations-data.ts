@@ -2073,6 +2073,46 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Profile 1"
   },
   {
+    "fr": "Profil 2",
+    "en": "Profile 2"
+  },
+  {
+    "fr": "Profil 3",
+    "en": "Profile 3"
+  },
+  {
+    "fr": "Profil 4",
+    "en": "Profile 4"
+  },
+  {
+    "fr": "Profil 5",
+    "en": "Profile 5"
+  },
+  {
+    "fr": "Profil 6",
+    "en": "Profile 6"
+  },
+  {
+    "fr": "Profil 7",
+    "en": "Profile 7"
+  },
+  {
+    "fr": "Profil 8",
+    "en": "Profile 8"
+  },
+  {
+    "fr": "Profil 9",
+    "en": "Profile 9"
+  },
+  {
+    "fr": "Profil 10",
+    "en": "Profile 10"
+  },
+  {
+    "fr": "Profil {{number}}",
+    "en": "Profile {{number}}"
+  },
+  {
     "fr": "Réinitialiser",
     "en": "Reset"
   },

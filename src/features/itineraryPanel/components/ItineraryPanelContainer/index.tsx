@@ -761,63 +761,55 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         onChangeProfile={(id) => {
           const custom = savedCustomProfiles.find((p) => p.id === id);
           if (custom) {
-            setProject((prev) => {
-              const active = prev.itineraries.find((it) => it.id === prev.activeItineraryId);
-              const applyToAll = active?.roadTypes.applyToAllItineraries;
-              return {
-                ...prev,
-                itineraries: prev.itineraries.map((itinerary) => {
-                  if (itinerary.id !== prev.activeItineraryId && !applyToAll) return itinerary;
-                  const copy = structuredClone(itinerary);
-                  copy.profileId = id;
-                  copy.priorities = { ...custom.priorities };
-                  copy.roadTypes = {
-                    ...custom.roadTypes,
-                    applyToAllItineraries: copy.roadTypes.applyToAllItineraries,
-                  };
-                  return copy;
-                }),
-              };
-            });
+            setProject((prev) => ({
+              ...prev,
+              itineraries: prev.itineraries.map((itinerary) => {
+                if (itinerary.id !== prev.activeItineraryId) return itinerary;
+                const copy = structuredClone(itinerary);
+                copy.profileId = id;
+                copy.priorities = { ...custom.priorities };
+                copy.roadTypes = {
+                  ...custom.roadTypes,
+                  applyToAllItineraries: copy.roadTypes.applyToAllItineraries,
+                };
+                return copy;
+              }),
+            }));
             return;
           }
           const preset = getProfilePreset(id);
-          setProject((prev) => {
-            const active = prev.itineraries.find((it) => it.id === prev.activeItineraryId);
-            const applyToAll = active?.roadTypes.applyToAllItineraries;
-            return {
-              ...prev,
-              itineraries: prev.itineraries.map((itinerary) => {
-                if (itinerary.id !== prev.activeItineraryId && !applyToAll) return itinerary;
-                const copy = structuredClone(itinerary);
-                copy.profileId = id;
-                if (preset) {
-                  const currentMode = copy.roadTypes.tracingMode ?? 'vitesse';
-                  const currentTolerance = copy.roadTypes.surfaceTolerance ?? 10;
-                  const isActivityType = id === 'road' || id === 'gravel-default' || id === 'mtb';
-                  if (isActivityType) {
-                    const sync = syncTracageOnActivityChange(id as ActivityType, currentMode, currentTolerance);
-                    if (sync.priorities) {
-                      copy.priorities = { ...copy.priorities, ...sync.priorities };
-                    }
-                    copy.roadTypes = {
-                      ...copy.roadTypes,
-                      ...sync.roadTypes,
-                      applyToAllItineraries: copy.roadTypes.applyToAllItineraries,
-                    };
-                  } else {
-                    copy.priorities = { ...preset.priorities };
-                    copy.roadTypes = {
-                      ...preset.roadTypes,
-                      tracingMode: currentMode,
-                      applyToAllItineraries: copy.roadTypes.applyToAllItineraries,
-                    };
+          setProject((prev) => ({
+            ...prev,
+            itineraries: prev.itineraries.map((itinerary) => {
+              if (itinerary.id !== prev.activeItineraryId) return itinerary;
+              const copy = structuredClone(itinerary);
+              copy.profileId = id;
+              if (preset) {
+                const currentMode = copy.roadTypes.tracingMode ?? 'vitesse';
+                const currentTolerance = copy.roadTypes.surfaceTolerance ?? 10;
+                const isActivityType = id === 'road' || id === 'gravel-default' || id === 'mtb';
+                if (isActivityType) {
+                  const sync = syncTracageOnActivityChange(id as ActivityType, currentMode, currentTolerance);
+                  if (sync.priorities) {
+                    copy.priorities = { ...copy.priorities, ...sync.priorities };
                   }
+                  copy.roadTypes = {
+                    ...copy.roadTypes,
+                    ...sync.roadTypes,
+                    applyToAllItineraries: copy.roadTypes.applyToAllItineraries,
+                  };
+                } else {
+                  copy.priorities = { ...preset.priorities };
+                  copy.roadTypes = {
+                    ...preset.roadTypes,
+                    tracingMode: currentMode,
+                    applyToAllItineraries: copy.roadTypes.applyToAllItineraries,
+                  };
                 }
-                return copy;
-              }),
-            };
-          });
+              }
+              return copy;
+            }),
+          }));
         }}
         onUndo={() => {
           cancelRouteRequest();
@@ -847,16 +839,32 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         }
         onChangeRoadType={(key, value) =>
           setProject((prev) => {
+            // Toggling 'applyToAllItineraries' must only affect the active itinerary and never modify profiles!
+            if (key === 'applyToAllItineraries') {
+              return {
+                ...prev,
+                itineraries: prev.itineraries.map((itinerary) => {
+                  if (itinerary.id !== prev.activeItineraryId) return itinerary;
+                  return {
+                    ...itinerary,
+                    roadTypes: {
+                      ...itinerary.roadTypes,
+                      applyToAllItineraries: Boolean(value),
+                    },
+                  };
+                }),
+              };
+            }
+
             const active = prev.itineraries.find((it) => it.id === prev.activeItineraryId);
-            const applyToAll =
-              key === 'applyToAllItineraries' ? value : active?.roadTypes.applyToAllItineraries;
+            const applyToAll = active?.roadTypes.applyToAllItineraries;
             return {
               ...prev,
               itineraries: prev.itineraries.map((itinerary) => {
                 if (itinerary.id !== prev.activeItineraryId && !applyToAll) return itinerary;
                 const copy = structuredClone(itinerary);
                 (copy.roadTypes[key] as RoadTypesState[typeof key]) = value;
-                if (key === 'activityType') {
+                if (key === 'activityType' && itinerary.id === prev.activeItineraryId) {
                   copy.profileId = value as string;
                 }
                 return copy;
@@ -867,21 +875,29 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         onBatchChangeRoadTypes={(roadUpdates, priorityUpdates) =>
           setProject((prev) => {
             const active = prev.itineraries.find((it) => it.id === prev.activeItineraryId);
-            const applyToAll =
-              roadUpdates.applyToAllItineraries !== undefined
-                ? roadUpdates.applyToAllItineraries
-                : active?.roadTypes.applyToAllItineraries;
+            const applyToAll = active?.roadTypes.applyToAllItineraries;
             return {
               ...prev,
               itineraries: prev.itineraries.map((itinerary) => {
-                if (itinerary.id !== prev.activeItineraryId && !applyToAll) return itinerary;
+                const isActive = itinerary.id === prev.activeItineraryId;
+                if (!isActive && !applyToAll) return itinerary;
                 const copy = structuredClone(itinerary);
-                Object.assign(copy.roadTypes, roadUpdates);
-                if (priorityUpdates) {
-                  Object.assign(copy.priorities, priorityUpdates);
-                }
-                if (roadUpdates.activityType) {
-                  copy.profileId = roadUpdates.activityType;
+
+                if (isActive) {
+                  Object.assign(copy.roadTypes, roadUpdates);
+                  if (priorityUpdates) {
+                    Object.assign(copy.priorities, priorityUpdates);
+                  }
+                  if (roadUpdates.activityType) {
+                    copy.profileId = roadUpdates.activityType;
+                  }
+                } else {
+                  // For other itineraries when applyToAll is true:
+                  // Only propagate specific road preferences, never change their activityType or profileId or applyToAllItineraries
+                  const safeRoadUpdates = { ...roadUpdates };
+                  delete safeRoadUpdates.activityType;
+                  delete safeRoadUpdates.applyToAllItineraries;
+                  Object.assign(copy.roadTypes, safeRoadUpdates);
                 }
                 return copy;
               }),

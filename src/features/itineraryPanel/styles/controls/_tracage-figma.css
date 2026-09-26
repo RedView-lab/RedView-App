@@ -56,12 +56,9 @@
   outline: none;
 }
 
-.rvi-tracage__mode-btn--activity {
-  background: rgba(255, 255, 255, 0.16);
-}
-
+.rvi-tracage__mode-btn--activity,
 .rvi-tracage__mode-btn--tracing {
-  background: #3c3c3c;
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .rvi-tracage__mode-btn:hover {
@@ -122,6 +119,9 @@
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   animation: rviDropdownFadeIn 0.12s ease-out;
+  max-height: 280px;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 @keyframes rviDropdownFadeIn {

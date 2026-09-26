@@ -80,8 +80,11 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
   const allowFerries = roadTypes.ferry !== 'forbid';
   const allowSteps = roadTypes.bikeLanes !== 'forbid' && fSingletrack < 10000;
 
-  // Surface preferences scaling with tolerance
-  const tolFactor = clamp(1 + ((20 - (roadTypes.surfaceTolerance ?? 10)) / 20), 0.7, 1.8);
+  // Surface preferences scaling with tolerance (0% strict ~2.0, 10% default ~1.5, 100% max tolerance ~0.15)
+  const tol = clamp(roadTypes.surfaceTolerance ?? 10, 0, 100);
+  const tolFactor = tol <= 10
+    ? 2.0 - (tol / 10) * 0.5
+    : Math.max(0.15, 1.5 - ((tol - 10) / 90) * 1.35);
   let effectiveFRoad = fRoad;
   let effectiveFGravel = fGravel;
   let effectiveFSingletrack = fSingletrack;

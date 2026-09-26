@@ -1,5 +1,10 @@
 import type { PrioritiesState, RoadTypesState, RouteProfile } from '../../types';
 import { translateAppText } from '@/shared/i18n';
+import {
+  syncTracageOnActivityChange,
+  type ActivityType,
+  type TracingModeType,
+} from './syncTracageParams';
 
 export interface RouteProfilePreset {
   id: string;
@@ -9,97 +14,29 @@ export interface RouteProfilePreset {
   roadTypes: Omit<RoadTypesState, 'applyToAllItineraries'>;
 }
 
+const defaultRoad = syncTracageOnActivityChange('road', 'vitesse', 10);
+const defaultGravel = syncTracageOnActivityChange('gravel-default', 'vitesse', 10);
+const defaultMtb = syncTracageOnActivityChange('mtb', 'vitesse', 10);
+
 export const ROUTE_PROFILE_PRESETS: Record<string, RouteProfilePreset> = {
   road: {
     id: 'road',
     name: translateAppText('Route'),
-    priorities: {
-      duration: 70,
-      elevation: 40,
-      distance: 65,
-      tranquility: 40,
-    },
-    roadTypes: {
-      activityType: 'road',
-      tracingMode: 'vitesse',
-      surfacePreference: 'tarmac',
-      surfaceMin: 'tarmac',
-      surfaceMax: 'tarmac',
-      surfaceTolerance: 10,
-      elevationPreference: 'avoid',
-      road: 'prefer',
-      gravel: 'forbid',
-      singletrack: 'forbid',
-      offroad: 'forbid',
-      bikeLanes: 'prefer',
-      majorRoads: 'avoid',
-      woods: 'tolerate',
-      ferry: 'tolerate',
-      turns: 'tolerate',
-      maxSlopePercent: 12,
-      cities: 'tolerate',
-    },
+    priorities: defaultRoad.priorities as PrioritiesState,
+    roadTypes: defaultRoad.roadTypes as Omit<RoadTypesState, 'applyToAllItineraries'>,
   },
   'gravel-default': {
     id: 'gravel-default',
     name: translateAppText('Gravel'),
     isDefault: true,
-    priorities: {
-      duration: 50,
-      elevation: 50,
-      distance: 50,
-      tranquility: 70,
-    },
-    roadTypes: {
-      activityType: 'gravel-default',
-      tracingMode: 'vitesse',
-      surfacePreference: 'gravel',
-      surfaceMin: 'tarmac',
-      surfaceMax: 'gravel',
-      surfaceTolerance: 10,
-      elevationPreference: 'avoid',
-      road: 'avoid',
-      gravel: 'prefer',
-      singletrack: 'tolerate',
-      offroad: 'forbid',
-      bikeLanes: 'tolerate',
-      majorRoads: 'avoid',
-      woods: 'prefer',
-      ferry: 'tolerate',
-      turns: 'avoid',
-      maxSlopePercent: 15,
-      cities: 'avoid',
-    },
+    priorities: defaultGravel.priorities as PrioritiesState,
+    roadTypes: defaultGravel.roadTypes as Omit<RoadTypesState, 'applyToAllItineraries'>,
   },
   mtb: {
     id: 'mtb',
     name: translateAppText('VTT'),
-    priorities: {
-      duration: 60,
-      elevation: 35,
-      distance: 55,
-      tranquility: 80,
-    },
-    roadTypes: {
-      activityType: 'mtb',
-      tracingMode: 'vitesse',
-      surfacePreference: 'other',
-      surfaceMin: 'paved',
-      surfaceMax: 'other',
-      surfaceTolerance: 10,
-      elevationPreference: 'avoid',
-      road: 'avoid',
-      gravel: 'prefer',
-      singletrack: 'prefer',
-      offroad: 'tolerate',
-      bikeLanes: 'avoid',
-      majorRoads: 'forbid',
-      woods: 'prefer',
-      ferry: 'tolerate',
-      turns: 'avoid',
-      maxSlopePercent: 25,
-      cities: 'avoid',
-    },
+    priorities: defaultMtb.priorities as PrioritiesState,
+    roadTypes: defaultMtb.roadTypes as Omit<RoadTypesState, 'applyToAllItineraries'>,
   },
 };
 
@@ -114,51 +51,82 @@ export function getProfilePreset(profileId: string): RouteProfilePreset | undefi
 }
 
 export const PRIORITY_KEYS: (keyof PrioritiesState)[] = ['duration', 'elevation', 'distance', 'tranquility'];
-export const ROAD_TYPE_KEYS: (keyof Omit<RoadTypesState, 'applyToAllItineraries'>)[] = [
+
+/**
+ * Keys representing manual user adjustments:
+ * - Surface sliders & tolerance
+ * - Additional fields (champs additionnels)
+ *
+ * Notice:
+ * - `activityType` is excluded (switching Route / Gravel / VTT is not a custom profile)
+ * - `tracingMode` is excluded (switching Vitesse / Aventure / Comfort is not a custom profile)
+ * - `applyToAllItineraries` is excluded (batch checkbox must never affect profile state)
+ */
+export const CUSTOMIZABLE_ROAD_TYPE_KEYS: (keyof RoadTypesState)[] = [
+  // Surface sliders & tolerance
+  'surfaceMin',
+  'surfaceMax',
+  'surfacePreference',
+  'surfaceTolerance',
+  // Additional fields (champs additionnels)
+  'elevationPreference',
+  'maxSlopePercent',
+  'majorRoads',
+  'bikeLanes',
+  'woods',
+  'turns',
+  'ferry',
+  'cities',
   'road',
   'gravel',
   'singletrack',
   'offroad',
-  'bikeLanes',
-  'majorRoads',
-  'ferry',
-  'turns',
-  'maxSlopePercent',
-  'cities',
-  'elevationPreference',
-  'woods',
-  'surfacePreference',
-  'surfaceMin',
-  'surfaceMax',
-  'surfaceTolerance',
-  'tracingMode',
 ];
 
+export const ROAD_TYPE_KEYS = CUSTOMIZABLE_ROAD_TYPE_KEYS as (keyof Omit<RoadTypesState, 'applyToAllItineraries'>)[];
+
+/**
+ * Checks whether current road types differ from a baseline reference
+ * on any of the manual customizable parameters (surfaces & additional fields).
+ */
+export function isRoadTypesCustomized(
+  current: Partial<RoadTypesState>,
+  baseline: Partial<RoadTypesState>,
+): boolean {
+  for (const k of CUSTOMIZABLE_ROAD_TYPE_KEYS) {
+    if (current[k] !== undefined && baseline[k] !== undefined && current[k] !== baseline[k]) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Compares current road types with a target set of road types.
+ * Returns true if all customizable keys match.
+ */
 export function isRoadTypesMatching(
   current: Partial<RoadTypesState>,
   target: Partial<RoadTypesState>,
 ): boolean {
-  for (const k of ROAD_TYPE_KEYS) {
-    if (current[k] !== target[k]) {
-      return false;
-    }
-  }
-  return true;
+  return !isRoadTypesCustomized(current, target);
 }
 
 export function matchesProfilePreset(
   profileId: string,
-  priorities: PrioritiesState,
+  _priorities: PrioritiesState,
   roadTypes: RoadTypesState,
 ): boolean {
+  if (profileId === 'road' || profileId === 'gravel-default' || profileId === 'mtb') {
+    const currentMode = (roadTypes.tracingMode ?? 'vitesse') as TracingModeType;
+    const baseline = syncTracageOnActivityChange(profileId as ActivityType, currentMode, 10);
+    return !isRoadTypesCustomized(roadTypes, baseline.roadTypes);
+  }
+
   const preset = ROUTE_PROFILE_PRESETS[profileId];
   if (!preset) return false;
 
-  for (const k of PRIORITY_KEYS) {
-    if (priorities[k] !== preset.priorities[k]) return false;
-  }
-
-  return isRoadTypesMatching(roadTypes, preset.roadTypes);
+  return !isRoadTypesCustomized(roadTypes, preset.roadTypes);
 }
 
 export function resolveProfilePresetId(
@@ -174,12 +142,23 @@ export function resolveProfilePresetId(
     return currentProfileId;
   }
 
+  const activityType = roadTypes.activityType;
+  if (
+    activityType &&
+    (activityType === 'road' || activityType === 'gravel-default' || activityType === 'mtb')
+  ) {
+    if (matchesProfilePreset(activityType, priorities, roadTypes)) {
+      return activityType;
+    }
+  }
+
   for (const [id] of Object.entries(ROUTE_PROFILE_PRESETS)) {
     if (matchesProfilePreset(id, priorities, roadTypes)) {
       return id;
     }
   }
 
-  return 'custom';
+  return currentProfileId && currentProfileId !== 'custom' ? currentProfileId : 'custom';
 }
+
 

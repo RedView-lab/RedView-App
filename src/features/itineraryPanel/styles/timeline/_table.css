@@ -52,7 +52,7 @@
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.01em;
-  background: rgba(255, 255, 255, 0.08);
+  background: transparent;
   border: 0;
   cursor: pointer;
   white-space: nowrap;
@@ -61,17 +61,10 @@
   min-width: 0;
   overflow: hidden;
 }
-.rvi-tl-th:first-child {
-  border-top-left-radius: var(--rvi-radius-md);
-  border-bottom-left-radius: var(--rvi-radius-md);
-}
-.rvi-tl-th:last-child {
-  border-top-right-radius: var(--rvi-radius-md);
-  border-bottom-right-radius: var(--rvi-radius-md);
-}
 .rvi-tl-th:not([aria-hidden='true']):hover {
   color: var(--rvi-text);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: var(--rvi-radius-sm, 6px);
 }
 .rvi-tl-th.is-sorted {
   color: var(--rvi-text);
@@ -144,8 +137,7 @@
   left: 2px;
 }
 
-/* Sticky check + actions edges. */
-.rvi-tl-th--sticky-left,
+/* Sticky check + actions edges for body rows */
 .rvi-tl-td--sticky-left {
   position: sticky;
   left: 0;
@@ -155,16 +147,13 @@
   -webkit-backdrop-filter: blur(12px);
   box-shadow: 8px 0 16px -4px rgba(0, 0, 0, 0.45);
 }
-.rvi-tl-th--sticky-left {
-  background: rgba(22, 22, 26, 0.92);
-}
 .rvi-tl-tr:hover .rvi-tl-td--sticky-left {
   background: rgba(36, 36, 42, 0.92);
 }
 .rvi-tl-tr.is-selected .rvi-tl-td--sticky-left {
   background: rgba(45, 12, 12, 0.94);
 }
-.rvi-tl-th--sticky-right,
+
 .rvi-tl-td--sticky-right {
   position: sticky;
   right: 0;
@@ -174,14 +163,31 @@
   -webkit-backdrop-filter: blur(12px);
   box-shadow: -8px 0 16px -4px rgba(0, 0, 0, 0.45);
 }
-.rvi-tl-th--sticky-right {
-  background: rgba(22, 22, 26, 0.92);
-}
 .rvi-tl-tr:hover .rvi-tl-td--sticky-right {
   background: rgba(36, 36, 42, 0.92);
 }
 .rvi-tl-tr.is-selected .rvi-tl-td--sticky-right {
   background: rgba(45, 12, 12, 0.94);
+}
+
+/* Sticky check + actions edges for header row (transparent, no grey background) */
+.rvi-tl-th--sticky-left {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+.rvi-tl-th--sticky-right {
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
 }
 .rvi-tl-th--check,
 .rvi-tl-td--check {

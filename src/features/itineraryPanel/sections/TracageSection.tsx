@@ -24,7 +24,7 @@ import {
 } from '../lib/project/syncTracageParams';
 import {
   ROUTE_PROFILE_PRESETS,
-  isRoadTypesMatching,
+  isRoadTypesCustomized,
 } from '../lib/project/profilePresets';
 import {
   getSavedCustomProfiles,
@@ -69,7 +69,7 @@ const ROAD_PREF_OPTIONS: { value: RoadPreference; label: string }[] = [
   { value: 'forbid', label: 'Interdire' },
 ];
 
-const TOLERANCE_OPTIONS = [5, 10, 15, 20, 25, 30];
+const TOLERANCE_OPTIONS = [0, 5, 10, 15, 20, 25, 30, 40, 50, 75, 100];
 
 const SLOPE_OPTIONS = [8, 10, 12, 15, 20, 25];
 
@@ -187,21 +187,28 @@ export function TracageSection({
     if (activeBaseSaved) {
       return activeBaseSaved.roadTypes;
     }
-    return syncTracageOnActivityChange(basePresetKey, currentTracingMode, currentTolerance).roadTypes;
-  }, [activeBaseSaved, basePresetKey, currentTracingMode, currentTolerance]);
+    return syncTracageOnActivityChange(basePresetKey, currentTracingMode, 10).roadTypes;
+  }, [activeBaseSaved, basePresetKey, currentTracingMode]);
 
-  const isCustomized = !isRoadTypesMatching(roadTypes, expectedRoadTypes);
+  const isCustomized = isRoadTypesCustomized(roadTypes, expectedRoadTypes);
 
   // Resolved active activity name displayed in the top selector
+  const nextProfileName = useMemo(() => {
+    const raw = getNextCustomProfileName(savedProfiles);
+    return t(raw);
+  }, [savedProfiles, t]);
+
   const currentActivityName = activeBaseSaved
     ? activeBaseSaved.name
-    : selectedBaseId === 'road'
-      ? t('Route')
-      : selectedBaseId === 'mtb'
-        ? t('VTT')
-        : t('Gravel');
+    : isCustomized
+      ? nextProfileName
+      : selectedBaseId === 'road'
+        ? t('Route')
+        : selectedBaseId === 'mtb'
+          ? t('VTT')
+          : t('Gravel');
 
-  const currentActivityIcon = activeBaseSaved ? (
+  const currentActivityIcon = activeBaseSaved || isCustomized ? (
     <IconSlidersFigma size={16} />
   ) : (
     <IconBikeShop size={16} />
@@ -239,15 +246,15 @@ export function TracageSection({
     const syncResult = syncTracageOnActivityChange(
       activityId,
       currentTracingMode,
-      currentTolerance,
+      10,
     );
 
     if (onBatchChangeRoadTypes) {
       onBatchChangeRoadTypes(syncResult.roadTypes, syncResult.priorities);
     } else {
       applyRoadUpdates(syncResult.roadTypes);
-      onChangeProfile?.(activityId);
     }
+    onChangeProfile?.(activityId);
     setActivityOpen(false);
   };
 
@@ -278,6 +285,9 @@ export function TracageSection({
       onBatchChangeRoadTypes(syncResult.roadTypes, syncResult.priorities);
     } else {
       applyRoadUpdates(syncResult.roadTypes);
+    }
+    if (!activeBaseSaved) {
+      onChangeProfile?.(currentActivity);
     }
     setTracingOpen(false);
   };
@@ -325,13 +335,14 @@ export function TracageSection({
     const syncResult = syncTracageOnActivityChange(
       presetKey,
       currentTracingMode,
-      currentTolerance,
+      10,
     );
     if (onBatchChangeRoadTypes) {
       onBatchChangeRoadTypes(syncResult.roadTypes, syncResult.priorities);
     } else {
       applyRoadUpdates(syncResult.roadTypes);
     }
+    onChangeProfile?.(presetKey);
   };
 
   const handleSave = () => {
@@ -363,7 +374,7 @@ export function TracageSection({
         priorities: { ...priorities },
       };
     } else {
-      const nextName = getNextCustomProfileName(savedProfiles);
+      const nextName = nextProfileName;
       const newId = `custom_${Date.now()}`;
       profileToSave = {
         id: newId,
@@ -612,7 +623,7 @@ export function TracageSection({
             {/* Standard 3 Presets: Route, Gravel, VTT */}
             <button
               type="button"
-              className={`rvi-tracage__mode-menu-item${!activeBaseSaved && selectedBaseId === 'road' ? ' is-selected' : ''}`}
+              className={`rvi-tracage__mode-menu-item${!activeBaseSaved && !isCustomized && selectedBaseId === 'road' ? ' is-selected' : ''}`}
               onClick={() => handleActivitySelect('road')}
             >
               <IconBikeShop size={15} />
@@ -620,7 +631,7 @@ export function TracageSection({
             </button>
             <button
               type="button"
-              className={`rvi-tracage__mode-menu-item${!activeBaseSaved && selectedBaseId === 'gravel-default' ? ' is-selected' : ''}`}
+              className={`rvi-tracage__mode-menu-item${!activeBaseSaved && !isCustomized && selectedBaseId === 'gravel-default' ? ' is-selected' : ''}`}
               onClick={() => handleActivitySelect('gravel-default')}
             >
               <IconBikeShop size={15} />
@@ -628,12 +639,27 @@ export function TracageSection({
             </button>
             <button
               type="button"
-              className={`rvi-tracage__mode-menu-item${!activeBaseSaved && selectedBaseId === 'mtb' ? ' is-selected' : ''}`}
+              className={`rvi-tracage__mode-menu-item${!activeBaseSaved && !isCustomized && selectedBaseId === 'mtb' ? ' is-selected' : ''}`}
               onClick={() => handleActivitySelect('mtb')}
             >
               <IconBikeShop size={15} />
               <span>{t('VTT')}</span>
             </button>
+
+            {/* Current in-progress draft profile before saving */}
+            {isCustomized && !activeBaseSaved && (
+              <>
+                <div className="rvi-tracage__dropdown-divider" />
+                <button
+                  type="button"
+                  className="rvi-tracage__mode-menu-item is-selected"
+                  onClick={() => setActivityOpen(false)}
+                >
+                  <IconSlidersFigma size={15} />
+                  <span>{nextProfileName}</span>
+                </button>
+              </>
+            )}
 
             {/* Saved custom profiles if any */}
             {savedProfiles.length > 0 && (
@@ -863,7 +889,7 @@ export function TracageSection({
               onClose={() => setToleranceOpen(false)}
               width={76}
               align="right"
-              estimatedHeight={200}
+              estimatedHeight={260}
             >
               {TOLERANCE_OPTIONS.map((val) => (
                 <button

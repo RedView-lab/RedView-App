@@ -16,6 +16,9 @@ export {
   getProfilePreset,
   matchesProfilePreset,
   resolveProfilePresetId,
+  isRoadTypesCustomized,
+  isRoadTypesMatching,
+  CUSTOMIZABLE_ROAD_TYPE_KEYS,
 } from './profilePresets';
 export type { RouteProfilePreset } from './profilePresets';
 export {

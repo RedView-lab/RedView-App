@@ -142,73 +142,7 @@ export function syncTracageOnTracingModeChange(
   newMode: TracingModeType,
   currentActivity: ActivityType = 'gravel-default',
 ): TracageSyncResult {
-  const updates: Partial<RoadTypesState> = {
-    tracingMode: newMode,
-  };
-
-  let priorities: Partial<PrioritiesState> | undefined;
-
-  switch (newMode) {
-    case 'vitesse': {
-      updates.elevationPreference = 'avoid';
-      updates.turns = 'avoid';
-      updates.cities = 'avoid';
-      updates.maxSlopePercent = currentActivity === 'road' ? 12 : currentActivity === 'mtb' ? 25 : 15;
-      updates.majorRoads = currentActivity === 'road' ? 'tolerate' : currentActivity === 'mtb' ? 'forbid' : 'avoid';
-      updates.woods = currentActivity === 'road' ? 'tolerate' : 'prefer';
-      updates.bikeLanes = currentActivity === 'road' ? 'prefer' : currentActivity === 'mtb' ? 'avoid' : 'tolerate';
-
-      if (currentActivity === 'road') {
-        priorities = { duration: 80, distance: 70, elevation: 30, tranquility: 35 };
-      } else if (currentActivity === 'mtb') {
-        priorities = { duration: 60, distance: 55, elevation: 35, tranquility: 80 };
-      } else {
-        priorities = { duration: 70, distance: 60, elevation: 35, tranquility: 60 };
-      }
-      break;
-    }
-
-    case 'aventure': {
-      updates.elevationPreference = currentActivity === 'road' ? 'tolerate' : 'prefer';
-      updates.turns = 'tolerate';
-      updates.woods = 'prefer';
-      updates.majorRoads = currentActivity === 'road' ? 'avoid' : 'forbid';
-      updates.cities = 'avoid';
-      updates.maxSlopePercent = currentActivity === 'road' ? 15 : currentActivity === 'mtb' ? 25 : 20;
-      updates.bikeLanes = currentActivity === 'road' ? 'prefer' : currentActivity === 'mtb' ? 'avoid' : 'tolerate';
-
-      if (currentActivity === 'road') {
-        priorities = { duration: 40, distance: 45, elevation: 65, tranquility: 85 };
-      } else if (currentActivity === 'mtb') {
-        priorities = { duration: 25, distance: 35, elevation: 85, tranquility: 95 };
-      } else {
-        priorities = { duration: 30, distance: 40, elevation: 75, tranquility: 95 };
-      }
-      break;
-    }
-
-    case 'comfort': {
-      updates.elevationPreference = 'avoid';
-      updates.turns = 'tolerate';
-      updates.woods = 'prefer';
-      updates.bikeLanes = currentActivity === 'road' ? 'prefer' : currentActivity === 'mtb' ? 'avoid' : 'prefer';
-      updates.majorRoads = currentActivity === 'mtb' ? 'forbid' : 'avoid';
-      updates.cities = 'avoid';
-      updates.ferry = 'tolerate';
-      updates.maxSlopePercent = currentActivity === 'mtb' ? 25 : currentActivity === 'road' ? 10 : 12;
-
-      if (currentActivity === 'road') {
-        priorities = { duration: 45, distance: 45, elevation: 20, tranquility: 80 };
-      } else if (currentActivity === 'mtb') {
-        priorities = { duration: 35, distance: 40, elevation: 25, tranquility: 90 };
-      } else {
-        priorities = { duration: 40, distance: 45, elevation: 25, tranquility: 85 };
-      }
-      break;
-    }
-  }
-
-  return { roadTypes: updates, priorities };
+  return syncTracageOnActivityChange(currentActivity, newMode, 10);
 }
 
 const SURFACE_INDEX: Record<SurfaceType, number> = {
