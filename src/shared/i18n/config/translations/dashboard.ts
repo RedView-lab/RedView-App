@@ -163,6 +163,7 @@ export const dashboardTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Filtres', en: 'Filters' },
   { fr: "Graphique d'analyse", en: 'Analysis chart' },
   { fr: 'Renseigne une date et une heure de départ pour activer Jour/nuit.', en: 'Set a departure date and time to enable Day/Night.' },
+  { fr: 'Renseigne une heure de départ pour activer l’échelle temps/heure.', en: 'Set a departure time to enable the time/hour scale.' },
   { fr: 'Renseigne une date de départ.', en: 'Set a departure date.' },
   { fr: 'Waypoint', en: 'Waypoint' },
   { fr: 'Pause', en: 'Pause' },

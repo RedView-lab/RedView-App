@@ -35,6 +35,10 @@ import {
   type SavedCustomProfile,
 } from '../../lib/project/customProfiles';
 import type { PoiFeature } from '@/features/poi/types';
+import {
+  dispatchSelectPoiOnChart,
+  listenOpenPoiOnMap,
+} from '@/features/poi/lib/chartPoiSyncBridge';
 import { deleteProjectItineraryFitFiles } from '@/shared/utils/projects';
 import type {
   ItineraryProject,
@@ -523,6 +527,17 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         setSelectedTimelineIds([matchingItem.id]);
         centerTimelineRowInList(matchingItem.id);
       }
+
+      dispatchSelectPoiOnChart({
+        id: feature.id,
+        osmId: feature.id,
+        lat: feature.lat,
+        lon: feature.lon,
+        distanceKm: matchingItem?.distanceKm,
+        category: feature.category,
+        itineraryId: currentActive.id,
+        source: 'map',
+      });
     },
     [centerTimelineRowInList],
   );
@@ -574,9 +589,61 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
       } else if (map && item.lat != null && item.lon != null) {
         flyToLocation(map, { lon: item.lon, lat: item.lat }, { zoom: 15.5 });
       }
+
+      dispatchSelectPoiOnChart({
+        id: item.id,
+        osmId: item.osmId,
+        lat: item.lat,
+        lon: item.lon,
+        distanceKm: item.distanceKm,
+        category: item.poiCategory,
+        itineraryId: activeItineraryRef.current?.id,
+        source: 'timeline',
+      });
     },
     [map, openPoiMarker],
   );
+
+  useEffect(() => {
+    return listenOpenPoiOnMap((payload) => {
+      const currentActive = activeItineraryRef.current;
+      if (!currentActive) return;
+
+      const matchingItem = currentActive.timeline.find((item) => {
+        if (
+          payload.id &&
+          (item.id === payload.id ||
+            item.id === `poi-${payload.id}` ||
+            String(item.osmId) === String(payload.id))
+        ) {
+          return true;
+        }
+        if (payload.osmId != null && item.osmId === payload.osmId) return true;
+        if (payload.lat != null && payload.lon != null && item.lat != null && item.lon != null) {
+          return Math.abs(item.lat - payload.lat) < 0.0001 && Math.abs(item.lon - payload.lon) < 0.0001;
+        }
+        return false;
+      });
+
+      if (matchingItem) {
+        setSelectedTimelineIds([matchingItem.id]);
+        centerTimelineRowInList(matchingItem.id);
+        openPoiMarker(
+          matchingItem.osmId ?? matchingItem.id,
+          matchingItem.poiCategory,
+          matchingItem.lat != null && matchingItem.lon != null
+            ? { lat: matchingItem.lat, lon: matchingItem.lon }
+            : undefined,
+        );
+      } else if (payload.lat != null && payload.lon != null) {
+        openPoiMarker(
+          payload.id ?? '',
+          payload.category,
+          { lat: payload.lat, lon: payload.lon },
+        );
+      }
+    });
+  }, [centerTimelineRowInList, openPoiMarker]);
 
   const duplicateActiveItinerary = useCallback(() => {
     duplicateItinerary(project.activeItineraryId);

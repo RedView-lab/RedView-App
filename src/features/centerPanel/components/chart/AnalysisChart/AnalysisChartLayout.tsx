@@ -13,6 +13,7 @@ import {
   POI_MARKER_SIZE_PX,
   type HoverCardRow,
   type PoiMarkerGroup,
+  type VisiblePoiAnnotation,
 } from './types';
 
 interface AnalysisChartLayoutProps {
@@ -56,6 +57,7 @@ interface AnalysisChartLayoutProps {
   visibleFraction: number;
   expandedPoiClusterId: string | null;
   onPoiClusterClick: (group: PoiMarkerGroup) => void;
+  onPoiClick?: (annotation: VisiblePoiAnnotation) => void;
   activeHover: { x: number; ratioX: number } | null;
   hoverMarkers: Array<{ id: string; topRatio: number; color: string; backdrop: boolean }>;
   hoverXValue: number | null;
@@ -93,6 +95,7 @@ export function AnalysisChartLayout({
   visibleFraction,
   expandedPoiClusterId,
   onPoiClusterClick,
+  onPoiClick,
   activeHover,
   hoverMarkers,
   hoverXValue,
@@ -214,8 +217,9 @@ export function AnalysisChartLayout({
               if (group.kind === 'single') {
                 const annotation = group.members[0];
                 return (
-                  <div
+                  <button
                     key={group.id}
+                    type="button"
                     className={`rvchart__poi-marker${annotation.favorite ? ' is-favorite' : ''}`}
                     style={{
                       left: `${group.xRatio * 100}%`,
@@ -223,7 +227,14 @@ export function AnalysisChartLayout({
                       zIndex: annotation.favorite ? 30 : 10,
                     }}
                     title={`${annotation.itineraryName} · ${annotation.categoryLabel} · ${annotation.label}`}
-                    aria-hidden="true"
+                    aria-label={`${annotation.itineraryName} · ${annotation.categoryLabel} · ${annotation.label}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onPoiClick?.(annotation);
+                    }}
+                    onPointerDown={(event) => {
+                      event.stopPropagation();
+                    }}
                   >
                     {annotation.kind === 'pause' ? (
                       <span style={{ position: 'relative', display: 'inline-flex' }}>
@@ -292,7 +303,7 @@ export function AnalysisChartLayout({
                     ) : (
                       <span className="rvchart__poi-marker-fallback">POI</span>
                     )}
-                  </div>
+                  </button>
                 );
               }
 
@@ -336,8 +347,9 @@ export function AnalysisChartLayout({
                       ? buildPoiSpreadOffsetPx(index, group.count)
                       : 0;
                     return (
-                      <div
+                      <button
                         key={annotation.id}
+                        type="button"
                         className={`rvchart__poi-marker${annotation.favorite ? ' is-favorite' : ''}`}
                         style={{
                           left: `calc(${annotation.xRatio * 100}% + ${offsetPx}px)`,
@@ -345,7 +357,14 @@ export function AnalysisChartLayout({
                           zIndex: annotation.favorite ? 30 + index : 10 + index,
                         }}
                         title={`${annotation.itineraryName} · ${annotation.categoryLabel} · ${annotation.label}`}
-                        aria-hidden="true"
+                        aria-label={`${annotation.itineraryName} · ${annotation.categoryLabel} · ${annotation.label}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onPoiClick?.(annotation);
+                        }}
+                        onPointerDown={(event) => {
+                          event.stopPropagation();
+                        }}
                       >
                         {annotation.kind === 'pause' ? (
                           <span style={{ position: 'relative', display: 'inline-flex' }}>
@@ -414,7 +433,7 @@ export function AnalysisChartLayout({
                         ) : (
                           <span className="rvchart__poi-marker-fallback">POI</span>
                         )}
-                      </div>
+                      </button>
                     );
                   })}
                 </Fragment>

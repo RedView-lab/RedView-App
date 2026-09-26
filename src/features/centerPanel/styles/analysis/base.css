@@ -73,6 +73,31 @@
   transition: all 0.15s ease;
 }
 
+.rvc-center-analysis__segment-item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+}
+
+.rvc-center-analysis__segment-item--disabled {
+  cursor: not-allowed;
+}
+
+.rvc-center-analysis__segment--disabled,
+.rvc-center-analysis__segment:disabled {
+  opacity: 0.35;
+  color: rgba(255, 255, 255, 0.35);
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.rvc-center-analysis__segment--disabled:hover,
+.rvc-center-analysis__segment:disabled:hover {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.35);
+}
+
 .rvc-center-analysis__segment:hover {
   color: #fff;
   background: rgba(255, 255, 255, 0.06);

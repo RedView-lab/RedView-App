@@ -39,6 +39,11 @@ interface AnalysisToolbarProps {
    * les désactive pas. Renversé par le parent (voir CenterPanelAnalysis).
    */
   pinnedFilters?: Partial<Record<ToolbarFilterKey, string>>;
+  /**
+   * Modes d'axe X désactivés avec message d'aide en pop-in (ex: Temps / Heures
+   * sans heure de départ).
+   */
+  disabledXModes?: Partial<Record<AxisMode, string>>;
 }
 
 export function AnalysisToolbar({
@@ -58,9 +63,11 @@ export function AnalysisToolbar({
   onToggleFilter,
   disabledFilters,
   pinnedFilters,
+  disabledXModes,
 }: AnalysisToolbarProps) {
   const { t } = useAppI18n();
   const [hovered, setHovered] = useState<ToolbarFilterKey | null>(null);
+  const [hoveredXMode, setHoveredXMode] = useState<AxisMode | null>(null);
 
   /**
    * Un pop-in est affiché quand le filtre correspondant a un prérequis manquant
@@ -84,39 +91,65 @@ export function AnalysisToolbar({
       <div className="rvc-center-analysis__label">{t('Analyse')}</div>
 
       <div className="rvc-center-analysis__segmented" role="tablist" aria-label={t("Mode d'analyse")}>
-        <button
-          className={
-            xMode === 'distance'
-              ? 'rvc-center-analysis__segment rvc-center-analysis__segment--active'
-              : 'rvc-center-analysis__segment'
-          }
-          type="button"
-          onClick={() => onXModeChange('distance')}
-        >
-          {t('Distance')}
-        </button>
-        <button
-          className={
-            xMode === 'temps'
-              ? 'rvc-center-analysis__segment rvc-center-analysis__segment--active'
-              : 'rvc-center-analysis__segment'
-          }
-          type="button"
-          onClick={() => onXModeChange('temps')}
-        >
-          {t('Temps')}
-        </button>
-        <button
-          className={
-            xMode === 'heure'
-              ? 'rvc-center-analysis__segment rvc-center-analysis__segment--active'
-              : 'rvc-center-analysis__segment'
-          }
-          type="button"
-          onClick={() => onXModeChange('heure')}
-        >
-          {t('Heures')}
-        </button>
+        {(
+          [
+            { mode: 'distance' as const, label: t('Distance') },
+            { mode: 'temps' as const, label: t('Temps') },
+            { mode: 'heure' as const, label: t('Heures') },
+          ] as const
+        ).map(({ mode, label }) => {
+          const isActive = xMode === mode;
+          const hint = disabledXModes?.[mode];
+          const isDisabled = Boolean(hint);
+          const showHint = isDisabled && hoveredXMode === mode;
+
+          return (
+            <div
+              key={mode}
+              className={[
+                'rvc-center-analysis__segment-item',
+                isDisabled ? 'rvc-center-analysis__segment-item--disabled' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              onMouseEnter={() => {
+                if (isDisabled) setHoveredXMode(mode);
+              }}
+              onMouseLeave={() => {
+                setHoveredXMode((curr) => (curr === mode ? null : curr));
+              }}
+            >
+              <button
+                className={[
+                  'rvc-center-analysis__segment',
+                  isActive ? 'rvc-center-analysis__segment--active' : '',
+                  isDisabled ? 'rvc-center-analysis__segment--disabled' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                type="button"
+                disabled={isDisabled}
+                onClick={() => {
+                  if (!isDisabled) onXModeChange(mode);
+                }}
+                aria-label={label}
+                aria-describedby={showHint ? `rvc-analysis-xmode-hint-${mode}` : undefined}
+              >
+                {label}
+              </button>
+
+              {showHint && hint ? (
+                <div
+                  id={`rvc-analysis-xmode-hint-${mode}`}
+                  className="rvc-center-analysis__tooltip"
+                  role="tooltip"
+                >
+                  {hint}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
 
       <AxisDropdown

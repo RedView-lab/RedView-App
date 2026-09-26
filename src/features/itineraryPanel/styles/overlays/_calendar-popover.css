@@ -81,15 +81,15 @@
   justify-content: center;
   width: 16px;
   height: 16px;
-  padding: 6px;       /* keeps the 20×20 icon centred inside 16+12 hit-area */
+  padding: 6px;       /* 16x16 icon centered inside 16+12 hit-area */
   box-sizing: content-box;
   border-radius: 6px;
-  color: #ffffff;
+  color: #A4A7AE;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
 }
-.rvi-calendar__navbtn:hover  { background: rgba(255, 255, 255, 0.08); }
-.rvi-calendar__navbtn:active { background: rgba(255, 255, 255, 0.14); }
+.rvi-calendar__navbtn:hover  { background: rgba(255, 255, 255, 0.08); color: #ffffff; }
+.rvi-calendar__navbtn:active { background: rgba(255, 255, 255, 0.14); color: #ffffff; }
 .rvi-calendar__navbtn:focus-visible {
   outline: 2px solid rgba(197, 0, 0, 0.6);
   outline-offset: 2px;

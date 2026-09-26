@@ -6,10 +6,13 @@ import {
   CHART_CLICK_FOCUS_ZOOM,
   type CenterPanelAnalysisProps,
   DEFAULT_ANALYSIS_AXIS_COLORS,
+  detailOffsetForCenter,
+  detailZoomToVisibleFraction,
   extractRouteSegmentPoints,
   findSplitIndexForChartX,
   lightenColor,
   normalizeAnalysisState,
+  normalizeUnitInterval,
   selectInteractiveItineraryForChartX,
 } from './shared';
 import {
@@ -17,7 +20,13 @@ import {
   locateRoutePointAtX,
   type AxisMetricId,
   type AxisMode,
+  type ChartPoiAnnotation,
 } from '../chart';
+import {
+  dispatchOpenPoiOnMap,
+  findChartXForPoi,
+  listenSelectPoiOnChart,
+} from '@/features/poi/lib/chartPoiSyncBridge';
 import { flyToBounds, flyToLocation } from '@/features/map3d';
 import {
   clearAnalysisSelectedSegment,
@@ -133,9 +142,19 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
 
   const isSplitArmed = Boolean(routeSplitTool?.armed);
   const [mapHoverXValue, setMapHoverXValue] = useState<number | null>(null);
+  const [selectedChartX, setSelectedChartX] = useState<number | null>(null);
 
   const handleMapHoverXValueChange = useCallback(
     (xValue: number | null) => {
+      setMapHoverXValue(xValue);
+      setManualHoverXValue(xValue);
+    },
+    [setManualHoverXValue],
+  );
+
+  const handleTraceClick = useCallback(
+    (xValue: number) => {
+      setSelectedChartX(xValue);
       setMapHoverXValue(xValue);
       setManualHoverXValue(xValue);
     },
@@ -149,6 +168,8 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
     xMode,
     predictions,
     onMapHoverXValueChange: handleMapHoverXValueChange,
+    selectedXValue: selectedChartX,
+    onTraceClick: handleTraceClick,
     disabled: isSplitArmed,
   });
 
@@ -160,14 +181,15 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
     [setManualHoverXValue, updateHoverPoint],
   );
 
-  useEffect(() => {
-    if (Number.isFinite(controlledHoverXValue)) {
-      updateHoverPoint(controlledHoverXValue);
-    }
-  }, [controlledHoverXValue, updateHoverPoint]);
-
+  const effectiveHoverXValue = mapHoverXValue ?? selectedChartX;
   const chartControlledHoverXValue =
-    Number.isFinite(controlledHoverXValue) ? controlledHoverXValue : mapHoverXValue;
+    Number.isFinite(controlledHoverXValue) ? controlledHoverXValue : effectiveHoverXValue;
+
+  useEffect(() => {
+    if (Number.isFinite(chartControlledHoverXValue)) {
+      updateHoverPoint(chartControlledHoverXValue);
+    }
+  }, [chartControlledHoverXValue, updateHoverPoint]);
 
   const updateAnalysis = (mut: (draft: AnalysisPanelState) => void) => {
     if (!projectStore) return;
@@ -233,6 +255,31 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
       dayNightUnavailable && filters.jourNuit ? { jourNuit: dayNightHint } : undefined,
     [dayNightUnavailable, dayNightHint, filters.jourNuit],
   );
+
+  const hasStartTime = Boolean(activeItinerary?.rhythm.startTime);
+  const timeScaleUnavailable = !hasStartTime;
+  const timeScaleHint = t(
+    'Renseigne une heure de départ pour activer l’échelle temps/heure.',
+  );
+
+  const disabledXModes = useMemo(
+    () =>
+      timeScaleUnavailable
+        ? {
+            temps: timeScaleHint,
+            heure: timeScaleHint,
+          }
+        : undefined,
+    [timeScaleUnavailable, timeScaleHint],
+  );
+
+  useEffect(() => {
+    if (timeScaleUnavailable && (xMode === 'heure' || xMode === 'temps')) {
+      updateAnalysis((draft) => {
+        draft.xMode = 'distance';
+      });
+    }
+  }, [timeScaleUnavailable, xMode]);
 
   const [selectedXRange, setSelectedXRange] = useState<{ startX: number; endX: number } | null>(null);
 
@@ -336,7 +383,103 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
     };
   }, [map]);
 
+  useEffect(() => {
+    return listenSelectPoiOnChart((payload) => {
+      const targetX = findChartXForPoi({
+        poi: payload,
+        poiAnnotations,
+        activeItinerary,
+        visibleChartNodes,
+        xMode,
+        predictions,
+      });
+
+      if (targetX != null && Number.isFinite(targetX)) {
+        setSelectedChartX(targetX);
+        updateHoverPoint(targetX);
+
+        if (detailZoom > 0 && routeXDomainClamp) {
+          const fullSpan = routeXDomainClamp.max - routeXDomainClamp.min;
+          if (fullSpan > 0) {
+            const visibleFraction = detailZoomToVisibleFraction(normalizeUnitInterval(detailZoom));
+            const visibleSpan = fullSpan * visibleFraction;
+            const currentMin = routeXDomainClamp.min + detailOffset * (fullSpan - visibleSpan);
+            const currentMax = currentMin + visibleSpan;
+
+            if (targetX < currentMin + visibleSpan * 0.08 || targetX > currentMax - visibleSpan * 0.08) {
+              const centerNorm = (targetX - routeXDomainClamp.min) / fullSpan;
+              const nextOffset = detailOffsetForCenter(centerNorm, visibleFraction);
+              handleOffsetChange(nextOffset);
+            }
+          }
+        }
+      }
+    });
+  }, [
+    activeItinerary,
+    detailOffset,
+    detailZoom,
+    handleOffsetChange,
+    poiAnnotations,
+    predictions,
+    routeXDomainClamp,
+    updateHoverPoint,
+    visibleChartNodes,
+    xMode,
+  ]);
+
+  const handlePoiAnnotationClick = useCallback(
+    (annotation: ChartPoiAnnotation) => {
+      setSelectedChartX(annotation.x);
+      updateHoverPoint(annotation.x);
+
+      const targetItinerary = selectInteractiveItineraryForChartX(
+        visibleChartNodes,
+        activeItinerary?.id ?? null,
+        xMode,
+        annotation.x,
+      );
+      if (targetItinerary && map) {
+        const xOffset = xMode === 'distance' ? getItineraryStartDistanceKm(targetItinerary) : 0;
+        const localXValue = xMode === 'distance' ? annotation.x - xOffset : annotation.x;
+        const prediction = predictions?.[targetItinerary.id] ?? targetItinerary.prediction ?? null;
+        const point = locateRoutePointAtX(
+          targetItinerary.gpxRoute?.points ?? null,
+          prediction,
+          xMode,
+          localXValue,
+          targetItinerary.rhythm.startTime,
+        );
+        if (point) {
+          const currentPitch = map.getPitch();
+          const is2D = currentPitch <= 8;
+          const targetPitch = is2D ? 0 : Math.max(currentPitch, CHART_CLICK_FOCUS_PITCH);
+
+          flyToLocation(
+            map,
+            { lon: point.lon, lat: point.lat },
+            {
+              zoom: Math.max(map.getZoom(), CHART_CLICK_FOCUS_ZOOM),
+              pitch: targetPitch,
+            },
+          );
+
+          dispatchOpenPoiOnMap({
+            id: annotation.id,
+            lat: point.lat,
+            lon: point.lon,
+            category: annotation.poiCategory,
+            xValue: annotation.x,
+            source: 'chart',
+          });
+        }
+      }
+    },
+    [activeItinerary, map, predictions, updateHoverPoint, visibleChartNodes, xMode],
+  );
+
   const handleChartClick = (xValue: number) => {
+    setSelectedChartX(xValue);
     handleClearSelectedXRange();
 
     const targetItinerary = selectInteractiveItineraryForChartX(
@@ -429,6 +572,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
         onToggleFilter={toggleFilter}
         disabledFilters={disabledFilters}
         pinnedFilters={pinnedFilters}
+        disabledXModes={disabledXModes}
       />
 
       <div className="rvc-center-analysis__results" aria-label={t("Graphique d'analyse")}>
@@ -453,6 +597,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
           onHoverXValueChange={handleHoverXValueChange}
           controlledHoverXValue={chartControlledHoverXValue}
           onPlotClick={handleChartClick}
+          onPoiClick={handlePoiAnnotationClick}
           onPlotRangeSelect={handlePlotRangeSelect}
           selectedXRange={selectedXRange}
           onClearSelectedXRange={handleClearSelectedXRange}

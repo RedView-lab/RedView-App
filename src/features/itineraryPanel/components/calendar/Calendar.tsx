@@ -81,7 +81,7 @@ export function Calendar({ value, onSelect, markedDates }: CalendarProps) {
           aria-label={t('Mois précédent')}
           onClick={() => setViewMonth((m) => addMonths(m, -1))}
         >
-          <IconChevronLeft size={20} />
+          <IconChevronLeft size={16} />
         </button>
         <span className="rvi-calendar__title">{formatMonthLabel(viewMonth)}</span>
         <button
@@ -90,7 +90,7 @@ export function Calendar({ value, onSelect, markedDates }: CalendarProps) {
           aria-label={t('Mois suivant')}
           onClick={() => setViewMonth((m) => addMonths(m, 1))}
         >
-          <IconChevronRight size={20} />
+          <IconChevronRight size={16} />
         </button>
       </div>
 

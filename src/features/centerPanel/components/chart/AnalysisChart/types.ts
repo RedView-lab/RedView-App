@@ -45,6 +45,7 @@ export interface AnalysisChartProps {
   onHoverXValueChange?: (xValue: number | null) => void;
   controlledHoverXValue?: number | null;
   onPlotClick?: (xValue: number) => void;
+  onPoiClick?: (annotation: ChartPoiAnnotation) => void;
   onPlotRangeSelect?: (range: { startX: number; endX: number }) => void;
   selectedXRange?: { startX: number; endX: number } | null;
   onClearSelectedXRange?: () => void;

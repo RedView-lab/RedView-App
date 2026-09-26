@@ -194,6 +194,11 @@
   justify-content: center;
   pointer-events: auto;
   cursor: pointer;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  outline: none;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
   transition: transform 140ms ease, filter 140ms ease;
 }

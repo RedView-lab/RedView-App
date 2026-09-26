@@ -86,6 +86,8 @@ interface UseAnalysisHoverPointMarkerArgs {
   xMode: AxisMode;
   predictions: Record<string, unknown> | null;
   onMapHoverXValueChange?: (xValue: number | null) => void;
+  selectedXValue?: number | null;
+  onTraceClick?: (xValue: number) => void;
   disabled?: boolean;
 }
 
@@ -101,6 +103,8 @@ export function useAnalysisHoverPointMarker({
   xMode,
   predictions,
   onMapHoverXValueChange,
+  selectedXValue = null,
+  onTraceClick,
   disabled = false,
 }: UseAnalysisHoverPointMarkerArgs) {
   const domMarkerRef = useRef<mapboxgl.Marker | null>(null);
@@ -115,6 +119,8 @@ export function useAnalysisHoverPointMarker({
     xMode,
     predictions,
     onMapHoverXValueChange,
+    selectedXValue,
+    onTraceClick,
     disabled,
   });
 
@@ -126,6 +132,8 @@ export function useAnalysisHoverPointMarker({
       xMode,
       predictions,
       onMapHoverXValueChange,
+      selectedXValue,
+      onTraceClick,
       disabled,
     };
   });
@@ -212,6 +220,11 @@ export function useAnalysisHoverPointMarker({
         lastEmittedXValueRef.current = null;
         stateRef.current.onMapHoverXValueChange?.(null);
       }
+      const selectedX = stateRef.current.selectedXValue;
+      if (Number.isFinite(selectedX)) {
+        updateHoverPoint(selectedX as number);
+        return;
+      }
       if (domMarkerRef.current) {
         domMarkerRef.current.remove();
         domMarkerRef.current = null;
@@ -240,11 +253,11 @@ export function useAnalysisHoverPointMarker({
         return;
       }
 
-      // If hovering over interactive overlay elements (POI markers, popups, controls, buttons)
+      // If hovering over interactive overlay elements (popups, controls, buttons)
       const target = event.originalEvent?.target as HTMLElement | null;
       if (
         target?.closest(
-          '.rv-poi-marker, .mapboxgl-popup, .mapboxgl-ctrl, button, input, [role="button"]',
+          '.mapboxgl-popup, .mapboxgl-ctrl, input',
         )
       ) {
         clearMapHover();
@@ -374,15 +387,121 @@ export function useAnalysisHoverPointMarker({
       clearMapHover();
     };
 
+    const handleMapClick = (event: MapMouseEvent) => {
+      const target = event.originalEvent?.target as HTMLElement | null;
+      if (
+        target?.closest(
+          '.rv-poi-marker, .mapboxgl-popup, .mapboxgl-ctrl, button, input, [role="button"]',
+        )
+      ) {
+        return;
+      }
+
+      const {
+        map: activeMap,
+        visibleChartNodes: activeNodes,
+        activeItinerary: currentItinerary,
+        xMode: currentXMode,
+        predictions: currentPredictions,
+        disabled: isDisabled,
+        onTraceClick,
+      } = stateRef.current;
+
+      if (!activeMap || isDisabled || !event.lngLat) return;
+
+      const candidates =
+        activeNodes.length > 0
+          ? activeNodes
+          : currentItinerary
+            ? [{ itinerary: currentItinerary, startDistanceKm: 0 }]
+            : [];
+
+      if (candidates.length === 0) return;
+
+      const queryPoint: RouteDistancePoint = { lat: event.lngLat.lat, lon: event.lngLat.lng };
+      let bestCandidate: {
+        itinerary: Itinerary;
+        startDistanceKm: number;
+        projected: ProjectedRoutePoint;
+        screenDistPx: number;
+      } | null = null;
+
+      for (const node of candidates) {
+        const points = node.itinerary.gpxRoute?.points;
+        if (!points || points.length < 2) continue;
+
+        const cumulativeLengths = getCumulativeLengths(points);
+        const projected = projectPointAlongRoute(queryPoint, points, cumulativeLengths);
+        if (!projected) continue;
+
+        const screenPoint = activeMap.project([projected.lon, projected.lat]);
+        const screenDistPx = Math.hypot(
+          screenPoint.x - event.point.x,
+          screenPoint.y - event.point.y,
+        );
+
+        if (screenDistPx > ENTER_ROUTE_HOVER_DISTANCE_PX) continue;
+
+        if (!bestCandidate || screenDistPx < bestCandidate.screenDistPx) {
+          bestCandidate = {
+            itinerary: node.itinerary,
+            startDistanceKm: node.startDistanceKm,
+            projected,
+            screenDistPx,
+          };
+        }
+      }
+
+      if (!bestCandidate) return;
+
+      const { itinerary: targetItinerary, startDistanceKm, projected } = bestCandidate;
+      let xValue: number | null = null;
+      if (currentXMode === 'distance') {
+        xValue = projected.distanceM / 1000 + startDistanceKm;
+      } else {
+        const prediction =
+          (currentPredictions?.[targetItinerary.id] as PredictionResult | undefined) ??
+          (targetItinerary.prediction as PredictionResult | null | undefined) ??
+          null;
+        const points = targetItinerary.gpxRoute?.points ?? [];
+        const cumulativeLengths = getCumulativeLengths(points);
+        const totalDistanceM =
+          prediction?.total_distance_m && prediction.total_distance_m > 0
+            ? prediction.total_distance_m
+            : cumulativeLengths[cumulativeLengths.length - 1] ?? 0;
+
+        xValue = xValueFromDistance(projected.distanceM, {
+          prediction,
+          totalDistanceM,
+          xMode: currentXMode,
+          startTime: targetItinerary.rhythm.startTime,
+        });
+      }
+
+      if (Number.isFinite(xValue)) {
+        renderHoverMarker(
+          activeMap,
+          domMarkerRef,
+          projected.lon,
+          projected.lat,
+          targetItinerary.color || '#ff4d4f',
+        );
+        lastEmittedXValueRef.current = xValue as number;
+        onTraceClick?.(xValue as number);
+      }
+    };
+
     map.on('mousemove', scheduleSync);
     map.on('mouseleave', handleMouseLeave);
     map.on('mouseout', handleMouseLeave);
+    map.on('click', handleMapClick);
     window.addEventListener('blur', handleMouseLeave);
 
     return () => {
       map.off('mousemove', scheduleSync);
       map.off('mouseleave', handleMouseLeave);
       map.off('mouseout', handleMouseLeave);
+      map.off('click', handleMapClick);
       window.removeEventListener('blur', handleMouseLeave);
       if (rafRef.current !== null) {
         window.cancelAnimationFrame(rafRef.current);

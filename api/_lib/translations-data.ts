@@ -2225,6 +2225,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Set a departure date and time to enable Day/Night."
   },
   {
+    "fr": "Renseigne une heure de départ pour activer l’échelle temps/heure.",
+    "en": "Set a departure time to enable the time/hour scale."
+  },
+  {
     "fr": "Renseigne une date de départ.",
     "en": "Set a departure date."
   },

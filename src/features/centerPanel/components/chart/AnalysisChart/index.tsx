@@ -64,6 +64,7 @@ export const AnalysisChart = memo(function AnalysisChart({
   onHoverXValueChange,
   controlledHoverXValue = null,
   onPlotClick,
+  onPoiClick,
   onPlotRangeSelect,
   selectedXRange: controlledSelectedXRange,
   onClearSelectedXRange,
@@ -95,6 +96,9 @@ export const AnalysisChart = memo(function AnalysisChart({
   );
 
   const activeHover = useMemo(() => {
+    if (hover != null) {
+      return hover;
+    }
     if (Number.isFinite(controlledHoverXValue) && plotSize.width > 0) {
       const val = controlledHoverXValue as number;
       if (val < plotXDomain.min - 1e-4 || val > plotXDomain.max + 1e-4) {
@@ -106,7 +110,7 @@ export const AnalysisChart = memo(function AnalysisChart({
         return { x: ratioX * plotSize.width, ratioX };
       }
     }
-    return hover;
+    return null;
   }, [controlledHoverXValue, hover, plotSize.width, plotXDomain]);
 
   const xNice = useMemo(() => {
@@ -499,9 +503,9 @@ export const AnalysisChart = memo(function AnalysisChart({
 
   useEffect(() => {
     if (!onHoverXValueChange) return;
-    if (Number.isFinite(controlledHoverXValue)) return;
+    if (Number.isFinite(controlledHoverXValue) && hover == null) return;
     onHoverXValueChange(hoverXValue);
-  }, [controlledHoverXValue, hoverXValue, onHoverXValueChange]);
+  }, [controlledHoverXValue, hover, hoverXValue, onHoverXValueChange]);
 
   const [internalSelectedXRange, setInternalSelectedXRange] = useState<{ startX: number; endX: number } | null>(null);
   const selectedXRange = controlledSelectedXRange !== undefined ? controlledSelectedXRange : internalSelectedXRange;
@@ -712,6 +716,7 @@ export const AnalysisChart = memo(function AnalysisChart({
       visibleFraction={visibleFraction}
       expandedPoiClusterId={effectiveExpandedPoiClusterId}
       onPoiClusterClick={handlePoiClusterClick}
+      onPoiClick={onPoiClick}
       activeHover={activeHover}
       hoverMarkers={hoverMarkers}
       hoverXValue={hoverXValue}
