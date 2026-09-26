@@ -278,7 +278,12 @@ export function RythmeSection({
               anchorRef={dateChipRef}
               onClose={() => setCalendarOpen(false)}
               value={rhythm.startDate}
-              onSelect={(iso) => onChange?.('startDate', iso)}
+              onSelect={(iso) => {
+                onChange?.('startDate', iso);
+                if (!rhythm.startTime) {
+                  onChange?.('startTime', '09:30');
+                }
+              }}
             />
           </div>
 

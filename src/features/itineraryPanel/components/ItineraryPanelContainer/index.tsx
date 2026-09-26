@@ -23,6 +23,7 @@ import { useForbiddenZoneToolOptional } from '@/features/centerPanel/forbiddenZo
 import { usePredictionStoreOptional } from '../../context/PredictionStore';
 import { useItineraryUndoRedoShortcut } from '../../hooks/useItineraryUndoRedoShortcut';
 import { DEFAULT_PROFILES, getProfilePreset, resolveProfilePresetId } from '../../lib/project';
+import type { TimelineFilterState } from '../../sections/timeline/TimelineFilters';
 import {
   syncTracageOnActivityChange,
   type ActivityType,
@@ -68,6 +69,10 @@ interface ItineraryPanelContainerProps {
   onBackToHome?: () => void;
   pausesEnabled?: boolean;
   waypointsEnabled?: boolean;
+  poisRouteEnabled?: boolean;
+  favorisEnabled?: boolean;
+  selectedPoiCategories?: Set<string>;
+  globalFilters?: TimelineFilterState;
   onRevealCenterPanel?: () => void;
 }
 
@@ -87,6 +92,10 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   onBackToHome,
   pausesEnabled,
   waypointsEnabled,
+  poisRouteEnabled,
+  favorisEnabled,
+  selectedPoiCategories,
+  globalFilters,
   onRevealCenterPanel,
 }: ItineraryPanelContainerProps) {
   const {
@@ -378,6 +387,9 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     routesEnabled: project.controlPanel?.toggles?.routesEnabled ?? true,
     pausesEnabled,
     waypointsEnabled,
+    poisRouteEnabled,
+    favorisEnabled,
+    selectedPoiCategories,
     onChangePauseDuration: timelineCallbacks.handleChangeTimelinePauseDuration,
     onDeletePause: timelineCallbacks.handleRemoveTimelineItem,
     onTogglePauseFavorite: timelineCallbacks.handleFavoriteTimelineItem,
@@ -572,6 +584,9 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
       onDelete: poiHandlers.handlePoiDelete,
       onSelectPoi: handleMapPoiSelect,
     },
+    poisRouteEnabled,
+    favorisEnabled,
+    selectedPoiCategories,
   );
 
   const handleSelectTimelineRow = useCallback(
@@ -918,6 +933,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         onFavoriteTimelineItem={timelineCallbacks.handleFavoriteTimelineItem}
         onSearchTimeline={() => { }}
         onOpenTimelineSettings={() => { }}
+        globalFilters={globalFilters}
         onSelectTimelinePlace={timelineCallbacks.handleSelectTimelinePlace}
         routeLoading={routeLoading}
         routeError={routeError}

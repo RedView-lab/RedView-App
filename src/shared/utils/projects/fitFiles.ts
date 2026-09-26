@@ -54,9 +54,16 @@ export async function deleteProjectItineraryFitFiles(
   // No-op or cleanup handled per file ID in deleteProjectFitFiles
 }
 
-export async function downloadProjectItineraryFitFiles(
+export interface DownloadedFitFileEntry {
+  path: string;
+  name: string;
+  file: File | null;
+  notFound: boolean;
+}
+
+export async function downloadProjectItineraryFitFileEntries(
   uploads: ItineraryFitUpload[] | null | undefined,
-): Promise<File[]> {
+): Promise<DownloadedFitFileEntry[]> {
   if (!uploads || uploads.length === 0) return [];
 
   return Promise.all(
@@ -64,18 +71,47 @@ export async function downloadProjectItineraryFitFiles(
       .filter((upload) => typeof upload.path === 'string' && upload.path.length > 0)
       .map(async (upload) => {
         const fileId = upload.path as string;
-        const downloadUrl = storage.getFileDownload(FIT_FILES_BUCKET_ID, fileId);
-        const res = await fetch(downloadUrl);
-        if (!res.ok) {
-          throw new Error(`Failed to download FIT file ${upload.name}`);
+        try {
+          const downloadUrl = storage.getFileDownload(FIT_FILES_BUCKET_ID, fileId);
+          const res = await fetch(downloadUrl);
+          if (!res.ok) {
+            console.warn(`[fit-predictor] FIT file ${upload.name} (${fileId}) could not be downloaded (status ${res.status}).`);
+            return {
+              path: fileId,
+              name: upload.name,
+              file: null,
+              notFound: res.status === 404,
+            };
+          }
+          const blob = await res.blob();
+          const file = new File([blob], upload.name, {
+            type: upload.type || 'application/octet-stream',
+            lastModified: upload.lastModified,
+          });
+          return {
+            path: fileId,
+            name: upload.name,
+            file,
+            notFound: false,
+          };
+        } catch (err) {
+          console.warn(`[fit-predictor] Error fetching FIT file ${upload.name} (${fileId}):`, err);
+          return {
+            path: fileId,
+            name: upload.name,
+            file: null,
+            notFound: false,
+          };
         }
-        const blob = await res.blob();
-        return new File([blob], upload.name, {
-          type: upload.type || 'application/octet-stream',
-          lastModified: upload.lastModified,
-        });
       }),
   );
+}
+
+export async function downloadProjectItineraryFitFiles(
+  uploads: ItineraryFitUpload[] | null | undefined,
+): Promise<File[]> {
+  const entries = await downloadProjectItineraryFitFileEntries(uploads);
+  return entries.map((entry) => entry.file).filter((file): file is File => file !== null);
 }
 
 export async function duplicateProjectItineraryFitFiles(

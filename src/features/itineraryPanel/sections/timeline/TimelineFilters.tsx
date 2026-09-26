@@ -18,6 +18,7 @@ export interface TimelineFilterState {
   poi: boolean;
   pause: boolean;
   favorite: boolean;
+  categories?: Set<string>;
 }
 
 export const DEFAULT_TIMELINE_FILTER: TimelineFilterState = {
@@ -34,7 +35,7 @@ interface TimelineFiltersProps {
 }
 
 const CHIPS: Array<{
-  key: keyof TimelineFilterState;
+  key: keyof Omit<TimelineFilterState, 'categories'>;
   label: string;
   badge: 'start' | 'waypoint' | 'water' | 'pause' | 'favorite';
 }> = [
@@ -50,7 +51,7 @@ export function TimelineFilters({
   onChange,
 }: TimelineFiltersProps) {
   const { t } = useAppI18n();
-  const toggle = (key: keyof TimelineFilterState) => {
+  const toggle = (key: keyof Omit<TimelineFilterState, 'categories'>) => {
     onChange?.({ ...value, [key]: !value[key] });
   };
 
@@ -59,7 +60,7 @@ export function TimelineFilters({
       <span className="rvi-tl-filters__label">{t('Filtres')}</span>
       <div className="rvi-tl-filters__chips">
         {CHIPS.map((chip) => {
-          const active = value[chip.key];
+          const active = Boolean(value[chip.key]);
           const badge = chip.badge === 'favorite'
             ? (
                 <span className="rvi-tl-chip__favorite-badge" aria-hidden>

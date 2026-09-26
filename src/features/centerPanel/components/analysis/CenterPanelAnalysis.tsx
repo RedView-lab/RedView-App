@@ -50,7 +50,7 @@ import { AnalysisToolbar } from './AnalysisToolbar';
 /**
  * Panneau d'analyse centrale des itinéraires (graphique d'élévation, pente, vitesse, puissance, etc.).
  */
-export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
+export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisProps) {
   const { t } = useAppI18n();
   const rootRef = useRef<HTMLElement | null>(null);
   const [openAxis, setOpenAxis] = useState<'axis1' | 'axis2' | null>(null);
@@ -136,6 +136,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
     xMode,
     detailZoom,
     filters,
+    globalFilters,
     activeItinerary,
     weatherByItinerary,
   });
@@ -257,29 +258,27 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
   );
 
   const hasStartTime = Boolean(activeItinerary?.rhythm.startTime);
-  const timeScaleUnavailable = !hasStartTime;
-  const timeScaleHint = t(
-    'Renseigne une heure de départ pour activer l’échelle temps/heure.',
+  const hourScaleHint = t(
+    'Renseigne une heure de départ pour activer l’échelle heure.',
   );
 
   const disabledXModes = useMemo(
     () =>
-      timeScaleUnavailable
+      !hasStartTime
         ? {
-            temps: timeScaleHint,
-            heure: timeScaleHint,
+            heure: hourScaleHint,
           }
         : undefined,
-    [timeScaleUnavailable, timeScaleHint],
+    [hasStartTime, hourScaleHint],
   );
 
   useEffect(() => {
-    if (timeScaleUnavailable && (xMode === 'heure' || xMode === 'temps')) {
+    if (!hasStartTime && xMode === 'heure') {
       updateAnalysis((draft) => {
-        draft.xMode = 'distance';
+        draft.xMode = 'temps';
       });
     }
-  }, [timeScaleUnavailable, xMode]);
+  }, [hasStartTime, xMode]);
 
   const [selectedXRange, setSelectedXRange] = useState<{ startX: number; endX: number } | null>(null);
 

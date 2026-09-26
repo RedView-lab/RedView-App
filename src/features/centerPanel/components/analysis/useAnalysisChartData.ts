@@ -25,6 +25,8 @@ import {
 } from '../chart';
 import type { RouteWeatherDataset } from '@/features/weather';
 import { lightenColor, type FilterKey, type PreparedChartNode } from './shared';
+import type { TimelineFilterState } from '@/features/itineraryPanel/sections/timeline/TimelineFilters';
+import { matchesPoiCategory } from '@/features/itineraryPanel/sections/timeline/poiCategoryMatch';
 
 interface UseAnalysisChartDataArgs {
   itineraries: Itinerary[];
@@ -36,6 +38,7 @@ interface UseAnalysisChartDataArgs {
   xMode: AxisMode;
   detailZoom: number;
   filters: Record<FilterKey, boolean>;
+  globalFilters?: TimelineFilterState;
   activeItinerary: Itinerary | null;
   weatherByItinerary?: Record<string, RouteWeatherDataset | null>;
 }
@@ -53,9 +56,20 @@ export function useAnalysisChartData({
   xMode,
   detailZoom,
   filters,
+  globalFilters,
   activeItinerary,
   weatherByItinerary,
 }: UseAnalysisChartDataArgs) {
+  const effectiveFilters = useMemo(() => {
+    if (!globalFilters) return filters;
+    return {
+      ...filters,
+      poi: globalFilters.poi,
+      pause: globalFilters.pause,
+      waypoint: globalFilters.waypoint,
+    };
+  }, [filters, globalFilters]);
+
   const visualNodes = useMemo(
     () => buildItineraryVisualNodes(itineraries),
     [itineraries],
@@ -195,24 +209,32 @@ export function useAnalysisChartData({
   }, [preparedChartNodes, xMode]);
 
   const poiAnnotations = useMemo<ChartPoiAnnotation[]>(() => {
-    const includePoi = Boolean(filters.poi);
-    const includePause = Boolean(filters.pause);
-    const includeWaypoint = Boolean(filters.waypoint);
+    const includePoi = Boolean(effectiveFilters.poi);
+    const includePause = Boolean(effectiveFilters.pause);
+    const includeWaypoint = Boolean(effectiveFilters.waypoint);
+    const includeFavoritesAlways = globalFilters ? globalFilters.favorite : true;
 
     const result: ChartPoiAnnotation[] = [];
     for (const node of preparedChartNodes) {
       const { itinerary, prediction, xOffset } = node;
-      result.push(
-        ...buildPoiAnnotationsForItinerary(itinerary, prediction, xMode, {
-          includePoi,
-          includePause,
-          includeWaypoint,
-          includeFavoritesAlways: true,
-        }).map((annotation) => shiftChartX(annotation, xOffset)),
-      );
+      const annotations = buildPoiAnnotationsForItinerary(itinerary, prediction, xMode, {
+        includePoi,
+        includePause,
+        includeWaypoint,
+        includeFavoritesAlways,
+      });
+
+      for (const annotation of annotations) {
+        if (annotation.kind === 'poi' && globalFilters?.categories && globalFilters.categories.size > 0) {
+          if (!matchesPoiCategory(annotation.poiCategory, globalFilters.categories)) {
+            continue;
+          }
+        }
+        result.push(shiftChartX(annotation, xOffset));
+      }
     }
     return result;
-  }, [filters.pause, filters.poi, filters.waypoint, preparedChartNodes, xMode]);
+  }, [effectiveFilters.pause, effectiveFilters.poi, effectiveFilters.waypoint, globalFilters, preparedChartNodes, xMode]);
 
   const alertAnnotations = useMemo<ChartAlertAnnotation[]>(() => {
     if (!filters.alertes) return [];
@@ -258,7 +280,7 @@ export function useAnalysisChartData({
   }, [activeItinerary, dayNightStartReady, filters.jourNuit, predictions, xMode]);
 
   const pauseOverlay = useMemo<ChartPauseOverlay | null>(() => {
-    if (filters.pause === false) return null;
+    if (effectiveFilters.pause === false) return null;
     if (xMode === 'distance') return null;
 
     const targetItinerary =
@@ -277,7 +299,7 @@ export function useAnalysisChartData({
       prediction,
       xMode,
     });
-  }, [activeItinerary, filters.pause, predictions, preparedChartNodes, xMode]);
+  }, [activeItinerary, effectiveFilters.pause, predictions, preparedChartNodes, xMode]);
 
   return {
     preparedChartNodes,

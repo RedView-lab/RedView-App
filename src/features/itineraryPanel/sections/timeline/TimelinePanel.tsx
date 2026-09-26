@@ -30,6 +30,8 @@ import {
   type TimelineFilterState,
   DEFAULT_TIMELINE_FILTER,
 } from './TimelineFilters';
+import { TimelineSheetFilterPanel } from './TimelineSheetFilterPanel';
+import { matchesPoiCategory } from './poiCategoryMatch';
 import {
   TimelineTableSettings,
   type TimelineTableSettingsState,
@@ -45,6 +47,7 @@ interface TimelinePanelProps {
   railConfig?: Partial<TimelineRailConfig>;
   isFullscreen?: boolean;
   tableSettings?: TimelineTableSettingsState;
+  globalFilters?: TimelineFilterState;
 
   onChangeView?: (v: TimelineView) => void;
   onOpenSettings?: () => void;
@@ -78,6 +81,7 @@ export function TimelinePanel({
   railConfig,
   isFullscreen,
   tableSettings,
+  globalFilters,
   selectedIds: selectedIdsProp,
   onSelectRow,
   onChangeView,
@@ -110,16 +114,22 @@ export function TimelinePanel({
   const [timelineZoomLevel, setTimelineZoomLevel] = useState(1);
   const pauseInsertionResolverRef = useRef<(() => number | null) | null>(null);
 
-  // Filter + table-settings state — local for now; the wiring to backend
+  // Table-settings state — local for now; the wiring to backend
   // will move these into the project state once persistence lands.
-  const [filters, setFilters] = useState<TimelineFilterState>(
-    DEFAULT_TIMELINE_FILTER,
-  );
   const [localTableSettings, setLocalTableSettings] = useState<TimelineTableSettingsState>(
     DEFAULT_TIMELINE_TABLE_SETTINGS,
   );
   const resolvedTableSettings = tableSettings ?? localTableSettings;
   const handleChangeTableSettings = onChangeTableSettings ?? setLocalTableSettings;
+
+  // Local table filters: when overridden (non-null), filters apply ONLY to this table.
+  // When null, the table synchronizes with globalFilters from the top of the screen.
+  const [localFilters, setLocalFilters] = useState<TimelineFilterState | null>(null);
+  const effectiveFilters = useMemo<TimelineFilterState>(() => {
+    return localFilters ?? globalFilters ?? DEFAULT_TIMELINE_FILTER;
+  }, [localFilters, globalFilters]);
+
+  const [sheetSettingsOpen, setSheetSettingsOpen] = useState(false);
 
   const handleToggleSelect = (id: string, selected: boolean) => {
     const next = new Set(selectedIds);
@@ -149,8 +159,12 @@ export function TimelinePanel({
   }, [view]);
 
   useEffect(() => {
-    if (view !== 'timeline' || !isFullscreen) return;
-    setTimelineEditOpen(true);
+    if (!isFullscreen) return;
+    if (view === 'timeline') {
+      setTimelineEditOpen(true);
+    } else if (view === 'sheet') {
+      setSheetSettingsOpen(true);
+    }
   }, [isFullscreen, view]);
 
   const handleOpenSettings = () => {
@@ -158,6 +172,7 @@ export function TimelinePanel({
       setTimelineEditOpen((current) => !current);
       return;
     }
+    setSheetSettingsOpen((current) => !current);
     onOpenSettings?.();
   };
 
@@ -188,13 +203,13 @@ export function TimelinePanel({
 
   const visibleSheetItems = useMemo(
     () => buildSheetItemsWithIntervalPauses(items, intervalPauseSheetItems)
-      .filter((item) => matchesTimelineFilter(item, 'sheet', filters)),
-    [filters, intervalPauseSheetItems, items],
+      .filter((item) => matchesTimelineFilter(item, 'sheet', effectiveFilters)),
+    [effectiveFilters, intervalPauseSheetItems, items],
   );
 
   const visibleTimelineItems = useMemo(
-    () => items.filter((item) => matchesTimelineFilter(item, 'timeline', filters)),
-    [filters, items],
+    () => items.filter((item) => matchesTimelineFilter(item, 'timeline', effectiveFilters)),
+    [effectiveFilters, items],
   );
 
   const addMenuOptions: TimelineKindMenuOption[] = [
@@ -231,6 +246,7 @@ export function TimelinePanel({
   ];
 
   const showTimelineTopbar = view === 'timeline' && timelineEditOpen;
+  const showSheetTopbar = view === 'sheet' && sheetSettingsOpen;
 
   return (
     <section
@@ -242,7 +258,7 @@ export function TimelinePanel({
           view={view}
           onChangeView={onChangeView}
           onOpenSettings={handleOpenSettings}
-          settingsActive={view === 'timeline' && timelineEditOpen}
+          settingsActive={view === 'timeline' ? timelineEditOpen : sheetSettingsOpen}
           fullscreenActive={isFullscreen}
           onToggleFullscreen={onToggleFullscreen}
           onAdd={handleOpenKindMenu}
@@ -251,12 +267,21 @@ export function TimelinePanel({
 
         {showTimelineTopbar ? (
           <TimelineEditPanel
-            filters={filters}
+            filters={effectiveFilters}
             markerStepKm={timelineMarkerStepKm}
             zoomLevel={timelineZoomLevel}
-            onChangeFilters={setFilters}
+            onChangeFilters={setLocalFilters}
             onChangeMarkerStepKm={setTimelineMarkerStepKm}
             onChangeZoomLevel={setTimelineZoomLevel}
+          />
+        ) : null}
+
+        {showSheetTopbar ? (
+          <TimelineSheetFilterPanel
+            filters={effectiveFilters}
+            isOverridden={localFilters !== null}
+            onChangeFilters={setLocalFilters}
+            onResetToGlobal={() => setLocalFilters(null)}
           />
         ) : null}
       </div>
@@ -298,7 +323,7 @@ export function TimelinePanel({
             rhythm={rhythm}
             prediction={prediction}
             config={railConfig}
-            filters={filters}
+            filters={effectiveFilters}
             markerStepKm={timelineMarkerStepKm}
             hourZoom={timelineZoomLevel}
             selectedIds={selectedIds}
@@ -341,12 +366,32 @@ function matchesTimelineFilter(
   view: TimelineView,
   filters: TimelineFilterState,
 ): boolean {
-  if (item.favorite) return filters.favorite;
-  if (item.kind === 'start' || item.kind === 'end') return filters.etape;
-  if (item.kind === 'waypoint') return filters.waypoint;
-  if (item.kind === 'pause') return filters.pause;
-  if (view === 'timeline' && item.kind === 'poi' && !item.favorite) return false;
-  return filters.poi;
+  const isFav = Boolean(item.favorite);
+  if (isFav && filters.favorite) {
+    if (item.kind === 'poi' && filters.categories && filters.categories.size > 0) {
+      return matchesPoiCategory(item.poiCategory, filters.categories);
+    }
+    return true;
+  }
+
+  if (item.kind === 'start' || item.kind === 'end') {
+    return filters.etape !== false;
+  }
+  if (item.kind === 'waypoint') {
+    return Boolean(filters.waypoint);
+  }
+  if (item.kind === 'pause') {
+    return Boolean(filters.pause);
+  }
+  if (item.kind === 'poi') {
+    if (!filters.poi) return false;
+    if (view === 'timeline' && !item.favorite) return false;
+    if (filters.categories && filters.categories.size > 0) {
+      return matchesPoiCategory(item.poiCategory, filters.categories);
+    }
+    return true;
+  }
+  return true;
 }
 
 function buildSheetItemsWithIntervalPauses(

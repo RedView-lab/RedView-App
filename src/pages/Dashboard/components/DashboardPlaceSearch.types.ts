@@ -11,6 +11,8 @@ export interface DashboardPlaceSearchProps {
   top: number;
   activeFilters?: Set<DashboardFilterId>;
   onFilterChange?: (filters: Set<DashboardFilterId>) => void;
+  selectedPoiCategories?: Set<DashboardPoiOptionId>;
+  onSelectedPoiCategoriesChange?: (categories: Set<DashboardPoiOptionId>) => void;
   /** Left drawer visibility — drives the mirrored toggle rendered before the search field. */
   isLeftPanelCollapsed?: boolean;
   onRestoreLeftPanel?: () => void;

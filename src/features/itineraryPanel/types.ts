@@ -47,6 +47,15 @@ export interface AnalysisFiltersState {
   jourNuit: boolean;
 }
 
+export interface TimelineFilterState {
+  etape: boolean;
+  waypoint: boolean;
+  poi: boolean;
+  pause: boolean;
+  favorite: boolean;
+  categories?: Set<string>;
+}
+
 export interface AnalysisPanelState {
   xMode: AnalysisAxisMode;
   axis1: AnalysisAxisMetricId;
@@ -600,6 +609,7 @@ export interface ItineraryPanelProps {
   onFavoriteTimelineItem?: (id: string, favorite: boolean) => void;
   onSearchTimeline?: () => void;
   onOpenTimelineSettings?: () => void;
+  globalFilters?: TimelineFilterState;
 
   /**
    * Called when the user picks a geocoded place for a timeline row

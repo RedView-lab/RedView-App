@@ -40,7 +40,9 @@ import { MapViewportControls } from '@/features/mapViewportControls';
 import type { MapViewport } from '@/features/map3d/lib/viewport-persist';
 import { useAppI18n } from '@/shared/i18n';
 import { DashboardPlaceSearch } from './DashboardPlaceSearch';
-import type { DashboardFilterId } from './DashboardPlaceSearch.types';
+import type { DashboardFilterId, DashboardPoiOptionId } from './DashboardPlaceSearch.types';
+import { DASHBOARD_POI_OPTIONS } from './DashboardPlaceSearch.constants';
+import type { TimelineFilterState } from '@/features/itineraryPanel/sections/timeline/TimelineFilters';
 import { CENTER_TOOLBAR_HEIGHT, PANEL_PADDING } from '../lib/constants';
 import { getDashboardStyles } from '../lib/dashboardStyles';
 import { getDashboardLayout } from '../lib/layout';
@@ -203,6 +205,23 @@ export function DashboardEditor({
   const [dashboardSearchActiveFilters, setDashboardSearchActiveFilters] = useState<Set<DashboardFilterId>>(
     () => new Set<DashboardFilterId>(['pois_route', 'favoris', 'pauses', 'waypoints']),
   );
+  const [dashboardSearchSelectedPoiCategories, setDashboardSearchSelectedPoiCategories] = useState<Set<DashboardPoiOptionId>>(
+    () => new Set<DashboardPoiOptionId>(DASHBOARD_POI_OPTIONS.map((opt) => opt.id)),
+  );
+
+  const globalTimelineFilters = useMemo<TimelineFilterState>(() => {
+    return {
+      etape: true,
+      waypoint: dashboardSearchActiveFilters.has('waypoints'),
+      poi: dashboardSearchActiveFilters.has('pois_route'),
+      pause: dashboardSearchActiveFilters.has('pauses'),
+      favorite: dashboardSearchActiveFilters.has('favoris'),
+      categories:
+        dashboardSearchSelectedPoiCategories.size === DASHBOARD_POI_OPTIONS.length
+          ? undefined
+          : (dashboardSearchSelectedPoiCategories as Set<string>),
+    };
+  }, [dashboardSearchActiveFilters, dashboardSearchSelectedPoiCategories]);
   const [contextMenuOverlayContext, setContextMenuOverlayContext] = useState<MapContextMenuOverlayContext>({
     weather: {
       enabled: false,
@@ -306,6 +325,8 @@ export function DashboardEditor({
         top={PANEL_PADDING}
         activeFilters={dashboardSearchActiveFilters}
         onFilterChange={setDashboardSearchActiveFilters}
+        selectedPoiCategories={dashboardSearchSelectedPoiCategories}
+        onSelectedPoiCategoriesChange={setDashboardSearchSelectedPoiCategories}
         isLeftPanelCollapsed={isLeftPanelCollapsed}
         onRestoreLeftPanel={onRestoreLeftPanel}
         onCollapseLeftPanel={onCollapseLeftPanel}
@@ -386,6 +407,10 @@ export function DashboardEditor({
                         onBackToHome={onBackToBrowser}
                         pausesEnabled={dashboardSearchActiveFilters.has('pauses')}
                         waypointsEnabled={dashboardSearchActiveFilters.has('waypoints')}
+                        poisRouteEnabled={dashboardSearchActiveFilters.has('pois_route')}
+                        favorisEnabled={dashboardSearchActiveFilters.has('favoris')}
+                        selectedPoiCategories={dashboardSearchSelectedPoiCategories as Set<string>}
+                        globalFilters={globalTimelineFilters}
                       />
                     </div>
                   </div>
@@ -410,7 +435,7 @@ export function DashboardEditor({
 
                     {layout.centerToolbarVisible ? (
                       <div style={styles.centerPanelShellStyle}>
-                        <CenterPanel map={mapInstance} />
+                        <CenterPanel map={mapInstance} globalFilters={globalTimelineFilters} />
                       </div>
                     ) : null}
                   </AnalysisFlyoverProvider>

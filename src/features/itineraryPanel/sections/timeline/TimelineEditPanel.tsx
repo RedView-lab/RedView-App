@@ -32,7 +32,7 @@ const ZOOM_MAX = 1.5;
 const ZOOM_STEP = 0.25;
 
 const FILTER_CHIPS: Array<{
-  key: keyof TimelineFilterState;
+  key: keyof Omit<TimelineFilterState, 'categories'>;
   label: string;
   renderIcon: () => React.ReactNode;
 }> = [
@@ -80,7 +80,7 @@ export function TimelineEditPanel({
   onChangeZoomLevel,
 }: TimelineEditPanelProps) {
   const { t } = useAppI18n();
-  const toggleFilter = (key: keyof TimelineFilterState) => {
+  const toggleFilter = (key: keyof Omit<TimelineFilterState, 'categories'>) => {
     onChangeFilters?.({ ...filters, [key]: !filters[key] });
   };
 
@@ -133,7 +133,7 @@ export function TimelineEditPanel({
 
       <div className="rvi-tl-edit__chips" role="group" aria-label={t('Filtres de la timeline')}>
         {FILTER_CHIPS.map((chip) => {
-          const active = filters[chip.key];
+          const active = Boolean(filters[chip.key]);
           return (
             <button
               key={chip.key}

@@ -17,10 +17,13 @@ import type {
 } from '@/features/itineraryPanel/types';
 import type { RouteLayerPoint } from '@/features/itineraryPanel/lib/route-layer';
 
+import type { TimelineFilterState } from '@/features/itineraryPanel/sections/timeline/TimelineFilters';
+
 export type FilterKey = keyof AnalysisFiltersState;
 
 export interface CenterPanelAnalysisProps {
   map: MapboxMap | null;
+  globalFilters?: TimelineFilterState;
 }
 
 export interface PreparedChartNode {

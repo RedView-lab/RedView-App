@@ -58,7 +58,7 @@ export const DASHBOARD_POI_OPTIONS: readonly DashboardPoiOption[] = [
 
 export const DASHBOARD_FILTER_OPTIONS: readonly DashboardFilterOption[] = [
   { id: 'pois_map', label: 'POIs sur carte', icon: 'search-filter-pois-map.svg', hasDropdown: true },
-  { id: 'pois_route', label: 'POIs sur itinéraires', icon: 'search-filter-pois-route.svg' },
+  { id: 'pois_route', label: 'POIs sur itinéraires', icon: 'search-filter-pois-route.svg', hasDropdown: true },
   { id: 'favoris', label: 'Favoris', icon: 'search-filter-favoris.svg' },
   { id: 'pauses', label: 'Pauses', icon: 'search-filter-pauses.svg' },
   { id: 'waypoints', label: 'Points de passage', icon: 'search-filter-waypoints.svg' },

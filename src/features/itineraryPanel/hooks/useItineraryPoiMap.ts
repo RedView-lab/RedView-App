@@ -77,6 +77,8 @@ export interface UseItineraryPoiMapResult {
  * The hook is intentionally side-effect-only on the map; it never owns
  * UI state beyond what `usePoi` already exposes.
  */
+import { matchesPoiCategory } from '../sections/timeline/poiCategoryMatch';
+
 export function useItineraryPoiMap(
   map: MapboxMap | null,
   isMapLoaded: boolean,
@@ -84,21 +86,31 @@ export function useItineraryPoiMap(
   onCorridorUpdate?: (features: PoiFeature[]) => void,
   onCorridorComplete?: (features: PoiFeature[]) => void,
   popupActions?: UsePoiPopupActions,
+  poisRouteEnabled: boolean = true,
+  favorisEnabled: boolean = true,
+  selectedPoiCategories?: Set<string>,
 ): UseItineraryPoiMapResult {
   // ── Derive enabled OSM categories from the panel POI rows ─────────
   const enabledCategories = useMemo<Set<FeaturePoiCategory>>(() => {
     const set = new Set<FeaturePoiCategory>();
-    if (!active?.poi) return set;
+    if (!active?.poi || !poisRouteEnabled) return set;
     for (const [panelKey, raw] of Object.entries(active.poi)) {
       if (POI_NON_ENTRY_KEYS.has(panelKey)) continue;
       if (!raw || typeof raw !== 'object') continue;
       const entry = raw as PoiEntry;
       if (!entry.enabled) continue;
+      if (
+        selectedPoiCategories &&
+        selectedPoiCategories.size > 0 &&
+        !matchesPoiCategory(panelKey as PanelPoiCategory, selectedPoiCategories)
+      ) {
+        continue;
+      }
       const mapped = PANEL_TO_FEATURE_POI[panelKey as PanelPoiCategory] ?? [];
       for (const fk of mapped) set.add(fk);
     }
     return set;
-  }, [active]);
+  }, [active, poisRouteEnabled, selectedPoiCategories]);
 
   // ── Effective corridor radius: max of enabled rows ────────────────
   //
@@ -161,6 +173,9 @@ export function useItineraryPoiMap(
     persistedPoiFeatures,
     popupActions,
     active?.id ?? null,
+    poisRouteEnabled,
+    favorisEnabled,
+    selectedPoiCategories,
   );
 
   return {

@@ -164,10 +164,17 @@ function buildSeriesFromRouteProfile(
   }
 
   const timeline = xMode === 'distance' ? null : getPredictionTimeline(prediction);
+  const FALLBACK_SPEED_MS = 20 / 3.6; // 20 km/h default
 
   const points: ChartPoint[] = [];
   for (const sample of profile) {
-    const elapsedHours = interpolateElapsedHoursFromTimeline(timeline, sample.distanceM);
+    let elapsedHours: number | null = null;
+    if (timeline && timeline.length > 0) {
+      elapsedHours = interpolateElapsedHoursFromTimeline(timeline, sample.distanceM);
+    }
+    if (elapsedHours === null || !Number.isFinite(elapsedHours)) {
+      elapsedHours = (sample.distanceM / FALLBACK_SPEED_MS) / 3600;
+    }
     const x =
       xMode === 'distance'
         ? sample.distanceM / 1000
@@ -371,7 +378,7 @@ export function projectXToDistanceM(
 
   const totalElapsedHours = prediction?.points.length
     ? (prediction.points[prediction.points.length - 1]?.elapsed_time_s ?? 0) / 3600
-    : Number.NaN;
+    : (totalDistanceM / (20 / 3.6)) / 3600;
   if (!(totalElapsedHours > 0)) return Number.NaN;
 
   return (elapsedHours / totalElapsedHours) * totalDistanceM;

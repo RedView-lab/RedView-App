@@ -1,6 +1,6 @@
 import type { PredictionResult } from '@/features/fitPredictor';
 import {
-  downloadProjectItineraryFitFiles,
+  downloadProjectItineraryFitFileEntries,
 } from '@/shared/utils/projects';
 
 import {
@@ -19,6 +19,7 @@ export interface HydratedFitRuntimeData {
   fitFileNames: string[];
   predictionResult: PredictionResult | null;
   persistedUploadSignature: string;
+  missingFileIds?: string[];
 }
 
 export async function hydratePersistedFitRuntime(
@@ -33,15 +34,19 @@ export async function hydratePersistedFitRuntime(
   const storageUploads = persistedUploads.filter(
     (upload) => typeof upload.path === 'string' && upload.path.length > 0,
   );
-  const downloadedFiles = storageUploads.length > 0
-    ? await downloadProjectItineraryFitFiles(storageUploads)
+  const downloadedEntries = storageUploads.length > 0
+    ? await downloadProjectItineraryFitFileEntries(storageUploads)
     : [];
 
   const downloadedByPath = new Map<string, File>();
-  for (let index = 0; index < storageUploads.length; index += 1) {
-    const path = storageUploads[index]?.path;
-    const file = downloadedFiles[index];
-    if (path && file) downloadedByPath.set(path, file);
+  const missingFileIds: string[] = [];
+
+  for (const entry of downloadedEntries) {
+    if (entry.file) {
+      downloadedByPath.set(entry.path, entry.file);
+    } else if (entry.notFound) {
+      missingFileIds.push(entry.path);
+    }
   }
 
   const legacyQueue = legacyFiles.slice();
@@ -59,5 +64,6 @@ export async function hydratePersistedFitRuntime(
     fitFileNames: fitFiles.map((file) => file.name),
     predictionResult: itinerary.prediction ?? null,
     persistedUploadSignature,
+    missingFileIds: missingFileIds.length > 0 ? missingFileIds : undefined,
   };
 }

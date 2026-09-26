@@ -14,6 +14,9 @@ interface UseItineraryCheckpointMarkersArgs {
   routesEnabled?: boolean;
   pausesEnabled?: boolean;
   waypointsEnabled?: boolean;
+  poisRouteEnabled?: boolean;
+  favorisEnabled?: boolean;
+  selectedPoiCategories?: Set<string>;
   onChangePauseDuration?: (id: string, durationMin: number) => void;
   onDeletePause?: (id: string) => void;
   onTogglePauseFavorite?: (id: string, favorite: boolean) => void;
@@ -619,6 +622,9 @@ export function useItineraryCheckpointMarkers({
   routesEnabled = true,
   pausesEnabled = true,
   waypointsEnabled = true,
+  poisRouteEnabled = true,
+  favorisEnabled = true,
+  selectedPoiCategories,
   onChangePauseDuration,
   onDeletePause,
   onTogglePauseFavorite,
@@ -727,7 +733,11 @@ export function useItineraryCheckpointMarkers({
 
       // 3. Pauses (if enabled in top bar, or if favorite)
       const pauseRows = itinerary.timeline.filter(
-        (row) => row.kind === 'pause' && row.visible !== false && (pausesEnabled || row.favorite === true),
+        (row) =>
+          row.kind === 'pause' &&
+          row.visible !== false &&
+          ((pausesEnabled && (favorisEnabled || !row.favorite)) ||
+            (favorisEnabled && row.favorite === true)),
       );
       for (const row of pauseRows) {
         let coord: [number, number] | null = null;
@@ -801,7 +811,11 @@ export function useItineraryCheckpointMarkers({
 
       // 4. Waypoints (if enabled in top bar, or if favorite)
       const waypointRows = itinerary.timeline.filter(
-        (row) => row.kind === 'waypoint' && row.visible !== false && (waypointsEnabled || row.favorite === true),
+        (row) =>
+          row.kind === 'waypoint' &&
+          row.visible !== false &&
+          ((waypointsEnabled && (favorisEnabled || !row.favorite)) ||
+            (favorisEnabled && row.favorite === true)),
       );
       for (const row of waypointRows) {
         let coord: [number, number] | null = null;
@@ -952,7 +966,7 @@ export function useItineraryCheckpointMarkers({
         applyMarkerVisualState(entry, currentZoom);
       }
     }
-  }, [itineraries, isMapLoaded, map, pausesEnabled, routesEnabled, waypointsEnabled]);
+  }, [itineraries, isMapLoaded, map, pausesEnabled, routesEnabled, waypointsEnabled, poisRouteEnabled, favorisEnabled, selectedPoiCategories]);
 
   // Handle map zoom changes in real-time
   useEffect(() => {

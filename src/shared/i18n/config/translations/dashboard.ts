@@ -420,4 +420,9 @@ export const dashboardTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Impossible de calculer l’itinéraire pour ces points.', en: 'Unable to calculate route for these points.' },
   { fr: 'Impossible de calculer l’itinéraire.', en: 'Unable to calculate route.' },
   { fr: 'Supprimer la zone interdite', en: 'Delete forbidden zone' },
+  { fr: 'Filtres du tableau', en: 'Table filters' },
+  { fr: 'Tableau uniquement (personnalisé)', en: 'Table only (custom)' },
+  { fr: 'Synchronisé', en: 'Synchronized' },
+  { fr: 'Réinitialiser aux filtres globaux', en: 'Reset to global filters' },
+  { fr: 'Toutes les catégories', en: 'All categories' },
 ] as const;

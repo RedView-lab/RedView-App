@@ -111,7 +111,7 @@ const DEFAULT_TIMELINE_END: TimelineItem = {
 export function createDefaultRhythmState(): RhythmState {
   return {
     startDate: null,
-    startTime: null,
+    startTime: '09:30',
     gender: 'default',
     practiceLevel: 'debutant',
     applyToAllItineraries: false,
@@ -153,6 +153,7 @@ export function normalizeItineraryRhythmState(rhythm?: Partial<RhythmState> | nu
   return {
     ...base,
     ...rhythm,
+    startTime: rhythm?.startTime ?? base.startTime ?? '09:30',
     poiPauseDurations: {
       ...base.poiPauseDurations,
       ...(rhythm?.poiPauseDurations ?? {}),

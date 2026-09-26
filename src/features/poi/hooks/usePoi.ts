@@ -25,6 +25,7 @@ import { sampleRouteByDistance } from '../lib/gpx-loader';
 import { filterPoisByLateralDistance } from '../lib/corridor-distance-filter';
 import { PoiMarkerManager } from '../lib/poi-markers';
 import type { UsePoiPopupActions } from '../lib/poi-popup';
+import { matchesPoiCategory } from '@/features/itineraryPanel/sections/timeline/poiCategoryMatch';
 import '../styles/floating-markers.css';
 
 // Re-exported so existing consumers keep importing from the hook module.
@@ -47,6 +48,9 @@ export function usePoi(
   initialFeatures: PoiFeature[] | null = null,
   popupActions: UsePoiPopupActions = {},
   routeId: string | null = null,
+  poisRouteEnabled: boolean = true,
+  favorisEnabled: boolean = true,
+  selectedPoiCategories?: Set<string>,
 ) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +65,12 @@ export function usePoi(
   // Mirror reactive inputs into refs so stable callbacks read fresh values.
   const enabledRef = useRef(enabledCategories);
   enabledRef.current = enabledCategories;
+  const favorisEnabledRef = useRef(favorisEnabled);
+  favorisEnabledRef.current = favorisEnabled;
+  const poisRouteEnabledRef = useRef(poisRouteEnabled);
+  poisRouteEnabledRef.current = poisRouteEnabled;
+  const selectedPoiCategoriesRef = useRef(selectedPoiCategories);
+  selectedPoiCategoriesRef.current = selectedPoiCategories;
   const gpxRef = useRef(gpxRoute);
   gpxRef.current = gpxRoute;
   const radiusRef = useRef(radiusM);
@@ -78,6 +88,9 @@ export function usePoi(
 
   // Stable dependency keys for effects that react to semantic changes.
   const enabledCategoriesKey = Array.from(enabledCategories).sort().join('|');
+  const selectedPoiCategoriesKey = selectedPoiCategories
+    ? Array.from(selectedPoiCategories).sort().join('|')
+    : 'all';
   const lateralDistanceKey = maxLateralDistanceByCategory
     ? Object.entries(maxLateralDistanceByCategory)
       .sort(([a], [b]) => a.localeCompare(b))
@@ -99,19 +112,35 @@ export function usePoi(
   // ── Feature filtering ─────────────────────────────────────────────
   //
   // Two passes only, both of them user-controlled:
-  //   1. category is enabled in the POI panel,
+  //   1. category is enabled in the POI panel / top filter bar,
   //   2. lateral distance to the track <= the X metres set for that
   //      category.
-  // Everything the POI server returned inside the corridor that survives
-  // these two passes is rendered. Nothing else is dropped.
+  // Favorites are rendered ONLY if `favorisEnabled` is true (and category matches).
+  // Non-favorites are rendered ONLY if `poisRouteEnabled` is true (and category matches).
 
   const buildRenderableFeatures = useCallback((features: PoiFeature[]) => {
     if (features.length === 0) return [];
 
-    const favorites = features.filter((feature) => feature.favorite);
-    const nonFavorites = features.filter(
-      (feature) => !feature.favorite && enabledRef.current.has(feature.category),
-    );
+    const matchesCategory = (category: PoiCategory) => {
+      const activeCats = selectedPoiCategoriesRef.current;
+      if (!activeCats || activeCats.size === 0) return true;
+      return matchesPoiCategory(category, activeCats);
+    };
+
+    const isFavEnabled = favorisEnabledRef.current;
+    const isRoutePoisEnabled = poisRouteEnabledRef.current;
+
+    const favorites = isFavEnabled
+      ? features.filter((feature) => feature.favorite && matchesCategory(feature.category))
+      : [];
+    const nonFavorites = isRoutePoisEnabled
+      ? features.filter(
+          (feature) =>
+            !feature.favorite &&
+            enabledRef.current.has(feature.category) &&
+            matchesCategory(feature.category),
+        )
+      : [];
 
     if (favorites.length === 0 && nonFavorites.length === 0) return [];
 
@@ -139,9 +168,10 @@ export function usePoi(
   const fetchCorridorPois = useCallback(async () => {
     const route = gpxRef.current;
     const cats = Array.from(enabledRef.current);
-    if (!route || cats.length === 0) {
-      lastCorridorFeatures.current = [];
-      syncRenderedFeatures([]);
+    if (!route || cats.length === 0 || !poisRouteEnabledRef.current) {
+      const all = initialFeaturesRef.current ?? [];
+      lastCorridorFeatures.current = all;
+      syncRenderedFeatures(buildRenderableFeatures(all));
       return;
     }
 
@@ -188,16 +218,18 @@ export function usePoi(
         signal: controller.signal,
         onProgress: (deduped, { done, total }) => {
           if (controller.signal.aborted) return;
-          const rendered = buildRenderableFeatures(deduped);
-          lastCorridorFeatures.current = rendered;
+          const all = [...(initialFeaturesRef.current ?? []), ...deduped];
+          lastCorridorFeatures.current = all;
+          const rendered = buildRenderableFeatures(all);
           syncRenderedFeatures(rendered);
           onCorridorUpdateRef.current?.(rendered);
           setCorridorProgress(total > 0 ? done / total : 0);
         },
       });
       if (!controller.signal.aborted) {
-        const rendered = buildRenderableFeatures(features);
-        lastCorridorFeatures.current = rendered;
+        const all = [...(initialFeaturesRef.current ?? []), ...features];
+        lastCorridorFeatures.current = all;
+        const rendered = buildRenderableFeatures(all);
         syncRenderedFeatures(rendered);
         onCorridorCompleteRef.current?.(rendered);
       }
@@ -236,8 +268,9 @@ export function usePoi(
     const manager = new PoiMarkerManager(map, () => popupActionsRef.current);
     managerRef.current = manager;
 
-    const seed = buildRenderableFeatures(initialFeaturesRef.current ?? []);
-    lastCorridorFeatures.current = seed;
+    const all = initialFeaturesRef.current ?? [];
+    lastCorridorFeatures.current = all;
+    const seed = buildRenderableFeatures(all);
     manager.sync(seed);
     setPoiCount(seed.length);
 
@@ -258,32 +291,49 @@ export function usePoi(
     setCorridorProgress(null);
     setError(null);
     if (!managerRef.current) return;
-    const seed = buildRenderableFeatures(initialFeaturesRef.current ?? []);
-    lastCorridorFeatures.current = seed;
+    const all = initialFeaturesRef.current ?? [];
+    lastCorridorFeatures.current = all;
+    const seed = buildRenderableFeatures(all);
     syncRenderedFeatures(seed);
     setPoiCount(seed.length);
   }, [routeId, buildRenderableFeatures, syncRenderedFeatures]);
 
-  // ── React to category / distance changes ──────────────────────────
+  // ── React to category / distance / filter changes ─────────────────
 
   useEffect(() => {
     if (!managerRef.current) return;
     // In corridor mode a settings change re-runs the search; otherwise the
     // saved features are simply re-filtered.
-    if (gpxRef.current && lastCorridorFeatures.current.length > 0) {
+    if (gpxRef.current && poisRouteEnabled && lastCorridorFeatures.current.length > 0) {
       void fetchCorridorPois();
       return;
     }
 
-    syncRenderedFeatures(buildRenderableFeatures(initialFeaturesRef.current ?? []));
-  }, [map, isMapLoaded, enabledCategoriesKey, lateralDistanceKey, fetchCorridorPois, buildRenderableFeatures, syncRenderedFeatures]);
+    const source =
+      lastCorridorFeatures.current.length > 0
+        ? lastCorridorFeatures.current
+        : (initialFeaturesRef.current ?? []);
+    syncRenderedFeatures(buildRenderableFeatures(source));
+  }, [
+    map,
+    isMapLoaded,
+    enabledCategoriesKey,
+    lateralDistanceKey,
+    favorisEnabled,
+    poisRouteEnabled,
+    selectedPoiCategoriesKey,
+    fetchCorridorPois,
+    buildRenderableFeatures,
+    syncRenderedFeatures,
+  ]);
 
   // ── Rehydrate when the active itinerary's saved features change ───
 
   useEffect(() => {
     if (!managerRef.current) return;
-    const seed = buildRenderableFeatures(initialFeaturesRef.current ?? []);
-    lastCorridorFeatures.current = seed;
+    const all = initialFeaturesRef.current ?? [];
+    lastCorridorFeatures.current = all;
+    const seed = buildRenderableFeatures(all);
     syncRenderedFeatures(seed);
   }, [map, isMapLoaded, initialFeaturesKey, buildRenderableFeatures, syncRenderedFeatures]);
 

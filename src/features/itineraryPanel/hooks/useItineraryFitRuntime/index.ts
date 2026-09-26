@@ -170,6 +170,22 @@ export function useItineraryFitRuntime({
 
         delete failedHydrationSignatureRef.current[itineraryId];
 
+        if (hydrated.missingFileIds && hydrated.missingFileIds.length > 0) {
+          setProject((prev) => ({
+            ...prev,
+            itineraries: prev.itineraries.map((it) =>
+              it.id === itineraryId
+                ? {
+                    ...it,
+                    fitUploads: (it.fitUploads ?? []).filter(
+                      (u) => !hydrated.missingFileIds?.includes(u.path ?? ''),
+                    ),
+                  }
+                : it,
+            ),
+          }));
+        }
+
         updateFitRuntime(itineraryId, (current) => {
           const shouldReuseLoadedFiles =
             persistedUploadSignature.length > 0
@@ -336,15 +352,6 @@ export function useItineraryFitRuntime({
     if (!itinerary) return;
 
     const runtime = fitRuntimeRef.current[itinerary.id] ?? createEmptyFitRuntime();
-    if (runtime.fitFiles.length === 0) {
-      updateFitRuntime(itinerary.id, (current) => ({
-        ...current,
-        status: 'error',
-        error: translateAppText('Chargez au moins un fichier FIT avant de calculer.'),
-        updatedAt: new Date().toISOString(),
-      }));
-      return;
-    }
 
     if (!itinerary.gpxRoute || itinerary.gpxRoute.points.length < 2) {
       updateFitRuntime(itinerary.id, (current) => ({
@@ -512,14 +519,13 @@ export function useItineraryFitRuntime({
     }
 
     const runtime = fitRuntimeRef.current[itineraryId] ?? createEmptyFitRuntime();
-    const hasFitFiles = runtime.fitFiles.length > 0 || (active.fitUploads && active.fitUploads.length > 0);
 
     if (calculateTimeoutRef.current) {
       clearTimeout(calculateTimeoutRef.current);
       calculateTimeoutRef.current = null;
     }
 
-    if (!hasFitFiles) {
+    if (!active.gpxRoute || active.gpxRoute.points.length < 2) {
       lastProcessedSignatureRef.current[itineraryId] = activeCalculationSignature;
       if (active.prediction || runtime.predictionResult) {
         predictionStore?.setPrediction(itineraryId, null);
@@ -548,7 +554,6 @@ export function useItineraryFitRuntime({
       return;
     }
 
-    if (!active.gpxRoute || active.gpxRoute.points.length < 2) return;
     if (active.gpxRoute.source === 'brouter' && !active.routeAudit) return;
     if (!hasUsableRouteElevation(active.gpxRoute.points)) return;
 

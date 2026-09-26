@@ -56,6 +56,8 @@ export function DashboardPlaceSearch({
   top,
   activeFilters: controlledActiveFilters,
   onFilterChange,
+  selectedPoiCategories: controlledSelectedPoiCategories,
+  onSelectedPoiCategoriesChange,
   isLeftPanelCollapsed,
   onRestoreLeftPanel,
   onCollapseLeftPanel,
@@ -71,23 +73,26 @@ export function DashboardPlaceSearch({
   const poiFetchTimerRef = useRef<number | null>(null);
   const poiAbortRef = useRef<AbortController | null>(null);
   const poiMarkerRegistryRef = useRef<Map<string, ViewportPoiMarkerEntry>>(new Map());
-  const [poiMenuOpen, setPoiMenuOpen] = useState(false);
-  const [poiMenuMounted, setPoiMenuMounted] = useState(false);
-  const [selectedPoiIds, setSelectedPoiIds] = useState<Set<DashboardPoiOptionId>>(
-    () => new Set(),
+  const [openDropdownFilterId, setOpenDropdownFilterId] = useState<DashboardFilterId | null>(null);
+  const [dropdownMounted, setDropdownMounted] = useState(false);
+  const [internalSelectedPoiIds, setInternalSelectedPoiIds] = useState<Set<DashboardPoiOptionId>>(
+    () => new Set(DASHBOARD_POI_OPTIONS.map((opt) => opt.id)),
   );
+  const selectedPoiIds = controlledSelectedPoiCategories ?? internalSelectedPoiIds;
+  const isAllCategoriesSelected = selectedPoiIds.size === DASHBOARD_POI_OPTIONS.length;
+
   const [internalActiveFilters, setInternalActiveFilters] = useState<Set<DashboardFilterId>>(
     () => new Set<DashboardFilterId>(['pois_route', 'favoris', 'pauses']),
   );
   const activeFilters = controlledActiveFilters ?? internalActiveFilters;
 
-  const handleClosePoiMenu = useCallback(() => {
-    setPoiMenuOpen(false);
+  const handleCloseDropdown = useCallback(() => {
+    setOpenDropdownFilterId(null);
   }, []);
 
-  const handleTogglePoiMenu = useCallback(() => {
-    setPoiMenuMounted(true);
-    setPoiMenuOpen((open) => !open);
+  const handleToggleDropdown = useCallback((filterId: DashboardFilterId) => {
+    setDropdownMounted(true);
+    setOpenDropdownFilterId((current) => (current === filterId ? null : filterId));
   }, []);
 
   const clearPendingSearchTransition = useCallback((mapInstance: MapboxMap | null) => {
@@ -123,27 +128,27 @@ export function DashboardPlaceSearch({
   }, [map]);
 
   useEffect(() => {
-    if (poiMenuOpen || !poiMenuMounted) return;
+    if (openDropdownFilterId !== null || !dropdownMounted) return;
     const timeoutId = window.setTimeout(() => {
-      setPoiMenuMounted(false);
+      setDropdownMounted(false);
     }, POI_MENU_CLOSE_MS);
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [poiMenuMounted, poiMenuOpen]);
+  }, [dropdownMounted, openDropdownFilterId]);
 
   useEffect(() => {
-    if (!poiMenuOpen) return;
+    if (openDropdownFilterId === null) return;
 
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target as Node | null;
       if (target && rootRef.current?.contains(target)) return;
-      handleClosePoiMenu();
+      handleCloseDropdown();
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        handleClosePoiMenu();
+        handleCloseDropdown();
       }
     };
 
@@ -153,7 +158,7 @@ export function DashboardPlaceSearch({
       document.removeEventListener('mousedown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [handleClosePoiMenu, poiMenuOpen]);
+  }, [handleCloseDropdown, openDropdownFilterId]);
 
   const lastAppliedPoiSizePxRef = useRef<number>(-1);
 
@@ -342,7 +347,7 @@ export function DashboardPlaceSearch({
     };
 
     const refreshViewportPois = () => {
-      if (categories.length === 0 || map.getZoom() < VIEWPORT_POI_MIN_ZOOM) {
+      if (!activeFilters.has('pois_map') || categories.length === 0 || map.getZoom() < VIEWPORT_POI_MIN_ZOOM) {
         abortInFlightFetch();
         clearViewportPoiMarkers();
         return;
@@ -392,7 +397,7 @@ export function DashboardPlaceSearch({
       abortInFlightFetch();
       clearViewportPoiMarkers();
     };
-  }, [clearViewportPoiMarkers, map, selectedPoiIds, syncViewportPoiMarkers]);
+  }, [activeFilters, clearViewportPoiMarkers, map, selectedPoiIds, syncViewportPoiMarkers]);
 
   const handlePick = useCallback(
     (suggestion: GeocodeSuggestion) => {
@@ -451,32 +456,50 @@ export function DashboardPlaceSearch({
     transition: `left ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
   };
 
-  const handleTogglePoiOption = useCallback((optionId: DashboardPoiOptionId) => {
-    setSelectedPoiIds((current) => {
-      const next = new Set(current);
+  const handleTogglePoiOption = useCallback(
+    (optionId: DashboardPoiOptionId) => {
+      const next = new Set(selectedPoiIds);
       if (next.has(optionId)) {
         next.delete(optionId);
       } else {
         next.add(optionId);
       }
-      return next;
-    });
-  }, []);
+      if (onSelectedPoiCategoriesChange) {
+        onSelectedPoiCategoriesChange(next);
+      } else {
+        setInternalSelectedPoiIds(next);
+      }
+    },
+    [onSelectedPoiCategoriesChange, selectedPoiIds],
+  );
+
+  const handleToggleAllCategories = useCallback(() => {
+    const isAll = selectedPoiIds.size === DASHBOARD_POI_OPTIONS.length;
+    const next = isAll
+      ? new Set<DashboardPoiOptionId>()
+      : new Set<DashboardPoiOptionId>(DASHBOARD_POI_OPTIONS.map((o) => o.id));
+    if (onSelectedPoiCategoriesChange) {
+      onSelectedPoiCategoriesChange(next);
+    } else {
+      setInternalSelectedPoiIds(next);
+    }
+  }, [onSelectedPoiCategoriesChange, selectedPoiIds]);
 
   const handleToggleFilter = useCallback(
     (filterId: DashboardFilterId) => {
-      if (filterId === 'pois_map') {
-        setSelectedPoiIds((current) => {
-          if (current.size > 0) return new Set();
-          return new Set(DASHBOARD_POI_OPTIONS.map((option) => option.id));
-        });
-        return;
-      }
       const next = new Set(activeFilters);
       if (next.has(filterId)) {
         next.delete(filterId);
       } else {
         next.add(filterId);
+        if ((filterId === 'pois_map' || filterId === 'pois_route') && selectedPoiIds.size === 0) {
+          const allCategories = new Set(DASHBOARD_POI_OPTIONS.map((option) => option.id));
+          if (onSelectedPoiCategoriesChange) {
+            onSelectedPoiCategoriesChange(allCategories);
+          } else {
+            setInternalSelectedPoiIds(allCategories);
+          }
+        }
       }
       if (onFilterChange) {
         onFilterChange(next);
@@ -484,13 +507,12 @@ export function DashboardPlaceSearch({
         setInternalActiveFilters(next);
       }
     },
-    [activeFilters, onFilterChange],
+    [activeFilters, onFilterChange, onSelectedPoiCategoriesChange, selectedPoiIds],
   );
 
   const isFilterActive = useCallback(
-    (filterId: DashboardFilterId) =>
-      filterId === 'pois_map' ? selectedPoiIds.size > 0 : activeFilters.has(filterId),
-    [activeFilters, selectedPoiIds],
+    (filterId: DashboardFilterId) => activeFilters.has(filterId),
+    [activeFilters],
   );
 
   return (
@@ -537,9 +559,10 @@ export function DashboardPlaceSearch({
         <div className="rvd-place-search__filters">
           {DASHBOARD_FILTER_OPTIONS.map((filter) => {
             const active = isFilterActive(filter.id);
+            const isMenuOpen = openDropdownFilterId === filter.id;
             const shellClassName = `rvd-place-search__filter${
               active ? ' is-active' : ''
-            }${filter.hasDropdown && poiMenuOpen ? ' is-open' : ''}`;
+            }${filter.hasDropdown && isMenuOpen ? ' is-open' : ''}`;
             return (
               <div key={filter.id} className={shellClassName}>
                 <div className="rvd-place-search__filter-shell">
@@ -573,21 +596,21 @@ export function DashboardPlaceSearch({
                       type="button"
                       className="rvd-place-search__filter-chevron"
                       aria-haspopup="menu"
-                      aria-expanded={poiMenuOpen}
-                      aria-controls={poiMenuMounted ? 'rvd-poi-menu' : undefined}
+                      aria-expanded={isMenuOpen}
+                      aria-controls={dropdownMounted ? `rvd-poi-menu-${filter.id}` : undefined}
                       aria-label={t('Catégories POI')}
-                      onClick={handleTogglePoiMenu}
+                      onClick={() => handleToggleDropdown(filter.id)}
                     >
                       <SvgV2Icon name="chevron-down.svg" size={15} />
                     </button>
                   ) : null}
                 </div>
 
-                {filter.hasDropdown && poiMenuMounted ? (
+                {filter.hasDropdown && dropdownMounted && isMenuOpen ? (
                   <div
-                    id="rvd-poi-menu"
+                    id={`rvd-poi-menu-${filter.id}`}
                     className={`rvd-place-search__poi-menu${
-                      poiMenuOpen ? ' is-open' : ' is-closing'
+                      isMenuOpen ? ' is-open' : ' is-closing'
                     }`}
                     role="menu"
                     aria-label={t('Catégories POI')}
@@ -598,6 +621,25 @@ export function DashboardPlaceSearch({
                       tint="rgba(14, 14, 18, 0.94)"
                     />
                     <div className="rvd-place-search__poi-menu-list">
+                      <button
+                        type="button"
+                        role="menuitemcheckbox"
+                        aria-checked={isAllCategoriesSelected}
+                        className="rvd-place-search__poi-option"
+                        style={{
+                          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                          marginBottom: 4,
+                          paddingBottom: 6,
+                        }}
+                        onClick={handleToggleAllCategories}
+                      >
+                        <span className="rvd-place-search__poi-checkbox" aria-hidden="true">
+                          {isAllCategoriesSelected ? <SvgV2Icon name="check.svg" size={12} /> : null}
+                        </span>
+                        <span className="rvd-place-search__poi-option-label" style={{ fontWeight: 600 }}>
+                          {t('Toutes les catégories')}
+                        </span>
+                      </button>
                       {DASHBOARD_POI_OPTIONS.map((option) => {
                         const selected = selectedPoiIds.has(option.id);
                         return (

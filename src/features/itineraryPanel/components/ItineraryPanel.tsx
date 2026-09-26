@@ -90,6 +90,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     onRemoveTimelineItem,
     onFavoriteTimelineItem,
     onOpenTimelineSettings,
+    globalFilters,
     onSelectTimelinePlace,
     routeError,
     routeWarnings,
@@ -193,6 +194,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
   const dockTimelinePanel = timelinePanelProps ? (
     <TimelinePanel
       {...timelinePanelProps}
+      globalFilters={globalFilters}
       tableSettings={timelineTableSettings}
       onChangeTableSettings={setTimelineTableSettings}
       onToggleFullscreen={() => setTimelineFullscreen(true)}
@@ -203,6 +205,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     <TimelinePanel
       {...timelinePanelProps}
       isFullscreen
+      globalFilters={globalFilters}
       tableSettings={timelineTableSettings}
       onChangeTableSettings={setTimelineTableSettings}
       onToggleFullscreen={() => setTimelineFullscreen(false)}
