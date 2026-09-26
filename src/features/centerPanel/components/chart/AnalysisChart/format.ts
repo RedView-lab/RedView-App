@@ -162,3 +162,33 @@ export function formatCellValue(value: number, metric: ChartMetricId): string {
   else txt = value.toFixed(2).replace(/\.?0+$/u, '');
   return unit ? `${txt}${unit}` : txt;
 }
+
+export function formatRangeLabel(startX: number, endX: number, xMode: AxisMode): string {
+  const min = Math.min(startX, endX);
+  const max = Math.max(startX, endX);
+  const delta = Math.abs(max - min);
+
+  if (xMode === 'distance') {
+    return `${min.toFixed(1)} → ${max.toFixed(1)} km · ${delta.toFixed(1)} km`;
+  }
+  if (xMode === 'heure') {
+    const minStr = formatClockHours(min, 'compact');
+    const maxStr = formatClockHours(max, 'compact');
+    const deltaHours = Math.floor(delta);
+    const deltaMins = Math.round((delta - deltaHours) * 60);
+    const deltaStr =
+      deltaHours > 0
+        ? `${deltaHours}h${deltaMins > 0 ? ` ${deltaMins}m` : ''}`
+        : `${deltaMins} min`;
+    return `${minStr} → ${maxStr} · ${deltaStr}`;
+  }
+  const minStr = formatHours(min, 'compact');
+  const maxStr = formatHours(max, 'compact');
+  const deltaHours = Math.floor(delta);
+  const deltaMins = Math.round((delta - deltaHours) * 60);
+  const deltaStr =
+    deltaHours > 0
+      ? `${deltaHours}h${deltaMins > 0 ? ` ${deltaMins}m` : ''}`
+      : `${deltaMins} min`;
+  return `${minStr} → ${maxStr} · ${deltaStr}`;
+}

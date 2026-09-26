@@ -5,11 +5,14 @@ export type { ChartHoverState } from './useChartHover';
 export {
   buildSeriesFromPrediction,
   computeXDomain,
+  getRoutePointDistances,
+  interpolateRoutePointAtDistance,
   isInclinationMetric,
   isIntervalAverageMetric,
   isWeatherMetric,
   locateRoutePointAtX,
   metricIsAvailable,
+  projectXToDistanceM,
   unitForMetric,
 } from './series';
 export { buildPoiAnnotationsForItinerary } from './annotations/buildPoiAnnotations';

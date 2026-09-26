@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useCallback, memo, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback, memo, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { useChartHover } from '../useChartHover';
 import { computeDomain, computeXDomain, isInclinationMetric, type AxisDomain, type ChartMetricId } from '../series';
 import '../chart.css';
@@ -16,6 +16,7 @@ import {
   defaultDomainFor,
   detailZoomToVisibleFraction,
   interpolateY,
+  MIN_VISIBLE_FRACTION,
   normalizeMetricDomain,
   normalizeUnitInterval,
   ratioFor,
@@ -63,6 +64,9 @@ export const AnalysisChart = memo(function AnalysisChart({
   onHoverXValueChange,
   controlledHoverXValue = null,
   onPlotClick,
+  onPlotRangeSelect,
+  selectedXRange: controlledSelectedXRange,
+  onClearSelectedXRange,
   showSeriesRows = true,
 }: AnalysisChartProps) {
   const { ref: plotAreaRef, hover } = useChartHover<HTMLDivElement>();
@@ -499,14 +503,162 @@ export const AnalysisChart = memo(function AnalysisChart({
     onHoverXValueChange(hoverXValue);
   }, [controlledHoverXValue, hoverXValue, onHoverXValueChange]);
 
-  const handlePlotClick = (event: ReactMouseEvent<HTMLDivElement>) => {
-    if (!onPlotClick || event.button !== 0) return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    if (rect.width <= 0) return;
+  const [internalSelectedXRange, setInternalSelectedXRange] = useState<{ startX: number; endX: number } | null>(null);
+  const selectedXRange = controlledSelectedXRange !== undefined ? controlledSelectedXRange : internalSelectedXRange;
+
+  const [activeDragRange, setActiveDragRange] = useState<{ startX: number; endX: number } | null>(null);
+  const dragStartRef = useRef<{ clientX: number; clientY: number; xValue: number } | null>(null);
+  const isDraggingRef = useRef(false);
+
+  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    const rect = plotAreaRef.current?.getBoundingClientRect();
+    if (!rect || rect.width <= 0) return;
+
     const x = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
     const ratioX = x / rect.width;
-    onPlotClick(plotXDomain.min + ratioX * (plotXDomain.max - plotXDomain.min));
+    const xValue = plotXDomain.min + ratioX * (plotXDomain.max - plotXDomain.min);
+
+    dragStartRef.current = { clientX: event.clientX, clientY: event.clientY, xValue };
+    isDraggingRef.current = false;
   };
+
+  useEffect(() => {
+    const handleWindowPointerMove = (e: PointerEvent) => {
+      const dragStart = dragStartRef.current;
+      if (!dragStart) return;
+
+      const rect = plotAreaRef.current?.getBoundingClientRect();
+      if (!rect || rect.width <= 0) return;
+
+      const dx = Math.abs(e.clientX - dragStart.clientX);
+      if (!isDraggingRef.current && dx >= 5) {
+        isDraggingRef.current = true;
+      }
+
+      if (isDraggingRef.current) {
+        const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+        const ratioX = x / rect.width;
+        const currentXVal = plotXDomain.min + ratioX * (plotXDomain.max - plotXDomain.min);
+        setActiveDragRange({
+          startX: dragStart.xValue,
+          endX: currentXVal,
+        });
+      }
+    };
+
+    const handleWindowPointerUp = (e: PointerEvent) => {
+      const dragStart = dragStartRef.current;
+      if (!dragStart) return;
+
+      const wasDragging = isDraggingRef.current;
+      dragStartRef.current = null;
+      isDraggingRef.current = false;
+
+      const rect = plotAreaRef.current?.getBoundingClientRect();
+      if (!rect || rect.width <= 0) {
+        setActiveDragRange(null);
+        return;
+      }
+
+      const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+      const ratioX = x / rect.width;
+      const currentXVal = plotXDomain.min + ratioX * (plotXDomain.max - plotXDomain.min);
+
+      if (wasDragging) {
+        const minX = Math.min(dragStart.xValue, currentXVal);
+        const maxX = Math.max(dragStart.xValue, currentXVal);
+        const range = {
+          startX: minX,
+          endX: maxX,
+        };
+        setActiveDragRange(null);
+        setInternalSelectedXRange(range);
+        onPlotRangeSelect?.(range);
+
+        // Zoom in sur la portion sélectionnée dans le tableau / graphe d'altitude (comme sur Komoot)
+        const fullSpan = xDomain.max - xDomain.min;
+        const rangeSpan = maxX - minX;
+        if (fullSpan > 0 && rangeSpan > 0) {
+          const targetVisibleFraction = Math.max(MIN_VISIBLE_FRACTION, Math.min(1, rangeSpan / fullSpan));
+          const targetSpan = fullSpan * targetVisibleFraction;
+          const remainingSpan = Math.max(0, fullSpan - targetSpan);
+          const start = Math.max(xDomain.min, Math.min(xDomain.max - targetSpan, minX));
+          const nextOffset = remainingSpan <= 1e-6 ? 0 : Math.max(0, Math.min(1, (start - xDomain.min) / remainingSpan));
+          const nextDetailZoom = visibleFractionToDetailZoom(targetVisibleFraction);
+
+          onViewportChange?.({ detailZoom: nextDetailZoom, detailOffset: nextOffset });
+          onDetailOffsetChange?.(nextOffset);
+        }
+      } else {
+        // Clic simple sans glissement : centrage direct
+        setActiveDragRange(null);
+        onPlotClick?.(dragStart.xValue);
+      }
+    };
+
+    window.addEventListener('pointermove', handleWindowPointerMove);
+    window.addEventListener('pointerup', handleWindowPointerUp);
+
+    return () => {
+      window.removeEventListener('pointermove', handleWindowPointerMove);
+      window.removeEventListener('pointerup', handleWindowPointerUp);
+    };
+  }, [
+    onDetailOffsetChange,
+    onPlotClick,
+    onPlotRangeSelect,
+    onViewportChange,
+    plotAreaRef,
+    plotXDomain.max,
+    plotXDomain.min,
+    xDomain.max,
+    xDomain.min,
+  ]);
+
+  const handleResetZoom = useCallback(() => {
+    onViewportChange?.({ detailZoom: 0, detailOffset: 0 });
+    onDetailOffsetChange?.(0);
+    setInternalSelectedXRange(null);
+    setActiveDragRange(null);
+    onClearSelectedXRange?.();
+  }, [onClearSelectedXRange, onDetailOffsetChange, onViewportChange]);
+
+  const isZoomed = useMemo(() => {
+    return visibleFraction < 0.98 || normalizeUnitInterval(detailZoom) > 0.02;
+  }, [detailZoom, visibleFraction]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isZoomed || selectedXRange || activeDragRange) {
+          handleResetZoom();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeDragRange, handleResetZoom, isZoomed, selectedXRange]);
+
+  const selectionBand = useMemo(() => {
+    const effectiveRange = activeDragRange;
+    if (!effectiveRange) return null;
+
+    const minX = Math.min(effectiveRange.startX, effectiveRange.endX);
+    const maxX = Math.max(effectiveRange.startX, effectiveRange.endX);
+    const startRatio = ratioFor(minX, plotXDomain);
+    const endRatio = ratioFor(maxX, plotXDomain);
+
+    if (endRatio <= 0 || startRatio >= 1) return null;
+
+    return {
+      startRatio,
+      endRatio,
+      startX: minX,
+      endX: maxX,
+      isDragging: true,
+    };
+  }, [activeDragRange, plotXDomain]);
 
   const handlePoiClusterClick = (group: PoiMarkerGroup) => {
     setExpandedPoiClusterId(group.id);
@@ -543,7 +695,11 @@ export const AnalysisChart = memo(function AnalysisChart({
       axis1Metric={axis1Metric}
       axis2Metric={axis2Metric}
       plotAreaRef={plotAreaRef}
-      handlePlotClick={handlePlotClick}
+      onPlotPointerDown={handlePointerDown}
+      onPlotDoubleClick={handleResetZoom}
+      onResetZoom={handleResetZoom}
+      isZoomed={isZoomed}
+      selectionBand={selectionBand}
       dayNightBands={dayNightBands}
       pauseBands={pauseBands}
       yPositions={yPositions}

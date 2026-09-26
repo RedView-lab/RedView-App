@@ -6,6 +6,8 @@ import {
   ANALYSIS_FLYOVER_PROGRESS_SOURCE_ID,
   ANALYSIS_HOVER_POINT_LAYER_ID,
   ANALYSIS_HOVER_SOURCE_ID,
+  ANALYSIS_SELECTION_LINE_LAYER_ID,
+  ANALYSIS_SELECTION_SOURCE_ID,
   FORBIDDEN_ZONE_DRAFT_FILL_LAYER_ID,
   FORBIDDEN_ZONE_DRAFT_LINE_LAYER_ID,
   FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID,
@@ -27,6 +29,7 @@ import {
 import {
   buildAnalysisFlyoverProgressGeoJson,
   buildAnalysisHoverGeoJson,
+  buildAnalysisSelectionGeoJson,
   buildForbiddenZoneDraftGeoJson,
   buildForbiddenZoneGeoJson,
   buildRouteAuditGeoJson,
@@ -174,6 +177,41 @@ export function ensureAnalysisFlyoverProgressLayers(map: MapboxMap): GeoJSONSour
   });
 
   return map.getSource(ANALYSIS_FLYOVER_PROGRESS_SOURCE_ID) as GeoJSONSource | null;
+}
+
+export function ensureAnalysisSelectionLayers(map: MapboxMap): GeoJSONSource | null {
+  if (!canMutateStyle(map)) return null;
+  const existing = map.getSource(ANALYSIS_SELECTION_SOURCE_ID) as GeoJSONSource | undefined;
+  if (existing) return existing;
+
+  map.addSource(ANALYSIS_SELECTION_SOURCE_ID, {
+    type: 'geojson',
+    data: buildAnalysisSelectionGeoJson(null),
+  });
+
+  map.addLayer({
+    id: ANALYSIS_SELECTION_LINE_LAYER_ID,
+    type: 'line',
+    source: ANALYSIS_SELECTION_SOURCE_ID,
+    slot: 'top',
+    layout: {
+      'line-cap': 'round',
+      'line-join': 'round',
+      'line-elevation-reference': 'ground' as unknown as undefined,
+      'line-z-offset': 4 as unknown as undefined,
+      visibility: 'none',
+    },
+    paint: {
+      'line-color': ['coalesce', ['get', 'color'], '#ffffff'],
+      'line-width': 4.5,
+      'line-opacity': 1,
+      'line-border-width': 1.5,
+      'line-border-color': 'rgba(0, 0, 0, 0.45)',
+      'line-occlusion-opacity': 0,
+    },
+  });
+
+  return map.getSource(ANALYSIS_SELECTION_SOURCE_ID) as GeoJSONSource | null;
 }
 
 export function ensureRouteAuditLayers(map: MapboxMap): GeoJSONSource | null {

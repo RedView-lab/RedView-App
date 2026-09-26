@@ -23,3 +23,15 @@ export type {
 } from './lib/overlayStatus';
 export { useCinematicIdleRotate } from './hooks/useCinematicIdleRotate';
 export type { UseCinematicIdleRotateOptions } from './hooks/useCinematicIdleRotate';
+export {
+	computeAdaptiveFlightDuration,
+	flyToBounds,
+	flyToLocation,
+	getMapViewportPadding,
+	haversineDistanceKm,
+} from './lib/cameraFlight';
+export type {
+	FlyToBoundsOptions,
+	FlyToLocationOptions,
+	MapViewportPadding,
+} from './lib/cameraFlight';

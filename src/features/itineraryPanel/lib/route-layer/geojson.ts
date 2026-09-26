@@ -75,6 +75,28 @@ export function buildAnalysisFlyoverProgressGeoJson(
   };
 }
 
+export function buildAnalysisSelectionGeoJson(
+  coordinates?: [number, number][] | null,
+  color?: string,
+): GeoJSON.FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features:
+      coordinates && coordinates.length >= 2
+        ? [
+            {
+              type: 'Feature',
+              properties: { color: color ?? '#ffffff' },
+              geometry: {
+                type: 'LineString',
+                coordinates,
+              },
+            },
+          ]
+        : [],
+  };
+}
+
 export function buildRouteAuditGeoJson(
   findings?: Array<{ id: string; coordinates: [number, number][]; title: string; detail: string }> | null,
 ): GeoJSON.FeatureCollection {

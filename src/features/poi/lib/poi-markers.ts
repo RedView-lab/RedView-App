@@ -21,6 +21,7 @@
 
 import mapboxgl from 'mapbox-gl';
 import type { Map as MapboxMap } from 'mapbox-gl';
+import { flyToLocation } from '@/features/map3d';
 
 import type { PoiFeature } from '../types';
 import { POI_LABELS } from '../types';
@@ -350,12 +351,7 @@ export class PoiMarkerManager {
     }
 
     const lngLat = targetEntry.marker.getLngLat();
-    this.map.flyTo({
-      center: [lngLat.lng, lngLat.lat],
-      zoom: Math.max(this.map.getZoom(), 15),
-      duration: 800,
-      essential: true,
-    });
+    flyToLocation(this.map, { lon: lngLat.lng, lat: lngLat.lat }, { zoom: 15.5 });
 
     return true;
   }

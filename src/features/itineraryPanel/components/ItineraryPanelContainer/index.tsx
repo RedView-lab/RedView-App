@@ -3,6 +3,7 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import { useAppI18n } from '@/shared/i18n';
 import {
   createOverlayStatus,
+  flyToLocation,
   type OverlayStatusReporter,
 } from '@/features/map3d';
 
@@ -540,20 +541,10 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
           item.lat != null && item.lon != null ? { lat: item.lat, lon: item.lon } : undefined,
         );
         if (!opened && map && item.lat != null && item.lon != null) {
-          map.flyTo({
-            center: [item.lon, item.lat],
-            zoom: Math.max(map.getZoom(), 15),
-            duration: 800,
-            essential: true,
-          });
+          flyToLocation(map, { lon: item.lon, lat: item.lat }, { zoom: 15.5 });
         }
       } else if (map && item.lat != null && item.lon != null) {
-        map.flyTo({
-          center: [item.lon, item.lat],
-          zoom: Math.max(map.getZoom(), 15),
-          duration: 800,
-          essential: true,
-        });
+        flyToLocation(map, { lon: item.lon, lat: item.lat }, { zoom: 15.5 });
       }
     },
     [map, openPoiMarker],

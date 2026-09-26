@@ -7,6 +7,8 @@ import {
   ANALYSIS_HOVER_HALO_LAYER_ID,
   ANALYSIS_HOVER_POINT_LAYER_ID,
   ANALYSIS_HOVER_SOURCE_ID,
+  ANALYSIS_SELECTION_LINE_LAYER_ID,
+  ANALYSIS_SELECTION_SOURCE_ID,
   FORBIDDEN_ZONE_DRAFT_FILL_LAYER_ID,
   FORBIDDEN_ZONE_DRAFT_LINE_LAYER_ID,
   FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID,
@@ -25,6 +27,7 @@ import {
 import {
   ensureAnalysisFlyoverProgressLayers,
   ensureAnalysisHoverLayers,
+  ensureAnalysisSelectionLayers,
   ensureForbiddenZoneDraftLayers,
   ensureForbiddenZoneLayers,
   ensureRouteAuditLayers,
@@ -33,6 +36,7 @@ import {
 import {
   buildAnalysisFlyoverProgressGeoJson,
   buildAnalysisHoverGeoJson,
+  buildAnalysisSelectionGeoJson,
   buildForbiddenZoneDraftGeoJson,
   buildForbiddenZoneGeoJson,
   buildRouteAuditGeoJson,
@@ -299,6 +303,38 @@ export function clearAnalysisFlyoverProgress(map: MapboxMap): void {
     }
     if (map.getLayer(ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID)) {
       map.setLayoutProperty(ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID, 'visibility', 'none');
+    }
+  } catch {
+    /* noop */
+  }
+}
+
+export function setAnalysisSelectedSegment(
+  map: MapboxMap,
+  coordinates: [number, number][],
+  color?: string,
+): void {
+  try {
+    const source = ensureAnalysisSelectionLayers(map);
+    if (!source) return;
+    source.setData(buildAnalysisSelectionGeoJson(coordinates, color));
+    if (map.getLayer(ANALYSIS_SELECTION_LINE_LAYER_ID)) {
+      map.setLayoutProperty(ANALYSIS_SELECTION_LINE_LAYER_ID, 'visibility', 'visible');
+      map.moveLayer(ANALYSIS_SELECTION_LINE_LAYER_ID);
+    }
+    if (map.getLayer(ANALYSIS_HOVER_HALO_LAYER_ID)) map.moveLayer(ANALYSIS_HOVER_HALO_LAYER_ID);
+    if (map.getLayer(ANALYSIS_HOVER_POINT_LAYER_ID)) map.moveLayer(ANALYSIS_HOVER_POINT_LAYER_ID);
+  } catch {
+    /* noop */
+  }
+}
+
+export function clearAnalysisSelectedSegment(map: MapboxMap): void {
+  try {
+    const source = map.getSource(ANALYSIS_SELECTION_SOURCE_ID) as GeoJSONSource | undefined;
+    source?.setData(buildAnalysisSelectionGeoJson(null));
+    if (map.getLayer(ANALYSIS_SELECTION_LINE_LAYER_ID)) {
+      map.setLayoutProperty(ANALYSIS_SELECTION_LINE_LAYER_ID, 'visibility', 'none');
     }
   } catch {
     /* noop */

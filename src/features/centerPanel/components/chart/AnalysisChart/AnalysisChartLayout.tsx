@@ -1,4 +1,4 @@
-import { Fragment, type CSSProperties, type MouseEvent as ReactMouseEvent, type RefObject } from 'react';
+import { Fragment, type CSSProperties, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import { useAppI18n } from '@/shared/i18n';
 import { PoiBadge } from '@/features/itineraryPanel/sections/timeline/KindBadge';
 import { IconMoon, IconSun } from '../../CenterPanelIcons';
@@ -20,7 +20,17 @@ interface AnalysisChartLayoutProps {
   axis1Metric: AxisMetricId;
   axis2Metric: AxisMetricId | null;
   plotAreaRef: RefObject<HTMLDivElement | null>;
-  handlePlotClick: (event: ReactMouseEvent<HTMLDivElement>) => void;
+  onPlotPointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onPlotDoubleClick?: () => void;
+  onResetZoom?: () => void;
+  isZoomed?: boolean;
+  selectionBand?: {
+    startRatio: number;
+    endRatio: number;
+    startX: number;
+    endX: number;
+    isDragging: boolean;
+  } | null;
   dayNightBands: Array<{ id: string; startRatio: number; endRatio: number }>;
   pauseBands?: Array<{
     id: string;
@@ -66,7 +76,11 @@ export function AnalysisChartLayout({
   axis1Metric,
   axis2Metric,
   plotAreaRef,
-  handlePlotClick,
+  onPlotPointerDown,
+  onPlotDoubleClick,
+  onResetZoom,
+  isZoomed,
+  selectionBand,
   dayNightBands,
   pauseBands = [],
   yPositions,
@@ -111,7 +125,12 @@ export function AnalysisChartLayout({
             ))}
         </div>
 
-        <div ref={plotAreaRef} className="rvchart__plotarea" onClick={handlePlotClick}>
+        <div
+          ref={plotAreaRef}
+          className="rvchart__plotarea"
+          onPointerDown={onPlotPointerDown}
+          onDoubleClick={onPlotDoubleClick}
+        >
           <div className="rvchart__layer rvchart__layer--bg" aria-hidden="true">
             {dayNightBands.map(({ id, startRatio, endRatio }) => (
               <div
@@ -434,6 +453,49 @@ export function AnalysisChartLayout({
               </>
             ) : null}
           </div>
+
+          {selectionBand && (
+            <div
+              className="rvchart__selection-band"
+              style={{
+                left: `${Math.max(0, selectionBand.startRatio) * 100}%`,
+                width: `${Math.max(
+                  0,
+                  Math.min(1, selectionBand.endRatio) - Math.max(0, selectionBand.startRatio),
+                ) * 100}%`,
+              }}
+              aria-hidden="true"
+            />
+          )}
+
+          {isZoomed && onResetZoom && (
+            <button
+              type="button"
+              className="rvchart__zoom-reset-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                onResetZoom();
+              }}
+              title={t('Afficher tout le parcours (ou double-clic / Échap)')}
+              aria-label={t('Afficher tout le parcours')}
+            >
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                <path d="M3 3v5h5" />
+              </svg>
+              <span>{t('Vue complète')}</span>
+            </button>
+          )}
         </div>
 
         {axis2Metric ? (

@@ -29,6 +29,7 @@ export {
 export {
   clearAnalysisFlyoverProgress,
   clearAnalysisHoverPoint,
+  clearAnalysisSelectedSegment,
   clearForbiddenZoneDraft,
   clearForbiddenZones,
   clearRouteAuditFindings,
@@ -37,6 +38,7 @@ export {
   type FitToRouteOptions,
   setAnalysisFlyoverProgress,
   setAnalysisHoverPoint,
+  setAnalysisSelectedSegment,
   setForbiddenZoneDraft,
   setForbiddenZones,
   setRouteAuditFindings,

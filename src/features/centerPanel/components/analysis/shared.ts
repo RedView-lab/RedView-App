@@ -128,6 +128,61 @@ export function findSplitIndexForChartX(
   return Math.max(1, Math.min(bestIndex, routePoints.length - 2));
 }
 
+/**
+ * Extrait les coordonnées géographiques [lon, lat][] d'un tronçon d'itinéraire
+ * délimité par une plage [startX, endX] sur l'axe du graphique.
+ */
+export function extractRouteSegmentCoordinates(
+  routePoints: Array<{ lat: number; lon: number; distanceM?: number }> | null | undefined,
+  prediction: Parameters<typeof locateRoutePointAtX>[1],
+  xMode: AxisMode,
+  startX: number,
+  endX: number,
+  startTime?: string | null,
+): [number, number][] {
+  if (!routePoints || routePoints.length < 2) return [];
+
+  const minX = Math.min(startX, endX);
+  const maxX = Math.max(startX, endX);
+
+  const startPt = locateRoutePointAtX(routePoints, prediction, xMode, minX, startTime);
+  const endPt = locateRoutePointAtX(routePoints, prediction, xMode, maxX, startTime);
+
+  const startDistM = startPt?.distanceM;
+  const endDistM = endPt?.distanceM;
+
+  if (!Number.isFinite(startDistM) || !Number.isFinite(endDistM)) return [];
+
+  const distances = getRoutePointDistances(routePoints);
+  if (distances.length !== routePoints.length || distances.length < 2) return [];
+
+  const totalDistM = distances[distances.length - 1] ?? 0;
+  const clampedMin = Math.max(0, Math.min(Math.min(startDistM as number, endDistM as number), totalDistM));
+  const clampedMax = Math.max(0, Math.min(Math.max(startDistM as number, endDistM as number), totalDistM));
+
+  if (clampedMax - clampedMin < 1) {
+    return startPt ? [[startPt.lon, startPt.lat]] : [];
+  }
+
+  const coords: [number, number][] = [];
+  if (startPt) {
+    coords.push([startPt.lon, startPt.lat]);
+  }
+
+  for (let i = 0; i < routePoints.length; i++) {
+    const d = distances[i];
+    if (d > clampedMin + 0.5 && d < clampedMax - 0.5) {
+      coords.push([routePoints[i].lon, routePoints[i].lat]);
+    }
+  }
+
+  if (endPt) {
+    coords.push([endPt.lon, endPt.lat]);
+  }
+
+  return coords;
+}
+
 export function normalizeAnalysisState(
   state?: Partial<AnalysisPanelState> | null,
 ): AnalysisPanelState {

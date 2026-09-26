@@ -2,11 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAnalysisFlyover } from '../../flyover';
 import { useRouteSplitToolOptional } from '../../routeSplit';
 import {
-  CHART_CLICK_CAMERA_DURATION_MS,
   CHART_CLICK_FOCUS_PITCH,
   CHART_CLICK_FOCUS_ZOOM,
   type CenterPanelAnalysisProps,
   DEFAULT_ANALYSIS_AXIS_COLORS,
+  extractRouteSegmentCoordinates,
   findSplitIndexForChartX,
   lightenColor,
   normalizeAnalysisState,
@@ -18,6 +18,12 @@ import {
   type AxisMetricId,
   type AxisMode,
 } from '../chart';
+import { flyToBounds, flyToLocation } from '@/features/map3d';
+import {
+  clearAnalysisSelectedSegment,
+  setAnalysisSelectedSegment,
+} from '@/features/itineraryPanel/lib/route-layer';
+import type { PredictionResult } from '@/features/fitPredictor';
 import { useRouteWeather } from '@/features/weather';
 import {
   usePredictionStoreOptional,
@@ -228,7 +234,111 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
     [dayNightUnavailable, dayNightHint, filters.jourNuit],
   );
 
+  const [selectedXRange, setSelectedXRange] = useState<{ startX: number; endX: number } | null>(null);
+
+  const handleClearSelectedXRange = useCallback(() => {
+    setSelectedXRange(null);
+    if (map) {
+      clearAnalysisSelectedSegment(map);
+      const points = activeItinerary?.gpxRoute?.points ?? [];
+      if (points.length >= 2) {
+        let minLon = Infinity;
+        let maxLon = -Infinity;
+        let minLat = Infinity;
+        let maxLat = -Infinity;
+        for (const pt of points) {
+          if (pt.lon < minLon) minLon = pt.lon;
+          if (pt.lon > maxLon) maxLon = pt.lon;
+          if (pt.lat < minLat) minLat = pt.lat;
+          if (pt.lat > maxLat) maxLat = pt.lat;
+        }
+        if (Number.isFinite(minLon) && Number.isFinite(maxLon)) {
+          flyToBounds(map, [
+            [minLon, minLat],
+            [maxLon, maxLat],
+          ]);
+        }
+      }
+    }
+  }, [activeItinerary, map]);
+
+  const handlePlotRangeSelect = useCallback(
+    (range: { startX: number; endX: number }) => {
+      setSelectedXRange(range);
+      if (!map) return;
+
+      const targetItinerary =
+        selectInteractiveItineraryForChartX(
+          visibleChartNodes,
+          activeItinerary?.id ?? null,
+          xMode,
+          range.startX,
+        ) ?? activeItinerary;
+      if (!targetItinerary) return;
+
+      const points = targetItinerary.gpxRoute?.points ?? [];
+      if (points.length < 2) return;
+
+      const xOffset = xMode === 'distance' ? getItineraryStartDistanceKm(targetItinerary) : 0;
+      const localStartX = xMode === 'distance' ? range.startX - xOffset : range.startX;
+      const localEndX = xMode === 'distance' ? range.endX - xOffset : range.endX;
+
+      const prediction =
+        (predictions?.[targetItinerary.id] as PredictionResult | undefined) ??
+        (targetItinerary.prediction as PredictionResult | null | undefined) ??
+        null;
+
+      const coords = extractRouteSegmentCoordinates(
+        points,
+        prediction,
+        xMode,
+        localStartX,
+        localEndX,
+        targetItinerary.rhythm.startTime,
+      );
+
+      if (coords.length >= 2) {
+        setAnalysisSelectedSegment(map, coords, '#ffffff');
+
+        let minLon = Infinity;
+        let maxLon = -Infinity;
+        let minLat = Infinity;
+        let maxLat = -Infinity;
+        for (const [lon, lat] of coords) {
+          if (lon < minLon) minLon = lon;
+          if (lon > maxLon) maxLon = lon;
+          if (lat < minLat) minLat = lat;
+          if (lat > maxLat) maxLat = lat;
+        }
+
+        const currentPitch = map.getPitch();
+        const is2D = currentPitch <= 8;
+        const targetPitch = is2D ? 0 : Math.max(currentPitch, CHART_CLICK_FOCUS_PITCH);
+
+        flyToBounds(
+          map,
+          [
+            [minLon, minLat],
+            [maxLon, maxLat],
+          ],
+          { pitch: targetPitch },
+        );
+      }
+    },
+    [activeItinerary, map, predictions, visibleChartNodes, xMode],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (map) {
+        clearAnalysisSelectedSegment(map);
+      }
+    };
+  }, [map]);
+
   const handleChartClick = (xValue: number) => {
+    handleClearSelectedXRange();
+
     const targetItinerary = selectInteractiveItineraryForChartX(
       visibleChartNodes,
       activeItinerary?.id ?? null,
@@ -274,13 +384,16 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
     const is2D = currentPitch <= 8;
     const targetPitch = is2D ? 0 : Math.max(currentPitch, CHART_CLICK_FOCUS_PITCH);
 
-    map.easeTo({
-      center: [point.lon, point.lat],
-      zoom: Math.max(map.getZoom(), CHART_CLICK_FOCUS_ZOOM),
-      pitch: targetPitch,
-      duration: CHART_CLICK_CAMERA_DURATION_MS,
-      essential: true,
-    });
+    flyToLocation(
+      map,
+      { lon: point.lon, lat: point.lat },
+      {
+        zoom: Math.max(map.getZoom(), CHART_CLICK_FOCUS_ZOOM),
+        pitch: targetPitch,
+      },
+    );
+
+    updateHoverPoint(xValue);
   };
 
   const toggleFilter = (key: 'pente' | 'jourNuit') => {
@@ -340,9 +453,13 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
           onHoverXValueChange={handleHoverXValueChange}
           controlledHoverXValue={chartControlledHoverXValue}
           onPlotClick={handleChartClick}
+          onPlotRangeSelect={handlePlotRangeSelect}
+          selectedXRange={selectedXRange}
+          onClearSelectedXRange={handleClearSelectedXRange}
           showSeriesRows={false}
         />
       </div>
     </section>
   );
 }
+

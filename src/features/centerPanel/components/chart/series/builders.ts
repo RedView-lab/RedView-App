@@ -347,7 +347,7 @@ export function computeXDomain(series: ChartPoint[][], xMode: AxisMode): AxisDom
   return { min: min >= 0 ? 0 : min, max };
 }
 
-function projectXToDistanceM(
+export function projectXToDistanceM(
   routePoints: RouteChartPoint[],
   prediction: PredictionResult | null | undefined,
   xMode: AxisMode,
