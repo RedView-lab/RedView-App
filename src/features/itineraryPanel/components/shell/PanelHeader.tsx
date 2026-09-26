@@ -44,7 +44,6 @@ export function PanelHeader({
   onBack,
   backDisabled = false,
   onRename,
-  onShare,
 }: PanelHeaderProps) {
   const { locale, t } = useAppI18n();
   const privacyLabel = privacy === 'private' ? t('Privé') : t('Public');
