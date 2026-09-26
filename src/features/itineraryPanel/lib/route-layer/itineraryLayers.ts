@@ -1,4 +1,4 @@
-import type { GeoJSONSource, Map as MapboxMap } from 'mapbox-gl';
+import type { ExpressionSpecification, GeoJSONSource, Map as MapboxMap } from 'mapbox-gl';
 
 import {
   CASING_PREFIX,
@@ -19,10 +19,16 @@ import {
   type RouteLayerOptions,
   type RouteLayerPoint,
 } from './routeStyle';
+import {
+  ROUTE_PROFILE_Z_OFFSET,
+  applyRouteElevationProfile,
+  getRouteElevationContext,
+} from './routeElevation';
 import { buildRouteContentSignature } from '../routes';
 
-const ROUTE_LINE_ELEVATION_REFERENCE = 'ground' as unknown as undefined;
-const ROUTE_LINE_Z_OFFSET = 0 as unknown as undefined;
+type RouteLineElevationReference = 'sea' | 'ground' | 'none';
+
+const ROUTE_LINE_OCCLUSION_OPACITY = 0;
 
 const routeLineMetricsState = new WeakMap<MapboxMap, Map<string, boolean>>();
 // Per-map signature cache: sourceId -> last applied option+content signature.
@@ -40,12 +46,17 @@ function getRouteAppliedSignatureRegistry(map: MapboxMap): Map<string, string> {
   return registry;
 }
 
-function buildRouteOptionSignature(opts: RouteLayerOptions, contentSignature: string): string {
+function buildRouteOptionSignature(
+  opts: RouteLayerOptions,
+  contentSignature: string,
+  elevationSignature: string,
+): string {
   const slopeBandsSignature = opts.slopeBands
     ? opts.slopeBands.map((band) => `${band.id}:${band.minDeg}:${band.maxDeg}:${band.color}`).join(',')
     : '';
   return [
     contentSignature,
+    elevationSignature,
     opts.color,
     opts.opacity01,
     opts.visible ? 1 : 0,
@@ -142,6 +153,8 @@ function syncPatternLayer(
     dasharray: number[] | null;
     filter: unknown[] | null;
     lineCap: 'butt' | 'round';
+    elevationReference: RouteLineElevationReference;
+    zOffset: ExpressionSpecification | number;
   },
 ): void {
   const {
@@ -154,6 +167,8 @@ function syncPatternLayer(
     dasharray,
     filter,
     lineCap,
+    elevationReference,
+    zOffset,
   } = params;
 
   if (!colorPaint || !(widthPx > 0) || !filter) {
@@ -171,8 +186,8 @@ function syncPatternLayer(
       layout: {
         'line-cap': lineCap,
         'line-join': 'round',
-        'line-elevation-reference': ROUTE_LINE_ELEVATION_REFERENCE,
-        'line-z-offset': ROUTE_LINE_Z_OFFSET,
+        'line-elevation-reference': elevationReference,
+        'line-z-offset': zOffset,
         visibility,
       },
       paint: {
@@ -181,7 +196,7 @@ function syncPatternLayer(
         'line-opacity': opacity,
         'line-dasharray': dasharray as never,
         'line-emissive-strength': 1,
-        'line-occlusion-opacity': 0,
+        'line-occlusion-opacity': ROUTE_LINE_OCCLUSION_OPACITY,
       },
     });
     return;
@@ -191,10 +206,11 @@ function syncPatternLayer(
   setPaintPropertyIfChanged(map, layerId, 'line-width', widthPx);
   setPaintPropertyIfChanged(map, layerId, 'line-opacity', opacity);
   setPaintPropertyIfChanged(map, layerId, 'line-dasharray', dasharray);
+  setPaintPropertyIfChanged(map, layerId, 'line-occlusion-opacity', ROUTE_LINE_OCCLUSION_OPACITY);
   setLayoutPropertyIfChanged(map, layerId, 'line-cap', lineCap);
   setLayoutPropertyIfChanged(map, layerId, 'line-join', 'round');
-  setLayoutPropertyIfChanged(map, layerId, 'line-elevation-reference', ROUTE_LINE_ELEVATION_REFERENCE);
-  setLayoutPropertyIfChanged(map, layerId, 'line-z-offset', ROUTE_LINE_Z_OFFSET);
+  setLayoutPropertyIfChanged(map, layerId, 'line-elevation-reference', elevationReference);
+  setLayoutPropertyIfChanged(map, layerId, 'line-z-offset', zOffset);
   setLayoutPropertyIfChanged(map, layerId, 'visibility', visibility);
   map.setFilter(layerId, filter as never);
 }
@@ -241,8 +257,9 @@ export function upsertRouteLayer(
   const traceWidthPx = normalizeTraceWidthPx(opts.traceWidthPx);
   const lineMetricsRegistry = getRouteLineMetricsRegistry(map);
   const appliedSignatureRegistry = getRouteAppliedSignatureRegistry(map);
+  const elevationContext = getRouteElevationContext(map);
   const contentSignature = buildRouteContentSignature(points);
-  const optionSignature = buildRouteOptionSignature(opts, contentSignature);
+  const optionSignature = buildRouteOptionSignature(opts, contentSignature, elevationContext.signature);
 
   let existing = map.getSource(srcId) as GeoJSONSource | undefined;
 
@@ -266,6 +283,20 @@ export function upsertRouteLayer(
   }
 
   const renderSpec = buildRouteGeoJson(points, opts, traceWidthPx);
+  renderSpec.requiresLineMetrics = true;
+  const elevationProfileApplied = elevationContext.scale !== null
+    ? applyRouteElevationProfile(renderSpec, points, elevationContext.scale)
+    : false;
+  const elevationReference: RouteLineElevationReference = elevationProfileApplied
+    ? 'sea'
+    : elevationContext.scale !== null
+      ? 'ground'
+      : 'none';
+  const zOffset: ExpressionSpecification | number = elevationProfileApplied
+    ? ROUTE_PROFILE_Z_OFFSET
+    : elevationContext.scale !== null
+      ? 0.8
+      : 0;
   const mountedSourceRequiresLineMetrics = getMountedSourceRequiresLineMetrics(map, srcId);
   const mountedLayerUsesLineProgress = routeLayerUsesLineGradient(map, lineId)
     || routeLayerUsesLineGradient(map, legacyGlowId)
@@ -320,8 +351,8 @@ export function upsertRouteLayer(
       layout: {
         'line-cap': 'round',
         'line-join': 'round',
-        'line-elevation-reference': ROUTE_LINE_ELEVATION_REFERENCE,
-        'line-z-offset': ROUTE_LINE_Z_OFFSET,
+        'line-elevation-reference': elevationReference,
+        'line-z-offset': zOffset,
         visibility,
       },
       paint: {
@@ -329,7 +360,7 @@ export function upsertRouteLayer(
         'line-width': traceWidthPx,
         'line-opacity': opacity,
         'line-emissive-strength': 1,
-        'line-occlusion-opacity': 0,
+        'line-occlusion-opacity': ROUTE_LINE_OCCLUSION_OPACITY,
         'line-border-width': renderSpec.lineBorderWidthPx,
         'line-border-color': renderSpec.lineBorderColorPaint as never,
         ...(renderSpec.lineGradientPaint ? { 'line-gradient': renderSpec.lineGradientPaint as never } : {}),
@@ -349,10 +380,11 @@ export function upsertRouteLayer(
         map.setPaintProperty(lineId, 'line-gradient', null as never);
       }
       map.setPaintProperty(lineId, 'line-border-color', renderSpec.lineBorderColorPaint as never);
-      setLayoutPropertyIfChanged(map, lineId, 'line-elevation-reference', ROUTE_LINE_ELEVATION_REFERENCE);
-      setLayoutPropertyIfChanged(map, lineId, 'line-z-offset', ROUTE_LINE_Z_OFFSET);
+      setLayoutPropertyIfChanged(map, lineId, 'line-elevation-reference', elevationReference);
+      setLayoutPropertyIfChanged(map, lineId, 'line-z-offset', zOffset);
       setPaintPropertyIfChanged(map, lineId, 'line-width', traceWidthPx);
       setPaintPropertyIfChanged(map, lineId, 'line-opacity', opacity);
+      setPaintPropertyIfChanged(map, lineId, 'line-occlusion-opacity', ROUTE_LINE_OCCLUSION_OPACITY);
       setPaintPropertyIfChanged(map, lineId, 'line-border-width', renderSpec.lineBorderWidthPx);
       setLayoutPropertyIfChanged(map, lineId, 'visibility', visibility);
     }
@@ -367,8 +399,8 @@ export function upsertRouteLayer(
           layout: {
             'line-cap': 'round',
             'line-join': 'round',
-            'line-elevation-reference': ROUTE_LINE_ELEVATION_REFERENCE,
-            'line-z-offset': ROUTE_LINE_Z_OFFSET,
+            'line-elevation-reference': elevationReference,
+            'line-z-offset': zOffset,
             visibility,
           },
           paint: {
@@ -376,17 +408,18 @@ export function upsertRouteLayer(
             'line-width': renderSpec.casingWidthPx,
             'line-opacity': opacity,
             'line-emissive-strength': 1,
-            'line-occlusion-opacity': 0,
+            'line-occlusion-opacity': ROUTE_LINE_OCCLUSION_OPACITY,
           },
         }, lineId);
       } else {
         map.setPaintProperty(casingId, 'line-color', renderSpec.casingColorPaint as never);
         setPaintPropertyIfChanged(map, casingId, 'line-width', renderSpec.casingWidthPx);
         setPaintPropertyIfChanged(map, casingId, 'line-opacity', opacity);
+        setPaintPropertyIfChanged(map, casingId, 'line-occlusion-opacity', ROUTE_LINE_OCCLUSION_OPACITY);
         setLayoutPropertyIfChanged(map, casingId, 'line-cap', 'round');
         setLayoutPropertyIfChanged(map, casingId, 'line-join', 'round');
-        setLayoutPropertyIfChanged(map, casingId, 'line-elevation-reference', ROUTE_LINE_ELEVATION_REFERENCE);
-        setLayoutPropertyIfChanged(map, casingId, 'line-z-offset', ROUTE_LINE_Z_OFFSET);
+        setLayoutPropertyIfChanged(map, casingId, 'line-elevation-reference', elevationReference);
+        setLayoutPropertyIfChanged(map, casingId, 'line-z-offset', zOffset);
         setLayoutPropertyIfChanged(map, casingId, 'visibility', visibility);
         map.setFilter(casingId, renderSpec.casingFilter as never);
       }
@@ -403,6 +436,8 @@ export function upsertRouteLayer(
       dasharray: null,
       filter: null,
       lineCap: 'butt',
+      elevationReference,
+      zOffset,
     });
     syncPatternLayer(map, {
       layerId: pavedPatternId,
@@ -414,6 +449,8 @@ export function upsertRouteLayer(
       dasharray: renderSpec.pavedPattern?.dasharray ?? null,
       filter: renderSpec.pavedPattern?.filter ?? null,
       lineCap: renderSpec.pavedPattern?.lineCap ?? 'butt',
+      elevationReference,
+      zOffset,
     });
     syncPatternLayer(map, {
       layerId: gravelPatternId,
@@ -425,6 +462,8 @@ export function upsertRouteLayer(
       dasharray: renderSpec.gravelPattern?.dasharray ?? null,
       filter: renderSpec.gravelPattern?.filter ?? null,
       lineCap: renderSpec.gravelPattern?.lineCap ?? 'butt',
+      elevationReference,
+      zOffset,
     });
     syncPatternLayer(map, {
       layerId: dirtPatternId,
@@ -436,6 +475,8 @@ export function upsertRouteLayer(
       dasharray: renderSpec.dirtPattern?.dasharray ?? null,
       filter: renderSpec.dirtPattern?.filter ?? null,
       lineCap: renderSpec.dirtPattern?.lineCap ?? 'butt',
+      elevationReference,
+      zOffset,
     });
     syncPatternLayer(map, {
       layerId: sandPatternId,
@@ -447,6 +488,8 @@ export function upsertRouteLayer(
       dasharray: renderSpec.sandPattern?.dasharray ?? null,
       filter: renderSpec.sandPattern?.filter ?? null,
       lineCap: renderSpec.sandPattern?.lineCap ?? 'round',
+      elevationReference,
+      zOffset,
     });
     lineMetricsRegistry.set(itineraryId, renderSpec.requiresLineMetrics);
     raiseRouteLayer(map, itineraryId);

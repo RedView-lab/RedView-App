@@ -27,9 +27,9 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
   basemap3dQuality: {
     value: 'fast-30m',
     options: [
-      { value: 'fast-30m', label: '30 m (Rapide - Recommandé)' },
-      { value: 'terrain-1m', label: '1 m terrain (IGN)' },
-      { value: 'slow-040', label: '0.40 m (Haute définition)' },
+      { value: 'fast-30m', label: '30 m (Monde - Rapide)' },
+      { value: 'terrain-1m', label: '1 m Sol Nu (MNT IGN - Tracé net)' },
+      { value: 'slow-040', label: '0.40 m Surface (MNS - Bâtiments 3D)' },
     ],
   },
   lidarTiles: [

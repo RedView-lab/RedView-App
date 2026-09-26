@@ -153,10 +153,69 @@ function smoothImpossibleAltitudeSpikes(points: RoutePoint[]): RoutePoint[] {
   return next;
 }
 
+function smoothLateralDriftSpikes(points: RoutePoint[]): RoutePoint[] {
+  if (points.length < 3) return points;
+
+  const next = points.map((p) => ({ ...p }));
+
+  for (let i = 1; i < next.length - 1; i++) {
+    const prev = next[i - 1];
+    const curr = next[i];
+    const after = next[i + 1];
+
+    const dPrev = haversineM(prev, curr);
+    const dNext = haversineM(curr, after);
+    const dDirect = haversineM(prev, after);
+
+    // Only process short local segments where a single vertex kicks out
+    if (dPrev > 45 || dNext > 45 || dDirect > 70 || dDirect < 1) continue;
+
+    // Detour ratio: path through curr vs direct line
+    const detourRatio = (dPrev + dNext) / dDirect;
+    if (detourRatio < 1.22) continue;
+
+    // Project curr onto the prev -> after chord in local Mercator meters
+    const avgLat = (prev.lat + after.lat) / 2;
+    const latScale = 111319.5;
+    const lonScale = Math.cos(toRad(avgLat)) * latScale;
+
+    const xC = (after.lon - prev.lon) * lonScale;
+    const yC = (after.lat - prev.lat) * latScale;
+    const xB = (curr.lon - prev.lon) * lonScale;
+    const yB = (curr.lat - prev.lat) * latScale;
+
+    const lenSq = xC * xC + yC * yC;
+    if (lenSq <= 0.01) continue;
+
+    const t = Math.max(0.05, Math.min(0.95, (xB * xC + yB * yC) / lenSq));
+    const projX = t * xC;
+    const projY = t * yC;
+
+    const perpDistSq = (xB - projX) ** 2 + (yB - projY) ** 2;
+    // Lateral drift between 2m (sidewalk/wall edge) and 18m (property/roof edge)
+    if (perpDistSq >= 4 && perpDistSq <= 324) {
+      curr.lon = prev.lon + projX / lonScale;
+      curr.lat = prev.lat + projY / latScale;
+      if (
+        prev.elevationM != null &&
+        after.elevationM != null &&
+        Number.isFinite(prev.elevationM) &&
+        Number.isFinite(after.elevationM)
+      ) {
+        curr.elevationM = prev.elevationM + (after.elevationM - prev.elevationM) * t;
+      }
+      curr.gradientPct = undefined;
+    }
+  }
+
+  return next;
+}
+
 export function cleanGpxGlitches(points: RoutePoint[]): RoutePoint[] {
   if (points.length < 3) return points;
 
   const withoutSpiderwebs = collapseStationarySpiderwebs(points);
-  const smoothedElevations = smoothImpossibleAltitudeSpikes(withoutSpiderwebs);
+  const withoutLateralSpikes = smoothLateralDriftSpikes(withoutSpiderwebs);
+  const smoothedElevations = smoothImpossibleAltitudeSpikes(withoutLateralSpikes);
   return rebuildCumulativeDistances(smoothedElevations);
 }

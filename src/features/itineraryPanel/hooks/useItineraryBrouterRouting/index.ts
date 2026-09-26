@@ -234,8 +234,8 @@ export function useItineraryBrouterRouting({
             'km | pts=',
             route.coordinates.length,
           );
-          // Background IGN altimetry refinement for short segments only (<= 50km)
-          if (route.distanceM <= 50_000) {
+          // Background MNT (1m bare-earth) altimetry refinement (France IGN + International)
+          if (route.distanceM <= 500_000) {
             const ignAltimetryRouteProfile = await resolveIgnAltimetryRouteProfile(route, ctrl.signal, 'local patch');
             if (ignAltimetryRouteProfile && !ctrl.signal.aborted) {
               setProject((project) => applyPendingRoutePatch(project, route, ignAltimetryRouteProfile));
@@ -311,8 +311,8 @@ export function useItineraryBrouterRouting({
             'km | pts=',
             route.coordinates.length,
           );
-          // Background IGN altimetry refinement for short segments only (<= 50km)
-          if (route.distanceM <= 50_000) {
+          // Background MNT (1m bare-earth) altimetry refinement (France IGN + International)
+          if (route.distanceM <= 500_000) {
             const ignAltimetryRouteProfile = await resolveIgnAltimetryRouteProfile(route, ctrl.signal, 'append segment');
             if (ignAltimetryRouteProfile && !ctrl.signal.aborted) {
               setProject((project) => applyPendingTraceAppend(project, route, ignAltimetryRouteProfile));
@@ -439,8 +439,8 @@ export function useItineraryBrouterRouting({
           },
         });
 
-        // Background IGN altimetry refinement for short routes only (<= 50km)
-        if (route.distanceM <= 50_000) {
+        // Background MNT (1m bare-earth) altimetry refinement (France IGN + International)
+        if (route.distanceM <= 500_000) {
           const ignAltimetryRouteProfile = await resolveIgnAltimetryRouteProfile(route, ctrl.signal, 'recompute route');
           if (ignAltimetryRouteProfile && !ctrl.signal.aborted) {
             setProject((project) => applyRecomputedRoute(project, route, ignAltimetryRouteProfile));

@@ -1,15 +1,11 @@
 import { ActionButtonStack, CheckboxField } from '../components/controls';
 import { useAppI18n } from '@/shared/i18n';
-import {
-  IconChevronDown,
-  IconPlusCircle,
-} from '../components/icons';
+
 import type { PoiCategory, PoiEntry, PoiState } from '../types';
 
 interface PoiSectionProps {
   poi?: PoiState | null;
   onChangeEntry?: (category: PoiCategory, next: PoiEntry) => void;
-  onOpenCategories?: () => void;
   onLoad?: () => void;
   onCancelLoad?: () => void;
   /** Map-level POI loading state. */
@@ -92,7 +88,6 @@ function DistanceInput({
 export function PoiSection({
   poi,
   onChangeEntry,
-  onOpenCategories,
   onLoad,
   onCancelLoad,
   loading = false,
@@ -115,7 +110,7 @@ export function PoiSection({
   const resultLabel = poiCount > 0 ? t('({{count}} POI trouvés)', { count: poiCount }) : null;
 
   return (
-    <div className="rvi-params">
+    <div className="rvi-params rvi-params--poi">
       <div className="rvi-divider" />
 
       {POI_ROWS.map((row) => (
@@ -148,23 +143,6 @@ export function PoiSection({
           })}
         </div>
       ))}
-
-      {/* The "Affiner les résultats (beta)" toggle used to live here. It has
-          been removed: the corridor search is now exhaustive, and every POI
-          within the distance set on each row is displayed. The spacer below
-          keeps the Catégories button right-aligned as before. */}
-      <div className="rvi-row rvi-poi-refine">
-        <div className="rvi-poi-refine__spacer" aria-hidden="true" />
-        <button
-          type="button"
-          className="rvi-categories-btn"
-          onClick={onOpenCategories}
-        >
-          <IconPlusCircle size={16} />
-          <span className="rvi-categories-btn__label">{t('Catégories')}</span>
-          <IconChevronDown size={14} className="rvi-categories-btn__chevron" />
-        </button>
-      </div>
 
       <ActionButtonStack
         primaryLabel={t('Charger')}

@@ -1,6 +1,5 @@
 import { routeLengthM } from '@/features/poi/lib/gpx-loader';
 import { translateAppText } from '@/shared/i18n';
-import { FRANCE_BOUNDS } from '@/features/map3d/lib/ign.config';
 
 import { formatGpsCoordinateLabel } from '../geocoding';
 import {
@@ -66,23 +65,11 @@ interface NormalizeImportedRoutePointsOptions {
   includeGradient?: boolean;
 }
 
-function routeIsInsideFrance(
-  points: NonNullable<Itinerary['gpxRoute']>['points'],
-): boolean {
-  const [west, south, east, north] = FRANCE_BOUNDS;
-  return points.every((point) => (
-    point.lon >= west
-    && point.lon <= east
-    && point.lat >= south
-    && point.lat <= north
-  ));
-}
-
 export async function refineImportedRoutePointsWithIgnAltimetry(
   points: NonNullable<Itinerary['gpxRoute']>['points'],
   signal?: AbortSignal,
 ): Promise<NonNullable<Itinerary['gpxRoute']>['points'] | null> {
-  if (points.length < 2 || !routeIsInsideFrance(points)) return null;
+  if (points.length < 2) return null;
 
   const elevations = await sampleTerrainElevationsAtPoints(points, signal);
   let coverage = 0;

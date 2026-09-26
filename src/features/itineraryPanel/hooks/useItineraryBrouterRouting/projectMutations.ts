@@ -1,4 +1,5 @@
 import { analyzeBrouterRoute } from '../../lib/routeAudit/analyzeBrouterRoute';
+import { cleanGpxGlitches } from '../../lib/routes';
 import {
   computeRouteElevationMetrics,
   computeRouteSurfaceMetricsFromBrouter,
@@ -52,10 +53,12 @@ export function applyPendingRoutePatch(
   );
   const surfacedPatchRoutePoints = applyBrouterSurfaceToRoutePoints(route, patchRoutePoints);
   const patchSurfaceMetrics = computeRouteSurfaceMetricsFromBrouter(route);
-  const mergedRoutePoints = replaceRouteSegment(
-    basePoints,
-    itinerary.pendingRoutePatch,
-    surfacedPatchRoutePoints,
+  const mergedRoutePoints = cleanGpxGlitches(
+    replaceRouteSegment(
+      basePoints,
+      itinerary.pendingRoutePatch,
+      surfacedPatchRoutePoints,
+    ),
   );
   const elevationMetrics = computeRouteElevationMetrics(mergedRoutePoints);
   const distanceM = getRoutePointTotalDistanceM(mergedRoutePoints);
@@ -83,6 +86,9 @@ export function applyPendingRoutePatch(
             gpxRoute: {
               name: current.gpxRoute?.name ?? null,
               points: mergedRoutePoints,
+              originalPoints: mergedRoutePoints,
+              gpxQuality: current.gpxRoute?.gpxQuality ?? 'default',
+              gpxQualityPointsPerKm: current.gpxRoute?.gpxQualityPointsPerKm ?? null,
               source: 'brouter',
             },
             metrics: {
@@ -132,7 +138,7 @@ export function applyPendingTraceAppend(
   );
   const surfacedSegmentRoutePoints = applyBrouterSurfaceToRoutePoints(route, segmentRoutePoints);
   const segmentSurfaceMetrics = computeRouteSurfaceMetricsFromBrouter(route);
-  const mergedRoutePoints = appendRoutePoints(basePoints, surfacedSegmentRoutePoints);
+  const mergedRoutePoints = cleanGpxGlitches(appendRoutePoints(basePoints, surfacedSegmentRoutePoints));
   const elevationMetrics = computeRouteElevationMetrics(mergedRoutePoints);
   const totalDistanceM = getRoutePointTotalDistanceM(mergedRoutePoints);
   const distanceKm = roundRouteDistanceKm(totalDistanceM);
@@ -158,6 +164,9 @@ export function applyPendingTraceAppend(
             gpxRoute: {
               name: current.gpxRoute?.name ?? null,
               points: mergedRoutePoints,
+              originalPoints: mergedRoutePoints,
+              gpxQuality: current.gpxRoute?.gpxQuality ?? 'default',
+              gpxQualityPointsPerKm: current.gpxRoute?.gpxQualityPointsPerKm ?? null,
               source: 'brouter',
             },
             metrics: {
@@ -200,7 +209,7 @@ export function applyRecomputedRoute(
     routeProfile,
     route.distanceM,
   );
-  const surfacedRoutePoints = applyBrouterSurfaceToRoutePoints(route, routePoints);
+  const surfacedRoutePoints = cleanGpxGlitches(applyBrouterSurfaceToRoutePoints(route, routePoints));
   const elevationMetrics = computeRouteElevationMetrics(surfacedRoutePoints);
   const surfaceMetrics = computeRouteSurfaceMetricsFromBrouter(route);
   const auditRoutePoints: NonNullable<Itinerary['gpxRoute']>['points'] = routeProfile
@@ -255,6 +264,9 @@ export function applyRecomputedRoute(
             gpxRoute: {
               name: current.gpxRoute?.name ?? null,
               points: surfacedRoutePoints,
+              originalPoints: surfacedRoutePoints,
+              gpxQuality: current.gpxRoute?.gpxQuality ?? 'default',
+              gpxQualityPointsPerKm: current.gpxRoute?.gpxQualityPointsPerKm ?? null,
               source: 'brouter',
             },
             metrics: {

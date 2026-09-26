@@ -1,84 +1,12 @@
-/* POI section — Catégories dropdown row.
-   Source of truth: Figma 1716:52683 (POI) — gap-[8px] between rows. */
-
-/* Figma 1716:52683 — the POI block uses an 8px vertical rhythm (gap-[8px]),
-   NOT the 12px fallback used by other parameter blocks. We scope this
-   override to `.rvi-params:has(.rvi-poi-refine)` so only the POI tab
-   inherits the tighter rhythm; Rythme/Traçage keep their 12px stack. */
-.rvi-params:has(.rvi-poi-refine) {
+/* POI section — gap-[8px] between rows (Figma 1716:52683). */
+.rvi-params--poi {
   gap: 8px;
 }
 
-/* Figma 1716:52620 — bottom action stack in POI keeps the same tighter
-  button padding as the mock. */
-.rvi-params:has(.rvi-poi-refine) .rvi-action-stack__button {
+/* Figma 1716:52620 — bottom action stack in POI keeps the tighter button padding */
+.rvi-params--poi .rvi-action-stack__button {
   gap: 8px;
   padding: 7px 8px;
-}
-
-.rvi-poi-refine {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  width: 100%;
-  min-width: 0;
-}
-
-/* Flex spacer replacing the removed "Affiner les résultats (beta)" toggle:
-   keeps the Catégories button pinned to the right edge of the row. */
-.rvi-poi-refine__spacer {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-/* Catégories button */
-.rvi-categories-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 6px 10px;
-  border: 0.25px solid #ffffff;
-  border-radius: var(--rvi-radius-md);
-  color: var(--rvi-text);
-  cursor: pointer;
-  flex-shrink: 0;
-  box-sizing: border-box;
-  transition: background 0.15s ease;
-  white-space: nowrap;
-}
-.rvi-categories-btn:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.rvi-categories-btn__label {
-  font-family: 'Rethink Sans', sans-serif;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: normal;
-  white-space: nowrap;
-}
-
-.rvi-categories-btn__chevron {
-  opacity: 1;
-  flex-shrink: 0;
-}
-
-@media (max-width: 440px) {
-  .rvi-poi-refine {
-    flex-wrap: wrap;
-  }
-
-  .rvi-poi-refine__toggle {
-    width: 100%;
-    padding-right: 0;
-  }
-
-  .rvi-categories-btn {
-    width: 100%;
-    justify-content: center;
-  }
 }
 
 /* "Charger" button — disabled state (no GPX or no enabled category). */

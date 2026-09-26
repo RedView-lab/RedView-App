@@ -219,7 +219,7 @@ export function useItineraryGpxActions({
     (id: string, targetPointsPerKm: number) => {
       updateItinerary(id, (it) => {
         const route = it.gpxRoute;
-        if (!route || route.source === 'brouter') return;
+        if (!route) return;
 
         const basePoints = route.originalPoints || route.points;
         const qualityResult = applyGpxQuality(basePoints, 'expert', targetPointsPerKm);
@@ -274,7 +274,7 @@ export function useItineraryGpxActions({
     ) => {
       updateItinerary(id, (it) => {
         const route = it.gpxRoute;
-        if (!route || route.source === 'brouter') return;
+        if (!route) return;
 
         const basePoints = route.originalPoints || route.points;
         const qualityResult = applyGpxQuality(basePoints, quality, options?.pointsPerKm);

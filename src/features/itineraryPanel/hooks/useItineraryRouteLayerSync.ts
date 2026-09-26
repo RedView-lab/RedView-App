@@ -15,6 +15,7 @@ import {
   upsertRouteLayer,
 } from '../lib/route-layer';
 import { buildRouteContentSignature } from '../lib/routes';
+import { getRouteElevationContext } from '../lib/route-layer/routeElevation';
 import type { ItineraryProject } from '../types';
 
 function canAccessStyle(map: MapboxMap): boolean {
@@ -132,10 +133,10 @@ export function useItineraryRouteLayerSync({
     } = stateRef.current;
     if (!currentMap || !loaded || !canAccessStyle(currentMap)) return false;
 
-    // If nothing about the routes changed since the last successful replay,
-    // skip the (expensive, O(total points)) rebuild. styledata/sourcedata storms
-    // triggered by terrain tile streaming collapse here.
-    if (!force && lastReplayedSignatureRef.current === signature) return true;
+    // Include only terrain mode/scale and the globe-to-Mercator threshold, not
+    // streamed tile contents: the smooth route must not acquire canopy spikes.
+    const renderSignature = `${signature}::elevation:${getRouteElevationContext(currentMap).signature}`;
+    if (!force && lastReplayedSignatureRef.current === renderSignature) return true;
 
     for (const it of currentItineraries) {
       const pts = it.gpxRoute?.points;
@@ -183,7 +184,7 @@ export function useItineraryRouteLayerSync({
       clearForbiddenZoneDraft(currentMap);
     }
 
-    lastReplayedSignatureRef.current = signature;
+    lastReplayedSignatureRef.current = renderSignature;
     return true;
   }, []);
 
@@ -240,6 +241,8 @@ export function useItineraryRouteLayerSync({
 
     map.on('style.load', onStyleLoad);
     map.on('styledata', onStyleData);
+    map.on('zoomend', onStyleData);
+    map.on('terrain', onStyleData);
     map.on('sourcedata', onSourceData as never);
     return () => {
       if (replayTimerRef.current) {
@@ -249,6 +252,8 @@ export function useItineraryRouteLayerSync({
       forceReplayPendingRef.current = false;
       map.off('style.load', onStyleLoad);
       map.off('styledata', onStyleData);
+      map.off('zoomend', onStyleData);
+      map.off('terrain', onStyleData);
       map.off('sourcedata', onSourceData as never);
     };
   }, [isMapLoaded, map, scheduleReplayRouteState]);

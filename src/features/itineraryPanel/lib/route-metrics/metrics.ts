@@ -53,12 +53,12 @@ export function computeRouteElevationMetrics(
     samples.map((sample) => sample.ele),
     5,
   );
-  const { ascent, descent } = computeAscentDescentFromElevations(smoothedElevations, 1);
+  const { ascent, descent } = computeAscentDescentFromElevations(smoothedElevations, 2);
 
   return {
     distanceM: totalDistanceM,
-    ascentM: ascent,
-    descentM: descent,
+    ascentM: Math.round(ascent),
+    descentM: Math.round(descent),
     avgSlopePercent: totalDistanceM > 0 ? (ascent / totalDistanceM) * 100 : 0,
   };
 }

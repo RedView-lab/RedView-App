@@ -115,6 +115,14 @@ export async function refineRouteProfileWithIgnAltimetry(
     }
   }
 
-  if (coverage / rows.length < 0.6) return null;
+  if (coverage / rows.length < 0.5) return null;
+
+  const filledElevations = interpolateMissingElevations(rows.map((r) => r.ele));
+  if (filledElevations) {
+    for (let i = 0; i < rows.length; i++) {
+      rows[i]!.ele = filledElevations[i]!;
+    }
+  }
+
   return buildRouteProfile(rows);
 }

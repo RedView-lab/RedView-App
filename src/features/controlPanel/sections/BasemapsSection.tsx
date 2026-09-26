@@ -59,7 +59,7 @@ export function BasemapsSection({
       <div className="rvc-basemaps__quality-row">
         <span className="rvc-basemaps__quality-label">{t('Qualité 3D')}</span>
         <Select
-          width={140}
+          width={185}
           value={basemap3dQuality.value}
           options={basemap3dQuality.options}
           onChange={(value) => onBasemap3dQualityChange?.(value)}

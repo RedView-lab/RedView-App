@@ -85,7 +85,6 @@ export function ItineraryPanelModeContent({
   onChangeRoadType,
   onBatchChangeRoadTypes,
   onLoadPois,
-  onOpenPoiCategories,
   onRefreshRoute,
   onRedo,
   onSaveProfile,
@@ -163,7 +162,6 @@ export function ItineraryPanelModeContent({
         <PoiSection
           poi={active.poi}
           onChangeEntry={onChangePoiEntry}
-          onOpenCategories={onOpenPoiCategories}
           onLoad={onLoadPois}
           onCancelLoad={onCancelLoadPois}
           loading={poiLoading}
