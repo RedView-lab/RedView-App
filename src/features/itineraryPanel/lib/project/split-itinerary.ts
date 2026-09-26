@@ -55,37 +55,25 @@ export function splitItineraryProject(
   const createdItineraryId = `it-${Date.now()}-${project.itineraries.length + 1}`;
   const createdItineraryName = buildUniqueSplitName(project, source.name);
   const nextColor = pickSplitChildColor(project, source.color);
-  const sourceStartDistanceKm = source.splitRelation?.startDistanceKm ?? 0;
-  const localSplitDistanceKm = (leftPoints[leftPoints.length - 1]?.distanceM ?? 0) / 1000;
-  const createdStartDistanceKm = Math.round((sourceStartDistanceKm + localSplitDistanceKm) * 1000) / 1000;
-
-  const nextItineraries = project.itineraries.map((itinerary) => {
-    if (itinerary.id !== itineraryId) return itinerary;
-    const nextSource: Itinerary = structuredClone(itinerary);
-    nextSource.gpxRoute = {
-      ...route,
-      points: leftPoints,
-    };
-    nextSource.timeline = createImportedTimeline(leftPoints);
-    nextSource.metrics = buildImportedRouteMetrics(leftPoints);
-    nextSource.visible = true;
-    nextSource.prediction = null;
-    delete nextSource.poiFeatures;
-    delete nextSource.routeAudit;
-    return nextSource;
-  });
+  const nextSource: Itinerary = structuredClone(source);
+  nextSource.gpxRoute = {
+    ...route,
+    points: leftPoints,
+  };
+  nextSource.timeline = createImportedTimeline(leftPoints);
+  nextSource.metrics = buildImportedRouteMetrics(leftPoints);
+  nextSource.visible = true;
+  nextSource.prediction = null;
+  delete nextSource.poiFeatures;
+  delete nextSource.routeAudit;
 
   const createdItinerary: Itinerary = structuredClone(source);
   createdItinerary.id = createdItineraryId;
   createdItinerary.name = createdItineraryName;
   createdItinerary.color = nextColor;
   createdItinerary.visible = true;
-  createdItinerary.splitRelation = {
-    parentItineraryId: source.id,
-    rootItineraryId: source.splitRelation?.rootItineraryId ?? source.id,
-    startDistanceKm: createdStartDistanceKm,
-    depth: (source.splitRelation?.depth ?? 0) + 1,
-  };
+  createdItinerary.analysisVisible = true;
+  delete createdItinerary.splitRelation;
   createdItinerary.gpxRoute = {
     ...route,
     points: rightPoints,
@@ -98,10 +86,20 @@ export function splitItineraryProject(
   delete createdItinerary.poiFeatures;
   delete createdItinerary.routeAudit;
 
+  const nextItineraries: Itinerary[] = [];
+  for (const itinerary of project.itineraries) {
+    if (itinerary.id === itineraryId) {
+      nextItineraries.push(nextSource);
+      nextItineraries.push(createdItinerary);
+    } else {
+      nextItineraries.push(itinerary);
+    }
+  }
+
   return {
     project: {
       ...project,
-      itineraries: [...nextItineraries, createdItinerary],
+      itineraries: nextItineraries,
       activeItineraryId: createdItineraryId,
     },
     createdItineraryId,

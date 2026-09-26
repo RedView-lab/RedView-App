@@ -157,33 +157,35 @@ export function CenterPanelSummary() {
         </div>
       </div>
 
-      {itineraries.length === 0 ? (
-        <EmptyRow />
-      ) : (
-        summaryTree.map((branch) => (
-          <SummaryTreeBranch
-            key={branch.node.itinerary.id}
-            branch={branch}
-            collapsedIds={collapsedIds}
-            editingState={editingState}
-            mergeArmed={routeMergeTool?.armed ?? false}
-            mergeSelectable={(id) => routeMergeTool?.canSelectItinerary(id) ?? false}
-            mergeSelectionOrder={(id) => routeMergeTool?.getSelectionOrder(id) ?? null}
-            activeItineraryId={store?.project.activeItineraryId}
-            onSelectItinerary={handleSelectItinerary}
-            onToggleAnalysisVisibility={handleToggleAnalysisVisibility}
-            onToggleExpanded={handleToggleExpanded}
-            onStartRename={handleStartRename}
-            onRenameDraftChange={(draft) =>
-              setEditingState((current) => (current ? { ...current, draft } : current))
-            }
-            onCommitRename={handleCommitRename}
-            onCancelRename={handleCancelRename}
-            onSelectForMerge={handleSelectForMerge}
-            onOpenMenu={handleOpenMenu}
-          />
-        ))
-      )}
+      <div className="rvc-center-summary__rows">
+        {itineraries.length === 0 ? (
+          <EmptyRow />
+        ) : (
+          summaryTree.map((branch) => (
+            <SummaryTreeBranch
+              key={branch.node.itinerary.id}
+              branch={branch}
+              collapsedIds={collapsedIds}
+              editingState={editingState}
+              mergeArmed={routeMergeTool?.armed ?? false}
+              mergeSelectable={(id) => routeMergeTool?.canSelectItinerary(id) ?? false}
+              mergeSelectionOrder={(id) => routeMergeTool?.getSelectionOrder(id) ?? null}
+              activeItineraryId={store?.project.activeItineraryId}
+              onSelectItinerary={handleSelectItinerary}
+              onToggleAnalysisVisibility={handleToggleAnalysisVisibility}
+              onToggleExpanded={handleToggleExpanded}
+              onStartRename={handleStartRename}
+              onRenameDraftChange={(draft) =>
+                setEditingState((current) => (current ? { ...current, draft } : current))
+              }
+              onCommitRename={handleCommitRename}
+              onCancelRename={handleCancelRename}
+              onSelectForMerge={handleSelectForMerge}
+              onOpenMenu={handleOpenMenu}
+            />
+          ))
+        )}
+      </div>
 
       {menuState && selectedItinerary ? (
         <SummaryActionMenu

@@ -22,29 +22,32 @@
   align-items: stretch;
   gap: 8px;
   width: 100%;
+  container-type: inline-size;
 }
 
 .rvi-pause-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto 20px;
+  grid-template-columns: minmax(64px, auto) minmax(0, 1fr) minmax(0, 1fr) 24px;
   align-items: center;
   gap: 8px;
   width: 100%;
+  box-sizing: border-box;
   border-radius: 6px;
 }
 
-/* ---- Name pill (flex:1, hug height via padding) ---------------------------- */
+/* ---- Name pill ------------------------------------------------------------- */
 .rvi-pause-row__name {
-  flex: 1 1 0;
-  min-width: 0;
+  min-width: 64px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   box-sizing: border-box;
   background: rgba(255, 255, 255, 0.08);
   border-radius: 6px;
-  padding: 6px 8px;
+  padding: 4px 8px;
   font-family: 'Rethink Sans', sans-serif;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600; /* SemiBold */
   line-height: normal;
   color: var(--rvi-text);
@@ -57,50 +60,59 @@
 .rvi-pause-row__field {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   min-width: 0;
+  justify-content: center;
 }
 
 .rvi-pause-row__field-label {
   font-family: 'Rethink Sans', sans-serif;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 500;
   line-height: normal;
   color: var(--rvi-text);
-  opacity: 0.64;
+  opacity: 0.65;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   flex: 0 0 auto;
 }
 
 /* Numeric chip */
 .rvi-pause-chip {
   box-sizing: border-box;
-  width: 100%;
-  flex: 1 1 auto;
-  min-width: 36px;
-  max-width: 104px;
+  width: 48px;
+  min-width: 42px;
+  max-width: 52px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   background: rgba(255, 255, 255, 0.08);
-  border-radius: 4px;
-  padding: 5px 8px;
-  transition: background 0.15s ease;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 5px;
+  padding: 0 4px;
+  flex: 0 0 auto;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
+
 .rvi-pause-chip:hover {
   background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.rvi-pause-chip:focus-within {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.28);
 }
 
 .rvi-pause-chip__native {
+  all: unset;
   display: block;
   box-sizing: border-box;
-  min-width: 0;
-  max-width: none;
   width: 100%;
-  text-align: left;
+  min-width: 0;
+  text-align: center;
   font-family: 'Rethink Sans', sans-serif;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
   line-height: normal;
   color: var(--rvi-text);
@@ -108,30 +120,34 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .rvi-pause-chip__native::placeholder {
   color: var(--rvi-text-faint);
 }
 
 /* ---- Remove (minus) button ------------------------------------------------- */
 .rvi-pause-row__remove {
+  all: unset;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 28px;
   border-radius: 4px;
   color: var(--rvi-text);
   cursor: pointer;
   flex-shrink: 0;
   justify-self: end;
   transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
-  opacity: 0.72;
+  opacity: 0.6;
 }
+
 .rvi-pause-row__remove:hover {
   background: rgba(255, 96, 96, 0.16);
   color: #ff7070;
   opacity: 1;
 }
+
 .rvi-pause-row__remove:focus-visible {
   outline: 2px solid rgba(255, 96, 96, 0.6);
   outline-offset: 1px;
@@ -225,28 +241,40 @@
   cursor: not-allowed;
 }
 
-@media (max-width: 440px) {
+@container (max-width: 310px) {
   .rvi-pause-row {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: 1fr auto;
     grid-template-areas:
       'name remove'
       'duration interval';
-    align-items: flex-start;
+    row-gap: 6px;
+    column-gap: 8px;
+    padding: 6px 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
   }
 
   .rvi-pause-row__name {
     grid-area: name;
+    justify-self: start;
+    min-width: 0;
   }
 
   .rvi-pause-row__remove {
     grid-area: remove;
+    justify-self: end;
   }
 
-  .rvi-pause-row > .rvi-pause-row__field:nth-of-type(2) {
+  .rvi-pause-row__field--duration {
     grid-area: duration;
+    justify-content: space-between;
+    width: 100%;
   }
 
-  .rvi-pause-row > .rvi-pause-row__field:nth-of-type(3) {
+  .rvi-pause-row__field--interval {
     grid-area: interval;
+    justify-content: space-between;
+    width: 100%;
   }
 }

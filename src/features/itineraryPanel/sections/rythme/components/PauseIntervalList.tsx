@@ -37,7 +37,7 @@ export function PauseIntervalList({ rows, onChange }: PauseIntervalListProps) {
         <div key={row.id} className="rvi-pause-row">
           <div className="rvi-pause-row__name">{row.label}</div>
 
-          <div className="rvi-pause-row__field">
+          <div className="rvi-pause-row__field rvi-pause-row__field--duration">
             <span className="rvi-pause-row__field-label">{t('Durée')}</span>
             <div className="rvi-pause-chip">
               <input
@@ -58,7 +58,7 @@ export function PauseIntervalList({ rows, onChange }: PauseIntervalListProps) {
             </div>
           </div>
 
-          <div className="rvi-pause-row__field">
+          <div className="rvi-pause-row__field rvi-pause-row__field--interval">
             <span className="rvi-pause-row__field-label">{t('Interval')}</span>
             <div className="rvi-pause-chip">
               <input
@@ -85,7 +85,7 @@ export function PauseIntervalList({ rows, onChange }: PauseIntervalListProps) {
             aria-label={t('Supprimer {{label}}', { label: row.label })}
             onClick={() => remove(row.id)}
           >
-            <IconMinus size={20} />
+            <IconMinus size={16} />
           </button>
         </div>
       ))}

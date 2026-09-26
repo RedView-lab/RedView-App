@@ -168,6 +168,7 @@ export function getDashboardStyles({
     left: layout.centerPanelLeft,
     width: layout.centerPanelWidth,
     height: layout.centerPanelHeight,
+    ['--rvc-center-panel-height' as string]: `${layout.centerPanelHeight}px`,
     zIndex: 25,
     overflow: 'hidden',
     opacity: layout.centerPanelVisible ? 1 : 0,

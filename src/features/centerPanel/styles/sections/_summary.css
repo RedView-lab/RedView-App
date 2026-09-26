@@ -4,6 +4,38 @@
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+  min-height: 0;
+}
+
+.rvc-center-summary__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  min-height: 0;
+  max-height: clamp(80px, calc(var(--rvc-center-panel-height, 390px) - 310px), 160px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+
+.rvc-center-summary__rows::-webkit-scrollbar {
+  width: 6px;
+}
+
+.rvc-center-summary__rows::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.rvc-center-summary__rows::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+}
+
+.rvc-center-summary__rows::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.38);
 }
 
 .rvc-center-summary__row {
@@ -24,7 +56,35 @@
 
 .rvc-center-summary__row--item {
   min-height: 36px;
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.rvc-center-summary__row--item:hover:not(.rvc-center-summary__row--merge-armed):not(.rvc-center-summary__row--merge-selected) {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.rvc-center-summary__row--item.rvc-center-summary__row--active {
   background: rgba(0, 0, 0, 0.6);
+}
+
+.rvc-center-summary__row--item.rvc-center-summary__row--active:hover:not(.rvc-center-summary__row--merge-armed):not(.rvc-center-summary__row--merge-selected) {
+  background: rgba(0, 0, 0, 0.68);
+}
+
+.rvc-center-summary__row--item:not(.rvc-center-summary__row--active) .rvc-center-summary__metric {
+  color: var(--rvc-center-text-dim, rgba(255, 255, 255, 0.68));
+}
+
+.rvc-center-summary__row--item.rvc-center-summary__row--active .rvc-center-summary__metric {
+  color: #fff;
+  font-weight: 500;
+}
+
+.rvc-center-summary__row--item.rvc-center-summary__row--active .rvc-center-summary__name {
+  color: #fff;
+  font-weight: 600;
 }
 
 .rvc-center-summary__row--merge-armed {
@@ -58,9 +118,6 @@
 .rvc-center-summary__row--child {
   margin-left: var(--rvc-center-summary-lineage-indent);
   width: calc(100% - var(--rvc-center-summary-lineage-indent));
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012)),
-    rgba(0, 0, 0, 0.56);
 }
 
 .rvc-center-summary__row--child::before {
