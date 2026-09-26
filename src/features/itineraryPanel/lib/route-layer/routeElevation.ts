@@ -1,6 +1,6 @@
 import type { ExpressionSpecification, Map as MapboxMap } from 'mapbox-gl';
 import { isValidElevation } from '../route-metrics/elevationSanitizer';
-import type { RouteLayerPoint, RouteLayerRenderSpec } from './routeStyle';
+import type { RouteLayerPoint } from './routeStyle';
 
 const HEIGHTS_PROPERTY = '__routeHeights';
 const SAMPLE_SPACING_M = 10;
@@ -37,7 +37,7 @@ function mercatorY(lat: number): number {
 /** Render-only heights. Never mutate route points, metrics, or the terrain. */
 export function applyRouteElevationProfile(
   spec: {
-    data: GeoJSON.Feature<GeoJSON.LineString> | GeoJSON.FeatureCollection<GeoJSON.LineString>;
+    data: GeoJSON.Feature | GeoJSON.FeatureCollection;
     requiresLineMetrics?: boolean;
   },
   points: readonly RouteLayerPoint[],
@@ -102,6 +102,7 @@ export function applyRouteElevationProfile(
   const features = spec.data.type === 'FeatureCollection' ? spec.data.features : [spec.data];
   let startIndex = 0;
   for (const feature of features) {
+    if (!feature.geometry || feature.geometry.type !== 'LineString') continue;
     const endIndex = startIndex + feature.geometry.coordinates.length - 1;
     const start = distances[startIndex];
     const end = distances[endIndex];

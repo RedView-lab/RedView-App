@@ -13,7 +13,6 @@ import {
   buildCinematicCameraTarget,
   cinematicBearingAtDistance,
   buildRoutePlaybackGeometry,
-  buildRouteTrailCoordinates,
   buildRouteTrailPoints,
   clampDistanceM,
   elapsedSecondsAtDistance,

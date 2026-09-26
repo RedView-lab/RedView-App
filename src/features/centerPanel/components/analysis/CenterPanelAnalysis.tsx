@@ -6,7 +6,6 @@ import {
   CHART_CLICK_FOCUS_ZOOM,
   type CenterPanelAnalysisProps,
   DEFAULT_ANALYSIS_AXIS_COLORS,
-  extractRouteSegmentCoordinates,
   extractRouteSegmentPoints,
   findSplitIndexForChartX,
   lightenColor,
