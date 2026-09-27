@@ -35,8 +35,16 @@ export function mergePoiFeatureFavorites(
 ): PoiFeature[] {
   if (features.length === 0) return features;
 
-  const timelineFavorites = new Map<number, boolean>();
-  const timelinePauseDurations = new Map<number, number | null>();
+  const seenIds = new Set<string | number>();
+  const uniqueFeatures: PoiFeature[] = [];
+  for (const f of features) {
+    if (seenIds.has(f.id)) continue;
+    seenIds.add(f.id);
+    uniqueFeatures.push(f);
+  }
+
+  const timelineFavorites = new Map<string | number, boolean>();
+  const timelinePauseDurations = new Map<string | number, number | null>();
   for (const row of timeline) {
     if (row.kind === 'poi' && row.osmId != null) {
       timelineFavorites.set(row.osmId, Boolean(row.favorite));
@@ -51,8 +59,8 @@ export function mergePoiFeatureFavorites(
     }
   }
 
-  const currentFavorites = new Map<number, boolean>();
-  const currentPauseDurations = new Map<number, number | null>();
+  const currentFavorites = new Map<string | number, boolean>();
+  const currentPauseDurations = new Map<string | number, number | null>();
   for (const feature of currentFeatures) {
     if (feature.favorite != null) {
       currentFavorites.set(feature.id, feature.favorite);
@@ -62,8 +70,8 @@ export function mergePoiFeatureFavorites(
     }
   }
 
-  let changed = false;
-  const merged = features.map((feature) => {
+  let changed = uniqueFeatures.length !== features.length;
+  const merged = uniqueFeatures.map((feature) => {
     const nextFavorite = timelineFavorites.get(feature.id)
       ?? currentFavorites.get(feature.id)
       ?? Boolean(feature.favorite);

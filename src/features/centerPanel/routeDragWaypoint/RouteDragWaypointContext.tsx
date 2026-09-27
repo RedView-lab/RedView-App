@@ -170,15 +170,19 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
         );
         if (!result) return false;
 
-        if (currentRoute.source === 'brouter') {
+        if (currentRoute.source === 'brouter' && !result.isDirectOnRoute) {
           targetItinerary.pendingRoutePatch = buildPendingRoutePatchForEditedRow(
             targetItinerary.timeline,
             result.newRowId,
           );
+        } else {
+          delete targetItinerary.pendingRoutePatch;
         }
         delete targetItinerary.pendingTraceExtension;
         delete targetItinerary.routeAudit;
-        targetItinerary.prediction = null;
+        if (!result.isDirectOnRoute) {
+          targetItinerary.prediction = null;
+        }
         return true;
       });
 

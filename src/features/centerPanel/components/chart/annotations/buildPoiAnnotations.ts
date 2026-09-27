@@ -177,8 +177,12 @@ export function buildPoiAnnotationsForItinerary(
   };
 
   // 1. POI rows
+  const seenPoiKeys = new Set<string | number>();
   const poiRows = (itinerary.timeline ?? []).filter((row) => {
     if (row.kind !== 'poi' || row.visible === false) return false;
+    const key = row.osmId ?? row.id;
+    if (seenPoiKeys.has(key)) return false;
+    seenPoiKeys.add(key);
     if (row.favorite && includeFavoritesAlways) return true;
     return includePoi;
   });

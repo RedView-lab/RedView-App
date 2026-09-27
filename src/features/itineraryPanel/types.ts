@@ -254,6 +254,8 @@ export interface TimelineItem {
   /** Geo coordinates once the user has resolved a place via search. */
   lat?: number;
   lon?: number;
+  /** Indicates the waypoint was placed directly on the existing route track and acts as an anchor without initial recalculation. */
+  onRoute?: boolean;
   /**
    * For `kind: 'poi'` items injected by the corridor search — the panel
    * POI category, used by `KindBadge` to render the right teardrop pin

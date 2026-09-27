@@ -31,6 +31,46 @@ import '../styles/floating-markers.css';
 // Re-exported so existing consumers keep importing from the hook module.
 export type { PoiPopupState, UsePoiPopupActions } from '../lib/poi-popup';
 
+function deduplicateFeatures(features: PoiFeature[] | null): PoiFeature[] {
+  if (!features || features.length === 0) return [];
+  const map = new Map<number | string, PoiFeature>();
+  for (const f of features) {
+    const existing = map.get(f.id);
+    if (!existing) {
+      map.set(f.id, { ...f });
+    } else {
+      if (f.favorite) existing.favorite = true;
+      if (f.pauseDurationMin != null) existing.pauseDurationMin = f.pauseDurationMin;
+    }
+  }
+  return Array.from(map.values());
+}
+
+function mergeCorridorWithSavedFeatures(
+  freshFeatures: PoiFeature[],
+  savedFeatures: PoiFeature[] | null,
+): PoiFeature[] {
+  const map = new Map<number | string, PoiFeature>();
+
+  for (const feature of freshFeatures) {
+    map.set(feature.id, { ...feature });
+  }
+
+  if (savedFeatures) {
+    for (const saved of savedFeatures) {
+      const existing = map.get(saved.id);
+      if (existing) {
+        if (saved.favorite) existing.favorite = true;
+        if (saved.pauseDurationMin != null) existing.pauseDurationMin = saved.pauseDurationMin;
+      } else if (saved.favorite) {
+        map.set(saved.id, { ...saved });
+      }
+    }
+  }
+
+  return Array.from(map.values());
+}
+
 export function usePoi(
   map: MapboxMap | null,
   isMapLoaded: boolean,
@@ -218,7 +258,7 @@ export function usePoi(
         signal: controller.signal,
         onProgress: (deduped, { done, total }) => {
           if (controller.signal.aborted) return;
-          const all = [...(initialFeaturesRef.current ?? []), ...deduped];
+          const all = mergeCorridorWithSavedFeatures(deduped, initialFeaturesRef.current);
           lastCorridorFeatures.current = all;
           const rendered = buildRenderableFeatures(all);
           syncRenderedFeatures(rendered);
@@ -227,7 +267,7 @@ export function usePoi(
         },
       });
       if (!controller.signal.aborted) {
-        const all = [...(initialFeaturesRef.current ?? []), ...features];
+        const all = mergeCorridorWithSavedFeatures(features, initialFeaturesRef.current);
         lastCorridorFeatures.current = all;
         const rendered = buildRenderableFeatures(all);
         syncRenderedFeatures(rendered);
@@ -268,7 +308,7 @@ export function usePoi(
     const manager = new PoiMarkerManager(map, () => popupActionsRef.current);
     managerRef.current = manager;
 
-    const all = initialFeaturesRef.current ?? [];
+    const all = deduplicateFeatures(initialFeaturesRef.current);
     lastCorridorFeatures.current = all;
     const seed = buildRenderableFeatures(all);
     manager.sync(seed);
@@ -291,7 +331,7 @@ export function usePoi(
     setCorridorProgress(null);
     setError(null);
     if (!managerRef.current) return;
-    const all = initialFeaturesRef.current ?? [];
+    const all = deduplicateFeatures(initialFeaturesRef.current);
     lastCorridorFeatures.current = all;
     const seed = buildRenderableFeatures(all);
     syncRenderedFeatures(seed);
@@ -311,8 +351,8 @@ export function usePoi(
 
     const source =
       lastCorridorFeatures.current.length > 0
-        ? lastCorridorFeatures.current
-        : (initialFeaturesRef.current ?? []);
+        ? deduplicateFeatures(lastCorridorFeatures.current)
+        : deduplicateFeatures(initialFeaturesRef.current);
     syncRenderedFeatures(buildRenderableFeatures(source));
   }, [
     map,
@@ -331,7 +371,7 @@ export function usePoi(
 
   useEffect(() => {
     if (!managerRef.current) return;
-    const all = initialFeaturesRef.current ?? [];
+    const all = deduplicateFeatures(initialFeaturesRef.current);
     lastCorridorFeatures.current = all;
     const seed = buildRenderableFeatures(all);
     syncRenderedFeatures(seed);

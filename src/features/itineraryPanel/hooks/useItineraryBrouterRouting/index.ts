@@ -107,7 +107,19 @@ export function useItineraryBrouterRouting({
         .map((item) => `${item.lon},${item.lat}`)
         .join('|')
     : '';
-  const hasWaypointOverride = viaKey.length > 0;
+  const routingViaKey = active
+    ? active.timeline
+        .filter(
+          (item) =>
+            item.kind === 'waypoint' &&
+            item.lat != null &&
+            item.lon != null &&
+            !item.onRoute,
+        )
+        .map((item) => `${item.lon},${item.lat}`)
+        .join('|')
+    : '';
+  const hasWaypointOverride = routingViaKey.length > 0;
   const profileId = active?.profileId ?? 'gravel-default';
   const climbing = active ? isClimbingMode(active.priorities) : false;
   const forbiddenPolygons = formatForbiddenZonePolygons(active?.forbiddenZones);
@@ -478,7 +490,7 @@ export function useItineraryBrouterRouting({
     rollbackPendingTraceAppend,
     setProject,
     startKey,
-    viaKey,
+    routingViaKey,
   ]);
 
   return {

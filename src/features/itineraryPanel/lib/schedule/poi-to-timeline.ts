@@ -98,7 +98,12 @@ export function poiFeaturesToTimelineItems(
   const cumulativeLengths = cumulativeRouteLengthsM(routePoints);
 
   const rows: TimelineItem[] = [];
+  const seenIds = new Set<string | number>();
+
   for (const f of features) {
+    if (seenIds.has(f.id)) continue;
+    seenIds.add(f.id);
+
     const panelKey = FEATURE_TO_PANEL_POI[f.category];
     if (!panelKey) continue;
     const distM = projectDistanceAlongRouteM(

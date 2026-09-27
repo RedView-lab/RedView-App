@@ -120,7 +120,7 @@ export function insertWaypointAtRoutePosition(
   routePoints: Array<{ lat: number; lon: number }>,
   anchorLonLat: { lat: number; lon: number },
   dropLatLon: { lat: number; lon: number },
-): { newRowId: string } | null {
+): { newRowId: string; isDirectOnRoute: boolean } | null {
   if (routePoints.length < 2) return null;
 
   const cumulative = cumulativeRouteLengthsM(routePoints);
@@ -162,9 +162,10 @@ export function insertWaypointAtRoutePosition(
     distanceKm: isDirectOnRoute ? roundDistanceKm(anchor.distanceM) : null,
     lat: dropLatLon.lat,
     lon: dropLatLon.lon,
+    onRoute: isDirectOnRoute || undefined,
   };
   timeline.splice(insertIndex, 0, newRow);
-  return { newRowId };
+  return { newRowId, isDirectOnRoute };
 }
 
 export function buildTimelineAfterRemoval(

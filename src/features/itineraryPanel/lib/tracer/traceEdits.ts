@@ -173,6 +173,7 @@ export function moveTracePointInItinerary(
 
   row.lon = lon;
   row.lat = lat;
+  delete row.onRoute;
 
   delete itinerary.routeAudit;
   delete itinerary.pendingTraceExtension;
