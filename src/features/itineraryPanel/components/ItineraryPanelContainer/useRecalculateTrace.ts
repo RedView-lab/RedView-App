@@ -146,6 +146,9 @@ export function useRecalculateTrace({
 
     setLoading(true);
     setProgress(0);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('rv-route-loading', { detail: { loading: true } }));
+    }
 
     const segmentCount = anchors.length - 1;
     const segments: GpxRoutePoint[][] = [];
@@ -304,6 +307,9 @@ export function useRecalculateTrace({
       if ((error as { name?: string }).name === 'AbortError') return;
       console.error('[Recalculate] failed:', error);
     } finally {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('rv-route-loading', { detail: { loading: false } }));
+      }
       if (!ctrl.signal.aborted) {
         setLoading(false);
         setProgress(null);
@@ -316,6 +322,9 @@ export function useRecalculateTrace({
     abortRef.current = null;
     setLoading(false);
     setProgress(null);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('rv-route-loading', { detail: { loading: false } }));
+    }
   }, []);
 
   return {

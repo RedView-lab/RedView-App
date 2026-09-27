@@ -168,6 +168,98 @@ export function insertWaypointAtRoutePosition(
   return { newRowId, isDirectOnRoute };
 }
 
+export interface InsertWaypointOptions {
+  id?: string;
+  label?: string;
+  osmId?: number;
+  poiCategory?: TimelineItem['poiCategory'];
+}
+
+export interface InsertWaypointResult {
+  newRow: TimelineItem;
+  isDirectOnRoute: boolean;
+  insertIndex: number;
+}
+
+/**
+ * Insère un point de passage dans la timeline au bon kilométrage projeté sur l'itinéraire.
+ * Maintient l'ordre chronologique/croissant des kilomètres pour que le routage BRouter
+ * et la feuille de route restent parfaitement cohérents sans aller-retours.
+ */
+export function insertWaypointIntoTimeline(
+  timeline: TimelineItem[],
+  point: { lat: number; lon: number },
+  routePoints?: Array<{ lat: number; lon: number }> | null,
+  options?: InsertWaypointOptions,
+): InsertWaypointResult {
+  const newRowId =
+    options?.id ??
+    `map-waypoint-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+  const existingIndex = timeline.findIndex((row) => row.id === newRowId);
+  if (existingIndex >= 0) {
+    return {
+      newRow: timeline[existingIndex]!,
+      isDirectOnRoute: false,
+      insertIndex: existingIndex,
+    };
+  }
+
+  const hasRoute = Boolean(routePoints && routePoints.length >= 2);
+  const cumulative = hasRoute ? cumulativeRouteLengthsM(routePoints!) : null;
+  const anchor = hasRoute && cumulative
+    ? projectPointAlongRoute(point, routePoints!, cumulative)
+    : null;
+
+  const distanceKm = anchor ? roundDistanceKm(anchor.distanceM) : null;
+  const isDirectOnRoute = anchor
+    ? Math.abs(point.lat - anchor.lat) < 0.0003 && Math.abs(point.lon - anchor.lon) < 0.0003
+    : false;
+
+  const endIndex = timeline.findIndex((row) => row.kind === 'end');
+  const searchLimit = endIndex >= 0 ? endIndex : timeline.length;
+  let insertIndex = searchLimit;
+
+  if (distanceKm != null && hasRoute && cumulative) {
+    for (let index = 0; index < searchLimit; index += 1) {
+      const row = timeline[index];
+      if (row.kind === 'start') continue;
+
+      let rowDist = row.distanceKm;
+      if (rowDist == null && row.lat != null && row.lon != null) {
+        const rowProj = projectPointAlongRoute(
+          { lat: row.lat, lon: row.lon },
+          routePoints!,
+          cumulative,
+        );
+        if (rowProj) rowDist = roundDistanceKm(rowProj.distanceM);
+      }
+
+      if (rowDist != null && rowDist > distanceKm) {
+        insertIndex = index;
+        break;
+      }
+    }
+  }
+
+  const newRow: TimelineItem = {
+    id: newRowId,
+    kind: 'waypoint',
+    label: options?.label ?? translateAppText('Point de passage'),
+    distanceKm,
+    lat: point.lat,
+    lon: point.lon,
+    osmId: options?.osmId,
+    poiCategory: options?.poiCategory,
+    onRoute: isDirectOnRoute || undefined,
+    visible: true,
+  };
+
+  timeline.splice(insertIndex, 0, newRow);
+
+  return { newRow, isDirectOnRoute, insertIndex };
+}
+
 export function buildTimelineAfterRemoval(
   timeline: TimelineItem[],
   rowId: string,

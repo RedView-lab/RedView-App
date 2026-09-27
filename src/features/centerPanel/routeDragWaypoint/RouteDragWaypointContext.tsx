@@ -13,6 +13,10 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import { getMapScreenPoint, unprojectClientPoint } from '@/features/map3d/lib/mapPointer';
 import {
+  handlePointPanelMousedown,
+  isPointPanelOpen,
+} from '@/features/map3d';
+import {
   clearRouteHoverPreview,
   setRouteHoverPreview,
 } from '@/features/itineraryPanel/lib/route-layer';
@@ -33,6 +37,8 @@ import {
   findContinuousRouteProjection,
   isClickNearExistingTimelinePoint,
   MAX_ROUTE_DRAG_CLICK_DISTANCE_PX,
+  ROUTE_DRAG_HOVER_ENTER_DISTANCE_PX,
+  ROUTE_DRAG_HOVER_EXIT_DISTANCE_PX,
 } from './routeDragWaypointSnap';
 
 /** Minimum pointer movement (in screen pixels) before a press is treated as a drag. */
@@ -223,13 +229,20 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
 
     const canvas = map.getCanvas();
     const canvasContainer = map.getCanvasContainer();
+    interface HoverSnapshot {
+      clientX: number;
+      clientY: number;
+      target: HTMLElement | null;
+    }
     let dragRafId: number | null = null;
     let hoverRafId: number | null = null;
     let pendingDragLngLat: { lng: number; lat: number } | null = null;
-    let pendingHoverEvent: MouseEvent | null = null;
+    let pendingHoverEvent: HoverSnapshot | null = null;
 
     const applyCursor = (cursor: string) => {
-      canvas.style.cursor = cursor;
+      if (canvas.style.cursor !== cursor) {
+        canvas.style.cursor = cursor;
+      }
     };
 
     const applyDefaultCursor = () => {
@@ -355,8 +368,16 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
       if (event.button !== 0) return;
       if (sessionRef.current) return;
 
-      // 1. If clicking directly on a POI marker, checkpoint marker, popup, or interactive control, let it handle natively
       const target = event.target as HTMLElement | null;
+
+      // 0. If an interactive point panel or popup is open, clicking on the map
+      // should ONLY close that panel and NOT drag the route or create a waypoint.
+      if (isPointPanelOpen(target)) {
+        handlePointPanelMousedown(target);
+        return;
+      }
+
+      // 1. If clicking directly on a POI marker, checkpoint marker, popup, or interactive control, let it handle natively
       if (
         target &&
         target.closest(
@@ -409,16 +430,17 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
       window.addEventListener('keydown', handleKeyDown, true);
     };
 
-    const processHover = (event: MouseEvent) => {
+    const processHover = (event: HoverSnapshot) => {
       hoverRafId = null;
       if (sessionRef.current?.isDragging) return;
 
-      const target = event.target as HTMLElement | null;
+      const target = event.target;
       if (
-        target &&
-        target.closest(
-          '.rv-poi-marker, .rv-checkpoint-marker, .mapboxgl-marker, .mapboxgl-popup, button, a, [role="button"]',
-        )
+        (target &&
+          target.closest(
+            '.rv-poi-marker, .rv-checkpoint-marker, .mapboxgl-marker, .mapboxgl-popup, .rv-poi-draft-card, button, a, [role="button"]',
+          )) ||
+        isPointPanelOpen(target)
       ) {
         if (overRouteRef.current) {
           overRouteRef.current = false;
@@ -440,15 +462,29 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
 
       const screenPt = getMapScreenPoint(map, event.clientX, event.clientY);
 
+      // Avoid snapping right on top of an existing waypoint marker (which has its own interaction)
+      const currentTimeline = storeRef.current?.project.itineraries.find(
+        (it) => it.id === activeItineraryIdRef.current,
+      )?.timeline;
+      const nearExistingPoint = currentTimeline
+        ? isClickNearExistingTimelinePoint(map, currentTimeline, screenPt.x, screenPt.y, 14)
+        : false;
+
+      // Hysteresis: strict distance to enter hover (22px), generous distance to stay in hover (34px)
+      // Eliminates flashing/strobe effect when cursor is near the edge of the route zone
+      const tolerance = overRouteRef.current
+        ? ROUTE_DRAG_HOVER_EXIT_DISTANCE_PX
+        : ROUTE_DRAG_HOVER_ENTER_DISTANCE_PX;
+
       const projection = findContinuousRouteProjection(
         map,
         routePts,
         screenPt.x,
         screenPt.y,
-        MAX_ROUTE_DRAG_CLICK_DISTANCE_PX,
+        tolerance,
       );
 
-      const over = projection?.withinTolerance ?? false;
+      const over = !nearExistingPoint && (projection?.withinTolerance ?? false);
 
       if (over && projection) {
         overRouteRef.current = true;
@@ -470,7 +506,11 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
 
     const handleHoverMouseMove = (event: MouseEvent) => {
       if (sessionRef.current?.isDragging) return;
-      pendingHoverEvent = event;
+      pendingHoverEvent = {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        target: event.target as HTMLElement | null,
+      };
       if (hoverRafId === null) {
         hoverRafId = window.requestAnimationFrame(() => {
           if (pendingHoverEvent) {

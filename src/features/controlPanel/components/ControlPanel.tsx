@@ -34,6 +34,7 @@ export function ControlPanel({
   onLidarTileDelete,
   onLidarTileRename,
   onLidarTileDownload,
+  onLidarSelectionCancel,
   onLidarDownloadCancel,
   onLidarTileOpen,
   onLabelsEnabledChange,
@@ -128,6 +129,7 @@ export function ControlPanel({
         onTileDelete={onLidarTileDelete}
         onTileRename={onLidarTileRename}
         onDownload={onLidarTileDownload}
+        onCancelSelection={onLidarSelectionCancel}
         onCancelDownload={onLidarDownloadCancel}
       />
 

@@ -1,10 +1,7 @@
 import type { AxisDomain } from '../series';
 import {
-  POI_CLUSTER_COMPACT_VISIBLE_FRACTION,
-  POI_CLUSTER_OVERLAP_X_PX,
-  POI_CLUSTER_OVERLAP_X_PX_COMPACT,
-  POI_CLUSTER_OVERLAP_Y_PX,
-  POI_CLUSTER_OVERLAP_Y_PX_COMPACT,
+  POI_CLUSTER_DISTANCE_WINDOW_KM,
+  POI_CLUSTER_MIN_COUNT,
   POI_MARKER_SIZE_PX,
   POI_MARKER_SPREAD_STEP_PX,
   type PoiMarkerGroup,
@@ -12,9 +9,19 @@ import {
 } from './types';
 import { clamp, MIN_VISIBLE_FRACTION, normalizeUnitInterval } from './math';
 
+export function getPoiDistanceKm(annotation: VisiblePoiAnnotation): number {
+  if (typeof annotation.distanceKm === 'number' && Number.isFinite(annotation.distanceKm)) {
+    return annotation.distanceKm;
+  }
+  if (typeof annotation.x === 'number' && Number.isFinite(annotation.x)) {
+    return annotation.x;
+  }
+  return 0;
+}
+
 export function buildPoiMarkerGroups(
   annotations: VisiblePoiAnnotation[],
-  visibleFraction: number,
+  _visibleFraction: number,
 ): PoiMarkerGroup[] {
   if (annotations.length === 0) return [];
 
@@ -24,16 +31,36 @@ export function buildPoiMarkerGroups(
 
   const clusterList = (list: VisiblePoiAnnotation[]): PoiMarkerGroup[] => {
     if (list.length === 0) return [];
-    const sorted = [...list].sort((left, right) => left.xPx - right.xPx);
-    const rawGroups: VisiblePoiAnnotation[][] = [];
+    // Sort primarily by distanceKm along route, secondary by xRatio
+    const sorted = [...list].sort((left, right) => {
+      const distA = getPoiDistanceKm(left);
+      const distB = getPoiDistanceKm(right);
+      if (distA !== distB) return distA - distB;
+      return left.xRatio - right.xRatio;
+    });
 
-    for (const annotation of sorted) {
-      const targetGroup = rawGroups[rawGroups.length - 1] ?? null;
-      if (targetGroup && annotationFitsCluster(targetGroup, annotation, visibleFraction)) {
-        targetGroup.push(annotation);
-        continue;
+    const rawGroups: VisiblePoiAnnotation[][] = [];
+    let i = 0;
+    while (i < sorted.length) {
+      const startDist = getPoiDistanceKm(sorted[i]);
+      let j = i;
+      while (
+        j < sorted.length &&
+        getPoiDistanceKm(sorted[j]) - startDist <= POI_CLUSTER_DISTANCE_WINDOW_KM
+      ) {
+        j++;
       }
-      rawGroups.push([annotation]);
+
+      const countInWindow = j - i;
+      // Only group dense clusters with >= 10 POIs within 1.0 km
+      if (countInWindow >= POI_CLUSTER_MIN_COUNT) {
+        rawGroups.push(sorted.slice(i, j));
+        i = j;
+      } else {
+        // All other POIs are kept as single individual markers
+        rawGroups.push([sorted[i]]);
+        i++;
+      }
     }
 
     return rawGroups.map((members) => {
@@ -57,34 +84,6 @@ export function buildPoiMarkerGroups(
   return [...nonFavoriteGroups, ...favoriteGroups];
 }
 
-function annotationsOverlap(
-  left: VisiblePoiAnnotation,
-  right: VisiblePoiAnnotation,
-  visibleFraction: number,
-): boolean {
-  const compactMode = visibleFraction >= POI_CLUSTER_COMPACT_VISIBLE_FRACTION;
-  const maxDeltaX = compactMode ? POI_CLUSTER_OVERLAP_X_PX_COMPACT : POI_CLUSTER_OVERLAP_X_PX;
-  const maxDeltaY = compactMode ? POI_CLUSTER_OVERLAP_Y_PX_COMPACT : POI_CLUSTER_OVERLAP_Y_PX;
-  return (
-    Math.abs(left.xPx - right.xPx) <= maxDeltaX &&
-    Math.abs(left.yPx - right.yPx) <= maxDeltaY
-  );
-}
-
-function annotationFitsCluster(
-  cluster: VisiblePoiAnnotation[],
-  annotation: VisiblePoiAnnotation,
-  visibleFraction: number,
-): boolean {
-  if (cluster.length === 0) return false;
-  const anchor = cluster[0];
-  const previous = cluster[cluster.length - 1];
-  return (
-    annotationsOverlap(anchor, annotation, visibleFraction) &&
-    annotationsOverlap(previous, annotation, visibleFraction)
-  );
-}
-
 export function buildPoiSpreadOffsetPx(_index: number, _count: number): number {
   // POIs superpose at their actual route position with no horizontal shift
   return 0;
@@ -95,12 +94,18 @@ export function shouldRenderPoiCluster(
   visibleFraction: number,
   expandedPoiClusterId: string | null,
 ): boolean {
+  if (group.kind !== 'cluster') {
+    return false;
+  }
   // If the group contains any favorite, never cluster: show the favorite pin in front of rounds
   if (group.members.some((m) => m.favorite)) {
     return false;
   }
-  // Only cluster when there are 6 or more co-located non-favorite POIs and not expanded
-  return group.count >= 6 && !shouldExpandPoiCluster(group, visibleFraction, expandedPoiClusterId);
+  // Only cluster when there are 10 or more co-located non-favorite POIs and not expanded
+  return (
+    group.count >= POI_CLUSTER_MIN_COUNT &&
+    !shouldExpandPoiCluster(group, visibleFraction, expandedPoiClusterId)
+  );
 }
 
 export function shouldExpandPoiCluster(

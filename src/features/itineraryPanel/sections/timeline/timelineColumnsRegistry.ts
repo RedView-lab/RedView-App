@@ -65,7 +65,6 @@ export const TIMELINE_COLUMNS: TimelineColumnDef[] = [
     align: 'left',
     minWidth: 80,
     defaultWidth: 120,
-    pinned: true,
     custom: true,
     getCell: (ctx) => ({ display: ctx.item.label, sortKey: ctx.item.label.toLowerCase() }),
   },
@@ -76,7 +75,6 @@ export const TIMELINE_COLUMNS: TimelineColumnDef[] = [
     align: 'right',
     minWidth: 65,
     defaultWidth: 75,
-    pinned: true,
     getCell: (ctx) => ({
       display: fmtDistanceKm(ctx.item.distanceKm),
       sortKey: ctx.item.distanceKm ?? null,

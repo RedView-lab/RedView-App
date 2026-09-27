@@ -73,6 +73,10 @@ export const IconExpand = ({ size = 18, ...rest }: AssetIconProps) => (
   <SvgV2Icon name="scale-01.svg" size={size} {...rest} />
 );
 
+export const IconX = ({ size = 15, ...rest }: AssetIconProps) => (
+  <SvgV2Icon name="x.svg" size={size} {...rest} />
+);
+
 export const IconCheck = ({ size = 10, ...rest }: AssetIconProps) => (
   <SvgV2Icon name="check.svg" size={size} {...rest} />
 );

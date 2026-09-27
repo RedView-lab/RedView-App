@@ -29,6 +29,12 @@ import {
 import { resolveRouteRequest } from './resolveRouteRequest';
 import type { RouteRequestBase } from './profileFallback';
 
+function dispatchRouteLoading(loading: boolean) {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('rv-route-loading', { detail: { loading } }));
+  }
+}
+
 export function useItineraryBrouterRouting({
   active,
   isMapLoaded,
@@ -36,7 +42,11 @@ export function useItineraryBrouterRouting({
   rollbackPendingTraceAppend,
   setProject,
 }: UseItineraryBrouterRoutingArgs) {
-  const [routeLoading, setRouteLoading] = useState(false);
+  const [routeLoading, _setRouteLoading] = useState(false);
+  const setRouteLoading = useCallback((loading: boolean) => {
+    _setRouteLoading(loading);
+    dispatchRouteLoading(loading);
+  }, []);
   const [routeRequestNonce, setRouteRequestNonce] = useState(0);
   const [routeRefreshNonce, setRouteRefreshNonce] = useState(0);
   const [routeError, setRouteError] = useState<string | null>(null);
@@ -46,7 +56,7 @@ export function useItineraryBrouterRouting({
     routeAbortRef.current?.abort();
     routeAbortRef.current = null;
     setRouteLoading(false);
-  }, []);
+  }, [setRouteLoading]);
   const activeRef = useRef(active);
   // When set to true, the next "full recompute" branch of the routing
   // effect is skipped and the flag is cleared.  This is used by the
@@ -62,21 +72,27 @@ export function useItineraryBrouterRouting({
     activeRef.current = active;
   }, [active]);
 
+  useEffect(() => {
+    return () => {
+      dispatchRouteLoading(false);
+    };
+  }, []);
+
   const beginRouteRequest = useCallback(() => {
     routeAbortRef.current?.abort();
     const ctrl = new AbortController();
     routeAbortRef.current = ctrl;
+    setRouteLoading(true);
     queueMicrotask(() => {
       setRouteRequestNonce((current) => current + 1);
-      setRouteLoading(true);
       setRouteError(null);
     });
     return ctrl;
-  }, []);
+  }, [setRouteLoading]);
   const settleRouteState = useCallback((nextError: string | null) => {
     setRouteError(nextError);
     setRouteLoading(false);
-  }, []);
+  }, [setRouteLoading]);
   const deferRouteState = useCallback((nextError: string | null) => {
     queueMicrotask(() => {
       settleRouteState(nextError);
@@ -128,7 +144,7 @@ export function useItineraryBrouterRouting({
         .map((item) => `${item.lon},${item.lat}`)
         .join('|')
     : '';
-  const hasWaypointOverride = routingViaKey.length > 0;
+  const hasWaypointOverride = viaKey.length > 0;
   const profileId = active?.profileId ?? 'road';
   const climbing = active ? isClimbingMode(active.priorities) : false;
   const forbiddenPolygons = formatForbiddenZonePolygons(active?.forbiddenZones);
@@ -402,91 +418,99 @@ export function useItineraryBrouterRouting({
       return;
     }
 
-    const ctrl = beginRouteRequest();
+    setRouteLoading(true);
+    let ctrl: AbortController | null = null;
+    const timer = window.setTimeout(() => {
+      const activeCtrl = beginRouteRequest();
+      ctrl = activeCtrl;
 
-  const itineraryForRouting = currentActive;
-    if (!itineraryForRouting) return;
+      const itineraryForRouting = activeRef.current ?? currentActive;
+      if (!itineraryForRouting) return;
 
-    const t0 = performance.now();
-    console.log(
-      '[BRouter] recompute START hash=',
-      brfHash,
-      'climbing=',
-      climbing,
-      'start=',
-      startKey,
-      'end=',
-      endKey,
-      'via=',
-      viaKey || '∅',
-    );
+      const t0 = performance.now();
+      console.log(
+        '[BRouter] recompute START hash=',
+        brfHash,
+        'climbing=',
+        climbing,
+        'start=',
+        startKey,
+        'end=',
+        endKey,
+        'via=',
+        viaKey || '∅',
+      );
 
-    const requestBase: RouteRequestBase = {
-      start: { lat: startLat, lon: startLon },
-      end: { lat: endLat, lon: endLon },
-      via,
-      polygons: forbiddenPolygons,
-      signal: ctrl.signal,
-    };
+      const requestBase: RouteRequestBase = {
+        start: { lat: startLat, lon: startLon },
+        end: { lat: endLat, lon: endLon },
+        via,
+        polygons: forbiddenPolygons,
+        signal: activeCtrl.signal,
+      };
 
-    resolveRouteRequest({
-      itinerary: itineraryForRouting,
-      signal: ctrl.signal,
-      requestBase,
-      setRouteWarnings,
-    })
-      .then(async ({ route, usedFallbackProfile, resolvedWarnings, resolved }) => {
-        if (ctrl.signal.aborted) return;
-        console.log(
-          '[BRouter] profile resolved →',
-          resolved.profileId,
-          '| brf=',
-          resolved.brf ? `${resolved.brf.length}B` : 'stock',
-          '| warnings=',
-          resolved.roadTypes.warnings.length,
-        );
-        setRouteWarnings(applyRouteWarnings(resolvedWarnings, usedFallbackProfile));
-        console.log(
-          '[BRouter] route OK in',
-          Math.round(performance.now() - t0),
-          'ms | dist=',
-          (route.distanceM / 1000).toFixed(2),
-          'km | ascent=',
-          Math.round(route.ascentM),
-          'm | pts=',
-          route.coordinates.length,
-        );
-        // Render route immediately with native BRouter elevation data & unblock UI
-        setProject((project) => applyRecomputedRoute(project, route, null));
-        setRouteLoading(false);
+      resolveRouteRequest({
+        itinerary: itineraryForRouting,
+        signal: activeCtrl.signal,
+        requestBase,
+        setRouteWarnings,
+      })
+        .then(async ({ route, usedFallbackProfile, resolvedWarnings, resolved }) => {
+          if (activeCtrl.signal.aborted) return;
+          console.log(
+            '[BRouter] profile resolved →',
+            resolved.profileId,
+            '| brf=',
+            resolved.brf ? `${resolved.brf.length}B` : 'stock',
+            '| warnings=',
+            resolved.roadTypes.warnings.length,
+          );
+          setRouteWarnings(applyRouteWarnings(resolvedWarnings, usedFallbackProfile));
+          console.log(
+            '[BRouter] route OK in',
+            Math.round(performance.now() - t0),
+            'ms | dist=',
+            (route.distanceM / 1000).toFixed(2),
+            'km | ascent=',
+            Math.round(route.ascentM),
+            'm | pts=',
+            route.coordinates.length,
+          );
+          // Render route immediately with native BRouter elevation data & unblock UI
+          setProject((project) => applyRecomputedRoute(project, route, null));
+          setRouteLoading(false);
 
-        trackAnalyticsEvent({
-          name: 'route_calculated',
-          data: {
-            distance_km: Math.round(route.distanceM / 1000),
-            elevation_gain: Math.round(route.ascentM),
-            surface: resolved?.roadTypes?.effective?.gravel === 'prefer' ? 'gravel' : 'road',
-          },
-        });
+          trackAnalyticsEvent({
+            name: 'route_calculated',
+            data: {
+              distance_km: Math.round(route.distanceM / 1000),
+              elevation_gain: Math.round(route.ascentM),
+              surface: resolved?.roadTypes?.effective?.gravel === 'prefer' ? 'gravel' : 'road',
+            },
+          });
 
-        // Background MNT (1m bare-earth) altimetry refinement (France IGN + International)
-        if (route.distanceM <= 500_000) {
-          const ignAltimetryRouteProfile = await resolveIgnAltimetryRouteProfile(route, ctrl.signal, 'recompute route');
-          if (ignAltimetryRouteProfile && !ctrl.signal.aborted) {
-            setProject((project) => applyRecomputedRoute(project, route, ignAltimetryRouteProfile));
+          // Background MNT (1m bare-earth) altimetry refinement (France IGN + International)
+          if (route.distanceM <= 500_000) {
+            const ignAltimetryRouteProfile = await resolveIgnAltimetryRouteProfile(route, activeCtrl.signal, 'recompute route');
+            if (ignAltimetryRouteProfile && !activeCtrl.signal.aborted) {
+              setProject((project) => applyRecomputedRoute(project, route, ignAltimetryRouteProfile));
+            }
           }
-        }
-      })
-      .catch((error: unknown) => {
-        if ((error as { name?: string }).name === 'AbortError') return;
-        console.error('[BRouter fetch fail]', error);
-        setRouteError(formatBrouterErrorMessage(error));
-      })
-      .finally(() => {
-        if (!ctrl.signal.aborted) setRouteLoading(false);
-      });
+        })
+        .catch((error: unknown) => {
+          if ((error as { name?: string }).name === 'AbortError') return;
+          console.error('[BRouter fetch fail]', error);
+          setRouteError(formatBrouterErrorMessage(error));
+        })
+        .finally(() => {
+          if (!activeCtrl.signal.aborted) setRouteLoading(false);
+        });
+    }, 120);
 
-    return () => ctrl.abort();
+    return () => {
+      window.clearTimeout(timer);
+      ctrl?.abort();
+    };
   }, [
     activeId,
     beginRouteRequest,
@@ -509,6 +533,7 @@ export function useItineraryBrouterRouting({
     setProject,
     startKey,
     routingViaKey,
+    viaKey,
   ]);
 
   return {

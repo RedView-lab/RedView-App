@@ -94,30 +94,135 @@
   background: rgba(255, 255, 255, 0.06);
 }
 
-.rvc-lidar__download-meta {
+.rvc-lidar__actions-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   width: 100%;
-  font-size: 11px;
-  line-height: 1.3;
-  color: rgba(255, 255, 255, 0.74);
-  white-space: normal;
 }
 
-.rvc-lidar__download-meta.is-error {
-  color: #ffd1d1;
+.rvc-lidar__action-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
 }
 
-.rvc-lidar__download-bar {
-  width: 100%;
-  height: 4px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.18);
+.rvc-btn-primary--lidar {
+  all: unset;
+  flex: 1 1 0%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 7px 8px;
+  background: #890000;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background 0.15s, opacity 0.15s, box-shadow 0.15s;
+  position: relative;
   overflow: hidden;
-  margin-top: 4px;
+  white-space: nowrap;
+  min-height: 32px;
 }
 
-.rvc-lidar__download-bar-fill {
+.rvc-btn-primary--lidar:hover:not(:disabled) {
+  background: #a00000;
+}
+
+.rvc-btn-primary--lidar:active:not(:disabled) {
+  background: #730000;
+}
+
+.rvc-btn-primary--lidar.is-loading {
+  cursor: wait;
+  background: #890000;
+}
+
+.rvc-btn-primary--lidar.is-selecting {
+  background: #890000;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.28);
+}
+
+.rvc-lidar-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  border-top-color: #ffffff;
+  animation: rvc-lidar-spin 0.75s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes rvc-lidar-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rvc-lidar-spinner {
+    animation-duration: 1.8s;
+  }
+}
+
+.rvc-btn-secondary--lidar-cancel {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  padding: 7px 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background 0.15s, opacity 0.15s;
+  white-space: nowrap;
+  min-height: 32px;
+}
+
+.rvc-btn-secondary--lidar-cancel:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.rvc-btn-secondary--lidar-cancel:active {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.rvc-btn-primary--lidar .rvc-lidar__download-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(0, 0, 0, 0.25);
+  margin: 0;
+  border-radius: 0 0 6px 6px;
+  overflow: hidden;
+}
+
+.rvc-btn-primary--lidar .rvc-lidar__download-bar-fill {
   display: block;
   height: 100%;
-  border-radius: inherit;
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.9);
+  transition: width 0.2s ease-out;
 }
+
+.rvc-lidar__error-meta {
+  font-size: 11px;
+  line-height: 1.35;
+  color: #ff9999;
+  background: rgba(255, 69, 58, 0.12);
+  border: 1px solid rgba(255, 69, 58, 0.25);
+  border-radius: 6px;
+  padding: 6px 8px;
+  word-break: break-word;
+}
+

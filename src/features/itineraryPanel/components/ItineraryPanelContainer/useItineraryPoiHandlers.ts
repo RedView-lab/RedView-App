@@ -9,6 +9,7 @@ import { cumulativeRouteLengthsM, projectDistanceAlongRouteM, roundDistanceKm } 
 import {
   buildPendingRoutePatchForEditedRow,
   insertTimelineItem,
+  insertWaypointIntoTimeline,
 } from './timelineMutations';
 import { removePoiAndLinkedWaypoints } from './poiDraft';
 import { setPoiFeatureFavoriteState } from './poiFeatureUtils';
@@ -28,6 +29,7 @@ interface UseItineraryPoiHandlersArgs {
   ) => boolean;
   project?: ItineraryProject;
   addItinerary?: (overrides?: Partial<Itinerary>) => string | null;
+  onSelectAndCenterTimelineRow?: (rowId: string) => void;
 }
 
 /**
@@ -40,6 +42,7 @@ export function useItineraryPoiHandlers({
   updateActiveWithHistory,
   project,
   addItinerary,
+  onSelectAndCenterTimelineRow,
 }: UseItineraryPoiHandlersArgs) {
   const resolvePoiTitle = useCallback((feature: PoiFeature) => {
     return feature.name?.trim() || POI_LABELS[feature.category] || 'POI';
@@ -179,26 +182,21 @@ export function useItineraryPoiHandlers({
   }, [addItinerary, project?.itineraries?.length, resolvePoiTitle, updateActive]);
 
   const handlePoiAddWaypoint = useCallback((feature: PoiFeature) => {
+    let createdId: string | null = null;
     updateActive((it) => {
       const waypointId = `poi-waypoint-${feature.id}`;
-      const existingIndex = it.timeline.findIndex((row) => row.id === waypointId);
-      if (existingIndex >= 0) return;
-
-      const poiIndex = it.timeline.findIndex((row) => row.kind === 'poi' && row.osmId === feature.id);
-      const endIndex = it.timeline.findIndex((row) => row.kind === 'end');
-      const anchorRow = poiIndex >= 0 ? it.timeline[poiIndex] : null;
-      const insertAt = poiIndex >= 0 ? poiIndex : endIndex >= 0 ? endIndex : it.timeline.length;
-
-      it.timeline.splice(insertAt, 0, {
-        id: waypointId,
-        kind: 'waypoint',
-        label: resolvePoiTitle(feature),
-        distanceKm: anchorRow?.distanceKm ?? null,
-        lat: feature.lat,
-        lon: feature.lon,
-        osmId: feature.id,
-        visible: true,
-      });
+      const result = insertWaypointIntoTimeline(
+        it.timeline,
+        { lat: feature.lat, lon: feature.lon },
+        it.gpxRoute?.points,
+        {
+          id: waypointId,
+          label: resolvePoiTitle(feature),
+          osmId: feature.id,
+          poiCategory: FEATURE_TO_PANEL_POI[feature.category],
+        },
+      );
+      createdId = result.newRow.id;
 
       if (!it.poiFeatures) it.poiFeatures = [];
       if (!it.poiFeatures.some((f) => f.id === feature.id)) {
@@ -210,7 +208,10 @@ export function useItineraryPoiHandlers({
       delete it.routeAudit;
       it.prediction = null;
     });
-  }, [resolvePoiTitle, updateActive]);
+    if (createdId) {
+      onSelectAndCenterTimelineRow?.(createdId);
+    }
+  }, [onSelectAndCenterTimelineRow, resolvePoiTitle, updateActive]);
 
   const handlePoiFinishHere = useCallback((feature: PoiFeature) => {
     updateActive((it) => {

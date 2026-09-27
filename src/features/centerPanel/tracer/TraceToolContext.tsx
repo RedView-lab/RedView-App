@@ -30,6 +30,10 @@ import { isVariantModifierPressed } from '@/shared/lib/platform';
 import { useRouteSplitToolOptional } from '../routeSplit';
 import { useRouteMergeToolOptional } from '../routeMerge';
 import { useTracePointDrag, type TracePointDragCommit } from './useTracePointDrag';
+import {
+  handlePointPanelMousedown,
+  shouldIgnoreMapClickAfterPanelDismiss,
+} from '@/features/map3d';
 
 export const TRACE_CURSOR = 'url("/svgv2/icone/edit-04.svg") 3 17, crosshair';
 export const TRACE_GRABBING_CURSOR = 'grabbing';
@@ -288,7 +292,24 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
       canvas.style.cursor = draggingRef.current ? TRACE_GRABBING_CURSOR : TRACE_CURSOR;
     };
 
+    const handleMouseDown = (event: MouseEvent) => {
+      if (event.button === 0) {
+        handlePointPanelMousedown(event.target);
+      }
+    };
+
     const handleClick = (event: MapMouseEvent) => {
+      const originalTarget = event.originalEvent?.target as HTMLElement | null;
+      if (
+        (originalTarget &&
+          originalTarget.closest(
+            '.mapboxgl-popup, .rv-poi-draft-card, [data-rv-poi-draft-card], .rv-poi-marker, .rv-checkpoint-marker, button, a, [role="button"]',
+          )) ||
+        shouldIgnoreMapClickAfterPanelDismiss(originalTarget)
+      ) {
+        return;
+      }
+
       const asVariant = isVariantModifierPressed(event.originalEvent);
       if (!appendPointAt(event.lngLat.lng, event.lngLat.lat, { asVariant })) return;
       applyCursor();
@@ -300,10 +321,12 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
     };
 
     applyCursor();
+    canvas.addEventListener('mousedown', handleMouseDown, true);
     map.on('click', handleClick);
     map.on('contextmenu', handleContextMenu);
 
     return () => {
+      canvas.removeEventListener('mousedown', handleMouseDown, true);
       map.off('click', handleClick);
       map.off('contextmenu', handleContextMenu);
       canvas.style.cursor = '';

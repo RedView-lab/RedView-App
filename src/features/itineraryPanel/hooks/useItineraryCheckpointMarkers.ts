@@ -135,7 +135,12 @@ function applyMarkerVisualState(entry: MarkerRegistryEntry, zoom: number): void 
     const visual = getPoiMarkerVisualState(zoom);
     el.style.setProperty('--rv-poi-marker-scale', visual.scale.toFixed(3));
     if (entry.popup) {
-      entry.popup.setOffset([0, visual.popupOffsetPx]);
+      if (entry.kind === 'waypoint') {
+        const offsetPx = Math.round(14 * visual.scale) + 4;
+        entry.popup.setOffset([offsetPx, -offsetPx]);
+      } else {
+        entry.popup.setOffset([0, visual.popupOffsetPx]);
+      }
     }
   } else {
     applyCheckpointZoomVisibility(el, zoom);
@@ -420,7 +425,8 @@ function createWaypointPopup(
     closeOnClick: true,
     focusAfterOpen: false,
     maxWidth: 'none',
-    offset: MARKER_MAX_POPUP_OFFSET_PX,
+    anchor: 'bottom-left',
+    offset: [16, -16],
   });
 
   const state = {

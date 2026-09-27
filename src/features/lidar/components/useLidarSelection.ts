@@ -332,7 +332,7 @@ export function useLidarSelection(
     };
 
     const unsubscribeManager = manager.on((event) => {
-      if (event.type === 'tileLoaded') {
+      if (event.type === 'tileLoaded' || event.type === 'cancelled' || event.type === 'error') {
         clearSelectionForTile(event.tileCoord);
       }
     });
@@ -353,12 +353,23 @@ export function useLidarSelection(
       if (!enabledRef.current) return;
 
       const coord = hoveredRef.current ?? wgs84ToTileCoord(event.lngLat.lng, event.lngLat.lat);
+      hoveredRef.current = null;
       selectedRef.current = coord;
-      // Use scheduleOverlaySync (not bare updateSourceData) so that if the
-      // style graph is momentarily rebuilding the selection is retried — a
-      // click fires exactly once and has no automatic follow-up unlike mousemove.
       scheduleOverlaySync();
       void manager.downloadTile(coord);
+      onDisableRef.current?.();
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!enabledRef.current) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        hoveredRef.current = null;
+        if (!updateSourceData()) {
+          scheduleOverlaySync();
+        }
+        onDisableRef.current?.();
+      }
     };
 
     const handleMouseLeave = () => {
@@ -392,6 +403,7 @@ export function useLidarSelection(
     map.on('style.load', handleStyleLoad);
     map.on('styledata', handleStyleData);
     canvas?.addEventListener('mouseleave', handleMouseLeave);
+    window.addEventListener('keydown', handleKeyDown);
 
     if (enabled) {
       if (canvas) canvas.style.cursor = 'crosshair';
@@ -411,6 +423,7 @@ export function useLidarSelection(
       map.off('style.load', handleStyleLoad);
       map.off('styledata', handleStyleData);
       canvas?.removeEventListener('mouseleave', handleMouseLeave);
+      window.removeEventListener('keydown', handleKeyDown);
       if (canvas) canvas.style.cursor = '';
       removeSelectionLayers(map);
     };

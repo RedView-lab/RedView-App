@@ -13,6 +13,10 @@ import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import { translateAppText } from '@/shared/i18n';
 import { useRouteHoverPreview } from '../hooks/useRouteHoverPreview';
 import { findSplitIndexForMapClick } from './routeSnap';
+import {
+  handlePointPanelMousedown,
+  shouldIgnoreMapClickAfterPanelDismiss,
+} from '@/features/map3d';
 
 const SPLIT_CURSOR = 'url("/svgv2/icone/scissors.svg") 4 4, crosshair';
 
@@ -94,7 +98,24 @@ export function RouteSplitToolProvider({ children, map }: RouteSplitToolProvider
       canvas.style.cursor = SPLIT_CURSOR;
     };
 
+    const handleMouseDown = (event: MouseEvent) => {
+      if (event.button === 0) {
+        handlePointPanelMousedown(event.target);
+      }
+    };
+
     const handleClick = (event: MapMouseEvent) => {
+      const originalTarget = event.originalEvent?.target as HTMLElement | null;
+      if (
+        (originalTarget &&
+          originalTarget.closest(
+            '.mapboxgl-popup, .rv-poi-draft-card, [data-rv-poi-draft-card], .rv-poi-marker, .rv-checkpoint-marker, button, a, [role="button"]',
+          )) ||
+        shouldIgnoreMapClickAfterPanelDismiss(originalTarget)
+      ) {
+        return;
+      }
+
       const splitIndex = findSplitIndexForMapClick(map, routePoints, event.point.x, event.point.y);
       if (splitIndex == null) return;
 
@@ -109,11 +130,13 @@ export function RouteSplitToolProvider({ children, map }: RouteSplitToolProvider
     };
 
     applyCursor();
+    canvas.addEventListener('mousedown', handleMouseDown, true);
     map.on('mousemove', applyCursor);
     map.on('click', handleClick);
     map.on('contextmenu', handleContextMenu);
 
     return () => {
+      canvas.removeEventListener('mousedown', handleMouseDown, true);
       map.off('mousemove', applyCursor);
       map.off('click', handleClick);
       map.off('contextmenu', handleContextMenu);

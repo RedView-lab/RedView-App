@@ -8,6 +8,10 @@ import { projectPointToSegment } from '../routeSplit/routeSnap';
 
 /** Maximum screen distance in pixels from the trace line for hover/drag detection. */
 export const MAX_ROUTE_DRAG_CLICK_DISTANCE_PX = 28;
+/** Tolerance in pixels to enter route hover mode (strict to avoid accidental triggers). */
+export const ROUTE_DRAG_HOVER_ENTER_DISTANCE_PX = 22;
+/** Tolerance in pixels to exit route hover mode (generous hysteresis to eliminate border flicker). */
+export const ROUTE_DRAG_HOVER_EXIT_DISTANCE_PX = 34;
 
 export interface ContinuousRouteProjection {
   /** Squared pixel distance from the cursor to the nearest segment. */

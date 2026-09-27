@@ -2,6 +2,7 @@ export { default as MapView } from './components/MapView';
 export { default as MapBlurMirror } from './components/MapBlurMirror';
 export { FpsDiagnosticsMonitor } from './components/FpsDiagnosticsMonitor/FpsDiagnosticsMonitor';
 export { default as MapOverlayStatusDock } from './components/MapOverlayStatusDock';
+export { MapCursorLoader } from './components/MapCursorLoader';
 export type {
 	MapContextMenuActionId,
 	MapContextMenuActionPayload,
@@ -35,3 +36,8 @@ export type {
 	FlyToLocationOptions,
 	MapViewportPadding,
 } from './lib/cameraFlight';
+export {
+	isPointPanelOpen,
+	handlePointPanelMousedown,
+	shouldIgnoreMapClickAfterPanelDismiss,
+} from './lib/pointPanelDismiss';

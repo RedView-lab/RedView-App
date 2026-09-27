@@ -42,6 +42,7 @@ export interface ControlPanelContainerProps {
   onSlopeOverlayStatusChange?: OverlayStatusReporter;
   onAltitudeOverlayStatusChange?: OverlayStatusReporter;
   onToggleLidarDownloadMode?: () => void;
+  onCancelLidarSelection?: () => void;
   lidarDownloadModeActive?: boolean;
   width?: number;
   onResizeStart?: (ev: ReactMouseEvent<HTMLDivElement>) => void;
@@ -68,6 +69,7 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
   onSlopeOverlayStatusChange,
   onAltitudeOverlayStatusChange,
   onToggleLidarDownloadMode,
+  onCancelLidarSelection,
   lidarDownloadModeActive,
   width,
   onResizeStart,
@@ -163,6 +165,7 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
     initialControlPanel,
     updateProjectControlPanel,
     onToggleLidarDownloadMode,
+    onCancelLidarSelection,
     itineraries,
   });
 
@@ -363,6 +366,7 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
       onLidarTileDelete={lidarHandlers.onLidarTileDelete}
       onLidarTileRename={lidarHandlers.onLidarTileRename}
       onLidarTileDownload={lidarHandlers.onLidarTileDownload}
+      onLidarSelectionCancel={lidarHandlers.onLidarSelectionCancel}
       onLidarDownloadCancel={lidarHandlers.onLidarDownloadCancel}
       onLabelsEnabledChange={overlayState.handlers.onLabelsEnabledChange}
       onLabelToggle={overlayState.handlers.onLabelToggle}

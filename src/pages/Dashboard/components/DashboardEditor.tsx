@@ -12,6 +12,7 @@ import {
 import type { Map as MapboxMap } from 'mapbox-gl';
 import {
   MapBlurMirror,
+  MapCursorLoader,
   MapOverlayStatusDock,
   MapView,
   type MapContextMenuOverlayContext,
@@ -296,6 +297,10 @@ export function DashboardEditor({
           contextMenuOverlayContext={contextMenuOverlayContext}
         />
 
+      <MapCursorLoader
+        loading={visibleStatuses.some((s) => s.id === 'itinerary' && s.state === 'loading')}
+      />
+
       <MapOverlayStatusDock
         statuses={visibleStatuses}
         right={statusDockRight}
@@ -472,6 +477,7 @@ export function DashboardEditor({
                           onAltitudeOverlayStatusChange={onAltitudeOverlayStatusChange}
                           lidarDownloadModeActive={lidarModeEnabled}
                           onToggleLidarDownloadMode={handleToggleLidarDownloadMode}
+                          onCancelLidarSelection={handleLidarSelectionDisable}
                           width={panelWidth}
                           onResizeStart={onRightResizeStart}
                           isResizing={isResizing}

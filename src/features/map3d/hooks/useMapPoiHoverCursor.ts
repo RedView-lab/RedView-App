@@ -192,7 +192,6 @@ export function useMapPoiHoverCursor(map: MapboxMap | null): void {
       if (
         currentCursor
         && currentCursor !== 'pointer'
-        && currentCursor !== 'grab'
         && currentCursor !== ''
       ) {
         return;

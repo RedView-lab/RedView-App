@@ -136,6 +136,8 @@ export function MapPoiDraftCard({
   return (
     <div
       ref={cardRef}
+      className="rv-poi-draft-card"
+      data-rv-poi-draft-card="true"
       style={{
         position: 'absolute',
         top: position.top,

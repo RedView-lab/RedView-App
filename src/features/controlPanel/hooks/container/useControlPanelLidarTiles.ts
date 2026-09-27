@@ -19,6 +19,7 @@ interface UseControlPanelLidarTilesArgs {
   initialControlPanel: ControlPanelPersistedState;
   updateProjectControlPanel: (mut: (draft: ControlPanelPersistedState) => void) => void;
   onToggleLidarDownloadMode?: () => void;
+  onCancelLidarSelection?: () => void;
   itineraries?: readonly Itinerary[];
 }
 
@@ -30,6 +31,7 @@ export function useControlPanelLidarTiles({
   initialControlPanel,
   updateProjectControlPanel,
   onToggleLidarDownloadMode,
+  onCancelLidarSelection,
   itineraries,
 }: UseControlPanelLidarTilesArgs) {
   const lidarManager = useLidarManager();
@@ -131,6 +133,14 @@ export function useControlPanelLidarTiles({
       setLidarDownloadError(null);
       onToggleLidarDownloadMode?.();
     }, [onToggleLidarDownloadMode]),
+    onLidarSelectionCancel: useCallback(() => {
+      setLidarDownloadError(null);
+      if (onCancelLidarSelection) {
+        onCancelLidarSelection();
+      } else {
+        onToggleLidarDownloadMode?.();
+      }
+    }, [onCancelLidarSelection, onToggleLidarDownloadMode]),
     onLidarDownloadCancel: useCallback(() => {
       lidarManager.cancelDownload();
     }, [lidarManager]),

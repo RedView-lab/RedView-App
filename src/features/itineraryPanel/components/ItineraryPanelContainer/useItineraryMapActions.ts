@@ -8,6 +8,7 @@ import type { Itinerary, ItineraryProject } from '../../types';
 import {
   buildPendingRoutePatchForEditedRow,
   insertTimelineItem,
+  insertWaypointIntoTimeline,
 } from './timelineMutations';
 import { pointInPolygon } from '../../context/ProjectStore/forbiddenZonePatch';
 import {
@@ -32,6 +33,7 @@ interface UseItineraryMapActionsArgs {
   poiHandlers?: ReturnType<typeof useItineraryPoiHandlers>;
   project?: ItineraryProject;
   addItinerary?: (overrides?: Partial<Itinerary>) => string | null;
+  onSelectAndCenterTimelineRow?: (rowId: string) => void;
 }
 
 /**
@@ -44,6 +46,7 @@ export function useItineraryMapActions({
   poiHandlers,
   project,
   addItinerary,
+  onSelectAndCenterTimelineRow,
 }: UseItineraryMapActionsArgs) {
   const handleExternalMapContextAction = useCallback((payload: MapContextMenuActionPayload) => {
     switch (payload.action) {
@@ -92,30 +95,29 @@ export function useItineraryMapActions({
         }
         break;
       }
-      case 'add-waypoint':
+      case 'add-waypoint': {
+        let createdId: string | null = null;
         updateActive((it) => {
-          const waypointId = `map-waypoint-${Date.now()}`;
-          if (it.timeline.some((row) => row.id === waypointId)) return;
-
-          const endIndex = it.timeline.findIndex((row) => row.kind === 'end');
-          const insertAt = endIndex >= 0 ? endIndex : it.timeline.length;
-
-          it.timeline.splice(insertAt, 0, {
-            id: waypointId,
-            kind: 'waypoint',
-            label: resolveMapContextPointTitle(payload.point),
-            distanceKm: null,
-            lat: payload.point.lat,
-            lon: payload.point.lng,
-            visible: true,
-          });
+          const result = insertWaypointIntoTimeline(
+            it.timeline,
+            { lat: payload.point.lat, lon: payload.point.lng },
+            it.gpxRoute?.points,
+            {
+              label: resolveMapContextPointTitle(payload.point),
+            },
+          );
+          createdId = result.newRow.id;
 
           delete it.pendingRoutePatch;
           delete it.pendingTraceExtension;
           delete it.routeAudit;
           it.prediction = null;
         });
+        if (createdId) {
+          onSelectAndCenterTimelineRow?.(createdId);
+        }
         break;
+      }
       case 'set-finish':
         updateActive((it) => {
           let row = it.timeline.find((item) => item.kind === 'end');
@@ -216,37 +218,33 @@ export function useItineraryMapActions({
         }
         break;
       }
-      case 'add-waypoint':
+      case 'add-waypoint': {
+        let createdId: string | null = null;
         updateActive((it) => {
           const poiId = upsertDraftPoiIntoItinerary(it, payload.draft);
           const waypointId = poiId != null ? `poi-waypoint-${poiId}` : `draft-waypoint-${payload.draft.id}`;
-          const existingIndex = it.timeline.findIndex((row) => row.id === waypointId);
-          if (existingIndex >= 0) return;
-
-          const poiIndex = poiId != null
-            ? it.timeline.findIndex((row) => row.kind === 'poi' && row.osmId === poiId)
-            : -1;
-          const endIndex = it.timeline.findIndex((row) => row.kind === 'end');
-          const anchorRow = poiIndex >= 0 ? it.timeline[poiIndex] : null;
-          const insertAt = poiIndex >= 0 ? poiIndex : endIndex >= 0 ? endIndex : it.timeline.length;
-
-          it.timeline.splice(insertAt, 0, {
-            id: waypointId,
-            kind: 'waypoint',
-            label: resolveDraftTitle(payload.draft),
-            distanceKm: anchorRow?.distanceKm ?? null,
-            lat: payload.draft.point.lat,
-            lon: payload.draft.point.lng,
-            osmId: poiId ?? undefined,
-            visible: true,
-          });
+          const result = insertWaypointIntoTimeline(
+            it.timeline,
+            { lat: payload.draft.point.lat, lon: payload.draft.point.lng },
+            it.gpxRoute?.points,
+            {
+              id: waypointId,
+              label: resolveDraftTitle(payload.draft),
+              osmId: poiId ?? undefined,
+            },
+          );
+          createdId = result.newRow.id;
 
           delete it.pendingRoutePatch;
           delete it.pendingTraceExtension;
           delete it.routeAudit;
           it.prediction = null;
         });
+        if (createdId) {
+          onSelectAndCenterTimelineRow?.(createdId);
+        }
         break;
+      }
       case 'finish-here':
         updateActive((it) => {
           upsertDraftPoiIntoItinerary(it, payload.draft);

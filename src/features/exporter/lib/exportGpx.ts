@@ -69,21 +69,6 @@ export function buildItineraryGpx(itinerary: Itinerary, options?: { favoritesOnl
     })
     .join('\n');
 
-  const routeAnchorXml = anchors
-    .map((anchor) => {
-      const lines = [
-        `    <rtept lat="${formatCoordinate(anchor.lat)}" lon="${formatCoordinate(anchor.lon)}">`,
-      ];
-      if (anchor.elevationM != null) {
-        lines.push(`      <ele>${formatDecimal(anchor.elevationM, 1)}</ele>`);
-      }
-      lines.push(`      <name>${escapeXml(anchor.name)}</name>`);
-      lines.push(`      <type>${escapeXml(buildGpxWaypointType(anchor))}</type>`);
-      lines.push('    </rtept>');
-      return lines.join('\n');
-    })
-    .join('\n');
-
   const ptCount = routePoints.length;
   const trackPointParts = new Array<string>(ptCount);
   for (let i = 0; i < ptCount; i++) {
@@ -104,11 +89,6 @@ export function buildItineraryGpx(itinerary: Itinerary, options?: { favoritesOnl
     `    <bounds minlat="${formatCoordinate(bounds.minLat)}" minlon="${formatCoordinate(bounds.minLon)}" maxlat="${formatCoordinate(bounds.maxLat)}" maxlon="${formatCoordinate(bounds.maxLon)}" />`,
     '  </metadata>',
     waypointXml,
-    '  <rte>',
-    `    <name>${escapeXml(routeName)}</name>`,
-    `    <desc>${escapeXml('Points de guidage et POI exportes pour navigation.')}</desc>`,
-    routeAnchorXml,
-    '  </rte>',
     '  <trk>',
     `    <name>${escapeXml(routeName)}</name>`,
     '    <trkseg>',

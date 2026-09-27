@@ -110,7 +110,7 @@ export function ensureRouteHoverPreviewLayers(map: MapboxMap): GeoJSONSource | n
     type: 'circle',
     source: ROUTE_HOVER_PREVIEW_SOURCE_ID,
     slot: 'top',
-    layout: { visibility: 'none' },
+    layout: { visibility: 'visible' },
     paint: {
       'circle-radius': ['case', ['get', 'dimmed'], 8, ['+', ['coalesce', ['get', 'radius'], 6.5], 3]],
       'circle-color': '#000000',
@@ -127,7 +127,7 @@ export function ensureRouteHoverPreviewLayers(map: MapboxMap): GeoJSONSource | n
     type: 'circle',
     source: ROUTE_HOVER_PREVIEW_SOURCE_ID,
     slot: 'top',
-    layout: { visibility: 'none' },
+    layout: { visibility: 'visible' },
     paint: {
       'circle-radius': ['coalesce', ['get', 'radius'], 6.5],
       'circle-color': '#ffffff',

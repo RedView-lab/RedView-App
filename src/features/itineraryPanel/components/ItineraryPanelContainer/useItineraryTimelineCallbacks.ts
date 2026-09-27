@@ -22,6 +22,7 @@ interface UseItineraryTimelineCallbacksArgs {
   updateActiveWithHistory?: (
     mutateItinerary: (itinerary: ItineraryProject['itineraries'][number]) => boolean | void,
   ) => boolean;
+  onSelectAndCenterTimelineRow?: (rowId: string) => void;
 }
 
 /**
@@ -32,16 +33,22 @@ export function useItineraryTimelineCallbacks({
   setProject,
   updateActive,
   updateActiveWithHistory,
+  onSelectAndCenterTimelineRow,
 }: UseItineraryTimelineCallbacksArgs) {
   const handleChangeTimelineView = useCallback((view: TimelineView) => {
     setProject((p) => ({ ...p, timelineView: view }));
   }, [setProject]);
 
   const handleAddTimelineItem = useCallback((kind: TimelineAddItemKind, options?: TimelineAddItemOptions) => {
+    let createdId: string | null = null;
     updateActive((it) => {
-      insertTimelineItem(it.timeline, kind, options);
+      const added = insertTimelineItem(it.timeline, kind, options);
+      if (added) createdId = added.id;
     });
-  }, [updateActive]);
+    if (createdId) {
+      onSelectAndCenterTimelineRow?.(createdId);
+    }
+  }, [onSelectAndCenterTimelineRow, updateActive]);
 
   const handleToggleTimelineItem = useCallback((id: string, visible: boolean) => {
     updateActive((it) => {

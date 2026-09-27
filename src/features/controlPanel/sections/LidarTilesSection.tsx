@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAppI18n } from '@/shared/i18n';
 import { Section } from '../components/Section';
-import { IconCube, IconExpand, IconExternalLink, IconTrash } from '../icons';
+import { IconCube, IconExpand, IconExternalLink, IconTrash, IconX } from '../icons';
 import type { DownloadProgress } from '@/features/lidar/types';
 import type { ControlPanelHandlers, ControlPanelState } from '../types';
 
@@ -17,6 +17,7 @@ interface Props {
   onTileDelete: ControlPanelHandlers['onLidarTileDelete'];
   onTileRename?: ControlPanelHandlers['onLidarTileRename'];
   onDownload: ControlPanelHandlers['onLidarTileDownload'];
+  onCancelSelection?: () => void;
   onCancelDownload?: ControlPanelHandlers['onLidarDownloadCancel'];
 }
 
@@ -31,6 +32,7 @@ export function LidarTilesSection({
   onTileDelete,
   onTileRename,
   onDownload,
+  onCancelSelection,
   onCancelDownload,
 }: Props) {
   const { t } = useAppI18n();
@@ -47,6 +49,36 @@ export function LidarTilesSection({
     }
   }, [editingId]);
 
+  const isDownloading = Boolean(progress);
+
+  const handleCancelSelection = () => {
+    if (onCancelSelection) {
+      onCancelSelection();
+    } else {
+      onDownload?.();
+    }
+  };
+
+  // Annule la sélection ou le téléchargement lors de l'appui sur Échap
+  useEffect(() => {
+    if (!downloadModeActive && !isDownloading) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isDownloading) {
+          e.preventDefault();
+          onCancelDownload?.();
+        } else if (downloadModeActive) {
+          e.preventDefault();
+          handleCancelSelection();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [downloadModeActive, isDownloading, onCancelDownload, onCancelSelection, onDownload]);
+
   const startEdit = (id: string, currentLabel: string) => {
     if (!onTileRename) return;
     setEditingId(id);
@@ -60,38 +92,22 @@ export function LidarTilesSection({
   };
 
   const cancel = () => setEditingId(null);
+
   const progressPercent = progress?.totalBytes
     ? Math.min(100, (progress.bytesDownloaded / progress.totalBytes) * 100)
     : 0;
-  const progressText = !progress
+
+  const progressDetail = !progress
     ? null
     : progress.totalBytes > 0
       ? `${formatMegabytes(progress.bytesDownloaded)} / ${formatMegabytes(progress.totalBytes)}`
       : formatMegabytes(progress.bytesDownloaded);
-  const buttonLabel = progress
-    ? progressText
-      ? t('Téléchargement {{progress}}', { progress: progressText })
-      : progress.message ?? t('Téléchargement en cours')
-    : downloadModeActive
-      ? t('Clique sur la carte pour choisir une tuile')
-      : t('Télécharger une tuile LIDAR');
-  const buttonMeta = progress
-    ? `${progress.message ?? t('Téléchargement en cours')} — ${t('cliquer pour annuler')}`
-    : error
-      ? error
-      : downloadModeActive
-        ? t('Mode sélection actif')
-        : t('Active le mode puis clique sur la carte');
 
-  // Pendant un téléchargement, le bouton rouge devient un bouton d'annulation.
-  const isDownloading = Boolean(progress);
-  const handleButtonClick = () => {
-    if (isDownloading) {
-      onCancelDownload?.();
-      return;
-    }
-    onDownload?.();
-  };
+  const downloadLabel = progress?.totalBytes && progress.totalBytes > 0
+    ? `${t('Téléchargement')} ${Math.round(progressPercent)}%`
+    : progress?.message ?? t('Téléchargement…');
+
+  const showCancelButton = Boolean(downloadModeActive || isDownloading);
 
   return (
     <Section
@@ -163,24 +179,60 @@ export function LidarTilesSection({
           );
         })}
       </div>
-      <button
-        type="button"
-        className={`rvc-btn-primary rvc-btn-primary--lidar${progress ? ' is-busy' : ''}`}
-        onClick={handleButtonClick}
-        aria-label={isDownloading ? t('Annuler le téléchargement') : undefined}
-        title={isDownloading ? t('Cliquer pour annuler le téléchargement') : undefined}
-      >
-        <IconExpand size={18} />
-        <span className="rvc-btn-primary__content">
-          <span>{buttonLabel}</span>
-          <span className={`rvc-lidar__download-meta${error ? ' is-error' : ''}`}>{buttonMeta}</span>
-          {progress && progress.phase === 'downloading' && progress.totalBytes > 0 ? (
-            <span className="rvc-lidar__download-bar" aria-hidden="true">
-              <span className="rvc-lidar__download-bar-fill" style={{ width: `${progressPercent}%` }} />
-            </span>
-          ) : null}
-        </span>
-      </button>
+
+      <div className="rvc-lidar__actions-container">
+        <div className="rvc-lidar__action-row">
+          {isDownloading ? (
+            <button
+              type="button"
+              className="rvc-btn-primary--lidar is-loading"
+              disabled
+              title={progressDetail ?? undefined}
+            >
+              <span className="rvc-lidar-spinner" aria-hidden="true" />
+              <span>{downloadLabel}</span>
+              {progress && progress.phase === 'downloading' && progress.totalBytes > 0 ? (
+                <span className="rvc-lidar__download-bar" aria-hidden="true">
+                  <span
+                    className="rvc-lidar__download-bar-fill"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </span>
+              ) : null}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={`rvc-btn-primary--lidar${downloadModeActive ? ' is-selecting' : ''}`}
+              onClick={onDownload}
+              aria-label={t('Télécharger une tuile')}
+              title={downloadModeActive ? t('Clique sur la carte pour choisir une tuile') : undefined}
+            >
+              <IconExpand size={18} />
+              <span>{t('Télécharger une tuile')}</span>
+            </button>
+          )}
+
+          {showCancelButton && (
+            <button
+              type="button"
+              className="rvc-btn-secondary--lidar-cancel"
+              onClick={isDownloading ? onCancelDownload : handleCancelSelection}
+              aria-label={isDownloading ? t('Annuler le téléchargement') : t('Annuler')}
+              title={isDownloading ? t('Cliquer pour annuler le téléchargement') : t('Annuler')}
+            >
+              <IconX size={15} />
+              <span>{t('Annuler')}</span>
+            </button>
+          )}
+        </div>
+
+        {error && (
+          <div className="rvc-lidar__error-meta" role="alert">
+            {error}
+          </div>
+        )}
+      </div>
     </Section>
   );
 }
@@ -188,3 +240,4 @@ export function LidarTilesSection({
 function formatMegabytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
+

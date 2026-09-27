@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, memo } from 'react';
-import { Slider } from '@/features/controlPanel/components/Slider';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import { useAppI18n } from '@/shared/i18n';
 import { variantModifierLabel } from '@/shared/lib/platform';
@@ -7,8 +6,6 @@ import { useRouteMergeToolOptional } from '../../routeMerge';
 import { useRouteSplitToolOptional } from '../../routeSplit';
 import { useTraceToolOptional } from '../../tracer';
 import { useForbiddenZoneToolOptional } from '../../forbiddenZones';
-import { cleanGpxGlitches } from '@/features/itineraryPanel/lib/routes';
-import { routeLengthM } from '@/features/poi/lib/gpx-loader';
 import { IconChevronDown } from '../CenterPanelIcons';
 import { useAnalysisFlyover } from '../../flyover';
 import {
@@ -25,15 +22,8 @@ import {
   IconSwitchHorizontal,
   IconTrash,
   IconUndo,
-  IconWrench,
 } from './icons';
 import { ToolbarIconButton } from './ToolbarIconButton';
-import {
-  BALANCED_POINTS_PER_KM,
-  clamp,
-  computeDefaultPointsPerKm,
-  routePointsEqual,
-} from './utils';
 
 interface CenterPanelToolbarProps {
   /** Visibility of the center analysis panel this toolbar belongs to. */
@@ -46,15 +36,12 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
   isPanelVisible = true,
   onTogglePanel,
 }: CenterPanelToolbarProps) {
-  const { locale, t } = useAppI18n();
+  const { t } = useAppI18n();
   const store = useProjectStoreOptional();
   const routeMergeTool = useRouteMergeToolOptional();
   const routeSplitTool = useRouteSplitToolOptional();
   const traceTool = useTraceToolOptional();
   const forbiddenZoneTool = useForbiddenZoneToolOptional();
-  const [toolsExpanded, setToolsExpanded] = useState(false);
-  const [activeSubtool, setActiveSubtool] = useState<'simplify' | null>(null);
-  const [simplifyPointsPerKm, setSimplifyPointsPerKm] = useState(BALANCED_POINTS_PER_KM);
   const [toolbarStatus, setToolbarStatus] = useState<string | null>(null);
   const {
     canPlay,
@@ -99,25 +86,9 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
     store.addItinerary();
     setToolbarStatus(t('Nouvel itinéraire créé'));
   };
-  const simplifiableRoute =
-    activeItinerary?.gpxRoute && activeItinerary.gpxRoute.source !== 'brouter'
-      ? activeItinerary.gpxRoute
-      : null;
   const reversibleRoute = activeItinerary?.gpxRoute ?? null;
-  const activeTracePointCount = simplifiableRoute?.points.length ?? 0;
   const reversibleTracePointCount = reversibleRoute?.points.length ?? 0;
-  const activeTraceDistanceKm = useMemo(() => {
-    if (!simplifiableRoute) return 0;
-    return routeLengthM(simplifiableRoute.points) / 1000;
-  }, [simplifiableRoute]);
-  const currentPointsPerKm = useMemo(() => {
-    if (activeTracePointCount <= 0 || activeTraceDistanceKm <= 0) return 0;
-    return activeTracePointCount / activeTraceDistanceKm;
-  }, [activeTraceDistanceKm, activeTracePointCount]);
-  const canSimplifyTrace = activeTracePointCount > 2;
-  const canCleanTrace = activeTracePointCount > 2;
   const canReverseTrace = reversibleTracePointCount > 1;
-  const canAuditTrace = activeItinerary?.gpxRoute?.source === 'brouter';
   const canSplitTrace = routeSplitTool?.canSplit ?? false;
   const splitStatusMessage = routeSplitTool?.statusMessage ?? null;
   const splitArmed = routeSplitTool?.armed ?? false;
@@ -139,145 +110,27 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
   const canRedoTraceEdit = forbiddenZoneArmed
     ? canRedoForbiddenZoneDraft
     : (store?.canRedoTraceEdit ?? false);
-  const auditFindings = activeItinerary?.routeAudit?.findings ?? [];
-  const auditVisible = activeItinerary?.routeAudit?.visible === true;
-  const simplifyTargetPoints = useMemo(
-    () =>
-      clamp(
-        Math.round(Math.max(activeTraceDistanceKm, 0.25) * simplifyPointsPerKm),
-        2,
-        Math.max(2, activeTracePointCount),
-      ),
-    [activeTraceDistanceKm, activeTracePointCount, simplifyPointsPerKm],
-  );
-  const canApplySimplification = canSimplifyTrace && simplifyTargetPoints < activeTracePointCount;
   const inlineToolbarStatus = useMemo(() => {
     if (splitStatusMessage) return splitStatusMessage;
     if (forbiddenZoneStatusMessage) return forbiddenZoneStatusMessage;
     if (traceStatusMessage) return traceStatusMessage;
     if (toolbarStatus) return toolbarStatus;
-    if (!toolsExpanded) return null;
-    if (activeSubtool === 'simplify' && canSimplifyTrace) {
-      const reduciblePoints = Math.max(0, activeTracePointCount - simplifyTargetPoints);
-      return reduciblePoints > 0
-        ? t(
-            reduciblePoints > 1 ? 'Réduction possible: {{count}} points en moins' : 'Réduction possible: {{count}} point en moins',
-            { count: reduciblePoints.toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US') },
-          )
-        : t('Trace déjà assez légère');
-    }
-    if (canAuditTrace) {
-      return auditFindings.length > 0
-        ? t(
-            auditFindings.length > 1 ? '{{count}} passages trop raides détectés' : '{{count}} passage trop raide détecté',
-            { count: auditFindings.length.toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US') },
-          )
-        : t('Aucun passage trop raide détecté');
-    }
-    if (canCleanTrace) {
-      return t('Nettoyage de trace disponible');
-    }
     return null;
   }, [
-    activeSubtool,
-    activeTracePointCount,
-    auditFindings.length,
-    canAuditTrace,
-    canCleanTrace,
     forbiddenZoneStatusMessage,
-    canSimplifyTrace,
-    simplifyTargetPoints,
     splitStatusMessage,
     traceStatusMessage,
     toolbarStatus,
-    toolsExpanded,
   ]);
-
-  useEffect(() => {
-    setSimplifyPointsPerKm(computeDefaultPointsPerKm(currentPointsPerKm));
-  }, [activeItinerary?.id, currentPointsPerKm]);
-
-  useEffect(() => {
-    if (!toolsExpanded) {
-      setActiveSubtool(null);
-    }
-  }, [toolsExpanded]);
-
 
   useEffect(() => {
     setToolbarStatus(null);
   }, [activeItinerary?.id]);
 
-  const handleToggleTools = () => {
-    setToolsExpanded((open) => !open);
-  };
-
-  const handleToggleSimplifyTool = () => {
-    if (!canSimplifyTrace) return;
-    if (!toolsExpanded) {
-      setToolsExpanded(true);
-      setActiveSubtool('simplify');
-      return;
-    }
-    setActiveSubtool((current) => (current === 'simplify' ? null : 'simplify'));
-  };
-
-  const handleApplySimplification = () => {
-    if (!store || !activeItinerary || !canApplySimplification) return;
-    store.simplifyItineraryGpx(activeItinerary.id, simplifyPointsPerKm);
-    setToolbarStatus(
-      t('Trace réduite à {{value}} pts/km', {
-        value: simplifyPointsPerKm.toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US'),
-      }),
-    );
-  };
-
-  const handleCleanTrace = () => {
-    if (!store || !activeItinerary || !canCleanTrace || !simplifiableRoute) return;
-    const cleanedPoints = cleanGpxGlitches(simplifiableRoute.points);
-    if (routePointsEqual(cleanedPoints, simplifiableRoute.points)) {
-      setToolbarStatus(t('Aucune aberration détectée'));
-      return;
-    }
-    store.cleanItineraryGpxGlitches(activeItinerary.id);
-    setToolbarStatus(t('Trace nettoyée'));
-  };
-
   const handleReverseTrace = () => {
     if (!store || !activeItinerary || !canReverseTrace) return;
     const reversed = store.reverseItineraryGpx(activeItinerary.id);
     setToolbarStatus(reversed ? t('Sens du GPX inversé') : t('Inversion indisponible pour cette trace'));
-  };
-
-  const handleToggleRouteAudit = () => {
-    if (!store || !activeItinerary || !canAuditTrace) return;
-    if (!activeItinerary.routeAudit) {
-      setToolbarStatus(t('Audit indisponible pour cette trace'));
-      return;
-    }
-    if (auditFindings.length === 0) {
-      store.updateItinerary(activeItinerary.id, (it) => {
-        if (it.routeAudit) it.routeAudit.visible = false;
-      });
-      setToolbarStatus(t('Aucune galère détectée'));
-      return;
-    }
-    const nextVisible = !auditVisible;
-    store.updateItinerary(activeItinerary.id, (it) => {
-      if (!it.routeAudit) {
-        it.routeAudit = { visible: nextVisible, findings: [] };
-        return;
-      }
-      it.routeAudit.visible = nextVisible;
-    });
-    setToolbarStatus(
-      nextVisible
-        ? t(
-            auditFindings.length > 1 ? '{{count}} portions à vérifier' : '{{count}} portion à vérifier',
-            { count: auditFindings.length.toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US') },
-          )
-        : t('Audit masqué'),
-    );
   };
 
   const handleToggleRouteSplit = () => {
@@ -427,10 +280,6 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
             <IconSlashOctagon />
           </ToolbarIconButton>
 
-          <ToolbarIconButton label="Outils" onClick={handleToggleTools} active={toolsExpanded}>
-            <IconWrench />
-          </ToolbarIconButton>
-
           <ToolbarIconButton
             label="Supprimer"
             onClick={handleDeleteActiveRoute}
@@ -438,36 +287,6 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
           >
             <IconTrash />
           </ToolbarIconButton>
-
-          {toolsExpanded ? (
-            <>
-              <ToolbarIconButton
-                label="Simplification intelligente de la trace"
-                onClick={handleToggleSimplifyTool}
-                disabled={!canSimplifyTrace}
-                active={activeSubtool === 'simplify'}
-              >
-                <span className="rvc-center-toolbar__tool-glyph" aria-hidden="true">X</span>
-              </ToolbarIconButton>
-
-              <ToolbarIconButton
-                label="Nettoyer la trace"
-                onClick={handleCleanTrace}
-                disabled={!canCleanTrace}
-              >
-                <span className="rvc-center-toolbar__tool-glyph" aria-hidden="true">X</span>
-              </ToolbarIconButton>
-
-              <ToolbarIconButton
-                label="Audit de roulabilité"
-                onClick={handleToggleRouteAudit}
-                disabled={!canAuditTrace}
-                active={auditVisible}
-              >
-                <span className="rvc-center-toolbar__tool-glyph" aria-hidden="true">X</span>
-              </ToolbarIconButton>
-            </>
-          ) : null}
 
           {inlineToolbarStatus ? (
             <div className="rvc-center-toolbar__status-inline" role="status" aria-live="polite">
@@ -534,54 +353,6 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
           </div>
         </div>
       </div>
-
-      {toolsExpanded && activeSubtool === 'simplify' ? (
-        <div className="rvc-center-toolbar__tool-panel" role="group" aria-label={t('Réduction de points GPX')}>
-          <div className="rvc-center-toolbar__tool-panel-head">
-            <span className="rvc-center-toolbar__tool-title">{t('Simplification intelligente')}</span>
-            <span className="rvc-center-toolbar__tool-stats">
-              {simplifyTargetPoints.toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US')} / {activeTracePointCount.toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US')} pts
-            </span>
-          </div>
-
-          <div className="rvc-center-toolbar__tool-hint">
-            <span>{t('Detaillé courant: {{value}} pts/km', { value: Math.round(currentPointsPerKm).toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US') })}</span>
-            <span>{t('Repères utiles: détaillé 40-80 pts/km, léger 15-30 pts/km')}</span>
-          </div>
-
-          <div className="rvc-center-toolbar__tool-panel-row">
-            <span className="rvc-center-toolbar__tool-caption">{t('Densité cible')}</span>
-            <div className="rvc-center-toolbar__tool-slider-shell">
-              <Slider
-                value={simplifyPointsPerKm}
-                min={5}
-                max={120}
-                step={1}
-                width="100%"
-                onChange={setSimplifyPointsPerKm}
-                onCommit={setSimplifyPointsPerKm}
-              />
-            </div>
-            <span className="rvc-center-toolbar__tool-value">{simplifyPointsPerKm} pts/km</span>
-          </div>
-
-          <div className="rvc-center-toolbar__tool-panel-actions">
-            <span className="rvc-center-toolbar__tool-caption">
-              {activeTraceDistanceKm > 0
-                ? `${activeTraceDistanceKm.toFixed(1).replace(locale === 'fr' ? '.' : ',', locale === 'fr' ? ',' : '.')} km -> ${simplifyTargetPoints.toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US')} pts`
-                : t('Distance indisponible')}
-            </span>
-            <button
-              className="rvc-center-toolbar__button rvc-center-toolbar__button--accent"
-              type="button"
-              onClick={handleApplySimplification}
-              disabled={!canApplySimplification}
-            >
-              {t('Réduire')}
-            </button>
-          </div>
-        </div>
-      ) : null}
     </section>
   );
 });

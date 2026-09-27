@@ -312,12 +312,66 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     [commitTraceMutation],
   );
 
+  const [selectedTimelineIds, setSelectedTimelineIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    setSelectedTimelineIds([]);
+  }, [project.activeItineraryId]);
+
+  const centerTimelineRowInList = useCallback((itemId: string) => {
+    const tryScroll = (attempts = 6) => {
+      const rowEl = document.querySelector<HTMLElement>(`[data-timeline-id="${itemId}"]`);
+      if (rowEl) {
+        let container: HTMLElement | null = rowEl.parentElement;
+        while (container) {
+          const style = window.getComputedStyle(container);
+          const overflowY = style.overflowY;
+          if ((overflowY === 'auto' || overflowY === 'scroll') && container.scrollHeight > container.clientHeight) {
+            break;
+          }
+          container = container.parentElement;
+        }
+
+        if (container) {
+          const rowRect = rowEl.getBoundingClientRect();
+          const containerRect = container.getBoundingClientRect();
+          const targetScrollTop =
+            container.scrollTop +
+            (rowRect.top - containerRect.top) -
+            (container.clientHeight / 2) +
+            (rowRect.height / 2);
+
+          container.scrollTo({
+            top: Math.max(0, targetScrollTop),
+            behavior: 'smooth',
+          });
+        } else {
+          rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        return;
+      }
+      if (attempts > 0) {
+        setTimeout(() => tryScroll(attempts - 1), 50);
+      }
+    };
+    window.requestAnimationFrame(() => tryScroll());
+  }, []);
+
+  const handleSelectAndCenterTimelineRow = useCallback(
+    (rowId: string) => {
+      setSelectedTimelineIds([rowId]);
+      centerTimelineRowInList(rowId);
+    },
+    [centerTimelineRowInList],
+  );
+
   const poiHandlers = useItineraryPoiHandlers({
     activeItineraryRef,
     updateActive,
     updateActiveWithHistory,
     project,
     addItinerary,
+    onSelectAndCenterTimelineRow: handleSelectAndCenterTimelineRow,
   });
 
   useItineraryMapActions({
@@ -326,6 +380,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     poiHandlers,
     project,
     addItinerary,
+    onSelectAndCenterTimelineRow: handleSelectAndCenterTimelineRow,
   });
 
   // GPX import progress, surfaced as a loading row in the itinerary list.
@@ -392,6 +447,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     setProject,
     updateActive,
     updateActiveWithHistory,
+    onSelectAndCenterTimelineRow: handleSelectAndCenterTimelineRow,
   });
 
   const { openCheckpointMarker } = useItineraryCheckpointMarkers({
@@ -499,45 +555,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     });
   }, [setProject]);
 
-  const [selectedTimelineIds, setSelectedTimelineIds] = useState<string[]>([]);
 
-  useEffect(() => {
-    setSelectedTimelineIds([]);
-  }, [project.activeItineraryId]);
-
-  const centerTimelineRowInList = useCallback((itemId: string) => {
-    window.requestAnimationFrame(() => {
-      const rowEl = document.querySelector<HTMLElement>(`[data-timeline-id="${itemId}"]`);
-      if (!rowEl) return;
-
-      let container: HTMLElement | null = rowEl.parentElement;
-      while (container) {
-        const style = window.getComputedStyle(container);
-        const overflowY = style.overflowY;
-        if ((overflowY === 'auto' || overflowY === 'scroll') && container.scrollHeight > container.clientHeight) {
-          break;
-        }
-        container = container.parentElement;
-      }
-
-      if (container) {
-        const rowRect = rowEl.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
-        const targetScrollTop =
-          container.scrollTop +
-          (rowRect.top - containerRect.top) -
-          (container.clientHeight / 2) +
-          (rowRect.height / 2);
-
-        container.scrollTo({
-          top: Math.max(0, targetScrollTop),
-          behavior: 'smooth',
-        });
-      } else {
-        rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    });
-  }, []);
 
   const handleMapPoiSelect = useCallback(
     (feature: PoiFeature) => {
