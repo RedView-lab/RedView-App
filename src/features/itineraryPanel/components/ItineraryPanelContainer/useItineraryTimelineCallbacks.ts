@@ -122,7 +122,8 @@ export function useItineraryTimelineCallbacks({
       row.label = place.name;
       row.lat = place.lat;
       row.lon = place.lon;
-      if (it.gpxRoute?.source === 'brouter') {
+      if (it.gpxRoute?.points && it.gpxRoute.points.length >= 2) {
+        delete row.onRoute;
         it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, id);
         delete it.pendingTraceExtension;
         delete it.routeAudit;
@@ -130,6 +131,25 @@ export function useItineraryTimelineCallbacks({
       }
     });
   }, [updateActive]);
+
+  const handleMoveTimelineWaypoint = useCallback(
+    (id: string, lat: number, lon: number) => {
+      updateActive((it) => {
+        const row = it.timeline.find((item) => item.id === id);
+        if (!row) return;
+        row.lat = lat;
+        row.lon = lon;
+        delete row.onRoute;
+        if (it.gpxRoute?.points && it.gpxRoute.points.length >= 2) {
+          it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, id);
+          delete it.pendingTraceExtension;
+          delete it.routeAudit;
+          it.prediction = null;
+        }
+      });
+    },
+    [updateActive],
+  );
 
   return {
     handleChangeTimelineView,
@@ -140,5 +160,6 @@ export function useItineraryTimelineCallbacks({
     handleRemoveTimelineItem,
     handleFavoriteTimelineItem,
     handleSelectTimelinePlace,
+    handleMoveTimelineWaypoint,
   };
 }

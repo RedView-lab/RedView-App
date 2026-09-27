@@ -129,6 +129,12 @@ function reverseTimelineEndpoints(
     return createImportedTimeline(reversedPoints);
   }
 
+  const reversedWaypoints = timeline
+    .filter((row) => row.kind === 'waypoint')
+    .slice()
+    .reverse();
+
+  let waypointIndex = 0;
   return timeline.map((row) => {
     if (row.kind === 'start') {
       return {
@@ -146,6 +152,23 @@ function reverseTimelineEndpoints(
         lat: endPoint.lat,
         lon: endPoint.lon,
         distanceKm,
+      };
+    }
+    if (row.kind === 'waypoint') {
+      const source = reversedWaypoints[waypointIndex] ?? row;
+      waypointIndex += 1;
+      const reversedDistKm =
+        distanceKm != null && source.distanceKm != null
+          ? Math.max(0, Math.round((distanceKm - source.distanceKm) * 10) / 10)
+          : null;
+      return {
+        ...row,
+        id: source.id,
+        label: source.label,
+        lat: source.lat,
+        lon: source.lon,
+        distanceKm: reversedDistKm,
+        onRoute: source.onRoute,
       };
     }
     return row;

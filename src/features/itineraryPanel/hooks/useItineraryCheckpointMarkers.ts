@@ -23,6 +23,7 @@ interface UseItineraryCheckpointMarkersArgs {
   onTogglePauseFavorite?: (id: string, favorite: boolean) => void;
   onDeleteWaypoint?: (id: string) => void;
   onToggleWaypointFavorite?: (id: string, favorite: boolean) => void;
+  onMoveWaypoint?: (id: string, lat: number, lon: number) => void;
 }
 
 interface CheckpointData {
@@ -71,13 +72,13 @@ const UI_ICON_URLS = {
 
 const PAUSE_DURATION_OPTIONS = [5, 10, 15, 20, 30, 45, 60] as const;
 
-const MARKER_MIN_SCALE_ZOOM = 8.25;
+const MARKER_MIN_SCALE_ZOOM = 6.2;
 const MARKER_MAX_SCALE_ZOOM = 15.1;
-const MARKER_MIN_SCREEN_SCALE = 0.42;
+const MARKER_MIN_SCREEN_SCALE = 0.35;
 const MARKER_MAX_SCREEN_SCALE = 1.0;
 const MARKER_MIN_POPUP_OFFSET_PX = 38;
 const MARKER_MAX_POPUP_OFFSET_PX = 80;
-const CHECKPOINT_MIN_ZOOM = 8.0;
+const CHECKPOINT_MIN_ZOOM = 6.0;
 
 function escapeHtml(text: string): string {
   return text
@@ -124,7 +125,7 @@ function applyCheckpointZoomVisibility(element: HTMLElement, zoom: number): void
 
 function applyMarkerVisualState(entry: MarkerRegistryEntry, zoom: number): void {
   const el = entry.element;
-  if (zoom < 8.0) {
+  if (zoom < CHECKPOINT_MIN_ZOOM) {
     el.style.display = 'none';
     return;
   }
@@ -584,6 +585,7 @@ export function useItineraryCheckpointMarkers({
   onTogglePauseFavorite,
   onDeleteWaypoint,
   onToggleWaypointFavorite,
+  onMoveWaypoint,
 }: UseItineraryCheckpointMarkersArgs): {
   openCheckpointMarker: (checkpointId: string, coords?: { lat: number; lon: number }) => boolean;
 } {
@@ -596,6 +598,7 @@ export function useItineraryCheckpointMarkers({
     onTogglePauseFavorite,
     onDeleteWaypoint,
     onToggleWaypointFavorite,
+    onMoveWaypoint,
   });
 
   useEffect(() => {
@@ -605,6 +608,7 @@ export function useItineraryCheckpointMarkers({
       onTogglePauseFavorite,
       onDeleteWaypoint,
       onToggleWaypointFavorite,
+      onMoveWaypoint,
     };
   }, [
     onChangePauseDuration,
@@ -612,6 +616,7 @@ export function useItineraryCheckpointMarkers({
     onTogglePauseFavorite,
     onDeleteWaypoint,
     onToggleWaypointFavorite,
+    onMoveWaypoint,
   ]);
 
   useEffect(() => {
@@ -895,8 +900,17 @@ export function useItineraryCheckpointMarkers({
           pitchAlignment: 'viewport',
           rotationAlignment: 'viewport',
           occludedOpacity: 0,
+          draggable: cp.kind === 'waypoint',
         })
           .setLngLat(cp.coord);
+
+        if (cp.kind === 'waypoint' && cp.waypointId) {
+          const wpId = cp.waypointId;
+          marker.on('dragend', () => {
+            const lngLat = marker.getLngLat();
+            callbacksRef.current.onMoveWaypoint?.(wpId, lngLat.lat, lngLat.lng);
+          });
+        }
 
         if (popup) {
           marker.setPopup(popup);

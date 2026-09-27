@@ -16,6 +16,7 @@ import {
 import { createDefaultAnalysisPanelState } from '../../lib/project';
 import type { GpxQualityMode, Itinerary, ItineraryProject } from '../../types';
 import { resolveImportedTimelineLabel } from './importedTimelineLabel';
+import { reverseGeocodeSettlement } from '../../lib/geocoding';
 
 interface UseItineraryGpxImportArgs {
   setProject: Dispatch<SetStateAction<ItineraryProject>>;
@@ -61,34 +62,88 @@ export function useItineraryGpxImport({
         resolveImportedTimelineLabel(endPoint.lon, endPoint.lat),
       ]);
 
-      setProject((projectState) => ({
-        ...projectState,
-        itineraries: projectState.itineraries.map((itinerary) => {
-          if (itinerary.id !== itineraryId) return itinerary;
-          return {
-            ...itinerary,
-            timeline: itinerary.timeline.map((item) => {
-              if (item.kind === 'start') {
-                return {
-                  ...item,
-                  label: startLabel,
-                  lat: startPoint.lat,
-                  lon: startPoint.lon,
-                };
+      setProject((projectState) => {
+        const targetItinerary = projectState.itineraries.find((it) => it.id === itineraryId);
+        if (!targetItinerary) return projectState;
+
+        const updatedTimeline = targetItinerary.timeline.map((item) => {
+          if (item.kind === 'start') {
+            return {
+              ...item,
+              label: startLabel,
+              lat: startPoint.lat,
+              lon: startPoint.lon,
+            };
+          }
+          if (item.kind === 'end') {
+            return {
+              ...item,
+              label: endLabel,
+              lat: endPoint.lat,
+              lon: endPoint.lon,
+            };
+          }
+          return item;
+        });
+
+        return {
+          ...projectState,
+          itineraries: projectState.itineraries.map((itinerary) =>
+            itinerary.id === itineraryId ? { ...itinerary, timeline: updatedTimeline } : itinerary,
+          ),
+        };
+      });
+
+      // Résolution asynchrone des toponymes des points de passage intermédiaires
+      try {
+        setProject((projectState) => {
+          const target = projectState.itineraries.find((it) => it.id === itineraryId);
+          if (!target) return projectState;
+          const waypointItems = target.timeline.filter(
+            (item) => item.kind === 'waypoint' && item.lat != null && item.lon != null,
+          );
+          if (waypointItems.length === 0) return projectState;
+
+          void Promise.all(
+            waypointItems.map(async (wp) => {
+              try {
+                const settlement = await reverseGeocodeSettlement(wp.lon!, wp.lat!, {
+                  maxDistanceMeters: 1500,
+                });
+                return { id: wp.id, name: settlement?.name?.trim() || null };
+              } catch {
+                return { id: wp.id, name: null };
               }
-              if (item.kind === 'end') {
-                return {
-                  ...item,
-                  label: endLabel,
-                  lat: endPoint.lat,
-                  lon: endPoint.lon,
-                };
-              }
-              return item;
             }),
-          };
-        }),
-      }));
+          ).then((results) => {
+            const namedMap = new Map(
+              results.filter((r) => r.name).map((r) => [r.id, r.name!]),
+            );
+            if (namedMap.size === 0) return;
+
+            setProject((latestState) => ({
+              ...latestState,
+              itineraries: latestState.itineraries.map((itinerary) => {
+                if (itinerary.id !== itineraryId) return itinerary;
+                return {
+                  ...itinerary,
+                  timeline: itinerary.timeline.map((item) => {
+                    const placeName = namedMap.get(item.id);
+                    if (placeName) {
+                      return { ...item, label: placeName };
+                    }
+                    return item;
+                  }),
+                };
+              }),
+            }));
+          });
+
+          return projectState;
+        });
+      } catch (err) {
+        console.warn('[useItineraryGpxImport] Failed to resolve waypoint settlements:', err);
+      }
     },
     [setProject],
   );

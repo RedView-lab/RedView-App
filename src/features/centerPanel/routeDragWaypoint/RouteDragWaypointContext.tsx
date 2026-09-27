@@ -170,7 +170,7 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
         );
         if (!result) return false;
 
-        if (currentRoute.source === 'brouter' && !result.isDirectOnRoute) {
+        if (!result.isDirectOnRoute) {
           targetItinerary.pendingRoutePatch = buildPendingRoutePatchForEditedRow(
             targetItinerary.timeline,
             result.newRowId,

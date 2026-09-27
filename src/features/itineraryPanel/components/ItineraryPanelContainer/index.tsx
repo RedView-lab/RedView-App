@@ -395,6 +395,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     onTogglePauseFavorite: timelineCallbacks.handleFavoriteTimelineItem,
     onDeleteWaypoint: timelineCallbacks.handleRemoveTimelineItem,
     onToggleWaypointFavorite: timelineCallbacks.handleFavoriteTimelineItem,
+    onMoveWaypoint: timelineCallbacks.handleMoveTimelineWaypoint,
   });
 
   const handleCorridorUpdate = useCallback((features: PoiFeature[]) => {

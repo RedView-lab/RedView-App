@@ -180,15 +180,13 @@ export function useItineraryBrouterRouting({
     const currentActive = activeRef.current;
     const pendingRoutePatch = currentActive?.pendingRoutePatch;
     const pendingTraceExtension = currentActive?.pendingTraceExtension;
-    const existingBrouterPoints = currentActive?.gpxRoute?.source === 'brouter'
-      ? currentActive.gpxRoute.points
-      : null;
+    const existingRoutePoints = currentActive?.gpxRoute?.points ?? null;
 
     if (
       currentActive &&
       pendingRoutePatch &&
-      existingBrouterPoints &&
-      existingBrouterPoints.length >= 2
+      existingRoutePoints &&
+      existingRoutePoints.length >= 2
     ) {
       const patchPoints = [
         pendingRoutePatch.start,
@@ -269,8 +267,8 @@ export function useItineraryBrouterRouting({
     if (
       currentActive &&
       pendingTraceExtension &&
-      existingBrouterPoints &&
-      existingBrouterPoints.length >= 2
+      existingRoutePoints &&
+      existingRoutePoints.length >= 2
     ) {
       const appendStart = pendingTraceExtension.from;
       const appendEnd = pendingTraceExtension.to;
