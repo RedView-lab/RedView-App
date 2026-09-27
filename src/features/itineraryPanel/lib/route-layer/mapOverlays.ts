@@ -45,6 +45,7 @@ import {
 } from './geojson';
 import type { RouteLayerPoint } from './routeStyle';
 import {
+  LINE_CLEARANCE_M,
   ROUTE_PROFILE_Z_OFFSET,
   ROUTE_SELECTION_CLEARANCE_M,
   applyRouteElevationProfile,
@@ -304,7 +305,7 @@ export function setAnalysisFlyoverProgress(
     const geoJson = buildAnalysisFlyoverProgressGeoJson(coords, color);
     const elevationContext = getRouteElevationContext(map);
     const elevationProfileApplied =
-      elevationContext.scale !== null && points.some((pt) => isValidElevation(pt.elevationM))
+      elevationContext.scale !== null && !elevationContext.isLowResDem && points.some((pt) => isValidElevation(pt.elevationM))
         ? applyRouteElevationProfile(
             { data: geoJson, requiresLineMetrics: true },
             points,
@@ -321,7 +322,7 @@ export function setAnalysisFlyoverProgress(
     const zOffset = elevationProfileApplied
       ? ROUTE_PROFILE_Z_OFFSET
       : elevationContext.scale !== null
-        ? 0.8
+        ? LINE_CLEARANCE_M
         : 0;
 
     source.setData(geoJson);
@@ -387,7 +388,7 @@ export function setAnalysisSelectedSegment(
     const geoJson = buildAnalysisSelectionGeoJson(coords, color);
     const elevationContext = getRouteElevationContext(map);
     const elevationProfileApplied =
-      elevationContext.scale !== null && points.some((pt) => isValidElevation(pt.elevationM))
+      elevationContext.scale !== null && !elevationContext.isLowResDem && points.some((pt) => isValidElevation(pt.elevationM))
         ? applyRouteElevationProfile(
             { data: geoJson, requiresLineMetrics: true },
             points,
@@ -404,7 +405,7 @@ export function setAnalysisSelectedSegment(
     const zOffset = elevationProfileApplied
       ? ROUTE_PROFILE_Z_OFFSET
       : elevationContext.scale !== null
-        ? 0.8
+        ? LINE_CLEARANCE_M
         : 0;
 
     source.setData(geoJson);

@@ -21,14 +21,14 @@ const defaultMtb = syncTracageOnActivityChange('mtb', 'vitesse', 10);
 export const ROUTE_PROFILE_PRESETS: Record<string, RouteProfilePreset> = {
   road: {
     id: 'road',
-    name: translateAppText('Route'),
+    name: translateAppText('Cyclisme sur route'),
+    isDefault: true,
     priorities: defaultRoad.priorities as PrioritiesState,
     roadTypes: defaultRoad.roadTypes as Omit<RoadTypesState, 'applyToAllItineraries'>,
   },
   'gravel-default': {
     id: 'gravel-default',
     name: translateAppText('Gravel'),
-    isDefault: true,
     priorities: defaultGravel.priorities as PrioritiesState,
     roadTypes: defaultGravel.roadTypes as Omit<RoadTypesState, 'applyToAllItineraries'>,
   },
@@ -41,8 +41,8 @@ export const ROUTE_PROFILE_PRESETS: Record<string, RouteProfilePreset> = {
 };
 
 export const DEFAULT_PROFILES: RouteProfile[] = [
-  { id: 'road', name: translateAppText('Route') },
-  { id: 'gravel-default', name: translateAppText('Gravel'), isDefault: true },
+  { id: 'road', name: translateAppText('Cyclisme sur route'), isDefault: true },
+  { id: 'gravel-default', name: translateAppText('Gravel') },
   { id: 'mtb', name: translateAppText('VTT') },
 ];
 

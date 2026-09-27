@@ -311,7 +311,12 @@ export function DashboardEditor({
         <MapViewportControls
           map={mapInstance}
           isMapLoaded={mapLoaded}
-          immersiveMode={isMapFocusMode}
+          immersiveMode={
+            isMapFocusMode ||
+            (isLeftPanelCollapsed &&
+              isRightPanelCollapsed &&
+              (isCenterPanelCollapsed || !layout.centerToolbarVisible))
+          }
           onToggleImmersiveMode={onToggleMapFocusMode}
           isRightPanelVisible={!isRightPanelCollapsed}
           onToggleRightPanel={isRightPanelCollapsed ? onRestoreRightPanel : onCollapseRightPanel}

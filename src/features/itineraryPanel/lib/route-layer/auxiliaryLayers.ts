@@ -26,6 +26,7 @@ import {
   ROUTE_HOVER_PREVIEW_SOURCE_ID,
   canMutateStyle,
 } from './constants';
+import { LINE_CLEARANCE_M, ROUTE_SELECTION_CLEARANCE_M } from './routeElevation';
 import {
   buildAnalysisFlyoverProgressGeoJson,
   buildAnalysisHoverGeoJson,
@@ -178,7 +179,7 @@ export function ensureAnalysisFlyoverProgressLayers(map: MapboxMap): GeoJSONSour
       'line-cap': 'round',
       'line-join': 'round',
       'line-elevation-reference': 'ground' as unknown as undefined,
-      'line-z-offset': 0.8 as unknown as undefined,
+      'line-z-offset': LINE_CLEARANCE_M as unknown as undefined,
       visibility: 'none',
     },
     paint: {
@@ -200,7 +201,7 @@ export function ensureAnalysisFlyoverProgressLayers(map: MapboxMap): GeoJSONSour
       'line-cap': 'round',
       'line-join': 'round',
       'line-elevation-reference': 'ground' as unknown as undefined,
-      'line-z-offset': 0.8 as unknown as undefined,
+      'line-z-offset': LINE_CLEARANCE_M as unknown as undefined,
       visibility: 'none',
     },
     paint: {
@@ -249,7 +250,7 @@ export function ensureAnalysisSelectionLayers(map: MapboxMap): GeoJSONSource | n
       'line-cap': 'round',
       'line-join': 'round',
       'line-elevation-reference': 'ground' as unknown as undefined,
-      'line-z-offset': 0.86 as unknown as undefined,
+      'line-z-offset': ROUTE_SELECTION_CLEARANCE_M as unknown as undefined,
       visibility: 'none',
     },
     paint: {

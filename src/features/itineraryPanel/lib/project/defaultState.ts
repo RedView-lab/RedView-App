@@ -188,8 +188,26 @@ export function normalizeItineraryProject(project: ItineraryProject): ItineraryP
       }
     }
 
+    const profileId =
+      itinerary.profileId ||
+      (itinerary.roadTypes?.activityType && ROUTE_PROFILE_PRESETS[itinerary.roadTypes.activityType]
+        ? itinerary.roadTypes.activityType
+        : 'road');
+    const roadTypes = itinerary.roadTypes
+      ? {
+          ...itinerary.roadTypes,
+          activityType: itinerary.roadTypes.activityType || profileId,
+          tracingMode: itinerary.roadTypes.tracingMode || 'vitesse',
+        }
+      : {
+          ...ROUTE_PROFILE_PRESETS['road'].roadTypes,
+          applyToAllItineraries: false,
+        };
+
     return {
       ...itinerary,
+      profileId,
+      roadTypes,
       gpxRoute,
       metrics,
       poi: normalizeItineraryPoiState(itinerary.poi),
@@ -213,7 +231,7 @@ export function createDefaultItinerary(
   index = 1,
   color: string = ITINERARY_COLORS[0],
 ): Itinerary {
-  const defaultPreset = ROUTE_PROFILE_PRESETS['gravel-default'];
+  const defaultPreset = ROUTE_PROFILE_PRESETS['road'];
   return {
     id: `it-${Date.now()}-${index}`,
     name: translateAppText('Itinéraire {{index}}', { index }),

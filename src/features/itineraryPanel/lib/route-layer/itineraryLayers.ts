@@ -20,6 +20,7 @@ import {
   type RouteLayerPoint,
 } from './routeStyle';
 import {
+  LINE_CLEARANCE_M,
   ROUTE_PROFILE_Z_OFFSET,
   applyRouteElevationProfile,
   getRouteElevationContext,
@@ -284,7 +285,11 @@ export function upsertRouteLayer(
 
   const renderSpec = buildRouteGeoJson(points, opts, traceWidthPx);
   renderSpec.requiresLineMetrics = true;
-  const elevationProfileApplied = elevationContext.scale !== null
+  // Low-res DEM (30 m): drape the route directly on the terrain mesh — the
+  // coarse grid makes a sea-referenced absolute profile clip through hills.
+  // HD DEM (0.40 m): use the smooth sea-referenced elevation profile so the
+  // route floats above the high-fidelity mesh without hugging jagged facets.
+  const elevationProfileApplied = elevationContext.scale !== null && !elevationContext.isLowResDem
     ? applyRouteElevationProfile(renderSpec, points, elevationContext.scale)
     : false;
   const elevationReference: RouteLineElevationReference = elevationProfileApplied
@@ -295,7 +300,7 @@ export function upsertRouteLayer(
   const zOffset: ExpressionSpecification | number = elevationProfileApplied
     ? ROUTE_PROFILE_Z_OFFSET
     : elevationContext.scale !== null
-      ? 0.8
+      ? LINE_CLEARANCE_M
       : 0;
   const mountedSourceRequiresLineMetrics = getMountedSourceRequiresLineMetrics(map, srcId);
   const mountedLayerUsesLineProgress = routeLayerUsesLineGradient(map, lineId)

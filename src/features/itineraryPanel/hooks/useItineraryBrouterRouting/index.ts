@@ -48,6 +48,15 @@ export function useItineraryBrouterRouting({
     setRouteLoading(false);
   }, []);
   const activeRef = useRef(active);
+  // When set to true, the next "full recompute" branch of the routing
+  // effect is skipped and the flag is cleared.  This is used by the
+  // recalculate-trace feature to prevent the effect from overwriting
+  // the freshly-recalculated route with a single (often failing)
+  // end-to-end BRouter request.
+  const skipRouteRecomputeRef = useRef(false);
+  const skipNextRouteRecompute = useCallback(() => {
+    skipRouteRecomputeRef.current = true;
+  }, []);
 
   useEffect(() => {
     activeRef.current = active;
@@ -120,7 +129,7 @@ export function useItineraryBrouterRouting({
         .join('|')
     : '';
   const hasWaypointOverride = routingViaKey.length > 0;
-  const profileId = active?.profileId ?? 'gravel-default';
+  const profileId = active?.profileId ?? 'road';
   const climbing = active ? isClimbingMode(active.priorities) : false;
   const forbiddenPolygons = formatForbiddenZonePolygons(active?.forbiddenZones);
   const pendingRoutePatchKey = active?.pendingRoutePatch
@@ -354,6 +363,17 @@ export function useItineraryBrouterRouting({
       return;
     }
 
+    // After a segment-by-segment recalculation the source flips from
+    // 'gpx' → 'brouter' which re-triggers this effect.  Skip the full
+    // recompute once so we don't overwrite the result with a failing
+    // single-request route.
+    if (skipRouteRecomputeRef.current) {
+      skipRouteRecomputeRef.current = false;
+      console.log('[BRouter] skipping full recompute (recalculate-trace guard)');
+      deferRouteState(null);
+      return;
+    }
+
     const [startLon, startLat] = startKey.split(',').map(Number);
     const [endLon, endLat] = endKey.split(',').map(Number);
     const userVia = viaKey
@@ -498,5 +518,6 @@ export function useItineraryBrouterRouting({
     routeLoading,
     routeRequestNonce,
     routeWarnings,
+    skipNextRouteRecompute,
   };
 }

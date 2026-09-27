@@ -2061,6 +2061,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Road"
   },
   {
+    "fr": "Cyclisme sur route",
+    "en": "Road cycling"
+  },
+  {
     "fr": "Marche",
     "en": "Walking"
   },
@@ -2831,6 +2835,14 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Favoris",
     "en": "Favorites"
+  },
+  {
+    "fr": "POI carte",
+    "en": "POI map"
+  },
+  {
+    "fr": "POI itinéraire",
+    "en": "POI route"
   },
   {
     "fr": "POIs sur carte",

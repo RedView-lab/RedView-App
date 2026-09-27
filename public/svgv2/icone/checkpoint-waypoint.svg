@@ -1,15 +1,15 @@
-<svg width="44" height="48" viewBox="0 0 44 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
 <g filter="url(#filter0_d_wp)">
 <circle cx="22" cy="22" r="13" fill="#0e0e0e" stroke="white" stroke-width="3"/>
 <circle cx="22" cy="22" r="5" fill="white"/>
 </g>
 <defs>
-<filter id="filter0_d_wp" x="0" y="0" width="44" height="48" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<filter id="filter0_d_wp" x="0" y="0" width="44" height="44" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
 <feFlood flood-opacity="0" result="BackgroundImageFix"/>
 <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
 <feMorphology radius="1.5" operator="dilate" in="SourceAlpha" result="effect1_dropShadow"/>
-<feOffset dy="2"/>
-<feGaussianBlur stdDeviation="3.5"/>
+<feOffset dy="0"/>
+<feGaussianBlur stdDeviation="3"/>
 <feComposite in2="hardAlpha" operator="out"/>
 <feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.35 0"/>
 <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow"/>

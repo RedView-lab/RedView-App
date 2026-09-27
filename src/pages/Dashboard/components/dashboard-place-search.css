@@ -33,9 +33,9 @@
   position: relative;
   display: flex;
   align-items: center;
-  flex: 0 1 234px;
+  flex: 0 1 180px;
   min-width: 140px;
-  width: 234px;
+  width: 180px;
   height: 32px;
   min-height: 32px;
   padding: 0 12px 0 8px;

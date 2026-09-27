@@ -108,11 +108,17 @@ function concatenateSegments(
 interface UseRecalculateTraceArgs {
   active: Itinerary | null;
   setProject: (updater: (project: ItineraryProject) => ItineraryProject) => void;
+  /** Cancel any in-flight main routing request so it doesn't race with the recalculate result. */
+  cancelRouteRequest: () => void;
+  /** Tell the main routing effect to skip its next "full recompute" run. */
+  skipNextRouteRecompute: () => void;
 }
 
 export function useRecalculateTrace({
   active,
   setProject,
+  cancelRouteRequest,
+  skipNextRouteRecompute,
 }: UseRecalculateTraceArgs) {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
@@ -202,6 +208,12 @@ export function useRecalculateTrace({
       }
       const tarmacPercent = totalWeightM > 0 ? Math.round(totalTarmacWeighted / totalWeightM) : undefined;
       const offroadPercent = totalWeightM > 0 ? Math.round(totalOffroadWeighted / totalWeightM) : undefined;
+
+      // Cancel any in-flight main routing request and prevent the routing
+      // effect from re-triggering a full recompute when it sees the source
+      // change from 'gpx' → 'brouter'.
+      cancelRouteRequest();
+      skipNextRouteRecompute();
 
       // Update project with recalculated route
       setProject((project) => {
@@ -297,7 +309,7 @@ export function useRecalculateTrace({
         setProgress(null);
       }
     }
-  }, [active, setProject]);
+  }, [active, setProject, cancelRouteRequest, skipNextRouteRecompute]);
 
   const cancel = useCallback(() => {
     abortRef.current?.abort();

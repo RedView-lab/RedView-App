@@ -1,12 +1,13 @@
 import type { ExpressionSpecification, Map as MapboxMap } from 'mapbox-gl';
 import { isValidElevation } from '../route-metrics/elevationSanitizer';
+import { getActiveDem3dQuality } from '../../../map3d/lib/dem3dQualityBus';
 import type { RouteLayerPoint } from './routeStyle';
 
 const HEIGHTS_PROPERTY = '__routeHeights';
 const SAMPLE_SPACING_M = 10;
 const MAX_SAMPLES = 16_384;
-const LINE_CLEARANCE_M = 0.8;
-export const ROUTE_SELECTION_CLEARANCE_M = 0.86;
+export const LINE_CLEARANCE_M = 2.4;
+export const ROUTE_SELECTION_CLEARANCE_M = 2.5;
 const EARTH_RADIUS_M = 6_378_137;
 
 // GeoJSON Z coordinates alone do not position native line layers. Evaluate an
@@ -17,15 +18,23 @@ export const ROUTE_PROFILE_Z_OFFSET: ExpressionSpecification = [
   ['get', HEIGHTS_PROPERTY],
 ];
 
-export function getRouteElevationContext(map: MapboxMap): { scale: number | null; signature: string } {
+export function getRouteElevationContext(map: MapboxMap): {
+  scale: number | null;
+  signature: string;
+  /** True when the active 3D DEM is low-resolution (30 m). */
+  isLowResDem: boolean;
+} {
   const terrain = map.getTerrain();
   // The globe becomes Mercator at zoom 6. Elevated lines are not rendered on
   // the low-zoom globe; keep an ordinary 2D line there, without changing the map.
   const enabled = Boolean(terrain?.source) && map.getZoom() >= 6;
   const exaggeration = typeof terrain?.exaggeration === 'number' ? terrain.exaggeration : 1;
+  const demQuality = getActiveDem3dQuality();
+  const isLowResDem = demQuality === 'fast-30m';
   return {
     scale: enabled ? exaggeration : null,
-    signature: `${enabled ? 1 : 0}:${terrain?.source ?? ''}:${exaggeration}`,
+    signature: `${enabled ? 1 : 0}:${terrain?.source ?? ''}:${exaggeration}:${demQuality}`,
+    isLowResDem,
   };
 }
 
@@ -78,7 +87,7 @@ export function applyRouteElevationProfile(
     return left.height + (right.height - left.height) * t;
   });
   // Uniform distance samples keep this independent of GPX recording density.
-  // A small median removes isolated spikes; a triangular pass softens the joins.
+  // A small median removes isolated spikes; a triangular pass smooths the joins.
   // Endpoints are kept, and broad climbs/descents are not flattened.
   const median = raw.map((height, i) => {
     const radius = Math.min(2, i, raw.length - 1 - i);

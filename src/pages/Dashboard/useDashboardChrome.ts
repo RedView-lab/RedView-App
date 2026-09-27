@@ -477,25 +477,41 @@ export function useDashboardChrome({
   }, [layout.centerPanelHeight]);
 
   const handleToggleMapFocusMode = useCallback(() => {
-    setIsMapFocusMode((current) => !current);
-  }, []);
+    const isAllCollapsed =
+      isLeftPanelCollapsed &&
+      isRightPanelCollapsed &&
+      (isCenterPanelCollapsed || !layout.centerToolbarVisible);
 
-  // Auto-reveal the center analysis table + right settings dock the first time
+    if (isAllCollapsed) {
+      restoreLeftPanel();
+      restoreRightPanel();
+      restoreCenterPanel();
+      setIsMapFocusMode(false);
+      return;
+    }
+
+    setIsMapFocusMode((current) => !current);
+  }, [
+    isLeftPanelCollapsed,
+    isRightPanelCollapsed,
+    isCenterPanelCollapsed,
+    layout.centerToolbarVisible,
+    restoreLeftPanel,
+    restoreRightPanel,
+    restoreCenterPanel,
+  ]);
+
+  // Auto-reveal the center analysis table the first time
   // the user drops a trace point on a project that started empty. Idempotent:
-  // no-op if the panels are already open (e.g. an existing project, or the user
-  // already expanded them manually).
+  // no-op if the panel is already open (e.g. an existing project, or the user
+  // already expanded it manually).
   const handleTraceStarted = useCallback(() => {
     setIsCenterPanelCollapsed((current) => {
       if (!current) return current;
       restoreCenterPanel();
       return false;
     });
-    setIsRightPanelCollapsed((current) => {
-      if (!current) return current;
-      restoreRightPanel();
-      return false;
-    });
-  }, [restoreCenterPanel, restoreRightPanel]);
+  }, [restoreCenterPanel]);
 
   return {
     lidarModeEnabled,

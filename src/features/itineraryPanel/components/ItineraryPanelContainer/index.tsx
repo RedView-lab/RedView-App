@@ -215,6 +215,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     routeLoading,
     routeRequestNonce,
     routeWarnings,
+    skipNextRouteRecompute,
   } = useItineraryBrouterRouting({
     active,
     isMapLoaded,
@@ -231,6 +232,8 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   } = useRecalculateTrace({
     active,
     setProject,
+    cancelRouteRequest,
+    skipNextRouteRecompute,
   });
 
   useEffect(() => {

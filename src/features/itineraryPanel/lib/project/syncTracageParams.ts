@@ -140,7 +140,7 @@ export function syncTracageOnActivityChange(
  */
 export function syncTracageOnTracingModeChange(
   newMode: TracingModeType,
-  currentActivity: ActivityType = 'gravel-default',
+  currentActivity: ActivityType = 'road',
 ): TracageSyncResult {
   return syncTracageOnActivityChange(currentActivity, newMode, 10);
 }
@@ -164,7 +164,7 @@ const ORDERED_SURFACES: SurfaceType[] = ['tarmac', 'paved', 'gravel', 'other'];
 export function syncTracageOnSurfaceRangeChange(
   surfaceMin: SurfaceType,
   surfaceMax: SurfaceType,
-  currentActivity: ActivityType = 'gravel-default',
+  currentActivity: ActivityType = 'road',
 ): TracageSyncResult {
   let minIdx = SURFACE_INDEX[surfaceMin] ?? 0;
   let maxIdx = SURFACE_INDEX[surfaceMax] ?? minIdx;
@@ -273,7 +273,7 @@ export function syncTracageOnSurfaceRangeChange(
  */
 export function syncTracageOnSurfaceChange(
   surface: SurfaceType,
-  currentActivity: ActivityType = 'gravel-default',
+  currentActivity: ActivityType = 'road',
 ): TracageSyncResult {
   return syncTracageOnSurfaceRangeChange('tarmac', surface, currentActivity);
 }

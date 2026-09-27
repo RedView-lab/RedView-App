@@ -4,7 +4,7 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import { flyToLocation } from '@/features/map3d';
 import type { ItineraryProject } from '../types';
 import { translateAppText } from '@/shared/i18n';
-import { cumulativeRouteLengthsM, type RouteDistancePoint } from '../lib/routes';
+import { cumulativeRouteLengthsM, projectPointAlongRoute, type RouteDistancePoint } from '../lib/routes';
 import { writeTracePointDataset } from '../lib/tracer/tracePointDataset';
 import { buildScheduledTimelineState, parseStartReference } from '../sections/timeline/TimelineTimelineView/utils';
 
@@ -473,7 +473,7 @@ function createMarkerElement(
     const el = document.createElement('button');
     el.type = 'button';
     const isPin = kind === 'pause';
-    el.className = `rv-poi-marker rv-poi-marker--${kind} ${isPin ? 'rv-poi-marker--pin' : 'rv-poi-marker--round'}${favorite ? ' is-favorite rv-poi-marker--favorite' : ''}`;
+    el.className = `rv-poi-marker rv-poi-marker--${kind} ${isPin ? 'rv-poi-marker--pin' : kind === 'waypoint' ? '' : 'rv-poi-marker--round'}${favorite ? ' is-favorite rv-poi-marker--favorite' : ''}`;
     el.style.zIndex = favorite ? '50' : '20';
 
     const kindName = kind === 'pause' ? translateAppText('Pause') : translateAppText('Waypoint');
@@ -640,13 +640,13 @@ export function useItineraryCheckpointMarkers({
       let startCoord: [number, number] | null = null;
       let startLabel = '';
       const startRow = itinerary.timeline.find((row) => row.kind === 'start');
-      if (startRow && startRow.lat != null && startRow.lon != null) {
-        startCoord = [startRow.lon, startRow.lat];
-        startLabel = startRow.label ?? '';
-      } else if (routePoints.length > 0) {
+      if (routePoints.length > 0) {
         const firstPt = routePoints[0];
         startCoord = [firstPt.lon, firstPt.lat];
         startLabel = startRow?.label ?? '';
+      } else if (startRow && startRow.lat != null && startRow.lon != null) {
+        startCoord = [startRow.lon, startRow.lat];
+        startLabel = startRow.label ?? '';
       }
 
       if (startCoord) {
@@ -668,13 +668,13 @@ export function useItineraryCheckpointMarkers({
       let endCoord: [number, number] | null = null;
       let endLabel = '';
       const endRow = itinerary.timeline.find((row) => row.kind === 'end');
-      if (endRow && endRow.lat != null && endRow.lon != null) {
-        endCoord = [endRow.lon, endRow.lat];
-        endLabel = endRow.label ?? '';
-      } else if (routePoints.length >= 2) {
+      if (routePoints.length >= 2) {
         const lastPt = routePoints[routePoints.length - 1];
         endCoord = [lastPt.lon, lastPt.lat];
         endLabel = endRow?.label ?? '';
+      } else if (endRow && endRow.lat != null && endRow.lon != null) {
+        endCoord = [endRow.lon, endRow.lat];
+        endLabel = endRow.label ?? '';
       }
 
       if (endCoord) {
@@ -780,12 +780,25 @@ export function useItineraryCheckpointMarkers({
       );
       for (const row of waypointRows) {
         let coord: [number, number] | null = null;
-        if (row.lat != null && row.lon != null) {
+        if (routePoints.length >= 2) {
+          if (row.lat != null && row.lon != null) {
+            const snapped = projectPointAlongRoute(
+              { lat: row.lat, lon: row.lon },
+              routePoints,
+              distancesM,
+            );
+            if (snapped) {
+              coord = [snapped.lon, snapped.lat];
+            }
+          }
+          if (!coord && Number.isFinite(row.distanceKm)) {
+            const targetM = (row.distanceKm as number) * 1000;
+            const pt = interpolateRoutePointAtDistanceM(routePoints, distancesM, targetM);
+            if (pt) coord = [pt.lon, pt.lat];
+          }
+        }
+        if (!coord && row.lat != null && row.lon != null) {
           coord = [row.lon, row.lat];
-        } else if (routePoints.length >= 2 && Number.isFinite(row.distanceKm)) {
-          const targetM = (row.distanceKm as number) * 1000;
-          const pt = interpolateRoutePointAtDistanceM(routePoints, distancesM, targetM);
-          if (pt) coord = [pt.lon, pt.lat];
         }
 
         if (coord) {
