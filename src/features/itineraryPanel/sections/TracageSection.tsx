@@ -60,6 +60,14 @@ export interface TracageSectionProps {
   onCancelApply?: () => void;
   applyLoading?: boolean;
   resultLabel?: string | null;
+  /** Recalculate entire trace through BRouter using current profile, segment by segment between waypoints. */
+  onRecalculateTrace?: () => void;
+  /** True while the recalculation is running. */
+  recalculateLoading?: boolean;
+  /** Progress 0–1 of segment recalculation. */
+  recalculateProgress?: number | null;
+  /** Whether the recalculate button should be shown (GPX import with waypoints). */
+  showRecalculateTrace?: boolean;
 }
 
 const ROAD_PREF_OPTIONS: { value: RoadPreference; label: string }[] = [
@@ -92,6 +100,10 @@ export function TracageSection({
   onDeleteProfile,
   onChangeRoadType,
   onBatchChangeRoadTypes,
+  onRecalculateTrace,
+  recalculateLoading,
+  recalculateProgress,
+  showRecalculateTrace,
 }: TracageSectionProps) {
   const { t } = useAppI18n();
 
@@ -1004,6 +1016,38 @@ export function TracageSection({
           </div>
         </div>
       </div>
+
+      {/* ── Recalculer la trace (GPX import with waypoints) ── */}
+      {showRecalculateTrace ? (
+        <button
+          type="button"
+          className={`rvi-tracage__recalculate-btn${
+            recalculateLoading ? ' is-loading' : ''
+          }`}
+          onClick={onRecalculateTrace}
+          disabled={recalculateLoading}
+          aria-label={t('Recalculer la trace')}
+        >
+          {recalculateLoading ? (
+            <>
+              <span className="rvi-tracage__recalculate-spinner" />
+              <span>
+                {t('Recalcul en cours')}
+                {recalculateProgress != null
+                  ? ` ${Math.round(recalculateProgress * 100)}%`
+                  : '…'}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="rvi-tracage__action-icon">
+                <IconRepeatFigma size={14} />
+              </span>
+              <span>{t('Recalculer la trace')}</span>
+            </>
+          )}
+        </button>
+      ) : null}
 
       {/* ── Custom Actions: Réinitialiser & Enregistrer ── */}
       {isCustomized ? (

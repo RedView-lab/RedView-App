@@ -44,6 +44,10 @@ type ItineraryPanelModeContentProps = Pick<
   | 'onLoadPois'
   | 'onOpenPoiCategories'
   | 'onRefreshRoute'
+  | 'onRecalculateTrace'
+  | 'recalculateLoading'
+  | 'recalculateProgress'
+  | 'showRecalculateTrace'
   | 'onRedo'
   | 'onSaveProfile'
   | 'onDeleteProfile'
@@ -86,6 +90,10 @@ export function ItineraryPanelModeContent({
   onBatchChangeRoadTypes,
   onLoadPois,
   onRefreshRoute,
+  onRecalculateTrace,
+  recalculateLoading,
+  recalculateProgress,
+  showRecalculateTrace,
   onRedo,
   onSaveProfile,
   onDeleteProfile,
@@ -139,6 +147,10 @@ export function ItineraryPanelModeContent({
           onCancelApply={onCancelRoute}
           applyLoading={routeLoading}
           resultLabel={routeResultLabel}
+          onRecalculateTrace={onRecalculateTrace}
+          recalculateLoading={recalculateLoading}
+          recalculateProgress={recalculateProgress}
+          showRecalculateTrace={showRecalculateTrace}
         />
       ) : null;
       break;

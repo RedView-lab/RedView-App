@@ -570,6 +570,14 @@ export interface ItineraryPanelProps {
   ) => void;
   onRefreshRoute?: () => void;
   onCancelRoute?: () => void;
+  /** Recalculate the full GPX trace segment-by-segment via BRouter. */
+  onRecalculateTrace?: () => void;
+  /** Whether recalculation is running. */
+  recalculateLoading?: boolean;
+  /** Recalculation progress 0–1. */
+  recalculateProgress?: number | null;
+  /** Whether the recalculate button should be shown. */
+  showRecalculateTrace?: boolean;
 
   // rythme
   onChangeRhythm?: <K extends keyof RhythmState>(key: K, value: RhythmState[K]) => void;

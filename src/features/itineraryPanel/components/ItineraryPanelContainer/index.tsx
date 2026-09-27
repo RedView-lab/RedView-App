@@ -56,6 +56,7 @@ import { useItineraryPoiHandlers } from './useItineraryPoiHandlers';
 import { useItineraryMapActions } from './useItineraryMapActions';
 import { useItineraryGpxImport } from './useItineraryGpxImport';
 import { useItineraryTimelineCallbacks } from './useItineraryTimelineCallbacks';
+import { useRecalculateTrace } from './useRecalculateTrace';
 
 interface ItineraryPanelContainerProps {
   projectId?: string | null;
@@ -219,6 +220,16 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     isMapLoaded,
     map,
     rollbackPendingTraceAppend,
+    setProject,
+  });
+
+  const {
+    recalculateLoading,
+    recalculateProgress,
+    showRecalculateTrace,
+    handleRecalculateTrace,
+  } = useRecalculateTrace({
+    active,
     setProject,
   });
 
@@ -934,6 +945,10 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         }
         onRefreshRoute={() => requestRouteRefresh()}
         onCancelRoute={() => cancelRouteRequest()}
+        onRecalculateTrace={handleRecalculateTrace}
+        recalculateLoading={recalculateLoading}
+        recalculateProgress={recalculateProgress}
+        showRecalculateTrace={showRecalculateTrace}
         onChangeRhythm={(key, value) =>
           updateActive((it) => {
             (it.rhythm[key] as RhythmState[typeof key]) = value;

@@ -61,6 +61,10 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     onBatchChangeRoadTypes,
     onRefreshRoute,
     onCancelRoute,
+    onRecalculateTrace,
+    recalculateLoading,
+    recalculateProgress,
+    showRecalculateTrace,
     onChangeRhythm,
     onUploadFit,
     uploadFitLabel,
@@ -324,6 +328,10 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
             onLoadPois={onLoadPois}
             onOpenPoiCategories={onOpenPoiCategories}
             onRefreshRoute={onRefreshRoute}
+            onRecalculateTrace={onRecalculateTrace}
+            recalculateLoading={recalculateLoading}
+            recalculateProgress={recalculateProgress}
+            showRecalculateTrace={showRecalculateTrace}
             onRedo={onRedo}
             onSaveProfile={onSaveProfile}
             onDeleteProfile={onDeleteProfile}

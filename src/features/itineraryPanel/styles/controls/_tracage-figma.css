@@ -726,3 +726,69 @@
   display: none;
 }
 
+/* ── Recalculer la trace Button ────────────────────────── */
+.rvi-tracage__recalculate-btn {
+  width: 100%;
+  height: 42px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  box-sizing: border-box;
+  font-family: 'Rethink Sans', sans-serif;
+  font-weight: 600;
+  font-size: 13.5px;
+  letter-spacing: -0.01em;
+  padding: 0 16px;
+  margin-top: 10px;
+  background: #890000;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  transition: background-color 0.15s ease, border-color 0.15s ease,
+    transform 0.05s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  user-select: none;
+  outline: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.rvi-tracage__recalculate-btn:hover:not(:disabled) {
+  background: #a00000;
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 2px 12px rgba(137, 0, 0, 0.35);
+}
+
+.rvi-tracage__recalculate-btn:active:not(:disabled) {
+  background: #700000;
+  transform: translateY(1px);
+}
+
+.rvi-tracage__recalculate-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.rvi-tracage__recalculate-btn.is-loading {
+  background: rgba(137, 0, 0, 0.6);
+  cursor: wait;
+}
+
+/* Spinner */
+.rvi-tracage__recalculate-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: rviRecalculateSpin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes rviRecalculateSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
