@@ -12,7 +12,6 @@ import {
   buildNiceXTicks,
   buildVisibleXDomain,
   clampXDomainToRoute,
-  computeCumulativeElevationAtX,
   defaultDomainFor,
   detailZoomToVisibleFraction,
   interpolateY,
@@ -34,6 +33,7 @@ import {
   type PoiMarkerGroup,
 } from './types';
 import { usePlotAreaSize } from './usePlotAreaSize';
+import { resolveItineraryHoverMetrics } from './hoverMetrics';
 
 function pointSeriesCoversX(points: Array<{ x: number; y: number }>, xValue: number): boolean {
   if (!Number.isFinite(xValue) || points.length === 0) return false;
@@ -45,6 +45,7 @@ function pointSeriesCoversX(points: Array<{ x: number; y: number }>, xValue: num
 
 export const AnalysisChart = memo(function AnalysisChart({
   series,
+  chartNodes = [],
   backdropProfiles = [],
   poiAnnotations = [],
   alertAnnotations = [],
@@ -410,12 +411,18 @@ export const AnalysisChart = memo(function AnalysisChart({
         const val = interpolateY(entry.points, hoverXValue);
         if (!Number.isFinite(val)) return null;
 
-        const matchingProfile = backdropProfiles.find(
-          (p) => p.itineraryName === entry.itineraryName,
+        const matchingNode = chartNodes.find(
+          (n) => n.itinerary.id === entry.itineraryId || n.itinerary.name === entry.itineraryName,
         );
-        const { gainM, lossM } = matchingProfile
-          ? computeCumulativeElevationAtX(matchingProfile.points, hoverXValue)
-          : { gainM: undefined, lossM: undefined };
+        const matchingProfile = backdropProfiles.find(
+          (p) => p.itineraryName === entry.itineraryName || p.id.startsWith(entry.itineraryId),
+        );
+        const metrics = resolveItineraryHoverMetrics({
+          hoverXValue,
+          xMode,
+          node: matchingNode,
+          profilePoints: matchingProfile?.points ?? matchingNode?.altitudeShiftedPoints,
+        });
 
         return {
           id: entry.id,
@@ -425,12 +432,15 @@ export const AnalysisChart = memo(function AnalysisChart({
           axisLabel: `Axe ${entry.axis}`,
           metric: entry.metricId,
           value: val,
-          gainM,
-          lossM,
+          distanceFormatted: metrics.distanceFormatted,
+          gainM: metrics.gainM,
+          lossM: metrics.lossM,
+          durationFormatted: metrics.durationFormatted,
+          timeFormatted: metrics.timeFormatted,
         };
       })
       .filter((entry): entry is HoverCardRow => entry !== null);
-  }, [backdropProfiles, hoverXValue, series]);
+  }, [backdropProfiles, chartNodes, hoverXValue, series, xMode]);
 
   const hoverBackdropData = useMemo<HoverCardRow[]>(() => {
     if (hoverXValue == null || !backdropProfiles.length) return [];
@@ -442,7 +452,19 @@ export const AnalysisChart = memo(function AnalysisChart({
         if (!pointSeriesCoversX(profile.points, hoverXValue)) return null;
         const value = interpolateY(profile.points, hoverXValue);
         if (!Number.isFinite(value)) return null;
-        const { gainM, lossM } = computeCumulativeElevationAtX(profile.points, hoverXValue);
+
+        const matchingNode = chartNodes.find(
+          (n) =>
+            n.itinerary.id === profile.id.replace('::altitude-backdrop', '') ||
+            n.itinerary.name === profile.itineraryName,
+        );
+        const metrics = resolveItineraryHoverMetrics({
+          hoverXValue,
+          xMode,
+          node: matchingNode,
+          profilePoints: profile.points,
+        });
+
         return {
           id: `${profile.id}::hover-altitude`,
           itineraryName: profile.itineraryName,
@@ -451,16 +473,62 @@ export const AnalysisChart = memo(function AnalysisChart({
           axisLabel: "Profil d'altitude",
           metric: 'Altitude' as ChartMetricId,
           value,
-          gainM,
-          lossM,
+          distanceFormatted: metrics.distanceFormatted,
+          gainM: metrics.gainM,
+          lossM: metrics.lossM,
+          durationFormatted: metrics.durationFormatted,
+          timeFormatted: metrics.timeFormatted,
         };
       })
       .filter((entry): entry is HoverCardRow => entry !== null);
-  }, [backdropProfiles, hoverXValue, series]);
+  }, [backdropProfiles, chartNodes, hoverXValue, series, xMode]);
+
+  const hoverChartNodesData = useMemo<HoverCardRow[]>(() => {
+    if (hoverXValue == null || !chartNodes || chartNodes.length === 0) return [];
+    const existingNames = new Set([
+      ...(hoverData ?? []).map((r) => r.itineraryName),
+      ...hoverBackdropData.map((r) => r.itineraryName),
+    ]);
+
+    return chartNodes
+      .map<HoverCardRow | null>((node) => {
+        if (existingNames.has(node.itinerary.name)) return null;
+        const points = node.altitudeShiftedPoints || node.axis1ShiftedPoints || [];
+        const covers =
+          points.length > 0
+            ? pointSeriesCoversX(points, hoverXValue)
+            : hoverXValue >= node.startDistanceKm &&
+              hoverXValue <= node.startDistanceKm + (node.itinerary.metrics?.distanceKm ?? 0);
+        if (!covers) return null;
+
+        const metrics = resolveItineraryHoverMetrics({
+          hoverXValue,
+          xMode,
+          node,
+          profilePoints: node.altitudeShiftedPoints,
+        });
+
+        return {
+          id: `${node.itinerary.id}::hover-node`,
+          itineraryName: node.itinerary.name,
+          color: node.itinerary.color,
+          axis: null,
+          axisLabel: '',
+          metric: 'Altitude' as ChartMetricId,
+          value: 0,
+          distanceFormatted: metrics.distanceFormatted,
+          gainM: metrics.gainM,
+          lossM: metrics.lossM,
+          durationFormatted: metrics.durationFormatted,
+          timeFormatted: metrics.timeFormatted,
+        };
+      })
+      .filter((entry): entry is HoverCardRow => entry !== null);
+  }, [chartNodes, hoverBackdropData, hoverData, hoverXValue, xMode]);
 
   const hoverRows = useMemo(
-    () => [...(hoverData ?? []), ...hoverBackdropData],
-    [hoverBackdropData, hoverData],
+    () => [...(hoverData ?? []), ...hoverBackdropData, ...hoverChartNodesData],
+    [hoverBackdropData, hoverChartNodesData, hoverData],
   );
 
   const hoverMarkers = useMemo(() => {

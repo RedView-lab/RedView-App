@@ -42,6 +42,8 @@ export function useWeatherOverlay(
   const scheduleRefreshRef = useRef<((reason?: RefreshReason, isDebounced?: boolean) => void) | null>(null);
 
   const activeLayers = useMemo(() => activeRenderableLayers(state), [state]);
+  const activeLayersRef = useRef(activeLayers);
+  activeLayersRef.current = activeLayers;
 
   const publishStatus = (status: ReturnType<typeof createOverlayStatus> | null) => {
     statusReporter?.(status);
@@ -77,6 +79,9 @@ export function useWeatherOverlay(
     hideAll,
     removeAll,
     ensureLayer,
+    hideLayerCompletely,
+    hideRadarCompletely,
+    drainPendingHiddenLayers,
   } = useWeatherStyleManager({
     map,
     stateRef,
@@ -98,7 +103,10 @@ export function useWeatherOverlay(
     canMutateStyle,
     armStyleRecovery,
     completeStyleRecovery,
+    clearStyleRecoveryTimers,
     hideAll,
+    hideLayerCompletely,
+    hideRadarCompletely,
     setVisibility,
     ensureLayer,
     ensureRadarLayer,
@@ -109,22 +117,35 @@ export function useWeatherOverlay(
 
   scheduleRefreshRef.current = scheduleRefresh;
 
+  // 1. Map Lifecycle & Mapbox Event Listeners (strictly [map, isMapLoaded])
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     isCancelledRef.current = false;
 
-    if (!state.enabled || activeLayers.length === 0) {
-      removeAll();
-      return;
-    }
+    const onMoveEnd = () => {
+      if (!stateRef.current.enabled || activeLayersRef.current.length === 0) {
+        hideAll();
+        return;
+      }
+      scheduleRefresh('normal', true);
+    };
 
-    const onMoveEnd = () => scheduleRefresh('normal', true);
     const onStyleData = () => {
-      if (!map || isCancelledRef.current || !canMutateStyle()) return;
+      if (!map || isCancelledRef.current) return;
+      drainPendingHiddenLayers();
+
+      const currentActive = activeLayersRef.current;
+      if (!stateRef.current.enabled || currentActive.length === 0) {
+        hideAll();
+        return;
+      }
+
+      if (!canMutateStyle()) return;
+
       // Re-apply already rendered layers if map style stripped them (e.g. during basemap transition)
       const rendered = renderedRef.current;
       let hasMissingLayer = false;
-      for (const layer of activeLayers) {
+      for (const layer of currentActive) {
         const item = rendered[layer.key];
         if (item) {
           ensureLayer(layer.key, layer.mode, item.url, item.coords);
@@ -132,60 +153,102 @@ export function useWeatherOverlay(
           hasMissingLayer = true;
         }
       }
+
+      // Ensure any layer NOT in currentActive is guaranteed hidden
+      for (const key of SUPPORTED_KEYS) {
+        if (!currentActive.some((l) => l.key === key)) {
+          hideLayerCompletely(key);
+        }
+      }
+
       if (hasMissingLayer) {
         scheduleRefresh('normal', 'move');
       }
     };
 
+    const onIdle = () => {
+      if (!map || isCancelledRef.current) return;
+      drainPendingHiddenLayers();
+    };
+
     map.on('moveend', onMoveEnd);
     map.on('styledata', onStyleData);
-
-    scheduleRefresh('normal');
+    map.on('idle', onIdle);
 
     return () => {
       isCancelledRef.current = true;
       map.off('moveend', onMoveEnd);
       map.off('styledata', onStyleData);
+      map.off('idle', onIdle);
       cancelPipeline();
       clearStyleRecoveryTimers();
+      removeAll();
     };
-  }, [map, isMapLoaded, state.enabled]);
+  }, [map, isMapLoaded]);
 
-  const prevSelectionKeyRef = useRef(selectionKey);
-  const prevActiveLayersKeyRef = useRef(activeLayersKey);
+  const prevStateRef = useRef({
+    selectionKey,
+    activeLayersKey,
+    paletteKey,
+    enabled: state.enabled,
+  });
+  const isMountedRef = useRef(false);
 
+  // 2. State Coordinator: Reacts to layer toggles, time scrubbing, and palette changes
   useEffect(() => {
+    if (!map || !isMapLoaded) return;
+
     if (!state.enabled || activeLayers.length === 0) {
-      hideAll();
       cancelPipeline();
+      clearStyleRecoveryTimers();
+      hideAll();
+      prevStateRef.current = { selectionKey, activeLayersKey, paletteKey, enabled: state.enabled };
       return;
     }
 
     // Immediately hide any layers that are no longer active
     for (const key of SUPPORTED_KEYS) {
       if (!activeLayers.some((layer) => layer.key === key)) {
-        setVisibility(key, false);
+        hideLayerCompletely(key);
       }
     }
 
-    const isOnlySelectionScrubbing =
-      prevActiveLayersKeyRef.current === activeLayersKey &&
-      prevSelectionKeyRef.current !== selectionKey;
-    prevSelectionKeyRef.current = selectionKey;
-    prevActiveLayersKeyRef.current = activeLayersKey;
-
-    // Use fast scrub debounce (120ms) during time scrubbing so slider dragging doesn't overwhelm network
-    scheduleRefresh('normal', isOnlySelectionScrubbing ? 'scrub' : false);
-  }, [selectionKey, activeLayersKey, state.enabled]);
-
-  useEffect(() => {
-    if (!state.enabled || activeLayers.length === 0) return;
-    if (dataRef.current) {
-      void renderFromData(dataRef.current);
-    } else {
-      scheduleRefresh('force');
+    if (!isMountedRef.current) {
+      isMountedRef.current = true;
+      prevStateRef.current = { selectionKey, activeLayersKey, paletteKey, enabled: state.enabled };
+      scheduleRefresh('normal', false);
+      return;
     }
-  }, [paletteKey]);
+
+    const prev = prevStateRef.current;
+    const isSelectionChanged = prev.selectionKey !== selectionKey;
+    const isLayersChanged = prev.activeLayersKey !== activeLayersKey;
+    const isPaletteChanged = prev.paletteKey !== paletteKey;
+    const isEnabledChanged = prev.enabled !== state.enabled;
+
+    prevStateRef.current = { selectionKey, activeLayersKey, paletteKey, enabled: state.enabled };
+
+    // Case 1: Palette change (color, band breakpoints, scale) -> Instant recolor (delay = 0, no debounce)
+    if (isPaletteChanged && !isSelectionChanged && !isLayersChanged && !isEnabledChanged) {
+      if (dataRef.current) {
+        void renderFromData(dataRef.current);
+      } else {
+        scheduleRefresh('force', false);
+      }
+      return;
+    }
+
+    // Case 2: Layer toggle on/off or render mode change -> Instant display (delay = 0)
+    if (isLayersChanged || isEnabledChanged) {
+      scheduleRefresh('normal', false);
+      return;
+    }
+
+    // Case 3: Time scrubbing / date change -> Fast 60ms debounce for rapid drag responsiveness
+    if (isSelectionChanged) {
+      scheduleRefresh('normal', 'scrub');
+    }
+  }, [map, isMapLoaded, selectionKey, activeLayersKey, paletteKey, state.enabled]);
 
   useEffect(() => {
     if (!state.enabled || activeLayers.length === 0) return;

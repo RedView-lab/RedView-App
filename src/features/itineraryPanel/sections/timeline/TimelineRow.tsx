@@ -326,7 +326,13 @@ export function TimelineRow({
         <span className="rvi-tl-row__check-box" aria-hidden />
       </label>
 
-      <KindBadge kind={item.kind} poiCategory={item.poiCategory} size={24} />
+      <KindBadge
+        kind={item.kind}
+        poiCategory={item.poiCategory}
+        size={24}
+        favorite={item.favorite}
+        pauseDurationMin={item.durationMin}
+      />
 
       <span className="rvi-tl-row__kind-text" title={rowKindLabel}>
         {rowKindLabel}

@@ -34,25 +34,54 @@ export async function fetchRadarMeta(signal?: AbortSignal): Promise<RadarMapsPay
   if (cachedRadarMeta && now - cachedRadarMetaTime < RADAR_META_TTL_MS) {
     return cachedRadarMeta;
   }
-  if (inFlightRadarPromise) return inFlightRadarPromise;
+  if (!inFlightRadarPromise) {
+    const fetchController = new AbortController();
+    const timeout = window.setTimeout(() => fetchController.abort(), 10_000);
 
-  inFlightRadarPromise = (async () => {
-    try {
-      // Primary: Local/Vercel serverless proxy with CORS & caching
-      let res = await fetch('/api/weather/radar.json', { signal });
-      if (!res.ok) {
-        // Fallback: direct public RainViewer endpoint
-        res = await fetch('https://api.rainviewer.com/public/weather-maps.json', { signal });
+    inFlightRadarPromise = (async () => {
+      try {
+        // Primary: Local/Vercel serverless proxy with CORS & caching
+        let res = await fetch('/api/weather/radar.json', { signal: fetchController.signal });
+        if (!res.ok) {
+          // Fallback: direct public RainViewer endpoint
+          res = await fetch('https://api.rainviewer.com/public/weather-maps.json', { signal: fetchController.signal });
+        }
+        window.clearTimeout(timeout);
+        if (!res.ok) throw new Error(`Radar meta HTTP ${res.status}`);
+        const data = (await res.json()) as RadarMapsPayload;
+        cachedRadarMeta = data;
+        cachedRadarMetaTime = Date.now();
+        return data;
+      } catch (err) {
+        window.clearTimeout(timeout);
+        if (cachedRadarMeta) return cachedRadarMeta;
+        throw err;
+      } finally {
+        inFlightRadarPromise = null;
       }
-      if (!res.ok) throw new Error(`Radar meta HTTP ${res.status}`);
-      const data = (await res.json()) as RadarMapsPayload;
-      cachedRadarMeta = data;
-      cachedRadarMetaTime = Date.now();
-      return data;
-    } finally {
-      inFlightRadarPromise = null;
-    }
-  })();
+    })();
+  }
+
+  if (signal) {
+    if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+    return new Promise<RadarMapsPayload>((resolve, reject) => {
+      const onAbort = () => {
+        signal.removeEventListener('abort', onAbort);
+        reject(new DOMException('Aborted', 'AbortError'));
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+      inFlightRadarPromise!.then(
+        (data) => {
+          signal.removeEventListener('abort', onAbort);
+          resolve(data);
+        },
+        (err) => {
+          signal.removeEventListener('abort', onAbort);
+          reject(err);
+        },
+      );
+    });
+  }
 
   return inFlightRadarPromise;
 }

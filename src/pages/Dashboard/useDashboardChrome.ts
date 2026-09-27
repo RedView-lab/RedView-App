@@ -176,6 +176,8 @@ export function useDashboardChrome({
   }, []);
 
   useEffect(() => {
+    if (isResizing) return;
+
     try {
       localStorage.setItem(PANEL_WIDTH_KEY, String(panelWidth));
     } catch {
@@ -185,9 +187,11 @@ export function useDashboardChrome({
     updatePersistedDashboard((dashboard) => {
       dashboard.rightPanelWidth = panelWidth;
     });
-  }, [panelWidth, updatePersistedDashboard]);
+  }, [isResizing, panelWidth, updatePersistedDashboard]);
 
   useEffect(() => {
+    if (isLeftResizing) return;
+
     try {
       localStorage.setItem(LEFT_PANEL_WIDTH_KEY, String(leftPanelWidth));
     } catch {
@@ -197,7 +201,7 @@ export function useDashboardChrome({
     updatePersistedDashboard((dashboard) => {
       dashboard.leftPanelWidth = leftPanelWidth;
     });
-  }, [leftPanelWidth, updatePersistedDashboard]);
+  }, [isLeftResizing, leftPanelWidth, updatePersistedDashboard]);
 
   useEffect(() => {
     if (isCenterResizing) return;
@@ -272,19 +276,49 @@ export function useDashboardChrome({
     (event: ReactMouseEvent<HTMLDivElement>) => {
       event.preventDefault();
       setIsResizing(true);
+      document.body.style.cursor = 'ew-resize';
+      document.body.style.userSelect = 'none';
+
+      let rafId: number | null = null;
+      let lastRaw = 0;
+      let pendingCollapse = false;
 
       const onMove = (nextEvent: MouseEvent) => {
         const raw = layout.scaledViewportWidth - nextEvent.clientX / layout.appScale - PANEL_PADDING;
         if (raw <= panelMinWidth - PANEL_COLLAPSE_DRAG_THRESHOLD) {
-          setIsRightPanelCollapsed(true);
-          return;
+          pendingCollapse = true;
+        } else {
+          pendingCollapse = false;
+          lastRaw = raw;
         }
 
-        setIsRightPanelCollapsed(false);
-        setPanelWidth(clampPanelWidth(raw, panelMinWidth));
+        if (rafId !== null) return;
+        rafId = window.requestAnimationFrame(() => {
+          rafId = null;
+          if (pendingCollapse) {
+            setIsRightPanelCollapsed(true);
+          } else {
+            setIsRightPanelCollapsed(false);
+            setPanelWidth(clampPanelWidth(lastRaw, panelMinWidth));
+          }
+        });
       };
+
       const onUp = () => {
+        if (rafId !== null) {
+          window.cancelAnimationFrame(rafId);
+          rafId = null;
+        }
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
         setIsResizing(false);
+        if (pendingCollapse) {
+          setIsRightPanelCollapsed(true);
+        } else if (lastRaw > 0) {
+          const finalW = clampPanelWidth(lastRaw, panelMinWidth);
+          setPanelWidth(finalW);
+          lastExpandedPanelWidthRef.current = finalW;
+        }
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
       };
@@ -311,19 +345,49 @@ export function useDashboardChrome({
     (event: ReactMouseEvent<HTMLDivElement>) => {
       event.preventDefault();
       setIsLeftResizing(true);
+      document.body.style.cursor = 'ew-resize';
+      document.body.style.userSelect = 'none';
+
+      let rafId: number | null = null;
+      let lastRaw = 0;
+      let pendingCollapse = false;
 
       const onMove = (nextEvent: MouseEvent) => {
         const raw = nextEvent.clientX / layout.appScale - PANEL_PADDING;
         if (raw <= panelMinWidth - PANEL_COLLAPSE_DRAG_THRESHOLD) {
-          setIsLeftPanelCollapsed(true);
-          return;
+          pendingCollapse = true;
+        } else {
+          pendingCollapse = false;
+          lastRaw = raw;
         }
 
-        setIsLeftPanelCollapsed(false);
-        setLeftPanelWidth(clampLeftPanelWidth(raw));
+        if (rafId !== null) return;
+        rafId = window.requestAnimationFrame(() => {
+          rafId = null;
+          if (pendingCollapse) {
+            setIsLeftPanelCollapsed(true);
+          } else {
+            setIsLeftPanelCollapsed(false);
+            setLeftPanelWidth(clampLeftPanelWidth(lastRaw));
+          }
+        });
       };
+
       const onUp = () => {
+        if (rafId !== null) {
+          window.cancelAnimationFrame(rafId);
+          rafId = null;
+        }
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
         setIsLeftResizing(false);
+        if (pendingCollapse) {
+          setIsLeftPanelCollapsed(true);
+        } else if (lastRaw > 0) {
+          const finalW = clampLeftPanelWidth(lastRaw);
+          setLeftPanelWidth(finalW);
+          lastExpandedLeftPanelWidthRef.current = finalW;
+        }
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
       };
@@ -350,7 +414,10 @@ export function useDashboardChrome({
     (event: ReactMouseEvent<HTMLDivElement>) => {
       event.preventDefault();
       setIsCenterResizing(true);
+      document.body.style.cursor = 'row-resize';
+      document.body.style.userSelect = 'none';
 
+      let rafId: number | null = null;
       let finalHeight = layout.centerPanelHeight;
       let shouldCollapse = false;
 
@@ -365,11 +432,21 @@ export function useDashboardChrome({
           finalHeight = Math.max(layout.centerPanelMinHeight, Math.min(layout.centerPanelMaxHeight, raw));
         }
 
-        setIsCenterPanelCollapsed(false);
-        setCenterPanelHeightOverride((current) => (current === finalHeight ? current : finalHeight));
+        if (rafId !== null) return;
+        rafId = window.requestAnimationFrame(() => {
+          rafId = null;
+          setIsCenterPanelCollapsed(false);
+          setCenterPanelHeightOverride((current) => (current === finalHeight ? current : finalHeight));
+        });
       };
 
       const onUp = () => {
+        if (rafId !== null) {
+          window.cancelAnimationFrame(rafId);
+          rafId = null;
+        }
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
 
@@ -381,8 +458,6 @@ export function useDashboardChrome({
         }
         setIsCenterResizing(false);
       };
-
-      onMove(event.nativeEvent as MouseEvent);
 
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);

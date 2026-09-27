@@ -1,3 +1,5 @@
+import type { Itinerary } from '@/features/itineraryPanel/types';
+import type { PredictionResult } from '@/features/fitPredictor';
 import type { ChartAlertAnnotation } from '../annotations/buildRouteAuditAnnotations';
 import type { ChartPoiAnnotation } from '../annotations/buildPoiAnnotations';
 import type { ChartDayNightOverlay } from '../dayNight';
@@ -8,24 +10,38 @@ import type {
   AxisMode,
   ChartBackdropProfile,
   ChartMetricId,
+  ChartPoint,
   ChartSeries,
 } from '../series';
 
 export const Y_MAJOR_TARGET_PX = 26;
 export const X_MAJOR_TARGET_PX = 80;
 export const DEFAULT_TICK_COUNT = 6;
-export const POI_MARKER_SIZE_PX = 44;
-export const POI_MARKER_SPREAD_STEP_PX = 36;
-export const MULTI_POI_MARKER_WIDTH_PX = 44;
-export const MULTI_POI_MARKER_HEIGHT_PX = 48;
-export const POI_CLUSTER_OVERLAP_X_PX = 38;
-export const POI_CLUSTER_OVERLAP_Y_PX = 16;
-export const POI_CLUSTER_OVERLAP_X_PX_COMPACT = 46;
-export const POI_CLUSTER_OVERLAP_Y_PX_COMPACT = 40;
+export const POI_MARKER_SIZE_PX = 30;
+export const POI_FAVORITE_MARKER_SIZE_PX = 44;
+export const POI_MARKER_SPREAD_STEP_PX = 0;
+export const MULTI_POI_MARKER_WIDTH_PX = 34;
+export const MULTI_POI_MARKER_HEIGHT_PX = 38;
+export const POI_CLUSTER_OVERLAP_X_PX = 36;
+export const POI_CLUSTER_OVERLAP_Y_PX = 22;
+export const POI_CLUSTER_OVERLAP_X_PX_COMPACT = 40;
+export const POI_CLUSTER_OVERLAP_Y_PX_COMPACT = 32;
 export const POI_CLUSTER_COMPACT_VISIBLE_FRACTION = 0.88;
+
+export interface ChartItineraryNode {
+  itinerary: Itinerary;
+  startDistanceKm: number;
+  prediction?: PredictionResult | null;
+  xOffset: number;
+  altitudeShiftedPoints?: ChartPoint[] | null;
+  altitudePoints?: ChartPoint[] | null;
+  axis1ShiftedPoints?: ChartPoint[] | null;
+  axis2ShiftedPoints?: ChartPoint[] | null;
+}
 
 export interface AnalysisChartProps {
   series: ChartSeries[];
+  chartNodes?: ChartItineraryNode[];
   backdropProfiles?: ChartBackdropProfile[];
   poiAnnotations?: ChartPoiAnnotation[];
   alertAnnotations?: ChartAlertAnnotation[];
@@ -92,6 +108,9 @@ export interface HoverCardRow {
   axisLabel: string;
   metric: ChartMetricId;
   value: number;
+  distanceFormatted?: string;
   gainM?: number;
   lossM?: number;
+  durationFormatted?: string;
+  timeFormatted?: string;
 }

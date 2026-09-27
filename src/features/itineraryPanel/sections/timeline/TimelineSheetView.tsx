@@ -750,7 +750,7 @@ function renderCell(
   const cell = row.cells[cellIndex]!;
 
   if (col.id === 'typePicto') {
-    return <KindBadge kind={item.kind} poiCategory={item.poiCategory} />;
+    return <KindBadge kind={item.kind} poiCategory={item.poiCategory} favorite={item.favorite} pauseDurationMin={item.durationMin} />;
   }
   if (col.id === 'typeText') {
     const label = resolveSheetKindLabel(item, extras.t);

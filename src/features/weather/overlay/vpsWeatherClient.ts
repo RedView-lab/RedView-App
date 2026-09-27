@@ -42,7 +42,7 @@ let cachedMeta: WeatherMeta | null = null;
 let cachedMetaTime = 0;
 let metaPromise: Promise<WeatherMeta> | null = null;
 
-const META_CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
+const META_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 export function clearWeatherMetaCache(): void {
   cachedMeta = null;
@@ -50,27 +50,74 @@ export function clearWeatherMetaCache(): void {
   metaPromise = null;
 }
 
+export function getCachedWeatherMeta(): WeatherMeta | null {
+  const now = Date.now();
+  if (cachedMeta && now - cachedMetaTime < META_CACHE_TTL_MS) {
+    return cachedMeta;
+  }
+  return null;
+}
+
+/**
+ * Robust weather metadata fetcher.
+ * An individual caller's transient AbortSignal will NOT kill the underlying network fetch,
+ * preventing cascading AbortErrors and permanent 20% progress freezes across the app.
+ */
 export async function fetchWeatherMeta(signal?: AbortSignal, force = false): Promise<WeatherMeta> {
   const now = Date.now();
-  if (!force && cachedMeta && now - cachedMetaTime < META_CACHE_TTL_MS) return cachedMeta;
-  if (metaPromise) return metaPromise;
+  if (!force && cachedMeta && now - cachedMetaTime < META_CACHE_TTL_MS) {
+    return cachedMeta;
+  }
 
-  metaPromise = (async () => {
-    try {
-      const res = await fetch('/api/weather/meta.json', { signal });
-      if (!res.ok) throw new Error(`Weather meta HTTP ${res.status}`);
-      const data = (await res.json()) as WeatherMeta;
-      cachedMeta = data;
-      cachedMetaTime = Date.now();
-      return data;
-    } catch (err) {
-      cachedMeta = null;
-      metaPromise = null;
-      throw err;
-    } finally {
-      metaPromise = null;
+  if (!metaPromise || force) {
+    const fetchController = new AbortController();
+    const timeoutTimer = window.setTimeout(() => fetchController.abort(), 12_000);
+
+    metaPromise = (async () => {
+      try {
+        const res = await fetch('/api/weather/meta.json', { signal: fetchController.signal });
+        window.clearTimeout(timeoutTimer);
+        if (!res.ok) throw new Error(`Weather meta HTTP ${res.status}`);
+        const data = (await res.json()) as WeatherMeta;
+        cachedMeta = data;
+        cachedMetaTime = Date.now();
+        return data;
+      } catch (err) {
+        window.clearTimeout(timeoutTimer);
+        if (cachedMeta) {
+          // Graceful fallback to existing cached metadata on transient network drops
+          return cachedMeta;
+        }
+        throw err;
+      } finally {
+        metaPromise = null;
+      }
+    })();
+  }
+
+  // If caller provided an abort signal, respect caller cancellation without aborting the background fetch
+  if (signal) {
+    if (signal.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
     }
-  })();
+    return new Promise<WeatherMeta>((resolve, reject) => {
+      const onAbort = () => {
+        signal.removeEventListener('abort', onAbort);
+        reject(new DOMException('Aborted', 'AbortError'));
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+      metaPromise!.then(
+        (data) => {
+          signal.removeEventListener('abort', onAbort);
+          resolve(data);
+        },
+        (err) => {
+          signal.removeEventListener('abort', onAbort);
+          reject(err);
+        },
+      );
+    });
+  }
 
   return metaPromise;
 }
@@ -121,133 +168,143 @@ export function buildVpsTileUrl(variable: string, isoHour: string, tileFormat: s
 
 const tileImageCache = new Map<string, HTMLImageElement>();
 const inFlightImagePromises = new Map<string, Promise<HTMLImageElement>>();
-const MAX_IMAGE_CACHE_SIZE = 64;
+const MAX_IMAGE_CACHE_SIZE = 128; // Holds 48 hours for multiple metrics easily
 
+export function hasCachedTileImage(url: string): boolean {
+  return tileImageCache.has(url);
+}
+
+export function getCachedTileImage(url: string): HTMLImageElement | undefined {
+  return tileImageCache.get(url);
+}
+
+/**
+ * Resilient tile image loader.
+ * Ensures concurrent callers and prefetching share identical requests without
+ * abort cascades (an aborted caller detaches, but the image finishes downloading
+ * into tileImageCache for immediate availability on subsequent scrub steps).
+ */
 export async function loadTileImage(url: string, signal?: AbortSignal): Promise<HTMLImageElement> {
   const cached = tileImageCache.get(url);
   if (cached) return cached;
 
-  const inFlight = inFlightImagePromises.get(url);
-  if (inFlight) {
-    if (!signal) return inFlight;
-    return new Promise<HTMLImageElement>((resolve, reject) => {
-      if (signal.aborted) {
-        reject(new DOMException('Aborted', 'AbortError'));
-        return;
-      }
-      const onAbort = () => reject(new DOMException('Aborted', 'AbortError'));
-      signal.addEventListener('abort', onAbort, { once: true });
-      inFlight.then(
-        (img) => {
-          signal.removeEventListener('abort', onAbort);
-          resolve(img);
-        },
-        (err) => {
-          signal.removeEventListener('abort', onAbort);
-          reject(err);
-        },
-      );
+  let inFlight = inFlightImagePromises.get(url);
+  if (!inFlight) {
+    inFlight = new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+
+      const cleanup = () => {
+        inFlightImagePromises.delete(url);
+      };
+
+      img.onload = async () => {
+        cleanup();
+        try {
+          await img.decode();
+        } catch {
+          // onload is enough
+        }
+        if (tileImageCache.size >= MAX_IMAGE_CACHE_SIZE) {
+          const oldestKey = tileImageCache.keys().next().value;
+          if (oldestKey) tileImageCache.delete(oldestKey);
+        }
+        tileImageCache.set(url, img);
+        resolve(img);
+      };
+
+      img.onerror = () => {
+        cleanup();
+        reject(new Error(`Failed to load tile image: ${url}`));
+      };
+
+      img.src = url;
     });
+
+    inFlightImagePromises.set(url, inFlight);
   }
 
-  const promise = new Promise<HTMLImageElement>((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(new DOMException('Aborted', 'AbortError'));
-      return;
-    }
+  if (!signal) return inFlight;
 
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
+  if (signal.aborted) {
+    throw new DOMException('Aborted', 'AbortError');
+  }
 
+  return new Promise<HTMLImageElement>((resolve, reject) => {
     const onAbort = () => {
-      img.src = '';
-      inFlightImagePromises.delete(url);
+      signal.removeEventListener('abort', onAbort);
       reject(new DOMException('Aborted', 'AbortError'));
     };
-
-    signal?.addEventListener('abort', onAbort, { once: true });
-
-    img.onload = async () => {
-      signal?.removeEventListener('abort', onAbort);
-      try {
-        await img.decode();
-      } catch {
-        // onload is enough
-      }
-      if (tileImageCache.size >= MAX_IMAGE_CACHE_SIZE) {
-        const oldestKey = tileImageCache.keys().next().value;
-        if (oldestKey) tileImageCache.delete(oldestKey);
-      }
-      tileImageCache.set(url, img);
-      inFlightImagePromises.delete(url);
-      resolve(img);
-    };
-
-    img.onerror = () => {
-      signal?.removeEventListener('abort', onAbort);
-      inFlightImagePromises.delete(url);
-      reject(new Error(`Failed to load tile image: ${url}`));
-    };
-
-    img.src = url;
+    signal.addEventListener('abort', onAbort, { once: true });
+    inFlight!.then(
+      (img) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(img);
+      },
+      (err) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(err);
+      },
+    );
   });
-
-  inFlightImagePromises.set(url, promise);
-  return promise;
 }
 
 let activePrefetchTimer: number | null = null;
-let prefetchAbortController: AbortController | null = null;
 
 export function cancelPrefetch(): void {
   if (activePrefetchTimer !== null) {
     window.clearTimeout(activePrefetchTimer);
     activePrefetchTimer = null;
   }
-  if (prefetchAbortController) {
-    prefetchAbortController.abort();
-    prefetchAbortController = null;
-  }
 }
 
+/**
+ * Prefetches adjacent forecast hours without cancelling foreground tile loads.
+ */
 export function prefetchAdjacentHours(
   variable: string,
   currentHour: string,
   availableHours: string[],
   tileFormat: string = 'png',
+  onTileLoaded?: (url: string, img: HTMLImageElement, hour: string) => void,
 ): void {
   cancelPrefetch();
 
   const currentIndex = availableHours.indexOf(currentHour);
   if (currentIndex === -1) return;
 
-  const targetIndices = [currentIndex + 1, currentIndex + 2, currentIndex - 1];
-  const urlsToPrefetch: string[] = [];
+  const targetIndices = [
+    currentIndex + 1,
+    currentIndex + 2,
+    currentIndex + 3,
+    currentIndex - 1,
+    currentIndex - 2,
+  ];
+  const itemsToPrefetch: { url: string; hour: string }[] = [];
 
   for (const idx of targetIndices) {
     if (idx >= 0 && idx < availableHours.length) {
       const h = availableHours[idx]!;
       const url = buildVpsTileUrl(variable, h, tileFormat);
       if (!tileImageCache.has(url) && !inFlightImagePromises.has(url)) {
-        urlsToPrefetch.push(url);
+        itemsToPrefetch.push({ url, hour: h });
       }
     }
   }
 
-  if (urlsToPrefetch.length === 0) return;
+  if (itemsToPrefetch.length === 0) return;
 
-  const controller = new AbortController();
-  prefetchAbortController = controller;
-
-  // Debounce background prefetch by 250ms so active timeline scrubbing isn't choked
+  // Debounce background prefetch by 100ms so active timeline scrubbing has zero network contention
   activePrefetchTimer = window.setTimeout(() => {
     activePrefetchTimer = null;
-    if (controller.signal.aborted) return;
-
-    for (const url of urlsToPrefetch) {
-      loadTileImage(url, controller.signal).catch(() => {});
+    for (const item of itemsToPrefetch) {
+      loadTileImage(item.url)
+        .then((img) => {
+          onTileLoaded?.(item.url, img, item.hour);
+        })
+        .catch(() => {});
     }
-  }, 250);
+  }, 100);
 }
 
 

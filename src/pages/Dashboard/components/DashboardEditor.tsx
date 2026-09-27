@@ -78,6 +78,7 @@ interface DashboardEditorProps {
   statusDockBottom: number;
   dashboardSearchVisible: boolean;
   dashboardSearchLeft: number;
+  dashboardSearchRight?: number;
   onMapReady: (map: MapboxMap) => void;
   onMapLoadStatusChange: OverlayStatusReporter;
   onMapReloadChange: OverlayReloadRegistrar;
@@ -170,6 +171,7 @@ export function DashboardEditor({
   statusDockBottom,
   dashboardSearchVisible,
   dashboardSearchLeft,
+  dashboardSearchRight: searchRightProp,
   onMapReady,
   onMapLoadStatusChange,
   onMapReloadChange,
@@ -322,7 +324,13 @@ export function DashboardEditor({
         basemapConfig={activeBasemapConfig}
         visible={dashboardSearchVisible}
         left={dashboardSearchLeft}
+        right={searchRightProp ?? (statusDockRight + 40 + PANEL_PADDING)}
+        maxWidth={Math.max(
+          0,
+          layout.designW - dashboardSearchLeft - (searchRightProp ?? (statusDockRight + 40 + PANEL_PADDING)),
+        )}
         top={PANEL_PADDING}
+        isResizing={isResizing || isLeftResizing}
         activeFilters={dashboardSearchActiveFilters}
         onFilterChange={setDashboardSearchActiveFilters}
         selectedPoiCategories={dashboardSearchSelectedPoiCategories}

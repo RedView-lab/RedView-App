@@ -113,7 +113,13 @@ export function TimelineEventCard({
       >
         <span className="rvi-tl-schedule__event-main">
           <span className="rvi-tl-schedule__event-icon" aria-hidden>
-            <KindBadge kind={event.item.kind} poiCategory={event.item.poiCategory} size={24} />
+            <KindBadge
+              kind={event.item.kind}
+              poiCategory={event.item.poiCategory}
+              favorite={event.item.favorite}
+              pauseDurationMin={event.item.durationMin}
+              size={24}
+            />
           </span>
           <span className="rvi-tl-schedule__event-name" title={title}>
             {title}

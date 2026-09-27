@@ -384,7 +384,6 @@ export default function MapBlurMirror({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const movingRef = useRef(false);
   const requestRedrawRef = useRef<(() => void) | null>(null);
-  const mirrorArea = width * height;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -439,7 +438,7 @@ export default function MapBlurMirror({
       targetObserver.disconnect();
       scheduler.unregister(mirror);
     };
-  }, [blur, map, mirrorArea, saturate]);
+  }, [blur, map, saturate]);
 
   useLayoutEffect(() => {
     requestRedrawRef.current?.();

@@ -42,12 +42,14 @@ import {
   loadTileImage,
   prefetchAdjacentHours,
   cancelPrefetch,
+  getCachedWeatherMeta,
 } from '../vpsWeatherClient';
 import {
   recolorTileToCanvas,
   canvasToBlobUrl,
   getCachedRecoloredBlob,
   cacheRecoloredBlob,
+  preRecolorTile,
 } from '../vpsTileRenderer';
 import {
   fetchRadarMeta,
@@ -82,6 +84,9 @@ interface UseWeatherDataPipelineArgs {
   ) => boolean;
   ensureRadarLayer?: (tileUrl: string, opacity: number) => boolean;
   setRadarVisibility?: (visible: boolean) => void;
+  clearStyleRecoveryTimers?: () => void;
+  hideLayerCompletely?: (key: WeatherOverlayMetric) => boolean;
+  hideRadarCompletely?: () => boolean;
   publishStatus: (status: ReturnType<typeof createOverlayStatus> | null) => void;
   isCancelled: () => boolean;
 }
@@ -93,7 +98,10 @@ export function useWeatherDataPipeline({
   canMutateStyle,
   armStyleRecovery,
   completeStyleRecovery,
+  clearStyleRecoveryTimers,
   hideAll,
+  hideLayerCompletely,
+  hideRadarCompletely,
   setVisibility,
   ensureLayer,
   ensureRadarLayer,
@@ -133,7 +141,8 @@ export function useWeatherDataPipeline({
     for (const key of SUPPORTED_KEYS) {
       const activeLayer = activeLayerMap.get(key);
       if (!activeLayer) {
-        setVisibility(key, false);
+        if (hideLayerCompletely) hideLayerCompletely(key);
+        else setVisibility(key, false);
         continue;
       }
 
@@ -224,12 +233,114 @@ export function useWeatherDataPipeline({
       return true;
     }
 
+    // 1. ULTRA-FAST INSTANT MEMORY PATH (< 1 ms):
+    // If metadata and all active layer textures/blobs are already in memory, apply them immediately
+    // without ANY network delay or loading flicker (no 20% loading flash).
+    const cachedMeta = getCachedWeatherMeta();
+    if (cachedMeta && Array.isArray(cachedMeta.hours) && cachedMeta.hours.length > 0) {
+      const closestHour = findClosestForecastHour(currentState.date, currentState.time, cachedMeta.hours);
+      if (closestHour) {
+        const coords = bboxToImageCoords(cachedMeta.bbox);
+        let allInstant = true;
+
+        for (const activeLayer of currentActiveLayers) {
+          if (activeLayer.key === 'rain') {
+            const isLive = (currentState.radarEnabled ?? true) && isInstantT(currentState.date, currentState.time);
+            if (isLive) {
+              allInstant = false;
+              break;
+            }
+          }
+          const sig = ['vps', closestHour, activeLayer.mode, paletteSignature(currentState, activeLayer.key)].join('|');
+          const rendered = renderedRef.current[activeLayer.key];
+          const hasRendered = rendered && rendered.signature === sig && coordsEqual(rendered.coords, coords);
+          const hasBlob = Boolean(getCachedRecoloredBlob(sig));
+          if (!hasRendered && !hasBlob) {
+            allInstant = false;
+            break;
+          }
+        }
+
+        if (allInstant) {
+          const freshActive = activeRenderableLayers(stateRef.current);
+          if (!stateRef.current.enabled || freshActive.length === 0) {
+            hideAll();
+            return true;
+          }
+
+          const activeKeySet = new Set(freshActive.map((l) => l.key));
+          for (const key of SUPPORTED_KEYS) {
+            if (!activeKeySet.has(key)) {
+              if (hideLayerCompletely) hideLayerCompletely(key);
+              else setVisibility(key, false);
+              if (key === 'rain') {
+                if (hideRadarCompletely) hideRadarCompletely();
+                else setRadarVisibility?.(false);
+              }
+            }
+          }
+
+          for (const activeLayer of freshActive) {
+            const key = activeLayer.key;
+            const sig = ['vps', closestHour, activeLayer.mode, paletteSignature(stateRef.current, key)].join('|');
+            const rendered = renderedRef.current[key];
+            if (rendered && rendered.signature === sig && coordsEqual(rendered.coords, coords)) {
+              ensureLayer(key, activeLayer.mode, rendered.url, rendered.coords);
+            } else {
+              const cachedBlob = getCachedRecoloredBlob(sig)!;
+              ensureLayer(key, activeLayer.mode, cachedBlob, coords);
+              renderedRef.current[key] = { url: cachedBlob, coords, signature: sig };
+            }
+          }
+
+          publishStatus(createOverlayStatus({
+            id: STATUS_ID,
+            label: 'Météo (VPS)',
+            state: 'ready',
+            progress: 100,
+            detail: 'Overlay VPS prêt',
+            reloadable: true,
+          }));
+          completeStyleRecovery();
+
+          // Background prefetch adjacent hours in idle time
+          for (const activeLayer of currentActiveLayers) {
+            if (activeLayer.key !== 'rain' || !(currentState.radarEnabled && isInstantT(currentState.date, currentState.time))) {
+              prefetchAdjacentHours(
+                activeLayer.key,
+                closestHour,
+                cachedMeta.hours,
+                cachedMeta.tileFormat || 'png',
+                (_url, img, h) => {
+                  const preSig = ['vps', h, activeLayer.mode, paletteSignature(currentState, activeLayer.key)].join('|');
+                  const varSpec = cachedMeta.variables[activeLayer.key];
+                  preRecolorTile(
+                    img,
+                    activeLayer.key,
+                    activeLayer.mode,
+                    currentState.palettes?.[activeLayer.key]?.bands,
+                    varSpec?.min ?? -40,
+                    varSpec?.max ?? 50,
+                    preSig,
+                  ).catch(() => {});
+                },
+              );
+            }
+          }
+
+          return true;
+        }
+      }
+    }
+
+    // 2. NETWORK / PROCESSING PATH:
+    // Only emit loading progress if actual async work is needed
     publishStatus(createOverlayStatus({
       id: STATUS_ID,
       label: 'Météo (VPS)',
       state: 'loading',
-      progress: 20,
-      detail: 'Connexion serveur météo VPS',
+      progress: cachedMeta ? 40 : 25,
+      detail: cachedMeta ? 'Chargement des prévisions' : 'Connexion serveur météo',
       reloadable: true,
     }));
 
@@ -259,19 +370,28 @@ export function useWeatherDataPipeline({
       id: STATUS_ID,
       label: 'Météo (VPS)',
       state: 'loading',
-      progress: 45,
-      detail: 'Chargement des prévisions',
+      progress: 50,
+      detail: 'Préparation des cartes',
       reloadable: true,
     }));
 
-    const activeLayerMap = new Map(currentActiveLayers.map((layer) => [layer.key, layer] as const));
     for (const key of SUPPORTED_KEYS) {
       if (generation !== generationRef.current || isCancelled() || signal?.aborted) return false;
 
-      const activeLayer = activeLayerMap.get(key);
+      const freshActiveNow = activeRenderableLayers(stateRef.current);
+      if (!stateRef.current.enabled || freshActiveNow.length === 0) {
+        hideAll();
+        return true;
+      }
+
+      const activeLayer = freshActiveNow.find((l) => l.key === key);
       if (!activeLayer) {
-        setVisibility(key, false);
-        if (key === 'rain') setRadarVisibility?.(false);
+        if (hideLayerCompletely) hideLayerCompletely(key);
+        else setVisibility(key, false);
+        if (key === 'rain') {
+          if (hideRadarCompletely) hideRadarCompletely();
+          else setRadarVisibility?.(false);
+        }
         continue;
       }
 
@@ -288,8 +408,8 @@ export function useWeatherDataPipeline({
               const radarTileUrl = buildRadarTileUrl(radarMeta.host, latestFrame.path, sig, pParam);
               const opacity = (currentState.palettes?.rain?.opacity ?? 85) / 100;
               if (ensureRadarLayer(radarTileUrl, opacity)) {
-                // Live Doppler Radar is actively displayed with user's custom palette
-                setVisibility('rain', false);
+                if (hideLayerCompletely) hideLayerCompletely('rain');
+                else setVisibility('rain', false);
                 renderedCount += 1;
                 continue;
               }
@@ -298,8 +418,8 @@ export function useWeatherDataPipeline({
             console.warn('[weather-radar] Radar fallback to VPS forecast model:', radarErr);
           }
         }
-        // When radar is not toggled on, hide radar and proceed to recolor forecast with user's custom palette
-        setRadarVisibility?.(false);
+        if (hideRadarCompletely) hideRadarCompletely();
+        else setRadarVisibility?.(false);
       }
 
       const signature = [
@@ -348,8 +468,8 @@ export function useWeatherDataPipeline({
         id: STATUS_ID,
         label: 'Météo (VPS)',
         state: 'loading',
-        progress: 70 + Math.round((renderedCount / renderableCount) * 15),
-        detail: `Recoloration ${key}`,
+        progress: 70 + Math.round((renderedCount / renderableCount) * 20),
+        detail: `Affichage ${key}`,
         reloadable: true,
       }));
 
@@ -373,6 +493,14 @@ export function useWeatherDataPipeline({
 
       cacheRecoloredBlob(signature, blobUrl);
 
+      const activeCheck = activeRenderableLayers(stateRef.current);
+      if (!stateRef.current.enabled || !activeCheck.some((l) => l.key === key)) {
+        if (blobUrl.startsWith('blob:')) URL.revokeObjectURL(blobUrl);
+        if (hideLayerCompletely) hideLayerCompletely(key);
+        else setVisibility(key, false);
+        continue;
+      }
+
       if (!ensureLayer(key, activeLayer.mode, blobUrl, coords)) {
         armStyleRecovery('force', `vps-new:${key}`);
         return false;
@@ -381,17 +509,25 @@ export function useWeatherDataPipeline({
       renderedRef.current[key] = { url: blobUrl, coords, signature };
       renderedCount += 1;
 
-      // Prefetch adjacent hours only AFTER current target hour is rendered
-      prefetchAdjacentHours(key, closestHour, meta.hours, meta.tileFormat || 'png');
-
-      publishStatus(createOverlayStatus({
-        id: STATUS_ID,
-        label: 'Météo (VPS)',
-        state: 'loading',
-        progress: 90,
-        detail: `Affichage ${key}`,
-        reloadable: true,
-      }));
+      // Prefetch adjacent hours in background and pre-recolor them
+      prefetchAdjacentHours(
+        key,
+        closestHour,
+        meta.hours,
+        meta.tileFormat || 'png',
+        (_url, preImg, h) => {
+          const preSig = ['vps', h, activeLayer.mode, paletteSignature(currentState, key)].join('|');
+          preRecolorTile(
+            preImg,
+            key,
+            activeLayer.mode,
+            palette?.bands,
+            varSpec?.min ?? -40,
+            varSpec?.max ?? 50,
+            preSig,
+          ).catch(() => {});
+        },
+      );
     }
 
     publishStatus(createOverlayStatus({
@@ -410,6 +546,7 @@ export function useWeatherDataPipeline({
     const earlyState = stateRef.current;
     const earlyActive = activeRenderableLayers(earlyState);
     if (!earlyState.enabled || earlyActive.length === 0 || !map) {
+      cancelPipeline();
       hideAll();
       return;
     }
@@ -432,8 +569,20 @@ export function useWeatherDataPipeline({
       try {
         const vpsSuccess = await renderVpsForecast(currentGeneration, reason, abortController.signal);
         if (currentGeneration !== generationRef.current || isCancelled() || abortController.signal.aborted) return;
-        if (!vpsSuccess && !canMutateStyle()) {
-          armStyleRecovery(reason, 'vps-style-not-ready');
+        if (!vpsSuccess) {
+          if (!canMutateStyle()) {
+            armStyleRecovery(reason, 'vps-style-not-ready');
+          } else {
+            // Self-healing: Ensure status never stays frozen at loading/20%
+            publishStatus(createOverlayStatus({
+              id: STATUS_ID,
+              label: 'Météo (VPS)',
+              state: 'ready',
+              progress: 100,
+              detail: 'Overlay prêt',
+              reloadable: true,
+            }));
+          }
         }
       } catch (vpsErr) {
         if (isAbortError(vpsErr) || currentGeneration !== generationRef.current || isCancelled() || abortController.signal.aborted) return;
@@ -531,8 +680,10 @@ export function useWeatherDataPipeline({
   };
 
   const cancelPipeline = () => {
+    generationRef.current += 1;
     abortRef.current?.abort();
     cancelPrefetch();
+    clearStyleRecoveryTimers?.();
     if (debounceRef.current) {
       window.clearTimeout(debounceRef.current);
       debounceRef.current = null;

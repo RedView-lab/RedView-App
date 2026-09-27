@@ -118,6 +118,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
   );
 
   const {
+    preparedChartNodes,
     visibleChartNodes,
     series,
     altitudeBackdropProfiles,
@@ -438,21 +439,25 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
         const xOffset = xMode === 'distance' ? getItineraryStartDistanceKm(targetItinerary) : 0;
         const localXValue = xMode === 'distance' ? annotation.x - xOffset : annotation.x;
         const prediction = predictions?.[targetItinerary.id] ?? targetItinerary.prediction ?? null;
-        const point = locateRoutePointAtX(
+        const routePoint = locateRoutePointAtX(
           targetItinerary.gpxRoute?.points ?? null,
           prediction,
           xMode,
           localXValue,
           targetItinerary.rhythm.startTime,
         );
-        if (point) {
+
+        const targetLat = annotation.lat ?? routePoint?.lat;
+        const targetLon = annotation.lon ?? routePoint?.lon;
+
+        if (targetLat != null && targetLon != null) {
           const currentPitch = map.getPitch();
           const is2D = currentPitch <= 8;
           const targetPitch = is2D ? 0 : Math.max(currentPitch, CHART_CLICK_FOCUS_PITCH);
 
           flyToLocation(
             map,
-            { lon: point.lon, lat: point.lat },
+            { lon: targetLon, lat: targetLat },
             {
               zoom: Math.max(map.getZoom(), CHART_CLICK_FOCUS_ZOOM),
               pitch: targetPitch,
@@ -460,11 +465,13 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
           );
 
           dispatchOpenPoiOnMap({
-            id: annotation.id,
-            lat: point.lat,
-            lon: point.lon,
+            id: annotation.rowId ?? annotation.id,
+            osmId: annotation.osmId,
+            lat: targetLat,
+            lon: targetLon,
             category: annotation.poiCategory,
             xValue: annotation.x,
+            itineraryId: targetItinerary.id,
             source: 'chart',
           });
         }
@@ -572,6 +579,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
       <div className="rvc-center-analysis__results" aria-label={t("Graphique d'analyse")}>
         <AnalysisChart
           series={series}
+          chartNodes={preparedChartNodes}
           backdropProfiles={altitudeBackdropProfiles}
           poiAnnotations={poiAnnotations}
           alertAnnotations={alertAnnotations}

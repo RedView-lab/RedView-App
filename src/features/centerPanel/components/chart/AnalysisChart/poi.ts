@@ -18,37 +18,43 @@ export function buildPoiMarkerGroups(
 ): PoiMarkerGroup[] {
   if (annotations.length === 0) return [];
 
-  const sorted = [...annotations].sort((left, right) => left.xPx - right.xPx);
-  const groups: VisiblePoiAnnotation[][] = [];
+  // Isolate favorites so a single favorite doesn't force a whole town of non-favorites to fan out across the chart
+  const favorites = annotations.filter((a) => Boolean(a.favorite));
+  const nonFavorites = annotations.filter((a) => !a.favorite);
 
-  for (const annotation of sorted) {
-    const targetGroup = groups[groups.length - 1] ?? null;
-    if (targetGroup && annotationFitsCluster(targetGroup, annotation, visibleFraction)) {
-      targetGroup.push(annotation);
-      continue;
-    }
-    groups.push([annotation]);
-  }
+  const clusterList = (list: VisiblePoiAnnotation[]): PoiMarkerGroup[] => {
+    if (list.length === 0) return [];
+    const sorted = [...list].sort((left, right) => left.xPx - right.xPx);
+    const rawGroups: VisiblePoiAnnotation[][] = [];
 
-  return groups.map((rawMembers) => {
-    const members = [...rawMembers].sort((a, b) => {
-      if (Boolean(a.favorite) !== Boolean(b.favorite)) {
-        return a.favorite ? 1 : -1;
+    for (const annotation of sorted) {
+      const targetGroup = rawGroups[rawGroups.length - 1] ?? null;
+      if (targetGroup && annotationFitsCluster(targetGroup, annotation, visibleFraction)) {
+        targetGroup.push(annotation);
+        continue;
       }
-      return 0;
+      rawGroups.push([annotation]);
+    }
+
+    return rawGroups.map((members) => {
+      const count = members.length;
+      const avgX = members.reduce((sum, member) => sum + member.xRatio, 0) / count;
+      const topY = members.reduce((min, member) => Math.min(min, member.yRatio), members[0].yRatio);
+      return {
+        id: count === 1 ? members[0].id : `cluster:${members.map((member) => member.id).join('|')}`,
+        kind: count === 1 ? 'single' : 'cluster',
+        count,
+        xRatio: avgX,
+        yRatio: topY,
+        members,
+      };
     });
-    const count = members.length;
-    const avgX = members.reduce((sum, member) => sum + member.xRatio, 0) / count;
-    const topY = members.reduce((min, member) => Math.min(min, member.yRatio), members[0].yRatio);
-    return {
-      id: count === 1 ? members[0].id : `cluster:${members.map((member) => member.id).join('|')}`,
-      kind: count === 1 ? 'single' : 'cluster',
-      count,
-      xRatio: avgX,
-      yRatio: topY,
-      members,
-    };
-  });
+  };
+
+  const favoriteGroups = clusterList(favorites);
+  const nonFavoriteGroups = clusterList(nonFavorites);
+
+  return [...nonFavoriteGroups, ...favoriteGroups];
 }
 
 function annotationsOverlap(
@@ -79,10 +85,9 @@ function annotationFitsCluster(
   );
 }
 
-export function buildPoiSpreadOffsetPx(index: number, count: number): number {
-  if (count <= 1) return 0;
-  const centeredIndex = index - (count - 1) / 2;
-  return centeredIndex * POI_MARKER_SPREAD_STEP_PX;
+export function buildPoiSpreadOffsetPx(_index: number, _count: number): number {
+  // POIs superpose at their actual route position with no horizontal shift
+  return 0;
 }
 
 export function shouldRenderPoiCluster(
@@ -90,10 +95,12 @@ export function shouldRenderPoiCluster(
   visibleFraction: number,
   expandedPoiClusterId: string | null,
 ): boolean {
-  if (group.members.some((member) => member.favorite)) {
+  // If the group contains any favorite, never cluster: show the favorite pin in front of rounds
+  if (group.members.some((m) => m.favorite)) {
     return false;
   }
-  return group.count > 1 && !shouldExpandPoiCluster(group, visibleFraction, expandedPoiClusterId);
+  // Only cluster when there are 6 or more co-located non-favorite POIs and not expanded
+  return group.count >= 6 && !shouldExpandPoiCluster(group, visibleFraction, expandedPoiClusterId);
 }
 
 export function shouldExpandPoiCluster(

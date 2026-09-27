@@ -27,6 +27,8 @@ function getViewportPoiMarkerSignature(feature: PoiFeature): string {
     feature.id,
     feature.lat,
     feature.lon,
+    feature.favorite ? '1' : '0',
+    feature.pauseDurationMin ?? 0,
     feature.tags?.name ?? '',
     feature.name ?? '',
   ].join('|');
@@ -213,9 +215,10 @@ export function selectViewportLodPois(
 }
 
 export function createViewportPoiMarkerElement(feature: PoiFeature): HTMLButtonElement {
+  const isPin = Boolean(feature.favorite);
   const element = document.createElement('button');
   element.type = 'button';
-  element.className = `rvd-viewport-poi-marker${feature.favorite ? ' is-favorite' : ''}`;
+  element.className = `rvd-viewport-poi-marker ${isPin ? 'is-favorite rvd-viewport-poi-marker--pin' : 'rvd-viewport-poi-marker--round'}`;
   element.dataset.poiCategory = feature.category;
   element.style.zIndex = feature.favorite ? '50' : '20';
 
@@ -253,6 +256,15 @@ export function createViewportPoiMarkerElement(feature: PoiFeature): HTMLButtonE
     badgeIcon.alt = '';
     badge.appendChild(badgeIcon);
     element.appendChild(badge);
+  }
+
+  // Symbol with pause time for POIs associated with pauses
+  if (feature.pauseDurationMin && feature.pauseDurationMin > 0) {
+    const pauseBadge = document.createElement('span');
+    pauseBadge.className = 'rvd-viewport-poi-marker__pause-badge';
+    pauseBadge.setAttribute('aria-label', `Pause ${feature.pauseDurationMin} min`);
+    pauseBadge.innerHTML = `<span class="rvd-viewport-poi-marker__pause-symbol" aria-hidden="true">❚❚</span><span class="rvd-viewport-poi-marker__pause-duration">${feature.pauseDurationMin} min</span>`;
+    element.appendChild(pauseBadge);
   }
 
   element.addEventListener('mouseenter', () => {

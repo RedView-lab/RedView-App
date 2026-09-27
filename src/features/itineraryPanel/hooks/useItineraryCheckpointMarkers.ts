@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import type { Map as MapboxMap } from 'mapbox-gl';
+import { flyToLocation } from '@/features/map3d';
 import type { ItineraryProject } from '../types';
 import { translateAppText } from '@/shared/i18n';
 import { cumulativeRouteLengthsM, type RouteDistancePoint } from '../lib/routes';
@@ -46,7 +47,6 @@ interface MarkerRegistryEntry {
   signature: string;
   element: HTMLElement;
   kind: 'start' | 'end' | 'pause' | 'waypoint';
-  spreadOffsetPx?: number;
 }
 
 interface PausePopupState {
@@ -133,66 +133,12 @@ function applyMarkerVisualState(entry: MarkerRegistryEntry, zoom: number): void 
   if (entry.kind === 'pause' || entry.kind === 'waypoint') {
     const visual = getPoiMarkerVisualState(zoom);
     el.style.setProperty('--rv-poi-marker-scale', visual.scale.toFixed(3));
-    const spreadPx = entry.spreadOffsetPx ?? 0;
-    const scaledSpreadPx = Math.round(spreadPx * visual.scale);
-    el.style.setProperty('--rv-poi-spread-x', `${scaledSpreadPx}px`);
     if (entry.popup) {
-      entry.popup.setOffset([scaledSpreadPx, visual.popupOffsetPx]);
+      entry.popup.setOffset([0, visual.popupOffsetPx]);
     }
   } else {
     applyCheckpointZoomVisibility(el, zoom);
   }
-}
-
-function computeCheckpointSpreadOffsets(checkpoints: CheckpointData[]): Map<string, number> {
-  const offsetMap = new Map<string, number>();
-  if (checkpoints.length === 0) return offsetMap;
-
-  const clusters: CheckpointData[][] = [];
-  for (const cp of checkpoints) {
-    let targetCluster: CheckpointData[] | null = null;
-    for (const cluster of clusters) {
-      const anchor = cluster[0];
-      const dLat = (cp.coord[1] - anchor.coord[1]) * 111320;
-      const dLon =
-        (cp.coord[0] - anchor.coord[0]) *
-        111320 *
-        Math.cos(((cp.coord[1] + anchor.coord[1]) / 2) * (Math.PI / 180));
-      const distM = Math.hypot(dLat, dLon);
-      if (distM <= 18) {
-        targetCluster = cluster;
-        break;
-      }
-    }
-    if (targetCluster) {
-      targetCluster.push(cp);
-    } else {
-      clusters.push([cp]);
-    }
-  }
-
-  for (const cluster of clusters) {
-    const N = cluster.length;
-    if (N <= 1) {
-      offsetMap.set(cluster[0].key, 0);
-      continue;
-    }
-
-    // Sort so non-favorites are first, favorites last (rendered on top)
-    cluster.sort((a, b) => {
-      if (Boolean(a.favorite) !== Boolean(b.favorite)) {
-        return a.favorite ? 1 : -1;
-      }
-      return 0;
-    });
-
-    cluster.forEach((cp, idx) => {
-      const centerOffset = idx - (N - 1) / 2;
-      offsetMap.set(cp.key, Math.round(centerOffset * 26));
-    });
-  }
-
-  return offsetMap;
 }
 
 function getRoutePointDistances(points: Array<{ lat: number; lon: number; distanceM?: number }>): number[] {
@@ -525,7 +471,8 @@ function createMarkerElement(
   if (kind === 'pause' || kind === 'waypoint') {
     const el = document.createElement('button');
     el.type = 'button';
-    el.className = `rv-poi-marker rv-poi-marker--${kind}${favorite ? ' is-favorite rv-poi-marker--favorite' : ''}`;
+    const isPin = kind === 'pause';
+    el.className = `rv-poi-marker rv-poi-marker--${kind} ${isPin ? 'rv-poi-marker--pin' : 'rv-poi-marker--round'}${favorite ? ' is-favorite rv-poi-marker--favorite' : ''}`;
     el.style.zIndex = favorite ? '50' : '20';
 
     const kindName = kind === 'pause' ? translateAppText('Pause') : translateAppText('Waypoint');
@@ -549,6 +496,13 @@ function createMarkerElement(
     img.draggable = false;
     img.decoding = 'async';
     inner.appendChild(img);
+
+    if (kind === 'pause' && durationMin && durationMin > 0) {
+      const timeBadge = document.createElement('span');
+      timeBadge.className = 'rv-checkpoint-pause__time';
+      timeBadge.textContent = `${durationMin} min`;
+      inner.appendChild(timeBadge);
+    }
 
     if (favorite) {
       const badge = document.createElement('span');
@@ -630,7 +584,9 @@ export function useItineraryCheckpointMarkers({
   onTogglePauseFavorite,
   onDeleteWaypoint,
   onToggleWaypointFavorite,
-}: UseItineraryCheckpointMarkersArgs): void {
+}: UseItineraryCheckpointMarkersArgs): {
+  openCheckpointMarker: (checkpointId: string, coords?: { lat: number; lon: number }) => boolean;
+} {
   const registryRef = useRef<Map<string, MarkerRegistryEntry>>(new Map());
 
   // Keep latest callbacks in ref for stable popup handlers
@@ -857,15 +813,10 @@ export function useItineraryCheckpointMarkers({
       }
     }
 
-    // Compute spread offsets for superposed / co-located checkpoints
-    const spreadOffsets = computeCheckpointSpreadOffsets(currentCheckpoints);
-
     // Add or update markers
     for (const cp of currentCheckpoints) {
-      const spreadOffsetPx = spreadOffsets.get(cp.key) ?? 0;
       const existing = registry.get(cp.key);
       if (existing) {
-        existing.spreadOffsetPx = spreadOffsetPx;
         if (existing.signature !== cp.signature) {
           existing.marker.setLngLat(cp.coord);
           let kindName = '';
@@ -940,7 +891,7 @@ export function useItineraryCheckpointMarkers({
 
         const marker = new mapboxgl.Marker({
           element,
-          anchor: 'bottom',
+          anchor: cp.kind === 'waypoint' ? 'center' : 'bottom',
           pitchAlignment: 'viewport',
           rotationAlignment: 'viewport',
           occludedOpacity: 0,
@@ -959,7 +910,6 @@ export function useItineraryCheckpointMarkers({
           signature: cp.signature,
           element,
           kind: cp.kind,
-          spreadOffsetPx,
         };
 
         registry.set(cp.key, entry);
@@ -1009,4 +959,64 @@ export function useItineraryCheckpointMarkers({
       registry.clear();
     };
   }, []);
+
+  const openCheckpointMarker = useCallback(
+    (checkpointId: string, coords?: { lat: number; lon: number }): boolean => {
+      const idStr = String(checkpointId);
+      const cleanId = idStr.replace(/^.*::/, '');
+      let targetEntry: MarkerRegistryEntry | null = null;
+
+      for (const [key, entry] of registryRef.current.entries()) {
+        if (
+          key === idStr ||
+          key === cleanId ||
+          key.endsWith(`:${idStr}`) ||
+          key.endsWith(`:${cleanId}`)
+        ) {
+          targetEntry = entry;
+          break;
+        }
+      }
+
+      if (!targetEntry && coords) {
+        let closestEntry: MarkerRegistryEntry | null = null;
+        let minDistanceSq = Infinity;
+        for (const entry of registryRef.current.values()) {
+          const lngLat = entry.marker.getLngLat();
+          const dLat = lngLat.lat - coords.lat;
+          const dLon = lngLat.lng - coords.lon;
+          const distSq = dLat * dLat + dLon * dLon;
+          if (distSq < 0.001 * 0.001 && distSq < minDistanceSq) {
+            minDistanceSq = distSq;
+            closestEntry = entry;
+          }
+        }
+        targetEntry = closestEntry;
+      }
+
+      if (!targetEntry) return false;
+
+      for (const other of registryRef.current.values()) {
+        if (other !== targetEntry && other.popup?.isOpen()) {
+          other.popup.remove();
+        }
+      }
+
+      if (targetEntry.popup && !targetEntry.popup.isOpen()) {
+        targetEntry.marker.togglePopup();
+      } else {
+        targetEntry.element.click();
+      }
+
+      if (map) {
+        const lngLat = targetEntry.marker.getLngLat();
+        flyToLocation(map, { lon: lngLat.lng, lat: lngLat.lat }, { zoom: 15.5 });
+      }
+
+      return true;
+    },
+    [map],
+  );
+
+  return { openCheckpointMarker };
 }

@@ -21,7 +21,7 @@ const FALLBACK_POI_ICON_URL = '/svgv2/icone/x.svg';
 const LOGICAL_ICON_URLS: Record<string, string> = {
   drinking_water: PROVIDED_POI_SVG.water,
   supermarket: PROVIDED_POI_SVG.supermarket,
-  shop: PROVIDED_POI_SVG.shop,
+  shop: PROVIDED_POI_SVG.bakery,
   bakery: PROVIDED_POI_SVG.bakery,
   restaurant: PROVIDED_POI_SVG.restaurant,
   fast_food: PROVIDED_POI_SVG.fastFood,
@@ -41,11 +41,35 @@ const LOGICAL_ICON_URLS: Record<string, string> = {
   scenic: PROVIDED_POI_SVG.refugePin,
 };
 
-/** Variantes « favori » disponibles, par nom d'icône logique. */
+/** Variantes « rond » (carte, itinéraire standard), par nom d'icône logique. */
+const LOGICAL_ROUND_ICON_URLS: Record<string, string> = {
+  drinking_water: '/svgv2/poi/dropdown-maps/water.svg',
+  supermarket: '/svgv2/poi/dropdown-maps/supermarket.svg',
+  shop: '/svgv2/poi/dropdown-maps/bakery.svg',
+  bakery: '/svgv2/poi/dropdown-maps/bakery.svg',
+  restaurant: '/svgv2/poi/dropdown-maps/restaurant.svg',
+  fast_food: '/svgv2/poi/dropdown-maps/fast-food.svg',
+  cafe: '/svgv2/poi/dropdown-maps/cafe.svg',
+  bar: '/svgv2/poi/dropdown-maps/bar.svg',
+  hotel: '/svgv2/poi/dropdown-maps/hotel.svg',
+  refuge: '/svgv2/poi/dropdown-maps/refuge.svg',
+  bicycle: '/svgv2/poi/dropdown-maps/bicycle.svg',
+  toilets: '/svgv2/poi/dropdown-maps/toilets.svg',
+  fuel: '/svgv2/poi/dropdown-maps/fuel.svg',
+  waypoint: '/svgv2/icone/checkpoint-waypoint.svg',
+  medical: '/svgv2/icone/plus-circle.svg',
+  police: '/svgv2/icone/flag-02.svg',
+  transport: '/svgv2/icone/marker-pin-02.svg',
+  cash: '/svgv2/icone/credit-card-02.svg',
+  mail: '/svgv2/icone/mail-02.svg',
+  scenic: '/svgv2/poi/dropdown-maps/refuge.svg',
+};
+
+/** Variantes « pointe / favori » disponibles, par nom d'icône logique. */
 const LOGICAL_FAVORITE_ICON_URLS: Record<string, string> = {
   drinking_water: PROVIDED_POI_SVG.favoriteWater,
   bakery: PROVIDED_POI_SVG.favoriteBakery,
-  shop: PROVIDED_POI_SVG.favoriteShop,
+  shop: PROVIDED_POI_SVG.favoriteBakery,
   supermarket: PROVIDED_POI_SVG.favoriteSupermarket,
   toilets: PROVIDED_POI_SVG.favoriteToilet,
   fuel: PROVIDED_POI_SVG.favoriteFuel,
@@ -67,12 +91,17 @@ export function hasDedicatedFavoritePoiIcon(category: PoiCategory): boolean {
   return Boolean(LOGICAL_FAVORITE_ICON_URLS[logicalName(category)]);
 }
 
-/** Resolve the SVG URL for a category, favoring the favorite variant. */
+/**
+ * Resolve the SVG URL for a category:
+ * - Round icon for standard POIs (!favorite)
+ * - Pointed pin icon ("le truc avec la pointe") for favorite POIs
+ */
 export function getPoiIconUrl(category: PoiCategory, favorite: boolean = false): string {
   const name = logicalName(category);
-  const base = LOGICAL_ICON_URLS[name] ?? FALLBACK_POI_ICON_URL;
-  if (!favorite) return base;
-  return LOGICAL_FAVORITE_ICON_URLS[name] ?? base;
+  if (!favorite) {
+    return LOGICAL_ROUND_ICON_URLS[name] ?? LOGICAL_ICON_URLS[name] ?? FALLBACK_POI_ICON_URL;
+  }
+  return LOGICAL_FAVORITE_ICON_URLS[name] ?? LOGICAL_ICON_URLS[name] ?? FALLBACK_POI_ICON_URL;
 }
 
 /** Catégories dont l'icône logique n'a pas d'asset dédié (audit design). */

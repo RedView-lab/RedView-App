@@ -117,9 +117,12 @@ export function HoverCardGroup({
       string,
       {
         color: string;
+        distanceFormatted: string;
         gainM?: number;
         lossM?: number;
-        rows: HoverCardRow[];
+        durationFormatted?: string;
+        timeFormatted?: string;
+        extraMetrics: HoverCardRow[];
       }
     >
   >((acc, row) => {
@@ -127,14 +130,24 @@ export function HoverCardGroup({
     if (!acc[key]) {
       acc[key] = {
         color: row.color,
+        distanceFormatted: row.distanceFormatted || formatXAxisValue(xValue, xMode),
         gainM: row.gainM,
         lossM: row.lossM,
-        rows: [],
+        durationFormatted: row.durationFormatted,
+        timeFormatted: row.timeFormatted,
+        extraMetrics: [],
       };
     }
     if (row.gainM != null) acc[key].gainM = row.gainM;
     if (row.lossM != null) acc[key].lossM = row.lossM;
-    acc[key].rows.push(row);
+    if (row.distanceFormatted) acc[key].distanceFormatted = row.distanceFormatted;
+    if (row.durationFormatted) acc[key].durationFormatted = row.durationFormatted;
+    if (row.timeFormatted) acc[key].timeFormatted = row.timeFormatted;
+    if (row.metric !== 'Altitude' && row.value != null && Number.isFinite(row.value)) {
+      if (!acc[key].extraMetrics.some((m) => m.id === row.id)) {
+        acc[key].extraMetrics.push(row);
+      }
+    }
     return acc;
   }, {});
 
@@ -152,25 +165,29 @@ export function HoverCardGroup({
             />
             <div className="rvchart__card-copy">
               <div className="rvchart__card-distance">
-                {formatXAxisValue(xValue, xMode)}
+                {group.distanceFormatted}
               </div>
-              {group.gainM != null ? (
-                <div className="rvchart__card-metric">+{group.gainM} m</div>
+              <div className="rvchart__card-metric">
+                +{group.gainM ?? 0} m
+              </div>
+              <div className="rvchart__card-metric">
+                -{group.lossM != null ? Math.abs(group.lossM) : 0} m
+              </div>
+              {group.durationFormatted ? (
+                <div className="rvchart__card-metric">
+                  {group.durationFormatted}
+                </div>
               ) : null}
-              {group.lossM != null ? (
-                <div className="rvchart__card-metric">-{group.lossM} m</div>
+              {group.timeFormatted ? (
+                <div className="rvchart__card-metric">
+                  {group.timeFormatted}
+                </div>
               ) : null}
-              {group.rows.map((row) => {
-                const isAltitude = row.metric === 'Altitude';
-                const formatted = Number.isFinite(row.value)
-                  ? formatAxisValue(row.metric, row.value)
-                  : '--';
-                return (
-                  <div key={row.id} className="rvchart__card-metric">
-                    {isAltitude ? formatted : `${row.metric}: ${formatted}`}
-                  </div>
-                );
-              })}
+              {group.extraMetrics.map((row) => (
+                <div key={row.id} className="rvchart__card-metric">
+                  {row.metric}: {formatAxisValue(row.metric, row.value)}
+                </div>
+              ))}
             </div>
           </div>
         );

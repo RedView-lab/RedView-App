@@ -36,9 +36,10 @@ export const DROPDOWN_VIEWPORT_POI_ICON_URLS: Partial<Record<PoiCategory, string
   bar: '/svgv2/poi/dropdown-maps/bar.svg',
   cafe: '/svgv2/poi/dropdown-maps/cafe.svg',
   restaurant: '/svgv2/poi/dropdown-maps/restaurant.svg',
-  convenience: '/svgv2/poi/dropdown-maps/shop.svg',
+  convenience: '/svgv2/poi/dropdown-maps/bakery.svg',
   hotel: '/svgv2/poi/dropdown-maps/hotel.svg',
   alpine_hut: '/svgv2/poi/dropdown-maps/refuge.svg',
+  bicycle: '/svgv2/poi/dropdown-maps/bicycle.svg',
 };
 
 export const DASHBOARD_POI_OPTIONS: readonly DashboardPoiOption[] = [
@@ -50,7 +51,7 @@ export const DASHBOARD_POI_OPTIONS: readonly DashboardPoiOption[] = [
   { id: 'bar', label: 'Bar', color: '#C70036' },
   { id: 'cafe', label: 'Café', color: '#FF2157' },
   { id: 'restaurant', label: 'Restaurant', color: '#8B0836' },
-  { id: 'convenience', label: 'Supermarché', color: '#A900B7' },
+  { id: 'convenience', label: 'Épicerie', color: '#FF6900' },
   { id: 'hotel', label: 'Hôtel', color: '#008236' },
   { id: 'alpine_hut', label: 'Refuge', color: '#7DCF00' },
   { id: 'bicycle', label: 'Magasin de vélo', color: '#63758E' },

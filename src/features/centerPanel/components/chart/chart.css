@@ -201,20 +201,19 @@
   outline: none;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
   transition: transform 140ms ease, filter 140ms ease;
-}
-
-.rvchart__poi-marker:hover {
-  z-index: 50 !important;
-  transform: translate(-50%, -100%) scale(1.15);
-  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.7));
+  z-index: 10;
 }
 
 .rvchart__poi-marker.is-favorite {
-  z-index: 30;
+  z-index: 40;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.65));
 }
 
+.rvchart__poi-marker:hover,
 .rvchart__poi-marker.is-favorite:hover {
-  z-index: 60 !important;
+  z-index: 100 !important;
+  transform: translate(-50%, -100%) scale(1.15);
+  filter: drop-shadow(0 5px 12px rgba(0, 0, 0, 0.8));
 }
 
 .rvchart__poi-marker-fallback {
@@ -259,8 +258,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 48px;
+  width: 34px;
+  height: 38px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -275,7 +274,7 @@
   height: 100%;
 }
 
-/* ---- Hover info cards (Figma Pixel-Perfect node 1894:39098) ---- */
+/* ---- Hover info cards (Figma Pixel-Perfect node 1894:40694) ---- */
 .rvchart__cards {
   position: absolute;
   top: 8px;
@@ -288,7 +287,10 @@
   -webkit-backdrop-filter: blur(60px);
   box-shadow: 0 14px 28px rgba(0, 0, 0, 0.32);
   color: #ffffff;
-  font: 700 12px/normal 'DM Sans', 'Rethink Sans', system-ui, sans-serif;
+  font-family: 'Rethink Sans', 'DM Sans', system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: normal;
   white-space: nowrap;
   pointer-events: none;
   z-index: 10001;
@@ -303,7 +305,7 @@
 }
 
 .rvchart__card + .rvchart__card {
-  border-left: 1px solid rgba(255, 255, 255, 0.14);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .rvchart__card-dot {
@@ -319,22 +321,28 @@
   flex-direction: column;
   gap: 4px;
   align-items: flex-start;
-  font-family: 'DM Sans', 'Rethink Sans', system-ui, sans-serif;
+  font-family: 'Rethink Sans', 'DM Sans', system-ui, sans-serif;
   font-weight: 700;
   font-size: 12px;
   color: #ffffff;
   line-height: normal;
   white-space: nowrap;
+  min-width: 74px;
 }
 
 .rvchart__card-distance {
   color: #ffffff;
   font-weight: 700;
+  font-size: 12px;
+  line-height: normal;
+  font-variant-numeric: tabular-nums;
 }
 
 .rvchart__card-metric {
   color: #ffffff;
   font-weight: 700;
+  font-size: 12px;
+  line-height: normal;
   font-variant-numeric: tabular-nums;
 }
 

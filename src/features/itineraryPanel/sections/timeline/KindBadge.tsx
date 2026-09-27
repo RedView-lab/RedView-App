@@ -16,6 +16,7 @@
  * concrete `PoiCategory`, the `<PoiBadge>` helper exported below renders
  * the matching teardrop pin.
  */
+import React from 'react';
 import {
   IconBakery,
   IconBeer,
@@ -41,12 +42,13 @@ import type { PoiCategory, TimelineItemKind } from '../../types';
 import { PROVIDED_POI_SVG } from '@/features/poi/lib/providedPoiSvg';
 
 interface KindBadgeProps {
-  kind: TimelineItemKind;
+  kind: TimelineItemKind | 'favorite';
   /** Pixel size — defaults to the 20px Figma value. */
   size?: number;
   /** Required when `kind === 'poi'` — selects the teardrop pin color/icon. */
   poiCategory?: PoiCategory;
   favorite?: boolean;
+  pauseDurationMin?: number | null;
 }
 
 /** French labels for the timeline type column. */
@@ -106,20 +108,20 @@ export const POI_BADGE_REGISTRY: Partial<Record<PoiCategory, PoiBadgeSpec>> = {
   passes:       { color: '#5a5a5a', Icon: IconMountain },
 };
 
-const PROVIDED_TIMELINE_BADGE_URLS: Partial<Record<PoiCategory, string>> = {
-  fountains: PROVIDED_POI_SVG.water,
-  toilets: PROVIDED_POI_SVG.toilet,
-  supermarkets: PROVIDED_POI_SVG.shop,
-  gasStations: PROVIDED_POI_SVG.fuel,
-  bakeries: PROVIDED_POI_SVG.bakery,
-  fastFood: PROVIDED_POI_SVG.fastFood,
-  cafes: PROVIDED_POI_SVG.cafe,
-  bars: PROVIDED_POI_SVG.bar,
-  restaurants: PROVIDED_POI_SVG.restaurant,
-  bikeShops: PROVIDED_POI_SVG.bikeShop,
-  hotels: PROVIDED_POI_SVG.hotelBadge,
-  refuges: PROVIDED_POI_SVG.refugeBadge,
-  passes: PROVIDED_POI_SVG.refugeBadge,
+const PROVIDED_TIMELINE_ROUND_BADGE_URLS: Partial<Record<PoiCategory, string>> = {
+  fountains: '/svgv2/poi/dropdown-maps/water.svg',
+  toilets: '/svgv2/poi/dropdown-maps/toilets.svg',
+  supermarkets: '/svgv2/poi/dropdown-maps/supermarket.svg',
+  gasStations: '/svgv2/poi/dropdown-maps/fuel.svg',
+  bakeries: '/svgv2/poi/dropdown-maps/bakery.svg',
+  fastFood: '/svgv2/poi/dropdown-maps/fast-food.svg',
+  cafes: '/svgv2/poi/dropdown-maps/cafe.svg',
+  bars: '/svgv2/poi/dropdown-maps/bar.svg',
+  restaurants: '/svgv2/poi/dropdown-maps/restaurant.svg',
+  bikeShops: '/svgv2/poi/dropdown-maps/bicycle.svg',
+  hotels: '/svgv2/poi/dropdown-maps/hotel.svg',
+  refuges: '/svgv2/poi/dropdown-maps/refuge.svg',
+  passes: '/svgv2/poi/dropdown-maps/refuge.svg',
 };
 
 const PROVIDED_TIMELINE_FAVORITE_BADGE_URLS: Partial<Record<PoiCategory, string>> = {
@@ -159,65 +161,99 @@ export function poiLabel(category: PoiCategory): string {
 }
 
 /**
- * Teardrop POI pin with a centred white glyph — composed by overlaying the
- * white icon on top of the colored teardrop SVG.
+ * POI badge:
+ * - Round circle for standard (non-favorite) POIs
+ * - Pointed pin ("le truc avec la pointe") for favorite POIs
+ * - Pause symbol with pause duration when associated with pauses
  */
 export function PoiBadge({
   category,
   size = 20,
   hideGlyph = false,
   favorite = false,
+  pauseDurationMin,
 }: {
   category: PoiCategory;
   size?: number;
   hideGlyph?: boolean;
   favorite?: boolean;
+  pauseDurationMin?: number | null;
 }) {
   const favoriteUrl = favorite ? PROVIDED_TIMELINE_FAVORITE_BADGE_URLS[category] : undefined;
-  const providedUrl = favoriteUrl ?? PROVIDED_TIMELINE_BADGE_URLS[category];
-  if (providedUrl) {
-    return (
-      <ProvidedPoiSvgBadge
-        url={providedUrl}
-        size={size}
-        className="rvi-kind--pin"
-        showStarBadge={favorite && !favoriteUrl}
-      />
-    );
-  }
+  const providedUrl = favoriteUrl ?? PROVIDED_TIMELINE_ROUND_BADGE_URLS[category];
+  const hasPause = Boolean(pauseDurationMin && pauseDurationMin > 0);
 
-  // Les catégories sans badge designé retombent sur un pin neutre.
-  const spec = POI_BADGE_REGISTRY[category];
-  const color = spec?.color ?? '#5a5a5a';
-  const glyph = Math.round(size * 0.5);
-  return (
+  const badgeContent = providedUrl ? (
+    <ProvidedPoiSvgBadge
+      url={providedUrl}
+      size={size}
+      className={favorite ? 'rvi-kind--pin' : 'rvi-kind--round'}
+      showStarBadge={favorite && !favoriteUrl}
+    />
+  ) : favorite ? (
     <span
       className="rvi-kind rvi-kind--pin"
       style={{ width: size, height: size, position: 'relative', display: 'inline-flex' }}
       aria-hidden
     >
-      <IconTeardropPin size={size} color={color} />
-      {!hideGlyph && spec ? (
-        <span className="rvi-kind__pin-icon" style={{ width: glyph, height: glyph }}>
-          <spec.Icon size={glyph} />
+      <IconTeardropPin size={size} color={POI_BADGE_REGISTRY[category]?.color ?? '#5a5a5a'} />
+      {!hideGlyph && POI_BADGE_REGISTRY[category] ? (
+        <span className="rvi-kind__pin-icon" style={{ width: Math.round(size * 0.5), height: Math.round(size * 0.5) }}>
+          {React.createElement(POI_BADGE_REGISTRY[category]!.Icon, { size: Math.round(size * 0.5) })}
         </span>
       ) : null}
-      {favorite && !favoriteUrl && (
-        <img
-          src="/svgv2/icone/star-01.svg"
-          alt=""
-          style={{
-            position: 'absolute',
-            top: -2,
-            right: -2,
-            width: Math.round(size * 0.45),
-            height: Math.round(size * 0.45),
-            pointerEvents: 'none',
-            filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6))',
-          }}
-          draggable={false}
-        />
-      )}
+      <img
+        src="/svgv2/icone/star-01.svg"
+        alt=""
+        style={{
+          position: 'absolute',
+          top: -2,
+          right: -2,
+          width: Math.round(size * 0.45),
+          height: Math.round(size * 0.45),
+          pointerEvents: 'none',
+          filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6))',
+        }}
+        draggable={false}
+      />
+    </span>
+  ) : (
+    <span
+      className="rvi-kind rvi-kind--round"
+      style={{
+        width: size,
+        height: size,
+        position: 'relative',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: '50%',
+        backgroundColor: POI_BADGE_REGISTRY[category]?.color ?? '#5a5a5a',
+        border: '1.5px solid rgba(255, 255, 255, 0.9)',
+        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.25)',
+        boxSizing: 'border-box',
+      }}
+      aria-hidden
+    >
+      {!hideGlyph && POI_BADGE_REGISTRY[category] ? (
+        <span style={{ width: Math.round(size * 0.55), height: Math.round(size * 0.55), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {React.createElement(POI_BADGE_REGISTRY[category]!.Icon, { size: Math.round(size * 0.55) })}
+        </span>
+      ) : null}
+    </span>
+  );
+
+  if (!hasPause) {
+    return badgeContent;
+  }
+
+  return (
+    <span className="rvi-poi-pause-wrap" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      {badgeContent}
+      <span className="rvi-poi-pause-badge" title={`Pause ${pauseDurationMin} min`}>
+        <span className="rvi-poi-pause-badge__icon">❚❚</span>
+        <span className="rvi-poi-pause-badge__text">{pauseDurationMin} min</span>
+      </span>
     </span>
   );
 }
@@ -233,18 +269,20 @@ function ProvidedPoiSvgBadge({
   className?: string;
   showStarBadge?: boolean;
 }) {
+  const isPin = className?.includes('rvi-kind--pin');
+  const height = isPin ? Math.round(size * (48 / 44)) : size;
   return (
     <span
       className={`rvi-kind ${className ?? ''}`.trim()}
-      style={{ width: size, height: size, position: 'relative', display: 'inline-flex' }}
+      style={{ width: size, height, position: 'relative', display: 'inline-flex' }}
       aria-hidden
     >
       <img
         src={url}
         alt=""
         width={size}
-        height={size}
-        style={{ width: size, height: size, display: 'block', objectFit: 'contain' }}
+        height={height}
+        style={{ width: size, height, display: 'block', objectFit: 'contain' }}
         draggable={false}
       />
       {showStarBadge && (
@@ -269,7 +307,13 @@ function ProvidedPoiSvgBadge({
 
 /* ------------------------------ Main badge ------------------------------ */
 
-export function KindBadge({ kind, size = 20, poiCategory, favorite = false }: KindBadgeProps) {
+export function KindBadge({
+  kind,
+  size = 20,
+  poiCategory,
+  favorite = false,
+  pauseDurationMin,
+}: KindBadgeProps) {
   if (kind === 'start') {
     return (
       <span
@@ -310,29 +354,86 @@ export function KindBadge({ kind, size = 20, poiCategory, favorite = false }: Ki
     return (
       <span
         className="rvi-kind rvi-kind--pause"
-        style={{ width: size, height: size }}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
         aria-hidden
       >
         <IconPauseBadge size={size} />
+        {pauseDurationMin && pauseDurationMin > 0 ? (
+          <span className="rvi-poi-pause-badge__text rvi-poi-pause-badge__text--standalone">
+            {pauseDurationMin} min
+          </span>
+        ) : null}
       </span>
     );
   }
 
-  // Generic POI row injected by corridor search → use the typed teardrop pin.
+  if (kind === 'favorite') {
+    return (
+      <span
+        className="rvi-kind rvi-kind--pin rvi-kind--favorite"
+        style={{ width: size, height: size, position: 'relative', display: 'inline-flex' }}
+        aria-hidden
+      >
+        <IconTeardropPin size={size} color="#FDB022" />
+        <img
+          src="/svgv2/icone/star-01.svg"
+          alt=""
+          style={{
+            position: 'absolute',
+            top: 2,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: Math.round(size * 0.55),
+            height: Math.round(size * 0.55),
+            pointerEvents: 'none',
+          }}
+          draggable={false}
+        />
+      </span>
+    );
+  }
+
+  // Generic POI row injected by corridor search → use the typed badge
   if (kind === 'poi' && poiCategory) {
-    return <PoiBadge category={poiCategory} size={size} favorite={favorite} />;
+    return <PoiBadge category={poiCategory} size={size} favorite={favorite} pauseDurationMin={pauseDurationMin} />;
   }
 
-  if (kind === 'poi') {
-    return <ProvidedPoiSvgBadge url={PROVIDED_POI_SVG.water} size={size} className="rvi-kind--pin rvi-kind--water" />;
-  }
-
-  if (kind === 'water') {
-    return <ProvidedPoiSvgBadge url={PROVIDED_POI_SVG.water} size={size} className="rvi-kind--pin rvi-kind--water" />;
+  if (kind === 'poi' || kind === 'water') {
+    const url = favorite ? PROVIDED_POI_SVG.favoriteWater : '/svgv2/poi/dropdown-maps/water.svg';
+    return (
+      <span className="rvi-poi-pause-wrap" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <ProvidedPoiSvgBadge
+          url={url}
+          size={size}
+          className={favorite ? 'rvi-kind--pin rvi-kind--water' : 'rvi-kind--round rvi-kind--water'}
+        />
+        {pauseDurationMin && pauseDurationMin > 0 ? (
+          <span className="rvi-poi-pause-badge" title={`Pause ${pauseDurationMin} min`}>
+            <span className="rvi-poi-pause-badge__icon">❚❚</span>
+            <span className="rvi-poi-pause-badge__text">{pauseDurationMin} min</span>
+          </span>
+        ) : null}
+      </span>
+    );
   }
 
   if (kind === 'supermarket') {
-    return <ProvidedPoiSvgBadge url={PROVIDED_POI_SVG.shop} size={size} className="rvi-kind--pin rvi-kind--supermarket" />;
+    const url = favorite ? PROVIDED_POI_SVG.favoriteSupermarket : '/svgv2/poi/dropdown-maps/supermarket.svg';
+    return (
+      <span className="rvi-poi-pause-wrap" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <ProvidedPoiSvgBadge
+          url={url}
+          size={size}
+          className={favorite ? 'rvi-kind--pin rvi-kind--supermarket' : 'rvi-kind--round rvi-kind--supermarket'}
+        />
+        {pauseDurationMin && pauseDurationMin > 0 ? (
+          <span className="rvi-poi-pause-badge" title={`Pause ${pauseDurationMin} min`}>
+            <span className="rvi-poi-pause-badge__icon">❚❚</span>
+            <span className="rvi-poi-pause-badge__text">{pauseDurationMin} min</span>
+          </span>
+        ) : null}
+      </span>
+    );
   }
 
   return null;

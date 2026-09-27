@@ -109,6 +109,7 @@ export interface PoiFeature {
   name: string | null;
   tags: Record<string, string>;
   favorite?: boolean;
+  pauseDurationMin?: number | null;
   /** Type d'objet OSM d'origine, renvoyé par le serveur POI. */
   osmType?: 'node' | 'way' | 'relation';
 }

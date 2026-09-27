@@ -54,6 +54,9 @@ export function DashboardPlaceSearch({
   visible,
   left,
   top,
+  right,
+  maxWidth,
+  isResizing = false,
   activeFilters: controlledActiveFilters,
   onFilterChange,
   selectedPoiCategories: controlledSelectedPoiCategories,
@@ -288,7 +291,7 @@ export function DashboardPlaceSearch({
 
       const marker = new mapboxgl.Marker({
         element: createViewportPoiMarkerElement(feature),
-        anchor: 'center',
+        anchor: feature.favorite ? 'bottom' : 'center',
         pitchAlignment: 'viewport',
         rotationAlignment: 'viewport',
         occludedOpacity: 0,
@@ -441,10 +444,16 @@ export function DashboardPlaceSearch({
     [basemapConfig, clearPendingSearchTransition, map],
   );
 
+  const transitionProp = isResizing
+    ? 'none'
+    : `left ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, right ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, max-width ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`;
+
   const wrapperStyle: CSSProperties = {
     position: 'absolute',
     top,
     left,
+    right,
+    maxWidth: maxWidth != null ? maxWidth : right != null ? undefined : 'calc(100vw - 24px)',
     zIndex: 30,
     display: 'flex',
     flexDirection: 'row',
@@ -453,7 +462,8 @@ export function DashboardPlaceSearch({
     opacity: visible ? 1 : 0,
     transform: visible ? 'translateY(0)' : 'translateY(-6px)',
     pointerEvents: visible ? 'auto' : 'none',
-    transition: `left ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
+    transition: transitionProp,
+    willChange: isResizing ? 'auto' : 'left, right, max-width',
   };
 
   const handleTogglePoiOption = useCallback(
@@ -576,6 +586,7 @@ export function DashboardPlaceSearch({
                     className="rvd-place-search__filter-toggle"
                     aria-pressed={active}
                     aria-label={t(filter.label)}
+                    title={t(filter.label)}
                     onClick={() => handleToggleFilter(filter.id)}
                   >
                     <span
@@ -589,7 +600,7 @@ export function DashboardPlaceSearch({
                     <span className="rvd-place-search__filter-marker">
                       <FilterChipIcon name={filter.icon} />
                     </span>
-                    <span className="rvd-place-search__filter-label">{t(filter.label)}</span>
+                    <span className="rvd-place-search__filter-label" title={t(filter.label)}>{t(filter.label)}</span>
                   </button>
                   {filter.hasDropdown ? (
                     <button

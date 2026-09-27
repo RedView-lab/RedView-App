@@ -141,6 +141,7 @@ export default function Dashboard({
   const dashboardSearchLeft = isMapFocusMode || !leftPanelOpen
     ? PANEL_PADDING
     : leftPanelWidth + PANEL_PADDING * 2;
+  const dashboardSearchRight = rightDockOffset + 40 + PANEL_PADDING;
   const dashboardSearchVisible = !projectBrowserOpen && activeProjectId != null;
 
   const styles = getDashboardStyles({
@@ -149,6 +150,8 @@ export default function Dashboard({
     isLeftPanelCollapsed,
     isRightPanelCollapsed,
     isCenterResizing,
+    isResizing,
+    isLeftResizing,
     panelWidth,
     leftPanelWidth,
     rightDockWidth,
@@ -216,6 +219,7 @@ export default function Dashboard({
               statusDockBottom={statusDockBottom}
               dashboardSearchVisible={dashboardSearchVisible}
               dashboardSearchLeft={dashboardSearchLeft}
+              dashboardSearchRight={dashboardSearchRight}
               onMapReady={handleMapReady}
               onMapLoadStatusChange={handleMapLoadStatusChange}
               onMapReloadChange={handleMapReloadChange}

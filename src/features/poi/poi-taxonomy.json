@@ -34,7 +34,7 @@
     { "key": "fountain", "label": "Fontaine", "group": "water", "icon": "drinking_water", "rules": [[{ "k": "amenity", "v": "fountain" }]] },
 
     { "key": "supermarket", "label": "Supermarché", "group": "food", "icon": "supermarket", "rules": [[{ "k": "shop", "v": "supermarket" }]] },
-    { "key": "convenience", "label": "Épicerie", "group": "food", "icon": "shop", "rules": [[{ "k": "shop", "v": "convenience" }]] },
+    { "key": "convenience", "label": "Épicerie", "group": "food", "icon": "bakery", "rules": [[{ "k": "shop", "v": "convenience" }]] },
     { "key": "bakery", "label": "Boulangerie", "group": "food", "icon": "bakery", "rules": [[{ "k": "shop", "v": "bakery" }]] },
     { "key": "butcher", "label": "Boucherie / charcuterie", "group": "food", "icon": "bakery", "rules": [[{ "k": "shop", "v": "butcher" }]] },
     { "key": "marketplace", "label": "Marché", "group": "food", "icon": "shop", "rules": [[{ "k": "amenity", "v": "marketplace" }]] },

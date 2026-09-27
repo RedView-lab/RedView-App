@@ -194,8 +194,10 @@ function getFeatherFactors(width: number, height: number, featherRadius: number 
   return result;
 }
 
-const canvasCache = new Map<string, HTMLCanvasElement>();
-
+/**
+ * Fast 1D color table recoloring for weather raster textures.
+ * Creates an isolated canvas per recolor to avoid race conditions during asynchronous toBlob() encoding.
+ */
 export function recolorTileToCanvas(
   sourceImage: HTMLImageElement | ImageBitmap,
   metric: WeatherOverlayMetric,
@@ -207,13 +209,9 @@ export function recolorTileToCanvas(
   const width = sourceImage.width;
   const height = sourceImage.height;
 
-  let canvas = canvasCache.get(`${width}x${height}`);
-  if (!canvas) {
-    canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    canvasCache.set(`${width}x${height}`, canvas);
-  }
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
 
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) return canvas;
@@ -264,7 +262,7 @@ export function canvasToBlobUrl(canvas: HTMLCanvasElement): Promise<string> {
         // Fallback to PNG if WebP fails
         canvas.toBlob((pngBlob) => {
           if (!pngBlob) {
-            resolve(canvas.toDataURL());
+            resolve(canvas.toDataURL('image/png'));
             return;
           }
           resolve(URL.createObjectURL(pngBlob));
@@ -273,7 +271,7 @@ export function canvasToBlobUrl(canvas: HTMLCanvasElement): Promise<string> {
     } catch {
       canvas.toBlob((pngBlob) => {
         if (!pngBlob) {
-          resolve(canvas.toDataURL());
+          resolve(canvas.toDataURL('image/png'));
           return;
         }
         resolve(URL.createObjectURL(pngBlob));
@@ -283,7 +281,11 @@ export function canvasToBlobUrl(canvas: HTMLCanvasElement): Promise<string> {
 }
 
 const recoloredBlobCache = new Map<string, string>();
-const MAX_RECOLORED_BLOBS = 32;
+const MAX_RECOLORED_BLOBS = 128; // Covers all 48 hours for multiple metrics easily
+
+export function hasCachedRecoloredBlob(signature: string): boolean {
+  return recoloredBlobCache.has(signature);
+}
 
 export function getCachedRecoloredBlob(signature: string): string | undefined {
   return recoloredBlobCache.get(signature);
@@ -295,7 +297,14 @@ export function cacheRecoloredBlob(signature: string, blobUrl: string): void {
     if (oldestKey) {
       const oldUrl = recoloredBlobCache.get(oldestKey);
       if (oldUrl?.startsWith('blob:')) {
-        window.setTimeout(() => URL.revokeObjectURL(oldUrl), 500);
+        // Safe 10s delayed revocation so Mapbox has finished reading it during transitions
+        window.setTimeout(() => {
+          try {
+            URL.revokeObjectURL(oldUrl);
+          } catch {
+            /* no-op */
+          }
+        }, 10_000);
       }
       recoloredBlobCache.delete(oldestKey);
     }
@@ -315,4 +324,27 @@ export function clearRecoloredBlobCache(): void {
   }
   recoloredBlobCache.clear();
 }
+
+/**
+ * Background pre-recoloring helper for adjacent forecast hours.
+ * Runs in idle time to populate recoloredBlobCache ahead of user interaction.
+ */
+export async function preRecolorTile(
+  img: HTMLImageElement,
+  metric: WeatherOverlayMetric,
+  mode: WeatherOverlayMode,
+  paletteBands: PaletteBandLike[] | undefined,
+  valMin: number,
+  valMax: number,
+  signature: string,
+): Promise<string> {
+  const existing = recoloredBlobCache.get(signature);
+  if (existing) return existing;
+
+  const canvas = recolorTileToCanvas(img, metric, mode, paletteBands, valMin, valMax);
+  const blobUrl = await canvasToBlobUrl(canvas);
+  cacheRecoloredBlob(signature, blobUrl);
+  return blobUrl;
+}
+
 

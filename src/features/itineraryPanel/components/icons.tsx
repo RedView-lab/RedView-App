@@ -295,11 +295,33 @@ export const IconCheckpointEndMarker = ({ size = 20, ...p }: AssetGlyphProps) =>
 );
 
 /**
- * Waypoint dot — Figma node 855:20775. Red filled circle with a
- * darker red ring (Group12635). Used for the generic "Point de passage".
+ * Waypoint dot — Round "blanc - noir - blanc" concentric circle.
+ * No inner icon.
  */
-export const IconWaypointDot = ({ size = 20, ...p }: AssetGlyphProps) => (
-  <SvgV2Icon name="marker-pin-04.svg" size={size} {...p} />
+export const IconWaypointDot = ({ size = 20, className, style, ...p }: AssetGlyphProps) => (
+  <span
+    className={className}
+    style={{
+      width: size,
+      height: size,
+      display: 'inline-flex',
+      flex: '0 0 auto',
+      ...style,
+    }}
+    {...p}
+  >
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 20 20"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ display: 'block', width: '100%', height: '100%' }}
+    >
+      <circle cx="10" cy="10" r="7" fill="#0e0e0e" stroke="#ffffff" strokeWidth="2.5" />
+      <circle cx="10" cy="10" r="2.8" fill="#ffffff" />
+    </svg>
+  </span>
 );
 
 /**

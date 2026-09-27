@@ -380,7 +380,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     updateActiveWithHistory,
   });
 
-  useItineraryCheckpointMarkers({
+  const { openCheckpointMarker } = useItineraryCheckpointMarkers({
     itineraries,
     map,
     isMapLoaded,
@@ -406,6 +406,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         features,
         target.timeline,
         target.poiFeatures ?? [],
+        target.rhythm,
       );
       const current = target.poiFeatures ?? [];
       const unchanged =
@@ -419,6 +420,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
             && feature.category === next.category
             && feature.name === next.name
             && Boolean(feature.favorite) === Boolean(next.favorite)
+            && (feature.pauseDurationMin ?? null) === (next?.pauseDurationMin ?? null)
           );
         });
       if (unchanged) return p;
@@ -442,6 +444,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         features,
         target.timeline,
         target.poiFeatures ?? [],
+        target.rhythm,
       );
 
       const existingPoiRows = new Map(
@@ -601,6 +604,14 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         if (!opened && map && item.lat != null && item.lon != null) {
           flyToLocation(map, { lon: item.lon, lat: item.lat }, { zoom: 15.5 });
         }
+      } else if (item.kind === 'pause' || item.kind === 'waypoint') {
+        const opened = openCheckpointMarker(
+          item.id,
+          item.lat != null && item.lon != null ? { lat: item.lat, lon: item.lon } : undefined,
+        );
+        if (!opened && map && item.lat != null && item.lon != null) {
+          flyToLocation(map, { lon: item.lon, lat: item.lat }, { zoom: 15.5 });
+        }
       } else if (map && item.lat != null && item.lon != null) {
         flyToLocation(map, { lon: item.lon, lat: item.lat }, { zoom: 15.5 });
       }
@@ -616,7 +627,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         source: 'timeline',
       });
     },
-    [map, openPoiMarker],
+    [map, openPoiMarker, openCheckpointMarker],
   );
 
   useEffect(() => {
@@ -626,16 +637,17 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
 
       const matchingItem = currentActive.timeline.find((item) => {
         if (
-          payload.id &&
-          (item.id === payload.id ||
+          payload.id != null &&
+          (String(item.id) === String(payload.id) ||
+            (typeof payload.id === 'string' && payload.id.endsWith(`::${item.id}`)) ||
             item.id === `poi-${payload.id}` ||
             String(item.osmId) === String(payload.id))
         ) {
           return true;
         }
-        if (payload.osmId != null && item.osmId === payload.osmId) return true;
+        if (payload.osmId != null && String(item.osmId) === String(payload.osmId)) return true;
         if (payload.lat != null && payload.lon != null && item.lat != null && item.lon != null) {
-          return Math.abs(item.lat - payload.lat) < 0.0001 && Math.abs(item.lon - payload.lon) < 0.0001;
+          return Math.abs(item.lat - payload.lat) < 0.0005 && Math.abs(item.lon - payload.lon) < 0.0005;
         }
         return false;
       });
@@ -643,22 +655,37 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
       if (matchingItem) {
         setSelectedTimelineIds([matchingItem.id]);
         centerTimelineRowInList(matchingItem.id);
-        openPoiMarker(
-          matchingItem.osmId ?? matchingItem.id,
-          matchingItem.poiCategory,
-          matchingItem.lat != null && matchingItem.lon != null
-            ? { lat: matchingItem.lat, lon: matchingItem.lon }
-            : undefined,
-        );
+        if (matchingItem.kind === 'poi') {
+          openPoiMarker(
+            matchingItem.osmId ?? matchingItem.id,
+            matchingItem.poiCategory,
+            matchingItem.lat != null && matchingItem.lon != null
+              ? { lat: matchingItem.lat, lon: matchingItem.lon }
+              : undefined,
+          );
+        } else if (matchingItem.kind === 'pause' || matchingItem.kind === 'waypoint') {
+          openCheckpointMarker(
+            matchingItem.id,
+            matchingItem.lat != null && matchingItem.lon != null
+              ? { lat: matchingItem.lat, lon: matchingItem.lon }
+              : undefined,
+          );
+        }
       } else if (payload.lat != null && payload.lon != null) {
-        openPoiMarker(
-          payload.id ?? '',
+        const opened = openPoiMarker(
+          payload.osmId ?? payload.id ?? '',
           payload.category,
           { lat: payload.lat, lon: payload.lon },
         );
+        if (!opened) {
+          openCheckpointMarker(
+            String(payload.id ?? ''),
+            { lat: payload.lat, lon: payload.lon },
+          );
+        }
       }
     });
-  }, [centerTimelineRowInList, openPoiMarker]);
+  }, [centerTimelineRowInList, openPoiMarker, openCheckpointMarker]);
 
   const duplicateActiveItinerary = useCallback(() => {
     duplicateItinerary(project.activeItineraryId);

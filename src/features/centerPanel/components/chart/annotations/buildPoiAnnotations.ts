@@ -27,6 +27,11 @@ interface TimelineSample {
 
 export interface ChartPoiAnnotation {
   id: string;
+  rowId?: string;
+  osmId?: string | number;
+  lat?: number;
+  lon?: number;
+  distanceKm?: number;
   itineraryId: string;
   itineraryName: string;
   label: string;
@@ -105,6 +110,10 @@ export function buildPoiAnnotationsForItinerary(
       durationMin?: number | null;
       entityId?: string;
       favorite?: boolean;
+      rowId?: string;
+      osmId?: string | number;
+      lat?: number;
+      lon?: number;
     },
   ) => {
     if (!Number.isFinite(distanceKm)) return;
@@ -149,6 +158,11 @@ export function buildPoiAnnotationsForItinerary(
 
     result.push({
       id,
+      rowId: extra.rowId,
+      osmId: extra.osmId,
+      lat: extra.lat,
+      lon: extra.lon,
+      distanceKm,
       itineraryId: itinerary.id,
       itineraryName: itinerary.name,
       label,
@@ -181,6 +195,10 @@ export function buildPoiAnnotationsForItinerary(
         kind: 'poi',
         poiCategory: row.poiCategory,
         favorite: Boolean(row.favorite),
+        rowId: row.id,
+        osmId: row.osmId,
+        lat: row.lat,
+        lon: row.lon,
       },
     );
   }
@@ -210,6 +228,10 @@ export function buildPoiAnnotationsForItinerary(
             kind: 'poi',
             poiCategory: panelCategory,
             favorite: true,
+            rowId: `poi-${f.id}`,
+            osmId: f.id,
+            lat: f.lat,
+            lon: f.lon,
           },
         );
       }
@@ -234,6 +256,10 @@ export function buildPoiAnnotationsForItinerary(
           durationMin: row.durationMin ?? 15,
           entityId: row.id,
           favorite: Boolean(row.favorite),
+          rowId: row.id,
+          osmId: row.osmId,
+          lat: row.lat,
+          lon: row.lon,
         },
       );
     }
@@ -265,6 +291,9 @@ export function buildPoiAnnotationsForItinerary(
               durationMin: autoPause.durationMin ?? 15,
               entityId: autoPause.id,
               favorite: Boolean((autoPause as unknown as { favorite?: boolean }).favorite),
+              rowId: autoPause.id,
+              lat: (autoPause as unknown as { lat?: number }).lat,
+              lon: (autoPause as unknown as { lon?: number }).lon,
             },
           );
         }
@@ -286,6 +315,10 @@ export function buildPoiAnnotationsForItinerary(
         {
           kind: 'waypoint',
           favorite: Boolean(row.favorite),
+          rowId: row.id,
+          osmId: row.osmId,
+          lat: row.lat,
+          lon: row.lon,
         },
       );
     }

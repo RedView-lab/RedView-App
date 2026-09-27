@@ -9,6 +9,9 @@ export interface DashboardPlaceSearchProps {
   visible: boolean;
   left: number;
   top: number;
+  right?: number;
+  maxWidth?: number | string;
+  isResizing?: boolean;
   activeFilters?: Set<DashboardFilterId>;
   onFilterChange?: (filters: Set<DashboardFilterId>) => void;
   selectedPoiCategories?: Set<DashboardPoiOptionId>;

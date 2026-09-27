@@ -16,6 +16,8 @@ interface DashboardStylesInput {
   isLeftPanelCollapsed: boolean;
   isRightPanelCollapsed: boolean;
   isCenterResizing: boolean;
+  isResizing?: boolean;
+  isLeftResizing?: boolean;
   panelWidth: number;
   leftPanelWidth: number;
   rightDockWidth: number;
@@ -29,12 +31,16 @@ export function getDashboardStyles({
   isLeftPanelCollapsed,
   isRightPanelCollapsed,
   isCenterResizing,
+  isResizing = false,
+  isLeftResizing = false,
   panelWidth,
   leftPanelWidth,
   rightDockWidth,
   rightDockOffset,
   leftDockWidth,
 }: DashboardStylesInput) {
+  const isAnyResizing = isResizing || isLeftResizing || isCenterResizing;
+
   const rightPanelStyle: CSSProperties = {
     position: 'absolute',
     top: 0,
@@ -50,8 +56,10 @@ export function getDashboardStyles({
       : 'translate3d(0, 0, 0) scale(1)',
     filter: isMapFocusMode ? 'blur(10px) saturate(0.88)' : 'blur(0px) saturate(1)',
     pointerEvents: isMapFocusMode ? 'none' : 'auto',
-    transition: `width ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, filter ${IMMERSIVE_TRANSITION_MS}ms ease`,
-    willChange: 'width, transform, opacity, filter',
+    transition: isResizing
+      ? 'none'
+      : `width ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, filter ${IMMERSIVE_TRANSITION_MS}ms ease`,
+    willChange: isResizing ? 'auto' : 'width, transform, opacity, filter',
   };
 
   const rightPanelContentStyle: CSSProperties = {
@@ -71,8 +79,10 @@ export function getDashboardStyles({
       : 'translate3d(0, 0, 0) scale(1)',
     filter: isRightPanelCollapsed ? 'blur(8px) saturate(0.88)' : 'blur(0px) saturate(1)',
     pointerEvents: isRightPanelCollapsed ? 'none' : 'auto',
-    transition: `opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, filter ${IMMERSIVE_TRANSITION_MS}ms ease`,
-    willChange: 'transform, opacity, filter',
+    transition: isResizing
+      ? 'none'
+      : `opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, filter ${IMMERSIVE_TRANSITION_MS}ms ease`,
+    willChange: isResizing ? 'auto' : 'transform, opacity, filter',
   };
 
   const leftPanelStyle: CSSProperties = {
@@ -90,8 +100,10 @@ export function getDashboardStyles({
       : 'translate3d(0, 0, 0) scale(1)',
     filter: isMapFocusMode ? 'blur(10px) saturate(0.88)' : 'blur(0px) saturate(1)',
     pointerEvents: isMapFocusMode ? 'none' : 'auto',
-    transition: `opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, filter ${IMMERSIVE_TRANSITION_MS}ms ease`,
-    willChange: 'transform, opacity, filter',
+    transition: isLeftResizing
+      ? 'none'
+      : `width ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, filter ${IMMERSIVE_TRANSITION_MS}ms ease`,
+    willChange: isLeftResizing ? 'auto' : 'width, transform, opacity, filter',
   };
 
   const leftPanelContentStyle: CSSProperties = {
@@ -110,8 +122,10 @@ export function getDashboardStyles({
       : 'translate3d(0, 0, 0) scale(1)',
     filter: isLeftPanelCollapsed ? 'blur(8px) saturate(0.88)' : 'blur(0px) saturate(1)',
     pointerEvents: isLeftPanelCollapsed ? 'none' : 'auto',
-    transition: `opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, filter ${IMMERSIVE_TRANSITION_MS}ms ease`,
-    willChange: 'transform, opacity, filter',
+    transition: isLeftResizing
+      ? 'none'
+      : `opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, filter ${IMMERSIVE_TRANSITION_MS}ms ease`,
+    willChange: isLeftResizing ? 'auto' : 'transform, opacity, filter',
   };
 
   const mapViewportControlsStyle: CSSProperties = {
@@ -119,15 +133,19 @@ export function getDashboardStyles({
     top: PANEL_PADDING,
     right: rightDockOffset,
     zIndex: 30,
-    transition: `right ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, top ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
+    transition: isResizing
+      ? 'none'
+      : `right ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, top ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
   };
 
   const rightPrimaryPanelStyle: CSSProperties = {
     height: `${layout.rightPrimaryPanelHeight}px`,
     minHeight: 0,
     display: 'flex',
-    transition: 'height 360ms cubic-bezier(0.22, 1, 0.36, 1), transform 360ms cubic-bezier(0.22, 1, 0.36, 1), filter 280ms ease',
-    willChange: 'height, transform',
+    transition: isAnyResizing
+      ? 'none'
+      : 'height 360ms cubic-bezier(0.22, 1, 0.36, 1), transform 360ms cubic-bezier(0.22, 1, 0.36, 1), filter 280ms ease',
+    willChange: isAnyResizing ? 'auto' : 'height, transform',
     transform:
       layout.rightPrimaryPanelHeight > 80 ? 'translateY(0)' : 'translateY(-2px)',
     filter: layout.rightPrimaryPanelHeight > 80 ? 'saturate(1)' : 'saturate(0.96)',
@@ -141,8 +159,10 @@ export function getDashboardStyles({
     height: CENTER_TOOLBAR_HEIGHT,
     zIndex: 25,
     overflow: 'hidden',
-    transition: `top ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, left ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, width ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
-    willChange: 'top, left, width',
+    transition: isAnyResizing
+      ? 'none'
+      : `top ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, left ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, width ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
+    willChange: isAnyResizing ? 'auto' : 'top, left, width',
   };
 
   const centerResizeHandleStyle: CSSProperties = {
@@ -157,7 +177,7 @@ export function getDashboardStyles({
     touchAction: 'none',
     opacity: isMapFocusMode ? 0 : 1,
     pointerEvents: isMapFocusMode ? 'none' : 'auto',
-    transition: isCenterResizing
+    transition: isAnyResizing
       ? 'none'
       : `opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, top ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, left ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, width ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
   };
@@ -179,10 +199,10 @@ export function getDashboardStyles({
       ? 'blur(0px) saturate(1)'
       : 'blur(10px) saturate(0.88)',
     pointerEvents: layout.centerPanelVisible ? 'auto' : 'none',
-    transition: isCenterResizing
+    transition: isAnyResizing
       ? 'none'
       : `opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, filter ${IMMERSIVE_TRANSITION_MS}ms ease, top ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, left ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, width ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
-    willChange: 'transform, opacity, filter, top, left, width',
+    willChange: isAnyResizing ? 'auto' : 'transform, opacity, filter, top, left, width',
   };
 
   return {

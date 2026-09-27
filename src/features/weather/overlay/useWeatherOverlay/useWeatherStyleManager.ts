@@ -47,6 +47,9 @@ export function useWeatherStyleManager({
   const styleFallbackUsableRef = useRef(false);
   const stylePollCountRef = useRef(0);
   const lastStyleBlockLogAtRef = useRef(0);
+  const pendingHideSetRef = useRef<Set<WeatherOverlayMetric>>(new Set());
+  const pendingRadarHideRef = useRef(false);
+  const hideDrainTimerRef = useRef<number | null>(null);
 
   const clearStyleRecoveryTimers = () => {
     if (styleRetryRef.current != null) {
@@ -61,7 +64,120 @@ export function useWeatherStyleManager({
       window.clearInterval(stylePollRef.current);
       stylePollRef.current = null;
     }
+    if (hideDrainTimerRef.current != null) {
+      window.cancelAnimationFrame(hideDrainTimerRef.current);
+      hideDrainTimerRef.current = null;
+    }
     stylePollCountRef.current = 0;
+  };
+
+  const hideLayerCompletely = (key: WeatherOverlayMetric): boolean => {
+    if (!map) return true;
+    let success = true;
+    const lid = layerId(key);
+
+    try {
+      if (map.getLayer(lid)) {
+        map.setLayoutProperty(lid, 'visibility', 'none');
+      }
+    } catch {
+      success = false;
+    }
+
+    try {
+      if (map.getLayer(lid)) {
+        map.setPaintProperty(lid, 'raster-opacity', 0);
+      }
+    } catch {
+      /* ignore */
+    }
+
+    try {
+      if (map.getLayer(lid)) {
+        map.removeLayer(lid);
+      }
+    } catch {
+      success = false;
+    }
+
+    if (!success) {
+      pendingHideSetRef.current.add(key);
+      scheduleDrainPendingHidden();
+    } else {
+      pendingHideSetRef.current.delete(key);
+    }
+
+    try {
+      map.triggerRepaint();
+    } catch {
+      /* ignore */
+    }
+
+    return success;
+  };
+
+  const hideRadarCompletely = (): boolean => {
+    if (!map) return true;
+    let success = true;
+
+    try {
+      if (map.getLayer(RADAR_LAYER_ID)) {
+        map.setLayoutProperty(RADAR_LAYER_ID, 'visibility', 'none');
+      }
+    } catch {
+      success = false;
+    }
+
+    try {
+      if (map.getLayer(RADAR_LAYER_ID)) {
+        map.setPaintProperty(RADAR_LAYER_ID, 'raster-opacity', 0);
+      }
+    } catch {
+      /* ignore */
+    }
+
+    try {
+      if (map.getLayer(RADAR_LAYER_ID)) {
+        map.removeLayer(RADAR_LAYER_ID);
+      }
+    } catch {
+      success = false;
+    }
+
+    if (!success) {
+      pendingRadarHideRef.current = true;
+      scheduleDrainPendingHidden();
+    } else {
+      pendingRadarHideRef.current = false;
+    }
+
+    try {
+      map.triggerRepaint();
+    } catch {
+      /* ignore */
+    }
+
+    return success;
+  };
+
+  const drainPendingHiddenLayers = () => {
+    if (!map) return;
+    if (pendingHideSetRef.current.size === 0 && !pendingRadarHideRef.current) return;
+
+    for (const key of Array.from(pendingHideSetRef.current)) {
+      hideLayerCompletely(key);
+    }
+    if (pendingRadarHideRef.current) {
+      hideRadarCompletely();
+    }
+  };
+
+  const scheduleDrainPendingHidden = () => {
+    if (hideDrainTimerRef.current !== null) return;
+    hideDrainTimerRef.current = window.requestAnimationFrame(() => {
+      hideDrainTimerRef.current = null;
+      drainPendingHiddenLayers();
+    });
   };
 
   const promoteStyleFallbackIfUsable = (trigger: string): boolean => {
@@ -103,10 +219,28 @@ export function useWeatherStyleManager({
 
   const setVisibility = (key: WeatherOverlayMetric, visible: boolean) => {
     if (!map) return;
+    if (!visible) {
+      hideLayerCompletely(key);
+      return;
+    }
+
+    // Safety guard: Never show a layer that is disabled in current state
+    const currentState = stateRef.current;
+    if (!currentState.enabled || !currentState.layers.some((l) => l.key === key && l.enabled)) {
+      hideLayerCompletely(key);
+      return;
+    }
+
+    pendingHideSetRef.current.delete(key);
     try {
       if (map.getLayer(layerId(key))) {
-        map.setLayoutProperty(layerId(key), 'visibility', visible ? 'visible' : 'none');
+        map.setLayoutProperty(layerId(key), 'visibility', 'visible');
       }
+    } catch {
+      /* no-op */
+    }
+    try {
+      map.triggerRepaint();
     } catch {
       /* no-op */
     }
@@ -234,10 +368,27 @@ export function useWeatherStyleManager({
 
   const setRadarVisibility = (visible: boolean) => {
     if (!map) return;
+    if (!visible) {
+      hideRadarCompletely();
+      return;
+    }
+
+    const currentState = stateRef.current;
+    if (!currentState.enabled || !currentState.layers.some((l) => l.key === 'rain' && l.enabled)) {
+      hideRadarCompletely();
+      return;
+    }
+
+    pendingRadarHideRef.current = false;
     try {
       if (map.getLayer(RADAR_LAYER_ID)) {
-        map.setLayoutProperty(RADAR_LAYER_ID, 'visibility', visible ? 'visible' : 'none');
+        map.setLayoutProperty(RADAR_LAYER_ID, 'visibility', 'visible');
       }
+    } catch {
+      /* no-op */
+    }
+    try {
+      map.triggerRepaint();
     } catch {
       /* no-op */
     }
@@ -245,6 +396,14 @@ export function useWeatherStyleManager({
 
   const ensureRadarLayer = (tileUrl: string, opacity: number): boolean => {
     if (!map || !canMutateStyle()) return false;
+
+    const currentState = stateRef.current;
+    if (!currentState.enabled || !currentState.layers.some((l) => l.key === 'rain' && l.enabled)) {
+      hideRadarCompletely();
+      return false;
+    }
+
+    pendingRadarHideRef.current = false;
     try {
       const existingSource = map.getSource(RADAR_SOURCE_ID) as {
         _options?: { tiles?: string[] };
@@ -299,6 +458,7 @@ export function useWeatherStyleManager({
         map.setPaintProperty(RADAR_LAYER_ID, 'raster-opacity', opacity);
         map.setLayoutProperty(RADAR_LAYER_ID, 'visibility', 'visible');
       }
+      map.triggerRepaint();
       return true;
     } catch (err) {
       console.warn('[weather-style] ensureRadarLayer failed:', err);
@@ -307,9 +467,17 @@ export function useWeatherStyleManager({
   };
 
   const hideAll = () => {
-    for (const key of SUPPORTED_KEYS) setVisibility(key, false);
-    setRadarVisibility(false);
+    clearStyleRecoveryTimers();
+    for (const key of SUPPORTED_KEYS) {
+      hideLayerCompletely(key);
+    }
+    hideRadarCompletely();
     publishStatus(null);
+    try {
+      map?.triggerRepaint();
+    } catch {
+      /* no-op */
+    }
   };
 
   const removeAll = () => {
@@ -346,14 +514,28 @@ export function useWeatherStyleManager({
     coords: ReturnType<typeof imageCoords>,
   ): boolean => {
     if (!map || !canMutateStyle()) return false;
+
+    // Strict guard: NEVER render or show a layer that is disabled in state
+    const currentState = stateRef.current;
+    if (!currentState.enabled || !currentState.layers.some((l) => l.key === key && l.enabled)) {
+      hideLayerCompletely(key);
+      return false;
+    }
+
+    pendingHideSetRef.current.delete(key);
+
     try {
-      if (!map.getSource(sourceId(key))) {
+      const existingSource = map.getSource(sourceId(key)) as ImageSource | undefined;
+      if (!existingSource) {
         map.addSource(sourceId(key), {
           type: 'image',
           url,
           coordinates: coords,
         } as never);
+      } else {
+        existingSource.updateImage({ url, coordinates: coords });
       }
+
       if (!map.getLayer(layerId(key))) {
         map.addLayer({
           id: layerId(key),
@@ -367,10 +549,10 @@ export function useWeatherStyleManager({
           },
         } as never);
       }
-      const source = map.getSource(sourceId(key)) as ImageSource | undefined;
-      source?.updateImage({ url, coordinates: coords });
+
       setLayerPaint(key, mode);
       setVisibility(key, true);
+      map.triggerRepaint();
       return true;
     } catch (err) {
       console.warn('[weather-style] ensureLayer failed:', err);
@@ -390,5 +572,8 @@ export function useWeatherStyleManager({
     hideAll,
     removeAll,
     ensureLayer,
+    hideLayerCompletely,
+    hideRadarCompletely,
+    drainPendingHiddenLayers,
   };
 }

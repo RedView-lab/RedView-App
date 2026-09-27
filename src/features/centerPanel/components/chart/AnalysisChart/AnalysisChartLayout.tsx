@@ -4,13 +4,14 @@ import { PoiBadge } from '@/features/itineraryPanel/sections/timeline/KindBadge'
 import { IconMoon, IconSun } from '../../CenterPanelIcons';
 import type { AxisMetricId, AxisMode, ChartSeries } from '../series';
 import { formatAxisLabel, xAnchorTransformFor } from './format';
-import { buildPoiSpreadOffsetPx, shouldExpandPoiCluster, shouldRenderPoiCluster } from './poi';
+import { shouldRenderPoiCluster } from './poi';
 import { ChartZoomNavigator } from './ChartZoomNavigator';
 import { EmptySeriesRow, HoverCardGroup, SeriesRow } from './rows';
 import {
   MULTI_POI_MARKER_HEIGHT_PX,
   MULTI_POI_MARKER_WIDTH_PX,
   POI_MARKER_SIZE_PX,
+  POI_FAVORITE_MARKER_SIZE_PX,
   type HoverCardRow,
   type PoiMarkerGroup,
   type VisiblePoiAnnotation,
@@ -216,6 +217,9 @@ export function AnalysisChartLayout({
             {poiMarkerGroups.map((group) => {
               if (group.kind === 'single') {
                 const annotation = group.members[0];
+                const markerSize = annotation.favorite
+                  ? POI_FAVORITE_MARKER_SIZE_PX
+                  : POI_MARKER_SIZE_PX;
                 return (
                   <button
                     key={group.id}
@@ -224,7 +228,7 @@ export function AnalysisChartLayout({
                     style={{
                       left: `${group.xRatio * 100}%`,
                       top: `${group.yRatio * 100}%`,
-                      zIndex: annotation.favorite ? 30 : 10,
+                      zIndex: annotation.favorite ? 40 : 10,
                     }}
                     title={`${annotation.itineraryName} · ${annotation.categoryLabel} · ${annotation.label}`}
                     aria-label={`${annotation.itineraryName} · ${annotation.categoryLabel} · ${annotation.label}`}
@@ -242,8 +246,8 @@ export function AnalysisChartLayout({
                           src="/svgv2/icone/checkpoint-pause.svg"
                           alt="Pause"
                           style={{
-                            width: POI_MARKER_SIZE_PX,
-                            height: POI_MARKER_SIZE_PX,
+                            width: markerSize,
+                            height: markerSize,
                             display: 'block',
                             objectFit: 'contain',
                             filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))',
@@ -257,8 +261,8 @@ export function AnalysisChartLayout({
                               position: 'absolute',
                               top: -2,
                               right: -2,
-                              width: Math.round(POI_MARKER_SIZE_PX * 0.45),
-                              height: Math.round(POI_MARKER_SIZE_PX * 0.45),
+                              width: Math.round(markerSize * 0.4),
+                              height: Math.round(markerSize * 0.4),
                               pointerEvents: 'none',
                               filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6))',
                             }}
@@ -271,8 +275,8 @@ export function AnalysisChartLayout({
                           src="/svgv2/icone/checkpoint-waypoint.svg"
                           alt="Waypoint"
                           style={{
-                            width: POI_MARKER_SIZE_PX,
-                            height: POI_MARKER_SIZE_PX,
+                            width: markerSize,
+                            height: markerSize,
                             display: 'block',
                             objectFit: 'contain',
                             filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))',
@@ -286,8 +290,8 @@ export function AnalysisChartLayout({
                               position: 'absolute',
                               top: -2,
                               right: -2,
-                              width: Math.round(POI_MARKER_SIZE_PX * 0.45),
-                              height: Math.round(POI_MARKER_SIZE_PX * 0.45),
+                              width: Math.round(markerSize * 0.4),
+                              height: Math.round(markerSize * 0.4),
                               pointerEvents: 'none',
                               filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6))',
                             }}
@@ -297,7 +301,7 @@ export function AnalysisChartLayout({
                     ) : annotation.poiCategory ? (
                       <PoiBadge
                         category={annotation.poiCategory}
-                        size={POI_MARKER_SIZE_PX}
+                        size={markerSize}
                         favorite={annotation.favorite}
                       />
                     ) : (
@@ -335,26 +339,27 @@ export function AnalysisChartLayout({
                 );
               }
 
-              const hasFavoriteInGroup = group.members.some((m) => m.favorite);
-              const shouldSpread =
-                hasFavoriteInGroup ||
-                shouldExpandPoiCluster(group, visibleFraction, expandedPoiClusterId);
+              // Sort cluster members so non-favorites render first (below) and favorites last (on top)
+              const sortedMembers = [...group.members].sort((a, b) => {
+                if (Boolean(a.favorite) === Boolean(b.favorite)) return 0;
+                return a.favorite ? 1 : -1;
+              });
 
               return (
                 <Fragment key={group.id}>
-                  {group.members.map((annotation, index) => {
-                    const offsetPx = shouldSpread
-                      ? buildPoiSpreadOffsetPx(index, group.count)
-                      : 0;
+                  {sortedMembers.map((annotation, index) => {
+                    const markerSize = annotation.favorite
+                      ? POI_FAVORITE_MARKER_SIZE_PX
+                      : POI_MARKER_SIZE_PX;
                     return (
                       <button
                         key={annotation.id}
                         type="button"
                         className={`rvchart__poi-marker${annotation.favorite ? ' is-favorite' : ''}`}
                         style={{
-                          left: `calc(${annotation.xRatio * 100}% + ${offsetPx}px)`,
+                          left: `${annotation.xRatio * 100}%`,
                           top: `${annotation.yRatio * 100}%`,
-                          zIndex: annotation.favorite ? 30 + index : 10 + index,
+                          zIndex: annotation.favorite ? 40 + index : 10 + index,
                         }}
                         title={`${annotation.itineraryName} · ${annotation.categoryLabel} · ${annotation.label}`}
                         aria-label={`${annotation.itineraryName} · ${annotation.categoryLabel} · ${annotation.label}`}
@@ -372,8 +377,8 @@ export function AnalysisChartLayout({
                               src="/svgv2/icone/checkpoint-pause.svg"
                               alt="Pause"
                               style={{
-                                width: POI_MARKER_SIZE_PX,
-                                height: POI_MARKER_SIZE_PX,
+                                width: markerSize,
+                                height: markerSize,
                                 display: 'block',
                                 objectFit: 'contain',
                                 filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))',
@@ -387,8 +392,8 @@ export function AnalysisChartLayout({
                                   position: 'absolute',
                                   top: -2,
                                   right: -2,
-                                  width: Math.round(POI_MARKER_SIZE_PX * 0.45),
-                                  height: Math.round(POI_MARKER_SIZE_PX * 0.45),
+                                  width: Math.round(markerSize * 0.4),
+                                  height: Math.round(markerSize * 0.4),
                                   pointerEvents: 'none',
                                   filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6))',
                                 }}
@@ -401,8 +406,8 @@ export function AnalysisChartLayout({
                               src="/svgv2/icone/checkpoint-waypoint.svg"
                               alt="Waypoint"
                               style={{
-                                width: POI_MARKER_SIZE_PX,
-                                height: POI_MARKER_SIZE_PX,
+                                width: markerSize,
+                                height: markerSize,
                                 display: 'block',
                                 objectFit: 'contain',
                                 filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))',
@@ -416,8 +421,8 @@ export function AnalysisChartLayout({
                                   position: 'absolute',
                                   top: -2,
                                   right: -2,
-                                  width: Math.round(POI_MARKER_SIZE_PX * 0.45),
-                                  height: Math.round(POI_MARKER_SIZE_PX * 0.45),
+                                  width: Math.round(markerSize * 0.4),
+                                  height: Math.round(markerSize * 0.4),
                                   pointerEvents: 'none',
                                   filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6))',
                                 }}
@@ -427,7 +432,7 @@ export function AnalysisChartLayout({
                         ) : annotation.poiCategory ? (
                           <PoiBadge
                             category={annotation.poiCategory}
-                            size={POI_MARKER_SIZE_PX}
+                            size={markerSize}
                             favorite={annotation.favorite}
                           />
                         ) : (

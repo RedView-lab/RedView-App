@@ -262,7 +262,8 @@ export function useItineraryPoiHandlers({
       const rhythm = normalizeItineraryRhythmState(it.rhythm);
       it.rhythm = rhythm;
       poiRow.favorite = nextEnabled;
-      it.poiFeatures = setPoiFeatureFavoriteState(it.poiFeatures, feature.id, nextEnabled);
+      poiRow.durationMin = nextEnabled ? durationMin : undefined;
+      it.poiFeatures = setPoiFeatureFavoriteState(it.poiFeatures, feature.id, nextEnabled, nextEnabled ? durationMin : null);
 
       if (!nextEnabled) {
         return;

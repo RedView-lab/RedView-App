@@ -43,17 +43,13 @@ const MARKER_MIN_POPUP_OFFSET_PX = 38;
 const MARKER_MAX_POPUP_OFFSET_PX = 80;
 /** Occlusion relief 3D : 0 pour masquer complètement les POI situés derrière les montagnes. */
 const MARKER_OCCLUDED_OPACITY = 0;
-
 const FAVORITE_BADGE_ICON_URL = '/svgv2/icone/star-01.svg';
-const SUPERPOSED_PROXIMITY_M = 18;
-const SUPERPOSED_SPREAD_STEP_PX = 26;
 
 interface PoiMarkerEntry {
   marker: mapboxgl.Marker;
   popup: mapboxgl.Popup;
   signature: string;
   feature: PoiFeature;
-  spreadOffsetPx: number;
 }
 
 export function getMarkerKey(feature: PoiFeature): string {
@@ -66,68 +62,19 @@ function getMarkerSignature(feature: PoiFeature): string {
     feature.lon,
     feature.category,
     feature.favorite ? 'favorite' : 'default',
+    feature.pauseDurationMin ?? 0,
     feature.name ?? '',
     feature.tags.opening_hours ?? '',
   ].join('|');
 }
 
-function computeSuperposedSpreadOffsets(features: PoiFeature[]): Map<string, number> {
-  const offsetMap = new Map<string, number>();
-  if (features.length === 0) return offsetMap;
-
-  const clusters: PoiFeature[][] = [];
-  for (const feature of features) {
-    let targetCluster: PoiFeature[] | null = null;
-    for (const cluster of clusters) {
-      const anchor = cluster[0];
-      const dLat = (feature.lat - anchor.lat) * 111320;
-      const dLon =
-        (feature.lon - anchor.lon) *
-        111320 *
-        Math.cos(((feature.lat + anchor.lat) / 2) * (Math.PI / 180));
-      const distM = Math.hypot(dLat, dLon);
-      if (distM <= SUPERPOSED_PROXIMITY_M) {
-        targetCluster = cluster;
-        break;
-      }
-    }
-    if (targetCluster) {
-      targetCluster.push(feature);
-    } else {
-      clusters.push([feature]);
-    }
-  }
-
-  for (const cluster of clusters) {
-    const N = cluster.length;
-    if (N <= 1) {
-      offsetMap.set(getMarkerKey(cluster[0]), 0);
-      continue;
-    }
-
-    // Sort so non-favorites are first, favorites last (rendered on top / in front)
-    cluster.sort((a, b) => {
-      if (Boolean(a.favorite) !== Boolean(b.favorite)) {
-        return a.favorite ? 1 : -1;
-      }
-      return 0;
-    });
-
-    cluster.forEach((feature, idx) => {
-      const centerOffset = idx - (N - 1) / 2;
-      offsetMap.set(getMarkerKey(feature), Math.round(centerOffset * SUPERPOSED_SPREAD_STEP_PX));
-    });
-  }
-
-  return offsetMap;
-}
-
 // ── Marker DOM ────────────────────────────────────────────────────────
 
 function createMarkerElement(feature: PoiFeature): HTMLButtonElement {
+  const isPin = Boolean(feature.favorite);
   const element = document.createElement('button');
   element.type = 'button';
-  element.className = `rv-poi-marker${feature.favorite ? ' is-favorite rv-poi-marker--favorite' : ''}`;
+  element.className = `rv-poi-marker ${isPin ? 'is-favorite rv-poi-marker--favorite rv-poi-marker--pin' : 'rv-poi-marker--round'}`;
   element.dataset.poiCategory = feature.category;
   element.style.zIndex = feature.favorite ? '50' : '20';
   element.setAttribute(
@@ -163,6 +110,15 @@ function createMarkerElement(feature: PoiFeature): HTMLButtonElement {
     badge.appendChild(badgeIcon);
 
     inner.appendChild(badge);
+  }
+
+  // Symbol with pause time for POIs associated with pauses
+  if (feature.pauseDurationMin && feature.pauseDurationMin > 0) {
+    const pauseBadge = document.createElement('span');
+    pauseBadge.className = 'rv-poi-marker__pause-badge';
+    pauseBadge.setAttribute('aria-label', `Pause ${feature.pauseDurationMin} min`);
+    pauseBadge.innerHTML = `<span class="rv-poi-marker__pause-symbol" aria-hidden="true">❚❚</span><span class="rv-poi-marker__pause-duration">${feature.pauseDurationMin} min</span>`;
+    inner.appendChild(pauseBadge);
   }
 
   element.appendChild(inner);
@@ -201,12 +157,7 @@ function applyMarkerVisualState(entry: PoiMarkerEntry, zoom: number): void {
     '--rv-poi-marker-scale',
     visual.scale.toFixed(3),
   );
-  const scaledSpreadPx = Math.round(entry.spreadOffsetPx * visual.scale);
-  el.style.setProperty(
-    '--rv-poi-spread-x',
-    `${scaledSpreadPx}px`,
-  );
-  entry.popup.setOffset([scaledSpreadPx, visual.popupOffsetPx]);
+  entry.popup.setOffset([0, visual.popupOffsetPx]);
 }
 
 // ── Manager ───────────────────────────────────────────────────────────
@@ -254,15 +205,12 @@ export class PoiMarkerManager {
     return this.registry.size;
   }
 
-  private spreadOffsets = new Map<string, number>();
-
   /**
    * Reconcile rendered markers against `features`: removes stale markers,
    * keeps unchanged ones (same signature) and (re)creates the rest.
-   * Also computes horizontal spread offsets so co-located / superposed POIs all appear.
+   * Markers are positioned at their exact GPS coordinates without sideways drift.
    */
   sync(features: PoiFeature[]): void {
-    this.spreadOffsets = computeSuperposedSpreadOffsets(features);
     const nextKeys = new Set(features.map(getMarkerKey));
 
     for (const [key, entry] of this.registry) {
@@ -274,19 +222,14 @@ export class PoiMarkerManager {
     for (const feature of features) {
       const key = getMarkerKey(feature);
       const signature = getMarkerSignature(feature);
-      const spreadOffsetPx = this.spreadOffsets.get(key) ?? 0;
       const existing = this.registry.get(key);
 
       if (existing && existing.signature === signature) {
-        if (existing.spreadOffsetPx !== spreadOffsetPx) {
-          existing.spreadOffsetPx = spreadOffsetPx;
-          applyMarkerVisualState(existing, this.map.getZoom());
-        }
         continue;
       }
 
       existing?.marker.remove();
-      this.registry.set(key, this.createEntry(feature, spreadOffsetPx));
+      this.registry.set(key, this.createEntry(feature));
     }
   }
 
@@ -309,17 +252,25 @@ export class PoiMarkerManager {
    */
   openPoi(poiId: number | string, category?: string, coords?: { lat: number; lon: number }): boolean {
     const idStr = String(poiId);
-    const cleanId = idStr.replace(/^poi-/, '');
+    const strippedPrefix = idStr.replace(/^.*::/, '');
+    const cleanId = strippedPrefix.replace(/^(poi-|feature-|poi-timeline-)/, '');
     let targetEntry: PoiMarkerEntry | null = null;
 
     for (const [key, entry] of this.registry.entries()) {
       if (
         key === idStr ||
+        key === strippedPrefix ||
         key.endsWith(`:${idStr}`) ||
+        key.endsWith(`:${strippedPrefix}`) ||
         key.endsWith(`:${cleanId}`) ||
         String(entry.feature.id) === idStr ||
+        String(entry.feature.id) === strippedPrefix ||
         String(entry.feature.id) === cleanId ||
-        (category && (key === `${category}:${idStr}` || key === `${category}:${cleanId}`))
+        (category && (
+          key === `${category}:${idStr}` ||
+          key === `${category}:${strippedPrefix}` ||
+          key === `${category}:${cleanId}`
+        ))
       ) {
         targetEntry = entry;
         break;
@@ -327,14 +278,19 @@ export class PoiMarkerManager {
     }
 
     if (!targetEntry && coords) {
+      let closestEntry: PoiMarkerEntry | null = null;
+      let minDistanceSq = Infinity;
       for (const entry of this.registry.values()) {
-        const dLat = Math.abs(entry.feature.lat - coords.lat);
-        const dLon = Math.abs(entry.feature.lon - coords.lon);
-        if (dLat < 0.0001 && dLon < 0.0001) {
-          targetEntry = entry;
-          break;
+        const dLat = entry.feature.lat - coords.lat;
+        const dLon = entry.feature.lon - coords.lon;
+        const distSq = dLat * dLat + dLon * dLon;
+        // Search within ~100m (0.001 deg)
+        if (distSq < 0.001 * 0.001 && distSq < minDistanceSq) {
+          minDistanceSq = distSq;
+          closestEntry = entry;
         }
       }
+      targetEntry = closestEntry;
     }
 
     if (!targetEntry) return false;
@@ -348,6 +304,8 @@ export class PoiMarkerManager {
 
     if (!targetEntry.popup.isOpen()) {
       targetEntry.marker.togglePopup();
+    } else {
+      this.getActions().onSelectPoi?.(targetEntry.feature);
     }
 
     const lngLat = targetEntry.marker.getLngLat();
@@ -356,7 +314,7 @@ export class PoiMarkerManager {
     return true;
   }
 
-  private createEntry(feature: PoiFeature, spreadOffsetPx: number): PoiMarkerEntry {
+  private createEntry(feature: PoiFeature): PoiMarkerEntry {
     const popup = new mapboxgl.Popup({
       className: 'rv-poi-popup',
       closeButton: false,
@@ -392,9 +350,10 @@ export class PoiMarkerManager {
       this.getActions().onSelectPoi?.(feature);
     });
 
+    const isPin = Boolean(feature.favorite);
     const marker = new mapboxgl.Marker({
       element: markerEl,
-      anchor: 'bottom',
+      anchor: isPin ? 'bottom' : 'center',
       pitchAlignment: 'viewport',
       rotationAlignment: 'viewport',
       // No `altitude`: identical projection path to the viewport POI
@@ -410,7 +369,6 @@ export class PoiMarkerManager {
       popup,
       signature: getMarkerSignature(feature),
       feature,
-      spreadOffsetPx,
     };
 
     applyMarkerVisualState(entry, this.map.getZoom());

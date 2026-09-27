@@ -11,15 +11,17 @@ export function setPoiFeatureFavoriteState(
   features: PoiFeature[] | undefined,
   poiId: number | string,
   favorite: boolean,
+  pauseDurationMin?: number | null,
 ): PoiFeature[] | undefined {
   if (!features || features.length === 0) return features;
 
   let changed = false;
   const nextFeatures = features.map((feature) => {
     if (feature.id !== poiId && String(feature.id) !== String(poiId)) return feature;
-    if (Boolean(feature.favorite) === favorite) return feature;
+    const nextPause = pauseDurationMin !== undefined ? pauseDurationMin : feature.pauseDurationMin;
+    if (Boolean(feature.favorite) === favorite && feature.pauseDurationMin === nextPause) return feature;
     changed = true;
-    return { ...feature, favorite };
+    return { ...feature, favorite, pauseDurationMin: nextPause };
   });
 
   return changed ? nextFeatures : features;
@@ -29,20 +31,34 @@ export function mergePoiFeatureFavorites(
   features: PoiFeature[],
   timeline: Itinerary['timeline'],
   currentFeatures: PoiFeature[],
+  rhythm?: Itinerary['rhythm'],
 ): PoiFeature[] {
   if (features.length === 0) return features;
 
   const timelineFavorites = new Map<number, boolean>();
+  const timelinePauseDurations = new Map<number, number | null>();
   for (const row of timeline) {
     if (row.kind === 'poi' && row.osmId != null) {
       timelineFavorites.set(row.osmId, Boolean(row.favorite));
+      const pauseMin = row.durationMin ?? (
+        row.favorite && rhythm?.pauseAtFavoritePois && row.poiCategory
+          ? rhythm.poiPauseDurations[row.poiCategory] ?? null
+          : null
+      );
+      if (pauseMin != null && pauseMin > 0) {
+        timelinePauseDurations.set(row.osmId, pauseMin);
+      }
     }
   }
 
   const currentFavorites = new Map<number, boolean>();
+  const currentPauseDurations = new Map<number, number | null>();
   for (const feature of currentFeatures) {
     if (feature.favorite != null) {
       currentFavorites.set(feature.id, feature.favorite);
+    }
+    if (feature.pauseDurationMin != null) {
+      currentPauseDurations.set(feature.id, feature.pauseDurationMin);
     }
   }
 
@@ -51,11 +67,18 @@ export function mergePoiFeatureFavorites(
     const nextFavorite = timelineFavorites.get(feature.id)
       ?? currentFavorites.get(feature.id)
       ?? Boolean(feature.favorite);
-    if (Boolean(feature.favorite) === nextFavorite) {
+    const nextPause = timelinePauseDurations.get(feature.id)
+      ?? currentPauseDurations.get(feature.id)
+      ?? feature.pauseDurationMin
+      ?? null;
+    if (
+      Boolean(feature.favorite) === nextFavorite &&
+      (feature.pauseDurationMin ?? null) === nextPause
+    ) {
       return feature;
     }
     changed = true;
-    return { ...feature, favorite: nextFavorite };
+    return { ...feature, favorite: nextFavorite, pauseDurationMin: nextPause };
   });
 
   return changed ? merged : features;
