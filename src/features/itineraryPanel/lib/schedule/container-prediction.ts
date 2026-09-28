@@ -15,7 +15,7 @@ export function buildPredictionConfigFromRhythm(
 ): PredictionConfig {
   const config: PredictionConfig = {
     pacing_factor: 1,
-    stop_strategy: 'auto',
+    stop_strategy: 'none',
   };
 
   const maxRoutePoints = resolvePredictionMaxRoutePoints(routePoints);

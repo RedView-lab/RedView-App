@@ -43,22 +43,11 @@ pub fn predict(
         profile.fatigue.decay_lambda = lambda.clamp(0.0, 1.0);
     }
 
-    // Auto-detect stop strategy: Auto handles micro/resupply stops for rides > 40km, scaling into Ultra
+    // Stop strategy: automatic pause injection is disabled.
+    // Only explicit Ultra or Custom strategies configured by caller will generate stops.
     let effective_stop_strategy = match &config.stop_strategy {
-        crate::types::StopStrategy::Auto => {
-            if route.total_distance_m > 40_000.0 {
-                crate::types::StopStrategy::Auto
-            } else {
-                crate::types::StopStrategy::None
-            }
-        }
-        crate::types::StopStrategy::None => {
-            // Auto-upgrade: if distance > 300km on None, likely an oversight
-            if route.total_distance_m > 300_000.0 {
-                crate::types::StopStrategy::Ultra
-            } else {
-                crate::types::StopStrategy::None
-            }
+        crate::types::StopStrategy::Auto | crate::types::StopStrategy::None => {
+            crate::types::StopStrategy::None
         }
         other => other.clone(),
     };
@@ -73,18 +62,9 @@ pub fn predict(
     let estimated_riding_time_s = route.total_distance_m / base_speed_ms;
     let estimated_riding_h = estimated_riding_time_s / 3600.0;
 
-    // Auto-enable sleep stops for ultra events (>18h estimated riding)
-    // Sleep deprivation is a major performance factor that cannot be ignored.
+    // Sleep strategy: do not auto-inject sleep stops unless explicitly configured.
     let effective_sleep_strategy = match &config.sleep_strategy {
-        SleepStrategy::None => {
-            if estimated_riding_h > 18.0 {
-                SleepStrategy::SleepStops
-            } else if estimated_riding_h > 10.0 {
-                SleepStrategy::MicroNaps
-            } else {
-                SleepStrategy::None
-            }
-        }
+        SleepStrategy::None => SleepStrategy::None,
         other => other.clone(),
     };
 
@@ -106,17 +86,19 @@ pub fn predict(
         }
     });
 
-    // Terrain-aware stop placement: shift stops to valley bottoms
-    let estimated_avg_speed = 25.0 / 3.6; // rough estimate for terrain search
-    stops::terrain_aware_shift(&mut stop_schedule, &route, estimated_avg_speed);
+    // Terrain-aware stop placement and altitude adjustment: only if stops are enabled
+    if effective_stop_strategy != crate::types::StopStrategy::None {
+        let estimated_avg_speed = 25.0 / 3.6; // rough estimate for terrain search
+        stops::terrain_aware_shift(&mut stop_schedule, &route, estimated_avg_speed);
 
-    // Add extra stops at high altitude (>2500m)
-    stops::altitude_adjusted_stops(
-        &mut stop_schedule,
-        &route,
-        estimated_avg_speed,
-        estimated_riding_time_s,
-    );
+        // Add extra stops at high altitude (>2500m)
+        stops::altitude_adjusted_stops(
+            &mut stop_schedule,
+            &route,
+            estimated_avg_speed,
+            estimated_riding_time_s,
+        );
+    }
 
     // Apply surface types from OSM data if provided — only clone route when needed
     let route_owned;

@@ -114,7 +114,7 @@ pub enum StopStrategy {
 
 impl Default for StopStrategy {
     fn default() -> Self {
-        StopStrategy::Auto
+        StopStrategy::None
     }
 }
 
@@ -513,7 +513,7 @@ impl Default for PredictionConfig {
             drivetrain_efficiency: None,
             race_aggressiveness: None,
             start_time_h: None,
-            stop_strategy: StopStrategy::Auto,
+            stop_strategy: StopStrategy::None,
             sleep_strategy: SleepStrategy::None,
             surface_types: None,
             ambient_temperature_c: None,
