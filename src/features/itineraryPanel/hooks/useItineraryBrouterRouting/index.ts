@@ -126,12 +126,6 @@ export function useItineraryBrouterRouting({
     return row && row.lat != null && row.lon != null ? `${row.lon},${row.lat}` : '';
   })();
 
-  const viaKey = active
-    ? active.timeline
-        .filter((item) => item.kind === 'waypoint' && item.lat != null && item.lon != null)
-        .map((item) => `${item.lon},${item.lat}`)
-        .join('|')
-    : '';
   const routingViaKey = active
     ? active.timeline
         .filter(
@@ -144,7 +138,7 @@ export function useItineraryBrouterRouting({
         .map((item) => `${item.lon},${item.lat}`)
         .join('|')
     : '';
-  const hasWaypointOverride = viaKey.length > 0;
+  const hasWaypointOverride = routingViaKey.length > 0;
   const profileId = active?.profileId ?? 'road';
   const climbing = active ? isClimbingMode(active.priorities) : false;
   const forbiddenPolygons = formatForbiddenZonePolygons(active?.forbiddenZones);
@@ -392,8 +386,8 @@ export function useItineraryBrouterRouting({
 
     const [startLon, startLat] = startKey.split(',').map(Number);
     const [endLon, endLat] = endKey.split(',').map(Number);
-    const userVia = viaKey
-      ? viaKey.split('|').map((segment) => {
+    const userVia = routingViaKey
+      ? routingViaKey.split('|').map((segment) => {
           const [lon, lat] = segment.split(',').map(Number);
           return { lat, lon };
         })
@@ -438,7 +432,7 @@ export function useItineraryBrouterRouting({
         'end=',
         endKey,
         'via=',
-        viaKey || '∅',
+        routingViaKey || '∅',
       );
 
       const requestBase: RouteRequestBase = {
@@ -533,7 +527,6 @@ export function useItineraryBrouterRouting({
     setProject,
     startKey,
     routingViaKey,
-    viaKey,
   ]);
 
   return {
