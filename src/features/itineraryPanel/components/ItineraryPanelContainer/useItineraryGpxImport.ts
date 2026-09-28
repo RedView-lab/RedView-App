@@ -168,7 +168,7 @@ export function useItineraryGpxImport({
           simplifyPointsByQuality(enrichedStoredPoints, quality, qualityPointsPerKm),
         );
         const surfaceMetrics =
-          result.metrics ?? computeRouteSurfaceMetricsFromPoints(enrichedSimplifiedPoints);
+          result.metrics ?? computeRouteSurfaceMetricsFromPoints(enrichedStoredPoints);
 
         setProject((projectState) => ({
           ...projectState,
@@ -217,7 +217,7 @@ export function useItineraryGpxImport({
         const simplifiedPoints = normalizeImportedRoutePoints(
           simplifyPointsByQuality(storedPoints, quality),
         );
-        const timeline = createImportedTimeline(simplifiedPoints);
+        const timeline = createImportedTimeline(storedPoints);
         const id = addItinerary({
           name: route.name?.trim() || file.name.replace(/\.gpx$/i, ''),
           gpxRoute: {
@@ -229,7 +229,7 @@ export function useItineraryGpxImport({
             source: 'gpx',
           },
           timeline,
-          metrics: buildImportedRouteMetrics(simplifiedPoints),
+          metrics: buildImportedRouteMetrics(storedPoints),
           visible: true,
           analysisVisible: true,
           poi: {

@@ -226,9 +226,13 @@ export function useItineraryGpxActions({
         if (qualityResult.points.length >= route.points.length && route.gpxQuality === 'expert') return;
 
         const simplifiedPoints = normalizeImportedRoutePoints(qualityResult.points);
-        const elevationMetrics = computeRouteElevationMetrics(simplifiedPoints);
-        const surfaceMetrics = computeRouteSurfaceMetricsFromPoints(simplifiedPoints);
-        const distanceM = elevationMetrics?.distanceM ?? routeLengthM(simplifiedPoints);
+        const elevationMetrics = computeRouteElevationMetrics(basePoints);
+        const surfaceMetrics = computeRouteSurfaceMetricsFromPoints(basePoints);
+        const lastBasePoint = basePoints[basePoints.length - 1];
+        const distanceM =
+          (typeof lastBasePoint?.distanceM === 'number' && lastBasePoint.distanceM > 0)
+            ? lastBasePoint.distanceM
+            : (elevationMetrics?.distanceM ?? routeLengthM(basePoints));
         const distanceKm = Math.round(distanceM / 100) / 10;
 
         it.gpxRoute = {
@@ -280,9 +284,13 @@ export function useItineraryGpxActions({
         const qualityResult = applyGpxQuality(basePoints, quality, options?.pointsPerKm);
         const simplifiedPoints = normalizeImportedRoutePoints(qualityResult.points);
 
-        const elevationMetrics = computeRouteElevationMetrics(simplifiedPoints);
-        const surfaceMetrics = computeRouteSurfaceMetricsFromPoints(simplifiedPoints);
-        const distanceM = elevationMetrics?.distanceM ?? routeLengthM(simplifiedPoints);
+        const elevationMetrics = computeRouteElevationMetrics(basePoints);
+        const surfaceMetrics = computeRouteSurfaceMetricsFromPoints(basePoints);
+        const lastBasePoint = basePoints[basePoints.length - 1];
+        const distanceM =
+          (typeof lastBasePoint?.distanceM === 'number' && lastBasePoint.distanceM > 0)
+            ? lastBasePoint.distanceM
+            : (elevationMetrics?.distanceM ?? routeLengthM(basePoints));
         const distanceKm = Math.round(distanceM / 100) / 10;
 
         it.gpxRoute = {

@@ -19,11 +19,15 @@ export function getItineraryDepth(itinerary: Itinerary): number {
 }
 
 export function getItineraryLocalDistanceKm(itinerary: Itinerary): number {
+  if (Number.isFinite(itinerary.metrics?.distanceKm)) return itinerary.metrics?.distanceKm as number;
+
+  const originalPoints = itinerary.gpxRoute?.originalPoints;
+  const originalLastDistanceM = originalPoints?.[originalPoints.length - 1]?.distanceM;
+  if (Number.isFinite(originalLastDistanceM)) return (originalLastDistanceM as number) / 1000;
+
   const routePoints = itinerary.gpxRoute?.points;
   const routeLastDistanceM = routePoints?.[routePoints.length - 1]?.distanceM;
   if (Number.isFinite(routeLastDistanceM)) return (routeLastDistanceM as number) / 1000;
-
-  if (Number.isFinite(itinerary.metrics?.distanceKm)) return itinerary.metrics?.distanceKm as number;
 
   const endDistanceKm = itinerary.timeline.find((row) => row.kind === 'end')?.distanceKm;
   return Number.isFinite(endDistanceKm) ? (endDistanceKm as number) : 0;

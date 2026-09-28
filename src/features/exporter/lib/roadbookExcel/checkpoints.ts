@@ -34,7 +34,7 @@ const SLEEP_CATEGORIES = new Set<PoiCategory>(['hotels', 'refuges']);
 const MECHANIC_CATEGORIES = new Set<PoiCategory>(['bikeShops', 'gasStations']);
 
 export function collectRouteSamples(itinerary: Itinerary): RouteSample[] {
-  const points = itinerary.gpxRoute?.points;
+  const points = itinerary.gpxRoute?.originalPoints ?? itinerary.gpxRoute?.points;
   if (!points || points.length < 2) {
     throw new Error('La feuille de route Excel nécessite une trace active exploitable.');
   }

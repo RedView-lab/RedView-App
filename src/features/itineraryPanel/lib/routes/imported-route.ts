@@ -49,7 +49,15 @@ function buildDistanceOnlyRoutePoints(
   let cumulativeDistanceM = 0;
   return points.map((point, index) => {
     if (index > 0) {
-      cumulativeDistanceM += haversineM(points[index - 1]!, point);
+      if (
+        typeof point.distanceM === 'number' &&
+        Number.isFinite(point.distanceM) &&
+        point.distanceM >= cumulativeDistanceM
+      ) {
+        cumulativeDistanceM = point.distanceM;
+      } else {
+        cumulativeDistanceM += haversineM(points[index - 1]!, point);
+      }
     }
     return {
       lat: point.lat,
@@ -101,6 +109,7 @@ export function normalizeImportedRoutePoints(
   const geometryOnlyPoints = sanitizedPoints.map((point) => ({
     lat: point.lat,
     lon: point.lon,
+    distanceM: point.distanceM,
     elevationM: point.elevationM ?? null,
     surface: point.surface,
   }));
@@ -117,7 +126,11 @@ export function buildImportedRouteMetrics(
   const sanitizedPoints = cleanAndInterpolateElevations(points);
   const elevationMetrics = computeRouteElevationMetrics(sanitizedPoints);
   const surfaceMetrics = computeRouteSurfaceMetricsFromPoints(sanitizedPoints);
-  const distanceM = elevationMetrics?.distanceM ?? routeLengthM(sanitizedPoints);
+  const lastPoint = sanitizedPoints[sanitizedPoints.length - 1];
+  const distanceM =
+    (typeof lastPoint?.distanceM === 'number' && lastPoint.distanceM > 0)
+      ? lastPoint.distanceM
+      : (elevationMetrics?.distanceM ?? routeLengthM(sanitizedPoints));
   return {
     distanceKm: Math.round(distanceM / 100) / 10,
     ascentM: elevationMetrics

@@ -421,11 +421,32 @@ export function applyGpxQuality(
 
 function rebuildRoutePoints(points: RoutePoint[], indices: number[]): RoutePoint[] {
   let cumulativeDistanceM = 0;
+  const lastIndex = points.length - 1;
+  const totalOriginalDistanceM = points[lastIndex]?.distanceM;
+
   return indices.map((index, position) => {
     const point = points[index];
     if (position > 0) {
-      cumulativeDistanceM += haversineM(points[indices[position - 1]], point);
+      if (
+        typeof point.distanceM === 'number' &&
+        Number.isFinite(point.distanceM) &&
+        point.distanceM >= cumulativeDistanceM
+      ) {
+        cumulativeDistanceM = point.distanceM;
+      } else {
+        cumulativeDistanceM += haversineM(points[indices[position - 1]], point);
+      }
     }
+
+    if (
+      index === lastIndex &&
+      typeof totalOriginalDistanceM === 'number' &&
+      Number.isFinite(totalOriginalDistanceM) &&
+      totalOriginalDistanceM > 0
+    ) {
+      cumulativeDistanceM = totalOriginalDistanceM;
+    }
+
     return {
       ...point,
       distanceM: cumulativeDistanceM,

@@ -202,7 +202,12 @@ export function sampleRouteByDistance(
 }
 
 /** Total length of a polyline in metres (sum of segment lengths). */
-export function routeLengthM(points: { lat: number; lon: number }[]): number {
+export function routeLengthM(points: { lat: number; lon: number; distanceM?: number | null }[]): number {
+  if (points.length <= 1) return 0;
+  const last = points[points.length - 1];
+  if (typeof last?.distanceM === 'number' && Number.isFinite(last.distanceM) && last.distanceM > 0) {
+    return last.distanceM;
+  }
   let total = 0;
   for (let i = 1; i < points.length; i++) {
     total += haversineM(points[i - 1], points[i]);

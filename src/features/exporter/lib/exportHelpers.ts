@@ -103,7 +103,7 @@ export function buildExportFileName(itinerary: Itinerary, format: string): strin
 }
 
 export function getExportRoutePoints(itinerary: Itinerary): ExportRoutePoint[] {
-  const points = itinerary.gpxRoute?.points;
+  const points = itinerary.gpxRoute?.originalPoints ?? itinerary.gpxRoute?.points;
   if (!points || points.length < 2) {
     throw new Error("L'itineraire actif n'a pas de trace exportable.");
   }

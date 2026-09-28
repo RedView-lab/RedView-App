@@ -3,10 +3,10 @@ import type { Itinerary } from '../../types';
 type RoutePoint = NonNullable<Itinerary['gpxRoute']>['points'][number];
 
 const EARTH_RADIUS_M = 6_371_008.8;
-const STATIONARY_RADIUS_M = 50;
-const RETURN_TOLERANCE_M = 20;
-const MIN_LOOP_PATH_M = 60;
-const MIN_CLUSTER_POINTS = 4;
+const STATIONARY_RADIUS_M = 18;
+const RETURN_TOLERANCE_M = 10;
+const MIN_LOOP_PATH_M = 40;
+const MIN_CLUSTER_POINTS = 5;
 const IMPOSSIBLE_SLOPE_PCT = 50;
 const SHORT_GLITCH_SEGMENT_M = 20;
 const REASONABLE_SPAN_SLOPE_PCT = 20;
@@ -41,7 +41,15 @@ function rebuildCumulativeDistances(points: RoutePoint[]): RoutePoint[] {
   let cumulativeDistanceM = 0;
   return points.map((point, index) => {
     if (index > 0) {
-      cumulativeDistanceM += haversineM(points[index - 1], point);
+      if (
+        typeof point.distanceM === 'number' &&
+        Number.isFinite(point.distanceM) &&
+        point.distanceM >= cumulativeDistanceM
+      ) {
+        cumulativeDistanceM = point.distanceM;
+      } else {
+        cumulativeDistanceM += haversineM(points[index - 1], point);
+      }
     }
     return {
       ...point,
@@ -95,10 +103,25 @@ function collapseStationarySpiderwebs(points: RoutePoint[]): RoutePoint[] {
     const clusterPointCount = clusterEnd - index + 1;
     const clusterPathM = segmentLengthM(points, index, clusterEnd);
     const netDriftM = haversineM(points[index], points[clusterEnd]);
+
+    // Check vertical relief in this cluster:
+    // If altitude changes significantly (span >= 3.5m), it is a climb, descent,
+    // or mountain switchback, NOT a stationary pause with GPS jitter!
+    const clusterElevations = points
+      .slice(index, clusterEnd + 1)
+      .map((point) => point.elevationM)
+      .filter((value): value is number => value != null && Number.isFinite(value));
+    const eleSpan =
+      clusterElevations.length >= 2
+        ? Math.max(...clusterElevations) - Math.min(...clusterElevations)
+        : 0;
+    const isSlopeOrSwitchback = eleSpan >= 3.5;
+
     const loopLike =
+      !isSlopeOrSwitchback &&
       clusterPointCount >= MIN_CLUSTER_POINTS &&
       clusterPathM >= MIN_LOOP_PATH_M &&
-      (netDriftM <= RETURN_TOLERANCE_M || clusterPathM >= Math.max(60, netDriftM * 3));
+      (netDriftM <= RETURN_TOLERANCE_M || clusterPathM >= Math.max(MIN_LOOP_PATH_M, netDriftM * 3));
 
     if (loopLike) {
       cleaned.push(makeClusterRepresentative(points, index, clusterEnd));
