@@ -373,7 +373,7 @@ export const AnalysisChart = memo(function AnalysisChart({
     if (1 - cursor > 1e-4) {
       frames.push({ id: `night-${frames.length + 1}`, startRatio: cursor, endRatio: 1 });
     }
-    return frames.filter((frame) => frame.endRatio - frame.startRatio > 0.06);
+    return frames.filter((frame) => frame.endRatio - frame.startRatio > 0.02);
   }, [dayNightBands]);
 
   const seriesLayers = useMemo(

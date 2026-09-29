@@ -5,11 +5,12 @@ import { axisOptions, axis2Options } from './shared';
 import type { AxisMetricId, AxisMode } from '../chart';
 import { useAppI18n } from '@/shared/i18n';
 
-type ToolbarFilterKey = 'pente' | 'jourNuit';
+type ToolbarFilterKey = 'pente' | 'jourNuit' | 'alertes';
 
 const visibleToolbarFilters: ReadonlyArray<{ key: ToolbarFilterKey; label: string }> = [
   { key: 'pente', label: "Profils d'altitude" },
   { key: 'jourNuit', label: 'Jour/nuit' },
+  { key: 'alertes', label: 'Alertes' },
 ];
 
 interface AnalysisToolbarProps {
@@ -25,7 +26,7 @@ interface AnalysisToolbarProps {
   onAxis2Select: (value: string) => void;
   onAxis1ColorChange: (color: string) => void;
   onAxis2ColorChange: (color: string) => void;
-  filters: { pente: boolean; jourNuit: boolean };
+  filters: { pente: boolean; jourNuit: boolean; alertes?: boolean };
   onToggleFilter: (key: ToolbarFilterKey) => void;
   /**
    * Aide au survol par filtre : si une entrée existe pour un filtre, son chip
@@ -168,7 +169,7 @@ export function AnalysisToolbar({
 
       <div className="rvc-center-analysis__filters" aria-label={t('Filtres')}>
         {visibleToolbarFilters.map(({ key, label }) => {
-          const checked = filters[key];
+          const checked = Boolean(filters[key] ?? true);
           const hint = disabledFilters?.[key];
           const hasHint = Boolean(hint);
           const showHint = activeHintKey === key && Boolean(activeHint);

@@ -39,6 +39,7 @@ export function TimelineTimelineView({
   config,
   markerStepKm,
   hourZoom = 1,
+  onHourZoomChange,
   selectedIds,
   filters,
   onSelectRow,
@@ -52,10 +53,18 @@ export function TimelineTimelineView({
   onToggleFavorite,
   onRemove,
 }: TimelineTimelineViewProps) {
-  const normalizedHourZoom = Math.min(1.5, Math.max(0.75, hourZoom));
+  const [localHourZoom, setLocalHourZoom] = useState(hourZoom);
+  useEffect(() => {
+    if (Number.isFinite(hourZoom)) {
+      setLocalHourZoom(hourZoom);
+    }
+  }, [hourZoom]);
+
+  const normalizedHourZoom = Math.min(3.0, Math.max(0.4, localHourZoom));
   const scheduleRef = useRef<HTMLDivElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
-  const lastAutoScrollKeyRef = useRef<string | null>(null);
+  const isNavigatingRef = useRef(false);
+  const pendingScrollTopRef = useRef<number | null>(null);
 
   const reference = useMemo(() => parseStartReference(rhythm), [rhythm]);
   const scheduleState = useMemo(
@@ -353,22 +362,149 @@ export function TimelineTimelineView({
     return dayIndexByKey.get(toDayKey(now)) ?? null;
   }, [dayIndexByKey, now, reference.hasRealDate]);
 
-  const autoScrollKey = useMemo(
-    () =>
-      [
-        displayDayKeys.join(','),
-        Math.round(hourRowHeightPx),
-        Math.round(firstVisibleTopPx ?? -1),
-        Math.round(canvasHeight),
-      ].join(':'),
-    [canvasHeight, displayDayKeys, firstVisibleTopPx, hourRowHeightPx],
+  const [viewportMetrics, setViewportMetrics] = useState({
+    clientHeight: 0,
+    scrollHeight: 0,
+    scrollTop: 0,
+  });
+
+  const updateViewportMetrics = useCallback(() => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    setViewportMetrics({
+      clientHeight: vp.clientHeight,
+      scrollHeight: vp.scrollHeight,
+      scrollTop: vp.scrollTop,
+    });
+  }, []);
+
+  useEffect(() => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    updateViewportMetrics();
+    vp.addEventListener('scroll', updateViewportMetrics, { passive: true });
+    const ro = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(() => updateViewportMetrics())
+      : null;
+    ro?.observe(vp);
+    return () => {
+      vp.removeEventListener('scroll', updateViewportMetrics);
+      ro?.disconnect();
+    };
+  }, [canvasHeight, updateViewportMetrics]);
+
+  useEffect(() => {
+    if (pendingScrollTopRef.current !== null && viewportRef.current) {
+      viewportRef.current.scrollTop = pendingScrollTopRef.current;
+      pendingScrollTopRef.current = null;
+      updateViewportMetrics();
+    }
+  }, [canvasHeight, updateViewportMetrics]);
+
+  useEffect(() => {
+    const handleWindowPointerUp = () => {
+      isNavigatingRef.current = false;
+    };
+    window.addEventListener('pointerup', handleWindowPointerUp);
+    window.addEventListener('pointercancel', handleWindowPointerUp);
+    return () => {
+      window.removeEventListener('pointerup', handleWindowPointerUp);
+      window.removeEventListener('pointercancel', handleWindowPointerUp);
+    };
+  }, []);
+
+  const verticalFraction = useMemo(() => {
+    if (viewportMetrics.scrollHeight <= 0 || viewportMetrics.clientHeight <= 0) return 1;
+    return Math.min(1, Math.max(0.04, viewportMetrics.clientHeight / viewportMetrics.scrollHeight));
+  }, [viewportMetrics.clientHeight, viewportMetrics.scrollHeight]);
+
+  const verticalOffset = useMemo(() => {
+    const maxScroll = Math.max(0, viewportMetrics.scrollHeight - viewportMetrics.clientHeight);
+    if (maxScroll <= 0) return 1;
+    const ratio = Math.max(0, Math.min(1, viewportMetrics.scrollTop / maxScroll));
+    return 1 - ratio;
+  }, [viewportMetrics.clientHeight, viewportMetrics.scrollHeight, viewportMetrics.scrollTop]);
+
+  const handleVerticalNavigatorChange = useCallback(
+    (next: { visibleFraction: number; offset: number }) => {
+      const vp = viewportRef.current;
+      if (!vp) return;
+
+      isNavigatingRef.current = true;
+      const currentClientHeight = vp.clientHeight || viewportMetrics.clientHeight;
+      if (currentClientHeight <= 0) return;
+
+      // Double-click reset to default 1.0 view
+      if (next.visibleFraction >= 0.999 && next.offset === 0) {
+        setLocalHourZoom(1);
+        onHourZoomChange?.(1);
+        vp.scrollTop = 0;
+        setViewportMetrics({
+          clientHeight: currentClientHeight,
+          scrollHeight: vp.scrollHeight,
+          scrollTop: 0,
+        });
+        return;
+      }
+
+      const clampedFraction = Math.max(0.04, Math.min(1, next.visibleFraction));
+      const clampedOffset = Math.max(0, Math.min(1, next.offset));
+
+      // Handle zoom if fraction changed
+      const fractionDiff = Math.abs(clampedFraction - verticalFraction);
+      let effectiveCanvasHeight = vp.scrollHeight;
+      if (fractionDiff > 0.005) {
+        const desiredCanvasHeight = currentClientHeight / clampedFraction;
+        const visibleDurationHours = Math.max(1, visibleDurationMinutes / 60);
+        const desiredHourRowHeightPx = desiredCanvasHeight / visibleDurationHours;
+        const targetZoom = Math.min(
+          3.0,
+          Math.max(0.4, Number((desiredHourRowHeightPx / BASE_HOUR_ROW_HEIGHT_PX).toFixed(2))),
+        );
+
+        setLocalHourZoom(targetZoom);
+        onHourZoomChange?.(targetZoom);
+        effectiveCanvasHeight = desiredCanvasHeight;
+      }
+
+      // Scroll position calculation:
+      // Offset 1 is top (scrollTop = 0), Offset 0 is bottom (scrollTop = maxScroll)
+      const desiredMaxScroll = Math.max(0, effectiveCanvasHeight - currentClientHeight);
+      const targetScrollTop = Math.max(0, Math.min(desiredMaxScroll, (1 - clampedOffset) * desiredMaxScroll));
+
+      vp.scrollTop = targetScrollTop;
+      pendingScrollTopRef.current = targetScrollTop;
+
+      setViewportMetrics({
+        clientHeight: currentClientHeight,
+        scrollHeight: Math.round(effectiveCanvasHeight),
+        scrollTop: targetScrollTop,
+      });
+    },
+    [onHourZoomChange, verticalFraction, viewportMetrics.clientHeight, visibleDurationMinutes],
   );
+
+  const handleZoomWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    vp.scrollTop += e.deltaY;
+  }, []);
+
+  const hasInitialAutoScrolledRef = useRef(false);
+  const lastAutoScrollDayKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
-    if (lastAutoScrollKeyRef.current === autoScrollKey) return;
-    lastAutoScrollKeyRef.current = autoScrollKey;
+    if (isNavigatingRef.current) return;
+
+    const daysKey = displayDayKeys.join(',');
+    const isNewDay = lastAutoScrollDayKeyRef.current !== daysKey;
+    if (!isNewDay && hasInitialAutoScrolledRef.current) return;
+    if (canvasHeight <= 0) return;
+
+    lastAutoScrollDayKeyRef.current = daysKey;
+    hasInitialAutoScrolledRef.current = true;
 
     const fallbackTopPx = (reference.startMinutes - startMinutes) * pixelsPerMinute + TIMELINE_VIEWPORT_TOP_INSET_PX;
     const preferredTopPx = currentTimeLineTopPx ?? firstVisibleTopPx ?? fallbackTopPx;
@@ -385,7 +521,7 @@ export function TimelineTimelineView({
       ),
     );
     viewport.scrollTop = targetScrollTop;
-  }, [autoScrollKey, currentTimeLineTopPx, firstVisibleTopPx, hourRowHeightPx, pixelsPerMinute, reference.startMinutes, startMinutes]);
+  }, [canvasHeight, currentTimeLineTopPx, displayDayKeys, firstVisibleTopPx, hourRowHeightPx, pixelsPerMinute, reference.startMinutes, startMinutes]);
 
   const visibleWindowHasEvents = events.length > 0 || standalonePauses.length > 0;
   const scheduleStyle = {
@@ -430,6 +566,10 @@ export function TimelineTimelineView({
 
       <TimelineScheduleCanvas
         viewportRef={viewportRef}
+        verticalFraction={verticalFraction}
+        verticalOffset={verticalOffset}
+        onVerticalNavigatorChange={handleVerticalNavigatorChange}
+        onZoomWheel={handleZoomWheel}
         hourMarks={hourMarks}
         hourRowHeightPx={hourRowHeightPx}
         kmMarkers={kmMarkers}

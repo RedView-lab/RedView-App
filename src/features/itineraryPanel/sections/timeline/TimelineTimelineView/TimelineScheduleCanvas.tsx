@@ -31,9 +31,14 @@ import {
 import { useTimelinePauseDrag } from './useTimelinePauseDrag';
 import { TimelineEventCard } from './TimelineEventCard';
 import { TimelineStandalonePauseCard } from './TimelineStandalonePauseCard';
+import { ChartZoomNavigator } from '@/features/centerPanel/components/chart';
 
 interface TimelineScheduleCanvasProps {
   viewportRef: RefObject<HTMLDivElement | null>;
+  verticalFraction: number;
+  verticalOffset: number;
+  onVerticalNavigatorChange: (next: { visibleFraction: number; offset: number }) => void;
+  onZoomWheel?: (e: React.WheelEvent<HTMLDivElement>) => void;
   hourMarks: number[];
   hourRowHeightPx: number;
   kmMarkers: KmMarker[];
@@ -84,6 +89,10 @@ function resolveIntervalPauseId(pauseId: string): string | null {
  */
 export function TimelineScheduleCanvas({
   viewportRef,
+  verticalFraction,
+  verticalOffset,
+  onVerticalNavigatorChange,
+  onZoomWheel,
   hourMarks,
   kmMarkers,
   canvasStyle,
@@ -290,8 +299,21 @@ export function TimelineScheduleCanvas({
   );
 
   return (
-    <div ref={viewportRef} className="rvi-tl-schedule__viewport">
-      <div className="rvi-tl-schedule__times" aria-hidden>
+    <div className="rvi-tl-schedule__body">
+      <ChartZoomNavigator
+        orientation="vertical"
+        visibleFraction={verticalFraction}
+        offset={verticalOffset}
+        onChange={onVerticalNavigatorChange}
+        className="rvi-tl-schedule__zoom-vertical"
+        ariaLabel="Zoom et défilement vertical de la feuille de route"
+        startHandleTitle="Ajuster l'échelle en bas"
+        endHandleTitle="Ajuster l'échelle en haut"
+        onWheel={onZoomWheel}
+      />
+
+      <div ref={viewportRef} className="rvi-tl-schedule__viewport">
+        <div className="rvi-tl-schedule__times" aria-hidden>
         {hourMarks.map((markMinute, index) => {
           const topPx = (markMinute - startMinutes) * pixelsPerMinute + TIMELINE_VIEWPORT_TOP_INSET_PX;
           return (
@@ -491,6 +513,7 @@ export function TimelineScheduleCanvas({
             </div>
           </div>
         ) : null}
+        </div>
       </div>
     </div>
   );

@@ -1,4 +1,6 @@
 export { AnalysisChart } from './AnalysisChart';
+export { ChartZoomNavigator } from './AnalysisChart/ChartZoomNavigator';
+export type { ChartZoomNavigatorProps } from './AnalysisChart/ChartZoomNavigator';
 export { useChartHover } from './useChartHover';
 export { buildChartDayNightOverlay } from './dayNight';
 export type { ChartHoverState } from './useChartHover';

@@ -9,6 +9,7 @@ export interface TimelineTimelineViewProps {
   config?: Partial<TimelineRailConfig>;
   markerStepKm?: number;
   hourZoom?: number;
+  onHourZoomChange?: (zoom: number) => void;
   selectedIds?: ReadonlySet<string>;
   filters?: TimelineFilterState;
   onSelectRow?: (id: string, item: TimelineItem) => void;

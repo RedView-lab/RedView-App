@@ -206,7 +206,7 @@ export function DashboardEditor({
 }: DashboardEditorProps) {
   const { t } = useAppI18n();
   const [dashboardSearchActiveFilters, setDashboardSearchActiveFilters] = useState<Set<DashboardFilterId>>(
-    () => new Set<DashboardFilterId>(['pois_route', 'favoris', 'pauses', 'waypoints']),
+    () => new Set<DashboardFilterId>(['pois_route', 'favoris', 'pauses', 'waypoints', 'alertes']),
   );
   const [dashboardSearchSelectedPoiCategories, setDashboardSearchSelectedPoiCategories] = useState<Set<DashboardPoiOptionId>>(
     () => new Set<DashboardPoiOptionId>(DASHBOARD_POI_OPTIONS.map((opt) => opt.id)),
@@ -219,6 +219,7 @@ export function DashboardEditor({
       poi: dashboardSearchActiveFilters.has('pois_route'),
       pause: dashboardSearchActiveFilters.has('pauses'),
       favorite: dashboardSearchActiveFilters.has('favoris'),
+      alertes: dashboardSearchActiveFilters.has('alertes'),
       categories:
         dashboardSearchSelectedPoiCategories.size === DASHBOARD_POI_OPTIONS.length
           ? undefined
@@ -427,6 +428,7 @@ export function DashboardEditor({
                         waypointsEnabled={dashboardSearchActiveFilters.has('waypoints')}
                         poisRouteEnabled={dashboardSearchActiveFilters.has('pois_route')}
                         favorisEnabled={dashboardSearchActiveFilters.has('favoris')}
+                        alertesEnabled={dashboardSearchActiveFilters.has('alertes')}
                         selectedPoiCategories={dashboardSearchSelectedPoiCategories as Set<string>}
                         globalFilters={globalTimelineFilters}
                       />

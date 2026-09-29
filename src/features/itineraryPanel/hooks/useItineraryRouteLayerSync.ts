@@ -39,6 +39,7 @@ interface UseItineraryRouteLayerSyncArgs {
   routeTraceWidthPx?: number;
   /** When false the entire Routes section is off and NO trace renders. */
   routesEnabled?: boolean;
+  alertesEnabled?: boolean;
 }
 
 export function useItineraryRouteLayerSync({
@@ -48,6 +49,7 @@ export function useItineraryRouteLayerSync({
   map,
   routeTraceWidthPx = 8,
   routesEnabled = true,
+  alertesEnabled = true,
 }: UseItineraryRouteLayerSyncArgs): void {
   const replayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const forceReplayPendingRef = useRef(false);
@@ -93,8 +95,8 @@ export function useItineraryRouteLayerSync({
         ].join(':');
       })
       .join('|');
-    return `${routesEnabled ? 1 : 0}::${itinerarySignature}::bands:${routeSlopeBandSignature}`;
-  }, [itineraries, routeSlopeBandSignature, routeTraceWidthPx, routesEnabled]);
+    return `${routesEnabled ? 1 : 0}::${alertesEnabled ? 1 : 0}::${itinerarySignature}::bands:${routeSlopeBandSignature}`;
+  }, [alertesEnabled, itineraries, routeSlopeBandSignature, routeTraceWidthPx, routesEnabled]);
 
   // Ref bag so the stable map listeners always read the latest values without
   // having to re-subscribe on every project mutation. Updated synchronously
@@ -107,6 +109,7 @@ export function useItineraryRouteLayerSync({
     routeSlopeBands,
     routeTraceWidthPx,
     routesEnabled,
+    alertesEnabled,
     layerSignature,
   });
   stateRef.current = {
@@ -117,6 +120,7 @@ export function useItineraryRouteLayerSync({
     routeSlopeBands,
     routeTraceWidthPx,
     routesEnabled,
+    alertesEnabled,
     layerSignature,
   };
 
@@ -130,6 +134,7 @@ export function useItineraryRouteLayerSync({
       routeTraceWidthPx: traceWidthPx,
       layerSignature: signature,
       routesEnabled: areRoutesEnabled,
+      alertesEnabled: areAlertesEnabled,
     } = stateRef.current;
     if (!currentMap || !loaded || !canAccessStyle(currentMap)) return false;
 
@@ -172,10 +177,15 @@ export function useItineraryRouteLayerSync({
     }
 
     if (currentActive && areRoutesEnabled) {
+      const auditVisible =
+        areAlertesEnabled !== undefined
+          ? areAlertesEnabled
+          : currentActive.routeAudit?.visible === true;
+
       setRouteAuditFindings(
         currentMap,
         currentActive.routeAudit?.findings ?? [],
-        currentActive.routeAudit?.visible === true,
+        auditVisible,
       );
       setForbiddenZones(currentMap, currentActive.forbiddenZones ?? []);
     } else {

@@ -475,11 +475,13 @@ export function useAnalysisHoverPointMarker({
             ? prediction.total_distance_m
             : cumulativeLengths[cumulativeLengths.length - 1] ?? 0;
 
+        const pauseSchedule = buildPauseAwareSchedule(targetItinerary, prediction);
         xValue = xValueFromDistance(projected.distanceM, {
           prediction,
           totalDistanceM,
           xMode: currentXMode,
           startTime: targetItinerary.rhythm.startTime,
+          pauseSchedule,
         });
       }
 

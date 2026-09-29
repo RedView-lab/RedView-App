@@ -161,7 +161,7 @@ export function AnalysisChartLayout({
               );
             })}
             {dayNightBands.map(({ id, startRatio, endRatio }) =>
-              endRatio - startRatio > 0.06 ? (
+              endRatio - startRatio > 0.02 ? (
                 <div
                   key={`${id}-sun`}
                   className="rvchart__day-night-corner-icon rvchart__day-night-corner-icon--sun"
@@ -210,7 +210,7 @@ export function AnalysisChartLayout({
                 title={`${annotation.itineraryName} · ${annotation.label} · ${annotation.detail}`}
                 aria-hidden="true"
               >
-                <span className="rvchart__alert-marker-cross">X</span>
+                <span className="rvchart__alert-marker-cross">!</span>
               </div>
             ))}
 

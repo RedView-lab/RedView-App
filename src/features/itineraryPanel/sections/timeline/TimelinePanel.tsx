@@ -339,6 +339,7 @@ export function TimelinePanel({
             filters={effectiveFilters}
             markerStepKm={timelineMarkerStepKm}
             hourZoom={timelineZoomLevel}
+            onHourZoomChange={setTimelineZoomLevel}
             selectedIds={selectedIds}
             onSelectRow={onSelectRow}
             onToggleSelect={handleToggleSelect}

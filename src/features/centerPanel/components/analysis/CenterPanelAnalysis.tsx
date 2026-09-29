@@ -554,7 +554,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
     updateHoverPoint(xValue);
   };
 
-  const toggleFilter = (key: 'pente' | 'jourNuit') => {
+  const toggleFilter = (key: 'pente' | 'jourNuit' | 'alertes') => {
     updateAnalysis((draft) => {
       draft.filters[key] = !draft.filters[key];
     });

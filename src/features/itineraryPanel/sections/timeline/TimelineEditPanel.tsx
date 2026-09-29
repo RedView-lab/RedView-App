@@ -27,8 +27,8 @@ const MARKER_STEP_OPTIONS: readonly TimelineSelectOption<number>[] = [
 const SCALE_OPTIONS: readonly TimelineSelectOption<string>[] = [
   { value: 'Date', label: 'Date' },
 ];
-const ZOOM_MIN = 0.75;
-const ZOOM_MAX = 1.5;
+const ZOOM_MIN = 0.4;
+const ZOOM_MAX = 2.5;
 const ZOOM_STEP = 0.25;
 
 const FILTER_CHIPS: Array<{

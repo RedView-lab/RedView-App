@@ -34,7 +34,16 @@ interface ParsedMessageRow {
 }
 
 type SurfaceKind = 'tarmac' | 'offroad' | 'unknown';
-type FindingCategory = 'extreme' | 'offroad-uphill' | 'offroad-downhill';
+type FindingCategory =
+  | 'extreme'
+  | 'offroad-uphill'
+  | 'offroad-downhill'
+  | 'steep-12'
+  | 'steep-downhill'
+  | 'technical-sand'
+  | 'technical-mud'
+  | 'technical-rock'
+  | 'technical-rough';
 
 interface RouteSample {
   lat: number;
@@ -43,6 +52,7 @@ interface RouteSample {
   elevationM: number | null;
   gradientPct: number | null;
   surface: SurfaceKind;
+  tags: Record<string, string>;
 }
 
 interface GradeWindow {
@@ -303,6 +313,7 @@ function buildSamples(points: RoutePoint[], rows: ParsedMessageRow[]): RouteSamp
           : null,
       gradientPct: Number.isFinite(gradientPct) ? gradientPct : null,
       surface: classifySurface(tags),
+      tags,
     };
   });
 }
@@ -402,6 +413,32 @@ function computeGradeWindow(
   };
 }
 
+function classifyTechnicalSample(tags: Record<string, string>): FindingCategory | null {
+  const surface = tags.surface?.toLowerCase() ?? '';
+  const smoothness = tags.smoothness?.toLowerCase() ?? '';
+  const tracktype = tags.tracktype?.toLowerCase() ?? '';
+
+  if (surface === 'sand') return 'technical-sand';
+  if (surface === 'mud') return 'technical-mud';
+  if (
+    surface === 'rock' ||
+    surface === 'scree' ||
+    surface === 'pebblestone' ||
+    surface === 'stones'
+  ) {
+    return 'technical-rock';
+  }
+  if (
+    smoothness === 'horrible' ||
+    smoothness === 'very_horrible' ||
+    smoothness === 'impassable' ||
+    tracktype === 'grade5'
+  ) {
+    return 'technical-rough';
+  }
+  return null;
+}
+
 function chooseFindingWindow(shortWindow: GradeWindow | null, longWindow: GradeWindow | null) {
   const shortGrade = shortWindow?.gradePct ?? 0;
   const longGrade = longWindow?.gradePct ?? 0;
@@ -416,35 +453,49 @@ function chooseFindingWindow(shortWindow: GradeWindow | null, longWindow: GradeW
   }
 
   const offroadWindow = longWindow && longWindow.offroadShare >= MIN_OFFROAD_SHARE ? longWindow : shortWindow;
-  if (!offroadWindow || offroadWindow.offroadShare < MIN_OFFROAD_SHARE) return null;
+  if (offroadWindow && offroadWindow.offroadShare >= MIN_OFFROAD_SHARE) {
+    if (
+      shortWindow &&
+      shortWindow.offroadShare >= MIN_OFFROAD_SHARE &&
+      shortWindow.gradePct >= OFFROAD_UPHILL_SHORT_GRADE_PCT
+    ) {
+      return { category: 'offroad-uphill' as const, kind: 'hikeabike' as const, window: shortWindow };
+    }
+    if (
+      longWindow &&
+      longWindow.offroadShare >= MIN_OFFROAD_SHARE &&
+      longWindow.gradePct >= OFFROAD_UPHILL_LONG_GRADE_PCT
+    ) {
+      return { category: 'offroad-uphill' as const, kind: 'hikeabike' as const, window: longWindow };
+    }
+    if (
+      shortWindow &&
+      shortWindow.offroadShare >= MIN_OFFROAD_SHARE &&
+      shortWindow.gradePct <= OFFROAD_DOWNHILL_SHORT_GRADE_PCT
+    ) {
+      return { category: 'offroad-downhill' as const, kind: 'steep' as const, window: shortWindow };
+    }
+    if (
+      longWindow &&
+      longWindow.offroadShare >= MIN_OFFROAD_SHARE &&
+      longWindow.gradePct <= OFFROAD_DOWNHILL_LONG_GRADE_PCT
+    ) {
+      return { category: 'offroad-downhill' as const, kind: 'steep' as const, window: longWindow };
+    }
+  }
 
-  if (
-    shortWindow &&
-    shortWindow.offroadShare >= MIN_OFFROAD_SHARE &&
-    shortWindow.gradePct >= OFFROAD_UPHILL_SHORT_GRADE_PCT
-  ) {
-    return { category: 'offroad-uphill' as const, kind: 'hikeabike' as const, window: shortWindow };
+  // Détection des pentes raides > 12% (générales)
+  if (longWindow && longGrade >= 12) {
+    return { category: 'steep-12' as const, kind: 'steep' as const, window: longWindow };
   }
-  if (
-    longWindow &&
-    longWindow.offroadShare >= MIN_OFFROAD_SHARE &&
-    longWindow.gradePct >= OFFROAD_UPHILL_LONG_GRADE_PCT
-  ) {
-    return { category: 'offroad-uphill' as const, kind: 'hikeabike' as const, window: longWindow };
+  if (shortWindow && shortGrade >= 14) {
+    return { category: 'steep-12' as const, kind: 'steep' as const, window: shortWindow };
   }
-  if (
-    shortWindow &&
-    shortWindow.offroadShare >= MIN_OFFROAD_SHARE &&
-    shortWindow.gradePct <= OFFROAD_DOWNHILL_SHORT_GRADE_PCT
-  ) {
-    return { category: 'offroad-downhill' as const, kind: 'steep' as const, window: shortWindow };
+  if (longWindow && longGrade <= -14) {
+    return { category: 'steep-downhill' as const, kind: 'steep' as const, window: longWindow };
   }
-  if (
-    longWindow &&
-    longWindow.offroadShare >= MIN_OFFROAD_SHARE &&
-    longWindow.gradePct <= OFFROAD_DOWNHILL_LONG_GRADE_PCT
-  ) {
-    return { category: 'offroad-downhill' as const, kind: 'steep' as const, window: longWindow };
+  if (shortWindow && shortGrade <= -16) {
+    return { category: 'steep-downhill' as const, kind: 'steep' as const, window: shortWindow };
   }
 
   return null;
@@ -453,6 +504,12 @@ function chooseFindingWindow(shortWindow: GradeWindow | null, longWindow: GradeW
 function findingTitle(category: FindingCategory): string {
   if (category === 'offroad-uphill') return 'Montée trop raide / portage probable';
   if (category === 'offroad-downhill') return 'Descente très raide / prudence';
+  if (category === 'steep-12') return 'Pente raide (> 12%)';
+  if (category === 'steep-downhill') return 'Descente raide (< -14%)';
+  if (category === 'technical-sand') return 'Segment technique : Sable';
+  if (category === 'technical-mud') return 'Segment technique : Boue';
+  if (category === 'technical-rock') return 'Segment technique : Roches / Pierrier';
+  if (category === 'technical-rough') return 'Segment technique : Terrain très accidenté';
   return 'Pente extrême détectée';
 }
 
@@ -463,10 +520,29 @@ function findingDetail(finding: FindingSeed): string {
     ? `${Math.round(finding.spanM / 10) * 10} m`
     : `${Math.round(finding.spanM)} m`;
   const surface = finding.offroadShare >= 0.6
-    ? 'terrain majoritairement non roulant'
+    ? 'terrain non roulant'
     : finding.tarmacShare >= 0.6
-      ? 'route majoritairement roulante'
-      : 'surface mixte ou mal renseignée';
+      ? 'route goudronnée'
+      : 'surface mixte';
+
+  if (finding.category === 'technical-sand') {
+    return `Passage sablonneux sur ~${distance}. Risque d'enlisement ou portage nécessaire.`;
+  }
+  if (finding.category === 'technical-mud') {
+    return `Passage boueux sur ~${distance}. Terrain glissant, adhérence précaire.`;
+  }
+  if (finding.category === 'technical-rock') {
+    return `Section rocheuse ou pierrier sur ~${distance}. Pilotage technique et prudence requis.`;
+  }
+  if (finding.category === 'technical-rough') {
+    return `Piste très dégradée ou sentier accidenté sur ~${distance}. Roulabilité difficile.`;
+  }
+  if (finding.category === 'steep-12') {
+    return `Montée raide avec pente de ${grade} (${degrees}°) sur ~${distance}, ${surface}.`;
+  }
+  if (finding.category === 'steep-downhill') {
+    return `Descente prononcée à ${grade} (${degrees}°) sur ~${distance}, ${surface}. Contrôlez votre vitesse.`;
+  }
 
   return `Pente fenêtrée jusqu'à ${grade} (${degrees}°) sur ~${distance}, ${surface}.`;
 }
@@ -492,6 +568,7 @@ export function analyzeBrouterRoute(
 
   const candidates: FindingSeed[] = [];
 
+  // 1. Détection des pentes (> 12%, extrêmes, portage)
   for (let index = 0; index < samples.length; index++) {
     const shortWindow = computeGradeWindow(samples, index, SHORT_WINDOW_M);
     const longWindow = computeGradeWindow(samples, index, LONG_WINDOW_M);
@@ -509,6 +586,66 @@ export function analyzeBrouterRoute(
         tarmacShare: window.tarmacShare,
       });
     }
+  }
+
+  // 2. Détection des segments techniques (sable, boue, rocher, etc.)
+  let techStart = -1;
+  let currentTechCategory: FindingCategory | null = null;
+
+  for (let index = 0; index < samples.length; index++) {
+    const techCategory = classifyTechnicalSample(samples[index].tags);
+    if (techCategory) {
+      if (currentTechCategory === techCategory) {
+        // Prolongation du segment
+      } else {
+        if (currentTechCategory && techStart >= 0) {
+          const spanM = samples[index - 1].distanceM - samples[techStart].distanceM;
+          candidates.push({
+            kind: 'technical',
+            category: currentTechCategory,
+            startIndex: techStart,
+            endIndex: index - 1,
+            peakGradePct: samples[techStart].gradientPct ?? 0,
+            spanM: Math.max(10, spanM),
+            offroadShare: 1,
+            tarmacShare: 0,
+          });
+        }
+        techStart = index;
+        currentTechCategory = techCategory;
+      }
+    } else {
+      if (currentTechCategory && techStart >= 0) {
+        const spanM = samples[index - 1].distanceM - samples[techStart].distanceM;
+        candidates.push({
+          kind: 'technical',
+          category: currentTechCategory,
+          startIndex: techStart,
+          endIndex: index - 1,
+          peakGradePct: samples[techStart].gradientPct ?? 0,
+          spanM: Math.max(10, spanM),
+          offroadShare: 1,
+          tarmacShare: 0,
+        });
+        currentTechCategory = null;
+        techStart = -1;
+      }
+    }
+  }
+
+  if (currentTechCategory && techStart >= 0) {
+    const last = samples.length - 1;
+    const spanM = samples[last].distanceM - samples[techStart].distanceM;
+    candidates.push({
+      kind: 'technical',
+      category: currentTechCategory,
+      startIndex: techStart,
+      endIndex: last,
+      peakGradePct: samples[techStart].gradientPct ?? 0,
+      spanM: Math.max(10, spanM),
+      offroadShare: 1,
+      tarmacShare: 0,
+    });
   }
 
   return mergeAdjacentFindings(candidates, samples).map((finding, index) => {

@@ -72,6 +72,7 @@ interface ItineraryPanelContainerProps {
   waypointsEnabled?: boolean;
   poisRouteEnabled?: boolean;
   favorisEnabled?: boolean;
+  alertesEnabled?: boolean;
   selectedPoiCategories?: Set<string>;
   globalFilters?: TimelineFilterState;
   onRevealCenterPanel?: () => void;
@@ -95,6 +96,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   waypointsEnabled,
   poisRouteEnabled,
   favorisEnabled,
+  alertesEnabled,
   selectedPoiCategories,
   globalFilters,
   onRevealCenterPanel,
@@ -159,6 +161,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     map,
     routeTraceWidthPx: project.controlPanel?.routes?.traceWidthPx ?? 8,
     routesEnabled: project.controlPanel?.toggles?.routesEnabled ?? true,
+    alertesEnabled: alertesEnabled ?? globalFilters?.alertes ?? true,
   });
 
 

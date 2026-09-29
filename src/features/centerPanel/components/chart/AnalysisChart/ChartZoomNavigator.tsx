@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
+import '../ChartZoomNavigator.css';
 
 export interface ChartZoomNavigatorProps {
   orientation: 'horizontal' | 'vertical';
@@ -10,6 +11,9 @@ export interface ChartZoomNavigatorProps {
   className?: string;
   minFraction?: number;
   ariaLabel?: string;
+  startHandleTitle?: string;
+  endHandleTitle?: string;
+  onWheel?: (e: ReactWheelEvent<HTMLDivElement>) => void;
 }
 
 type DragMode = 'body' | 'start' | 'end';
@@ -29,6 +33,9 @@ export function ChartZoomNavigator({
   className = '',
   minFraction = 0.04,
   ariaLabel,
+  startHandleTitle,
+  endHandleTitle,
+  onWheel,
 }: ChartZoomNavigatorProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [activeDrag, setActiveDrag] = useState<DragMode | null>(null);
@@ -178,6 +185,7 @@ export function ChartZoomNavigator({
       className={`rvc-zoom-bar rvc-zoom-bar--${orientation} ${className}${activeDrag ? ' is-dragging' : ''}`}
       onPointerDown={handleTrackClick}
       onDoubleClick={handleDoubleClick}
+      onWheel={onWheel}
       role="scrollbar"
       aria-label={ariaLabel ?? (isH ? 'Zoom et défilement horizontal' : 'Zoom et défilement vertical')}
       aria-valuenow={Math.round(clampedOffset * 100)}
@@ -191,7 +199,7 @@ export function ChartZoomNavigator({
         <div
           className={`rvc-zoom-bar__handle rvc-zoom-bar__handle--${isH ? 'left' : 'bottom'}`}
           onPointerDown={(e) => handlePointerDown('start', e)}
-          title={isH ? 'Ajuster début' : 'Ajuster plancher'}
+          title={startHandleTitle ?? (isH ? 'Ajuster début' : 'Ajuster plancher')}
         />
 
         {/* Center Dots */}
@@ -205,7 +213,7 @@ export function ChartZoomNavigator({
         <div
           className={`rvc-zoom-bar__handle rvc-zoom-bar__handle--${isH ? 'right' : 'top'}`}
           onPointerDown={(e) => handlePointerDown('end', e)}
-          title={isH ? 'Ajuster fin' : 'Ajuster plafond'}
+          title={endHandleTitle ?? (isH ? 'Ajuster fin' : 'Ajuster plafond')}
         />
       </div>
     </div>

@@ -41,7 +41,8 @@ export type DashboardFilterId =
   | 'pois_route'
   | 'favoris'
   | 'pauses'
-  | 'waypoints';
+  | 'waypoints'
+  | 'alertes';
 
 export interface DashboardFilterOption {
   id: DashboardFilterId;

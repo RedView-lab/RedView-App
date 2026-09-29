@@ -1,5 +1,7 @@
 import type { PredictionResult } from '@/features/fitPredictor';
 import { resolveSunTimesForLocalDay } from '@/features/sunlight/lib/sun-calc';
+import type { PauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule';
+import { resolveRideElapsedSecondsAtScheduledElapsed } from '@/features/itineraryPanel/sections/timeline/TimelineTimelineView/utils';
 import type { AxisMode } from '../series';
 
 export interface ChartDayNightWindow {
@@ -20,6 +22,7 @@ export interface ChartDayNightOverlay {
 
 interface BuildChartDayNightOverlayOptions {
   prediction: PredictionResult;
+  pauseSchedule?: PauseAwareSchedule | null;
   startDate: string;
   startTime: string;
   latitude: number;
@@ -31,6 +34,7 @@ const MIN_WINDOW_WIDTH = 1e-3;
 
 export function buildChartDayNightOverlay({
   prediction,
+  pauseSchedule,
   startDate,
   startTime,
   latitude,
@@ -43,7 +47,10 @@ export function buildChartDayNightOverlay({
   const timeline = buildTimeline(prediction);
   if (timeline.length < 2) return null;
 
-  const maxElapsedSeconds = timeline[timeline.length - 1]?.elapsedSeconds ?? 0;
+  const lastRideSeconds = timeline[timeline.length - 1]?.elapsedSeconds ?? 0;
+  const maxElapsedSeconds = pauseSchedule
+    ? Math.max(pauseSchedule.totalDurationSeconds, lastRideSeconds)
+    : (prediction.total_time_s ?? lastRideSeconds);
   if (!Number.isFinite(maxElapsedSeconds) || maxElapsedSeconds <= 0) return null;
 
   const routeEnd = new Date(routeStart.getTime() + maxElapsedSeconds * 1000);
@@ -56,8 +63,9 @@ export function buildChartDayNightOverlay({
     cursor.getTime() <= routeEndDay.getTime();
     cursor = addDays(cursor, 1)
   ) {
+    const localDateIso = formatLocalDateIso(cursor);
     const { sunrise, sunset } = resolveSunTimesForLocalDay(
-      formatLocalDateIso(cursor),
+      localDateIso,
       latitude,
       longitude,
     );
@@ -69,14 +77,14 @@ export function buildChartDayNightOverlay({
 
     const startElapsedSeconds = (daylightStartMs - routeStart.getTime()) / 1000;
     const endElapsedSeconds = (daylightEndMs - routeStart.getTime()) / 1000;
-    const startX = projectElapsedSecondsToX(startElapsedSeconds, timeline, xMode, routeStart);
-    const endX = projectElapsedSecondsToX(endElapsedSeconds, timeline, xMode, routeStart);
+    const startX = projectElapsedSecondsToX(startElapsedSeconds, timeline, xMode, routeStart, pauseSchedule);
+    const endX = projectElapsedSecondsToX(endElapsedSeconds, timeline, xMode, routeStart, pauseSchedule);
     if (!Number.isFinite(startX) || !Number.isFinite(endX) || endX - startX <= MIN_WINDOW_WIDTH) {
       continue;
     }
 
     windows.push({
-      id: `day-${cursor.toISOString().slice(0, 10)}`,
+      id: `day-${localDateIso}`,
       startX,
       endX,
     });
@@ -113,14 +121,20 @@ function buildTimeline(prediction: PredictionResult): TimelinePoint[] {
 }
 
 function projectElapsedSecondsToX(
-  elapsedSeconds: number,
+  scheduledElapsedSeconds: number,
   timeline: TimelinePoint[],
   xMode: AxisMode,
   routeStart: Date,
+  pauseSchedule?: PauseAwareSchedule | null,
 ): number {
-  if (xMode === 'temps') return elapsedSeconds / 3600;
-  if (xMode === 'heure') return elapsedSeconds / 3600 + getClockHours(routeStart);
-  return interpolateDistanceAtElapsedSeconds(elapsedSeconds, timeline);
+  if (xMode === 'temps') return scheduledElapsedSeconds / 3600;
+  if (xMode === 'heure') return scheduledElapsedSeconds / 3600 + getClockHours(routeStart);
+
+  const rideElapsedSeconds = pauseSchedule
+    ? resolveRideElapsedSecondsAtScheduledElapsed(scheduledElapsedSeconds, pauseSchedule.stopAnchors)
+    : scheduledElapsedSeconds;
+
+  return interpolateDistanceAtElapsedSeconds(rideElapsedSeconds, timeline);
 }
 
 function getClockHours(routeStart: Date): number {

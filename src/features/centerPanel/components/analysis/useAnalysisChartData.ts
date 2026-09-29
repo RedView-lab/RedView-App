@@ -27,6 +27,7 @@ import type { RouteWeatherDataset } from '@/features/weather';
 import { lightenColor, type FilterKey, type PreparedChartNode } from './shared';
 import type { TimelineFilterState } from '@/features/itineraryPanel/sections/timeline/TimelineFilters';
 import { matchesPoiCategory } from '@/features/itineraryPanel/sections/timeline/poiCategoryMatch';
+import { buildPauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule';
 
 interface UseAnalysisChartDataArgs {
   itineraries: Itinerary[];
@@ -237,7 +238,8 @@ export function useAnalysisChartData({
   }, [effectiveFilters.pause, effectiveFilters.poi, effectiveFilters.waypoint, globalFilters, preparedChartNodes, xMode]);
 
   const alertAnnotations = useMemo<ChartAlertAnnotation[]>(() => {
-    if (!filters.alertes) return [];
+    const isAlertsOn = globalFilters?.alertes ?? filters.alertes;
+    if (!isAlertsOn) return [];
 
     const result: ChartAlertAnnotation[] = [];
     for (const node of preparedChartNodes) {
@@ -249,7 +251,7 @@ export function useAnalysisChartData({
       );
     }
     return result;
-  }, [filters.alertes, preparedChartNodes, xMode]);
+  }, [filters.alertes, globalFilters?.alertes, preparedChartNodes, xMode]);
 
   const dayNightStartReady = Boolean(
     activeItinerary?.rhythm.startDate && activeItinerary?.rhythm.startTime,
@@ -269,8 +271,11 @@ export function useAnalysisChartData({
       ) ?? null;
     if (!anchorPoint) return null;
 
+    const pauseSchedule = buildPauseAwareSchedule(activeItinerary, prediction);
+
     return buildChartDayNightOverlay({
       prediction,
+      pauseSchedule,
       startDate: activeItinerary.rhythm.startDate as string,
       startTime: activeItinerary.rhythm.startTime as string,
       latitude: anchorPoint.lat,

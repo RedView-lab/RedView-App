@@ -53,6 +53,7 @@ export interface TimelineFilterState {
   poi: boolean;
   pause: boolean;
   favorite: boolean;
+  alertes?: boolean;
   categories?: Set<string>;
 }
 
@@ -311,7 +312,7 @@ export interface ItineraryMetrics {
 
 export interface ItineraryRouteAuditFinding {
   id: string;
-  kind: 'hikeabike' | 'restricted' | 'steep';
+  kind: 'hikeabike' | 'restricted' | 'steep' | 'technical';
   title: string;
   detail: string;
   coordinates: [number, number][];

@@ -18,6 +18,7 @@ export interface TimelineFilterState {
   poi: boolean;
   pause: boolean;
   favorite: boolean;
+  alertes?: boolean;
   categories?: Set<string>;
 }
 
@@ -27,6 +28,7 @@ export const DEFAULT_TIMELINE_FILTER: TimelineFilterState = {
   poi: true,
   pause: true,
   favorite: true,
+  alertes: true,
 };
 
 interface TimelineFiltersProps {

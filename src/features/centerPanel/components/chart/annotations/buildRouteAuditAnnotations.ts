@@ -45,9 +45,6 @@ export function buildRouteAuditAnnotationsForItinerary(
   prediction: PredictionResult | null | undefined,
   xMode: AxisMode,
 ): ChartAlertAnnotation[] {
-  const findings = itinerary.routeAudit?.findings ?? [];
-  if (findings.length === 0) return [];
-
   const routePoints = itinerary.gpxRoute?.points ?? null;
   if (!routePoints || routePoints.length < 2) return [];
 
@@ -57,15 +54,97 @@ export function buildRouteAuditAnnotationsForItinerary(
   const timeline = xMode === 'distance' ? null : getPredictionTimeline(prediction);
   if (xMode !== 'distance' && (!timeline || timeline.length < 2)) return [];
 
-  const routeIndexByCoord = getRouteIndexByCoord(routePoints);
-  const routePointDistances = getRoutePointDistances(routePoints);
-
   const pauseSchedule =
     xMode === 'distance' || !itinerary
       ? null
       : buildPauseAwareSchedule(itinerary, prediction);
 
+  const findings = itinerary.routeAudit?.findings ?? [];
   const result: ChartAlertAnnotation[] = [];
+
+  if (findings.length === 0) {
+    // Fallback pour traces GPX : scan du profil pour détecter les sections montantes > 12%
+    const stepM = 80;
+    let scanDist = 0;
+    const maxDist = profile[profile.length - 1].distanceM;
+    let clusterStartM = -1;
+    let clusterMaxGrade = 0;
+
+    while (scanDist + stepM <= maxDist) {
+      const eStart = interpolateElevation(profile, scanDist);
+      const eEnd = interpolateElevation(profile, scanDist + stepM);
+      const grade = ((eEnd - eStart) / stepM) * 100;
+
+      if (grade >= 12) {
+        if (clusterStartM < 0) clusterStartM = scanDist;
+        if (grade > clusterMaxGrade) clusterMaxGrade = grade;
+      } else {
+        if (clusterStartM >= 0) {
+          const spanM = scanDist - clusterStartM;
+          if (spanM >= 40) {
+            const midM = (clusterStartM + scanDist) / 2;
+            const x =
+              xMode === 'distance'
+                ? midM / 1000
+                : projectPredictionElapsedHoursToX(
+                    interpolateElapsedHoursFromTimeline(timeline, midM) ??
+                      (midM / (20 / 3.6)) / 3600,
+                    xMode,
+                    itinerary.rhythm.startTime,
+                    pauseSchedule,
+                  );
+            const y = interpolateElevation(profile, midM);
+            if (Number.isFinite(x) && Number.isFinite(y)) {
+              result.push({
+                id: `${itinerary.id}::alert::fallback-steep-${Math.round(midM)}`,
+                itineraryId: itinerary.id,
+                itineraryName: itinerary.name,
+                label: 'Pente raide (> 12%)',
+                detail: `Section à +${Math.round(clusterMaxGrade)}% sur ~${Math.round(spanM)} m.`,
+                x,
+                y,
+              });
+            }
+          }
+          clusterStartM = -1;
+          clusterMaxGrade = 0;
+        }
+      }
+      scanDist += stepM;
+    }
+
+    if (clusterStartM >= 0 && scanDist - clusterStartM >= 40) {
+      const midM = (clusterStartM + scanDist) / 2;
+      const x =
+        xMode === 'distance'
+          ? midM / 1000
+          : projectPredictionElapsedHoursToX(
+              interpolateElapsedHoursFromTimeline(timeline, midM) ??
+                (midM / (20 / 3.6)) / 3600,
+              xMode,
+              itinerary.rhythm.startTime,
+              pauseSchedule,
+            );
+      const y = interpolateElevation(profile, midM);
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        result.push({
+          id: `${itinerary.id}::alert::fallback-steep-${Math.round(midM)}`,
+          itineraryId: itinerary.id,
+          itineraryName: itinerary.name,
+          label: 'Pente raide (> 12%)',
+          detail: `Section à +${Math.round(clusterMaxGrade)}% sur ~${Math.round(scanDist - clusterStartM)} m.`,
+          x,
+          y,
+        });
+      }
+    }
+
+    return result;
+  }
+
+  const routeIndexByCoord = getRouteIndexByCoord(routePoints);
+  const routePointDistances = getRoutePointDistances(routePoints);
+
   for (const finding of findings) {
     const distanceM = distanceForFinding(finding, routePointDistances, routeIndexByCoord);
     if (!Number.isFinite(distanceM)) continue;
