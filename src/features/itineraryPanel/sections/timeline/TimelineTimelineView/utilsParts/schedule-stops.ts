@@ -34,15 +34,23 @@ export function resolveRideElapsedSecondsAtScheduledElapsed(
   scheduledElapsedSeconds: number,
   stopAnchors: TimelineStopAnchor[],
 ): number {
-  let cumulativeStopMinutes = 0;
+  let cumulativeStopSeconds = 0;
 
-  stopAnchors.forEach((anchor) => {
-    const anchorScheduledSeconds = anchor.rideElapsedSeconds + cumulativeStopMinutes * 60;
-    if (scheduledElapsedSeconds <= anchorScheduledSeconds) return;
-    cumulativeStopMinutes += anchor.durationMin;
-  });
+  for (const anchor of stopAnchors) {
+    const pauseStartScheduled = anchor.rideElapsedSeconds + cumulativeStopSeconds;
+    const pauseDurationSeconds = anchor.durationMin * 60;
+    const pauseEndScheduled = pauseStartScheduled + pauseDurationSeconds;
 
-  return Math.max(0, scheduledElapsedSeconds - cumulativeStopMinutes * 60);
+    if (scheduledElapsedSeconds <= pauseStartScheduled) {
+      return Math.max(0, scheduledElapsedSeconds - cumulativeStopSeconds);
+    }
+    if (scheduledElapsedSeconds < pauseEndScheduled) {
+      return anchor.rideElapsedSeconds;
+    }
+    cumulativeStopSeconds += pauseDurationSeconds;
+  }
+
+  return Math.max(0, scheduledElapsedSeconds - cumulativeStopSeconds);
 }
 
 export function applyStopAnchorsToRideElapsedSeconds(
@@ -63,8 +71,13 @@ export function resolveFavoritePoiPauseDurationMin(
   item: TimelineItem,
   rhythm?: RhythmState,
 ): number {
-  if (!rhythm?.pauseAtFavoritePois) return 0;
-  if (item.visible === false || item.kind !== 'poi' || !item.favorite || !item.poiCategory) return 0;
+  if (item.visible === false || item.kind !== 'poi') return 0;
+
+  if (item.durationMin !== undefined && item.durationMin !== null) {
+    return Math.max(0, item.durationMin);
+  }
+
+  if (!rhythm?.pauseAtFavoritePois || !item.favorite || !item.poiCategory) return 0;
 
   const durationMin = rhythm.poiPauseDurations[item.poiCategory];
   if (

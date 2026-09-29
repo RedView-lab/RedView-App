@@ -8,7 +8,6 @@ import {
   moveTimelinePauseItem,
 } from './timelineMutations';
 import { normalizeItineraryRhythmState } from '../../lib/project';
-import { resolveFavoritePoiPauseDurationMin } from '../../sections/timeline/TimelineTimelineView/utilsParts/schedule-stops';
 import { setPoiFeatureFavoriteState } from './poiFeatureUtils';
 import type { ItineraryProject } from '../../types';
 
@@ -111,9 +110,6 @@ export function useItineraryTimelineCallbacks({
       const row = it.timeline.find((item) => item.id === id);
       if (!row) return;
 
-      const hasAutomaticFavoritePause =
-        !favorite && resolveFavoritePoiPauseDurationMin(row, it.rhythm) > 0;
-      if (hasAutomaticFavoritePause) return;
 
       row.favorite = favorite;
       if (row.kind === 'poi' && row.osmId != null) {

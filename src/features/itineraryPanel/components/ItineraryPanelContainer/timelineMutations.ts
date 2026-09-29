@@ -196,11 +196,19 @@ export function insertWaypointIntoTimeline(
     options?.id ??
     `map-waypoint-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
-  const existingIndex = timeline.findIndex((row) => row.id === newRowId);
+  const existingIndex = timeline.findIndex(
+    (row) => row.id === newRowId || (options?.osmId != null && row.osmId === options.osmId),
+  );
   if (existingIndex >= 0) {
+    const existingRow = timeline[existingIndex]!;
+    existingRow.kind = 'waypoint';
+    if (options?.label) existingRow.label = options.label;
+    if (options?.poiCategory) existingRow.poiCategory = options.poiCategory;
+    if (options?.osmId != null) existingRow.osmId = options.osmId;
+    existingRow.visible = true;
     return {
-      newRow: timeline[existingIndex]!,
-      isDirectOnRoute: false,
+      newRow: existingRow,
+      isDirectOnRoute: true,
       insertIndex: existingIndex,
     };
   }

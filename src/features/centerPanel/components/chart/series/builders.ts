@@ -36,6 +36,7 @@ import {
   isPauseZeroMetric,
   projectPredictionElapsedHoursToX,
 } from './timeline';
+import { resolveRideElapsedSecondsAtScheduledElapsed } from '@/features/itineraryPanel/sections/timeline/TimelineTimelineView/utils';
 
 function isRouteBackedMetric(metric: ChartMetricId): boolean {
   return metric === 'Altitude' || metric === 'Inclinaison (°)' || metric === 'Inclinaison (%)';
@@ -309,10 +310,11 @@ export function locateRoutePointAtX(
   xMode: AxisMode,
   xValue: number,
   startTime?: string | null,
+  pauseSchedule?: PauseAwareSchedule | null,
 ): RouteChartPoint | null {
   if (!routePoints || routePoints.length === 0 || !Number.isFinite(xValue)) return null;
 
-  const targetDistanceM = projectXToDistanceM(routePoints, prediction, xMode, xValue, startTime);
+  const targetDistanceM = projectXToDistanceM(routePoints, prediction, xMode, xValue, startTime, pauseSchedule);
   if (!Number.isFinite(targetDistanceM)) return null;
 
   return interpolateRoutePointAtDistance(routePoints, targetDistanceM as number);
@@ -360,16 +362,24 @@ export function projectXToDistanceM(
   xMode: AxisMode,
   xValue: number,
   startTime?: string | null,
+  pauseSchedule?: PauseAwareSchedule | null,
 ): number {
   if (xMode === 'distance') return xValue * 1000;
 
-  const elapsedHours = xMode === 'heure'
+  const scheduledElapsedHours = xMode === 'heure'
     ? xValue - parseStartTimeHours(startTime)
     : xValue;
-  if (!Number.isFinite(elapsedHours)) return Number.NaN;
+  if (!Number.isFinite(scheduledElapsedHours)) return Number.NaN;
+
+  const scheduledElapsedSeconds = scheduledElapsedHours * 3600;
+  const rideElapsedSeconds = pauseSchedule
+    ? resolveRideElapsedSecondsAtScheduledElapsed(scheduledElapsedSeconds, pauseSchedule.stopAnchors)
+    : scheduledElapsedSeconds;
+
+  const rideElapsedHours = rideElapsedSeconds / 3600;
 
   const timeline = getPredictionTimeline(prediction);
-  const distanceFromTimeline = interpolateDistanceMFromElapsedHours(timeline, elapsedHours);
+  const distanceFromTimeline = interpolateDistanceMFromElapsedHours(timeline, rideElapsedHours);
   if (Number.isFinite(distanceFromTimeline)) return distanceFromTimeline;
 
   const routeDistances = getRoutePointDistances(routePoints);
@@ -381,5 +391,5 @@ export function projectXToDistanceM(
     : (totalDistanceM / (20 / 3.6)) / 3600;
   if (!(totalElapsedHours > 0)) return Number.NaN;
 
-  return (elapsedHours / totalElapsedHours) * totalDistanceM;
+  return (rideElapsedHours / totalElapsedHours) * totalDistanceM;
 }

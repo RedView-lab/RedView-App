@@ -751,6 +751,7 @@ export function useItineraryCheckpointMarkers({
         );
         for (const autoPause of autoPauses) {
           if (autoPause.visible === false) continue;
+          if (autoPause.source !== 'interval') continue;
           let coord: [number, number] | null = null;
           if (routePoints.length >= 2 && Number.isFinite(autoPause.distanceKm)) {
             const targetM = autoPause.distanceKm * 1000;

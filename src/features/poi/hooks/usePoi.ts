@@ -39,8 +39,10 @@ function deduplicateFeatures(features: PoiFeature[] | null): PoiFeature[] {
     if (!existing) {
       map.set(f.id, { ...f });
     } else {
-      if (f.favorite) existing.favorite = true;
-      if (f.pauseDurationMin != null) existing.pauseDurationMin = f.pauseDurationMin;
+      existing.favorite = Boolean(existing.favorite || f.favorite);
+      if (f.pauseDurationMin !== undefined) {
+        existing.pauseDurationMin = f.pauseDurationMin;
+      }
     }
   }
   return Array.from(map.values());
@@ -60,9 +62,9 @@ function mergeCorridorWithSavedFeatures(
     for (const saved of savedFeatures) {
       const existing = map.get(saved.id);
       if (existing) {
-        if (saved.favorite) existing.favorite = true;
-        if (saved.pauseDurationMin != null) existing.pauseDurationMin = saved.pauseDurationMin;
-      } else if (saved.favorite) {
+        existing.favorite = Boolean(saved.favorite);
+        existing.pauseDurationMin = saved.pauseDurationMin ?? null;
+      } else if (saved.favorite || (saved.pauseDurationMin != null && saved.pauseDurationMin > 0)) {
         map.set(saved.id, { ...saved });
       }
     }
@@ -144,6 +146,7 @@ export function usePoi(
       feature.id,
       feature.category,
       feature.favorite ? '1' : '0',
+      feature.pauseDurationMin ?? 0,
       feature.lat,
       feature.lon,
     ].join(':')).join('|')
@@ -371,7 +374,10 @@ export function usePoi(
 
   useEffect(() => {
     if (!managerRef.current) return;
-    const all = deduplicateFeatures(initialFeaturesRef.current);
+    const currentCorridor = lastCorridorFeatures.current;
+    const all = currentCorridor.length > 0
+      ? mergeCorridorWithSavedFeatures(currentCorridor, initialFeaturesRef.current)
+      : deduplicateFeatures(initialFeaturesRef.current);
     lastCorridorFeatures.current = all;
     const seed = buildRenderableFeatures(all);
     syncRenderedFeatures(seed);

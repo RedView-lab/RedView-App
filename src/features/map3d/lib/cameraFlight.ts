@@ -231,7 +231,7 @@ export function flyToBounds(
         map,
         { lon: centerLon, lat: centerLat },
         {
-          zoom: options?.maxZoom ?? 16.2,
+          zoom: options?.maxZoom ?? 13.8,
           pitch: options?.pitch,
           duration: options?.duration,
           padding: options?.padding,
@@ -252,7 +252,7 @@ export function flyToBounds(
 
     map.fitBounds(bounds, {
       padding,
-      maxZoom: options?.maxZoom ?? 16.2,
+      maxZoom: options?.maxZoom ?? 13.8,
       linear: false,
       pitch: targetPitch,
       bearing: options?.bearing ?? map.getBearing(),

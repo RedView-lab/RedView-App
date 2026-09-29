@@ -108,10 +108,13 @@ export function useItineraryMapActions({
           );
           createdId = result.newRow.id;
 
-          delete it.pendingRoutePatch;
           delete it.pendingTraceExtension;
           delete it.routeAudit;
-          it.prediction = null;
+
+          if (it.gpxRoute?.source === 'brouter' && !result.isDirectOnRoute) {
+            it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, createdId);
+            it.prediction = null;
+          }
         });
         if (createdId) {
           onSelectAndCenterTimelineRow?.(createdId);
@@ -235,10 +238,13 @@ export function useItineraryMapActions({
           );
           createdId = result.newRow.id;
 
-          delete it.pendingRoutePatch;
           delete it.pendingTraceExtension;
           delete it.routeAudit;
-          it.prediction = null;
+
+          if (it.gpxRoute?.source === 'brouter' && !result.isDirectOnRoute) {
+            it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, createdId);
+            it.prediction = null;
+          }
         });
         if (createdId) {
           onSelectAndCenterTimelineRow?.(createdId);

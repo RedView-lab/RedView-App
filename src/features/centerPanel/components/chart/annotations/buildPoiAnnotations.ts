@@ -284,6 +284,7 @@ export function buildPoiAnnotationsForItinerary(
         );
         for (const autoPause of autoPauses) {
           if (autoPause.visible === false || !Number.isFinite(autoPause.distanceKm)) continue;
+          if (autoPause.source !== 'interval') continue;
           const durSuffix = autoPause.durationMin ? ` · ${autoPause.durationMin}min` : '';
           addAnnotation(
             `${itinerary.id}::pause::${autoPause.id}`,

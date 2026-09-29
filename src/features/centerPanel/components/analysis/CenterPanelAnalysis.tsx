@@ -33,6 +33,7 @@ import {
   setAnalysisSelectedSegment,
 } from '@/features/itineraryPanel/lib/route-layer';
 import type { PredictionResult } from '@/features/fitPredictor';
+import { buildPauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule';
 import { useRouteWeather } from '@/features/weather';
 import {
   usePredictionStoreOptional,
@@ -331,6 +332,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
         (targetItinerary.prediction as PredictionResult | null | undefined) ??
         null;
 
+      const pauseSchedule = buildPauseAwareSchedule(targetItinerary, prediction);
       const segmentPoints = extractRouteSegmentPoints(
         points,
         prediction,
@@ -338,6 +340,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
         localStartX,
         localEndX,
         targetItinerary.rhythm.startTime,
+        pauseSchedule,
       );
 
       if (segmentPoints.length >= 2) {
@@ -364,7 +367,11 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
             [minLon, minLat],
             [maxLon, maxLat],
           ],
-          { pitch: targetPitch },
+          {
+            pitch: targetPitch,
+            maxZoom: 13.8,
+            padding: { top: 80, bottom: 80, left: 80, right: 80 },
+          },
         );
       }
     },
@@ -439,12 +446,14 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
         const xOffset = xMode === 'distance' ? getItineraryStartDistanceKm(targetItinerary) : 0;
         const localXValue = xMode === 'distance' ? annotation.x - xOffset : annotation.x;
         const prediction = predictions?.[targetItinerary.id] ?? targetItinerary.prediction ?? null;
+        const pauseSchedule = buildPauseAwareSchedule(targetItinerary, prediction);
         const routePoint = locateRoutePointAtX(
           targetItinerary.gpxRoute?.points ?? null,
           prediction,
           xMode,
           localXValue,
           targetItinerary.rhythm.startTime,
+          pauseSchedule,
         );
 
         const targetLat = annotation.lat ?? routePoint?.lat;
@@ -459,7 +468,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
             map,
             { lon: targetLon, lat: targetLat },
             {
-              zoom: Math.max(map.getZoom(), CHART_CLICK_FOCUS_ZOOM),
+              zoom: CHART_CLICK_FOCUS_ZOOM,
               pitch: targetPitch,
             },
           );
@@ -502,12 +511,14 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
       && (activeItinerary.gpxRoute?.points.length ?? 0) >= 4
     ) {
       const activePrediction = predictions?.[activeItinerary.id] ?? activeItinerary.prediction ?? null;
+      const activePauseSchedule = buildPauseAwareSchedule(activeItinerary, activePrediction);
       const splitIndex = findSplitIndexForChartX(
         activeItinerary.gpxRoute?.points ?? null,
         activePrediction,
         xMode,
         localXValue,
         activeItinerary.rhythm.startTime,
+        activePauseSchedule,
       );
       if (splitIndex != null && routeSplitTool.splitAtPointIndex(splitIndex)) {
         return;
@@ -516,12 +527,14 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
 
     if (!map) return;
     const prediction = predictions?.[targetItinerary.id] ?? targetItinerary.prediction ?? null;
+    const pauseSchedule = buildPauseAwareSchedule(targetItinerary, prediction);
     const point = locateRoutePointAtX(
       targetItinerary.gpxRoute?.points ?? null,
       prediction,
       xMode,
       localXValue,
       targetItinerary.rhythm.startTime,
+      pauseSchedule,
     );
     if (!point) return;
 
@@ -533,7 +546,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
       map,
       { lon: point.lon, lat: point.lat },
       {
-        zoom: Math.max(map.getZoom(), CHART_CLICK_FOCUS_ZOOM),
+        zoom: CHART_CLICK_FOCUS_ZOOM,
         pitch: targetPitch,
       },
     );

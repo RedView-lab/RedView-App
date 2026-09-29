@@ -108,7 +108,7 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.16);
   pointer-events: none;
 }
 

@@ -146,7 +146,7 @@ function resolveAttachedPauseDurationMin(pauses: Array<Pick<AttachedPause, 'dura
 }
 
 function isOvernightPoi(item: TimelineItem): boolean {
-  return item.kind === 'poi' && (item.poiCategory === 'hotels' || item.poiCategory === 'refuges');
+  return (item.kind === 'poi' || item.kind === 'waypoint') && (item.poiCategory === 'hotels' || item.poiCategory === 'refuges');
 }
 
 function resolveEventDisplayDurationMin(

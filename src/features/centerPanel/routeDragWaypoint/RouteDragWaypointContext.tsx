@@ -112,8 +112,8 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
   const routePoints = activeItinerary?.gpxRoute?.points ?? null;
   const hasRoute = (routePoints?.length ?? 0) >= 2;
 
-  // Active in both classic mode and tracing mode, as long as a route exists and no blocking tool is armed.
-  const enabled = Boolean(map) && hasRoute && !otherBlockingToolArmed;
+  // Active in tracing/editing mode ONLY, as long as a route exists and no blocking tool is armed.
+  const enabled = Boolean(map) && hasRoute && isTraceMode && !otherBlockingToolArmed;
 
   const [isDragging, setIsDragging] = useState(false);
   const sessionRef = useRef<DragSession | null>(null);
@@ -224,6 +224,17 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
     if (!enabled || !map) {
       sessionRef.current = null;
       overRouteRef.current = false;
+      if (map) {
+        clearRouteHoverPreview(map);
+        try {
+          const canvas = map.getCanvas();
+          if (canvas && canvas.style.cursor === 'grab') {
+            canvas.style.cursor = '';
+          }
+        } catch {
+          /* noop */
+        }
+      }
       return;
     }
 

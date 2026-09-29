@@ -16,6 +16,7 @@ import type {
   Itinerary,
 } from '@/features/itineraryPanel/types';
 import type { RouteLayerPoint } from '@/features/itineraryPanel/lib/route-layer';
+import type { PauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule';
 
 import type { TimelineFilterState } from '@/features/itineraryPanel/sections/timeline/TimelineFilters';
 
@@ -83,7 +84,7 @@ export const DETAIL_ZOOM_STEP = 0.1;
 const DETAIL_MIN_VISIBLE_FRACTION = 0.04;
 export const VIEWPORT_COMMIT_DEBOUNCE_MS = 140;
 export const CHART_CLICK_CAMERA_DURATION_MS = 950;
-export const CHART_CLICK_FOCUS_ZOOM = 15.5;
+export const CHART_CLICK_FOCUS_ZOOM = 13.5;
 export const CHART_CLICK_FOCUS_PITCH = 68;
 export const DEFAULT_ANALYSIS_AXIS_COLORS = {
   axis1: '#D92D20',
@@ -110,10 +111,11 @@ export function findSplitIndexForChartX(
   xMode: AxisMode,
   xValue: number,
   startTime?: string | null,
+  pauseSchedule?: PauseAwareSchedule | null,
 ): number | null {
   if (!routePoints || routePoints.length < 4) return null;
 
-  const targetPoint = locateRoutePointAtX(routePoints, prediction, xMode, xValue, startTime);
+  const targetPoint = locateRoutePointAtX(routePoints, prediction, xMode, xValue, startTime, pauseSchedule);
   const targetDistanceM = targetPoint?.distanceM;
   if (!Number.isFinite(targetDistanceM)) return null;
 
@@ -143,14 +145,15 @@ export function extractRouteSegmentPoints(
   startX: number,
   endX: number,
   startTime?: string | null,
+  pauseSchedule?: PauseAwareSchedule | null,
 ): RouteLayerPoint[] {
   if (!routePoints || routePoints.length < 2) return [];
 
   const minX = Math.min(startX, endX);
   const maxX = Math.max(startX, endX);
 
-  const startPt = locateRoutePointAtX(routePoints, prediction, xMode, minX, startTime);
-  const endPt = locateRoutePointAtX(routePoints, prediction, xMode, maxX, startTime);
+  const startPt = locateRoutePointAtX(routePoints, prediction, xMode, minX, startTime, pauseSchedule);
+  const endPt = locateRoutePointAtX(routePoints, prediction, xMode, maxX, startTime, pauseSchedule);
 
   const startDistM = startPt?.distanceM;
   const endDistM = endPt?.distanceM;

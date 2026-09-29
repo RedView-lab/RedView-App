@@ -18,8 +18,8 @@ export function setPoiFeatureFavoriteState(
   let changed = false;
   const nextFeatures = features.map((feature) => {
     if (feature.id !== poiId && String(feature.id) !== String(poiId)) return feature;
-    const nextPause = pauseDurationMin !== undefined ? pauseDurationMin : feature.pauseDurationMin;
-    if (Boolean(feature.favorite) === favorite && feature.pauseDurationMin === nextPause) return feature;
+    const nextPause = pauseDurationMin !== undefined ? pauseDurationMin : (feature.pauseDurationMin ?? null);
+    if (Boolean(feature.favorite) === favorite && (feature.pauseDurationMin ?? null) === nextPause) return feature;
     changed = true;
     return { ...feature, favorite, pauseDurationMin: nextPause };
   });
@@ -46,15 +46,20 @@ export function mergePoiFeatureFavorites(
   const timelineFavorites = new Map<string | number, boolean>();
   const timelinePauseDurations = new Map<string | number, number | null>();
   for (const row of timeline) {
-    if (row.kind === 'poi' && row.osmId != null) {
-      timelineFavorites.set(row.osmId, Boolean(row.favorite));
-      const pauseMin = row.durationMin ?? (
-        row.favorite && rhythm?.pauseAtFavoritePois && row.poiCategory
-          ? rhythm.poiPauseDurations[row.poiCategory] ?? null
-          : null
-      );
-      if (pauseMin != null && pauseMin > 0) {
-        timelinePauseDurations.set(row.osmId, pauseMin);
+    if ((row.kind === 'poi' || row.kind === 'waypoint') && row.osmId != null) {
+      if (row.favorite !== undefined) {
+        timelineFavorites.set(row.osmId, Boolean(row.favorite));
+      }
+      if (row.durationMin !== undefined) {
+        timelinePauseDurations.set(
+          row.osmId,
+          row.durationMin != null && row.durationMin > 0 ? row.durationMin : null,
+        );
+      } else if (row.favorite && rhythm?.pauseAtFavoritePois && row.poiCategory) {
+        const catDuration = rhythm.poiPauseDurations[row.poiCategory];
+        if (catDuration != null && catDuration > 0) {
+          timelinePauseDurations.set(row.osmId, catDuration);
+        }
       }
     }
   }
@@ -65,7 +70,7 @@ export function mergePoiFeatureFavorites(
     if (feature.favorite != null) {
       currentFavorites.set(feature.id, feature.favorite);
     }
-    if (feature.pauseDurationMin != null) {
+    if (feature.pauseDurationMin !== undefined) {
       currentPauseDurations.set(feature.id, feature.pauseDurationMin);
     }
   }
@@ -75,10 +80,11 @@ export function mergePoiFeatureFavorites(
     const nextFavorite = timelineFavorites.get(feature.id)
       ?? currentFavorites.get(feature.id)
       ?? Boolean(feature.favorite);
-    const nextPause = timelinePauseDurations.get(feature.id)
-      ?? currentPauseDurations.get(feature.id)
-      ?? feature.pauseDurationMin
-      ?? null;
+    const nextPause = timelinePauseDurations.has(feature.id)
+      ? timelinePauseDurations.get(feature.id)!
+      : (currentPauseDurations.has(feature.id)
+          ? currentPauseDurations.get(feature.id)!
+          : (feature.pauseDurationMin ?? null));
     if (
       Boolean(feature.favorite) === nextFavorite &&
       (feature.pauseDurationMin ?? null) === nextPause

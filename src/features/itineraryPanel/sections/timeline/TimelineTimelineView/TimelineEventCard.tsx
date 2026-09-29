@@ -81,7 +81,6 @@ export function TimelineEventCard({
   const visible = event.item.visible !== false;
   const hasAttachedPauses = previewEvent.attachedPauses.length > 0;
   const hasNextMetric = event.toNextSeconds !== null && Number.isFinite(event.toNextSeconds);
-  const isFavoriteLocked = event.item.kind === 'poi' && hasAttachedPauses && event.item.favorite;
   const title =
     event.item.kind === 'pause' && event.item.durationMin
       ? formatPauseDuration(event.item.durationMin)
@@ -202,10 +201,9 @@ export function TimelineEventCard({
             tabIndex={0}
             onClick={(clickEvent) => {
               clickEvent.stopPropagation();
-              if (isFavoriteLocked) return;
               onToggleFavorite?.(event.item.id, !event.item.favorite);
             }}
-            aria-label={isFavoriteLocked ? t('Favori verrouille par pause automatique') : t('Favori')}
+            aria-label={t('Favori')}
             aria-pressed={!!event.item.favorite}
           >
             <IconStar size={12} />
@@ -231,12 +229,10 @@ export function TimelineEventCard({
           className={`rvi-tl-schedule__action rvi-tl-schedule__action--favorite${event.item.favorite ? ' is-on is-fav' : ''}`}
           onClick={(actionEvent) => {
             stopEventPropagation(actionEvent);
-            if (isFavoriteLocked) return;
             onToggleFavorite?.(event.item.id, !event.item.favorite);
           }}
-          aria-label={isFavoriteLocked ? t('Favori verrouille par pause automatique') : t('Favori')}
+          aria-label={t('Favori')}
           aria-pressed={!!event.item.favorite}
-          disabled={isFavoriteLocked}
         >
           <IconStar size={12} />
         </button>

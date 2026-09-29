@@ -7,6 +7,7 @@ import {
 import type { Itinerary } from '@/features/itineraryPanel/types';
 import type { ChartPoiAnnotation, AxisMode } from '@/features/centerPanel/components/chart';
 import { xValueFromDistance } from '@/features/centerPanel/flyover/playback';
+import { buildPauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule';
 
 export interface SelectPoiOnChartPayload {
   id?: string | number;
@@ -150,10 +151,12 @@ export function findChartXForPoi({
       ? prediction.total_distance_m
       : cumulativeLengths[cumulativeLengths.length - 1] ?? 0;
 
+  const pauseSchedule = buildPauseAwareSchedule(targetItinerary, prediction);
   return xValueFromDistance(distanceM, {
     prediction,
     totalDistanceM,
     xMode,
     startTime: targetItinerary.rhythm.startTime,
+    pauseSchedule,
   });
 }

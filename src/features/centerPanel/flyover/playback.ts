@@ -1,6 +1,7 @@
 import type { PredictionResult } from '@/features/fitPredictor';
 import type { AxisMode, RouteChartPoint } from '../components/chart';
 import type { RouteLayerPoint } from '@/features/itineraryPanel/lib/route-layer';
+import { projectRideElapsedSecondsToScheduledSeconds, type PauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule';
 
 const EARTH_RADIUS_M = 6_371_008.8;
 
@@ -380,6 +381,7 @@ export function xValueFromDistance(
     totalDistanceM: number;
     xMode: AxisMode;
     startTime?: string | null;
+    pauseSchedule?: PauseAwareSchedule | null;
   },
 ): number {
   const clampedDistanceM = clampDistanceM(distanceM, options.totalDistanceM);
@@ -392,7 +394,11 @@ export function xValueFromDistance(
   );
   if (!Number.isFinite(elapsedSeconds)) return Number.NaN;
 
-  const elapsedHours = (elapsedSeconds as number) / 3600;
+  const scheduledElapsedSeconds = options.pauseSchedule
+    ? projectRideElapsedSecondsToScheduledSeconds(elapsedSeconds as number, options.pauseSchedule.stopAnchors)
+    : (elapsedSeconds as number);
+
+  const elapsedHours = scheduledElapsedSeconds / 3600;
   if (options.xMode === 'heure') return elapsedHours + parseStartTimeHours(options.startTime);
   return elapsedHours;
 }

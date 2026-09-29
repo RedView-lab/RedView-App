@@ -14,6 +14,7 @@ import {
 import { xValueFromDistance } from '../../flyover/playback';
 import { locateRoutePointAtX, type AxisMode } from '../chart';
 import { selectInteractiveItineraryForChartX } from './shared';
+import { buildPauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule';
 
 const ENTER_ROUTE_HOVER_DISTANCE_PX = 36;
 const EXIT_ROUTE_HOVER_DISTANCE_PX = 48;
@@ -181,12 +182,14 @@ export function useAnalysisHoverPointMarker({
       (currentPredictions?.[targetItinerary.id] as never) ?? targetItinerary.prediction ?? null;
     const routePoints = targetItinerary.gpxRoute?.points ?? null;
 
+    const pauseSchedule = buildPauseAwareSchedule(targetItinerary, prediction);
     const point = locateRoutePointAtX(
       routePoints,
       prediction,
       currentXMode,
       localXValue,
       targetItinerary.rhythm.startTime,
+      pauseSchedule,
     );
 
     if (!point) {
@@ -347,11 +350,13 @@ export function useAnalysisHoverPointMarker({
             ? prediction.total_distance_m
             : cumulativeLengths[cumulativeLengths.length - 1] ?? 0;
 
+        const pauseSchedule = buildPauseAwareSchedule(targetItinerary, prediction);
         xValue = xValueFromDistance(projected.distanceM, {
           prediction,
           totalDistanceM,
           xMode: currentXMode,
           startTime: targetItinerary.rhythm.startTime,
+          pauseSchedule,
         });
       }
 

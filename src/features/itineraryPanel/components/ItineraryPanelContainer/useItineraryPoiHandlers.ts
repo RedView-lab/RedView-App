@@ -62,19 +62,20 @@ export function useItineraryPoiHandlers({
     const poiRow = itinerary.timeline.find((row) => row.kind === 'poi' && row.osmId === feature.id);
     const panelCategory = poiRow?.poiCategory ?? FEATURE_TO_PANEL_POI[feature.category];
     const rhythm = normalizeItineraryRhythmState(itinerary.rhythm);
-    const pauseDurationMin = panelCategory
-      ? rhythm.poiPauseDurations[panelCategory] ?? 5
-      : 5;
+    const pauseDurationMin =
+      poiRow?.durationMin
+      ?? (feature.pauseDurationMin && feature.pauseDurationMin > 0 ? feature.pauseDurationMin : undefined)
+      ?? (panelCategory ? rhythm.poiPauseDurations[panelCategory] : undefined)
+      ?? 5;
     const manualTraceWaypointId = `poi-waypoint-${feature.id}`;
+
+    const pauseEnabled = poiRow?.durationMin != null
+      ? poiRow.durationMin > 0
+      : Boolean(feature.pauseDurationMin && feature.pauseDurationMin > 0);
 
     return {
       favoriteEnabled: Boolean(poiRow?.favorite ?? feature.favorite),
-      pauseEnabled: Boolean(
-        poiRow
-        && poiRow.favorite
-        && rhythm.pauseAtFavoritePois
-        && pauseDurationMin > 0,
-      ),
+      pauseEnabled,
       pauseDurationMin,
       manualTraceEnabled: itinerary.timeline.some(
         (row) => row.id === manualTraceWaypointId,
@@ -203,10 +204,13 @@ export function useItineraryPoiHandlers({
         it.poiFeatures.push(feature);
       }
 
-      delete it.pendingRoutePatch;
       delete it.pendingTraceExtension;
       delete it.routeAudit;
-      it.prediction = null;
+
+      if (it.gpxRoute?.source === 'brouter' && !result.isDirectOnRoute) {
+        it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, createdId);
+        it.prediction = null;
+      }
     });
     if (createdId) {
       onSelectAndCenterTimelineRow?.(createdId);
@@ -257,21 +261,30 @@ export function useItineraryPoiHandlers({
     durationMin: number,
   ) => {
     updateActive((it) => {
-      const poiRow = it.timeline.find((row) => row.kind === 'poi' && row.osmId === feature.id);
-      if (!poiRow) return;
+      let poiRow = it.timeline.find((row) => row.kind === 'poi' && row.osmId === feature.id);
+      if (!poiRow && nextEnabled) {
+        handlePoiFavoriteToggle(feature, true);
+        poiRow = it.timeline.find((row) => row.kind === 'poi' && row.osmId === feature.id);
+      }
+      if (poiRow) {
+        poiRow.durationMin = nextEnabled ? Math.max(1, Math.round(durationMin)) : undefined;
+      }
 
-      const rhythm = normalizeItineraryRhythmState(it.rhythm);
-      it.rhythm = rhythm;
-      poiRow.favorite = nextEnabled;
-      poiRow.durationMin = nextEnabled ? durationMin : undefined;
-      it.poiFeatures = setPoiFeatureFavoriteState(it.poiFeatures, feature.id, nextEnabled, nextEnabled ? durationMin : null);
+      const currentFavorite = Boolean(poiRow?.favorite ?? feature.favorite);
+      it.poiFeatures = setPoiFeatureFavoriteState(
+        it.poiFeatures,
+        feature.id,
+        currentFavorite,
+        nextEnabled ? Math.max(1, Math.round(durationMin)) : null,
+      );
 
       if (!nextEnabled) {
         return;
       }
 
-      rhythm.pauseAtFavoritePois = true;
-      const panelCategory = poiRow.poiCategory ?? FEATURE_TO_PANEL_POI[feature.category];
+      const rhythm = normalizeItineraryRhythmState(it.rhythm);
+      it.rhythm = rhythm;
+      const panelCategory = poiRow?.poiCategory ?? FEATURE_TO_PANEL_POI[feature.category];
       if (!panelCategory) return;
 
       const currentDuration = rhythm.poiPauseDurations[panelCategory];
@@ -279,7 +292,7 @@ export function useItineraryPoiHandlers({
         rhythm.poiPauseDurations[panelCategory] = Math.max(1, Math.round(durationMin));
       }
     });
-  }, [updateActive]);
+  }, [handlePoiFavoriteToggle, updateActive]);
 
   const handlePoiManualTraceToggle = useCallback((feature: PoiFeature, nextEnabled: boolean) => {
     updateActive((it) => {
@@ -309,10 +322,13 @@ export function useItineraryPoiHandlers({
         it.timeline.splice(existingIndex, 1);
       }
 
-      delete it.pendingRoutePatch;
       delete it.pendingTraceExtension;
       delete it.routeAudit;
-      it.prediction = null;
+
+      if (it.gpxRoute?.source === 'brouter') {
+        it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, waypointId);
+        it.prediction = null;
+      }
     });
   }, [resolvePoiTitle, updateActive]);
 
