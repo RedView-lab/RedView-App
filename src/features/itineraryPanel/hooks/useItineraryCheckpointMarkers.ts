@@ -248,23 +248,20 @@ function buildPausePopupHtml(title: string, state: PausePopupState): string {
           ${
             state.isDurationDropdownOpen
               ? `
-            <div class="rvc-select__dropdown rv-poi-popup__dropdown" role="listbox" aria-label="${translateAppText('Durée de pause')}">
-              <div class="rv-poi-popup__dropdown-list">
-                ${PAUSE_DURATION_OPTIONS.map((dur) => {
-                  const selected = dur === state.pauseDurationMin;
-                  return `
-                    <div
-                      class="rvc-select__option rv-poi-popup__dropdown-option${selected ? ' is-selected' : ''}"
-                      role="option"
-                      data-duration="${dur}"
-                      aria-selected="${selected}"
-                    >
-                      <span class="rvc-select__option-label rv-poi-popup__dropdown-text">${dur} min</span>
-                      ${selected ? `<img src="${UI_ICON_URLS.check}" alt="" class="rvc-select__option-check rv-poi-popup__dropdown-check" />` : ''}
-                    </div>
-                  `;
-                }).join('')}
-              </div>
+            <div class="rv-dropdown rv-poi-popup__dropdown" role="listbox" aria-label="${translateAppText('Durée de pause')}">
+              ${PAUSE_DURATION_OPTIONS.map((dur) => {
+                const selected = dur === state.pauseDurationMin;
+                return `
+                  <div
+                    class="rv-dropdown__item rv-poi-popup__dropdown-option${selected ? ' is-selected' : ''}"
+                    role="option"
+                    data-duration="${dur}"
+                    aria-selected="${selected}"
+                  >
+                    <span class="rv-dropdown__label">${dur} min</span>
+                  </div>
+                `;
+              }).join('')}
             </div>
           `
               : ''
@@ -956,15 +953,22 @@ export function useItineraryCheckpointMarkers({
   useEffect(() => {
     if (!map) return;
 
+    // rAF-coalesced: `zoom` fires several times per frame during wheel zooms.
+    let frameId: number | null = null;
     const handleZoom = () => {
-      const currentZoom = map.getZoom();
-      registryRef.current.forEach((entry) => {
-        applyMarkerVisualState(entry, currentZoom);
+      if (frameId !== null) return;
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        const currentZoom = map.getZoom();
+        registryRef.current.forEach((entry) => {
+          applyMarkerVisualState(entry, currentZoom);
+        });
       });
     };
 
     map.on('zoom', handleZoom);
     return () => {
+      if (frameId !== null) window.cancelAnimationFrame(frameId);
       map.off('zoom', handleZoom);
     };
   }, [map]);

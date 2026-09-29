@@ -64,7 +64,6 @@ export function useDashboardChrome({
 }: UseDashboardChromeArgs) {
 
   const [lidarModeEnabled, setLidarModeEnabled] = useState(false);
-  const [isMapFocusMode, setIsMapFocusMode] = useState(false);
   const [projectMapViewport, setProjectMapViewport] = useState<MapViewport | null>(
     () => resolveProjectViewport(activeProjectInitial),
   );
@@ -72,7 +71,7 @@ export function useDashboardChrome({
   const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
-  const leftPanelOpen = !isMapFocusMode && !isLeftPanelCollapsed;
+  const leftPanelOpen = !isLeftPanelCollapsed;
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(() =>
     readStoredLeftWidth(),
   );
@@ -261,7 +260,6 @@ export function useDashboardChrome({
     leftPanelWidth,
     exporterPanelHeight,
     centerPanelHeightOverride,
-    isMapFocusMode,
     isLeftPanelCollapsed,
     isCenterPanelCollapsed,
     isRightPanelCollapsed,
@@ -336,10 +334,12 @@ export function useDashboardChrome({
     setIsRightPanelCollapsed(false);
   }, [panelMinWidth]);
 
+  // Stable callbacks (no width/height deps): lastExpanded*Ref is kept in sync by
+  // the effects above, so collapse handlers don't change identity on every
+  // resize frame and memoized consumers (toolbar, map controls) don't re-render.
   const collapseRightPanel = useCallback(() => {
-    lastExpandedPanelWidthRef.current = panelWidth;
     setIsRightPanelCollapsed(true);
-  }, [panelWidth]);
+  }, []);
 
   const handleLeftResizeStart = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -406,9 +406,8 @@ export function useDashboardChrome({
   }, []);
 
   const collapseLeftPanel = useCallback(() => {
-    lastExpandedLeftPanelWidthRef.current = leftPanelWidth;
     setIsLeftPanelCollapsed(true);
-  }, [leftPanelWidth]);
+  }, []);
 
   const handleCenterPanelResizeStart = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -472,33 +471,37 @@ export function useDashboardChrome({
   }, []);
 
   const collapseCenterPanel = useCallback(() => {
-    setCenterPanelHeightOverride(layout.centerPanelHeight);
+    setCenterPanelHeightOverride(lastExpandedCenterPanelHeightRef.current);
     setIsCenterPanelCollapsed(true);
-  }, [layout.centerPanelHeight]);
+  }, []);
+
+  // "Plein écran" is only a shortcut over the per-panel collapse states, never
+  // a lock: it closes every panel (or reopens them all when everything is
+  // already closed), and each panel stays independently toggleable afterwards.
+  const isAllPanelsCollapsed =
+    isLeftPanelCollapsed &&
+    isRightPanelCollapsed &&
+    (isCenterPanelCollapsed || !layout.centerToolbarVisible);
 
   const handleToggleMapFocusMode = useCallback(() => {
-    const isAllCollapsed =
-      isLeftPanelCollapsed &&
-      isRightPanelCollapsed &&
-      (isCenterPanelCollapsed || !layout.centerToolbarVisible);
-
-    if (isAllCollapsed) {
+    if (isAllPanelsCollapsed) {
       restoreLeftPanel();
       restoreRightPanel();
       restoreCenterPanel();
-      setIsMapFocusMode(false);
       return;
     }
 
-    setIsMapFocusMode((current) => !current);
+    collapseLeftPanel();
+    collapseRightPanel();
+    collapseCenterPanel();
   }, [
-    isLeftPanelCollapsed,
-    isRightPanelCollapsed,
-    isCenterPanelCollapsed,
-    layout.centerToolbarVisible,
+    isAllPanelsCollapsed,
     restoreLeftPanel,
     restoreRightPanel,
     restoreCenterPanel,
+    collapseLeftPanel,
+    collapseRightPanel,
+    collapseCenterPanel,
   ]);
 
   // Auto-reveal the center analysis table the first time
@@ -516,7 +519,7 @@ export function useDashboardChrome({
   return {
     lidarModeEnabled,
     setLidarModeEnabled,
-    isMapFocusMode,
+    isAllPanelsCollapsed,
     leftPanelOpen,
     panelWidth,
     isLeftPanelCollapsed,

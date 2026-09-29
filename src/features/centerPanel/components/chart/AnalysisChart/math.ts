@@ -412,11 +412,81 @@ export function buildNiceXTicks(
   return ticks;
 }
 
+const ELEVATION_STEP_LIMIT_M = 300;
+
+/** Prefix sums of D+/D- per point, only built for x-sorted series (else null). */
+const cumulativeElevationCache = new WeakMap<
+  { x: number; y: number }[],
+  { gain: Float64Array; loss: Float64Array } | null
+>();
+
+function getCumulativeElevation(points: { x: number; y: number }[]) {
+  if (cumulativeElevationCache.has(points)) return cumulativeElevationCache.get(points) ?? null;
+
+  let prefix: { gain: Float64Array; loss: Float64Array } | null = {
+    gain: new Float64Array(points.length),
+    loss: new Float64Array(points.length),
+  };
+  let gain = 0;
+  let loss = 0;
+  for (let i = 1; i < points.length; i++) {
+    if (!(points[i].x >= points[i - 1].x)) {
+      prefix = null;
+      break;
+    }
+    const dy = points[i].y - points[i - 1].y;
+    if (Math.abs(dy) <= ELEVATION_STEP_LIMIT_M) {
+      if (dy > 0) gain += dy;
+      else if (dy < 0) loss += Math.abs(dy);
+    }
+    prefix.gain[i] = gain;
+    prefix.loss[i] = loss;
+  }
+  cumulativeElevationCache.set(points, prefix);
+  return prefix;
+}
+
+/**
+ * D+/D- cumulés jusqu'à `xTarget`. O(log N) via sommes préfixes sur les séries triées
+ * (appelé à chaque frame de survol), repli linéaire sinon.
+ */
 export function computeCumulativeElevationAtX(
   points: { x: number; y: number }[],
   xTarget: number,
 ): { gainM: number; lossM: number } {
   if (points.length < 2) return { gainM: 0, lossM: 0 };
+
+  const prefix = Number.isFinite(xTarget) ? getCumulativeElevation(points) : null;
+  if (prefix) {
+    if (points[0].x > xTarget) return { gainM: 0, lossM: 0 };
+    // Last index with x <= xTarget.
+    let lo = 0;
+    let hi = points.length - 1;
+    if (points[hi].x <= xTarget) {
+      lo = hi;
+    } else {
+      while (hi - lo > 1) {
+        const mid = (lo + hi) >> 1;
+        if (points[mid].x <= xTarget) lo = mid;
+        else hi = mid;
+      }
+    }
+    let gain = prefix.gain[lo];
+    let loss = prefix.loss[lo];
+    const next = points[lo + 1];
+    if (next && points[lo].x < xTarget && next.x > xTarget) {
+      const prev = points[lo];
+      const span = next.x - prev.x;
+      const t = span > 0 ? (xTarget - prev.x) / span : 0;
+      const dy = t * (next.y - prev.y);
+      if (Math.abs(dy) <= ELEVATION_STEP_LIMIT_M) {
+        if (dy > 0) gain += dy;
+        else if (dy < 0) loss += Math.abs(dy);
+      }
+    }
+    return { gainM: Math.round(gain), lossM: Math.round(loss) };
+  }
+
   let gain = 0;
   let loss = 0;
 

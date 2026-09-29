@@ -1,6 +1,5 @@
 import type { Itinerary } from '@/features/itineraryPanel/types';
 import type { PredictionResult } from '@/features/fitPredictor';
-import type { ChartAlertAnnotation } from '../annotations/buildRouteAuditAnnotations';
 import type { ChartPoiAnnotation } from '../annotations/buildPoiAnnotations';
 import type { ChartDayNightOverlay } from '../dayNight';
 import type { ChartPauseOverlay } from '../pause';
@@ -46,7 +45,6 @@ export interface AnalysisChartProps {
   chartNodes?: ChartItineraryNode[];
   backdropProfiles?: ChartBackdropProfile[];
   poiAnnotations?: ChartPoiAnnotation[];
-  alertAnnotations?: ChartAlertAnnotation[];
   dayNightOverlay?: ChartDayNightOverlay | null;
   pauseOverlay?: ChartPauseOverlay | null;
   axis1Metric: AxisMetricId;
@@ -80,8 +78,6 @@ export interface CanvasBackdropLayer {
 export interface VisiblePoiAnnotation extends ChartPoiAnnotation {
   xRatio: number;
   yRatio: number;
-  xPx: number;
-  yPx: number;
 }
 
 export interface PoiMarkerGroup {

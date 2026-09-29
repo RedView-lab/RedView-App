@@ -17,7 +17,6 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
 import {
   geocodePlaces,
   type GeocodeSuggestion,
@@ -71,10 +70,6 @@ export function PlaceSearchInput({
     maxHeight: number;
     placeAbove: boolean;
     scale: number;
-    fontFamily: string;
-    fontSize: string;
-    fontWeight: string;
-    lineHeight: string;
   } | null>(null);
 
   // Keep local text in sync if the parent resets the value (e.g. itinerary switch).
@@ -166,10 +161,6 @@ export function PlaceSearchInput({
         maxHeight,
         placeAbove,
         scale,
-        fontFamily: computed.fontFamily,
-        fontSize: computed.fontSize,
-        fontWeight: computed.fontWeight,
-        lineHeight: computed.lineHeight,
       });
     };
 
@@ -274,19 +265,14 @@ export function PlaceSearchInput({
             }}
           >
             <div
-              className="rvi-place-search__menu-shell"
+              className="rv-dropdown rvi-place-search__menu-shell"
               style={{
                 width: menuRect.width / menuRect.scale,
                 transform: `scale(${menuRect.scale})`,
                 transformOrigin: menuRect.placeAbove ? 'bottom left' : 'top left',
-                fontFamily: menuRect.fontFamily,
-                fontSize: menuRect.fontSize,
-                fontWeight: menuRect.fontWeight,
-                lineHeight: menuRect.lineHeight,
               }}
               onMouseDown={(e) => e.preventDefault() /* keep input focused */}
             >
-              <MapCanvasGlassBackdrop blur={24} saturate={1.2} tint="rgba(14, 14, 18, 0.94)" />
               <div
                 id={listId}
                 role="listbox"
@@ -313,14 +299,14 @@ export function PlaceSearchInput({
                       id={`${listId}-opt-${i}`}
                       role="option"
                       aria-selected={i === activeIdx}
-                      className={`rvi-place-search__option${
+                      className={`rv-dropdown__item rv-dropdown__item--no-check${
                         i === activeIdx ? ' is-active' : ''
                       }`}
                       onMouseEnter={() => setActiveIdx(i)}
                       onClick={() => commit(s)}
                       title={s.fullName}
                     >
-                      <span className="rvi-place-search__name">{s.fullName}</span>
+                      <span className="rv-dropdown__label">{s.fullName}</span>
                     </div>
                   ))}
               </div>

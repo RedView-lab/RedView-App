@@ -80,68 +80,10 @@
   transform: rotate(180deg);
 }
 
+/* Apparence : shared/styles/dropdown.css (.rv-dropdown) */
 .rvi-tl-select-popover {
   position: fixed;
   z-index: 2147483600;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 4px;
-  border-radius: 8px;
-  background: rgba(18, 20, 24, 0.96);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
-  box-sizing: border-box;
-  animation: rvi-tl-popover-enter 140ms cubic-bezier(0.2, 0.9, 0.3, 1);
-}
-
-.rvi-tl-select-option {
-  all: unset;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  height: 28px;
-  padding: 4px 8px;
-  border-radius: 5px;
-  font-size: 13px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.88);
-  cursor: pointer;
-  box-sizing: border-box;
-  white-space: nowrap;
-  transition: background 0.14s ease, color 0.14s ease;
-}
-
-.rvi-tl-select-option:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-}
-
-.rvi-tl-select-option.is-selected {
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
-  font-weight: 600;
-}
-
-.rvi-tl-select-option-check {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-}
-
-@keyframes rvi-tl-popover-enter {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .rvi-tl-edit__zoom-actions {

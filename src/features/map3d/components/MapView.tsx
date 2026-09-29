@@ -6,6 +6,7 @@ import { useMap } from '../hooks/useMap';
 import { useMapPoiHoverCursor } from '../hooks/useMapPoiHoverCursor';
 import { useCinematicIdleRotate } from '../hooks/useCinematicIdleRotate';
 import { useLidarSelection } from '@/features/lidar/components/useLidarSelection';
+import { useFreeCam } from '@/features/freeCam';
 import { MapContextMenu } from './MapContextMenu/MapContextMenu';
 import type {
   MapContextMenuActionPayload,
@@ -93,6 +94,7 @@ export default memo(function MapView({
   useLidarSelection(isLoaded ? map.current : null, lidarSelectionEnabled, onLidarSelectionDisable);
   useMapPoiHoverCursor(isLoaded ? map.current : null);
   useCinematicIdleRotate(isLoaded ? map.current : null, isLoaded);
+  useFreeCam(isLoaded ? map.current : null);
 
   useEffect(() => {
     if (isLoaded && map.current && onMapReady) {

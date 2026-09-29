@@ -31,6 +31,7 @@ import {
   type AnalysisChartProps,
   type HoverCardRow,
   type PoiMarkerGroup,
+  type VisiblePoiAnnotation,
 } from './types';
 import { usePlotAreaSize } from './usePlotAreaSize';
 import { resolveItineraryHoverMetrics } from './hoverMetrics';
@@ -48,7 +49,6 @@ export const AnalysisChart = memo(function AnalysisChart({
   chartNodes = [],
   backdropProfiles = [],
   poiAnnotations = [],
-  alertAnnotations = [],
   dayNightOverlay = null,
   pauseOverlay = null,
   axis1Metric,
@@ -295,32 +295,23 @@ export const AnalysisChart = memo(function AnalysisChart({
     return backdropYDomain ?? plotYDomain;
   }, [axis1Metric, axis2Metric, backdropYDomain, plotY2Domain, plotYDomain]);
 
-  const visiblePoiAnnotations = useMemo(() => {
+  const visiblePoiAnnotations = useMemo<VisiblePoiAnnotation[]>(() => {
     if (!altitudeDomainForAnnotations || poiAnnotations.length === 0) return [];
-    return poiAnnotations
-      .filter((annotation) => annotation.x >= plotXDomain.min && annotation.x <= plotXDomain.max)
-      .map((annotation) => ({
+    const result: VisiblePoiAnnotation[] = [];
+    for (const annotation of poiAnnotations) {
+      if (annotation.x < plotXDomain.min || annotation.x > plotXDomain.max) continue;
+      result.push({
         ...annotation,
         xRatio: ratioFor(annotation.x, plotXDomain),
         yRatio: 1 - ratioFor(annotation.y, altitudeDomainForAnnotations),
-        xPx: ratioFor(annotation.x, plotXDomain) * plotSize.width,
-        yPx: (1 - ratioFor(annotation.y, altitudeDomainForAnnotations)) * plotSize.height,
-      }));
-  }, [altitudeDomainForAnnotations, plotSize.height, plotSize.width, plotXDomain, poiAnnotations]);
+      });
+    }
+    return result;
+  }, [altitudeDomainForAnnotations, plotXDomain, poiAnnotations]);
   const poiMarkerGroups = useMemo(
     () => buildPoiMarkerGroups(visiblePoiAnnotations, visibleFraction),
     [visibleFraction, visiblePoiAnnotations],
   );
-  const visibleAlertAnnotations = useMemo(() => {
-    if (!altitudeDomainForAnnotations || alertAnnotations.length === 0) return [];
-    return alertAnnotations
-      .filter((annotation) => annotation.x >= plotXDomain.min && annotation.x <= plotXDomain.max)
-      .map((annotation) => ({
-        ...annotation,
-        xRatio: ratioFor(annotation.x, plotXDomain),
-        yRatio: 1 - ratioFor(annotation.y, altitudeDomainForAnnotations),
-      }));
-  }, [alertAnnotations, altitudeDomainForAnnotations, plotXDomain]);
 
   const effectiveExpandedPoiClusterId =
     visibleFraction >= POI_CLUSTER_COMPACT_VISIBLE_FRACTION ? null : expandedPoiClusterId;
@@ -779,7 +770,8 @@ export const AnalysisChart = memo(function AnalysisChart({
       xPositions={xPositions}
       nightFrames={nightFrames}
       seriesCanvasRef={seriesCanvasRef}
-      visibleAlertAnnotations={visibleAlertAnnotations}
+      plotWidth={plotSize.width}
+      plotHeight={plotSize.height}
       poiMarkerGroups={poiMarkerGroups}
       visibleFraction={visibleFraction}
       expandedPoiClusterId={effectiveExpandedPoiClusterId}

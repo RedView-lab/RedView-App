@@ -7,8 +7,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useAppI18n } from '@/shared/i18n';
-import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
-import { IconChevronDown, IconCheck } from '../icons';
+import { IconChevronDown } from '../icons';
 
 interface SelectOption<T extends string = string> {
   value: T;
@@ -41,10 +40,6 @@ export function PanelSelect<T extends string = string>({
     left: number;
     width: number;
     scale: number;
-    fontFamily: string;
-    fontSize: string;
-    fontWeight: string;
-    lineHeight: string;
   } | null>(null);
   const label = t(options.find((o) => o.value === value)?.label ?? value);
 
@@ -72,8 +67,8 @@ export function PanelSelect<T extends string = string>({
     const computed = window.getComputedStyle(rootRef.current);
     const rawScale = Number.parseFloat(computed.getPropertyValue('--app-scale'));
     const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
-    const rowHeight = 32 * scale;
-    const dropdownHeight = options.length * rowHeight;
+    const rowHeight = 30 * scale;
+    const dropdownHeight = Math.min(options.length * rowHeight, 260 * scale);
     const offset = 4 * scale;
     const spaceBelow = window.innerHeight - rect.bottom - 8;
     const placeAbove = spaceBelow < dropdownHeight && rect.top > spaceBelow;
@@ -81,12 +76,8 @@ export function PanelSelect<T extends string = string>({
     setDropPos({
       top: placeAbove ? rect.top - dropdownHeight - offset : rect.bottom + offset,
       left: rect.left,
-      width: Math.max(104, rect.width / scale),
+      width: Math.max(140, rect.width / scale),
       scale,
-      fontFamily: computed.fontFamily,
-      fontSize: computed.fontSize,
-      fontWeight: computed.fontWeight,
-      lineHeight: computed.lineHeight,
     });
   }, [open, options.length]);
 
@@ -94,7 +85,7 @@ export function PanelSelect<T extends string = string>({
     open && dropPos
       ? createPortal(
           <div
-            className="rvi-select__menu"
+            className="rv-dropdown rvi-select__menu"
             role="listbox"
             aria-label={ariaLabel ? t(ariaLabel) : undefined}
             style={{
@@ -103,14 +94,9 @@ export function PanelSelect<T extends string = string>({
               width: dropPos.width,
               transform: `scale(${dropPos.scale})`,
               transformOrigin: 'top left',
-              fontFamily: dropPos.fontFamily,
-              fontSize: dropPos.fontSize,
-              fontWeight: dropPos.fontWeight,
-              lineHeight: dropPos.lineHeight,
             }}
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <MapCanvasGlassBackdrop blur={30} saturate={1.8} />
             {options.map((o) => {
               const selected = o.value === value;
               return (
@@ -118,15 +104,14 @@ export function PanelSelect<T extends string = string>({
                   key={o.value}
                   role="option"
                   aria-selected={selected}
-                  className={`rvi-select__option${selected ? ' is-selected' : ''}`}
+                  className={`rv-dropdown__item${selected ? ' is-selected' : ''}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     onChange?.(o.value);
                     setOpen(false);
                   }}
                 >
-                  <span className="rvi-select__option-label">{t(o.label)}</span>
-                  {selected && <IconCheck size={16} className="rvi-select__option-check" />}
+                  <span className="rv-dropdown__label">{t(o.label)}</span>
                 </div>
               );
             })}

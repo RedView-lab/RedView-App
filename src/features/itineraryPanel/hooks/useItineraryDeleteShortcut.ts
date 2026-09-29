@@ -1,4 +1,6 @@
 import { useEffect } from 'react';
+import { isTypingTarget } from '@/shared/lib/isTypingTarget';
+import { isFreeCamActive } from '@/features/freeCam';
 
 /**
  * Keyboard accelerators that act on the currently active itinerary.
@@ -29,15 +31,6 @@ export interface UseItineraryDeleteShortcutArgs {
   enabled?: boolean;
 }
 
-function isTypingTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-
-  const tag = target.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
-  if (target.isContentEditable) return true;
-  return false;
-}
-
 export function useItineraryDeleteShortcut({
   activeItineraryId,
   itineraryCount,
@@ -55,6 +48,7 @@ export function useItineraryDeleteShortcut({
 
       // Never hijack text entry.
       if (isTypingTarget(event.target)) return;
+      if (isFreeCamActive()) return;
 
       if (!activeItineraryId || itineraryCount <= 0) return;
 

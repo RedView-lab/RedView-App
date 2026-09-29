@@ -1,14 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
-import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
 import { useAppI18n } from '@/shared/i18n';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import type { Itinerary } from '@/features/itineraryPanel';
 import { IconCopy04, IconTrash } from '@/features/itineraryPanel/components/icons';
 
-const MENU_WIDTH = 270;
-const MENU_ROW_HEIGHT = 32;
+const MENU_WIDTH = 200;
+const MENU_ROW_HEIGHT = 30;
 const MENU_GAP = 6;
 
 interface SummaryActionMenuProps {
@@ -37,7 +36,6 @@ export function SummaryActionMenu({
     top: number;
     left: number;
     scale: number;
-    fontFamily: string;
     transformOrigin: string;
   } | null>(null);
 
@@ -82,7 +80,6 @@ export function SummaryActionMenu({
         top: placeAbove ? rect.top - menuHeight - gap : rect.bottom + gap,
         left: Math.min(rect.left, maxLeft),
         scale,
-        fontFamily: computed.fontFamily,
         transformOrigin: placeAbove ? 'bottom left' : 'top left',
       });
     };
@@ -104,7 +101,7 @@ export function SummaryActionMenu({
   return createPortal(
     <div
       ref={menuRef}
-      className="rvc-center-summary__menu"
+      className="rv-dropdown rvc-center-summary__menu"
       role="menu"
       aria-label={t('Actions pour {{name}}', { name: itinerary.name })}
       style={{
@@ -113,44 +110,41 @@ export function SummaryActionMenu({
         width: MENU_WIDTH,
         transform: `scale(${menuStyle.scale})`,
         transformOrigin: menuStyle.transformOrigin,
-        fontFamily: menuStyle.fontFamily,
       }}
       onMouseDown={(event) => event.stopPropagation()}
     >
-      <MapCanvasGlassBackdrop blur={34} saturate={1.85} tint="rgba(10, 10, 12, 0.46)" />
-
       <button
         ref={firstActionRef}
         type="button"
-        className="rvc-center-summary__menu-item"
+        className="rv-dropdown__item"
         role="menuitem"
         onClick={onStartRename}
       >
-        <span className="rvc-center-summary__menu-label">{t('Renommer la trace')}</span>
-        <span className="rvc-center-summary__menu-icon" aria-hidden>
+        <span className="rv-dropdown__label">{t('Renommer la trace')}</span>
+        <span className="rv-dropdown__icon" aria-hidden>
           <SvgV2Icon name="edit-05.svg" size={16} />
         </span>
       </button>
       <button
         type="button"
-        className="rvc-center-summary__menu-item"
+        className="rv-dropdown__item"
         role="menuitem"
         onClick={onDuplicate}
       >
-        <span className="rvc-center-summary__menu-label">{t('Dupliquer la trace')}</span>
-        <span className="rvc-center-summary__menu-icon" aria-hidden>
+        <span className="rv-dropdown__label">{t('Dupliquer la trace')}</span>
+        <span className="rv-dropdown__icon" aria-hidden>
           <IconCopy04 size={16} />
         </span>
       </button>
       <button
         type="button"
-        className="rvc-center-summary__menu-item rvc-center-summary__menu-item--danger"
+        className="rv-dropdown__item rv-dropdown__item--danger"
         role="menuitem"
         onClick={onDelete}
         disabled={!canDelete}
       >
-        <span className="rvc-center-summary__menu-label">{t('Supprimer la trace')}</span>
-        <span className="rvc-center-summary__menu-icon" aria-hidden>
+        <span className="rv-dropdown__label">{t('Supprimer la trace')}</span>
+        <span className="rv-dropdown__icon" aria-hidden>
           <IconTrash size={14} />
         </span>
       </button>

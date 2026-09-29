@@ -22,6 +22,7 @@ export type {
 	OverlayStatusReporter,
 	OverlayStatusSnapshot,
 } from './lib/overlayStatus';
+export { setDprLayoutScale } from './hooks/useMap/runtimeProfile';
 export { useCinematicIdleRotate } from './hooks/useCinematicIdleRotate';
 export type { UseCinematicIdleRotateOptions } from './hooks/useCinematicIdleRotate';
 export {

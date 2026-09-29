@@ -9,14 +9,12 @@ import {
   buildChartDayNightOverlay,
   buildChartPauseOverlay,
   buildPoiAnnotationsForItinerary,
-  buildRouteAuditAnnotationsForItinerary,
   buildSeriesFromPrediction,
   computeXDomain,
   unitForMetric,
   type AxisDomain,
   type AxisMetricId,
   type AxisMode,
-  type ChartAlertAnnotation,
   type ChartBackdropProfile,
   type ChartDayNightOverlay,
   type ChartPauseOverlay,
@@ -209,6 +207,25 @@ export function useAnalysisChartData({
     return computeXDomain(routeProfiles, xMode);
   }, [preparedChartNodes, xMode]);
 
+  // POI positions only depend on the route, the prediction and the X mode.
+  // Deriving them from `preparedChartNodes` rebuilt every annotation on each
+  // chart zoom step, axis-metric switch or weather update (series LOD depends
+  // on `detailZoom`); this lighter node list keeps them stable.
+  const poiSourceNodes = useMemo(() => {
+    const result: Array<Pick<PreparedChartNode, 'itinerary' | 'prediction' | 'xOffset'>> = [];
+    for (const node of visualNodes) {
+      const itinerary = node.itinerary;
+      if (itinerary.analysisVisible === false) continue;
+      if ((itinerary.gpxRoute?.points.length ?? 0) === 0) continue;
+      result.push({
+        itinerary,
+        prediction: (predictions?.[itinerary.id] as never) ?? itinerary.prediction ?? null,
+        xOffset: xMode === 'distance' ? node.startDistanceKm : 0,
+      });
+    }
+    return result;
+  }, [predictions, visualNodes, xMode]);
+
   const poiAnnotations = useMemo<ChartPoiAnnotation[]>(() => {
     const includePoi = Boolean(effectiveFilters.poi);
     const includePause = Boolean(effectiveFilters.pause);
@@ -216,7 +233,7 @@ export function useAnalysisChartData({
     const includeFavoritesAlways = globalFilters ? globalFilters.favorite : true;
 
     const result: ChartPoiAnnotation[] = [];
-    for (const node of preparedChartNodes) {
+    for (const node of poiSourceNodes) {
       const { itinerary, prediction, xOffset } = node;
       const annotations = buildPoiAnnotationsForItinerary(itinerary, prediction, xMode, {
         includePoi,
@@ -235,23 +252,7 @@ export function useAnalysisChartData({
       }
     }
     return result;
-  }, [effectiveFilters.pause, effectiveFilters.poi, effectiveFilters.waypoint, globalFilters, preparedChartNodes, xMode]);
-
-  const alertAnnotations = useMemo<ChartAlertAnnotation[]>(() => {
-    const isAlertsOn = globalFilters?.alertes ?? filters.alertes;
-    if (!isAlertsOn) return [];
-
-    const result: ChartAlertAnnotation[] = [];
-    for (const node of preparedChartNodes) {
-      const { itinerary, prediction, xOffset } = node;
-      result.push(
-        ...buildRouteAuditAnnotationsForItinerary(itinerary, prediction, xMode).map((annotation) =>
-          shiftChartX(annotation, xOffset),
-        ),
-      );
-    }
-    return result;
-  }, [filters.alertes, globalFilters?.alertes, preparedChartNodes, xMode]);
+  }, [effectiveFilters.pause, effectiveFilters.poi, effectiveFilters.waypoint, globalFilters, poiSourceNodes, xMode]);
 
   const dayNightStartReady = Boolean(
     activeItinerary?.rhythm.startDate && activeItinerary?.rhythm.startTime,
@@ -313,7 +314,6 @@ export function useAnalysisChartData({
     altitudeBackdropProfiles,
     routeXDomainClamp,
     poiAnnotations,
-    alertAnnotations,
     dayNightOverlay,
     pauseOverlay,
   };

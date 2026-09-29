@@ -5,12 +5,11 @@ import { axisOptions, axis2Options } from './shared';
 import type { AxisMetricId, AxisMode } from '../chart';
 import { useAppI18n } from '@/shared/i18n';
 
-type ToolbarFilterKey = 'pente' | 'jourNuit' | 'alertes';
+type ToolbarFilterKey = 'pente' | 'jourNuit';
 
 const visibleToolbarFilters: ReadonlyArray<{ key: ToolbarFilterKey; label: string }> = [
   { key: 'pente', label: "Profils d'altitude" },
   { key: 'jourNuit', label: 'Jour/nuit' },
-  { key: 'alertes', label: 'Alertes' },
 ];
 
 interface AnalysisToolbarProps {
@@ -26,7 +25,7 @@ interface AnalysisToolbarProps {
   onAxis2Select: (value: string) => void;
   onAxis1ColorChange: (color: string) => void;
   onAxis2ColorChange: (color: string) => void;
-  filters: { pente: boolean; jourNuit: boolean; alertes?: boolean };
+  filters: { pente: boolean; jourNuit: boolean };
   onToggleFilter: (key: ToolbarFilterKey) => void;
   /**
    * Aide au survol par filtre : si une entrée existe pour un filtre, son chip

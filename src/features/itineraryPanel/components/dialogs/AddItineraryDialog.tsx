@@ -1,11 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
 import { useAppI18n } from '@/shared/i18n';
 import { IconCopy04, IconPlus, IconUploadCircle } from '../icons';
 
-const MENU_WIDTH = 270;
-const MENU_ROW_HEIGHT = 32;
+const MENU_WIDTH = 330;
+const MENU_ROW_HEIGHT = 30;
 const MENU_GAP = 6;
 
 interface AddItineraryDialogProps {
@@ -32,7 +31,6 @@ export function AddItineraryDialog({
     top: number;
     left: number;
     scale: number;
-    fontFamily: string;
   } | null>(null);
 
   useEffect(() => {
@@ -89,7 +87,6 @@ export function AddItineraryDialog({
         top: placeAbove ? rect.top - menuHeight - gap : rect.bottom + gap,
         left: Math.min(rect.left, maxLeft),
         scale,
-        fontFamily: computed.fontFamily,
       });
     };
 
@@ -128,7 +125,7 @@ export function AddItineraryDialog({
   return createPortal(
     <div
       ref={menuRef}
-      className="rvi-add-itin-menu"
+      className="rv-dropdown rvi-add-itin-menu"
       role="menu"
       aria-label={t('Créer un itinéraire')}
       style={{
@@ -137,20 +134,18 @@ export function AddItineraryDialog({
         width: MENU_WIDTH,
         transform: `scale(${menuStyle.scale})`,
         transformOrigin: 'top left',
-        fontFamily: menuStyle.fontFamily,
       }}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      <MapCanvasGlassBackdrop blur={34} saturate={1.85} tint="rgba(10, 10, 12, 0.46)" />
       <button
         ref={firstActionRef}
         type="button"
-        className="rvi-add-itin-menu__item"
+        className="rv-dropdown__item"
         role="menuitem"
         onClick={handleScratch}
       >
-        <span className="rvi-add-itin-menu__label">{t('Créer un nouvel itinéraire')}</span>
-        <span className="rvi-add-itin-menu__icon" aria-hidden>
+        <span className="rv-dropdown__label">{t('Créer un nouvel itinéraire')}</span>
+        <span className="rv-dropdown__icon" aria-hidden>
           <IconPlus size={16} />
         </span>
       </button>
@@ -158,15 +153,15 @@ export function AddItineraryDialog({
       {showDuplicate && (
         <button
           type="button"
-          className="rvi-add-itin-menu__item"
+          className="rv-dropdown__item"
           role="menuitem"
           onClick={handleDuplicate}
           disabled={!onPickDuplicate}
         >
-          <span className="rvi-add-itin-menu__label">
+          <span className="rv-dropdown__label">
             {t('Dupliquer à partir de l’itinéraire sélectionné')}
           </span>
-          <span className="rvi-add-itin-menu__icon" aria-hidden>
+          <span className="rv-dropdown__icon" aria-hidden>
             <IconCopy04 size={16} />
           </span>
         </button>
@@ -174,12 +169,12 @@ export function AddItineraryDialog({
 
       <button
         type="button"
-        className="rvi-add-itin-menu__item"
+        className="rv-dropdown__item"
         role="menuitem"
         onClick={handleGpxClick}
       >
-        <span className="rvi-add-itin-menu__label">{t('Uploader un fichier gpx')}</span>
-        <span className="rvi-add-itin-menu__icon" aria-hidden>
+        <span className="rv-dropdown__label">{t('Uploader un fichier gpx')}</span>
+        <span className="rv-dropdown__icon" aria-hidden>
           <IconUploadCircle size={16} />
         </span>
       </button>

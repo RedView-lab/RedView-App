@@ -87,6 +87,21 @@ export function ChartZoomNavigator({
   useEffect(() => {
     if (!activeDrag) return;
 
+    // Pointer events can fire several times per frame (high-rate mice): emit
+    // at most one viewport change per animation frame, the latest one wins.
+    let frameId: number | null = null;
+    let pending: { visibleFraction: number; offset: number } | null = null;
+    const flush = () => {
+      frameId = null;
+      const next = pending;
+      pending = null;
+      if (next) onChangeRef.current(next);
+    };
+    const emit = (next: { visibleFraction: number; offset: number }) => {
+      pending = next;
+      if (frameId === null) frameId = window.requestAnimationFrame(flush);
+    };
+
     const handleWindowPointerMove = (e: PointerEvent) => {
       const session = dragSessionRef.current;
       if (!session) return;
@@ -107,13 +122,13 @@ export function ChartZoomNavigator({
         let nextStart = initialStartRatio + deltaRatio;
         nextStart = Math.max(0, Math.min(1 - initialSpan, nextStart));
         const nextOffset = initialSpan >= 0.999 ? 0 : nextStart / (1 - initialSpan);
-        onChangeRef.current({ visibleFraction: initialSpan, offset: Math.max(0, Math.min(1, nextOffset)) });
+        emit({ visibleFraction: initialSpan, offset: Math.max(0, Math.min(1, nextOffset)) });
       } else if (mode === 'start') {
         let nextStart = initialStartRatio + deltaRatio;
         nextStart = Math.max(0, Math.min(initialEndRatio - minFraction, nextStart));
         const nextSpan = initialEndRatio - nextStart;
         const nextOffset = nextSpan >= 0.999 ? 0 : nextStart / (1 - nextSpan);
-        onChangeRef.current({
+        emit({
           visibleFraction: Math.max(minFraction, Math.min(1, nextSpan)),
           offset: Math.max(0, Math.min(1, nextOffset)),
         });
@@ -122,7 +137,7 @@ export function ChartZoomNavigator({
         nextEnd = Math.max(initialStartRatio + minFraction, Math.min(1, nextEnd));
         const nextSpan = nextEnd - initialStartRatio;
         const nextOffset = nextSpan >= 0.999 ? 0 : initialStartRatio / (1 - nextSpan);
-        onChangeRef.current({
+        emit({
           visibleFraction: Math.max(minFraction, Math.min(1, nextSpan)),
           offset: Math.max(0, Math.min(1, nextOffset)),
         });
@@ -130,6 +145,9 @@ export function ChartZoomNavigator({
     };
 
     const handleWindowPointerUp = () => {
+      // Commit the last position synchronously so the drop is exact.
+      if (frameId !== null) window.cancelAnimationFrame(frameId);
+      flush();
       dragSessionRef.current = null;
       setActiveDrag(null);
     };
@@ -139,6 +157,7 @@ export function ChartZoomNavigator({
     window.addEventListener('pointercancel', handleWindowPointerUp);
 
     return () => {
+      if (frameId !== null) window.cancelAnimationFrame(frameId);
       window.removeEventListener('pointermove', handleWindowPointerMove);
       window.removeEventListener('pointerup', handleWindowPointerUp);
       window.removeEventListener('pointercancel', handleWindowPointerUp);

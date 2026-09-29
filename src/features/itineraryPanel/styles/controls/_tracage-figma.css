@@ -105,66 +105,7 @@
   transform: rotate(180deg);
 }
 
-/* ── Portal Dropdown Container (Always on Top, Unclipped) ── */
-.rvi-portal-dropdown {
-  background: #3a3a3a;
-  border-radius: 12px;
-  padding: 4px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  box-sizing: border-box;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  animation: rviDropdownFadeIn 0.12s ease-out;
-  max-height: 280px;
-  overflow-y: auto;
-  scrollbar-width: thin;
-}
-
-@keyframes rviDropdownFadeIn {
-  from {
-    opacity: 0;
-    transform: scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.rvi-tracage__mode-menu-item {
-  height: 34px;
-  padding: 6px 10px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  border-radius: 8px;
-  border: none;
-  background: transparent;
-  color: #ffffff;
-  cursor: pointer;
-  width: 100%;
-  box-sizing: border-box;
-  text-align: left;
-  font-family: 'Rethink Sans', sans-serif;
-  font-weight: 500;
-  font-size: 13px;
-  letter-spacing: -0.0133em;
-  transition: background-color 0.12s ease;
-  user-select: none;
-}
-
-.rvi-tracage__mode-menu-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.rvi-tracage__mode-menu-item.is-selected {
-  background: rgba(197, 0, 0, 0.35);
-  color: #ffffff;
-}
+/* Portal dropdown + items : apparence dans shared/styles/dropdown.css (.rv-dropdown) */
 
 /* ── Surfaces Section ────────────────────────── */
 .rvi-tracage__surfaces {
@@ -675,28 +616,27 @@
 }
 
 /* ── Custom Profile Dropdown Menu Enhancements ────────────────────────── */
-.rvi-tracage__dropdown-divider {
-  height: 1px;
-  background: rgba(255, 255, 255, 0.1);
-  margin: 4px 6px;
-}
-
 .rvi-tracage__mode-menu-item-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  border-radius: 8px;
-  transition: background-color 0.12s ease;
+  padding-right: 4px;
+  box-sizing: border-box;
 }
 
 .rvi-tracage__mode-menu-item-row:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--rv-dropdown-item-hover-bg);
 }
 
-.rvi-tracage__mode-menu-item-row .rvi-tracage__mode-menu-item {
+.rvi-tracage__mode-menu-item-row:has(.is-selected) {
+  background: var(--rv-dropdown-item-selected-bg);
+}
+
+:root .rv-dropdown .rvi-tracage__mode-menu-item-row .rv-dropdown__item {
   flex: 1;
   min-width: 0;
+  background: transparent;
 }
 
 .rvi-tracage__delete-profile-btn {

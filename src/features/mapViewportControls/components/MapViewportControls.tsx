@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { ROUTE_SLOPE_LEGEND_BANDS } from '@/features/controlPanel/lib';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
@@ -136,7 +136,8 @@ function clampZoom(map: MapboxMap, delta: number) {
   return Math.min(map.getMaxZoom(), Math.max(map.getMinZoom(), target));
 }
 
-export function MapViewportControls({
+// memo: the dashboard shell re-renders on every panel-resize frame.
+export const MapViewportControls = memo(function MapViewportControls({
   map,
   isMapLoaded,
   immersiveMode,
@@ -421,4 +422,4 @@ export function MapViewportControls({
       </div>
     </aside>
   );
-}
+});

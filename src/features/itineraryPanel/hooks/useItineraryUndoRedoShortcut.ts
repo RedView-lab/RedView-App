@@ -1,4 +1,6 @@
 import { useEffect } from 'react';
+import { isTypingTarget } from '@/shared/lib/isTypingTarget';
+import { isFreeCamActive } from '@/features/freeCam';
 
 export interface UseItineraryUndoRedoShortcutArgs {
   canUndo: boolean;
@@ -6,14 +8,6 @@ export interface UseItineraryUndoRedoShortcutArgs {
   onUndo: () => void;
   onRedo: () => void;
   enabled?: boolean;
-}
-
-function isTypingTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  const tag = target.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
-  if (target.isContentEditable) return true;
-  return false;
 }
 
 /**
@@ -34,6 +28,8 @@ export function useItineraryUndoRedoShortcut({
     const handleKeyDown = (event: KeyboardEvent) => {
       // Never hijack text typing (search inputs, title edit, notes, etc.)
       if (isTypingTarget(event.target)) return;
+      // Ctrl sert à descendre en FreeCam : Ctrl+Z (avancer) ne doit pas annuler.
+      if (isFreeCamActive()) return;
 
       const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
       const isCmdOrCtrl = isMac ? event.metaKey : event.ctrlKey;

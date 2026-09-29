@@ -320,6 +320,7 @@ export function useItineraryFitRuntime({
                     ftp: it.rhythm.ftp === 260 || it.rhythm.ftp === 300 ? null : it.rhythm.ftp,
                   },
                   fitUploads: storedUploads,
+                  rhythmConfigured: true,
                   prediction: undefined,
                   pendingFitRecompute: true,
                 }
@@ -422,6 +423,7 @@ export function useItineraryFitRuntime({
               ? {
                   ...curr,
                   prediction: result,
+                  rhythmConfigured: true,
                   pendingFitRecompute: undefined,
                   metrics: {
                     ...curr.metrics,
@@ -553,6 +555,16 @@ export function useItineraryFitRuntime({
       }
       return;
     }
+
+    // No automatic prediction until the user has touched the "Rythme" mode.
+    // Legacy projects (saved before the flag) count as configured when they
+    // already carry a prediction or FIT uploads.
+    const rhythmConfigured =
+      active.rhythmConfigured === true
+      || active.prediction != null
+      || (active.fitUploads?.length ?? 0) > 0
+      || active.pendingFitRecompute === true;
+    if (!rhythmConfigured) return;
 
     if (active.gpxRoute.source === 'brouter' && !active.routeAudit) return;
     if (!hasUsableRouteElevation(active.gpxRoute.points)) return;

@@ -44,7 +44,6 @@ export const filterDefs: ReadonlyArray<{ key: FilterKey; label: string }> = [
   { key: 'waypoint', label: 'Waypoint' },
   { key: 'poi', label: 'POI' },
   { key: 'pause', label: 'Pause' },
-  { key: 'alertes', label: 'Alertes' },
   { key: 'pente', label: "Profil d'altitude" },
   { key: 'jourNuit', label: 'Jour/nuit' },
 ];
@@ -315,11 +314,23 @@ function migrateAxisMetric(value: string): AxisMetricId {
   return value as AxisMetricId;
 }
 
+const routePointDistancesCache = new WeakMap<object, number[]>();
+
 function getRoutePointDistances(
   routePoints: Array<{ lat: number; lon: number; distanceM?: number }>,
 ): number[] {
   if (routePoints.length === 0) return [];
 
+  const cached = routePointDistancesCache.get(routePoints);
+  if (cached && cached.length === routePoints.length) return cached;
+  const distances = computeRoutePointDistances(routePoints);
+  routePointDistancesCache.set(routePoints, distances);
+  return distances;
+}
+
+function computeRoutePointDistances(
+  routePoints: Array<{ lat: number; lon: number; distanceM?: number }>,
+): number[] {
   const distances: number[] = [0];
   let cumulativeDistanceM = 0;
   for (let index = 1; index < routePoints.length; index += 1) {

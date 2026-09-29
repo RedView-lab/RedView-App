@@ -21,7 +21,7 @@ const ITINERARY_FORMAT_OPTIONS: { value: ItineraryExportFormat; label: string }[
 ];
 
 interface ExporterPanelProps {
-  width?: number;
+  width?: number | '100%';
 }
 
 interface ExportRow {

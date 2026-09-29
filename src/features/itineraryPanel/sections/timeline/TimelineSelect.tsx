@@ -5,7 +5,7 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { IconCheck, IconChevronDown } from '../../components/icons';
+import { IconChevronDown } from '../../components/icons';
 
 export interface TimelineSelectOption<T extends string | number> {
   value: T;
@@ -22,7 +22,8 @@ interface TimelineSelectProps<T extends string | number> {
 interface PopoverStyle {
   top: number;
   left: number;
-  minWidth: number;
+  /** Unscaled px — the popover itself is scaled by `--app-scale`. */
+  width: number;
   scale: number;
 }
 
@@ -42,7 +43,7 @@ function computePopoverStyle(anchorEl: HTMLElement): PopoverStyle {
   return {
     top: rect.bottom + offset,
     left: rect.left,
-    minWidth: Math.max(rect.width, 80 * scale),
+    width: Math.max(140, rect.width / scale),
     scale,
   };
 }
@@ -129,12 +130,12 @@ export function TimelineSelect<T extends string | number>({
         ? createPortal(
             <div
               ref={popoverRef}
-              className="rvi-tl-select-popover"
+              className="rv-dropdown rvi-tl-select-popover"
               role="listbox"
               style={{
                 top: popoverStyle.top,
                 left: popoverStyle.left,
-                minWidth: popoverStyle.minWidth,
+                width: popoverStyle.width,
                 transform: `scale(${popoverStyle.scale})`,
                 transformOrigin: 'top left',
               }}
@@ -148,15 +149,10 @@ export function TimelineSelect<T extends string | number>({
                     type="button"
                     role="option"
                     aria-selected={isSelected}
-                    className={`rvi-tl-select-option${isSelected ? ' is-selected' : ''}`}
+                    className={`rv-dropdown__item${isSelected ? ' is-selected' : ''}`}
                     onClick={() => handleSelect(option.value)}
                   >
-                    <span>{option.label}</span>
-                    {isSelected ? (
-                      <span className="rvi-tl-select-option-check" aria-hidden>
-                        <IconCheck size={11} />
-                      </span>
-                    ) : null}
+                    <span className="rv-dropdown__label">{option.label}</span>
                   </button>
                 );
               })}

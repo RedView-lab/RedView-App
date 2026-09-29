@@ -6,7 +6,6 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
 import { useAppI18n } from '@/shared/i18n';
 import type { TimelineAddItemKind } from '../../types';
 
@@ -15,10 +14,6 @@ interface TimelineKindMenuStyle {
   left: number;
   width: number;
   scale: number;
-  fontFamily: string;
-  fontSize: string;
-  fontWeight: string;
-  lineHeight: string;
 }
 
 export interface TimelineKindMenuOption {
@@ -44,7 +39,7 @@ function computeMenuStyle(
   const computed = window.getComputedStyle(anchorEl);
   const rawScale = Number.parseFloat(computed.getPropertyValue('--app-scale'));
   const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
-  const menuWidth = 139 * scale;
+  const menuWidth = 140 * scale;
   const menuHeight = optionCount * 30 * scale + 2;
   const offset = 6 * scale;
   const maxLeft = Math.max(8, window.innerWidth - menuWidth - 8);
@@ -59,12 +54,8 @@ function computeMenuStyle(
   return {
     top,
     left,
-    width: 139,
+    width: 140,
     scale,
-    fontFamily: computed.fontFamily,
-    fontSize: computed.fontSize,
-    fontWeight: computed.fontWeight,
-    lineHeight: computed.lineHeight,
   };
 }
 
@@ -134,7 +125,7 @@ export function TimelineKindMenu({
   return createPortal(
     <div
       ref={menuRef}
-      className="rvi-tl-kind-menu"
+      className="rv-dropdown rvi-tl-kind-menu"
       role="menu"
       aria-label={t('Ajouter un élément')}
       style={{
@@ -143,21 +134,16 @@ export function TimelineKindMenu({
         width: menuStyle.width,
         transform: `scale(${menuStyle.scale})`,
         transformOrigin: 'top left',
-        fontFamily: menuStyle.fontFamily,
-        fontSize: menuStyle.fontSize,
-        fontWeight: menuStyle.fontWeight,
-        lineHeight: menuStyle.lineHeight,
       }}
       onMouseDown={(event) => event.stopPropagation()}
     >
-      <MapCanvasGlassBackdrop blur={60} saturate={1.8} />
       {options.map((option) => (
         <button
           key={option.value}
           type="button"
           role="menuitem"
           disabled={option.disabled}
-          className={`rvi-tl-kind-menu__option${option.disabled ? ' is-disabled' : ''}`}
+          className={`rv-dropdown__item${option.disabled ? ' is-disabled' : ''}`}
           onClick={() => {
             if (option.disabled) return;
             onSelect?.(option.value);
@@ -167,7 +153,7 @@ export function TimelineKindMenu({
           <span className="rvi-tl-kind-menu__icon" aria-hidden>
             {option.icon}
           </span>
-          <span className="rvi-tl-kind-menu__label">{t(option.label)}</span>
+          <span className="rv-dropdown__label">{t(option.label)}</span>
         </button>
       ))}
     </div>,

@@ -46,6 +46,62 @@ export function projectDistanceAlongRouteM(
   return projected?.distanceM ?? null;
 }
 
+/** Segments per bounding-box chunk of the projection index. */
+const PROJECTION_CHUNK_SIZE = 32;
+
+/**
+ * Per-route acceleration structure for {@link projectPointAlongRoute}:
+ * per-segment cos(midLat) and per-chunk lon/lat bounding boxes. Lets the
+ * nearest-segment search skip whole chunks with an exact lower bound, so a
+ * 50k-point route costs ~N/32 box tests + a few chunks instead of N cos() calls.
+ */
+interface RouteProjectionIndex {
+  segmentCos: Float64Array;
+  chunkMinLon: Float64Array;
+  chunkMaxLon: Float64Array;
+  chunkMinLat: Float64Array;
+  chunkMaxLat: Float64Array;
+  chunkMinCos: Float64Array;
+}
+
+const projectionIndexCache = new WeakMap<RouteDistancePoint[], RouteProjectionIndex>();
+
+function getRouteProjectionIndex(routePoints: RouteDistancePoint[]): RouteProjectionIndex {
+  const cached = projectionIndexCache.get(routePoints);
+  if (cached && cached.segmentCos.length === routePoints.length - 1) return cached;
+
+  const segmentCount = routePoints.length - 1;
+  const chunkCount = Math.ceil(segmentCount / PROJECTION_CHUNK_SIZE);
+  const index: RouteProjectionIndex = {
+    segmentCos: new Float64Array(segmentCount),
+    chunkMinLon: new Float64Array(chunkCount).fill(Infinity),
+    chunkMaxLon: new Float64Array(chunkCount).fill(-Infinity),
+    chunkMinLat: new Float64Array(chunkCount).fill(Infinity),
+    chunkMaxLat: new Float64Array(chunkCount).fill(-Infinity),
+    chunkMinCos: new Float64Array(chunkCount).fill(Infinity),
+  };
+
+  for (let segment = 0; segment < segmentCount; segment += 1) {
+    const start = routePoints[segment];
+    const end = routePoints[segment + 1];
+    const cosLat = Math.cos(((start.lat + end.lat) / 2) * DEG);
+    index.segmentCos[segment] = cosLat;
+    const chunk = (segment / PROJECTION_CHUNK_SIZE) | 0;
+    const minLon = Math.min(start.lon, end.lon);
+    const maxLon = Math.max(start.lon, end.lon);
+    const minLat = Math.min(start.lat, end.lat);
+    const maxLat = Math.max(start.lat, end.lat);
+    if (minLon < index.chunkMinLon[chunk]) index.chunkMinLon[chunk] = minLon;
+    if (maxLon > index.chunkMaxLon[chunk]) index.chunkMaxLon[chunk] = maxLon;
+    if (minLat < index.chunkMinLat[chunk]) index.chunkMinLat[chunk] = minLat;
+    if (maxLat > index.chunkMaxLat[chunk]) index.chunkMaxLat[chunk] = maxLat;
+    if (cosLat < index.chunkMinCos[chunk]) index.chunkMinCos[chunk] = cosLat;
+  }
+
+  projectionIndexCache.set(routePoints, index);
+  return index;
+}
+
 export function projectPointAlongRoute(
   point: RouteDistancePoint,
   routePoints: RouteDistancePoint[],
@@ -55,35 +111,65 @@ export function projectPointAlongRoute(
     return null;
   }
 
+  const index = getRouteProjectionIndex(routePoints);
+  const chunkCount = index.chunkMinLon.length;
+  const segmentCount = routePoints.length - 1;
+
+  // Lower bound of the (segment-metric) squared distance from the query to any
+  // segment in a chunk: distance to the chunk's lon/lat box, lon scaled by the
+  // smallest cos in the chunk (segment metric scales lon by cos >= that).
+  const chunkBoundSq = new Float64Array(chunkCount);
+  let firstChunk = 0;
+  for (let chunk = 0; chunk < chunkCount; chunk += 1) {
+    const dLon = Math.max(index.chunkMinLon[chunk] - point.lon, 0, point.lon - index.chunkMaxLon[chunk]);
+    const dLat = Math.max(index.chunkMinLat[chunk] - point.lat, 0, point.lat - index.chunkMaxLat[chunk]);
+    const scaledLon = dLon * Math.max(0, index.chunkMinCos[chunk]);
+    const bound = scaledLon * scaledLon + dLat * dLat;
+    chunkBoundSq[chunk] = bound;
+    if (bound < chunkBoundSq[firstChunk]) firstChunk = chunk;
+  }
+
   let bestDistanceSq = Number.POSITIVE_INFINITY;
   let bestSegmentStart = 0;
   let bestT = 0;
 
-  for (let index = 1; index < routePoints.length; index += 1) {
-    const start = routePoints[index - 1];
-    const end = routePoints[index];
-    const midLat = (start.lat + end.lat) / 2;
-    const cosLat = Math.cos(midLat * DEG);
-    const ax = start.lon * cosLat;
-    const ay = start.lat;
-    const bx = end.lon * cosLat;
-    const by = end.lat;
-    const px = point.lon * cosLat;
-    const py = point.lat;
-    const dx = bx - ax;
-    const dy = by - ay;
-    const segmentLengthSq = dx * dx + dy * dy;
-    let t = 0;
-    if (segmentLengthSq > 0) {
-      t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / segmentLengthSq));
+  const scanChunk = (chunk: number) => {
+    const from = chunk * PROJECTION_CHUNK_SIZE;
+    const to = Math.min(segmentCount, from + PROJECTION_CHUNK_SIZE);
+    for (let segment = from; segment < to; segment += 1) {
+      const start = routePoints[segment];
+      const end = routePoints[segment + 1];
+      const cosLat = index.segmentCos[segment];
+      const ax = start.lon * cosLat;
+      const ay = start.lat;
+      const bx = end.lon * cosLat;
+      const by = end.lat;
+      const px = point.lon * cosLat;
+      const py = point.lat;
+      const dx = bx - ax;
+      const dy = by - ay;
+      const segmentLengthSq = dx * dx + dy * dy;
+      let t = 0;
+      if (segmentLengthSq > 0) {
+        t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / segmentLengthSq));
+      }
+      const projectedX = ax + t * dx;
+      const projectedY = ay + t * dy;
+      const distanceSq = ((px - projectedX) * (px - projectedX)) + ((py - projectedY) * (py - projectedY));
+      if (distanceSq > bestDistanceSq) continue;
+      // Ties keep the earliest segment, as a plain in-order scan would.
+      if (distanceSq === bestDistanceSq && segment >= bestSegmentStart) continue;
+      bestDistanceSq = distanceSq;
+      bestSegmentStart = segment;
+      bestT = t;
     }
-    const projectedX = ax + t * dx;
-    const projectedY = ay + t * dy;
-    const distanceSq = ((px - projectedX) * (px - projectedX)) + ((py - projectedY) * (py - projectedY));
-    if (distanceSq >= bestDistanceSq) continue;
-    bestDistanceSq = distanceSq;
-    bestSegmentStart = index - 1;
-    bestT = t;
+  };
+
+  // Seed with the closest chunk to get a tight bound, then prune the rest.
+  scanChunk(firstChunk);
+  for (let chunk = 0; chunk < chunkCount; chunk += 1) {
+    if (chunk === firstChunk || chunkBoundSq[chunk] > bestDistanceSq) continue;
+    scanChunk(chunk);
   }
 
   const segmentLengthM = cumulativeLengthsM[bestSegmentStart + 1] - cumulativeLengthsM[bestSegmentStart];

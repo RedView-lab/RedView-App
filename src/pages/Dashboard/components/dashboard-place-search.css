@@ -41,24 +41,13 @@
   padding: 0 12px 0 8px;
   box-sizing: border-box;
   overflow: hidden;
-  border-radius: 8px;
-  background: rgba(14, 14, 18, 0.82);
-  backdrop-filter: blur(20px) saturate(1.2);
-  -webkit-backdrop-filter: blur(20px) saturate(1.2);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  transition: background 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+  /* Fond / flou / bordure : shared/styles/glass.css (.rv-glass) */
 }
 
-.rvd-place-search__search-shell:hover {
-  background: rgba(22, 22, 28, 0.88);
-  border-color: rgba(255, 255, 255, 0.20);
-}
-
+.rvd-place-search__search-shell:hover,
 .rvd-place-search__search-shell:focus-within {
-  background: rgba(20, 20, 26, 0.94);
-  border-color: rgba(255, 255, 255, 0.32);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.40), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  background: var(--rv-glass-tint-hover);
+  border-color: var(--rv-glass-border-hover);
 }
 
 .rvd-place-search__icon {
@@ -143,34 +132,20 @@
   padding: 0 12px 0 8px;
   box-sizing: border-box;
   overflow: hidden;
-  border-radius: 8px;
   min-width: 0;
   max-width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(14, 14, 18, 0.82);
-  backdrop-filter: blur(20px) saturate(1.2);
-  -webkit-backdrop-filter: blur(20px) saturate(1.2);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  /* Fond / flou / bordure : shared/styles/glass.css (.rv-glass) */
   color: rgba(255, 255, 255, 0.72);
-  transition: background 180ms ease, border-color 180ms ease, box-shadow 180ms ease, color 180ms ease;
 }
 
 .rvd-place-search__filter-shell:hover {
-  background: rgba(24, 24, 30, 0.88);
-  border-color: rgba(255, 255, 255, 0.18);
+  background: var(--rv-glass-tint-hover);
+  border-color: var(--rv-glass-border-hover);
   color: #ffffff;
 }
 
+/* Filtre actif : même verre, seul le contenu passe en blanc plein. */
 .rvd-place-search__filter.is-active .rvd-place-search__filter-shell {
-  background: rgba(20, 20, 26, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.20);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  color: #ffffff;
-}
-
-.rvd-place-search__filter.is-active .rvd-place-search__filter-shell:hover {
-  background: rgba(28, 28, 36, 0.95);
-  border-color: rgba(255, 255, 255, 0.30);
   color: #ffffff;
 }
 
@@ -299,96 +274,14 @@
   transform: rotate(180deg);
 }
 
+/* Menu catégories POI — apparence : shared/styles/dropdown.css (.rv-dropdown) */
 .rvd-place-search__poi-menu {
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
-  width: 163px;
-  min-width: 163px;
-  border-radius: 8px;
-  overflow: hidden;
-  background: rgba(14, 14, 18, 0.94);
-  backdrop-filter: blur(24px) saturate(1.2);
-  -webkit-backdrop-filter: blur(24px) saturate(1.2);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  transform-origin: top left;
+  width: 180px;
+  max-height: min(var(--rv-dropdown-max-height), calc(100vh - 160px));
   z-index: 5;
-}
-
-.rvd-place-search__poi-menu.is-open {
-  animation: rvd-poi-menu-in 180ms cubic-bezier(0.18, 0.84, 0.28, 1) both;
-}
-
-.rvd-place-search__poi-menu.is-closing {
-  pointer-events: none;
-  animation: rvd-poi-menu-out 150ms ease both;
-}
-
-.rvd-place-search__poi-menu-list {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  padding: 3px 0;
-}
-
-.rvd-place-search__poi-option {
-  position: relative;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 4px;
-  width: 163px;
-  min-width: 80px;
-  height: 30px;
-  min-height: 30px;
-  padding: 6px 6px 6px 4px;
-  border: 0;
-  background: transparent;
-  color: #ffffff;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-  box-sizing: border-box;
-  flex: none;
-  order: 0;
-  align-self: stretch;
-  flex-grow: 0;
-  transition: background 140ms ease;
-}
-
-.rvd-place-search__poi-option:hover,
-.rvd-place-search__poi-option:focus-visible {
-  background: rgba(255, 255, 255, 0.14);
-  outline: none;
-}
-
-.rvd-place-search__poi-checkbox {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid rgba(255, 255, 255, 0.45);
-  color: #ffffff;
-  box-sizing: border-box;
-}
-
-.rvd-place-search__poi-option-label {
-  min-width: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: 'Rethink Sans', system-ui, sans-serif;
-  font-size: 14px;
-  font-weight: 500;
-  line-height: normal;
-  color: #ffffff;
 }
 
 .rvd-place-search__poi-option-marker {
@@ -411,30 +304,6 @@
   object-fit: contain;
 }
 
-
-@keyframes rvd-poi-menu-in {
-  from {
-    opacity: 0;
-    transform: translateY(-6px) scale(0.97);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes rvd-poi-menu-out {
-  from {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-
-  to {
-    opacity: 0;
-    transform: translateY(-4px) scale(0.985);
-  }
-}
 
 @media (max-width: 900px) {
   .rvd-place-search {

@@ -62,6 +62,5 @@ export const DASHBOARD_FILTER_OPTIONS: readonly DashboardFilterOption[] = [
   { id: 'favoris', label: 'Favoris', icon: 'search-filter-favoris.svg' },
   { id: 'pauses', label: 'Pauses', icon: 'search-filter-pauses.svg' },
   { id: 'waypoints', label: 'Points de passage', icon: 'search-filter-waypoints.svg' },
-  { id: 'alertes', label: 'Alertes', icon: 'search-filter-alertes.svg' },
   { id: 'pois_map', label: 'POI carte', icon: 'search-filter-pois-map.svg', hasDropdown: true },
 ] as const;

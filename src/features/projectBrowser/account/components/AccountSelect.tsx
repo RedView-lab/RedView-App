@@ -190,7 +190,7 @@ export function AccountSelect({
       </button>
 
       {menuVisible ? (
-        <div id={listboxId} className="rvpb-account-select-menu" role="listbox">
+        <div id={listboxId} className="rv-dropdown rvpb-account-select-menu" role="listbox">
           {options.map((option, index) => {
             const isSelected = option.value === value;
             const optionId = `${listboxId}-${option.value}`;
@@ -205,7 +205,7 @@ export function AccountSelect({
                 role="option"
                 aria-selected={isSelected}
                 tabIndex={isSelected ? 0 : -1}
-                className={`rvpb-account-select-option${isSelected ? ' is-selected' : ''}`}
+                className={`rv-dropdown__item${isSelected ? ' is-selected' : ''}`}
                 onClick={() => {
                   onChange(option.value);
                   closeMenu();
@@ -213,7 +213,7 @@ export function AccountSelect({
                 onKeyDown={(event) => handleOptionKeyDown(event, option, index)}
               >
                 {renderOptionPrefix ? renderOptionPrefix(option) : null}
-                <span className="rvpb-account-select-option-label">{option.label}</span>
+                <span className="rv-dropdown__label">{option.label}</span>
               </button>
             );
           })}

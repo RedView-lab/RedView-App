@@ -21,12 +21,35 @@ export interface PauseAwareSchedule {
   pauseSignature: string;
 }
 
+/**
+ * Memo keyed on the (immutable) prediction, then on the itinerary inputs actually
+ * read (`timeline`, `rhythm`). Hover handlers call this every frame; recomputing
+ * the scheduled timeline each time was the main hover cost in time/hour modes.
+ */
+const scheduleCache = new WeakMap<
+  PredictionResult,
+  { timeline: Itinerary['timeline']; rhythm: Itinerary['rhythm']; value: PauseAwareSchedule | null }
+>();
+
 export function buildPauseAwareSchedule(
   itinerary: Itinerary,
   prediction: PredictionResult | null | undefined,
 ): PauseAwareSchedule | null {
   if (!prediction || prediction.points.length < 2) return null;
 
+  const cached = scheduleCache.get(prediction);
+  if (cached && cached.timeline === itinerary.timeline && cached.rhythm === itinerary.rhythm) {
+    return cached.value;
+  }
+  const value = computePauseAwareSchedule(itinerary, prediction);
+  scheduleCache.set(prediction, { timeline: itinerary.timeline, rhythm: itinerary.rhythm, value });
+  return value;
+}
+
+function computePauseAwareSchedule(
+  itinerary: Itinerary,
+  prediction: PredictionResult,
+): PauseAwareSchedule | null {
   const reference = parseStartReference(itinerary.rhythm);
   const state = buildScheduledTimelineState(
     itinerary.timeline,

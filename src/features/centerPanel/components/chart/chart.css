@@ -186,92 +186,14 @@
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.8);
 }
 
-.rvchart__poi-marker {
+/* POI markers / clusters: drawn on one canvas (AnalysisChart/PoiCanvasLayer),
+ * sprites with their drop-shadows pre-rendered (AnalysisChart/poiSprites).
+ * The canvas overflows the plot area so markers anchored near the top edge
+ * are not clipped; hit-testing is done in JS on the plot area. */
+.rvchart__poi-canvas {
   position: absolute;
-  transform: translate(-50%, -100%);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: auto;
-  cursor: pointer;
-  background: transparent;
-  border: none;
-  padding: 0;
-  margin: 0;
-  outline: none;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
-  transition: transform 140ms ease, filter 140ms ease;
-  z-index: 10;
-}
-
-.rvchart__poi-marker.is-favorite {
-  z-index: 40;
-  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.65));
-}
-
-.rvchart__poi-marker:hover,
-.rvchart__poi-marker.is-favorite:hover {
-  z-index: 100 !important;
-  transform: translate(-50%, -100%) scale(1.15);
-  filter: drop-shadow(0 5px 12px rgba(0, 0, 0, 0.8));
-}
-
-.rvchart__poi-marker-fallback {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 28px;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: rgba(25, 25, 25, 0.88);
-  color: #fff;
-  font: 700 10px/1 'DM Sans', system-ui, sans-serif;
-}
-
-.rvchart__alert-marker {
-  position: absolute;
-  transform: translate(-50%, -100%);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.56));
-}
-
-.rvchart__alert-marker-cross {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  background: rgba(137, 0, 0, 0.94);
-  border: 1px solid rgba(255, 255, 255, 0.42);
-  color: #fff;
-  font: 800 11px/1 'DM Sans', system-ui, sans-serif;
-}
-
-.rvchart__poi-cluster {
-  position: absolute;
-  transform: translate(-50%, -79.6%);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 38px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: zoom-in;
-  pointer-events: auto;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
-}
-
-.rvchart__poi-cluster-icon {
   display: block;
-  width: 100%;
-  height: 100%;
+  pointer-events: none;
 }
 
 /* ---- Hover info cards (Figma Pixel-Perfect node 1894:40694) ---- */

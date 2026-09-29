@@ -353,8 +353,8 @@ export interface ControlPanelProps extends ControlPanelHandlers {
   onSunlightMapExpandedChange?: (open: boolean) => void;
   /** False while no analysis zone is drawn — zone-gated sections show a hint. */
   analysisZoneActive?: boolean;
-  /** Optional px width the panel shell should render at. */
-  width?: number;
+  /** Optional px width the panel shell should render at ('100%' = fill its host, used during live resize). */
+  width?: number | '100%';
   /** Mouse-down handler on the drag-to-resize handle (left edge). */
   onResizeStart?: (ev: import('react').MouseEvent<HTMLDivElement>) => void;
   /** Toggles an active visual state while dragging. */

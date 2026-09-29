@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
+import { requestFreeCamExit } from '@/features/freeCam';
 import { distanceBetweenRoutePlaybackPointsM, type interpolateRoutePointAtDistance } from './playback';
 import {
   FLYOVER_BEARING_SMOOTHING,
@@ -55,6 +56,11 @@ export function useFlyoverCamera({
   const primedPlaybackSessionRef = useRef<number | null>(null);
   const reliefPitchEnabledRef = useRef(false);
   const reliefPitchOffsetRef = useRef(0);
+
+  // Le flyover pilote la caméra : il reprend la main sur la FreeCam.
+  useEffect(() => {
+    if (isPlaying) requestFreeCamExit();
+  }, [isPlaying]);
 
   useEffect(() => {
     if (!map || !isPlaying || !playbackRoutePoint || !playbackCameraTarget) return;

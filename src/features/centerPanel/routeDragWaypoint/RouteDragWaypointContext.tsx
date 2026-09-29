@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
+import { activatePoiAtPoint, queryPoiAtPoint } from '@/features/poi/lib/poi-markers';
 
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import { getMapScreenPoint, unprojectClientPoint } from '@/features/map3d/lib/mapPointer';
@@ -357,8 +358,11 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
         commitDrag(session.anchor.lat, session.anchor.lon, lngLat.lng, lngLat.lat, asVariant);
       } else {
         // Simple click without drag movement
+        const clickPt = getMapScreenPoint(map, event.clientX, event.clientY);
         const nearbyPoi = findNearbyPoiMarker(event.clientX, event.clientY, POI_CLICK_PROXIMITY_PX);
-        if (nearbyPoi) {
+        if (activatePoiAtPoint(map, clickPt, POI_CLICK_PROXIMITY_PX)) {
+          // A POI of the GPU layer was near the click: it opened its popup.
+        } else if (nearbyPoi) {
           nearbyPoi.click();
         } else {
           // Add a waypoint at the exact clicked anchor location
@@ -402,6 +406,9 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
       if (!routePts || routePts.length < 2) return;
 
       const screenPt = getMapScreenPoint(map, event.clientX, event.clientY);
+
+      // POIs are drawn by a GPU layer (no DOM target): let their click handler run.
+      if (queryPoiAtPoint(map, screenPt)) return;
 
       // Avoid creating duplicate waypoints right on top of existing timeline points (within 16px)
       const currentTimeline = storeRef.current?.project.itineraries.find(
@@ -477,9 +484,9 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
       const currentTimeline = storeRef.current?.project.itineraries.find(
         (it) => it.id === activeItineraryIdRef.current,
       )?.timeline;
-      const nearExistingPoint = currentTimeline
+      const nearExistingPoint = (currentTimeline
         ? isClickNearExistingTimelinePoint(map, currentTimeline, screenPt.x, screenPt.y, 14)
-        : false;
+        : false) || queryPoiAtPoint(map, screenPt) !== null;
 
       // Hysteresis: strict distance to enter hover (22px), generous distance to stay in hover (34px)
       // Eliminates flashing/strobe effect when cursor is near the edge of the route zone

@@ -20,7 +20,8 @@
   cursor: pointer;
   pointer-events: auto;
   z-index: 20;
-  transition: opacity 140ms ease;
+  /* No opacity transition: Mapbox rewrites `opacity` every ~60 ms while the
+   * camera moves (terrain occlusion), which kept restarting it. */
 }
 
 .rv-poi-marker.mapboxgl-marker {
@@ -492,78 +493,13 @@
   opacity: 0.9;
 }
 
-.rv-poi-popup__dropdown.rvc-select__dropdown {
+/* Apparence : shared/styles/dropdown.css (.rv-dropdown) */
+.rv-poi-popup__dropdown {
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
   z-index: 1000;
-  isolation: isolate;
-  display: flex;
-  flex-direction: column;
-  min-width: 120px;
-  width: 100%;
-  background: rgba(12, 12, 12, 0.88);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 8px;
-  overflow: clip;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.04);
-}
-
-.rv-poi-popup__dropdown-list {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-  margin: 0;
-}
-
-.rv-poi-popup__dropdown .rvc-select__option {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 32px;
-  min-width: 80px;
-  padding: 7px 8px 7px 10px;
-  background: transparent;
-  color: #ffffff;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  box-sizing: border-box;
-  user-select: none;
-  transition: background 0.16s ease;
-}
-
-.rv-poi-popup__dropdown .rvc-select__option + .rvc-select__option {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.rv-poi-popup__dropdown .rvc-select__option.is-selected {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.rv-poi-popup__dropdown .rvc-select__option:hover:not(.is-selected) {
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.rv-poi-popup__dropdown .rvc-select__option-label {
-  flex: 1 1 0;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rv-poi-popup__dropdown .rvc-select__option-check {
-  display: block;
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-  color: #ffffff;
+  width: max(100%, var(--rv-dropdown-width));
 }
 
 .rv-poi-popup__type-icon-wrap {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import type { Map as MapboxMap, MapMouseEvent } from 'mapbox-gl';
+import { queryPoiAtPoint } from '@/features/poi/lib/poi-markers';
 import type { Itinerary } from '@/features/itineraryPanel/types';
 import type { PredictionResult } from '@/features/fitPredictor';
 import { getItineraryStartDistanceKm } from '@/features/itineraryPanel/lineage/itineraryLineage';
@@ -68,7 +69,9 @@ function renderHoverMarker(
   } else {
     markerRef.current.setLngLat([lon, lat]);
     const el = markerRef.current.getElement();
-    if (el) {
+    // Hot path (every hover frame): only touch the DOM when the color changes.
+    if (el && el.dataset.rvHoverColor !== color) {
+      el.dataset.rvHoverColor = color;
       el.style.pointerEvents = 'none';
       const inner = (el.classList.contains('rvi-analysis-hover-dot')
         ? el
@@ -112,6 +115,8 @@ export function useAnalysisHoverPointMarker({
   const lastEmittedXValueRef = useRef<number | null>(null);
   const pendingEventRef = useRef<MapMouseEvent | null>(null);
   const rafRef = useRef<number | null>(null);
+  /** True once the marker reflects "cursor off the route"; avoids redoing it every frame. */
+  const mapHoverIdleRef = useRef(false);
 
   const stateRef = useRef({
     map,
@@ -149,6 +154,11 @@ export function useAnalysisHoverPointMarker({
     } = stateRef.current;
 
     if (!activeMap) return;
+
+    // Echo of a map-hover emission (parent re-feeds the x value): marker is
+    // already at the exact projected point, skip the x -> point recomputation.
+    if (xValue != null && xValue === lastEmittedXValueRef.current && domMarkerRef.current) return;
+    mapHoverIdleRef.current = false;
 
     if (!Number.isFinite(xValue)) {
       if (domMarkerRef.current) {
@@ -219,6 +229,7 @@ export function useAnalysisHoverPointMarker({
     }
 
     const clearMapHover = () => {
+      if (mapHoverIdleRef.current) return;
       if (lastEmittedXValueRef.current !== null) {
         lastEmittedXValueRef.current = null;
         stateRef.current.onMapHoverXValueChange?.(null);
@@ -226,15 +237,16 @@ export function useAnalysisHoverPointMarker({
       const selectedX = stateRef.current.selectedXValue;
       if (Number.isFinite(selectedX)) {
         updateHoverPoint(selectedX as number);
-        return;
+      } else {
+        if (domMarkerRef.current) {
+          domMarkerRef.current.remove();
+          domMarkerRef.current = null;
+        }
+        if (map) {
+          clearAnalysisHoverPoint(map);
+        }
       }
-      if (domMarkerRef.current) {
-        domMarkerRef.current.remove();
-        domMarkerRef.current = null;
-      }
-      if (map) {
-        clearAnalysisHoverPoint(map);
-      }
+      mapHoverIdleRef.current = true;
     };
 
     const applyHover = (event: MapMouseEvent) => {
@@ -330,6 +342,7 @@ export function useAnalysisHoverPointMarker({
 
       const { itinerary: targetItinerary, startDistanceKm, projected } = bestCandidate;
       const color = targetItinerary.color || '#ff4d4f';
+      mapHoverIdleRef.current = false;
 
       // 1. Move or create map marker
       renderHoverMarker(activeMap, domMarkerRef, projected.lon, projected.lat, color);
@@ -398,6 +411,7 @@ export function useAnalysisHoverPointMarker({
         target?.closest(
           '.rv-poi-marker, .mapboxgl-popup, .mapboxgl-ctrl, button, input, [role="button"]',
         )
+        || queryPoiAtPoint(event.target, event.point)
       ) {
         return;
       }

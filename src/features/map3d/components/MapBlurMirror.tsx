@@ -35,6 +35,20 @@ function getMirrorFrameProfile(): MirrorFrameProfile {
   };
 }
 
+/**
+ * Copies regions of the Mapbox canvas into small blurred 2D canvases.
+ *
+ * Map pixels are read synchronously inside the map `render` event, while the
+ * WebGL drawing buffer is still valid. This lets the map run with
+ * `preserveDrawingBuffer: false`, which avoids a full-screen buffer copy on every
+ * map frame (very costly on Apple tile-based GPUs / ANGLE-Metal and on iGPUs).
+ *
+ * Each read refreshes a downscaled 2D snapshot of the whole map; mirrors are cut
+ * from that snapshot. A pure geometry change (panel resize/drag, 60 events/s)
+ * therefore only re-cuts the snapshot on the next animation frame — no map
+ * repaint. A real map frame is requested only when the map image may have changed
+ * (move start/end, map canvas resize, tab shown, first mount).
+ */
 class MapBlurMirrorScheduler {
   private readonly map: MapboxMap;
 
@@ -44,9 +58,13 @@ class MapBlurMirrorScheduler {
 
   private readonly sourceObserver: ResizeObserver;
 
-  private raf = 0;
+  private readonly snapshot: HTMLCanvasElement;
 
-  private timer = 0;
+  private readonly snapshotCtx: CanvasRenderingContext2D | null;
+
+  private snapshotValid = false;
+
+  private geometryRaf = 0;
 
   private settleTimer = 0;
 
@@ -58,13 +76,17 @@ class MapBlurMirrorScheduler {
 
   private moving = false;
 
+  private forcePending = false;
+
   private cachedSourceRect: DOMRect | null = null;
 
   constructor(map: MapboxMap) {
     this.map = map;
     this.sourceCanvas = map.getCanvas() as HTMLCanvasElement;
+    this.snapshot = document.createElement('canvas');
+    this.snapshotCtx = this.snapshot.getContext('2d', { alpha: true });
     this.sourceObserver = new ResizeObserver(() => {
-      this.invalidateSourceRect();
+      this.invalidateSnapshot();
       this.requestRedraw();
     });
   }
@@ -89,16 +111,22 @@ class MapBlurMirrorScheduler {
     }
   }
 
+  /** Mirror geometry changed: re-cut from the snapshot, or fetch a map frame if none. */
   requestRedraw() {
     this.invalidateSourceRect();
     for (const mirror of this.mirrors) {
       mirror.cachedTargetRect = null;
     }
-
-    this.clearSettleTimer();
-    this.subscribeRender();
-    this.schedule(true);
-    this.restartSettleTimer();
+    if (!this.snapshotValid || this.moving) {
+      this.requestForcedCopy();
+      this.restartSettleTimer();
+      return;
+    }
+    if (this.geometryRaf !== 0 || !this.visible) return;
+    this.geometryRaf = requestAnimationFrame(() => {
+      this.geometryRaf = 0;
+      this.cutMirrors(true);
+    });
   }
 
   invalidateMirrorRect(mirror: MirrorInstance) {
@@ -133,14 +161,18 @@ class MapBlurMirrorScheduler {
     this.attached = false;
     this.sourceObserver.disconnect();
     this.unsubscribeRender();
-    this.clearScheduledDraw();
     this.clearSettleTimer();
+    this.cancelGeometryRaf();
     this.map.off('movestart', this.handleMoveStart);
     this.map.off('moveend', this.handleMoveEnd);
     window.removeEventListener('resize', this.handleWindowResize);
     document.removeEventListener('visibilitychange', this.handleVisibilityChange);
     this.cachedSourceRect = null;
     this.moving = false;
+    this.forcePending = false;
+    this.invalidateSnapshot();
+    this.snapshot.width = 0;
+    this.snapshot.height = 0;
   }
 
   private subscribeRender() {
@@ -159,15 +191,24 @@ class MapBlurMirrorScheduler {
     this.cachedSourceRect = null;
   }
 
-  private clearScheduledDraw() {
-    if (this.raf !== 0) {
-      cancelAnimationFrame(this.raf);
-      this.raf = 0;
+  private invalidateSnapshot() {
+    this.invalidateSourceRect();
+    this.snapshotValid = false;
+  }
+
+  private cancelGeometryRaf() {
+    if (this.geometryRaf !== 0) {
+      cancelAnimationFrame(this.geometryRaf);
+      this.geometryRaf = 0;
     }
-    if (this.timer !== 0) {
-      clearTimeout(this.timer);
-      this.timer = 0;
-    }
+  }
+
+  private requestForcedCopy() {
+    if (!this.visible || this.mirrors.size === 0) return;
+    this.forcePending = true;
+    this.clearSettleTimer();
+    this.subscribeRender();
+    this.map.triggerRepaint();
   }
 
   private clearSettleTimer() {
@@ -181,108 +222,63 @@ class MapBlurMirrorScheduler {
     this.clearSettleTimer();
     this.settleTimer = window.setTimeout(() => {
       this.settleTimer = 0;
-      if (!this.moving) {
+      if (!this.moving && !this.forcePending) {
         this.unsubscribeRender();
       }
     }, SETTLE_AFTER_MOVE_MS);
   }
 
-  private schedule(force = false) {
-    if (!this.visible || this.mirrors.size === 0) return;
-
-    const now = performance.now();
-
-    if (force) {
-      if (this.timer !== 0) {
-        clearTimeout(this.timer);
-        this.timer = 0;
-      }
-      if (this.raf !== 0) {
-        cancelAnimationFrame(this.raf);
-      }
-      this.raf = requestAnimationFrame(() => {
-        this.raf = 0;
-        this.flush(true);
-      });
-      return;
-    }
-
-    if (this.raf !== 0 || this.timer !== 0) return;
-
-    const nextDelay = this.getNextDelay(now);
-    if (!Number.isFinite(nextDelay)) return; // Idle: do not schedule background poll
-
-    if (nextDelay <= 0) {
-      this.raf = requestAnimationFrame(() => {
-        this.raf = 0;
-        this.flush(false);
-      });
-      return;
-    }
-
-    this.timer = window.setTimeout(() => {
-      this.timer = 0;
-      if (this.raf === 0) {
-        this.raf = requestAnimationFrame(() => {
-          this.raf = 0;
-          this.flush(false);
-        });
-      }
-    }, Math.max(1, Math.ceil(nextDelay)));
-  }
-
-  private getNextDelay(now: number) {
-    let nextDelay = Number.POSITIVE_INFINITY;
-
-    for (const mirror of this.mirrors) {
-      const frameBudget = this.moving
-        ? mirror.frameProfile.activeFrameMs
-        : mirror.frameProfile.idleFrameMs;
-      const elapsed = now - mirror.lastDrawAt;
-      nextDelay = Math.min(nextDelay, Math.max(0, frameBudget - elapsed));
-    }
-
-    return nextDelay;
-  }
-
-  private flush(force: boolean) {
-    if (!this.visible || this.mirrors.size === 0) return;
-
+  /** Downscales the current WebGL frame into the snapshot. Must run inside `render`. */
+  private refreshSnapshot(): boolean {
     const src = this.sourceCanvas;
-    if (!src || src.width === 0 || src.height === 0) return;
+    const ctx = this.snapshotCtx;
+    if (!ctx || !src || src.width === 0 || src.height === 0) return false;
 
-    const srcCanvasRect = this.getSourceRect();
-    if (srcCanvasRect.width <= 0 || srcCanvasRect.height <= 0) return;
+    const srcRect = this.getSourceRect();
+    if (srcRect.width <= 0 || srcRect.height <= 0) return false;
 
+    const targetW = Math.max(32, Math.round(srcRect.width * MIRROR_SCALE));
+    const targetH = Math.max(32, Math.round(srcRect.height * MIRROR_SCALE));
+    if (this.snapshot.width !== targetW || this.snapshot.height !== targetH) {
+      this.snapshot.width = targetW;
+      this.snapshot.height = targetH;
+    }
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'medium';
+    try {
+      ctx.clearRect(0, 0, targetW, targetH);
+      ctx.drawImage(src, 0, 0, src.width, src.height, 0, 0, targetW, targetH);
+      this.snapshotValid = true;
+      return true;
+    } catch {
+      /* drawImage can throw if the WebGL context was lost; ignore one frame */
+      return false;
+    }
+  }
+
+  /** Cuts each due mirror out of the snapshot (2D -> 2D, cheap). */
+  private cutMirrors(force: boolean, dueOnly?: Set<MirrorInstance>) {
+    if (!this.visible || !this.snapshotValid) return;
+
+    const srcRect = this.getSourceRect();
+    if (srcRect.width <= 0 || srcRect.height <= 0) return;
+    const scaleX = this.snapshot.width / srcRect.width;
+    const scaleY = this.snapshot.height / srcRect.height;
     const now = performance.now();
-    const sxScale = src.width / Math.max(srcCanvasRect.width, 1);
-    const syScale = src.height / Math.max(srcCanvasRect.height, 1);
 
     for (const mirror of this.mirrors) {
-      const frameBudget = this.moving
-        ? mirror.frameProfile.activeFrameMs
-        : mirror.frameProfile.idleFrameMs;
-      const elapsed = now - mirror.lastDrawAt;
-      if (!force && elapsed < frameBudget) {
-        continue;
-      }
+      if (dueOnly && !dueOnly.has(mirror)) continue;
 
       const mirrorRect = mirror.cachedTargetRect ?? (mirror.cachedTargetRect = mirror.canvas.getBoundingClientRect());
-      if (mirrorRect.width <= 0 || mirrorRect.height <= 0) {
-        continue;
-      }
+      if (mirrorRect.width <= 0 || mirrorRect.height <= 0) continue;
 
-      const offsetX = mirrorRect.left - srcCanvasRect.left;
-      const offsetY = mirrorRect.top - srcCanvasRect.top;
-      const sx = Math.max(0, Math.floor(offsetX * sxScale));
-      const sy = Math.max(0, Math.floor(offsetY * syScale));
-      const sw = Math.min(src.width - sx, Math.ceil(mirrorRect.width * sxScale));
-      const sh = Math.min(src.height - sy, Math.ceil(mirrorRect.height * syScale));
-      if (sw <= 0 || sh <= 0) {
-        continue;
-      }
+      const sx = Math.max(0, Math.floor((mirrorRect.left - srcRect.left) * scaleX));
+      const sy = Math.max(0, Math.floor((mirrorRect.top - srcRect.top) * scaleY));
+      const sw = Math.min(this.snapshot.width - sx, Math.ceil(mirrorRect.width * scaleX));
+      const sh = Math.min(this.snapshot.height - sy, Math.ceil(mirrorRect.height * scaleY));
+      if (sw <= 0 || sh <= 0) continue;
 
-      // High-quality downscaled buffer with bicubic/bilinear smoothing
       const targetW = Math.max(32, Math.round(mirrorRect.width * MIRROR_SCALE));
       const targetH = Math.max(32, Math.round(mirrorRect.height * MIRROR_SCALE));
       if (mirror.canvas.width !== targetW || mirror.canvas.height !== targetH) {
@@ -290,22 +286,36 @@ class MapBlurMirrorScheduler {
         mirror.canvas.height = targetH;
       }
 
-      mirror.ctx.clearRect(0, 0, mirror.canvas.width, mirror.canvas.height);
       mirror.ctx.imageSmoothingEnabled = true;
-      mirror.ctx.imageSmoothingQuality = 'high';
-      try {
-        mirror.ctx.drawImage(src, sx, sy, sw, sh, 0, 0, mirror.canvas.width, mirror.canvas.height);
-        mirror.lastDrawAt = now;
-      } catch {
-        /* drawImage can throw if the WebGL context was lost; ignore one frame */
-      }
+      mirror.ctx.imageSmoothingQuality = 'medium';
+      mirror.ctx.clearRect(0, 0, targetW, targetH);
+      mirror.ctx.drawImage(this.snapshot, sx, sy, sw, sh, 0, 0, targetW, targetH);
+      if (force || dueOnly) mirror.lastDrawAt = now;
     }
-
-    this.schedule(false);
   }
 
   private readonly handleMapRender = () => {
-    this.schedule(false);
+    const force = this.forcePending;
+    this.forcePending = false;
+    if (!this.visible || this.mirrors.size === 0) return;
+
+    let due: Set<MirrorInstance> | undefined;
+    if (!force) {
+      const now = performance.now();
+      due = new Set();
+      for (const mirror of this.mirrors) {
+        const frameBudget = this.moving
+          ? mirror.frameProfile.activeFrameMs
+          : mirror.frameProfile.idleFrameMs;
+        if (now - mirror.lastDrawAt >= frameBudget) due.add(mirror);
+      }
+      if (due.size === 0) return;
+    }
+
+    if (this.refreshSnapshot()) {
+      this.cutMirrors(true, due);
+    }
+    if (force && !this.moving) this.restartSettleTimer();
   };
 
   private readonly handleMoveStart = () => {
@@ -314,9 +324,7 @@ class MapBlurMirrorScheduler {
       mirror.applyPresentation(true);
       mirror.cachedTargetRect = null;
     }
-    this.clearSettleTimer();
-    this.subscribeRender();
-    this.schedule(true);
+    this.requestForcedCopy();
   };
 
   private readonly handleMoveEnd = () => {
@@ -325,11 +333,12 @@ class MapBlurMirrorScheduler {
       mirror.applyPresentation(false);
       mirror.cachedTargetRect = null;
     }
-    this.schedule(true);
+    this.requestForcedCopy();
     this.restartSettleTimer();
   };
 
   private readonly handleWindowResize = () => {
+    this.invalidateSnapshot();
     this.requestRedraw();
   };
 
@@ -338,10 +347,12 @@ class MapBlurMirrorScheduler {
     if (!this.visible) {
       this.clearSettleTimer();
       this.unsubscribeRender();
-      this.clearScheduledDraw();
+      this.cancelGeometryRaf();
+      this.forcePending = false;
       return;
     }
 
+    this.invalidateSnapshot();
     this.requestRedraw();
   };
 }
@@ -357,7 +368,7 @@ function getMapBlurMirrorScheduler(map: MapboxMap) {
 }
 
 interface MapBlurMirrorProps {
-  /** Mapbox map instance (created with `preserveDrawingBuffer: true`). */
+  /** Mapbox map instance. Copies are taken inside `render`, no `preserveDrawingBuffer` needed. */
   map: MapboxMap | null;
   /** Absolute geometry of the region to mirror. */
   top: number;

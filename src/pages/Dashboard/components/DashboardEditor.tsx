@@ -58,7 +58,7 @@ interface DashboardEditorProps {
   mapLoaded: boolean;
   lidarModeEnabled: boolean;
   setLidarModeEnabled: Dispatch<SetStateAction<boolean>>;
-  isMapFocusMode: boolean;
+  isAllPanelsCollapsed: boolean;
   leftPanelOpen: boolean;
   panelWidth: number;
   leftPanelWidth: number;
@@ -151,7 +151,7 @@ export function DashboardEditor({
   mapLoaded,
   lidarModeEnabled,
   setLidarModeEnabled,
-  isMapFocusMode,
+  isAllPanelsCollapsed,
   leftPanelOpen,
   panelWidth,
   leftPanelWidth,
@@ -206,7 +206,7 @@ export function DashboardEditor({
 }: DashboardEditorProps) {
   const { t } = useAppI18n();
   const [dashboardSearchActiveFilters, setDashboardSearchActiveFilters] = useState<Set<DashboardFilterId>>(
-    () => new Set<DashboardFilterId>(['pois_route', 'favoris', 'pauses', 'waypoints', 'alertes']),
+    () => new Set<DashboardFilterId>(['pois_route', 'favoris', 'pauses', 'waypoints']),
   );
   const [dashboardSearchSelectedPoiCategories, setDashboardSearchSelectedPoiCategories] = useState<Set<DashboardPoiOptionId>>(
     () => new Set<DashboardPoiOptionId>(DASHBOARD_POI_OPTIONS.map((opt) => opt.id)),
@@ -219,7 +219,6 @@ export function DashboardEditor({
       poi: dashboardSearchActiveFilters.has('pois_route'),
       pause: dashboardSearchActiveFilters.has('pauses'),
       favorite: dashboardSearchActiveFilters.has('favoris'),
-      alertes: dashboardSearchActiveFilters.has('alertes'),
       categories:
         dashboardSearchSelectedPoiCategories.size === DASHBOARD_POI_OPTIONS.length
           ? undefined
@@ -317,12 +316,7 @@ export function DashboardEditor({
         <MapViewportControls
           map={mapInstance}
           isMapLoaded={mapLoaded}
-          immersiveMode={
-            isMapFocusMode ||
-            (isLeftPanelCollapsed &&
-              isRightPanelCollapsed &&
-              (isCenterPanelCollapsed || !layout.centerToolbarVisible))
-          }
+          immersiveMode={isAllPanelsCollapsed}
           onToggleImmersiveMode={onToggleMapFocusMode}
           isRightPanelVisible={!isRightPanelCollapsed}
           onToggleRightPanel={isRightPanelCollapsed ? onRestoreRightPanel : onCollapseRightPanel}
@@ -367,7 +361,7 @@ export function DashboardEditor({
           borderRadius={8}
         />
       )}
-      {mapLoaded && shouldRenderPanelMapBlurMirrors && !isMapFocusMode && !isRightPanelCollapsed && (
+      {mapLoaded && shouldRenderPanelMapBlurMirrors && !isRightPanelCollapsed && (
         <MapBlurMirror
           map={mapInstance}
           top={PANEL_PADDING}
@@ -419,7 +413,9 @@ export function DashboardEditor({
                         isMapLoaded={mapLoaded}
                         onRouteStatusChange={onItineraryRouteStatusChange}
                         onRevealCenterPanel={onRestoreCenterPanel}
-                        width={leftPanelWidth}
+                        // Live drag: the panel fills its host (CSS width 100%), so the
+                        // memoized panel does not re-render on every resize frame.
+                        width={isLeftResizing ? undefined : leftPanelWidth}
                         onResizeStart={onLeftResizeStart}
                         isResizing={isLeftResizing}
                         isReturningToBrowser={isClosingProject}
@@ -428,7 +424,6 @@ export function DashboardEditor({
                         waypointsEnabled={dashboardSearchActiveFilters.has('waypoints')}
                         poisRouteEnabled={dashboardSearchActiveFilters.has('pois_route')}
                         favorisEnabled={dashboardSearchActiveFilters.has('favoris')}
-                        alertesEnabled={dashboardSearchActiveFilters.has('alertes')}
                         selectedPoiCategories={dashboardSearchSelectedPoiCategories as Set<string>}
                         globalFilters={globalTimelineFilters}
                       />
@@ -480,14 +475,14 @@ export function DashboardEditor({
                           lidarDownloadModeActive={lidarModeEnabled}
                           onToggleLidarDownloadMode={handleToggleLidarDownloadMode}
                           onCancelLidarSelection={handleLidarSelectionDisable}
-                          width={panelWidth}
+                          width={isResizing ? '100%' : panelWidth}
                           onResizeStart={onRightResizeStart}
                           isResizing={isResizing}
                           onContextMenuOverlayContextChange={setContextMenuOverlayContext}
                         />
                       </div>
                       <div ref={exporterPanelHostRef} style={{ flex: '0 0 auto' }}>
-                        <ExporterPanel width={panelWidth} />
+                        <ExporterPanel width={isResizing ? '100%' : panelWidth} />
                       </div>
                     </div>
                   </div>

@@ -1,0 +1,34 @@
+/*
+ * RedView — verre dépoli (glassmorphism) unique pour tout ce qui flotte sur la carte :
+ * panneaux latéraux, barre de recherche, filtres (POI route, Favoris, Pauses,
+ * Waypoints, POI map), boutons d'outils carte.
+ *
+ * Les panneaux utilisent un miroir flouté de la carte (MapBlurMirror) + `--rv-glass-tint` ;
+ * les petits éléments flottants utilisent `backdrop-filter` avec les mêmes valeurs,
+ * pour un rendu identique.
+ *
+ * Pour changer le verre partout, modifier uniquement les variables ci-dessous.
+ *
+ * Contrat : ajouter la classe `rv-glass` à l'élément (bords arrondis inclus).
+ */
+
+:root {
+  --rv-glass-tint: rgba(14, 14, 18, 0.58);
+  --rv-glass-tint-hover: rgba(14, 14, 18, 0.66);
+  --rv-glass-blur: 30px;
+  --rv-glass-saturate: 1.3;
+  --rv-glass-border: rgba(255, 255, 255, 0.08);
+  --rv-glass-border-hover: rgba(255, 255, 255, 0.16);
+  --rv-glass-radius: 8px;
+  --rv-glass-backdrop: blur(var(--rv-glass-blur)) saturate(var(--rv-glass-saturate));
+}
+
+.rv-glass {
+  background: var(--rv-glass-tint);
+  -webkit-backdrop-filter: var(--rv-glass-backdrop);
+  backdrop-filter: var(--rv-glass-backdrop);
+  border: 1px solid var(--rv-glass-border);
+  border-radius: var(--rv-glass-radius);
+  box-shadow: none;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}

@@ -83,70 +83,10 @@
 
 /* ── Add itinerary popover (Figma node 2190:42467) ────────────── */
 
+/* Apparence : shared/styles/dropdown.css (.rv-dropdown) */
 .rvi-add-itin-menu {
   position: fixed;
   z-index: 1200;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.44);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 18px 42px rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(60px);
-  -webkit-backdrop-filter: blur(60px);
-  isolation: isolate;
-}
-
-.rvi-add-itin-menu__item {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 32px;
-  padding: 6px 12px;
-  color: #fff;
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-.rvi-add-itin-menu__item + .rvi-add-itin-menu__item {
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
-}
-.rvi-add-itin-menu__item:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-.rvi-add-itin-menu__item:focus-visible {
-  outline: none;
-  background: rgba(255, 255, 255, 0.06);
-  box-shadow: inset 0 0 0 1px rgba(197, 0, 0, 0.48);
-}
-.rvi-add-itin-menu__item:disabled {
-  color: rgba(255, 255, 255, 0.34);
-  cursor: default;
-}
-
-.rvi-add-itin-menu__label {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.2;
-}
-
-.rvi-add-itin-menu__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
-  color: rgba(255, 255, 255, 0.96);
 }
 
 .rvi-add-itin-menu__error {
@@ -162,7 +102,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .rvi-dialog[open],
-  .rvi-dialog::backdrop,
-  .rvi-add-itin-menu,
-  .rvi-add-itin-menu__item { animation: none; transition: none; }
+  .rvi-dialog::backdrop { animation: none; transition: none; }
 }

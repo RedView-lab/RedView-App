@@ -262,7 +262,6 @@ export function createDefaultAnalysisPanelState(): AnalysisPanelState {
       waypoint: true,
       poi: true,
       pause: true,
-      alertes: true,
       pente: true,
       jourNuit: false,
     },

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import mapboxgl, { type Map as MapboxMap } from 'mapbox-gl';
-import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
 import type { PoiCategory, PoiFeature } from '@/features/poi/types';
 import { PlaceSearchInput } from '@/features/itineraryPanel/sections/timeline/components';
 import type { GeocodeSuggestion } from '@/features/itineraryPanel/lib/geocoding';
@@ -561,8 +560,7 @@ export function DashboardPlaceSearch({
       ) : null}
 
       <div className="rvd-place-search__row" ref={rootRef}>
-        <div className="rvd-place-search__search-shell">
-          <MapCanvasGlassBackdrop blur={20} saturate={1.2} tint="rgba(14, 14, 18, 0.82)" />
+        <div className="rv-glass rvd-place-search__search-shell">
           <span className="rvd-place-search__icon">
             <SearchIcon />
           </span>
@@ -586,12 +584,7 @@ export function DashboardPlaceSearch({
             }${filter.hasDropdown && isMenuOpen ? ' is-open' : ''}`;
             return (
               <div key={filter.id} className={shellClassName}>
-                <div className="rvd-place-search__filter-shell">
-                  <MapCanvasGlassBackdrop
-                    blur={20}
-                    saturate={1.2}
-                    tint={active ? 'rgba(20, 20, 26, 0.92)' : 'rgba(14, 14, 18, 0.82)'}
-                  />
+                <div className="rv-glass rvd-place-search__filter-shell">
                   <button
                     type="button"
                     className="rvd-place-search__filter-toggle"
@@ -631,61 +624,38 @@ export function DashboardPlaceSearch({
                 {filter.hasDropdown && dropdownMounted && isMenuOpen ? (
                   <div
                     id={`rvd-poi-menu-${filter.id}`}
-                    className={`rvd-place-search__poi-menu${
-                      isMenuOpen ? ' is-open' : ' is-closing'
-                    }`}
+                    className="rv-dropdown rvd-place-search__poi-menu"
                     role="menu"
                     aria-label={t('Catégories POI')}
                   >
-                    <MapCanvasGlassBackdrop
-                      blur={24}
-                      saturate={1.2}
-                      tint="rgba(14, 14, 18, 0.94)"
-                    />
-                    <div className="rvd-place-search__poi-menu-list">
-                      <button
-                        type="button"
-                        role="menuitemcheckbox"
-                        aria-checked={isAllCategoriesSelected}
-                        className="rvd-place-search__poi-option"
-                        style={{
-                          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                          marginBottom: 4,
-                          paddingBottom: 6,
-                        }}
-                        onClick={handleToggleAllCategories}
-                      >
-                        <span className="rvd-place-search__poi-checkbox" aria-hidden="true">
-                          {isAllCategoriesSelected ? <SvgV2Icon name="check.svg" size={12} /> : null}
-                        </span>
-                        <span className="rvd-place-search__poi-option-label" style={{ fontWeight: 600 }}>
-                          {t('Toutes les catégories')}
-                        </span>
-                      </button>
-                      {DASHBOARD_POI_OPTIONS.map((option) => {
-                        const selected = selectedPoiIds.has(option.id);
-                        return (
-                          <button
-                            key={option.id}
-                            type="button"
-                            role="menuitemcheckbox"
-                            aria-checked={selected}
-                            className="rvd-place-search__poi-option"
-                            onClick={() => handleTogglePoiOption(option.id)}
-                          >
-                            <span className="rvd-place-search__poi-checkbox" aria-hidden="true">
-                              {selected ? <SvgV2Icon name="check.svg" size={12} /> : null}
-                            </span>
-                            <span className="rvd-place-search__poi-option-marker">
-                              <PoiOptionMarker option={option} />
-                            </span>
-                            <span className="rvd-place-search__poi-option-label">
-                              {t(option.label)}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <button
+                      type="button"
+                      role="menuitemcheckbox"
+                      aria-checked={isAllCategoriesSelected}
+                      className={`rv-dropdown__item${isAllCategoriesSelected ? ' is-selected' : ''}`}
+                      onClick={handleToggleAllCategories}
+                    >
+                      <span className="rv-dropdown__label">{t('Toutes les catégories')}</span>
+                    </button>
+                    <div className="rv-dropdown__divider" />
+                    {DASHBOARD_POI_OPTIONS.map((option) => {
+                      const selected = selectedPoiIds.has(option.id);
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          role="menuitemcheckbox"
+                          aria-checked={selected}
+                          className={`rv-dropdown__item${selected ? ' is-selected' : ''}`}
+                          onClick={() => handleTogglePoiOption(option.id)}
+                        >
+                          <span className="rvd-place-search__poi-option-marker">
+                            <PoiOptionMarker option={option} />
+                          </span>
+                          <span className="rv-dropdown__label">{t(option.label)}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 ) : null}
               </div>

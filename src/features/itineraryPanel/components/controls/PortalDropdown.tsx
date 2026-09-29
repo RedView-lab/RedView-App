@@ -6,20 +6,26 @@ interface PortalDropdownProps {
   anchorRef: RefObject<HTMLElement | null>;
   onClose: () => void;
   children: ReactNode;
+  /** Largeur fixe (px non scalés). Par défaut : max(minWidth, largeur de l'ancre). */
   width?: number;
   minWidth?: number;
   className?: string;
   align?: 'left' | 'right';
+  /** Hauteur de repli tant que le menu n'a pas encore été mesuré (px non scalés). */
   estimatedHeight?: number;
 }
 
+/**
+ * Menu déroulant rendu en portal. Apparence : `.rv-dropdown` (shared/styles/dropdown.css).
+ * Les enfants doivent porter la classe `rv-dropdown__item`.
+ */
 export function PortalDropdown({
   open,
   anchorRef,
   onClose,
   children,
   width,
-  minWidth,
+  minWidth = 140,
   className = '',
   align = 'right',
   estimatedHeight = 150,
@@ -28,7 +34,7 @@ export function PortalDropdown({
     top: number;
     left: number;
     width: number;
-    placeAbove: boolean;
+    scale: number;
   } | null>(null);
 
   const menuRef = useRef<HTMLDivElement>(null);
@@ -69,53 +75,58 @@ export function PortalDropdown({
       );
       const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
 
-      const resolvedWidth =
-        typeof width === 'number'
-          ? width * scale
-          : Math.max(minWidth ? minWidth * scale : rect.width, rect.width);
+      const unscaledWidth = typeof width === 'number' ? width : Math.max(minWidth, rect.width / scale);
+      const scaledWidth = unscaledWidth * scale;
 
+      const measuredHeight = menuRef.current?.offsetHeight;
+      const neededHeight = (measuredHeight && measuredHeight > 0 ? measuredHeight : estimatedHeight) * scale;
       const spaceBelow = window.innerHeight - rect.bottom - 8;
-      const neededHeight = estimatedHeight * scale;
       const placeAbove = spaceBelow < neededHeight && rect.top > spaceBelow;
 
       const top = placeAbove
         ? rect.top - neededHeight - 4 * scale
         : rect.bottom + 4 * scale;
 
-      let left = align === 'right' ? rect.right - resolvedWidth : rect.left;
+      let left = align === 'right' ? rect.right - scaledWidth : rect.left;
 
       // Keep within viewport boundaries
-      left = Math.max(8, Math.min(left, window.innerWidth - resolvedWidth - 8));
+      left = Math.max(8, Math.min(left, window.innerWidth - scaledWidth - 8));
 
       setPos({
         top: Math.max(8, top),
         left,
-        width: resolvedWidth,
-        placeAbove,
+        width: unscaledWidth,
+        scale,
       });
     };
 
     updatePos();
+    // Second pass once the menu is in the DOM so its real height drives placement.
+    const raf = requestAnimationFrame(updatePos);
 
     window.addEventListener('scroll', updatePos, true);
     window.addEventListener('resize', updatePos);
     return () => {
+      cancelAnimationFrame(raf);
       window.removeEventListener('scroll', updatePos, true);
       window.removeEventListener('resize', updatePos);
     };
   }, [open, anchorRef, width, minWidth, align, estimatedHeight]);
 
-  if (!open || !pos) return null;
+  if (!open) return null;
 
   return createPortal(
     <div
       ref={menuRef}
-      className={`rvi-portal-dropdown ${className}`}
+      className={`rv-dropdown rvi-portal-dropdown ${className}`}
       style={{
         position: 'fixed',
-        top: `${pos.top}px`,
-        left: `${pos.left}px`,
-        width: `${pos.width}px`,
+        top: `${pos?.top ?? 0}px`,
+        left: `${pos?.left ?? 0}px`,
+        width: `${pos?.width ?? minWidth}px`,
+        transform: `scale(${pos?.scale ?? 1})`,
+        transformOrigin: 'top left',
+        visibility: pos ? 'visible' : 'hidden',
         zIndex: 2147483647,
       }}
       role="listbox"

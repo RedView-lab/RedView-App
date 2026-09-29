@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
+import { isFreeCamActive } from '@/features/freeCam';
 
 export interface UseCinematicIdleRotateOptions {
   /**
@@ -87,6 +88,7 @@ export function useCinematicIdleRotate(
     const startRotation = () => {
       if (isRotatingRef.current) return;
       if (document.hidden) return;
+      if (isFreeCamActive()) return;
       if (!map || typeof map.getBearing !== 'function') return;
 
       isRotatingRef.current = true;

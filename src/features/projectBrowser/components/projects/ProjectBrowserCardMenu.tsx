@@ -83,32 +83,38 @@ export function ProjectBrowserCardMenu({
   return createPortal(
     <div
       ref={menuRef}
-      className="rvpb-card-menu"
+      className="rv-dropdown rvpb-card-menu"
       role="menu"
       aria-label={t(title)}
       style={{ top: menuStyle.top, left: menuStyle.left, width: MENU_WIDTH }}
     >
       {onDuplicate ? (
-        <button type="button" className="rvpb-card-menu__item" role="menuitem" onClick={onDuplicate}>
-          <span>{t('Dupliquer')}</span>
-          <SvgV2Icon name="copy-03.svg" size={16} />
+        <button type="button" className="rv-dropdown__item" role="menuitem" onClick={onDuplicate}>
+          <span className="rv-dropdown__label">{t('Dupliquer')}</span>
+          <span className="rv-dropdown__icon" aria-hidden>
+            <SvgV2Icon name="copy-03.svg" size={16} />
+          </span>
         </button>
       ) : null}
 
-      <button type="button" className="rvpb-card-menu__item" role="menuitem" onClick={onRename}>
-        <span>{isFolderMenu ? t('Renommer le dossier') : t('Renommer')}</span>
-        <SvgV2Icon name="edit-01.svg" size={16} />
+      <button type="button" className="rv-dropdown__item" role="menuitem" onClick={onRename}>
+        <span className="rv-dropdown__label">{isFolderMenu ? t('Renommer le dossier') : t('Renommer')}</span>
+        <span className="rv-dropdown__icon" aria-hidden>
+          <SvgV2Icon name="edit-01.svg" size={16} />
+        </span>
       </button>
 
       <button
         type="button"
-        className="rvpb-card-menu__item"
+        className="rv-dropdown__item"
         role="menuitem"
         aria-expanded={moveOpen}
         onClick={() => setMoveOpen((prev) => !prev)}
       >
-        <span>{t('Déplacer vers...')}</span>
-        <SvgV2Icon name="arrow-circle-right.svg" size={16} />
+        <span className="rv-dropdown__label">{t('Déplacer vers...')}</span>
+        <span className="rv-dropdown__icon" aria-hidden>
+          <SvgV2Icon name="arrow-circle-right.svg" size={16} />
+        </span>
       </button>
 
       {moveOpen ? (
@@ -117,14 +123,14 @@ export function ProjectBrowserCardMenu({
             <button
               key={destination.id ?? '__root__'}
               type="button"
-              className="rvpb-card-menu__move-item"
+              className="rv-dropdown__item rvpb-card-menu__move-item"
               disabled={destination.disabled}
               onClick={() => {
                 onMove(destination.id);
                 onClose();
               }}
             >
-              {destination.label}
+              <span className="rv-dropdown__label">{destination.label}</span>
             </button>
           ))}
         </div>
@@ -132,12 +138,14 @@ export function ProjectBrowserCardMenu({
 
       <button
         type="button"
-        className="rvpb-card-menu__item rvpb-card-menu__item--danger"
+        className="rv-dropdown__item rv-dropdown__item--danger"
         role="menuitem"
         onClick={onDelete}
       >
-        <span>{isFolderMenu ? t('Supprimer le dossier') : t('Supprimer')}</span>
-        <SvgV2Icon name="trash-03.svg" size={16} />
+        <span className="rv-dropdown__label">{isFolderMenu ? t('Supprimer le dossier') : t('Supprimer')}</span>
+        <span className="rv-dropdown__icon" aria-hidden>
+          <SvgV2Icon name="trash-03.svg" size={16} />
+        </span>
       </button>
     </div>,
     document.body,

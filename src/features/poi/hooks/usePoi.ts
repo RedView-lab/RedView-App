@@ -1,12 +1,10 @@
 // POI engine hook — fetches POIs along the active GPX corridor and renders
-// them as 3D DOM markers on the Mapbox map.
+// them on the 3D Mapbox map.
 //
-// Rendering is delegated to `PoiMarkerManager` (lib/poi-markers.ts), which
-// uses `mapboxgl.Marker` DOM overlays instead of symbol layers. DOM markers
-// survive style reloads and are immune to the symbol-placement/terrain
-// occlusion culling that previously made POIs invisible on the 3D map, so
-// this hook no longer needs any `styledata` resynchronisation, sprite
-// registration or source/layer lifecycle management.
+// Rendering is delegated to `PoiMarkerManager` (lib/poi-markers.ts): one GPU
+// symbol layer with pre-rasterised sprites, placement/occlusion culling
+// disabled explicitly, and its own style-reload reinstall. This hook only
+// feeds it the filtered feature list.
 //
 // Filtering policy — EXHAUSTIVE BY DESIGN:
 //   The only filter applied is the one the user configures: for each
@@ -16,7 +14,7 @@
 //   culling any more — the map must show *all* the POIs that exist within
 //   the requested distance. See lib/corridor-distance-filter.ts.
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useMemo, useRef, useCallback, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import type { PoiCategory, PoiFeature, GpxRoute } from '../types';
@@ -141,16 +139,20 @@ export function usePoi(
     : 'off';
   // Identity of the itinerary's saved features: a change signals an
   // itinerary switch or a favorite toggle and prompts a marker rehydration.
-  const initialFeaturesKey = initialFeatures && initialFeatures.length > 0
-    ? initialFeatures.map((feature) => [
-      feature.id,
-      feature.category,
-      feature.favorite ? '1' : '0',
-      feature.pauseDurationMin ?? 0,
-      feature.lat,
-      feature.lon,
-    ].join(':')).join('|')
-    : 'empty';
+  // Memoised on the array reference: O(n) only when the features change,
+  // not on every render of the itinerary panel.
+  const initialFeaturesKey = useMemo(() => (
+    initialFeatures && initialFeatures.length > 0
+      ? initialFeatures.map((feature) => [
+        feature.id,
+        feature.category,
+        feature.favorite ? '1' : '0',
+        feature.pauseDurationMin ?? 0,
+        feature.lat,
+        feature.lon,
+      ].join(':')).join('|')
+      : 'empty'
+  ), [initialFeatures]);
 
   // ── Feature filtering ─────────────────────────────────────────────
   //
@@ -261,12 +263,16 @@ export function usePoi(
         signal: controller.signal,
         onProgress: (deduped, { done, total }) => {
           if (controller.signal.aborted) return;
+          setCorridorProgress(total > 0 ? done / total : 0);
+          // The empty "request started" tick must NOT wipe the rendered POIs
+          // (it used to clear every marker and rebuild them all on response),
+          // and the final tick is handled once by the completion branch below.
+          if (deduped.length === 0 || done >= total) return;
           const all = mergeCorridorWithSavedFeatures(deduped, initialFeaturesRef.current);
           lastCorridorFeatures.current = all;
           const rendered = buildRenderableFeatures(all);
           syncRenderedFeatures(rendered);
           onCorridorUpdateRef.current?.(rendered);
-          setCorridorProgress(total > 0 ? done / total : 0);
         },
       });
       if (!controller.signal.aborted) {

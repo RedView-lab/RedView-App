@@ -1,7 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { useAppI18n } from '@/shared/i18n';
-import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
-import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
 import { IconCheck, IconChevronDown, IconStar } from '../../components/icons';
 import { KindBadge } from './KindBadge';
 import type { TimelineFilterState } from './TimelineFilters';
@@ -201,60 +199,39 @@ export function TimelineSheetFilterPanel({
             <div
               id={menuId}
               ref={poiMenuContainerRef}
-              className="rvi-tl-sheet-filters__poi-menu is-open"
+              className="rv-dropdown rvi-tl-sheet-filters__poi-menu"
               role="menu"
               aria-label={t('Catégories POI')}
               onWheel={(e) => e.stopPropagation()}
             >
-              <MapCanvasGlassBackdrop
-                blur={24}
-                saturate={1.2}
-                tint="rgba(14, 14, 18, 0.94)"
-              />
-              <div className="rvd-place-search__poi-menu-list">
-                <button
-                  type="button"
-                  role="menuitemcheckbox"
-                  aria-checked={isAllCategoriesSelected}
-                  className="rvd-place-search__poi-option"
-                  style={{
-                    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                    marginBottom: 4,
-                    paddingBottom: 6,
-                  }}
-                  onClick={handleToggleAllCategories}
-                >
-                  <span className="rvd-place-search__poi-checkbox" aria-hidden="true">
-                    {isAllCategoriesSelected ? <SvgV2Icon name="check.svg" size={12} /> : null}
-                  </span>
-                  <span className="rvd-place-search__poi-option-label" style={{ fontWeight: 600 }}>
-                    {t('Toutes les catégories')}
-                  </span>
-                </button>
-                {DASHBOARD_POI_OPTIONS.map((option) => {
-                  const selected = activeCategories.has(option.id);
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      role="menuitemcheckbox"
-                      aria-checked={selected}
-                      className="rvd-place-search__poi-option"
-                      onClick={() => handleToggleCategory(option.id)}
-                    >
-                      <span className="rvd-place-search__poi-checkbox" aria-hidden="true">
-                        {selected ? <SvgV2Icon name="check.svg" size={12} /> : null}
-                      </span>
-                      <span className="rvd-place-search__poi-option-marker">
-                        <PoiOptionMarker option={option} />
-                      </span>
-                      <span className="rvd-place-search__poi-option-label">
-                        {t(option.label)}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+              <button
+                type="button"
+                role="menuitemcheckbox"
+                aria-checked={isAllCategoriesSelected}
+                className={`rv-dropdown__item${isAllCategoriesSelected ? ' is-selected' : ''}`}
+                onClick={handleToggleAllCategories}
+              >
+                <span className="rv-dropdown__label">{t('Toutes les catégories')}</span>
+              </button>
+              <div className="rv-dropdown__divider" />
+              {DASHBOARD_POI_OPTIONS.map((option) => {
+                const selected = activeCategories.has(option.id);
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    role="menuitemcheckbox"
+                    aria-checked={selected}
+                    className={`rv-dropdown__item${selected ? ' is-selected' : ''}`}
+                    onClick={() => handleToggleCategory(option.id)}
+                  >
+                    <span className="rvd-place-search__poi-option-marker">
+                      <PoiOptionMarker option={option} />
+                    </span>
+                    <span className="rv-dropdown__label">{t(option.label)}</span>
+                  </button>
+                );
+              })}
             </div>
           ) : null}
         </div>

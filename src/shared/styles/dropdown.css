@@ -1,0 +1,238 @@
+/*
+ * RedView — style unique de TOUS les dropdowns / menus déroulants.
+ *
+ * Source de vérité : Figma "REGLAGE ECHELLE" (liste 140px, fond sombre,
+ * lignes de 30px, Rethink Sans 600 14/18, coche 16px sur l'item sélectionné).
+ *
+ * Pour changer l'apparence de tous les dropdowns de l'app, modifier
+ * uniquement les variables ci-dessous.
+ *
+ * Contrat :
+ *   - conteneur du menu  → classe `rv-dropdown`
+ *   - chaque ligne       → classe `rv-dropdown__item`
+ *       état sélectionné → `.is-selected` ou `aria-selected="true"` (coche auto)
+ *       état survol clavier → `.is-active` (même rendu que :hover)
+ *       état désactivé   → `.is-disabled`, `:disabled` ou `aria-disabled="true"`
+ *       action critique  → `.rv-dropdown__item--danger`
+ *   - libellé (optionnel)→ `rv-dropdown__label` (sinon le 1er <span> de l'item)
+ *   - icône (optionnel)  → `rv-dropdown__icon`
+ *   - séparateur         → `rv-dropdown__divider`
+ *   - `rv-dropdown__item--no-check` masque la coche (ex. autocomplete, où
+ *     aria-selected désigne la ligne survolée et non une valeur choisie).
+ *
+ * Les sélecteurs sont préfixés par `:root` pour passer devant les styles de
+ * layout propres à chaque feature (chargés plus tard, en lazy).
+ */
+
+:root {
+  /* Conteneur */
+  --rv-dropdown-bg: rgba(15, 15, 15, 0.74);
+  --rv-dropdown-backdrop: blur(60px);
+  --rv-dropdown-radius: 8px;
+  --rv-dropdown-padding: 0px;
+  --rv-dropdown-border: none;
+  --rv-dropdown-shadow: none;
+  --rv-dropdown-width: 140px;
+  --rv-dropdown-min-width: 80px;
+  --rv-dropdown-max-height: 260px;
+  --rv-dropdown-scrollbar-thumb: rgba(255, 255, 255, 0.24);
+
+  /* Lignes */
+  --rv-dropdown-item-height: 30px;
+  --rv-dropdown-item-padding: 6px 6px 6px 10px;
+  --rv-dropdown-item-gap: 4px;
+  --rv-dropdown-item-radius: 0px;
+  --rv-dropdown-item-bg: transparent;
+  --rv-dropdown-item-hover-bg: rgba(255, 255, 255, 0.16);
+  --rv-dropdown-item-selected-bg: rgba(255, 255, 255, 0.16);
+  --rv-dropdown-item-disabled-opacity: 0.4;
+  --rv-dropdown-item-danger-color: #ff6b6b;
+
+  /* Typo */
+  --rv-dropdown-font-family: 'Rethink Sans', system-ui, -apple-system, sans-serif;
+  --rv-dropdown-font-size: 14px;
+  --rv-dropdown-font-weight: 600;
+  --rv-dropdown-line-height: 18px;
+  --rv-dropdown-color: #ffffff;
+
+  /* Icônes / coche */
+  --rv-dropdown-icon-size: 16px;
+  --rv-dropdown-check-size: 16px;
+  --rv-dropdown-check-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M13.333 4 6 11.333 2.667 8' stroke='%23000' stroke-width='1.66667' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+
+  /* Séparateur */
+  --rv-dropdown-divider-color: rgba(255, 255, 255, 0.1);
+}
+
+/* ── Conteneur ─────────────────────────────────────────────── */
+
+/* Dimensions : spécificité nulle, chaque feature peut les ajuster (ancrage). */
+:where(.rv-dropdown) {
+  width: var(--rv-dropdown-width);
+  min-width: var(--rv-dropdown-min-width);
+  max-height: var(--rv-dropdown-max-height);
+}
+
+/* Apparence : prioritaire sur les styles des features. */
+:root .rv-dropdown {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  box-sizing: border-box;
+  padding: var(--rv-dropdown-padding);
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--rv-dropdown-bg);
+  -webkit-backdrop-filter: var(--rv-dropdown-backdrop);
+  backdrop-filter: var(--rv-dropdown-backdrop);
+  border: var(--rv-dropdown-border);
+  border-radius: var(--rv-dropdown-radius);
+  box-shadow: var(--rv-dropdown-shadow);
+  color: var(--rv-dropdown-color);
+  font-family: var(--rv-dropdown-font-family);
+  font-size: var(--rv-dropdown-font-size);
+  font-weight: var(--rv-dropdown-font-weight);
+  line-height: var(--rv-dropdown-line-height);
+  font-style: normal;
+  letter-spacing: normal;
+  animation: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rv-dropdown-scrollbar-thumb) transparent;
+}
+
+:root .rv-dropdown::-webkit-scrollbar {
+  width: 4px;
+}
+
+:root .rv-dropdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+:root .rv-dropdown::-webkit-scrollbar-thumb {
+  background: var(--rv-dropdown-scrollbar-thumb);
+  border-radius: 4px;
+}
+
+:root .rv-dropdown[hidden],
+:root .rv-dropdown .rv-dropdown__item[hidden] {
+  display: none;
+}
+
+/* ── Lignes ────────────────────────────────────────────────── */
+:root .rv-dropdown .rv-dropdown__item {
+  all: unset;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  flex: none;
+  gap: var(--rv-dropdown-item-gap);
+  box-sizing: border-box;
+  width: 100%;
+  min-width: var(--rv-dropdown-min-width);
+  height: var(--rv-dropdown-item-height);
+  min-height: var(--rv-dropdown-item-height);
+  padding: var(--rv-dropdown-item-padding);
+  margin: 0;
+  border: none;
+  border-radius: var(--rv-dropdown-item-radius);
+  background: var(--rv-dropdown-item-bg);
+  color: var(--rv-dropdown-color);
+  font-family: var(--rv-dropdown-font-family);
+  font-size: var(--rv-dropdown-font-size);
+  font-weight: var(--rv-dropdown-font-weight);
+  line-height: var(--rv-dropdown-line-height);
+  font-style: normal;
+  letter-spacing: normal;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  opacity: 1;
+  transition: background-color 0.12s ease;
+}
+
+:root .rv-dropdown .rv-dropdown__item:hover,
+:root .rv-dropdown .rv-dropdown__item:focus-visible,
+:root .rv-dropdown .rv-dropdown__item.is-active {
+  background: var(--rv-dropdown-item-hover-bg);
+  color: var(--rv-dropdown-color);
+}
+
+:root .rv-dropdown .rv-dropdown__item.is-selected,
+:root .rv-dropdown .rv-dropdown__item[aria-selected='true'] {
+  background: var(--rv-dropdown-item-selected-bg);
+  color: var(--rv-dropdown-color);
+}
+
+:root .rv-dropdown .rv-dropdown__item.is-disabled,
+:root .rv-dropdown .rv-dropdown__item:disabled,
+:root .rv-dropdown .rv-dropdown__item[aria-disabled='true'] {
+  opacity: var(--rv-dropdown-item-disabled-opacity);
+  cursor: default;
+  background: var(--rv-dropdown-item-bg);
+}
+
+:root .rv-dropdown .rv-dropdown__item--danger:not(:disabled) {
+  color: var(--rv-dropdown-item-danger-color);
+}
+
+/* Libellé : prend toute la place, tronqué si trop long */
+:root .rv-dropdown .rv-dropdown__label,
+:root .rv-dropdown .rv-dropdown__item > span:first-of-type:not([class]) {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: inherit;
+  font: inherit;
+}
+
+:root .rv-dropdown .rv-dropdown__item > svg {
+  flex: none;
+  width: var(--rv-dropdown-icon-size);
+  height: var(--rv-dropdown-icon-size);
+}
+
+/* Icône d'action (avant ou après le libellé) */
+:root .rv-dropdown .rv-dropdown__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--rv-dropdown-icon-size);
+  height: var(--rv-dropdown-icon-size);
+  color: inherit;
+}
+
+/* Coche automatique sur la ligne sélectionnée */
+:root .rv-dropdown .rv-dropdown__item::after {
+  content: '';
+  flex: none;
+  width: var(--rv-dropdown-check-size);
+  height: var(--rv-dropdown-check-size);
+  margin-left: auto;
+  display: none;
+  background-color: currentColor;
+  -webkit-mask: var(--rv-dropdown-check-icon) center / contain no-repeat;
+  mask: var(--rv-dropdown-check-icon) center / contain no-repeat;
+}
+
+:root .rv-dropdown .rv-dropdown__item.is-selected::after,
+:root .rv-dropdown .rv-dropdown__item[aria-selected='true']::after {
+  display: block;
+}
+
+:root .rv-dropdown .rv-dropdown__item--no-check::after {
+  display: none !important;
+}
+
+/* Séparateur */
+:root .rv-dropdown .rv-dropdown__divider {
+  flex: none;
+  height: 1px;
+  margin: 0;
+  background: var(--rv-dropdown-divider-color);
+}

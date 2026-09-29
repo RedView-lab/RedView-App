@@ -1,37 +1,52 @@
-// 3D POI markers — DOM `mapboxgl.Marker` pipeline.
+// 3D POI markers — GPU `symbol` layer pipeline.
 //
-// POIs are rendered as DOM markers rather than symbol layers, on purpose:
+// POIs used to be one DOM `mapboxgl.Marker` each. With exhaustive corridor
+// searches (800+ POIs on a GR20-like route) that meant thousands of DOM nodes,
+// ~3 200 map listeners, one terrain projection + one occlusion raycast per
+// marker on every camera frame, and 800 CSS drop-shadows repainted per frame.
 //
-// - DOM markers are never culled by Mapbox's symbol placement engine or by
-//   terrain depth-occlusion (the repeated failure mode of the previous
-//   symbol-layer implementation at the app's default 60° pitch).
-// - They survive `setStyle()` reloads — no sprite re-registration, no
-//   source/layer re-creation on `styledata`.
-// - Icons are plain `<img src>` SVGs: no canvas rasterisation, no sprite
-//   atlas races, no `addImage` lifecycle.
+// They are now drawn by ONE Mapbox symbol layer fed by ONE GeoJSON source:
 //
-// Terrain note: markers carry NO `altitude` option, exactly like the
-// viewport POI markers in DashboardPlaceSearch (the reference
-// implementation, verified pixel-perfect on 3D terrain). Mapbox samples the
-// rendered (exaggerated) DEM itself on every projection and keeps the
-// marker glued to the surface through rotation/pitch/zoom. Never set an
-// altitude on top — any extra meters displace the pin vertically and make
-// it drift with parallax when the camera rotates. An `idle` nudge
-// re-projects markers created before DEM tiles loaded.
+// - Sprites are composed once per visual variant (category × favorite ×
+//   pause) by `poi-sprites.ts` — same SVGs, same badges, shadows baked in —
+//   and registered with `addImage` at a HiDPI pixel ratio.
+// - The historical failure modes of the old symbol-layer implementation are
+//   neutralised explicitly: `icon-allow-overlap` + `icon-ignore-placement`
+//   (placement never drops a POI), `icon-occlusion-opacity` (terrain
+//   occlusion handled by the GPU depth test, same result as the former
+//   `occludedOpacity: 0`), viewport pitch/rotation alignment.
+// - Style reloads are handled by re-installing source/images/layers on
+//   `styledata` (cheap `getLayer` guard).
+// - Hover uses `feature-state` + a one-feature highlight layer; a single
+//   shared `Popup` replaces the 800 per-marker instances.
+//
+// Per-frame cost is therefore independent of the number of POIs.
 
 import mapboxgl from 'mapbox-gl';
-import type { Map as MapboxMap } from 'mapbox-gl';
+import type {
+  ExpressionSpecification,
+  GeoJSONSource,
+  Map as MapboxMap,
+  MapMouseEvent,
+} from 'mapbox-gl';
 import { flyToLocation } from '@/features/map3d';
 
 import type { PoiFeature } from '../types';
 import { POI_LABELS } from '../types';
-import { getPoiIconUrl, hasDedicatedFavoritePoiIcon } from './poi-icons';
 import {
   buildPopupContent,
   resolvePopupState,
   type PoiPopupState,
   type UsePoiPopupActions,
 } from './poi-popup';
+import {
+  getPoiSpriteId,
+  getPoiSpritePixelRatio,
+  getPoiSpriteSpec,
+  rasterizePoiSprite,
+  type PoiSprite,
+  type PoiSpriteSpec,
+} from './poi-sprites';
 
 // ── Visual tuning ─────────────────────────────────────────────────────
 
@@ -41,215 +56,196 @@ const MARKER_MIN_SCREEN_SCALE = 0.42;
 const MARKER_MAX_SCREEN_SCALE = 1;
 const MARKER_MIN_POPUP_OFFSET_PX = 38;
 const MARKER_MAX_POPUP_OFFSET_PX = 80;
-/** Occlusion relief 3D : 0 pour masquer complètement les POI situés derrière les montagnes. */
-const MARKER_OCCLUDED_OPACITY = 0;
-const FAVORITE_BADGE_ICON_URL = '/svgv2/icone/star-01.svg';
+// Terrain occlusion: `icon-occlusion-opacity` is deliberately NOT set. Absent,
+// Mapbox fully hides icons behind the relief only (same result as the former
+// DOM `occludedOpacity: 0`). Setting it switches to a generic depth test, and
+// the route line — elevated in 3D via `line-z-offset` — then hid the icons.
+/** Hover lift, identical to the former `.rv-poi-marker:hover` CSS. */
+const HOVER_SCALE = 1.03;
+const HOVER_LIFT_PX = 4;
 /**
  * Niveau de zoom auto lors d'un focus POI (14.5 au lieu de 15.5).
  * En projection Web Mercator, -1 niveau de zoom divise l'échelle par 2 (zoom 2x moins fort).
  */
 export const POI_AUTO_ZOOM_LEVEL = 14.5;
 
-interface PoiMarkerEntry {
-  marker: mapboxgl.Marker;
-  popup: mapboxgl.Popup;
-  signature: string;
-  feature: PoiFeature;
-}
+export const POI_GPU_SOURCE_ID = 'rv-poi-gpu-source';
+export const POI_GPU_LAYER_ID = 'rv-poi-gpu-symbols';
+export const POI_GPU_HOVER_LAYER_ID = 'rv-poi-gpu-hover';
 
 export function getMarkerKey(feature: PoiFeature): string {
   return `${feature.category}:${feature.id}`;
 }
 
-function getMarkerSignature(feature: PoiFeature): string {
-  return [
-    feature.lat,
-    feature.lon,
-    feature.category,
-    feature.favorite ? 'favorite' : 'default',
-    feature.pauseDurationMin ?? 0,
-    feature.name ?? '',
-    feature.tags.opening_hours ?? '',
-  ].join('|');
-}
-
-// ── Marker DOM ────────────────────────────────────────────────────────
-
-function createMarkerElement(feature: PoiFeature): HTMLButtonElement {
-  const isPin = Boolean(feature.favorite);
-  const element = document.createElement('button');
-  element.type = 'button';
-  element.className = `rv-poi-marker ${isPin ? 'is-favorite rv-poi-marker--favorite rv-poi-marker--pin' : 'rv-poi-marker--round'}`;
-  element.dataset.poiCategory = feature.category;
-  element.style.zIndex = feature.favorite ? '50' : '20';
-  element.setAttribute(
-    'aria-label',
-    feature.name?.trim()
-      ? `${feature.name} - ${POI_LABELS[feature.category]}`
-      : POI_LABELS[feature.category],
-  );
-  element.title = feature.name?.trim() || POI_LABELS[feature.category];
-
-  const inner = document.createElement('div');
-  inner.className = 'rv-poi-marker__inner';
-
-  const image = document.createElement('img');
-  image.className = 'rv-poi-marker__img';
-  image.src = getPoiIconUrl(feature.category, feature.favorite === true);
-  image.alt = '';
-  image.draggable = false;
-  image.decoding = 'async';
-  inner.appendChild(image);
-
-  // Categories without a dedicated favorite sprite get a star badge overlay.
-  if (feature.favorite && !hasDedicatedFavoritePoiIcon(feature.category)) {
-    const badge = document.createElement('span');
-    badge.className = 'rv-poi-marker__favorite-badge';
-    badge.setAttribute('aria-hidden', 'true');
-
-    const badgeIcon = document.createElement('img');
-    badgeIcon.className = 'rv-poi-marker__favorite-badge-icon';
-    badgeIcon.src = FAVORITE_BADGE_ICON_URL;
-    badgeIcon.alt = '';
-    badgeIcon.draggable = false;
-    badge.appendChild(badgeIcon);
-
-    inner.appendChild(badge);
-  }
-
-  // Symbol with pause time for POIs associated with pauses
-  if (feature.pauseDurationMin && feature.pauseDurationMin > 0) {
-    const pauseBadge = document.createElement('span');
-    pauseBadge.className = 'rv-poi-marker__pause-badge';
-    pauseBadge.setAttribute('aria-label', `Pause ${feature.pauseDurationMin} min`);
-    pauseBadge.innerHTML = `<span class="rv-poi-marker__pause-symbol" aria-hidden="true">❚❚</span><span class="rv-poi-marker__pause-duration">${feature.pauseDurationMin} min</span>`;
-    inner.appendChild(pauseBadge);
-  }
-
-  element.appendChild(inner);
-
-  element.addEventListener('mouseenter', () => {
-    element.style.zIndex = '100';
-  });
-  element.addEventListener('mouseleave', () => {
-    element.style.zIndex = feature.favorite ? '50' : '20';
-  });
-
-  return element;
-}
-
 // ── Zoom-responsive sizing ────────────────────────────────────────────
 
-interface PoiMarkerVisualState {
-  scale: number;
-  popupOffsetPx: number;
-}
-
-function getMarkerVisualState(zoom: number): PoiMarkerVisualState {
+/** Former CSS: box = base * (0.8 + 0.35 * scale), scale = smoothstep(zoom). */
+function getIconSizeAtZoom(zoom: number): number {
   const progress = smoothstep(MARKER_MIN_SCALE_ZOOM, MARKER_MAX_SCALE_ZOOM, zoom);
-  return {
-    scale: lerp(MARKER_MIN_SCREEN_SCALE, MARKER_MAX_SCREEN_SCALE, progress),
-    popupOffsetPx: Math.round(
-      lerp(MARKER_MIN_POPUP_OFFSET_PX, MARKER_MAX_POPUP_OFFSET_PX, progress),
-    ),
-  };
+  const scale = lerp(MARKER_MIN_SCREEN_SCALE, MARKER_MAX_SCREEN_SCALE, progress);
+  return 0.8 + 0.35 * scale;
 }
 
-function applyMarkerVisualState(entry: PoiMarkerEntry, zoom: number): void {
-  const el = entry.marker.getElement();
-  const visual = getMarkerVisualState(zoom);
-  el.style.setProperty(
-    '--rv-poi-marker-scale',
-    visual.scale.toFixed(3),
-  );
-  entry.popup.setOffset([0, visual.popupOffsetPx]);
+function getPopupOffsetAtZoom(zoom: number): number {
+  const progress = smoothstep(MARKER_MIN_SCALE_ZOOM, MARKER_MAX_SCALE_ZOOM, zoom);
+  return Math.round(lerp(MARKER_MIN_POPUP_OFFSET_PX, MARKER_MAX_POPUP_OFFSET_PX, progress));
+}
+
+/** Piecewise-linear sampling of the smoothstep curve as a zoom expression. */
+function buildIconSizeExpression(multiplier = 1): ExpressionSpecification {
+  const stops: number[] = [];
+  const steps = 10;
+  for (let i = 0; i <= steps; i += 1) {
+    const zoom = MARKER_MIN_SCALE_ZOOM + ((MARKER_MAX_SCALE_ZOOM - MARKER_MIN_SCALE_ZOOM) * i) / steps;
+    stops.push(Number(zoom.toFixed(3)), Number((getIconSizeAtZoom(zoom) * multiplier).toFixed(4)));
+  }
+  return ['interpolate', ['linear'], ['zoom'], ...stops] as ExpressionSpecification;
+}
+
+// ── GeoJSON ───────────────────────────────────────────────────────────
+
+interface PoiGeoJsonProperties {
+  key: string;
+  icon: string;
+  sort: number;
+  name: string;
+}
+
+type PoiFeatureCollection = GeoJSON.FeatureCollection<GeoJSON.Point, PoiGeoJsonProperties>;
+
+const EMPTY_COLLECTION: PoiFeatureCollection = { type: 'FeatureCollection', features: [] };
+
+function poiDisplayName(feature: PoiFeature): string {
+  return feature.name?.trim() || POI_LABELS[feature.category];
+}
+
+// ── Hit-testing registry (used by map tools that used to look for DOM markers) ──
+
+const managersByMap = new WeakMap<MapboxMap, PoiMarkerManager>();
+
+/** POI rendered under (or within `radiusPx` of) a canvas point, nearest first. */
+export function queryPoiAtPoint(
+  map: MapboxMap,
+  point: { x: number; y: number },
+  radiusPx = 0,
+): PoiFeature | null {
+  return managersByMap.get(map)?.queryAt(point, radiusPx) ?? null;
+}
+
+/** Opens the POI under a canvas point, as a click on it would. */
+export function activatePoiAtPoint(
+  map: MapboxMap,
+  point: { x: number; y: number },
+  radiusPx = 0,
+): boolean {
+  return managersByMap.get(map)?.activateAt(point, radiusPx) ?? false;
 }
 
 // ── Manager ───────────────────────────────────────────────────────────
 
 /**
- * Owns the full lifecycle of the POI DOM markers for one map instance:
- * diffed reconciliation, zoom/terrain visual refresh and teardown.
+ * Owns the POI GPU layer for one map instance: sprite registration,
+ * diffed `setData`, hover/click, the shared popup and teardown.
+ * Public API kept identical to the former DOM marker manager.
  */
 export class PoiMarkerManager {
   private readonly map: MapboxMap;
   private readonly getActions: () => UsePoiPopupActions;
-  private readonly registry = new Map<string, PoiMarkerEntry>();
-  private frameId: number | null = null;
-
-  private readonly scheduleVisualRefresh = (): void => {
-    if (this.frameId != null) return;
-    this.frameId = window.requestAnimationFrame(() => {
-      this.frameId = null;
-      const zoom = this.map.getZoom();
-      for (const entry of this.registry.values()) {
-        applyMarkerVisualState(entry, zoom);
-      }
-    });
-  };
-
-  // Markers created before DEM tiles finished loading were projected with a
-  // default elevation; re-setting their LngLat forces a re-projection that
-  // re-samples the now-loaded terrain. `idle` fires exactly when tiles and
-  // camera settle, and the nudge itself does not schedule another repaint.
-  private readonly reanchorOnIdle = (): void => {
-    for (const entry of this.registry.values()) {
-      entry.marker.setLngLat(entry.marker.getLngLat());
-    }
-  };
+  private readonly features = new Map<string, PoiFeature>();
+  private readonly sprites = new Map<string, PoiSprite>();
+  private readonly pendingSprites = new Map<string, Promise<void>>();
+  private readonly pixelRatio = getPoiSpritePixelRatio();
+  private data: PoiFeatureCollection = EMPTY_COLLECTION;
+  /** Signature of `data` (what should be on screen). */
+  private renderedSignature = '';
+  /** Signature of what was last uploaded to the source. */
+  private dataSignature = '';
+  private syncToken = 0;
+  private destroyed = false;
+  private hoveredKey: string | null = null;
+  private popup: mapboxgl.Popup | null = null;
+  private popupKey: string | null = null;
+  private zoomFrameId: number | null = null;
+  private raiseFrameId: number | null = null;
 
   constructor(map: MapboxMap, getActions: () => UsePoiPopupActions) {
     this.map = map;
     this.getActions = getActions;
-    map.on('zoom', this.scheduleVisualRefresh);
-    map.on('idle', this.reanchorOnIdle);
+    managersByMap.set(map, this);
+    map.on('styledata', this.handleStyleData);
+    map.on('zoom', this.handleZoom);
+    map.on('click', POI_GPU_LAYER_ID, this.handleLayerClick);
+    map.on('mousemove', POI_GPU_LAYER_ID, this.handleLayerMouseMove);
+    map.on('mouseleave', POI_GPU_LAYER_ID, this.handleLayerMouseLeave);
+    this.ensureLayers();
   }
 
   /** Currently rendered feature count. */
   get size(): number {
-    return this.registry.size;
+    return this.features.size;
   }
 
   /**
-   * Reconcile rendered markers against `features`: removes stale markers,
-   * keeps unchanged ones (same signature) and (re)creates the rest.
-   * Markers are positioned at their exact GPS coordinates without sideways drift.
+   * Reconcile rendered POIs against `features`. Missing sprite variants are
+   * rasterised first (async, once per variant); the GeoJSON source is only
+   * re-uploaded when the rendered set actually changed.
    */
   sync(features: PoiFeature[]): void {
-    const nextKeys = new Set(features.map(getMarkerKey));
-
-    for (const [key, entry] of this.registry) {
-      if (nextKeys.has(key)) continue;
-      entry.marker.remove();
-      this.registry.delete(key);
-    }
-
+    this.features.clear();
     for (const feature of features) {
-      const key = getMarkerKey(feature);
-      const signature = getMarkerSignature(feature);
-      const existing = this.registry.get(key);
-
-      if (existing && existing.signature === signature) {
-        continue;
-      }
-
-      existing?.marker.remove();
-      this.registry.set(key, this.createEntry(feature));
+      this.features.set(getMarkerKey(feature), feature);
     }
+
+    const token = ++this.syncToken;
+    const waits: Promise<void>[] = [];
+    for (const feature of this.features.values()) {
+      const spec = getPoiSpriteSpec(feature);
+      const id = getPoiSpriteId(spec);
+      if (this.sprites.has(id)) continue;
+      waits.push(this.loadSprite(id, spec));
+    }
+
+    if (waits.length === 0) {
+      this.flush();
+      return;
+    }
+    void Promise.all(waits).then(() => {
+      if (this.destroyed || token !== this.syncToken) return;
+      this.flush();
+    });
   }
 
-  /** Remove every marker and detach map listeners. */
+  /** Remove the layer, the popup and every listener. */
   destroy(): void {
-    if (this.frameId != null) {
-      window.cancelAnimationFrame(this.frameId);
-      this.frameId = null;
+    this.destroyed = true;
+    if (this.zoomFrameId != null) {
+      window.cancelAnimationFrame(this.zoomFrameId);
+      this.zoomFrameId = null;
     }
-    this.map.off('zoom', this.scheduleVisualRefresh);
-    this.map.off('idle', this.reanchorOnIdle);
-    for (const entry of this.registry.values()) {
-      entry.marker.remove();
+    if (this.raiseFrameId != null) {
+      window.cancelAnimationFrame(this.raiseFrameId);
+      this.raiseFrameId = null;
     }
-    this.registry.clear();
+    this.map.off('styledata', this.handleStyleData);
+    this.map.off('zoom', this.handleZoom);
+    this.map.off('click', POI_GPU_LAYER_ID, this.handleLayerClick);
+    this.map.off('mousemove', POI_GPU_LAYER_ID, this.handleLayerMouseMove);
+    this.map.off('mouseleave', POI_GPU_LAYER_ID, this.handleLayerMouseLeave);
+    this.popup?.remove();
+    this.popup = null;
+    this.popupKey = null;
+    if (managersByMap.get(this.map) === this) managersByMap.delete(this.map);
+    try {
+      if (this.map.getLayer(POI_GPU_HOVER_LAYER_ID)) this.map.removeLayer(POI_GPU_HOVER_LAYER_ID);
+      if (this.map.getLayer(POI_GPU_LAYER_ID)) this.map.removeLayer(POI_GPU_LAYER_ID);
+      if (this.map.getSource(POI_GPU_SOURCE_ID)) this.map.removeSource(POI_GPU_SOURCE_ID);
+      for (const id of this.sprites.keys()) {
+        if (this.map.hasImage(id)) this.map.removeImage(id);
+      }
+    } catch {
+      // Map already torn down.
+    }
+    this.features.clear();
   }
 
   /**
@@ -259,84 +255,267 @@ export class PoiMarkerManager {
     const idStr = String(poiId);
     const strippedPrefix = idStr.replace(/^.*::/, '');
     const cleanId = strippedPrefix.replace(/^(poi-|feature-|poi-timeline-)/, '');
-    let targetEntry: PoiMarkerEntry | null = null;
+    let targetKey: string | null = null;
 
-    for (const [key, entry] of this.registry.entries()) {
+    for (const [key, feature] of this.features) {
+      const featureId = String(feature.id);
       if (
         key === idStr ||
         key === strippedPrefix ||
         key.endsWith(`:${idStr}`) ||
         key.endsWith(`:${strippedPrefix}`) ||
         key.endsWith(`:${cleanId}`) ||
-        String(entry.feature.id) === idStr ||
-        String(entry.feature.id) === strippedPrefix ||
-        String(entry.feature.id) === cleanId ||
+        featureId === idStr ||
+        featureId === strippedPrefix ||
+        featureId === cleanId ||
         (category && (
           key === `${category}:${idStr}` ||
           key === `${category}:${strippedPrefix}` ||
           key === `${category}:${cleanId}`
         ))
       ) {
-        targetEntry = entry;
+        targetKey = key;
         break;
       }
     }
 
-    if (!targetEntry && coords) {
-      let closestEntry: PoiMarkerEntry | null = null;
-      let minDistanceSq = Infinity;
-      for (const entry of this.registry.values()) {
-        const dLat = entry.feature.lat - coords.lat;
-        const dLon = entry.feature.lon - coords.lon;
+    if (!targetKey && coords) {
+      let minDistanceSq = 0.001 * 0.001; // ~100 m
+      for (const [key, feature] of this.features) {
+        const dLat = feature.lat - coords.lat;
+        const dLon = feature.lon - coords.lon;
         const distSq = dLat * dLat + dLon * dLon;
-        // Search within ~100m (0.001 deg)
-        if (distSq < 0.001 * 0.001 && distSq < minDistanceSq) {
+        if (distSq < minDistanceSq) {
           minDistanceSq = distSq;
-          closestEntry = entry;
+          targetKey = key;
         }
       }
-      targetEntry = closestEntry;
     }
 
-    if (!targetEntry) return false;
+    const target = targetKey ? this.features.get(targetKey) : undefined;
+    if (!targetKey || !target) return false;
 
-    // Close any other open popups
-    for (const other of this.registry.values()) {
-      if (other !== targetEntry && other.popup.isOpen()) {
-        other.popup.remove();
-      }
-    }
-
-    if (!targetEntry.popup.isOpen()) {
-      targetEntry.marker.togglePopup();
+    if (this.popupKey === targetKey && this.popup?.isOpen()) {
+      this.getActions().onSelectPoi?.(target);
     } else {
-      this.getActions().onSelectPoi?.(targetEntry.feature);
+      this.openPopup(targetKey, target);
     }
 
     flyToLocation(
       this.map,
-      { lon: targetEntry.feature.lon, lat: targetEntry.feature.lat },
+      { lon: target.lon, lat: target.lat },
       { zoom: POI_AUTO_ZOOM_LEVEL },
     );
 
     return true;
   }
 
-  private createEntry(feature: PoiFeature): PoiMarkerEntry {
+  /** Nearest rendered POI under / around a canvas point. */
+  queryAt(point: { x: number; y: number }, radiusPx: number): PoiFeature | null {
+    const key = this.queryKeyAt(point, radiusPx);
+    return key ? this.features.get(key) ?? null : null;
+  }
+
+  /** Open the POI under / around a canvas point. */
+  activateAt(point: { x: number; y: number }, radiusPx: number): boolean {
+    const key = this.queryKeyAt(point, radiusPx);
+    const feature = key ? this.features.get(key) : undefined;
+    if (!key || !feature) return false;
+    this.openPopup(key, feature);
+    return true;
+  }
+
+  // ── Internals ──────────────────────────────────────────────────────
+
+  private queryKeyAt(point: { x: number; y: number }, radiusPx: number): string | null {
+    try {
+      if (!this.map.getLayer(POI_GPU_LAYER_ID)) return null;
+      const r = Math.max(0, radiusPx);
+      const hits = this.map.queryRenderedFeatures(
+        r > 0
+          ? [[point.x - r, point.y - r], [point.x + r, point.y + r]]
+          : [point.x, point.y],
+        { layers: [POI_GPU_LAYER_ID] },
+      );
+      if (hits.length === 0) return null;
+      if (hits.length === 1 || r === 0) {
+        // Topmost first: highest sort key wins (favorites / pauses above).
+        let best = hits[0];
+        for (const hit of hits) {
+          if (Number(hit.properties?.sort ?? 0) > Number(best.properties?.sort ?? 0)) best = hit;
+        }
+        return String(best.properties?.key ?? '') || null;
+      }
+      let bestKey: string | null = null;
+      let bestDist = Infinity;
+      for (const hit of hits) {
+        const key = String(hit.properties?.key ?? '');
+        const feature = this.features.get(key);
+        if (!feature) continue;
+        const projected = this.map.project([feature.lon, feature.lat]);
+        const dist = Math.hypot(projected.x - point.x, projected.y - point.y);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestKey = key;
+        }
+      }
+      return bestKey;
+    } catch {
+      return null;
+    }
+  }
+
+  private loadSprite(id: string, spec: PoiSpriteSpec): Promise<void> {
+    let pending = this.pendingSprites.get(id);
+    if (!pending) {
+      pending = rasterizePoiSprite(spec, this.pixelRatio)
+        .then((sprite) => {
+          if (sprite) this.sprites.set(id, sprite);
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          this.pendingSprites.delete(id);
+        });
+      this.pendingSprites.set(id, pending);
+    }
+    return pending;
+  }
+
+  private ensureLayers(): boolean {
+    if (this.destroyed) return false;
+    const map = this.map;
+    try {
+      if (!map.getStyle()) return false;
+    } catch {
+      return false;
+    }
+
+    try {
+      for (const sprite of this.sprites.values()) {
+        if (!map.hasImage(sprite.id)) {
+          map.addImage(sprite.id, sprite.image, { pixelRatio: sprite.pixelRatio });
+        }
+      }
+
+      if (!map.getSource(POI_GPU_SOURCE_ID)) {
+        map.addSource(POI_GPU_SOURCE_ID, {
+          type: 'geojson',
+          data: this.data,
+          promoteId: 'key',
+        });
+      }
+
+      const sharedLayout = {
+        'icon-image': ['get', 'icon'] as ExpressionSpecification,
+        'icon-anchor': 'center' as const,
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+        'icon-pitch-alignment': 'viewport' as const,
+        'icon-rotation-alignment': 'viewport' as const,
+        'symbol-sort-key': ['get', 'sort'] as ExpressionSpecification,
+      };
+
+      if (!map.getLayer(POI_GPU_LAYER_ID)) {
+        map.addLayer({
+          id: POI_GPU_LAYER_ID,
+          type: 'symbol',
+          source: POI_GPU_SOURCE_ID,
+          slot: 'top',
+          layout: {
+            ...sharedLayout,
+            'icon-size': buildIconSizeExpression(),
+          },
+          paint: {
+            'icon-opacity': [
+              'case',
+              ['boolean', ['feature-state', 'hover'], false],
+              0,
+              1,
+            ],
+            'icon-opacity-transition': { duration: 0, delay: 0 },
+            'icon-emissive-strength': 1,
+          },
+        });
+      }
+
+      if (!map.getLayer(POI_GPU_HOVER_LAYER_ID)) {
+        map.addLayer({
+          id: POI_GPU_HOVER_LAYER_ID,
+          type: 'symbol',
+          source: POI_GPU_SOURCE_ID,
+          slot: 'top',
+          filter: ['==', ['get', 'key'], this.hoveredKey ?? ''],
+          layout: {
+            ...sharedLayout,
+            'icon-size': buildIconSizeExpression(HOVER_SCALE),
+          },
+          paint: {
+            'icon-translate': [0, -HOVER_LIFT_PX],
+            'icon-translate-anchor': 'viewport',
+            'icon-emissive-strength': 1,
+          },
+        });
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private flush(): void {
+    if (this.destroyed) return;
+
+    const features: PoiFeatureCollection['features'] = [];
+    const signatureParts: string[] = [];
+    for (const [key, feature] of this.features) {
+      const icon = getPoiSpriteId(getPoiSpriteSpec(feature));
+      if (!this.sprites.has(icon)) continue;
+      const sort = (feature.favorite ? 2 : 0) + ((feature.pauseDurationMin ?? 0) > 0 ? 1 : 0);
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [feature.lon, feature.lat] },
+        properties: { key, icon, sort, name: poiDisplayName(feature) },
+      });
+      signatureParts.push(`${key}|${icon}|${feature.lon}|${feature.lat}`);
+    }
+    this.data = { type: 'FeatureCollection', features };
+    this.renderedSignature = signatureParts.join(';');
+
+    // Popup follows its feature; closes if the POI is gone.
+    if (this.popupKey && this.popup) {
+      const current = this.features.get(this.popupKey);
+      if (!current) {
+        this.popup.remove();
+      } else {
+        this.popup.setLngLat([current.lon, current.lat]);
+      }
+    }
+    if (this.hoveredKey && !this.features.has(this.hoveredKey)) {
+      this.setHovered(null);
+    }
+
+    if (!this.ensureLayers()) return;
+    this.scheduleRaise();
+    const source = this.map.getSource(POI_GPU_SOURCE_ID) as GeoJSONSource | undefined;
+    if (!source) return;
+    if (this.renderedSignature === this.dataSignature) return;
+    this.dataSignature = this.renderedSignature;
+    source.setData(this.data);
+  }
+
+  private openPopup(key: string, feature: PoiFeature): void {
+    this.popup?.remove();
+
     const popup = new mapboxgl.Popup({
       className: 'rv-poi-popup',
       closeButton: false,
       closeOnClick: true,
       focusAfterOpen: false,
       maxWidth: 'none',
-      offset: MARKER_MAX_POPUP_OFFSET_PX,
+      offset: [0, getPopupOffsetAtZoom(this.map.getZoom())],
     });
 
-    // Popup DOM is built lazily, on first open, then kept in sync while
-    // open. Building it eagerly for every marker (the previous behaviour)
-    // cost one full popup DOM tree per POI at creation time — fine for a
-    // shortlist of a few dozen POIs, untenable now that the exhaustive
-    // corridor search can legitimately return thousands of them.
+    // Popup DOM is built on open only — a single popup exists at a time.
     const refresh = (nextState?: PoiPopupState) => {
       const actions = this.getActions();
       popup.setDOMContent(buildPopupContent(
@@ -346,42 +525,114 @@ export class PoiMarkerManager {
         refresh,
       ));
     };
+    refresh();
 
-    // Re-resolve state from the itinerary every time the popup reopens.
-    popup.on('open', () => {
-      refresh();
-      this.getActions().onSelectPoi?.(feature);
+    popup.on('close', () => {
+      if (this.popup === popup) {
+        this.popup = null;
+        this.popupKey = null;
+      }
     });
 
-    const markerEl = createMarkerElement(feature);
-    markerEl.addEventListener('click', () => {
-      this.getActions().onSelectPoi?.(feature);
-    });
-
-    const isPin = Boolean(feature.favorite);
-    const marker = new mapboxgl.Marker({
-      element: markerEl,
-      anchor: isPin ? 'bottom' : 'center',
-      pitchAlignment: 'viewport',
-      rotationAlignment: 'viewport',
-      // No `altitude`: identical projection path to the viewport POI
-      // markers — Mapbox anchors the pin tip on the terrain surface.
-      occludedOpacity: MARKER_OCCLUDED_OPACITY,
-    })
-      .setLngLat([feature.lon, feature.lat])
-      .setPopup(popup)
-      .addTo(this.map);
-
-    const entry: PoiMarkerEntry = {
-      marker,
-      popup,
-      signature: getMarkerSignature(feature),
-      feature,
-    };
-
-    applyMarkerVisualState(entry, this.map.getZoom());
-    return entry;
+    this.popup = popup;
+    this.popupKey = key;
+    popup.setLngLat([feature.lon, feature.lat]).addTo(this.map);
+    this.getActions().onSelectPoi?.(feature);
   }
+
+  private setHovered(key: string | null): void {
+    if (key === this.hoveredKey) return;
+    const map = this.map;
+    try {
+      if (this.hoveredKey && map.getSource(POI_GPU_SOURCE_ID)) {
+        map.setFeatureState({ source: POI_GPU_SOURCE_ID, id: this.hoveredKey }, { hover: false });
+      }
+      this.hoveredKey = key;
+      if (key && map.getSource(POI_GPU_SOURCE_ID)) {
+        map.setFeatureState({ source: POI_GPU_SOURCE_ID, id: key }, { hover: true });
+      }
+      if (map.getLayer(POI_GPU_HOVER_LAYER_ID)) {
+        map.setFilter(POI_GPU_HOVER_LAYER_ID, ['==', ['get', 'key'], key ?? '']);
+      }
+    } catch {
+      this.hoveredKey = key;
+    }
+  }
+
+  /**
+   * Keep the POI layers at the very top of the stack: route lines (and other
+   * overlays) are added / re-added after us and would otherwise paint over
+   * the icons. Only moves when needed, so the `styledata` it triggers is a no-op.
+   */
+  private raiseLayers(): void {
+    const map = this.map;
+    try {
+      if (!map.getLayer(POI_GPU_LAYER_ID) || !map.getLayer(POI_GPU_HOVER_LAYER_ID)) return;
+      const order = (map as unknown as { style?: { order?: string[] } }).style?.order;
+      if (!order || order.length < 2) return;
+      const last = order[order.length - 1];
+      const beforeLast = order[order.length - 2];
+      if (beforeLast === POI_GPU_LAYER_ID && last === POI_GPU_HOVER_LAYER_ID) return;
+      map.moveLayer(POI_GPU_LAYER_ID);
+      map.moveLayer(POI_GPU_HOVER_LAYER_ID);
+    } catch {
+      // Style mid-reload.
+    }
+  }
+
+  private readonly scheduleRaise = (): void => {
+    if (this.raiseFrameId != null || this.destroyed) return;
+    this.raiseFrameId = window.requestAnimationFrame(() => {
+      this.raiseFrameId = null;
+      if (!this.destroyed) this.raiseLayers();
+    });
+  };
+
+  private readonly handleStyleData = (): void => {
+    if (this.destroyed) return;
+    let missing = false;
+    try {
+      missing = !this.map.getLayer(POI_GPU_LAYER_ID) || !this.map.getSource(POI_GPU_SOURCE_ID);
+    } catch {
+      return;
+    }
+    if (!missing) {
+      this.scheduleRaise();
+      return;
+    }
+    // A style reload wiped source, layers and images: reinstall everything.
+    this.dataSignature = '';
+    if (this.ensureLayers()) {
+      (this.map.getSource(POI_GPU_SOURCE_ID) as GeoJSONSource | undefined)?.setData(this.data);
+      this.dataSignature = this.renderedSignature;
+    }
+  };
+
+  private readonly handleZoom = (): void => {
+    if (!this.popup || this.zoomFrameId != null) return;
+    this.zoomFrameId = window.requestAnimationFrame(() => {
+      this.zoomFrameId = null;
+      this.popup?.setOffset([0, getPopupOffsetAtZoom(this.map.getZoom())]);
+    });
+  };
+
+  private readonly handleLayerClick = (event: MapMouseEvent): void => {
+    const hit = event.features?.[0];
+    const key = hit ? String(hit.properties?.key ?? '') : '';
+    const feature = key ? this.features.get(key) : undefined;
+    if (!key || !feature) return;
+    this.openPopup(key, feature);
+  };
+
+  private readonly handleLayerMouseMove = (event: MapMouseEvent): void => {
+    const hit = event.features?.[0];
+    const key = hit ? String(hit.properties?.key ?? '') : '';
+    this.setHovered(key || null);
+  };
+
+  private readonly handleLayerMouseLeave = (): void => {
+    this.setHovered(null);
+  };
 }
 
 // ── Math helpers ──────────────────────────────────────────────────────

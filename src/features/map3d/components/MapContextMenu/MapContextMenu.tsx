@@ -4,6 +4,7 @@ import type { Map as MapboxMap, MapMouseEvent } from 'mapbox-gl';
 import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
 import { useAppI18n } from '@/shared/i18n';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
+import { isFreeCamActive } from '@/features/freeCam';
 
 import { computePanelPosition, resolvePanelPlacement, type PanelPlacement } from '../panelPlacement';
 import { sampleSlopePct, resolvePointContext } from './contextMenuHelpers';
@@ -149,6 +150,7 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
 
     const handleContextMenu = (event: MapMouseEvent) => {
       event.preventDefault();
+      if (isFreeCamActive()) return;
 
       if (pendingCleanupTimerRef.current != null) {
         window.clearTimeout(pendingCleanupTimerRef.current);

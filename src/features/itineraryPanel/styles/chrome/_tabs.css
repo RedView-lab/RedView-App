@@ -172,98 +172,10 @@
   color: rgba(255, 255, 255, 0.96);
 }
 
+/* Menu d'actions (portal) — apparence : shared/styles/dropdown.css (.rv-dropdown) */
 .rvi-itin-actions-menu {
   position: fixed;
   z-index: 1200;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(14, 14, 16, 0.72);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 12px 32px rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(40px);
-  -webkit-backdrop-filter: blur(40px);
-  isolation: isolate;
-}
-
-.rvi-itin-actions-menu__item {
-  all: unset;
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  min-height: 24px;
-  padding: 4px 8px;
-  color: rgba(255, 255, 255, 0.9);
-  cursor: pointer;
-  font-family: 'Rethink Sans', 'DM Sans', system-ui, -apple-system, Segoe UI, sans-serif;
-  font-size: 10.5px;
-  font-weight: 500;
-  line-height: 1.2;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.rvi-itin-actions-menu__item + .rvi-itin-actions-menu__item {
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
-}
-
-.rvi-itin-actions-menu__item:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-}
-
-.rvi-itin-actions-menu__item:focus-visible {
-  outline: none;
-  background: rgba(255, 255, 255, 0.1);
-  box-shadow: inset 0 0 0 1px rgba(197, 0, 0, 0.48);
-}
-
-.rvi-itin-actions-menu__item:disabled {
-  color: rgba(255, 255, 255, 0.28);
-  cursor: default;
-}
-
-.rvi-itin-actions-menu__item:disabled:hover {
-  background: transparent;
-}
-
-.rvi-itin-actions-menu__item--danger:not(:disabled) {
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.rvi-itin-actions-menu__item--danger:not(:disabled):hover {
-  background: rgba(239, 68, 68, 0.18);
-  color: #ff5252;
-}
-
-.rvi-itin-actions-menu__label {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rvi-itin-actions-menu__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  color: rgba(255, 255, 255, 0.55);
-  transition: color 0.15s ease;
-}
-
-.rvi-itin-actions-menu__item:hover .rvi-itin-actions-menu__icon {
-  color: rgba(255, 255, 255, 0.95);
-}
-
-.rvi-itin-actions-menu__item--danger:hover .rvi-itin-actions-menu__icon {
-  color: #ff5252;
 }
 
 @media (max-width: 420px) {

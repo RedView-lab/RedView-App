@@ -13,6 +13,15 @@ import { cumulativeRouteLengthsM, projectDistanceAlongRouteM, roundDistanceKm } 
 import { FEATURE_TO_PANEL_POI } from '@/features/itineraryPanel/lib/schedule';
 
 const predictionTimelineCache = new WeakMap<PredictionResult, TimelineSample[] | null>();
+const cumulativeLengthsCache = new WeakMap<object, number[]>();
+
+function getCachedCumulativeLengths(points: Parameters<typeof cumulativeRouteLengthsM>[0]): number[] {
+  const cached = cumulativeLengthsCache.get(points);
+  if (cached && cached.length === points.length) return cached;
+  const lengths = cumulativeRouteLengthsM(points);
+  cumulativeLengthsCache.set(points, lengths);
+  return lengths;
+}
 const predictionProfileCache = new WeakMap<PredictionResult, ElevationSample[] | null>();
 
 interface ElevationSample {
@@ -84,7 +93,7 @@ export function buildPoiAnnotationsForItinerary(
       : buildPauseAwareSchedule(itinerary, prediction);
 
   const routePoints = itinerary.gpxRoute?.points ?? [];
-  const cumLengths = routePoints.length >= 2 ? cumulativeRouteLengthsM(routePoints) : null;
+  const cumLengths = routePoints.length >= 2 ? getCachedCumulativeLengths(routePoints) : null;
 
   const resolveRowDistanceKm = (row: TimelineItem): number | null => {
     if (typeof row.distanceKm === 'number' && Number.isFinite(row.distanceKm)) {
@@ -210,17 +219,22 @@ export function buildPoiAnnotationsForItinerary(
   // 1b. Extra favorite POIs from itinerary.poiFeatures if not yet in timeline
   if (includeFavoritesAlways && itinerary.poiFeatures && routePoints.length >= 2 && cumLengths) {
     const favoriteFeatures = itinerary.poiFeatures.filter((f) => f.favorite);
+    // Last `::` segment of each annotation id — `id.endsWith('::X')` for an X
+    // without `::` is exactly `lastSegment === X`, so the per-favorite scan of
+    // every annotation becomes a Set lookup.
+    const presentSegments = new Set(
+      result.map((r) => r.id.slice(r.id.lastIndexOf('::') + 2)),
+    );
     for (const f of favoriteFeatures) {
-      const alreadyPresent = result.some(
-        (r) =>
-          r.id.endsWith(`::poi-timeline-${f.id}`) ||
-          r.id.endsWith(`::poi-${f.id}`) ||
-          r.id.endsWith(`::feature-${f.id}`),
-      );
+      const alreadyPresent =
+        presentSegments.has(`poi-timeline-${f.id}`) ||
+        presentSegments.has(`poi-${f.id}`) ||
+        presentSegments.has(`feature-${f.id}`);
       if (alreadyPresent) continue;
 
       const distM = projectDistanceAlongRouteM({ lat: f.lat, lon: f.lon }, routePoints, cumLengths);
       if (distM != null) {
+        presentSegments.add(`feature-${f.id}`);
         const distKm = roundDistanceKm(distM);
         const panelCategory = FEATURE_TO_PANEL_POI[f.category];
         addAnnotation(

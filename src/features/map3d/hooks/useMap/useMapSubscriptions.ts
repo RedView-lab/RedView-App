@@ -10,6 +10,7 @@ import {
   subscribeDemProfilePreference,
 } from '../../lib/demProfileBus';
 import type { MapLifecycleController } from './controller/context';
+import { isFreeCamActive, subscribeFreeCam } from '@/features/freeCam';
 
 interface SetupMapSubscriptionsArgs {
   map: MapboxMap;
@@ -81,6 +82,10 @@ export function setupMapSubscriptions({
 
   const onMoveEnd = () => {
     if (saveTimer) clearTimeout(saveTimer);
+    // En FreeCam, `moveend` part à chaque frame : une sauvegarde pendant une
+    // pause ferait revenir le viewport par `initialViewport` → `jumpTo` (snap-back).
+    // On sauvegarde une seule fois à la sortie (voir `subscribeFreeCam` ci-dessous).
+    if (isFreeCamActive()) return;
     saveTimer = setTimeout(() => {
       const center = map.getCenter();
       persistViewport({
@@ -92,6 +97,9 @@ export function setupMapSubscriptions({
     }, 500);
   };
   map.on('moveend', onMoveEnd);
+  const unsubscribeFreeCam = subscribeFreeCam((active) => {
+    if (!active) onMoveEnd();
+  });
 
   let lastSvgWarnAt = 0;
   let suppressedSvgErrors = 0;
@@ -127,6 +135,7 @@ export function setupMapSubscriptions({
       }
       unsubscribeDem3dQuality();
       unsubscribeDemProfile();
+      unsubscribeFreeCam();
       if (saveTimer) clearTimeout(saveTimer);
       map.off('moveend', onMoveEnd);
       map.off('error', onError);

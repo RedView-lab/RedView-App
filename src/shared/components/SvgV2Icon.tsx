@@ -98,7 +98,6 @@ const SVGV2_ICONE_ASSETS = new Set([
   'search-filter-favoris.svg',
   'search-filter-pauses.svg',
   'search-filter-waypoints.svg',
-  'search-filter-alertes.svg',
   'search-sm.svg',
   'settings-01.svg',
   'settings-02.svg',

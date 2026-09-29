@@ -133,88 +133,10 @@
 
 .rvc-select__chevron { flex-shrink: 0; color: var(--rvc-text); }
 
-/* Custom dropdown — Figma node 1792:73224 — rendered via portal */
+/* Menu rendu en portal — apparence : src/shared/styles/dropdown.css (.rv-dropdown) */
 .rvc-select__dropdown {
   position: fixed;
   z-index: 99999;
-  isolation: isolate;
-  display: flex;
-  flex-direction: column;
-  min-width: 80px;
-  width: 140px;
-  max-height: 260px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  background: rgba(22, 24, 29, 0.90);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.05);
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
-}
-
-.rvc-select__dropdown::-webkit-scrollbar {
-  width: 4px;
-}
-
-.rvc-select__dropdown::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.rvc-select__dropdown::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.24);
-  border-radius: 4px;
-}
-
-.rvc-select__dropdown::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.38);
-}
-
-.rvc-select__dropdown > * {
-  position: relative;
-  z-index: 1;
-}
-
-.rvc-select__option {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 32px;
-  min-width: 80px;
-  padding: 7px 8px 7px 10px;
-  background: transparent;
-  color: #ffffff;
-  font: inherit;
-  cursor: pointer;
-  box-sizing: border-box;
-  transition: background 0.16s ease;
-}
-
-.rvc-select__option + .rvc-select__option {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.rvc-select__option.is-selected {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.rvc-select__option:hover:not(.is-selected) {
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.rvc-select__option-label {
-  flex: 1 1 0;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rvc-select__option-check {
-  flex-shrink: 0;
-  color: #ffffff;
 }
 
 .rvc-slider {

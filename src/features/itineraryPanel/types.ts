@@ -42,7 +42,6 @@ export interface AnalysisFiltersState {
   waypoint: boolean;
   poi: boolean;
   pause: boolean;
-  alertes: boolean;
   pente: boolean;
   jourNuit: boolean;
 }
@@ -53,7 +52,6 @@ export interface TimelineFilterState {
   poi: boolean;
   pause: boolean;
   favorite: boolean;
-  alertes?: boolean;
   categories?: Set<string>;
 }
 
@@ -468,6 +466,12 @@ export interface Itinerary {
   pendingRoutePatch?: ItineraryPendingRoutePatch;
   /** Internal flag to auto-run FIT timing again once the route is ready. */
   pendingFitRecompute?: boolean;
+  /**
+   * True once the user has interacted with the "Rythme" mode (edited a field,
+   * uploaded a FIT or clicked "Calculer"). The automatic prediction only runs
+   * after that, so a freshly imported/drawn route has no speed/time estimate.
+   */
+  rhythmConfigured?: boolean;
 }
 
 export interface ItineraryProject {

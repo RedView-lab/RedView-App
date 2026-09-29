@@ -22,7 +22,6 @@ interface DashboardLayoutInput {
   leftPanelWidth: number;
   exporterPanelHeight: number;
   centerPanelHeightOverride: number | null;
-  isMapFocusMode: boolean;
   isLeftPanelCollapsed: boolean;
   isCenterPanelCollapsed: boolean;
   isRightPanelCollapsed: boolean;
@@ -34,7 +33,6 @@ export function getDashboardLayout({
   leftPanelWidth,
   exporterPanelHeight,
   centerPanelHeightOverride,
-  isMapFocusMode,
   isLeftPanelCollapsed,
   isCenterPanelCollapsed,
   isRightPanelCollapsed,
@@ -63,11 +61,11 @@ export function getDashboardLayout({
     rightDockContentHeight - exporterPanelHeight - PANEL_PADDING,
   );
 
-  const leftPanelReservedWidth = isMapFocusMode || isLeftPanelCollapsed
+  const leftPanelReservedWidth = isLeftPanelCollapsed
     ? PANEL_PADDING
     : leftPanelWidth + PANEL_PADDING * 2;
   const centerPanelBaseRegionLeft = leftPanelReservedWidth;
-  const rightPanelReservedWidth = isMapFocusMode || isRightPanelCollapsed
+  const rightPanelReservedWidth = isRightPanelCollapsed
     ? PANEL_PADDING
     : panelWidth + PANEL_PADDING * 2;
   const centerPanelBaseRegionRight = rightPanelReservedWidth;
@@ -83,7 +81,7 @@ export function getDashboardLayout({
     designW - centerPanelRegionLeft - centerPanelRegionRight,
   );
   const centerToolbarVisible = centerToolbarWidth >= CENTER_PANEL_MIN_WIDTH;
-  const centerPanelVisible = centerToolbarVisible && !isMapFocusMode && !isCenterPanelCollapsed;
+  const centerPanelVisible = centerToolbarVisible && !isCenterPanelCollapsed;
   const centerPanelWidth = centerPanelAvailableWidth;
 
   const centerPanelAvailableHeight = Math.max(
@@ -127,10 +125,8 @@ export function getDashboardLayout({
 
   const centerPanelLeft = centerPanelRegionLeft;
   const centerPanelTop = designH - PANEL_PADDING - centerPanelHeight;
-  const centerToolbarLeft = isMapFocusMode
-    ? Math.max(PANEL_PADDING, Math.round((designW - centerToolbarWidth) / 2))
-    : centerPanelBaseRegionLeft;
-  const centerToolbarTop = isMapFocusMode || isCenterPanelCollapsed
+  const centerToolbarLeft = centerPanelBaseRegionLeft;
+  const centerToolbarTop = isCenterPanelCollapsed
     ? designH - PANEL_PADDING - CENTER_TOOLBAR_HEIGHT
     : centerPanelTop - CENTER_PANEL_STACK_GAP - CENTER_TOOLBAR_HEIGHT;
   const centerPanelResizeHitTop =

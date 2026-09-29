@@ -68,7 +68,11 @@ export function buildPoiMarkerGroups(
       const avgX = members.reduce((sum, member) => sum + member.xRatio, 0) / count;
       const topY = members.reduce((min, member) => Math.min(min, member.yRatio), members[0].yRatio);
       return {
-        id: count === 1 ? members[0].id : `cluster:${members.map((member) => member.id).join('|')}`,
+        // First member + size identifies a cluster (members are disjoint and
+        // sorted) without concatenating every member id on each pan frame.
+        id: count === 1
+          ? members[0].id
+          : `cluster:${members[0].id}:${members[count - 1].id}:${count}`,
         kind: count === 1 ? 'single' : 'cluster',
         count,
         xRatio: avgX,

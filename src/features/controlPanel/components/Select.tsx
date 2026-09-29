@@ -1,8 +1,7 @@
 import { type ReactNode, useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
 import { useAppI18n } from '@/shared/i18n';
-import { IconChevronDown, IconCheck } from '../icons';
+import { IconChevronDown } from '../icons';
 
 interface SelectOption<T extends string = string> {
   value: T;
@@ -42,12 +41,7 @@ export function Select<T extends string = string>({
     top: number;
     left: number;
     width: number;
-    maxHeight: number;
     scale: number;
-    fontFamily: string;
-    fontSize: string;
-    fontWeight: string;
-    lineHeight: string;
   } | null>(null);
 
   useEffect(() => {
@@ -70,7 +64,7 @@ export function Select<T extends string = string>({
     const computed = window.getComputedStyle(ref.current);
     const rawScale = Number.parseFloat(computed.getPropertyValue('--app-scale'));
     const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
-    const rowHeight = 32 * scale;
+    const rowHeight = 30 * scale;
     const maxDropdownHeight = 260 * scale;
     const rawDropdownHeight = options.length * rowHeight;
     const dropdownHeight = Math.min(rawDropdownHeight, maxDropdownHeight);
@@ -81,12 +75,7 @@ export function Select<T extends string = string>({
       top: placeAbove ? rect.top - dropdownHeight - offset : rect.bottom + offset,
       left: rect.left,
       width: Math.max(140, rect.width / scale),
-      maxHeight: 260,
       scale,
-      fontFamily: computed.fontFamily,
-      fontSize: computed.fontSize,
-      fontWeight: computed.fontWeight,
-      lineHeight: computed.lineHeight,
     });
   }, [open, options.length]);
 
@@ -95,40 +84,30 @@ export function Select<T extends string = string>({
   const dropdown = open && !disabled && dropPos
     ? createPortal(
         <div
-          className="rvc-select__dropdown"
+          className="rv-dropdown rvc-select__dropdown"
+          role="listbox"
           style={{
-            position: 'fixed',
             top: dropPos.top,
             left: dropPos.left,
             width: dropPos.width,
-            maxHeight: dropPos.maxHeight,
-            overflowY: 'auto',
-            overflowX: 'hidden',
-            zIndex: 99999,
             transform: `scale(${dropPos.scale})`,
             transformOrigin: 'top left',
-            fontFamily: dropPos.fontFamily,
-            fontSize: dropPos.fontSize,
-            fontWeight: dropPos.fontWeight,
-            lineHeight: dropPos.lineHeight,
-            scrollbarWidth: 'thin',
-            scrollbarColor: 'rgba(255, 255, 255, 0.24) transparent',
           }}
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <MapCanvasGlassBackdrop blur={30} saturate={1.8} />
           {options.map((o) => (
             <div
               key={o.value}
-              className={`rvc-select__option${o.value === value ? ' is-selected' : ''}`}
+              role="option"
+              aria-selected={o.value === value}
+              className={`rv-dropdown__item${o.value === value ? ' is-selected' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
                 onChange?.(o.value);
                 setOpen(false);
               }}
             >
-              <span className="rvc-select__option-label">{t(o.label)}</span>
-              {o.value === value && <IconCheck size={16} className="rvc-select__option-check" />}
+              <span className="rv-dropdown__label">{t(o.label)}</span>
             </div>
           ))}
         </div>,

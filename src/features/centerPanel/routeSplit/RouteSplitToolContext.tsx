@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { Map as MapboxMap, MapMouseEvent } from 'mapbox-gl';
+import { queryPoiAtPoint } from '@/features/poi/lib/poi-markers';
 
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import { translateAppText } from '@/shared/i18n';
@@ -111,7 +112,8 @@ export function RouteSplitToolProvider({ children, map }: RouteSplitToolProvider
           originalTarget.closest(
             '.mapboxgl-popup, .rv-poi-draft-card, [data-rv-poi-draft-card], .rv-poi-marker, .rv-checkpoint-marker, button, a, [role="button"]',
           )) ||
-        shouldIgnoreMapClickAfterPanelDismiss(originalTarget)
+        shouldIgnoreMapClickAfterPanelDismiss(originalTarget) ||
+        queryPoiAtPoint(map, event.point)
       ) {
         return;
       }

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
+import { setDprLayoutScale } from '@/features/map3d';
 import { ProjectBrowserOverlay } from '@/features/projectBrowser';
 import { LidarProvider } from '@/features/lidar/components/LidarContext';
 import { DashboardEditor } from './components/DashboardEditor';
@@ -78,7 +79,7 @@ export default function Dashboard({
   const {
     lidarModeEnabled,
     setLidarModeEnabled,
-    isMapFocusMode,
+    isAllPanelsCollapsed,
     leftPanelOpen,
     panelWidth,
     isLeftPanelCollapsed,
@@ -109,36 +110,40 @@ export default function Dashboard({
     updatePersistedDashboard,
   });
 
+  // Render canvases (Mapbox, charts) at on-screen resolution despite the
+  // `transform: scale(appScale)` wrapper. Layout effect: runs before useMap's
+  // passive effect creates the map. The logical size can stay constant while
+  // appScale changes (proportional window resize), so force a map resize.
+  useLayoutEffect(() => {
+    setDprLayoutScale(layout.appScale);
+    mapInstance?.resize();
+  }, [layout.appScale, mapInstance]);
+
   const handleMapReady = useCallback((map: MapboxMap) => {
     setMapInstance(map);
     setMapLoaded(true);
   }, []);
 
-  const rightDockWidth = isMapFocusMode
+  const rightDockWidth = isRightPanelCollapsed
     ? 0
-    : isRightPanelCollapsed
-      ? 0
-      : panelWidth + PANEL_PADDING * 2;
-  const rightDockOffset = isMapFocusMode || isRightPanelCollapsed
+    : panelWidth + PANEL_PADDING * 2;
+  const rightDockOffset = isRightPanelCollapsed
     ? PANEL_PADDING
     : rightDockWidth + PANEL_PADDING;
 
   const statusDockRight = rightDockOffset;
-  const statusDockLeft = isMapFocusMode && layout.centerToolbarVisible
-    ? layout.centerToolbarLeft + layout.centerToolbarWidth / 2
-    : undefined;
   const statusDockBottom = layout.centerToolbarVisible
     ? layout.designH - layout.centerToolbarTop + CENTER_PANEL_STACK_GAP
     : 88;
 
-  const leftDockWidth = isMapFocusMode || isLeftPanelCollapsed
+  const leftDockWidth = isLeftPanelCollapsed
     ? 0
     : leftPanelWidth + PANEL_PADDING * 2;
 
   // The search wrapper now starts right after the left drawer and owns the
   // mirrored panel toggle as its first flex child, so the row reads:
   // [ drawer ] PANEL_PADDING [ toggle ] PANEL_PADDING [ search bar ]
-  const dashboardSearchLeft = isMapFocusMode || !leftPanelOpen
+  const dashboardSearchLeft = !leftPanelOpen
     ? PANEL_PADDING
     : leftPanelWidth + PANEL_PADDING * 2;
   const dashboardSearchRight = rightDockOffset + 40 + PANEL_PADDING;
@@ -146,7 +151,6 @@ export default function Dashboard({
 
   const styles = getDashboardStyles({
     layout,
-    isMapFocusMode,
     isLeftPanelCollapsed,
     isRightPanelCollapsed,
     isCenterResizing,
@@ -200,7 +204,7 @@ export default function Dashboard({
               mapLoaded={mapLoaded}
               lidarModeEnabled={lidarModeEnabled}
               setLidarModeEnabled={setLidarModeEnabled}
-              isMapFocusMode={isMapFocusMode}
+              isAllPanelsCollapsed={isAllPanelsCollapsed}
               leftPanelOpen={leftPanelOpen}
               panelWidth={panelWidth}
               leftPanelWidth={leftPanelWidth}
@@ -215,7 +219,6 @@ export default function Dashboard({
               activeBasemapConfig={activeBasemapConfig}
               visibleStatuses={visibleStatuses}
               statusDockRight={statusDockRight}
-              statusDockLeft={statusDockLeft}
               statusDockBottom={statusDockBottom}
               dashboardSearchVisible={dashboardSearchVisible}
               dashboardSearchLeft={dashboardSearchLeft}

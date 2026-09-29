@@ -69,32 +69,22 @@ export function AxisDropdown({
         </button>
 
         {isOpen ? (
-          <div className="rvc-center-analysis__dropdown" role="listbox" aria-label={translatedAxisLabel}>
-            <div className="rvc-center-analysis__dropdown-list">
-              {options.map((option) => {
-                const selected = value === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    className={`rvc-center-analysis__dropdown-option${selected ? ' is-selected' : ''}`}
-                    type="button"
-                    role="option"
-                    aria-selected={selected}
-                    onClick={() => onSelect(option.value)}
-                  >
-                    <span
-                      className={
-                        option.tone === 'primary'
-                          ? 'rvc-center-analysis__dropdown-text rvc-center-analysis__dropdown-text--primary'
-                          : 'rvc-center-analysis__dropdown-text rvc-center-analysis__dropdown-text--secondary'
-                      }
-                    >
-                      {t(option.label)}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+          <div className="rv-dropdown rvc-center-analysis__dropdown" role="listbox" aria-label={translatedAxisLabel}>
+            {options.map((option) => {
+              const selected = value === option.value;
+              return (
+                <button
+                  key={option.value}
+                  className={`rv-dropdown__item${selected ? ' is-selected' : ''}`}
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  onClick={() => onSelect(option.value)}
+                >
+                  <span className="rv-dropdown__label">{t(option.label)}</span>
+                </button>
+              );
+            })}
           </div>
         ) : null}
       </div>

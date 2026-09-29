@@ -89,13 +89,40 @@ export function useMap(
       bearing: savedVp?.bearing ?? DEFAULT_VIEW.bearing,
       projection: DEFAULT_VIEW.projection,
       antialias: runtimeProfile.antialias,
-      preserveDrawingBuffer: true,
+      // false: avoids a full-screen back-buffer copy every frame (major cost on
+      // Apple TBDR GPUs / ANGLE-Metal and iGPUs). Canvas readers (MapBlurMirror,
+      // mapThumbnail) copy synchronously inside the `render` event instead.
+      preserveDrawingBuffer: false,
+      performanceMetricsCollection: false,
       fadeDuration: 0,
       maxTileCacheSize: runtimeProfile.maxTileCacheSize,
       minTileCacheSize: runtimeProfile.minTileCacheSize,
     } as mapboxgl.MapOptions);
 
     mapRef.current = map;
+
+    // While the camera moves, every `backdrop-filter` above the WebGL canvas is
+    // re-blurred each map frame (large kernels at Retina resolution, the main
+    // jank source on Safari/macOS and on iGPUs). `index.css` drops the backdrop
+    // blur while this flag is set; it is restored shortly after the move ends.
+    const rootEl = document.documentElement;
+    let movingFlagTimer: ReturnType<typeof setTimeout> | null = null;
+    const handleCameraMoveStart = () => {
+      if (movingFlagTimer) {
+        clearTimeout(movingFlagTimer);
+        movingFlagTimer = null;
+      }
+      rootEl.setAttribute('data-rv-map-moving', '');
+    };
+    const handleCameraMoveEnd = () => {
+      if (movingFlagTimer) clearTimeout(movingFlagTimer);
+      movingFlagTimer = setTimeout(() => {
+        movingFlagTimer = null;
+        rootEl.removeAttribute('data-rv-map-moving');
+      }, 160);
+    };
+    map.on('movestart', handleCameraMoveStart);
+    map.on('moveend', handleCameraMoveEnd);
 
     const lifecycle = createMapLifecycleController({
       map,
@@ -225,6 +252,10 @@ export function useMap(
 
     return () => {
       cancelled = true;
+      map.off('movestart', handleCameraMoveStart);
+      map.off('moveend', handleCameraMoveEnd);
+      if (movingFlagTimer) clearTimeout(movingFlagTimer);
+      rootEl.removeAttribute('data-rv-map-moving');
       disarmInitialReveal();
       if (stuckShellTimer) clearTimeout(stuckShellTimer);
       subscriptions.cleanup();

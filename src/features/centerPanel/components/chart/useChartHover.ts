@@ -36,21 +36,31 @@ export function useChartHover<T extends HTMLElement>() {
     const el = ref.current;
     if (!el) return;
 
+    // Coalesce pointer events to one React commit per frame; the layout read
+    // (getBoundingClientRect) also happens at most once per frame.
+    let rafId: number | null = null;
+    let pendingPointer: { clientX: number; clientY: number } | null = null;
+
     const commitHover = (nextHover: ChartHoverState | null) => {
       if (sameHoverState(lastHoverRef.current, nextHover)) return;
       lastHoverRef.current = nextHover;
       setHover(nextHover);
     };
 
-    const update = (event: PointerEvent) => {
+    const flush = () => {
+      rafId = null;
+      const pointer = pendingPointer;
+      pendingPointer = null;
+      if (!pointer) return;
+
       const rect = el.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) {
         commitHover(null);
         return;
       }
 
-      const rawX = event.clientX - rect.left;
-      const rawY = event.clientY - rect.top;
+      const rawX = pointer.clientX - rect.left;
+      const rawY = pointer.clientY - rect.top;
       if (rawX < 0 || rawX > rect.width || rawY < 0 || rawY > rect.height) {
         commitHover(null);
         return;
@@ -63,7 +73,17 @@ export function useChartHover<T extends HTMLElement>() {
       commitHover({ x, y, ratioX });
     };
 
+    const update = (event: PointerEvent) => {
+      pendingPointer = { clientX: event.clientX, clientY: event.clientY };
+      if (rafId === null) rafId = window.requestAnimationFrame(flush);
+    };
+
     const clear = () => {
+      pendingPointer = null;
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+        rafId = null;
+      }
       commitHover(null);
     };
 
@@ -74,6 +94,7 @@ export function useChartHover<T extends HTMLElement>() {
     el.addEventListener('pointercancel', clear);
 
     return () => {
+      if (rafId !== null) window.cancelAnimationFrame(rafId);
       el.removeEventListener('pointermove', update);
       el.removeEventListener('pointerenter', update);
       el.removeEventListener('pointerdown', update);

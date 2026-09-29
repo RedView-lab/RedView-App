@@ -326,7 +326,7 @@ export function RythmeSection({
                 <button
                   key={lvl.id}
                   type="button"
-                  className={`rvi-tracage__mode-menu-item${
+                  className={`rv-dropdown__item${
                     rhythm.practiceLevel === lvl.id ? ' is-selected' : ''
                   }`}
                   onClick={() => {
@@ -475,7 +475,6 @@ export function RythmeSection({
               open={tiresMenuOpen}
               anchorRef={tiresBtnRef}
               onClose={() => setTiresMenuOpen(false)}
-              minWidth={80}
               align="left"
               estimatedHeight={200}
             >
@@ -483,7 +482,7 @@ export function RythmeSection({
                 <button
                   key={mm}
                   type="button"
-                  className={`rvi-tracage__mode-menu-item${
+                  className={`rv-dropdown__item${
                     (rhythm.tiresMm ?? 35) === mm ? ' is-selected' : ''
                   }`}
                   onClick={() => {

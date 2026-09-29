@@ -23,8 +23,9 @@
   padding: 12px;
   border-radius: 8px;
   background: var(--rvc-center-bg);
-  backdrop-filter: blur(20px) saturate(1.2);
-  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  /* No backdrop-filter: the dashboard already paints a blurred copy of the map
+     behind this panel (MapBlurMirror). A second backdrop blur here was recomputed
+     on every map frame and every resize frame for no visible difference. */
   color: var(--rvc-center-text);
   display: flex;
   flex-direction: column;

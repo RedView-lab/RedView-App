@@ -423,44 +423,6 @@
   white-space: nowrap;
 }
 
-.rvpb-create-menu__dropdown {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  min-width: 240px;
-  display: grid;
-  gap: 4px;
-  padding: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  background: rgba(21, 21, 21, 0.96);
-  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.42);
-  backdrop-filter: blur(20px);
-  z-index: 4;
-}
-
-.rvpb-create-menu__item {
-  appearance: none;
-  border: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 40px;
-  padding: 0 12px;
-  border-radius: 8px;
-  background: transparent;
-  color: #fff;
-  cursor: pointer;
-  font: inherit;
-  font-size: 14px;
-  font-weight: 500;
-  text-align: left;
-}
-
-.rvpb-create-menu__item:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
 .rvpb-grid-shell {
   flex: 1 1 auto;
   min-height: 0;
@@ -840,66 +802,20 @@
   }
 }
 
+/* Menu carte/dossier (portal) — apparence : shared/styles/dropdown.css (.rv-dropdown) */
 .rvpb-card-menu {
   position: fixed;
   z-index: 90;
-  display: grid;
-  gap: 4px;
-  padding: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  background: #242424;
-  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.42);
-  backdrop-filter: blur(60px);
-}
-
-.rvpb-card-menu__item,
-.rvpb-card-menu__move-item {
-  appearance: none;
-  border: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px;
-  height: 30px;
-  width: 100%;
-  padding: 6px 6px 6px 10px;
-  border-radius: 6px;
-  background: transparent;
-  color: #fff;
-  cursor: pointer;
-  font: inherit;
-  font-family: 'Rethink Sans', sans-serif;
-  font-size: 14px;
-  font-weight: 600;
-  text-align: left;
-}
-
-.rvpb-card-menu__item:hover,
-.rvpb-card-menu__move-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.rvpb-card-menu__item--danger {
-  color: #ffb7b7;
 }
 
 .rvpb-card-menu__move-list {
-  display: grid;
-  gap: 4px;
-  padding: 4px 0 6px 10px;
+  display: flex;
+  flex-direction: column;
 }
 
-.rvpb-card-menu__move-item {
-  height: 28px;
-  padding-left: 10px;
-  justify-content: flex-start;
-}
-
-.rvpb-card-menu__item:disabled,
-.rvpb-card-menu__move-item:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
+/* Sous-liste « Déplacer vers » : simple retrait */
+:root .rv-dropdown .rvpb-card-menu__move-item {
+  padding-left: 22px;
 }
 
 .rvpb-toast {
@@ -1052,9 +968,6 @@
 .rvpb-square-button:hover,
 .rvpb-card__open:hover,
 .rvpb-breadcrumb__item:not(.is-current):hover,
-.rvpb-create-menu__item:hover,
-.rvpb-card-menu__item:hover,
-.rvpb-card-menu__move-item:hover,
 .rvpb-top-tabs__item:hover,
 .rvpb-view-toggle__item:hover,
 .rvpb-create-button:hover,
@@ -1071,9 +984,6 @@
 .rvpb-square-button:focus-visible,
 .rvpb-card__open:focus-visible,
 .rvpb-breadcrumb__item:focus-visible,
-.rvpb-create-menu__item:focus-visible,
-.rvpb-card-menu__item:focus-visible,
-.rvpb-card-menu__move-item:focus-visible,
 .rvpb-top-tabs__item:focus-visible,
 .rvpb-view-toggle__item:focus-visible,
 .rvpb-create-button:focus-visible,

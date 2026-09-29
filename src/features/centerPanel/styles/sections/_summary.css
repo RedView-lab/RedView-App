@@ -316,79 +316,10 @@
   cursor: default;
 }
 
+/* Menu d'actions (portal) — apparence : shared/styles/dropdown.css (.rv-dropdown) */
 .rvc-center-summary__menu {
   position: fixed;
   z-index: 1200;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.44);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 18px 42px rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(60px);
-  -webkit-backdrop-filter: blur(60px);
-  isolation: isolate;
-}
-
-.rvc-center-summary__menu-item {
-  all: unset;
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 32px;
-  padding: 6px 12px;
-  color: #fff;
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.rvc-center-summary__menu-item + .rvc-center-summary__menu-item {
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
-}
-
-.rvc-center-summary__menu-item:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.rvc-center-summary__menu-item:focus-visible {
-  outline: none;
-  background: rgba(255, 255, 255, 0.06);
-  box-shadow: inset 0 0 0 1px rgba(197, 0, 0, 0.48);
-}
-
-.rvc-center-summary__menu-item:disabled {
-  color: rgba(255, 255, 255, 0.34);
-  cursor: default;
-}
-
-.rvc-center-summary__menu-item--danger:not(:disabled) {
-  color: #ffdfdf;
-}
-
-.rvc-center-summary__menu-label {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.2;
-}
-
-.rvc-center-summary__menu-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
-  color: rgba(255, 255, 255, 0.96);
 }
 
 .rvc-center-summary__rename-panel {
@@ -432,11 +363,6 @@
   border-top: 1px solid rgba(255, 255, 255, 0.04);
 }
 
-.rvc-center-summary__rename-actions .rvc-center-summary__menu-item + .rvc-center-summary__menu-item {
-  border-top: 0;
-  border-left: 1px solid rgba(255, 255, 255, 0.04);
-}
-
 .rvc-center-summary__children .rvi-collapse__inner {
   display: flex;
   flex-direction: column;
@@ -458,10 +384,3 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .rvc-center-summary__menu,
-  .rvc-center-summary__menu-item {
-    animation: none;
-    transition: none;
-  }
-}

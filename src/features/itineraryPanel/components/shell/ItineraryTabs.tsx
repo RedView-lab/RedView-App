@@ -2,12 +2,12 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { useAppI18n } from '@/shared/i18n';
-import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { IconEye, IconPlus, IconTrash } from '../icons';
 import type { Itinerary, RouteProfile } from '../../types';
 
-const MENU_WIDTH = 104;
+const MENU_WIDTH = 140;
+const MENU_MAX_HEIGHT = 90;
 const MENU_GAP = 6;
 const VIEWPORT_PADDING = 8;
 
@@ -72,7 +72,7 @@ export function ItineraryTabs({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number; scale: number } | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const triggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -109,14 +109,17 @@ export function ItineraryTabs({
       const trigger = triggerRefs.current[openMenuId];
       if (!trigger) return;
       const rect = trigger.getBoundingClientRect();
-      const rawLeft = rect.right - MENU_WIDTH;
-      const maxLeft = window.innerWidth - MENU_WIDTH - VIEWPORT_PADDING;
+      const rawScale = Number.parseFloat(window.getComputedStyle(trigger).getPropertyValue('--app-scale'));
+      const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
+      const menuWidth = MENU_WIDTH * scale;
+      const rawLeft = rect.right - menuWidth;
+      const maxLeft = window.innerWidth - menuWidth - VIEWPORT_PADDING;
       const left = Math.max(VIEWPORT_PADDING, Math.min(rawLeft, maxLeft));
       const top = Math.min(
-        rect.bottom + MENU_GAP,
-        window.innerHeight - VIEWPORT_PADDING - 108,
+        rect.bottom + MENU_GAP * scale,
+        window.innerHeight - VIEWPORT_PADDING - MENU_MAX_HEIGHT * scale,
       );
-      setMenuPosition({ top, left });
+      setMenuPosition({ top, left, scale });
     };
 
     updatePosition();
@@ -305,29 +308,34 @@ export function ItineraryTabs({
         ? createPortal(
             <div
               ref={menuRef}
-              className="rvi-itin-actions-menu"
+              className="rv-dropdown rvi-itin-actions-menu"
               role="menu"
               aria-label={t('Actions de l’itinéraire')}
-              style={{ top: menuPosition.top, left: menuPosition.left, width: MENU_WIDTH }}
+              style={{
+                top: menuPosition.top,
+                left: menuPosition.left,
+                width: MENU_WIDTH,
+                transform: `scale(${menuPosition.scale})`,
+                transformOrigin: 'top left',
+              }}
             >
-              <MapCanvasGlassBackdrop blur={34} saturate={1.85} tint="rgba(10, 10, 12, 0.46)" />
               {canRename ? (
                 <button
                   type="button"
-                  className="rvi-itin-actions-menu__item"
+                  className="rv-dropdown__item"
                   role="menuitem"
                   onClick={() => startEdit(menuItinerary)}
                 >
-                  <span className="rvi-itin-actions-menu__label">{t('Renommer')}</span>
-                  <span className="rvi-itin-actions-menu__icon" aria-hidden>
-                    <SvgV2Icon name="edit-05.svg" size={12} />
+                  <span className="rv-dropdown__label">{t('Renommer')}</span>
+                  <span className="rv-dropdown__icon" aria-hidden>
+                    <SvgV2Icon name="edit-05.svg" size={16} />
                   </span>
                 </button>
               ) : null}
               {canDuplicate ? (
                 <button
                   type="button"
-                  className="rvi-itin-actions-menu__item"
+                  className="rv-dropdown__item"
                   role="menuitem"
                   onClick={() => {
                     onDuplicate?.(menuItinerary.id);
@@ -335,16 +343,16 @@ export function ItineraryTabs({
                     setMenuPosition(null);
                   }}
                 >
-                  <span className="rvi-itin-actions-menu__label">{t('Dupliquer')}</span>
-                  <span className="rvi-itin-actions-menu__icon" aria-hidden>
-                    <SvgV2Icon name="copy-04.svg" size={12} />
+                  <span className="rv-dropdown__label">{t('Dupliquer')}</span>
+                  <span className="rv-dropdown__icon" aria-hidden>
+                    <SvgV2Icon name="copy-04.svg" size={16} />
                   </span>
                 </button>
               ) : null}
               {canRemove ? (
                 <button
                   type="button"
-                  className="rvi-itin-actions-menu__item rvi-itin-actions-menu__item--danger"
+                  className="rv-dropdown__item rv-dropdown__item--danger"
                   role="menuitem"
                   onClick={() => {
                     onRemove?.(menuItinerary.id);
@@ -352,9 +360,9 @@ export function ItineraryTabs({
                     setMenuPosition(null);
                   }}
                 >
-                  <span className="rvi-itin-actions-menu__label">{t('Supprimer')}</span>
-                  <span className="rvi-itin-actions-menu__icon" aria-hidden>
-                    <IconTrash size={12} />
+                  <span className="rv-dropdown__label">{t('Supprimer')}</span>
+                  <span className="rv-dropdown__icon" aria-hidden>
+                    <IconTrash size={14} />
                   </span>
                 </button>
               ) : null}

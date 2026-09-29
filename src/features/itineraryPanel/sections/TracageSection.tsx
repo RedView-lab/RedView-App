@@ -630,7 +630,7 @@ export function TracageSection({
             {/* Standard 3 Presets: Cyclisme sur route, Gravel, VTT */}
             <button
               type="button"
-              className={`rvi-tracage__mode-menu-item${!activeBaseSaved && !isCustomized && effectiveBaseId === 'road' ? ' is-selected' : ''}`}
+              className={`rv-dropdown__item${!activeBaseSaved && !isCustomized && effectiveBaseId === 'road' ? ' is-selected' : ''}`}
               onClick={() => handleActivitySelect('road')}
             >
               <IconBikeShop size={15} />
@@ -638,7 +638,7 @@ export function TracageSection({
             </button>
             <button
               type="button"
-              className={`rvi-tracage__mode-menu-item${!activeBaseSaved && !isCustomized && effectiveBaseId === 'gravel-default' ? ' is-selected' : ''}`}
+              className={`rv-dropdown__item${!activeBaseSaved && !isCustomized && effectiveBaseId === 'gravel-default' ? ' is-selected' : ''}`}
               onClick={() => handleActivitySelect('gravel-default')}
             >
               <IconBikeShop size={15} />
@@ -646,7 +646,7 @@ export function TracageSection({
             </button>
             <button
               type="button"
-              className={`rvi-tracage__mode-menu-item${!activeBaseSaved && !isCustomized && effectiveBaseId === 'mtb' ? ' is-selected' : ''}`}
+              className={`rv-dropdown__item${!activeBaseSaved && !isCustomized && effectiveBaseId === 'mtb' ? ' is-selected' : ''}`}
               onClick={() => handleActivitySelect('mtb')}
             >
               <IconBikeShop size={15} />
@@ -656,10 +656,10 @@ export function TracageSection({
             {/* Current in-progress draft profile before saving */}
             {isCustomized && !activeBaseSaved && (
               <>
-                <div className="rvi-tracage__dropdown-divider" />
+                <div className="rv-dropdown__divider" />
                 <button
                   type="button"
-                  className="rvi-tracage__mode-menu-item is-selected"
+                  className="rv-dropdown__item is-selected"
                   onClick={() => setActivityOpen(false)}
                 >
                   <IconSlidersFigma size={15} />
@@ -671,12 +671,12 @@ export function TracageSection({
             {/* Saved custom profiles if any */}
             {savedProfiles.length > 0 && (
               <>
-                <div className="rvi-tracage__dropdown-divider" />
+                <div className="rv-dropdown__divider" />
                 {savedProfiles.map((cp) => (
                   <div key={cp.id} className="rvi-tracage__mode-menu-item-row">
                     <button
                       type="button"
-                      className={`rvi-tracage__mode-menu-item${effectiveBaseId === cp.id ? ' is-selected' : ''}`}
+                      className={`rv-dropdown__item${effectiveBaseId === cp.id ? ' is-selected' : ''}`}
                       onClick={() => handleCustomProfileSelect(cp)}
                     >
                       <IconSlidersFigma size={15} />
@@ -735,7 +735,7 @@ export function TracageSection({
           >
             <button
               type="button"
-              className={`rvi-tracage__mode-menu-item${currentTracingMode === 'vitesse' ? ' is-selected' : ''}`}
+              className={`rv-dropdown__item${currentTracingMode === 'vitesse' ? ' is-selected' : ''}`}
               onClick={() => handleTracingModeSelect('vitesse')}
             >
               <IconFlash size={15} />
@@ -743,7 +743,7 @@ export function TracageSection({
             </button>
             <button
               type="button"
-              className={`rvi-tracage__mode-menu-item${currentTracingMode === 'aventure' ? ' is-selected' : ''}`}
+              className={`rv-dropdown__item${currentTracingMode === 'aventure' ? ' is-selected' : ''}`}
               onClick={() => handleTracingModeSelect('aventure')}
             >
               <IconTelescope size={15} />
@@ -751,7 +751,7 @@ export function TracageSection({
             </button>
             <button
               type="button"
-              className={`rvi-tracage__mode-menu-item${currentTracingMode === 'comfort' ? ' is-selected' : ''}`}
+              className={`rv-dropdown__item${currentTracingMode === 'comfort' ? ' is-selected' : ''}`}
               onClick={() => handleTracingModeSelect('comfort')}
             >
               <IconComfort size={15} />
@@ -894,7 +894,6 @@ export function TracageSection({
               open={toleranceOpen}
               anchorRef={toleranceBtnRef}
               onClose={() => setToleranceOpen(false)}
-              width={76}
               align="right"
               estimatedHeight={260}
             >
@@ -902,8 +901,7 @@ export function TracageSection({
                 <button
                   key={val}
                   type="button"
-                  className={`rvi-tracage__mode-menu-item${val === currentTolerance ? ' is-selected' : ''}`}
-                  style={{ justifyContent: 'center', height: 30 }}
+                  className={`rv-dropdown__item${val === currentTolerance ? ' is-selected' : ''}`}
                   onClick={() => handleToleranceSelect(val)}
                 >
                   <span>{`${val}%`}</span>
@@ -1115,7 +1113,6 @@ function ParamDropdownItem({
         open={open}
         anchorRef={btnRef}
         onClose={() => setOpen(false)}
-        width={96}
         align="right"
         estimatedHeight={138}
       >
@@ -1123,12 +1120,7 @@ function ParamDropdownItem({
           <button
             key={opt.value}
             type="button"
-            className={`rvi-tracage__mode-menu-item${opt.value === value ? ' is-selected' : ''}`}
-            style={{
-              height: 28,
-              fontSize: 12,
-              padding: '4px 8px',
-            }}
+            className={`rv-dropdown__item${opt.value === value ? ' is-selected' : ''}`}
             onClick={() => {
               onChange(opt.value);
               setOpen(false);
@@ -1178,7 +1170,6 @@ function SlopeParamItem({
         open={open}
         anchorRef={btnRef}
         onClose={() => setOpen(false)}
-        width={88}
         align="right"
         estimatedHeight={180}
       >
@@ -1186,13 +1177,7 @@ function SlopeParamItem({
           <button
             key={val}
             type="button"
-            className={`rvi-tracage__mode-menu-item${val === value ? ' is-selected' : ''}`}
-            style={{
-              height: 28,
-              fontSize: 12,
-              padding: '4px 8px',
-              justifyContent: 'center',
-            }}
+            className={`rv-dropdown__item${val === value ? ' is-selected' : ''}`}
             onClick={() => {
               onChange(val);
               setOpen(false);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useAnalysisFlyover } from '../../flyover';
 import { useRouteSplitToolOptional } from '../../routeSplit';
 import {
@@ -125,7 +125,6 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
     altitudeBackdropProfiles,
     routeXDomainClamp,
     poiAnnotations,
-    alertAnnotations,
     dayNightOverlay,
     pauseOverlay,
   } = useAnalysisChartData({
@@ -489,7 +488,14 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
     [activeItinerary, map, predictions, updateHoverPoint, visibleChartNodes, xMode],
   );
 
-  const handleChartClick = (xValue: number) => {
+  // Latest-closure ref + stable wrapper: a fresh `onPlotClick` on every render
+  // defeated `AnalysisChart`'s memo (re-rendering it on each map-hover /
+  // flyover frame) and re-bound its window pointer listeners.
+  const chartClickImplRef = useRef<(xValue: number) => void>(() => {});
+  const handleChartClick = useCallback((xValue: number) => {
+    chartClickImplRef.current(xValue);
+  }, []);
+  const handleChartClickImpl = (xValue: number) => {
     setSelectedChartX(xValue);
     handleClearSelectedXRange();
 
@@ -553,8 +559,11 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
 
     updateHoverPoint(xValue);
   };
+  useLayoutEffect(() => {
+    chartClickImplRef.current = handleChartClickImpl;
+  });
 
-  const toggleFilter = (key: 'pente' | 'jourNuit' | 'alertes') => {
+  const toggleFilter = (key: 'pente' | 'jourNuit') => {
     updateAnalysis((draft) => {
       draft.filters[key] = !draft.filters[key];
     });
@@ -595,7 +604,6 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
           chartNodes={preparedChartNodes}
           backdropProfiles={altitudeBackdropProfiles}
           poiAnnotations={poiAnnotations}
-          alertAnnotations={alertAnnotations}
           dayNightOverlay={dayNightOverlay}
           pauseOverlay={pauseOverlay}
           axis1Metric={axis1Value}

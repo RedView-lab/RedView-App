@@ -44,7 +44,7 @@ export interface ControlPanelContainerProps {
   onToggleLidarDownloadMode?: () => void;
   onCancelLidarSelection?: () => void;
   lidarDownloadModeActive?: boolean;
-  width?: number;
+  width?: number | '100%';
   onResizeStart?: (ev: ReactMouseEvent<HTMLDivElement>) => void;
   isResizing?: boolean;
   onContextMenuOverlayContextChange?: (context: MapContextMenuOverlayContext) => void;

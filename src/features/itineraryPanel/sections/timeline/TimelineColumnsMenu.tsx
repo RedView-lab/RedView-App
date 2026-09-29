@@ -14,7 +14,6 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useAppI18n } from '@/shared/i18n';
-import { IconCheck } from '../../components/icons';
 import type { TimelineColumnDef, TimelineColumnId } from './TimelineColumns';
 
 interface MenuStyle {
@@ -23,10 +22,6 @@ interface MenuStyle {
   width: number;
   maxHeight: number;
   scale: number;
-  fontFamily: string;
-  fontSize: string;
-  fontWeight: string;
-  lineHeight: string;
 }
 
 interface TimelineColumnsMenuProps {
@@ -69,10 +64,6 @@ function computeStyle(anchorEl: HTMLElement, rowCount: number): MenuStyle {
     width: MENU_WIDTH,
     maxHeight: Math.round(maxHeight / scale),
     scale,
-    fontFamily: computed.fontFamily,
-    fontSize: computed.fontSize,
-    fontWeight: computed.fontWeight,
-    lineHeight: computed.lineHeight,
   };
 }
 
@@ -133,7 +124,7 @@ export function TimelineColumnsMenu({
   return createPortal(
     <div
       ref={menuRef}
-      className="rvi-tl-columns-menu"
+      className="rv-dropdown rvi-tl-columns-menu"
       role="menu"
       aria-label={t('Colonnes')}
       style={{
@@ -143,38 +134,29 @@ export function TimelineColumnsMenu({
         maxHeight: menuStyle.maxHeight,
         transform: `scale(${menuStyle.scale})`,
         transformOrigin: 'top left',
-        fontFamily: menuStyle.fontFamily,
-        fontSize: menuStyle.fontSize,
-        fontWeight: menuStyle.fontWeight,
-        lineHeight: menuStyle.lineHeight,
       }}
       onMouseDown={(event) => event.stopPropagation()}
     >
-      <div className="rvi-tl-columns-menu__scroll">
-        {columns.map((col) => {
-          const on = visibility[col.id] === true;
-          const disabled = col.pinned === true;
-          return (
-            <button
-              key={col.id}
-              type="button"
-              role="menuitemcheckbox"
-              aria-checked={on}
-              disabled={disabled}
-              className={`rvi-tl-columns-menu__option${on ? ' is-on' : ''}${disabled ? ' is-disabled' : ''}`}
-              onClick={() => {
-                if (disabled) return;
-                onToggle(col.id, !on);
-              }}
-            >
-              <span className="rvi-tl-columns-menu__label">{t(col.label)}</span>
-              <span className="rvi-tl-columns-menu__check" aria-hidden>
-                {on ? <IconCheck size={16} /> : null}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      {columns.map((col) => {
+        const on = visibility[col.id] === true;
+        const disabled = col.pinned === true;
+        return (
+          <button
+            key={col.id}
+            type="button"
+            role="menuitemcheckbox"
+            aria-checked={on}
+            disabled={disabled}
+            className={`rv-dropdown__item${on ? ' is-selected' : ''}${disabled ? ' is-disabled' : ''}`}
+            onClick={() => {
+              if (disabled) return;
+              onToggle(col.id, !on);
+            }}
+          >
+            <span className="rv-dropdown__label">{t(col.label)}</span>
+          </button>
+        );
+      })}
     </div>,
     portalTarget,
   );

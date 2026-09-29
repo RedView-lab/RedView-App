@@ -46,19 +46,11 @@ const PANEL_TEMPLATE = `
             <path d="m5 7.5 5 5 5-5"></path>
           </svg>
         </button>
-        <div id="panel-engine-mode-menu" class="viewer-panel__select-menu viewer-panel__select-menu--engine" role="listbox" hidden>
-          <button class="viewer-panel__select-option is-selected" type="button" role="option" data-engine-mode-option="webgpu" aria-selected="true">
-            <span class="viewer-panel__select-option-label">WebGpu (+ precis)</span>
-            <svg class="viewer-panel__select-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="m3.5 8.2 2.7 2.7 6-6"></path>
-            </svg>
-          </button>
-          <button class="viewer-panel__select-option" type="button" role="option" data-engine-mode-option="webgl" aria-selected="false">
-            <span class="viewer-panel__select-option-label">WebGl HD</span>
-            <svg class="viewer-panel__select-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="m3.5 8.2 2.7 2.7 6-6"></path>
-            </svg>
-          </button>
+        <div id="panel-engine-mode-menu" class="rv-dropdown viewer-panel__select-menu viewer-panel__select-menu--engine" role="listbox" hidden>
+          <button class="rv-dropdown__item viewer-panel__select-option is-selected" type="button" role="option" data-engine-mode-option="webgpu" aria-selected="true">
+            <span class="rv-dropdown__label">WebGpu (+ precis)</span>          </button>
+          <button class="rv-dropdown__item viewer-panel__select-option" type="button" role="option" data-engine-mode-option="webgl" aria-selected="false">
+            <span class="rv-dropdown__label">WebGl HD</span>          </button>
         </div>
       </div>
     </div>
@@ -102,19 +94,11 @@ const PANEL_TEMPLATE = `
             <path d="m4 6 4 4 4-4"></path>
           </svg>
         </button>
-        <div id="panel-snow-mode-menu" class="viewer-panel__select-menu" role="listbox" hidden>
-          <button class="viewer-panel__select-option is-selected" type="button" role="option" data-snow-mode-option="cover" aria-selected="true">
-            <span class="viewer-panel__select-option-label">Couverture neigeuse</span>
-            <svg class="viewer-panel__select-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="m3.5 8.2 2.7 2.7 6-6"></path>
-            </svg>
-          </button>
-          <button class="viewer-panel__select-option" type="button" role="option" data-snow-mode-option="thickness" aria-selected="false">
-            <span class="viewer-panel__select-option-label">Epaisseur (cm)</span>
-            <svg class="viewer-panel__select-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="m3.5 8.2 2.7 2.7 6-6"></path>
-            </svg>
-          </button>
+        <div id="panel-snow-mode-menu" class="rv-dropdown viewer-panel__select-menu" role="listbox" hidden>
+          <button class="rv-dropdown__item viewer-panel__select-option is-selected" type="button" role="option" data-snow-mode-option="cover" aria-selected="true">
+            <span class="rv-dropdown__label">Couverture neigeuse</span>          </button>
+          <button class="rv-dropdown__item viewer-panel__select-option" type="button" role="option" data-snow-mode-option="thickness" aria-selected="false">
+            <span class="rv-dropdown__label">Epaisseur (cm)</span>          </button>
         </div>
       </div>
     </div>

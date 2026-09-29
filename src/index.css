@@ -18,6 +18,15 @@ body {
 }
 
 /*
+ * Map camera in motion (flag set by useMap on movestart/moveend): skip
+ * backdrop blurs, which the compositor would recompute on every WebGL frame.
+ */
+html[data-rv-map-moving] * {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/*
  * Full-viewport overlays (project manager, loading page, modals, mobile block).
  *
  * These are rendered inside the dashboard's `transform: scale(appScale)` canvas,

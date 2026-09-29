@@ -127,23 +127,20 @@ function buildPopupHtml(feature: PoiFeature, state: PoiPopupState): string {
           ${
             state.isDurationDropdownOpen
               ? `
-            <div class="rvc-select__dropdown rv-poi-popup__dropdown" role="listbox" aria-label="Durée de pause">
-              <div class="rv-poi-popup__dropdown-list">
-                ${PAUSE_DURATION_OPTIONS.map((dur) => {
-                  const selected = dur === state.pauseDurationMin;
-                  return `
-                    <div
-                      class="rvc-select__option rv-poi-popup__dropdown-option${selected ? ' is-selected' : ''}"
-                      role="option"
-                      data-duration="${dur}"
-                      aria-selected="${selected}"
-                    >
-                      <span class="rvc-select__option-label rv-poi-popup__dropdown-text">${dur} min</span>
-                      ${selected ? `<img src="${UI_ICON_URLS.check}" alt="" class="rvc-select__option-check rv-poi-popup__dropdown-check" />` : ''}
-                    </div>
-                  `;
-                }).join('')}
-              </div>
+            <div class="rv-dropdown rv-poi-popup__dropdown" role="listbox" aria-label="Durée de pause">
+              ${PAUSE_DURATION_OPTIONS.map((dur) => {
+                const selected = dur === state.pauseDurationMin;
+                return `
+                  <div
+                    class="rv-dropdown__item rv-poi-popup__dropdown-option${selected ? ' is-selected' : ''}"
+                    role="option"
+                    data-duration="${dur}"
+                    aria-selected="${selected}"
+                  >
+                    <span class="rv-dropdown__label">${dur} min</span>
+                  </div>
+                `;
+              }).join('')}
             </div>
           `
               : ''
