@@ -172,7 +172,7 @@ export function flyToLocation(
 
     const is2D = currentPitch <= 8;
     const targetPitch = options?.pitch ?? (is2D ? 0 : Math.max(currentPitch, 58));
-    const targetZoom = options?.zoom ?? Math.max(map.getZoom(), 15.4);
+    const targetZoom = options?.zoom ?? Math.max(map.getZoom(), 14.4);
 
     map.flyTo({
       center: [target.lon, target.lat],

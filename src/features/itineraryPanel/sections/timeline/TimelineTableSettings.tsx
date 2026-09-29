@@ -54,7 +54,7 @@ export const DEFAULT_TIMELINE_TABLE_SETTINGS: TimelineTableSettingsState = {
   distanceBetweenWaypoints: false,
   distanceKm: 10,
   columns: buildDefaultColumnVisibility(),
-  sort: null,
+  sort: { columnId: 'distance', direction: 'asc' },
 };
 
 interface TimelineTableSettingsProps {

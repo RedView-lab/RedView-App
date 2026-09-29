@@ -1044,7 +1044,7 @@ export function useItineraryCheckpointMarkers({
 
       if (map) {
         const lngLat = targetEntry.marker.getLngLat();
-        flyToLocation(map, { lon: lngLat.lng, lat: lngLat.lat }, { zoom: 15.5 });
+        flyToLocation(map, { lon: lngLat.lng, lat: lngLat.lat }, { zoom: 14.5 });
       }
 
       return true;

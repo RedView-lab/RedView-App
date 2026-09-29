@@ -324,11 +324,22 @@ export function DashboardPlaceSearch({
     scheduleVisualRefresh();
     map.on('zoom', scheduleVisualRefresh);
 
+    // Markers created before DEM tiles finished loading were projected with a
+    // default elevation (sea level); re-setting their LngLat forces a re-projection that
+    // re-samples the loaded 3D terrain elevation and prevents parallax drift.
+    const reanchorOnIdle = () => {
+      for (const { marker } of poiMarkerRegistryRef.current.values()) {
+        marker.setLngLat(marker.getLngLat());
+      }
+    };
+    map.on('idle', reanchorOnIdle);
+
     return () => {
       if (frameId != null) {
         window.cancelAnimationFrame(frameId);
       }
       map.off('zoom', scheduleVisualRefresh);
+      map.off('idle', reanchorOnIdle);
     };
   }, [map, syncViewportPoiMarkerVisualState]);
 

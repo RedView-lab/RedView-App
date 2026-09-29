@@ -23,6 +23,13 @@
   transition: opacity 140ms ease;
 }
 
+.rv-poi-marker.mapboxgl-marker {
+  position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
+  margin: 0 !important;
+}
+
 .rv-poi-marker.is-favorite,
 .rv-poi-marker--favorite {
   z-index: 50;

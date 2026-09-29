@@ -635,7 +635,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
           item.lat != null && item.lon != null ? { lat: item.lat, lon: item.lon } : undefined,
         );
         if (!opened && map && item.lat != null && item.lon != null) {
-          flyToLocation(map, { lon: item.lon, lat: item.lat }, { zoom: 15.5 });
+          flyToLocation(map, { lon: item.lon, lat: item.lat }, { zoom: 14.5 });
         }
       } else if (item.kind === 'pause' || item.kind === 'waypoint') {
         const opened = openCheckpointMarker(
@@ -643,10 +643,10 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
           item.lat != null && item.lon != null ? { lat: item.lat, lon: item.lon } : undefined,
         );
         if (!opened && map && item.lat != null && item.lon != null) {
-          flyToLocation(map, { lon: item.lon, lat: item.lat }, { zoom: 15.5 });
+          flyToLocation(map, { lon: item.lon, lat: item.lat }, { zoom: 14.5 });
         }
       } else if (map && item.lat != null && item.lon != null) {
-        flyToLocation(map, { lon: item.lon, lat: item.lat }, { zoom: 15.5 });
+        flyToLocation(map, { lon: item.lon, lat: item.lat }, { zoom: 14.5 });
       }
 
       dispatchSelectPoiOnChart({

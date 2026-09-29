@@ -44,6 +44,11 @@ const MARKER_MAX_POPUP_OFFSET_PX = 80;
 /** Occlusion relief 3D : 0 pour masquer complètement les POI situés derrière les montagnes. */
 const MARKER_OCCLUDED_OPACITY = 0;
 const FAVORITE_BADGE_ICON_URL = '/svgv2/icone/star-01.svg';
+/**
+ * Niveau de zoom auto lors d'un focus POI (14.5 au lieu de 15.5).
+ * En projection Web Mercator, -1 niveau de zoom divise l'échelle par 2 (zoom 2x moins fort).
+ */
+export const POI_AUTO_ZOOM_LEVEL = 14.5;
 
 interface PoiMarkerEntry {
   marker: mapboxgl.Marker;
@@ -308,8 +313,11 @@ export class PoiMarkerManager {
       this.getActions().onSelectPoi?.(targetEntry.feature);
     }
 
-    const lngLat = targetEntry.marker.getLngLat();
-    flyToLocation(this.map, { lon: lngLat.lng, lat: lngLat.lat }, { zoom: 15.5 });
+    flyToLocation(
+      this.map,
+      { lon: targetEntry.feature.lon, lat: targetEntry.feature.lat },
+      { zoom: POI_AUTO_ZOOM_LEVEL },
+    );
 
     return true;
   }

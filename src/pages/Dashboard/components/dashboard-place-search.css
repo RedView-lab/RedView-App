@@ -456,8 +456,10 @@
 
 /* ── Viewport POI Markers (POIs sur carte) ─────────────────────────── */
 .rvd-viewport-poi-marker {
-  position: relative;
-  display: inline-flex;
+  /* CRITICAL: Never set position: relative or static.
+   * Mapbox GL Marker requires position: absolute; left: 0; top: 0;
+   * so markers are detached from document flow and placed at canvas origin. */
+  display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
@@ -466,6 +468,13 @@
   cursor: pointer;
   pointer-events: auto;
   user-select: none;
+}
+
+.rvd-viewport-poi-marker.mapboxgl-marker {
+  position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
+  margin: 0 !important;
 }
 
 .rvd-viewport-poi-marker--round {
