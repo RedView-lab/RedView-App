@@ -66,11 +66,11 @@ function generateHeightmap(
   const useStrictGround = groundCount >= Math.min(1000, count * 0.05);
 
   // 2) Bilinear splatting accumulation grid (completely eliminates flight-line stepping and moiré beating)
-  const sumZ = new Float64Array(N);
-  const sumW = new Float32Array(N);
-  const sumR = new Float64Array(N);
-  const sumG = new Float64Array(N);
-  const sumB = new Float64Array(N);
+  // Interleaved accumulators [z, w, r, g, b] per cell: one cache line per
+  // splat corner instead of five scattered arrays. `w` keeps float32
+  // accumulation semantics via Math.fround.
+  const ACC = 5;
+  const acc = new Float64Array(N * ACC);
   const hasPoint = new Uint8Array(N);
 
   for (let i = 0; i < count; i++) {
@@ -108,10 +108,14 @@ function generateHeightmap(
       const i01 = (y0 + 1) * gridW + x0;
       const i11 = (y0 + 1) * gridW + (x0 + 1);
 
-      sumZ[i00] += z * w00; sumW[i00] += w00; sumR[i00] += r * w00; sumG[i00] += g * w00; sumB[i00] += b * w00; hasPoint[i00] = 1;
-      sumZ[i10] += z * w10; sumW[i10] += w10; sumR[i10] += r * w10; sumG[i10] += g * w10; sumB[i10] += b * w10; hasPoint[i10] = 1;
-      sumZ[i01] += z * w01; sumW[i01] += w01; sumR[i01] += r * w01; sumG[i01] += g * w01; sumB[i01] += b * w01; hasPoint[i01] = 1;
-      sumZ[i11] += z * w11; sumW[i11] += w11; sumR[i11] += r * w11; sumG[i11] += g * w11; sumB[i11] += b * w11; hasPoint[i11] = 1;
+      let a = i00 * ACC;
+      acc[a] += z * w00; acc[a + 1] = Math.fround(acc[a + 1]! + w00); acc[a + 2] += r * w00; acc[a + 3] += g * w00; acc[a + 4] += b * w00; hasPoint[i00] = 1;
+      a = i10 * ACC;
+      acc[a] += z * w10; acc[a + 1] = Math.fround(acc[a + 1]! + w10); acc[a + 2] += r * w10; acc[a + 3] += g * w10; acc[a + 4] += b * w10; hasPoint[i10] = 1;
+      a = i01 * ACC;
+      acc[a] += z * w01; acc[a + 1] = Math.fround(acc[a + 1]! + w01); acc[a + 2] += r * w01; acc[a + 3] += g * w01; acc[a + 4] += b * w01; hasPoint[i01] = 1;
+      a = i11 * ACC;
+      acc[a] += z * w11; acc[a + 1] = Math.fround(acc[a + 1]! + w11); acc[a + 2] += r * w11; acc[a + 3] += g * w11; acc[a + 4] += b * w11; hasPoint[i11] = 1;
     }
   }
 
@@ -121,11 +125,13 @@ function generateHeightmap(
   const colB = new Uint8Array(N);
 
   for (let i = 0; i < N; i++) {
-    if (sumW[i]! > 0) {
-      heights[i] = sumZ[i]! / sumW[i]!;
-      colR[i] = Math.round(sumR[i]! / sumW[i]!);
-      colG[i] = Math.round(sumG[i]! / sumW[i]!);
-      colB[i] = Math.round(sumB[i]! / sumW[i]!);
+    const a = i * ACC;
+    const w = acc[a + 1]!;
+    if (w > 0) {
+      heights[i] = acc[a]! / w;
+      colR[i] = Math.round(acc[a + 2]! / w);
+      colG[i] = Math.round(acc[a + 3]! / w);
+      colB[i] = Math.round(acc[a + 4]! / w);
     } else {
       heights[i] = Infinity;
       colR[i] = 128;

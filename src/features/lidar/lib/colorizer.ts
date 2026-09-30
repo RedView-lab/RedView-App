@@ -98,12 +98,52 @@ function wgs84ToAbsPixel(lon: number, lat: number, zoom: number): [number, numbe
   return [absPx, absPy];
 }
 
-export async function colorizePointCloud(
-  pointCloud: PointCloudData,
-  onProgress?: (phase: string, percent: number) => void
-): Promise<void> {
-  const { positions, colors, count, crs, bounds } = pointCloud;
+const ORTHO_FETCH_CONCURRENCY = 48;
 
+// Per-worker cache of in-flight/decoded ortho tiles, so a prefetch started
+// from the COPC header bounds (while points are still decoding) is reused by
+// the colorization pass.
+const orthoTileCache = new Map<string, Promise<Uint8Array | null>>();
+const orthoFetchQueue: Array<() => void> = [];
+let orthoFetchesInFlight = 0;
+
+function runOrthoFetchQueue(): void {
+  while (orthoFetchesInFlight < ORTHO_FETCH_CONCURRENCY && orthoFetchQueue.length > 0) {
+    orthoFetchesInFlight++;
+    orthoFetchQueue.shift()!();
+  }
+}
+
+function getOrthoTile(zoom: number, tileX: number, tileY: number, crs: DetectedCrs): Promise<Uint8Array | null> {
+  const key = `${crs}/${zoom}/${tileX}/${tileY}`;
+  let pending = orthoTileCache.get(key);
+  if (!pending) {
+    pending = new Promise<Uint8Array | null>((resolve) => {
+      orthoFetchQueue.push(() => {
+        fetchOrthoTile(zoom, tileX, tileY, crs)
+          .then(resolve, () => resolve(null))
+          .finally(() => {
+            orthoFetchesInFlight--;
+            runOrthoFetchQueue();
+          });
+      });
+      runOrthoFetchQueue();
+    });
+    orthoTileCache.set(key, pending);
+  }
+  return pending;
+}
+
+interface OrthoTileRange {
+  px00: number; py00: number;
+  px10: number; py10: number;
+  px01: number; py01: number;
+  px11: number; py11: number;
+  minTileCol: number; maxTileCol: number;
+  minTileRow: number; maxTileRow: number;
+}
+
+function computeOrthoTileRange(bounds: PointCloudData['bounds'], crs: DetectedCrs): OrthoTileRange {
   const [lon00, lat00] = toWgs84(bounds.minX, bounds.minY, crs);
   const [lon10, lat10] = toWgs84(bounds.maxX, bounds.minY, crs);
   const [lon01, lat01] = toWgs84(bounds.minX, bounds.maxY, crs);
@@ -114,6 +154,41 @@ export async function colorizePointCloud(
   const [px01, py01] = wgs84ToAbsPixel(lon01, lat01, WMTS_ZOOM);
   const [px11, py11] = wgs84ToAbsPixel(lon11, lat11, WMTS_ZOOM);
 
+  const allPxX = [px00, px10, px01, px11];
+  const allPxY = [py00, py10, py01, py11];
+  return {
+    px00, py00, px10, py10, px01, py01, px11, py11,
+    minTileCol: Math.floor(Math.min(...allPxX) / TILE_SIZE),
+    maxTileCol: Math.floor(Math.max(...allPxX) / TILE_SIZE),
+    minTileRow: Math.floor(Math.min(...allPxY) / TILE_SIZE),
+    maxTileRow: Math.floor(Math.max(...allPxY) / TILE_SIZE),
+  };
+}
+
+/**
+ * Starts downloading the ortho tiles covering `bounds` (typically the COPC
+ * header extent) without waiting for them. `colorizePointCloud` picks them up.
+ */
+export function prefetchOrthoTiles(bounds: PointCloudData['bounds'], crs: DetectedCrs): void {
+  const range = computeOrthoTileRange(bounds, crs);
+  for (let col = range.minTileCol; col <= range.maxTileCol; col++) {
+    for (let row = range.minTileRow; row <= range.maxTileRow; row++) {
+      void getOrthoTile(WMTS_ZOOM, col, row, crs);
+    }
+  }
+}
+
+export async function colorizePointCloud(
+  pointCloud: PointCloudData,
+  onProgress?: (phase: string, percent: number) => void
+): Promise<void> {
+  const { positions, colors, count, crs, bounds } = pointCloud;
+
+  const {
+    px00, py00, px10, py10, px01, py01, px11, py11,
+    minTileCol, maxTileCol, minTileRow, maxTileRow,
+  } = computeOrthoTileRange(bounds, crs);
+
   const invDx = 1 / (bounds.maxX - bounds.minX);
   const invDy = 1 / (bounds.maxY - bounds.minY);
   const xMin = bounds.minX;
@@ -121,34 +196,27 @@ export async function colorizePointCloud(
 
   onProgress?.('Téléchargement des orthophotos...', 0);
 
-  const allPxX = [px00, px10, px01, px11];
-  const allPxY = [py00, py10, py01, py11];
-  const minTileCol = Math.floor(Math.min(...allPxX) / TILE_SIZE);
-  const maxTileCol = Math.floor(Math.max(...allPxX) / TILE_SIZE);
-  const minTileRow = Math.floor(Math.min(...allPxY) / TILE_SIZE);
-  const maxTileRow = Math.floor(Math.max(...allPxY) / TILE_SIZE);
-
   const tileCols = maxTileCol - minTileCol + 1;
   const tileRows = maxTileRow - minTileRow + 1;
   const tileData: (Uint8Array | null)[] = new Array(tileCols * tileRows).fill(null);
 
-  const BATCH_SIZE = 48;
-  const tileJobs: { col: number; row: number; idx: number }[] = [];
+  const tileJobs: Promise<void>[] = [];
+  let tilesDone = 0;
+  const totalTiles = tileCols * tileRows;
   for (let col = minTileCol; col <= maxTileCol; col++) {
     for (let row = minTileRow; row <= maxTileRow; row++) {
       const idx = (col - minTileCol) * tileRows + (row - minTileRow);
-      tileJobs.push({ col, row, idx });
+      tileJobs.push(getOrthoTile(WMTS_ZOOM, col, row, crs).then((pixels) => {
+        tileData[idx] = pixels;
+        tilesDone++;
+        if (tilesDone % 24 === 0 || tilesDone === totalTiles) {
+          onProgress?.('Téléchargement des orthophotos...', Math.round((tilesDone / totalTiles) * 50));
+        }
+      }));
     }
   }
-
-  for (let i = 0; i < tileJobs.length; i += BATCH_SIZE) {
-    const batch = tileJobs.slice(i, i + BATCH_SIZE);
-    const results = await Promise.all(batch.map(t => fetchOrthoTile(WMTS_ZOOM, t.col, t.row, crs)));
-    for (let j = 0; j < batch.length; j++) {
-      tileData[batch[j].idx] = results[j];
-    }
-    onProgress?.('Téléchargement des orthophotos...', Math.round(((i + batch.length) / tileJobs.length) * 50));
-  }
+  await Promise.all(tileJobs);
+  orthoTileCache.clear();
 
   onProgress?.('Colorisation des points...', 50);
 

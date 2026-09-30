@@ -185,21 +185,34 @@ function resizeCanvas() {
     });
     const pointCloud = scene.pointCloud;
     const rgba = buildRGBA(pointCloud);
-
-    setStatus('Assemblage du terrain...', 82);
-    const terrainMesh = scene.terrainMesh;
     const { positions } = centerPositions(pointCloud);
 
-    setStatus('Initialisation WebGPU...', 85);
+    const cx = (pointCloud.bounds.minX + pointCloud.bounds.maxX) / 2;
+    const cy = (pointCloud.bounds.minY + pointCloud.bounds.maxY) / 2;
+    const cz = (pointCloud.bounds.minZ + pointCloud.bounds.maxZ) / 2;
+    const centeredBounds: AABB = {
+      minX: pointCloud.bounds.minX - cx,
+      maxX: pointCloud.bounds.maxX - cx,
+      minY: (pointCloud.bounds.minZ - (pointCloud.bounds.minZ + pointCloud.bounds.maxZ) / 2),
+      maxY: (pointCloud.bounds.maxZ - (pointCloud.bounds.minZ + pointCloud.bounds.maxZ) / 2),
+      minZ: -(pointCloud.bounds.maxY - cy),
+      maxZ: -(pointCloud.bounds.minY - cy),
+    };
+
+    // Octree build (worker), terrain heightmap (worker) and WebGPU init run
+    // concurrently; none of them depends on the others.
+    setStatus('Construction octree LOD...', 84);
+    const octreePromise = buildOctreeInWorker(positions, rgba, centeredBounds, setStatus);
+    octreePromise.catch(() => undefined);
+
     resizeCanvas();
     renderer = new LidarRenderer();
     await renderer.init(canvas);
     resizeCanvas();
     renderer.resize(canvas.width, canvas.height);
 
-    const cx = (pointCloud.bounds.minX + pointCloud.bounds.maxX) / 2;
-    const cy = (pointCloud.bounds.minY + pointCloud.bounds.maxY) / 2;
-    const cz = (pointCloud.bounds.minZ + pointCloud.bounds.maxZ) / 2;
+    const terrainMesh = await scene.terrainMesh;
+
     renderer.centerAltitude = cz;
     renderer.setMaxAltitude(pointCloud.bounds.maxZ);
     const rangeX = pointCloud.bounds.maxX - pointCloud.bounds.minX;
@@ -218,17 +231,7 @@ function resizeCanvas() {
     renderer.pointSize = 0.59;
     renderer.lodThreshold = Math.max(50, extent * 0.5);
 
-    setStatus('Construction octree LOD...', 87);
-    const centeredBounds: AABB = {
-      minX: pointCloud.bounds.minX - cx,
-      maxX: pointCloud.bounds.maxX - cx,
-      minY: (pointCloud.bounds.minZ - (pointCloud.bounds.minZ + pointCloud.bounds.maxZ) / 2),
-      maxY: (pointCloud.bounds.maxZ - (pointCloud.bounds.minZ + pointCloud.bounds.maxZ) / 2),
-      minZ: -(pointCloud.bounds.maxY - cy),
-      maxZ: -(pointCloud.bounds.minY - cy),
-    };
-
-    const octree = await buildOctreeInWorker(positions, rgba, centeredBounds, setStatus);
+    const octree = await octreePromise;
     setStatus('Upload GPU (octree)...', 92);
     renderer.setOctreeData(octree);
     renderer.setMesh(terrainMesh.vertices, terrainMesh.colors, terrainMesh.indices);

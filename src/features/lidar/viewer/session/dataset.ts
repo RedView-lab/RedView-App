@@ -7,7 +7,12 @@ import {
   type TerrainCache,
 } from '../../lib/storage';
 import { generateHeightmap } from '../heightmap';
-import { loadTileFromOPFS, processPointCloudInWorker, type ViewerStatusReporter } from '../runtime';
+import {
+  getDefaultDecodeWorkerCount,
+  loadTileFromOPFS,
+  processPointCloudInWorker,
+  type ViewerStatusReporter,
+} from '../runtime';
 import {
   buildTileFileCandidates,
   createSceneProgressReporter,
@@ -31,28 +36,33 @@ export interface CacheWriteTask {
 
 export interface ViewerSceneData {
   pointCloud: PointCloudData;
-  terrainMesh: TerrainCache;
+  /**
+   * Resolves once the terrain mesh is ready. Kept as a promise so the caller
+   * can build the octree while the heightmap is still being generated.
+   */
+  terrainMesh: Promise<TerrainCache>;
   cacheWrites: CacheWriteTask[];
   tileFileLabel: string;
+}
+
+interface PendingViewerTile extends Omit<LoadedViewerTile, 'terrainMesh'> {
+  terrainMesh: Promise<TerrainCache>;
 }
 
 async function loadViewerTile(
   coord: TileCoord,
   onProgress: (detail: string, progress: number) => void,
-): Promise<LoadedViewerTile> {
+  decodeWorkers: number,
+): Promise<PendingViewerTile> {
   const { fileName, legacyFileName } = buildTileFileCandidates(coord);
-  let resolvedFileName = fileName;
-  let fileBuffer: ArrayBuffer;
+  const resolvedFileName = fileName;
 
-  onProgress(`Lecture OPFS ${coord.xKm}/${coord.yKm}`, 0.05);
-  try {
-    fileBuffer = await loadTileFromOPFS([fileName, legacyFileName]);
-  } catch (error) {
-    throw error;
-  }
-
-  onProgress(`Recherche cache ${coord.xKm}/${coord.yKm}`, 0.12);
-  let pointCloud = await loadColorizedData(resolvedFileName);
+  onProgress(`Recherche cache ${coord.xKm}/${coord.yKm}`, 0.05);
+  const [cachedPointCloud, cachedTerrainMesh] = await Promise.all([
+    loadColorizedData(resolvedFileName),
+    loadTerrainData(resolvedFileName),
+  ]);
+  let pointCloud = cachedPointCloud;
   // Invalidate stale or grey-colored cache if CRS mismatches or uncolorized
   if (pointCloud) {
     if (pointCloud.crs !== coord.projection) {
@@ -62,11 +72,13 @@ async function loadViewerTile(
     }
   }
 
-  let terrainMesh = await loadTerrainData(resolvedFileName);
   const shouldSaveColorizedCache = !pointCloud;
-  const shouldSaveTerrainCache = !terrainMesh;
+  const shouldSaveTerrainCache = !cachedTerrainMesh;
 
   if (!pointCloud) {
+    // The raw LAZ is only needed when the colorized cache is missing.
+    onProgress(`Lecture OPFS ${coord.xKm}/${coord.yKm}`, 0.12);
+    const fileBuffer = await loadTileFromOPFS([fileName, legacyFileName]);
     onProgress(`Décompression LAS ${coord.xKm}/${coord.yKm}`, 0.2);
     pointCloud = await processPointCloudInWorker(
       fileBuffer,
@@ -74,12 +86,16 @@ async function loadViewerTile(
         onProgress(`${detail} ${coord.xKm}/${coord.yKm}`, 0.2 + (progress / 100) * 0.5);
       },
       coord.projection,
+      { decodeWorkers },
     );
   }
 
-  if (!terrainMesh) {
+  let terrainMesh: Promise<TerrainCache>;
+  if (cachedTerrainMesh) {
+    terrainMesh = Promise.resolve(cachedTerrainMesh);
+  } else {
     onProgress(`Génération heightmap ${coord.xKm}/${coord.yKm}`, 0.75);
-    terrainMesh = await generateHeightmap(pointCloud, 1.0);
+    terrainMesh = generateHeightmap(pointCloud, 1.0);
   }
 
   onProgress(`Tuile prête ${coord.xKm}/${coord.yKm}`, 0.92);
@@ -112,24 +128,26 @@ export async function loadViewerSceneData(
 
   reporter.updateSceneProgress('Chargement des tuiles LiDAR...', 0.05);
 
-  const tiles = await mapWithConcurrency(tileCoords, concurrency, (coord, index) => {
+  const decodeWorkers = Math.max(1, Math.floor(getDefaultDecodeWorkerCount() / concurrency));
+  const pendingTiles = await mapWithConcurrency(tileCoords, concurrency, (coord, index) => {
     return loadViewerTile(coord, (detail, progress) => {
       reporter.updateTileProgress(index, detail, progress);
-    });
+    }, decodeWorkers);
   });
 
   reporter.updateSceneProgress('Fusion des nuages de points...', 0.82);
-  const mergedPointCloud = mergePointClouds(tiles, multiTilePointCap);
+  const mergedPointCloud = mergePointClouds(pendingTiles, multiTilePointCap);
 
-  reporter.updateSceneProgress('Génération du maillage de terrain...', 0.88);
-  let mergedTerrainMesh = mergeTerrainMeshes(tiles, mergedPointCloud);
-  if (!mergedTerrainMesh) {
-    reporter.updateSceneProgress('Recalcul de la heightmap de la scène...', 0.9);
-    mergedTerrainMesh = await generateHeightmap(mergedPointCloud, 1.0);
-  }
+  const terrainMesh = (async (): Promise<TerrainCache> => {
+    const meshes = await Promise.all(pendingTiles.map((tile) => tile.terrainMesh));
+    const tiles: LoadedViewerTile[] = pendingTiles.map((tile, index) => ({ ...tile, terrainMesh: meshes[index]! }));
+    return mergeTerrainMeshes(tiles, mergedPointCloud) ?? generateHeightmap(mergedPointCloud, 1.0);
+  })();
+  // Avoid an unhandled rejection before the caller awaits it.
+  terrainMesh.catch(() => undefined);
 
   const cacheWrites: CacheWriteTask[] = [];
-  for (const tile of tiles) {
+  for (const tile of pendingTiles) {
     if (tile.shouldSaveColorizedCache) {
       cacheWrites.push({
         label: `Cache couleur ${tile.coord.xKm}/${tile.coord.yKm}`,
@@ -139,18 +157,18 @@ export async function loadViewerSceneData(
     if (tile.shouldSaveTerrainCache) {
       cacheWrites.push({
         label: `Cache terrain ${tile.coord.xKm}/${tile.coord.yKm}`,
-        task: () => saveTerrainData(tile.fileName, tile.terrainMesh),
+        task: async () => saveTerrainData(tile.fileName, await tile.terrainMesh),
       });
     }
   }
 
-  const tileFileLabel = tiles.length === 1
-    ? tiles[0]!.fileName
-    : `${tiles.length} tuiles (${tiles.map((tile) => `${tile.coord.xKm}/${tile.coord.yKm}`).join(', ')})`;
+  const tileFileLabel = pendingTiles.length === 1
+    ? pendingTiles[0]!.fileName
+    : `${pendingTiles.length} tuiles (${pendingTiles.map((tile) => `${tile.coord.xKm}/${tile.coord.yKm}`).join(', ')})`;
 
   return {
     pointCloud: mergedPointCloud,
-    terrainMesh: mergedTerrainMesh,
+    terrainMesh,
     cacheWrites,
     tileFileLabel,
   };

@@ -1,18 +1,30 @@
 /// <reference lib="webworker" />
 
 import { parseLazBuffer } from '../lib/lazParser';
-import { colorizePointCloud } from '../lib/colorizer';
+import { colorizePointCloud, prefetchOrthoTiles } from '../lib/colorizer';
 
-import type { DetectedCrs } from '../types';
+import type { DetectedCrs, PointCloudBounds } from '../types';
 
 const workerScope = self as unknown as DedicatedWorkerGlobalScope;
 
-export type WorkerRequest = {
-  type: 'process';
-  buffer: ArrayBuffer;
-  crs?: DetectedCrs;
-  wasmModule?: WebAssembly.Module;
-};
+export type WorkerRequest =
+  | {
+      type: 'process';
+      buffer: ArrayBuffer;
+      crs?: DetectedCrs;
+      wasmModule?: WebAssembly.Module;
+    }
+  /** Start ortho downloads early (from header bounds) while points decode elsewhere. */
+  | { type: 'prefetch'; bounds: PointCloudBounds; crs: DetectedCrs }
+  /** Colorize already-decoded points (parallel COPC decode path). */
+  | {
+      type: 'colorize';
+      positions: Float32Array;
+      classifications: Uint8Array;
+      count: number;
+      bounds: PointCloudBounds;
+      crs: DetectedCrs;
+    };
 
 export type WorkerResponse =
   | { type: 'progress'; phase: string; message: string; percent: number }
@@ -28,18 +40,35 @@ export type WorkerResponse =
   | { type: 'error'; message: string };
 
 workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
-  if (e.data.type !== 'process') return;
+  const request = e.data;
+  if (request.type === 'prefetch') {
+    try {
+      prefetchOrthoTiles(request.bounds, request.crs);
+    } catch {
+      // Prefetch is best-effort; colorize fetches whatever is missing.
+    }
+    return;
+  }
 
   try {
-    const pointCloud = await parseLazBuffer(
-      e.data.buffer,
-      (phase, pct) => {
-        const msg: WorkerResponse = { type: 'progress', phase: 'parsing', message: phase, percent: pct };
-        workerScope.postMessage(msg);
-      },
-      e.data.crs,
-      e.data.wasmModule,
-    );
+    const pointCloud = request.type === 'process'
+      ? await parseLazBuffer(
+          request.buffer,
+          (phase, pct) => {
+            const msg: WorkerResponse = { type: 'progress', phase: 'parsing', message: phase, percent: pct };
+            workerScope.postMessage(msg);
+          },
+          request.crs,
+          request.wasmModule,
+        )
+      : {
+          positions: request.positions,
+          colors: new Uint8Array(request.count * 3),
+          classifications: request.classifications,
+          count: request.count,
+          bounds: request.bounds,
+          crs: request.crs,
+        };
 
     await colorizePointCloud(pointCloud, (phase, pct) => {
       const msg: WorkerResponse = { type: 'progress', phase: 'colorizing', message: phase, percent: pct };

@@ -1,25 +1,23 @@
 // ============================================
 // Octree LOD — Build, Voxel Sampling & Flatten
 // ============================================
+//
+// Typed-array, in-place implementation. Positions and RGBA colors are
+// partitioned together (stable counting sort per node), so every node owns a
+// contiguous range that keeps the original point order while it is split:
+//  - voxel sampling runs on that range at split time, which yields exactly the
+//    same "first point wins" samples as a per-point root→leaf walk;
+//  - octant-ordered partitioning makes the leaves appear in DFS flatten order,
+//    so the partitioned buffers *are* the final leaf buffers (no copy).
+// Inputs are consumed: `positions` and `colors` are reordered in place and
+// returned as `leafPositions` / `leafColors`.
 
 import type { AABB, SerializedNode, FlatOctree } from './types';
 import { MAX_POINTS_PER_NODE, MAX_DEPTH, OCCUPANCY_GRID_SIZE } from './types';
 
 const GRID = OCCUPANCY_GRID_SIZE;
 const GRID_WORDS = Math.ceil((GRID * GRID * GRID) / 32);
-
-function createOccupancyGrid(): Uint32Array {
-  return new Uint32Array(GRID_WORDS);
-}
-
-function testAndSet(grid: Uint32Array, ix: number, iy: number, iz: number): boolean {
-  const bit = (iz * GRID + iy) * GRID + ix;
-  const word = bit >>> 5;
-  const mask = 1 << (bit & 31);
-  if (grid[word] & mask) return false;
-  grid[word] |= mask;
-  return true;
-}
+const GRID_CELLS = GRID * GRID * GRID;
 
 interface BuildNode {
   id: number;
@@ -27,33 +25,12 @@ interface BuildNode {
   aabb: AABB;
   children: (BuildNode | null)[];
   isLeaf: boolean;
-  pointIndices: number[];
-  voxelSamples: number[];
-  occGrid: Uint32Array | null;
+  /** Point range [start, end) in the partitioned buffers. */
+  start: number;
+  end: number;
+  voxelPositions: Float32Array | null;
+  voxelColors: Uint32Array | null;
   subtreePointCount: number;
-}
-
-let nextNodeId = 0;
-
-function createNode(depth: number, aabb: AABB): BuildNode {
-  return {
-    id: nextNodeId++,
-    depth,
-    aabb,
-    children: [null, null, null, null, null, null, null, null],
-    isLeaf: true,
-    pointIndices: [],
-    voxelSamples: [],
-    occGrid: null,
-    subtreePointCount: 0,
-  };
-}
-
-function getOctant(aabb: AABB, x: number, y: number, z: number): number {
-  const mx = (aabb.minX + aabb.maxX) * 0.5;
-  const my = (aabb.minY + aabb.maxY) * 0.5;
-  const mz = (aabb.minZ + aabb.maxZ) * 0.5;
-  return (x >= mx ? 1 : 0) | (y >= my ? 2 : 0) | (z >= mz ? 4 : 0);
 }
 
 function childAABB(parent: AABB, octant: number): AABB {
@@ -70,45 +47,6 @@ function childAABB(parent: AABB, octant: number): AABB {
   };
 }
 
-function tryVoxelSample(
-  node: BuildNode,
-  x: number, y: number, z: number,
-  r: number, g: number, b: number, a: number,
-): void {
-  if (!node.occGrid) node.occGrid = createOccupancyGrid();
-
-  const aabb = node.aabb;
-  const ix = Math.min(GRID - 1, Math.floor(((x - aabb.minX) / (aabb.maxX - aabb.minX)) * GRID));
-  const iy = Math.min(GRID - 1, Math.floor(((y - aabb.minY) / (aabb.maxY - aabb.minY)) * GRID));
-  const iz = Math.min(GRID - 1, Math.floor(((z - aabb.minZ) / (aabb.maxZ - aabb.minZ)) * GRID));
-
-  if (testAndSet(node.occGrid, ix, iy, iz)) {
-    node.voxelSamples.push(x, y, z, r, g, b, a);
-  }
-}
-
-function countSubtree(node: BuildNode): number {
-  if (node.isLeaf) {
-    node.subtreePointCount = node.pointIndices.length;
-    return node.subtreePointCount;
-  }
-  let total = 0;
-  for (const child of node.children) {
-    if (child) total += countSubtree(child);
-  }
-  node.subtreePointCount = total;
-  return total;
-}
-
-interface FlattenContext {
-  leafPositions: Float32Array;
-  leafColors: Uint8Array;
-  voxelPositions: Float32Array;
-  voxelColors: Uint8Array;
-  leafOffset: number;
-  voxelOffset: number;
-}
-
 /**
  * Deterministic 32-bit hash → used as PRNG seed for in-leaf shuffle.
  * Keeps build reproducible across runs.
@@ -120,120 +58,40 @@ function pcg32(state: number): number {
 }
 
 /**
- * Fisher–Yates shuffle of a slice of point indices using a seeded PRNG.
+ * Fisher–Yates shuffle of a leaf range using a seeded PRNG.
  * After this, taking the first N entries yields a spatially-uniform random
  * subset of the leaf — required so CPU-side density (instanceCount reduction)
  * doesn't produce visible spatial banding.
  */
-function shuffleIndices(indices: number[], seed: number): void {
+function shuffleLeafRange(
+  positions: Float32Array,
+  colors: Uint32Array,
+  start: number,
+  end: number,
+  seed: number,
+  perm: Uint32Array,
+  tmpPositions: Float32Array,
+  tmpColors: Uint32Array,
+): void {
+  const n = end - start;
+  for (let i = 0; i < n; i++) perm[i] = i;
   let state = (seed | 0) || 1;
-  for (let i = indices.length - 1; i > 0; i--) {
+  for (let i = n - 1; i > 0; i--) {
     state = pcg32(state);
     const j = state % (i + 1);
-    const tmp = indices[i];
-    indices[i] = indices[j];
-    indices[j] = tmp;
+    const tmp = perm[i]!;
+    perm[i] = perm[j]!;
+    perm[j] = tmp;
   }
-}
-
-function flattenNode(
-  node: BuildNode,
-  positions: Float32Array,
-  colors: Uint8Array,
-  ctx: FlattenContext,
-): SerializedNode {
-  const serialized: SerializedNode = {
-    id: node.id,
-    depth: node.depth,
-    aabb: node.aabb,
-    children: [null, null, null, null, null, null, null, null],
-    isLeaf: node.isLeaf,
-    pointOffset: 0,
-    pointCount: 0,
-    voxelOffset: 0,
-    voxelCount: 0,
-    subtreePointCount: node.subtreePointCount,
-  };
-
-  if (node.isLeaf && node.pointIndices.length > 0) {
-    // Shuffle so first N points form a spatially-uniform random subset.
-    // Used by renderer for CPU-side density (drawCount = count * density).
-    shuffleIndices(node.pointIndices, node.id + 1);
-
-    serialized.pointOffset = ctx.leafOffset;
-    serialized.pointCount = node.pointIndices.length;
-
-    for (let k = 0; k < node.pointIndices.length; k++) {
-      const idx = node.pointIndices[k];
-      const src = idx * 3;
-      const dst = (ctx.leafOffset + k) * 3;
-      ctx.leafPositions[dst] = positions[src];
-      ctx.leafPositions[dst + 1] = positions[src + 1];
-      ctx.leafPositions[dst + 2] = positions[src + 2];
-
-      const sc = idx * 4;
-      const dc = (ctx.leafOffset + k) * 4;
-      ctx.leafColors[dc] = colors[sc];
-      ctx.leafColors[dc + 1] = colors[sc + 1];
-      ctx.leafColors[dc + 2] = colors[sc + 2];
-      ctx.leafColors[dc + 3] = colors[sc + 3];
-    }
-    ctx.leafOffset += node.pointIndices.length;
+  for (let k = 0; k < n; k++) {
+    const src = start + perm[k]!;
+    tmpPositions[k * 3] = positions[src * 3]!;
+    tmpPositions[k * 3 + 1] = positions[src * 3 + 1]!;
+    tmpPositions[k * 3 + 2] = positions[src * 3 + 2]!;
+    tmpColors[k] = colors[src]!;
   }
-
-  if (!node.isLeaf && node.voxelSamples.length > 0) {
-    const nVoxels = node.voxelSamples.length / 7;
-    serialized.voxelOffset = ctx.voxelOffset;
-    serialized.voxelCount = nVoxels;
-
-    for (let k = 0; k < nVoxels; k++) {
-      const s = k * 7;
-      const dp = (ctx.voxelOffset + k) * 3;
-      ctx.voxelPositions[dp] = node.voxelSamples[s];
-      ctx.voxelPositions[dp + 1] = node.voxelSamples[s + 1];
-      ctx.voxelPositions[dp + 2] = node.voxelSamples[s + 2];
-
-      const dc = (ctx.voxelOffset + k) * 4;
-      ctx.voxelColors[dc] = node.voxelSamples[s + 3];
-      ctx.voxelColors[dc + 1] = node.voxelSamples[s + 4];
-      ctx.voxelColors[dc + 2] = node.voxelSamples[s + 5];
-      ctx.voxelColors[dc + 3] = node.voxelSamples[s + 6];
-    }
-    ctx.voxelOffset += nVoxels;
-  }
-
-  for (let i = 0; i < 8; i++) {
-    if (node.children[i]) {
-      serialized.children[i] = flattenNode(node.children[i]!, positions, colors, ctx);
-    }
-  }
-
-  return serialized;
-}
-
-function countVoxels(node: BuildNode): number {
-  let total = node.voxelSamples.length / 7;
-  for (const child of node.children) {
-    if (child) total += countVoxels(child);
-  }
-  return total;
-}
-
-function countNodes(node: BuildNode): number {
-  let total = 1;
-  for (const child of node.children) {
-    if (child) total += countNodes(child);
-  }
-  return total;
-}
-
-function getMaxDepth(node: BuildNode): number {
-  if (node.isLeaf) return node.depth;
-  let max = node.depth;
-  for (const child of node.children) {
-    if (child) max = Math.max(max, getMaxDepth(child));
-  }
-  return max;
+  positions.set(tmpPositions.subarray(0, n * 3), start * 3);
+  colors.set(tmpColors.subarray(0, n), start);
 }
 
 export function buildOctree(
@@ -243,8 +101,7 @@ export function buildOctree(
   onProgress?: (msg: string, pct: number) => void,
 ): FlatOctree {
   const totalPoints = positions.length / 3;
-
-  nextNodeId = 0;
+  let nextNodeId = 0;
 
   const eps = 0.01;
   const rootAABB: AABB = {
@@ -272,96 +129,204 @@ export function buildOctree(
   rootAABB.minZ = cz - half;
   rootAABB.maxZ = cz + half;
 
-  const root = createNode(0, rootAABB);
+  const createNode = (depth: number, aabb: AABB, start: number, end: number): BuildNode => ({
+    id: nextNodeId++,
+    depth,
+    aabb,
+    children: [null, null, null, null, null, null, null, null],
+    isLeaf: true,
+    start,
+    end,
+    voxelPositions: null,
+    voxelColors: null,
+    subtreePointCount: end - start,
+  });
 
   onProgress?.('Building octree — inserting points...', 10);
 
-  for (let i = 0; i < totalPoints; i++) {
-    root.pointIndices.push(i);
-  }
-  root.subtreePointCount = totalPoints;
+  // RGBA handled as one 32-bit word per point.
+  const rgba = colors.byteOffset % 4 === 0 && colors.length === totalPoints * 4
+    ? colors
+    : new Uint8Array(colors.subarray(0, totalPoints * 4));
+  const pos = positions;
+  const col = new Uint32Array(rgba.buffer, rgba.byteOffset, totalPoints);
+  const scratchPos = new Float32Array(totalPoints * 3);
+  const scratchCol = new Uint32Array(totalPoints);
+  const octants = new Uint8Array(totalPoints);
+  const occGrid = new Uint32Array(GRID_WORDS);
+  const samplePos = new Float32Array(GRID_CELLS * 3);
+  const sampleCol = new Uint32Array(GRID_CELLS);
+  const counts = new Uint32Array(8);
+  const cursors = new Uint32Array(8);
+
+  const root = createNode(0, rootAABB, 0, totalPoints);
 
   onProgress?.('Building octree — splitting nodes...', 20);
   const splitWork: BuildNode[] = [root];
+  let pointsProcessed = 0;
+  let lastProgressPoints = 0;
 
   while (splitWork.length > 0) {
     const node = splitWork.pop()!;
-    if (!node.isLeaf) continue;
-    if (node.pointIndices.length <= MAX_POINTS_PER_NODE || node.depth >= MAX_DEPTH) continue;
+    const { start, end } = node;
+    if (end - start <= MAX_POINTS_PER_NODE || node.depth >= MAX_DEPTH) continue;
 
     node.isLeaf = false;
-    const indices = node.pointIndices;
-    node.pointIndices = [];
+    const aabb = node.aabb;
+    const minX = aabb.minX, minY = aabb.minY, minZ = aabb.minZ;
+    const mx = (aabb.minX + aabb.maxX) * 0.5;
+    const my = (aabb.minY + aabb.maxY) * 0.5;
+    const mz = (aabb.minZ + aabb.maxZ) * 0.5;
+    const dx = aabb.maxX - aabb.minX;
+    const dy = aabb.maxY - aabb.minY;
+    const dz = aabb.maxZ - aabb.minZ;
 
-    for (let k = 0; k < indices.length; k++) {
-      const idx = indices[k];
-      const j = idx * 3;
-      const x = positions[j], y = positions[j + 1], z = positions[j + 2];
-      const octant = getOctant(node.aabb, x, y, z);
+    // Single sequential pass: octant classification + voxel sampling.
+    occGrid.fill(0);
+    counts.fill(0);
+    let sampleCount = 0;
+    const order: number[] = [];
 
-      if (!node.children[octant]) {
-        node.children[octant] = createNode(node.depth + 1, childAABB(node.aabb, octant));
+    for (let k = start; k < end; k++) {
+      const j = k * 3;
+      const x = pos[j]!, y = pos[j + 1]!, z = pos[j + 2]!;
+
+      const ix = Math.min(GRID - 1, Math.floor(((x - minX) / dx) * GRID));
+      const iy = Math.min(GRID - 1, Math.floor(((y - minY) / dy) * GRID));
+      const iz = Math.min(GRID - 1, Math.floor(((z - minZ) / dz) * GRID));
+      const bit = (iz * GRID + iy) * GRID + ix;
+      const word = bit >>> 5;
+      const mask = 1 << (bit & 31);
+      if ((occGrid[word]! & mask) === 0) {
+        occGrid[word]! |= mask;
+        const s = sampleCount * 3;
+        samplePos[s] = x;
+        samplePos[s + 1] = y;
+        samplePos[s + 2] = z;
+        sampleCol[sampleCount] = col[k]!;
+        sampleCount++;
       }
-      node.children[octant]!.pointIndices.push(idx);
+
+      const octant = (x >= mx ? 1 : 0) | (y >= my ? 2 : 0) | (z >= mz ? 4 : 0);
+      octants[k] = octant;
+      if (counts[octant]++ === 0) order.push(octant);
+    }
+    node.voxelPositions = samplePos.slice(0, sampleCount * 3);
+    node.voxelColors = sampleCol.slice(0, sampleCount);
+
+    // Stable counting partition into octant order.
+    let offset = start;
+    for (let o = 0; o < 8; o++) {
+      cursors[o] = offset;
+      offset += counts[o]!;
+    }
+    for (let k = start; k < end; k++) {
+      const dst = cursors[octants[k]!]!++;
+      scratchPos[dst * 3] = pos[k * 3]!;
+      scratchPos[dst * 3 + 1] = pos[k * 3 + 1]!;
+      scratchPos[dst * 3 + 2] = pos[k * 3 + 2]!;
+      scratchCol[dst] = col[k]!;
+    }
+    pos.set(scratchPos.subarray(start * 3, end * 3), start * 3);
+    col.set(scratchCol.subarray(start, end), start);
+
+    // Children are created (ids assigned) in first-encounter order.
+    for (const o of order) {
+      const childEnd = cursors[o]!;
+      node.children[o] = createNode(node.depth + 1, childAABB(aabb, o), childEnd - counts[o]!, childEnd);
     }
 
     for (const child of node.children) {
-      if (child && child.pointIndices.length > MAX_POINTS_PER_NODE) {
+      if (child && child.end - child.start > MAX_POINTS_PER_NODE) {
         splitWork.push(child);
       }
     }
-  }
 
-  // Voxel sampling
-  onProgress?.('Building octree — voxel sampling...', 50);
-  for (let i = 0; i < totalPoints; i++) {
-    const j = i * 3;
-    const x = positions[j], y = positions[j + 1], z = positions[j + 2];
-    const c = i * 4;
-    const r = colors[c], g = colors[c + 1], b = colors[c + 2], a = colors[c + 3];
-
-    let node = root;
-    while (!node.isLeaf) {
-      tryVoxelSample(node, x, y, z, r, g, b, a);
-      const octant = getOctant(node.aabb, x, y, z);
-      const child = node.children[octant];
-      if (!child) break;
-      node = child;
-    }
-
-    if (i > 0 && (i % 2_000_000) === 0) {
-      onProgress?.(`Voxel sampling... ${((i / totalPoints) * 100).toFixed(0)}%`, 50 + (i / totalPoints) * 30);
+    pointsProcessed += end - start;
+    if (pointsProcessed - lastProgressPoints >= 4_000_000) {
+      lastProgressPoints = pointsProcessed;
+      onProgress?.('Building octree — splitting nodes...', Math.min(80, 20 + (pointsProcessed / (totalPoints * 5)) * 60));
     }
   }
 
-  onProgress?.('Building octree — finalizing...', 85);
+  onProgress?.('Building octree — flattening...', 85);
+
+  // DFS in octant order: leaves come out in partition order (pointOffset ==
+  // start), voxels are concatenated in the same pre-order.
+  let totalVoxels = 0;
+  let nodeCount = 0;
+  let maxDepthReached = 0;
+  let maxLeafCount = 0;
+  const internalNodes: BuildNode[] = [];
+  const leafNodes: BuildNode[] = [];
+  const countSubtree = (node: BuildNode): number => {
+    nodeCount++;
+    if (node.depth > maxDepthReached) maxDepthReached = node.depth;
+    if (node.isLeaf) {
+      node.subtreePointCount = node.end - node.start;
+      if (node.subtreePointCount > 0) leafNodes.push(node);
+      if (node.subtreePointCount > maxLeafCount) maxLeafCount = node.subtreePointCount;
+      return node.subtreePointCount;
+    }
+    if (node.voxelPositions && node.voxelPositions.length > 0) internalNodes.push(node);
+    totalVoxels += node.voxelColors?.length ?? 0;
+    let total = 0;
+    for (const child of node.children) {
+      if (child) total += countSubtree(child);
+    }
+    node.subtreePointCount = total;
+    return total;
+  };
   countSubtree(root);
 
-  onProgress?.('Building octree — flattening...', 90);
+  // Shuffle every leaf so its first N points form a spatially-uniform subset
+  // (renderer's CPU-side density: drawCount = count * density).
+  const perm = new Uint32Array(maxLeafCount);
+  for (const leaf of leafNodes) {
+    shuffleLeafRange(pos, col, leaf.start, leaf.end, leaf.id + 1, perm, scratchPos, scratchCol);
+  }
 
-  const totalVoxels = countVoxels(root);
-  const nodeCount = countNodes(root);
-  const maxDepthReached = getMaxDepth(root);
+  const voxelPositions = new Float32Array(totalVoxels * 3);
+  const voxelColorWords = new Uint32Array(totalVoxels);
+  const voxelOffsets = new Map<BuildNode, number>();
+  let voxelOffset = 0;
+  for (const node of internalNodes) {
+    voxelOffsets.set(node, voxelOffset);
+    voxelPositions.set(node.voxelPositions!, voxelOffset * 3);
+    voxelColorWords.set(node.voxelColors!, voxelOffset);
+    voxelOffset += node.voxelColors!.length;
+  }
 
-  const ctx: FlattenContext = {
-    leafPositions: new Float32Array(totalPoints * 3),
-    leafColors: new Uint8Array(totalPoints * 4),
-    voxelPositions: new Float32Array(totalVoxels * 3),
-    voxelColors: new Uint8Array(totalVoxels * 4),
-    leafOffset: 0,
-    voxelOffset: 0,
+  const serialize = (node: BuildNode): SerializedNode => {
+    const count = node.end - node.start;
+    const serialized: SerializedNode = {
+      id: node.id,
+      depth: node.depth,
+      aabb: node.aabb,
+      children: [null, null, null, null, null, null, null, null],
+      isLeaf: node.isLeaf,
+      pointOffset: node.isLeaf && count > 0 ? node.start : 0,
+      pointCount: node.isLeaf ? count : 0,
+      voxelOffset: voxelOffsets.get(node) ?? 0,
+      voxelCount: node.isLeaf ? 0 : (node.voxelColors?.length ?? 0),
+      subtreePointCount: node.subtreePointCount,
+    };
+    for (let i = 0; i < 8; i++) {
+      const child = node.children[i];
+      if (child) serialized.children[i] = serialize(child);
+    }
+    return serialized;
   };
-
-  const serializedRoot = flattenNode(root, positions, colors, ctx);
+  const serializedRoot = serialize(root);
 
   onProgress?.('Octree build complete', 100);
 
   return {
     root: serializedRoot,
-    leafPositions: ctx.leafPositions,
-    leafColors: ctx.leafColors,
-    voxelPositions: ctx.voxelPositions,
-    voxelColors: ctx.voxelColors,
+    leafPositions: pos,
+    leafColors: rgba,
+    voxelPositions,
+    voxelColors: new Uint8Array(voxelColorWords.buffer),
     totalLeafPoints: totalPoints,
     totalVoxelSamples: totalVoxels,
     maxDepthReached,

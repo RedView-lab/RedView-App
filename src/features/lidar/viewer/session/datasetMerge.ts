@@ -1,6 +1,9 @@
 import type { PointCloudData, TileCoord } from '../../types';
 import type { TerrainCache } from '../../lib/storage';
 
+/** Only the point cloud is needed to merge/sample points. */
+export type PointCloudTile = Pick<LoadedViewerTile, 'pointCloud'>;
+
 export interface LoadedViewerTile {
   coord: TileCoord;
   fileName: string;
@@ -26,7 +29,7 @@ export function unionBounds(boundsList: PointCloudData['bounds'][]): PointCloudD
 }
 
 export function computeMergedPointTargetCount(
-  tiles: LoadedViewerTile[],
+  tiles: PointCloudTile[],
   multiTilePointCap: number,
 ): { totalCount: number; targetCount: number } {
   const totalCount = tiles.reduce((sum, tile) => sum + tile.pointCloud.count, 0);
@@ -36,7 +39,7 @@ export function computeMergedPointTargetCount(
   return { totalCount, targetCount: multiTilePointCap };
 }
 
-export function computeTilePointQuotas(tiles: LoadedViewerTile[], targetCount: number, totalCount: number): Uint32Array {
+export function computeTilePointQuotas(tiles: PointCloudTile[], targetCount: number, totalCount: number): Uint32Array {
   const quotas = new Uint32Array(tiles.length);
   if (targetCount >= totalCount) {
     for (let index = 0; index < tiles.length; index += 1) quotas[index] = tiles[index]!.pointCloud.count;
@@ -90,7 +93,7 @@ export function computeTilePointQuotas(tiles: LoadedViewerTile[], targetCount: n
 }
 
 export function copyTilePointSample(
-  tile: LoadedViewerTile,
+  tile: PointCloudTile,
   quota: number,
   positions: Float32Array,
   colors: Uint8Array,
@@ -123,7 +126,7 @@ export function copyTilePointSample(
   return pointOffset + quota;
 }
 
-export function mergePointClouds(tiles: LoadedViewerTile[], multiTilePointCap: number): PointCloudData {
+export function mergePointClouds(tiles: PointCloudTile[], multiTilePointCap: number): PointCloudData {
   if (tiles.length === 1) return tiles[0]!.pointCloud;
 
   const { totalCount, targetCount } = computeMergedPointTargetCount(tiles, multiTilePointCap);
