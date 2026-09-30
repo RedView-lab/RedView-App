@@ -59,6 +59,7 @@ export const DASHBOARD_POI_OPTIONS: readonly DashboardPoiOption[] = [
   { id: 'convenience', label: 'Épicerie', color: '#FF6900' },
   { id: 'hotel', label: 'Hôtel', color: '#008236' },
   { id: 'alpine_hut', label: 'Refuge', color: '#7DCF00' },
+  { id: 'pass', label: 'Col', color: '#5A5A5A' },
   { id: 'bicycle', label: 'Magasin de vélo', color: '#63758E' },
 ] as const;
 

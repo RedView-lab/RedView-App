@@ -112,7 +112,27 @@ export interface PoiFeature {
   pauseDurationMin?: number | null;
   /** Type d'objet OSM d'origine, renvoyé par le serveur POI. */
   osmType?: 'node' | 'way' | 'relation';
+  /** Base d'origine (null = OSM), renvoyée par une base POI enrichie. */
+  source?: string | null;
+  /** Confiance de la déduplication multi-sources (0..1), null pour OSM. */
+  srcConfidence?: number | null;
+  /** Favori posé à la main ou par le tri automatique (absent = manuel). */
+  favoriteSource?: PoiFavoriteSource;
+  /** Règle du tri automatique qui a retenu ce favori. */
+  autoReason?: PoiAutoSortReason;
 }
+
+export type PoiFavoriteSource = 'auto' | 'manual';
+
+/** Pourquoi le tri automatique a mis un POI en favori. */
+export type PoiAutoSortReason =
+  | 'water'
+  | 'resupply'
+  | 'bakery'
+  | 'meal'
+  | 'night'
+  | 'hotel'
+  | 'gap6h';
 
 /** Backend response (Fastify /bbox and /corridor) */
 export interface PoiApiResponse {

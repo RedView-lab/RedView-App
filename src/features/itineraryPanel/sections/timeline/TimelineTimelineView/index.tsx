@@ -34,6 +34,7 @@ import {
 
 export function TimelineTimelineView({
   items,
+  visibleIds,
   rhythm,
   prediction,
   config,
@@ -71,17 +72,33 @@ export function TimelineTimelineView({
     () => buildScheduledTimelineState(items, prediction, reference, rhythm),
     [items, prediction, reference, rhythm],
   );
-  const timedItems = scheduleState.timedItems;
-  const autoPauseItems = scheduleState.autoPauses;
   const stopAnchors = scheduleState.stopAnchors;
 
+  // Affichage seulement : le planning ci-dessus reste calculé sur tous les items.
+  const timedItems = useMemo(
+    () => (visibleIds
+      ? scheduleState.timedItems.filter((entry) => visibleIds.has(entry.item.id))
+      : scheduleState.timedItems),
+    [scheduleState.timedItems, visibleIds],
+  );
+  const autoPauseItems = useMemo(
+    () => (visibleIds
+      ? scheduleState.autoPauses.filter(
+          (pause) => pause.source !== 'favorite-poi'
+            || !pause.attachedToItemId
+            || visibleIds.has(pause.attachedToItemId),
+        )
+      : scheduleState.autoPauses),
+    [scheduleState.autoPauses, visibleIds],
+  );
+
   const defaultAnchorDay = useMemo(() => {
-    const activeAutoPauses = filters && !filters.pause ? [] : autoPauseItems;
-    const firstDatedItem = [...timedItems, ...activeAutoPauses].find((item) => item.dayKey);
+    const activeAutoPauses = filters && !filters.pause ? [] : scheduleState.autoPauses;
+    const firstDatedItem = [...scheduleState.timedItems, ...activeAutoPauses].find((item) => item.dayKey);
     if (firstDatedItem?.date) return new Date(firstDatedItem.date);
     if (reference.reference && reference.hasRealDate) return new Date(reference.reference);
     return new Date();
-  }, [autoPauseItems, filters, reference, timedItems]);
+  }, [filters, reference, scheduleState.autoPauses, scheduleState.timedItems]);
   const defaultAnchorDayKey = useMemo(() => toDayKey(defaultAnchorDay), [defaultAnchorDay]);
 
   const [selectedDayKey, setSelectedDayKey] = useState(() => defaultAnchorDayKey);
@@ -170,13 +187,14 @@ export function TimelineTimelineView({
   }, [reference.startMinutes]);
 
   const endMinutes = useMemo(() => {
-    const lastItemMinute = [...timedItems, ...autoPauseItems].reduce(
+    // Hauteur du canevas stable quels que soient les filtres.
+    const lastItemMinute = [...scheduleState.timedItems, ...scheduleState.autoPauses].reduce(
       (maxMinute, item) => Math.max(maxMinute, item.minuteOfDay),
       startMinutes,
     );
     const roundedLastMinute = Math.ceil(lastItemMinute / 60) * 60;
     return Math.max(startMinutes + 12 * 60, MINUTES_PER_DAY, roundedLastMinute);
-  }, [autoPauseItems, startMinutes, timedItems]);
+  }, [scheduleState.autoPauses, scheduleState.timedItems, startMinutes]);
 
   const visibleDurationMinutes = Math.max(60, endMinutes - startMinutes);
   const hourRowHeightPx = BASE_HOUR_ROW_HEIGHT_PX * normalizedHourZoom;

@@ -9,6 +9,7 @@ import {
   waitForStyleReadiness,
 } from './styleBootstrapReadiness';
 import { bootstrapUnifiedDem } from './styleBootstrapUnified';
+import { styleHasUsableContent } from './styleContent';
 
 const supportsStandardLightPreset = (visualFamily: Ctx['getActiveVisualFamily'] extends never ? never : ReturnType<Ctx['getActiveVisualFamily']>): boolean => (
   visualFamily === 'mapbox-standard-v3'
@@ -53,7 +54,54 @@ export function attachStyleBootstrap(ctx: Ctx): void {
     }
   };
 
+  // Late-style retry.
+  //
+  // Symptom: map stays flat (no terrain at all, HD or 30 m) with
+  // "style still unusable after forced bypass grace window" in the console.
+  // Root cause: when the style (e.g. a prefetched RedView theme) takes longer
+  // than the readiness grace windows to parse, `bootstrapCurrentStyle()`
+  // bails out BEFORE the heartbeat and the `style.load` recovery listener are
+  // installed — so nothing ever re-runs the bootstrap once the style finally
+  // lands. Fix: a bailed-out run arms a one-shot retry on the next Mapbox
+  // signal where the style is usable. A newer run (style switch, stuck-shell
+  // recovery) supersedes it.
+  const LATE_STYLE_RETRY_MAX_MS = 60000;
+  let disposeLateStyleRetry: (() => void) | null = null;
+  const clearLateStyleRetry = () => {
+    disposeLateStyleRetry?.();
+    disposeLateStyleRetry = null;
+  };
+  const armLateStyleRetry = (runId: number) => {
+    clearLateStyleRetry();
+    const retrySignals = ['style.load', 'styledata', 'sourcedata', 'idle'] as const;
+    const onSignal = () => {
+      if (isCancelled() || runId !== st.styleBootstrapRunId) {
+        clearLateStyleRetry();
+        return;
+      }
+      let usable = fns.canMutateStyle();
+      if (!usable) {
+        try {
+          usable = styleHasUsableContent(map.getStyle());
+        } catch {
+          usable = false;
+        }
+      }
+      if (!usable) return;
+      clearLateStyleRetry();
+      console.info('[map3d] style became usable after bootstrap bailed out — retrying terrain bootstrap');
+      void fns.bootstrapCurrentStyle();
+    };
+    for (const eventName of retrySignals) map.on(eventName, onSignal);
+    const expiryTimer = setTimeout(clearLateStyleRetry, LATE_STYLE_RETRY_MAX_MS);
+    disposeLateStyleRetry = () => {
+      for (const eventName of retrySignals) map.off(eventName, onSignal);
+      clearTimeout(expiryTimer);
+    };
+  };
+
   fns.prepareStyleChange = (detail = 'Fond de carte') => {
+    clearLateStyleRetry();
     // Stop the heartbeat FIRST — it must not detect the intentionally
     // flat state caused by setStyle({diff:false}) and launch a parasitic
     // bootstrapCurrentStyle() call that races the legitimate style switch.
@@ -71,6 +119,7 @@ export function attachStyleBootstrap(ctx: Ctx): void {
 
   fns.bootstrapCurrentStyle = async (): Promise<boolean> => {
     const runId = ++st.styleBootstrapRunId;
+    clearLateStyleRetry();
     console.info('[map3d] bootstrapCurrentStyle:start', {
       runId,
       visualFamily: getActiveVisualFamily(),
@@ -85,7 +134,10 @@ export function attachStyleBootstrap(ctx: Ctx): void {
       applyConfiguredLightPreset();
     };
     if (!await waitForStyleReadiness(ctx, runId)) return false;
-    if (!await ensureStyleUsableForBootstrap(ctx, runId)) return false;
+    if (!await ensureStyleUsableForBootstrap(ctx, runId)) {
+      if (!isCancelled() && runId === st.styleBootstrapRunId) armLateStyleRetry(runId);
+      return false;
+    }
 
     fns.refreshTrackedSourceIds();
     // SW readiness gate. We need an actual `controller` for the DEM

@@ -3,10 +3,16 @@ import mapboxgl from 'mapbox-gl';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { buildPopupClearanceOffset, closeMarkerPopupOnSecondClick, flyToPoi } from '@/features/map3d';
 import type { ItineraryProject } from '../types';
-import { translateAppText } from '@/shared/i18n';
+import { readDocumentAppLocale, translateAppText } from '@/shared/i18n';
 import { cumulativeRouteLengthsM, projectPointAlongRoute, type RouteDistancePoint } from '../lib/routes';
 import { writeTracePointDataset } from '../lib/tracer/tracePointDataset';
-import { buildScheduledTimelineState, parseStartReference } from '../sections/timeline/TimelineTimelineView/utils';
+import {
+  buildScheduledTimelineState,
+  formatDistanceLabel,
+  formatLegDuration,
+  parseStartReference,
+} from '../sections/timeline/TimelineTimelineView/utils';
+import type { ScheduledTimelineState, StartReference } from '../sections/timeline/TimelineTimelineView/types';
 
 interface UseItineraryCheckpointMarkersArgs {
   itineraries: ItineraryProject['itineraries'];
@@ -40,11 +46,39 @@ interface CheckpointData {
   durationMin?: number | null;
   distanceKm?: number | null;
   favorite?: boolean;
+  /** Départ : heure de départ ; arrivée : heure d'arrivée estimée (pauses incluses). */
+  timeLabel?: string | null;
+  /** Arrivée : durée totale estimée (pauses incluses). */
+  durationLabel?: string | null;
 }
+
+/** Données courantes d'un marqueur, relues par sa popup à chaque ouverture. */
+interface CheckpointDataRef {
+  current: CheckpointData;
+}
+
+interface CheckpointPopupHandle {
+  popup: mapboxgl.Popup;
+  /** Resynchronise le contenu depuis `CheckpointDataRef` (si la popup est ouverte). */
+  sync: () => void;
+}
+
+/**
+ * Ouvre la popup d'un marqueur de checkpoint. `scope` restreint la recherche à
+ * un itinéraire : sans lui, « start » / « end » tombaient sur le premier
+ * itinéraire du registre, pas forcément l'actif.
+ */
+export type OpenCheckpointMarker = (
+  checkpointId: string,
+  coords?: { lat: number; lon: number },
+  scope?: { itineraryId?: string | null; kind?: CheckpointData['kind'] },
+) => boolean;
 
 interface MarkerRegistryEntry {
   marker: mapboxgl.Marker;
   popup?: mapboxgl.Popup;
+  syncPopup?: () => void;
+  dataRef: CheckpointDataRef;
   signature: string;
   element: HTMLElement;
   kind: 'start' | 'end' | 'pause' | 'waypoint';
@@ -113,6 +147,14 @@ function getPausePopupOffset(scale: number) {
   return buildPopupClearanceOffset({ above: 75 * scale, below: 0, side: 30 * scale });
 }
 
+/**
+ * Pin départ / arrivée (`.rv-checkpoint-marker`, anchor 'bottom') : ~29px ×
+ * scale au-dessus de la pointe, ~13px × scale de chaque côté.
+ */
+function getEndpointPopupOffset(scale: number) {
+  return buildPopupClearanceOffset({ above: 32 * scale, below: 0, side: 14 * scale });
+}
+
 function applyCheckpointZoomVisibility(element: HTMLElement, zoom: number): void {
   if (zoom < CHECKPOINT_MIN_ZOOM) {
     element.style.display = 'none';
@@ -145,6 +187,10 @@ function applyMarkerVisualState(entry: MarkerRegistryEntry, zoom: number): void 
     }
   } else {
     applyCheckpointZoomVisibility(el, zoom);
+    if (entry.popup) {
+      const scale = Number(el.style.getPropertyValue('--rv-checkpoint-scale')) || 1;
+      entry.popup.setOffset(getEndpointPopupOffset(scale));
+    }
   }
 }
 
@@ -325,51 +371,134 @@ function buildWaypointPopupHtml(title: string, state: { favoriteEnabled: boolean
   `;
 }
 
-function createPausePopup(
-  pauseId: string,
-  label: string,
-  initialDurationMin: number,
-  initialFavorite: boolean,
-  callbacks: {
-    onChangeDuration?: (id: string, durationMin: number) => void;
-    onDelete?: (id: string) => void;
-    onToggleFavorite?: (id: string, favorite: boolean) => void;
-  },
-): mapboxgl.Popup {
-  const popup = new mapboxgl.Popup({
+function buildEndpointPopupHtml(data: CheckpointData): string {
+  const isStart = data.kind === 'start';
+  const kindLabel = isStart ? translateAppText('Départ') : translateAppText('Arrivée');
+  const title = data.label && data.label !== translateAppText('Rechercher un lieu') ? data.label : kindLabel;
+  const distanceKm = isStart ? 0 : data.distanceKm;
+  const rows: string[] = [
+    buildPopupInfoRow(
+      translateAppText('Type'),
+      kindLabel,
+      isStart ? CHECKPOINT_START_ICON : CHECKPOINT_END_ICON,
+    ),
+  ];
+  if (distanceKm != null && Number.isFinite(distanceKm)) {
+    rows.push(buildPopupInfoRow(translateAppText('Distance'), formatDistanceLabel(distanceKm)));
+  }
+  if (data.timeLabel) {
+    rows.push(
+      buildPopupInfoRow(
+        isStart ? translateAppText('Heure de départ') : translateAppText('Arrivée estimée'),
+        data.timeLabel,
+      ),
+    );
+  }
+  if (!isStart && data.durationLabel) {
+    rows.push(buildPopupInfoRow(translateAppText('Durée totale'), data.durationLabel));
+  }
+
+  return `
+    <div class="rv-poi-popup__panel">
+      <div class="rv-poi-popup__header">
+        <div class="rv-poi-popup__title">${escapeHtml(title)}</div>
+        <button type="button" class="rv-poi-popup__icon-btn rv-poi-popup__icon-btn--ghost" aria-label="${translateAppText('Fermer')}" data-action="close">
+          <img src="${UI_ICON_URLS.globe}" alt="" class="rv-poi-popup__icon" />
+        </button>
+      </div>
+      ${rows.map((row) => `<div class="rv-poi-popup__divider"></div>${row}`).join('')}
+    </div>
+  `;
+}
+
+/** Ligne « libellé · valeur » en lecture seule, même gabarit que la ligne Type. */
+function buildPopupInfoRow(label: string, value: string, iconSrc?: string): string {
+  const icon = iconSrc
+    ? `<span class="rv-poi-popup__type-icon-wrap"><img src="${iconSrc}" alt="" class="rv-poi-popup__type-icon" /></span>`
+    : '';
+  return `
+    <div class="rv-poi-popup__field-row">
+      <div class="rv-poi-popup__field-label">${escapeHtml(label)}</div>
+      <div class="rv-poi-popup__select" role="presentation">
+        ${icon}
+        <span class="rv-poi-popup__select-value">${escapeHtml(value)}</span>
+      </div>
+    </div>
+  `;
+}
+
+function createPopupShell(options: mapboxgl.PopupOptions): mapboxgl.Popup {
+  return new mapboxgl.Popup({
     className: 'rv-poi-popup',
     closeButton: false,
     closeOnClick: true,
     focusAfterOpen: false,
     maxWidth: 'none',
-    offset: getPausePopupOffset(MARKER_MAX_SCREEN_SCALE),
+    ...options,
   });
+}
 
-  const state: PausePopupState = {
-    favoriteEnabled: initialFavorite,
-    pauseDurationMin: initialDurationMin || 15,
-    isDurationDropdownOpen: false,
+function bindPopupClose(panel: Element, popup: mapboxgl.Popup): void {
+  panel.querySelector('[data-action="close"]')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    popup.remove();
+  });
+}
+
+function createEndpointPopup(dataRef: CheckpointDataRef): CheckpointPopupHandle {
+  const popup = createPopupShell({ offset: getEndpointPopupOffset(1) });
+  const container = document.createElement('div');
+
+  const refresh = () => {
+    container.innerHTML = buildEndpointPopupHtml(dataRef.current);
+    const panel = container.firstElementChild;
+    if (panel) bindPopupClose(panel, popup);
   };
+
+  refresh();
+  popup.on('open', refresh);
+  popup.setDOMContent(container);
+  return {
+    popup,
+    sync: () => {
+      if (popup.isOpen()) refresh();
+    },
+  };
+}
+
+function createPausePopup(
+  dataRef: CheckpointDataRef,
+  callbacks: {
+    onChangeDuration?: (id: string, durationMin: number) => void;
+    onDelete?: (id: string) => void;
+    onToggleFavorite?: (id: string, favorite: boolean) => void;
+  },
+): CheckpointPopupHandle {
+  const popup = createPopupShell({ offset: getPausePopupOffset(MARKER_MAX_SCREEN_SCALE) });
+
+  const readState = (): Pick<PausePopupState, 'favoriteEnabled' | 'pauseDurationMin'> => ({
+    favoriteEnabled: dataRef.current.favorite ?? false,
+    pauseDurationMin: dataRef.current.durationMin || 15,
+  });
+  const state: PausePopupState = { ...readState(), isDurationDropdownOpen: false };
+  const pauseId = () => dataRef.current.pauseId ?? '';
 
   const container = document.createElement('div');
 
   const refresh = () => {
-    container.innerHTML = buildPausePopupHtml(label || translateAppText('Pause'), state);
+    container.innerHTML = buildPausePopupHtml(dataRef.current.label || translateAppText('Pause'), state);
     const panel = container.firstElementChild;
     if (!panel) return;
 
-    panel.querySelector('[data-action="close"]')?.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      popup.remove();
-    });
+    bindPopupClose(panel, popup);
 
     panel.querySelector('[data-action="favorite-toggle"]')?.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
       state.favoriteEnabled = !state.favoriteEnabled;
       state.isDurationDropdownOpen = false;
-      callbacks.onToggleFavorite?.(pauseId, state.favoriteEnabled);
+      callbacks.onToggleFavorite?.(pauseId(), state.favoriteEnabled);
       refresh();
     });
 
@@ -388,7 +517,7 @@ function createPausePopup(
         if (Number.isFinite(dur)) {
           state.pauseDurationMin = dur;
           state.isDurationDropdownOpen = false;
-          callbacks.onChangeDuration?.(pauseId, dur);
+          callbacks.onChangeDuration?.(pauseId(), dur);
           refresh();
         }
       });
@@ -398,57 +527,57 @@ function createPausePopup(
       e.preventDefault();
       e.stopPropagation();
       popup.remove();
-      callbacks.onDelete?.(pauseId);
+      callbacks.onDelete?.(pauseId());
     });
   };
 
+  const syncFromData = () => {
+    Object.assign(state, readState());
+  };
+
   refresh();
-  popup.on('open', () => refresh());
+  popup.on('open', () => {
+    syncFromData();
+    state.isDurationDropdownOpen = false;
+    refresh();
+  });
   popup.setDOMContent(container);
-  return popup;
+  return {
+    popup,
+    sync: () => {
+      if (!popup.isOpen()) return;
+      syncFromData();
+      refresh();
+    },
+  };
 }
 
 function createWaypointPopup(
-  waypointId: string,
-  label: string,
-  initialFavorite: boolean,
+  dataRef: CheckpointDataRef,
   callbacks: {
     onDelete?: (id: string) => void;
     onToggleFavorite?: (id: string, favorite: boolean) => void;
   },
-): mapboxgl.Popup {
-  const popup = new mapboxgl.Popup({
-    className: 'rv-poi-popup',
-    closeButton: false,
-    closeOnClick: true,
-    focusAfterOpen: false,
-    maxWidth: 'none',
-    anchor: 'bottom-left',
-    offset: [16, -16],
-  });
+): CheckpointPopupHandle {
+  const popup = createPopupShell({ anchor: 'bottom-left', offset: [16, -16] });
 
-  const state = {
-    favoriteEnabled: initialFavorite,
-  };
+  const state = { favoriteEnabled: dataRef.current.favorite ?? false };
+  const waypointId = () => dataRef.current.waypointId ?? '';
 
   const container = document.createElement('div');
 
   const refresh = () => {
-    container.innerHTML = buildWaypointPopupHtml(label || translateAppText('Waypoint'), state);
+    container.innerHTML = buildWaypointPopupHtml(dataRef.current.label || translateAppText('Waypoint'), state);
     const panel = container.firstElementChild;
     if (!panel) return;
 
-    panel.querySelector('[data-action="close"]')?.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      popup.remove();
-    });
+    bindPopupClose(panel, popup);
 
     panel.querySelector('[data-action="favorite-toggle"]')?.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
       state.favoriteEnabled = !state.favoriteEnabled;
-      callbacks.onToggleFavorite?.(waypointId, state.favoriteEnabled);
+      callbacks.onToggleFavorite?.(waypointId(), state.favoriteEnabled);
       refresh();
     });
 
@@ -456,14 +585,60 @@ function createWaypointPopup(
       e.preventDefault();
       e.stopPropagation();
       popup.remove();
-      callbacks.onDelete?.(waypointId);
+      callbacks.onDelete?.(waypointId());
     });
   };
 
+  const syncFromData = () => {
+    state.favoriteEnabled = dataRef.current.favorite ?? false;
+  };
+
   refresh();
-  popup.on('open', () => refresh());
+  popup.on('open', () => {
+    syncFromData();
+    refresh();
+  });
   popup.setDOMContent(container);
-  return popup;
+  return {
+    popup,
+    sync: () => {
+      if (!popup.isOpen()) return;
+      syncFromData();
+      refresh();
+    },
+  };
+}
+
+/**
+ * Heures affichées par la popup départ / arrivée. L'arrivée n'est estimée
+ * qu'avec une prédiction : sans elle, la durée serait une pure supposition.
+ */
+function resolveEndpointTimeLabels(
+  reference: StartReference,
+  schedule: ScheduledTimelineState | null,
+  prediction: { points: Array<{ elapsed_time_s: number }> } | null | undefined,
+): { start: string | null; end: string | null; total: string | null } {
+  const start = reference.reference ? formatCheckpointClock(reference.reference, reference.hasRealDate) : null;
+  const points = prediction?.points ?? [];
+  const last = points[points.length - 1];
+  if (!schedule || !last) return { start, end: null, total: null };
+
+  const stopSeconds = schedule.stopAnchors.reduce((sum, anchor) => sum + anchor.durationMin * 60, 0);
+  const totalSeconds = last.elapsed_time_s + stopSeconds;
+  const end = reference.reference
+    ? formatCheckpointClock(new Date(reference.reference.getTime() + totalSeconds * 1000), reference.hasRealDate)
+    : null;
+  return { start, end, total: formatLegDuration(totalSeconds) };
+}
+
+function formatCheckpointClock(date: Date, withDay: boolean): string {
+  const locale = readDocumentAppLocale() === 'en' ? 'en-GB' : 'fr-FR';
+  return date.toLocaleString(
+    locale,
+    withDay
+      ? { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }
+      : { hour: '2-digit', minute: '2-digit' },
+  );
 }
 
 function createMarkerElement(
@@ -591,7 +766,7 @@ export function useItineraryCheckpointMarkers({
   onToggleWaypointFavorite,
   onMoveWaypoint,
 }: UseItineraryCheckpointMarkersArgs): {
-  openCheckpointMarker: (checkpointId: string, coords?: { lat: number; lon: number }) => boolean;
+  openCheckpointMarker: OpenCheckpointMarker;
 } {
   const registryRef = useRef<Map<string, MarkerRegistryEntry>>(new Map());
 
@@ -640,6 +815,15 @@ export function useItineraryCheckpointMarkers({
       const routePoints: RouteDistancePoint[] = itinerary.gpxRoute?.points ?? [];
       const distancesM = getRoutePointDistances(routePoints);
 
+      // Planning pauses incluses, calculé une seule fois : heures des popups
+      // départ / arrivée et pauses d'intervalle.
+      const reference = parseStartReference(itinerary.rhythm);
+      const hasPrediction = Boolean(itinerary.prediction && itinerary.prediction.points.length >= 2);
+      const schedule = hasPrediction
+        ? buildScheduledTimelineState(itinerary.timeline, itinerary.prediction, reference, itinerary.rhythm)
+        : null;
+      const endpointTimes = resolveEndpointTimeLabels(reference, schedule, itinerary.prediction);
+
       // 1. Start checkpoint
       let startCoord: [number, number] | null = null;
       let startLabel = '';
@@ -655,7 +839,7 @@ export function useItineraryCheckpointMarkers({
 
       if (startCoord) {
         const key = `${itinerary.id}:start`;
-        const signature = `${key}:${startCoord[0].toFixed(6)},${startCoord[1].toFixed(6)}:${startLabel}`;
+        const signature = `${key}:${startCoord[0].toFixed(6)},${startCoord[1].toFixed(6)}:${startLabel}:${endpointTimes.start ?? ''}`;
         currentCheckpoints.push({
           key,
           kind: 'start',
@@ -665,6 +849,7 @@ export function useItineraryCheckpointMarkers({
           signature,
           rowId: startRow?.id,
           distanceKm: 0,
+          timeLabel: endpointTimes.start,
         });
       }
 
@@ -683,7 +868,9 @@ export function useItineraryCheckpointMarkers({
 
       if (endCoord) {
         const key = `${itinerary.id}:end`;
-        const signature = `${key}:${endCoord[0].toFixed(6)},${endCoord[1].toFixed(6)}:${endLabel}`;
+        const routeTotalKm = distancesM.length >= 2 ? (distancesM[distancesM.length - 1] ?? 0) / 1000 : null;
+        const endDistanceKm = endRow?.distanceKm ?? routeTotalKm;
+        const signature = `${key}:${endCoord[0].toFixed(6)},${endCoord[1].toFixed(6)}:${endLabel}:${endDistanceKm ?? ''}:${endpointTimes.end ?? ''}:${endpointTimes.total ?? ''}`;
         currentCheckpoints.push({
           key,
           kind: 'end',
@@ -692,7 +879,9 @@ export function useItineraryCheckpointMarkers({
           itineraryId: itinerary.id,
           signature,
           rowId: endRow?.id,
-          distanceKm: endRow?.distanceKm ?? null,
+          distanceKm: endDistanceKm,
+          timeLabel: endpointTimes.end,
+          durationLabel: endpointTimes.total,
         });
       }
 
@@ -734,20 +923,8 @@ export function useItineraryCheckpointMarkers({
       }
 
       // 3b. Auto-generated interval pauses
-      if (
-        pausesEnabled &&
-        itinerary.rhythm?.pauseEveryIntervalEnabled &&
-        itinerary.prediction &&
-        itinerary.prediction.points.length >= 2
-      ) {
-        const reference = parseStartReference(itinerary.rhythm);
-        const { autoPauses } = buildScheduledTimelineState(
-          itinerary.timeline,
-          itinerary.prediction,
-          reference,
-          itinerary.rhythm,
-        );
-        for (const autoPause of autoPauses) {
+      if (pausesEnabled && itinerary.rhythm?.pauseEveryIntervalEnabled && schedule) {
+        for (const autoPause of schedule.autoPauses) {
           if (autoPause.visible === false) continue;
           if (autoPause.source !== 'interval') continue;
           let coord: [number, number] | null = null;
@@ -849,13 +1026,17 @@ export function useItineraryCheckpointMarkers({
           else kindName = translateAppText('Waypoint');
           const distSuffix = cp.distanceKm != null && cp.distanceKm > 0 ? ` (${cp.distanceKm.toFixed(1)} km)` : '';
           const favSuffix = cp.favorite ? ` ★` : '';
-          const title =
-            cp.label && cp.label !== 'Pause' && cp.label !== 'Waypoint'
+          const isEndpoint = cp.kind === 'start' || cp.kind === 'end';
+          const title = isEndpoint
+            ? (cp.label ? `${kindName} : ${cp.label}${distSuffix}` : `${kindName}${distSuffix}`)
+            : cp.label && cp.label !== 'Pause' && cp.label !== 'Waypoint'
               ? `${cp.label}${distSuffix}${favSuffix}`
               : `${kindName}${distSuffix}${favSuffix}`;
           existing.element.title = title;
           existing.element.setAttribute('aria-label', title);
           existing.signature = cp.signature;
+          existing.dataRef.current = cp;
+          existing.syncPopup?.();
           applyTracePointDataset(existing.element, cp);
 
           if (cp.kind === 'pause' || cp.kind === 'waypoint') {
@@ -887,30 +1068,23 @@ export function useItineraryCheckpointMarkers({
       } else {
         const element = createMarkerElement(cp.kind, cp.label, cp.durationMin, cp.distanceKm, cp.favorite);
         applyTracePointDataset(element, cp);
-        const popup =
+        const dataRef: CheckpointDataRef = { current: cp };
+        const popupHandle =
           cp.kind === 'pause' && cp.pauseId
-            ? createPausePopup(
-                cp.pauseId,
-                cp.label,
-                cp.durationMin ?? 15,
-                cp.favorite ?? false,
-                {
-                  onChangeDuration: (id, dur) => callbacksRef.current.onChangePauseDuration?.(id, dur),
-                  onDelete: (id) => callbacksRef.current.onDeletePause?.(id),
-                  onToggleFavorite: (id, fav) => callbacksRef.current.onTogglePauseFavorite?.(id, fav),
-                },
-              )
+            ? createPausePopup(dataRef, {
+                onChangeDuration: (id, dur) => callbacksRef.current.onChangePauseDuration?.(id, dur),
+                onDelete: (id) => callbacksRef.current.onDeletePause?.(id),
+                onToggleFavorite: (id, fav) => callbacksRef.current.onTogglePauseFavorite?.(id, fav),
+              })
             : cp.kind === 'waypoint' && cp.waypointId
-              ? createWaypointPopup(
-                  cp.waypointId,
-                  cp.label,
-                  cp.favorite ?? false,
-                  {
-                    onDelete: (id) => callbacksRef.current.onDeleteWaypoint?.(id),
-                    onToggleFavorite: (id, fav) => callbacksRef.current.onToggleWaypointFavorite?.(id, fav),
-                  },
-                )
-              : undefined;
+              ? createWaypointPopup(dataRef, {
+                  onDelete: (id) => callbacksRef.current.onDeleteWaypoint?.(id),
+                  onToggleFavorite: (id, fav) => callbacksRef.current.onToggleWaypointFavorite?.(id, fav),
+                })
+              : cp.kind === 'start' || cp.kind === 'end'
+                ? createEndpointPopup(dataRef)
+                : undefined;
+        const popup = popupHandle?.popup;
 
         const marker = new mapboxgl.Marker({
           element,
@@ -923,8 +1097,9 @@ export function useItineraryCheckpointMarkers({
           .setLngLat(cp.coord);
 
         if (cp.kind === 'waypoint' && cp.waypointId) {
-          const wpId = cp.waypointId;
           marker.on('dragend', () => {
+            const wpId = dataRef.current.waypointId;
+            if (!wpId) return;
             const lngLat = marker.getLngLat();
             callbacksRef.current.onMoveWaypoint?.(wpId, lngLat.lat, lngLat.lng);
           });
@@ -940,6 +1115,8 @@ export function useItineraryCheckpointMarkers({
         const entry: MarkerRegistryEntry = {
           marker,
           popup,
+          syncPopup: popupHandle?.sync,
+          dataRef,
           signature: cp.signature,
           element,
           kind: cp.kind,
@@ -1000,21 +1177,40 @@ export function useItineraryCheckpointMarkers({
     };
   }, []);
 
-  const openCheckpointMarker = useCallback(
-    (checkpointId: string, coords?: { lat: number; lon: number }): boolean => {
+  const openCheckpointMarker = useCallback<OpenCheckpointMarker>(
+    (checkpointId, coords, scope) => {
       const idStr = String(checkpointId);
       const cleanId = idStr.replace(/^.*::/, '');
+      const itineraryId = scope?.itineraryId ?? null;
+      const registry = registryRef.current;
       let targetEntry: MarkerRegistryEntry | null = null;
 
-      for (const [key, entry] of registryRef.current.entries()) {
-        if (
-          key === idStr ||
-          key === cleanId ||
-          key.endsWith(`:${idStr}`) ||
-          key.endsWith(`:${cleanId}`)
-        ) {
-          targetEntry = entry;
-          break;
+      // Départ / arrivée : une seule clé par itinéraire, quel que soit l'id de ligne.
+      if (itineraryId && (scope?.kind === 'start' || scope?.kind === 'end')) {
+        targetEntry = registry.get(`${itineraryId}:${scope.kind}`) ?? null;
+      }
+
+      const matchesId = (key: string) =>
+        key === idStr ||
+        key === cleanId ||
+        key.endsWith(`:${idStr}`) ||
+        key.endsWith(`:${cleanId}`);
+
+      if (!targetEntry && itineraryId) {
+        for (const [key, entry] of registry.entries()) {
+          if (key.startsWith(`${itineraryId}:`) && matchesId(key)) {
+            targetEntry = entry;
+            break;
+          }
+        }
+      }
+
+      if (!targetEntry) {
+        for (const [key, entry] of registry.entries()) {
+          if (matchesId(key)) {
+            targetEntry = entry;
+            break;
+          }
         }
       }
 
@@ -1042,8 +1238,10 @@ export function useItineraryCheckpointMarkers({
         }
       }
 
-      if (targetEntry.popup && !targetEntry.popup.isOpen()) {
-        targetEntry.marker.togglePopup();
+      // Sélection depuis la feuille de route / le graphique : on ouvre, on ne
+      // referme jamais un panneau déjà ouvert.
+      if (targetEntry.popup) {
+        if (!targetEntry.popup.isOpen()) targetEntry.marker.togglePopup();
       } else {
         targetEntry.element.click();
       }

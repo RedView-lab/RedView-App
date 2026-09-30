@@ -2,9 +2,16 @@ import { useCallback } from 'react';
 import type { MutableRefObject } from 'react';
 import { translateAppText } from '@/shared/i18n';
 import { POI_LABELS, type PoiFeature } from '@/features/poi/types';
-import { FEATURE_TO_PANEL_POI } from '../../lib/schedule';
+import type { PredictionResult } from '@/features/fitPredictor';
+import {
+  applyPoiAutoSort,
+  buildPoiAutoSortSignature,
+  computePoiAutoSort,
+  FEATURE_TO_PANEL_POI,
+  upsertPoiTimelineRow,
+} from '../../lib/schedule';
 import { normalizeItineraryRhythmState } from '../../lib/project';
-import type { Itinerary, ItineraryProject } from '../../types';
+import type { Itinerary, ItineraryProject, PoiAutoSortSummary } from '../../types';
 import { cumulativeRouteLengthsM, projectDistanceAlongRouteM, roundDistanceKm } from '../../lib/routes';
 import {
   buildPendingRoutePatchForEditedRow,
@@ -12,7 +19,7 @@ import {
   insertWaypointIntoTimeline,
 } from './timelineMutations';
 import { removePoiAndLinkedWaypoints } from './poiDraft';
-import { setPoiFeatureFavoriteState } from './poiFeatureUtils';
+import { setManualFavoriteOrigin, setPoiFeatureFavoriteState } from './poiFeatureUtils';
 
 const POI_PAUSE_DURATION_STEPS = [5, 10, 15, 20, 30, 45, 60, 90, 120] as const;
 
@@ -30,6 +37,8 @@ interface UseItineraryPoiHandlersArgs {
   project?: ItineraryProject;
   addItinerary?: (overrides?: Partial<Itinerary>) => string | null;
   onSelectAndCenterTimelineRow?: (rowId: string) => void;
+  /** Prédiction la plus récente (store) ; à défaut `itinerary.prediction`. */
+  getPrediction?: (itinerary: Itinerary) => PredictionResult | null | undefined;
 }
 
 /**
@@ -43,6 +52,7 @@ export function useItineraryPoiHandlers({
   project,
   addItinerary,
   onSelectAndCenterTimelineRow,
+  getPrediction,
 }: UseItineraryPoiHandlersArgs) {
   const resolvePoiTitle = useCallback((feature: PoiFeature) => {
     return feature.name?.trim() || POI_LABELS[feature.category] || 'POI';
@@ -73,8 +83,10 @@ export function useItineraryPoiHandlers({
       ? poiRow.durationMin > 0
       : Boolean(feature.pauseDurationMin && feature.pauseDurationMin > 0);
 
+    const favoriteOrigin = poiRow?.favorite ? poiRow : feature;
     return {
       favoriteEnabled: Boolean(poiRow?.favorite ?? feature.favorite),
+      autoReason: favoriteOrigin.favoriteSource === 'auto' ? (favoriteOrigin.autoReason ?? null) : null,
       pauseEnabled,
       pauseDurationMin,
       manualTraceEnabled: itinerary.timeline.some(
@@ -95,47 +107,47 @@ export function useItineraryPoiHandlers({
         return null;
       };
 
-      let poiRow = it.timeline.find((row) => row.kind === 'poi' && row.osmId === feature.id);
-      if (poiRow) {
+      const hasRow = it.timeline.some((row) => row.kind === 'poi' && row.osmId === feature.id);
+      if (hasRow || nextEnabled) {
+        const poiRow = upsertPoiTimelineRow(it, feature, calcDistanceKm);
         poiRow.favorite = nextEnabled;
-        if (poiRow.distanceKm == null) {
-          poiRow.distanceKm = calcDistanceKm();
-        }
-      } else if (nextEnabled) {
-        const distanceKm = calcDistanceKm();
-        const panelCategory = FEATURE_TO_PANEL_POI[feature.category];
-        poiRow = {
-          id: `poi-timeline-${feature.id}`,
-          kind: 'poi',
-          label: resolvePoiTitle(feature),
-          lat: feature.lat,
-          lon: feature.lon,
-          osmId: feature.id,
-          poiCategory: panelCategory,
-          favorite: true,
-          visible: true,
-          distanceKm,
-        };
-
-        let insertAt = it.timeline.findIndex((row) => row.kind === 'end');
-        if (insertAt < 0) insertAt = it.timeline.length;
-        if (distanceKm != null) {
-          const distIdx = it.timeline.findIndex(
-            (row) =>
-              row.kind !== 'start' &&
-              (row.kind === 'end' || (row.distanceKm != null && row.distanceKm > distanceKm)),
-          );
-          if (distIdx >= 0) insertAt = distIdx;
-        }
-        it.timeline.splice(insertAt, 0, poiRow);
+        setManualFavoriteOrigin(poiRow, nextEnabled);
       }
       it.poiFeatures = setPoiFeatureFavoriteState(it.poiFeatures, feature.id, nextEnabled);
       if (nextEnabled && (!it.poiFeatures || !it.poiFeatures.some((f) => f.id === feature.id))) {
         if (!it.poiFeatures) it.poiFeatures = [];
-        it.poiFeatures.push({ ...feature, favorite: true });
+        it.poiFeatures.push({ ...feature, favorite: true, favoriteSource: 'manual' });
       }
     });
-  }, [resolvePoiTitle, updateActive]);
+  }, [updateActive]);
+
+  /**
+   * Tri automatique : remplace les favoris « auto » par une nouvelle
+   * sélection (les favoris manuels sont conservés). Une seule entrée
+   * d'historique, donc annulable d'un coup.
+   */
+  const handleAutoSortPois = useCallback((): boolean => {
+    const itinerary = activeItineraryRef.current;
+    if (!itinerary) return false;
+    const prediction = getPrediction?.(itinerary) ?? itinerary.prediction ?? null;
+    const run = computePoiAutoSort(itinerary, prediction);
+    if (!run) return false;
+
+    const summary: PoiAutoSortSummary = {
+      total: run.result.picks.length,
+      byReason: run.result.stats.byReason,
+      warnings: run.result.warnings,
+      usedPrediction: run.usedPrediction,
+    };
+    const signature = buildPoiAutoSortSignature(itinerary, prediction);
+    const apply = (it: Itinerary) => {
+      applyPoiAutoSort(it, run.result.picks);
+      it.poiAutoSort = { signature, summary, ranAt: new Date().toISOString() };
+    };
+    if (updateActiveWithHistory) updateActiveWithHistory(apply);
+    else updateActive(apply);
+    return true;
+  }, [activeItineraryRef, getPrediction, updateActive, updateActiveWithHistory]);
 
   const handlePoiStartHere = useCallback((feature: PoiFeature) => {
     const hasItinerary = (project?.itineraries?.length ?? 0) > 0;
@@ -373,6 +385,7 @@ export function useItineraryPoiHandlers({
   return {
     resolvePoiPopupState,
     handlePoiFavoriteToggle,
+    handleAutoSortPois,
     handlePoiStartHere,
     handlePoiAddWaypoint,
     handlePoiFinishHere,

@@ -9,7 +9,7 @@ import type { ExpertProfileState } from './expert/types';
 import type { Surface } from './lib/route-metrics/types';
 import type { ControlPanelPersistedState } from '../controlPanel/lib/persistedState';
 import type { PredictionResult } from '../fitPredictor/types';
-import type { PoiFeature } from '../poi/types';
+import type { PoiAutoSortReason, PoiFavoriteSource, PoiFeature } from '../poi/types';
 import type { SportDiscipline } from '@/shared/lib/discipline';
 
 export type { SportDiscipline } from '@/shared/lib/discipline';
@@ -305,6 +305,28 @@ export interface TimelineItem {
   poiCategory?: PoiCategory;
   /** Stable OSM id of the source feature, when the row was injected by POI search. */
   osmId?: number;
+  /** Favori posé à la main ou par le tri automatique des POI (absent = manuel). */
+  favoriteSource?: PoiFavoriteSource;
+  /** Règle du tri automatique qui a retenu ce favori. */
+  autoReason?: PoiAutoSortReason;
+}
+
+/** Bilan du tri automatique des POI, affiché sous le bouton « Tri auto ». */
+export interface PoiAutoSortSummary {
+  total: number;
+  byReason: Record<PoiAutoSortReason, number>;
+  /** Trous que les POI disponibles ne permettent pas de combler. */
+  warnings: Array<{ kind: 'waterGap' | 'resupplyGap'; fromKm: number; toKm: number; hours: number }>;
+  /** false : heures de passage estimées à 18 km/h faute de prédiction. */
+  usedPrediction: boolean;
+}
+
+export interface PoiAutoSortState {
+  /** Entrées du tri (recherche, départ, rythme) : voir `buildPoiAutoSortSignature`. */
+  signature: string;
+  summary: PoiAutoSortSummary;
+  /** ISO date du tri. */
+  ranAt: string;
 }
 
 export type TimelineView = 'sheet' | 'timeline';
@@ -518,6 +540,14 @@ export interface Itinerary {
    * search; empty/undefined means no search has been run yet.
    */
   poiFeatures?: PoiFeature[];
+  /**
+   * Réglages (catégories cochées + distances X) de la dernière recherche POI
+   * terminée : s'ils diffèrent des réglages courants, le panneau propose
+   * « Relancer la recherche ». Voir `buildPoiSearchSignature`.
+   */
+  poiSearchSignature?: string;
+  /** Dernier tri automatique des favoris (bilan affiché dans la pop-in). */
+  poiAutoSort?: PoiAutoSortState;
   /** BRouter-backed rideability audit findings for this itinerary. */
   routeAudit?: ItineraryRouteAuditState;
   /** Persisted no-go polygons sent to BRouter as absolute forbidden areas. */
@@ -688,6 +718,13 @@ export interface ItineraryPanelProps {
   poiLoadDisabled?: boolean;
   /** Optional helper text rendered when the load button is disabled. */
   poiLoadDisabledReason?: string | null;
+  /** POI chargés avec d'autres catégories / distances que les réglages courants. */
+  poiSearchStale?: boolean;
+  /** Tri automatique : pré-sélection de favoris d'après des règles horaires. Renvoie false si rien n'a pu être trié. */
+  onAutoSortPois?: () => boolean;
+  poiAutoSortDisabled?: boolean;
+  /** Dernier tri auto de l'itinéraire actif (null = jamais lancé) ; `stale` si ses entrées ont changé. */
+  poiAutoSort?: { summary: PoiAutoSortSummary; stale: boolean } | null;
 
   // timeline
   selectedTimelineIds?: string[];

@@ -275,6 +275,8 @@ export function useItineraryCrudActions({
         delete target.gpxRoute;
         delete target.metrics;
         delete target.poiFeatures;
+        delete target.poiSearchSignature;
+        delete target.poiAutoSort;
         delete target.routeAudit;
         delete target.pendingTraceExtension;
         delete target.pendingRoutePatch;

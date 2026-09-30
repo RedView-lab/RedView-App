@@ -34,6 +34,7 @@ export type DashboardPoiOptionId =
   | 'convenience'
   | 'hotel'
   | 'alpine_hut'
+  | 'pass'
   | 'bicycle';
 
 export type DashboardFilterId =

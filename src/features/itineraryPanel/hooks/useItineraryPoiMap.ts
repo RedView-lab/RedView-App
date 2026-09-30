@@ -37,7 +37,7 @@ const PANEL_TO_FEATURE_POI: Record<PanelPoiCategory, FeaturePoiCategory[]> = {
   bikeShops: ['bicycle', 'bicycle_repair', 'compressed_air', 'outdoor_shop'],
   hotels: ['hotel', 'camp_site', 'caravan_site'],
   refuges: ['alpine_hut', 'wilderness_hut', 'shelter'],
-  passes: ['pass', 'viewpoint', 'picnic_site'],
+  passes: ['pass'],
   health: ['pharmacy', 'hospital', 'clinic', 'doctors', 'defibrillator', 'police'],
   transport: ['train_station', 'bus_station', 'ferry_terminal', 'atm', 'post_office', 'laundry'],
 };
@@ -78,6 +78,7 @@ export interface UseItineraryPoiMapResult {
  * UI state beyond what `usePoi` already exposes.
  */
 import { matchesPoiCategory } from '../sections/timeline/poiCategoryMatch';
+import { isPanelPoiCategoryHidden } from '../lib/project/poiRows';
 
 export function useItineraryPoiMap(
   map: MapboxMap | null,
@@ -95,7 +96,7 @@ export function useItineraryPoiMap(
     const set = new Set<FeaturePoiCategory>();
     if (!active?.poi || !poisRouteEnabled) return set;
     for (const [panelKey, raw] of Object.entries(active.poi)) {
-      if (POI_NON_ENTRY_KEYS.has(panelKey)) continue;
+      if (POI_NON_ENTRY_KEYS.has(panelKey) || isPanelPoiCategoryHidden(panelKey)) continue;
       if (!raw || typeof raw !== 'object') continue;
       const entry = raw as PoiEntry;
       if (!entry.enabled) continue;
@@ -112,6 +113,22 @@ export function useItineraryPoiMap(
     return set;
   }, [active, poisRouteEnabled, selectedPoiCategories]);
 
+  // ── Catégories recherchées : les lignes cochées du panneau ─────────
+  //
+  // Indépendantes des filtres d'affichage de la carte (« POIs route »,
+  // sélecteur de catégories) : masquer des POI à l'écran ne doit ni
+  // empêcher la recherche ni restreindre ce qu'elle enregistre.
+  const searchCategories = useMemo<Set<FeaturePoiCategory>>(() => {
+    const set = new Set<FeaturePoiCategory>();
+    if (!active?.poi) return set;
+    for (const [panelKey, raw] of Object.entries(active.poi)) {
+      if (POI_NON_ENTRY_KEYS.has(panelKey) || isPanelPoiCategoryHidden(panelKey)) continue;
+      if (!raw || typeof raw !== 'object' || !(raw as PoiEntry).enabled) continue;
+      for (const fk of PANEL_TO_FEATURE_POI[panelKey as PanelPoiCategory] ?? []) set.add(fk);
+    }
+    return set;
+  }, [active]);
+
   // ── Effective corridor radius: max of enabled rows ────────────────
   //
   // The POI server takes a single radius for the whole corridor query, so
@@ -124,7 +141,7 @@ export function useItineraryPoiMap(
     if (!active?.poi) return DEFAULT_RADIUS_M;
     let max = 0;
     for (const [k, raw] of Object.entries(active.poi)) {
-      if (POI_NON_ENTRY_KEYS.has(k)) continue;
+      if (POI_NON_ENTRY_KEYS.has(k) || isPanelPoiCategoryHidden(k)) continue;
       if (!raw || typeof raw !== 'object') continue;
       const entry = raw as PoiEntry;
       if (entry.enabled && typeof entry.distanceM === 'number' && entry.distanceM > max) {
@@ -138,7 +155,7 @@ export function useItineraryPoiMap(
     if (!active?.poi) return null;
     const next: Partial<Record<FeaturePoiCategory, number>> = {};
     for (const [panelKey, raw] of Object.entries(active.poi)) {
-      if (POI_NON_ENTRY_KEYS.has(panelKey)) continue;
+      if (POI_NON_ENTRY_KEYS.has(panelKey) || isPanelPoiCategoryHidden(panelKey)) continue;
       if (!raw || typeof raw !== 'object') continue;
       const entry = raw as PoiEntry;
       if (!entry.enabled || typeof entry.distanceM !== 'number' || entry.distanceM <= 0) continue;
@@ -176,6 +193,7 @@ export function useItineraryPoiMap(
     poisRouteEnabled,
     favorisEnabled,
     selectedPoiCategories,
+    searchCategories,
   );
 
   return {
@@ -186,7 +204,7 @@ export function useItineraryPoiMap(
     searchCorridor,
     cancelSearchCorridor,
     hasGpxRoute: gpxRoute !== null,
-    hasEnabledCategories: enabledCategories.size > 0,
+    hasEnabledCategories: searchCategories.size > 0,
     radiusM,
     openPoiMarker,
   };

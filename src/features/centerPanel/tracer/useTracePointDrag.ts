@@ -183,8 +183,22 @@ export function useTracePointDrag({
       if (!activeTarget) return;
 
       if (!wasDragging) {
+        if (!elementForReplay) return;
+        // Rejoué aux vraies coordonnées : `element.click()` émettait un clic en
+        // (0,0), donc un `event.point` Mapbox faux pour les écouteurs de carte.
         replayMarkerClick = true;
-        elementForReplay?.click();
+        elementForReplay.dispatchEvent(new MouseEvent('click', {
+          bubbles: true,
+          cancelable: true,
+          view: window,
+          button: 0,
+          clientX: event.clientX,
+          clientY: event.clientY,
+          altKey: event.altKey,
+          ctrlKey: event.ctrlKey,
+          metaKey: event.metaKey,
+          shiftKey: event.shiftKey,
+        }));
         return;
       }
 

@@ -7,19 +7,30 @@ import { DASHBOARD_POI_OPTIONS } from '@/pages/Dashboard/components/DashboardPla
 import type { DashboardPoiOptionId } from '@/pages/Dashboard/components/DashboardPlaceSearch.types';
 import { PoiOptionMarker } from '@/pages/Dashboard/components/DashboardPlaceSearch.icons';
 
-interface TimelineSheetFilterPanelProps {
+interface TimelineFilterBarProps {
   filters: TimelineFilterState;
+  /** True quand la vue a ses propres filtres au lieu des filtres globaux du haut. */
   isOverridden: boolean;
   onChangeFilters: (next: TimelineFilterState) => void;
   onResetToGlobal?: () => void;
+  /** Titre de la barre (« Filtres du tableau », « Filtres de la timeline »…). */
+  title: string;
+  ariaLabel: string;
 }
 
-export function TimelineSheetFilterPanel({
+/**
+ * Barre de filtres de la feuille de route, partagée par la vue tableau et la
+ * vue timeline. Par défaut elle reflète les filtres globaux du haut de page ;
+ * modifier un chip crée un override local, signalé et réinitialisable.
+ */
+export function TimelineFilterBar({
   filters,
   isOverridden,
   onChangeFilters,
   onResetToGlobal,
-}: TimelineSheetFilterPanelProps) {
+  title,
+  ariaLabel,
+}: TimelineFilterBarProps) {
   const { t } = useAppI18n();
   const menuId = useId();
   const [poiMenuOpen, setPoiMenuOpen] = useState(false);
@@ -115,12 +126,16 @@ export function TimelineSheetFilterPanel({
   return (
     <section
       className="rvi-tl-sheet-filters"
-      aria-label={t('Filtres de la feuille de route')}
+      aria-label={ariaLabel}
     >
       <div className="rvi-tl-sheet-filters__status">
-        <span className="rvi-tl-sheet-filters__title">{t('Filtres du tableau')}</span>
+        <span className="rvi-tl-sheet-filters__title">{title}</span>
 
-        {isOverridden && onResetToGlobal ? (
+        {!isOverridden ? (
+          <span className="rvi-tl-sheet-filters__sync" title={t('Filtres globaux du haut de page')}>
+            {t('Synchronisé')}
+          </span>
+        ) : onResetToGlobal ? (
           <button
             type="button"
             className="rvi-tl-filter-reset"
@@ -150,7 +165,7 @@ export function TimelineSheetFilterPanel({
       <div
         className="rvi-tl-sheet-filters__chips"
         role="group"
-        aria-label={t('Filtres de la feuille de route')}
+        aria-label={ariaLabel}
       >
         {/* POIs chip with category dropdown */}
         <div

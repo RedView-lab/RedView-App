@@ -65,6 +65,8 @@ export function splitItineraryProject(
   nextSource.visible = true;
   nextSource.prediction = null;
   delete nextSource.poiFeatures;
+  delete nextSource.poiSearchSignature;
+  delete nextSource.poiAutoSort;
   delete nextSource.routeAudit;
 
   const createdItinerary: Itinerary = structuredClone(source);
@@ -84,6 +86,8 @@ export function splitItineraryProject(
   delete createdItinerary.fitUploads;
   delete createdItinerary.pendingFitRecompute;
   delete createdItinerary.poiFeatures;
+  delete createdItinerary.poiSearchSignature;
+  delete createdItinerary.poiAutoSort;
   delete createdItinerary.routeAudit;
 
   const nextItineraries: Itinerary[] = [];

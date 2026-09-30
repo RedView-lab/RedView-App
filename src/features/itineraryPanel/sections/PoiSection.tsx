@@ -1,7 +1,12 @@
-import { ActionButtonStack, CheckboxField } from '../components/controls';
-import { useAppI18n } from '@/shared/i18n';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { PoiCategory, PoiEntry, PoiState } from '../types';
+import { ActionButtonStack, CheckboxField } from '../components/controls';
+import { PoiAutoSortDialog } from '../components/dialogs/PoiAutoSortDialog';
+import { IconInfo, IconSparkles } from '../components/icons';
+import { useAppI18n } from '@/shared/i18n';
+import { PANEL_POI_ROWS } from '../lib/project/poiRows';
+
+import type { PoiAutoSortSummary, PoiCategory, PoiEntry, PoiState } from '../types';
 
 interface PoiSectionProps {
   poi?: PoiState | null;
@@ -23,38 +28,23 @@ interface PoiSectionProps {
   disabled?: boolean;
   /** Optional helper text shown when the button is disabled. */
   disabledReason?: string | null;
+  /** POI chargés avec d'autres catégories / distances : proposer de relancer. */
+  searchStale?: boolean;
+  /** Tri automatique : pré-sélectionne des favoris parmi les POI chargés. */
+  onAutoSort?: () => boolean;
+  autoSortDisabled?: boolean;
+  /** Dernier tri (null = jamais lancé) ; `stale` si ses entrées ont changé. */
+  autoSort?: { summary: PoiAutoSortSummary; stale: boolean } | null;
 }
 
-const POI_ROWS: { key: PoiCategory; label: string }[][] = [
-  [
-    { key: 'fountains', label: 'Fontaines' },
-    { key: 'toilets', label: 'Toilettes' },
-  ],
-  [
-    { key: 'supermarkets', label: 'Supermarchés' },
-    { key: 'gasStations', label: 'Station Service' },
-  ],
-  [
-    { key: 'bakeries', label: 'Boulangerie' },
-    { key: 'fastFood', label: 'Fast-food' },
-  ],
-  [
-    { key: 'cafes', label: 'Café' },
-    { key: 'bars', label: 'Bar' },
-  ],
-  [
-    { key: 'restaurants', label: 'Restaurant' },
-    { key: 'bikeShops', label: 'Magasin de vélo' },
-  ],
-  [
-    { key: 'hotels', label: 'Hôtels' },
-    { key: 'refuges', label: 'Refuges' },
-  ],
-  [
-    { key: 'health', label: 'Santé' },
-    { key: 'transport', label: 'Transport' },
-  ],
-];
+/** Lignes du panneau groupées par paires (grille 2 colonnes). */
+const POI_ROWS = pairRows(PANEL_POI_ROWS);
+
+function pairRows<T>(list: readonly T[]): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < list.length; i += 2) out.push(list.slice(i, i + 2));
+  return out;
+}
 
 /** Parses a `"40m"`-style string into a positive integer or null. */
 function parseDistance(raw: string): number | null {
@@ -96,8 +86,34 @@ export function PoiSection({
   error = null,
   disabled = false,
   disabledReason = null,
+  searchStale = false,
+  onAutoSort,
+  autoSortDisabled = false,
+  autoSort = null,
 }: PoiSectionProps) {
   const { t } = useAppI18n();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [infoButton, setInfoButton] = useState<HTMLButtonElement | null>(null);
+  const closeDialog = useCallback(() => setDialogOpen(false), []);
+  // Le bouton lance le tri directement ; le bilan reste consultable via ⓘ.
+  // Le tri est synchrone : on laisse d'abord s'afficher « Tri en cours… »,
+  // puis on confirme brièvement la mise à jour (sinon un tri qui retombe
+  // sur le même nombre de favoris semble ne rien faire).
+  const [sortPhase, setSortPhase] = useState<'idle' | 'running' | 'done'>('idle');
+  const sortTimerRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (sortTimerRef.current != null) window.clearTimeout(sortTimerRef.current);
+  }, []);
+  const runAutoSort = useCallback(() => {
+    if (sortTimerRef.current != null) window.clearTimeout(sortTimerRef.current);
+    setSortPhase('running');
+    sortTimerRef.current = window.setTimeout(() => {
+      const sorted = onAutoSort?.() ?? false;
+      setSortPhase(sorted ? 'done' : 'idle');
+      sortTimerRef.current = window.setTimeout(() => setSortPhase('idle'), 2000);
+    }, 30);
+  }, [onAutoSort]);
+
   const pct =
     progress !== null && Number.isFinite(progress)
       ? Math.max(0, Math.min(100, Math.round(progress * 100)))
@@ -107,7 +123,9 @@ export function PoiSection({
       ? `${pct}%`
       : t('Recherche…')
     : null;
-  const resultLabel = poiCount > 0 ? t('({{count}} POI trouvés)', { count: poiCount }) : null;
+  // Réglages modifiés depuis la recherche : le bouton repasse en action.
+  const resultLabel = poiCount > 0 && !searchStale ? t('({{count}} POI trouvés)', { count: poiCount }) : null;
+  const autoSortFresh = autoSort != null && !autoSort.stale && !autoSortDisabled;
 
   return (
     <div className="rvi-params rvi-params--poi">
@@ -143,7 +161,7 @@ export function PoiSection({
       ))}
 
       <ActionButtonStack
-        primaryLabel={t('Charger')}
+        primaryLabel={searchStale ? t('Relancer la recherche') : t('Charger')}
         onPrimaryClick={onLoad}
         primaryDisabled={disabled}
         loadingLabel={loadingLabel}
@@ -160,6 +178,48 @@ export function PoiSection({
           {disabledReason}
         </div>
       ) : null}
+
+      {onAutoSort ? (
+        <div className="rvi-poi-autosort">
+          <div className="rvi-poi-autosort__main">
+            <ActionButtonStack
+              primaryLabel={autoSort ? t('Re-trier les favoris') : t('Tri auto des favoris')}
+              primaryIcon={<IconSparkles size={16} />}
+              onPrimaryClick={runAutoSort}
+              primaryDisabled={autoSortDisabled}
+              loadingLabel={sortPhase === 'running' ? t('Tri en cours…') : null}
+              resultLabel={
+                autoSortFresh
+                  ? sortPhase === 'done'
+                    ? t('{{count}} favoris auto mis à jour', { count: autoSort.summary.total })
+                    : t('{{count}} favoris auto', { count: autoSort.summary.total })
+                  : null
+              }
+            />
+          </div>
+          <button
+            ref={setInfoButton}
+            type="button"
+            className="rvi-poi-autosort__info"
+            aria-label={t('Critères du tri automatique')}
+            aria-haspopup="dialog"
+            aria-expanded={dialogOpen}
+            onClick={() => setDialogOpen(true)}
+          >
+            <IconInfo size={16} />
+          </button>
+        </div>
+      ) : null}
+
+      <PoiAutoSortDialog
+        open={dialogOpen}
+        anchorEl={infoButton}
+        onClose={closeDialog}
+        summary={autoSort?.summary ?? null}
+        stale={Boolean(autoSort?.stale)}
+        runDisabled={autoSortDisabled}
+        onRun={runAutoSort}
+      />
     </div>
   );
 }

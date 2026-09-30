@@ -1,19 +1,17 @@
-import {
-  IconCheck,
-  IconMinus,
-  IconPlus,
-  IconStar,
-} from '../../components/icons';
+import { IconMinus, IconPlus } from '../../components/icons';
 import { useAppI18n } from '@/shared/i18n';
-import { KindBadge } from './KindBadge';
+import { TimelineFilterBar } from './TimelineFilterBar';
 import type { TimelineFilterState } from './TimelineFilters';
 import { TimelineSelect, type TimelineSelectOption } from './TimelineSelect';
 
 interface TimelineEditPanelProps {
   filters: TimelineFilterState;
+  /** True quand la timeline a ses propres filtres au lieu des filtres globaux. */
+  isFiltersOverridden: boolean;
   markerStepKm: number;
   zoomLevel: number;
-  onChangeFilters?: (next: TimelineFilterState) => void;
+  onChangeFilters: (next: TimelineFilterState) => void;
+  onResetFilters?: () => void;
   onChangeMarkerStepKm?: (next: number) => void;
   onChangeZoomLevel?: (next: number) => void;
 }
@@ -31,58 +29,21 @@ const ZOOM_MIN = 0.4;
 const ZOOM_MAX = 2.5;
 const ZOOM_STEP = 0.25;
 
-const FILTER_CHIPS: Array<{
-  key: keyof Omit<TimelineFilterState, 'categories'>;
-  label: string;
-  renderIcon: () => React.ReactNode;
-}> = [
-  {
-    key: 'etape',
-    label: 'Étape',
-    renderIcon: () => <KindBadge kind="start" size={20} />,
-  },
-  {
-    key: 'waypoint',
-    label: 'Waypoint',
-    renderIcon: () => <KindBadge kind="waypoint" size={20} />,
-  },
-  {
-    key: 'poi',
-    label: 'POI',
-    renderIcon: () => <KindBadge kind="water" size={20} />,
-  },
-  {
-    key: 'pause',
-    label: 'Pause',
-    renderIcon: () => <KindBadge kind="pause" size={20} />,
-  },
-  {
-    key: 'favorite',
-    label: 'Favoris',
-    renderIcon: () => (
-      <span className="rvi-tl-edit__favorite-icon" aria-hidden>
-        <IconStar size={12} />
-      </span>
-    ),
-  },
-];
-
 function clampZoom(value: number): number {
   return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Number(value.toFixed(2))));
 }
 
 export function TimelineEditPanel({
   filters,
+  isFiltersOverridden,
   markerStepKm,
   zoomLevel,
   onChangeFilters,
+  onResetFilters,
   onChangeMarkerStepKm,
   onChangeZoomLevel,
 }: TimelineEditPanelProps) {
   const { t } = useAppI18n();
-  const toggleFilter = (key: keyof Omit<TimelineFilterState, 'categories'>) => {
-    onChangeFilters?.({ ...filters, [key]: !filters[key] });
-  };
 
   return (
     <section className="rvi-tl-edit" aria-label={t('Paramètres de la timeline')}>
@@ -131,28 +92,14 @@ export function TimelineEditPanel({
         </div>
       </div>
 
-      <div className="rvi-tl-edit__chips" role="group" aria-label={t('Filtres de la timeline')}>
-        {FILTER_CHIPS.map((chip) => {
-          const active = Boolean(filters[chip.key]);
-          return (
-            <button
-              key={chip.key}
-              type="button"
-              className={`rvi-tl-edit__chip${active ? ' is-on' : ''}`}
-              aria-pressed={active}
-              onClick={() => toggleFilter(chip.key)}
-            >
-              <span className="rvi-tl-edit__chip-check" aria-hidden>
-                {active ? <IconCheck size={10} /> : null}
-              </span>
-              <span className="rvi-tl-edit__chip-label">{t(chip.label)}</span>
-              <span className="rvi-tl-edit__chip-icon" aria-hidden>
-                {chip.renderIcon()}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      <TimelineFilterBar
+        filters={filters}
+        isOverridden={isFiltersOverridden}
+        onChangeFilters={onChangeFilters}
+        onResetToGlobal={onResetFilters}
+        title={t('Filtres de la timeline')}
+        ariaLabel={t('Filtres de la timeline')}
+      />
 
       <div className="rvi-tl-edit__divider" aria-hidden />
     </section>

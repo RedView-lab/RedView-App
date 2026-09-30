@@ -8,7 +8,7 @@ import {
   moveTimelinePauseItem,
 } from './timelineMutations';
 import { normalizeItineraryRhythmState } from '../../lib/project';
-import { setPoiFeatureFavoriteState } from './poiFeatureUtils';
+import { setManualFavoriteOrigin, setPoiFeatureFavoriteState } from './poiFeatureUtils';
 import type { ItineraryProject } from '../../types';
 
 interface UseItineraryTimelineCallbacksArgs {
@@ -112,6 +112,7 @@ export function useItineraryTimelineCallbacks({
 
 
       row.favorite = favorite;
+      setManualFavoriteOrigin(row, favorite);
       if (row.kind === 'poi' && row.osmId != null) {
         it.poiFeatures = setPoiFeatureFavoriteState(it.poiFeatures, row.osmId, favorite);
       }

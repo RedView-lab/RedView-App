@@ -60,6 +60,10 @@ type ItineraryPanelModeContentProps = Pick<
   | 'poiError'
   | 'poiLoadDisabled'
   | 'poiLoadDisabledReason'
+  | 'poiSearchStale'
+  | 'onAutoSortPois'
+  | 'poiAutoSortDisabled'
+  | 'poiAutoSort'
   | 'poiLoading'
   | 'poiProgress'
   | 'routeLoading'
@@ -112,6 +116,10 @@ export function ItineraryPanelModeContent({
   poiError,
   poiLoadDisabled,
   poiLoadDisabledReason,
+  poiSearchStale,
+  onAutoSortPois,
+  poiAutoSortDisabled,
+  poiAutoSort,
   poiLoading,
   poiProgress,
   profiles,
@@ -197,6 +205,10 @@ export function ItineraryPanelModeContent({
           error={poiError}
           disabled={poiLoadDisabled}
           disabledReason={poiLoadDisabledReason}
+          searchStale={poiSearchStale}
+          onAutoSort={onAutoSortPois}
+          autoSortDisabled={poiAutoSortDisabled}
+          autoSort={poiAutoSort}
         />
       ) : (
         <ComingSoonSection title="Points d'intérêt" />

@@ -113,59 +113,6 @@
   cursor: default;
 }
 
-.rvi-tl-edit__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  width: 100%;
-  min-width: 0;
-}
-
-.rvi-tl-edit__chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  height: 30px;
-  padding: 3px 5px 3px 5px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
-  cursor: pointer;
-  transition: background 0.18s ease;
-}
-
-.rvi-tl-edit__chip:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.rvi-tl-edit__chip-check {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 15px;
-  height: 15px;
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.64);
-  flex-shrink: 0;
-  color: #fff;
-}
-
-.rvi-tl-edit__chip-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.64);
-  white-space: nowrap;
-}
-
-.rvi-tl-edit__chip-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-}
-
 .rvi-tl-edit__favorite-icon {
   display: inline-flex;
   align-items: center;

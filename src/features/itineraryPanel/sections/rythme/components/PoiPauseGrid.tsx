@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAppI18n } from '@/shared/i18n';
 import { PanelCheckbox } from '../../../components/controls';
 import { formatPauseDurationInput, parsePauseDurationInput } from '../../../lib/schedule';
+import { DEFAULT_POI_PAUSE_DURATIONS, PANEL_POI_ROWS } from '../../../lib/project';
 import type { PoiCategory } from '../../../types';
 
 /**
@@ -24,21 +25,14 @@ export interface PoiPauseGridProps {
   onChange: (next: Record<PoiCategory, number | null>) => void;
 }
 
+/** Categories that never carry a pause (hidden from this grid). */
+const NO_PAUSE_CATEGORIES: ReadonlySet<PoiCategory> = new Set<PoiCategory>(['health']);
+const FALLBACK_PAUSE_MIN = 15;
+
 /** Display order + French labels, mirroring the POI section grid. */
-const ROWS: ReadonlyArray<[PoiCategory, string, number]> = [
-  ['fountains', 'Fontaines', 15],
-  ['toilets', 'Toilettes', 15],
-  ['supermarkets', 'Supermarchés', 15],
-  ['gasStations', 'Station Service', 15],
-  ['bakeries', 'Boulangerie', 15],
-  ['fastFood', 'Fast-food', 15],
-  ['cafes', 'Café', 15],
-  ['bars', 'Bar', 15],
-  ['restaurants', 'Restaurant', 15],
-  ['bikeShops', 'Magasin de vélo', 15],
-  ['hotels', 'Hôtels', 15],
-  ['refuges', 'Refuges', 15],
-];
+const ROWS: ReadonlyArray<[PoiCategory, string, number]> = PANEL_POI_ROWS
+  .filter((row) => !NO_PAUSE_CATEGORIES.has(row.key))
+  .map((row) => [row.key, row.label, DEFAULT_POI_PAUSE_DURATIONS[row.key] ?? FALLBACK_PAUSE_MIN]);
 
 export function PoiPauseGrid({ durations, onChange }: PoiPauseGridProps) {
   const { t } = useAppI18n();
@@ -98,7 +92,7 @@ function PoiPauseCell({
       setDraft('-');
       return;
     }
-    const nextMinutes = parsePauseDurationInput(draft, value ?? 15);
+    const nextMinutes = parsePauseDurationInput(draft, value ?? FALLBACK_PAUSE_MIN);
     onValueChange(nextMinutes);
     setDraft(formatPauseDurationInput(nextMinutes));
   };

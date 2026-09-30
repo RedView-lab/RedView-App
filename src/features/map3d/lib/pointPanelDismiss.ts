@@ -108,3 +108,20 @@ export function closeMarkerPopupOnSecondClick(
     popup.remove();
   });
 }
+
+/** Marqueurs DOM posés sur la carte (checkpoints, waypoints, pauses, POI DOM). */
+const DOM_MARKER_SELECTOR = '.mapboxgl-marker, .rv-poi-marker, .rv-checkpoint-marker';
+
+/**
+ * True quand l'événement (DOM, ou `MapMouseEvent` via `originalEvent`) part
+ * d'un marqueur DOM. Mapbox émet quand même ses événements de couche
+ * (`map.on('click', layerId)`) si un symbole se trouve sous le marqueur : un
+ * waypoint posé sur un POI ouvrait ainsi son panneau ET celui du POI.
+ */
+export function isEventFromDomMarker(
+  event: Event | { originalEvent?: Event | null } | null | undefined,
+): boolean {
+  if (!event) return false;
+  const target = event instanceof Event ? event.target : event.originalEvent?.target;
+  return target instanceof Element && target.closest(DOM_MARKER_SELECTOR) !== null;
+}

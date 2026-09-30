@@ -220,7 +220,7 @@ export function AnalysisToolbar({
                   }
                 />
                 <span className="rvc-center-analysis__checkbox" aria-hidden="true">
-                  {checked ? <IconCheck size={10} /> : null}
+                  {checked ? <IconCheck size={9} /> : null}
                 </span>
                 {icon ? (
                   <img className="rvc-center-analysis__filter-icon" src={icon} alt="" aria-hidden="true" />

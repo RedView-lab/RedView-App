@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import type { Map as MapboxMap, MapMouseEvent } from 'mapbox-gl';
+import { isEventFromDomMarker } from '@/features/map3d';
 import { queryPoiAtPoint } from '@/features/poi/lib/poi-markers';
 import type { Itinerary } from '@/features/itineraryPanel/types';
 import type { PredictionResult } from '@/features/fitPredictor';
@@ -408,8 +409,9 @@ export function useAnalysisHoverPointMarker({
     const handleMapClick = (event: MapMouseEvent) => {
       const target = event.originalEvent?.target as HTMLElement | null;
       if (
-        target?.closest(
-          '.rv-poi-marker, .mapboxgl-popup, .mapboxgl-ctrl, button, input, [role="button"]',
+        isEventFromDomMarker(event)
+        || target?.closest(
+          '.mapboxgl-popup, .mapboxgl-ctrl, button, input, [role="button"]',
         )
         || queryPoiAtPoint(event.target, event.point)
       ) {

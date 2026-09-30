@@ -16,7 +16,11 @@ import { useItineraryFitRuntime } from '../../hooks/useItineraryFitRuntime';
 import { useItineraryPoiMap } from '../../hooks/useItineraryPoiMap';
 import { useItineraryRouteLayerSync } from '../../hooks/useItineraryRouteLayerSync';
 import { useItineraryCheckpointMarkers } from '../../hooks/useItineraryCheckpointMarkers';
-import { poiFeaturesToTimelineItems } from '../../lib/schedule';
+import {
+  buildPoiAutoSortSignature,
+  buildPoiSearchSignature,
+  poiFeaturesToTimelineItems,
+} from '../../lib/schedule';
 import { fitToRoute } from '../../lib/route-layer';
 import { useProjectStore } from '../../context/ProjectStore';
 import { useTraceToolOptional } from '@/features/centerPanel/tracer';
@@ -45,6 +49,7 @@ import {
 } from '@/features/poi/lib/chartPoiSyncBridge';
 import { deleteProjectItineraryFitFiles } from '@/shared/utils/projects';
 import type {
+  Itinerary,
   ItineraryProject,
   PanelMode,
   ProjectSaveStatus,
@@ -381,6 +386,11 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     [centerTimelineRowInList],
   );
 
+  const getPrediction = useCallback(
+    (itinerary: Itinerary) => predictionStore?.predictions[itinerary.id] ?? itinerary.prediction ?? null,
+    [predictionStore],
+  );
+
   const poiHandlers = useItineraryPoiHandlers({
     activeItineraryRef,
     updateActive,
@@ -388,7 +398,26 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     project,
     addItinerary,
     onSelectAndCenterTimelineRow: handleSelectAndCenterTimelineRow,
+    getPrediction,
   });
+
+  // POI chargés avec d'autres réglages que ceux affichés → « Relancer la recherche ».
+  const poiFoundCount = active?.poiFeatures?.length ?? 0;
+  const poiSearchStale = Boolean(
+    poiFoundCount > 0
+    && active?.poiSearchSignature != null
+    && active.poiSearchSignature !== buildPoiSearchSignature(active.poi),
+  );
+  // Recherche, départ ou rythme modifiés depuis le dernier tri → « Re-trier ».
+  const activePrediction = active ? getPrediction(active) : null;
+  const poiAutoSortView = useMemo(() => {
+    if (!active?.poiAutoSort) return null;
+    return {
+      summary: active.poiAutoSort.summary,
+      stale: active.poiAutoSort.signature !== buildPoiAutoSortSignature(active, activePrediction),
+    };
+  }, [active, activePrediction]);
+  const poiAutoSortDisabled = !active?.gpxRoute?.points?.length || poiFoundCount === 0;
 
   useItineraryMapActions({
     updateActive,
@@ -543,13 +572,16 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
 
       const newPoiRows = poiFeaturesToTimelineItems(mergedFeatures, route).map((row) => {
         const previous = row.osmId != null ? existingPoiRows.get(row.osmId) : undefined;
-        return previous
-          ? {
-            ...row,
-            favorite: Boolean(previous.favorite || row.favorite),
-            visible: previous.visible ?? row.visible,
-          }
-          : row;
+        if (!previous) return row;
+        const favorite = Boolean(previous.favorite || row.favorite);
+        const origin = previous.favorite ? previous : row;
+        return {
+          ...row,
+          favorite,
+          visible: previous.visible ?? row.visible,
+          ...(favorite && origin?.favoriteSource ? { favoriteSource: origin.favoriteSource } : {}),
+          ...(favorite && origin?.autoReason ? { autoReason: origin.autoReason } : {}),
+        };
       });
 
       const stripped = target.timeline.filter((row) => row.kind !== 'poi');
@@ -565,7 +597,12 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         ...p,
         itineraries: p.itineraries.map((it) =>
           it.id === targetId
-            ? { ...it, timeline: merged, poiFeatures: mergedFeatures }
+            ? {
+              ...it,
+              timeline: merged,
+              poiFeatures: mergedFeatures,
+              poiSearchSignature: buildPoiSearchSignature(target.poi),
+            }
             : it,
         ),
       };
@@ -652,10 +689,11 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         if (!opened && map && item.lat != null && item.lon != null) {
           flyToPoi(map, { lon: item.lon, lat: item.lat });
         }
-      } else if (item.kind === 'pause' || item.kind === 'waypoint') {
+      } else if (isCheckpointKind(item.kind)) {
         const opened = openCheckpointMarker(
           item.id,
           item.lat != null && item.lon != null ? { lat: item.lat, lon: item.lon } : undefined,
+          { itineraryId: activeItineraryRef.current?.id, kind: item.kind },
         );
         if (!opened && map && item.lat != null && item.lon != null) {
           flyToPoi(map, { lon: item.lon, lat: item.lat });
@@ -711,12 +749,13 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
               ? { lat: matchingItem.lat, lon: matchingItem.lon }
               : undefined,
           );
-        } else if (matchingItem.kind === 'pause' || matchingItem.kind === 'waypoint') {
+        } else if (isCheckpointKind(matchingItem.kind)) {
           openCheckpointMarker(
             matchingItem.id,
             matchingItem.lat != null && matchingItem.lon != null
               ? { lat: matchingItem.lat, lon: matchingItem.lon }
               : undefined,
+            { itineraryId: currentActive.id, kind: matchingItem.kind },
           );
         }
       } else if (payload.lat != null && payload.lon != null) {
@@ -729,6 +768,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
           openCheckpointMarker(
             String(payload.id ?? ''),
             { lat: payload.lat, lon: payload.lon },
+            { itineraryId: payload.itineraryId ?? currentActive.id },
           );
         }
       }
@@ -780,11 +820,10 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   }, [cancelSearchCorridor, historyRevision, poiLoading]);
 
   const poiLoadDisabled = !hasGpxRoute || !hasEnabledCategories;
+  // Sans catégorie cochée le bouton est simplement grisé : pas de message.
   const poiLoadDisabledReason = !hasGpxRoute
     ? t('Importez un fichier GPX pour rechercher les POI le long du parcours.')
-    : !hasEnabledCategories
-      ? t('Activez au moins une catégorie ci-dessus.')
-      : null;
+    : null;
 
   const [savedCustomProfiles, setSavedCustomProfiles] = useState<SavedCustomProfile[]>(() =>
     getSavedCustomProfiles(),
@@ -1078,10 +1117,14 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         onCancelLoadPois={() => cancelSearchCorridor()}
         poiLoading={poiLoading}
         poiProgress={poiProgress}
-        poiCount={poiCount}
+        poiCount={poiFoundCount || poiCount}
         poiError={poiError}
         poiLoadDisabled={poiLoadDisabled}
         poiLoadDisabledReason={poiLoadDisabledReason}
+        poiSearchStale={poiSearchStale}
+        onAutoSortPois={poiHandlers.handleAutoSortPois}
+        poiAutoSortDisabled={poiAutoSortDisabled || poiLoading}
+        poiAutoSort={poiAutoSortView}
         selectedTimelineIds={selectedTimelineIds}
         onSelectTimelineRow={handleSelectTimelineRow}
         onSelectionTimelineChange={setSelectedTimelineIds}
@@ -1128,3 +1171,10 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
 });
 
 export type { ItineraryPanelContainerProps };
+
+/** Lignes de timeline portées par un marqueur de checkpoint (popup dédiée). */
+function isCheckpointKind(
+  kind: TimelineItem['kind'],
+): kind is 'start' | 'end' | 'pause' | 'waypoint' {
+  return kind === 'start' || kind === 'end' || kind === 'pause' || kind === 'waypoint';
+}

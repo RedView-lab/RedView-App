@@ -13,7 +13,7 @@ import {
   refineImportedRoutePointsWithIgnAltimetry,
   simplifyPointsByQuality,
 } from '../../lib/routes';
-import { createDefaultAnalysisPanelState } from '../../lib/project';
+import { createDefaultAnalysisPanelState, createImportedPoiState } from '../../lib/project';
 import type { GpxQualityMode, Itinerary, ItineraryProject } from '../../types';
 import { resolveImportedTimelineLabel } from './importedTimelineLabel';
 import { reverseGeocodeSettlement } from '../../lib/geocoding';
@@ -232,23 +232,7 @@ export function useItineraryGpxImport({
           metrics: buildImportedRouteMetrics(storedPoints),
           visible: true,
           analysisVisible: true,
-          poi: {
-            fountains: { enabled: true, distanceM: 40 },
-            toilets: { enabled: true, distanceM: 40 },
-            supermarkets: { enabled: true, distanceM: 40 },
-            gasStations: { enabled: true, distanceM: 40 },
-            bakeries: { enabled: true, distanceM: 40 },
-            fastFood: { enabled: true, distanceM: 40 },
-            cafes: { enabled: true, distanceM: 40 },
-            bars: { enabled: true, distanceM: 40 },
-            restaurants: { enabled: true, distanceM: 40 },
-            bikeShops: { enabled: true, distanceM: 40 },
-            hotels: { enabled: true, distanceM: 40 },
-            refuges: { enabled: true, distanceM: 40 },
-            passes: { enabled: true, distanceM: 40 },
-            health: { enabled: true, distanceM: 40 },
-            transport: { enabled: true, distanceM: 40 },
-          },
+          poi: createImportedPoiState(),
         });
 
         if (id) {

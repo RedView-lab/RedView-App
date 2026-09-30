@@ -1,4 +1,4 @@
-import type { Itinerary } from '../../types';
+import type { Itinerary, TimelineItem } from '../../types';
 import type { PoiFeature } from '@/features/poi/types';
 
 /**
@@ -6,6 +6,13 @@ import type { PoiFeature } from '@/features/poi/types';
  * and the corridor feature list. Extracted from ItineraryPanelContainer so the
  * component stays focused on orchestration.
  */
+
+/** Un favori basculé à la main n'est plus un favori du tri auto. */
+export function setManualFavoriteOrigin(row: TimelineItem, favorite: boolean): void {
+  delete row.autoReason;
+  if (favorite) row.favoriteSource = 'manual';
+  else delete row.favoriteSource;
+}
 
 export function setPoiFeatureFavoriteState(
   features: PoiFeature[] | undefined,
@@ -19,9 +26,18 @@ export function setPoiFeatureFavoriteState(
   const nextFeatures = features.map((feature) => {
     if (feature.id !== poiId && String(feature.id) !== String(poiId)) return feature;
     const nextPause = pauseDurationMin !== undefined ? pauseDurationMin : (feature.pauseDurationMin ?? null);
-    if (Boolean(feature.favorite) === favorite && (feature.pauseDurationMin ?? null) === nextPause) return feature;
+    const favoriteChanged = Boolean(feature.favorite) !== favorite;
+    if (!favoriteChanged && (feature.pauseDurationMin ?? null) === nextPause) return feature;
     changed = true;
-    return { ...feature, favorite, pauseDurationMin: nextPause };
+    const next: PoiFeature = { ...feature, favorite, pauseDurationMin: nextPause };
+    // Seul le tri auto pose des favoris « auto » : tout basculement passant
+    // par ici est un choix manuel.
+    if (favoriteChanged) {
+      delete next.autoReason;
+      if (favorite) next.favoriteSource = 'manual';
+      else delete next.favoriteSource;
+    }
+    return next;
   });
 
   return changed ? nextFeatures : features;
@@ -45,11 +61,16 @@ export function mergePoiFeatureFavorites(
 
   const timelineFavorites = new Map<string | number, boolean>();
   const timelinePauseDurations = new Map<string | number, number | null>();
+  const origins = new Map<string | number, FavoriteOrigin>();
+  for (const feature of currentFeatures) {
+    if (feature.favorite) origins.set(feature.id, originOf(feature));
+  }
   for (const row of timeline) {
     if ((row.kind === 'poi' || row.kind === 'waypoint') && row.osmId != null) {
       if (row.favorite !== undefined) {
         timelineFavorites.set(row.osmId, Boolean(row.favorite));
       }
+      if (row.favorite) origins.set(row.osmId, originOf(row));
       if (row.durationMin !== undefined) {
         timelinePauseDurations.set(
           row.osmId,
@@ -85,15 +106,33 @@ export function mergePoiFeatureFavorites(
       : (currentPauseDurations.has(feature.id)
           ? currentPauseDurations.get(feature.id)!
           : (feature.pauseDurationMin ?? null));
+    const origin: FavoriteOrigin = nextFavorite
+      ? (origins.get(feature.id) ?? originOf(feature))
+      : {};
     if (
       Boolean(feature.favorite) === nextFavorite &&
-      (feature.pauseDurationMin ?? null) === nextPause
+      (feature.pauseDurationMin ?? null) === nextPause &&
+      feature.favoriteSource === origin.favoriteSource &&
+      feature.autoReason === origin.autoReason
     ) {
       return feature;
     }
     changed = true;
-    return { ...feature, favorite: nextFavorite, pauseDurationMin: nextPause };
+    const next: PoiFeature = { ...feature, favorite: nextFavorite, pauseDurationMin: nextPause };
+    delete next.favoriteSource;
+    delete next.autoReason;
+    return { ...next, ...origin };
   });
 
   return changed ? merged : features;
+}
+
+type FavoriteOrigin = Pick<PoiFeature, 'favoriteSource' | 'autoReason'>;
+
+/** Origine d'un favori (manuel / tri auto), sans clés `undefined`. */
+function originOf(item: FavoriteOrigin): FavoriteOrigin {
+  const origin: FavoriteOrigin = {};
+  if (item.favoriteSource) origin.favoriteSource = item.favoriteSource;
+  if (item.autoReason) origin.autoReason = item.autoReason;
+  return origin;
 }

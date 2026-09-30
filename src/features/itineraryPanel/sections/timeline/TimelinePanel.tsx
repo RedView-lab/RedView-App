@@ -31,7 +31,8 @@ import {
   type TimelineFilterState,
   DEFAULT_TIMELINE_FILTER,
 } from './TimelineFilters';
-import { TimelineSheetFilterPanel } from './TimelineSheetFilterPanel';
+import { sameTimelineFilters } from './timelineFilterUtils';
+import { TimelineFilterBar } from './TimelineFilterBar';
 import { matchesPoiCategory } from './poiCategoryMatch';
 import {
   TimelineTableSettings,
@@ -126,12 +127,20 @@ export function TimelinePanel({
   const resolvedTableSettings = tableSettings ?? localTableSettings;
   const handleChangeTableSettings = onChangeTableSettings ?? setLocalTableSettings;
 
-  // Local table filters: when overridden (non-null), filters apply ONLY to this table.
-  // When null, the table synchronizes with globalFilters from the top of the screen.
+  // Filtres locaux (tableau et timeline) : non-null = override propre à la
+  // feuille de route ; null = synchronisé sur les filtres globaux du haut.
   const [localFilters, setLocalFilters] = useState<TimelineFilterState | null>(null);
   const effectiveFilters = useMemo<TimelineFilterState>(() => {
     return localFilters ?? globalFilters ?? DEFAULT_TIMELINE_FILTER;
   }, [localFilters, globalFilters]);
+
+  // Le global reprend la main : toucher aux filtres du haut abandonne
+  // l'override (ajustement d'état pendant le rendu, sans effet en cascade).
+  const [lastGlobalFilters, setLastGlobalFilters] = useState(globalFilters);
+  if (!sameTimelineFilters(lastGlobalFilters, globalFilters)) {
+    setLastGlobalFilters(globalFilters);
+    setLocalFilters(null);
+  }
 
   const [sheetSettingsOpen, setSheetSettingsOpen] = useState(false);
 
@@ -224,8 +233,14 @@ export function TimelinePanel({
     [deduplicatedItems, effectiveFilters, intervalPauseSheetItems],
   );
 
-  const visibleTimelineItems = useMemo(
-    () => deduplicatedItems.filter((item) => matchesTimelineFilter(item, 'timeline', effectiveFilters)),
+  // La vue timeline reçoit TOUS les items (le planning compte chaque pause) et
+  // n'affiche que ceux-ci : filtrer avant le calcul décalait les heures.
+  const visibleTimelineIds = useMemo<ReadonlySet<string>>(
+    () => new Set(
+      deduplicatedItems
+        .filter((item) => matchesTimelineFilter(item, 'timeline', effectiveFilters))
+        .map((item) => item.id),
+    ),
     [deduplicatedItems, effectiveFilters],
   );
 
@@ -285,20 +300,24 @@ export function TimelinePanel({
         {showTimelineTopbar ? (
           <TimelineEditPanel
             filters={effectiveFilters}
+            isFiltersOverridden={localFilters !== null}
             markerStepKm={timelineMarkerStepKm}
             zoomLevel={timelineZoomLevel}
             onChangeFilters={setLocalFilters}
+            onResetFilters={() => setLocalFilters(null)}
             onChangeMarkerStepKm={setTimelineMarkerStepKm}
             onChangeZoomLevel={setTimelineZoomLevel}
           />
         ) : null}
 
         {showSheetTopbar ? (
-          <TimelineSheetFilterPanel
+          <TimelineFilterBar
             filters={effectiveFilters}
             isOverridden={localFilters !== null}
             onChangeFilters={setLocalFilters}
             onResetToGlobal={() => setLocalFilters(null)}
+            title={t('Filtres du tableau')}
+            ariaLabel={t('Filtres de la feuille de route')}
           />
         ) : null}
       </div>
@@ -338,7 +357,8 @@ export function TimelinePanel({
           </>
         ) : (
           <TimelineTimelineView
-            items={visibleTimelineItems}
+            items={deduplicatedItems}
+            visibleIds={visibleTimelineIds}
             rhythm={rhythm}
             prediction={prediction}
             config={railConfig}

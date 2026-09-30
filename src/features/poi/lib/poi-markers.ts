@@ -29,7 +29,7 @@ import type {
   Map as MapboxMap,
   MapMouseEvent,
 } from 'mapbox-gl';
-import { buildPopupClearanceOffset, flyToPoi } from '@/features/map3d';
+import { buildPopupClearanceOffset, flyToPoi, isEventFromDomMarker } from '@/features/map3d';
 
 import type { PoiFeature } from '../types';
 import { POI_LABELS } from '../types';
@@ -630,6 +630,12 @@ export class PoiMarkerManager {
   };
 
   private readonly handleLayerClick = (event: MapMouseEvent): void => {
+    // Un marqueur DOM (waypoint, pause, départ…) posé sur le POI gère son
+    // propre clic : sans ça, les deux panneaux s'ouvraient ensemble.
+    if (isEventFromDomMarker(event)) {
+      this.pressedOpenPopupKey = null;
+      return;
+    }
     const hit = event.features?.[0];
     const key = hit ? String(hit.properties?.key ?? '') : '';
     const feature = key ? this.features.get(key) : undefined;
@@ -646,6 +652,10 @@ export class PoiMarkerManager {
   };
 
   private readonly handleLayerMouseMove = (event: MapMouseEvent): void => {
+    if (isEventFromDomMarker(event)) {
+      this.setHovered(null);
+      return;
+    }
     const hit = event.features?.[0];
     const key = hit ? String(hit.properties?.key ?? '') : '';
     this.setHovered(key || null);

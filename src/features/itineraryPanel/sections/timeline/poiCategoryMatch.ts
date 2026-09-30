@@ -16,7 +16,8 @@ export const DASHBOARD_TO_PANEL_CATEGORY_MAP: Record<DashboardPoiOptionId, Panel
   cafe: ['cafes'],
   restaurant: ['restaurants', 'fastFood'],
   hotel: ['hotels'],
-  alpine_hut: ['refuges', 'passes'],
+  alpine_hut: ['refuges'],
+  pass: ['passes'],
   bicycle: ['bikeShops'],
 };
 
@@ -33,7 +34,7 @@ export const PANEL_TO_DASHBOARD_CATEGORY_MAP: Partial<Record<PanelPoiCategory, D
   bikeShops: 'bicycle',
   hotels: 'hotel',
   refuges: 'alpine_hut',
-  passes: 'alpine_hut',
+  passes: 'pass',
 };
 
 export const FEATURE_TO_DASHBOARD_CATEGORY: Partial<Record<string, DashboardPoiOptionId>> = {
@@ -64,7 +65,7 @@ export const FEATURE_TO_DASHBOARD_CATEGORY: Partial<Record<string, DashboardPoiO
   alpine_hut: 'alpine_hut',
   wilderness_hut: 'alpine_hut',
   shelter: 'alpine_hut',
-  pass: 'alpine_hut',
+  pass: 'pass',
   viewpoint: 'alpine_hut',
   picnic_site: 'alpine_hut',
   bicycle: 'bicycle',

@@ -89,6 +89,10 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     poiError,
     poiLoadDisabled,
     poiLoadDisabledReason,
+    poiSearchStale,
+    onAutoSortPois,
+    poiAutoSortDisabled,
+    poiAutoSort,
     routeLoading,
     selectedTimelineIds,
     onSelectTimelineRow,
@@ -353,6 +357,10 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
             poiError={poiError}
             poiLoadDisabled={poiLoadDisabled}
             poiLoadDisabledReason={poiLoadDisabledReason}
+            poiSearchStale={poiSearchStale}
+            onAutoSortPois={onAutoSortPois}
+            poiAutoSortDisabled={poiAutoSortDisabled}
+            poiAutoSort={poiAutoSort}
             poiLoading={poiLoading}
             poiProgress={poiProgress}
             profiles={profiles}

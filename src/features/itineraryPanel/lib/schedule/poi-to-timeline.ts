@@ -122,6 +122,8 @@ export function poiFeaturesToTimelineItems(
       poiCategory: panelKey,
       osmId: f.id,
       favorite: f.favorite,
+      ...(f.favorite && f.favoriteSource ? { favoriteSource: f.favoriteSource } : {}),
+      ...(f.favorite && f.autoReason ? { autoReason: f.autoReason } : {}),
       visible: true,
     });
   }

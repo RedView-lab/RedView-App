@@ -3,7 +3,16 @@ import type { PoiCategory, RhythmState, TimelineItem, TimelineRailConfig } from 
 import type { TimelineFilterState } from '../TimelineFilters';
 
 export interface TimelineTimelineViewProps {
+  /**
+   * Tous les items de l'itinéraire : le planning (heures, pauses cumulées,
+   * repères km) se calcule toujours sur l'ensemble.
+   */
   items: TimelineItem[];
+  /**
+   * Items à afficher (filtres). Absent = tout afficher. Filtrer `items` à la
+   * place retirerait les pauses masquées du planning et décalerait les heures.
+   */
+  visibleIds?: ReadonlySet<string>;
   rhythm?: RhythmState;
   prediction?: PredictionResult | null;
   config?: Partial<TimelineRailConfig>;

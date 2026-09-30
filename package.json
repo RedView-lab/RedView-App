@@ -15,6 +15,7 @@
     "bench:fit": "tsx script-test-bench/bench-fit-predictor.ts",
     "bench:lidar": "tsx script-test-bench/bench-lidar.ts",
     "bench:poi": "tsx script-test-bench/bench-poi.ts",
+    "bench:poi-autosort": "tsx script-test-bench/test-poi-autosort.ts",
     "bench:exporter": "tsx script-test-bench/bench-exporter.ts",
     "bench:chart": "tsx script-test-bench/bench-center-panel.ts",
     "bench:server": "tsx script-test-bench/bench-server-api.ts",

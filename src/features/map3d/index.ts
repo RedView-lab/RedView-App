@@ -49,6 +49,7 @@ export type {
 } from './lib/cameraFlight';
 export {
 	closeMarkerPopupOnSecondClick,
+	isEventFromDomMarker,
 	isPointPanelOpen,
 	handlePointPanelMousedown,
 	shouldIgnoreMapClickAfterPanelDismiss,

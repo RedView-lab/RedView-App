@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import { AssetIcon } from '@/shared/components/AssetIcon';
+import { useAppI18n } from '@/shared/i18n';
 
 import type { OverlayStatusId, OverlayStatusSnapshot } from '../lib/overlayStatus';
 
@@ -15,6 +16,13 @@ interface MapOverlayStatusDockProps {
   onReload?: (id: OverlayStatusId) => void;
 }
 
+/**
+ * Un seul contrôle pour tous les overlays (carte, pentes, altitude, météo…) :
+ * un bouton ↻ par overlay s'empilait sans libellé, impossible de savoir lequel
+ * rechargeait quoi. Tant que tout est prêt → un bouton qui recharge tout ; dès
+ * qu'un overlay charge ou échoue → une pilule agrégée (progression moyenne) dont
+ * le ↻ recharge en priorité les overlays en erreur.
+ */
 export default function MapOverlayStatusDock({
   statuses,
   right,
@@ -26,96 +34,114 @@ export default function MapOverlayStatusDock({
   transform,
   onReload,
 }: MapOverlayStatusDockProps) {
+  const { t } = useAppI18n();
   if (statuses.length === 0) return null;
 
+  const loading = statuses.filter((status) => status.state === 'loading');
+  const errored = statuses.filter((status) => status.state === 'error');
+  const reloadable = statuses.filter((status) => status.reloadable);
+  const erroredReloadable = errored.filter((status) => status.reloadable);
+  const reloadTargets = erroredReloadable.length > 0 ? erroredReloadable : reloadable;
+  const busy = loading.length > 0 || errored.length > 0;
+
+  const reloadTargetsLabel = reloadTargets.map((status) => t(status.label)).join(', ');
+  const reloadLabel = reloadTargets.length > 0
+    ? t('Recharger : {{list}}', { list: reloadTargetsLabel })
+    : t('Recharger');
+  const handleReload = () => {
+    for (const status of reloadTargets) onReload?.(status.id);
+  };
+
+  const containerStyle: CSSProperties = {
+    ...dockStyle,
+    ...(left == null ? { right } : { left }),
+    ...(top == null ? { bottom } : { top }),
+    alignItems: align === 'center' ? 'center' : 'flex-end',
+    transform,
+    opacity: hidden ? 0 : 1,
+    pointerEvents: hidden ? 'none' : 'auto',
+  };
+
+  if (!busy) {
+    if (reloadable.length === 0) return null;
+    return (
+      <div style={containerStyle}>
+        <button
+          type="button"
+          aria-label={reloadLabel}
+          title={reloadLabel}
+          onClick={handleReload}
+          style={compactButtonStyle}
+        >
+          <RefreshIcon />
+        </button>
+      </div>
+    );
+  }
+
+  const progress = loading.length > 0
+    ? Math.round(loading.reduce((sum, status) => sum + status.progress, 0) / loading.length)
+    : 100;
+  const hasError = errored.length > 0;
+  const accentColor = hasError ? 'rgba(255, 140, 92, 0.92)' : 'rgba(255, 255, 255, 0.82)';
+  const reloadDisabled = reloadTargets.length === 0
+    || reloadTargets.every((status) => status.state === 'loading');
+  const tooltip = [
+    loading.length > 0 ? t('Chargement : {{list}}', { list: loading.map((s) => t(s.label)).join(', ') }) : null,
+    hasError ? t('Erreur : {{list}}', { list: errored.map((s) => (s.detail ? `${t(s.label)} (${s.detail})` : t(s.label))).join(', ') }) : null,
+  ].filter(Boolean).join('\n');
+
   return (
-    <div
-      style={{
-        ...dockStyle,
-        ...(left == null ? { right } : { left }),
-        ...(top == null ? { bottom } : { top }),
-        alignItems: align === 'center' ? 'center' : 'flex-end',
-        transform,
-        opacity: hidden ? 0 : 1,
-        pointerEvents: hidden ? 'none' : 'auto',
-      }}
-    >
-      {statuses.map((status) => {
-          const compact = status.state === 'ready';
-        const reloadDisabled = status.state === 'loading' || !status.reloadable;
-        const showReload = status.id === 'shadow' || status.reloadable;
-        const tooltip = [status.label, status.detail].filter(Boolean).join(' - ');
-
-        if (compact) {
-          return (
-            <button
-              key={status.id}
-              type="button"
-              aria-label={`Recharger ${status.label}`}
-              title={tooltip || status.label}
-              onClick={() => onReload?.(status.id)}
-              style={compactButtonStyle}
-            >
-              <RefreshIcon />
-            </button>
-          );
-        }
-
-        const accentColor = status.state === 'error' ? 'rgba(255, 140, 92, 0.92)' : 'rgba(255, 255, 255, 0.82)';
-
-        return (
+    <div style={containerStyle}>
+      <div
+        role="status"
+        aria-live="polite"
+        title={tooltip}
+        style={{
+          ...pillStyle,
+          borderColor: hasError ? 'rgba(255, 140, 92, 0.22)' : 'rgba(255,255,255,0.08)',
+        }}
+      >
+        <div style={trackShellStyle}>
           <div
-            key={status.id}
-            role="status"
-            aria-live="polite"
-            title={tooltip || status.label}
             style={{
-              ...pillStyle,
-              borderColor: status.state === 'error' ? 'rgba(255, 140, 92, 0.22)' : 'rgba(255,255,255,0.08)',
+              ...trackFillStyle,
+              width: `${progress <= 0 ? 0 : Math.max(8, progress)}%`,
+              background: hasError
+                ? 'linear-gradient(90deg, rgba(255,140,92,0.96), rgba(255,190,135,0.9))'
+                : 'rgba(255,255,255,0.8)',
+            }}
+          />
+        </div>
+
+        <div style={{ ...percentStyle, color: accentColor }}>
+          {loading.length > 0 ? `${progress}%` : 'Err'}
+        </div>
+
+        {reloadTargets.length > 0 ? (
+          <button
+            type="button"
+            aria-label={reloadLabel}
+            title={reloadLabel}
+            disabled={reloadDisabled}
+            onClick={handleReload}
+            style={{
+              ...iconButtonStyle,
+              opacity: reloadDisabled ? 0.5 : 0.92,
+              cursor: reloadDisabled ? 'default' : 'pointer',
             }}
           >
-            <div style={trackShellStyle}>
-              <div
-                style={{
-                  ...trackFillStyle,
-                  width: `${status.progress <= 0 ? 0 : Math.max(8, status.progress)}%`,
-                  background: status.state === 'error'
-                    ? 'linear-gradient(90deg, rgba(255,140,92,0.96), rgba(255,190,135,0.9))'
-                    : 'rgba(255,255,255,0.8)',
-                }}
-              />
-            </div>
-
-            <div style={{ ...percentStyle, color: accentColor }}>
-              {status.state === 'error' ? 'Err' : `${status.progress}%`}
-            </div>
-
-            {showReload ? (
-              <button
-                type="button"
-                aria-label={`Recharger ${status.label}`}
-                title={tooltip || status.label}
-                disabled={reloadDisabled}
-                onClick={() => onReload?.(status.id)}
-                style={{
-                  ...iconButtonStyle,
-                  opacity: reloadDisabled ? 0.5 : 0.92,
-                  cursor: reloadDisabled ? 'default' : 'pointer',
-                }}
-              >
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    animation: status.state === 'loading' ? 'spin 1.15s linear infinite' : undefined,
-                  }}
-                >
-                  <RefreshIcon />
-                </span>
-              </button>
-            ) : null}
-          </div>
-        );
-      })}
+            <span
+              style={{
+                display: 'inline-flex',
+                animation: loading.length > 0 ? 'spin 1.15s linear infinite' : undefined,
+              }}
+            >
+              <RefreshIcon />
+            </span>
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

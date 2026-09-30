@@ -6,12 +6,25 @@
 // data — actions are resolved lazily via a getter, never captured at
 // marker-creation time.
 
-import type { PoiFeature } from '../types';
+import type { PoiAutoSortReason, PoiFeature } from '../types';
 import { POI_LABELS } from '../types';
 import { getPoiIconUrl } from './poi-icons';
 
+/** Libellés (source FR, traduits par l'observateur DOM d'AppI18nProvider). */
+const AUTO_REASON_LABELS: Record<PoiAutoSortReason, string> = {
+  water: "Point d'eau (toutes les 3h)",
+  resupply: 'Ravitaillement (~3h)',
+  bakery: 'Boulangerie du matin',
+  meal: 'Repas (midi / soir)',
+  night: 'Ravitaillement de nuit',
+  hotel: 'Hôtel pour la nuit',
+  gap6h: 'Dernier avant 6h sans équivalent',
+};
+
 export interface PoiPopupState {
   favoriteEnabled: boolean;
+  /** Règle du tri auto, quand le favori a été posé par lui. */
+  autoReason?: PoiAutoSortReason | null;
   pauseEnabled: boolean;
   pauseDurationMin: number;
   manualTraceEnabled: boolean;
@@ -90,6 +103,11 @@ function buildPopupHtml(feature: PoiFeature, state: PoiPopupState): string {
           <img src="${UI_ICON_URLS.globe}" alt="" class="rv-poi-popup__icon" />
         </button>
       </div>
+      ${
+        state.favoriteEnabled && state.autoReason
+          ? `<div class="rv-poi-popup__auto-reason"><span>Favori auto</span> · <span>${escapeHtml(AUTO_REASON_LABELS[state.autoReason])}</span></div>`
+          : ''
+      }
 
       <div class="rv-poi-popup__divider"></div>
 
@@ -225,7 +243,8 @@ export function buildPopupContent(
   });
 
   bindClick('[data-action="favorite-toggle"]', () => {
-    const nextState = { ...state, favoriteEnabled: !state.favoriteEnabled, isDurationDropdownOpen: false };
+    // Basculer l'étoile à la main en fait un favori manuel.
+    const nextState = { ...state, favoriteEnabled: !state.favoriteEnabled, autoReason: null, isDurationDropdownOpen: false };
     actions.onToggleFavorite?.(feature, nextState.favoriteEnabled);
     refresh(nextState);
   });

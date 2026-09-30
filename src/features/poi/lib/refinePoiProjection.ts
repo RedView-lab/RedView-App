@@ -74,7 +74,7 @@ export function projectRoutePoints(points: GpxRoute['points']): ProjectedRoutePo
   return result;
 }
 
-interface RouteChunk {
+export interface RouteChunk {
   minX: number;
   maxX: number;
   minY: number;
@@ -85,7 +85,7 @@ interface RouteChunk {
 
 const CHUNK_SIZE = 128;
 
-function getRouteChunks(route: readonly ProjectedRoutePoint[]): RouteChunk[] {
+export function getRouteChunks(route: readonly ProjectedRoutePoint[]): RouteChunk[] {
   const cached = (route as { _chunks?: RouteChunk[] })._chunks;
   if (cached) return cached;
 

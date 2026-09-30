@@ -62,6 +62,8 @@ function mergeCorridorWithSavedFeatures(
       if (existing) {
         existing.favorite = Boolean(saved.favorite);
         existing.pauseDurationMin = saved.pauseDurationMin ?? null;
+        if (saved.favoriteSource) existing.favoriteSource = saved.favoriteSource;
+        if (saved.autoReason) existing.autoReason = saved.autoReason;
       } else if (saved.favorite || (saved.pauseDurationMin != null && saved.pauseDurationMin > 0)) {
         map.set(saved.id, { ...saved });
       }
@@ -91,6 +93,13 @@ export function usePoi(
   poisRouteEnabled: boolean = true,
   favorisEnabled: boolean = true,
   selectedPoiCategories?: Set<string>,
+  /**
+   * Catégories cochées dans le panneau POI : ce que la recherche corridor
+   * interroge et conserve, indépendamment des filtres d'affichage de la
+   * carte (`poisRouteEnabled`, `selectedPoiCategories`). Défaut :
+   * `enabledCategories`.
+   */
+  searchCategories?: Set<PoiCategory>,
 ) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,6 +114,8 @@ export function usePoi(
   // Mirror reactive inputs into refs so stable callbacks read fresh values.
   const enabledRef = useRef(enabledCategories);
   enabledRef.current = enabledCategories;
+  const searchCategoriesRef = useRef(searchCategories ?? enabledCategories);
+  searchCategoriesRef.current = searchCategories ?? enabledCategories;
   const favorisEnabledRef = useRef(favorisEnabled);
   favorisEnabledRef.current = favorisEnabled;
   const poisRouteEnabledRef = useRef(poisRouteEnabled);
@@ -201,6 +212,24 @@ export function usePoi(
     return [...favorites, ...filteredNonFavorites];
   }, []);
 
+  /**
+   * Ce que la recherche enregistre dans l'itinéraire : tous les favoris +
+   * les POI des catégories cochées dans leur distance X. Surtout pas le
+   * sous-ensemble affiché, sinon masquer des POI sur la carte (vue
+   * « Favoris » seule…) les effacerait du projet à la recherche suivante.
+   */
+  const buildStoredFeatures = useCallback((features: PoiFeature[]) => {
+    const searched = searchCategoriesRef.current;
+    const favorites = features.filter((feature) => feature.favorite);
+    const others = features.filter((feature) => !feature.favorite && searched.has(feature.category));
+    const route = gpxRef.current;
+    if (!route || route.points.length < 2) return [...favorites, ...others];
+    return [
+      ...favorites,
+      ...filterPoisByLateralDistance(others, route.points, maxLateralDistanceByCategoryRef.current ?? undefined),
+    ];
+  }, []);
+
   const syncRenderedFeatures = useCallback((features: PoiFeature[]) => {
     const manager = managerRef.current;
     if (!manager) return;
@@ -212,8 +241,8 @@ export function usePoi(
 
   const fetchCorridorPois = useCallback(async () => {
     const route = gpxRef.current;
-    const cats = Array.from(enabledRef.current);
-    if (!route || cats.length === 0 || !poisRouteEnabledRef.current) {
+    const cats = Array.from(searchCategoriesRef.current);
+    if (!route || cats.length === 0) {
       const all = initialFeaturesRef.current ?? [];
       lastCorridorFeatures.current = all;
       syncRenderedFeatures(buildRenderableFeatures(all));
@@ -270,17 +299,15 @@ export function usePoi(
           if (deduped.length === 0 || done >= total) return;
           const all = mergeCorridorWithSavedFeatures(deduped, initialFeaturesRef.current);
           lastCorridorFeatures.current = all;
-          const rendered = buildRenderableFeatures(all);
-          syncRenderedFeatures(rendered);
-          onCorridorUpdateRef.current?.(rendered);
+          syncRenderedFeatures(buildRenderableFeatures(all));
+          onCorridorUpdateRef.current?.(buildStoredFeatures(all));
         },
       });
       if (!controller.signal.aborted) {
         const all = mergeCorridorWithSavedFeatures(features, initialFeaturesRef.current);
         lastCorridorFeatures.current = all;
-        const rendered = buildRenderableFeatures(all);
-        syncRenderedFeatures(rendered);
-        onCorridorCompleteRef.current?.(rendered);
+        syncRenderedFeatures(buildRenderableFeatures(all));
+        onCorridorCompleteRef.current?.(buildStoredFeatures(all));
       }
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -291,7 +318,7 @@ export function usePoi(
         setCorridorProgress(null);
       }
     }
-  }, [buildRenderableFeatures, syncRenderedFeatures]);
+  }, [buildRenderableFeatures, buildStoredFeatures, syncRenderedFeatures]);
 
   // ── Public triggers ───────────────────────────────────────────────
 
@@ -351,13 +378,9 @@ export function usePoi(
 
   useEffect(() => {
     if (!managerRef.current) return;
-    // In corridor mode a settings change re-runs the search; otherwise the
-    // saved features are simply re-filtered.
-    if (gpxRef.current && poisRouteEnabled && lastCorridorFeatures.current.length > 0) {
-      void fetchCorridorPois();
-      return;
-    }
-
+    // Un changement de réglage ne relance jamais la recherche d'elle-même
+    // (chaque frappe dans une distance déclenchait une requête) : on
+    // re-filtre l'existant, et le panneau propose « Relancer la recherche ».
     const source =
       lastCorridorFeatures.current.length > 0
         ? deduplicateFeatures(lastCorridorFeatures.current)
@@ -371,7 +394,6 @@ export function usePoi(
     favorisEnabled,
     poisRouteEnabled,
     selectedPoiCategoriesKey,
-    fetchCorridorPois,
     buildRenderableFeatures,
     syncRenderedFeatures,
   ]);

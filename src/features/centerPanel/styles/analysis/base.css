@@ -19,12 +19,25 @@
   min-height: 235px;
 }
 
+/*
+ * Typographie de la barre d'outils alignée sur le menu Traçage du panel gauche
+ * (.rvi-tracage__param-label / .rvi-tracage__param-btn) : Rethink Sans 500,
+ * étiquettes à 64 % d'opacité, contrôles blancs, en plus compact. Tout se règle
+ * ici.
+ */
 .rvc-center-analysis__toolbar {
+  --rvc-tb-font-size: 11px;
+  --rvc-tb-font-weight: 500;
+  --rvc-tb-letter-spacing: -0.0154em;
+  --rvc-tb-label-color: rgba(255, 255, 255, 0.64);
+  --rvc-tb-control-h: 24px;
+  --rvc-tb-radius: 5px;
+
   display: flex;
   align-items: center;
   flex: 0 0 auto;
   gap: 8px;
-  min-height: 32px;
+  min-height: 28px;
   min-width: 0;
   position: relative;
   z-index: 30;
@@ -35,9 +48,10 @@
 .rvc-center-analysis__label {
   flex-shrink: 0;
   font-family: var(--rvc-center-font-family);
-  font-size: 12px;
-  font-weight: 400;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: var(--rvc-tb-font-size);
+  font-weight: var(--rvc-tb-font-weight);
+  letter-spacing: var(--rvc-tb-letter-spacing);
+  color: var(--rvc-tb-label-color);
   line-height: normal;
   white-space: nowrap;
 }
@@ -47,26 +61,28 @@
   align-items: center;
   flex-shrink: 0;
   gap: 2px;
-  height: 28px;
+  height: var(--rvc-tb-control-h);
   padding: 2px;
-  border-radius: 6px;
+  border-radius: var(--rvc-tb-radius);
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  box-sizing: border-box;
 }
 
 .rvc-center-analysis__segment {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 24px;
+  height: calc(var(--rvc-tb-control-h) - 6px);
   border: 0;
-  border-radius: 4px;
-  padding: 0 8px;
+  border-radius: 3px;
+  padding: 0 7px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--rvc-tb-label-color);
   font-family: var(--rvc-center-font-family);
-  font-size: 12px;
-  font-weight: 400;
+  font-size: var(--rvc-tb-font-size);
+  font-weight: var(--rvc-tb-font-weight);
+  letter-spacing: var(--rvc-tb-letter-spacing);
   line-height: normal;
   white-space: nowrap;
   cursor: pointer;
@@ -106,7 +122,6 @@
 .rvc-center-analysis__segment--active {
   background: rgba(255, 255, 255, 0.14);
   color: #fff;
-  font-weight: 400;
 }
 
 .rvc-center-analysis__detail {
@@ -119,10 +134,11 @@
 
 .rvc-center-analysis__minor-label,
 .rvc-center-analysis__axis-label {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--rvc-tb-label-color);
   font-family: var(--rvc-center-font-family);
-  font-size: 12px;
-  font-weight: 400;
+  font-size: var(--rvc-tb-font-size);
+  font-weight: var(--rvc-tb-font-weight);
+  letter-spacing: var(--rvc-tb-letter-spacing);
   line-height: 1;
   white-space: nowrap;
   flex-shrink: 0;
@@ -202,9 +218,6 @@
 }
 
 .rvc-center-analysis__axis-label {
-  font-size: 12px;
-  font-weight: 400;
-  color: rgba(255, 255, 255, 0.6);
   width: 32px;
   text-align: right;
   flex-shrink: 0;
@@ -242,22 +255,24 @@
 }
 
 .rvc-center-analysis__select {
-  min-width: 76px;
+  min-width: 72px;
   width: auto;
   max-width: 120px;
-  height: 28px;
-  padding: 4px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
+  height: var(--rvc-tb-control-h);
+  box-sizing: border-box;
+  padding: 3px 5px 3px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--rvc-tb-radius);
   background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.9);
+  color: #fff;
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 4px;
   font-family: var(--rvc-center-font-family);
-  font-size: 12px;
-  font-weight: 400;
+  font-size: var(--rvc-tb-font-size);
+  font-weight: var(--rvc-tb-font-weight);
+  letter-spacing: var(--rvc-tb-letter-spacing);
   line-height: normal;
   cursor: pointer;
   overflow: hidden;
@@ -277,7 +292,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 400;
 }
 
 .rvc-center-analysis__select-icon {
@@ -298,7 +312,7 @@
 
 .rvc-center-analysis__separator {
   width: 1px;
-  height: 20px;
+  height: 16px;
   align-self: center;
   flex-shrink: 0;
   background: rgba(255, 255, 255, 0.12);
@@ -322,21 +336,23 @@
 
 .rvc-center-analysis__filter-chip {
   position: relative;
-  height: 28px;
+  height: var(--rvc-tb-control-h);
+  box-sizing: border-box;
   flex-shrink: 0;
   max-width: none;
   min-width: 0;
-  padding: 4px 8px 4px 6px;
-  border-radius: 6px;
+  padding: 3px 7px 3px 5px;
+  border-radius: var(--rvc-tb-radius);
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.85);
+  color: #fff;
   display: inline-flex;
   align-items: center;
   gap: 5px;
   font-family: var(--rvc-center-font-family);
-  font-size: 12px;
-  font-weight: 400;
+  font-size: var(--rvc-tb-font-size);
+  font-weight: var(--rvc-tb-font-weight);
+  letter-spacing: var(--rvc-tb-letter-spacing);
   line-height: normal;
   overflow: hidden;
   white-space: nowrap;
@@ -431,7 +447,6 @@
 
 .rvc-center-analysis__filter-label {
   min-width: 0;
-  font-weight: 400;
   color: inherit;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -440,8 +455,8 @@
 }
 
 .rvc-center-analysis__filter-icon {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   padding: 1px;
   border-radius: 3px;
   background: #ff3b30;
@@ -454,7 +469,7 @@
 }
 
 .rvc-center-analysis__surface-chip {
-  padding: 4px 6px 4px 8px;
+  padding: 3px 5px 3px 8px;
 }
 
 .rvc-center-analysis__surface-chip--active {
@@ -470,8 +485,8 @@
 }
 
 .rvc-center-analysis__checkbox {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border-radius: 3px;
   background: rgba(255, 255, 255, 0.16);
   color: #fff;

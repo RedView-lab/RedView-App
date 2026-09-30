@@ -161,6 +161,14 @@
   color: rgba(255, 255, 255, 0.45);
 }
 
+/* Filtres alignés sur ceux du haut de page (aucun override local). */
+.rvi-tl-sheet-filters__sync {
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.45);
+}
+
 .rvi-tl-filter-reset {
   all: unset;
   display: inline-flex;
@@ -351,4 +359,4 @@
   max-width: 20px;
   max-height: 24px;
   object-fit: contain;
-}
+}

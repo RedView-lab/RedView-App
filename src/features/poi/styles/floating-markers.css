@@ -432,6 +432,14 @@
   padding-left: 0;
 }
 
+/* Raison du favori posé par le tri automatique. */
+.rv-poi-popup__auto-reason {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--rv-poi-popup-text-muted);
+}
+
 .rv-poi-popup__field-label,
 .rv-poi-popup__toggle-label {
   overflow: hidden;

@@ -14,6 +14,7 @@ import { DEFAULT_VIEW } from '../../../map3d/lib/mapbox.config';
 import { createDefaultExpertState } from '../../expert/defaults';
 import { cleanAndInterpolateElevations, hasCorruptedElevations } from '../route-metrics';
 import { buildImportedRouteMetrics } from '../routes';
+import { HIDDEN_PANEL_POI_CATEGORIES } from './poiRows';
 
 export const ALL_POI_CATEGORIES: PoiCategory[] = [
   'fountains',
@@ -51,6 +52,18 @@ export function createDefaultPoiState(): PoiState {
     health: { enabled: false, distanceM: 40 },
     transport: { enabled: false, distanceM: 40 },
   };
+}
+
+/**
+ * État POI d'un itinéraire importé depuis un GPX : toutes les lignes exposées
+ * dans l'UI sont cochées, les catégories masquées restent désactivées.
+ */
+export function createImportedPoiState(): PoiState {
+  const state = createDefaultPoiState();
+  for (const key of ALL_POI_CATEGORIES) {
+    state[key] = { ...state[key], enabled: !HIDDEN_PANEL_POI_CATEGORIES.has(key) };
+  }
+  return state;
 }
 
 export function normalizeItineraryPoiState(poi?: Partial<PoiState> | null): PoiState {
@@ -109,6 +122,29 @@ const DEFAULT_TIMELINE_END: TimelineItem = {
   distanceKm: null,
 };
 
+/**
+ * Durées de pause par défaut aux POI favoris (minutes). `null` = catégorie
+ * décochée dans la grille « pauses par POI ». Sert aussi de valeur de repli
+ * quand l'utilisateur recoche une catégorie.
+ */
+export const DEFAULT_POI_PAUSE_DURATIONS: Readonly<Record<PoiCategory, number | null>> = {
+  fountains: 10,
+  toilets: null,
+  supermarkets: null,
+  gasStations: null,
+  bakeries: 15,
+  fastFood: null,
+  cafes: null,
+  bars: null,
+  restaurants: 30,
+  bikeShops: null,
+  hotels: 360,
+  refuges: null,
+  passes: null,
+  health: null,
+  transport: null,
+};
+
 export function createDefaultRhythmState(): RhythmState {
   return {
     startDate: null,
@@ -125,23 +161,7 @@ export function createDefaultRhythmState(): RhythmState {
     useSurfaces: false,
     surfacesWeight: 100,
     pauseAtFavoritePois: false,
-    poiPauseDurations: {
-      fountains: 15,
-      toilets: null,
-      supermarkets: 15,
-      gasStations: null,
-      bakeries: 15,
-      fastFood: null,
-      cafes: null,
-      bars: null,
-      restaurants: 15,
-      bikeShops: null,
-      hotels: 15,
-      refuges: 15,
-      passes: null,
-      health: null,
-      transport: null,
-    },
+    poiPauseDurations: { ...DEFAULT_POI_PAUSE_DURATIONS },
     pauseEveryIntervalEnabled: false,
     pauseEveryIntervalMin: null,
     pauseIntervals: [],
