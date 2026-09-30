@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import type { Map as MapboxMap, MapboxGeoJSONFeature, PointLike } from 'mapbox-gl';
+import { isMapCursorManaged } from '../lib/mapCursor';
 
 const IGNORED_LAYER_PREFIXES = [
   'route-',
@@ -174,6 +175,7 @@ export function useMapPoiHoverCursor(map: MapboxMap | null): void {
 
     let startPoint: { x: number; y: number } | null = null;
     let hoverRafId: number | null = null;
+    let ownsPointer = false;
 
     const onMouseDown = (e: mapboxgl.MapMouseEvent) => {
       startPoint = { x: e.point.x, y: e.point.y };
@@ -186,6 +188,8 @@ export function useMapPoiHoverCursor(map: MapboxMap | null): void {
     const onMouseMove = (e: mapboxgl.MapMouseEvent) => {
       // Skip expensive spatial queries while dragging or during active camera movement
       if (startPoint !== null || map.isMoving()) return;
+      // Un outil (mode Tracer…) impose le curseur via l'arbitre : on s'efface.
+      if (isMapCursorManaged(map)) return;
 
       const canvas = map.getCanvas();
       const currentCursor = canvas.style.cursor;
@@ -201,7 +205,7 @@ export function useMapPoiHoverCursor(map: MapboxMap | null): void {
       const point = { x: e.point.x, y: e.point.y };
       hoverRafId = requestAnimationFrame(() => {
         hoverRafId = null;
-        if (startPoint !== null || map.isMoving()) return;
+        if (startPoint !== null || map.isMoving() || isMapCursorManaged(map)) return;
         const bbox: [PointLike, PointLike] = [
           [point.x - 16, point.y - 16],
           [point.x + 16, point.y + 16],
@@ -209,10 +213,17 @@ export function useMapPoiHoverCursor(map: MapboxMap | null): void {
         try {
           const features = map.queryRenderedFeatures(bbox);
           const match = findNamedPoiFeature(features);
+          // Ne relâche que le `pointer` posé par ce hook : un `pointer` posé par
+          // un autre outil (survol POI en mode édition) remis à '' faisait
+          // réapparaître la main Mapbox → clignotement crayon ↔ main.
           if (match) {
-            canvas.style.cursor = 'pointer';
-          } else if (canvas.style.cursor === 'pointer') {
-            canvas.style.cursor = '';
+            if (canvas.style.cursor === '') {
+              canvas.style.cursor = 'pointer';
+              ownsPointer = true;
+            }
+          } else if (ownsPointer) {
+            ownsPointer = false;
+            if (canvas.style.cursor === 'pointer') canvas.style.cursor = '';
           }
         } catch {
           // Query rendered features may throw during rapid style switches

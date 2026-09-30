@@ -287,6 +287,16 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Lignes d'itinéraire (chiffres clefs) : typo plus grande que l'en-tête. */
+.rvc-center-summary__row--item .rvc-center-summary__metric {
+  font-size: clamp(12px, 1.22cqi, 15.5px);
+}
+
+.rvc-center-summary__row--item .rvc-center-summary__name,
+.rvc-center-summary__row--item .rvc-center-summary__inline-input {
+  font-size: clamp(12.5px, 1.3cqi, 16px);
+}
+
 .rvc-center-summary__metric--header {
   color: var(--rvc-center-text-dim);
   font-size: clamp(10px, 1.02cqi, 13px);

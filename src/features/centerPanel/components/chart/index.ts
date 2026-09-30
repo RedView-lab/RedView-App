@@ -1,4 +1,8 @@
 export { AnalysisChart } from './AnalysisChart';
+export {
+  estimateScheduledSecondsAtDistance,
+  formatScheduledDayClock,
+} from './AnalysisChart/hoverMetrics';
 export { ChartZoomNavigator } from './AnalysisChart/ChartZoomNavigator';
 export type { ChartZoomNavigatorProps } from './AnalysisChart/ChartZoomNavigator';
 export { useChartHover } from './useChartHover';
@@ -46,11 +50,14 @@ export type {
 export {
   buildAlertWindowsForItinerary,
   detectSteepAlertSegments,
+  listItinerarySteepAlerts,
+  steepAlertKey,
   STEEP_ALERT_MIN_GRADIENT_PCT,
   STEEP_ALERT_MIN_LENGTH_M,
 } from './alerts/buildSteepAlertOverlay';
 export type {
   ChartAlertOverlay,
   ChartAlertWindow,
+  ItinerarySteepAlert,
   SteepAlertSegment,
 } from './alerts/buildSteepAlertOverlay';

@@ -390,6 +390,15 @@ export interface ItineraryForbiddenZone {
   createdAt: string;
 }
 
+/** Niveau d'une alerte pente affichée sur la carte (menu « Type »). */
+export type SteepAlertKind = 'alert' | 'warning' | 'info';
+
+/** Réglage utilisateur d'une alerte pente, indexé par sa clé stable (milieu du tronçon). */
+export interface ItinerarySteepAlertOverride {
+  kind?: SteepAlertKind;
+  ignored?: boolean;
+}
+
 export interface ItineraryFitUpload {
   name: string;
   type: string;
@@ -493,6 +502,8 @@ export interface Itinerary {
   routeAudit?: ItineraryRouteAuditState;
   /** Persisted no-go polygons sent to BRouter as absolute forbidden areas. */
   forbiddenZones?: ItineraryForbiddenZone[];
+  /** Alertes pente reclassées ou ignorées par l'utilisateur (clé = `steepAlertKey`). */
+  steepAlertOverrides?: Record<string, ItinerarySteepAlertOverride>;
   /** Persisted FIT uploads used as prediction history for this itinerary. */
   fitUploads?: ItineraryFitUpload[];
   /** Pending tail-segment append produced by the tracer subtool. */

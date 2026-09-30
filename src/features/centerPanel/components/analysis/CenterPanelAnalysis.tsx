@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useAnalysisFlyover } from '../../flyover';
 import { useRouteSplitToolOptional } from '../../routeSplit';
+import { useTraceToolOptional } from '../../tracer';
 import {
   axis2Options,
   axisOptions,
@@ -25,6 +26,7 @@ import {
   type AxisMetricId,
   type AxisMode,
   type ChartPoiAnnotation,
+  type ItinerarySteepAlert,
 } from '../chart';
 import {
   dispatchOpenPoiOnMap,
@@ -52,6 +54,11 @@ import { useAnalysisViewportSync } from './useAnalysisViewportSync';
 import { useAnalysisChartData } from './useAnalysisChartData';
 import { useAnalysisHoverPointMarker } from './useAnalysisHoverPointMarker';
 import { useAnalysisAlertMapMarkers } from './useAnalysisAlertMapMarkers';
+import {
+  AnalysisAlertSectionPopover,
+  type AnalysisAlertSelection,
+} from './AnalysisAlertSectionPopover';
+import { resolveRoadTypeLabel } from './resolveRoadTypeLabel';
 import { AnalysisToolbar } from './AnalysisToolbar';
 
 /**
@@ -65,6 +72,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
   const projectStore = useProjectStoreOptional();
   const predictionStore = usePredictionStoreOptional();
   const routeSplitTool = useRouteSplitToolOptional();
+  const traceTool = useTraceToolOptional();
   const { controlledHoverXValue, setManualHoverXValue } = useAnalysisFlyover();
   const project = projectStore?.project ?? null;
   const itineraries = useMemo(() => project?.itineraries ?? [], [project?.itineraries]);
@@ -163,6 +171,9 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
   });
 
   const isSplitArmed = Boolean(routeSplitTool?.armed);
+  // Découpe et Tracer ont leur propre point de survol sur la trace : le survol
+  // carte → graphique de l'analyse (second point, autres seuils) se met en retrait.
+  const isMapEditToolArmed = isSplitArmed || Boolean(traceTool?.armed);
   const [mapHoverXValue, setMapHoverXValue] = useState<number | null>(null);
   const [selectedChartX, setSelectedChartX] = useState<number | null>(null);
 
@@ -183,10 +194,25 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
     [setManualHoverXValue],
   );
 
+  const alertMarkersEnabled = filters.alertes && (project?.controlPanel?.toggles?.routesEnabled ?? true);
+  const [selectedAlert, setSelectedAlert] = useState<AnalysisAlertSelection | null>(null);
+  const handleCloseAlert = useCallback(() => setSelectedAlert(null), []);
+  const handleSelectAlert = useCallback(
+    (alert: ItinerarySteepAlert) => {
+      setSelectedAlert({
+        itineraryId: alert.itineraryId,
+        key: alert.key,
+        roadTypeLabel: map ? resolveRoadTypeLabel(map, alert.mid.lon, alert.mid.lat) : null,
+      });
+    },
+    [map],
+  );
+
   useAnalysisAlertMapMarkers({
     map,
     itineraries,
-    enabled: filters.alertes && (project?.controlPanel?.toggles?.routesEnabled ?? true),
+    enabled: alertMarkersEnabled,
+    onSelect: handleSelectAlert,
   });
 
   const { updateHoverPoint } = useAnalysisHoverPointMarker({
@@ -198,7 +224,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
     onMapHoverXValueChange: handleMapHoverXValueChange,
     selectedXValue: selectedChartX,
     onTraceClick: handleTraceClick,
-    disabled: isSplitArmed,
+    disabled: isMapEditToolArmed,
   });
 
   const handleHoverXValueChange = useCallback(
@@ -659,6 +685,15 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
           showSeriesRows={false}
         />
       </div>
+      {map && selectedAlert && alertMarkersEnabled ? (
+        <AnalysisAlertSectionPopover
+          map={map}
+          selection={selectedAlert}
+          itineraries={itineraries}
+          predictions={predictions}
+          onClose={handleCloseAlert}
+        />
+      ) : null}
     </section>
   );
 }

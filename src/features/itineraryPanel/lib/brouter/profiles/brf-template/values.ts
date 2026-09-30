@@ -191,7 +191,11 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
   const sDur = sign(priorities.duration);
   const sTranq = sign(priorities.tranquility);
 
-  const climbFocus = Math.max(0, sElev);
+  // On foot, « Dénivelé : Privilégier » is the runner's max-D+ control: give
+  // it the full climbing mode of the max elevation priority, not just free climbs.
+  const climbFocus = foot && roadTypes.elevationPreference === 'prefer'
+    ? 1
+    : Math.max(0, sElev);
   const climbAvoid = Math.max(0, -sElev);
   const distanceFocus = Math.max(0, sDist);
   const distanceDetourAllowance = Math.max(0, -sDist);

@@ -279,6 +279,14 @@
   padding: 0;
 }
 
+/* Mode Tracer (classe posée par TraceToolContext) : départ, arrivée et points
+ * de passage se déplacent au glisser → même main « grab » que la trace
+ * saisissable. Longer la trace en passant sur une poignée ne change donc pas
+ * de curseur. */
+.mapboxgl-canvas-container.rv-trace-editing [data-rv-trace-point] {
+  cursor: grab;
+}
+
 .rv-checkpoint-marker:hover .rv-checkpoint-marker__img {
   transform: scale(1.22);
 }

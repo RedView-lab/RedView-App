@@ -32,12 +32,24 @@ import { useRouteSplitToolOptional } from '../routeSplit';
 import { useRouteMergeToolOptional } from '../routeMerge';
 import { useTracePointDrag, type TracePointDragCommit } from './useTracePointDrag';
 import {
+  MAP_CURSOR_PRIORITY,
   handlePointPanelMousedown,
+  setMapCursor,
   shouldIgnoreMapClickAfterPanelDismiss,
 } from '@/features/map3d';
 
 export const TRACE_CURSOR = 'url("/svgv2/icone/edit-04.svg") 3 17, crosshair';
-export const TRACE_GRABBING_CURSOR = 'grabbing';
+
+/** Propriétaires des curseurs déclarés par l'outil auprès de l'arbitre (`setMapCursor`). */
+const TRACE_TOOL_CURSOR_OWNER = 'trace-tool';
+const TRACE_POINT_DRAG_CURSOR_OWNER = 'trace-point-drag';
+const TRACE_MAP_PAN_CURSOR_OWNER = 'trace-map-pan';
+
+/**
+ * Classe posée sur le conteneur du canvas pendant le mode Tracer : les poignées
+ * de tracé y affichent la main « grab » (elles se déplacent au glisser).
+ */
+const TRACE_EDITING_CLASS = 'rv-trace-editing';
 
 interface TraceToolContextValue {
   armed: boolean;
@@ -78,9 +90,6 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
   const hasStartPoint = Boolean(startRow && startRow.lat != null && startRow.lon != null);
   const hasEndPoint = Boolean(endRow && endRow.lat != null && endRow.lon != null);
   const canTrace = Boolean(store && activeItinerary && startRow && endRow);
-
-  /** Vrai pendant qu'une poignée est en cours de déplacement (curseur « grabbing »). */
-  const draggingRef = useRef(false);
 
   const buildTracePrompt = useCallback(() => {
     if (!hasStartPoint) return translateAppText('Cliquez sur la carte pour placer le départ');
@@ -238,9 +247,13 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
 
   const handleDraggingChange = useCallback(
     (dragging: boolean) => {
-      draggingRef.current = dragging;
-      const canvas = map?.getCanvas();
-      if (canvas) canvas.style.cursor = dragging ? TRACE_GRABBING_CURSOR : TRACE_CURSOR;
+      if (!map) return;
+      setMapCursor(
+        map,
+        TRACE_POINT_DRAG_CURSOR_OWNER,
+        dragging ? 'grabbing' : null,
+        MAP_CURSOR_PRIORITY.gesture,
+      );
     },
     [map],
   );
@@ -285,10 +298,9 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
     setStatusMessage(buildTracePrompt());
   }, [armed, buildTracePrompt]);
 
-  // Refs : l'effet d'écoute ci-dessous ne doit dépendre que de `armed`/`map`.
-  // Avec `appendPointAt` en dépendance, chaque mutation du projet le
-  // ré-exécutait ; son cleanup remettait le curseur à '' puis au crayon, en
-  // conflit avec le « grab » posé par RouteDragWaypoint au survol de la trace.
+  // Refs : l'effet d'écoute ci-dessous ne doit dépendre que de `armed`/`map`,
+  // sinon chaque mutation du projet le ré-exécuterait (listeners et curseur
+  // retirés puis reposés).
   const appendPointAtRef = useRef(appendPointAt);
   const deactivateRef = useRef(deactivate);
   useEffect(() => {
@@ -300,8 +312,23 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
     if (!armed || !map) return;
 
     const canvas = map.getCanvas();
-    const applyCursor = () => {
-      canvas.style.cursor = draggingRef.current ? TRACE_GRABBING_CURSOR : TRACE_CURSOR;
+    const container = map.getCanvasContainer();
+
+    // Crayon en fond ; la main (survol de la trace) et « grabbing » (gestes)
+    // se déclarent par-dessus avec une priorité plus haute.
+    setMapCursor(map, TRACE_TOOL_CURSOR_OWNER, TRACE_CURSOR, MAP_CURSOR_PRIORITY.tool);
+    container.classList.add(TRACE_EDITING_CLASS);
+
+    // Deux clics rapprochés posent deux points : pas de zoom au double-clic.
+    const restoreDoubleClickZoom = map.doubleClickZoom.isEnabled();
+    if (restoreDoubleClickZoom) map.doubleClickZoom.disable();
+
+    // Pan de la carte : « grabbing » au lieu du crayon pendant le glisser.
+    const handlePanStart = () => {
+      setMapCursor(map, TRACE_MAP_PAN_CURSOR_OWNER, 'grabbing', MAP_CURSOR_PRIORITY.gesture);
+    };
+    const handlePanEnd = () => {
+      setMapCursor(map, TRACE_MAP_PAN_CURSOR_OWNER, null, MAP_CURSOR_PRIORITY.gesture);
     };
 
     const handleMouseDown = (event: MouseEvent) => {
@@ -324,8 +351,7 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
       }
 
       const asVariant = isVariantModifierPressed(event.originalEvent);
-      if (!appendPointAtRef.current(event.lngLat.lng, event.lngLat.lat, { asVariant })) return;
-      applyCursor();
+      appendPointAtRef.current(event.lngLat.lng, event.lngLat.lat, { asVariant });
     };
 
     const handleContextMenu = (event: MapMouseEvent) => {
@@ -333,16 +359,23 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
       deactivateRef.current();
     };
 
-    applyCursor();
     canvas.addEventListener('mousedown', handleMouseDown, true);
     map.on('click', handleClick);
     map.on('contextmenu', handleContextMenu);
+    map.on('dragstart', handlePanStart);
+    map.on('dragend', handlePanEnd);
 
     return () => {
       canvas.removeEventListener('mousedown', handleMouseDown, true);
       map.off('click', handleClick);
       map.off('contextmenu', handleContextMenu);
-      canvas.style.cursor = '';
+      map.off('dragstart', handlePanStart);
+      map.off('dragend', handlePanEnd);
+      if (restoreDoubleClickZoom) map.doubleClickZoom.enable();
+      container.classList.remove(TRACE_EDITING_CLASS);
+      setMapCursor(map, TRACE_MAP_PAN_CURSOR_OWNER, null, MAP_CURSOR_PRIORITY.gesture);
+      setMapCursor(map, TRACE_POINT_DRAG_CURSOR_OWNER, null, MAP_CURSOR_PRIORITY.gesture);
+      setMapCursor(map, TRACE_TOOL_CURSOR_OWNER, null, MAP_CURSOR_PRIORITY.tool);
     };
   }, [armed, map]);
 

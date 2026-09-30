@@ -3455,5 +3455,101 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Allure → next",
     "en": "Pace → next"
+  },
+  {
+    "fr": "Section pentue",
+    "en": "Steep section"
+  },
+  {
+    "fr": "Retirer du parcours",
+    "en": "Remove from route"
+  },
+  {
+    "fr": "Ignorer",
+    "en": "Ignore"
+  },
+  {
+    "fr": "Alerte",
+    "en": "Alert"
+  },
+  {
+    "fr": "Attention",
+    "en": "Warning"
+  },
+  {
+    "fr": "Info",
+    "en": "Info"
+  },
+  {
+    "fr": "Pente max",
+    "en": "Max slope"
+  },
+  {
+    "fr": "moyenne",
+    "en": "average"
+  },
+  {
+    "fr": "Position",
+    "en": "Position"
+  },
+  {
+    "fr": "Autoroute",
+    "en": "Motorway"
+  },
+  {
+    "fr": "Voie rapide",
+    "en": "Expressway"
+  },
+  {
+    "fr": "Route nationale",
+    "en": "National road"
+  },
+  {
+    "fr": "Route départementale",
+    "en": "Regional road"
+  },
+  {
+    "fr": "Route secondaire",
+    "en": "Secondary road"
+  },
+  {
+    "fr": "Rue",
+    "en": "Street"
+  },
+  {
+    "fr": "Route locale",
+    "en": "Local road"
+  },
+  {
+    "fr": "Voie de service",
+    "en": "Service road"
+  },
+  {
+    "fr": "Chemin de terre",
+    "en": "Dirt track"
+  },
+  {
+    "fr": "Sentier",
+    "en": "Trail"
+  },
+  {
+    "fr": "Voie piétonne",
+    "en": "Pedestrian way"
+  },
+  {
+    "fr": "Bitume",
+    "en": "Asphalt"
+  },
+  {
+    "fr": "Gravier",
+    "en": "Gravel"
+  },
+  {
+    "fr": "Terre",
+    "en": "Dirt"
+  },
+  {
+    "fr": "Sable",
+    "en": "Sand"
   }
 ];

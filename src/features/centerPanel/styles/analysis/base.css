@@ -538,7 +538,22 @@
   background: #ff3b30;
   border: 1.5px solid #ffffff;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.7);
-  cursor: default;
+  cursor: pointer;
+}
+
+/* Pas de `transform` ici : Mapbox positionne le marqueur via transform inline. */
+.rvi-analysis-alert-marker:hover {
+  filter: brightness(1.15);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 0 0 4px rgba(255, 255, 255, 0.25), 0 2px 8px rgba(0, 0, 0, 0.7);
+}
+
+/* Niveaux du menu « Type » — mêmes teintes que .rv-alert-popup__badge--* (map3d). */
+.rvi-analysis-alert-marker--warning {
+  background: #ff9f0a;
+}
+
+.rvi-analysis-alert-marker--info {
+  background: #0a84ff;
 }
 
 .rvi-analysis-alert-marker img {

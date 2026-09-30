@@ -11,6 +11,51 @@ import {
 } from '../series/timeline';
 import { computeCumulativeElevationAtX } from './math';
 import type { ChartItineraryNode } from './types';
+import type { Itinerary } from '@/features/itineraryPanel/types';
+import type { PauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule';
+
+/**
+ * Secondes écoulées depuis le départ (pauses comprises) au passage à
+ * `targetDistanceM`. Sans prédiction, repli proportionnel sur la durée totale.
+ */
+export function estimateScheduledSecondsAtDistance(
+  itinerary: Itinerary | null,
+  prediction: PredictionResult | null | undefined,
+  pauseSchedule: PauseAwareSchedule | null,
+  targetDistanceM: number,
+): number {
+  if (prediction && prediction.points && prediction.points.length >= 2) {
+    const timeline = getPredictionTimeline(prediction);
+    const rideElapsedHours = interpolateElapsedHoursFromTimeline(timeline, targetDistanceM);
+    if (rideElapsedHours != null) {
+      const rideElapsedSeconds = rideElapsedHours * 3600;
+      return pauseSchedule
+        ? projectRideElapsedSecondsToScheduledSeconds(rideElapsedSeconds, pauseSchedule.stopAnchors)
+        : rideElapsedSeconds;
+    }
+  }
+
+  const points = itinerary?.gpxRoute?.points;
+  const lastPoint = points && points.length > 0 ? points[points.length - 1] : null;
+  const totalDistM =
+    (itinerary?.metrics?.distanceKm ?? (lastPoint?.distanceM ?? 0) / 1000) * 1000;
+  const totalSec =
+    pauseSchedule?.totalDurationSeconds ??
+    itinerary?.metrics?.durationSec ??
+    (totalDistM > 0 ? (totalDistM / 1000 / 20) * 3600 : 0);
+  const fraction = totalDistM > 0 ? Math.min(1, Math.max(0, targetDistanceM / totalDistM)) : 0;
+  return fraction * totalSec;
+}
+
+/** Heure de passage au format « J1 - 08:29 ». */
+export function formatScheduledDayClock(startSecOfDay: number, scheduledSeconds: number): string {
+  const currentSecFromStartOfDay = startSecOfDay + scheduledSeconds;
+  const dayNumber = Math.max(1, Math.floor(currentSecFromStartOfDay / 86400) + 1);
+  const secInDay = ((Math.round(currentSecFromStartOfDay) % 86400) + 86400) % 86400;
+  const clockH = Math.floor(secInDay / 3600);
+  const clockM = Math.floor((secInDay % 3600) / 60);
+  return `J${dayNumber} - ${String(clockH).padStart(2, '0')}:${String(clockM).padStart(2, '0')}`;
+}
 
 export interface ItineraryHoverResolvedMetrics {
   distanceFormatted: string;
@@ -70,7 +115,7 @@ export function resolveItineraryHoverMetrics({
   const { gainM, lossM } = computeCumulativeElevationAtX(elevationPoints, hoverXValue);
 
   // 3. Durée et heure d'arrivée/passage au point
-  let scheduledSeconds: number | null = null;
+  let scheduledSeconds: number;
 
   if (xMode === 'temps') {
     scheduledSeconds = Math.max(0, hoverXValue * 3600);
@@ -78,29 +123,12 @@ export function resolveItineraryHoverMetrics({
     scheduledSeconds = Math.max(0, (hoverXValue - startTimeHours) * 3600);
   } else {
     // Mode distance : projection via timeline et programme de pauses
-    if (pred && pred.points && pred.points.length >= 2) {
-      const timeline = getPredictionTimeline(pred);
-      const rideElapsedHours = interpolateElapsedHoursFromTimeline(timeline, targetDistanceM);
-      if (rideElapsedHours != null) {
-        const rideElapsedSeconds = rideElapsedHours * 3600;
-        scheduledSeconds = pauseSchedule
-          ? projectRideElapsedSecondsToScheduledSeconds(rideElapsedSeconds, pauseSchedule.stopAnchors)
-          : rideElapsedSeconds;
-      }
-    }
-
-    if (scheduledSeconds == null) {
-      const points = node?.itinerary.gpxRoute?.points;
-      const lastPoint = points && points.length > 0 ? points[points.length - 1] : null;
-      const totalDistM =
-        (node?.itinerary.metrics?.distanceKm ?? (lastPoint?.distanceM ?? 0) / 1000) * 1000;
-      const totalSec =
-        pauseSchedule?.totalDurationSeconds ??
-        node?.itinerary.metrics?.durationSec ??
-        (totalDistM > 0 ? (totalDistM / 1000 / 20) * 3600 : 0);
-      const fraction = totalDistM > 0 ? Math.min(1, Math.max(0, targetDistanceM / totalDistM)) : 0;
-      scheduledSeconds = fraction * totalSec;
-    }
+    scheduledSeconds = estimateScheduledSecondsAtDistance(
+      node?.itinerary ?? null,
+      pred,
+      pauseSchedule,
+      targetDistanceM,
+    );
   }
 
   // Format durée : 02 : 48 : 59 (Figma node 1894:40701)
@@ -111,12 +139,7 @@ export function resolveItineraryHoverMetrics({
   const durationFormatted = `${String(h).padStart(2, '0')} : ${String(m).padStart(2, '0')} : ${String(s).padStart(2, '0')}`;
 
   // Format jour et heure : J1 - 08:29 (Figma node 1894:40702)
-  const currentSecFromStartOfDay = startSecOfDay + scheduledSeconds;
-  const dayNumber = Math.max(1, Math.floor(currentSecFromStartOfDay / 86400) + 1);
-  const secInDay = ((Math.round(currentSecFromStartOfDay) % 86400) + 86400) % 86400;
-  const clockH = Math.floor(secInDay / 3600);
-  const clockM = Math.floor((secInDay % 3600) / 60);
-  const timeFormatted = `J${dayNumber} - ${String(clockH).padStart(2, '0')}:${String(clockM).padStart(2, '0')}`;
+  const timeFormatted = formatScheduledDayClock(startSecOfDay, scheduledSeconds);
 
   return {
     distanceFormatted,

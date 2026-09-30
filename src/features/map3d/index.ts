@@ -10,6 +10,13 @@ export type {
 	MapContextMenuOverlayDetail,
 	MapContextMenuPoint,
 } from './components/MapContextMenu';
+export { MapAlertSectionCard } from './components/MapAlertSectionCard';
+export type {
+	MapAlertSection,
+	MapAlertSectionActionId,
+	MapAlertSectionActionPayload,
+} from './components/MapAlertSectionCard';
+export { formatCoordinates } from './components/MapContextMenu/utils';
 export type {
 	MapPoiDraft,
 	MapPoiDraftActionId,
@@ -42,3 +49,8 @@ export {
 	handlePointPanelMousedown,
 	shouldIgnoreMapClickAfterPanelDismiss,
 } from './lib/pointPanelDismiss';
+export {
+	MAP_CURSOR_PRIORITY,
+	isMapCursorManaged,
+	setMapCursor,
+} from './lib/mapCursor';

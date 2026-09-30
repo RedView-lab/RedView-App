@@ -3,39 +3,56 @@ import {
   cumulativeRouteLengthsM,
   projectPointAlongRoute,
 } from '@/features/itineraryPanel/lib/routes';
-import type { TimelineItem } from '@/features/itineraryPanel/types';
 import { projectPointToSegment } from '../routeSplit/routeSnap';
 
-/** Maximum screen distance in pixels from the trace line for hover/drag detection. */
-export const MAX_ROUTE_DRAG_CLICK_DISTANCE_PX = 28;
-/** Tolerance in pixels to enter route hover mode (strict to avoid accidental triggers). */
-export const ROUTE_DRAG_HOVER_ENTER_DISTANCE_PX = 22;
-/** Tolerance in pixels to exit route hover mode (generous hysteresis to eliminate border flicker). */
-export const ROUTE_DRAG_HOVER_EXIT_DISTANCE_PX = 34;
-
-export interface ContinuousRouteProjection {
-  /** Squared pixel distance from the cursor to the nearest segment. */
-  distanceSq: number;
-  /** Segment index start (between points[i] and points[i+1]). */
-  segmentIndex: number;
-  /** Parametric factor along segment, between 0 and 1. */
-  t: number;
-  /** True when cursor is within tolerance of the route line. */
-  withinTolerance: boolean;
-  /** Snapped geographic coordinates (continuously interpolated on the segment). */
-  snapped: { lat: number; lon: number };
-}
+/**
+ * Zone de saisie de la trace en mode Tracer (px écran, de part et d'autre de la
+ * ligne). Large à dessein : pas besoin de viser la ligne pour la saisir.
+ *
+ * Deux seuils (hystérésis) : il faut s'approcher à ENTER pour passer à la main,
+ * et s'éloigner au-delà de EXIT pour revenir au crayon. Un pointeur qui longe
+ * la bordure ne peut donc pas faire alterner les deux curseurs.
+ */
+export const ROUTE_GRAB_ENTER_PX = 44;
+export const ROUTE_GRAB_EXIT_PX = 72;
 
 /**
- * Projects a cursor position (screen coordinates relative to canvas) continuously
- * onto the polyline in screen space. Glides smoothly along segments without jumping
- * between vertices, matching Strava and Komoot behavior.
+ * Aux deux extrémités, la zone se referme en pointe : juste après un clic de
+ * prolongement, le pointeur est posé sur la nouvelle extrémité, et le clic
+ * suivant doit encore prolonger le tracé (crayon) au lieu de saisir la trace.
+ * Les poignées de départ / d'arrivée restent, elles, saisissables.
+ *
+ * Mesuré le long de la trace à l'écran depuis chaque bout : rien de saisissable
+ * sur les DEAD premiers px (hystérésis entrée / sortie), puis la tolérance
+ * s'ouvre en continu jusqu'à sa pleine largeur sur TAPER px — sans marche, donc
+ * sans bascule brutale en longeant la ligne.
  */
+export const ROUTE_GRAB_END_DEAD_ENTER_PX = 20;
+export const ROUTE_GRAB_END_DEAD_EXIT_PX = 12;
+export const ROUTE_GRAB_END_TAPER_PX = 140;
+const ROUTE_GRAB_END_MEASURE_PX = ROUTE_GRAB_END_DEAD_ENTER_PX + ROUTE_GRAB_END_TAPER_PX;
+
+export type RouteGrabMode = 'enter' | 'exit';
+
+export interface RouteGrabHit {
+  /** Point saisi sur la trace (interpolé en continu sur le segment). */
+  snapped: { lat: number; lon: number };
+  /** Distance écran pointeur ↔ trace, en px. */
+  distancePx: number;
+}
+
 interface ScreenProjectionCache {
   key: string;
   builtAt: number;
   xs: Float64Array;
   ys: Float64Array;
+  /**
+   * Longueur de trace à l'écran (px) entre chaque sommet et le départ / l'arrivée.
+   * Renseignée seulement près de chaque bout (+∞ ailleurs, et quand
+   * l'extrémité est hors écran).
+   */
+  fromStart: Float64Array;
+  fromEnd: Float64Array;
 }
 
 /**
@@ -115,84 +132,111 @@ function getScreenProjections(
     }
   }
 
-  const next = { key, builtAt: now, xs, ys };
+  const fromStart = new Float64Array(points.length).fill(Number.POSITIVE_INFINITY);
+  const fromEnd = new Float64Array(points.length).fill(Number.POSITIVE_INFINITY);
+  measureFromEnd(xs, ys, fromStart, 0, 1);
+  measureFromEnd(xs, ys, fromEnd, points.length - 1, -1);
+
+  const next = { key, builtAt: now, xs, ys, fromStart, fromEnd };
   screenProjectionCache.set(points, next);
   return next;
 }
 
-export function findContinuousRouteProjection(
+/**
+ * Cumule la longueur écran de la trace depuis l'extrémité `start` (pas `step`),
+ * jusqu'à dépasser la zone de resserrement ou tomber sur un sommet hors écran.
+ */
+function measureFromEnd(
+  xs: Float64Array,
+  ys: Float64Array,
+  out: Float64Array,
+  start: number,
+  step: 1 | -1,
+): void {
+  if (Number.isNaN(xs[start]!)) return;
+  out[start] = 0;
+  let length = 0;
+  for (let i = start + step; i >= 0 && i < xs.length; i += step) {
+    const x = xs[i]!;
+    if (Number.isNaN(x)) return;
+    length += Math.hypot(x - xs[i - step]!, ys[i]! - ys[i - step]!);
+    out[i] = length;
+    if (length >= ROUTE_GRAB_END_MEASURE_PX) return;
+  }
+}
+
+function smoothstep(value: number): number {
+  if (value <= 0) return 0;
+  if (value >= 1) return 1;
+  return value * value * (3 - 2 * value);
+}
+
+/**
+ * Cherche le point de trace saisissable sous le pointeur (coordonnées écran du
+ * conteneur de la carte, comme `map.project`).
+ *
+ * La tolérance vaut ROUTE_GRAB_ENTER_PX (`mode: 'enter'`) ou ROUTE_GRAB_EXIT_PX
+ * (`mode: 'exit'`, quand la main est déjà affichée), refermée aux extrémités.
+ * Parmi les segments à portée, on garde le plus proche : c'est là que le point
+ * d'aperçu s'affiche et que le point de passage sera inséré.
+ */
+export function findRouteGrabHit(
   map: MapboxMap,
   points: Array<{ lat: number; lon: number }>,
   screenX: number,
   screenY: number,
-  tolerancePx: number = MAX_ROUTE_DRAG_CLICK_DISTANCE_PX,
-): ContinuousRouteProjection | null {
+  mode: RouteGrabMode,
+): RouteGrabHit | null {
   if (points.length < 2) return null;
 
   const projections = getScreenProjections(map, points);
   if (!projections) return null;
-  const { xs, ys } = projections;
+  const { xs, ys, fromStart, fromEnd } = projections;
+
+  const fullTolerance = mode === 'exit' ? ROUTE_GRAB_EXIT_PX : ROUTE_GRAB_ENTER_PX;
+  const endDeadLength = mode === 'exit' ? ROUTE_GRAB_END_DEAD_EXIT_PX : ROUTE_GRAB_END_DEAD_ENTER_PX;
+  const maxDistanceSq = fullTolerance * fullTolerance;
 
   let bestDistanceSq = Number.POSITIVE_INFINITY;
-  let bestSegment = 0;
+  let bestSegment = -1;
   let bestT = 0;
 
   for (let i = 0; i < points.length - 1; i += 1) {
     const x0 = xs[i]!;
     const x1 = xs[i + 1]!;
     if (Number.isNaN(x0) || Number.isNaN(x1)) continue;
+    const y0 = ys[i]!;
+    const y1 = ys[i + 1]!;
 
-    const projection = projectPointToSegment(screenX, screenY, x0, ys[i]!, x1, ys[i + 1]!);
-    if (projection.distanceSq < bestDistanceSq) {
-      bestDistanceSq = projection.distanceSq;
-      bestSegment = i;
-      bestT = projection.t;
-    }
+    const { distanceSq, t } = projectPointToSegment(screenX, screenY, x0, y0, x1, y1);
+    if (distanceSq > maxDistanceSq || distanceSq >= bestDistanceSq) continue;
+
+    // Tolérance au point projeté : pleine au milieu, refermée près des bouts.
+    const segmentLength = Math.hypot(x1 - x0, y1 - y0);
+    const alongFromEnds = Math.min(
+      fromStart[i]! + t * segmentLength,
+      fromEnd[i + 1]! + (1 - t) * segmentLength,
+    );
+    const tolerance = fullTolerance
+      * smoothstep((alongFromEnds - endDeadLength) / ROUTE_GRAB_END_TAPER_PX);
+    if (tolerance <= 0 || distanceSq > tolerance * tolerance) continue;
+
+    bestDistanceSq = distanceSq;
+    bestSegment = i;
+    bestT = t;
   }
 
-  if (!Number.isFinite(bestDistanceSq)) return null;
+  if (bestSegment < 0) return null;
 
-  const p0 = points[bestSegment];
-  const p1 = points[bestSegment + 1];
-  const snappedLat = p0.lat + bestT * (p1.lat - p0.lat);
-  const snappedLon = p0.lon + bestT * (p1.lon - p0.lon);
-
+  const p0 = points[bestSegment]!;
+  const p1 = points[bestSegment + 1]!;
   return {
-    distanceSq: bestDistanceSq,
-    segmentIndex: bestSegment,
-    t: bestT,
-    withinTolerance: bestDistanceSq <= tolerancePx * tolerancePx,
-    snapped: { lat: snappedLat, lon: snappedLon },
+    snapped: {
+      lat: p0.lat + bestT * (p1.lat - p0.lat),
+      lon: p0.lon + bestT * (p1.lon - p0.lon),
+    },
+    distancePx: Math.sqrt(bestDistanceSq),
   };
-}
-
-/**
- * Checks if a click is within proximity of an existing routable checkpoint
- * (start, end, or waypoint) to avoid creating unintentional duplicate waypoints.
- */
-export function isClickNearExistingTimelinePoint(
-  map: MapboxMap,
-  timeline: TimelineItem[],
-  clickX: number,
-  clickY: number,
-  thresholdPx = 14,
-): boolean {
-  const thresholdSq = thresholdPx * thresholdPx;
-  for (const item of timeline) {
-    if (item.lat == null || item.lon == null) continue;
-    if (item.kind !== 'start' && item.kind !== 'end' && item.kind !== 'waypoint') continue;
-    try {
-      const pt = map.project([item.lon, item.lat]);
-      const dx = clickX - pt.x;
-      const dy = clickY - pt.y;
-      if (dx * dx + dy * dy <= thresholdSq) {
-        return true;
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-  return false;
 }
 
 /** Re-exported tolerance so the drag tool shares the split tool's hit radius. */

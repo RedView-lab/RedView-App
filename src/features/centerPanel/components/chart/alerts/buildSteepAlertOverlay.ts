@@ -1,8 +1,9 @@
 import type { PredictionResult } from '@/features/fitPredictor';
-import type { Itinerary } from '@/features/itineraryPanel/types';
+import type { Itinerary, SteepAlertKind } from '@/features/itineraryPanel/types';
 import { buildPauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule';
 import type { AxisMode, RouteChartPoint } from '../seriesCommon';
 import { normalizeRouteProfile } from '../series/routeProfile';
+import { locateRoutePointAtX } from '../series/builders';
 import { projectPredictionElapsedHoursToX } from '../series/timeline';
 
 /** Seuil d'alerte : pente moyenne ≥ 12 % tenue sur au moins 100 m. */
@@ -37,6 +38,21 @@ export interface ChartAlertOverlay {
 }
 
 const segmentsCache = new WeakMap<object, SteepAlertSegment[]>();
+
+/** Alerte pente résolue pour un itinéraire, avec son point d'ancrage (milieu du tronçon). */
+export interface ItinerarySteepAlert {
+  id: string;
+  /** Clé stable (coordonnées du milieu) : survit aux éditions ailleurs sur le tracé. */
+  key: string;
+  itineraryId: string;
+  segment: SteepAlertSegment;
+  mid: RouteChartPoint;
+  kind: SteepAlertKind;
+}
+
+export function steepAlertKey(lat: number, lon: number): string {
+  return `${lat.toFixed(4)},${lon.toFixed(4)}`;
+}
 
 /**
  * Détecte les tronçons dont la pente moyenne est ≥ 12 % sur au moins 100 m.
@@ -117,6 +133,34 @@ export function detectSteepAlertSegments(
   return result;
 }
 
+/**
+ * Alertes pente d'un itinéraire, sans celles que l'utilisateur a ignorées.
+ * `id` reprend l'index du segment détecté (même id que les colonnes du graphe).
+ */
+export function listItinerarySteepAlerts(itinerary: Itinerary): ItinerarySteepAlert[] {
+  const points = itinerary.gpxRoute?.points;
+  if (!points || points.length < 2) return [];
+  const overrides = itinerary.steepAlertOverrides;
+  const result: ItinerarySteepAlert[] = [];
+  detectSteepAlertSegments(points).forEach((segment, index) => {
+    const midKm = (segment.startM + segment.endM) / 2000;
+    const mid = locateRoutePointAtX(points, null, 'distance', midKm);
+    if (!mid || !Number.isFinite(mid.lat) || !Number.isFinite(mid.lon)) return;
+    const key = steepAlertKey(mid.lat, mid.lon);
+    const override = overrides?.[key];
+    if (override?.ignored) return;
+    result.push({
+      id: `${itinerary.id}::alert::${index}`,
+      key,
+      itineraryId: itinerary.id,
+      segment,
+      mid,
+      kind: override?.kind ?? 'alert',
+    });
+  });
+  return result;
+}
+
 function interpolateElapsedHours(prediction: PredictionResult, distanceM: number): number | null {
   const points = prediction.points;
   if (!points || points.length < 2) return null;
@@ -148,8 +192,8 @@ export function buildAlertWindowsForItinerary(
   xMode: AxisMode,
   xOffset = 0,
 ): ChartAlertWindow[] {
-  const segments = detectSteepAlertSegments(itinerary.gpxRoute?.points ?? null);
-  if (segments.length === 0) return [];
+  const alerts = listItinerarySteepAlerts(itinerary);
+  if (alerts.length === 0) return [];
   if (xMode !== 'distance' && (!prediction || prediction.points.length < 2)) return [];
 
   const pauseSchedule = xMode === 'distance' ? null : buildPauseAwareSchedule(itinerary, prediction);
@@ -160,12 +204,12 @@ export function buildAlertWindowsForItinerary(
   };
 
   const windows: ChartAlertWindow[] = [];
-  segments.forEach((segment, index) => {
+  alerts.forEach(({ id, segment }) => {
     const startX = toX(segment.startM);
     const endX = toX(segment.endM);
     if (!Number.isFinite(startX) || !Number.isFinite(endX) || endX <= startX) return;
     windows.push({
-      id: `${itinerary.id}::alert::${index}`,
+      id,
       itineraryId: itinerary.id,
       itineraryName: itinerary.name,
       startX,

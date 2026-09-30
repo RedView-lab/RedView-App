@@ -57,10 +57,10 @@ export function GlobeGlyph() {
   return <RightClickImageIcon src="globe-06.svg" width={16} height={16} />;
 }
 
-export function SurfaceGlyph() {
+export function SurfaceGlyph({ color = '#FF2A1F' }: { color?: string }) {
   return (
     <svg width="12" height="8" viewBox="0 0 12 8" fill="none" aria-hidden>
-      <rect y="2" width="12" height="4" rx="2" fill="#FF2A1F" />
+      <rect y="2" width="12" height="4" rx="2" fill={color} />
     </svg>
   );
 }
