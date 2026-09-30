@@ -148,13 +148,16 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
 
   const {
     calculateDisabled,
+    calculateError,
     calculateLabel,
     cancelCalculatePrediction,
+    fitFileNames,
     fitInputRef,
     handleCalculatePrediction,
+    handleClearFitFiles,
     handleFitInputChange,
+    handleRemoveFitFile,
     handleUploadFitRequest,
-    uploadFitLabel,
   } = useItineraryFitRuntime({
     active,
     projectId: projectId ?? null,
@@ -1053,7 +1056,9 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         onUploadFit={() => {
           handleUploadFitRequest();
         }}
-        uploadFitLabel={uploadFitLabel}
+        fitFileNames={fitFileNames}
+        onRemoveFitFile={handleRemoveFitFile}
+        onClearFitFiles={handleClearFitFiles}
         onCalculate={() => {
           handleCalculatePrediction();
         }}
@@ -1062,6 +1067,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         }}
         calculateLabel={calculateLabel}
         calculateDisabled={calculateDisabled}
+        calculateError={calculateError}
         onChangePoiEntry={(category, next) =>
           updateActive((it) => {
             it.poi[category] = next;

@@ -45,6 +45,17 @@ async function fetchWithTimeout(
 
 // ── BBOX ──────────────────────────────────────────────────────────────
 
+/**
+ * Spatial sampling for zoomed-out views: at most one POI per category per
+ * XYZ tile cell of `level`, and at most `perCell` categories per cell.
+ * Without it the server returns the first `limit` rows in R*Tree order,
+ * i.e. one clump in a corner of any bbox denser than `limit`.
+ */
+export interface PoiBboxSampling {
+  level: number;
+  perCell?: number;
+}
+
 export async function fetchPoisInBbox(
   south: number,
   west: number,
@@ -53,6 +64,7 @@ export async function fetchPoisInBbox(
   categories: PoiCategory[],
   signal?: AbortSignal,
   limit?: number,
+  sampling?: PoiBboxSampling,
 ): Promise<PoiFeature[]> {
   if (categories.length === 0) return [];
 
@@ -66,6 +78,12 @@ export async function fetchPoisInBbox(
   });
   if (Number.isFinite(limit) && (limit ?? 0) > 0) {
     params.set('limit', String(Math.round(limit as number)));
+  }
+  if (sampling && Number.isFinite(sampling.level)) {
+    params.set('level', String(Math.round(sampling.level)));
+    if (sampling.perCell && sampling.perCell > 0) {
+      params.set('per_cell', String(Math.round(sampling.perCell)));
+    }
   }
 
   const res = await fetchWithTimeout(

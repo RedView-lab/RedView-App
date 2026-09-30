@@ -76,32 +76,6 @@ const ENVIRONMENTS: Record<MapEnvironment, EnvironmentLighting> = {
   },
 };
 
-/**
- * "Jour" haze for dark basemaps: the warm day fog reads as a sunset glow over
- * a night-toned ground, so dark themes get a cool, low-key horizon instead.
- * Dusk / night keep their own fog whatever the basemap.
- */
-const DARK_BASEMAP_DAY_FOG: FogSpecification = {
-  range: [0.6, 8.5],
-  color: 'rgb(40, 50, 68)',
-  'high-color': 'rgb(28, 44, 86)',
-  'horizon-blend': 0.1,
-  'space-color': 'rgb(8, 12, 26)',
-  'star-intensity': 0.25,
-};
-
-export type MapBasemapTone = 'light' | 'dark';
-
-let currentBasemapTone: MapBasemapTone = 'light';
-
-/**
- * Set by the style bootstrap before it applies the environment. No notify:
- * the tone only changes with a basemap switch, which re-applies the fog.
- */
-export function setMapEnvironmentBasemapTone(tone: MapBasemapTone): void {
-  currentBasemapTone = tone;
-}
-
 /** Real sun direction published by the sunlight feature while it is enabled. */
 export interface SunLightOverride {
   azimuthDeg: number;
@@ -189,7 +163,6 @@ export function buildMapEnvironmentLights(
 }
 
 export function getMapEnvironmentFog(environment: MapEnvironment): FogSpecification {
-  if (environment === 'day' && currentBasemapTone === 'dark') return DARK_BASEMAP_DAY_FOG;
   return ENVIRONMENTS[environment].fog;
 }
 

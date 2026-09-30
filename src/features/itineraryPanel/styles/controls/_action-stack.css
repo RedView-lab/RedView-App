@@ -31,3 +31,35 @@
 .rvi-action-stack__button.is-placeholder {
   color: rgba(255, 255, 255, 0.48);
 }
+.rvi-action-stack__icon {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.rvi-action-stack__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Calcul en cours : l'icône tourne, sauf au survol (le bouton propose alors d'interrompre). */
+.rvi-action-stack__button.is-loading .rvi-action-stack__icon {
+  animation: rvi-action-stack-spin 1s linear infinite;
+}
+
+.rvi-action-stack__button.is-loading:not(:disabled):hover .rvi-action-stack__icon {
+  animation: none;
+}
+
+@keyframes rvi-action-stack-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rvi-action-stack__button.is-loading .rvi-action-stack__icon {
+    animation: none;
+  }
+}

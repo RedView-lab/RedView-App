@@ -23,7 +23,12 @@ export const SEARCH_SATELLITE_FAR_SETTLE_MS = 1500;
 export const SEARCH_SATELLITE_NEAR_RESTORE_MS = 550;
 export const SEARCH_SATELLITE_MEDIUM_RESTORE_MS = 700;
 export const SEARCH_SATELLITE_FAR_RESTORE_MS = 900;
-export const VIEWPORT_POI_MIN_ZOOM = 9.5;
+/**
+ * En dessous, la vue couvre plus que la base POI (France + frontaliers) : les
+ * icônes n'apporteraient que du bruit. Au-dessus, le serveur échantillonne
+ * par cellule, la densité reste donc lisible à tout zoom.
+ */
+export const VIEWPORT_POI_MIN_ZOOM = 5;
 export const VIEWPORT_POI_FETCH_DEBOUNCE_MS = 160;
 export const POI_MENU_CLOSE_MS = 150;
 

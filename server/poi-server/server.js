@@ -11,6 +11,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { db } from './db.js';
+import { createViewportSampler } from './viewport-sampler.js';
 
 const fastify = Fastify({ logger: false });
 await fastify.register(cors, { origin: true });
@@ -49,6 +50,16 @@ if (HAS_SOURCE) {
   console.log('[poi-server] base enrichie détectée (colonnes source / src_confidence).');
 }
 
+// Échantillonnage spatial de `/bbox?level=…` (vue « POI carte »). Construit
+// une fois au démarrage ; en cas d'échec, `/bbox` retombe sur la requête
+// historique plutôt que d'empêcher le service de démarrer.
+let viewportSampler = null;
+try {
+  viewportSampler = createViewportSampler(db, { hasSource: HAS_SOURCE, selectColumns: SELECT_COLUMNS });
+} catch (err) {
+  console.error('[poi-server] échantillonnage spatial indisponible :', err);
+}
+
 function toFeature(r) {
   return {
     id: r.id,
@@ -79,8 +90,13 @@ fastify.get('/categories', async () => {
 });
 
 // ─── GET /bbox ──────────────────────────────────────────────────────────
+//
+// `level` (optionnel) active l'échantillonnage spatial : au plus un POI par
+// catégorie et par cellule de tuile XYZ de ce niveau (`per_cell` borne en plus
+// le nombre de catégories par cellule). Sans `level`, comportement historique :
+// les `limit` premiers POI de la bbox, sans garantie de répartition.
 fastify.get('/bbox', async (req, reply) => {
-  const { south, west, north, east, categories, sources, limit = '500' } = req.query;
+  const { south, west, north, east, categories, sources, limit = '500', level, per_cell: perCell } = req.query;
 
   if (!south || !west || !north || !east) {
     return reply.status(400).send({ error: 'Missing bounds (south, west, north, east)' });
@@ -90,9 +106,27 @@ fastify.get('/bbox', async (req, reply) => {
   const w = parseFloat(west);
   const n = parseFloat(north);
   const e = parseFloat(east);
+  if (![s, w, n, e].every(Number.isFinite)) {
+    return reply.status(400).send({ error: 'Invalid bounds' });
+  }
   const maxLimit = Math.min(parseInt(limit, 10) || 500, 2000);
 
   const catList = categories ? categories.split(',').map((c) => c.trim()).filter(Boolean) : [];
+
+  const sampleLevel = parseInt(level, 10);
+  if (viewportSampler && Number.isFinite(sampleLevel) && !sources) {
+    const { rows, level: usedLevel } = viewportSampler.sample({
+      south: s,
+      west: w,
+      north: n,
+      east: e,
+      categories: catList,
+      level: sampleLevel,
+      perCell: Math.max(0, parseInt(perCell, 10) || 0),
+      limit: maxLimit,
+    });
+    return { features: rows.map(toFeature), sampled: true, level: usedLevel };
+  }
 
   let query = `
     SELECT ${SELECT_COLUMNS}

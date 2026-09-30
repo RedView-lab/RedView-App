@@ -1,14 +1,11 @@
 import type { Map as MapboxMap, Marker } from 'mapbox-gl';
 
-import { fetchPoisInBbox } from '@/features/poi/lib/poi-api';
+import { fetchPoisInBbox, type PoiBboxSampling } from '@/features/poi/lib/poi-api';
 import { getPoiIconUrl, hasDedicatedFavoritePoiIcon } from '@/features/poi/lib/poi-icons';
 import { POI_LABELS, type PoiCategory, type PoiFeature } from '@/features/poi/types';
 
 import { DROPDOWN_VIEWPORT_POI_ICON_URLS } from './DashboardPlaceSearch.constants';
-import type {
-  ViewportPoiCandidate,
-  ViewportPoiLodProfile,
-} from './DashboardPlaceSearch.types';
+import type { ViewportPoiCandidate } from './DashboardPlaceSearch.types';
 
 function getDropdownViewportPoiIconUrl(category: PoiCategory, favorite?: boolean): string {
   if (favorite) {
@@ -35,22 +32,11 @@ function getViewportPoiMarkerSignature(feature: PoiFeature): string {
 }
 
 /**
- * Limite de POIs demandés au backend par requête bbox.
- * Réduit drastiquement le volume réseau, le parsing JSON et la mémoire,
- * tout en fournissant largement assez de candidats pour alimenter la grille d'écran.
+ * Plafond de POIs demandés au backend par requête bbox. Le serveur échantillonne
+ * par cellule (voir `getViewportPoiSampling`), ce plafond ne sert que de
+ * garde-fou réseau / parsing JSON.
  */
-function getViewportPoiLodProfile(zoom: number): ViewportPoiLodProfile {
-  if (zoom < 10.5) {
-    return { fetchLimit: 300 };
-  }
-  if (zoom < 12.0) {
-    return { fetchLimit: 450 };
-  }
-  if (zoom < 13.5) {
-    return { fetchLimit: 600 };
-  }
-  return { fetchLimit: 800 };
-}
+const VIEWPORT_POI_FETCH_LIMIT = 600;
 
 /**
  * Taille en pixels des icônes de POI selon le zoom.
@@ -58,6 +44,7 @@ function getViewportPoiLodProfile(zoom: number): ViewportPoiLodProfile {
  * sans masquer les routes ni le relief.
  */
 export function getViewportPoiMarkerSizePx(zoom: number): number {
+  if (zoom < 8.0) return 24;
   if (zoom < 11.0) return 28;
   if (zoom < 13.0) return 32;
   if (zoom < 15.0) return 34;
@@ -85,9 +72,42 @@ function getGridCellSizePx(zoom: number): number {
  * Garantit un framerate de 60 FPS constant sur terrain 3D sans surcharge CPU.
  */
 function getMaxViewportDomMarkers(zoom: number): number {
-  if (zoom < 11.0) return 40;
+  if (zoom < 11.0) return 60;
   if (zoom < 13.0) return 65;
   return 85;
+}
+
+function getViewportSize(map: MapboxMap): { width: number; height: number } {
+  const container = map.getContainer();
+  return {
+    width: container?.clientWidth || window.innerWidth,
+    height: container?.clientHeight || window.innerHeight,
+  };
+}
+
+/**
+ * Cellule effective : jamais plus fine que le plafond DOM ne peut remplir.
+ * Sinon, dézoomé, le plafond tronquait une grille trop dense et ne gardait
+ * que les POIs proches du centre ; ici les markers restent répartis sur
+ * toute la carte.
+ */
+function getViewportPoiCellPx(map: MapboxMap): number {
+  const zoom = map.getZoom();
+  const { width, height } = getViewportSize(map);
+  const fillCellPx = Math.sqrt((width * height) / getMaxViewportDomMarkers(zoom));
+  return Math.max(getGridCellSizePx(zoom), fillCellPx);
+}
+
+/**
+ * Niveau de tuile XYZ pour l'échantillonnage serveur (un POI par catégorie
+ * et par cellule). Mapbox GL : monde = 512 · 2^zoom px, une cellule de niveau
+ * L mesure donc 512 · 2^(zoom − L) px. On vise des cellules deux fois plus
+ * fines que la grille d'écran pour laisser au tri client (`selectViewportLodPois`)
+ * plusieurs candidats par case.
+ */
+function getViewportPoiSampling(map: MapboxMap): PoiBboxSampling {
+  const level = Math.round(map.getZoom() + Math.log2(512 / getViewportPoiCellPx(map))) + 1;
+  return { level, perCell: 1 };
 }
 
 interface RankedCandidate extends ViewportPoiCandidate {
@@ -109,9 +129,7 @@ export function selectViewportLodPois(
   if (features.length === 0) return [];
 
   const zoom = map.getZoom();
-  const container = map.getContainer();
-  const width = container?.clientWidth || window.innerWidth;
-  const height = container?.clientHeight || window.innerHeight;
+  const { width, height } = getViewportSize(map);
   const centerX = width / 2;
   const centerY = height / 2;
   const maxCenterDistance = Math.hypot(centerX, centerY) || 1;
@@ -123,7 +141,7 @@ export function selectViewportLodPois(
   const minY = -marginPx;
   const maxY = height + marginPx;
 
-  const cellPx = getGridCellSizePx(zoom);
+  const cellPx = getViewportPoiCellPx(map);
   const maxDomMarkers = getMaxViewportDomMarkers(zoom);
 
   // 1. Projeter les coordonnées et calculer le score de chaque candidat
@@ -289,15 +307,16 @@ export async function fetchVisibleViewportPois(
   const north = bounds.getNorth();
   const west = bounds.getWest();
   const east = bounds.getEast();
-  const limit = getViewportPoiLodProfile(map.getZoom()).fetchLimit;
+  const limit = VIEWPORT_POI_FETCH_LIMIT;
+  const sampling = getViewportPoiSampling(map);
 
   if (west <= east) {
-    return fetchPoisInBbox(south, west, north, east, categories, signal, limit);
+    return fetchPoisInBbox(south, west, north, east, categories, signal, limit, sampling);
   }
 
   const [left, right] = await Promise.all([
-    fetchPoisInBbox(south, west, north, 180, categories, signal, limit),
-    fetchPoisInBbox(south, -180, north, east, categories, signal, limit),
+    fetchPoisInBbox(south, west, north, 180, categories, signal, limit, sampling),
+    fetchPoisInBbox(south, -180, north, east, categories, signal, limit, sampling),
   ]);
   const deduped = new Map<string, PoiFeature>();
   for (const feature of [...left, ...right]) {

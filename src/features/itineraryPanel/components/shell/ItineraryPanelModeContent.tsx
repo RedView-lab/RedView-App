@@ -34,6 +34,7 @@ type ItineraryPanelModeContentProps = Pick<
   | 'onCancelLoadPois'
   | 'onCancelRoute'
   | 'calculateDisabled'
+  | 'calculateError'
   | 'calculateLabel'
   | 'onCalculate'
   | 'onChangePoiEntry'
@@ -62,7 +63,9 @@ type ItineraryPanelModeContentProps = Pick<
   | 'poiLoading'
   | 'poiProgress'
   | 'routeLoading'
-  | 'uploadFitLabel'
+  | 'fitFileNames'
+  | 'onRemoveFitFile'
+  | 'onClearFitFiles'
 > & {
   active?: Itinerary;
   activeMode: VisiblePanelMode;
@@ -81,6 +84,7 @@ export function ItineraryPanelModeContent({
   onCancelLoadPois,
   onCancelRoute,
   calculateDisabled,
+  calculateError,
   calculateLabel,
   dockTimelinePanel,
   onCalculate,
@@ -112,7 +116,9 @@ export function ItineraryPanelModeContent({
   poiProgress,
   profiles,
   routeLoading,
-  uploadFitLabel,
+  fitFileNames,
+  onRemoveFitFile,
+  onClearFitFiles,
 }: ItineraryPanelModeContentProps) {
   const splitRef = useRef<HTMLDivElement | null>(null);
   const dockSlotRef = useRef<HTMLDivElement | null>(null);
@@ -166,11 +172,14 @@ export function ItineraryPanelModeContent({
           discipline={normalizeDiscipline(active.discipline)}
           onChange={onChangeRhythm}
           onUploadFit={onUploadFit}
-          uploadFitLabel={uploadFitLabel}
+          fitFileNames={fitFileNames}
+          onRemoveFitFile={onRemoveFitFile}
+          onClearFitFiles={onClearFitFiles}
           onCalculate={onCalculate}
           onCancelCalculate={onCancelCalculate}
           calculateLabel={calculateLabel}
           calculateDisabled={calculateDisabled}
+          calculateError={calculateError}
           resultLabel={rhythmResultLabel}
         />
       ) : null;

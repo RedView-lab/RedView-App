@@ -187,6 +187,12 @@ export interface PauseIntervalRow {
 
 export type RhythmGender = 'default' | 'male' | 'female';
 
+/**
+ * "Profil de rythme" : `preset` = un niveau par défaut (Débutant → Expert),
+ * `custom` = "Personalisé" (activités .fit + FTP / poids / pneus saisis).
+ */
+export type RhythmProfileMode = 'preset' | 'custom';
+
 export interface RhythmState {
   /** ISO date (yyyy-mm-dd) or null when empty. */
   startDate: string | null;
@@ -195,6 +201,12 @@ export interface RhythmState {
   /** Prediction engine gender override. `default` lets the backend decide. */
   gender?: RhythmGender;
   usePastActivities: boolean;
+  /**
+   * Absent sur les projets antérieurs : voir `isCustomRhythmProfile`, qui
+   * l'infère des valeurs saisies.
+   */
+  rhythmProfile?: RhythmProfileMode;
+  /** Niveau du profil par défaut ; ignoré en mode `custom`. */
   practiceLevel?: string | null;
   applyToAllItineraries?: boolean;
   ftp: number | null;
@@ -648,11 +660,16 @@ export interface ItineraryPanelProps {
   // rythme
   onChangeRhythm?: <K extends keyof RhythmState>(key: K, value: RhythmState[K]) => void;
   onUploadFit?: () => void;
-  uploadFitLabel?: string;
+  /** Noms des .fit de référence chargés pour l'itinéraire actif. */
+  fitFileNames?: string[];
+  onRemoveFitFile?: (index: number) => void;
+  onClearFitFiles?: () => void;
   onCalculate?: () => void;
   onCancelCalculate?: () => void;
   calculateLabel?: string;
   calculateDisabled?: boolean;
+  /** Dernière erreur de prédiction, affichée sous le bouton d'action. */
+  calculateError?: string | null;
 
   // poi
   onChangePoiEntry?: (category: PoiCategory, next: PoiEntry) => void;

@@ -39,11 +39,6 @@ export function getBaseStyleUrl(styleUrl: string): string {
   return getTheme(styleUrl)?.baseStyleUrl ?? styleUrl;
 }
 
-/** Ground tone of the basemap, used to pick a matching fog. */
-export function getBasemapTone(styleUrl: string): BasemapTone {
-  return getTheme(styleUrl)?.palette.tone ?? 'light';
-}
-
 /**
  * Applies the RedView theme of `styleUrl` to a fetched base style definition
  * (mutates and returns it). Non-themed URLs return the definition untouched.

@@ -30,13 +30,16 @@ export interface UseItineraryFitRuntimeArgs {
 
 export interface UseItineraryFitRuntimeResult {
   calculateDisabled: boolean;
+  calculateError: string | null;
   calculateLabel: string;
   cancelCalculatePrediction: () => void;
+  fitFileNames: string[];
   fitInputRef: React.RefObject<HTMLInputElement | null>;
   handleCalculatePrediction: () => void;
+  handleClearFitFiles: () => void;
   handleFitInputChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  handleRemoveFitFile: (index: number) => void;
   handleUploadFitRequest: () => void;
-  uploadFitLabel: string;
 }
 
 export function createEmptyFitRuntime(): ItineraryFitRuntime {

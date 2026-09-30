@@ -2,11 +2,14 @@ import type { PredictionConfig, RunPredictionConfig } from '@/features/fitPredic
 import type { FootDiscipline } from '@/shared/lib/discipline';
 
 import type { Itinerary, ItineraryProject, RhythmState } from '../../types';
+import { CUSTOM_PROFILE_LEVEL, isCustomRhythmProfile } from '../rhythm/profile';
 
 const EARTH_RADIUS_M = 6_371_008.8;
 const PREDICTION_TARGET_POINT_SPACING_M = 250;
 const PREDICTION_MIN_ROUTE_POINTS = 4_000;
 const PREDICTION_MAX_ROUTE_POINTS = 8_000;
+/** Pneus supposés par les profils par défaut (valeur initiale d'un projet). */
+const PRESET_TIRES_MM = 35;
 type PredictionRoutePoint = NonNullable<Itinerary['gpxRoute']>['points'][number];
 type PredictionRoutePoints = NonNullable<Itinerary['gpxRoute']>['points'];
 
@@ -28,14 +31,19 @@ export function buildPredictionConfigFromRhythm(
     config.gender = rhythm.gender;
   }
 
+  // FTP / poids / pneus ne comptent qu'en profil "Personalisé" ; les profils
+  // par défaut s'en tiennent au niveau choisi.
+  const custom = isCustomRhythmProfile(rhythm);
+
   // Only override FTP if explicitly entered as a positive number by the user.
   // When left blank (null / undefined / empty), config.ftp_w remains undefined
   // so the prediction engine automatically uses the virtual FTP derived from the .fit files!
-  if (typeof rhythm.ftp === 'number' && rhythm.ftp > 0) {
+  if (custom && typeof rhythm.ftp === 'number' && rhythm.ftp > 0) {
     config.ftp_w = rhythm.ftp;
   }
 
   if (
+    custom &&
     typeof rhythm.systemWeightKg === 'number' &&
     rhythm.systemWeightKg > 0
   ) {
@@ -50,12 +58,15 @@ export function buildPredictionConfigFromRhythm(
   }
 
   // Practice level pacing modulation
-  config.pacing_factor = resolvePracticeLevelFactor(rhythm.practiceLevel);
+  config.pacing_factor = resolvePracticeLevelFactor(
+    custom ? CUSTOM_PROFILE_LEVEL : rhythm.practiceLevel,
+  );
 
   // Tire width effect on rolling resistance (Crr)
-  if (typeof rhythm.tiresMm === 'number' && rhythm.tiresMm > 0) {
+  const tiresMm = custom ? rhythm.tiresMm : PRESET_TIRES_MM;
+  if (typeof tiresMm === 'number' && tiresMm > 0) {
     // 25-28mm road: ~0.0045, 32-35mm allroad: ~0.0050, 40-50mm gravel: ~0.0058
-    config.crr = 0.0035 + (rhythm.tiresMm * 0.000045);
+    config.crr = 0.0035 + (tiresMm * 0.000045);
   }
 
   return config;
@@ -79,9 +90,10 @@ export function buildRunPredictionConfigFromRhythm(
   discipline: FootDiscipline,
   routePoints?: PredictionRoutePoints | null,
 ): RunPredictionConfig {
+  const custom = isCustomRhythmProfile(rhythm);
   const config: RunPredictionConfig = {
     discipline,
-    level: rhythm.practiceLevel ?? 'debutant',
+    level: custom ? CUSTOM_PROFILE_LEVEL : rhythm.practiceLevel ?? 'debutant',
   };
 
   const maxRoutePoints = resolvePredictionMaxRoutePoints(routePoints);
@@ -94,11 +106,12 @@ export function buildRunPredictionConfigFromRhythm(
     if (startTimeH !== null) config.start_time_h = startTimeH;
   }
 
-  if (typeof rhythm.runWeightKg === 'number' && rhythm.runWeightKg > 0) {
+  if (custom && typeof rhythm.runWeightKg === 'number' && rhythm.runWeightKg > 0) {
     config.mass_kg = rhythm.runWeightKg;
   }
 
-  if (rhythm.runReferenceMode === 'chrono') {
+  // Profil par défaut : le niveau seul fixe l'allure de référence.
+  if (custom && rhythm.runReferenceMode === 'chrono') {
     if (
       typeof rhythm.refRaceDistanceM === 'number' && rhythm.refRaceDistanceM > 0
       && typeof rhythm.refRaceTimeS === 'number' && rhythm.refRaceTimeS > 0
@@ -106,7 +119,7 @@ export function buildRunPredictionConfigFromRhythm(
       config.ref_distance_m = rhythm.refRaceDistanceM;
       config.ref_time_s = rhythm.refRaceTimeS;
     }
-  } else if (typeof rhythm.vmaKmh === 'number' && rhythm.vmaKmh > 0) {
+  } else if (custom && typeof rhythm.vmaKmh === 'number' && rhythm.vmaKmh > 0) {
     config.vma_kmh = rhythm.vmaKmh;
   }
 

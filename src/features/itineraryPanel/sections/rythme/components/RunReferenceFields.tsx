@@ -51,7 +51,7 @@ function NumericCardInput({
         type="text"
         inputMode={decimals ? 'decimal' : 'numeric'}
         value={draft}
-        placeholder="Auto"
+        placeholder="N/A"
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             (e.target as HTMLInputElement).blur();

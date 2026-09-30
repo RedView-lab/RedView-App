@@ -71,11 +71,14 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     showRecalculateTrace,
     onChangeRhythm,
     onUploadFit,
-    uploadFitLabel,
+    fitFileNames,
+    onRemoveFitFile,
+    onClearFitFiles,
     onCalculate,
     onCancelCalculate,
     calculateLabel,
     calculateDisabled,
+    calculateError,
     onChangePoiEntry,
     onOpenPoiCategories,
     onLoadPois,
@@ -323,6 +326,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
             onCancelLoadPois={onCancelLoadPois}
             onCancelRoute={onCancelRoute}
             calculateDisabled={calculateDisabled}
+            calculateError={calculateError}
             calculateLabel={calculateLabel}
             dockTimelinePanel={dockTimelinePanel}
             onCalculate={onCalculate}
@@ -353,7 +357,9 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
             poiProgress={poiProgress}
             profiles={profiles}
             routeLoading={routeLoading}
-            uploadFitLabel={uploadFitLabel}
+            fitFileNames={fitFileNames}
+            onRemoveFitFile={onRemoveFitFile}
+            onClearFitFiles={onClearFitFiles}
           />
         )}
       </div>

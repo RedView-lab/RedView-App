@@ -27,14 +27,16 @@ import {
 } from '@/shared/lib/discipline';
 import { buildPauseAwareSchedule } from '../../lib/schedule';
 import { buildFitUploadsSignature } from '../../lib/schedule';
+import { MAX_FIT_FILES, isCustomRhythmProfile } from '../../lib/rhythm/profile';
 
 import {
   buildLocalFitUploadSignature,
+  fitFileKey,
   fitFilesEqual,
   mergeFitFiles,
 } from './files';
 import { hydratePersistedFitRuntime } from './hydration';
-import { buildFitStatusText, buildUploadFitLabel } from './labels';
+import { buildFitStatusText } from './labels';
 import { translateAppText } from '@/shared/i18n';
 import {
   createEmptyFitRuntime,
@@ -43,6 +45,8 @@ import {
 } from './types';
 
 type RoutePoints = NonNullable<Itinerary['gpxRoute']>['points'];
+
+const EMPTY_FIT_FILE_NAMES: string[] = [];
 
 function buildRouteSignature(points: RoutePoints | null | undefined): string {
   if (!points || points.length < 2) return '';
@@ -132,11 +136,6 @@ export function useItineraryFitRuntime({
     return `${active.id}::${activeDiscipline}::${activeRouteSignature}::${activeRhythmSignature}::${activePersistedUploadSignature}`;
   }, [active, activeDiscipline, activeRouteSignature, activeRhythmSignature, activePersistedUploadSignature]);
 
-  const uploadFitLabel = useMemo(
-    () => buildUploadFitLabel(activeFitRuntime),
-    [activeFitRuntime],
-  );
-
   const fitStatusText = useMemo(
     () => buildFitStatusText(activeFitRuntime),
     [activeFitRuntime],
@@ -148,6 +147,9 @@ export function useItineraryFitRuntime({
   }, [fitStatusText]);
 
   const calculateDisabled = activeFitRuntime?.status === 'running';
+  const calculateError =
+    activeFitRuntime?.status === 'error' ? activeFitRuntime.error : null;
+  const fitFileNames = activeFitRuntime?.fitFileNames ?? EMPTY_FIT_FILE_NAMES;
 
   const replaceFitEngine = useCallback(() => {
     fitEngineRef.current?.terminate();
@@ -311,7 +313,7 @@ export function useItineraryFitRuntime({
       if (incoming.length === 0) return;
 
       const current = fitRuntimeRef.current[itineraryId] ?? createEmptyFitRuntime();
-      const nextFitFiles = mergeFitFiles(current.fitFiles, incoming);
+      const nextFitFiles = mergeFitFiles(current.fitFiles, incoming).slice(0, MAX_FIT_FILES);
       const nextFitFileNames = nextFitFiles.map((file) => file.name);
       const localSignature = buildLocalFitUploadSignature(nextFitFiles);
 
@@ -341,6 +343,7 @@ export function useItineraryFitRuntime({
                   rhythm: {
                     ...it.rhythm,
                     usePastActivities: true,
+                    rhythmProfile: 'custom' as const,
                     // Clear hardcoded default FTP so .fit files' virtual FTP is automatically used
                     ftp: it.rhythm.ftp === 260 || it.rhythm.ftp === 300 ? null : it.rhythm.ftp,
                   },
@@ -371,6 +374,67 @@ export function useItineraryFitRuntime({
       }
     },
     [active?.id, predictionStore, projectId, setProject, updateFitRuntime],
+  );
+
+  const handleRemoveFitFiles = useCallback(
+    (shouldRemove: (index: number) => boolean) => {
+      const itinerary = active;
+      if (!itinerary) return;
+      const itineraryId = itinerary.id;
+
+      const current = fitRuntimeRef.current[itineraryId] ?? createEmptyFitRuntime();
+      const nextFitFiles = current.fitFiles.filter((_, index) => !shouldRemove(index));
+      if (nextFitFiles.length === current.fitFiles.length) return;
+
+      // Les uploads persistés suivent les fichiers conservés ; la signature est
+      // alignée dessus pour que l'hydratation réutilise les fichiers déjà en
+      // mémoire au lieu de les re-télécharger.
+      const keptKeys = new Set(nextFitFiles.map(fitFileKey));
+      const nextUploads = (itinerary.fitUploads ?? []).filter((upload) =>
+        keptKeys.has(fitFileKey(upload)),
+      );
+
+      updateFitRuntime(itineraryId, (prev) => ({
+        ...prev,
+        fitFiles: nextFitFiles,
+        fitFileNames: nextFitFiles.map((file) => file.name),
+        status: prev.status === 'running' ? prev.status : nextFitFiles.length > 0 ? 'ready' : 'idle',
+        error: null,
+        // Sans upload persisté (projet non enregistré), signature locale comme
+        // à l'ajout, sinon l'hydratation viderait les fichiers restants.
+        persistedUploadSignature:
+          nextUploads.length > 0
+            ? buildFitUploadsSignature(nextUploads)
+            : buildLocalFitUploadSignature(nextFitFiles),
+      }));
+
+      setProject((prev) => ({
+        ...prev,
+        itineraries: prev.itineraries.map((it) =>
+          it.id === itineraryId
+            ? {
+                ...it,
+                fitUploads: nextUploads,
+                rhythmConfigured: true,
+                prediction: undefined,
+                pendingFitRecompute: true,
+              }
+            : it,
+        ),
+      }));
+      predictionStore?.setPrediction(itineraryId, null);
+    },
+    [active, predictionStore, setProject, updateFitRuntime],
+  );
+
+  const handleRemoveFitFile = useCallback(
+    (index: number) => handleRemoveFitFiles((candidate) => candidate === index),
+    [handleRemoveFitFiles],
+  );
+
+  const handleClearFitFiles = useCallback(
+    () => handleRemoveFitFiles(() => true),
+    [handleRemoveFitFiles],
   );
 
   const handleCalculatePrediction = useCallback(() => {
@@ -441,15 +505,17 @@ export function useItineraryFitRuntime({
     };
     // Running / trail use their own engine; the result is stamped with the
     // discipline so displays (pace vs km/h) always match the engine used.
+    // Les .fit ne comptent qu'en profil "Personalisé".
+    const fitFiles = isCustomRhythmProfile(itinerary.rhythm) ? runtime.fitFiles : [];
     const pending = isFootDiscipline(discipline)
       ? engine.predictRun(
-          runtime.fitFiles,
+          fitFiles,
           gpxFile,
           buildRunPredictionConfigFromRhythm(itinerary.rhythm, discipline, routePoints),
           onProgress,
         )
       : engine.predict(
-          runtime.fitFiles,
+          fitFiles,
           gpxFile,
           buildPredictionConfigFromRhythm(itinerary.rhythm, routePoints),
           onProgress,
@@ -657,12 +723,15 @@ export function useItineraryFitRuntime({
 
   return {
     calculateDisabled,
+    calculateError,
     calculateLabel,
     cancelCalculatePrediction,
+    fitFileNames,
     fitInputRef,
     handleCalculatePrediction,
+    handleClearFitFiles,
     handleFitInputChange,
+    handleRemoveFitFile,
     handleUploadFitRequest,
-    uploadFitLabel,
   };
 }

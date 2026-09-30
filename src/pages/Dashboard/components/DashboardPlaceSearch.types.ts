@@ -82,7 +82,3 @@ export interface ViewportPoiCandidate {
   y: number;
   centerDistance: number;
 }
-
-export interface ViewportPoiLodProfile {
-  fetchLimit: number;
-}

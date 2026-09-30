@@ -1,11 +1,5 @@
 import type { ItineraryFitRuntime } from './types';
 
-export function buildUploadFitLabel(runtime: ItineraryFitRuntime | null): string {
-  const count = runtime?.fitFiles.length ?? 0;
-  if (count <= 0) return 'Upload .fit';
-  return count === 1 ? '1 FIT' : `${count} FIT`;
-}
-
 export function buildFitStatusText(runtime: ItineraryFitRuntime | null): string | null {
   if (!runtime) return null;
   const count = runtime.fitFiles.length;

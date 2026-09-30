@@ -1,4 +1,4 @@
-/* Rythme section — Pixel-perfect Figma node 6043:105672 & 6025:114207 */
+/* Rythme section — Figma node 6043:105672 & 6025:114207, frame 2147237110 (profil de rythme) */
 
 .rvi-rythme-figma {
   display: flex;
@@ -46,7 +46,7 @@
 
 /* Date rectangle: hugs content, exact Figma ratio */
 .rvi-rythme-figma__chip-btn {
-  height: 36px;
+  height: 38px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -74,10 +74,10 @@
   border-color: rgba(255, 255, 255, 0.14);
 }
 
-/* Time rectangle: fixed 95px, exact Figma */
+/* Time rectangle: fixed 95px, exact Figma — ouvre la liste des créneaux */
 .rvi-rythme-figma__time-chip {
   width: 95px;
-  height: 36px;
+  height: 38px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -86,7 +86,7 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  cursor: text;
+  cursor: pointer;
   color: #ffffff;
   font-family: 'Rethink Sans', sans-serif;
   font-weight: 600;
@@ -100,25 +100,19 @@
   white-space: nowrap;
 }
 
-.rvi-rythme-figma__time-chip:hover {
+.rvi-rythme-figma__time-chip:hover,
+.rvi-rythme-figma__time-chip.is-open {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.14);
 }
 
-.rvi-rythme-figma__time-chip:focus-within {
-  background: rgba(255, 255, 255, 0.12);
+.rvi-rythme-figma__time-chip:focus-visible {
   border-color: rgba(255, 255, 255, 0.25);
 }
 
-.rvi-rythme-figma__time-sr-input {
-  position: absolute;
-  width: 0;
-  height: 0;
-  opacity: 0;
-  pointer-events: none;
-  border: 0;
-  padding: 0;
-  margin: 0;
+/* Liste des créneaux de 30 min : ~8 lignes visibles */
+.rv-dropdown.rvi-rythme-figma__time-menu {
+  max-height: 248px;
 }
 
 .rvi-rythme-figma__time-digits {
@@ -132,7 +126,7 @@
 }
 
 .rvi-rythme-figma__time-pill {
-  width: 17px;
+  width: 19px;
   height: 20px;
   display: inline-flex;
   align-items: center;
@@ -141,16 +135,6 @@
   border-radius: 1px;
   padding: 0 1px;
   box-sizing: border-box;
-}
-
-.rvi-rythme-figma__time-pill span {
-  display: inline-block;
-  text-align: center;
-}
-
-.rvi-rythme-figma__time-pill span.is-active {
-  background: rgba(255, 255, 255, 0.25);
-  border-radius: 2px;
 }
 
 .rvi-rythme-figma__time-colon {
@@ -175,16 +159,8 @@
   text-overflow: ellipsis;
 }
 
-/* ── Row 2 : Duo (Niveau de pratique & Personalisé) ───── */
-.rvi-rythme-figma__row-duo {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  width: 100%;
-  align-items: flex-start;
-  box-sizing: border-box;
-}
-
+/* ── Champ titré : titre 14px + contrôle (gap 8px) ──────── */
+.rvi-rythme-figma__field,
 .rvi-rythme-figma__col {
   display: flex;
   flex-direction: column;
@@ -194,39 +170,197 @@
   box-sizing: border-box;
 }
 
-.rvi-rythme-figma__card-btn {
-  height: 36px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  padding: 0 12px;
+/* ── Profil de rythme : pilule 40px (Figma "Itinerary mode") ── */
+.rvi-rythme-figma__profile-btn {
+  height: 40px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.16);
+  border: none;
+  padding: 10px 8px 10px 12px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 6px;
+  width: 100%;
+  box-sizing: border-box;
   cursor: pointer;
   color: #ffffff;
   font-family: 'Rethink Sans', sans-serif;
   font-style: normal;
   font-weight: 500;
   font-size: 15px;
-  letter-spacing: -0.0133em;
+  line-height: 20px;
+  letter-spacing: -0.2px;
+  outline: none;
+  user-select: none;
+  transition: background-color 0.15s ease;
+}
+
+.rvi-rythme-figma__profile-btn:hover,
+.rvi-rythme-figma__profile-btn.is-open {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.rvi-rythme-figma__profile-btn:focus-visible {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+}
+
+.rvi-rythme-figma__profile-text {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rvi-rythme-figma__profile-chevron {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.22s ease;
+}
+
+.rvi-rythme-figma__profile-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+/* ── Bloc "Personnalisé" (dans un Collapse) ──────────────── */
+/* Fermé, le Collapse ne doit pas ajouter le gap de 12px du parent. */
+.rvi-rythme-figma > .rvi-collapse {
+  margin-top: -12px;
+}
+
+.rvi-rythme-figma__custom {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 12px;
   width: 100%;
   box-sizing: border-box;
-  outline: none;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
-  user-select: none;
 }
 
-.rvi-rythme-figma__card-btn:hover,
-.rvi-rythme-figma__card-btn.is-open {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.14);
+/* ── Activités de référence (.fit) ───────────────────────── */
+.rvi-rythme-figma__fit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
 }
 
-.rvi-rythme-figma__card-btn--fit {
-  justify-content: flex-start;
+.rvi-rythme-figma__fit-btn {
+  height: 38px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
   gap: 6px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  cursor: pointer;
+  color: #ffffff;
+  font-family: 'Rethink Sans', sans-serif;
+  font-style: normal;
+  font-weight: 500;
+  font-size: 15px;
+  line-height: 20px;
+  letter-spacing: -0.2px;
+  outline: none;
+  user-select: none;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.rvi-rythme-figma__fit-btn:not(:disabled):hover,
+.rvi-rythme-figma__fit-btn.is-open {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.rvi-rythme-figma__fit-btn:focus-visible {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+}
+
+.rvi-rythme-figma__fit-btn:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.rvi-rythme-figma__fit-btn--add {
+  flex: none;
+  width: auto;
+}
+
+.rvi-rythme-figma__fit-btn--files {
+  flex: 1 1 0;
+}
+
+.rvi-rythme-figma__fit-text {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Figma "Buttons/Button utility" : corbeille 15px dans un carré 24px */
+.rvi-rythme-figma__fit-trash {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 4.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.24);
+  transition: color 0.15s ease;
+}
+
+.rvi-rythme-figma__fit-btn--files:hover .rvi-rythme-figma__fit-trash,
+.rvi-rythme-figma__fit-btn--files.is-open .rvi-rythme-figma__fit-trash {
+  color: rgba(255, 255, 255, 0.64);
+}
+
+/* Liste des .fit (dropdown) : nom + bouton retirer */
+.rv-dropdown .rvi-rythme-figma__fit-item {
+  justify-content: space-between;
+  cursor: default;
+}
+
+.rvi-rythme-figma__fit-item-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rvi-rythme-figma__fit-item-remove {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.48);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.rvi-rythme-figma__fit-item-remove:hover,
+.rvi-rythme-figma__fit-item-remove:focus-visible {
+  color: #ff6b6b;
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
 }
 
 .rvi-rythme-figma__card-text {
@@ -245,6 +379,29 @@
   width: 100%;
   align-items: flex-start;
   box-sizing: border-box;
+}
+
+/* Figma : titre + carte 32px (gap 6px), contenu aligné à gauche */
+.rvi-rythme-figma__row-four .rvi-rythme-figma__col {
+  gap: 6px;
+}
+
+.rvi-rythme-figma__row-four .rvi-rythme-figma__card-box {
+  height: 32px;
+  padding: 0 10px;
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+.rvi-rythme-figma__row-four .rvi-rythme-figma__card-box input {
+  text-align: left;
+}
+
+.rvi-rythme-figma__card-value {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .rvi-rythme-figma__card-box {
@@ -352,9 +509,7 @@ button.rvi-rythme-figma__card-box.is-selected {
 .rvi-rythme-figma__weather-btn {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 0 4px;
+  gap: 6px;
 }
 
 /* ── Checkbox Base (16x16, 4px radius, Figma node 143:3023) ── */
@@ -407,4 +562,13 @@ button.rvi-rythme-figma__card-box.is-selected {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ── Erreur de prédiction (sous le bouton d'action) ─────── */
+.rvi-rythme-figma__error {
+  margin: -4px 0 0;
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 12px;
+  line-height: 16px;
+  color: #ff6b6b;
 }

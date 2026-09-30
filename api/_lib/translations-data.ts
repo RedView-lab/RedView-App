@@ -1733,6 +1733,82 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Calculate"
   },
   {
+    "fr": "Re-calculer",
+    "en": "Recalculate"
+  },
+  {
+    "fr": "Profil de rythme",
+    "en": "Pace profile"
+  },
+  {
+    "fr": "Débutant",
+    "en": "Beginner"
+  },
+  {
+    "fr": "Intermédiaire",
+    "en": "Intermediate"
+  },
+  {
+    "fr": "Avancé",
+    "en": "Advanced"
+  },
+  {
+    "fr": "Activités de référence",
+    "en": "Reference activities"
+  },
+  {
+    "fr": "Jusqu’à {{count}} .fit",
+    "en": "Up to {{count}} .fit"
+  },
+  {
+    "fr": "Ajouter",
+    "en": "Add"
+  },
+  {
+    "fr": "Ajouter des fichiers .fit",
+    "en": "Add .fit files"
+  },
+  {
+    "fr": "Limite de {{count}} fichiers .fit atteinte",
+    "en": "Limit of {{count}} .fit files reached"
+  },
+  {
+    "fr": "1 fichier uploadé",
+    "en": "1 file uploaded"
+  },
+  {
+    "fr": "{{count}} fichiers uploadés",
+    "en": "{{count}} files uploaded"
+  },
+  {
+    "fr": "Gérer les fichiers .fit",
+    "en": "Manage .fit files"
+  },
+  {
+    "fr": "Retirer {{name}}",
+    "en": "Remove {{name}}"
+  },
+  {
+    "fr": "Tout supprimer",
+    "en": "Delete all"
+  },
+  {
+    "fr": "Poids total",
+    "en": "Total weight"
+  },
+  {
+    "fr": "Largeur de pneus",
+    "en": "Tire width"
+  },
+  {
+    "fr": "Oui",
+    "en": "Yes"
+  },
+  {
+    "fr": "Non",
+    "en": "No"
+  },
+  {
     "fr": "Appliquer",
     "en": "Apply"
   },

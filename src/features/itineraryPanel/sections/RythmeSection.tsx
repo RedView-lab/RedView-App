@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { readDocumentAppLocale, translateAppText, useAppI18n } from '@/shared/i18n';
 import { ActionButtonStack, ToggleRow } from '../components/controls';
 import { PortalDropdown } from '../components/controls/PortalDropdown';
@@ -7,20 +7,28 @@ import { PauseIntervalList, PoiPauseGrid, RunReferenceFields, TerrainTechnicalit
 import { isFootDiscipline, type SportDiscipline } from '@/shared/lib/discipline';
 import { CalendarPopover } from '../components/calendar';
 import { IconInfo, IconPlus } from '../components/icons';
-import { IconFigmaCheck } from '../components/iconsFigma';
+import { IconFigmaCheck, IconFigmaChevronDown, IconTrashFigma } from '../components/iconsFigma';
+import { MAX_FIT_FILES, isCustomRhythmProfile } from '../lib/rhythm/profile';
 import type { PauseIntervalRow, RhythmState } from '../types';
+
+type RhythmChange = <K extends keyof RhythmState>(key: K, value: RhythmState[K]) => void;
 
 interface RythmeSectionProps {
   rhythm: RhythmState;
   /** Trail / Running swap FTP, weight and tyres for running references. */
   discipline?: SportDiscipline;
-  onChange?: <K extends keyof RhythmState>(key: K, value: RhythmState[K]) => void;
+  onChange?: RhythmChange;
   onUploadFit?: () => void;
-  uploadFitLabel?: string;
+  /** Noms des .fit de référence chargés. */
+  fitFileNames?: string[];
+  onRemoveFitFile?: (index: number) => void;
+  onClearFitFiles?: () => void;
   onCalculate?: () => void;
   onCancelCalculate?: () => void;
   calculateLabel?: string;
+  /** Vrai pendant le calcul de la prédiction. */
   calculateDisabled?: boolean;
+  calculateError?: string | null;
   resultLabel?: string | null;
 }
 
@@ -31,7 +39,19 @@ const PRACTICE_LEVELS = [
   { id: 'expert', label: 'Expert' },
 ] as const;
 
+const CUSTOM_PROFILE_LABEL = 'Personnalisé';
+
 const TIRE_OPTIONS = [28, 30, 32, 35, 38, 40, 45, 50];
+
+const DEFAULT_START_TIME = '09:30';
+
+/** Créneaux de départ proposés : toutes les 30 min, de 00:00 à 23:30. */
+const START_TIME_SLOTS = Array.from({ length: 48 }, (_, index) => {
+  const hours = String(Math.floor(index / 2)).padStart(2, '0');
+  return `${hours}:${index % 2 === 0 ? '00' : '30'}`;
+});
+
+const NUMERIC_NAV_KEYS = ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
 
 function CalendarIcon({ size = 10 }: { size?: number }) {
   return (
@@ -61,21 +81,8 @@ function ClockIcon({ size = 12 }: { size?: number }) {
   );
 }
 
-function ChevronSelectorVerticalIcon({ size = 20 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, opacity: 0.85 }}>
-      <path
-        d="M7 15L12 20L17 15M7 9L12 4L17 9"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function UploadFitIcon({ size = 14 }: { size?: number }) {
+/** Figma "share-01" : flèche d'upload 8px dans un cadre 16px. */
+function UploadFitIcon({ size = 16 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 36 36" fill="none" style={{ flexShrink: 0 }}>
       <path
@@ -89,132 +96,231 @@ function UploadFitIcon({ size = 14 }: { size?: number }) {
   );
 }
 
-function parseTimeDigits(timeStr: string | null | undefined): [string, string, string, string] {
-  if (!timeStr) return ['0', '9', '3', '0'];
-  const [h = '09', m = '30'] = timeStr.split(':');
-  const hPad = h.padStart(2, '0');
-  const mPad = m.padStart(2, '0');
-  return [hPad[0] || '0', hPad[1] || '9', mPad[0] || '3', mPad[1] || '0'];
-}
-
-function TimeChipInput({
-  displayTime,
-  onChange,
+/** Champ "Heure" : liste déroulante de créneaux de 30 min. */
+function StartTimeSelect({
+  value,
   ariaLabel,
+  onChange,
 }: {
-  displayTime: string;
-  onChange?: (value: string | null) => void;
+  value: string;
   ariaLabel: string;
+  onChange: (value: string) => void;
 }) {
-  const [digits, setDigits] = useState<[string, string, string, string]>(() => parseTimeDigits(displayTime));
-  const [activeSlot, setActiveSlot] = useState<number | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const [hours = '09', minutes = '30'] = value.split(':');
 
+  // À l'ouverture, centre la liste sur l'heure courante.
   useEffect(() => {
-    setDigits(parseTimeDigits(displayTime));
-  }, [displayTime]);
-
-  const commitTime = (d: [string, string, string, string]) => {
-    const formatted = `${d[0]}${d[1]}:${d[2]}${d[3]}`;
-    onChange?.(formatted);
-  };
-
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Tab') return;
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      setActiveSlot(null);
-      inputRef.current?.blur();
-      return;
-    }
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      const reverted = parseTimeDigits(displayTime);
-      setDigits(reverted);
-      commitTime(reverted);
-      setActiveSlot(null);
-      inputRef.current?.blur();
-      return;
-    }
-
-    const currentSlot = activeSlot ?? 0;
-    if (event.key === 'ArrowLeft') {
-      event.preventDefault();
-      setActiveSlot(Math.max(0, currentSlot - 1));
-      return;
-    }
-    if (event.key === 'ArrowRight') {
-      event.preventDefault();
-      setActiveSlot(Math.min(3, currentSlot + 1));
-      return;
-    }
-    if (event.key === ':' || event.key === 'h' || event.key === 'H') {
-      event.preventDefault();
-      setActiveSlot(2);
-      return;
-    }
-    if (event.key === 'Backspace') {
-      event.preventDefault();
-      const next: [string, string, string, string] = [...digits];
-      next[currentSlot] = '0';
-      setDigits(next);
-      commitTime(next);
-      setActiveSlot(Math.max(0, currentSlot - 1));
-      return;
-    }
-    if (event.key >= '0' && event.key <= '9') {
-      event.preventDefault();
-      const next: [string, string, string, string] = [...digits];
-      if (currentSlot === 0) {
-        if (event.key <= '2') next[0] = event.key;
-      } else if (currentSlot === 1) {
-        if (next[0] === '2' && event.key > '3') next[1] = '3';
-        else next[1] = event.key;
-      } else if (currentSlot === 2) {
-        if (event.key <= '5') next[2] = event.key;
-      } else if (currentSlot === 3) {
-        next[3] = event.key;
-      }
-      setDigits(next);
-      commitTime(next);
-      setActiveSlot(Math.min(3, currentSlot + 1));
-    }
-  };
+    if (!open) return;
+    const raf = requestAnimationFrame(() => {
+      const menu = document.querySelector<HTMLElement>('.rvi-rythme-figma__time-menu');
+      const selected = menu?.querySelector<HTMLElement>('[aria-selected="true"]');
+      if (!menu || !selected) return;
+      menu.scrollTop = selected.offsetTop - (menu.clientHeight - selected.offsetHeight) / 2;
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [open]);
 
   return (
-    <div
-      className="rvi-rythme-figma__time-chip"
-      onClick={() => {
-        inputRef.current?.focus();
-        if (activeSlot === null) setActiveSlot(0);
-      }}
-      role="group"
-      aria-label={ariaLabel}
-    >
-      <input
-        ref={inputRef}
-        type="text"
-        className="rvi-rythme-figma__time-sr-input"
-        tabIndex={0}
-        onFocus={() => {
-          if (activeSlot === null) setActiveSlot(0);
-        }}
-        onBlur={() => setActiveSlot(null)}
-        onKeyDown={handleKeyDown}
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        className={`rvi-rythme-figma__time-chip${open ? ' is-open' : ''}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
         aria-label={ariaLabel}
-      />
-      <ClockIcon size={12} />
-      <span className="rvi-rythme-figma__time-digits">
-        <span className="rvi-rythme-figma__time-pill">
-          <span className={activeSlot === 0 ? 'is-active' : ''}>{digits[0]}</span>
-          <span className={activeSlot === 1 ? 'is-active' : ''}>{digits[1]}</span>
+      >
+        <ClockIcon size={12} />
+        <span className="rvi-rythme-figma__time-digits">
+          <span className="rvi-rythme-figma__time-pill">{hours.padStart(2, '0')}</span>
+          <span className="rvi-rythme-figma__time-colon">:</span>
+          <span className="rvi-rythme-figma__time-pill">{minutes.padStart(2, '0')}</span>
         </span>
-        <span className="rvi-rythme-figma__time-colon">:</span>
-        <span className="rvi-rythme-figma__time-pill">
-          <span className={activeSlot === 2 ? 'is-active' : ''}>{digits[2]}</span>
-          <span className={activeSlot === 3 ? 'is-active' : ''}>{digits[3]}</span>
-        </span>
-      </span>
+      </button>
+
+      <PortalDropdown
+        open={open}
+        anchorRef={buttonRef}
+        onClose={() => setOpen(false)}
+        minWidth={95}
+        align="left"
+        className="rvi-rythme-figma__time-menu"
+        estimatedHeight={260}
+      >
+        {START_TIME_SLOTS.map((slot) => (
+          <button
+            key={slot}
+            type="button"
+            className={`rv-dropdown__item${slot === value ? ' is-selected' : ''}`}
+            onClick={() => {
+              onChange(slot);
+              setOpen(false);
+            }}
+            role="option"
+            aria-selected={slot === value}
+          >
+            <span>{slot}</span>
+          </button>
+        ))}
+      </PortalDropdown>
+    </>
+  );
+}
+
+/** Carte numérique (FTP, poids) : "N/A" quand vide, unité affichée sinon. */
+function RiderNumberField({
+  label,
+  value,
+  unit,
+  onCommit,
+}: {
+  label: string;
+  value: number | null;
+  unit: string;
+  onCommit: (value: number | null) => void;
+}) {
+  const hasValue = value !== null && value > 0;
+  return (
+    <div className="rvi-rythme-figma__col">
+      <span className="rvi-rythme-figma__label-title" title={label}>{label}</span>
+      <div className={`rvi-rythme-figma__card-box${hasValue ? ' rvi-rythme-figma__card-box--has-val' : ''}`}>
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={hasValue ? String(value) : ''}
+          placeholder="N/A"
+          onKeyDown={(e) => {
+            if (NUMERIC_NAV_KEYS.includes(e.key) || e.ctrlKey || e.metaKey) return;
+            if (!/^\d$/.test(e.key)) e.preventDefault();
+          }}
+          onChange={(e) => {
+            const cleaned = e.target.value.replace(/\D/g, '');
+            const n = cleaned ? parseInt(cleaned, 10) : NaN;
+            onCommit(Number.isFinite(n) && n > 0 ? n : null);
+          }}
+          aria-label={label}
+        />
+        {hasValue ? <span className="rvi-rythme-figma__card-unit">{unit}</span> : null}
+      </div>
+    </div>
+  );
+}
+
+/** "Activités de référence" : upload initial, puis ajout / gestion des .fit. */
+function ReferenceActivitiesField({
+  fitFileNames,
+  onUploadFit,
+  onRemoveFitFile,
+  onClearFitFiles,
+}: {
+  fitFileNames: string[];
+  onUploadFit?: () => void;
+  onRemoveFitFile?: (index: number) => void;
+  onClearFitFiles?: () => void;
+}) {
+  const { t } = useAppI18n();
+  const [filesMenuOpen, setFilesMenuOpen] = useState(false);
+  const filesBtnRef = useRef<HTMLButtonElement | null>(null);
+  const fitCount = fitFileNames.length;
+  const limitReached = fitCount >= MAX_FIT_FILES;
+
+  return (
+    <div className="rvi-rythme-figma__field">
+      <span className="rvi-rythme-figma__label-title">{t('Activités de référence')}</span>
+
+      {fitCount === 0 ? (
+        <button
+          type="button"
+          className="rvi-rythme-figma__fit-btn"
+          onClick={onUploadFit}
+          aria-label={t('Ajouter des fichiers .fit')}
+        >
+          <UploadFitIcon size={16} />
+          <span className="rvi-rythme-figma__fit-text">
+            {t('Jusqu’à {{count}} .fit', { count: MAX_FIT_FILES })}
+          </span>
+        </button>
+      ) : (
+        <div className="rvi-rythme-figma__fit-row">
+          <button
+            type="button"
+            className="rvi-rythme-figma__fit-btn rvi-rythme-figma__fit-btn--add"
+            onClick={onUploadFit}
+            disabled={limitReached}
+            title={
+              limitReached
+                ? t('Limite de {{count}} fichiers .fit atteinte', { count: MAX_FIT_FILES })
+                : t('Ajouter des fichiers .fit')
+            }
+          >
+            <UploadFitIcon size={16} />
+            <span className="rvi-rythme-figma__fit-text">{t('Ajouter')}</span>
+          </button>
+
+          <button
+            ref={filesBtnRef}
+            type="button"
+            className={`rvi-rythme-figma__fit-btn rvi-rythme-figma__fit-btn--files${filesMenuOpen ? ' is-open' : ''}`}
+            onClick={() => setFilesMenuOpen((v) => !v)}
+            aria-haspopup="listbox"
+            aria-expanded={filesMenuOpen}
+            aria-label={t('Gérer les fichiers .fit')}
+          >
+            <span className="rvi-rythme-figma__fit-trash">
+              <IconTrashFigma size={15} />
+            </span>
+            <span className="rvi-rythme-figma__fit-text">
+              {fitCount === 1
+                ? t('1 fichier uploadé')
+                : t('{{count}} fichiers uploadés', { count: fitCount })}
+            </span>
+          </button>
+
+          <PortalDropdown
+            open={filesMenuOpen}
+            anchorRef={filesBtnRef}
+            onClose={() => setFilesMenuOpen(false)}
+            align="right"
+            estimatedHeight={Math.min(260, 30 * (fitCount + 1) + 1)}
+          >
+            {fitFileNames.map((name, index) => (
+              <div
+                key={`${name}-${index}`}
+                className="rv-dropdown__item rv-dropdown__item--no-check rvi-rythme-figma__fit-item"
+              >
+                <span className="rvi-rythme-figma__fit-item-name" title={name}>{name}</span>
+                <button
+                  type="button"
+                  className="rvi-rythme-figma__fit-item-remove"
+                  onClick={() => {
+                    if (fitCount === 1) setFilesMenuOpen(false);
+                    onRemoveFitFile?.(index);
+                  }}
+                  aria-label={t('Retirer {{name}}', { name })}
+                >
+                  <IconTrashFigma size={14} />
+                </button>
+              </div>
+            ))}
+            <div className="rv-dropdown__divider" />
+            <button
+              type="button"
+              className="rv-dropdown__item rv-dropdown__item--danger rv-dropdown__item--no-check"
+              onClick={() => {
+                setFilesMenuOpen(false);
+                onClearFitFiles?.();
+              }}
+            >
+              <IconTrashFigma size={14} />
+              <span>{t('Tout supprimer')}</span>
+            </button>
+          </PortalDropdown>
+        </div>
+      )}
     </div>
   );
 }
@@ -224,41 +330,46 @@ export function RythmeSection({
   discipline = 'bike',
   onChange,
   onUploadFit,
-  uploadFitLabel,
+  fitFileNames = [],
+  onRemoveFitFile,
+  onClearFitFiles,
   onCalculate,
   onCancelCalculate,
   calculateLabel,
   calculateDisabled,
+  calculateError = null,
   resultLabel = null,
 }: RythmeSectionProps) {
   const { locale, t } = useAppI18n();
   const dateChipRef = useRef<HTMLButtonElement | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [levelMenuOpen, setLevelMenuOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [tiresMenuOpen, setTiresMenuOpen] = useState(false);
-  const levelBtnRef = useRef<HTMLButtonElement | null>(null);
+  const profileBtnRef = useRef<HTMLButtonElement | null>(null);
   const tiresBtnRef = useRef<HTMLButtonElement | null>(null);
 
-  const displayTime = rhythm.startTime || '09:30';
-  const hasFitFiles = Boolean(
-    uploadFitLabel &&
-    uploadFitLabel.length > 0 &&
-    uploadFitLabel !== 'Upload .fit'
-  );
+  const displayTime = rhythm.startTime || DEFAULT_START_TIME;
+  const isCustom = isCustomRhythmProfile(rhythm);
+  const presetLevel = PRACTICE_LEVELS.find((l) => l.id === rhythm.practiceLevel) ?? PRACTICE_LEVELS[0];
+  const profileLabel = isCustom ? CUSTOM_PROFILE_LABEL : presetLevel.label;
+  const isCalculating = Boolean(calculateDisabled);
 
-  const currentLevelLabel = useMemo(() => {
-    const found = PRACTICE_LEVELS.find((l) => l.id === rhythm.practiceLevel);
-    if (found) return found.label;
-    return 'Débutant';
-  }, [rhythm.practiceLevel]);
+  const selectPreset = (levelId: string) => {
+    onChange?.('rhythmProfile', 'preset');
+    onChange?.('practiceLevel', levelId);
+    setProfileMenuOpen(false);
+  };
+
+  const selectCustom = () => {
+    onChange?.('rhythmProfile', 'custom');
+    setProfileMenuOpen(false);
+  };
 
   return (
     <div className="rvi-params">
-      {/* ── Figma Node 6043:105672 container ── */}
       <div className="rvi-rythme-figma">
-        {/* ── ROW 1 : Départ & Heure (Figma node 6025:114207) ── */}
+        {/* ── Départ & Heure ── */}
         <div className="rvi-rythme-figma__row-datetime">
-          {/* Départ */}
           <div className="rvi-rythme-figma__datetime-group">
             <span className="rvi-rythme-figma__label-sm">{t('Départ :')}</span>
             <button
@@ -283,278 +394,176 @@ export function RythmeSection({
               onSelect={(iso) => {
                 onChange?.('startDate', iso);
                 if (!rhythm.startTime) {
-                  onChange?.('startTime', '09:30');
+                  onChange?.('startTime', DEFAULT_START_TIME);
                 }
               }}
             />
           </div>
 
-          {/* Heure */}
           <div className="rvi-rythme-figma__datetime-group">
             <span className="rvi-rythme-figma__label-sm">{t('Heure :')}</span>
-            <TimeChipInput
-              displayTime={displayTime}
+            <StartTimeSelect
+              value={displayTime}
               ariaLabel={t('Heure de départ')}
               onChange={(nextValue) => onChange?.('startTime', nextValue)}
             />
           </div>
         </div>
 
-        {/* ── ROW 2 : Niveau de pratique & Personalisé ── */}
-        <div className="rvi-rythme-figma__row-duo">
-          {/* Col 1 : Niveau de pratique */}
-          <div className="rvi-rythme-figma__col">
-            <span className="rvi-rythme-figma__label-title">{t('Niveau de pratique')}</span>
-            <button
-              ref={levelBtnRef}
-              type="button"
-              className={`rvi-rythme-figma__card-btn${levelMenuOpen ? ' is-open' : ''}`}
-              onClick={() => setLevelMenuOpen((v) => !v)}
-              aria-label={t('Niveau de pratique')}
-              aria-haspopup="listbox"
-              aria-expanded={levelMenuOpen}
-            >
-              <span className="rvi-rythme-figma__card-text">{currentLevelLabel}</span>
-              <ChevronSelectorVerticalIcon size={20} />
-            </button>
+        {/* ── Profil de rythme ── */}
+        <div className="rvi-rythme-figma__field">
+          <span className="rvi-rythme-figma__label-title">{t('Profil de rythme')}</span>
+          <button
+            ref={profileBtnRef}
+            type="button"
+            className={`rvi-rythme-figma__profile-btn${profileMenuOpen ? ' is-open' : ''}`}
+            onClick={() => setProfileMenuOpen((v) => !v)}
+            aria-label={t('Profil de rythme')}
+            aria-haspopup="listbox"
+            aria-expanded={profileMenuOpen}
+          >
+            <span className="rvi-rythme-figma__profile-text">{t(profileLabel)}</span>
+            <span className={`rvi-rythme-figma__profile-chevron${profileMenuOpen ? ' is-open' : ''}`}>
+              <IconFigmaChevronDown size={24} />
+            </span>
+          </button>
 
-            <PortalDropdown
-              open={levelMenuOpen}
-              anchorRef={levelBtnRef}
-              onClose={() => setLevelMenuOpen(false)}
-              minWidth={140}
-              align="left"
-              estimatedHeight={180}
-            >
-              {PRACTICE_LEVELS.map((lvl) => (
+          <PortalDropdown
+            open={profileMenuOpen}
+            anchorRef={profileBtnRef}
+            onClose={() => setProfileMenuOpen(false)}
+            align="left"
+            estimatedHeight={160}
+          >
+            {PRACTICE_LEVELS.map((lvl) => {
+              const selected = !isCustom && presetLevel.id === lvl.id;
+              return (
                 <button
                   key={lvl.id}
                   type="button"
-                  className={`rv-dropdown__item${
-                    rhythm.practiceLevel === lvl.id ? ' is-selected' : ''
-                  }`}
-                  onClick={() => {
-                    onChange?.('practiceLevel', lvl.id);
-                    setLevelMenuOpen(false);
-                  }}
+                  className={`rv-dropdown__item${selected ? ' is-selected' : ''}`}
+                  onClick={() => selectPreset(lvl.id)}
                   role="option"
-                  aria-selected={rhythm.practiceLevel === lvl.id}
+                  aria-selected={selected}
                 >
-                  <span>{lvl.label}</span>
+                  <span>{t(lvl.label)}</span>
                 </button>
-              ))}
-            </PortalDropdown>
-          </div>
-
-          {/* Col 2 : Personalisé (.fit de référence) */}
-          <div className="rvi-rythme-figma__col">
-            <span className="rvi-rythme-figma__label-title">{t('Personalisé')}</span>
+              );
+            })}
+            <div className="rv-dropdown__divider" />
             <button
               type="button"
-              className="rvi-rythme-figma__card-btn rvi-rythme-figma__card-btn--fit"
-              onClick={onUploadFit}
-              aria-label={t('.fit de référence')}
-              title={hasFitFiles ? t('Cliquer pour remplacer ou ajouter des fichiers .fit') : t('Uploader des fichiers .fit')}
+              className={`rv-dropdown__item${isCustom ? ' is-selected' : ''}`}
+              onClick={selectCustom}
+              role="option"
+              aria-selected={isCustom}
             >
-              <UploadFitIcon size={14} />
-              <span className="rvi-rythme-figma__card-text">
-                {hasFitFiles && uploadFitLabel
-                  ? uploadFitLabel
-                  : t('.fit de référence')}
-              </span>
+              <span>{t(CUSTOM_PROFILE_LABEL)}</span>
             </button>
-          </div>
+          </PortalDropdown>
         </div>
 
-        {/* ── ROW 3 : FTP / Poids / Pneus / Météo (Figma 4 columns) ── */}
-        <div className="rvi-rythme-figma__row-four">
-          {isFootDiscipline(discipline) ? (
-            <RunReferenceFields rhythm={rhythm} onChange={onChange} />
-          ) : (
-            <>
-            {/* Col 1 : FTP */}
-            <div className="rvi-rythme-figma__col">
-              <span className="rvi-rythme-figma__label-title">{t('FTP')}</span>
-              <div
-                className={`rvi-rythme-figma__card-box${
-                  rhythm.ftp !== null && rhythm.ftp > 0 ? ' rvi-rythme-figma__card-box--has-val' : ''
-                }`}
-              >
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  value={rhythm.ftp !== null && rhythm.ftp > 0 ? String(rhythm.ftp) : ''}
-                  placeholder="Auto"
-                  onKeyDown={(e) => {
-                    if (
-                      ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) ||
-                      e.ctrlKey ||
-                      e.metaKey
-                    ) {
-                      return;
-                    }
-                    if (!/^\d$/.test(e.key)) {
-                      e.preventDefault();
-                    }
-                  }}
-                  onChange={(e) => {
-                    const cleaned = e.target.value.replace(/\D/g, '');
-                    if (!cleaned) {
-                      onChange?.('ftp', null);
-                    } else {
-                      const n = parseInt(cleaned, 10);
-                      onChange?.('ftp', Number.isFinite(n) && n > 0 ? n : null);
-                    }
-                  }}
-                  aria-label={t('FTP')}
-                />
-                {rhythm.ftp !== null && rhythm.ftp > 0 ? (
-                  <span className="rvi-rythme-figma__card-unit">W</span>
-                ) : null}
+        {/* ── Personnalisé : activités de référence + données du cycliste / coureur ── */}
+        <Collapse open={isCustom}>
+          <div className="rvi-rythme-figma__custom">
+            <ReferenceActivitiesField
+              fitFileNames={fitFileNames}
+              onUploadFit={onUploadFit}
+              onRemoveFitFile={onRemoveFitFile}
+              onClearFitFiles={onClearFitFiles}
+            />
+
+            <div className="rvi-rythme-figma__row-four">
+              {isFootDiscipline(discipline) ? (
+                <RunReferenceFields rhythm={rhythm} onChange={onChange} />
+              ) : (
+                <>
+                  <RiderNumberField
+                    label={t('FTP')}
+                    value={rhythm.ftp}
+                    unit="W"
+                    onCommit={(v) => onChange?.('ftp', v)}
+                  />
+                  <RiderNumberField
+                    label={t('Poids total')}
+                    value={rhythm.systemWeightKg}
+                    unit="kg"
+                    onCommit={(v) => onChange?.('systemWeightKg', v)}
+                  />
+
+                  <div className="rvi-rythme-figma__col">
+                    <span className="rvi-rythme-figma__label-title">{t('Pneus')}</span>
+                    <button
+                      ref={tiresBtnRef}
+                      type="button"
+                      className={`rvi-rythme-figma__card-box${tiresMenuOpen ? ' is-open' : ''}`}
+                      onClick={() => setTiresMenuOpen((v) => !v)}
+                      aria-label={t('Largeur de pneus')}
+                      aria-haspopup="listbox"
+                      aria-expanded={tiresMenuOpen}
+                    >
+                      <span className="rvi-rythme-figma__card-value">
+                        {rhythm.tiresMm ? `${rhythm.tiresMm}mm` : '35mm'}
+                      </span>
+                    </button>
+
+                    <PortalDropdown
+                      open={tiresMenuOpen}
+                      anchorRef={tiresBtnRef}
+                      onClose={() => setTiresMenuOpen(false)}
+                      align="left"
+                      estimatedHeight={200}
+                    >
+                      {TIRE_OPTIONS.map((mm) => (
+                        <button
+                          key={mm}
+                          type="button"
+                          className={`rv-dropdown__item${(rhythm.tiresMm ?? 35) === mm ? ' is-selected' : ''}`}
+                          onClick={() => {
+                            onChange?.('tiresMm', mm);
+                            setTiresMenuOpen(false);
+                          }}
+                          role="option"
+                          aria-selected={(rhythm.tiresMm ?? 35) === mm}
+                        >
+                          <span>{mm}mm</span>
+                        </button>
+                      ))}
+                    </PortalDropdown>
+                  </div>
+                </>
+              )}
+
+              <div className="rvi-rythme-figma__col">
+                <span className="rvi-rythme-figma__label-title">{t('Météo')}</span>
+                <button
+                  type="button"
+                  className="rvi-rythme-figma__card-box rvi-rythme-figma__weather-btn"
+                  onClick={() => onChange?.('useWeather', !rhythm.useWeather)}
+                  aria-label={t('Météo')}
+                  role="checkbox"
+                  aria-checked={Boolean(rhythm.useWeather)}
+                >
+                  <span className={`rvi-rythme-figma__checkbox-box${rhythm.useWeather ? ' is-checked' : ''}`}>
+                    {rhythm.useWeather && <IconFigmaCheck size={11} />}
+                  </span>
+                  <span className="rvi-rythme-figma__card-value">
+                    {rhythm.useWeather ? t('Oui') : t('Non')}
+                  </span>
+                </button>
               </div>
             </div>
-
-            {/* Col 2 : Poids */}
-            <div className="rvi-rythme-figma__col">
-              <span className="rvi-rythme-figma__label-title">{t('Poids')}</span>
-              <div
-                className={`rvi-rythme-figma__card-box${
-                  rhythm.systemWeightKg !== null && rhythm.systemWeightKg > 0
-                    ? ' rvi-rythme-figma__card-box--has-val'
-                    : ''
-                }`}
-              >
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  value={
-                    rhythm.systemWeightKg !== null && rhythm.systemWeightKg > 0
-                      ? String(rhythm.systemWeightKg)
-                      : ''
-                  }
-                  placeholder="Auto"
-                  onKeyDown={(e) => {
-                    if (
-                      ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) ||
-                      e.ctrlKey ||
-                      e.metaKey
-                    ) {
-                      return;
-                    }
-                    if (!/^\d$/.test(e.key)) {
-                      e.preventDefault();
-                    }
-                  }}
-                  onChange={(e) => {
-                    const cleaned = e.target.value.replace(/\D/g, '');
-                    if (!cleaned) {
-                      onChange?.('systemWeightKg', null);
-                    } else {
-                      const n = parseInt(cleaned, 10);
-                      onChange?.('systemWeightKg', Number.isFinite(n) && n > 0 ? n : null);
-                    }
-                  }}
-                  aria-label={t('Poids')}
-                />
-                {rhythm.systemWeightKg !== null && rhythm.systemWeightKg > 0 ? (
-                  <span className="rvi-rythme-figma__card-unit">kg</span>
-                ) : null}
-              </div>
-            </div>
-
-            {/* Col 3 : Pneus */}
-            <div className="rvi-rythme-figma__col">
-              <span className="rvi-rythme-figma__label-title">{t('Pneus')}</span>
-              <button
-                ref={tiresBtnRef}
-                type="button"
-                className={`rvi-rythme-figma__card-box${tiresMenuOpen ? ' is-open' : ''}`}
-                onClick={() => setTiresMenuOpen((v) => !v)}
-                aria-label={t('Largeur de pneus')}
-                aria-haspopup="listbox"
-                aria-expanded={tiresMenuOpen}
-              >
-                <span>{rhythm.tiresMm ? `${rhythm.tiresMm}mm` : '35mm'}</span>
-              </button>
-
-              <PortalDropdown
-                open={tiresMenuOpen}
-                anchorRef={tiresBtnRef}
-                onClose={() => setTiresMenuOpen(false)}
-                align="left"
-                estimatedHeight={200}
-              >
-                {TIRE_OPTIONS.map((mm) => (
-                  <button
-                    key={mm}
-                    type="button"
-                    className={`rv-dropdown__item${
-                      (rhythm.tiresMm ?? 35) === mm ? ' is-selected' : ''
-                    }`}
-                    onClick={() => {
-                      onChange?.('tiresMm', mm);
-                      setTiresMenuOpen(false);
-                    }}
-                    role="option"
-                    aria-selected={(rhythm.tiresMm ?? 35) === mm}
-                  >
-                    <span>{mm}mm</span>
-                  </button>
-                ))}
-              </PortalDropdown>
-            </div>
-            </>
-          )}
-
-          {/* Col 4 : Météo */}
-          <div className="rvi-rythme-figma__col">
-            <span className="rvi-rythme-figma__label-title">{t('Météo')}</span>
-            <button
-              type="button"
-              className="rvi-rythme-figma__card-box rvi-rythme-figma__weather-btn"
-              onClick={() => onChange?.('useWeather', !rhythm.useWeather)}
-              aria-label={t('Météo')}
-              role="checkbox"
-              aria-checked={Boolean(rhythm.useWeather)}
-            >
-              <span className={`rvi-rythme-figma__checkbox-box${rhythm.useWeather ? ' is-checked' : ''}`}>
-                {rhythm.useWeather && <IconFigmaCheck size={11} />}
-              </span>
-              <span>{rhythm.useWeather ? t('Oui') : t('Non')}</span>
-            </button>
           </div>
-        </div>
+        </Collapse>
 
         {discipline === 'trail' && (
           <TerrainTechnicalityRow value={rhythm.terrainTechnicality} onChange={onChange} />
         )}
-
-        {/* ── ROW 4 : Appliquer à tout les itinéraires ── */}
-        <button
-          type="button"
-          className="rvi-rythme-figma__apply-all"
-          onClick={() => onChange?.('applyToAllItineraries', !rhythm.applyToAllItineraries)}
-          role="checkbox"
-          aria-checked={Boolean(rhythm.applyToAllItineraries)}
-        >
-          <span
-            className={`rvi-rythme-figma__checkbox-box${
-              rhythm.applyToAllItineraries ? ' is-checked' : ''
-            }`}
-          >
-            {rhythm.applyToAllItineraries && <IconFigmaCheck size={11} />}
-          </span>
-          <span className="rvi-rythme-figma__apply-all-label">
-            {t('Appliquer à tout les itinéraires')}
-          </span>
-        </button>
       </div>
 
-      <div className="rvi-divider" style={{ marginTop: 8 }} />
+      <div className="rvi-divider" />
 
-      {/* Pauses favoris */}
+      {/* ── Pauses ── */}
       <ToggleRow
         checked={rhythm.pauseAtFavoritePois}
         onChange={(v) => onChange?.('pauseAtFavoritePois', v)}
@@ -571,9 +580,6 @@ export function RythmeSection({
         />
       </Collapse>
 
-      <div className="rvi-divider" />
-
-      {/* Pauses par intervalle */}
       <ToggleRow
         checked={rhythm.pauseEveryIntervalEnabled}
         onChange={(v) => {
@@ -614,16 +620,36 @@ export function RythmeSection({
         />
       </Collapse>
 
-      <div className="rvi-divider" />
+      {/* ── Appliquer à tout les itinéraires ── */}
+      <button
+        type="button"
+        className="rvi-rythme-figma__apply-all"
+        onClick={() => onChange?.('applyToAllItineraries', !rhythm.applyToAllItineraries)}
+        role="checkbox"
+        aria-checked={Boolean(rhythm.applyToAllItineraries)}
+      >
+        <span className={`rvi-rythme-figma__checkbox-box${rhythm.applyToAllItineraries ? ' is-checked' : ''}`}>
+          {rhythm.applyToAllItineraries && <IconFigmaCheck size={11} />}
+        </span>
+        <span className="rvi-rythme-figma__apply-all-label">
+          {t('Appliquer à tout les itinéraires')}
+        </span>
+      </button>
 
-      {/* Bouton de calcul */}
+      {/* ── Action : Re-calculer → calcul en cours (survol : Interrompre) → résultat ── */}
       <ActionButtonStack
-        primaryLabel={t('Calculer')}
+        primaryLabel={t('Re-calculer')}
+        primaryIcon={<IconFigmaCheck size={16} />}
         onPrimaryClick={onCalculate}
-        loadingLabel={calculateDisabled ? (calculateLabel ?? t('Calculer')) : null}
+        loadingLabel={isCalculating ? (calculateLabel ?? t('Calculer')) : null}
         onLoadingClick={onCancelCalculate}
-        resultLabel={resultLabel}
+        resultLabel={calculateError ? null : resultLabel}
       />
+      {calculateError && !isCalculating ? (
+        <p className="rvi-rythme-figma__error" role="alert">
+          {calculateError}
+        </p>
+      ) : null}
     </div>
   );
 }

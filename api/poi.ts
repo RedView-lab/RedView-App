@@ -4,7 +4,9 @@
  * Deux endpoints muxés via `?op=` :
  *
  *   GET  /api/poi?op=bbox&categories=…&south=…&west=…&north=…&east=…
+ *        [&limit=…&level=…&per_cell=…]
  *        → forwarde vers `${POI_UPSTREAM}/bbox?...`
+ *        (`level` = échantillonnage spatial par cellule de tuile XYZ)
  *
  *   POST /api/poi?op=corridor
  *        Content-Type: application/json
@@ -28,7 +30,7 @@ const REQUEST_TIMEOUT_MS = 28_000; // Vercel hobby cap = 30 s
 const MAX_BODY_BYTES = 256_000;
 
 const ALLOWED_BBOX_PARAMS = new Set([
-  'categories', 'south', 'west', 'north', 'east', 'limit',
+  'categories', 'south', 'west', 'north', 'east', 'limit', 'level', 'per_cell',
 ]);
 
 export default async function handler(
