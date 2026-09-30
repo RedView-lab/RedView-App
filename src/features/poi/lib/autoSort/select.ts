@@ -192,7 +192,9 @@ export function selectAutoSortPicks(
   const commit = (e: Evaluated, reason: AutoSortReason): AutoSortPick => {
     const c = e.timed.candidate;
     taken.add(c.feature.id);
-    schedule.addPause(e.timed.rideS, time.pauseMinutesFor(c.feature) * 60);
+    // Les hôtels retenus sont des options pour la nuit, pas des arrêts :
+    // leur pause ne décale pas l'horaire (voir `isAutoHotelOption`).
+    if (c.kind !== 'hotel') schedule.addPause(e.timed.rideS, time.pauseMinutesFor(c.feature) * 60);
     const pick: AutoSortPick = {
       feature: c.feature,
       reason,

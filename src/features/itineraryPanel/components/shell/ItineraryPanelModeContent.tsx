@@ -13,6 +13,7 @@ import type {
   PanelMode,
   RouteProfile,
 } from '../../types';
+import { useAppI18n, type AppTranslationVars } from '@/shared/i18n';
 import { normalizeDiscipline } from '@/shared/lib/discipline';
 import { buildPauseAwareSchedule } from '../../lib/schedule';
 import { Collapse } from './Collapse';
@@ -61,7 +62,8 @@ type ItineraryPanelModeContentProps = Pick<
   | 'poiLoadDisabled'
   | 'poiLoadDisabledReason'
   | 'poiSearchStale'
-  | 'onAutoSortPois'
+  | 'poiAutoSortEnabled'
+  | 'onTogglePoiAutoSort'
   | 'poiAutoSortDisabled'
   | 'poiAutoSort'
   | 'poiLoading'
@@ -117,7 +119,8 @@ export function ItineraryPanelModeContent({
   poiLoadDisabled,
   poiLoadDisabledReason,
   poiSearchStale,
-  onAutoSortPois,
+  poiAutoSortEnabled,
+  onTogglePoiAutoSort,
   poiAutoSortDisabled,
   poiAutoSort,
   poiLoading,
@@ -138,8 +141,9 @@ export function ItineraryPanelModeContent({
   const [splitHeight, setSplitHeight] = useState(0);
   const [customDockHeight, setCustomDockHeight] = useState<number | null>(null);
   const [isDockResizing, setIsDockResizing] = useState(false);
+  const { t } = useAppI18n();
   const routeResultLabel = active ? buildRouteResultLabel(active) : null;
-  const rhythmResultLabel = active ? buildRhythmResultLabel(active) : null;
+  const rhythmResultLabel = active ? buildRhythmResultLabel(active, t) : null;
   let modeContent: ReactNode = null;
 
   switch (activeMode) {
@@ -206,7 +210,8 @@ export function ItineraryPanelModeContent({
           disabled={poiLoadDisabled}
           disabledReason={poiLoadDisabledReason}
           searchStale={poiSearchStale}
-          onAutoSort={onAutoSortPois}
+          autoSortEnabled={Boolean(poiAutoSortEnabled)}
+          onToggleAutoSort={onTogglePoiAutoSort}
           autoSortDisabled={poiAutoSortDisabled}
           autoSort={poiAutoSort}
         />
@@ -349,7 +354,10 @@ function buildRouteResultLabel(active: Itinerary): string | null {
   return `(${distanceKm.toFixed(2)} km)`;
 }
 
-function buildRhythmResultLabel(active: Itinerary): string | null {
+function buildRhythmResultLabel(
+  active: Itinerary,
+  t: (text: string, vars?: AppTranslationVars) => string,
+): string | null {
   const schedule = active.prediction ? buildPauseAwareSchedule(active, active.prediction) : null;
   const durationSeconds = schedule?.totalDurationSeconds ?? active.metrics?.durationSec ?? null;
   if (durationSeconds == null || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
@@ -361,7 +369,11 @@ function buildRhythmResultLabel(active: Itinerary): string | null {
     : 0;
 
   if (pauseSeconds > 0) {
-    return `(${formatCompactDuration(durationSeconds)} et ${formatCompactDuration(pauseSeconds)} de pause)`;
+    // La durée affichée inclut les pauses : « dont » évite de les lire en plus.
+    return t('({{total}} dont {{pause}} de pause)', {
+      total: formatCompactDuration(durationSeconds),
+      pause: formatCompactDuration(pauseSeconds),
+    });
   }
 
   return `(${formatCompactDuration(durationSeconds)})`;

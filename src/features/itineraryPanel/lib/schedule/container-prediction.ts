@@ -8,8 +8,6 @@ const EARTH_RADIUS_M = 6_371_008.8;
 const PREDICTION_TARGET_POINT_SPACING_M = 250;
 const PREDICTION_MIN_ROUTE_POINTS = 4_000;
 const PREDICTION_MAX_ROUTE_POINTS = 8_000;
-/** Pneus supposés par les profils par défaut (valeur initiale d'un projet). */
-const PRESET_TIRES_MM = 35;
 type PredictionRoutePoint = NonNullable<Itinerary['gpxRoute']>['points'][number];
 type PredictionRoutePoints = NonNullable<Itinerary['gpxRoute']>['points'];
 
@@ -57,13 +55,22 @@ export function buildPredictionConfigFromRhythm(
     }
   }
 
-  // Practice level pacing modulation
-  config.pacing_factor = resolvePracticeLevelFactor(
-    custom ? CUSTOM_PROFILE_LEVEL : rhythm.practiceLevel,
-  );
+  if (!custom) {
+    // Profil par défaut : sans .fit ni FTP, le moteur retomberait sur un
+    // cycliste unique à 2,5 W/kg pour tous les niveaux. Le niveau fixe donc
+    // la puissance, la position, les pneus et l'endurance.
+    const level = resolvePresetRiderLevel(rhythm.practiceLevel);
+    const riderWeightKg = rhythm.gender === 'female' ? FEMALE_RIDER_WEIGHT_KG : DEFAULT_RIDER_WEIGHT_KG;
+    config.ftp_w = Math.round(level.wkg * riderWeightKg);
+    config.cda = level.cda;
+    config.crr = level.crr;
+    config.fatigue_floor = level.fatigueFloor;
+    config.fatigue_lambda = level.fatigueLambda;
+    return config;
+  }
 
   // Tire width effect on rolling resistance (Crr)
-  const tiresMm = custom ? rhythm.tiresMm : PRESET_TIRES_MM;
+  const tiresMm = rhythm.tiresMm;
   if (typeof tiresMm === 'number' && tiresMm > 0) {
     // 25-28mm road: ~0.0045, 32-35mm allroad: ~0.0050, 40-50mm gravel: ~0.0058
     config.crr = 0.0035 + (tiresMm * 0.000045);
@@ -72,12 +79,37 @@ export function buildPredictionConfigFromRhythm(
   return config;
 }
 
-function resolvePracticeLevelFactor(level: string | null | undefined): number {
-  const lvl = level?.toLowerCase() ?? '';
-  if (lvl.includes('debutant')) return 0.85;
-  if (lvl.includes('avance')) return 1.05;
-  if (lvl.includes('expert')) return 1.10;
-  return 1.0;
+interface PresetRiderLevel {
+  /** FTP en W/kg de poids du cycliste. */
+  wkg: number;
+  /** Surface frontale (m²) : position et tenue. */
+  cda: number;
+  /** Résistance au roulement : pneus et pression. */
+  crr: number;
+  /** Plancher et vitesse de la baisse de puissance sur la durée. */
+  fatigueFloor: number;
+  fatigueLambda: number;
+}
+
+/** Poids du cycliste supposés par le moteur (voir `Gender::default_rider_weight`). */
+const DEFAULT_RIDER_WEIGHT_KG = 70;
+const FEMALE_RIDER_WEIGHT_KG = 56;
+
+/**
+ * Calage sur la GT20 (Bastia → Bonifacio, 593 km, ~10 000 m D+, référence
+ * ~21h pour un coureur de très haut niveau) : débutant ~37h30, intermédiaire
+ * ~30h40, avancé ~26h, expert ~22h de roulage. Les descentes du moteur restent
+ * prudentes sans .fit, d'où une puissance d'expert un peu généreuse.
+ */
+const PRESET_RIDER_LEVELS: Record<string, PresetRiderLevel> = {
+  debutant: { wkg: 2.3, cda: 0.38, crr: 0.0052, fatigueFloor: 0.58, fatigueLambda: 0.032 },
+  intermediaire: { wkg: 3.0, cda: 0.35, crr: 0.005, fatigueFloor: 0.66, fatigueLambda: 0.025 },
+  avance: { wkg: 3.8, cda: 0.32, crr: 0.0046, fatigueFloor: 0.75, fatigueLambda: 0.018 },
+  expert: { wkg: 5.0, cda: 0.28, crr: 0.0042, fatigueFloor: 0.85, fatigueLambda: 0.01 },
+};
+
+function resolvePresetRiderLevel(level: string | null | undefined): PresetRiderLevel {
+  return PRESET_RIDER_LEVELS[level?.toLowerCase() ?? ''] ?? PRESET_RIDER_LEVELS.debutant;
 }
 
 /**

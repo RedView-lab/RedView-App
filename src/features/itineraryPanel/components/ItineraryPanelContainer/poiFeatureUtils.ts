@@ -1,5 +1,6 @@
 import type { Itinerary, TimelineItem } from '../../types';
 import type { PoiFeature } from '@/features/poi/types';
+import { isAutoHotelOption } from '../../lib/schedule/poi-to-timeline';
 
 /**
  * Pure helpers for reconciling POI favorite flags between the timeline rows
@@ -76,7 +77,7 @@ export function mergePoiFeatureFavorites(
           row.osmId,
           row.durationMin != null && row.durationMin > 0 ? row.durationMin : null,
         );
-      } else if (row.favorite && rhythm?.pauseAtFavoritePois && row.poiCategory) {
+      } else if (row.favorite && rhythm?.pauseAtFavoritePois && row.poiCategory && !isAutoHotelOption(row)) {
         const catDuration = rhythm.poiPauseDurations[row.poiCategory];
         if (catDuration != null && catDuration > 0) {
           timelinePauseDurations.set(row.osmId, catDuration);

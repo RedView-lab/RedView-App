@@ -410,13 +410,18 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   );
   // Recherche, départ ou rythme modifiés depuis le dernier tri → « Re-trier ».
   const activePrediction = active ? getPrediction(active) : null;
+  const poiAutoSortSignature = useMemo(
+    () => (active ? buildPoiAutoSortSignature(active, activePrediction) : null),
+    [active, activePrediction],
+  );
   const poiAutoSortView = useMemo(() => {
     if (!active?.poiAutoSort) return null;
     return {
       summary: active.poiAutoSort.summary,
-      stale: active.poiAutoSort.signature !== buildPoiAutoSortSignature(active, activePrediction),
+      stale: active.poiAutoSort.signature !== poiAutoSortSignature,
     };
-  }, [active, activePrediction]);
+  }, [active?.poiAutoSort, poiAutoSortSignature]);
+  const poiAutoSortEnabled = Boolean(active?.poiAutoSortEnabled);
   const poiAutoSortDisabled = !active?.gpxRoute?.points?.length || poiFoundCount === 0;
 
   useItineraryMapActions({
@@ -819,6 +824,18 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     if (poiLoading) cancelSearchCorridor();
   }, [cancelSearchCorridor, historyRevision, poiLoading]);
 
+  // Toggle « Affiner les résultats » actif : re-trie dès que les entrées du
+  // dernier tri changent (POI rechargés, départ, prédiction…). Clé sur la
+  // signature courante : un tri impossible n'est pas relancé en boucle.
+  const { refreshPoiAutoSort } = poiHandlers;
+  const poiAutoSortNeedsRun = poiAutoSortEnabled
+    && !poiAutoSortDisabled
+    && !poiLoading
+    && (poiAutoSortView == null || poiAutoSortView.stale);
+  useEffect(() => {
+    if (poiAutoSortNeedsRun) refreshPoiAutoSort();
+  }, [poiAutoSortNeedsRun, poiAutoSortSignature, refreshPoiAutoSort]);
+
   const poiLoadDisabled = !hasGpxRoute || !hasEnabledCategories;
   // Sans catégorie cochée le bouton est simplement grisé : pas de message.
   const poiLoadDisabledReason = !hasGpxRoute
@@ -1122,7 +1139,8 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         poiLoadDisabled={poiLoadDisabled}
         poiLoadDisabledReason={poiLoadDisabledReason}
         poiSearchStale={poiSearchStale}
-        onAutoSortPois={poiHandlers.handleAutoSortPois}
+        poiAutoSortEnabled={poiAutoSortEnabled}
+        onTogglePoiAutoSort={poiHandlers.handleTogglePoiAutoSort}
         poiAutoSortDisabled={poiAutoSortDisabled || poiLoading}
         poiAutoSort={poiAutoSortView}
         selectedTimelineIds={selectedTimelineIds}

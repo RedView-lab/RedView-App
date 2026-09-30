@@ -90,7 +90,8 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     poiLoadDisabled,
     poiLoadDisabledReason,
     poiSearchStale,
-    onAutoSortPois,
+    poiAutoSortEnabled,
+    onTogglePoiAutoSort,
     poiAutoSortDisabled,
     poiAutoSort,
     routeLoading,
@@ -358,7 +359,8 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
             poiLoadDisabled={poiLoadDisabled}
             poiLoadDisabledReason={poiLoadDisabledReason}
             poiSearchStale={poiSearchStale}
-            onAutoSortPois={onAutoSortPois}
+            poiAutoSortEnabled={poiAutoSortEnabled}
+            onTogglePoiAutoSort={onTogglePoiAutoSort}
             poiAutoSortDisabled={poiAutoSortDisabled}
             poiAutoSort={poiAutoSort}
             poiLoading={poiLoading}

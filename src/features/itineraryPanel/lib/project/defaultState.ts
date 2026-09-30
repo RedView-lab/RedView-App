@@ -34,23 +34,27 @@ export const ALL_POI_CATEGORIES: PoiCategory[] = [
   'transport',
 ];
 
+/** Distance max. d'un POI à la trace (m) par défaut ; l'utilisateur peut élargir par catégorie. */
+export const DEFAULT_POI_DISTANCE_M = 20;
+
 export function createDefaultPoiState(): PoiState {
+  const distanceM = DEFAULT_POI_DISTANCE_M;
   return {
-    fountains: { enabled: true, distanceM: 40 },
-    toilets: { enabled: true, distanceM: 40 },
-    supermarkets: { enabled: true, distanceM: 40 },
-    gasStations: { enabled: true, distanceM: 40 },
-    bakeries: { enabled: true, distanceM: 40 },
-    fastFood: { enabled: true, distanceM: 40 },
-    cafes: { enabled: true, distanceM: 40 },
-    bars: { enabled: true, distanceM: 40 },
-    restaurants: { enabled: true, distanceM: 40 },
-    bikeShops: { enabled: true, distanceM: 40 },
-    hotels: { enabled: true, distanceM: 40 },
-    refuges: { enabled: true, distanceM: 40 },
-    passes: { enabled: false, distanceM: 40 },
-    health: { enabled: false, distanceM: 40 },
-    transport: { enabled: false, distanceM: 40 },
+    fountains: { enabled: true, distanceM },
+    toilets: { enabled: true, distanceM },
+    supermarkets: { enabled: true, distanceM },
+    gasStations: { enabled: true, distanceM },
+    bakeries: { enabled: true, distanceM },
+    fastFood: { enabled: true, distanceM },
+    cafes: { enabled: true, distanceM },
+    bars: { enabled: true, distanceM },
+    restaurants: { enabled: true, distanceM },
+    bikeShops: { enabled: true, distanceM },
+    hotels: { enabled: true, distanceM },
+    refuges: { enabled: true, distanceM },
+    passes: { enabled: false, distanceM },
+    health: { enabled: false, distanceM },
+    transport: { enabled: false, distanceM },
   };
 }
 

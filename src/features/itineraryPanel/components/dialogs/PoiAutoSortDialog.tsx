@@ -33,8 +33,8 @@ interface PoiAutoSortDialogProps {
   summary: PoiAutoSortSummary | null;
   /** Recherche, départ ou rythme modifiés depuis le dernier tri. */
   stale: boolean;
-  runDisabled: boolean;
-  onRun: () => void;
+  /** Toggle « Affiner les résultats » éteint : propose de l'activer. */
+  onEnable?: () => void;
 }
 
 function readAppScale(el: HTMLElement | null): number {
@@ -59,8 +59,7 @@ export function PoiAutoSortDialog({
   onClose,
   summary,
   stale,
-  runDisabled,
-  onRun,
+  onEnable,
 }: PoiAutoSortDialogProps) {
   const { t } = useAppI18n();
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -217,7 +216,7 @@ export function PoiAutoSortDialog({
               </div>
               {stale ? (
                 <div className="rvi-autosort-dialog__note rvi-autosort-dialog__note--warn">
-                  {t('Les POI, le départ ou le rythme ont changé depuis ce tri : relancez-le.')}
+                  {t('Les POI, le départ ou le rythme ont changé : le tri sera mis à jour.')}
                 </div>
               ) : null}
               {!summary.usedPrediction ? (
@@ -268,15 +267,16 @@ export function PoiAutoSortDialog({
           <button type="button" className="rvi-autosort-dialog__btn" onClick={onClose}>
             {t('Fermer')}
           </button>
-          <button
-            type="button"
-            className="rvi-autosort-dialog__btn rvi-autosort-dialog__btn--primary"
-            onClick={onRun}
-            disabled={runDisabled}
-          >
-            <IconSparkles size={16} />
-            {summary ? t('Relancer le tri') : t('Lancer le tri')}
-          </button>
+          {onEnable ? (
+            <button
+              type="button"
+              className="rvi-autosort-dialog__btn rvi-autosort-dialog__btn--primary"
+              onClick={onEnable}
+            >
+              <IconSparkles size={16} />
+              {t('Activer le tri')}
+            </button>
+          ) : null}
         </footer>
       </div>
     </div>,

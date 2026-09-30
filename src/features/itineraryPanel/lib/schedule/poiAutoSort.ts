@@ -16,14 +16,13 @@ import { POI_LABELS, type PoiFeature } from '@/features/poi/types';
 
 import { parseStartReference } from '../../sections/timeline/TimelineTimelineView/utils';
 import type { Itinerary, PoiCategory as PanelPoiCategory, PoiState, TimelineItem } from '../../types';
-import { normalizeItineraryRhythmState } from '../project/defaultState';
+import { DEFAULT_POI_DISTANCE_M, normalizeItineraryRhythmState } from '../project/defaultState';
 import { cumulativeRouteLengthsM, projectDistanceAlongRouteM, roundDistanceKm } from '../routes';
 import { buildPauseAwareSchedule } from './pauseAwareSchedule';
 import { FEATURE_TO_PANEL_POI } from './poi-to-timeline';
 
 /** Vitesse de repli quand aucune prédiction n'est disponible. */
 const FALLBACK_SPEED_MS = 18 / 3.6;
-const DEFAULT_MAX_LATERAL_M = 40;
 
 export interface PoiAutoSortRun {
   result: AutoSortResult;
@@ -194,7 +193,7 @@ export function computePoiAutoSort(
     routePoints,
     time,
     manualFavoriteIds,
-    maxLateralMFor: (feature) => entryFor(feature)?.distanceM ?? DEFAULT_MAX_LATERAL_M,
+    maxLateralMFor: (feature) => entryFor(feature)?.distanceM ?? DEFAULT_POI_DISTANCE_M,
   });
   return { result, usedPrediction: usablePrediction != null };
 }
@@ -241,11 +240,8 @@ export function upsertPoiTimelineRow(
   return row;
 }
 
-/**
- * Remplace les favoris auto précédents par ceux de `picks`. Les favoris
- * manuels ne sont jamais touchés. Mute `itinerary` (brouillon).
- */
-export function applyPoiAutoSort(itinerary: Itinerary, picks: readonly AutoSortPick[]): void {
+/** Retire les favoris posés par le tri auto ; les favoris manuels restent. Mute `itinerary`. */
+export function clearPoiAutoSortFavorites(itinerary: Itinerary): void {
   for (const row of itinerary.timeline) {
     if (row.favoriteSource !== 'auto') continue;
     row.favorite = false;
@@ -261,6 +257,14 @@ export function applyPoiAutoSort(itinerary: Itinerary, picks: readonly AutoSortP
       return next;
     });
   }
+}
+
+/**
+ * Remplace les favoris auto précédents par ceux de `picks`. Les favoris
+ * manuels ne sont jamais touchés. Mute `itinerary` (brouillon).
+ */
+export function applyPoiAutoSort(itinerary: Itinerary, picks: readonly AutoSortPick[]): void {
+  clearPoiAutoSortFavorites(itinerary);
 
   const routePoints = itinerary.gpxRoute?.points ?? [];
   const cumulative = routePoints.length >= 2 ? cumulativeRouteLengthsM(routePoints) : null;

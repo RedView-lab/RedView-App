@@ -6,6 +6,7 @@ import type { PredictionResult } from '@/features/fitPredictor';
 import {
   applyPoiAutoSort,
   buildPoiAutoSortSignature,
+  clearPoiAutoSortFavorites,
   computePoiAutoSort,
   FEATURE_TO_PANEL_POI,
   upsertPoiTimelineRow,
@@ -122,16 +123,14 @@ export function useItineraryPoiHandlers({
   }, [updateActive]);
 
   /**
-   * Tri automatique : remplace les favoris « auto » par une nouvelle
-   * sélection (les favoris manuels sont conservés). Une seule entrée
-   * d'historique, donc annulable d'un coup.
+   * Tri automatique : calcule une nouvelle sélection de favoris « auto » pour
+   * l'itinéraire (les favoris manuels sont conservés) et renvoie la mutation
+   * qui l'applique, ou null si rien n'est triable (pas de trace / de POI).
    */
-  const handleAutoSortPois = useCallback((): boolean => {
-    const itinerary = activeItineraryRef.current;
-    if (!itinerary) return false;
+  const buildPoiAutoSortMutation = useCallback((itinerary: Itinerary) => {
     const prediction = getPrediction?.(itinerary) ?? itinerary.prediction ?? null;
     const run = computePoiAutoSort(itinerary, prediction);
-    if (!run) return false;
+    if (!run) return null;
 
     const summary: PoiAutoSortSummary = {
       total: run.result.picks.length,
@@ -140,14 +139,48 @@ export function useItineraryPoiHandlers({
       usedPrediction: run.usedPrediction,
     };
     const signature = buildPoiAutoSortSignature(itinerary, prediction);
-    const apply = (it: Itinerary) => {
+    return (it: Itinerary) => {
       applyPoiAutoSort(it, run.result.picks);
       it.poiAutoSort = { signature, summary, ranAt: new Date().toISOString() };
     };
+  }, [getPrediction]);
+
+  /**
+   * Toggle « Affiner les résultats » : activé, trie tout de suite si des POI
+   * sont chargés (sinon au prochain chargement) ; désactivé, retire les
+   * favoris auto. Une seule entrée d'historique, donc annulable d'un coup.
+   */
+  const handleTogglePoiAutoSort = useCallback((enabled: boolean) => {
+    const itinerary = activeItineraryRef.current;
+    if (!itinerary) return;
+    const sort = enabled ? buildPoiAutoSortMutation(itinerary) : null;
+    const apply = (it: Itinerary) => {
+      if (enabled) {
+        it.poiAutoSortEnabled = true;
+        sort?.(it);
+        return;
+      }
+      delete it.poiAutoSortEnabled;
+      clearPoiAutoSortFavorites(it);
+      delete it.poiAutoSort;
+    };
     if (updateActiveWithHistory) updateActiveWithHistory(apply);
     else updateActive(apply);
+  }, [activeItineraryRef, buildPoiAutoSortMutation, updateActive, updateActiveWithHistory]);
+
+  /**
+   * Re-tri quand le toggle est actif et que les entrées du dernier tri ont
+   * changé (POI rechargés, départ, prédiction…). Hors historique : c'est la
+   * conséquence d'une action déjà annulable. Renvoie false si rien n'a été trié.
+   */
+  const refreshPoiAutoSort = useCallback((): boolean => {
+    const itinerary = activeItineraryRef.current;
+    if (!itinerary?.poiAutoSortEnabled) return false;
+    const sort = buildPoiAutoSortMutation(itinerary);
+    if (!sort) return false;
+    updateActive(sort);
     return true;
-  }, [activeItineraryRef, getPrediction, updateActive, updateActiveWithHistory]);
+  }, [activeItineraryRef, buildPoiAutoSortMutation, updateActive]);
 
   const handlePoiStartHere = useCallback((feature: PoiFeature) => {
     const hasItinerary = (project?.itineraries?.length ?? 0) > 0;
@@ -385,7 +418,8 @@ export function useItineraryPoiHandlers({
   return {
     resolvePoiPopupState,
     handlePoiFavoriteToggle,
-    handleAutoSortPois,
+    handleTogglePoiAutoSort,
+    refreshPoiAutoSort,
     handlePoiStartHere,
     handlePoiAddWaypoint,
     handlePoiFinishHere,

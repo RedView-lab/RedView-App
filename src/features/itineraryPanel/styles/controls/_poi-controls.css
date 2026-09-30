@@ -40,36 +40,30 @@
   border: 1px solid var(--rvi-border);
 }
 
-/* Tri automatique des favoris : bouton (flexible) + bouton « critères ». */
-.rvi-poi-autosort {
-  display: flex;
-  align-items: stretch;
+/* Toggle « Affiner les résultats (beta) » : tri auto des favoris.
+   Libellé flexible, compteur discret puis bouton « critères » (ⓘ). */
+.rvi-poi-refine {
   gap: 8px;
 }
-.rvi-poi-autosort__main {
+.rvi-poi-refine .rvi-toggle-row__text {
   flex: 1 1 auto;
-  min-width: 0;
 }
-.rvi-poi-autosort__info {
-  display: inline-flex;
+.rvi-poi-refine__count {
   flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  padding: 0;
-  border: none;
-  border-radius: 6px;
-  background: var(--rvi-bg-chip);
+  font-size: 11px;
+  font-weight: 500;
   color: var(--rvi-text-dim);
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
 }
-.rvi-poi-autosort__info:hover,
-.rvi-poi-autosort__info[aria-expanded='true'] {
-  background: var(--rvi-bg-chip-hover);
+.rvi-poi-refine__info {
+  flex: 0 0 20px;
+  color: var(--rvi-text-dim);
+}
+.rvi-poi-refine__info:hover,
+.rvi-poi-refine__info[aria-expanded='true'] {
   color: var(--rvi-text);
 }
-.rvi-poi-autosort__info:focus-visible {
+.rvi-poi-refine__info:focus-visible {
   outline: 2px solid rgba(255, 255, 255, 0.6);
   outline-offset: 1px;
 }

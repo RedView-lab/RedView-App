@@ -3249,28 +3249,16 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "({{count}} POIs found)"
   },
   {
-    "fr": "Tri auto des favoris",
-    "en": "Auto-pick favorites"
+    "fr": "({{total}} dont {{pause}} de pause)",
+    "en": "({{total}} incl. {{pause}} of breaks)"
   },
   {
     "fr": "Relancer la recherche",
     "en": "Search again"
   },
   {
-    "fr": "Re-trier les favoris",
-    "en": "Re-pick favorites"
-  },
-  {
     "fr": "{{count}} favoris auto",
     "en": "{{count}} auto favorites"
-  },
-  {
-    "fr": "{{count}} favoris auto mis à jour",
-    "en": "{{count}} auto favorites updated"
-  },
-  {
-    "fr": "Tri en cours…",
-    "en": "Picking…"
   },
   {
     "fr": "Critères du tri automatique",
@@ -3297,8 +3285,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Before gap"
   },
   {
-    "fr": "Les POI, le départ ou le rythme ont changé depuis ce tri : relancez-le.",
-    "en": "POIs, start or pace changed since this pick: run it again."
+    "fr": "Les POI, le départ ou le rythme ont changé : le tri sera mis à jour.",
+    "en": "POIs, start or pace changed: the pick will be updated."
   },
   {
     "fr": "Pas d'eau",
@@ -3373,12 +3361,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "If the next POI of the same type is more than {{hours}}h away, the last one before the gap is always added."
   },
   {
-    "fr": "Relancer le tri",
-    "en": "Run again"
-  },
-  {
-    "fr": "Lancer le tri",
-    "en": "Run"
+    "fr": "Activer le tri",
+    "en": "Turn on"
   },
   {
     "fr": "Heures estimées à 18 km/h : calculez le rythme pour un tri plus juste.",

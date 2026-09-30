@@ -546,6 +546,8 @@ export interface Itinerary {
    * « Relancer la recherche ». Voir `buildPoiSearchSignature`.
    */
   poiSearchSignature?: string;
+  /** Toggle « Affiner les résultats » : le tri auto des favoris suit les POI chargés. */
+  poiAutoSortEnabled?: boolean;
   /** Dernier tri automatique des favoris (bilan affiché dans la pop-in). */
   poiAutoSort?: PoiAutoSortState;
   /** BRouter-backed rideability audit findings for this itinerary. */
@@ -720,8 +722,10 @@ export interface ItineraryPanelProps {
   poiLoadDisabledReason?: string | null;
   /** POI chargés avec d'autres catégories / distances que les réglages courants. */
   poiSearchStale?: boolean;
-  /** Tri automatique : pré-sélection de favoris d'après des règles horaires. Renvoie false si rien n'a pu être trié. */
-  onAutoSortPois?: () => boolean;
+  /** Tri automatique (toggle « Affiner les résultats ») : pré-sélection de favoris d'après des règles horaires. */
+  poiAutoSortEnabled?: boolean;
+  onTogglePoiAutoSort?: (enabled: boolean) => void;
+  /** Rien à trier pour l'instant (pas de trace / de POI chargés, recherche en cours). */
   poiAutoSortDisabled?: boolean;
   /** Dernier tri auto de l'itinéraire actif (null = jamais lancé) ; `stale` si ses entrées ont changé. */
   poiAutoSort?: { summary: PoiAutoSortSummary; stale: boolean } | null;

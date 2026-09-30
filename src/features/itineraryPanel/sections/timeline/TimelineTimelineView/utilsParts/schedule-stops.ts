@@ -1,5 +1,6 @@
 import { elapsedSecondsAtDistance } from '@/features/centerPanel/flyover/playback';
 import type { PredictionResult } from '@/features/fitPredictor';
+import { isAutoHotelOption } from '../../../../lib/schedule/poi-to-timeline';
 import type { RhythmState, TimelineItem } from '../../../../types';
 import type { StartReference, TimedAutoPause, TimedTimelineItem, TimelineStopAnchor } from '../types';
 
@@ -78,6 +79,7 @@ export function resolveFavoritePoiPauseDurationMin(
   }
 
   if (!rhythm?.pauseAtFavoritePois || !item.favorite || !item.poiCategory) return 0;
+  if (isAutoHotelOption(item)) return 0;
 
   const durationMin = rhythm.poiPauseDurations[item.poiCategory];
   if (

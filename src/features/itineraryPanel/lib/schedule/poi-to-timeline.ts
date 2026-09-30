@@ -84,6 +84,15 @@ export const FEATURE_TO_PANEL_POI: Partial<Record<FeaturePoiCategory, PanelPoiCa
 };
 
 /**
+ * Hôtel retenu par le tri auto : une option pour la nuit parmi plusieurs
+ * (jusqu'à 5 par nuit), pas un arrêt. Il ne pose donc pas de pause, même
+ * quand les favoris en marquent une.
+ */
+export function isAutoHotelOption(item: Pick<TimelineItem, 'favoriteSource' | 'autoReason'>): boolean {
+  return item.favoriteSource === 'auto' && item.autoReason === 'hotel';
+}
+
+/**
  * Convert POI features into ordered TimelineItems with `kind: 'poi'`.
  *
  * Items are sorted by their projected distance along the route so they

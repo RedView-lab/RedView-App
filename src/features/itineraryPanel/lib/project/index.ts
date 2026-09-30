@@ -4,6 +4,7 @@ export {
   ROUTE_PROFILE_PRESETS,
   createDefaultPoiState,
   createImportedPoiState,
+  DEFAULT_POI_DISTANCE_M,
   DEFAULT_POI_PAUSE_DURATIONS,
   normalizeItineraryPoiState,
   createDefaultRhythmState,
