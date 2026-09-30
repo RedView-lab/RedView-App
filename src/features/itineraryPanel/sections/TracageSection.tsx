@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useAppI18n } from '@/shared/i18n';
+import { isFootDiscipline, type FootDiscipline, type SportDiscipline } from '@/shared/lib/discipline';
 import type { PrioritiesState, RoadPreference, RoadTypesState, RouteProfile } from '../types';
 import {
   IconBikeShop,
@@ -12,6 +13,8 @@ import {
   IconTrashFigma,
   IconRepeatFigma,
   IconSaveFigma,
+  IconRun,
+  IconTrail,
 } from '../components/iconsFigma';
 import { PortalDropdown } from '../components/controls/PortalDropdown';
 import {
@@ -24,6 +27,8 @@ import {
 } from '../lib/project/syncTracageParams';
 import {
   ROUTE_PROFILE_PRESETS,
+  isActivityPresetId,
+  isFootActivity,
   isRoadTypesCustomized,
 } from '../lib/project/profilePresets';
 import {
@@ -68,6 +73,41 @@ export interface TracageSectionProps {
   recalculateProgress?: number | null;
   /** Whether the recalculate button should be shown (GPX import with waypoints). */
   showRecalculateTrace?: boolean;
+  /** Sport of the itinerary: Trail / Running route on the pedestrian network. */
+  discipline?: SportDiscipline;
+  onChangeDiscipline?: (discipline: SportDiscipline) => void;
+}
+
+const ACTIVITY_LABELS: Record<ActivityType, string> = {
+  road: 'Cyclisme sur route',
+  'gravel-default': 'Gravel',
+  mtb: 'VTT',
+  running: 'Running',
+  trail: 'Trail',
+};
+
+const BIKE_ACTIVITIES: ActivityType[] = ['road', 'gravel-default', 'mtb'];
+const FOOT_ACTIVITIES: FootDiscipline[] = ['running', 'trail'];
+
+function ActivityIcon({ activity, size }: { activity: ActivityType; size: number }) {
+  if (activity === 'trail') return <IconTrail size={size} />;
+  if (activity === 'running') return <IconRun size={size} />;
+  return <IconBikeShop size={size} />;
+}
+
+/** Built-in preset behind the active profile (a saved profile keeps its base preset). */
+function resolveActivityKey(
+  baseId: string,
+  saved: SavedCustomProfile | undefined,
+  footDiscipline: FootDiscipline | null,
+): ActivityType {
+  if (isActivityPresetId(baseId)) return baseId;
+  if (isActivityPresetId(saved?.basePresetId)) return saved.basePresetId;
+  return footDiscipline ?? 'road';
+}
+
+function disciplineForActivity(activity: ActivityType): SportDiscipline {
+  return isFootActivity(activity) ? activity : 'bike';
 }
 
 const ROAD_PREF_OPTIONS: { value: RoadPreference; label: string }[] = [
@@ -80,6 +120,8 @@ const ROAD_PREF_OPTIONS: { value: RoadPreference; label: string }[] = [
 const TOLERANCE_OPTIONS = [0, 5, 10, 15, 20, 25, 30, 40, 50, 75, 100];
 
 const SLOPE_OPTIONS = [8, 10, 12, 15, 20, 25];
+/** On foot, mountain paths routinely exceed 25 %. */
+const FOOT_SLOPE_OPTIONS = [...SLOPE_OPTIONS, 30, 40, 50];
 
 const SURFACES: { id: SurfaceType; label: string; pct: number }[] = [
   { id: 'tarmac', label: 'Tarmac', pct: 0 },
@@ -104,8 +146,11 @@ export function TracageSection({
   recalculateLoading,
   recalculateProgress,
   showRecalculateTrace,
+  discipline = 'bike',
+  onChangeDiscipline,
 }: TracageSectionProps) {
   const { t } = useAppI18n();
+  const footDiscipline = isFootDiscipline(discipline) ? discipline : null;
 
   // Collapsible additional params (smooth accordion)
   const [paramsOpen, setParamsOpen] = useState(false);
@@ -137,29 +182,36 @@ export function TracageSection({
 
   // Base profile id currently active, derived synchronously to avoid 1-frame stale state
   const effectiveBaseId = useMemo(() => {
-    if (
-      activeProfileId &&
-      (ROUTE_PROFILE_PRESETS[activeProfileId] || savedProfiles.some((p) => p.id === activeProfileId))
-    ) {
-      return activeProfileId;
+    const known = (id: string | undefined): id is string =>
+      !!id && (!!ROUTE_PROFILE_PRESETS[id] || savedProfiles.some((p) => p.id === id));
+    const candidate = known(activeProfileId)
+      ? activeProfileId
+      : known(roadTypes.activityType)
+        ? roadTypes.activityType
+        : 'road';
+    // The discipline decides the routing network: a built-in preset of the
+    // other family (older projects) falls back to the discipline's preset.
+    if (isActivityPresetId(candidate) && isFootActivity(candidate) !== !!footDiscipline) {
+      return footDiscipline ?? 'road';
     }
-    if (roadTypes.activityType && (ROUTE_PROFILE_PRESETS[roadTypes.activityType] || savedProfiles.some((p) => p.id === roadTypes.activityType))) {
-      return roadTypes.activityType;
-    }
-    return 'road';
-  }, [activeProfileId, roadTypes.activityType, savedProfiles]);
+    return candidate;
+  }, [activeProfileId, footDiscipline, roadTypes.activityType, savedProfiles]);
+
+  // Built-in preset behind the active profile
+  const activeBaseSaved = savedProfiles.find((p) => p.id === effectiveBaseId);
+  const basePresetKey = resolveActivityKey(effectiveBaseId, activeBaseSaved, footDiscipline);
 
   // Active surface preference range [min, max]
   const currentSurfaceMin: SurfaceType =
     roadTypes.surfaceMin ??
-    (effectiveBaseId === 'mtb'
+    (effectiveBaseId === 'mtb' || effectiveBaseId === 'trail'
       ? 'paved'
       : 'tarmac');
 
   const currentSurfaceMax: SurfaceType =
     roadTypes.surfaceMax ??
     roadTypes.surfacePreference ??
-    (effectiveBaseId === 'mtb'
+    (effectiveBaseId === 'mtb' || effectiveBaseId === 'trail'
       ? 'other'
       : effectiveBaseId === 'road'
         ? 'tarmac'
@@ -177,16 +229,6 @@ export function TracageSection({
   const currentTracingMode: TracingModeType = roadTypes.tracingMode ?? 'vitesse';
 
   // Compare roadTypes against base profile
-  const activeBaseSaved = savedProfiles.find((p) => p.id === effectiveBaseId);
-  const basePresetKey: ActivityType =
-    effectiveBaseId === 'road'
-      ? 'road'
-      : effectiveBaseId === 'gravel-default'
-        ? 'gravel-default'
-        : effectiveBaseId === 'mtb'
-          ? 'mtb'
-          : (activeBaseSaved?.basePresetId as ActivityType) || 'road';
-
   const expectedRoadTypes = useMemo(() => {
     if (activeBaseSaved) {
       return activeBaseSaved.roadTypes;
@@ -206,17 +248,16 @@ export function TracageSection({
     ? activeBaseSaved.name
     : isCustomized
       ? nextProfileName
-      : effectiveBaseId === 'road'
-        ? t('Cyclisme sur route')
-        : effectiveBaseId === 'mtb'
-          ? t('VTT')
-          : t('Gravel');
+      : t(ACTIVITY_LABELS[basePresetKey]);
 
   const currentActivityIcon = activeBaseSaved || isCustomized ? (
     <IconSlidersFigma size={16} />
   ) : (
-    <IconBikeShop size={16} />
+    <ActivityIcon activity={basePresetKey} size={16} />
   );
+
+  // Built-in preset highlighted in the dropdown (none while a custom profile is active).
+  const selectedPresetId = !activeBaseSaved && !isCustomized ? basePresetKey : null;
 
   // Surface slider position and smooth dragging
   const sliderWrapRef = useRef<HTMLDivElement>(null);
@@ -258,6 +299,8 @@ export function TracageSection({
       applyRoadUpdates(syncResult.roadTypes);
     }
     onChangeProfile?.(activityId);
+    const nextDiscipline = disciplineForActivity(activityId);
+    if (nextDiscipline !== discipline) onChangeDiscipline?.(nextDiscipline);
     setActivityOpen(false);
   };
 
@@ -268,18 +311,13 @@ export function TracageSection({
       applyRoadUpdates(profile.roadTypes);
     }
     onChangeProfile?.(profile.id);
+    const nextDiscipline = disciplineForActivity(resolveActivityKey(profile.id, profile, null));
+    if (nextDiscipline !== discipline) onChangeDiscipline?.(nextDiscipline);
     setActivityOpen(false);
   };
 
   const handleTracingModeSelect = (mode: TracingModeType) => {
-    const currentActivity: ActivityType =
-      effectiveBaseId === 'road'
-        ? 'road'
-        : effectiveBaseId === 'gravel-default'
-          ? 'gravel-default'
-          : effectiveBaseId === 'mtb'
-            ? 'mtb'
-            : (activeBaseSaved?.basePresetId as ActivityType) || 'road';
+    const currentActivity = basePresetKey;
     const syncResult = syncTracageOnTracingModeChange(
       mode,
       currentActivity,
@@ -297,15 +335,7 @@ export function TracageSection({
   };
 
   const handleSurfaceRangeSelect = (surfaceMin: SurfaceType, surfaceMax: SurfaceType) => {
-    const currentActivity: ActivityType =
-      effectiveBaseId === 'road'
-        ? 'road'
-        : effectiveBaseId === 'gravel-default'
-          ? 'gravel-default'
-          : effectiveBaseId === 'mtb'
-            ? 'mtb'
-            : (activeBaseSaved?.basePresetId as ActivityType) || 'road';
-    const syncResult = syncTracageOnSurfaceRangeChange(surfaceMin, surfaceMax, currentActivity);
+    const syncResult = syncTracageOnSurfaceRangeChange(surfaceMin, surfaceMax, basePresetKey);
 
     if (onBatchChangeRoadTypes) {
       onBatchChangeRoadTypes(syncResult.roadTypes);
@@ -332,14 +362,7 @@ export function TracageSection({
       return;
     }
 
-    const presetKey: ActivityType =
-      effectiveBaseId === 'road'
-        ? 'road'
-        : effectiveBaseId === 'gravel-default'
-          ? 'gravel-default'
-          : effectiveBaseId === 'mtb'
-            ? 'mtb'
-            : 'road';
+    const presetKey = basePresetKey;
     const syncResult = syncTracageOnActivityChange(
       presetKey,
       currentTracingMode,
@@ -426,7 +449,7 @@ export function TracageSection({
     setSavedProfiles(updated);
     onDeleteProfile?.(id);
     if (effectiveBaseId === id) {
-      handleActivitySelect('road');
+      handleActivitySelect(footDiscipline ?? 'road');
     }
   };
 
@@ -627,31 +650,32 @@ export function TracageSection({
             minWidth={140}
             align="left"
           >
-            {/* Standard 3 Presets: Cyclisme sur route, Gravel, VTT */}
-            <button
-              type="button"
-              className={`rv-dropdown__item${!activeBaseSaved && !isCustomized && effectiveBaseId === 'road' ? ' is-selected' : ''}`}
-              onClick={() => handleActivitySelect('road')}
-            >
-              <IconBikeShop size={15} />
-              <span>{t('Cyclisme sur route')}</span>
-            </button>
-            <button
-              type="button"
-              className={`rv-dropdown__item${!activeBaseSaved && !isCustomized && effectiveBaseId === 'gravel-default' ? ' is-selected' : ''}`}
-              onClick={() => handleActivitySelect('gravel-default')}
-            >
-              <IconBikeShop size={15} />
-              <span>{t('Gravel')}</span>
-            </button>
-            <button
-              type="button"
-              className={`rv-dropdown__item${!activeBaseSaved && !isCustomized && effectiveBaseId === 'mtb' ? ' is-selected' : ''}`}
-              onClick={() => handleActivitySelect('mtb')}
-            >
-              <IconBikeShop size={15} />
-              <span>{t('VTT')}</span>
-            </button>
+            {/* Bike presets: Cyclisme sur route, Gravel, VTT */}
+            {BIKE_ACTIVITIES.map((activity) => (
+              <button
+                key={activity}
+                type="button"
+                className={`rv-dropdown__item${selectedPresetId === activity ? ' is-selected' : ''}`}
+                onClick={() => handleActivitySelect(activity)}
+              >
+                <ActivityIcon activity={activity} size={15} />
+                <span>{t(ACTIVITY_LABELS[activity])}</span>
+              </button>
+            ))}
+
+            {/* Foot presets: Running (route) & Trail, on the pedestrian network */}
+            <div className="rv-dropdown__divider" />
+            {FOOT_ACTIVITIES.map((activity) => (
+              <button
+                key={activity}
+                type="button"
+                className={`rv-dropdown__item${selectedPresetId === activity ? ' is-selected' : ''}`}
+                onClick={() => handleActivitySelect(activity)}
+              >
+                <ActivityIcon activity={activity} size={15} />
+                <span>{t(ACTIVITY_LABELS[activity])}</span>
+              </button>
+            ))}
 
             {/* Current in-progress draft profile before saving */}
             {isCustomized && !activeBaseSaved && (
@@ -940,11 +964,12 @@ export function TracageSection({
                 <SlopeParamItem
                   label={t('Pentes max.')}
                   value={roadTypes.maxSlopePercent ?? 12}
+                  options={footDiscipline ? FOOT_SLOPE_OPTIONS : SLOPE_OPTIONS}
                   onChange={(val) => onChangeRoadType?.('maxSlopePercent', val)}
                 />
               </div>
 
-              {/* Row 2: Axes majeurs & Voies cyclables */}
+              {/* Row 2: Axes majeurs & Voies cyclables (trottoirs à pied) */}
               <div className="rvi-tracage__params-row">
                 <ParamDropdownItem
                   label={t('Axes majeurs')}
@@ -952,7 +977,7 @@ export function TracageSection({
                   onChange={(val) => onChangeRoadType?.('majorRoads', val)}
                 />
                 <ParamDropdownItem
-                  label={t('Voies cyclables')}
+                  label={footDiscipline ? t('Trottoirs & voies piétonnes') : t('Voies cyclables')}
                   value={roadTypes.bikeLanes ?? 'tolerate'}
                   onChange={(val) => onChangeRoadType?.('bikeLanes', val)}
                 />
@@ -1140,10 +1165,12 @@ function ParamDropdownItem({
 function SlopeParamItem({
   label,
   value,
+  options,
   onChange,
 }: {
   label: string;
   value: number;
+  options: number[];
   onChange: (val: number) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -1173,7 +1200,7 @@ function SlopeParamItem({
         align="right"
         estimatedHeight={180}
       >
-        {SLOPE_OPTIONS.map((val) => (
+        {options.map((val) => (
           <button
             key={val}
             type="button"

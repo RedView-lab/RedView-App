@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { useAppI18n } from '@/shared/i18n';
+import { normalizeDiscipline } from '@/shared/lib/discipline';
 import {
   createOverlayStatus,
   flyToLocation,
@@ -22,12 +23,14 @@ import { useTraceToolOptional } from '@/features/centerPanel/tracer';
 import { useForbiddenZoneToolOptional } from '@/features/centerPanel/forbiddenZones';
 import { usePredictionStoreOptional } from '../../context/PredictionStore';
 import { useItineraryUndoRedoShortcut } from '../../hooks/useItineraryUndoRedoShortcut';
-import { DEFAULT_PROFILES, getProfilePreset, resolveProfilePresetId } from '../../lib/project';
-import type { TimelineFilterState } from '../../sections/timeline/TimelineFilters';
 import {
-  syncTracageOnActivityChange,
-  type ActivityType,
-} from '../../lib/project/syncTracageParams';
+  DEFAULT_PROFILES,
+  getProfilePreset,
+  isActivityPresetId,
+  resolveProfilePresetId,
+} from '../../lib/project';
+import type { TimelineFilterState } from '../../sections/timeline/TimelineFilters';
+import { syncTracageOnActivityChange } from '../../lib/project/syncTracageParams';
 import {
   getSavedCustomProfiles,
   saveCustomProfileToStorage,
@@ -44,6 +47,7 @@ import { deleteProjectItineraryFitFiles } from '@/shared/utils/projects';
 import type {
   ItineraryProject,
   PanelMode,
+  ProjectSaveStatus,
   PrioritiesState,
   RhythmState,
   RoadTypesState,
@@ -68,6 +72,7 @@ interface ItineraryPanelContainerProps {
   isResizing?: boolean;
   isReturningToBrowser?: boolean;
   onBackToHome?: () => void;
+  onSaveProject?: () => Promise<ItineraryProject | null>;
   pausesEnabled?: boolean;
   waypointsEnabled?: boolean;
   poisRouteEnabled?: boolean;
@@ -91,6 +96,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   isResizing,
   isReturningToBrowser,
   onBackToHome,
+  onSaveProject,
   pausesEnabled,
   waypointsEnabled,
   poisRouteEnabled,
@@ -119,6 +125,8 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const addButtonRef = useRef<HTMLButtonElement | null>(null);
   const [pendingCorridorFor, setPendingCorridorFor] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<ProjectSaveStatus>('idle');
+  const saveStatusTimerRef = useRef<number | null>(null);
   const { t } = useAppI18n();
 
   const active = useMemo(
@@ -159,6 +167,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     map,
     routeTraceWidthPx: project.controlPanel?.routes?.traceWidthPx ?? 8,
     routesEnabled: project.controlPanel?.toggles?.routesEnabled ?? true,
+    surfaceFilter: project.analysis?.surfaceFilter ?? 'all',
   });
 
 
@@ -780,6 +789,48 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     return [...DEFAULT_PROFILES, ...customItems];
   }, [savedCustomProfiles]);
 
+  useEffect(() => () => {
+    if (saveStatusTimerRef.current != null) window.clearTimeout(saveStatusTimerRef.current);
+  }, []);
+
+  const handleSaveProject = useCallback(async () => {
+    if (!onSaveProject || saveStatus === 'saving') return;
+    if (saveStatusTimerRef.current != null) {
+      window.clearTimeout(saveStatusTimerRef.current);
+      saveStatusTimerRef.current = null;
+    }
+    setSaveStatus('saving');
+    let nextStatus: ProjectSaveStatus;
+    try {
+      const saved = await onSaveProject();
+      if (saved) {
+        setProject((p) => ({ ...p, savedAt: saved.savedAt, sizeBytes: saved.sizeBytes }));
+      }
+      nextStatus = 'saved';
+    } catch (error) {
+      console.error('[ItineraryPanel] project save failed', error);
+      nextStatus = 'error';
+    }
+    setSaveStatus(nextStatus);
+    saveStatusTimerRef.current = window.setTimeout(() => {
+      saveStatusTimerRef.current = null;
+      setSaveStatus('idle');
+    }, nextStatus === 'error' ? 4000 : 2000);
+  }, [onSaveProject, saveStatus, setProject]);
+
+  const handleSaveProjectRef = useRef(handleSaveProject);
+  handleSaveProjectRef.current = handleSaveProject;
+  useEffect(() => {
+    if (!onSaveProject) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== 's') return;
+      event.preventDefault();
+      void handleSaveProjectRef.current();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onSaveProject]);
+
   return (
     <>
       <ItineraryPanel
@@ -790,6 +841,8 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         onResizeStart={onResizeStart}
         isReturningToBrowser={isReturningToBrowser}
         onBackToHome={onBackToHome}
+        onSaveProject={onSaveProject ? () => { void handleSaveProject(); } : undefined}
+        saveStatus={saveStatus}
         onShareProject={() => { }}
         onRenameProject={(next) => setProject((p) => ({ ...p, name: next }))}
         onSelectItinerary={(id) =>
@@ -847,9 +900,8 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
               if (preset) {
                 const currentMode = copy.roadTypes.tracingMode ?? 'vitesse';
                 const currentTolerance = copy.roadTypes.surfaceTolerance ?? 10;
-                const isActivityType = id === 'road' || id === 'gravel-default' || id === 'mtb';
-                if (isActivityType) {
-                  const sync = syncTracageOnActivityChange(id as ActivityType, currentMode, currentTolerance);
+                if (isActivityPresetId(id)) {
+                  const sync = syncTracageOnActivityChange(id, currentMode, currentTolerance);
                   if (sync.priorities) {
                     copy.priorities = { ...copy.priorities, ...sync.priorities };
                   }
@@ -870,6 +922,22 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
               return copy;
             }),
           }));
+        }}
+        onChangeDiscipline={(discipline) => {
+          const current = project.itineraries.find(
+            (it) => it.id === project.activeItineraryId,
+          );
+          if (!current || normalizeDiscipline(current.discipline) === discipline) return;
+          // Another engine produces the prediction: drop the old one and let
+          // the fit runtime recompute it when the rhythm was already set up.
+          const shouldRecompute = current.rhythmConfigured === true || current.prediction != null;
+          updateActive((it) => {
+            it.discipline = discipline;
+            it.prediction = undefined;
+            if (it.metrics) it.metrics.durationSec = undefined;
+            if (shouldRecompute) it.pendingFitRecompute = true;
+          });
+          predictionStore?.setPrediction(current.id, null);
         }}
         onUndo={() => {
           cancelRouteRequest();

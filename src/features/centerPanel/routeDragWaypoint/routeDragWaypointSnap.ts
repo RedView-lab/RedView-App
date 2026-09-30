@@ -31,6 +31,95 @@ export interface ContinuousRouteProjection {
  * onto the polyline in screen space. Glides smoothly along segments without jumping
  * between vertices, matching Strava and Komoot behavior.
  */
+interface ScreenProjectionCache {
+  key: string;
+  builtAt: number;
+  xs: Float64Array;
+  ys: Float64Array;
+}
+
+/**
+ * Projections écran mises en cache par état caméra : le survol appelait
+ * `map.project` deux fois par segment à chaque frame (échantillonnage DEM en
+ * 3D), ce qui faisait laguer le survol et « clignoter » le curseur. Tant que la
+ * caméra ne bouge pas, on réutilise le tableau (courte expiration pour suivre
+ * le chargement des tuiles de relief).
+ */
+const screenProjectionCache = new WeakMap<object, ScreenProjectionCache>();
+const SCREEN_PROJECTION_CACHE_TTL_MS = 400;
+
+function cameraKey(map: MapboxMap): string {
+  const center = map.getCenter();
+  const canvas = map.getCanvas();
+  return [
+    center.lng.toFixed(7),
+    center.lat.toFixed(7),
+    map.getZoom().toFixed(4),
+    map.getPitch().toFixed(3),
+    map.getBearing().toFixed(3),
+    canvas.width,
+    canvas.height,
+  ].join('|');
+}
+
+function getScreenProjections(
+  map: MapboxMap,
+  points: Array<{ lat: number; lon: number }>,
+): ScreenProjectionCache | null {
+  let key: string;
+  let bounds;
+  try {
+    key = cameraKey(map);
+    bounds = map.getBounds();
+  } catch {
+    return null;
+  }
+  if (!bounds) return null;
+
+  const now = performance.now();
+  const cached = screenProjectionCache.get(points);
+  if (
+    cached
+    && cached.key === key
+    && cached.xs.length === points.length
+    && now - cached.builtAt < SCREEN_PROJECTION_CACHE_TTL_MS
+  ) {
+    return cached;
+  }
+
+  const marginLon = Math.max(0.01, (bounds.getEast() - bounds.getWest()) * 0.15);
+  const marginLat = Math.max(0.01, (bounds.getNorth() - bounds.getSouth()) * 0.15);
+  const west = bounds.getWest() - marginLon;
+  const east = bounds.getEast() + marginLon;
+  const south = bounds.getSouth() - marginLat;
+  const north = bounds.getNorth() + marginLat;
+
+  const xs = new Float64Array(points.length).fill(Number.NaN);
+  const ys = new Float64Array(points.length).fill(Number.NaN);
+  const inView = (p: { lat: number; lon: number }) =>
+    p.lon >= west && p.lon <= east && p.lat >= south && p.lat <= north;
+
+  for (let i = 0; i < points.length; i += 1) {
+    const p = points[i]!;
+    // Un point hors vue reste utile s'il borde un segment qui traverse l'écran.
+    const needed = inView(p)
+      || (i > 0 && inView(points[i - 1]!))
+      || (i + 1 < points.length && inView(points[i + 1]!));
+    if (!needed) continue;
+    try {
+      const s = map.project([p.lon, p.lat]);
+      xs[i] = s.x;
+      ys[i] = s.y;
+    } catch {
+      /* ignore projection error on out-of-world points */
+    }
+  }
+
+  const next = { key, builtAt: now, xs, ys };
+  screenProjectionCache.set(points, next);
+  return next;
+}
+
 export function findContinuousRouteProjection(
   map: MapboxMap,
   points: Array<{ lat: number; lon: number }>,
@@ -40,50 +129,24 @@ export function findContinuousRouteProjection(
 ): ContinuousRouteProjection | null {
   if (points.length < 2) return null;
 
-  let bounds;
-  try {
-    bounds = map.getBounds();
-  } catch {
-    return null;
-  }
-  if (!bounds) return null;
-
-  const marginLon = Math.max(0.01, (bounds.getEast() - bounds.getWest()) * 0.15);
-  const marginLat = Math.max(0.01, (bounds.getNorth() - bounds.getSouth()) * 0.15);
-  const west = bounds.getWest() - marginLon;
-  const east = bounds.getEast() + marginLon;
-  const south = bounds.getSouth() - marginLat;
-  const north = bounds.getNorth() + marginLat;
+  const projections = getScreenProjections(map, points);
+  if (!projections) return null;
+  const { xs, ys } = projections;
 
   let bestDistanceSq = Number.POSITIVE_INFINITY;
   let bestSegment = 0;
   let bestT = 0;
 
   for (let i = 0; i < points.length - 1; i += 1) {
-    const p0 = points[i];
-    const p1 = points[i + 1];
+    const x0 = xs[i]!;
+    const x1 = xs[i + 1]!;
+    if (Number.isNaN(x0) || Number.isNaN(x1)) continue;
 
-    const minLon = Math.min(p0.lon, p1.lon);
-    const maxLon = Math.max(p0.lon, p1.lon);
-    const minLat = Math.min(p0.lat, p1.lat);
-    const maxLat = Math.max(p0.lat, p1.lat);
-
-    if (maxLon < west || minLon > east || maxLat < south || minLat > north) {
-      continue;
-    }
-
-    try {
-      const s0 = map.project([p0.lon, p0.lat]);
-      const s1 = map.project([p1.lon, p1.lat]);
-
-      const projection = projectPointToSegment(screenX, screenY, s0.x, s0.y, s1.x, s1.y);
-      if (projection.distanceSq < bestDistanceSq) {
-        bestDistanceSq = projection.distanceSq;
-        bestSegment = i;
-        bestT = projection.t;
-      }
-    } catch {
-      /* ignore projection error on out-of-world points */
+    const projection = projectPointToSegment(screenX, screenY, x0, ys[i]!, x1, ys[i + 1]!);
+    if (projection.distanceSq < bestDistanceSq) {
+      bestDistanceSq = projection.distanceSq;
+      bestSegment = i;
+      bestT = projection.t;
     }
   }
 

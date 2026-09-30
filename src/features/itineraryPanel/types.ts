@@ -10,6 +10,9 @@ import type { Surface } from './lib/route-metrics/types';
 import type { ControlPanelPersistedState } from '../controlPanel/lib/persistedState';
 import type { PredictionResult } from '../fitPredictor/types';
 import type { PoiFeature } from '../poi/types';
+import type { SportDiscipline } from '@/shared/lib/discipline';
+
+export type { SportDiscipline } from '@/shared/lib/discipline';
 
 export type GpxQualityPreset = 'default' | 'balanced' | 'max';
 export type GpxQualityMode = GpxQualityPreset | 'expert';
@@ -23,6 +26,8 @@ export type AnalysisAxisMetricId =
   | 'Altitude'
   | 'Vitesse'
   | 'Vitesse moyenne'
+  | 'Allure'
+  | 'Allure moyenne'
   | 'Puissance'
   | 'Puissance moyenne'
   | 'Inclinaison (°)'
@@ -44,7 +49,15 @@ export interface AnalysisFiltersState {
   pause: boolean;
   pente: boolean;
   jourNuit: boolean;
+  /** Colonnes rouges sur le graphe : pente ≥ 12 % sur ≥ 100 m. */
+  alertes: boolean;
 }
+
+/**
+ * Filtre « Surface » : n'affiche sur la carte que les tronçons du revêtement
+ * choisi. `other` = terre + sable.
+ */
+export type RouteSurfaceFilter = 'all' | 'asphalt' | 'paved' | 'gravel' | 'other';
 
 export interface TimelineFilterState {
   etape: boolean;
@@ -62,6 +75,7 @@ export interface AnalysisPanelState {
   axis1Color?: string;
   axis2Color?: string;
   filters: AnalysisFiltersState;
+  surfaceFilter?: RouteSurfaceFilter;
   detailZoom: number;
   detailOffset: number;
   yZoom?: number;
@@ -215,7 +229,23 @@ export interface RhythmState {
   pauseIntervals: PauseIntervalRow[];
   /** Per-generated-pause distance overrides keyed by pause id. */
   pausePositionOverridesKm: Record<string, number>;
+
+  // ── Trail / Running (ignored by the cycling engine) ──
+  /** Which reference feeds the running engine: VMA or a race time. */
+  runReferenceMode?: RunReferenceMode;
+  /** Maximal aerobic speed (km/h). */
+  vmaKmh?: number | null;
+  /** Reference race distance (m) for `runReferenceMode === 'chrono'`. */
+  refRaceDistanceM?: number | null;
+  /** Reference race finish time (s). */
+  refRaceTimeS?: number | null;
+  /** Runner weight including pack (kg) — separate from the bike system weight. */
+  runWeightKg?: number | null;
+  /** Terrain technicality 0 (smooth) … 1 (very technical), trail only. */
+  terrainTechnicality?: number | null;
 }
+
+export type RunReferenceMode = 'vma' | 'chrono';
 
 export type TimelineItemKind =
   | 'start'
@@ -382,6 +412,11 @@ export interface Itinerary {
   name: string;
   color: string;
   profileId: string;
+  /**
+   * Sport of this itinerary: drives the prediction engine, pace display and
+   * the routing network (Trail / Running → pedestrian BRouter profile).
+   */
+  discipline?: SportDiscipline;
   priorities: PrioritiesState;
   roadTypes: RoadTypesState;
   rhythm: RhythmState;
@@ -504,6 +539,8 @@ export interface ItineraryProject {
   };
 }
 
+export type ProjectSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
 export interface ItineraryPanelProps {
   project: ItineraryProject;
   profiles: RouteProfile[];
@@ -515,6 +552,9 @@ export interface ItineraryPanelProps {
 
   // project-level
   onBackToHome?: () => void;
+  /** Explicit project save (header Save button). */
+  onSaveProject?: () => void;
+  saveStatus?: ProjectSaveStatus;
   onShareProject?: () => void;
   onRenameProject?: (next: string) => void;
 
@@ -552,6 +592,8 @@ export interface ItineraryPanelProps {
 
   // profile bar
   onChangeProfile?: (profileId: string) => void;
+  /** Change the sport of the active itinerary (bike / trail / running). */
+  onChangeDiscipline?: (discipline: SportDiscipline) => void;
   onUndo?: () => void;
   onRedo?: () => void;
   canUndo?: boolean;

@@ -3,6 +3,7 @@ import type { PredictionResult } from '@/features/fitPredictor';
 import type { ChartPoiAnnotation } from '../annotations/buildPoiAnnotations';
 import type { ChartDayNightOverlay } from '../dayNight';
 import type { ChartPauseOverlay } from '../pause';
+import type { ChartAlertOverlay } from '../alerts/buildSteepAlertOverlay';
 import type {
   AxisDomain,
   AxisMetricId,
@@ -47,6 +48,8 @@ export interface AnalysisChartProps {
   poiAnnotations?: ChartPoiAnnotation[];
   dayNightOverlay?: ChartDayNightOverlay | null;
   pauseOverlay?: ChartPauseOverlay | null;
+  /** Colonnes rouges « Alertes » (pente ≥ 12 % sur ≥ 100 m). */
+  alertOverlay?: ChartAlertOverlay | null;
   axis1Metric: AxisMetricId;
   axis2Metric: AxisMetricId | null;
   xMode: AxisMode;
@@ -111,4 +114,6 @@ export interface HoverCardRow {
   lossM?: number;
   durationFormatted?: string;
   timeFormatted?: string;
+  /** Libellé d'alerte pente affiché dans la carte de survol. */
+  alertLabel?: string;
 }

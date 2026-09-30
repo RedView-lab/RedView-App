@@ -102,6 +102,7 @@ interface DashboardEditorProps {
   onCenterResizeStart: (ev: ReactMouseEvent<HTMLDivElement>) => void;
   onProjectChange: (next: ItineraryProject) => void;
   onBackToBrowser: () => void;
+  onSaveProject: () => Promise<ItineraryProject | null>;
   onOverlayReload: (id: OverlayStatusId) => void;
   onBasemapChange: (id: BasemapId) => void;
   onWeatherOverlayStatusChange: OverlayStatusReporter;
@@ -190,6 +191,7 @@ export function DashboardEditor({
   onCenterResizeStart,
   onProjectChange,
   onBackToBrowser,
+  onSaveProject,
   onOverlayReload,
   onBasemapChange,
   onWeatherOverlayStatusChange,
@@ -420,6 +422,7 @@ export function DashboardEditor({
                         isResizing={isLeftResizing}
                         isReturningToBrowser={isClosingProject}
                         onBackToHome={onBackToBrowser}
+                        onSaveProject={onSaveProject}
                         pausesEnabled={dashboardSearchActiveFilters.has('pauses')}
                         waypointsEnabled={dashboardSearchActiveFilters.has('waypoints')}
                         poisRouteEnabled={dashboardSearchActiveFilters.has('pois_route')}

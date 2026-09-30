@@ -180,7 +180,12 @@ export function ItineraryTabs({
           const isActive = it.id === activeId;
           const isEditing = editingId === it.id;
           const isMenuOpen = openMenuId === it.id;
-          const profileLabel = resolveProfileLabel(it.profileId, it.roadTypes?.activityType);
+          const profileLabel =
+            it.discipline === 'trail'
+              ? t('Trail')
+              : it.discipline === 'running'
+                ? t('Running')
+                : resolveProfileLabel(it.profileId, it.roadTypes?.activityType);
           return (
             <div
               key={it.id}

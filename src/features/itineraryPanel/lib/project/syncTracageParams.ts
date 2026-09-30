@@ -1,6 +1,6 @@
 import type { PrioritiesState, RoadTypesState } from '../../types';
 
-export type ActivityType = 'road' | 'gravel-default' | 'mtb';
+export type ActivityType = 'road' | 'gravel-default' | 'mtb' | 'running' | 'trail';
 export type TracingModeType = 'vitesse' | 'aventure' | 'comfort';
 export type SurfaceType = 'tarmac' | 'paved' | 'gravel' | 'other';
 
@@ -23,6 +23,76 @@ export function syncTracageOnActivityChange(
   currentTolerance = 10,
 ): TracageSyncResult {
   switch (activity) {
+    case 'running': {
+      // Road running: sidewalks & car-free paved ways (knob `bikeLanes`),
+      // quiet streets, stabilised paths; dirt only as a connector.
+      const isComfort = mode === 'comfort';
+      const isAventure = mode === 'aventure';
+
+      return {
+        roadTypes: {
+          activityType: 'running',
+          tracingMode: mode,
+          surfacePreference: 'gravel',
+          surfaceMin: 'tarmac',
+          surfaceMax: 'gravel',
+          surfaceTolerance: currentTolerance,
+          road: 'tolerate',
+          gravel: 'tolerate',
+          singletrack: 'avoid',
+          offroad: 'forbid',
+          elevationPreference: isAventure ? 'tolerate' : 'avoid',
+          maxSlopePercent: isAventure ? 25 : isComfort ? 15 : 20,
+          majorRoads: 'avoid',
+          bikeLanes: 'prefer',
+          woods: 'prefer',
+          turns: mode === 'vitesse' ? 'avoid' : 'tolerate',
+          ferry: 'tolerate',
+          cities: 'tolerate',
+        },
+        priorities: isComfort
+          ? { duration: 40, distance: 45, elevation: 20, tranquility: 85 }
+          : isAventure
+            ? { duration: 35, distance: 40, elevation: 60, tranquility: 85 }
+            : { duration: 70, distance: 60, elevation: 30, tranquility: 50 },
+      };
+    }
+
+    case 'trail': {
+      // Trail: singletracks and mountain paths; SAC ceiling set per mode
+      // by the BRF generator (T2 comfort / T3 vitesse / T4 aventure).
+      const isComfort = mode === 'comfort';
+      const isAventure = mode === 'aventure';
+
+      return {
+        roadTypes: {
+          activityType: 'trail',
+          tracingMode: mode,
+          surfacePreference: 'other',
+          surfaceMin: 'paved',
+          surfaceMax: 'other',
+          surfaceTolerance: currentTolerance,
+          road: 'avoid',
+          gravel: 'tolerate',
+          singletrack: 'prefer',
+          offroad: isAventure ? 'prefer' : isComfort ? 'avoid' : 'tolerate',
+          elevationPreference: isAventure ? 'prefer' : 'tolerate',
+          maxSlopePercent: 50,
+          majorRoads: 'forbid',
+          bikeLanes: 'tolerate',
+          woods: 'prefer',
+          turns: 'tolerate',
+          ferry: 'tolerate',
+          cities: 'avoid',
+        },
+        priorities: isComfort
+          ? { duration: 35, distance: 40, elevation: 35, tranquility: 90 }
+          : isAventure
+            ? { duration: 25, distance: 35, elevation: 85, tranquility: 95 }
+            : { duration: 50, distance: 50, elevation: 55, tranquility: 80 },
+      };
+    }
+
     case 'mtb': {
       // Matches Figma node 5918:112682 and user's reference screenshot
       const isComfort = mode === 'comfort';
@@ -260,8 +330,9 @@ export function syncTracageOnSurfaceRangeChange(
     updates.singletrack = 'forbid';
     updates.offroad = 'forbid';
   } else {
-    updates.singletrack = currentActivity === 'mtb' ? 'prefer' : 'tolerate';
-    updates.offroad = currentActivity === 'mtb' ? 'tolerate' : 'avoid';
+    const offroadFriendly = currentActivity === 'mtb' || currentActivity === 'trail';
+    updates.singletrack = offroadFriendly ? 'prefer' : 'tolerate';
+    updates.offroad = offroadFriendly ? 'tolerate' : 'avoid';
     updates.woods = 'prefer';
   }
 

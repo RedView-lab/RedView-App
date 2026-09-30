@@ -4,6 +4,7 @@ mod knn;
 mod math;
 mod prediction;
 mod profile;
+mod running;
 mod types;
 
 use wasm_bindgen::prelude::*;
@@ -74,8 +75,13 @@ pub fn predict(
     let fit_buffers: Vec<Vec<u8>> = fit_files.iter().map(|f| f.to_vec()).collect();
     let fit_slices: Vec<&[u8]> = fit_buffers.iter().map(|b| b.as_slice()).collect();
 
-    let activities = fit_parser::parse_fit_batch(&fit_slices)
+    let parsed = fit_parser::parse_fit_batch(&fit_slices)
         .map_err(|e| JsValue::from_str(&e))?;
+    // Running / hiking recordings would teach the cycling model walking speeds.
+    let (activities, ignored) = split_by_sport(parsed, |s| !s.is_foot_sport());
+    if ignored > 0 {
+        progress(&format!("{} fichier(s) ignoré(s) (autre sport)", ignored));
+    }
 
     let total_pts: usize = activities.iter().map(|a| a.points.len()).sum();
     progress(&format!("{} activité(s) parsées ({} points)", activities.len(), total_pts));
@@ -112,6 +118,83 @@ pub fn predict(
         format_duration(result.total_time_s)));
 
     // 6. Serialize result
+    serde_wasm_bindgen::to_value(&result)
+        .map_err(|e| JsValue::from_str(&format!("Serialization error: {e}")))
+}
+
+/// Keep activities whose summary passes `keep`; returns (kept, dropped count).
+fn split_by_sport(
+    activities: Vec<types::ActivityData>,
+    keep: impl Fn(&types::ActivitySummary) -> bool,
+) -> (Vec<types::ActivityData>, usize) {
+    let total = activities.len();
+    let kept: Vec<types::ActivityData> =
+        activities.into_iter().filter(|a| keep(&a.summary)).collect();
+    let dropped = total - kept.len();
+    (kept, dropped)
+}
+
+/// Running / trail-running prediction.
+///
+/// Same inputs as [`predict`]; `config` is a `RunPredictionConfig`
+/// `{ discipline: "running"|"trail", level?, vma_kmh?, ref_distance_m?,
+/// ref_time_s?, mass_kg?, technicality?, start_time_h?, gender?, max_route_points? }`.
+/// FIT files recorded as cycling are ignored.
+#[wasm_bindgen]
+pub fn predict_run(
+    fit_files: Vec<js_sys::Uint8Array>,
+    gpx_data: &[u8],
+    config: JsValue,
+    on_progress: Option<js_sys::Function>,
+) -> Result<JsValue, JsValue> {
+    let t0 = js_sys::Date::now();
+    let progress = |msg: &str| {
+        let elapsed = js_sys::Date::now() - t0;
+        let text = format!("[{:.0}ms] {}", elapsed, msg);
+        web_sys::console::log_1(&JsValue::from_str(&text));
+        if let Some(ref cb) = on_progress {
+            let _ = cb.call1(&JsValue::NULL, &JsValue::from_str(&text));
+        }
+    };
+
+    progress("Démarrage (course à pied)...");
+
+    let cfg: running::RunPredictionConfig = if config.is_undefined() || config.is_null() {
+        running::RunPredictionConfig::default()
+    } else {
+        serde_wasm_bindgen::from_value(config)
+            .map_err(|e| JsValue::from_str(&format!("Invalid config: {e}")))?
+    };
+
+    progress(&format!("Parsing {} fichier(s) FIT...", fit_files.len()));
+    let fit_buffers: Vec<Vec<u8>> = fit_files.iter().map(|f| f.to_vec()).collect();
+    let fit_slices: Vec<&[u8]> = fit_buffers.iter().map(|b| b.as_slice()).collect();
+    let parsed = fit_parser::parse_fit_batch(&fit_slices)
+        .map_err(|e| JsValue::from_str(&e))?;
+    let (activities, ignored) = split_by_sport(parsed, |s| !s.is_cycling_sport());
+    if ignored > 0 {
+        progress(&format!("{} fichier(s) ignoré(s) (autre sport)", ignored));
+    }
+    progress(&format!("{} activité(s) course retenue(s)", activities.len()));
+
+    progress(&format!("Parsing GPX ({:.1} MB)...", gpx_data.len() as f64 / 1_048_576.0));
+    let route = gpx_parser::parse_gpx(gpx_data, cfg.max_route_points, cfg.smoothing_window_m)
+        .map_err(|e| JsValue::from_str(&e))?;
+    progress(&format!("Route: {} points, {:.1} km, D+ {:.0}m",
+        route.points.len(),
+        route.total_distance_m / 1000.0,
+        route.total_elevation_gain_m));
+
+    progress(&format!("Prédiction sur {} points de route...", route.points.len()));
+    let result = running::predict_run(&activities, ignored, &route, &cfg);
+    progress(&format!("Profil: allure ref {:.1} km/h ({}), marche > {:.0}%, VAM {:.0} m/h, k={:.3}",
+        result.runner_profile.v_ref_kmh,
+        result.runner_profile.v_ref_source,
+        result.runner_profile.walk_threshold_pct,
+        result.runner_profile.walk_vam_mh,
+        result.runner_profile.riegel_k));
+    progress(&format!("Terminé! Temps prédit: {}", format_duration(result.total_time_s)));
+
     serde_wasm_bindgen::to_value(&result)
         .map_err(|e| JsValue::from_str(&format!("Serialization error: {e}")))
 }

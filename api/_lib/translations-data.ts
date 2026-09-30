@@ -145,8 +145,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Trail running"
   },
   {
-    "fr": "Randonnee",
-    "en": "Hiking"
+    "fr": "Running",
+    "en": "Road running"
   },
   {
     "fr": "Debutant",
@@ -1761,6 +1761,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Bike lanes"
   },
   {
+    "fr": "Trottoirs & voies piétonnes",
+    "en": "Sidewalks & footpaths"
+  },
+  {
     "fr": "Voix cyclables",
     "en": "Bike lanes"
   },
@@ -1995,6 +1999,26 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Non enregistré",
     "en": "Unsaved"
+  },
+  {
+    "fr": "Enregistrement…",
+    "en": "Saving…"
+  },
+  {
+    "fr": "Enregistré",
+    "en": "Saved"
+  },
+  {
+    "fr": "Échec de l’enregistrement",
+    "en": "Save failed"
+  },
+  {
+    "fr": "Enregistrer le projet",
+    "en": "Save project"
+  },
+  {
+    "fr": "Enregistrer le projet (Ctrl+S)",
+    "en": "Save project (Ctrl+S)"
   },
   {
     "fr": "Retour au gestionnaire en cours",
@@ -2307,6 +2331,22 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Jour/nuit",
     "en": "Day/Night"
+  },
+  {
+    "fr": "Toutes surfaces",
+    "en": "All surfaces"
+  },
+  {
+    "fr": "Asphalte",
+    "en": "Asphalt"
+  },
+  {
+    "fr": "Pavé / béton",
+    "en": "Cobbles / concrete"
+  },
+  {
+    "fr": "Autre (terre, sable)",
+    "en": "Other (dirt, sand)"
   },
   {
     "fr": "Vitesse",
@@ -3335,5 +3375,85 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Toutes les catégories",
     "en": "All categories"
+  },
+  {
+    "fr": "Référence",
+    "en": "Reference"
+  },
+  {
+    "fr": "Référence d’allure",
+    "en": "Pace reference"
+  },
+  {
+    "fr": "VMA",
+    "en": "MAS"
+  },
+  {
+    "fr": "VMA (km/h)",
+    "en": "MAS (km/h)"
+  },
+  {
+    "fr": "Chrono",
+    "en": "Race time"
+  },
+  {
+    "fr": "Chrono de référence",
+    "en": "Reference race time"
+  },
+  {
+    "fr": "Semi-marathon",
+    "en": "Half marathon"
+  },
+  {
+    "fr": "Poids (avec sac)",
+    "en": "Weight (with pack)"
+  },
+  {
+    "fr": "Technicité du terrain",
+    "en": "Terrain technicality"
+  },
+  {
+    "fr": "Facile",
+    "en": "Easy"
+  },
+  {
+    "fr": "Moyen",
+    "en": "Medium"
+  },
+  {
+    "fr": "Technique",
+    "en": "Technical"
+  },
+  {
+    "fr": "Allure",
+    "en": "Pace"
+  },
+  {
+    "fr": "Allure moyenne",
+    "en": "Average pace"
+  },
+  {
+    "fr": "Allure moyenne depuis le début",
+    "en": "Average pace since start"
+  },
+  {
+    "fr": "Allure moyenne depuis l’élément précédent",
+    "en": "Average pace since previous item"
+  },
+  {
+    "fr": "Allure moyenne jusqu’au prochain élément",
+    "en": "Average pace to next item"
+  },
+  {
+    "fr": "Allure depuis départ",
+    "en": "Pace since start"
+  },
+  {
+    "fr": "Allure depuis prev",
+    "en": "Pace since prev"
+  },
+  {
+    "fr": "Allure → next",
+    "en": "Pace → next"
   }
 ];

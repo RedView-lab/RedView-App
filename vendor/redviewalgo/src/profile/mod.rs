@@ -12,6 +12,9 @@ const DEFAULT_CRR: f64 = 0.005;
 const DEFAULT_MASS: f64 = 80.0;
 /// Default bike + equipment weight (kg) when rider weight is provided alone.
 const DEFAULT_BIKE_WEIGHT: f64 = 10.0;
+/// Default FTP in W/kg of rider weight when there is no data at all
+/// (no FIT file, no user FTP). Typical recreational endurance rider.
+const DEFAULT_WKG: f64 = 2.5;
 
 /// Build a `RiderProfile` from multiple activities and user config overrides.
 ///
@@ -48,9 +51,6 @@ pub fn build_rider_profile(activities: &[ActivityData], config: &PredictionConfi
         (vftp, default_mass, default_cda)
     };
 
-    // Apply user overrides: FTP
-    let ftp_w = config.ftp_w.unwrap_or(auto_ftp);
-
     // Apply user overrides: weight (split rider + bike)
     let (rider_weight_kg, bike_weight_kg, mass_kg) = if let Some(rw) = config.rider_weight_kg {
         let bw = config.bike_weight_kg.unwrap_or(default_bike_weight);
@@ -66,6 +66,16 @@ pub fn build_rider_profile(activities: &[ActivityData], config: &PredictionConfi
         let rw = default_rider_weight;
         (rw, bw, default_mass)
     };
+
+    // Apply user overrides: FTP. Without any activity nor user FTP there is
+    // nothing to learn from: fall back to a typical amateur W/kg so the physics
+    // path still reacts to gradient (otherwise every point gets the same
+    // constant fallback speed, climbs and descents included).
+    let ftp_w = config.ftp_w.unwrap_or(if activities.is_empty() && auto_ftp < 50.0 {
+        DEFAULT_WKG * rider_weight_kg
+    } else {
+        auto_ftp
+    });
 
     // Compute W/kg — the single most important metric in cycling performance
     let wkg = if rider_weight_kg > 0.0 && ftp_w > 0.0 {

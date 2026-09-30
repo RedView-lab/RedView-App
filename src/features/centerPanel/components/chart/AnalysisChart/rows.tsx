@@ -122,6 +122,7 @@ export function HoverCardGroup({
         lossM?: number;
         durationFormatted?: string;
         timeFormatted?: string;
+        alertLabel?: string;
         extraMetrics: HoverCardRow[];
       }
     >
@@ -143,7 +144,8 @@ export function HoverCardGroup({
     if (row.distanceFormatted) acc[key].distanceFormatted = row.distanceFormatted;
     if (row.durationFormatted) acc[key].durationFormatted = row.durationFormatted;
     if (row.timeFormatted) acc[key].timeFormatted = row.timeFormatted;
-    if (row.metric !== 'Altitude' && row.value != null && Number.isFinite(row.value)) {
+    if (row.alertLabel) acc[key].alertLabel = row.alertLabel;
+    if (!row.alertLabel && row.metric !== 'Altitude' && row.value != null && Number.isFinite(row.value)) {
       if (!acc[key].extraMetrics.some((m) => m.id === row.id)) {
         acc[key].extraMetrics.push(row);
       }
@@ -188,6 +190,12 @@ export function HoverCardGroup({
                   {row.metric}: {formatAxisValue(row.metric, row.value)}
                 </div>
               ))}
+              {group.alertLabel ? (
+                <div className="rvchart__card-metric rvchart__card-metric--alert">
+                  <img src="/svgv2/icone/search-filter-alertes.svg" alt="" width={12} height={12} />
+                  {group.alertLabel}
+                </div>
+              ) : null}
             </div>
           </div>
         );

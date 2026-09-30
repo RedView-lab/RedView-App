@@ -324,6 +324,23 @@ button.rvi-rythme-figma__card-box.is-open {
   -moz-appearance: textfield;
 }
 
+/* Trail / Running: technicality segmented control */
+.rvi-rythme-figma__segmented {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+button.rvi-rythme-figma__card-box.is-selected {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.rvi-rythme-figma__card-text--center {
+  text-align: center;
+}
+
 .rvi-rythme-figma__card-unit {
   font-size: 13px;
   color: rgba(255, 255, 255, 0.7);

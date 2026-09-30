@@ -2,6 +2,7 @@ import { useEffect, useId, useState, type CSSProperties, type WheelEvent as Reac
 import { createPortal } from 'react-dom';
 import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
 import { useAppI18n } from '@/shared/i18n';
+import { normalizeDiscipline } from '@/shared/lib/discipline';
 import { useMiddleClickAutoscroll } from '@/shared/hooks/useMiddleClickAutoscroll';
 import {
   ItineraryPanelModeContent,
@@ -40,6 +41,8 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     isReturningToBrowser,
     onResizeStart,
     onBackToHome,
+    onSaveProject,
+    saveStatus,
     onShareProject,
     onRenameProject,
     onSelectItinerary,
@@ -52,6 +55,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     onToggleItineraryVisibility,
     onChangeMode,
     onChangeProfile,
+    onChangeDiscipline,
     onUndo,
     onRedo,
     onSaveProfile,
@@ -161,6 +165,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
       items: active.timeline,
       rhythm: active.rhythm,
       prediction: active.prediction ?? null,
+      discipline: normalizeDiscipline(active.discipline),
       view: project.timelineView,
       selectedIds: selectedTimelineIds,
       onSelectRow: onSelectTimelineRow,
@@ -260,6 +265,8 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
         privacy={project.privacy}
         backDisabled={isReturningToBrowser}
         onBack={onBackToHome}
+        onSave={onSaveProject}
+        saveStatus={saveStatus}
         onRename={onRenameProject}
         onShare={onShareProject}
       />
@@ -321,6 +328,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
             onCalculate={onCalculate}
             onChangePoiEntry={onChangePoiEntry}
             onChangeProfile={onChangeProfile}
+            onChangeDiscipline={onChangeDiscipline}
             onChangePriority={onChangePriority}
             onChangeRhythm={onChangeRhythm}
             onChangeRoadType={onChangeRoadType}

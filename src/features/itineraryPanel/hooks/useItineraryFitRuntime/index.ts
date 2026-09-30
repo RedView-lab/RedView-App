@@ -15,9 +15,15 @@ import {
 
 import {
   buildPredictionConfigFromRhythm,
+  buildRunPredictionConfigFromRhythm,
   buildRouteGpxFile,
   hasUsableRouteElevation,
 } from '../../lib/schedule';
+import {
+  isFootDiscipline,
+  normalizeDiscipline,
+  resolvePredictionDiscipline,
+} from '@/shared/lib/discipline';
 import { buildPauseAwareSchedule } from '../../lib/schedule';
 import { buildFitUploadsSignature } from '../../lib/schedule';
 
@@ -102,10 +108,12 @@ export function useItineraryFitRuntime({
     return JSON.stringify(active.rhythm);
   }, [active?.rhythm]);
 
+  const activeDiscipline = normalizeDiscipline(active?.discipline);
+
   const activeCalculationSignature = useMemo(() => {
     if (!active || !activeRouteSignature) return '';
-    return `${active.id}::${activeRouteSignature}::${activeRhythmSignature}::${activePersistedUploadSignature}`;
-  }, [active, activeRouteSignature, activeRhythmSignature, activePersistedUploadSignature]);
+    return `${active.id}::${activeDiscipline}::${activeRouteSignature}::${activeRhythmSignature}::${activePersistedUploadSignature}`;
+  }, [active, activeDiscipline, activeRouteSignature, activeRhythmSignature, activePersistedUploadSignature]);
 
   const uploadFitLabel = useMemo(
     () => buildUploadFitLabel(activeFitRuntime),
@@ -391,10 +399,8 @@ export function useItineraryFitRuntime({
     const itineraryId = itinerary.id;
     cancelledPredictionIdsRef.current.delete(itineraryId);
     const gpxFile = buildRouteGpxFile(itinerary);
-    const config = buildPredictionConfigFromRhythm(
-      itinerary.rhythm,
-      itinerary.gpxRoute?.points ?? null,
-    );
+    const discipline = normalizeDiscipline(itinerary.discipline);
+    const routePoints = itinerary.gpxRoute?.points ?? null;
 
     updateFitRuntime(itineraryId, (current) => ({
       ...current,
@@ -406,15 +412,32 @@ export function useItineraryFitRuntime({
     }));
     predictionStore?.setPrediction(itineraryId, null);
 
-    void engine
-      .predict(runtime.fitFiles, gpxFile, config, (message: string) => {
-        updateFitRuntime(itineraryId, (current) => ({
-          ...current,
-          progress: [...current.progress.slice(-19), message],
-          status: 'running',
-        }));
-      })
-      .then((result: PredictionResult) => {
+    const onProgress = (message: string) => {
+      updateFitRuntime(itineraryId, (current) => ({
+        ...current,
+        progress: [...current.progress.slice(-19), message],
+        status: 'running',
+      }));
+    };
+    // Running / trail use their own engine; the result is stamped with the
+    // discipline so displays (pace vs km/h) always match the engine used.
+    const pending = isFootDiscipline(discipline)
+      ? engine.predictRun(
+          runtime.fitFiles,
+          gpxFile,
+          buildRunPredictionConfigFromRhythm(itinerary.rhythm, discipline, routePoints),
+          onProgress,
+        )
+      : engine.predict(
+          runtime.fitFiles,
+          gpxFile,
+          buildPredictionConfigFromRhythm(itinerary.rhythm, routePoints),
+          onProgress,
+        );
+
+    void pending
+      .then((raw: PredictionResult) => {
+        const result: PredictionResult = { ...raw, discipline };
         cancelledPredictionIdsRef.current.delete(itineraryId);
         setProject((prev) => ({
           ...prev,
@@ -509,8 +532,10 @@ export function useItineraryFitRuntime({
       const lastPointDistM = active.gpxRoute?.points[active.gpxRoute.points.length - 1]?.distanceM ?? 0;
       const predDistM = active.prediction?.total_distance_m ?? 0;
       const isDistMismatched = active.prediction && Math.abs(predDistM - lastPointDistM) > 500;
+      const isDisciplineMismatched =
+        active.prediction && resolvePredictionDiscipline(active.prediction) !== activeDiscipline;
 
-      if (active.prediction && !isDistMismatched) {
+      if (active.prediction && !isDistMismatched && !isDisciplineMismatched) {
         lastProcessedSignatureRef.current[itineraryId] = activeCalculationSignature;
         return;
       }
@@ -583,6 +608,7 @@ export function useItineraryFitRuntime({
   }, [
     active,
     activeCalculationSignature,
+    activeDiscipline,
     handleCalculatePrediction,
     predictionStore,
     setProject,

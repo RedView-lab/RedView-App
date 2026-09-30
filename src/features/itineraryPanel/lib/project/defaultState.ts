@@ -8,6 +8,7 @@ import type {
   TimelineItem,
 } from '../../types';
 import { translateAppText } from '@/shared/i18n';
+import { normalizeDiscipline } from '@/shared/lib/discipline';
 import { createDefaultControlPanelPersistedState } from '../../../controlPanel/lib/persistedState';
 import { DEFAULT_VIEW } from '../../../map3d/lib/mapbox.config';
 import { createDefaultExpertState } from '../../expert/defaults';
@@ -145,7 +146,17 @@ export function createDefaultRhythmState(): RhythmState {
     pauseEveryIntervalMin: null,
     pauseIntervals: [],
     pausePositionOverridesKm: {},
+    runReferenceMode: 'vma',
+    vmaKmh: null,
+    refRaceDistanceM: 10000,
+    refRaceTimeS: null,
+    runWeightKg: null,
+    terrainTechnicality: 0.5,
   };
+}
+
+function positiveOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
 }
 
 export function normalizeItineraryRhythmState(rhythm?: Partial<RhythmState> | null): RhythmState {
@@ -160,6 +171,15 @@ export function normalizeItineraryRhythmState(rhythm?: Partial<RhythmState> | nu
     },
     pauseIntervals: Array.isArray(rhythm?.pauseIntervals) ? rhythm.pauseIntervals : base.pauseIntervals,
     pausePositionOverridesKm: rhythm?.pausePositionOverridesKm ?? {},
+    runReferenceMode: rhythm?.runReferenceMode === 'chrono' ? 'chrono' : 'vma',
+    vmaKmh: positiveOrNull(rhythm?.vmaKmh),
+    refRaceDistanceM: positiveOrNull(rhythm?.refRaceDistanceM) ?? base.refRaceDistanceM,
+    refRaceTimeS: positiveOrNull(rhythm?.refRaceTimeS),
+    runWeightKg: positiveOrNull(rhythm?.runWeightKg),
+    terrainTechnicality:
+      typeof rhythm?.terrainTechnicality === 'number' && Number.isFinite(rhythm.terrainTechnicality)
+        ? Math.min(1, Math.max(0, rhythm.terrainTechnicality))
+        : base.terrainTechnicality,
   };
 }
 
@@ -207,6 +227,7 @@ export function normalizeItineraryProject(project: ItineraryProject): ItineraryP
     return {
       ...itinerary,
       profileId,
+      discipline: normalizeDiscipline(itinerary.discipline),
       roadTypes,
       gpxRoute,
       metrics,
@@ -237,6 +258,7 @@ export function createDefaultItinerary(
     name: translateAppText('Itinéraire {{index}}', { index }),
     color,
     profileId: defaultPreset.id,
+    discipline: 'bike',
     priorities: { ...defaultPreset.priorities },
     roadTypes: {
       ...defaultPreset.roadTypes,
@@ -264,7 +286,9 @@ export function createDefaultAnalysisPanelState(): AnalysisPanelState {
       pause: true,
       pente: true,
       jourNuit: false,
+      alertes: true,
     },
+    surfaceFilter: 'all',
     detailZoom: 0,
     detailOffset: 0,
     yZoom: 0,

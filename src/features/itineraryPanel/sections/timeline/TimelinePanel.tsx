@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import type { PredictionResult } from '@/features/fitPredictor';
 import { useAppI18n } from '@/shared/i18n';
+import type { SportDiscipline } from '@/shared/lib/discipline';
 import type {
   PoiCategory,
   RhythmState,
@@ -43,6 +44,8 @@ interface TimelinePanelProps {
   items: TimelineItem[];
   rhythm?: RhythmState;
   prediction?: PredictionResult | null;
+  /** Itinerary sport: Trail / Running show paces and hide power columns. */
+  discipline?: SportDiscipline;
   view: TimelineView;
   railConfig?: Partial<TimelineRailConfig>;
   isFullscreen?: boolean;
@@ -77,6 +80,7 @@ export function TimelinePanel({
   items,
   rhythm,
   prediction,
+  discipline = 'bike',
   view,
   railConfig,
   isFullscreen,
@@ -303,6 +307,7 @@ export function TimelinePanel({
         {view === 'sheet' ? (
           <>
             <TimelineTableSettings
+              discipline={discipline}
               value={resolvedTableSettings}
               onChange={handleChangeTableSettings}
             />
@@ -311,6 +316,7 @@ export function TimelinePanel({
               items={visibleSheetItems}
               rhythm={rhythm}
               prediction={prediction}
+              discipline={discipline}
               columns={resolvedTableSettings.columns}
               sort={resolvedTableSettings.sort}
               onChangeSort={(next) =>

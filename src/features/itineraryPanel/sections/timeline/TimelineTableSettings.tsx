@@ -11,8 +11,10 @@
 import { useState, type MouseEvent } from 'react';
 import { IconChevronDown, IconPlusCircle } from '../../components/icons';
 import { useAppI18n } from '@/shared/i18n';
+import type { SportDiscipline } from '@/shared/lib/discipline';
 import {
   TIMELINE_COLUMNS,
+  resolveTimelineColumns,
   type TimelineColumnId,
 } from './TimelineColumns';
 import { TimelineColumnsMenu } from './TimelineColumnsMenu.tsx';
@@ -58,11 +60,14 @@ export const DEFAULT_TIMELINE_TABLE_SETTINGS: TimelineTableSettingsState = {
 };
 
 interface TimelineTableSettingsProps {
+  /** Trail / Running: pace labels, no power columns. */
+  discipline?: SportDiscipline;
   value?: TimelineTableSettingsState;
   onChange?: (next: TimelineTableSettingsState) => void;
 }
 
 export function TimelineTableSettings({
+  discipline = 'bike',
   value = DEFAULT_TIMELINE_TABLE_SETTINGS,
   onChange,
 }: TimelineTableSettingsProps) {
@@ -133,7 +138,7 @@ export function TimelineTableSettings({
       <TimelineColumnsMenu
         anchorEl={triggerEl}
         open={menuOpen}
-        columns={TIMELINE_COLUMNS}
+        columns={resolveTimelineColumns(discipline)}
         visibility={value.columns}
         onToggle={handleToggleColumn}
         onClose={() => setMenuOpen(false)}

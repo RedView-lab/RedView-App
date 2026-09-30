@@ -169,6 +169,30 @@ pub struct ActivitySummary {
     pub avg_hr_bpm: f64,
     pub has_power: bool,
     pub has_hr: bool,
+    /// FIT `sport` enum from the Session/Sport message, when recorded
+    /// (1 running, 2 cycling, 11 walking, 17 hiking — see FIT_SPORT_*).
+    #[serde(default)]
+    pub sport: Option<u8>,
+}
+
+/// FIT profile `sport` codes used to route activities to the right engine.
+pub const FIT_SPORT_RUNNING: u8 = 1;
+pub const FIT_SPORT_CYCLING: u8 = 2;
+pub const FIT_SPORT_WALKING: u8 = 11;
+pub const FIT_SPORT_HIKING: u8 = 17;
+
+impl ActivitySummary {
+    /// On-foot activity (running, walking, hiking).
+    pub fn is_foot_sport(&self) -> bool {
+        matches!(
+            self.sport,
+            Some(FIT_SPORT_RUNNING) | Some(FIT_SPORT_WALKING) | Some(FIT_SPORT_HIKING)
+        )
+    }
+
+    pub fn is_cycling_sport(&self) -> bool {
+        self.sport == Some(FIT_SPORT_CYCLING)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

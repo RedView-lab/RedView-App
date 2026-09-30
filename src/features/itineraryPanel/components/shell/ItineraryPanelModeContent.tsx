@@ -13,6 +13,7 @@ import type {
   PanelMode,
   RouteProfile,
 } from '../../types';
+import { normalizeDiscipline } from '@/shared/lib/discipline';
 import { buildPauseAwareSchedule } from '../../lib/schedule';
 import { Collapse } from './Collapse';
 import { ComingSoonSection } from '../../sections/ComingSoonSection';
@@ -37,6 +38,7 @@ type ItineraryPanelModeContentProps = Pick<
   | 'onCalculate'
   | 'onChangePoiEntry'
   | 'onChangeProfile'
+  | 'onChangeDiscipline'
   | 'onChangePriority'
   | 'onChangeRhythm'
   | 'onChangeRoadType'
@@ -84,6 +86,7 @@ export function ItineraryPanelModeContent({
   onCalculate,
   onChangePoiEntry,
   onChangeProfile,
+  onChangeDiscipline,
   onChangePriority,
   onChangeRhythm,
   onChangeRoadType,
@@ -151,6 +154,8 @@ export function ItineraryPanelModeContent({
           recalculateLoading={recalculateLoading}
           recalculateProgress={recalculateProgress}
           showRecalculateTrace={showRecalculateTrace}
+          discipline={normalizeDiscipline(active.discipline)}
+          onChangeDiscipline={onChangeDiscipline}
         />
       ) : null;
       break;
@@ -158,6 +163,7 @@ export function ItineraryPanelModeContent({
       modeContent = active ? (
         <RythmeSection
           rhythm={active.rhythm}
+          discipline={normalizeDiscipline(active.discipline)}
           onChange={onChangeRhythm}
           onUploadFit={onUploadFit}
           uploadFitLabel={uploadFitLabel}

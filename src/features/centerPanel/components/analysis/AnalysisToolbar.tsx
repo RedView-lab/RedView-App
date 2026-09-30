@@ -1,15 +1,17 @@
-import { useMemo, useState } from 'react';
-import { IconCheck } from '../CenterPanelIcons';
-import { AxisDropdown } from './AxisDropdown';
-import { axisOptions, axis2Options } from './shared';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { IconCheck, IconChevronDown } from '../CenterPanelIcons';
+import { AxisDropdown, type AxisOption } from './AxisDropdown';
+import { axisOptions, axis2Options, surfaceFilterOptions } from './shared';
+import type { RouteSurfaceFilter } from '@/features/itineraryPanel/types';
 import type { AxisMetricId, AxisMode } from '../chart';
 import { useAppI18n } from '@/shared/i18n';
 
-type ToolbarFilterKey = 'pente' | 'jourNuit';
+type ToolbarFilterKey = 'pente' | 'jourNuit' | 'alertes';
 
-const visibleToolbarFilters: ReadonlyArray<{ key: ToolbarFilterKey; label: string }> = [
+const visibleToolbarFilters: ReadonlyArray<{ key: ToolbarFilterKey; label: string; icon?: string }> = [
   { key: 'pente', label: "Profils d'altitude" },
   { key: 'jourNuit', label: 'Jour/nuit' },
+  { key: 'alertes', label: 'Alertes', icon: '/svgv2/icone/search-filter-alertes.svg' },
 ];
 
 interface AnalysisToolbarProps {
@@ -25,8 +27,10 @@ interface AnalysisToolbarProps {
   onAxis2Select: (value: string) => void;
   onAxis1ColorChange: (color: string) => void;
   onAxis2ColorChange: (color: string) => void;
-  filters: { pente: boolean; jourNuit: boolean };
+  filters: { pente: boolean; jourNuit: boolean; alertes: boolean };
   onToggleFilter: (key: ToolbarFilterKey) => void;
+  surfaceFilter: RouteSurfaceFilter;
+  onSurfaceFilterChange: (value: RouteSurfaceFilter) => void;
   /**
    * Aide au survol par filtre : si une entrée existe pour un filtre, son chip
    * affiche ce message en pop-in au survol. Le chip reste cliquable — c'est un
@@ -38,6 +42,9 @@ interface AnalysisToolbarProps {
    * sans heure de départ).
    */
   disabledXModes?: Partial<Record<AxisMode, string>>;
+  /** Axis choices (defaults to every metric); filtered per discipline by the caller. */
+  axis1Options?: AxisOption[];
+  axis2Options?: AxisOption[];
 }
 
 export function AnalysisToolbar({
@@ -55,8 +62,12 @@ export function AnalysisToolbar({
   onAxis2ColorChange,
   filters,
   onToggleFilter,
+  surfaceFilter,
+  onSurfaceFilterChange,
   disabledFilters,
   disabledXModes,
+  axis1Options = axisOptions,
+  axis2Options: axis2OptionList = axis2Options,
 }: AnalysisToolbarProps) {
   const { t } = useAppI18n();
   const [hovered, setHovered] = useState<ToolbarFilterKey | null>(null);
@@ -146,7 +157,7 @@ export function AnalysisToolbar({
         axisColor={axis1Color}
         value={axis1Value}
         isOpen={openAxis === 'axis1'}
-        options={axisOptions}
+        options={axis1Options}
         onToggle={() => onToggleAxis('axis1')}
         onColorChange={onAxis1ColorChange}
         onSelect={onAxis1Select}
@@ -157,7 +168,7 @@ export function AnalysisToolbar({
         axisColor={axis2Color}
         value={axis2Value}
         isOpen={openAxis === 'axis2'}
-        options={axis2Options}
+        options={axis2OptionList}
         onToggle={() => onToggleAxis('axis2')}
         onColorChange={onAxis2ColorChange}
         onSelect={onAxis2Select}
@@ -167,7 +178,7 @@ export function AnalysisToolbar({
       <div className="rvc-center-analysis__separator" aria-hidden="true" />
 
       <div className="rvc-center-analysis__filters" aria-label={t('Filtres')}>
-        {visibleToolbarFilters.map(({ key, label }) => {
+        {visibleToolbarFilters.map(({ key, label, icon }) => {
           const checked = Boolean(filters[key] ?? true);
           const hint = disabledFilters?.[key];
           const hasHint = Boolean(hint);
@@ -211,6 +222,9 @@ export function AnalysisToolbar({
                 <span className="rvc-center-analysis__checkbox" aria-hidden="true">
                   {checked ? <IconCheck size={10} /> : null}
                 </span>
+                {icon ? (
+                  <img className="rvc-center-analysis__filter-icon" src={icon} alt="" aria-hidden="true" />
+                ) : null}
                 <span className="rvc-center-analysis__filter-label" title={t(label)}>
                   {t(label)}
                 </span>
@@ -228,7 +242,82 @@ export function AnalysisToolbar({
             </div>
           );
         })}
+
+        <SurfaceFilterDropdown value={surfaceFilter} onChange={onSurfaceFilterChange} />
       </div>
+    </div>
+  );
+}
+
+/**
+ * Filtre « Surface » : restreint la trace affichée sur la carte au revêtement
+ * choisi (toutes les portions = affichage normal).
+ */
+function SurfaceFilterDropdown({
+  value,
+  onChange,
+}: {
+  value: RouteSurfaceFilter;
+  onChange: (value: RouteSurfaceFilter) => void;
+}) {
+  const { t } = useAppI18n();
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const isActive = value !== 'all';
+  const selected = surfaceFilterOptions.find((option) => option.value === value) ?? surfaceFilterOptions[0]!;
+
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (rootRef.current?.contains(event.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="rvc-center-analysis__filter-item">
+      <button
+        type="button"
+        className={[
+          'rvc-center-analysis__filter-chip',
+          'rvc-center-analysis__surface-chip',
+          isActive ? 'rvc-center-analysis__surface-chip--active' : 'rvc-center-analysis__filter-chip--off',
+        ].join(' ')}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((curr) => !curr)}
+        title={t('Surface')}
+      >
+        <span className="rvc-center-analysis__filter-label">
+          {isActive ? t(selected.label) : t('Surface')}
+        </span>
+        <IconChevronDown size={14} className="rvc-center-analysis__select-icon" />
+      </button>
+
+      {open ? (
+        <div className="rv-dropdown rvc-center-analysis__dropdown rvc-center-analysis__surface-dropdown" role="listbox" aria-label={t('Surface')}>
+          {surfaceFilterOptions.map((option) => {
+            const isSelected = option.value === value;
+            return (
+              <button
+                key={option.value}
+                className={`rv-dropdown__item${isSelected ? ' is-selected' : ''}`}
+                type="button"
+                role="option"
+                aria-selected={isSelected}
+                onClick={() => {
+                  onChange(option.value);
+                  setOpen(false);
+                }}
+              >
+                <span className="rv-dropdown__label">{t(option.label)}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }

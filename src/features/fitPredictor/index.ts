@@ -6,5 +6,7 @@ export type {
   PredictionPoint,
   PredictionResult,
   RiderProfile,
+  RunnerProfile,
+  RunPredictionConfig,
   SegmentSummary,
 } from './types';

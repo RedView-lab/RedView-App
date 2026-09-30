@@ -21,7 +21,6 @@ import {
   formatBrouterErrorMessage,
   formatForbiddenZonePolygons,
   isClimbingMode,
-  panelProfileToBrouter,
   resolveItineraryRouting,
 } from '@/features/itineraryPanel/lib/brouter';
 import {
@@ -90,7 +89,7 @@ async function fetchMergeConnectorWithFallbacks(
   polygons: string | undefined,
 ): Promise<MergeConnectorFetchResult> {
   const resolved = await resolveItineraryRouting(source);
-  const stockProfile = panelProfileToBrouter(source.profileId);
+  const stockProfile = resolved.stockProfileId;
   const climbing = isClimbingMode(source.priorities);
   const attempts = [
     {

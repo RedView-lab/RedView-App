@@ -122,6 +122,38 @@ export function useDashboardProjectSync({
     [activeProjectIdRef, activeProjectSnapshotRef, flushSave],
   );
 
+  /**
+   * Sauvegarde explicite (bouton Save) : court-circuite le debounce, horodate
+   * `savedAt`/`sizeBytes` et renvoie le projet enregistré (null si rien à
+   * sauvegarder). Lève une erreur si le projet dépasse la limite de taille.
+   */
+  const saveNow = useCallback(async (): Promise<ItineraryProject | null> => {
+    const id = activeProjectIdRef.current;
+    const current = pendingSaveRef.current ?? activeProjectSnapshotRef.current;
+    if (!id || !current) return null;
+
+    if (saveTimerRef.current != null) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+
+    const stamped: ItineraryProject = { ...current, savedAt: new Date().toISOString() };
+    const sizeBytes = new Blob([JSON.stringify(stamped)]).size;
+    if (!id.startsWith('local-') && isProjectTooLarge(sizeBytes)) {
+      throw new Error('Project exceeds payload safety limit');
+    }
+    const next: ItineraryProject = { ...stamped, sizeBytes };
+
+    await saveProject(id, next);
+    lastSavedSerializedRef.current = JSON.stringify(next);
+    activeProjectSnapshotRef.current = next;
+    if (pendingSaveRef.current === current) {
+      pendingSaveRef.current = null;
+    }
+    writeProjectCache(id, next);
+    return next;
+  }, [activeProjectIdRef, activeProjectSnapshotRef]);
+
   const captureThumbnailForProject = useCallback(
     async (projectId: string) => {
       if (!mapInstance || projectId.startsWith('local-')) return;
@@ -180,6 +212,7 @@ export function useDashboardProjectSync({
   return {
     flushSave,
     queueProjectSave,
+    saveNow,
     captureThumbnailForProject,
     resetSyncState,
   };

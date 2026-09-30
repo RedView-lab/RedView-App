@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 
-import init, { predict, predict_vs_actual } from './pkg/redviewalgo.js';
+import init, { predict, predict_run, predict_vs_actual } from './pkg/redviewalgo.js';
 import type { FitWorkerRequest, FitWorkerResponse } from '../types';
 
 let wasmReady = false;
@@ -41,6 +41,22 @@ self.onmessage = async (event: MessageEvent<FitWorkerRequest>) => {
         };
         const result = predict(fitArrays, gpxArray, message.config ?? {}, onProgress);
         respond({ _id: message._id, type: 'result', action: 'predict', data: result });
+        break;
+      }
+
+      case 'predictRun': {
+        const fitArrays = message.fitFiles.map((buffer) => new Uint8Array(buffer));
+        const gpxArray = new Uint8Array(message.gpxData);
+        const onProgress = (text: string) => {
+          respond({
+            _id: message._id,
+            type: 'progress',
+            action: 'predictRun',
+            message: text,
+          });
+        };
+        const result = predict_run(fitArrays, gpxArray, message.config, onProgress);
+        respond({ _id: message._id, type: 'result', action: 'predictRun', data: result });
         break;
       }
 

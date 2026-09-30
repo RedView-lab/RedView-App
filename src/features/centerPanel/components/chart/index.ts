@@ -42,3 +42,15 @@ export type {
   ChartPauseWindow,
 } from './pause';
 
+
+export {
+  buildAlertWindowsForItinerary,
+  detectSteepAlertSegments,
+  STEEP_ALERT_MIN_GRADIENT_PCT,
+  STEEP_ALERT_MIN_LENGTH_M,
+} from './alerts/buildSteepAlertOverlay';
+export type {
+  ChartAlertOverlay,
+  ChartAlertWindow,
+  SteepAlertSegment,
+} from './alerts/buildSteepAlertOverlay';

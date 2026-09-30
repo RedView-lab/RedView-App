@@ -168,6 +168,57 @@ export function IconWalk({ size = 16, ...props }: SVGProps<SVGSVGElement> & { si
   );
 }
 
+export function IconRun({ size = 16, ...props }: SVGProps<SVGSVGElement> & { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      {...props}
+    >
+      <circle cx="10" cy="2.4" r="1.5" fill="currentColor" />
+      <path
+        d="M4.5 6.2L7 4.9C7.5 4.6 8.1 4.7 8.5 5.1L10 6.8L12.2 7.4M7.6 8.2L9.6 10L8.4 14M7.6 8.2L8.5 5.5M7.6 8.2L5.6 10.8L2.8 10.6"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function IconTrail({ size = 16, ...props }: SVGProps<SVGSVGElement> & { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      {...props}
+    >
+      <circle cx="10.6" cy="1.9" r="1.3" fill="currentColor" />
+      <path
+        d="M6 5.2L8 4.2C8.4 4 8.9 4.1 9.2 4.4L10.4 5.8L12.2 6.3M8.3 6.9L9.8 8.3L9 10.6M8.3 6.9L9 4.6M8.3 6.9L6.8 8.9L4.6 8.8"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M0.8 14.6L4.6 10.4L6.8 12.4L9.4 10.2L15.2 14.6"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function IconSlidersFigma({ size = 16, ...props }: SVGProps<SVGSVGElement> & { size?: number }) {
   return (
     <svg

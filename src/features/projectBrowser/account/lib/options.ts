@@ -49,7 +49,7 @@ export const ACCOUNT_SPORT_OPTIONS = [
   'Gravel',
   'VTT',
   'Trail',
-  'Randonnee',
+  'Running',
 ] as const;
 
 export const ACCOUNT_LEVEL_OPTIONS = ['Debutant', 'Intermediaire', 'Avance', 'Expert'] as const;

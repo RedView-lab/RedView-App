@@ -274,6 +274,7 @@ export function useItineraryGpxImport({
                 pause: true,
                 pente: true,
                 jourNuit: false,
+                alertes: true,
               },
               detailZoom: 0,
               detailOffset: 0,

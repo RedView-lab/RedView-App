@@ -1,5 +1,6 @@
 import { haversineRouteDistanceM } from '../routes';
 import type { Surface } from '../route-metrics/types';
+import type { RouteSurfaceFilter } from '../../types';
 
 export interface RouteLayerPoint {
   lat: number;
@@ -26,6 +27,8 @@ export interface RouteLayerOptions {
   traceWidthPx?: number;
   renderMode?: RouteRenderMode;
   slopeBands?: ReadonlyArray<RouteSlopeBand>;
+  /** N'affiche que les tronçons de ce revêtement ('all' = trace complète). */
+  surfaceFilter?: RouteSurfaceFilter;
 }
 
 export interface RoutePatternLayerSpec {
@@ -589,11 +592,40 @@ function buildSurfaceRouteRenderSpec(
   };
 }
 
+function matchesSurfaceFilter(surface: StyledSurface, filter: RouteSurfaceFilter): boolean {
+  if (filter === 'other') return surface === 'dirt' || surface === 'sand';
+  return surface === filter;
+}
+
+/**
+ * Filtre « Surface » : on repart du rendu par revêtement (une feature par
+ * tronçon homogène) et on ne garde que les tronçons du revêtement demandé.
+ */
+function buildSurfaceFilteredRouteRenderSpec(
+  points: readonly RouteLayerPoint[],
+  fallbackColor: string,
+  traceWidthPx: number,
+  filter: RouteSurfaceFilter,
+): RouteLayerRenderSpec {
+  const spec = buildSurfaceRouteRenderSpec(points, fallbackColor, traceWidthPx);
+  const collection = spec.data as GeoJSON.FeatureCollection<GeoJSON.LineString>;
+  spec.data = {
+    type: 'FeatureCollection',
+    features: collection.features.filter((feature) =>
+      matchesSurfaceFilter((feature.properties as SurfaceRouteFeatureProperties).surface, filter),
+    ),
+  };
+  return spec;
+}
+
 export function buildRouteGeoJson(
   points: readonly RouteLayerPoint[],
   opts: RouteLayerOptions,
   traceWidthPx: number,
 ): RouteLayerRenderSpec {
+  if (opts.surfaceFilter && opts.surfaceFilter !== 'all') {
+    return buildSurfaceFilteredRouteRenderSpec(points, opts.color, traceWidthPx, opts.surfaceFilter);
+  }
   if (opts.renderMode === 'slope') {
     return buildSlopeRouteRenderSpec(points, opts.slopeBands ?? [], opts.color);
   }

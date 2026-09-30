@@ -1,5 +1,6 @@
 import type { PrioritiesState, RoadTypesState, RouteProfile } from '../../types';
 import { translateAppText } from '@/shared/i18n';
+import type { FootDiscipline } from '@/shared/lib/discipline';
 import {
   syncTracageOnActivityChange,
   type ActivityType,
@@ -14,9 +15,23 @@ export interface RouteProfilePreset {
   roadTypes: Omit<RoadTypesState, 'applyToAllItineraries'>;
 }
 
+/** Built-in activity presets, in dropdown order (bike first, then foot). */
+export const ACTIVITY_PRESET_IDS: readonly ActivityType[] = ['road', 'gravel-default', 'mtb', 'running', 'trail'];
+
+export function isActivityPresetId(id: string | null | undefined): id is ActivityType {
+  return id != null && (ACTIVITY_PRESET_IDS as readonly string[]).includes(id);
+}
+
+/** Running / Trail presets route on the pedestrian network. */
+export function isFootActivity(id: string | null | undefined): id is FootDiscipline {
+  return id === 'running' || id === 'trail';
+}
+
 const defaultRoad = syncTracageOnActivityChange('road', 'vitesse', 10);
 const defaultGravel = syncTracageOnActivityChange('gravel-default', 'vitesse', 10);
 const defaultMtb = syncTracageOnActivityChange('mtb', 'vitesse', 10);
+const defaultRunning = syncTracageOnActivityChange('running', 'vitesse', 10);
+const defaultTrail = syncTracageOnActivityChange('trail', 'vitesse', 10);
 
 export const ROUTE_PROFILE_PRESETS: Record<string, RouteProfilePreset> = {
   road: {
@@ -38,12 +53,26 @@ export const ROUTE_PROFILE_PRESETS: Record<string, RouteProfilePreset> = {
     priorities: defaultMtb.priorities as PrioritiesState,
     roadTypes: defaultMtb.roadTypes as Omit<RoadTypesState, 'applyToAllItineraries'>,
   },
+  running: {
+    id: 'running',
+    name: translateAppText('Running'),
+    priorities: defaultRunning.priorities as PrioritiesState,
+    roadTypes: defaultRunning.roadTypes as Omit<RoadTypesState, 'applyToAllItineraries'>,
+  },
+  trail: {
+    id: 'trail',
+    name: translateAppText('Trail'),
+    priorities: defaultTrail.priorities as PrioritiesState,
+    roadTypes: defaultTrail.roadTypes as Omit<RoadTypesState, 'applyToAllItineraries'>,
+  },
 };
 
 export const DEFAULT_PROFILES: RouteProfile[] = [
   { id: 'road', name: translateAppText('Cyclisme sur route'), isDefault: true },
   { id: 'gravel-default', name: translateAppText('Gravel') },
   { id: 'mtb', name: translateAppText('VTT') },
+  { id: 'running', name: translateAppText('Running') },
+  { id: 'trail', name: translateAppText('Trail') },
 ];
 
 export function getProfilePreset(profileId: string): RouteProfilePreset | undefined {
@@ -58,7 +87,7 @@ export const PRIORITY_KEYS: (keyof PrioritiesState)[] = ['duration', 'elevation'
  * - Additional fields (champs additionnels)
  *
  * Notice:
- * - `activityType` is excluded (switching Route / Gravel / VTT is not a custom profile)
+ * - `activityType` is excluded (switching Route / Gravel / VTT / Running / Trail is not a custom profile)
  * - `tracingMode` is excluded (switching Vitesse / Aventure / Comfort is not a custom profile)
  * - `applyToAllItineraries` is excluded (batch checkbox must never affect profile state)
  */
@@ -117,9 +146,9 @@ export function matchesProfilePreset(
   _priorities: PrioritiesState,
   roadTypes: RoadTypesState,
 ): boolean {
-  if (profileId === 'road' || profileId === 'gravel-default' || profileId === 'mtb') {
+  if (isActivityPresetId(profileId)) {
     const currentMode = (roadTypes.tracingMode ?? 'vitesse') as TracingModeType;
-    const baseline = syncTracageOnActivityChange(profileId as ActivityType, currentMode, 10);
+    const baseline = syncTracageOnActivityChange(profileId, currentMode, 10);
     return !isRoadTypesCustomized(roadTypes, baseline.roadTypes);
   }
 
@@ -143,10 +172,7 @@ export function resolveProfilePresetId(
   }
 
   const activityType = roadTypes.activityType;
-  if (
-    activityType &&
-    (activityType === 'road' || activityType === 'gravel-default' || activityType === 'mtb')
-  ) {
+  if (isActivityPresetId(activityType)) {
     if (matchesProfilePreset(activityType, priorities, roadTypes)) {
       return activityType;
     }

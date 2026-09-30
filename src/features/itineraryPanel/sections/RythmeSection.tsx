@@ -3,7 +3,8 @@ import { readDocumentAppLocale, translateAppText, useAppI18n } from '@/shared/i1
 import { ActionButtonStack, ToggleRow } from '../components/controls';
 import { PortalDropdown } from '../components/controls/PortalDropdown';
 import { Collapse } from '../components/shell';
-import { PauseIntervalList, PoiPauseGrid } from './rythme/components';
+import { PauseIntervalList, PoiPauseGrid, RunReferenceFields, TerrainTechnicalityRow } from './rythme/components';
+import { isFootDiscipline, type SportDiscipline } from '@/shared/lib/discipline';
 import { CalendarPopover } from '../components/calendar';
 import { IconInfo, IconPlus } from '../components/icons';
 import { IconFigmaCheck } from '../components/iconsFigma';
@@ -11,6 +12,8 @@ import type { PauseIntervalRow, RhythmState } from '../types';
 
 interface RythmeSectionProps {
   rhythm: RhythmState;
+  /** Trail / Running swap FTP, weight and tyres for running references. */
+  discipline?: SportDiscipline;
   onChange?: <K extends keyof RhythmState>(key: K, value: RhythmState[K]) => void;
   onUploadFit?: () => void;
   uploadFitLabel?: string;
@@ -218,6 +221,7 @@ function TimeChipInput({
 
 export function RythmeSection({
   rhythm,
+  discipline = 'bike',
   onChange,
   onUploadFit,
   uploadFitLabel,
@@ -364,139 +368,145 @@ export function RythmeSection({
 
         {/* ── ROW 3 : FTP / Poids / Pneus / Météo (Figma 4 columns) ── */}
         <div className="rvi-rythme-figma__row-four">
-          {/* Col 1 : FTP */}
-          <div className="rvi-rythme-figma__col">
-            <span className="rvi-rythme-figma__label-title">{t('FTP')}</span>
-            <div
-              className={`rvi-rythme-figma__card-box${
-                rhythm.ftp !== null && rhythm.ftp > 0 ? ' rvi-rythme-figma__card-box--has-val' : ''
-              }`}
-            >
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={rhythm.ftp !== null && rhythm.ftp > 0 ? String(rhythm.ftp) : ''}
-                placeholder="Auto"
-                onKeyDown={(e) => {
-                  if (
-                    ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) ||
-                    e.ctrlKey ||
-                    e.metaKey
-                  ) {
-                    return;
-                  }
-                  if (!/^\d$/.test(e.key)) {
-                    e.preventDefault();
-                  }
-                }}
-                onChange={(e) => {
-                  const cleaned = e.target.value.replace(/\D/g, '');
-                  if (!cleaned) {
-                    onChange?.('ftp', null);
-                  } else {
-                    const n = parseInt(cleaned, 10);
-                    onChange?.('ftp', Number.isFinite(n) && n > 0 ? n : null);
-                  }
-                }}
-                aria-label={t('FTP')}
-              />
-              {rhythm.ftp !== null && rhythm.ftp > 0 ? (
-                <span className="rvi-rythme-figma__card-unit">W</span>
-              ) : null}
-            </div>
-          </div>
-
-          {/* Col 2 : Poids */}
-          <div className="rvi-rythme-figma__col">
-            <span className="rvi-rythme-figma__label-title">{t('Poids')}</span>
-            <div
-              className={`rvi-rythme-figma__card-box${
-                rhythm.systemWeightKg !== null && rhythm.systemWeightKg > 0
-                  ? ' rvi-rythme-figma__card-box--has-val'
-                  : ''
-              }`}
-            >
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={
-                  rhythm.systemWeightKg !== null && rhythm.systemWeightKg > 0
-                    ? String(rhythm.systemWeightKg)
-                    : ''
-                }
-                placeholder="Auto"
-                onKeyDown={(e) => {
-                  if (
-                    ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) ||
-                    e.ctrlKey ||
-                    e.metaKey
-                  ) {
-                    return;
-                  }
-                  if (!/^\d$/.test(e.key)) {
-                    e.preventDefault();
-                  }
-                }}
-                onChange={(e) => {
-                  const cleaned = e.target.value.replace(/\D/g, '');
-                  if (!cleaned) {
-                    onChange?.('systemWeightKg', null);
-                  } else {
-                    const n = parseInt(cleaned, 10);
-                    onChange?.('systemWeightKg', Number.isFinite(n) && n > 0 ? n : null);
-                  }
-                }}
-                aria-label={t('Poids')}
-              />
-              {rhythm.systemWeightKg !== null && rhythm.systemWeightKg > 0 ? (
-                <span className="rvi-rythme-figma__card-unit">kg</span>
-              ) : null}
-            </div>
-          </div>
-
-          {/* Col 3 : Pneus */}
-          <div className="rvi-rythme-figma__col">
-            <span className="rvi-rythme-figma__label-title">{t('Pneus')}</span>
-            <button
-              ref={tiresBtnRef}
-              type="button"
-              className={`rvi-rythme-figma__card-box${tiresMenuOpen ? ' is-open' : ''}`}
-              onClick={() => setTiresMenuOpen((v) => !v)}
-              aria-label={t('Largeur de pneus')}
-              aria-haspopup="listbox"
-              aria-expanded={tiresMenuOpen}
-            >
-              <span>{rhythm.tiresMm ? `${rhythm.tiresMm}mm` : '35mm'}</span>
-            </button>
-
-            <PortalDropdown
-              open={tiresMenuOpen}
-              anchorRef={tiresBtnRef}
-              onClose={() => setTiresMenuOpen(false)}
-              align="left"
-              estimatedHeight={200}
-            >
-              {TIRE_OPTIONS.map((mm) => (
-                <button
-                  key={mm}
-                  type="button"
-                  className={`rv-dropdown__item${
-                    (rhythm.tiresMm ?? 35) === mm ? ' is-selected' : ''
-                  }`}
-                  onClick={() => {
-                    onChange?.('tiresMm', mm);
-                    setTiresMenuOpen(false);
+          {isFootDiscipline(discipline) ? (
+            <RunReferenceFields rhythm={rhythm} onChange={onChange} />
+          ) : (
+            <>
+            {/* Col 1 : FTP */}
+            <div className="rvi-rythme-figma__col">
+              <span className="rvi-rythme-figma__label-title">{t('FTP')}</span>
+              <div
+                className={`rvi-rythme-figma__card-box${
+                  rhythm.ftp !== null && rhythm.ftp > 0 ? ' rvi-rythme-figma__card-box--has-val' : ''
+                }`}
+              >
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={rhythm.ftp !== null && rhythm.ftp > 0 ? String(rhythm.ftp) : ''}
+                  placeholder="Auto"
+                  onKeyDown={(e) => {
+                    if (
+                      ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) ||
+                      e.ctrlKey ||
+                      e.metaKey
+                    ) {
+                      return;
+                    }
+                    if (!/^\d$/.test(e.key)) {
+                      e.preventDefault();
+                    }
                   }}
-                  role="option"
-                  aria-selected={(rhythm.tiresMm ?? 35) === mm}
-                >
-                  <span>{mm}mm</span>
-                </button>
-              ))}
-            </PortalDropdown>
-          </div>
+                  onChange={(e) => {
+                    const cleaned = e.target.value.replace(/\D/g, '');
+                    if (!cleaned) {
+                      onChange?.('ftp', null);
+                    } else {
+                      const n = parseInt(cleaned, 10);
+                      onChange?.('ftp', Number.isFinite(n) && n > 0 ? n : null);
+                    }
+                  }}
+                  aria-label={t('FTP')}
+                />
+                {rhythm.ftp !== null && rhythm.ftp > 0 ? (
+                  <span className="rvi-rythme-figma__card-unit">W</span>
+                ) : null}
+              </div>
+            </div>
+
+            {/* Col 2 : Poids */}
+            <div className="rvi-rythme-figma__col">
+              <span className="rvi-rythme-figma__label-title">{t('Poids')}</span>
+              <div
+                className={`rvi-rythme-figma__card-box${
+                  rhythm.systemWeightKg !== null && rhythm.systemWeightKg > 0
+                    ? ' rvi-rythme-figma__card-box--has-val'
+                    : ''
+                }`}
+              >
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={
+                    rhythm.systemWeightKg !== null && rhythm.systemWeightKg > 0
+                      ? String(rhythm.systemWeightKg)
+                      : ''
+                  }
+                  placeholder="Auto"
+                  onKeyDown={(e) => {
+                    if (
+                      ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) ||
+                      e.ctrlKey ||
+                      e.metaKey
+                    ) {
+                      return;
+                    }
+                    if (!/^\d$/.test(e.key)) {
+                      e.preventDefault();
+                    }
+                  }}
+                  onChange={(e) => {
+                    const cleaned = e.target.value.replace(/\D/g, '');
+                    if (!cleaned) {
+                      onChange?.('systemWeightKg', null);
+                    } else {
+                      const n = parseInt(cleaned, 10);
+                      onChange?.('systemWeightKg', Number.isFinite(n) && n > 0 ? n : null);
+                    }
+                  }}
+                  aria-label={t('Poids')}
+                />
+                {rhythm.systemWeightKg !== null && rhythm.systemWeightKg > 0 ? (
+                  <span className="rvi-rythme-figma__card-unit">kg</span>
+                ) : null}
+              </div>
+            </div>
+
+            {/* Col 3 : Pneus */}
+            <div className="rvi-rythme-figma__col">
+              <span className="rvi-rythme-figma__label-title">{t('Pneus')}</span>
+              <button
+                ref={tiresBtnRef}
+                type="button"
+                className={`rvi-rythme-figma__card-box${tiresMenuOpen ? ' is-open' : ''}`}
+                onClick={() => setTiresMenuOpen((v) => !v)}
+                aria-label={t('Largeur de pneus')}
+                aria-haspopup="listbox"
+                aria-expanded={tiresMenuOpen}
+              >
+                <span>{rhythm.tiresMm ? `${rhythm.tiresMm}mm` : '35mm'}</span>
+              </button>
+
+              <PortalDropdown
+                open={tiresMenuOpen}
+                anchorRef={tiresBtnRef}
+                onClose={() => setTiresMenuOpen(false)}
+                align="left"
+                estimatedHeight={200}
+              >
+                {TIRE_OPTIONS.map((mm) => (
+                  <button
+                    key={mm}
+                    type="button"
+                    className={`rv-dropdown__item${
+                      (rhythm.tiresMm ?? 35) === mm ? ' is-selected' : ''
+                    }`}
+                    onClick={() => {
+                      onChange?.('tiresMm', mm);
+                      setTiresMenuOpen(false);
+                    }}
+                    role="option"
+                    aria-selected={(rhythm.tiresMm ?? 35) === mm}
+                  >
+                    <span>{mm}mm</span>
+                  </button>
+                ))}
+              </PortalDropdown>
+            </div>
+            </>
+          )}
 
           {/* Col 4 : Météo */}
           <div className="rvi-rythme-figma__col">
@@ -516,6 +526,10 @@ export function RythmeSection({
             </button>
           </div>
         </div>
+
+        {discipline === 'trail' && (
+          <TerrainTechnicalityRow value={rhythm.terrainTechnicality} onChange={onChange} />
+        )}
 
         {/* ── ROW 4 : Appliquer à tout les itinéraires ── */}
         <button

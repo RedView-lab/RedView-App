@@ -314,6 +314,7 @@ mod tests {
             avg_hr_bpm: 140.0,
             has_power,
             has_hr: true,
+            sport: None,
         };
 
         ActivityData { points, summary }

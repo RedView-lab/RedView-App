@@ -266,18 +266,6 @@ export const metricsGridStyle: CSSProperties = {
   gap: 8,
 };
 
-export const exportBtnStyle: CSSProperties = {
-  padding: '3px 10px',
-  fontSize: 10,
-  fontWeight: 600,
-  borderRadius: 6,
-  border: '1px solid rgba(230,126,34,0.5)',
-  background: 'rgba(230,126,34,0.15)',
-  color: '#e67e22',
-  cursor: 'pointer',
-  whiteSpace: 'nowrap',
-};
-
 export const metricCardStyle: CSSProperties = {
   padding: '9px 10px',
   borderRadius: 12,

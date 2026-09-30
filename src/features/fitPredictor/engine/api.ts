@@ -4,6 +4,7 @@ import type {
   FitWorkerResponse,
   PredictionConfig,
   PredictionResult,
+  RunPredictionConfig,
 } from '../types';
 
 type PendingRequest = {
@@ -70,6 +71,25 @@ export function createFitPredictionEngine() {
       const request: FitWorkerRequest = {
         _id: ++idCounter,
         type: 'predict',
+        fitFiles: fitBuffers,
+        gpxData: gpxBuffer,
+        config,
+      };
+
+      return send<PredictionResult>(request, [...fitBuffers, gpxBuffer], onProgress);
+    },
+
+    async predictRun(
+      fitFiles: readonly File[],
+      gpxFile: File,
+      config: RunPredictionConfig,
+      onProgress?: (message: string) => void,
+    ): Promise<PredictionResult> {
+      const fitBuffers = await Promise.all(fitFiles.map((file) => file.arrayBuffer()));
+      const gpxBuffer = await gpxFile.arrayBuffer();
+      const request: FitWorkerRequest = {
+        _id: ++idCounter,
+        type: 'predictRun',
         fitFiles: fitBuffers,
         gpxData: gpxBuffer,
         config,

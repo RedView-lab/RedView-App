@@ -31,8 +31,13 @@ pub fn predict(
     let pacing = config.pacing_factor;
     let drivetrain_eff = config.drivetrain_efficiency.unwrap_or(DRIVETRAIN_EFFICIENCY);
 
-    // Gender-based speed modifier
-    let gender_factor = config.gender.speed_factor();
+    // Gender-based speed modifier — only a population prior: a user-entered FTP
+    // already reflects the rider's physiology, so don't penalise twice.
+    let gender_factor = if config.ftp_w.is_some() {
+        1.0
+    } else {
+        config.gender.speed_factor()
+    };
 
     // Apply fatigue overrides from config
     let mut profile = profile.clone();

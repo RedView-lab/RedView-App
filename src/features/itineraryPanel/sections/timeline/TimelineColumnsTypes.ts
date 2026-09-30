@@ -1,4 +1,5 @@
 import type { PredictionPoint, PredictionResult } from '@/features/fitPredictor';
+import type { SportDiscipline } from '@/shared/lib/discipline';
 import type { RhythmState, TimelineItem } from '../../types';
 import type { StartReference } from './TimelineTimelineView/types';
 
@@ -51,6 +52,8 @@ export interface TimelineColumnContext {
   pointPrev: PredictionPoint | null;
   pointNext: PredictionPoint | null;
   weather?: RouteWeatherValues | null;
+  /** Trail / Running show paces (min/km) instead of km/h. */
+  discipline: SportDiscipline;
 }
 
 export interface TimelineColumnCell {
@@ -68,6 +71,11 @@ export interface TimelineColumnDef {
   defaultWidth?: number;
   pinned?: boolean;
   custom?: boolean;
+  /** Header labels used for Trail / Running (pace columns). */
+  footLabel?: string;
+  footShortLabel?: string;
+  /** Hidden for Trail / Running (no power model). */
+  bikeOnly?: boolean;
   getCell: (ctx: TimelineColumnContext) => TimelineColumnCell;
 }
 
@@ -80,4 +88,6 @@ export interface BuildContextArgs {
   rhythm: RhythmState | undefined;
   reference: StartReference;
   weatherDataset?: RouteWeatherDataset | null;
+  /** Itinerary discipline, used when there is no prediction yet. */
+  discipline?: SportDiscipline;
 }

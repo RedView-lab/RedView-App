@@ -46,6 +46,7 @@ export default function Dashboard({
     handleOpenProject,
     handleBackToBrowser,
     handleProjectChange,
+    handleSaveProject,
     updatePersistedDashboard,
   } = useDashboardProjectState({
     initialProjectId,
@@ -242,6 +243,7 @@ export default function Dashboard({
               onCenterResizeStart={handleCenterPanelResizeStart}
               onProjectChange={handleProjectChange}
               onBackToBrowser={handleBackToBrowser}
+              onSaveProject={handleSaveProject}
               onOverlayReload={handleOverlayReload}
               onBasemapChange={handleBasemapChange}
               onWeatherOverlayStatusChange={handleWeatherOverlayStatusChange}

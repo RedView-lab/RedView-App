@@ -2,6 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useAnalysisFlyover } from '../../flyover';
 import { useRouteSplitToolOptional } from '../../routeSplit';
 import {
+  axis2Options,
+  axisOptions,
   CHART_CLICK_FOCUS_PITCH,
   CHART_CLICK_FOCUS_ZOOM,
   type CenterPanelAnalysisProps,
@@ -9,8 +11,10 @@ import {
   detailOffsetForCenter,
   detailZoomToVisibleFraction,
   extractRouteSegmentPoints,
+  filterAxisOptionsForDiscipline,
   findSplitIndexForChartX,
   lightenColor,
+  mapAxisMetricForDiscipline,
   normalizeAnalysisState,
   normalizeUnitInterval,
   selectInteractiveItineraryForChartX,
@@ -43,9 +47,11 @@ import { useAppI18n } from '@/shared/i18n';
 import { getItineraryStartDistanceKm } from '@/features/itineraryPanel/lineage/itineraryLineage';
 import type { AnalysisPanelState } from '@/features/itineraryPanel/types';
 
+import { isFootDiscipline } from '@/shared/lib/discipline';
 import { useAnalysisViewportSync } from './useAnalysisViewportSync';
 import { useAnalysisChartData } from './useAnalysisChartData';
 import { useAnalysisHoverPointMarker } from './useAnalysisHoverPointMarker';
+import { useAnalysisAlertMapMarkers } from './useAnalysisAlertMapMarkers';
 import { AnalysisToolbar } from './AnalysisToolbar';
 
 /**
@@ -69,8 +75,8 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
   const analysisState: AnalysisPanelState = rawAnalysis
     ? normalizeAnalysisState(rawAnalysis)
     : normalizeAnalysisState();
-  const axis1Value = analysisState.axis1 as AxisMetricId;
-  const axis2Value = analysisState.axis2 as AxisMetricId | null;
+  const storedAxis1 = analysisState.axis1 as AxisMetricId;
+  const storedAxis2 = analysisState.axis2 as AxisMetricId | null;
   const xMode = analysisState.xMode as AxisMode;
   const filters = analysisState.filters;
 
@@ -110,6 +116,19 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
     );
   }, [activeItineraryId, itineraries]);
 
+  // Trail / Running: pace instead of speed, no power (display-only mapping).
+  const footDiscipline = isFootDiscipline(activeItinerary?.discipline);
+  const axis1Value = mapAxisMetricForDiscipline<AxisMetricId>(storedAxis1, footDiscipline, 'Altitude');
+  const axis2Value = mapAxisMetricForDiscipline<AxisMetricId | null>(storedAxis2, footDiscipline, null);
+  const axis1Options = useMemo(
+    () => filterAxisOptionsForDiscipline(axisOptions, footDiscipline),
+    [footDiscipline],
+  );
+  const axis2OptionList = useMemo(
+    () => filterAxisOptionsForDiscipline(axis2Options, footDiscipline),
+    [footDiscipline],
+  );
+
   const axis1Color = analysisState.axis1Color ?? activeItinerary?.color ?? DEFAULT_ANALYSIS_AXIS_COLORS.axis1;
   const axis2Color = analysisState.axis2Color
     ?? (activeItinerary?.color ? lightenColor(activeItinerary.color, 0.4) : DEFAULT_ANALYSIS_AXIS_COLORS.axis2);
@@ -127,6 +146,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
     poiAnnotations,
     dayNightOverlay,
     pauseOverlay,
+    alertOverlay,
   } = useAnalysisChartData({
     itineraries,
     predictions,
@@ -162,6 +182,12 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
     },
     [setManualHoverXValue],
   );
+
+  useAnalysisAlertMapMarkers({
+    map,
+    itineraries,
+    enabled: filters.alertes && (project?.controlPanel?.toggles?.routesEnabled ?? true),
+  });
 
   const { updateHoverPoint } = useAnalysisHoverPointMarker({
     map,
@@ -204,6 +230,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
         axis1Color: current.axis1Color,
         axis2Color: current.axis2Color,
         filters: { ...current.filters },
+        surfaceFilter: current.surfaceFilter,
         detailZoom: current.detailZoom,
         detailOffset: current.detailOffset,
         yZoom: current.yZoom ?? 0,
@@ -563,7 +590,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
     chartClickImplRef.current = handleChartClickImpl;
   });
 
-  const toggleFilter = (key: 'pente' | 'jourNuit') => {
+  const toggleFilter = (key: 'pente' | 'jourNuit' | 'alertes') => {
     updateAnalysis((draft) => {
       draft.filters[key] = !draft.filters[key];
     });
@@ -594,8 +621,12 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
         onAxis2ColorChange={(col) => updateAnalysis((d) => { d.axis2Color = col; })}
         filters={filters}
         onToggleFilter={toggleFilter}
+        surfaceFilter={analysisState.surfaceFilter ?? 'all'}
+        onSurfaceFilterChange={(value) => updateAnalysis((d) => { d.surfaceFilter = value; })}
         disabledFilters={disabledFilters}
         disabledXModes={disabledXModes}
+        axis1Options={axis1Options}
+        axis2Options={axis2OptionList}
       />
 
       <div className="rvc-center-analysis__results" aria-label={t("Graphique d'analyse")}>
@@ -606,6 +637,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
           poiAnnotations={poiAnnotations}
           dayNightOverlay={dayNightOverlay}
           pauseOverlay={pauseOverlay}
+          alertOverlay={alertOverlay}
           axis1Metric={axis1Value}
           axis2Metric={axis2Value}
           xMode={xMode}

@@ -29,6 +29,10 @@ type PauseBand = {
 
 const EMPTY_PAUSE_BANDS: PauseBand[] = [];
 
+type AlertBand = { id: string; startRatio: number; endRatio: number };
+
+const EMPTY_ALERT_BANDS: AlertBand[] = [];
+
 interface AnalysisChartLayoutProps {
   style: CSSProperties;
   axis1Metric: AxisMetricId;
@@ -47,6 +51,7 @@ interface AnalysisChartLayoutProps {
   } | null;
   dayNightBands: Array<{ id: string; startRatio: number; endRatio: number }>;
   pauseBands?: PauseBand[];
+  alertBands?: AlertBand[];
   yPositions: Array<{ value: number; ratio: number }>;
   y2Positions: Array<{ value: number; ratio: number }>;
   xPositions: Array<{ value: number; ratio: number }>;
@@ -82,11 +87,13 @@ interface AnalysisChartLayoutProps {
 const ChartBackgroundLayer = memo(function ChartBackgroundLayer({
   dayNightBands,
   pauseBands,
+  alertBands,
   yPositions,
   xPositions,
   nightFrames,
 }: Pick<AnalysisChartLayoutProps, 'dayNightBands' | 'yPositions' | 'xPositions' | 'nightFrames'> & {
   pauseBands: PauseBand[];
+  alertBands: AlertBand[];
 }) {
   return (
     <div className="rvchart__layer rvchart__layer--bg" aria-hidden="true">
@@ -112,6 +119,20 @@ const ChartBackgroundLayer = memo(function ChartBackgroundLayer({
             }}
             title={label ? `${label}${durationMin ? ` · ${durationMin} min` : ''}` : undefined}
           />
+        );
+      })}
+      {alertBands.map(({ id, startRatio, endRatio }) => {
+        const clampedStart = Math.max(0, startRatio);
+        const clampedEnd = Math.min(1, endRatio);
+        if (clampedEnd <= clampedStart) return null;
+        return (
+          <div
+            key={id}
+            className="rvchart__alert-band"
+            style={{ left: `${clampedStart * 100}%`, width: `${(clampedEnd - clampedStart) * 100}%` }}
+          >
+            <img className="rvchart__alert-icon" src="/svgv2/icone/search-filter-alertes.svg" alt="" />
+          </div>
         );
       })}
       {dayNightBands.map(({ id, startRatio, endRatio }) =>
@@ -233,6 +254,7 @@ export function AnalysisChartLayout({
   selectionBand,
   dayNightBands,
   pauseBands = EMPTY_PAUSE_BANDS,
+  alertBands = EMPTY_ALERT_BANDS,
   yPositions,
   y2Positions,
   xPositions,
@@ -311,6 +333,7 @@ export function AnalysisChartLayout({
           <ChartBackgroundLayer
             dayNightBands={dayNightBands}
             pauseBands={pauseBands}
+            alertBands={alertBands}
             yPositions={yPositions}
             xPositions={xPositions}
             nightFrames={nightFrames}

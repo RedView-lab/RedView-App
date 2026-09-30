@@ -2,6 +2,7 @@ import type { PredictionPoint, PredictionResult } from '@/features/fitPredictor'
 import type { AxisMode, ChartMetricId, ChartPoint } from './seriesCommon';
 
 const INTERVAL_AVERAGE_SPAN_M = 500;
+const MAX_PACE_MIN_PER_KM = 30;
 const MAX_CHART_POINT_COUNT = 2000;
 
 interface DistanceMetricSample {
@@ -15,6 +16,12 @@ export function metricValueAtPoint(metric: ChartMetricId, point: PredictionPoint
     case 'Vitesse':
     case 'Vitesse moyenne':
       return point.predicted_speed_kmh;
+    case 'Allure':
+    case 'Allure moyenne':
+      // Decimal minutes per km, capped so walking / stops don't flatten the axis.
+      return point.predicted_speed_kmh > 0.5
+        ? Math.min(60 / point.predicted_speed_kmh, MAX_PACE_MIN_PER_KM)
+        : Number.NaN;
     case 'Puissance':
     case 'Puissance moyenne':
       return point.predicted_power_w;

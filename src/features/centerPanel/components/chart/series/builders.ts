@@ -1,8 +1,9 @@
 import type { PredictionResult } from '@/features/fitPredictor';
+import { isFootDiscipline, resolvePredictionDiscipline } from '@/shared/lib/discipline';
 import { buildRouteContentSignature } from '@/features/itineraryPanel/lib/routes';
 import { buildPauseAwareSchedule, type PauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule';
 import type { Itinerary } from '@/features/itineraryPanel/types';
-import { isWeatherMetric, metricIsAvailable, type AxisDomain, type AxisMode, type ChartMetricId, type ChartPoint, type RouteChartPoint } from '../seriesCommon';
+import { isPowerMetric, isWeatherMetric, metricIsAvailable, type AxisDomain, type AxisMode, type ChartMetricId, type ChartPoint, type RouteChartPoint } from '../seriesCommon';
 import {
   generateEstimatedRouteWeatherValues,
   getRouteWeatherAtDistanceAndTime,
@@ -250,6 +251,8 @@ export function buildSeriesFromPrediction(
 
   if (!prediction || prediction.points.length === 0) return null;
   if (!metricIsAvailable(metric)) return null;
+  // The running engine has no power model.
+  if (isPowerMetric(metric) && isFootDiscipline(resolvePredictionDiscipline(prediction))) return null;
 
   const predictionCache = getPredictionSeriesCacheMap(prediction);
   const predictionCacheKey = getPredictionSeriesCacheKey(metric, xMode, startTime, pauseSchedule?.pauseSignature);
@@ -258,7 +261,7 @@ export function buildSeriesFromPrediction(
 
   let result: ChartPoint[] | null = null;
 
-  if (metric === 'Vitesse moyenne' || metric === 'Puissance moyenne') {
+  if (metric === 'Vitesse moyenne' || metric === 'Allure moyenne' || metric === 'Puissance moyenne') {
     const averageSeries = buildFixedDistanceAverageSeries(
       prediction,
       metric,

@@ -1,3 +1,4 @@
+import type { SportDiscipline } from '@/shared/lib/discipline';
 import type { TimelineColumnDef } from './TimelineColumnsTypes';
 import {
   avgPowerBetween,
@@ -8,10 +9,11 @@ import {
   fmtPower,
   fmtRain,
   fmtSeconds,
-  fmtSpeed,
+  fmtSpeedOrPace,
   fmtTemperature,
   fmtWind,
   gainLossBetween,
+  speedSortKey,
 } from './timelineColumnsFormatters';
 
 function avgSpeedFromElapsed(
@@ -135,42 +137,49 @@ export const TIMELINE_COLUMNS: TimelineColumnDef[] = [
     id: 'avgSpeedFromStart',
     label: 'Vitesse moyenne depuis le début',
     shortLabel: 'V̄ depuis départ',
+    footLabel: 'Allure moyenne depuis le début',
+    footShortLabel: 'Allure depuis départ',
     defaultOn: true,
     align: 'right',
     minWidth: 88,
     getCell: (ctx) => {
       const v = avgSpeedFromElapsed(ctx.distanceM, ctx.elapsedS);
-      return { display: fmtSpeed(v), sortKey: v };
+      return { display: fmtSpeedOrPace(v, ctx.discipline), sortKey: speedSortKey(v, ctx.discipline) };
     },
   },
   {
     id: 'avgSpeedSincePrev',
     label: 'Vitesse moyenne depuis l’élément précédent',
     shortLabel: 'V̄ depuis prev',
+    footLabel: 'Allure moyenne depuis l’élément précédent',
+    footShortLabel: 'Allure depuis prev',
     defaultOn: false,
     align: 'right',
     minWidth: 88,
     getCell: (ctx) => {
       const v = avgSpeedBetweenDistanceAndTime(ctx.prevDistanceM, ctx.distanceM, ctx.elapsedPrevS, ctx.elapsedS);
-      return { display: fmtSpeed(v), sortKey: v };
+      return { display: fmtSpeedOrPace(v, ctx.discipline), sortKey: speedSortKey(v, ctx.discipline) };
     },
   },
   {
     id: 'avgSpeedToNext',
     label: 'Vitesse moyenne jusqu’au prochain élément',
     shortLabel: 'V̄ → next',
+    footLabel: 'Allure moyenne jusqu’au prochain élément',
+    footShortLabel: 'Allure → next',
     defaultOn: false,
     align: 'right',
     minWidth: 88,
     getCell: (ctx) => {
       const v = avgSpeedBetweenDistanceAndTime(ctx.distanceM, ctx.nextDistanceM, ctx.elapsedS, ctx.elapsedNextS);
-      return { display: fmtSpeed(v), sortKey: v };
+      return { display: fmtSpeedOrPace(v, ctx.discipline), sortKey: speedSortKey(v, ctx.discipline) };
     },
   },
   {
     id: 'avgPowerFromStart',
     label: 'Puissance moyenne (depuis le début)',
     shortLabel: 'P̄ depuis départ',
+    bikeOnly: true,
     defaultOn: false,
     align: 'right',
     minWidth: 88,
@@ -183,6 +192,7 @@ export const TIMELINE_COLUMNS: TimelineColumnDef[] = [
     id: 'avgPowerSincePrev',
     label: 'Puissance moyenne (depuis l’élément précédent)',
     shortLabel: 'P̄ depuis prev',
+    bikeOnly: true,
     defaultOn: false,
     align: 'right',
     minWidth: 88,
@@ -195,6 +205,7 @@ export const TIMELINE_COLUMNS: TimelineColumnDef[] = [
     id: 'avgPowerToNext',
     label: 'Puissance moyenne (jusqu’au prochain élément)',
     shortLabel: 'P̄ → next',
+    bikeOnly: true,
     defaultOn: false,
     align: 'right',
     minWidth: 88,
@@ -333,3 +344,16 @@ export const TIMELINE_COLUMNS: TimelineColumnDef[] = [
     }),
   },
 ];
+
+/**
+ * Columns for a discipline: Trail / Running drop the power columns and use
+ * pace labels on the speed columns.
+ */
+export function resolveTimelineColumns(discipline: SportDiscipline): TimelineColumnDef[] {
+  if (discipline === 'bike') return TIMELINE_COLUMNS;
+  return TIMELINE_COLUMNS.filter((column) => !column.bikeOnly).map((column) =>
+    column.footLabel
+      ? { ...column, label: column.footLabel, shortLabel: column.footShortLabel ?? column.shortLabel }
+      : column,
+  );
+}

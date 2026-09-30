@@ -19,6 +19,9 @@ export {
   isRoadTypesCustomized,
   isRoadTypesMatching,
   CUSTOMIZABLE_ROAD_TYPE_KEYS,
+  ACTIVITY_PRESET_IDS,
+  isActivityPresetId,
+  isFootActivity,
 } from './profilePresets';
 export type { RouteProfilePreset } from './profilePresets';
 export {

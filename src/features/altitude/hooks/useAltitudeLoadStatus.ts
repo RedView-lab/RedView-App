@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { Map as MapboxMap, MapSourceDataEvent } from 'mapbox-gl';
+import type { ErrorEvent as MapboxErrorEvent, Map as MapboxMap, MapSourceDataEvent } from 'mapbox-gl';
 
 import { ALTITUDE_SOURCE_ID } from '../lib/altitude-source';
 import {
@@ -67,10 +67,24 @@ export function useAltitudeLoadStatus(
       }));
     };
 
+    const isSourceLoaded = (): boolean => {
+      try {
+        return Boolean(map.getSource(ALTITUDE_SOURCE_ID)) && map.isSourceLoaded(ALTITUDE_SOURCE_ID);
+      } catch {
+        return false;
+      }
+    };
+
     const publishProgress = () => {
       const total = requested.size;
       const done = loaded.size;
       if (total === 0) {
+        // Every visible tile came from cache (no sourcedataloading event):
+        // nothing is in flight, so the overlay is ready.
+        if (isSourceLoaded()) {
+          emit('ready', 100, 'Altitude prête');
+          return;
+        }
         emit('loading', 5, 'En attente de tuiles');
         return;
       }
@@ -87,8 +101,12 @@ export function useAltitudeLoadStatus(
       watchdog = setTimeout(() => {
         watchdog = null;
         if (requested.size === 0) {
-          // Nothing in flight yet (or every tile errored): keep watching
-          // instead of leaving the pill stuck on "loading".
+          // Nothing in flight (or every tile errored) for a full stagnation
+          // window: the overlay is as loaded as it will get.
+          if (Date.now() - lastProgressMs >= STAGNATION_MS) {
+            emit('ready', 100, 'Altitude prête');
+            return;
+          }
           publishProgress();
           armWatchdog();
           return;
@@ -151,9 +169,16 @@ export function useAltitudeLoadStatus(
       scheduleSettle();
     };
 
+    // Failed tiles (404 / network) emit `error`, not `sourcedata`: without
+    // this they stayed "requested" and pinned the pill below 100 %.
+    const onTileError = (event: MapboxErrorEvent) => {
+      onAbort(event as unknown as MapSourceDataEvent);
+    };
+
     map.on('sourcedataloading', onLoading);
     map.on('sourcedata', onLoaded);
     map.on('dataabort', onAbort);
+    map.on('error', onTileError);
 
     emit('loading', 5, 'Préparation altitude');
     armWatchdog();
@@ -162,6 +187,7 @@ export function useAltitudeLoadStatus(
       map.off('sourcedataloading', onLoading);
       map.off('sourcedata', onLoaded);
       map.off('dataabort', onAbort);
+      map.off('error', onTileError);
       if (settleTimer) clearTimeout(settleTimer);
       if (watchdog) clearTimeout(watchdog);
       reporterRef.current?.(null);

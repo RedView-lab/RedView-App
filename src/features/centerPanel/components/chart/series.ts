@@ -13,8 +13,11 @@ export {
 
 export {
   formatAxisValue,
+  formatPaceMinutes,
   isInclinationMetric,
   isIntervalAverageMetric,
+  isPaceMetric,
+  isPowerMetric,
   isWeatherMetric,
   metricIsAvailable,
   unitForMetric,

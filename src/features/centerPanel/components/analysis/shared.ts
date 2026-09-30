@@ -14,6 +14,7 @@ import type {
   AnalysisFiltersState,
   AnalysisPanelState,
   Itinerary,
+  RouteSurfaceFilter,
 } from '@/features/itineraryPanel/types';
 import type { RouteLayerPoint } from '@/features/itineraryPanel/lib/route-layer';
 import type { PauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule';
@@ -21,6 +22,20 @@ import type { PauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule'
 import type { TimelineFilterState } from '@/features/itineraryPanel/sections/timeline/TimelineFilters';
 
 export type FilterKey = keyof AnalysisFiltersState;
+
+export const surfaceFilterOptions: ReadonlyArray<{ value: RouteSurfaceFilter; label: string }> = [
+  { value: 'all', label: 'Toutes surfaces' },
+  { value: 'asphalt', label: 'Asphalte' },
+  { value: 'paved', label: 'Pavé / béton' },
+  { value: 'gravel', label: 'Gravel' },
+  { value: 'other', label: 'Autre (terre, sable)' },
+];
+
+function normalizeSurfaceFilter(value: unknown): RouteSurfaceFilter {
+  return surfaceFilterOptions.some((option) => option.value === value)
+    ? (value as RouteSurfaceFilter)
+    : 'all';
+}
 
 export interface CenterPanelAnalysisProps {
   map: MapboxMap | null;
@@ -46,12 +61,15 @@ export const filterDefs: ReadonlyArray<{ key: FilterKey; label: string }> = [
   { key: 'pause', label: 'Pause' },
   { key: 'pente', label: "Profil d'altitude" },
   { key: 'jourNuit', label: 'Jour/nuit' },
+  { key: 'alertes', label: 'Alertes' },
 ];
 
 export const axisOptions: AxisOption[] = [
   { value: 'Altitude', label: 'Élévation', tone: 'primary' },
   { value: 'Vitesse', label: 'Vitesse', tone: 'primary' },
   { value: 'Vitesse moyenne', label: 'Vitesse moyenne', tone: 'primary' },
+  { value: 'Allure', label: 'Allure', tone: 'primary' },
+  { value: 'Allure moyenne', label: 'Allure moyenne', tone: 'primary' },
   { value: 'Puissance', label: 'Puissance', tone: 'primary' },
   { value: 'Puissance moyenne', label: 'Puissance moyenne', tone: 'primary' },
   { value: 'Inclinaison (°)', label: 'Inclinaison (°)', tone: 'primary' },
@@ -78,6 +96,36 @@ export const axis2Options: AxisOption[] = [
   { value: 'none', label: 'Désactivé', tone: 'secondary' },
   ...axisOptions,
 ];
+
+const BIKE_ONLY_AXIS_VALUES = new Set(['Vitesse', 'Vitesse moyenne', 'Puissance', 'Puissance moyenne']);
+const FOOT_ONLY_AXIS_VALUES = new Set(['Allure', 'Allure moyenne']);
+
+/** Running shows pace instead of speed and has no power; cycling the reverse. */
+export function filterAxisOptionsForDiscipline(options: AxisOption[], foot: boolean): AxisOption[] {
+  const hidden = foot ? BIKE_ONLY_AXIS_VALUES : FOOT_ONLY_AXIS_VALUES;
+  return options.filter((option) => !hidden.has(option.value));
+}
+
+/**
+ * Display-time mapping of a persisted axis metric to the active discipline
+ * (speed ↔ pace; power has no running equivalent). The stored choice is left
+ * untouched so switching back restores it.
+ */
+export function mapAxisMetricForDiscipline<T extends string | null>(
+  metric: T,
+  foot: boolean,
+  powerFallback: T,
+): T {
+  if (foot) {
+    if (metric === 'Vitesse') return 'Allure' as T;
+    if (metric === 'Vitesse moyenne') return 'Allure moyenne' as T;
+    if (metric === 'Puissance' || metric === 'Puissance moyenne') return powerFallback;
+    return metric;
+  }
+  if (metric === 'Allure') return 'Vitesse' as T;
+  if (metric === 'Allure moyenne') return 'Vitesse moyenne' as T;
+  return metric;
+}
 
 export const DETAIL_ZOOM_STEP = 0.1;
 const DETAIL_MIN_VISIBLE_FRACTION = 0.04;
@@ -246,6 +294,7 @@ export function normalizeAnalysisState(
     axis1Color: normalizeAnalysisColor(state?.axis1Color),
     axis2Color: normalizeAnalysisColor(state?.axis2Color),
     filters,
+    surfaceFilter: normalizeSurfaceFilter(state?.surfaceFilter),
     detailZoom: normalizeUnitInterval(state?.detailZoom, fallback.detailZoom),
     detailOffset: normalizeUnitInterval(state?.detailOffset, fallback.detailOffset),
     yZoom: normalizeUnitInterval(state?.yZoom, fallback.yZoom ?? 0),

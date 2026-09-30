@@ -4,6 +4,7 @@ import {
   DEM_ACTIVITY_SETTLE_MS,
   DEM_PASSIVE_REFRESH_COOLDOWN_MS,
   LOADING_WATCHDOG_MS,
+  MAP_LOADING_MAX_MS,
 } from '../constants';
 import type { Ctx } from './context';
 
@@ -32,9 +33,43 @@ export function attachStatus(ctx: Ctx): void {
     }
   };
 
+  // Hard deadline per loading cycle. Bootstrap phases ("Relief" 68 %,
+  // "Tuiles satellites" 80 %, "Terrain" 82 %…) only complete on Mapbox
+  // `idle` / `areTilesLoaded()`, which never fire while ANY source keeps
+  // streaming (weather, POI, prefetch…). Without this cap the pill stayed
+  // frozen at 80–99 % forever even though the map was fully usable.
+  const armLoadingDeadline = (delayMs: number) => {
+    st.loadingDeadline = setTimeout(() => {
+      st.loadingDeadline = null;
+      if (isCancelled() || st.lastReportedState !== 'loading') return;
+      if (map.isMoving()) {
+        armLoadingDeadline(1_000);
+        return;
+      }
+      console.warn(`[map3d] loading cycle exceeded ${MAP_LOADING_MAX_MS} ms; reporting ready`);
+      // Deliberately NOT finishDemActivity(): its flat-terrain self-heal can
+      // trigger a reload, which would restart a cycle and loop every 12 s.
+      // The terrain heartbeat keeps covering genuine terrain drops.
+      if (st.demTrackingEnabled) {
+        fns.clearDemTracking();
+        st.hasReportedReadyOnce = true;
+        fns.reportStatus('ready', 100, 'Carte prête');
+        fns.startTerrainHeartbeat();
+      } else {
+        fns.reportStatus('ready', 100, 'Carte prête');
+      }
+    }, delayMs);
+  };
+
   fns.reportStatus = (state, progress, detail) => {
     st.lastReportedState = state;
     st.lastReportedProgress = progress;
+    if (state === 'loading') {
+      if (!st.loadingDeadline) armLoadingDeadline(MAP_LOADING_MAX_MS);
+    } else if (st.loadingDeadline) {
+      clearTimeout(st.loadingDeadline);
+      st.loadingDeadline = null;
+    }
     if (state !== 'loading' && st.loadingWatchdog) {
       clearTimeout(st.loadingWatchdog);
       st.loadingWatchdog = null;
@@ -115,16 +150,27 @@ export function attachStatus(ctx: Ctx): void {
     st.loadingWatchdog = setTimeout(() => {
       st.loadingWatchdog = null;
       if (isCancelled() || !st.demTrackingEnabled) return;
-      if (fns.allTilesLoaded() && !map.isMoving()) {
-        fns.finishDemActivity('Carte prête');
-      } else {
-        for (const key of Array.from(st.requestedTiles)) {
-          if (st.loadedTiles.has(key)) fns.dropTrackedTile(key);
-        }
-        fns.pruneStalePendingTiles();
-        fns.publishDemProgress('Tuiles en attente');
+      if (map.isMoving()) {
         fns.armLoadingWatchdog();
+        return;
       }
+      if (fns.allTilesLoaded()) {
+        fns.finishDemActivity('Carte prête');
+        return;
+      }
+      for (const key of Array.from(st.requestedTiles)) {
+        if (st.loadedTiles.has(key)) fns.dropTrackedTile(key);
+      }
+      fns.pruneStalePendingTiles();
+      // `allTilesLoaded()` covers EVERY source (weather, POI, vector…), so it
+      // can stay false indefinitely. Once no tracked relief/raster tile is
+      // pending anymore, the map is done from the user's point of view.
+      if (st.requestedTiles.size === 0) {
+        fns.finishDemActivity('Carte prête');
+        return;
+      }
+      fns.publishDemProgress('Tuiles en attente');
+      fns.armLoadingWatchdog();
     }, LOADING_WATCHDOG_MS);
   };
 

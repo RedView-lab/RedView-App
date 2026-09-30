@@ -176,6 +176,28 @@ fn route_dplus_intensity_correction(
     }
 }
 
+/// Physiological power distribution by gradient (fraction of FTP).
+/// On long endurance/ultra rides, riders sustain threshold/tempo on climbs (>3.5%),
+/// but cruise in Zone 2 on flat terrain (65-72% FTP), and coast on descents.
+fn terrain_power_factor(gradient_pct: f64) -> f64 {
+    if gradient_pct > 3.5 {
+        1.0
+    } else if gradient_pct > -1.0 {
+        // Smooth ramp from 0.70 on flat (-1% to 0%) up to 1.0 on steep climbs (>3.5%)
+        0.70 + 0.30 * ((gradient_pct + 1.0) / 4.5).clamp(0.0, 1.0)
+    } else {
+        0.15 // Descending: coasting / soft pedaling
+    }
+}
+
+/// On descents, riders brake to control speed based on handling, safety and road vision.
+/// Pure unbraked physics terminal velocity (55-65 km/h) is unrealistic for amateur/bikepacking.
+/// Bound physics speed to the rider's observed empirical descent capability.
+fn braked_descent_speed(physics_speed_ms: f64, spline_bins: &SplineBins, gradient_pct: f64) -> f64 {
+    let empirical_descent = spline_bins.lookup_fresh(gradient_pct).unwrap_or(33.0 / 3.6);
+    physics_speed_ms.min(empirical_descent * 1.15).min(42.0 / 3.6)
+}
+
 /// Run a single prediction pass with per-point fatigue.
 pub fn predict_single_pass(
     profile: &RiderProfile,
@@ -501,20 +523,11 @@ pub fn predict_single_pass(
 
             let fatigue_factor = compute_fatigue_factor(&profile.fatigue, elapsed_h);
 
-            // Physiological power distribution by gradient:
-            // On long endurance/ultra rides, riders sustain threshold/tempo on climbs (>3.5%),
-            // but cruise in Zone 2 on flat terrain (65-72% FTP), and coast on descents.
-            let terrain_power_factor = if rp.gradient_pct > 3.5 {
-                1.0
-            } else if rp.gradient_pct > -1.0 {
-                // Smooth ramp from 0.70 on flat (-1% to 0%) up to 1.0 on steep climbs (>3.5%)
-                0.70 + 0.30 * ((rp.gradient_pct + 1.0) / 4.5).clamp(0.0, 1.0)
-            } else {
-                0.15 // Descending: coasting / soft pedaling
-            };
-
-            let effective_power =
-                profile.ftp_w * terrain_power_factor * fatigue_factor * pacing * alt_factor;
+            let effective_power = profile.ftp_w
+                * terrain_power_factor(rp.gradient_pct)
+                * fatigue_factor
+                * pacing
+                * alt_factor;
             let physics_speed = solve_speed_from_power_with_efficiency(
                 effective_power,
                 mass_kg,
@@ -557,12 +570,7 @@ pub fn predict_single_pass(
             let race_factor = if race_mode { 1.05 } else { 1.0 };
 
             let blended = if rp.gradient_pct < -2.0 {
-                // On descents, riders brake to control speed based on handling, safety and road vision.
-                // Pure unbraked physics terminal velocity (55-65 km/h) is unrealistic for amateur/bikepacking.
-                // Bound physics speed to the rider's observed empirical descent capability.
-                let empirical_descent = spline_bins.lookup_fresh(rp.gradient_pct)
-                    .unwrap_or(33.0 / 3.6);
-                let safe_physics = physics_speed.min(empirical_descent * 1.15).min(42.0 / 3.6);
+                let safe_physics = braked_descent_speed(physics_speed, &spline_bins, rp.gradient_pct);
                 alpha * knn_result.speed_ms * pacing + (1.0 - alpha) * safe_physics
             } else {
                 alpha * knn_result.speed_ms * pacing * race_factor + (1.0 - alpha) * physics_speed
@@ -602,8 +610,14 @@ pub fn predict_single_pass(
         } else if has_physics {
             // Physics-based fallback (has power but not enough KNN data)
             let fatigue_factor = compute_fatigue_factor(&profile.fatigue, elapsed_h);
-            let effective_factor = fatigue_factor * pacing;
-            let available_power = profile.ftp_w * effective_factor * alt_factor;
+            // Same terrain power distribution and descent braking as the
+            // ensemble path: holding 100% FTP on the flat for the whole ride
+            // (and pedalling hard downhill) was wildly optimistic.
+            let available_power = profile.ftp_w
+                * terrain_power_factor(rp.gradient_pct)
+                * fatigue_factor
+                * pacing
+                * alt_factor;
             let speed = solve_speed_from_power_with_efficiency(
                 available_power,
                 mass_kg,
@@ -613,6 +627,11 @@ pub fn predict_single_pass(
                 rp.elevation_m,
                 drivetrain_eff,
             );
+            let speed = if rp.gradient_pct < -2.0 {
+                braked_descent_speed(speed, &spline_bins, rp.gradient_pct)
+            } else {
+                speed
+            };
             (speed, 0.0)
         } else {
             // Empirical gradient bins fallback — use blended fresh/fatigued bins.

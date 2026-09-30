@@ -14,6 +14,7 @@
 import { useCallback, useMemo, useRef, useState, type MouseEventHandler } from 'react';
 import type { PredictionResult } from '@/features/fitPredictor';
 import { useAppI18n } from '@/shared/i18n';
+import type { SportDiscipline } from '@/shared/lib/discipline';
 import type { RhythmState, TimelineItem } from '../../types';
 import { IconNiceManYellow, IconStar, IconTrash } from '../../components/icons';
 import { KindBadge, kindLabel } from './KindBadge';
@@ -21,8 +22,8 @@ import { PlaceSearchInput } from './components';
 import { TimelineRow } from './TimelineRow';
 import { TimelineAddRow } from './TimelineAddRow';
 import {
-  TIMELINE_COLUMNS,
   buildTimelineColumnContext,
+  resolveTimelineColumns,
   type TimelineColumnAlign,
   type TimelineColumnContext,
   type TimelineColumnDef,
@@ -52,6 +53,7 @@ interface TimelineSheetViewProps {
   items: TimelineItem[];
   rhythm?: RhythmState;
   prediction?: PredictionResult | null;
+  discipline?: SportDiscipline;
   weatherDataset?: RouteWeatherDataset | null;
   columns: Record<TimelineColumnId, boolean>;
   sort: TimelineTableSortState | null;
@@ -128,6 +130,7 @@ export function TimelineSheetView({
   items,
   rhythm,
   prediction,
+  discipline = 'bike',
   weatherDataset,
   columns,
   sort,
@@ -225,8 +228,8 @@ export function TimelineSheetView({
   );
 
   const visibleColumns: TimelineColumnDef[] = useMemo(
-    () => TIMELINE_COLUMNS.filter((c) => c.pinned || columns[c.id] !== false),
-    [columns],
+    () => resolveTimelineColumns(discipline).filter((c) => c.pinned || columns[c.id] !== false),
+    [columns, discipline],
   );
 
   const maxDistanceKm = useMemo(() => {
@@ -249,11 +252,12 @@ export function TimelineSheetView({
         rhythm,
         reference,
         weatherDataset,
+        discipline,
       });
       const cells = visibleColumns.map((col) => col.getCell(ctx));
       return { item, ctx, cells };
     });
-  }, [items, prediction, rhythm, visibleColumns, weatherDataset]);
+  }, [discipline, items, prediction, rhythm, visibleColumns, weatherDataset]);
 
   const sortedRows: PreparedRow[] = useMemo(() => {
     if (!sort) return preparedRows;

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { trackAnalyticsEvent } from '../../../../shared/lib/analytics';
+import { normalizeDiscipline } from '@/shared/lib/discipline';
 import {
   buildBrfProfile,
   checkRouteWithinFrance,
@@ -67,6 +68,12 @@ export function useItineraryBrouterRouting({
   const skipNextRouteRecompute = useCallback(() => {
     skipRouteRecomputeRef.current = true;
   }, []);
+  // Clé des entrées de routage (départ, arrivée, via, profil, BRF, zones…)
+  // ayant produit le tracé actuellement stocké, par itinéraire. Évite de
+  // relancer BRouter à l'ouverture d'un projet (le tracé sauvegardé est déjà
+  // le résultat de ces entrées) ou quand seul le tracé stocké a changé
+  // (nb de points après un patch / append / affinage altimétrique IGN).
+  const routedInputKeysRef = useRef(new Map<string, string>());
 
   useEffect(() => {
     activeRef.current = active;
@@ -155,6 +162,8 @@ export function useItineraryBrouterRouting({
   const expertProfileKey = active?.expertProfile
     ? JSON.stringify(active.expertProfile)
     : '';
+  // Trail / Running switch the BRF to the pedestrian network.
+  const discipline = normalizeDiscipline(active?.discipline);
 
   const brfInputs = useMemo(() => {
     if (!prioritiesKey || !roadTypesKey) return null;
@@ -162,8 +171,9 @@ export function useItineraryBrouterRouting({
       priorities: JSON.parse(prioritiesKey),
       roadTypes: JSON.parse(roadTypesKey),
       expert: expertProfileKey ? JSON.parse(expertProfileKey) : undefined,
+      discipline,
     };
-  }, [expertProfileKey, prioritiesKey, roadTypesKey]);
+  }, [discipline, expertProfileKey, prioritiesKey, roadTypesKey]);
 
   const brfProfile = useMemo(() => {
     if (!brfInputs) return '';
@@ -194,9 +204,21 @@ export function useItineraryBrouterRouting({
     );
   }, [brfHash, brfProfile, prioritiesKey, profileId]);
 
+  const routingInputKey = [
+    startKey,
+    endKey,
+    routingViaKey,
+    profileId,
+    brfHash,
+    climbing ? 1 : 0,
+    forbiddenPolygons ?? '',
+    routeRefreshNonce,
+  ].join('#');
+
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     const currentActive = activeRef.current;
+    const routedInputKeys = routedInputKeysRef.current;
     const pendingRoutePatch = currentActive?.pendingRoutePatch;
     const pendingTraceExtension = currentActive?.pendingTraceExtension;
     const existingRoutePoints = currentActive?.gpxRoute?.points ?? null;
@@ -254,6 +276,7 @@ export function useItineraryBrouterRouting({
           setRouteWarnings(applyRouteWarnings(resolvedWarnings, usedFallbackProfile));
           // Render route immediately with native BRouter elevation data
           setProject((project) => applyPendingRoutePatch(project, route, null));
+          routedInputKeys.set(itineraryForRouting.id, routingInputKey);
           setRouteLoading(false);
           console.log(
             '[BRouter] local patch OK in',
@@ -331,6 +354,7 @@ export function useItineraryBrouterRouting({
           setRouteWarnings(applyRouteWarnings(resolvedWarnings, usedFallbackProfile));
           // Render route immediately with native BRouter elevation data
           setProject((project) => applyPendingTraceAppend(project, route, null));
+          routedInputKeys.set(itineraryForRouting.id, routingInputKey);
           setRouteLoading(false);
           console.log(
             '[BRouter] append segment OK in',
@@ -382,6 +406,21 @@ export function useItineraryBrouterRouting({
       console.log('[BRouter] skipping full recompute (recalculate-trace guard)');
       deferRouteState(null);
       return;
+    }
+
+    // Tracé BRouter déjà stocké pour ces entrées : rien à recalculer. Au
+    // premier passage sur un itinéraire (ouverture de projet, duplication),
+    // le tracé sauvegardé fait foi.
+    const hasStoredRoute =
+      currentActive?.gpxRoute?.source === 'brouter' &&
+      (existingRoutePoints?.length ?? 0) >= 2;
+    if (currentActive && hasStoredRoute) {
+      const routedKey = routedInputKeys.get(currentActive.id);
+      if (routedKey === undefined || routedKey === routingInputKey) {
+        routedInputKeys.set(currentActive.id, routingInputKey);
+        deferRouteState(null);
+        return;
+      }
     }
 
     const [startLon, startLat] = startKey.split(',').map(Number);
@@ -472,6 +511,7 @@ export function useItineraryBrouterRouting({
           );
           // Render route immediately with native BRouter elevation data & unblock UI
           setProject((project) => applyRecomputedRoute(project, route, null));
+          routedInputKeys.set(itineraryForRouting.id, routingInputKey);
           setRouteLoading(false);
 
           trackAnalyticsEvent({
@@ -523,6 +563,7 @@ export function useItineraryBrouterRouting({
     profileId,
     resolveIgnAltimetryRouteProfile,
     routeRefreshNonce,
+    routingInputKey,
     rollbackPendingTraceAppend,
     setProject,
     startKey,

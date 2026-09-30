@@ -1,10 +1,24 @@
 import type { ExpertProfileState } from '../../../../expert/types';
 import type { PrioritiesState, RoadTypesState } from '../../../../types';
+import type { FootDiscipline, SportDiscipline } from '@/shared/lib/discipline';
 
 export interface BrfBuildInputs {
   priorities: PrioritiesState;
   roadTypes: RoadTypesState;
   expert?: ExpertProfileState | null;
+  /** Trail / Running switch the profile to the pedestrian network. */
+  discipline?: SportDiscipline;
+}
+
+/** Pedestrian-only knobs, set when the itinerary is Trail / Running. */
+export interface BrfFootValues {
+  style: FootDiscipline;
+  /** Ways with a SAC grade above this are forbidden (0 = no SAC path). */
+  sacLimit: number;
+  /** SAC grade with no penalty; others cost more (above) or slightly more (below). */
+  sacPreferred: number;
+  /** Cost multiplier on marked hiking / foot routes. */
+  hikingRouteFactor: number;
 }
 
 export interface BrfProfileValues {
@@ -62,4 +76,6 @@ export interface BrfProfileValues {
   bikerPower: number;
   turnInstructionMode: number;
   considerTurnRestrictions: boolean;
+  /** Non-null → pedestrian profile (validForFoot, foot access, no oneway). */
+  foot: BrfFootValues | null;
 }

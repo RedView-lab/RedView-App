@@ -1,4 +1,10 @@
-import { unitForMetric, type AxisMode, type ChartMetricId } from '../series';
+import {
+  formatPaceMinutes,
+  isPaceMetric,
+  unitForMetric,
+  type AxisMode,
+  type ChartMetricId,
+} from '../series';
 
 export function buildResponsiveXAxisLabels(
   positions: Array<{ value: number; ratio: number }>,
@@ -82,6 +88,7 @@ function estimateXAxisLabelWidth(label: string, xMode: AxisMode): number {
 
 export function formatAxisLabel(value: number, metric: ChartMetricId): string {
   if (!Number.isFinite(value)) return '--';
+  if (isPaceMetric(metric)) return formatPaceMinutes(value, false);
   let txt: string;
   if (Number.isInteger(value)) txt = String(value);
   else if (Math.abs(value) >= 100) txt = String(Math.round(value));
@@ -155,6 +162,7 @@ function formatClockHours(
 
 export function formatCellValue(value: number, metric: ChartMetricId): string {
   if (!Number.isFinite(value)) return '--';
+  if (isPaceMetric(metric)) return formatPaceMinutes(value);
   const unit = unitForMetric(metric);
   let txt: string;
   if (Math.abs(value) >= 100) txt = String(Math.round(value));

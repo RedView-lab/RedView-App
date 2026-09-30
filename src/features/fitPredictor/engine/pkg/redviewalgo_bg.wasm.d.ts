@@ -2,6 +2,7 @@
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
 export const predict: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
+export const predict_run: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
 export const predict_vs_actual: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
 export const init: () => void;
 export const __wbindgen_export: (a: number, b: number) => number;

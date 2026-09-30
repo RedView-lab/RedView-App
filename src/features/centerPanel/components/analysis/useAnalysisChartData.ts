@@ -6,6 +6,7 @@ import {
   shiftChartX,
 } from '@/features/itineraryPanel/lineage/itineraryLineage';
 import {
+  buildAlertWindowsForItinerary,
   buildChartDayNightOverlay,
   buildChartPauseOverlay,
   buildPoiAnnotationsForItinerary,
@@ -15,6 +16,7 @@ import {
   type AxisDomain,
   type AxisMetricId,
   type AxisMode,
+  type ChartAlertOverlay,
   type ChartBackdropProfile,
   type ChartDayNightOverlay,
   type ChartPauseOverlay,
@@ -254,6 +256,16 @@ export function useAnalysisChartData({
     return result;
   }, [effectiveFilters.pause, effectiveFilters.poi, effectiveFilters.waypoint, globalFilters, poiSourceNodes, xMode]);
 
+  // Alertes pente : ne dépendent que de la géométrie, de la prédiction et du
+  // mode X (comme les POI) — pas du zoom ni des métriques d'axe.
+  const alertOverlay = useMemo<ChartAlertOverlay | null>(() => {
+    if (!filters.alertes) return null;
+    const alertWindows = poiSourceNodes.flatMap(({ itinerary, prediction, xOffset }) =>
+      buildAlertWindowsForItinerary(itinerary, prediction, xMode, xOffset),
+    );
+    return alertWindows.length > 0 ? { alertWindows } : null;
+  }, [filters.alertes, poiSourceNodes, xMode]);
+
   const dayNightStartReady = Boolean(
     activeItinerary?.rhythm.startDate && activeItinerary?.rhythm.startTime,
   );
@@ -316,5 +328,6 @@ export function useAnalysisChartData({
     poiAnnotations,
     dayNightOverlay,
     pauseOverlay,
+    alertOverlay,
   };
 }

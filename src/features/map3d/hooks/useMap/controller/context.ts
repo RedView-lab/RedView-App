@@ -90,6 +90,8 @@ export interface ControllerState {
   demPassiveRefreshPending: boolean;
   demSettleTimer: ReturnType<typeof setTimeout> | null;
   loadingWatchdog: ReturnType<typeof setTimeout> | null;
+  /** Hard deadline of the current "loading" cycle (see MAP_LOADING_MAX_MS). */
+  loadingDeadline: ReturnType<typeof setTimeout> | null;
   lastReportedState: 'loading' | 'ready' | 'error';
   lastReportedProgress: number;
   disposeTerrainBootstrap: (() => void) | null;
@@ -201,6 +203,7 @@ export function createInitialState(): ControllerState {
     demPassiveRefreshPending: false,
     demSettleTimer: null,
     loadingWatchdog: null,
+    loadingDeadline: null,
     lastReportedState: 'loading',
     lastReportedProgress: 0,
     disposeTerrainBootstrap: null,

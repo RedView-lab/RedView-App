@@ -44,8 +44,15 @@ pub fn parse_fit_batch(files: &[&[u8]]) -> Result<Vec<ActivityData>, String> {
 
 /// FIT global message number for Record messages.
 const MSG_RECORD: u16 = 20;
+/// FIT global message numbers carrying the activity sport (field `sport`).
+const MSG_SESSION: u16 = 18;
+const MSG_SPORT: u16 = 12;
+/// `sport` field number in Session (5) and Sport (0) messages.
+const SESSION_SPORT_FIELD: u16 = 5;
+const SPORT_SPORT_FIELD: u16 = 0;
 
 /// Base type identifiers (FIT protocol §3.3.1).
+const BASE_ENUM: u8 = 0x00;
 const BASE_SINT8: u8 = 0x01;
 const BASE_UINT8: u8 = 0x02;
 const BASE_SINT16: u8 = 0x03;
@@ -108,7 +115,7 @@ fn read_scalar(d: &[u8], off: usize, size: u8, base: u8, be: bool) -> Option<f64
     }
     let v: f64 = match base & 0x7F {
         BASE_SINT8 if size == 1 => d[off] as i8 as f64,
-        BASE_UINT8 if size == 1 => d[off] as f64,
+        BASE_ENUM | BASE_UINT8 if size == 1 => d[off] as f64,
         BASE_SINT16 if size == 2 => {
             let b = [d[off], d[off + 1]];
             let u = if be { u16::from_be_bytes(b) } else { u16::from_le_bytes(b) };
@@ -157,7 +164,7 @@ fn read_scalar(d: &[u8], off: usize, size: u8, base: u8, be: bool) -> Option<f64
 
     let invalid = match base & 0x7F {
         BASE_SINT8 => v == 127.0,
-        BASE_UINT8 => v == 255.0,
+        BASE_ENUM | BASE_UINT8 => v == 255.0,
         BASE_SINT16 => v == 32767.0,
         BASE_UINT16 => v == 65535.0,
         BASE_SINT32 => v == 2_147_483_647.0,
@@ -201,6 +208,30 @@ fn decode_record_message(payload: &[u8], def: &LocalDef) -> RecordValues {
         }
     }
     v
+}
+
+/// Read the FIT `sport` enum from a Session or Sport message payload.
+fn decode_sport_message(payload: &[u8], def: &LocalDef) -> Option<u8> {
+    let wanted = match def.global_msg_num {
+        MSG_SESSION => SESSION_SPORT_FIELD,
+        MSG_SPORT => SPORT_SPORT_FIELD,
+        _ => return None,
+    };
+    def.fields
+        .iter()
+        .find(|&&(fnum, _, size, _)| fnum == wanted && size == 1)
+        .and_then(|&(_, off, size, base)| read_scalar(payload, off as usize, size, base, def.big_endian))
+        .map(|v| v as u8)
+}
+
+/// Keep the Session sport over the Sport message one (a Session is the
+/// authoritative summary of what was recorded).
+fn merge_sport(current: &mut Option<u8>, from_session: bool, value: Option<u8>) {
+    if let Some(v) = value {
+        if from_session || current.is_none() {
+            *current = Some(v);
+        }
+    }
 }
 
 /// Build a DataPoint from decoded Record values.
@@ -343,6 +374,7 @@ fn parse_fit_fast(data: &[u8]) -> Result<ActivityData, String> {
     let mut last_timestamp: u32 = 0;
     let mut first_timestamp: Option<f64> = None;
     let mut last_altitude: f64 = 0.0;
+    let mut sport: Option<u8> = None;
 
     let mut pos = body_start;
     'segments: loop {
@@ -380,6 +412,9 @@ fn parse_fit_fast(data: &[u8]) -> Result<ActivityData, String> {
                     if let Some(pt) = build_point(&v, &mut first_timestamp, &mut last_altitude) {
                         points.push(pt);
                     }
+                } else if def.global_msg_num == MSG_SESSION || def.global_msg_num == MSG_SPORT {
+                    let value = decode_sport_message(&data[pos..payload_end], def);
+                    merge_sport(&mut sport, def.global_msg_num == MSG_SESSION, value);
                 }
                 pos = payload_end;
             } else if header_byte & 0x40 != 0 {
@@ -409,6 +444,9 @@ fn parse_fit_fast(data: &[u8]) -> Result<ActivityData, String> {
                     if let Some(pt) = build_point(&v, &mut first_timestamp, &mut last_altitude) {
                         points.push(pt);
                     }
+                } else if def.global_msg_num == MSG_SESSION || def.global_msg_num == MSG_SPORT {
+                    let value = decode_sport_message(&data[pos..payload_end], def);
+                    merge_sport(&mut sport, def.global_msg_num == MSG_SESSION, value);
                 }
                 pos = payload_end;
             }
@@ -443,7 +481,8 @@ fn parse_fit_fast(data: &[u8]) -> Result<ActivityData, String> {
     }
 
     recompute_distance_if_needed(&mut points);
-    let summary = compute_summary(&points);
+    let mut summary = compute_summary(&points);
+    summary.sport = sport;
     Ok(ActivityData { points, summary })
 }
 
@@ -456,8 +495,18 @@ fn parse_fit_reference(data: &[u8]) -> Result<ActivityData, String> {
 
     let mut points: Vec<DataPoint> = Vec::new();
     let mut first_timestamp: Option<f64> = None;
+    let mut sport: Option<u8> = None;
 
     for msg in &messages {
+        if msg.kind() == MesgNum::Session || msg.kind() == MesgNum::Sport {
+            let value = msg
+                .fields()
+                .iter()
+                .find(|f| f.name() == "sport")
+                .and_then(|f| sport_from_value(f.value()));
+            merge_sport(&mut sport, msg.kind() == MesgNum::Session, value);
+            continue;
+        }
         if msg.kind() != MesgNum::Record {
             continue;
         }
@@ -567,9 +616,27 @@ fn parse_fit_reference(data: &[u8]) -> Result<ActivityData, String> {
 
     recompute_distance_if_needed(&mut points);
 
-    let summary = compute_summary(&points);
+    let mut summary = compute_summary(&points);
+    summary.sport = sport;
 
     Ok(ActivityData { points, summary })
+}
+
+/// The reference parser names profile enums ("running"); map the ones the
+/// engines care about back to their FIT numeric codes.
+fn sport_from_value(value: &Value) -> Option<u8> {
+    match value {
+        Value::Enum(v) | Value::UInt8(v) => Some(*v),
+        Value::String(name) => match name.as_str() {
+            "generic" => Some(0),
+            "running" => Some(crate::types::FIT_SPORT_RUNNING),
+            "cycling" => Some(crate::types::FIT_SPORT_CYCLING),
+            "walking" => Some(crate::types::FIT_SPORT_WALKING),
+            "hiking" => Some(crate::types::FIT_SPORT_HIKING),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -679,6 +746,7 @@ fn compute_summary(points: &[DataPoint]) -> ActivitySummary {
         avg_hr_bpm,
         has_power,
         has_hr,
+        sport: None,
     }
 }
 

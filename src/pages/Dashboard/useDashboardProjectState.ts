@@ -44,6 +44,7 @@ export function useDashboardProjectState({
   const {
     flushSave,
     queueProjectSave,
+    saveNow,
     captureThumbnailForProject,
     resetSyncState,
   } = useDashboardProjectSync({
@@ -141,6 +142,15 @@ export function useDashboardProjectState({
     }
   }, [beforeCloseProject, captureThumbnailForProject, flushSave, resetSyncState]);
 
+  const saveActiveProject = useCallback(async () => {
+    const saved = await saveNow();
+    const id = activeProjectIdRef.current;
+    if (saved && id) {
+      void captureThumbnailForProject(id);
+    }
+    return saved;
+  }, [captureThumbnailForProject, saveNow]);
+
   const mutateActiveProjectDashboard = useCallback(
     (mutator: DashboardPersistedMutator) => {
       const current = activeProjectSnapshotRef.current;
@@ -178,6 +188,7 @@ export function useDashboardProjectState({
     handleOpenProject: openProject,
     handleBackToBrowser: closeProject,
     handleProjectChange: queueProjectSave,
+    handleSaveProject: saveActiveProject,
     updatePersistedDashboard: mutateActiveProjectDashboard,
   };
 }

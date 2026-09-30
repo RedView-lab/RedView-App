@@ -35,6 +35,7 @@ import {
 } from './types';
 import { usePlotAreaSize } from './usePlotAreaSize';
 import { resolveItineraryHoverMetrics } from './hoverMetrics';
+import { translateAppText } from '@/shared/i18n';
 
 function pointSeriesCoversX(points: Array<{ x: number; y: number }>, xValue: number): boolean {
   if (!Number.isFinite(xValue) || points.length === 0) return false;
@@ -51,6 +52,7 @@ export const AnalysisChart = memo(function AnalysisChart({
   poiAnnotations = [],
   dayNightOverlay = null,
   pauseOverlay = null,
+  alertOverlay = null,
   axis1Metric,
   axis2Metric,
   xMode,
@@ -346,6 +348,18 @@ export const AnalysisChart = memo(function AnalysisChart({
         ),
     [pauseOverlay, plotXDomain],
   );
+  const alertBands = useMemo(
+    () =>
+      (alertOverlay?.alertWindows ?? [])
+        .map((window) => ({
+          id: window.id,
+          startRatio: ratioFor(window.startX, plotXDomain),
+          endRatio: ratioFor(window.endX, plotXDomain),
+        }))
+        .filter((window) => window.endRatio > 0 && window.startRatio < 1),
+    [alertOverlay, plotXDomain],
+  );
+
   const nightFrames = useMemo(() => {
     if (dayNightBands.length === 0) return [];
 
@@ -517,9 +531,28 @@ export const AnalysisChart = memo(function AnalysisChart({
       .filter((entry): entry is HoverCardRow => entry !== null);
   }, [chartNodes, hoverBackdropData, hoverData, hoverXValue, xMode]);
 
+  const hoverAlertRows = useMemo<HoverCardRow[]>(() => {
+    if (hoverXValue == null || !alertOverlay) return [];
+    const rows: HoverCardRow[] = [];
+    for (const window of alertOverlay.alertWindows) {
+      if (hoverXValue < window.startX || hoverXValue > window.endX) continue;
+      rows.push({
+        id: `${window.id}::hover`,
+        itineraryName: window.itineraryName,
+        color: '#ff3b30',
+        axis: null,
+        axisLabel: '',
+        metric: 'Altitude' as ChartMetricId,
+        value: 0,
+        alertLabel: `${translateAppText('Pente')} ${Math.round(window.maxGradientPct)} % · ${Math.round(window.lengthM)} m`,
+      });
+    }
+    return rows;
+  }, [alertOverlay, hoverXValue]);
+
   const hoverRows = useMemo(
-    () => [...(hoverData ?? []), ...hoverBackdropData, ...hoverChartNodesData],
-    [hoverBackdropData, hoverChartNodesData, hoverData],
+    () => [...(hoverData ?? []), ...hoverBackdropData, ...hoverChartNodesData, ...hoverAlertRows],
+    [hoverAlertRows, hoverBackdropData, hoverChartNodesData, hoverData],
   );
 
   const hoverMarkers = useMemo(() => {
@@ -765,6 +798,7 @@ export const AnalysisChart = memo(function AnalysisChart({
       selectionBand={selectionBand}
       dayNightBands={dayNightBands}
       pauseBands={pauseBands}
+      alertBands={alertBands}
       yPositions={yPositions}
       y2Positions={y2Positions}
       xPositions={xPositions}

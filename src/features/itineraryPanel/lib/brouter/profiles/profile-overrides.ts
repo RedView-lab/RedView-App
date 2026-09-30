@@ -23,7 +23,7 @@ import type {
 import type { ExpertProfileState } from '../../../expert/types';
 import { expertStateToOverrides } from '../../../expert/state-to-overrides';
 import { safeOverride } from './param-encoding';
-import type { BrouterParamOverrides, RedviewProfileId } from '../types';
+import { FOOT_FALLBACK_PROFILE, type BrouterParamOverrides, type RedviewProfileId } from '../types';
 
 /** Convert the panel-side preset id to an actual BRouter profile name. */
 export function panelProfileToBrouter(panelProfileId: string): string {
@@ -34,6 +34,9 @@ export function panelProfileToBrouter(panelProfileId: string): string {
       return 'fastbike';
     case 'mtb':
       return 'mtb';
+    case 'running':
+    case 'trail':
+      return FOOT_FALLBACK_PROFILE;
     case 'touring':
       return 'trekking';
     case 'custom':

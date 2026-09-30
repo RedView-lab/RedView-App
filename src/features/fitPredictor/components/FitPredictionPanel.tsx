@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { trackAnalyticsEvent } from '../../../shared/lib/analytics';
 import { createFitPredictionEngine } from '../engine/api';
-import { exportPredictionToExcel } from '../export';
 import {
   cardHeaderStyle,
   cardStyle,
@@ -11,7 +10,6 @@ import {
   dockStyle,
   errorChipStyle,
   errorStyle,
-  exportBtnStyle,
   fieldLabelStyle,
   fieldMetaStyle,
   fileInputStyle,
@@ -422,16 +420,7 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
             <div style={cardStyle}>
               <div style={cardHeaderStyle}>
                 <span style={sectionTitleStyle}>Resultat</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={mutedTextStyle}>Prediction route</span>
-                  <button
-                    type="button"
-                    style={exportBtnStyle}
-                    onClick={() => exportPredictionToExcel(predictionResult)}
-                  >
-                    Export Excel
-                  </button>
-                </div>
+                <span style={mutedTextStyle}>Prediction route</span>
               </div>
               <div style={metricsGridStyle}>
                 <Metric label="Temps predit" value={formatDuration(predictionResult.total_time_s)} accent />
@@ -440,10 +429,14 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
                 <Metric label="Distance" value={`${(predictionResult.total_distance_m / 1000).toFixed(1)} km`} />
                 <Metric label="Vitesse moy" value={`${predictionResult.avg_speed_kmh.toFixed(1)} km/h`} />
                 <Metric label="D+ / D-" value={`${Math.round(predictionResult.elevation_gain_m)} / ${Math.round(predictionResult.elevation_loss_m)} m`} />
-                <Metric label="W/kg" value={predictionResult.rider_profile.wkg > 0 ? `${predictionResult.rider_profile.wkg.toFixed(2)}` : 'N/A'} accent />
-                <Metric label="FTP" value={predictionResult.rider_profile.ftp_w > 0 ? `${Math.round(predictionResult.rider_profile.ftp_w)} W` : 'N/A'} />
-                <Metric label="Coureur" value={`${predictionResult.rider_profile.rider_weight_kg.toFixed(1)} kg`} />
-                <Metric label="Velo + equip" value={`${predictionResult.rider_profile.bike_weight_kg.toFixed(1)} kg`} />
+                {predictionResult.rider_profile && (
+                  <>
+                    <Metric label="W/kg" value={predictionResult.rider_profile.wkg > 0 ? `${predictionResult.rider_profile.wkg.toFixed(2)}` : 'N/A'} accent />
+                    <Metric label="FTP" value={predictionResult.rider_profile.ftp_w > 0 ? `${Math.round(predictionResult.rider_profile.ftp_w)} W` : 'N/A'} />
+                    <Metric label="Coureur" value={`${predictionResult.rider_profile.rider_weight_kg.toFixed(1)} kg`} />
+                    <Metric label="Velo + equip" value={`${predictionResult.rider_profile.bike_weight_kg.toFixed(1)} kg`} />
+                  </>
+                )}
               </div>
             </div>
           )}

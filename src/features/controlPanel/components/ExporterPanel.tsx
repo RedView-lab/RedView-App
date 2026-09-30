@@ -1,6 +1,6 @@
 import { useState, type CSSProperties, memo } from 'react';
 
-import { exportItineraryFile, exportRoadbookExcel, type ItineraryExportFormat } from '@/features/exporter';
+import { exportItineraryFile, type ItineraryExportFormat } from '@/features/exporter';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import { useAppI18n } from '@/shared/i18n';
 
@@ -9,7 +9,7 @@ import { Select } from './Select';
 import { IconChevronDown, IconDownload01, IconShare01 } from '../icons';
 import '../styles/index.css';
 
-type ExportFormat = ItineraryExportFormat | 'excel' | 'pdf';
+type ExportFormat = ItineraryExportFormat | 'pdf';
 
 // Itinerary export formats selectable in the dropdown. KML is listed
 // alongside GPX/FIT so the user can send favorited POIs + the trace to a
@@ -36,15 +36,12 @@ const FORMAT_OPTIONS: Record<ExportFormat, { value: ExportFormat; label: string 
   gpx: ITINERARY_FORMAT_OPTIONS,
   kml: ITINERARY_FORMAT_OPTIONS,
   fit: ITINERARY_FORMAT_OPTIONS,
-  excel: [{ value: 'excel', label: 'Excel' }],
   pdf: [{ value: 'pdf', label: 'PDF' }],
 };
 
 const INITIAL_ROWS: ExportRow[] = [
   { id: 'itineraries', label: 'Itinéraire(s)', format: 'gpx', checked: true },
-  { id: 'sheet', label: 'Feuille de route', format: 'excel', checked: true },
   { id: 'timeline', label: 'Timeline', format: 'pdf', checked: false, disabled: true },
-  { id: 'summary', label: 'Synthèse', format: 'excel', checked: false, disabled: true },
   { id: 'chart', label: 'Graphique', format: 'pdf', checked: false, disabled: true },
 ];
 
@@ -79,8 +76,7 @@ export const ExporterPanel = memo(function ExporterPanel({ width }: ExporterPane
 
   const handleExport = async () => {
     const itineraryRow = rows.find((row) => row.id === 'itineraries' && row.checked && !row.disabled);
-    const roadbookRow = rows.find((row) => row.id === 'sheet' && row.checked && !row.disabled);
-    if (!itineraryRow && !roadbookRow) {
+    if (!itineraryRow) {
       setStatus({ tone: 'error', message: t('Activez au moins un export avant de lancer le téléchargement.') });
       return;
     }
@@ -89,44 +85,21 @@ export const ExporterPanel = memo(function ExporterPanel({ width }: ExporterPane
       return;
     }
     if (
-      itineraryRow
-      && itineraryRow.format !== 'gpx'
+      itineraryRow.format !== 'gpx'
       && itineraryRow.format !== 'fit'
       && itineraryRow.format !== 'kml'
     ) {
       setStatus({ tone: 'error', message: t("Le format sélectionné n'est pas encore pris en charge pour l'itinéraire.") });
       return;
     }
-    if (roadbookRow && roadbookRow.format !== 'excel') {
-      setStatus({ tone: 'error', message: t('La feuille de route est uniquement disponible en export Excel.') });
-      return;
-    }
 
     try {
       setIsExporting(true);
       setStatus(null);
-      const exportedFiles: string[] = [];
-
-      if (
-        itineraryRow
-        && (itineraryRow.format === 'gpx' || itineraryRow.format === 'fit' || itineraryRow.format === 'kml')
-      ) {
-        const { fileName } = exportItineraryFile(activeItinerary, itineraryRow.format);
-        exportedFiles.push(fileName);
-      }
-      if (roadbookRow) {
-        const { fileName } = await exportRoadbookExcel(activeItinerary);
-        exportedFiles.push(fileName);
-      }
-
+      const { fileName } = exportItineraryFile(activeItinerary, itineraryRow.format);
       setStatus({
         tone: 'success',
-        message: t(
-          exportedFiles.length > 1
-            ? "{{files}} exportés depuis l'itinéraire actif."
-            : "{{files}} exporté depuis l'itinéraire actif.",
-          { files: exportedFiles.join(' + ') },
-        ),
+        message: t("{{files}} exporté depuis l'itinéraire actif.", { files: fileName }),
       });
     } catch (error) {
       console.error('[exporter] failed to export itinerary', error);

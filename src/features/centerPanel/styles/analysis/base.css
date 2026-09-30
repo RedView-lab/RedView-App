@@ -439,6 +439,36 @@
   pointer-events: none;
 }
 
+.rvc-center-analysis__filter-icon {
+  width: 14px;
+  height: 14px;
+  padding: 1px;
+  border-radius: 3px;
+  background: #ff3b30;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.rvc-center-analysis__filter-chip--off .rvc-center-analysis__filter-icon {
+  background: rgba(255, 59, 48, 0.35);
+}
+
+.rvc-center-analysis__surface-chip {
+  padding: 4px 6px 4px 8px;
+}
+
+.rvc-center-analysis__surface-chip--active {
+  border-color: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+.rvc-center-analysis__surface-dropdown {
+  right: auto;
+  left: 0;
+  width: max-content;
+  min-width: 170px;
+}
+
 .rvc-center-analysis__checkbox {
   width: 14px;
   height: 14px;
@@ -493,5 +523,26 @@
 /* The plot grid owns the pointer. Every visual layer above it must let
    events pass through so the cursor and hover tracking always work. */
 .rvc-center-analysis__plot-grid > * {
+  pointer-events: none;
+}
+/* Icône de danger « Alertes » posée sur la carte 3D (pente ≥ 12 % sur ≥ 100 m). */
+.rvi-analysis-alert-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 3px;
+  box-sizing: border-box;
+  border-radius: 6px;
+  background: #ff3b30;
+  border: 1.5px solid #ffffff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.7);
+  cursor: default;
+}
+
+.rvi-analysis-alert-marker img {
+  width: 100%;
+  height: 100%;
   pointer-events: none;
 }

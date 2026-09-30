@@ -72,7 +72,12 @@ export type RedviewProfileId =
   | 'gravel-default'
   | 'road'
   | 'mtb'
+  | 'running'
+  | 'trail'
   | 'touring'
   | 'custom';
 
 export const DEFAULT_PROFILE = 'trekking';
+
+/** Stock pedestrian profile shipped with BRouter (present on the VPS). */
+export const FOOT_FALLBACK_PROFILE = 'hiking-mountain';

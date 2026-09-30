@@ -1,4 +1,5 @@
-import type { PredictionConfig } from '@/features/fitPredictor';
+import type { PredictionConfig, RunPredictionConfig } from '@/features/fitPredictor';
+import type { FootDiscipline } from '@/shared/lib/discipline';
 
 import type { Itinerary, ItineraryProject, RhythmState } from '../../types';
 
@@ -49,23 +50,68 @@ export function buildPredictionConfigFromRhythm(
   }
 
   // Practice level pacing modulation
-  if (rhythm.practiceLevel) {
-    const lvl = rhythm.practiceLevel.toLowerCase();
-    if (lvl.includes('debutant')) {
-      config.pacing_factor = 0.85;
-    } else if (lvl.includes('intermediaire')) {
-      config.pacing_factor = 1.0;
-    } else if (lvl.includes('avance')) {
-      config.pacing_factor = 1.05;
-    } else if (lvl.includes('expert')) {
-      config.pacing_factor = 1.10;
-    }
-  }
+  config.pacing_factor = resolvePracticeLevelFactor(rhythm.practiceLevel);
 
   // Tire width effect on rolling resistance (Crr)
   if (typeof rhythm.tiresMm === 'number' && rhythm.tiresMm > 0) {
     // 25-28mm road: ~0.0045, 32-35mm allroad: ~0.0050, 40-50mm gravel: ~0.0058
     config.crr = 0.0035 + (rhythm.tiresMm * 0.000045);
+  }
+
+  return config;
+}
+
+function resolvePracticeLevelFactor(level: string | null | undefined): number {
+  const lvl = level?.toLowerCase() ?? '';
+  if (lvl.includes('debutant')) return 0.85;
+  if (lvl.includes('avance')) return 1.05;
+  if (lvl.includes('expert')) return 1.10;
+  return 1.0;
+}
+
+/**
+ * Config of the running / trail engine. The level drives the defaults
+ * (reference pace, walk threshold, descent skill…); an explicit VMA or race
+ * time replaces the level's reference pace, and FIT files override both.
+ */
+export function buildRunPredictionConfigFromRhythm(
+  rhythm: RhythmState,
+  discipline: FootDiscipline,
+  routePoints?: PredictionRoutePoints | null,
+): RunPredictionConfig {
+  const config: RunPredictionConfig = {
+    discipline,
+    level: rhythm.practiceLevel ?? 'debutant',
+  };
+
+  const maxRoutePoints = resolvePredictionMaxRoutePoints(routePoints);
+  if (maxRoutePoints != null) config.max_route_points = maxRoutePoints;
+
+  if (rhythm.gender && rhythm.gender !== 'default') config.gender = rhythm.gender;
+
+  if (rhythm.startTime) {
+    const startTimeH = parseTimeToHourDecimal(rhythm.startTime);
+    if (startTimeH !== null) config.start_time_h = startTimeH;
+  }
+
+  if (typeof rhythm.runWeightKg === 'number' && rhythm.runWeightKg > 0) {
+    config.mass_kg = rhythm.runWeightKg;
+  }
+
+  if (rhythm.runReferenceMode === 'chrono') {
+    if (
+      typeof rhythm.refRaceDistanceM === 'number' && rhythm.refRaceDistanceM > 0
+      && typeof rhythm.refRaceTimeS === 'number' && rhythm.refRaceTimeS > 0
+    ) {
+      config.ref_distance_m = rhythm.refRaceDistanceM;
+      config.ref_time_s = rhythm.refRaceTimeS;
+    }
+  } else if (typeof rhythm.vmaKmh === 'number' && rhythm.vmaKmh > 0) {
+    config.vma_kmh = rhythm.vmaKmh;
+  }
+
+  if (discipline === 'trail') {
+    config.technicality = rhythm.terrainTechnicality ?? 0.5;
   }
 
   return config;

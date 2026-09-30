@@ -1,9 +1,33 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createOverlayStatus,
   type OverlayStatusId,
   type OverlayStatusSnapshot,
 } from '@/features/map3d';
+
+// ── Loading guard ────────────────────────────────────────────────────────
+// Last line of defence so no pill ever sits on "loading" forever: each
+// producer has its own watchdog, but several depend on Mapbox `idle` /
+// `areTilesLoaded()`, which can stay false indefinitely while any source
+// streams. A loading cycle is displayed as finished once it has not advanced
+// for LOADING_STALL_MS, or has lasted LOADING_MAX_MS in total.
+const LOADING_STALL_MS = 8_000;
+const LOADING_MAX_MS = 20_000;
+/** A progress drop larger than this means the producer started a new cycle. */
+const LOADING_RESTART_DROP = 15;
+/** Itinerary tracks a real BRouter request with a definite end (and drives the cursor loader). */
+const LOADING_GUARD_EXEMPT: ReadonlySet<OverlayStatusId> = new Set(['itinerary']);
+
+interface LoadingCycle {
+  startedAt: number;
+  advancedAt: number;
+  progress: number;
+  detail?: string;
+}
+
+function loadingCycleDeadline(cycle: LoadingCycle): number {
+  return Math.min(cycle.startedAt + LOADING_MAX_MS, cycle.advancedAt + LOADING_STALL_MS);
+}
 
 interface UseDashboardOverlayStatusResult {
   visibleStatuses: OverlayStatusSnapshot[];
@@ -29,8 +53,29 @@ export function useDashboardOverlayStatus(): UseDashboardOverlayStatusResult {
     Partial<Record<OverlayStatusId, OverlayStatusSnapshot>>
   >({});
   const overlayReloadersRef = useRef<Partial<Record<OverlayStatusId, () => void>>>({});
+  const [loadingCycles, setLoadingCycles] = useState<Partial<Record<OverlayStatusId, LoadingCycle>>>({});
+  const [guardNow, setGuardNow] = useState(() => Date.now());
+
+  const trackLoadingCycle = useCallback((id: OverlayStatusId, status: OverlayStatusSnapshot | null) => {
+    const now = Date.now();
+    setLoadingCycles((prev) => {
+      const current = prev[id];
+      if (!status || status.state !== 'loading' || LOADING_GUARD_EXEMPT.has(id)) {
+        if (!current) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }
+      if (!current || status.progress < current.progress - LOADING_RESTART_DROP) {
+        return { ...prev, [id]: { startedAt: now, advancedAt: now, progress: status.progress, detail: status.detail } };
+      }
+      if (status.progress === current.progress && status.detail === current.detail) return prev;
+      return { ...prev, [id]: { ...current, advancedAt: now, progress: status.progress, detail: status.detail } };
+    });
+  }, []);
 
   const setOverlayStatus = useCallback((id: OverlayStatusId, status: OverlayStatusSnapshot | null) => {
+    trackLoadingCycle(id, status);
     setOverlayStatuses((prev) => {
       if (!status) {
         if (!(id in prev)) return prev;
@@ -51,7 +96,7 @@ export function useDashboardOverlayStatus(): UseDashboardOverlayStatusResult {
       }
       return { ...prev, [id]: status };
     });
-  }, []);
+  }, [trackLoadingCycle]);
 
   const setOverlayReloader = useCallback((id: OverlayStatusId, reload: (() => void) | null) => {
     if (reload) {
@@ -81,8 +126,9 @@ export function useDashboardOverlayStatus(): UseDashboardOverlayStatusResult {
   }, []);
 
   const handleMapLoadStatusChange = useCallback((status: OverlayStatusSnapshot | null) => {
+    trackLoadingCycle('map', status);
     setMapStatus(status);
-  }, []);
+  }, [trackLoadingCycle]);
 
   const handleMapReloadChange = useCallback((reload: (() => void) | null) => {
     setOverlayReloader('map', reload);
@@ -128,8 +174,28 @@ export function useDashboardOverlayStatus(): UseDashboardOverlayStatusResult {
     };
     return orderedIds
       .map((id) => snapshots[id])
-      .filter((status): status is OverlayStatusSnapshot => Boolean(status));
-  }, [mapStatus, overlayStatuses]);
+      .filter((status): status is OverlayStatusSnapshot => Boolean(status))
+      .map((status) => {
+        if (status.state !== 'loading') return status;
+        const cycle = loadingCycles[status.id];
+        if (!cycle || guardNow < loadingCycleDeadline(cycle)) return status;
+        return { ...status, state: 'ready' as const, progress: 100 };
+      });
+  }, [mapStatus, overlayStatuses, loadingCycles, guardNow]);
+
+  // Wake up exactly when the next loading cycle expires so the pill flips
+  // to "ready" without polling.
+  useEffect(() => {
+    let nextDeadline = Infinity;
+    for (const cycle of Object.values(loadingCycles)) {
+      if (!cycle) continue;
+      const deadline = loadingCycleDeadline(cycle);
+      if (deadline > guardNow) nextDeadline = Math.min(nextDeadline, deadline);
+    }
+    if (!Number.isFinite(nextDeadline)) return;
+    const timer = setTimeout(() => setGuardNow(Date.now()), Math.max(0, nextDeadline - Date.now()) + 50);
+    return () => clearTimeout(timer);
+  }, [loadingCycles, guardNow]);
 
   // IMPORTANT: keep these handler identities stable across renders. Several
   // overlay hooks (useWind, useWeatherOverlay…) include the reporter/reload

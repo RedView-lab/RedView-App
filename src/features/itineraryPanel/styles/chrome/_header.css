@@ -115,6 +115,46 @@
   flex-shrink: 0;
 }
 
+/* Save CTA — same language as .rvi-redbtn (brand red, radius 6, 600 weight). */
+.rvi-header__save {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px 0 8px;
+  border-radius: var(--rvi-radius-md);
+  background: var(--rvi-red);
+  color: var(--rvi-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+.rvi-header__save:hover {
+  background: #a00000;
+}
+.rvi-header__save:focus-visible {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.24);
+}
+.rvi-header__save:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.rvi-header__save.is-saved,
+.rvi-header__save.is-saved:hover {
+  background: var(--rvi-bg-chip);
+  color: var(--rvi-text-dim);
+}
+.rvi-header__save.is-error,
+.rvi-header__save.is-error:hover {
+  background: rgba(127, 29, 29, 0.32);
+  color: #ffd3d3;
+}
+
 .rvi-iconbtn {
   display: inline-flex;
   align-items: center;

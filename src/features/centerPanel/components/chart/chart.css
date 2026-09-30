@@ -112,6 +112,35 @@
   pointer-events: none;
 }
 
+.rvchart__alert-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 2px;
+  background: rgba(255, 59, 48, 0.24);
+  box-shadow: inset 1px 0 0 rgba(255, 59, 48, 0.55), inset -1px 0 0 rgba(255, 59, 48, 0.55);
+  pointer-events: none;
+}
+
+.rvchart__alert-icon {
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  padding: 2px;
+  border-radius: 4px;
+  background: #ff3b30;
+  transform: translateX(-50%);
+}
+
+.rvchart__card-metric--alert {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #ff6b61;
+}
+
 .rvchart__day-night-corner-icon {
   position: absolute;
   top: 4px;

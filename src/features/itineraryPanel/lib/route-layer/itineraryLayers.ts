@@ -64,6 +64,7 @@ function buildRouteOptionSignature(
     normalizeTraceWidthPx(opts.traceWidthPx),
     opts.renderMode ?? 'default',
     slopeBandsSignature,
+    opts.surfaceFilter ?? 'all',
   ].join('|');
 }
 

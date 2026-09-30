@@ -24,6 +24,16 @@ export function init(): void;
 export function predict(fit_files: Uint8Array[], gpx_data: Uint8Array, config: any, on_progress?: Function | null): any;
 
 /**
+ * Running / trail-running prediction.
+ *
+ * Same inputs as [`predict`]; `config` is a `RunPredictionConfig`
+ * `{ discipline: "running"|"trail", level?, vma_kmh?, ref_distance_m?,
+ * ref_time_s?, mass_kg?, technicality?, start_time_h?, gender?, max_route_points? }`.
+ * FIT files recorded as cycling are ignored.
+ */
+export function predict_run(fit_files: Uint8Array[], gpx_data: Uint8Array, config: any, on_progress?: Function | null): any;
+
+/**
  * Run prediction on a validation FIT file and compare with actual data.
  *
  * The validation FIT is NOT included in the training data for the model.
@@ -36,6 +46,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly predict: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
+    readonly predict_run: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly predict_vs_actual: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly init: () => void;
     readonly __wbindgen_export: (a: number, b: number) => number;

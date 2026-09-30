@@ -1,5 +1,5 @@
 import { useEffect, useRef, type MutableRefObject } from 'react';
-import type { Map as MapboxMap, MapSourceDataEvent } from 'mapbox-gl';
+import type { ErrorEvent as MapboxErrorEvent, Map as MapboxMap, MapSourceDataEvent } from 'mapbox-gl';
 import { createOverlayStatus, type OverlayStatusReporter } from '@/features/map3d';
 import { SLOPE_SOURCE_ID } from '../../lib/slope-source';
 import { canStartSlopeWork } from './helpers';
@@ -100,23 +100,31 @@ export function useSlopeProgressReporter({
       emit('loading', pct, `Tuiles ${done}/${total}`);
     };
 
+    const STAGNATION_MS = 8000;
+    const HARD_STAGNATION_MS = 16000;
+    const ZONE_SILENCE_MS = 15000;
+    const READY_STRAGGLER_THRESHOLD = 8;
+
     const armWatchdog = () => {
       if (watchdog) clearTimeout(watchdog);
-      const STAGNATION_MS = 8000;
-      const HARD_STAGNATION_MS = 35000;
-      const READY_STRAGGLER_THRESHOLD = 8;
       watchdog = setTimeout(() => {
         watchdog = null;
         if (isZonePipelineActive) {
           const sinceZone = Date.now() - lastZoneProgressMs;
-          if (sinceZone < 60000) {
+          if (sinceZone < ZONE_SILENCE_MS) {
             armWatchdog();
             return;
           }
-          // Hard failsafe after 60s of total silence
+          // Failsafe: the SW zone pipeline went silent (killed SW, dropped
+          // message…) — stop waiting for its "done" phase.
           isZonePipelineActive = false;
         }
         if (requested.size === 0) {
+          // Nothing in flight for a full stagnation window: done.
+          if (Date.now() - lastProgressMs >= STAGNATION_MS) {
+            emit('ready', 100, 'Pentes prêtes');
+            return;
+          }
           publishProgress();
           armWatchdog();
           return;
@@ -231,9 +239,15 @@ export function useSlopeProgressReporter({
       }
     };
 
+    // Failed tiles emit `error`, not `sourcedata`/`dataabort`.
+    const onTileError = (event: MapboxErrorEvent) => {
+      onError(event as unknown as MapSourceDataEvent);
+    };
+
     map.on('sourcedataloading', onLoading);
     map.on('sourcedata', onLoaded);
     map.on('dataabort', onError);
+    map.on('error', onTileError);
     map.on('idle', onIdle);
     map.on('movestart', onViewportChange);
     map.on('zoomstart', onViewportChange);
@@ -246,6 +260,7 @@ export function useSlopeProgressReporter({
       map.off('sourcedataloading', onLoading);
       map.off('sourcedata', onLoaded);
       map.off('dataabort', onError);
+      map.off('error', onTileError);
       map.off('idle', onIdle);
       map.off('movestart', onViewportChange);
       map.off('zoomstart', onViewportChange);

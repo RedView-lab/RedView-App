@@ -1,3 +1,5 @@
+import { formatPaceSeconds } from '@/shared/lib/pace';
+
 /**
  * Base route sample used by chart series builders and chart interactions.
  */
@@ -17,6 +19,8 @@ export type AxisMetricId =
   | 'Altitude'
   | 'Vitesse'
   | 'Vitesse moyenne'
+  | 'Allure'
+  | 'Allure moyenne'
   | 'Puissance'
   | 'Puissance moyenne'
   | 'Inclinaison (°)'
@@ -77,6 +81,9 @@ export function unitForMetric(metric: ChartMetricId): string {
     case 'Vitesse moyenne':
     case 'Vent (km/h)':
       return 'km/h';
+    case 'Allure':
+    case 'Allure moyenne':
+      return '/km';
     case 'Puissance':
     case 'Puissance moyenne':
       return 'W';
@@ -104,7 +111,21 @@ export function unitForMetric(metric: ChartMetricId): string {
 }
 
 export function isIntervalAverageMetric(metric: ChartMetricId): boolean {
-  return metric === 'Vitesse moyenne' || metric === 'Puissance moyenne';
+  return metric === 'Vitesse moyenne' || metric === 'Allure moyenne' || metric === 'Puissance moyenne';
+}
+
+/** Running pace, stored in the series as decimal minutes per km. */
+export function isPaceMetric(metric: ChartMetricId): boolean {
+  return metric === 'Allure' || metric === 'Allure moyenne';
+}
+
+export function isPowerMetric(metric: ChartMetricId): boolean {
+  return metric === 'Puissance' || metric === 'Puissance moyenne';
+}
+
+/** "5:32 /km" from decimal minutes per km. */
+export function formatPaceMinutes(minutesPerKm: number, withUnit = true): string {
+  return formatPaceSeconds(minutesPerKm * 60, { unit: withUnit });
 }
 
 export function isInclinationMetric(metric: ChartMetricId): boolean {
@@ -114,6 +135,7 @@ export function isInclinationMetric(metric: ChartMetricId): boolean {
 /** Format a tick label according to the metric type. */
 export function formatAxisValue(metric: ChartMetricId, value: number): string {
   if (!Number.isFinite(value)) return '--';
+  if (isPaceMetric(metric)) return formatPaceMinutes(value);
   const unit = unitForMetric(metric);
   let txt: string;
   if (Math.abs(value) >= 100 || Number.isInteger(value)) {
@@ -150,6 +172,8 @@ export function metricIsAvailable(metric: ChartMetricId): boolean {
   switch (metric) {
     case 'Vitesse':
     case 'Vitesse moyenne':
+    case 'Allure':
+    case 'Allure moyenne':
     case 'Puissance':
     case 'Puissance moyenne':
     case 'Altitude':

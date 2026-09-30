@@ -48,6 +48,39 @@ export function predict(fit_files, gpx_data, config, on_progress) {
 }
 
 /**
+ * Running / trail-running prediction.
+ *
+ * Same inputs as [`predict`]; `config` is a `RunPredictionConfig`
+ * `{ discipline: "running"|"trail", level?, vma_kmh?, ref_distance_m?,
+ * ref_time_s?, mass_kg?, technicality?, start_time_h?, gender?, max_route_points? }`.
+ * FIT files recorded as cycling are ignored.
+ * @param {Uint8Array[]} fit_files
+ * @param {Uint8Array} gpx_data
+ * @param {any} config
+ * @param {Function | null} [on_progress]
+ * @returns {any}
+ */
+export function predict_run(fit_files, gpx_data, config, on_progress) {
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passArrayJsValueToWasm0(fit_files, wasm.__wbindgen_export);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passArray8ToWasm0(gpx_data, wasm.__wbindgen_export);
+        const len1 = WASM_VECTOR_LEN;
+        wasm.predict_run(retptr, ptr0, len0, ptr1, len1, addHeapObject(config), isLikeNone(on_progress) ? 0 : addHeapObject(on_progress));
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+        if (r2) {
+            throw takeObject(r1);
+        }
+        return takeObject(r0);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+    }
+}
+
+/**
  * Run prediction on a validation FIT file and compare with actual data.
  *
  * The validation FIT is NOT included in the training data for the model.

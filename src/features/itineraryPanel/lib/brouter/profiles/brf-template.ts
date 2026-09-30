@@ -6,6 +6,8 @@ import type { BrfBuildInputs } from './brf-template/types';
 import { resolveBrfProfileValues } from './brf-template/values';
 import { buildBrfWayContext } from './brf-template/brfWayContext';
 import { BRF_NODE_CONTEXT } from './brf-template/brfNodeContext';
+import { buildBrfFootWayContext } from './brf-template/brfFootWayContext';
+import { buildBrfFootNodeContext } from './brf-template/brfFootNodeContext';
 
 export type { BrfBuildInputs } from './brf-template/types';
 
@@ -23,6 +25,17 @@ function brfNum(v: number, digits = 4): string {
  */
 export function buildBrfProfile(inputs: BrfBuildInputs): string {
   const values = resolveBrfProfileValues(inputs);
+  const { foot } = values;
+
+  const footGlobals = foot
+    ? `
+# ─── Pedestrian (${foot.style}) ─────────────────────────────────────
+# SAC grades: 1=T1 hiking … 6=T6 difficult_alpine_hiking.
+assign sac_scale_limit     = ${brfNum(foot.sacLimit)}
+assign sac_scale_preferred = ${brfNum(foot.sacPreferred)}
+assign hiking_route_factor = ${brfNum(foot.hikingRouteFactor)}
+`
+    : '';
 
   const globalContext = `# *** RedView dynamic profile (auto-generated) ***
 # Generated from the Itinerary Panel state.
@@ -30,7 +43,7 @@ export function buildBrfProfile(inputs: BrfBuildInputs): string {
 
 ---context:global
 
-assign validForBikes = true
+assign ${foot ? 'validForFoot' : 'validForBikes'} = true
 
 # ─── User-controlled per-category cost multipliers ────────────────
 assign user_factor_road        = ${brfNum(values.fRoad)}
@@ -70,7 +83,7 @@ assign consider_river           = ${brfBool(values.considerRiver)}
 assign consider_forest          = ${brfBool(values.considerForest)}
 assign consider_town            = ${brfBool(values.considerTown)}
 assign consider_traffic         = ${brfBool(values.considerTraffic)}
-
+${footGlobals}
 # ─── Elevation ────────────────────────────────────────────────────
 assign consider_elevation = ${brfBool(values.considerElevation)}
 assign downhillcost   = ${brfNum(values.downCost)}
@@ -96,8 +109,8 @@ assign bikerPower = ${brfNum(values.bikerPower)}
 
 # ─── Turn instructions ────────────────────────────────────────────
 assign turnInstructionMode          = ${brfNum(values.turnInstructionMode as number)}
-assign turnInstructionCatchingRange = 40
-assign turnInstructionRoundabouts   = true
+assign turnInstructionCatchingRange = ${foot ? 20 : 40}
+assign turnInstructionRoundabouts   = ${brfBool(!foot)}
 assign considerTurnRestrictions     = ${brfBool(values.considerTurnRestrictions)}
 
 # ─── Engine ───────────────────────────────────────────────────────
@@ -108,14 +121,23 @@ assign pass1coefficient = ${brfNum(values.pass1Coefficient)}
 assign pass2coefficient = ${brfNum(values.pass2Coefficient)}
 `;
 
-  const wayContext = buildBrfWayContext({
+  const wayOptions = {
     forestReliefByClass: values.forestReliefByClass,
     riverReliefByClass: values.riverReliefByClass,
     inClimbMode: values.inClimbMode,
     brfNum,
-  });
+  };
+  const wayContext = foot
+    ? buildBrfFootWayContext({
+        ...wayOptions,
+        style: foot.style,
+        sacLimit: foot.sacLimit,
+        sacPreferred: foot.sacPreferred,
+      })
+    : buildBrfWayContext(wayOptions);
+  const nodeContext = foot ? buildBrfFootNodeContext(foot.style) : BRF_NODE_CONTEXT;
 
-  return `${globalContext}\n\n${wayContext}\n${BRF_NODE_CONTEXT}`;
+  return `${globalContext}\n\n${wayContext}\n${nodeContext}`;
 }
 
 /** FNV-1a 32-bit hash → 8-char hex. Plenty of entropy to dedup uploads. */

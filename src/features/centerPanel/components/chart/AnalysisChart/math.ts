@@ -19,6 +19,9 @@ export function defaultDomainFor(metric: ChartMetricId): AxisDomain {
     case 'Vitesse':
     case 'Vitesse moyenne':
       return { min: 0, max: 50 };
+    case 'Allure':
+    case 'Allure moyenne':
+      return { min: 3, max: 15 };
     case 'Puissance':
     case 'Puissance moyenne':
       return { min: 0, max: 400 };
@@ -47,6 +50,12 @@ export function normalizeMetricDomain(
     const maxBound = metric === 'Inclinaison (°)' ? 45 : 30;
     const clampedBound = Math.min(maxBound, Math.ceil(bound / 5) * 5);
     return { min: -clampedBound, max: clampedBound };
+  }
+
+  if (metric === 'Allure' || metric === 'Allure moyenne') {
+    const min = Math.max(2, Number.isFinite(domain.min) ? domain.min : 3);
+    const max = Math.min(30, Math.max(min + 1, Number.isFinite(domain.max) ? domain.max : 15));
+    return { min, max };
   }
 
   if (metric === 'Altitude') {

@@ -1,5 +1,6 @@
 import { Encoder, Profile } from '@garmin/fitsdk';
 import type { Itinerary } from '@/features/itineraryPanel/types';
+import { isFootDiscipline } from '@/shared/lib/discipline';
 import {
   collectExportAnchors,
   FIT_PRODUCT_ID,
@@ -121,7 +122,7 @@ export function buildItineraryFitCourse(
 
   encoder.onMesg(Profile.MesgNum.COURSE, {
     name: routeName,
-    sport: 'cycling',
+    sport: isFootDiscipline(itinerary.discipline) ? 'running' : 'cycling',
   });
 
   encoder.onMesg(Profile.MesgNum.LAP, {

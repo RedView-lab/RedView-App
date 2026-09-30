@@ -285,6 +285,17 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
     setStatusMessage(buildTracePrompt());
   }, [armed, buildTracePrompt]);
 
+  // Refs : l'effet d'écoute ci-dessous ne doit dépendre que de `armed`/`map`.
+  // Avec `appendPointAt` en dépendance, chaque mutation du projet le
+  // ré-exécutait ; son cleanup remettait le curseur à '' puis au crayon, en
+  // conflit avec le « grab » posé par RouteDragWaypoint au survol de la trace.
+  const appendPointAtRef = useRef(appendPointAt);
+  const deactivateRef = useRef(deactivate);
+  useEffect(() => {
+    appendPointAtRef.current = appendPointAt;
+    deactivateRef.current = deactivate;
+  });
+
   useEffect(() => {
     if (!armed || !map) return;
 
@@ -313,13 +324,13 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
       }
 
       const asVariant = isVariantModifierPressed(event.originalEvent);
-      if (!appendPointAt(event.lngLat.lng, event.lngLat.lat, { asVariant })) return;
+      if (!appendPointAtRef.current(event.lngLat.lng, event.lngLat.lat, { asVariant })) return;
       applyCursor();
     };
 
     const handleContextMenu = (event: MapMouseEvent) => {
       event.preventDefault();
-      deactivate();
+      deactivateRef.current();
     };
 
     applyCursor();
@@ -333,7 +344,7 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
       map.off('contextmenu', handleContextMenu);
       canvas.style.cursor = '';
     };
-  }, [appendPointAt, armed, deactivate, map]);
+  }, [armed, map]);
 
   const value = useMemo<TraceToolContextValue>(
     () => ({

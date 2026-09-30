@@ -484,9 +484,11 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
       const currentTimeline = storeRef.current?.project.itineraries.find(
         (it) => it.id === activeItineraryIdRef.current,
       )?.timeline;
-      const nearExistingPoint = (currentTimeline
+      const nearWaypoint = currentTimeline
         ? isClickNearExistingTimelinePoint(map, currentTimeline, screenPt.x, screenPt.y, 14)
-        : false) || queryPoiAtPoint(map, screenPt) !== null;
+        : false;
+      const overPoi = !nearWaypoint && queryPoiAtPoint(map, screenPt) !== null;
+      const nearExistingPoint = nearWaypoint || overPoi;
 
       // Hysteresis: strict distance to enter hover (22px), generous distance to stay in hover (34px)
       // Eliminates flashing/strobe effect when cursor is near the edge of the route zone
@@ -513,12 +515,17 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
           color: routeColorRef.current,
           radius: getPreviewRadius(),
         });
-      } else {
-        if (overRouteRef.current) {
-          overRouteRef.current = false;
-          applyDefaultCursor();
-          clearRouteHoverPreview(map);
-        }
+      } else if (overPoi) {
+        // Le clic ira au POI : curseur « pointer » explicite plutôt que de
+        // retomber sur le crayon de traçage (qui donnait un clignotement
+        // crayon ↔ point de passage en longeant les POI posés sur la trace).
+        overRouteRef.current = false;
+        applyCursor('pointer');
+        clearRouteHoverPreview(map);
+      } else if (overRouteRef.current || canvas.style.cursor === 'pointer') {
+        overRouteRef.current = false;
+        applyDefaultCursor();
+        clearRouteHoverPreview(map);
       }
     };
 

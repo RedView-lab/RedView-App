@@ -1,7 +1,8 @@
 import { ALL_PARAMETERS } from '../../../../expert/parameters';
 import type { ExpertProfileState } from '../../../../expert/types';
-import type { RoadPreference } from '../../../../types';
-import type { BrfBuildInputs, BrfProfileValues } from './types';
+import type { RoadPreference, RoadTypesState } from '../../../../types';
+import { isFootDiscipline } from '@/shared/lib/discipline';
+import type { BrfBuildInputs, BrfFootValues, BrfProfileValues } from './types';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -48,6 +49,34 @@ function prefToFactor(preference: RoadPreference): number {
   return 1.0;
 }
 
+/**
+ * SAC ceilings per tracing mode (sac_scale T1 = 1 … T6 = 6). Road running
+ * stays on T1 at most; trail goes up to T3 (T4 in Aventure: alpine paths,
+ * hands occasionally needed), T5+ is never runnable.
+ */
+function resolveFootValues(
+  style: BrfFootValues['style'],
+  tracingMode: RoadTypesState['tracingMode'],
+): BrfFootValues {
+  if (style === 'running') {
+    const adventurous = tracingMode === 'aventure';
+    return {
+      style,
+      sacLimit: adventurous ? 2 : 1,
+      sacPreferred: adventurous ? 1 : 0,
+      hikingRouteFactor: 1,
+    };
+  }
+  switch (tracingMode) {
+    case 'comfort':
+      return { style, sacLimit: 2, sacPreferred: 1, hikingRouteFactor: 0.9 };
+    case 'aventure':
+      return { style, sacLimit: 4, sacPreferred: 3, hikingRouteFactor: 0.85 };
+    default:
+      return { style, sacLimit: 3, sacPreferred: 2, hikingRouteFactor: 0.9 };
+  }
+}
+
 function expertValue<T>(
   expert: ExpertProfileState | null | undefined,
   id: string,
@@ -65,7 +94,10 @@ function defaultFor(id: string): unknown {
 }
 
 export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValues {
-  const { priorities, roadTypes, expert } = inputs;
+  const { priorities, roadTypes, expert, discipline } = inputs;
+  const foot = isFootDiscipline(discipline)
+    ? resolveFootValues(discipline, roadTypes.tracingMode)
+    : null;
 
   const factorFor = (preference: RoadPreference): number => {
     return prefToFactor(preference);
@@ -78,7 +110,8 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
   const fBikelane = factorFor(roadTypes.bikeLanes);
   const fMajor = factorFor(roadTypes.majorRoads);
   const allowFerries = roadTypes.ferry !== 'forbid';
-  const allowSteps = roadTypes.bikeLanes !== 'forbid' && fSingletrack < 10000;
+  // Steps are part of the pedestrian network; the way context prices them.
+  const allowSteps = foot != null || (roadTypes.bikeLanes !== 'forbid' && fSingletrack < 10000);
 
   // Surface preferences scaling with tolerance (0% strict ~2.0, 10% default ~1.5, 100% max tolerance ~0.15)
   const tol = clamp(roadTypes.surfaceTolerance ?? 10, 0, 100);
@@ -296,8 +329,13 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
     ? buildBonusByClass(1 + (tranquilityFocus * 0.5), clamp(1 - (tranquilityFocus * 0.4), 0.5, 1))
     : buildReliefByClass(1);
 
-  const totalMass = expertValue(expert, 'totalMass', defaultFor('totalMass') as number);
-  const maxSpeedBase = expertValue(expert, 'maxSpeed', defaultFor('maxSpeed') as number);
+  // Foot: BRouter times walking/running with Tobler's function
+  // (maxSpeed · e^(-3.5·|slope + 5 %|) ≈ 0.84 · maxSpeed on the flat); the
+  // bike kinematic knobs below are ignored by the engine in foot mode.
+  const totalMass = foot ? 70 : expertValue(expert, 'totalMass', defaultFor('totalMass') as number);
+  const maxSpeedBase = foot
+    ? foot.style === 'running' ? 13 : 10
+    : expertValue(expert, 'maxSpeed', defaultFor('maxSpeed') as number);
   const sCx = expertValue(expert, 'S_C_x', defaultFor('S_C_x') as number);
   const cR = expertValue(expert, 'C_r', defaultFor('C_r') as number);
   const bikerPowerBase = expertValue(expert, 'bikerPower', defaultFor('bikerPower') as number);
@@ -312,7 +350,8 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
     roadTypes.woods === 'prefer' ||
     (roadTypes.woods !== 'forbid' && tranquilityFocus >= 0.45);
   const turnInstructionMode = expertValue(expert, 'turnInstructionMode', 1);
-  const considerTurnRestrictions = expertValue(expert, 'considerTurnRestrictions', true);
+  // Turn restrictions only bind vehicles.
+  const considerTurnRestrictions = foot ? false : expertValue(expert, 'considerTurnRestrictions', true);
 
   // Apply tracingMode adjustments
   if (roadTypes.tracingMode === 'vitesse') {
@@ -387,5 +426,6 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
     bikerPower,
     turnInstructionMode,
     considerTurnRestrictions,
+    foot,
   };
 }

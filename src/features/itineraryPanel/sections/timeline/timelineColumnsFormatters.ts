@@ -1,4 +1,6 @@
 import type { PredictionPoint, PredictionResult } from '@/features/fitPredictor';
+import type { SportDiscipline } from '@/shared/lib/discipline';
+import { formatSpeedOrPace, kmhToPaceSecPerKm } from '@/shared/lib/pace';
 import type { StartReference } from './TimelineTimelineView/types';
 
 export const DASH = '—';
@@ -38,6 +40,18 @@ export function fmtClock(elapsedS: number | null, reference: StartReference): st
 export function fmtSpeed(kmh: number | null | undefined): string {
   if (kmh == null || !Number.isFinite(kmh) || kmh <= 0) return DASH;
   return `${kmh.toFixed(1)} km/h`;
+}
+
+/** Sort key of a speed cell: speed for cycling, pace (s/km) for Trail / Running. */
+export function speedSortKey(kmh: number | null, discipline: SportDiscipline): number | null {
+  if (kmh == null) return null;
+  return discipline === 'bike' ? kmh : kmhToPaceSecPerKm(kmh);
+}
+
+/** km/h for cycling, min/km for Trail / Running. */
+export function fmtSpeedOrPace(kmh: number | null | undefined, discipline: SportDiscipline): string {
+  if (kmh == null || !Number.isFinite(kmh) || kmh <= 0) return DASH;
+  return formatSpeedOrPace(kmh, discipline);
 }
 
 export function fmtPower(w: number | null | undefined): string {

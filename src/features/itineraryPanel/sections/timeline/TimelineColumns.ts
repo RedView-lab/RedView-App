@@ -7,6 +7,7 @@
 
 import { elapsedSecondsAtDistance } from '@/features/centerPanel/flyover/playback';
 import { getRouteWeatherAtDistanceAndTime } from '@/features/weather';
+import { resolvePredictionDiscipline } from '@/shared/lib/discipline';
 import { pointAtDistanceM } from './timelineColumnsFormatters';
 import { TIMELINE_COLUMNS } from './timelineColumnsRegistry';
 import type {
@@ -73,6 +74,9 @@ export function buildTimelineColumnContext(args: BuildContextArgs): TimelineColu
     prediction: args.prediction,
     rhythm: args.rhythm,
     reference: args.reference,
+    discipline: args.prediction
+      ? resolvePredictionDiscipline(args.prediction)
+      : args.discipline ?? 'bike',
     elapsedS: effectiveElapsedS,
     elapsedPrevS,
     elapsedNextS,

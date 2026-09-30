@@ -56,6 +56,10 @@ export function createMapLifecycleController(
   const cleanup = () => {
     ctx.fns.stopTerrainHeartbeat();
     ctx.fns.clearDemTracking();
+    if (ctx.state.loadingDeadline) {
+      clearTimeout(ctx.state.loadingDeadline);
+      ctx.state.loadingDeadline = null;
+    }
     ctx.fns.clearStyleBootstrapArtifacts();
     ctx.fns.removeTrackingListeners();
   };

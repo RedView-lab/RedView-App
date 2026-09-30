@@ -1,5 +1,6 @@
 export {
   buildPredictionConfigFromRhythm,
+  buildRunPredictionConfigFromRhythm,
   buildRouteGpxFile,
   hasUsableRouteElevation,
 } from './container-prediction';

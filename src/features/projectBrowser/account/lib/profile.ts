@@ -3,6 +3,11 @@ import {
   clearStoredAppwriteSession,
   getAppwriteUser,
 } from '@/shared/services/appwrite';
+import {
+  normalizeAccountSportLabel,
+  publishAccountSports,
+  resetAccountSports,
+} from '@/shared/services/accountPrefs';
 import { readDocumentAppLocale, translateAppText } from '@/shared/i18n';
 
 import {
@@ -35,7 +40,7 @@ function readMetadata(user: any): AccountMetadata {
 function buildSportEntry(value: Partial<AccountSportEntry> | null | undefined, index: number): AccountSportEntry {
   return {
     id: typeof value?.id === 'string' && value.id ? value.id : `sport-${index + 1}`,
-    sport: readString(value?.sport, DEFAULT_SPORT),
+    sport: normalizeAccountSportLabel(readString(value?.sport, DEFAULT_SPORT)),
     level: readString(value?.level, DEFAULT_LEVEL),
     annualDistanceKm: readString(value?.annualDistanceKm, '500'),
   };
@@ -156,6 +161,8 @@ export async function saveAccountPractice(form: AccountPracticeForm) {
     country: form.country,
     sports: form.sports.map((sport, index) => buildSportEntry(sport, index)),
   };
+  // The itinerary panel offers Trail / Running from these sports: update it now.
+  publishAccountSports(updatedPrefs.sports.map((entry) => entry.sport));
 
   try {
     return await account.updatePrefs(updatedPrefs);
@@ -174,6 +181,7 @@ export async function updateAccountPassword(password: string) {
 }
 
 export async function signOutAccount() {
+  resetAccountSports();
   clearStoredAppwriteSession();
 
   try {

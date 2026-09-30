@@ -1,3 +1,5 @@
+import type { FootDiscipline, SportDiscipline } from '@/shared/lib/discipline';
+
 export type FitPanelMode = 'route' | 'compare';
 
 export type RiderType = 'elite' | 'trained' | 'recreational';
@@ -25,6 +27,38 @@ export interface PredictionConfig {
   stop_strategy?: 'auto' | 'none' | 'ultra';
   sleep_strategy?: 'none' | 'sleep_stops' | 'micro_naps';
   gender?: Gender;
+}
+
+/** Config of the running / trail-running engine (`predict_run`). */
+export interface RunPredictionConfig {
+  discipline: FootDiscipline;
+  /** Practice level id: debutant | intermediaire | avance | expert. */
+  level?: string;
+  vma_kmh?: number;
+  ref_distance_m?: number;
+  ref_time_s?: number;
+  /** Runner weight including pack (kg). */
+  mass_kg?: number;
+  /** Terrain technicality 0..1 (trail only). */
+  technicality?: number;
+  start_time_h?: number;
+  gender?: Gender;
+  max_route_points?: number;
+}
+
+/** Runner parameters resolved by the running engine. */
+export interface RunnerProfile {
+  v_ref_kmh: number;
+  v_ref_source: 'fit' | 'chrono' | 'vma' | 'level';
+  riegel_k: number;
+  walk_threshold_pct: number;
+  walk_vam_mh: number;
+  descent_ratio: number;
+  descent_skill: number;
+  technicality: number;
+  n_activities: number;
+  n_ignored: number;
+  knn_samples: number;
 }
 
 export interface RiderProfile {
@@ -77,7 +111,12 @@ export interface PredictionResult {
   elevation_loss_m: number;
   segments: SegmentSummary[];
   points: PredictionPoint[];
-  rider_profile: RiderProfile;
+  /** Cycling engine only. */
+  rider_profile?: RiderProfile;
+  /** Running engine only. */
+  runner_profile?: RunnerProfile;
+  /** Engine that produced the result; absent on (older) cycling predictions. */
+  discipline?: SportDiscipline;
   total_time_low_s?: number;
   total_time_high_s?: number;
 }
@@ -110,6 +149,12 @@ export type FitWorkerRequest =
       config?: PredictionConfig;
     })
   | (WorkerMessageBase & {
+      type: 'predictRun';
+      fitFiles: ArrayBuffer[];
+      gpxData: ArrayBuffer;
+      config: RunPredictionConfig;
+    })
+  | (WorkerMessageBase & {
       type: 'compare';
       fitFiles: ArrayBuffer[];
       validationFit: ArrayBuffer;
@@ -119,12 +164,12 @@ export type FitWorkerRequest =
 export type FitWorkerResponse =
   | (WorkerMessageBase & {
       type: 'progress';
-      action: 'predict';
+      action: 'predict' | 'predictRun';
       message: string;
     })
   | (WorkerMessageBase & {
       type: 'result';
-      action: 'predict';
+      action: 'predict' | 'predictRun';
       data: PredictionResult;
     })
   | (WorkerMessageBase & {

@@ -41,7 +41,7 @@ export const globalTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Gravel', en: 'Gravel' },
   { fr: 'VTT', en: 'MTB' },
   { fr: 'Trail', en: 'Trail running' },
-  { fr: 'Randonnee', en: 'Hiking' },
+  { fr: 'Running', en: 'Road running' },
   { fr: 'Debutant', en: 'Beginner' },
   { fr: 'Intermediaire', en: 'Intermediate' },
   { fr: 'Avance', en: 'Advanced' },

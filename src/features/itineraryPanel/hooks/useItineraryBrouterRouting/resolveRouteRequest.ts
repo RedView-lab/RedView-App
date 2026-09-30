@@ -1,4 +1,4 @@
-import { panelProfileToBrouter, resolveItineraryRouting, type BrouterRoute, type ResolvedRouting } from '../../lib/brouter';
+import { resolveItineraryRouting, type BrouterRoute, type ResolvedRouting } from '../../lib/brouter';
 import type { Itinerary } from '../../types';
 
 import { fetchRouteForPrioritiesWithFallback, type RouteRequestBase } from './profileFallback';
@@ -30,7 +30,7 @@ export async function resolveRouteRequest({
     requestBase,
     itinerary.priorities,
     resolved.profileId,
-    panelProfileToBrouter(itinerary.profileId),
+    resolved.stockProfileId,
   );
   return {
     ...routeResult,
