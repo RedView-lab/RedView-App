@@ -1,4 +1,9 @@
 import { MAPBOX_TOKEN } from '../../lib/mapbox.config';
+import {
+  applyBasemapTheme,
+  getBaseStyleUrl,
+  isRedviewThemedStyleUrl,
+} from '../../lib/basemapThemes';
 
 export type MapboxStyleDefinition = Record<string, unknown>;
 
@@ -25,6 +30,8 @@ export function cloneStyleDefinition(style: MapboxStyleDefinition): MapboxStyleD
 }
 
 export function shouldPrefetchMapboxStyle(styleUrl: string): boolean {
+  // RedView themes only exist as a recoloured JSON definition.
+  if (isRedviewThemedStyleUrl(styleUrl)) return true;
   const apiUrl = getMapboxStyleApiUrl(styleUrl);
   if (!apiUrl) return false;
   if (
@@ -39,6 +46,13 @@ export function shouldPrefetchMapboxStyle(styleUrl: string): boolean {
 export async function fetchMapboxStyleDefinition(styleUrl: string): Promise<MapboxStyleDefinition> {
   const cached = prefetchedStyleCache.get(styleUrl);
   if (cached) return cloneStyleDefinition(cached);
+
+  if (isRedviewThemedStyleUrl(styleUrl)) {
+    const baseStyle = await fetchMapboxStyleDefinition(getBaseStyleUrl(styleUrl));
+    const themed = applyBasemapTheme(styleUrl, baseStyle);
+    prefetchedStyleCache.set(styleUrl, themed);
+    return cloneStyleDefinition(themed);
+  }
 
   const apiUrl = getMapboxStyleApiUrl(styleUrl);
   if (!apiUrl) throw new Error(`Unsupported style URL: ${styleUrl}`);
@@ -71,6 +85,17 @@ export async function resolveStyleInput(styleUrl: string): Promise<string | Mapb
     return await fetchMapboxStyleDefinition(styleUrl);
   } catch (error) {
     console.warn('[map3d] style prefetch failed, falling back to URL', error);
-    return styleUrl;
+    return getBaseStyleUrl(styleUrl);
   }
+}
+
+/**
+ * Synchronous variant for recovery paths that cannot await: the cached (and
+ * themed) definition when available, otherwise a URL Mapbox can load itself
+ * (a RedView theme then degrades to its untouched base style).
+ */
+export function resolveStyleInputSync(styleUrl: string): string | MapboxStyleDefinition {
+  const cached = prefetchedStyleCache.get(styleUrl);
+  if (cached) return cloneStyleDefinition(cached);
+  return getBaseStyleUrl(styleUrl);
 }

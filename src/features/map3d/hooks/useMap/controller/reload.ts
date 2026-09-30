@@ -2,6 +2,7 @@ import { unifiedDEMSource } from '../../../lib/sources';
 import { DEM_RELOAD_COOLDOWN_MS } from '../constants';
 import { getActiveDem3dQuality } from '../../../lib/dem3dQualityBus';
 import { buildDemTilesTemplate } from '../demTiles';
+import { resolveStyleInputSync } from '../stylePrefetch';
 import type { Ctx } from './context';
 
 // Debounce window for back-to-back DEM profile switches. The profile path
@@ -160,7 +161,7 @@ export function attachReload(ctx: Ctx): void {
         fns.reportStatus('loading', 12, 'Reconstruction fond de carte');
         try {
           fns.detachManagedTerrain();
-          map.setStyle(getActiveStyleUrl(), {
+          map.setStyle(resolveStyleInputSync(getActiveStyleUrl()) as Parameters<typeof map.setStyle>[0], {
             diff: false,
             localFontFamily: null,
             localIdeographFontFamily: 'sans-serif',

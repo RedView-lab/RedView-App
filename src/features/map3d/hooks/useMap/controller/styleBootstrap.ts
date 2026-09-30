@@ -1,4 +1,5 @@
-import { applyMapEnvironment } from '../../../lib/mapEnvironment';
+import { getBasemapTone } from '../../../lib/basemapThemes';
+import { applyMapEnvironment, setMapEnvironmentBasemapTone } from '../../../lib/mapEnvironment';
 import { awaitController, swReady } from '../serviceWorker';
 import {
   type Ctx,
@@ -38,6 +39,7 @@ export function attachStyleBootstrap(ctx: Ctx): void {
     getActiveVisualFamily,
     getActiveTerrainContract,
     getActiveLightPreset,
+    getActiveStyleUrl,
   } = ctx;
   const fns = ctx.fns;
   const st = ctx.state;
@@ -81,6 +83,7 @@ export function attachStyleBootstrap(ctx: Ctx): void {
     const applyStyleDecorators = () => {
       // Fog + lights of the active environment (jour / crépuscule / nuit):
       // both are reset by setStyle, so they are re-applied on every bootstrap.
+      setMapEnvironmentBasemapTone(getBasemapTone(getActiveStyleUrl()));
       applyMapEnvironment(map);
       applyConfiguredLightPreset();
     };

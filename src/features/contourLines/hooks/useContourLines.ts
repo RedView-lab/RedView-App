@@ -9,6 +9,7 @@ import {
   CONTOUR_LAYER_PREFIX,
   CONTOUR_LINE_LAYER_ID,
   CONTOUR_SOURCE_ID,
+  type ContourTone,
 } from '../lib/contour-source';
 
 function findFirstSymbolLayerId(map: MapboxMap): string | undefined {
@@ -36,7 +37,7 @@ function hideNativeContourLayers(map: MapboxMap) {
   }
 }
 
-function addContourLayers(map: MapboxMap, opacity: number, intervalMeters: number) {
+function addContourLayers(map: MapboxMap, opacity: number, intervalMeters: number, tone: ContourTone) {
   try {
     hideNativeContourLayers(map);
     if (!map.getSource(CONTOUR_SOURCE_ID)) {
@@ -45,13 +46,13 @@ function addContourLayers(map: MapboxMap, opacity: number, intervalMeters: numbe
     const beforeId = findFirstSymbolLayerId(map);
     if (!map.getLayer(CONTOUR_CASING_LAYER_ID)) {
       map.addLayer(
-        buildContourCasingLayer(opacity, intervalMeters) as Parameters<MapboxMap['addLayer']>[0],
+        buildContourCasingLayer(opacity, intervalMeters, tone) as Parameters<MapboxMap['addLayer']>[0],
         beforeId,
       );
     }
     if (!map.getLayer(CONTOUR_LINE_LAYER_ID)) {
       map.addLayer(
-        buildContourLineLayer(opacity, intervalMeters) as Parameters<MapboxMap['addLayer']>[0],
+        buildContourLineLayer(opacity, intervalMeters, tone) as Parameters<MapboxMap['addLayer']>[0],
         beforeId,
       );
     }
@@ -82,8 +83,8 @@ function setContourVisibility(map: MapboxMap, visible: boolean) {
   }
 }
 
-function updateContourPaint(map: MapboxMap, opacity: number, intervalMeters: number) {
-  const paints = buildContourPaints(opacity, intervalMeters);
+function updateContourPaint(map: MapboxMap, opacity: number, intervalMeters: number, tone: ContourTone) {
+  const paints = buildContourPaints(opacity, intervalMeters, tone);
   const casingOpacity = paints.casingOpacity as unknown as DataDrivenPropertyValueSpecification<number>;
   const casingWidth = paints.casingWidth as unknown as DataDrivenPropertyValueSpecification<number>;
   const lineOpacity = paints.lineOpacity as unknown as DataDrivenPropertyValueSpecification<number>;
@@ -91,11 +92,13 @@ function updateContourPaint(map: MapboxMap, opacity: number, intervalMeters: num
   try {
     if (map.getLayer(CONTOUR_CASING_LAYER_ID)) {
       map.setFilter(CONTOUR_CASING_LAYER_ID, paints.filter);
+      map.setPaintProperty(CONTOUR_CASING_LAYER_ID, 'line-color', paints.casingColor);
       map.setPaintProperty(CONTOUR_CASING_LAYER_ID, 'line-opacity', casingOpacity);
       map.setPaintProperty(CONTOUR_CASING_LAYER_ID, 'line-width', casingWidth);
     }
     if (map.getLayer(CONTOUR_LINE_LAYER_ID)) {
       map.setFilter(CONTOUR_LINE_LAYER_ID, paints.filter);
+      map.setPaintProperty(CONTOUR_LINE_LAYER_ID, 'line-color', paints.lineColor);
       map.setPaintProperty(CONTOUR_LINE_LAYER_ID, 'line-opacity', lineOpacity);
       map.setPaintProperty(CONTOUR_LINE_LAYER_ID, 'line-width', lineWidth);
     }
@@ -111,19 +114,22 @@ export function useContourLines(
   opacity: number,
   intervalMeters: number,
   available: boolean,
+  tone: ContourTone = 'light',
 ) {
   const mountedRef = useRef(false);
   const enabledRef = useRef(enabled);
   const opacityRef = useRef(opacity);
   const intervalRef = useRef(intervalMeters);
   const availableRef = useRef(available);
+  const toneRef = useRef(tone);
 
   useEffect(() => {
     enabledRef.current = enabled;
     opacityRef.current = opacity;
     intervalRef.current = intervalMeters;
     availableRef.current = available;
-  }, [enabled, opacity, intervalMeters, available]);
+    toneRef.current = tone;
+  }, [enabled, opacity, intervalMeters, available, tone]);
 
   useEffect(() => {
     if (!map || !isMapLoaded || !available) return;
@@ -131,7 +137,7 @@ export function useContourLines(
       hideNativeContourLayers(map);
       return;
     }
-    addContourLayers(map, opacityRef.current, intervalRef.current);
+    addContourLayers(map, opacityRef.current, intervalRef.current, toneRef.current);
     mountedRef.current = true;
     setContourVisibility(map, enabledRef.current && availableRef.current);
   }, [map, isMapLoaded, available]);
@@ -143,8 +149,8 @@ export function useContourLines(
 
   useEffect(() => {
     if (!map || !isMapLoaded || !mountedRef.current) return;
-    updateContourPaint(map, opacity, intervalMeters);
-  }, [map, isMapLoaded, opacity, intervalMeters]);
+    updateContourPaint(map, opacity, intervalMeters, tone);
+  }, [map, isMapLoaded, opacity, intervalMeters, tone]);
 
   useEffect(() => {
     if (!map || !isMapLoaded) return;
@@ -153,7 +159,7 @@ export function useContourLines(
       mountedRef.current = false;
       setTimeout(() => {
         if (!availableRef.current) return;
-        addContourLayers(map, opacityRef.current, intervalRef.current);
+        addContourLayers(map, opacityRef.current, intervalRef.current, toneRef.current);
         mountedRef.current = true;
         setContourVisibility(map, enabledRef.current && availableRef.current);
       }, 0);

@@ -49,7 +49,7 @@ export function ContourLinesSection({
       <div className={`rvc-contour-lines${available ? '' : ' is-unavailable'}`}>
         {!available ? (
           <p className="rvc-contour-lines__hint">
-            {t('Disponible uniquement avec le fond Topographique.')}
+            {t('Indisponible avec le fond Satellite.')}
           </p>
         ) : null}
 

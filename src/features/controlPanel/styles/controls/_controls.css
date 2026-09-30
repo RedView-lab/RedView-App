@@ -153,30 +153,31 @@
   position: absolute;
   left: 0;
   right: 0;
-  top: 8px;
-  height: 8px;
+  top: 7px;
+  height: 10px;
   border-radius: 9999px;
-  background: #e9eaeb;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .rvc-slider__fill {
   position: absolute;
   left: 0;
-  top: 8px;
-  height: 8px;
+  top: 7px;
+  height: 10px;
   border-radius: 9999px;
-  background: var(--rvc-red);
+  background: rgba(255, 255, 255, 0.25);
 }
 
 .rvc-slider__handle {
   position: absolute;
-  top: 4px;
-  width: 16px;
-  height: 16px;
+  top: 0;
+  width: 24px;
+  height: 24px;
+  box-sizing: border-box;
   border-radius: 9999px;
   background: #ffffff;
-  border: 2px solid var(--rvc-red-border);
-  box-shadow: 0 4px 6px -1px rgba(10, 13, 18, 0.1), 0 2px 4px -2px rgba(10, 13, 18, 0.06);
+  border: 2px solid rgba(0, 0, 0, 0.64);
+  box-shadow: 0 1px 3px rgba(10, 13, 18, 0.1), 0 1px 2px -1px rgba(10, 13, 18, 0.1);
   pointer-events: none;
 }
 

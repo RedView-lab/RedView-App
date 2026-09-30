@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import { useContourLines } from '@/features/contourLines/hooks/useContourLines';
+import { basemapSupportsContourLines, getBasemapGroundTone } from '../../lib/basemaps';
 import { DEFAULT_CONTROL_PANEL_STATE } from '../../lib/defaultState';
 import type { ControlPanelPersistedState } from '../../lib/persistedState';
 import type { BasemapId, ContourIntervalSetting } from '../../types';
@@ -39,7 +40,7 @@ export function useTerrainContourState({
   const [contourLinesOpacity, setContourLinesOpacity] = useState(
     () => initialControlPanel.contourLines?.opacity ?? DEFAULT_CONTROL_PANEL_STATE.contourLines.opacity,
   );
-  const contourLinesAvailable = activeBasemapId === 'topographic';
+  const contourLinesAvailable = basemapSupportsContourLines(activeBasemapId);
 
   useContourLines(
     isMapLoaded ? map : null,
@@ -48,6 +49,7 @@ export function useTerrainContourState({
     Math.max(0, Math.min(1, contourLinesOpacity / 100)),
     contourIntervalMetersFromSetting(contourLinesInterval),
     contourLinesAvailable,
+    getBasemapGroundTone(activeBasemapId),
   );
 
   const contourLinesSlice = useMemo(

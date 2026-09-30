@@ -197,8 +197,6 @@ export function WindSection({
             value={dateOffset}
             onChange={updateDateFromOffset}
             onCommit={updateDateFromOffset}
-            handleSize={22}
-            trackHeight={10}
           />
           <span className="rvc-wind__bound">{formatDateShort(endDateKey, locale)}</span>
           <label className="rvc-wind__picker-chip rvc-wind__picker-chip--date">
@@ -225,8 +223,6 @@ export function WindSection({
             value={selectedMinutes}
             onChange={updateTimeFromMinutes}
             onCommit={updateTimeFromMinutes}
-            handleSize={22}
-            trackHeight={10}
           />
           <span className="rvc-wind__bound">{minutesToTime(maxSelectableMinutes)}</span>
           <label className="rvc-wind__picker-chip rvc-wind__picker-chip--time">

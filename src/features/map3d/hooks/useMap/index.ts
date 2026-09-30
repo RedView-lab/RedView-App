@@ -14,6 +14,7 @@ import type { UseMapOptions } from './types';
 import {
   createEmptyBootstrapStyle,
   resolveStyleInput,
+  resolveStyleInputSync,
   shouldPrefetchMapboxStyle,
   type MapboxStyleDefinition,
 } from './stylePrefetch';
@@ -203,7 +204,7 @@ export function useMap(
         );
         try {
           lifecycle.prepareStyleChange('Fond de carte (recovery)');
-          map.setStyle(basemapConfig.styleUrl as Parameters<typeof map.setStyle>[0], {
+          map.setStyle(resolveStyleInputSync(basemapConfig.styleUrl) as Parameters<typeof map.setStyle>[0], {
             diff: false,
             localFontFamily: null,
             localIdeographFontFamily: 'sans-serif',

@@ -22,8 +22,8 @@ export function Slider({
   min = 0,
   max = 100,
   step = 1,
-  handleSize = 16,
-  trackHeight = 8,
+  handleSize = 24,
+  trackHeight = 10,
   disabled = false,
 }: SliderProps) {
   const [draftValue, setDraftValue] = useState(value);

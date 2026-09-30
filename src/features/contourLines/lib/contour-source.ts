@@ -8,6 +8,14 @@ export const CONTOUR_LAYER_PREFIX = 'rv-contour-lines-';
 const CONTOUR_TILESET_URL = 'mapbox://mapbox.mapbox-terrain-v2';
 const CONTOUR_SOURCE_LAYER = 'contour';
 
+/** Ground tone of the active basemap: the casing is a halo cut out of it. */
+export type ContourTone = 'light' | 'dark';
+
+const CONTOUR_COLORS: Record<ContourTone, { casing: string; line: string }> = {
+  light: { casing: '#f6f2ea', line: '#8d6942' },
+  dark: { casing: '#141a24', line: '#c9a677' },
+};
+
 export function buildContourFilter(intervalMeters: number): FilterSpecification {
   return [
     'all',
@@ -45,7 +53,7 @@ export function buildContourSource(): VectorSourceSpecification {
   };
 }
 
-export function buildContourCasingLayer(opacity: number, intervalMeters: number): AnyLayer {
+export function buildContourCasingLayer(opacity: number, intervalMeters: number, tone: ContourTone = 'light'): AnyLayer {
   return {
     id: CONTOUR_CASING_LAYER_ID,
     type: 'line',
@@ -58,7 +66,7 @@ export function buildContourCasingLayer(opacity: number, intervalMeters: number)
       visibility: 'visible',
     },
     paint: {
-      'line-color': '#f6f2ea',
+      'line-color': CONTOUR_COLORS[tone].casing,
       'line-opacity': buildOpacityExpression(opacity, 0.58),
       'line-width': buildWidthExpression([0.9, 1.2, 1.6, 2.2]),
       'line-blur': 0.08,
@@ -66,7 +74,7 @@ export function buildContourCasingLayer(opacity: number, intervalMeters: number)
   } as AnyLayer;
 }
 
-export function buildContourLineLayer(opacity: number, intervalMeters: number): AnyLayer {
+export function buildContourLineLayer(opacity: number, intervalMeters: number, tone: ContourTone = 'light'): AnyLayer {
   return {
     id: CONTOUR_LINE_LAYER_ID,
     type: 'line',
@@ -79,16 +87,18 @@ export function buildContourLineLayer(opacity: number, intervalMeters: number): 
       visibility: 'visible',
     },
     paint: {
-      'line-color': '#8d6942',
+      'line-color': CONTOUR_COLORS[tone].line,
       'line-opacity': buildOpacityExpression(opacity, 0.94),
       'line-width': buildWidthExpression([0.35, 0.55, 0.82, 1.1]),
     },
   } as AnyLayer;
 }
 
-export function buildContourPaints(opacity: number, intervalMeters: number) {
+export function buildContourPaints(opacity: number, intervalMeters: number, tone: ContourTone = 'light') {
   return {
     filter: buildContourFilter(intervalMeters),
+    casingColor: CONTOUR_COLORS[tone].casing,
+    lineColor: CONTOUR_COLORS[tone].line,
     casingOpacity: buildOpacityExpression(opacity, 0.58),
     casingWidth: buildWidthExpression([0.9, 1.2, 1.6, 2.2]),
     lineOpacity: buildOpacityExpression(opacity, 0.94),

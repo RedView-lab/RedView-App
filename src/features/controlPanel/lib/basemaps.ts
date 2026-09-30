@@ -1,3 +1,7 @@
+import {
+  REDVIEW_TOPO_DARK_STYLE_URL,
+  REDVIEW_TOPO_LIGHT_STYLE_URL,
+} from '@/features/map3d/lib/basemapThemes/urls';
 import type { Basemap, BasemapId } from '../types';
 
 export type BasemapVisualFamily = 'mapbox-standard-v3' | 'mapbox-classic-v12';
@@ -15,20 +19,22 @@ export interface BasemapRenderConfig {
 
 interface BasemapOption extends BasemapRenderConfig {}
 
-// Stick to Mapbox-owned public style URLs so the app only pays for the same
-// GL JS map usage it already has, without introducing custom Styles API churn.
+// Stick to Mapbox-owned public styles so the app only pays for the same GL JS
+// map usage it already has, without introducing custom Styles API churn. The
+// two "Standard" entries are RedView themes: Mapbox Outdoors v12 recoloured
+// client-side (see `features/map3d/lib/basemapThemes`).
 export const MAPBOX_BASEMAPS: readonly BasemapOption[] = [
   {
     id: 'standard',
     label: 'Standard (clair)',
-    styleUrl: 'mapbox://styles/mapbox/light-v11',
+    styleUrl: REDVIEW_TOPO_LIGHT_STYLE_URL,
     visualFamily: 'mapbox-classic-v12',
     terrainContract: 'unified-dem-v1',
   },
   {
     id: 'dark',
     label: 'Standard (sombre)',
-    styleUrl: 'mapbox://styles/mapbox/dark-v11',
+    styleUrl: REDVIEW_TOPO_DARK_STYLE_URL,
     visualFamily: 'mapbox-classic-v12',
     terrainContract: 'unified-dem-v1',
   },
@@ -74,6 +80,18 @@ export function buildBasemapList(activeId: BasemapId | null | undefined): Basema
       active: isActive,
     };
   });
+}
+
+// Vector basemaps (RedView themes / Outdoors) take the contour overlay;
+// satellite imagery is too busy for it.
+const CONTOUR_LINE_BASEMAPS: ReadonlySet<BasemapId> = new Set<BasemapId>(['standard', 'dark', 'topographic']);
+
+export function basemapSupportsContourLines(id: BasemapId | null | undefined): boolean {
+  return CONTOUR_LINE_BASEMAPS.has(normalizeBasemapId(id));
+}
+
+export function getBasemapGroundTone(id: BasemapId | null | undefined): 'light' | 'dark' {
+  return normalizeBasemapId(id) === 'dark' ? 'dark' : 'light';
 }
 
 export function getBasemapStyleUrl(id: BasemapId | null | undefined): string {

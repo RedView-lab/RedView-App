@@ -24,17 +24,8 @@
   min-width: 0;
 }
 
-.rvc-wind__slider-row .rvc-slider__track {
-  background: rgba(255, 255, 255, 0.08);
-}
 
-.rvc-wind__slider-row .rvc-slider__fill {
-  background: rgba(255, 255, 255, 0.25);
-}
 
-.rvc-wind__slider-row .rvc-slider__handle {
-  border-color: #000000;
-}
 
 .rvc-wind__bound {
   color: #ffffff;

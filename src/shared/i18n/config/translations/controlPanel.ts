@@ -20,7 +20,7 @@ export const controlPanelTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Plans d’eau', en: 'Water bodies' },
   { fr: "Plans d'eau", en: 'Water bodies' },
   { fr: 'Courbes de niveau', en: 'Contour lines' },
-  { fr: 'Disponible uniquement avec le fond Topographique.', en: 'Available only with the Topographic basemap.' },
+  { fr: 'Indisponible avec le fond Satellite.', en: 'Not available with the Satellite basemap.' },
   { fr: 'Opacité', en: 'Opacity' },
   { fr: 'Activer {{title}}', en: 'Enable {{title}}' },
   { fr: 'Réduire', en: 'Collapse' },
