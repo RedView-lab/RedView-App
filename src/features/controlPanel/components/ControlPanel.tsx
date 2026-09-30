@@ -29,6 +29,7 @@ export function ControlPanel({
   onSectionOpenChange,
   onBasemapToggle,
   onBasemap3dQualityChange,
+  onMapEnvironmentChange,
   onBasemapAdd,
   onLidarTileToggle,
   onLidarTileDelete,
@@ -110,10 +111,12 @@ export function ControlPanel({
       <BasemapsSection
         basemaps={state.basemaps}
         basemap3dQuality={state.basemap3dQuality}
+        mapEnvironment={state.mapEnvironment}
         open={sectionsOpen?.basemaps}
         onOpenChange={(open) => onSectionOpenChange?.('basemaps', open)}
         onBasemapToggle={onBasemapToggle}
         onBasemap3dQualityChange={onBasemap3dQualityChange}
+        onMapEnvironmentChange={onMapEnvironmentChange}
         onBasemapAdd={onBasemapAdd}
       />
 

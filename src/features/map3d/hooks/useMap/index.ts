@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 import mapboxgl from 'mapbox-gl';
 import {
   DEFAULT_VIEW,
-  FOG_CONFIG,
   MAPBOX_STYLE,
   MAPBOX_TOKEN,
 } from '../../lib/mapbox.config';
@@ -126,7 +125,6 @@ export function useMap(
 
     const lifecycle = createMapLifecycleController({
       map,
-      fogConfig: FOG_CONFIG as mapboxgl.FogSpecification,
       runtimeProfile,
       terrainRef,
       onLoadStatusChangeRef,

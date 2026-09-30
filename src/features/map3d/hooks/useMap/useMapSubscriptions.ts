@@ -9,6 +9,7 @@ import {
   getActiveDemProfilePreference,
   subscribeDemProfilePreference,
 } from '../../lib/demProfileBus';
+import { applyMapEnvironment, subscribeMapEnvironment } from '../../lib/mapEnvironment';
 import type { MapLifecycleController } from './controller/context';
 import { isFreeCamActive, subscribeFreeCam } from '@/features/freeCam';
 
@@ -64,6 +65,12 @@ export function setupMapSubscriptions({
     } catch (err) {
       console.warn('[map3d] reloadMapElevationForProfile after DEM profile change failed', err);
     }
+  });
+
+  // Environment (jour / crépuscule / nuit) or sunlight direction changed:
+  // re-apply lights + fog live. Style swaps re-apply via the bootstrap.
+  const unsubscribeMapEnvironment = subscribeMapEnvironment(() => {
+    applyMapEnvironment(map);
   });
 
   if (getActiveDemProfilePreference() !== 'default') {
@@ -135,6 +142,7 @@ export function setupMapSubscriptions({
       }
       unsubscribeDem3dQuality();
       unsubscribeDemProfile();
+      unsubscribeMapEnvironment();
       unsubscribeFreeCam();
       if (saveTimer) clearTimeout(saveTimer);
       map.off('moveend', onMoveEnd);

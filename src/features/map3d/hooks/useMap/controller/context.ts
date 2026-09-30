@@ -1,6 +1,5 @@
 import type { MutableRefObject } from 'react';
 import type {
-  FogSpecification,
   Map as MapboxMap,
   MapSourceDataEvent,
 } from 'mapbox-gl';
@@ -53,7 +52,6 @@ export const DEM_SETTILE_VERIFY_MS = 3500;
 
 export interface CreateMapLifecycleControllerOptions {
   map: MapboxMap;
-  fogConfig: FogSpecification;
   runtimeProfile: MapRuntimeProfile;
   terrainRef: MutableRefObject<TerrainManager | null>;
   onLoadStatusChangeRef: MutableRefObject<OverlayStatusReporter | undefined>;

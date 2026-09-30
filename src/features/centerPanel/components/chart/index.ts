@@ -52,12 +52,12 @@ export {
   detectSteepAlertSegments,
   listItinerarySteepAlerts,
   steepAlertKey,
-  STEEP_ALERT_MIN_GRADIENT_PCT,
-  STEEP_ALERT_MIN_LENGTH_M,
+  STEEP_ALERT_RULES,
 } from './alerts/buildSteepAlertOverlay';
 export type {
   ChartAlertOverlay,
   ChartAlertWindow,
   ItinerarySteepAlert,
+  SteepAlertRule,
   SteepAlertSegment,
 } from './alerts/buildSteepAlertOverlay';

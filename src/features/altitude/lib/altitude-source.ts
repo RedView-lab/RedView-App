@@ -145,6 +145,8 @@ export function buildAltitudeLayer(
       'raster-color-mix': encoding === 'terrarium' ? TERRARIUM_DECODE_MIX : MAPBOX_RGB_DECODE_MIX,
       'raster-color-range': ALTITUDE_DECODE_RANGE,
       'raster-color': buildAltitudeColorExpression(categories, colorMode, hiddenIds),
+      // Legend colours must stay exact under dusk/night scene lighting.
+      'raster-emissive-strength': 1,
     },
   };
 }

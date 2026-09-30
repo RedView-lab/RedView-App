@@ -29,7 +29,7 @@ import type {
   Map as MapboxMap,
   MapMouseEvent,
 } from 'mapbox-gl';
-import { flyToLocation } from '@/features/map3d';
+import { buildPopupClearanceOffset, flyToPoi } from '@/features/map3d';
 
 import type { PoiFeature } from '../types';
 import { POI_LABELS } from '../types';
@@ -40,6 +40,7 @@ import {
   type UsePoiPopupActions,
 } from './poi-popup';
 import {
+  getPoiSpriteFootprint,
   getPoiSpriteId,
   getPoiSpritePixelRatio,
   getPoiSpriteSpec,
@@ -54,8 +55,6 @@ const MARKER_MIN_SCALE_ZOOM = 8.25;
 const MARKER_MAX_SCALE_ZOOM = 15.1;
 const MARKER_MIN_SCREEN_SCALE = 0.42;
 const MARKER_MAX_SCREEN_SCALE = 1;
-const MARKER_MIN_POPUP_OFFSET_PX = 38;
-const MARKER_MAX_POPUP_OFFSET_PX = 80;
 // Terrain occlusion: `icon-occlusion-opacity` is deliberately NOT set. Absent,
 // Mapbox fully hides icons behind the relief only (same result as the former
 // DOM `occludedOpacity: 0`). Setting it switches to a generic depth test, and
@@ -63,12 +62,6 @@ const MARKER_MAX_POPUP_OFFSET_PX = 80;
 /** Hover lift, identical to the former `.rv-poi-marker:hover` CSS. */
 const HOVER_SCALE = 1.03;
 const HOVER_LIFT_PX = 4;
-/**
- * Niveau de zoom auto lors d'un focus POI (14.5 au lieu de 15.5).
- * En projection Web Mercator, -1 niveau de zoom divise l'échelle par 2 (zoom 2x moins fort).
- */
-export const POI_AUTO_ZOOM_LEVEL = 14.5;
-
 export const POI_GPU_SOURCE_ID = 'rv-poi-gpu-source';
 export const POI_GPU_LAYER_ID = 'rv-poi-gpu-symbols';
 export const POI_GPU_HOVER_LAYER_ID = 'rv-poi-gpu-hover';
@@ -86,9 +79,18 @@ function getIconSizeAtZoom(zoom: number): number {
   return 0.8 + 0.35 * scale;
 }
 
-function getPopupOffsetAtZoom(zoom: number): number {
-  const progress = smoothstep(MARKER_MIN_SCALE_ZOOM, MARKER_MAX_SCALE_ZOOM, zoom);
-  return Math.round(lerp(MARKER_MIN_POPUP_OFFSET_PX, MARKER_MAX_POPUP_OFFSET_PX, progress));
+/**
+ * Popup offset keeping the menu clear of the POI sprite on whichever side
+ * Mapbox anchors it (the hovered sprite is scaled and lifted: included).
+ */
+function getPopupOffset(feature: PoiFeature, zoom: number) {
+  const size = getIconSizeAtZoom(zoom) * HOVER_SCALE;
+  const footprint = getPoiSpriteFootprint(getPoiSpriteSpec(feature));
+  return buildPopupClearanceOffset({
+    above: footprint.above * size + HOVER_LIFT_PX,
+    below: footprint.below * size,
+    side: footprint.side * size,
+  });
 }
 
 /** Piecewise-linear sampling of the smoothstep curve as a zoom expression. */
@@ -165,6 +167,12 @@ export class PoiMarkerManager {
   private hoveredKey: string | null = null;
   private popup: mapboxgl.Popup | null = null;
   private popupKey: string | null = null;
+  /**
+   * POI dont le panneau était ouvert au moment de l'appui. Mapbox ferme le
+   * popup au `preclick` (closeOnClick), avant le `click` du calque : sans ce
+   * repère, recliquer le POI ouvert le rouvrait aussitôt au lieu de le fermer.
+   */
+  private pressedOpenPopupKey: string | null = null;
   private zoomFrameId: number | null = null;
   private raiseFrameId: number | null = null;
 
@@ -174,6 +182,7 @@ export class PoiMarkerManager {
     managersByMap.set(map, this);
     map.on('styledata', this.handleStyleData);
     map.on('zoom', this.handleZoom);
+    map.on('mousedown', this.handleMapMouseDown);
     map.on('click', POI_GPU_LAYER_ID, this.handleLayerClick);
     map.on('mousemove', POI_GPU_LAYER_ID, this.handleLayerMouseMove);
     map.on('mouseleave', POI_GPU_LAYER_ID, this.handleLayerMouseLeave);
@@ -228,6 +237,7 @@ export class PoiMarkerManager {
     }
     this.map.off('styledata', this.handleStyleData);
     this.map.off('zoom', this.handleZoom);
+    this.map.off('mousedown', this.handleMapMouseDown);
     this.map.off('click', POI_GPU_LAYER_ID, this.handleLayerClick);
     this.map.off('mousemove', POI_GPU_LAYER_ID, this.handleLayerMouseMove);
     this.map.off('mouseleave', POI_GPU_LAYER_ID, this.handleLayerMouseLeave);
@@ -301,11 +311,7 @@ export class PoiMarkerManager {
       this.openPopup(targetKey, target);
     }
 
-    flyToLocation(
-      this.map,
-      { lon: target.lon, lat: target.lat },
-      { zoom: POI_AUTO_ZOOM_LEVEL },
-    );
+    flyToPoi(this.map, { lon: target.lon, lat: target.lat });
 
     return true;
   }
@@ -488,6 +494,8 @@ export class PoiMarkerManager {
         this.popup.remove();
       } else {
         this.popup.setLngLat([current.lon, current.lat]);
+        // The sprite may have changed (favorite / pause toggled from the menu).
+        this.popup.setOffset(getPopupOffset(current, this.map.getZoom()));
       }
     }
     if (this.hoveredKey && !this.features.has(this.hoveredKey)) {
@@ -512,7 +520,7 @@ export class PoiMarkerManager {
       closeOnClick: true,
       focusAfterOpen: false,
       maxWidth: 'none',
-      offset: [0, getPopupOffsetAtZoom(this.map.getZoom())],
+      offset: getPopupOffset(feature, this.map.getZoom()),
     });
 
     // Popup DOM is built on open only — a single popup exists at a time.
@@ -612,15 +620,28 @@ export class PoiMarkerManager {
     if (!this.popup || this.zoomFrameId != null) return;
     this.zoomFrameId = window.requestAnimationFrame(() => {
       this.zoomFrameId = null;
-      this.popup?.setOffset([0, getPopupOffsetAtZoom(this.map.getZoom())]);
+      const feature = this.popupKey ? this.features.get(this.popupKey) : undefined;
+      if (feature) this.popup?.setOffset(getPopupOffset(feature, this.map.getZoom()));
     });
+  };
+
+  private readonly handleMapMouseDown = (): void => {
+    this.pressedOpenPopupKey = this.popup?.isOpen() ? this.popupKey : null;
   };
 
   private readonly handleLayerClick = (event: MapMouseEvent): void => {
     const hit = event.features?.[0];
     const key = hit ? String(hit.properties?.key ?? '') : '';
     const feature = key ? this.features.get(key) : undefined;
+    const pressedOpenKey = this.pressedOpenPopupKey;
+    this.pressedOpenPopupKey = null;
     if (!key || !feature) return;
+    // Second clic sur le POI dont le panneau est ouvert : il se ferme, comme
+    // un clic ailleurs sur la carte.
+    if (key === pressedOpenKey) {
+      this.popup?.remove();
+      return;
+    }
     this.openPopup(key, feature);
   };
 

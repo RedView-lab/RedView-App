@@ -1,3 +1,4 @@
+import { applyMapEnvironment } from '../../../lib/mapEnvironment';
 import { awaitController, swReady } from '../serviceWorker';
 import {
   type Ctx,
@@ -37,7 +38,6 @@ export function attachStyleBootstrap(ctx: Ctx): void {
     getActiveVisualFamily,
     getActiveTerrainContract,
     getActiveLightPreset,
-    fogConfig,
   } = ctx;
   const fns = ctx.fns;
   const st = ctx.state;
@@ -79,11 +79,9 @@ export function attachStyleBootstrap(ctx: Ctx): void {
       spriteStormBypass: st.spriteStormBypass,
     });
     const applyStyleDecorators = () => {
-      try {
-        map.setFog(fogConfig);
-      } catch {
-        /* style may still be finishing its internal graph rebuild */
-      }
+      // Fog + lights of the active environment (jour / crépuscule / nuit):
+      // both are reset by setStyle, so they are re-applied on every bootstrap.
+      applyMapEnvironment(map);
       applyConfiguredLightPreset();
     };
     if (!await waitForStyleReadiness(ctx, runId)) return false;

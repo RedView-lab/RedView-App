@@ -144,7 +144,7 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
         .then((settlement) => {
           const name = settlement?.name?.trim();
           if (!name) return;
-          currentStore.updateItinerary(targetItineraryId, (it) => {
+          currentStore.updateItineraryWithoutHistory(targetItineraryId, (it) => {
             const newlyAdded = it.timeline.find(
               (row) =>
                 row.kind === 'waypoint' &&

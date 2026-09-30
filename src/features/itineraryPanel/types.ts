@@ -49,7 +49,7 @@ export interface AnalysisFiltersState {
   pause: boolean;
   pente: boolean;
   jourNuit: boolean;
-  /** Colonnes rouges sur le graphe : pente ≥ 12 % sur ≥ 100 m. */
+  /** Colonnes rouges sur le graphe : pente ≥ 10 % sur ≥ 1 km ou ≥ 15 % sur ≥ 100 m. */
   alertes: boolean;
 }
 
@@ -476,6 +476,14 @@ export interface Itinerary {
     }[];
     gpxQuality?: GpxQualityMode;
     gpxQualityPointsPerKm?: number | null;
+    /**
+     * Entrées de routage (points, profil, priorités, zones…) pour lesquelles
+     * BRouter a produit ce tracé (`getRoutingInputsSignature`). Après un
+     * undo/redo, un tracé dont l'estampille ne correspond plus aux entrées
+     * restaurées (figé en plein recalcul) est recalculé ; sinon il fait foi.
+     * Absent (anciens projets, GPX importé) = tracé considéré à jour.
+     */
+    routedInputsKey?: string;
   };
   /**
    * Expert Mode profile state. When `enabled`, every parameter the user

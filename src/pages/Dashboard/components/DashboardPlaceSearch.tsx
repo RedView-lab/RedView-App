@@ -11,6 +11,7 @@ import {
   type UsePoiPopupActions,
 } from '@/features/poi/lib/poi-popup';
 import { getViewportPrefetch } from '@/features/map3d/lib/viewportPrefetch';
+import { closeMarkerPopupOnSecondClick } from '@/features/map3d/lib/pointPanelDismiss';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { useAppI18n } from '@/shared/i18n';
 
@@ -288,8 +289,10 @@ export function DashboardPlaceSearch({
       refresh();
       popup.on('open', () => refresh());
 
+      const markerElement = createViewportPoiMarkerElement(feature);
+      closeMarkerPopupOnSecondClick(markerElement, popup);
       const marker = new mapboxgl.Marker({
-        element: createViewportPoiMarkerElement(feature),
+        element: markerElement,
         anchor: feature.favorite ? 'bottom' : 'center',
         pitchAlignment: 'viewport',
         rotationAlignment: 'viewport',

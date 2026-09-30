@@ -525,7 +525,7 @@
 .rvc-center-analysis__plot-grid > * {
   pointer-events: none;
 }
-/* Icône de danger « Alertes » posée sur la carte 3D (pente ≥ 12 % sur ≥ 100 m). */
+/* Icône de danger « Alertes » posée sur la carte 3D (pente ≥ 10 % sur ≥ 1 km ou ≥ 15 % sur ≥ 100 m). */
 .rvi-analysis-alert-marker {
   display: flex;
   align-items: center;

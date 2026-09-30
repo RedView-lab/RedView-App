@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
-import { normalizeItineraryProject } from '@/features/itineraryPanel/lib/project';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import {
   isProjectTooLarge,
@@ -14,6 +13,16 @@ import { idbSaveThumbnail } from '@/shared/utils/storage/idbProjectStore';
 import { writeProjectCache } from './dashboardProjectCache';
 
 import { logger } from '@/shared/lib/logger';
+
+/**
+ * Sauvegarde (cache local + cloud) après une rafale de modifications, pas à
+ * chaque modification : sérialiser / copier un grand projet coûte des
+ * centaines de ms et bloquait l'édition (curseurs, undo/redo). Une édition
+ * continue est quand même sauvegardée au moins toutes les AUTOSAVE_MAX_WAIT_MS,
+ * et tout est écrit immédiatement à la fermeture / mise en arrière-plan.
+ */
+const AUTOSAVE_DEBOUNCE_MS = 1000;
+const AUTOSAVE_MAX_WAIT_MS = 4000;
 
 interface UseDashboardProjectSyncArgs {
   mapInstance: MapboxMap | null;
@@ -32,12 +41,27 @@ export function useDashboardProjectSync({
   const lastSavedSerializedRef = useRef<string | null>(null);
   const lastOversizedSignatureRef = useRef<string | null>(null);
   const saveTimerRef = useRef<number | null>(null);
+  const firstQueuedAtRef = useRef<number | null>(null);
+  const lastCachedPayloadRef = useRef<ItineraryProject | null>(null);
+  const lastSavedPayloadRef = useRef<ItineraryProject | null>(null);
 
   const flushSave = useCallback(
     async ({ keepalive: _keepalive = false }: { keepalive?: boolean } = {}): Promise<void> => {
       const id = activeProjectIdRef.current;
       const payload = pendingSaveRef.current;
+      firstQueuedAtRef.current = null;
       if (!id || !payload) return;
+
+      // Cache local de reprise (IndexedDB / localStorage), une fois par état.
+      if (lastCachedPayloadRef.current !== payload) {
+        lastCachedPayloadRef.current = payload;
+        writeProjectCache(id, payload);
+      }
+
+      if (payload === lastSavedPayloadRef.current) {
+        pendingSaveRef.current = null;
+        return;
+      }
 
       const endpoint = import.meta.env.VITE_APPWRITE_ENDPOINT as string | undefined;
       if (!endpoint && !import.meta.env.DEV) {
@@ -55,6 +79,7 @@ export function useDashboardProjectSync({
         try {
           await saveProject(id, payload);
           lastSavedSerializedRef.current = serialized;
+          lastSavedPayloadRef.current = payload;
           if (pendingSaveRef.current === payload) {
             pendingSaveRef.current = null;
           }
@@ -88,6 +113,7 @@ export function useDashboardProjectSync({
       try {
         await saveProject(id, payload);
         lastSavedSerializedRef.current = serialized;
+        lastSavedPayloadRef.current = payload;
         if (pendingSaveRef.current === payload) {
           pendingSaveRef.current = null;
         }
@@ -98,26 +124,31 @@ export function useDashboardProjectSync({
     [activeProjectIdRef],
   );
 
+  /** Reçoit un état déjà normalisé (ProjectStore / mutateur du Dashboard). */
   const queueProjectSave = useCallback(
     (next: ItineraryProject) => {
-      const normalizedNext = normalizeItineraryProject(next);
-      activeProjectSnapshotRef.current = normalizedNext;
-      pendingSaveRef.current = normalizedNext;
+      const previousName = activeProjectSnapshotRef.current?.name;
+      activeProjectSnapshotRef.current = next;
+      pendingSaveRef.current = next;
 
       const id = activeProjectIdRef.current;
-      if (id) {
-        replaceProjectLocation({ id, name: normalizedNext.name || 'project' });
-        writeProjectCache(id, normalizedNext);
+      if (id && next.name !== previousName) {
+        replaceProjectLocation({ id, name: next.name || 'project' });
       }
 
       if (saveTimerRef.current != null) {
         window.clearTimeout(saveTimerRef.current);
       }
 
+      const now = Date.now();
+      if (firstQueuedAtRef.current == null) firstQueuedAtRef.current = now;
+      const waited = now - firstQueuedAtRef.current;
+      const delay = Math.max(0, Math.min(AUTOSAVE_DEBOUNCE_MS, AUTOSAVE_MAX_WAIT_MS - waited));
+
       saveTimerRef.current = window.setTimeout(() => {
         saveTimerRef.current = null;
         void flushSave();
-      }, 150);
+      }, delay);
     },
     [activeProjectIdRef, activeProjectSnapshotRef, flushSave],
   );
@@ -206,6 +237,9 @@ export function useDashboardProjectSync({
 
   const resetSyncState = useCallback((serialized: string | null) => {
     lastSavedSerializedRef.current = serialized;
+    lastSavedPayloadRef.current = null;
+    lastCachedPayloadRef.current = null;
+    firstQueuedAtRef.current = null;
     pendingSaveRef.current = null;
   }, []);
 

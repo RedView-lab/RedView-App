@@ -38,7 +38,7 @@ interface MapAlertSectionCardProps {
 }
 
 /**
- * Contenu de la popup Mapbox d'un tronçon « Alertes » (pente ≥ 12 % sur ≥ 100 m).
+ * Contenu de la popup Mapbox d'un tronçon « Alertes » (pente ≥ 10 % sur ≥ 1 km ou ≥ 15 % sur ≥ 100 m).
  * Reprend le gabarit et les classes du menu POI (`rv-poi-popup__*`).
  */
 export function MapAlertSectionCard({ section, onAction }: MapAlertSectionCardProps) {

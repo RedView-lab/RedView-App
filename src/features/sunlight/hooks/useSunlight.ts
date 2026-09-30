@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { FogSpecification, LightsSpecification, Map as MapboxMap } from 'mapbox-gl';
+import type { Map as MapboxMap } from 'mapbox-gl';
 
 import {
   getSunPositionForLocalDateTime,
@@ -11,7 +11,7 @@ import {
   type SunObserverPoint,
 } from '../lib/observerPoint';
 import { addSunRayLayer, removeSunRayLayer, updateSunRayPosition } from '../lib/sun-ray/sun-ray-layer';
-import { FOG_CONFIG } from '../../map3d/lib/mapbox.config';
+import { setSunLightOverride } from '@/features/map3d/lib/mapEnvironment';
 
 /**
  * Computes real sun position from date/time and map center.
@@ -20,7 +20,9 @@ import { FOG_CONFIG } from '../../map3d/lib/mapbox.config';
  * previous fog/lightPreset cycle made the entire screen brighten/darken so much
  * that terrain shadows became hard to read. The sunlight system now keeps the
  * scene lighting visually neutral and only uses the sun position for shadow
- * direction and informational sunrise/sunset times.
+ * direction and informational sunrise/sunset times. Scene lights and fog are
+ * owned by `map3d/lib/mapEnvironment` (jour / crépuscule / nuit): this hook
+ * only publishes the real sun direction as an override.
  */
 export interface UseSunlightOptions {
   enabled: boolean;
@@ -81,50 +83,6 @@ async function lookupTimeZoneForPoint(point: Pick<SunObserverPoint, 'lat' | 'lng
   const resolved = Promise.resolve(resolveLocalTimeZone(point.lat, point.lng));
   timeZoneLookupCache.set(key, resolved);
   return resolved;
-}
-
-const DEFAULT_LIGHTS: LightsSpecification[] = [
-  { id: 'ambient', type: 'ambient', properties: { color: 'white', intensity: 0.34 } },
-  {
-    id: 'directional',
-    type: 'directional',
-    properties: {
-      color: '#ffffff',
-      intensity: 0.55,
-      direction: [180, 38],
-      'cast-shadows': false,
-      'shadow-intensity': 0,
-    },
-  },
-];
-
-function buildLights(azimuthDeg: number, altitudeDeg: number, castShadows: boolean): LightsSpecification[] {
-  const clampedAltitude = Math.max(-12, Math.min(85, altitudeDeg));
-  const polar = Math.min(88, Math.max(4, 90 - clampedAltitude));
-
-  return [
-    {
-      id: 'ambient',
-      type: 'ambient',
-      properties: { color: 'white', intensity: 0.34 },
-    },
-    {
-      id: 'directional',
-      type: 'directional',
-      properties: {
-        color: '#ffffff',
-        intensity: 0.55,
-        direction: [azimuthDeg, polar],
-        // `cast-shadows` is the single most expensive Mapbox light property
-        // on styles with fill-extrusion 3D buildings (light "Standard" basemap):
-        // it triggers a per-frame shadow-map render over every extruded
-        // building, which collapses FPS to single digits in dense cities.
-        // Gated by the user-facing "Ombres" toggle so it can be turned off.
-        'cast-shadows': castShadows,
-        'shadow-intensity': castShadows ? 0.62 : 0,
-      },
-    },
-  ];
 }
 
 export function useSunlight(
@@ -242,17 +200,11 @@ export function useSunlight(
         );
       }
 
-      try {
-        map.setLights(buildLights(position.azimuth, position.altitude, optsRef.current.shadowEnabled));
-      } catch (err) {
-        console.warn('[sunlight] setLights failed', err);
-      }
-
-      try {
-        map.setFog(FOG_CONFIG as FogSpecification);
-      } catch (err) {
-        console.warn('[sunlight] setFog failed', err);
-      }
+      setSunLightOverride({
+        azimuthDeg: position.azimuth,
+        altitudeDeg: position.altitude,
+        castShadows: optsRef.current.shadowEnabled,
+      });
     };
 
     frameId = requestAnimationFrame(applySunPosition);
@@ -315,22 +267,15 @@ export function useSunlight(
     sunPos.altitudeDeg,
   ]);
 
-  // Restore neutral sky when the panel is disabled.
+  // Back to the environment's default light direction when the panel is disabled.
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     if (opts.enabled) return;
     removeSunRayLayer(map);
-    try {
-      map.setLights(DEFAULT_LIGHTS);
-    } catch {
-      /* no-op */
-    }
-    try {
-      map.setFog(FOG_CONFIG as FogSpecification);
-    } catch {
-      /* no-op */
-    }
+    setSunLightOverride(null);
   }, [map, isMapLoaded, opts.enabled]);
+
+  useEffect(() => () => setSunLightOverride(null), []);
 
   return {
     ...times,

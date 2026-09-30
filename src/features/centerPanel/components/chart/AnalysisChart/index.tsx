@@ -4,12 +4,11 @@ import { computeDomain, computeXDomain, isInclinationMetric, type AxisDomain, ty
 import '../chart.css';
 import { AnalysisChartLayout } from './AnalysisChartLayout';
 import { drawAnalysisChartCanvas } from './canvas';
-import { buildResponsiveXAxisLabels } from './format';
+import { buildResponsiveXAxisLabels, buildXAxisTicks } from './format';
 import {
   buildInterpolatedTicks,
   buildNiceDomain,
   buildNiceTicks,
-  buildNiceXTicks,
   buildVisibleXDomain,
   clampXDomainToRoute,
   defaultDomainFor,
@@ -116,11 +115,11 @@ export const AnalysisChart = memo(function AnalysisChart({
     return null;
   }, [controlledHoverXValue, hover, plotSize.width, plotXDomain]);
 
-  const xNice = useMemo(() => {
-    const target = Math.max(2, Math.round(plotSize.width / X_MAJOR_TARGET_PX));
-    return buildNiceXTicks(plotXDomain.min, plotXDomain.max, target || DEFAULT_TICK_COUNT);
-  }, [plotSize.width, plotXDomain.max, plotXDomain.min]);
-  const xTicks = xNice;
+  const xAxis = useMemo(
+    () => buildXAxisTicks(plotXDomain.min, plotXDomain.max, plotSize.width, xMode, X_MAJOR_TARGET_PX),
+    [plotSize.width, plotXDomain.max, plotXDomain.min, xMode],
+  );
+  const xTicks = xAxis.ticks;
   const visibleSeries = useMemo(() => (showSeriesRows ? series : []), [series, showSeriesRows]);
 
   const axis1Series = useMemo(() => series.filter((entry) => entry.axis === 1), [series]);
@@ -219,8 +218,8 @@ export const AnalysisChart = memo(function AnalysisChart({
     [plotXDomain, xTicks],
   );
   const xAxisLabels = useMemo(
-    () => buildResponsiveXAxisLabels(xPositions, xMode, plotSize.width),
-    [plotSize.width, xMode, xPositions],
+    () => buildResponsiveXAxisLabels(xPositions, xMode, plotSize.width, xAxis.density),
+    [plotSize.width, xAxis.density, xMode, xPositions],
   );
 
   const yPositions = useMemo(

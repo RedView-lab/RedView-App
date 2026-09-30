@@ -56,36 +56,39 @@ export function PredictionProvider({ children }: PredictionProviderProps) {
     return initial;
   });
 
-  // Re-hydrate when itineraries are added / removed (or their saved
-  // prediction is replaced by an external mutation).
-  const lastSnapshotRef = useRef<string>('');
+  // Le projet fait foi : dès que la prédiction stockée d'un itinéraire change
+  // (undo / redo, édition du tracé qui l'invalide, résultat async), la valeur
+  // exposée suit. Sans ça, un undo laissait afficher la prédiction de l'état
+  // quitté.
+  const lastProjectPredictionsRef = useRef(new Map<string, PredictionResult | null>());
   useEffect(() => {
     const itineraries = projectStore?.project.itineraries;
     if (!itineraries) return;
-    const snapshot = itineraries
-      .map((it) => `${it.id}:${it.prediction ? '1' : '0'}`)
-      .join('|');
-    if (snapshot === lastSnapshotRef.current) return;
-    lastSnapshotRef.current = snapshot;
+    const seen = lastProjectPredictionsRef.current;
+    const nextSeen = new Map<string, PredictionResult | null>();
+    const changed = new Map<string, PredictionResult | null>();
+    for (const it of itineraries) {
+      const projectValue = it.prediction ?? null;
+      nextSeen.set(it.id, projectValue);
+      if (!seen.has(it.id) || seen.get(it.id) !== projectValue) {
+        changed.set(it.id, projectValue);
+      }
+    }
+    lastProjectPredictionsRef.current = nextSeen;
 
     setPredictions((prev) => {
-      const next: Record<string, PredictionResult | null> = {};
-      let changed = false;
-      const validIds = new Set<string>();
-      for (const it of itineraries) {
-        validIds.add(it.id);
-        if (prev[it.id]) {
-          next[it.id] = prev[it.id];
-        } else if (it.prediction) {
-          next[it.id] = it.prediction;
-          changed = true;
-        }
+      let next = prev;
+      const edit = () => {
+        if (next === prev) next = { ...prev };
+        return next;
+      };
+      for (const [id, value] of changed) {
+        if ((prev[id] ?? null) === value) continue;
+        if (value) edit()[id] = value;
+        else if (id in prev) delete edit()[id];
       }
       for (const id of Object.keys(prev)) {
-        if (!validIds.has(id)) changed = true;
-      }
-      if (!changed && Object.keys(next).length === Object.keys(prev).length) {
-        return prev;
+        if (!nextSeen.has(id)) delete edit()[id];
       }
       return next;
     });
@@ -104,19 +107,22 @@ export function PredictionProvider({ children }: PredictionProviderProps) {
         return { ...prev, [itineraryId]: result };
       });
       // Mirror into the project so the Dashboard autosaver pushes the
-      // prediction to Appwrite.
-      const updateItinerary = projectStore?.updateItinerary;
-      if (updateItinerary) {
-        updateItinerary(itineraryId, (draft) => {
-          if (result === null) {
-            if (draft.prediction != null) draft.prediction = null;
-          } else if (draft.prediction !== result) {
-            draft.prediction = result;
-          }
+      // prediction to Appwrite. Derived data: written outside undo history.
+      const setProjectWithoutHistory = projectStore?.setProjectWithoutHistory;
+      if (setProjectWithoutHistory) {
+        setProjectWithoutHistory((project) => {
+          const target = project.itineraries.find((it) => it.id === itineraryId);
+          if (!target || (target.prediction ?? null) === result) return project;
+          return {
+            ...project,
+            itineraries: project.itineraries.map((it) =>
+              it.id === itineraryId ? { ...it, prediction: result } : it,
+            ),
+          };
         });
       }
     },
-    [projectStore],
+    [projectStore?.setProjectWithoutHistory],
   );
 
   const clearPredictions = useCallback(() => {

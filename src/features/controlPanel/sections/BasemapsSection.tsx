@@ -7,20 +7,24 @@ import type { ControlPanelHandlers, ControlPanelState } from '../types';
 interface Props {
   basemaps: ControlPanelState['basemaps'];
   basemap3dQuality: ControlPanelState['basemap3dQuality'];
+  mapEnvironment: ControlPanelState['mapEnvironment'];
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   onBasemapToggle: ControlPanelHandlers['onBasemapToggle'];
   onBasemap3dQualityChange?: ControlPanelHandlers['onBasemap3dQualityChange'];
+  onMapEnvironmentChange?: ControlPanelHandlers['onMapEnvironmentChange'];
   onBasemapAdd: ControlPanelHandlers['onBasemapAdd'];
 }
 
 export function BasemapsSection({
   basemaps,
   basemap3dQuality,
+  mapEnvironment,
   open,
   onOpenChange,
   onBasemapToggle,
   onBasemap3dQualityChange,
+  onMapEnvironmentChange,
 }: Props) {
   const { t } = useAppI18n();
 
@@ -63,6 +67,17 @@ export function BasemapsSection({
           value={basemap3dQuality.value}
           options={basemap3dQuality.options}
           onChange={(value) => onBasemap3dQualityChange?.(value)}
+          className="rvc-basemaps__quality-select"
+        />
+      </div>
+
+      <div className="rvc-basemaps__quality-row">
+        <span className="rvc-basemaps__quality-label">{t('Environnement')}</span>
+        <Select
+          width={185}
+          value={mapEnvironment.value}
+          options={mapEnvironment.options}
+          onChange={(value) => onMapEnvironmentChange?.(value)}
           className="rvc-basemaps__quality-select"
         />
       </div>

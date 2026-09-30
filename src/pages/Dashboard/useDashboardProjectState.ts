@@ -166,6 +166,20 @@ export function useDashboardProjectState({
     [queueProjectSave],
   );
 
+  /**
+   * Modification venant du ProjectStore. `dashboard` (vue carte, tailles des
+   * panneaux) est tenu ici par `mutateActiveProjectDashboard`, hors store : la
+   * copie du store date de l'ouverture du projet et écraserait la vue et les
+   * panneaux sauvegardés depuis. On garde donc toujours la version courante.
+   */
+  const handleProjectChange = useCallback(
+    (next: ItineraryProject) => {
+      const dashboard = activeProjectSnapshotRef.current?.dashboard;
+      queueProjectSave(dashboard ? { ...next, dashboard } : next);
+    },
+    [queueProjectSave],
+  );
+
   useEffect(() => {
     if (!initialProjectId) return;
     if (suppressedInitialProjectIdRef.current === initialProjectId) return;
@@ -187,7 +201,7 @@ export function useDashboardProjectState({
     mutateActiveProjectDashboard,
     handleOpenProject: openProject,
     handleBackToBrowser: closeProject,
-    handleProjectChange: queueProjectSave,
+    handleProjectChange,
     handleSaveProject: saveActiveProject,
     updatePersistedDashboard: mutateActiveProjectDashboard,
   };

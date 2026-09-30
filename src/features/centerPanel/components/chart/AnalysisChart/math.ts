@@ -386,41 +386,6 @@ export function buildNiceTicks(
   return buildNiceDomain(min, max, targetCount, options).ticks;
 }
 
-export function buildNiceXTicks(
-  min: number,
-  max: number,
-  targetCount: number,
-): number[] {
-  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return [min || 0];
-
-  const range = max - min;
-  const desired = Math.max(2, targetCount);
-  const rough = range / desired;
-  const pow10 = Math.pow(10, Math.floor(Math.log10(rough)));
-  const norm = rough / pow10;
-  let niceMult: number;
-
-  if (norm < 1.4) niceMult = 1;
-  else if (norm < 2.8) niceMult = 2;
-  else if (norm < 4.2) niceMult = 2.5;
-  else if (norm < 7.5) niceMult = 5;
-  else niceMult = 10;
-
-  const step = niceMult * pow10;
-  const start = Math.ceil((min - 1e-6) / step) * step;
-  const ticks: number[] = [];
-
-  for (let val = start; val <= max + step * 1e-4; val += step) {
-    ticks.push(Number(val.toFixed(8)));
-  }
-
-  if (ticks.length === 0) {
-    ticks.push(Number(min.toFixed(8)));
-  }
-
-  return ticks;
-}
-
 const ELEVATION_STEP_LIMIT_M = 300;
 
 /** Prefix sums of D+/D- per point, only built for x-sorted series (else null). */

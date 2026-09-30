@@ -4,7 +4,7 @@ import { useAppI18n } from '@/shared/i18n';
 import { normalizeDiscipline } from '@/shared/lib/discipline';
 import {
   createOverlayStatus,
-  flyToLocation,
+  flyToPoi,
   type OverlayStatusReporter,
 } from '@/features/map3d';
 
@@ -108,6 +108,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   const {
     project,
     setProject,
+    setProjectWithoutHistory,
     addItinerary,
     setItineraryName,
     duplicateItinerary,
@@ -117,6 +118,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     redoTraceEdit,
     canUndoTraceEdit,
     canRedoTraceEdit,
+    historyRevision,
     commitTraceMutation,
     rollbackPendingTraceAppend,
   } = useProjectStore();
@@ -157,7 +159,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     active,
     projectId: projectId ?? null,
     predictionStore,
-    setProject,
+    setProject: setProjectWithoutHistory,
   });
 
   useItineraryRouteLayerSync({
@@ -227,10 +229,11 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     skipNextRouteRecompute,
   } = useItineraryBrouterRouting({
     active,
+    historyRevision,
     isMapLoaded,
     map,
     rollbackPendingTraceAppend,
-    setProject,
+    setProject: setProjectWithoutHistory,
   });
 
   const {
@@ -240,7 +243,8 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     handleRecalculateTrace,
   } = useRecalculateTrace({
     active,
-    setProject,
+    commitTraceMutation,
+    historyRevision,
     cancelRouteRequest,
     skipNextRouteRecompute,
   });
@@ -419,7 +423,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   );
 
   const { addItineraryFromGpxFile } = useItineraryGpxImport({
-    setProject,
+    setProject: setProjectWithoutHistory,
     addItinerary,
     setPendingCorridorFor,
     onImportStateChange: setPendingImportName,
@@ -477,9 +481,10 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     onMoveWaypoint: timelineCallbacks.handleMoveTimelineWaypoint,
   });
 
+  // Résultats de la recherche POI (async) : hors historique.
   const handleCorridorUpdate = useCallback((features: PoiFeature[]) => {
     const targetId = activeIdRef.current;
-    setProject((p) => {
+    setProjectWithoutHistory((p) => {
       const target = p.itineraries.find((i) => i.id === targetId);
       if (!target) return p;
       const mergedFeatures = mergePoiFeatureFavorites(
@@ -511,11 +516,11 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         ),
       };
     });
-  }, [setProject]);
+  }, [setProjectWithoutHistory]);
 
   const handleCorridorComplete = useCallback((features: PoiFeature[]) => {
     const targetId = activeIdRef.current;
-    setProject((p) => {
+    setProjectWithoutHistory((p) => {
       const target = p.itineraries.find((i) => i.id === targetId);
       if (!target) return p;
       const route = target.gpxRoute?.points;
@@ -562,9 +567,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         ),
       };
     });
-  }, [setProject]);
-
-
+  }, [setProjectWithoutHistory]);
 
   const handleMapPoiSelect = useCallback(
     (feature: PoiFeature) => {
@@ -644,7 +647,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
           item.lat != null && item.lon != null ? { lat: item.lat, lon: item.lon } : undefined,
         );
         if (!opened && map && item.lat != null && item.lon != null) {
-          flyToLocation(map, { lon: item.lon, lat: item.lat }, { zoom: 14.5 });
+          flyToPoi(map, { lon: item.lon, lat: item.lat });
         }
       } else if (item.kind === 'pause' || item.kind === 'waypoint') {
         const opened = openCheckpointMarker(
@@ -652,10 +655,10 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
           item.lat != null && item.lon != null ? { lat: item.lat, lon: item.lon } : undefined,
         );
         if (!opened && map && item.lat != null && item.lon != null) {
-          flyToLocation(map, { lon: item.lon, lat: item.lat }, { zoom: 14.5 });
+          flyToPoi(map, { lon: item.lon, lat: item.lat });
         }
       } else if (map && item.lat != null && item.lon != null) {
-        flyToLocation(map, { lon: item.lon, lat: item.lat }, { zoom: 14.5 });
+        flyToPoi(map, { lon: item.lon, lat: item.lat });
       }
 
       dispatchSelectPoiOnChart({
@@ -763,6 +766,15 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     isMapLoaded,
     searchCorridor,
   ]);
+
+  // Undo / redo : une recherche POI lancée sur l'état quitté ne doit pas
+  // s'appliquer à l'état restauré.
+  const seenHistoryRevisionRef = useRef(historyRevision);
+  useEffect(() => {
+    if (seenHistoryRevisionRef.current === historyRevision) return;
+    seenHistoryRevisionRef.current = historyRevision;
+    if (poiLoading) cancelSearchCorridor();
+  }, [cancelSearchCorridor, historyRevision, poiLoading]);
 
   const poiLoadDisabled = !hasGpxRoute || !hasEnabledCategories;
   const poiLoadDisabledReason = !hasGpxRoute
@@ -939,16 +951,10 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
           });
           predictionStore?.setPrediction(current.id, null);
         }}
-        onUndo={() => {
-          cancelRouteRequest();
-          undoTraceEdit();
-        }}
-        onRedo={() => {
-          cancelRouteRequest();
-          redoTraceEdit();
-        }}
-        canUndo={canUndoTraceEdit}
-        canRedo={canRedoTraceEdit}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        canUndo={canUndo}
+        canRedo={canRedo}
         onSaveProfile={(profile) => {
           if (profile) {
             saveCustomProfileToStorage(profile);

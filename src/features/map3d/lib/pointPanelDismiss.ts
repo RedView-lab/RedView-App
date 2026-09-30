@@ -89,3 +89,22 @@ export function shouldIgnoreMapClickAfterPanelDismiss(
 
   return false;
 }
+
+/**
+ * Makes a second click on a marker whose popup is open close that popup.
+ *
+ * Mapbox closes a `closeOnClick` popup on `preclick`, then the marker toggles
+ * it back open on `click`, so re-clicking an open marker kept its panel open.
+ * This listener runs before the map's (bubbling, child element): it closes
+ * the panel and stops there.
+ */
+export function closeMarkerPopupOnSecondClick(
+  element: HTMLElement,
+  popup: { isOpen: () => boolean; remove: () => unknown },
+): void {
+  element.addEventListener('click', (event) => {
+    if (!popup.isOpen()) return;
+    event.stopPropagation();
+    popup.remove();
+  });
+}

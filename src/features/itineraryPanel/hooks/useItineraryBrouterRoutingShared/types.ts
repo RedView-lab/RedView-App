@@ -16,6 +16,8 @@ export type ProfilePoint = {
 
 export interface UseItineraryBrouterRoutingArgs {
   active: ItineraryProject['itineraries'][number] | null;
+  /** Révision d'historique du ProjectStore (undo / redo / rollback). */
+  historyRevision: number;
   isMapLoaded: boolean;
   map: MapboxMap | null;
   rollbackPendingTraceAppend: (itineraryId: string) => boolean;

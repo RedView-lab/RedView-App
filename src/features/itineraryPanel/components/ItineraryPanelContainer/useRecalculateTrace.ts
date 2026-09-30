@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Itinerary, ItineraryProject, TimelineItem } from '../../types';
 import { resolveRouteRequest } from '../../hooks/useItineraryBrouterRouting/resolveRouteRequest';
 import type { RouteRequestBase } from '../../hooks/useItineraryBrouterRouting/profileFallback';
@@ -9,12 +9,13 @@ import {
   getRoutePointTotalDistanceM,
   roundRouteDistanceKm,
   projectTimelineLocationDistances,
+  routePointsEqual,
 } from '../../hooks/useItineraryBrouterRoutingShared';
+import { getRoutingInputsSignature } from '../../hooks/useItineraryBrouterRouting/projectMutations';
 import {
   computeRouteElevationMetrics,
   computeRouteSurfaceMetricsFromBrouter,
   extractRouteProfileFromBrouter,
-  refineRouteProfileWithIgnAltimetry,
 } from '../../lib/route-metrics';
 import { cleanGpxGlitches } from '../../lib/routes';
 import { formatForbiddenZonePolygons, type BrouterRoute } from '../../lib/brouter';
@@ -107,7 +108,13 @@ function concatenateSegments(
 
 interface UseRecalculateTraceArgs {
   active: Itinerary | null;
-  setProject: (updater: (project: ItineraryProject) => ItineraryProject) => void;
+  /** Mutation historisée du ProjectStore : le recalcul est annulable. */
+  commitTraceMutation: (
+    itineraryId: string,
+    mutate: (draft: ItineraryProject) => boolean | void,
+  ) => boolean;
+  /** Révision d'historique : un undo/redo abandonne le recalcul en cours. */
+  historyRevision: number;
   /** Cancel any in-flight main routing request so it doesn't race with the recalculate result. */
   cancelRouteRequest: () => void;
   /** Tell the main routing effect to skip its next "full recompute" run. */
@@ -116,7 +123,8 @@ interface UseRecalculateTraceArgs {
 
 export function useRecalculateTrace({
   active,
-  setProject,
+  commitTraceMutation,
+  historyRevision,
   cancelRouteRequest,
   skipNextRouteRecompute,
 }: UseRecalculateTraceArgs) {
@@ -150,6 +158,10 @@ export function useRecalculateTrace({
       window.dispatchEvent(new CustomEvent('rv-route-loading', { detail: { loading: true } }));
     }
 
+    // Le résultat ne s'applique qu'à l'itinéraire et au tracé de départ :
+    // s'ils ont changé entre-temps (undo, autre édition), il est périmé.
+    const targetId = active.id;
+    const sourceRoutePoints = active.gpxRoute.points;
     const segmentCount = anchors.length - 1;
     const segments: GpxRoutePoint[][] = [];
     const segmentRoutes: BrouterRoute[] = [];
@@ -212,97 +224,62 @@ export function useRecalculateTrace({
       const tarmacPercent = totalWeightM > 0 ? Math.round(totalTarmacWeighted / totalWeightM) : undefined;
       const offroadPercent = totalWeightM > 0 ? Math.round(totalOffroadWeighted / totalWeightM) : undefined;
 
-      // Cancel any in-flight main routing request and prevent the routing
-      // effect from re-triggering a full recompute when it sees the source
-      // change from 'gpx' → 'brouter'.
+      // Cancel any in-flight main routing request so it can't race with
+      // the recalculated result.
       cancelRouteRequest();
-      skipNextRouteRecompute();
 
-      // Update project with recalculated route
-      setProject((project) => {
-        const itinerary = project.itineraries.find(
-          (it) => it.id === project.activeItineraryId,
-        );
-        if (!itinerary) return project;
+      // Update project with recalculated route (historisé → annulable)
+      const applied = commitTraceMutation(targetId, (draft) => {
+        const itinerary = draft.itineraries.find((it) => it.id === targetId);
+        if (!itinerary || !routePointsEqual(itinerary.gpxRoute?.points, sourceRoutePoints)) {
+          return false;
+        }
 
-        const nextTimeline = projectTimelineLocationDistances(
+        itinerary.visible = true;
+        itinerary.gpxRoute = {
+          name: itinerary.gpxRoute?.name ?? null,
+          points: mergedPoints,
+          originalPoints: mergedPoints,
+          gpxQuality: itinerary.gpxRoute?.gpxQuality ?? 'default',
+          gpxQualityPointsPerKm: itinerary.gpxRoute?.gpxQualityPointsPerKm ?? null,
+          source: 'brouter',
+          routedInputsKey: getRoutingInputsSignature(itinerary),
+        };
+        itinerary.metrics = {
+          ...itinerary.metrics,
+          distanceKm,
+          ascentM: elevationMetrics
+            ? Math.max(0, Math.round(elevationMetrics.ascentM))
+            : undefined,
+          descentM: elevationMetrics
+            ? Math.max(0, Math.round(elevationMetrics.descentM))
+            : undefined,
+          avgSlopePercent: elevationMetrics
+            ? Math.round(elevationMetrics.avgSlopePercent * 10) / 10
+            : undefined,
+          tarmacPercent,
+          offroadPercent,
+        };
+        itinerary.timeline = projectTimelineLocationDistances(
           itinerary.timeline,
           mergedPoints,
           distanceKm,
         );
-
-        return {
-          ...project,
-          itineraries: project.itineraries.map((current) =>
-            current.id === project.activeItineraryId
-              ? {
-                  ...current,
-                  visible: true,
-                  gpxRoute: {
-                    name: current.gpxRoute?.name ?? null,
-                    points: mergedPoints,
-                    originalPoints: mergedPoints,
-                    gpxQuality: current.gpxRoute?.gpxQuality ?? 'default',
-                    gpxQualityPointsPerKm: current.gpxRoute?.gpxQualityPointsPerKm ?? null,
-                    source: 'brouter',
-                  },
-                  metrics: {
-                    ...current.metrics,
-                    distanceKm,
-                    ascentM: elevationMetrics
-                      ? Math.max(0, Math.round(elevationMetrics.ascentM))
-                      : undefined,
-                    descentM: elevationMetrics
-                      ? Math.max(0, Math.round(elevationMetrics.descentM))
-                      : undefined,
-                    avgSlopePercent: elevationMetrics
-                      ? Math.round(elevationMetrics.avgSlopePercent * 10) / 10
-                      : undefined,
-                    tarmacPercent,
-                    offroadPercent,
-                  },
-                  timeline: nextTimeline,
-                  routeAudit: undefined,
-                  pendingRoutePatch: undefined,
-                  pendingTraceExtension: undefined,
-                }
-              : current,
-          ),
-        };
+        itinerary.routeAudit = undefined;
+        itinerary.pendingRoutePatch = undefined;
+        itinerary.pendingTraceExtension = undefined;
       });
+      if (!applied) {
+        console.warn('[Recalculate] itinerary changed during recalculation — result discarded');
+        return;
+      }
+      // The source may flip 'gpx' → 'brouter': keep the routing effect from
+      // overwriting the result with a single end-to-end recompute.
+      skipNextRouteRecompute();
 
       console.log(
         `[Recalculate] ✔ done: ${segmentCount} segments, ${distanceKm} km total`,
       );
-
-      // Background IGN altimetry refinement
-      if (totalDistanceM <= 500_000) {
-        try {
-          // Combine all BRouter routes into a single virtual route for refinement
-          const allCoords = segmentRoutes.flatMap((r) => r.coordinates);
-          const virtualRoute: BrouterRoute = {
-            coordinates: allCoords,
-            distanceM: totalDistanceM,
-            ascentM: elevationMetrics?.ascentM ?? 0,
-            descentM: elevationMetrics?.descentM ?? 0,
-            durationS: segmentRoutes.reduce((s, r) => s + r.durationS, 0),
-            raw: { type: 'FeatureCollection', features: [] },
-          };
-          const refined = await refineRouteProfileWithIgnAltimetry(virtualRoute, ctrl.signal);
-          if (refined && !ctrl.signal.aborted) {
-            // Re-apply with IGN altimetry
-            setProject((project) => {
-              const itinerary = project.itineraries.find(
-                (it) => it.id === project.activeItineraryId,
-              );
-              if (!itinerary) return project;
-              return project; // Let the existing layer sync handle visual refresh
-            });
-          }
-        } catch {
-          // Non-critical, ignore
-        }
-      }
     } catch (error) {
       if ((error as { name?: string }).name === 'AbortError') return;
       console.error('[Recalculate] failed:', error);
@@ -315,7 +292,7 @@ export function useRecalculateTrace({
         setProgress(null);
       }
     }
-  }, [active, setProject, cancelRouteRequest, skipNextRouteRecompute]);
+  }, [active, commitTraceMutation, cancelRouteRequest, skipNextRouteRecompute]);
 
   const cancel = useCallback(() => {
     abortRef.current?.abort();
@@ -326,6 +303,14 @@ export function useRecalculateTrace({
       window.dispatchEvent(new CustomEvent('rv-route-loading', { detail: { loading: false } }));
     }
   }, []);
+
+  // Undo / redo pendant un recalcul : l'état restauré fait foi, on abandonne.
+  const seenHistoryRevisionRef = useRef(historyRevision);
+  useEffect(() => {
+    if (seenHistoryRevisionRef.current === historyRevision) return;
+    seenHistoryRevisionRef.current = historyRevision;
+    if (abortRef.current) cancel();
+  }, [cancel, historyRevision]);
 
   return {
     recalculateLoading: loading,

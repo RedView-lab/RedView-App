@@ -115,7 +115,7 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
           maxDistanceMeters: 1000,
         });
         const resolvedLabel = settlement?.name?.trim() || fallbackLabel;
-        store?.updateItinerary(itineraryId, (itinerary) => {
+        store?.updateItineraryWithoutHistory(itineraryId, (itinerary) => {
           const currentRow = itinerary.timeline.find((row) => row.kind === kind);
           if (!currentRow || currentRow.lon !== lon || currentRow.lat !== lat) return;
           currentRow.label = resolvedLabel;

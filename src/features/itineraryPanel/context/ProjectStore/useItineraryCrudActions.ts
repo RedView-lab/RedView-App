@@ -12,6 +12,8 @@ import type {
 
 interface UseItineraryCrudActionsArgs {
   setProject: Dispatch<SetStateAction<ItineraryProject>>;
+  /** Écriture hors historique (résultats async). */
+  setProjectWithoutHistory: Dispatch<SetStateAction<ItineraryProject>>;
   /**
    * Enregistre une mutation destructive dans l'historique undo/redo.
    * Requis pour que les suppressions d'itinéraires soient annulables.
@@ -26,26 +28,50 @@ interface UseItineraryCrudActionsArgs {
  * Gère les actions CRUD de base sur les itinéraires du projet
  * (nom, couleur, visibilité, mode de rendu, opacité, ajout, duplication, suppression).
  */
+function applyItineraryMutation(
+  prev: ItineraryProject,
+  id: string,
+  mut: (draft: ItineraryProject['itineraries'][number]) => void,
+): ItineraryProject {
+  return {
+    ...prev,
+    itineraries: prev.itineraries.map((it) => {
+      if (it.id !== id) return it;
+      const copy = structuredClone(it);
+      mut(copy);
+      return copy;
+    }),
+  };
+}
+
 export function useItineraryCrudActions({
   setProject,
+  setProjectWithoutHistory,
   commitTraceMutation,
 }: UseItineraryCrudActionsArgs) {
+  /** Modification utilisateur d'un itinéraire (enregistrée dans l'historique). */
   const updateItinerary = useCallback(
     (
       id: string,
       mut: (draft: ItineraryProject['itineraries'][number]) => void,
     ) => {
-      setProject((prev) => ({
-        ...prev,
-        itineraries: prev.itineraries.map((it) => {
-          if (it.id !== id) return it;
-          const copy = structuredClone(it);
-          mut(copy);
-          return copy;
-        }),
-      }));
+      setProject((prev) => applyItineraryMutation(prev, id, mut));
     },
     [setProject],
+  );
+
+  /**
+   * Complément async d'une action déjà enregistrée (ex. nom de lieu géocodé
+   * d'un point qu'on vient de poser) : hors historique, ne vide pas « Rétablir ».
+   */
+  const updateItineraryWithoutHistory = useCallback(
+    (
+      id: string,
+      mut: (draft: ItineraryProject['itineraries'][number]) => void,
+    ) => {
+      setProjectWithoutHistory((prev) => applyItineraryMutation(prev, id, mut));
+    },
+    [setProjectWithoutHistory],
   );
 
   const setItineraryName = useCallback(
@@ -154,33 +180,33 @@ export function useItineraryCrudActions({
     (overrides: Partial<Itinerary> = {}) => {
       let createdId: string | null = null;
 
-      setProject((currentProject) => {
-        const nextIndex = currentProject.itineraries.length;
+      // Historisé : l'ajout (dont l'import GPX) est une étape d'undo à part
+      // entière, au lieu d'être effacé en silence par l'annulation d'une
+      // édition antérieure.
+      commitTraceMutation('', (draft) => {
+        const nextIndex = draft.itineraries.length;
         const color =
           ITINERARY_COLORS[nextIndex % ITINERARY_COLORS.length] ?? ITINERARY_COLORS[0];
         const base = createDefaultItinerary(nextIndex + 1, color);
-        const next = { ...base, ...overrides };
+        const next = { ...base, ...structuredClone(overrides) };
         createdId = next.id;
 
-        return {
-          ...currentProject,
-          itineraries: [...currentProject.itineraries, next],
-          activeItineraryId: next.id,
-        };
+        draft.itineraries = [...draft.itineraries, next];
+        draft.activeItineraryId = next.id;
       });
 
       return createdId;
     },
-    [setProject],
+    [commitTraceMutation],
   );
 
   const duplicateItinerary = useCallback(
     (id: string) => {
       let resultBox: { createdItineraryId: string; createdItineraryName: string } | null = null;
 
-      setProject((currentProject) => {
+      commitTraceMutation(id, (currentProject) => {
         const source = currentProject.itineraries.find((itinerary) => itinerary.id === id);
-        if (!source) return currentProject;
+        if (!source) return false;
 
         const nextIndex = currentProject.itineraries.length + 1;
         const color =
@@ -209,16 +235,13 @@ export function useItineraryCrudActions({
           createdItineraryName: duplicate.name,
         };
 
-        return {
-          ...currentProject,
-          itineraries: [...currentProject.itineraries, duplicate],
-          activeItineraryId: duplicate.id,
-        };
+        currentProject.itineraries = [...currentProject.itineraries, duplicate];
+        currentProject.activeItineraryId = duplicate.id;
       });
 
       return resultBox;
     },
-    [setProject],
+    [commitTraceMutation],
   );
 
   const removeItinerary = useCallback(
@@ -263,6 +286,7 @@ export function useItineraryCrudActions({
 
   return {
     updateItinerary,
+    updateItineraryWithoutHistory,
     setItineraryName,
     setItineraryColor,
     setItineraryVisibility,

@@ -17,11 +17,26 @@ export interface TraceHistoryEntry {
 
 export interface ProjectStoreValue {
   project: ItineraryProject;
+  /**
+   * Modification utilisateur : tout changement du document (itinéraires) est
+   * enregistré dans l'historique undo/redo (rafales regroupées).
+   */
   setProject: Dispatch<SetStateAction<ItineraryProject>>;
+  /**
+   * Écriture en arrière-plan (résultat async dérivé : routage, altimétrie,
+   * POI, prédiction…). Jamais enregistrée, ne vide jamais « Rétablir ».
+   */
+  setProjectWithoutHistory: Dispatch<SetStateAction<ItineraryProject>>;
   undoTraceEdit: () => void;
   redoTraceEdit: () => void;
   canUndoTraceEdit: boolean;
   canRedoTraceEdit: boolean;
+  /**
+   * Incrémenté à chaque restauration d'historique (undo / redo / rollback).
+   * Les traitements async (routage, recalcul) l'observent pour abandonner
+   * leurs requêtes en vol et ne jamais recalculer un tracé restauré.
+   */
+  historyRevision: number;
   /**
    * Applique une mutation au projet en l'enregistrant dans l'historique undo/redo.
    * Retourne `false` si la mutation a été déclarée sans effet (aucune entrée créée).
@@ -33,6 +48,11 @@ export interface ProjectStoreValue {
   rollbackPendingTraceAppend: (itineraryId: string) => boolean;
   addItinerary: (overrides?: Partial<Itinerary>) => string | null;
   updateItinerary: (
+    id: string,
+    mut: (draft: ItineraryProject['itineraries'][number]) => void,
+  ) => void;
+  /** Variante hors historique, pour les compléments async d'une action. */
+  updateItineraryWithoutHistory: (
     id: string,
     mut: (draft: ItineraryProject['itineraries'][number]) => void,
   ) => void;

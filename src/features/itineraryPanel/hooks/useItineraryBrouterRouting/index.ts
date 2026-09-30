@@ -26,9 +26,14 @@ import {
   applyPendingRoutePatch,
   applyPendingTraceAppend,
   applyRecomputedRoute,
+  getRoutingEndpointsKey,
+  getRoutingInputsSignature,
 } from './projectMutations';
 import { resolveRouteRequest } from './resolveRouteRequest';
 import type { RouteRequestBase } from './profileFallback';
+
+/** Marqueur « tracé restauré par undo/redo, à vérifier par estampille ». */
+const VERIFY_STORED_ROUTE = '#verify-stored-route';
 
 function dispatchRouteLoading(loading: boolean) {
   if (typeof window !== 'undefined') {
@@ -38,6 +43,7 @@ function dispatchRouteLoading(loading: boolean) {
 
 export function useItineraryBrouterRouting({
   active,
+  historyRevision,
   isMapLoaded,
   map,
   rollbackPendingTraceAppend,
@@ -74,6 +80,9 @@ export function useItineraryBrouterRouting({
   // le résultat de ces entrées) ou quand seul le tracé stocké a changé
   // (nb de points après un patch / append / affinage altimétrique IGN).
   const routedInputKeysRef = useRef(new Map<string, string>());
+  // Révision d'historique vue au dernier passage de l'effet de routage : un
+  // undo/redo restaure un tracé déjà calculé, qui fait foi (cf. effet).
+  const seenHistoryRevisionRef = useRef(historyRevision);
 
   useEffect(() => {
     activeRef.current = active;
@@ -122,29 +131,12 @@ export function useItineraryBrouterRouting({
     setRouteRefreshNonce((current) => current + 1);
   }, []);
 
-  const startKey = (() => {
-    const row = active?.timeline.find((item) => item.kind === 'start');
-    return row && row.lat != null && row.lon != null ? `${row.lon},${row.lat}` : '';
-  })();
+  const {
+    startKey,
+    endKey,
+    viaKey: routingViaKey,
+  } = getRoutingEndpointsKey(active);
   const activeId = active?.id ?? '';
-
-  const endKey = (() => {
-    const row = active?.timeline.find((item) => item.kind === 'end');
-    return row && row.lat != null && row.lon != null ? `${row.lon},${row.lat}` : '';
-  })();
-
-  const routingViaKey = active
-    ? active.timeline
-        .filter(
-          (item) =>
-            item.kind === 'waypoint' &&
-            item.lat != null &&
-            item.lon != null &&
-            !item.onRoute,
-        )
-        .map((item) => `${item.lon},${item.lat}`)
-        .join('|')
-    : '';
   const hasWaypointOverride = routingViaKey.length > 0;
   const profileId = active?.profileId ?? 'road';
   const climbing = active ? isClimbingMode(active.priorities) : false;
@@ -219,6 +211,18 @@ export function useItineraryBrouterRouting({
     if (!map || !isMapLoaded) return;
     const currentActive = activeRef.current;
     const routedInputKeys = routedInputKeysRef.current;
+    if (seenHistoryRevisionRef.current !== historyRevision) {
+      // Undo / redo : l'état restauré porte son propre tracé. Les entrées
+      // routées en dernier (celles de l'état quitté) ne valent plus : les
+      // itinéraires routés pendant la session passent en vérification par
+      // estampille (cf. plus bas) au lieu de déclencher un recalcul complet
+      // qui écraserait le tracé restauré. La requête en vol a déjà été
+      // abandonnée par le cleanup de l'effet (dépendance `historyRevision`).
+      seenHistoryRevisionRef.current = historyRevision;
+      for (const id of routedInputKeys.keys()) {
+        routedInputKeys.set(id, VERIFY_STORED_ROUTE);
+      }
+    }
     const pendingRoutePatch = currentActive?.pendingRoutePatch;
     const pendingTraceExtension = currentActive?.pendingTraceExtension;
     const existingRoutePoints = currentActive?.gpxRoute?.points ?? null;
@@ -257,6 +261,10 @@ export function useItineraryBrouterRouting({
         pendingRoutePatch.via.length,
       );
 
+      const target = {
+        itineraryId: itineraryForRouting.id,
+        pendingKey: JSON.stringify(pendingRoutePatch),
+      };
       const requestBase: RouteRequestBase = {
         start: pendingRoutePatch.start,
         end: pendingRoutePatch.end,
@@ -275,7 +283,7 @@ export function useItineraryBrouterRouting({
           if (ctrl.signal.aborted) return;
           setRouteWarnings(applyRouteWarnings(resolvedWarnings, usedFallbackProfile));
           // Render route immediately with native BRouter elevation data
-          setProject((project) => applyPendingRoutePatch(project, route, null));
+          setProject((project) => applyPendingRoutePatch(project, target, route, null));
           routedInputKeys.set(itineraryForRouting.id, routingInputKey);
           setRouteLoading(false);
           console.log(
@@ -290,7 +298,7 @@ export function useItineraryBrouterRouting({
           if (route.distanceM <= 500_000) {
             const ignAltimetryRouteProfile = await resolveIgnAltimetryRouteProfile(route, ctrl.signal, 'local patch');
             if (ignAltimetryRouteProfile && !ctrl.signal.aborted) {
-              setProject((project) => applyPendingRoutePatch(project, route, ignAltimetryRouteProfile));
+              setProject((project) => applyPendingRoutePatch(project, target, route, ignAltimetryRouteProfile));
             }
           }
         })
@@ -335,6 +343,10 @@ export function useItineraryBrouterRouting({
         `${appendEnd.lon},${appendEnd.lat}`,
       );
 
+      const target = {
+        itineraryId: itineraryForRouting.id,
+        pendingKey: JSON.stringify(pendingTraceExtension),
+      };
       const requestBase: RouteRequestBase = {
         start: appendStart,
         end: appendEnd,
@@ -353,7 +365,7 @@ export function useItineraryBrouterRouting({
           if (ctrl.signal.aborted) return;
           setRouteWarnings(applyRouteWarnings(resolvedWarnings, usedFallbackProfile));
           // Render route immediately with native BRouter elevation data
-          setProject((project) => applyPendingTraceAppend(project, route, null));
+          setProject((project) => applyPendingTraceAppend(project, target, route, null));
           routedInputKeys.set(itineraryForRouting.id, routingInputKey);
           setRouteLoading(false);
           console.log(
@@ -368,7 +380,7 @@ export function useItineraryBrouterRouting({
           if (route.distanceM <= 500_000) {
             const ignAltimetryRouteProfile = await resolveIgnAltimetryRouteProfile(route, ctrl.signal, 'append segment');
             if (ignAltimetryRouteProfile && !ctrl.signal.aborted) {
-              setProject((project) => applyPendingTraceAppend(project, route, ignAltimetryRouteProfile));
+              setProject((project) => applyPendingTraceAppend(project, target, route, ignAltimetryRouteProfile));
             }
           }
         })
@@ -416,7 +428,19 @@ export function useItineraryBrouterRouting({
       (existingRoutePoints?.length ?? 0) >= 2;
     if (currentActive && hasStoredRoute) {
       const routedKey = routedInputKeys.get(currentActive.id);
-      if (routedKey === undefined || routedKey === routingInputKey) {
+      // Après undo/redo : le tracé restauré fait foi s'il a été routé pour les
+      // entrées restaurées ; figé en plein recalcul (estampille différente),
+      // il est recalculé.
+      const storedInputsKey = currentActive.gpxRoute?.routedInputsKey;
+      const restoredRouteIsCurrent =
+        routedKey === VERIFY_STORED_ROUTE &&
+        (storedInputsKey === undefined ||
+          storedInputsKey === getRoutingInputsSignature(currentActive));
+      if (
+        routedKey === undefined ||
+        routedKey === routingInputKey ||
+        restoredRouteIsCurrent
+      ) {
         routedInputKeys.set(currentActive.id, routingInputKey);
         deferRouteState(null);
         return;
@@ -459,6 +483,10 @@ export function useItineraryBrouterRouting({
 
       const itineraryForRouting = activeRef.current ?? currentActive;
       if (!itineraryForRouting) return;
+      const target = {
+        itineraryId: itineraryForRouting.id,
+        inputsSignature: getRoutingInputsSignature(itineraryForRouting),
+      };
 
       const t0 = performance.now();
       console.log(
@@ -510,7 +538,7 @@ export function useItineraryBrouterRouting({
             route.coordinates.length,
           );
           // Render route immediately with native BRouter elevation data & unblock UI
-          setProject((project) => applyRecomputedRoute(project, route, null));
+          setProject((project) => applyRecomputedRoute(project, target, route, null));
           routedInputKeys.set(itineraryForRouting.id, routingInputKey);
           setRouteLoading(false);
 
@@ -527,7 +555,7 @@ export function useItineraryBrouterRouting({
           if (route.distanceM <= 500_000) {
             const ignAltimetryRouteProfile = await resolveIgnAltimetryRouteProfile(route, activeCtrl.signal, 'recompute route');
             if (ignAltimetryRouteProfile && !activeCtrl.signal.aborted) {
-              setProject((project) => applyRecomputedRoute(project, route, ignAltimetryRouteProfile));
+              setProject((project) => applyRecomputedRoute(project, target, route, ignAltimetryRouteProfile));
             }
           }
         })
@@ -556,6 +584,7 @@ export function useItineraryBrouterRouting({
     gpxRoutePointCount,
     gpxRouteSource,
     hasWaypointOverride,
+    historyRevision,
     isMapLoaded,
     map,
     pendingRoutePatchKey,

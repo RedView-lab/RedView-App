@@ -9,6 +9,7 @@ import {
 
 import { createFitPredictionEngine } from '@/features/fitPredictor/engine/api';
 import type { PredictionResult } from '@/features/fitPredictor';
+import type { Itinerary } from '../../types';
 import {
   uploadProjectItineraryFitFiles,
 } from '@/shared/utils/projects';
@@ -41,6 +42,29 @@ import {
   type UseItineraryFitRuntimeArgs,
 } from './types';
 
+type RoutePoints = NonNullable<Itinerary['gpxRoute']>['points'];
+
+function buildRouteSignature(points: RoutePoints | null | undefined): string {
+  if (!points || points.length < 2) return '';
+  const first = points[0];
+  const last = points[points.length - 1];
+  return [
+    points.length,
+    first ? `${first.lon.toFixed(5)},${first.lat.toFixed(5)}` : '',
+    last ? `${last.lon.toFixed(5)},${last.lat.toFixed(5)}` : '',
+    last?.distanceM ?? '',
+  ].join('|');
+}
+
+/** Entrées d'une prédiction : un résultat n'est valable que pour elles. */
+function buildPredictionInputSignature(itinerary: Itinerary): string {
+  return [
+    buildRouteSignature(itinerary.gpxRoute?.points),
+    normalizeDiscipline(itinerary.discipline),
+    JSON.stringify(itinerary.rhythm ?? null),
+  ].join('::');
+}
+
 export function useItineraryFitRuntime({
   active,
   projectId,
@@ -50,6 +74,7 @@ export function useItineraryFitRuntime({
   const fitInputRef = useRef<HTMLInputElement | null>(null);
   const fitUploadTargetIdRef = useRef<string | null>(null);
   const cancelledPredictionIdsRef = useRef<Set<string>>(new Set());
+  const latestPredictionRunRef = useRef<Record<string, number>>({});
   const fitEngineRef = useRef<ReturnType<typeof createFitPredictionEngine> | null>(
     null,
   );
@@ -73,18 +98,10 @@ export function useItineraryFitRuntime({
       active ? fitRuntimeByItineraryId[active.id] ?? createEmptyFitRuntime() : null,
     [active, fitRuntimeByItineraryId],
   );
-  const activeRouteSignature = useMemo(() => {
-    const points = active?.gpxRoute?.points;
-    if (!points || points.length < 2) return '';
-    const first = points[0];
-    const last = points[points.length - 1];
-    return [
-      points.length,
-      first ? `${first.lon.toFixed(5)},${first.lat.toFixed(5)}` : '',
-      last ? `${last.lon.toFixed(5)},${last.lat.toFixed(5)}` : '',
-      last?.distanceM ?? '',
-    ].join('|');
-  }, [active?.gpxRoute?.points]);
+  const activeRouteSignature = useMemo(
+    () => buildRouteSignature(active?.gpxRoute?.points),
+    [active?.gpxRoute?.points],
+  );
   const activePersistedUploadSignature = active
     ? buildFitUploadsSignature(active.fitUploads ?? [])
     : '';
@@ -401,6 +418,9 @@ export function useItineraryFitRuntime({
     const gpxFile = buildRouteGpxFile(itinerary);
     const discipline = normalizeDiscipline(itinerary.discipline);
     const routePoints = itinerary.gpxRoute?.points ?? null;
+    const inputSignature = buildPredictionInputSignature(itinerary);
+    const runId = (latestPredictionRunRef.current[itineraryId] ?? 0) + 1;
+    latestPredictionRunRef.current[itineraryId] = runId;
 
     updateFitRuntime(itineraryId, (current) => ({
       ...current,
@@ -439,23 +459,43 @@ export function useItineraryFitRuntime({
       .then((raw: PredictionResult) => {
         const result: PredictionResult = { ...raw, discipline };
         cancelledPredictionIdsRef.current.delete(itineraryId);
-        setProject((prev) => ({
-          ...prev,
-          itineraries: prev.itineraries.map((curr) =>
-            curr.id === itineraryId
-              ? {
-                  ...curr,
-                  prediction: result,
-                  rhythmConfigured: true,
-                  pendingFitRecompute: undefined,
-                  metrics: {
-                    ...curr.metrics,
-                    durationSec: buildPauseAwareSchedule(curr, result)?.totalDurationSeconds ?? result.total_time_s,
-                  },
-                }
-              : curr,
-          ),
-        }));
+        // Le tracé / rythme a changé pendant le calcul (undo, édition) : ce
+        // résultat décrit un autre état, on ne l'écrit pas. Le recalcul
+        // automatique repart sur l'état courant.
+        let applied = false;
+        setProject((prev) => {
+          const target = prev.itineraries.find((curr) => curr.id === itineraryId);
+          if (!target || buildPredictionInputSignature(target) !== inputSignature) return prev;
+          applied = true;
+          return {
+            ...prev,
+            itineraries: prev.itineraries.map((curr) =>
+              curr.id === itineraryId
+                ? {
+                    ...curr,
+                    prediction: result,
+                    rhythmConfigured: true,
+                    pendingFitRecompute: undefined,
+                    metrics: {
+                      ...curr.metrics,
+                      durationSec: buildPauseAwareSchedule(curr, result)?.totalDurationSeconds ?? result.total_time_s,
+                    },
+                  }
+                : curr,
+            ),
+          };
+        });
+        if (!applied) {
+          if (latestPredictionRunRef.current[itineraryId] === runId) {
+            updateFitRuntime(itineraryId, (current) => ({
+              ...current,
+              progress: [],
+              status: current.fitFiles.length > 0 ? 'ready' : 'idle',
+              updatedAt: new Date().toISOString(),
+            }));
+          }
+          return;
+        }
         updateFitRuntime(itineraryId, (current) => ({
           ...current,
           predictionResult: result,

@@ -5,6 +5,7 @@ import { buildDefaultSunlightBands, DEFAULT_SUNLIGHT_SCALE_SETTING } from './sun
 import { buildDefaultWeatherPalettePresets } from '../weather/defaultPalettes';
 import { clampForecastSelection, getForecastDateForOffset } from '@/features/weather/lib/forecastTime.ts';
 import { generateDynamicCategories, formatSlopeDegreeLabel } from '@/features/slope/lib/slope-config';
+import { DEFAULT_MAP_ENVIRONMENT, MAP_ENVIRONMENT_OPTIONS } from '@/features/map3d/lib/mapEnvironment';
 
 const WEATHER_PALETTE_PRESETS = buildDefaultWeatherPalettePresets();
 const DEFAULT_SLOPE_BANDS = generateDynamicCategories(10).map((category) => ({
@@ -31,6 +32,10 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
       { value: 'terrain-1m', label: '1 m Sol Nu (MNT IGN - Tracé net)' },
       { value: 'slow-040', label: '0.40 m Surface (MNS - Bâtiments 3D)' },
     ],
+  },
+  mapEnvironment: {
+    value: DEFAULT_MAP_ENVIRONMENT,
+    options: MAP_ENVIRONMENT_OPTIONS.map((option) => ({ ...option })),
   },
   lidarTiles: [
     { id: 'tile-1', label: translateAppText('Tuile {{index}} (LIDAR) ({{size}}mo) ({{year}} IGN)', { index: 1, size: 2102, year: 2026 }), sizeMb: 2102, year: 2026, source: 'LIDAR', visible: true },

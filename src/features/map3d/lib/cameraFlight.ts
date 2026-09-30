@@ -190,6 +190,29 @@ export function flyToLocation(
   }
 }
 
+/**
+ * Cadrage d'un POI / point de la feuille de route sélectionné : vue reculée.
+ * Le zoom courant est conservé s'il est déjà dans la plage, sinon ramené dans
+ * [POI_FOCUS_MIN_ZOOM, POI_FOCUS_MAX_ZOOM] — jamais plus proche que
+ * POI_FOCUS_MAX_ZOOM, pour garder le contexte autour du point.
+ */
+export const POI_FOCUS_MIN_ZOOM = 10.5;
+export const POI_FOCUS_MAX_ZOOM = 12;
+
+/**
+ * Centre la vue sur un POI sans plonger dessus : zoom borné (cf. constantes
+ * ci-dessus) et inclinaison courante conservée (pas de bascule forcée en 3D
+ * rasante, qui rapproche visuellement la caméra du sol).
+ */
+export function flyToPoi(
+  map: MapboxMap | null | undefined,
+  target: { lon: number; lat: number },
+): void {
+  if (!map) return;
+  const zoom = Math.min(POI_FOCUS_MAX_ZOOM, Math.max(POI_FOCUS_MIN_ZOOM, map.getZoom()));
+  flyToLocation(map, target, { zoom, pitch: map.getPitch() });
+}
+
 export interface FlyToBoundsOptions {
   maxZoom?: number;
   pitch?: number;

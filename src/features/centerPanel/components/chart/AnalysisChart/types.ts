@@ -48,7 +48,7 @@ export interface AnalysisChartProps {
   poiAnnotations?: ChartPoiAnnotation[];
   dayNightOverlay?: ChartDayNightOverlay | null;
   pauseOverlay?: ChartPauseOverlay | null;
-  /** Colonnes rouges « Alertes » (pente ≥ 12 % sur ≥ 100 m). */
+  /** Colonnes rouges « Alertes » (pente ≥ 10 % sur ≥ 1 km ou ≥ 15 % sur ≥ 100 m). */
   alertOverlay?: ChartAlertOverlay | null;
   axis1Metric: AxisMetricId;
   axis2Metric: AxisMetricId | null;

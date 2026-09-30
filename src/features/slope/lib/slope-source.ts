@@ -180,6 +180,8 @@ export function buildSlopeLayer(
       'raster-color-mix': SLOPE_DECODE_MIX,
       'raster-color-range': SLOPE_DECODE_RANGE,
       'raster-color': buildSlopeColorExpression(categories, colorMode, hiddenIds),
+      // Legend colours must stay exact under dusk/night scene lighting.
+      'raster-emissive-strength': 1,
     },
   };
 }

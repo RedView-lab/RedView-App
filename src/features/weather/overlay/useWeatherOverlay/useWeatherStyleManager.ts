@@ -452,6 +452,8 @@ export function useWeatherStyleManager({
             'raster-opacity': opacity,
             'raster-fade-duration': 150,
             'raster-resampling': 'linear',
+            // Keep true colours under dusk/night scene lighting.
+            'raster-emissive-strength': 1,
           },
         } as never);
       } else {
@@ -546,6 +548,8 @@ export function useWeatherStyleManager({
             'raster-opacity': 1,
             'raster-fade-duration': 0,
             'raster-resampling': mode === 'fill' ? 'nearest' : 'linear',
+            // Keep true colours under dusk/night scene lighting.
+            'raster-emissive-strength': 1,
           },
         } as never);
       }

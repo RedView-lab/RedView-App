@@ -6,78 +6,125 @@ import {
   type ChartMetricId,
 } from '../series';
 
+export type XAxisLabelDensity = 'full' | 'compact' | 'tight';
+
+/** Pas « ronds » pour les axes en heures (minutes). */
+const TIME_STEPS_MIN = [1, 2, 5, 10, 15, 20, 30, 60, 120, 180, 240, 360, 480, 720, 1440];
+const X_LABEL_GAP_PX = 10;
+const MAX_STEP_ATTEMPTS = 16;
+
+/** Plus petit pas « rond » ≥ `rough` (km : 1-2-2,5-5 × 10ⁿ ; heures : minutes rondes). */
+function niceXStep(rough: number, xMode: AxisMode): number {
+  if (!(rough > 0) || !Number.isFinite(rough)) return 1;
+  const floor = rough * (1 - 1e-9);
+  if (xMode === 'distance') {
+    const pow10 = 10 ** Math.floor(Math.log10(rough));
+    for (const mult of [1, 2, 2.5, 5]) {
+      if (mult * pow10 >= floor) return mult * pow10;
+    }
+    return 10 * pow10;
+  }
+  const roughMinutes = rough * 60;
+  const minutes =
+    TIME_STEPS_MIN.find((step) => step >= roughMinutes * (1 - 1e-9))
+    ?? Math.ceil(roughMinutes / 1440) * 1440;
+  return minutes / 60;
+}
+
+function ticksForStep(min: number, max: number, step: number): number[] {
+  const first = Math.ceil((min - step * 1e-6) / step);
+  const last = Math.floor((max + step * 1e-6) / step);
+  const ticks: number[] = [];
+  for (let index = first; index <= last && ticks.length < 200; index += 1) {
+    ticks.push(Number((index * step).toFixed(8)));
+  }
+  return ticks;
+}
+
+function densityForSpacing(spacingPx: number): XAxisLabelDensity {
+  if (spacingPx < 42) return 'tight';
+  if (spacingPx < 68) return 'compact';
+  return 'full';
+}
+
+/**
+ * Graduations de l'axe X à pas constant. On part du pas « rond » visant
+ * `targetSpacingPx` entre deux graduations, puis on l'agrandit (valeur ronde
+ * suivante) tant que les libellés ne tiennent pas : toutes les graduations
+ * restent libellées et régulièrement espacées, au lieu d'en masquer certaines
+ * (ce qui donnait des graduations serrées aux extrémités et très espacées
+ * ailleurs).
+ */
+export function buildXAxisTicks(
+  min: number,
+  max: number,
+  plotWidth: number,
+  xMode: AxisMode,
+  targetSpacingPx: number,
+): { ticks: number[]; density: XAxisLabelDensity } {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
+    return { ticks: [Number.isFinite(min) ? min : 0], density: 'full' };
+  }
+  const span = max - min;
+  const width = plotWidth > 0 ? plotWidth : targetSpacingPx * 6;
+  let step = niceXStep((span * targetSpacingPx) / width, xMode);
+  let ticks = ticksForStep(min, max, step);
+  let density = densityForSpacing((step / span) * width);
+
+  for (let attempt = 0; attempt < MAX_STEP_ATTEMPTS; attempt += 1) {
+    const spacingPx = (step / span) * width;
+    density = densityForSpacing(spacingPx);
+    const widest = ticks.reduce(
+      (acc, value) => Math.max(acc, estimateXAxisLabelWidth(formatXTick(value, xMode, density), xMode)),
+      0,
+    );
+    if (widest + X_LABEL_GAP_PX <= spacingPx || ticks.length <= 2) break;
+    step = niceXStep(step * 1.000001, xMode);
+    ticks = ticksForStep(min, max, step);
+  }
+
+  if (ticks.length === 0) ticks = [Number(min.toFixed(8))];
+  return { ticks, density };
+}
+
+/**
+ * Libellés de l'axe X : une graduation = un libellé (le pas garantit déjà
+ * qu'ils tiennent). Seul un libellé collé à un bord, ancré sur ce bord (cf.
+ * `xAnchorTransformFor`), peut chevaucher son voisin : il est alors omis, sa
+ * ligne de graduation restant affichée.
+ */
 export function buildResponsiveXAxisLabels(
   positions: Array<{ value: number; ratio: number }>,
   xMode: AxisMode,
   plotWidth: number,
+  density: XAxisLabelDensity,
 ): Array<{ value: number; ratio: number; label: string }> {
-  if (positions.length === 0) return [];
-
-  const density = chooseXAxisLabelDensity(positions, plotWidth);
-  const candidates = positions.map((position) => ({
+  const labels = positions.map((position) => ({
     ...position,
     label: formatXTick(position.value, xMode, density),
   }));
+  if (labels.length < 2 || plotWidth <= 0) return labels;
 
-  if (candidates.length <= 2 || plotWidth <= 0) return candidates;
+  const extent = (entry: { ratio: number; label: string }) => {
+    const width = estimateXAxisLabelWidth(entry.label, xMode);
+    const center = entry.ratio * plotWidth;
+    if (entry.ratio <= 0.02) return { left: center, right: center + width };
+    if (entry.ratio >= 0.98) return { left: center - width, right: center };
+    return { left: center - width / 2, right: center + width / 2 };
+  };
 
-  const estimatedLabelWidths = candidates.map((position) =>
-    estimateXAxisLabelWidth(position.label, xMode),
-  );
-
-  const accepted: Array<{ value: number; ratio: number; label: string }> = [];
-  let lastRight = -Infinity;
-
-  for (let index = 0; index < candidates.length; index += 1) {
-    const position = candidates[index];
-    const isFirst = index === 0;
-    const isLast = index === candidates.length - 1;
-    const width = estimatedLabelWidths[index] ?? 0;
-    const center = position.ratio * plotWidth;
-    const left = isFirst ? center : center - width / 2;
-    const right = isLast ? center : center + width / 2;
-    const minGap = isFirst || isLast ? 6 : 10;
-
-    if (!isFirst && left < lastRight + minGap && !isLast) continue;
-
-    accepted.push(position);
-    lastRight = right;
+  const result = labels.slice();
+  if (extent(result[0]).right + X_LABEL_GAP_PX > extent(result[1]).left) {
+    result.shift();
   }
-
-  const first = candidates[0];
-  const last = candidates[candidates.length - 1];
-  if (accepted[0] !== first) accepted.unshift(first);
-  if (accepted[accepted.length - 1] !== last) {
-    const prev = accepted[accepted.length - 1];
-    const lastWidth = estimatedLabelWidths[estimatedLabelWidths.length - 1] ?? 0;
-    const lastLeft = last.ratio * plotWidth - lastWidth;
-    const prevCenter = prev.ratio * plotWidth;
-    if (lastLeft < prevCenter + 10 && accepted.length > 1) {
-      accepted.splice(accepted.length - 1, 1, last);
-    } else {
-      accepted.push(last);
+  if (result.length >= 2) {
+    const last = result[result.length - 1];
+    const previous = result[result.length - 2];
+    if (extent(previous).right + X_LABEL_GAP_PX > extent(last).left) {
+      result.pop();
     }
   }
-
-  return accepted;
-}
-
-function chooseXAxisLabelDensity(
-  positions: Array<{ value: number; ratio: number }>,
-  plotWidth: number,
-): 'full' | 'compact' | 'tight' {
-  if (positions.length <= 1 || plotWidth <= 0) return 'full';
-
-  let minSpacingPx = Infinity;
-  for (let index = 1; index < positions.length; index += 1) {
-    const spacingPx = (positions[index].ratio - positions[index - 1].ratio) * plotWidth;
-    if (spacingPx > 0) minSpacingPx = Math.min(minSpacingPx, spacingPx);
-  }
-
-  if (!Number.isFinite(minSpacingPx)) return 'full';
-  if (minSpacingPx < 42) return 'tight';
-  if (minSpacingPx < 68) return 'compact';
-  return 'full';
+  return result;
 }
 
 function estimateXAxisLabelWidth(label: string, xMode: AxisMode): number {
@@ -103,7 +150,7 @@ export function formatXTick(
   xMode: AxisMode,
   density: 'full' | 'compact' | 'tight' = 'full',
 ): string {
-  if (xMode === 'distance') return formatDistanceTick(value, density);
+  if (xMode === 'distance') return formatDistanceTick(value);
   if (xMode === 'heure') return formatClockHours(value, density);
   return formatHours(value, density);
 }
@@ -120,15 +167,13 @@ export function xAnchorTransformFor(ratio: number): string {
   return 'translateX(-50%)';
 }
 
-function formatDistanceTick(
-  value: number,
-  density: 'full' | 'compact' | 'tight',
-): string {
+function formatDistanceTick(value: number): string {
   if (!Number.isFinite(value)) return '--';
-  if (density === 'tight') return `${Math.round(value)}`;
-  if (density === 'compact') return Number(value.toFixed(0)).toString();
-  if (Number.isInteger(value)) return String(value);
-  return value.toFixed(1);
+  // Les graduations tombent sur des pas ronds (… 0,25 / 0,5 / 1 / 2,5 …) :
+  // on affiche leur valeur exacte (≤ 2 décimales), jamais un arrondi qui
+  // ferait se répéter ou mentir deux libellés voisins. La densité ne
+  // raccourcit que les libellés horaires.
+  return Number(value.toFixed(2)).toString();
 }
 
 function formatHours(
@@ -199,4 +244,4 @@ export function formatRangeLabel(startX: number, endX: number, xMode: AxisMode):
       ? `${deltaHours}h${deltaMins > 0 ? ` ${deltaMins}m` : ''}`
       : `${deltaMins} min`;
   return `${minStr} → ${maxStr} · ${deltaStr}`;
-}
+}

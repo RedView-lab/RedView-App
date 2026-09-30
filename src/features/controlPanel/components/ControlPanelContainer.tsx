@@ -26,6 +26,10 @@ import { useControlPanelRoutes } from '../hooks/container/useControlPanelRoutes'
 import { setActiveDem3dQuality } from '@/features/map3d/lib/dem3dQualityBus';
 import { resolveDem3dSelection } from '@/features/map3d/lib/dem3dSelection';
 import { setActiveDemProfilePreference } from '@/features/map3d/lib/demProfileBus';
+import {
+  normalizeMapEnvironment,
+  setActiveMapEnvironment,
+} from '@/features/map3d/lib/mapEnvironment';
 
 export interface ControlPanelContainerProps {
   map: MapboxMap | null;
@@ -255,6 +259,10 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
           projectControlPanel.basemap3dQuality
           ?? DEFAULT_CONTROL_PANEL_STATE.basemap3dQuality.value,
       },
+      mapEnvironment: {
+        ...DEFAULT_CONTROL_PANEL_STATE.mapEnvironment,
+        value: normalizeMapEnvironment(projectControlPanel.mapEnvironment),
+      },
       lidarTiles,
       contourLines: terrainState.slices.contourLines,
       routes: routesSlice,
@@ -275,6 +283,7 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
       overlayState.slices.weather,
       overlayState.slices.wind,
       projectControlPanel.basemap3dQuality,
+      projectControlPanel.mapEnvironment,
       routesSlice,
       terrainState.slices.contourLines,
       terrainState.slices.altitude,
@@ -334,6 +343,10 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
   useEffect(() => {
     applyDem3dSelection(projectControlPanel.basemap3dQuality);
   }, [applyDem3dSelection, projectControlPanel.basemap3dQuality]);
+
+  useEffect(() => {
+    setActiveMapEnvironment(projectControlPanel.mapEnvironment);
+  }, [projectControlPanel.mapEnvironment]);
 
   return (
     <ControlPanel
@@ -406,6 +419,12 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
         applyDem3dSelection(value);
         updateProjectControlPanel((draft) => {
           draft.basemap3dQuality = value;
+        });
+      }}
+      onMapEnvironmentChange={(value) => {
+        setActiveMapEnvironment(value);
+        updateProjectControlPanel((draft) => {
+          draft.mapEnvironment = value;
         });
       }}
       onRouteTraceWidthChange={routeHandlers.onRouteTraceWidthChange}

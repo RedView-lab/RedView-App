@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import type { Map as MapboxMap } from 'mapbox-gl';
-import { flyToLocation } from '@/features/map3d';
+import { buildPopupClearanceOffset, closeMarkerPopupOnSecondClick, flyToPoi } from '@/features/map3d';
 import type { ItineraryProject } from '../types';
 import { translateAppText } from '@/shared/i18n';
 import { cumulativeRouteLengthsM, projectPointAlongRoute, type RouteDistancePoint } from '../lib/routes';
@@ -76,8 +76,6 @@ const MARKER_MIN_SCALE_ZOOM = 6.2;
 const MARKER_MAX_SCALE_ZOOM = 15.1;
 const MARKER_MIN_SCREEN_SCALE = 0.35;
 const MARKER_MAX_SCREEN_SCALE = 1.0;
-const MARKER_MIN_POPUP_OFFSET_PX = 38;
-const MARKER_MAX_POPUP_OFFSET_PX = 80;
 const CHECKPOINT_MIN_ZOOM = 6.0;
 
 function escapeHtml(text: string): string {
@@ -102,14 +100,17 @@ function smoothstep(edge0: number, edge1: number, value: number): number {
   return progress * progress * (3 - 2 * progress);
 }
 
-function getPoiMarkerVisualState(zoom: number): { scale: number; popupOffsetPx: number } {
+function getPoiMarkerVisualState(zoom: number): { scale: number } {
   const progress = smoothstep(MARKER_MIN_SCALE_ZOOM, MARKER_MAX_SCALE_ZOOM, zoom);
-  return {
-    scale: lerp(MARKER_MIN_SCREEN_SCALE, MARKER_MAX_SCREEN_SCALE, progress),
-    popupOffsetPx: Math.round(
-      lerp(MARKER_MIN_POPUP_OFFSET_PX, MARKER_MAX_POPUP_OFFSET_PX, progress),
-    ),
-  };
+  return { scale: lerp(MARKER_MIN_SCREEN_SCALE, MARKER_MAX_SCREEN_SCALE, progress) };
+}
+
+/**
+ * Pause pin (`.rv-poi-marker`, anchor 'bottom'): the pin and its duration
+ * badge stand 75px × scale above the tip, ~30px × scale each side (time badge included).
+ */
+function getPausePopupOffset(scale: number) {
+  return buildPopupClearanceOffset({ above: 75 * scale, below: 0, side: 30 * scale });
 }
 
 function applyCheckpointZoomVisibility(element: HTMLElement, zoom: number): void {
@@ -139,7 +140,7 @@ function applyMarkerVisualState(entry: MarkerRegistryEntry, zoom: number): void 
         const offsetPx = Math.round(14 * visual.scale) + 4;
         entry.popup.setOffset([offsetPx, -offsetPx]);
       } else {
-        entry.popup.setOffset([0, visual.popupOffsetPx]);
+        entry.popup.setOffset(getPausePopupOffset(visual.scale));
       }
     }
   } else {
@@ -341,7 +342,7 @@ function createPausePopup(
     closeOnClick: true,
     focusAfterOpen: false,
     maxWidth: 'none',
-    offset: MARKER_MAX_POPUP_OFFSET_PX,
+    offset: getPausePopupOffset(MARKER_MAX_SCREEN_SCALE),
   });
 
   const state: PausePopupState = {
@@ -931,6 +932,7 @@ export function useItineraryCheckpointMarkers({
 
         if (popup) {
           marker.setPopup(popup);
+          closeMarkerPopupOnSecondClick(element, popup);
         }
 
         marker.addTo(map);
@@ -1048,7 +1050,7 @@ export function useItineraryCheckpointMarkers({
 
       if (map) {
         const lngLat = targetEntry.marker.getLngLat();
-        flyToLocation(map, { lon: lngLat.lng, lat: lngLat.lat }, { zoom: 14.5 });
+        flyToPoi(map, { lon: lngLat.lng, lat: lngLat.lat });
       }
 
       return true;

@@ -9,6 +9,7 @@ import type {
   BasemapId,
   Basemap3dQualityId,
   ContourIntervalSetting,
+  MapEnvironmentId,
   SlopeScale,
   SlopeScaleSetting,
   SunlightState,
@@ -72,6 +73,8 @@ export interface ControlPanelPersistedState {
   sectionsOpen: ControlPanelSectionsOpenState;
   basemapId: BasemapId;
   basemap3dQuality: Basemap3dQualityId;
+  /** Scene lighting (jour / crépuscule / nuit). Absent on older projects → day. */
+  mapEnvironment?: MapEnvironmentId;
   toggles: {
     labelsEnabled: boolean;
     contourLinesEnabled: boolean;
@@ -146,6 +149,7 @@ export function createDefaultControlPanelPersistedState(): ControlPanelPersisted
     sectionsOpen: { ...DEFAULT_SECTIONS_OPEN },
     basemapId: 'satellite',
     basemap3dQuality: 'fast-30m',
+    mapEnvironment: 'day',
     toggles: {
       labelsEnabled: true,
       contourLinesEnabled: false,

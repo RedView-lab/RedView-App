@@ -6,12 +6,27 @@ import { normalizeRouteProfile } from '../series/routeProfile';
 import { locateRoutePointAtX } from '../series/builders';
 import { projectPredictionElapsedHoursToX } from '../series/timeline';
 
-/** Seuil d'alerte : pente moyenne ≥ 12 % tenue sur au moins 100 m. */
-export const STEEP_ALERT_MIN_GRADIENT_PCT = 12;
-export const STEEP_ALERT_MIN_LENGTH_M = 100;
+export interface SteepAlertRule {
+  /** Pente moyenne minimale (%) tenue sur toute la fenêtre. */
+  minGradientPct: number;
+  /** Longueur minimale de la fenêtre (m). */
+  minLengthM: number;
+}
+
+/**
+ * Seuils d'alerte (un seul suffit) :
+ *  - pente moyenne ≥ 10 % tenue sur au moins 1 km ;
+ *  - pente moyenne ≥ 15 % tenue sur au moins 100 m.
+ */
+export const STEEP_ALERT_RULES: ReadonlyArray<SteepAlertRule> = [
+  { minGradientPct: 10, minLengthM: 1000 },
+  { minGradientPct: 15, minLengthM: 100 },
+];
 
 /** Pas de ré-échantillonnage du profil (m). */
 const SAMPLE_STEP_M = 10;
+/** Fenêtre utilisée pour la pente max affichée d'un tronçon (m). */
+const MAX_GRADIENT_WINDOW_M = 100;
 /** Deux alertes séparées de moins que ça sont fusionnées en une seule colonne. */
 const MERGE_GAP_M = 40;
 
@@ -55,9 +70,11 @@ export function steepAlertKey(lat: number, lon: number): string {
 }
 
 /**
- * Détecte les tronçons dont la pente moyenne est ≥ 12 % sur au moins 100 m.
- * Une fenêtre glissante de 100 m parcourt le profil ré-échantillonné ; toutes
- * les fenêtres au-dessus du seuil sont unies en segments continus.
+ * Détecte les tronçons qui satisfont au moins une règle de `STEEP_ALERT_RULES`.
+ * Pour chaque règle, une fenêtre glissante de `minLengthM` parcourt le profil
+ * ré-échantillonné ; toutes les fenêtres au-dessus du seuil sont unies en
+ * segments continus (puis fusionnés s'ils sont séparés de ≤ MERGE_GAP_M),
+ * dont les bords plats sont rognés.
  */
 export function detectSteepAlertSegments(
   routePoints: RouteChartPoint[] | null | undefined,
@@ -72,9 +89,8 @@ export function detectSteepAlertSegments(
     const startM = profile[0]!.distanceM;
     const totalM = profile[profile.length - 1]!.distanceM;
     const count = Math.floor((totalM - startM) / SAMPLE_STEP_M) + 1;
-    const windowSteps = Math.round(STEEP_ALERT_MIN_LENGTH_M / SAMPLE_STEP_M);
 
-    if (count > windowSteps) {
+    if (count >= 2) {
       // Profil d'altitude ré-échantillonné à pas fixe (interpolation linéaire).
       const elev = new Float64Array(count);
       let cursor = 0;
@@ -88,44 +104,65 @@ export function detectSteepAlertSegments(
         elev[i] = a.elevationM + (b.elevationM - a.elevationM) * t;
       }
 
-      const threshold = STEEP_ALERT_MIN_GRADIENT_PCT / 100;
-      let runStart = -1;
-      let runEnd = -1;
-      let runMax = 0;
-
-      const flush = () => {
-        if (runStart < 0) return;
-        const lengthM = (runEnd - runStart) * SAMPLE_STEP_M;
-        const avg = ((elev[runEnd]! - elev[runStart]!) / lengthM) * 100;
-        const segStart = startM + runStart * SAMPLE_STEP_M;
-        const segEnd = startM + runEnd * SAMPLE_STEP_M;
-        const previous = result[result.length - 1];
-        if (previous && segStart - previous.endM <= MERGE_GAP_M) {
-          const mergedLength = segEnd - previous.startM;
-          const startIdx = Math.round((previous.startM - startM) / SAMPLE_STEP_M);
-          previous.avgGradientPct = ((elev[runEnd]! - elev[startIdx]!) / mergedLength) * 100;
-          previous.endM = segEnd;
-          previous.maxGradientPct = Math.max(previous.maxGradientPct, runMax);
-        } else {
-          result.push({ startM: segStart, endM: segEnd, avgGradientPct: avg, maxGradientPct: runMax });
-        }
-        runStart = -1;
-      };
-
-      for (let i = 0; i + windowSteps < count; i += 1) {
-        const j = i + windowSteps;
-        const grade = (elev[j]! - elev[i]!) / STEEP_ALERT_MIN_LENGTH_M;
-        if (grade >= threshold) {
-          if (runStart < 0 || i > runEnd) {
-            flush();
-            runStart = i;
-            runMax = 0;
+      // Couverture par intervalle d'échantillonnage [k, k+1] : tableau de
+      // différences, chaque fenêtre qualifiante [i, j] ajoute +1 sur [i, j-1].
+      const coverage = new Int32Array(count);
+      for (const rule of STEEP_ALERT_RULES) {
+        const windowSteps = Math.round(rule.minLengthM / SAMPLE_STEP_M);
+        const threshold = rule.minGradientPct / 100;
+        const windowM = windowSteps * SAMPLE_STEP_M;
+        for (let i = 0; i + windowSteps < count; i += 1) {
+          const j = i + windowSteps;
+          if ((elev[j]! - elev[i]!) / windowM >= threshold) {
+            coverage[i]! += 1;
+            coverage[j]! -= 1;
           }
-          runEnd = j;
-          runMax = Math.max(runMax, grade * 100);
         }
       }
-      flush();
+
+      const maxWindowSteps = Math.round(MAX_GRADIENT_WINDOW_M / SAMPLE_STEP_M);
+      // Une fenêtre qualifiante (surtout celle de 1 km) peut déborder sur le
+      // plat avant/après la montée : on rogne les bords tant que le pas local
+      // est franchement plus doux (< moitié du seuil le plus bas), sans toucher
+      // aux épaulements de la montée elle-même.
+      const edgeThreshold = Math.min(...STEEP_ALERT_RULES.map((rule) => rule.minGradientPct)) / 200;
+      const stepGrade = (k: number) => (elev[k + 1]! - elev[k]!) / SAMPLE_STEP_M;
+      const pushSegment = (rawStart: number, rawEnd: number) => {
+        let runStart = rawStart;
+        let runEnd = rawEnd;
+        while (runEnd - runStart > maxWindowSteps && stepGrade(runStart) < edgeThreshold) runStart += 1;
+        while (runEnd - runStart > maxWindowSteps && stepGrade(runEnd - 1) < edgeThreshold) runEnd -= 1;
+        let maxGrade = -Infinity;
+        for (let i = runStart; i + maxWindowSteps <= runEnd; i += 1) {
+          maxGrade = Math.max(maxGrade, (elev[i + maxWindowSteps]! - elev[i]!) / MAX_GRADIENT_WINDOW_M);
+        }
+        const segStart = startM + runStart * SAMPLE_STEP_M;
+        const segEnd = startM + runEnd * SAMPLE_STEP_M;
+        const avg = ((elev[runEnd]! - elev[runStart]!) / (segEnd - segStart)) * 100;
+        result.push({
+          startM: segStart,
+          endM: segEnd,
+          avgGradientPct: avg,
+          maxGradientPct: Math.max(avg, maxGrade * 100),
+        });
+      };
+
+      const mergeGapSteps = Math.round(MERGE_GAP_M / SAMPLE_STEP_M);
+      let runStart = -1;
+      let runEnd = -1;
+      let depth = 0;
+      for (let k = 0; k < count - 1; k += 1) {
+        depth += coverage[k]!;
+        if (depth <= 0) continue;
+        if (runStart >= 0 && k - runEnd <= mergeGapSteps) {
+          runEnd = k + 1;
+          continue;
+        }
+        if (runStart >= 0) pushSegment(runStart, runEnd);
+        runStart = k;
+        runEnd = k + 1;
+      }
+      if (runStart >= 0) pushSegment(runStart, runEnd);
     }
   }
 

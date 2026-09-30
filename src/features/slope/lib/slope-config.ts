@@ -107,19 +107,36 @@ export function formatSlopeDegreeLabel(deg: number): string {
 
 // ── Color ramp for dynamic bands ──────────────────────────────────────
 
-/** Cycling-profile ramp from green (easy) → black (wall). */
-const COLOR_RAMP = [
-  '#3FAE2A',
-  '#77C043',
-  '#B7CF3A',
-  '#F1D43B',
-  '#F6AD2F',
-  '#F47C20',
-  '#E84A27',
-  '#C81E1E',
-  '#6F1010',
-  '#000000',
-];
+/**
+ * Palettes dédiées par nombre de bandes : un échantillonnage uniforme d'une
+ * seule rampe donne des extrêmes brutaux à faible N (vert → noir en 2
+ * couleurs). Chaque palette part d'un vert émeraude, passe par jaune/ambre
+ * puis rouge, et termine sur un bordeaux-prune (lisible sur fond satellite,
+ * contrairement au noir).
+ */
+const SLOPE_PALETTES_BY_COUNT: Record<number, string[]> = {
+  2: ['#2FB67C', '#E5484D'],
+  3: ['#34B96A', '#F5B83D', '#D92D4A'],
+  4: ['#34B96A', '#EFD43E', '#F0782E', '#B3204F'],
+  5: ['#2FAF6A', '#A6D146', '#F5C93D', '#EF7430', '#B3204F'],
+  6: ['#24A46A', '#8CCB45', '#F2D63F', '#F59A35', '#E24A3B', '#9E1C55'],
+  8: ['#1E9A63', '#4DB960', '#A6D146', '#F2D63F', '#F6AE38', '#F07A2F', '#D93A40', '#8E1B58'],
+  10: [
+    '#17915F',
+    '#35AD62',
+    '#7DC54B',
+    '#C3D843',
+    '#F2D63F',
+    '#F6B53A',
+    '#F48A32',
+    '#E65A36',
+    '#C42A45',
+    '#7A1A57',
+  ],
+};
+
+/** Rampe continue de secours pour les nombres de bandes sans palette dédiée. */
+const COLOR_RAMP = SLOPE_PALETTES_BY_COUNT[10];
 
 /** Interpolate a hex color between two hex colors. t ∈ [0, 1]. */
 function lerpColor(a: string, b: string, t: number): string {
@@ -276,7 +293,7 @@ export function generateDynamicCategories(
       label,
       minDeg,
       maxDeg,
-      color: rampColor(i / Math.max(count - 1, 1)),
+      color: SLOPE_PALETTES_BY_COUNT[count]?.[i] ?? rampColor(i / Math.max(count - 1, 1)),
       displayRange: pctRange,
     };
   });

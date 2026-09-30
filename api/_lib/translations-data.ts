@@ -1137,6 +1137,18 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "3D quality"
   },
   {
+    "fr": "Environnement",
+    "en": "Environment"
+  },
+  {
+    "fr": "Jour",
+    "en": "Day"
+  },
+  {
+    "fr": "Crépuscule",
+    "en": "Dusk"
+  },
+  {
     "fr": "0.40 m (Lent)",
     "en": "0.40 m (Slow)"
   },

@@ -46,6 +46,34 @@ export function getPoiSpriteId(spec: PoiSpriteSpec): string {
   return `rv-poi:${spec.category}:${spec.favorite ? 'f' : 'r'}:${spec.pauseMin}`;
 }
 
+// Pause pill under a round icon: its bottom sits 8px below the 38px box.
+const PAUSE_PILL_ROUND_OVERHANG_PX = 8;
+// Typical pause pill half width ("60 min" label on the 10px font).
+const PAUSE_PILL_MAX_HALF_WIDTH_PX = 30;
+
+/**
+ * Visible footprint of a sprite around its geographic anchor at icon-size 1
+ * (shadows excluded), mirroring the composition in `rasterizePoiSprite`.
+ */
+export function getPoiSpriteFootprint(spec: PoiSpriteSpec): { above: number; below: number; side: number } {
+  if (spec.favorite) {
+    return {
+      above: PIN_BODY_HEIGHT_PX,
+      below: PIN_IMAGE_HEIGHT_PX - PIN_BODY_HEIGHT_PX,
+      side: PIN_WIDTH_PX / 2,
+    };
+  }
+  const half = ROUND_SIZE_PX / 2;
+  if (spec.pauseMin > 0) {
+    return {
+      above: half,
+      below: half + PAUSE_PILL_ROUND_OVERHANG_PX,
+      side: Math.max(half, PAUSE_PILL_MAX_HALF_WIDTH_PX),
+    };
+  }
+  return { above: half, below: half, side: half };
+}
+
 /** Sprite rasterisation density: sharp up to the max icon-size on HiDPI. */
 export function getPoiSpritePixelRatio(): number {
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
@@ -174,7 +202,7 @@ export async function rasterizePoiSprite(spec: PoiSpriteSpec, pixelRatio: number
     const w = 6 + symbolW + 3 + labelW + 6 + 2;
     const h = 18;
     // Round: bottom: -8px under a 38px box. Pin: bottom: 2px above the tip.
-    const bottom = spec.favorite ? -2 : ROUND_SIZE_PX / 2 + 8;
+    const bottom = spec.favorite ? -2 : ROUND_SIZE_PX / 2 + PAUSE_PILL_ROUND_OVERHANG_PX;
     pill = { x: -w / 2, y: bottom - h, w, h, symbolW };
     grow(extent, pill.x - 18, pill.y - 18, pill.x + w + 18, pill.y + h + 18);
   }

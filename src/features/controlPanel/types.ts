@@ -10,6 +10,7 @@ import type {
 import type { GpxQualityMode } from '@/features/itineraryPanel/types';
 import type { DownloadProgress } from '@/features/lidar/types';
 import type { GpxQualityStats } from '@/features/itineraryPanel/lib/routes';
+import type { MapEnvironment } from '@/features/map3d/lib/mapEnvironment';
 
 export type BasemapId =
   | 'satellite'
@@ -40,6 +41,13 @@ export interface Basemap3dQualityOption {
 export interface Basemap3dQualityControl {
   value: Basemap3dQualityId;
   options: Basemap3dQualityOption[];
+}
+
+export type MapEnvironmentId = MapEnvironment;
+
+export interface MapEnvironmentControl {
+  value: MapEnvironmentId;
+  options: Array<{ value: MapEnvironmentId; label: string }>;
 }
 
 export interface LidarTile {
@@ -254,6 +262,7 @@ export interface SunlightState {
 export interface ControlPanelState {
   basemaps: Basemap[];
   basemap3dQuality: Basemap3dQualityControl;
+  mapEnvironment: MapEnvironmentControl;
   lidarTiles: LidarTile[];
   labels: { enabled: boolean; state: LabelsState };
   contourLines: ContourLinesState;
@@ -269,6 +278,7 @@ export interface ControlPanelState {
 export interface ControlPanelHandlers {
   onBasemapToggle?: (id: BasemapId) => void;
   onBasemap3dQualityChange?: (value: Basemap3dQualityId) => void;
+  onMapEnvironmentChange?: (value: MapEnvironmentId) => void;
   onBasemapAdd?: () => void;
 
   onLidarTileToggle?: (id: string) => void;

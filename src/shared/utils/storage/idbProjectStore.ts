@@ -162,10 +162,11 @@ export async function idbSaveProjectCache(projectId: string, project: ItineraryP
   return new Promise((resolve, reject) => {
     const tx = db.transaction([STORE_CACHE], 'readwrite');
     const store = tx.objectStore(STORE_CACHE);
+    // IndexedDB copie déjà la valeur (clonage structuré) : pas de copie en plus.
     const entry: IdbCacheEntry = {
       projectId,
       cachedAt: new Date().toISOString(),
-      project: structuredClone(project),
+      project,
     };
     const req = store.put(entry);
     req.onsuccess = () => resolve();

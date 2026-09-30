@@ -33,7 +33,7 @@ import {
   findChartXForPoi,
   listenSelectPoiOnChart,
 } from '@/features/poi/lib/chartPoiSyncBridge';
-import { flyToBounds, flyToLocation } from '@/features/map3d';
+import { flyToBounds, flyToLocation, flyToPoi } from '@/features/map3d';
 import {
   clearAnalysisSelectedSegment,
   setAnalysisSelectedSegment,
@@ -512,18 +512,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
         const targetLon = annotation.lon ?? routePoint?.lon;
 
         if (targetLat != null && targetLon != null) {
-          const currentPitch = map.getPitch();
-          const is2D = currentPitch <= 8;
-          const targetPitch = is2D ? 0 : Math.max(currentPitch, CHART_CLICK_FOCUS_PITCH);
-
-          flyToLocation(
-            map,
-            { lon: targetLon, lat: targetLat },
-            {
-              zoom: CHART_CLICK_FOCUS_ZOOM,
-              pitch: targetPitch,
-            },
-          );
+          flyToPoi(map, { lon: targetLon, lat: targetLat });
 
           dispatchOpenPoiOnMap({
             id: annotation.rowId ?? annotation.id,

@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
+import type { MutableRefObject } from 'react';
 import { routeLengthM } from '@/features/poi/lib/gpx-loader';
 import {
   applyGpxQuality,
@@ -14,7 +14,7 @@ import {
   type MergeItineraryConnectorSegment,
 } from '../../lib/project';
 import { reverseItineraryGpxProject } from '../../lib/project';
-import { splitItineraryProject, type SplitItineraryProjectResult } from '../../lib/project';
+import { splitItineraryProject } from '../../lib/project';
 import {
   computeRouteElevationMetrics,
   computeRouteSurfaceMetricsFromPoints,
@@ -33,11 +33,9 @@ import type { TraceHistoryEntry } from './types';
 
 interface UseItineraryGpxActionsArgs {
   projectRef: MutableRefObject<ItineraryProject>;
-  setProject: Dispatch<SetStateAction<ItineraryProject>>;
   updateItinerary: (id: string, mut: (draft: ItineraryProject['itineraries'][number]) => void) => void;
-  pushTraceHistoryEntry: (entry: TraceHistoryEntry, options?: { preservePendingTraceAppend?: boolean }) => void;
+  pushTraceHistoryEntry: (entry: TraceHistoryEntry, options?: { pendingTraceAppend?: boolean }) => void;
   pushTraceHistoryEntries: (entries: TraceHistoryEntry[]) => void;
-  setPendingTraceAppend: (entry: TraceHistoryEntry | null) => void;
 }
 
 /**
@@ -46,11 +44,9 @@ interface UseItineraryGpxActionsArgs {
  */
 export function useItineraryGpxActions({
   projectRef,
-  setProject,
   updateItinerary,
   pushTraceHistoryEntry,
   pushTraceHistoryEntries,
-  setPendingTraceAppend,
 }: UseItineraryGpxActionsArgs) {
   const reverseItineraryGpx = useCallback(
     (id: string) => {
@@ -60,8 +56,8 @@ export function useItineraryGpxActions({
 
       const entry: TraceHistoryEntry = {
         itineraryId: id,
-        before: structuredClone(currentProject),
-        after: structuredClone(nextProject),
+        before: currentProject,
+        after: nextProject,
       };
       pushTraceHistoryEntry(entry);
       return true;
@@ -93,24 +89,17 @@ export function useItineraryGpxActions({
 
       const entry: TraceHistoryEntry = {
         itineraryId: id,
-        before: structuredClone(currentProject),
-        after: structuredClone(nextProject),
+        before: currentProject,
+        after: nextProject,
       };
 
-      if (pointKind === 'waypoint') {
-        // Deux clics d'affilée sur le même prolongement doivent se replier en
-        // une seule étape d'historique : on garde l'entrée « en attente » pour
-        // que le recalcul BRouter puisse l'annuler s'il échoue.
-        setPendingTraceAppend(entry);
-        pushTraceHistoryEntry(entry, { preservePendingTraceAppend: true });
-      } else {
-        setPendingTraceAppend(null);
-        pushTraceHistoryEntry(entry);
-      }
+      // Prolongement routé par BRouter : l'étape reste « en attente » pour que
+      // le routage puisse l'annuler proprement s'il échoue (point non routable).
+      pushTraceHistoryEntry(entry, { pendingTraceAppend: pointKind === 'waypoint' });
 
       return true;
     },
-    [projectRef, pushTraceHistoryEntry, setPendingTraceAppend],
+    [projectRef, pushTraceHistoryEntry],
   );
 
   const addForbiddenZone = useCallback(
@@ -158,8 +147,8 @@ export function useItineraryGpxActions({
 
         entries.push({
           itineraryId: id,
-          before: structuredClone(workingProject),
-          after: structuredClone(nextProject),
+          before: workingProject,
+          after: nextProject,
         });
         workingProject = nextProject;
       }
@@ -206,8 +195,8 @@ export function useItineraryGpxActions({
 
       const entry: TraceHistoryEntry = {
         itineraryId: id,
-        before: structuredClone(currentProject),
-        after: structuredClone(nextProject),
+        before: currentProject,
+        after: nextProject,
       };
       pushTraceHistoryEntry(entry);
       return true;
@@ -415,8 +404,8 @@ export function useItineraryGpxActions({
 
       const entry: TraceHistoryEntry = {
         itineraryId: sourceId,
-        before: structuredClone(currentProject),
-        after: structuredClone(result.project),
+        before: currentProject,
+        after: result.project,
       };
       pushTraceHistoryEntry(entry);
 
@@ -432,20 +421,21 @@ export function useItineraryGpxActions({
 
   const splitItineraryAtPointIndex = useCallback(
     (id: string, splitIndex: number) => {
-      let resultBox: Omit<SplitItineraryProjectResult, 'project'> | null = null;
-      setProject((prev) => {
-        const result = splitItineraryProject(prev, id, splitIndex);
-        resultBox = result
-          ? {
-              createdItineraryId: result.createdItineraryId,
-              createdItineraryName: result.createdItineraryName,
-            }
-          : null;
-        return result?.project ?? prev;
+      const currentProject = projectRef.current;
+      const result = splitItineraryProject(currentProject, id, splitIndex);
+      if (!result) return null;
+
+      pushTraceHistoryEntry({
+        itineraryId: id,
+        before: currentProject,
+        after: result.project,
       });
-      return resultBox;
+      return {
+        createdItineraryId: result.createdItineraryId,
+        createdItineraryName: result.createdItineraryName,
+      };
     },
-    [setProject],
+    [projectRef, pushTraceHistoryEntry],
   );
 
   const updateItineraryRoutePoints = useCallback(
@@ -523,15 +513,14 @@ export function useItineraryGpxActions({
 
       const entry: TraceHistoryEntry = {
         itineraryId: id,
-        before: structuredClone(currentProject),
-        after: structuredClone(nextProject),
+        before: currentProject,
+        after: nextProject,
       };
 
-      setProject(nextProject);
       pushTraceHistoryEntry(entry);
       return true;
     },
-    [projectRef, setProject, pushTraceHistoryEntry],
+    [projectRef, pushTraceHistoryEntry],
   );
 
   return {

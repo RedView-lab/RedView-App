@@ -36,15 +36,19 @@ export {
 	computeAdaptiveFlightDuration,
 	flyToBounds,
 	flyToLocation,
+	flyToPoi,
 	getMapViewportPadding,
 	haversineDistanceKm,
 } from './lib/cameraFlight';
+export { buildPopupClearanceOffset } from './lib/popupOffset';
+export type { MarkerClearance } from './lib/popupOffset';
 export type {
 	FlyToBoundsOptions,
 	FlyToLocationOptions,
 	MapViewportPadding,
 } from './lib/cameraFlight';
 export {
+	closeMarkerPopupOnSecondClick,
 	isPointPanelOpen,
 	handlePointPanelMousedown,
 	shouldIgnoreMapClickAfterPanelDismiss,
