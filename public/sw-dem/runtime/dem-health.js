@@ -138,22 +138,18 @@ async function guardDemTileHealth(cache, pngBlob, z, x, y, demSource, demProfile
     return { blob: null, demSource, shortCache: true, healthStatus: 'suspect', reason: 'flat-inland' };
   }
 
-  const parentFallback = await tryParentOverzoom(cache, z, x, y, 0, demProfile);
-  if (!parentFallback?.blob) {
+  // Ancestor consistency check — against an ALREADY-AVAILABLE parent only.
+  // This used to run tryParentOverzoom() for every healthy tile: a bicubic
+  // overzoom + PNG encode + decode (~40-60 ms of SW CPU per tile), and, when
+  // no parent was cached, a full recursive parent BUILD (WMS fetch, bypassing
+  // DEM_INFLIGHT) serialised before the child could be served. The stats of
+  // the parent's sub-rectangle answer the same question at ~1 ms; the
+  // expensive overzoom now only runs on the rare anomalous tile below.
+  const parentInfo = await findCachedParentStats(cache, z, x, y, demProfile);
+  if (!parentInfo) {
     return { blob: pngBlob, demSource, shortCache: false, healthStatus: 'ok' };
   }
-
-  let parentElevations;
-  try {
-    parentElevations = await decodeTerrainRGBBlob(parentFallback.blob);
-  } catch {
-    return { blob: pngBlob, demSource, shortCache: false, healthStatus: 'ok' };
-  }
-
-  const parent = summarizeDemElevations(parentElevations);
-  if (!parent.valid) {
-    return { blob: pngBlob, demSource, shortCache: false, healthStatus: 'ok' };
-  }
+  const parent = parentInfo.stats;
 
   const meanDelta = Math.abs(current.mean - parent.mean);
   const collapsedRangeThreshold = Math.max(DEM_HEALTH_MIN_COLLAPSED_RANGE_M, parent.range * 0.15);
@@ -163,6 +159,11 @@ async function guardDemTileHealth(cache, pngBlob, z, x, y, demSource, demProfile
   const hugeOffset = meanDelta >= DEM_HEALTH_MAX_MEAN_DELTA_M;
 
   if (verticalDrop || verticalRise || (collapsedRelief && hugeOffset)) {
+    const parentFallback = await tryParentOverzoom(cache, z, x, y, 0, demProfile);
+    // Same outcome as before when no recovery blob can be produced: keep the tile.
+    if (!parentFallback?.blob) {
+      return { blob: pngBlob, demSource, shortCache: false, healthStatus: 'ok' };
+    }
     console.warn(
       `[sw-dem][health] rejecting anomalous tile ${z}/${x}/${y} src=${demSource} current=[${current.min.toFixed(1)}..${current.max.toFixed(1)}] parent=[${parent.min.toFixed(1)}..${parent.max.toFixed(1)}] meanDelta=${meanDelta.toFixed(1)} -> ${parentFallback.source}`,
     );

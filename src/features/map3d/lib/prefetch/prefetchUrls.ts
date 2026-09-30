@@ -42,14 +42,12 @@ export function buildPrefetchUrls(
   includeChildren: boolean,
   includeParent: boolean,
   slopeOn: boolean = false,
-  altitudeOn: boolean = false,
 ): string[] {
   const urls: string[] = [];
   const cap = (1 << z) - 1;
 
   const pushDerived = (tileZ: number, tileX: number, tileY: number) => {
     if (slopeOn) urls.push(slopePrefetchUrl(map, tileZ, tileX, tileY));
-    if (altitudeOn) urls.push(`/altitude-tiles/${tileZ}/${tileX}/${tileY}?pf=1`);
   };
 
   if (includeRing) {

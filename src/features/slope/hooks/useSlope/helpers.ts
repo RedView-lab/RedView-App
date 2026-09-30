@@ -157,9 +157,12 @@ export function snapshotVisibleTiles(
   }
 }
 
+// Cheap guard — called from high-frequency map events, so it must NOT use
+// map.getStyle() (serialises the whole style on every call). getTerrain /
+// getSource throw while no style is attached, which the catch maps to false.
 export function canStartSlopeWork(map: MapboxMap): boolean {
   try {
-    return Boolean(map.getStyle() && (map.getTerrain()?.source || map.getSource(SLOPE_SOURCE_ID)));
+    return Boolean(map.getTerrain()?.source || map.getSource(SLOPE_SOURCE_ID));
   } catch {
     return false;
   }

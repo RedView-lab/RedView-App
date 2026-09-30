@@ -147,7 +147,6 @@ export function installViewportPrefetch(
 
     const orthoOn = opts.isOrthoActive?.() ?? false;
     const slopeOn = false;
-    const altitudeOn = false;
     const urls = buildPrefetchUrls(
       map,
       z, xMin, yMin, xMax, yMax, anchor, tilted, orthoOn,
@@ -155,7 +154,6 @@ export function installViewportPrefetch(
       /* includeChildren */ true,
       /* includeParent */ true,
       slopeOn,
-      altitudeOn,
     );
 
     if (velocity) {
@@ -208,7 +206,6 @@ export function installViewportPrefetch(
     const radius = Math.max(0, Math.min(3, prewarmOpts.radius ?? 1));
     const orthoOn = prewarmOpts.withOrtho ?? (opts.isOrthoActive?.() ?? false);
     const slopeOn = opts.isSlopeActive?.() ?? false;
-    const altitudeOn = opts.isAltitudeActive?.() ?? false;
     const includeChildren = prewarmOpts.includeChildren ?? true;
 
     const c = lngLatToTile(lng, lat, z);
@@ -226,7 +223,6 @@ export function installViewportPrefetch(
         urls.push(`/dem-tiles/${z}/${x}/${y}?pf=1`);
         if (orthoOn && z >= 11) urls.push(`/ortho-tiles/${z}/${x}/${y}?pf=1`);
         if (slopeOn) urls.push(slopePrefetchUrl(map, z, x, y));
-        if (altitudeOn) urls.push(`/altitude-tiles/${z}/${x}/${y}?pf=1`);
       }
     }
 
@@ -239,7 +235,6 @@ export function installViewportPrefetch(
       includeChildren,
       /* includeParent */ true,
       /* slopeOn */ false,
-      /* altitudeOn */ false,
     );
     for (const u of extras) urls.push(u);
 

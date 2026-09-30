@@ -9,7 +9,6 @@ interface UseSlopeProgressReporterOptions {
   isMapLoaded: boolean;
   enabled: boolean;
   onLoadStatusChange?: OverlayStatusReporter;
-  visibilityDeferredRef: MutableRefObject<boolean>;
   mountedRef: MutableRefObject<boolean>;
 }
 
@@ -18,11 +17,12 @@ export function useSlopeProgressReporter({
   isMapLoaded,
   enabled,
   onLoadStatusChange,
-  visibilityDeferredRef,
   mountedRef,
 }: UseSlopeProgressReporterOptions): void {
   const onLoadStatusChangeRef = useRef(onLoadStatusChange);
-  onLoadStatusChangeRef.current = onLoadStatusChange;
+  useEffect(() => {
+    onLoadStatusChangeRef.current = onLoadStatusChange;
+  }, [onLoadStatusChange]);
 
   useEffect(() => {
     if (!map || !isMapLoaded) return;
@@ -74,7 +74,7 @@ export function useSlopeProgressReporter({
       const total = requested.size;
       const done = loaded.size;
       if (total === 0) {
-        if (visibilityDeferredRef.current || !canStartSlopeWork(map)) {
+        if (!canStartSlopeWork(map)) {
           emit('loading', 5, 'En attente du relief');
           return;
         }
@@ -254,5 +254,5 @@ export function useSlopeProgressReporter({
       if (watchdog) clearTimeout(watchdog);
       onLoadStatusChangeRef.current?.(null);
     };
-  }, [map, isMapLoaded, enabled, mountedRef, visibilityDeferredRef]);
+  }, [map, isMapLoaded, enabled, mountedRef]);
 }

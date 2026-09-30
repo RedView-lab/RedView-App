@@ -3,8 +3,6 @@ export interface ViewportPrefetchOptions {
   isOrthoActive?: () => boolean;
   /** Returns true when the slope overlay layer is visible on the map. */
   isSlopeActive?: () => boolean;
-  /** Returns true when the altitude overlay layer is visible on the map. */
-  isAltitudeActive?: () => boolean;
 }
 
 export interface PrewarmDestinationOptions {

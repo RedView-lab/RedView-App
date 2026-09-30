@@ -200,6 +200,11 @@ function scheduleIGN(fn, purpose, coords) {
       lng = c.lng;
       lat = c.lat;
       hasCoords = true;
+    } else if (coords && Number.isFinite(coords.lng) && Number.isFinite(coords.lat)) {
+      // Direct lng/lat (Mercator-tile WMS requests) — centre-first ordering.
+      lng = coords.lng;
+      lat = coords.lat;
+      hasCoords = true;
     }
     pushIGNEntry({
       fn,
@@ -570,7 +575,16 @@ const terrainWmsInflight = new Map();
 const TERRAIN_WMS_CACHE_MAX = 300;
 const mnsWmsTileCache = new Map();
 const mnsWmsInflight = new Map();
-const MNS_WMS_CACHE_MAX = 300;
+// Raw WMS grids only serve rebuilds of the same tile — the DEM hot tier and
+// CacheStorage answer every normal re-request — so keep this small
+// (96 × 256 KB ≈ 24 MB instead of ~77 MB of SW heap).
+const MNS_WMS_CACHE_MAX = 96;
+
+// Centre of a Mercator tile, used to schedule WMS fetches centre-first.
+function mercatorTileCenterCoords(mercZ, mercX, mercY) {
+  const b = mercatorTileBounds(mercZ, mercX, mercY);
+  return { lng: (b.west + b.east) / 2, lat: (b.north + b.south) / 2 };
+}
 
 function buildHighresTileURL(z, col, row) {
   return (
@@ -713,13 +727,21 @@ function mnsWmsResampleToTile(raw, srcWidth, srcHeight) {
   const out = new Float32Array(DEM_TILE_SIZE * DEM_TILE_SIZE);
   const sx = srcWidth / DEM_TILE_SIZE;
   const sy = srcHeight / DEM_TILE_SIZE;
+  // Column spans depend on x only — compute them once, not once per pixel.
+  const colStart = new Int32Array(DEM_TILE_SIZE);
+  const colEnd = new Int32Array(DEM_TILE_SIZE);
+  for (let x = 0; x < DEM_TILE_SIZE; x++) {
+    const x0 = Math.floor(x * sx);
+    colStart[x] = x0;
+    colEnd[x] = Math.min(srcWidth, Math.max(x0 + 1, Math.ceil((x + 1) * sx)));
+  }
   for (let y = 0; y < DEM_TILE_SIZE; y++) {
     const y0 = Math.floor(y * sy);
     const y1 = Math.min(srcHeight, Math.max(y0 + 1, Math.ceil((y + 1) * sy)));
     const outRow = y * DEM_TILE_SIZE;
     for (let x = 0; x < DEM_TILE_SIZE; x++) {
-      const x0 = Math.floor(x * sx);
-      const x1 = Math.min(srcWidth, Math.max(x0 + 1, Math.ceil((x + 1) * sx)));
+      const x0 = colStart[x];
+      const x1 = colEnd[x];
       let sum = 0;
       let n = 0;
       for (let yy = y0; yy < y1; yy++) {
@@ -868,7 +890,7 @@ async function getTerrainWmsTile(mercZ, mercX, mercY, purpose = PURPOSE_SLOPE_VI
     } finally {
       cleanup();
     }
-  }, purpose).then((result) => {
+  }, purpose, mercatorTileCenterCoords(mercZ, mercX, mercY)).then((result) => {
     if (result === PRUNED_SENTINEL) return null;
     return result;
   }).finally(() => {
@@ -918,12 +940,9 @@ async function getMnsWmsTile(mercZ, mercX, mercY, purpose = null) {
     const buf = await res.arrayBuffer();
     if (buf.byteLength !== srcW * srcH * 4) return null;
     const raw = new Float32Array(buf);
-    let validCount = 0;
-    for (let i = 0; i < raw.length; i++) {
-      const v = raw[i];
-      if (!Number.isNaN(v) && v >= MIN_VALID_ELEVATION_M && v <= MAX_VALID_ELEVATION_M) validCount++;
-    }
-    if (validCount === 0) return null;
+    // No separate validity pre-pass over the raw raster: the resample is
+    // NaN/range-aware, so a raw raster with zero valid samples yields a tile
+    // with zero valid cells and the count below returns null all the same.
     const tiled = mnsWmsResampleToTile(raw, srcW, srcH);
     // After the NaN-aware resample some cells may hold NaN; count what survived
     // so the caller's coverage logic keeps working.
@@ -980,7 +999,7 @@ async function getMnsWmsTile(mercZ, mercX, mercY, purpose = null) {
     } finally {
       cleanup();
     }
-  }, purpose).then((result) => {
+  }, purpose, mercatorTileCenterCoords(mercZ, mercX, mercY)).then((result) => {
     if (result === PRUNED_SENTINEL) return null;
     return result;
   }).finally(() => {

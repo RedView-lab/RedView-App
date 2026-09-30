@@ -8,6 +8,7 @@
     "bench:quick": "tsx --expose-gc script-test-bench/run-all-benchmarks.ts --quick",
     "bench:meteo": "tsx script-test-bench/bench-meteo.ts",
     "bench:pente": "tsx script-test-bench/bench-pente.ts",
+    "bench:dem-sw": "tsx script-test-bench/bench-dem-sw.ts",
     "bench:alti": "tsx script-test-bench/bench-alti.ts",
     "bench:neige": "tsx script-test-bench/bench-neige.ts",
     "bench:brouter": "tsx script-test-bench/bench-brouter.ts",

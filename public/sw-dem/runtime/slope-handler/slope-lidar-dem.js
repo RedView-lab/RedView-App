@@ -5,7 +5,11 @@
 // NEVER initiates independent network downloads of DEM tiles for slope.
 // ---------------------------------------------------------------------------
 
-async function getExistingTerrainDemResponse(z, x, y, demProfile, demCache, sourceDem = '') {
+// opts.allowBuild (default true): when false, only already-available DEM
+// (hot tier / CacheStorage / in-flight terrain fetch) is returned — a miss
+// resolves to null instead of starting a new DEM build.
+async function getExistingTerrainDemResponse(z, x, y, demProfile, demCache, sourceDem = '', opts = {}) {
+  const allowBuild = opts.allowBuild !== false;
   // 0. Fast 30m mode: directly leverage AWS Terrarium DEM tiles
   if (sourceDem === 'fast-30m' || demProfile === 'fast-30m') {
     const awsKey = new Request(`/dem-tiles/${z}/${x}/${y}?rv-dem-profile=fast-30m`);
@@ -85,6 +89,7 @@ async function getExistingTerrainDemResponse(z, x, y, demProfile, demCache, sour
   // We strictly proceed to genuine DEM retrieval via handleDemRequest.
 
   // 7. If not in cache, fetch via handleDemRequest so both 3D terrain and overlays receive elevation data
+  if (!allowBuild) return null;
   try {
     if (typeof handleDemRequest === 'function') {
       const demResp = await handleDemRequest(specificKey, z, x, y, 0, demProfile);

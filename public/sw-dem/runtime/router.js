@@ -143,6 +143,7 @@ self.addEventListener('fetch', (event) => {
       parseInt(altitudeMatch[2], 10),
       parseInt(altitudeMatch[3], 10),
       altitudeZone,
+      resolveDemProfile(url),
     ));
     return;
   }

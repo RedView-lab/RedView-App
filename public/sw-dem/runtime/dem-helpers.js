@@ -116,6 +116,85 @@ function shouldAllowParentOverzoomFallback(z, x, y) {
   return isExpertFallbackRiskTile(z, x, y);
 }
 
+// Elevation stats (min/max/mean) of the part of the nearest ALREADY-AVAILABLE
+// parent tile that covers (z, x, y). Used by the health guard to compare a
+// freshly built tile against its ancestor.
+//
+// Unlike tryParentOverzoom this never builds anything: hot tier and
+// CacheStorage only (no handleDemRequest → no WMS fetch, no recursive parent
+// chain), and no Catmull-Rom overzoom + PNG encode + decode round-trip — the
+// stats are read straight from the parent's sub-rectangle. Returns
+// { stats, source, parentZ } or null when no usable parent is cached.
+async function findCachedParentStats(cache, z, x, y, demProfile = 'default') {
+  if (!shouldAllowParentOverzoomFallback(z, x, y)) return null;
+  const minParentZ = Math.max(0, z - DEM_OVERZOOM_MAX_DEPTH);
+  const levels = [];
+  for (let pZ = z - 1; pZ >= minParentZ; pZ--) levels.push(pZ);
+  if (levels.length === 0) return null;
+
+  // Hot tier first (same Blob identity → decode-cache hit), then a single
+  // parallel round of CacheStorage lookups for the levels that missed.
+  const candidates = levels.map((pZ) => {
+    const key = buildDemCacheKey(pZ, x >> (z - pZ), y >> (z - pZ), demProfile);
+    const hot = (typeof demHotGet === 'function') ? demHotGet(key.url) : null;
+    return { pZ, key, hot };
+  });
+  const matched = await Promise.all(candidates.map((c) => (
+    c.hot ? null : cache.match(c.key).catch(() => null)
+  )));
+
+  for (let i = 0; i < candidates.length; i++) {
+    const { pZ, hot } = candidates[i];
+    let headers;
+    let blobPromise;
+    if (hot) {
+      headers = new Headers(hot.headers);
+      blobPromise = Promise.resolve(hot.blob);
+    } else {
+      const resp = matched[i];
+      if (!resp || resp.status !== 200) continue;
+      headers = resp.headers;
+      blobPromise = resp.blob();
+    }
+    const headerView = { headers };
+    if (shouldSkipUnsafeOverzoomParent(headerView, z, x, y)) continue;
+
+    try {
+      const parentElevations = await decodeTerrainRGBBlob(await blobPromise);
+      const size = Math.round(Math.sqrt(parentElevations.length));
+      const dz = z - pZ;
+      const span = size >> dz;
+      if (span < 1) continue;
+      const x0 = (x - ((x >> dz) << dz)) * span;
+      const y0 = (y - ((y >> dz) << dz)) * span;
+      let min = Infinity;
+      let max = -Infinity;
+      let sum = 0;
+      let count = 0;
+      for (let py = y0; py < y0 + span; py++) {
+        const row = py * size;
+        for (let px = x0; px < x0 + span; px++) {
+          const v = parentElevations[row + px];
+          if (!Number.isFinite(v)) continue;
+          if (v < min) min = v;
+          if (v > max) max = v;
+          sum += v;
+          count++;
+        }
+      }
+      if (count === 0) continue;
+      return {
+        stats: { valid: true, min, max, mean: sum / count, range: max - min },
+        source: headers.get('X-DEM-Source') || 'unknown',
+        parentZ: pZ,
+      };
+    } catch {
+      /* try the next ancestor */
+    }
+  }
+  return null;
+}
+
 async function tryParentOverzoom(cache, z, x, y, depth, demProfile = 'default') {
   if (depth > 0) return null;
   if (!shouldAllowParentOverzoomFallback(z, x, y)) return null;

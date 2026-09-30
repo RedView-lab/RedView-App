@@ -1,24 +1,32 @@
 // ---------------------------------------------------------------------------
-// Altitude tile handler — /altitude-tiles/{z}/{x}/{y}.
+// Altitude tile handler — /altitude-tiles/{z}/{x}/{y}[?rv-dem-profile=terrain][&zone=<hash>]
 //
-// Pipeline mirrors the slope handler:
-//   Strictly reuses the 3D terrain DEM tile (getExistingTerrainDemResponse).
-//   NEVER initiates independent remote network downloads of DEM tiles.
-//   Fast-path: when no analysis-zone masking is needed, directly serves
-//   the 3D DEM Terrain-RGB blob (zero worker decode/encode CPU overhead).
-//   When zone-masked, applies polygon mask via worker pool / in-process builder.
+// Only reached in HD 3D quality (fast-30m streams AWS Terrarium straight to
+// the GPU and never hits the SW — see features/altitude/lib/altitude-source.ts).
 //
-// A hot tier (ALTITUDE_HOT_CACHE) sits in FRONT of CacheStorage so a toggle
-// off/on, pan-back or Mapbox repaint returns a previously served tile in
-// <1 ms instead of paying the 5-25 ms caches.match round-trip.
+// No zone (the common case): a READ-THROUGH ALIAS of the DEM pipeline. The
+// Terrain-RGB DEM blob is served verbatim — Mapbox decodes it on the GPU via
+// raster-color-mix — so there is no decode/encode, and no altitude-specific
+// CacheStorage / hot tier (they only duplicated the DEM bytes). DEM hot cache
+// → CacheStorage → DEM_INFLIGHT coalescing answer almost every request because
+// the page caps the source at ALTITUDE_MAX_BUILD_ZOOM, i.e. the zooms the 3D
+// terrain loads itself. A genuine miss at those zooms joins the terrain's own
+// build (same DEM_INFLIGHT key); above the cap we never build.
+//
+// Zone-masked: unchanged — polygon mask via worker pool / in-process builder,
+// cached under the `?zone=` key.
 // ---------------------------------------------------------------------------
+
+const ALTITUDE_MAX_BUILD_ZOOM = 14;
 
 function isAltitudeWorkCancelled(generation) {
   if (generation === null || generation === undefined) return false;
   return generation !== altitudeCancelGeneration;
 }
 
-async function handleAltitudeRequest(z, x, y, zoneHash = '') {
+async function handleAltitudeRequest(z, x, y, zoneHash = '', demProfile = 'default') {
+  if (!zoneHash) return handleAltitudePassthrough(z, x, y, demProfile);
+
   // ── Analysis-zone cache key ──────────────────────────────────────────
   // `?zone=<hash>` isolates masked from unmasked tiles in CacheStorage and
   // the hot tier (same convention as the slope handler), so a zone edit can
@@ -56,13 +64,13 @@ async function handleAltitudeRequest(z, x, y, zoneHash = '') {
     catch { /* fall through and recompute */ }
   }
 
-  const generation = zoneHash ? null : altitudeCancelGeneration;
+  const generation = null; // zone builds are uncancellable (same as before)
   const work = (async () => {
     const demCache = await caches.open(CACHE_NAME);
 
     // 1. Get existing DEM tile from the 3D terrain cache / in-flight requests (NEVER download DEM for altitude)
     const demResponse = (typeof getExistingTerrainDemResponse === 'function')
-      ? await getExistingTerrainDemResponse(z, x, y, 'default', demCache)
+      ? await getExistingTerrainDemResponse(z, x, y, demProfile, demCache)
       : null;
 
     if (isAltitudeWorkCancelled(generation) || !demResponse || demResponse.status !== 200) {
@@ -75,11 +83,6 @@ async function handleAltitudeRequest(z, x, y, zoneHash = '') {
         return transparentTileResponse();
       }
 
-      // Fast-path: When there is no polygon analysis zone masking required,
-      // the 3D terrain DEM blob is ALREADY bit-exact Terrain-RGB! Mapbox's
-      // raster-color-mix directly decodes Terrain-RGB meters on the GPU.
-      // We directly wrap and serve demBlob, avoiding CPU decodes, Float32Array allocations,
-      // and PNG deflate recompression entirely.
       let altitudeBlob = null;
       if (!zoneRing) {
         altitudeBlob = demBlob;
@@ -150,5 +153,26 @@ async function handleAltitudeRequest(z, x, y, zoneHash = '') {
     if (ALTITUDE_INFLIGHT.get(inflightKey) === work) {
       ALTITUDE_INFLIGHT.delete(inflightKey);
     }
+  }
+}
+
+async function handleAltitudePassthrough(z, x, y, demProfile) {
+  const generation = altitudeCancelGeneration;
+  try {
+    const demCache = await caches.open(CACHE_NAME);
+    const demResponse = (typeof getExistingTerrainDemResponse === 'function')
+      ? await getExistingTerrainDemResponse(z, x, y, demProfile, demCache, '', {
+          allowBuild: z <= ALTITUDE_MAX_BUILD_ZOOM,
+        })
+      : null;
+    if (generation !== altitudeCancelGeneration || !demResponse || demResponse.status !== 200) {
+      return transparentTileResponse();
+    }
+    const headers = new Headers(demResponse.headers);
+    headers.set('X-Tile-Type', 'altitude');
+    return new Response(demResponse.body, { status: 200, headers });
+  } catch (err) {
+    console.error('[altitude]', z, x, y, err);
+    return transparentTileResponse();
   }
 }

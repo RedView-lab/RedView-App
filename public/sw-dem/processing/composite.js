@@ -50,7 +50,9 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y, opts = {}) {
       if (!mbElevations || mbElevations.length === 0) return encodeTerrainRGBPng(ignElevations);
     }
 
-    // Defensive despike of Mapbox before sampling offsets.
+    // Defensive despike of Mapbox before sampling offsets. Work on a copy:
+    // decoded grids are shared through DECODED_TERRAIN_RGB_CACHE.
+    mbElevations = new Float32Array(mbElevations);
     const mbSize = Math.round(Math.sqrt(mbElevations.length));
     {
       const mbCov = new Uint8Array(mbElevations.length).fill(1);
@@ -117,6 +119,8 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y, opts = {}) {
   // mapbox.js, a rogue outlier in the Mapbox DEM would drag the IDW offset
   // below by hundreds of metres and reintroduce visible spikes along the
   // blend ring. 3×3 median clamp is cheap and preserves real relief.
+  // Copy first: decoded grids are shared through DECODED_TERRAIN_RGB_CACHE.
+  mbElevations = new Float32Array(mbElevations);
   {
     const mbSize = Math.round(Math.sqrt(mbElevations.length));
     const mbCov = new Uint8Array(mbElevations.length).fill(1);

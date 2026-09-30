@@ -25,6 +25,13 @@
 // Current: dem-tiles-v48-lidar-wms-aspect / radar-v2 / dem-negative-v29
 // 2026-08 zone-gated overlays: slope/altitude tiles may carry ?zone=<hash>
 // (masked, separate cache keys); analysis-zone registry + per-pixel mask (v5 Uniform Fast LiDAR).
+// 2026-09-30 altitude-passthrough: /altitude-tiles (HD only) is a read-through
+// alias of the DEM cache for the active profile — no altitude cache writes,
+// no DEM builds above z14.
+// 2026-09-30 hd-perf-1: cache-only health guard (no parent builds / overzoom
+// round-trip), bounded decode LRU seeded by the encoder, centre-first WMS
+// scheduling, static routes (non-tile requests bypass the SW). Tile bytes
+// unchanged — MAP_CACHE_EPOCH intentionally not bumped.
 // ---------------------------------------------------------------------------
 
 const swModuleEpoch = new URL(self.location.href).searchParams.get('rv-map-cache-epoch') || 'base';

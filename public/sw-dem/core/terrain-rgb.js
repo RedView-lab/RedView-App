@@ -42,7 +42,8 @@ function _pngChunk(type, data) {
 }
 
 async function buildRawPng(width, height, rgba) {
-  // Build raw scanlines: filter-byte(0) + row RGBA data per row
+  // Build raw scanlines: filter-byte(0) + row RGBA data per row.
+  // `set(subarray)` is a native memcpy — ~10x faster than a JS byte loop.
   const rowLen = width * 4;
   const rowBytes = 1 + rowLen;
   const raw = new Uint8Array(height * rowBytes);
@@ -50,12 +51,13 @@ async function buildRawPng(width, height, rgba) {
     const off = y * rowBytes;
     const srcOff = y * rowLen;
     raw[off] = 0; // filter: None
-    // Direct copy without allocating 256 subarray views
-    for (let i = 0; i < rowLen; i++) {
-      raw[off + 1 + i] = rgba[srcOff + i];
-    }
+    raw.set(rgba.subarray(srcOff, srcOff + rowLen), off + 1);
   }
+  return buildPngFromScanlines(width, height, raw);
+}
 
+// Assemble an RGBA PNG from pre-built scanlines (filter byte + row data).
+async function buildPngFromScanlines(width, height, raw) {
   // Compress with deflate via CompressionStream
   const cs = new CompressionStream('deflate');
   const writer = cs.writable.getWriter();
@@ -184,21 +186,40 @@ function getFlatDemTile() {
   return _flatDemTilePromise;
 }
 
+// Writes the Terrain-RGB scanlines directly (filter byte 0 + RGBA) — same
+// deflate input as buildRawPng(rgba), so the PNG bytes are identical, minus
+// one 256 KB intermediate buffer and its copy loop.
+//
+// The same loop also produces the exact Float32 grid a later decode of this
+// blob would return (`-10000 + val * 0.1`, computed with the same integer
+// `val`), and seeds DECODED_TERRAIN_RGB_CACHE with it: the health guard,
+// the overzoom flat check and slope/altitude decodes of a freshly built tile
+// then cost nothing.
 async function encodeTerrainRGBPng(elevations) {
   const size = DEM_TILE_SIZE;
-  const rgba = new Uint8Array(size * size * 4);
+  const rowBytes = 1 + size * 4;
+  const raw = new Uint8Array(size * rowBytes); // filter bytes stay 0 (None)
+  const decoded = new Float32Array(size * size);
 
-  for (let i = 0; i < elevations.length; i++) {
-    const height = sanitizeElevation(elevations[i]);
-    const val = Math.max(0, Math.min(16777215, Math.round((height + 10000) * 10)));
-    const idx = i * 4;
-    rgba[idx]     = (val >> 16) & 0xff;
-    rgba[idx + 1] = (val >>  8) & 0xff;
-    rgba[idx + 2] =  val        & 0xff;
-    rgba[idx + 3] = 255;
+  for (let y = 0; y < size; y++) {
+    let o = y * rowBytes + 1;
+    const rowStart = y * size;
+    for (let x = 0; x < size; x++) {
+      const i = rowStart + x;
+      const height = sanitizeElevation(elevations[i]);
+      const val = Math.max(0, Math.min(16777215, Math.round((height + 10000) * 10)));
+      raw[o]     = (val >> 16) & 0xff;
+      raw[o + 1] = (val >>  8) & 0xff;
+      raw[o + 2] =  val        & 0xff;
+      raw[o + 3] = 255;
+      o += 4;
+      decoded[i] = -10000 + val * 0.1;
+    }
   }
 
-  return buildRawPng(size, size, rgba);
+  const blob = await buildPngFromScanlines(size, size, raw);
+  decodedTerrainRgbPut(blob, decoded);
+  return blob;
 }
 
 // ── Decode Terrain-RGB PNG → Float32 elevations ───────────────────────
@@ -215,11 +236,33 @@ async function encodeTerrainRGBPng(elevations) {
 // loop for a 256² tile, more for 512² Mapbox). On a 100-tile zoom-in
 // with slope+altitude both on, that's ~2-4 s of SW-thread CPU saved.
 //
-// WeakMap means the cache evicts itself the moment the underlying blob
-// is GC'd — no manual budget, no leaks. Returns a SHARED Float32Array,
-// so callers must NOT mutate it in place; every reader I audited only
-// reads (slope/altitude/composite/overzoom all sample, never write).
-const DECODED_TERRAIN_RGB_CACHE = new WeakMap();
+// Bounded LRU (Map in insertion order), NOT a WeakMap: DEM_HOT_CACHE keeps
+// up to 2048 tile blobs alive, and a WeakMap pinned one 256 KB Float32 grid
+// per blob (up to ~512 MB of SW heap) that was never read again — hot-tier
+// reads go through Response.blob(), which yields a new Blob identity.
+// 128 entries (~32 MB) still covers every burst reuse (guard, overzoom,
+// slope neighbours, sibling parents). Returns a SHARED Float32Array, so
+// callers must NOT mutate it in place (composite.js copies before despike).
+const DECODED_TERRAIN_RGB_CACHE_MAX = 128;
+const DECODED_TERRAIN_RGB_CACHE = new Map();
+
+function decodedTerrainRgbGet(blob) {
+  const entry = DECODED_TERRAIN_RGB_CACHE.get(blob);
+  if (!entry) return null;
+  DECODED_TERRAIN_RGB_CACHE.delete(blob);
+  DECODED_TERRAIN_RGB_CACHE.set(blob, entry);
+  return entry;
+}
+
+function decodedTerrainRgbPut(blob, elevations) {
+  if (!blob || !elevations) return;
+  DECODED_TERRAIN_RGB_CACHE.delete(blob);
+  DECODED_TERRAIN_RGB_CACHE.set(blob, elevations);
+  while (DECODED_TERRAIN_RGB_CACHE.size > DECODED_TERRAIN_RGB_CACHE_MAX) {
+    const oldest = DECODED_TERRAIN_RGB_CACHE.keys().next().value;
+    DECODED_TERRAIN_RGB_CACHE.delete(oldest);
+  }
+}
 
 let _sharedOffscreenCanvas = null;
 let _sharedOffscreenCtx = null;
@@ -243,10 +286,10 @@ function getSharedOffscreenCtx(width, height) {
 }
 
 async function decodeTerrainRGBBlob(blob) {
-  const cached = DECODED_TERRAIN_RGB_CACHE.get(blob);
+  const cached = decodedTerrainRgbGet(blob);
   if (cached) return cached;
   const elevations = await decodeTerrainRGBBlobUncached(blob);
-  try { DECODED_TERRAIN_RGB_CACHE.set(blob, elevations); } catch { /* ignore */ }
+  decodedTerrainRgbPut(blob, elevations);
   return elevations;
 }
 

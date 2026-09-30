@@ -6,6 +6,12 @@ import type {
 } from '../types';
 
 export const MAX_ALTITUDE_M = 5000;
+/**
+ * Lower bound of the raster-color lookup. Kept slightly below 0 so sea /
+ * bathymetry (negative in Terrarium) lands in a transparent bin instead of
+ * being clamped onto the first land colour.
+ */
+export const MIN_ALTITUDE_M = -100;
 
 const ALTITUDE_STOPS: Record<AltitudeScaleSettingKey, number[]> = {
   '2 couleurs': [0, 1500],
@@ -93,7 +99,9 @@ export function buildAltitudeColorExpression(
     return expr;
   }
 
-  const expr: unknown[] = ['interpolate', ['linear'], ['raster-value']];
+  const expr: unknown[] = ['interpolate', ['linear'], ['raster-value'], MIN_ALTITUDE_M, 'transparent'];
+  const first = categories[0];
+  if (first && first.minMeters > MIN_ALTITUDE_M + 1) expr.push(first.minMeters - 1, 'transparent');
   for (const cat of categories) {
     expr.push(cat.minMeters, colorOf(cat));
   }

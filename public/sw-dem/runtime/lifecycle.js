@@ -480,7 +480,45 @@ function purgeManagedMapCaches({ includeCurrent = false } = {}) {
   ));
 }
 
+// ── Static routing (Service Worker Static Routing API, Chrome/Edge 123+) ──
+// router.js only answers the five tile families below; every other request
+// (Mapbox satellite/vector tiles, sprites, glyphs, API calls, app assets)
+// falls through to the network. Without routes the browser still dispatches
+// each of those to the SW thread first — so while the SW is busy building a
+// 0.40 m DEM tile, or is being restarted after idle termination (~45
+// importScripts), satellite imagery waits behind it. Declaring the same
+// split as static routes lets the browser send them straight to the network.
+// Same behaviour as today; browsers without the API (Safari, Firefox) ignore
+// it. Must never fail the install (see comment below).
+const SW_FETCH_EVENT_PATHS = [
+  '/dem-tiles/*',
+  '/ortho-tiles/*',
+  '/slope-tiles/*',
+  '/altitude-tiles/*',
+  '/radar-tiles/*',
+];
+
+function registerStaticRoutes(e) {
+  if (typeof e.addRoutes !== 'function' || typeof URLPattern !== 'function') {
+    return Promise.resolve();
+  }
+  try {
+    const routes = SW_FETCH_EVENT_PATHS.map((pathname) => ({
+      condition: { urlPattern: new URLPattern({ pathname }) },
+      source: 'fetch-event',
+    }));
+    routes.push({ condition: { urlPattern: new URLPattern({}) }, source: 'network' });
+    return Promise.resolve(e.addRoutes(routes)).catch((err) => {
+      console.warn('[sw-dem] install: static routes rejected (non-fatal):', err);
+    });
+  } catch (err) {
+    console.warn('[sw-dem] install: static routes unavailable (non-fatal):', err);
+    return Promise.resolve();
+  }
+}
+
 self.addEventListener('install', (e) => {
+  const staticRoutes = registerStaticRoutes(e);
   // CRITICAL: install must NEVER hinge on a network fetch. `cache.add()`
   // rejects on any transient hiccup (offline, 5xx, slow proxy) or non-ok
   // response for /france-border.json. If install rejects, the SW becomes
@@ -490,7 +528,8 @@ self.addEventListener('install', (e) => {
   // is only needed for ortho clipping and is loaded lazily by
   // ensureFrancePoly() on demand anyway, so prefetch failure is non-fatal.
   e.waitUntil(
-    caches.open(STATIC_CACHE_NAME)
+    staticRoutes
+      .then(() => caches.open(STATIC_CACHE_NAME))
       .then((cache) => cache.add('/france-border.json'))
       .then(() => ensureFrancePoly())
       .catch((err) => {

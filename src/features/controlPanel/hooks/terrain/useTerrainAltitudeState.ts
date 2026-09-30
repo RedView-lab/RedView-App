@@ -1,20 +1,28 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import {
   buildAltitudeCategories,
   altitudeBandCountFromSetting,
   clampAltitudeBreakpoints,
-} from '@/features/altitude/lib/altitude-config';
-import {
   loadAltitudeState,
   saveAltitudeState,
   loadAltitudeBreakpoints,
   saveAltitudeBreakpoints,
-} from '@/features/altitude/lib/altitude-persist';
-import { useAltitude } from '@/features/altitude/hooks/useAltitude';
-import type { AltitudeColorMode, AltitudeScaleSettingKey } from '@/features/altitude/types';
+  useAltitude,
+  type AltitudeColorMode,
+  type AltitudeScaleSettingKey,
+  type AltitudeTileSourceOptions,
+} from '@/features/altitude';
 import type { OverlayStatusReporter } from '@/features/map3d';
+import {
+  getActiveDem3dQuality,
+  subscribeDem3dQuality,
+} from '@/features/map3d/lib/dem3dQualityBus';
+import {
+  getActiveDemProfilePreference,
+  subscribeDemProfilePreference,
+} from '@/features/map3d/lib/demProfileBus';
 
 import type { ControlPanelPersistedState } from '../../lib/persistedState';
 import type {
@@ -141,8 +149,16 @@ export function useTerrainAltitudeState({
     updateProjectControlPanel,
   ]);
 
-  // ── Zone-gated altitude overlay ──────────────────────────────────────
-  const altitudeSourceOptions = useMemo(() => ({ zone: null }), []);
+  // ── Altitude source follows the 3D terrain DEM ───────────────────────
+  // The overlay re-reads the exact tiles the terrain streams (AWS Terrarium
+  // in fast-30m, SW DEM cache for the active profile in HD) — never a second
+  // DEM pipeline.
+  const dem3dQuality = useSyncExternalStore(subscribeDem3dQuality, getActiveDem3dQuality);
+  const demProfile = useSyncExternalStore(subscribeDemProfilePreference, getActiveDemProfilePreference);
+  const altitudeSourceOptions = useMemo<AltitudeTileSourceOptions>(
+    () => ({ zone: null, quality: dem3dQuality, profile: demProfile }),
+    [dem3dQuality, demProfile],
+  );
 
   useAltitude(
     isMapLoaded ? map : null,
