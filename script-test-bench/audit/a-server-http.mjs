@@ -16,6 +16,7 @@ import https from 'node:https';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import zlib from 'node:zlib';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const args = Object.fromEntries(
@@ -92,7 +93,19 @@ function record(level, id, label, detail) {
 }
 const check = (cond, id, label, detail) => record(cond ? 'PASS' : 'FAIL', id, label, detail);
 const h = (res, name) => res.headers[name.toLowerCase()];
-const isHtmlBody = (res) => /^\s*<!doctype html/i.test(res.body.toString('utf8', 0, 64));
+// Corps décodé selon Content-Encoding (le serveur compresse désormais les statiques).
+function decodedBody(res) {
+  const enc = h(res, 'content-encoding');
+  try {
+    if (enc === 'br') return zlib.brotliDecompressSync(res.body);
+    if (enc === 'gzip') return zlib.gunzipSync(res.body);
+    if (enc === 'deflate') return zlib.inflateSync(res.body);
+  } catch {
+    // corps tronqué (maxBodyBytes) : on garde les octets bruts
+  }
+  return res.body;
+}
+const isHtmlBody = (res) => /^\s*<!doctype html/i.test(decodedBody(res).toString('utf8', 0, 64));
 
 function securityHeaders(res, id, { expectCsp }) {
   const missing = [];
@@ -123,13 +136,13 @@ async function main() {
   record('INFO', 'html./.csp', 'CSP length / unsafe-eval', `${csp.length} chars; unsafe-eval=${/'unsafe-eval'/.test(csp)}; frame-ancestors=${/frame-ancestors 'none'/.test(csp)}`);
   record('INFO', 'html./.enc', 'content-encoding / etag / last-modified', `${h(home, 'content-encoding') || 'none'} / ${h(home, 'etag') || 'none'} / ${h(home, 'last-modified') || 'none'}`);
 
-  const html = home.body.toString('utf8');
+  const html = decodedBody(home).toString('utf8');
   const entry = /<script[^>]+type="module"[^>]+src="(\/assets\/[^"]+\.js)"/.exec(html)?.[1];
   const css = /<link[^>]+rel="stylesheet"[^>]+href="(\/assets\/[^"]+\.css)"/.exec(html)?.[1];
   record('INFO', 'html./.entry', 'entry chunk', entry || 'NOT FOUND');
 
   const viewer = await raw('GET', '/viewer');
-  check(viewer.status === 200 && isHtmlBody(viewer) && /viewer/i.test(viewer.body.toString()), 'html./viewer', 'GET /viewer → viewer.html', `status=${viewer.status}`);
+  check(viewer.status === 200 && isHtmlBody(viewer) && /viewer/i.test(decodedBody(viewer).toString()), 'html./viewer', 'GET /viewer → viewer.html', `status=${viewer.status}`);
   securityHeaders(viewer, 'html./viewer', { expectCsp: true });
   check(/no-store|no-cache/.test(h(viewer, 'cache-control') || ''), 'html./viewer.cache', 'viewer.html not cached', `cache-control=${h(viewer, 'cache-control')}`);
 
@@ -233,7 +246,7 @@ async function main() {
       ];
   for (const p of traversal) {
     const r = await raw('GET', p);
-    const leaked = leakRe.test(r.body.toString('utf8'));
+    const leaked = leakRe.test(decodedBody(r).toString('utf8'));
     const ok = !leaked && (r.status >= 400 || isHtmlBody(r));
     check(ok, `trav.${p}`.slice(0, 22), `GET ${p}`, `status=${r.status} type=${h(r, 'content-type') || '-'} leak=${leaked} body=${JSON.stringify(r.body.toString('utf8', 0, 60))}`);
   }

@@ -1,6 +1,8 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
+import { promisify } from 'node:util';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { recolorRadarPng } from './server/radar-recolor.mjs';
 import { generateSlopeTile, generateAltitudeTile } from './server/terrain-tiles.mjs';
@@ -44,7 +46,24 @@ const MIME_TYPES = {
   '.ttf': 'font/ttf',
   '.wasm': 'application/wasm',
   '.brf': 'text/plain; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
 };
+
+// ── Compression des statiques (le proxy amont ne compresse pas) ─────────────
+const brotliCompressAsync = promisify(zlib.brotliCompress);
+const gzipAsync = promisify(zlib.gzip);
+const COMPRESSIBLE_EXTENSIONS = new Set(['.html', '.js', '.mjs', '.css', '.json', '.svg', '.wasm', '.txt', '.brf']);
+const MIN_COMPRESS_BYTES = 1024;
+// Au-delà, on diffuse le fichier brut en flux plutôt que de le bufferiser.
+const MAX_COMPRESS_BYTES = 32 * 1024 * 1024;
+// Brotli 9 : bon ratio, ~0,3 s pour 3 MB ; 5 au-delà de 8 MB (chunk d'index LiDAR NZ).
+const BROTLI_HIGH_QUALITY_MAX_BYTES = 8 * 1024 * 1024;
+// Cache mémoire LRU des variantes compressées, borné en octets. Clé incluant
+// taille + mtime : un fichier remplacé n'est jamais servi périmé.
+const COMPRESSED_CACHE_MAX_BYTES = 128 * 1024 * 1024;
+const compressedCache = new Map();
+const compressionsInFlight = new Map();
+let compressedCacheBytes = 0;
 
 export const REDVIEW_CSP_HEADER = [
   "default-src 'self'",
@@ -88,6 +107,69 @@ function looksLikeStaticAsset(pathname) {
   if (pathname.startsWith('/project/')) return false;
   const lastSegment = pathname.slice(pathname.lastIndexOf('/') + 1);
   return /\.[a-z0-9]+$/i.test(lastSegment);
+}
+
+/**
+ * Choisit l'encodage d'après Accept-Encoding (q-values respectées, `*`
+ * compris) : brotli de préférence, sinon gzip, sinon identité (null).
+ */
+function negotiateEncoding(acceptEncoding) {
+  if (!acceptEncoding) return null;
+  const weights = new Map();
+  for (const part of String(acceptEncoding).split(',')) {
+    const [rawToken, ...params] = part.split(';');
+    const token = rawToken.trim().toLowerCase();
+    if (!token) continue;
+    let q = 1;
+    for (const param of params) {
+      const m = /^\s*q\s*=\s*([0-9.]+)\s*$/i.exec(param);
+      if (m) q = Number(m[1]);
+    }
+    weights.set(token, Number.isFinite(q) ? q : 0);
+  }
+  const weightOf = (encoding) => weights.get(encoding) ?? weights.get('*') ?? 0;
+  const br = weightOf('br');
+  const gzip = weightOf('gzip');
+  if (br > 0 && br >= gzip) return 'br';
+  if (gzip > 0) return 'gzip';
+  return null;
+}
+
+/** Variante compressée d'un fichier, mise en cache (LRU borné, dédoublonnage des compressions concurrentes). */
+function getCompressedFile(filePath, stat, encoding) {
+  const key = `${encoding}:${stat.size}:${Math.floor(stat.mtimeMs)}:${filePath}`;
+  const cached = compressedCache.get(key);
+  if (cached) {
+    compressedCache.delete(key);
+    compressedCache.set(key, cached);
+    return Promise.resolve(cached);
+  }
+  const inFlight = compressionsInFlight.get(key);
+  if (inFlight) return inFlight;
+
+  const work = (async () => {
+    const raw = await fs.promises.readFile(filePath);
+    const compressed = encoding === 'br'
+      ? await brotliCompressAsync(raw, {
+        params: {
+          [zlib.constants.BROTLI_PARAM_QUALITY]: raw.length > BROTLI_HIGH_QUALITY_MAX_BYTES ? 5 : 9,
+          [zlib.constants.BROTLI_PARAM_SIZE_HINT]: raw.length,
+        },
+      })
+      : await gzipAsync(raw, { level: 9 });
+    if (compressed.length <= COMPRESSED_CACHE_MAX_BYTES / 4) {
+      compressedCache.set(key, compressed);
+      compressedCacheBytes += compressed.length;
+      while (compressedCacheBytes > COMPRESSED_CACHE_MAX_BYTES && compressedCache.size > 0) {
+        const [oldestKey, oldest] = compressedCache.entries().next().value;
+        compressedCache.delete(oldestKey);
+        compressedCacheBytes -= oldest.length;
+      }
+    }
+    return compressed;
+  })().finally(() => compressionsInFlight.delete(key));
+  compressionsInFlight.set(key, work);
+  return work;
 }
 
 /** ETag faible dérivé de la taille et de la date de modification. */
@@ -270,8 +352,15 @@ const server = http.createServer(async (req, res) => {
       res.setHeader('Cache-Control', 'public, max-age=86400, must-revalidate');
     }
 
+    const compressible = COMPRESSIBLE_EXTENSIONS.has(ext)
+      && stat.size >= MIN_COMPRESS_BYTES
+      && stat.size <= MAX_COMPRESS_BYTES;
+    const encoding = compressible ? negotiateEncoding(req.headers['accept-encoding']) : null;
+    if (compressible) res.setHeader('Vary', 'Accept-Encoding');
+
     if (!isHtml) {
-      const etag = buildStaticEtag(stat);
+      // Une variante par encodage : l'ETag doit les distinguer.
+      const etag = buildStaticEtag(stat, encoding ?? '');
       res.setHeader('ETag', etag);
       res.setHeader('Last-Modified', stat.mtime.toUTCString());
       if (isNotModified(req, etag, stat.mtime)) {
@@ -279,6 +368,13 @@ const server = http.createServer(async (req, res) => {
         res.statusCode = 304;
         return res.end();
       }
+    }
+
+    if (encoding) {
+      const body = await getCompressedFile(filePath, stat, encoding);
+      res.setHeader('Content-Encoding', encoding);
+      res.setHeader('Content-Length', body.length);
+      return req.method === 'HEAD' ? res.end() : res.end(body);
     }
 
     res.setHeader('Content-Length', stat.size);
