@@ -126,6 +126,8 @@ export const dashboardTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Enregistrement…', en: 'Saving…' },
   { fr: 'Enregistré', en: 'Saved' },
   { fr: 'Échec de l’enregistrement', en: 'Save failed' },
+  { fr: 'Synchronisation en attente', en: 'Sync pending' },
+  { fr: 'Ce projet a été modifié sur un autre appareil. Remplacer la version du cloud par la vôtre ? (Annuler : vos modifications restent sur cet appareil.)', en: 'This project was modified on another device. Replace the cloud version with yours? (Cancel: your changes stay on this device.)' },
   { fr: 'Enregistrer le projet', en: 'Save project' },
   { fr: 'Enregistrer le projet (Ctrl+S)', en: 'Save project (Ctrl+S)' },
   { fr: 'Retour au gestionnaire en cours', en: 'Returning to project browser' },

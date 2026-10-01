@@ -6,3 +6,4 @@ export * from './folders';
 export * from './fitFiles';
 export * from './thumbnails';
 export * from './errors';
+export * from './syncStatus';

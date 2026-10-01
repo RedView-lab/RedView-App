@@ -21,7 +21,7 @@ import {
   Query,
   Role,
 } from '@/shared/services/appwrite';
-import { translateAppText } from '@/shared/i18n';
+import { translateAppText } from '@/shared/i18n/config';
 import { logger } from '@/shared/lib/logger';
 import {
   idbDeleteProject,

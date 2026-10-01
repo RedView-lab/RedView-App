@@ -192,6 +192,23 @@ export function readProjectCache(projectId: string): LocalProjectCacheEntry | nu
   }
 }
 
+/**
+ * Instantané complet (store IndexedDB `project_cache`) uniquement, jamais la
+ * copie localStorage compactée (sans traces d'origine / POI) : une version
+ * compactée ne doit jamais être rouverte puis renvoyée au cloud.
+ */
+export async function readFullProjectCacheAsync(projectId: string): Promise<LocalProjectCacheEntry | null> {
+  try {
+    const idbEntry = await idbGetProjectCache(projectId);
+    if (idbEntry?.project && idbEntry.ownerId === getCachedCurrentUserIdSync()) {
+      return { ownerId: idbEntry.ownerId, cachedAt: idbEntry.cachedAt, project: idbEntry.project };
+    }
+  } catch {
+    // pas d'IndexedDB
+  }
+  return null;
+}
+
 export async function readProjectCacheAsync(projectId: string): Promise<LocalProjectCacheEntry | null> {
   try {
     const idbEntry = await idbGetProjectCache(projectId);

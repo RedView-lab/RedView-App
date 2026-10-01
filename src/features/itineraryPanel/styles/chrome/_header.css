@@ -108,6 +108,24 @@
   white-space: nowrap;
 }
 
+/* État de synchronisation cloud (attente hors-ligne / erreur), sous le titre. */
+.rvi-header__sync-message {
+  flex: 1 1 100%;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rvi-header__sync-message.is-pending {
+  color: #fcd9a0;
+}
+.rvi-header__sync-message.is-error {
+  color: #ffd3d3;
+}
+
 .rvi-header__actions {
   display: flex;
   gap: 12px;
@@ -148,6 +166,11 @@
 .rvi-header__save.is-saved:hover {
   background: var(--rvi-bg-chip);
   color: var(--rvi-text-dim);
+}
+.rvi-header__save.is-pending,
+.rvi-header__save.is-pending:hover {
+  background: rgba(146, 64, 14, 0.36);
+  color: #fcd9a0;
 }
 .rvi-header__save.is-error,
 .rvi-header__save.is-error:hover {

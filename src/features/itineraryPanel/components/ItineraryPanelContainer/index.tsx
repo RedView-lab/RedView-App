@@ -47,7 +47,8 @@ import {
   dispatchSelectPoiOnChart,
   listenOpenPoiOnMap,
 } from '@/features/poi/lib/chartPoiSyncBridge';
-import { deleteProjectItineraryFitFiles } from '@/shared/utils/projects';
+import { deleteProjectItineraryFitFiles, isProjectCloudError } from '@/shared/utils/projects';
+import { useProjectSyncStatus } from '@/shared/hooks/useProjectSyncStatus';
 import type {
   Itinerary,
   ItineraryProject,
@@ -77,7 +78,7 @@ interface ItineraryPanelContainerProps {
   isResizing?: boolean;
   isReturningToBrowser?: boolean;
   onBackToHome?: () => void;
-  onSaveProject?: () => Promise<ItineraryProject | null>;
+  onSaveProject?: (options?: { force?: boolean }) => Promise<ItineraryProject | null>;
   pausesEnabled?: boolean;
   waypointsEnabled?: boolean;
   poisRouteEnabled?: boolean;
@@ -133,7 +134,9 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   const addButtonRef = useRef<HTMLButtonElement | null>(null);
   const [pendingCorridorFor, setPendingCorridorFor] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<ProjectSaveStatus>('idle');
+  const [saveErrorMessage, setSaveErrorMessage] = useState<string | null>(null);
   const saveStatusTimerRef = useRef<number | null>(null);
+  const syncStatus = useProjectSyncStatus();
   const { t } = useAppI18n();
 
   const active = useMemo(
@@ -875,23 +878,58 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
       saveStatusTimerRef.current = null;
     }
     setSaveStatus('saving');
+    setSaveErrorMessage(null);
     let nextStatus: ProjectSaveStatus;
     try {
-      const saved = await onSaveProject();
-      if (saved) {
-        setProject((p) => ({ ...p, savedAt: saved.savedAt, sizeBytes: saved.sizeBytes }));
+      let saved: ItineraryProject | null;
+      try {
+        saved = await onSaveProject();
+      } catch (error) {
+        // Version cloud modifiée sur un autre appareil : écraser seulement sur confirmation.
+        if (
+          isProjectCloudError(error)
+          && error.kind === 'conflict'
+          && window.confirm(t('Ce projet a été modifié sur un autre appareil. Remplacer la version du cloud par la vôtre ? (Annuler : vos modifications restent sur cet appareil.)'))
+        ) {
+          saved = await onSaveProject({ force: true });
+        } else {
+          throw error;
+        }
+      }
+      const savedProject = saved;
+      if (savedProject) {
+        setProject((p) => ({ ...p, savedAt: savedProject.savedAt, sizeBytes: savedProject.sizeBytes }));
       }
       nextStatus = 'saved';
     } catch (error) {
       console.error('[ItineraryPanel] project save failed', error);
+      setSaveErrorMessage(
+        isProjectCloudError(error) ? t(error.message) : t('Échec de l’enregistrement'),
+      );
       nextStatus = 'error';
     }
     setSaveStatus(nextStatus);
     saveStatusTimerRef.current = window.setTimeout(() => {
       saveStatusTimerRef.current = null;
       setSaveStatus('idle');
-    }, nextStatus === 'error' ? 4000 : 2000);
-  }, [onSaveProject, saveStatus, setProject]);
+    }, nextStatus === 'error' ? 6000 : 2000);
+  }, [onSaveProject, saveStatus, setProject, t]);
+
+  // Indicateur : résultat du bouton Enregistrer, sinon état de l'autosave
+  // (hors-ligne en attente / erreur persistante) du projet affiché.
+  const autosaveStatus = syncStatus.projectId != null && syncStatus.projectId === projectId ? syncStatus : null;
+  const displayedSaveStatus: ProjectSaveStatus = saveStatus !== 'idle'
+    ? saveStatus
+    : autosaveStatus?.state === 'pending-offline'
+      ? 'pending'
+      : autosaveStatus?.state === 'error'
+        ? 'error'
+        : 'idle';
+  const displayedSaveMessage = saveStatus !== 'idle'
+    ? saveErrorMessage
+    : autosaveStatus?.message
+      ? t(autosaveStatus.message)
+      : null;
 
   const handleSaveProjectRef = useRef(handleSaveProject);
   handleSaveProjectRef.current = handleSaveProject;
@@ -917,7 +955,8 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         isReturningToBrowser={isReturningToBrowser}
         onBackToHome={onBackToHome}
         onSaveProject={onSaveProject ? () => { void handleSaveProject(); } : undefined}
-        saveStatus={saveStatus}
+        saveStatus={displayedSaveStatus}
+        saveStatusMessage={displayedSaveMessage ?? undefined}
         onShareProject={() => { }}
         onRenameProject={(next) => setProject((p) => ({ ...p, name: next }))}
         onSelectItinerary={(id) =>

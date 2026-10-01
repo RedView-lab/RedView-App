@@ -36,6 +36,23 @@ class MemStorage {
 const g = globalThis as Record<string, unknown>;
 g.window = globalThis;
 g.localStorage = new MemStorage();
+// Événements window minimalistes (online, pagehide…) pour le hook d'autosave (scénarios H*).
+const winListeners = new Map<string, Set<(ev: unknown) => void>>();
+g.addEventListener = (type: string, fn: (ev: unknown) => void) => {
+  if (!winListeners.has(type)) winListeners.set(type, new Set());
+  winListeners.get(type)!.add(fn);
+};
+g.removeEventListener = (type: string, fn: (ev: unknown) => void) => { winListeners.get(type)?.delete(fn); };
+g.dispatchEvent = (ev: { type: string }) => { for (const fn of winListeners.get(ev.type) ?? []) fn(ev); return true; };
+g.document = {
+  visibilityState: 'visible',
+  title: '',
+  documentElement: { lang: 'fr' },
+  addEventListener: () => undefined,
+  removeEventListener: () => undefined,
+};
+g.location = { pathname: '/' };
+g.history = { replaceState: (_s: unknown, _t: string, path: string) => { (g.location as { pathname: string }).pathname = path; } };
 
 async function loadBundle() {
   const esbuild = await import('esbuild');
@@ -46,6 +63,8 @@ async function loadBundle() {
     export { compressProjectPayload, decompressProjectPayload } from ${JSON.stringify(path.join(SRC, 'shared/utils/projects/compression.ts'))};
     export { readStoredAppwriteSession, saveStoredAppwriteSession, clearStoredAppwriteSession, getAppwriteUser, onAppwriteSessionExpired } from ${JSON.stringify(path.join(SRC, 'shared/services/appwrite.ts'))};
     export { createDefaultProject, createDefaultItinerary } from ${JSON.stringify(path.join(SRC, 'features/itineraryPanel/lib/project/index.ts'))};
+    export { useDashboardProjectSync } from ${JSON.stringify(path.join(SRC, 'pages/Dashboard/useDashboardProjectSync.ts'))};
+    export { getProjectSyncStatus } from ${JSON.stringify(path.join(SRC, 'shared/utils/projects/syncStatus.ts'))};
     export { __mock } from 'appwrite';
     export { __idb } from '@/shared/utils/storage/idbProjectStore';
   `;
@@ -61,6 +80,7 @@ async function loadBundle() {
       name: 'audit-mocks',
       setup(build) {
         build.onResolve({ filter: /^appwrite$/ }, () => ({ path: path.join(import.meta.dirname, 'a-mock-appwrite-sdk.ts') }));
+        build.onResolve({ filter: /^react$/ }, () => ({ path: path.join(import.meta.dirname, 'a-mock-react.ts') }));
         build.onResolve({ filter: /idbProjectStore$/ }, () => ({ path: path.join(import.meta.dirname, 'a-mock-idb.ts') }));
         build.onResolve({ filter: /^@\// }, (args) =>
           build.resolve('./' + args.path.slice(2), { resolveDir: SRC, kind: args.kind }));
@@ -419,6 +439,88 @@ async function main() {
     report('P2', 'deleteProjectFolder : listDocuments sans Query.limit (25 par défaut)', orphans > 0, [
       `30 projets dans le dossier → ${orphans} restent rattachés au dossier supprimé`,
       `visibles à la racine après suppression : ${visibleAtRoot}/30 (useProjectBrowserProjects.ts:500 filtre folderId === currentFolderId → ${orphans} projets introuvables dans l'UI)`,
+    ]);
+  }
+
+  // ── Hook d'autosave (useDashboardProjectSync) exécuté avec un React minimal ──
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const mountSync = (id: string) => {
+    const activeProjectSnapshotRef = { current: null as unknown };
+    const api = m.useDashboardProjectSync({
+      mapInstance: null,
+      activeProjectId: id,
+      activeProjectIdRef: { current: id },
+      activeProjectSnapshotRef,
+    });
+    return { ...api, activeProjectSnapshotRef };
+  };
+
+  // H1 : un seul envoi à la fois, états intermédiaires fusionnés, ordre respecté (A6).
+  {
+    fresh();
+    const row = await m.createProject('H1', named('H1 v0'));
+    await m.getProject(row.id);
+    const s = mountSync(row.id);
+    __mock.calls = [];
+    __mock.updateLatencyQueue = [600];
+    s.queueProjectSave(named('H1 A'));
+    const f1 = s.flushSave();
+    await sleep(50);
+    s.queueProjectSave(named('H1 B'));
+    s.queueProjectSave(named('H1 C'));
+    const f2 = s.flushSave();
+    await Promise.all([f1, f2]);
+    const updates = __mock.calls.filter((c: string) => c === 'updateDocument:projects').length;
+    const cloudName = (await cloudProject(row.id))?.name;
+    const state = m.getProjectSyncStatus().state;
+    report('H1', 'autosave : envois concurrents / désordonnés', cloudName !== 'H1 C' || updates !== 2 || state !== 'saved', [
+      `cloud final="${cloudName}" ; updateDocument=${updates} (A puis C, B fusionné) ; statut=${state}`,
+    ]);
+  }
+
+  // H2 : coupure réseau → pas de faux « enregistré », copie locale en attente, réessai au retour réseau (A2).
+  {
+    fresh();
+    const row = await m.createProject('H2', named('H2 v0'));
+    await m.getProject(row.id);
+    const s = mountSync(row.id);
+    __mock.dbNetworkDown = true;
+    s.queueProjectSave(named('H2 hors-ligne'));
+    await s.flushSave();
+    const offlineState = m.getProjectSyncStatus().state;
+    const dirtyOffline = __idb.projects.get(row.id)?.dirty;
+    __mock.dbNetworkDown = false;
+    (g.dispatchEvent as (ev: { type: string }) => void)({ type: 'online' });
+    await sleep(20);
+    await s.flushSave();
+    const cloudName = (await cloudProject(row.id))?.name;
+    const finalState = m.getProjectSyncStatus().state;
+    const dirtyAfter = __idb.projects.get(row.id)?.dirty;
+    const bad = offlineState !== 'pending-offline' || dirtyOffline !== true || cloudName !== 'H2 hors-ligne' || finalState !== 'saved' || dirtyAfter !== false;
+    report('H2', 'autosave hors-ligne marqué « enregistré » sans réessai', bad, [
+      `hors-ligne : statut=${offlineState}, copie locale dirty=${dirtyOffline}`,
+      `retour réseau (événement online) : cloud="${cloudName}", statut=${finalState}, dirty=${dirtyAfter}`,
+    ]);
+  }
+
+  // H3 : bouton Enregistrer sur un conflit → erreur remontée, puis écrasement explicite (force).
+  {
+    fresh();
+    const row = await m.createProject('H3', named('H3 v0'));
+    await m.getProject(row.id);
+    const s = mountSync(row.id);
+    await __mockUpdate(__mock, row.id, await m.compressProjectPayload(named('H3 portable')), 'H3 portable');
+    s.activeProjectSnapshotRef.current = named('H3 bureau');
+    let threw: { kind?: string } | null = null;
+    try { await s.saveNow(); } catch (e) { threw = e as { kind?: string }; }
+    const stateAfter = m.getProjectSyncStatus();
+    const cloudAfter = (await cloudProject(row.id))?.name;
+    const saved = await s.saveNow({ force: true });
+    const cloudForced = (await cloudProject(row.id))?.name;
+    const bad = threw?.kind !== 'conflict' || stateAfter.state !== 'error' || cloudAfter !== 'H3 portable' || !saved || cloudForced !== 'H3 bureau';
+    report('H3', 'saveNow : conflit non signalé / écrasement silencieux', bad, [
+      `saveNow : ${threw ? `lève ${threw.kind}` : 'RÉSOUT'} ; statut=${stateAfter.state} « ${stateAfter.message ?? ''} » ; cloud="${cloudAfter}"`,
+      `saveNow({ force }) après confirmation : cloud="${cloudForced}"`,
     ]);
   }
 

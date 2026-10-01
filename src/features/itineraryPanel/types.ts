@@ -602,7 +602,8 @@ export interface ItineraryProject {
   };
 }
 
-export type ProjectSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+/** `pending` : modifications conservées localement, synchronisation cloud en attente (hors-ligne). */
+export type ProjectSaveStatus = 'idle' | 'saving' | 'saved' | 'pending' | 'error';
 
 export interface ItineraryPanelProps {
   project: ItineraryProject;
@@ -618,6 +619,8 @@ export interface ItineraryPanelProps {
   /** Explicit project save (header Save button). */
   onSaveProject?: () => void;
   saveStatus?: ProjectSaveStatus;
+  /** Détail (déjà traduit) de l'état d'enregistrement : erreur, attente hors-ligne. */
+  saveStatusMessage?: string;
   onShareProject?: () => void;
   onRenameProject?: (next: string) => void;
 

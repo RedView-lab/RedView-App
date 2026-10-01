@@ -43,6 +43,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     onBackToHome,
     onSaveProject,
     saveStatus,
+    saveStatusMessage,
     onShareProject,
     onRenameProject,
     onSelectItinerary,
@@ -275,6 +276,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
         onBack={onBackToHome}
         onSave={onSaveProject}
         saveStatus={saveStatus}
+        saveStatusMessage={saveStatusMessage}
         onRename={onRenameProject}
         onShare={onShareProject}
       />

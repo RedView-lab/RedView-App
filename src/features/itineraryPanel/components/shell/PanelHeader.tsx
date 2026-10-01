@@ -14,6 +14,8 @@ interface PanelHeaderProps {
   backDisabled?: boolean;
   onSave?: () => void;
   saveStatus?: ProjectSaveStatus;
+  /** Détail déjà traduit (erreur, attente hors-ligne), affiché en infobulle. */
+  saveStatusMessage?: string;
   onRename?: (next: string) => void;
   onShare?: () => void;
 }
@@ -48,6 +50,7 @@ export function PanelHeader({
   backDisabled = false,
   onSave,
   saveStatus = 'idle',
+  saveStatusMessage,
   onRename,
 }: PanelHeaderProps) {
   const { locale, t } = useAppI18n();
@@ -57,9 +60,12 @@ export function PanelHeader({
       ? t('Enregistrement…')
       : saveStatus === 'saved'
         ? t('Enregistré')
-        : saveStatus === 'error'
-          ? t('Échec de l’enregistrement')
-          : t('Enregistrer');
+        : saveStatus === 'pending'
+          ? t('Synchronisation en attente')
+          : saveStatus === 'error'
+            ? t('Échec de l’enregistrement')
+            : t('Enregistrer');
+  const saveTitle = saveStatusMessage || t('Enregistrer le projet (Ctrl+S)');
   return (
     <header className="rvi-header">
       <div className="rvi-header__title-group">
@@ -100,6 +106,15 @@ export function PanelHeader({
             {sizeBytes !== null ? (
               <span className="rvi-header__size">{formatSize(sizeBytes, locale)}</span>
             ) : null}
+            {saveStatusMessage && (saveStatus === 'error' || saveStatus === 'pending') ? (
+              <span
+                className={`rvi-header__sync-message is-${saveStatus}`}
+                role="status"
+                title={saveStatusMessage}
+              >
+                {saveStatusMessage}
+              </span>
+            ) : null}
           </div>
         </div>
       </div>
@@ -111,7 +126,7 @@ export function PanelHeader({
             onClick={onSave}
             disabled={saveStatus === 'saving'}
             aria-label={t('Enregistrer le projet')}
-            title={t('Enregistrer le projet (Ctrl+S)')}
+            title={saveTitle}
           >
             <IconSave size={14} />
             <span>{saveLabel}</span>

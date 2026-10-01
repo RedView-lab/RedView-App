@@ -102,7 +102,7 @@ interface DashboardEditorProps {
   onCenterResizeStart: (ev: ReactMouseEvent<HTMLDivElement>) => void;
   onProjectChange: (next: ItineraryProject) => void;
   onBackToBrowser: () => void;
-  onSaveProject: () => Promise<ItineraryProject | null>;
+  onSaveProject: (options?: { force?: boolean }) => Promise<ItineraryProject | null>;
   onOverlayReload: (id: OverlayStatusId) => void;
   onBasemapChange: (id: BasemapId) => void;
   onWeatherOverlayStatusChange: OverlayStatusReporter;

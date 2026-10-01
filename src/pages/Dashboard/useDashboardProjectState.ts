@@ -4,11 +4,11 @@ import { normalizeItineraryProject } from '@/features/itineraryPanel/lib/project
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import { getProject } from '@/shared/utils/projects';
 import { replaceProjectLocation } from '@/shared/utils/projectLocation';
-import {
-  readProjectCacheAsync,
-  writeProjectCache,
-} from './dashboardProjectCache';
+import { readFullProjectCacheAsync } from './dashboardProjectCache';
 import { useDashboardProjectSync } from './useDashboardProjectSync';
+
+/** Attente maximale de l'envoi cloud du projet courant avant d'en ouvrir un autre. */
+const FLUSH_BEFORE_SWITCH_MS = 5000;
 
 export type DashboardPersistedMutator = (
   dashboard: NonNullable<ItineraryProject['dashboard']>,
@@ -43,6 +43,7 @@ export function useDashboardProjectState({
 
   const {
     flushSave,
+    flushPendingLocally,
     queueProjectSave,
     saveNow,
     captureThumbnailForProject,
@@ -54,51 +55,69 @@ export function useDashboardProjectState({
     activeProjectSnapshotRef,
   });
 
+  /** Jeton de la dernière ouverture demandée : les réponses plus anciennes sont ignorées. */
+  const openRequestRef = useRef(0);
+
   const openProject = useCallback(
     async (projectId: string, projectSnapshot?: ItineraryProject) => {
+      const requestId = ++openRequestRef.current;
+      const isStale = () => requestId !== openRequestRef.current;
       setProjectLoading(true);
       try {
-        if (projectSnapshot) {
-          const normalized = normalizeItineraryProject(projectSnapshot);
-          setActiveProjectId(projectId);
-          setActiveProjectInitial(normalized);
-          activeProjectSnapshotRef.current = normalized;
-          resetSyncState(JSON.stringify(normalized));
-          replaceProjectLocation({ id: projectId, name: normalized.name || 'project' });
-          writeProjectCache(projectId, normalized);
-          setProjectBrowserOpen(false);
+        // Les modifications du projet courant partent avant de changer de projet :
+        // copie locale immédiate, envoi cloud attendu au plus FLUSH_BEFORE_SWITCH_MS
+        // (au-delà, la copie locale `dirty` sera resynchronisée plus tard).
+        await flushPendingLocally();
+        await Promise.race([
+          flushSave(),
+          new Promise<void>((resolve) => window.setTimeout(resolve, FLUSH_BEFORE_SWITCH_MS)),
+        ]);
+        if (isStale()) return;
+
+        let chosen: ItineraryProject | null = projectSnapshot ?? null;
+        let needsSync = false;
+
+        if (!chosen) {
+          // Le plus récent entre cloud et copie locale (getProject) et l'instantané
+          // complet de reprise (IndexedDB) écrit par les versions précédentes.
+          const [projectRow, cached] = await Promise.all([
+            getProject(projectId),
+            readFullProjectCacheAsync(projectId).catch(() => null),
+          ]);
+          if (isStale()) return;
+
+          chosen = projectRow?.data ?? null;
+          needsSync = projectRow?.dirty === true;
+          const cachedAt = cached ? Date.parse(cached.cachedAt) : Number.NaN;
+          const rowAt = projectRow ? Date.parse(projectRow.updated_at) : Number.NaN;
+          if (cached && (!projectRow || (Number.isFinite(cachedAt) && Number.isFinite(rowAt) && cachedAt > rowAt + 5000))) {
+            chosen = cached.project;
+            needsSync = true;
+          }
+        }
+
+        if (!chosen) {
+          console.error('[Dashboard] project not found', projectId);
           return;
         }
 
-        const cached = await readProjectCacheAsync(projectId);
-        if (cached) {
-          const normalized = normalizeItineraryProject(cached.project);
-          setActiveProjectId(projectId);
-          setActiveProjectInitial(normalized);
-          activeProjectSnapshotRef.current = normalized;
-          resetSyncState(JSON.stringify(normalized));
-          replaceProjectLocation({ id: projectId, name: normalized.name || 'project' });
-          setProjectBrowserOpen(false);
-        }
-
-        const projectRow = await getProject(projectId);
-        if (projectRow?.data) {
-          const normalized = normalizeItineraryProject(projectRow.data);
-          setActiveProjectId(projectId);
-          setActiveProjectInitial(normalized);
-          activeProjectSnapshotRef.current = normalized;
-          resetSyncState(JSON.stringify(normalized));
-          replaceProjectLocation({ id: projectId, name: normalized.name || 'project' });
-          writeProjectCache(projectId, normalized);
-          setProjectBrowserOpen(false);
-        }
+        const normalized = normalizeItineraryProject(chosen);
+        setActiveProjectId(projectId);
+        activeProjectIdRef.current = projectId;
+        setActiveProjectInitial(normalized);
+        activeProjectSnapshotRef.current = normalized;
+        resetSyncState(projectId, null);
+        replaceProjectLocation({ id: projectId, name: normalized.name || 'project' });
+        setProjectBrowserOpen(false);
+        // Modifications locales non confirmées par le cloud : on les renvoie.
+        if (needsSync) queueProjectSave(normalized);
       } catch (error) {
         console.error('[Dashboard] project loading failed', error);
       } finally {
-        setProjectLoading(false);
+        if (!isStale()) setProjectLoading(false);
       }
     },
-    [resetSyncState],
+    [flushPendingLocally, flushSave, queueProjectSave, resetSyncState],
   );
 
   const closeProject = useCallback(async () => {
@@ -128,8 +147,9 @@ export function useDashboardProjectState({
         }
       }
 
+      await flushPendingLocally();
       await flushSave();
-      resetSyncState(null);
+      resetSyncState(null, null);
 
       setActiveProjectId(null);
       setActiveProjectInitial(null);
@@ -140,10 +160,10 @@ export function useDashboardProjectState({
       isClosingProjectRef.current = false;
       setIsClosingProject(false);
     }
-  }, [beforeCloseProject, captureThumbnailForProject, flushSave, resetSyncState]);
+  }, [beforeCloseProject, captureThumbnailForProject, flushPendingLocally, flushSave, resetSyncState]);
 
-  const saveActiveProject = useCallback(async () => {
-    const saved = await saveNow();
+  const saveActiveProject = useCallback(async (options?: { force?: boolean }) => {
+    const saved = await saveNow(options);
     const id = activeProjectIdRef.current;
     if (saved && id) {
       void captureThumbnailForProject(id);
