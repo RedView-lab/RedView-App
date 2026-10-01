@@ -303,6 +303,9 @@ export function formatDecimal(value: number, digits: number): string {
 
 export function escapeXml(value: string): string {
   return value
+    // XML 1.0 interdit les caractères de contrôle C0 (hors tab, LF, CR), même échappés.
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
