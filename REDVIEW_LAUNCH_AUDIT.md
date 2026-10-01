@@ -1,7 +1,7 @@
 # Audit pré-lancement RedView : parcours utilisateur connecté
 
 > Audit du 2026-10-01, réalisé sans navigateur avec des scripts tsx/node et de vraies données (GPX GT20, UTMB, Tour de France ; FIT Chamonix–Paris). Les appels en lecture visaient la prod (`app.redview.tech`, Appwrite). Le compte de test n'a écrit que des documents `AUDIT-*`, tous supprimés depuis.
-> Base : `806fd25`. Correctifs : 54 commits sur `main`, **non poussés et non déployés**.
+> Base : `806fd25`. Correctifs : 56 commits sur `main`, **non poussés et non déployés**.
 
 ## 1. Synthèse
 
@@ -105,11 +105,13 @@ L'audit a relevé **6 P0**, c'est-à-dire des pertes de données silencieuses ou
   - `79c6b16` : la FTP saisie n'est plus remise à zéro.
 - `616b0e7` : la requête amont BRouter est annulée si le client part, et le cache est borné en octets.
 
+**Moteur de prédiction (Rust/WASM)**
+- `47717b0` : sans capteur de puissance, la FTP virtuelle tombait à 0 (4,4 km/h prédits au lieu de 21 km/h) ou était fixée par la pire montée (450 W). Agrégation par percentile, repli « portions plates », refus des FIT de type `course` (parcours planifiés). Six sorties réelles combinées : FTP 168 W, 30,2 h sur GT20.
+
 ## 5. Non corrigé : à planifier
 
 | Priorité | Sujet | Détail et recommandation |
 |---|---|---|
-| **P1** | Prédiction avec des FIT sans puissance (moteur Rust) | Une sortie sans capteur de puissance ni montée détectable donne une FTP virtuelle de 0 et une vitesse prédite de 4,4 km/h au lieu de 21 km/h (`power_profile.rs:309-387`). Une courte sortie aux points espacés pousse la FTP à 450 W (`:356,370`). **Aucune toolchain Rust sur le poste**, donc non corrigé. Il faut un plancher sur le W/kg par niveau quand la FTP virtuelle est sous 50 W, et une médiane des montées de plus de 10 min au lieu du maximum. Repro : `c-fit-jour3-probe.ts`. |
 | P2 | Cohérence du D+ | Étape du Tour : 2308 m (GPX), 1860 m (BRouter), 2045 m (app). Sur 1129 km, l'app affiche +26 % par rapport à BRouter. À revoir maintenant que l'affinage IGN s'applique réellement. |
 | P2 | Open-Meteo appelé en direct | Jusqu'à 200 appels pour une route longue (plafond de 20 000 points). Sous-échantillonner à environ 2000 points puis interpoler. |
 | P2 | FIT orphelins | La suppression d'un itinéraire ou d'un projet laisse ses fichiers FIT dans le bucket (TODO dans `fitFiles.ts`). Les anciens fichiers déjà orphelins sont à nettoyer par un script serveur. |
