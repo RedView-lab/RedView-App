@@ -97,7 +97,9 @@ function redviewDevApiPlugin(): Plugin {
           } catch (e) {
             console.warn('[vite-radar-tiles-fallback] error:', e)
           }
+          // Pas de tuile : 204 jamais mis en cache (même contrat que server.mjs)
           res.statusCode = 204
+          res.setHeader('Cache-Control', 'no-store')
           return res.end()
         }
 
@@ -107,18 +109,22 @@ function redviewDevApiPlugin(): Plugin {
             const urlObj = new URL(req.url, 'http://localhost')
             const coords = parseTileCoords(urlObj.pathname, /^\/slope-tiles\/(\d+)\/(\d+)\/(\d+)/)
             if (coords) {
-              const pngBuf = await generateSlopeTile(coords.z, coords.x, coords.y)
-              res.statusCode = 200
-              res.setHeader('Content-Type', 'image/png')
-              res.setHeader('Cache-Control', 'public, max-age=604800')
-              res.setHeader('Access-Control-Allow-Origin', '*')
-              res.setHeader('X-Tile-Type', 'slope')
-              return res.end(pngBuf)
+              const pngBuf: Buffer | null = await generateSlopeTile(coords.z, coords.x, coords.y)
+              if (pngBuf) {
+                res.statusCode = 200
+                res.setHeader('Content-Type', 'image/png')
+                res.setHeader('Cache-Control', 'public, max-age=604800')
+                res.setHeader('Access-Control-Allow-Origin', '*')
+                res.setHeader('X-Tile-Type', 'slope')
+                return res.end(pngBuf)
+              }
             }
           } catch (e) {
             console.warn('[vite-slope-tiles-fallback] error:', e)
           }
+          // Pas de tuile : 204 jamais mis en cache (même contrat que server.mjs)
           res.statusCode = 204
+          res.setHeader('Cache-Control', 'no-store')
           return res.end()
         }
 
@@ -128,18 +134,22 @@ function redviewDevApiPlugin(): Plugin {
             const urlObj = new URL(req.url, 'http://localhost')
             const coords = parseTileCoords(urlObj.pathname, /^\/(?:altitude|dem)-tiles\/(\d+)\/(\d+)\/(\d+)/)
             if (coords) {
-              const pngBuf = await generateAltitudeTile(coords.z, coords.x, coords.y)
-              res.statusCode = 200
-              res.setHeader('Content-Type', 'image/png')
-              res.setHeader('Cache-Control', 'public, max-age=604800')
-              res.setHeader('Access-Control-Allow-Origin', '*')
-              res.setHeader('X-Tile-Type', 'altitude')
-              return res.end(pngBuf)
+              const pngBuf: Buffer | null = await generateAltitudeTile(coords.z, coords.x, coords.y)
+              if (pngBuf) {
+                res.statusCode = 200
+                res.setHeader('Content-Type', 'image/png')
+                res.setHeader('Cache-Control', 'public, max-age=604800')
+                res.setHeader('Access-Control-Allow-Origin', '*')
+                res.setHeader('X-Tile-Type', 'altitude')
+                return res.end(pngBuf)
+              }
             }
           } catch (e) {
             console.warn('[vite-altitude-tiles-fallback] error:', e)
           }
+          // Pas de tuile : 204 jamais mis en cache (même contrat que server.mjs)
           res.statusCode = 204
+          res.setHeader('Cache-Control', 'no-store')
           return res.end()
         }
 

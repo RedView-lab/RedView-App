@@ -9,11 +9,18 @@
  * Operates standalone with node:zlib without external dependencies.
  * Ensures 100% functionality on plain HTTP production environments (where Service Workers are disabled by browsers)
  * as well as during cold-start hydration before Service Worker claims.
+ *
+ * Contract (same as the Service Worker): a tile that cannot be produced
+ * resolves to `null` and the HTTP layer answers 204 + no-store. No
+ * placeholder image is ever synthesised (it would be cached as a real tile).
  */
 import { inflateSync, deflateSync, crc32 } from 'node:zlib';
 
 const AWS_TERRAIN_BASE = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium';
 const AWS_TERRAIN_MAXZOOM = 14;
+// La source pente du client monte à z16 : au-delà de z14 (limite AWS), la
+// pente est calculée sur l'élévation z14 suréchantillonnée (bilinéaire).
+const SLOPE_UPSAMPLE_MAXZOOM = 16;
 
 // In-memory LRU caches
 const RAW_TERRARIUM_CACHE = new Map();
@@ -65,18 +72,6 @@ function buildPngFromScanlines(width, height, rawScanlines) {
     makeChunk('IEND', Buffer.alloc(0)),
   ]);
 }
-
-const TRANSPARENT_1X1_PNG = Buffer.from([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-  0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
-  0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-  0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
-  0x89, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41,
-  0x74, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
-  0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00,
-  0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
-  0x42, 0x60, 0x82,
-]);
 
 function upsampleElevations(parentElev, pZ, pX, pY, tZ, tX, tY, size = 256) {
   const dz = tZ - pZ;
@@ -200,20 +195,32 @@ async function getElevationGrid(z, x, y) {
   return elev;
 }
 
+/** Élévation d'une tuile z > 14 par suréchantillonnage de son ancêtre z14. */
+async function getUpsampledElevationGrid(z, x, y) {
+  const dz = z - AWS_TERRAIN_MAXZOOM;
+  if (dz <= 0) return getElevationGrid(z, x, y);
+  const parentX = x >> dz;
+  const parentY = y >> dz;
+  const parent = await getElevationGrid(AWS_TERRAIN_MAXZOOM, parentX, parentY);
+  if (!parent) return null;
+  return upsampleElevations(parent, AWS_TERRAIN_MAXZOOM, parentX, parentY, z, x, y);
+}
+
 /**
  * Generate Slope PNG tile (/slope-tiles/:z/:x/:y)
  * Horn 3x3 algorithm encoded as 1-channel sqrt-gamma PNG.
+ * Resolves to `null` when no elevation data is available (→ HTTP 204).
  */
 export async function generateSlopeTile(z, x, y) {
-  if (z > AWS_TERRAIN_MAXZOOM) return TRANSPARENT_1X1_PNG;
+  if (z > SLOPE_UPSAMPLE_MAXZOOM) return null;
   const cacheKey = `${z}/${x}/${y}`;
   if (SLOPE_CACHE.has(cacheKey)) return SLOPE_CACHE.get(cacheKey);
   if (INFLIGHT_SLOPE.has(cacheKey)) return INFLIGHT_SLOPE.get(cacheKey);
 
   const work = (async () => {
     try {
-      const elev = await getElevationGrid(z, x, y);
-      if (!elev) return TRANSPARENT_1X1_PNG;
+      const elev = await getUpsampledElevationGrid(z, x, y);
+      if (!elev) return null;
 
       const width = 256;
       const height = 256;
@@ -260,7 +267,7 @@ export async function generateSlopeTile(z, x, y) {
       return png;
     } catch (err) {
       console.error(`[terrain-tiles] Slope tile failed ${z}/${x}/${y}:`, err);
-      return TRANSPARENT_1X1_PNG;
+      return null;
     } finally {
       INFLIGHT_SLOPE.delete(cacheKey);
     }
@@ -273,6 +280,7 @@ export async function generateSlopeTile(z, x, y) {
 /**
  * Generate Altitude / DEM Terrain-RGB PNG tile (/altitude-tiles/:z/:x/:y or /dem-tiles/:z/:x/:y)
  * Converts Terrarium H to Terrain-RGB encoded PNG.
+ * Resolves to `null` above z14 (no AWS data) or on upstream failure (→ HTTP 204).
  */
 export async function generateAltitudeTile(z, x, y) {
   const cacheKey = `${z}/${x}/${y}`;
@@ -282,7 +290,7 @@ export async function generateAltitudeTile(z, x, y) {
   const work = (async () => {
     try {
       const elev = await getElevationGrid(z, x, y);
-      if (!elev) return TRANSPARENT_1X1_PNG;
+      if (!elev) return null;
 
       const width = 256;
       const height = 256;
@@ -310,7 +318,7 @@ export async function generateAltitudeTile(z, x, y) {
       return png;
     } catch (err) {
       console.error(`[terrain-tiles] Altitude tile failed ${z}/${x}/${y}:`, err);
-      return TRANSPARENT_1X1_PNG;
+      return null;
     } finally {
       INFLIGHT_ALTITUDE.delete(cacheKey);
     }

@@ -517,6 +517,16 @@ async function handleApiRoute(apiRoute, parsedUrl, req, res) {
   }
 }
 
+/**
+ * Pas de tuile (hors couverture, échec amont) : 204 jamais mis en cache, pour
+ * qu'une panne passagère ne soit pas mémorisée comme une vraie tuile.
+ */
+function sendNoTile(res) {
+  res.statusCode = 204;
+  res.setHeader('Cache-Control', 'no-store');
+  return res.end();
+}
+
 async function handleRadarTileRoute(pathname, parsedUrl, req, res) {
   const coords = parseTileCoords(pathname, /^\/radar-tiles\/(\d+)\/(\d+)\/(\d+)/);
   // Hôte forcé dans l'allowlist, chemin de frame strictement alphanumérique.
@@ -542,8 +552,7 @@ async function handleRadarTileRoute(pathname, parsedUrl, req, res) {
   } catch (e) {
     console.warn('[server-radar-tiles] error:', e);
   }
-  res.statusCode = 204;
-  return res.end();
+  return sendNoTile(res);
 }
 
 async function handleSlopeTileRoute(pathname, parsedUrl, req, res) {
@@ -551,6 +560,7 @@ async function handleSlopeTileRoute(pathname, parsedUrl, req, res) {
     const coords = parseTileCoords(pathname, /^\/slope-tiles\/(\d+)\/(\d+)\/(\d+)/);
     if (coords) {
       const pngBuf = await generateSlopeTile(coords.z, coords.x, coords.y);
+      if (!pngBuf) return sendNoTile(res);
       res.statusCode = 200;
       res.setHeader('Content-Type', 'image/png');
       res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
@@ -561,8 +571,7 @@ async function handleSlopeTileRoute(pathname, parsedUrl, req, res) {
   } catch (e) {
     console.warn('[server-slope-tiles] error:', e);
   }
-  res.statusCode = 204;
-  return res.end();
+  return sendNoTile(res);
 }
 
 async function handleAltitudeTileRoute(pathname, parsedUrl, req, res) {
@@ -570,6 +579,7 @@ async function handleAltitudeTileRoute(pathname, parsedUrl, req, res) {
     const coords = parseTileCoords(pathname, /^\/(?:altitude|dem)-tiles\/(\d+)\/(\d+)\/(\d+)/);
     if (coords) {
       const pngBuf = await generateAltitudeTile(coords.z, coords.x, coords.y);
+      if (!pngBuf) return sendNoTile(res);
       res.statusCode = 200;
       res.setHeader('Content-Type', 'image/png');
       res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
@@ -580,8 +590,7 @@ async function handleAltitudeTileRoute(pathname, parsedUrl, req, res) {
   } catch (e) {
     console.warn('[server-altitude-tiles] error:', e);
   }
-  res.statusCode = 204;
-  return res.end();
+  return sendNoTile(res);
 }
 
 export { server };
