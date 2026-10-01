@@ -1,15 +1,11 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import {
   account,
-  APPWRITE_DATABASE_ID,
   clearStoredAppwriteSession,
-  databases,
   getAppwriteUser,
   hasStoredAppwriteSession,
-  Query,
   readStoredAppwriteSession,
   saveStoredAppwriteSession,
-  SUBSCRIPTIONS_COLLECTION_ID,
 } from './shared/services/appwrite'
 import { PROJECT_LOCATION_CHANGE_EVENT, readProjectIdFromPath } from './shared/utils/projectLocation'
 import { LoginScreen, probeSession } from './features/auth'
@@ -21,24 +17,8 @@ import './index.css'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 
-type BootstrapStatus = 'loading' | 'ready'
-
 /** 'unreachable' : Appwrite injoignable (timeout / réseau) sans session locale → écran de reprise. */
-type AuthStatus = BootstrapStatus | 'unreachable'
-
-type SubscriptionAccessState = {
-  hasAccess: boolean
-  status: string | null
-}
-
-const SUBSCRIPTION_CACHE_KEY_PREFIX = 'redview:subscription-status:v2:'
-const SUBSCRIPTION_CACHE_TTL_MS = 6 * 60 * 60 * 1000
-
-type CachedSubscriptionSnapshot = {
-  hasAccess: boolean
-  status: string | null
-  cachedAt: number
-}
+type AuthStatus = 'loading' | 'ready' | 'unreachable'
 
 let initialSessionProbePromise: Promise<SessionProbeResult> | null = null
 
@@ -60,10 +40,6 @@ function injectAnalyticsRecorder(): void {
   script.src = ANALYTICS_RECORDER_SRC
   script.dataset.websiteId = ANALYTICS_WEBSITE_ID
   document.body.appendChild(script)
-}
-
-function getSubscriptionCacheKey(userId: string): string {
-  return `${SUBSCRIPTION_CACHE_KEY_PREFIX}${userId}`
 }
 
 function BootstrapScreen({ label }: { label: string }) {
@@ -107,48 +83,6 @@ function isPasswordResetLocation(): boolean {
   return params.has('userId') && params.has('secret')
 }
 
-function readCachedSubscription(userId: string | null | undefined): SubscriptionAccessState | null {
-  if (!userId) return null
-
-  try {
-    const raw = window.localStorage.getItem(getSubscriptionCacheKey(userId))
-    if (!raw) return null
-
-    const parsed = JSON.parse(raw) as Partial<CachedSubscriptionSnapshot> & { isSubscribed?: boolean }
-    if (typeof parsed.cachedAt !== 'number') {
-      window.localStorage.removeItem(getSubscriptionCacheKey(userId))
-      return null
-    }
-
-    if (Date.now() - parsed.cachedAt > SUBSCRIPTION_CACHE_TTL_MS) {
-      window.localStorage.removeItem(getSubscriptionCacheKey(userId))
-      return null
-    }
-
-    // In Open Beta, all registered users have free access to the web app
-    const isSubscribed = parsed.status === 'active' || parsed.status === 'trialing'
-    return {
-      hasAccess: true,
-      status: isSubscribed ? (parsed.status as string) : 'demo',
-    }
-  } catch {
-    return null
-  }
-}
-
-function writeCachedSubscription(userId: string, subscription: SubscriptionAccessState): void {
-  try {
-    const payload: CachedSubscriptionSnapshot = {
-      hasAccess: subscription.hasAccess,
-      status: subscription.status,
-      cachedAt: Date.now(),
-    }
-    window.localStorage.setItem(getSubscriptionCacheKey(userId), JSON.stringify(payload))
-  } catch {
-    // Ignore storage write failures
-  }
-}
-
 /**
  * Vérifie la session auprès d'Appwrite (borné par SESSION_PROBE_TIMEOUT_MS) et
  * synchronise le snapshot local : sauvegardé si valide, effacé seulement sur 401.
@@ -186,16 +120,6 @@ function App() {
     return hasStoredAppwriteSession() ? 'ready' : 'loading'
   })
   const [authAttempt, setAuthAttempt] = useState(0)
-  const [subscriptionStatus, setSubscriptionStatus] = useState<BootstrapStatus>(() => {
-    if (isPasswordResetUrl) return 'ready'
-    const storedSession = readStoredAppwriteSession()
-    return readCachedSubscription(storedSession?.user.id) == null ? 'loading' : 'ready'
-  })
-  const [subscriptionAccess, setSubscriptionAccess] = useState<SubscriptionAccessState>(() => {
-    if (isPasswordResetUrl) return { hasAccess: true, status: 'demo' }
-    const storedSession = readStoredAppwriteSession()
-    return readCachedSubscription(storedSession?.user.id) ?? { hasAccess: true, status: 'demo' }
-  })
   const [pathname, setPathname] = useState(() => window.location.pathname)
   const initialProjectId = readProjectIdFromPath(pathname)
 
@@ -251,82 +175,6 @@ function App() {
     }
   }, [authAttempt])
 
-  // Check subscription status after session is available
-  useEffect(() => {
-    let cancelled = false
-
-    if (authStatus !== 'ready') {
-      return
-    }
-
-    if (!session?.user?.id) {
-      setSubscriptionAccess({ hasAccess: false, status: null })
-      setSubscriptionStatus('ready')
-      return
-    }
-
-    if (session.user.id === 'dev-user-001') {
-      setSubscriptionAccess({ hasAccess: true, status: 'pro' })
-      setSubscriptionStatus('ready')
-      return
-    }
-
-    const cachedSubscription = readCachedSubscription(session.user.id)
-    if (cachedSubscription != null) {
-      setSubscriptionAccess(cachedSubscription)
-      setSubscriptionStatus('ready')
-    } else {
-      setSubscriptionStatus('loading')
-    }
-
-    const fetchSubscriptionStatus = async (userId: string): Promise<SubscriptionAccessState> => {
-      try {
-        const res = await databases.listDocuments(
-          APPWRITE_DATABASE_ID,
-          SUBSCRIPTIONS_COLLECTION_ID,
-          [Query.equal('user_id', userId), Query.limit(1)],
-        )
-
-        const first = res.documents[0]
-        if (first) {
-          const status = (first.status as string) ?? null
-          const isSubscribed = status === 'active' || status === 'trialing'
-          return {
-            hasAccess: true,
-            status: isSubscribed ? status : 'demo',
-          }
-        }
-
-        // Default to free demo access for all users in Open Beta
-        return { hasAccess: true, status: 'demo' }
-      } catch (err) {
-        console.warn('[app] Appwrite subscription check error', err)
-        return { hasAccess: true, status: 'demo' }
-      }
-    }
-
-    const resolveSubscription = async () => {
-      try {
-        const nextSubscription = await fetchSubscriptionStatus(session.user.id)
-        if (cancelled) return
-
-        setSubscriptionAccess(nextSubscription)
-        writeCachedSubscription(session.user.id, nextSubscription)
-      } catch (error) {
-        if (cancelled) return
-        console.warn('[app] Subscription bootstrap error', error)
-      } finally {
-        if (!cancelled) setSubscriptionStatus('ready')
-      }
-    }
-
-    void resolveSubscription()
-
-    return () => {
-      cancelled = true
-    }
-  }, [authStatus, session?.user?.id])
-
   // Session replay: only once Appwrite confirms a real authenticated user
   // (not the dev/demo fallback session, not the login/reset screens).
   useEffect(() => {
@@ -364,7 +212,7 @@ function App() {
     )
   }
 
-  if (authStatus === 'loading' || (session && subscriptionStatus === 'loading')) {
+  if (authStatus === 'loading') {
     return <BootstrapScreen label={t('Loading...')} />
   }
 
@@ -376,16 +224,12 @@ function App() {
           const stored = readStoredAppwriteSession()
           if (stored) {
             setSession(stored)
-            setSubscriptionAccess({ hasAccess: true, status: 'pro' })
-            setSubscriptionStatus('ready')
             return
           }
 
           // Compte démo local (sans Appwrite) : uniquement en développement.
           if (import.meta.env.DEV) {
             setSession({ user: { id: DEV_FALLBACK_USER_ID, email: email || 'user@redview.tech' } })
-            setSubscriptionAccess({ hasAccess: true, status: 'pro' })
-            setSubscriptionStatus('ready')
             return
           }
 
@@ -394,20 +238,20 @@ function App() {
           void getAppwriteUser().then((user) => {
             if (!user) return
             setSession({ user: { id: user.$id, email: user.email } })
-            setSubscriptionStatus('ready')
           })
         }}
       />
     )
   }
 
-  // In Open Beta, all registered accounts access RedView App
+  // Open beta : tout compte inscrit a un accès complet. Le statut d'abonnement réel
+  // est lu côté serveur (billing, Project Browser) ; rien en aval n'affiche « démo ».
   return (
     <Suspense fallback={<BootstrapScreen label={t('Loading dashboard...')} />}>
       <Dashboard
         email={session.user.email || 'unknown'}
         initialProjectId={initialProjectId}
-        isDemoAccount={subscriptionAccess.status !== 'active' && subscriptionAccess.status !== 'trialing'}
+        isDemoAccount={false}
         offersUrl={offersUrl}
       />
     </Suspense>
