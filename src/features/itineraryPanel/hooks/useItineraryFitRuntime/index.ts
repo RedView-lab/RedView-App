@@ -461,8 +461,10 @@ export function useItineraryFitRuntime({
                     ...it.rhythm,
                     usePastActivities: true,
                     rhythmProfile: 'custom' as const,
-                    // Clear hardcoded default FTP so .fit files' virtual FTP is automatically used
-                    ftp: it.rhythm.ftp === 260 || it.rhythm.ftp === 300 ? null : it.rhythm.ftp,
+                    // FTP conservée telle quelle : la valeur par défaut est
+                    // null (FTP virtuelle des .fit), une FTP non nulle a été
+                    // saisie par l'utilisateur — l'ancienne remise à null de
+                    // 260 / 300 effaçait une saisie réelle.
                   },
                   fitUploads: storedUploads,
                   rhythmConfigured: true,
