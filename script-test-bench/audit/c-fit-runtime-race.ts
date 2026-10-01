@@ -48,7 +48,7 @@ class FakeWorker {
   terminate() { this.dead = true; this.queue = []; }
 }
 (globalThis as { Worker?: unknown }).Worker = FakeWorker;
-const { createFitPredictionEngine } = await import('../../src/features/fitPredictor/engine/api.ts');
+const { createFitPredictionEngine, FitPredictionCancelledError } = await import('../../src/features/fitPredictor/engine/api.ts');
 
 // ── Modèle minimal du hook (copie des branches l.480-628) ────────────────
 type Runtime = { status: 'idle' | 'ready' | 'running' | 'success' | 'error'; error: string | null; result: unknown };
@@ -71,7 +71,7 @@ function makeHook() {
     cancelled.delete(id);
     setRt(id, { status: 'running', error: null, result: null });
     const gpx = new File(['<gpx/>'], 'r.gpx');
-    void engine.predict([], gpx, {}, () => {})
+    void engine.predict([], gpx, {}, () => {}, { key: id })
       .then((raw) => {
         cancelled.delete(id);
         let applied = false;
@@ -86,6 +86,7 @@ function makeHook() {
         setRt(id, { status: 'success', error: null, result: raw });
       })
       .catch((error: unknown) => {
+        if (error instanceof FitPredictionCancelledError && error.reason === 'superseded') return;
         const wasCancelled = cancelled.has(id) && error instanceof Error && error.message === 'Prediction worker terminated';
         if (wasCancelled) { cancelled.delete(id); return; }
         project[id] = { ...project[id]!, pendingFitRecompute: undefined };

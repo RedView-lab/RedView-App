@@ -7,7 +7,10 @@ import {
   type ChangeEvent,
 } from 'react';
 
-import { createFitPredictionEngine } from '@/features/fitPredictor/engine/api';
+import {
+  FitPredictionCancelledError,
+  createFitPredictionEngine,
+} from '@/features/fitPredictor/engine/api';
 import type { PredictionResult } from '@/features/fitPredictor';
 import type { Itinerary } from '../../types';
 import {
@@ -513,12 +516,14 @@ export function useItineraryFitRuntime({
           gpxFile,
           buildRunPredictionConfigFromRhythm(itinerary.rhythm, discipline, routePoints),
           onProgress,
+          { key: itineraryId },
         )
       : engine.predict(
           fitFiles,
           gpxFile,
           buildPredictionConfigFromRhythm(itinerary.rhythm, routePoints),
           onProgress,
+          { key: itineraryId },
         );
 
     void pending
@@ -572,6 +577,8 @@ export function useItineraryFitRuntime({
         predictionStore?.setPrediction(itineraryId, result);
       })
       .catch((error: unknown) => {
+        // Remplacée dans la file par un calcul plus récent du même itinéraire.
+        if (error instanceof FitPredictionCancelledError && error.reason === 'superseded') return;
         const wasCancelled =
           cancelledPredictionIdsRef.current.has(itineraryId)
           && error instanceof Error

@@ -13,46 +13,80 @@ type PendingRequest = {
   onProgress?: (message: string) => void;
 };
 
+type QueuedRequest = {
+  request: FitWorkerRequest;
+  transferables: Transferable[];
+  /** Clé de regroupement (ex. id d'itinéraire) : une requête plus récente remplace celles en attente. */
+  key: string | null;
+  entry: PendingRequest;
+};
+
+export interface FitEngineRequestOptions {
+  /**
+   * Requêtes de même clé : quand une nouvelle est mise en file, les plus
+   * anciennes pas encore démarrées sont abandonnées (rejetées avec
+   * `FitPredictionCancelledError`, raison `superseded`).
+   */
+  key?: string;
+}
+
+/** Requête abandonnée (remplacée par une plus récente, annulée, moteur arrêté) : pas une erreur à afficher. */
+export class FitPredictionCancelledError extends Error {
+  readonly reason: 'superseded' | 'cancelled' | 'terminated';
+
+  constructor(reason: 'superseded' | 'cancelled' | 'terminated') {
+    super(reason === 'terminated' ? 'Prediction worker terminated' : `Prediction ${reason}`);
+    this.name = 'FitPredictionCancelledError';
+    this.reason = reason;
+  }
+}
+
 export function createFitPredictionEngine() {
   let idCounter = 0;
-  const pending = new Map<number, PendingRequest>();
+  // Le worker est mono-thread et `predict()` est synchrone : une seule
+  // requête lui est confiée à la fois, les autres attendent ici, où l'on peut
+  // encore les abandonner (impossible une fois postées au worker).
+  const queue: QueuedRequest[] = [];
+  let inFlight: QueuedRequest | null = null;
+
+  function settleInFlight(): QueuedRequest | null {
+    const current = inFlight;
+    inFlight = null;
+    return current;
+  }
 
   function handleMessage(event: MessageEvent<FitWorkerResponse>) {
     const message = event.data;
-    const entry = pending.get(message._id);
-    if (!entry) {
+    if (!inFlight || inFlight.request._id !== message._id) {
       return;
     }
 
     if (message.type === 'progress') {
-      entry.onProgress?.(message.message);
+      inFlight.entry.onProgress?.(message.message);
       return;
     }
 
-    pending.delete(message._id);
-
+    const done = settleInFlight()!;
     if (message.type === 'error') {
-      entry.reject(new Error(message.message));
-      return;
+      done.entry.reject(new Error(message.message));
+    } else {
+      done.entry.resolve(message.data);
     }
-
-    entry.resolve(message.data);
+    pump();
   }
 
   function spawnWorker(): Worker {
     const next = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
     next.onmessage = handleMessage;
     next.onerror = (event) => {
-      const error = new Error(event.message || 'Prediction worker crashed');
-      for (const entry of pending.values()) {
-        entry.reject(error);
-      }
-      pending.clear();
       // Un worker planté (erreur de chargement du module, panique WASM…)
-      // ne répondra plus : il est remplacé à la requête suivante (création
-      // paresseuse, pas de boucle si le module ne se charge toujours pas).
+      // ne répondra plus : la requête en cours échoue, il est remplacé à la
+      // requête suivante (création paresseuse, pas de boucle de redémarrage).
       next.terminate();
-      if (worker === next) worker = null;
+      if (worker !== next) return;
+      worker = null;
+      settleInFlight()?.entry.reject(new Error(event.message || 'Prediction worker crashed'));
+      pump();
     };
     return next;
   }
@@ -64,14 +98,37 @@ export function createFitPredictionEngine() {
     return worker;
   }
 
+  function pump(): void {
+    if (inFlight) return;
+    const next = queue.shift();
+    if (!next) return;
+    inFlight = next;
+    getWorker().postMessage(next.request, next.transferables);
+  }
+
   function send<T extends PredictionResult | ComparisonResult>(
     request: FitWorkerRequest,
     transferables: Transferable[],
     onProgress?: (message: string) => void,
+    options?: FitEngineRequestOptions,
   ): Promise<T> {
     return new Promise<T>((resolve, reject) => {
-      pending.set(request._id, { resolve: resolve as PendingRequest['resolve'], reject, onProgress });
-      getWorker().postMessage(request, transferables);
+      const key = options?.key ?? null;
+      if (key !== null) {
+        // Supersede : les requêtes de même clé encore en attente sont périmées.
+        for (let i = queue.length - 1; i >= 0; i--) {
+          if (queue[i]!.key !== key) continue;
+          const [dropped] = queue.splice(i, 1);
+          dropped!.entry.reject(new FitPredictionCancelledError('superseded'));
+        }
+      }
+      queue.push({
+        request,
+        transferables,
+        key,
+        entry: { resolve: resolve as PendingRequest['resolve'], reject, onProgress },
+      });
+      pump();
     });
   }
 
@@ -81,6 +138,7 @@ export function createFitPredictionEngine() {
       gpxFile: File,
       config?: PredictionConfig,
       onProgress?: (message: string) => void,
+      options?: FitEngineRequestOptions,
     ): Promise<PredictionResult> {
       const fitBuffers = await Promise.all(fitFiles.map((file) => file.arrayBuffer()));
       const gpxBuffer = await gpxFile.arrayBuffer();
@@ -92,7 +150,7 @@ export function createFitPredictionEngine() {
         config,
       };
 
-      return send<PredictionResult>(request, [...fitBuffers, gpxBuffer], onProgress);
+      return send<PredictionResult>(request, [...fitBuffers, gpxBuffer], onProgress, options);
     },
 
     async predictRun(
@@ -100,6 +158,7 @@ export function createFitPredictionEngine() {
       gpxFile: File,
       config: RunPredictionConfig,
       onProgress?: (message: string) => void,
+      options?: FitEngineRequestOptions,
     ): Promise<PredictionResult> {
       const fitBuffers = await Promise.all(fitFiles.map((file) => file.arrayBuffer()));
       const gpxBuffer = await gpxFile.arrayBuffer();
@@ -111,7 +170,7 @@ export function createFitPredictionEngine() {
         config,
       };
 
-      return send<PredictionResult>(request, [...fitBuffers, gpxBuffer], onProgress);
+      return send<PredictionResult>(request, [...fitBuffers, gpxBuffer], onProgress, options);
     },
 
     async compare(
@@ -135,10 +194,11 @@ export function createFitPredictionEngine() {
     terminate(): void {
       worker?.terminate();
       worker = null;
-      for (const entry of pending.values()) {
-        entry.reject(new Error('Prediction worker terminated'));
+      const error = new FitPredictionCancelledError('terminated');
+      settleInFlight()?.entry.reject(error);
+      for (const queued of queue.splice(0)) {
+        queued.entry.reject(error);
       }
-      pending.clear();
     },
   };
 }
