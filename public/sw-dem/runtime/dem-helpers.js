@@ -37,9 +37,11 @@ function noTileResponse(reason) {
 }
 
 // Minimal 1×1 transparent PNG used as a safe fallback when DEM data is absent.
+// Generated with node:zlib (deflate + CRC32) and checked chunk by chunk: the
+// previous literal had a bad IDAT CRC / Adler-32, so browsers rejected it.
 const TRANSPARENT_PNG = Uint8Array.from(atob(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQAB' +
-  'Nl7BcQAAAABJRU5ErkJggg=='
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgAAIAAAUA' +
+  'Aen63NgAAAAASUVORK5CYII='
 ), (c) => c.charCodeAt(0));
 
 function transparentTileResponse() {

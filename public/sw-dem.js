@@ -24,6 +24,8 @@
 // detects a byte diff in this file and triggers install→activate→purge.
 // Current: dem-tiles-v48-lidar-wms-aspect / radar-v3 / dem-negative-v29
 // 2026-10-01 security: radar host allowlist + no raw passthrough, navigations bypass the SW.
+// 2026-10-01 tiles: valid 1x1 transparent PNG (bad IDAT CRC before) + router
+// rejects impossible tile coords (z>22, x/y >= 2^z) with 204.
 // 2026-08 zone-gated overlays: slope/altitude tiles may carry ?zone=<hash>
 // (masked, separate cache keys); analysis-zone registry + per-pixel mask (v5 Uniform Fast LiDAR).
 // 2026-09-30 altitude-passthrough: /altitude-tiles (HD only) is a read-through
