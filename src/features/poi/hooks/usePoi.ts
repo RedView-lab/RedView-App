@@ -19,7 +19,7 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 
 import type { PoiCategory, PoiFeature, GpxRoute } from '../types';
 import { PoiApiError, clampCorridorRadiusM, fetchPoisAlongRouteChunked } from '../lib/poi-api';
-import { sampleRouteByDistance } from '../lib/gpx-loader';
+import { buildCorridorSamples } from '../lib/corridor-samples';
 import { filterPoisByLateralDistance } from '../lib/corridor-distance-filter';
 import { PoiMarkerManager } from '../lib/poi-markers';
 import type { UsePoiPopupActions } from '../lib/poi-popup';
@@ -221,6 +221,9 @@ export function usePoi(
       nonFavorites,
       route.points,
       maxLateralDistanceByCategoryRef.current ?? undefined,
+      // Le serveur est interrogé avec r + tolérance de simplification :
+      // les catégories sans distance X sont ramenées au rayon r.
+      clampCorridorRadiusM(radiusRef.current),
     );
 
     return [...favorites, ...filteredNonFavorites];
@@ -240,7 +243,12 @@ export function usePoi(
     if (!route || route.points.length < 2) return [...favorites, ...others];
     return [
       ...favorites,
-      ...filterPoisByLateralDistance(others, route.points, maxLateralDistanceByCategoryRef.current ?? undefined),
+      ...filterPoisByLateralDistance(
+        others,
+        route.points,
+        maxLateralDistanceByCategoryRef.current ?? undefined,
+        clampCorridorRadiusM(radiusRef.current),
+      ),
     ];
   }, []);
 
@@ -271,38 +279,17 @@ export function usePoi(
     setError(null);
     setCorridorProgress(0);
 
-    // Spacing chosen so consecutive radius disks OVERLAP, which is the only
-    // way to get *every* POI within `radius` of the track:
-    //   1. spacing = radius * 1.4  → strictly < 2 * radius, so adjacent
-    //      disks always intersect and no slice of the corridor is skipped.
-    //      (The previous `max(200, radius * 1.6)` floor silently broke this
-    //      for any radius < 125 m — with the shipped 40 m default it left a
-    //      120 m blind gap between two 40 m disks, i.e. ~80 % of the route
-    //      was never queried.)
-    //   2. spacing >= 10 m         → bounds the sample count for tiny radii.
-    //   3. spacing >= length/8000  → keeps the POST body under the proxy
-    //      limit for very long routes (multi-day tours).
+    // Polyligne simplifiée (tolérance <= r/4, sommets de virage conservés)
+    // puis densifiée dans le budget de points du serveur, interrogée avec
+    // r + tolérance ; le filtre latéral client ramène ensuite chaque
+    // catégorie à sa distance X. Voir lib/corridor-samples.ts.
     // Le serveur rejette (400) tout rayon hors [1, 10000] m.
-    const radius = clampCorridorRadiusM(radiusRef.current);
-    let approxLenM = 0;
-    for (let i = 1; i < route.points.length; i++) {
-      const a = route.points[i - 1];
-      const b = route.points[i];
-      const dLat = (b.lat - a.lat) * 111_320;
-      const dLon =
-        (b.lon - a.lon) *
-        111_320 *
-        Math.cos(((a.lat + b.lat) / 2) * (Math.PI / 180));
-      approxLenM += Math.sqrt(dLat * dLat + dLon * dLon);
-    }
-    const lenBasedSpacing = approxLenM > 0 ? approxLenM / 8_000 : 0;
-    const spacing = Math.max(10, radius * 1.4, lenBasedSpacing);
-    const sampled = sampleRouteByDistance(route.points, spacing, 8_000);
+    const { samples, queryRadiusM } = buildCorridorSamples(route.points, radiusRef.current);
 
     try {
       const features = await fetchPoisAlongRouteChunked({
-        samples: sampled,
-        radiusM: radius,
+        samples,
+        radiusM: queryRadiusM,
         categories: cats,
         signal: controller.signal,
         onProgress: (deduped, { done, total }) => {

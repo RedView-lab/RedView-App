@@ -14,6 +14,7 @@
 import Fastify from 'fastify';
 import { db } from './db.js';
 import { createViewportSampler } from './viewport-sampler.js';
+import { corridorQueryBoxes, selectCorridorCandidates } from './corridor-geometry.js';
 
 // bodyLimit : `api/poi.ts` plafonne déjà le corps à 256 Ko ; 512 Ko laisse
 // de la marge sans permettre d'épuiser la mémoire avec un corps géant.
@@ -241,21 +242,18 @@ fastify.get('/bbox', async (req, reply) => {
 // peut ramener des dizaines de milliers de candidats et faire exploser le
 // coût en O(candidats × points).
 //
-// Ici on indexe d'abord les points d'échantillonnage de la trace dans une
-// grille de côté `2 × radius` (pas de 1 m). Un POI ne peut être à moins de
-// `radius` d'un segment que si l'un des points de ce segment est dans son
-// voisinage 3×3 : on ne teste donc que quelques segments au lieu de tous.
+// Ici on indexe d'abord les SEGMENTS de la trace dans une grille de côté
+// >= `2 × radius` (chaque segment est inscrit dans toutes les cellules qu'il
+// traverse) : un POI ne teste que les segments de son voisinage 3×3. Les
+// points reçus sont traités comme une polyligne (distance POI → segment) :
+// l'ancienne version n'inscrivait que les points, et perdait les POI au
+// milieu des segments longs. Voir corridor-geometry.js.
 //
 // Candidats : plutôt qu'une seule requête R*Tree sur la bbox de TOUTE la
 // trace (un Paris → Nice en diagonale ramenait la moitié de la France), on
-// découpe la trace en tronçons consécutifs de CORRIDOR_CHUNK_POINTS points
-// (chevauchement d'un point pour couvrir le segment à cheval sur deux
-// tronçons) et on interroge la bbox de chaque tronçon élargie du rayon.
-// Correction : un POI à moins de `radius` d'un segment est dans la bbox
-// élargie du tronçon qui contient ce segment — en latitude par degLat, en
-// longitude par degLon calculé au |lat| max du tronçon (cos minimal, donc
-// élargissement maximal par rapport au cos de la latitude moyenne du segment
-// utilisé dans le calcul de distance ci-dessous).
+// découpe la trace en tronçons consécutifs d'au plus CORRIDOR_CHUNK_POINTS
+// points et d'au plus max(25 × radius, 2 km) de long (segments longs
+// découpés) et on interroge la bbox de chaque tronçon élargie du rayon.
 const CORRIDOR_CHUNK_POINTS = 50;
 const CORRIDOR_MAX_CANDIDATES = 300_000;
 const CORRIDOR_MAX_POINTS = 10_000;
@@ -328,44 +326,13 @@ fastify.post('/corridor', { schema: corridorSchema }, async (req, reply) => {
   }
 
   const radius = radiusM;
-  const degLat = radius / 110574;
-  const degLon = radius / (111320 * Math.cos((points[0][0] * Math.PI) / 180));
 
-  // Bbox globale : ne sert plus qu'à l'origine de la grille ci-dessous, calculée
-  // exactement comme avant pour garder des cellules (et donc des résultats)
-  // identiques.
-  let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180;
-  for (const [lat, lon] of points) {
-    if (lat < minLat) minLat = lat;
-    if (lat > maxLat) maxLat = lat;
-    if (lon < minLon) minLon = lon;
-    if (lon > maxLon) maxLon = lon;
-  }
-  minLat -= degLat; maxLat += degLat;
-  minLon -= degLon; maxLon += degLon;
-
+  // Candidats : une requête R*Tree par tronçon (bbox élargie du rayon), les
+  // segments trop longs étant découpés — voir corridor-geometry.js.
   const stmt = corridorStatement(categories.length);
   const byId = new Map();
-  for (let start = 0; start < points.length - 1;) {
-    const end = Math.min(start + CORRIDOR_CHUNK_POINTS, points.length - 1);
-
-    let cMinLat = 90, cMaxLat = -90, cMinLon = 180, cMaxLon = -180, cMaxAbsLat = 0;
-    for (let i = start; i <= end; i++) {
-      const [lat, lon] = points[i];
-      if (lat < cMinLat) cMinLat = lat;
-      if (lat > cMaxLat) cMaxLat = lat;
-      if (lon < cMinLon) cMinLon = lon;
-      if (lon > cMaxLon) cMaxLon = lon;
-      if (Math.abs(lat) > cMaxAbsLat) cMaxAbsLat = Math.abs(lat);
-    }
-    const cosLat = Math.max(0.01, Math.cos((cMaxAbsLat * Math.PI) / 180));
-    const chunkDegLon = radius / (111320 * cosLat);
-
-    for (const row of stmt.iterate(
-      cMinLon - chunkDegLon, cMaxLon + chunkDegLon,
-      cMinLat - degLat, cMaxLat + degLat,
-      ...categories,
-    )) {
+  for (const [minLon, maxLon, minLat, maxLat] of corridorQueryBoxes(points, radius, CORRIDOR_CHUNK_POINTS)) {
+    for (const row of stmt.iterate(minLon, maxLon, minLat, maxLat, ...categories)) {
       if (byId.has(row.id)) continue;
       byId.set(row.id, row);
       if (byId.size > CORRIDOR_MAX_CANDIDATES) {
@@ -373,90 +340,15 @@ fastify.post('/corridor', { schema: corridorSchema }, async (req, reply) => {
         return reply.status(413).send({ error: 'Corridor trop large' });
       }
     }
-
-    start = end;
   }
 
   const candidates = [...byId.values()];
   if (candidates.length === 0) return { features: [] };
 
-  // Origine locale en degrés (centre de la trace) pour rester en petits
-  // nombres et garder des clés de cellule entières exactes.
-  const originLat = (minLat + maxLat) / 2;
-  const originLon = (minLon + maxLon) / 2;
-  const mPerDegLat = 110574;
-  const mPerDegLon = 111320 * Math.cos((originLat * Math.PI) / 180);
-
-  const cellM = Math.max(radius * 2, 100);
-  const toCellX = (lon) => Math.floor(((lon - originLon) * mPerDegLon) / cellM);
-  const toCellY = (lat) => Math.floor(((lat - originLat) * mPerDegLat) / cellM);
-  const cellKey = (cx, cy) => `${cx}:${cy}`;
-
-  const grid = new Map();
-  for (let i = 0; i < points.length; i++) {
-    const key = cellKey(toCellX(points[i][1]), toCellY(points[i][0]));
-    const bucket = grid.get(key);
-    if (bucket) bucket.push(i);
-    else grid.set(key, [i]);
-  }
-
-  const radiusSq = radius * radius;
-  const accepted = [];
-
-  for (const poi of candidates) {
-    const cx = toCellX(poi.lon);
-    const cy = toCellY(poi.lat);
-
-    // Segments candidats : ceux adjacents aux points d'échantillonnage du
-    // voisinage 3×3 (cellM = 2 × radius couvre largement la condition
-    // « POI à moins de radius d'un segment »).
-    const segments = new Set();
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dy = -1; dy <= 1; dy++) {
-        const bucket = grid.get(cellKey(cx + dx, cy + dy));
-        if (!bucket) continue;
-        for (const idx of bucket) {
-          if (idx > 0) segments.add(idx - 1);
-          if (idx < points.length - 1) segments.add(idx);
-        }
-      }
-    }
-
-    let minDistanceSq = Infinity;
-
-    for (const i of segments) {
-      const [lat1, lon1] = points[i];
-      const [lat2, lon2] = points[i + 1];
-
-      const meanLat = ((lat1 + lat2) / 2) * (Math.PI / 180);
-      const kx = 111320 * Math.cos(meanLat);
-      const ky = 110574;
-
-      const x2 = (lon2 - lon1) * kx;
-      const y2 = (lat2 - lat1) * ky;
-      const px = (poi.lon - lon1) * kx;
-      const py = (poi.lat - lat1) * ky;
-
-      const segLenSq = x2 * x2 + y2 * y2;
-      let t = segLenSq === 0 ? 0 : (px * x2 + py * y2) / segLenSq;
-      t = Math.max(0, Math.min(1, t));
-
-      const ddx = px - t * x2;
-      const ddy = py - t * y2;
-      const dSq = ddx * ddx + ddy * ddy;
-
-      if (dSq < minDistanceSq) {
-        minDistanceSq = dSq;
-        if (minDistanceSq <= radiusSq) break;
-      }
-    }
-
-    if (minDistanceSq <= radiusSq) {
-      accepted.push(toFeature(poi));
-    }
-  }
-
-  return { features: accepted };
+  // Distance POI → SEGMENT (et non → point d'échantillonnage) : un POI au
+  // milieu d'un long segment est bien retenu.
+  const accepted = selectCorridorCandidates(points, radius, candidates);
+  return { features: accepted.map(toFeature) };
 });
 
 try {

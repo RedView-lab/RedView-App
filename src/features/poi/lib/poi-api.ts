@@ -164,7 +164,11 @@ export async function fetchPoisAlongRoute(
   if (points.length === 0 || categories.length === 0) return [];
 
   const body = JSON.stringify({
-    points: capCorridorPoints(points).map((p) => [p.lat, p.lon]),
+    // 6 décimales ≈ 0,1 m : corps ~2× plus léger qu'en double précision.
+    points: capCorridorPoints(points).map((p) => [
+      Math.round(p.lat * 1e6) / 1e6,
+      Math.round(p.lon * 1e6) / 1e6,
+    ]),
     radiusM: clampCorridorRadiusM(radiusM),
     categories,
   });

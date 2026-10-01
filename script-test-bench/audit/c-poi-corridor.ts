@@ -1,7 +1,9 @@
 /**
- * C2 / C1 — Corridor POI : échantillonnage frontend réel + logique de grille du
- * serveur POI (copie fidèle de server/poi-server/server.js, POST /corridor,
- * lignes ~383-458) → rappel géométrique ; puis vérification sur la prod.
+ * C2 / C1 — Corridor POI : échantillonnage frontend réel (corridor-samples.ts)
+ * + sélection réelle du serveur POI (server/poi-server/corridor-geometry.js,
+ * POST /corridor) → rappel géométrique ; puis vérification sur la prod (qui
+ * peut encore faire tourner l'ancien serveur : --live ne valide alors que le
+ * côté client).
  *
  * Usage :
  *   npx tsx script-test-bench/audit/c-poi-corridor.ts            # géométrie seule (hors ligne)
@@ -13,8 +15,8 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { sampleRouteByDistance } from '../../src/features/poi/lib/gpx-loader.ts';
-import { clampCorridorRadiusM } from '../../src/features/poi/lib/poi-api.ts';
+import { buildCorridorSamples } from '../../src/features/poi/lib/corridor-samples.ts';
+import { selectCorridorCandidates } from '../../server/poi-server/corridor-geometry.js';
 import { DEFAULT_POI_DISTANCE_M, createDefaultItinerary } from '../../src/features/itineraryPanel/lib/project/defaultState.ts';
 import { GT20, TDF, haversineM, readGpxPoints, routeLength, throttledFetch } from './c-lib.ts';
 
@@ -47,59 +49,22 @@ const CATEGORIES = Object.entries(defaultIt.poi)
 
 type LL = { lat: number; lon: number };
 
-/** Copie de usePoi.ts fetchCorridorPois (lignes ~273-287) : rayon, longueur approx, pas, échantillons. */
+/**
+ * Échantillonnage frontend RÉEL (src/features/poi/lib/corridor-samples.ts,
+ * appelé par usePoi.ts fetchCorridorPois). `radius` = rayon effectivement
+ * envoyé au serveur (r + tolérance de simplification), `spacing` = pas moyen.
+ */
 function frontendSamples(points: LL[], radiusInput: number) {
-  const radius = clampCorridorRadiusM(radiusInput);
-  let approxLenM = 0;
-  for (let i = 1; i < points.length; i++) {
-    const a = points[i - 1]!; const b = points[i]!;
-    const dLat = (b.lat - a.lat) * 111_320;
-    const dLon = (b.lon - a.lon) * 111_320 * Math.cos(((a.lat + b.lat) / 2) * (Math.PI / 180));
-    approxLenM += Math.sqrt(dLat * dLat + dLon * dLon);
-  }
-  const lenBasedSpacing = approxLenM > 0 ? approxLenM / 8_000 : 0;
-  const spacing = Math.max(10, radius * 1.4, lenBasedSpacing);
-  const sampled = sampleRouteByDistance(points, spacing, 8_000);
-  return { radius, spacing, sampled };
+  const { samples, queryRadiusM } = buildCorridorSamples(points, radiusInput);
+  const spacing = routeLength(samples) / Math.max(1, samples.length - 1);
+  return { radius: queryRadiusM, spacing, sampled: samples };
 }
 
-/** Copie fidèle de la sélection serveur (server.js POST /corridor, grille + test segment). */
+/** Sélection serveur RÉELLE (server/poi-server/corridor-geometry.js, POST /corridor). */
 function serverAccept(pointsLL: LL[], radius: number, pois: LL[]): boolean[] {
   const points = pointsLL.map((p) => [p.lat, p.lon] as [number, number]);
-  const degLat = radius / 110574;
-  const degLon = radius / (111320 * Math.cos((points[0]![0] * Math.PI) / 180));
-  let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180;
-  for (const [lat, lon] of points) {
-    if (lat < minLat) minLat = lat; if (lat > maxLat) maxLat = lat;
-    if (lon < minLon) minLon = lon; if (lon > maxLon) maxLon = lon;
-  }
-  minLat -= degLat; maxLat += degLat; minLon -= degLon; maxLon += degLon;
-  const originLat = (minLat + maxLat) / 2;
-  const originLon = (minLon + maxLon) / 2;
-  const mPerDegLat = 110574;
-  const mPerDegLon = 111320 * Math.cos((originLat * Math.PI) / 180);
-  const cellM = Math.max(radius * 2, 100);
-  const toCellX = (lon: number) => Math.floor(((lon - originLon) * mPerDegLon) / cellM);
-  const toCellY = (lat: number) => Math.floor(((lat - originLat) * mPerDegLat) / cellM);
-  const cellKey = (cx: number, cy: number) => `${cx}:${cy}`;
-  const grid = new Map<string, number[]>();
-  for (let i = 0; i < points.length; i++) {
-    const key = cellKey(toCellX(points[i]![1]), toCellY(points[i]![0]));
-    const b = grid.get(key); if (b) b.push(i); else grid.set(key, [i]);
-  }
-  const radiusSq = radius * radius;
-  return pois.map((poi) => {
-    const cx = toCellX(poi.lon); const cy = toCellY(poi.lat);
-    const segments = new Set<number>();
-    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
-      const bucket = grid.get(cellKey(cx + dx, cy + dy));
-      if (!bucket) continue;
-      for (const idx of bucket) { if (idx > 0) segments.add(idx - 1); if (idx < points.length - 1) segments.add(idx); }
-    }
-    let min = Infinity;
-    for (const i of segments) { const d = segDistSq(points[i]!, points[i + 1]!, poi); if (d < min) { min = d; if (min <= radiusSq) break; } }
-    return min <= radiusSq;
-  });
+  const accepted = new Set(selectCorridorCandidates(points, radius, pois));
+  return pois.map((p) => accepted.has(p));
 }
 
 function segDistSq(a: [number, number], b: [number, number], poi: LL): number {
@@ -163,16 +128,16 @@ function geometry(name: string, points: LL[]) {
   console.log('  r(m)  pas(m)  échant.  écart max(m)  rappel corde  rappel serveur  pertes grille seule  rappel serveur @0,9r   (20 000 POI synthétiques à 0,5·r de la trace réelle)');
   const results: Record<number, number> = {};
   for (const r of [20, 40, 100, 300, 1000]) {
-    const { spacing, sampled } = frontendSamples(points, r);
+    const { spacing, sampled, radius: qr } = frontendSamples(points, r);
     let maxGap = 0; for (let i = 1; i < sampled.length; i++) maxGap = Math.max(maxGap, haversineM(sampled[i - 1]!, sampled[i]!));
     const pois = syntheticPois(points, r, 20_000, 0.5);
     const dist = makeDistIndex(sampled);
     const chordOk = pois.filter((p) => dist(p) <= r).length;
-    const accFlags = serverAccept(sampled, r, pois);
+    const accFlags = serverAccept(sampled, qr, pois);
     const acc = accFlags.filter(Boolean).length;
     const gridOnly = pois.filter((p, i) => !accFlags[i] && dist(p) <= r).length;
     const pois9 = syntheticPois(points, r, 20_000, 0.9);
-    const acc9 = serverAccept(sampled, r, pois9).filter(Boolean).length;
+    const acc9 = serverAccept(sampled, qr, pois9).filter(Boolean).length;
     results[r] = acc / pois.length;
     console.log(`  ${String(r).padStart(4)}  ${spacing.toFixed(0).padStart(6)}  ${String(sampled.length).padStart(7)}  ${maxGap.toFixed(0).padStart(12)}  ${(100 * chordOk / pois.length).toFixed(1).padStart(11)} %  ${(100 * acc / pois.length).toFixed(1).padStart(13)} %  ${String(gridOnly).padStart(18)}  ${(100 * acc9 / pois9.length).toFixed(1).padStart(18)} %`);
   }
@@ -200,11 +165,11 @@ function sliceByKm(points: LL[], fromKm: number, toKm: number): LL[] {
 
 /** Fenêtre de `win` km où la sélection serveur perd le plus de POI synthétiques (tronçon sinueux). */
 function worstWindow(points: LL[], r: number, win: number): [number, number] {
-  const { sampled } = frontendSamples(points, r);
+  const { sampled, radius: qr } = frontendSamples(points, r);
   const totalKm = routeLength(points) / 1000;
   const n = 10_000;
   const pois = syntheticPois(points, r, n, 0.5);
-  const ok = serverAccept(sampled, r, pois);
+  const ok = serverAccept(sampled, qr, pois);
   const bins = new Array(Math.ceil(totalKm / win)).fill(0);
   pois.forEach((_, i) => { if (!ok[i]) bins[Math.min(bins.length - 1, Math.floor(((i + 0.5) / n) * totalKm / win))]++; });
   const best = bins.indexOf(Math.max(...bins));
@@ -224,8 +189,8 @@ async function post(points: LL[], radiusM: number, categories: string[]) {
 }
 
 async function live(name: string, points: LL[], r: number, sliceKm: [number, number]) {
-  const { sampled } = frontendSamples(points, r);
-  const full = await post(sampled, r, CATEGORIES);
+  const { sampled, radius: qr } = frontendSamples(points, r);
+  const full = await post(sampled, qr, CATEGORIES);
   console.log(`  ${name} r=${r} : HTTP ${full.status} en ${full.ms.toFixed(0)} ms, corps ${(full.bytes / 1024).toFixed(0)} Ko, ${sampled.length} échant., ${full.features.length} POI`);
   const slice = sliceByKm(points, sliceKm[0], sliceKm[1]);
   const dense = densify(slice, 25);
@@ -233,7 +198,7 @@ async function live(name: string, points: LL[], r: number, sliceKm: [number, num
   const fullIds = new Set(full.features.map((f) => f.id));
   const missing = truth.features.filter((f) => !fullIds.has(f.id));
   // La réimplémentation prédit-elle exactement les mêmes manques ?
-  const predicted = serverAccept(sampled, r, truth.features);
+  const predicted = serverAccept(sampled, qr, truth.features);
   const predictedMissing = truth.features.filter((_, i) => !predicted[i]);
   const agree = predictedMissing.length === missing.length && predictedMissing.every((f) => !fullIds.has(f.id));
   console.log(`  tronçon km ${sliceKm[0]}-${sliceKm[1]} densifié (${dense.length} pts, HTTP ${truth.status}, ${truth.ms.toFixed(0)} ms) : ${truth.features.length} POI réels à < ${r} m ; absents de la requête complète : ${missing.length} (${truth.features.length ? (100 * missing.length / truth.features.length).toFixed(0) : 0} %) ; réimplémentation grille prédit ${predictedMissing.length} manquants (${agree ? 'accord exact' : 'désaccord'})`);
@@ -271,8 +236,8 @@ async function main() {
     for (const f of fs.readdirSync(cacheDir).filter((n) => /^pois-.*-(20|40)\.json$/.test(n))) {
       const r = Number(/-(\d+)\.json$/.exec(f)![1]);
       const cached = JSON.parse(fs.readFileSync(path.join(cacheDir, f), 'utf8')) as LL[];
-      const { sampled, spacing } = frontendSamples(gt20, r);
-      const ok = serverAccept(sampled, r, cached).filter(Boolean).length;
+      const { sampled, spacing, radius: qr } = frontendSamples(gt20, r);
+      const ok = serverAccept(sampled, qr, cached).filter(Boolean).length;
       console.log(`\nCache ${f} (${cached.length} POI réels, pas 1,4·r) → requête frontend (pas ${spacing.toFixed(0)} m) en garde ${ok} : ${cached.length - ok} perdus (${(100 * (cached.length - ok) / cached.length).toFixed(1)} %)`);
     }
   }
@@ -288,10 +253,10 @@ async function main() {
         if (x.truthN > 0 && x.missing / x.truthN > 0.01) failures.push(`${n} prod : ${x.missing}/${x.truthN} POI réels à < 20 m absents de la recherche corridor`);
       }
       const g1k = frontendSamples(gt20, 1000);
-      const r1 = await post(g1k.sampled, 1000, CATEGORIES);
+      const r1 = await post(g1k.sampled, g1k.radius, CATEGORIES);
       console.log(`  GT20 r=1000 : HTTP ${r1.status} en ${r1.ms.toFixed(0)} ms, ${r1.features.length} POI, réponse ${(r1.respBytes / 1048576).toFixed(1)} Mo`);
       const t10k = frontendSamples(tdf, 10_000);
-      const b10 = await post(t10k.sampled, 10_000, CATEGORIES);
+      const b10 = await post(t10k.sampled, t10k.radius, CATEGORIES);
       big = b10;
       console.log(`  TdF r=10000 (max UI/serveur) : HTTP ${b10.status} en ${b10.ms.toFixed(0)} ms, ${b10.features.length} POI, cache-control=${b10.cache}, corps="${b10.text}"`);
     }
@@ -303,7 +268,7 @@ async function main() {
     ];
     const loop = densify(cities, 30);
     const lf = frontendSamples(loop, 10_000);
-    const big2 = await post(lf.sampled, 10_000, CATEGORIES);
+    const big2 = await post(lf.sampled, lf.radius, CATEGORIES);
     console.log(`  Boucle France ${(routeLength(loop) / 1000).toFixed(0)} km r=10000 : HTTP ${big2.status} en ${big2.ms.toFixed(0)} ms, ${big2.features.length} POI, cache-control=${big2.cache}, corps="${big2.text}"`);
     for (const [n, x] of [['TdF r=10000', big], ['Boucle France r=10000', big2]] as const) {
       if (x.status === 200 && x.features.length === 0) failures.push(`${n} : 200 + 0 POI (413 « Corridor trop large » amont masqué par api/poi.ts)`);
