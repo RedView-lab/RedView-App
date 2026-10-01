@@ -312,6 +312,35 @@ export function cacheRecoloredBlob(signature: string, blobUrl: string): void {
   recoloredBlobCache.set(signature, blobUrl);
 }
 
+/** L'URL est-elle encore détenue par le cache recoloré ? */
+export function isRecoloredBlobUrlCached(url: string): boolean {
+  for (const cachedUrl of recoloredBlobCache.values()) {
+    if (cachedUrl === url) return true;
+  }
+  return false;
+}
+
+/**
+ * Libère une URL blob d'overlay qui n'est plus affichée. Propriété : une URL
+ * présente dans `recoloredBlobCache` appartient au cache, qui seul la révoque
+ * (à l'éviction ou au clear) — la révoquer ici rendrait l'entrée de cache
+ * morte et le calque météo vide au prochain rendu de la même heure.
+ * La vérification a lieu au moment de la révocation (après `delayMs`).
+ */
+export function releaseOverlayBlobUrl(url: string | undefined, delayMs = 0): void {
+  if (!url?.startsWith('blob:')) return;
+  const revoke = () => {
+    if (isRecoloredBlobUrlCached(url)) return;
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      /* no-op */
+    }
+  };
+  if (delayMs > 0) window.setTimeout(revoke, delayMs);
+  else revoke();
+}
+
 export function clearRecoloredBlobCache(): void {
   for (const url of recoloredBlobCache.values()) {
     if (url.startsWith('blob:')) {

@@ -50,6 +50,7 @@ import {
   getCachedRecoloredBlob,
   cacheRecoloredBlob,
   preRecolorTile,
+  releaseOverlayBlobUrl,
 } from '../vpsTileRenderer';
 import {
   fetchRadarMeta,
@@ -193,9 +194,8 @@ export function useWeatherDataPipeline({
         armStyleRecovery('force', `ensureLayer-new:${key}`);
         return false;
       }
-      if (rendered?.url.startsWith('blob:')) {
-        window.setTimeout(() => URL.revokeObjectURL(rendered.url), 1_000);
-      }
+      // L'URL remplacée peut être une tuile VPS détenue par le cache recoloré.
+      releaseOverlayBlobUrl(rendered?.url, 1_000);
       renderedRef.current[key] = { url, coords, signature };
       renderedCount += 1;
       publishStatus(createOverlayStatus({
@@ -495,7 +495,8 @@ export function useWeatherDataPipeline({
 
       const activeCheck = activeRenderableLayers(stateRef.current);
       if (!stateRef.current.enabled || !activeCheck.some((l) => l.key === key)) {
-        if (blobUrl.startsWith('blob:')) URL.revokeObjectURL(blobUrl);
+        // blobUrl vient d'entrer dans le cache : c'est lui qui la révoquera.
+        releaseOverlayBlobUrl(blobUrl);
         if (hideLayerCompletely) hideLayerCompletely(key);
         else setVisibility(key, false);
         continue;

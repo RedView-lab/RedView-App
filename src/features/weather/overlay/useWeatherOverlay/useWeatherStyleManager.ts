@@ -14,6 +14,7 @@ import {
   RADAR_LAYER_ID,
   RADAR_SOURCE_ID,
 } from './constants';
+import { releaseOverlayBlobUrl } from '../vpsTileRenderer';
 import {
   imageCoords,
   logWeatherOverlay,
@@ -499,10 +500,10 @@ export function useWeatherStyleManager({
     } catch {
       /* no-op */
     }
+    // Les URLs détenues par le cache recoloré restent vivantes pour la
+    // réouverture du projet ; les autres sont révoquées.
     for (const rendered of Object.values(renderedRef.current)) {
-      if (rendered?.url.startsWith('blob:')) {
-        window.setTimeout(() => URL.revokeObjectURL(rendered.url), 1_000);
-      }
+      releaseOverlayBlobUrl(rendered?.url, 1_000);
     }
     renderedRef.current = {};
     styleFallbackUsableRef.current = false;
