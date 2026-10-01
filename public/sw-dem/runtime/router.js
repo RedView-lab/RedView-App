@@ -79,7 +79,13 @@ function shedPrefetchIfBusy(url) {
 }
 
 self.addEventListener('fetch', (event) => {
+  // Les navigations (barre d'adresse, liens) ne sont jamais servies par le SW :
+  // seules les requêtes de tuiles émises par la carte le sont.
+  if (event.request.mode === 'navigate') return;
+
   const url = new URL(event.request.url);
+  // Uniquement les routes de tuiles de NOTRE origine.
+  if (url.origin !== self.location.origin) return;
 
   const demMatch = url.pathname.match(/^\/dem-tiles\/(\d+)\/(\d+)\/(\d+)$/);
   if (demMatch) {

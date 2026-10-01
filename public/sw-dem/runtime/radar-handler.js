@@ -120,16 +120,45 @@ function buildRadarLookup(bands, mode, valMin = 0, valMax = 20) {
   return lookup;
 }
 
+// LRU borné : `p` vient de l'URL de la tuile.
+const RADAR_LOOKUP_CACHE_MAX = 64;
 const radarLookupCache = new Map();
 
 function getOrCreateRadarLookup(pStr) {
-  if (radarLookupCache.has(pStr)) {
-    return radarLookupCache.get(pStr);
+  const cached = radarLookupCache.get(pStr);
+  if (cached) {
+    radarLookupCache.delete(pStr);
+    radarLookupCache.set(pStr, cached);
+    return cached;
   }
   const { mode, bands } = parseRadarPaletteParam(pStr);
   const lookup = buildRadarLookup(bands, mode, 0, 20);
   radarLookupCache.set(pStr, lookup);
+  while (radarLookupCache.size > RADAR_LOOKUP_CACHE_MAX) {
+    radarLookupCache.delete(radarLookupCache.keys().next().value);
+  }
   return lookup;
+}
+
+// Même allowlist que server.mjs / server/http-security.mjs : le SW ne doit
+// jamais aller chercher (ni renvoyer sous l'origine de l'app) le contenu d'un
+// hôte arbitraire passé en query string.
+const RADAR_ALLOWED_HOSTS = new Set([
+  'https://tilecache.rainviewer.com',
+  'https://tilecache.rainviewer.net',
+]);
+const RADAR_DEFAULT_HOST = 'https://tilecache.rainviewer.com';
+const RADAR_FRAME_PATH_RE = /^\/?[a-zA-Z0-9_-]+(\/[a-zA-Z0-9_-]+)*$/;
+const RADAR_MAX_ZOOM = 22;
+
+function isValidRadarTile(z, x, y) {
+  if (!Number.isInteger(z) || z < 0 || z > RADAR_MAX_ZOOM) return false;
+  const n = 2 ** z;
+  return Number.isInteger(x) && Number.isInteger(y) && x >= 0 && y >= 0 && x < n && y < n;
+}
+
+function isImageResponse(res) {
+  return (res.headers.get('content-type') || '').toLowerCase().startsWith('image/');
 }
 
 /**
@@ -137,11 +166,13 @@ function getOrCreateRadarLookup(pStr) {
  * recolors it in ~0.7 ms, and returns a PNG response matching the user's custom palette.
  */
 async function handleRadarTileRequest(url, z, x, y) {
-  const host = (url.searchParams.get('host') || 'https://tilecache.rainviewer.com').replace(/\/+$/, '');
-  const path = url.searchParams.get('path') || '';
-  const pStr = url.searchParams.get('p') || '';
+  const rawHost = (url.searchParams.get('host') || '').trim().replace(/\/+$/, '');
+  const host = RADAR_ALLOWED_HOSTS.has(rawHost) ? rawHost : RADAR_DEFAULT_HOST;
+  const path = (url.searchParams.get('path') || '').trim();
+  const rawP = url.searchParams.get('p') || '';
+  const pStr = rawP.length <= 512 ? rawP : '';
 
-  if (!path) {
+  if (!path || path.length > 200 || !RADAR_FRAME_PATH_RE.test(path) || !isValidRadarTile(z, x, y)) {
     return new Response(null, { status: 204 });
   }
 
@@ -150,7 +181,7 @@ async function handleRadarTileRequest(url, z, x, y) {
 
   try {
     const res = await fetch(upstreamUrl);
-    if (!res.ok) {
+    if (!res.ok || !isImageResponse(res)) {
       return new Response(null, { status: 204 });
     }
 
@@ -225,7 +256,19 @@ async function handleRadarTileRequest(url, z, x, y) {
     console.warn('[radar-handler] recolor failed, attempting raw tile fallback:', err);
     try {
       const fallbackRes = await fetch(upstreamUrl);
-      if (fallbackRes.ok) return fallbackRes;
+      // On ne relaie jamais la réponse brute telle quelle : uniquement une
+      // image, ré-emballée avec un Content-Type maîtrisé.
+      if (fallbackRes.ok && isImageResponse(fallbackRes)) {
+        return new Response(await fallbackRes.blob(), {
+          status: 200,
+          headers: {
+            'Content-Type': 'image/png',
+            'Cache-Control': 'public, max-age=300',
+            'X-Content-Type-Options': 'nosniff',
+            'X-Weather-Source': 'radar-raw-fallback',
+          },
+        });
+      }
     } catch { /* ignore */ }
     return new Response(null, { status: 204 });
   }
