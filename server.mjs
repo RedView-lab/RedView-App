@@ -87,6 +87,10 @@ export const REDVIEW_CSP_HEADER = [
 const hitRateLimit = createRateLimiter({ windowMs: 60 * 1000 });
 const MAX_AUTH_REQUESTS = 15;
 const MAX_API_REQUESTS = 120;
+// Tuiles/méta météo du VPS (/api/weather/*) : un balayage de 24 h × 5 couches
+// avec préchargement fait ~145 requêtes ; bucket dédié pour ne pas épuiser
+// celui de BRouter/POI.
+const MAX_WEATHER_REQUESTS = 600;
 // Fallbacks de tuiles (SW inactif) : généreux, mais chaque requête déclenche
 // des fetchs upstream, donc pas illimité.
 const MAX_TILE_REQUESTS = 600;
@@ -234,7 +238,13 @@ const server = http.createServer(async (req, res) => {
       // Le bucket est choisi d'après la route RÉSOLUE : un chemin détourné ne
       // peut plus atteindre `auth/*` en passant par le quota général.
       const isAuth = apiRoute?.isAuth ?? false;
-      if (!checkRateLimit(req, isAuth ? 'auth' : 'general', isAuth ? MAX_AUTH_REQUESTS : MAX_API_REQUESTS)) {
+      const isWeather = apiRoute?.route === 'weather';
+      const [bucket, max] = isAuth
+        ? ['auth', MAX_AUTH_REQUESTS]
+        : isWeather
+          ? ['weather', MAX_WEATHER_REQUESTS]
+          : ['general', MAX_API_REQUESTS];
+      if (!checkRateLimit(req, bucket, max)) {
         return sendTooManyRequests(res);
       }
       if (!apiRoute) {
