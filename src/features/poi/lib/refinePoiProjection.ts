@@ -1,3 +1,18 @@
+/**
+ * Projection plane locale de la trace pour les POI (distance latérale,
+ * progression le long de la trace).
+ *
+ * Métrique : équirectangulaire LOCALE par segment (kx = cos(lat moyenne du
+ * segment) × 111 320 m/°) — comme le serveur POI. Une échelle de longitude
+ * unique (latitude moyenne de la trace) faussait la distance latérale de
+ * ±7-9 % aux extrémités d'un itinéraire nord–sud de 1 000 km (POI gardés ou
+ * rejetés à tort autour de X) et la progression de plusieurs km.
+ *
+ * Les coordonnées globales x/y ne servent plus qu'à l'élagage spatial : leur
+ * échelle de longitude est celle du |lat| max de la trace (cos minimal), si
+ * bien qu'un écart en x/y est toujours <= à l'écart réel — l'élagage reste
+ * conservatif.
+ */
 import type { GpxRoute, PoiFeature } from '../types';
 import type { OpenStatus } from './refinePoiOpeningHours';
 
@@ -36,34 +51,83 @@ export interface ProjectedPoi {
   clusterId: number;
 }
 
+/** Mètres par degré de longitude à la latitude `latDeg`. */
+function lonMetersAt(latDeg: number): number {
+  return Math.cos((latDeg * Math.PI) / 180) * METERS_PER_DEG_LON;
+}
+
+/**
+ * Projection d'un point sur le segment [a, b] dans la métrique locale du
+ * segment (kx = cos(lat moyenne de a et b)). `cross` > 0 ⇒ point à gauche du
+ * sens de marche (x = est, y = nord).
+ */
+export function projectOntoSegmentLocal(
+  a: { lat: number; lon: number },
+  b: { lat: number; lon: number },
+  lat: number,
+  lon: number,
+): { t: number; distanceM: number; segmentLengthM: number; cross: number } {
+  const kx = lonMetersAt((a.lat + b.lat) / 2);
+  const ky = METERS_PER_DEG_LAT;
+  const abx = (b.lon - a.lon) * kx;
+  const aby = (b.lat - a.lat) * ky;
+  const apx = (lon - a.lon) * kx;
+  const apy = (lat - a.lat) * ky;
+  const segLenSq = abx * abx + aby * aby;
+  const t = segLenSq > 0 ? Math.max(0, Math.min(1, (apx * abx + apy * aby) / segLenSq)) : 0;
+  const dx = apx - t * abx;
+  const dy = apy - t * aby;
+  return {
+    t,
+    distanceM: Math.sqrt(dx * dx + dy * dy),
+    segmentLengthM: Math.sqrt(segLenSq),
+    cross: abx * apy - aby * apx,
+  };
+}
+
+/** Latitude / longitude d'un point projeté (repli sur x/y pour les anciens objets). */
+export function projectedLatLon(
+  p: ProjectedRoutePoint,
+  meta: Partial<ProjectedRouteMetadata>,
+): { lat: number; lon: number } {
+  const latScale = meta.latScale ?? METERS_PER_DEG_LAT;
+  const lat = p.lat ?? p.y / latScale;
+  const lonScale = meta.lonScale ?? lonMetersAt(lat);
+  return { lat, lon: p.lon ?? p.x / lonScale };
+}
+
 export function projectRoutePoints(points: GpxRoute['points']): ProjectedRoutePoint[] {
   if (points.length === 0) return [];
   let sumLat = 0;
+  let maxAbsLat = 0;
   for (let i = 0; i < points.length; i++) {
     sumLat += points[i]!.lat;
+    maxAbsLat = Math.max(maxAbsLat, Math.abs(points[i]!.lat));
   }
   const refLat = sumLat / points.length;
-  const lonScale = Math.cos((refLat * Math.PI) / 180) * METERS_PER_DEG_LON;
+  // Échelle de l'élagage spatial uniquement (cos minimal ⇒ écarts x/y <= écarts
+  // réels) ; distances et progression utilisent la métrique locale du segment.
+  const lonScale = Math.max(0.01 * METERS_PER_DEG_LON, lonMetersAt(Math.min(90, maxAbsLat)));
   const latScale = METERS_PER_DEG_LAT;
 
   const result: ProjectedRoutePoint[] = new Array(points.length);
   let totalProgress = 0;
-  let prevX = points[0]!.lon * lonScale;
-  let prevY = points[0]!.lat * latScale;
 
-  result[0] = { x: prevX, y: prevY, progressM: 0, lat: points[0]!.lat, lon: points[0]!.lon };
+  result[0] = {
+    x: points[0]!.lon * lonScale,
+    y: points[0]!.lat * latScale,
+    progressM: 0,
+    lat: points[0]!.lat,
+    lon: points[0]!.lon,
+  };
 
   for (let i = 1; i < points.length; i++) {
     const p = points[i]!;
-    const curX = p.lon * lonScale;
-    const curY = p.lat * latScale;
-    const dx = curX - prevX;
-    const dy = curY - prevY;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    totalProgress += dist;
-    result[i] = { x: curX, y: curY, progressM: totalProgress, lat: p.lat, lon: p.lon };
-    prevX = curX;
-    prevY = curY;
+    const prev = points[i - 1]!;
+    const dx = (p.lon - prev.lon) * lonMetersAt((p.lat + prev.lat) / 2);
+    const dy = (p.lat - prev.lat) * latScale;
+    totalProgress += Math.sqrt(dx * dx + dy * dy);
+    result[i] = { x: p.lon * lonScale, y: p.lat * latScale, progressM: totalProgress, lat: p.lat, lon: p.lon };
   }
 
   const meta = result as unknown as ProjectedRouteMetadata;
@@ -121,62 +185,66 @@ export function projectPoiOntoRoute(
     return { progressM: 0, lateralDistanceM: 0, etaSec: null };
   }
 
-  // Use the exact same coordinate scale as the route to eliminate spurious lateral offsets
+  // x/y globaux (élagage) : même échelle que la trace. Les distances sont
+  // calculées dans la métrique locale de chaque segment.
   const meta = route as unknown as Partial<ProjectedRouteMetadata>;
   const lonScale = meta.lonScale ?? (
     route[0]?.lat != null
-      ? Math.cos((route[0].lat * Math.PI) / 180) * METERS_PER_DEG_LON
-      : Math.cos((poi.lat * Math.PI) / 180) * METERS_PER_DEG_LON
+      ? lonMetersAt(route[0].lat)
+      : lonMetersAt(poi.lat)
   );
   const latScale = meta.latScale ?? METERS_PER_DEG_LAT;
 
   const px = poi.lon * lonScale;
   const py = poi.lat * latScale;
 
+  const vertexDistanceM = (p: ProjectedRoutePoint): number => {
+    const ll = projectedLatLon(p, meta);
+    const dx = (poi.lon - ll.lon) * lonMetersAt((poi.lat + ll.lat) / 2);
+    const dy = (poi.lat - ll.lat) * METERS_PER_DEG_LAT;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
   if (route.length === 1) {
     const p = route[0]!;
-    const dx = px - p.x;
-    const dy = py - p.y;
     return {
       progressM: p.progressM,
-      lateralDistanceM: Math.sqrt(dx * dx + dy * dy),
+      lateralDistanceM: vertexDistanceM(p),
       etaSec: etaSecByPoint?.[0] ?? null,
     };
   }
 
-  let minDistanceSq = Infinity;
+  // 1. Échantillonnage grossier : borne supérieure rapide (élagage seulement ;
+  //    le résultat vient toujours d'un segment).
+  let bound = Infinity;
+  const stride = Math.max(1, Math.floor(route.length / 64));
+  for (let i = 0; i < route.length; i += stride) {
+    const d = vertexDistanceM(route[i]!);
+    if (d < bound) bound = d;
+  }
+
+  let bestDist = Infinity;
   let bestProgressM = 0;
   let bestSegmentIndex = 0;
   let bestSegmentT = 0;
 
-  // 1. Échantillonnage grossier : borne supérieure rapide
-  const stride = Math.max(1, Math.floor(route.length / 64));
-  for (let i = 0; i < route.length; i += stride) {
-    const pt = route[i]!;
-    const dx = px - pt.x;
-    const dy = py - pt.y;
-    const dSq = dx * dx + dy * dy;
-    if (dSq < minDistanceSq) {
-      minDistanceSq = dSq;
-      bestProgressM = pt.progressM;
-      bestSegmentIndex = Math.min(i, route.length - 2);
-      bestSegmentT = 0;
-    }
-  }
+  // Marge d'élagage : la borne vient d'une métrique légèrement différente
+  // (latitude moyenne POI/sommet) de celle des segments.
+  let pruneDist = bound * 1.01 + 1;
 
-  let bestDist = Math.sqrt(minDistanceSq);
-
-  // 2. Élagage spatial hiérarchique par paquets (chunks de 128 points)
+  // 2. Élagage spatial hiérarchique par paquets (chunks de 128 points).
+  //    Les écarts x/y (cos minimal de la trace) sont <= aux écarts réels :
+  //    un paquet hors de la boîte élargie ne peut contenir mieux.
   const chunks = getRouteChunks(route);
   for (let c = 0; c < chunks.length; c++) {
     const chunk = chunks[c]!;
 
     // Élimination du paquet entier de 128 segments en un seul test AABB
     if (
-      px < chunk.minX - bestDist ||
-      px > chunk.maxX + bestDist ||
-      py < chunk.minY - bestDist ||
-      py > chunk.maxY + bestDist
+      px < chunk.minX - pruneDist ||
+      px > chunk.maxX + pruneDist ||
+      py < chunk.minY - pruneDist ||
+      py > chunk.maxY + pruneDist
     ) {
       continue;
     }
@@ -186,38 +254,45 @@ export function projectPoiOntoRoute(
       const a = route[i]!;
       const b = route[i + 1]!;
 
-      const minX = (a.x < b.x ? a.x : b.x) - bestDist;
+      const minX = (a.x < b.x ? a.x : b.x) - pruneDist;
       if (px < minX) continue;
-      const maxX = (a.x > b.x ? a.x : b.x) + bestDist;
+      const maxX = (a.x > b.x ? a.x : b.x) + pruneDist;
       if (px > maxX) continue;
-      const minY = (a.y < b.y ? a.y : b.y) - bestDist;
+      const minY = (a.y < b.y ? a.y : b.y) - pruneDist;
       if (py < minY) continue;
-      const maxY = (a.y > b.y ? a.y : b.y) + bestDist;
+      const maxY = (a.y > b.y ? a.y : b.y) + pruneDist;
       if (py > maxY) continue;
 
-      const abx = b.x - a.x;
-      const aby = b.y - a.y;
-      const apx = px - a.x;
-      const apy = py - a.y;
-      const segLenSq = abx * abx + aby * aby;
+      const seg = projectOntoSegmentLocal(
+        projectedLatLon(a, meta),
+        projectedLatLon(b, meta),
+        poi.lat,
+        poi.lon,
+      );
 
-      let t = 0;
-      if (segLenSq > 0) {
-        t = Math.max(0, Math.min(1, (apx * abx + apy * aby) / segLenSq));
-      }
-
-      const projX = a.x + t * abx;
-      const projY = a.y + t * aby;
-      const dx = px - projX;
-      const dy = py - projY;
-      const distSq = dx * dx + dy * dy;
-
-      if (distSq < minDistanceSq) {
-        minDistanceSq = distSq;
-        bestDist = Math.sqrt(distSq);
-        bestProgressM = a.progressM + t * Math.sqrt(segLenSq);
+      if (seg.distanceM < bestDist) {
+        bestDist = seg.distanceM;
+        pruneDist = bestDist * 1.01 + 1;
+        // Progression : longueur cumulée (métrique locale) jusqu'à a, puis
+        // fraction du segment — cohérente avec projectRoutePoints.
+        bestProgressM = a.progressM + seg.t * (b.progressM - a.progressM);
         bestSegmentIndex = i;
-        bestSegmentT = t;
+        bestSegmentT = seg.t;
+      }
+    }
+  }
+
+  // Filet de sécurité (ne devrait pas arriver) : parcours complet.
+  if (!Number.isFinite(bestDist)) {
+    for (let i = 0; i < route.length - 1; i++) {
+      const a = route[i]!;
+      const b = route[i + 1]!;
+      const seg = projectOntoSegmentLocal(projectedLatLon(a, meta), projectedLatLon(b, meta), poi.lat, poi.lon);
+      if (seg.distanceM < bestDist) {
+        bestDist = seg.distanceM;
+        bestProgressM = a.progressM + seg.t * (b.progressM - a.progressM);
+        bestSegmentIndex = i;
+        bestSegmentT = seg.t;
       }
     }
   }

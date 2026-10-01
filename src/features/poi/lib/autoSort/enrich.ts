@@ -6,7 +6,9 @@ import type { PoiFeature } from '../../types';
 import { buildPoiClusters } from '../refinePoiClustering';
 import {
   getRouteChunks,
+  projectOntoSegmentLocal,
   projectRoutePoints,
+  projectedLatLon,
   scorePoiFeature,
   type ProjectedPoi,
   type ProjectedRoutePoint,
@@ -122,21 +124,20 @@ export function findRoutePasses(
     for (let i = chunk.start; i < chunk.end; i++) {
       const a = route[i]!;
       const b = route[i + 1]!;
-      const abx = b.x - a.x;
-      const aby = b.y - a.y;
-      const apx = px - a.x;
-      const apy = py - a.y;
-      const segLenSq = abx * abx + aby * aby;
-      const t = segLenSq > 0 ? Math.max(0, Math.min(1, (apx * abx + apy * aby) / segLenSq)) : 0;
-      const dx = px - (a.x + t * abx);
-      const dy = py - (a.y + t * aby);
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist > maxLateralM) continue;
+      // Métrique locale du segment (cos de sa latitude) : les x/y globaux ne
+      // servent qu'à l'élagage ci-dessus.
+      const seg = projectOntoSegmentLocal(
+        projectedLatLon(a, meta),
+        projectedLatLon(b, meta),
+        feature.lat,
+        feature.lon,
+      );
+      if (seg.distanceM > maxLateralM) continue;
       hits.push({
-        progressM: a.progressM + t * Math.sqrt(segLenSq),
-        lateralM: dist,
+        progressM: a.progressM + seg.t * (b.progressM - a.progressM),
+        lateralM: seg.distanceM,
         // x = est, y = nord : produit vectoriel > 0 ⇒ POI à gauche du sens de marche.
-        cross: abx * apy - aby * apx,
+        cross: seg.cross,
       });
     }
   }
