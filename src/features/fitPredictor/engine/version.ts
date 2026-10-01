@@ -3,4 +3,4 @@
  * le banc script-test-bench/pace-accuracy). Une prédiction vélo persistée sans
  * version ou d'une version inférieure est recalculée à l'ouverture.
  */
-export const CYCLING_ENGINE_VERSION = 3;
+export const CYCLING_ENGINE_VERSION = 4;

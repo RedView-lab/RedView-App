@@ -18,7 +18,6 @@ use crate::cycling::rider::RiderModel;
 
 #[derive(Debug, Clone, Default)]
 pub struct SimOptions {
-    pub start_time_h: Option<f64>,
     pub temperature_c: Option<f64>,
     pub disable_corners: bool,
     pub disable_way: bool,
@@ -28,11 +27,13 @@ pub struct SimOptions {
     pub power_scale: Option<f64>,
 }
 
-/// Allure selon la durée de l'effort : au-delà de `pacing_ref_h` heures de
-/// déplacement, on ne roule pas à l'intensité d'une sortie à la journée —
-/// puissance × (T / T_ref)^(−k). Plafonnée à `pacing_max_h` : au-delà de
-/// deux à trois jours de roulage, tout le monde dort et l'intensité horaire
-/// cesse de baisser (le moteur, lui, ne connaît pas les pauses).
+/// Allure selon la durée de l'effort : jusqu'à `pacing_ref_h` heures de
+/// déplacement (une longue journée), on roule à l'intensité d'une sortie à la
+/// journée ; au-delà, puissance × (T / T_ref)^(−k). Plafonnée à
+/// `pacing_max_h` : au-delà de deux à trois jours de roulage, tout le monde
+/// dort et l'intensité horaire cesse de baisser (le moteur, lui, ne connaît
+/// pas les pauses). Réglage : ultras de 38 à 107 h d'un coureur expert
+/// (validation croisée), sorties à la journée de la cycliste de référence.
 pub fn duration_pacing(moving_s: f64, p: &ModelParams) -> f64 {
     let hours = (moving_s / 3600.0).min(p.pacing_max_h.max(p.pacing_ref_h));
     if !(hours > p.pacing_ref_h) || p.pacing_ref_h <= 0.0 {
@@ -272,7 +273,7 @@ pub fn simulate(course: &Course, r: &RiderModel, p: &ModelParams, o: &SimOptions
             continue;
         }
 
-        let phys = scale * if o.disable_physio { 1.0 } else { physio.factor(r, p, o.start_time_h) };
+        let phys = scale * if o.disable_physio { 1.0 } else { physio.factor(r, p) };
         // Allure réglée sur la pente de contexte (on ne relâche pas sur un
         // replat de montée, on ne force pas sur une bosse de 50 m — ni sur le
         // bruit du MNT), mais on repédale sur une bosse en pleine descente.

@@ -169,7 +169,6 @@ export type CyclingRiderSpec =
 export interface CyclingConfig {
   rider?: CyclingRiderSpec;
   rider_override?: Partial<CyclingRiderModel>;
-  start_time_h?: number;
   ambient_temperature_c?: number;
   /** `planned` (BRouter), `gps` (trace enregistrée), `auto` (GPX importé). */
   geometry?: 'planned' | 'gps' | 'auto';

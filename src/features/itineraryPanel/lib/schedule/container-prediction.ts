@@ -80,10 +80,8 @@ export function buildCyclingConfig(
   if (options.calibration) {
     config.uncertainty = options.calibration.report.expected_accuracy_pct / 100;
   }
-  if (rhythm.startTime) {
-    const startTimeH = parseTimeToHourDecimal(rhythm.startTime);
-    if (startTimeH !== null) config.start_time_h = startTimeH;
-  }
+  // Pas d'heure de départ : le moteur ignore les pauses (sommeil compris), son
+  // horloge de déplacement ne dit pas l'heure qu'il est.
   return config;
 }
 

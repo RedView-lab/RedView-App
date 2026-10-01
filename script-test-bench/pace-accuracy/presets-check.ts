@@ -4,10 +4,10 @@
  *   npx tsx script-test-bench/pace-accuracy/presets-check.ts [--pkg=<dir>]
  *
  * - chaque niveau × genre sur les 6 jours de Jo (mode A) ;
- * - GT20 (593 km, ~10 000 m D+) en temps de déplacement, bandes provisoires ;
+ * - GT20 (593 km, ~10 000 m D+) en temps de déplacement d'une traite ;
  * - vitesse sur 100 km de plat, VAM sur un col type (Alpe d'Huez simplifiée).
- * Ancrages : intermédiaire ♀ = Jo à ±5 % ; intermédiaire (défaut) au plus 5 %
- * plus rapide ; débutant nettement plus lent ; ordre monotone.
+ * Ancrages : Jo plus rapide qu'intermédiaire (♀ +3 à +15 %, défaut > 0) ;
+ * débutant nettement plus lent ; ordre monotone.
  */
 import fs from 'node:fs';
 import { loadPkg, predictV2, trackToV2Route, type V2Route } from './lib/engine';
@@ -17,12 +17,12 @@ import { formatHms, loadRides } from './lib/rides';
 const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
 const LEVELS = ['debutant', 'intermediaire', 'avance', 'expert'] as const;
 const GENDERS = ['female', 'unspecified'] as const;
-/** Bandes GT20 provisoires (h de déplacement) — à valider avec Victor. */
+/** Bandes GT20 (h de déplacement) : débutant ≈ 48 h, expert ≈ 21 h (cibles produit 2026-10-01). */
 const GT20_BANDS: Record<string, [number, number]> = {
-  debutant: [42, 50],
-  intermediaire: [33, 38],
-  avance: [27, 31],
-  expert: [22, 25],
+  debutant: [45, 51],
+  intermediaire: [36, 42],
+  avance: [25, 29],
+  expert: [20, 22.5],
 };
 
 function gpxRoute(file: string): V2Route {
@@ -84,7 +84,7 @@ async function main() {
   const jo = tripErr['intermediaire:female']!;
   const def = tripErr['intermediaire:unspecified']!;
   const deb = tripErr['debutant:female']!;
-  console.log(`Ancrages : intermédiaire ♀ ${pct(jo)} (±5 %), défaut ${pct(def)} (entre −5 % et 0), débutant ♀ ${pct(deb)} (+15 à +20 %)`);
+  console.log(`Ancrages : intermédiaire ♀ ${pct(jo)} (+3 à +15 %), défaut ${pct(def)} (> 0), débutant ♀ ${pct(deb)} (≥ +15 %)`);
 }
 
 main().catch((e) => { console.error(e); process.exit(2); });

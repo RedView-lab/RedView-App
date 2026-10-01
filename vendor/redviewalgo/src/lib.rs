@@ -129,8 +129,9 @@ pub fn engine_version() -> u32 {
 /// * `dist_m` — axe de distance de l'app (vide = haversine)
 /// * `surface`, `way` — attributs par point (voir `cycling::input`), vides = inconnus
 /// * `headwind_ms` — vent de face par point (vide = pas de vent)
-/// * `config` — `CyclingConfig` : `{ rider, rider_override?, start_time_h?,
-///   ambient_temperature_c?, geometry?, model_params?, output? }`
+/// * `config` — `CyclingConfig` : `{ rider, rider_override?,
+///   ambient_temperature_c?, geometry?, model_params?, output? }` (temps de
+///   déplacement seul : ni pauses ni heure de départ)
 #[wasm_bindgen]
 #[allow(clippy::too_many_arguments)]
 pub fn predict_cycling(

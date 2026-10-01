@@ -3,10 +3,12 @@
 //!
 //! Ce sont des jeux de paramètres « effectifs » : ils reproduisent des
 //! vitesses de déplacement réelles (vélo de voyage / bikepacking courant chez
-//! les utilisateurs de RedView), pas une FTP de laboratoire. Ancrage :
-//! « intermédiaire » femme = la cycliste de référence du banc (Cham→Paris,
-//! ±5 %) ; débutant nettement plus lent ; progression monotone sur le plat,
-//! en montée et en descente.
+//! les utilisateurs de RedView), pas une FTP de laboratoire. Ancrages : la
+//! cycliste de référence du banc (Cham→Paris) calibrée sur ses .fit est plus
+//! rapide qu'« intermédiaire » et plus lente qu'« avancé » ; débutant
+//! nettement plus lent ; GT20 (593 km, ~9 800 m D+) d'une traite ≈ 48 h en
+//! débutant, ≈ 21 h en expert ; progression monotone sur le plat, en montée et
+//! en descente.
 
 use crate::cycling::rider::RiderModel;
 use crate::types::Gender;
@@ -79,7 +81,7 @@ fn level_spec(level: &str) -> LevelSpec {
             endurance_amp: 0.35,
         },
         "expert" => LevelSpec {
-            p_flat_female_w: 135.0,
+            p_flat_female_w: 148.0,
             climb_ratio: 1.9,
             climb_sat_pct: 1.2,
             free_pct: 3.0,
@@ -97,9 +99,10 @@ fn level_spec(level: &str) -> LevelSpec {
             warmup_amp: 0.04,
             endurance_amp: 0.35,
         },
-        // "intermediaire" et toute valeur inconnue : la cycliste de référence.
+        // "intermediaire" et toute valeur inconnue : un peu en dessous de la
+        // cycliste de référence.
         _ => LevelSpec {
-            p_flat_female_w: 82.0,
+            p_flat_female_w: 72.0,
             climb_ratio: 1.95,
             climb_sat_pct: 1.2,
             free_pct: 3.0,

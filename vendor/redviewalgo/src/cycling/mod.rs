@@ -32,7 +32,7 @@ use params::ModelParams;
 use rider::{RiderModel, RiderOverride};
 
 /// Version du moteur vélo : une prédiction persistée plus ancienne est recalculée.
-pub const ENGINE_VERSION: u32 = 3;
+pub const ENGINE_VERSION: u32 = 4;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -70,7 +70,6 @@ pub struct OutputConfig {
 pub struct CyclingConfig {
     pub rider: Option<RiderSpec>,
     pub rider_override: Option<RiderOverride>,
-    pub start_time_h: Option<f64>,
     pub ambient_temperature_c: Option<f64>,
     pub geometry: Option<GeometrySource>,
     pub model_params: Option<ModelParams>,
@@ -116,17 +115,12 @@ pub fn from_legacy_config(cfg: &crate::types::PredictionConfig) -> (RiderModel, 
     if cfg.pacing_factor.is_finite() && cfg.pacing_factor > 0.3 {
         model.p_flat_w *= cfg.pacing_factor.clamp(0.5, 1.5);
     }
-    let v2 = CyclingConfig {
-        start_time_h: cfg.start_time_h,
-        ambient_temperature_c: cfg.ambient_temperature_c,
-        ..Default::default()
-    };
+    let v2 = CyclingConfig { ambient_temperature_c: cfg.ambient_temperature_c, ..Default::default() };
     (model, v2)
 }
 
 pub fn sim_options(cfg: &CyclingConfig) -> SimOptions {
     SimOptions {
-        start_time_h: cfg.start_time_h.filter(|h| h.is_finite()).map(|h| h.rem_euclid(24.0)),
         temperature_c: cfg.ambient_temperature_c.filter(|t| t.is_finite()),
         ..Default::default()
     }

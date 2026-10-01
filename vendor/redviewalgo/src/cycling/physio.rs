@@ -1,26 +1,20 @@
 //! État physiologique le long de la simulation : échauffement, fatigue
-//! d'endurance (ultra), creux circadien.
+//! d'endurance (ultra).
 //!
 //! Le moteur ne connaît pas les pauses : son horloge est le temps de
 //! déplacement. Les données de référence (5 jours de bikepacking) ne montrent
 //! aucune baisse de forme dans la journée : la fatigue d'endurance ne commence
-//! qu'après `endurance_onset_h` heures de selle.
+//! qu'après `endurance_onset_h` heures de selle. Pas de creux nocturne : sans
+//! les pauses (sommeil compris, posées par le planning de l'app), l'heure de
+//! déplacement ne dit pas l'heure qu'il est.
 
 use crate::cycling::params::ModelParams;
 use crate::cycling::rider::RiderModel;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Physio {
     /// Temps de déplacement depuis le départ (s).
     pub clock_s: f64,
-    /// Heures d'éveil (pour la dette de sommeil), départ ≈ 1 h après le réveil.
-    pub awake_h: f64,
-}
-
-impl Default for Physio {
-    fn default() -> Self {
-        Self { clock_s: 0.0, awake_h: 1.0 }
-    }
 }
 
 impl Physio {
@@ -34,29 +28,12 @@ impl Physio {
         1.0 - r.endurance_amp.clamp(0.0, 0.8) * (1.0 - (-over / p.endurance_tau_h.max(0.1)).exp())
     }
 
-    pub fn circadian_factor(&self, p: &ModelParams, start_time_h: Option<f64>) -> f64 {
-        let Some(start) = start_time_h else { return 1.0 };
-        let hour = (start + self.clock_s / 3600.0).rem_euclid(24.0);
-        let dip = (p.circadian_dip + p.circadian_debt_per_h * (self.awake_h - 16.0).max(0.0))
-            .min(p.circadian_max_dip);
-        if hour < 6.5 {
-            let phase = std::f64::consts::PI * (hour - 3.25) / 3.25;
-            1.0 - dip * 0.5 * (1.0 + phase.cos())
-        } else if hour > 22.0 {
-            let phase = std::f64::consts::PI * (hour - 22.0) / 5.25;
-            1.0 - dip * 0.5 * (1.0 - phase.cos())
-        } else {
-            1.0
-        }
-    }
-
-    pub fn factor(&self, r: &RiderModel, p: &ModelParams, start_time_h: Option<f64>) -> f64 {
-        self.warmup_factor(r, p) * self.endurance_factor(r, p) * self.circadian_factor(p, start_time_h)
+    pub fn factor(&self, r: &RiderModel, p: &ModelParams) -> f64 {
+        self.warmup_factor(r, p) * self.endurance_factor(r, p)
     }
 
     pub fn ride(&mut self, dt_s: f64) {
         self.clock_s += dt_s;
-        self.awake_h += dt_s / 3600.0;
     }
 }
 
@@ -89,16 +66,5 @@ mod tests {
         s.ride(12.0 * 3600.0);
         let at24 = s.endurance_factor(&r, &p);
         assert!(at12 < 1.0 && at24 < at12, "{at12} {at24}");
-    }
-
-    #[test]
-    fn night_dip_only_with_start_time() {
-        let p = ModelParams::default();
-        let mut s = Physio::default();
-        assert_eq!(s.circadian_factor(&p, None), 1.0);
-        s.clock_s = 18.0 * 3600.0; // départ 10 h → 4 h du matin
-        s.awake_h = 19.0;
-        let f = s.circadian_factor(&p, Some(10.0));
-        assert!(f < 0.95, "{f}");
     }
 }

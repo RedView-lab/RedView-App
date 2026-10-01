@@ -27,6 +27,7 @@ const outcomes: Outcome[] = [];
 
 let glue: any;
 let rides: Ride[];
+/** Cycliste type des scénarios synthétiques (un peu plus lent que Jo). */
 const JO = { preset: { level: 'intermediaire', gender: 'female' } };
 const PRIOR = { custom: { gender: 'female' } };
 const median = (v: number[]) => { const s = [...v].sort((a, b) => a - b); const n = s.length; return n % 2 ? s[(n - 1) / 2]! : (s[n / 2 - 1]! + s[n / 2]!) / 2; };
@@ -108,8 +109,8 @@ function r4() {
   const def = trip('intermediaire', 'unspecified');
   const deb = trip('debutant', 'female');
   const debDef = trip('debutant', 'unspecified');
-  record('R4', 'P', 'Préréglages ancrés sur Jo', Math.abs(jo) <= 5 && def <= 0 && def >= -5 && deb >= 10 && debDef > 0,
-    `intermédiaire ♀ ${pct(jo)} (±5)  intermédiaire défaut ${pct(def)} (−5..0)  débutant ♀ ${pct(deb)} (≥ +10)  débutant défaut ${pct(debDef)} (> 0 : plus lent qu'elle)`);
+  record('R4', 'P', 'Préréglages ancrés sur Jo (plus rapide qu\'intermédiaire)', jo >= 3 && jo <= 15 && def > 0 && deb >= 15 && debDef > def,
+    `intermédiaire ♀ ${pct(jo)} (+3..+15)  intermédiaire défaut ${pct(def)} (> 0 : plus lent qu'elle)  débutant ♀ ${pct(deb)} (≥ +15)  débutant défaut ${pct(debDef)} (> intermédiaire défaut)`);
 }
 
 function r6() {
@@ -233,7 +234,7 @@ function s1() {
   const e = (t / tRef - 1) * 100;
   record('S1', 'H', 'Alpe d\'Huez (13,8 km à 8,1 %) : moteur vs régime établi indépendant', Math.abs(e) <= 2,
     `moteur ${formatHms(t)}  référence ${formatHms(tRef)}  ${pct(e)} (≤ 2 %)`);
-  const bands: Record<string, [number, number]> = { debutant: [450, 650], intermediaire: [650, 850], avance: [850, 1100], expert: [1050, 1350] };
+  const bands: Record<string, [number, number]> = { debutant: [450, 650], intermediaire: [600, 800], avance: [850, 1100], expert: [1100, 1400] };
   const lines: string[] = [];
   let ok = true;
   for (const [level, [lo, hi]] of Object.entries(bands)) {
@@ -246,7 +247,7 @@ function s1() {
 }
 
 function s2() {
-  const bands: Record<string, [number, number]> = { debutant: [19, 24], intermediaire: [22, 27], avance: [26, 31], expert: [29, 36] };
+  const bands: Record<string, [number, number]> = { debutant: [19, 24], intermediaire: [21, 26], avance: [26, 31], expert: [29, 36] };
   const route = straight(100_000, () => 100, { step: 50 });
   let ok = true;
   const lines = Object.entries(bands).map(([level, [lo, hi]]) => {
@@ -337,11 +338,11 @@ function s11() {
 function s12() {
   const prof = (d: number) => 400 + 80 * Math.sin(d / 3000);
   const route = straight(600_000, prof, { step: 100 });
-  const res = predict(route, { rider: JO, start_time_h: 6 });
+  const res = predict(route, { rider: JO });
   const mid = res.points.find((p: any) => p.distance_m >= 300_000);
   const a1 = mid.elapsed_time_s;
   const a2 = res.total_time_s - mid.elapsed_time_s;
-  record('S12', 'P', '600 km d\'une traite : fatigue d\'endurance et creux nocturne', a2 > a1 * 1.05,
+  record('S12', 'P', '600 km d\'une traite : fatigue d\'endurance', a2 > a1 * 1.05,
     `1re moitié ${formatHms(a1)}, 2e ${formatHms(a2)} (${pct((a2 / a1 - 1) * 100)})`);
 }
 
@@ -360,8 +361,13 @@ function s13() {
   const levels = ['debutant', 'intermediaire', 'avance', 'expert'];
   const times = levels.map((level) => predict(route, { rider: { preset: { level, gender: 'unspecified' } }, geometry: 'auto' }).total_time_s / 3600);
   const ordered = times.every((t, i) => i === 0 || t < times[i - 1]!);
-  record('S13', 'I', 'GT20 (593 km, ~9 800 m D+) par niveau — bandes à valider avec Victor', ordered,
-    `${levels.map((l, i) => `${l} ${times[i]!.toFixed(1)} h`).join('  ')}  (ancien moteur : débutant ~36-37,5 h)`);
+  // Jo calibrée sur ses 6 jours, genre par défaut comme dans l'app.
+  const jo = predict(route, { rider: { model: calibrate(rides, { rider: { custom: { gender: 'unspecified' } } }).model }, geometry: 'auto' }).total_time_s / 3600;
+  // Cibles produit (2026-10-01) : débutant ≈ 48 h, expert ≈ 21 h, Jo plus rapide qu'intermédiaire.
+  const [deb, inter, , exp] = times as [number, number, number, number];
+  const ok = ordered && deb >= 45 && deb <= 51 && exp >= 20 && exp <= 22.5 && jo < inter;
+  record('S13', 'P', 'GT20 (593 km, ~9 800 m D+) d\'une traite par niveau', ok,
+    `${levels.map((l, i) => `${l} ${times[i]!.toFixed(1)} h`).join('  ')}  Jo (fit) ${jo.toFixed(1)} h  (débutant 45-51, expert 20-22,5, Jo < intermédiaire)`);
 }
 
 function s14() {

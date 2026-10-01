@@ -49,6 +49,27 @@ fn median_of(values: &mut [f64]) -> f64 {
     if n % 2 == 1 { values[n / 2] } else { 0.5 * (values[n / 2 - 1] + values[n / 2]) }
 }
 
+/// Bruit d'altitude des points source (m) : médiane de l'écart de chaque point
+/// à l'interpolation linéaire de ses deux voisins. ≈ 0,1-0,2 m pour un
+/// baromètre ou un GPX déjà lissé ; > 1 m pour un MNT échantillonné le long
+/// d'une route en corniche (le MNT voit la pente à côté de la route), dont le
+/// D+ brut double alors.
+pub fn ele_noise_m(c: &CleanInput) -> f64 {
+    let mut residuals = Vec::with_capacity(c.len());
+    for i in 1..c.len().saturating_sub(1) {
+        let (d0, d1, d2) = (c.d[i - 1], c.d[i], c.d[i + 1]);
+        let span = d2 - d0;
+        if span > 1.0 && span < 400.0 {
+            let lin = (c.ele[i - 1] * (d2 - d1) + c.ele[i + 1] * (d1 - d0)) / span;
+            residuals.push((c.ele[i] - lin).abs());
+        }
+    }
+    if residuals.len() < 20 {
+        return 0.0;
+    }
+    median_of(&mut residuals)
+}
+
 fn gaussian_smooth(values: &[f64], sigma_nodes: f64) -> Vec<f64> {
     if sigma_nodes < 0.3 {
         return values.to_vec();
@@ -102,10 +123,15 @@ pub fn build_course(c: &CleanInput, p: &ModelParams) -> Course {
         })
         .collect();
     // Lissage gaussien, élargi quand les points source sont espacés (une
-    // interpolation linéaire entre points lointains crée des marches de pente).
+    // interpolation linéaire entre points lointains crée des marches de pente)
+    // ou bruités (MNT) : chaque montée-descente parasite coûte du temps.
     let mut spacings: Vec<f64> = c.d.windows(2).map(|w| w[1] - w[0]).collect();
     let median_spacing = if spacings.is_empty() { ds } else { median_of(&mut spacings) };
-    let sigma = p.ele_sigma_m.max(0.5 * median_spacing).min(p.ele_sigma_max_m);
+    let sigma = p
+        .ele_sigma_m
+        .max(0.5 * median_spacing)
+        .max(p.ele_sigma_per_noise * ele_noise_m(c))
+        .min(p.ele_sigma_max_m);
     let ele = gaussian_smooth(&despiked, sigma / ds);
 
     let slope_between = |a: usize, b: usize| -> f64 {
@@ -214,5 +240,30 @@ mod tests {
         assert!(mid_flat.g_local.abs() < 0.2, "{}", mid_flat.g_local);
         assert!((mid_climb.g_local - 5.0).abs() < 0.2, "{}", mid_climb.g_local);
         assert!((course.gain_m - 50.0).abs() < 2.0, "{}", course.gain_m);
+    }
+
+    #[test]
+    fn dem_noise_widens_smoothing() {
+        // 20 km ondulés (±40 m sur 4 km), un point tous les 30 m ; le MNT
+        // ajoute un bruit pseudo-aléatoire de ±3 m d'un point à l'autre.
+        let n = 667;
+        let ky = 111_195.0;
+        let ele = |i: usize| 300.0 + 40.0 * (i as f64 * 30.0 / 4000.0 * std::f64::consts::TAU).sin();
+        let mk = |noise: bool| CourseInput {
+            lat: (0..n).map(|i| 45.0 + i as f64 * 30.0 / ky).collect(),
+            lon: vec![6.0; n],
+            ele: (0..n)
+                .map(|i| ele(i) + if noise { 3.0 * ((i as f64 * 12.9898).sin() * 43_758.545).fract() * 2.0 - 3.0 } else { 0.0 })
+                .collect(),
+            ..Default::default()
+        };
+        let p = ModelParams::default();
+        let clean = sanitize(&mk(false)).unwrap();
+        let noisy = sanitize(&mk(true)).unwrap();
+        assert!(ele_noise_m(&clean) < 0.2, "{}", ele_noise_m(&clean));
+        assert!(ele_noise_m(&noisy) > 1.0, "{}", ele_noise_m(&noisy));
+        let g_clean = build_course(&clean, &p).gain_m;
+        let g_noisy = build_course(&noisy, &p).gain_m;
+        assert!((g_noisy / g_clean - 1.0).abs() < 0.08, "{g_noisy} vs {g_clean}");
     }
 }

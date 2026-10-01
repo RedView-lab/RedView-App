@@ -30,6 +30,9 @@ pub struct ModelParams {
     /// Écart-type du lissage gaussien de l'altitude (m), avant prise en compte
     /// de l'espacement des points source.
     pub ele_sigma_m: f64,
+    /// Lissage minimal (m) par mètre de bruit d'altitude mesuré sur les points
+    /// source (`course::ele_noise_m`) : MNT bruité → lissage plus large.
+    pub ele_sigma_per_noise: f64,
     /// Demi-fenêtre du filtre médian anti-pics (m).
     pub ele_median_half_m: f64,
     /// Plafond du lissage quand les points source sont très espacés (m).
@@ -109,11 +112,6 @@ pub struct ModelParams {
     /// Heures de selle avant la fatigue d'endurance.
     pub endurance_onset_h: f64,
     pub endurance_tau_h: f64,
-    /// Creux circadien nocturne de base (fraction de puissance).
-    pub circadian_dip: f64,
-    /// Aggravation du creux par heure d'éveil au-delà de 16 h.
-    pub circadian_debt_per_h: f64,
-    pub circadian_max_dip: f64,
 
     // ── Intégration ──
     /// Vitesse au départ (m/s).
@@ -137,6 +135,7 @@ impl Default for ModelParams {
             calibration_cell_m: 20.0,
 
             ele_sigma_m: 30.0,
+            ele_sigma_per_noise: 75.0,
             ele_median_half_m: 40.0,
             ele_sigma_max_m: 150.0,
             g_mid_half_m: 60.0,
@@ -177,14 +176,11 @@ impl Default for ModelParams {
             stall_kmh: 2.5,
 
             warmup_tau_min: 15.0,
-            pacing_ref_h: 8.0,
-            pacing_exponent: 0.12,
+            pacing_ref_h: 16.0,
+            pacing_exponent: 0.2,
             pacing_max_h: 60.0,
             endurance_onset_h: 6.0,
             endurance_tau_h: 12.0,
-            circadian_dip: 0.06,
-            circadian_debt_per_h: 0.01,
-            circadian_max_dip: 0.2,
 
             start_speed_ms: 1.5,
             m_eff_extra_kg: 1.5,
