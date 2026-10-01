@@ -35,7 +35,7 @@ import {
 import { usePlotAreaSize } from './usePlotAreaSize';
 import { resolveItineraryHoverMetrics } from './hoverMetrics';
 import { readDocumentAppLocale, translateAppText } from '@/shared/i18n';
-import { SLOPE_COLOR_CLASSES, slopeClassAtX, slopeGradeAtX } from '../slope';
+import { SLOPE_COLOR_CLASSES, pickSlopeLevel, slopeSegmentAtX } from '../slope';
 
 function pointSeriesCoversX(points: Array<{ x: number; y: number }>, xValue: number): boolean {
   if (!Number.isFinite(xValue) || points.length === 0) return false;
@@ -294,6 +294,12 @@ export const AnalysisChart = memo(function AnalysisChart({
     if (!slopeOverlay || slopeSeriesId) return null;
     return backdropProfiles.find((profile) => profile.itineraryId === slopeOverlay.itineraryId)?.id ?? null;
   }, [backdropProfiles, slopeOverlay, slopeSeriesId]);
+  // Tronçons moyennés au niveau de détail du zoom : grands blocs en vue
+  // d'ensemble, détail fin en zoomant.
+  const slopeSegments = useMemo(
+    () => (slopeOverlay ? pickSlopeLevel(slopeOverlay, plotXDomain, plotSize.width)?.segments ?? null : null),
+    [plotSize.width, plotXDomain, slopeOverlay],
+  );
 
   const backdropSeries = useMemo(() => {
     if (!backdropYDomain) return [];
@@ -302,9 +308,9 @@ export const AnalysisChart = memo(function AnalysisChart({
       fillColor: withAlpha(profile.color, 0.16),
       lineColor: withAlpha(profile.color, 0.72),
       points: selectPointsForPlotLod(profile.points, plotXDomain, plotSize.width),
-      slopeSegments: profile.id === slopeBackdropId ? slopeOverlay?.segments : undefined,
+      slopeSegments: profile.id === slopeBackdropId ? slopeSegments ?? undefined : undefined,
     }));
-  }, [backdropProfiles, backdropYDomain, plotSize.width, plotXDomain, slopeBackdropId, slopeOverlay]);
+  }, [backdropProfiles, backdropYDomain, plotSize.width, plotXDomain, slopeBackdropId, slopeSegments]);
 
   const altitudeDomainForAnnotations = useMemo(() => {
     if (axis1Metric === 'Altitude') return plotYDomain;
@@ -405,9 +411,9 @@ export const AnalysisChart = memo(function AnalysisChart({
         lineWidth: 2.0,
         points: selectPointsForPlotLod(entry.points, plotXDomain, plotSize.width),
         yDomain: entry.axis === 2 ? plotY2Domain : plotYDomain,
-        slopeSegments: entry.id === slopeSeriesId ? slopeOverlay?.segments : undefined,
+        slopeSegments: entry.id === slopeSeriesId ? slopeSegments ?? undefined : undefined,
       })),
-    [plotSize.width, plotXDomain, plotY2Domain, plotYDomain, series, slopeOverlay, slopeSeriesId],
+    [plotSize.width, plotXDomain, plotY2Domain, plotYDomain, series, slopeSegments, slopeSeriesId],
   );
 
   useEffect(() => {
@@ -567,19 +573,24 @@ export const AnalysisChart = memo(function AnalysisChart({
   }, [alertOverlay, hoverXValue]);
 
   const hoverSlopeRows = useMemo<HoverCardRow[]>(() => {
-    if (hoverXValue == null || !slopeOverlay) return [];
-    const classIndex = slopeClassAtX(slopeOverlay, hoverXValue);
-    const grade = slopeGradeAtX(slopeOverlay, hoverXValue);
-    if (classIndex == null || grade == null) return [];
+    if (hoverXValue == null || !slopeOverlay || !slopeSegments) return [];
+    // Même tronçon que la couleur affichée : pente moyenne et longueur.
+    const segment = slopeSegmentAtX(slopeSegments, hoverXValue);
+    if (!segment) return [];
     const node = chartNodes.find((entry) => entry.itinerary.id === slopeOverlay.itineraryId);
     const seriesEntry = series.find((entry) => entry.itineraryId === slopeOverlay.itineraryId);
     const itineraryName = node?.itinerary.name ?? seriesEntry?.itineraryName;
     if (!itineraryName) return [];
     const locale = readDocumentAppLocale();
-    const value = new Intl.NumberFormat(locale === 'fr' ? 'fr-FR' : 'en-US', {
+    const numberLocale = locale === 'fr' ? 'fr-FR' : 'en-US';
+    const value = new Intl.NumberFormat(numberLocale, {
       minimumFractionDigits: 1,
       maximumFractionDigits: 1,
-    }).format(grade);
+    }).format(segment.avgPct);
+    const lengthKm = segment.lengthM / 1000;
+    const length = segment.lengthM < 1000
+      ? `${Math.round(segment.lengthM / 10) * 10} m`
+      : `${new Intl.NumberFormat(numberLocale, { maximumFractionDigits: lengthKm < 10 ? 1 : 0 }).format(lengthKm)} km`;
     return [{
       id: `${slopeOverlay.itineraryId}::hover-slope`,
       itineraryName,
@@ -588,10 +599,10 @@ export const AnalysisChart = memo(function AnalysisChart({
       axisLabel: '',
       metric: 'Altitude' as ChartMetricId,
       value: 0,
-      slopeLabel: `${translateAppText('Pente', undefined, locale)} ${value} %`,
-      slopeColor: SLOPE_COLOR_CLASSES[classIndex]?.color,
+      slopeLabel: `${translateAppText('Pente moy.', undefined, locale)} ${value} % · ${length}`,
+      slopeColor: SLOPE_COLOR_CLASSES[segment.classIndex]?.color,
     }];
-  }, [chartNodes, hoverXValue, series, slopeOverlay]);
+  }, [chartNodes, hoverXValue, series, slopeOverlay, slopeSegments]);
 
   const hoverRows = useMemo(
     () => [...(hoverData ?? []), ...hoverBackdropData, ...hoverChartNodesData, ...hoverAlertRows, ...hoverSlopeRows],

@@ -104,6 +104,8 @@ pub struct ModelParams {
     /// durée prévue de l'effort, et exposant de cette baisse.
     pub pacing_ref_h: f64,
     pub pacing_exponent: f64,
+    /// Durée (h) au-delà de laquelle l'allure ne baisse plus.
+    pub pacing_max_h: f64,
     /// Heures de selle avant la fatigue d'endurance.
     pub endurance_onset_h: f64,
     pub endurance_tau_h: f64,
@@ -177,6 +179,7 @@ impl Default for ModelParams {
             warmup_tau_min: 15.0,
             pacing_ref_h: 8.0,
             pacing_exponent: 0.12,
+            pacing_max_h: 60.0,
             endurance_onset_h: 6.0,
             endurance_tau_h: 12.0,
             circadian_dip: 0.06,

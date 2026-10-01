@@ -76,7 +76,7 @@ fn level_spec(level: &str) -> LevelSpec {
             walk_up_pct: 20.0,
             v_min_ride_kmh: 4.0,
             warmup_amp: 0.05,
-            endurance_amp: 0.33,
+            endurance_amp: 0.35,
         },
         "expert" => LevelSpec {
             p_flat_female_w: 135.0,
@@ -95,7 +95,7 @@ fn level_spec(level: &str) -> LevelSpec {
             walk_up_pct: 22.0,
             v_min_ride_kmh: 3.5,
             warmup_amp: 0.04,
-            endurance_amp: 0.30,
+            endurance_amp: 0.35,
         },
         // "intermediaire" et toute valeur inconnue : la cycliste de référence.
         _ => LevelSpec {

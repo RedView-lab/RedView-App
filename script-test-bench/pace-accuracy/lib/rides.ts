@@ -27,7 +27,15 @@ export const RIDES = [
   { id: 'D5', file: 'Sortie_vélo_le_matin (1).fit', label: 'J5 Troyes → Paris' },
 ] as const;
 
-export type RideId = (typeof RIDES)[number]['id'];
+export type RideId = string;
+
+export interface RideMeta {
+  id: string;
+  file: string;
+  label: string;
+  /** Dossier du fichier (défaut : FIT_DIR). */
+  dir?: string;
+}
 
 export interface TrackPoint {
   lat: number;
@@ -115,13 +123,13 @@ function decodeRecords(bytes: Uint8Array): { records: RawRecord[]; session: Reco
 }
 
 export function extractRide(
-  meta: (typeof RIDES)[number],
+  meta: RideMeta,
   opts: TruthOptions = {},
 ): Ride {
   const minSpeed = opts.minMovingSpeedMs ?? 0.6;
   const maxGap = opts.maxGapS ?? 30;
   const minPause = opts.minPauseS ?? 60;
-  const file = path.join(FIT_DIR, meta.file);
+  const file = path.join(meta.dir ?? FIT_DIR, meta.file);
   const bytes = new Uint8Array(fs.readFileSync(file));
   const { records, session } = decodeRecords(bytes);
   if (records.length < 2) throw new Error(`${meta.id}: pas assez de points`);
@@ -203,6 +211,14 @@ export function extractRide(
 
 export function loadRides(opts: TruthOptions = {}): Ride[] {
   return RIDES.map((meta) => extractRide(meta, opts));
+}
+
+/** Toutes les sorties .fit d'un dossier, triées par date, identifiants `prefix1…n`. */
+export function loadRidesFromDir(dir: string, prefix = 'R', opts: TruthOptions = {}): Ride[] {
+  const files = fs.readdirSync(dir).filter((f) => f.toLowerCase().endsWith('.fit'));
+  const rides = files.map((file) => extractRide({ id: file, file, dir, label: file.replace(/\.fit$/i, '').replace(/_/g, ' ').trim() }, opts));
+  rides.sort((a, b) => a.startEpoch - b.startEpoch);
+  return rides.map((r, i) => ({ ...r, id: `${prefix}${i + 1}` }));
 }
 
 /** Temps réel cumulé (s) à la distance d (m) le long de la trace. */

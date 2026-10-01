@@ -2,6 +2,7 @@ import type { AxisDomain } from '../series';
 import type { ChartSlopeSegment } from '../slope';
 import { SLOPE_COLOR_CLASSES, SLOPE_NEUTRAL_CLASS_INDEX } from '../slope';
 import { ratioFor } from './math';
+import { readDocumentAppLocale } from '@/shared/i18n';
 import type { CanvasBackdropLayer, CanvasSeriesLayer } from './types';
 
 export function drawAnalysisChartCanvas(
@@ -217,13 +218,20 @@ function drawCanvasArea(
 
 // ── Colorisation « Pente » ──────────────────────────────────────────────────
 
-/** Première classe de montée : seules les montées priment sur la classe dominante. */
-const FIRST_CLIMB_CLASS_INDEX = SLOPE_COLOR_CLASSES.findIndex((entry) => entry.climb);
-/** Part minimale d'une colonne pour qu'une montée plus raide l'emporte sur la classe dominante. */
-const STEEP_PRIORITY_SHARE = 1 / 3;
 /** Opacité du remplissage : pleine sous la courbe, estompée vers le bas. */
-const SLOPE_FILL_TOP_ALPHA = 0.8;
-const SLOPE_FILL_BOTTOM_ALPHA = 0.22;
+const SLOPE_FILL_TOP_ALPHA = 0.92;
+const SLOPE_FILL_BOTTOM_ALPHA = 0.45;
+/** Descente et plat restent en retrait : seules les montées « pèsent ». */
+const SLOPE_CALM_FILL_ALPHA = 0.32;
+/** Pastille de pente moyenne : tronçon minimal (px, m de D+), écart et géométrie (px). */
+const GRADE_LABEL_MIN_BLOCK_PX = 16;
+const GRADE_LABEL_MIN_GAIN_M = 25;
+const GRADE_LABEL_GAP_PX = 6;
+const GRADE_LABEL_HEIGHT_PX = 17;
+const GRADE_LABEL_BOTTOM_PX = 6;
+const GRADE_LABEL_CLEARANCE_PX = 4;
+/** Espace fine insécable avant « % ». */
+const PERCENT_SEPARATOR = String.fromCharCode(0x202f);
 
 interface SlopeBand {
   startPx: number;
@@ -232,10 +240,9 @@ interface SlopeBand {
 }
 
 /**
- * Classe affichée par colonne de pixels, puis colonnes contiguës fusionnées.
- * Dans une colonne, la montée la plus raide qui en couvre au moins un tiers
- * l'emporte (un mur reste rouge en vue d'ensemble), sinon la classe dominante.
- * Zoomé, une colonne ne couvre qu'un tronçon : le rendu est exact.
+ * Classe dominante par colonne de pixels, puis colonnes contiguës fusionnées.
+ * Les tronçons arrivent déjà moyennés au niveau de détail du zoom (≥ ~6 px) :
+ * la colonne ne sert qu'à absorber les rares tronçons sous le pixel.
  */
 export function buildSlopeBands(
   segments: ReadonlyArray<ChartSlopeSegment>,
@@ -249,16 +256,7 @@ export function buildSlopeBands(
   const columns = Math.max(1, Math.ceil(width));
   const coverage = new Float32Array(columns * classCount);
 
-  // Premier tronçon susceptible d'être visible (segments triés par X).
-  let lo = 0;
-  let hi = segments.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (segments[mid]!.endX < xDomain.min) lo = mid + 1;
-    else hi = mid;
-  }
-
-  for (let index = lo; index < segments.length; index += 1) {
+  for (let index = firstVisibleSegment(segments, xDomain); index < segments.length; index += 1) {
     const segment = segments[index]!;
     if (segment.startX > xDomain.max) break;
     const startPx = Math.max(0, ((segment.startX - xDomain.min) / span) * width);
@@ -274,25 +272,14 @@ export function buildSlopeBands(
   const bands: SlopeBand[] = [];
   for (let column = 0; column < columns; column += 1) {
     const base = column * classCount;
-    let total = 0;
-    let dominant = -1;
-    let dominantCoverage = 0;
+    // Colonne sans tracé roulé (pause en mode temps) : neutre.
+    let chosen = SLOPE_NEUTRAL_CLASS_INDEX;
+    let chosenCoverage = 0;
     for (let classIndex = 0; classIndex < classCount; classIndex += 1) {
       const value = coverage[base + classIndex]!;
-      total += value;
-      if (value > dominantCoverage) {
-        dominantCoverage = value;
-        dominant = classIndex;
-      }
-    }
-    // Colonne sans tracé roulé (pause en mode temps) : neutre.
-    let chosen = dominant >= 0 ? dominant : SLOPE_NEUTRAL_CLASS_INDEX;
-    if (total > 0 && FIRST_CLIMB_CLASS_INDEX >= 0) {
-      for (let classIndex = classCount - 1; classIndex >= FIRST_CLIMB_CLASS_INDEX; classIndex -= 1) {
-        if (coverage[base + classIndex]! >= total * STEEP_PRIORITY_SHARE) {
-          chosen = Math.max(chosen, classIndex);
-          break;
-        }
+      if (value > chosenCoverage) {
+        chosenCoverage = value;
+        chosen = classIndex;
       }
     }
     const last = bands[bands.length - 1];
@@ -302,17 +289,58 @@ export function buildSlopeBands(
   return bands;
 }
 
-/** Dégradé horizontal à arrêts francs : une couleur pleine par bande. */
+/** Premier tronçon susceptible d'être visible (segments triés par X). */
+function firstVisibleSegment(segments: ReadonlyArray<ChartSlopeSegment>, xDomain: AxisDomain): number {
+  let lo = 0;
+  let hi = segments.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (segments[mid]!.endX < xDomain.min) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+function slopeClassColor(classIndex: number): string {
+  return SLOPE_COLOR_CLASSES[classIndex]?.color ?? SLOPE_COLOR_CLASSES[SLOPE_NEUTRAL_CLASS_INDEX]!.color;
+}
+
+function hexToRgb(hex: string): [number, number, number] {
+  const value = Number.parseInt(hex.slice(1, 7), 16);
+  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+}
+
+function hexWithAlpha(hex: string, alpha: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/** Texte sombre sur les teintes claires (jaune, orange), blanc sinon. */
+function labelTextColor(hex: string): string {
+  const [r, g, b] = hexToRgb(hex).map((channel) => {
+    const c = channel / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  }) as [number, number, number];
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.3 ? '#15171C' : '#FFFFFF';
+}
+
+/**
+ * Dégradé horizontal à arrêts francs : une couleur pleine par bande.
+ * `calmAlpha` estompe descente et plat (remplissage).
+ */
 function createBandGradient(
   ctx: CanvasRenderingContext2D,
   bands: ReadonlyArray<SlopeBand>,
   width: number,
+  calmAlpha = 1,
 ): CanvasGradient {
   const gradient = ctx.createLinearGradient(0, 0, width, 0);
   for (const band of bands) {
-    const color = SLOPE_COLOR_CLASSES[band.classIndex]?.color ?? SLOPE_COLOR_CLASSES[SLOPE_NEUTRAL_CLASS_INDEX]!.color;
-    gradient.addColorStop(Math.max(0, Math.min(1, band.startPx / width)), color);
-    gradient.addColorStop(Math.max(0, Math.min(1, band.endPx / width)), color);
+    const color = slopeClassColor(band.classIndex);
+    const climb = SLOPE_COLOR_CLASSES[band.classIndex]?.climb ?? false;
+    const stopColor = climb || calmAlpha >= 1 ? color : hexWithAlpha(color, calmAlpha);
+    gradient.addColorStop(Math.max(0, Math.min(1, band.startPx / width)), stopColor);
+    gradient.addColorStop(Math.max(0, Math.min(1, band.endPx / width)), stopColor);
   }
   return gradient;
 }
@@ -331,10 +359,10 @@ function getSlopeScratchContext(target: HTMLCanvasElement): CanvasRenderingConte
 }
 
 /**
- * Profil d'altitude coloré par classe de pente : aire remplie (couleur de la
- * classe, fondu vers le bas) et ligne colorée soulignée d'un liseré sombre.
- * Un seul fill et un seul stroke via un dégradé à arrêts francs, quel que soit
- * le nombre de tronçons.
+ * Profil d'altitude coloré par pente moyenne de tronçon : aire remplie
+ * (montées pleines, descente/plat estompés, fondu vers le bas), ligne colorée
+ * soulignée d'un liseré sombre, puis pastille « x,x % » au pied des montées
+ * assez larges. Un seul fill et un seul stroke via un dégradé à arrêts francs.
  */
 function drawSlopeColoredProfile(
   ctx: CanvasRenderingContext2D,
@@ -366,7 +394,7 @@ function drawSlopeColoredProfile(
       scratch.lineTo(bounds.firstX, height);
       scratch.closePath();
       scratch.globalCompositeOperation = 'source-over';
-      scratch.fillStyle = createBandGradient(scratch, bands, width);
+      scratch.fillStyle = createBandGradient(scratch, bands, width, SLOPE_CALM_FILL_ALPHA);
       scratch.fill();
 
       const fade = scratch.createLinearGradient(0, Math.max(0, bounds.topY), 0, height);
@@ -396,5 +424,103 @@ function drawSlopeColoredProfile(
   ctx.strokeStyle = createBandGradient(ctx, bands, width);
   ctx.lineWidth = lineWidth;
   ctx.stroke();
+  ctx.restore();
+
+  drawSlopeGradeLabels(ctx, canvas, points, segments, xDomain, yDomain, width, height);
+}
+
+/** Point le plus bas de la courbe (Y pixel max) sur [startX, endX]. */
+function lowestCurvePx(
+  points: { x: number; y: number }[],
+  startX: number,
+  endX: number,
+  yDomain: AxisDomain,
+  height: number,
+): number {
+  let lo = 0;
+  let hi = points.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (points[mid]!.x < startX) lo = mid + 1;
+    else hi = mid;
+  }
+  let minY = Infinity;
+  // Le point précédent borne la courbe à l'entrée du tronçon.
+  for (let index = Math.max(0, lo - 1); index < points.length; index += 1) {
+    const point = points[index]!;
+    if (point.y < minY) minY = point.y;
+    if (point.x > endX) break;
+  }
+  return Number.isFinite(minY) ? (1 - rawYRatio(minY, yDomain)) * height : height;
+}
+
+/**
+ * Pastilles de pente moyenne (« 7,4 % ») au pied des montées, comme les
+ * paliers d'un profil de col. Les montées au plus fort dénivelé sont posées
+ * d'abord, sans chevauchement ; une pastille n'est posée que si la courbe
+ * laisse la place au-dessus d'elle.
+ */
+function drawSlopeGradeLabels(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  points: { x: number; y: number }[],
+  segments: ReadonlyArray<ChartSlopeSegment>,
+  xDomain: AxisDomain,
+  yDomain: AxisDomain,
+  width: number,
+  height: number,
+) {
+  const span = xDomain.max - xDomain.min;
+  if (!(span > 0) || height < GRADE_LABEL_HEIGHT_PX * 3) return;
+
+  const candidates: Array<{ segment: ChartSlopeSegment; startPx: number; endPx: number; gainM: number }> = [];
+  for (let index = firstVisibleSegment(segments, xDomain); index < segments.length; index += 1) {
+    const segment = segments[index]!;
+    if (segment.startX > xDomain.max) break;
+    if (!SLOPE_COLOR_CLASSES[segment.classIndex]?.climb) continue;
+    const startPx = Math.max(0, ((segment.startX - xDomain.min) / span) * width);
+    const endPx = Math.min(width, ((segment.endX - xDomain.min) / span) * width);
+    const gainM = (segment.avgPct / 100) * segment.lengthM;
+    if (endPx - startPx < GRADE_LABEL_MIN_BLOCK_PX || gainM < GRADE_LABEL_MIN_GAIN_M) continue;
+    candidates.push({ segment, startPx, endPx, gainM });
+  }
+  if (candidates.length === 0) return;
+  candidates.sort((a, b) => b.gainM - a.gainM);
+
+  const locale = readDocumentAppLocale();
+  const format = new Intl.NumberFormat(locale === 'fr' ? 'fr-FR' : 'en-US', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+  const fontFamily = getComputedStyle(canvas).fontFamily || 'system-ui, sans-serif';
+  const pillTop = height - GRADE_LABEL_BOTTOM_PX - GRADE_LABEL_HEIGHT_PX;
+  const placed: Array<[number, number]> = [];
+
+  ctx.save();
+  ctx.font = `700 11px ${fontFamily}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const { segment, startPx, endPx } of candidates) {
+    const text = `${format.format(segment.avgPct)}${PERCENT_SEPARATOR}%`;
+    const pillWidth = Math.ceil(ctx.measureText(text).width) + 12;
+    const left = Math.max(2, Math.min(width - 2 - pillWidth, (startPx + endPx) / 2 - pillWidth / 2));
+    const right = left + pillWidth;
+    if (placed.some(([a, b]) => left < b + GRADE_LABEL_GAP_PX && right > a - GRADE_LABEL_GAP_PX)) continue;
+    const roomStartX = xDomain.min + (Math.min(left, startPx) / width) * span;
+    const roomEndX = xDomain.min + (Math.max(right, endPx) / width) * span;
+    if (lowestCurvePx(points, roomStartX, roomEndX, yDomain, height) > pillTop - GRADE_LABEL_CLEARANCE_PX) continue;
+    placed.push([left, right]);
+
+    const color = slopeClassColor(segment.classIndex);
+    ctx.beginPath();
+    ctx.roundRect(left, pillTop, pillWidth, GRADE_LABEL_HEIGHT_PX, GRADE_LABEL_HEIGHT_PX / 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.stroke();
+    ctx.fillStyle = labelTextColor(color);
+    ctx.fillText(text, left + pillWidth / 2, pillTop + GRADE_LABEL_HEIGHT_PX / 2 + 0.5);
+  }
   ctx.restore();
 }

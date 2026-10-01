@@ -580,33 +580,30 @@
 /* ---- Colorisation « Pente » : légende sous le graphe ---- */
 .rvchart-slope-legend {
   display: flex;
-  flex-direction: column;
-  gap: 5px;
+  align-items: center;
+  gap: 14px;
   flex: 0 0 auto;
-  padding: 7px 10px 6px;
+  min-width: 0;
+  padding: 7px 12px;
   margin-top: 6px;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(0, 0, 0, 0.6);
 }
 
-.rvchart-slope-legend__bar {
-  display: flex;
-  height: 4px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.rvchart-slope-legend__bar-part {
-  flex-basis: 0;
-  min-width: 1px;
+.rvchart-slope-legend__title {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .rvchart-slope-legend__items {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
@@ -616,22 +613,20 @@
   display: none;
 }
 
-.rvchart-slope-legend__title {
+.rvchart-slope-legend__divider {
   flex: 0 0 auto;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.5);
+  width: 1px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .rvchart-slope-legend__item {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   flex: 0 0 auto;
-  font-size: 11px;
-  line-height: 14px;
+  font-size: 12px;
+  line-height: 16px;
   white-space: nowrap;
   transition: opacity 120ms ease;
 }
@@ -641,21 +636,41 @@
 }
 
 .rvchart-slope-legend__swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3);
 }
 
+.rvchart-slope-legend__item.is-calm .rvchart-slope-legend__swatch {
+  opacity: 0.6;
+}
+
 .rvchart-slope-legend__label {
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.86);
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.rvchart-slope-legend__item.is-calm .rvchart-slope-legend__label {
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .rvchart-slope-legend__value {
   font-weight: 500;
   color: rgba(255, 255, 255, 0.5);
   font-variant-numeric: tabular-nums;
+}
+
+.rvchart-slope-legend__hint {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.38);
 }
 
 /* Ligne « Pente » de la carte de survol. */

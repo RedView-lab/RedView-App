@@ -2561,6 +2561,14 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Flat"
   },
   {
+    "fr": "Pente moy.",
+    "en": "Avg. gradient"
+  },
+  {
+    "fr": "Pente moyenne par tronçon · zoomez pour le détail",
+    "en": "Average gradient per section · zoom in for detail"
+  },
+  {
     "fr": "Toutes surfaces",
     "en": "All surfaces"
   },

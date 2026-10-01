@@ -7,13 +7,15 @@ export type { SlopeColorClass } from './slopeScale';
 export {
   buildSlopeOverlayForItinerary,
   detectSlopeProfile,
-  slopeClassAtX,
-  slopeGradeAtX,
+  pickSlopeLevel,
+  slopeSegmentAtX,
   summarizeSlopeDistribution,
 } from './buildSlopeColorRuns';
 export type {
+  ChartSlopeLevel,
   ChartSlopeOverlay,
   ChartSlopeSegment,
   SlopeProfile,
+  SlopeProfileLevel,
   SlopeRun,
 } from './buildSlopeColorRuns';

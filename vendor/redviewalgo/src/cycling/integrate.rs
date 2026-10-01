@@ -30,9 +30,11 @@ pub struct SimOptions {
 
 /// Allure selon la durée de l'effort : au-delà de `pacing_ref_h` heures de
 /// déplacement, on ne roule pas à l'intensité d'une sortie à la journée —
-/// puissance × (T / T_ref)^(−k).
+/// puissance × (T / T_ref)^(−k). Plafonnée à `pacing_max_h` : au-delà de
+/// deux à trois jours de roulage, tout le monde dort et l'intensité horaire
+/// cesse de baisser (le moteur, lui, ne connaît pas les pauses).
 pub fn duration_pacing(moving_s: f64, p: &ModelParams) -> f64 {
-    let hours = moving_s / 3600.0;
+    let hours = (moving_s / 3600.0).min(p.pacing_max_h.max(p.pacing_ref_h));
     if !(hours > p.pacing_ref_h) || p.pacing_ref_h <= 0.0 {
         return 1.0;
     }

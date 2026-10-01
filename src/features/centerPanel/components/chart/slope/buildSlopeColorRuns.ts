@@ -7,19 +7,26 @@ import { classifyGradientPct, SLOPE_COLOR_CLASSES } from './slopeScale';
 
 /** Pas de ré-échantillonnage du profil (m). */
 const SAMPLE_STEP_M = 10;
-/** Lissage de l'altitude (5 × 10 m ≈ 50 m) avant calcul de pente. */
+/** Lissage de l'altitude (5 × 10 m ≈ 50 m) : gomme le bruit du MNT. */
 const SMOOTH_WINDOW_SAMPLES = 5;
 /**
- * Fenêtre centrée de calcul de la pente (m). Une fenêtre courte (30 m) donne
- * un rendu moucheté avec des classes de 2 % ; 100 m suit fidèlement les
- * rampes tout en ignorant le bruit du MNT.
+ * Niveaux de détail, du plus fin au plus grossier. Le profil est simplifié
+ * (Douglas-Peucker, écart vertical `toleranceM`), puis aucun tronçon ne reste
+ * plus court que `minLengthM` : chaque tronçon porte la pente moyenne de sa
+ * corde, comme les paliers d'un profil de col. Vue d'ensemble = grands blocs
+ * moyennés ; en zoomant, le graphe descend vers le niveau fin.
  */
-const GRADIENT_WINDOW_M = 100;
-/** Un tronçon de classe plus court que ça est absorbé par un voisin. */
-const MIN_RUN_M = 40;
-/** Pas des échantillons de survol (m). */
-const HOVER_SAMPLE_STEP_M = 50;
-const MAX_ABSORB_PASSES = 8;
+const SLOPE_DETAIL_LEVELS: ReadonlyArray<{ minLengthM: number; toleranceM: number }> = [
+  { minLengthM: 250, toleranceM: 4 },
+  { minLengthM: 500, toleranceM: 6 },
+  { minLengthM: 1000, toleranceM: 9 },
+  { minLengthM: 2000, toleranceM: 13 },
+  { minLengthM: 4000, toleranceM: 19 },
+  { minLengthM: 8000, toleranceM: 27 },
+  { minLengthM: 16000, toleranceM: 38 },
+];
+/** Largeur minimale visée d'un tronçon à l'écran (px) : fixe le niveau de détail. */
+const MIN_SEGMENT_PX = 6;
 
 export interface SlopeRun {
   startM: number;
@@ -29,19 +36,22 @@ export interface SlopeRun {
   avgPct: number;
 }
 
-export interface SlopeProfile {
-  startM: number;
-  stepM: number;
-  /** Pente lissée (%) de chaque intervalle [k, k+1] du profil ré-échantillonné. */
-  intervalGrades: Float32Array;
+export interface SlopeProfileLevel {
+  /** Longueur minimale d'un tronçon à ce niveau (m). */
+  minLengthM: number;
   runs: SlopeRun[];
+}
+
+export interface SlopeProfile {
+  /** Niveaux de détail, du plus fin au plus grossier. */
+  levels: SlopeProfileLevel[];
 }
 
 const slopeProfileCache = new WeakMap<object, SlopeProfile | null>();
 
 /**
- * Découpe le tracé en tronçons de classe de pente homogène (`SLOPE_COLOR_CLASSES`).
- * Résultat mis en cache par tableau de points (immutable).
+ * Découpe le tracé en tronçons de pente moyenne homogène, à chaque niveau de
+ * détail. Résultat mis en cache par tableau de points (immutable).
  */
 export function detectSlopeProfile(
   routePoints: RouteChartPoint[] | null | undefined,
@@ -51,92 +61,190 @@ export function detectSlopeProfile(
   if (cached !== undefined) return cached;
 
   const resampled = resampleRouteElevations(routePoints, SAMPLE_STEP_M, SMOOTH_WINDOW_SAMPLES);
-  const result = resampled ? buildSlopeProfile(resampled.startM, resampled.elevations) : null;
+  const result = resampled && resampled.elevations.length >= 2
+    ? {
+        levels: SLOPE_DETAIL_LEVELS.map(({ minLengthM, toleranceM }) => ({
+          minLengthM,
+          runs: buildLevelRuns(resampled.startM, resampled.elevations, toleranceM, minLengthM),
+        })),
+      }
+    : null;
   slopeProfileCache.set(routePoints, result);
   return result;
 }
 
-function buildSlopeProfile(startM: number, elev: Float64Array): SlopeProfile | null {
-  const intervalCount = elev.length - 1;
-  if (intervalCount < 1) return null;
+function gradePct(elev: Float64Array, start: number, end: number): number {
+  return ((elev[end]! - elev[start]!) / ((end - start) * SAMPLE_STEP_M)) * 100;
+}
 
-  const halfWindow = Math.max(1, Math.round(GRADIENT_WINDOW_M / SAMPLE_STEP_M / 2));
-  const intervalGrades = new Float32Array(intervalCount);
-  for (let k = 0; k < intervalCount; k += 1) {
-    // Fenêtre centrée sur l'intervalle [k, k+1], tronquée aux extrémités.
-    const a = Math.max(0, k + 1 - halfWindow);
-    const b = Math.min(elev.length - 1, k + halfWindow);
-    intervalGrades[k] = ((elev[b]! - elev[a]!) / ((b - a) * SAMPLE_STEP_M)) * 100;
+function buildLevelRuns(
+  startM: number,
+  elev: Float64Array,
+  toleranceM: number,
+  minLengthM: number,
+): SlopeRun[] {
+  const vertices = simplifyProfile(elev, toleranceM);
+  const spans = mergeShortSpans(elev, vertices, Math.max(1, Math.round(minLengthM / SAMPLE_STEP_M)));
+
+  // Tronçons voisins de même classe recollés : la moyenne pondérée reste dans la classe.
+  const merged: Array<{ start: number; end: number; classIndex: number }> = [];
+  for (const [start, end] of spans) {
+    const classIndex = classifyGradientPct(gradePct(elev, start, end));
+    const last = merged[merged.length - 1];
+    if (last && last.classIndex === classIndex) last.end = end;
+    else merged.push({ start, end, classIndex });
   }
 
-  // Intervalles consécutifs de même classe → tronçons.
-  const runs: Array<{ start: number; end: number; classIndex: number }> = [];
-  for (let k = 0; k < intervalCount; k += 1) {
-    const classIndex = classifyGradientPct(intervalGrades[k]!);
-    const last = runs[runs.length - 1];
-    if (last && last.classIndex === classIndex) last.end = k + 1;
-    else runs.push({ start: k, end: k + 1, classIndex });
-  }
-
-  absorbShortRuns(runs, Math.round(MIN_RUN_M / SAMPLE_STEP_M));
-
-  return {
-    startM,
-    stepM: SAMPLE_STEP_M,
-    intervalGrades,
-    runs: runs.map(({ start, end, classIndex }) => ({
-      startM: startM + start * SAMPLE_STEP_M,
-      endM: startM + end * SAMPLE_STEP_M,
-      classIndex,
-      avgPct: ((elev[end]! - elev[start]!) / ((end - start) * SAMPLE_STEP_M)) * 100,
-    })),
-  };
+  return merged.map(({ start, end, classIndex }) => ({
+    startM: startM + start * SAMPLE_STEP_M,
+    endM: startM + end * SAMPLE_STEP_M,
+    classIndex,
+    avgPct: gradePct(elev, start, end),
+  }));
 }
 
 /**
- * Fusionne chaque tronçon trop court dans le voisin de classe la plus proche
- * (à égalité, le plus long), puis recolle les voisins devenus identiques.
- * Les classes restent celles des intervalles : seules les miettes disparaissent.
+ * Douglas-Peucker sur (distance, altitude) avec un écart vertical : renvoie les
+ * indices conservés (extrémités incluses), triés.
  */
-function absorbShortRuns(
-  runs: Array<{ start: number; end: number; classIndex: number }>,
-  minSteps: number,
-): void {
-  for (let pass = 0; pass < MAX_ABSORB_PASSES && runs.length > 1; pass += 1) {
-    let changed = false;
-    for (let i = 0; i < runs.length && runs.length > 1; i += 1) {
-      const run = runs[i]!;
-      if (run.end - run.start >= minSteps) continue;
-      const prev = runs[i - 1];
-      const next = runs[i + 1];
-      let target: typeof run | undefined;
-      if (prev && next) {
-        const prevDelta = Math.abs(prev.classIndex - run.classIndex);
-        const nextDelta = Math.abs(next.classIndex - run.classIndex);
-        target = prevDelta < nextDelta
-          ? prev
-          : nextDelta < prevDelta
-            ? next
-            : prev.end - prev.start >= next.end - next.start ? prev : next;
-      } else {
-        target = prev ?? next;
-      }
-      if (prev && target === prev) prev.end = run.end;
-      else if (next && target === next) next.start = run.start;
-      else continue;
-      runs.splice(i, 1);
-      i -= 1;
-      changed = true;
-    }
-    // Recolle les voisins de même classe créés par les absorptions.
-    for (let i = runs.length - 1; i > 0; i -= 1) {
-      if (runs[i]!.classIndex === runs[i - 1]!.classIndex) {
-        runs[i - 1]!.end = runs[i]!.end;
-        runs.splice(i, 1);
+function simplifyProfile(elev: Float64Array, toleranceM: number): number[] {
+  const last = elev.length - 1;
+  const keep = new Uint8Array(elev.length);
+  keep[0] = 1;
+  keep[last] = 1;
+  const stack: number[] = [0, last];
+  while (stack.length > 0) {
+    const b = stack.pop()!;
+    const a = stack.pop()!;
+    if (b - a < 2) continue;
+    const za = elev[a]!;
+    const slope = (elev[b]! - za) / (b - a);
+    let worst = -1;
+    let worstDeviation = toleranceM;
+    for (let i = a + 1; i < b; i += 1) {
+      const deviation = Math.abs(elev[i]! - (za + slope * (i - a)));
+      if (deviation > worstDeviation) {
+        worstDeviation = deviation;
+        worst = i;
       }
     }
-    if (!changed) break;
+    if (worst < 0) continue;
+    keep[worst] = 1;
+    stack.push(a, worst, worst, b);
   }
+  const vertices: number[] = [];
+  for (let i = 0; i <= last; i += 1) {
+    if (keep[i]) vertices.push(i);
+  }
+  return vertices;
+}
+
+/**
+ * Fusionne, du plus court au plus long, chaque tronçon de moins de `minSteps`
+ * échantillons dans le voisin de pente la plus proche (à égalité, le plus
+ * long). La pente du tronçon fusionné est recalculée : c'est une moyenne.
+ */
+function mergeShortSpans(
+  elev: Float64Array,
+  vertices: number[],
+  minSteps: number,
+): Array<[number, number]> {
+  const count = vertices.length - 1;
+  const starts = new Int32Array(count);
+  const ends = new Int32Array(count);
+  const prev = new Int32Array(count);
+  const next = new Int32Array(count);
+  const alive = new Uint8Array(count);
+  for (let i = 0; i < count; i += 1) {
+    starts[i] = vertices[i]!;
+    ends[i] = vertices[i + 1]!;
+    prev[i] = i - 1;
+    next[i] = i + 1 < count ? i + 1 : -1;
+    alive[i] = 1;
+  }
+  const lengthOf = (id: number) => ends[id]! - starts[id]!;
+  const gradeOf = (id: number) => gradePct(elev, starts[id]!, ends[id]!);
+
+  // Tas binaire (longueur, id) ; une entrée est périmée si la longueur a changé.
+  const heapKeys: number[] = [];
+  const heapIds: number[] = [];
+  const push = (key: number, id: number) => {
+    let i = heapKeys.length;
+    heapKeys.push(key);
+    heapIds.push(id);
+    while (i > 0) {
+      const parent = (i - 1) >> 1;
+      if (heapKeys[parent]! <= key) break;
+      heapKeys[i] = heapKeys[parent]!;
+      heapIds[i] = heapIds[parent]!;
+      i = parent;
+    }
+    heapKeys[i] = key;
+    heapIds[i] = id;
+  };
+  const pop = () => {
+    const top = { key: heapKeys[0]!, id: heapIds[0]! };
+    const lastKey = heapKeys.pop()!;
+    const lastId = heapIds.pop()!;
+    const size = heapKeys.length;
+    if (size > 0) {
+      let i = 0;
+      for (;;) {
+        let child = 2 * i + 1;
+        if (child >= size) break;
+        if (child + 1 < size && heapKeys[child + 1]! < heapKeys[child]!) child += 1;
+        if (heapKeys[child]! >= lastKey) break;
+        heapKeys[i] = heapKeys[child]!;
+        heapIds[i] = heapIds[child]!;
+        i = child;
+      }
+      heapKeys[i] = lastKey;
+      heapIds[i] = lastId;
+    }
+    return top;
+  };
+
+  for (let id = 0; id < count; id += 1) {
+    if (lengthOf(id) < minSteps) push(lengthOf(id), id);
+  }
+
+  while (heapKeys.length > 0) {
+    const { key, id } = pop();
+    if (!alive[id] || lengthOf(id) !== key) continue;
+    const before = prev[id]!;
+    const after = next[id]!;
+    if (before < 0 && after < 0) break;
+    let target: number;
+    if (before >= 0 && after >= 0) {
+      const grade = gradeOf(id);
+      const beforeDelta = Math.abs(gradeOf(before) - grade);
+      const afterDelta = Math.abs(gradeOf(after) - grade);
+      target = beforeDelta < afterDelta
+        ? before
+        : afterDelta < beforeDelta
+          ? after
+          : lengthOf(before) >= lengthOf(after) ? before : after;
+    } else {
+      target = before >= 0 ? before : after;
+    }
+    if (target === before) {
+      ends[before] = ends[id]!;
+      next[before] = after;
+      if (after >= 0) prev[after] = before;
+    } else {
+      starts[after] = starts[id]!;
+      prev[after] = before;
+      if (before >= 0) next[before] = after;
+    }
+    alive[id] = 0;
+    if (lengthOf(target) < minSteps) push(lengthOf(target), target);
+  }
+
+  const spans: Array<[number, number]> = [];
+  let id = 0;
+  while (id >= 0 && !alive[id]) id += 1;
+  for (; id >= 0 && id < count; id = next[id]!) spans.push([starts[id]!, ends[id]!]);
+  return spans;
 }
 
 /** Distance (m) parcourue dans chaque classe de `SLOPE_COLOR_CLASSES`. */
@@ -152,16 +260,25 @@ export interface ChartSlopeSegment {
   startX: number;
   endX: number;
   classIndex: number;
+  /** Pente moyenne du tronçon (%). */
+  avgPct: number;
+  /** Longueur du tronçon sur le tracé (m), pauses exclues. */
+  lengthM: number;
+}
+
+export interface ChartSlopeLevel {
+  minLengthM: number;
+  /** Tronçons projetés sur l'axe X, triés ; les pauses (modes temps) n'en font pas partie. */
+  segments: ChartSlopeSegment[];
 }
 
 export interface ChartSlopeOverlay {
   itineraryId: string;
-  /** Tronçons projetés sur l'axe X, triés ; les pauses (modes temps) n'en font pas partie. */
-  segments: ChartSlopeSegment[];
-  /** Échantillons de survol : X croissants et pente locale (%) correspondante. */
-  hoverXs: Float64Array;
-  hoverGrades: Float32Array;
-  /** Distance (m) par classe sur tout l'itinéraire. */
+  /** Niveaux de détail, du plus fin au plus grossier (voir `pickSlopeLevel`). */
+  levels: ChartSlopeLevel[];
+  /** Mètres de tracé par unité X (approx. en mode temps), pour choisir le niveau. */
+  metersPerXUnit: number;
+  /** Distance (m) par classe sur tout l'itinéraire, au niveau le plus fin. */
   distributionM: number[];
   totalM: number;
 }
@@ -177,45 +294,58 @@ export function buildSlopeOverlayForItinerary(
   xOffset = 0,
 ): ChartSlopeOverlay | null {
   const profile = detectSlopeProfile(itinerary.gpxRoute?.points);
-  if (!profile || profile.runs.length === 0) return null;
+  const finest = profile?.levels[0];
+  if (!profile || !finest || finest.runs.length === 0) return null;
   const projector = buildItineraryXProjector(itinerary, prediction, xMode, xOffset);
   if (!projector) return null;
 
-  const segments: ChartSlopeSegment[] = [];
-  for (const run of profile.runs) {
-    for (const [startX, endX] of projector.projectRange(run.startM, run.endM)) {
-      segments.push({ startX, endX, classIndex: run.classIndex });
+  const levels: ChartSlopeLevel[] = profile.levels.map(({ minLengthM, runs }) => {
+    const segments: ChartSlopeSegment[] = [];
+    for (const run of runs) {
+      const lengthM = run.endM - run.startM;
+      for (const [startX, endX] of projector.projectRange(run.startM, run.endM)) {
+        segments.push({ startX, endX, classIndex: run.classIndex, avgPct: run.avgPct, lengthM });
+      }
     }
-  }
-  if (segments.length === 0) return null;
+    return { minLengthM, segments };
+  });
+  if (levels[0]!.segments.length === 0) return null;
 
-  const sampleEvery = Math.max(1, Math.round(HOVER_SAMPLE_STEP_M / profile.stepM));
-  const sampleCount = Math.ceil(profile.intervalGrades.length / sampleEvery);
-  const hoverXs = new Float64Array(sampleCount);
-  const hoverGrades = new Float32Array(sampleCount);
-  let written = 0;
-  for (let k = 0; k < profile.intervalGrades.length; k += sampleEvery) {
-    const x = projector.toX(profile.startM + (k + 0.5) * profile.stepM);
-    if (!Number.isFinite(x)) continue;
-    hoverXs[written] = x;
-    hoverGrades[written] = profile.intervalGrades[k]!;
-    written += 1;
-  }
-
-  const distributionM = summarizeSlopeDistribution(profile.runs);
+  const routeStartM = finest.runs[0]!.startM;
+  const routeEndM = finest.runs[finest.runs.length - 1]!.endM;
+  const xSpan = projector.toX(routeEndM) - projector.toX(routeStartM);
+  const distributionM = summarizeSlopeDistribution(finest.runs);
   return {
     itineraryId: itinerary.id,
-    segments,
-    hoverXs: hoverXs.subarray(0, written),
-    hoverGrades: hoverGrades.subarray(0, written),
+    levels,
+    metersPerXUnit: Number.isFinite(xSpan) && xSpan > 0 ? (routeEndM - routeStartM) / xSpan : 1000,
     distributionM,
     totalM: distributionM.reduce((sum, value) => sum + value, 0),
   };
 }
 
-/** Classe affichée au point X (null hors tracé ou pendant une pause). */
-export function slopeClassAtX(overlay: ChartSlopeOverlay, x: number): number | null {
-  const { segments } = overlay;
+/**
+ * Niveau de détail adapté au zoom : le plus fin dont les tronçons font au
+ * moins `MIN_SEGMENT_PX` à l'écran (sinon le plus grossier).
+ */
+export function pickSlopeLevel(
+  overlay: ChartSlopeOverlay,
+  xDomain: { min: number; max: number },
+  widthPx: number,
+): ChartSlopeLevel | null {
+  const { levels } = overlay;
+  if (levels.length === 0) return null;
+  const span = xDomain.max - xDomain.min;
+  if (!(span > 0) || !(widthPx > 0)) return levels[levels.length - 1]!;
+  const wantedM = ((overlay.metersPerXUnit * span) / widthPx) * MIN_SEGMENT_PX;
+  return levels.find((level) => level.minLengthM >= wantedM) ?? levels[levels.length - 1]!;
+}
+
+/** Tronçon affiché au point X (null hors tracé ou pendant une pause). */
+export function slopeSegmentAtX(
+  segments: ReadonlyArray<ChartSlopeSegment>,
+  x: number,
+): ChartSlopeSegment | null {
   let lo = 0;
   let hi = segments.length - 1;
   while (lo <= hi) {
@@ -223,24 +353,7 @@ export function slopeClassAtX(overlay: ChartSlopeOverlay, x: number): number | n
     const segment = segments[mid]!;
     if (x < segment.startX) hi = mid - 1;
     else if (x > segment.endX) lo = mid + 1;
-    else return segment.classIndex;
+    else return segment;
   }
   return null;
-}
-
-/** Pente locale (%) au point X, ou null hors tronçon roulé. */
-export function slopeGradeAtX(overlay: ChartSlopeOverlay, x: number): number | null {
-  if (slopeClassAtX(overlay, x) === null) return null;
-  const { hoverXs, hoverGrades } = overlay;
-  if (hoverXs.length === 0) return null;
-  let lo = 0;
-  let hi = hoverXs.length - 1;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (hoverXs[mid]! < x) lo = mid + 1;
-    else hi = mid;
-  }
-  const prev = lo > 0 ? lo - 1 : lo;
-  const nearest = Math.abs(hoverXs[prev]! - x) < Math.abs(hoverXs[lo]! - x) ? prev : lo;
-  return hoverGrades[nearest]!;
 }

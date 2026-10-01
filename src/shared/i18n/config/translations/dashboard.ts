@@ -214,6 +214,8 @@ export const dashboardTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Répartition des pentes', en: 'Slope breakdown' },
   { fr: 'Descente', en: 'Descent' },
   { fr: 'Plat', en: 'Flat' },
+  { fr: 'Pente moy.', en: 'Avg. gradient' },
+  { fr: 'Pente moyenne par tronçon · zoomez pour le détail', en: 'Average gradient per section · zoom in for detail' },
   { fr: 'Toutes surfaces', en: 'All surfaces' },
   { fr: 'Asphalte', en: 'Asphalt' },
   { fr: 'Pavé / béton', en: 'Cobbles / concrete' },
