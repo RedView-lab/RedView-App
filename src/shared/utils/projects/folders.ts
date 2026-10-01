@@ -11,6 +11,7 @@ import {
 import { logger } from '@/shared/lib/logger';
 
 import { getCurrentUserId, isOwnedBy } from './auth';
+import { toProjectCloudError } from './errors';
 import { folderRowToSummary } from './mappers';
 import type { ProjectFolderRow, ProjectFolderSummary, ProjectPrivacy } from './types';
 
@@ -100,11 +101,11 @@ export async function createProjectFolder(
           Permission.delete(Role.user(userId)),
         ],
       );
-      if (doc) {
-        return folderRowToSummary(docToFolderRow(doc));
-      }
+      return folderRowToSummary(docToFolderRow(doc));
     } catch (e) {
-      logger.projects.debug('Appwrite createProjectFolder fallback to local storage', e);
+      const error = toProjectCloudError(e);
+      logger.projects.warn('Appwrite createProjectFolder failed', error.kind, e);
+      throw error;
     }
   }
 
@@ -139,7 +140,9 @@ export async function renameProjectFolder(id: string, name: string): Promise<voi
       });
       return;
     } catch (e) {
-      logger.projects.debug('Appwrite renameProjectFolder fallback to local storage', e);
+      const error = toProjectCloudError(e);
+      logger.projects.warn('Appwrite renameProjectFolder failed', error.kind, e);
+      throw error;
     }
   }
 
@@ -168,7 +171,9 @@ export async function moveProjectFolder(
       });
       return;
     } catch (e) {
-      logger.projects.debug('Appwrite moveProjectFolder fallback to local storage', e);
+      const error = toProjectCloudError(e);
+      logger.projects.warn('Appwrite moveProjectFolder failed', error.kind, e);
+      throw error;
     }
   }
 
@@ -215,7 +220,9 @@ export async function deleteProjectFolder(id: string): Promise<void> {
       await databases.deleteDocument(APPWRITE_DATABASE_ID, FOLDERS_COLLECTION_ID, id);
       return;
     } catch (e) {
-      logger.projects.debug('Appwrite deleteProjectFolder fallback to local storage', e);
+      const error = toProjectCloudError(e);
+      logger.projects.warn('Appwrite deleteProjectFolder failed', error.kind, e);
+      throw error;
     }
   }
 

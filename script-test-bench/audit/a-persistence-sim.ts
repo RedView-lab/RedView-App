@@ -137,13 +137,17 @@ async function main() {
   {
     fresh();
     const big = heavy('Copie de GT20');
-    const row = await m.createProject('Copie de GT20', big, null);
+    // Comportement attendu après correctif : createProject lève (toast d'erreur) au lieu
+    // de renvoyer silencieusement un projet `local-*`.
+    let row: { id: string } | null = null;
+    let threw: unknown = null;
+    try { row = await m.createProject('Copie de GT20', big, null); } catch (e) { threw = e; }
     const list = await m.listProjects();
-    const visible = list.some((p: { id: string }) => p.id === row.id);
-    report('C1b', 'createProject (dupliquer) d\'un gros projet retombe en « local-* » jamais synchronisé', row.id.startsWith('local-') && !visible, [
-      `id renvoyé : ${row.id} (aucune erreur, toast « Projet dupliqué » affiché par useProjectBrowserProjects.ts:403)`,
-      `listProjects() (cloud OK) contient le projet ? ${visible ? 'oui' : 'NON → disparaît de la liste au prochain refresh'}`,
-      `saveProject sur un id local-* ne tente jamais le cloud (projectRows.ts:243) → jamais sauvegardé côté serveur`,
+    const visible = !!row && list.some((p: { id: string }) => p.id === row!.id);
+    const silentLocal = !!row && row.id.startsWith('local-') && !visible;
+    report('C1b', 'createProject (dupliquer) d\'un gros projet retombe en « local-* » jamais synchronisé', silentLocal, [
+      row ? `id renvoyé : ${row.id} (aucune erreur, toast « Projet dupliqué » affiché par useProjectBrowserProjects.ts:403)` : `createProject a levé : ${(threw as Error)?.name} ${(threw as { kind?: string })?.kind ?? ''} → toast d'erreur, aucun projet fantôme`,
+      `listProjects() (cloud OK) contient le projet ? ${visible ? 'oui' : 'non'}`,
     ]);
   }
 
@@ -160,7 +164,7 @@ async function main() {
     const list = await m.listProjects();
     const back = list.find((p: { id: string }) => p.id === row.id);
     report('C1c', 'deleteProject / renameProject : échec cloud silencieux', !threwDel && !threwRen && !!back && back.name === 'Zombie', [
-      `rename levé ? ${threwRen ? 'oui' : 'non'} ; delete levé ? ${threwDel ? 'oui' : 'non'} (UI : succès, projet retiré de la liste)`,
+      `rename levé ? ${threwRen ? 'oui' : 'non'} ; delete levé ? ${threwDel ? 'oui (toast d\'erreur, projet conservé)' : 'non (UI : succès, projet retiré de la liste)'}`,
       `au refresh : projet ${back ? `RÉAPPARAÎT, nom="${back.name}"` : 'absent'}`,
     ]);
   }

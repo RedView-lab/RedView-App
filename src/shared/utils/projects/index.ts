@@ -5,3 +5,4 @@ export * from './projectRows';
 export * from './folders';
 export * from './fitFiles';
 export * from './thumbnails';
+export * from './errors';

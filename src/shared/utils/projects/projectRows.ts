@@ -15,6 +15,7 @@ import { computeProjectSizeBytes } from './limits';
 import { rowToSummary } from './mappers';
 import type { ItineraryProject, ProjectRow, ProjectSummary } from './types';
 import { compressProjectPayload, decompressProjectPayload } from './compression';
+import { toProjectCloudError } from './errors';
 import {
   idbSaveProject,
   idbGetProject,
@@ -185,16 +186,17 @@ export async function createProject(
         ],
       );
 
-      if (doc) {
-        const row = await docToProjectRow(doc);
-        void idbSaveProject(row);
-        return row;
-      }
+      const row = await docToProjectRow(doc);
+      void idbSaveProject(row);
+      return row;
     } catch (e) {
-      logger.projects.debug('Appwrite createProject fallback to local storage', e);
+      const error = toProjectCloudError(e);
+      logger.projects.error('Appwrite createProject failed', error.kind, e);
+      throw error;
     }
   }
 
+  // Mode local de développement uniquement (pas de session Appwrite) : projet `local-*`.
   const now = new Date().toISOString();
   const localRow: ProjectRow = {
     id: 'local-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
@@ -249,9 +251,11 @@ export async function saveProject(id: string, project: ItineraryProject): Promis
         size_bytes: computeProjectSizeBytes(project),
         privacy: project.privacy ?? 'private',
       });
-      return;
     } catch (e) {
-      logger.projects.debug('Appwrite saveProject fallback to local storage', e);
+      // La copie IndexedDB est déjà écrite : l'appelant garde la sauvegarde en attente et réessaie.
+      const error = toProjectCloudError(e);
+      logger.projects.warn('Appwrite saveProject failed', error.kind, e);
+      throw error;
     }
   }
 }
@@ -275,10 +279,12 @@ export async function renameProject(id: string, name: string): Promise<void> {
           size_bytes: computeProjectSizeBytes(nextData),
         });
         void idbSaveProject({ ...current, name: trimmed, data: nextData, updated_at: new Date().toISOString() });
-        return;
       }
+      return;
     } catch (e) {
-      logger.projects.debug('Appwrite renameProject fallback to local storage', e);
+      const error = toProjectCloudError(e);
+      logger.projects.warn('Appwrite renameProject failed', error.kind, e);
+      throw error;
     }
   }
 
@@ -311,7 +317,9 @@ export async function moveProjectToFolder(
       }
       return;
     } catch (e) {
-      logger.projects.debug('Appwrite moveProjectToFolder fallback to local storage', e);
+      const error = toProjectCloudError(e);
+      logger.projects.warn('Appwrite moveProjectToFolder failed', error.kind, e);
+      throw error;
     }
   }
 
@@ -329,20 +337,26 @@ export async function deleteProject(id: string): Promise<void> {
   const userId = await getCurrentUserId().catch(() => 'dev-user-001');
   const isDev = userId === 'dev-user-001';
 
-  // 1. Suppression IndexedDB (projets + cache + miniature)
-  try {
-    await idbDeleteProject(id);
-  } catch {
-    // ignore
-  }
-
+  // 1. Suppression cloud d'abord : en cas d'échec la copie locale reste intacte
+  //    et l'erreur remonte (pas de faux succès suivi d'une « réapparition »).
   if (!isDev && !id.startsWith('local-')) {
     try {
       await databases.deleteDocument(APPWRITE_DATABASE_ID, PROJECTS_COLLECTION_ID, id);
-      return;
     } catch (e) {
-      logger.projects.debug('Appwrite deleteProject fallback to local storage', e);
+      const error = toProjectCloudError(e);
+      // Déjà supprimé côté cloud : on termine le nettoyage local.
+      if (error.kind !== 'not-found') {
+        logger.projects.warn('Appwrite deleteProject failed', error.kind, e);
+        throw error;
+      }
     }
+  }
+
+  // 2. Suppression IndexedDB (projets + cache + miniature)
+  try {
+    await idbDeleteProject(id);
+  } catch (e) {
+    logger.projects.warn('IndexedDB deleteProject failed', e);
   }
 
   const projects = readLocalProjects().filter((p) => p.id !== id);
