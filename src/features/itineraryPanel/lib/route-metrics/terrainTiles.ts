@@ -6,7 +6,17 @@ const IGN_ALTIMETRY_MIN_DELAY_MS = 200;
 const IGN_ALTIMETRY_NODATA = -99_999;
 
 const OPEN_METEO_ELEVATION_ENDPOINT = 'https://api.open-meteo.com/v1/elevation';
-const OPEN_METEO_MAX_POINTS_PER_REQUEST = 2_000;
+/** Limite de l'API : au-delà de 100 coordonnées, HTTP 400 « must not exceed 100 coordinates ». */
+export const OPEN_METEO_MAX_POINTS_PER_REQUEST = 100;
+/** Espacement entre lots : reste sous le quota gratuit (600 appels/min). */
+const OPEN_METEO_MIN_DELAY_MS = 120;
+/**
+ * Plafond de points envoyés à Open-Meteo par appel (200 requêtes). Au-delà,
+ * les points restent sans altitude MNT : les appelants gardent alors
+ * l'altitude du GPX / de BRouter (seuil de couverture) au lieu d'épuiser le
+ * quota horaire (5 000 appels) sur un seul tracé.
+ */
+const OPEN_METEO_MAX_POINTS_PER_CALL = 20_000;
 
 export interface PointLike {
   lat: number;
@@ -240,7 +250,8 @@ export async function sampleTerrainElevationsAtPoints(
   }
 
   // 2. Fetch International points + any IGN missing/failed points via Open-Meteo Elevation
-  const needInternational = [...internationalSubIndices, ...ignFailedOrMissingIndices];
+  const needInternational = [...internationalSubIndices, ...ignFailedOrMissingIndices]
+    .slice(0, OPEN_METEO_MAX_POINTS_PER_CALL);
   if (needInternational.length > 0) {
     for (let offset = 0; offset < needInternational.length; offset += OPEN_METEO_MAX_POINTS_PER_REQUEST) {
       throwIfAborted(signal);
@@ -260,10 +271,12 @@ export async function sampleTerrainElevationsAtPoints(
       } catch (err) {
         if ((err as { name?: string }).name === 'AbortError') throw err;
         console.warn('[Open-Meteo Elevation] Batch query failed:', err);
+        // Quota atteint : les lots suivants seraient refusés aussi.
+        if (/\bHTTP 429\b/.test(String((err as Error)?.message ?? err))) break;
       }
 
       if (offset + OPEN_METEO_MAX_POINTS_PER_REQUEST < needInternational.length) {
-        await delay(IGN_ALTIMETRY_MIN_DELAY_MS, signal);
+        await delay(OPEN_METEO_MIN_DELAY_MS, signal);
       }
     }
   }

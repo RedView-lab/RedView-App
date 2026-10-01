@@ -12,7 +12,12 @@
  * Exit 1 when the batch is rejected or the elevation array length mismatches
  * (the app then silently keeps BRouter/GPX elevations: catch at terrainTiles.ts:265).
  */
-const N = 2000;
+import { loadSrc, closeLoader } from './b-loader';
+
+// Batch size actually used by the app (route-metrics/terrainTiles.ts).
+const { OPEN_METEO_MAX_POINTS_PER_REQUEST } = await loadSrc<{ OPEN_METEO_MAX_POINTS_PER_REQUEST: number }>('src/features/itineraryPanel/lib/route-metrics/terrainTiles.ts');
+await closeLoader();
+const N = OPEN_METEO_MAX_POINTS_PER_REQUEST;
 const latitude: number[] = [], longitude: number[] = [];
 for (let i = 0; i < N; i++) { latitude.push(+(46.0 + i * 0.0005).toFixed(5)); longitude.push(+(7.5 + i * 0.0005).toFixed(5)); }
 
