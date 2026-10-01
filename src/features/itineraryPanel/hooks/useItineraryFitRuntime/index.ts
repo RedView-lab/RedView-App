@@ -150,7 +150,9 @@ export function useItineraryFitRuntime({
 
   const calculateDisabled = activeFitRuntime?.status === 'running';
   const calculateError =
-    activeFitRuntime?.status === 'error' ? activeFitRuntime.error : null;
+    (activeFitRuntime?.status === 'error' ? activeFitRuntime.error : null)
+    ?? activeFitRuntime?.uploadError
+    ?? null;
   const fitFileNames = activeFitRuntime?.fitFileNames ?? EMPTY_FIT_FILE_NAMES;
 
   const updateFitRuntime = useCallback(
@@ -326,11 +328,30 @@ export function useItineraryFitRuntime({
       if (!projectId) return;
 
       try {
-        const storedUploads = await uploadProjectItineraryFitFiles(
+        const { uploads: storedUploads, failed } = await uploadProjectItineraryFitFiles(
           projectId,
           itineraryId,
           nextFitFiles,
         );
+
+        // Les fichiers non envoyés restent dans l'état local (toujours utilisés
+        // pour la prédiction) ; la signature suit les uploads persistés pour
+        // que l'hydratation réutilise les fichiers en mémoire au lieu de les
+        // remplacer par la liste partielle téléchargée.
+        updateFitRuntime(itineraryId, (prev) => ({
+          ...prev,
+          persistedUploadSignature:
+            storedUploads.length > 0
+              ? buildFitUploadsSignature(storedUploads)
+              : buildLocalFitUploadSignature(prev.fitFiles),
+          uploadError:
+            failed.length > 0
+              ? translateAppText(
+                  'Envoi impossible pour : {{list}}. Ces fichiers sont utilisés mais ne seront pas conservés dans le projet.',
+                  { list: failed.map((file) => file.name).join(', ') },
+                )
+              : null,
+        }));
 
         setProject((prev) => {
           const nextItineraries = prev.itineraries.map((it) =>
@@ -366,6 +387,7 @@ export function useItineraryFitRuntime({
             error instanceof Error
               ? translateAppText(error.message)
               : translateAppText('Impossible de sauvegarder les fichiers FIT sur le serveur.'),
+          uploadError: translateAppText('Impossible de sauvegarder les fichiers FIT sur le serveur.'),
           updatedAt: new Date().toISOString(),
         }));
       }
@@ -390,6 +412,7 @@ export function useItineraryFitRuntime({
       const nextUploads = (itinerary.fitUploads ?? []).filter((upload) =>
         keptKeys.has(fitFileKey(upload)),
       );
+      const uploadedKeys = new Set(nextUploads.map(fitFileKey));
 
       updateFitRuntime(itineraryId, (prev) => ({
         ...prev,
@@ -397,6 +420,10 @@ export function useItineraryFitRuntime({
         fitFileNames: nextFitFiles.map((file) => file.name),
         status: prev.status === 'running' ? prev.status : nextFitFiles.length > 0 ? 'ready' : 'idle',
         error: null,
+        // Plus aucun fichier local non enregistré : l'avertissement d'envoi tombe.
+        uploadError: nextFitFiles.every((file) => uploadedKeys.has(fitFileKey(file)))
+          ? null
+          : prev.uploadError,
         // Sans upload persisté (projet non enregistré), signature locale comme
         // à l'ajout, sinon l'hydratation viderait les fichiers restants.
         persistedUploadSignature:

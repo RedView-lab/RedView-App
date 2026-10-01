@@ -15,6 +15,12 @@ export interface ItineraryFitRuntime {
   error: string | null;
   updatedAt: string | null;
   persistedUploadSignature: string;
+  /**
+   * Fichiers ajoutés mais non enregistrés dans le projet (échec d'envoi) :
+   * ils restent utilisés localement, le message le signale. Distinct de
+   * `error` (écrasé par chaque nouveau calcul).
+   */
+  uploadError: string | null;
 }
 
 export interface PredictionStoreBridge {
@@ -52,5 +58,6 @@ export function createEmptyFitRuntime(): ItineraryFitRuntime {
     error: null,
     updatedAt: null,
     persistedUploadSignature: '',
+    uploadError: null,
   };
 }

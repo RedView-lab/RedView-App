@@ -563,4 +563,6 @@ export const dashboardTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Corridor trop large : réduisez le rayon ou découpez l’itinéraire', en: 'Corridor too large: reduce the radius or split the route' },
   { fr: 'La recherche de POI a expiré. Les POI déjà trouvés sont conservés.', en: 'The POI search timed out. POIs already found are kept.' },
   { fr: 'La recherche de POI a échoué. Les POI déjà trouvés sont conservés.', en: 'The POI search failed. POIs already found are kept.' },
+  { fr: 'Envoi impossible pour : {{list}}. Ces fichiers sont utilisés mais ne seront pas conservés dans le projet.', en: 'Upload failed for: {{list}}. These files are used but will not be kept in the project.' },
+  { fr: 'Impossible de sauvegarder les fichiers FIT sur le serveur.', en: 'Unable to save the FIT files on the server.' },
 ] as const;

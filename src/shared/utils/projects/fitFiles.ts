@@ -9,13 +9,21 @@ import {
 import { getCurrentUserId } from './auth';
 import type { ItineraryFitUpload } from './types';
 
+export interface FitUploadBatchResult {
+  /** Fichiers enregistrés dans le bucket, dans l'ordre d'entrée. */
+  uploads: ItineraryFitUpload[];
+  /** Fichiers dont l'envoi a échoué (à signaler, à garder en local). */
+  failed: File[];
+}
+
 export async function uploadProjectItineraryFitFiles(
   _projectId: string,
   _itineraryId: string,
   files: File[],
-): Promise<ItineraryFitUpload[]> {
+): Promise<FitUploadBatchResult> {
   const userId = await getCurrentUserId();
   const uploads: ItineraryFitUpload[] = [];
+  const failed: File[] = [];
 
   for (const file of files) {
     try {
@@ -40,10 +48,11 @@ export async function uploadProjectItineraryFitFiles(
       });
     } catch (error) {
       console.warn('[fitFiles] upload failed for file', file.name, error);
+      failed.push(file);
     }
   }
 
-  return uploads;
+  return { uploads, failed };
 }
 
 export async function deleteProjectItineraryFitFiles(
@@ -129,11 +138,15 @@ export async function duplicateProjectItineraryFitFiles(
     const files = await downloadProjectItineraryFitFiles(sourceUploads);
     if (files.length === 0) continue;
 
-    uploadsByItineraryId[itinerary.id] = await uploadProjectItineraryFitFiles(
+    const { uploads, failed } = await uploadProjectItineraryFitFiles(
       targetProjectId,
       itinerary.id,
       files,
     );
+    if (failed.length > 0) {
+      console.warn(`[fitFiles] duplicate: ${failed.length} FIT file(s) could not be copied`, failed.map((file) => file.name));
+    }
+    uploadsByItineraryId[itinerary.id] = uploads;
   }
 
   return uploadsByItineraryId;
