@@ -351,6 +351,115 @@ function ignFetchInit(extra) {
   };
 }
 
+// ── Flaky Géoplateforme backends ──────────────────────────────────────
+// Measured against data.geopf.fr (2026-10-01):
+//   - 13-35 % of LiDAR HD GetMap requests fail with HTTP 400 ServiceException
+//     "LayerNotDefined": some nodes behind the load balancer do not know the
+//     layer. The very same URL succeeds on the next attempt (40/40 tiles
+//     recovered within 3 attempts).
+//   - WMS-Raster is rate-limited to 40 requests/s per IP; above it geopf
+//     answers 429 and blocks the WMS (only) for 5 s. WMTS has no limit
+//     (https://geoservices.ign.fr/documentation/services/limite-d-usage).
+// Both used to be cached as a transient miss, so the tile fell back to the
+// correlation MNS / AWS 30 m (blank, smooth or flat-looking slope tiles in
+// the middle of LiDAR ones). They are retried here instead; any other error
+// is returned as-is to the caller's existing handling.
+const IGN_RETRY_MAX_ATTEMPTS = 3;
+const IGN_RETRY_BACKOFF_MS = 600;
+const IGN_WMS_RATE_LIMIT_BLOCK_MS = 5000;
+// Stay under the 40 req/s WMS quota (retries included) instead of finding
+// it with a 5 s block.
+const IGN_WMS_MAX_PER_SECOND = 32;
+const ignWmsRecentStarts = [];
+// Shared cool-down after a 429 so the other queued WMS requests do not keep
+// hammering the quota while it resets.
+let ignWmsRateLimitedUntil = 0;
+
+function isIgnWmsUrl(url) {
+  return url.startsWith(IGN_WMS_BASE);
+}
+
+async function acquireIgnWmsRateSlot(signal) {
+  for (;;) {
+    const now = Date.now();
+    if (ignWmsRateLimitedUntil > now) {
+      await ignAbortableDelay(ignWmsRateLimitedUntil - now, signal);
+      continue;
+    }
+    while (ignWmsRecentStarts.length && now - ignWmsRecentStarts[0] >= 1000) ignWmsRecentStarts.shift();
+    if (ignWmsRecentStarts.length < IGN_WMS_MAX_PER_SECOND) {
+      ignWmsRecentStarts.push(now);
+      return;
+    }
+    await ignAbortableDelay(ignWmsRecentStarts[0] + 1000 - now + 5, signal);
+  }
+}
+
+function ignAbortableDelay(ms, signal) {
+  if (!(ms > 0)) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+function parseRetryAfterMs(value) {
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1000, 10_000);
+  const at = Date.parse(value);
+  if (Number.isFinite(at)) return Math.min(Math.max(0, at - Date.now()), 10_000);
+  return null;
+}
+
+async function fetchIgnWithRetry(url, init) {
+  const isWms = isIgnWmsUrl(url);
+  let res = null;
+  for (let attempt = 0; attempt < IGN_RETRY_MAX_ATTEMPTS; attempt++) {
+    if (isWms) await acquireIgnWmsRateSlot(init?.signal);
+    res = await fetch(url, init);
+    if (res.ok) return res;
+    const lastAttempt = attempt + 1 >= IGN_RETRY_MAX_ATTEMPTS;
+    if (res.status === 400) {
+      // Small XML body: tells a flaky backend from a genuinely bad request.
+      let body = '';
+      try { body = await res.clone().text(); } catch { /* keep res */ }
+      if (!body.includes('LayerNotDefined')) return res;
+      continue;
+    }
+    if (res.status === 429) {
+      const block = parseRetryAfterMs(res.headers.get('Retry-After')) ?? IGN_WMS_RATE_LIMIT_BLOCK_MS;
+      if (isWms) {
+        // The WMS slot acquisition of every request (this retry included)
+        // waits the block out.
+        ignWmsRateLimitedUntil = Math.max(ignWmsRateLimitedUntil, Date.now() + block + Math.random() * 300);
+      } else if (!lastAttempt) {
+        await ignAbortableDelay(block, init?.signal);
+      }
+      continue;
+    }
+    if (res.status === 502 || res.status === 503 || res.status === 504) {
+      const backoff = parseRetryAfterMs(res.headers.get('Retry-After'))
+        ?? IGN_RETRY_BACKOFF_MS * (attempt + 1) + Math.random() * 400;
+      if (!lastAttempt) await ignAbortableDelay(backoff, init?.signal);
+      continue;
+    }
+    return res;
+  }
+  return res;
+}
+
 function isIGNUserCancel(controller) {
   return controller.signal.aborted && controller.signal.reason === USER_CANCEL_REASON;
 }
@@ -473,7 +582,7 @@ async function getIGNTile(z, col, row, purpose) {
       // mesh — they MUST land before lazy assets (analytics, prefetch link
       // hints, etc.) on the shared geopf H2 connection. Free ~30–80 ms TTFB
       // win when the connection has any background traffic.
-      const res = await fetch(url, init);
+      const res = await fetchIgnWithRetry(url, init);
       if (!res.ok) {
         const errorType = res.status === 404 ? 'permanent' : 'transient';
         cacheNull(key, errorType);
@@ -596,25 +705,47 @@ function buildHighresTileURL(z, col, row) {
   );
 }
 
-function terrainWmsSupersampleFactor(mercZ) {
-  // 2× supersampling for z>=13: fetches 512×512 BIL32 from IGN WMS and box-averages
-  // 2×2 -> 256×256. This eliminates the IGN WMS server's internal scanline duplication
-  // and staircase row artifacts in Horn slope math.
+// ── WMS anti-aliasing: 2× supersample + box average ───────────────────
+// The geopf WMS resamples its pyramid nearest-neighbour. Asked for exactly
+// the output grid, the samples alias against the 0.5 m LiDAR grid and Horn
+// turns that into regular row/column bands ("hachures") on the slope
+// overlay. Fetching 2× and box-averaging 2×2 is a proper area sample.
+// Measured on 5 French sites at z14-16 (row/col band energy of the slope
+// field, and mean |error| against a 4× reference):
+//   1×: bands 0.46-1.62, error 0.63-7.54°
+//   2×: bands 0.20-0.78, error 0.26-3.03°   (4× reference: 0.15-0.73)
+// 3× is worse than 2× (non-integer box partition); 2× in one axis only
+// leaves the bands of the other axis. Costs 4× the payload (≈1.5 MB per
+// tile, BIL32 is not compressed by geopf), hence only from z13 where the
+// overlay shows the LiDAR detail.
+function ignWmsSupersampleFactor(mercZ) {
   return mercZ >= 13 ? 2 : 1;
 }
 
-function buildTerrainWmsTileURL(mercZ, mercX, mercY, supersample) {
-  const bounds = mercatorTileBounds(mercZ, mercX, mercY);
-  // WMS 1.3.0 axis order for EPSG:4326 is latitude,longitude.
-  const bbox = [bounds.south, bounds.west, bounds.north, bounds.east].join(',');
+// The 0.40 m MNS stays at 1×: it is the 3D basemap mesh, requested for the
+// whole viewport on every load. At 2× (≈1.5 MB per tile) a 36-tile z14
+// viewport took 13-15 s and a 64-tile z15 one up to 19 s against geopf
+// (≈3.4 MB/s, measured 2026-10-01), past IGN_FETCH_TIMEOUT_MS: the aborted
+// builds cascaded into MNT/RGE ALTI fallbacks and surface recoveries, and the
+// map never finished loading. 1×: 4 s for the same viewports.
+function mnsWmsSupersampleFactor() {
+  return 1;
+}
+
+// One GetMap raster, metre-square geometry (see mnsWmsRequestSize), raw
+// srcWidth × srcHeight floats. null on any HTTP / size failure.
+async function fetchWmsElevationRaster(layer, mercZ, mercX, mercY, supersample, init) {
   const { width, height } = mnsWmsRequestSize(mercZ, mercX, mercY, supersample);
-  return (
-    `${IGN_WMS_BASE}?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0` +
-    `&LAYERS=${IGN_DEM_FALLBACK_LAYER}&STYLES=` +
-    `&FORMAT=${encodeURIComponent(IGN_DEM_FORMAT)}` +
-    `&CRS=EPSG:4326&BBOX=${bbox}` +
-    `&WIDTH=${width}&HEIGHT=${height}`
-  );
+  const url = buildMnsWmsTileURL(mercZ, mercX, mercY, layer, width, height);
+  const res = await fetchIgnWithRetry(url, init);
+  if (!res.ok) return null;
+  const buf = await res.arrayBuffer();
+  if (buf.byteLength !== width * height * 4) return null;
+  return new Float32Array(buf);
+}
+
+function isValidWmsElevation(v) {
+  return !Number.isNaN(v) && v >= MIN_VALID_ELEVATION_M && v <= MAX_VALID_ELEVATION_M;
 }
 
 // ── WMS request geometry: metre-square, never degree-square ───────────
@@ -793,7 +924,7 @@ async function getHighresTile(z, col, row) {
     const url = buildHighresTileURL(z, col, row);
     const { controller, cleanup, init } = ignFetchInit();
     try {
-      const res = await fetch(url, init);
+      const res = await fetchIgnWithRetry(url, init);
       if (!res.ok) {
         cacheHighresNull(key, res.status === 404 ? 'permanent' : 'transient');
         return null;
@@ -847,8 +978,8 @@ function cacheTerrainWmsNull(key, errorType) {
 }
 
 async function getTerrainWmsTile(mercZ, mercX, mercY, purpose = PURPOSE_SLOPE_VISIBLE) {
-  const supersample = terrainWmsSupersampleFactor(mercZ);
-  const key = `wms/${mercZ}/${mercX}/${mercY}@${supersample}x`;
+  const supersample = ignWmsSupersampleFactor(mercZ);
+  const key = `wms-mnt/${mercZ}/${mercX}/${mercY}@${supersample}x`;
   const cached = getCachedTerrainWms(key);
   if (cached.hit) return cached.data;
 
@@ -858,25 +989,34 @@ async function getTerrainWmsTile(mercZ, mercX, mercY, purpose = PURPOSE_SLOPE_VI
     const cached2 = getCachedTerrainWms(key);
     if (cached2.hit) return cached2.data;
 
-    const url = buildTerrainWmsTileURL(mercZ, mercX, mercY, supersample);
     const { controller, cleanup, init } = ignFetchInit({ purpose });
     try {
-      const res = await fetch(url, init);
-      if (!res.ok) {
-        cacheTerrainWmsNull(key, res.status === 404 ? 'permanent' : 'transient');
-        return null;
-      }
-      const buf = await res.arrayBuffer();
       const { width: srcW, height: srcH } = mnsWmsRequestSize(mercZ, mercX, mercY, supersample);
-      if (buf.byteLength !== srcW * srcH * 4) {
-        cacheTerrainWmsNull(key, 'permanent');
-        return null;
-      }
-      const raw = new Float32Array(buf);
+      // 1. LiDAR HD MNT (0.5 m bare earth), 2. RGE ALTI for the pixels it
+      // does not cover. Both rasters share the exact request geometry, so
+      // the gap fill is a per-pixel merge before the resample.
+      let raw = await fetchWmsElevationRaster(IGN_LIDAR_MNT_LAYER, mercZ, mercX, mercY, supersample, init);
       let validCount = 0;
-      for (let i = 0; i < raw.length; i++) {
-        const v = raw[i];
-        if (!Number.isNaN(v) && v >= MIN_VALID_ELEVATION_M && v <= MAX_VALID_ELEVATION_M) validCount++;
+      if (raw) {
+        for (let i = 0; i < raw.length; i++) if (isValidWmsElevation(raw[i])) validCount++;
+      }
+      if (validCount < srcW * srcH) {
+        const rgeAlti = await fetchWmsElevationRaster(IGN_DEM_FALLBACK_LAYER, mercZ, mercX, mercY, supersample, init);
+        if (rgeAlti) {
+          if (!raw || validCount === 0) {
+            raw = rgeAlti;
+          } else {
+            for (let i = 0; i < raw.length; i++) {
+              if (!isValidWmsElevation(raw[i])) raw[i] = rgeAlti[i];
+            }
+          }
+          validCount = 0;
+          for (let i = 0; i < raw.length; i++) if (isValidWmsElevation(raw[i])) validCount++;
+        }
+      }
+      if (!raw) {
+        cacheTerrainWmsNull(key, 'transient');
+        return null;
       }
       if (validCount === 0) return null;
       const data = mnsWmsResampleToTile(raw, srcW, srcH);
@@ -922,50 +1062,50 @@ function cacheMnsWmsNull(key, errorType) {
   mnsWmsTileCache.set(key, { _null: true, ts: Date.now(), ttl, errorType });
 }
 
+function mnsWmsCacheKey(mercZ, mercX, mercY) {
+  return `mns/${mercZ}/${mercX}/${mercY}@${mnsWmsSupersampleFactor()}x`;
+}
+
+// True only when the LiDAR HD WMS answered for this tile with no valid sample
+// (a genuine coverage gap) — never after a timeout, an abort or an HTTP error.
+function isMnsWmsConfirmedEmpty(mercZ, mercX, mercY) {
+  const key = mnsWmsCacheKey(mercZ, mercX, mercY);
+  // getCachedMnsWms first: it drops an expired null entry.
+  const cached = getCachedMnsWms(key);
+  return cached.hit && !cached.data && mnsWmsTileCache.get(key)?.errorType === 'permanent';
+}
+
 async function getMnsWmsTile(mercZ, mercX, mercY, purpose = null) {
-  const { width: srcW, height: srcH } = mnsWmsRequestSize(mercZ, mercX, mercY, 1);
-  const key = `mns/${mercZ}/${mercX}/${mercY}`;
+  const supersample = mnsWmsSupersampleFactor();
+  const { width: srcW, height: srcH } = mnsWmsRequestSize(mercZ, mercX, mercY, supersample);
+  const key = mnsWmsCacheKey(mercZ, mercX, mercY);
   const cached = getCachedMnsWms(key);
   if (cached.hit) return cached.data;
 
   if (mnsWmsInflight.has(key)) return mnsWmsInflight.get(key);
-
-  // Decode one WMS response into a DEM_TILE_SIZE² elevation grid.
-  // The request is deliberately NOT degree-square (see mnsWmsRequestSize), so
-  // the payload is srcW × srcH with srcW > srcH; it is box-averaged down in X
-  // and de-combed in Y. decodeBIL32 is not used here because it hard-codes the
-  // 256² IGN_SRC_TILE_SIZE geometry.
-  const decodeWmsResponse = async (res) => {
-    if (!res.ok) return null;
-    const buf = await res.arrayBuffer();
-    if (buf.byteLength !== srcW * srcH * 4) return null;
-    const raw = new Float32Array(buf);
-    // No separate validity pre-pass over the raw raster: the resample is
-    // NaN/range-aware, so a raw raster with zero valid samples yields a tile
-    // with zero valid cells and the count below returns null all the same.
-    const tiled = mnsWmsResampleToTile(raw, srcW, srcH);
-    // After the NaN-aware resample some cells may hold NaN; count what survived
-    // so the caller's coverage logic keeps working.
-    let tiledValid = 0;
-    for (let i = 0; i < tiled.length; i++) {
-      const v = tiled[i];
-      if (!Number.isNaN(v) && v >= MIN_VALID_ELEVATION_M && v <= MAX_VALID_ELEVATION_M) tiledValid++;
-    }
-    if (tiledValid === 0) return null;
-    return tiled;
-  };
 
   const promise = scheduleIGN(async () => {
     const cached2 = getCachedMnsWms(key);
     if (cached2.hit) return cached2.data;
 
     // 1. Primary: True LiDAR HD MNS WMS (~0.40m surface model)
-    const url = buildMnsWmsTileURL(mercZ, mercX, mercY, IGN_LIDAR_MNS_LAYER, srcW, srcH);
     const { controller, cleanup, init } = ignFetchInit({ purpose });
     try {
       let data = null;
+      let answered = false;
       try {
-        data = await decodeWmsResponse(await fetch(url, init));
+        // The request is deliberately NOT degree-square (see
+        // mnsWmsRequestSize): srcW > srcH, box-averaged down to
+        // DEM_TILE_SIZE² and de-combed in Y by mnsWmsResampleToTile, which is
+        // NaN/range-aware (cells with no valid sample stay NaN).
+        const raw = await fetchWmsElevationRaster(IGN_LIDAR_MNS_LAYER, mercZ, mercX, mercY, supersample, init);
+        if (raw) {
+          answered = true;
+          const tiled = mnsWmsResampleToTile(raw, srcW, srcH);
+          let tiledValid = 0;
+          for (let i = 0; i < tiled.length; i++) if (isValidWmsElevation(tiled[i])) tiledValid++;
+          if (tiledValid > 0) data = tiled;
+        }
       } catch {
         if (isIGNUserCancel(controller)) return null;
       }
@@ -990,7 +1130,10 @@ async function getMnsWmsTile(mercZ, mercX, mercY, purpose = null) {
         return data;
       }
 
-      cacheMnsWmsNull(key, 'transient');
+      // A well-formed raster with no valid sample is a genuine LiDAR HD
+      // coverage gap: remember it for longer than a transport failure so the
+      // WMS request is not repeated every 10 s.
+      cacheMnsWmsNull(key, answered ? 'permanent' : 'transient');
       return null;
     } catch {
       if (isIGNUserCancel(controller)) return null;

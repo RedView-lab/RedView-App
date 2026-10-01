@@ -114,6 +114,12 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
     let ignHadSomeData = false; // true when MNS returned partial/full coverage
     let franceHadSomeData = false;
     let franceTransientFailure = false; // IGN timed out / partially settled; keep parent mesh instead of caching flat AWS child
+    // Surface (0.40 m MNS) build failed for a transient reason — WMS timeout,
+    // retries exhausted, or aborted by CANCEL_STALE_DEM on zoomstart. Every
+    // later fallback is bare earth (MNT / RGE ALTI / AWS): committing one of
+    // them as this tile's answer erases the buildings and trees the parent
+    // tile showed, i.e. the relief vanishes as the user zooms in.
+    let franceSurfaceTransient = false;
     const tileBounds = mercatorTileBounds(z, x, y);
     const tileCenterLat = (tileBounds.north + tileBounds.south) / 2;
     const useFranceTerrainOnly = demProfile === 'terrain';
@@ -355,9 +361,25 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
           mnsAreaNegSet(z, x, y);
         } else if (!ignHadSomeData) {
           franceTransientFailure = true;
+          franceSurfaceTransient = true;
         }
       } else {
         franceTransientFailure = true;
+        franceSurfaceTransient = true;
+      }
+    }
+
+    // 3-. Surface stand-in: overzoom an ancestor that is ALREADY built (the
+    // tile the user was looking at before zooming in) so the buildings stay
+    // on screen. Cache-only — a recursive parent build would queue another
+    // WMS raster behind the one that just failed. Its `overzoom-*`
+    // source makes finalize() short-cache it, and the surface recovery
+    // scheduled below replaces it with the real MNS tile.
+    if (!pngBlob && franceSurfaceTransient) {
+      const fb = await tryParentOverzoom(cache, z, x, y, _depth, demProfile, { cachedOnly: true });
+      if (fb) {
+        pngBlob = fb.blob;
+        demSource = fb.source + '-surface-standin';
       }
     }
 
@@ -503,6 +525,16 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
           }
         }
       } catch { /* best-effort — fall through to 204 */ }
+    }
+
+    // 5c. Whatever stands in for a failed surface build (parent overzoom,
+    // bare-earth MNT, AWS) is provisional: short-cache it so it never becomes
+    // the tile's permanent answer nor a parent for deeper zooms, and rebuild
+    // the real MNS tile in the background (the page reloads it on
+    // DEM_TILE_CACHE_UPDATED).
+    if (franceSurfaceTransient) {
+      if (pngBlob) forceShortCache = true;
+      if (_depth === 0) scheduleSurfaceMnsRecovery(cache, cacheKey, z, x, y, franceClass, demProfile);
     }
 
     // 6. Nothing worked — 204 with short TTL for transient failures.

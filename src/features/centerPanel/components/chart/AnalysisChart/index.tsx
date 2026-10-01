@@ -34,7 +34,8 @@ import {
 } from './types';
 import { usePlotAreaSize } from './usePlotAreaSize';
 import { resolveItineraryHoverMetrics } from './hoverMetrics';
-import { translateAppText } from '@/shared/i18n';
+import { readDocumentAppLocale, translateAppText } from '@/shared/i18n';
+import { SLOPE_COLOR_CLASSES, slopeClassAtX, slopeGradeAtX } from '../slope';
 
 function pointSeriesCoversX(points: Array<{ x: number; y: number }>, xValue: number): boolean {
   if (!Number.isFinite(xValue) || points.length === 0) return false;
@@ -52,6 +53,7 @@ export const AnalysisChart = memo(function AnalysisChart({
   dayNightOverlay = null,
   pauseOverlay = null,
   alertOverlay = null,
+  slopeOverlay = null,
   axis1Metric,
   axis2Metric,
   xMode,
@@ -280,6 +282,19 @@ export const AnalysisChart = memo(function AnalysisChart({
     };
   }, [backdropNiceBase, normalizedYOffset, yVisibleFraction]);
 
+  // Courbe colorée par la pente : la première courbe d'altitude de l'itinéraire
+  // de l'overlay (série d'axe, sinon profil d'altitude en fond).
+  const slopeSeriesId = useMemo(() => {
+    if (!slopeOverlay) return null;
+    return series.find(
+      (entry) => entry.metricId === 'Altitude' && entry.itineraryId === slopeOverlay.itineraryId,
+    )?.id ?? null;
+  }, [series, slopeOverlay]);
+  const slopeBackdropId = useMemo(() => {
+    if (!slopeOverlay || slopeSeriesId) return null;
+    return backdropProfiles.find((profile) => profile.itineraryId === slopeOverlay.itineraryId)?.id ?? null;
+  }, [backdropProfiles, slopeOverlay, slopeSeriesId]);
+
   const backdropSeries = useMemo(() => {
     if (!backdropYDomain) return [];
     return backdropProfiles.map((profile) => ({
@@ -287,8 +302,9 @@ export const AnalysisChart = memo(function AnalysisChart({
       fillColor: withAlpha(profile.color, 0.16),
       lineColor: withAlpha(profile.color, 0.72),
       points: selectPointsForPlotLod(profile.points, plotXDomain, plotSize.width),
+      slopeSegments: profile.id === slopeBackdropId ? slopeOverlay?.segments : undefined,
     }));
-  }, [backdropProfiles, backdropYDomain, plotSize.width, plotXDomain]);
+  }, [backdropProfiles, backdropYDomain, plotSize.width, plotXDomain, slopeBackdropId, slopeOverlay]);
 
   const altitudeDomainForAnnotations = useMemo(() => {
     if (axis1Metric === 'Altitude') return plotYDomain;
@@ -389,8 +405,9 @@ export const AnalysisChart = memo(function AnalysisChart({
         lineWidth: 2.0,
         points: selectPointsForPlotLod(entry.points, plotXDomain, plotSize.width),
         yDomain: entry.axis === 2 ? plotY2Domain : plotYDomain,
+        slopeSegments: entry.id === slopeSeriesId ? slopeOverlay?.segments : undefined,
       })),
-    [plotSize.width, plotXDomain, plotY2Domain, plotYDomain, series],
+    [plotSize.width, plotXDomain, plotY2Domain, plotYDomain, series, slopeOverlay, slopeSeriesId],
   );
 
   useEffect(() => {
@@ -549,9 +566,36 @@ export const AnalysisChart = memo(function AnalysisChart({
     return rows;
   }, [alertOverlay, hoverXValue]);
 
+  const hoverSlopeRows = useMemo<HoverCardRow[]>(() => {
+    if (hoverXValue == null || !slopeOverlay) return [];
+    const classIndex = slopeClassAtX(slopeOverlay, hoverXValue);
+    const grade = slopeGradeAtX(slopeOverlay, hoverXValue);
+    if (classIndex == null || grade == null) return [];
+    const node = chartNodes.find((entry) => entry.itinerary.id === slopeOverlay.itineraryId);
+    const seriesEntry = series.find((entry) => entry.itineraryId === slopeOverlay.itineraryId);
+    const itineraryName = node?.itinerary.name ?? seriesEntry?.itineraryName;
+    if (!itineraryName) return [];
+    const locale = readDocumentAppLocale();
+    const value = new Intl.NumberFormat(locale === 'fr' ? 'fr-FR' : 'en-US', {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }).format(grade);
+    return [{
+      id: `${slopeOverlay.itineraryId}::hover-slope`,
+      itineraryName,
+      color: node?.itinerary.color ?? seriesEntry?.color ?? '#ffffff',
+      axis: null,
+      axisLabel: '',
+      metric: 'Altitude' as ChartMetricId,
+      value: 0,
+      slopeLabel: `${translateAppText('Pente', undefined, locale)} ${value} %`,
+      slopeColor: SLOPE_COLOR_CLASSES[classIndex]?.color,
+    }];
+  }, [chartNodes, hoverXValue, series, slopeOverlay]);
+
   const hoverRows = useMemo(
-    () => [...(hoverData ?? []), ...hoverBackdropData, ...hoverChartNodesData, ...hoverAlertRows],
-    [hoverAlertRows, hoverBackdropData, hoverChartNodesData, hoverData],
+    () => [...(hoverData ?? []), ...hoverBackdropData, ...hoverChartNodesData, ...hoverAlertRows, ...hoverSlopeRows],
+    [hoverAlertRows, hoverBackdropData, hoverChartNodesData, hoverData, hoverSlopeRows],
   );
 
   const hoverMarkers = useMemo(() => {

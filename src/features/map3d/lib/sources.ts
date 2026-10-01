@@ -1,6 +1,25 @@
 import { FRANCE_BOUNDS, DEM_SOURCE_MAXZOOM } from './ign.config';
 
 /**
+ * Logical tile size that makes a raster overlay request exactly the tiles of
+ * the 3D terrain's DEM pyramid.
+ *
+ * Mapbox loads terrain DEM tiles at `floor(zoom − 1)` for our 256 px
+ * raster-dem sources (Terrain.getScaledDemTileSize(): 256 / GRID_DIM 128 ×
+ * 512 px proxy tile = 1024), while a raster source asks
+ * `round(zoom + log2(512 / tileSize))` — `round(zoom + 1)` for 256 px tiles,
+ * i.e. 2–3 levels deeper than the terrain: 16–64× more DEM tiles to build
+ * than the relief on screen. With 512·2^1.5 px the overlay asks
+ * `round(zoom − 1.5) = floor(zoom − 1)`: the very tiles the terrain loaded.
+ */
+export const TERRAIN_ALIGNED_RASTER_TILE_SIZE = 512 * 2 * Math.SQRT2;
+
+/** Zoom of the DEM tiles Mapbox loads for the 3D terrain at `zoom` (see above). */
+export function terrainDemTileZoom(zoom: number): number {
+  return Math.max(0, Math.floor(zoom - 1));
+}
+
+/**
  * Unified DEM source: high-res national DEM in covered regions, AWS Terrarium
  * (~30 m global) elsewhere. Processed client-side by Service Worker
  * (sw-dem.js) intercepting /dem-tiles/ requests.

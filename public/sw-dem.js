@@ -22,7 +22,29 @@
 // ---------------------------------------------------------------------------
 // Cache stamp — bumped on every cache-invalidating change so the browser
 // detects a byte diff in this file and triggers install→activate→purge.
-// Current: dem-tiles-v48-lidar-wms-aspect / radar-v3 / dem-negative-v29
+// Current: dem-tiles-v51-mns-1x / radar-v3 / dem-negative-v29 / slope-tiles-v3-aligned
+// 2026-10-01 slope-terrain-aligned: the overlay requests the 3D terrain's own
+// DEM tiles (z = floor(zoom − 1) instead of round(zoom + 1): 16–64× fewer DEM
+// builds), slope 2× Catmull-Rom gray+alpha, per-row cell size, in-flight
+// neighbours awaited, provisional tiles rebuilt when the missing DEM lands,
+// parent-slope fallback instead of holes, no gesture cancellation (slope and
+// altitude passthrough), stand-in DEMs no longer pinned by the resolver.
+// 2026-10-01 mns-1x: the 0.40 m MNS (3D basemap) is fetched at 1× again — 2×
+// pushed whole viewports past the 15 s IGN timeout and the map never loaded.
+// The 2× anti-aliasing stays on the 1 m terrain WMS only.
+// 2026-10-01 surface-standin: a transient MNS (0.40 m) failure no longer caches
+// bare earth for good — cached-parent overzoom first, every stand-in
+// short-cached, background MNS recovery (buildings stayed flat on zoom-in).
+// 2026-10-01 slope-lidar-wms-v2: LiDAR HD WMS fetched 2× + box-averaged (no
+// more row/column hatching), 1 m terrain on LiDAR HD MNT (RGE ALTI only fills
+// gaps), geopf 400 LayerNotDefined / 429 retried + WMS kept under 40 req/s,
+// no 0 m plateau when a partial tile has no background, worker DEM LRU keyed
+// by content, provisional slope tiles kept out of the hot tier and reloaded
+// by the page (SLOPE_TILES_STALE) — placeholder holes after a gesture.
+// 2026-10-01 slope-hd-outside-lidar: France border test by polygon edges (no
+// more FRANCE_BOUNDS bbox → NW Italy/BE/LU/DE back on AWS), HD slope outside
+// LiDAR footprints = 30 m slope (z>13 upsampled from z13), same-class
+// neighbour stitching, AWS fetch-slot leak fixed, CLAIM_CLIENTS message.
 // 2026-10-01 security: radar host allowlist + no raw passthrough, navigations bypass the SW.
 // 2026-10-01 tiles: valid 1x1 transparent PNG (bad IDAT CRC before) + router
 // rejects impossible tile coords (z>22, x/y >= 2^z) with 204.

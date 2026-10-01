@@ -80,6 +80,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     calculateLabel,
     calculateDisabled,
     calculateError,
+    fitNotice,
     onChangePoiEntry,
     onOpenPoiCategories,
     onLoadPois,
@@ -334,6 +335,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
             onCancelRoute={onCancelRoute}
             calculateDisabled={calculateDisabled}
             calculateError={calculateError}
+            fitNotice={fitNotice}
             calculateLabel={calculateLabel}
             dockTimelinePanel={dockTimelinePanel}
             onCalculate={onCalculate}

@@ -92,7 +92,8 @@ const MAX_API_REQUESTS = 120;
 // celui de BRouter/POI.
 const MAX_WEATHER_REQUESTS = 600;
 // Fallbacks de tuiles (SW inactif) : généreux, mais chaque requête déclenche
-// des fetchs upstream, donc pas illimité.
+// des fetchs upstream, donc pas illimité. Quota par famille (radar, slope,
+// altitude) ; /dem-tiles et les préchargements `?pf=1` ne sont pas comptés.
 const MAX_TILE_REQUESTS = 600;
 
 function checkRateLimit(req, bucket, max) {
@@ -255,13 +256,19 @@ const server = http.createServer(async (req, res) => {
       return await handleApiRoute(apiRoute, parsedUrl, req, res);
     }
 
-    if (
-      pathname.startsWith('/radar-tiles/')
-      || pathname.startsWith('/slope-tiles/')
-      || pathname.startsWith('/altitude-tiles/')
-      || pathname.startsWith('/dem-tiles/')
-    ) {
-      if (!checkRateLimit(req, 'tiles', MAX_TILE_REQUESTS)) {
+    // Tuiles servies normalement par le Service Worker. Arrivées ici, la page
+    // n'est pas (encore) contrôlée :
+    //  - /dem-tiles : le DEM n'existe que côté SW (la page non contrôlée
+    //    utilise AWS Terrarium en direct) → 204 immédiat, hors quota ;
+    //  - ?pf=1 : préchargement spéculatif sans SW, inutile → 204, hors quota ;
+    //  - sinon un quota PAR famille, pour qu'une rafale pente ne prive pas
+    //    l'altitude ou le radar (et inversement).
+    const tileFamily = /^\/(radar|slope|altitude|dem)-tiles\//.exec(pathname)?.[1];
+    if (tileFamily) {
+      if (tileFamily === 'dem' || parsedUrl.searchParams.get('pf') === '1') {
+        return sendNoTile(res);
+      }
+      if (!checkRateLimit(req, `tiles:${tileFamily}`, MAX_TILE_REQUESTS)) {
         return sendTooManyRequests(res);
       }
     }
@@ -276,8 +283,8 @@ const server = http.createServer(async (req, res) => {
       return await handleSlopeTileRoute(pathname, parsedUrl, req, res);
     }
 
-    // 2d. Fallback for /altitude-tiles/* and /dem-tiles/* when Service Worker is inactive (e.g. over plain HTTP)
-    if (pathname.startsWith('/altitude-tiles/') || pathname.startsWith('/dem-tiles/')) {
+    // 2d. Fallback for /altitude-tiles/* when Service Worker is inactive (e.g. over plain HTTP)
+    if (pathname.startsWith('/altitude-tiles/')) {
       return await handleAltitudeTileRoute(pathname, parsedUrl, req, res);
     }
 
@@ -586,7 +593,7 @@ async function handleSlopeTileRoute(pathname, parsedUrl, req, res) {
 
 async function handleAltitudeTileRoute(pathname, parsedUrl, req, res) {
   try {
-    const coords = parseTileCoords(pathname, /^\/(?:altitude|dem)-tiles\/(\d+)\/(\d+)\/(\d+)/);
+    const coords = parseTileCoords(pathname, /^\/altitude-tiles\/(\d+)\/(\d+)\/(\d+)/);
     if (coords) {
       const pngBuf = await generateAltitudeTile(coords.z, coords.x, coords.y);
       if (!pngBuf) return sendNoTile(res);

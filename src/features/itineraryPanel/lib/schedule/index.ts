@@ -1,8 +1,12 @@
 export {
+  buildCyclingConfig,
+  buildCyclingRiderSpec,
+  buildCyclingRouteInput,
   buildPredictionConfigFromRhythm,
   buildRunPredictionConfigFromRhythm,
   buildRouteGpxFile,
   hasUsableRouteElevation,
+  resolveCyclingGeometry,
 } from './container-prediction';
 export {
   buildPauseAwareSchedule,

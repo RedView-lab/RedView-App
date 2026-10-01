@@ -160,6 +160,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     calculateLabel,
     cancelCalculatePrediction,
     fitFileNames,
+    fitNotice,
     fitInputRef,
     handleCalculatePrediction,
     handleClearFitFiles,
@@ -1167,6 +1168,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         calculateLabel={calculateLabel}
         calculateDisabled={calculateDisabled}
         calculateError={calculateError}
+        fitNotice={fitNotice}
         onChangePoiEntry={(category, next) =>
           updateActive((it) => {
             it.poi[category] = next;

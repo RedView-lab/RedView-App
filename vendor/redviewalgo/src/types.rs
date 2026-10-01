@@ -2,62 +2,20 @@ use serde::{Deserialize, Serialize};
 
 // ─── Gender / sex (physiological model) ──────────────────────────────────────
 
-/// Rider gender for physiological adjustments.
-/// Affects sustainable power-to-speed efficiency in ultra-distance events.
-/// Research: Knechtle et al. 2021, Speechly et al. 1996.
+/// Genre du cycliste / coureur : choisit le gabarit des préréglages
+/// (masse, puissance absolue, traînée), jamais un coefficient de vitesse.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum Gender {
-    /// Male physiology (baseline)
     Male,
-    /// Female physiology — ~8% lower absolute VO2max on average,
-    /// but potentially better fatigue resistance in ultra events.
     Female,
-    /// Not specified — uses male baseline (conservative for prediction).
+    /// Non précisé : gabarit masculin moyen.
     Unspecified,
 }
 
 impl Default for Gender {
     fn default() -> Self {
         Gender::Unspecified
-    }
-}
-
-impl Gender {
-    /// Speed modifier for ultra-distance cycling.
-    /// Female riders average ~8% slower in ultra cycling events (Knechtle et al. 2021,
-    /// RAAM/TCR data). This accounts for average VO2max differences.
-    /// Returns a factor applied to predicted speed.
-    pub fn speed_factor(&self) -> f64 {
-        match self {
-            Gender::Female => 0.92,
-            _ => 1.0,
-        }
-    }
-
-    /// Typical rider body weight (kg) by gender when not explicitly provided.
-    pub fn default_rider_weight(&self) -> f64 {
-        match self {
-            Gender::Female => 56.0,
-            _ => 70.0,
-        }
-    }
-
-    /// Typical bike + equipment weight (kg).
-    pub fn default_bike_weight(&self) -> f64 {
-        match self {
-            Gender::Female => 10.0,
-            _ => 10.0,
-        }
-    }
-
-    /// Typical aerodynamic drag area CdA (m²) by gender.
-    /// Female riders have a ~10-15% smaller frontal area than male riders.
-    pub fn default_cda(&self) -> f64 {
-        match self {
-            Gender::Female => 0.30,
-            _ => 0.35,
-        }
     }
 }
 
@@ -79,18 +37,6 @@ pub enum SurfaceType {
 impl Default for SurfaceType {
     fn default() -> Self {
         SurfaceType::Unknown
-    }
-}
-
-impl SurfaceType {
-    /// Convert from u8 encoding used in JS→WASM transfer.
-    /// 0 = Road, 1 = Gravel, 2 = Unknown (default)
-    pub fn from_u8(v: u8) -> Self {
-        match v {
-            0 => SurfaceType::Road,
-            1 => SurfaceType::Gravel,
-            _ => SurfaceType::Unknown,
-        }
     }
 }
 
@@ -232,103 +178,6 @@ pub struct Route {
     pub total_elevation_loss_m: f64,
 }
 
-// ─── Rider profile ──────────────────────────────────────────────────────────
-
-/// One bin of the speed-vs-gradient curve
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GradientBin {
-    /// Centre of the gradient bin (%)
-    pub gradient_pct: f64,
-    /// Median speed in m/s
-    pub median_speed_ms: f64,
-    /// Standard deviation of speed in m/s
-    pub std_speed_ms: f64,
-    /// Number of samples
-    pub count: u32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FatigueModel {
-    /// Exponential decay coefficient λ  — perf(t) = floor + (baseline − floor) · e^(−λ·t)
-    /// Used as fallback when bi-exponential params are absent.
-    pub decay_lambda: f64,
-    /// Baseline performance factor (normalised to 1.0)
-    pub baseline: f64,
-    /// Minimum performance floor — fatigue never drops below this fraction
-    /// Typical range: 0.40–0.85. Default 0.60 (ultra-endurance research).
-    pub floor: f64,
-    /// Ultra-distance floor override. When set, used for events estimated > 24h.
-    /// Typical: 0.55-0.70 (ultra athletes sustain higher steady-state than training suggests).
-    #[serde(default)]
-    pub ultra_floor: Option<f64>,
-
-    // ── Bi-exponential fatigue (ultra-distance, >6h training data) ──
-    // factor(t) = floor + fast_amplitude·e^(−fast_lambda·t) + slow_amplitude·e^(−slow_lambda·t)
-    // Fast component: neuromuscular fatigue (λ ~0.3-1.0, half-life 2-4h)
-    // Slow component: metabolic fatigue (λ ~0.01-0.05, half-life 10-30h)
-
-    /// Fast decay amplitude A (None = use single-exponential fallback)
-    #[serde(default)]
-    pub fast_amplitude: Option<f64>,
-    /// Fast decay rate λ₁ (neuromuscular, typically 0.3-1.0)
-    #[serde(default)]
-    pub fast_lambda: Option<f64>,
-    /// Slow decay amplitude B
-    #[serde(default)]
-    pub slow_amplitude: Option<f64>,
-    /// Slow decay rate λ₂ (metabolic, typically 0.01-0.05)
-    #[serde(default)]
-    pub slow_lambda: Option<f64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RiderProfile {
-    /// Speed vs gradient lookup bins (fresh state — first 2h of activities)
-    pub gradient_bins: Vec<GradientBin>,
-    /// Speed vs gradient bins in fatigued state (>3h into activities).
-    /// Used for blending during ultra-distance prediction.
-    #[serde(default)]
-    pub fatigued_bins: Vec<GradientBin>,
-    /// FTP in watts (user-provided or auto-estimated). 0 if no power data.
-    pub ftp_w: f64,
-    /// Total system mass: rider + bike + equipment (kg)
-    pub mass_kg: f64,
-    /// Rider body weight only (kg)
-    #[serde(default)]
-    pub rider_weight_kg: f64,
-    /// Bike + bags + equipment weight (kg)
-    #[serde(default)]
-    pub bike_weight_kg: f64,
-    /// W/kg ratio = FTP / rider_weight_kg. The #1 climbing predictor in cycling.
-    #[serde(default)]
-    pub wkg: f64,
-    /// Drag area CdA (m²)
-    pub cda: f64,
-    /// Rolling resistance coefficient
-    pub crr: f64,
-    /// Fatigue model
-    pub fatigue: FatigueModel,
-    /// Whether power data was available
-    pub has_power: bool,
-
-    // ── Training D+ statistics (computed from historical FIT files) ──
-
-    /// Average D+ per km across all training rides (m/km).
-    /// Typical: flat = 5-8, rolling = 10-15, mountainous = 15-25, alpine = 25-40.
-    #[serde(default)]
-    pub training_dplus_per_km: f64,
-    /// Maximum climbing rate observed in training (m/h of D+ gain).
-    /// Typical trained cyclist: 800-1200 m/h, elite: 1500-1800 m/h.
-    #[serde(default)]
-    pub training_max_climb_rate_mh: f64,
-    /// Average climbing rate in training (m/h of D+ during climbing segments).
-    #[serde(default)]
-    pub training_avg_climb_rate_mh: f64,
-    /// Maximum D+ in a single training ride (m).
-    #[serde(default)]
-    pub training_max_dplus_m: f64,
-}
-
 // ─── Prediction output ──────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -383,49 +232,7 @@ pub struct SegmentSummary {
     pub vam_mh: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PredictionResult {
-    pub total_time_s: f64,
-    /// Time spent actually riding (excluding stops)
-    pub riding_time_s: f64,
-    /// Estimated stop/rest time (s)
-    pub stop_time_s: f64,
-    pub total_distance_m: f64,
-    pub avg_speed_kmh: f64,
-    pub elevation_gain_m: f64,
-    pub elevation_loss_m: f64,
-    pub segments: Vec<SegmentSummary>,
-    pub points: Vec<PredictionPoint>,
-    pub rider_profile: RiderProfile,
-    /// Total time lower bound (s) — 90% confidence interval
-    #[serde(default)]
-    pub total_time_low_s: f64,
-    /// Total time upper bound (s) — 90% confidence interval
-    #[serde(default)]
-    pub total_time_high_s: f64,
-}
-
 // ─── Config from JS ─────────────────────────────────────────────────────────
-
-/// A scheduled stop event during the prediction.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StopEvent {
-    /// Riding time (seconds, excluding previous stops) at which this stop occurs.
-    pub riding_time_trigger_s: f64,
-    /// Duration of the stop (seconds).
-    pub duration_s: f64,
-    /// Type of stop for recovery computation.
-    pub stop_type: StopType,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum StopType {
-    Micro,
-    Extended,
-    Sleep,
-    Mechanical,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PredictionConfig {

@@ -16,11 +16,12 @@ export interface ItineraryFitRuntime {
   updatedAt: string | null;
   persistedUploadSignature: string;
   /**
-   * Fichiers ajoutés mais non enregistrés dans le projet (échec d'envoi) :
-   * ils restent utilisés localement, le message le signale. Distinct de
-   * `error` (écrasé par chaque nouveau calcul).
+   * Avertissement non bloquant sur les .fit : fichiers écartés (illisibles,
+   * parcours planifiés) ou ajoutés mais non enregistrés dans le projet (échec
+   * d'envoi, ils restent utilisés localement). Distinct de `error` : il ne
+   * masque jamais le résultat de la prédiction.
    */
-  uploadError: string | null;
+  uploadNotice: string | null;
 }
 
 export interface PredictionStoreBridge {
@@ -36,8 +37,11 @@ export interface UseItineraryFitRuntimeArgs {
 
 export interface UseItineraryFitRuntimeResult {
   calculateDisabled: boolean;
+  /** Échec du calcul de prédiction (masque le résultat). */
   calculateError: string | null;
   calculateLabel: string;
+  /** Avertissement non bloquant sur les .fit (fichiers écartés, envoi impossible). */
+  fitNotice: string | null;
   cancelCalculatePrediction: () => void;
   fitFileNames: string[];
   fitInputRef: React.RefObject<HTMLInputElement | null>;
@@ -58,6 +62,6 @@ export function createEmptyFitRuntime(): ItineraryFitRuntime {
     error: null,
     updatedAt: null,
     persistedUploadSignature: '',
-    uploadError: null,
+    uploadNotice: null,
   };
 }

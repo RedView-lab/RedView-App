@@ -1,12 +1,13 @@
+mod cycling;
 mod fit_parser;
 mod gpx_parser;
 mod knn;
 mod math;
 mod prediction;
-mod profile;
 mod running;
 mod types;
 
+use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
 /// Log a message to the browser console.
@@ -71,7 +72,7 @@ pub fn predict(
     };
 
     // 2. Parse FIT files
-    progress(&format!("Parsing {} fichier(s) FIT...", fit_files.len()));
+    progress(&format!("Lecture de {} fichier(s) FIT...", fit_files.len()));
     let fit_buffers: Vec<Vec<u8>> = fit_files.iter().map(|f| f.to_vec()).collect();
     let fit_slices: Vec<&[u8]> = fit_buffers.iter().map(|b| b.as_slice()).collect();
 
@@ -83,42 +84,146 @@ pub fn predict(
         progress(&format!("{} fichier(s) ignoré(s) (autre sport)", ignored));
     }
 
-    let total_pts: usize = activities.iter().map(|a| a.points.len()).sum();
-    progress(&format!("{} activité(s) parsées ({} points)", activities.len(), total_pts));
+    // 3. Parse GPX (points bruts : le moteur v2 fait son propre traitement)
+    let raw = gpx_parser::parse_gpx_points(gpx_data).map_err(|e| JsValue::from_str(&e))?;
+    let input = cycling::input::CourseInput {
+        lat: raw.iter().map(|p| p.0).collect(),
+        lon: raw.iter().map(|p| p.1).collect(),
+        ele: raw.iter().map(|p| if p.3 { p.2 } else { f64::NAN }).collect(),
+        ..Default::default()
+    };
 
-    // 3. Parse GPX
-    progress(&format!("Parsing GPX ({:.1} MB)...", gpx_data.len() as f64 / 1_048_576.0));
-    let route = gpx_parser::parse_gpx(
-        gpx_data,
-        cfg.max_route_points,
-        cfg.smoothing_window_m,
-    )
-        .map_err(|e| JsValue::from_str(&e))?;
-    progress(&format!("Route: {} points, {:.1} km, D+ {:.0}m",
-        route.points.len(),
-        route.total_distance_m / 1000.0,
-        route.total_elevation_gain_m));
+    // 4. Modèle du cycliste : config historique → prior, puis calibration .fit
+    let (prior, v2_cfg) = cycling::from_legacy_config(&cfg);
+    let (model, uncertainty) = if activities.is_empty() {
+        (prior, None)
+    } else {
+        progress(&format!("Calibration sur {} sortie(s)...", activities.len()));
+        let params = v2_cfg.model_params.clone().unwrap_or_default();
+        let cal = cycling::calibrate::calibrate_activities(&activities, &prior, &params);
+        let accuracy = cal.report.expected_accuracy_pct / 100.0;
+        (cal.model, Some(accuracy))
+    };
 
-    // 4. Build rider profile
-    progress("Construction du profil rider...");
-    let profile = profile::build_rider_profile(&activities, &cfg);
-    progress(&format!("Profil: FTP={:.0}W, masse={:.1}kg (coureur {:.1}kg + vélo {:.1}kg), W/kg={:.2}, {} bins",
-        profile.ftp_w, profile.mass_kg, profile.rider_weight_kg, profile.bike_weight_kg,
-        profile.wkg, profile.gradient_bins.len()));
-
-    // 4b. Build KNN model from activity data
-    progress("Construction du modèle KNN...");
-    let mut knn = knn::build_knn_model(&activities);
-    progress(&format!("KNN: {} samples (usable: {})", knn.samples.len(), knn.is_usable()));
-
-    // 5. Run prediction
-    progress(&format!("Prédiction sur {} points de route...", route.points.len()));
-    let result = prediction::predict(&profile, &route, &cfg, &mut knn);
-    progress(&format!("Terminé! Temps prédit: {}",
-        format_duration(result.total_time_s)));
+    // 5. Prédiction v2
+    let v2_cfg = cycling::CyclingConfig { uncertainty: uncertainty.or(v2_cfg.uncertainty), ..v2_cfg };
+    let result = cycling::predict_with_model(&input, &model, &v2_cfg).map_err(|e| JsValue::from_str(&e))?;
+    progress(&format!("Terminé ! Temps de déplacement prédit : {}", format_duration(result.total_time_s)));
 
     // 6. Serialize result
-    serde_wasm_bindgen::to_value(&result)
+    result
+        .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
+        .map_err(|e| JsValue::from_str(&format!("Serialization error: {e}")))
+}
+
+/// Version du moteur vélo (v2) : les prédictions persistées plus anciennes
+/// doivent être recalculées.
+#[wasm_bindgen]
+pub fn engine_version() -> u32 {
+    cycling::ENGINE_VERSION
+}
+
+/// Prédiction vélo v2 sur un tracé passé en tableaux typés.
+///
+/// * `lat`, `lon` — degrés ; `ele` — mètres (NaN = inconnue)
+/// * `dist_m` — axe de distance de l'app (vide = haversine)
+/// * `surface`, `way` — attributs par point (voir `cycling::input`), vides = inconnus
+/// * `headwind_ms` — vent de face par point (vide = pas de vent)
+/// * `config` — `CyclingConfig` : `{ rider, rider_override?, start_time_h?,
+///   ambient_temperature_c?, geometry?, model_params?, output? }`
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn predict_cycling(
+    lat: &[f64],
+    lon: &[f64],
+    ele: &[f64],
+    dist_m: &[f64],
+    surface: &[u8],
+    way: &[u8],
+    headwind_ms: &[f64],
+    config: JsValue,
+) -> Result<JsValue, JsValue> {
+    let cfg: cycling::CyclingConfig = if config.is_undefined() || config.is_null() {
+        cycling::CyclingConfig::default()
+    } else {
+        serde_wasm_bindgen::from_value(config)
+            .map_err(|e| JsValue::from_str(&format!("Invalid config: {e}")))?
+    };
+    let input = cycling::input::CourseInput {
+        lat: lat.to_vec(),
+        lon: lon.to_vec(),
+        ele: ele.to_vec(),
+        dist: dist_m.to_vec(),
+        surface: surface.to_vec(),
+        way: way.to_vec(),
+        headwind_ms: headwind_ms.to_vec(),
+        geometry: cycling::input::GeometrySource::Auto,
+    };
+    let result = cycling::predict_course(&input, &cfg).map_err(|e| JsValue::from_str(&e))?;
+    result
+        .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
+        .map_err(|e| JsValue::from_str(&format!("Serialization error: {e}")))
+}
+
+/// Calibration vélo v2 sur les .fit d'un cycliste.
+///
+/// `config` : `CyclingConfig` dont `rider` sert de prior (préréglage ou
+/// profil personnalisé : masse, pneus, FTP) et `model_params` éventuels.
+/// Renvoie `{ engine_version, model, report }` ; `model` se passe ensuite à
+/// `predict_cycling` via `{ rider: { model } }`.
+#[wasm_bindgen]
+pub fn calibrate_cycling(
+    fit_files: Vec<js_sys::Uint8Array>,
+    config: JsValue,
+    on_progress: Option<js_sys::Function>,
+) -> Result<JsValue, JsValue> {
+    let progress = |msg: &str| {
+        if let Some(ref cb) = on_progress {
+            let _ = cb.call1(&JsValue::NULL, &JsValue::from_str(msg));
+        }
+    };
+    let cfg: cycling::CyclingConfig = if config.is_undefined() || config.is_null() {
+        cycling::CyclingConfig::default()
+    } else {
+        serde_wasm_bindgen::from_value(config)
+            .map_err(|e| JsValue::from_str(&format!("Invalid config: {e}")))?
+    };
+    progress(&format!("Lecture de {} fichier(s) FIT...", fit_files.len()));
+    let fit_buffers: Vec<Vec<u8>> = fit_files.iter().map(|f| f.to_vec()).collect();
+    let fit_slices: Vec<&[u8]> = fit_buffers.iter().map(|b| b.as_slice()).collect();
+    let parsed = fit_parser::parse_fit_batch(&fit_slices).map_err(|e| JsValue::from_str(&e))?;
+    let (activities, foot) = split_by_sport(parsed, |s| !s.is_foot_sport());
+    progress(&format!("Calibration sur {} sortie(s)...", activities.len()));
+    let prior = cycling::resolve_rider(cfg.rider.as_ref(), cfg.rider_override.as_ref());
+    let params = cfg.model_params.clone().unwrap_or_default();
+    let mut result = cycling::calibrate::calibrate_activities(&activities, &prior, &params);
+    result.report.n_ignored += foot;
+    progress(&format!(
+        "Calibration terminée : précision attendue ±{:.1} %",
+        result.report.expected_accuracy_pct
+    ));
+    result
+        .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
+        .map_err(|e| JsValue::from_str(&format!("Serialization error: {e}")))
+}
+
+/// Calibration vélo v2 sur des traces déjà extraites (banc de mesure, traces
+/// étiquetées OSM) : `tracks` = `[{ lat, lon, ele, dist, t, surface?, way? }]`.
+#[wasm_bindgen]
+pub fn calibrate_cycling_tracks(tracks: JsValue, config: JsValue) -> Result<JsValue, JsValue> {
+    let cfg: cycling::CyclingConfig = if config.is_undefined() || config.is_null() {
+        cycling::CyclingConfig::default()
+    } else {
+        serde_wasm_bindgen::from_value(config)
+            .map_err(|e| JsValue::from_str(&format!("Invalid config: {e}")))?
+    };
+    let tracks: Vec<cycling::calibrate::TrackInput> = serde_wasm_bindgen::from_value(tracks)
+        .map_err(|e| JsValue::from_str(&format!("Invalid tracks: {e}")))?;
+    let prior = cycling::resolve_rider(cfg.rider.as_ref(), cfg.rider_override.as_ref());
+    let params = cfg.model_params.clone().unwrap_or_default();
+    let result = cycling::calibrate::calibrate_tracks(&tracks, &prior, &params);
+    result
+        .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
         .map_err(|e| JsValue::from_str(&format!("Serialization error: {e}")))
 }
 
@@ -220,7 +325,7 @@ struct ActualSpeedPoint {
 /// Result of a "predict vs actual" comparison.
 #[derive(serde::Serialize)]
 struct ComparisonResult {
-    prediction: types::PredictionResult,
+    prediction: cycling::output::CyclingResult,
     actual_points: Vec<ActualSpeedPoint>,
     actual_total_time_s: f64,
     actual_riding_time_s: f64,
@@ -228,42 +333,14 @@ struct ComparisonResult {
     actual_distance_m: f64,
 }
 
-/// Build a Route from an ActivityData's GPS track.
-fn route_from_activity(
-    activity: &types::ActivityData,
-    smooth_window_m: f64,
-    max_route_points: usize,
-) -> Result<types::Route, String> {
-    let raw_points: Vec<(f64, f64, f64)> = activity
-        .points
-        .iter()
-        .filter(|p| p.lat.abs() > 0.001 && p.lon.abs() > 0.001)
-        .map(|p| (p.lat, p.lon, p.altitude_m))
-        .collect();
-
-    if raw_points.len() < 2 {
-        return Err("FIT file has fewer than 2 valid GPS points".to_string());
-    }
-
-    gpx_parser::build_route(raw_points, max_route_points, smooth_window_m)
-}
-
-/// Run prediction on a validation FIT file and compare with actual data.
-///
-/// The validation FIT is NOT included in the training data for the model.
-/// This allows direct comparison of predicted vs actual speed.
+/// Prédit une sortie de validation (sa propre trace) avec un modèle calibré
+/// sur les seules sorties d'entraînement, et renvoie le réel pour comparaison.
 #[wasm_bindgen]
 pub fn predict_vs_actual(
     training_fits: Vec<js_sys::Uint8Array>,
     validation_fit: &[u8],
     config: JsValue,
 ) -> Result<JsValue, JsValue> {
-    let t0 = js_sys::Date::now();
-    let progress = |msg: &str| {
-        let elapsed = js_sys::Date::now() - t0;
-        web_sys::console::log_1(&JsValue::from_str(&format!("[{:.0}ms] {}", elapsed, msg)));
-    };
-
     let cfg: types::PredictionConfig = if config.is_undefined() || config.is_null() {
         types::PredictionConfig::default()
     } else {
@@ -271,40 +348,33 @@ pub fn predict_vs_actual(
             .map_err(|e| JsValue::from_str(&format!("Invalid config: {e}")))?
     };
 
-    // Parse training FIT files
-    progress(&format!("Parsing {} training FIT file(s)...", training_fits.len()));
     let fit_buffers: Vec<Vec<u8>> = training_fits.iter().map(|f| f.to_vec()).collect();
     let fit_slices: Vec<&[u8]> = fit_buffers.iter().map(|b| b.as_slice()).collect();
-    let training_activities = fit_parser::parse_fit_batch(&fit_slices)
-        .map_err(|e| JsValue::from_str(&e))?;
+    let training = fit_parser::parse_fit_batch(&fit_slices).map_err(|e| JsValue::from_str(&e))?;
+    let (training, _) = split_by_sport(training, |s| !s.is_foot_sport());
+    let val_activity = fit_parser::parse_fit(validation_fit).map_err(|e| JsValue::from_str(&e))?;
 
-    // Parse validation FIT file — NOT used for training
-    progress("Parsing validation FIT file...");
-    let val_activity = fit_parser::parse_fit(validation_fit)
-        .map_err(|e| JsValue::from_str(&e))?;
+    let (prior, v2_cfg) = cycling::from_legacy_config(&cfg);
+    let params = v2_cfg.model_params.clone().unwrap_or_default();
+    let model = if training.is_empty() {
+        prior
+    } else {
+        cycling::calibrate::calibrate_activities(&training, &prior, &params).model
+    };
 
-    // Extract route from validation FIT
-    progress("Extracting route from validation FIT...");
-    let smooth_w = cfg.smoothing_window_m.unwrap_or(50.0);
-    let max_pts = cfg.max_route_points.unwrap_or(15_000);
-    let route = route_from_activity(&val_activity, smooth_w, max_pts)
-        .map_err(|e| JsValue::from_str(&e))?;
-    progress(&format!("Route: {} points, {:.1} km", route.points.len(), route.total_distance_m / 1000.0));
+    // Trace de la sortie de validation en mouvement (arrêts retirés).
+    let truth = cycling::calibrate::truth::ride_truth(&val_activity, &params)
+        .ok_or_else(|| JsValue::from_str("Sortie de validation trop courte ou sans GPS"))?;
+    let raw: Vec<_> = val_activity.points.iter().filter(|p| p.lat.abs() > 0.001 && p.lon.abs() > 0.001).collect();
+    let input = cycling::input::CourseInput {
+        lat: raw.iter().map(|p| p.lat).collect(),
+        lon: raw.iter().map(|p| p.lon).collect(),
+        ele: raw.iter().map(|p| p.altitude_m).collect(),
+        geometry: cycling::input::GeometrySource::Gps,
+        ..Default::default()
+    };
+    let prediction = cycling::predict_with_model(&input, &model, &v2_cfg).map_err(|e| JsValue::from_str(&e))?;
 
-    // Build profile + KNN from TRAINING ONLY
-    progress("Building rider profile from training data...");
-    let rider_profile = profile::build_rider_profile(&training_activities, &cfg);
-
-    progress("Building KNN model from training data...");
-    let mut knn_model = knn::build_knn_model(&training_activities);
-    progress(&format!("KNN: {} samples (usable: {})", knn_model.samples.len(), knn_model.is_usable()));
-
-    // Run prediction on the extracted route
-    progress("Running prediction...");
-    let pred_result = prediction::predict(&rider_profile, &route, &cfg, &mut knn_model);
-    progress(&format!("Predicted: {}", format_duration(pred_result.total_time_s)));
-
-    // Extract actual speed data from validation FIT
     let actual_points: Vec<ActualSpeedPoint> = val_activity
         .points
         .iter()
@@ -316,39 +386,17 @@ pub fn predict_vs_actual(
             elevation_m: p.altitude_m,
         })
         .collect();
-
     let actual_total_time = val_activity.summary.duration_s;
-    let mut actual_riding_s = 0.0_f64;
-    for i in 1..val_activity.points.len() {
-        if val_activity.points[i].speed_ms > 0.5 {
-            let dt = val_activity.points[i].timestamp_s - val_activity.points[i - 1].timestamp_s;
-            if dt > 0.0 && dt < 300.0 {
-                actual_riding_s += dt;
-            }
-        }
-    }
-    if actual_riding_s < 1.0 {
-        actual_riding_s = actual_total_time;
-    }
-
     let actual_distance = val_activity.summary.distance_m;
-    let actual_avg_speed = if actual_total_time > 0.0 {
-        (actual_distance / actual_total_time) * 3.6
-    } else {
-        0.0
-    };
-
-    progress(&format!("Actual: {} (avg {:.1} km/h)", format_duration(actual_total_time), actual_avg_speed));
-
     let comparison = ComparisonResult {
-        prediction: pred_result,
+        prediction,
         actual_points,
         actual_total_time_s: actual_total_time,
-        actual_riding_time_s: actual_riding_s,
-        actual_avg_speed_kmh: actual_avg_speed,
+        actual_riding_time_s: truth.moving_s,
+        actual_avg_speed_kmh: if truth.moving_s > 0.0 { truth.distance_m / truth.moving_s * 3.6 } else { 0.0 },
         actual_distance_m: actual_distance,
     };
-
-    serde_wasm_bindgen::to_value(&comparison)
+    comparison
+        .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
         .map_err(|e| JsValue::from_str(&format!("Serialization error: {e}")))
 }

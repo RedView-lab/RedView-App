@@ -22,6 +22,14 @@ import { setupMapSubscriptions } from './useMapSubscriptions';
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
+// Terrain DEM, satellite, IGN ortho, slope, altitude and weather tiles all go
+// through ONE FIFO image queue (16 by default). Service-Worker tiles that
+// wait on a DEM build hold their slot meanwhile, so with overlays on, the
+// terrain's own DEM requests queued behind them. SW-served requests open no
+// connection and the external hosts are HTTP/2, so a wider queue costs
+// nothing on the network side.
+mapboxgl.maxParallelImageRequests = 32;
+
 // Request maximum clock state from Windows D3D11 / AMD graphics driver for APUs
 if ((mapboxgl.supported as any)?.webGLContextAttributes) {
   (mapboxgl.supported as any).webGLContextAttributes.powerPreference = 'high-performance';

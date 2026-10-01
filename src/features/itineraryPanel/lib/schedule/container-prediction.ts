@@ -1,7 +1,16 @@
-import type { PredictionConfig, RunPredictionConfig } from '@/features/fitPredictor';
+import type {
+  CyclingCalibration,
+  CyclingConfig,
+  CyclingGender,
+  CyclingRiderSpec,
+  CyclingRouteInput,
+  PredictionConfig,
+  RunPredictionConfig,
+} from '@/features/fitPredictor';
 import type { FootDiscipline } from '@/shared/lib/discipline';
 
 import type { Itinerary, ItineraryProject, RhythmState } from '../../types';
+import { encodeEngineSurface } from '../route-metrics/engineCodes';
 import { CUSTOM_PROFILE_LEVEL, isCustomRhythmProfile } from '../rhythm/profile';
 
 const EARTH_RADIUS_M = 6_371_008.8;
@@ -10,6 +19,152 @@ const PREDICTION_MIN_ROUTE_POINTS = 4_000;
 const PREDICTION_MAX_ROUTE_POINTS = 8_000;
 type PredictionRoutePoint = NonNullable<Itinerary['gpxRoute']>['points'][number];
 type PredictionRoutePoints = NonNullable<Itinerary['gpxRoute']>['points'];
+
+// ── Moteur vélo v2 ──────────────────────────────────────────────────────────
+
+/**
+ * `originalPoints` (GPX importé non simplifié) remplace `points` s'il décrit le
+ * même tracé : mêmes extrémités, longueur à 2,5 % près (la simplification coupe
+ * un peu les courbes).
+ */
+const ORIGINAL_POINTS_LENGTH_TOLERANCE = 0.025;
+const ORIGINAL_POINTS_ENDPOINT_TOLERANCE_M = 50;
+
+interface CyclingRoutePointLike {
+  lat: number;
+  lon: number;
+  distanceM?: number;
+  elevationM?: number | null;
+  surface?: PredictionRoutePoint['surface'];
+  roughness?: number;
+  wayCode?: number;
+}
+
+function toCyclingGender(gender: RhythmState['gender']): CyclingGender {
+  return gender === 'female' || gender === 'male' ? gender : 'unspecified';
+}
+
+/**
+ * Cycliste du moteur v2 : le niveau choisi (préréglage, source unique dans le
+ * moteur), ou en profil Personnalisé ce que l'utilisateur a saisi (FTP, poids
+ * système, pneus) — qui sert aussi de prior à la calibration .fit.
+ */
+export function buildCyclingRiderSpec(rhythm: RhythmState): CyclingRiderSpec {
+  const gender = toCyclingGender(rhythm.gender);
+  if (!isCustomRhythmProfile(rhythm)) {
+    return { preset: { level: rhythm.practiceLevel ?? 'debutant', gender } };
+  }
+  const positive = (value: number | null | undefined) =>
+    typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
+  return {
+    custom: {
+      gender,
+      ftp_w: positive(rhythm.ftp),
+      mass_kg: positive(rhythm.systemWeightKg),
+      tires_mm: positive(rhythm.tiresMm),
+    },
+  };
+}
+
+export function buildCyclingConfig(
+  rhythm: RhythmState,
+  options: {
+    calibration?: CyclingCalibration | null;
+    geometry?: CyclingConfig['geometry'];
+  } = {},
+): CyclingConfig {
+  const config: CyclingConfig = {
+    rider: options.calibration ? { model: options.calibration.model } : buildCyclingRiderSpec(rhythm),
+    geometry: options.geometry ?? 'auto',
+  };
+  if (options.calibration) {
+    config.uncertainty = options.calibration.report.expected_accuracy_pct / 100;
+  }
+  if (rhythm.startTime) {
+    const startTimeH = parseTimeToHourDecimal(rhythm.startTime);
+    if (startTimeH !== null) config.start_time_h = startTimeH;
+  }
+  return config;
+}
+
+/**
+ * Tracé complet pour le moteur v2 : points denses (pas de décimation — les
+ * virages et les rampes courtes comptent), axe de distance de l'app, altitude
+ * manquante = NaN, revêtement / contexte de voie BRouter quand connus.
+ * Pour un GPX importé, les points d'origine (non simplifiés) sont préférés
+ * s'ils décrivent bien le même tracé.
+ */
+export function buildCyclingRouteInput(
+  itinerary: ItineraryProject['itineraries'][number],
+): CyclingRouteInput {
+  const route = itinerary.gpxRoute;
+  const points = selectDensestPoints(route?.points ?? [], route?.originalPoints);
+  const n = points.length;
+  const lat = new Float64Array(n);
+  const lon = new Float64Array(n);
+  const ele = new Float64Array(n);
+  const dist = new Float64Array(n);
+  const surface = new Uint8Array(n);
+  const way = new Uint8Array(n);
+  let distanceAxisValid = n > 0;
+  let previousDistance = -Infinity;
+  for (let i = 0; i < n; i += 1) {
+    const point = points[i]!;
+    lat[i] = point.lat;
+    lon[i] = point.lon;
+    ele[i] = Number.isFinite(point.elevationM as number) ? (point.elevationM as number) : Number.NaN;
+    const d = point.distanceM;
+    if (typeof d === 'number' && Number.isFinite(d) && d >= previousDistance) {
+      dist[i] = d;
+      previousDistance = d;
+    } else {
+      distanceAxisValid = false;
+    }
+    surface[i] = encodeEngineSurface(point.surface, point.roughness ?? 0);
+    way[i] = (point.wayCode ?? 0) & 0xff;
+  }
+  const hasAttributes = surface.some((code) => code !== 0) || way.some((code) => code !== 0);
+  return {
+    lat,
+    lon,
+    ele,
+    dist: distanceAxisValid ? dist : new Float64Array(0),
+    surface: hasAttributes ? surface : new Uint8Array(0),
+    way: hasAttributes ? way : new Uint8Array(0),
+    headwind: new Float64Array(0),
+  };
+}
+
+function selectDensestPoints(
+  points: readonly CyclingRoutePointLike[],
+  originalPoints: readonly CyclingRoutePointLike[] | undefined,
+): readonly CyclingRoutePointLike[] {
+  if (!originalPoints || originalPoints === points || originalPoints.length <= points.length || points.length < 2) {
+    return points;
+  }
+  const sameEnds =
+    haversineM(points[0]!, originalPoints[0]!) < ORIGINAL_POINTS_ENDPOINT_TOLERANCE_M
+    && haversineM(points[points.length - 1]!, originalPoints[originalPoints.length - 1]!) < ORIGINAL_POINTS_ENDPOINT_TOLERANCE_M;
+  const length = polylineLengthM(points);
+  const sameLength = length > 0
+    && Math.abs(polylineLengthM(originalPoints) / length - 1) < ORIGINAL_POINTS_LENGTH_TOLERANCE;
+  return sameEnds && sameLength ? originalPoints : points;
+}
+
+function polylineLengthM(points: readonly CyclingRoutePointLike[]): number {
+  let total = 0;
+  for (let i = 1; i < points.length; i += 1) total += haversineM(points[i - 1]!, points[i]!);
+  return total;
+}
+
+/** Géométrie du tracé pour la détection des virages. */
+export function resolveCyclingGeometry(
+  itinerary: ItineraryProject['itineraries'][number],
+): NonNullable<CyclingConfig['geometry']> {
+  return itinerary.gpxRoute?.source === 'brouter' ? 'planned' : 'auto';
+}
+
+// ── API historique (moteur v1 / scripts d'audit) ────────────────────────────
 
 export function buildPredictionConfigFromRhythm(
   rhythm: RhythmState,
@@ -55,19 +210,9 @@ export function buildPredictionConfigFromRhythm(
     }
   }
 
-  if (!custom) {
-    // Profil par défaut : sans .fit ni FTP, le moteur retomberait sur un
-    // cycliste unique à 2,5 W/kg pour tous les niveaux. Le niveau fixe donc
-    // la puissance, la position, les pneus et l'endurance.
-    const level = resolvePresetRiderLevel(rhythm.practiceLevel);
-    const riderWeightKg = rhythm.gender === 'female' ? FEMALE_RIDER_WEIGHT_KG : DEFAULT_RIDER_WEIGHT_KG;
-    config.ftp_w = Math.round(level.wkg * riderWeightKg);
-    config.cda = level.cda;
-    config.crr = level.crr;
-    config.fatigue_floor = level.fatigueFloor;
-    config.fatigue_lambda = level.fatigueLambda;
-    return config;
-  }
+  // Les préréglages de niveau vivent dans le moteur v2 (buildCyclingRiderSpec) :
+  // l'API historique ne porte que les saisies du profil Personnalisé.
+  if (!custom) return config;
 
   // Tire width effect on rolling resistance (Crr)
   const tiresMm = rhythm.tiresMm;
@@ -77,39 +222,6 @@ export function buildPredictionConfigFromRhythm(
   }
 
   return config;
-}
-
-interface PresetRiderLevel {
-  /** FTP en W/kg de poids du cycliste. */
-  wkg: number;
-  /** Surface frontale (m²) : position et tenue. */
-  cda: number;
-  /** Résistance au roulement : pneus et pression. */
-  crr: number;
-  /** Plancher et vitesse de la baisse de puissance sur la durée. */
-  fatigueFloor: number;
-  fatigueLambda: number;
-}
-
-/** Poids du cycliste supposés par le moteur (voir `Gender::default_rider_weight`). */
-const DEFAULT_RIDER_WEIGHT_KG = 70;
-const FEMALE_RIDER_WEIGHT_KG = 56;
-
-/**
- * Calage sur la GT20 (Bastia → Bonifacio, 593 km, ~10 000 m D+, référence
- * ~21h pour un coureur de très haut niveau) : débutant ~37h30, intermédiaire
- * ~30h40, avancé ~26h, expert ~22h de roulage. Les descentes du moteur restent
- * prudentes sans .fit, d'où une puissance d'expert un peu généreuse.
- */
-const PRESET_RIDER_LEVELS: Record<string, PresetRiderLevel> = {
-  debutant: { wkg: 2.3, cda: 0.38, crr: 0.0052, fatigueFloor: 0.58, fatigueLambda: 0.032 },
-  intermediaire: { wkg: 3.0, cda: 0.35, crr: 0.005, fatigueFloor: 0.66, fatigueLambda: 0.025 },
-  avance: { wkg: 3.8, cda: 0.32, crr: 0.0046, fatigueFloor: 0.75, fatigueLambda: 0.018 },
-  expert: { wkg: 5.0, cda: 0.28, crr: 0.0042, fatigueFloor: 0.85, fatigueLambda: 0.01 },
-};
-
-function resolvePresetRiderLevel(level: string | null | undefined): PresetRiderLevel {
-  return PRESET_RIDER_LEVELS[level?.toLowerCase() ?? ''] ?? PRESET_RIDER_LEVELS.debutant;
 }
 
 /**

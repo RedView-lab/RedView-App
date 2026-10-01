@@ -1,6 +1,16 @@
 export { FitPredictionPanel } from './components/FitPredictionPanel';
+export { CYCLING_ENGINE_VERSION } from './engine/version';
 export type {
   ComparisonResult,
+  CyclingCalibration,
+  CyclingCalibrationReport,
+  CyclingConfig,
+  CyclingGender,
+  CyclingRiderModel,
+  CyclingRiderSpec,
+  CyclingRouteInput,
+  CyclingSpeedTable,
+  CyclingTimeBreakdown,
   FitPanelMode,
   PredictionConfig,
   PredictionPoint,

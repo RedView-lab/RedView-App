@@ -28,7 +28,10 @@ interface RythmeSectionProps {
   calculateLabel?: string;
   /** Vrai pendant le calcul de la prédiction. */
   calculateDisabled?: boolean;
+  /** Échec du calcul : masque le résultat, affiché sous le bouton. */
   calculateError?: string | null;
+  /** Avertissement non bloquant sur les .fit, affiché sous « Activités de référence ». */
+  fitNotice?: string | null;
   resultLabel?: string | null;
 }
 
@@ -213,11 +216,14 @@ function RiderNumberField({
 /** "Activités de référence" : upload initial, puis ajout / gestion des .fit. */
 function ReferenceActivitiesField({
   fitFileNames,
+  notice,
   onUploadFit,
   onRemoveFitFile,
   onClearFitFiles,
 }: {
   fitFileNames: string[];
+  /** Fichiers écartés ou non enregistrés : information, pas une erreur bloquante. */
+  notice?: string | null;
   onUploadFit?: () => void;
   onRemoveFitFile?: (index: number) => void;
   onClearFitFiles?: () => void;
@@ -321,6 +327,12 @@ function ReferenceActivitiesField({
           </PortalDropdown>
         </div>
       )}
+
+      {notice ? (
+        <p className="rvi-rythme-figma__fit-notice" role="status">
+          {notice}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -338,6 +350,7 @@ export function RythmeSection({
   calculateLabel,
   calculateDisabled,
   calculateError = null,
+  fitNotice = null,
   resultLabel = null,
 }: RythmeSectionProps) {
   const { locale, t } = useAppI18n();
@@ -468,6 +481,7 @@ export function RythmeSection({
           <div className="rvi-rythme-figma__custom">
             <ReferenceActivitiesField
               fitFileNames={fitFileNames}
+              notice={fitNotice}
               onUploadFit={onUploadFit}
               onRemoveFitFile={onRemoveFitFile}
               onClearFitFiles={onClearFitFiles}

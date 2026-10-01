@@ -56,17 +56,61 @@ export function haversineM(a: RouteChartPoint, b: RouteChartPoint): number {
   return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h));
 }
 
-function smoothValues(values: number[], windowSize = 5): number[] {
+/** Moyenne glissante centrée sur `windowSize` valeurs (fenêtre tronquée aux bords). */
+export function smoothValues(values: ArrayLike<number>, windowSize = 5): number[] {
   const out = new Array<number>(values.length);
   const half = Math.floor(windowSize / 2);
   for (let i = 0; i < values.length; i++) {
     const lo = Math.max(0, i - half);
     const hi = Math.min(values.length - 1, i + half);
     let sum = 0;
-    for (let j = lo; j <= hi; j++) sum += values[j];
+    for (let j = lo; j <= hi; j++) sum += values[j]!;
     out[i] = sum / (hi - lo + 1);
   }
   return out;
+}
+
+export interface ResampledElevationProfile {
+  /** Distance (m) du premier échantillon. */
+  startM: number;
+  stepM: number;
+  /** Altitude tous les `stepM` mètres depuis `startM`. */
+  elevations: Float64Array;
+}
+
+/**
+ * Profil d'altitude ré-échantillonné à pas fixe (interpolation linéaire), puis
+ * lissé sur `smoothWindow` échantillons (1 = brut). Base commune des
+ * détections de pente (alertes, colorisation) : sans lissage, le bruit du MNT
+ * produit de fausses pentes sur quelques dizaines de mètres.
+ */
+export function resampleRouteElevations(
+  routePoints: RouteChartPoint[] | null | undefined,
+  stepM: number,
+  smoothWindow = 1,
+): ResampledElevationProfile | null {
+  const profile = normalizeRouteProfile(routePoints);
+  if (!profile || profile.length < 2 || !(stepM > 0)) return null;
+
+  const startM = profile[0]!.distanceM;
+  const totalM = profile[profile.length - 1]!.distanceM;
+  const count = Math.floor((totalM - startM) / stepM) + 1;
+  if (count < 2) return null;
+
+  const raw = new Float64Array(count);
+  let cursor = 0;
+  for (let i = 0; i < count; i += 1) {
+    const d = startM + i * stepM;
+    while (cursor + 1 < profile.length - 1 && profile[cursor + 1]!.distanceM <= d) cursor += 1;
+    const a = profile[cursor]!;
+    const b = profile[Math.min(cursor + 1, profile.length - 1)]!;
+    const span = b.distanceM - a.distanceM;
+    const t = span > 0 ? Math.max(0, Math.min(1, (d - a.distanceM) / span)) : 0;
+    raw[i] = a.elevationM + (b.elevationM - a.elevationM) * t;
+  }
+
+  const elevations = smoothWindow > 1 ? Float64Array.from(smoothValues(raw, smoothWindow)) : raw;
+  return { startM, stepM, elevations };
 }
 
 function gradientWindowIndices(

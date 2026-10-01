@@ -31,7 +31,7 @@ function createAlertMarkerElement(alert: ItinerarySteepAlert, label: string): HT
 
 /**
  * Icônes de danger sur la carte 3D, au milieu de chaque tronçon « Alertes »
- * (pente ≥ 10 % sur ≥ 1 km ou ≥ 15 % sur ≥ 100 m) — mêmes zones que les colonnes rouges du graphe.
+ * (pente ≥ 12 % sur ≥ 500 m ou ≥ 18 % sur ≥ 200 m) — mêmes zones que les colonnes rouges du graphe.
  * Les alertes ignorées sont absentes ; un clic ouvre la carte du tronçon.
  */
 export function useAnalysisAlertMapMarkers({

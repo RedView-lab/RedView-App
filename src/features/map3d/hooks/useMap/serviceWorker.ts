@@ -125,6 +125,26 @@ function notifyRegistrationMapCacheReset(
   notifyMapCacheReset(registration.active);
 }
 
+/**
+ * A force-reloaded page (Ctrl+Shift+R) is never controlled even though the
+ * worker is already active: its activate handler — the only place that
+ * calls `clients.claim()` — will not run again. Ask the active worker to
+ * claim us so `controllerchange` fires within milliseconds instead of
+ * leaving the map on the 30 m AWS fallback until a full reinstall.
+ */
+function requestClaimFromActiveWorker(
+  registration: ServiceWorkerRegistration | null | undefined,
+): void {
+  if (navigator.serviceWorker.controller) return;
+  const active = registration?.active;
+  if (!active) return;
+  try {
+    active.postMessage({ type: 'CLAIM_CLIENTS' });
+  } catch {
+    /* worker going away — the late-recovery path takes over */
+  }
+}
+
 async function waitForServiceWorkerController(timeoutMs: number): Promise<ServiceWorker | null> {
   if (!('serviceWorker' in navigator)) return null;
   if (navigator.serviceWorker.controller) return navigator.serviceWorker.controller;
@@ -249,6 +269,7 @@ export const swReady: Promise<boolean> = (async () => {
     }
 
     scheduleEpochTakeoverReload(registration, epochReset);
+    requestClaimFromActiveWorker(registration);
 
     const controller = await waitForServiceWorkerController(SW_CONTROLLER_TIMEOUT);
     if (!controller) {
@@ -292,6 +313,9 @@ export const swLateReady: Promise<boolean> = (async () => {
 
   while (Date.now() - start < MAX_LATE_WAIT_MS) {
     await new Promise<void>((r) => setTimeout(r, interval));
+    // An install that finished during the wait leaves an active worker the
+    // page can claim directly (same force-reload case as in swReady).
+    requestClaimFromActiveWorker(swRegistration);
     if (navigator.serviceWorker.controller) {
       logger.sw.debug('Late controller claim detected — DEM pipeline can recover');
       return true;

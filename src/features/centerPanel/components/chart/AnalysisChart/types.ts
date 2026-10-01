@@ -4,6 +4,7 @@ import type { ChartPoiAnnotation } from '../annotations/buildPoiAnnotations';
 import type { ChartDayNightOverlay } from '../dayNight';
 import type { ChartPauseOverlay } from '../pause';
 import type { ChartAlertOverlay } from '../alerts/buildSteepAlertOverlay';
+import type { ChartSlopeOverlay, ChartSlopeSegment } from '../slope';
 import type {
   AxisDomain,
   AxisMetricId,
@@ -48,8 +49,10 @@ export interface AnalysisChartProps {
   poiAnnotations?: ChartPoiAnnotation[];
   dayNightOverlay?: ChartDayNightOverlay | null;
   pauseOverlay?: ChartPauseOverlay | null;
-  /** Colonnes rouges « Alertes » (pente ≥ 10 % sur ≥ 1 km ou ≥ 15 % sur ≥ 100 m). */
+  /** Colonnes rouges « Alertes » (pente ≥ 12 % sur ≥ 500 m ou ≥ 18 % sur ≥ 200 m). */
   alertOverlay?: ChartAlertOverlay | null;
+  /** Colorisation « Pente » de la courbe d'altitude de l'itinéraire actif. */
+  slopeOverlay?: ChartSlopeOverlay | null;
   axis1Metric: AxisMetricId;
   axis2Metric: AxisMetricId | null;
   xMode: AxisMode;
@@ -76,6 +79,8 @@ export interface CanvasBackdropLayer {
   fillColor: string;
   lineColor: string;
   points: { x: number; y: number }[];
+  /** Tronçons de pente : la couche est alors colorée par classe. */
+  slopeSegments?: ChartSlopeSegment[];
 }
 
 export interface VisiblePoiAnnotation extends ChartPoiAnnotation {
@@ -99,6 +104,8 @@ export interface CanvasSeriesLayer {
   lineWidth: number;
   points: { x: number; y: number }[];
   yDomain: AxisDomain;
+  /** Tronçons de pente : la couche est alors colorée par classe. */
+  slopeSegments?: ChartSlopeSegment[];
 }
 
 export interface HoverCardRow {
@@ -116,4 +123,7 @@ export interface HoverCardRow {
   timeFormatted?: string;
   /** Libellé d'alerte pente affiché dans la carte de survol. */
   alertLabel?: string;
+  /** Pente locale (colorisation « Pente ») et couleur de sa classe. */
+  slopeLabel?: string;
+  slopeColor?: string;
 }

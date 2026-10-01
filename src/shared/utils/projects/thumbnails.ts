@@ -4,6 +4,7 @@ import {
   readStoredAppwriteSession,
   Role,
   Permission,
+  Query,
   storage,
   THUMBNAILS_BUCKET_ID,
 } from '@/shared/services/appwrite';
@@ -77,8 +78,38 @@ function sniffImageMime(head: Uint8Array): string {
   return 'image/webp';
 }
 
+/** Limite Appwrite du nombre de valeurs dans un `Query.equal`. */
+const THUMBNAIL_LIST_CHUNK = 100;
+
+/**
+ * IDs de fichiers miniatures existants (et lisibles par l'utilisateur) parmi
+ * `fileIds`. Un seul `listFiles` par lot de 100 au lieu d'un GET par projet :
+ * les projets sans miniature cloud ne génèrent plus de 404 dans la console.
+ * Renvoie null si la liste échoue (on retente alors fichier par fichier).
+ */
+async function listExistingCloudThumbnailIds(fileIds: string[]): Promise<Set<string> | null> {
+  const existing = new Set<string>();
+  try {
+    for (let i = 0; i < fileIds.length; i += THUMBNAIL_LIST_CHUNK) {
+      const chunk = fileIds.slice(i, i + THUMBNAIL_LIST_CHUNK);
+      const res = await storage.listFiles(THUMBNAILS_BUCKET_ID, [
+        Query.equal('$id', chunk),
+        Query.limit(chunk.length),
+      ]);
+      for (const file of res.files) existing.add(file.$id);
+    }
+    return existing;
+  } catch (error) {
+    console.debug('[thumbnails] listFiles failed, falling back to per-file fetch', error);
+    return null;
+  }
+}
+
 /** Miniature d'un projet : IndexedDB d'abord (instantané, hors-ligne), puis cloud. */
-async function loadProjectThumbnailBlob(projectId: string): Promise<Blob | null> {
+async function loadProjectThumbnailBlob(
+  projectId: string,
+  cloudIds?: Set<string> | null,
+): Promise<Blob | null> {
   try {
     const localBlob = await idbGetThumbnail(projectId);
     if (localBlob) return localBlob;
@@ -87,6 +118,7 @@ async function loadProjectThumbnailBlob(projectId: string): Promise<Blob | null>
   }
 
   if (projectId.startsWith('local-')) return null;
+  if (cloudIds && !cloudIds.has(safeThumbnailFileId(projectId))) return null;
 
   try {
     const cloudBlob = await fetchCloudThumbnailBlob(projectId);
@@ -110,11 +142,16 @@ export async function getProjectThumbnailUrls(
   const out: Record<string, string | null> = {};
   if (projectIds.length === 0) return out;
 
+  const cloudFileIds = [
+    ...new Set(projectIds.filter((id) => !id.startsWith('local-')).map(safeThumbnailFileId)),
+  ];
+  const cloudIds = cloudFileIds.length > 0 ? await listExistingCloudThumbnailIds(cloudFileIds) : null;
+
   let cursor = 0;
   const worker = async () => {
     while (cursor < projectIds.length) {
       const id = projectIds[cursor++];
-      const blob = await loadProjectThumbnailBlob(id);
+      const blob = await loadProjectThumbnailBlob(id, cloudIds);
       out[id] = blob ? URL.createObjectURL(blob) : null;
     }
   };

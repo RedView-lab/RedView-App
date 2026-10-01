@@ -36,6 +36,7 @@ type ItineraryPanelModeContentProps = Pick<
   | 'onCancelRoute'
   | 'calculateDisabled'
   | 'calculateError'
+  | 'fitNotice'
   | 'calculateLabel'
   | 'onCalculate'
   | 'onChangePoiEntry'
@@ -91,6 +92,7 @@ export function ItineraryPanelModeContent({
   onCancelRoute,
   calculateDisabled,
   calculateError,
+  fitNotice,
   calculateLabel,
   dockTimelinePanel,
   onCalculate,
@@ -192,6 +194,7 @@ export function ItineraryPanelModeContent({
           calculateLabel={calculateLabel}
           calculateDisabled={calculateDisabled}
           calculateError={calculateError}
+          fitNotice={fitNotice}
           resultLabel={rhythmResultLabel}
         />
       ) : null;

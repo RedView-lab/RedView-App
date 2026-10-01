@@ -19,7 +19,6 @@ import {
 } from '@/shared/utils/projects';
 
 import {
-  buildPredictionConfigFromRhythm,
   buildRunPredictionConfigFromRhythm,
   buildRouteGpxFile,
   hasUsableRouteElevation,
@@ -39,6 +38,11 @@ import {
   fitFilesEqual,
   mergeFitFiles,
 } from './files';
+import {
+  isCyclingPredictionOutdated,
+  predictCyclingItinerary,
+  type CyclingCalibrationCache,
+} from './cycling';
 import { hydratePersistedFitRuntime } from './hydration';
 import { buildFitStatusText, buildRejectedFitNotice } from './labels';
 import {
@@ -92,6 +96,7 @@ export function useItineraryFitRuntime({
   const fitEngineRef = useRef<ReturnType<typeof createFitPredictionEngine> | null>(
     null,
   );
+  const cyclingCalibrationCacheRef = useRef<CyclingCalibrationCache>(new Map());
   const [fitRuntimeByItineraryId, setFitRuntimeByItineraryId] = useState<
     Record<string, ItineraryFitRuntime>
   >({});
@@ -157,10 +162,11 @@ export function useItineraryFitRuntime({
   }, [fitStatusText]);
 
   const calculateDisabled = activeFitRuntime?.status === 'running';
-  const calculateError =
-    (activeFitRuntime?.status === 'error' ? activeFitRuntime.error : null)
-    ?? activeFitRuntime?.uploadError
-    ?? null;
+  // Seul un échec de calcul masque le résultat : un fichier écarté ou non
+  // enregistré est signalé à part (`fitNotice`). Les confondre cachait le
+  // résultat du recalcul réussi juste après l'exclusion d'un .fit.
+  const calculateError = activeFitRuntime?.status === 'error' ? activeFitRuntime.error : null;
+  const fitNotice = activeFitRuntime?.uploadNotice ?? null;
   const fitFileNames = activeFitRuntime?.fitFileNames ?? EMPTY_FIT_FILE_NAMES;
 
   const updateFitRuntime = useCallback(
@@ -206,7 +212,10 @@ export function useItineraryFitRuntime({
           ...prev,
           fitFiles,
           fitFileNames: fitFiles.map((file) => file.name),
-          uploadError: notice,
+          // Cumulé : plusieurs refus successifs restent tous nommés.
+          uploadNotice: prev.uploadNotice && !prev.uploadNotice.includes(notice)
+            ? `${prev.uploadNotice} ${notice}`
+            : notice,
           persistedUploadSignature:
             remainingUploads.length > 0
               ? buildFitUploadsSignature(remainingUploads)
@@ -390,7 +399,7 @@ export function useItineraryFitRuntime({
       });
       const rejectedNotice = rejected.length > 0 ? buildRejectedFitNotice(rejected) : null;
       if (incoming.length === 0) {
-        updateFitRuntime(itineraryId, (prev) => ({ ...prev, uploadError: rejectedNotice }));
+        updateFitRuntime(itineraryId, (prev) => ({ ...prev, uploadNotice: rejectedNotice }));
         return;
       }
 
@@ -405,7 +414,7 @@ export function useItineraryFitRuntime({
         fitFileNames: nextFitFileNames,
         status: 'ready',
         error: null,
-        uploadError: rejectedNotice,
+        uploadNotice: rejectedNotice,
         persistedUploadSignature: localSignature,
       }));
 
@@ -443,7 +452,7 @@ export function useItineraryFitRuntime({
             storedUploads.length > 0
               ? buildFitUploadsSignature(storedUploads)
               : buildLocalFitUploadSignature(prev.fitFiles),
-          uploadError: [
+          uploadNotice: [
             rejectedNotice,
             failed.length > 0
               ? translateAppText(
@@ -490,7 +499,7 @@ export function useItineraryFitRuntime({
             error instanceof Error
               ? translateAppText(error.message)
               : translateAppText('Impossible de sauvegarder les fichiers FIT sur le serveur.'),
-          uploadError: translateAppText('Impossible de sauvegarder les fichiers FIT sur le serveur.'),
+          uploadNotice: translateAppText('Impossible de sauvegarder les fichiers FIT sur le serveur.'),
           updatedAt: new Date().toISOString(),
         }));
       }
@@ -533,9 +542,9 @@ export function useItineraryFitRuntime({
         status: prev.status === 'running' ? prev.status : nextFitFiles.length > 0 ? 'ready' : 'idle',
         error: null,
         // Plus aucun fichier local non enregistré : l'avertissement d'envoi tombe.
-        uploadError: nextFitFiles.every((file) => uploadedKeys.has(fitFileKey(file)))
+        uploadNotice: nextFitFiles.every((file) => uploadedKeys.has(fitFileKey(file)))
           ? null
-          : prev.uploadError,
+          : prev.uploadNotice,
         // Sans upload persisté (projet non enregistré), signature locale comme
         // à l'ajout, sinon l'hydratation viderait les fichiers restants.
         persistedUploadSignature:
@@ -614,7 +623,6 @@ export function useItineraryFitRuntime({
     }
 
     const itineraryId = itinerary.id;
-    const gpxFile = buildRouteGpxFile(itinerary);
     const discipline = normalizeDiscipline(itinerary.discipline);
     const routePoints = itinerary.gpxRoute?.points ?? null;
     const inputSignature = buildPredictionInputSignature(itinerary);
@@ -640,20 +648,22 @@ export function useItineraryFitRuntime({
     };
     // Running / trail use their own engine; the result is stamped with the
     // discipline so displays (pace vs km/h) always match the engine used.
-    // Les .fit ne comptent qu'en profil "Personalisé".
+    // Les .fit ne comptent qu'en profil "Personalisé". Vélo : moteur v2
+    // (calibration .fit mise en cache, tracé complet).
     const fitFiles = isCustomRhythmProfile(itinerary.rhythm) ? runtime.fitFiles : [];
     const pending = isFootDiscipline(discipline)
       ? engine.predictRun(
           fitFiles,
-          gpxFile,
+          buildRouteGpxFile(itinerary),
           buildRunPredictionConfigFromRhythm(itinerary.rhythm, discipline, routePoints),
           onProgress,
           { key: itineraryId },
         )
-      : engine.predict(
+      : predictCyclingItinerary(
+          engine,
+          itinerary,
           fitFiles,
-          gpxFile,
-          buildPredictionConfigFromRhythm(itinerary.rhythm, routePoints),
+          cyclingCalibrationCacheRef.current,
           onProgress,
           { key: itineraryId },
         );
@@ -721,10 +731,11 @@ export function useItineraryFitRuntime({
         const failingFile = failingIndex !== null ? fitFiles[failingIndex] : undefined;
         if (failingFile) {
           console.warn('[fit-predictor] FIT file rejected by the engine, retrying without it', failingFile.name, error);
+          const failingKey = fitFileKey(failingFile);
           updateFitRuntime(itineraryId, (current) => ({
             ...current,
             progress: [],
-            status: current.fitFiles.length > 1 ? 'ready' : 'idle',
+            status: current.fitFiles.some((file) => fitFileKey(file) !== failingKey) ? 'ready' : 'idle',
             updatedAt: new Date().toISOString(),
           }));
           excludeFitFiles(
@@ -796,8 +807,10 @@ export function useItineraryFitRuntime({
       const isDistMismatched = active.prediction && Math.abs(predDistM - lastPointDistM) > 500;
       const isDisciplineMismatched =
         active.prediction && resolvePredictionDiscipline(active.prediction) !== activeDiscipline;
+      // Prédiction vélo d'un moteur plus ancien : recalculée avec le moteur courant.
+      const isEngineOutdated = isCyclingPredictionOutdated(active.prediction);
 
-      if (active.prediction && !isDistMismatched && !isDisciplineMismatched) {
+      if (active.prediction && !isDistMismatched && !isDisciplineMismatched && !isEngineOutdated) {
         lastProcessedSignatureRef.current[itineraryId] = activeCalculationSignature;
         return;
       }
@@ -883,6 +896,7 @@ export function useItineraryFitRuntime({
     calculateLabel,
     cancelCalculatePrediction,
     fitFileNames,
+    fitNotice,
     fitInputRef,
     handleCalculatePrediction,
     handleClearFitFiles,

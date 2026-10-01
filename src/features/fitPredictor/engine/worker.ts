@@ -1,6 +1,12 @@
 /// <reference lib="webworker" />
 
-import init, { predict, predict_run, predict_vs_actual } from './pkg/redviewalgo.js';
+import init, {
+  calibrate_cycling,
+  predict,
+  predict_cycling,
+  predict_run,
+  predict_vs_actual,
+} from './pkg/redviewalgo.js';
 import type { FitWorkerRequest, FitWorkerResponse } from '../types';
 
 let wasmReady = false;
@@ -73,6 +79,32 @@ self.onmessage = async (event: MessageEvent<FitWorkerRequest>) => {
         const validationArray = new Uint8Array(message.validationFit);
         const result = predict_vs_actual(fitArrays, validationArray, message.config ?? {});
         respond({ _id: message._id, type: 'result', action: 'compare', data: result });
+        break;
+      }
+
+      case 'calibrateCycling': {
+        const fitArrays = message.fitFiles.map((buffer) => new Uint8Array(buffer));
+        const onProgress = (text: string) => {
+          respond({ _id: message._id, type: 'progress', action: 'calibrateCycling', message: text });
+        };
+        const result = calibrate_cycling(fitArrays, message.config, onProgress);
+        respond({ _id: message._id, type: 'result', action: 'calibrateCycling', data: result });
+        break;
+      }
+
+      case 'predictCycling': {
+        const { route } = message;
+        const result = predict_cycling(
+          route.lat,
+          route.lon,
+          route.ele,
+          route.dist,
+          route.surface,
+          route.way,
+          route.headwind,
+          message.config,
+        );
+        respond({ _id: message._id, type: 'result', action: 'predictCycling', data: result });
         break;
       }
     }

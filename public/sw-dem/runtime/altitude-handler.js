@@ -156,8 +156,10 @@ async function handleAltitudeRequest(z, x, y, zoneHash = '', demProfile = 'defau
   }
 }
 
+// Not cancellable: the DEM read is the terrain's own tile (same pyramid, see
+// altitude-source.ts), and a cancelled request used to answer a transparent
+// tile that Mapbox kept as final — holes in the overlay after a pan.
 async function handleAltitudePassthrough(z, x, y, demProfile) {
-  const generation = altitudeCancelGeneration;
   try {
     const demCache = await caches.open(CACHE_NAME);
     const demResponse = (typeof getExistingTerrainDemResponse === 'function')
@@ -165,7 +167,7 @@ async function handleAltitudePassthrough(z, x, y, demProfile) {
           allowBuild: z <= ALTITUDE_MAX_BUILD_ZOOM,
         })
       : null;
-    if (generation !== altitudeCancelGeneration || !demResponse || demResponse.status !== 200) {
+    if (!demResponse || demResponse.status !== 200) {
       return transparentTileResponse();
     }
     const headers = new Headers(demResponse.headers);

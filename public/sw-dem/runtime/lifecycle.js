@@ -182,6 +182,18 @@ function slopeHotClear() {
   SLOPE_HOT_CACHE.clear();
 }
 
+// Drops every hot entry of one slope tile, whatever its profile / source /
+// query (keys look like `${sourceDem}:${profile}:/slope-tiles/z/x/y?…`).
+function slopeHotDeleteTile(z, x, y) {
+  const path = `/slope-tiles/${z}/${x}/${y}`;
+  for (const key of Array.from(SLOPE_HOT_CACHE.keys())) {
+    const at = key.indexOf(path);
+    if (at < 0) continue;
+    const next = key.charAt(at + path.length);
+    if (next === '' || next === '?') SLOPE_HOT_CACHE.delete(key);
+  }
+}
+
 function slopeHotResponse(entry) {
   return new Response(entry.blob, { status: 200, headers: entry.headers });
 }
@@ -554,6 +566,14 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('message', (e) => {
+  // A force-reloaded page (Ctrl+Shift+R) is never controlled, even though
+  // this worker is already active — activate (and its clients.claim()) will
+  // not run again. The page asks explicitly instead of staying on the 30 m
+  // fallback (and hitting the server for every tile) until a reinstall.
+  if (e.data?.type === 'CLAIM_CLIENTS') {
+    e.waitUntil(self.clients.claim());
+    return;
+  }
   if (e.data?.type === 'SET_VIEWPORT_CENTER') {
     try {
       if (typeof setIGNViewportCenter === 'function') {
@@ -745,6 +765,9 @@ self.addEventListener('message', (e) => {
       [x, y + 1],
       [x - 1, y],
     ].filter(([tx, ty]) => tx >= 0 && ty >= 0 && tx <= max && ty <= max);
+    // The hot tier sits in front of CacheStorage: without this the reload
+    // that follows (listeners.ts) got the pre-upgrade slope tile back.
+    for (const [tx, ty] of slopeTiles) slopeHotDeleteTile(z, tx, ty);
     const altitudeTilePath = `/altitude-tiles/${z}/${x}/${y}`;
     Promise.all([
       caches.open(SLOPE_CACHE_NAME).then((cache) => cache.keys().then((keys) => {

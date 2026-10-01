@@ -49,8 +49,10 @@ export interface AnalysisFiltersState {
   pause: boolean;
   pente: boolean;
   jourNuit: boolean;
-  /** Colonnes rouges sur le graphe : pente ≥ 10 % sur ≥ 1 km ou ≥ 15 % sur ≥ 100 m. */
+  /** Colonnes rouges sur le graphe : pente ≥ 12 % sur ≥ 500 m ou ≥ 18 % sur ≥ 200 m. */
   alertes: boolean;
+  /** Colorisation du profil d'altitude par classe de pente (façon Komoot). */
+  slopeColors: boolean;
 }
 
 /**
@@ -498,6 +500,13 @@ export interface Itinerary {
       elevationM?: number | null;
       gradientPct?: number | null;
       surface?: Surface;
+      /** Rugosité OSM (smoothness/tracktype) 1 bonne … 4 très mauvaise ; absente = inconnue. */
+      roughness?: number;
+      /**
+       * Contexte de voie pour le moteur de temps (route-metrics/engineCodes.ts) :
+       * type de voie, agglomération, feu au point ; absent = inconnu.
+       */
+      wayCode?: number;
     }[];
     source?: 'gpx' | 'brouter';
     originalPoints?: {
@@ -705,6 +714,8 @@ export interface ItineraryPanelProps {
   calculateDisabled?: boolean;
   /** Dernière erreur de prédiction, affichée sous le bouton d'action. */
   calculateError?: string | null;
+  /** Avertissement non bloquant sur les .fit (fichiers écartés, envoi impossible). */
+  fitNotice?: string | null;
 
   // poi
   onChangePoiEntry?: (category: PoiCategory, next: PoiEntry) => void;

@@ -1,48 +1,20 @@
 // ---------------------------------------------------------------------------
-// Slope computation from DEM elevations
-// Uses Horn's method (3×3 neighborhood) on a 258×258 padded buffer stitched
-// from the DEM cache — eliminates the visible seams that edge-replication
-// produces between adjacent slope tiles.
+// Slope tile — in-process fallback (worker pool unavailable).
 //
-// Output: 8-bit slope-only RGBA PNG with a sqrt-gamma encoding.
-//   - R encodes the slope angle on a perceptual ramp:
-//       R = round(sqrt(deg / 90) * 255)
-//       deg = (R / 255)^2 * 90      (recovered GPU-side)
-//     The sqrt is critical: it concentrates the 256 distinct codes near low
-//     slopes (≈0.04°/step at 0°, ≈0.56°/step at 90°), so the 0–7° "flat"
-//     band — where any quantization is most visible — gets ~67 codes
-//     instead of the ~20 codes a linear 8-bit ramp would give.
-//   - G,B = 0
-//   - A   = 0 on NoData, 255 otherwise
+// The math (Horn on a padded buffer, sqrt-gamma encode, 2× Catmull-Rom,
+// gray + alpha PNG) lives in workers/slope-math.js and is shared with the
+// worker pool, so both paths produce byte-identical tiles. This file only
+// decodes the DEM blobs on the SW thread, with a small LRU so a DEM tile
+// read as the own tile of one slope tile and as the neighbour of four others
+// is decoded once.
 //
-// Why a SINGLE channel instead of the previous 16-bit RG packing:
-//   raster-resampling: 'linear' bilinearly interpolates each channel
-//   independently. With 16-bit RG, every R-byte boundary (~0.35°) makes
-//   bilinear sampling produce nonsense decoded values between adjacent
-//   pixels — visible as a regular dot/grid moiré on otherwise smooth
-//   terrain. A single-channel ramp interpolates correctly under bilinear,
-//   eliminating the artefact entirely without any smoothing post-pass.
-//
-// Colorisation, hide-bands, and colour-mode (gradient/step) are applied
-// GPU-side via Mapbox `raster-color` + `raster-color-mix` paint properties.
-// This means the SW caches a SINGLE PNG per (z, x, y, resFactor) — colour
-// changes, band-toggles and mode swaps are instantaneous (no tile refetch,
-// no SW round-trip, no DEM re-decode, no PNG re-encode).
+// Encoding (see slope-math.js / slope-source.ts):
+//   gray  = round(sqrt(deg / 90) · 255)   — decoded GPU-side by raster-color-mix
+//   alpha = 0 on NoData / outside the analysis zone, 255 otherwise
+// Colours, hidden bands and the gradient/step mode are GPU paint properties:
+// they never invalidate a tile.
 // ---------------------------------------------------------------------------
 
-// DEM PNG decode is one of the hottest CPU paths in the 1 m slope overlay.
-// A cold viewport can ask each elevation tile as: own DEM for its slope tile
-// plus north/east/south/west neighbour for four adjacent slope tiles. Without
-// an in-memory decoded cache, that is up to 5 Terrain-RGB decodes per DEM tile
-// on top of CacheStorage blob reads. Keep an LRU of Float32Array grids in the
-// service worker so visible-tile slope builds share decoded elevations.
-//
-// Size tuning: a cold viewport at z14 in mountainous terrain can hit
-// ~90 own tiles + ~120 unique neighbours ≈ 210 distinct DEM decodes. At 160
-// the LRU was already evicting before the harmonize/border passes consumed
-// neighbour elevations, which forced a re-decode on the seam-heal pass.
-// 384 covers two full viewports + neighbours and keeps memory under ~96 MB
-// (384 × 256 × 256 × 4 bytes).
 const SLOPE_DECODED_DEM_CACHE_MAX = 384;
 const slopeDecodedDemCache = new Map();
 const slopeDecodedDemInflight = new Map();
@@ -66,7 +38,9 @@ function rememberSlopeDecodedDem(key, elevations, generation) {
 }
 
 async function decodeSlopeDemBlob(demBlob, z, x, y, demProfile) {
-  const key = slopeDemDecodeKey(z, x, y, demProfile);
+  // The blob size tells two DEM versions of the same coords apart (stand-in
+  // vs final build, 30 m vs LiDAR — both use the 'default' profile key).
+  const key = `${slopeDemDecodeKey(z, x, y, demProfile)}:${demBlob?.size || 0}`;
   if (slopeDecodedDemCache.has(key)) {
     const cached = slopeDecodedDemCache.get(key);
     slopeDecodedDemCache.delete(key);
@@ -91,416 +65,41 @@ function clearSlopeProcessingCaches() {
 
 function invalidateSlopeProcessingTile(z, x, y) {
   slopeDecodeCacheGeneration++;
-  slopeDecodedDemCache.delete(slopeDemDecodeKey(z, x, y, 'default'));
-  slopeDecodedDemCache.delete(slopeDemDecodeKey(z, x, y, 'terrain'));
-  slopeDecodedDemInflight.delete(slopeDemDecodeKey(z, x, y, 'default'));
-  slopeDecodedDemInflight.delete(slopeDemDecodeKey(z, x, y, 'terrain'));
-}
-
-function isValidSlopeTileCoord(z, x, y) {
-  const n = 1 << z;
-  return x >= 0 && y >= 0 && x < n && y < n;
-}
-
-// ── Ground-cell size (meters per DEM pixel) ───────────────────────────
-// In Web Mercator (EPSG:3857, conformal projection), horizontal and
-// vertical scale are identical at any given latitude:
-//   cellSizeX = cellSizeY = (2 * PI * R * cos(lat)) / (tileSize * 2^z)
-function computeCellSize(z, x, y, tileSize) {
-  const n = Math.PI - 2 * Math.PI * (y + 0.5) / (1 << z);
-  const latRad = Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
-  const cellSize = (40075016.686 * Math.abs(Math.cos(latRad))) / (tileSize * (1 << z));
-  return { cellSizeX: cellSize, cellSizeY: cellSize };
-}
-
-// ── Padded elevation buffer: 258×258 with 1 px border from neighbour tiles ──
-// When a neighbour tile is absent from the DEM cache (not yet loaded or
-// outside coverage) we replicate the own-tile edge — identical to the old
-// behaviour, so there is no regression; where neighbours *are* cached (the
-// common case during steady viewing) the seam disappears.
-function buildSlopeDemCachePath(z, x, y, demProfile, sourceDem = '') {
-  if (sourceDem === 'fast-30m') {
-    return `/dem-tiles/${z}/${x}/${y}?rv-dem-profile=fast-30m`;
-  }
-  return demProfile === 'terrain'
-    ? `/dem-tiles/${z}/${x}/${y}?rv-dem-profile=terrain`
-    : `/dem-tiles/${z}/${x}/${y}`;
-}
-
-function shouldUseSlopeNeighbourDem(resp, demProfile, sourceDem = '') {
-  if (!resp || resp.status !== 200) return false;
-
-  const health = (resp.headers.get('X-DEM-Health') || 'ok').toLowerCase();
-  if (health !== 'ok') return false;
-
-  const source = (resp.headers.get('X-DEM-Source') || '').toLowerCase();
-
-  // Strict DEM source segregation: NEVER mix 30m AWS DEM with high-res LiDAR DEM!
-  if (sourceDem === 'fast-30m') {
-    return source === 'aws-fast-30m' || source.startsWith('aws-terrarium') || source.startsWith('aws');
-  } else {
-    if (source === 'aws-fast-30m' || source.startsWith('aws-terrarium')) {
-      return false;
+  const prefixes = [
+    `${slopeDemDecodeKey(z, x, y, 'default')}:`,
+    `${slopeDemDecodeKey(z, x, y, 'terrain')}:`,
+  ];
+  for (const map of [slopeDecodedDemCache, slopeDecodedDemInflight]) {
+    for (const key of Array.from(map.keys())) {
+      if (prefixes.some((p) => key.startsWith(p))) map.delete(key);
     }
   }
-
-  if (
-    source.startsWith('aws-emergency')
-    || source.startsWith('mapbox')
-    || source.startsWith('overzoom')
-  ) {
-    return false;
-  }
-
-  // In 1 m terrain mode, only stitch against genuine terrain-grade neighbour
-  // DEMs. Reusing a coarse AWS fallback beside a high-res terrain tile makes
-  // the Horn kernel disagree exactly on the shared border, which shows up as
-  // a visible tile grid.
-  if (demProfile === 'terrain' && source.startsWith('aws-terrarium')) {
-    return false;
-  }
-
-  return true;
 }
 
-async function buildPaddedElevations(ownElev, z, x, y, demCache, demProfile, sourceDem = '') {
-  const S = DEM_TILE_SIZE;
-  const P = S + 2;
-  const pad = new Float32Array(P * P);
-  const missingNeighbours = [];
-
-  // Copy own tile into interior [1..S, 1..S]
-  for (let r = 0; r < S; r++) {
-    pad.set(ownElev.subarray(r * S, (r + 1) * S), (r + 1) * P + 1);
-  }
-
-  async function cachedElev(nx, ny) {
-    if (!isValidSlopeTileCoord(z, nx, ny)) return null;
-    if (!demCache) {
-      missingNeighbours.push([nx, ny]);
-      return null;
-    }
-    let resp = await demCache.match(new Request(buildSlopeDemCachePath(z, nx, ny, demProfile, sourceDem)));
-    if ((!resp || resp.status !== 200) && demProfile !== 'default' && sourceDem !== 'fast-30m') {
-      resp = await demCache.match(new Request(buildSlopeDemCachePath(z, nx, ny, 'default', sourceDem)));
-    }
-    if (!shouldUseSlopeNeighbourDem(resp, demProfile, sourceDem)) {
-      missingNeighbours.push([nx, ny]);
-      return null;
-    }
-    try { return await decodeSlopeDemBlob(await resp.clone().blob(), z, nx, ny, demProfile); }
-    catch {
-      missingNeighbours.push([nx, ny]);
-      return null;
-    }
-  }
-
-  const [nN, nE, nS, nW] = await Promise.all([
-    cachedElev(x, y - 1),
-    cachedElev(x + 1, y),
-    cachedElev(x, y + 1),
-    cachedElev(x - 1, y),
-  ]);
-
-  // Top row (pad row 0) — borrow south row of north neighbour or extrapolate
-  if (nN) {
-    for (let c = 0; c < S; c++) pad[0 * P + (c + 1)] = nN[(S - 1) * S + c];
-  } else {
-    for (let c = 0; c < S; c++) pad[0 * P + (c + 1)] = 2 * ownElev[c] - ownElev[S + c];
-  }
-
-  // Bottom row (pad row S+1) — borrow north row of south neighbour or extrapolate
-  if (nS) {
-    for (let c = 0; c < S; c++) pad[(S + 1) * P + (c + 1)] = nS[c];
-  } else {
-    const rLast = (S - 1) * S;
-    const rPrev = (S - 2) * S;
-    for (let c = 0; c < S; c++) pad[(S + 1) * P + (c + 1)] = 2 * ownElev[rLast + c] - ownElev[rPrev + c];
-  }
-
-  // Left column (pad col 0) — borrow east column of west neighbour or extrapolate
-  if (nW) {
-    for (let r = 0; r < S; r++) pad[(r + 1) * P + 0] = nW[r * S + (S - 1)];
-  } else {
-    for (let r = 0; r < S; r++) pad[(r + 1) * P + 0] = 2 * ownElev[r * S] - ownElev[r * S + 1];
-  }
-
-  // Right column (pad col S+1) — borrow west column of east neighbour or extrapolate
-  if (nE) {
-    for (let r = 0; r < S; r++) pad[(r + 1) * P + (S + 1)] = nE[r * S];
-  } else {
-    for (let r = 0; r < S; r++) pad[(r + 1) * P + (S + 1)] = 2 * ownElev[r * S + S - 1] - ownElev[r * S + S - 2];
-  }
-
-  // Four corners: smooth 2D extrapolation
-  pad[0] = pad[1 * P + 0] + pad[0 * P + 1] - pad[1 * P + 1];
-  pad[S + 1] = pad[1 * P + S + 1] + pad[0 * P + S] - pad[1 * P + S];
-  pad[(S + 1) * P] = pad[S * P + 0] + pad[(S + 1) * P + 1] - pad[S * P + 1];
-  pad[(S + 1) * P + (S + 1)] = pad[S * P + S + 1] + pad[(S + 1) * P + S] - pad[S * P + S];
-
-  return {
-    pad,
-    missingNeighbours,
-    edgeNeighbours: {
-      north: Boolean(nN),
-      east: Boolean(nE),
-      south: Boolean(nS),
-      west: Boolean(nW),
-    },
-    neighbourElevations: {
-      north: nN,
-      east: nE,
-      south: nS,
-      west: nW,
-    },
+// `neighbourBlobs`: { north, east, south, west } DEM blobs already resolved
+// by resolveSlopeNeighbourDems() (null when absent).
+// Returns { blob, missingDirections } like the worker pool.
+async function buildSlopeTile(demBlob, neighbourBlobs, z, x, y, resFactor, demProfile, zoneRing, outputScale) {
+  const n = 2 ** z;
+  const coords = {
+    north: [x, y - 1],
+    east: [(x + 1) % n, y],
+    south: [x, y + 1],
+    west: [(x - 1 + n) % n, y],
   };
-}
-
-// ── Horn's method on the padded buffer ────────────────────────────────
-// Inner loop has no clamping branches — the pad row/column already covers
-// the edge case. Branches-free makes the JIT produce tight SIMD-friendly code.
-function computeHornSlope(a, b, c, d, f, g, h, i, inv8x, inv8y) {
-  const dzDx = ((c + 2 * f + i) - (a + 2 * d + g)) * inv8x;
-  const dzDy = ((g + 2 * h + i) - (a + 2 * b + c)) * inv8y;
-  return Math.atan(Math.sqrt(dzDx * dzDx + dzDy * dzDy)) * (180 / Math.PI);
-}
-
-function computeSlopesFromPadded(pad, cellSizeX, cellSizeY) {
-  const S = DEM_TILE_SIZE;
-  const P = S + 2;
-  const slopes = new Float32Array(S * S);
-  const inv8x = 1 / (8 * cellSizeX);
-  const inv8y = 1 / (8 * cellSizeY);
-
-  for (let row = 0; row < S; row++) {
-    const r0 = row * P;         // pad row (row-1 of 3×3)
-    const r1 = (row + 1) * P;   // pad row (row   of 3×3)
-    const r2 = (row + 2) * P;   // pad row (row+1 of 3×3)
-    const outRow = row * S;
-    for (let col = 0; col < S; col++) {
-      const a = pad[r0 + col];
-      const b = pad[r0 + col + 1];
-      const c = pad[r0 + col + 2];
-      const d = pad[r1 + col];
-      const f = pad[r1 + col + 2];
-      const g = pad[r2 + col];
-      const h = pad[r2 + col + 1];
-      const i = pad[r2 + col + 2];
-
-      slopes[outRow + col] = computeHornSlope(a, b, c, d, f, g, h, i, inv8x, inv8y);
-    }
-  }
-  return slopes;
-}
-
-function clampIndex(value, max) {
-  if (value <= 0) return 0;
-  if (value >= max) return max;
-  return value;
-}
-
-function sampleTile(elevations, row, col) {
-  const S = DEM_TILE_SIZE;
-  if (!elevations) return NaN;
-  const rr = clampIndex(row, S - 1);
-  const cc = clampIndex(col, S - 1);
-  return elevations[rr * S + cc];
-}
-
-// Adjacent raster tiles do not overlap on the GPU. Even with neighbour-aware
-// Horn padding, the last column of tile A and the first column of tile B still
-// represent two different kernel centres, which can leave a 1 px visual seam
-// on very high-frequency surface DEMs.
-function harmonizeSlopeBorders(slopes) {
-  // No-op in Slope Engine 2.0: Conformal Mercator metric scale + 1st-order boundary
-  // extrapolation mathematically eliminates tile seams at the source.
-  return slopes;
-}
-
-// ── Slope-only RGBA PNG (R = sqrt-encoded angle, A = NoData mask) ─────
-async function encodeSlopePng(slopes, ownElev, _edgeNeighbours, zoneMask) {
-  const size = DEM_TILE_SIZE;
-  const n = size * size;
-  const rgba = new Uint8Array(n * 4);
-  // sqrt-gamma encoding: R = round(sqrt(deg/90) * 255). See header comment.
-  const INV_MAX = 1 / 90;
-
-  for (let j = 0; j < n; j++) {
-    const elev = ownElev[j];
-    const idx = j * 4;
-    if (elev <= DEM_NODATA_THRESHOLD) {
-      // Transparent on NoData — keeps the ortho visible where DEM is absent
-      rgba[idx + 3] = 0;
-      continue;
-    }
-    let d = slopes[j];
-    if (d < 0) d = 0; else if (d > 90) d = 90;
-    const enc = Math.max(0, Math.min(255, Math.round(Math.sqrt(d * INV_MAX) * 255)));
-    rgba[idx] = enc;
-    rgba[idx + 1] = 0;
-    rgba[idx + 2] = 0;
-    rgba[idx + 3] = 255;
-  }
-
-  if (zoneMask) applyRingMaskToRgba(rgba, zoneMask);
-
-  return (typeof buildRawPngSlope === 'function')
-    ? buildRawPngSlope(size, size, rgba)
-    : buildRawPng(size, size, rgba);
-}
-
-// ── Resolution downsampling ──────────────────────────────────────────
-// The user picks a target ground resolution in the Control Panel. We honour
-// it by box-averaging the per-pixel slope values into N×N blocks ("on fait
-// une moyenne" — see UX request). Block-fill keeps the output buffer the
-// same 256×256 grid so all downstream encoding stays unchanged.
-function downsampleSlopes(slopes, factor) {
-  if (!factor || factor <= 1) return slopes;
-  const S = DEM_TILE_SIZE;
-  const out = new Float32Array(S * S);
-  for (let by = 0; by < S; by += factor) {
-    const yEnd = Math.min(by + factor, S);
-    for (let bx = 0; bx < S; bx += factor) {
-      const xEnd = Math.min(bx + factor, S);
-      let sum = 0, n = 0;
-      for (let y = by; y < yEnd; y++) {
-        const row = y * S;
-        for (let x = bx; x < xEnd; x++) {
-          sum += slopes[row + x];
-          n++;
-        }
-      }
-      const avg = n > 0 ? sum / n : 0;
-      for (let y = by; y < yEnd; y++) {
-        const row = y * S;
-        for (let x = bx; x < xEnd; x++) {
-          out[row + x] = avg;
-        }
-      }
-    }
-  }
-  return out;
-}
-
-// ── Full pipeline — DEM blob → slope PNG blob ─────────────────────────
-// `demCache` is optional; when provided we borrow neighbour tile borders
-// to seam-correct the slope at tile edges.
-//
-// No CPU-side smoothing: the previous 1-2-1 separable blur was masking the
-// real artefact (16-bit RG bilinear glitch). With single-channel sqrt-gamma
-// encoding the GPU samples the slope ramp cleanly and shows the raw 1 m
-// terrain signal as-is — no flou needed.
-// Fused Horn + sqrt-gamma encode in a single pass directly into the RGBA
-// buffer. The previous pipeline allocated a Float32Array(S*S) for `slopes`,
-// wrote it once in `computeSlopesFromPadded`, then read it back in
-// `encodeSlopePng` — that's a full ~262 KB allocation plus an extra memory
-// pass on every slope tile. The fused loop drops both costs and lets the
-// JIT keep the Horn intermediates in registers between compute and encode.
-//
-// Border harmonization is kept as a separate step on the seam pixels only
-// because it needs cross-tile gradient samples; it then re-encodes just
-// those 4 × S pixels into the RGBA buffer. Border-fallback clamping (no
-// neighbour DEM available) is also handled inline.
-function computeAndEncodeSlopeFused(pad, ownElev, cellSizeX, cellSizeY, edgeNeighbours) {
-  const S = DEM_TILE_SIZE;
-  const P = S + 2;
-  const n = S * S;
-  const rgba = new Uint8Array(n * 4);
-  const u32 = new Uint32Array(rgba.buffer);
-  const inv8x = 1 / (8 * cellSizeX);
-  const inv8y = 1 / (8 * cellSizeY);
-  // encoded = round(sqrt(deg/90) * 255) with deg = atan(g) * 180/π
-  //         = round(sqrt(atan(g) * (2/π)) * 255)
-  const ENC_K = 255 / Math.sqrt(Math.PI / 2); // factor outside sqrt
-
-  for (let row = 0; row < S; row++) {
-    const r0 = row * P;
-    const r1 = (row + 1) * P;
-    const r2 = (row + 2) * P;
-    const outRow = row * S;
-    for (let col = 0; col < S; col++) {
-      const elev = ownElev[outRow + col];
-      if (elev <= DEM_NODATA_THRESHOLD) {
-        continue;
-      }
-      const a = pad[r0 + col];
-      const b = pad[r0 + col + 1];
-      const c = pad[r0 + col + 2];
-      const d = pad[r1 + col];
-      const f = pad[r1 + col + 2];
-      const g = pad[r2 + col];
-      const h = pad[r2 + col + 1];
-      const i = pad[r2 + col + 2];
-      const dzDx = ((c + 2 * f + i) - (a + 2 * d + g)) * inv8x;
-      const dzDy = ((g + 2 * h + i) - (a + 2 * b + c)) * inv8y;
-      const gradMag = Math.sqrt(dzDx * dzDx + dzDy * dzDy);
-      // sqrt(atan(g) * (2/π)) * 255  — monotonic, [0..255]
-      let enc = Math.sqrt(Math.atan(gradMag)) * ENC_K;
-      if (enc < 0) enc = 0; else if (enc > 255) enc = 255;
-      u32[outRow + col] = ((enc + 0.5 | 0) & 0xff) | 0xff000000;
-    }
-  }
-
-  return rgba;
-}
-
-function encodeSingleSlopeByte(deg) {
-  let d = deg;
-  if (d < 0) d = 0; else if (d > 90) d = 90;
-  return Math.max(0, Math.min(255, Math.round(Math.sqrt(d / 90) * 255)));
-}
-
-function harmonizeSlopeBordersIntoRgba() {
-  // No-op in Slope Engine 2.0: Conformal Mercator metric scale + 1st-order boundary
-  // extrapolation mathematically eliminates tile seams at the source.
-  return;
-}
-
-async function buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile, zoneRing, sourceDem = '') {
-  const t0 = performance.now();
   const ownElev = await decodeSlopeDemBlob(demBlob, z, x, y, demProfile);
-  const t1 = performance.now();
-  const { cellSizeX, cellSizeY } = computeCellSize(z, x, y, DEM_TILE_SIZE);
-  const { pad, missingNeighbours, edgeNeighbours, neighbourElevations } = await buildPaddedElevations(ownElev, z, x, y, demCache, demProfile, sourceDem);
-  const t2 = performance.now();
-
-  // Analysis-zone mask (see core/analysis-zone.js). rasterizeRingMask comes
-  // from workers/slope-math.js (shared kernel), so the in-process output is
-  // byte-identical to the worker-pool output.
-  const zoneMask = zoneRing ? rasterizeRingMask(zoneRing, z, x, y, DEM_TILE_SIZE) : null;
-
-  let blob;
-  const useFusedFastPath = !resFactor || resFactor <= 1;
-  if (useFusedFastPath) {
-    // Single-pass compute + encode (fast path, default resolution).
-    const rgba = computeAndEncodeSlopeFused(pad, ownElev, cellSizeX, cellSizeY, edgeNeighbours);
-    harmonizeSlopeBordersIntoRgba(rgba, ownElev, neighbourElevations, cellSizeX, cellSizeY);
-    if (zoneMask) applyRingMaskToRgba(rgba, zoneMask);
-    const t3 = performance.now();
-    blob = (typeof buildRawPngSlope === 'function')
-      ? await buildRawPngSlope(DEM_TILE_SIZE, DEM_TILE_SIZE, rgba)
-      : await buildRawPng(DEM_TILE_SIZE, DEM_TILE_SIZE, rgba);
-    const t4 = performance.now();
-    if (DEBUG) {
-      console.log(
-        `[slope] ${z}/${x}/${y} dec=${(t1 - t0).toFixed(0)} pad=${(t2 - t1).toFixed(0)} fused=${(t3 - t2).toFixed(0)} png=${(t4 - t3).toFixed(0)} total=${(t4 - t0).toFixed(0)}ms profile=${demProfile || 'default'}${zoneMask ? ' zone=1' : ''} missingN=${missingNeighbours.length}`
-      );
-    }
-  } else {
-    // Legacy two-pass path — needed for the resolution-downsample mode
-    // (slopes are box-averaged into N×N blocks before encoding).
-    let slopes = computeSlopesFromPadded(pad, cellSizeX, cellSizeY);
-    slopes = harmonizeSlopeBorders(slopes, ownElev, neighbourElevations, cellSizeX, cellSizeY);
-    slopes = downsampleSlopes(slopes, resFactor | 0);
-    const t3 = performance.now();
-    blob = await encodeSlopePng(slopes, ownElev, edgeNeighbours, zoneMask);
-    const t4 = performance.now();
-    if (DEBUG) {
-      console.log(
-        `[slope] ${z}/${x}/${y} dec=${(t1 - t0).toFixed(0)} pad=${(t2 - t1).toFixed(0)} horn=${(t3 - t2).toFixed(0)} enc=${(t4 - t3).toFixed(0)} total=${(t4 - t0).toFixed(0)}ms res=${resFactor} profile=${demProfile || 'default'}${zoneMask ? ' zone=1' : ''} missingN=${missingNeighbours.length}`
-      );
-    }
-  }
-  return { blob, missingNeighbours };
+  const neighbourElevations = {};
+  await Promise.all(Object.keys(coords).map(async (dir) => {
+    const blob = neighbourBlobs?.[dir];
+    if (!blob) return;
+    const [nx, ny] = coords[dir];
+    try {
+      neighbourElevations[dir] = await decodeSlopeDemBlob(blob, z, nx, ny, demProfile);
+    } catch { /* treated as missing */ }
+  }));
+  return buildSlopePngFromElevations(ownElev, neighbourElevations, z, x, y, {
+    resFactor,
+    outputScale,
+    zoneRing,
+  });
 }
-

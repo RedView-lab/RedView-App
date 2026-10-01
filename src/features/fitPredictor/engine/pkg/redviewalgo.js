@@ -1,6 +1,69 @@
 /* @ts-self-types="./redviewalgo.d.ts" */
 
 /**
+ * Calibration vélo v2 sur les .fit d'un cycliste.
+ *
+ * `config` : `CyclingConfig` dont `rider` sert de prior (préréglage ou
+ * profil personnalisé : masse, pneus, FTP) et `model_params` éventuels.
+ * Renvoie `{ engine_version, model, report }` ; `model` se passe ensuite à
+ * `predict_cycling` via `{ rider: { model } }`.
+ * @param {Uint8Array[]} fit_files
+ * @param {any} config
+ * @param {Function | null} [on_progress]
+ * @returns {any}
+ */
+export function calibrate_cycling(fit_files, config, on_progress) {
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passArrayJsValueToWasm0(fit_files, wasm.__wbindgen_export);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.calibrate_cycling(retptr, ptr0, len0, addHeapObject(config), isLikeNone(on_progress) ? 0 : addHeapObject(on_progress));
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+        if (r2) {
+            throw takeObject(r1);
+        }
+        return takeObject(r0);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+    }
+}
+
+/**
+ * Calibration vélo v2 sur des traces déjà extraites (banc de mesure, traces
+ * étiquetées OSM) : `tracks` = `[{ lat, lon, ele, dist, t, surface?, way? }]`.
+ * @param {any} tracks
+ * @param {any} config
+ * @returns {any}
+ */
+export function calibrate_cycling_tracks(tracks, config) {
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        wasm.calibrate_cycling_tracks(retptr, addHeapObject(tracks), addHeapObject(config));
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+        if (r2) {
+            throw takeObject(r1);
+        }
+        return takeObject(r0);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+    }
+}
+
+/**
+ * Version du moteur vélo (v2) : les prédictions persistées plus anciennes
+ * doivent être recalculées.
+ * @returns {number}
+ */
+export function engine_version() {
+    const ret = wasm.engine_version();
+    return ret >>> 0;
+}
+
+/**
  * Initialize panic hook for better error messages in the browser console.
  */
 export function init() {
@@ -48,6 +111,55 @@ export function predict(fit_files, gpx_data, config, on_progress) {
 }
 
 /**
+ * Prédiction vélo v2 sur un tracé passé en tableaux typés.
+ *
+ * * `lat`, `lon` — degrés ; `ele` — mètres (NaN = inconnue)
+ * * `dist_m` — axe de distance de l'app (vide = haversine)
+ * * `surface`, `way` — attributs par point (voir `cycling::input`), vides = inconnus
+ * * `headwind_ms` — vent de face par point (vide = pas de vent)
+ * * `config` — `CyclingConfig` : `{ rider, rider_override?, start_time_h?,
+ *   ambient_temperature_c?, geometry?, model_params?, output? }`
+ * @param {Float64Array} lat
+ * @param {Float64Array} lon
+ * @param {Float64Array} ele
+ * @param {Float64Array} dist_m
+ * @param {Uint8Array} surface
+ * @param {Uint8Array} way
+ * @param {Float64Array} headwind_ms
+ * @param {any} config
+ * @returns {any}
+ */
+export function predict_cycling(lat, lon, ele, dist_m, surface, way, headwind_ms, config) {
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passArrayF64ToWasm0(lat, wasm.__wbindgen_export);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passArrayF64ToWasm0(lon, wasm.__wbindgen_export);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passArrayF64ToWasm0(ele, wasm.__wbindgen_export);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passArrayF64ToWasm0(dist_m, wasm.__wbindgen_export);
+        const len3 = WASM_VECTOR_LEN;
+        const ptr4 = passArray8ToWasm0(surface, wasm.__wbindgen_export);
+        const len4 = WASM_VECTOR_LEN;
+        const ptr5 = passArray8ToWasm0(way, wasm.__wbindgen_export);
+        const len5 = WASM_VECTOR_LEN;
+        const ptr6 = passArrayF64ToWasm0(headwind_ms, wasm.__wbindgen_export);
+        const len6 = WASM_VECTOR_LEN;
+        wasm.predict_cycling(retptr, ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, ptr5, len5, ptr6, len6, addHeapObject(config));
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+        if (r2) {
+            throw takeObject(r1);
+        }
+        return takeObject(r0);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+    }
+}
+
+/**
  * Running / trail-running prediction.
  *
  * Same inputs as [`predict`]; `config` is a `RunPredictionConfig`
@@ -81,10 +193,8 @@ export function predict_run(fit_files, gpx_data, config, on_progress) {
 }
 
 /**
- * Run prediction on a validation FIT file and compare with actual data.
- *
- * The validation FIT is NOT included in the training data for the model.
- * This allows direct comparison of predicted vs actual speed.
+ * Prédit une sortie de validation (sa propre trace) avec un modèle calibré
+ * sur les seules sorties d'entraînement, et renvoie le réel pour comparaison.
  * @param {Uint8Array[]} training_fits
  * @param {Uint8Array} validation_fit
  * @param {any} config
@@ -468,6 +578,14 @@ function getDataViewMemory0() {
     return cachedDataViewMemory0;
 }
 
+let cachedFloat64ArrayMemory0 = null;
+function getFloat64ArrayMemory0() {
+    if (cachedFloat64ArrayMemory0 === null || cachedFloat64ArrayMemory0.byteLength === 0) {
+        cachedFloat64ArrayMemory0 = new Float64Array(wasm.memory.buffer);
+    }
+    return cachedFloat64ArrayMemory0;
+}
+
 function getStringFromWasm0(ptr, len) {
     ptr = ptr >>> 0;
     return decodeText(ptr, len);
@@ -503,6 +621,13 @@ function isLikeNone(x) {
 function passArray8ToWasm0(arg, malloc) {
     const ptr = malloc(arg.length * 1, 1) >>> 0;
     getUint8ArrayMemory0().set(arg, ptr / 1);
+    WASM_VECTOR_LEN = arg.length;
+    return ptr;
+}
+
+function passArrayF64ToWasm0(arg, malloc) {
+    const ptr = malloc(arg.length * 8, 8) >>> 0;
+    getFloat64ArrayMemory0().set(arg, ptr / 8);
     WASM_VECTOR_LEN = arg.length;
     return ptr;
 }
@@ -594,6 +719,7 @@ function __wbg_finalize_init(instance, module) {
     wasm = instance.exports;
     wasmModule = module;
     cachedDataViewMemory0 = null;
+    cachedFloat64ArrayMemory0 = null;
     cachedUint8ArrayMemory0 = null;
     wasm.__wbindgen_start();
     return wasm;

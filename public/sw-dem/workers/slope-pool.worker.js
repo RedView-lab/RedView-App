@@ -12,7 +12,7 @@
 //     inner Horn loop independently of the SW's compile unit.
 //
 // Message protocol:
-//   in : { id, z, x, y, resFactor,
+//   in : { id, z, x, y, resFactor, outputScale, zoneRing,
 //          ownDem: ArrayBuffer,            // raw Terrain-RGB PNG bytes
 //          neighbours: {
 //            north?: ArrayBuffer,
@@ -82,8 +82,24 @@ function workerDemPut(key, elev) {
   return elev;
 }
 
+// FNV-1a over the PNG bytes. The LRU used to be keyed by "z/x/y" alone, so a
+// tile decoded once from a stand-in DEM (AWS emergency parent, overzoom, the
+// 30 m or the 1 m terrain profile, a pre-upgrade build) kept being served
+// for the real LiDAR tile of the same coords: smooth or mismatched slope
+// tiles and seams that never healed. Keying by content makes a new DEM a
+// new entry; ~0.2 ms for a 150 KB tile.
+function demContentHash(buf) {
+  const bytes = new Uint8Array(buf);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < bytes.length; i++) {
+    h ^= bytes[i];
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36);
+}
+
 async function workerDecodeDem(buf, z, x, y) {
-  const key = `${z}/${x}/${y}`;
+  const key = `${z}/${x}/${y}:${buf.byteLength}:${demContentHash(buf)}`;
   const cached = workerDemGet(key);
   if (cached) return cached;
   // Wrap the transferred ArrayBuffer in a Blob for decodeTerrainRGBBlob.
@@ -249,10 +265,11 @@ self.onmessage = async (event) => {
       }));
     }
 
-    const resFactor = Number(msg.resFactor) > 1 ? Number(msg.resFactor) : 1;
-    const result = await buildSlopeRgbaFromElevations(
-      ownElev, neighbours, msg.z, msg.x, msg.y, resFactor, msg.zoneRing || null,
-    );
+    const result = await buildSlopePngFromElevations(ownElev, neighbours, msg.z, msg.x, msg.y, {
+      resFactor: msg.resFactor,
+      outputScale: msg.outputScale,
+      zoneRing: msg.zoneRing || null,
+    });
 
     // Merge any worker-side missing directions into the result.
     for (const d of missingDirections) {
@@ -260,9 +277,10 @@ self.onmessage = async (event) => {
     }
 
     // Transfer the PNG buffer back — zero copy.
+    const pngArrayBuffer = await result.blob.arrayBuffer();
     self.postMessage(
-      { id, ok: true, png: result.pngArrayBuffer, missingDirections: result.missingDirections },
-      [result.pngArrayBuffer],
+      { id, ok: true, png: pngArrayBuffer, missingDirections: result.missingDirections },
+      [pngArrayBuffer],
     );
   } catch (err) {
     self.postMessage({ id, ok: false, error: String(err && err.message || err) });

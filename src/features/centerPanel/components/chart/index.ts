@@ -61,3 +61,9 @@ export type {
   SteepAlertRule,
   SteepAlertSegment,
 } from './alerts/buildSteepAlertOverlay';
+export {
+  buildSlopeOverlayForItinerary,
+  SLOPE_COLOR_CLASSES,
+} from './slope';
+export { SlopeLegend } from './slope/SlopeLegend';
+export type { ChartSlopeOverlay, SlopeColorClass } from './slope';

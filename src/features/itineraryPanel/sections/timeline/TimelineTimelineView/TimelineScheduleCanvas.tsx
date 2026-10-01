@@ -37,7 +37,9 @@ interface TimelineScheduleCanvasProps {
   viewportRef: RefObject<HTMLDivElement | null>;
   verticalFraction: number;
   verticalOffset: number;
+  verticalMinFraction?: number;
   onVerticalNavigatorChange: (next: { visibleFraction: number; offset: number }) => void;
+  onVerticalNavigatorReset?: () => void;
   onZoomWheel?: (e: React.WheelEvent<HTMLDivElement>) => void;
   hourMarks: number[];
   hourRowHeightPx: number;
@@ -91,7 +93,9 @@ export function TimelineScheduleCanvas({
   viewportRef,
   verticalFraction,
   verticalOffset,
+  verticalMinFraction,
   onVerticalNavigatorChange,
+  onVerticalNavigatorReset,
   onZoomWheel,
   hourMarks,
   kmMarkers,
@@ -304,7 +308,9 @@ export function TimelineScheduleCanvas({
         orientation="vertical"
         visibleFraction={verticalFraction}
         offset={verticalOffset}
+        minFraction={verticalMinFraction}
         onChange={onVerticalNavigatorChange}
+        onReset={onVerticalNavigatorReset}
         className="rvi-tl-schedule__zoom-vertical"
         ariaLabel="Zoom et défilement vertical de la feuille de route"
         startHandleTitle="Ajuster l'échelle en bas"

@@ -22,7 +22,7 @@ export default defineConfig([
   },
   {
     // Scripts de recette (tsx/node) : manipulent des réponses JSON brutes et des mocks.
-    files: ['script-test-bench/audit/**/*.ts'],
+    files: ['script-test-bench/audit/**/*.ts', 'script-test-bench/pace-accuracy/**/*.ts'],
     languageOptions: {
       globals: { ...globals.node, ...globals.browser },
     },

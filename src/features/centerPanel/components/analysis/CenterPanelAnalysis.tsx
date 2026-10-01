@@ -24,6 +24,7 @@ import {
   AnalysisChart,
   isWeatherMetric,
   locateRoutePointAtX,
+  SlopeLegend,
   type AxisMetricId,
   type AxisMode,
   type ChartPoiAnnotation,
@@ -60,7 +61,7 @@ import {
   type AnalysisAlertSelection,
 } from './AnalysisAlertSectionPopover';
 import { resolveRoadTypeLabel } from './resolveRoadTypeLabel';
-import { AnalysisToolbar } from './AnalysisToolbar';
+import { AnalysisToolbar, type ToolbarFilterKey } from './AnalysisToolbar';
 
 /**
  * Panneau d'analyse centrale des itinéraires (graphique d'élévation, pente, vitesse, puissance, etc.).
@@ -168,6 +169,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
     dayNightOverlay,
     pauseOverlay,
     alertOverlay,
+    slopeOverlay,
   } = useAnalysisChartData({
     itineraries,
     predictions,
@@ -305,10 +307,20 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
     'Renseigne une date et une heure de départ pour activer Jour/nuit.',
   );
 
-  const disabledFilters = useMemo(
-    () => (dayNightUnavailable ? { jourNuit: dayNightHint } : undefined),
-    [dayNightUnavailable, dayNightHint],
-  );
+  /**
+   * La colorisation « Pente » s'applique à la courbe d'altitude : sans altitude
+   * sur un axe ni profil d'altitude en fond, il n'y a rien à colorer.
+   */
+  const altitudeShown =
+    axis1Value === 'Altitude' || axis2Value === 'Altitude' || Boolean(filters.pente);
+  const slopeColorsHint = t('Affichez l’altitude (axe ou profil d’altitude) pour colorer la pente.');
+
+  const disabledFilters = useMemo(() => {
+    const hints: Partial<Record<ToolbarFilterKey, string>> = {};
+    if (dayNightUnavailable) hints.jourNuit = dayNightHint;
+    if (!altitudeShown) hints.slopeColors = slopeColorsHint;
+    return Object.keys(hints).length > 0 ? hints : undefined;
+  }, [altitudeShown, dayNightUnavailable, dayNightHint, slopeColorsHint]);
 
   // Par défaut l'option Jour/nuit est désactivée tant que le rythme n'a pas été édité.
   // Si un projet existant avait conservé l'ancien défaut `jourNuit: true`, on l'aligne sur `false`.
@@ -618,7 +630,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
     chartClickImplRef.current = handleChartClickImpl;
   });
 
-  const toggleFilter = (key: 'pente' | 'jourNuit' | 'alertes') => {
+  const toggleFilter = (key: ToolbarFilterKey) => {
     updateAnalysis((draft) => {
       draft.filters[key] = !draft.filters[key];
     });
@@ -666,6 +678,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
           dayNightOverlay={dayNightOverlay}
           pauseOverlay={pauseOverlay}
           alertOverlay={alertOverlay}
+          slopeOverlay={slopeOverlay}
           axis1Metric={axis1Value}
           axis2Metric={axis2Value}
           xMode={xMode}
@@ -686,6 +699,9 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
           onClearSelectedXRange={handleClearSelectedXRange}
           showSeriesRows={false}
         />
+        {slopeOverlay && altitudeShown ? (
+          <SlopeLegend overlay={slopeOverlay} itineraryName={activeItinerary?.name} />
+        ) : null}
         {weatherUnavailable ? (
           <div className="rvc-center-analysis__notice" role="status">
             {t('Prévisions météo indisponibles pour ce départ (erreur ou date au-delà de 16 jours) : la courbe météo est masquée.')}

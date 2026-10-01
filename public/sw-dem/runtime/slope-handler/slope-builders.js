@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Slope Tile Processing — Tile Builders (LiDAR HD & Downsampled for Zones)
+// Slope Tile Processing — Tile Builders (zone HD tiles, ancestor upsamples)
 // ---------------------------------------------------------------------------
 
 const zoneStateMap = new Map();
@@ -34,6 +34,8 @@ async function purgeSlopeCache(zoneHash) {
   }
 }
 
+// Zone pipeline (slope-zone-pipeline.js): one z14 tile at native resolution,
+// masked to the analysis-zone polygon, cached under its `?zone=` key.
 function buildAndCacheHdSlopeTile(z, x, y, resFactor, demProfile, zoneHash, options = {}) {
   const key = `${demProfile}:${z}/${x}/${y}?${zoneHash}`;
   if (backgroundHdSlopeInflight.has(key)) {
@@ -65,8 +67,12 @@ function buildAndCacheHdSlopeTile(z, x, y, resFactor, demProfile, zoneHash, opti
 
       const slopeCache = await caches.open(SLOPE_CACHE_NAME);
       const { ring: zoneRing } = resolveAnalysisZoneForTile(zoneHash);
+      const ownSourceClass = slopeDemSourceClass(demResp.headers.get('X-DEM-Source'));
 
-      const slopeResult = await buildSlopeBlobFromDem(demBlob, z, x, y, demCache, resFactor, demProfile, generation, zoneRing, options?.sourceDem);
+      const slopeResult = await buildSlopeBlobFromDem(
+        demBlob, z, x, y, demCache, resFactor, demProfile, generation, zoneRing,
+        options?.sourceDem, ownSourceClass, 1,
+      );
       if (!slopeResult || !slopeResult.blob || (generation !== null && isSlopeWorkCancelled(generation))) {
         return transparentTileResponse();
       }
@@ -90,15 +96,17 @@ function buildAndCacheHdSlopeTile(z, x, y, resFactor, demProfile, zoneHash, opti
         },
       });
 
-      const isSeamComplete = !slopeResult.missingNeighbours || slopeResult.missingNeighbours.length === 0;
-      if (isSeamComplete) {
+      // Provisional (seam-incomplete) builds stay out of both tiers: a hot
+      // entry would be served back instead of the rebuild once the
+      // neighbours exist.
+      if (slopeResult.missingNeighbours.length === 0) {
         await slopeCache.put(cacheKey, response.clone());
+        try {
+          if (typeof slopeHotPut === 'function') {
+            slopeHotPut(hotKey, slopeResult.blob, Array.from(response.headers.entries()));
+          }
+        } catch { /* ignore */ }
       }
-      try {
-        if (typeof slopeHotPut === 'function') {
-          slopeHotPut(hotKey, slopeResult.blob, Array.from(response.headers.entries()));
-        }
-      } catch { /* ignore */ }
 
       if (z === 14 && zoneHash && !options?.silent) {
         invalidateParentDownsampledSlopeTiles(z, x, y, zoneHash);
@@ -106,8 +114,6 @@ function buildAndCacheHdSlopeTile(z, x, y, resFactor, demProfile, zoneHash, opti
 
       const dt = Math.round(performance.now() - t0);
       logDemPente(`✨ Succès HD pour ${z}/${x}/${y} en ${dt}ms`);
-
-      scheduleSlopeNeighbourWarm(z, x, y, demProfile, demCache, slopeResult.missingNeighbours, generation);
       return response;
     } catch (err) {
       logDemPente(`❌ Erreur buildAndCacheHdSlopeTile ${z}/${x}/${y}: ${err?.message || err}`);
@@ -121,150 +127,178 @@ function buildAndCacheHdSlopeTile(z, x, y, resFactor, demProfile, zoneHash, opti
   return task;
 }
 
-async function buildDownsampledSlopeTile(z, x, y, resFactor, demProfile, zoneHash) {
-  const S = DEM_TILE_SIZE;
-  const dz = 14 - z;
-  if (dz <= 0) return null;
+// ── Slope tile from an ancestor slope tile ────────────────────────────
+// Bilinear crop + upsample of an already-built SLOPE tile — never of the
+// DEM, which would reintroduce the interpolation ripples the Horn kernel
+// amplifies. Used where the exact DEM tile does not exist:
+//   * outside the HD footprints above the global 30 m native zoom
+//     (buildUpsampledGlobalSlopeResponse),
+//   * where the terrain itself shows a parent mesh (buildSlopeFromAncestorDem).
 
-  const { entry: zoneEntry } = resolveAnalysisZoneForTile(zoneHash);
-  if (zoneHash && (!zoneEntry || !tileIntersectsAnalysisZone(zoneEntry, z, x, y))) {
-    return transparentTileResponse();
-  }
+const upsampleAncestorDecodeCache = new Map();
+const UPSAMPLE_ANCESTOR_DECODE_MAX = 8;
 
-  const scale = 1 << dz;
-  const startChildX = x * scale;
-  const startChildY = y * scale;
-  const endChildX = startChildX + scale - 1;
-  const endChildY = startChildY + scale - 1;
-
-  const childTilesToFetch = [];
-  for (let cx = startChildX; cx <= endChildX; cx++) {
-    for (let cy = startChildY; cy <= endChildY; cy++) {
-      if (!zoneEntry || tileIntersectsAnalysisZone(zoneEntry, 14, cx, cy)) {
-        childTilesToFetch.push({ cx, cy });
-      }
-    }
-  }
-
-  if (childTilesToFetch.length === 0) {
-    return transparentTileResponse();
-  }
-
-  const slopeCache = await caches.open(SLOPE_CACHE_NAME);
-  const childBlobs = new Map();
-
-  await Promise.all(childTilesToFetch.map(async ({ cx, cy }) => {
-    try {
-      const childParams = new URLSearchParams();
-      if (resFactor > 1) childParams.set('res', String(resFactor));
-      if (demProfile === 'terrain') childParams.set('rv-dem-profile', 'terrain');
-      if (zoneHash) childParams.set('zone', zoneHash);
-      const childUrl = `/slope-tiles/14/${cx}/${cy}${childParams.size ? `?${childParams.toString()}` : ''}`;
-
-      let blob = null;
-      const cached = await slopeCache.match(new Request(childUrl));
-      if (cached && cached.status === 200) {
-        blob = await cached.clone().blob();
-      }
-      if (blob) {
-        const img = await createImageBitmap(blob, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
-        const ctx = (typeof getSharedOffscreenCtx === 'function')
-          ? getSharedOffscreenCtx(S, S)
-          : new OffscreenCanvas(S, S).getContext('2d', { willReadFrequently: true });
-        ctx.clearRect(0, 0, S, S);
-        ctx.drawImage(img, 0, 0);
-        const imgData = ctx.getImageData(0, 0, S, S);
-        img.close();
-        childBlobs.set(`${cx}/${cy}`, imgData.data);
-      }
-    } catch { /* ignore */ }
-  }));
-
-  if (childBlobs.size === 0) {
-    return transparentTileResponse();
-  }
-
-  const outRgba = new Uint8Array(S * S * 4);
-  for (let py = 0; py < S; py++) {
-    const globalY = py * scale;
-    const childTileOffsetY = Math.floor(globalY / S);
-    const subPy = globalY % S;
-    const cy = startChildY + childTileOffsetY;
-
-    for (let px = 0; px < S; px++) {
-      const globalX = px * scale;
-      const childTileOffsetX = Math.floor(globalX / S);
-      const subPx = globalX % S;
-      const cx = startChildX + childTileOffsetX;
-
-      const childKey = `${cx}/${cy}`;
-      const childData = childBlobs.get(childKey);
-      if (childData) {
-        const childIdx = (subPy * S + subPx) * 4;
-        const outIdx = (py * S + px) * 4;
-        outRgba[outIdx] = childData[childIdx];
-        outRgba[outIdx + 1] = childData[childIdx + 1];
-        outRgba[outIdx + 2] = childData[childIdx + 2];
-        outRgba[outIdx + 3] = childData[childIdx + 3];
-      }
-    }
-  }
-
-  const blob = (typeof buildRawPngSlope === 'function')
-    ? await buildRawPngSlope(S, S, outRgba)
-    : await buildRawPng(S, S, outRgba);
-
-  return new Response(blob, {
-    status: 200,
-    headers: {
-      'Content-Type': 'image/png',
-      'Cache-Control': 'public, max-age=604800',
-      'X-Tile-Type': 'slope',
-      'X-Slope-Quality': 'hd',
-      'X-DEM-Profile': demProfile,
-    },
-  });
+function isSlopeTileResponse(resp) {
+  return Boolean(resp && resp.status === 200 && resp.headers.get('X-Tile-Type') === 'slope');
 }
 
-async function buildOverzoomedSlopeTile(z, x, y, resFactor, demProfile, zoneHash) {
-  const S = DEM_TILE_SIZE;
-  const parentZ = z - 1;
-  if (parentZ < 6) return transparentTileResponse();
+async function decodeSlopeAncestorPixels(key, blob) {
+  const hit = upsampleAncestorDecodeCache.get(key);
+  if (hit) {
+    upsampleAncestorDecodeCache.delete(key);
+    upsampleAncestorDecodeCache.set(key, hit);
+    return hit;
+  }
+  const img = await createImageBitmap(blob, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
+  let decoded;
+  try {
+    const size = img.width;
+    if (img.height !== size || size < 2) return null;
+    const ctx = typeof getSharedOffscreenCtx === 'function'
+      ? getSharedOffscreenCtx(size, size)
+      : new OffscreenCanvas(size, size).getContext('2d', { willReadFrequently: true });
+    ctx.clearRect(0, 0, size, size);
+    ctx.drawImage(img, 0, 0);
+    decoded = { pixels: ctx.getImageData(0, 0, size, size).data, size };
+  } finally {
+    img.close();
+  }
+  upsampleAncestorDecodeCache.set(key, decoded);
+  if (upsampleAncestorDecodeCache.size > UPSAMPLE_ANCESTOR_DECODE_MAX) {
+    upsampleAncestorDecodeCache.delete(upsampleAncestorDecodeCache.keys().next().value);
+  }
+  return decoded;
+}
 
-  const parentX = Math.floor(x / 2);
-  const parentY = Math.floor(y / 2);
-  const subX = (x % 2) * (S / 2);
-  const subY = (y % 2) * (S / 2);
-  const subSize = S / 2;
+// Bilinear, alpha-weighted (NoData pixels never bleed into valid ones) on
+// the sqrt-gamma gray channel, sampled at pixel centres so adjacent children
+// line up exactly. `src` is RGBA (decoded PNG) of srcSize², the output covers
+// child (subX, subY) of the 2^dz × 2^dz grid at outSize².
+function upsampleSlopeAncestor(src, srcSize, dz, subX, subY, outSize) {
+  const scale = srcSize / (2 ** dz * outSize);
+  const gray = new Uint8Array(outSize * outSize);
+  const alpha = new Uint8Array(outSize * outSize);
+  const last = srcSize - 1;
+  for (let oy = 0; oy < outSize; oy++) {
+    const sy = Math.min(Math.max((subY * outSize + oy + 0.5) * scale - 0.5, 0), last);
+    const y0 = Math.floor(sy);
+    const y1 = Math.min(y0 + 1, last);
+    const fy = sy - y0;
+    for (let ox = 0; ox < outSize; ox++) {
+      const sx = Math.min(Math.max((subX * outSize + ox + 0.5) * scale - 0.5, 0), last);
+      const x0 = Math.floor(sx);
+      const x1 = Math.min(x0 + 1, last);
+      const fx = sx - x0;
+      const i00 = (y0 * srcSize + x0) * 4;
+      const i01 = (y0 * srcSize + x1) * 4;
+      const i10 = (y1 * srcSize + x0) * 4;
+      const i11 = (y1 * srcSize + x1) * 4;
+      const w00 = (1 - fx) * (1 - fy) * src[i00 + 3];
+      const w01 = fx * (1 - fy) * src[i01 + 3];
+      const w10 = (1 - fx) * fy * src[i10 + 3];
+      const w11 = fx * fy * src[i11 + 3];
+      const wSum = w00 + w01 + w10 + w11;
+      if (wSum <= 0) continue; // transparent
+      const o = oy * outSize + ox;
+      gray[o] = Math.round((src[i00] * w00 + src[i01] * w01 + src[i10] * w10 + src[i11] * w11) / wSum);
+      alpha[o] = Math.round(wSum);
+    }
+  }
+  return { gray, alpha };
+}
 
-  const parentResp = await handleSlopeRequest(parentZ, parentX, parentY, String(resFactor), demProfile, zoneHash);
-  if (!parentResp || parentResp.status !== 200) {
+async function upsampleSlopeFromAncestor(ancestorResponse, decodeKey, dz, subX, subY, outSize) {
+  const ancestorBlob = await ancestorResponse.blob();
+  // Size in the key: a provisional and a final ancestor build differ.
+  const decoded = await decodeSlopeAncestorPixels(`${decodeKey}:${ancestorBlob.size}`, ancestorBlob);
+  if (!decoded) return null;
+  const { gray, alpha } = upsampleSlopeAncestor(decoded.pixels, decoded.size, dz, subX, subY, outSize);
+  return alpha.every((a) => a === 255)
+    ? buildGrayPng(outSize, outSize, gray)
+    : buildGrayAlphaPng(outSize, outSize, gray, alpha);
+}
+
+// ── Global slope above its native zoom ────────────────────────────────
+// Outside the high-resolution DEM footprints the slope is computed at
+// GLOBAL_SLOPE_NATIVE_MAX_Z from AWS 30 m and the deeper tiles are an
+// upsample of that slope raster. This is what Mapbox overzoom does in the
+// 30 m mode, done in the SW so the HD source (maxzoom 16) keeps showing
+// slope at every zoom.
+async function buildUpsampledGlobalSlopeResponse(z, x, y, resParam, cacheKey, hotKey, slopeCache) {
+  const dz = z - GLOBAL_SLOPE_NATIVE_MAX_Z;
+  const ax = x >> dz;
+  const ay = y >> dz;
+  const ancestor = await handleSlopeRequest(GLOBAL_SLOPE_NATIVE_MAX_Z, ax, ay, resParam, 'default', '', { sourceDem: 'fast-30m' });
+  if (!isSlopeTileResponse(ancestor)) {
+    noteSlopeTileStale(hotKey);
+    return transparentTileResponse();
+  }
+  const ancestorComplete = ancestor.headers.get('X-Slope-Seam') === 'complete'
+    && !/no-cache/.test(ancestor.headers.get('Cache-Control') || '');
+
+  const mask = (1 << dz) - 1;
+  const blob = await upsampleSlopeFromAncestor(
+    ancestor,
+    `30m:${GLOBAL_SLOPE_NATIVE_MAX_Z}/${ax}/${ay}:${resParam || ''}`,
+    dz, x & mask, y & mask,
+    DEM_TILE_SIZE * SLOPE_OUTPUT_SCALE,
+  );
+  if (!blob) {
+    noteSlopeTileStale(hotKey);
     return transparentTileResponse();
   }
 
-  const parentBlob = await parentResp.clone().blob();
-  const img = await createImageBitmap(parentBlob, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
-  const ctx = (typeof getSharedOffscreenCtx === 'function')
-    ? getSharedOffscreenCtx(S, S)
-    : new OffscreenCanvas(S, S).getContext('2d', { willReadFrequently: true });
-  ctx.clearRect(0, 0, S, S);
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(img, subX, subY, subSize, subSize, 0, 0, S, S);
-  img.close();
-  const imgData = ctx.getImageData(0, 0, S, S);
-  const blob = (typeof buildRawPngSlope === 'function')
-    ? await buildRawPngSlope(S, S, imgData.data)
-    : await buildRawPng(S, S, imgData.data);
-
-  return new Response(blob, {
+  const response = new Response(blob, {
     status: 200,
     headers: {
       'Content-Type': 'image/png',
-      'Cache-Control': 'public, max-age=604800',
+      'Cache-Control': ancestorComplete ? 'public, max-age=604800' : 'no-cache',
       'X-Tile-Type': 'slope',
-      'X-Slope-Quality': 'hd',
-      'X-DEM-Profile': demProfile,
+      'X-Slope-Quality': 'global-30m-upsampled',
+      'X-Slope-Seam': ancestorComplete ? 'complete' : 'provisional',
+      'X-DEM-Profile': 'fast-30m',
     },
   });
+  if (ancestorComplete) {
+    slopeCache.put(cacheKey, response.clone());
+    try {
+      if (typeof slopeHotPut === 'function') {
+        slopeHotPut(hotKey, blob, Array.from(response.headers.entries()));
+      }
+    } catch { /* ignore */ }
+    noteSlopeTileFinal(hotKey);
+  } else {
+    noteSlopeTileStale(hotKey);
+  }
+  return response;
+}
+
+// ── No DEM tile: the parent's slope ───────────────────────────────────
+// The DEM pipeline answered 204 for this tile (LiDAR pending at high zoom,
+// coverage gap, transient build failure): the terrain renders its parent
+// mesh there. Show that parent's slope instead of a hole — the closest
+// ancestor whose DEM is already available (never built from here), cropped
+// and upsampled. The caller serves it provisional and waits on the real DEM.
+async function buildSlopeFromAncestorDem(z, x, y, resParam, demProfile, sourceDem, demCache, outSize) {
+  for (let dz = 1; dz <= 4 && z - dz >= 0; dz++) {
+    const pZ = z - dz;
+    const px = x >> dz;
+    const py = y >> dz;
+    const dem = await getExistingTerrainDemResponse(pZ, px, py, demProfile, demCache, sourceDem, { allowBuild: false });
+    // A short-cached stand-in would make the ancestor's slope request rebuild it.
+    if (!dem || dem.headers.get('x-cache-ttl-ms')) continue;
+    const ancestor = await handleSlopeRequest(pZ, px, py, resParam, demProfile, '', {
+      sourceDem,
+      noAncestorFallback: true,
+    });
+    if (!isSlopeTileResponse(ancestor)) continue;
+    const mask = (1 << dz) - 1;
+    const blob = await upsampleSlopeFromAncestor(
+      ancestor,
+      `${sourceDem || 'hd'}:${demProfile}:${pZ}/${px}/${py}:${resParam || ''}`,
+      dz, x & mask, y & mask, outSize,
+    );
+    if (blob) return blob;
+  }
+  return null;
 }

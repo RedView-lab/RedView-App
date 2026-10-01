@@ -12,16 +12,83 @@ import {
   PREDICTIVE_LEAD_TILES,
   type PriorityHintInit,
 } from './prefetch/prefetchGeometry';
-import { buildPrefetchUrls, slopePrefetchUrl } from './prefetch/prefetchUrls';
+import {
+  buildPrefetchUrls,
+  demPrefetchUrl,
+  getSlopeSourceMaxZoom,
+  slopePrefetchUrl,
+} from './prefetch/prefetchUrls';
 import type {
   ViewportPrefetchOptions,
   PrewarmDestinationOptions,
   ViewportPrefetchHandle,
 } from './prefetch/types';
+import { getActiveDem3dQuality } from './dem3dQualityBus';
+import { getActiveDemProfilePreference } from './demProfileBus';
+import { terrainDemTileZoom, unifiedDEMSource } from './sources';
 
 export * from './prefetch/types';
 
 let currentHandle: ViewportPrefetchHandle | null = null;
+
+/**
+ * Speculative tiles only make sense when the Service Worker answers them.
+ * On an uncontrolled page (force-reload, SW not claimed yet, AWS fallback
+ * terrain) every `/dem-tiles?pf=1` would reach the server instead — burning
+ * the tile rate-limit bucket (429) for tiles nobody displays.
+ */
+function isServiceWorkerControlled(): boolean {
+  return typeof navigator !== 'undefined' && Boolean(navigator.serviceWorker?.controller);
+}
+
+/**
+ * DEM query of the tiles the 3D terrain reads, or null when it does not read
+ * `/dem-tiles` at all: the 30 m mode streams AWS Terrarium straight to the
+ * GPU, so warming `/dem-tiles` there built 0.40 m IGN tiles nobody displays.
+ */
+function terrainDemPrefetchQuery(): string | null {
+  if (getActiveDem3dQuality() === 'fast-30m') return null;
+  return getActiveDemProfilePreference() === 'terrain' ? 'rv-dem-profile=terrain' : '';
+}
+
+/** Zoom of the terrain's DEM tiles (what the terrain and the slope overlay read). */
+function terrainDemPrefetchZoom(zoom: number): number {
+  return Math.max(unifiedDEMSource.minzoom, Math.min(unifiedDEMSource.maxzoom, terrainDemTileZoom(zoom)));
+}
+
+interface TileBox { xMin: number; yMin: number; xMax: number; yMax: number }
+
+/** Tiles one step beyond the box edge in the direction of travel. */
+function leadTiles(box: TileBox, z: number, velocity: { dx: number; dy: number }): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  const cap = (1 << z) - 1;
+  const dominantX = Math.abs(velocity.dx) >= Math.abs(velocity.dy);
+  const stepX = dominantX ? Math.sign(velocity.dx) : 0;
+  const stepY = dominantX ? 0 : Math.sign(velocity.dy);
+  if (stepX === 0 && stepY === 0) return out;
+  for (let i = 1; i <= PREDICTIVE_LEAD_TILES; i++) {
+    const lx0 = stepX > 0 ? box.xMax + i : (stepX < 0 ? box.xMin - i : box.xMin);
+    const lx1 = stepX !== 0 ? lx0 : box.xMax;
+    const ly0 = stepY > 0 ? box.yMax + i : (stepY < 0 ? box.yMin - i : box.yMin);
+    const ly1 = stepY !== 0 ? ly0 : box.yMax;
+    for (let lx = Math.max(0, Math.min(cap, lx0)); lx <= Math.max(0, Math.min(cap, lx1)); lx++) {
+      for (let ly = Math.max(0, Math.min(cap, ly0)); ly <= Math.max(0, Math.min(cap, ly1)); ly++) {
+        out.push([lx, ly]);
+      }
+    }
+  }
+  return out;
+}
+
+/** DEM and ortho share the per-cycle cap fairly. */
+function interleave(a: readonly string[], b: readonly string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    if (i < a.length) out.push(a[i]);
+    if (i < b.length) out.push(b[i]);
+  }
+  return out;
+}
 
 export function getViewportPrefetch(): ViewportPrefetchHandle | null {
   return currentHandle;
@@ -29,6 +96,12 @@ export function getViewportPrefetch(): ViewportPrefetchHandle | null {
 
 /**
  * Installe le moteur de préchargement spéculatif de tuiles basé sur le viewport et les mouvements caméra.
+ *
+ * Chaque famille est préchargée au zoom où la carte la demande réellement :
+ * le DEM du relief à floor(zoom − 1) (même pyramide que les pentes, voir
+ * TERRAIN_ALIGNED_RASTER_TILE_SIZE), l'ortho 256 px autour de round(zoom).
+ * L'anneau DEM autour du viewport est aussi ce qui complète les bords des
+ * tuiles de pente (voisins manquants → reconstruites quand le DEM arrive).
  */
 export function installViewportPrefetch(
   map: MapboxMap,
@@ -71,20 +144,15 @@ export function installViewportPrefetch(
   const fire = (): void => {
     scheduled = null;
     if (disposed) return;
+    if (!isServiceWorkerControlled()) return;
     if (typeof map.getStyle !== 'function' || !map.getStyle()) return;
 
-    const z = Math.round(map.getZoom());
+    const zoom = map.getZoom();
+    const z = Math.round(zoom);
     if (z < PREFETCH_MIN_ZOOM || z > PREFETCH_MAX_ZOOM) return;
 
     const bounds = map.getBounds();
     if (!bounds) return;
-
-    const sw = lngLatToTile(bounds.getWest(), bounds.getSouth(), z);
-    const ne = lngLatToTile(bounds.getEast(), bounds.getNorth(), z);
-    let xMin = Math.min(sw.x, ne.x);
-    let xMax = Math.max(sw.x, ne.x);
-    let yMin = Math.min(sw.y, ne.y);
-    let yMax = Math.max(sw.y, ne.y);
 
     const pitch = typeof map.getPitch === 'function' ? map.getPitch() : 0;
     const tilted = pitch >= PITCH_FOREGROUND_THRESHOLD_DEG;
@@ -102,21 +170,34 @@ export function installViewportPrefetch(
       const c = map.getCenter();
       anchor = { lng: c.lng, lat: c.lat };
     }
+    const groundAnchor = anchor;
 
     // Gestion spécifique des vues très couchées (pitch >= 55°)
     // En vue rasante/couchée, la boîte englobante de l'écran s'étend jusqu'à l'horizon
     // infini (xMax - xMin > 16), ce qui coupait brutalement le préchargement du sol.
     // On cadre ici un cône de qualité foreground centré sur le sol devant la caméra (±2 tuiles).
-    if (pitch >= 55) {
-      const ac = lngLatToTile(anchor.lng, anchor.lat, z);
-      const cap = (1 << z) - 1;
-      xMin = Math.max(0, ac.x - 2);
-      xMax = Math.min(cap, ac.x + 2);
-      yMin = Math.max(0, ac.y - 2);
-      yMax = Math.min(cap, ac.y + 2);
-    } else if (xMax - xMin > 16 || yMax - yMin > 16) {
-      return;
-    }
+    const boxAt = (tz: number): TileBox => {
+      if (pitch >= 55) {
+        const ac = lngLatToTile(groundAnchor.lng, groundAnchor.lat, tz);
+        const cap = (1 << tz) - 1;
+        return {
+          xMin: Math.max(0, ac.x - 2),
+          xMax: Math.min(cap, ac.x + 2),
+          yMin: Math.max(0, ac.y - 2),
+          yMax: Math.min(cap, ac.y + 2),
+        };
+      }
+      const sw = lngLatToTile(bounds.getWest(), bounds.getSouth(), tz);
+      const ne = lngLatToTile(bounds.getEast(), bounds.getNorth(), tz);
+      return {
+        xMin: Math.min(sw.x, ne.x),
+        xMax: Math.max(sw.x, ne.x),
+        yMin: Math.min(sw.y, ne.y),
+        yMax: Math.max(sw.y, ne.y),
+      };
+    };
+    const box = boxAt(z);
+    if (pitch < 55 && (box.xMax - box.xMin > 16 || box.yMax - box.yMin > 16)) return;
 
     const centreTile = lngLatToTile(anchor.lng, anchor.lat, z);
     let velocity: { dx: number; dy: number } | null = null;
@@ -140,43 +221,47 @@ export function installViewportPrefetch(
     lastVelocityTile = velocity;
     lastCentreTile = { x: centreTile.x, y: centreTile.y, z };
 
-    const sig = `${z}:${xMin},${yMin},${xMax},${yMax}:p${tilted ? 1 : 0}:a${anchor.lng.toFixed(3)},${anchor.lat.toFixed(3)}`;
+    const demQuery = terrainDemPrefetchQuery();
+    const sig = `${z}:${box.xMin},${box.yMin},${box.xMax},${box.yMax}:p${tilted ? 1 : 0}:a${anchor.lng.toFixed(3)},${anchor.lat.toFixed(3)}:d${demQuery ?? '-'}`;
     if (sig === lastSignature) return;
     lastSignature = sig;
     lastFiredAt = performance.now();
 
     const orthoOn = opts.isOrthoActive?.() ?? false;
-    const slopeOn = false;
-    const urls = buildPrefetchUrls(
-      map,
-      z, xMin, yMin, xMax, yMax, anchor, tilted, orthoOn,
-      /* includeRing */ true,
-      /* includeChildren */ true,
-      /* includeParent */ true,
-      slopeOn,
-    );
+    const orthoUrls = orthoOn
+      ? buildPrefetchUrls(
+          map, z, box.xMin, box.yMin, box.xMax, box.yMax, anchor, tilted,
+          { demQuery: null, ortho: true, slope: false },
+          /* includeRing */ true,
+          /* includeChildren */ true,
+          /* includeParent */ true,
+        )
+      : [];
+    let demUrls: string[] = [];
+    let demZ = 0;
+    let demBox: TileBox | null = null;
+    if (demQuery !== null) {
+      demZ = terrainDemPrefetchZoom(zoom);
+      demBox = boxAt(demZ);
+      demUrls = buildPrefetchUrls(
+        map, demZ, demBox.xMin, demBox.yMin, demBox.xMax, demBox.yMax, anchor, tilted,
+        { demQuery, ortho: false, slope: false },
+        /* includeRing */ true,
+        /* includeChildren */ true,
+        /* includeParent */ true,
+      );
+    }
 
     if (velocity) {
-      const cap = (1 << z) - 1;
-      const dominantX = Math.abs(velocity.dx) >= Math.abs(velocity.dy);
-      const stepX = dominantX ? Math.sign(velocity.dx) : 0;
-      const stepY = dominantX ? 0 : Math.sign(velocity.dy);
-      if (stepX !== 0 || stepY !== 0) {
-        for (let i = 1; i <= PREDICTIVE_LEAD_TILES; i++) {
-          const lx0 = stepX > 0 ? xMax + i : (stepX < 0 ? xMin - i : xMin);
-          const lx1 = stepX !== 0 ? lx0 : xMax;
-          const ly0 = stepY > 0 ? yMax + i : (stepY < 0 ? yMin - i : yMin);
-          const ly1 = stepY !== 0 ? ly0 : yMax;
-          for (let lx = Math.max(0, Math.min(cap, lx0)); lx <= Math.max(0, Math.min(cap, lx1)); lx++) {
-            for (let ly = Math.max(0, Math.min(cap, ly0)); ly <= Math.max(0, Math.min(cap, ly1)); ly++) {
-              urls.push(`/dem-tiles/${z}/${lx}/${ly}?pf=1`);
-              if (orthoOn && z >= 11) urls.push(`/ortho-tiles/${z}/${lx}/${ly}?pf=1`);
-            }
-          }
-        }
+      if (demQuery !== null && demBox) {
+        for (const [lx, ly] of leadTiles(demBox, demZ, velocity)) demUrls.push(demPrefetchUrl(demZ, lx, ly, demQuery));
+      }
+      if (orthoOn && z >= 11) {
+        for (const [lx, ly] of leadTiles(box, z, velocity)) orthoUrls.push(`/ortho-tiles/${z}/${lx}/${ly}?pf=1`);
       }
     }
 
+    const urls = interleave(demUrls, orthoUrls);
     if (urls.length === 0) return;
 
     if (activeAbort) activeAbort.abort();
@@ -200,6 +285,7 @@ export function installViewportPrefetch(
     prewarmOpts: PrewarmDestinationOptions = {},
   ): void => {
     if (disposed) return;
+    if (!isServiceWorkerControlled()) return;
     if (!Number.isFinite(lng) || !Number.isFinite(lat) || !Number.isFinite(zoom)) return;
 
     const z = Math.max(PREFETCH_MIN_ZOOM, Math.min(PREFETCH_MAX_ZOOM, Math.round(zoom)));
@@ -207,36 +293,67 @@ export function installViewportPrefetch(
     const orthoOn = prewarmOpts.withOrtho ?? (opts.isOrthoActive?.() ?? false);
     const slopeOn = opts.isSlopeActive?.() ?? false;
     const includeChildren = prewarmOpts.includeChildren ?? true;
-
-    const c = lngLatToTile(lng, lat, z);
-    const cap = (1 << z) - 1;
-    const xMin = Math.max(0, c.x - radius);
-    const xMax = Math.min(cap, c.x + radius);
-    const yMin = Math.max(0, c.y - radius);
-    const yMax = Math.min(cap, c.y + radius);
-
+    const demQuery = terrainDemPrefetchQuery();
+    const demZ = terrainDemPrefetchZoom(zoom);
     const anchor = { lng, lat };
 
+    const squareAround = (tz: number) => {
+      const c = lngLatToTile(lng, lat, tz);
+      const cap = (1 << tz) - 1;
+      return {
+        xMin: Math.max(0, c.x - radius),
+        xMax: Math.min(cap, c.x + radius),
+        yMin: Math.max(0, c.y - radius),
+        yMax: Math.min(cap, c.y + radius),
+      };
+    };
+
     const urls: string[] = [];
-    for (let x = xMin; x <= xMax; x++) {
-      for (let y = yMin; y <= yMax; y++) {
-        urls.push(`/dem-tiles/${z}/${x}/${y}?pf=1`);
-        if (orthoOn && z >= 11) urls.push(`/ortho-tiles/${z}/${x}/${y}?pf=1`);
-        if (slopeOn) urls.push(slopePrefetchUrl(map, z, x, y));
+    // Slope tiles are the terrain's DEM tiles (same pyramid), capped at the
+    // slope source's native maxzoom.
+    if (demQuery !== null || slopeOn) {
+      const slopeZ = Math.min(demZ, getSlopeSourceMaxZoom(map));
+      const demSquare = squareAround(demZ);
+      for (let x = demSquare.xMin; x <= demSquare.xMax; x++) {
+        for (let y = demSquare.yMin; y <= demSquare.yMax; y++) {
+          if (demQuery !== null) urls.push(demPrefetchUrl(demZ, x, y, demQuery));
+        }
+      }
+      if (slopeOn) {
+        const slopeSquare = squareAround(slopeZ);
+        for (let x = slopeSquare.xMin; x <= slopeSquare.xMax; x++) {
+          for (let y = slopeSquare.yMin; y <= slopeSquare.yMax; y++) {
+            urls.push(slopePrefetchUrl(map, slopeZ, x, y));
+          }
+        }
+      }
+      if (demQuery !== null) {
+        urls.push(...buildPrefetchUrls(
+          map, demZ, demSquare.xMin, demSquare.yMin, demSquare.xMax, demSquare.yMax, anchor,
+          /* tilted */ false,
+          { demQuery, ortho: false, slope: false },
+          /* includeRing */ false,
+          includeChildren,
+          /* includeParent */ true,
+        ));
       }
     }
-
-    const extras = buildPrefetchUrls(
-      map,
-      z, xMin, yMin, xMax, yMax, anchor,
-      /* tilted */ false,
-      orthoOn,
-      /* includeRing */ false,
-      includeChildren,
-      /* includeParent */ true,
-      /* slopeOn */ false,
-    );
-    for (const u of extras) urls.push(u);
+    if (orthoOn && z >= 11) {
+      const orthoSquare = squareAround(z);
+      for (let x = orthoSquare.xMin; x <= orthoSquare.xMax; x++) {
+        for (let y = orthoSquare.yMin; y <= orthoSquare.yMax; y++) {
+          urls.push(`/ortho-tiles/${z}/${x}/${y}?pf=1`);
+        }
+      }
+      urls.push(...buildPrefetchUrls(
+        map, z, orthoSquare.xMin, orthoSquare.yMin, orthoSquare.xMax, orthoSquare.yMax, anchor,
+        /* tilted */ false,
+        { demQuery: null, ortho: true, slope: false },
+        /* includeRing */ false,
+        includeChildren,
+        /* includeParent */ true,
+      ));
+    }
 
     if (urls.length === 0) return;
 
@@ -246,6 +363,7 @@ export function installViewportPrefetch(
     }
     lastSignature = '';
     lastFiredAt = 0;
+    const c = lngLatToTile(lng, lat, z);
     lastCentreTile = { x: c.x, y: c.y, z };
     lastVelocityTile = null;
 
@@ -286,6 +404,10 @@ export function installViewportPrefetch(
   };
   map.on('style.load', onStyleLoad);
 
+  // A user gesture aborts speculative fetches and the stale IGN / ortho
+  // network work. Slope and altitude tiles are NOT cancelled any more: they
+  // read the terrain's own DEM tiles, and a cancelled request answered a
+  // transparent tile that Mapbox kept as final (holes after every pan).
   const cancelOnUserGesture = (e: unknown): void => {
     const evt = e as { originalEvent?: unknown } | null | undefined;
     if (!evt || !evt.originalEvent) return;
@@ -306,10 +428,6 @@ export function installViewportPrefetch(
     const sw = typeof navigator !== 'undefined' ? navigator.serviceWorker : null;
     if (sw && sw.controller) {
       try { sw.controller.postMessage({ type: 'CANCEL_STALE_DEM' }); }
-      catch { /* SW gone away */ }
-      try { sw.controller.postMessage({ type: 'CANCEL_SLOPE_WORK' }); }
-      catch { /* SW gone away */ }
-      try { sw.controller.postMessage({ type: 'CANCEL_ALTITUDE_WORK' }); }
       catch { /* SW gone away */ }
     }
   };
@@ -340,6 +458,7 @@ export function installViewportPrefetch(
       }
       map.off('idle', onIdle);
       map.off('moveend', onMoveEnd);
+      map.off('style.load', onStyleLoad);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       map.off('movestart', cancelOnUserGesture as any);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

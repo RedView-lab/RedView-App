@@ -37,12 +37,25 @@ interface MapAlertSectionCardProps {
   onAction: (payload: MapAlertSectionActionPayload) => void;
 }
 
+/** Seuils au-delà desquels le tronçon est présenté comme un « mur ». */
+const WALL_MAX_GRADIENT_PCT = 18;
+const WALL_AVG_GRADIENT_PCT = 15;
+
+function formatSectionLength(lengthM: number, locale: string): string {
+  if (lengthM < 1000) return `${Math.round(lengthM / 10) * 10} m`;
+  const km = new Intl.NumberFormat(locale === 'fr' ? 'fr-FR' : 'en-US', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(lengthM / 1000);
+  return `${km} km`;
+}
+
 /**
- * Contenu de la popup Mapbox d'un tronçon « Alertes » (pente ≥ 10 % sur ≥ 1 km ou ≥ 15 % sur ≥ 100 m).
+ * Contenu de la popup Mapbox d'un tronçon « Alertes » (pente ≥ 12 % sur ≥ 500 m ou ≥ 18 % sur ≥ 200 m).
  * Reprend le gabarit et les classes du menu POI (`rv-poi-popup__*`).
  */
 export function MapAlertSectionCard({ section, onAction }: MapAlertSectionCardProps) {
-  const { t } = useAppI18n();
+  const { t, locale } = useAppI18n();
   const [copied, setCopied] = useState(false);
   const [kindMenuOpen, setKindMenuOpen] = useState(false);
   const copyResetTimerRef = useRef<number | null>(null);
@@ -84,6 +97,14 @@ export function MapAlertSectionCard({ section, onAction }: MapAlertSectionCardPr
   const kindLabel = KIND_OPTIONS.find((option) => option.value === section.kind)?.label ?? 'Alerte';
   const slopeTitle = `${t('Pente max')} ${Math.round(section.maxGradientPct)} % · ${t('moyenne')} ${Math.round(section.avgGradientPct)} % · ${Math.round(section.lengthM)} m`;
   const elevationLabel = section.elevationM == null ? '—' : `${Math.round(section.elevationM)}m`;
+  // Conseil lisible par un débutant : la nature de l'obstacle avant les chiffres.
+  const isWall =
+    section.maxGradientPct >= WALL_MAX_GRADIENT_PCT || section.avgGradientPct >= WALL_AVG_GRADIENT_PCT;
+  const adviceSummary = t('{{length}} à {{avg}} % de moyenne, jusqu’à {{max}} %', {
+    length: formatSectionLength(section.lengthM, locale),
+    avg: Math.round(section.avgGradientPct),
+    max: Math.round(section.maxGradientPct),
+  });
 
   return (
     <div className="rv-poi-popup__panel rv-alert-popup">
@@ -148,6 +169,18 @@ export function MapAlertSectionCard({ section, onAction }: MapAlertSectionCardPr
           {section.clockLabel ? (
             <span className="rv-alert-popup__meta-text rv-alert-popup__meta-text--upright">{section.clockLabel}</span>
           ) : null}
+        </div>
+      </div>
+
+      <div className={`rv-alert-popup__advice rv-alert-popup__advice--${isWall ? 'wall' : 'climb'}`}>
+        <div className="rv-alert-popup__advice-title">
+          {isWall ? t('Mur très raide') : t('Montée longue et raide')}
+        </div>
+        <div className="rv-alert-popup__advice-summary">{adviceSummary}</div>
+        <div className="rv-alert-popup__advice-text">
+          {isWall
+            ? t('Petit braquet indispensable, pied à terre possible.')
+            : t('Partez prudemment et gardez un braquet de réserve.')}
         </div>
       </div>
 

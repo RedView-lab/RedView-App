@@ -468,6 +468,20 @@
   background: rgba(255, 59, 48, 0.35);
 }
 
+/* Pastille du chip « Pente » : l'échelle de couleur des montées. */
+.rvc-center-analysis__slope-swatch {
+  width: 14px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.rvc-center-analysis__filter-chip--off .rvc-center-analysis__slope-swatch {
+  opacity: 0.4;
+}
+
 .rvc-center-analysis__surface-chip {
   padding: 3px 5px 3px 8px;
 }
@@ -558,7 +572,7 @@
 .rvc-center-analysis__plot-grid > * {
   pointer-events: none;
 }
-/* Icône de danger « Alertes » posée sur la carte 3D (pente ≥ 10 % sur ≥ 1 km ou ≥ 15 % sur ≥ 100 m). */
+/* Icône de danger « Alertes » posée sur la carte 3D (pente ≥ 12 % sur ≥ 500 m ou ≥ 18 % sur ≥ 200 m). */
 .rvi-analysis-alert-marker {
   display: flex;
   align-items: center;

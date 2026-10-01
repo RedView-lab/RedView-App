@@ -59,12 +59,22 @@ async function fetchAWSTerrainTile(z, x, y) {
 
   const url = `${AWS_TERRAIN_BASE}/${fetchZ}/${fetchX}/${fetchY}.png`;
   await acquireAwsFetchSlot();
+  // The slot must be released exactly once on every path: a missed release
+  // on HTTP errors used to leak slots until all 32 were gone and every AWS
+  // fetch (global DEM + 30 m slope) queued forever.
+  let slotHeld = true;
+  const releaseSlot = () => {
+    if (!slotHeld) return;
+    slotHeld = false;
+    releaseAwsFetchSlot();
+  };
   try {
     const t0 = performance.now();
     const res = await fetch(url, { signal: AbortSignal.timeout(6000), priority: 'high' });
     const dt = (performance.now() - t0).toFixed(0);
 
     if (!res.ok) {
+      releaseSlot();
       if (DEBUG) {
         console.warn(
           `[sw-dem][aws] %c FAIL %c ${z}/${x}/${y}${clamped ? ` (clamped→${fetchZ}/${fetchX}/${fetchY})` : ''} — HTTP ${res.status}, ${dt}ms`,
@@ -75,7 +85,7 @@ async function fetchAWSTerrainTile(z, x, y) {
     }
 
     const arrayBuffer = await res.arrayBuffer();
-    releaseAwsFetchSlot();
+    releaseSlot();
 
     // ── Multi-Core Worker Pool Fast-Path (2026-08-29) ──────────────────────
     // Offloads decoding, Terrarium → Terrain-RGB conversion and Sub-filter
@@ -142,7 +152,7 @@ async function fetchAWSTerrainTile(z, x, y) {
     }
     return encodeTerrainRGBPng(elevations);
   } catch (err) {
-    releaseAwsFetchSlot();
+    releaseSlot();
     if (DEBUG) {
       console.warn(
         `[sw-dem][aws] %c ERROR %c ${z}/${x}/${y} — ${err.message || err}`,

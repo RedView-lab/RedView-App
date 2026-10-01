@@ -1,3 +1,4 @@
+import { TERRAIN_ALIGNED_RASTER_TILE_SIZE } from '@/features/map3d/lib/sources';
 import type { SlopeColorMode, SlopeCategory, SlopeDemProfile, SlopeResolutionKey } from '../types';
 import { buildSlopeColorExpression, MAX_SLOPE_DEG } from './slope-config';
 
@@ -86,6 +87,14 @@ export function resolveSlopeMaxZoom(options: SlopeTileSourceOptions): number {
 // tile cache and never refetches any tile — `setPaintProperty` is instant
 // and synchronous on the GPU.
 //
+// Tile pyramid: the overlay requests exactly the tiles of the 3D terrain's
+// DEM pyramid (TERRAIN_ALIGNED_RASTER_TILE_SIZE, z = floor(zoom − 1)), so the
+// Service Worker computes slope tile z/x/y from the DEM tile z/x/y the terrain
+// mesh already loaded — no DEM of its own to build. With 256 px tiles it
+// asked round(zoom + 1): 16–64× more DEM tiles than the relief on screen,
+// each one an IGN build. The SW returns 512 px tiles (2× Catmull-Rom of the
+// DEM-resolution slope) that Mapbox draws over 1024–2048 px.
+//
 // Zone mode: `bounds` stops Mapbox from requesting ANY tile outside the
 // polygon bbox, and `?zone=<hash>` makes the Service Worker (a) reject
 // non-intersecting tiles before any DEM fetch and (b) alpha-mask partially
@@ -118,7 +127,8 @@ export function buildSlopeTileSource(options: SlopeTileSourceOptions = DEFAULT_S
   } = {
     type: 'raster',
     tiles: [`/slope-tiles/{z}/{x}/{y}${query ? `?${query}` : ''}`],
-    tileSize: 256,
+    // Zone tiles keep the z14 pipeline's 256 px grid.
+    tileSize: options.zone ? 256 : TERRAIN_ALIGNED_RASTER_TILE_SIZE,
     minzoom: 4,
     maxzoom,
   };
@@ -130,9 +140,9 @@ export function buildSlopeTileSource(options: SlopeTileSourceOptions = DEFAULT_S
 
 // ── Build layer definition ────────────────────────────────────────────
 //
-// SW PNG encoding (sqrt-gamma, single channel):
+// SW PNG encoding (sqrt-gamma, single channel — gray + alpha PNG, decoded
+// to R = G = B):
 //   R = round(sqrt(deg / 90) * 255)
-//   G = B = 0
 //   A = 0 on NoData, 255 otherwise
 //
 // raster-color-mix [90, 0, 0, 0] decodes R→[0,90] perceptual units.

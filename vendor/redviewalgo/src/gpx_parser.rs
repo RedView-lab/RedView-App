@@ -28,6 +28,23 @@ pub fn parse_gpx(
     max_points: Option<usize>,
     smooth_window_m: Option<f64>,
 ) -> Result<Route, String> {
+    let mut raw_points = parse_gpx_points(data)?;
+
+    // Fill in missing elevations by linear interpolation between known
+    // points. Without this, a single missing <ele> in the middle of a
+    // mountain descent would be treated as 0 m and create a fake −800 m
+    // cliff that the smoother cannot fully erase.
+    interpolate_missing_elevations(&mut raw_points);
+    let raw_points: Vec<(f64, f64, f64)> =
+        raw_points.into_iter().map(|(lat, lon, ele, _)| (lat, lon, ele)).collect();
+
+    let max_pts = max_points.unwrap_or(DEFAULT_MAX_ROUTE_POINTS);
+    let smooth_w = smooth_window_m.unwrap_or(DEFAULT_SMOOTH_WINDOW_M);
+    build_route(raw_points, max_pts, smooth_w)
+}
+
+/// Points bruts d'un GPX : (lat, lon, ele, ele présente), sans aucun traitement.
+pub fn parse_gpx_points(data: &[u8]) -> Result<Vec<(f64, f64, f64, bool)>, String> {
     let xml = std::str::from_utf8(data).map_err(|e| format!("GPX is not valid UTF-8: {e}"))?;
 
     // Pre-allocate based on estimated point count (~1 point per 80 bytes of GPX)
@@ -105,18 +122,7 @@ pub fn parse_gpx(
     if raw_points.len() < 2 {
         return Err("GPX must contain at least 2 track points".to_string());
     }
-
-    // Fill in missing elevations by linear interpolation between known
-    // points. Without this, a single missing <ele> in the middle of a
-    // mountain descent would be treated as 0 m and create a fake −800 m
-    // cliff that the smoother cannot fully erase.
-    interpolate_missing_elevations(&mut raw_points);
-    let raw_points: Vec<(f64, f64, f64)> =
-        raw_points.into_iter().map(|(lat, lon, ele, _)| (lat, lon, ele)).collect();
-
-    let max_pts = max_points.unwrap_or(DEFAULT_MAX_ROUTE_POINTS);
-    let smooth_w = smooth_window_m.unwrap_or(DEFAULT_SMOOTH_WINDOW_M);
-    build_route(raw_points, max_pts, smooth_w)
+    Ok(raw_points)
 }
 
 /// Replace missing elevations (`has_ele == false`) by linear interpolation

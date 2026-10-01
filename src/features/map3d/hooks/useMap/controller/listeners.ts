@@ -19,6 +19,7 @@ export function attachListeners(ctx: Ctx): void {
   const fns = ctx.fns;
   const st = ctx.state;
   let styleDataTerrainRepairTimer: ReturnType<typeof setTimeout> | null = null;
+  let slopeStaleAwaitingMoveEnd = false;
 
   const repairManagedTerrain = (): boolean => {
     const managedSourceId = fns.getManagedTerrainSourceId();
@@ -237,6 +238,30 @@ export function attachListeners(ctx: Ctx): void {
 
     if (event.data?.type === 'SLOPE_ZONE_HD_READY' || event.data?.type === 'SLOPE_ZONE_PHASE1_READY') {
       scheduleDerivedCachesReload(0);
+      return;
+    }
+
+    // The SW answered some slope tiles with a placeholder or a provisional
+    // build (work cancelled by a pan/zoom gesture, DEM not built yet, missing
+    // neighbours). Mapbox keeps any 200 image as final, so those tiles stayed
+    // empty until they left the viewport. Reload the slope source once the
+    // gesture is over — a reload during it would be cancelled again by the
+    // next movestart. Complete tiles come back from the SW hot tier.
+    if (event.data?.type === 'SLOPE_TILES_STALE') {
+      const reloadWhenSettled = (): void => {
+        if (isCancelled()) return;
+        if (map.isMoving()) {
+          if (slopeStaleAwaitingMoveEnd) return;
+          slopeStaleAwaitingMoveEnd = true;
+          map.once('moveend', () => {
+            slopeStaleAwaitingMoveEnd = false;
+            reloadWhenSettled();
+          });
+          return;
+        }
+        scheduleDerivedCachesReload(400);
+      };
+      reloadWhenSettled();
       return;
     }
 

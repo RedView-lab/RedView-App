@@ -56,8 +56,9 @@ async function buildRawPng(width, height, rgba) {
   return buildPngFromScanlines(width, height, raw);
 }
 
-// Assemble an RGBA PNG from pre-built scanlines (filter byte + row data).
-async function buildPngFromScanlines(width, height, raw) {
+// Assemble a PNG from pre-built scanlines (filter byte + row data).
+// `colorType`: 6 = RGBA (default), 4 = gray + alpha.
+async function buildPngFromScanlines(width, height, raw, colorType = 6) {
   // Compress with deflate via CompressionStream
   const cs = new CompressionStream('deflate');
   const writer = cs.writable.getWriter();
@@ -75,7 +76,7 @@ async function buildPngFromScanlines(width, height, raw) {
   ihdrView.setUint32(0, width);
   ihdrView.setUint32(4, height);
   ihdrData[8] = 8;  // bit depth
-  ihdrData[9] = 6;  // color type: RGBA
+  ihdrData[9] = colorType;
   ihdrData[10] = 0; // compression
   ihdrData[11] = 0; // filter
   ihdrData[12] = 0; // interlace
@@ -96,6 +97,61 @@ async function buildPngFromScanlines(width, height, raw) {
   png.set(iend, pos);
 
   return new Blob([png], { type: 'image/png' });
+}
+
+// ── Gray + alpha PNG (colour type 4, Sub filter) ──────────────────────
+// Slope tiles carry ONE meaningful byte per pixel (the sqrt-gamma angle) plus
+// the NoData / zone alpha: half the scanline bytes of RGBA, so deflate runs on
+// half the data. Image decoders expand it to RGBA with R = G = B = gray, which
+// is exactly what Mapbox's raster-color-mix [90, 0, 0, 0] reads.
+async function buildGrayAlphaPng(width, height, gray, alpha) {
+  const rowBytes = 1 + width * 2;
+  const raw = new Uint8Array(height * rowBytes);
+  for (let y = 0; y < height; y++) {
+    const off = y * rowBytes;
+    const src = y * width;
+    raw[off] = 1; // filter type: Sub (residual vs the previous pixel)
+    let prevGray = 0;
+    let prevAlpha = 0;
+    for (let x = 0; x < width; x++) {
+      const g = gray[src + x];
+      const a = alpha[src + x];
+      const o = off + 1 + x * 2;
+      raw[o] = (g - prevGray) & 0xff;
+      raw[o + 1] = (a - prevAlpha) & 0xff;
+      prevGray = g;
+      prevAlpha = a;
+    }
+  }
+  return buildPngFromScanlines(width, height, raw, 4);
+}
+
+// ── Gray PNG (colour type 0, Paeth filter) ────────────────────────────
+// Fully opaque single-channel tile (the usual slope tile): one byte per
+// pixel. Paeth predicts from the left, upper and upper-left pixels, which
+// suits the smooth 2D field of an upsampled slope raster: measured on a
+// 512² LiDAR-like tile, 15 ms / 121 KB vs 27 ms / 147 KB for gray+alpha Sub.
+async function buildGrayPng(width, height, gray) {
+  const rowBytes = 1 + width;
+  const raw = new Uint8Array(height * rowBytes);
+  for (let y = 0; y < height; y++) {
+    const off = y * rowBytes;
+    const row = y * width;
+    const up = row - width;
+    raw[off] = 4; // filter type: Paeth
+    for (let x = 0; x < width; x++) {
+      const a = x > 0 ? gray[row + x - 1] : 0;
+      const b = y > 0 ? gray[up + x] : 0;
+      const c = x > 0 && y > 0 ? gray[up + x - 1] : 0;
+      const p = a + b - c;
+      const pa = p > a ? p - a : a - p;
+      const pb = p > b ? p - b : b - p;
+      const pc = p > c ? p - c : c - p;
+      const pred = (pa <= pb && pa <= pc) ? a : (pb <= pc ? b : c);
+      raw[off + 1 + x] = (gray[row + x] - pred) & 0xff;
+    }
+  }
+  return buildPngFromScanlines(width, height, raw, 0);
 }
 
 // ── Slope-optimised PNG encoder (RGBA, Sub filter) ────────────────────

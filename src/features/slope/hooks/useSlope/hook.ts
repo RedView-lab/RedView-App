@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import type { SlopeCategory, SlopeColorMode, SlopeDemProfile } from '../../types';
 import {
@@ -136,7 +136,24 @@ export function useSlope(
     [categories],
   );
   const hiddenKey = useMemo(() => Array.from(hiddenIds).sort().join(','), [hiddenIds]);
-  const sourceKey = useMemo(() => buildSlopeSourceKey(sourceOptions), [sourceOptions]);
+
+  // Tiles requested before the Service Worker controls the page went to the
+  // server fallback: 30 m slope, or a 204 / 429 that Mapbox marks as errored
+  // and never retries (source.reload() skips errored tiles). A new controller
+  // re-keys the source so every tile is requested again through the SW.
+  const [swControllerEpoch, setSwControllerEpoch] = useState(0);
+  useEffect(() => {
+    const sw = typeof navigator !== 'undefined' ? navigator.serviceWorker : undefined;
+    if (!sw) return;
+    const onControllerChange = () => setSwControllerEpoch((n) => n + 1);
+    sw.addEventListener('controllerchange', onControllerChange);
+    return () => sw.removeEventListener('controllerchange', onControllerChange);
+  }, []);
+
+  const sourceKey = useMemo(
+    () => `${buildSlopeSourceKey(sourceOptions)}#sw${swControllerEpoch}`,
+    [sourceOptions, swControllerEpoch],
+  );
 
   // Layout effect: synced before any passive effect below reads them.
   const propsRef = useRef<SlopeLayerProps>({

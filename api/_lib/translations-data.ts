@@ -2537,8 +2537,28 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Altitude profile"
   },
   {
+    "fr": "Profils d'altitude",
+    "en": "Altitude profiles"
+  },
+  {
     "fr": "Jour/nuit",
     "en": "Day/Night"
+  },
+  {
+    "fr": "Affichez l’altitude (axe ou profil d’altitude) pour colorer la pente.",
+    "en": "Show altitude (axis or altitude profile) to colour the slope."
+  },
+  {
+    "fr": "Répartition des pentes",
+    "en": "Slope breakdown"
+  },
+  {
+    "fr": "Descente",
+    "en": "Descent"
+  },
+  {
+    "fr": "Plat",
+    "en": "Flat"
   },
   {
     "fr": "Toutes surfaces",
@@ -3847,6 +3867,26 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "moyenne",
     "en": "average"
+  },
+  {
+    "fr": "Mur très raide",
+    "en": "Very steep wall"
+  },
+  {
+    "fr": "Montée longue et raide",
+    "en": "Long, steep climb"
+  },
+  {
+    "fr": "{{length}} à {{avg}} % de moyenne, jusqu’à {{max}} %",
+    "en": "{{length}} at {{avg}}% average, up to {{max}}%"
+  },
+  {
+    "fr": "Petit braquet indispensable, pied à terre possible.",
+    "en": "Low gear essential, you may have to walk."
+  },
+  {
+    "fr": "Partez prudemment et gardez un braquet de réserve.",
+    "en": "Start easy and keep a gear in reserve."
   },
   {
     "fr": "Position",

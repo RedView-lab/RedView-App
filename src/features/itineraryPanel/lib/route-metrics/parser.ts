@@ -1,5 +1,6 @@
 import type { BrouterRoute } from '../brouter';
-import { classifySegment } from './surface';
+import { classifyRoughness, classifyWayClass, encodeEngineWay, isSignalNode, isUrbanWay } from './engineCodes';
+import { classifySegment, parseWayTags } from './surface';
 import type { ParsedRow } from './types';
 
 interface BrouterFeatureProps {
@@ -19,6 +20,7 @@ export function parseMessages(route: BrouterRoute): ParsedRow[] {
   const idxEle = header.indexOf('Elevation');
   const idxDist = header.indexOf('Distance');
   const idxTags = header.indexOf('WayTags');
+  const idxNodeTags = header.indexOf('NodeTags');
   if (idxLon < 0 || idxLat < 0 || idxEle < 0 || idxDist < 0) return [];
 
   const rows: ParsedRow[] = [];
@@ -28,7 +30,9 @@ export function parseMessages(route: BrouterRoute): ParsedRow[] {
     const lat = Number(row[idxLat]) / 1e6;
     const ele = Number(row[idxEle]);
     const segDist = Number(row[idxDist]);
-    const surface = idxTags >= 0 ? classifySegment(String(row[idxTags] ?? '')) : 'unknown';
+    const wayTagsStr = idxTags >= 0 ? String(row[idxTags] ?? '') : '';
+    const wayTags = parseWayTags(wayTagsStr);
+    const surface = idxTags >= 0 ? classifySegment(wayTagsStr) : 'unknown';
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
 
     rows.push({
@@ -37,6 +41,9 @@ export function parseMessages(route: BrouterRoute): ParsedRow[] {
       ele: Number.isFinite(ele) ? ele : 0,
       segDistM: Number.isFinite(segDist) ? segDist : 0,
       surface,
+      roughness: classifyRoughness(wayTags),
+      wayCode: encodeEngineWay(classifyWayClass(wayTags), isUrbanWay(wayTags), false),
+      signal: idxNodeTags >= 0 ? isSignalNode(String(row[idxNodeTags] ?? '')) : false,
     });
   }
 

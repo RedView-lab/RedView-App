@@ -54,4 +54,10 @@ export interface ParsedRow {
   ele: number;
   segDistM: number;
   surface: Surface;
+  /** Rugosité du tronçon (0 inconnue … 4 très mauvaise). */
+  roughness: number;
+  /** Type de voie + agglomération du tronçon (engineCodes, sans le bit feu). */
+  wayCode: number;
+  /** Feu / stop au nœud qui termine le tronçon. */
+  signal: boolean;
 }

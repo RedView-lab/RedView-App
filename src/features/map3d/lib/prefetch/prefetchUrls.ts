@@ -6,16 +6,25 @@ import {
   PREFETCH_RING_TILTED,
 } from './prefetchGeometry';
 
-export function getSlopeTileQuery(map: MapboxMap): string {
+function getSlopeSource(map: MapboxMap): { tiles?: string[]; maxzoom?: number } | undefined {
   try {
-    const source = map.getStyle()?.sources?.['slope-tiles'] as { tiles?: string[] } | undefined;
-    const template = source?.tiles?.[0];
-    if (!template) return '';
-    const queryStart = template.indexOf('?');
-    return queryStart >= 0 ? template.slice(queryStart) : '';
+    return map.getStyle()?.sources?.['slope-tiles'] as { tiles?: string[]; maxzoom?: number } | undefined;
   } catch {
-    return '';
+    return undefined;
   }
+}
+
+export function getSlopeTileQuery(map: MapboxMap): string {
+  const template = getSlopeSource(map)?.tiles?.[0];
+  if (!template) return '';
+  const queryStart = template.indexOf('?');
+  return queryStart >= 0 ? template.slice(queryStart) : '';
+}
+
+/** Deepest zoom the slope source requests (Mapbox overzooms beyond). */
+export function getSlopeSourceMaxZoom(map: MapboxMap): number {
+  const maxzoom = getSlopeSource(map)?.maxzoom;
+  return typeof maxzoom === 'number' && Number.isFinite(maxzoom) ? maxzoom : 16;
 }
 
 export function slopePrefetchUrl(map: MapboxMap, z: number, x: number, y: number): string {
@@ -25,8 +34,22 @@ export function slopePrefetchUrl(map: MapboxMap, z: number, x: number, y: number
     : `/slope-tiles/${z}/${x}/${y}?pf=1`;
 }
 
+/** `demQuery`: '' (surface profile) or 'rv-dem-profile=terrain'. */
+export function demPrefetchUrl(z: number, x: number, y: number, demQuery: string): string {
+  return `/dem-tiles/${z}/${x}/${y}?${demQuery ? `${demQuery}&` : ''}pf=1`;
+}
+
+export interface PrefetchFamilies {
+  /** DEM query (see demPrefetchUrl), or null for no DEM prefetch. */
+  demQuery: string | null;
+  ortho: boolean;
+  slope: boolean;
+}
+
 /**
- * Construit la liste d'URLs à précharger (DEM, ortho, overlays) pour une boîte englobante et un point d'ancrage.
+ * Construit la liste d'URLs à précharger (DEM, ortho, pentes) pour une boîte englobante et un point d'ancrage.
+ * Toutes les familles demandées partagent le zoom `z` : l'appelant fait un appel par zoom
+ * (le relief 3D charge son DEM à floor(zoom − 1), l'ortho 256 px à round(zoom)).
  */
 export function buildPrefetchUrls(
   map: MapboxMap,
@@ -37,17 +60,18 @@ export function buildPrefetchUrls(
   bboxYMax: number,
   anchor: { lng: number; lat: number },
   tilted: boolean,
-  orthoOn: boolean,
+  families: PrefetchFamilies,
   includeRing: boolean,
   includeChildren: boolean,
   includeParent: boolean,
-  slopeOn: boolean = false,
 ): string[] {
   const urls: string[] = [];
   const cap = (1 << z) - 1;
 
-  const pushDerived = (tileZ: number, tileX: number, tileY: number) => {
-    if (slopeOn) urls.push(slopePrefetchUrl(map, tileZ, tileX, tileY));
+  const pushTile = (tileZ: number, tileX: number, tileY: number) => {
+    if (families.demQuery !== null) urls.push(demPrefetchUrl(tileZ, tileX, tileY, families.demQuery));
+    if (families.ortho && tileZ >= 11) urls.push(`/ortho-tiles/${tileZ}/${tileX}/${tileY}?pf=1`);
+    if (families.slope) urls.push(slopePrefetchUrl(map, tileZ, tileX, tileY));
   };
 
   if (includeRing) {
@@ -59,9 +83,7 @@ export function buildPrefetchUrls(
     for (let x = rxMin; x <= rxMax; x++) {
       for (let y = ryMin; y <= ryMax; y++) {
         if (x >= bboxXMin && x <= bboxXMax && y >= bboxYMin && y <= bboxYMax) continue;
-        urls.push(`/dem-tiles/${z}/${x}/${y}?pf=1`);
-        if (orthoOn && z >= 11) urls.push(`/ortho-tiles/${z}/${x}/${y}?pf=1`);
-        pushDerived(z, x, y);
+        pushTile(z, x, y);
       }
     }
   }
@@ -82,9 +104,7 @@ export function buildPrefetchUrls(
     }
     for (const t of candidates) {
       if (t.x < 0 || t.y < 0 || t.x > cap1 || t.y > cap1) continue;
-      urls.push(`/dem-tiles/${z1}/${t.x}/${t.y}?pf=1`);
-      if (orthoOn && z1 >= 11) urls.push(`/ortho-tiles/${z1}/${t.x}/${t.y}?pf=1`);
-      pushDerived(z1, t.x, t.y);
+      pushTile(z1, t.x, t.y);
     }
   }
 
@@ -93,9 +113,7 @@ export function buildPrefetchUrls(
     const p = lngLatToTile(anchor.lng, anchor.lat, zM);
     const capM = (1 << zM) - 1;
     if (p.x >= 0 && p.y >= 0 && p.x <= capM && p.y <= capM) {
-      urls.push(`/dem-tiles/${zM}/${p.x}/${p.y}?pf=1`);
-      if (orthoOn && zM >= 11) urls.push(`/ortho-tiles/${zM}/${p.x}/${p.y}?pf=1`);
-      pushDerived(zM, p.x, p.y);
+      pushTile(zM, p.x, p.y);
     }
   }
 

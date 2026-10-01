@@ -1,5 +1,8 @@
 import type {
   ComparisonResult,
+  CyclingCalibration,
+  CyclingConfig,
+  CyclingRouteInput,
   FitWorkerRequest,
   FitWorkerResponse,
   PredictionConfig,
@@ -7,8 +10,10 @@ import type {
   RunPredictionConfig,
 } from '../types';
 
+type EngineResult = PredictionResult | ComparisonResult | CyclingCalibration;
+
 type PendingRequest = {
-  resolve: (value: PredictionResult | ComparisonResult) => void;
+  resolve: (value: EngineResult) => void;
   reject: (reason?: unknown) => void;
   onProgress?: (message: string) => void;
 };
@@ -106,7 +111,7 @@ export function createFitPredictionEngine() {
     getWorker().postMessage(next.request, next.transferables);
   }
 
-  function send<T extends PredictionResult | ComparisonResult>(
+  function send<T extends EngineResult>(
     request: FitWorkerRequest,
     transferables: Transferable[],
     onProgress?: (message: string) => void,
@@ -171,6 +176,41 @@ export function createFitPredictionEngine() {
       };
 
       return send<PredictionResult>(request, [...fitBuffers, gpxBuffer], onProgress, options);
+    },
+
+    /** Moteur vélo v2 : calibre un cycliste sur ses .fit (prior = `config.rider`). */
+    async calibrateCycling(
+      fitFiles: readonly File[],
+      config: CyclingConfig,
+      onProgress?: (message: string) => void,
+      options?: FitEngineRequestOptions,
+    ): Promise<CyclingCalibration> {
+      const fitBuffers = await Promise.all(fitFiles.map((file) => file.arrayBuffer()));
+      const request: FitWorkerRequest = {
+        _id: ++idCounter,
+        type: 'calibrateCycling',
+        fitFiles: fitBuffers,
+        config,
+      };
+      return send<CyclingCalibration>(request, fitBuffers, onProgress, options);
+    },
+
+    /** Moteur vélo v2 : temps de déplacement sur un tracé (tableaux transférés). */
+    predictCycling(
+      route: CyclingRouteInput,
+      config: CyclingConfig,
+      onProgress?: (message: string) => void,
+      options?: FitEngineRequestOptions,
+    ): Promise<PredictionResult> {
+      const request: FitWorkerRequest = {
+        _id: ++idCounter,
+        type: 'predictCycling',
+        route,
+        config,
+      };
+      const transferables = [route.lat, route.lon, route.ele, route.dist, route.surface, route.way, route.headwind]
+        .map((array) => array.buffer as ArrayBuffer);
+      return send<PredictionResult>(request, transferables, onProgress, options);
     },
 
     async compare(

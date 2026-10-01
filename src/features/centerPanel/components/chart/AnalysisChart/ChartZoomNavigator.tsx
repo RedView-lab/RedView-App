@@ -14,6 +14,12 @@ export interface ChartZoomNavigatorProps {
   startHandleTitle?: string;
   endHandleTitle?: string;
   onWheel?: (e: ReactWheelEvent<HTMLDivElement>) => void;
+  /**
+   * Double-click handler. When omitted, double-click emits a full view
+   * ({ visibleFraction: 1, offset: 0 }) through `onChange`, which is
+   * indistinguishable from dragging a handle to the edge.
+   */
+  onReset?: () => void;
 }
 
 type DragMode = 'body' | 'start' | 'end';
@@ -36,6 +42,7 @@ export function ChartZoomNavigator({
   startHandleTitle,
   endHandleTitle,
   onWheel,
+  onReset,
 }: ChartZoomNavigatorProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [activeDrag, setActiveDrag] = useState<DragMode | null>(null);
@@ -181,6 +188,10 @@ export function ChartZoomNavigator({
   };
 
   const handleDoubleClick = () => {
+    if (onReset) {
+      onReset();
+      return;
+    }
     // Reset to 100% full view
     onChange({ visibleFraction: 1, offset: 0 });
   };

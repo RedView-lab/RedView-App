@@ -1,7 +1,7 @@
 import type { BrouterRoute } from '../../lib/brouter';
 import { extractRouteProfileFromPoints } from '../../lib/route-metrics';
 import { parseMessages } from '../../lib/route-metrics/parser';
-import type { Surface } from '../../lib/route-metrics/types';
+import type { ParsedRow, Surface } from '../../lib/route-metrics/types';
 
 import type { ProfilePoint, RoutePoints } from './types';
 
@@ -66,13 +66,15 @@ export function applyBrouterSurfaceToRoutePoints(
   if (surfaceSamples.length === 0) return points;
 
   let sampleIndex = 0;
-  const lastSample = surfaceSamples[surfaceSamples.length - 1];
+  const lastSample = surfaceSamples[surfaceSamples.length - 1]!;
+  const distances: number[] = [];
 
-  return points.map((point, index) => {
+  const enriched = points.map((point, index) => {
     const fallbackDistanceM = index > 0
       ? Number(points[index - 1]?.distanceM ?? 0) + haversineMeters(points[index - 1], point)
       : 0;
     const distanceM = Number.isFinite(point.distanceM) ? (point.distanceM as number) : fallbackDistanceM;
+    distances.push(distanceM);
 
     while (
       sampleIndex < surfaceSamples.length - 1
@@ -81,11 +83,33 @@ export function applyBrouterSurfaceToRoutePoints(
       sampleIndex += 1;
     }
 
-    return {
-      ...point,
-      surface: (surfaceSamples[sampleIndex] ?? lastSample).surface,
-    };
+    const sample = surfaceSamples[sampleIndex] ?? lastSample;
+    // Attributs pour le moteur de temps, omis quand inconnus (taille du projet).
+    const next = { ...point, surface: sample.surface };
+    delete next.roughness;
+    delete next.wayCode;
+    if (sample.roughness > 0) next.roughness = sample.roughness;
+    if (sample.wayCode > 0) next.wayCode = sample.wayCode;
+    return next;
   });
+
+  // Feu / stop : porté par le seul point le plus proche du nœud, pas par tout
+  // le tronçon.
+  for (const sample of surfaceSamples) {
+    if (!sample.signal) continue;
+    let lo = 0;
+    let hi = distances.length - 1;
+    while (lo + 1 < hi) {
+      const mid = (lo + hi) >> 1;
+      if (distances[mid]! <= sample.distanceM) lo = mid;
+      else hi = mid;
+    }
+    const index = Math.abs(distances[hi]! - sample.distanceM) < Math.abs(distances[lo]! - sample.distanceM) ? hi : lo;
+    const target = enriched[index]!;
+    enriched[index] = { ...target, wayCode: (target.wayCode ?? 0) | 0x80 };
+  }
+
+  return enriched;
 }
 
 function scaleRouteProfileDistances(points: RoutePoints, targetDistanceM: number): RoutePoints {
@@ -204,19 +228,29 @@ function haversineMeters(a: { lat: number; lon: number }, b: { lat: number; lon:
   return 2 * 6_371_008.8 * Math.asin(Math.sqrt(h));
 }
 
-function buildSurfaceSamples(
-  rows: Array<{ segDistM: number; surface: Surface }>,
-): Array<{ distanceM: number; surface: Surface }> {
-  const samples: Array<{ distanceM: number; surface: Surface }> = [];
+interface SurfaceSample {
+  distanceM: number;
+  surface: Surface;
+  roughness: number;
+  wayCode: number;
+  signal: boolean;
+}
+
+function buildSurfaceSamples(rows: ParsedRow[]): SurfaceSample[] {
+  const samples: SurfaceSample[] = [];
   let cumulativeDistanceM = 0;
 
   for (let index = 0; index < rows.length; index += 1) {
     if (index > 0) {
       cumulativeDistanceM += Math.max(0, rows[index]!.segDistM);
     }
+    const row = rows[index]!;
     samples.push({
       distanceM: cumulativeDistanceM,
-      surface: rows[index]!.surface,
+      surface: row.surface,
+      roughness: row.roughness,
+      wayCode: row.wayCode,
+      signal: row.signal,
     });
   }
 

@@ -26,6 +26,14 @@ const IGN_DEM_FORMAT = 'image/x-bil;bits=32';
 // row-duplication defect that a degree-square request causes.
 const IGN_LIDAR_MNS_LAYER = 'IGNF_LIDAR-HD_MNS_ELEVATION.ELEVATIONGRIDCOVERAGE.WGS84G';
 
+// LiDAR HD MNT — bare-earth counterpart of the MNS above (0.5 m grid), primary
+// source of the 1 m terrain profile. RGE ALTI (IGN_DEM_FALLBACK_LAYER) is only
+// a ~5 m grid in the mountains: at z16 the WMS returns 92 distinct rows and
+// 128 distinct columns for a 512×725 request, i.e. the raster is a 4× stretched
+// staircase that Horn turns into dense hatching. RGE ALTI now only fills the
+// pixels the LiDAR MNT does not cover yet.
+const IGN_LIDAR_MNT_LAYER = 'IGNF_LIDAR-HD_MNT_ELEVATION.ELEVATIONGRIDCOVERAGE.WGS84G';
+
 // MNS correlation fallback — intentionally NOT used as a WMS fallback.
 // Measured through EPSG:4326 AND EPSG:3857: only half the requested rows are
 // ever distinct (128/256), the duplicated rows are not pair-aligned, and the
@@ -197,7 +205,19 @@ const ORTHO_TILE_SIZE = 256;
 // slope worker pool — its decode + RGBA encode + PNG encode now run OFF the
 // SW thread (kind:'altitude' dispatch). Previously altitude computed
 // entirely on the SW thread at ALTITUDE_BUILD_MAX_CONCURRENT=2, the dominant
-const MAP_CACHE_EPOCH = '2026-09-22-slope-zero-oversample-v1';
+//
+// 2026-10-01-slope-lidar-wms-v2: LiDAR HD WMS rasters are fetched 2× and
+// box-averaged (anti-aliasing), the 1 m terrain profile reads the LiDAR HD
+// MNT instead of RGE ALTI, flaky geopf backends (400 LayerNotDefined, 429)
+// are retried instead of falling back to 30 m data. Every cached DEM/slope
+// tile was built from the aliased rasters, hence the full purge.
+//
+// 2026-10-01-surface-standin-1: a transient 0.40 m MNS failure (WMS timeout,
+// CANCEL_STALE_DEM abort on zoomstart) used to cache the bare-earth MNT
+// fallback as the tile's permanent answer — buildings vanished on zoom-in.
+// Stand-ins are now short-cached + MNS-recovered; the purge drops the bare
+// tiles already cached under the surface profile.
+const MAP_CACHE_EPOCH = '2026-10-01-surface-standin-1';
 
 // ── Slope pipeline tuning (2026-06-20 multicore pass) ─────────────────
 // Dedicated slope build worker pool depth. We reserve one core for the SW
@@ -208,8 +228,9 @@ const SLOPE_POOL_MAX_WORKERS = 16;
 const SLOPE_POOL_MIN_WORKERS = 2;
 
 // SLOPE_HOT_CACHE — in-memory LRU of recently served slope PNG blobs,
-// mirroring DEM_HOT_CACHE.
-const SLOPE_HOT_CACHE_MAX = 2048;
+// mirroring DEM_HOT_CACHE. Terrain-aligned slope tiles are 512² and 16× fewer
+// than the old 256² z+2 tiles: 384 entries cover several viewports.
+const SLOPE_HOT_CACHE_MAX = 384;
 
 // ALTITUDE_HOT_CACHE — in-memory LRU of recently served altitude PNG blobs,
 // mirroring SLOPE_HOT_CACHE.
@@ -230,7 +251,11 @@ const USER_CANCEL_REASON = 'rv-user-gesture-cancel';
 const CACHE_NAME = `dem-tiles-${MAP_CACHE_EPOCH}`;
 const NEGATIVE_CACHE_NAME = `dem-negative-${MAP_CACHE_EPOCH}`;
 const ORTHO_CACHE_NAME = `ortho-tiles-${MAP_CACHE_EPOCH}`;
-const SLOPE_CACHE_NAME = `slope-tiles-${MAP_CACHE_EPOCH}`;
+// `v2`: purges slope tiles built on overzoomed / server-upsampled DEM outside
+// the LiDAR footprints (2026-10-01). `v3`: terrain-aligned tiles (same z/x/y as
+// the 3D DEM pyramid), 2× Catmull-Rom gray+alpha PNG. Same managed prefix, so
+// activate drops the old cache without touching the DEM caches.
+const SLOPE_CACHE_NAME = `slope-tiles-v3-${MAP_CACHE_EPOCH}`;
 const ALTITUDE_CACHE_NAME = `altitude-tiles-${MAP_CACHE_EPOCH}`;
 const STATIC_CACHE_NAME = `dem-static-${MAP_CACHE_EPOCH}`;
 

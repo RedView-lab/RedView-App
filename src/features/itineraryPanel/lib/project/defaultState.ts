@@ -311,6 +311,7 @@ export function createDefaultAnalysisPanelState(): AnalysisPanelState {
       pente: true,
       jourNuit: false,
       alertes: true,
+      slopeColors: false,
     },
     surfaceFilter: 'all',
     detailZoom: 0,

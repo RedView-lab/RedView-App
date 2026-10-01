@@ -11,6 +11,7 @@ import {
   buildChartPauseOverlay,
   buildPoiAnnotationsForItinerary,
   buildSeriesFromPrediction,
+  buildSlopeOverlayForItinerary,
   computeXDomain,
   unitForMetric,
   type AxisDomain,
@@ -22,6 +23,7 @@ import {
   type ChartPauseOverlay,
   type ChartPoiAnnotation,
   type ChartSeries,
+  type ChartSlopeOverlay,
 } from '../chart';
 import type { RouteWeatherDataset } from '@/features/weather';
 import { lightenColor, type FilterKey, type PreparedChartNode } from './shared';
@@ -266,6 +268,16 @@ export function useAnalysisChartData({
     return alertWindows.length > 0 ? { alertWindows } : null;
   }, [filters.alertes, poiSourceNodes, xMode]);
 
+  // Colorisation « Pente » : itinéraire actif seulement (plusieurs aires
+  // colorées superposées seraient illisibles). Comme les alertes, ne dépend
+  // que de la géométrie, de la prédiction et du mode X.
+  const slopeOverlay = useMemo<ChartSlopeOverlay | null>(() => {
+    if (!filters.slopeColors || !activeItinerary) return null;
+    const node = poiSourceNodes.find(({ itinerary }) => itinerary.id === activeItinerary.id);
+    if (!node) return null;
+    return buildSlopeOverlayForItinerary(node.itinerary, node.prediction, xMode, node.xOffset);
+  }, [activeItinerary, filters.slopeColors, poiSourceNodes, xMode]);
+
   const dayNightStartReady = Boolean(
     activeItinerary?.rhythm.startDate && activeItinerary?.rhythm.startTime,
   );
@@ -329,5 +341,6 @@ export function useAnalysisChartData({
     dayNightOverlay,
     pauseOverlay,
     alertOverlay,
+    slopeOverlay,
   };
 }

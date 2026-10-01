@@ -9,6 +9,56 @@
 // composite at the same LOD). This is O(4·TILE_SIZE) instead of O(TILE²).
 // ---------------------------------------------------------------------------
 
+// Partial coverage and no global background tile (AWS down / slot timeout).
+// The uncovered pixels of the builders' grids are still 0 m: encoding them
+// as-is planted a 0 m plateau inside the tile — a perfectly flat slab on the
+// slope overlay (uniform 0° colour) ringed by a cliff line. Mostly-covered
+// tiles are completed by nearest-valid propagation; a tile that is mostly
+// hole resolves to null so the dispatcher moves on to its next fallback
+// instead of caching a fake surface.
+const COMPOSITE_NO_BACKGROUND_MIN_COVERAGE = 0.5;
+
+function encodeWithoutBackground(ignElevations, coverage) {
+  const total = DEM_TILE_SIZE * DEM_TILE_SIZE;
+  let covered = 0;
+  for (let i = 0; i < total; i++) if (coverage[i]) covered++;
+  if (covered < total * COMPOSITE_NO_BACKGROUND_MIN_COVERAGE) return null;
+  if (covered === total) return encodeTerrainRGBPng(ignElevations);
+
+  const elev = new Float32Array(ignElevations);
+  const cov = new Uint8Array(coverage);
+  const nextElev = new Float32Array(total);
+  const nextCov = new Uint8Array(total);
+  const S = DEM_TILE_SIZE;
+  while (covered < total) {
+    nextElev.set(elev);
+    nextCov.set(cov);
+    let grown = 0;
+    for (let py = 0; py < S; py++) {
+      for (let px = 0; px < S; px++) {
+        const idx = py * S + px;
+        if (cov[idx]) continue;
+        let sum = 0;
+        let n = 0;
+        if (py > 0 && cov[idx - S]) { sum += elev[idx - S]; n++; }
+        if (py < S - 1 && cov[idx + S]) { sum += elev[idx + S]; n++; }
+        if (px > 0 && cov[idx - 1]) { sum += elev[idx - 1]; n++; }
+        if (px < S - 1 && cov[idx + 1]) { sum += elev[idx + 1]; n++; }
+        if (n > 0) {
+          nextElev[idx] = sum / n;
+          nextCov[idx] = 1;
+          grown++;
+        }
+      }
+    }
+    if (grown === 0) return null;
+    covered += grown;
+    elev.set(nextElev);
+    cov.set(nextCov);
+  }
+  return encodeTerrainRGBPng(elev);
+}
+
 async function compositeIGNMapbox(ignElevations, coverage, z, x, y, opts = {}) {
   const totalPixels = DEM_TILE_SIZE * DEM_TILE_SIZE;
 
@@ -107,11 +157,11 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y, opts = {}) {
   if (!mbElevations) {
     const mapboxBlob = await fetchMapboxTile(z, x, y);
     if (!mapboxBlob) {
-      return encodeTerrainRGBPng(ignElevations);
+      return encodeWithoutBackground(ignElevations, coverage);
     }
     mbElevations = await decodeTerrainRGBBlob(mapboxBlob);
     if (!mbElevations || mbElevations.length === 0) {
-      return encodeTerrainRGBPng(ignElevations);
+      return encodeWithoutBackground(ignElevations, coverage);
     }
   }
 

@@ -197,7 +197,9 @@ async function findCachedParentStats(cache, z, x, y, demProfile = 'default') {
   return null;
 }
 
-async function tryParentOverzoom(cache, z, x, y, depth, demProfile = 'default') {
+// `options.cachedOnly`: only overzoom an ancestor that is already in the hot
+// tier / CacheStorage — never start a recursive parent build (WMS fetch).
+async function tryParentOverzoom(cache, z, x, y, depth, demProfile = 'default', options = {}) {
   if (depth > 0) return null;
   if (!shouldAllowParentOverzoomFallback(z, x, y)) return null;
 
@@ -221,6 +223,7 @@ async function tryParentOverzoom(cache, z, x, y, depth, demProfile = 'default') 
       parentResp = await cache.match(parentKey);
     }
     if (!parentResp || parentResp.status !== 200) {
+      if (options.cachedOnly) continue;
       parentResp = await handleDemRequest(parentKey, pZ, pX, pY, depth + 1, demProfile);
     }
     if (!parentResp || parentResp.status !== 200) continue;

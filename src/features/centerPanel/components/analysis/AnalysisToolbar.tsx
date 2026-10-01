@@ -3,16 +3,29 @@ import { IconCheck, IconChevronDown } from '../CenterPanelIcons';
 import { AxisDropdown, type AxisOption } from './AxisDropdown';
 import { axisOptions, axis2Options, surfaceFilterOptions } from './shared';
 import type { RouteSurfaceFilter } from '@/features/itineraryPanel/types';
-import type { AxisMetricId, AxisMode } from '../chart';
+import { SLOPE_COLOR_CLASSES, type AxisMetricId, type AxisMode } from '../chart';
 import { useAppI18n } from '@/shared/i18n';
 
-type ToolbarFilterKey = 'pente' | 'jourNuit' | 'alertes';
+export type ToolbarFilterKey = 'pente' | 'jourNuit' | 'alertes' | 'slopeColors';
 
-const visibleToolbarFilters: ReadonlyArray<{ key: ToolbarFilterKey; label: string; icon?: string }> = [
+const visibleToolbarFilters: ReadonlyArray<{
+  key: ToolbarFilterKey;
+  label: string;
+  icon?: string;
+  /** Pastille dégradée de l'échelle de pente à la place d'une icône. */
+  slopeSwatch?: boolean;
+}> = [
   { key: 'pente', label: "Profils d'altitude" },
+  { key: 'slopeColors', label: 'Pente', slopeSwatch: true },
   { key: 'jourNuit', label: 'Jour/nuit' },
   { key: 'alertes', label: 'Alertes', icon: '/svgv2/icone/search-filter-alertes.svg' },
 ];
+
+/** Dégradé des classes de montée (4 % → 16 % +), pour la pastille du chip « Pente ». */
+const SLOPE_SWATCH_BACKGROUND = `linear-gradient(90deg, ${SLOPE_COLOR_CLASSES
+  .filter((entry) => entry.climb)
+  .map((entry) => entry.color)
+  .join(', ')})`;
 
 interface AnalysisToolbarProps {
   xMode: AxisMode;
@@ -27,7 +40,7 @@ interface AnalysisToolbarProps {
   onAxis2Select: (value: string) => void;
   onAxis1ColorChange: (color: string) => void;
   onAxis2ColorChange: (color: string) => void;
-  filters: { pente: boolean; jourNuit: boolean; alertes: boolean };
+  filters: Record<ToolbarFilterKey, boolean>;
   onToggleFilter: (key: ToolbarFilterKey) => void;
   surfaceFilter: RouteSurfaceFilter;
   onSurfaceFilterChange: (value: RouteSurfaceFilter) => void;
@@ -178,7 +191,7 @@ export function AnalysisToolbar({
       <div className="rvc-center-analysis__separator" aria-hidden="true" />
 
       <div className="rvc-center-analysis__filters" aria-label={t('Filtres')}>
-        {visibleToolbarFilters.map(({ key, label, icon }) => {
+        {visibleToolbarFilters.map(({ key, label, icon, slopeSwatch }) => {
           const checked = Boolean(filters[key] ?? true);
           const hint = disabledFilters?.[key];
           const hasHint = Boolean(hint);
@@ -224,6 +237,13 @@ export function AnalysisToolbar({
                 </span>
                 {icon ? (
                   <img className="rvc-center-analysis__filter-icon" src={icon} alt="" aria-hidden="true" />
+                ) : null}
+                {slopeSwatch ? (
+                  <span
+                    className="rvc-center-analysis__slope-swatch"
+                    style={{ background: SLOPE_SWATCH_BACKGROUND }}
+                    aria-hidden="true"
+                  />
                 ) : null}
                 <span className="rvc-center-analysis__filter-label" title={t(label)}>
                   {t(label)}

@@ -1,0 +1,6 @@
+# Données dérivées des .fit (traces, vent, tags OSM) et builds locaux : jamais versionnés.
+.cache/
+.out/
+.baseline-pkg/
+.dev-pkg/
+.dbg-*

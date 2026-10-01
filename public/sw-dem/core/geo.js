@@ -48,9 +48,9 @@ function tileOverlapsOverseasFrance(z, x, y) {
 // Polygon-based DEM tile classification (requires ensureFrancePoly() loaded)
 // Returns 'inside' | 'border' | 'outside'
 //
-// IGN-first bias at high zoom: at z≥12 any tile whose Mercator bounds
-// overlap FRANCE_BOUNDS is classified as at least 'border' — i.e. IGN is
-// attempted even when the 6×6 polygon sampling finds 0 inside points.
+// IGN-first bias at high zoom: at z≥12 any tile crossed by a France border
+// edge is classified as at least 'border' — i.e. IGN is attempted even when
+// the 6×6 polygon sampling finds 0 inside points.
 // This fixes the Mont Blanc / Pyrénées / Corsican-coast summit bug where
 // a z15-17 tile (~20-80 m wide) at a ridgeline can have every sample fall
 // outside the France polygon while the LiDAR HD grid still covers part
@@ -73,10 +73,15 @@ function classifyDemTile(z, x, y) {
   if (hasPolyVertexInTile(b)) return 'border';
   if (insideCount === total) return 'inside';
   // 0 inside points + no polygon vertex: normally 'outside', but at high
-  // zoom we give IGN a chance when the Mercator bbox overlaps France
-  // (summit/border tiles where sampling misses the French sliver).
-  const [w, s, e, n] = FRANCE_BOUNDS;
-  const overlapsBounds = !(b.east < w || b.west > e || b.south > n || b.north < s);
-  if (overlapsBounds && z >= 12) return 'border';
+  // zoom we give IGN a chance when a France border edge actually crosses
+  // the tile (plus a 10 % margin) — summit/ridge tiles where the sampling
+  // misses the French sliver. The old FRANCE_BOUNDS bbox test claimed NW
+  // Italy, Belgium, Luxembourg and SW Germany as 'border': IGN failed there,
+  // the AWS fallback was skipped and DEM/slope went blank.
+  if (z >= 12) {
+    const marginLng = (b.east - b.west) * 0.1;
+    const marginLat = (b.north - b.south) * 0.1;
+    if (franceBorderNearBBox(b, marginLng, marginLat)) return 'border';
+  }
   return 'outside';
 }

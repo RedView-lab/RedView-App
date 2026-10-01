@@ -123,6 +123,8 @@ export function HoverCardGroup({
         durationFormatted?: string;
         timeFormatted?: string;
         alertLabel?: string;
+        slopeLabel?: string;
+        slopeColor?: string;
         extraMetrics: HoverCardRow[];
       }
     >
@@ -145,7 +147,11 @@ export function HoverCardGroup({
     if (row.durationFormatted) acc[key].durationFormatted = row.durationFormatted;
     if (row.timeFormatted) acc[key].timeFormatted = row.timeFormatted;
     if (row.alertLabel) acc[key].alertLabel = row.alertLabel;
-    if (!row.alertLabel && row.metric !== 'Altitude' && row.value != null && Number.isFinite(row.value)) {
+    if (row.slopeLabel) {
+      acc[key].slopeLabel = row.slopeLabel;
+      acc[key].slopeColor = row.slopeColor;
+    }
+    if (!row.alertLabel && !row.slopeLabel && row.metric !== 'Altitude' && row.value != null && Number.isFinite(row.value)) {
       if (!acc[key].extraMetrics.some((m) => m.id === row.id)) {
         acc[key].extraMetrics.push(row);
       }
@@ -190,6 +196,16 @@ export function HoverCardGroup({
                   {row.metric}: {formatAxisValue(row.metric, row.value)}
                 </div>
               ))}
+              {group.slopeLabel ? (
+                <div className="rvchart__card-metric rvchart__card-metric--slope">
+                  <span
+                    className="rvchart__card-slope-dot"
+                    style={{ background: group.slopeColor ?? '#ffffff' }}
+                    aria-hidden="true"
+                  />
+                  {group.slopeLabel}
+                </div>
+              ) : null}
               {group.alertLabel ? (
                 <div className="rvchart__card-metric rvchart__card-metric--alert">
                   <img src="/svgv2/icone/search-filter-alertes.svg" alt="" width={12} height={12} />

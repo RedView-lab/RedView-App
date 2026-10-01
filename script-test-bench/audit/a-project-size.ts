@@ -181,35 +181,32 @@ function buildPois(points: RoutePoint[], count: number): PoiFeature[] {
 
 function buildPrediction(points: RoutePoint[]): PredictionResult {
   const totalM = points[points.length - 1]?.distanceM ?? 0;
-  // container-prediction.ts:8-10 : 250 m, min 4000, max 8000 points
-  const n = Math.max(4000, Math.min(8000, Math.ceil(totalM / 250)));
+  // Moteur vélo v2 (cycling/output.rs) : un point tous les max(50 m, L/6000),
+  // 7 champs arrondis (0,1 m ; 0,01 % ; 0,01 km/h ; 1 W ; 0,1 s).
+  const n = Math.min(6000, Math.ceil(totalM / 50)) + 1;
+  const round = (v: number, step: number) => Math.round(v / step) * step;
   const pts = [];
   let t = 0;
   for (let i = 0; i < n; i++) {
     const src = points[Math.floor((i / (n - 1)) * (points.length - 1))];
     const speed = 18 + rnd() * 12;
     const seg = (totalM / n) / (speed / 3.6);
-    t += seg;
     pts.push({
-      distance_m: (totalM * i) / (n - 1),
-      elevation_m: src.elevationM ?? 0,
-      gradient_pct: (rnd() - 0.5) * 16,
-      predicted_speed_kmh: speed,
-      predicted_power_w: 150 + rnd() * 120,
-      elapsed_time_s: t,
-      segment_time_s: seg,
-      fatigue_factor: 0.9 + rnd() * 0.1,
-      circadian_factor: 0.95 + rnd() * 0.05,
-      distance_eff_factor: 0.97 + rnd() * 0.03,
-      knn_confidence: rnd(),
-      predicted_speed_low_kmh: speed * 0.9,
-      predicted_speed_high_kmh: speed * 1.1,
+      distance_m: round((totalM * i) / (n - 1), 0.1),
+      elevation_m: round(src.elevationM ?? 0, 0.1),
+      gradient_pct: round((rnd() - 0.5) * 16, 0.01),
+      predicted_speed_kmh: round(speed, 0.01),
+      predicted_power_w: Math.round(150 + rnd() * 120),
+      elapsed_time_s: round(t, 0.1),
+      segment_time_s: round(seg, 0.1),
     });
+    t += seg;
   }
   return {
+    engine_version: 2,
     total_time_s: t,
-    riding_time_s: t * 0.9,
-    stop_time_s: t * 0.1,
+    riding_time_s: t,
+    stop_time_s: 0,
     total_distance_m: totalM,
     avg_speed_kmh: 22,
     elevation_gain_m: 30000,

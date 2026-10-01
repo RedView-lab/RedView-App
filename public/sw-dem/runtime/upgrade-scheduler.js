@@ -38,6 +38,8 @@ async function finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgrad
         Array.from(response.headers.entries()),
       );
     } catch { /* ignore */ }
+    // Provisional slope tiles that lacked this DEM tile can now be rebuilt.
+    if (typeof notifySlopeDemTileReady === 'function') notifySlopeDemTileReady(z, x, y, demProfile);
   }
   if (DEBUG) {
     const dt = (performance.now() - t0).toFixed(0);
@@ -147,23 +149,69 @@ function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches, preferredS
       }
       if (!upgraded?.blob) return;
 
-      await cache.put(cacheKey, buildDemResponse(upgraded.blob, upgraded.source + '+upgrade'));
-      // Refresh the hot tier so subsequent requests see the upgraded blob
-      // immediately without going through CacheStorage. Without this, the
-      // older (composite/aws/overzoom) blob would stay hot until evicted
-      // by LRU pressure, silently delaying the upgrade's visual effect.
-      try {
-        const upgradedResp = buildDemResponse(upgraded.blob, upgraded.source + '+upgrade');
-        demHotPut(
-          cacheKey.url,
-          upgraded.blob,
-          Array.from(upgradedResp.headers.entries()),
-        );
-      } catch { /* ignore */ }
-      notifyDemTileCacheUpdated(z, x, y, upgraded.source, demProfile);
+      await commitUpgradedDemTile(cache, cacheKey, z, x, y, upgraded, demProfile);
       if (DEBUG) console.log(`[sw-dem][upgrade] ${z}/${x}/${y} re-cached at ${upgraded.source}`);
     } catch (e) {
       if (DEBUG) console.warn(`[sw-dem][upgrade] ${z}/${x}/${y} failed`, e);
+    } finally {
+      pendingUpgrades.delete(key);
+    }
+  })();
+}
+
+async function commitUpgradedDemTile(cache, cacheKey, z, x, y, upgraded, demProfile) {
+  const response = buildDemResponse(upgraded.blob, upgraded.source + '+upgrade');
+  await cache.put(cacheKey, response.clone());
+  // Refresh the hot tier so subsequent requests see the upgraded blob
+  // immediately without going through CacheStorage. Without this, the
+  // older (composite/aws/overzoom) blob would stay hot until evicted
+  // by LRU pressure, silently delaying the upgrade's visual effect.
+  try {
+    demHotPut(cacheKey.url, upgraded.blob, Array.from(response.headers.entries()));
+  } catch { /* ignore */ }
+  notifyDemTileCacheUpdated(z, x, y, upgraded.source, demProfile);
+  if (typeof notifySlopeDemTileReady === 'function') notifySlopeDemTileReady(z, x, y, demProfile);
+}
+
+// ── Surface (MNS) recovery ────────────────────────────────────────────
+// computeDemRequest() served a provisional stand-in (parent overzoom or bare
+// earth, short-cached) because the 0.40 m MNS build failed transiently. Retry
+// the MNS build only — scheduleBackgroundUpgrade's HIGHRES rebuilder is bare
+// earth and would make the missing buildings permanent. The first retry
+// covers a CANCEL_STALE_DEM abort (nothing negative-cached); the second waits
+// out the transient null entry a WMS timeout leaves for IGN_NULL_TTL_TRANSIENT.
+// Background purpose: low fetch priority, and the reduced background
+// concurrency keeps it from competing with the visible viewport.
+const SURFACE_RECOVERY_DELAYS_MS = [1_500, IGN_NULL_TTL_TRANSIENT + 1_000, 40_000];
+
+function scheduleSurfaceMnsRecovery(cache, cacheKey, z, x, y, tileClass, demProfile = 'default') {
+  if (tileClass === 'outside') return;
+  const key = `surface:${demProfile}:${z}/${x}/${y}`;
+  if (pendingUpgrades.has(key)) return;
+  pendingUpgrades.add(key);
+
+  (async () => {
+    try {
+      for (const delayMs of SURFACE_RECOVERY_DELAYS_MS) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        // A long-lived entry means a fresh foreground build already produced
+        // the real tile; stand-ins always carry x-cache-ttl-ms.
+        const existing = await cache.match(cacheKey);
+        if (existing && !existing.headers.get('x-cache-ttl-ms')) return;
+
+        const result = await buildIGNTile(z, x, y, tileClass, PURPOSE_DEM_PREFETCH);
+        if (result?.allPermanent404) return;
+        const upgraded = await materializeUpgradeResult(
+          result, z, x, y, 'ign-composite', tileClass === 'inside',
+        );
+        if (!upgraded?.blob) continue;
+
+        await commitUpgradedDemTile(cache, cacheKey, z, x, y, upgraded, demProfile);
+        if (DEBUG) console.log(`[sw-dem][surface-recovery] ${z}/${x}/${y} re-cached at ${upgraded.source}`);
+        return;
+      }
+    } catch (e) {
+      if (DEBUG) console.warn(`[sw-dem][surface-recovery] ${z}/${x}/${y} failed`, e);
     } finally {
       pendingUpgrades.delete(key);
     }

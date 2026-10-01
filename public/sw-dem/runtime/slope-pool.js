@@ -14,8 +14,8 @@
 //   * computeSlopeViaPool(...)  — own DEM + up to 4 neighbour DEMs → slope PNG
 //   * computeAltitudeViaPool(...) — own DEM only → altitude PNG
 // Both:
-//   1. read the own (and for slope, neighbour) DEM blob(s) from CacheStorage
-//      on the SW thread (cheap — the hot tier makes most of these <1 ms),
+//   1. take DEM blobs the caller already resolved (slope neighbours come from
+//      resolveSlopeNeighbourDems() in slope-lidar-dem.js),
 //   2. TRANSFER the raw PNG bytes to a free worker — the worker decodes
 //      them itself, so the heavy createImageBitmap + getImageData + Float32
 //      loop runs OFF the SW thread,
@@ -233,192 +233,62 @@ function cancelAllAltitudePoolJobs() {
   return cancelPoolJobsByKind('altitude');
 }
 
-// ── Resolve neighbour DEM BLOBS (no decode) ───────────────────────────
-// Returns the raw Terrain-RGB PNG bytes for each cardinal neighbour that's
-// present in the DEM cache and passes the source/health gate. The actual
-// decode (createImageBitmap + getImageData + Float32 loop, 8-20 ms each)
-// happens IN THE WORKER, not here — that's the whole point of the pool.
-// The SW only pays the CacheStorage match (5-25 ms, mostly I/O) per
-// neighbour, which is unavoidable because we need the bytes to transfer.
-function buildSlopePoolCachePath(z, x, y, demProfile, sourceDem = '') {
-  if (sourceDem === 'fast-30m') {
-    return `/dem-tiles/${z}/${x}/${y}?rv-dem-profile=fast-30m`;
-  }
-  return demProfile === 'terrain'
-    ? `/dem-tiles/${z}/${x}/${y}?rv-dem-profile=terrain`
-    : `/dem-tiles/${z}/${x}/${y}`;
-}
-
-function shouldUseSlopeNeighbourDem(resp, demProfile, sourceDem = '') {
-  if (!resp) return false;
-  if (typeof resp.status === 'number' && resp.status !== 200) return false;
-  const getHeader = (name) => {
-    if (typeof resp.headers?.get === 'function') return resp.headers.get(name);
-    if (Array.isArray(resp.headers)) {
-      const entry = resp.headers.find(([k]) => k.toLowerCase() === name.toLowerCase());
-      return entry ? entry[1] : null;
-    }
-    return null;
-  };
-  const health = (getHeader('X-DEM-Health') || 'ok').toLowerCase();
-  if (health !== 'ok') return false;
-  const source = (getHeader('X-DEM-Source') || '').toLowerCase();
-
-  // Strict DEM source segregation: NEVER mix 30m AWS DEM with high-res LiDAR DEM!
-  if (sourceDem === 'fast-30m') {
-    return source === 'aws-fast-30m' || source.startsWith('aws-terrarium') || source.startsWith('aws');
-  } else {
-    if (source === 'aws-fast-30m' || source.startsWith('aws-terrarium')) {
-      return false;
-    }
-  }
-
-  if (
-    source.startsWith('aws-emergency')
-    || source.startsWith('mapbox')
-    || source.startsWith('overzoom')
-  ) {
-    return false;
-  }
-  if (demProfile === 'terrain' && source.startsWith('aws-terrarium')) return false;
-  return true;
-}
-
-function isValidSlopeTileCoord(z, x, y) {
-  const n = 1 << z;
-  return x >= 0 && y >= 0 && x < n && y < n;
-}
-
-async function resolveNeighbourBlobs(z, x, y, demCache, demProfile, sourceDem = '') {
-  const out = { north: null, east: null, south: null, west: null };
-  const missing = [];
-  if (!demCache) {
-    return { blobs: out, missing: ['north', 'east', 'south', 'west'] };
-  }
-
-  const fetchOne = async (direction, nx, ny) => {
-    if (!isValidSlopeTileCoord(z, nx, ny)) {
-      missing.push(direction);
-      return;
-    }
-    const path = buildSlopePoolCachePath(z, nx, ny, demProfile, sourceDem);
-    const defaultPath = (demProfile !== 'default' && sourceDem !== 'fast-30m') ? buildSlopePoolCachePath(z, nx, ny, 'default', sourceDem) : null;
-    // 1. Fast in-memory hit from DEM_HOT_CACHE (avoids disk CacheStorage round-trip)
-    if (typeof demHotGet === 'function') {
-      let hot = demHotGet(path);
-      if (!hot && defaultPath) hot = demHotGet(defaultPath);
-      if (hot && hot.blob) {
-        if (shouldUseSlopeNeighbourDem(hot, demProfile, sourceDem)) {
-          try {
-            out[direction] = await hot.blob.arrayBuffer();
-            return;
-          } catch {
-            /* fall through to disk cache */
-          }
-        } else {
-          missing.push(direction);
-          return;
-        }
-      }
-    }
-
-    // 2. Disk CacheStorage match
-    try {
-      let resp = await demCache.match(new Request(path));
-      if ((!resp || resp.status !== 200) && defaultPath) {
-        resp = await demCache.match(new Request(defaultPath));
-      }
-      if (!shouldUseSlopeNeighbourDem(resp, demProfile, sourceDem)) {
-        missing.push(direction);
-        return;
-      }
-      // Grab ArrayBuffer directly without redundant response.clone()
-      out[direction] = await resp.arrayBuffer();
-    } catch {
-      missing.push(direction);
-    }
-  };
-
-  await Promise.all([
-    fetchOne('north', x, y - 1),
-    fetchOne('east',  x + 1, y),
-    fetchOne('south', x, y + 1),
-    fetchOne('west',  x - 1, y),
-  ]);
-
-  return { blobs: out, missing };
-}
-
 // ── Public entry: compute one slope tile via the pool ─────────────────
 //
-//   demBlob        own DEM tile blob (the one already fetched + cached)
-//   demCache       caches.open(CACHE_NAME) — borrowed for neighbour reads
-//   z, x, y        tile coords
-//   resFactor      1 = fast path, >1 = legacy downsample
-//   demProfile     'default' | 'terrain'
-//   generation     slopeCancelGeneration snapshot — job auto-cancels if it
-//                  no longer matches by the time the worker replies.
-//   zoneRing       optional [[lng, lat], …] analysis-zone ring — the worker
-//                  rasterizes it into an alpha mask (see slope-math.js).
+//   demBlob         own DEM tile blob
+//   neighbourBlobs  { north, east, south, west } DEM blobs already resolved
+//                   by resolveSlopeNeighbourDems() (null when absent)
+//   z, x, y         tile coords
+//   resFactor       1 = normal, >1 = legacy block-average
+//   generation      slopeCancelGeneration snapshot, or null (uncancellable)
+//   zoneRing        optional [[lng, lat], …] analysis-zone ring
+//   outputScale     1 = native DEM resolution, 2 = 2× Catmull-Rom
 //
-// Returns:
-//   { blob: Blob, missingDirections: string[] } — ready to wrap into a Response
-//   null — cancelled (generation mismatch) or pool unavailable; caller
-//          MUST fall back to the in-process buildSlopeTile() path.
+// Returns { blob, missingDirections } — or null when the pool is unavailable
+// or the job was cancelled; the caller then runs the in-process path.
 //
-// SW-thread work done here: CacheStorage match for neighbours + 1
-// arrayBuffer() on the own blob + postMessage. NO createImageBitmap, NO
-// getImageData, NO Float32 decode loop — all of that moved into the worker.
-async function computeSlopeViaPool(demBlob, demCache, z, x, y, resFactor, demProfile, generation, zoneRing, sourceDem = '') {
+// SW-thread work: one arrayBuffer() per blob + postMessage. Decode, Horn,
+// upsample and PNG encode all run in the worker.
+async function computeSlopeViaPool(demBlob, neighbourBlobs, z, x, y, resFactor, generation, zoneRing, outputScale = 1) {
   const workers = ensureSlopePool();
   if (!workers) return null;
 
   const isCancelled = () => generation !== null && generation !== undefined && typeof slopeCancelGeneration !== 'undefined' && generation !== slopeCancelGeneration;
+  if (isCancelled()) return null;
 
-  // Cancel check BEFORE expensive work.
-  if (isCancelled()) {
-    return null;
-  }
-
-  // Acquire a pre-work slot. Even though we no longer decode on the SW
-  // thread, the CacheStorage matches (5-25 ms each × 5 tiles = up to 125 ms)
-  // still happen here and would saturate the SW event loop if 90 tiles did
-  // them in parallel. The gate keeps the SW responsive for basemap fetches.
   await acquireSlopePreWork();
+  // Released once, either right after the transfer or on an early exit (a
+  // second release used to hand out one extra slot per tile).
+  let preWorkHeld = true;
+  const releasePreWork = () => {
+    if (!preWorkHeld) return;
+    preWorkHeld = false;
+    releaseSlopePreWork();
+  };
   try {
-    if (isCancelled()) {
-      return null;
-    }
+    if (isCancelled()) return null;
 
-    // Grab the own DEM bytes (transferable). We do NOT decode here.
+    // Own + neighbour bytes, all TRANSFERRED (zero copy) to the worker.
+    const directions = ['north', 'east', 'south', 'west'];
     let ownDemBuf;
+    let neighbourBufs;
     try {
-      ownDemBuf = await demBlob.arrayBuffer();
+      [ownDemBuf, ...neighbourBufs] = await Promise.all([
+        demBlob.arrayBuffer(),
+        ...directions.map((dir) => (neighbourBlobs?.[dir] ? neighbourBlobs[dir].arrayBuffer() : null)),
+      ]);
     } catch {
       return null;
     }
-    if (isCancelled()) {
-      return null;
-    }
+    if (isCancelled()) return null;
 
-    // Resolve neighbour DEM blobs from the cache. Each is a raw PNG
-    // ArrayBuffer ready to transfer.
-    const { blobs: neighbourBlobs, missing } = await resolveNeighbourBlobs(z, x, y, demCache, demProfile, sourceDem);
-    if (isCancelled()) {
-      return null;
-    }
-
-    // Build the transfer list: own + every present neighbour. All are
-    // transferred (zero copy) — the SW loses ownership until the worker
-    // returns. We hold no reference to these bytes after postMessage.
     const transferList = [ownDemBuf];
     const neighbourMsg = {};
-    for (const dir of ['north', 'east', 'south', 'west']) {
-      if (neighbourBlobs[dir]) {
-        neighbourMsg[dir] = neighbourBlobs[dir];
-        transferList.push(neighbourBlobs[dir]);
-      }
-    }
+    directions.forEach((dir, i) => {
+      if (!neighbourBufs[i]) return;
+      neighbourMsg[dir] = neighbourBufs[i];
+      transferList.push(neighbourBufs[i]);
+    });
 
     const workerIdx = pickSlopeWorker();
     if (workerIdx < 0) return null;
@@ -439,6 +309,7 @@ async function computeSlopeViaPool(demBlob, demCache, z, x, y, resFactor, demPro
       {
         id, kind: 'slope', z, x, y,
         resFactor: Number(resFactor) > 1 ? Number(resFactor) : 1,
+        outputScale: outputScale >= 2 ? 2 : 1,
         ownDem: ownDemBuf,
         neighbours: neighbourMsg,
         zoneRing: zoneRing || null,
@@ -446,8 +317,8 @@ async function computeSlopeViaPool(demBlob, demCache, z, x, y, resFactor, demPro
       transferList,
     );
 
-    // Release pre-work gate immediately after buffers are transferred!
-    releaseSlopePreWork();
+    // The buffers are gone: free the pre-work slot while the worker computes.
+    releasePreWork();
 
     let result;
     try {
@@ -455,27 +326,14 @@ async function computeSlopeViaPool(demBlob, demCache, z, x, y, resFactor, demPro
     } catch {
       return null;
     }
-    if (!result) return null; // cancelled
+    if (!result || isCancelled()) return null;
 
-    // Generation check on the way out — if the viewport moved while we were
-    // waiting, drop the result.
-    if (isCancelled()) {
-      return null;
-    }
-
-    // Wrap the returned ArrayBuffer into a PNG Blob.
-    const blob = new Blob([result.png], { type: 'image/png' });
-
-    // Merge missing-direction reports: directions missing from the cache
-    // are always reported; the worker may also report its own (decode
-    // failures).
-    const seen = new Set(missing);
-    for (const d of result.missingDirections || []) seen.add(d);
-
-    return { blob, missingDirections: Array.from(seen) };
+    return {
+      blob: new Blob([result.png], { type: 'image/png' }),
+      missingDirections: result.missingDirections || [],
+    };
   } finally {
-    // Defensive cleanup in case of synchronous throw before transfer
-    releaseSlopePreWork();
+    releasePreWork();
   }
 }
 

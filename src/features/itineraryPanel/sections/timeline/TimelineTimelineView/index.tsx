@@ -6,7 +6,7 @@
  * still drive placement fallback and km markers, but the user now navigates a
  * date strip and reads the route as scheduled checkpoints.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   BASE_HOUR_ROW_HEIGHT_PX,
   MINUTES_PER_DAY,
@@ -31,6 +31,14 @@ import {
   resolveRideElapsedSecondsAtScheduledElapsed,
   toDayKey,
 } from './utils';
+
+/** Zoom minimal « normal » (boutons, barre) tant que la journée ne tient pas déjà à l'écran. */
+const HOUR_ZOOM_MIN = 0.4;
+const HOUR_ZOOM_MAX = 3.0;
+/** Plancher absolu, atteint seulement par le « tout voir » de la barre verticale. */
+const HOUR_ZOOM_FLOOR = 0.05;
+const NAVIGATOR_MIN_FRACTION = 0.04;
+const CANVAS_INSETS_PX = TIMELINE_VIEWPORT_TOP_INSET_PX + TIMELINE_VIEWPORT_BOTTOM_INSET_PX;
 
 export function TimelineTimelineView({
   items,
@@ -61,11 +69,14 @@ export function TimelineTimelineView({
     }
   }, [hourZoom]);
 
-  const normalizedHourZoom = Math.min(3.0, Math.max(0.4, localHourZoom));
+  // Le plancher descend sous HOUR_ZOOM_MIN quand la barre verticale demande
+  // « tout voir » : il faut alors pouvoir rentrer la journée entière.
+  const normalizedHourZoom = Math.min(HOUR_ZOOM_MAX, Math.max(HOUR_ZOOM_FLOOR, localHourZoom));
   const scheduleRef = useRef<HTMLDivElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const isNavigatingRef = useRef(false);
-  const pendingScrollTopRef = useRef<number | null>(null);
+  // Offset (1 = haut, 0 = bas) à appliquer une fois le canevas re-rendu au nouveau zoom.
+  const pendingScrollOffsetRef = useRef<number | null>(null);
 
   const reference = useMemo(() => parseStartReference(rhythm), [rhythm]);
   const scheduleState = useMemo(
@@ -411,13 +422,17 @@ export function TimelineTimelineView({
     };
   }, [canvasHeight, updateViewportMetrics]);
 
-  useEffect(() => {
-    if (pendingScrollTopRef.current !== null && viewportRef.current) {
-      viewportRef.current.scrollTop = pendingScrollTopRef.current;
-      pendingScrollTopRef.current = null;
-      updateViewportMetrics();
-    }
-  }, [canvasHeight, updateViewportMetrics]);
+  // Après un changement de zoom piloté par la barre : on positionne le scroll
+  // avant le paint, sur la hauteur réelle du canevas (pas une estimation).
+  useLayoutEffect(() => {
+    const offset = pendingScrollOffsetRef.current;
+    const vp = viewportRef.current;
+    if (offset === null || !vp) return;
+    pendingScrollOffsetRef.current = null;
+    const maxScroll = Math.max(0, vp.scrollHeight - vp.clientHeight);
+    vp.scrollTop = (1 - offset) * maxScroll;
+    updateViewportMetrics();
+  });
 
   useEffect(() => {
     const handleWindowPointerUp = () => {
@@ -433,8 +448,21 @@ export function TimelineTimelineView({
 
   const verticalFraction = useMemo(() => {
     if (viewportMetrics.scrollHeight <= 0 || viewportMetrics.clientHeight <= 0) return 1;
-    return Math.min(1, Math.max(0.04, viewportMetrics.clientHeight / viewportMetrics.scrollHeight));
+    return Math.min(
+      1,
+      Math.max(NAVIGATOR_MIN_FRACTION, viewportMetrics.clientHeight / viewportMetrics.scrollHeight),
+    );
   }, [viewportMetrics.clientHeight, viewportMetrics.scrollHeight]);
+
+  const visibleDurationHours = Math.max(1, visibleDurationMinutes / 60);
+
+  // Fraction visible au zoom max : les poignées ne peuvent pas aller en dessous,
+  // sinon la barre demanderait un zoom inatteignable et le pouce décrocherait.
+  const verticalMinFraction = useMemo(() => {
+    if (viewportMetrics.clientHeight <= 0) return NAVIGATOR_MIN_FRACTION;
+    const maxZoomCanvasHeight = visibleDurationHours * BASE_HOUR_ROW_HEIGHT_PX * HOUR_ZOOM_MAX + CANVAS_INSETS_PX;
+    return Math.min(1, Math.max(NAVIGATOR_MIN_FRACTION, viewportMetrics.clientHeight / maxZoomCanvasHeight));
+  }, [viewportMetrics.clientHeight, visibleDurationHours]);
 
   const verticalOffset = useMemo(() => {
     const maxScroll = Math.max(0, viewportMetrics.scrollHeight - viewportMetrics.clientHeight);
@@ -449,58 +477,54 @@ export function TimelineTimelineView({
       if (!vp) return;
 
       isNavigatingRef.current = true;
-      const currentClientHeight = vp.clientHeight || viewportMetrics.clientHeight;
-      if (currentClientHeight <= 0) return;
+      const clientHeight = vp.clientHeight;
+      if (clientHeight <= 0) return;
 
-      // Double-click reset to default 1.0 view
-      if (next.visibleFraction >= 0.999 && next.offset === 0) {
-        setLocalHourZoom(1);
-        onHourZoomChange?.(1);
-        vp.scrollTop = 0;
-        setViewportMetrics({
-          clientHeight: currentClientHeight,
-          scrollHeight: vp.scrollHeight,
-          scrollTop: 0,
-        });
+      const clampedFraction = Math.max(NAVIGATOR_MIN_FRACTION, Math.min(1, next.visibleFraction));
+      // Offset 1 = haut (scrollTop 0), offset 0 = bas (scrollTop max).
+      const clampedOffset = Math.max(0, Math.min(1, next.offset));
+
+      let targetZoom = normalizedHourZoom;
+      const wantsFitAll = clampedFraction >= 0.999 && verticalFraction < 0.999;
+      if (wantsFitAll || Math.abs(clampedFraction - verticalFraction) > 0.005) {
+        // Hauteur canevas = durée × hauteur d'heure × zoom + insets haut/bas.
+        const hourPxAtZoom1 = visibleDurationHours * BASE_HOUR_ROW_HEIGHT_PX;
+        const zoomForFraction = (fraction: number) => (clientHeight / fraction - CANVAS_INSETS_PX) / hourPxAtZoom1;
+        // Zoom auquel la journée entière tient dans la vue (fraction = 1).
+        const fitAllZoom = zoomForFraction(1);
+        const minZoom = Math.max(HOUR_ZOOM_FLOOR, Math.min(HOUR_ZOOM_MIN, fitAllZoom));
+        targetZoom = Math.min(HOUR_ZOOM_MAX, Math.max(minZoom, zoomForFraction(clampedFraction)));
+      }
+
+      if (Math.abs(targetZoom - normalizedHourZoom) > 1e-4) {
+        // Le scroll sera appliqué après re-rendu, sur la nouvelle hauteur réelle.
+        pendingScrollOffsetRef.current = clampedOffset;
+        setLocalHourZoom(targetZoom);
+        onHourZoomChange?.(targetZoom);
         return;
       }
 
-      const clampedFraction = Math.max(0.04, Math.min(1, next.visibleFraction));
-      const clampedOffset = Math.max(0, Math.min(1, next.offset));
-
-      // Handle zoom if fraction changed
-      const fractionDiff = Math.abs(clampedFraction - verticalFraction);
-      let effectiveCanvasHeight = vp.scrollHeight;
-      if (fractionDiff > 0.005) {
-        const desiredCanvasHeight = currentClientHeight / clampedFraction;
-        const visibleDurationHours = Math.max(1, visibleDurationMinutes / 60);
-        const desiredHourRowHeightPx = desiredCanvasHeight / visibleDurationHours;
-        const targetZoom = Math.min(
-          3.0,
-          Math.max(0.4, Number((desiredHourRowHeightPx / BASE_HOUR_ROW_HEIGHT_PX).toFixed(2))),
-        );
-
-        setLocalHourZoom(targetZoom);
-        onHourZoomChange?.(targetZoom);
-        effectiveCanvasHeight = desiredCanvasHeight;
-      }
-
-      // Scroll position calculation:
-      // Offset 1 is top (scrollTop = 0), Offset 0 is bottom (scrollTop = maxScroll)
-      const desiredMaxScroll = Math.max(0, effectiveCanvasHeight - currentClientHeight);
-      const targetScrollTop = Math.max(0, Math.min(desiredMaxScroll, (1 - clampedOffset) * desiredMaxScroll));
-
-      vp.scrollTop = targetScrollTop;
-      pendingScrollTopRef.current = targetScrollTop;
-
-      setViewportMetrics({
-        clientHeight: currentClientHeight,
-        scrollHeight: Math.round(effectiveCanvasHeight),
-        scrollTop: targetScrollTop,
-      });
+      const maxScroll = Math.max(0, vp.scrollHeight - clientHeight);
+      vp.scrollTop = (1 - clampedOffset) * maxScroll;
+      updateViewportMetrics();
     },
-    [onHourZoomChange, verticalFraction, viewportMetrics.clientHeight, visibleDurationMinutes],
+    [normalizedHourZoom, onHourZoomChange, updateViewportMetrics, verticalFraction, visibleDurationHours],
   );
+
+  // Double-clic sur la barre : retour au zoom par défaut, en haut de la journée.
+  const handleVerticalNavigatorReset = useCallback(() => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    isNavigatingRef.current = true;
+    if (Math.abs(normalizedHourZoom - 1) > 1e-4) {
+      pendingScrollOffsetRef.current = 1;
+      setLocalHourZoom(1);
+      onHourZoomChange?.(1);
+      return;
+    }
+    vp.scrollTop = 0;
+    updateViewportMetrics();
+  }, [normalizedHourZoom, onHourZoomChange, updateViewportMetrics]);
 
   const handleZoomWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     const vp = viewportRef.current;
@@ -586,7 +610,9 @@ export function TimelineTimelineView({
         viewportRef={viewportRef}
         verticalFraction={verticalFraction}
         verticalOffset={verticalOffset}
+        verticalMinFraction={Math.min(verticalMinFraction, verticalFraction)}
         onVerticalNavigatorChange={handleVerticalNavigatorChange}
+        onVerticalNavigatorReset={handleVerticalNavigatorReset}
         onZoomWheel={handleZoomWheel}
         hourMarks={hourMarks}
         hourRowHeightPx={hourRowHeightPx}

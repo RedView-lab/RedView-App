@@ -34,6 +34,7 @@ async function ensureFrancePoly() {
         }
         return [minLng, minLat, maxLng, maxLat];
       });
+      francePolyEdgeGrid = buildFrancePolyEdgeGrid(francePoly);
       return true;
     })
     .catch(err => {
@@ -63,6 +64,7 @@ function pointInRing(lng, lat, ring) {
 
 function pointInFrance(lng, lat) {
   if (!francePoly) return false;
+  if (francePolyEdgeGrid) return pointInFranceGrid(lng, lat);
   for (let p = 0; p < francePoly.length; p++) {
     const [bw, bs, be, bn] = francePolyBBoxes[p];
     if (lng < bw || lng > be || lat < bs || lat > bn) continue;
@@ -102,6 +104,12 @@ function classifyOrthoTile(z, x, y) {
 
 function hasPolyVertexInTile(b) {
   if (!francePoly) return false;
+  if (francePolyEdgeGrid) {
+    // Every vertex is the start point of an indexed edge.
+    return forEachGridEdge(b, (x1, y1) => (
+      x1 >= b.west && x1 <= b.east && y1 >= b.south && y1 <= b.north
+    ));
+  }
   for (let p = 0; p < francePoly.length; p++) {
     const [bw, bs, be, bn] = francePolyBBoxes[p];
     if (be < b.west || bw > b.east || bn < b.south || bs > b.north) continue;
@@ -112,6 +120,148 @@ function hasPolyVertexInTile(b) {
     }
   }
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// Border-edge spatial index
+// ---------------------------------------------------------------------------
+// The metropolitan polygon has tens of thousands of vertices and its bbox
+// overlaps every tile of the region, so scanning it per tile is expensive and
+// a bbox test is far too generous (it claimed NW Italy, Belgium, Luxembourg
+// and SW Germany as "border"). Edges are bucketed into a fixed lng/lat grid
+// once at load time; a tile query only visits the few cells it covers.
+
+const FRANCE_EDGE_GRID_CELL_DEG = 0.05;
+const FRANCE_EDGE_GRID_ROWS = Math.ceil(180 / FRANCE_EDGE_GRID_CELL_DEG) + 1;
+let francePolyEdgeGrid = null;
+let francePolyEdgeGridMaxCol = -1;
+
+function franceEdgeGridCol(lng) {
+  return Math.floor((lng + 180) / FRANCE_EDGE_GRID_CELL_DEG);
+}
+
+function franceEdgeGridRow(lat) {
+  return Math.floor((lat + 90) / FRANCE_EDGE_GRID_CELL_DEG);
+}
+
+function buildFrancePolyEdgeGrid(polygons) {
+  const grid = new Map();
+  for (const polygon of polygons) {
+    for (const ring of polygon) {
+      for (let i = 0; i < ring.length; i++) {
+        const [x1, y1] = ring[i];
+        const [x2, y2] = ring[(i + 1) % ring.length];
+        const c0 = franceEdgeGridCol(Math.min(x1, x2));
+        const c1 = franceEdgeGridCol(Math.max(x1, x2));
+        const r0 = franceEdgeGridRow(Math.min(y1, y2));
+        const r1 = franceEdgeGridRow(Math.max(y1, y2));
+        if (c1 > francePolyEdgeGridMaxCol) francePolyEdgeGridMaxCol = c1;
+        for (let c = c0; c <= c1; c++) {
+          for (let r = r0; r <= r1; r++) {
+            const key = c * FRANCE_EDGE_GRID_ROWS + r;
+            let bucket = grid.get(key);
+            if (!bucket) {
+              bucket = [];
+              grid.set(key, bucket);
+            }
+            bucket.push(x1, y1, x2, y2);
+          }
+        }
+      }
+    }
+  }
+  return grid;
+}
+
+// Calls `test(x1, y1, x2, y2)` for every indexed edge in the cells covering
+// `b`; returns true as soon as one call does. Edges spanning several cells
+// may be visited more than once — harmless for a predicate.
+function forEachGridEdge(b, test) {
+  const c0 = franceEdgeGridCol(b.west);
+  const c1 = franceEdgeGridCol(b.east);
+  const r0 = franceEdgeGridRow(b.south);
+  const r1 = franceEdgeGridRow(b.north);
+  for (let c = c0; c <= c1; c++) {
+    for (let r = r0; r <= r1; r++) {
+      const bucket = francePolyEdgeGrid.get(c * FRANCE_EDGE_GRID_ROWS + r);
+      if (!bucket) continue;
+      for (let i = 0; i < bucket.length; i += 4) {
+        if (test(bucket[i], bucket[i + 1], bucket[i + 2], bucket[i + 3])) return true;
+      }
+    }
+  }
+  return false;
+}
+
+// Even-odd ray cast towards +lng, restricted to the grid row holding `lat`.
+// Same crossing rule as pointInRing(); all rings of all polygons are counted
+// together, which handles holes and disjoint islands (the Spanish enclave of
+// Llívia is stored as a polygon overlapping the mainland one: even-odd
+// correctly reports it as outside France). An edge indexed in
+// several cells is counted only in the cell containing its crossing point.
+function pointInFranceGrid(lng, lat) {
+  const row = franceEdgeGridRow(lat);
+  let inside = false;
+  for (let c = franceEdgeGridCol(lng); c <= francePolyEdgeGridMaxCol; c++) {
+    const bucket = francePolyEdgeGrid.get(c * FRANCE_EDGE_GRID_ROWS + row);
+    if (!bucket) continue;
+    const cellWest = c * FRANCE_EDGE_GRID_CELL_DEG - 180;
+    const cellEast = cellWest + FRANCE_EDGE_GRID_CELL_DEG;
+    for (let i = 0; i < bucket.length; i += 4) {
+      const xi = bucket[i], yi = bucket[i + 1];
+      const xj = bucket[i + 2], yj = bucket[i + 3];
+      if ((yi > lat) === (yj > lat)) continue;
+      // Clamped so rounding can never push it into a cell the edge is not indexed in.
+      const xCross = Math.min(Math.max((xj - xi) * (lat - yi) / (yj - yi) + xi, Math.min(xi, xj)), Math.max(xi, xj));
+      if (xCross <= lng) continue;
+      if (franceEdgeGridCol(xCross) !== c) continue;
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+// Liang–Barsky: does segment (x1,y1)→(x2,y2) touch the rectangle?
+function segmentIntersectsRect(x1, y1, x2, y2, w, s, e, n) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  let t0 = 0;
+  let t1 = 1;
+  const p = [-dx, dx, -dy, dy];
+  const q = [x1 - w, e - x1, y1 - s, n - y1];
+  for (let i = 0; i < 4; i++) {
+    if (p[i] === 0) {
+      if (q[i] < 0) return false;
+    } else {
+      const t = q[i] / p[i];
+      if (p[i] < 0) {
+        if (t > t1) return false;
+        if (t > t0) t0 = t;
+      } else {
+        if (t < t0) return false;
+        if (t < t1) t1 = t;
+      }
+    }
+  }
+  return true;
+}
+
+/**
+ * True when a France border edge crosses the tile bounds `b` expanded by
+ * `marginLng` / `marginLat` degrees. Catches the summit / ridge tiles whose
+ * French sliver is too thin for the 6×6 point sampling, without claiming
+ * foreign tiles that merely sit inside the France bbox.
+ */
+function franceBorderNearBBox(b, marginLng, marginLat) {
+  if (!francePoly || !francePolyEdgeGrid) return false;
+  const w = b.west - marginLng;
+  const e = b.east + marginLng;
+  const s = b.south - marginLat;
+  const n = b.north + marginLat;
+  return forEachGridEdge(
+    { west: w, east: e, south: s, north: n },
+    (x1, y1, x2, y2) => segmentIntersectsRect(x1, y1, x2, y2, w, s, e, n),
+  );
 }
 
 // ---------------------------------------------------------------------------

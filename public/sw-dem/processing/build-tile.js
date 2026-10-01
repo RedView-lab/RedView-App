@@ -157,6 +157,13 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null) 
     }
   }
 
+  // Only a WMS that answered "no LiDAR here" lets this build report a genuine
+  // coverage gap. A timed-out / aborted WMS request plus a legacy fallback
+  // that also fails is a transient miss: reporting it as allPermanent404 made
+  // the dispatcher negative-cache the area and commit bare earth for good.
+  const mnsWmsConfirmedEmpty = typeof getMnsWmsTile !== 'function'
+    || isMnsWmsConfirmedEmpty(mercZ, mercX, mercY);
+
   // ── Legacy Multi-Subtile WMTS Fallback ──
   // Zoom-aware MNS source bias (see ignMnsSourceZoomBias in config.js).
   // Avoids the 63-sub-tile fan-out that wedged the SW thread at z14.
@@ -173,7 +180,7 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null) 
   if (mnsAreaNegGet(mercZ, mercX, mercY)) {
     return {
       blob: null, elevations: null, coverage: null,
-      source: 'ign-empty-cached', allPermanent404: true, pendingFetches: null,
+      source: 'ign-empty-cached', allPermanent404: mnsWmsConfirmedEmpty, pendingFetches: null,
     };
   }
 
@@ -292,7 +299,7 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null) 
   }
 
   // Log IGN sub-tile fetch results
-  let ignOk = 0, ignFallback = 0, ignMissing = 0;
+  let ignOk = 0, ignFallback = 0, ignMissing = 0, ignMissing404 = 0;
   for (let i = 0; i < totalSubTiles; i++) {
     const result = subTileGrid[i];
     if (result && result.data) {
@@ -300,6 +307,9 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null) 
       else ignOk++;
     } else {
       ignMissing++;
+      const row = tl.row + Math.floor(i / gridCols);
+      const col = tl.col + (i % gridCols);
+      if (isCachedPermanent404(`${demZ}/${col}/${row}`)) ignMissing404++;
     }
   }
   if ((ignMissing > 0 || ignFallback > 0) && typeof swLog !== 'undefined' && swLog.isDebug()) {
@@ -387,7 +397,12 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null) 
     return {
       blob: null, elevations: null, coverage: null,
       source: 'ign-empty',
-      allPermanent404: ignMissing === fetchCount && ignMissing > 0,
+      // Sub-tiles still in flight after the early abort are presumed empty
+      // like their settled siblings; a settled miss that is not a cached 404
+      // (timeout, abort, 5xx) makes the whole build transient.
+      allPermanent404: mnsWmsConfirmedEmpty
+        && ignMissing404 > 0
+        && ignMissing404 === ignMissing - pendingCount,
       pendingFetches,
     };
   }

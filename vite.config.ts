@@ -108,6 +108,19 @@ function redviewDevApiPlugin(): Plugin {
           return res.end()
         }
 
+        // 2b'. Sans SW : /dem-tiles n'a pas de repli (la page non contrôlée
+        // utilise AWS Terrarium en direct) et les préchargements `?pf=1` sont
+        // inutiles → 204 immédiat (même contrat que server.mjs).
+        if (
+          req.url.startsWith('/dem-tiles/')
+          || (/^\/(?:radar|slope|altitude)-tiles\//.test(req.url)
+            && new URL(req.url, 'http://localhost').searchParams.get('pf') === '1')
+        ) {
+          res.statusCode = 204
+          res.setHeader('Cache-Control', 'no-store')
+          return res.end()
+        }
+
         // 2c. Fallback for /slope-tiles/ when SW is not controlling the page
         if (req.url.startsWith('/slope-tiles/')) {
           try {
@@ -133,11 +146,11 @@ function redviewDevApiPlugin(): Plugin {
           return res.end()
         }
 
-        // 2d. Fallback for /altitude-tiles/ and /dem-tiles/
-        if (req.url.startsWith('/altitude-tiles/') || req.url.startsWith('/dem-tiles/')) {
+        // 2d. Fallback for /altitude-tiles/
+        if (req.url.startsWith('/altitude-tiles/')) {
           try {
             const urlObj = new URL(req.url, 'http://localhost')
-            const coords = parseTileCoords(urlObj.pathname, /^\/(?:altitude|dem)-tiles\/(\d+)\/(\d+)\/(\d+)/)
+            const coords = parseTileCoords(urlObj.pathname, /^\/altitude-tiles\/(\d+)\/(\d+)\/(\d+)/)
             if (coords) {
               const pngBuf: Buffer | null = await generateAltitudeTile(coords.z, coords.x, coords.y)
               if (pngBuf) {

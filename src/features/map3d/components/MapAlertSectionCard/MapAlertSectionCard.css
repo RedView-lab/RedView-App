@@ -103,3 +103,39 @@
   width: 14px;
   height: 14px;
 }
+
+/* Conseil « débutant » : nature de l'obstacle, chiffres clés, consigne. */
+.rv-alert-popup__advice {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 6px 4px 2px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  border-left: 3px solid #ff3b30;
+  background: rgba(255, 59, 48, 0.12);
+}
+
+.rv-alert-popup__advice--climb {
+  border-left-color: #ff9f0a;
+  background: rgba(255, 159, 10, 0.1);
+}
+
+.rv-alert-popup__advice-title {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 16px;
+  color: var(--rv-poi-popup-text);
+}
+
+.rv-alert-popup__advice-summary,
+.rv-alert-popup__advice-text {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 15px;
+  color: var(--rv-poi-popup-text-muted);
+}
+
+.rv-alert-popup__advice-summary {
+  font-variant-numeric: tabular-nums;
+}

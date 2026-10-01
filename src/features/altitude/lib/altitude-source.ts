@@ -4,7 +4,11 @@ import type {
 } from '../types';
 import { buildAltitudeColorExpression, MAX_ALTITUDE_M, MIN_ALTITUDE_M } from './altitude-config';
 
-import { awsFastDEMSource, unifiedDEMSource } from '@/features/map3d/lib/sources';
+import {
+  awsFastDEMSource,
+  TERRAIN_ALIGNED_RASTER_TILE_SIZE,
+  unifiedDEMSource,
+} from '@/features/map3d/lib/sources';
 import type { Dem3dQuality } from '@/features/map3d/lib/dem3dQualityBus';
 import type { DemTileProfile } from '@/features/map3d/hooks/useMap/demTiles';
 
@@ -20,11 +24,13 @@ export const ALTITUDE_LAYER_ID = 'altitude-overlay';
 export const ALTITUDE_MAXZOOM = 14;
 
 /**
- * 512 logical px for 256 px images → Mapbox requests tiles one zoom level
- * lower than the display zoom: 4× fewer requests for a visually identical
- * colour ramp.
+ * The overlay requests exactly the tiles of the 3D terrain's DEM pyramid
+ * (z = floor(zoom − 1)): every tile is the DEM the terrain already loaded —
+ * hot-tier / HTTP-cache hits, no extra DEM build. The previous 512 px asked
+ * round(zoom), 1–2 levels deeper than the terrain. Hypsometric bands lose
+ * nothing at DEM resolution.
  */
-const ALTITUDE_TILE_SIZE = 512;
+const ALTITUDE_TILE_SIZE = TERRAIN_ALIGNED_RASTER_TILE_SIZE;
 
 // raster-color-mix works on 0..1 normalised channels (×255 folded in).
 // Mapbox Terrain-RGB: -10000 + (R·65536 + G·256 + B) · 0.1
