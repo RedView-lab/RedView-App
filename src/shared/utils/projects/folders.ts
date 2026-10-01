@@ -10,8 +10,7 @@ import {
 } from '@/shared/services/appwrite';
 import { logger } from '@/shared/lib/logger';
 
-import { getCurrentUserId, isOwnedBy } from './auth';
-import { toProjectCloudError } from './errors';
+import { getCurrentUserId, isLocalFallbackUser, isOwnedBy, toCloudFailure } from './auth';
 import { folderRowToSummary } from './mappers';
 import type { ProjectFolderRow, ProjectFolderSummary, ProjectPrivacy } from './types';
 
@@ -49,8 +48,8 @@ function docToFolderRow(doc: any): ProjectFolderRow {
 }
 
 export async function listProjectFolders(): Promise<ProjectFolderSummary[]> {
-  const userId = await getCurrentUserId().catch(() => 'dev-user-001');
-  const isDev = userId === 'dev-user-001';
+  const userId = await getCurrentUserId();
+  const isDev = isLocalFallbackUser(userId);
 
   if (!isDev) {
     try {
@@ -79,8 +78,8 @@ export async function createProjectFolder(
   const trimmed = name.trim();
   if (!trimmed) throw new Error('Folder name cannot be empty');
 
-  const userId = await getCurrentUserId().catch(() => 'dev-user-001');
-  const isDev = userId === 'dev-user-001';
+  const userId = await getCurrentUserId();
+  const isDev = isLocalFallbackUser(userId);
 
   if (!isDev) {
     try {
@@ -103,9 +102,7 @@ export async function createProjectFolder(
       );
       return folderRowToSummary(docToFolderRow(doc));
     } catch (e) {
-      const error = toProjectCloudError(e);
-      logger.projects.warn('Appwrite createProjectFolder failed', error.kind, e);
-      throw error;
+      throw toCloudFailure('createProjectFolder', e);
     }
   }
 
@@ -130,8 +127,8 @@ export async function renameProjectFolder(id: string, name: string): Promise<voi
   const trimmed = name.trim();
   if (!trimmed) throw new Error('Folder name cannot be empty');
 
-  const userId = await getCurrentUserId().catch(() => 'dev-user-001');
-  const isDev = userId === 'dev-user-001';
+  const userId = await getCurrentUserId();
+  const isDev = isLocalFallbackUser(userId);
 
   if (!isDev && !id.startsWith('folder-')) {
     try {
@@ -140,9 +137,7 @@ export async function renameProjectFolder(id: string, name: string): Promise<voi
       });
       return;
     } catch (e) {
-      const error = toProjectCloudError(e);
-      logger.projects.warn('Appwrite renameProjectFolder failed', error.kind, e);
-      throw error;
+      throw toCloudFailure('renameProjectFolder', e);
     }
   }
 
@@ -161,8 +156,8 @@ export async function moveProjectFolder(
 ): Promise<void> {
   if (id === parentFolderId) return;
 
-  const userId = await getCurrentUserId().catch(() => 'dev-user-001');
-  const isDev = userId === 'dev-user-001';
+  const userId = await getCurrentUserId();
+  const isDev = isLocalFallbackUser(userId);
 
   if (!isDev && !id.startsWith('folder-')) {
     try {
@@ -171,9 +166,7 @@ export async function moveProjectFolder(
       });
       return;
     } catch (e) {
-      const error = toProjectCloudError(e);
-      logger.projects.warn('Appwrite moveProjectFolder failed', error.kind, e);
-      throw error;
+      throw toCloudFailure('moveProjectFolder', e);
     }
   }
 
@@ -187,8 +180,8 @@ export async function moveProjectFolder(
 }
 
 export async function deleteProjectFolder(id: string): Promise<void> {
-  const userId = await getCurrentUserId().catch(() => 'dev-user-001');
-  const isDev = userId === 'dev-user-001';
+  const userId = await getCurrentUserId();
+  const isDev = isLocalFallbackUser(userId);
 
   if (!isDev && !id.startsWith('folder-')) {
     try {
@@ -220,9 +213,7 @@ export async function deleteProjectFolder(id: string): Promise<void> {
       await databases.deleteDocument(APPWRITE_DATABASE_ID, FOLDERS_COLLECTION_ID, id);
       return;
     } catch (e) {
-      const error = toProjectCloudError(e);
-      logger.projects.warn('Appwrite deleteProjectFolder failed', error.kind, e);
-      throw error;
+      throw toCloudFailure('deleteProjectFolder', e);
     }
   }
 

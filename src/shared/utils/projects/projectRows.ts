@@ -10,12 +10,12 @@ import {
 } from '@/shared/services/appwrite';
 import { logger } from '@/shared/lib/logger';
 
-import { getCurrentUserId, isOwnedBy } from './auth';
+import { getCurrentUserId, isLocalFallbackUser, isOwnedBy, toCloudFailure } from './auth';
 import { computeProjectSizeBytes } from './limits';
 import { rowToSummary } from './mappers';
 import type { ItineraryProject, ProjectRow, ProjectSummary } from './types';
 import { compressProjectPayload, decompressProjectPayload } from './compression';
-import { toProjectCloudError } from './errors';
+
 import {
   idbSaveProject,
   idbGetProject,
@@ -73,8 +73,8 @@ async function docToProjectRow(doc: any): Promise<ProjectRow> {
 }
 
 export async function listProjects(): Promise<ProjectSummary[]> {
-  const userId = await getCurrentUserId().catch(() => 'dev-user-001');
-  const isDev = userId === 'dev-user-001';
+  const userId = await getCurrentUserId();
+  const isDev = isLocalFallbackUser(userId);
 
   if (!isDev) {
     try {
@@ -124,9 +124,9 @@ export async function getProject(id: string): Promise<ProjectRow | null> {
   // n'est servi que s'il appartient à l'utilisateur courant (sinon cache miss).
   const [idbRow, userId] = await Promise.all([
     idbGetProject(id).catch(() => null),
-    getCurrentUserId().catch(() => 'dev-user-001'),
+    getCurrentUserId(),
   ]);
-  const isDev = userId === 'dev-user-001';
+  const isDev = isLocalFallbackUser(userId);
 
   // 1. Priorité IndexedDB : ouverture instantanée sans décompression lourde
   if (idbRow?.data && isOwnedBy(idbRow, userId)) {
@@ -156,8 +156,8 @@ export async function createProject(
   initialData?: ItineraryProject,
   folderId?: string | null,
 ): Promise<ProjectRow> {
-  const userId = await getCurrentUserId().catch(() => 'dev-user-001');
-  const isDev = userId === 'dev-user-001';
+  const userId = await getCurrentUserId();
+  const isDev = isLocalFallbackUser(userId);
   const baseProject: ItineraryProject = initialData ?? createDefaultProject();
   const finalProject: ItineraryProject = name ? { ...baseProject, name } : baseProject;
 
@@ -190,9 +190,7 @@ export async function createProject(
       void idbSaveProject(row);
       return row;
     } catch (e) {
-      const error = toProjectCloudError(e);
-      logger.projects.error('Appwrite createProject failed', error.kind, e);
-      throw error;
+      throw toCloudFailure('createProject', e);
     }
   }
 
@@ -218,8 +216,8 @@ export async function createProject(
 }
 
 export async function saveProject(id: string, project: ItineraryProject): Promise<void> {
-  const userId = await getCurrentUserId().catch(() => 'dev-user-001');
-  const isDev = userId === 'dev-user-001';
+  const userId = await getCurrentUserId();
+  const isDev = isLocalFallbackUser(userId);
   const now = new Date().toISOString();
 
   const localRow: ProjectRow = {
@@ -253,9 +251,7 @@ export async function saveProject(id: string, project: ItineraryProject): Promis
       });
     } catch (e) {
       // La copie IndexedDB est déjà écrite : l'appelant garde la sauvegarde en attente et réessaie.
-      const error = toProjectCloudError(e);
-      logger.projects.warn('Appwrite saveProject failed', error.kind, e);
-      throw error;
+      throw toCloudFailure('saveProject', e);
     }
   }
 }
@@ -264,8 +260,8 @@ export async function renameProject(id: string, name: string): Promise<void> {
   const trimmed = name.trim();
   if (!trimmed) throw new Error('Project name cannot be empty');
 
-  const userId = await getCurrentUserId().catch(() => 'dev-user-001');
-  const isDev = userId === 'dev-user-001';
+  const userId = await getCurrentUserId();
+  const isDev = isLocalFallbackUser(userId);
 
   if (!isDev && !id.startsWith('local-')) {
     try {
@@ -282,9 +278,7 @@ export async function renameProject(id: string, name: string): Promise<void> {
       }
       return;
     } catch (e) {
-      const error = toProjectCloudError(e);
-      logger.projects.warn('Appwrite renameProject failed', error.kind, e);
-      throw error;
+      throw toCloudFailure('renameProject', e);
     }
   }
 
@@ -303,8 +297,8 @@ export async function moveProjectToFolder(
   id: string,
   folderId: string | null,
 ): Promise<void> {
-  const userId = await getCurrentUserId().catch(() => 'dev-user-001');
-  const isDev = userId === 'dev-user-001';
+  const userId = await getCurrentUserId();
+  const isDev = isLocalFallbackUser(userId);
 
   if (!isDev && !id.startsWith('local-')) {
     try {
@@ -317,9 +311,7 @@ export async function moveProjectToFolder(
       }
       return;
     } catch (e) {
-      const error = toProjectCloudError(e);
-      logger.projects.warn('Appwrite moveProjectToFolder failed', error.kind, e);
-      throw error;
+      throw toCloudFailure('moveProjectToFolder', e);
     }
   }
 
@@ -334,8 +326,8 @@ export async function moveProjectToFolder(
 }
 
 export async function deleteProject(id: string): Promise<void> {
-  const userId = await getCurrentUserId().catch(() => 'dev-user-001');
-  const isDev = userId === 'dev-user-001';
+  const userId = await getCurrentUserId();
+  const isDev = isLocalFallbackUser(userId);
 
   // 1. Suppression cloud d'abord : en cas d'échec la copie locale reste intacte
   //    et l'erreur remonte (pas de faux succès suivi d'une « réapparition »).
@@ -343,12 +335,9 @@ export async function deleteProject(id: string): Promise<void> {
     try {
       await databases.deleteDocument(APPWRITE_DATABASE_ID, PROJECTS_COLLECTION_ID, id);
     } catch (e) {
-      const error = toProjectCloudError(e);
+      const error = toCloudFailure('deleteProject', e);
       // Déjà supprimé côté cloud : on termine le nettoyage local.
-      if (error.kind !== 'not-found') {
-        logger.projects.warn('Appwrite deleteProject failed', error.kind, e);
-        throw error;
-      }
+      if (error.kind !== 'not-found') throw error;
     }
   }
 

@@ -44,7 +44,7 @@ async function loadBundle() {
     export * from ${JSON.stringify(path.join(SRC, 'shared/utils/projects/projectRows.ts'))};
     export * from ${JSON.stringify(path.join(SRC, 'shared/utils/projects/folders.ts'))};
     export { compressProjectPayload, decompressProjectPayload } from ${JSON.stringify(path.join(SRC, 'shared/utils/projects/compression.ts'))};
-    export { readStoredAppwriteSession, saveStoredAppwriteSession } from ${JSON.stringify(path.join(SRC, 'shared/services/appwrite.ts'))};
+    export { readStoredAppwriteSession, saveStoredAppwriteSession, clearStoredAppwriteSession, getAppwriteUser, onAppwriteSessionExpired } from ${JSON.stringify(path.join(SRC, 'shared/services/appwrite.ts'))};
     export { createDefaultProject, createDefaultItinerary } from ${JSON.stringify(path.join(SRC, 'features/itineraryPanel/lib/project/index.ts'))};
     export { __mock } from 'appwrite';
     export { __idb } from '@/shared/utils/storage/idbProjectStore';
@@ -194,6 +194,31 @@ async function main() {
       `ligne IndexedDB réécrite avec user_id="${idbOwner}" ; cloud.name="${cloudName}" (pas d'envoi cloud)`,
       `liste des projets pendant la coupure : ${listDuringOutage.length} projet(s) [${listDuringOutage.map((p: { name: string }) => p.name).join(', ')}] — les vrais projets de l'utilisateur ont disparu`,
       `réseau rétabli, réouverture : name="${reopened?.data?.name}" → ${lost ? 'MODIFS PERDUES (ligne IDB ignorée car user_id≠user-A, cloud ancien)' : 'ok'}`,
+    ]);
+  }
+
+  // ── C2b : seul un vrai 401 invalide la session ; sans utilisateur, aucune écriture factice ──
+  {
+    fresh();
+    const expired: unknown[] = [];
+    const off = m.onAppwriteSessionExpired((d: unknown) => expired.push(d));
+    __mock.accountGetMode = 'network'; __mock.accountGetFailures = -1;
+    await m.getAppwriteUser();
+    const keptAfterNetwork = !!m.readStoredAppwriteSession();
+    __mock.accountGetMode = 'unauthorized';
+    await m.getAppwriteUser();
+    const clearedAfter401 = !m.readStoredAppwriteSession();
+    // Plus aucune session (prod, DEV=false) : saveProject doit lever, sans ligne « dev-user-001 ».
+    __idb.clear();
+    let threw: { kind?: string } | null = null;
+    try { await m.saveProject('doc-x', named('orphelin')); } catch (e) { threw = e as { kind?: string }; }
+    const fakeOwnerRows = [...__idb.projects.values()].filter((r: { user_id: string }) => r.user_id === 'dev-user-001').length;
+    off();
+    __mock.accountGetMode = 'ok';
+    const bad = !keptAfterNetwork || !clearedAfter401 || expired.length !== 1 || !threw || fakeOwnerRows > 0;
+    report('C2b', 'session : effacée sur erreur réseau / écritures sous un propriétaire factice', bad, [
+      `après erreur réseau : session ${keptAfterNetwork ? 'conservée' : 'EFFACÉE'} ; après 401 : ${clearedAfter401 ? 'effacée' : 'CONSERVÉE'} ; événements d'expiration : ${expired.length}`,
+      `saveProject sans session : ${threw ? `lève (${threw.kind})` : 'RÉSOUT'} ; lignes IDB sous dev-user-001 : ${fakeOwnerRows}`,
     ]);
   }
 
