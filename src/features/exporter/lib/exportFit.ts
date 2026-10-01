@@ -14,6 +14,13 @@ function roundTo(value: number, digits: number): number {
   return Math.round(value * factor) / factor;
 }
 
+const SEMICIRCLES_PER_DEGREE = 2 ** 31 / 180;
+
+/** FIT stocke les positions en semicercles (sint32) : deg * 2^31 / 180. */
+function degreesToSemicircles(degrees: number): number {
+  return Math.round(degrees * SEMICIRCLES_PER_DEGREE);
+}
+
 function buildFitRecordMessages(routePoints: ExportRoutePoint[], createdAt: Date) {
   const createdAtMs = createdAt.getTime();
   return routePoints.map((point, index) => {
@@ -25,8 +32,8 @@ function buildFitRecordMessages(routePoints: ExportRoutePoint[], createdAt: Date
       altitude?: number;
     } = {
       timestamp: new Date(createdAtMs + index * 1000),
-      positionLat: point.lat,
-      positionLong: point.lon,
+      positionLat: degreesToSemicircles(point.lat),
+      positionLong: degreesToSemicircles(point.lon),
       distance: roundTo(point.distanceM, 2),
     };
     if (point.elevationM != null) {
