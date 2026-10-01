@@ -814,19 +814,22 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
                 </button>
               )
             ) : isLogin ? (
-              <button
-                type="button"
-                className="rv-login-footer-action"
-                onClick={() => {
-                  // Fallback to dev login if needed
-                  if (typeof window !== 'undefined') {
-                    window.localStorage.setItem('redview:dev-session', 'true')
-                  }
-                  onLogin?.('dev@redview.tech')
-                }}
-              >
-                Continue with Demo account
-              </button>
+              // Compte démo local réservé au développement : `import.meta.env.DEV`
+              // vaut `false` en build, la branche (et son libellé) est éliminée du bundle.
+              import.meta.env.DEV ? (
+                <button
+                  type="button"
+                  className="rv-login-footer-action"
+                  onClick={() => {
+                    if (typeof window !== 'undefined') {
+                      window.localStorage.setItem('redview:dev-session', 'true')
+                    }
+                    onLogin?.('dev@redview.tech')
+                  }}
+                >
+                  Continue with Demo account
+                </button>
+              ) : null
             ) : (
               <button
                 type="button"

@@ -317,12 +317,28 @@ function App() {
         landingUrl={landingUrl}
         onLogin={(email) => {
           const stored = readStoredAppwriteSession()
-          const nextSession = stored ?? {
-            user: { id: 'dev-user-001', email: email || 'user@redview.tech' },
+          if (stored) {
+            setSession(stored)
+            setSubscriptionAccess({ hasAccess: true, status: 'pro' })
+            setSubscriptionStatus('ready')
+            return
           }
-          setSession(nextSession)
-          setSubscriptionAccess({ hasAccess: true, status: 'pro' })
-          setSubscriptionStatus('ready')
+
+          // Compte démo local (sans Appwrite) : uniquement en développement.
+          if (import.meta.env.DEV) {
+            setSession({ user: { id: DEV_FALLBACK_USER_ID, email: email || 'user@redview.tech' } })
+            setSubscriptionAccess({ hasAccess: true, status: 'pro' })
+            setSubscriptionStatus('ready')
+            return
+          }
+
+          // Session Appwrite créée mais snapshot local illisible (stockage bloqué) :
+          // on relit l'utilisateur côté serveur plutôt que d'inventer une identité.
+          void getAppwriteUser().then((user) => {
+            if (!user) return
+            setSession({ user: { id: user.$id, email: user.email } })
+            setSubscriptionStatus('ready')
+          })
         }}
       />
     )
