@@ -6,6 +6,7 @@ export {
   saveAccountIdentity,
   saveAccountPractice,
   signOutAccount,
+  UnsyncedProjectsError,
   updateAccountPassword,
 } from './lib';
 export type {

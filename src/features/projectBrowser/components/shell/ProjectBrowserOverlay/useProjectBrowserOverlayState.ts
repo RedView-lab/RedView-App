@@ -8,6 +8,7 @@ import {
   formatLastConnection,
   loadAccountProfile,
   signOutAccount,
+  UnsyncedProjectsError,
   type AccountProfile,
 } from '../../../account';
 import {
@@ -332,16 +333,30 @@ export function useProjectBrowserOverlayState({
 
     setIsSigningOut(true);
     try {
-      await signOutAccount();
+      try {
+        await signOutAccount();
+      } catch (nextError) {
+        if (!(nextError instanceof UnsyncedProjectsError)) throw nextError;
+        // Des modifications locales n'ont pas pu être envoyées : la purge locale
+        // de la déconnexion les détruirait. L'utilisateur choisit.
+        const names = nextError.projects.map((project) => `« ${project.name} »`).join(', ');
+        const confirmed = window.confirm(
+          t('Des modifications ne sont pas synchronisées avec le cloud : {{names}}. OK : se déconnecter quand même (ces modifications seront perdues). Annuler : rester connecté pour réessayer plus tard ou exporter les projets.', { names }),
+        );
+        if (!confirmed) {
+          setIsSigningOut(false);
+          return;
+        }
+        await signOutAccount({ force: true });
+      }
     } catch (nextError) {
       console.warn('[ProjectBrowserOverlay] Failed to sign out cleanly', nextError);
-    } finally {
-      if (typeof window !== 'undefined') {
-        window.localStorage.removeItem('redview:dev-session');
-        window.location.reload();
-      }
     }
-  }, [isSigningOut]);
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem('redview:dev-session');
+      window.location.reload();
+    }
+  }, [isSigningOut, t]);
 
   const handlePlanSelection = useCallback(
     async (requestedPlanId: ManagedPlanId, amount?: number) => {

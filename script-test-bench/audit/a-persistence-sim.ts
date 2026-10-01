@@ -64,6 +64,7 @@ async function loadBundle() {
     export { readStoredAppwriteSession, saveStoredAppwriteSession, clearStoredAppwriteSession, getAppwriteUser, onAppwriteSessionExpired } from ${JSON.stringify(path.join(SRC, 'shared/services/appwrite.ts'))};
     export { createDefaultProject, createDefaultItinerary } from ${JSON.stringify(path.join(SRC, 'features/itineraryPanel/lib/project/index.ts'))};
     export { useDashboardProjectSync } from ${JSON.stringify(path.join(SRC, 'pages/Dashboard/useDashboardProjectSync.ts'))};
+    export { signOutAccount } from ${JSON.stringify(path.join(SRC, 'features/projectBrowser/account/lib/profile.ts'))};
     export { getProjectSyncStatus } from ${JSON.stringify(path.join(SRC, 'shared/utils/projects/syncStatus.ts'))};
     export { __mock } from 'appwrite';
     export { __idb } from '@/shared/utils/storage/idbProjectStore';
@@ -522,6 +523,29 @@ async function main() {
       `saveNow : ${threw ? `lève ${threw.kind}` : 'RÉSOUT'} ; statut=${stateAfter.state} « ${stateAfter.message ?? ''} » ; cloud="${cloudAfter}"`,
       `saveNow({ force }) après confirmation : cloud="${cloudForced}"`,
     ]);
+  }
+
+  // L1 : déconnexion avec des modifications non synchronisées (A3).
+  {
+    fresh();
+    const row = await m.createProject('L1', named('L1 v1'));
+    await m.getProject(row.id);
+    __mock.dbNetworkDown = true;
+    try { await m.saveProject(row.id, named('L1 v2 hors-ligne')); } catch { /* attendu */ }
+    let refused: { name?: string; projects?: Array<{ name: string }> } | null = null;
+    try { await m.signOutAccount(); } catch (e) { refused = e as typeof refused; }
+    const keptOffline = __idb.projects.get(row.id)?.data?.name === 'L1 v2 hors-ligne' && !!m.readStoredAppwriteSession();
+    __mock.dbNetworkDown = false;
+    let threwOnline: unknown = null;
+    try { await m.signOutAccount(); } catch (e) { threwOnline = e; }
+    const cloudName = (await cloudProject(row.id))?.name;
+    const purged = __idb.projects.size === 0;
+    const bad = refused?.name !== 'UnsyncedProjectsError' || !keptOffline || !!threwOnline || cloudName !== 'L1 v2 hors-ligne' || !purged;
+    report('L1', 'déconnexion purge IndexedDB malgré des modifications non synchronisées', bad, [
+      `hors-ligne : signOutAccount ${refused ? `refuse (${refused.name} : ${refused.projects?.map((p) => p.name).join(', ')})` : 'PURGE'} ; copie locale + session conservées : ${keptOffline ? 'oui' : 'NON'}`,
+      `en ligne : dernière synchro puis déconnexion ${threwOnline ? 'en échec' : 'ok'} ; cloud="${cloudName}" ; IDB purgée : ${purged ? 'oui' : 'non'}`,
+    ]);
+    loginAs('user-A');
   }
 
   const reproduced = results.filter((r) => r.reproduced);

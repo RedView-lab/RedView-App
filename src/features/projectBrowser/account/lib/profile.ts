@@ -14,6 +14,7 @@ import {
   translateAppText,
 } from '@/shared/i18n';
 import { APP_CACHE_EPOCH_STORAGE_KEY } from '@/shared/lib/appCacheEpoch';
+import { syncDirtyProjects } from '@/shared/utils/projects';
 import { clearProjectStore } from '@/shared/utils/storage/idbProjectStore';
 
 import {
@@ -220,7 +221,50 @@ function clearUserScopedLocalStorage() {
   }
 }
 
-export async function signOutAccount() {
+/**
+ * Déconnexion refusée : des projets ont des modifications locales que le cloud
+ * n'a pas confirmées (la purge d'IndexedDB les détruirait).
+ */
+export class UnsyncedProjectsError extends Error {
+  readonly projects: ReadonlyArray<{ id: string; name: string }>;
+
+  constructor(projects: ReadonlyArray<{ id: string; name: string }>) {
+    super('Des modifications ne sont pas synchronisées.');
+    this.name = 'UnsyncedProjectsError';
+    this.projects = projects;
+  }
+}
+
+/**
+ * Avant de purger les données locales : tente une dernière synchronisation des
+ * copies locales non synchronisées. Renvoie celles qui restent en attente.
+ */
+async function syncPendingProjectsBeforeSignOut(): Promise<Array<{ id: string; name: string }>> {
+  try {
+    const failures = await syncDirtyProjects();
+    return failures.map(({ meta, error }) => {
+      console.warn('[auth] project still unsynced before sign-out', meta.id, error);
+      return { id: meta.id, name: meta.name || 'Untitled' };
+    });
+  } catch (error) {
+    // Impossible de lister les copies locales (pas d'IndexedDB / pas de session) :
+    // rien de vérifiable, la déconnexion suit son cours.
+    console.warn('[auth] unsynced projects check failed', error);
+    return [];
+  }
+}
+
+/**
+ * Déconnexion. Sans `force`, lève `UnsyncedProjectsError` si des projets ont
+ * encore des modifications non synchronisées après une dernière tentative
+ * (l'UI propose alors d'exporter / réessayer / se déconnecter quand même).
+ */
+export async function signOutAccount({ force = false }: { force?: boolean } = {}) {
+  if (!force) {
+    const pending = await syncPendingProjectsBeforeSignOut();
+    if (pending.length > 0) throw new UnsyncedProjectsError(pending);
+  }
+
   resetAccountSports();
 
   // 1. Révoquer la session serveur EN PREMIER : le SDK Appwrite a besoin du

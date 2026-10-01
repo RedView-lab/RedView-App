@@ -13,5 +13,6 @@ export {
   saveAccountIdentity,
   saveAccountPractice,
   signOutAccount,
+  UnsyncedProjectsError,
   updateAccountPassword,
 } from './profile';

@@ -215,5 +215,7 @@ export const projectBrowserTranslationPairs: ReadonlyArray<AppTranslationPair> =
   { fr: 'Ce projet a été supprimé.', en: 'This project has been deleted.' },
   { fr: 'Le serveur a refusé l’enregistrement du projet.', en: 'The server rejected the project save.' },
   { fr: 'copie locale non synchronisée', en: 'unsynced local copy' },
+  { fr: 'Des modifications ne sont pas synchronisées avec le cloud : {{names}}. OK : se déconnecter quand même (ces modifications seront perdues). Annuler : rester connecté pour réessayer plus tard ou exporter les projets.', en: 'Some changes are not synced to the cloud: {{names}}. OK: sign out anyway (these changes will be lost). Cancel: stay signed in to retry later or export the projects.' },
+  { fr: 'Des modifications ne sont pas synchronisées.', en: 'Some changes are not synced.' },
   { fr: 'version d’un autre appareil', en: 'version from another device' },
 ] as const;
