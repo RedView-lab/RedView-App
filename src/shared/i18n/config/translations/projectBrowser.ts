@@ -214,4 +214,6 @@ export const projectBrowserTranslationPairs: ReadonlyArray<AppTranslationPair> =
   { fr: 'Ce projet a été modifié sur un autre appareil.', en: 'This project was modified on another device.' },
   { fr: 'Ce projet a été supprimé.', en: 'This project has been deleted.' },
   { fr: 'Le serveur a refusé l’enregistrement du projet.', en: 'The server rejected the project save.' },
+  { fr: 'copie locale non synchronisée', en: 'unsynced local copy' },
+  { fr: 'version d’un autre appareil', en: 'version from another device' },
 ] as const;

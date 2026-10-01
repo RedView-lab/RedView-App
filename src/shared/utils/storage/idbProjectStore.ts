@@ -6,7 +6,7 @@
  * Transactionnel, asynchrone, crash-proof.
  */
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
-import type { ProjectRow } from '@/shared/utils/projects/types';
+import type { ProjectRow, ProjectRowMeta } from '@/shared/utils/projects/types';
 
 const DB_NAME = 'redview_storage_v1';
 const DB_VERSION = 1;
@@ -132,15 +132,56 @@ export async function migrateFromLocalStorageIfNeeded(): Promise<void> {
 
 // ── Projects Store ────────────────────────────────────────────────────────
 
-export async function idbSaveProject(row: ProjectRow): Promise<void> {
+/**
+ * Forme stockée : le contenu du projet est conservé en JSON (`data_json`), déjà
+ * sérialisé par l'autosave. Cloner une chaîne est bien moins coûteux que le
+ * clonage structuré d'un graphe d'objets de plusieurs Mo à chaque sauvegarde.
+ * Les anciennes lignes (champ `data` objet) restent lisibles.
+ */
+type StoredProjectRow = ProjectRowMeta & { data?: ItineraryProject; data_json?: string };
+
+function toMeta(stored: StoredProjectRow): ProjectRowMeta {
+  const meta: Partial<StoredProjectRow> = { ...stored };
+  delete meta.data;
+  delete meta.data_json;
+  return meta as ProjectRowMeta;
+}
+
+function hydrate(stored: StoredProjectRow | undefined | null): ProjectRow | null {
+  if (!stored) return null;
+  let data: ItineraryProject | undefined = stored.data;
+  if (typeof stored.data_json === 'string') {
+    try {
+      data = JSON.parse(stored.data_json) as ItineraryProject;
+    } catch (error) {
+      console.warn('[idbProjectStore] corrupted project JSON', stored.id, error);
+      data = undefined;
+    }
+  }
+  if (!data) return null;
+  return { ...toMeta(stored), data };
+}
+
+function sortByUpdatedDesc<T extends { updated_at: string }>(list: T[]): T[] {
+  return list.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+}
+
+/**
+ * Écrit une ligne projet. `serializedData` : JSON de `row.data` déjà calculé par
+ * l'appelant (sinon sérialisé ici). Résout une fois la transaction validée
+ * (donnée durable), pas seulement la requête acceptée.
+ */
+export async function idbSaveProject(row: ProjectRow, serializedData?: string): Promise<void> {
   await migrateFromLocalStorageIfNeeded();
   const db = await getDb();
+  const { data, ...meta } = row;
+  const stored: StoredProjectRow = { ...meta, data_json: serializedData ?? JSON.stringify(data) };
   return new Promise((resolve, reject) => {
     const tx = db.transaction([STORE_PROJECTS], 'readwrite');
-    const store = tx.objectStore(STORE_PROJECTS);
-    const req = store.put(row);
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
+    tx.objectStore(STORE_PROJECTS).put(stored);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
   });
 }
 
@@ -151,8 +192,52 @@ export async function idbGetProject(id: string): Promise<ProjectRow | null> {
     const tx = db.transaction([STORE_PROJECTS], 'readonly');
     const store = tx.objectStore(STORE_PROJECTS);
     const req = store.get(id);
-    req.onsuccess = () => resolve(req.result || null);
+    req.onsuccess = () => resolve(hydrate(req.result as StoredProjectRow | undefined));
     req.onerror = () => reject(req.error);
+  });
+}
+
+/** Métadonnées d'une ligne (sans désérialiser le contenu du projet). */
+export async function idbGetProjectMeta(id: string): Promise<ProjectRowMeta | null> {
+  await migrateFromLocalStorageIfNeeded();
+  const db = await getDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([STORE_PROJECTS], 'readonly');
+    const req = tx.objectStore(STORE_PROJECTS).get(id);
+    req.onsuccess = () => {
+      const stored = req.result as StoredProjectRow | undefined;
+      resolve(stored ? toMeta(stored) : null);
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/**
+ * Met à jour les métadonnées d'une ligne existante dans une seule transaction
+ * (lecture + écriture), sans toucher au contenu. Renvoie false si la ligne
+ * n'existe pas.
+ */
+export async function idbUpdateProjectMeta(
+  id: string,
+  patch: Partial<Omit<ProjectRowMeta, 'id'>> | ((meta: ProjectRowMeta) => Partial<Omit<ProjectRowMeta, 'id'>>),
+): Promise<boolean> {
+  await migrateFromLocalStorageIfNeeded();
+  const db = await getDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([STORE_PROJECTS], 'readwrite');
+    const store = tx.objectStore(STORE_PROJECTS);
+    const req = store.get(id);
+    let found = false;
+    req.onsuccess = () => {
+      const stored = req.result as StoredProjectRow | undefined;
+      if (!stored) return;
+      found = true;
+      const next = typeof patch === 'function' ? patch(toMeta(stored)) : patch;
+      store.put({ ...stored, ...next, id });
+    };
+    tx.oncomplete = () => resolve(found);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
   });
 }
 
@@ -164,10 +249,24 @@ export async function idbListProjects(): Promise<ProjectRow[]> {
     const store = tx.objectStore(STORE_PROJECTS);
     const req = store.getAll();
     req.onsuccess = () => {
-      const list = (req.result || []) as ProjectRow[];
-      // Tri par date de mise à jour descendante
-      list.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
-      resolve(list);
+      const list = ((req.result || []) as StoredProjectRow[])
+        .map((stored) => hydrate(stored))
+        .filter((row): row is ProjectRow => row !== null);
+      resolve(sortByUpdatedDesc(list));
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/** Liste les métadonnées des lignes (sans désérialiser les contenus). */
+export async function idbListProjectMetas(): Promise<ProjectRowMeta[]> {
+  await migrateFromLocalStorageIfNeeded();
+  const db = await getDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([STORE_PROJECTS], 'readonly');
+    const req = tx.objectStore(STORE_PROJECTS).getAll();
+    req.onsuccess = () => {
+      resolve(sortByUpdatedDesc(((req.result || []) as StoredProjectRow[]).map(toMeta)));
     };
     req.onerror = () => reject(req.error);
   });

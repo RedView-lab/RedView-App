@@ -2,7 +2,7 @@
  * Audit A — substitut en mémoire de src/shared/utils/storage/idbProjectStore.ts
  * (même API, structuredClone comme IndexedDB). Utilisé par a-persistence-sim.ts.
  */
-import type { ProjectRow } from '../../src/shared/utils/projects/types.ts';
+import type { ProjectRow, ProjectRowMeta } from '../../src/shared/utils/projects/types.ts';
 import type { ItineraryProject } from '../../src/features/itineraryPanel/types.ts';
 
 const projects = new Map<string, ProjectRow>();
@@ -15,16 +15,40 @@ export async function clearProjectStore(): Promise<void> {
   __idb.clear();
 }
 export async function migrateFromLocalStorageIfNeeded(): Promise<void> {}
-export async function idbSaveProject(row: ProjectRow): Promise<void> {
+export async function idbSaveProject(row: ProjectRow, _serializedData?: string): Promise<void> {
   projects.set(row.id, structuredClone(row));
 }
 export async function idbGetProject(id: string): Promise<ProjectRow | null> {
   const r = projects.get(id);
   return r ? structuredClone(r) : null;
 }
+function toMeta(r: ProjectRow): ProjectRowMeta {
+  const meta: Partial<ProjectRow> = { ...r };
+  delete meta.data;
+  return structuredClone(meta) as ProjectRowMeta;
+}
+export async function idbGetProjectMeta(id: string): Promise<ProjectRowMeta | null> {
+  const r = projects.get(id);
+  return r ? toMeta(r) : null;
+}
+export async function idbUpdateProjectMeta(
+  id: string,
+  patch: Partial<Omit<ProjectRowMeta, 'id'>> | ((meta: ProjectRowMeta) => Partial<Omit<ProjectRowMeta, 'id'>>),
+): Promise<boolean> {
+  const r = projects.get(id);
+  if (!r) return false;
+  const next = typeof patch === 'function' ? patch(toMeta(r)) : patch;
+  projects.set(id, { ...r, ...structuredClone(next), id });
+  return true;
+}
 export async function idbListProjects(): Promise<ProjectRow[]> {
   return [...projects.values()]
     .map((r) => structuredClone(r))
+    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+}
+export async function idbListProjectMetas(): Promise<ProjectRowMeta[]> {
+  return [...projects.values()]
+    .map(toMeta)
     .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
 }
 export async function idbDeleteProject(id: string): Promise<void> {

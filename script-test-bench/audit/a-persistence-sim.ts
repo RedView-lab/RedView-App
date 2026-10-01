@@ -267,6 +267,80 @@ async function main() {
     ]);
   }
 
+  // ── C4b : session ouverte sur v1, un autre appareil enregistre v2 → la sauvegarde ne doit pas écraser ──
+  {
+    fresh();
+    const row = await m.createProject('C4b', named('C4b v1'));
+    await m.getProject(row.id);
+    await __mockUpdate(__mock, row.id, await m.compressProjectPayload(named('C4b v2 (portable)')));
+    let threw: { kind?: string } | null = null;
+    try { await m.saveProject(row.id, named('C4b v1 + modif bureau')); } catch (e) { threw = e as { kind?: string }; }
+    const cloudAfterConflict = (await cloudProject(row.id))?.name;
+    const idbRow = __idb.projects.get(row.id);
+    // Choix explicite de l'utilisateur : écraser.
+    await m.saveProject(row.id, named('C4b v1 + modif bureau'), { force: true });
+    const cloudAfterForce = (await cloudProject(row.id))?.name;
+    const idbAfterForce = __idb.projects.get(row.id);
+    const bad = threw?.kind !== 'conflict' || cloudAfterConflict !== 'C4b v2 (portable)' || !idbRow?.dirty
+      || idbRow?.data?.name !== 'C4b v1 + modif bureau' || cloudAfterForce !== 'C4b v1 + modif bureau' || idbAfterForce?.dirty;
+    report('C4b', 'sauvegarde aveugle par-dessus une version plus récente d\'un autre appareil', bad, [
+      `saveProject : ${threw ? `lève ${threw.kind}` : 'RÉSOUT'} ; cloud après refus = "${cloudAfterConflict}"`,
+      `copie locale conservée en attente : dirty=${idbRow?.dirty} name="${idbRow?.data?.name}"`,
+      `après force (choix utilisateur) : cloud="${cloudAfterForce}", dirty=${idbAfterForce?.dirty}`,
+    ]);
+  }
+
+  // ── C4c : modifs locales non synchronisées (onglet fermé hors-ligne) → reprises à l'ouverture ──
+  {
+    fresh();
+    const row = await m.createProject('C4c', named('C4c v1'));
+    await m.getProject(row.id);
+    __mock.dbNetworkDown = true;
+    let threw: unknown = null;
+    try { await m.saveProject(row.id, named('C4c v2 hors-ligne')); } catch (e) { threw = e; }
+    __mock.dbNetworkDown = false;
+    const dirtyBefore = (await m.listDirtyProjects()).map((p: { id: string }) => p.id);
+    const reopened = await m.getProject(row.id);
+    await m.saveProject(row.id, reopened.data);
+    const cloudName = (await cloudProject(row.id))?.name;
+    const dirtyAfter = (await m.listDirtyProjects()).length;
+    // Cas conflit : modifs locales non synchronisées ET cloud modifié ailleurs (plus récent).
+    __mock.dbNetworkDown = true;
+    try { await m.saveProject(row.id, named('C4c v3 locale')); } catch { /* attendu */ }
+    __mock.dbNetworkDown = false;
+    await __mockUpdate(__mock, row.id, await m.compressProjectPayload(named('C4c v4 portable')), 'C4c v4 portable');
+    const opened = await m.getProject(row.id);
+    const all = [...__mock.col('projects').values()];
+    const copies = await Promise.all(all.filter((d: { $id: string }) => d.$id !== row.id).map((d: { $id: string }) => cloudProject(d.$id)));
+    const localKept = copies.some((p: { name?: string } | null) => String(p?.name).startsWith('C4c v3 locale'));
+    const bad = !threw || !dirtyBefore.includes(row.id) || reopened?.data?.name !== 'C4c v2 hors-ligne'
+      || cloudName !== 'C4c v2 hors-ligne' || dirtyAfter !== 0
+      || opened?.data?.name !== 'C4c v4 portable' || !localKept;
+    report('C4c', 'modifs locales non synchronisées ignorées / écrasées à la réouverture', bad, [
+      `hors-ligne : saveProject ${threw ? 'lève' : 'RÉSOUT'} ; projets dirty = [${dirtyBefore.join(', ')}]`,
+      `réouverture en ligne : "${reopened?.data?.name}" → resynchronisé, cloud="${cloudName}", dirty restants=${dirtyAfter}`,
+      `conflit (local v3 non synchronisé, cloud v4 plus récent) : ouvert="${opened?.data?.name}", copie de la version locale conservée : ${localKept ? 'oui' : 'NON'}`,
+    ]);
+  }
+
+  // ── C6 : renommer ne réécrit pas `data` depuis une copie périmée ──
+  {
+    fresh();
+    const row = await m.createProject('C6', named('C6 v1'));
+    await m.getProject(row.id); // copie IDB v1
+    await __mockUpdate(__mock, row.id, await m.compressProjectPayload(named('C6 v2 portable')));
+    __mock.calls = [];
+    await m.renameProject(row.id, 'C6 renommé');
+    const doc = __mock.col('projects').get(row.id);
+    const cloud = await cloudProject(row.id);
+    const opened = await m.getProject(row.id);
+    const bad = cloud?.name !== 'C6 v2 portable' || doc?.name !== 'C6 renommé' || opened?.name !== 'C6 renommé' || opened?.data?.name !== 'C6 renommé';
+    report('C6', 'renameProject réécrit data depuis une copie locale périmée', bad, [
+      `après renommage : doc.name="${doc?.name}" ; contenu cloud="${cloud?.name}" (v2 du portable préservée ?)`,
+      `réouverture : name="${opened?.name}", data.name="${opened?.data?.name}"`,
+    ]);
+  }
+
   // ── C5 : saveProject réécrit folder_id:null / created_at:now dans IDB ──
   {
     fresh();
@@ -323,6 +397,16 @@ async function main() {
     ]);
   }
 
+  // ── P1b : plus de 100 projets → la liste ne doit pas être tronquée ──
+  {
+    fresh();
+    for (let i = 0; i < 130; i++) await m.createProject(`L${i}`, named(`L${i}`));
+    const list = await m.listProjects();
+    report('P1b', 'listProjects plafonné à 100 projets (pas de pagination)', list.length !== 130, [
+      `130 projets en base → ${list.length} listés`,
+    ]);
+  }
+
   // ── P2 : deleteProjectFolder sans limit → 25 enfants max détachés ──
   {
     fresh();
@@ -344,10 +428,10 @@ async function main() {
 }
 
 /** Écriture directe côté « serveur » (simule un autre appareil). */
-async function __mockUpdate(mock: any, id: string, data: string) { // eslint-disable-line @typescript-eslint/no-explicit-any
+async function __mockUpdate(mock: any, id: string, data: string, name = 'C4 v2') { // eslint-disable-line @typescript-eslint/no-explicit-any
   const c = mock.col('projects');
   const cur = c.get(id);
-  c.set(id, { ...cur, data, name: 'C4 v2', $updatedAt: new Date(Date.now() + 3_600_000).toISOString() });
+  c.set(id, { ...cur, data, name, $updatedAt: new Date(Date.now() + 3_600_000).toISOString() });
   mock.calls = [];
 }
 

@@ -143,10 +143,12 @@ export class Databases {
     c.set(id, next);
     return structuredClone(next);
   }
-  async getDocument(_db: string, col: string, id: string) {
+  async getDocument(_db: string, col: string, id: string, queries: string[] = []) {
     netCheck(`getDocument:${col}`);
     const d = __mock.col(col).get(id);
     if (!d) throw new AppwriteException('Document with the requested ID could not be found.', 404, 'document_not_found');
+    const select = parseQueries(queries).find((q) => q.method === 'select')?.values as string[] | undefined;
+    if (select) return Object.fromEntries(Object.entries(structuredClone(d)).filter(([k]) => select.includes(k) || k.startsWith('$')));
     return structuredClone(d);
   }
   async deleteDocument(_db: string, col: string, id: string) {
@@ -160,13 +162,20 @@ export class Databases {
     let docs = [...__mock.col(col).values()];
     let limit = 25; // défaut Appwrite
     let select: string[] | null = null;
+    let cursorAfter: string | null = null;
     for (const q of parseQueries(queries)) {
       if (q.method === 'equal') docs = docs.filter((d) => q.values!.includes(d[q.attribute!] ?? null));
       if (q.method === 'limit') limit = q.values![0];
       if (q.method === 'orderDesc') docs.sort((a, b) => String(b[q.attribute!]).localeCompare(String(a[q.attribute!])));
       if (q.method === 'select') select = q.values as string[];
+      if (q.method === 'cursorAfter') cursorAfter = q.values![0];
     }
     const total = docs.length;
+    if (cursorAfter) {
+      const at = docs.findIndex((d) => d.$id === cursorAfter);
+      if (at < 0) throw new AppwriteException(`Document '${cursorAfter}' for the 'cursor' value not found.`, 400, 'general_cursor_not_found');
+      docs = docs.slice(at + 1);
+    }
     let out = docs.slice(0, limit).map((d) => structuredClone(d));
     if (select) {
       out = out.map((d) => Object.fromEntries(Object.entries(d).filter(([k]) => select!.includes(k) || k.startsWith('$'))));

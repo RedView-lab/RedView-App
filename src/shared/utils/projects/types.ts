@@ -12,7 +12,21 @@ export interface ProjectRow {
   privacy: ProjectPrivacy;
   created_at: string;
   updated_at: string;
+  /**
+   * Copie locale (IndexedDB) uniquement : modifications pas encore confirmées
+   * par le cloud. Une ligne `dirty` est resynchronisée à la prochaine ouverture
+   * et bloque la déconnexion tant qu'elle n'est pas envoyée.
+   */
+  dirty?: boolean;
+  /**
+   * Copie locale uniquement : `$updatedAt` du document cloud sur lequel cette
+   * copie est basée (contrôle de conflit multi-appareils).
+   */
+  cloud_updated_at?: string | null;
 }
+
+/** Ligne de projet sans le contenu `data` (lecture IndexedDB sans désérialiser). */
+export type ProjectRowMeta = Omit<ProjectRow, 'data'>;
 
 export interface ProjectSummary {
   id: string;
