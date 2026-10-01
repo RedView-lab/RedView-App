@@ -571,4 +571,5 @@ export const dashboardTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'fichier tronqué', en: 'truncated file' },
   { fr: 'illisible par le moteur', en: 'unreadable by the engine' },
   { fr: 'pas un fichier FIT', en: 'not a FIT file' },
+  { fr: 'trop volumineux, 30 Mo maximum', en: 'too large, 30 MB maximum' },
 ] as const;

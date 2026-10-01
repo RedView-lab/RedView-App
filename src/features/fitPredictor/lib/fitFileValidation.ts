@@ -13,7 +13,10 @@
  * le hook retire alors le fichier désigné par l'erreur et relance.
  */
 
-export type FitFileProblem = 'empty' | 'not-fit' | 'truncated' | 'no-data';
+export type FitFileProblem = 'empty' | 'not-fit' | 'truncated' | 'no-data' | 'too-large';
+
+/** Taille max du bucket Appwrite des FIT (scripts/setup-appwrite-schema.mjs : 30 000 000 octets). */
+export const MAX_FIT_FILE_BYTES = 30_000_000;
 
 const FIT_SIGNATURE = [0x2e, 0x46, 0x49, 0x54]; // ".FIT"
 const FIT_CRC_BYTES = 2;
@@ -41,6 +44,8 @@ export function validateFitBytes(bytes: Uint8Array): FitFileProblem | null {
 
 export async function validateFitFile(file: File): Promise<FitFileProblem | null> {
   if (file.size === 0) return 'empty';
+  // Refusé par le bucket de toute façon : on le signale dès la sélection.
+  if (file.size > MAX_FIT_FILE_BYTES) return 'too-large';
   const head = new Uint8Array(await file.slice(0, FIT_MAX_HEADER_BYTES).arrayBuffer());
   return validateFitHeader(head, file.size);
 }
@@ -56,6 +61,8 @@ export function describeFitFileProblem(problem: FitFileProblem | 'unreadable'): 
       return 'fichier tronqué';
     case 'unreadable':
       return 'illisible par le moteur';
+    case 'too-large':
+      return 'trop volumineux, 30 Mo maximum';
     default:
       return 'pas un fichier FIT';
   }
