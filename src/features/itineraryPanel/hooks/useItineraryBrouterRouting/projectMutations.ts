@@ -330,7 +330,16 @@ export function applyRecomputedRoute(
     itinerary.routeAudit?.findings,
     auditFindings,
   );
-  if (nextTimeline === itinerary.timeline && gpxAlreadyOk && metricsAlreadyOk && auditAlreadyOk) {
+  // Le tracé complet couvre toutes les ancres courantes : les éditions locales
+  // encore en attente (patch / extension) sont satisfaites.
+  const noPendingEdit = !itinerary.pendingRoutePatch && !itinerary.pendingTraceExtension;
+  if (
+    nextTimeline === itinerary.timeline &&
+    gpxAlreadyOk &&
+    metricsAlreadyOk &&
+    auditAlreadyOk &&
+    noPendingEdit
+  ) {
     return project;
   }
 
@@ -364,6 +373,8 @@ export function applyRecomputedRoute(
               visible: current.routeAudit?.visible ?? false,
               findings: auditFindings,
             },
+            pendingTraceExtension: undefined,
+            pendingRoutePatch: undefined,
           }
         : current,
     ),

@@ -31,6 +31,7 @@ import {
 } from './projectMutations';
 import { resolveRouteRequest } from './resolveRouteRequest';
 import type { RouteRequestBase } from './profileFallback';
+import { planPendingRouteEdit, type UnresolvedRouteEdit } from './pendingEditPlan';
 
 /** Marqueur « tracé restauré par undo/redo, à vérifier par estampille ». */
 const VERIFY_STORED_ROUTE = '#verify-stored-route';
@@ -83,6 +84,10 @@ export function useItineraryBrouterRouting({
   // Révision d'historique vue au dernier passage de l'effet de routage : un
   // undo/redo restaure un tracé déjà calculé, qui fait foi (cf. effet).
   const seenHistoryRevisionRef = useRef(historyRevision);
+  // Édition locale (ajout / patch) demandée mais pas encore appliquée, par
+  // itinéraire : une nouvelle édition la fusionne ou force un recalcul complet
+  // au lieu de l'écraser (cf. planPendingRouteEdit).
+  const unresolvedEditsRef = useRef(new Map<string, UnresolvedRouteEdit>());
 
   useEffect(() => {
     activeRef.current = active;
@@ -222,13 +227,26 @@ export function useItineraryBrouterRouting({
       for (const id of routedInputKeys.keys()) {
         routedInputKeys.set(id, VERIFY_STORED_ROUTE);
       }
+      // L'état restauré porte ses propres éditions en attente.
+      unresolvedEditsRef.current.clear();
     }
+    const unresolvedEdits = unresolvedEditsRef.current;
     const pendingRoutePatch = currentActive?.pendingRoutePatch;
-    const pendingTraceExtension = currentActive?.pendingTraceExtension;
     const existingRoutePoints = currentActive?.gpxRoute?.points ?? null;
+    const editPlan = planPendingRouteEdit(
+      currentActive,
+      currentActive ? unresolvedEdits.get(currentActive.id) : undefined,
+    );
+    const resolveUnresolvedEdit = (itineraryId: string, pendingKey?: string) => {
+      const entry = unresolvedEdits.get(itineraryId);
+      if (entry && (pendingKey === undefined || entry.pendingKey === pendingKey)) {
+        unresolvedEdits.delete(itineraryId);
+      }
+    };
 
     if (
       currentActive &&
+      editPlan.mode === 'patch' &&
       pendingRoutePatch &&
       existingRoutePoints &&
       existingRoutePoints.length >= 2
@@ -263,8 +281,9 @@ export function useItineraryBrouterRouting({
 
       const target = {
         itineraryId: itineraryForRouting.id,
-        pendingKey: JSON.stringify(pendingRoutePatch),
+        pendingKey: editPlan.pendingKey,
       };
+      unresolvedEdits.set(itineraryForRouting.id, { kind: 'patch', pendingKey: editPlan.pendingKey });
       const requestBase: RouteRequestBase = {
         start: pendingRoutePatch.start,
         end: pendingRoutePatch.end,
@@ -284,6 +303,7 @@ export function useItineraryBrouterRouting({
           setRouteWarnings(applyRouteWarnings(resolvedWarnings, usedFallbackProfile));
           // Render route immediately with native BRouter elevation data
           setProject((project) => applyPendingRoutePatch(project, target, route, null));
+          resolveUnresolvedEdit(itineraryForRouting.id, target.pendingKey);
           routedInputKeys.set(itineraryForRouting.id, routingInputKey);
           setRouteLoading(false);
           console.log(
@@ -316,13 +336,15 @@ export function useItineraryBrouterRouting({
 
     if (
       currentActive &&
-      pendingTraceExtension &&
+      editPlan.mode === 'append' &&
       existingRoutePoints &&
       existingRoutePoints.length >= 2
     ) {
-      const appendStart = pendingTraceExtension.from;
-      const appendEnd = pendingTraceExtension.to;
-      const bounds = checkRouteWithinFrance([appendStart, appendEnd]);
+      // Depuis le dernier point routé, via les clics pas encore routés.
+      const appendStart = editPlan.from;
+      const appendVia = editPlan.via;
+      const appendEnd = editPlan.to;
+      const bounds = checkRouteWithinFrance([appendStart, ...appendVia, appendEnd]);
       if (!bounds.ok) {
         deferRouteState(bounds.reason ?? 'Itinéraire hors zone autorisée.');
         return;
@@ -341,16 +363,23 @@ export function useItineraryBrouterRouting({
         `${appendStart.lon},${appendStart.lat}`,
         'to=',
         `${appendEnd.lon},${appendEnd.lat}`,
+        'via=',
+        appendVia.length,
       );
 
       const target = {
         itineraryId: itineraryForRouting.id,
-        pendingKey: JSON.stringify(pendingTraceExtension),
+        pendingKey: editPlan.pendingKey,
       };
+      unresolvedEdits.set(itineraryForRouting.id, {
+        kind: 'append',
+        pendingKey: editPlan.pendingKey,
+        append: { from: appendStart, via: appendVia, to: appendEnd },
+      });
       const requestBase: RouteRequestBase = {
         start: appendStart,
         end: appendEnd,
-        via: [] as Array<{ lat: number; lon: number }>,
+        via: appendVia,
         polygons: forbiddenPolygons,
         signal: ctrl.signal,
       };
@@ -366,6 +395,7 @@ export function useItineraryBrouterRouting({
           setRouteWarnings(applyRouteWarnings(resolvedWarnings, usedFallbackProfile));
           // Render route immediately with native BRouter elevation data
           setProject((project) => applyPendingTraceAppend(project, target, route, null));
+          resolveUnresolvedEdit(itineraryForRouting.id, target.pendingKey);
           routedInputKeys.set(itineraryForRouting.id, routingInputKey);
           setRouteLoading(false);
           console.log(
@@ -387,6 +417,8 @@ export function useItineraryBrouterRouting({
         .catch((error: unknown) => {
           if ((error as { name?: string }).name === 'AbortError') return;
           if (currentActive && isBrouterUnmappedPointError(error)) {
+            // Clic hors réseau annulé : l'état antérieur porte sa propre extension.
+            resolveUnresolvedEdit(currentActive.id);
             rollbackPendingTraceAppend(currentActive.id);
           }
           console.error('[BRouter append fail]', error);
@@ -426,7 +458,10 @@ export function useItineraryBrouterRouting({
     const hasStoredRoute =
       currentActive?.gpxRoute?.source === 'brouter' &&
       (existingRoutePoints?.length ?? 0) >= 2;
-    if (currentActive && hasStoredRoute) {
+    // Édition locale remplacée avant d'être routée : le tracé stocké est
+    // incomplet, on recalcule tout au lieu de lui faire confiance.
+    const forceFullRecompute = editPlan.mode === 'full';
+    if (currentActive && hasStoredRoute && !forceFullRecompute) {
       const routedKey = routedInputKeys.get(currentActive.id);
       // Après undo/redo : le tracé restauré fait foi s'il a été routé pour les
       // entrées restaurées ; figé en plein recalcul (estampille différente),
@@ -540,6 +575,7 @@ export function useItineraryBrouterRouting({
           );
           // Render route immediately with native BRouter elevation data & unblock UI
           setProject((project) => applyRecomputedRoute(project, target, route, null));
+          resolveUnresolvedEdit(itineraryForRouting.id);
           routedInputKeys.set(itineraryForRouting.id, routingInputKey);
           setRouteLoading(false);
 

@@ -83,6 +83,8 @@ async function main() {
   const trace = await loadSrc<any>('src/features/itineraryPanel/lib/tracer/traceEdits.ts');
   const mut = await loadSrc<any>('src/features/itineraryPanel/hooks/useItineraryBrouterRouting/projectMutations.ts');
   const tl = await loadSrc<any>('src/features/itineraryPanel/components/ItineraryPanelContainer/timelineMutations.ts');
+  // Routing effect's decision for a pending edit, given the previous unapplied one (index.ts).
+  const { planPendingRouteEdit } = await loadSrc<any>('src/features/itineraryPanel/hooks/useItineraryBrouterRouting/pendingEditPlan.ts');
 
   const S: P = { lat: 45.90, lon: 6.10 };
   const A: P = { lat: 45.93, lon: 6.16 };
@@ -167,9 +169,13 @@ async function main() {
     project = { ...project, itineraries: [c2] };
     const secondExt = c2.pendingTraceExtension;
     console.log(`B2a pending after click1 = ${JSON.stringify(firstExt)}\n    pending after click2 = ${JSON.stringify(secondExt)}`);
-    // effect re-runs (pendingTraceExtensionKey changed) → request A→B aborted, B→C requested
-    const route = fakeBrouterRoute([B, C]);
-    const out = mut.applyPendingTraceAppend(project, { itineraryId: 'it-1', pendingKey: JSON.stringify(secondExt) }, route, null);
+    // effect ran for click 1 (request A→B, still unresolved), then re-runs for click 2
+    const plan1 = planPendingRouteEdit(c1, undefined);
+    const unresolved = { kind: 'append', pendingKey: plan1.pendingKey, append: { from: plan1.from, via: plan1.via, to: plan1.to } };
+    const plan2 = planPendingRouteEdit(c2, unresolved);
+    console.log(`    effect plan after click2 = ${plan2.mode} from ${JSON.stringify(plan2.from)} via ${JSON.stringify(plan2.via)} to ${JSON.stringify(plan2.to)}`);
+    const route = plan2.mode === 'append' ? fakeBrouterRoute([plan2.from, ...plan2.via, plan2.to]) : fakeBrouterRoute([B, C]);
+    const out = mut.applyPendingTraceAppend(project, { itineraryId: 'it-1', pendingKey: plan2.pendingKey ?? JSON.stringify(secondExt) }, route, null);
     const pts = out.itineraries[0].gpxRoute.points;
     const gap = maxGapM(pts);
     const viaKey = mut.getRoutingEndpointsKey(out.itineraries[0]).viaKey;
@@ -202,8 +208,13 @@ async function main() {
     c2.pendingRoutePatch = tl.buildPendingRoutePatchForEditedRow(c2.timeline, 'end');
     project = { ...project, itineraries: [c2] };
     console.log(`B2b patch1=${JSON.stringify(c1.pendingRoutePatch)}\n    patch2=${JSON.stringify(c2.pendingRoutePatch)} (patch1 lost)`);
-    const route = fakeBrouterRoute([A2, B2]);
-    const out = mut.applyPendingRoutePatch(project, { itineraryId: 'it-1', pendingKey: JSON.stringify(c2.pendingRoutePatch) }, route, null);
+    const plan1 = planPendingRouteEdit(c1, undefined);
+    const plan2 = planPendingRouteEdit(c2, { kind: 'patch', pendingKey: plan1.pendingKey });
+    console.log(`    effect plan after 2nd drag = ${plan2.mode}`);
+    const out = plan2.mode === 'full'
+      ? mut.applyRecomputedRoute(project, { itineraryId: 'it-1', inputsSignature: mut.getRoutingInputsSignature(c2) }, fakeBrouterRoute([S, A2, B2]), null)
+      : mut.applyPendingRoutePatch(project, { itineraryId: 'it-1', pendingKey: JSON.stringify(c2.pendingRoutePatch) }, fakeBrouterRoute([A2, B2]), null);
+    if (out.itineraries[0].pendingRoutePatch) failures.push('B2b: pending patch left after the route was recomputed');
     const outPts: P[] = out.itineraries[0].gpxRoute.points;
     // does the final route pass near the NEW position of A (A2)? and near the OLD one (A)?
     const near = (p: P) => Math.min(...outPts.map((q) => hav(p, q)));
