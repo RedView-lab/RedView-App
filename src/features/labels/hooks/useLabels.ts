@@ -15,9 +15,18 @@ const STANDARD_CONFIG_KEYS = [
 const ALL_VECTOR_OVERLAY_PATTERN =
   /(road|street|highway|motorway|trunk|primary|secondary|tertiary|pedestrian|path|track|junction|shield|tunnel|bridge|traffic|railway|rail|transit|ferry|aerialway|aeroway|runway|taxiway|admin|boundary|border|country|state|province|poi|place|settlement|locality|natural|park|protected|water.*label|waterway.*label|marine.*label)/i;
 
-function isAppCustomLayer(layerId: string): boolean {
+/**
+ * Calques ajoutés par l'application (tracés BRouter, zones RedView, ortho IGN,
+ * overlays…) : jamais touchés par les bascules d'étiquettes. Sans ces
+ * préfixes, `brouter-analysis-hover-point-layer` (« point » contient « poi »)
+ * était masqué par la bascule POI.
+ */
+export function isAppCustomLayer(layerId: string): boolean {
   return (
     layerId.startsWith('rv-') ||
+    layerId.startsWith('brouter-') ||
+    layerId.startsWith('redview-') ||
+    layerId.startsWith('ign-') ||
     layerId.startsWith('rvi-') ||
     layerId.startsWith('route-') ||
     layerId.startsWith('forbidden-zone-') ||
@@ -57,6 +66,14 @@ export function getLayerCategory(
   const id = layer.id.toLowerCase();
   if (isAppCustomLayer(id)) return null;
 
+  // Seuls les calques symbol sont des étiquettes. Les motifs ci-dessous
+  // matchent des sous-chaînes (« trail » contient « rail ») : appliqués aux
+  // lignes/remplissages, ils masquaient sentiers, voies ferrées, clôtures et
+  // tout le réseau routier. Exception : les tracés de frontières, rattachés
+  // explicitement aux catégories Pays / Régions.
+  const isSymbol = layer.type === 'symbol';
+  if (!isSymbol && !/(admin|boundary|border|disputed)/i.test(id)) return null;
+
   // 1. Countries (Country names & country boundaries)
   // E.g. "country-label", "country-label-sm", "admin-0-boundary", "admin-0-line", "boundary-land", etc.
   if (
@@ -71,6 +88,8 @@ export function getLayerCategory(
   if (/(state|province|admin[-_]?1)/i.test(id)) {
     return 'states';
   }
+
+  if (!isSymbol) return null;
 
   // 3. Water body labels
   if (/(water.*label|waterway.*label|marine.*label|water-point-label|water-line-label)/i.test(id)) {
@@ -193,8 +212,10 @@ function applyAll(
   setConfigSafe('showPointOfInterestLabels', hasPoi);
   setConfigSafe('showTransitLabels', hasPoi);
   setConfigSafe('showRoadLabels', hasRoads);
-  setConfigSafe('showRoadsAndTransit', hasRoads);
-  setConfigSafe('showPedestrianRoads', hasRoads);
+  // Les bascules par catégorie ne concernent que les étiquettes : le réseau
+  // routier reste visible (et est rétabli après un « tout masquer »).
+  setConfigSafe('showRoadsAndTransit', true);
+  setConfigSafe('showPedestrianRoads', true);
 
   // 2. Enumerate all style layers and apply visibility per category
   try {

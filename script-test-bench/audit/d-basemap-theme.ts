@@ -25,7 +25,7 @@ import {
 } from '../../src/features/map3d/lib/basemapThemes/index.ts';
 import { buildThemeOverrides } from '../../src/features/map3d/lib/basemapThemes/engine.ts';
 import { TOPO_LIGHT_PALETTE } from '../../src/features/map3d/lib/basemapThemes/palettes.ts';
-import { getLayerCategory } from '../../src/features/labels/hooks/useLabels.ts';
+import { getLayerCategory, isAppCustomLayer } from '../../src/features/labels/hooks/useLabels.ts';
 
 const require = createRequire(import.meta.url);
 const styleSpec = require('mapbox-gl/dist/style-spec/index.cjs') as {
@@ -151,10 +151,10 @@ const APP_LAYER_IDS = [
   'weather-overlay-layer-rain-radar', 'wind-particles', 'sunlight-map-image', 'shadow-image', 'sun-disk',
 ];
 const OVERLAY_RE = /(road|street|highway|motorway|trunk|primary|secondary|tertiary|pedestrian|path|track|junction|shield|tunnel|bridge|traffic|railway|rail|transit|ferry|aerialway|aeroway|runway|taxiway|admin|boundary|border|country|state|province|poi|place|settlement|locality|natural|park|protected|water.*label|waterway.*label|marine.*label)/i;
-// Mirror of useLabels.isAppCustomLayer (not exported): these are skipped.
-const APP_PREFIXES = ['rv-', 'rvi-', 'route-', 'forbidden-zone-', 'analysis-', 'lidar-', 'weather-', 'wind-', 'sunlight-', 'sun-', 'shadow-', 'slope-', 'altitude-', 'contour-', 'custom-'];
+// useLabels.isAppCustomLayer (now exported): protected app layers are skipped
+// by applyAll / applyMasterDisable before any pattern matching.
 for (const id of APP_LAYER_IDS) {
-  if (APP_PREFIXES.some((p) => id.startsWith(p))) continue;
+  if (isAppCustomLayer(id)) continue;
   const cat = getLayerCategory({ id, type: 'circle', slot: 'top' } as never);
   const masterHit = OVERLAY_RE.test(`${id} top`);
   if (cat || masterHit) fail(`app layer '${id}' NOT protected by isAppCustomLayer → category=${cat ?? 'none'} masterDisableMatch=${masterHit} (hidden by Étiquettes toggles)`);
