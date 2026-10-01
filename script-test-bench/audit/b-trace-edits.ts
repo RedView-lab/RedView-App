@@ -123,13 +123,17 @@ async function main() {
     const p1 = mut.applyPendingTraceAppend(project, target, route, null);
     const depsAfter = effectDeps(p1.itineraries[0]);
     const effectReruns = depsBefore !== depsAfter; // → cleanup at index.ts:399 aborts ctrl
-    // index.ts:383 — refined profile (distinct elevations) applied on the *new* state
-    const refined = mut.applyPendingTraceAppend; // same fn
+    // Refinement (index.ts refineRouteInBackground): own AbortController keyed on the
+    // itinerary — an effect re-run does not abort it — and applied through
+    // applyRefinedRouteProfile, matched on the refined route's geometry (the pending
+    // field is already cleared by the 1st apply).
     const fakeRefinedProfile = route.coordinates.map((c: any, i: number) => ({ lat: c[1], lon: c[0], distanceM: i * 40, elevationM: 1234, gradientPct: 0 }));
-    const p2 = refined(p1, target, route, fakeRefinedProfile);
-    const noop = p2 === p1;
-    console.log(`B1 append: effect deps change after 1st apply=${effectReruns} (→ ctrl.abort() kills refinement); 2nd apply no-op=${noop}`);
-    if (effectReruns && noop) failures.push('B1: IGN altimetry refinement can never be applied after a trace append (aborted + no-op)');
+    const refinedLanded = (before: any, after: any) => after !== before
+      && after.itineraries[0].gpxRoute.points.some((pt: any) => Math.abs((pt.elevationM ?? 0) - 1234) < 1);
+    const base1 = mut.captureRouteRefinementBase(project, p1, 'it-1');
+    const p2 = mut.applyRefinedRouteProfile(p1, base1, (bp: any) => mut.applyPendingTraceAppend(bp, target, route, fakeRefinedProfile));
+    console.log(`B1 append: effect deps change after 1st apply=${effectReruns} (refinement has its own controller); refined elevations applied=${refinedLanded(p1, p2)}`);
+    if (!refinedLanded(p1, p2)) failures.push('B1: IGN altimetry refinement not applied after a trace append');
 
     // same for drag patch
     let pp = baseProject();
@@ -140,21 +144,26 @@ async function main() {
     const tgt = { itineraryId: 'it-1', pendingKey: JSON.stringify(c2.pendingRoutePatch) };
     const r2 = fakeBrouterRoute([S, B]);
     const q1 = mut.applyPendingRoutePatch(pp, tgt, r2, null);
-    const rerun2 = effectDeps(pp.itineraries[0]) !== effectDeps(q1.itineraries[0]);
-    const q2 = mut.applyPendingRoutePatch(q1, tgt, r2, fakeRefinedProfile);
-    console.log(`B1 patch : effect deps change after 1st apply=${rerun2}; 2nd apply no-op=${q2 === q1}`);
-    if (rerun2 && q2 === q1) failures.push('B1: IGN altimetry refinement can never be applied after a drag patch (aborted + no-op)');
+    const q2 = mut.applyRefinedRouteProfile(q1, mut.captureRouteRefinementBase(pp, q1, 'it-1'), (bp: any) => mut.applyPendingRoutePatch(bp, tgt, r2, fakeRefinedProfile));
+    console.log(`B1 patch : refined elevations applied=${refinedLanded(q1, q2)}`);
+    if (!refinedLanded(q1, q2)) failures.push('B1: IGN altimetry refinement not applied after a drag patch');
 
-    // full recompute (applyRecomputedRoute): 2nd apply would work, but deps change → abort
+    // full recompute
     const pr = baseProject();
     pr.itineraries[0].gpxRoute.source = 'gpx';
     pr.itineraries[0].timeline.splice(1, 0, { id: 'w', kind: 'waypoint', label: 'w', distanceKm: null, lat: B.lat, lon: B.lon });
     const sig = mut.getRoutingInputsSignature(pr.itineraries[0]);
     const r3 = fakeBrouterRoute([S, B, A]);
-    const s1 = mut.applyRecomputedRoute(pr, { itineraryId: 'it-1', inputsSignature: sig }, r3, null);
-    const rerun3 = effectDeps(pr.itineraries[0]) !== effectDeps(s1.itineraries[0]);
-    console.log(`B1 recompute: effect deps change after 1st apply=${rerun3} (points ${pr.itineraries[0].gpxRoute.points.length}→${s1.itineraries[0].gpxRoute.points.length}, source gpx→${s1.itineraries[0].gpxRoute.source})`);
-    if (rerun3) failures.push('B1: full-recompute refinement aborted by effect cleanup whenever point count/source changes');
+    const rtgt = { itineraryId: 'it-1', inputsSignature: sig };
+    const s1 = mut.applyRecomputedRoute(pr, rtgt, r3, null);
+    const s2 = mut.applyRefinedRouteProfile(s1, mut.captureRouteRefinementBase(pr, s1, 'it-1'), (bp: any) => mut.applyRecomputedRoute(bp, rtgt, r3, fakeRefinedProfile));
+    console.log(`B1 recompute: refined elevations applied=${refinedLanded(s1, s2)}`);
+    if (!refinedLanded(s1, s2)) failures.push('B1: IGN altimetry refinement not applied after a full recompute');
+
+    // stale refinement (route replaced meanwhile) must be ignored
+    const replaced = mut.applyRecomputedRoute(pr, rtgt, fakeBrouterRoute([S, { lat: 45.95, lon: 6.0 }, B, A]), null);
+    const stale = mut.applyRefinedRouteProfile(replaced, mut.captureRouteRefinementBase(pr, s1, 'it-1'), (bp: any) => mut.applyRecomputedRoute(bp, rtgt, r3, fakeRefinedProfile));
+    if (stale !== replaced) failures.push('B1: stale refinement applied over a newer route');
   }
 
   // ---------------- B2a: rapid clicks (append) -----------------

@@ -25,10 +25,15 @@ export function toGeometryRoutePoints(coordinates: [number, number][]): RoutePoi
   }));
 }
 
+/**
+ * @param elevationOverride profil d'altitude affiné (MNT IGN / Copernicus) :
+ *   remplace les altitudes BRouter sans toucher à la géométrie.
+ */
 export function buildStoredRoutePointsFromBrouter(
   geometryPoints: RoutePoints,
   messageProfile: ProfilePoint[] | null,
   targetDistanceM: number,
+  elevationOverride?: ProfilePoint[] | null,
 ): RoutePoints {
   const geometryProfile = extractRouteProfileFromPoints(geometryPoints);
   const denseGeometryPoints = geometryProfile
@@ -36,7 +41,11 @@ export function buildStoredRoutePointsFromBrouter(
     : null;
 
   if (denseGeometryPoints) {
-    return denseGeometryPoints;
+    // Sans cela le profil affiné était ignoré dès que BRouter fournit des
+    // coordonnées 3D (cas normal) : l'affinage altimétrique n'avait aucun effet.
+    return elevationOverride && elevationOverride.length >= 2
+      ? reElevateRoutePoints(denseGeometryPoints, elevationOverride)
+      : denseGeometryPoints;
   }
 
   return messageProfile
@@ -94,6 +103,17 @@ function scaleRouteProfileDistances(points: RoutePoints, targetDistanceM: number
     ...point,
     distanceM: Number.isFinite(point.distanceM) ? (point.distanceM as number) * scale : point.distanceM,
   }));
+}
+
+/** Altitudes / pentes reprises du profil (à distance relative égale), géométrie inchangée. */
+function reElevateRoutePoints(points: RoutePoints, profile: ProfilePoint[]): RoutePoints {
+  const totalDistanceM = Number(points[points.length - 1]?.distanceM ?? 0);
+  const profileTotalDistanceM = profile[profile.length - 1]?.distanceM ?? 0;
+  const scale = totalDistanceM > 0 && profileTotalDistanceM > 0 ? profileTotalDistanceM / totalDistanceM : 1;
+  return points.map((point) => {
+    const sample = interpolateProfileSample(profile, Number(point.distanceM ?? 0) * scale);
+    return { ...point, elevationM: sample.elevationM, gradientPct: sample.gradientPct };
+  });
 }
 
 function enrichGeometryRoutePoints(

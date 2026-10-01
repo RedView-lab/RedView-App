@@ -123,6 +123,7 @@ export function applyPendingRoutePatch(
     geometryPoints,
     routeProfile,
     route.distanceM,
+    routeProfileOverride,
   );
   const surfacedPatchRoutePoints = applyBrouterSurfaceToRoutePoints(route, patchRoutePoints);
   const patchSurfaceMetrics = computeRouteSurfaceMetricsFromBrouter(route);
@@ -209,6 +210,7 @@ export function applyPendingTraceAppend(
     geometryPoints,
     routeProfile,
     route.distanceM,
+    routeProfileOverride,
   );
   const surfacedSegmentRoutePoints = applyBrouterSurfaceToRoutePoints(route, segmentRoutePoints);
   const segmentSurfaceMetrics = computeRouteSurfaceMetricsFromBrouter(route);
@@ -286,6 +288,7 @@ export function applyRecomputedRoute(
     geometryPoints,
     routeProfile,
     route.distanceM,
+    routeProfileOverride,
   );
   const surfacedRoutePoints = cleanGpxGlitches(applyBrouterSurfaceToRoutePoints(route, routePoints));
   const elevationMetrics = computeRouteElevationMetrics(surfacedRoutePoints);
@@ -377,6 +380,99 @@ export function applyRecomputedRoute(
             pendingRoutePatch: undefined,
           }
         : current,
+    ),
+  };
+}
+
+/**
+ * Contexte d'un affinage altimétrique (IGN / Copernicus) lancé après la 1re
+ * application d'un tracé BRouter. L'affinage arrive après que le champ pending
+ * a été effacé et que l'effet de routage a été relancé : il se rattache donc au
+ * tracé qu'il affine (signature géométrique), pas à l'édition en attente.
+ */
+export interface RouteRefinementBase {
+  itineraryId: string;
+  /** Projet sur lequel le tracé brut a été appliqué (état avant application). */
+  baseProject: ItineraryProject;
+  /** Signature géométrique du tracé produit par cette application. */
+  appliedGeometryKey: string;
+}
+
+/** Signature de la géométrie (lat/lon) d'un tracé, indépendante des altitudes. */
+export function buildRouteGeometryKey(
+  points: ReadonlyArray<{ lat: number; lon: number }> | null | undefined,
+): string {
+  if (!points || points.length === 0) return 'empty';
+  let hash = 0x811c9dc5;
+  const mix = (value: number) => {
+    hash = Math.imul(hash ^ (value | 0), 0x01000193) >>> 0;
+  };
+  mix(points.length);
+  for (const point of points) {
+    mix(Math.round(point.lat * 1e6));
+    mix(Math.round(point.lon * 1e6));
+  }
+  return `${points.length}:${hash.toString(36)}`;
+}
+
+/** À appeler dans l'updater de la 1re application (tracé brut). */
+export function captureRouteRefinementBase(
+  baseProject: ItineraryProject,
+  appliedProject: ItineraryProject,
+  itineraryId: string,
+): RouteRefinementBase | null {
+  const applied = appliedProject.itineraries.find((item) => item.id === itineraryId);
+  if (!applied?.gpxRoute || applied.gpxRoute.source !== 'brouter') return null;
+  return {
+    itineraryId,
+    baseProject,
+    appliedGeometryKey: buildRouteGeometryKey(applied.gpxRoute.points),
+  };
+}
+
+/**
+ * Applique le profil affiné : rejoue `applyWithProfile` (la même mutation que
+ * la 1re application, avec le profil affiné) sur l'état d'origine, puis n'en
+ * reporte que les altitudes et les métriques qui en dépendent, à condition
+ * que l'itinéraire porte toujours le tracé affiné (sinon il a été remplacé).
+ */
+export function applyRefinedRouteProfile(
+  project: ItineraryProject,
+  base: RouteRefinementBase,
+  applyWithProfile: (project: ItineraryProject) => ItineraryProject,
+): ItineraryProject {
+  const current = project.itineraries.find((item) => item.id === base.itineraryId);
+  if (!current?.gpxRoute || current.gpxRoute.source !== 'brouter') return project;
+  if (buildRouteGeometryKey(current.gpxRoute.points) !== base.appliedGeometryKey) return project;
+
+  const refinedProject = applyWithProfile(base.baseProject);
+  if (refinedProject === base.baseProject) return project;
+  const refinedRoute = refinedProject.itineraries.find((item) => item.id === base.itineraryId);
+  const refinedPoints = refinedRoute?.gpxRoute;
+  if (!refinedRoute || !refinedPoints) return project;
+
+  return {
+    ...project,
+    itineraries: project.itineraries.map((item) =>
+      item.id === base.itineraryId && item.gpxRoute
+        ? {
+            ...item,
+            gpxRoute: {
+              ...item.gpxRoute,
+              points: refinedPoints.points,
+              originalPoints: refinedPoints.originalPoints,
+            },
+            metrics: {
+              ...item.metrics,
+              ascentM: refinedRoute.metrics?.ascentM,
+              descentM: refinedRoute.metrics?.descentM,
+              avgSlopePercent: refinedRoute.metrics?.avgSlopePercent,
+            },
+            ...(item.routeAudit && refinedRoute.routeAudit
+              ? { routeAudit: { ...item.routeAudit, findings: refinedRoute.routeAudit.findings } }
+              : {}),
+          }
+        : item,
     ),
   };
 }

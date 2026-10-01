@@ -11,6 +11,8 @@ import {
   isClimbingMode,
   type BrouterRoute,
 } from '../../lib/brouter';
+import type { RouteProfilePoint } from '../../lib/route-metrics';
+import type { ItineraryProject } from '../../types';
 import { refineRouteProfileWithIgnAltimetry } from '../../lib/route-metrics';
 import {
   hasRouteLayer,
@@ -26,8 +28,11 @@ import {
   applyPendingRoutePatch,
   applyPendingTraceAppend,
   applyRecomputedRoute,
+  applyRefinedRouteProfile,
+  captureRouteRefinementBase,
   getRoutingEndpointsKey,
   getRoutingInputsSignature,
+  type RouteRefinementBase,
 } from './projectMutations';
 import { resolveRouteRequest } from './resolveRouteRequest';
 import type { RouteRequestBase } from './profileFallback';
@@ -88,14 +93,21 @@ export function useItineraryBrouterRouting({
   // itinéraire : une nouvelle édition la fusionne ou force un recalcul complet
   // au lieu de l'écraser (cf. planPendingRouteEdit).
   const unresolvedEditsRef = useRef(new Map<string, UnresolvedRouteEdit>());
+  // Affinage altimétrique en cours, par itinéraire. Contrôleur propre : la
+  // relance de l'effet (déclenchée par la 1re application du tracé) ne doit
+  // pas l'annuler ; seul un nouveau tracé pour cet itinéraire le remplace.
+  const refinementAbortRef = useRef(new Map<string, AbortController>());
 
   useEffect(() => {
     activeRef.current = active;
   }, [active]);
 
   useEffect(() => {
+    const refinements = refinementAbortRef.current;
     return () => {
       dispatchRouteLoading(false);
+      for (const ctrl of refinements.values()) ctrl.abort();
+      refinements.clear();
     };
   }, []);
 
@@ -131,6 +143,38 @@ export function useItineraryBrouterRouting({
       }
     },
     [],
+  );
+  /**
+   * Affinage altimétrique MNT (IGN 1 m en France, Copernicus ailleurs) d'un
+   * tracé tout juste appliqué, en arrière-plan. Le résultat se rattache au
+   * tracé affiné (cf. applyRefinedRouteProfile), pas à l'édition en attente
+   * déjà effacée par la 1re application.
+   */
+  const refineRouteInBackground = useCallback(
+    (
+      itineraryId: string,
+      route: BrouterRoute,
+      baseBox: { current: RouteRefinementBase | null },
+      applyWithProfile: (project: ItineraryProject, profile: RouteProfilePoint[]) => ItineraryProject,
+      reason: string,
+    ) => {
+      if (route.distanceM > 500_000) return;
+      const refinements = refinementAbortRef.current;
+      refinements.get(itineraryId)?.abort();
+      const ctrl = new AbortController();
+      refinements.set(itineraryId, ctrl);
+      void resolveIgnAltimetryRouteProfile(route, ctrl.signal, reason).then((profile) => {
+        if (refinements.get(itineraryId) === ctrl) refinements.delete(itineraryId);
+        const base = baseBox.current;
+        if (!profile || ctrl.signal.aborted || !base) return;
+        setProject((project) => applyRefinedRouteProfile(
+          project,
+          base,
+          (baseProject) => applyWithProfile(baseProject, profile),
+        ));
+      });
+    },
+    [resolveIgnAltimetryRouteProfile, setProject],
   );
   const requestRouteRefresh = useCallback(() => {
     setRouteRefreshNonce((current) => current + 1);
@@ -298,11 +342,16 @@ export function useItineraryBrouterRouting({
         requestBase,
         setRouteWarnings,
       })
-        .then(async ({ route, usedFallbackProfile, resolvedWarnings }) => {
+        .then(({ route, usedFallbackProfile, resolvedWarnings }) => {
           if (ctrl.signal.aborted) return;
           setRouteWarnings(applyRouteWarnings(resolvedWarnings, usedFallbackProfile));
           // Render route immediately with native BRouter elevation data
-          setProject((project) => applyPendingRoutePatch(project, target, route, null));
+          const refinementBase: { current: RouteRefinementBase | null } = { current: null };
+          setProject((project) => {
+            const next = applyPendingRoutePatch(project, target, route, null);
+            refinementBase.current = captureRouteRefinementBase(project, next, target.itineraryId);
+            return next;
+          });
           resolveUnresolvedEdit(itineraryForRouting.id, target.pendingKey);
           routedInputKeys.set(itineraryForRouting.id, routingInputKey);
           setRouteLoading(false);
@@ -314,13 +363,13 @@ export function useItineraryBrouterRouting({
             'km | pts=',
             route.coordinates.length,
           );
-          // Background MNT (1m bare-earth) altimetry refinement (France IGN + International)
-          if (route.distanceM <= 500_000) {
-            const ignAltimetryRouteProfile = await resolveIgnAltimetryRouteProfile(route, ctrl.signal, 'local patch');
-            if (ignAltimetryRouteProfile && !ctrl.signal.aborted) {
-              setProject((project) => applyPendingRoutePatch(project, target, route, ignAltimetryRouteProfile));
-            }
-          }
+          refineRouteInBackground(
+            target.itineraryId,
+            route,
+            refinementBase,
+            (project, profile) => applyPendingRoutePatch(project, target, route, profile),
+            'local patch',
+          );
         })
         .catch((error: unknown) => {
           if ((error as { name?: string }).name === 'AbortError') return;
@@ -390,11 +439,16 @@ export function useItineraryBrouterRouting({
         requestBase,
         setRouteWarnings,
       })
-        .then(async ({ route, usedFallbackProfile, resolvedWarnings }) => {
+        .then(({ route, usedFallbackProfile, resolvedWarnings }) => {
           if (ctrl.signal.aborted) return;
           setRouteWarnings(applyRouteWarnings(resolvedWarnings, usedFallbackProfile));
           // Render route immediately with native BRouter elevation data
-          setProject((project) => applyPendingTraceAppend(project, target, route, null));
+          const refinementBase: { current: RouteRefinementBase | null } = { current: null };
+          setProject((project) => {
+            const next = applyPendingTraceAppend(project, target, route, null);
+            refinementBase.current = captureRouteRefinementBase(project, next, target.itineraryId);
+            return next;
+          });
           resolveUnresolvedEdit(itineraryForRouting.id, target.pendingKey);
           routedInputKeys.set(itineraryForRouting.id, routingInputKey);
           setRouteLoading(false);
@@ -406,13 +460,13 @@ export function useItineraryBrouterRouting({
             'km | pts=',
             route.coordinates.length,
           );
-          // Background MNT (1m bare-earth) altimetry refinement (France IGN + International)
-          if (route.distanceM <= 500_000) {
-            const ignAltimetryRouteProfile = await resolveIgnAltimetryRouteProfile(route, ctrl.signal, 'append segment');
-            if (ignAltimetryRouteProfile && !ctrl.signal.aborted) {
-              setProject((project) => applyPendingTraceAppend(project, target, route, ignAltimetryRouteProfile));
-            }
-          }
+          refineRouteInBackground(
+            target.itineraryId,
+            route,
+            refinementBase,
+            (project, profile) => applyPendingTraceAppend(project, target, route, profile),
+            'append segment',
+          );
         })
         .catch((error: unknown) => {
           if ((error as { name?: string }).name === 'AbortError') return;
@@ -552,7 +606,7 @@ export function useItineraryBrouterRouting({
         requestBase,
         setRouteWarnings,
       })
-        .then(async ({ route, usedFallbackProfile, resolvedWarnings, resolved }) => {
+        .then(({ route, usedFallbackProfile, resolvedWarnings, resolved }) => {
           if (activeCtrl.signal.aborted) return;
           console.log(
             '[BRouter] profile resolved →',
@@ -574,7 +628,12 @@ export function useItineraryBrouterRouting({
             route.coordinates.length,
           );
           // Render route immediately with native BRouter elevation data & unblock UI
-          setProject((project) => applyRecomputedRoute(project, target, route, null));
+          const refinementBase: { current: RouteRefinementBase | null } = { current: null };
+          setProject((project) => {
+            const next = applyRecomputedRoute(project, target, route, null);
+            refinementBase.current = captureRouteRefinementBase(project, next, target.itineraryId);
+            return next;
+          });
           resolveUnresolvedEdit(itineraryForRouting.id);
           routedInputKeys.set(itineraryForRouting.id, routingInputKey);
           setRouteLoading(false);
@@ -588,13 +647,13 @@ export function useItineraryBrouterRouting({
             },
           });
 
-          // Background MNT (1m bare-earth) altimetry refinement (France IGN + International)
-          if (route.distanceM <= 500_000) {
-            const ignAltimetryRouteProfile = await resolveIgnAltimetryRouteProfile(route, activeCtrl.signal, 'recompute route');
-            if (ignAltimetryRouteProfile && !activeCtrl.signal.aborted) {
-              setProject((project) => applyRecomputedRoute(project, target, route, ignAltimetryRouteProfile));
-            }
-          }
+          refineRouteInBackground(
+            target.itineraryId,
+            route,
+            refinementBase,
+            (project, profile) => applyRecomputedRoute(project, target, route, profile),
+            'recompute route',
+          );
         })
         .catch((error: unknown) => {
           if ((error as { name?: string }).name === 'AbortError') return;
@@ -627,7 +686,7 @@ export function useItineraryBrouterRouting({
     pendingRoutePatchKey,
     pendingTraceExtensionKey,
     profileId,
-    resolveIgnAltimetryRouteProfile,
+    refineRouteInBackground,
     routeRefreshNonce,
     routingInputKey,
     rollbackPendingTraceAppend,
