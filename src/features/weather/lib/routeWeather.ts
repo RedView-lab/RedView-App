@@ -52,11 +52,43 @@ export interface RouteWeatherValues {
 // ── Cache & In-Flight Management ─────────────────────────────────────
 
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+/** Horizon de l'API forecast Open-Meteo : aujourd'hui + 15 jours (16 jours). */
+export const ROUTE_WEATHER_FORECAST_HORIZON_DAYS = 16;
+/** Vitesse de repli pour estimer la durée de sortie sans prédiction. */
+const FALLBACK_RIDE_SPEED_KMH = 20;
 const weatherCache = new Map<string, RouteWeatherDataset>();
 const inFlightRequests = new Map<string, Promise<RouteWeatherDataset | null>>();
 
-function makeCacheKey(signature: string, startDate: string, startTimeHour: string): string {
-  return `${signature}|${startDate}|${startTimeHour}`;
+function makeCacheKey(signature: string, startDate: string, startTimeHour: string, endDate: string): string {
+  return `${signature}|${startDate}|${startTimeHour}|${endDate}`;
+}
+
+const DAY_MS = 24 * 3600 * 1000;
+
+function startOfLocalDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+/**
+ * Plage de dates à demander : du jour de départ au jour d'arrivée estimé
+ * (durée prédite + 1 h de marge), bornée à l'horizon de prévision.
+ * `null` si le départ est au-delà de l'horizon (aucune prévision possible).
+ */
+export function resolveRouteWeatherDateRange(
+  startDate: string,
+  startTime: string,
+  rideDurationHours: number,
+  now: Date = new Date(),
+): { startDate: string; endDate: string } | null {
+  const startDay = parseLocalDateIso(startDate);
+  if (!startDay) return null;
+  const lastForecastDay = new Date(startOfLocalDay(now).getTime() + (ROUTE_WEATHER_FORECAST_HORIZON_DAYS - 1) * DAY_MS);
+  if (startDay.getTime() > lastForecastDay.getTime()) return null;
+  const departureMs = startDay.getTime() + timeToMinutes(startTime || '12:00') * 60 * 1000;
+  const durationH = Number.isFinite(rideDurationHours) && rideDurationHours > 0 ? rideDurationHours : 0;
+  const arrivalDay = startOfLocalDay(new Date(departureMs + (durationH + 1) * 3600 * 1000));
+  const endDay = arrivalDay.getTime() > lastForecastDay.getTime() ? lastForecastDay : arrivalDay;
+  return { startDate, endDate: formatLocalDateIso(endDay) };
 }
 
 export function clearRouteWeatherCache(): void {
@@ -131,21 +163,34 @@ interface RawOpenMeteoForecastItem {
   };
 }
 
+/**
+ * Prévisions horaires le long de la trace. `null` = prévisions indisponibles
+ * (départ hors horizon, erreur HTTP, réponse vide) : l'appelant doit l'afficher
+ * comme tel — aucune valeur n'est inventée.
+ */
 export async function fetchRouteWeatherDataset(
   itineraryId: string,
   routePoints: RouteChartPoint[],
   startDate: string,
   startTime: string,
   signal?: AbortSignal,
+  options: { rideDurationHours?: number | null } = {},
 ): Promise<RouteWeatherDataset | null> {
   if (!routePoints || routePoints.length === 0) return null;
 
   const sampledStations = sampleRouteForWeather(routePoints);
   if (sampledStations.length === 0) return null;
 
+  const totalDistanceKm = (routePoints[routePoints.length - 1]?.distanceM ?? 0) / 1000;
+  const rideDurationHours = options.rideDurationHours && options.rideDurationHours > 0
+    ? options.rideDurationHours
+    : totalDistanceKm / FALLBACK_RIDE_SPEED_KMH;
+  const range = resolveRouteWeatherDateRange(startDate, startTime, rideDurationHours);
+  if (!range) return null;
+
   const signature = buildRouteContentSignature(routePoints);
   const hourPrefix = startTime ? startTime.slice(0, 2) : '12';
-  const cacheKey = makeCacheKey(signature, startDate, hourPrefix);
+  const cacheKey = makeCacheKey(signature, startDate, hourPrefix, range.endDate);
 
   const cached = weatherCache.get(cacheKey);
   if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
@@ -160,16 +205,13 @@ export async function fetchRouteWeatherDataset(
       const lats = sampledStations.map((s) => s.lat.toFixed(4)).join(',');
       const lngs = sampledStations.map((s) => s.lng.toFixed(4)).join(',');
 
-      // Calcul de la plage de jours (ex: départ + 1 jour de marge pour longues courses)
-      const parsedStart = parseLocalDateIso(startDate) ?? new Date();
-      const nextDay = new Date(parsedStart.getTime() + 24 * 3600 * 1000);
-      const endDateIso = formatLocalDateIso(nextDay);
-
+      // timezone=auto : heures locales du lieu de chaque station (heure murale),
+      // cohérentes avec l'heure de départ saisie pour ce parcours.
       const url =
         `${OPENMETEO_FORECAST_URL}?latitude=${lats}&longitude=${lngs}` +
         `&hourly=temperature_2m,apparent_temperature,precipitation,wind_speed_10m,cloud_cover,relative_humidity_2m,sunshine_duration` +
-        `&start_date=${startDate}&end_date=${endDateIso}` +
-        `&timezone=Europe%2FParis&temperature_unit=celsius&precipitation_unit=mm&wind_speed_unit=kmh&cell_selection=nearest`;
+        `&start_date=${range.startDate}&end_date=${range.endDate}` +
+        `&timezone=auto&temperature_unit=celsius&precipitation_unit=mm&wind_speed_unit=kmh&cell_selection=nearest`;
 
       const response = await fetch(url, {
         signal,
@@ -203,33 +245,35 @@ export async function fetchRouteWeatherDataset(
         const humidityArr = new Array<number>(count);
         const sunshineArr = new Array<number>(count);
 
+        // Valeur absente (null au-delà de l'horizon du modèle) → NaN : le point
+        // est omis du graphique plutôt que remplacé par une valeur inventée.
         for (let t = 0; t < count; t++) {
           const rawTemp = hourly.temperature_2m?.[t];
-          const temp = Number.isFinite(rawTemp) ? (rawTemp as number) : 15;
+          const temp = Number.isFinite(rawTemp) ? (rawTemp as number) : Number.NaN;
           tempArr[t] = temp;
 
           const rawFeels = hourly.apparent_temperature?.[t];
-          feelsArr[t] = Number.isFinite(rawFeels) ? (rawFeels as number) : temp;
+          feelsArr[t] = Number.isFinite(rawFeels) ? (rawFeels as number) : Number.NaN;
 
           const rawPrecip = hourly.precipitation?.[t];
-          precipArr[t] = Number.isFinite(rawPrecip) ? Math.max(0, rawPrecip as number) : 0;
+          precipArr[t] = Number.isFinite(rawPrecip) ? Math.max(0, rawPrecip as number) : Number.NaN;
 
           const rawWind = hourly.wind_speed_10m?.[t];
-          windArr[t] = Number.isFinite(rawWind) ? Math.max(0, rawWind as number) : 5;
+          windArr[t] = Number.isFinite(rawWind) ? Math.max(0, rawWind as number) : Number.NaN;
 
           const rawCloud = hourly.cloud_cover?.[t];
-          const cloud = Number.isFinite(rawCloud) ? Math.max(0, Math.min(100, rawCloud as number)) : 20;
+          const cloud = Number.isFinite(rawCloud) ? Math.max(0, Math.min(100, rawCloud as number)) : Number.NaN;
           cloudArr[t] = cloud;
 
           const rawHumidity = hourly.relative_humidity_2m?.[t];
-          humidityArr[t] = Number.isFinite(rawHumidity) ? Math.max(0, Math.min(100, rawHumidity as number)) : 60;
+          humidityArr[t] = Number.isFinite(rawHumidity) ? Math.max(0, Math.min(100, rawHumidity as number)) : Number.NaN;
 
           const rawSunshine = hourly.sunshine_duration?.[t];
           if (Number.isFinite(rawSunshine)) {
             // Open-Meteo sunshine_duration is in seconds (0..3600), convert to minutes (0..60)
             sunshineArr[t] = Math.max(0, Math.min(60, Math.round((rawSunshine as number) / 60)));
           } else {
-            // Fallback: inverse of cloud cover
+            // Fallback: inverse of cloud cover (NaN si la couverture manque aussi)
             sunshineArr[t] = Math.max(0, Math.min(60, Math.round((1 - cloud / 100) * 60)));
           }
         }
@@ -253,7 +297,8 @@ export async function fetchRouteWeatherDataset(
         });
       }
 
-      if (samples.length === 0) return null;
+      const hasAnyValue = samples.some((sample) => sample.hourly.temperature_2m.some((v) => Number.isFinite(v)));
+      if (!hasAnyValue) return null;
 
       const startDateObj = parseLocalDateIso(startDate) ?? new Date();
       const startMinutes = timeToMinutes(startTime || '12:00');
@@ -358,13 +403,13 @@ export function getRouteWeatherAtDistanceAndTime(
     const len = timeSlots.length;
     if (len === 0) {
       return {
-        temperature: 15,
-        feelsLike: 15,
-        rain: 0,
-        windKmh: 5,
-        cloudCover: 0,
-        humidity: 50,
-        sunshineMin: 45,
+        temperature: Number.NaN,
+        feelsLike: Number.NaN,
+        rain: Number.NaN,
+        windKmh: Number.NaN,
+        cloudCover: Number.NaN,
+        humidity: Number.NaN,
+        sunshineMin: Number.NaN,
       };
     }
 
@@ -428,6 +473,8 @@ export function getRouteWeatherAtDistanceAndTime(
 
   const v0 = interpolateStationAtTime(s0);
   const v1 = interpolateStationAtTime(s1);
+  // Heure non couverte par la prévision : pas de valeur plutôt qu'une valeur fausse.
+  if (!Number.isFinite(v0.temperature) || !Number.isFinite(v1.temperature)) return null;
 
   const rawTemp = lerp(v0.temperature, v1.temperature, spatialFraction);
   const rawFeels = lerp(v0.feelsLike, v1.feelsLike, spatialFraction);
@@ -473,50 +520,3 @@ export function getRouteWeatherMetricValue(
       return 0;
   }
 }
-
-/**
- * Génère des valeurs météorologiques estimées physiquement réalistes (cycle diurne,
- * gradient adiabatique d'altitude -6.5°C/1000m, exposition au vent de crête, etc.)
- * pour un affichage réactif immédiat sur le graphique dès la sélection d'une métrique,
- * en attendant la résolution réseau d'Open-Meteo.
- */
-export function generateEstimatedRouteWeatherValues(
-  sample: { distanceM: number; elevationM: number },
-  elapsedSeconds: number,
-  startTime?: string | null,
-): RouteWeatherValues {
-  const elapsedHours = elapsedSeconds / 3600;
-  const departureMinutes = timeToMinutes(startTime || '12:00');
-  const departureHours = departureMinutes / 60;
-  const currentHour = (departureHours + elapsedHours) % 24;
-
-  // Cycle diurne thermique : maximum vers 14h, minimum vers 05h
-  const diurnalAngle = ((currentHour - 14) / 24) * 2 * Math.PI;
-  const diurnalTempDelta = Math.cos(diurnalAngle) * 4.5;
-
-  // Gradient adiabatique selon l'altitude de la trace
-  const altitudeM = Number.isFinite(sample.elevationM) ? (sample.elevationM as number) : 300;
-  const altitudeLapse = -0.0065 * Math.max(0, altitudeM - 200);
-
-  const baseTemp = 19.5;
-  const temperature = Math.round((baseTemp + diurnalTempDelta + altitudeLapse) * 10) / 10;
-  const windBase = 12 + (altitudeM / 1000) * 8 + Math.sin(sample.distanceM / 5000) * 3;
-  const windKmh = Math.max(2, Math.round(windBase * 10) / 10);
-  const feelsLike = Math.round((temperature - (windKmh > 15 ? (windKmh - 15) * 0.12 : 0)) * 10) / 10;
-  const humidity = Math.max(25, Math.min(95, Math.round(62 - diurnalTempDelta * 2.8 + (altitudeM / 1000) * 4)));
-  const cloudCover = Math.max(0, Math.min(100, Math.round(35 + Math.sin(sample.distanceM / 14000) * 20)));
-  const rain = cloudCover > 80 ? Math.round((cloudCover - 80) * 0.08 * 10) / 10 : 0;
-  const isDay = currentHour >= 6.5 && currentHour <= 20.5;
-  const sunshineMin = isDay ? Math.max(0, Math.min(60, Math.round((1 - cloudCover / 100) * 60))) : 0;
-
-  return {
-    temperature,
-    feelsLike,
-    rain,
-    windKmh,
-    cloudCover,
-    humidity,
-    sunshineMin,
-  };
-}
-

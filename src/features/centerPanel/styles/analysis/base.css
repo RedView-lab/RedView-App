@@ -514,6 +514,24 @@
   border: 0;
 }
 
+.rvc-center-analysis__notice {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 5;
+  max-width: calc(100% - 32px);
+  padding: 6px 12px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(255, 196, 0, 0.45);
+  border-radius: 8px;
+  background: rgba(20, 20, 24, 0.88);
+  color: #ffd666;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: center;
+  pointer-events: none;
+}
+
 .rvc-center-analysis__hover-line {
   position: absolute;
   top: 0;

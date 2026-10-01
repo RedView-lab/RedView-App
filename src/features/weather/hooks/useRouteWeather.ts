@@ -15,12 +15,21 @@ interface UseRouteWeatherOptions {
   fallbackDate?: string | null;
   fallbackTime?: string | null;
   enabled?: boolean;
+  /** Prédictions courantes (store) : leur durée dimensionne la plage de prévision. */
+  predictions?: Record<string, unknown> | null;
 }
 
 interface UseRouteWeatherResult {
   weatherByItinerary: Record<string, RouteWeatherDataset | null>;
+  /** Itinéraires pour lesquels aucune prévision n'a pu être obtenue (erreur, hors horizon). */
+  unavailableItineraryIds: string[];
   loading: boolean;
   error: string | null;
+}
+
+function readTotalTimeHours(prediction: unknown): number | null {
+  const totalS = (prediction as { total_time_s?: unknown } | null | undefined)?.total_time_s;
+  return typeof totalS === 'number' && Number.isFinite(totalS) && totalS > 0 ? totalS / 3600 : null;
 }
 
 export function useRouteWeather({
@@ -28,10 +37,12 @@ export function useRouteWeather({
   fallbackDate,
   fallbackTime,
   enabled = true,
+  predictions,
 }: UseRouteWeatherOptions): UseRouteWeatherResult {
   const [weatherByItinerary, setWeatherByItinerary] = useState<
     Record<string, RouteWeatherDataset | null>
   >({});
+  const [unavailableItineraryIds, setUnavailableItineraryIds] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,6 +76,8 @@ export function useRouteWeather({
 
           const startDate = itinerary.rhythm?.startDate || defaultDate || formatLocalDateIso(now);
           const startTime = itinerary.rhythm?.startTime || defaultTime || '12:00';
+          const rideDurationHours = readTotalTimeHours(predictions?.[itinerary.id])
+            ?? readTotalTimeHours(itinerary.prediction);
 
           const dataset = await fetchRouteWeatherDataset(
             itinerary.id,
@@ -72,11 +85,12 @@ export function useRouteWeather({
             startDate,
             startTime,
             controller.signal,
+            { rideDurationHours },
           );
 
-          if (dataset) {
-            entries.push([itinerary.id, dataset]);
-          }
+          // null = prévisions indisponibles : on efface toute donnée périmée
+          // (autre date de départ) au lieu de la laisser affichée.
+          entries.push([itinerary.id, dataset]);
         }
 
         if (isMounted && !controller.signal.aborted) {
@@ -87,6 +101,7 @@ export function useRouteWeather({
             }
             return next;
           });
+          setUnavailableItineraryIds(entries.filter(([, ds]) => !ds).map(([id]) => id));
           setLoading(false);
         }
       } catch (err) {
@@ -103,10 +118,11 @@ export function useRouteWeather({
       isMounted = false;
       controller.abort();
     };
-  }, [enabled, fallbackDate, fallbackTime, itineraries]);
+  }, [enabled, fallbackDate, fallbackTime, itineraries, predictions]);
 
   return {
     weatherByItinerary,
+    unavailableItineraryIds,
     loading,
     error,
   };

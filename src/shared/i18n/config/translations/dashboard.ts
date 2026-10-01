@@ -573,4 +573,5 @@ export const dashboardTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'pas un fichier FIT', en: 'not a FIT file' },
   { fr: 'trop volumineux, 30 Mo maximum', en: 'too large, 30 MB maximum' },
   { fr: 'Trop de calculs d’itinéraire en peu de temps. Patientez une minute puis réessayez.', en: 'Too many route calculations in a short time. Please wait a minute and try again.' },
+  { fr: 'Prévisions météo indisponibles pour ce départ (erreur ou date au-delà de 16 jours) : la courbe météo est masquée.', en: 'Weather forecast unavailable for this departure (error or date beyond 16 days): the weather curve is hidden.' },
 ] as const;

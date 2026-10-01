@@ -5,7 +5,6 @@ import { buildPauseAwareSchedule, type PauseAwareSchedule } from '@/features/iti
 import type { Itinerary } from '@/features/itineraryPanel/types';
 import { isPowerMetric, isWeatherMetric, metricIsAvailable, type AxisDomain, type AxisMode, type ChartMetricId, type ChartPoint, type RouteChartPoint } from '../seriesCommon';
 import {
-  generateEstimatedRouteWeatherValues,
   getRouteWeatherAtDistanceAndTime,
   getRouteWeatherMetricValue,
   type RouteWeatherDataset,
@@ -54,6 +53,9 @@ function buildSeriesFromRouteWeather(
   detailZoom = 0,
 ): ChartPoint[] | null {
   if (!routePoints || routePoints.length === 0) return null;
+  // Pas de prévision (chargement, erreur, hors horizon) : pas de courbe — on
+  // ne trace jamais de météo inventée. L'analyse affiche un avis explicite.
+  if (!weatherDataset) return null;
 
   const sampleSpacingM = getAdaptiveRouteProfileSampleSpacingM(routePoints, detailZoom);
   const routeSignature = routePoints ? buildRouteContentSignature(routePoints) : '';
@@ -61,7 +63,7 @@ function buildSeriesFromRouteWeather(
   const routeCache = routePoints
     ? getRouteBackedSeriesCacheMap(routePoints, xMode === 'distance' ? null : prediction)
     : null;
-  const weatherVersion = weatherDataset ? `live-${weatherDataset.fetchedAt}` : 'estimated';
+  const weatherVersion = `live-${weatherDataset.fetchedAt}`;
   const routeCacheKey = routePoints
     ? getRouteBackedSeriesCacheKey(
         metric,
@@ -98,18 +100,12 @@ function buildSeriesFromRouteWeather(
         ? sample.distanceM / 1000
         : projectPredictionElapsedHoursToX(elapsedHours, xMode, startTime, pauseSchedule);
 
-    const weatherValues = weatherDataset
-      ? getRouteWeatherAtDistanceAndTime(
-          weatherDataset,
-          sample.distanceM,
-          elapsedHours * 3600,
-          sample.elevationM,
-        )
-      : generateEstimatedRouteWeatherValues(
-          sample,
-          elapsedHours * 3600,
-          startTime,
-        );
+    const weatherValues = getRouteWeatherAtDistanceAndTime(
+      weatherDataset,
+      sample.distanceM,
+      elapsedHours * 3600,
+      sample.elevationM,
+    );
 
     if (weatherValues) {
       const y = getRouteWeatherMetricValue(metric, weatherValues);

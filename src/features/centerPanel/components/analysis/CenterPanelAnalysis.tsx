@@ -22,6 +22,7 @@ import {
 } from './shared';
 import {
   AnalysisChart,
+  isWeatherMetric,
   locateRoutePointAtX,
   type AxisMetricId,
   type AxisMode,
@@ -92,11 +93,12 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
   const fallbackDate = weatherControl?.date;
   const fallbackTime = weatherControl?.time;
 
-  const { weatherByItinerary } = useRouteWeather({
+  const { weatherByItinerary, unavailableItineraryIds } = useRouteWeather({
     itineraries,
     fallbackDate,
     fallbackTime,
     enabled: Boolean(itineraries.length > 0),
+    predictions,
   });
 
   const {
@@ -140,6 +142,17 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
   const axis1Color = analysisState.axis1Color ?? activeItinerary?.color ?? DEFAULT_ANALYSIS_AXIS_COLORS.axis1;
   const axis2Color = analysisState.axis2Color
     ?? (activeItinerary?.color ? lightenColor(activeItinerary.color, 0.4) : DEFAULT_ANALYSIS_AXIS_COLORS.axis2);
+
+  // Métrique météo choisie mais aucune prévision réelle : avis explicite (la
+  // courbe n'est pas tracée, jamais de valeurs estimées).
+  const activeWeatherItineraryId = activeItinerary?.id ?? null;
+  const weatherUnavailable = useMemo(() => {
+    const weatherAxisSelected = isWeatherMetric(axis1Value)
+      || (axis2Value != null && (axis2Value as string) !== 'none' && isWeatherMetric(axis2Value));
+    return weatherAxisSelected
+      && activeWeatherItineraryId != null
+      && unavailableItineraryIds.includes(activeWeatherItineraryId);
+  }, [activeWeatherItineraryId, axis1Value, axis2Value, unavailableItineraryIds]);
 
   const dayNightStartReady = Boolean(
     activeItinerary?.rhythm.startDate && activeItinerary?.rhythm.startTime,
@@ -673,6 +686,11 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
           onClearSelectedXRange={handleClearSelectedXRange}
           showSeriesRows={false}
         />
+        {weatherUnavailable ? (
+          <div className="rvc-center-analysis__notice" role="status">
+            {t('Prévisions météo indisponibles pour ce départ (erreur ou date au-delà de 16 jours) : la courbe météo est masquée.')}
+          </div>
+        ) : null}
       </div>
       {map && selectedAlert && alertMarkersEnabled ? (
         <AnalysisAlertSectionPopover
