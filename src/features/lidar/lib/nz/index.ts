@@ -1,4 +1,5 @@
 export * from './types';
 export * from './coordConvert';
-export * from './stacClient';
-export * from './nzLazIndex';
+// stacClient / nzLazIndex (≈ 19 MB) ne sont volontairement PAS ré-exportés :
+// ce barrel est atteint statiquement depuis le Dashboard ; downloader.ts les
+// charge par import dynamique.

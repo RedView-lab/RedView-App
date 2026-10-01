@@ -4,8 +4,9 @@ import { saveTile, hasTile, loadTile, hasValidLasSignature, hasValidZipSignature
 import { resolveSwissDownloadUrls } from './swiss/stacClient';
 import { extractLasFromZip } from './swiss/zipReader';
 import { getSwissTileBounds, swissToWgs84 } from './swiss/coordConvert';
-import { resolveNzDownloadUrls } from './nz/stacClient';
-import { resolveJapanDownloadUrls } from './japan/stacClient';
+// NB : les clients NZ / Japon embarquent des index de tuiles volumineux
+// (nzLazIndex ≈ 19 MB, japanLazIndex ≈ 1,6 MB). Ils sont chargés à la demande
+// (import dynamique) pour ne pas alourdir le bundle de démarrage du Dashboard.
 import {
   fromWgs84,
   getTileInfo,
@@ -608,6 +609,8 @@ async function downloadNzTile(
   throwIfCancelled(signal);
   onProgress?.({ tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'downloading', message: 'Recherche nuage de points LiDAR Nouvelle-Zélande...' });
 
+  const { resolveNzDownloadUrls } = await import('./nz/stacClient');
+  throwIfCancelled(signal);
   const urls = await resolveNzDownloadUrls({ eastKm: coord.xKm, northKm: coord.yKm });
   throwIfCancelled(signal);
   if (urls.length === 0) {
@@ -693,6 +696,7 @@ async function downloadJapanTile(
     message: `Recherche nuage de points LiDAR Japon (Zone ${zone})...`,
   });
 
+  const { resolveJapanDownloadUrls } = await import('./japan/stacClient');
   const urls = await resolveJapanDownloadUrls({
     eastKm: coord.xKm,
     northKm: coord.yKm,
