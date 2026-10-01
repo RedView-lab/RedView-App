@@ -1,4 +1,4 @@
-import { fetchBrouterRoute } from '../brouter';
+import { fetchBrouterRoute, isBrouterRateLimitError } from '../brouter';
 import { parseMessages } from './parser';
 import { isOffroadSurface, isPavedSurface } from './surface';
 import type { RoutePointInput, RouteSurfaceMetrics, Surface } from './types';
@@ -213,24 +213,62 @@ function createWaypointChunks(
   return chunks;
 }
 
+type RequestLimiter = <T>(task: () => Promise<T>) => Promise<T>;
+
+/**
+ * File d'attente à concurrence bornée, partagée par TOUTES les requêtes d'une
+ * analyse (y compris les sous-segments du repli) : le plafond tient même
+ * quand des tronçons échouent et se scindent.
+ */
+function createRequestLimiter(limit: number): RequestLimiter {
+  let active = 0;
+  const waiting: Array<() => void> = [];
+  return async <T>(task: () => Promise<T>): Promise<T> => {
+    if (active < limit) {
+      active += 1;
+    } else {
+      await new Promise<void>((resolve) => waiting.push(resolve));
+    }
+    try {
+      return await task();
+    } finally {
+      // Passe la place directement au suivant (pas de dépassement transitoire).
+      const next = waiting.shift();
+      if (next) next();
+      else active -= 1;
+    }
+  };
+}
+
+interface ChunkFetchContext {
+  signal: AbortSignal;
+  limit: RequestLimiter;
+  /** Posé au premier 429 : plus aucune requête ne part ensuite. */
+  stopError: Error | null;
+}
+
 async function fetchChunkSurfaces(
   chunk: WaypointChunk,
-  signal?: AbortSignal,
+  context: ChunkFetchContext,
 ): Promise<SurfaceInterval[]> {
   const { waypoints, startDistM, endDistM } = chunk;
   if (waypoints.length < 2) return [];
+  const { signal } = context;
 
   const start = waypoints[0];
   const end = waypoints[waypoints.length - 1];
   const via = waypoints.slice(1, -1).map((wp) => ({ lat: wp.lat, lon: wp.lon }));
 
   try {
-    const route = await fetchBrouterRoute({
-      start: { lat: start.lat, lon: start.lon },
-      via: via.length > 0 ? via : undefined,
-      end: { lat: end.lat, lon: end.lon },
-      profile: 'trekking',
-      signal,
+    const route = await context.limit(() => {
+      if (context.stopError) throw context.stopError;
+      return fetchBrouterRoute({
+        start: { lat: start.lat, lon: start.lon },
+        via: via.length > 0 ? via : undefined,
+        end: { lat: end.lat, lon: end.lon },
+        profile: 'trekking',
+        signal,
+      });
     });
 
     const rows = parseMessages(route);
@@ -272,7 +310,12 @@ async function fetchChunkSurfaces(
 
     return intervals;
   } catch (error) {
-    if (signal?.aborted) throw error;
+    if (signal.aborted || context.stopError) throw context.stopError ?? error;
+    // Quota atteint : scinder ou réessayer ne ferait qu'aggraver le 429.
+    if (isBrouterRateLimitError(error)) {
+      context.stopError = error;
+      throw error;
+    }
     console.warn(`[gpx-surface-analyzer] Chunk ${chunk.chunkIndex} direct route failed, trying sub-segments...`, error);
 
     // Fallback: if chunk has > 2 waypoints, split into halves
@@ -291,13 +334,17 @@ async function fetchChunkSurfaces(
         endDistM,
       };
 
+      const unknownOnError = (fallback: SurfaceInterval) => (subError: unknown): SurfaceInterval[] => {
+        if (signal.aborted || context.stopError) throw context.stopError ?? subError;
+        return [fallback];
+      };
       const [leftIntervals, rightIntervals] = await Promise.all([
-        fetchChunkSurfaces(leftChunk, signal).catch(() => [
-          { startDistanceM: startDistM, endDistanceM: waypoints[mid].distanceM, surface: 'unknown' as Surface },
-        ]),
-        fetchChunkSurfaces(rightChunk, signal).catch(() => [
-          { startDistanceM: waypoints[mid].distanceM, endDistanceM: endDistM, surface: 'unknown' as Surface },
-        ]),
+        fetchChunkSurfaces(leftChunk, context).catch(unknownOnError(
+          { startDistanceM: startDistM, endDistanceM: waypoints[mid].distanceM, surface: 'unknown' },
+        )),
+        fetchChunkSurfaces(rightChunk, context).catch(unknownOnError(
+          { startDistanceM: waypoints[mid].distanceM, endDistanceM: endDistM, surface: 'unknown' },
+        )),
       ]);
 
       return [...leftIntervals, ...rightIntervals];
@@ -391,9 +438,29 @@ export async function analyzeGpxSurfaces(
   let completedChunks = 0;
   const totalChunks = chunks.length;
 
+  // Signal interne : annule les requêtes en vol dès le premier 429 (et suit
+  // l'annulation demandée par l'appelant).
+  const controller = new AbortController();
+  const externalSignal = options?.signal;
+  const forwardAbort = () => controller.abort(externalSignal?.reason);
+  if (externalSignal?.aborted) forwardAbort();
+  else externalSignal?.addEventListener('abort', forwardAbort, { once: true });
+  const context: ChunkFetchContext = {
+    signal: controller.signal,
+    limit: createRequestLimiter(Math.max(1, maxConcurrency)),
+    stopError: null,
+  };
+
   const handleChunk = async (chunk: WaypointChunk): Promise<SurfaceInterval[]> => {
-    if (options?.signal?.aborted) throw new Error('Surface analysis aborted');
-    const result = await fetchChunkSurfaces(chunk, options?.signal);
+    if (externalSignal?.aborted) throw new Error('Surface analysis aborted');
+    if (context.stopError) throw context.stopError;
+    let result: SurfaceInterval[];
+    try {
+      result = await fetchChunkSurfaces(chunk, context);
+    } catch (error) {
+      if (context.stopError && !controller.signal.aborted) controller.abort(context.stopError);
+      throw error;
+    }
     completedChunks++;
     options?.onProgress?.({
       completedChunks,
@@ -403,7 +470,19 @@ export async function analyzeGpxSurfaces(
     return result;
   };
 
-  const chunkResults = await runWithConcurrencyLimit(chunks, maxConcurrency, handleChunk);
+  let chunkResults: SurfaceInterval[][];
+  try {
+    chunkResults = await runWithConcurrencyLimit(chunks, maxConcurrency, handleChunk);
+  } catch (error) {
+    if (context.stopError) {
+      // Avertissement non bloquant : l'import continue sans revêtements.
+      console.warn('[gpx-surface-analyzer] BRouter rate limit reached, surface analysis stopped.', context.stopError);
+      throw context.stopError;
+    }
+    throw error;
+  } finally {
+    externalSignal?.removeEventListener('abort', forwardAbort);
+  }
   const allIntervals = chunkResults.flat().sort((a, b) => a.startDistanceM - b.startDistanceM);
 
   const breakdown = {

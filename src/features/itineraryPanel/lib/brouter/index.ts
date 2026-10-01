@@ -13,6 +13,8 @@ export {
   fetchBrouterRouteBestWithDistanceDetours,
   fetchBrouterRouteBestWithClimbEfficiency,
   formatBrouterErrorMessage,
+  BrouterRateLimitError,
+  isBrouterRateLimitError,
 } from './api';
 export { buildBrouterUrl, formatLonlats, resolveEndpoint } from './api';
 export { formatForbiddenZonePolygons } from './geo';

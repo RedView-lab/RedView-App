@@ -39,6 +39,34 @@ const clientRouteCache = new Map<string, BrouterRoute>();
 const MAX_CLIENT_CACHE = 256;
 
 /**
+ * Quota de requêtes du proxy /api/brouter atteint (HTTP 429). À ne jamais
+ * réessayer en boucle ni contourner par d'autres requêtes : on s'arrête et on
+ * le signale à l'utilisateur.
+ */
+export class BrouterRateLimitError extends Error {
+  /** Délai conseillé par l'en-tête Retry-After, en secondes (null si absent). */
+  readonly retryAfterS: number | null;
+
+  constructor(message: string, retryAfterS: number | null) {
+    super(message);
+    this.name = 'BrouterRateLimitError';
+    this.retryAfterS = retryAfterS;
+  }
+}
+
+export function isBrouterRateLimitError(error: unknown): error is BrouterRateLimitError {
+  return error instanceof BrouterRateLimitError;
+}
+
+function parseRetryAfterS(value: string | null): number | null {
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds;
+  const dateMs = Date.parse(value);
+  return Number.isFinite(dateMs) ? Math.max(0, Math.round((dateMs - Date.now()) / 1000)) : null;
+}
+
+/**
  * Fetch a route from BRouter. Throws on network/HTTP errors and on
  * BRouter-side errors (which are returned as plain-text responses
  * starting with `"error"` — we detect them via Content-Type).
@@ -62,11 +90,13 @@ export async function fetchBrouterRoute(
       const text = await res.text().catch(() => '');
       const upstream = res.headers.get('x-brouter-upstream-error');
       const detail = text || upstream || '';
-      lastError = new Error(
-        `BRouter HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ''}${
-          detail ? ` — ${detail.slice(0, 300)}` : ''
-        }`,
-      );
+      const message = `BRouter HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ''}${
+        detail ? ` — ${detail.slice(0, 300)}` : ''
+      }`;
+      if (res.status === 429) {
+        throw new BrouterRateLimitError(message, parseRetryAfterS(res.headers.get('retry-after')));
+      }
+      lastError = new Error(message);
       if (isWatchdogMessage(lastError.message) && attempt < WATCHDOG_RETRY_DELAYS_MS.length) {
         await delay(WATCHDOG_RETRY_DELAYS_MS[attempt]!, req.signal);
         continue;
