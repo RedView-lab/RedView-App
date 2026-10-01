@@ -54,7 +54,7 @@ async function main() {
         { type: 'string', key: 'folder_id', size: 128, required: false },
         { type: 'integer', key: 'size_bytes', required: false, default: 0, min: 0, max: 2147483647 },
         { type: 'string', key: 'privacy', size: 32, required: false, default: 'private' },
-        { type: 'string', key: 'data', size: 1000000, required: false },
+        { type: 'string', key: 'data', size: 16000000, required: false }, // relevé de 1 M à 16 M en prod le 2026-10-01
       ],
       indexes: [
         { key: 'idx_projects_user_id', type: 'key', attributes: ['user_id'] },

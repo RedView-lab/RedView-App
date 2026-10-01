@@ -50,8 +50,8 @@ import type { Itinerary, ItineraryProject, TimelineItem } from '../../src/featur
 import type { PoiCategory, PoiFeature } from '../../src/features/poi/types.ts';
 import type { PredictionResult } from '../../src/features/fitPredictor/types.ts';
 
-/** Attribut `projects.data` (scripts/setup-appwrite-schema.mjs:57, confirmé en live). */
-const APPWRITE_DATA_MAX_CHARS = 1_000_000;
+/** Attribut `projects.data` (scripts/setup-appwrite-schema.mjs, relevé à 16 000 000 en prod le 2026-10-01). */
+const APPWRITE_DATA_MAX_CHARS = 16_000_000;
 
 const args = process.argv.slice(2);
 const argVal = (k: string) => {
@@ -493,12 +493,14 @@ async function main() {
 
 
 /** Projets de référence réutilisés par a-appwrite-live.ts. */
-export function buildReferenceProjects(): { traceOnly: ItineraryProject; heavy: ItineraryProject } | null {
+export function buildReferenceProjects(): { traceOnly: ItineraryProject; heavy: ItineraryProject; ultra: ItineraryProject } | null {
   const gt20 = loadGpx('GT20.gpx');
   if (!gt20) return null;
   return {
     traceOnly: makeProject('GT20 trace', [buildItineraryFromPoints('GT20', gt20.points, 1, { pois: 0, prediction: false })]),
     heavy: makeProject('GT20 full', [buildItineraryFromPoints('GT20', gt20.points, 1, { pois: 1000, prediction: true })]),
+    // 3 variantes complètes : le plus gros projet réaliste mesuré (~4,5 M car. compressés).
+    ultra: makeProject('GT20 x3', [1, 2, 3].map((n) => buildItineraryFromPoints(`GT20 v${n}`, gt20.points, n, { pois: 1000, prediction: true }))),
   };
 }
 

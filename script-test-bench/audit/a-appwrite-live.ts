@@ -165,20 +165,42 @@ async function main() {
         `contenu différent ou illisible (${g.status})`,
       );
 
-      // 3b. Mise à jour au-dessus de la limite (GT20 + 1000 POI + prédiction) : attendu = refus 400
-      const heavyData = await compressProjectPayload(refs.heavy);
-      const uh = await api('PATCH', `/databases/${DB}/collections/${COL}/documents/${docId}`, {
-        data: { data: heavyData, size_bytes: computeProjectSizeBytes(refs.heavy) },
-      });
-      log('update>limit', `${heavyData.length} car. (JSON ${computeProjectSizeBytes(refs.heavy)} o) → HTTP ${uh.status} ${uh.ok ? 'ACCEPTÉ' : `refusé : ${errSummary(uh)}`} (${uh.ms} ms)`);
-      if (uh.ok) anomalies.push('update>limit : accepté alors que la limite schéma est 1 000 000 car. (limite à revérifier)');
-      else console.log('    → c\'est cette erreur que projectRows.ts:253-255 avale (logger.debug) : l\'utilisateur voit « Enregistré ».');
+      // 3b. Projets lourds réalistes (GT20 + 1000 POI + prédiction, puis 3 variantes) : attendu = accepté
+      for (const [label, project] of [['heavy', refs.heavy], ['ultra', refs.ultra]] as const) {
+        const payload = await compressProjectPayload(project);
+        const uh = await api('PATCH', `/databases/${DB}/collections/${COL}/documents/${docId}`, {
+          data: { data: payload, size_bytes: computeProjectSizeBytes(project) },
+        });
+        expect(
+          uh.ok,
+          `update-${label}`,
+          `${payload.length} car. (JSON ${computeProjectSizeBytes(project)} o) acceptés en ${uh.ms} ms`,
+          `${payload.length} car. refusés : ${errSummary(uh)}`,
+        );
+        if (uh.ok) {
+          const g = await api('GET', `/databases/${DB}/collections/${COL}/documents/${docId}`);
+          const back = g.ok ? await decompressProjectPayload(g.data.data) : null;
+          expect(
+            !!back && JSON.stringify(back) === JSON.stringify(project),
+            `read-back-${label}`,
+            `relu en ${g.ms} ms, contenu identique`,
+            `contenu différent ou illisible (${g.status})`,
+          );
+        }
+      }
     }
 
-    // 3c. Bornes exactes de l'attribut data
-    for (const n of [1_000_000, 1_000_001]) {
+    // 3c. Bornes : plafond applicatif 12 M car. (le nginx devant Appwrite renvoie 502 vers 16 M),
+    //     attribut schéma 16 000 000 car. → au-delà, refus attendu.
+    for (const [n, expectOk] of [[12_000_000, true], [16_000_001, false]] as const) {
       const u = await api('PATCH', `/databases/${DB}/collections/${COL}/documents/${docId}`, { data: { data: 'x'.repeat(n) } });
-      log('borne', `data de ${n} car. → HTTP ${u.status}${u.ok ? '' : ` ${u.data?.type ?? ''}`}`);
+      log('borne', `data de ${n} car. → HTTP ${u.status}${u.ok ? '' : ` ${u.data?.type ?? ''}`} (${u.ms} ms)`);
+      expect(
+        expectOk ? u.ok : !u.ok,
+        'borne',
+        `${n} car. ${u.ok ? 'accepté' : 'refusé'} comme attendu`,
+        `${n} car. ${u.ok ? 'accepté' : `refusé (${String(errSummary(u)).replace(/\s+/g, ' ').slice(0, 120)})`} — inattendu`,
+      );
     }
 
     // 5. Renommage (comme renameProject : name + data)
