@@ -38,6 +38,23 @@ if (sentryDsn && !sentryDsn.includes('placeholder')) {
   })
 }
 
+// Après un déploiement, les chunks hashés de l'ancien build n'existent plus
+// (404) : un import paresseux échoue. On recharge la page une seule fois pour
+// récupérer le nouvel index.html ; le garde sessionStorage évite les boucles.
+const PRELOAD_ERROR_RELOAD_KEY = 'redview:preload-error-reload-at'
+const PRELOAD_ERROR_RELOAD_GUARD_MS = 60_000
+window.addEventListener('vite:preloadError', (event) => {
+  try {
+    const lastReloadAt = Number(sessionStorage.getItem(PRELOAD_ERROR_RELOAD_KEY) || 0)
+    if (Date.now() - lastReloadAt < PRELOAD_ERROR_RELOAD_GUARD_MS) return
+    sessionStorage.setItem(PRELOAD_ERROR_RELOAD_KEY, String(Date.now()))
+  } catch {
+    return
+  }
+  event.preventDefault()
+  window.location.reload()
+})
+
 async function bootstrap(): Promise<void> {
   const didResetCacheEpoch = await ensureAppCacheEpochReset()
 

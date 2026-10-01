@@ -77,6 +77,19 @@ function checkRateLimit(req, bucket, max) {
   return hitRateLimit(`${ipKey}:${bucket}`, max);
 }
 
+/**
+ * Chemin d'asset (et non de navigation SPA) : tout `/assets/*` et tout chemin
+ * dont le dernier segment porte une extension. Les URLs de projet
+ * (`/project/<slug>--<id>`) restent des navigations même si l'id contient
+ * un point.
+ */
+function looksLikeStaticAsset(pathname) {
+  if (pathname.startsWith('/assets/')) return true;
+  if (pathname.startsWith('/project/')) return false;
+  const lastSegment = pathname.slice(pathname.lastIndexOf('/') + 1);
+  return /\.[a-z0-9]+$/i.test(lastSegment);
+}
+
 function sendTooManyRequests(res) {
   res.statusCode = 429;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -172,7 +185,18 @@ const server = http.createServer(async (req, res) => {
         stat = await fs.promises.stat(filePath);
       }
     } catch {
-      // File not found -> SPA fallback to dist/index.html
+      // Fichier absent. Un asset (chunk hashé d'un build précédent, .wasm,
+      // .json…) doit répondre 404 : renvoyer index.html en 200 casserait le
+      // chargement des chunks paresseux après un déploiement (le navigateur
+      // recevrait du HTML à la place du JS/CSS). Le fallback SPA ne vaut que
+      // pour les navigations sans extension.
+      if (looksLikeStaticAsset(pathname)) {
+        res.statusCode = 404;
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-store');
+        return res.end('Not Found');
+      }
+      // Navigation -> SPA fallback to dist/index.html
       filePath = path.join(DIST_DIR, 'index.html');
       try {
         stat = await fs.promises.stat(filePath);
