@@ -10,7 +10,7 @@ import {
 import VerificationCodeModal from './VerificationCodeModal'
 import './LoginScreen.css'
 
-// Envoi du code de vérification à 4 chiffres par e-mail lors de l'inscription
+// Envoi du code de vérification à 6 chiffres par e-mail lors de l'inscription
 const ENABLE_EMAIL_VERIFICATION = true
 
 type AuthMode = 'login' | 'signup' | 'forgot-password' | 'reset-password'
@@ -249,6 +249,11 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
         setLoading(false)
         return
       }
+      if (password.length > 256) {
+        setErrorMessage('Password must be at most 256 characters.')
+        setLoading(false)
+        return
+      }
     }
 
     try {
@@ -263,7 +268,12 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
         const trimmedName = name.trim() || trimmedEmail.split('@')[0] || 'User'
 
         if (ENABLE_EMAIL_VERIFICATION) {
-          // Call API to send 4-digit verification code via Resend
+          // Call API to send 6-digit verification code via Resend.
+          // Anti-énumération : l'API répond 200 avec le même message que
+          // l'adresse soit libre ou déjà associée à un compte (dans ce cas
+          // l'utilisateur reçoit un e-mail « compte existant » au lieu du
+          // code). Seules les erreurs de validation (400), de quota (429) ou
+          // serveur (5xx) arrivent ici en !res.ok.
           const res = await fetch('/api/auth/send-verification-code', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -604,6 +614,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
                     placeholder="Enter your name"
                     className="rv-login-input"
                     autoComplete="name"
+                    maxLength={100}
                     required
                   />
                 </div>
@@ -625,6 +636,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
                     placeholder="Enter your email"
                     className="rv-login-input"
                     autoComplete="email"
+                    maxLength={254}
                     required
                   />
                 </div>
@@ -835,7 +847,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
         </>
       )}
 
-      {/* 4-digit Email Verification Modal */}
+      {/* 6-digit Email Verification Modal */}
       <VerificationCodeModal
         isOpen={showVerificationModal}
         email={email.trim()}

@@ -10,13 +10,28 @@ interface VerificationCodeModalProps {
   onResend: () => Promise<{ success: boolean; debugCode?: string; error?: string }>;
 }
 
+const CODE_LENGTH = 6;
+const CODE_REGEX = /^\d{6}$/;
+const emptyDigits = (): string[] => Array.from({ length: CODE_LENGTH }, () => '');
+// La feuille de style d'origine dimensionne 4 cases de 80 px ; on resserre
+// en inline pour que 6 cases tiennent dans la carte (360 px de contenu).
+const DIGITS_ROW_STYLE = { gap: 8 } as const;
+const DIGIT_INPUT_STYLE = {
+  width: 52,
+  height: 60,
+  minWidth: 52,
+  minHeight: 60,
+  fontSize: 32,
+  lineHeight: '60px',
+} as const;
+
 export default function VerificationCodeModal({
   isOpen,
   onClose,
   onConfirm,
   onResend,
 }: VerificationCodeModalProps) {
-  const [digits, setDigits] = useState<string[]>(['', '', '', '']);
+  const [digits, setDigits] = useState<string[]>(emptyDigits);
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -27,7 +42,7 @@ export default function VerificationCodeModal({
   // Focus first input on open & start countdown
   useEffect(() => {
     if (isOpen) {
-      setDigits(['', '', '', '']);
+      setDigits(emptyDigits());
       setErrorMessage(null);
       setCountdown(30);
       const timer = setTimeout(() => {
@@ -57,18 +72,18 @@ export default function VerificationCodeModal({
 
     // Handle paste inside single box or normal input
     if (cleaned.length > 1) {
-      const chars = cleaned.slice(0, 4).split('');
+      const chars = cleaned.slice(0, CODE_LENGTH).split('');
       const newDigits = [...digits];
       chars.forEach((ch, idx) => {
-        if (index + idx < 4) {
+        if (index + idx < CODE_LENGTH) {
           newDigits[index + idx] = ch;
         }
       });
       setDigits(newDigits);
-      const nextFocus = Math.min(index + chars.length, 3);
+      const nextFocus = Math.min(index + chars.length, CODE_LENGTH - 1);
       inputsRef.current[nextFocus]?.focus();
 
-      // If full 4 digits reached, auto submit
+      // If all 6 digits reached, auto submit
       if (newDigits.every((d) => d !== '')) {
         verify(newDigits.join(''));
       }
@@ -80,12 +95,12 @@ export default function VerificationCodeModal({
     newDigits[index] = digit;
     setDigits(newDigits);
 
-    if (digit && index < 3) {
+    if (digit && index < CODE_LENGTH - 1) {
       inputsRef.current[index + 1]?.focus();
     }
 
-    // Auto submit on 4th digit
-    if (digit && index === 3 && newDigits.every((d) => d !== '')) {
+    // Auto submit on last (6th) digit
+    if (digit && index === CODE_LENGTH - 1 && newDigits.every((d) => d !== '')) {
       verify(newDigits.join(''));
     }
   };
@@ -104,7 +119,7 @@ export default function VerificationCodeModal({
       }
     } else if (e.key === 'ArrowLeft' && index > 0) {
       inputsRef.current[index - 1]?.focus();
-    } else if (e.key === 'ArrowRight' && index < 3) {
+    } else if (e.key === 'ArrowRight' && index < CODE_LENGTH - 1) {
       inputsRef.current[index + 1]?.focus();
     } else if (e.key === 'Enter') {
       verify(digits.join(''));
@@ -113,27 +128,27 @@ export default function VerificationCodeModal({
 
   const handlePaste = (e: ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
-    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 4);
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, CODE_LENGTH);
     if (!pasted) return;
 
     const chars = pasted.split('');
-    const newDigits = ['', '', '', ''];
+    const newDigits = emptyDigits();
     chars.forEach((c, idx) => {
       newDigits[idx] = c;
     });
     setDigits(newDigits);
 
-    const focusIdx = Math.min(chars.length, 3);
+    const focusIdx = Math.min(chars.length, CODE_LENGTH - 1);
     inputsRef.current[focusIdx]?.focus();
 
-    if (chars.length === 4) {
+    if (chars.length === CODE_LENGTH) {
       verify(newDigits.join(''));
     }
   };
 
   const verify = async (code: string) => {
-    if (code.length < 4) {
-      setErrorMessage('Veuillez renseigner les 4 chiffres du code.');
+    if (!CODE_REGEX.test(code)) {
+      setErrorMessage('Veuillez renseigner les 6 chiffres du code.');
       return;
     }
 
@@ -163,7 +178,7 @@ export default function VerificationCodeModal({
       const res = await onResend();
       if (res.success) {
         setCountdown(30);
-        setDigits(['', '', '', '']);
+        setDigits(emptyDigits());
         inputsRef.current[0]?.focus();
       } else {
         setErrorMessage(res.error || 'Impossible de renvoyer le code.');
@@ -227,7 +242,7 @@ export default function VerificationCodeModal({
           <div className="rv-modal-text-group">
             <h2 className="rv-modal-title">Vérifiez vos e-mails.</h2>
             <p className="rv-modal-supporting-text">
-              Nous avons envoyé un e-mail à votre adresse avec un code de confirmation.
+              Si l’adresse est valide, nous vous avons envoyé un e-mail avec un code de confirmation à 6 chiffres.
             </p>
           </div>
         </header>
@@ -237,8 +252,8 @@ export default function VerificationCodeModal({
           {/* Error Message */}
           {errorMessage && <div className="rv-modal-error">{errorMessage}</div>}
 
-          {/* 4 Mega inputs row */}
-          <div className="rv-modal-digits-row">
+          {/* 6 Mega inputs row */}
+          <div className="rv-modal-digits-row" style={DIGITS_ROW_STYLE}>
             {digits.map((digit, idx) => (
               <input
                 key={idx}
@@ -248,13 +263,14 @@ export default function VerificationCodeModal({
                 type="text"
                 inputMode="numeric"
                 pattern="[0-9]*"
-                maxLength={4}
+                maxLength={CODE_LENGTH}
                 value={digit}
                 onChange={(e) => handleInputChange(idx, e)}
                 onKeyDown={(e) => handleKeyDown(idx, e)}
                 onPaste={handlePaste}
                 disabled={loading}
                 className={`rv-mega-input ${errorMessage ? 'is-error' : ''}`}
+                style={DIGIT_INPUT_STYLE}
                 autoComplete="one-time-code"
                 aria-label={`Chiffre ${idx + 1}`}
               />

@@ -18,7 +18,7 @@ import { useEffect, useMemo, useRef, useCallback, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import type { PoiCategory, PoiFeature, GpxRoute } from '../types';
-import { fetchPoisAlongRouteChunked } from '../lib/poi-api';
+import { clampCorridorRadiusM, fetchPoisAlongRouteChunked } from '../lib/poi-api';
 import { sampleRouteByDistance } from '../lib/gpx-loader';
 import { filterPoisByLateralDistance } from '../lib/corridor-distance-filter';
 import { PoiMarkerManager } from '../lib/poi-markers';
@@ -268,7 +268,8 @@ export function usePoi(
     //   2. spacing >= 10 m         → bounds the sample count for tiny radii.
     //   3. spacing >= length/8000  → keeps the POST body under the proxy
     //      limit for very long routes (multi-day tours).
-    const radius = radiusRef.current;
+    // Le serveur rejette (400) tout rayon hors [1, 10000] m.
+    const radius = clampCorridorRadiusM(radiusRef.current);
     let approxLenM = 0;
     for (let i = 1; i < route.points.length; i++) {
       const a = route.points[i - 1];

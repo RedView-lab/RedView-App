@@ -99,6 +99,29 @@ export async function fetchPoisInBbox(
 
 // ── CORRIDOR ──────────────────────────────────────────────────────────
 
+/** Bornes acceptées par le serveur POI (au-delà : HTTP 400). */
+export const POI_CORRIDOR_MIN_RADIUS_M = 1;
+export const POI_CORRIDOR_MAX_RADIUS_M = 10_000;
+export const POI_CORRIDOR_MAX_POINTS = 10_000;
+const POI_CORRIDOR_DEFAULT_RADIUS_M = 1_000;
+
+export function clampCorridorRadiusM(radiusM: number): number {
+  if (!Number.isFinite(radiusM)) return POI_CORRIDOR_DEFAULT_RADIUS_M;
+  return Math.min(POI_CORRIDOR_MAX_RADIUS_M, Math.max(POI_CORRIDOR_MIN_RADIUS_M, radiusM));
+}
+
+/** Garde-fou : sous-échantillonne uniformément (en gardant le dernier point) au-delà du plafond serveur. */
+function capCorridorPoints<T>(points: T[]): T[] {
+  if (points.length <= POI_CORRIDOR_MAX_POINTS) return points;
+  const stride = Math.ceil(points.length / POI_CORRIDOR_MAX_POINTS);
+  const out: T[] = [];
+  for (let i = 0; i < points.length && out.length < POI_CORRIDOR_MAX_POINTS - 1; i += stride) {
+    out.push(points[i]);
+  }
+  out.push(points[points.length - 1]);
+  return out;
+}
+
 export async function fetchPoisAlongRoute(
   points: { lat: number; lon: number }[],
   radiusM: number,
@@ -108,8 +131,8 @@ export async function fetchPoisAlongRoute(
   if (points.length === 0 || categories.length === 0) return [];
 
   const body = JSON.stringify({
-    points: points.map((p) => [p.lat, p.lon]),
-    radiusM,
+    points: capCorridorPoints(points).map((p) => [p.lat, p.lon]),
+    radiusM: clampCorridorRadiusM(radiusM),
     categories,
   });
 

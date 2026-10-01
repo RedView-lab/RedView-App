@@ -33,6 +33,40 @@ export async function compressProjectPayload(project: ItineraryProject): Promise
   return json;
 }
 
+/** Plafond de la taille décompressée d'un projet (protection contre les bombes gzip). */
+export const MAX_DECOMPRESSED_PROJECT_BYTES = 200 * 1024 * 1024;
+
+/**
+ * Lit un flux décompressé en comptant les octets produits et abandonne dès que
+ * `maxBytes` est dépassé, sans jamais matérialiser la sortie complète.
+ */
+async function readStreamWithLimit(stream: ReadableStream<Uint8Array>, maxBytes: number): Promise<string> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  const parts: string[] = [];
+  let total = 0;
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        throw new Error(`Decompressed project payload exceeds ${maxBytes} bytes`);
+      }
+      parts.push(decoder.decode(value, { stream: true }));
+    }
+    parts.push(decoder.decode());
+  } catch (error) {
+    await reader.cancel().catch(() => {});
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+
+  return parts.join('');
+}
+
 /**
  * Décompresse un payload de projet.
  * Détecte automatiquement les payloads compressés ('gz:...') ou bruts ('{...').
@@ -49,7 +83,7 @@ export async function decompressProjectPayload(payload: string): Promise<Itinera
 
       if (typeof DecompressionStream !== 'undefined' && typeof Response !== 'undefined') {
         const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
-        const text = await new Response(stream).text();
+        const text = await readStreamWithLimit(stream, MAX_DECOMPRESSED_PROJECT_BYTES);
         return JSON.parse(text) as ItineraryProject;
       }
     } catch (e) {

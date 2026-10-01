@@ -318,6 +318,7 @@ export const dashboardTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Export...', en: 'Exporting...' },
   { fr: 'Veuillez sélectionner un fichier .gpx', en: 'Please select a .gpx file' },
   { fr: 'Impossible de lire ce GPX', en: 'Unable to read this GPX' },
+  { fr: 'Fichier GPX trop volumineux (50 Mo maximum).', en: 'GPX file too large (50 MB maximum).' },
   { fr: 'Créer un itinéraire', en: 'Create a route' },
   { fr: 'Créer un nouvel itinéraire', en: 'Create a new route' },
   { fr: 'Dupliquer à partir de l’itinéraire sélectionné', en: 'Duplicate from the selected route' },

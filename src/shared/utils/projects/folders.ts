@@ -10,7 +10,7 @@ import {
 } from '@/shared/services/appwrite';
 import { logger } from '@/shared/lib/logger';
 
-import { getCurrentUserId } from './auth';
+import { getCurrentUserId, isOwnedBy } from './auth';
 import { folderRowToSummary } from './mappers';
 import type { ProjectFolderRow, ProjectFolderSummary, ProjectPrivacy } from './types';
 
@@ -66,7 +66,7 @@ export async function listProjectFolders(): Promise<ProjectFolderSummary[]> {
     }
   }
 
-  const local = readLocalFolders();
+  const local = readLocalFolders().filter((folder) => isOwnedBy(folder, userId));
   return local.map(folderRowToSummary);
 }
 

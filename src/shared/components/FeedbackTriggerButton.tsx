@@ -1,6 +1,5 @@
 import { useState, type CSSProperties } from 'react';
-import { readStoredAppwriteSession } from '../services/appwrite';
-import { useAppI18n } from '../i18n';
+import { readDocumentAppLocale, useAppI18n } from '../i18n';
 import { SvgV2Icon } from './SvgV2Icon';
 
 export function buildFeedbackUrl(): string {
@@ -10,20 +9,10 @@ export function buildFeedbackUrl(): string {
   const params = new URLSearchParams();
   params.set('feedback', 'open');
   params.set('step', '1');
-
-  try {
-    const sessionUser = readStoredAppwriteSession()?.user;
-    if (sessionUser?.email) params.set('email', sessionUser.email);
-    if (sessionUser?.name) {
-      const parts = sessionUser.name.trim().split(' ');
-      params.set('firstName', parts[0] || '');
-      if (parts.length > 1) {
-        params.set('lastName', parts.slice(1).join(' '));
-      }
-    }
-  } catch {
-    // Ignore if session not available
-  }
+  // No PII in the URL (it leaks into history, server logs, analytics and
+  // Referer): only non-identifying context is passed to the feedback form.
+  params.set('source', 'app');
+  params.set('lang', readDocumentAppLocale());
 
   return `${base}?${params.toString()}`;
 }

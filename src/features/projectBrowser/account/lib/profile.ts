@@ -8,7 +8,13 @@ import {
   publishAccountSports,
   resetAccountSports,
 } from '@/shared/services/accountPrefs';
-import { readDocumentAppLocale, translateAppText } from '@/shared/i18n';
+import {
+  PROJECT_BROWSER_SETTINGS_STORAGE_KEY,
+  readDocumentAppLocale,
+  translateAppText,
+} from '@/shared/i18n';
+import { APP_CACHE_EPOCH_STORAGE_KEY } from '@/shared/lib/appCacheEpoch';
+import { clearProjectStore } from '@/shared/utils/storage/idbProjectStore';
 
 import {
   DEFAULT_COUNTRY,
@@ -180,15 +186,31 @@ export async function updateAccountPassword(password: string) {
   }
 }
 
-export async function signOutAccount() {
-  resetAccountSports();
-  clearStoredAppwriteSession();
+/**
+ * Clés `redview:*` purement UI (langue/réglages d'affichage, époque de cache,
+ * contournement mobile) conservées à la déconnexion. Toute autre clé `redview:*`
+ * (caches de projets, dossiers, abonnement, facturation, overlay LiDAR, session…)
+ * est considérée comme propre à l'utilisateur et supprimée.
+ */
+const SIGN_OUT_PRESERVED_KEYS = new Set<string>([
+  PROJECT_BROWSER_SETTINGS_STORAGE_KEY,
+  APP_CACHE_EPOCH_STORAGE_KEY,
+  'redview:bypass-mobile-block',
+]);
 
+function isUserScopedStorageKey(key: string): boolean {
+  if (key.startsWith('cookieFallback')) return true;
+  // Legacy Supabase auth tokens (backend migré vers Appwrite).
+  if (key.startsWith('sb-')) return true;
+  return key.startsWith('redview:') && !SIGN_OUT_PRESERVED_KEYS.has(key);
+}
+
+function clearUserScopedLocalStorage() {
   try {
     const keysToRemove: string[] = [];
     for (let i = 0; i < window.localStorage.length; i++) {
       const key = window.localStorage.key(i);
-      if (key && (key.startsWith('redview:') || key.startsWith('sb-') || key.startsWith('cookieFallback'))) {
+      if (key && isUserScopedStorageKey(key)) {
         keysToRemove.push(key);
       }
     }
@@ -196,7 +218,14 @@ export async function signOutAccount() {
   } catch {
     // ignore storage access errors
   }
+}
 
+export async function signOutAccount() {
+  resetAccountSports();
+
+  // 1. Révoquer la session serveur EN PREMIER : le SDK Appwrite a besoin du
+  //    `cookieFallback` (header X-Fallback-Cookies) pour authentifier cet appel
+  //    lorsque les cookies tiers sont bloqués.
   try {
     await Promise.race([
       account.deleteSession('current'),
@@ -204,5 +233,18 @@ export async function signOutAccount() {
     ]);
   } catch (err) {
     console.warn('[auth] Appwrite deleteSession error (ignored):', err);
+  }
+
+  // 2. Puis purger l'état d'authentification local et les données propres à l'utilisateur.
+  clearStoredAppwriteSession();
+  clearUserScopedLocalStorage();
+
+  try {
+    await Promise.race([
+      clearProjectStore(),
+      new Promise((resolve) => setTimeout(resolve, 1500)),
+    ]);
+  } catch (err) {
+    console.warn('[auth] Failed to clear local project store (ignored):', err);
   }
 }

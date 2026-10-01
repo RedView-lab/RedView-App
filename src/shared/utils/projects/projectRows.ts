@@ -10,7 +10,7 @@ import {
 } from '@/shared/services/appwrite';
 import { logger } from '@/shared/lib/logger';
 
-import { getCurrentUserId } from './auth';
+import { getCurrentUserId, isOwnedBy } from './auth';
 import { computeProjectSizeBytes } from './limits';
 import { rowToSummary } from './mappers';
 import type { ItineraryProject, ProjectRow, ProjectSummary } from './types';
@@ -104,9 +104,9 @@ export async function listProjects(): Promise<ProjectSummary[]> {
     }
   }
 
-  // 1. Priorité IndexedDB (pas de limite 5 Mo)
+  // 1. Priorité IndexedDB (pas de limite 5 Mo) — uniquement les projets de l'utilisateur courant
   try {
-    const idbRows = await idbListProjects();
+    const idbRows = (await idbListProjects()).filter((row) => isOwnedBy(row, userId));
     if (idbRows.length > 0) {
       return idbRows.map((row) => rowToSummary(row));
     }
@@ -114,23 +114,23 @@ export async function listProjects(): Promise<ProjectSummary[]> {
     /* fallback to localStorage */
   }
 
-  const local = readLocalProjects();
+  const local = readLocalProjects().filter((row) => isOwnedBy(row, userId));
   return local.map((row) => rowToSummary(row));
 }
 
 export async function getProject(id: string): Promise<ProjectRow | null> {
-  // 1. Priorité absolue IndexedDB : ouverture instantanée (2-5ms) sans latence réseau ni décompression lourde
-  try {
-    const idbRow = await idbGetProject(id);
-    if (idbRow?.data) {
-      return idbRow;
-    }
-  } catch {
-    /* fallback to cloud */
-  }
-
-  const userId = await getCurrentUserId().catch(() => 'dev-user-001');
+  // Lecture IndexedDB et résolution de l'utilisateur en parallèle : le cache local
+  // n'est servi que s'il appartient à l'utilisateur courant (sinon cache miss).
+  const [idbRow, userId] = await Promise.all([
+    idbGetProject(id).catch(() => null),
+    getCurrentUserId().catch(() => 'dev-user-001'),
+  ]);
   const isDev = userId === 'dev-user-001';
+
+  // 1. Priorité IndexedDB : ouverture instantanée sans décompression lourde
+  if (idbRow?.data && isOwnedBy(idbRow, userId)) {
+    return idbRow;
+  }
 
   if (!isDev && !id.startsWith('local-')) {
     try {
@@ -147,7 +147,7 @@ export async function getProject(id: string): Promise<ProjectRow | null> {
   }
 
   const local = readLocalProjects();
-  return local.find((p) => p.id === id) ?? null;
+  return local.find((p) => p.id === id && isOwnedBy(p, userId)) ?? null;
 }
 
 export async function createProject(

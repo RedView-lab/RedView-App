@@ -277,11 +277,14 @@ export function createViewportPoiMarkerElement(feature: PoiFeature): HTMLButtonE
   }
 
   // Symbol with pause time for POIs associated with pauses
-  if (feature.pauseDurationMin && feature.pauseDurationMin > 0) {
+  // Coercion numérique : la durée vient des données projet (défense en profondeur avant innerHTML).
+  const pauseDurationMin = Number(feature.pauseDurationMin);
+  if (Number.isFinite(pauseDurationMin) && pauseDurationMin > 0) {
+    const safePauseMin = Math.round(pauseDurationMin);
     const pauseBadge = document.createElement('span');
     pauseBadge.className = 'rvd-viewport-poi-marker__pause-badge';
-    pauseBadge.setAttribute('aria-label', `Pause ${feature.pauseDurationMin} min`);
-    pauseBadge.innerHTML = `<span class="rvd-viewport-poi-marker__pause-symbol" aria-hidden="true">❚❚</span><span class="rvd-viewport-poi-marker__pause-duration">${feature.pauseDurationMin} min</span>`;
+    pauseBadge.setAttribute('aria-label', `Pause ${safePauseMin} min`);
+    pauseBadge.innerHTML = `<span class="rvd-viewport-poi-marker__pause-symbol" aria-hidden="true">❚❚</span><span class="rvd-viewport-poi-marker__pause-duration">${safePauseMin} min</span>`;
     element.appendChild(pauseBadge);
   }
 

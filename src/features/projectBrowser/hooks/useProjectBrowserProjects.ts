@@ -29,6 +29,12 @@ type BrowserToast = {
   message: string;
 };
 
+function revokeThumbnailUrls(urls: Iterable<string | null>, keep?: ReadonlySet<string | null>) {
+  for (const url of urls) {
+    if (url && url.startsWith('blob:') && !keep?.has(url)) URL.revokeObjectURL(url);
+  }
+}
+
 type DragPreviewState = {
   type: 'project' | 'folder';
   label: string;
@@ -65,6 +71,22 @@ export function useProjectBrowserProjects({
   const [dragPreview, setDragPreview] = useState<DragPreviewState | null>(null);
   const [toast, setToast] = useState<BrowserToast | null>(null);
   const thumbnailRequestRef = useRef(0);
+  const thumbnailsRef = useRef<Record<string, string | null>>({});
+
+  // Les miniatures sont des URLs `blob:` : libérer celles qui ne sont plus affichées.
+  useEffect(() => {
+    const previous = thumbnailsRef.current;
+    thumbnailsRef.current = thumbnails;
+    if (previous === thumbnails) return;
+    revokeThumbnailUrls(Object.values(previous), new Set(Object.values(thumbnails)));
+  }, [thumbnails]);
+
+  useEffect(() => {
+    return () => {
+      revokeThumbnailUrls(Object.values(thumbnailsRef.current));
+      thumbnailsRef.current = {};
+    };
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
@@ -101,7 +123,10 @@ export function useProjectBrowserProjects({
         setThumbnailLoadingIds(new Set(projectIds));
         getProjectThumbnailUrls(projectIds)
           .then((map) => {
-            if (thumbnailRequestRef.current !== thumbnailRequestId) return;
+            if (thumbnailRequestRef.current !== thumbnailRequestId) {
+              revokeThumbnailUrls(Object.values(map));
+              return;
+            }
             setThumbnails(map);
           })
           .catch((nextError) => {

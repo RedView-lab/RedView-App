@@ -306,13 +306,26 @@ export async function preflightWebGPU(): Promise<PreflightResult> {
   return { ok: true, vendor, arch, desc };
 }
 
+function createStyledElement<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  cssText: string,
+  text?: string,
+): HTMLElementTagNameMap[K] {
+  const element = document.createElement(tag);
+  element.style.cssText = cssText;
+  if (text !== undefined) element.textContent = text;
+  return element;
+}
+
 export function showFatalError(
   overlay: HTMLElement,
   opts: { title: string; message: string; hint?: string; technical?: string },
 ) {
   overlay.classList.remove('hidden');
-  overlay.innerHTML = `
-    <div style="
+
+  // Construit via le DOM (textContent) : les messages peuvent contenir des
+  // fragments non maîtrisés (erreurs worker, paramètres d'URL…).
+  const card = createStyledElement('div', `
       max-width: 560px;
       padding: 28px 32px;
       background: rgba(20, 24, 40, 0.85);
@@ -322,28 +335,38 @@ export function showFatalError(
       color: #fff;
       font-family: system-ui, sans-serif;
       text-align: center;
-    ">
-      <div style="font-size: 40px; margin-bottom: 8px;">⚠️</div>
-      <h1 style="font-size: 1.35rem; margin: 0 0 12px; color:#ffb4b4;">${opts.title}</h1>
-      <p style="font-size: 0.95rem; line-height: 1.55; color:#e6e8f0; margin: 0 0 14px;">${opts.message}</p>
-      ${opts.hint ? `<p style="font-size:0.85rem; color:#9aa3bd; margin:0 0 14px;">${opts.hint}</p>` : ''}
-      ${opts.technical ? `<details style="margin-top:10px; text-align:left;">
-          <summary style="cursor:pointer; color:#7ea1ff; font-size:0.8rem;">Détails techniques</summary>
-          <pre style="
+    `);
+  card.appendChild(createStyledElement('div', 'font-size: 40px; margin-bottom: 8px;', '⚠️'));
+  card.appendChild(createStyledElement('h1', 'font-size: 1.35rem; margin: 0 0 12px; color:#ffb4b4;', opts.title));
+  card.appendChild(
+    createStyledElement('p', 'font-size: 0.95rem; line-height: 1.55; color:#e6e8f0; margin: 0 0 14px;', opts.message),
+  );
+  if (opts.hint) {
+    card.appendChild(createStyledElement('p', 'font-size:0.85rem; color:#9aa3bd; margin:0 0 14px;', opts.hint));
+  }
+  if (opts.technical) {
+    const details = createStyledElement('details', 'margin-top:10px; text-align:left;');
+    details.appendChild(
+      createStyledElement('summary', 'cursor:pointer; color:#7ea1ff; font-size:0.8rem;', 'Détails techniques'),
+    );
+    details.appendChild(createStyledElement('pre', `
             margin-top: 8px; padding: 10px; font-size: 11px;
             background: rgba(0,0,0,0.45); border-radius: 6px;
             color:#cfd6e8; white-space: pre-wrap; word-break: break-word;
-          ">${opts.technical}</pre>
-        </details>` : ''}
-      <button id="err-close" style="
+          `, opts.technical));
+    card.appendChild(details);
+  }
+  const closeButton = createStyledElement('button', `
         margin-top: 18px; padding: 8px 18px;
         background: rgba(80,120,255,0.25); color:#fff;
         border: 1px solid rgba(120,160,255,0.55);
         border-radius: 999px; cursor: pointer; font-size: 0.9rem;
-      ">Fermer l'onglet</button>
-    </div>
-  `;
-  document.getElementById('err-close')?.addEventListener('click', () => window.close());
+      `, "Fermer l'onglet");
+  closeButton.id = 'err-close';
+  closeButton.addEventListener('click', () => window.close());
+  card.appendChild(closeButton);
+
+  overlay.replaceChildren(card);
 }
 
 export function explainWorkerError(raw: string): { title: string; message: string; hint?: string } {

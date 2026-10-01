@@ -246,56 +246,60 @@ function interpolateRoutePointAtDistanceM(
 }
 
 function buildPausePopupHtml(title: string, state: PausePopupState): string {
+  // Défense en profondeur : toute valeur interpolée est échappée ou coercée en nombre.
+  const pauseMin = Number(state.pauseDurationMin);
+  const safePauseMin = Number.isFinite(pauseMin) ? Math.round(pauseMin) : 0;
+  const favoriteEnabled = state.favoriteEnabled === true;
   return `
     <div class="rv-poi-popup__panel">
       <div class="rv-poi-popup__header">
         <button
           type="button"
-          class="rv-poi-popup__icon-btn rv-poi-popup__icon-btn--ghost${state.favoriteEnabled ? ' is-active' : ''}"
-          aria-label="${translateAppText('Favori')}"
-          aria-pressed="${state.favoriteEnabled}"
+          class="rv-poi-popup__icon-btn rv-poi-popup__icon-btn--ghost${favoriteEnabled ? ' is-active' : ''}"
+          aria-label="${escapeHtml(translateAppText('Favori'))}"
+          aria-pressed="${favoriteEnabled}"
           data-action="favorite-toggle"
         >
-          <img src="${UI_ICON_URLS.star}" alt="" class="rv-poi-popup__icon rv-poi-popup__icon--star" />
+          <img src="${escapeHtml(UI_ICON_URLS.star)}" alt="" class="rv-poi-popup__icon rv-poi-popup__icon--star" />
         </button>
         <div class="rv-poi-popup__title">${escapeHtml(title)}</div>
-        <button type="button" class="rv-poi-popup__icon-btn rv-poi-popup__icon-btn--ghost" aria-label="${translateAppText('Fermer')}" data-action="close">
-          <img src="${UI_ICON_URLS.globe}" alt="" class="rv-poi-popup__icon" />
+        <button type="button" class="rv-poi-popup__icon-btn rv-poi-popup__icon-btn--ghost" aria-label="${escapeHtml(translateAppText('Fermer'))}" data-action="close">
+          <img src="${escapeHtml(UI_ICON_URLS.globe)}" alt="" class="rv-poi-popup__icon" />
         </button>
       </div>
 
       <div class="rv-poi-popup__divider"></div>
 
       <div class="rv-poi-popup__field-row">
-        <div class="rv-poi-popup__field-label">${translateAppText('Type')}</div>
-        <div class="rv-poi-popup__select" aria-label="${translateAppText('Type de POI')}" role="presentation">
+        <div class="rv-poi-popup__field-label">${escapeHtml(translateAppText('Type'))}</div>
+        <div class="rv-poi-popup__select" aria-label="${escapeHtml(translateAppText('Type de POI'))}" role="presentation">
           <span class="rv-poi-popup__type-icon-wrap">
-            <img src="${UI_ICON_URLS.pausePin}" alt="" class="rv-poi-popup__type-icon" />
+            <img src="${escapeHtml(UI_ICON_URLS.pausePin)}" alt="" class="rv-poi-popup__type-icon" />
           </span>
-          <span class="rv-poi-popup__select-value">${translateAppText('Pause')}</span>
+          <span class="rv-poi-popup__select-value">${escapeHtml(translateAppText('Pause'))}</span>
         </div>
       </div>
 
       <div class="rv-poi-popup__divider"></div>
 
       <div class="rv-poi-popup__field-row">
-        <div class="rv-poi-popup__field-label">${translateAppText('Durée')}</div>
+        <div class="rv-poi-popup__field-label">${escapeHtml(translateAppText('Durée'))}</div>
         <div class="rv-poi-popup__select-wrap">
           <button
             type="button"
             class="rv-poi-popup__select rv-poi-popup__select--duration"
-            aria-label="${translateAppText('Durée de pause')}"
+            aria-label="${escapeHtml(translateAppText('Durée de pause'))}"
             data-action="pause-duration"
             aria-haspopup="listbox"
             aria-expanded="${state.isDurationDropdownOpen === true}"
           >
-            <span class="rv-poi-popup__select-value">${state.pauseDurationMin} min</span>
-            <img src="${UI_ICON_URLS.chevron}" alt="" class="rv-poi-popup__chevron" />
+            <span class="rv-poi-popup__select-value">${safePauseMin} min</span>
+            <img src="${escapeHtml(UI_ICON_URLS.chevron)}" alt="" class="rv-poi-popup__chevron" />
           </button>
           ${
             state.isDurationDropdownOpen
               ? `
-            <div class="rv-dropdown rv-poi-popup__dropdown" role="listbox" aria-label="${translateAppText('Durée de pause')}">
+            <div class="rv-dropdown rv-poi-popup__dropdown" role="listbox" aria-label="${escapeHtml(translateAppText('Durée de pause'))}">
               ${PAUSE_DURATION_OPTIONS.map((dur) => {
                 const selected = dur === state.pauseDurationMin;
                 return `
@@ -320,42 +324,43 @@ function buildPausePopupHtml(title: string, state: PausePopupState): string {
 
       <button type="button" class="rv-poi-popup__action-row rv-poi-popup__action-row--delete" data-action="delete">
         <span class="rv-poi-popup__utility-icon-wrap">
-          <img src="${UI_ICON_URLS.trash}" alt="" class="rv-poi-popup__utility-icon" />
+          <img src="${escapeHtml(UI_ICON_URLS.trash)}" alt="" class="rv-poi-popup__utility-icon" />
         </span>
-        <span class="rv-poi-popup__action-label rv-poi-popup__action-label--delete">${translateAppText('Supprimer')}</span>
+        <span class="rv-poi-popup__action-label rv-poi-popup__action-label--delete">${escapeHtml(translateAppText('Supprimer'))}</span>
       </button>
     </div>
   `;
 }
 
 function buildWaypointPopupHtml(title: string, state: { favoriteEnabled: boolean }): string {
+  const favoriteEnabled = state.favoriteEnabled === true;
   return `
     <div class="rv-poi-popup__panel">
       <div class="rv-poi-popup__header">
         <button
           type="button"
-          class="rv-poi-popup__icon-btn rv-poi-popup__icon-btn--ghost${state.favoriteEnabled ? ' is-active' : ''}"
-          aria-label="${translateAppText('Favori')}"
-          aria-pressed="${state.favoriteEnabled}"
+          class="rv-poi-popup__icon-btn rv-poi-popup__icon-btn--ghost${favoriteEnabled ? ' is-active' : ''}"
+          aria-label="${escapeHtml(translateAppText('Favori'))}"
+          aria-pressed="${favoriteEnabled}"
           data-action="favorite-toggle"
         >
-          <img src="${UI_ICON_URLS.star}" alt="" class="rv-poi-popup__icon rv-poi-popup__icon--star" />
+          <img src="${escapeHtml(UI_ICON_URLS.star)}" alt="" class="rv-poi-popup__icon rv-poi-popup__icon--star" />
         </button>
         <div class="rv-poi-popup__title">${escapeHtml(title)}</div>
-        <button type="button" class="rv-poi-popup__icon-btn rv-poi-popup__icon-btn--ghost" aria-label="${translateAppText('Fermer')}" data-action="close">
-          <img src="${UI_ICON_URLS.globe}" alt="" class="rv-poi-popup__icon" />
+        <button type="button" class="rv-poi-popup__icon-btn rv-poi-popup__icon-btn--ghost" aria-label="${escapeHtml(translateAppText('Fermer'))}" data-action="close">
+          <img src="${escapeHtml(UI_ICON_URLS.globe)}" alt="" class="rv-poi-popup__icon" />
         </button>
       </div>
 
       <div class="rv-poi-popup__divider"></div>
 
       <div class="rv-poi-popup__field-row">
-        <div class="rv-poi-popup__field-label">${translateAppText('Type')}</div>
-        <div class="rv-poi-popup__select" aria-label="${translateAppText('Type de POI')}" role="presentation">
+        <div class="rv-poi-popup__field-label">${escapeHtml(translateAppText('Type'))}</div>
+        <div class="rv-poi-popup__select" aria-label="${escapeHtml(translateAppText('Type de POI'))}" role="presentation">
           <span class="rv-poi-popup__type-icon-wrap">
-            <img src="${CHECKPOINT_WAYPOINT_ICON}" alt="" class="rv-poi-popup__type-icon" />
+            <img src="${escapeHtml(CHECKPOINT_WAYPOINT_ICON)}" alt="" class="rv-poi-popup__type-icon" />
           </span>
-          <span class="rv-poi-popup__select-value">${translateAppText('Waypoint')}</span>
+          <span class="rv-poi-popup__select-value">${escapeHtml(translateAppText('Waypoint'))}</span>
         </div>
       </div>
 
@@ -363,9 +368,9 @@ function buildWaypointPopupHtml(title: string, state: { favoriteEnabled: boolean
 
       <button type="button" class="rv-poi-popup__action-row rv-poi-popup__action-row--delete" data-action="delete">
         <span class="rv-poi-popup__utility-icon-wrap">
-          <img src="${UI_ICON_URLS.trash}" alt="" class="rv-poi-popup__utility-icon" />
+          <img src="${escapeHtml(UI_ICON_URLS.trash)}" alt="" class="rv-poi-popup__utility-icon" />
         </span>
-        <span class="rv-poi-popup__action-label rv-poi-popup__action-label--delete">${translateAppText('Supprimer')}</span>
+        <span class="rv-poi-popup__action-label rv-poi-popup__action-label--delete">${escapeHtml(translateAppText('Supprimer'))}</span>
       </button>
     </div>
   `;
@@ -402,8 +407,8 @@ function buildEndpointPopupHtml(data: CheckpointData): string {
     <div class="rv-poi-popup__panel">
       <div class="rv-poi-popup__header">
         <div class="rv-poi-popup__title">${escapeHtml(title)}</div>
-        <button type="button" class="rv-poi-popup__icon-btn rv-poi-popup__icon-btn--ghost" aria-label="${translateAppText('Fermer')}" data-action="close">
-          <img src="${UI_ICON_URLS.globe}" alt="" class="rv-poi-popup__icon" />
+        <button type="button" class="rv-poi-popup__icon-btn rv-poi-popup__icon-btn--ghost" aria-label="${escapeHtml(translateAppText('Fermer'))}" data-action="close">
+          <img src="${escapeHtml(UI_ICON_URLS.globe)}" alt="" class="rv-poi-popup__icon" />
         </button>
       </div>
       ${rows.map((row) => `<div class="rv-poi-popup__divider"></div>${row}`).join('')}
@@ -414,7 +419,7 @@ function buildEndpointPopupHtml(data: CheckpointData): string {
 /** Ligne « libellé · valeur » en lecture seule, même gabarit que la ligne Type. */
 function buildPopupInfoRow(label: string, value: string, iconSrc?: string): string {
   const icon = iconSrc
-    ? `<span class="rv-poi-popup__type-icon-wrap"><img src="${iconSrc}" alt="" class="rv-poi-popup__type-icon" /></span>`
+    ? `<span class="rv-poi-popup__type-icon-wrap"><img src="${escapeHtml(iconSrc)}" alt="" class="rv-poi-popup__type-icon" /></span>`
     : '';
   return `
     <div class="rv-poi-popup__field-row">

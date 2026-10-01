@@ -42,7 +42,14 @@ function getDb(): Promise<IDBDatabase> {
     };
 
     request.onsuccess = () => {
-      resolve(request.result);
+      const db = request.result;
+      // Another tab (or clearProjectStore) wants to delete/upgrade the DB:
+      // release our handle so the request is not blocked.
+      db.onversionchange = () => {
+        db.close();
+        dbPromise = null;
+      };
+      resolve(db);
     };
 
     request.onerror = () => {
@@ -56,6 +63,36 @@ function getDb(): Promise<IDBDatabase> {
   });
 
   return dbPromise;
+}
+
+/**
+ * Supprime entièrement la base IndexedDB (projets, caches, miniatures).
+ * Appelé à la déconnexion : ces données sont propres à l'utilisateur.
+ */
+export async function clearProjectStore(): Promise<void> {
+  if (typeof window === 'undefined' || typeof indexedDB === 'undefined') return;
+
+  const pending = dbPromise;
+  dbPromise = null;
+  migrationDone = false;
+  if (pending) {
+    try {
+      (await pending).close();
+    } catch {
+      // handle never opened: nothing to close
+    }
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const request = indexedDB.deleteDatabase(DB_NAME);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+    request.onblocked = () => {
+      // Other tabs are notified through `onversionchange` and close their handle;
+      // the deletion completes once they do.
+      console.warn('[idbProjectStore] IndexedDB delete blocked by other tabs');
+    };
+  });
 }
 
 // ── Migration depuis LocalStorage ─────────────────────────────────────────
@@ -153,11 +190,17 @@ export async function idbDeleteProject(id: string): Promise<void> {
 
 export interface IdbCacheEntry {
   projectId: string;
+  /** Identifiant de l'utilisateur propriétaire du snapshot (cache scopé par compte). */
+  ownerId?: string;
   cachedAt: string;
   project: ItineraryProject;
 }
 
-export async function idbSaveProjectCache(projectId: string, project: ItineraryProject): Promise<void> {
+export async function idbSaveProjectCache(
+  projectId: string,
+  project: ItineraryProject,
+  ownerId: string,
+): Promise<void> {
   const db = await getDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction([STORE_CACHE], 'readwrite');
@@ -165,6 +208,7 @@ export async function idbSaveProjectCache(projectId: string, project: ItineraryP
     // IndexedDB copie déjà la valeur (clonage structuré) : pas de copie en plus.
     const entry: IdbCacheEntry = {
       projectId,
+      ownerId,
       cachedAt: new Date().toISOString(),
       project,
     };

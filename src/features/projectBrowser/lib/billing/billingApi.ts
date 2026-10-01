@@ -57,7 +57,8 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
     path,
     method: init?.method ?? 'GET',
     hasBody: Boolean(init?.body),
-    body: typeof init?.body === 'string' ? init.body : null,
+    // Request bodies may contain billing contact details: only log them in dev.
+    ...(import.meta.env.DEV ? { body: typeof init?.body === 'string' ? init.body : null } : {}),
   });
 
   const token = await getAccessToken();

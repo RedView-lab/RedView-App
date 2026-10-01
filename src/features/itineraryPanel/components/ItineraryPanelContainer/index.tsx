@@ -63,7 +63,7 @@ import { mergePoiFeatureFavorites } from './poiFeatureUtils';
 
 import { useItineraryPoiHandlers } from './useItineraryPoiHandlers';
 import { useItineraryMapActions } from './useItineraryMapActions';
-import { useItineraryGpxImport } from './useItineraryGpxImport';
+import { GpxFileTooLargeError, useItineraryGpxImport } from './useItineraryGpxImport';
 import { useItineraryTimelineCallbacks } from './useItineraryTimelineCallbacks';
 import { useRecalculateTrace } from './useRecalculateTrace';
 
@@ -483,6 +483,10 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         await addItineraryFromGpxFile(file);
       } catch (err) {
         console.warn('[ItineraryPanelContainer] GPX import failed', err);
+        if (err instanceof GpxFileTooLargeError) {
+          // No toast system in the itinerary panel: a native alert is the minimal visible feedback.
+          window.alert(err.message);
+        }
       }
     },
     [addItineraryFromGpxFile],

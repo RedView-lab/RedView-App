@@ -17,6 +17,17 @@ import { createDefaultAnalysisPanelState, createImportedPoiState } from '../../l
 import type { GpxQualityMode, Itinerary, ItineraryProject } from '../../types';
 import { resolveImportedTimelineLabel } from './importedTimelineLabel';
 import { reverseGeocodeSettlement } from '../../lib/geocoding';
+import { translateAppText } from '@/shared/i18n';
+
+/** Taille maximale d'un fichier GPX importé (protection mémoire du parseur). */
+export const MAX_GPX_IMPORT_BYTES = 50 * 1024 * 1024;
+
+export class GpxFileTooLargeError extends Error {
+  constructor() {
+    super(translateAppText('Fichier GPX trop volumineux (50 Mo maximum).'));
+    this.name = 'GpxFileTooLargeError';
+  }
+}
 
 interface UseItineraryGpxImportArgs {
   setProject: Dispatch<SetStateAction<ItineraryProject>>;
@@ -205,6 +216,9 @@ export function useItineraryGpxImport({
 
   const addItineraryFromGpxFile = useCallback(
     async (file: File) => {
+      if (file.size > MAX_GPX_IMPORT_BYTES) {
+        throw new GpxFileTooLargeError();
+      }
       // Surface the import in the itinerary list straight away: the list shows
       // a loading row named after the file until the itinerary row replaces it.
       onImportStateChange?.(file.name);

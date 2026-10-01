@@ -1,8 +1,11 @@
 import { PROJECT_CACHE_KEY_PREFIX } from '@/features/map3d/lib/mapCacheEpoch';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import { idbSaveProjectCache, idbGetProjectCache } from '@/shared/utils/storage/idbProjectStore';
+import { getCachedCurrentUserIdSync } from '@/shared/utils/projects/auth';
 
 export interface LocalProjectCacheEntry {
+  /** Utilisateur propriétaire du snapshot : une entrée d'un autre compte est un cache miss. */
+  ownerId?: string;
   cachedAt: string;
   project: ItineraryProject;
 }
@@ -35,6 +38,7 @@ export function buildLocalProjectCachePayload(project: ItineraryProject): {
   serialized: string;
 } | null {
   const payload: LocalProjectCacheEntry = {
+    ownerId: getCachedCurrentUserIdSync(),
     cachedAt: new Date().toISOString(),
     project: structuredClone(project),
   };
@@ -153,23 +157,6 @@ export function compactProjectCacheStorage(projectIdToKeep?: string | null): voi
   }
 }
 
-export function readAccessTokenSync(anonKey: string): string {
-  try {
-    for (let i = 0; i < window.localStorage.length; i++) {
-      const key = window.localStorage.key(i);
-      if (!key || !key.startsWith('sb-')) continue;
-      if (!key.endsWith('-auth-token')) continue;
-      const raw = window.localStorage.getItem(key);
-      if (!raw) continue;
-      const parsed = JSON.parse(raw);
-      if (parsed?.access_token) return parsed.access_token as string;
-    }
-  } catch {
-    /* fall through */
-  }
-  return anonKey;
-}
-
 export function getProjectCacheKey(projectId: string): string {
   return `${PROJECT_CACHE_KEY_PREFIX}${projectId}`;
 }
@@ -194,7 +181,9 @@ export function readProjectCache(projectId: string): LocalProjectCacheEntry | nu
       window.localStorage.removeItem(getProjectCacheKey(projectId));
       return null;
     }
+    if (parsed.ownerId !== getCachedCurrentUserIdSync()) return null;
     return {
+      ownerId: parsed.ownerId,
       cachedAt: parsed.cachedAt,
       project: parsed.project as ItineraryProject,
     };
@@ -206,8 +195,9 @@ export function readProjectCache(projectId: string): LocalProjectCacheEntry | nu
 export async function readProjectCacheAsync(projectId: string): Promise<LocalProjectCacheEntry | null> {
   try {
     const idbEntry = await idbGetProjectCache(projectId);
-    if (idbEntry?.project) {
+    if (idbEntry?.project && idbEntry.ownerId === getCachedCurrentUserIdSync()) {
       return {
+        ownerId: idbEntry.ownerId,
         cachedAt: idbEntry.cachedAt,
         project: idbEntry.project,
       };
@@ -220,7 +210,7 @@ export async function readProjectCacheAsync(projectId: string): Promise<LocalPro
 
 export function writeProjectCache(projectId: string, project: ItineraryProject): void {
   // 1. Toujours enregistrer immédiatement le snapshot complet dans IndexedDB (Crash-Proof, sans perte de POIs ni d'altitudes)
-  void idbSaveProjectCache(projectId, project).catch((err) => {
+  void idbSaveProjectCache(projectId, project, getCachedCurrentUserIdSync()).catch((err) => {
     console.warn('[Dashboard] idbSaveProjectCache error', err);
   });
 

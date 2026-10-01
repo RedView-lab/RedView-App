@@ -89,4 +89,13 @@ export const globalTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Actif', en: 'Active' },
   { fr: 'Essai', en: 'Trial' },
   { fr: 'Statut indisponible', en: 'Status unavailable' },
+  { fr: 'Veuillez renseigner les 6 chiffres du code.', en: 'Please enter all 6 digits of the code.' },
+  { fr: 'Si l’adresse est valide, un code de vérification à 6 chiffres a été envoyé.', en: 'If the address is valid, a 6-digit verification code has been sent.' },
+  { fr: 'Si l’adresse est valide, nous vous avons envoyé un e-mail avec un code de confirmation à 6 chiffres.', en: 'If the address is valid, we have sent you an e-mail with a 6-digit confirmation code.' },
+  { fr: 'Trop de tentatives pour cette adresse e-mail. Veuillez réessayer plus tard.', en: 'Too many attempts for this e-mail address. Please try again later.' },
+  { fr: 'Trop de demandes de code pour cette adresse e-mail. Veuillez réessayer dans une heure.', en: 'Too many code requests for this e-mail address. Please try again in an hour.' },
+  { fr: 'Le code de vérification doit comporter 6 chiffres.', en: 'The verification code must be 6 digits.' },
+  { fr: 'Le mot de passe doit comporter entre 8 et 256 caractères.', en: 'Password must be between 8 and 256 characters.' },
+  { fr: 'Le nom ne doit pas dépasser 100 caractères.', en: 'Name must not exceed 100 characters.' },
+  { fr: 'Le mot de passe ne doit pas dépasser 256 caractères.', en: 'Password must be at most 256 characters.' },
 ] as const;

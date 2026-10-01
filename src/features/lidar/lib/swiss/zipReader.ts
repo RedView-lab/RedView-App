@@ -148,13 +148,36 @@ function readCentralDirectory(
   return entries;
 }
 
-async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
+/** Zip-bomb guards: max declared inflated size and max inflate ratio. */
+const MAX_UNCOMPRESSED_ENTRY_BYTES = 2 * 1024 * 1024 * 1024;
+const MAX_COMPRESSION_RATIO = 200;
+
+async function inflateRaw(data: Uint8Array, expectedSize: number): Promise<Uint8Array> {
   // `deflate-raw` decompresses raw DEFLATE streams (no zlib header), which is
-  // what ZIP entries with method=8 contain.
+  // what ZIP entries with method=8 contain. The output is streamed into a
+  // buffer of the declared size and aborted as soon as it would overflow it.
   const ds = new DecompressionStream('deflate-raw');
   const stream = new Blob([data as unknown as BlobPart]).stream().pipeThrough(ds);
-  const buf = await new Response(stream).arrayBuffer();
-  return new Uint8Array(buf);
+  const reader = stream.getReader();
+  const out = new Uint8Array(expectedSize);
+  let written = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (written + value.byteLength > expectedSize) {
+        throw new Error(`ZIP: inflated data exceeds declared size (${expectedSize} bytes)`);
+      }
+      out.set(value, written);
+      written += value.byteLength;
+    }
+  } catch (error) {
+    await reader.cancel().catch(() => {});
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+  return written === expectedSize ? out : out.slice(0, written);
 }
 
 /**
@@ -190,6 +213,15 @@ export async function extractLasFromZip(zipBytes: ArrayBuffer): Promise<ArrayBuf
   const lfhFileNameLen = view.getUint16(lfh + 26, true);
   const lfhExtraLen = view.getUint16(lfh + 28, true);
   const dataOffset = lfh + 30 + lfhFileNameLen + lfhExtraLen;
+  if (lasEntry.uncompressedSize > MAX_UNCOMPRESSED_ENTRY_BYTES) {
+    throw new Error(`ZIP: entry ${lasEntry.fileName} is too large (${lasEntry.uncompressedSize} bytes)`);
+  }
+  if (
+    lasEntry.uncompressedSize > 0 &&
+    (lasEntry.compressedSize <= 0 || lasEntry.uncompressedSize / lasEntry.compressedSize > MAX_COMPRESSION_RATIO)
+  ) {
+    throw new Error(`ZIP: suspicious compression ratio for ${lasEntry.fileName}`);
+  }
   const compressed = new Uint8Array(zipBytes, dataOffset, lasEntry.compressedSize);
 
   if (lasEntry.compressionMethod === 0) {
@@ -199,7 +231,7 @@ export async function extractLasFromZip(zipBytes: ArrayBuffer): Promise<ArrayBuf
     return copy.buffer as ArrayBuffer;
   }
   if (lasEntry.compressionMethod === 8) {
-    const inflated = await inflateRaw(compressed);
+    const inflated = await inflateRaw(compressed, lasEntry.uncompressedSize);
     return inflated.buffer as ArrayBuffer;
   }
   throw new Error(`ZIP: unsupported compression method ${lasEntry.compressionMethod} for ${lasEntry.fileName}`);

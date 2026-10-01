@@ -1,4 +1,5 @@
 import {
+  client,
   getAppwriteUser,
   readStoredAppwriteSession,
   Role,
@@ -42,7 +43,7 @@ export async function uploadProjectThumbnail(projectId: string, blob: Blob): Pro
       fileId,
       file,
       [
-        Permission.read(Role.any()),
+        Permission.read(Role.user(userId)),
         Permission.update(Role.user(userId)),
         Permission.delete(Role.user(userId)),
       ],
@@ -52,37 +53,74 @@ export async function uploadProjectThumbnail(projectId: string, blob: Blob): Pro
   }
 }
 
+/** Nombre maximal de téléchargements de miniatures cloud simultanés. */
+const THUMBNAIL_FETCH_CONCURRENCY = 6;
+
+/**
+ * Télécharge une miniature cloud via le client Appwrite (session cookie +
+ * `X-Fallback-Cookies` quand les cookies tiers sont bloqués). Les fichiers ne
+ * sont lisibles que par leur propriétaire : un `<img src>` direct vers
+ * l'endpoint Appwrite ne transporterait pas forcément ces identifiants.
+ */
+async function fetchCloudThumbnailBlob(projectId: string): Promise<Blob | null> {
+  const fileId = safeThumbnailFileId(projectId);
+  const viewUrl = new URL(storage.getFileView(THUMBNAILS_BUCKET_ID, fileId));
+  const data: unknown = await client.call('get', viewUrl, {}, {}, 'arrayBuffer');
+  if (!(data instanceof ArrayBuffer) || data.byteLength === 0) return null;
+  return new Blob([data], { type: sniffImageMime(new Uint8Array(data, 0, Math.min(12, data.byteLength))) });
+}
+
+function sniffImageMime(head: Uint8Array): string {
+  if (head[0] === 0xff && head[1] === 0xd8) return 'image/jpeg';
+  if (head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47) return 'image/png';
+  // Miniatures RedView : WebP par défaut (cf. uploadProjectThumbnail).
+  return 'image/webp';
+}
+
+/** Miniature d'un projet : IndexedDB d'abord (instantané, hors-ligne), puis cloud. */
+async function loadProjectThumbnailBlob(projectId: string): Promise<Blob | null> {
+  try {
+    const localBlob = await idbGetThumbnail(projectId);
+    if (localBlob) return localBlob;
+  } catch {
+    // continuer vers le cloud
+  }
+
+  if (projectId.startsWith('local-')) return null;
+
+  try {
+    const cloudBlob = await fetchCloudThumbnailBlob(projectId);
+    if (cloudBlob) {
+      void idbSaveThumbnail(projectId, cloudBlob).catch(() => {});
+    }
+    return cloudBlob;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Renvoie une URL `blob:` par projet (ou null). L'appelant est propriétaire de
+ * ces URLs et doit les libérer avec `URL.revokeObjectURL` quand elles ne sont
+ * plus affichées.
+ */
 export async function getProjectThumbnailUrls(
   projectIds: string[],
 ): Promise<Record<string, string | null>> {
   const out: Record<string, string | null> = {};
   if (projectIds.length === 0) return out;
 
-  for (const id of projectIds) {
-    // 1. Toujours vérifier IndexedDB en premier : affichage instantané (0 ms, hors-ligne, fiable sur Firefox & Chrome)
-    try {
-      const localBlob = await idbGetThumbnail(id);
-      if (localBlob) {
-        out[id] = URL.createObjectURL(localBlob);
-        continue;
-      }
-    } catch {
-      // continuer vers le cloud
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < projectIds.length) {
+      const id = projectIds[cursor++];
+      const blob = await loadProjectThumbnailBlob(id);
+      out[id] = blob ? URL.createObjectURL(blob) : null;
     }
-
-    // 2. URL cloud directe via getFileView : sert le WebP/JPEG pré-compressé sans bug 0-octet de preview Appwrite
-    if (!id.startsWith('local-')) {
-      try {
-        const fileId = safeThumbnailFileId(id);
-        const url = storage.getFileView(THUMBNAILS_BUCKET_ID, fileId);
-        out[id] = url.toString();
-      } catch {
-        out[id] = null;
-      }
-    } else {
-      out[id] = null;
-    }
-  }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(THUMBNAIL_FETCH_CONCURRENCY, projectIds.length) }, worker),
+  );
 
   return out;
 }
@@ -91,16 +129,9 @@ export async function duplicateProjectThumbnail(
   sourceProjectId: string,
   targetProjectId: string,
 ): Promise<boolean> {
-  const urls = await getProjectThumbnailUrls([sourceProjectId]);
-  const sourceUrl = urls[sourceProjectId];
-  if (!sourceUrl) return false;
-
   try {
-    const response = await fetch(sourceUrl);
-    if (!response.ok) {
-      return false;
-    }
-    const blob = await response.blob();
+    const blob = await loadProjectThumbnailBlob(sourceProjectId);
+    if (!blob) return false;
     await uploadProjectThumbnail(targetProjectId, blob);
     return true;
   } catch {

@@ -37,6 +37,26 @@ type BootstrapSession = { user: { id: string; email?: string } } | null
 
 let initialSessionBootstrapPromise: Promise<BootstrapSession> | null = null
 
+const ANALYTICS_RECORDER_SRC = 'https://analytics.redview.tech/recorder.js'
+const ANALYTICS_WEBSITE_ID = '794b9933-1d87-4e8c-af69-a09982cc2353'
+const DEV_FALLBACK_USER_ID = 'dev-user-001'
+
+/**
+ * Session replay is only loaded for a confirmed, authenticated Appwrite user —
+ * never on the login / password-reset screens, so credentials typed there are
+ * never recorded. Injected at most once per page.
+ */
+function injectAnalyticsRecorder(): void {
+  if (typeof document === 'undefined') return
+  if (document.querySelector(`script[src="${ANALYTICS_RECORDER_SRC}"]`)) return
+
+  const script = document.createElement('script')
+  script.defer = true
+  script.src = ANALYTICS_RECORDER_SRC
+  script.dataset.websiteId = ANALYTICS_WEBSITE_ID
+  document.body.appendChild(script)
+}
+
 function getSubscriptionCacheKey(userId: string): string {
   return `${SUBSCRIPTION_CACHE_KEY_PREFIX}${userId}`
 }
@@ -260,6 +280,26 @@ function App() {
       cancelled = true
     }
   }, [authStatus, session?.user?.id])
+
+  // Session replay: only once Appwrite confirms a real authenticated user
+  // (not the dev/demo fallback session, not the login/reset screens).
+  useEffect(() => {
+    const userId = session?.user?.id
+    if (authStatus !== 'ready' || isPasswordResetUrl || !userId || userId === DEV_FALLBACK_USER_ID) {
+      return
+    }
+
+    let cancelled = false
+    getAppwriteUser()
+      .then((user) => {
+        if (!cancelled && user?.$id === userId) injectAnalyticsRecorder()
+      })
+      .catch(() => {})
+
+    return () => {
+      cancelled = true
+    }
+  }, [authStatus, isPasswordResetUrl, session?.user?.id])
 
   const { isMobile } = useIsMobileDevice()
 
