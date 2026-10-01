@@ -3989,6 +3989,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "unreadable by the engine"
   },
   {
+    "fr": "parcours planifié, pas une sortie enregistrée",
+    "en": "planned course, not a recorded ride"
+  },
+  {
     "fr": "pas un fichier FIT",
     "en": "not a FIT file"
   },
