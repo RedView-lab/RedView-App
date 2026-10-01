@@ -1,6 +1,39 @@
 export const FORECAST_MAX_DAY_OFFSET = 2;
 export const FORECAST_TIME_STEP_MINUTES = 60;
 
+// ── Horizon réel des prévisions (dernière heure de la méta VPS) ──────────
+// Le curseur « +2j » ne doit pas dépasser les heures réellement publiées
+// (48 h depuis le run du modèle) : au-delà, la carte afficherait la dernière
+// heure disponible sous une étiquette fausse.
+let forecastHorizonEndMs: number | null = null;
+const forecastHorizonListeners = new Set<() => void>();
+
+/** Fixe la dernière heure disponible (ms epoch) ; `null` = inconnue (pas de plafond). */
+export function setForecastHorizonEnd(endMs: number | null): void {
+  const next = endMs != null && Number.isFinite(endMs) ? endMs : null;
+  if (next === forecastHorizonEndMs) return;
+  forecastHorizonEndMs = next;
+  for (const listener of forecastHorizonListeners) listener();
+}
+
+export function getForecastHorizonEnd(): number | null {
+  return forecastHorizonEndMs;
+}
+
+export function subscribeForecastHorizon(listener: () => void): () => void {
+  forecastHorizonListeners.add(listener);
+  return () => {
+    forecastHorizonListeners.delete(listener);
+  };
+}
+
+/** Horizon utilisable : ignoré s'il est inconnu ou déjà dépassé (méta périmée). */
+function usableForecastHorizon(now: Date): Date | null {
+  if (forecastHorizonEndMs == null) return null;
+  const end = new Date(forecastHorizonEndMs);
+  return end.getTime() >= getForecastWindowStart(now).getTime() ? end : null;
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
@@ -69,8 +102,18 @@ export function getForecastBaseDate(now: Date = new Date()): Date {
   return base;
 }
 
+/** Dernier jour sélectionnable (0..FORECAST_MAX_DAY_OFFSET), borné par l'horizon des prévisions. */
+export function getForecastMaxDayOffset(now: Date = new Date()): number {
+  const horizon = usableForecastHorizon(now);
+  if (!horizon) return FORECAST_MAX_DAY_OFFSET;
+  const horizonDay = new Date(horizon);
+  horizonDay.setHours(0, 0, 0, 0);
+  const days = Math.round((horizonDay.getTime() - getForecastBaseDate(now).getTime()) / 86400000);
+  return clamp(days, 0, FORECAST_MAX_DAY_OFFSET);
+}
+
 export function getForecastDateForOffset(offset: number, now: Date = new Date()): string {
-  const safeOffset = clamp(Math.round(offset), 0, FORECAST_MAX_DAY_OFFSET);
+  const safeOffset = clamp(Math.round(offset), 0, getForecastMaxDayOffset(now));
   return formatLocalDateIso(addDays(getForecastBaseDate(now), safeOffset));
 }
 
@@ -78,7 +121,7 @@ export function getForecastOffsetForDate(dateIso: string, now: Date = new Date()
   const date = parseLocalDateIso(dateIso) ?? getForecastBaseDate(now);
   const base = getForecastBaseDate(now);
   const diffMs = date.getTime() - base.getTime();
-  return clamp(Math.round(diffMs / 86400000), 0, FORECAST_MAX_DAY_OFFSET);
+  return clamp(Math.round(diffMs / 86400000), 0, getForecastMaxDayOffset(now));
 }
 
 export function getForecastMinMinutesForDate(dateIso: string, now: Date = new Date()): number {
@@ -88,7 +131,12 @@ export function getForecastMinMinutesForDate(dateIso: string, now: Date = new Da
     : 0;
 }
 
-export function getForecastMaxMinutesForDate(_dateIso: string): number {
+export function getForecastMaxMinutesForDate(dateIso: string, now: Date = new Date()): number {
+  const horizon = usableForecastHorizon(now);
+  if (horizon && dateIso === formatLocalDateIso(horizon)) {
+    const horizonMinutes = floorToStep((horizon.getHours() * 60) + horizon.getMinutes(), FORECAST_TIME_STEP_MINUTES);
+    return Math.max(getForecastMinMinutesForDate(dateIso, now), horizonMinutes);
+  }
   return 23 * 60;
 }
 
@@ -97,7 +145,7 @@ export function clampForecastSelection(
   now: Date = new Date(),
 ): { date: string; time: string; forecastDay: number } {
   const base = getForecastBaseDate(now);
-  const maxDate = addDays(base, FORECAST_MAX_DAY_OFFSET);
+  const maxDate = addDays(base, getForecastMaxDayOffset(now));
 
   let date = parseLocalDateIso(selection.date) ?? getForecastBaseDate(now);
   if (date.getTime() < base.getTime()) date = base;
@@ -105,7 +153,7 @@ export function clampForecastSelection(
 
   const dateIso = formatLocalDateIso(date);
   const minMinutes = getForecastMinMinutesForDate(dateIso, now);
-  const maxMinutes = getForecastMaxMinutesForDate(dateIso);
+  const maxMinutes = getForecastMaxMinutesForDate(dateIso, now);
   const rawMinutes = timeToMinutes(selection.time || minutesToTime(minMinutes));
   const alignedMinutes = floorToStep(rawMinutes, FORECAST_TIME_STEP_MINUTES);
   const safeMinutes = clamp(alignedMinutes, minMinutes, maxMinutes);

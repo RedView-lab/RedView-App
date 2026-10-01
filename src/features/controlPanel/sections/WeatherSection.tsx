@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useAppI18n } from '@/shared/i18n';
 import { ColorPalettePicker } from '../components/ColorPalettePicker';
 import { ColorSwatch } from '../components/ColorSwatch';
@@ -19,14 +19,16 @@ import type {
 } from '../types';
 import { formatWeatherPaletteBandLabel, formatWeatherPaletteValue, weatherPaletteMetricSpec } from '../lib/weatherPalette';
 import {
-  FORECAST_MAX_DAY_OFFSET,
   FORECAST_TIME_STEP_MINUTES,
   formatLocalDateIso,
   getForecastDateForOffset,
+  getForecastHorizonEnd,
+  getForecastMaxDayOffset,
   getForecastMaxMinutesForDate,
   getForecastMinMinutesForDate,
   getForecastOffsetForDate,
   minutesToTime,
+  subscribeForecastHorizon,
   timeToMinutes,
 } from '@/features/weather/lib/forecastTime.ts';
 import { isInstantT } from '@/features/weather/radar/radarClient';
@@ -329,15 +331,18 @@ export function WeatherSection({
     const formatter = new Intl.DateTimeFormat(dateLocale, { month: 'short' });
     return Array.from({ length: 12 }, (_, index) => formatter.format(new Date(2026, index, 1)));
   }, [dateLocale]);
+  // Re-rendu quand la méta VPS fixe l'horizon réel des prévisions.
+  useSyncExternalStore(subscribeForecastHorizon, getForecastHorizonEnd);
+  const forecastMaxDayOffset = getForecastMaxDayOffset();
   const dayLabels = useMemo(() => {
     const todayIso = formatLocalDateIso(new Date());
     const formatter = new Intl.DateTimeFormat(dateLocale, { weekday: 'short' });
-    return Array.from({ length: FORECAST_MAX_DAY_OFFSET + 1 }, (_, offset) => {
+    return Array.from({ length: forecastMaxDayOffset + 1 }, (_, offset) => {
       const dateIso = getForecastDateForOffset(offset);
       if (dateIso === todayIso) return t("Aujourd'hui");
       return formatter.format(new Date(`${dateIso}T00:00:00`));
     });
-  }, [dateLocale, t]);
+  }, [dateLocale, t, forecastMaxDayOffset]);
   const isForecast = state.tab === 'forecast';
   const forecastDay = getForecastOffsetForDate(state.date);
   const trendMonth = getMonthIndexFromIso(state.date);
@@ -394,7 +399,7 @@ export function WeatherSection({
             <div className="rvc-weather__day-slider-wrapper">
               <Slider
                 min={0}
-                max={FORECAST_MAX_DAY_OFFSET}
+                max={forecastMaxDayOffset}
                 value={forecastDay}
                 onChange={(v) => onDateChange?.({ forecastDay: v, date: getForecastDateForOffset(v) })}
                 width="100%"

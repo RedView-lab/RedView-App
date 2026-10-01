@@ -4,6 +4,11 @@
  * Replaces the multi-batch 2,000-point JSON queries and 2M-pixel CPU bilinear loops.
  */
 
+import { setForecastHorizonEnd } from '../lib/forecastTime';
+
+/** Au-delà de cet écart, l'heure demandée n'est pas couverte : pas de tuile. */
+export const MAX_FORECAST_HOUR_GAP_MS = 90 * 60 * 1000;
+
 export interface WeatherMetaBbox {
   west: number;
   south: number;
@@ -81,6 +86,9 @@ export async function fetchWeatherMeta(signal?: AbortSignal, force = false): Pro
         const data = (await res.json()) as WeatherMeta;
         cachedMeta = data;
         cachedMetaTime = Date.now();
+        // Plafonne le curseur de prévision à la dernière heure publiée.
+        const lastHour = Array.isArray(data.hours) ? data.hours[data.hours.length - 1] : undefined;
+        setForecastHorizonEnd(lastHour ? Date.parse(lastHour) : null);
         return data;
       } catch (err) {
         window.clearTimeout(timeoutTimer);
@@ -131,6 +139,11 @@ export function bboxToImageCoords(bbox: WeatherMetaBbox = DEFAULT_WEATHER_BBOX):
   ];
 }
 
+/**
+ * Heure de la méta la plus proche de l'heure locale demandée, ou `''` si
+ * aucune n'est à moins de 90 min (heure hors horizon) : l'appelant masque
+ * alors le calque au lieu d'afficher une autre heure sous la mauvaise étiquette.
+ */
 export function findClosestForecastHour(targetDate: string, targetTime: string, availableHours: string[]): string {
   if (!availableHours.length) return '';
   const dateParts = targetDate.split('-').map(Number);
@@ -159,7 +172,7 @@ export function findClosestForecastHour(targetDate: string, targetTime: string, 
     }
   }
 
-  return bestHour;
+  return minDiff <= MAX_FORECAST_HOUR_GAP_MS ? bestHour : '';
 }
 
 export function buildVpsTileUrl(variable: string, isoHour: string, tileFormat: string = 'png'): string {

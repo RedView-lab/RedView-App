@@ -360,7 +360,9 @@ export function useWeatherDataPipeline({
 
     const closestHour = findClosestForecastHour(currentState.date, currentState.time, meta.hours);
     if (!closestHour) {
-      throw new Error('Heure de prévision non trouvée');
+      // Heure hors de l'horizon publié : rien à afficher plutôt qu'une autre heure.
+      hideAll();
+      return true;
     }
     const coords = bboxToImageCoords(meta.bbox);
     const renderableCount = Math.max(1, currentActiveLayers.length);
