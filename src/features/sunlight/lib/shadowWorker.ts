@@ -4,7 +4,7 @@ import {
   rawPng,
 } from './shadowWorkerEncoding';
 import { applyPolygonMaskToRgba, rasterizePolygonMask } from './polygonMask';
-import { MAP_CACHE_EPOCH } from '../../map3d/lib/mapCacheEpoch';
+import { SW_TILE_CACHE_EPOCH } from '../../map3d/lib/mapCacheEpoch';
 import {
   bilinearSample,
   DEM_NODATA_THRESHOLD,
@@ -27,7 +27,8 @@ import {
   type GridState,
 } from './shadowWorkerComputer';
 
-const DEM_CACHE_NAME = `dem-tiles-${MAP_CACHE_EPOCH}`;
+// Même nom que le cache écrit par le SW (sinon chaque lecture rate).
+const DEM_CACHE_NAME = `dem-tiles-${SW_TILE_CACHE_EPOCH}`;
 const MAX_SAMPLE_TILE_COUNT = 256;
 const MIN_SAMPLE_DEM_ZOOM = 4;
 

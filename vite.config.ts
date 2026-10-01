@@ -19,9 +19,14 @@ import {
   // @ts-expect-error JS module without declarations
 } from './server/http-security.mjs'
 
+// Identifiant de build (release Sentry, APP_CACHE_EPOCH). En prod Docker /
+// Coolify, SOURCE_COMMIT est passé en ARG de build (voir Dockerfile) ; sans
+// lui, npm_package_version (« 0.0.0 ») ne change jamais d'un déploiement à
+// l'autre.
 const redviewBuildId = (
   process.env.VERCEL_GIT_COMMIT_SHA
   || process.env.GITHUB_SHA
+  || process.env.SOURCE_COMMIT
   || process.env.npm_package_version
   || 'dev'
 ).slice(0, 12)

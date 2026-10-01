@@ -12,11 +12,12 @@
  */
 import { latToMercY, lngLatToMercTile } from './shadowWorkerEncoding';
 import { computeShadowSweep } from './shadowSweep';
-import { MAP_CACHE_EPOCH } from '../../map3d/lib/mapCacheEpoch';
+import { SW_TILE_CACHE_EPOCH } from '../../map3d/lib/mapCacheEpoch';
 
 export const DEM_TILE_SIZE = 256;
 export const DEM_NODATA_THRESHOLD = -10000;
-export const DEM_CACHE_NAME = `dem-tiles-${MAP_CACHE_EPOCH}`;
+// Même nom que le cache écrit par le SW (sinon chaque lecture rate).
+export const DEM_CACHE_NAME = `dem-tiles-${SW_TILE_CACHE_EPOCH}`;
 export const MAX_SAMPLE_TILE_COUNT = 256;
 export const MIN_SAMPLE_DEM_ZOOM = 4;
 const MAX_PARENT_WALK = 4;

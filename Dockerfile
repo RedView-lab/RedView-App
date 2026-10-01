@@ -9,6 +9,12 @@ RUN npm ci
 
 COPY . .
 
+# Commit déployé, injecté par Coolify (option « Include Source Commit in
+# Build ») : lu par vite.config.ts comme identifiant de build (release Sentry,
+# APP_CACHE_EPOCH). Déclaré après COPY pour ne pas invalider le cache npm ci.
+ARG SOURCE_COMMIT=""
+ENV SOURCE_COMMIT=${SOURCE_COMMIT}
+
 ENV NODE_ENV=production
 RUN npm run build
 
