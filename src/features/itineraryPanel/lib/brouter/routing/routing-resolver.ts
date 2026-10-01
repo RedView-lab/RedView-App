@@ -17,6 +17,7 @@ import type { ExpertProfileState } from '../../../expert/types';
 import { isFootDiscipline, normalizeDiscipline } from '@/shared/lib/discipline';
 import { buildBrfProfile } from '../profiles/brf-template';
 import { ensureProfileUploaded } from '../profiles/profile-cache';
+import { isBrouterRateLimitError } from '../api/client';
 import { panelProfileToBrouter } from '../profiles/profile-overrides';
 import {
   resolveRoadTypes,
@@ -93,7 +94,7 @@ export async function resolveItineraryRouting(
     const profileId = await ensureProfileUploaded(brf, signal);
     return { profileId, roadTypes, brf, stockProfileId };
   } catch (err) {
-    if ((err as { name?: string })?.name === 'AbortError') {
+    if ((err as { name?: string })?.name === 'AbortError' || isBrouterRateLimitError(err)) {
       throw err;
     }
     console.warn('[BRouter] Custom profile upload failed, falling back to stock profile:', err);

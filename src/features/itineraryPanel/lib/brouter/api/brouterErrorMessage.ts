@@ -1,4 +1,5 @@
 import { translateAppText } from '@/shared/i18n';
+import { isBrouterRateLimitError } from './client';
 
 /**
  * Normalise et traduit les erreurs BRouter / réseau en messages clairs et
@@ -19,6 +20,13 @@ export function formatBrouterErrorMessage(error: unknown): string {
           : String(error);
 
   const lower = rawMessage.toLowerCase();
+
+  // 0. Quota de requêtes atteint (HTTP 429) : ni les points ni le profil ne sont en cause.
+  if (isBrouterRateLimitError(error) || /\bhttp 429\b/.test(lower)) {
+    return translateAppText(
+      'Trop de calculs d’itinéraire en peu de temps. Patientez une minute puis réessayez.',
+    );
+  }
 
   // 1. Zones interdites / Restricted areas
   if (

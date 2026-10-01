@@ -172,9 +172,11 @@ export async function uploadCustomProfile(
   });
   const text = await res.text();
   if (!res.ok) {
-    throw new Error(
-      `BRouter upload HTTP ${res.status} ${res.statusText}${text ? ` — ${text.slice(0, 200)}` : ''}`,
-    );
+    const message = `BRouter upload HTTP ${res.status} ${res.statusText}${text ? ` — ${text.slice(0, 200)}` : ''}`;
+    if (res.status === 429) {
+      throw new BrouterRateLimitError(message, parseRetryAfterS(res.headers.get('retry-after')));
+    }
+    throw new Error(message);
   }
   let parsed: { profileid?: string; error?: string };
   try {
@@ -277,6 +279,7 @@ export async function fetchBrouterRouteBestWithDistanceDetours(
     baseRoute = alternatives;
     consider(alternatives, 'alternatives');
   } catch (error) {
+    if (isBrouterRateLimitError(error)) throw error;
     lastError = error as Error;
     logger.brouter.warn('distance detour alternatives failed —', lastError.message);
     try {
@@ -284,6 +287,7 @@ export async function fetchBrouterRouteBestWithDistanceDetours(
       baseRoute = fallbackRoute;
       consider(fallbackRoute, 'direct-fallback');
     } catch (fallbackError) {
+      if (isBrouterRateLimitError(fallbackError)) throw fallbackError;
       lastError = fallbackError as Error;
       logger.brouter.warn('distance detour direct fallback failed —', lastError.message);
     }
@@ -293,6 +297,11 @@ export async function fetchBrouterRouteBestWithDistanceDetours(
     try {
       consider(await fetchBrouterRoute({ ...req, via: candidate.via }), candidate.label);
     } catch (error) {
+      // Quota atteint : inutile d'épuiser les autres candidats, on garde le meilleur.
+      if (isBrouterRateLimitError(error)) {
+        if (best) break;
+        throw error;
+      }
       lastError = error as Error;
       if (!isExpectedDetourCandidateFailure(lastError)) {
         logger.brouter.warn(`distance detour ${candidate.label} failed —`, lastError.message);
@@ -330,6 +339,7 @@ export async function fetchBrouterRouteBestWithClimbEfficiency(
       try {
         consider(await fetchBrouterRoute({ ...req, alternativeIdx }), `direct-alt-${alternativeIdx}`);
       } catch (error) {
+        if (isBrouterRateLimitError(error)) break;
         logger.brouter.warn(`climb-efficiency direct alt ${alternativeIdx} failed —`, (error as Error).message);
       }
     }
@@ -337,7 +347,9 @@ export async function fetchBrouterRouteBestWithClimbEfficiency(
     return best;
   }
 
+  let rateLimited = false;
   for (const candidate of buildClimbEfficiencyDetourCandidates(req, directBase)) {
+    if (rateLimited) break;
     for (const alternativeIdx of candidate.alternativeIdxs) {
       try {
         consider(
@@ -349,6 +361,10 @@ export async function fetchBrouterRouteBestWithClimbEfficiency(
           `${candidate.label}-alt${alternativeIdx}`,
         );
       } catch (error) {
+        if (isBrouterRateLimitError(error)) {
+          rateLimited = true;
+          break;
+        }
         const routeError = error as Error;
         if (!isExpectedDetourCandidateFailure(routeError)) {
           logger.brouter.warn(`climb-efficiency ${candidate.label} alt ${alternativeIdx} failed —`, routeError.message);

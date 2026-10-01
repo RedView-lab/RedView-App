@@ -1,6 +1,6 @@
 import { isBrouterUnmappedPointError } from '../useItineraryBrouterRoutingShared';
 import type { Itinerary } from '../../types';
-import type { BrouterRoute } from '../../lib/brouter';
+import { isBrouterRateLimitError, type BrouterRoute } from '../../lib/brouter';
 
 import { fetchRouteForPriorities, type PriorityRouteRequest } from './routingStrategy';
 
@@ -18,6 +18,8 @@ function shouldRetryWithStockProfile(
 ): boolean {
   // If the user cancelled/switched destination themselves, don't retry
   if (userSignal?.aborted) return false;
+  // Quota atteint : un second appel avec le profil de base serait refusé aussi.
+  if (isBrouterRateLimitError(error)) return false;
   return (
     preferredProfile.startsWith('custom_') &&
     fallbackProfile !== preferredProfile &&
