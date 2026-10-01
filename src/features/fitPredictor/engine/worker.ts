@@ -13,9 +13,17 @@ async function ensureInit(): Promise<void> {
 
   if (!initPromise) {
     // Use absolute path to public/ — avoids import.meta.url resolution issues in workers
-    initPromise = init({ module_or_path: '/redviewalgo_bg.wasm' }).then(() => {
-      wasmReady = true;
-    });
+    initPromise = init({ module_or_path: '/redviewalgo_bg.wasm' }).then(
+      () => {
+        wasmReady = true;
+      },
+      (error: unknown) => {
+        // Échec réseau / 502 pendant un déploiement : ne pas garder la
+        // promesse rejetée, sinon le worker échoue jusqu'au rechargement.
+        initPromise = null;
+        throw error;
+      },
+    );
   }
 
   await initPromise;
