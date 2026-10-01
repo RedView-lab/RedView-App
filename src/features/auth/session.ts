@@ -10,6 +10,26 @@
 /** Délai max d'attente d'Appwrite au démarrage avant d'afficher l'écran de reprise. */
 export const SESSION_PROBE_TIMEOUT_MS = 8000
 
+/**
+ * Contrat d'expiration de session en cours d'usage : quand une requête Appwrite reçoit
+ * un 401 confirmé (pas une erreur réseau), émettre sur `window` :
+ *
+ *   window.dispatchEvent(new CustomEvent('redview:session-expired', { detail: { reason: 'unauthorized' } }))
+ *
+ * (ou `dispatchSessionExpired()`). App.tsx l'écoute : snapshot local effacé, Dashboard
+ * démonté, écran de connexion affiché.
+ */
+export const SESSION_EXPIRED_EVENT = 'redview:session-expired'
+
+export type SessionExpiredEventDetail = {
+  reason?: 'unauthorized'
+}
+
+export function dispatchSessionExpired(detail: SessionExpiredEventDetail = { reason: 'unauthorized' }): void {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent<SessionExpiredEventDetail>(SESSION_EXPIRED_EVENT, { detail }))
+}
+
 export type SessionUser = { id: string; email?: string }
 
 export type SessionProbeResult =

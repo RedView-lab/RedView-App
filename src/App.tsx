@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import {
   account,
   clearStoredAppwriteSession,
@@ -8,7 +8,7 @@ import {
   saveStoredAppwriteSession,
 } from './shared/services/appwrite'
 import { PROJECT_LOCATION_CHANGE_EVENT, readProjectIdFromPath } from './shared/utils/projectLocation'
-import { LoginScreen, probeSession } from './features/auth'
+import { LoginScreen, probeSession, SESSION_EXPIRED_EVENT } from './features/auth'
 import type { SessionProbeResult } from './features/auth'
 import { MobileBlockScreen } from './shared/components/MobileBlockScreen'
 import { useIsMobileDevice } from './shared/hooks/useIsMobileDevice'
@@ -174,6 +174,30 @@ function App() {
       cancelled = true
     }
   }, [authAttempt])
+
+  // Session expirée en cours d'usage (401 confirmé signalé par la couche Appwrite) :
+  // on quitte le Dashboard pour l'écran de connexion plutôt que de laisser une
+  // interface dont toutes les requêtes échouent. Ignoré pour la session démo de dev.
+  const sessionUserIdRef = useRef<string | null>(session?.user?.id ?? null)
+  useEffect(() => {
+    sessionUserIdRef.current = session?.user?.id ?? null
+  }, [session?.user?.id])
+
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      const userId = sessionUserIdRef.current
+      if (!userId || userId === DEV_FALLBACK_USER_ID) return
+      console.warn('[app] Appwrite session expired, returning to login')
+      clearStoredAppwriteSession()
+      setSession(null)
+      setAuthStatus('ready')
+    }
+
+    window.addEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired)
+    return () => {
+      window.removeEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired)
+    }
+  }, [])
 
   // Session replay: only once Appwrite confirms a real authenticated user
   // (not the dev/demo fallback session, not the login/reset screens).
