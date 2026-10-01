@@ -1,6 +1,7 @@
 import {
   describeFitFileProblem,
   type FitFileProblem,
+  type FitEngineRejection,
 } from '@/features/fitPredictor/lib/fitFileValidation';
 import { translateAppText } from '@/shared/i18n';
 
@@ -31,7 +32,7 @@ export function buildFitStatusText(runtime: ItineraryFitRuntime | null): string 
 
 /** Message nommant les .fit écartés et leur motif. */
 export function buildRejectedFitNotice(
-  rejected: ReadonlyArray<{ file: { name: string }; reason: FitFileProblem | 'unreadable' }>,
+  rejected: ReadonlyArray<{ file: { name: string }; reason: FitFileProblem | FitEngineRejection }>,
 ): string {
   return translateAppText('Fichiers FIT ignorés : {{list}}', {
     list: rejected

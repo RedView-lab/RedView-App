@@ -572,6 +572,7 @@ export const dashboardTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'aucune donnée d’activité', en: 'no activity data' },
   { fr: 'fichier tronqué', en: 'truncated file' },
   { fr: 'illisible par le moteur', en: 'unreadable by the engine' },
+  { fr: 'parcours planifié, pas une sortie enregistrée', en: 'planned course, not a recorded ride' },
   { fr: 'pas un fichier FIT', en: 'not a FIT file' },
   { fr: 'trop volumineux, 30 Mo maximum', en: 'too large, 30 MB maximum' },
   { fr: 'Trop de calculs d’itinéraire en peu de temps. Patientez une minute puis réessayez.', en: 'Too many route calculations in a short time. Please wait a minute and try again.' },

@@ -13,8 +13,30 @@ use fitparser::{from_bytes, Value};
 pub fn parse_fit(data: &[u8]) -> Result<ActivityData, String> {
     match parse_fit_fast(data) {
         Ok(activity) => Ok(activity),
+        // Refus explicite (fichier lisible mais pas une activité) : pas de repli.
+        Err(fast_err) if fast_err == NOT_AN_ACTIVITY_ERR => Err(fast_err),
         Err(_fast_err) => parse_fit_reference(data),
     }
+}
+
+/// FIT global message number for File Id messages, and its `type` field.
+const MSG_FILE_ID: u16 = 0;
+const FILE_ID_TYPE_FIELD: u16 = 0;
+/// `file` enum value for a Course (parcours planifié, vitesse synthétique).
+const FIT_FILE_TYPE_COURSE: u8 = 6;
+
+/// Un fichier « course » (parcours exporté d'un planificateur) a des
+/// horodatages synthétiques à vitesse constante : l'utiliser comme sortie
+/// d'entraînement fausse tout le profil (ex. FTP virtuelle 450 W).
+pub const NOT_AN_ACTIVITY_ERR: &str =
+    "Not an activity: this FIT file is a planned course (synthetic timing), not a recorded ride";
+
+fn decode_file_type(payload: &[u8], def: &LocalDef) -> Option<u8> {
+    def.fields
+        .iter()
+        .find(|&&(fnum, _, size, _)| fnum == FILE_ID_TYPE_FIELD && size == 1)
+        .and_then(|&(_, off, size, base)| read_scalar(payload, off as usize, size, base, def.big_endian))
+        .map(|v| v as u8)
 }
 
 /// Parse multiple FIT files.
@@ -415,6 +437,10 @@ fn parse_fit_fast(data: &[u8]) -> Result<ActivityData, String> {
                 } else if def.global_msg_num == MSG_SESSION || def.global_msg_num == MSG_SPORT {
                     let value = decode_sport_message(&data[pos..payload_end], def);
                     merge_sport(&mut sport, def.global_msg_num == MSG_SESSION, value);
+                } else if def.global_msg_num == MSG_FILE_ID
+                    && decode_file_type(&data[pos..payload_end], def) == Some(FIT_FILE_TYPE_COURSE)
+                {
+                    return Err(NOT_AN_ACTIVITY_ERR.into());
                 }
                 pos = payload_end;
             } else if header_byte & 0x40 != 0 {
@@ -447,6 +473,10 @@ fn parse_fit_fast(data: &[u8]) -> Result<ActivityData, String> {
                 } else if def.global_msg_num == MSG_SESSION || def.global_msg_num == MSG_SPORT {
                     let value = decode_sport_message(&data[pos..payload_end], def);
                     merge_sport(&mut sport, def.global_msg_num == MSG_SESSION, value);
+                } else if def.global_msg_num == MSG_FILE_ID
+                    && decode_file_type(&data[pos..payload_end], def) == Some(FIT_FILE_TYPE_COURSE)
+                {
+                    return Err(NOT_AN_ACTIVITY_ERR.into());
                 }
                 pos = payload_end;
             }
@@ -498,6 +528,20 @@ fn parse_fit_reference(data: &[u8]) -> Result<ActivityData, String> {
     let mut sport: Option<u8> = None;
 
     for msg in &messages {
+        if msg.kind() == MesgNum::FileId {
+            let is_course = msg.fields().iter().any(|f| {
+                f.name() == "type"
+                    && match f.value() {
+                        Value::String(s) => s == "course",
+                        Value::Enum(v) => *v == FIT_FILE_TYPE_COURSE,
+                        _ => false,
+                    }
+            });
+            if is_course {
+                return Err(NOT_AN_ACTIVITY_ERR.into());
+            }
+            continue;
+        }
         if msg.kind() == MesgNum::Session || msg.kind() == MesgNum::Sport {
             let value = msg
                 .fields()

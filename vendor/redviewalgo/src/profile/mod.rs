@@ -47,7 +47,13 @@ pub fn build_rider_profile(activities: &[ActivityData], config: &PredictionConfi
             .or_else(|| config.rider_weight_kg.map(|rw| rw + config.bike_weight_kg.unwrap_or(default_bike_weight)))
             .unwrap_or(default_mass);
         let cda = config.cda.unwrap_or(default_cda);
-        let vftp = power_profile::estimate_virtual_ftp(activities, total_mass, cda);
+        let mut vftp = power_profile::estimate_virtual_ftp(activities, total_mass, cda);
+        if vftp < 50.0 {
+            // Aucune montée exploitable (sortie plate, trace peu dense) :
+            // reconstruire depuis la vitesse sur le plat plutôt que FTP = 0,
+            // qui effondrait toute la prédiction (4 km/h pour un 21 km/h réel).
+            vftp = power_profile::estimate_ftp_from_flat_speed(activities, total_mass, cda);
+        }
         (vftp, default_mass, default_cda)
     };
 
@@ -71,7 +77,8 @@ pub fn build_rider_profile(activities: &[ActivityData], config: &PredictionConfi
     // nothing to learn from: fall back to a typical amateur W/kg so the physics
     // path still reacts to gradient (otherwise every point gets the same
     // constant fallback speed, climbs and descents included).
-    let ftp_w = config.ftp_w.unwrap_or(if activities.is_empty() && auto_ftp < 50.0 {
+    // Même repli quand les activités n'ont rien permis d'estimer.
+    let ftp_w = config.ftp_w.unwrap_or(if auto_ftp < 50.0 {
         DEFAULT_WKG * rider_weight_kg
     } else {
         auto_ftp

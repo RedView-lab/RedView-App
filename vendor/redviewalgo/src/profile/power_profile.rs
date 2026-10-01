@@ -307,12 +307,17 @@ pub fn estimate_cda_with_crr(activities: &[ActivityData], mass_kg: f64, crr: f64
 /// Reconstructs crank power on climbing segments (gradient >= 3.0%, duration >= 180s)
 /// using physical balance: gravity + rolling resistance + aerodynamic drag.
 pub fn estimate_virtual_ftp(activities: &[ActivityData], mass_kg: f64, cda: f64) -> f64 {
-    let mut best_climb_power = 0.0_f64;
+    // Puissances reconstruites par montée, séparées longues (>= 10 min) / courtes.
+    // On agrège par percentile et non par maximum : une seule montée bruitée
+    // (altitude barométrique sur une trace peu échantillonnée) ne doit pas
+    // fixer la FTP de tout le profil.
+    let mut long_climb_powers: Vec<f64> = Vec::new();
+    let mut short_climb_powers: Vec<f64> = Vec::new();
     let mut climb_vam_rates: Vec<f64> = Vec::new();
 
     for activity in activities {
         let pts = &activity.points;
-        if pts.len() < 30 {
+        if pts.len() < 30 || median_sample_interval_s(pts) > MAX_CLIMB_SAMPLE_INTERVAL_S {
             continue;
         }
 
@@ -352,9 +357,12 @@ pub fn estimate_virtual_ftp(activities: &[ActivityData], mass_kg: f64, cda: f64)
                         let vam = (ele / duration) * 3600.0;
                         climb_vam_rates.push(vam);
 
-                        // If sustained >= 10 min, use 95% factor; if 3-10 min, use 88-92%
-                        let factor = if duration >= 600.0 { 0.95 } else { 0.88 };
-                        best_climb_power = best_climb_power.max(p_crank * factor);
+                        // If sustained >= 10 min, use 95% factor; if 3-10 min, use 88%
+                        if duration >= 600.0 {
+                            long_climb_powers.push(p_crank * 0.95);
+                        } else {
+                            short_climb_powers.push(p_crank * 0.88);
+                        }
                     }
                     block_start = None;
                     block_dplus = 0.0;
@@ -366,8 +374,17 @@ pub fn estimate_virtual_ftp(activities: &[ActivityData], mass_kg: f64, cda: f64)
         }
     }
 
-    if best_climb_power > 60.0 {
-        return best_climb_power.clamp(80.0, 450.0);
+    // Montées longues : P75 (représentatif des bons efforts sans retenir
+    // l'aberration). À défaut, montées courtes : médiane.
+    let climb_power = if !long_climb_powers.is_empty() {
+        percentile(&mut long_climb_powers, 0.75)
+    } else if !short_climb_powers.is_empty() {
+        median(&mut short_climb_powers)
+    } else {
+        0.0
+    };
+    if climb_power > 60.0 {
+        return climb_power.clamp(80.0, 450.0);
     }
 
     // Fallback: estimate from median VAM if available
@@ -383,5 +400,68 @@ pub fn estimate_virtual_ftp(activities: &[ActivityData], mass_kg: f64, cda: f64)
     }
 
     0.0
+}
+
+/// Au-delà, l'altitude (barométrique, lissée par la montre) entre deux points
+/// est trop grossière pour reconstruire une puissance de montée fiable.
+const MAX_CLIMB_SAMPLE_INTERVAL_S: f64 = 10.0;
+
+/// Part de la FTP tenue en moyenne sur le plat lors d'une sortie d'endurance.
+const FLAT_ENDURANCE_FTP_FRACTION: f64 = 0.70;
+
+/// Intervalle médian entre deux points d'une activité (s).
+fn median_sample_interval_s(pts: &[crate::types::DataPoint]) -> f64 {
+    let mut dts: Vec<f64> = pts
+        .windows(2)
+        .map(|w| w[1].timestamp_s - w[0].timestamp_s)
+        .filter(|dt| *dt > 0.0 && *dt < 600.0)
+        .collect();
+    if dts.is_empty() {
+        return f64::INFINITY;
+    }
+    median(&mut dts)
+}
+
+/// FTP estimée sans capteur de puissance à partir des portions plates :
+/// puissance nécessaire (roulement + aéro) à la vitesse médiane sur le plat,
+/// rapportée à l'intensité typique d'une sortie d'endurance. Sert de repli
+/// quand aucune montée exploitable n'existe (sortie plate, trace peu dense).
+/// Renvoie 0 si aucune portion plate exploitable.
+pub fn estimate_ftp_from_flat_speed(activities: &[ActivityData], mass_kg: f64, cda: f64) -> f64 {
+    let mut flat_powers: Vec<f64> = Vec::new();
+
+    for activity in activities {
+        let pts = &activity.points;
+        if pts.len() < 30 {
+            continue;
+        }
+        // Fenêtres d'au moins 200 m pour lisser l'altitude point à point.
+        let mut start = 0usize;
+        for i in 1..pts.len() {
+            let dist = pts[i].distance_m - pts[start].distance_m;
+            if dist < 200.0 {
+                continue;
+            }
+            let dt = pts[i].timestamp_s - pts[start].timestamp_s;
+            let ele = pts[i].altitude_m - pts[start].altitude_m;
+            if dt > 0.0 && dt < dist / 2.0 {
+                let speed = dist / dt;
+                let grad = ele / dist;
+                // Plat, en mouvement, hors arrêts et descentes.
+                if grad.abs() < 0.01 && speed > 4.0 && speed < 15.0 {
+                    let rho = air_density(pts[i].altitude_m);
+                    let p_wheel = DEFAULT_CRR * mass_kg * G * speed + 0.5 * rho * cda * speed.powi(3);
+                    flat_powers.push(p_wheel / DRIVETRAIN_EFFICIENCY);
+                }
+            }
+            start = i;
+        }
+    }
+
+    if flat_powers.len() < 10 {
+        return 0.0;
+    }
+    let p_flat = median(&mut flat_powers);
+    (p_flat / FLAT_ENDURANCE_FTP_FRACTION).clamp(80.0, 400.0)
 }
 

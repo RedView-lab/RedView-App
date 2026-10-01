@@ -50,9 +50,23 @@ export async function validateFitFile(file: File): Promise<FitFileProblem | null
   return validateFitHeader(head, file.size);
 }
 
+/** Refus prononcé par le moteur WASM (après un en-tête valide). */
+export type FitEngineRejection = 'unreadable' | 'planned-course';
+
+/**
+ * Motif d'un refus du moteur. Un FIT de type « course » (parcours exporté d'un
+ * planificateur, vitesse synthétique) est lisible mais n'est pas une sortie :
+ * il fausserait le profil (FTP virtuelle aberrante).
+ */
+export function engineRejectionReason(message: string): FitEngineRejection {
+  return /Not an activity/.test(message) ? 'planned-course' : 'unreadable';
+}
+
 /** Motif (texte source FR) d'un fichier refusé. */
-export function describeFitFileProblem(problem: FitFileProblem | 'unreadable'): string {
+export function describeFitFileProblem(problem: FitFileProblem | FitEngineRejection): string {
   switch (problem) {
+    case 'planned-course':
+      return 'parcours planifié, pas une sortie enregistrée';
     case 'empty':
       return 'fichier vide';
     case 'no-data':

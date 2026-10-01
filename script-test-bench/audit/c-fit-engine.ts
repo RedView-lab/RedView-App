@@ -24,7 +24,13 @@ const fitFiles = [
   ...fs.readdirSync(FIT_DIR).filter((f) => f.toLowerCase().endsWith('.fit')).map((f) => path.join(FIT_DIR, f)),
   path.join(DL, 'Les 6 Puys 16 km.fit'),
 ];
-const fits = fitFiles.map((f) => ({ name: path.basename(f), bytes: new Uint8Array(fs.readFileSync(f)) }));
+const allFits = fitFiles.map((f) => ({ name: path.basename(f), bytes: new Uint8Array(fs.readFileSync(f)) }));
+// « Les 6 Puys » est un FIT de type course (parcours planifié, vitesse synthétique) :
+// le moteur doit le refuser ; les combinaisons n'utilisent que les vraies sorties,
+// comme le runtime JS qui écarte le fichier refusé et relance.
+const COURSE_FILE = 'Les 6 Puys 16 km.fit';
+const fits = allFits.filter((f) => f.name !== COURSE_FILE);
+const courseFit = allFits.find((f) => f.name === COURSE_FILE);
 
 async function buildGpx(file: string) {
   const it = createDefaultItinerary(1);
@@ -91,6 +97,12 @@ async function main() {
   console.log('\n-- 1. Vrais .fit, un par un (route GT20) --');
   sanity('aucun FIT (niveau seul)', run(glue, [], gt20.gpx, gt20.cfg));
   for (const f of fits) sanity(`${f.name} (${mb(f.bytes.length)} MB)`, run(glue, [f.bytes], gt20.gpx, gt20.cfg));
+  if (courseFit) {
+    const oc = run(glue, [courseFit.bytes], gt20.gpx, gt20.cfg);
+    const lc = `${COURSE_FILE} (course)`.padEnd(46) + ` ${oc.ok ? 'ACCEPTÉ' : `refusé : ${oc.error}`}`;
+    rows.push(lc); console.log(lc);
+    if (oc.ok || !/Not an activity/.test(oc.error)) failures.push(`${COURSE_FILE}: un FIT « course » doit être refusé comme activité`);
+  }
   sanity(`les ${fits.length} FIT ensemble`, run(glue, fits.map((f) => f.bytes), gt20.gpx, gt20.cfg));
 
   console.log('\n-- 2. Route longue (Tour de France) : coût d\'un recalcul --');
@@ -144,7 +156,7 @@ async function main() {
   console.log('\n-- 5. Fuzz (octets corrompus) + état de l\'instance après erreur --');
   let seed = 12345;
   const rand = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
-  const small = fits.find((f) => f.name.startsWith('Les 6 Puys'))!.bytes;
+  const small = fits.reduce((a, b) => (a.bytes.length < b.bytes.length ? a : b)).bytes;
   let traps = 0, errors = 0, oks = 0, firstTrap = '', poisoned = 0;
   const N = QUICK ? 100 : 400;
   for (let i = 0; i < N; i++) {

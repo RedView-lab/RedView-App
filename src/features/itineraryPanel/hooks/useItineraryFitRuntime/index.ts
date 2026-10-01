@@ -42,9 +42,11 @@ import {
 import { hydratePersistedFitRuntime } from './hydration';
 import { buildFitStatusText, buildRejectedFitNotice } from './labels';
 import {
+  engineRejectionReason,
   parseFailingFitIndex,
   validateFitFile,
   type FitFileProblem,
+  type FitEngineRejection,
 } from '@/features/fitPredictor/lib/fitFileValidation';
 import { translateAppText } from '@/shared/i18n';
 import {
@@ -187,7 +189,7 @@ export function useItineraryFitRuntime({
       uploadsSnapshot: readonly ItineraryFitUpload[],
       rejected: ReadonlyArray<{
         file: { name: string; lastModified: number; size: number };
-        reason: FitFileProblem | 'unreadable';
+        reason: FitFileProblem | FitEngineRejection;
       }>,
       recompute: boolean,
     ) => {
@@ -728,7 +730,7 @@ export function useItineraryFitRuntime({
           excludeFitFiles(
             itineraryId,
             itinerary.fitUploads ?? [],
-            [{ file: failingFile, reason: 'unreadable' }],
+            [{ file: failingFile, reason: engineRejectionReason(error instanceof Error ? error.message : '') }],
             true,
           );
           return;
