@@ -191,6 +191,26 @@ export function createFitPredictionEngine() {
       return send<ComparisonResult>(request, [...fitBuffers, validationBuffer]);
     },
 
+    /**
+     * Annule les requêtes d'une clé (en attente et en cours) sans toucher aux
+     * autres : si celle en cours est concernée, le worker est arrêté (seul
+     * moyen d'interrompre le calcul WASM synchrone) et les requêtes des autres
+     * clés reprennent sur un worker neuf.
+     */
+    cancel(key: string): void {
+      for (let i = queue.length - 1; i >= 0; i--) {
+        if (queue[i]!.key !== key) continue;
+        const [dropped] = queue.splice(i, 1);
+        dropped!.entry.reject(new FitPredictionCancelledError('cancelled'));
+      }
+      if (inFlight?.key === key) {
+        worker?.terminate();
+        worker = null;
+        settleInFlight()!.entry.reject(new FitPredictionCancelledError('cancelled'));
+      }
+      pump();
+    },
+
     terminate(): void {
       worker?.terminate();
       worker = null;

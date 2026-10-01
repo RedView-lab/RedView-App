@@ -80,7 +80,6 @@ export function useItineraryFitRuntime({
 }: UseItineraryFitRuntimeArgs) {
   const fitInputRef = useRef<HTMLInputElement | null>(null);
   const fitUploadTargetIdRef = useRef<string | null>(null);
-  const cancelledPredictionIdsRef = useRef<Set<string>>(new Set());
   const latestPredictionRunRef = useRef<Record<string, number>>({});
   const fitEngineRef = useRef<ReturnType<typeof createFitPredictionEngine> | null>(
     null,
@@ -153,11 +152,6 @@ export function useItineraryFitRuntime({
   const calculateError =
     activeFitRuntime?.status === 'error' ? activeFitRuntime.error : null;
   const fitFileNames = activeFitRuntime?.fitFileNames ?? EMPTY_FIT_FILE_NAMES;
-
-  const replaceFitEngine = useCallback(() => {
-    fitEngineRef.current?.terminate();
-    fitEngineRef.current = createFitPredictionEngine();
-  }, []);
 
   const updateFitRuntime = useCallback(
     (
@@ -481,7 +475,6 @@ export function useItineraryFitRuntime({
     }
 
     const itineraryId = itinerary.id;
-    cancelledPredictionIdsRef.current.delete(itineraryId);
     const gpxFile = buildRouteGpxFile(itinerary);
     const discipline = normalizeDiscipline(itinerary.discipline);
     const routePoints = itinerary.gpxRoute?.points ?? null;
@@ -529,7 +522,6 @@ export function useItineraryFitRuntime({
     void pending
       .then((raw: PredictionResult) => {
         const result: PredictionResult = { ...raw, discipline };
-        cancelledPredictionIdsRef.current.delete(itineraryId);
         // Le tracé / rythme a changé pendant le calcul (undo, édition) : ce
         // résultat décrit un autre état, on ne l'écrit pas. Le recalcul
         // automatique repart sur l'état courant.
@@ -577,16 +569,12 @@ export function useItineraryFitRuntime({
         predictionStore?.setPrediction(itineraryId, result);
       })
       .catch((error: unknown) => {
-        // Remplacée dans la file par un calcul plus récent du même itinéraire.
-        if (error instanceof FitPredictionCancelledError && error.reason === 'superseded') return;
-        const wasCancelled =
-          cancelledPredictionIdsRef.current.has(itineraryId)
-          && error instanceof Error
-          && error.message === 'Prediction worker terminated';
-        if (wasCancelled) {
-          cancelledPredictionIdsRef.current.delete(itineraryId);
-          return;
-        }
+        // Remplacée par un calcul plus récent, annulée, ou moteur arrêté
+        // (démontage) : pas une erreur à afficher.
+        if (error instanceof FitPredictionCancelledError) return;
+        // L'échec d'un calcul périmé ne doit ni afficher d'erreur sur le
+        // calcul courant ni effacer son pendingFitRecompute.
+        if (latestPredictionRunRef.current[itineraryId] !== runId) return;
         console.error('[fit-predictor] prediction failed', error);
         setProject((prev) => ({
           ...prev,
@@ -620,8 +608,9 @@ export function useItineraryFitRuntime({
     const runtime = fitRuntimeRef.current[itinerary.id] ?? createEmptyFitRuntime();
     if (runtime.status !== 'running') return;
 
-    cancelledPredictionIdsRef.current.add(itinerary.id);
-    replaceFitEngine();
+    // N'annule que les calculs de cet itinéraire : ceux des autres restent en
+    // file et reprennent sur un worker neuf.
+    fitEngineRef.current?.cancel(itinerary.id);
 
     updateFitRuntime(itinerary.id, (current) => ({
       ...current,
@@ -632,7 +621,7 @@ export function useItineraryFitRuntime({
       updatedAt: new Date().toISOString(),
     }));
     predictionStore?.setPrediction(itinerary.id, itinerary.prediction ?? null);
-  }, [active, predictionStore, replaceFitEngine, updateFitRuntime]);
+  }, [active, predictionStore, updateFitRuntime]);
 
   useEffect(() => {
     if (!active || !activeCalculationSignature) return;

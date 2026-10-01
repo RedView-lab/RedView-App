@@ -50,15 +50,14 @@ class FakeWorker {
 (globalThis as { Worker?: unknown }).Worker = FakeWorker;
 const { createFitPredictionEngine, FitPredictionCancelledError } = await import('../../src/features/fitPredictor/engine/api.ts');
 
-// ── Modèle minimal du hook (copie des branches l.480-628) ────────────────
+// ── Modèle minimal du hook (copie de handleCalculatePrediction / cancelCalculatePrediction) ──
 type Runtime = { status: 'idle' | 'ready' | 'running' | 'success' | 'error'; error: string | null; result: unknown };
 type Proj = { signature: string; pendingFitRecompute?: boolean; prediction?: unknown };
 function makeHook() {
-  let engine = createFitPredictionEngine();
+  const engine = createFitPredictionEngine();
   const runtime: Record<string, Runtime> = {};
   const project: Record<string, Proj> = {};
   const latestRun: Record<string, number> = {};
-  const cancelled = new Set<string>();
   const history: Record<string, string[]> = {};
   const setRt = (id: string, patch: Partial<Runtime>) => {
     runtime[id] = { ...(runtime[id] ?? { status: 'idle', error: null, result: null }), ...patch };
@@ -68,12 +67,10 @@ function makeHook() {
     const inputSignature = project[id]!.signature;
     const runId = (latestRun[id] ?? 0) + 1;
     latestRun[id] = runId;
-    cancelled.delete(id);
     setRt(id, { status: 'running', error: null, result: null });
     const gpx = new File(['<gpx/>'], 'r.gpx');
     void engine.predict([], gpx, {}, () => {}, { key: id })
       .then((raw) => {
-        cancelled.delete(id);
         let applied = false;
         if (project[id]!.signature === inputSignature) {
           applied = true;
@@ -86,9 +83,8 @@ function makeHook() {
         setRt(id, { status: 'success', error: null, result: raw });
       })
       .catch((error: unknown) => {
-        if (error instanceof FitPredictionCancelledError && error.reason === 'superseded') return;
-        const wasCancelled = cancelled.has(id) && error instanceof Error && error.message === 'Prediction worker terminated';
-        if (wasCancelled) { cancelled.delete(id); return; }
+        if (error instanceof FitPredictionCancelledError) return;
+        if (latestRun[id] !== runId) return;
         project[id] = { ...project[id]!, pendingFitRecompute: undefined };
         setRt(id, { status: 'error', error: error instanceof Error ? error.message : String(error), result: null });
       });
@@ -96,9 +92,7 @@ function makeHook() {
   };
   const cancel = (id: string) => {
     if (runtime[id]?.status !== 'running') return;
-    cancelled.add(id);
-    engine.terminate();
-    engine = createFitPredictionEngine();
+    engine.cancel(id);
     setRt(id, { status: 'ready', error: null });
   };
   return { calculate, cancel, runtime, project, history };
