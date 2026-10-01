@@ -36,6 +36,11 @@ export const ALL_POI_CATEGORIES: PoiCategory[] = [
 
 /** Distance max. d'un POI à la trace (m) par défaut ; l'utilisateur peut élargir par catégorie. */
 export const DEFAULT_POI_DISTANCE_M = 20;
+/**
+ * Ancien défaut. Un état POI dont toutes les distances valent encore
+ * exactement 40 m n'a jamais été réglé : il passe au nouveau défaut.
+ */
+const LEGACY_DEFAULT_POI_DISTANCE_M = 40;
 
 export function createDefaultPoiState(): PoiState {
   const distanceM = DEFAULT_POI_DISTANCE_M;
@@ -83,6 +88,11 @@ export function normalizeItineraryPoiState(poi?: Partial<PoiState> | null): PoiS
           ? raw.distanceM
           : base[key].distanceM;
       normalized[key] = { enabled, distanceM };
+    }
+  }
+  if (ALL_POI_CATEGORIES.every((key) => normalized[key].distanceM === LEGACY_DEFAULT_POI_DISTANCE_M)) {
+    for (const key of ALL_POI_CATEGORIES) {
+      normalized[key] = { ...normalized[key], distanceM: DEFAULT_POI_DISTANCE_M };
     }
   }
   return normalized;

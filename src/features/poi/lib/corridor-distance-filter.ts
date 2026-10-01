@@ -26,7 +26,23 @@
 // le maximum des X activés).
 
 import type { GpxRoute, PoiCategory, PoiFeature } from '../types';
-import { projectPoiOntoRoute, projectRoutePoints } from './refinePoiProjection';
+import { projectPoiOntoRoute, projectRoutePoints, type ProjectedRoutePoint } from './refinePoiProjection';
+
+/**
+ * Projected route per points array: the map re-filters on every toggle /
+ * search tick with the same route, and projecting 20-30k points (plus the
+ * chunk index built lazily on the result) each time was pure waste.
+ */
+const projectedRouteCache = new WeakMap<GpxRoute['points'], ProjectedRoutePoint[]>();
+
+function getProjectedRoute(routePoints: GpxRoute['points']): ProjectedRoutePoint[] {
+  let projected = projectedRouteCache.get(routePoints);
+  if (!projected) {
+    projected = projectRoutePoints(routePoints);
+    projectedRouteCache.set(routePoints, projected);
+  }
+  return projected;
+}
 
 /**
  * Keep every feature whose lateral distance to the route is within the
@@ -50,7 +66,7 @@ export function filterPoisByLateralDistance(
     return features;
   }
 
-  const projectedRoute = projectRoutePoints(routePoints);
+  const projectedRoute = getProjectedRoute(routePoints);
   const kept: PoiFeature[] = [];
 
   for (const feature of features) {

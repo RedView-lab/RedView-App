@@ -9,7 +9,7 @@
  * callbacks, never inferred locally — so the component stays stateless and
  * ready to wire to any backend.
  */
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { IconNiceManYellow, IconStar, IconTrash } from '../../components/icons';
 import { useAppI18n } from '@/shared/i18n';
 import { PlaceSearchInput } from './components';
@@ -269,7 +269,7 @@ function TimelineRowDuration({
   );
 }
 
-export function TimelineRow({
+function TimelineRowComponent({
   item,
   compact = false,
   style,
@@ -422,3 +422,9 @@ export function TimelineRow({
     </div>
   );
 }
+
+/**
+ * Mémoïsée : dans la feuille de route fenêtrée, un défilement ne rend que les
+ * lignes qui entrent dans la fenêtre, pas toutes les lignes visibles.
+ */
+export const TimelineRow = memo(TimelineRowComponent);

@@ -23,6 +23,7 @@ import {
 } from '../../lib/schedule';
 import { fitToRoute } from '../../lib/route-layer';
 import { useProjectStore } from '../../context/ProjectStore';
+import { cloneItineraryForMutation } from '../../context/ProjectStore/historyClone';
 import { useTraceToolOptional } from '@/features/centerPanel/tracer';
 import { useForbiddenZoneToolOptional } from '@/features/centerPanel/forbiddenZones';
 import { usePredictionStoreOptional } from '../../context/PredictionStore';
@@ -34,6 +35,7 @@ import {
   resolveProfilePresetId,
 } from '../../lib/project';
 import type { TimelineFilterState } from '../../sections/timeline/TimelineFilters';
+import { requestTimelineRowReveal } from '../../sections/timeline/useVirtualRows';
 import { syncTracageOnActivityChange } from '../../lib/project/syncTracageParams';
 import {
   getSavedCustomProfiles,
@@ -304,7 +306,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         ...prev,
         itineraries: prev.itineraries.map((itinerary) => {
           if (itinerary.id !== prev.activeItineraryId) return itinerary;
-          const copy = structuredClone(itinerary);
+          const copy = cloneItineraryForMutation(itinerary);
           mutateItinerary(copy);
           return copy;
         }),
@@ -375,6 +377,9 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         }
         return;
       }
+      // Feuille de route fenêtrée : la ligne hors écran n'est pas montée,
+      // on la fait défiler jusqu'à la fenêtre puis on réessaie.
+      if (attempts === 6) requestTimelineRowReveal(itemId);
       if (attempts > 0) {
         setTimeout(() => tryScroll(attempts - 1), 50);
       }
@@ -993,7 +998,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
               ...prev,
               itineraries: prev.itineraries.map((itinerary) => {
                 if (itinerary.id !== prev.activeItineraryId) return itinerary;
-                const copy = structuredClone(itinerary);
+                const copy = cloneItineraryForMutation(itinerary);
                 copy.profileId = id;
                 copy.priorities = { ...custom.priorities };
                 copy.roadTypes = {
@@ -1010,7 +1015,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
             ...prev,
             itineraries: prev.itineraries.map((itinerary) => {
               if (itinerary.id !== prev.activeItineraryId) return itinerary;
-              const copy = structuredClone(itinerary);
+              const copy = cloneItineraryForMutation(itinerary);
               copy.profileId = id;
               if (preset) {
                 const currentMode = copy.roadTypes.tracingMode ?? 'vitesse';
@@ -1099,7 +1104,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
               ...prev,
               itineraries: prev.itineraries.map((itinerary) => {
                 if (itinerary.id !== prev.activeItineraryId && !applyToAll) return itinerary;
-                const copy = structuredClone(itinerary);
+                const copy = cloneItineraryForMutation(itinerary);
                 (copy.roadTypes[key] as RoadTypesState[typeof key]) = value;
                 if (key === 'activityType' && itinerary.id === prev.activeItineraryId) {
                   copy.profileId = value as string;
@@ -1118,7 +1123,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
               itineraries: prev.itineraries.map((itinerary) => {
                 const isActive = itinerary.id === prev.activeItineraryId;
                 if (!isActive && !applyToAll) return itinerary;
-                const copy = structuredClone(itinerary);
+                const copy = cloneItineraryForMutation(itinerary);
 
                 if (isActive) {
                   Object.assign(copy.roadTypes, roadUpdates);

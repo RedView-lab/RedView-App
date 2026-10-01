@@ -18,22 +18,42 @@ import type { ItineraryProject } from '../../types';
 export function cloneProjectForMutation(project: ItineraryProject): ItineraryProject {
   const stripped: ItineraryProject = {
     ...project,
-    itineraries: project.itineraries.map((itinerary) => (
-      itinerary.gpxRoute
-        ? { ...itinerary, gpxRoute: { ...itinerary.gpxRoute, points: [], originalPoints: undefined } }
-        : itinerary
-    )),
+    itineraries: project.itineraries.map(stripRoutePoints),
   };
   const draft = structuredClone(stripped);
   draft.itineraries.forEach((itinerary, index) => {
-    const source = project.itineraries[index]?.gpxRoute;
-    if (!itinerary.gpxRoute || !source) return;
-    itinerary.gpxRoute.points = source.points;
-    if (source.originalPoints !== undefined) {
-      itinerary.gpxRoute.originalPoints = source.originalPoints;
-    } else {
-      delete itinerary.gpxRoute.originalPoints;
-    }
+    restoreRoutePoints(itinerary, project.itineraries[index]);
   });
   return draft;
+}
+
+type ProjectItinerary = ItineraryProject['itineraries'][number];
+
+/**
+ * Même contrat pour une seule variante (`updateActive`) : clone profond à
+ * points de tracé partagés. Garder la référence des points évite aussi de
+ * réinvalider tout ce qui est mémoïsé dessus (couches, profil, projections)
+ * à chaque clic sur un POI.
+ */
+export function cloneItineraryForMutation(itinerary: ProjectItinerary): ProjectItinerary {
+  const draft = structuredClone(stripRoutePoints(itinerary));
+  restoreRoutePoints(draft, itinerary);
+  return draft;
+}
+
+function stripRoutePoints(itinerary: ProjectItinerary): ProjectItinerary {
+  return itinerary.gpxRoute
+    ? { ...itinerary, gpxRoute: { ...itinerary.gpxRoute, points: [], originalPoints: undefined } }
+    : itinerary;
+}
+
+function restoreRoutePoints(draft: ProjectItinerary, original: ProjectItinerary | undefined): void {
+  const source = original?.gpxRoute;
+  if (!draft.gpxRoute || !source) return;
+  draft.gpxRoute.points = source.points;
+  if (source.originalPoints !== undefined) {
+    draft.gpxRoute.originalPoints = source.originalPoints;
+  } else {
+    delete draft.gpxRoute.originalPoints;
+  }
 }
