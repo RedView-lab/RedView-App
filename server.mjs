@@ -90,6 +90,27 @@ function looksLikeStaticAsset(pathname) {
   return /\.[a-z0-9]+$/i.test(lastSegment);
 }
 
+/** ETag faible dérivé de la taille et de la date de modification. */
+function buildStaticEtag(stat, variant = '') {
+  return `W/"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}${variant ? `-${variant}` : ''}"`;
+}
+
+/** Requête conditionnelle satisfaite (If-None-Match prioritaire sur If-Modified-Since) ? */
+function isNotModified(req, etag, mtime) {
+  const ifNoneMatch = req.headers['if-none-match'];
+  if (ifNoneMatch) {
+    const normalise = (tag) => tag.trim().replace(/^W\//, '');
+    const wanted = normalise(etag);
+    return ifNoneMatch.split(',').some((tag) => tag.trim() === '*' || normalise(tag) === wanted);
+  }
+  const ifModifiedSince = req.headers['if-modified-since'];
+  if (ifModifiedSince) {
+    const since = Date.parse(ifModifiedSince);
+    return Number.isFinite(since) && Math.floor(mtime.getTime() / 1000) <= Math.floor(since / 1000);
+  }
+  return false;
+}
+
 function sendTooManyRequests(res) {
   res.statusCode = 429;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -168,7 +189,14 @@ const server = http.createServer(async (req, res) => {
       return await handleAltitudeTileRoute(pathname, parsedUrl, req, res);
     }
 
-    // 3. Serve Static Files from dist
+    // 3. Serve Static Files from dist (lecture seule : GET/HEAD uniquement)
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      res.statusCode = 405;
+      res.setHeader('Allow', 'GET, HEAD');
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      return res.end('Method Not Allowed');
+    }
+
     let filePath = path.join(DIST_DIR, pathname);
 
     // Prevent path traversal (séparateur inclus : `dist_x/` n'est pas `dist/`)
@@ -212,6 +240,9 @@ const server = http.createServer(async (req, res) => {
     res.setHeader('Content-Type', contentType);
 
     const isHtml = ext === '.html' || pathname === '/' || pathname === '/viewer' || filePath.endsWith('index.html') || filePath.endsWith('viewer.html');
+    // Les fichiers de dist/assets/ sont tous hashés par Vite (workers compris) :
+    // immuables. Les autres (public/) gardent un nom stable d'un build à l'autre.
+    const isHashedAsset = pathname.startsWith('/assets/');
     const fetchDest = req.headers['sec-fetch-dest'];
     const isWorker = ext === '.js' && (
       pathname.toLowerCase().includes('worker')
@@ -226,11 +257,33 @@ const server = http.createServer(async (req, res) => {
       res.setHeader('Cache-Control', 'no-store');
       res.setHeader('Content-Security-Policy', REDVIEW_CSP_HEADER);
       res.setHeader('X-Frame-Options', 'DENY');
+    } else if (isHashedAsset) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      if (isWorker) res.setHeader('Content-Security-Policy', REDVIEW_CSP_HEADER);
     } else if (isWorker) {
+      // sw-dem.js et ses modules : nom stable, revalidés à chaque chargement.
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Content-Security-Policy', REDVIEW_CSP_HEADER);
-    } else if (pathname.startsWith('/assets/')) {
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    } else {
+      // Statiques racine non hashés (.wasm, france-border.json, icônes…) :
+      // 1 jour puis revalidation via ETag / Last-Modified.
+      res.setHeader('Cache-Control', 'public, max-age=86400, must-revalidate');
+    }
+
+    if (!isHtml) {
+      const etag = buildStaticEtag(stat);
+      res.setHeader('ETag', etag);
+      res.setHeader('Last-Modified', stat.mtime.toUTCString());
+      if (isNotModified(req, etag, stat.mtime)) {
+        res.removeHeader('Content-Type');
+        res.statusCode = 304;
+        return res.end();
+      }
+    }
+
+    res.setHeader('Content-Length', stat.size);
+    if (req.method === 'HEAD') {
+      return res.end();
     }
 
     const stream = fs.createReadStream(filePath);
