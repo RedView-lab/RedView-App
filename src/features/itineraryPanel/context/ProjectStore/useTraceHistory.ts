@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState, type MutableRefObject } from 'react';
 
 import type { ItineraryProject } from '../../types';
+import { cloneProjectForMutation } from './historyClone';
 import { restoreHistoryDocument } from './historyDocument';
 import type { TraceHistoryEntry } from './types';
 
@@ -150,7 +151,8 @@ export function useTraceHistory({ projectRef, writeProject }: UseTraceHistoryArg
    * Applique une mutation au projet courant en l'enregistrant comme une étape
    * à part entière (jamais regroupée).
    *
-   * Le mutateur reçoit un clone profond du projet : il le modifie librement.
+   * Le mutateur reçoit un clone profond du projet (hors tableaux de points du
+   * tracé, partagés : cf. cloneProjectForMutation) : il le modifie librement.
    * S'il retourne `false`, la mutation est considérée comme sans effet et
    * n'est pas enregistrée (pas de nouvelle entrée d'historique).
    */
@@ -160,7 +162,7 @@ export function useTraceHistory({ projectRef, writeProject }: UseTraceHistoryArg
       mutate: (draft: ItineraryProject) => boolean | void,
     ): boolean => {
       const before = projectRef.current;
-      const after = structuredClone(before);
+      const after = cloneProjectForMutation(before);
       if (mutate(after) === false) return false;
       pushTraceHistoryEntry({ itineraryId, before, after });
       return true;

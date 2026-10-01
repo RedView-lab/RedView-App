@@ -29,6 +29,8 @@ async function main() {
   if (!gc) console.warn('WARNING: run with `node --expose-gc --import tsx` for accurate heap numbers');
   const { parseGpxText } = await loadSrc<any>('src/features/poi/lib/gpx-parse.ts');
   const routes = await loadSrc<any>('src/features/itineraryPanel/lib/routes/index.ts');
+  // Draft clone actually used by commitTraceMutation (useTraceHistory.ts).
+  const { cloneProjectForMutation } = await loadSrc<any>('src/features/itineraryPanel/context/ProjectStore/historyClone.ts');
 
   const text = fs.readFileSync(path.join(DOWNLOADS, 'GT20.gpx'), 'utf8');
   const parsed = parseGpxText(text);
@@ -53,10 +55,11 @@ async function main() {
     const times: number[] = [];
     for (let step = 0; step < 100; step++) {
       const t0 = performance.now();
-      const after = structuredClone(current); // useTraceHistory.ts:163
+      const after = cloneProjectForMutation(current); // useTraceHistory.ts commitTraceMutation
       times.push(performance.now() - t0);
       const wp = after.itineraries[0].timeline.find((r: any) => r.kind === 'waypoint');
       if (wp) wp.lat += 0.0001; // moveTracePointInItinerary-like edit
+      if (wp && current.itineraries[0].timeline.find((r: any) => r.id === wp.id)?.lat === wp.lat) failures.push('draft edit leaked into the previous history state');
       past = [...past, current].slice(-100); // pushSnapshot
       current = after;
     }
