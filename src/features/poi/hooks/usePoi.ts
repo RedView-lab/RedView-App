@@ -18,7 +18,7 @@ import { useEffect, useMemo, useRef, useCallback, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import type { PoiCategory, PoiFeature, GpxRoute } from '../types';
-import { clampCorridorRadiusM, fetchPoisAlongRouteChunked } from '../lib/poi-api';
+import { PoiApiError, clampCorridorRadiusM, fetchPoisAlongRouteChunked } from '../lib/poi-api';
 import { sampleRouteByDistance } from '../lib/gpx-loader';
 import { filterPoisByLateralDistance } from '../lib/corridor-distance-filter';
 import { PoiMarkerManager } from '../lib/poi-markers';
@@ -44,6 +44,20 @@ function deduplicateFeatures(features: PoiFeature[] | null): PoiFeature[] {
     }
   }
   return Array.from(map.values());
+}
+
+/**
+ * Message affichable (texte source FR, traduit par le panneau) pour un échec
+ * de la recherche corridor.
+ */
+function describeCorridorError(err: unknown): string {
+  if (err instanceof PoiApiError && err.status === 413) {
+    return 'Corridor trop large : réduisez le rayon ou découpez l’itinéraire';
+  }
+  if (err instanceof PoiApiError && err.status === 0) {
+    return 'La recherche de POI a expiré. Les POI déjà trouvés sont conservés.';
+  }
+  return 'La recherche de POI a échoué. Les POI déjà trouvés sont conservés.';
 }
 
 function mergeCorridorWithSavedFeatures(
@@ -312,7 +326,11 @@ export function usePoi(
       }
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
-      setError(err instanceof Error ? err.message : 'Erreur POI corridor');
+      if (controller.signal.aborted) return;
+      // Échec : on ne touche NI aux POI enregistrés NI à la timeline NI à la
+      // signature de recherche (onCorridorComplete n'est pas appelé) ; le
+      // panneau affiche l'erreur et propose « Réessayer ».
+      setError(describeCorridorError(err));
     } finally {
       if (!controller.signal.aborted) {
         setLoading(false);

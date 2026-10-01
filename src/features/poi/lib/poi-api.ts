@@ -22,6 +22,30 @@ import type { PoiCategory, PoiFeature, PoiApiResponse } from '../types';
 const ENDPOINT = '/api/poi';
 const REQUEST_TIMEOUT_MS = 30_000;
 
+/**
+ * Échec de l'API POI (HTTP non-2xx, délai dépassé, réponse invalide).
+ * `status` vaut 0 pour un délai dépassé ou une erreur réseau.
+ */
+export class PoiApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'PoiApiError';
+    this.status = status;
+  }
+}
+
+async function readApiErrorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const body = (await res.json()) as { error?: unknown };
+    if (typeof body.error === 'string' && body.error.trim()) return body.error;
+  } catch {
+    /* corps non JSON */
+  }
+  return fallback;
+}
+
 async function fetchWithTimeout(
   url: string,
   init: RequestInit,
@@ -34,9 +58,18 @@ async function fetchWithTimeout(
     if (callerSignal.aborted) throw new DOMException('Aborted', 'AbortError');
     callerSignal.addEventListener('abort', onCallerAbort, { once: true });
   }
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    ctrl.abort();
+  }, timeoutMs);
   try {
     return await fetch(url, { ...init, signal: ctrl.signal });
+  } catch (err) {
+    // Un délai dépassé n'est pas une annulation de l'appelant : on le
+    // remonte comme une vraie erreur (sinon l'UI l'ignorerait en silence).
+    if (timedOut && !callerSignal?.aborted) throw new PoiApiError('POI request timeout', 0);
+    throw err;
   } finally {
     clearTimeout(timer);
     callerSignal?.removeEventListener('abort', onCallerAbort);
@@ -149,8 +182,13 @@ export async function fetchPoisAlongRoute(
     signal,
     REQUEST_TIMEOUT_MS,
   );
-  if (!res.ok) throw new Error(`POI corridor HTTP ${res.status}`);
-  const data: PoiApiResponse = await res.json();
+  if (!res.ok) {
+    throw new PoiApiError(await readApiErrorMessage(res, `POI corridor HTTP ${res.status}`), res.status);
+  }
+  const data = (await res.json().catch(() => null)) as PoiApiResponse | null;
+  if (!data || !Array.isArray(data.features)) {
+    throw new PoiApiError('POI corridor: invalid response', res.status);
+  }
   return data.features;
 }
 

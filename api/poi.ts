@@ -91,16 +91,19 @@ async function handleBbox(
     clearTimeout(timer);
     if (!upstream.ok) {
       console.warn(`[api/poi] Upstream returned HTTP ${upstream.status}`);
-      return res.status(200).json({ features: [] });
+      return sendUpstreamFailure(res, upstream);
     }
-    const data = await upstream.json().catch(() => ({ features: [] }));
+    const data = await upstream.json().catch(() => null);
+    if (!data || !Array.isArray(data.features)) {
+      return sendProxyError(res, 502, 'POI upstream returned an invalid response');
+    }
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
-    return res.status(200).json(data.features ? data : { features: [] });
+    return res.status(200).json(data);
   } catch (err) {
     clearTimeout(timer);
     console.warn('[api/poi] Upstream fetch error (is POI server running on 17778?):', err instanceof Error ? err.message : err);
-    return res.status(200).json({ features: [] });
+    return sendProxyError(res, 502, isAbortError(err) ? 'POI upstream timeout' : 'POI upstream error');
   }
 }
 
@@ -144,17 +147,54 @@ async function handleCorridor(
     clearTimeout(timer);
     if (!upstream.ok) {
       console.warn(`[api/poi] Upstream corridor returned HTTP ${upstream.status}`);
-      return res.status(200).json({ features: [] });
+      return sendUpstreamFailure(res, upstream);
     }
-    const data = await upstream.json().catch(() => ({ features: [] }));
+    const data = await upstream.json().catch(() => null);
+    if (!data || !Array.isArray(data.features)) {
+      return sendProxyError(res, 502, 'POI upstream returned an invalid response');
+    }
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Cache-Control', 'public, s-maxage=600, stale-while-revalidate=3600');
-    return res.status(200).json(data.features ? data : { features: [] });
+    return res.status(200).json(data);
   } catch (err) {
     clearTimeout(timer);
     console.warn('[api/poi] Upstream corridor fetch error:', err instanceof Error ? err.message : err);
-    return res.status(200).json({ features: [] });
+    return sendProxyError(res, 502, isAbortError(err) ? 'POI upstream timeout' : 'POI upstream error');
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Erreurs amont                                                        */
+/* ------------------------------------------------------------------ */
+
+// Un échec amont ne doit JAMAIS ressembler à « 200 + 0 POI » : le client ne
+// pourrait pas le distinguer d'un corridor réellement vide et effacerait les
+// POI déjà trouvés. 413 (corridor trop large) est relayé tel quel, toute
+// autre erreur amont devient 502. Jamais mis en cache.
+
+function isAbortError(err: unknown): boolean {
+  return (err as { name?: string } | undefined)?.name === 'AbortError';
+}
+
+function sendProxyError(res: ApiResponse, status: number, error: string) {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  return res.status(status).json({ error });
+}
+
+async function sendUpstreamFailure(res: ApiResponse, upstream: Response) {
+  if (upstream.status === 413) {
+    let message = 'Corridor too large';
+    try {
+      const body = (await upstream.json()) as { error?: unknown; message?: unknown };
+      const raw = typeof body.error === 'string' ? body.error : body.message;
+      if (typeof raw === 'string' && raw.trim()) message = raw.trim().slice(0, 300);
+    } catch {
+      /* corps non JSON : message par défaut */
+    }
+    return sendProxyError(res, 413, message);
+  }
+  return sendProxyError(res, 502, `POI upstream HTTP ${upstream.status}`);
 }
 
 async function forwardSimple(url: string, res: ApiResponse, cacheControl: string) {
@@ -176,7 +216,7 @@ async function forwardSimple(url: string, res: ApiResponse, cacheControl: string
     return res.status(upstream.status).send(text);
   } catch (err) {
     clearTimeout(timer);
-    const isAbort = (err as { name?: string } | undefined)?.name === 'AbortError';
+    const isAbort = isAbortError(err);
     if (!isAbort) console.warn('[api/poi] forwardSimple upstream error:', err);
     return res.status(502).json({
       error: isAbort ? 'POI upstream timeout' : 'POI upstream error',

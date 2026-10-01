@@ -559,4 +559,8 @@ export const dashboardTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Chargement : {{list}}', en: 'Loading: {{list}}' },
   { fr: 'Erreur : {{list}}', en: 'Error: {{list}}' },
   { fr: 'Filtres globaux du haut de page', en: 'Global filters at the top of the page' },
+  { fr: 'Réessayer', en: 'Retry' },
+  { fr: 'Corridor trop large : réduisez le rayon ou découpez l’itinéraire', en: 'Corridor too large: reduce the radius or split the route' },
+  { fr: 'La recherche de POI a expiré. Les POI déjà trouvés sont conservés.', en: 'The POI search timed out. POIs already found are kept.' },
+  { fr: 'La recherche de POI a échoué. Les POI déjà trouvés sont conservés.', en: 'The POI search failed. POIs already found are kept.' },
 ] as const;

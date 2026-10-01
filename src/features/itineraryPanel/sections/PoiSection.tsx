@@ -180,7 +180,7 @@ export function PoiSection({
       ) : null}
 
       <ActionButtonStack
-        primaryLabel={searchStale ? t('Relancer la recherche') : t('Charger')}
+        primaryLabel={error ? t('Réessayer') : searchStale ? t('Relancer la recherche') : t('Charger')}
         onPrimaryClick={onLoad}
         primaryDisabled={disabled}
         loadingLabel={loadingLabel}
@@ -190,7 +190,7 @@ export function PoiSection({
 
       {error ? (
         <div className="rvi-poi-msg rvi-poi-msg--error" role="alert">
-          {error}
+          {t(error)}
         </div>
       ) : disabledReason ? (
         <div className="rvi-poi-msg rvi-poi-msg--hint" role="status">
