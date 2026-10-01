@@ -1,10 +1,23 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import net from 'node:net';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { recolorRadarPng } from './server/radar-recolor.mjs';
 import { generateSlopeTile, generateAltitudeTile } from './server/terrain-tiles.mjs';
+import {
+  HttpError,
+  applyBaseSecurityHeaders,
+  bodyLimitFor,
+  buildRadarUpstreamUrl,
+  createRateLimiter,
+  decodeSafePathname,
+  getClientIp,
+  isInsideDir,
+  parseTileCoords,
+  rateLimitKeyForIp,
+  readBodyLimited,
+  resolveApiRoute,
+} from './server/http-security.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -35,89 +48,41 @@ const MIME_TYPES = {
 
 export const REDVIEW_CSP_HEADER = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://api.mapbox.com https://js.stripe.com https://analytics.redview.tech",
+  // Aucun script inline dans index.html / viewer.html : pas de 'unsafe-inline'.
+  "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://api.mapbox.com https://js.stripe.com https://analytics.redview.tech",
   "worker-src 'self' blob:",
   "child-src 'self' blob:",
   "style-src 'self' 'unsafe-inline' https://api.mapbox.com https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com data:",
-  "img-src 'self' data: blob: https://appwrite.redview.tech https://*.tilecache.rainviewer.com https://*.rainviewer.com https://*.rainviewer.net https://api.mapbox.com https://*.mapbox.com https://s3.amazonaws.com https://*.s3.amazonaws.com https://*.amazonaws.com https://data.geopf.fr https://*.geopf.fr https://data.geo.admin.ch https://*.geo.admin.ch https://*.admin.ch https://servicios.idee.es https://*.idee.es https://www.ign.es https://*.ign.es https://hoydedata.no https://*.hoydedata.no https://cyberjapandata.gsi.go.jp https://*.gsi.go.jp https://server.arcgisonline.com https://*.arcgisonline.com",
-  "connect-src 'self' blob: data: https://appwrite.redview.tech https://errors.redview.tech http://errors.141.145.220.99.sslip.io https://api.stripe.com https://api.mapbox.com https://events.mapbox.com https://*.mapbox.com https://*.rainviewer.com https://*.rainviewer.net https://api.open-meteo.com https://climate-api.open-meteo.com https://*.open-meteo.com https://nominatim.openstreetmap.org https://analytics.redview.tech https://s3.amazonaws.com https://*.s3.amazonaws.com https://*.amazonaws.com https://opentopography.s3.sdsc.edu https://data.geopf.fr https://*.geopf.fr https://data.geo.admin.ch https://*.geo.admin.ch https://*.admin.ch https://servicios.idee.es https://*.idee.es https://www.ign.es https://*.ign.es https://hoydedata.no https://*.hoydedata.no https://cyberjapandata.gsi.go.jp https://*.gsi.go.jp https://server.arcgisonline.com https://*.arcgisonline.com",
+  "img-src 'self' data: blob: https://appwrite.redview.tech https://*.tilecache.rainviewer.com https://*.rainviewer.com https://*.rainviewer.net https://api.mapbox.com https://*.mapbox.com https://s3.amazonaws.com/elevation-tiles-prod/ https://japan-pointcloud.s3.ap-northeast-1.amazonaws.com https://virtual-shizuoka.s3.ap-northeast-1.amazonaws.com https://data.geopf.fr https://*.geopf.fr https://data.geo.admin.ch https://*.geo.admin.ch https://*.admin.ch https://servicios.idee.es https://*.idee.es https://www.ign.es https://*.ign.es https://hoydedata.no https://*.hoydedata.no https://cyberjapandata.gsi.go.jp https://*.gsi.go.jp https://server.arcgisonline.com https://*.arcgisonline.com",
+  "connect-src 'self' blob: data: https://appwrite.redview.tech https://errors.redview.tech https://api.stripe.com https://api.mapbox.com https://events.mapbox.com https://*.mapbox.com https://*.rainviewer.com https://*.rainviewer.net https://api.open-meteo.com https://climate-api.open-meteo.com https://*.open-meteo.com https://nominatim.openstreetmap.org https://analytics.redview.tech https://s3.amazonaws.com/elevation-tiles-prod/ https://japan-pointcloud.s3.ap-northeast-1.amazonaws.com https://virtual-shizuoka.s3.ap-northeast-1.amazonaws.com https://opentopography.s3.sdsc.edu https://data.geopf.fr https://*.geopf.fr https://data.geo.admin.ch https://*.geo.admin.ch https://*.admin.ch https://servicios.idee.es https://*.idee.es https://www.ign.es https://*.ign.es https://hoydedata.no https://*.hoydedata.no https://cyberjapandata.gsi.go.jp https://*.gsi.go.jp https://server.arcgisonline.com https://*.arcgisonline.com",
   "frame-src https://js.stripe.com",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",
+  'upgrade-insecure-requests',
 ].join('; ');
 
-// In-memory rate limiting map: ip -> { count, resetTime }
-const rateLimitMap = new Map();
-const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+// Rate limiting en mémoire (fenêtre d'une minute, Map bornée).
+const hitRateLimit = createRateLimiter({ windowMs: 60 * 1000 });
 const MAX_AUTH_REQUESTS = 15;
 const MAX_API_REQUESTS = 120;
+// Fallbacks de tuiles (SW inactif) : généreux, mais chaque requête déclenche
+// des fetchs upstream, donc pas illimité.
+const MAX_TILE_REQUESTS = 600;
 
-function isPrivateOrLoopbackIp(ip) {
-  if (!ip) return false;
-  if (ip === '127.0.0.1' || ip === '::1' || ip.startsWith('fe80:')) return true;
-  // 10.0.0.0/8
-  if (ip.startsWith('10.')) return true;
-  // 172.16.0.0/12 (Docker networks)
-  const match172 = ip.match(/^172\.(\d+)\./);
-  if (match172) {
-    const second = parseInt(match172[1], 10);
-    if (second >= 16 && second <= 31) return true;
-  }
-  // 192.168.0.0/16
-  if (ip.startsWith('192.168.')) return true;
-  return false;
+function checkRateLimit(req, bucket, max) {
+  const ipKey = rateLimitKeyForIp(getClientIp(req));
+  return hitRateLimit(`${ipKey}:${bucket}`, max);
 }
 
-function getClientIp(req) {
-  const socketIp = (req.socket?.remoteAddress || '').replace(/^::ffff:/, '').trim();
-
-  // If request arrives via Coolify's Traefik reverse proxy or localhost Docker bridge,
-  // we can safely parse forwarded headers.
-  if (isPrivateOrLoopbackIp(socketIp)) {
-    const cfIp = req.headers['cf-connecting-ip'];
-    if (cfIp && typeof cfIp === 'string') {
-      const sanitized = cfIp.trim();
-      if (net.isIP(sanitized)) return sanitized;
-    }
-    const xff = req.headers['x-forwarded-for'];
-    if (xff && typeof xff === 'string') {
-      const first = xff.split(',')[0].trim();
-      if (net.isIP(first)) return first;
-    }
-  }
-
-  return socketIp || '127.0.0.1';
+function sendTooManyRequests(res) {
+  res.statusCode = 429;
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Retry-After', '60');
+  return res.end(JSON.stringify({ error: 'Trop de requêtes. Veuillez patienter une minute.' }));
 }
-
-function checkRateLimit(req, isAuth) {
-  const ip = getClientIp(req);
-  const key = `${ip}:${isAuth ? 'auth' : 'general'}`;
-  const max = isAuth ? MAX_AUTH_REQUESTS : MAX_API_REQUESTS;
-  const now = Date.now();
-
-  const record = rateLimitMap.get(key) || { count: 0, resetTime: now + RATE_LIMIT_WINDOW_MS };
-  if (now > record.resetTime) {
-    record.count = 0;
-    record.resetTime = now + RATE_LIMIT_WINDOW_MS;
-  }
-
-  record.count += 1;
-  rateLimitMap.set(key, record);
-
-  return record.count <= max;
-}
-
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, record] of rateLimitMap.entries()) {
-    if (now > record.resetTime) {
-      rateLimitMap.delete(key);
-    }
-  }
-}, 5 * 60 * 1000).unref();
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -126,8 +91,14 @@ const server = http.createServer(async (req, res) => {
       return res.end('Bad Request');
     }
 
-    const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-    let pathname = decodeURIComponent(parsedUrl.pathname);
+    applyBaseSecurityHeaders(res);
+
+    const parsedUrl = new URL(req.url, 'http://localhost');
+    let pathname = decodeSafePathname(parsedUrl.pathname);
+    if (pathname === null) {
+      res.statusCode = 400;
+      return res.end('Bad Request');
+    }
 
     // 0. Health check endpoint for uptime monitoring & Docker
     if (pathname === '/health' || pathname === '/healthz' || pathname === '/api/health') {
@@ -143,14 +114,30 @@ const server = http.createServer(async (req, res) => {
 
     // 2. Handle /api/* routes with rate limiting
     if (pathname.startsWith('/api/')) {
-      const isAuth = pathname.startsWith('/api/auth');
-      if (!checkRateLimit(req, isAuth)) {
-        res.statusCode = 429;
-        res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.setHeader('Retry-After', '60');
-        return res.end(JSON.stringify({ error: 'Trop de requêtes. Veuillez patienter une minute.' }));
+      const apiRoute = resolveApiRoute(API_DIR, pathname);
+      // Le bucket est choisi d'après la route RÉSOLUE : un chemin détourné ne
+      // peut plus atteindre `auth/*` en passant par le quota général.
+      const isAuth = apiRoute?.isAuth ?? false;
+      if (!checkRateLimit(req, isAuth ? 'auth' : 'general', isAuth ? MAX_AUTH_REQUESTS : MAX_API_REQUESTS)) {
+        return sendTooManyRequests(res);
       }
-      return await handleApiRoute(pathname, parsedUrl, req, res);
+      if (!apiRoute) {
+        res.statusCode = 404;
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        return res.end(JSON.stringify({ error: 'API route not found' }));
+      }
+      return await handleApiRoute(apiRoute, parsedUrl, req, res);
+    }
+
+    if (
+      pathname.startsWith('/radar-tiles/')
+      || pathname.startsWith('/slope-tiles/')
+      || pathname.startsWith('/altitude-tiles/')
+      || pathname.startsWith('/dem-tiles/')
+    ) {
+      if (!checkRateLimit(req, 'tiles', MAX_TILE_REQUESTS)) {
+        return sendTooManyRequests(res);
+      }
     }
 
     // 2b. Fallback proxy for /radar-tiles/* when Service Worker is inactive (e.g. over plain HTTP)
@@ -171,8 +158,8 @@ const server = http.createServer(async (req, res) => {
     // 3. Serve Static Files from dist
     let filePath = path.join(DIST_DIR, pathname);
 
-    // Prevent path traversal
-    if (!filePath.startsWith(DIST_DIR)) {
+    // Prevent path traversal (séparateur inclus : `dist_x/` n'est pas `dist/`)
+    if (filePath !== DIST_DIR && !isInsideDir(DIST_DIR, filePath)) {
       res.statusCode = 403;
       return res.end('Forbidden');
     }
@@ -201,7 +188,15 @@ const server = http.createServer(async (req, res) => {
     res.setHeader('Content-Type', contentType);
 
     const isHtml = ext === '.html' || pathname === '/' || pathname === '/viewer' || filePath.endsWith('index.html') || filePath.endsWith('viewer.html');
-    const isWorker = ext === '.js' && (pathname.toLowerCase().includes('worker') || req.headers['sec-fetch-dest'] === 'worker');
+    const fetchDest = req.headers['sec-fetch-dest'];
+    const isWorker = ext === '.js' && (
+      pathname.toLowerCase().includes('worker')
+      || pathname === '/sw-dem.js'
+      || pathname.startsWith('/sw-dem/')
+      || fetchDest === 'worker'
+      || fetchDest === 'serviceworker'
+      || fetchDest === 'sharedworker'
+    );
 
     if (isHtml) {
       res.setHeader('Cache-Control', 'no-store');
@@ -214,13 +209,16 @@ const server = http.createServer(async (req, res) => {
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     }
 
-    // Security headers applied to all responses
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-    res.setHeader('Permissions-Policy', 'camera=(), microphone=()');
-    res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
-
     const stream = fs.createReadStream(filePath);
+    stream.on('error', (err) => {
+      console.error('Static stream error:', err);
+      if (!res.headersSent) {
+        res.statusCode = 500;
+        res.end('Internal Server Error');
+      } else {
+        res.destroy(err);
+      }
+    });
     stream.pipe(res);
   } catch (err) {
     console.error('Server error:', err);
@@ -231,25 +229,8 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-async function handleApiRoute(pathname, parsedUrl, req, res) {
-  // Normalize openmeteo, weather & brouter
-  let apiPath = pathname;
-  if (apiPath.startsWith('/api/openmeteo')) {
-    apiPath = '/api/openmeteo';
-  } else if (apiPath.startsWith('/api/weather')) {
-    apiPath = '/api/weather';
-  } else if (apiPath.startsWith('/api/brouter')) {
-    apiPath = '/api/brouter';
-  }
-
-  const relPath = apiPath.replace(/^\/api\//, '');
-  const candidateFile = path.resolve(API_DIR, `${relPath}.ts`);
-
-  if (!candidateFile.startsWith(API_DIR) || !fs.existsSync(candidateFile)) {
-    res.statusCode = 404;
-    res.setHeader('Content-Type', 'application/json');
-    return res.end(JSON.stringify({ error: `API route ${pathname} not found` }));
-  }
+async function handleApiRoute(apiRoute, parsedUrl, req, res) {
+  const { route, file: candidateFile } = apiRoute;
 
   // Parse Query Parameters
   const query = {};
@@ -266,14 +247,20 @@ async function handleApiRoute(pathname, parsedUrl, req, res) {
     }
   }
 
-  // Parse Request Body
-  const chunks = [];
-  if (req.method !== 'GET' && req.method !== 'HEAD') {
-    for await (const chunk of req) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  // Parse Request Body (plafonné : 413 avant d'avoir tout bufferisé)
+  let rawBody;
+  try {
+    rawBody = await readBodyLimited(req, bodyLimitFor(route));
+  } catch (err) {
+    if (err instanceof HttpError) {
+      res.statusCode = err.status;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Connection', 'close');
+      res.on('finish', () => req.destroy());
+      return res.end(JSON.stringify({ error: err.message }));
     }
+    throw err;
   }
-  const rawBody = Buffer.concat(chunks);
   const contentType = (req.headers['content-type'] || '').toLowerCase();
   let parsedBody = rawBody;
 
@@ -314,6 +301,9 @@ async function handleApiRoute(pathname, parsedUrl, req, res) {
       if (Buffer.isBuffer(data)) {
         res.end(data);
       } else if (typeof data === 'string') {
+        if (!res.headersSent && !res.getHeader('Content-Type')) {
+          res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        }
         res.end(data);
       } else {
         apiRes.json(data);
@@ -339,10 +329,10 @@ async function handleApiRoute(pathname, parsedUrl, req, res) {
     } else {
       res.statusCode = 500;
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ error: `Handler in ${relPath}.ts is not a function` }));
+      res.end(JSON.stringify({ error: 'Internal Server Error' }));
     }
   } catch (err) {
-    console.error(`[API Error ${pathname}]:`, err);
+    console.error(`[API Error ${route}]:`, err);
     if (!res.headersSent) {
       res.statusCode = 500;
       res.setHeader('Content-Type', 'application/json');
@@ -354,40 +344,27 @@ async function handleApiRoute(pathname, parsedUrl, req, res) {
   }
 }
 
-const ALLOWED_RADAR_HOSTS = new Set([
-  'https://tilecache.rainviewer.com',
-  'https://tilecache.rainviewer.net',
-]);
-
 async function handleRadarTileRoute(pathname, parsedUrl, req, res) {
+  const coords = parseTileCoords(pathname, /^\/radar-tiles\/(\d+)\/(\d+)\/(\d+)/);
+  // Hôte forcé dans l'allowlist, chemin de frame strictement alphanumérique.
+  const target = coords ? buildRadarUpstreamUrl(parsedUrl.searchParams, coords) : null;
+  if (!target) {
+    res.statusCode = 400;
+    return res.end('Invalid radar tile request');
+  }
   try {
-    const rawHost = (parsedUrl.searchParams.get('host') || '').trim();
-    const host = ALLOWED_RADAR_HOSTS.has(rawHost) ? rawHost : 'https://tilecache.rainviewer.com';
-    const rawFramePath = decodeURIComponent(parsedUrl.searchParams.get('path') || '').trim();
-
-    // Prevent SSRF / path traversal: framePath must strictly be a relative alphanumeric path
-    if (!rawFramePath || !/^\/?[a-zA-Z0-9_\-\/]+$/.test(rawFramePath)) {
-      res.statusCode = 400;
-      return res.end('Invalid path parameter');
-    }
-
     const pStr = parsedUrl.searchParams.get('p') || '';
-    const match = pathname.match(/^\/radar-tiles\/(\d+)\/(\d+)\/(\d+)/);
-    if (match) {
-      const [, z, x, y] = match;
-      const cleanPath = rawFramePath.startsWith('/') ? rawFramePath : `/${rawFramePath}`;
-      const target = `${host}${cleanPath}/512/${z}/${x}/${y}/2/1_1.png`;
-      const upstreamRes = await fetch(target);
-      if (upstreamRes.ok) {
-        const rawBuf = Buffer.from(await upstreamRes.arrayBuffer());
-        const finalBuf = pStr ? recolorRadarPng(rawBuf, pStr) : rawBuf;
-        res.statusCode = 200;
-        res.setHeader('Content-Type', 'image/png');
-        res.setHeader('Cache-Control', 'public, max-age=300');
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('X-Weather-Source', pStr ? 'server-radar-recolor' : 'server-radar-proxy');
-        return res.end(finalBuf);
-      }
+    const upstreamRes = await fetch(target, { signal: AbortSignal.timeout(10_000) });
+    const upstreamType = upstreamRes.headers.get('content-type') || '';
+    if (upstreamRes.ok && upstreamType.startsWith('image/')) {
+      const rawBuf = Buffer.from(await upstreamRes.arrayBuffer());
+      const finalBuf = pStr ? recolorRadarPng(rawBuf, pStr) : rawBuf;
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'public, max-age=300');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('X-Weather-Source', pStr ? 'server-radar-recolor' : 'server-radar-proxy');
+      return res.end(finalBuf);
     }
   } catch (e) {
     console.warn('[server-radar-tiles] error:', e);
@@ -398,10 +375,9 @@ async function handleRadarTileRoute(pathname, parsedUrl, req, res) {
 
 async function handleSlopeTileRoute(pathname, parsedUrl, req, res) {
   try {
-    const match = pathname.match(/^\/slope-tiles\/(\d+)\/(\d+)\/(\d+)/);
-    if (match) {
-      const [, z, x, y] = match;
-      const pngBuf = await generateSlopeTile(parseInt(z, 10), parseInt(x, 10), parseInt(y, 10));
+    const coords = parseTileCoords(pathname, /^\/slope-tiles\/(\d+)\/(\d+)\/(\d+)/);
+    if (coords) {
+      const pngBuf = await generateSlopeTile(coords.z, coords.x, coords.y);
       res.statusCode = 200;
       res.setHeader('Content-Type', 'image/png');
       res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
@@ -418,10 +394,9 @@ async function handleSlopeTileRoute(pathname, parsedUrl, req, res) {
 
 async function handleAltitudeTileRoute(pathname, parsedUrl, req, res) {
   try {
-    const match = pathname.match(/^\/(?:altitude|dem)-tiles\/(\d+)\/(\d+)\/(\d+)/);
-    if (match) {
-      const [, z, x, y] = match;
-      const pngBuf = await generateAltitudeTile(parseInt(z, 10), parseInt(x, 10), parseInt(y, 10));
+    const coords = parseTileCoords(pathname, /^\/(?:altitude|dem)-tiles\/(\d+)\/(\d+)\/(\d+)/);
+    if (coords) {
+      const pngBuf = await generateAltitudeTile(coords.z, coords.x, coords.y);
       res.statusCode = 200;
       res.setHeader('Content-Type', 'image/png');
       res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
@@ -440,6 +415,10 @@ export { server };
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 if (isMain) {
+  // Slowloris : en-têtes en 20 s max, requête complète en 120 s max
+  // (les proxies Overpass/BRouter ont leurs propres timeouts < 90 s).
+  server.headersTimeout = 20_000;
+  server.requestTimeout = 120_000;
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`[RedView Server] Running on http://0.0.0.0:${PORT}`);
   });

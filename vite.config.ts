@@ -8,6 +8,16 @@ import { startDevServices } from './scripts/start-dev-services.mjs'
 import { recolorRadarPng } from './server/radar-recolor.mjs'
 // @ts-expect-error JS module without declarations
 import { generateSlopeTile, generateAltitudeTile } from './server/terrain-tiles.mjs'
+import {
+  HttpError,
+  bodyLimitFor,
+  buildRadarUpstreamUrl,
+  decodeSafePathname,
+  parseTileCoords,
+  readBodyLimited,
+  resolveApiRoute,
+  // @ts-expect-error JS module without declarations
+} from './server/http-security.mjs'
 
 const redviewBuildId = (
   process.env.VERCEL_GIT_COMMIT_SHA
@@ -69,15 +79,12 @@ function redviewDevApiPlugin(): Plugin {
         if (req.url.startsWith('/radar-tiles/')) {
           try {
             const urlObj = new URL(req.url, 'http://localhost')
-            const host = decodeURIComponent(urlObj.searchParams.get('host') || 'https://tilecache.rainviewer.com').replace(/\/+$/, '')
-            const framePath = decodeURIComponent(urlObj.searchParams.get('path') || '')
-            const match = urlObj.pathname.match(/^\/radar-tiles\/(\d+)\/(\d+)\/(\d+)/)
-            if (match && framePath) {
-              const [, z, x, y] = match
-              const cleanPath = framePath.startsWith('/') ? framePath : `/${framePath}`
-              const target = `${host}${cleanPath}/512/${z}/${x}/${y}/2/1_1.png`
-              const upstreamRes = await fetch(target)
-              if (upstreamRes.ok) {
+            const coords = parseTileCoords(urlObj.pathname, /^\/radar-tiles\/(\d+)\/(\d+)\/(\d+)/)
+            // Même allowlist d'hôtes / regex de chemin que server.mjs (anti-SSRF).
+            const target: string | null = coords ? buildRadarUpstreamUrl(urlObj.searchParams, coords) : null
+            if (target) {
+              const upstreamRes = await fetch(target, { signal: AbortSignal.timeout(10_000) })
+              if (upstreamRes.ok && (upstreamRes.headers.get('content-type') || '').startsWith('image/')) {
                 res.statusCode = 200
                 res.setHeader('Content-Type', 'image/png')
                 res.setHeader('Cache-Control', 'public, max-age=300')
@@ -98,10 +105,9 @@ function redviewDevApiPlugin(): Plugin {
         if (req.url.startsWith('/slope-tiles/')) {
           try {
             const urlObj = new URL(req.url, 'http://localhost')
-            const match = urlObj.pathname.match(/^\/slope-tiles\/(\d+)\/(\d+)\/(\d+)/)
-            if (match) {
-              const [, z, x, y] = match
-              const pngBuf = await generateSlopeTile(parseInt(z, 10), parseInt(x, 10), parseInt(y, 10))
+            const coords = parseTileCoords(urlObj.pathname, /^\/slope-tiles\/(\d+)\/(\d+)\/(\d+)/)
+            if (coords) {
+              const pngBuf = await generateSlopeTile(coords.z, coords.x, coords.y)
               res.statusCode = 200
               res.setHeader('Content-Type', 'image/png')
               res.setHeader('Cache-Control', 'public, max-age=604800')
@@ -120,10 +126,9 @@ function redviewDevApiPlugin(): Plugin {
         if (req.url.startsWith('/altitude-tiles/') || req.url.startsWith('/dem-tiles/')) {
           try {
             const urlObj = new URL(req.url, 'http://localhost')
-            const match = urlObj.pathname.match(/^\/(?:altitude|dem)-tiles\/(\d+)\/(\d+)\/(\d+)/)
-            if (match) {
-              const [, z, x, y] = match
-              const pngBuf = await generateAltitudeTile(parseInt(z, 10), parseInt(x, 10), parseInt(y, 10))
+            const coords = parseTileCoords(urlObj.pathname, /^\/(?:altitude|dem)-tiles\/(\d+)\/(\d+)\/(\d+)/)
+            if (coords) {
+              const pngBuf = await generateAltitudeTile(coords.z, coords.x, coords.y)
               res.statusCode = 200
               res.setHeader('Content-Type', 'image/png')
               res.setHeader('Cache-Control', 'public, max-age=604800')
@@ -151,22 +156,15 @@ function redviewDevApiPlugin(): Plugin {
           }
 
           const urlObj = new URL(req.url, 'http://localhost')
-          let pathname = urlObj.pathname
+          const pathname: string | null = decodeSafePathname(urlObj.pathname)
+          // Même résolution que server.mjs : pas de `..` encodé, pas de `_lib/`,
+          // alias openmeteo/weather/brouter.
+          const apiRoute: { route: string; file: string } | null = pathname
+            ? resolveApiRoute(path.resolve(__dirname, 'api'), pathname)
+            : null
 
-          // Normalize /api/openmeteo/... to /api/openmeteo
-          if (pathname.startsWith('/api/openmeteo')) {
-            pathname = '/api/openmeteo'
-          }
-
-          // Normalize /api/weather/... to /api/weather
-          if (pathname.startsWith('/api/weather')) {
-            pathname = '/api/weather'
-          }
-
-          const relPath = pathname.replace(/^\/api\//, '')
-          const candidateFile = path.resolve(__dirname, 'api', `${relPath}.ts`)
-
-          if (fs.existsSync(candidateFile)) {
+          if (apiRoute) {
+            const candidateFile = apiRoute.file
             try {
               // Parse query parameters
               const query: Record<string, string | string[]> = {}
@@ -183,14 +181,21 @@ function redviewDevApiPlugin(): Plugin {
                 }
               }
 
-              // Read and parse request body
-              const chunks: Buffer[] = []
-              if (req.method !== 'GET' && req.method !== 'HEAD') {
-                for await (const chunk of req) {
-                  chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+              // Read and parse request body (plafonné comme en prod)
+              let rawBody: Buffer
+              try {
+                rawBody = await readBodyLimited(req, bodyLimitFor(apiRoute.route))
+              } catch (err) {
+                if (err instanceof HttpError) {
+                  res.statusCode = (err as Error & { status: number }).status
+                  res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                  res.setHeader('Connection', 'close')
+                  res.on('finish', () => req.destroy())
+                  res.end(JSON.stringify({ error: (err as Error).message }))
+                  return
                 }
+                throw err
               }
-              const rawBody = Buffer.concat(chunks)
               const contentType = (req.headers['content-type'] || '').toLowerCase()
               let parsedBody: unknown = rawBody
 
@@ -265,7 +270,7 @@ function redviewDevApiPlugin(): Plugin {
               } else {
                 console.error(`[redview-dev-api] Handler in ${candidateFile} is not a function`)
                 res.statusCode = 500
-                res.end(JSON.stringify({ error: `Handler in ${relPath}.ts is not a function` }))
+                res.end(JSON.stringify({ error: 'Internal Server Error' }))
                 return
               }
             } catch (err) {
@@ -273,12 +278,7 @@ function redviewDevApiPlugin(): Plugin {
               if (!res.headersSent) {
                 res.statusCode = 500
                 res.setHeader('Content-Type', 'application/json; charset=utf-8')
-                res.end(
-                  JSON.stringify({
-                    error: 'Internal dev server API error',
-                    detail: err instanceof Error ? err.message : String(err),
-                  }),
-                )
+                res.end(JSON.stringify({ error: 'Internal dev server API error' }))
               }
               return
             }
@@ -303,7 +303,9 @@ export default defineConfig({
     },
   },
   server: {
-    host: true,
+    // Exposé sur le LAN uniquement sur demande explicite (REDVIEW_DEV_LAN=1) :
+    // le serveur de dev charge tous les secrets du .env dans process.env.
+    host: process.env.REDVIEW_DEV_LAN === '1' ? true : 'localhost',
     proxy: {
       '/api/lidar/wmts': {
         target: 'https://data.geopf.fr',

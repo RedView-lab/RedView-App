@@ -113,13 +113,32 @@ function buildRadarLookup(bands, mode, valMin = 0, valMax = 20) {
   return lookup;
 }
 
+// LRU borné : la clé `p` vient de la query string, un cache non borné
+// permettait de saturer la mémoire avec des palettes toutes différentes.
+const LOOKUP_CACHE_MAX = 64;
 const lookupCache = new Map();
 
+// `mode:hex_min_max:hex_min_max…` — tout autre format est refusé.
+const PALETTE_NUM = String.raw`-?[\d.]+(?:e[+-]?\d+)?`;
+const PALETTE_PARAM_RE = new RegExp(`^[a-z]{1,16}(?::(?:#?[0-9a-fA-F]{3,8}_${PALETTE_NUM}_${PALETTE_NUM})?){0,32}$`, 'i');
+
+export function isValidRadarPaletteParam(pStr) {
+  return typeof pStr === 'string' && pStr.length <= 512 && PALETTE_PARAM_RE.test(pStr);
+}
+
 function getOrCreateLookup(pStr) {
-  if (lookupCache.has(pStr)) return lookupCache.get(pStr);
+  const cached = lookupCache.get(pStr);
+  if (cached) {
+    lookupCache.delete(pStr);
+    lookupCache.set(pStr, cached);
+    return cached;
+  }
   const { mode, bands } = parseRadarPaletteParam(pStr);
   const lookup = buildRadarLookup(bands, mode, 0, 20);
   lookupCache.set(pStr, lookup);
+  while (lookupCache.size > LOOKUP_CACHE_MAX) {
+    lookupCache.delete(lookupCache.keys().next().value);
+  }
   return lookup;
 }
 
@@ -139,7 +158,7 @@ function makeChunk(typeStr, dataBuf) {
  * Returns the recolored PNG Buffer in ~3 milliseconds.
  */
 export function recolorRadarPng(rawPngBuffer, pStr) {
-  if (!pStr) return rawPngBuffer;
+  if (!pStr || !isValidRadarPaletteParam(pStr)) return rawPngBuffer;
 
   try {
     let offset = 8;
@@ -155,7 +174,8 @@ export function recolorRadarPng(rawPngBuffer, pStr) {
 
     if (idatParts.length === 0) return rawPngBuffer;
 
-    const raw = inflateSync(Buffer.concat(idatParts));
+    // Tuile 512×512 RGBA ≈ 1 Mo décompressée : 8 Mo de marge suffisent.
+    const raw = inflateSync(Buffer.concat(idatParts), { maxOutputLength: 8 * 1024 * 1024 });
     // Verify 512x512 RGBA scanline size: 512 * 2049 = 1,049,088 bytes
     if (raw.length !== 1049088) return rawPngBuffer;
 
