@@ -1,15 +1,19 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import {
+  account,
   APPWRITE_DATABASE_ID,
+  clearStoredAppwriteSession,
   databases,
   getAppwriteUser,
   hasStoredAppwriteSession,
   Query,
   readStoredAppwriteSession,
+  saveStoredAppwriteSession,
   SUBSCRIPTIONS_COLLECTION_ID,
 } from './shared/services/appwrite'
 import { PROJECT_LOCATION_CHANGE_EVENT, readProjectIdFromPath } from './shared/utils/projectLocation'
-import { LoginScreen } from './features/auth'
+import { LoginScreen, probeSession } from './features/auth'
+import type { SessionProbeResult } from './features/auth'
 import { MobileBlockScreen } from './shared/components/MobileBlockScreen'
 import { useIsMobileDevice } from './shared/hooks/useIsMobileDevice'
 import { useAppI18n } from './shared/i18n'
@@ -18,6 +22,9 @@ import './index.css'
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 
 type BootstrapStatus = 'loading' | 'ready'
+
+/** 'unreachable' : Appwrite injoignable (timeout / réseau) sans session locale → écran de reprise. */
+type AuthStatus = BootstrapStatus | 'unreachable'
 
 type SubscriptionAccessState = {
   hasAccess: boolean
@@ -33,9 +40,7 @@ type CachedSubscriptionSnapshot = {
   cachedAt: number
 }
 
-type BootstrapSession = { user: { id: string; email?: string } } | null
-
-let initialSessionBootstrapPromise: Promise<BootstrapSession> | null = null
+let initialSessionProbePromise: Promise<SessionProbeResult> | null = null
 
 const ANALYTICS_RECORDER_SRC = 'https://analytics.redview.tech/recorder.js'
 const ANALYTICS_WEBSITE_ID = '794b9933-1d87-4e8c-af69-a09982cc2353'
@@ -67,6 +72,39 @@ function BootstrapScreen({ label }: { label: string }) {
       <p>{label}</p>
     </div>
   )
+}
+
+function ServerUnreachableScreen({ onRetry }: { onRetry: () => void }) {
+  const { t } = useAppI18n()
+  return (
+    <div className="loading" role="alert">
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center', padding: 16 }}>
+        <p style={{ margin: 0, fontSize: 16, color: 'inherit' }}>{t('Connexion au serveur impossible')}</p>
+        <p style={{ margin: 0 }}>{t('Vérifiez votre connexion internet puis réessayez.')}</p>
+        <button
+          type="button"
+          onClick={onRetry}
+          style={{
+            padding: '8px 20px',
+            borderRadius: 8,
+            border: '1px solid currentColor',
+            background: 'transparent',
+            color: 'inherit',
+            font: 'inherit',
+            cursor: 'pointer',
+          }}
+        >
+          {t('Réessayer')}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function isPasswordResetLocation(): boolean {
+  if (typeof window === 'undefined') return false
+  const params = new URLSearchParams(window.location.search)
+  return params.has('userId') && params.has('secret')
 }
 
 function readCachedSubscription(userId: string | null | undefined): SubscriptionAccessState | null {
@@ -111,43 +149,43 @@ function writeCachedSubscription(userId: string, subscription: SubscriptionAcces
   }
 }
 
-function resolveInitialAppwriteSession(): Promise<BootstrapSession> {
-  if (!initialSessionBootstrapPromise) {
-    initialSessionBootstrapPromise = (async () => {
-      const stored = readStoredAppwriteSession()
-      if (stored?.user?.id) {
-        // Trigger background validation
-        getAppwriteUser().catch(() => {})
-        return stored
-      }
-
-      try {
-        const user = await getAppwriteUser()
-        if (user) {
-          return { user: { id: user.$id, email: user.email } }
-        }
-        return null
-      } catch (err) {
-        console.warn('[app] resolveInitialAppwriteSession error', err)
-        return null
-      }
-    })()
+/**
+ * Vérifie la session auprès d'Appwrite (borné par SESSION_PROBE_TIMEOUT_MS) et
+ * synchronise le snapshot local : sauvegardé si valide, effacé seulement sur 401.
+ */
+async function probeAppwriteSession(): Promise<SessionProbeResult> {
+  const result = await probeSession(() => account.get())
+  if (result.kind === 'authenticated') {
+    saveStoredAppwriteSession(result.user)
+  } else if (result.kind === 'unauthenticated') {
+    clearStoredAppwriteSession()
   }
+  return result
+}
 
-  return initialSessionBootstrapPromise
+/** Dédoublonne la vérification initiale (double montage StrictMode) ; `refresh` relance. */
+function resolveInitialAppwriteSession(refresh = false): Promise<SessionProbeResult> {
+  if (refresh || !initialSessionProbePromise) {
+    initialSessionProbePromise = probeAppwriteSession()
+  }
+  return initialSessionProbePromise
 }
 
 function App() {
   const { t } = useAppI18n()
-  const isPasswordResetUrl = typeof window !== 'undefined' &&
-    new URLSearchParams(window.location.search).has('userId') &&
-    new URLSearchParams(window.location.search).has('secret')
+  const isPasswordResetUrl = isPasswordResetLocation()
 
   const [session, setSession] = useState<{ user: { id: string; email?: string } } | null>(() => {
     if (isPasswordResetUrl) return null
     return readStoredAppwriteSession()
   })
-  const [authStatus, setAuthStatus] = useState<BootstrapStatus>('loading')
+  // Avec un snapshot local, on rend tout de suite (validation en arrière-plan) ;
+  // sans snapshot, on attend Appwrite au plus SESSION_PROBE_TIMEOUT_MS.
+  const [authStatus, setAuthStatus] = useState<AuthStatus>(() => {
+    if (isPasswordResetUrl) return 'ready'
+    return hasStoredAppwriteSession() ? 'ready' : 'loading'
+  })
+  const [authAttempt, setAuthAttempt] = useState(0)
   const [subscriptionStatus, setSubscriptionStatus] = useState<BootstrapStatus>(() => {
     if (isPasswordResetUrl) return 'ready'
     const storedSession = readStoredAppwriteSession()
@@ -180,30 +218,38 @@ function App() {
   }, [])
 
   useEffect(() => {
+    // Lien de réinitialisation de mot de passe : écran de connexion, pas de vérification.
+    if (isPasswordResetLocation()) return
+
     let cancelled = false
+    const hadStoredSession = hasStoredAppwriteSession()
 
-    const resolveSession = async () => {
-      try {
-        if (isPasswordResetUrl) {
-          if (!cancelled) setSession(null)
-          return
-        }
-        const nextSession = await resolveInitialAppwriteSession()
-        if (!cancelled) setSession(nextSession)
-      } catch (error) {
-        console.error('[app] Failed to resolve auth session during bootstrap', error)
-        if (!cancelled && !hasStoredAppwriteSession()) setSession(null)
-      } finally {
-        if (!cancelled) setAuthStatus('ready')
+    void resolveInitialAppwriteSession(authAttempt > 0).then((result) => {
+      if (cancelled) return
+
+      if (result.kind === 'authenticated') {
+        setSession({ user: result.user })
+        setAuthStatus('ready')
+        return
       }
-    }
 
-    void resolveSession()
+      if (result.kind === 'unauthenticated') {
+        // 401 confirmé : pas (ou plus) de session → écran de connexion.
+        setSession(null)
+        setAuthStatus('ready')
+        return
+      }
+
+      console.warn('[app] Appwrite unreachable during session bootstrap', result.reason, result.error)
+      // Session locale connue : on garde l'utilisateur dans l'app (usage hors ligne).
+      // Sinon : écran « Réessayer » plutôt qu'un chargement infini ou un renvoi au login.
+      setAuthStatus(hadStoredSession ? 'ready' : 'unreachable')
+    })
 
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [authAttempt])
 
   // Check subscription status after session is available
   useEffect(() => {
@@ -305,6 +351,17 @@ function App() {
 
   if (isMobile) {
     return <MobileBlockScreen landingUrl={landingUrl} />
+  }
+
+  if (authStatus === 'unreachable') {
+    return (
+      <ServerUnreachableScreen
+        onRetry={() => {
+          setAuthStatus('loading')
+          setAuthAttempt((attempt) => attempt + 1)
+        }}
+      />
+    )
   }
 
   if (authStatus === 'loading' || (session && subscriptionStatus === 'loading')) {
