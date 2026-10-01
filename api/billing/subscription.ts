@@ -12,6 +12,7 @@ import {
 import { isBillingPlanId } from '../_lib/config.js';
 import { readJsonBody, sendMethodNotAllowed } from '../_lib/http.js';
 import { requireAuthenticatedUser } from '../_lib/appwrite.js';
+import { sendSafeError } from '../_lib/errors.js';
 
 type SubscriptionActionRequestBody = {
   action?: 'subscribe' | 'change' | 'cancel' | 'resume' | 'sync';
@@ -81,9 +82,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
     return res.status(400).json({ error: 'Unsupported billing action.' });
   } catch (error) {
-    console.error('[billing/subscription] Error:', error);
-    const message = error instanceof Error ? error.message : 'Unable to update the subscription';
-    const status = message.includes('Missing Stripe price ID') ? 503 : 500;
-    return res.status(status).json({ error: message });
+    // Price ID manquant → PublicError 503 levée par requireConfiguredPriceId.
+    return sendSafeError(
+      res,
+      error,
+      'Unable to update the subscription',
+      'billing/subscription',
+    );
   }
 }

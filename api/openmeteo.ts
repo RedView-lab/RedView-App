@@ -89,16 +89,29 @@ export default async function handler(
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Vercel gives us req.url like "/api/openmeteo/v1/forecast?lat=..."
-  const rawUrl = req.url ?? '';
-  const pathAndQuery = rawUrl.replace(/^\/api\/openmeteo/, '') || '/';
-
-  // Only forward known Open-Meteo paths
-  const isForecast = pathAndQuery.startsWith('/v1/forecast');
-  const isClimate = pathAndQuery.startsWith('/v1/climate');
-  if (!isForecast && !isClimate) {
+  // req.url ressemble à "/api/openmeteo/v1/forecast?lat=...". On le parse
+  // proprement et on n'accepte QUE les chemins exacts connus (pas de
+  // préfixe, pas de "..", pas d'encodage exotique) : la cible amont est
+  // reconstruite à partir d'une constante + la query string.
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(req.url ?? '/', 'http://localhost');
+  } catch {
     return res.status(404).json({ error: 'Unknown Open-Meteo path' });
   }
+  const subPath = parsedUrl.pathname.replace(/^\/api\/openmeteo(?=\/|$)/, '').replace(/\/$/, '');
+  const ALLOWED_PATHS: Record<string, '/v1/forecast' | '/v1/climate'> = {
+    '/v1/forecast': '/v1/forecast',
+    '/v1/climate': '/v1/climate',
+  };
+  const exactPath = Object.prototype.hasOwnProperty.call(ALLOWED_PATHS, subPath)
+    ? ALLOWED_PATHS[subPath]
+    : null;
+  if (!exactPath) {
+    return res.status(404).json({ error: 'Unknown Open-Meteo path' });
+  }
+  const isClimate = exactPath === '/v1/climate';
+  const pathAndQuery = `${exactPath}${parsedUrl.search}`;
 
   let target: string;
   let source: WeatherSource;
@@ -162,7 +175,7 @@ export default async function handler(
     );
     return res.send(upstreamPayload.body);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return res.status(502).json({ error: 'Upstream fetch failed', detail: msg });
+    console.error('[openmeteo-proxy] upstream fetch failed:', err);
+    return res.status(502).json({ error: 'Upstream fetch failed' });
   }
 }

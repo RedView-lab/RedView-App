@@ -1,4 +1,5 @@
 import { getStripeServer } from '../stripe.js';
+import { PublicError } from '../errors.js';
 import { buildBillingOverview } from './overview.js';
 import { getCurrentManagedStripeSubscription } from './subscriptions.js';
 import { getOrCreateStripeCustomer, getStripeCustomerId } from './customers.js';
@@ -30,7 +31,7 @@ export async function createPaymentMethodSetupIntent(
 export async function applySetupIntentPaymentMethod(userId: string, setupIntentId: string) {
   const stripeCustomerId = await getStripeCustomerId(userId);
   if (!stripeCustomerId) {
-    throw new Error('No Stripe customer found for this account.');
+    throw new PublicError('No Stripe customer found for this account.', 404);
   }
 
   const setupIntent = (await getStripeServer().setupIntents.retrieve(setupIntentId, {
@@ -41,7 +42,7 @@ export async function applySetupIntentPaymentMethod(userId: string, setupIntentI
     typeof setupIntent.customer === 'string' ? setupIntent.customer : setupIntent.customer?.id;
 
   if (setupIntentCustomer !== stripeCustomerId) {
-    throw new Error('This setup intent does not belong to the current user.');
+    throw new PublicError('This setup intent does not belong to the current user.', 403);
   }
 
   const paymentMethod = setupIntent.payment_method;
@@ -71,7 +72,7 @@ export async function applySetupIntentPaymentMethod(userId: string, setupIntentI
 export async function setDefaultPaymentMethod(userId: string, paymentMethodId: string) {
   const stripeCustomerId = await getStripeCustomerId(userId);
   if (!stripeCustomerId) {
-    throw new Error('No Stripe customer found for this account.');
+    throw new PublicError('No Stripe customer found for this account.', 404);
   }
 
   const paymentMethod = await getStripeServer().paymentMethods.retrieve(paymentMethodId);
@@ -79,11 +80,11 @@ export async function setDefaultPaymentMethod(userId: string, paymentMethodId: s
     typeof paymentMethod.customer === 'string' ? paymentMethod.customer : paymentMethod.customer?.id ?? null;
 
   if (paymentMethodCustomer !== stripeCustomerId) {
-    throw new Error('This payment method does not belong to the current user.');
+    throw new PublicError('This payment method does not belong to the current user.', 403);
   }
 
   if (paymentMethod.type !== 'card') {
-    throw new Error('Only card payment methods can be set as default.');
+    throw new PublicError('Only card payment methods can be set as default.', 400);
   }
 
   await getStripeServer().customers.update(stripeCustomerId, {

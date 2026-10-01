@@ -7,6 +7,7 @@ import {
 } from '../_lib/billing.js';
 import { readJsonBody, sendMethodNotAllowed } from '../_lib/http.js';
 import { requireAuthenticatedUser } from '../_lib/appwrite.js';
+import { sendSafeError } from '../_lib/errors.js';
 
 type PaymentMethodRequestBody = {
   setupIntentId?: string;
@@ -39,8 +40,11 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const overview = await applySetupIntentPaymentMethod(user.id, body.setupIntentId);
     return res.status(200).json(overview);
   } catch (error) {
-    console.error('[billing/payment-method] Error:', error);
-    const message = error instanceof Error ? error.message : 'Unable to update the payment method';
-    return res.status(500).json({ error: message });
+    return sendSafeError(
+      res,
+      error,
+      'Unable to update the payment method',
+      'billing/payment-method',
+    );
   }
 }

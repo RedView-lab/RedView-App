@@ -1,11 +1,14 @@
 import type { ApiRequest } from './types.js';
+import { PublicError } from './errors.js';
 
 export type BillingPlanId = 'founder' | 'patron';
 
 export function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`);
+    // Le nom de la variable reste côté serveur (logs), jamais renvoyé au client.
+    console.error(`[config] Missing required environment variable: ${name}`);
+    throw new PublicError('Service temporarily unavailable.', 503);
   }
   return value;
 }
@@ -27,7 +30,8 @@ export function getConfiguredPriceId(planId: BillingPlanId): string | null {
 export function requireConfiguredPriceId(planId: BillingPlanId): string {
   const priceId = getConfiguredPriceId(planId);
   if (!priceId) {
-    throw new Error(`Missing Stripe price ID for plan ${planId}`);
+    console.error(`[config] Missing Stripe price ID for plan ${planId}`);
+    throw new PublicError('This plan is temporarily unavailable.', 503);
   }
   return priceId;
 }

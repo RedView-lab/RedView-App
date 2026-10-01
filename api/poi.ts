@@ -27,7 +27,7 @@
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
 
 const REQUEST_TIMEOUT_MS = 28_000; // Vercel hobby cap = 30 s
-const MAX_BODY_BYTES = 256_000;
+const MAX_BODY_BYTES = 512_000; // aligné sur bodyLimit du poi-server (512 Ko)
 
 const ALLOWED_BBOX_PARAMS = new Set([
   'categories', 'south', 'west', 'north', 'east', 'limit', 'level', 'per_cell',
@@ -45,7 +45,11 @@ export default async function handler(
   const upstream = (process.env.POI_UPSTREAM ?? '').trim() || 'http://localhost:17778';
   const base = upstream.replace(/\/+$/, '');
 
-  const op = (req.query.op as string | undefined)?.toLowerCase();
+  const rawOp = req.query.op;
+  if (rawOp !== undefined && typeof rawOp !== 'string') {
+    return res.status(400).json({ error: 'invalid op (expected a single string)' });
+  }
+  const op = rawOp?.toLowerCase();
 
   if (req.method === 'GET' && op === 'bbox') {
     return handleBbox(req, res, base);
@@ -105,10 +109,24 @@ async function handleCorridor(
   res: ApiResponse,
   base: string,
 ) {
-  const body = await readBody(req);
-  if (body.length > MAX_BODY_BYTES) {
+  const rawBody = await readBody(req);
+  if (rawBody.length > MAX_BODY_BYTES) {
     return res.status(413).json({ error: `body too large (>${MAX_BODY_BYTES})` });
   }
+
+  let parsedBody: unknown;
+  try {
+    parsedBody = typeof req.body === 'object' && req.body !== null ? req.body : JSON.parse(rawBody);
+  } catch {
+    return res.status(400).json({ error: 'invalid JSON body' });
+  }
+  const corridor = validateCorridorBody(parsedBody);
+  if (!corridor.ok) {
+    return res.status(400).json({ error: corridor.error });
+  }
+  // Ré-sérialisation d'un objet propre : aucun champ client arbitraire
+  // n'atteint le serveur POI.
+  const body = JSON.stringify(corridor.value);
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
@@ -159,10 +177,96 @@ async function forwardSimple(url: string, res: ApiResponse, cacheControl: string
   } catch (err) {
     clearTimeout(timer);
     const isAbort = (err as { name?: string } | undefined)?.name === 'AbortError';
+    if (!isAbort) console.warn('[api/poi] forwardSimple upstream error:', err);
     return res.status(502).json({
-      error: isAbort ? 'POI upstream timeout' : `POI upstream error: ${(err as Error).message}`,
+      error: isAbort ? 'POI upstream timeout' : 'POI upstream error',
     });
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Validation du corps `corridor`                                       */
+/* ------------------------------------------------------------------ */
+
+interface CorridorBody {
+  points: [number, number][];
+  radiusM: number;
+  categories: string[];
+}
+
+const CORRIDOR_MIN_POINTS = 2;
+const CORRIDOR_MAX_POINTS = 10_000;
+const CORRIDOR_MIN_RADIUS_M = 1;
+const CORRIDOR_MAX_RADIUS_M = 10_000;
+const CORRIDOR_MAX_CATEGORIES = 64;
+const CORRIDOR_MAX_CATEGORY_CHARS = 64;
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function validateCorridorBody(
+  input: unknown,
+): { ok: true; value: CorridorBody } | { ok: false; error: string } {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return { ok: false, error: 'body must be a JSON object' };
+  }
+  const raw = input as { points?: unknown; radiusM?: unknown; categories?: unknown };
+
+  if (
+    !Array.isArray(raw.points) ||
+    raw.points.length < CORRIDOR_MIN_POINTS ||
+    raw.points.length > CORRIDOR_MAX_POINTS
+  ) {
+    return {
+      ok: false,
+      error: `points must be an array of ${CORRIDOR_MIN_POINTS}..${CORRIDOR_MAX_POINTS} [lat, lon] pairs`,
+    };
+  }
+  const points: [number, number][] = [];
+  for (const point of raw.points) {
+    if (!Array.isArray(point) || point.length !== 2) {
+      return { ok: false, error: 'each point must be a [lat, lon] pair' };
+    }
+    const [lat, lon] = point as unknown[];
+    if (
+      !isFiniteNumber(lat) || !isFiniteNumber(lon) ||
+      lat < -90 || lat > 90 || lon < -180 || lon > 180
+    ) {
+      return { ok: false, error: 'each point must be a finite [lat, lon] within range' };
+    }
+    points.push([lat, lon]);
+  }
+
+  if (
+    !isFiniteNumber(raw.radiusM) ||
+    raw.radiusM < CORRIDOR_MIN_RADIUS_M ||
+    raw.radiusM > CORRIDOR_MAX_RADIUS_M
+  ) {
+    return {
+      ok: false,
+      error: `radiusM must be a finite number in [${CORRIDOR_MIN_RADIUS_M}, ${CORRIDOR_MAX_RADIUS_M}]`,
+    };
+  }
+
+  if (!Array.isArray(raw.categories) || raw.categories.length > CORRIDOR_MAX_CATEGORIES) {
+    return {
+      ok: false,
+      error: `categories must be an array of at most ${CORRIDOR_MAX_CATEGORIES} strings`,
+    };
+  }
+  const categories: string[] = [];
+  for (const category of raw.categories) {
+    if (typeof category !== 'string' || category.length > CORRIDOR_MAX_CATEGORY_CHARS) {
+      return {
+        ok: false,
+        error: `each category must be a string of at most ${CORRIDOR_MAX_CATEGORY_CHARS} chars`,
+      };
+    }
+    categories.push(category);
+  }
+
+  return { ok: true, value: { points, radiusM: raw.radiusM, categories } };
 }
 
 async function readBody(req: ApiRequest): Promise<string> {

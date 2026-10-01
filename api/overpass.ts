@@ -90,10 +90,12 @@ export default async function handler(
       continue;
     }
     if (!upstream.ok) {
+      // Ne pas relayer le corps amont (HTML/texte arbitraire) au client.
       const text = await upstream.text().catch(() => '');
+      console.warn(`[overpass] ${url} HTTP ${upstream.status}:`, text.slice(0, 300));
       return res
-        .status(upstream.status)
-        .send(text || `Overpass HTTP ${upstream.status}`);
+        .status(upstream.status >= 500 ? 502 : upstream.status)
+        .json({ error: 'Overpass upstream error' });
     }
 
     const text = await upstream.text();
@@ -106,9 +108,9 @@ export default async function handler(
     return res.status(200).send(text);
   }
 
+  console.warn('[overpass] All mirrors failed, last error:', lastErr.slice(0, 400));
   return res.status(502).json({
     error: 'All Overpass mirrors failed',
-    detail: lastErr.slice(0, 400),
   });
 }
 

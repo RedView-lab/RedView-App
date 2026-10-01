@@ -8,6 +8,7 @@ import {
   getAppwriteDatabases,
 } from '../appwrite.js';
 import { getStripeServer } from '../stripe.js';
+import { PublicError } from '../errors.js';
 import {
   getOrCreateStripeCustomer,
   getStripeCustomerId,
@@ -19,6 +20,9 @@ import type {
   SubscriptionSnapshot,
 } from './types.js';
 import { MANAGED_SUBSCRIPTION_STATUSES } from './types.js';
+
+/** Plafond du montant libre (10 000 €) — évite les montants absurdes/rejetés par Stripe. */
+const MAX_CUSTOM_AMOUNT_CENTS = 10_000 * 100;
 
 function toSnapshotFromStoredSubscription(
   row: Pick<
@@ -199,17 +203,25 @@ export async function createManagedSubscription(
     }
   }
 
-  let itemsPayload: Stripe.SubscriptionCreateParams.Item[];
+  let itemsPayload: Stripe.SubscriptionCreateParams.Item[] = [{ price: defaultPriceId }];
 
-  if (customAmount && Number.isFinite(customAmount) && customAmount > 0) {
-    const minAmount = planId === 'founder' ? 5 : 15;
-    const finalAmount = Math.max(minAmount, Math.round(customAmount));
-    const defaultAmount = planId === 'founder' ? 5 : 15;
+  // Flux « payez ce que vous voulez ≥ minimum » : le montant client ne peut
+  // qu'AUGMENTER le prix. Le plancher est le max entre le minimum produit
+  // (5 € / 15 €) et le prix Stripe configuré pour le plan ; devise et
+  // récurrence sont reprises du prix configuré, jamais du client.
+  if (
+    typeof customAmount === 'number' &&
+    Number.isFinite(customAmount) &&
+    customAmount > 0
+  ) {
+    const defaultPrice = await getStripeServer().prices.retrieve(defaultPriceId);
+    const configuredCents = defaultPrice.unit_amount ?? 0;
+    const productFloorCents = (planId === 'founder' ? 5 : 15) * 100;
+    const minCents = Math.max(productFloorCents, configuredCents);
+    const requestedCents = Math.round(customAmount) * 100;
+    const finalCents = Math.min(MAX_CUSTOM_AMOUNT_CENTS, Math.max(minCents, requestedCents));
 
-    if (finalAmount === defaultAmount) {
-      itemsPayload = [{ price: defaultPriceId }];
-    } else {
-      const defaultPrice = await getStripeServer().prices.retrieve(defaultPriceId);
+    if (finalCents > configuredCents && defaultPrice.recurring) {
       const productId =
         typeof defaultPrice.product === 'string'
           ? defaultPrice.product
@@ -218,16 +230,17 @@ export async function createManagedSubscription(
       itemsPayload = [
         {
           price_data: {
-            currency: 'eur',
+            currency: defaultPrice.currency,
             product: productId,
-            unit_amount: finalAmount * 100,
-            recurring: { interval: 'year' },
+            unit_amount: finalCents,
+            recurring: {
+              interval: defaultPrice.recurring.interval,
+              interval_count: defaultPrice.recurring.interval_count,
+            },
           },
         },
       ];
     }
-  } else {
-    itemsPayload = [{ price: defaultPriceId }];
   }
 
   const isLifetimePass = planId === 'founder' || planId === 'patron';
@@ -263,7 +276,7 @@ export async function changeManagedSubscriptionPlan(
   ]);
 
   if (!currentSubscription) {
-    throw new Error('No managed subscription found for this account.');
+    throw new PublicError('No managed subscription found for this account.', 404);
   }
 
   const currentItem = currentSubscription.items.data[0];
@@ -308,7 +321,7 @@ export async function setManagedSubscriptionCancellation(
 ): Promise<SubscriptionActionResult> {
   const currentSubscription = await getCurrentManagedStripeSubscription(userId);
   if (!currentSubscription) {
-    throw new Error('No managed subscription found for this account.');
+    throw new PublicError('No managed subscription found for this account.', 404);
   }
 
   const updatedSubscription = await getStripeServer().subscriptions.update(currentSubscription.id, {
@@ -325,7 +338,7 @@ export async function syncManagedSubscription(
 ): Promise<SubscriptionActionResult> {
   const expectedStripeCustomerId = await getStripeCustomerId(userId);
   if (!expectedStripeCustomerId) {
-    throw new Error('No Stripe customer found for this account.');
+    throw new PublicError('No Stripe customer found for this account.', 404);
   }
 
   const subscription = await getStripeServer().subscriptions.retrieve(subscriptionId, {
@@ -333,7 +346,7 @@ export async function syncManagedSubscription(
   });
 
   if (getStripeCustomerIdFromSubscription(subscription) !== expectedStripeCustomerId) {
-    throw new Error('This Stripe subscription does not belong to the current user.');
+    throw new PublicError('This Stripe subscription does not belong to the current user.', 403);
   }
 
   await upsertSubscription(subscription, userId);

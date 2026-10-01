@@ -1,7 +1,21 @@
 import type { ApiRequest, ApiResponse } from '../_lib/types.js';
 import { Query } from 'node-appwrite';
 import { getAppwriteUsers } from '../_lib/appwrite.js';
-import { requestVerificationCode } from '../_lib/verificationStore.js';
+import { sendSafeError } from '../_lib/errors.js';
+import { sendAccountExistsEmail } from '../_lib/mailer.js';
+import {
+  consumeVerificationRequestQuota,
+  normalizeVerificationEmail,
+  requestVerificationCode,
+} from '../_lib/verificationStore.js';
+
+const MAX_EMAIL_LENGTH = 254;
+const MAX_NAME_LENGTH = 100;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Réponse identique que l'adresse soit libre ou déjà prise (anti-énumération).
+const NEUTRAL_SUCCESS_MESSAGE =
+  'Si l’adresse est valide, un code de vérification à 6 chiffres a été envoyé.';
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== 'POST') {
@@ -9,37 +23,46 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   }
 
   const { email, name } = req.body || {};
-  const trimmedEmail = typeof email === 'string' ? email.trim() : '';
+  const normalizedEmail = typeof email === 'string' ? normalizeVerificationEmail(email) : '';
 
-  if (!trimmedEmail || !trimmedEmail.includes('@')) {
+  if (
+    !normalizedEmail ||
+    normalizedEmail.length > MAX_EMAIL_LENGTH ||
+    !EMAIL_REGEX.test(normalizedEmail)
+  ) {
     return res.status(400).json({ error: 'Une adresse e-mail valide est requise.' });
   }
 
+  const cleanName =
+    typeof name === 'string' && name.trim() ? name.trim().slice(0, MAX_NAME_LENGTH) : undefined;
+
   try {
+    // 0. Quotas par e-mail (verrou, cooldown, 5 demandes / heure) — appliqués
+    //    aux deux chemins pour qu'ils restent indiscernables.
+    consumeVerificationRequestQuota(normalizedEmail);
+
     // 1. Check if user already exists in Appwrite
     const users = getAppwriteUsers();
-    const existing = await users.list([Query.equal('email', trimmedEmail)]);
-    if (existing.total > 0) {
-      return res.status(409).json({
-        error: 'Un compte existe déjà avec cette adresse e-mail. Veuillez vous connecter.',
-      });
-    }
+    const existing = await users.list([Query.equal('email', normalizedEmail)]);
 
-    // 2. Generate and dispatch verification code
-    const result = await requestVerificationCode(trimmedEmail, name);
+    if (existing.total > 0) {
+      // Pas de 409 : on prévient le propriétaire de la boîte par e-mail.
+      await sendAccountExistsEmail({ to: normalizedEmail, name: cleanName });
+    } else {
+      // 2. Generate and dispatch verification code
+      await requestVerificationCode(normalizedEmail, cleanName);
+    }
 
     return res.status(200).json({
       success: true,
-      message: 'Un code de vérification à 4 chiffres a été envoyé par e-mail.',
+      message: NEUTRAL_SUCCESS_MESSAGE,
     });
-  } catch (error: any) {
-    console.error('[send-verification-code] Error:', error);
-    const userFacingError =
-      error?.message && !error.message.includes('API') && !error.message.includes('connect')
-        ? error.message
-        : 'Impossible d’envoyer le code de vérification.';
-    return res.status(500).json({
-      error: userFacingError,
-    });
+  } catch (error) {
+    return sendSafeError(
+      res,
+      error,
+      'Impossible d’envoyer le code de vérification.',
+      'send-verification-code',
+    );
   }
 }

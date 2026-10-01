@@ -55,10 +55,10 @@ async function fetchWithApikey(url: string, accept: string, asText: boolean) {
       signal: ctrl.signal,
     });
     if (!res.ok) {
+      // Corps amont logué côté serveur uniquement, jamais propagé au client.
       const body = await res.text().catch(() => '');
-      throw new Error(
-        `Météo-France HTTP ${res.status}: ${body.slice(0, 300)}`,
-      );
+      console.warn(`[meteofrance] upstream HTTP ${res.status}:`, body.slice(0, 300));
+      throw new Error(`Météo-France HTTP ${res.status}`);
     }
     return asText ? await res.text() : new Uint8Array(await res.arrayBuffer());
   } finally {
@@ -282,12 +282,57 @@ function parseGribToGrid(buf: Uint8Array, coverageId: string): SnowGridJson {
   };
 }
 
+// ────────────────────────────── Cache LRU ──────────────────────────────
+
+const MAX_BBOX_SPAN_DEG = 15;
+const CACHE_MAX_ENTRIES = 64;
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 min
+
+interface CachedGrid {
+  grid: SnowGridJson;
+  expiresAt: number;
+}
+
+// Map = ordre d'insertion → on ré-insère à chaque hit pour un vrai LRU.
+const gridCache = new Map<string, CachedGrid>();
+
+function getCachedGrid(key: string): SnowGridJson | null {
+  const hit = gridCache.get(key);
+  if (!hit) return null;
+  if (Date.now() > hit.expiresAt) {
+    gridCache.delete(key);
+    return null;
+  }
+  gridCache.delete(key);
+  gridCache.set(key, hit);
+  return hit.grid;
+}
+
+function setCachedGrid(key: string, grid: SnowGridJson) {
+  gridCache.delete(key);
+  while (gridCache.size >= CACHE_MAX_ENTRIES) {
+    const oldestKey = gridCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    gridCache.delete(oldestKey);
+  }
+  gridCache.set(key, { grid, expiresAt: Date.now() + CACHE_TTL_MS });
+}
+
 // ────────────────────────────── Handler ──────────────────────────────
+
+class BadRequestError extends Error {}
 
 function parseFloatStrict(v: unknown, name: string): number {
   const n = typeof v === 'string' ? parseFloat(v) : NaN;
-  if (!Number.isFinite(n)) throw new Error(`Missing/invalid query param: ${name}`);
+  if (!Number.isFinite(n)) throw new BadRequestError(`Missing/invalid query param: ${name}`);
   return n;
+}
+
+/** Arrondi « vers l'extérieur » au centième de degré (la bbox ne rétrécit jamais). */
+function snapOutward(value: number, direction: 'down' | 'up'): number {
+  const scaled = value * 100;
+  const snapped = direction === 'down' ? Math.floor(scaled + 1e-9) : Math.ceil(scaled - 1e-9);
+  return snapped / 100;
 }
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
@@ -300,16 +345,42 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  let lonMin: number;
+  let latMin: number;
+  let lonMax: number;
+  let latMax: number;
   try {
-    const lonMin = parseFloatStrict(req.query.lonMin, 'lonMin');
-    const latMin = parseFloatStrict(req.query.latMin, 'latMin');
-    const lonMax = parseFloatStrict(req.query.lonMax, 'lonMax');
-    const latMax = parseFloatStrict(req.query.latMax, 'latMax');
+    // bbox arrondie au centième (vers l'extérieur) : clé de cache stable et
+    // requête amont identique pour toutes les bbox voisines.
+    lonMin = snapOutward(parseFloatStrict(req.query.lonMin, 'lonMin'), 'down');
+    latMin = snapOutward(parseFloatStrict(req.query.latMin, 'latMin'), 'down');
+    lonMax = snapOutward(parseFloatStrict(req.query.lonMax, 'lonMax'), 'up');
+    latMax = snapOutward(parseFloatStrict(req.query.latMax, 'latMax'), 'up');
 
-    if (lonMax <= lonMin || latMax <= latMin) {
-      throw new Error('Invalid bbox: max must be > min');
+    if (latMin < -90 || latMax > 90 || lonMin < -180 || lonMax > 180) {
+      throw new BadRequestError('Invalid bbox: out of range');
     }
+    if (lonMax <= lonMin || latMax <= latMin) {
+      throw new BadRequestError('Invalid bbox: max must be > min');
+    }
+    if (lonMax - lonMin > MAX_BBOX_SPAN_DEG || latMax - latMin > MAX_BBOX_SPAN_DEG) {
+      throw new BadRequestError(`Invalid bbox: span must be ≤ ${MAX_BBOX_SPAN_DEG}°`);
+    }
+  } catch (err) {
+    const message = err instanceof BadRequestError ? err.message : 'Invalid bbox';
+    return res.status(400).json({ error: message });
+  }
 
+  const cacheKey = [lonMin, latMin, lonMax, latMax].map((v) => v.toFixed(2)).join(',');
+  const cachedGrid = getCachedGrid(cacheKey);
+  if (cachedGrid) {
+    res.setHeader('Cache-Control', 'public, max-age=900, stale-while-revalidate=1800');
+    res.setHeader('X-Snow-Source', 'meteofrance-wcs');
+    res.setHeader('X-Snow-Cache', 'HIT');
+    return res.status(200).json(cachedGrid);
+  }
+
+  try {
     const t0 = Date.now();
     const coverageId = await findSnowCoverage();
     const timeValue = await findFirstTimeStep(coverageId);
@@ -323,6 +394,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     );
     const grid = parseGribToGrid(gribBytes, coverageId);
     const elapsed = Date.now() - t0;
+    setCachedGrid(cacheKey, grid);
 
     console.log(
       `[meteofrance] ${coverageId} time=${timeValue} ` +
@@ -334,8 +406,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     res.setHeader('X-Snow-Source', 'meteofrance-wcs');
     return res.status(200).json(grid);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error('[meteofrance] failure:', msg);
-    return res.status(502).json({ error: 'Météo-France WCS fetch failed', detail: msg });
+    console.error('[meteofrance] failure:', err);
+    return res.status(502).json({ error: 'Météo-France WCS fetch failed' });
   }
 }

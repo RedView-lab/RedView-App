@@ -16,6 +16,24 @@ function getProjectId(): string {
   );
 }
 
+// Liste blanche EXACTE (plus de correspondance générique `*.redview.tech`) :
+// le lien de récupération Appwrite embarque userId + secret, il ne doit
+// pointer que vers l'app (window.location.origin côté client) ou la landing.
+const ALLOWED_REDIRECT_HOSTS = new Set(['app.redview.tech', 'redview.tech', 'www.redview.tech']);
+const DEV_REDIRECT_HOSTS = new Set(['localhost', '127.0.0.1']);
+
+function isAllowedRedirect(url: URL): boolean {
+  if (url.username || url.password) return false;
+  // Dev local (http ou https, port libre) uniquement hors production.
+  if (DEV_REDIRECT_HOSTS.has(url.hostname)) {
+    return (
+      process.env.NODE_ENV !== 'production' &&
+      (url.protocol === 'http:' || url.protocol === 'https:')
+    );
+  }
+  return url.protocol === 'https:' && url.port === '' && ALLOWED_REDIRECT_HOSTS.has(url.hostname);
+}
+
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
@@ -35,14 +53,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (typeof redirectUrl === 'string') {
     try {
       const parsed = new URL(redirectUrl);
-      const isAllowedHost =
-        parsed.hostname === 'app.redview.tech' ||
-        parsed.hostname === 'localhost' ||
-        parsed.hostname === '127.0.0.1' ||
-        parsed.hostname.endsWith('.redview.tech');
-
-      if (isAllowedHost) {
-        safeRedirectUrl = redirectUrl;
+      if (isAllowedRedirect(parsed)) {
+        safeRedirectUrl = parsed.toString();
       }
     } catch {
       // ignore invalid URLs and fallback to default

@@ -67,7 +67,7 @@ export async function sendVerificationEmail({
     }
     @media only screen and (max-width: 480px) {
       .email-card { padding: 28px 20px !important; }
-      .digit-box { width: 46px !important; height: 54px !important; font-size: 26px !important; }
+      .digit-box { width: 36px !important; height: 46px !important; line-height: 46px !important; font-size: 22px !important; }
     }
   </style>
 </head>
@@ -118,8 +118,8 @@ export async function sendVerificationEmail({
               <table role="presentation" border="0" cellspacing="0" cellpadding="0" align="center" style="margin: 0 auto 28px;">
                 <tr>
                   ${digits.map(d => `
-                    <td style="padding: 0 6px;">
-                      <div class="digit-box" style="width: 54px; height: 62px; line-height: 62px; background-color: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 12px; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 30px; font-weight: 700; color: #0f172a; text-align: center; display: block;">
+                    <td style="padding: 0 4px;">
+                      <div class="digit-box" style="width: 44px; height: 56px; line-height: 56px; background-color: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 12px; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 26px; font-weight: 700; color: #0f172a; text-align: center; display: block;">
                         ${d}
                       </div>
                     </td>
@@ -210,6 +210,159 @@ export async function sendVerificationEmail({
     return { sent: true };
   } catch (err) {
     console.error('[AUTH] Failed to send email via Resend:', err);
+    return { sent: false };
+  }
+}
+
+interface SendAccountExistsEmailOptions {
+  to: string;
+  name?: string;
+}
+
+/**
+ * Envoyé à la place du code quand une inscription est demandée pour une
+ * adresse déjà associée à un compte : l'API répond exactement comme pour un
+ * envoi de code (anti-énumération), seul le propriétaire de la boîte voit
+ * la différence.
+ */
+export async function sendAccountExistsEmail({
+  to,
+  name,
+}: SendAccountExistsEmailOptions): Promise<{ sent: boolean }> {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.RESEND_FROM || 'RedView <noreply@redview.tech>';
+  const appUrl = (process.env.APP_BASE_URL?.trim() || 'https://app.redview.tech').replace(/\/+$/, '');
+  const safeAppUrl = escapeHtml(`${appUrl}/`);
+
+  const maskedEmail = to.replace(/^(.)(.*)(@.*)$/, (_, first, middle, domain) => `${first}${'*'.repeat(Math.min(middle.length, 5))}${domain}`);
+  console.log(`[AUTH] 📧 Dispatching account-exists email to ${maskedEmail}`);
+
+  if (!apiKey) {
+    console.warn('[AUTH] RESEND_API_KEY is not configured.');
+    return { sent: false };
+  }
+
+  const cleanName = name && name.trim().length > 0 && !name.includes('@') ? escapeHtml(name.trim()) : '';
+  const greeting = cleanName ? `Bonjour ${cleanName},` : 'Bonjour,';
+  const subject = 'Vous avez déjà un compte RedView';
+  const text =
+    `${cleanName ? `Bonjour ${name?.trim()},` : 'Bonjour,'}\n\n` +
+    'Une inscription a été demandée avec cette adresse e-mail, mais un compte RedView existe déjà.\n' +
+    `Connectez-vous sur ${appUrl}/ ou, si vous avez oublié votre mot de passe, utilisez « Mot de passe oublié ».\n\n` +
+    "Si vous n'êtes pas à l'origine de cette demande, vous pouvez ignorer cet e-mail en toute sécurité.\n\n" +
+    '---\n' +
+    'Someone tried to sign up with this e-mail address, but a RedView account already exists. ' +
+    `Please log in at ${appUrl}/ or reset your password. If this wasn't you, you can safely ignore this e-mail.`;
+
+  const html = `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <title>${subject}</title>
+  <style>
+    :root { color-scheme: light dark; supported-color-schemes: light dark; }
+    body { margin: 0; padding: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+    @media (prefers-color-scheme: dark) {
+      .body-bg { background-color: #0b0c10 !important; }
+      .email-card { background-color: #12141c !important; border-color: #232736 !important; }
+      .text-title { color: #ffffff !important; }
+      .text-body { color: #94a3b8 !important; }
+      .text-brand { color: #ffffff !important; }
+      .text-muted { color: #64748b !important; }
+      .divider { border-color: #1e2230 !important; }
+    }
+    @media only screen and (max-width: 480px) {
+      .email-card { padding: 28px 20px !important; }
+    }
+  </style>
+</head>
+<body class="body-bg" style="margin: 0; padding: 0; background-color: #f4f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" class="body-bg" style="background-color: #f4f5f7; width: 100%; padding: 40px 16px;">
+    <tr>
+      <td align="center" valign="top">
+        <table role="presentation" class="email-card" border="0" cellspacing="0" cellpadding="0" style="max-width: 440px; width: 100%; background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); overflow: hidden;">
+          <tr>
+            <td style="padding: 40px 36px; text-align: center;">
+              <p class="text-brand" style="margin: 0 0 28px; font-size: 15px; font-weight: 800; letter-spacing: 2px; color: #0f172a; text-transform: uppercase;">
+                <span style="color: #e11d48;">&#9679;</span> REDVIEW
+              </p>
+              <h1 class="text-title" style="margin: 0 0 10px; font-size: 21px; font-weight: 600; color: #0f172a; letter-spacing: -0.02em; line-height: 28px;">
+                Vous avez déjà un compte
+              </h1>
+              <p class="text-body" style="margin: 0 0 24px; font-size: 14px; line-height: 22px; color: #475569;">
+                ${greeting}<br>
+                Une inscription a été demandée avec cette adresse e-mail, mais un compte RedView existe déjà.
+                Connectez-vous, ou utilisez « Mot de passe oublié » si vous ne vous souvenez plus de votre mot de passe.
+              </p>
+              <table role="presentation" border="0" cellspacing="0" cellpadding="0" align="center" style="margin: 0 auto 28px;">
+                <tr>
+                  <td style="border-radius: 10px; background-color: #e11d48;">
+                    <a href="${safeAppUrl}" style="display: inline-block; padding: 12px 22px; font-size: 14px; font-weight: 600; color: #ffffff; text-decoration: none;">Se connecter à RedView</a>
+                  </td>
+                </tr>
+              </table>
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 24px;">
+                <tr>
+                  <td class="divider" style="border-top: 1px solid #f1f5f9; height: 1px; line-height: 1px; font-size: 1px;">&nbsp;</td>
+                </tr>
+              </table>
+              <p class="text-muted" style="margin: 0 0 12px; font-size: 12px; line-height: 18px; color: #94a3b8;">
+                Si vous n'êtes pas à l'origine de cette demande, vous pouvez ignorer cet e-mail en toute sécurité.
+              </p>
+              <p class="text-muted" style="margin: 0 0 12px; font-size: 12px; line-height: 18px; color: #94a3b8;">
+                Someone tried to sign up with this e-mail address, but a RedView account already exists. Please log in or reset your password. If this wasn't you, you can safely ignore this e-mail.
+              </p>
+              <p class="text-muted" style="margin: 0; font-size: 11px; line-height: 16px; color: #cbd5e1;">
+                © RedView · Plateforme de cartographie 3D Haute Définition
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim();
+
+  const send = (sender: string) =>
+    fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ from: sender, to: [to], subject, text, html }),
+    });
+
+  try {
+    type ResendResult = { id?: string; message?: string };
+    let response = await send(from);
+    let data = (await response.json().catch(() => ({}))) as ResendResult;
+
+    if (!response.ok && from !== 'RedView <onboarding@resend.dev>') {
+      console.warn(`[AUTH] Resend sending from ${from} returned ${response.status} (${data?.message}). Testing fallback to onboarding@resend.dev...`);
+      const fallbackResponse = await send('RedView <onboarding@resend.dev>');
+      const fallbackData = (await fallbackResponse.json().catch(() => ({}))) as ResendResult;
+      if (fallbackResponse.ok) {
+        response = fallbackResponse;
+        data = fallbackData;
+      }
+    }
+
+    if (!response.ok) {
+      console.warn('[AUTH] Resend API response error (account-exists):', data);
+      return { sent: false };
+    }
+
+    console.log('[AUTH] ✅ Account-exists email sent via Resend, id:', data?.id);
+    return { sent: true };
+  } catch (err) {
+    console.error('[AUTH] Failed to send account-exists email via Resend:', err);
     return { sent: false };
   }
 }

@@ -19,6 +19,34 @@ type InvoiceWithPaymentIntent = Stripe.Invoice & {
   payment_intent?: string | Stripe.PaymentIntent | null;
 };
 
+/**
+ * Idempotence : LRU en mémoire des `event.id` traités avec succès. Stripe
+ * peut livrer un même évènement plusieurs fois ; un id n'est enregistré
+ * qu'APRÈS traitement réussi pour que les retries d'un échec soient rejoués.
+ * (Mémoire process uniquement : un redémarrage la vide, les handlers
+ * restent de toute façon idempotents via upsert.)
+ */
+const MAX_PROCESSED_EVENT_IDS = 1000;
+const processedEventIds = new Set<string>();
+
+function hasProcessedEvent(eventId: string): boolean {
+  if (!processedEventIds.has(eventId)) return false;
+  // Rafraîchit la position LRU
+  processedEventIds.delete(eventId);
+  processedEventIds.add(eventId);
+  return true;
+}
+
+function markEventProcessed(eventId: string) {
+  processedEventIds.delete(eventId);
+  processedEventIds.add(eventId);
+  while (processedEventIds.size > MAX_PROCESSED_EVENT_IDS) {
+    const oldest = processedEventIds.values().next().value;
+    if (oldest === undefined) break;
+    processedEventIds.delete(oldest);
+  }
+}
+
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const userId = session.metadata?.user_id;
   const subscriptionId = typeof session.subscription === 'string' ? session.subscription : null;
@@ -165,6 +193,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return res.status(400).json({ error: 'Webhook signature verification failed' });
   }
 
+  if (hasProcessedEvent(event.id)) {
+    return res.status(200).json({ received: true, duplicate: true });
+  }
+
   try {
     switch (event.type) {
       case 'checkout.session.completed':
@@ -187,8 +219,11 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         console.log(`[stripe/webhook] Unhandled event type: ${event.type}`);
     }
   } catch (error) {
-    console.error(`[stripe/webhook] Error handling ${event.type}:`, error);
+    console.error(`[stripe/webhook] Error handling ${event.type} (${event.id}):`, error);
+    // 500 → Stripe réessaiera la livraison (backoff exponentiel).
+    return res.status(500).json({ error: 'Webhook handler failed' });
   }
 
+  markEventProcessed(event.id);
   return res.status(200).json({ received: true });
 }

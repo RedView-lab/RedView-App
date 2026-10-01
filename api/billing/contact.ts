@@ -4,6 +4,7 @@ import type { BillingContactPreference } from '../_lib/billing.js';
 import { saveBillingContactPreference } from '../_lib/billing.js';
 import { sendMethodNotAllowed, readJsonBody } from '../_lib/http.js';
 import { requireAuthenticatedUser } from '../_lib/appwrite.js';
+import { PublicError, sendSafeError } from '../_lib/errors.js';
 
 function isValidPreference(value: BillingContactPreference): boolean {
   if (value.mode !== 'account' && value.mode !== 'alternative') {
@@ -36,9 +37,15 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const preference = await saveBillingContactPreference(user.id, body);
     return res.status(200).json({ contactPreference: preference });
   } catch (error) {
-    console.error('[billing/contact] Error:', error);
-    const message = error instanceof Error ? error.message : 'Unable to save billing contact';
-    const status = message.includes('migration') ? 409 : 500;
-    return res.status(status).json({ error: message });
+    // Schéma Appwrite pas encore migré (attribut manquant) → 409 explicite,
+    // sans relayer le message brut de l'erreur.
+    const rawMessage = error instanceof Error ? error.message : '';
+    const safeError = rawMessage.includes('migration')
+      ? new PublicError('Billing contact storage is not available yet.', 409)
+      : error;
+    if (safeError !== error) {
+      console.error('[billing/contact] Error:', error);
+    }
+    return sendSafeError(res, safeError, 'Unable to save billing contact', 'billing/contact');
   }
 }

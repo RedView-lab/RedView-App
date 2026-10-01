@@ -80,11 +80,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const upstream = await fetchWithTimeout(`${NOMINATIM_ENDPOINT}?${params.toString()}`);
     const body = Buffer.from(await upstream.arrayBuffer());
     if (!upstream.ok) {
-      const preview = previewText(body.toString('utf-8'));
-      return res.status(502).json({
-        error: 'Iconic geocoder upstream failed',
-        detail: preview || `HTTP ${upstream.status}`,
-      });
+      // Détail amont uniquement dans les logs serveur.
+      console.warn(
+        `[geocode-iconic] upstream HTTP ${upstream.status}:`,
+        previewText(body.toString('utf-8')),
+      );
+      return res.status(502).json({ error: 'Iconic geocoder upstream failed' });
     }
 
     res.status(200);
@@ -93,7 +94,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     res.setHeader('X-Geocoder-Source', 'nominatim');
     return res.send(body);
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    return res.status(502).json({ error: 'Iconic geocoder request failed', detail });
+    console.error('[geocode-iconic] request failed:', error);
+    return res.status(502).json({ error: 'Iconic geocoder request failed' });
   }
 }

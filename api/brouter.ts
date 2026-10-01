@@ -8,8 +8,10 @@
  *
  *   POST /api/brouter?upload=1
  *        body = full BRF profile text (UTF-8, ≤ 100 000 chars)
- *        → uploads a custom profile, returns { profileid: "custom_<id>" }.
- *        Use that id in subsequent GETs as `profile=custom_<id>`.
+ *        → uploads a custom profile, returns { profileid: "custom_<hash>" }.
+ *        The id is derived server-side from the profile content
+ *        (sha256, 16 hex chars); any client-supplied `?id=` is ignored.
+ *        Use the returned id in subsequent GETs as `profile=custom_<hash>`.
  *
  * Why a proxy?
  *   - Vercel apps run over HTTPS. Calling `http://<vps-ip>` from the
@@ -25,6 +27,7 @@
  *   # or
  *   BROUTER_UPSTREAM=http://<DROPLET_IP>:17777    (BRouter direct)
  */
+import crypto from 'node:crypto';
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
 
 const ALLOWED_PARAMS = new Set([
@@ -46,6 +49,15 @@ const ALLOWED_PARAMS = new Set([
 const ROUTE_TIMEOUT_MS = 55_000; // Vercel hobby cap is 60 s.
 const UPLOAD_TIMEOUT_MS = 15_000;
 const MAX_PROFILE_BYTES = 100_000;
+const MAX_ERROR_HEADER_CHARS = 200;
+
+/** Valeur d'en-tête sûre : ASCII imprimable uniquement, tronquée. */
+function sanitizeHeaderValue(value: string): string {
+  return value
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/[^\x20-\x7E]/g, '?')
+    .slice(0, MAX_ERROR_HEADER_CHARS);
+}
 
 export default async function handler(
   req: ApiRequest,
@@ -136,10 +148,11 @@ async function handleRouteQuery(
   } catch (err) {
     clearTimeout(timer);
     const isAbort = (err as { name?: string } | undefined)?.name === 'AbortError';
+    if (!isAbort) console.error('[brouter] upstream unreachable:', err);
     return res.status(isAbort ? 504 : 502).json({
       error: isAbort
         ? `BRouter upstream timeout after ${ROUTE_TIMEOUT_MS}ms`
-        : `BRouter upstream unreachable: ${(err as Error).message}`,
+        : 'BRouter upstream unreachable',
     });
   }
   clearTimeout(timer);
@@ -160,10 +173,7 @@ async function handleRouteQuery(
     // Surface upstream error text in a custom header too, in case the
     // body is consumed/filtered on the way back to the browser (some
     // CDNs strip plain-text 422 bodies). Truncate to keep headers small.
-    res.setHeader(
-      'x-brouter-upstream-error',
-      body.replace(/[\r\n]+/g, ' ').slice(0, 400),
-    );
+    res.setHeader('x-brouter-upstream-error', sanitizeHeaderValue(body));
   } else if (upstreamRes.status === 200) {
     if (ROUTE_CACHE.size >= MAX_ROUTE_CACHE) {
       const firstKey = ROUTE_CACHE.keys().next().value;
@@ -224,12 +234,12 @@ async function handleProfileUpload(
     profileText = `${profileText}\nassign pass1coefficient = 3.5\n`;
   }
 
-  // Optional ?id=custom_xxx → update existing profile in place.
-  const idParam = typeof req.query.id === 'string' ? req.query.id.trim() : '';
-  const sanitizedId = idParam.replace(/[^a-zA-Z0-9_\-]/g, '');
-  const url = sanitizedId
-    ? `${base}/brouter/profile/${encodeURIComponent(sanitizedId)}`
-    : `${base}/brouter/profile`;
+  // Id dérivé du contenu (et non plus fourni par le client) : un client ne
+  // peut plus écraser le profil d'un autre en devinant/réutilisant son id.
+  // Même contenu → même id (dédup naturelle côté BRouter). Le `?id=`
+  // éventuellement envoyé par le client est ignoré.
+  const profileId = `custom_${crypto.createHash('sha256').update(profileText, 'utf8').digest('hex').slice(0, 16)}`;
+  const url = `${base}/brouter/profile/${encodeURIComponent(profileId)}`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
@@ -248,20 +258,51 @@ async function handleProfileUpload(
   } catch (err) {
     clearTimeout(timer);
     const isAbort = (err as { name?: string } | undefined)?.name === 'AbortError';
+    if (!isAbort) console.error('[brouter] profile upload upstream unreachable:', err);
     return res.status(isAbort ? 504 : 502).json({
       error: isAbort
         ? `BRouter profile upload timeout after ${UPLOAD_TIMEOUT_MS}ms`
-        : `BRouter upstream unreachable: ${(err as Error).message}`,
+        : 'BRouter upstream unreachable',
     });
   }
   clearTimeout(timer);
 
   const text = await upstreamRes.text();
-  res.setHeader(
-    'Content-Type',
-    upstreamRes.headers.get('content-type') ?? 'application/json',
-  );
   // Never cache profile uploads.
   res.setHeader('Cache-Control', 'no-store');
-  return res.status(upstreamRes.status).send(text);
+
+  if (!upstreamRes.ok) {
+    console.warn(`[brouter] profile upload HTTP ${upstreamRes.status}:`, text.slice(0, 300));
+    return res
+      .status(upstreamRes.status >= 500 ? 502 : upstreamRes.status)
+      .json({ error: 'BRouter profile upload failed' });
+  }
+
+  // BRouter répond { profileid, error? } (error = message de compilation BRF,
+  // utile au client). On renvoie toujours l'id calculé côté serveur.
+  let upstreamJson: { profileid?: unknown; error?: unknown } = {};
+  try {
+    upstreamJson = JSON.parse(text) as { profileid?: unknown; error?: unknown };
+  } catch {
+    console.warn('[brouter] profile upload: non-JSON upstream response:', text.slice(0, 300));
+    return res.status(502).json({ error: 'BRouter profile upload failed' });
+  }
+  // BRouter réutilise l'id passé dans le chemin (`custom_<hash>` → <hash>.brf).
+  // Si une version amont l'ignorait, l'id qu'elle renvoie est le seul
+  // routable : on le relaie (validé) plutôt que de casser le routage.
+  let returnedId = profileId;
+  if (typeof upstreamJson.profileid === 'string' && upstreamJson.profileid !== profileId) {
+    console.warn(
+      `[brouter] profile upload: upstream id ${upstreamJson.profileid} differs from ${profileId}`,
+    );
+    if (/^custom_[A-Za-z0-9_-]{1,64}$/.test(upstreamJson.profileid)) {
+      returnedId = upstreamJson.profileid;
+    }
+  }
+
+  const payload: { profileid: string; error?: string } = { profileid: returnedId };
+  if (typeof upstreamJson.error === 'string' && upstreamJson.error) {
+    payload.error = upstreamJson.error;
+  }
+  return res.status(200).json(payload);
 }

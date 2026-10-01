@@ -7,15 +7,15 @@
  *   GET /api/weather/tiles/:variable/:hour.(webp|png)
  *   GET /api/weather/point?lat=...&lon=...
  *
- * Upstream env var:
- *   WEATHER_UPSTREAM=http://141.145.220.99/weather
+ * Upstream env var (obligatoire pour le relais VPS ; si absente, seul le
+ * fallback local `dist_weather/` est servi, sinon 503) :
+ *   WEATHER_UPSTREAM=http://<vps-ip>/weather
  */
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
 import fs from 'node:fs';
 import path from 'node:path';
 
 const TIMEOUT_MS = 15_000;
-const DEFAULT_VPS_UPSTREAM = process.env.WEATHER_UPSTREAM || 'http://141.145.220.99/weather';
 
 interface CacheEntry {
   body: Buffer;
@@ -43,6 +43,48 @@ function setCached(key: string, entry: CacheEntry) {
     if (oldestKey) memoryCache.delete(oldestKey);
   }
   memoryCache.set(key, entry);
+}
+
+/**
+ * SÉCURISÉ : Confinement strict du fallback local dans dist_weather
+ * (Anti-Path-Traversal). Retourne true si une réponse a été envoyée.
+ */
+function serveLocalFallback(subPath: string, res: ApiResponse): boolean {
+  const rawTargetName = subPath.split('?')[0].replace(/\0/g, '').trim();
+  const fallbackDir = path.resolve(process.cwd(), 'dist_weather');
+
+  // Rejeter immédiatement toute tentative de traversée ou chemin absolu
+  const isSuspicious = !rawTargetName ||
+    rawTargetName.includes('..') ||
+    path.isAbsolute(rawTargetName) ||
+    rawTargetName.startsWith('/') ||
+    rawTargetName.startsWith('\\');
+  if (isSuspicious) return false;
+
+  const localFallbackFile = path.resolve(fallbackDir, rawTargetName);
+  const isContained = localFallbackFile.startsWith(fallbackDir + path.sep);
+  if (!isContained || !fs.existsSync(localFallbackFile)) return false;
+
+  try {
+    const stat = fs.statSync(localFallbackFile);
+    if (!stat.isFile()) return false;
+    const content = fs.readFileSync(localFallbackFile);
+    const contentType =
+      rawTargetName.endsWith('.webp') ? 'image/webp' :
+      rawTargetName.endsWith('.png') ? 'image/png' :
+      'application/json; charset=utf-8';
+
+    res.status(200);
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('X-Weather-Source', 'local-fallback');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'public, max-age=60');
+    res.send(content);
+    return true;
+  } catch {
+    // Ignorer silencieusement si lecture impossible
+    return false;
+  }
 }
 
 async function fetchUpstream(target: string): Promise<{ response: Response; body: Buffer }> {
@@ -163,8 +205,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       res.setHeader('X-Weather-Source', 'radar-nowcast');
       return res.json(radarJson);
     } catch (radarErr) {
-      const msg = radarErr instanceof Error ? radarErr.message : String(radarErr);
-      return res.status(502).json({ error: 'Radar service unavailable', detail: msg });
+      console.warn('[weather-proxy] radar fetch failed:', radarErr);
+      return res.status(502).json({ error: 'Radar service unavailable' });
     }
   }
 
@@ -184,9 +226,13 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return res.send(cached.body);
   }
 
-  const upstreamBase = (process.env.WEATHER_UPSTREAM ?? DEFAULT_VPS_UPSTREAM).replace(/\/+$/, '');
+  // Plus de fallback codé en dur vers une IP : sans WEATHER_UPSTREAM on ne
+  // contacte aucun amont, on sert le fallback local s'il existe, sinon 503.
+  const upstreamBase = (process.env.WEATHER_UPSTREAM ?? '').trim().replace(/\/+$/, '');
   if (!upstreamBase) {
-    return res.status(503).json({ error: 'WEATHER_UPSTREAM environment variable is not configured' });
+    if (serveLocalFallback(subPath, res)) return;
+    console.warn('[weather-proxy] WEATHER_UPSTREAM is not configured');
+    return res.status(503).json({ error: 'Weather service temporarily unavailable' });
   }
   const targetUrl = `${upstreamBase}/${subPath}${parsedUrl.search}`;
 
@@ -224,43 +270,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
     return res.send(body);
   } catch (err) {
-    // SÉCURISÉ : Confinement strict du fallback local dans dist_weather (Anti-Path-Traversal)
-    const rawTargetName = subPath.split('?')[0].replace(/\0/g, '').trim();
-    const fallbackDir = path.resolve(process.cwd(), 'dist_weather');
-
-    // Rejeter immédiatement toute tentative de traversée ou chemin absolu
-    const isSuspicious = !rawTargetName ||
-      rawTargetName.includes('..') ||
-      path.isAbsolute(rawTargetName) ||
-      rawTargetName.startsWith('/') ||
-      rawTargetName.startsWith('\\');
-
-    if (!isSuspicious) {
-      const localFallbackFile = path.resolve(fallbackDir, rawTargetName);
-      const isContained = localFallbackFile.startsWith(fallbackDir + path.sep);
-
-      if (isContained && fs.existsSync(localFallbackFile)) {
-        try {
-          const stat = fs.statSync(localFallbackFile);
-          if (stat.isFile()) {
-            const content = fs.readFileSync(localFallbackFile);
-            const contentType =
-              rawTargetName.endsWith('.webp') ? 'image/webp' :
-              rawTargetName.endsWith('.png') ? 'image/png' :
-              'application/json; charset=utf-8';
-
-            res.status(200);
-            res.setHeader('Content-Type', contentType);
-            res.setHeader('X-Weather-Source', 'local-fallback');
-            res.setHeader('Access-Control-Allow-Origin', '*');
-            res.setHeader('Cache-Control', 'public, max-age=60');
-            return res.send(content);
-          }
-        } catch {
-          // Ignorer silencieusement si lecture impossible
-        }
-      }
-    }
+    if (serveLocalFallback(subPath, res)) return;
 
     console.warn(`[weather-proxy] upstream fetch failed:`, err instanceof Error ? err.message : err);
     return res.status(502).json({
