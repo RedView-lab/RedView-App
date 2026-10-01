@@ -92,7 +92,36 @@ interface CachedRoute {
   timestamp: number;
 }
 const ROUTE_CACHE = new Map<string, CachedRoute>();
-const MAX_ROUTE_CACHE = 512;
+/**
+ * Borne en octets (et non en nombre d'entrées) : un tracé multi-jours pèse
+ * plusieurs Mo, 512 entrées pouvaient atteindre des Go en mémoire.
+ */
+const MAX_ROUTE_CACHE_BYTES = 64 * 1024 * 1024;
+let routeCacheBytes = 0;
+
+function cachedRouteBytes(key: string, entry: CachedRoute): number {
+  return (key.length + entry.body.length) * 2;
+}
+
+function deleteCachedRoute(key: string) {
+  const entry = ROUTE_CACHE.get(key);
+  if (!entry) return;
+  routeCacheBytes -= cachedRouteBytes(key, entry);
+  ROUTE_CACHE.delete(key);
+}
+
+function rememberRoute(key: string, entry: CachedRoute) {
+  const bytes = cachedRouteBytes(key, entry);
+  if (bytes > MAX_ROUTE_CACHE_BYTES / 4) return;
+  deleteCachedRoute(key);
+  while (routeCacheBytes + bytes > MAX_ROUTE_CACHE_BYTES && ROUTE_CACHE.size > 0) {
+    const oldestKey = ROUTE_CACHE.keys().next().value;
+    if (oldestKey === undefined) break;
+    deleteCachedRoute(oldestKey);
+  }
+  ROUTE_CACHE.set(key, entry);
+  routeCacheBytes += bytes;
+}
 const ROUTE_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 async function handleRouteQuery(
@@ -137,16 +166,29 @@ async function handleRouteQuery(
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ROUTE_TIMEOUT_MS);
+  // Client parti (nouvelle édition côté app, onglet fermé) : on libère BRouter
+  // au lieu de laisser tourner un calcul de jusqu'à 55 s pour personne.
+  let clientGone = false;
+  const onClientClose = () => {
+    if (res.writableFinished) return;
+    clientGone = true;
+    controller.abort();
+  };
+  res.once('close', onClientClose);
 
   let upstreamRes: Response;
+  let body: string;
   try {
     upstreamRes = await fetch(url, {
       method: 'GET',
       signal: controller.signal,
       headers: { Accept: 'application/json,application/geo+json,text/plain' },
     });
+    body = await upstreamRes.text();
   } catch (err) {
     clearTimeout(timer);
+    res.off('close', onClientClose);
+    if (clientGone) return;
     const isAbort = (err as { name?: string } | undefined)?.name === 'AbortError';
     if (!isAbort) console.error('[brouter] upstream unreachable:', err);
     return res.status(isAbort ? 504 : 502).json({
@@ -156,8 +198,8 @@ async function handleRouteQuery(
     });
   }
   clearTimeout(timer);
+  res.off('close', onClientClose);
 
-  const body = await upstreamRes.text();
   const contentType =
     upstreamRes.headers.get('content-type') ?? 'application/json';
 
@@ -175,11 +217,7 @@ async function handleRouteQuery(
     // CDNs strip plain-text 422 bodies). Truncate to keep headers small.
     res.setHeader('x-brouter-upstream-error', sanitizeHeaderValue(body));
   } else if (upstreamRes.status === 200) {
-    if (ROUTE_CACHE.size >= MAX_ROUTE_CACHE) {
-      const firstKey = ROUTE_CACHE.keys().next().value;
-      if (firstKey !== undefined) ROUTE_CACHE.delete(firstKey);
-    }
-    ROUTE_CACHE.set(cacheKey, {
+    rememberRoute(cacheKey, {
       body,
       contentType,
       status: upstreamRes.status,
