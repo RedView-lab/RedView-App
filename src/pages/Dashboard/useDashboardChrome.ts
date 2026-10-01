@@ -19,7 +19,7 @@ import {
 } from './lib/constants';
 
 import { getDashboardLayout } from './lib/layout';
-import type { DashboardPersistedMutator } from './useDashboardProjectState';
+import type { DashboardPersistedMutator, DashboardPersistOptions } from './useDashboardProjectState';
 import {
   clampLeftPanelWidth,
   clampPanelWidth,
@@ -30,7 +30,10 @@ import {
 
 interface UseDashboardChromeArgs {
   activeProjectInitial: ItineraryProject | null;
-  updatePersistedDashboard: (mutateDashboard: DashboardPersistedMutator) => void;
+  updatePersistedDashboard: (
+    mutateDashboard: DashboardPersistedMutator,
+    options?: DashboardPersistOptions,
+  ) => void;
 }
 
 /**
@@ -232,9 +235,11 @@ export function useDashboardChrome({
   useEffect(() => {
     if (!projectMapViewport) return;
 
+    // Vue carte : cache local seulement, incluse dans la prochaine vraie sauvegarde
+    // (un déplacement de carte ne déclenche plus de sauvegarde cloud à lui seul).
     updatePersistedDashboard((dashboard) => {
       dashboard.mapViewport = structuredClone(projectMapViewport);
-    });
+    }, { localOnly: true });
   }, [projectMapViewport, updatePersistedDashboard]);
 
   const handleMapViewportChange = useCallback((nextViewport: MapViewport) => {

@@ -1,8 +1,15 @@
 import { PROJECT_CACHE_KEY_PREFIX } from '@/features/map3d/lib/mapCacheEpoch';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
-import { idbSaveProjectCache, idbGetProjectCache } from '@/shared/utils/storage/idbProjectStore';
+import { idbGetProjectCache } from '@/shared/utils/storage/idbProjectStore';
 import { getCachedCurrentUserIdSync } from '@/shared/utils/projects/auth';
 
+/**
+ * Caches de reprise écrits par les versions précédentes (store IndexedDB
+ * `project_cache` + copie localStorage compactée). L'autosave ne les écrit plus :
+ * la copie locale de référence est désormais la ligne projet IndexedDB
+ * (`dirty` tant que le cloud n'a pas confirmé, voir projectRows.ts). Ils ne
+ * sont plus que lus à l'ouverture (instantané complet plus récent, migration).
+ */
 export interface LocalProjectCacheEntry {
   /** Utilisateur propriétaire du snapshot : une entrée d'un autre compte est un cache miss. */
   ownerId?: string;
@@ -10,12 +17,10 @@ export interface LocalProjectCacheEntry {
   project: ItineraryProject;
 }
 
-export const KEEPALIVE_BODY_LIMIT_BYTES = 60_000;
 export const LOCAL_PROJECT_CACHE_MAX_ENTRY_BYTES = 900_000;
 export const LOCAL_PROJECT_CACHE_TOTAL_BUDGET_BYTES = 2_500_000;
 export const LOCAL_PROJECT_CACHE_MAX_ENTRIES = 3;
 
-const cacheWritesDisabledForProject = new Set<string>();
 let projectCacheStorageCompacted = false;
 
 export function isQuotaExceededError(error: unknown): boolean {
@@ -225,45 +230,3 @@ export async function readProjectCacheAsync(projectId: string): Promise<LocalPro
   return readProjectCache(projectId);
 }
 
-export function writeProjectCache(projectId: string, project: ItineraryProject): void {
-  // 1. Toujours enregistrer immédiatement le snapshot complet dans IndexedDB (Crash-Proof, sans perte de POIs ni d'altitudes)
-  void idbSaveProjectCache(projectId, project, getCachedCurrentUserIdSync()).catch((err) => {
-    console.warn('[Dashboard] idbSaveProjectCache error', err);
-  });
-
-  if (cacheWritesDisabledForProject.has(projectId)) return;
-
-  const key = getProjectCacheKey(projectId);
-  const payload = buildLocalProjectCachePayload(project);
-  if (!payload) {
-    cacheWritesDisabledForProject.add(projectId);
-    try {
-      window.localStorage.removeItem(key);
-    } catch {
-      // Ignore
-    }
-    return;
-  }
-
-  if (!projectCacheStorageCompacted) {
-    compactProjectCacheStorage(projectId);
-    projectCacheStorageCompacted = true;
-  }
-
-  try {
-    window.localStorage.setItem(key, payload.serialized);
-  } catch (error) {
-    if (isQuotaExceededError(error)) {
-      try {
-        compactProjectCacheStorage(projectId);
-        window.localStorage.setItem(key, payload.serialized);
-        return;
-      } catch (retryError) {
-        cacheWritesDisabledForProject.add(projectId);
-        return;
-      }
-    }
-
-    cacheWritesDisabledForProject.add(projectId);
-  }
-}

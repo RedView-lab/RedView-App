@@ -12,7 +12,7 @@
  *   - buildLocalProjectCachePayload (pages/Dashboard/dashboardProjectCache.ts)
  *
  * Mesure : JSON brut, gzip+base64 ('gz:' + base64) vs attribut Appwrite `projects.data`
- * (string size=1 000 000, vérifié en live par a-appwrite-schema-readonly.mjs), vs limite client
+ * (string size=16 000 000 depuis 2026-10-01 ; nginx 502 au-delà de ~12 M → limite effective MAX_CLOUD_PROJECT_PAYLOAD_CHARS), vs limite client
  * 16 MiB. Recherche la longueur de parcours max qui tient. Chronomètre les sérialisations
  * faites à CHAQUE autosave.
  *
@@ -44,14 +44,16 @@ import {
 import {
   computeProjectSizeBytes,
   isProjectTooLarge,
+  MAX_CLOUD_PROJECT_PAYLOAD_CHARS,
   MAX_PROJECT_SIZE_BYTES,
+  utf8ByteLength,
 } from '../../src/shared/utils/projects/limits.ts';
 import type { Itinerary, ItineraryProject, TimelineItem } from '../../src/features/itineraryPanel/types.ts';
 import type { PoiCategory, PoiFeature } from '../../src/features/poi/types.ts';
 import type { PredictionResult } from '../../src/features/fitPredictor/types.ts';
 
 /** Attribut `projects.data` (scripts/setup-appwrite-schema.mjs, relevé à 16 000 000 en prod le 2026-10-01). */
-const APPWRITE_DATA_MAX_CHARS = 16_000_000;
+const APPWRITE_DATA_MAX_CHARS = MAX_CLOUD_PROJECT_PAYLOAD_CHARS; // limite effective (proxy nginx), < 16 000 000 de l'attribut
 
 const args = process.argv.slice(2);
 const argVal = (k: string) => {
@@ -420,7 +422,7 @@ async function main() {
   }
 
   // ── Longueur max qui tient dans Appwrite ──
-  console.log('\nLongueur de parcours max (1 itinéraire, densité GPX native) qui tient dans 1 000 000 car. :');
+  console.log(`\nLongueur de parcours max (1 itinéraire, densité GPX native) qui tient dans ${APPWRITE_DATA_MAX_CHARS} car. :`);
   const pois_per_km = 1000 / ((gt20.points[gt20.points.length - 1].distanceM ?? 1) / 1000);
   const fitKm: Record<string, number> = {};
   for (const [label, withExtras] of [['trace seule', false], [`trace + POI (${pois_per_km.toFixed(2)}/km) + prédiction`, true]] as const) {
@@ -454,21 +456,38 @@ async function main() {
   const timings: Record<string, number> = {};
   if (heavy) {
     const p = heavy;
+    const blobSize = () => new Blob([JSON.stringify(p)]).size; // ancien computeProjectSizeBytes
     console.log('\nCoût CPU d\'UN autosave (scénario lourd, médiane de 5) — thread principal :');
-    timings['flushSave JSON.stringify (useDashboardProjectSync.ts:72)'] = timeIt(() => JSON.stringify(p));
-    timings['flushSave new Blob([serialized]).size (:92)'] = timeIt(() => new Blob([JSON.stringify(p)]).size) - timings['flushSave JSON.stringify (useDashboardProjectSync.ts:72)'];
-    timings['writeProjectCache → buildLocalProjectCachePayload (dashboardProjectCache.ts:36-98)'] = timeIt(() => buildLocalProjectCachePayload(p));
-    timings['idbSaveProjectCache structured clone (≈ structuredClone)'] = timeIt(() => structuredClone(p));
-    timings['saveProject computeProjectSizeBytes localRow (projectRows.ts:229)'] = timeIt(() => computeProjectSizeBytes(p));
-    timings['saveProject idbSaveProject structured clone (≈ structuredClone) (:237)'] = timeIt(() => structuredClone(p));
-    timings['saveProject compressProjectPayload (:245)'] = await timeItAsync(() => compressProjectPayload(p));
-    timings['saveProject computeProjectSizeBytes cloud (:249)'] = timeIt(() => computeProjectSizeBytes(p));
-    const total = Object.values(timings).reduce((a, b) => a + b, 0);
-    for (const [k, v] of Object.entries(timings)) console.log(`  ${k.padEnd(88)} ${v.toFixed(1)} ms`);
-    console.log(`  ${'TOTAL (hors réseau, hors account.get() fait par getCurrentUserId à chaque save)'.padEnd(88)} ${total.toFixed(1)} ms`);
+    console.log('  AVANT correctif (pipeline de l\'audit) :');
+    const before: Record<string, number> = {};
+    before['flushSave JSON.stringify'] = timeIt(() => JSON.stringify(p));
+    before['flushSave new Blob([serialized]).size'] = timeIt(blobSize) - before['flushSave JSON.stringify'];
+    before['writeProjectCache → buildLocalProjectCachePayload'] = timeIt(() => buildLocalProjectCachePayload(p));
+    before['idbSaveProjectCache structured clone'] = timeIt(() => structuredClone(p));
+    before['saveProject computeProjectSizeBytes localRow (Blob)'] = timeIt(blobSize);
+    before['saveProject idbSaveProject structured clone'] = timeIt(() => structuredClone(p));
+    before['saveProject compressProjectPayload (re-stringify)'] = await timeItAsync(() => compressProjectPayload(p));
+    before['saveProject computeProjectSizeBytes cloud (Blob)'] = timeIt(blobSize);
+    const totalBefore = Object.values(before).reduce((a, b) => a + b, 0);
+    for (const [k, v] of Object.entries(before)) console.log(`    ${k.padEnd(70)} ${v.toFixed(1)} ms`);
+    console.log(`    ${'TOTAL avant (hors réseau, + 1 GET /account par save)'.padEnd(70)} ${totalBefore.toFixed(1)} ms`);
+
+    console.log('  APRÈS correctif (une sérialisation réutilisée) :');
+    const after: Record<string, number> = {};
+    const serialized = JSON.stringify(p);
+    after['flushSave JSON.stringify (une fois)'] = timeIt(() => JSON.stringify(p));
+    after['utf8ByteLength(serialized) (taille, sans allocation)'] = timeIt(() => utf8ByteLength(serialized));
+    after['compressProjectPayload(project, serialized)'] = await timeItAsync(() => compressProjectPayload(p, serialized));
+    after['IndexedDB put data_json (clone d\'une chaîne)'] = timeIt(() => structuredClone(serialized));
+    const totalAfter = Object.values(after).reduce((a, b) => a + b, 0);
+    for (const [k, v] of Object.entries(after)) console.log(`    ${k.padEnd(70)} ${v.toFixed(1)} ms`);
+    console.log(`    ${'TOTAL après (hors réseau ; GET $updatedAt select pour le contrôle de conflit)'.padEnd(70)} ${totalAfter.toFixed(1)} ms`);
     const cache = buildLocalProjectCachePayload(p);
-    console.log(`  buildLocalProjectCachePayload → ${cache ? `compacted=${cache.compacted}, ${(cache.serialized.length / 1e6).toFixed(2)} Mo` : 'null (trop gros → cache localStorage désactivé pour ce projet)'}`);
-    timings.total = total;
+    console.log(`  buildLocalProjectCachePayload (plus appelé par l'autosave) → ${cache ? `compacted=${cache.compacted}, ${(cache.serialized.length / 1e6).toFixed(2)} Mo` : 'null (trop gros)'}`);
+    Object.assign(timings, Object.fromEntries(Object.entries(before).map(([k, v]) => [`avant: ${k}`, v])));
+    Object.assign(timings, Object.fromEntries(Object.entries(after).map(([k, v]) => [`après: ${k}`, v])));
+    timings.totalBefore = totalBefore;
+    timings.total = totalAfter;
 
     // Lecture : décompression
     const c = await compressProjectPayload(p);
@@ -480,7 +499,7 @@ async function main() {
   const ultraFails = reports.filter((r) => r.scenario !== 'TdF 2026 — trace seule' && r.passesClient && !r.passesAppwrite);
   console.log('\n=== Verdict ===');
   if (ultraFails.length) {
-    console.log(`ÉCHEC : ${ultraFails.length} projet(s) réaliste(s) passent la limite client (16 MiB) mais dépassent la limite Appwrite (1 000 000 car.) :`);
+    console.log(`ÉCHEC : ${ultraFails.length} projet(s) réaliste(s) passent la limite client (16 MiB) mais dépassent la limite cloud (${APPWRITE_DATA_MAX_CHARS} car.) :`);
     for (const r of ultraFails) console.log(`  - ${r.scenario}: ${r.gzB64Chars} car.`);
     console.log('→ saveProject (projectRows.ts:243-255) avale l\'erreur Appwrite : la sauvegarde cloud échoue en silence.');
   } else {

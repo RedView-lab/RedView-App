@@ -14,6 +14,49 @@ export type DashboardPersistedMutator = (
   dashboard: NonNullable<ItineraryProject['dashboard']>,
 ) => void;
 
+export interface DashboardPersistOptions {
+  /** Changement purement local (vue carte) : ne déclenche pas de sauvegarde cloud. */
+  localOnly?: boolean;
+}
+
+type MapViewport = NonNullable<NonNullable<ItineraryProject['dashboard']>['mapViewport']>;
+
+const PENDING_VIEWPORT_KEY_PREFIX = 'redview:project-viewport:v1:';
+
+function writePendingViewport(projectId: string, viewport: MapViewport | undefined): void {
+  if (!viewport) return;
+  try {
+    window.localStorage.setItem(`${PENDING_VIEWPORT_KEY_PREFIX}${projectId}`, JSON.stringify(viewport));
+  } catch {
+    // best effort
+  }
+}
+
+function clearPendingViewport(projectId: string): void {
+  try {
+    window.localStorage.removeItem(`${PENDING_VIEWPORT_KEY_PREFIX}${projectId}`);
+  } catch {
+    // best effort
+  }
+}
+
+function readPendingViewport(projectId: string): MapViewport | null {
+  try {
+    const raw = window.localStorage.getItem(`${PENDING_VIEWPORT_KEY_PREFIX}${projectId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<MapViewport>;
+    if (
+      !Array.isArray(parsed.center) || parsed.center.length !== 2
+      || typeof parsed.zoom !== 'number' || typeof parsed.pitch !== 'number' || typeof parsed.bearing !== 'number'
+    ) {
+      return null;
+    }
+    return parsed as MapViewport;
+  } catch {
+    return null;
+  }
+}
+
 interface UseDashboardProjectStateArgs {
   initialProjectId?: string | null;
   mapInstance: MapboxMap | null;
@@ -39,6 +82,8 @@ export function useDashboardProjectState({
   const activeProjectIdRef = useRef<string | null>(null);
   const isClosingProjectRef = useRef(false);
   const suppressedInitialProjectIdRef = useRef<string | null>(null);
+  /** Modifications locales seulement (vue carte) pas encore incluses dans une sauvegarde. */
+  const localOnlyChangesRef = useRef(false);
   activeProjectIdRef.current = activeProjectId;
 
   const {
@@ -102,6 +147,12 @@ export function useDashboardProjectState({
         }
 
         const normalized = normalizeItineraryProject(chosen);
+        // Vue carte modifiée sans sauvegarde cloud lors de la session précédente.
+        const pendingViewport = readPendingViewport(projectId);
+        localOnlyChangesRef.current = pendingViewport != null;
+        if (pendingViewport) {
+          normalized.dashboard = { ...(normalized.dashboard ?? {}), mapViewport: pendingViewport };
+        }
         setActiveProjectId(projectId);
         activeProjectIdRef.current = projectId;
         setActiveProjectInitial(normalized);
@@ -147,6 +198,13 @@ export function useDashboardProjectState({
         }
       }
 
+      // Vue carte modifiée depuis la dernière sauvegarde : une sauvegarde à la fermeture.
+      const closingSnapshot = activeProjectSnapshotRef.current;
+      if (localOnlyChangesRef.current && closingSnapshot) {
+        localOnlyChangesRef.current = false;
+        queueProjectSave(closingSnapshot);
+        if (closingId) clearPendingViewport(closingId);
+      }
       await flushPendingLocally();
       await flushSave();
       resetSyncState(null, null);
@@ -160,7 +218,7 @@ export function useDashboardProjectState({
       isClosingProjectRef.current = false;
       setIsClosingProject(false);
     }
-  }, [beforeCloseProject, captureThumbnailForProject, flushPendingLocally, flushSave, resetSyncState]);
+  }, [beforeCloseProject, captureThumbnailForProject, flushPendingLocally, flushSave, queueProjectSave, resetSyncState]);
 
   const saveActiveProject = useCallback(async (options?: { force?: boolean }) => {
     const saved = await saveNow(options);
@@ -171,16 +229,32 @@ export function useDashboardProjectState({
     return saved;
   }, [captureThumbnailForProject, saveNow]);
 
+  /**
+   * Met à jour `dashboard` (vue carte, tailles des panneaux). Copie superficielle :
+   * les mutateurs n'affectent que des champs de premier niveau de `dashboard`
+   * (un structuredClone du projet entier coûtait des centaines de ms par
+   * déplacement de carte). `localOnly` (vue carte) : pas de sauvegarde cloud à
+   * elle seule — la vue part avec la prochaine vraie sauvegarde (ou à la
+   * fermeture) et est gardée en attendant dans un petit cache local.
+   */
   const mutateActiveProjectDashboard = useCallback(
-    (mutator: DashboardPersistedMutator) => {
+    (mutator: DashboardPersistedMutator, options: DashboardPersistOptions = {}) => {
       const current = activeProjectSnapshotRef.current;
-      if (!current) return;
+      const id = activeProjectIdRef.current;
+      if (!current || !id) return;
 
-      const next = structuredClone(current);
-      if (!next.dashboard) {
-        next.dashboard = {};
+      const dashboard: NonNullable<ItineraryProject['dashboard']> = { ...(current.dashboard ?? {}) };
+      mutator(dashboard);
+      const next: ItineraryProject = { ...current, dashboard };
+
+      if (options.localOnly) {
+        activeProjectSnapshotRef.current = next;
+        localOnlyChangesRef.current = true;
+        writePendingViewport(id, dashboard.mapViewport);
+        return;
       }
-      mutator(next.dashboard);
+      localOnlyChangesRef.current = false;
+      clearPendingViewport(id);
       queueProjectSave(next);
     },
     [queueProjectSave],
@@ -195,6 +269,12 @@ export function useDashboardProjectState({
   const handleProjectChange = useCallback(
     (next: ItineraryProject) => {
       const dashboard = activeProjectSnapshotRef.current?.dashboard;
+      // La vue carte locale part avec cette sauvegarde.
+      const id = activeProjectIdRef.current;
+      if (localOnlyChangesRef.current && id) {
+        localOnlyChangesRef.current = false;
+        clearPendingViewport(id);
+      }
       queueProjectSave(dashboard ? { ...next, dashboard } : next);
     },
     [queueProjectSave],
