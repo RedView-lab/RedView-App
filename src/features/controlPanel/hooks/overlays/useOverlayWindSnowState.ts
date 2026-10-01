@@ -30,7 +30,12 @@ export function useOverlayWindSnowState({
   onWindOverlayStatusChange,
   onWindOverlayReloadChange,
 }: UseOverlayWindSnowStateArgs) {
-  const [windEnabled, setWindEnabled] = useState(initialControlPanel.toggles.windEnabled);
+  // Section Vent masquée (ControlPanel.tsx) : toujours désactivé au chargement,
+  // même si un ancien projet a persisté `windEnabled: true` — sinon useWind
+  // tournait sans UI (~96 appels Open-Meteo publics par déplacement de carte
+  // et chip « Vent » impossible à fermer). L'effet de persistance ci-dessous
+  // réécrit false dans le projet.
+  const [windEnabled, setWindEnabled] = useState(false);
   const [windSelection, setWindSelection] = useState(() => {
     const fallback = DEFAULT_CONTROL_PANEL_STATE.wind;
     const initial = initialControlPanel.wind ?? fallback;

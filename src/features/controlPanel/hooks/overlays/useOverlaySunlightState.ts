@@ -80,7 +80,10 @@ export function useOverlaySunlightState({
     const initial = {
       ...DEFAULT_CONTROL_PANEL_STATE.sunlight,
       ...persistedSunlight,
-      enabled: initialControlPanel.toggles.sunlightEnabled,
+      // Section Ensoleillement masquée (ControlPanel.tsx) : toujours désactivée
+      // au chargement, même si le projet a persisté `sunlightEnabled: true`
+      // (sinon la scène était ré-éclairée sans UI pour l'éteindre).
+      enabled: false,
       shadowEnabled: hasSunlightMapEnabled
         ? (persistedSunlight.shadowEnabled ?? DEFAULT_CONTROL_PANEL_STATE.sunlight.shadowEnabled)
         : DEFAULT_CONTROL_PANEL_STATE.sunlight.shadowEnabled,
