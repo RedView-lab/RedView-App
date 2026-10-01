@@ -14,6 +14,7 @@ import {
 import type { PredictionResult } from '@/features/fitPredictor';
 import type { Itinerary } from '../../types';
 import {
+  deleteFitUploads,
   uploadProjectItineraryFitFiles,
 } from '@/shared/utils/projects';
 
@@ -327,12 +328,27 @@ export function useItineraryFitRuntime({
 
       if (!projectId) return;
 
+      // N'envoyer que les fichiers pas encore enregistrés : renvoyer toute la
+      // liste à chaque ajout dupliquait les fichiers du bucket sous de
+      // nouveaux ids (traces GPS personnelles jamais supprimées).
+      const existingUploads = active?.id === itineraryId ? active.fitUploads ?? [] : [];
+      const nextKeys = new Set(nextFitFiles.map(fitFileKey));
+      const keptUploads = existingUploads.filter((upload) => nextKeys.has(fitFileKey(upload)));
+      const keptUploadKeys = new Set(keptUploads.map(fitFileKey));
+      const filesToUpload = nextFitFiles.filter((file) => !keptUploadKeys.has(fitFileKey(file)));
+
       try {
-        const { uploads: storedUploads, failed } = await uploadProjectItineraryFitFiles(
-          projectId,
-          itineraryId,
-          nextFitFiles,
+        const { uploads: newUploads, failed } = filesToUpload.length > 0
+          ? await uploadProjectItineraryFitFiles(projectId, itineraryId, filesToUpload)
+          : { uploads: [], failed: [] };
+        // Ordre de la liste locale, uploads existants réutilisés tels quels.
+        const uploadByKey = new Map(
+          [...keptUploads, ...newUploads].map((upload) => [fitFileKey(upload), upload]),
         );
+        const storedUploads = nextFitFiles.flatMap((file) => {
+          const upload = uploadByKey.get(fitFileKey(file));
+          return upload ? [upload] : [];
+        });
 
         // Les fichiers non envoyés restent dans l'état local (toujours utilisés
         // pour la prédiction) ; la signature suit les uploads persistés pour
@@ -392,7 +408,7 @@ export function useItineraryFitRuntime({
         }));
       }
     },
-    [active?.id, predictionStore, projectId, setProject, updateFitRuntime],
+    [active, predictionStore, projectId, setProject, updateFitRuntime],
   );
 
   const handleRemoveFitFiles = useCallback(
@@ -413,6 +429,15 @@ export function useItineraryFitRuntime({
         keptKeys.has(fitFileKey(upload)),
       );
       const uploadedKeys = new Set(nextUploads.map(fitFileKey));
+      // RGPD : un .fit retiré est supprimé du bucket. Un « annuler » qui le
+      // remettrait dans le projet ne retrouverait plus le fichier :
+      // l'hydratation le retire alors proprement (404 → missingFileIds).
+      const removedUploads = (itinerary.fitUploads ?? []).filter(
+        (upload) => !keptKeys.has(fitFileKey(upload)),
+      );
+      if (removedUploads.length > 0) {
+        void deleteFitUploads(removedUploads);
+      }
 
       updateFitRuntime(itineraryId, (prev) => ({
         ...prev,

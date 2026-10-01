@@ -55,12 +55,45 @@ export async function uploadProjectItineraryFitFiles(
   return { uploads, failed };
 }
 
+/**
+ * Supprime du bucket les fichiers FIT donnés (traces GPS personnelles : RGPD).
+ * Les uploads hérités (base64 dans le projet, sans `path`) sont ignorés. Un
+ * fichier déjà absent (404) compte comme supprimé. Renvoie les ids non
+ * supprimés.
+ */
+export async function deleteFitUploads(
+  uploads: readonly ItineraryFitUpload[] | null | undefined,
+): Promise<string[]> {
+  const ids = (uploads ?? [])
+    .map((upload) => upload.path)
+    .filter((path): path is string => typeof path === 'string' && path.length > 0);
+  const results = await Promise.allSettled(
+    ids.map((id) => storage.deleteFile(FIT_FILES_BUCKET_ID, id)),
+  );
+  const failedIds: string[] = [];
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled') return;
+    const code = (result.reason as { code?: number } | null)?.code;
+    if (code === 404) return;
+    console.warn('[fitFiles] delete failed for file', ids[index], result.reason);
+    failedIds.push(ids[index]!);
+  });
+  return failedIds;
+}
+
+// TODO(rgpd) : suppression d'un itinéraire / d'un projet. Ces deux points
+// d'entrée ne reçoivent que des ids, or les fichiers du bucket ne sont pas
+// rattachés au projet (id unique, sans métadonnée) : il faudrait passer les
+// `fitUploads` des itinéraires supprimés (ItineraryPanelContainer, effet sur
+// les ids retirés ; useProjectBrowserProjects.handleDelete / rollback de la
+// duplication, qui devraient charger les données du projet) puis appeler
+// deleteFitUploads. Laissé en l'état pendant la refonte de projectRows.ts.
 export async function deleteProjectItineraryFitFiles(
   _projectId: string,
   _itineraryId: string,
   _knownUserId?: string,
 ): Promise<void> {
-  // No-op or cleanup handled per file ID in deleteProjectFitFiles
+  // Voir TODO(rgpd) ci-dessus.
 }
 
 export interface DownloadedFitFileEntry {
@@ -136,7 +169,12 @@ export async function duplicateProjectItineraryFitFiles(
     if (!sourceUploads || sourceUploads.length === 0) continue;
 
     const files = await downloadProjectItineraryFitFiles(sourceUploads);
-    if (files.length === 0) continue;
+    if (files.length === 0) {
+      // Jamais de fichiers partagés entre deux projets : retirer un .fit de la
+      // copie le supprime du bucket (deleteFitUploads) et l'ôterait à l'original.
+      uploadsByItineraryId[itinerary.id] = [];
+      continue;
+    }
 
     const { uploads, failed } = await uploadProjectItineraryFitFiles(
       targetProjectId,
@@ -153,5 +191,6 @@ export async function duplicateProjectItineraryFitFiles(
 }
 
 export async function deleteProjectFitFiles(_projectId: string): Promise<void> {
-  // Cleanup will be handled automatically or when removing individual itinerary files
+  // Voir TODO(rgpd) près de deleteProjectItineraryFitFiles : sans les
+  // fitUploads du projet, les fichiers ne peuvent pas être retrouvés.
 }
