@@ -92,8 +92,21 @@ const extractPath = path.resolve(
   args.extract || path.resolve(path.dirname(dbPath), 'overture-fr.ndjson'),
 );
 
+/** Format des releases Overture, ex. `2025-09-24.0`. */
+const OVERTURE_RELEASE_RE = /^\d{4}-\d{2}-\d{2}\.\d+$/;
+
+/** Échappe une chaîne pour un littéral SQL entre apostrophes (`'` → `''`). */
+function sqlString(value) {
+  return String(value).replace(/'/g, "''");
+}
+
 async function extract() {
   const release = args.release || await latestOvertureRelease();
+  // La release vient d'un JSON distant (ou de la ligne de commande) et finit
+  // dans du SQL DuckDB : on n'accepte que le format officiel `AAAA-MM-JJ.N`.
+  if (typeof release !== 'string' || !OVERTURE_RELEASE_RE.test(release)) {
+    throw new Error(`Release Overture invalide : ${JSON.stringify(release)} (attendu AAAA-MM-JJ.N)`);
+  }
   console.log(`📦 Overture release : ${release}`);
   const src = `s3://overturemaps-us-west-2/release/${release}/theme=places/type=place/*`;
 
@@ -130,9 +143,9 @@ async function extract() {
         emails[1]                         AS email,
         ST_X(geometry)                    AS lon,
         ST_Y(geometry)                    AS lat
-      FROM read_parquet('${src}')
+      FROM read_parquet('${sqlString(src)}')
       WHERE addresses[1].country = 'FR'
-    ) TO '${extractPath.replace(/\\/g, '/')}' (FORMAT JSON, ARRAY false);
+    ) TO '${sqlString(extractPath.replace(/\\/g, '/'))}' (FORMAT JSON, ARRAY false);
   `, { duckdb: args.duckdb });
   const size = fs.statSync(extractPath).size;
   console.log(`✅ Extrait France : ${(size / 1e6).toFixed(0)} Mo en ${((Date.now() - t0) / 1000).toFixed(0)} s`);

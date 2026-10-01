@@ -14,9 +14,8 @@
     "ingest:atp": "node ../poi-ingest/import-atp.mjs --db data/pois.db --enrich"
   },
   "dependencies": {
-    "@fastify/cors": "^9.0.1",
     "better-sqlite3": "^9.4.3",
-    "fastify": "^4.26.2",
+    "fastify": "^5.12.5",
     "osm-pbf-parser": "^2.3.0"
   }
 }

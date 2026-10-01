@@ -34,6 +34,8 @@ const MAX_QUERY_CELLS = 16_384;
 const RAW_SCAN_LIMIT = 150_000;
 const FETCH_BATCH = 500;
 const MAX_MERCATOR_LAT = 85.05112878;
+/** Plafond par défaut si `limit` est invalide (même valeur que `/bbox`). */
+const DEFAULT_LIMIT = 500;
 
 // ── Géométrie Web Mercator ────────────────────────────────────────────
 
@@ -263,7 +265,12 @@ export function createViewportSampler(db, { hasSource, selectColumns }) {
       : [...pyramid.keys()];
     if (wanted.length === 0) return { rows: [], level };
 
-    let effectiveLevel = Math.max(PYRAMID_MIN_LEVEL, Math.min(MAX_LEVEL, Math.round(level)));
+    // Garde-fous : le serveur borne déjà ces valeurs, mais un NaN ou un plafond
+    // négatif casserait ici la boucle de niveaux ou `candidates.length = limit`
+    // (RangeError → 500).
+    const safeLevel = Number.isFinite(level) ? level : PYRAMID_MIN_LEVEL;
+    const maxRows = Number.isFinite(limit) && limit >= 1 ? Math.floor(limit) : DEFAULT_LIMIT;
+    let effectiveLevel = Math.max(PYRAMID_MIN_LEVEL, Math.min(MAX_LEVEL, Math.round(safeLevel)));
     let range = cellRange(bbox, effectiveLevel);
     while (
       effectiveLevel > PYRAMID_MIN_LEVEL
@@ -302,9 +309,9 @@ export function createViewportSampler(db, { hasSource, selectColumns }) {
     }
 
     // Dépassement du plafond : sous-échantillonnage uniforme et stable.
-    if (candidates.length > limit) {
+    if (candidates.length > maxRows) {
       candidates.sort((a, b) => hash53(a.id) - hash53(b.id));
-      candidates.length = limit;
+      candidates.length = maxRows;
     }
 
     return { rows: fetchRows(candidates.map((c) => c.id)), level: effectiveLevel };

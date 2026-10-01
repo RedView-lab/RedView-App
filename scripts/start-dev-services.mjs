@@ -156,7 +156,8 @@ export async function ensurePoiServerStarted() {
     env: {
       ...process.env,
       POI_PORT: String(POI_PORT),
-      POI_HOST: '0.0.0.0',
+      // Boucle locale : seul le proxy `api/poi.ts` (même machine) l'appelle.
+      POI_HOST: '127.0.0.1',
     },
   });
 
