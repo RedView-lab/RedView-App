@@ -1,0 +1,135 @@
+/**
+ * Audit B5 — GPX import pipeline on real files (no live network: fetch mocked).
+ *
+ *   npx tsx script-test-bench/audit/b-gpx-import.ts
+ *
+ * 1. Parses every real GPX with the app parser (parseGpxText — same code as
+ *    gpxParseWorker), times it, reports points / km / D+ / <wpt> present but
+ *    dropped by the import.
+ * 2. Runs the real import enrichment steps that hit the network with a mocked
+ *    fetch that COUNTS requests per host:
+ *      refineImportedRoutePointsWithIgnAltimetry → data.geopf.fr / open-meteo
+ *      analyzeGpxSurfaces                        → /api/brouter (rate-limited
+ *                                                  by server.mjs 120 req/min/IP)
+ *    in two modes: upstream OK, and /api/brouter answering 429 (rate limit hit).
+ *
+ * Exit 1 when a single import can exceed the 120 /api req/min budget, or when
+ * the 429 path amplifies requests.
+ */
+import fs from 'node:fs';
+import path from 'node:path';
+import { loadSrc, closeLoader, DOWNLOADS } from './b-loader';
+
+const FILES = ['GT20.gpx', 'GT20_POI.gpx', 'Tour de France 2026.gpx', 'UTMB 2024.gpx', 'TRAIL DU SANCY 33 km.gpx', 'Les 6 Puys 16 km.gpx', 'route-1.gpx', 'activity_24338087057.gpx'];
+const API_BUDGET_PER_MIN = 120;
+const failures: string[] = [];
+
+type Mode = 'ok' | '429';
+function installMockFetch(mode: Mode) {
+  const counts: Record<string, number> = {};
+  let inflight = 0, maxInflight = 0;
+  const real = globalThis.fetch;
+  globalThis.fetch = (async (input: any, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input.url;
+    const host = url.startsWith('/') ? url.split('?')[0] : new URL(url).host;
+    counts[host] = (counts[host] ?? 0) + 1;
+    inflight++; maxInflight = Math.max(maxInflight, inflight);
+    await new Promise((r) => setTimeout(r, 2));
+    inflight--;
+    if (host.includes('geopf')) {
+      const body = JSON.parse(String(init?.body));
+      const n = String(body.lon).split('|').length;
+      return new Response(JSON.stringify({ elevations: Array.from({ length: n }, () => 500) }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (host.includes('open-meteo')) {
+      const body = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ elevation: body.latitude.map(() => 500) }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (host === '/api/brouter') {
+      if (mode === '429') return new Response(JSON.stringify({ error: 'Trop de requêtes.' }), { status: 429, headers: { 'content-type': 'application/json' } });
+      const params = new URL('http://x' + url).searchParams;
+      const ll = params.get('lonlats')!.split('|').map((s) => s.split(',').map(Number));
+      const header = ['Longitude', 'Latitude', 'Elevation', 'Distance', 'CostPerKm', 'ElevCost', 'TurnCost', 'NodeCost', 'InitialCost', 'WayTags'];
+      const messages = [header, ...ll.map(([lo, la]) => [Math.round(lo * 1e6), Math.round(la * 1e6), 500, 1000, 1000, 0, 0, 0, 0, 'highway=track surface=gravel'])];
+      return new Response(JSON.stringify({ type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'LineString', coordinates: ll }, properties: { 'track-length': '1000', messages } }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    return new Response('{}', { status: 404 });
+  }) as typeof fetch;
+  return { counts, get maxInflight() { return maxInflight; }, restore: () => { globalThis.fetch = real; } };
+}
+
+async function main() {
+  const { parseGpxText } = await loadSrc<any>('src/features/poi/lib/gpx-parse.ts');
+  const routes = await loadSrc<any>('src/features/itineraryPanel/lib/routes/index.ts');
+  const metrics = await loadSrc<any>('src/features/itineraryPanel/lib/route-metrics/index.ts');
+
+  const parsedAll: Array<{ file: string; points: any[] }> = [];
+  console.log('file | bytes | parse ms | pts | km | D+ (import metrics) | <wpt> in file (dropped) | timeline wps');
+  for (const f of FILES) {
+    const p = path.join(DOWNLOADS, f);
+    if (!fs.existsSync(p)) { console.log(`${f}: missing`); continue; }
+    const text = fs.readFileSync(p, 'utf8');
+    const t0 = performance.now();
+    const r = parseGpxText(text);
+    const ms = performance.now() - t0;
+    const stored = routes.normalizeImportedRoutePoints(r.points, { includeGradient: false });
+    const m = routes.buildImportedRouteMetrics(stored);
+    const tl = routes.createImportedTimeline(stored);
+    const wpt = (text.match(/<wpt\b/g) ?? []).length;
+    const noEle = r.points.filter((x: any) => x.elevationM == null).length;
+    console.log(`${f} | ${text.length} | ${ms.toFixed(1)} | ${r.points.length} (noEle ${noEle}) | ${m.distanceKm} | ${m.ascentM} | ${wpt} | ${tl.filter((x: any) => x.kind === 'waypoint').length}`);
+    parsedAll.push({ file: f, points: stored });
+  }
+  const wptFiles = FILES.filter((f) => { const p = path.join(DOWNLOADS, f); return fs.existsSync(p) && /<wpt\b/.test(fs.readFileSync(p, 'utf8')); });
+  if (wptFiles.length) console.log(`NOTE: <wpt> elements are ignored by parseGpxText (files: ${wptFiles.join(', ')})`);
+
+  // Synthetic 1000 km route: concatenate GT20 + UTMB + TdF stage translated end-to-end is unrealistic for
+  // geography; instead densify a straight-ish 1000 km line across France with 20 m spacing (typical export).
+  const long: any[] = [];
+  const N = 50_000; let d = 0;
+  for (let i = 0; i < N; i++) {
+    const t = i / (N - 1);
+    const lat = 48.85 - 5.5 * t + Math.sin(t * 80) * 0.05, lon = 2.35 + 3.0 * t + Math.cos(t * 60) * 0.05;
+    if (i) { const q = long[i - 1]; const r = Math.PI / 180; const h = Math.sin((lat - q.lat) * r / 2) ** 2 + Math.cos(q.lat * r) * Math.cos(lat * r) * Math.sin((lon - q.lon) * r / 2) ** 2; d += 2 * 6371008.8 * Math.asin(Math.sqrt(h)); }
+    long.push({ lat, lon, distanceM: d, elevationM: 200 + 300 * Math.sin(t * 30) });
+  }
+  parsedAll.push({ file: `synthetic ${Math.round(d / 1000)} km / ${N} pts`, points: long });
+  // Real-geometry long route: GT20 followed by UTMB, shifted so it is contiguous (only the
+  // chunk count matters here: it depends on length and bearing changes).
+  const gt = parsedAll.find((x) => x.file === 'GT20.gpx')?.points, ut = parsedAll.find((x) => x.file === 'UTMB 2024.gpx')?.points;
+  if (gt && ut) {
+    const last = gt[gt.length - 1], first = ut[0];
+    const dLat = last.lat - first.lat, dLon = last.lon - first.lon, off = last.distanceM;
+    const joined = [...gt, ...ut.slice(1).map((p: any) => ({ ...p, lat: p.lat + dLat + 0.3, lon: p.lon + dLon, distanceM: p.distanceM + off }))];
+    const joined2 = [...joined, ...gt.slice(1).map((p: any) => ({ ...p, lat: p.lat + 1.5, distanceM: p.distanceM + joined[joined.length - 1].distanceM }))];
+    parsedAll.push({ file: `GT20+UTMB+GT20 (~${Math.round(joined2[joined2.length - 1].distanceM / 1000)} km real geometry)`, points: joined2 });
+  }
+
+  console.log('\nNetwork requests generated by ONE import (mocked fetch):');
+  console.log('file | mode | IGN (geopf) | open-meteo | /api/brouter | max concurrent | ms');
+  for (const { file, points } of parsedAll) {
+    // 429 first: fetchBrouterRoute keeps a module-level URL cache that would hide requests
+    for (const mode of ['429', 'ok'] as Mode[]) {
+      const mock = installMockFetch(mode);
+      const t0 = performance.now();
+      try {
+        if (mode === 'ok') await routes.refineImportedRoutePointsWithIgnAltimetry(points);
+        await metrics.analyzeGpxSurfaces(points);
+      } catch (e) { console.log(`  ${file} ${mode}: threw ${(e as Error).message}`); }
+      const ms = performance.now() - t0;
+      mock.restore();
+      const api = mock.counts['/api/brouter'] ?? 0;
+      console.log(`${file} | ${mode} | ${mock.counts['data.geopf.fr'] ?? 0} | ${mock.counts['api.open-meteo.com'] ?? 0} | ${api} | ${mock.maxInflight} | ${ms.toFixed(0)}`);
+      if (mode === 'ok' && api + 1 /* POI corridor */ > API_BUDGET_PER_MIN) failures.push(`${file}: one import issues ${api}+1 /api requests (> ${API_BUDGET_PER_MIN}/min budget)`);
+      (globalThis as any).__last = { ...(globalThis as any).__last, [`${file}|${mode}`]: api };
+    }
+    const okN = (globalThis as any).__last[`${file}|ok`], badN = (globalThis as any).__last[`${file}|429`];
+    if (badN > okN * 2) failures.push(`${file}: under 429 the surface analysis amplifies /api/brouter requests ${okN} → ${badN} (recursive split fallback)`);
+  }
+
+  console.log(failures.length ? `\nFAIL:\n - ${failures.join('\n - ')}` : '\nOK');
+  await closeLoader();
+  process.exit(failures.length ? 1 : 0);
+}
+
+main().catch(async (e) => { console.error(e); await closeLoader(); process.exit(2); });

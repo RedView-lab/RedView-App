@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.app.json",
+  "compilerOptions": { "types": ["vite/client", "@webgpu/types", "node"], "baseUrl": "../..", "tsBuildInfoFile": null, "incremental": false },
+  "include": [],
+  "files": ["a-project-size.ts", "a-persistence-sim.ts", "a-appwrite-live.ts", "a-mock-appwrite-sdk.ts", "a-mock-idb.ts"]
+}
