@@ -12,7 +12,7 @@ import {
   createFitPredictionEngine,
 } from '@/features/fitPredictor/engine/api';
 import type { PredictionResult } from '@/features/fitPredictor';
-import type { Itinerary } from '../../types';
+import type { Itinerary, ItineraryFitUpload } from '../../types';
 import {
   deleteFitUploads,
   uploadProjectItineraryFitFiles,
@@ -40,7 +40,12 @@ import {
   mergeFitFiles,
 } from './files';
 import { hydratePersistedFitRuntime } from './hydration';
-import { buildFitStatusText } from './labels';
+import { buildFitStatusText, buildRejectedFitNotice } from './labels';
+import {
+  parseFailingFitIndex,
+  validateFitFile,
+  type FitFileProblem,
+} from '@/features/fitPredictor/lib/fitFileValidation';
 import { translateAppText } from '@/shared/i18n';
 import {
   createEmptyFitRuntime,
@@ -171,6 +176,55 @@ export function useItineraryFitRuntime({
     [],
   );
 
+  /**
+   * Écarte des .fit inexploitables : retirés de l'état local et du projet,
+   * supprimés du bucket, et signalés par nom. `recompute` relance la
+   * prédiction sans eux.
+   */
+  const excludeFitFiles = useCallback(
+    (
+      itineraryId: string,
+      uploadsSnapshot: readonly ItineraryFitUpload[],
+      rejected: ReadonlyArray<{
+        file: { name: string; lastModified: number; size: number };
+        reason: FitFileProblem | 'unreadable';
+      }>,
+      recompute: boolean,
+    ) => {
+      if (rejected.length === 0) return;
+      const keys = new Set(rejected.map(({ file }) => fitFileKey(file)));
+      const remainingUploads = uploadsSnapshot.filter((upload) => !keys.has(fitFileKey(upload)));
+      const removedUploads = uploadsSnapshot.filter((upload) => keys.has(fitFileKey(upload)));
+      if (removedUploads.length > 0) void deleteFitUploads(removedUploads);
+      const notice = buildRejectedFitNotice(rejected);
+
+      updateFitRuntime(itineraryId, (prev) => {
+        const fitFiles = prev.fitFiles.filter((file) => !keys.has(fitFileKey(file)));
+        return {
+          ...prev,
+          fitFiles,
+          fitFileNames: fitFiles.map((file) => file.name),
+          uploadError: notice,
+          persistedUploadSignature:
+            remainingUploads.length > 0
+              ? buildFitUploadsSignature(remainingUploads)
+              : buildLocalFitUploadSignature(fitFiles),
+        };
+      });
+      setProject((prev) => ({
+        ...prev,
+        itineraries: prev.itineraries.map((it) => {
+          if (it.id !== itineraryId) return it;
+          const fitUploads = (it.fitUploads ?? []).filter((upload) => !keys.has(fitFileKey(upload)));
+          return recompute
+            ? { ...it, fitUploads, prediction: undefined, pendingFitRecompute: true }
+            : { ...it, fitUploads };
+        }),
+      }));
+    },
+    [setProject, updateFitRuntime],
+  );
+
   useEffect(() => {
     if (!active || !activeFitHydrationInput) return;
 
@@ -254,6 +308,15 @@ export function useItineraryFitRuntime({
             persistedUploadSignature: hydrated.persistedUploadSignature,
           };
         });
+
+        if (hydrated.invalidUploads) {
+          excludeFitFiles(
+            itineraryId,
+            activeFitHydrationInput.fitUploads,
+            hydrated.invalidUploads.map(({ upload, problem }) => ({ file: upload, reason: problem })),
+            false,
+          );
+        }
       } catch (error) {
         if (cancelled) return;
 
@@ -291,7 +354,7 @@ export function useItineraryFitRuntime({
     return () => {
       cancelled = true;
     };
-  }, [active?.id, activeFitHydrationInput, activePersistedUploadSignature, activePrediction, updateFitRuntime]);
+  }, [active?.id, activeFitHydrationInput, activePersistedUploadSignature, activePrediction, excludeFitFiles, updateFitRuntime]);
 
   const handleUploadFitRequest = useCallback(() => {
     if (!active) return;
@@ -307,10 +370,27 @@ export function useItineraryFitRuntime({
       const itineraryId = fitUploadTargetIdRef.current ?? active?.id;
       if (!itineraryId) return;
 
-      const incoming = Array.from(event.target.files ?? []).filter((file) =>
+      const selected = Array.from(event.target.files ?? []).filter((file) =>
         file.name.toLowerCase().endsWith('.fit'),
       );
-      if (incoming.length === 0) return;
+      if (selected.length === 0) return;
+
+      // L'extension ne suffit pas (GPX renommé, fichier vide ou tronqué) : un
+      // seul fichier illisible faisait échouer toute la prédiction, et
+      // persisté, après chaque rechargement.
+      const problems = await Promise.all(
+        selected.map((file) => validateFitFile(file).catch((): FitFileProblem => 'not-fit')),
+      );
+      const incoming = selected.filter((_, index) => problems[index] === null);
+      const rejected = selected.flatMap((file, index) => {
+        const reason = problems[index];
+        return reason ? [{ file, reason }] : [];
+      });
+      const rejectedNotice = rejected.length > 0 ? buildRejectedFitNotice(rejected) : null;
+      if (incoming.length === 0) {
+        updateFitRuntime(itineraryId, (prev) => ({ ...prev, uploadError: rejectedNotice }));
+        return;
+      }
 
       const current = fitRuntimeRef.current[itineraryId] ?? createEmptyFitRuntime();
       const nextFitFiles = mergeFitFiles(current.fitFiles, incoming).slice(0, MAX_FIT_FILES);
@@ -323,6 +403,7 @@ export function useItineraryFitRuntime({
         fitFileNames: nextFitFileNames,
         status: 'ready',
         error: null,
+        uploadError: rejectedNotice,
         persistedUploadSignature: localSignature,
       }));
 
@@ -360,13 +441,15 @@ export function useItineraryFitRuntime({
             storedUploads.length > 0
               ? buildFitUploadsSignature(storedUploads)
               : buildLocalFitUploadSignature(prev.fitFiles),
-          uploadError:
+          uploadError: [
+            rejectedNotice,
             failed.length > 0
               ? translateAppText(
                   'Envoi impossible pour : {{list}}. Ces fichiers sont utilisés mais ne seront pas conservés dans le projet.',
                   { list: failed.map((file) => file.name).join(', ') },
                 )
               : null,
+          ].filter(Boolean).join(' ') || null,
         }));
 
         setProject((prev) => {
@@ -627,6 +710,27 @@ export function useItineraryFitRuntime({
         // L'échec d'un calcul périmé ne doit ni afficher d'erreur sur le
         // calcul courant ni effacer son pendingFitRecompute.
         if (latestPredictionRunRef.current[itineraryId] !== runId) return;
+        // Un .fit passé au contrôle d'en-tête mais refusé par le moteur
+        // (« Error parsing FIT file #N ») : on l'écarte et on relance sans lui
+        // plutôt que de bloquer toute la prédiction.
+        const failingIndex = error instanceof Error ? parseFailingFitIndex(error.message) : null;
+        const failingFile = failingIndex !== null ? fitFiles[failingIndex] : undefined;
+        if (failingFile) {
+          console.warn('[fit-predictor] FIT file rejected by the engine, retrying without it', failingFile.name, error);
+          updateFitRuntime(itineraryId, (current) => ({
+            ...current,
+            progress: [],
+            status: current.fitFiles.length > 1 ? 'ready' : 'idle',
+            updatedAt: new Date().toISOString(),
+          }));
+          excludeFitFiles(
+            itineraryId,
+            itinerary.fitUploads ?? [],
+            [{ file: failingFile, reason: 'unreadable' }],
+            true,
+          );
+          return;
+        }
         console.error('[fit-predictor] prediction failed', error);
         setProject((prev) => ({
           ...prev,
@@ -651,7 +755,7 @@ export function useItineraryFitRuntime({
         }));
         predictionStore?.setPrediction(itineraryId, null);
       });
-  }, [active, predictionStore, setProject, updateFitRuntime]);
+  }, [active, excludeFitFiles, predictionStore, setProject, updateFitRuntime]);
 
   const cancelCalculatePrediction = useCallback(() => {
     const itinerary = active;

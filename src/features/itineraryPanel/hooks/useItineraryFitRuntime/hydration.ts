@@ -7,7 +7,11 @@ import {
   buildFitUploadsSignature,
   deserializeLegacyFitUploads,
 } from '../../lib/schedule';
-import type { ItineraryProject } from '../../types';
+import type { ItineraryFitUpload, ItineraryProject } from '../../types';
+import {
+  validateFitFile,
+  type FitFileProblem,
+} from '@/features/fitPredictor/lib/fitFileValidation';
 
 type FitHydrationItinerary = Pick<
   ItineraryProject['itineraries'][number],
@@ -20,6 +24,13 @@ export interface HydratedFitRuntimeData {
   predictionResult: PredictionResult | null;
   persistedUploadSignature: string;
   missingFileIds?: string[];
+  /** Uploads persistés dont le contenu n'est pas un FIT exploitable. */
+  invalidUploads?: InvalidFitUpload[];
+}
+
+export interface InvalidFitUpload {
+  upload: ItineraryFitUpload;
+  problem: FitFileProblem;
 }
 
 export async function hydratePersistedFitRuntime(
@@ -50,13 +61,25 @@ export async function hydratePersistedFitRuntime(
   }
 
   const legacyQueue = legacyFiles.slice();
-  const fitFiles = persistedUploads.flatMap((upload) => {
+  const loaded = persistedUploads.flatMap((upload) => {
     if (upload.path) {
       const file = downloadedByPath.get(upload.path);
-      return file ? [file] : [];
+      return file ? [{ upload, file }] : [];
     }
     const legacy = legacyQueue.shift();
-    return legacy ? [legacy] : [];
+    return legacy ? [{ upload, file: legacy }] : [];
+  });
+
+  // Un .fit illisible enregistré avant la validation faisait échouer toute
+  // prédiction à chaque rechargement : il est écarté (le hook le retire du
+  // projet et le signale).
+  const problems = await Promise.all(loaded.map(({ file }) => validateFitFile(file)));
+  const fitFiles: File[] = [];
+  const invalidUploads: InvalidFitUpload[] = [];
+  loaded.forEach(({ upload, file }, index) => {
+    const problem = problems[index];
+    if (problem) invalidUploads.push({ upload, problem });
+    else fitFiles.push(file);
   });
 
   return {
@@ -65,5 +88,6 @@ export async function hydratePersistedFitRuntime(
     predictionResult: itinerary.prediction ?? null,
     persistedUploadSignature,
     missingFileIds: missingFileIds.length > 0 ? missingFileIds : undefined,
+    invalidUploads: invalidUploads.length > 0 ? invalidUploads : undefined,
   };
 }

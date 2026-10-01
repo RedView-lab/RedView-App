@@ -100,7 +100,7 @@ function makeHook() {
 
 // ── Garde-fou source : le .catch ignore-t-il toujours runId ? ────────────
 const src = fs.readFileSync('src/features/itineraryPanel/hooks/useItineraryFitRuntime/index.ts', 'utf8');
-const catchBlock = src.slice(src.indexOf('.catch((error: unknown) => {'), src.indexOf('}, [active, predictionStore, setProject, updateFitRuntime]);'));
+const catchBlock = src.slice(src.indexOf('.catch((error: unknown) => {'), src.indexOf('const cancelCalculatePrediction'));
 const catchChecksRunId = /latestPredictionRunRef\.current\[itineraryId\]\s*[!=]==\s*runId/.test(catchBlock);
 const apiSrc = fs.readFileSync('src/features/fitPredictor/engine/api.ts', 'utf8');
 const apiSupersedes = /supersed|abort|cancelPending|pending\.clear\(\)[\s\S]{0,80}postMessage/.test(apiSrc.slice(apiSrc.indexOf('function send')));

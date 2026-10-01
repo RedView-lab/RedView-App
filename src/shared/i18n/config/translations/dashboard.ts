@@ -565,4 +565,10 @@ export const dashboardTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'La recherche de POI a échoué. Les POI déjà trouvés sont conservés.', en: 'The POI search failed. POIs already found are kept.' },
   { fr: 'Envoi impossible pour : {{list}}. Ces fichiers sont utilisés mais ne seront pas conservés dans le projet.', en: 'Upload failed for: {{list}}. These files are used but will not be kept in the project.' },
   { fr: 'Impossible de sauvegarder les fichiers FIT sur le serveur.', en: 'Unable to save the FIT files on the server.' },
+  { fr: 'Fichiers FIT ignorés : {{list}}', en: 'FIT files ignored: {{list}}' },
+  { fr: 'fichier vide', en: 'empty file' },
+  { fr: 'aucune donnée d’activité', en: 'no activity data' },
+  { fr: 'fichier tronqué', en: 'truncated file' },
+  { fr: 'illisible par le moteur', en: 'unreadable by the engine' },
+  { fr: 'pas un fichier FIT', en: 'not a FIT file' },
 ] as const;

@@ -1,3 +1,9 @@
+import {
+  describeFitFileProblem,
+  type FitFileProblem,
+} from '@/features/fitPredictor/lib/fitFileValidation';
+import { translateAppText } from '@/shared/i18n';
+
 import type { ItineraryFitRuntime } from './types';
 
 export function buildFitStatusText(runtime: ItineraryFitRuntime | null): string | null {
@@ -21,4 +27,15 @@ export function buildFitStatusText(runtime: ItineraryFitRuntime | null): string 
     return countLabel;
   }
   return null;
+}
+
+/** Message nommant les .fit écartés et leur motif. */
+export function buildRejectedFitNotice(
+  rejected: ReadonlyArray<{ file: { name: string }; reason: FitFileProblem | 'unreadable' }>,
+): string {
+  return translateAppText('Fichiers FIT ignorés : {{list}}', {
+    list: rejected
+      .map(({ file, reason }) => `${file.name} (${translateAppText(describeFitFileProblem(reason))})`)
+      .join(', '),
+  });
 }
