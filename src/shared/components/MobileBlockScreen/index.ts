@@ -1,1 +1,1 @@
-export { MobileBlockScreen } from './MobileBlockScreen';
+export { MobileBlockScreen, NarrowViewportOverlay } from './MobileBlockScreen';

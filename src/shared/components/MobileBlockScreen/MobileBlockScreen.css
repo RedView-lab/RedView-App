@@ -70,3 +70,25 @@
 .rv-mobile-block-link:active {
   background: #252834;
 }
+
+/* Variante superposée (fenêtre de bureau trop étroite) : l'app reste montée
+   dessous ; rendue hors du canvas mis à l'échelle, elle passe au-dessus de tout. */
+.rv-mobile-block-overlay--dismissible {
+  z-index: 2147483647;
+  background-color: rgba(15, 16, 21, 0.97);
+}
+
+.rv-mobile-block-button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.rv-mobile-block-button:hover {
+  background: #252834;
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.rv-mobile-block-button:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}

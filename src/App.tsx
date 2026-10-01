@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   account,
   clearStoredAppwriteSession,
@@ -10,7 +10,7 @@ import {
 import { PROJECT_LOCATION_CHANGE_EVENT, readProjectIdFromPath } from './shared/utils/projectLocation'
 import { LoginScreen, probeSession, SESSION_EXPIRED_EVENT } from './features/auth'
 import type { SessionProbeResult } from './features/auth'
-import { MobileBlockScreen } from './shared/components/MobileBlockScreen'
+import { MobileBlockScreen, NarrowViewportOverlay } from './shared/components/MobileBlockScreen'
 import { useIsMobileDevice } from './shared/hooks/useIsMobileDevice'
 import { useAppI18n } from './shared/i18n'
 import './index.css'
@@ -219,14 +219,16 @@ function App() {
     }
   }, [authStatus, isPasswordResetUrl, session?.user?.id])
 
-  const { isMobile } = useIsMobileDevice()
+  const { isMobile, showNarrowViewportOverlay, dismissNarrowViewportOverlay } = useIsMobileDevice()
 
+  // Vrai appareil mobile (détecté au chargement) : blocage, l'app n'est pas montée.
   if (isMobile) {
     return <MobileBlockScreen landingUrl={landingUrl} />
   }
 
+  let content: ReactNode
   if (authStatus === 'unreachable') {
-    return (
+    content = (
       <ServerUnreachableScreen
         onRetry={() => {
           setAuthStatus('loading')
@@ -234,14 +236,10 @@ function App() {
         }}
       />
     )
-  }
-
-  if (authStatus === 'loading') {
-    return <BootstrapScreen label={t('Loading...')} />
-  }
-
-  if (!session) {
-    return (
+  } else if (authStatus === 'loading') {
+    content = <BootstrapScreen label={t('Loading...')} />
+  } else if (!session) {
+    content = (
       <LoginScreen
         landingUrl={landingUrl}
         onLogin={(email) => {
@@ -266,19 +264,28 @@ function App() {
         }}
       />
     )
+  } else {
+    // Open beta : tout compte inscrit a un accès complet. Le statut d'abonnement réel
+    // est lu côté serveur (billing, Project Browser) ; rien en aval n'affiche « démo ».
+    content = (
+      <Suspense fallback={<BootstrapScreen label={t('Loading dashboard...')} />}>
+        <Dashboard
+          email={session.user.email || 'unknown'}
+          initialProjectId={initialProjectId}
+          isDemoAccount={false}
+          offersUrl={offersUrl}
+        />
+      </Suspense>
+    )
   }
 
-  // Open beta : tout compte inscrit a un accès complet. Le statut d'abonnement réel
-  // est lu côté serveur (billing, Project Browser) ; rien en aval n'affiche « démo ».
+  // Fenêtre de bureau rétrécie : simple superposition, l'app reste montée dessous
+  // (historique d'annulation, imports, LiDAR, contexte WebGL conservés).
   return (
-    <Suspense fallback={<BootstrapScreen label={t('Loading dashboard...')} />}>
-      <Dashboard
-        email={session.user.email || 'unknown'}
-        initialProjectId={initialProjectId}
-        isDemoAccount={false}
-        offersUrl={offersUrl}
-      />
-    </Suspense>
+    <>
+      {content}
+      {showNarrowViewportOverlay && <NarrowViewportOverlay onContinue={dismissNarrowViewportOverlay} />}
+    </>
   )
 }
 
