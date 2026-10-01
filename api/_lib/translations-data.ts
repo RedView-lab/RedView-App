@@ -13,6 +13,42 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Loading dashboard..."
   },
   {
+    "fr": "Connexion au serveur impossible",
+    "en": "Unable to reach the server"
+  },
+  {
+    "fr": "Vérifiez votre connexion internet puis réessayez.",
+    "en": "Check your internet connection, then try again."
+  },
+  {
+    "fr": "Réessayer",
+    "en": "Retry"
+  },
+  {
+    "fr": "Uniquement disponible sur desktop",
+    "en": "Only available on desktop"
+  },
+  {
+    "fr": "Veuillez ouvrir RedView sur un ordinateur pour accéder à l'application et à la cartographie 3D.",
+    "en": "Please open RedView on a computer to access the app and its 3D maps."
+  },
+  {
+    "fr": "Retour au site",
+    "en": "Back to website"
+  },
+  {
+    "fr": "Fenêtre trop étroite",
+    "en": "Window too narrow"
+  },
+  {
+    "fr": "RedView est conçu pour un écran d'ordinateur d'au moins 960 px de large. Agrandissez la fenêtre pour retrouver l'interface complète.",
+    "en": "RedView is designed for a computer screen at least 960 px wide. Widen the window to get the full interface back."
+  },
+  {
+    "fr": "Continuer quand même",
+    "en": "Continue anyway"
+  },
+  {
     "fr": "Réglages globaux",
     "en": "Global settings"
   },
@@ -1153,6 +1189,46 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Enter folder {{name}}"
   },
   {
+    "fr": "Connexion au cloud impossible : les modifications sont conservées sur cet appareil et seront synchronisées automatiquement.",
+    "en": "Cannot reach the cloud: your changes are kept on this device and will be synced automatically."
+  },
+  {
+    "fr": "Projet trop volumineux pour la sauvegarde cloud (limite 12 Mo compressés). Les modifications sont conservées sur cet appareil : allégez le projet ou exportez-le.",
+    "en": "Project too large for cloud backup (12 MB compressed limit). Your changes are kept on this device: slim the project down or export it."
+  },
+  {
+    "fr": "Session expirée : reconnectez-vous pour synchroniser vos projets.",
+    "en": "Session expired: sign in again to sync your projects."
+  },
+  {
+    "fr": "Ce projet a été modifié sur un autre appareil.",
+    "en": "This project was modified on another device."
+  },
+  {
+    "fr": "Ce projet a été supprimé.",
+    "en": "This project has been deleted."
+  },
+  {
+    "fr": "Le serveur a refusé l’enregistrement du projet.",
+    "en": "The server rejected the project save."
+  },
+  {
+    "fr": "copie locale non synchronisée",
+    "en": "unsynced local copy"
+  },
+  {
+    "fr": "Des modifications ne sont pas synchronisées avec le cloud : {{names}}. OK : se déconnecter quand même (ces modifications seront perdues). Annuler : rester connecté pour réessayer plus tard ou exporter les projets.",
+    "en": "Some changes are not synced to the cloud: {{names}}. OK: sign out anyway (these changes will be lost). Cancel: stay signed in to retry later or export the projects."
+  },
+  {
+    "fr": "Des modifications ne sont pas synchronisées.",
+    "en": "Some changes are not synced."
+  },
+  {
+    "fr": "version d’un autre appareil",
+    "en": "version from another device"
+  },
+  {
     "fr": "Fonds de carte",
     "en": "Basemaps"
   },
@@ -2135,6 +2211,14 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Échec de l’enregistrement",
     "en": "Save failed"
+  },
+  {
+    "fr": "Synchronisation en attente",
+    "en": "Sync pending"
+  },
+  {
+    "fr": "Ce projet a été modifié sur un autre appareil. Remplacer la version du cloud par la vôtre ? (Annuler : vos modifications restent sur cet appareil.)",
+    "en": "This project was modified on another device. Replace the cloud version with yours? (Cancel: your changes stay on this device.)"
   },
   {
     "fr": "Enregistrer le projet",
@@ -3859,5 +3943,65 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Filtres globaux du haut de page",
     "en": "Global filters at the top of the page"
+  },
+  {
+    "fr": "Réessayer",
+    "en": "Retry"
+  },
+  {
+    "fr": "Corridor trop large : réduisez le rayon ou découpez l’itinéraire",
+    "en": "Corridor too large: reduce the radius or split the route"
+  },
+  {
+    "fr": "La recherche de POI a expiré. Les POI déjà trouvés sont conservés.",
+    "en": "The POI search timed out. POIs already found are kept."
+  },
+  {
+    "fr": "La recherche de POI a échoué. Les POI déjà trouvés sont conservés.",
+    "en": "The POI search failed. POIs already found are kept."
+  },
+  {
+    "fr": "Envoi impossible pour : {{list}}. Ces fichiers sont utilisés mais ne seront pas conservés dans le projet.",
+    "en": "Upload failed for: {{list}}. These files are used but will not be kept in the project."
+  },
+  {
+    "fr": "Impossible de sauvegarder les fichiers FIT sur le serveur.",
+    "en": "Unable to save the FIT files on the server."
+  },
+  {
+    "fr": "Fichiers FIT ignorés : {{list}}",
+    "en": "FIT files ignored: {{list}}"
+  },
+  {
+    "fr": "fichier vide",
+    "en": "empty file"
+  },
+  {
+    "fr": "aucune donnée d’activité",
+    "en": "no activity data"
+  },
+  {
+    "fr": "fichier tronqué",
+    "en": "truncated file"
+  },
+  {
+    "fr": "illisible par le moteur",
+    "en": "unreadable by the engine"
+  },
+  {
+    "fr": "pas un fichier FIT",
+    "en": "not a FIT file"
+  },
+  {
+    "fr": "trop volumineux, 30 Mo maximum",
+    "en": "too large, 30 MB maximum"
+  },
+  {
+    "fr": "Trop de calculs d’itinéraire en peu de temps. Patientez une minute puis réessayez.",
+    "en": "Too many route calculations in a short time. Please wait a minute and try again."
+  },
+  {
+    "fr": "Prévisions météo indisponibles pour ce départ (erreur ou date au-delà de 16 jours) : la courbe météo est masquée.",
+    "en": "Weather forecast unavailable for this departure (error or date beyond 16 days): the weather curve is hidden."
   }
 ];
