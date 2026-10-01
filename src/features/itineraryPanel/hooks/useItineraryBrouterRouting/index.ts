@@ -455,7 +455,8 @@ export function useItineraryBrouterRouting({
           return { lat, lon };
         })
       : [];
-    const via = userVia.slice(0, 14);
+    // Plus de MAX_BROUTER_VIA_PER_REQUEST via : resolveRouteRequest découpe en tronçons.
+    const via = userVia;
 
     const allPoints = [
       { lat: startLat, lon: startLon },

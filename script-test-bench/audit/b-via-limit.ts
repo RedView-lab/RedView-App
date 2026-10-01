@@ -19,7 +19,7 @@ import { loadSrc, closeLoader } from './b-loader';
 async function main() {
   const trace = await loadSrc<any>('src/features/itineraryPanel/lib/tracer/traceEdits.ts');
   const mut = await loadSrc<any>('src/features/itineraryPanel/hooks/useItineraryBrouterRouting/projectMutations.ts');
-  const { buildBrouterUrl } = await loadSrc<any>('src/features/itineraryPanel/lib/brouter/index.ts');
+  const { splitRouteIntoLegs, MAX_BROUTER_VIA_PER_REQUEST } = await loadSrc<any>('src/features/itineraryPanel/lib/brouter/index.ts');
 
   const it: any = {
     id: 'it-1', timeline: [
@@ -36,19 +36,17 @@ async function main() {
     if (i === 1) it.gpxRoute = { points: [{ lat: 45, lon: 6 }, { lat: 45.02, lon: 6.02 }], source: 'brouter' };
   }
   const { startKey, endKey, viaKey } = mut.getRoutingEndpointsKey(it);
-  const userVia = viaKey ? viaKey.split('|') : [];
-  const via = userVia.slice(0, 14); // index.ts:458
-  const url = buildBrouterUrl({
-    start: { lon: +startKey.split(',')[0], lat: +startKey.split(',')[1] },
-    end: { lon: +endKey.split(',')[0], lat: +endKey.split(',')[1] },
-    via: via.map((s: string) => ({ lon: +s.split(',')[0], lat: +s.split(',')[1] })),
-    profile: 'trekking',
-  });
-  const lonlats = new URL('http://x' + url).searchParams.get('lonlats')!.split('|').length;
-  console.log(`${clicks} tracer clicks → timeline waypoints (not onRoute) = ${userVia.length}; full recompute sends ${lonlats} points (start + ${via.length} via + end); dropped = ${userVia.length - via.length}`);
-  console.log(`dropped points: ${userVia.slice(14).join(' | ')}`);
-  const dropped = userVia.length - via.length;
-  console.log(dropped > 0 ? '\nFAIL: vias silently dropped by the full recompute (no warning, route shortcuts to the end)' : '\nOK');
+  const toPoint = (s: string) => ({ lon: +s.split(',')[0], lat: +s.split(',')[1] });
+  const userVia = viaKey ? viaKey.split('|').map(toPoint) : [];
+  // Full recompute (index.ts → resolveRouteRequest): legs of <= MAX_BROUTER_VIA_PER_REQUEST via.
+  const legs = splitRouteIntoLegs(toPoint(startKey), userVia, toPoint(endKey));
+  const routed = [legs[0].start, ...legs.flatMap((leg: any) => [...leg.via, leg.end])];
+  const expected = [toPoint(startKey), ...userVia, toPoint(endKey)];
+  const same = routed.length === expected.length && routed.every((p: any, i: number) => p.lat === expected[i].lat && p.lon === expected[i].lon);
+  const maxVia = Math.max(...legs.map((leg: any) => leg.via.length));
+  console.log(`${clicks} tracer clicks → timeline waypoints (not onRoute) = ${userVia.length}; full recompute = ${legs.length} leg(s), max ${maxVia} via/request (cap ${MAX_BROUTER_VIA_PER_REQUEST}); all points routed in order = ${same}`);
+  const dropped = same && maxVia <= MAX_BROUTER_VIA_PER_REQUEST ? 0 : 1;
+  console.log(dropped > 0 ? '\nFAIL: vias dropped / reordered by the full recompute' : '\nOK');
   await closeLoader();
   process.exit(dropped > 0 ? 1 : 0);
 }

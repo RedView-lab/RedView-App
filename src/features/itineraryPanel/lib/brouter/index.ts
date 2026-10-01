@@ -54,3 +54,9 @@ export {
   type ResolvedRouting,
 } from './routing';
 export { isClimbingMode, CLIMBING_SLIDER_THRESHOLD } from './routing';
+export {
+  MAX_BROUTER_VIA_PER_REQUEST,
+  concatBrouterRoutes,
+  splitRouteIntoLegs,
+  type BrouterLeg,
+} from './routing';
