@@ -81,7 +81,25 @@ async function main() {
     parsedAll.push({ file: f, points: stored });
   }
   const wptFiles = FILES.filter((f) => { const p = path.join(DOWNLOADS, f); return fs.existsSync(p) && /<wpt\b/.test(fs.readFileSync(p, 'utf8')); });
-  if (wptFiles.length) console.log(`NOTE: <wpt> elements are ignored by parseGpxText (files: ${wptFiles.join(', ')})`);
+  if (wptFiles.length) console.log(`NOTE: <wpt> present in: ${wptFiles.join(', ')}`);
+
+  // B8 — re-importing RedView's own export must keep its POIs (<wpt>).
+  const poiExport = path.join(DOWNLOADS, 'GT20_POI.gpx');
+  if (fs.existsSync(poiExport)) {
+    const { buildImportedGpxWaypoints } = await loadSrc<any>('src/features/itineraryPanel/components/ItineraryPanelContainer/importedGpxWaypoints.ts');
+    const text = fs.readFileSync(poiExport, 'utf8');
+    const r = parseGpxText(text);
+    const wptInFile = (text.match(/<wpt\b/g) ?? []).length;
+    const endpoints = (r.waypoints ?? []).filter((w: any) => w.type === 'start' || w.type === 'finish').length;
+    const imported = buildImportedGpxWaypoints(r, r.points, 1);
+    const favInFile = (text.match(/\(favori\)<\/desc>/g) ?? []).length;
+    const favImported = imported.poiFeatures.filter((f: any) => f.favorite).length;
+    console.log(`GT20_POI.gpx: <wpt> ${wptInFile} (endpoints ${endpoints}) → parsed ${r.waypoints?.length ?? 0}, imported POIs ${imported.poiFeatures.length} (favorites ${favImported}/${favInFile}), timeline POI rows ${imported.poiRows.length}, waypoint rows ${imported.waypointRows.length}`);
+    if (imported.poiFeatures.length + imported.waypointRows.length < wptInFile - endpoints) {
+      failures.push(`GT20_POI.gpx: ${wptInFile - endpoints - imported.poiFeatures.length - imported.waypointRows.length} of ${wptInFile - endpoints} <wpt> lost on import`);
+    }
+    if (favImported !== favInFile) failures.push(`GT20_POI.gpx: favorites ${favImported} != ${favInFile} marked in file`);
+  }
 
   // Synthetic 1000 km route: concatenate GT20 + UTMB + TdF stage translated end-to-end is unrealistic for
   // geography; instead densify a straight-ish 1000 km line across France with 20 m spacing (typical export).

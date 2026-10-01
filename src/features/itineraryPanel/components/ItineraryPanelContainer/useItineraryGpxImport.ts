@@ -17,6 +17,7 @@ import { createDefaultAnalysisPanelState, createImportedPoiState } from '../../l
 import type { GpxQualityMode, Itinerary, ItineraryProject } from '../../types';
 import { resolveImportedTimelineLabel } from './importedTimelineLabel';
 import { reverseGeocodeSettlement } from '../../lib/geocoding';
+import { buildImportedGpxWaypoints, GPX_IMPORT_WAYPOINT_ID_PREFIX } from './importedGpxWaypoints';
 import { translateAppText } from '@/shared/i18n';
 
 /** Taille maximale d'un fichier GPX importé (protection mémoire du parseur). */
@@ -110,8 +111,13 @@ export function useItineraryGpxImport({
         setProject((projectState) => {
           const target = projectState.itineraries.find((it) => it.id === itineraryId);
           if (!target) return projectState;
+          // Les points de passage nommés dans le GPX gardent leur nom.
           const waypointItems = target.timeline.filter(
-            (item) => item.kind === 'waypoint' && item.lat != null && item.lon != null,
+            (item) =>
+              item.kind === 'waypoint'
+              && item.lat != null
+              && item.lon != null
+              && !item.id.startsWith(GPX_IMPORT_WAYPOINT_ID_PREFIX),
           );
           if (waypointItems.length === 0) return projectState;
 
@@ -231,7 +237,17 @@ export function useItineraryGpxImport({
         const simplifiedPoints = normalizeImportedRoutePoints(
           simplifyPointsByQuality(storedPoints, quality),
         );
-        const timeline = createImportedTimeline(storedPoints);
+        // <wpt> du fichier : POI (favoris préservés) et points de passage nommés.
+        const importedWaypoints = buildImportedGpxWaypoints(route, simplifiedPoints);
+        const baseTimeline = createImportedTimeline(storedPoints, importedWaypoints.waypointRows);
+        const endIndex = baseTimeline.findIndex((item) => item.kind === 'end');
+        const timeline = endIndex >= 0
+          ? [
+            ...baseTimeline.slice(0, endIndex),
+            ...importedWaypoints.poiRows,
+            ...baseTimeline.slice(endIndex),
+          ]
+          : [...baseTimeline, ...importedWaypoints.poiRows];
         const id = addItinerary({
           name: route.name?.trim() || file.name.replace(/\.gpx$/i, ''),
           gpxRoute: {
@@ -247,6 +263,9 @@ export function useItineraryGpxImport({
           visible: true,
           analysisVisible: true,
           poi: createImportedPoiState(),
+          ...(importedWaypoints.poiFeatures.length > 0
+            ? { poiFeatures: importedWaypoints.poiFeatures }
+            : {}),
         });
 
         if (id) {

@@ -277,8 +277,16 @@ export function sampleImportedTimelineWaypoints(
   return waypoints;
 }
 
+/** Un point échantillonné à moins de ça d'un point du fichier fait doublon. */
+const IMPORTED_WAYPOINT_DEDUPE_KM = 1;
+
+/**
+ * @param importedWaypoints points de passage lus dans le GPX (<wpt>), fusionnés
+ *   avec l'échantillonnage automatique (qui cède la place à proximité).
+ */
 export function createImportedTimeline(
   points: NonNullable<Itinerary['gpxRoute']>['points'],
+  importedWaypoints: TimelineItem[] = [],
 ): Itinerary['timeline'] {
   const startPoint = points[0];
   const endPoint = points[points.length - 1] ?? startPoint;
@@ -289,7 +297,17 @@ export function createImportedTimeline(
     ];
   }
 
-  const waypoints = sampleImportedTimelineWaypoints(points);
+  const sampledWaypoints = sampleImportedTimelineWaypoints(points);
+  const waypoints = importedWaypoints.length === 0
+    ? sampledWaypoints
+    : [
+      ...importedWaypoints,
+      ...sampledWaypoints.filter((sampled) => !importedWaypoints.some((imported) => (
+        sampled.distanceKm != null
+        && imported.distanceKm != null
+        && Math.abs(sampled.distanceKm - imported.distanceKm) < IMPORTED_WAYPOINT_DEDUPE_KM
+      ))),
+    ].sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0));
 
   return [
     {

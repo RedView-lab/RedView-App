@@ -30,7 +30,64 @@ export function parseGpxText(text: string): GpxRoute {
   }
 
   const cleanedPoints = cleanAndInterpolateElevations(routePoints);
-  return { name, points: cleanedPoints };
+  return {
+    name,
+    points: cleanedPoints,
+    creator: extractCreator(text),
+    waypoints: extractWaypoints(text),
+  };
+}
+
+const GPX_CREATOR_REGEX = /<gpx\b[^>]*?\bcreator\s*=\s*(["'])([^"']*)\1/i;
+const WAYPOINT_REGEX = /<wpt\b([^>]*)>([\s\S]*?)<\/wpt>|<wpt\b([^>]*)\/>/gi;
+const WAYPOINT_NAME_REGEX = /<name\b[^>]*>([\s\S]*?)<\/name>/i;
+const WAYPOINT_TYPE_REGEX = /<type\b[^>]*>([\s\S]*?)<\/type>/i;
+const WAYPOINT_SYM_REGEX = /<sym\b[^>]*>([\s\S]*?)<\/sym>/i;
+const WAYPOINT_DESC_REGEX = /<desc\b[^>]*>([\s\S]*?)<\/desc>/i;
+
+function extractCreator(text: string): string | null {
+  const creator = GPX_CREATOR_REGEX.exec(text)?.[2]?.trim();
+  return creator ? decodeXmlText(creator) : null;
+}
+
+function extractWaypointText(body: string, pattern: RegExp): string | null {
+  const raw = pattern.exec(body)?.[1];
+  if (raw == null) return null;
+  const decoded = decodeXmlText(raw).trim();
+  return decoded.length > 0 ? decoded : null;
+}
+
+/** Lit les <wpt> (POI, points de passage) ignorés jusqu'ici par l'import. */
+function extractWaypoints(text: string): NonNullable<GpxRoute['waypoints']> {
+  const waypoints: NonNullable<GpxRoute['waypoints']> = [];
+  let match: RegExpExecArray | null;
+
+  WAYPOINT_REGEX.lastIndex = 0;
+  while ((match = WAYPOINT_REGEX.exec(text)) !== null) {
+    const attrs = match[1] ?? match[3] ?? '';
+    const body = match[2] ?? '';
+    const latMatch = LAT_REGEX.exec(attrs);
+    const lonMatch = LON_REGEX.exec(attrs);
+    if (!latMatch || !lonMatch) continue;
+    const lat = Number.parseFloat(latMatch[1]);
+    const lon = Number.parseFloat(lonMatch[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+
+    const elevationText = extractWaypointText(body, ELEVATION_REGEX);
+    const elevation = elevationText != null ? Number.parseFloat(elevationText) : Number.NaN;
+
+    waypoints.push({
+      lat,
+      lon,
+      elevationM: isValidElevation(elevation) ? elevation : null,
+      name: extractWaypointText(body, WAYPOINT_NAME_REGEX),
+      type: extractWaypointText(body, WAYPOINT_TYPE_REGEX),
+      sym: extractWaypointText(body, WAYPOINT_SYM_REGEX),
+      desc: extractWaypointText(body, WAYPOINT_DESC_REGEX),
+    });
+  }
+
+  return waypoints;
 }
 
 function extractRouteName(text: string): string | null {

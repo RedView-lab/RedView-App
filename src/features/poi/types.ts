@@ -149,4 +149,22 @@ export interface GpxRoute {
     elevationM?: number | null;
     gradientPct?: number | null;
   }[];
+  /** Attribut `creator` de la balise <gpx> (ex. « RedView »), quand présent. */
+  creator?: string | null;
+  /** Points <wpt> du fichier (POI, points de passage, départ/arrivée). */
+  waypoints?: GpxWaypoint[];
+}
+
+/** `tags.source` des POI issus d'un import GPX (ids négatifs, hors base POI). */
+export const GPX_IMPORT_POI_SOURCE = 'redview_gpx_import';
+
+/** Un élément <wpt> brut lu dans un GPX. */
+export interface GpxWaypoint {
+  lat: number;
+  lon: number;
+  elevationM: number | null;
+  name: string | null;
+  type: string | null;
+  sym: string | null;
+  desc: string | null;
 }

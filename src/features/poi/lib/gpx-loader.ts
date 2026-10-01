@@ -114,7 +114,29 @@ function parseGpxTextWithDomParser(text: string): GpxRoute {
   }
 
   const cleanedPoints = cleanAndInterpolateElevations(points);
-  return { name, points: cleanedPoints };
+  const waypoints: NonNullable<GpxRoute['waypoints']> = [];
+  for (const element of doc.querySelectorAll('wpt')) {
+    const lat = Number.parseFloat(element.getAttribute('lat') ?? '');
+    const lon = Number.parseFloat(element.getAttribute('lon') ?? '');
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    const childText = (tag: string) => element.querySelector(tag)?.textContent?.trim() || null;
+    const elevationM = Number.parseFloat(childText('ele') ?? '');
+    waypoints.push({
+      lat,
+      lon,
+      elevationM: isValidElevation(elevationM) ? elevationM : null,
+      name: childText('name'),
+      type: childText('type'),
+      sym: childText('sym'),
+      desc: childText('desc'),
+    });
+  }
+  return {
+    name,
+    points: cleanedPoints,
+    creator: doc.documentElement.getAttribute('creator')?.trim() || null,
+    waypoints,
+  };
 }
 
 /**

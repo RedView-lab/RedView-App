@@ -18,6 +18,7 @@ import { useEffect, useMemo, useRef, useCallback, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import type { PoiCategory, PoiFeature, GpxRoute } from '../types';
+import { GPX_IMPORT_POI_SOURCE } from '../types';
 import { PoiApiError, clampCorridorRadiusM, fetchPoisAlongRouteChunked } from '../lib/poi-api';
 import { buildCorridorSamples } from '../lib/corridor-samples';
 import { filterPoisByLateralDistance } from '../lib/corridor-distance-filter';
@@ -60,6 +61,25 @@ function describeCorridorError(err: unknown): string {
   return 'La recherche de POI a échoué. Les POI déjà trouvés sont conservés.';
 }
 
+/** ~2 m : un POI importé d'un GPX et son original OSM ont les mêmes coordonnées (6 décimales). */
+const IMPORTED_POI_MATCH_DEG = 2e-5;
+
+/**
+ * POI importé d'un GPX (id local négatif) que la recherche vient de retrouver
+ * dans la base : même position et même nom (ou POI OSM sans nom).
+ */
+function findFreshTwinOfImportedPoi(saved: PoiFeature, freshFeatures: PoiFeature[]): PoiFeature | null {
+  if (saved.tags?.source !== GPX_IMPORT_POI_SOURCE) return null;
+  const savedName = saved.name?.trim() || null;
+  for (const fresh of freshFeatures) {
+    if (Math.abs(fresh.lat - saved.lat) > IMPORTED_POI_MATCH_DEG) continue;
+    if (Math.abs(fresh.lon - saved.lon) > IMPORTED_POI_MATCH_DEG) continue;
+    const freshName = fresh.name?.trim() || null;
+    if (freshName === null || freshName === savedName) return fresh;
+  }
+  return null;
+}
+
 function mergeCorridorWithSavedFeatures(
   freshFeatures: PoiFeature[],
   savedFeatures: PoiFeature[] | null,
@@ -72,6 +92,17 @@ function mergeCorridorWithSavedFeatures(
 
   if (savedFeatures) {
     for (const saved of savedFeatures) {
+      // Favori importé d'un GPX retrouvé par la recherche : on reporte le favori
+      // sur le POI de la base au lieu d'afficher deux marqueurs superposés.
+      const twin = saved.favorite ? findFreshTwinOfImportedPoi(saved, freshFeatures) : null;
+      const twinEntry = twin ? map.get(twin.id) : undefined;
+      if (twinEntry && !twinEntry.favorite) {
+        twinEntry.favorite = true;
+        twinEntry.pauseDurationMin = saved.pauseDurationMin ?? twinEntry.pauseDurationMin ?? null;
+        if (saved.favoriteSource) twinEntry.favoriteSource = saved.favoriteSource;
+        continue;
+      }
+
       const existing = map.get(saved.id);
       if (existing) {
         existing.favorite = Boolean(saved.favorite);
