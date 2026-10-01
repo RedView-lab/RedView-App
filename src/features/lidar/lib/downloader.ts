@@ -16,6 +16,8 @@ import {
 } from './coordConvert';
 
 const DOWNLOAD_TIMEOUT_MS = 600_000;
+/** Délai max sans recevoir un octet du corps avant d'abandonner et de reprendre (Range). */
+const READ_IDLE_TIMEOUT_MS = 30_000;
 const MAX_RETRIES = 4;
 const MAX_INCOMPLETE_DOWNLOAD_RETRIES = 3;
 const RETRY_BASE_DELAY_429_MS = 2000;
@@ -267,14 +269,14 @@ async function downloadIgnTile(
       if (err.status !== 404) allNotFound = false;
       lastError = err;
       if (err.status === 404) {
-        if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS);
+        if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS, signal);
         continue;
       }
       if (err.code === 'ERR_INCOMPLETE_DOWNLOAD' || err.code === 'ERR_INVALID_LAS_SIGNATURE') {
         preferredError = err;
       }
       console.warn(`[Download] Failed for ${url}: ${err.message}`);
-      if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS);
+      if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS, signal);
       continue;
     }
   }
@@ -318,6 +320,25 @@ async function fetchWithRetry(
     else signal.addEventListener('abort', onExternalAbort, { once: true });
   }
 
+  // Une fois les en-têtes reçus, le timeout global est levé : un corps qui
+  // cesse d'arriver (connexion figée) est détecté par ce minuteur
+  // d'inactivité, réarmé à chaque chunk, qui coupe la requête pour la
+  // relancer en reprise (Range).
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  let stalled = false;
+  const armIdleTimer = () => {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      stalled = true;
+      controller.abort();
+    }, READ_IDLE_TIMEOUT_MS);
+  };
+  const cleanup = () => {
+    clearTimeout(timeout);
+    clearTimeout(idleTimer);
+    signal?.removeEventListener('abort', onExternalAbort);
+  };
+
   try {
     const requestedResumeBytes = resumeState?.bytesDownloaded ?? 0;
     const requestHeaders = requestedResumeBytes > 0
@@ -352,8 +373,9 @@ async function fetchWithRetry(
       setRateLimit(delay);
       if (attempt < MAX_RETRIES) {
         onProgress?.({ tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'downloading', message: `Limite de débit, attente ${(delay / 1000).toFixed(0)}s...` });
-        await sleep(delay);
-        return fetchWithRetry(url, coord, onProgress, attempt + 1, incompleteRetryCount, resumeState, allowZip);
+        cleanup();
+        await sleep(delay, signal);
+        return fetchWithRetry(url, coord, onProgress, attempt + 1, incompleteRetryCount, resumeState, allowZip, signal);
       }
       const err = new Error(`HTTP 429 after ${MAX_RETRIES} retries`) as any;
       err.status = 429;
@@ -363,8 +385,9 @@ async function fetchWithRetry(
     if (response.status >= 500) {
       if (attempt < MAX_RETRIES) {
         const delay = RETRY_BASE_DELAY_5XX_MS * Math.pow(2, attempt);
-        await sleep(delay);
-        return fetchWithRetry(url, coord, onProgress, attempt + 1, incompleteRetryCount, resumeState, allowZip);
+        cleanup();
+        await sleep(delay, signal);
+        return fetchWithRetry(url, coord, onProgress, attempt + 1, incompleteRetryCount, resumeState, allowZip, signal);
       }
       throw new Error(`Server error ${response.status} after ${MAX_RETRIES} retries`);
     }
@@ -397,7 +420,8 @@ async function fetchWithRetry(
         console.warn(
           `[Download] Resume offset mismatch for ${url} (wanted ${requestedResumeBytes}, got ${effectiveContentRange.start}); restarting full download`,
         );
-        return fetchWithRetry(url, coord, onProgress, attempt, incompleteRetryCount + 1, undefined, allowZip);
+        cleanup();
+        return fetchWithRetry(url, coord, onProgress, attempt, incompleteRetryCount + 1, undefined, allowZip, signal);
       }
       totalBytes = effectiveContentRange.total;
     } else {
@@ -421,9 +445,25 @@ async function fetchWithRetry(
       });
     }
 
+    armIdleTimer();
     while (true) {
-      const { done, value } = await reader.read();
+      let readResult: ReadableStreamReadResult<Uint8Array>;
+      try {
+        readResult = await reader.read();
+      } catch (readErr) {
+        if (!stalled || signal?.aborted) throw readErr;
+        // Flux figé : on garde ce qui a été reçu et on relance en reprise.
+        console.warn(`[Download] No data for ${READ_IDLE_TIMEOUT_MS / 1000}s on ${url}; aborting stalled stream`);
+        const err = new Error(
+          `Téléchargement bloqué: aucune donnée reçue depuis ${READ_IDLE_TIMEOUT_MS / 1000} s.`
+        ) as Error & { code?: string; resumeState?: ResumeState };
+        err.code = 'ERR_INCOMPLETE_DOWNLOAD';
+        err.resumeState = { chunks, bytesDownloaded, totalBytes };
+        throw err;
+      }
+      const { done, value } = readResult;
       if (done) break;
+      armIdleTimer();
 
       chunks.push(value);
       bytesDownloaded += value.byteLength;
@@ -440,6 +480,7 @@ async function fetchWithRetry(
     }
 
     if (totalBytes > 0 && bytesDownloaded !== totalBytes) {
+      cleanup();
       const err = new Error(
         `Téléchargement incomplet: ${formatBytesAsMb(bytesDownloaded)} reçus sur ${formatBytesAsMb(totalBytes)} attendus.`
       ) as Error & { code?: string; resumeState?: ResumeState };
@@ -452,6 +493,7 @@ async function fetchWithRetry(
       throw err;
     }
 
+    cleanup();
     const merged = mergeChunks(chunks);
     const isValid = hasValidLasSignature(merged) || (allowZip && hasValidZipSignature(merged));
     if (!isValid) {
@@ -468,8 +510,7 @@ async function fetchWithRetry(
 
     return merged;
   } catch (err: any) {
-    clearTimeout(timeout);
-    signal?.removeEventListener('abort', onExternalAbort);
+    cleanup();
 
     if (signal?.aborted) {
       throw new DownloadCancelledError();
@@ -667,7 +708,7 @@ async function downloadNzTile(
         continue;
       }
       console.warn(`[NZ Download] Failed for ${url}: ${err.message}`);
-      if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS);
+      if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS, signal);
       continue;
     }
   }
@@ -697,11 +738,13 @@ async function downloadJapanTile(
   });
 
   const { resolveJapanDownloadUrls } = await import('./japan/stacClient');
+  throwIfCancelled(signal);
   const urls = await resolveJapanDownloadUrls({
     eastKm: coord.xKm,
     northKm: coord.yKm,
     zone,
   });
+  throwIfCancelled(signal);
 
   if (urls.length === 0) {
     throw new Error(
@@ -713,10 +756,12 @@ async function downloadJapanTile(
   for (let i = 0; i < urls.length; i++) {
     const url = urls[i];
     try {
-      await waitForRateLimit();
-      const downloadedBuffer = await fetchWithRetry(url, coord, onProgress, 0, 0, undefined, true);
+      throwIfCancelled(signal);
+      await waitForRateLimit(signal);
+      const downloadedBuffer = await fetchWithRetry(url, coord, onProgress, 0, 0, undefined, true, signal);
       if (!downloadedBuffer) continue;
 
+      throwIfCancelled(signal);
       let lasBuffer: ArrayBuffer;
       if (hasValidZipSignature(downloadedBuffer)) {
         onProgress?.({
@@ -731,6 +776,7 @@ async function downloadJapanTile(
         lasBuffer = downloadedBuffer;
       }
 
+      throwIfCancelled(signal);
       if (!hasValidLasSignature(lasBuffer)) {
         throw new Error('Fichier nuage de points japonais corrompu (signature LAS invalide).');
       }
@@ -749,13 +795,14 @@ async function downloadJapanTile(
       }
       return lasBuffer;
     } catch (err: any) {
+      if (isDownloadCancelledError(err)) throw err;
       lastError = err;
       if (err.status === 404) {
-        if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS);
+        if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS, signal);
         continue;
       }
       console.warn(`[Japan Download] Failed for ${url}: ${err.message}`);
-      if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS);
+      if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS, signal);
       continue;
     }
   }
