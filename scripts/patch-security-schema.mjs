@@ -1,6 +1,7 @@
 /**
  * Script de durcissement et mise à jour des permissions Appwrite existantes.
- * Met à jour les collections `customers` et `subscriptions` ainsi que le bucket `project-thumbnails`.
+ * Met à jour les collections `customers`, `subscriptions`, `projects`, `project_folders`
+ * et les buckets `project-thumbnails` / `itinerary-fit-files`.
  *
  * Usage:
  *   node scripts/patch-security-schema.mjs
@@ -103,24 +104,37 @@ async function main() {
     console.warn(`   ⚠️ Erreur mise à jour 'subscriptions' (${subsRes.status}):`, subsRes.data?.message);
   }
 
-  // 3. Durcir le bucket 'project-thumbnails'
-  console.log("\n3. Sécurisation du bucket 'project-thumbnails' (fileSecurity: true)...");
-  const bucketRes = await api('/storage/buckets/project-thumbnails', 'PUT', {
-    name: 'Project Thumbnails',
-    permissions: [
-      'read("any")',
-      'create("users")',
-      'update("users")',
-      'delete("users")',
-    ],
-    fileSecurity: true,
-    maximumFileSize: 10485760, // 10MB
-    allowedFileExtensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
-  });
-  if (bucketRes.ok) {
-    console.log("   ✅ Bucket 'project-thumbnails' durci (fileSecurity: true).");
-  } else {
-    console.warn(`   ⚠️ Erreur mise à jour bucket (${bucketRes.status}):`, bucketRes.data?.message);
+  // 3. Durcir les buckets 'project-thumbnails' et 'itinerary-fit-files'.
+  // Au niveau bucket : création seulement. La lecture/écriture est portée par
+  // chaque fichier (Role.user(owner)). Un read("any") / read("users") ici
+  // exposerait les miniatures ou les fichiers FIT de TOUS les utilisateurs.
+  // On relit la config actuelle pour ne modifier QUE les permissions (un PUT
+  // partiel remettrait taille max / extensions à leurs valeurs par défaut).
+  for (const bucketId of ['project-thumbnails', 'itinerary-fit-files']) {
+    console.log(`
+3. Sécurisation du bucket '${bucketId}' (permissions: ['create("users")'], fileSecurity: true)...`);
+    const current = await api(`/storage/buckets/${bucketId}`);
+    if (!current.ok) {
+      console.warn(`   ⚠️ Bucket '${bucketId}' introuvable (${current.status}):`, current.data?.message);
+      continue;
+    }
+    const b = current.data;
+    const bucketRes = await api(`/storage/buckets/${bucketId}`, 'PUT', {
+      name: b.name,
+      permissions: ['create("users")'],
+      fileSecurity: true,
+      enabled: b.enabled,
+      maximumFileSize: b.maximumFileSize,
+      allowedFileExtensions: b.allowedFileExtensions,
+      compression: b.compression,
+      encryption: b.encryption,
+      antivirus: b.antivirus,
+    });
+    if (bucketRes.ok) {
+      console.log(`   ✅ Bucket '${bucketId}' durci.`);
+    } else {
+      console.warn(`   ⚠️ Erreur mise à jour bucket '${bucketId}' (${bucketRes.status}):`, bucketRes.data?.message);
+    }
   }
 
   // 4. Durcir la collection 'projects' (Isolation multi-tenant stricte)

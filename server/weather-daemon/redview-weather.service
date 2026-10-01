@@ -1,12 +1,38 @@
 [Unit]
 Description=RedView Weather 48h Ingestion Worker (DWD ICON-EU Europe)
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=root
+# Utilisateur dédié sans privilèges (créé par install.sh) : l'ingest parse des
+# GRIB2 téléchargés depuis Internet, il ne doit pas tourner en root.
+User=redview-weather
+Group=redview-weather
 WorkingDirectory=/opt/redview-weather
 ExecStart=/usr/bin/python3 /opt/redview-weather/ingest_europe.py --output-dir /var/www/weather --hours 48
-ExecStartPost=/usr/bin/chcon -R -t httpd_sys_content_t /var/www/weather
+# `+` : seul le relabel SELinux s'exécute avec les privilèges complets.
+ExecStartPost=+/usr/bin/chcon -R -t httpd_sys_content_t /var/www/weather
 StandardOutput=journal
 StandardError=journal
+
+# Sandboxing
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/www/weather
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+SystemCallArchitectures=native

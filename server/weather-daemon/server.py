@@ -10,12 +10,14 @@ import os
 import sys
 import json
 import math
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from typing import Dict, Any, Optional
 
 DATA_DIR = os.environ.get("WEATHER_DATA_DIR", "/var/www/weather")
 PORT = int(os.environ.get("WEATHER_PORT", "8088"))
+# Écoute locale par défaut : le service est servi via nginx, jamais en direct.
+HOST = os.environ.get("WEATHER_HOST", "127.0.0.1")
 
 # Fallback local data dir if /var/www/weather does not exist
 if not os.path.exists(DATA_DIR) and os.path.exists("./dist_weather"):
@@ -54,6 +56,11 @@ class WeatherRequestHandler(SimpleHTTPRequestHandler):
         elif self.path.endswith(".json"):
             self.send_header("Cache-Control", "public, max-age=300, stale-while-revalidate=600")
         super().end_headers()
+
+    def list_directory(self, path):
+        # Pas de listing de répertoires.
+        self.send_error(404, "Not Found")
+        return None
 
     def do_OPTIONS(self):
         self.send_response(204)
@@ -161,8 +168,9 @@ class WeatherRequestHandler(SimpleHTTPRequestHandler):
 def run_server():
     print(f"[weather-server] Starting RedView Weather Server on port {PORT}...")
     print(f"[weather-server] Data directory: {os.path.abspath(DATA_DIR)}")
-    server_address = ("", PORT)
-    httpd = HTTPServer(server_address, WeatherRequestHandler)
+    server_address = (HOST, PORT)
+    # Threading : un client lent ne bloque plus tout le service.
+    httpd = ThreadingHTTPServer(server_address, WeatherRequestHandler)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

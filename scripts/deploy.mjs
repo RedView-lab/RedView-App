@@ -5,7 +5,7 @@
  *   npm run push "feat: my change"
  *   node scripts/deploy.mjs "fix(weather): update palette"
  */
-import { execSync, spawn } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -18,6 +18,11 @@ const APP_UUID = 'q7lznj8fhunybhvuvm3jcu0u';
 function run(cmd, options = {}) {
   return execSync(cmd, { stdio: 'pipe', encoding: 'utf-8', ...options }).trim();
 }
+
+// Fichiers qui ne doivent JAMAIS partir sur GitHub, même si le .gitignore
+// venait à les rater.
+const FORBIDDEN_STAGED_RE = /(^|\/)(\.env(\..+)?|COOLIFY\.txt|[^/]+\.(key|pem|p12))$/i;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function log(msg) {
   console.log(`\x1b[36m[RedView Deploy]\x1b[0m ${msg}`);
@@ -46,8 +51,16 @@ async function main() {
   if (status) {
     log(`Staging and committing changes with message: "${commitMessage}"`);
     run('git add .');
+    const staged = run('git diff --cached --name-only').split(/\r?\n/).filter(Boolean);
+    const forbidden = staged.filter((file) => FORBIDDEN_STAGED_RE.test(file) && !file.endsWith('.env.example'));
+    if (forbidden.length > 0) {
+      run('git reset -q');
+      error(`Refusing to commit sensitive files: ${forbidden.join(', ')}`);
+      process.exit(1);
+    }
     try {
-      run(`git commit -m "${commitMessage.replace(/"/g, '\\"')}"`);
+      // execFile : le message n'est jamais interprété par un shell.
+      execFileSync('git', ['commit', '-m', commitMessage], { stdio: 'pipe', encoding: 'utf-8' });
     } catch (err) {
       warn('No new commit created (working tree clean).');
     }
@@ -84,13 +97,14 @@ $res = queue_application_deployment(application: $application, deployment_uuid: 
 echo json_encode($res);
 `;
   const b64 = Buffer.from(phpScript).toString('base64');
-  const sshBaseCmd = `ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=no ${VPS_USER}@${VPS_HOST}`;
+  const sshBaseCmd = `ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=accept-new ${VPS_USER}@${VPS_HOST}`;
   
   let deploymentUuid = '';
   try {
     const triggerRes = run(`${sshBaseCmd} "echo '${b64}' | base64 -d | sudo docker exec -i coolify php"`);
     const parsed = JSON.parse(triggerRes);
-    deploymentUuid = parsed.deployment_uuid;
+    // Interpolé ensuite dans du SQL : uniquement un UUID strict.
+    deploymentUuid = UUID_RE.test(String(parsed.deployment_uuid ?? '')) ? parsed.deployment_uuid : '';
     success(`Coolify deployment queued! UUID: ${deploymentUuid}`);
   } catch (err) {
     warn(`Deployment trigger response: ${err.message}. Checking latest deployment in database...`);

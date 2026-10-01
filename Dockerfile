@@ -20,15 +20,22 @@ ENV PORT=3000
 
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 redview
 
+# Dépendances de production uniquement (pas de vite/eslint/typescript dans l'image).
 COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/node_modules ./node_modules
+RUN npm ci --omit=dev && npm cache clean --force
+
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/api ./api
-COPY --from=builder /app/server ./server
+# Seuls les modules runtime du serveur (pas les confs nginx/systemd ni l'ingest POI).
+COPY --from=builder /app/server/*.mjs ./server/
 COPY --from=builder /app/server.mjs ./server.mjs
 
 USER redview
 
 EXPOSE 3000
 
-CMD ["npm", "run", "start"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:3000/health > /dev/null || exit 1
+
+# node directement en PID 1 (signaux SIGTERM transmis, pas de npm intermédiaire).
+CMD ["node", "--import", "tsx", "server.mjs"]

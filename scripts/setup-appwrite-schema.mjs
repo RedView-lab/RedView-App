@@ -44,12 +44,10 @@ async function main() {
       id: 'projects',
       name: 'Projects',
       documentSecurity: true,
-      permissions: [
-        'read("users")',
-        'create("users")',
-        'update("users")',
-        'delete("users")',
-      ],
+      // Collection/bucket : création seulement. Lecture/écriture accordées
+      // par document/fichier à son propriétaire (Role.user) — une permission
+      // read("users") ici exposerait les données de TOUS les utilisateurs.
+      permissions: ['create("users")'],
       attributes: [
         { type: 'string', key: 'name', size: 255, required: true },
         { type: 'string', key: 'user_id', size: 128, required: true },
@@ -66,12 +64,10 @@ async function main() {
       id: 'project_folders',
       name: 'Project Folders',
       documentSecurity: true,
-      permissions: [
-        'read("users")',
-        'create("users")',
-        'update("users")',
-        'delete("users")',
-      ],
+      // Collection/bucket : création seulement. Lecture/écriture accordées
+      // par document/fichier à son propriétaire (Role.user) — une permission
+      // read("users") ici exposerait les données de TOUS les utilisateurs.
+      permissions: ['create("users")'],
       attributes: [
         { type: 'string', key: 'name', size: 255, required: true },
         { type: 'string', key: 'user_id', size: 128, required: true },
@@ -184,12 +180,10 @@ async function main() {
     {
       id: 'project-thumbnails',
       name: 'Project Thumbnails',
-      permissions: [
-        'read("any")',
-        'create("users")',
-        'update("users")',
-        'delete("users")',
-      ],
+      // Collection/bucket : création seulement. Lecture/écriture accordées
+      // par document/fichier à son propriétaire (Role.user) — une permission
+      // read("users") ici exposerait les données de TOUS les utilisateurs.
+      permissions: ['create("users")'],
       fileSecurity: true,
       maxFileSize: 10485760, // 10MB
       allowedFileExtensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
@@ -197,12 +191,10 @@ async function main() {
     {
       id: 'itinerary-fit-files',
       name: 'Itinerary FIT Files',
-      permissions: [
-        'read("users")',
-        'create("users")',
-        'update("users")',
-        'delete("users")',
-      ],
+      // Collection/bucket : création seulement. Lecture/écriture accordées
+      // par document/fichier à son propriétaire (Role.user) — une permission
+      // read("users") ici exposerait les données de TOUS les utilisateurs.
+      permissions: ['create("users")'],
       fileSecurity: true,
       maxFileSize: 30000000, // 30MB
       allowedFileExtensions: ['fit'],

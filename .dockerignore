@@ -4,5 +4,21 @@ dist
 .claude-temp
 .figma-cache
 .zcode
-.env.local
 npm-debug.log*
+
+# Secrets et fichiers d'exploitation : ne jamais les envoyer au contexte de build.
+.env
+.env.*
+!.env.example
+COOLIFY.txt
+.workbuddy-ai
+*.key
+*.pem
+*.p12
+
+# Outillage hors runtime
+server/weather-daemon
+server/poi-ingest
+server/poi-server/node_modules
+script-test-bench
+vendor/redviewalgo/target
