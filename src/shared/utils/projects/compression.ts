@@ -1,14 +1,31 @@
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
 
+import { ProjectCloudError } from './errors';
+import { isCloudPayloadTooLarge } from './limits';
+
 const GZ_PREFIX = 'gz:';
 
 /**
  * Compresse un ItineraryProject en gzip + base64 avec préfixe 'gz:'.
- * Le JSON de points GPS et POIs se compresse typiquement à ~85-90%.
- * Un projet lourd de 5 Mo devient ~400-500 Ko, sous le plafond Appwrite (1 000 000 car.).
+ *
+ * Ratio mesuré (script-test-bench/audit/a-project-size.ts) : gz+base64 ≈ 35-45 %
+ * du JSON pour des traces GPS réalistes (flottants peu compressibles), pas 10 %.
+ * Le résultat doit rester sous MAX_CLOUD_PROJECT_PAYLOAD_CHARS (12 M car., limite
+ * du nginx devant Appwrite) : c'est à l'appelant de vérifier sa longueur.
+ *
+ * `serialized` : JSON déjà calculé par l'appelant (évite un second stringify).
+ * Si CompressionStream échoue, repli sur le JSON brut uniquement s'il tient
+ * sous la limite cloud ; sinon une erreur « too-large » est levée.
  */
-export async function compressProjectPayload(project: ItineraryProject): Promise<string> {
-  const json = JSON.stringify(project);
+export async function compressProjectPayload(project: ItineraryProject, serialized?: string): Promise<string> {
+  const json = serialized ?? JSON.stringify(project);
+
+  const plainFallback = (reason: unknown): string => {
+    if (isCloudPayloadTooLarge(json)) {
+      throw new ProjectCloudError('too-large', { cause: reason });
+    }
+    return json;
+  };
 
   if (typeof CompressionStream !== 'undefined' && typeof Response !== 'undefined') {
     try {
@@ -26,11 +43,11 @@ export async function compressProjectPayload(project: ItineraryProject): Promise
       return `${GZ_PREFIX}${btoa(binary)}`;
     } catch (e) {
       console.warn('[compression] CompressionStream failed, fallback to plain JSON', e);
-      return json;
+      return plainFallback(e);
     }
   }
 
-  return json;
+  return plainFallback(new Error('CompressionStream unavailable'));
 }
 
 /** Plafond de la taille décompressée d'un projet (protection contre les bombes gzip). */

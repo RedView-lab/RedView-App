@@ -11,7 +11,14 @@ import {
 import { logger } from '@/shared/lib/logger';
 
 import { getCurrentUserId, isLocalFallbackUser, isOwnedBy, toCloudFailure } from './auth';
-import { computeProjectSizeBytes } from './limits';
+import {
+  computeProjectSizeBytes,
+  isCloudPayloadTooLarge,
+  isProjectTooLarge,
+  MAX_CLOUD_PROJECT_PAYLOAD_CHARS,
+  utf8ByteLength,
+} from './limits';
+import { ProjectCloudError } from './errors';
 import { rowToSummary } from './mappers';
 import type { ItineraryProject, ProjectRow, ProjectSummary } from './types';
 import { compressProjectPayload, decompressProjectPayload } from './compression';
@@ -70,6 +77,33 @@ async function docToProjectRow(doc: any): Promise<ProjectRow> {
     created_at: doc.$createdAt,
     updated_at: doc.$updatedAt,
   };
+}
+
+/**
+ * Prépare la charge utile cloud d'un projet : sérialise une seule fois (ou
+ * réutilise `serialized`), vérifie la limite brute (16 MiB) puis la longueur
+ * compressée (12 M car., limite du proxy devant Appwrite). Lève une
+ * `ProjectCloudError('too-large')` au lieu d'envoyer une requête vouée à l'échec.
+ */
+async function buildCloudPayload(
+  project: ItineraryProject,
+  serialized?: string,
+): Promise<{ data: string; sizeBytes: number }> {
+  const json = serialized ?? JSON.stringify(project);
+  const sizeBytes = utf8ByteLength(json);
+  if (isProjectTooLarge(sizeBytes)) {
+    throw new ProjectCloudError('too-large');
+  }
+  const data = await compressProjectPayload(project, json);
+  if (isCloudPayloadTooLarge(data)) {
+    logger.projects.warn('Cloud payload exceeds limit', {
+      sizeBytes,
+      payloadChars: data.length,
+      maxChars: MAX_CLOUD_PROJECT_PAYLOAD_CHARS,
+    });
+    throw new ProjectCloudError('too-large');
+  }
+  return { data, sizeBytes };
 }
 
 export async function listProjects(): Promise<ProjectSummary[]> {
@@ -164,13 +198,13 @@ export async function createProject(
   if (!isDev) {
     try {
       const docId = ID.unique();
-      const compressedData = await compressProjectPayload(finalProject);
+      const cloud = await buildCloudPayload(finalProject);
       const payload = {
         user_id: userId,
         folder_id: folderId ?? null,
         name: finalProject.name,
-        data: compressedData,
-        size_bytes: computeProjectSizeBytes(finalProject),
+        data: cloud.data,
+        size_bytes: cloud.sizeBytes,
         privacy: finalProject.privacy ?? 'private',
       };
 
@@ -242,11 +276,11 @@ export async function saveProject(id: string, project: ItineraryProject): Promis
   // 2. Sauvegarde Cloud Appwrite avec compression transparente Gzip
   if (!isDev && !id.startsWith('local-')) {
     try {
-      const compressedData = await compressProjectPayload(project);
+      const cloud = await buildCloudPayload(project);
       await databases.updateDocument(APPWRITE_DATABASE_ID, PROJECTS_COLLECTION_ID, id, {
         name: project.name,
-        data: compressedData,
-        size_bytes: computeProjectSizeBytes(project),
+        data: cloud.data,
+        size_bytes: cloud.sizeBytes,
         privacy: project.privacy ?? 'private',
       });
     } catch (e) {

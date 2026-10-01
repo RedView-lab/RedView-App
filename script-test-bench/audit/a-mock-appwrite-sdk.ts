@@ -4,7 +4,9 @@
  * src/shared/services/appwrite.ts et les VRAIS projectRows.ts / folders.ts tournent dessus.
  *
  * Reproduit les comportements Appwrite pertinents :
- *  - attribut `projects.data` limité à 1 000 000 caractères (erreur 400 document_invalid_structure)
+ *  - attribut `projects.data` limité à 16 000 000 caractères depuis 2026-10-01 (erreur 400
+ *    document_invalid_structure ; `dataMaxChars` réglable par scénario, ex. 1 000 000 = ancien schéma)
+ *  - nginx devant Appwrite : corps > `proxyMaxChars` → 502 Bad Gateway (accepte ~12 M, 502 à 16 M)
  *  - listDocuments : limite par défaut 25 si aucune Query.limit, filtre equal / orderDesc / select
  *  - erreurs réseau (TypeError 'Failed to fetch') et latences paramétrables
  */
@@ -36,8 +38,13 @@ export const __mock = {
   calls: [] as string[],
   lastListQueries: [] as string[],
   lastListResponseBytes: 0,
-  dataMaxChars: 1_000_000,
+  dataMaxChars: 16_000_000,
+  proxyMaxChars: 14_000_000,
+  /** Nombre d'appels createDocument/updateDocument dont le champ data a dépassé le proxy. */
+  proxyRejections: 0,
   reset() {
+    this.dataMaxChars = 16_000_000;
+    this.proxyRejections = 0;
     this.collections.clear();
     this.accountGetMode = 'ok';
     this.accountGetFailures = -1;
@@ -66,6 +73,10 @@ function netCheck(op: string) {
 }
 
 function validate(data: Doc) {
+  if (typeof data.data === 'string' && data.data.length > __mock.proxyMaxChars) {
+    __mock.proxyRejections += 1;
+    throw new AppwriteException('<html>502 Bad Gateway</html>', 502, '');
+  }
   if (typeof data.data === 'string' && data.data.length > __mock.dataMaxChars) {
     throw new AppwriteException(
       `Invalid document structure: Attribute "data" has invalid format. Value must be a valid string and no longer than ${__mock.dataMaxChars} chars`,

@@ -4,7 +4,7 @@
  * Bundle avec esbuild le VRAI code :
  *   src/shared/utils/projects/{projectRows,folders,compression}.ts + src/shared/services/appwrite.ts
  * en remplaçant uniquement :
- *   - le paquet `appwrite` (SDK web)        → a-mock-appwrite-sdk.ts (limite data 1 000 000 car., limit 25 par défaut)
+ *   - le paquet `appwrite` (SDK web)        → a-mock-appwrite-sdk.ts (data ≤ 16 M car., proxy nginx 502 au-delà, limit 25 par défaut)
  *   - shared/utils/storage/idbProjectStore  → a-mock-idb.ts (IndexedDB en mémoire)
  * `window.localStorage` est simulé. Aucun accès réseau.
  *
@@ -112,8 +112,11 @@ async function main() {
   };
 
   // ── C1a : autosave d'un projet devenu trop gros pour Appwrite ──────────
+  // Refus serveur simulé avec l'ancien schéma (data ≤ 1 000 000 car.) : toute erreur
+  // 400 d'Appwrite doit remonter à l'appelant.
   {
     fresh();
+    __mock.dataMaxChars = 1_000_000;
     const row = await m.createProject('C1 ultra', named('C1 ultra'));
     const big = heavy('C1 ultra — 3 semaines d\'édition');
     const json = JSON.stringify(big).length;
@@ -136,6 +139,7 @@ async function main() {
   // ── C1b : duplication / création d'un gros projet → projet local- invisible ──
   {
     fresh();
+    __mock.dataMaxChars = 1_000_000; // refus serveur (ancien schéma) pendant la duplication
     const big = heavy('Copie de GT20');
     // Comportement attendu après correctif : createProject lève (toast d'erreur) au lieu
     // de renvoyer silencieusement un projet `local-*`.
@@ -148,6 +152,28 @@ async function main() {
     report('C1b', 'createProject (dupliquer) d\'un gros projet retombe en « local-* » jamais synchronisé', silentLocal, [
       row ? `id renvoyé : ${row.id} (aucune erreur, toast « Projet dupliqué » affiché par useProjectBrowserProjects.ts:403)` : `createProject a levé : ${(threw as Error)?.name} ${(threw as { kind?: string })?.kind ?? ''} → toast d'erreur, aucun projet fantôme`,
       `listProjects() (cloud OK) contient le projet ? ${visible ? 'oui' : 'non'}`,
+    ]);
+  }
+
+  // ── C1e : charge utile compressée > 12 M car. (limite nginx) → refus client explicite ──
+  {
+    fresh();
+    const row = await m.createProject('C1e', named('C1e'));
+    // ~15 Mo de texte quasi incompressible (< 16 MiB brut, gz+b64 > 12 M car.)
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const chunk = Array.from({ length: 1_000_000 }, () => alphabet[Math.floor(rnd() * 62)]).join('');
+    const blob = Array.from({ length: 15 }, (_, i) => chunk.slice(i * 997) + chunk.slice(0, i * 997)).join('');
+    const huge = { ...named('C1e énorme'), auditBlob: blob };
+    const rawBytes = Buffer.byteLength(JSON.stringify(huge));
+    __mock.calls = [];
+    let threw: { kind?: string; message?: string } | null = null;
+    try { await m.saveProject(row.id, huge); } catch (e) { threw = e as { kind?: string; message?: string }; }
+    const updates = __mock.calls.filter((c: string) => c === 'updateDocument:projects').length;
+    const idbKept = __idb.projects.get(row.id)?.data?.name === 'C1e énorme';
+    const bad = threw?.kind !== 'too-large' || updates > 0 || __mock.proxyRejections > 0 || !idbKept;
+    report('C1e', 'payload compressé > 12 M car. envoyé quand même (502 nginx, réessais sans fin)', bad, [
+      `brut=${(rawBytes / 1e6).toFixed(2)} Mo (< 16 MiB) ; saveProject : ${threw ? `lève ${threw.kind} « ${threw.message?.slice(0, 60)}… »` : 'RÉSOUT'}`,
+      `updateDocument tentés : ${updates} ; 502 du proxy : ${__mock.proxyRejections} ; copie IndexedDB conservée : ${idbKept ? 'oui' : 'NON'}`,
     ]);
   }
 
