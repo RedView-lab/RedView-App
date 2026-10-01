@@ -11,10 +11,14 @@ import {
 import { logger } from '@/shared/lib/logger';
 
 import { getCurrentUserId, isLocalFallbackUser, isOwnedBy, toCloudFailure } from './auth';
+import { CLOUD_LIST_PAGE_SIZE, listAllCloudDocuments, listFirstCloudPage } from './cloudList';
 import { folderRowToSummary } from './mappers';
+import { advanceBaseIfCurrent } from './projectRows';
 import type { ProjectFolderRow, ProjectFolderSummary, ProjectPrivacy } from './types';
 
 const LOCAL_FOLDERS_KEY = 'redview:local-folders:v1';
+/** Garde-fou des boucles de détachement (100 000 enfants). */
+const MAX_DETACH_PASSES = 1000;
 
 function readLocalFolders(): ProjectFolderRow[] {
   if (typeof window === 'undefined') return [];
@@ -35,10 +39,20 @@ function writeLocalFolders(folders: ProjectFolderRow[]): void {
   }
 }
 
-function docToFolderRow(doc: any): ProjectFolderRow {
+type CloudFolderDoc = {
+  $id: string;
+  $createdAt: string;
+  $updatedAt: string;
+  user_id?: string;
+  parent_folder_id?: string | null;
+  name?: string;
+  privacy?: ProjectPrivacy;
+};
+
+function docToFolderRow(doc: CloudFolderDoc): ProjectFolderRow {
   return {
     id: doc.$id,
-    user_id: doc.user_id,
+    user_id: doc.user_id ?? '',
     parent_folder_id: doc.parent_folder_id ?? null,
     name: doc.name || 'Dossier',
     privacy: doc.privacy || 'private',
@@ -47,22 +61,45 @@ function docToFolderRow(doc: any): ProjectFolderRow {
   };
 }
 
+/** Dernière liste de dossiers reçue du cloud, servie hors-ligne (clé purgée à la déconnexion). */
+const FOLDERS_CACHE_KEY_PREFIX = 'redview:project-folders-cache:v1:';
+
+function writeFoldersCache(userId: string, folders: ProjectFolderSummary[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(`${FOLDERS_CACHE_KEY_PREFIX}${userId}`, JSON.stringify(folders));
+  } catch {
+    // cache best effort
+  }
+}
+
+function readFoldersCache(userId: string): ProjectFolderSummary[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(`${FOLDERS_CACHE_KEY_PREFIX}${userId}`);
+    return raw ? (JSON.parse(raw) as ProjectFolderSummary[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function listProjectFolders(): Promise<ProjectFolderSummary[]> {
   const userId = await getCurrentUserId();
   const isDev = isLocalFallbackUser(userId);
 
   if (!isDev) {
     try {
-      const result = await databases.listDocuments(
-        APPWRITE_DATABASE_ID,
-        FOLDERS_COLLECTION_ID,
-        [Query.equal('user_id', userId), Query.orderDesc('$updatedAt'), Query.limit(100)],
-      );
-      if (result.documents) {
-        return result.documents.map((doc) => folderRowToSummary(docToFolderRow(doc)));
-      }
+      const documents = await listAllCloudDocuments<CloudFolderDoc>(FOLDERS_COLLECTION_ID, [
+        Query.equal('user_id', userId),
+        Query.orderDesc('$updatedAt'),
+      ]);
+      const folders = documents.map((doc) => folderRowToSummary(docToFolderRow(doc)));
+      writeFoldersCache(userId, folders);
+      return folders;
     } catch (e) {
-      logger.projects.debug('Appwrite listProjectFolders fallback to local storage', e);
+      const error = toCloudFailure('listProjectFolders', e);
+      if (error.kind !== 'offline') throw error;
+      return readFoldersCache(userId);
     }
   }
 
@@ -185,28 +222,39 @@ export async function deleteProjectFolder(id: string): Promise<void> {
 
   if (!isDev && !id.startsWith('folder-')) {
     try {
-      // Find and detach child projects
-      const childProjects = await databases.listDocuments(
-        APPWRITE_DATABASE_ID,
-        PROJECTS_COLLECTION_ID,
-        [Query.equal('folder_id', id)],
-      );
-      for (const p of childProjects.documents) {
-        await databases.updateDocument(APPWRITE_DATABASE_ID, PROJECTS_COLLECTION_ID, p.$id, {
-          folder_id: null,
-        });
+      // Détacher TOUS les projets enfants (sans Query.limit, Appwrite n'en renvoie
+      // que 25). Les projets détachés sortent du filtre : on relit la première
+      // page jusqu'à ce qu'elle soit vide. Le dossier n'est supprimé qu'ensuite :
+      // un échec en cours de route laisse un dossier existant, jamais d'orphelins.
+      for (let pass = 0; pass < MAX_DETACH_PASSES; pass++) {
+        const children = await listFirstCloudPage<{ $id: string; $updatedAt: string }>(PROJECTS_COLLECTION_ID, [
+          Query.equal('user_id', userId),
+          Query.equal('folder_id', id),
+          Query.select(['$id', '$updatedAt', 'folder_id']),
+        ]);
+        if (children.length === 0) break;
+        for (const child of children) {
+          const doc = await databases.updateDocument(APPWRITE_DATABASE_ID, PROJECTS_COLLECTION_ID, child.$id, {
+            folder_id: null,
+          });
+          advanceBaseIfCurrent(child.$id, child.$updatedAt, doc.$updatedAt, { folder_id: null });
+        }
+        if (children.length < CLOUD_LIST_PAGE_SIZE) break;
       }
 
-      // Find and detach child folders
-      const childFolders = await databases.listDocuments(
-        APPWRITE_DATABASE_ID,
-        FOLDERS_COLLECTION_ID,
-        [Query.equal('parent_folder_id', id)],
-      );
-      for (const cf of childFolders.documents) {
-        await databases.updateDocument(APPWRITE_DATABASE_ID, FOLDERS_COLLECTION_ID, cf.$id, {
-          parent_folder_id: null,
-        });
+      // Détacher tous les sous-dossiers (même principe).
+      for (let pass = 0; pass < MAX_DETACH_PASSES; pass++) {
+        const children = await listFirstCloudPage(FOLDERS_COLLECTION_ID, [
+          Query.equal('user_id', userId),
+          Query.equal('parent_folder_id', id),
+        ]);
+        if (children.length === 0) break;
+        for (const child of children) {
+          await databases.updateDocument(APPWRITE_DATABASE_ID, FOLDERS_COLLECTION_ID, child.$id, {
+            parent_folder_id: null,
+          });
+        }
+        if (children.length < CLOUD_LIST_PAGE_SIZE) break;
       }
 
       // Delete the folder itself

@@ -496,8 +496,17 @@ export function useProjectBrowserProjects({
 
   const q = search.trim().toLowerCase();
   const breadcrumbs = buildFolderBreadcrumbs(folders, currentFolderId);
-  const visibleFoldersBase = folders.filter((folder) => folder.parentFolderId === currentFolderId);
-  const visibleProjectsBase = projects.filter((project) => project.folderId === currentFolderId);
+  // Un dossier parent inconnu (supprimé, orphelin) est traité comme la racine :
+  // aucun projet ni dossier ne doit devenir introuvable dans l'interface.
+  const knownFolderIds = new Set(folders.map((folder) => folder.id));
+  const effectiveParent = (parentId: string | null) =>
+    parentId && knownFolderIds.has(parentId) ? parentId : null;
+  const visibleFoldersBase = folders.filter(
+    (folder) => effectiveParent(folder.parentFolderId) === currentFolderId,
+  );
+  const visibleProjectsBase = projects.filter(
+    (project) => effectiveParent(project.folderId) === currentFolderId,
+  );
   const visibleFolders = (q
     ? visibleFoldersBase.filter((folder) => folder.name.toLowerCase().includes(q))
     : visibleFoldersBase

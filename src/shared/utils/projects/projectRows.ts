@@ -692,11 +692,23 @@ async function updateProjectDocumentKeepingBase(
   return doc;
 }
 
-/** Fait avancer la version de base (mémoire + IndexedDB) si elle valait `before`. */
-export function advanceBaseIfCurrent(id: string, before: string, after: string): void {
+/**
+ * Après une mise à jour d'attributs faite par ce client (renommage, dossier) :
+ * fait avancer la version de base (mémoire + IndexedDB) si elle valait
+ * `before`, et applique `metaPatch` à la copie locale.
+ */
+export function advanceBaseIfCurrent(
+  id: string,
+  before: string,
+  after: string,
+  metaPatch: Partial<Pick<ProjectRowMeta, 'name' | 'folder_id'>> = {},
+): void {
   if (knownCloudVersions.get(id) === before) knownCloudVersions.set(id, after);
   void enqueue(localQueues, id, () =>
-    idbUpdateProjectMeta(id, (meta) => (meta.cloud_updated_at === before ? { cloud_updated_at: after } : {})),
+    idbUpdateProjectMeta(id, (meta) => ({
+      ...metaPatch,
+      ...(meta.cloud_updated_at === before ? { cloud_updated_at: after } : {}),
+    })),
   ).catch(() => undefined);
 }
 
