@@ -59,8 +59,7 @@
 }
 
 .rvc-sunlight__option-label,
-.rvc-sunlight__row-label,
-.rvc-sunlight__band-label {
+.rvc-sunlight__row-label {
   flex: 1 1 0;
   min-width: 0;
   color: var(--rvc-text);
@@ -106,14 +105,6 @@
   padding: 4px 8px;
 }
 
-.rvc-sunlight__time-text {
-  color: var(--rvc-text);
-  font-family: var(--rv-font-sans);
-  font-size: var(--rv-font-size-md);
-  font-weight: 600;
-  letter-spacing: 0.2px;
-}
-
 .rvc-sunlight__native-input {
   position: absolute;
   inset: 0;
@@ -131,9 +122,6 @@
   display: flex;
   align-items: center;
 }
-
-
-
 
 .rvc-sunlight__time-bound {
   flex-shrink: 0;
@@ -208,9 +196,6 @@
 .rvc-sunlight__opacity-slider-wrap .rvc-slider {
   width: 100%;
 }
-
-
-
 
 .rvc-sunlight__shadow-opacity-value {
   font-size: var(--rv-font-size-xs);
@@ -289,7 +274,6 @@
   height: 16px;
   flex-shrink: 0;
 }
-
 
 .rvc-sunlight__map-settings {
   display: flex;
@@ -375,7 +359,6 @@
   color: var(--rvc-text);
 }
 
-.rvc-sunlight__band-row.is-hidden .rvc-sunlight__band-label,
 .rvc-sunlight__band-row.is-hidden .rvc-sunlight__band-label-editable,
 .rvc-sunlight__band-row.is-hidden .rvc-sunlight__color-chip {
   opacity: 0.4;

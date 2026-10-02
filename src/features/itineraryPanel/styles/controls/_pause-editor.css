@@ -73,7 +73,11 @@
   color: var(--rvi-text);
   opacity: 0.65;
   white-space: nowrap;
-  flex: 0 0 auto;
+  /* Le champ (48px) reste entier : c'est le label qui cède si la place manque. */
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Numeric chip */

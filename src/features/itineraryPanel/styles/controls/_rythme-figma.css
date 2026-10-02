@@ -381,6 +381,18 @@
   box-sizing: border-box;
 }
 
+/*
+ * Quatre cartes côte à côte seulement si chacune garde ~110px (titre « Poids
+ * (avec sac) », valeur « 15.5 km/h ») ; sinon grille 2×2. Le panneau gauche
+ * fait 334px utiles à sa largeur par défaut (360px).
+ */
+@container rvipanel (max-width: 480px) {
+  .rvi-rythme-figma__row-four {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 10px;
+  }
+}
+
 /* Figma : titre + carte 32px (gap 6px), contenu aligné à gauche */
 .rvi-rythme-figma__row-four .rvi-rythme-figma__col {
   gap: 6px;

@@ -1,7 +1,6 @@
 .rvpb-subscription-panel,
 .rvpb-account-panel,
-.rvpb-settings-panel,
-.rvpb-panel-placeholder {
+.rvpb-settings-panel {
   flex: 1 1 auto;
   min-height: 0;
   padding: 16px 0 0;
@@ -12,15 +11,13 @@
 
 .rvpb-account-panel::-webkit-scrollbar,
 .rvpb-subscription-panel::-webkit-scrollbar,
-.rvpb-settings-panel::-webkit-scrollbar,
-.rvpb-panel-placeholder::-webkit-scrollbar {
+.rvpb-settings-panel::-webkit-scrollbar {
   width: 6px;
 }
 
 .rvpb-account-panel::-webkit-scrollbar-thumb,
 .rvpb-subscription-panel::-webkit-scrollbar-thumb,
-.rvpb-settings-panel::-webkit-scrollbar-thumb,
-.rvpb-panel-placeholder::-webkit-scrollbar-thumb {
+.rvpb-settings-panel::-webkit-scrollbar-thumb {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.16);
 }
@@ -299,45 +296,9 @@
   flex: 0 0 auto;
 }
 
-.rvpb-panel-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  text-align: center;
-}
-
-.rvpb-panel-placeholder > * {
-  max-width: 520px;
-}
-
-.rvpb-panel-placeholder__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  margin: 0 auto 16px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.rvpb-panel-placeholder h2 {
-  margin: 0 0 10px;
-  font-size: var(--rv-font-size-3xl);
-  font-weight: 700;
-}
-
-.rvpb-panel-placeholder p {
-  margin: 0 0 18px;
-  color: rgba(255, 255, 255, 0.72);
-  line-height: 1.55;
-}
-
 .rvpb-inline-cta,
 .rvpb-text-link,
-.rvpb-add-row,
-.rvpb-panel-placeholder__link {
+.rvpb-add-row {
   appearance: none;
   border: 0;
   color: inherit;
@@ -363,8 +324,7 @@
   background: #890000;
 }
 
-.rvpb-text-link,
-.rvpb-panel-placeholder__link {
+.rvpb-text-link {
   display: inline-flex;
   align-items: center;
   padding: 0;

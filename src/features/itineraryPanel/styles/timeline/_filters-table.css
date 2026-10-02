@@ -143,8 +143,7 @@
   animation: rvi-tl-fade 180ms ease-out both;
 }
 
-.rvi-tl-sheet-filters__status,
-.rvi-tl-sheet-filters__header {
+.rvi-tl-sheet-filters__status {
   display: flex;
   align-items: center;
   justify-content: space-between;

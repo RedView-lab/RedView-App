@@ -59,10 +59,6 @@ body.rvpb-billing-page-open {
   gap: 32px;
 }
 
-.rvpb-billing-page__content--compact {
-  justify-content: center;
-}
-
 .rvpb-billing-page__intro {
   display: flex;
   flex-direction: column;
@@ -121,21 +117,6 @@ body.rvpb-billing-page-open {
   border-radius: 999px;
 }
 
-.rvpb-billing-page__section-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  color: #fff;
-  font-size: var(--rv-font-size-lg);
-  line-height: 20px;
-  font-weight: 600;
-}
-
-.rvpb-billing-page__section-label-mark,
-.rvpb-billing-page__field-required {
-  color: #e02424;
-}
-
 .rvpb-billing-page__error {
   margin: 0;
 }
@@ -144,31 +125,6 @@ body.rvpb-billing-page-open {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.rvpb-billing-page__method-group {
-  margin: 0;
-  padding: 0;
-  border: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.rvpb-billing-page__method-group legend,
-.rvpb-billing-page__field-label {
-  margin: 0;
-  padding: 0;
-  color: #fff;
-  font-size: var(--rv-font-size-lg);
-  line-height: 20px;
-  font-weight: 600;
-}
-
-.rvpb-billing-page__method-grid {
-  display: grid;
-  gap: 12px;
-  width: 100%;
 }
 
 .rvpb-billing-page__method-tile {
@@ -259,180 +215,6 @@ body.rvpb-billing-page-open {
 .rvpb-billing-page__method-icon-svg {
   width: 24px;
   height: 24px;
-}
-
-.rvpb-billing-page__custom-card-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.rvpb-billing-page__field-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 112px;
-  gap: 16px;
-}
-
-.rvpb-billing-page__field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-
-.rvpb-billing-page__field--full {
-  width: 100%;
-}
-
-.rvpb-billing-page__stripe-input,
-.rvpb-billing-page__text-input,
-.rvpb-billing-page__country-select .rvpb-account-select-shell {
-  min-height: 40px;
-  border-radius: 8px;
-  border: 1px solid rgba(213, 215, 218, 0.16);
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 1px 2px rgba(10, 13, 18, 0.05);
-}
-
-.rvpb-billing-page__stripe-input {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  padding: 8px 12px;
-}
-
-.rvpb-billing-page__stripe-input .StripeElement,
-.rvpb-billing-page__stripe-input .__PrivateStripeElement {
-  display: block;
-  width: 100%;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.rvpb-billing-page__stripe-input .__PrivateStripeElement > iframe {
-  width: 100% !important;
-}
-
-.rvpb-billing-page__stripe-shell {
-  position: relative;
-  display: block;
-}
-
-.rvpb-billing-page__text-input {
-  width: 100%;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: #fff;
-  font: inherit;
-  font-size: var(--rv-font-size-xl);
-  line-height: 24px;
-}
-
-.rvpb-billing-page__text-input {
-  display: block;
-  box-sizing: border-box;
-  border: 1px solid rgba(213, 215, 218, 0.16);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 1px 2px rgba(10, 13, 18, 0.05);
-  padding: 8px 12px;
-}
-
-.rvpb-billing-page__text-input::placeholder {
-  color: #fff;
-  opacity: 1;
-}
-
-.rvpb-billing-page__text-input:-webkit-autofill,
-.rvpb-billing-page__text-input:-webkit-autofill:hover,
-.rvpb-billing-page__text-input:-webkit-autofill:focus,
-.rvpb-billing-page__text-input:-webkit-autofill:active {
-  -webkit-text-fill-color: #fff;
-  -webkit-box-shadow: 0 0 0 1000px rgba(255, 255, 255, 0.08) inset;
-  box-shadow: 0 0 0 1000px rgba(255, 255, 255, 0.08) inset;
-  caret-color: #fff;
-  transition: background-color 100000s ease-in-out 0s;
-}
-
-.rvpb-billing-page__text-input:focus,
-.rvpb-billing-page__stripe-input:focus-within,
-.rvpb-billing-page__country-select .rvpb-account-select-shell:focus-within,
-.rvpb-billing-page__country-select .rvpb-account-select.is-open .rvpb-account-select-trigger {
-  border-color: rgba(137, 0, 0, 0.9);
-  box-shadow: 0 0 0 1px rgba(137, 0, 0, 0.65);
-}
-
-.rvpb-billing-page__country-select .rvpb-account-select {
-  width: 100%;
-}
-
-.rvpb-billing-page__country-select .rvpb-account-select-menu {
-  z-index: 24;
-}
-
-.rvpb-billing-page__chevron-svg {
-  width: 20px;
-  height: 20px;
-}
-
-.rvpb-billing-page__wallet-panel .AccordionItem,
-.rvpb-billing-page__wallet-panel .Block,
-.rvpb-billing-page__wallet-panel .Input,
-.rvpb-billing-page__wallet-panel .PickerItem,
-.rvpb-billing-page__wallet-panel .Dropdown,
-.rvpb-billing-page__wallet-panel .Tab {
-  border-radius: 8px;
-}
-
-.rvpb-billing-page__method-group .StripeElement,
-.rvpb-billing-page__method-group .__PrivateStripeElement {
-  display: block;
-  width: 100%;
-}
-
-.rvpb-billing-page__method-group .Tabs {
-  gap: 12px;
-}
-
-.rvpb-billing-page__method-group .Tab {
-  min-height: 90px;
-  align-items: flex-start;
-  justify-content: flex-start;
-}
-
-.rvpb-billing-page__method-group .TabLabel {
-  font-family: var(--rv-font-sans);
-  font-size: var(--rv-font-size-lg);
-  font-weight: 500;
-}
-
-.rvpb-billing-page__method-group .TabIcon {
-  transform: none;
-}
-
-.rvpb-billing-page__method-group .Tab--selected {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.28);
-}
-
-.rvpb-billing-page__method-group .Label {
-  margin-bottom: 6px;
-}
-
-.rvpb-billing-page__method-group .Text {
-  font-size: var(--rv-font-size-lg);
-}
-
-.rvpb-billing-page__method-group .Input::placeholder {
-  color: rgba(255, 255, 255, 0.48);
-}
-
-.rvpb-billing-page__legal {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.92);
-  font-size: var(--rv-font-size-lg);
-  line-height: 20px;
 }
 
 .rvpb-billing-page__consent {
@@ -674,11 +456,6 @@ body.rvpb-billing-page-open {
   .rvpb-billing-page__content {
     width: 100%;
     gap: 28px;
-  }
-
-  .rvpb-billing-page__method-grid,
-  .rvpb-billing-page__field-row {
-    grid-template-columns: 1fr !important;
   }
 
   .rvpb-billing-page__method-tile {

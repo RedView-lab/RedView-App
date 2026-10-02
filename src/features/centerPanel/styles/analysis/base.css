@@ -1,14 +1,5 @@
 .rvc-center-analysis {
-  --rvc-center-results-left-column: 95px;
-  --rvc-center-results-rows: 11;
   --rvc-center-plot-gutter: 72px;
-  --rvc-center-plot-width: calc(100% - var(--rvc-center-plot-gutter));
-  --rvc-center-plot-overlay-top: 18px;
-  --rvc-center-plot-scale-top: 34px;
-  --rvc-center-plot-axis-bottom: 36px;
-  --rvc-center-plot-band-bottom: 54px;
-  --rvc-center-grid-step: 54px;
-  --rvc-center-marker-top: 10px;
 
   display: flex;
   flex: 1 1 auto;
@@ -124,15 +115,6 @@
   color: #fff;
 }
 
-.rvc-center-analysis__detail {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  gap: 6px;
-  min-height: 28px;
-}
-
-.rvc-center-analysis__minor-label,
 .rvc-center-analysis__axis-label {
   color: var(--rvc-tb-label-color);
   font-family: var(--rvc-center-font-family);
@@ -142,43 +124,6 @@
   line-height: 1;
   white-space: nowrap;
   flex-shrink: 0;
-}
-
-.rvc-center-analysis__detail-buttons {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  gap: 2px;
-}
-
-.rvc-center-analysis__detail-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 28px;
-  height: 28px;
-  padding: 0 6px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.85);
-  font-family: var(--rvc-center-font-family);
-  font-size: var(--rv-font-size-md);
-  font-weight: 400;
-  line-height: 1;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: all 140ms ease;
-}
-
-.rvc-center-analysis__detail-button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
-}
-
-.rvc-center-analysis__detail-button:disabled {
-  opacity: 0.35;
-  cursor: default;
 }
 
 .rvc-center-analysis__axis {
@@ -546,32 +491,6 @@
   pointer-events: none;
 }
 
-.rvc-center-analysis__hover-line {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: rgba(255, 255, 255, 0.85);
-  pointer-events: none;
-  z-index: 4;
-}
-
-.rvc-center-analysis__plot-grid {
-  position: relative;
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-height: 120px;
-  background: rgba(0, 0, 0, 0.64);
-  cursor: crosshair;
-  isolation: isolate;
-}
-
-/* The plot grid owns the pointer. Every visual layer above it must let
-   events pass through so the cursor and hover tracking always work. */
-.rvc-center-analysis__plot-grid > * {
-  pointer-events: none;
-}
 /* Icône de danger « Alertes » posée sur la carte 3D (pente ≥ 12 % sur ≥ 500 m ou ≥ 18 % sur ≥ 200 m). */
 .rvi-analysis-alert-marker {
   display: flex;

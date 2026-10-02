@@ -2,31 +2,19 @@
 
 .rvc-panel {
   --rvc-panel-padding: 12px;
-  --rvc-panel-gap-compact: 6px;
   --rvc-panel-select-xs: 92px;
-  --rvc-panel-select-sm: 96px;
   --rvc-panel-select-md: 124px;
   --rvc-panel-route-mode-width: 80px;
   --rvc-panel-route-opacity-width: 74px;
   --rvc-panel-opacity-control-width: 124px;
   --rvc-panel-altitude-slider-width: 96px;
   --rvc-red: #890000;
-  --rvc-red-border: #700000;
-  --rvc-accent: #c50000;
   --rvc-bg: var(--rv-glass-tint);
   --rvc-bg-chip: rgba(255, 255, 255, 0.08);
-  --rvc-bg-chip-active: rgba(255, 255, 255, 0.12);
-  --rvc-bg-row: rgba(61, 61, 61, 0.55);
-  --rvc-bg-row-alt: rgba(56, 56, 56, 0.55);
-  --rvc-bg-row-dark: rgba(35, 35, 35, 0.55);
   --rvc-border: rgba(255, 255, 255, 0.08);
   --rvc-text: #ffffff;
   --rvc-text-dim: rgba(255, 255, 255, 0.64);
-  --rvc-text-dim-40: rgba(255, 255, 255, 0.4);
-  --rvc-ghost-btn: rgba(145, 145, 145, 0.4);
   --rvc-radius: 8px;
-  --rvc-radius-md: 6px;
-  --rvc-radius-sm: 4px;
 
   box-sizing: border-box;
   width: 280px;
@@ -98,9 +86,7 @@
 @container rvc-panel (max-width: 248px) {
   .rvc-panel {
     --rvc-panel-padding: 8px;
-    --rvc-panel-gap-compact: 5px;
     --rvc-panel-select-xs: 88px;
-    --rvc-panel-select-sm: 90px;
     --rvc-panel-select-md: 116px;
     --rvc-panel-route-mode-width: 76px;
     --rvc-panel-route-opacity-width: 68px;

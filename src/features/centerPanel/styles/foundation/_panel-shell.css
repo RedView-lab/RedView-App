@@ -1,19 +1,12 @@
 .rvc-center-panel {
   --rvc-center-bg: rgba(14, 14, 18, 0.58);
-  --rvc-center-chip: rgba(255, 255, 255, 0.08);
-  --rvc-center-chip-strong: rgba(0, 0, 0, 0.64);
   --rvc-center-border: rgba(255, 255, 255, 0.08);
-  --rvc-center-border-strong: rgba(255, 255, 255, 0.24);
   --rvc-center-text: #fff;
   --rvc-center-text-dim: rgba(255, 255, 255, 0.64);
   --rvc-center-red: #890000;
   --rvc-center-red-strong: #700000;
   --rvc-center-red-accent: #c50000;
-  --rvc-center-amber: rgba(112, 73, 20, 0.44);
   --rvc-center-font-family: var(--rv-font-sans);
-  --rvc-center-font-weight-medium: 400;
-  --rvc-center-font-weight-semibold: 400;
-  --rvc-center-font-weight-bold: 500;
   --rvc-center-panel-height: 390px;
 
   width: 100%;

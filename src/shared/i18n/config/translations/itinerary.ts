@@ -95,9 +95,6 @@ export const itineraryTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: "Debug : affiche tous les tags présents même s'ils ne sont pas utilisés.", en: 'Debug: shows every tag present, even unused ones.' },
 
   // Profils BRouter, avertissements de routage
-  { fr: 'Profil vide.', en: 'Empty profile.' },
-  { fr: 'Profil trop long (> 100 000 caractères).', en: 'Profile too long (> 100,000 characters).' },
-  { fr: 'Le profil doit contenir au moins une section ---context:global.', en: 'The profile must contain at least one ---context:global section.' },
   { fr: 'Profil BRouter personnalisé refusé par le serveur, repli sur le profil de base.', en: 'Custom BRouter profile rejected by the server, falling back to the base profile.' },
   { fr: 'Profil personnalisé momentanément indisponible, calcul avec le profil standard.', en: 'Custom profile temporarily unavailable, calculating with the standard profile.' },
   { fr: 'Point de départ isolé du réseau routable : décalé de {{distance}} m pour calculer le tracé.', en: 'Start point cut off from the routable network: moved {{distance}} m to calculate the route.' },

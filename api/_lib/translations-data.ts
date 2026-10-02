@@ -269,10 +269,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Bank card"
   },
   {
-    "fr": "Numéro de carte",
-    "en": "Card number"
-  },
-  {
     "fr": "PayPal",
     "en": "PayPal"
   },
@@ -321,10 +317,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Card details"
   },
   {
-    "fr": "CVV",
-    "en": "CVV"
-  },
-  {
     "fr": "Nom sur la carte",
     "en": "Name on card"
   },
@@ -355,10 +347,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "En fournissant vos informations de carte bancaire, vous autorisez RedView à débiter votre carte pour les paiements futurs conformément à ses conditions. Les données de votre carte sont traitées par Stripe, RedView n’enregistre jamais le PAN complet.",
     "en": "By providing your card information, you authorize RedView to charge your card for future payments in accordance with its terms. Your card data is processed by Stripe; RedView never stores the full PAN."
-  },
-  {
-    "fr": "Ouvrir RedView Web",
-    "en": "Open RedView Web"
   },
   {
     "fr": "Premium",
@@ -1773,14 +1761,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Time:"
   },
   {
-    "fr": "Homme",
-    "en": "Male"
-  },
-  {
-    "fr": "Femme",
-    "en": "Female"
-  },
-  {
     "fr": "Activités passées",
     "en": "Past activities"
   },
@@ -2123,10 +2103,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Annuler",
     "en": "Cancel"
-  },
-  {
-    "fr": "Zone très étendue — les calculs resteront plus lents qu’avec une zone réduite",
-    "en": "Very large zone — computations will stay slower than with a smaller zone"
   },
   {
     "fr": "Zone d’analyse requise — tracez-la pour activer",
@@ -3365,10 +3341,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Redo"
   },
   {
-    "fr": "Enregistrer le profil",
-    "en": "Save profile"
-  },
-  {
     "fr": "Bientôt disponible.",
     "en": "Coming soon."
   },
@@ -3559,10 +3531,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Dernier avant 6h sans équivalent",
     "en": "Last one before a 6h gap"
-  },
-  {
-    "fr": "Profil de routage",
-    "en": "Routing profile"
   },
   {
     "fr": "Itinéraire",
@@ -4093,14 +4061,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Map ready"
   },
   {
-    "fr": "Plateforme RedView 3D",
-    "en": "RedView 3D platform"
-  },
-  {
-    "fr": "Bienvenue sur RedView",
-    "en": "Welcome to RedView"
-  },
-  {
     "fr": "Visualisation 3D haute résolution & calculs d'itinéraires en temps réel.",
     "en": "High-resolution 3D visualization & real-time route computation."
   },
@@ -4109,40 +4069,12 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "⚡ Open the app (instant demo access)"
   },
   {
-    "fr": "Accès instantané avec toutes les fonctionnalités débloquées (3D, BRouter, POIs)",
-    "en": "Instant access with every feature unlocked (3D, BRouter, POIs)"
-  },
-  {
     "fr": "ou",
     "en": "or"
   },
   {
-    "fr": "🔑 Connexion avec compte Appwrite",
-    "en": "🔑 Sign in with an Appwrite account"
-  },
-  {
-    "fr": "Email Appwrite",
-    "en": "Appwrite email"
-  },
-  {
-    "fr": "votre-email@example.com",
-    "en": "your-email@example.com"
-  },
-  {
-    "fr": "Connexion en cours...",
-    "en": "Signing in..."
-  },
-  {
     "fr": "← Revenir au site vitrine RedView (",
     "en": "← Back to the RedView website ("
-  },
-  {
-    "fr": "Veuillez renseigner email et mot de passe.",
-    "en": "Please enter your email and password."
-  },
-  {
-    "fr": "Erreur de connexion",
-    "en": "Sign-in error"
   },
   {
     "fr": "Anomalie d'affichage 3D",
@@ -4165,20 +4097,12 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Technical details"
   },
   {
-    "fr": "Abonnement requis",
-    "en": "Subscription required"
-  },
-  {
     "fr": "La facturation se fait désormais directement dans l'app RedView. Reconnectez-vous avec un compte où la démo est activée ou contactez le support si cet accès devrait encore être actif.",
     "en": "Billing now happens directly inside RedView App. Reconnect with a demo-enabled account or contact support if this access should still be active."
   },
   {
     "fr": "Actualiser l'accès",
     "en": "Refresh access"
-  },
-  {
-    "fr": "Les pages de facturation hébergées sur le site vitrine sont désactivées.",
-    "en": "Hosted billing pages on the landing page are disabled."
   },
   {
     "fr": "Donner un avis",
@@ -4287,10 +4211,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Erreur inattendue",
     "en": "Unexpected error"
-  },
-  {
-    "fr": "Nom complet du titulaire",
-    "en": "Cardholder full name"
   },
   {
     "fr": "Date d'expiration",
@@ -4805,10 +4725,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Error while validating the code."
   },
   {
-    "fr": "Prédire (actif)",
-    "en": "Predict on"
-  },
-  {
     "fr": "Prédire",
     "en": "Predict"
   },
@@ -4837,32 +4753,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "No files"
   },
   {
-    "fr": "100% client",
-    "en": "100% client-side"
-  },
-  {
-    "fr": "Prédiction GPX",
-    "en": "GPX prediction"
-  },
-  {
-    "fr": "Prédit vs réel",
-    "en": "Predicted vs actual"
-  },
-  {
-    "fr": "Fichiers FIT historiques",
-    "en": "Past FIT files"
-  },
-  {
-    "fr": "Trace GPX cible",
-    "en": "Target GPX track"
-  },
-  {
     "fr": "Aucun GPX chargé",
     "en": "No GPX loaded"
-  },
-  {
-    "fr": "FIT réel de validation",
-    "en": "Actual FIT for validation"
   },
   {
     "fr": "{{name}} : tracé réel, exclu de l’entraînement",
@@ -4883,10 +4775,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "{{count}} fichiers · {{preview}}...",
     "en": "{{count}} files · {{preview}}..."
-  },
-  {
-    "fr": "Le fichier « {{name}} » dépasse la limite de 100 Mo",
-    "en": "File \"{{name}}\" exceeds 100 MB limit"
   },
   {
     "fr": "Profil coureur",
@@ -4933,32 +4821,12 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Rider (kg)"
   },
   {
-    "fr": "Vélo + équip. (kg) *",
-    "en": "Bike + gear (kg) *"
-  },
-  {
     "fr": "Gestion de l’effort",
     "en": "Pacing"
   },
   {
     "fr": "Conservateur",
     "en": "Conservative"
-  },
-  {
-    "fr": "Agressif",
-    "en": "Aggressive"
-  },
-  {
-    "fr": "Sexe",
-    "en": "Sex"
-  },
-  {
-    "fr": "Non précisé",
-    "en": "Not specified"
-  },
-  {
-    "fr": "Départ (h)",
-    "en": "Start (h)"
   },
   {
     "fr": "Total :",
@@ -5001,10 +4869,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Result"
   },
   {
-    "fr": "Prédiction du tracé",
-    "en": "Route prediction"
-  },
-  {
     "fr": "Temps prédit",
     "en": "Predicted time"
   },
@@ -5027,10 +4891,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Vélo + équip.",
     "en": "Bike + gear"
-  },
-  {
-    "fr": "Temps prédit vs temps réel",
-    "en": "Predicted vs actual time"
   },
   {
     "fr": "Temps observé",
@@ -5407,18 +5267,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Debug : affiche tous les tags présents même s'ils ne sont pas utilisés.",
     "en": "Debug: shows every tag present, even unused ones."
-  },
-  {
-    "fr": "Profil vide.",
-    "en": "Empty profile."
-  },
-  {
-    "fr": "Profil trop long (> 100 000 caractères).",
-    "en": "Profile too long (> 100,000 characters)."
-  },
-  {
-    "fr": "Le profil doit contenir au moins une section ---context:global.",
-    "en": "The profile must contain at least one ---context:global section."
   },
   {
     "fr": "Profil BRouter personnalisé refusé par le serveur, repli sur le profil de base.",
@@ -6741,60 +6589,12 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Average gradient"
   },
   {
-    "fr": "Fluidité optimale : +55 FPS stable.",
-    "en": "Optimal smoothness: stable 55+ FPS."
-  },
-  {
-    "fr": "Relief 3D à fort pitch ({{pitch}}°) : l'iGPU calcule des milliers de triangles DEM jusqu'à l'horizon.",
-    "en": "3D terrain at high pitch ({{pitch}}°): the iGPU computes thousands of DEM triangles up to the horizon."
-  },
-  {
-    "fr": "Résolution élevée ({{megaPixels}} MP / DPR {{dpr}}) : le fillrate sature la mémoire partagée de l'APU.",
-    "en": "High resolution ({{megaPixels}} MP / DPR {{dpr}}): fill rate saturates the APU's shared memory."
-  },
-  {
-    "fr": "Nombreux rafraîchissements WebGL ({{rate}} r/s) : saturation shaders fragment.",
-    "en": "Many WebGL repaints ({{rate}} r/s): fragment shader saturation."
-  },
-  {
-    "fr": "Charge combinée carte 3D / thread principal JavaScript.",
-    "en": "Combined load: 3D map / JavaScript main thread."
-  },
-  {
     "fr": "Ouvrir les diagnostics de performance",
     "en": "Open performance diagnostics"
   },
   {
     "fr": "Inconnu",
     "en": "Unknown"
-  },
-  {
-    "fr": "Inconnu (Pas de WebGL)",
-    "en": "Unknown (no WebGL)"
-  },
-  {
-    "fr": "Détection...",
-    "en": "Detecting..."
-  },
-  {
-    "fr": "Diagnostics Graphiques",
-    "en": "Graphics diagnostics"
-  },
-  {
-    "fr": "FPS (Moyen / Min)",
-    "en": "FPS (Avg / Min)"
-  },
-  {
-    "fr": "Temps Frame",
-    "en": "Frame time"
-  },
-  {
-    "fr": "Caméra (Pitch / Zoom)",
-    "en": "Camera (Pitch / Zoom)"
-  },
-  {
-    "fr": "Relief 3D DEM",
-    "en": "3D DEM terrain"
   },
   {
     "fr": "Actif (Tessellation)",
@@ -6805,44 +6605,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Off (flat 2D)"
   },
   {
-    "fr": "Résolution Canvas",
-    "en": "Canvas resolution"
-  },
-  {
-    "fr": "Mémoire JS (Heap)",
-    "en": "JS memory (heap)"
-  },
-  {
     "fr": "Mo",
     "en": "MB"
-  },
-  {
-    "fr": "Tests Immédiats d'Identification",
-    "en": "Quick diagnostic tests"
-  },
-  {
-    "fr": "Désactive temporairement le relief DEM pour mesurer l'impact du maillage 3D",
-    "en": "Temporarily disables DEM terrain to measure the impact of the 3D mesh"
-  },
-  {
-    "fr": "Désactiver Relief 3D",
-    "en": "Disable 3D terrain"
-  },
-  {
-    "fr": "Réactiver Relief 3D",
-    "en": "Re-enable 3D terrain"
-  },
-  {
-    "fr": "Bascule l'inclinaison de la caméra (0° 2D vs 60° 3D)",
-    "en": "Toggles camera pitch (0° 2D vs 60° 3D)"
-  },
-  {
-    "fr": "Vue 2D (0°)",
-    "en": "2D view (0°)"
-  },
-  {
-    "fr": "Vue 3D (60°)",
-    "en": "3D view (60°)"
   },
   {
     "fr": "{{value}}% humidité",
@@ -6927,18 +6691,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Chargement du globe...",
     "en": "Loading globe..."
-  },
-  {
-    "fr": "WebGL Standard",
-    "en": "Standard WebGL"
-  },
-  {
-    "fr": "Pixel Ratio (DPR)",
-    "en": "Pixel ratio (DPR)"
-  },
-  {
-    "fr": "Repaints WebGL / s",
-    "en": "WebGL repaints / s"
   },
   {
     "fr": "Légende de pente du tracé",

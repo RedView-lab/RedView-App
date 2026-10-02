@@ -20,7 +20,6 @@
 .lidar-viewer-right-panel-host .rvc-panel {
   --rvc-panel-padding: 12px 14px;
   --rvc-panel-select-md: 140px;
-  --rvc-panel-select-sm: 110px;
   --rvc-panel-opacity-control-width: 130px;
   position: relative;
   height: auto;

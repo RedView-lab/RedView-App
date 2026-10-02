@@ -28,40 +28,6 @@
   background: rgba(0, 0, 0, 0.6);
 }
 
-.rvc-weather__date-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-  margin-top: 8px;
-}
-
-.rvc-weather__date-label {
-  flex: 1;
-  color: white;
-  font-family: var(--rv-font-sans);
-  font-size: var(--rv-font-size-md);
-  font-weight: 500;
-  opacity: 0.64;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.rvc-weather__date-input {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
-  padding: 6px 8px;
-  color: white;
-  font-family: var(--rv-font-sans);
-  font-size: var(--rv-font-size-md);
-  font-weight: 600;
-  position: relative;
-}
-
 .rvc-weather__native-input {
   position: absolute;
   inset: 0;

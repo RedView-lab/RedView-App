@@ -183,7 +183,6 @@
 .viewer-panel__title,
 .viewer-panel__tile-label,
 .viewer-panel__location-value,
-.viewer-panel__select-option-label,
 .viewer-panel__select-trigger span,
 .viewer-panel__section-title {
   overflow: hidden;
@@ -243,10 +242,6 @@
   height: 1px;
   margin: 0;
   background: rgba(255, 255, 255, 0.12);
-}
-
-.viewer-panel__divider--compact {
-  margin-top: -6px;
 }
 
 .viewer-panel__section-title {

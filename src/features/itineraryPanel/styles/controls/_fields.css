@@ -9,245 +9,11 @@
   line-height: 1.2;
 }
 
-/* ── Priorities grid — Figma 1697:23227 ──────────────────────────
-   Two vertical columns (Durée+Distance | Dénivelé+Tranquilité) with
-   8px column gap and 8px row gap inside each column. */
-.rvi-priorities {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: flex-start;
-  gap: 8px;
-  width: 100%;
-}
-.rvi-priorities__col {
-  flex: 1 1 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
 /* ── Types de route rows — Figma 1697:23276…1697:23321 ──────────
    Five horizontal rows of two cells. The generic `.rvi-row` already
    handles gap-8 + flex-1 distribution via `.rvi-row > .rvi-lfield`. */
 
-/* ── Labeled slider (- [track] +) — Figma 1697:23229 ─────────── */
-.rvi-sfield {
-  display: flex;
-  align-items: center;
-  gap: 8px; /* Figma 1697:23229 gap-[8px] */
-  height: 24px;
-  padding: 3px 0;
-  width: 100%;
-  min-width: 0;
-}
-
-.rvi-sfield__label {
-  flex: 1 1 0;
-  min-width: 40px;
-  max-width: 64px;
-  /* Grille dense à 2 colonnes : label compact (typography.css). */
-  font-size: var(--rv-font-size-sm);
-  font-weight: 500; /* Medium — Figma 1697:23230 (Rethink_Sans:Medium) */
-  color: var(--rvi-text);
-  opacity: 0.64;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rvi-sfield__control {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 1 1 0;
-  min-width: 88px;
-  max-width: 140px; /* Figma 1697:23231 max-w-[140px] */
-}
-
-.rvi-sfield__sign {
-  font-size: var(--rv-font-size-xs);
-  font-weight: 600;
-  color: var(--rvi-text);
-  flex-shrink: 0;
-}
-
-.rvi-slider {
-  position: relative;
-  flex: 1 1 0;
-  min-width: 64px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-}
-.rvi-slider__track {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  height: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 9999px;
-}
-.rvi-slider__fill {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  height: 8px;
-  background: rgba(255, 255, 255, 0.25);
-  border-radius: 9999px;
-  pointer-events: none;
-}
-.rvi-slider__handle {
-  position: absolute;
-  top: 50%;
-  width: 24px;
-  height: 24px;
-  background: #ffffff;
-  border: 2px solid rgba(0, 0, 0, 0.64);
-  border-radius: 9999px;
-  box-shadow: 0 1px 3px 0 rgba(10, 13, 18, 0.1),
-    0 1px 2px -1px rgba(10, 13, 18, 0.1);
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-}
-.rvi-slider__native {
-  appearance: none;
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  cursor: pointer;
-  margin: 0;
-}
-
-/* ── Labeled select ──────────────────────────────────────────── */
-.rvi-lfield {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  width: 100%;
-  min-width: 0;
-}
-.rvi-lfield__label {
-  flex: 0 1 auto;
-  min-width: 0;
-  font-family: var(--rv-font-sans);
-  font-size: var(--rv-font-size-sm);
-  font-weight: 500;
-  letter-spacing: var(--rv-letter-spacing-tight);
-  color: var(--rvi-text);
-  opacity: 0.64;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rvi-select {
-  /* Default (cell) variant */
-  position: relative;
-  flex: 0 1 auto;
-  min-width: 56px;
-  max-width: 96px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 6px 4px 8px;
-  border: 1px solid var(--rvi-border);
-  border-radius: var(--rvi-radius-sm);
-  color: var(--rvi-text);
-  font-size: var(--rv-font-size-md);
-  font-weight: 600;
-  background: transparent;
-  cursor: pointer;
-  transition: background 0.15s ease;
-  width: auto;
-  box-sizing: border-box;
-}
-.rvi-select:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-/* Wide variant — ProfileBar "Gravel (défaut)", Figma 1697:23208.
-   Takes all available width, interior gap 10, padding 6/6/6/10. */
-.rvi-select--wide {
-  max-width: none;
-  min-width: 0;
-  gap: 10px;
-  padding: 6px 6px 6px 10px;
-  justify-content: center;
-}
-.rvi-select__value {
-  flex: 1 1 0;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.rvi-select__chevron {
-  flex-shrink: 0;
-  color: var(--rvi-text);
-}
-.rvi-select__trigger {
-  position: absolute;
-  inset: 0;
-  cursor: pointer;
-  border-radius: var(--rvi-radius-sm);
-}
-.rvi-select__trigger:focus-visible {
-  outline: 2px solid var(--rvi-red, #c8102e);
-  outline-offset: -2px;
-  border-radius: var(--rvi-radius-sm);
-}
-
-/* ── Dropdown menu (portal) — apparence : shared/styles/dropdown.css ── */
-.rvi-select__menu {
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 9999;
-}
-
 /* ── Input / chip input ──────────────────────────────────────── */
-.rvi-input {
-  /* Pentes max. / numeric text cell */
-  position: relative;
-  width: 100%;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 6px 4px 8px;
-  border: 1px solid var(--rvi-border);
-  border-radius: var(--rvi-radius-sm);
-  background: transparent;
-  box-sizing: border-box;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-.rvi-input:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-.rvi-input:focus-within {
-  outline: 2px solid var(--rvi-red, #c8102e);
-  outline-offset: -2px;
-  border-radius: var(--rvi-radius-sm);
-}
-.rvi-input__native {
-  flex: 1 1 0;
-  min-width: 0;
-  font-size: var(--rv-font-size-md);
-  font-weight: 600;
-  color: var(--rvi-text);
-  font-family: inherit;
-  width: 100%;
-}
-.rvi-input__native::placeholder {
-  color: var(--rvi-text-faint);
-}
 
 .rvi-chip-input {
   /* Uniform, perfectly aligned grey chip input across all stacked rows */
@@ -282,179 +48,6 @@
 .rvi-chip-input__native::placeholder {
   color: var(--rvi-text-faint);
 }
-
-/* ── Chip (button-like) for date/time ───────────────────────── */
-.rvi-datechip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 4px 6px;
-  background: var(--rvi-bg-chip);
-  border-radius: 6px;
-  color: var(--rvi-text);
-  font-family: var(--rv-font-sans);
-  font-size: var(--rv-font-size-md);
-  font-weight: 600;
-  cursor: pointer;
-  height: 28px;
-  width: 100%;
-  min-width: 0;
-  position: relative;
-  box-sizing: border-box;
-  overflow: hidden;
-}
-.rvi-datechip:hover { background: var(--rvi-bg-chip-hover); }
-.rvi-datechip__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 12px;
-  height: 12px;
-  flex-shrink: 0;
-}
-
-.rvi-datechip > span:last-child {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rvi-time-input {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  width: 100%;
-  min-width: 0;
-  height: 28px;
-  padding: 4px 6px;
-  border-radius: 6px;
-  background: var(--rvi-bg-chip);
-  color: var(--rvi-text);
-  font-family: var(--rv-font-sans);
-  font-size: var(--rv-font-size-md);
-  font-weight: 600;
-  box-sizing: border-box;
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.15s ease, box-shadow 0.15s ease;
-}
-
-.rvi-time-input:hover {
-  background: var(--rvi-bg-chip-hover);
-}
-
-.rvi-time-input:focus-within {
-  background: var(--rvi-bg-chip-hover);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
-}
-
-.rvi-time-input__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 12px;
-  height: 12px;
-  flex-shrink: 0;
-  color: var(--rvi-text);
-  opacity: 0.85;
-}
-
-.rvi-time-input__display {
-  display: flex;
-  align-items: center;
-  gap: 1px;
-  color: var(--rvi-text);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.2px;
-}
-
-.rvi-time-input__digit {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 9px;
-  height: 18px;
-  padding: 0 1.5px;
-  border-radius: 3px;
-  color: var(--rvi-text);
-  cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
-}
-
-.rvi-time-input__digit.is-active {
-  background: var(--rvi-red, #c8102e);
-  color: #ffffff;
-  font-weight: 700;
-}
-
-.rvi-time-input__colon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 4px;
-  color: var(--rvi-text);
-  opacity: 0.85;
-}
-
-.rvi-time-input__hidden-input {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  pointer-events: none;
-  border: 0;
-  margin: 0;
-  padding: 0;
-}
-
-/* ── Upload .fit chip ───────────────────────────────────────── */
-.rvi-uploadchip {
-  all: unset;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  box-sizing: border-box;
-  width: 100%;
-  min-width: 0;
-  height: 28px;
-  padding: 4px 6px;
-  background: var(--rvi-bg-chip);
-  border-radius: 6px;
-  color: var(--rvi-text);
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-.rvi-uploadchip:hover { background: var(--rvi-bg-chip-hover); }
-.rvi-uploadchip__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2px;
-  border-radius: 4px;
-  flex-shrink: 0;
-  color: var(--rvi-text);
-}
-.rvi-uploadchip__text {
-  flex: 1 1 auto;
-  min-width: 0;
-  max-width: none;
-  font-family: var(--rv-font-sans);
-  font-size: var(--rv-font-size-sm);
-  font-weight: 600;
-  line-height: normal;
-  color: var(--rvi-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 
 /* ── Checkbox ────────────────────────────────────────────────── */
 .rvi-checkbox {
@@ -518,7 +111,6 @@
 }
 
 /* Inside a horizontal row, sibling cells share available width */
-.rvi-row > .rvi-lfield,
 .rvi-row > .rvi-cfield {
   flex: 1 1 0;
   width: auto;
@@ -619,109 +211,15 @@
 }
 
 /* ── Two-cell row column distribution ────────────────────────── */
-.rvi-row:has(> .rvi-cfield + .rvi-cfield),
-.rvi-row:has(> .rvi-cfield + .rvi-lfield),
-.rvi-row:has(> .rvi-lfield + .rvi-cfield),
-.rvi-row:has(> .rvi-lfield + .rvi-lfield) {
+.rvi-row:has(> .rvi-cfield + .rvi-cfield) {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-}
-
-/* Uniform chip alignments for Rythme section */
-.rvi-row.rvi-row--rhythm-header {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.rvi-row--rhythm-header .rvi-lfield {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 76px;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  min-width: 0;
-}
-
-.rvi-row.rvi-row--rhythm-upload,
-.rvi-row.rvi-row--rhythm-weight,
-.rvi-row.rvi-row--rhythm-weather {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-/* Left column in Rythme checkbox rows: identical 70px boxes */
-.rvi-row--rhythm-upload > .rvi-cfield:first-child,
-.rvi-row--rhythm-weight > .rvi-cfield:first-child,
-.rvi-row--rhythm-weather > .rvi-cfield:first-child {
-  grid-template-columns: 20px minmax(0, 1fr) 70px;
-}
-
-/* Right column in Rythme checkbox rows: identical 56px boxes */
-.rvi-row--rhythm-upload > .rvi-cfield:last-child,
-.rvi-row--rhythm-weight > .rvi-cfield:last-child,
-.rvi-row--rhythm-weather > .rvi-cfield:last-child {
-  grid-template-columns: 20px minmax(0, 1fr) 56px;
 }
 
 /* ── Road types section: uniform size and alignment across all rows ── */
-.rvi-road-types {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 100%;
-}
 
-.rvi-row.rvi-row--road-type,
-.rvi-road-types .rvi-row,
-.rvi-row:has(> .rvi-lfield + .rvi-lfield) {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  align-items: center;
-}
-
-.rvi-row--road-type .rvi-lfield,
-.rvi-road-types .rvi-lfield,
-.rvi-row:has(> .rvi-lfield + .rvi-lfield) > .rvi-lfield {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 80px;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  min-width: 0;
-}
-
-.rvi-row--road-type .rvi-select,
-.rvi-row--road-type .rvi-input,
-.rvi-road-types .rvi-select,
-.rvi-road-types .rvi-input,
-.rvi-row:has(> .rvi-lfield + .rvi-lfield) > .rvi-lfield .rvi-select,
-.rvi-row:has(> .rvi-lfield + .rvi-lfield) > .rvi-lfield .rvi-input {
-  width: 80px;
-  min-width: 80px;
-  max-width: 80px;
-  height: 28px;
-  box-sizing: border-box;
-}
-
-.rvi-row > .rvi-lfield:only-child {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-}
-
-.rvi-row > .rvi-lfield:only-child .rvi-select {
-  width: auto;
-  min-width: 76px;
-  max-width: 96px;
-}
-
-.rvi-row:has(> .rvi-cfield + .rvi-cfield) > .rvi-cfield,
-.rvi-row:has(> .rvi-cfield + .rvi-lfield) > .rvi-cfield,
-.rvi-row:has(> .rvi-cfield + .rvi-lfield) > .rvi-lfield,
-.rvi-row:has(> .rvi-lfield + .rvi-cfield) > .rvi-cfield,
-.rvi-row:has(> .rvi-lfield + .rvi-cfield) > .rvi-lfield,
-.rvi-row:has(> .rvi-lfield + .rvi-lfield) > .rvi-lfield {
+.rvi-row:has(> .rvi-cfield + .rvi-cfield) > .rvi-cfield {
   flex: initial;
   width: auto;
   min-width: 0;
@@ -729,59 +227,20 @@
 
 /* ── Container Queries & Responsive Fallbacks ──────────────── */
 @container rvipanel (max-width: 320px) {
-  .rvi-priorities,
-  .rvi-row:has(> .rvi-cfield + .rvi-cfield),
-  .rvi-row:has(> .rvi-cfield + .rvi-lfield),
-  .rvi-row:has(> .rvi-lfield + .rvi-cfield),
-  .rvi-row:has(> .rvi-lfield + .rvi-lfield) {
+  .rvi-row:has(> .rvi-cfield + .rvi-cfield) {
     gap: 5px;
   }
 
-  .rvi-sfield,
-  .rvi-lfield,
   .rvi-cfield {
     gap: 4px;
   }
 
-  .rvi-chip-input,
-  .rvi-datechip,
-  .rvi-time-input,
-  .rvi-uploadchip {
+  .rvi-chip-input {
     padding: 3px 5px;
   }
 
-  .rvi-chip-input__native,
-  .rvi-datechip,
-  .rvi-time-input {
+  .rvi-chip-input__native {
     font-size: var(--rv-font-size-sm);
-  }
-
-  .rvi-uploadchip__text {
-    font-size: var(--rv-font-size-xs);
-  }
-
-  .rvi-row--road-type .rvi-lfield,
-  .rvi-road-types .rvi-lfield,
-  .rvi-row:has(> .rvi-lfield + .rvi-lfield) > .rvi-lfield {
-    grid-template-columns: minmax(0, 1fr) 74px;
-    gap: 4px;
-  }
-
-  .rvi-row--road-type .rvi-select,
-  .rvi-row--road-type .rvi-input,
-  .rvi-road-types .rvi-select,
-  .rvi-road-types .rvi-input,
-  .rvi-row:has(> .rvi-lfield + .rvi-lfield) > .rvi-lfield .rvi-select,
-  .rvi-row:has(> .rvi-lfield + .rvi-lfield) > .rvi-lfield .rvi-input {
-    width: 74px;
-    min-width: 74px;
-    max-width: 74px;
-  }
-}
-
-@container rvipanel (max-width: 275px) {
-  .rvi-lfield {
-    flex-wrap: wrap;
   }
 }
 

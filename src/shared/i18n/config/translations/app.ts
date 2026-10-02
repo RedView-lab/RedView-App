@@ -11,19 +11,10 @@ export const appTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Carte prête', en: 'Map ready' },
 
   // ── Dev auth screen ─────────────────────────────────────────────────────
-  { fr: 'Plateforme RedView 3D', en: 'RedView 3D platform' },
-  { fr: 'Bienvenue sur RedView', en: 'Welcome to RedView' },
   { fr: "Visualisation 3D haute résolution & calculs d'itinéraires en temps réel.", en: 'High-resolution 3D visualization & real-time route computation.' },
   { fr: "⚡ Accéder à l'application (Accès Démo Immédiat)", en: '⚡ Open the app (instant demo access)' },
-  { fr: 'Accès instantané avec toutes les fonctionnalités débloquées (3D, BRouter, POIs)', en: 'Instant access with every feature unlocked (3D, BRouter, POIs)' },
   { fr: 'ou', en: 'or' },
-  { fr: '🔑 Connexion avec compte Appwrite', en: '🔑 Sign in with an Appwrite account' },
-  { fr: 'Email Appwrite', en: 'Appwrite email' },
-  { fr: 'votre-email@example.com', en: 'your-email@example.com' },
-  { fr: 'Connexion en cours...', en: 'Signing in...' },
   { fr: '← Revenir au site vitrine RedView (', en: '← Back to the RedView website (' },
-  { fr: 'Veuillez renseigner email et mot de passe.', en: 'Please enter your email and password.' },
-  { fr: 'Erreur de connexion', en: 'Sign-in error' },
 
   // ── Global error boundary ───────────────────────────────────────────────
   { fr: "Anomalie d'affichage 3D", en: '3D display issue' },
@@ -33,10 +24,8 @@ export const appTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Détails techniques', en: 'Technical details' },
 
   // ── Paywall ─────────────────────────────────────────────────────────────
-  { fr: 'Abonnement requis', en: 'Subscription required' },
   { fr: "La facturation se fait désormais directement dans l'app RedView. Reconnectez-vous avec un compte où la démo est activée ou contactez le support si cet accès devrait encore être actif.", en: 'Billing now happens directly inside RedView App. Reconnect with a demo-enabled account or contact support if this access should still be active.' },
   { fr: "Actualiser l'accès", en: 'Refresh access' },
-  { fr: 'Les pages de facturation hébergées sur le site vitrine sont désactivées.', en: 'Hosted billing pages on the landing page are disabled.' },
 
   // ── Feedback ────────────────────────────────────────────────────────────
   { fr: 'Donner un avis', en: 'Give feedback' },
@@ -72,7 +61,6 @@ export const appTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Validation...', en: 'Validating...' },
   { fr: 'Une erreur est survenue lors du chargement de la page de paiement', en: 'An error occurred while loading the payment page' },
   { fr: 'Erreur inattendue', en: 'Unexpected error' },
-  { fr: 'Nom complet du titulaire', en: 'Cardholder full name' },
   { fr: "Date d'expiration", en: 'Expiration date' },
   { fr: 'Impossible de définir ce moyen de paiement par défaut.', en: 'Unable to set this payment method as default.' },
   { fr: 'Par défaut', en: 'Primary' },

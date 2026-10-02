@@ -24,9 +24,6 @@
   min-width: 0;
 }
 
-
-
-
 .rvc-wind__bound {
   color: #ffffff;
   font-size: var(--rv-font-size-xs);
@@ -71,8 +68,7 @@
   line-height: normal;
 }
 
-.rvc-wind__picker-input,
-.rvc-wind__color-input {
+.rvc-wind__picker-input {
   position: absolute;
   inset: 0;
   opacity: 0;

@@ -6,14 +6,8 @@
   .rvi-header__back,
   .rvi-header__title,
   .rvi-iconbtn,
-  .rvi-ghostbtn,
   .rvi-redbtn,
-  .rvi-select__trigger,
-  .rvi-input__native,
   .rvi-chip-input__native,
-  .rvi-datechip,
-  .rvi-dialog__close,
-  .rvi-add-itin-menu__item,
   .rvi-pause-chip__native,
   .rvi-pause-row__remove,
   .rvi-poipause-cell__native,
@@ -26,15 +20,13 @@
   .rvi-tl-add-split__chevron,
   .rvi-tl-row__action,
   .rvi-tl-add__main,
-  .rvi-tl-add__chevron,
-  .rvi-tl-kind-menu__option
+  .rvi-tl-add__chevron
 ) {
   all: unset;
   box-sizing: border-box;
 }
 
 :where(
-  .rvi-input__native,
   .rvi-chip-input__native,
   .rvi-pause-chip__native,
   .rvi-poipause-cell__native,

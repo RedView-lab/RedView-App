@@ -210,41 +210,6 @@
 
 .rvc-icon-btn--ghost:hover { background: rgba(255, 255, 255, 0.06); }
 
-.rvc-icon-btn--chip {
-  width: 20px;
-  height: 20px;
-  background: var(--rvc-bg-chip);
-  border-radius: 4px;
-  padding-right: 6px;
-}
-
-.rvc-icon-btn--chipActive {
-  width: 20px;
-  height: 20px;
-  background: var(--rvc-bg-chip-active);
-  border-radius: 4px;
-  padding-right: 6px;
-}
-
-.rvc-visibility {
-  all: unset;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  background: var(--rvc-bg-chip-active);
-  border-radius: 4px;
-  cursor: pointer;
-  color: var(--rvc-text);
-  flex-shrink: 0;
-  padding: 3px 6px 3px 3px;
-  box-sizing: border-box;
-}
-
-.rvc-visibility--chip { background: var(--rvc-bg-row); }
-.rvc-visibility--sm { width: 16px; height: 16px; padding: 3px; }
-
 .rvc-swatch {
   display: inline-block;
   border-radius: 2px;
@@ -273,10 +238,3 @@
   white-space: nowrap;
 }
 
-.rvc-row__value-sm {
-  color: var(--rvc-text);
-  font-size: var(--rv-font-size-xs);
-  font-weight: 500;
-  white-space: nowrap;
-  flex-shrink: 0;
-}

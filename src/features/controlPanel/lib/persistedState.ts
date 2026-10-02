@@ -90,7 +90,8 @@ export interface ControlPanelPersistedState {
   /**
    * Single user-drawn polygon focusing the terrain widgets (slopes /
    * altitude / sunlight). The terrain widgets are zone-gated: without a zone
-   * they stay off. Synced with the project via AnalysisZoneProjectBridge.
+   * they stay off. Zone drawing is currently disabled (see
+   * useControlPanelZoneGating), so this stays null.
    */
   analysisZone?: AnalysisZone | null;
   lidarTilesHidden?: Record<string, boolean>;

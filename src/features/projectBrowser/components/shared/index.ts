@@ -1,1 +1,0 @@
-export { PlaceholderPanel } from './PlaceholderPanel';

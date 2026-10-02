@@ -1,8 +1,7 @@
 import type { AppTranslationPair } from '../types';
 
 export const fitPredictorTranslationPairs: ReadonlyArray<AppTranslationPair> = [
-  // FitPredictionPanel — barre d'outils, statuts
-  { fr: 'Prédire (actif)', en: 'Predict on' },
+  // Prédiction — statuts
   { fr: 'Prédire', en: 'Predict' },
   { fr: 'Calcul', en: 'Computing' },
   { fr: 'Comparaison', en: 'Comparison' },
@@ -11,20 +10,13 @@ export const fitPredictorTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   // Résumé, modes
   { fr: 'Historique', en: 'History' },
   { fr: 'Aucun fichier', en: 'No files' },
-  { fr: '100% client', en: '100% client-side' },
-  { fr: 'Prédiction GPX', en: 'GPX prediction' },
-  { fr: 'Prédit vs réel', en: 'Predicted vs actual' },
   // Fichiers
-  { fr: 'Fichiers FIT historiques', en: 'Past FIT files' },
-  { fr: 'Trace GPX cible', en: 'Target GPX track' },
   { fr: 'Aucun GPX chargé', en: 'No GPX loaded' },
-  { fr: 'FIT réel de validation', en: 'Actual FIT for validation' },
   { fr: '{{name}} : tracé réel, exclu de l’entraînement', en: '{{name}}: actual track, excluded from training' },
   { fr: 'Le FIT réel sert de tracé et de temps observé', en: 'The actual FIT provides the route and the observed time' },
   { fr: 'Aucun FIT chargé', en: 'No FIT loaded' },
   { fr: '{{count}} fichiers · {{preview}}', en: '{{count}} files · {{preview}}' },
   { fr: '{{count}} fichiers · {{preview}}...', en: '{{count}} files · {{preview}}...' },
-  { fr: 'Le fichier « {{name}} » dépasse la limite de 100 Mo', en: 'File "{{name}}" exceeds 100 MB limit' },
   // Profil coureur
   { fr: 'Profil coureur', en: 'Rider profile' },
   { fr: '(auto-déduit ou manuel)', en: '(auto-detected or manual)' },
@@ -37,13 +29,8 @@ export const fitPredictorTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: '56 (défaut)', en: '56 (default)' },
   { fr: '70 (défaut)', en: '70 (default)' },
   { fr: 'Coureur (kg)', en: 'Rider (kg)' },
-  { fr: 'Vélo + équip. (kg) *', en: 'Bike + gear (kg) *' },
   { fr: 'Gestion de l’effort', en: 'Pacing' },
   { fr: 'Conservateur', en: 'Conservative' },
-  { fr: 'Agressif', en: 'Aggressive' },
-  { fr: 'Sexe', en: 'Sex' },
-  { fr: 'Non précisé', en: 'Not specified' },
-  { fr: 'Départ (h)', en: 'Start (h)' },
   { fr: 'Total :', en: 'Total:' },
   // Consignes, actions
   { fr: 'FTP + poids obligatoires. Le W/kg pilote les prédictions en montée. Chargez les FIT historiques + le GPX cible.', en: 'FTP + weight required. W/kg drives climbing predictions. Load past FIT files + the target GPX.' },
@@ -56,14 +43,12 @@ export const fitPredictorTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: '{{count}} étapes', en: '{{count}} steps' },
   // Résultats
   { fr: 'Résultat', en: 'Result' },
-  { fr: 'Prédiction du tracé', en: 'Route prediction' },
   { fr: 'Temps prédit', en: 'Predicted time' },
   { fr: 'Temps roulé', en: 'Riding time' },
   { fr: 'Temps d’arrêt', en: 'Stopped time' },
   { fr: 'Vitesse moy.', en: 'Avg speed' },
   { fr: 'Coureur', en: 'Rider' },
   { fr: 'Vélo + équip.', en: 'Bike + gear' },
-  { fr: 'Temps prédit vs temps réel', en: 'Predicted vs actual time' },
   { fr: 'Temps observé', en: 'Observed time' },
   { fr: 'Écart', en: 'Difference' },
   { fr: 'Vit. prédite', en: 'Predicted speed' },

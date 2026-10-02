@@ -462,31 +462,6 @@
   text-align: left;
 }
 
-.rvi-tracage__param-input {
-  width: 88px;
-  min-width: 88px;
-  max-width: 88px;
-  height: 30px;
-  box-sizing: border-box;
-  padding: 5px 6px 5px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 5px;
-  background: transparent;
-  font-family: var(--rv-font-sans);
-  font-weight: 500;
-  font-size: var(--rv-font-size-sm);
-  letter-spacing: -0.0154em;
-  color: #ffffff;
-  outline: none;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
-  text-align: left;
-}
-
-.rvi-tracage__param-input:focus {
-  border-color: rgba(255, 255, 255, 0.25);
-  background: rgba(255, 255, 255, 0.04);
-}
-
 /* ── Checkbox Row ────────────────────────── */
 .rvi-tracage__checkbox-row {
   display: flex;
@@ -659,11 +634,6 @@
 .rvi-tracage__delete-profile-btn:hover {
   color: #ff5252;
   background: rgba(255, 82, 82, 0.16);
-}
-
-/* Legacy submit button kept for backward compatibility */
-.rvi-tracage__submit-btn {
-  display: none;
 }
 
 /* ── Recalculer la trace Button ────────────────────────── */

@@ -1,4 +1,3 @@
-export { FitPredictionPanel } from './components/FitPredictionPanel';
 export { CYCLING_ENGINE_VERSION } from './engine/version';
 export type {
   ComparisonResult,

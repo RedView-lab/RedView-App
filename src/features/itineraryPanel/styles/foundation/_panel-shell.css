@@ -7,11 +7,7 @@
   --rvi-bg: var(--rv-glass-tint);
   --rvi-bg-chip: rgba(255, 255, 255, 0.08);
   --rvi-bg-chip-hover: rgba(255, 255, 255, 0.12);
-  --rvi-bg-row: rgba(28, 28, 28, 0.55);
-  --rvi-bg-row-alt: rgba(35, 35, 35, 0.55);
-  --rvi-bg-row-muted: rgba(56, 56, 56, 0.55);
   --rvi-border: rgba(255, 255, 255, 0.08);
-  --rvi-border-strong: #444;
   --rvi-text: #ffffff;
   --rvi-text-dim: rgba(255, 255, 255, 0.64);
   --rvi-text-faint: rgba(255, 255, 255, 0.4);
@@ -108,6 +104,8 @@
   flex-direction: column;
   gap: 12px;
   overflow-y: auto;
+  /* Never hand the scroll over to the page (macOS rubber-band bounce). */
+  overscroll-behavior-y: contain;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -144,16 +142,33 @@
   max-height: var(--rvi-mode-max-height, calc(100% - var(--rvi-min-dock-height, 180px) - 12px));
   overflow-x: hidden;
   overflow-y: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  overscroll-behavior-y: contain;
+  /*
+   * Native scrolling only (trackpad momentum, smooth wheel): no JS wheel
+   * handler on the panel. The mode area is often shorter than its content
+   * (Rythme on a laptop), so it shows a thin scrollbar as a cue; the stable
+   * gutter keeps the layout from shifting when the bar appears.
+   */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+  scrollbar-gutter: stable;
   transition:
     opacity 180ms cubic-bezier(0.22, 1, 0.36, 1),
     transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* Safari (no scrollbar-color): same thin bar. */
 .rvi-panel__mode-main::-webkit-scrollbar {
-  width: 0;
-  height: 0;
+  width: 6px;
+}
+
+.rvi-panel__mode-main::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.rvi-panel__mode-main::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
 }
 
 .rvi-panel__mode-main-inner {

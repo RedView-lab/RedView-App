@@ -9,10 +9,6 @@ export {
   safeOverride,
   sanitizeOverrides,
 } from './param-encoding';
-export {
-  generateBrfFromExpertState,
-  validateBrfText,
-} from './profile-template';
 export { buildBrfProfile, estimateBrfSearchCostScale, hashBrf, type BrfBuildInputs } from './brf-template';
 export {
   ensureProfileUploaded,

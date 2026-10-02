@@ -12,5 +12,4 @@ export type {
 	SunlightTrajectoryComputationRequest,
 	SunlightTrajectorySample,
 } from './lib/trajectory-contract';
-export { SUN_DISK_LAYER_ID, addSunDiskLayer, removeSunDiskLayer, updateSunDiskPosition } from './lib/sun-disk-layer';
 export { SUN_RAY_LAYER_ID, addSunRayLayer, removeSunRayLayer, updateSunRayPosition } from './lib/sun-ray/sun-ray-layer';
