@@ -90,6 +90,8 @@ walk(path.join(ROOT, 'src/features/lidar'));
 hosts.add('opentopography.s3.sdsc.edu'); // NZ index
 hosts.add('virtual-shizuoka.s3.ap-northeast-1.amazonaws.com'); // JP index
 hosts.add('japan-pointcloud.s3.ap-northeast-1.amazonaws.com'); // JP index
+hosts.add('kanagawa-pointcloud.s3.ap-northeast-1.amazonaws.com'); // JP index
+hosts.add('gsvrg.ipri.aist.go.jp'); // JP index (COPC AIST 3DDB)
 hosts.delete('www.google.com'); // plain <a href>, not fetched
 function allowed(directive, host) {
   return directive.split(/\s+/).some((src) => {

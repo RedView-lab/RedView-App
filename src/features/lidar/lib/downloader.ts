@@ -5,9 +5,10 @@ import { saveTile, hasTile, loadTile, hasValidLasSignature, hasValidZipSignature
 import { resolveSwissDownloadUrls } from './swiss/stacClient';
 import { extractLasFromZip } from './swiss/zipReader';
 import { getSwissTileBounds, swissToWgs84 } from './swiss/coordConvert';
-// NB : les clients NZ / Japon embarquent des index de tuiles volumineux
-// (nzLazIndex ≈ 19 MB, japanLazIndex ≈ 1,6 MB). Ils sont chargés à la demande
-// (import dynamique) pour ne pas alourdir le bundle de démarrage du Dashboard.
+// NB : les clients NZ / Japon embarquent les index de fichiers générés par
+// `npm run lidar:index` (nzLazIndex, japanLazIndex : ~1 Mo chacun). Ils sont
+// chargés à la demande (import dynamique) pour ne pas alourdir le bundle de
+// démarrage du Dashboard.
 import {
   fromWgs84,
   getTileInfo,

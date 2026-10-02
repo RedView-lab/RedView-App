@@ -12,6 +12,7 @@ import {
 } from '../lib/observerPoint';
 import { addSunRayLayer, removeSunRayLayer, updateSunRayPosition } from '../lib/sun-ray/sun-ray-layer';
 import { setSunLightOverride } from '@/features/map3d/lib/mapEnvironment';
+import { resolveTimeZoneAt } from '@/shared/lib/timeZoneAt';
 
 /**
  * Computes real sun position from date/time and map center.
@@ -64,24 +65,18 @@ function getHostTimeZone(): string | null {
   return typeof candidate === 'string' && candidate.trim() ? candidate : null;
 }
 
-function resolveLocalTimeZone(lat: number, lng: number): string {
-  const hostTz = getHostTimeZone();
-  // Within Western & Central Europe
-  if (lat >= 34 && lat <= 72 && lng >= -15 && lng <= 35) {
-    if (lng < -5) return 'Europe/London';
-    if (lng > 25) return 'Europe/Athens';
-    return hostTz || 'Europe/Paris';
-  }
-  return hostTz || 'UTC';
-}
-
 async function lookupTimeZoneForPoint(point: Pick<SunObserverPoint, 'lat' | 'lng'>): Promise<string | null> {
-  const key = pointLookupKey(point);
+  // ~100 m buckets: plenty for zone borders, bounded cache while panning.
+  const key = `${point.lat.toFixed(3)},${point.lng.toFixed(3)}`;
   const existing = timeZoneLookupCache.get(key);
   if (existing) return existing;
 
-  const resolved = Promise.resolve(resolveLocalTimeZone(point.lat, point.lng));
+  const resolved = resolveTimeZoneAt(point.lng, point.lat);
   timeZoneLookupCache.set(key, resolved);
+  void resolved.then((timeZone) => {
+    // A failed table load must not stick: the next lookup retries.
+    if (!timeZone) timeZoneLookupCache.delete(key);
+  });
   return resolved;
 }
 
@@ -139,8 +134,10 @@ export function useSunlight(
     if (!observerPointKey || !observerPoint) return;
 
     let cancelled = false;
-    void lookupTimeZoneForPoint(observerPoint).then((timeZone) => {
+    void lookupTimeZoneForPoint(observerPoint).then((resolvedTimeZone) => {
       if (cancelled) return;
+      // Table unavailable: the browser zone keeps the overlays usable.
+      const timeZone = resolvedTimeZone ?? getHostTimeZone();
       setObserverTimeZoneState((prev) => (
         prev?.key === observerPointKey && prev.timeZone === timeZone
           ? prev

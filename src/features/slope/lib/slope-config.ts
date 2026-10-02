@@ -22,12 +22,15 @@ export const DEFAULT_SLOPE_STATE: SlopeState = {
 // the same V-space, not raw degrees: a category breakpoint at deg_k must
 // be placed at V_k = sqrt(deg_k/90) * 90 = sqrt(deg_k * 90).
 //
-// We deliberately do NOT linearise the gradient back to degrees: the sqrt
-// gamma concentrates colour resolution in the low-slope range (the part
-// the user actually scrutinises), which is exactly what we want. Between
-// two consecutive breakpoints the colour still lerps smoothly — just on a
-// slightly squashed axis, which is visually imperceptible.
+// The sqrt gamma concentrates the encoding precision in the low-slope range
+// (the part the user actually scrutinises). Mapbox, however, lerps colours
+// linearly in raster-value space, i.e. along sqrt(deg): at 2.5° between stops
+// at 0° and 5° it would already be 71 % of the way. The gradient therefore
+// gets GRADIENT_SUBSTEPS degree-spaced sub-stops per band, so the colour is
+// linear in degrees (as in the legend and the LiDAR viewer's ramp) to within
+// a few percent of a band, while the encoding keeps its precision.
 export const MAX_SLOPE_DEG = 90;
+const GRADIENT_SUBSTEPS = 6;
 
 function degStop(deg: number): number {
   // Map a degree breakpoint to the raster-value (sqrt-gamma) space.
@@ -35,6 +38,20 @@ function degStop(deg: number): number {
   if (deg <= 0) return 0;
   if (deg >= MAX_SLOPE_DEG) return MAX_SLOPE_DEG;
   return Math.sqrt(deg * MAX_SLOPE_DEG);
+}
+
+type Rgba = [number, number, number, number];
+
+/** '#RRGGBB' → straight RGBA (alpha 0..1); null for anything else. */
+function parseHexRgba(hex: string, alpha: number): Rgba | null {
+  const match = /^#([0-9a-f]{6})$/iu.exec(hex.trim());
+  if (!match) return null;
+  const value = parseInt(match[1]!, 16);
+  return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff, alpha];
+}
+
+function rgbaString([r, g, b, a]: Rgba): string {
+  return `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${Math.round(a * 1000) / 1000})`;
 }
 
 /**
@@ -70,14 +87,24 @@ export function buildSlopeColorExpression(
     return expr;
   }
 
-  // Gradient: linear interpolation across band-start colors.
-  // For hidden bands we still emit 'transparent' as the stop value — Mapbox
-  // lerps RGBA which gives a soft fade in/out at the boundary, visually nicer
-  // than a hard cut and consistent with the gradient ethos.
+  // Gradient: linear interpolation (in degrees) across band-start colors.
+  // Hidden bands keep their colour at alpha 0 — the fade in/out at the
+  // boundary is the LiDAR viewer's, visually nicer than a hard cut.
   const expr: unknown[] = ['interpolate', ['linear'], ['raster-value']];
-  for (const cat of categories) {
+  categories.forEach((cat, index) => {
     expr.push(degStop(cat.minDeg), colorOf(cat));
-  }
+    const next = categories[index + 1];
+    if (!next || !(next.minDeg > cat.minDeg)) return;
+    const from = parseHexRgba(cat.color, hidden.has(cat.id) ? 0 : 1);
+    const to = parseHexRgba(next.color, hidden.has(next.id) ? 0 : 1);
+    if (!from || !to) return;
+    for (let k = 1; k < GRADIENT_SUBSTEPS; k++) {
+      const t = k / GRADIENT_SUBSTEPS;
+      const deg = cat.minDeg + (next.minDeg - cat.minDeg) * t;
+      const rgba = from.map((channel, i) => channel + (to[i]! - channel) * t) as Rgba;
+      expr.push(degStop(deg), rgbaString(rgba));
+    }
+  });
   // Extend the last color out to 90° so we never get a black/transparent tail
   const last = categories[categories.length - 1];
   if (last.maxDeg < MAX_SLOPE_DEG) {

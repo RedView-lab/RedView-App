@@ -37,9 +37,10 @@ export function rasterizePolygonMask(
   if (!Array.isArray(flatRing) || flatRing.length < 6 || w <= 0 || h <= 0) return null;
   const [west, south, east, north] = bounds;
   const spanX = east - west;
+  // mercY grows northwards while grid rows grow southwards (row 0 = north).
   const nMercY = mercY(north);
   const sMercY = mercY(south);
-  const spanY = sMercY - nMercY;
+  const spanY = nMercY - sMercY;
   if (spanX <= 0 || spanY <= 0) return null;
 
   const count = Math.floor(flatRing.length / 2);
@@ -50,7 +51,7 @@ export function rasterizePolygonMask(
     const lat = flatRing[i * 2 + 1];
     if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
     px[i] = ((lng - west) / spanX) * w;
-    py[i] = ((mercY(lat) - nMercY) / spanY) * h;
+    py[i] = ((nMercY - mercY(lat)) / spanY) * h;
   }
 
   // 2× supersampled coverage buffer.

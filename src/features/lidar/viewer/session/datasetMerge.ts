@@ -77,8 +77,14 @@ export function mergeHeightGrid(tiles: LoadedViewerTile[], mergedBounds: PointCl
   }));
   const step = Math.max(1e-3, Math.min(...steps.map((s) => Math.min(s.x, s.y))));
   const mergedCenterZ = (mergedBounds.minZ + mergedBounds.maxZ) / 2;
-  const gridWidth = Math.round((mergedBounds.maxX - mergedBounds.minX) / step) + 1;
-  const gridHeight = Math.round((mergedBounds.maxY - mergedBounds.minY) / step) + 1;
+  const rangeX = mergedBounds.maxX - mergedBounds.minX;
+  const rangeY = mergedBounds.maxY - mergedBounds.minY;
+  const gridWidth = Math.max(2, Math.round(rangeX / step) + 1);
+  const gridHeight = Math.max(2, Math.round(rangeY / step) + 1);
+  // Consumers place node i at min + i·range/(n − 1): sample at that spacing,
+  // not at `step`, which the rounding above leaves up to half a step off.
+  const stepX = rangeX / (gridWidth - 1);
+  const stepY = rangeY / (gridHeight - 1);
   const heightGrid = new Float32Array(gridWidth * gridHeight).fill(Number.NaN);
 
   tiles.forEach((tile, tileIndex) => {
@@ -86,18 +92,18 @@ export function mergeHeightGrid(tiles: LoadedViewerTile[], mergedBounds: PointCl
     const { heightGrid: src, gridWidth: w, gridHeight: h } = terrainMesh;
     const tileStep = steps[tileIndex]!;
     const deltaHeight = (bounds.minZ + bounds.maxZ) / 2 - mergedCenterZ;
-    const firstCol = Math.max(0, Math.ceil((bounds.minX - mergedBounds.minX) / step - 1e-6));
-    const lastCol = Math.min(gridWidth - 1, Math.floor((bounds.maxX - mergedBounds.minX) / step + 1e-6));
-    const firstRow = Math.max(0, Math.ceil((bounds.minY - mergedBounds.minY) / step - 1e-6));
-    const lastRow = Math.min(gridHeight - 1, Math.floor((bounds.maxY - mergedBounds.minY) / step + 1e-6));
+    const firstCol = Math.max(0, Math.ceil((bounds.minX - mergedBounds.minX) / stepX - 1e-6));
+    const lastCol = Math.min(gridWidth - 1, Math.floor((bounds.maxX - mergedBounds.minX) / stepX + 1e-6));
+    const firstRow = Math.max(0, Math.ceil((bounds.minY - mergedBounds.minY) / stepY - 1e-6));
+    const lastRow = Math.min(gridHeight - 1, Math.floor((bounds.maxY - mergedBounds.minY) / stepY + 1e-6));
 
     for (let row = firstRow; row <= lastRow; row++) {
-      const v = Math.min(h - 1, Math.max(0, (mergedBounds.minY + row * step - bounds.minY) / tileStep.y));
+      const v = Math.min(h - 1, Math.max(0, (mergedBounds.minY + row * stepY - bounds.minY) / tileStep.y));
       const v0 = Math.floor(v);
       const v1 = Math.min(h - 1, v0 + 1);
       const fv = v - v0;
       for (let col = firstCol; col <= lastCol; col++) {
-        const u = Math.min(w - 1, Math.max(0, (mergedBounds.minX + col * step - bounds.minX) / tileStep.x));
+        const u = Math.min(w - 1, Math.max(0, (mergedBounds.minX + col * stepX - bounds.minX) / tileStep.x));
         const u0 = Math.floor(u);
         const u1 = Math.min(w - 1, u0 + 1);
         const fu = u - u0;

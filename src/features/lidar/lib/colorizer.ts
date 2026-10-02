@@ -98,6 +98,18 @@ function wgs84ToAbsPixel(lon: number, lat: number, zoom: number): [number, numbe
   return [absPx, absPy];
 }
 
+/**
+ * Slot in the column-major ortho tile array of the tile holding an absolute
+ * pixel, or -1 outside the fetched range. Checking col and row separately
+ * matters: a flat bound on `col·rows + row` let a row one past the last wrap
+ * onto the first tile of the next column.
+ */
+function orthoTileSlot(absPx: number, absPy: number, minCol: number, minRow: number, cols: number, rows: number): number {
+  const col = (absPx >> 8) - minCol;
+  const row = (absPy >> 8) - minRow;
+  return col >= 0 && col < cols && row >= 0 && row < rows ? col * rows + row : -1;
+}
+
 const ORTHO_FETCH_CONCURRENCY = 48;
 
 // Per-worker cache of in-flight/decoded ortho tiles, so a prefetch started
@@ -255,8 +267,8 @@ export async function colorizePointCloud(
       // Sample (0,0)
       const spx0 = floorPx;
       const spy0 = floorPy;
-      const sIdx0 = ((spx0 >> 8) - minTileCol) * tileRows + ((spy0 >> 8) - minTileRow);
-      if (sIdx0 >= 0 && sIdx0 < tileData.length) {
+      const sIdx0 = orthoTileSlot(spx0, spy0, minTileCol, minTileRow, tileCols, tileRows);
+      if (sIdx0 >= 0) {
         const sPixels = tileData[sIdx0];
         if (sPixels) {
           const pIdx = ((spy0 & 255) * TILE_SIZE + (spx0 & 255)) * 4;
@@ -270,8 +282,8 @@ export async function colorizePointCloud(
       // Sample (1,0)
       const spx1 = floorPx + 1;
       const spy1 = floorPy;
-      const sIdx1 = ((spx1 >> 8) - minTileCol) * tileRows + ((spy1 >> 8) - minTileRow);
-      if (sIdx1 >= 0 && sIdx1 < tileData.length) {
+      const sIdx1 = orthoTileSlot(spx1, spy1, minTileCol, minTileRow, tileCols, tileRows);
+      if (sIdx1 >= 0) {
         const sPixels = tileData[sIdx1];
         if (sPixels) {
           const pIdx = ((spy1 & 255) * TILE_SIZE + (spx1 & 255)) * 4;
@@ -285,8 +297,8 @@ export async function colorizePointCloud(
       // Sample (0,1)
       const spx2 = floorPx;
       const spy2 = floorPy + 1;
-      const sIdx2 = ((spx2 >> 8) - minTileCol) * tileRows + ((spy2 >> 8) - minTileRow);
-      if (sIdx2 >= 0 && sIdx2 < tileData.length) {
+      const sIdx2 = orthoTileSlot(spx2, spy2, minTileCol, minTileRow, tileCols, tileRows);
+      if (sIdx2 >= 0) {
         const sPixels = tileData[sIdx2];
         if (sPixels) {
           const pIdx = ((spy2 & 255) * TILE_SIZE + (spx2 & 255)) * 4;
@@ -300,8 +312,8 @@ export async function colorizePointCloud(
       // Sample (1,1)
       const spx3 = floorPx + 1;
       const spy3 = floorPy + 1;
-      const sIdx3 = ((spx3 >> 8) - minTileCol) * tileRows + ((spy3 >> 8) - minTileRow);
-      if (sIdx3 >= 0 && sIdx3 < tileData.length) {
+      const sIdx3 = orthoTileSlot(spx3, spy3, minTileCol, minTileRow, tileCols, tileRows);
+      if (sIdx3 >= 0) {
         const sPixels = tileData[sIdx3];
         if (sPixels) {
           const pIdx = ((spy3 & 255) * TILE_SIZE + (spx3 & 255)) * 4;

@@ -23,6 +23,13 @@
  *     function call on the hot inner loop).
  *   • Precomputed predecessor base offset hoisted out of the inner loop.
  *
+ * Cells need not be square: the viewport grids follow the canvas aspect while
+ * their bounds follow the (pitched) map extent, and the preview/sunlight grids
+ * are capped per axis. The sun azimuth is a metric direction, so it is turned
+ * into cell units (row component scaled by cellSizeX / cellSizeY) before the
+ * sweep axis and the per-step shift are chosen. Square cells keep a ratio of
+ * exactly 1, i.e. the historical results bit for bit.
+ *
  * NOTE on floating-point tie-breaking: the legacy algorithm (and this one) does NOT
  * snap fractional weights near 0 or 1. On realistic terrain the resulting interpolation
  * noise at near-cardinal / exact-diagonal azimuths is sub-pixel and invisible — it was
@@ -76,12 +83,15 @@ export function computeShadowSweep(
   const shadowElev = scratch.shadowElev;
   out.fill(0);
   if (sunAltDeg <= 0 || sunAltDeg >= 89) return out;
+  if (!(cellSizeX > 0) || !(cellSizeY > 0)) return out;
 
   const azRad = (sunAzDeg * Math.PI) / 180;
   const tanAlt = Math.tan((sunAltDeg * Math.PI) / 180);
-  // Shadow propagation direction (away from the sun).
+  // Shadow propagation direction (away from the sun) in cell units: metres
+  // east / south divided by the cell size, scaled by cellSizeX so that square
+  // cells multiply by exactly 1.
   const shadowDC = -Math.sin(azRad);
-  const shadowDR = Math.cos(azRad);
+  const shadowDR = Math.cos(azRad) * (cellSizeX / cellSizeY);
   const absDC = Math.abs(shadowDC);
   const absDR = Math.abs(shadowDR);
 

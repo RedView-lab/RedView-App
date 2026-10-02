@@ -1,131 +1,116 @@
-import type { NzTileCoord } from './types';
+import type { NzLidarDataset, NzTileCoord } from './types';
+import { getNzTileBounds, nzTileKey } from './coordConvert';
+import { NZ_LIDAR_DATASETS } from './nzLazIndex';
 import {
-  isInNzCoverage,
-  nzTileCenterWgs84,
-  nzTileKey,
-} from './coordConvert';
-import { NZ_LAZ_TILES } from './nzLazIndex';
+  boundsIntersect,
+  hasMaskBit,
+  parseBoundedTiles,
+  rankTileCandidates,
+  type TileBounds,
+  type TileCandidate,
+} from '../tileCandidates';
 
 /**
- * Client for New Zealand Raw LiDAR Point Cloud Open Data (OpenTopography / LINZ).
+ * Résolution des nuages de points LiDAR néo-zélandais (LINZ, diffusés par
+ * OpenTopography) d'une dalle de 1 km NZTM2000, à partir de l'index généré
+ * `nzLazIndex`.
  *
- * Exclusively resolves genuine classified .laz point cloud files (Ground, Canopy,
- * Buildings, Intensity, Multi-returns) from the 181,171 indexed national tiles.
+ * Les fichiers suivent la grille Topo50 : feuille 24 × 36 km (« BW23 »)
+ * découpée en 1:500 (240 × 360 m), 1:1000 (480 × 720 m) ou 1:2000
+ * (960 × 1440 m) ; quelques jeux anciens ont une grille propre (emprises
+ * stockées).
  */
 
-const itemCache = new Map<string, string[]>();
-
-// LINZ Topo50 2-letter Row Sequence (letters I and O omitted)
 const ROW_LETTERS = [
   'AS', 'AT', 'AU', 'AV', 'AW', 'AX', 'AY', 'AZ',
   'BA', 'BB', 'BC', 'BD', 'BE', 'BF', 'BG', 'BH', 'BJ', 'BK', 'BL', 'BM', 'BN', 'BP', 'BQ', 'BR', 'BS', 'BT', 'BU', 'BV', 'BW', 'BX', 'BY', 'BZ',
-  'CA', 'CB', 'CC', 'CD', 'CE', 'CF', 'CG', 'CH', 'CJ', 'CK', 'CL', 'CM', 'CN', 'CP', 'CQ', 'CR', 'CS', 'CT', 'CU', 'CV', 'CW', 'CX', 'CY', 'CZ'
+  'CA', 'CB', 'CC', 'CD', 'CE', 'CF', 'CG', 'CH', 'CJ', 'CK', 'CL', 'CM', 'CN', 'CP', 'CQ', 'CR', 'CS', 'CT', 'CU', 'CV', 'CW', 'CX', 'CY', 'CZ',
 ];
+const NORTH_ORIGIN = 6_234_000;
+const WEST_ORIGIN = 988_000;
+const SHEET_W = 24_000;
+const SHEET_H = 36_000;
+const PER_SHEET: Record<number, number> = { 500: 100, 1000: 50, 2000: 25 };
 
-const NORTH_ORIGIN = 6234000;
-const WEST_ORIGIN = 988000;
-const SHEET_WIDTH = 24000;
-const SHEET_HEIGHT = 36000;
-
-export interface Topo50TileInfo {
-  sheetId: string;
-  tileId10k: string;
-  tileId1k: string;
-  subRow10k: number;
-  subCol10k: number;
-  subRow1k: number;
-  subCol1k: number;
+interface IndexedDataset {
+  dataset: NzLidarDataset;
+  rank: number;
+  /** Feuille Topo50 → masque hex de ses dalles. */
+  masks: Map<string, string>;
+  tiles: { name: string; bounds: TileBounds }[];
 }
 
-/**
- * Calculate LINZ Topo50 sheet ID and 1:1,000 sub-tile ID from NZTM2000 coordinates.
- */
-export function getTopo50TileInfo(eastM: number, northM: number): Topo50TileInfo | null {
-  const colNum = Math.floor((eastM - WEST_ORIGIN) / SHEET_WIDTH);
-  const rowIndex = Math.floor((NORTH_ORIGIN - northM) / SHEET_HEIGHT);
+let indexed: IndexedDataset[] | null = null;
 
-  if (rowIndex < 0 || rowIndex >= ROW_LETTERS.length || colNum < 0 || colNum > 99) {
-    return null;
+function getIndexedDatasets(): IndexedDataset[] {
+  if (indexed) return indexed;
+  indexed = NZ_LIDAR_DATASETS.map((dataset, rank) => {
+    const masks = new Map<string, string>();
+    if (dataset.scale && dataset.sheets) {
+      const n = PER_SHEET[dataset.scale]!;
+      const entryLength = 4 + Math.ceil((n * n) / 4);
+      for (let i = 0; i + entryLength <= dataset.sheets.length; i += entryLength) {
+        masks.set(dataset.sheets.slice(i, i + 4), dataset.sheets.slice(i + 4, i + entryLength));
+      }
+    }
+    return { dataset, rank, masks, tiles: parseBoundedTiles(dataset.tiles) };
+  });
+  return indexed;
+}
+
+function topoCandidates(entry: IndexedDataset, tile: TileBounds, out: TileCandidate[]): void {
+  const { dataset } = entry;
+  const n = PER_SHEET[dataset.scale]!;
+  const w = SHEET_W / n;
+  const h = SHEET_H / n;
+  const col0 = Math.floor((tile.minE - WEST_ORIGIN) / w);
+  const col1 = Math.ceil((tile.maxE - WEST_ORIGIN) / w) - 1;
+  const row0 = Math.floor((NORTH_ORIGIN - tile.maxN) / h);
+  const row1 = Math.ceil((NORTH_ORIGIN - tile.minN) / h) - 1;
+  const digits = n === 100 ? 3 : 2;
+  for (let row = Math.max(0, row0); row <= row1; row++) {
+    const letters = ROW_LETTERS[Math.floor(row / n)];
+    if (!letters) continue;
+    for (let col = Math.max(0, col0); col <= col1; col++) {
+      const sheet = `${letters}${String(Math.floor(col / n)).padStart(2, '0')}`;
+      const mask = entry.masks.get(sheet);
+      if (!mask) continue;
+      const r = row % n;
+      const c = col % n;
+      if (!hasMaskBit(mask, r * n + c)) continue;
+      const rc = `${String(r + 1).padStart(digits, '0')}${String(c + 1).padStart(digits, '0')}`;
+      const minE = WEST_ORIGIN + col * w;
+      const maxN = NORTH_ORIGIN - row * h;
+      out.push({
+        url: `${dataset.base}${dataset.name.replace('{sheet}', sheet).replace('{rc}', rc)}`,
+        bounds: { minE, minN: maxN - h, maxE: minE + w, maxN },
+        rank: entry.rank,
+      });
+    }
   }
-
-  const sheetLetter = ROW_LETTERS[rowIndex];
-  const sheetColStr = String(colNum).padStart(2, '0');
-  const sheetId = `${sheetLetter}${sheetColStr}`;
-
-  const sheetWest = WEST_ORIGIN + colNum * SHEET_WIDTH;
-  const sheetNorth = NORTH_ORIGIN - rowIndex * SHEET_HEIGHT;
-
-  const subCol10k = Math.min(5, Math.max(1, Math.floor((eastM - sheetWest) / 4800) + 1));
-  const subRow10k = Math.min(5, Math.max(1, Math.floor((sheetNorth - northM) / 7200) + 1));
-
-  const subCol1k = Math.min(50, Math.max(1, Math.floor((eastM - sheetWest) / 480) + 1));
-  const subRow1k = Math.min(50, Math.max(1, Math.floor((sheetNorth - northM) / 720) + 1));
-
-  const rowColStr10k = `${String(subRow10k).padStart(2, '0')}${String(subCol10k).padStart(2, '0')}`;
-  const rowColStr1k = `${String(subRow1k).padStart(2, '0')}${String(subCol1k).padStart(2, '0')}`;
-
-  const tileId10k = `${sheetId}_10000_${rowColStr10k}`;
-  const tileId1k = `${sheetId}_1000_${rowColStr1k}`;
-
-  return { sheetId, tileId10k, tileId1k, subRow10k, subCol10k, subRow1k, subCol1k };
 }
 
-/**
- * Resolve download candidates for an NZ tile (1km x 1km in NZTM2000).
- * Exclusively returns real classified LiDAR .laz point clouds.
- */
-export async function resolveNzDownloadUrls(
-  coord: NzTileCoord
-): Promise<string[]> {
+const itemCache = new Map<string, string[]>();
+
+/** Fichiers candidats d'une dalle de 1 km, du plus pertinent au moins pertinent. */
+export async function resolveNzDownloadUrls(coord: NzTileCoord): Promise<string[]> {
   const key = nzTileKey(coord);
   const cached = itemCache.get(key);
-  if (cached && cached.length > 0) {
-    return cached;
-  }
+  if (cached) return cached;
 
-  const [lon, lat] = nzTileCenterWgs84(coord);
-  if (!isInNzCoverage(lon, lat)) return [];
-
-  const eastM = coord.eastKm * 1000 + 500;
-  const northM = coord.northKm * 1000 + 500;
-
-  const topoInfo = getTopo50TileInfo(eastM, northM);
-  if (!topoInfo) return [];
-
-  const candidates: string[] = [];
-
-  // 1. Direct lookup in pre-indexed 181,000+ real LiDAR .laz point clouds
-  const rowColStr1k = `${String(topoInfo.subRow1k).padStart(2, '0')}${String(topoInfo.subCol1k).padStart(2, '0')}`;
-  const directLaz = NZ_LAZ_TILES[`${topoInfo.sheetId}_${rowColStr1k}`];
-  if (directLaz && directLaz.length > 0) {
-    candidates.push(...directLaz);
-  }
-
-  // 2. Check adjacent sub-tiles intersecting the 1km x 1km footprint
-  for (let dr = -1; dr <= 1; dr++) {
-    for (let dc = -1; dc <= 1; dc++) {
-      if (dr === 0 && dc === 0) continue;
-      const r = topoInfo.subRow1k + dr;
-      const c = topoInfo.subCol1k + dc;
-      if (r >= 1 && r <= 50 && c >= 1 && c <= 50) {
-        const neighborKey = `${topoInfo.sheetId}_${String(r).padStart(2, '0')}${String(c).padStart(2, '0')}`;
-        const neighborHits = NZ_LAZ_TILES[neighborKey];
-        if (neighborHits) candidates.push(...neighborHits);
-      }
+  const tile = getNzTileBounds(coord);
+  const candidates: TileCandidate[] = [];
+  for (const entry of getIndexedDatasets()) {
+    if (entry.dataset.scale) {
+      topoCandidates(entry, tile, candidates);
+      continue;
+    }
+    for (const { name, bounds } of entry.tiles) {
+      if (boundsIntersect(bounds, tile)) candidates.push({ url: `${entry.dataset.base}${name}`, bounds, rank: entry.rank });
     }
   }
 
-  // Deduplicate candidate URLs
-  const uniqueCandidates = Array.from(new Set(candidates));
-
-  if (uniqueCandidates.length > 0) {
-    itemCache.set(key, uniqueCandidates);
-  }
-
-  return uniqueCandidates;
-}
-
-/** Cache clear helper */
-export function clearNzStacCache(): void {
-  itemCache.clear();
+  const urls = rankTileCandidates(candidates, tile);
+  itemCache.set(key, urls);
+  return urls;
 }

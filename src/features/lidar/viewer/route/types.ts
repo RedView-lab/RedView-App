@@ -38,6 +38,12 @@ export interface ViewerRouteSceneParams {
   heightGrid?: Float32Array | null;
   gridWidth?: number;
   gridHeight?: number;
+  /**
+   * Subtracted from heightGrid samples to get renderer Y: 0 when the grid is
+   * already centred on centerZ (WebGPU viewer), centerZ when it holds
+   * absolute altitudes (WebGL viewer).
+   */
+  heightGridOffsetZ?: number;
 }
 
 export interface ViewerRouteState {

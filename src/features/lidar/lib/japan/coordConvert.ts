@@ -225,57 +225,41 @@ export function wgs84ToTertiaryMesh(lon: number, lat: number): JapanTertiaryMesh
   return { mesh1st, mesh2nd, mesh3rd, fullCode };
 }
 
+const SHEET_ROW_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const SHEET_COL_LETTERS = 'ABCDEFGH';
+/** Zone extent covered by the 1:50,000 sheet grid (metres from the zone origin). */
+const SHEET_GRID_NORTH_M = 300_000;
+const SHEET_GRID_WEST_M = -160_000;
+
+function sheetCell(offsetM: number, sizeM: number, count: number): number {
+  return Math.min(count - 1, Math.max(0, Math.floor(offsetM / sizeM)));
+}
+
 /**
  * Convert native JGD2011 coordinates to Japanese Public Survey Standard Map Sheet info (公共測量標準図郭).
- * A 1:50,000 sheet is 40,000m × 30,000m.
- * A 1:5,000 sheet is 4,000m × 3,000m (numbered 00 to 99).
- * A 1:2,500 sub-sheet is 400m × 300m (numbered 00 to 99).
+ * 1:50,000 sheets are 30 km (N-S) × 40 km (E-W): rows A.. from X = +300 km
+ * southwards (Tokyo's Izu islands reach row U), columns A..H from Y = −160 km eastwards. Each splits into 10×10
+ * 1:5,000 sheets (3 km × 4 km), each into 10×10 level-500 sheets
+ * (300 m × 400 m); both numbered row-from-north then column-from-west.
+ * Checked against the real file names of `japanLazIndex` (e.g. Izu-Ōshima,
+ * ~140 km south of the zone 9 origin, is row O).
  */
 export function japanCoordsToStandardSheet(eastM: number, northM: number, zone: JapanZoneNumber): JapanMapSheetInfo {
   const zoneStr = String(zone).padStart(2, '0');
 
-  // North-South letter (30km rows from origin Y=0)
-  const ROW_LETTERS_NORTH = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
-  const ROW_LETTERS_SOUTH = ['J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T'];
+  const rowIdx = sheetCell(SHEET_GRID_NORTH_M - northM, 30_000, SHEET_ROW_LETTERS.length);
+  const colIdx = sheetCell(eastM - SHEET_GRID_WEST_M, 40_000, SHEET_COL_LETTERS.length);
+  const rowLetter = SHEET_ROW_LETTERS[rowIdx]!;
+  const colLetter = SHEET_COL_LETTERS[colIdx]!;
+  const sheetNorth = SHEET_GRID_NORTH_M - rowIdx * 30_000;
+  const sheetWest = SHEET_GRID_WEST_M + colIdx * 40_000;
 
-  let rowLetter = 'J';
-  let sheetNorthOrigin = 0;
-  if (northM >= 0) {
-    const rowIdx = Math.min(ROW_LETTERS_NORTH.length - 1, Math.floor(northM / 30000));
-    rowLetter = ROW_LETTERS_NORTH[rowIdx];
-    sheetNorthOrigin = rowIdx * 30000;
-  } else {
-    const rowIdx = Math.min(ROW_LETTERS_SOUTH.length - 1, Math.floor(Math.abs(northM) / 30000));
-    rowLetter = ROW_LETTERS_SOUTH[rowIdx];
-    sheetNorthOrigin = - (rowIdx * 30000);
-  }
-
-  // East-West letter (40km columns from origin X=0)
-  const COL_LETTERS_WEST = ['D', 'C', 'B', 'A']; // West of origin
-  const COL_LETTERS_EAST = ['E', 'F', 'G', 'H']; // East of origin
-
-  let colLetter = 'E';
-  let sheetWestOrigin = 0;
-  if (eastM >= 0) {
-    const colIdx = Math.min(COL_LETTERS_EAST.length - 1, Math.floor(eastM / 40000));
-    colLetter = COL_LETTERS_EAST[colIdx];
-    sheetWestOrigin = colIdx * 40000;
-  } else {
-    const colIdx = Math.min(COL_LETTERS_WEST.length - 1, Math.floor(Math.abs(eastM) / 40000));
-    colLetter = COL_LETTERS_WEST[colIdx];
-    sheetWestOrigin = - ((colIdx + 1) * 40000);
-  }
-
-  // 1:5,000 sheet numbers (00 to 99): 10 rows of 3,000m, 10 cols of 4,000m
-  const sub5kCol = Math.min(9, Math.max(0, Math.floor((eastM - sheetWestOrigin) / 4000)));
-  const sub5kRow = Math.min(9, Math.max(0, Math.floor((Math.abs(northM - sheetNorthOrigin)) / 3000)));
+  const sub5kRow = sheetCell(sheetNorth - northM, 3_000, 10);
+  const sub5kCol = sheetCell(eastM - sheetWest, 4_000, 10);
   const sheet5k = `${sub5kRow}${sub5kCol}`;
 
-  // 1:2,500 / 1:500 sub-sheet numbers (00 to 99): 10 rows of 300m, 10 cols of 400m
-  const sheet5kWest = sheetWestOrigin + sub5kCol * 4000;
-  const sheet5kNorth = sheetNorthOrigin + (northM >= 0 ? sub5kRow * 3000 : - (sub5kRow * 3000));
-  const subCol = Math.min(9, Math.max(0, Math.floor((eastM - sheet5kWest) / 400)));
-  const subRow = Math.min(9, Math.max(0, Math.floor(Math.abs(northM - sheet5kNorth) / 300)));
+  const subRow = sheetCell(sheetNorth - sub5kRow * 3_000 - northM, 300, 10);
+  const subCol = sheetCell(eastM - (sheetWest + sub5kCol * 4_000), 400, 10);
   const subSheet = `${subRow}${subCol}`;
 
   const sheetCode = `${zoneStr}${rowLetter}${colLetter}${sheet5k}${subSheet}`;

@@ -84,6 +84,13 @@ vec3 linearToSrgb(vec3 c) {
   return pow(clamp(c, 0.0, 1.0), vec3(1.0 / 2.2));
 }
 
+// Shadow / sunlight maps are node grids spanning the terrain bounds edge to
+// edge: map uv 0..1 onto the first..last texel centres before filtering.
+vec2 nodeGridUV(vec2 uv, ivec2 dims) {
+  vec2 n = vec2(dims);
+  return (clamp(uv, 0.0, 1.0) * (n - 1.0) + 0.5) / n;
+}
+
 float sampleSnowDepthCm() {
   if (u_snowMode == 0) return 0.0;
   vec2 uv = (v_worldPos.xz - u_snowOrigin) / u_snowScale;
@@ -119,9 +126,11 @@ void main() {
 
   vec3 N = normalize(v_normal);
 
-  // Surface slope angle in degrees
+  // Surface slope angle in degrees, from the real (un-exaggerated) normal:
+  // v_normal carries the vertical exaggeration for shading only.
   if (u_slopeEnabled == 1 && u_slopeOpacity > 0.0) {
-    float cosSlope = clamp(N.y, 0.0, 1.0);
+    vec3 terrainN = normalize(vec3(N.x, N.y * u_elevationExaggeration, N.z));
+    float cosSlope = clamp(terrainN.y, 0.0, 1.0);
     float slopeDeg = acos(cosSlope) * 57.29577951308232;
     float slopeU = clamp(slopeDeg / 90.0, 0.0, 1.0);
     vec4 slopeSample = texture(u_slopeRamp, vec2(slopeU, 0.5));
@@ -144,7 +153,7 @@ void main() {
   vec2 gridUV = (v_worldPos.xz - u_terrainOrigin) / u_terrainScale;
   if (u_sunlightEnabled == 1 && u_sunlightMapEnabled == 1 && u_sunlightMapOpacity > 0.0) {
     if (all(greaterThanEqual(gridUV, vec2(0.0))) && all(lessThanEqual(gridUV, vec2(1.0)))) {
-      vec4 smSample = texture(u_sunlightMap, gridUV);
+      vec4 smSample = texture(u_sunlightMap, nodeGridUV(gridUV, textureSize(u_sunlightMap, 0)));
       if (smSample.a > 0.0) {
         tinted = mix(tinted, smSample.rgb, smSample.a * u_sunlightMapOpacity);
       }
@@ -159,7 +168,7 @@ void main() {
   float castShadow = 0.0;
   if (u_sunlightEnabled == 1 && u_shadowEnabled == 1 && u_shadowOpacity > 0.0) {
     if (all(greaterThanEqual(gridUV, vec2(0.0))) && all(lessThanEqual(gridUV, vec2(1.0)))) {
-      castShadow = texture(u_shadowMap, gridUV).r;
+      castShadow = texture(u_shadowMap, nodeGridUV(gridUV, textureSize(u_shadowMap, 0))).r;
     }
   }
 

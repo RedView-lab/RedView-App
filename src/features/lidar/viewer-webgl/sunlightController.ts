@@ -15,6 +15,7 @@ import {
   createShadowSweepScratch,
   type ShadowSweepScratch,
 } from '@/features/sunlight/lib/shadowSweep';
+import { sortSunlightBands, sunlightBandIndex } from '@/features/sunlight/lib/sunlightBands';
 import type { SunlightBand, SunlightState } from '@/features/controlPanel/types';
 import type { PointCloudBounds } from '../types';
 import type { PrecalcResponse, PrecalcError } from './sunlightPrecalcWorker';
@@ -30,6 +31,12 @@ export interface SunlightControllerOptions {
   gridWidth: number;
   gridHeight: number;
   timeZone?: string;
+  /**
+   * Grid bearing of true north at the scene centre (`trueNorthGridBearingDeg`).
+   * The scene axes follow the CRS grid, so true sun azimuths are rotated by
+   * it before any geometry (light, cast shadows, trajectory).
+   */
+  trueNorthGridBearingDeg?: number;
   onRequestRender?: () => void;
 }
 
@@ -143,11 +150,15 @@ export class SunlightController {
   readonly cellSizeX: number;
   readonly cellSizeY: number;
   readonly extent: number;
+  /** Added to true azimuths to get scene (grid) azimuths. */
+  readonly trueNorthGridBearingDeg: number;
   onRequestRender?: () => void;
 
   /** Heightmap with row 0 = North, row H-1 = South for horizon sweep */
   private northSouthElev: Float32Array;
   private shadowScratch: ShadowSweepScratch;
+  /** Reused buffer for exposures interpolated between precalculated snapshots. */
+  private blendedExposure: Float32Array | null = null;
 
   // Caches for shadow and sunlight map
   private lastShadowAzimuth = -999;
@@ -183,6 +194,9 @@ export class SunlightController {
     this.timeZone = opts.timeZone || 'Europe/Paris';
     this.gridWidth = opts.gridWidth;
     this.gridHeight = opts.gridHeight;
+    this.trueNorthGridBearingDeg = Number.isFinite(opts.trueNorthGridBearingDeg)
+      ? opts.trueNorthGridBearingDeg!
+      : 0;
     this.onRequestRender = opts.onRequestRender;
 
     const rangeX = opts.bounds.maxX - opts.bounds.minX;
@@ -260,6 +274,7 @@ export class SunlightController {
         centerLat: this.centerLat,
         centerLon: this.centerLon,
         timeZone: this.timeZone,
+        azimuthOffsetDeg: this.trueNorthGridBearingDeg,
         stepMinutes: 10,
       },
       [elevCopy.buffer],
@@ -281,9 +296,11 @@ export class SunlightController {
     const sunPos = getSunPositionForLocalDateTime(dateStr, timeStr, this.centerLat, this.centerLon, this.timeZone);
     const sunAzimuthDeg = sunPos ? sunPos.azimuth : 180;
     const sunAltitudeDeg = sunPos ? sunPos.altitude : 45;
+    // Azimut dans le repère de la scène (axes du quadrillage CRS, pas le nord vrai).
+    const sunGridAzimuthDeg = sunAzimuthDeg + this.trueNorthGridBearingDeg;
 
     // 2. Conversion en coordonnées cartésiennes 3D du visualiseur (+X Est, +Y Haut, +Z Sud, -Z Nord)
-    const azRad = (sunAzimuthDeg * Math.PI) / 180;
+    const azRad = (sunGridAzimuthDeg * Math.PI) / 180;
     const altRad = (sunAltitudeDeg * Math.PI) / 180;
     const cosAlt = Math.cos(altRad);
 
@@ -329,7 +346,7 @@ export class SunlightController {
     // 4. Calcul de l'ombre portée 3D (Horizon Sweep)
     let shadowMapData: Uint8Array | null = null;
     if (isEnabled && state.shadowEnabled && isAboveHorizon && state.shadowOpacity > 0) {
-      const azDiff = Math.abs(sunAzimuthDeg - this.lastShadowAzimuth);
+      const azDiff = Math.abs(sunGridAzimuthDeg - this.lastShadowAzimuth);
       const altDiff = Math.abs(sunAltitudeDeg - this.lastShadowAltitude);
 
       if (!this.lastShadowResult || azDiff > 0.05 || altDiff > 0.05) {
@@ -337,14 +354,14 @@ export class SunlightController {
           this.northSouthElev,
           this.gridWidth,
           this.gridHeight,
-          sunAzimuthDeg,
+          sunGridAzimuthDeg,
           sunAltitudeDeg,
           this.cellSizeX,
           this.cellSizeY,
           this.shadowScratch,
         );
         this.lastShadowResult = new Uint8Array(shadow);
-        this.lastShadowAzimuth = sunAzimuthDeg;
+        this.lastShadowAzimuth = sunGridAzimuthDeg;
         this.lastShadowAltitude = sunAltitudeDeg;
       }
       shadowMapData = this.lastShadowResult;
@@ -366,7 +383,7 @@ export class SunlightController {
     const skyRadius = Math.max(planSpan * 0.48, this.extent * 0.46);
 
     if (isEnabled && state.trajectoryEnabled) {
-      const traj = this.buildTrajectoryGeometry(dateStr, skyRadius, sunAzimuthDeg, sunAltitudeDeg);
+      const traj = this.buildTrajectoryGeometry(dateStr, skyRadius, sunGridAzimuthDeg, sunAltitudeDeg);
       trajectoryVertices = traj.vertices;
       trajectoryVertexCount = traj.vertexCount;
       sunDiscPos = traj.currentSunPos;
@@ -410,32 +427,13 @@ export class SunlightController {
 
     // OPTION A : Chemin haute performance précalculé (0ms CPU, 60+ FPS)
     if (this.precalculatedTimeline && this.precalculatedDate === dateStr) {
-      const { sunriseMinutes, sunsetMinutes, timeSteps, snapshots } = this.precalculatedTimeline;
-
       const needsRecolor =
         !this.cachedSunlightMapRgba ||
         this.lastBandsSignature !== bandsSignature ||
         this.lastColorizedMinutes !== currentMinutes;
 
       if (needsRecolor) {
-        let exposure: Float32Array;
-
-        if (currentMinutes <= sunriseMinutes || snapshots.length === 0) {
-          exposure = snapshots[0] ?? new Float32Array(N);
-        } else if (currentMinutes >= sunsetMinutes) {
-          exposure = snapshots[snapshots.length - 1] ?? new Float32Array(N);
-        } else {
-          // Recherche dichotomique / indexation directe de la tranche précalculée
-          let idx = 0;
-          for (let i = 0; i < timeSteps.length - 1; i++) {
-            if (currentMinutes >= timeSteps[i] && currentMinutes < timeSteps[i + 1]) {
-              idx = i;
-              break;
-            }
-          }
-          exposure = snapshots[idx] ?? snapshots[snapshots.length - 1];
-        }
-
+        const exposure = this.exposureFromTimeline(this.precalculatedTimeline, currentMinutes);
         this.cachedSunlightMapRgba = this.colorizeExposure(exposure, bands);
         this.lastBandsSignature = bandsSignature;
         this.lastColorizedMinutes = currentMinutes;
@@ -468,7 +466,7 @@ export class SunlightController {
           this.northSouthElev,
           this.gridWidth,
           this.gridHeight,
-          pos.azimuth,
+          pos.azimuth + this.trueNorthGridBearingDeg,
           pos.altitude,
           this.cellSizeX,
           this.cellSizeY,
@@ -501,17 +499,48 @@ export class SunlightController {
     return this.cachedSunlightMapRgba ?? new Uint8Array(N * 4);
   }
 
+  /**
+   * Cumulative exposure at `minutes`. Each precalculated step holds the sun
+   * state constant, so the exposure grows linearly inside it: interpolating
+   * between the two bracketing snapshots gives the integrated value at any
+   * minute (instead of freezing it up to 10 min back).
+   */
+  private exposureFromTimeline(
+    timeline: { timeSteps: number[]; snapshots: Float32Array[] },
+    minutes: number,
+  ): Float32Array {
+    const N = this.gridWidth * this.gridHeight;
+    const { timeSteps, snapshots } = timeline;
+    const last = snapshots.length - 1;
+    if (last < 0) return new Float32Array(N);
+    if (minutes <= timeSteps[0]! || last === 0) return snapshots[0]!;
+    if (minutes >= timeSteps[last]!) return snapshots[last]!;
+
+    let i = 0;
+    while (i < last - 1 && minutes >= timeSteps[i + 1]!) i++;
+    const t = (minutes - timeSteps[i]!) / (timeSteps[i + 1]! - timeSteps[i]!);
+    if (!(t > 0)) return snapshots[i]!;
+
+    const from = snapshots[i]!;
+    const to = snapshots[i + 1]!;
+    if (!this.blendedExposure || this.blendedExposure.length !== N) {
+      this.blendedExposure = new Float32Array(N);
+    }
+    const out = this.blendedExposure;
+    for (let k = 0; k < N; k++) out[k] = from[k]! + (to[k]! - from[k]!) * t;
+    return out;
+  }
+
+  /** Same legend rule as the map overlay (`sunlightBandIndex`): 0 min is the first band. */
   private colorizeExposure(exposure: Float32Array, bands: SunlightBand[]): Uint8Array {
     const N = this.gridWidth * this.gridHeight;
     const rgba = new Uint8Array(N * 4);
 
-    const bandColors = bands.map((b) => {
+    const bandColors = sortSunlightBands(bands).map((b) => {
       const rgb = hexToRgb(b.color);
-      const minMins = b.minMinutes ?? 0;
-      const maxMins = b.maxMinutes ?? 240;
       return {
-        minMins,
-        maxMins,
+        minMinutes: b.minMinutes,
+        maxMinutes: b.maxMinutes,
         r: Math.round(rgb[0] * 255),
         g: Math.round(rgb[1] * 255),
         b: Math.round(rgb[2] * 255),
@@ -520,17 +549,7 @@ export class SunlightController {
     });
 
     for (let i = 0; i < N; i++) {
-      const mins = exposure[i];
-      if (mins <= 0) continue;
-
-      let matched = null;
-      for (let bi = 0; bi < bandColors.length; bi++) {
-        const b = bandColors[bi];
-        if (bi === bandColors.length - 1 || (mins >= b.minMins && mins < b.maxMins)) {
-          matched = b;
-          break;
-        }
-      }
+      const matched = bandColors[sunlightBandIndex(exposure[i]!, bandColors)];
 
       if (matched && matched.visible) {
         const off = i * 4;
@@ -565,7 +584,7 @@ export class SunlightController {
     for (let i = 0; i < SAMPLES; i++) {
       const m = startM + (i / (SAMPLES - 1)) * (endM - startM);
       const pos = getSunPositionForLocalMinutes(dateStr, m, this.centerLat, this.centerLon, this.timeZone);
-      const az = pos ? pos.azimuth : 180;
+      const az = (pos ? pos.azimuth : 180) + this.trueNorthGridBearingDeg;
       const alt = pos ? Math.max(0, pos.altitude) : 0;
 
       const azRad = (az * Math.PI) / 180;

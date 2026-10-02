@@ -106,6 +106,9 @@ script-test-bench/reports/routing-quality/*.json
 script-test-bench/reports/routing-quality/*.html
 script-test-bench/routing-quality/vps/dist/
 
+# Cache des crawls S3 de l'index LiDAR Japon / NZ (scripts/lidar-index)
+scripts/lidar-index/.cache/
+
 # Claude temp files
 .claude-temp/
 .figma-cache/

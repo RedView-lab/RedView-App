@@ -2,7 +2,8 @@ import { CameraController } from '../viewer/camera';
 import { WebGLTerrainRenderer } from './renderer';
 import type { TerrainMeshWebGL } from './terrainWorker';
 import { stitchOrtho } from './orthoStitcher';
-import { getTimeZoneForCoordinates, toWgs84 } from '../lib/coordConvert';
+import { getTimeZoneForCoordinates, toWgs84, trueNorthGridBearingDeg } from '../lib/coordConvert';
+import { resolveTimeZoneAt } from '@/shared/lib/timeZoneAt';
 import { createViewerPanel, factorToElevationPercent, type SnowModeKey } from '../viewer/panel/controller';
 import { buildGoogleMapsTileCenterUrl, buildTileLocationLabel } from '../viewer/panel/location';
 import { exitLidarViewer, switchViewerEngine } from '../viewer/panel/runtime/navigation';
@@ -208,7 +209,8 @@ export async function runWebGLFallback(
   };
 
   const [centerLon, centerLat] = toWgs84(cx, cy, crs);
-  const tileTimeZone = getTimeZoneForCoordinates(centerLon, centerLat, crs);
+  const tileTimeZone = (await resolveTimeZoneAt(centerLon, centerLat))
+    ?? getTimeZoneForCoordinates(centerLon, centerLat, crs);
 
   const sunlightController = new SunlightController({
     bounds: mesh.bounds,
@@ -221,6 +223,7 @@ export async function runWebGLFallback(
     gridWidth: mesh.gridWidth,
     gridHeight: mesh.gridHeight,
     timeZone: tileTimeZone,
+    trueNorthGridBearingDeg: trueNorthGridBearingDeg(cx, cy, crs),
     onRequestRender: () => requestRender(),
   });
 
@@ -351,6 +354,8 @@ export async function runWebGLFallback(
       heightGrid: mesh.heightGrid,
       gridWidth: mesh.gridWidth,
       gridHeight: mesh.gridHeight,
+      // terrainWorker's grid holds absolute altitudes.
+      heightGridOffsetZ: mesh.centerZ,
     },
     canvas,
     container: canvas.parentElement ?? document.body,
@@ -409,7 +414,7 @@ export async function runWebGLFallback(
         colors: new Uint8Array(0),
         vertexCount: mesh.vertexCount,
         indexCount: mesh.indexCount,
-      });
+      }, mesh.centerZ);
       renderer.setPreviewMesh(previewMesh.vertices, previewMesh.colors, previewMesh.indices);
       requestRender();
     },

@@ -100,6 +100,13 @@ fn isPointClassVisible(cls: u32) -> bool {
 `;
 
 export const WGSL_OVERLAY_HELPERS = /* wgsl */ `
+/** Nearest node of a grid whose nodes span the scene bounds edge to edge
+ *  (heightmap, cast-shadow and sunlight maps): u = 0 → node 0, u = 1 → node n − 1. */
+fn gridNode(u: f32, v: f32, dims: vec2<u32>) -> vec2<i32> {
+  let maxNode = vec2<f32>(dims) - vec2<f32>(1.0);
+  return vec2<i32>(round(clamp(vec2<f32>(u, v), vec2<f32>(0.0), vec2<f32>(1.0)) * maxNode));
+}
+
 fn sampleSnowDepthCm(worldPos: vec3<f32>) -> f32 {
   if (camera.snowMode < 0.5) { return 0.0; }
   let u = (worldPos.x - camera.snowOriginX) / camera.snowScaleX;
@@ -168,11 +175,7 @@ fn applySunlightMap(baseSrgb: vec3<f32>, worldPos: vec3<f32>) -> vec3<f32> {
   if (u < 0.0 || u > 1.0 || v < 0.0 || v > 1.0) {
     return baseSrgb;
   }
-  let dims = textureDimensions(sunlightMapTex, 0);
-  let dimsF = vec2<f32>(dims);
-  let px = clamp(i32(u * dimsF.x), 0, i32(dims.x) - 1);
-  let py = clamp(i32(v * dimsF.y), 0, i32(dims.y) - 1);
-  let smSample = textureLoad(sunlightMapTex, vec2<i32>(px, py), 0);
+  let smSample = textureLoad(sunlightMapTex, gridNode(u, v, textureDimensions(sunlightMapTex, 0)), 0);
   if (smSample.a <= 0.0) {
     return baseSrgb;
   }
@@ -188,11 +191,7 @@ fn sampleCastShadow(worldPos: vec3<f32>) -> f32 {
   if (u < 0.0 || u > 1.0 || v < 0.0 || v > 1.0) {
     return 0.0;
   }
-  let dims = textureDimensions(shadowTex, 0);
-  let dimsF = vec2<f32>(dims);
-  let px = clamp(i32(u * dimsF.x), 0, i32(dims.x) - 1);
-  let py = clamp(i32(v * dimsF.y), 0, i32(dims.y) - 1);
-  return textureLoad(shadowTex, vec2<i32>(px, py), 0).r;
+  return textureLoad(shadowTex, gridNode(u, v, textureDimensions(shadowTex, 0)), 0).r;
 }
 `;
 
@@ -200,8 +199,7 @@ export const WGSL_HEIGHT_HELPERS = /* wgsl */ `
 fn heightmapTexel(worldPos: vec3<f32>) -> vec2<i32> {
   let u = (worldPos.x - camera.hmOriginX) / camera.hmScaleX;
   let v = (worldPos.z - camera.hmOriginZ) / camera.hmScaleZ;
-  let dims = vec2<f32>(textureDimensions(heightTex, 0));
-  return min(vec2<i32>(clamp(vec2<f32>(u, v), vec2<f32>(0.0), vec2<f32>(1.0)) * dims), vec2<i32>(dims) - vec2<i32>(1));
+  return gridNode(u, v, textureDimensions(heightTex, 0));
 }
 
 /** Ground (DTM) height under a point, in the centred render frame. */
@@ -225,8 +223,9 @@ fn computeSobelNormal(worldPos: vec3<f32>) -> vec3<f32> {
   let hS = textureLoad(heightTex, vec2<i32>(center.x, yS), 0).r;
   let hN = textureLoad(heightTex, vec2<i32>(center.x, yN), 0).r;
 
-  let cellWorldX = camera.hmScaleX / max(dims.x, 1.0);
-  let cellWorldZ = camera.hmScaleZ / max(dims.y, 1.0);
+  // Node spacing: n nodes span the scale edge to edge.
+  let cellWorldX = camera.hmScaleX / max(dims.x - 1.0, 1.0);
+  let cellWorldZ = camera.hmScaleZ / max(dims.y - 1.0, 1.0);
 
   let dzdx = (hR - hL) / (2.0 * cellWorldX);
   let dzdz = (hS - hN) / (2.0 * cellWorldZ);

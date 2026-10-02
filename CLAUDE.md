@@ -16,6 +16,7 @@ npm start            # tsx server.mjs — production server: serves dist/ + api/
 npm run services     # / services:stop — start/stop local BRouter (17777) and POI server (17778) manually
 npm run bench        # full benchmark/regression suite (bench:quick = fewer iterations)
 npm run bench:pente  # single suite; others: meteo, alti, neige, brouter, fit, lidar, poi, exporter, chart, server
+npm run lidar:index  # regenerate the Japan/NZ LiDAR file indexes + green coverage polygons (S3 crawl cached in scripts/lidar-index/.cache, --refresh to re-crawl)
 npm run deploy       # alias `push` — see warning below
 ```
 

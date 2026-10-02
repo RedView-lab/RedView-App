@@ -65,7 +65,7 @@ function sampleLocalElevation(
   elevationBias: number,
   fallbackElevM: number | null,
 ): number {
-  const { bounds, heightGrid, gridWidth, gridHeight, centerZ } = params;
+  const { bounds, heightGrid, gridWidth, gridHeight, centerZ, heightGridOffsetZ = 0 } = params;
   const fallbackLocalY = (fallbackElevM !== null ? fallbackElevM - centerZ : 0) + elevationBias;
 
   if (!heightGrid || !gridWidth || !gridHeight || gridWidth < 2 || gridHeight < 2) {
@@ -100,18 +100,13 @@ function sampleLocalElevation(
     Number.isFinite(z01) &&
     Number.isFinite(z11)
   ) {
-    let interpolated =
+    const interpolated =
       (1 - fx) * (1 - fy) * z00! +
       fx * (1 - fy) * z10! +
       (1 - fx) * fy * z01! +
       fx * fy * z11!;
 
-    // If heightGrid contains absolute altitudes (e.g. ~2000m near centerZ), convert to local camera Y (Z - cz)
-    if (centerZ > 50 && Math.abs(interpolated - centerZ) < Math.abs(interpolated)) {
-      interpolated -= centerZ;
-    }
-
-    return interpolated + elevationBias;
+    return interpolated - heightGridOffsetZ + elevationBias;
   }
 
   return fallbackLocalY;

@@ -162,6 +162,12 @@ function buildTerrain(
   const gridW = Math.max(2, Math.min(maxGrid + 1, Math.ceil(rangeX / res) + 1));
   const gridH = Math.max(2, Math.min(maxGrid + 1, Math.ceil(rangeY / res) + 1));
   const N = gridW * gridH;
+  // Node spacing actually used by the mesh, the ortho UVs and every
+  // heightGrid consumer (nodes span [min, max] exactly): ≤ res, since the
+  // range is rarely a multiple of res. Splatting with `res` instead shifted
+  // the terrain by up to one cell towards the far edges.
+  const cellX = rangeX > 0 ? rangeX / (gridW - 1) : res;
+  const cellY = rangeY > 0 ? rangeY / (gridH - 1) : res;
 
   // 1) First pass: count ground points to decide fallback
   let totalCount = 0;
@@ -197,15 +203,16 @@ function buildTerrain(
       const y = positions[i * 3 + 1];
       const z = positions[i * 3 + 2] + pc.origin.z;
 
-      const gx = (x - gridMinX) / res;
-      const gy = (y - gridMinY) / res;
+      const gx = (x - gridMinX) / cellX;
+      const gy = (y - gridMinY) / cellY;
 
-      const x0 = Math.floor(gx);
-      const y0 = Math.floor(gy);
+      // Points on the max edge splat onto the last cell (f = 1).
+      const x0 = Math.min(gridW - 2, Math.floor(gx));
+      const y0 = Math.min(gridH - 2, Math.floor(gy));
       const fx = gx - x0;
       const fy = gy - y0;
 
-      if (x0 >= 0 && x0 < gridW - 1 && y0 >= 0 && y0 < gridH - 1) {
+      if (x0 >= 0 && fx <= 1 && y0 >= 0 && fy <= 1) {
         const w00 = (1 - fx) * (1 - fy);
         const w10 = fx * (1 - fy);
         const w01 = (1 - fx) * fy;
@@ -312,10 +319,10 @@ function buildTerrain(
       const z22 = heights[y2 * gridW + x2];
 
       // Horn's 8-neighbor gradient formula:
-      // dz/dx = ((z20 + 2*z21 + z22) - (z00 + 2*z01 + z02)) / (8 * res)
-      // dz/dy = ((z02 + 2*z12 + z22) - (z00 + 2*z10 + z20)) / (8 * res)
-      const scaleX = (x2 === x0) ? (2 * res) : (x2 - x0) * 4 * res;
-      const scaleY = (y2 === y0) ? (2 * res) : (y2 - y0) * 4 * res;
+      // dz/dx = ((z20 + 2*z21 + z22) - (z00 + 2*z01 + z02)) / (8 * cellX)
+      // dz/dy = ((z02 + 2*z12 + z22) - (z00 + 2*z10 + z20)) / (8 * cellY)
+      const scaleX = (x2 === x0) ? (2 * cellX) : (x2 - x0) * 4 * cellX;
+      const scaleY = (y2 === y0) ? (2 * cellY) : (y2 - y0) * 4 * cellY;
 
       const dzdx = ((z20 + 2 * z21 + z22) - (z00 + 2 * z01 + z02)) / Math.max(0.0001, scaleX);
       const dzdy = ((z02 + 2 * z12 + z22) - (z00 + 2 * z10 + z20)) / Math.max(0.0001, scaleY);

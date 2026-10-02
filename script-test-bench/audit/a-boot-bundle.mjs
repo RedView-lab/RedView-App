@@ -10,7 +10,7 @@
 //                         avec les dépendances préchargées par Vite (`__vite__mapDeps` / `m.f=[...]`)
 //                         et les imports statiques transitifs de chacune.
 // Rapporte brut / gzip-6 / gzip-9 / brotli par fichier et au total, avec et sans les
-// index LiDAR NZ (nzLazIndex.ts, objet `{BW23_4949:[...` ) et Japon (japanLazIndex.ts, `{"08ME2849":...`).
+// index LiDAR NZ (nzLazIndex.ts, tableau `[{id:"NZ…",base:"…/pc-bulk/…"`) et Japon (japanLazIndex.ts, `[{…dir:"{z}/{L}/{s}/"`).
 // Les ressources externes (Google Fonts, analytics, Mapbox GL CSS/tiles), les workers et
 // les .wasm chargés à l'exécution ne sont PAS comptés dans le boot (listés à part).
 
@@ -77,9 +77,9 @@ function staticClosure(roots) {
 }
 
 // ── Index LiDAR : plages d'octets de l'objet littéral ────────────────────────
-function objectSpanAround(src, markerIdx) {
-  // remonte jusqu'à l'accolade ouvrante de l'objet contenant le marqueur
-  let start = src.lastIndexOf('{', markerIdx);
+function objectSpanAround(src, markerIdx, open = '{') {
+  // remonte jusqu'à l'accolade (ou le crochet) ouvrant du littéral contenant le marqueur
+  let start = src.lastIndexOf(open, markerIdx);
   let depth = 0;
   let inStr = null;
   for (let i = start; i < src.length; i++) {
@@ -99,17 +99,18 @@ function objectSpanAround(src, markerIdx) {
   return null;
 }
 const INDEX_MARKERS = [
-  { name: 'nzLazIndex (NZ_LAZ_TILES)', marker: 'BW23_4949' },
-  { name: 'japanLazIndex (JAPAN_LAZ_INDEX)', marker: '08ME2849' },
+  // Première occurrence = premier jeu du tableau, sans « [ » avant elle dans l'objet.
+  { name: 'nzLazIndex (NZ_LIDAR_DATASETS)', marker: 'opentopography.s3.sdsc.edu/pc-bulk/', open: '[' },
+  { name: 'japanLazIndex (JAPAN_LIDAR_DATASETS)', marker: '{z}/{L}/{s}/', open: '[' },
 ];
 function stripIndexes(rel) {
   const buf = readAsset(rel);
   const src = buf.toString('latin1'); // 1 char = 1 octet, offsets cohérents avec le Buffer
   const spans = [];
-  for (const { name, marker } of INDEX_MARKERS) {
+  for (const { name, marker, open } of INDEX_MARKERS) {
     const idx = src.indexOf(marker);
     if (idx < 0) continue;
-    const span = objectSpanAround(src, idx);
+    const span = objectSpanAround(src, idx, open);
     if (span) spans.push({ name, start: span[0], end: span[1], bytes: span[1] - span[0] });
   }
   if (!spans.length) return null;

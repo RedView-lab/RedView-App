@@ -341,8 +341,9 @@ export async function clearAllTiles(): Promise<void> {
 
 // Superseded per-tile caches: v3 stored absolute float32 positions (northings
 // quantised to 0.5 m), v4 whole decoded clouds; the LOD cache (lodCache.ts)
-// replaces both, and terrain v2 meshes were built from quantised points.
-const LEGACY_DERIVED_SUFFIXES = ['.colorized_v3', '.colorized_v4', '.terrain_hd_v2'] as const;
+// replaces both. Terrain v2 meshes were built from quantised points, v3 ones
+// splatted the points with a step that did not match the mesh node spacing.
+const LEGACY_DERIVED_SUFFIXES = ['.colorized_v3', '.colorized_v4', '.terrain_hd_v2', '.terrain_hd_v3'] as const;
 
 function legacyDerivedKeys(baseName: string): string[] {
   return LEGACY_DERIVED_SUFFIXES.map((suffix) => baseName.replace(/(\.copc)?\.laz$/, suffix));
@@ -357,7 +358,7 @@ async function removeLegacyDerivedCaches(dir: FileSystemDirectoryHandle | null, 
 // --- Terrain mesh cache ---
 
 function terrainKey(baseName: string): string {
-  return baseName.replace(/\.copc\.laz$/, '.terrain_hd_v3');
+  return baseName.replace(/\.copc\.laz$/, '.terrain_hd_v4');
 }
 
 export interface TerrainCache {

@@ -13,7 +13,8 @@ import { createAppTranslationBundle, readStoredAppLocale, translateAppText } fro
 import { buildTranslationLookup, observeDomTranslation } from '@/shared/i18n/domTranslation';
 import { LidarRenderer, type HeightmapParams } from './renderer';
 import { CameraController } from './camera';
-import { getTimeZoneForCoordinates, toWgs84 } from '../lib/coordConvert';
+import { getTimeZoneForCoordinates, toWgs84, trueNorthGridBearingDeg } from '../lib/coordConvert';
+import { resolveTimeZoneAt } from '@/shared/lib/timeZoneAt';
 import { SceneLod } from './lod/sceneLod';
 import { AdaptivePointBudget } from './lod/lodBudget';
 import { LidarManager } from '../lib/lidarManager';
@@ -485,7 +486,7 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
     panel.setSnowMode('off');
     panel.setPrimaryActionState({ label: 'Quitter le mode LIDAR', title: 'Fermer le viewer LiDAR.' });
 
-    const tileTimeZone = getTimeZoneForCoordinates(lon, lat, crs);
+    const tileTimeZone = (await resolveTimeZoneAt(lon, lat)) ?? getTimeZoneForCoordinates(lon, lat, crs);
 
     const slopeController = new ViewerSlopeController(renderer, () => requestRender());
     const altitudeController = new ViewerAltitudeController(renderer, () => requestRender());
@@ -497,6 +498,7 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
       centerLon: lon,
       centerLat: lat,
       timeZone: tileTimeZone,
+      trueNorthGridBearingDeg: trueNorthGridBearingDeg(cx, cy, crs),
       heightGrid: terrainMesh.heightGrid,
       gridWidth: terrainMesh.gridWidth,
       gridHeight: terrainMesh.gridHeight,
@@ -513,6 +515,8 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
         heightGrid: terrainMesh.heightGrid,
         gridWidth: terrainMesh.gridWidth,
         gridHeight: terrainMesh.gridHeight,
+        // Grid centred on cz (heightmapWorker / mergeHeightGrid).
+        heightGridOffsetZ: 0,
       },
       canvas,
       container: canvas.parentElement ?? document.body,
@@ -564,7 +568,7 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
           renderer.clearPreviewMesh();
           return;
         }
-        const previewMesh = buildTilePreviewMesh(coord, sceneBounds, terrainMesh);
+        const previewMesh = buildTilePreviewMesh(coord, sceneBounds, terrainMesh, 0);
         renderer.setPreviewMesh(previewMesh.vertices, previewMesh.colors, previewMesh.indices);
         requestRender();
       },

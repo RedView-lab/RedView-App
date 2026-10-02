@@ -4,6 +4,7 @@ import { type GeoJSONSource, type Map as MapboxMap, type MapMouseEvent } from 'm
 import type { TileCoord } from '../types';
 import { tileCoordToWgs84Polygon, wgs84ToTileCoord } from '../lib/coordConvert';
 import { useLidarManager } from './LidarContext';
+import { lidarCoverageJapanZoneAt, removeLidarCoverageLayers, syncLidarCoverageLayers } from './lidarCoverageLayers';
 
 const SOURCE_ID = 'lidar-selection-source';
 const HOVER_FILL_ID = 'lidar-selection-hover-fill';
@@ -200,6 +201,7 @@ function ensureSelectionLayers(map: MapboxMap): boolean {
 
 function removeSelectionLayers(map: MapboxMap): void {
   if (!canInspectStyle(map)) return;
+  removeLidarCoverageLayers(map);
 
   try {
     for (const layerId of [SELECTED_LINE_ID, SELECTED_FILL_ID, HOVER_LINE_ID, HOVER_FILL_ID]) {
@@ -272,6 +274,8 @@ export function useLidarSelection(
     const updateSourceData = (): boolean => {
       if (!canMutateOverlayStyle() && !promoteStyleFallbackIfUsable()) return false;
 
+      // Couverture LiDAR dense (Japon / NZ) sous les couches de sélection.
+      syncLidarCoverageLayers(map, enabledRef.current);
       const ready = ensureSelectionLayers(map);
       if (!ready) return false;
 
@@ -340,7 +344,8 @@ export function useLidarSelection(
     const handleMouseMove = (event: MapMouseEvent) => {
       if (!enabledRef.current) return;
 
-      const nextCoord = wgs84ToTileCoord(event.lngLat.lng, event.lngLat.lat);
+      const japanZone = lidarCoverageJapanZoneAt(map, event.point);
+      const nextCoord = wgs84ToTileCoord(event.lngLat.lng, event.lngLat.lat, { japanZone });
       if (sameTile(nextCoord, hoveredRef.current)) return;
 
       hoveredRef.current = nextCoord;
@@ -352,7 +357,9 @@ export function useLidarSelection(
     const handleClick = (event: MapMouseEvent) => {
       if (!enabledRef.current) return;
 
-      const coord = hoveredRef.current ?? wgs84ToTileCoord(event.lngLat.lng, event.lngLat.lat);
+      const coord = hoveredRef.current ?? wgs84ToTileCoord(event.lngLat.lng, event.lngLat.lat, {
+        japanZone: lidarCoverageJapanZoneAt(map, event.point),
+      });
       hoveredRef.current = null;
       selectedRef.current = coord;
       scheduleOverlaySync();
@@ -387,6 +394,11 @@ export function useLidarSelection(
       scheduleOverlaySync();
     };
 
+    // La couverture d'un pays n'est chargée qu'une fois la vue arrivée dessus.
+    const handleMoveEnd = () => {
+      if (enabledRef.current) scheduleOverlaySync();
+    };
+
     const handleContextMenu = (event: MapMouseEvent) => {
       if (!enabledRef.current) return;
       event.preventDefault();
@@ -402,6 +414,7 @@ export function useLidarSelection(
     map.on('contextmenu', handleContextMenu);
     map.on('style.load', handleStyleLoad);
     map.on('styledata', handleStyleData);
+    map.on('moveend', handleMoveEnd);
     canvas?.addEventListener('mouseleave', handleMouseLeave);
     window.addEventListener('keydown', handleKeyDown);
 
@@ -422,6 +435,7 @@ export function useLidarSelection(
       map.off('contextmenu', handleContextMenu);
       map.off('style.load', handleStyleLoad);
       map.off('styledata', handleStyleData);
+      map.off('moveend', handleMoveEnd);
       canvas?.removeEventListener('mouseleave', handleMouseLeave);
       window.removeEventListener('keydown', handleKeyDown);
       if (canvas) canvas.style.cursor = '';

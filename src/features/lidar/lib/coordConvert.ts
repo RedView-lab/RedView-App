@@ -122,6 +122,19 @@ export function fromWgs84(lon: number, lat: number, crs: DetectedCrs): [number, 
   return getConverterFromWgs84(getProj(crs)).forward([lon, lat]) as [number, number];
 }
 
+/**
+ * Grid bearing of true north at a projected point, in degrees clockwise from
+ * the CRS +Y axis (meridian convergence: about −5°…+5° across Lambert-93). A
+ * true azimuth A points along the grid bearing A + this value; the LiDAR
+ * scenes are laid out on the CRS grid, not on true north.
+ */
+export function trueNorthGridBearingDeg(x: number, y: number, crs: DetectedCrs): number {
+  const [lon, lat] = toWgs84(x, y, crs);
+  const [xNorth, yNorth] = fromWgs84(lon, lat + 0.001, crs);
+  const bearing = (Math.atan2(xNorth - x, yNorth - y) * 180) / Math.PI;
+  return Number.isFinite(bearing) ? bearing : 0;
+}
+
 const DEG_TO_RAD = Math.PI / 180;
 const INV_PI = 1 / Math.PI;
 const INV_360 = 1 / 360;
@@ -241,10 +254,14 @@ export function tileCoordToWgs84Polygon(coord: TileCoord): [number, number][] {
   return [southWest, southEast, northEast, northWest, southWest];
 }
 
-export function wgs84ToTileCoord(lon: number, lat: number): TileCoord {
+/**
+ * Dalle de 1 km contenant le point. `japanZone` impose la zone JGD2011 (celle
+ * des données LiDAR sous le point) au lieu de la détection géographique.
+ */
+export function wgs84ToTileCoord(lon: number, lat: number, options?: { japanZone?: JapanZoneNumber }): TileCoord {
   // Japan coverage check
   if (isInJapanCoverage(lon, lat)) {
-    const jp = wgs84ToJapanTileCoord(lon, lat);
+    const jp = wgs84ToJapanTileCoord(lon, lat, options?.japanZone);
     const crsName = `JGD2011_ZONE_${String(jp.zone).padStart(2, '0')}` as DetectedCrs;
     const info = getTileInfo(crsName);
     return {

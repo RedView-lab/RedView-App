@@ -26,6 +26,8 @@ export interface PrecalcRequest {
   centerLat: number;
   centerLon: number;
   timeZone: string;
+  /** Added to true sun azimuths to get grid azimuths (meridian convergence). */
+  azimuthOffsetDeg?: number;
   stepMinutes?: number;
 }
 
@@ -72,6 +74,7 @@ ctx.onmessage = (e: MessageEvent<PrecalcRequest>) => {
       centerLat,
       centerLon,
       timeZone,
+      azimuthOffsetDeg = 0,
       stepMinutes = 10,
     } = msg;
 
@@ -111,7 +114,7 @@ ctx.onmessage = (e: MessageEvent<PrecalcRequest>) => {
           northSouthElev,
           gridWidth,
           gridHeight,
-          pos.azimuth,
+          pos.azimuth + azimuthOffsetDeg,
           pos.altitude,
           cellSizeX,
           cellSizeY,

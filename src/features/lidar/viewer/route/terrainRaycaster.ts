@@ -216,7 +216,7 @@ export function sampleElevationAtProj(
   projY: number,
   params: ViewerRouteSceneParams,
 ): number {
-  const { bounds, heightGrid, gridWidth, gridHeight, centerZ } = params;
+  const { bounds, heightGrid, gridWidth, gridHeight, heightGridOffsetZ = 0 } = params;
   if (!heightGrid || !gridWidth || !gridHeight || gridWidth < 2 || gridHeight < 2) {
     return 0;
   }
@@ -248,16 +248,13 @@ export function sampleElevationAtProj(
     Number.isFinite(z01) &&
     Number.isFinite(z11)
   ) {
-    let interpolated =
+    const interpolated =
       (1 - fx) * (1 - fy) * z00! +
       fx * (1 - fy) * z10! +
       (1 - fx) * fy * z01! +
       fx * fy * z11!;
 
-    if (centerZ > 50 && Math.abs(interpolated - centerZ) < Math.abs(interpolated)) {
-      interpolated -= centerZ;
-    }
-    return interpolated;
+    return interpolated - heightGridOffsetZ;
   }
 
   return 0;

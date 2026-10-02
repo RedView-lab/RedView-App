@@ -9,10 +9,11 @@
  *
  * Design notes (v2 — rewrite for responsiveness):
  *   • One grid, one exposure cache per quality tier. Cache key is
- *     `(sampleGen, isoDate, stepMinutes)`. The observer's lat/lon is NOT
- *     part of the key — across a viewport the sun position varies by far
- *     less than the integration step, so re-keying on map drift would wipe
- *     a perfectly usable cache.
+ *     `(sampleGen, isoDate, stepMinutes, observerTimeZone)`. The observer's
+ *     lat/lon is NOT part of the key — across a viewport the sun position
+ *     varies by far less than the integration step, so re-keying on map drift
+ *     would wipe a perfectly usable cache. The time zone is: it maps the
+ *     integrated wall-clock minutes onto instants.
  *   • Time advances → only the missing tranches are integrated (true O(Δt)).
  *   • The loop is async-yielding (`setTimeout(0)` every BATCH_STEPS) so:
  *       1. Progress messages reach the main thread mid-flight.
@@ -27,6 +28,7 @@ import {
 } from './dem-grid-worker';
 import { applyPolygonMaskToRgba, rasterizePolygonMask } from './polygonMask';
 import { rawPng } from './shadowWorkerEncoding';
+import { sunlightBandIndex } from './sunlightBands';
 
 /** Target grid cap. ~150 k pixels keeps a single horizon sweep ≲ 5 ms. */
 const GRID_MAX_W = 448;
@@ -100,6 +102,7 @@ interface ExposureCache {
   sampleGen: number;
   isoDate: string;
   stepMinutes: number;
+  observerTimeZone: string;
   /** Last cumulative minute boundary actually integrated. */
   lastMinutes: number;
   exposure: Float32Array;
@@ -191,6 +194,7 @@ async function handleCompute(msg: ComputeRequest, token: number): Promise<void> 
     && cache.sampleGen === state.sampleGen
     && cache.isoDate === msg.isoDate
     && cache.stepMinutes === stepMinutes
+    && cache.observerTimeZone === msg.observerTimeZone
     && cache.exposure.length === grid.gridW * grid.gridH;
 
   if (!cacheValid) {
@@ -208,6 +212,7 @@ async function handleCompute(msg: ComputeRequest, token: number): Promise<void> 
       sampleGen: state.sampleGen,
       isoDate: msg.isoDate,
       stepMinutes,
+      observerTimeZone: msg.observerTimeZone,
       lastMinutes: 0,
       exposure,
     };
@@ -294,7 +299,7 @@ function finalizeCompute(
   const zoneMask = msg.zoneRing && state
     ? rasterizePolygonMask(msg.zoneRing, state.bounds, grid.gridW, grid.gridH)
     : null;
-  const rgba = colorize(exposure, grid.gridW, grid.gridH, msg.bands, msg.opacity);
+  const rgba = colorize(exposure, grid.elev, grid.gridW, grid.gridH, msg.bands, msg.opacity);
   if (zoneMask) applyPolygonMaskToRgba(rgba, zoneMask);
   const blob = new Blob([rawPng(grid.gridW, grid.gridH, rgba).buffer as ArrayBuffer], { type: 'image/png' });
   post({
@@ -347,8 +352,10 @@ function accumulateExposureAt(
   }
 }
 
+/** `bands` arrive sorted by minMinutes (serializeBands). */
 function colorize(
   exposure: Float32Array,
+  elev: Float32Array,
   W: number,
   H: number,
   bands: BandSpec[],
@@ -358,17 +365,10 @@ function colorize(
   const out = new Uint8Array(W * H * 4);
   if (alpha === 0 || bands.length === 0) return out;
 
-  const last = bands.length - 1;
   for (let i = 0; i < exposure.length; i++) {
-    const minutes = exposure[i];
-    let band: BandSpec | null = null;
-    for (let b = 0; b <= last; b++) {
-      const candidate = bands[b];
-      if (b === last || minutes < candidate.maxMinutes) {
-        band = candidate;
-        break;
-      }
-    }
+    // No DEM under the cell: no exposure to report (would read as "0 min").
+    if (Number.isNaN(elev[i])) continue;
+    const band = bands[sunlightBandIndex(exposure[i], bands)];
     if (!band || !band.visible) continue;
     const o = i * 4;
     out[o] = band.r;
