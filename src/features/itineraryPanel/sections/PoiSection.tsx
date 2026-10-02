@@ -162,7 +162,7 @@ export function PoiSection({
           </button>
           {autoSortCount != null ? (
             <span className="rvi-poi-refine__count">
-              {t('{{count}} favoris auto', { count: autoSortCount })}
+              {t('{{count}} POI retenus', { count: autoSortCount })}
             </span>
           ) : null}
           <button

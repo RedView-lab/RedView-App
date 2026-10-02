@@ -1,23 +1,28 @@
 /**
  * Branchement du tri automatique des POI (`@/features/poi/lib/autoSort`) sur
  * un itinéraire : construction du modèle horaire (prédiction, pauses
- * existantes, heure de départ) puis application du résultat en favoris
- * « auto » sur la timeline et les POI du corridor.
+ * existantes, heure de départ). Le résultat est un filtre, pas des favoris :
+ * la feuille de route ne garde que les POI retenus (et les favoris), la
+ * timeline n'en reçoit aucun.
  */
 import type { PredictionResult } from '@/features/fitPredictor';
 import {
   autoSortPois,
-  type AutoSortPick,
   type AutoSortResult,
   type AutoSortTimeModel,
 } from '@/features/poi/lib/autoSort';
 import { projectRoutePoints } from '@/features/poi/lib/refinePoiProjection';
-import { POI_LABELS, type PoiFeature } from '@/features/poi/types';
+import { POI_LABELS, type PoiAutoSortReason, type PoiFeature } from '@/features/poi/types';
 
 import { parseStartReference } from '../../sections/timeline/TimelineTimelineView/utils';
-import type { Itinerary, PoiCategory as PanelPoiCategory, PoiState, TimelineItem } from '../../types';
+import type {
+  Itinerary,
+  PoiAutoSortPickRef,
+  PoiCategory as PanelPoiCategory,
+  PoiState,
+  TimelineItem,
+} from '../../types';
 import { DEFAULT_POI_DISTANCE_M, normalizeItineraryRhythmState } from '../project/defaultState';
-import { cumulativeRouteLengthsM, projectDistanceAlongRouteM, roundDistanceKm } from '../routes';
 import { buildPauseAwareSchedule } from './pauseAwareSchedule';
 import { FEATURE_TO_PANEL_POI } from './poi-to-timeline';
 
@@ -62,8 +67,8 @@ function fingerprintPoiFeatures(features: readonly PoiFeature[] | undefined): st
 
 /**
  * Empreinte des entrées du tri auto : POI chargés, heure / date de départ,
- * pauses aux favoris et prédiction. Si elle change, le dernier tri est
- * périmé et le panneau propose « Re-trier ».
+ * pauses aux favoris (manuels, déjà planifiés) et prédiction. Si elle
+ * change, le dernier tri est périmé et il est relancé.
  */
 export function buildPoiAutoSortSignature(
   itinerary: Itinerary,
@@ -121,8 +126,9 @@ function rideSecondsModel(
 }
 
 /**
- * Lance le tri auto sur l'itinéraire. Ne modifie rien : voir
- * `applyPoiAutoSort`. Renvoie null sans trace ou sans POI chargés.
+ * Lance le tri auto sur l'itinéraire. Ne modifie rien : le résultat est
+ * enregistré dans `Itinerary.poiAutoSort.picks` (voir `toPoiAutoSortPickRefs`).
+ * Renvoie null sans trace ou sans POI chargés.
  */
 export function computePoiAutoSort(
   itinerary: Itinerary,
@@ -151,7 +157,7 @@ export function computePoiAutoSort(
     if (isManualFavorite(feature)) manualFavoriteIds.add(feature.id);
   }
 
-  // Pauses déjà planifiées, sans celles des favoris auto qu'on va remplacer.
+  // Pauses déjà planifiées, sans celles des anciens favoris auto (effacés au tri).
   const baseItinerary: Itinerary = {
     ...itinerary,
     timeline: itinerary.timeline.map((row) =>
@@ -180,12 +186,9 @@ export function computePoiAutoSort(
     baseStopAnchors,
     start,
     hasRealDate: reference.hasRealDate,
-    pauseMinutesFor: (feature) => {
-      if (!rhythm.pauseAtFavoritePois) return 0;
-      const panelCategory = FEATURE_TO_PANEL_POI[feature.category];
-      const minutes = panelCategory ? rhythm.poiPauseDurations[panelCategory] : null;
-      return minutes != null && minutes > 0 ? minutes : 0;
-    },
+    // Les POI retenus ne vont pas dans la timeline : ils ne posent pas de
+    // pause, l'horaire du tri reste celui affiché par la feuille de route.
+    pauseMinutesFor: () => 0,
   };
 
   const result = autoSortPois({
@@ -240,7 +243,10 @@ export function upsertPoiTimelineRow(
   return row;
 }
 
-/** Retire les favoris posés par le tri auto ; les favoris manuels restent. Mute `itinerary`. */
+/**
+ * Retire les favoris posés par l'ancien tri auto (avant qu'il devienne un
+ * filtre) ; les favoris manuels restent. Mute `itinerary`.
+ */
 export function clearPoiAutoSortFavorites(itinerary: Itinerary): void {
   for (const row of itinerary.timeline) {
     if (row.favoriteSource !== 'auto') continue;
@@ -259,39 +265,38 @@ export function clearPoiAutoSortFavorites(itinerary: Itinerary): void {
   }
 }
 
+/** Références persistées des POI retenus par un tri. */
+export function toPoiAutoSortPickRefs(run: PoiAutoSortRun): PoiAutoSortPickRef[] {
+  return run.result.picks.map((pick) => ({ id: pick.feature.id, reason: pick.reason }));
+}
+
+/** Index id OSM → règle des POI retenus. */
+export function indexPoiAutoSortPicks(
+  picks: readonly PoiAutoSortPickRef[],
+): ReadonlyMap<number, PoiAutoSortReason> {
+  return new Map(picks.map((pick) => [pick.id, pick.reason]));
+}
+
 /**
- * Remplace les favoris auto précédents par ceux de `picks`. Les favoris
- * manuels ne sont jamais touchés. Mute `itinerary` (brouillon).
+ * POI retenus par le tri auto actif, ou null si le filtre ne s'applique pas
+ * (toggle éteint, jamais trié ou tri d'avant le filtrage).
  */
-export function applyPoiAutoSort(itinerary: Itinerary, picks: readonly AutoSortPick[]): void {
-  clearPoiAutoSortFavorites(itinerary);
+export function getPoiAutoSortPicks(
+  itinerary: Pick<Itinerary, 'poiAutoSortEnabled' | 'poiAutoSort'> | null | undefined,
+): ReadonlyMap<number, PoiAutoSortReason> | null {
+  const picks = itinerary?.poiAutoSortEnabled ? itinerary.poiAutoSort?.picks : undefined;
+  return picks ? indexPoiAutoSortPicks(picks) : null;
+}
 
-  const routePoints = itinerary.gpxRoute?.points ?? [];
-  const cumulative = routePoints.length >= 2 ? cumulativeRouteLengthsM(routePoints) : null;
-  const pickById = new Map<string | number, AutoSortPick>();
-  for (const pick of picks) pickById.set(pick.feature.id, pick);
-
-  for (const pick of pickById.values()) {
-    const row = upsertPoiTimelineRow(itinerary, pick.feature, () => {
-      if (!cumulative) return null;
-      const distM = projectDistanceAlongRouteM(pick.feature, routePoints, cumulative);
-      return distM != null ? roundDistanceKm(distM) : null;
-    });
-    if (isManualFavorite(row)) continue;
-    row.favorite = true;
-    row.favoriteSource = 'auto';
-    row.autoReason = pick.reason;
-  }
-
-  if (!itinerary.poiFeatures) itinerary.poiFeatures = [];
-  const known = new Set(itinerary.poiFeatures.map((feature) => feature.id));
-  itinerary.poiFeatures = itinerary.poiFeatures.map((feature) => {
-    const pick = pickById.get(feature.id);
-    if (!pick || isManualFavorite(feature)) return feature;
-    return { ...feature, favorite: true, favoriteSource: 'auto', autoReason: pick.reason };
-  });
-  for (const pick of pickById.values()) {
-    if (known.has(pick.feature.id)) continue;
-    itinerary.poiFeatures.push({ ...pick.feature, favorite: true, favoriteSource: 'auto', autoReason: pick.reason });
-  }
+/**
+ * Ligne gardée par le filtre du tri auto : tout sauf les POI de la recherche
+ * corridor ni retenus, ni favoris, ni marqués d'une pause.
+ */
+export function keepsTimelineItemWithPoiAutoSort(
+  item: TimelineItem,
+  picks: ReadonlyMap<number, PoiAutoSortReason>,
+): boolean {
+  if (item.kind !== 'poi' || item.osmId == null) return true;
+  if (item.favorite || (item.durationMin ?? 0) > 0) return true;
+  return picks.has(item.osmId);
 }

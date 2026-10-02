@@ -31,8 +31,8 @@ export function setPoiFeatureFavoriteState(
     if (!favoriteChanged && (feature.pauseDurationMin ?? null) === nextPause) return feature;
     changed = true;
     const next: PoiFeature = { ...feature, favorite, pauseDurationMin: nextPause };
-    // Seul le tri auto pose des favoris « auto » : tout basculement passant
-    // par ici est un choix manuel.
+    // Seul l'ancien tri auto posait des favoris « auto » : tout basculement
+    // passant par ici est un choix manuel.
     if (favoriteChanged) {
       delete next.autoReason;
       if (favorite) next.favoriteSource = 'manual';

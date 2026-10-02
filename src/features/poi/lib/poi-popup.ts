@@ -23,7 +23,7 @@ const AUTO_REASON_LABELS: Record<PoiAutoSortReason, string> = {
 
 export interface PoiPopupState {
   favoriteEnabled: boolean;
-  /** Règle du tri auto, quand le favori a été posé par lui. */
+  /** Règle du tri auto, quand il a retenu ce POI. */
   autoReason?: PoiAutoSortReason | null;
   pauseEnabled: boolean;
   pauseDurationMin: number;
@@ -104,8 +104,8 @@ function buildPopupHtml(feature: PoiFeature, state: PoiPopupState): string {
         </button>
       </div>
       ${
-        state.favoriteEnabled && state.autoReason
-          ? `<div class="rv-poi-popup__auto-reason"><span>Favori auto</span> · <span>${escapeHtml(AUTO_REASON_LABELS[state.autoReason])}</span></div>`
+        state.autoReason
+          ? `<div class="rv-poi-popup__auto-reason"><span>Tri auto</span> · <span>${escapeHtml(AUTO_REASON_LABELS[state.autoReason])}</span></div>`
           : ''
       }
 
@@ -243,8 +243,7 @@ export function buildPopupContent(
   });
 
   bindClick('[data-action="favorite-toggle"]', () => {
-    // Basculer l'étoile à la main en fait un favori manuel.
-    const nextState = { ...state, favoriteEnabled: !state.favoriteEnabled, autoReason: null, isDurationDropdownOpen: false };
+    const nextState = { ...state, favoriteEnabled: !state.favoriteEnabled, isDurationDropdownOpen: false };
     actions.onToggleFavorite?.(feature, nextState.favoriteEnabled);
     refresh(nextState);
   });

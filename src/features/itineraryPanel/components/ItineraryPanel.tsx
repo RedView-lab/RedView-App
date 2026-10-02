@@ -154,6 +154,8 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
   const timelinePanelProps = active
     ? {
       items: active.timeline,
+      // Tri auto actif : la feuille de route ne garde que les POI retenus.
+      poiAutoSortPicks: poiAutoSortEnabled ? (active.poiAutoSort?.picks ?? null) : null,
       rhythm: active.rhythm,
       prediction: active.prediction ?? null,
       discipline: normalizeDiscipline(active.discipline),

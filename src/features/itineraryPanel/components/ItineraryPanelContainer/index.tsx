@@ -427,7 +427,8 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     if (!active?.poiAutoSort) return null;
     return {
       summary: active.poiAutoSort.summary,
-      stale: active.poiAutoSort.signature !== poiAutoSortSignature,
+      // Sans `picks` : tri d'avant le filtrage (favoris auto), à refaire.
+      stale: active.poiAutoSort.signature !== poiAutoSortSignature || !active.poiAutoSort.picks,
     };
   }, [active?.poiAutoSort, poiAutoSortSignature]);
   const poiAutoSortEnabled = Boolean(active?.poiAutoSortEnabled);

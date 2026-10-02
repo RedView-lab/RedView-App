@@ -10,6 +10,7 @@ import type { PredictionResult } from '@/features/fitPredictor';
 import { useAppI18n } from '@/shared/i18n';
 import type { SportDiscipline } from '@/shared/lib/discipline';
 import type {
+  PoiAutoSortPickRef,
   PoiCategory,
   RhythmState,
   TimelineAddItemKind,
@@ -40,9 +41,12 @@ import {
   DEFAULT_TIMELINE_TABLE_SETTINGS,
 } from './TimelineTableSettings';
 import { buildScheduledTimelineState, parseStartReference } from './TimelineTimelineView/utils';
+import { indexPoiAutoSortPicks, keepsTimelineItemWithPoiAutoSort } from '../../lib/schedule/poiAutoSort';
 
 interface TimelinePanelProps {
   items: TimelineItem[];
+  /** Tri auto actif : POI retenus, seuls (avec les favoris) gardés dans la feuille de route. */
+  poiAutoSortPicks?: readonly PoiAutoSortPickRef[] | null;
   rhythm?: RhythmState;
   prediction?: PredictionResult | null;
   /** Itinerary sport: Trail / Running show paces and hide power columns. */
@@ -79,6 +83,7 @@ interface TimelinePanelProps {
 
 export function TimelinePanel({
   items,
+  poiAutoSortPicks,
   rhythm,
   prediction,
   discipline = 'bike',
@@ -227,11 +232,12 @@ export function TimelinePanel({
       }));
   }, [deduplicatedItems, prediction, rhythm, view]);
 
-  const visibleSheetItems = useMemo(
-    () => buildSheetItemsWithIntervalPauses(deduplicatedItems, intervalPauseSheetItems)
-      .filter((item) => matchesTimelineFilter(item, 'sheet', effectiveFilters)),
-    [deduplicatedItems, effectiveFilters, intervalPauseSheetItems],
-  );
+  const visibleSheetItems = useMemo(() => {
+    const picks = poiAutoSortPicks ? indexPoiAutoSortPicks(poiAutoSortPicks) : null;
+    return buildSheetItemsWithIntervalPauses(deduplicatedItems, intervalPauseSheetItems)
+      .filter((item) => matchesTimelineFilter(item, 'sheet', effectiveFilters))
+      .filter((item) => !picks || keepsTimelineItemWithPoiAutoSort(item, picks));
+  }, [deduplicatedItems, effectiveFilters, intervalPauseSheetItems, poiAutoSortPicks]);
 
   // La vue timeline reçoit TOUS les items (le planning compte chaque pause) et
   // n'affiche que ceux-ci : filtrer avant le calcul décalait les heures.

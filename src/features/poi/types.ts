@@ -116,9 +116,9 @@ export interface PoiFeature {
   source?: string | null;
   /** Confiance de la déduplication multi-sources (0..1), null pour OSM. */
   srcConfidence?: number | null;
-  /** Favori posé à la main ou par le tri automatique (absent = manuel). */
+  /** Favori posé à la main (absent = manuel) ; `'auto'` = ancien tri automatique. */
   favoriteSource?: PoiFavoriteSource;
-  /** Règle du tri automatique qui a retenu ce favori. */
+  /** Règle de l'ancien tri automatique qui avait retenu ce favori. */
   autoReason?: PoiAutoSortReason;
 }
 

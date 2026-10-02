@@ -26,11 +26,13 @@ export {
 } from './persisted-fit-files';
 export { poiFeaturesToTimelineItems, FEATURE_TO_PANEL_POI, isAutoHotelOption } from './poi-to-timeline';
 export {
-  applyPoiAutoSort,
   buildPoiAutoSortSignature,
   buildPoiSearchSignature,
   clearPoiAutoSortFavorites,
   computePoiAutoSort,
+  getPoiAutoSortPicks,
+  keepsTimelineItemWithPoiAutoSort,
+  toPoiAutoSortPickRefs,
   upsertPoiTimelineRow,
 } from './poiAutoSort';
 export type { PoiAutoSortRun } from './poiAutoSort';

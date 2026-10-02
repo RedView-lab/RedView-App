@@ -307,9 +307,12 @@ export interface TimelineItem {
   poiCategory?: PoiCategory;
   /** Stable OSM id of the source feature, when the row was injected by POI search. */
   osmId?: number;
-  /** Favori posé à la main ou par le tri automatique des POI (absent = manuel). */
+  /**
+   * Favori posé à la main (absent = manuel). `'auto'` : favori posé par
+   * l'ancien tri automatique, effacé au prochain tri (voir `clearPoiAutoSortFavorites`).
+   */
   favoriteSource?: PoiFavoriteSource;
-  /** Règle du tri automatique qui a retenu ce favori. */
+  /** Règle de l'ancien tri automatique qui avait retenu ce favori. */
   autoReason?: PoiAutoSortReason;
 }
 
@@ -323,10 +326,21 @@ export interface PoiAutoSortSummary {
   usedPrediction: boolean;
 }
 
+/** POI retenu par le tri automatique (id OSM de la feature). */
+export interface PoiAutoSortPickRef {
+  id: number;
+  reason: PoiAutoSortReason;
+}
+
 export interface PoiAutoSortState {
   /** Entrées du tri (recherche, départ, rythme) : voir `buildPoiAutoSortSignature`. */
   signature: string;
   summary: PoiAutoSortSummary;
+  /**
+   * POI retenus : avec les favoris, seuls POI laissés dans la feuille de route.
+   * Absent sur les tris d'avant le filtrage (qui posaient des favoris) : re-tri.
+   */
+  picks?: PoiAutoSortPickRef[];
   /** ISO date du tri. */
   ranAt: string;
 }
@@ -555,9 +569,9 @@ export interface Itinerary {
    * « Relancer la recherche ». Voir `buildPoiSearchSignature`.
    */
   poiSearchSignature?: string;
-  /** Toggle « Affiner les résultats » : le tri auto des favoris suit les POI chargés. */
+  /** Toggle « Affiner les résultats » : le tri auto filtre les POI de la feuille de route. */
   poiAutoSortEnabled?: boolean;
-  /** Dernier tri automatique des favoris (bilan affiché dans la pop-in). */
+  /** Dernier tri automatique des POI (POI retenus, bilan affiché dans la pop-in). */
   poiAutoSort?: PoiAutoSortState;
   /** BRouter-backed rideability audit findings for this itinerary. */
   routeAudit?: ItineraryRouteAuditState;
@@ -736,7 +750,7 @@ export interface ItineraryPanelProps {
   poiLoadDisabledReason?: string | null;
   /** POI chargés avec d'autres catégories / distances que les réglages courants. */
   poiSearchStale?: boolean;
-  /** Tri automatique (toggle « Affiner les résultats ») : pré-sélection de favoris d'après des règles horaires. */
+  /** Tri automatique (toggle « Affiner les résultats ») : ne garde dans la feuille de route que les POI retenus d'après des règles horaires. */
   poiAutoSortEnabled?: boolean;
   onTogglePoiAutoSort?: (enabled: boolean) => void;
   /** Rien à trier pour l'instant (pas de trace / de POI chargés, recherche en cours). */

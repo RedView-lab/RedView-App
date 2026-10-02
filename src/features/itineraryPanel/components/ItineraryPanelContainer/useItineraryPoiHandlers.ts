@@ -4,11 +4,12 @@ import { translateAppText } from '@/shared/i18n';
 import { POI_LABELS, type PoiFeature } from '@/features/poi/types';
 import type { PredictionResult } from '@/features/fitPredictor';
 import {
-  applyPoiAutoSort,
   buildPoiAutoSortSignature,
   clearPoiAutoSortFavorites,
   computePoiAutoSort,
   FEATURE_TO_PANEL_POI,
+  getPoiAutoSortPicks,
+  toPoiAutoSortPickRefs,
   upsertPoiTimelineRow,
 } from '../../lib/schedule';
 import { normalizeItineraryRhythmState } from '../../lib/project';
@@ -84,10 +85,9 @@ export function useItineraryPoiHandlers({
       ? poiRow.durationMin > 0
       : Boolean(feature.pauseDurationMin && feature.pauseDurationMin > 0);
 
-    const favoriteOrigin = poiRow?.favorite ? poiRow : feature;
     return {
       favoriteEnabled: Boolean(poiRow?.favorite ?? feature.favorite),
-      autoReason: favoriteOrigin.favoriteSource === 'auto' ? (favoriteOrigin.autoReason ?? null) : null,
+      autoReason: getPoiAutoSortPicks(itinerary)?.get(feature.id) ?? null,
       pauseEnabled,
       pauseDurationMin,
       manualTraceEnabled: itinerary.timeline.some(
@@ -123,9 +123,9 @@ export function useItineraryPoiHandlers({
   }, [updateActive]);
 
   /**
-   * Tri automatique : calcule une nouvelle sélection de favoris « auto » pour
-   * l'itinéraire (les favoris manuels sont conservés) et renvoie la mutation
-   * qui l'applique, ou null si rien n'est triable (pas de trace / de POI).
+   * Tri automatique : calcule les POI à garder dans la feuille de route (les
+   * favoris y restent toujours) et renvoie la mutation qui enregistre ce
+   * filtre, ou null si rien n'est triable (pas de trace / de POI).
    */
   const buildPoiAutoSortMutation = useCallback((itinerary: Itinerary) => {
     const prediction = getPrediction?.(itinerary) ?? itinerary.prediction ?? null;
@@ -139,16 +139,19 @@ export function useItineraryPoiHandlers({
       usedPrediction: run.usedPrediction,
     };
     const signature = buildPoiAutoSortSignature(itinerary, prediction);
+    const picks = toPoiAutoSortPickRefs(run);
     return (it: Itinerary) => {
-      applyPoiAutoSort(it, run.result.picks);
-      it.poiAutoSort = { signature, summary, ranAt: new Date().toISOString() };
+      // Les tris d'avant le filtrage posaient des favoris « auto ».
+      clearPoiAutoSortFavorites(it);
+      it.poiAutoSort = { signature, summary, picks, ranAt: new Date().toISOString() };
     };
   }, [getPrediction]);
 
   /**
    * Toggle « Affiner les résultats » : activé, trie tout de suite si des POI
-   * sont chargés (sinon au prochain chargement) ; désactivé, retire les
-   * favoris auto. Une seule entrée d'historique, donc annulable d'un coup.
+   * sont chargés (sinon au prochain chargement) ; désactivé, la feuille de
+   * route retrouve tous les POI. Une seule entrée d'historique, donc
+   * annulable d'un coup.
    */
   const handleTogglePoiAutoSort = useCallback((enabled: boolean) => {
     const itinerary = activeItineraryRef.current;

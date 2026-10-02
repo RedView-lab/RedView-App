@@ -1,5 +1,5 @@
 import { cumulativeRouteLengthsM, projectDistanceAlongRouteM } from '@/features/itineraryPanel/lib/routes';
-import { FEATURE_TO_PANEL_POI } from '@/features/itineraryPanel/lib/schedule';
+import { FEATURE_TO_PANEL_POI, getPoiAutoSortPicks } from '@/features/itineraryPanel/lib/schedule';
 import type { Itinerary, TimelineItem } from '@/features/itineraryPanel/types';
 import { POI_LABELS } from '@/features/poi/types';
 import { translateAppText } from '@/shared/i18n/config';
@@ -200,9 +200,15 @@ export function collectExportAnchors(
   routePoints: ExportRoutePoint[],
   options?: { favoritesOnly?: boolean },
 ): ExportAnchor[] {
+  // Tri auto actif : les POI retenus s'exportent comme les favoris, comme
+  // dans la feuille de route.
+  const autoSortPicks = getPoiAutoSortPicks(itinerary);
+  const isKeptPoi = (favorite: boolean | undefined, osmId: number | undefined) =>
+    Boolean(favorite) || (osmId != null && autoSortPicks?.has(osmId) === true);
   const hasExplicitFavorites =
     (itinerary.timeline ?? []).some((item) => isPoiKind(item.kind) && item.favorite) ||
-    (itinerary.poiFeatures ?? []).some((f) => f.favorite);
+    (itinerary.poiFeatures ?? []).some((f) => f.favorite) ||
+    (autoSortPicks?.size ?? 0) > 0;
 
   const favoritesOnly = options?.favoritesOnly ?? (hasExplicitFavorites ? true : false);
   const routeDistancePoints = routePoints.map((point) => ({ lat: point.lat, lon: point.lon }));
@@ -215,7 +221,7 @@ export function collectExportAnchors(
   for (const item of itinerary.timeline ?? []) {
     if (!shouldExportTimelineItem(item)) continue;
     const isPoi = isPoiKind(item.kind);
-    if (favoritesOnly && isPoi && !item.favorite) continue;
+    if (favoritesOnly && isPoi && !isKeptPoi(item.favorite, item.osmId)) continue;
     if (!Number.isFinite(item.lat) || !Number.isFinite(item.lon)) continue;
     const lat = item.lat as number;
     const lon = item.lon as number;
@@ -255,7 +261,7 @@ export function collectExportAnchors(
   // Also collect POIs from itinerary.poiFeatures (features marked as favorite or loaded along corridor)
   if (Array.isArray(itinerary.poiFeatures) && itinerary.poiFeatures.length > 0) {
     for (const f of itinerary.poiFeatures) {
-      if (favoritesOnly && !f.favorite) continue;
+      if (favoritesOnly && !isKeptPoi(f.favorite, f.id)) continue;
       if (!Number.isFinite(f.lat) || !Number.isFinite(f.lon)) continue;
       if (f.id != null && seenOsmIds.has(Number(f.id))) continue;
 

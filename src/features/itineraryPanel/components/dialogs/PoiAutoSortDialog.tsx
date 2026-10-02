@@ -1,6 +1,6 @@
 /**
- * Pop-in du tri automatique des favoris POI : bilan du dernier tri
- * (favoris retenus, trous non comblés) et critères appliqués.
+ * Pop-in du tri automatique des POI : bilan du dernier tri (POI gardés dans
+ * la feuille de route, trous non comblés) et critères appliqués.
  *
  * Rendue en portal sur `document.body` : hors du canevas du dashboard
  * (mis à l'échelle par `--app-scale`), on relit l'échelle sur l'ancre pour
@@ -180,10 +180,10 @@ export function PoiAutoSortDialog({
           </span>
           <div className="rvi-autosort-dialog__heading">
             <h2 id="rvi-autosort-dialog-title" className="rvi-autosort-dialog__title">
-              {t('Tri automatique des favoris')}
+              {t('Tri automatique des POI')}
             </h2>
             <p className="rvi-autosort-dialog__subtitle">
-              {t("Pré-sélection d'après vos heures de passage prévues. Vos favoris manuels ne sont jamais modifiés.")}
+              {t("La feuille de route ne garde que les POI utiles à vos heures de passage prévues, plus vos favoris. Rien n'est ajouté à la timeline.")}
             </p>
           </div>
           <button
@@ -203,7 +203,7 @@ export function PoiAutoSortDialog({
               <div className="rvi-autosort-dialog__section-title">
                 {t('Dernier tri')}
                 <span className="rvi-autosort-dialog__total">
-                  {t('{{count}} favoris auto', { count: summary.total })}
+                  {t('{{count}} POI retenus', { count: summary.total })}
                 </span>
               </div>
               <div className="rvi-autosort-dialog__stats">
