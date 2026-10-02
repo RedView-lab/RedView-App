@@ -3389,20 +3389,20 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Search again"
   },
   {
-    "fr": "{{count}} favoris auto",
-    "en": "{{count}} auto favorites"
+    "fr": "{{count}} POI retenus",
+    "en": "{{count}} POIs kept"
   },
   {
     "fr": "Critères du tri automatique",
     "en": "Auto-pick criteria"
   },
   {
-    "fr": "Tri automatique des favoris",
-    "en": "Automatic favorite picking"
+    "fr": "Tri automatique des POI",
+    "en": "Automatic POI picking"
   },
   {
-    "fr": "Pré-sélection d'après vos heures de passage prévues. Vos favoris manuels ne sont jamais modifiés.",
-    "en": "Pre-selection based on your predicted passage times. Your manual favorites are never changed."
+    "fr": "La feuille de route ne garde que les POI utiles à vos heures de passage prévues, plus vos favoris. Rien n'est ajouté à la timeline.",
+    "en": "The roadbook only keeps the POIs useful at your predicted passage times, plus your favorites. Nothing is added to the timeline."
   },
   {
     "fr": "Dernier tri",
@@ -3501,8 +3501,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Times estimated at 18 km/h: calculate your pace for a more accurate pick."
   },
   {
-    "fr": "Favori auto",
-    "en": "Auto favorite"
+    "fr": "Tri auto",
+    "en": "Auto pick"
   },
   {
     "fr": "Point d'eau (toutes les 3h)",

@@ -29,6 +29,7 @@ import {
   applyPendingTraceAppend,
   applyRecomputedRoute,
   applyRefinedRouteProfile,
+  applyUnroutableRouteCleared,
   captureRouteRefinementBase,
   getRoutingEndpointsKey,
   getRoutingInputsSignature,
@@ -485,7 +486,12 @@ export function useItineraryBrouterRouting({
       return () => ctrl.abort();
     }
 
+    // Sans arrivée, le dernier point de passage en tient lieu (cf.
+    // getRoutingEndpoints) : on ne s'arrête qu'en dessous de deux points.
     if (!startKey || !endKey) {
+      if (currentActive) {
+        setProject((project) => applyUnroutableRouteCleared(project, currentActive.id));
+      }
       deferRouteState(null);
       return;
     }

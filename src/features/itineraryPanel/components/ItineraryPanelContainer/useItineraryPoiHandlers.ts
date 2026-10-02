@@ -19,6 +19,7 @@ import {
   buildPendingRoutePatchForEditedRow,
   insertTimelineItem,
   insertWaypointIntoTimeline,
+  setPendingRouteEditForPlacedRow,
 } from './timelineMutations';
 import { removePoiAndLinkedWaypoints } from './poiDraft';
 import { setManualFavoriteOrigin, setPoiFeatureFavoriteState } from './poiFeatureUtils';
@@ -252,12 +253,13 @@ export function useItineraryPoiHandlers({
         it.poiFeatures.push(feature);
       }
 
-      delete it.pendingTraceExtension;
       delete it.routeAudit;
 
       if (it.gpxRoute?.source === 'brouter' && !result.isDirectOnRoute) {
-        it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, createdId);
+        setPendingRouteEditForPlacedRow(it, createdId);
         it.prediction = null;
+      } else {
+        delete it.pendingTraceExtension;
       }
     });
     if (createdId) {

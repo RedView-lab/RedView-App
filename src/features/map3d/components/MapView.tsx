@@ -17,7 +17,7 @@ import type { MapViewport } from '../lib/viewport-persist';
 import type { OverlayReloadRegistrar, OverlayStatusReporter } from '../lib/overlayStatus';
 import type { BasemapRenderConfig } from '@/features/controlPanel/lib';
 import { dispatchItineraryMapAction } from '@/features/itineraryPanel/lib/mapActionBridge';
-import { resolvePanelPlacement } from './panelPlacement';
+import { resolvePanelArea, resolvePanelPlacement, type MapOverlayInsets } from './panelPlacement';
 
 function sampleSlopePct(map: MapboxMap, lng: number, lat: number): number | null {
   const elevation = map.queryTerrainElevation?.([lng, lat]);
@@ -66,6 +66,8 @@ interface MapViewProps {
   onMapContextMenuAction?: (payload: MapContextMenuActionPayload) => void;
   onMapPoiDraftAction?: (payload: MapPoiDraftActionPayload) => void;
   contextMenuOverlayContext?: MapContextMenuOverlayContext;
+  /** Bords de la carte couverts par les panneaux du dashboard. */
+  overlayInsets?: MapOverlayInsets | null;
 }
 
 export default memo(function MapView({
@@ -80,6 +82,7 @@ export default memo(function MapView({
   onMapContextMenuAction,
   onMapPoiDraftAction,
   contextMenuOverlayContext,
+  overlayInsets,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [poiDraft, setPoiDraft] = useState<MapPoiDraft | null>(null);
@@ -109,14 +112,22 @@ export default memo(function MapView({
     const containerRect = containerRef.current?.getBoundingClientRect();
     const anchorX = containerRect ? payload.screenPoint.x - containerRect.left : payload.screenPoint.x;
     const anchorY = containerRect ? payload.screenPoint.y - containerRect.top : payload.screenPoint.y;
-    const placement = resolvePanelPlacement(
-      anchorX,
-      anchorY,
+    const area = resolvePanelArea(
       containerRect?.width ?? window.innerWidth,
       containerRect?.height ?? window.innerHeight,
+      0,
+      0,
+      0,
+      overlayInsets,
+    );
+    const placement = resolvePanelPlacement(
+      anchorX - area.left,
+      anchorY - area.top,
+      area.width,
+      area.height,
     );
     setPoiDraft(createPoiDraft(payload, map.current, placement));
-  }, [map, onMapContextMenuAction]);
+  }, [map, onMapContextMenuAction, overlayInsets]);
 
   const handlePoiDraftAction = useCallback((payload: MapPoiDraftActionPayload) => {
     onMapPoiDraftAction?.(payload);
@@ -137,6 +148,7 @@ export default memo(function MapView({
     containerRef: typeof containerRef;
     onAction?: (payload: MapContextMenuActionPayload) => void;
     overlayContext?: MapContextMenuOverlayContext;
+    overlayInsets?: MapOverlayInsets | null;
   }) => React.ReactNode;
 
   return (
@@ -144,46 +156,55 @@ export default memo(function MapView({
     // container. The Dashboard wraps everything in a scaled box whose
     // logical size is `viewport / appScale`, so vw/dvh would only cover
     // a fraction of the wrapper and leave empty space on small screens.
-    <div style={{ position: 'relative', width: '100%', height: '100%', zIndex: 0, isolation: 'isolate' }}>
-      <div
-        ref={containerRef}
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-      />
+    <>
+      <div style={{ position: 'relative', width: '100%', height: '100%', zIndex: 0, isolation: 'isolate' }}>
+        <div
+          ref={containerRef}
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+        />
 
-      <ContextMenuComponent
-        map={isLoaded ? map.current : null}
-        containerRef={containerRef}
-        onAction={handleMapContextMenuAction}
-        overlayContext={contextMenuOverlayContext}
-      />
+        {!isLoaded && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(17, 17, 17, 0.85)',
+              zIndex: 10,
+            }}
+          >
+            <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 'var(--rv-font-size-lg)' }}>
+              Chargement du globe...
+            </span>
+          </div>
+        )}
+      </div>
 
-      {poiDraft ? (
-        <MapPoiDraftCard
-          draft={poiDraft}
+      {/* Menu contextuel et fiche POI : calque frère de la carte, au-dessus des
+          panneaux du dashboard (z 25). Dans la carte isolée (z 0), ils
+          passeraient dessous. Même origine que la carte : positions inchangées. */}
+      <div style={{ position: 'absolute', inset: 0, zIndex: 40, pointerEvents: 'none' }}>
+        <ContextMenuComponent
           map={isLoaded ? map.current : null}
           containerRef={containerRef}
-          onDraftChange={setPoiDraft}
-          onAction={handlePoiDraftAction}
+          onAction={handleMapContextMenuAction}
+          overlayContext={contextMenuOverlayContext}
+          overlayInsets={overlayInsets}
         />
-      ) : null}
 
-      {!isLoaded && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(17, 17, 17, 0.85)',
-            zIndex: 10,
-          }}
-        >
-          <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 'var(--rv-font-size-lg)' }}>
-            Chargement du globe...
-          </span>
-        </div>
-      )}
-    </div>
+        {poiDraft ? (
+          <MapPoiDraftCard
+            draft={poiDraft}
+            map={isLoaded ? map.current : null}
+            containerRef={containerRef}
+            overlayInsets={overlayInsets}
+            onDraftChange={setPoiDraft}
+            onAction={handlePoiDraftAction}
+          />
+        ) : null}
+      </div>
+    </>
   );
 });

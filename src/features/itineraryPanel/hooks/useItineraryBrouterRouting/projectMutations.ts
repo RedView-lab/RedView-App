@@ -35,25 +35,49 @@ export interface RoutingEndpointsKey {
   viaKey: string;
 }
 
+interface LatLon {
+  lat: number;
+  lon: number;
+}
+
+export interface RoutingEndpoints {
+  start: LatLon | null;
+  end: LatLon | null;
+  via: LatLon[];
+}
+
+/**
+ * Points routés d'un itinéraire. Sans arrivée posée, le dernier point de
+ * passage hors-trace sert d'arrivée : le tracé suit chaque étape ajoutée
+ * sans attendre l'arrivée.
+ */
+export function getRoutingEndpoints(
+  itinerary: Itinerary | null | undefined,
+): RoutingEndpoints {
+  if (!itinerary) return { start: null, end: null, via: [] };
+  const toLatLon = (item: Itinerary['timeline'][number] | undefined): LatLon | null =>
+    item && item.lat != null && item.lon != null ? { lat: item.lat, lon: item.lon } : null;
+  const via = itinerary.timeline
+    .filter((item) => item.kind === 'waypoint' && !item.onRoute)
+    .map(toLatLon)
+    .filter((point): point is LatLon => point !== null);
+  const end = toLatLon(itinerary.timeline.find((item) => item.kind === 'end')) ?? via.pop() ?? null;
+  return {
+    start: toLatLon(itinerary.timeline.find((item) => item.kind === 'start')),
+    end,
+    via,
+  };
+}
+
 export function getRoutingEndpointsKey(
   itinerary: Itinerary | null | undefined,
 ): RoutingEndpointsKey {
-  if (!itinerary) return { startKey: '', endKey: '', viaKey: '' };
-  const start = itinerary.timeline.find((item) => item.kind === 'start');
-  const end = itinerary.timeline.find((item) => item.kind === 'end');
+  const { start, end, via } = getRoutingEndpoints(itinerary);
+  const key = (point: LatLon | null) => (point ? `${point.lon},${point.lat}` : '');
   return {
-    startKey: start && start.lat != null && start.lon != null ? `${start.lon},${start.lat}` : '',
-    endKey: end && end.lat != null && end.lon != null ? `${end.lon},${end.lat}` : '',
-    viaKey: itinerary.timeline
-      .filter(
-        (item) =>
-          item.kind === 'waypoint' &&
-          item.lat != null &&
-          item.lon != null &&
-          !item.onRoute,
-      )
-      .map((item) => `${item.lon},${item.lat}`)
-      .join('|'),
+    startKey: key(start),
+    endKey: key(end),
+    viaKey: via.map(key).join('|'),
   };
 }
 
@@ -376,6 +400,52 @@ export function applyRecomputedRoute(
               visible: current.routeAudit?.visible ?? false,
               findings: auditFindings,
             },
+            pendingTraceExtension: undefined,
+            pendingRoutePatch: undefined,
+          }
+        : current,
+    ),
+  };
+}
+
+/**
+ * Itinéraire retombé à moins de deux points routés (dernière étape supprimée
+ * avant la pose de l'arrivée) : le tracé BRouter stocké, routé pour d'autres
+ * points, est retiré. Un tracé sans estampille (ancien projet) est conservé.
+ */
+export function applyUnroutableRouteCleared(
+  project: ItineraryProject,
+  itineraryId: string,
+): ItineraryProject {
+  const itinerary = project.itineraries.find((item) => item.id === itineraryId);
+  const route = itinerary?.gpxRoute;
+  if (!itinerary || !route || route.source !== 'brouter') return project;
+  if (route.routedInputsKey === undefined || route.routedInputsKey === getRoutingInputsSignature(itinerary)) {
+    return project;
+  }
+  return {
+    ...project,
+    itineraries: project.itineraries.map((current) =>
+      current.id === itineraryId
+        ? {
+            ...current,
+            gpxRoute: undefined,
+            metrics: current.metrics
+              ? {
+                  ...current.metrics,
+                  distanceKm: undefined,
+                  ascentM: undefined,
+                  descentM: undefined,
+                  avgSlopePercent: undefined,
+                  tarmacPercent: undefined,
+                  offroadPercent: undefined,
+                }
+              : current.metrics,
+            timeline: current.timeline.map((row) =>
+              row.kind === 'end' && row.distanceKm != null ? { ...row, distanceKm: null } : row,
+            ),
+            routeAudit: undefined,
+            prediction: null,
             pendingTraceExtension: undefined,
             pendingRoutePatch: undefined,
           }

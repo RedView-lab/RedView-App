@@ -3,8 +3,47 @@ export interface PanelPlacement {
   vertical: 'down' | 'up';
 }
 
+/** Bords de la carte couverts par l'interface (panneaux latéraux, panneau du bas), en px. */
+export interface MapOverlayInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+export interface PanelArea {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 function finiteOr(value: number, fallback: number): number {
   return Number.isFinite(value) ? value : fallback;
+}
+
+/**
+ * Zone où ancrer un panneau flottant : la carte visible entre les panneaux de
+ * l'interface. Sur un axe où le panneau n'y tient pas, tout le conteneur.
+ */
+export function resolvePanelArea(
+  containerWidth: number,
+  containerHeight: number,
+  panelWidth: number,
+  panelHeight: number,
+  padding: number,
+  insets?: MapOverlayInsets | null,
+): PanelArea {
+  const fit = (start: number, end: number, size: number, panelSize: number) => {
+    const safeStart = Math.max(0, finiteOr(start, 0));
+    const safeSize = size - safeStart - Math.max(0, finiteOr(end, 0));
+    return safeSize >= panelSize + padding * 2
+      ? { offset: safeStart, size: safeSize }
+      : { offset: 0, size };
+  };
+  const x = fit(insets?.left ?? 0, insets?.right ?? 0, containerWidth, panelWidth);
+  const y = fit(insets?.top ?? 0, insets?.bottom ?? 0, containerHeight, panelHeight);
+  return { left: x.offset, top: y.offset, width: x.size, height: y.size };
 }
 
 export function resolvePanelPlacement(

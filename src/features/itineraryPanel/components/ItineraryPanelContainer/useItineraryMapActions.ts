@@ -9,6 +9,7 @@ import {
   buildPendingRoutePatchForEditedRow,
   insertTimelineItem,
   insertWaypointIntoTimeline,
+  setPendingRouteEditForPlacedRow,
 } from './timelineMutations';
 import { pointInPolygon } from '../../context/ProjectStore/forbiddenZonePatch';
 import {
@@ -108,12 +109,13 @@ export function useItineraryMapActions({
           );
           createdId = result.newRow.id;
 
-          delete it.pendingTraceExtension;
           delete it.routeAudit;
 
           if (it.gpxRoute?.source === 'brouter' && !result.isDirectOnRoute) {
-            it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, createdId);
+            setPendingRouteEditForPlacedRow(it, createdId);
             it.prediction = null;
+          } else {
+            delete it.pendingTraceExtension;
           }
         });
         if (createdId) {
@@ -238,12 +240,13 @@ export function useItineraryMapActions({
           );
           createdId = result.newRow.id;
 
-          delete it.pendingTraceExtension;
           delete it.routeAudit;
 
           if (it.gpxRoute?.source === 'brouter' && !result.isDirectOnRoute) {
-            it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, createdId);
+            setPendingRouteEditForPlacedRow(it, createdId);
             it.prediction = null;
+          } else {
+            delete it.pendingTraceExtension;
           }
         });
         if (createdId) {

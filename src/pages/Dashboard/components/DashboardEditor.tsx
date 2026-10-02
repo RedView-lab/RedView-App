@@ -271,6 +271,16 @@ export function DashboardEditor({
     return `${itinerary.name} (${t('Pente').toLocaleLowerCase()})`;
   }, [activeProjectInitial, t]);
 
+  // Bords de la carte couverts par les panneaux : le menu contextuel et la
+  // fiche POI s'ouvrent dans la carte visible, pas sous le panneau du bas.
+  const leftInset = leftPanelOpen ? PANEL_PADDING + leftPanelWidth : 0;
+  const rightInset = isRightPanelCollapsed ? 0 : panelWidth + PANEL_PADDING;
+  const bottomInset = layout.centerToolbarVisible ? Math.max(0, layout.designH - layout.centerToolbarTop) : 0;
+  const mapOverlayInsets = useMemo(
+    () => ({ top: 0, right: rightInset, bottom: bottomInset, left: leftInset }),
+    [bottomInset, leftInset, rightInset],
+  );
+
   const handleLidarSelectionDisable = useCallback(() => {
     setLidarModeEnabled(false);
   }, [setLidarModeEnabled]);
@@ -297,6 +307,7 @@ export function DashboardEditor({
           onViewportChange={onMapViewportChange}
           basemapConfig={activeBasemapConfig}
           contextMenuOverlayContext={contextMenuOverlayContext}
+          overlayInsets={mapOverlayInsets}
         />
 
       <MapCursorLoader

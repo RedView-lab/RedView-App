@@ -6,6 +6,7 @@ import {
   buildTimelineAfterRemoval,
   insertTimelineItem,
   moveTimelinePauseItem,
+  setPendingRouteEditForPlacedRow,
 } from './timelineMutations';
 import { normalizeItineraryRhythmState } from '../../lib/project';
 import { setManualFavoriteOrigin, setPoiFeatureFavoriteState } from './poiFeatureUtils';
@@ -128,8 +129,7 @@ export function useItineraryTimelineCallbacks({
       row.lon = place.lon;
       if (it.gpxRoute?.points && it.gpxRoute.points.length >= 2) {
         delete row.onRoute;
-        it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, id);
-        delete it.pendingTraceExtension;
+        setPendingRouteEditForPlacedRow(it, id);
         delete it.routeAudit;
         it.prediction = null;
       }

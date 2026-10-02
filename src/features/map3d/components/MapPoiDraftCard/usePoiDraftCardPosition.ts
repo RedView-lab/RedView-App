@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useState, type RefObject } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
-import { computePanelPosition } from '../panelPlacement';
+import { computePanelPosition, resolvePanelArea, type MapOverlayInsets } from '../panelPlacement';
 import type { MapPoiDraft } from './types';
 
 const EDGE_PADDING = 8;
@@ -14,6 +14,7 @@ interface UsePoiDraftCardPositionArgs {
   map: MapboxMap | null;
   cardRef: RefObject<HTMLDivElement | null>;
   containerRef: RefObject<HTMLDivElement | null>;
+  overlayInsets?: MapOverlayInsets | null;
 }
 
 /**
@@ -24,6 +25,7 @@ export function usePoiDraftCardPosition({
   map,
   cardRef,
   containerRef,
+  overlayInsets,
 }: UsePoiDraftCardPositionArgs) {
   const [position, setPosition] = useState({ left: EDGE_PADDING, top: EDGE_PADDING });
 
@@ -53,23 +55,32 @@ export function usePoiDraftCardPosition({
       return;
     }
 
-    const nextPosition = computePanelPosition(
-      anchorX,
-      anchorY,
-      cardRect.width,
-      cardRect.height,
+    const area = resolvePanelArea(
       containerRect.width,
       containerRect.height,
+      cardRect.width,
+      cardRect.height,
+      EDGE_PADDING,
+      overlayInsets,
+    );
+    const areaPosition = computePanelPosition(
+      anchorX - area.left,
+      anchorY - area.top,
+      cardRect.width,
+      cardRect.height,
+      area.width,
+      area.height,
       EDGE_PADDING,
       draft.placement,
     );
+    const nextPosition = { left: areaPosition.left + area.left, top: areaPosition.top + area.top };
 
     setPosition((current) => (
       current.left === nextPosition.left && current.top === nextPosition.top
         ? current
         : nextPosition
     ));
-  }, [cardRef, containerRef, draft, map]);
+  }, [cardRef, containerRef, draft, map, overlayInsets]);
 
   useLayoutEffect(() => {
     syncCardPosition();

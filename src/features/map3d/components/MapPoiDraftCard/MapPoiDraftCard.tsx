@@ -18,6 +18,7 @@ import {
   WaypointGlyph,
 } from '../MapContextMenu/icons';
 import { copyTextToClipboard } from '../MapContextMenu/utils';
+import type { MapOverlayInsets } from '../panelPlacement';
 import type { MapPoiDraft, MapPoiDraftActionPayload } from './types';
 import { ActionRow, DeleteGlyph } from './ActionRow';
 import { CategorySelector } from './CategorySelector';
@@ -29,6 +30,7 @@ interface MapPoiDraftCardProps {
   draft: MapPoiDraft;
   map: MapboxMap | null;
   containerRef: RefObject<HTMLDivElement | null>;
+  overlayInsets?: MapOverlayInsets | null;
   onDraftChange: (nextDraft: MapPoiDraft) => void;
   onAction: (payload: MapPoiDraftActionPayload) => void;
 }
@@ -40,6 +42,7 @@ export function MapPoiDraftCard({
   draft,
   map,
   containerRef,
+  overlayInsets,
   onDraftChange,
   onAction,
 }: MapPoiDraftCardProps) {
@@ -67,6 +70,7 @@ export function MapPoiDraftCard({
     map,
     cardRef,
     containerRef,
+    overlayInsets,
   });
 
   useEffect(() => {

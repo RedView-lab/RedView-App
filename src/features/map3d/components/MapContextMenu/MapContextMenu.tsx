@@ -6,7 +6,12 @@ import { useAppI18n } from '@/shared/i18n';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import { isFreeCamActive } from '@/features/freeCam';
 
-import { computePanelPosition, resolvePanelPlacement, type PanelPlacement } from '../panelPlacement';
+import {
+  computePanelPosition,
+  resolvePanelArea,
+  resolvePanelPlacement,
+  type MapOverlayInsets,
+} from '../panelPlacement';
 import { sampleSlopePct, resolvePointContext } from './contextMenuHelpers';
 import { fetchOverlayDetails } from './overlayForecast';
 import { MapContextMenuHeader } from './MapContextMenuHeader';
@@ -30,12 +35,13 @@ interface MapContextMenuProps {
   containerRef: RefObject<HTMLDivElement | null>;
   onAction?: (payload: MapContextMenuActionPayload) => void;
   overlayContext?: MapContextMenuOverlayContext;
+  /** Bords de la carte couverts par les panneaux : le menu s'ouvre à côté. */
+  overlayInsets?: MapOverlayInsets | null;
 }
 
 interface MenuState {
   screenX: number;
   screenY: number;
-  placement: PanelPlacement;
   point: MapContextMenuPoint;
 }
 
@@ -52,7 +58,13 @@ interface PendingRightClickState {
  * Affiche les coordonnées, altitude, pente, météo locale et propose des actions
  * (Créer un POI, Démarrer ici, Ajouter une étape, Finir ici).
  */
-export function MapContextMenu({ map, containerRef, onAction, overlayContext }: MapContextMenuProps) {
+export function MapContextMenu({
+  map,
+  containerRef,
+  onAction,
+  overlayContext,
+  overlayInsets,
+}: MapContextMenuProps) {
   const { t } = useAppI18n();
   const projectStore = useProjectStoreOptional();
   const project = projectStore?.project;
@@ -232,25 +244,10 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
         forbiddenZoneId,
       };
 
-      const container = containerRef.current;
-      const containerBounds = container?.getBoundingClientRect() ?? {
-        left: 0,
-        top: 0,
-        right: window.innerWidth,
-        bottom: window.innerHeight,
-        width: window.innerWidth,
-        height: window.innerHeight,
-      };
-
-      const screenX = event.point.x;
-      const screenY = event.point.y;
-      const placement = resolvePanelPlacement(screenX, screenY, containerBounds.width, containerBounds.height);
-
       setCopied(false);
       setMenuState({
-        screenX,
-        screenY,
-        placement,
+        screenX: event.point.x,
+        screenY: event.point.y,
         point: nextPoint,
       });
     };
@@ -294,19 +291,33 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
     const container = containerRef.current;
     if (!menuEl || !container) return;
 
-    const pos = computePanelPosition(
-      menuState.screenX,
-      menuState.screenY,
-      menuEl.offsetWidth || MENU_WIDTH,
-      menuEl.offsetHeight || 280,
+    const menuWidth = menuEl.offsetWidth || MENU_WIDTH;
+    const menuHeight = menuEl.offsetHeight || 280;
+    // Placé dans la carte visible : au-dessus du clic quand il est dans la
+    // moitié basse de la zone libre, jamais sous le panneau du bas.
+    const area = resolvePanelArea(
       container.clientWidth,
       container.clientHeight,
+      menuWidth,
+      menuHeight,
       MENU_EDGE_PADDING,
-      menuState.placement,
+      overlayInsets,
+    );
+    const anchorX = menuState.screenX - area.left;
+    const anchorY = menuState.screenY - area.top;
+    const pos = computePanelPosition(
+      anchorX,
+      anchorY,
+      menuWidth,
+      menuHeight,
+      area.width,
+      area.height,
+      MENU_EDGE_PADDING,
+      resolvePanelPlacement(anchorX, anchorY, area.width, area.height),
     );
 
-    setMenuPosition(pos);
-  }, [containerRef, menuState]);
+    setMenuPosition({ left: pos.left + area.left, top: pos.top + area.top });
+  }, [containerRef, menuState, overlayInsets]);
 
   const activePointLat = menuState?.point.lat;
   const activePointLng = menuState?.point.lng;

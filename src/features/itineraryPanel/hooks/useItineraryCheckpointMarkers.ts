@@ -862,7 +862,10 @@ export function useItineraryCheckpointMarkers({
       let endCoord: [number, number] | null = null;
       let endLabel = '';
       const endRow = itinerary.timeline.find((row) => row.kind === 'end');
-      if (routePoints.length >= 2) {
+      // Sans arrivée posée, le tracé s'arrête sur la dernière étape, qui a
+      // déjà son marqueur.
+      const endIsPlaced = !endRow || (endRow.lat != null && endRow.lon != null);
+      if (routePoints.length >= 2 && endIsPlaced) {
         const lastPt = routePoints[routePoints.length - 1];
         endCoord = [lastPt.lon, lastPt.lat];
         endLabel = endRow?.label ?? '';

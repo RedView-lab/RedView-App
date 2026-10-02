@@ -6,6 +6,10 @@ import type {
 } from '../../types';
 import { translateAppText } from '@/shared/i18n';
 import {
+  getRoutingEndpoints,
+  getRoutingInputsSignature,
+} from '../../hooks/useItineraryBrouterRouting/projectMutations';
+import {
   cumulativeRouteLengthsM,
   projectPointAlongRoute,
   roundDistanceKm,
@@ -94,6 +98,44 @@ export function buildPendingRoutePatchAfterRemoval(
     end: { lat: after.lat, lon: after.lon, kind: after.kind === 'end' ? 'end' : 'waypoint' },
     via: [],
   };
+}
+
+/**
+ * Ligne qui vient de recevoir sa position (étape ajoutée, lieu choisi) : pose
+ * l'édition de tracé en attente. Sans arrivée, une étape ajoutée en queue
+ * prolonge le tracé depuis le dernier point routé (extension, comme le
+ * traceur) ; sinon patch local entre ses voisins, ou recalcul complet.
+ */
+export function setPendingRouteEditForPlacedRow(itinerary: Itinerary, rowId: string): void {
+  const extension = buildOpenRouteExtension(itinerary, rowId);
+  if (extension) {
+    itinerary.pendingTraceExtension = extension;
+    delete itinerary.pendingRoutePatch;
+    return;
+  }
+  delete itinerary.pendingTraceExtension;
+  itinerary.pendingRoutePatch = buildPendingRoutePatchForEditedRow(itinerary.timeline, rowId);
+}
+
+function buildOpenRouteExtension(
+  itinerary: Itinerary,
+  rowId: string,
+): Itinerary['pendingTraceExtension'] {
+  const route = itinerary.gpxRoute;
+  if (route?.source !== 'brouter' || route.points.length < 2) return undefined;
+  const endRow = itinerary.timeline.find((item) => item.kind === 'end');
+  if (endRow?.lat != null && endRow.lon != null) return undefined;
+  const { start, end } = getRoutingEndpoints(itinerary);
+  const row = itinerary.timeline.find((item) => item.id === rowId);
+  if (!start || !end || row?.kind !== 'waypoint' || row.lat !== end.lat || row.lon !== end.lon) {
+    return undefined;
+  }
+  // Le tracé stocké doit être celui des points d'avant l'ajout : il se
+  // termine alors exactement au point routé précédent.
+  const before = { ...itinerary, timeline: itinerary.timeline.filter((item) => item.id !== rowId) };
+  const from = getRoutingEndpoints(before).end;
+  if (!from || route.routedInputsKey !== getRoutingInputsSignature(before)) return undefined;
+  return { from, to: { lat: end.lat, lon: end.lon } };
 }
 
 /**
@@ -227,8 +269,12 @@ export function insertWaypointIntoTimeline(
   const endIndex = timeline.findIndex((row) => row.kind === 'end');
   const searchLimit = endIndex >= 0 ? endIndex : timeline.length;
   let insertIndex = searchLimit;
+  // Sans arrivée posée, une étape hors du tracé le prolonge : elle va en
+  // queue, pas au kilomètre où elle se projette sur le tracé actuel.
+  const endRow = endIndex >= 0 ? timeline[endIndex] : null;
+  const extendsOpenRoute = !isDirectOnRoute && (endRow?.lat == null || endRow?.lon == null);
 
-  if (distanceKm != null && hasRoute && cumulative) {
+  if (distanceKm != null && hasRoute && cumulative && !extendsOpenRoute) {
     for (let index = 0; index < searchLimit; index += 1) {
       const row = timeline[index];
       if (row.kind === 'start') continue;
@@ -254,7 +300,7 @@ export function insertWaypointIntoTimeline(
     id: newRowId,
     kind: 'waypoint',
     label: options?.label ?? translateAppText('Point de passage'),
-    distanceKm,
+    distanceKm: extendsOpenRoute ? null : distanceKm,
     lat: point.lat,
     lon: point.lon,
     osmId: options?.osmId,
