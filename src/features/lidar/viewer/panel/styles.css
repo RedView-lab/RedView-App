@@ -482,8 +482,9 @@
   transition: transform 0.15s ease;
 }
 
-.viewer-panel.is-snow-menu-open .viewer-panel__select-row:not(.viewer-panel__select-row--engine) .viewer-panel__select-chevron,
-.viewer-panel.is-engine-menu-open .viewer-panel__select-row--engine .viewer-panel__select-chevron {
+.viewer-panel.is-snow-menu-open .viewer-panel__select-row:not(.viewer-panel__select-row--engine):not(.viewer-panel__select-row--color) .viewer-panel__select-chevron,
+.viewer-panel.is-engine-menu-open .viewer-panel__select-row--engine .viewer-panel__select-chevron,
+.viewer-panel.is-color-menu-open .viewer-panel__select-row--color .viewer-panel__select-chevron {
   transform: rotate(180deg);
 }
 

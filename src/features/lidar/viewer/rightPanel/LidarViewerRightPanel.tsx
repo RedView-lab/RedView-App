@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AppI18nProvider } from '@/shared/i18n';
+import { AppI18nProvider, translateAppText } from '@/shared/i18n';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { SlopesSection } from '@/features/controlPanel/sections/SlopesSection';
 import { AltitudeSection } from '@/features/controlPanel/sections/AltitudeSection';
@@ -67,8 +67,8 @@ function buildSlopeBands(
   return categories.map((category) => ({
     id: category.id,
     percentRange: category.displayRange,
-    degreeRange: `${formatSlopeDegreeLabel(category.minDeg)}° - ${formatSlopeDegreeLabel(category.maxDeg)}° (${category.label})`,
-    label: `${category.displayRange} (${category.label})`,
+    degreeRange: `${formatSlopeDegreeLabel(category.minDeg)}° - ${formatSlopeDegreeLabel(category.maxDeg)}° (${translateAppText(category.label)})`,
+    label: `${category.displayRange} (${translateAppText(category.label)})`,
     color: category.color,
     visible: visibilityById[category.id] ?? true,
     minDeg: category.minDeg,

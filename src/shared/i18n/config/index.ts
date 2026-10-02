@@ -16,6 +16,7 @@ export {
   writeStoredAppLocale,
 } from './locale';
 export {
+  canonicalizeAppText,
   createAppTranslationBundle,
   interpolateAppTranslation,
   translateAppText,

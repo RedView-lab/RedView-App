@@ -38,8 +38,9 @@ export function fetchRouteForPriorities(
   }
 
   const climbFocus = Math.max(0, prioritySign(priorities.elevation));
-  const distanceAvoid = Math.max(0, -prioritySign(priorities.distance));
-  const distanceFocus = Math.max(0, prioritySign(priorities.distance));
+  // Priorité « Distance » haute = au plus direct (même sens que le profil BRF).
+  const distanceAvoid = Math.max(0, prioritySign(priorities.distance));
+  const distanceFocus = Math.max(0, -prioritySign(priorities.distance));
   const durationFocus = Math.max(0, prioritySign(priorities.duration));
   if (climbFocus > 0.4 && distanceAvoid > 0.65) {
     return fetchBrouterRouteBestWithClimbEfficiency(reqBase);

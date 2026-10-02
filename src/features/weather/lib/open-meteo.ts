@@ -1,6 +1,7 @@
 import type { WindPoint, WindDataSource, WindGridDefinition, WindTimeSelection } from '../types';
 import { coordCacheKey } from './wind-grid';
 import { OPENMETEO_FORECAST_URL } from './openMeteoConfig';
+import { translateAppText } from '@/shared/i18n';
 import {
   normaliseWindRequestedHourKey,
   normaliseWindSelection,
@@ -313,7 +314,12 @@ async function fetchWindGridForSelectionInternal(
     completedBatches: 0,
     totalBatches,
     source: null,
-    detail: `Préparation vent ${normalisedSelection.date} ${normalisedSelection.time} (${grid.cols}×${grid.rows})`,
+    detail: translateAppText('Préparation vent {{date}} {{time}} ({{cols}}×{{rows}})', {
+      date: normalisedSelection.date,
+      time: normalisedSelection.time,
+      cols: grid.cols,
+      rows: grid.rows,
+    }),
   });
 
   // 2. Batch fetch uncached coordinates (with inter-batch delay)
@@ -363,7 +369,16 @@ async function fetchWindGridForSelectionInternal(
       completedBatches: batchNumber,
       totalBatches,
       source: lastSource,
-      detail: `Vent ${normalisedSelection.date} ${normalisedSelection.time} ${batchNumber}/${totalBatches}${lastSource ? ` via ${lastSource}` : ''}`,
+      detail: translateAppText(
+        lastSource ? 'Vent {{date}} {{time}} {{batch}}/{{total}} via {{source}}' : 'Vent {{date}} {{time}} {{batch}}/{{total}}',
+        {
+          date: normalisedSelection.date,
+          time: normalisedSelection.time,
+          batch: batchNumber,
+          total: totalBatches,
+          source: lastSource ?? '',
+        },
+      ),
     });
   }
 
@@ -392,7 +407,11 @@ async function fetchWindGridForSelection(
       completedBatches: 0,
       totalBatches: 1,
       source: null,
-      detail: `Réutilisation du chargement vent en cours ${windSelectionKey(selection)} (${grid.cols}×${grid.rows})`,
+      detail: translateAppText('Réutilisation du chargement vent en cours {{key}} ({{cols}}×{{rows}})', {
+        key: windSelectionKey(selection),
+        cols: grid.cols,
+        rows: grid.rows,
+      }),
     });
     return existing;
   }

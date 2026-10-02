@@ -182,7 +182,7 @@ export async function colorizePointCloud(
   pointCloud: PointCloudData,
   onProgress?: (phase: string, percent: number) => void
 ): Promise<void> {
-  const { positions, colors, count, crs, bounds } = pointCloud;
+  const { positions, colors, count, crs, bounds, origin } = pointCloud;
 
   const {
     px00, py00, px10, py10, px01, py01, px11, py11,
@@ -191,8 +191,9 @@ export async function colorizePointCloud(
 
   const invDx = 1 / (bounds.maxX - bounds.minX);
   const invDy = 1 / (bounds.maxY - bounds.minY);
-  const xMin = bounds.minX;
-  const yMin = bounds.minY;
+  // Positions are relative to `origin`: express the bounds in the same frame.
+  const xMin = bounds.minX - origin.x;
+  const yMin = bounds.minY - origin.y;
 
   onProgress?.('Téléchargement des orthophotos...', 0);
 

@@ -11,7 +11,7 @@
 // per-cell colour averaging).
 
 import { parseLazBuffer } from '../lib/lazParser';
-import type { PointCloudBounds } from '../types';
+import type { PointCloudBounds, PointCloudOrigin } from '../types';
 
 export interface CornerUV {
   u00: number; v00: number; // (minX, minY)
@@ -79,12 +79,7 @@ scope.onmessage = async (e: MessageEvent<WorkerInput>) => {
     const gridCap = clampInt(maxGrid ?? DEFAULT_MAX_GRID, 64, 4096);
     const resFloor = Math.max(0.05, minResM ?? DEFAULT_MIN_RES_M);
 
-    const pointClouds: Array<{
-      positions: Float32Array;
-      classifications: Uint8Array;
-      count: number;
-      bounds: PointCloudBounds;
-    }> = [];
+    const pointClouds: TerrainPointCloud[] = [];
 
     const totalBuffers = rawBuffers.length;
     for (let i = 0; i < totalBuffers; i++) {
@@ -103,6 +98,7 @@ scope.onmessage = async (e: MessageEvent<WorkerInput>) => {
         classifications: pc.classifications,
         count: pc.count,
         bounds: pc.bounds,
+        origin: pc.origin,
       });
     }
 
@@ -141,13 +137,17 @@ function post(msg: WorkerOutput, transfer?: Transferable[]) {
   else scope.postMessage(msg);
 }
 
+interface TerrainPointCloud {
+  /** XYZ relative to `origin` (see PointCloudOrigin). */
+  positions: Float32Array;
+  classifications: Uint8Array;
+  count: number;
+  bounds: PointCloudBounds;
+  origin: PointCloudOrigin;
+}
+
 function buildTerrain(
-  pointClouds: Array<{
-    positions: Float32Array;
-    classifications: Uint8Array;
-    count: number;
-    bounds: PointCloudBounds;
-  }>,
+  pointClouds: TerrainPointCloud[],
   bounds: PointCloudBounds,
   cornerUV: CornerUV,
   maxGrid: number,
@@ -182,6 +182,9 @@ function buildTerrain(
 
   for (const pc of pointClouds) {
     const { positions, classifications, count } = pc;
+    // Grid origin expressed in this cloud's local frame (float64, exact).
+    const gridMinX = bounds.minX - pc.origin.x;
+    const gridMinY = bounds.minY - pc.origin.y;
     for (let i = 0; i < count; i++) {
       const cls = classifications[i];
       if (useStrictGround) {
@@ -192,10 +195,10 @@ function buildTerrain(
 
       const x = positions[i * 3];
       const y = positions[i * 3 + 1];
-      const z = positions[i * 3 + 2];
+      const z = positions[i * 3 + 2] + pc.origin.z;
 
-      const gx = (x - bounds.minX) / res;
-      const gy = (y - bounds.minY) / res;
+      const gx = (x - gridMinX) / res;
+      const gy = (y - gridMinY) / res;
 
       const x0 = Math.floor(gx);
       const y0 = Math.floor(gy);

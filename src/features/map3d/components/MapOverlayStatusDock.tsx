@@ -88,7 +88,7 @@ export default function MapOverlayStatusDock({
     || reloadTargets.every((status) => status.state === 'loading');
   const tooltip = [
     loading.length > 0 ? t('Chargement : {{list}}', { list: loading.map((s) => t(s.label)).join(', ') }) : null,
-    hasError ? t('Erreur : {{list}}', { list: errored.map((s) => (s.detail ? `${t(s.label)} (${s.detail})` : t(s.label))).join(', ') }) : null,
+    hasError ? t('Erreur : {{list}}', { list: errored.map((s) => (s.detail ? `${t(s.label)} (${t(s.detail)})` : t(s.label))).join(', ') }) : null,
   ].filter(Boolean).join('\n');
 
   return (

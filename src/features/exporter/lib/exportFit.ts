@@ -1,6 +1,7 @@
 import { Encoder, Profile } from '@garmin/fitsdk';
 import type { Itinerary } from '@/features/itineraryPanel/types';
 import { isFootDiscipline } from '@/shared/lib/discipline';
+import { translateAppText } from '@/shared/i18n/config';
 import {
   collectExportAnchors,
   FIT_PRODUCT_ID,
@@ -112,7 +113,7 @@ export function buildItineraryFitCourse(
   const anchors = collectExportAnchors(itinerary, routePoints, options).filter(
     (anchor) => anchor.kind !== 'start' && anchor.kind !== 'end',
   );
-  const routeName = itinerary.gpxRoute?.name?.trim() || itinerary.name.trim() || 'Itineraire';
+  const routeName = itinerary.gpxRoute?.name?.trim() || itinerary.name.trim() || translateAppText('Itinéraire');
   const createdAt = new Date();
   const encoder = new Encoder();
   const recordMessages = buildFitRecordMessages(routePoints, createdAt);

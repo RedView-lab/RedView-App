@@ -7,6 +7,7 @@ import { ColorPalettePicker } from '@/features/controlPanel/components/ColorPale
 import { IconChevronDown, IconEye, IconRoute } from '@/features/controlPanel/icons';
 import { IconPlus } from '@/features/itineraryPanel/components/icons';
 import type { ViewerRouteState } from '../route/types';
+import { useAppI18n } from '@/shared/i18n';
 
 export interface RouteSectionProps {
   state: ViewerRouteState;
@@ -110,6 +111,7 @@ export const RouteSection = memo(function RouteSection({
   onRibbonWidthChange,
   onToggleEditMode,
 }: RouteSectionProps) {
+  const { t } = useAppI18n();
   const { enabled, ribbonWidthM, routes, activeRoute, editMode } = state;
 
   const handleRouteClick = (routeId: string) => {
@@ -125,7 +127,7 @@ export const RouteSection = memo(function RouteSection({
 
   return (
     <Section
-      title="Itinéraires"
+      title={t('Itinéraires')}
       icon={<IconRoute size={16} />}
       toggle={{ checked: enabled, onChange: onEnabledChange }}
       open={open}
@@ -143,7 +145,7 @@ export const RouteSection = memo(function RouteSection({
                 color={route.color}
                 onChange={(nextColor) => onColorChange?.(route.id, nextColor)}
                 className="rvc-routes__color-picker"
-                ariaLabel={`Choisir la couleur de ${route.name}`}
+                ariaLabel={t('Choisir la couleur de {{name}}', { name: route.name })}
               >
                 <ColorSwatch color={route.color} size={12} />
                 <IconChevronDown size={20} />

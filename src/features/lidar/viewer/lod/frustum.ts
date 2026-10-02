@@ -101,12 +101,17 @@ export function frustumTestAABB(planes: FrustumPlanes, aabb: AABB): number {
 /**
  * Compute screen-space size of an AABB in pixels.
  * Uses bounding sphere projection in clip space: zero GC allocations, ultra-fast scalar math.
+ *
+ * `projScaleY` is the projection's `proj[1][1]` (1 / tan(fovY / 2)). It must
+ * not be read from `viewProj[5]`, which is `proj[1][1] * up.y` and collapses
+ * to ~0 when the camera looks straight down.
  */
 export function screenSpaceSize(
   aabb: AABB,
   viewProj: Float32Array,
   viewportW: number,
   viewportH: number,
+  projScaleY: number,
 ): number {
   const halfX = (aabb.maxX - aabb.minX) * 0.5;
   const halfY = (aabb.maxY - aabb.minY) * 0.5;
@@ -124,8 +129,7 @@ export function screenSpaceSize(
     return Math.max(viewportW, viewportH);
   }
 
-  // viewProj[5] corresponds to proj[1][1] = 1 / tan(fov / 2)
-  const projFactor = Math.abs(viewProj[5]) * (viewportH * 0.5);
+  const projFactor = Math.abs(projScaleY) * (viewportH * 0.5);
   const pixelDiameter = (2 * radius * projFactor) / w;
 
   return Math.max(0, pixelDiameter);

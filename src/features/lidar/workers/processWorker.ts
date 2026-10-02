@@ -3,7 +3,7 @@
 import { parseLazBuffer } from '../lib/lazParser';
 import { colorizePointCloud, prefetchOrthoTiles } from '../lib/colorizer';
 
-import type { DetectedCrs, PointCloudBounds } from '../types';
+import type { CopcHierarchyInfo, DetectedCrs, PointCloudBounds, PointCloudOrigin } from '../types';
 
 const workerScope = self as unknown as DedicatedWorkerGlobalScope;
 
@@ -23,6 +23,7 @@ export type WorkerRequest =
       classifications: Uint8Array;
       count: number;
       bounds: PointCloudBounds;
+      origin: PointCloudOrigin;
       crs: DetectedCrs;
     };
 
@@ -35,7 +36,10 @@ export type WorkerResponse =
       classifications: Uint8Array;
       count: number;
       bounds: { minX: number; minY: number; minZ: number; maxX: number; maxY: number; maxZ: number };
+      origin: PointCloudOrigin;
       crs: string;
+      intensities?: Uint16Array;
+      copc?: CopcHierarchyInfo;
     }
   | { type: 'error'; message: string };
 
@@ -67,13 +71,17 @@ workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
           classifications: request.classifications,
           count: request.count,
           bounds: request.bounds,
+          origin: request.origin,
           crs: request.crs,
         };
 
-    await colorizePointCloud(pointCloud, (phase, pct) => {
-      const msg: WorkerResponse = { type: 'progress', phase: 'colorizing', message: phase, percent: pct };
-      workerScope.postMessage(msg);
-    });
+    // Files with their own RGB (PDRF 7/8) skip the orthophoto pass.
+    if (!pointCloud.embeddedRgb) {
+      await colorizePointCloud(pointCloud, (phase, pct) => {
+        const msg: WorkerResponse = { type: 'progress', phase: 'colorizing', message: phase, percent: pct };
+        workerScope.postMessage(msg);
+      });
+    }
 
     const result: WorkerResponse = {
       type: 'done',
@@ -82,13 +90,18 @@ workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
       classifications: pointCloud.classifications,
       count: pointCloud.count,
       bounds: pointCloud.bounds,
+      origin: pointCloud.origin,
       crs: pointCloud.crs,
+      intensities: pointCloud.intensities,
+      copc: pointCloud.copc,
     };
-    workerScope.postMessage(result, [
+    const transfer: Transferable[] = [
       pointCloud.positions.buffer,
       pointCloud.colors.buffer,
       pointCloud.classifications.buffer,
-    ]);
+    ];
+    if (pointCloud.intensities) transfer.push(pointCloud.intensities.buffer);
+    workerScope.postMessage(result, transfer);
   } catch (err: any) {
     const msg: WorkerResponse = { type: 'error', message: err.message || String(err) };
     workerScope.postMessage(msg);

@@ -91,6 +91,7 @@ function WindBandRow({
   enabled: boolean;
   onColorChange: (color: string) => void;
 }) {
+  const { t } = useAppI18n();
   return (
     <div className="rvc-wind__band-row" data-disabled={!enabled}>
       <span className="rvc-wind__band-threshold">{formatWindBandLabel(band.minKmh)}</span>
@@ -99,7 +100,7 @@ function WindBandRow({
         color={band.color}
         onChange={onColorChange}
         className="rvc-wind__color-chip"
-        ariaLabel={`Choisir la couleur du seuil ${formatWindBandLabel(band.minKmh)}`}
+        ariaLabel={t('Choisir la couleur du seuil {{threshold}}', { threshold: formatWindBandLabel(band.minKmh) })}
       >
         <span
           className="rvc-wind__color-swatch"

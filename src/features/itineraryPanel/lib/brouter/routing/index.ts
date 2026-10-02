@@ -13,3 +13,13 @@ export {
   splitRouteIntoLegs,
   type BrouterLeg,
 } from './multi-leg';
+export {
+  buildIslandRepairCandidates,
+  isBrouterIslandError,
+  type IslandRepairCandidate,
+} from './island-repair';
+export {
+  ANCHOR_SECTION_KM,
+  buildAnchoredVia,
+  needsLongDistanceAnchors,
+} from './long-distance-anchors';

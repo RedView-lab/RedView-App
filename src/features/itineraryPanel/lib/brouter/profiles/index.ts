@@ -13,7 +13,7 @@ export {
   generateBrfFromExpertState,
   validateBrfText,
 } from './profile-template';
-export { buildBrfProfile, hashBrf, type BrfBuildInputs } from './brf-template';
+export { buildBrfProfile, estimateBrfSearchCostScale, hashBrf, type BrfBuildInputs } from './brf-template';
 export {
   ensureProfileUploaded,
   clearProfileCache,

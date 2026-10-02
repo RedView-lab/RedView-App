@@ -17,6 +17,13 @@ export {
   isBrouterRateLimitError,
 } from './api';
 export { buildBrouterUrl, formatLonlats, resolveEndpoint } from './api';
+export {
+  COARSE_SEARCH_WEIGHT,
+  DEFAULT_SEARCH_COST_SCALE,
+  effectiveSearchKm,
+  requestBeelineKm,
+  resolveSearchCoefficient,
+} from './api';
 export { formatForbiddenZonePolygons } from './geo';
 export {
   panelProfileToBrouter,
@@ -59,4 +66,14 @@ export {
   concatBrouterRoutes,
   splitRouteIntoLegs,
   type BrouterLeg,
+} from './routing';
+export {
+  buildIslandRepairCandidates,
+  isBrouterIslandError,
+  type IslandRepairCandidate,
+} from './routing';
+export {
+  ANCHOR_SECTION_KM,
+  buildAnchoredVia,
+  needsLongDistanceAnchors,
 } from './routing';

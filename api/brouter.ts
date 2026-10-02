@@ -28,6 +28,9 @@
  *   BROUTER_UPSTREAM=http://<DROPLET_IP>:17777    (BRouter direct)
  */
 import crypto from 'node:crypto';
+import { promisify } from 'node:util';
+import zlib from 'node:zlib';
+import { resolvePass1Coefficient } from './_lib/brouter-search.js';
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
 
 const ALLOWED_PARAMS = new Set([
@@ -124,6 +127,44 @@ function rememberRoute(key: string, entry: CachedRoute) {
 }
 const ROUTE_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
+/*
+ * Compression du GeoJSON vers le navigateur : server.mjs ne compresse que les
+ * fichiers statiques, et un tracé de 1 000 km pèse ~5 Mo (≈ 0,6 Mo en brotli).
+ */
+const brotliAsync = promisify(zlib.brotliCompress);
+const gzipAsync = promisify(zlib.gzip);
+const COMPRESS_MIN_CHARS = 4_096;
+
+function negotiateEncoding(req: ApiRequest): 'br' | 'gzip' | null {
+  const accepted = new Map<string, number>();
+  for (const part of String(req.headers?.['accept-encoding'] ?? '').toLowerCase().split(',')) {
+    const [name, ...params] = part.split(';').map((token) => token.trim());
+    if (!name) continue;
+    const q = params.find((param) => param.startsWith('q='));
+    accepted.set(name, q ? Number(q.slice(2)) || 0 : 1);
+  }
+  if ((accepted.get('br') ?? 0) > 0) return 'br';
+  if ((accepted.get('gzip') ?? 0) > 0) return 'gzip';
+  return null;
+}
+
+async function sendRouteBody(req: ApiRequest, res: ApiResponse, status: number, body: string) {
+  res.setHeader('Vary', 'Accept-Encoding');
+  const encoding = body.length >= COMPRESS_MIN_CHARS ? negotiateEncoding(req) : null;
+  if (!encoding) return res.status(status).send(body);
+  const raw = Buffer.from(body, 'utf8');
+  const packed = encoding === 'br'
+    ? await brotliAsync(raw, {
+        params: {
+          [zlib.constants.BROTLI_PARAM_QUALITY]: 4,
+          [zlib.constants.BROTLI_PARAM_SIZE_HINT]: raw.length,
+        },
+      })
+    : await gzipAsync(raw, { level: 6 });
+  res.setHeader('Content-Encoding', encoding);
+  return res.status(status).send(packed);
+}
+
 async function handleRouteQuery(
   req: ApiRequest,
   res: ApiResponse,
@@ -145,12 +186,13 @@ async function handleRouteQuery(
   if (!params.has('format')) params.set('format', 'geojson');
   if (!params.has('profile')) params.set('profile', 'trekking');
 
-  // Enforce high-speed One-Pass mode (O(D) linear complexity) unconditionally
+  // Passe unique imposée (la passe exacte est quadratique sur les longs tracés) ;
+  // coefficient A* du client borné selon la distance (calculé s'il manque).
   params.set('profile:pass2coefficient', '-1');
-  const pass1 = Number(params.get('profile:pass1coefficient'));
-  if (!params.has('profile:pass1coefficient') || !Number.isFinite(pass1) || pass1 < 1.0) {
-    params.set('profile:pass1coefficient', '3.5');
-  }
+  params.set(
+    'profile:pass1coefficient',
+    String(resolvePass1Coefficient(params.get('lonlats') ?? '', params.get('profile:pass1coefficient'))),
+  );
 
   const cacheKey = params.toString();
   const cached = ROUTE_CACHE.get(cacheKey);
@@ -159,7 +201,7 @@ async function handleRouteQuery(
     res.setHeader('Content-Type', cached.contentType);
     res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=7200');
     res.setHeader('X-Route-Cache', 'HIT');
-    return res.status(cached.status).send(cached.body);
+    return sendRouteBody(req, res, cached.status, cached.body);
   }
 
   const url = `${base}/brouter?${params.toString()}`;
@@ -225,7 +267,8 @@ async function handleRouteQuery(
     });
   }
 
-  return res.status(looksLikeError ? 422 : upstreamRes.status).send(body);
+  if (looksLikeError) return res.status(422).send(body);
+  return sendRouteBody(req, res, upstreamRes.status, body);
 }
 
 /* ------------------------------------------------------------------ */
@@ -260,7 +303,8 @@ async function handleProfileUpload(
     });
   }
 
-  // Enforce unconditional One-Pass mode (pass2=-1, pass1=3.5) in uploaded profiles
+  // Passe unique imposée dans les profils téléversés. Le coefficient A* réel
+  // est fixé à chaque requête (GET) ; 3.5 n'est qu'une valeur par défaut sûre.
   if (/assign\s+pass2coefficient\s*=/i.test(profileText)) {
     profileText = profileText.replace(/assign\s+pass2coefficient\s*=\s*[\d.-]+/gi, 'assign pass2coefficient = -1');
   } else {

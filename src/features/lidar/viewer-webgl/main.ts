@@ -14,7 +14,8 @@ import { buildTilePreviewMesh } from '../viewer/preview/tilePreview';
 import { LidarManager } from '../lib/lidarManager';
 import { buildViewerUrl } from '../lib/viewerUrl';
 import type { TileCoord, DetectedCrs } from '../types';
-import { setViewerStatus } from '../viewer/runtime';
+import { setViewerStatus, translateLidarWorkerProgress } from '../viewer/runtime';
+import { translateAppText } from '@/shared/i18n/config';
 import { detectDeviceTier, readBoundsFromLasHeader } from './qualityProfile';
 import { SunlightController } from './sunlightController';
 import { unionBounds } from '../viewer/session/datasetMerge';
@@ -81,7 +82,7 @@ export async function runWebGLFallback(
     : (opts.buffer ? [opts.buffer] : []);
 
   if (rawBuffers.length === 0) {
-    throw new Error('Aucun buffer LAZ disponible pour le visualiseur WebGL.');
+    throw new Error(translateAppText('Aucun buffer LAZ disponible pour le visualiseur WebGL.'));
   }
 
   const headers = rawBuffers.map((buf) => readBoundsFromLasHeader(buf)).filter(Boolean);
@@ -111,7 +112,10 @@ export async function runWebGLFallback(
     worker.onmessage = (e: MessageEvent) => {
       const msg = e.data;
       if (msg.type === 'progress') {
-        setStatus(`Décompression LiDAR : ${msg.phase}…`, 65 + Math.round(msg.percent * 0.25));
+        setStatus(
+          translateAppText('Décompression LiDAR : {{step}}…', { step: translateLidarWorkerProgress(String(msg.phase)) }),
+          65 + Math.round(msg.percent * 0.25),
+        );
       } else if (msg.type === 'done') {
         worker.terminate();
         resolve(msg.mesh);
@@ -185,9 +189,18 @@ export async function runWebGLFallback(
     const viewProj = WebGLTerrainRenderer.multiplyMat4(viewMatrix, camera.getProjMatrix());
     renderer.render(viewProj, viewMatrix);
 
-    stats.textContent =
-      `WebGL2 · ${(mesh.vertexCount / 1e3).toFixed(0)}k sommets · ${(mesh.indexCount / 3e3).toFixed(0)}k triangles · ` +
-      `ortho ${ortho.width}×${ortho.height} · ${sceneCoords.length} tuile(s) · canvas ${canvas.width}×${canvas.height}`;
+    stats.textContent = translateAppText(
+      'WebGL2 · {{vertices}}k sommets · {{triangles}}k triangles · ortho {{orthoWidth}}×{{orthoHeight}} · {{tiles}} tuile(s) · canvas {{canvasWidth}}×{{canvasHeight}}',
+      {
+        vertices: (mesh.vertexCount / 1e3).toFixed(0),
+        triangles: (mesh.indexCount / 3e3).toFixed(0),
+        orthoWidth: ortho.width,
+        orthoHeight: ortho.height,
+        tiles: sceneCoords.length,
+        canvasWidth: canvas.width,
+        canvasHeight: canvas.height,
+      },
+    );
 
     if (renderRequested) {
       requestRender();
@@ -294,8 +307,11 @@ export async function runWebGLFallback(
 
   const panel = createViewerPanel({
     tileLabel: sceneCoords.length > 1
-      ? `${sceneCoords.length} tuiles (${sceneCoords.map((c) => `${c.xKm}/${c.yKm}`).join(' + ')})`
-      : `Tuile ${opts.tileLabel}`,
+      ? translateAppText('{{count}} tuiles ({{list}})', {
+        count: sceneCoords.length,
+        list: sceneCoords.map((c) => `${c.xKm}/${c.yKm}`).join(' + '),
+      })
+      : opts.tileLabel,
     locationLabel: buildTileLocationLabel(centerLon, centerLat),
     googleMapsUrl: buildGoogleMapsTileCenterUrl(centerLon, centerLat),
     engineMode: 'webgl',
@@ -322,7 +338,7 @@ export async function runWebGLFallback(
   panel.setSnowMode('off');
   panel.setPrimaryActionState({
     label: 'Quitter le mode LIDAR',
-    title: 'Fermer le visualiseur et revenir à l’application.',
+    title: "Fermer le visualiseur et revenir à l'application.",
   });
 
   const routeController = new ViewerRouteController({

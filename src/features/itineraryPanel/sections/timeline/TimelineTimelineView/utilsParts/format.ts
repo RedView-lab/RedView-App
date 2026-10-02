@@ -1,3 +1,4 @@
+import { readDocumentAppLocale, type AppLocale } from '@/shared/i18n';
 import type { RhythmState } from '../../../../types';
 import {
   DAY_WINDOW_DAYS,
@@ -5,6 +6,7 @@ import {
   MIN_RENDER_DURATION_MIN,
   MINUTES_PER_DAY,
   WEEKDAY_SHORT,
+  WEEKDAY_SHORT_EN,
 } from '../constants';
 import type { StartReference } from '../types';
 
@@ -93,8 +95,9 @@ export function buildDayWindow(anchor: Date): Date[] {
   return Array.from({ length: DAY_WINDOW_DAYS }, (_, index) => addDays(start, index));
 }
 
-export function formatDayLabel(date: Date): string {
-  return WEEKDAY_SHORT[date.getDay()] ?? '';
+export function formatDayLabel(date: Date, locale: AppLocale = readDocumentAppLocale()): string {
+  const labels = locale === 'en' ? WEEKDAY_SHORT_EN : WEEKDAY_SHORT;
+  return labels[date.getDay()] ?? '';
 }
 
 export function formatDistanceLabel(distanceKm: number): string {

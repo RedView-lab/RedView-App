@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { Elements } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
 
+import { translateAppText } from '@/shared/i18n';
+
 import { appearance } from './billingModalStyles';
 import {
   BillingActionForm,
@@ -36,16 +38,16 @@ class BillingModalErrorBoundary extends Component<
     if (this.state.hasError) {
       return (
         <div className="rvpb-billing-page rv-fixed-viewport" style={{ padding: '40px', textAlign: 'center' }}>
-          <h2>Une erreur est survenue lors du chargement de la page de paiement</h2>
+          <h2>{translateAppText('Une erreur est survenue lors du chargement de la page de paiement')}</h2>
           <p style={{ color: '#ff8e8e', margin: '16px 0' }}>
-            {this.state.error?.message || 'Erreur inattendue'}
+            {translateAppText(this.state.error?.message || 'Erreur inattendue')}
           </p>
           <button
             type="button"
             className="rvpb-billing-page__cancel"
             onClick={this.props.onClose}
           >
-            Fermer
+            {translateAppText('Fermer')}
           </button>
         </div>
       );

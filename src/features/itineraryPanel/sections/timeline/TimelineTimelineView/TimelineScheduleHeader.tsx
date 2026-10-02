@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 import { formatDayLabel, toDayKey } from './utils';
 
 interface TimelineScheduleHeaderProps {
@@ -12,6 +13,7 @@ export function TimelineScheduleHeader({
   selectedDayKey,
   onSelectDay,
 }: TimelineScheduleHeaderProps) {
+  const { locale } = useAppI18n();
   const headerGridStyle = {
     '--rvi-tl-header-day-count': String(Math.max(1, displayDays.length)),
   } as CSSProperties;
@@ -32,7 +34,7 @@ export function TimelineScheduleHeader({
                 className={`rvi-tl-schedule__day${isSelected ? ' is-selected' : ''}`}
                 onClick={() => onSelectDay(dayKey)}
               >
-                <span className="rvi-tl-schedule__day-label">{formatDayLabel(day)}</span>
+                <span className="rvi-tl-schedule__day-label">{formatDayLabel(day, locale)}</span>
                 <span className="rvi-tl-schedule__day-number">{day.getDate()}</span>
               </button>
             );

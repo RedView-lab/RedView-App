@@ -6,6 +6,7 @@ import {
   createOverlayStatus,
   type OverlayStatusReporter,
 } from '@/features/map3d';
+import { translateAppText } from '@/shared/i18n';
 
 const SETTLE_MS = 120;
 const STAGNATION_MS = 8000;
@@ -93,7 +94,7 @@ export function useAltitudeLoadStatus(
         return;
       }
       const pct = Math.max(1, Math.min(99, Math.round((done / total) * 100)));
-      emit('loading', pct, `Tuiles ${done}/${total}`);
+      emit('loading', pct, translateAppText('Tuiles {{done}}/{{total}}', { done, total }));
     };
 
     const armWatchdog = () => {
@@ -116,7 +117,7 @@ export function useAltitudeLoadStatus(
           return;
         }
         if (Date.now() - lastProgressMs >= STAGNATION_MS) {
-          emit('ready', 100, `Altitude prête (${requested.size - loaded.size} en attente)`);
+          emit('ready', 100, translateAppText('Altitude prête ({{count}} en attente)', { count: requested.size - loaded.size }));
           return;
         }
         armWatchdog();

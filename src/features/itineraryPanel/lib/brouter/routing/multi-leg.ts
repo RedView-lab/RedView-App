@@ -89,6 +89,9 @@ export function concatBrouterRoutes(routes: BrouterRoute[]): BrouterRoute {
   const firstProps: BrouterFeatureProps = { ...((firstFeature?.properties ?? {}) as BrouterFeatureProps) };
   // Totaux propres au 1er tronçon : recalculés ci-dessous ou retirés.
   delete firstProps['plain-ascend'];
+  const legCosts = routes.map((route) => Number((route.raw.features?.[0]?.properties as BrouterFeatureProps | undefined)?.cost));
+  if (legCosts.every(Number.isFinite)) firstProps.cost = String(legCosts.reduce((total, cost) => total + cost, 0));
+  else delete firstProps.cost;
 
   return {
     coordinates,

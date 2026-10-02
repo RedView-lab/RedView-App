@@ -3,6 +3,7 @@ import type { Map as MapboxMap, Marker } from 'mapbox-gl';
 import { fetchPoisInBbox, type PoiBboxSampling } from '@/features/poi/lib/poi-api';
 import { getPoiIconUrl, hasDedicatedFavoritePoiIcon } from '@/features/poi/lib/poi-icons';
 import { POI_LABELS, type PoiCategory, type PoiFeature } from '@/features/poi/types';
+import { translateAppText } from '@/shared/i18n';
 
 import { DROPDOWN_VIEWPORT_POI_ICON_URLS } from './DashboardPlaceSearch.constants';
 import type { ViewportPoiCandidate } from './DashboardPlaceSearch.types';
@@ -240,20 +241,20 @@ export function createViewportPoiMarkerElement(feature: PoiFeature): HTMLButtonE
   element.dataset.poiCategory = feature.category;
   element.style.zIndex = feature.favorite ? '50' : '20';
 
+  const categoryLabel = translateAppText(POI_LABELS[feature.category] ?? feature.category);
   const poiName =
     feature.tags?.name
     || feature.tags?.['name:fr']
     || feature.tags?.['name:en']
     || feature.name
-    || POI_LABELS[feature.category]
-    || feature.category;
+    || categoryLabel;
 
   element.title = poiName;
   element.setAttribute(
     'aria-label',
     feature.name?.trim() || feature.tags?.name
-      ? `${poiName} - ${POI_LABELS[feature.category] ?? feature.category}`
-      : POI_LABELS[feature.category] ?? feature.category,
+      ? `${poiName} - ${categoryLabel}`
+      : categoryLabel,
   );
 
   const image = document.createElement('img');

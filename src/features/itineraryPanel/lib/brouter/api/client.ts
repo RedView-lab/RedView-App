@@ -12,6 +12,7 @@ import {
   type UploadedProfile,
 } from '../types';
 import { buildBrouterUrl, buildProfileUploadUrl } from './url';
+import { recordObservedCostScale } from './searchCoefficient';
 import {
   delay,
   isExpectedDetourCandidateFailure,
@@ -85,6 +86,7 @@ export async function fetchBrouterRoute(
       signal: req.signal,
       headers: { Accept: 'application/json,application/geo+json,text/plain' },
     });
+    req.onResponseHeaders?.();
 
     if (!res.ok) {
       const text = await res.text().catch(() => '');
@@ -137,9 +139,12 @@ export async function fetchBrouterRoute(
       distanceM: num(props['track-length']),
       durationS: num(props['total-time']),
       ascentM: num(props['filtered ascend']),
-      descentM: num(props['plain-ascend']) - num(props['filtered ascend']),
+      // `plain-ascend` = dénivelé net (arrivée − départ) : D− = D+ − net.
+      descentM: Math.max(0, num(props['filtered ascend']) - num(props['plain-ascend'])),
       raw: json,
     };
+
+    recordObservedCostScale(req.profile, num(props.cost), route.distanceM);
 
     if (clientRouteCache.size >= MAX_CLIENT_CACHE) {
       const oldestKey = clientRouteCache.keys().next().value;

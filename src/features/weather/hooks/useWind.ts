@@ -10,6 +10,7 @@ import {
   removeWindParticles,
 } from '../lib/wind-layer';
 import { normaliseWindSelection, windSelectionKey } from '../lib/windSelection';
+import { translateAppText } from '@/shared/i18n';
 
 // ── Configuration ─────────────────────────────────────────────────────
 
@@ -140,14 +141,14 @@ export function useWind(
             ...s,
             loading: true,
             progress: Math.max(s.progress, 12),
-            detail: `Pause API ${Math.ceil(delay / 1000)}s avant nouvelle requête`,
+            detail: translateAppText('Pause API {{seconds}} s avant nouvelle requête', { seconds: Math.ceil(delay / 1000) }),
           }));
           publishStatus(createOverlayStatus({
             id: 'wind',
             label: 'Vent',
             state: 'loading',
             progress: 12,
-            detail: `Pause API ${Math.ceil(delay / 1000)}s avant nouvelle requête`,
+            detail: translateAppText('Pause API {{seconds}} s avant nouvelle requête', { seconds: Math.ceil(delay / 1000) }),
             reloadable: true,
           }));
           retryTimerRef.current = setTimeout(() => {
@@ -192,14 +193,14 @@ export function useWind(
         loading: true,
         error: null,
         progress: 8,
-        detail: 'Préparation de la grille vent',
+        detail: translateAppText('Préparation de la grille vent'),
       }));
       publishStatus(createOverlayStatus({
         id: 'wind',
         label: 'Vent',
         state: 'loading',
         progress: 8,
-        detail: 'Préparation de la grille vent',
+        detail: translateAppText('Préparation de la grille vent'),
         reloadable: true,
       }));
 
@@ -211,14 +212,14 @@ export function useWind(
             loading: false,
             pointCount: 0,
             progress: 0,
-            detail: 'Aucune grille vent disponible',
+            detail: translateAppText('Aucune grille vent disponible'),
           }));
           publishStatus(createOverlayStatus({
             id: 'wind',
             label: 'Vent',
             state: 'error',
             progress: 0,
-            detail: 'Aucune grille vent disponible',
+            detail: translateAppText('Aucune grille vent disponible'),
             reloadable: true,
           }));
           return;
@@ -228,14 +229,14 @@ export function useWind(
           ...s,
           loading: true,
           progress: 22,
-          detail: `Vent ${resolvedSelection.date} ${resolvedSelection.time} ${grid.cols}×${grid.rows}`,
+          detail: translateAppText('Vent {{date}} {{time}} {{cols}}×{{rows}}', { date: resolvedSelection.date, time: resolvedSelection.time, cols: grid.cols, rows: grid.rows }),
         }));
         publishStatus(createOverlayStatus({
           id: 'wind',
           label: 'Vent',
           state: 'loading',
           progress: 22,
-          detail: `Vent ${resolvedSelection.date} ${resolvedSelection.time} ${grid.cols}×${grid.rows}`,
+          detail: translateAppText('Vent {{date}} {{time}} {{cols}}×{{rows}}', { date: resolvedSelection.date, time: resolvedSelection.time, cols: grid.cols, rows: grid.rows }),
           reloadable: true,
         }));
 
@@ -283,7 +284,7 @@ export function useWind(
           pointCount: windPoints.length,
           lastUpdate: Date.now(),
           progress: 100,
-          detail: 'Champ de vent chargé',
+          detail: translateAppText('Champ de vent chargé'),
           source: resolvedSource,
         };
         setState(nextState);
@@ -304,14 +305,14 @@ export function useWind(
           loading: false,
           error: message,
           progress: 0,
-          detail: 'Impossible de charger le vent',
+          detail: translateAppText('Impossible de charger le vent'),
         }));
         publishStatus(createOverlayStatus({
           id: 'wind',
           label: 'Vent',
           state: 'error',
           progress: 0,
-          detail: message,
+          detail: translateAppText(message),
           reloadable: true,
         }));
       }
@@ -345,7 +346,7 @@ export function useWind(
           ...s,
           loading: false,
           error: null,
-          detail: 'Carte non prête, attente du chargement Mapbox',
+          detail: translateAppText('Carte non prête, attente du chargement Mapbox'),
           progress: 0,
         }));
         publishStatus(createOverlayStatus({
@@ -353,7 +354,7 @@ export function useWind(
           label: 'Vent',
           state: 'loading',
           progress: 0,
-          detail: 'Carte non prête, attente du chargement Mapbox',
+          detail: translateAppText('Carte non prête, attente du chargement Mapbox'),
           reloadable: true,
         }));
       }
@@ -371,7 +372,7 @@ export function useWind(
           label: 'Vent',
           state: 'error',
           progress: 0,
-          detail: 'Wind particle init failed',
+          detail: translateAppText('Wind particle init failed'),
           reloadable: true,
         }));
         return;

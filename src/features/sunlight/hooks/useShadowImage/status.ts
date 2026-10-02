@@ -14,7 +14,7 @@ export function shadowLoadingStatus(progress: number, detail: string) {
   });
 }
 
-export function shadowReadyStatus(detail = 'Overlay pret') {
+export function shadowReadyStatus(detail = 'Overlay prêt') {
   return createOverlayStatus({
     id: STATUS_ID,
     label: STATUS_LABEL,

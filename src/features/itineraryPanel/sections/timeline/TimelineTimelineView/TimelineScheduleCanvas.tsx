@@ -375,7 +375,7 @@ export function TimelineScheduleCanvas({
 
         {!visibleWindowHasEvents ? (
           <div className="rvi-tl-schedule__empty">
-            {t('Aucun checkpoint planifie sur la plage affichee.')}
+            {t('Aucun checkpoint planifié sur la plage affichée.')}
           </div>
         ) : null}
 

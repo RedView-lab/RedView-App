@@ -284,7 +284,7 @@ export function AnalysisFlyoverProvider({
     ? `${(playbackDistanceM / 1000).toFixed(1)} / ${(totalDistanceM / 1000).toFixed(1)} km`
     : totalDistanceM > 0
       ? formatDistanceLabel(totalDistanceM)
-      : 'Aucun trace';
+      : 'Aucun tracé';
 
   const predictedElapsedSeconds =
     playbackDistanceM != null

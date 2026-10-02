@@ -1,15 +1,11 @@
-import type { FlatOctree, PlatformProfile, VisibleNode } from './lod/types';
-import {
-  computePointChunkCapacity,
-  destroyPointChunks,
-  MAX_BUFFER_POINTS,
-  type PointChunkBuffers,
-  uploadPointChunks,
-} from './renderer/chunks';
+import type { PlatformProfile } from './lod/types';
+import type { SceneNode, SceneNodeUploader } from './lod/sceneLod';
+import { translateAppText } from '@/shared/i18n/config';
 import { mat4MultiplyInto } from './renderer/math';
+import { NodeGpuPool } from './renderer/nodePool';
 import { resolvePlatformInfo } from './renderer/platform';
-import { createRendererPipelines } from './renderer/rendererPipeline';
-import { drawNodesBatched } from './renderer/rendererBatchDrawer';
+import { createRendererPipelines, SCENE_DEPTH_FORMAT, type RendererPipelines } from './renderer/rendererPipeline';
+import { EDL_PARAMS_FLOATS, POINT_PARAMS_FLOATS } from './renderer/shaders';
 import type { HeightmapParams, SnowParams } from './renderer/types';
 import { buildSlopeRampData } from './slope/slopeRamp';
 import { buildAltitudeRampData, DEFAULT_MAX_ALTITUDE_M } from './altitude/altitudeRamp';
@@ -17,36 +13,67 @@ import type { ViewerSlopeState, ViewerAltitudeState } from './rightPanel/types';
 import type { ViewerPointFilterState } from './pointFilter';
 import { computePointFilterBitmasks } from './pointFilter';
 import type { SolarRenderState } from '../viewer-webgl/sunlightController';
+import { GpuFrameTimer } from './renderer/gpuTimer';
 
 export type { HeightmapParams, SnowParams } from './renderer/types';
 export type { ViewerSlopeState, ViewerAltitudeState, ViewerPointFilterState };
 
-export class LidarRenderer {
+/** Point colouring: orthophoto/embedded RGB, LiDAR intensity, or classification. */
+export type PointColorMode = 'rgb' | 'intensity' | 'classification';
+const COLOR_MODE_INDEX: Record<PointColorMode, number> = { rgb: 0, intensity: 1, classification: 2 };
+
+/** Projected point diameter bounds (device pixels) for the metre-sized mode. */
+const POINT_MIN_PX = 1.0;
+const POINT_MAX_PX = 64;
+/** Uniform slots of the node pool (one per resident LOD node). */
+const NODE_POOL_CAPACITY = 16384;
+
+interface MeshBuffers {
+  vertBuf: GPUBuffer;
+  colBuf: GPUBuffer;
+  idxBuf: GPUBuffer;
+  count: number;
+}
+
+/**
+ * WebGPU point-cloud renderer.
+ *
+ * Frame = shading compute pass (new nodes, or all after an overlay change)
+ * → scene pass into an offscreen colour + depth32float target (reversed-Z,
+ * MSAA ×4 on discrete GPUs) → Eye-Dome Lighting pass resolving to the canvas.
+ * Point data lives in LOD nodes streamed by `SceneLod`; this class is its
+ * GPU residency backend (`SceneNodeUploader`).
+ */
+export class LidarRenderer implements SceneNodeUploader {
   private device!: GPUDevice;
   private context!: GPUCanvasContext;
   private format!: GPUTextureFormat;
-  private pipeline!: GPURenderPipeline;
-  private terrainPipeline!: GPURenderPipeline;
-  private previewPipeline!: GPURenderPipeline;
-  private trajectoryPipeline!: GPURenderPipeline;
-  private sunDiscPipeline!: GPURenderPipeline;
-  private routePipeline!: GPURenderPipeline;
+  private pipelines!: RendererPipelines;
+  private sampleCount = 1;
+  private nodePool: NodeGpuPool | null = null;
+
   private cameraBuffer!: GPUBuffer;
-  private pointBindGroup!: GPUBindGroup;
-  private terrainBindGroup!: GPUBindGroup;
-  private pointBindGroupLayout!: GPUBindGroupLayout;
-  private terrainBindGroupLayout!: GPUBindGroupLayout;
-  private depthTexture!: GPUTexture;
+  private pointParamsBuffer!: GPUBuffer;
+  private edlParamsBuffer!: GPUBuffer;
+  private sceneBindGroup!: GPUBindGroup;
+  private pointParamsBindGroup!: GPUBindGroup;
+  private edlBindGroup: GPUBindGroup | null = null;
+
+  private sceneColorTexture: GPUTexture | null = null;
+  private sceneColorMsTexture: GPUTexture | null = null;
+  private depthTexture: GPUTexture | null = null;
+  private sceneColorView!: GPUTextureView;
+  private sceneColorMsView: GPUTextureView | null = null;
   private depthView!: GPUTextureView;
-  private heightTexture!: GPUTexture;
-  private heightSampler!: GPUSampler;
-  private cameraBufferVoxel!: GPUBuffer;
-  private pointBindGroupVoxel!: GPUBindGroup;
+
   private uniformCache = new Float32Array(80);
   private uniformCacheU32 = new Uint32Array(this.uniformCache.buffer);
+  private pointParams = new Float32Array(POINT_PARAMS_FLOATS);
+  private edlParams = new Float32Array(EDL_PARAMS_FLOATS);
 
   private pointFilterEnabled = 0;
   private pointFilterMask: [number, number, number, number] = [0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff];
+  private colorMode: PointColorMode = 'rgb';
 
   private trajectoryBuffer: GPUBuffer | null = null;
   private trajectoryVertexCount = 0;
@@ -54,6 +81,7 @@ export class LidarRenderer {
   private sunDiscPos: [number, number, number] | null = null;
   private sunDiscRadius = 0;
 
+  private heightTexture!: GPUTexture;
   private snowTexture!: GPUTexture;
   private snowMode: 0 | 1 | 2 = 0;
   private snowOriginX = 0;
@@ -89,58 +117,68 @@ export class LidarRenderer {
   private sunColor: [number, number, number] = [1.0, 0.98, 0.95];
   private skyColor: [number, number, number] = [0.65, 0.75, 0.85];
 
-  private _tempFloat = new Float32Array(1);
   private _cachedViewProj = new Float32Array(16);
   private _lastView = new Float32Array(16);
   private _lastProj = new Float32Array(16);
-  private _lastCamPosArr = new Float32Array(3);
-  private _lastCamFwdArr = new Float32Array(3);
 
-  private terrainMesh: { vertBuf: GPUBuffer; colBuf: GPUBuffer; idxBuf: GPUBuffer; count: number } | null = null;
-  private previewMesh: { vertBuf: GPUBuffer; colBuf: GPUBuffer; idxBuf: GPUBuffer; count: number } | null = null;
-  private routeMesh: { vertBuf: GPUBuffer; colBuf: GPUBuffer; idxBuf: GPUBuffer; count: number } | null = null;
+  private terrainMesh: MeshBuffers | null = null;
+  private previewMesh: MeshBuffers | null = null;
+  private routeMesh: MeshBuffers | null = null;
   private canvasWidth = 1;
   private canvasHeight = 1;
   private hmOriginX = 0;
   private hmOriginZ = 0;
   private hmScaleX = 1;
   private hmScaleZ = 1;
-  totalPoints = 0;
-  pointSize = 0.59;
+  /** Point diameter in metres, identical for every point (projected, clamped in pixels). */
+  pointSize = 0.3;
+  /** Point diameter in device pixels; 0 = adaptive (world size, clamped in pixels). */
+  fixedPointPixels = 0;
   lodThreshold = 500;
   terrainVisible = true;
-  private pointChunkCapacity = MAX_BUFFER_POINTS;
 
-  private leafChunks: PointChunkBuffers[] = [];
-  private voxelChunks: PointChunkBuffers[] = [];
+  private edlEnabled = false;
+  private edlStrength = 1.0;
+  private edlRadiusPx = 1.4;
+
   lastViewProj: Float32Array = new Float32Array(16);
   lastCamPos: Float32Array | [number, number, number] = new Float32Array(3);
   lastCamFwd: Float32Array | [number, number, number] = new Float32Array([0, 0, -1]);
 
   deviceLost = false;
+  /** Called once when the device is lost for any reason other than `destroy()`. */
+  onDeviceLost: ((info: GPUDeviceLostInfo) => void) | null = null;
   platform: PlatformProfile | null = null;
-  private gpuDrivenDensityActive = false;
-  private lastLeafBatchCount = 0;
-  private lastVoxelBatchCount = 0;
+  /** proj[1][1] of the last camera update (LOD screen-size focal). */
+  lastProjScaleY = 1;
+  private gpuTimer: GpuFrameTimer | null = null;
   private lastDrawCallCount = 0;
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
-    if (!navigator.gpu) throw new Error('WebGPU non supporté');
+    if (!navigator.gpu) throw new Error(translateAppText('WebGPU non supporté'));
     const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
-    if (!adapter) throw new Error('Pas de GPUAdapter');
+    if (!adapter) throw new Error(translateAppText('Pas de GPUAdapter'));
 
-    const { vendor, arch, desc, isApple, profile } = resolvePlatformInfo((adapter as unknown as { info?: unknown }).info ?? null);
+    const { vendor, arch, desc, profile } = resolvePlatformInfo((adapter as unknown as { info?: unknown }).info ?? null);
     this.platform = profile;
+    // MSAA ×4 (with alpha-to-coverage on point edges) only where fill rate is cheap.
+    this.sampleCount = profile.tier === 'discrete' ? 4 : 1;
 
     console.log(`[LiDAR GPU] Adapter: vendor=${vendor} arch=${arch} desc=${desc}`);
-    console.log(`[LiDAR GPU] Platform profile: ${isApple ? 'Apple (Metal)' : 'Desktop'}`);
 
     const features: GPUFeatureName[] = [];
-    const hasF32FilterSupport = adapter.features.has('float32-filterable');
-    if (hasF32FilterSupport) features.push('float32-filterable');
+    if (adapter.features.has('timestamp-query')) features.push('timestamp-query');
 
     this.device = await adapter.requestDevice({ requiredFeatures: features });
-    this.pointChunkCapacity = computePointChunkCapacity(this.device);
+    this.gpuTimer = new GpuFrameTimer(this.device);
+    console.log(
+      `[LiDAR GPU] Tier: ${profile.tier} · MSAA ×${this.sampleCount}` +
+      ` · frame timing: ${this.gpuTimer.usesTimestamps ? 'timestamp-query' : 'onSubmittedWorkDone'}`,
+    );
+
+    this.device.addEventListener('uncapturederror', (event) => {
+      console.error('[LiDAR GPU] Uncaptured error:', (event as GPUUncapturedErrorEvent).error.message);
+    });
 
     this.device.lost.then((info) => {
       console.error(`[LiDAR GPU] Device lost: reason=${info.reason}, message=${info.message}`);
@@ -148,110 +186,37 @@ export class LidarRenderer {
       if (info.reason !== 'destroyed') {
         const statusEl = document.getElementById('status');
         const overlay = document.getElementById('overlay');
-        if (statusEl) statusEl.textContent = `⚠️ GPU device lost: ${info.message || info.reason}. Rechargez la page.`;
+        if (statusEl) statusEl.textContent = translateAppText('⚠️ Périphérique GPU perdu : {{reason}}. Rechargez la page.', { reason: info.message || info.reason });
         if (overlay) overlay.classList.remove('hidden');
+        this.onDeviceLost?.(info);
       }
     });
 
     this.context = canvas.getContext('webgpu') as GPUCanvasContext;
     this.format = navigator.gpu.getPreferredCanvasFormat();
-    this.context.configure({ device: this.device, format: this.format, alphaMode: 'premultiplied' });
+    this.context.configure({ device: this.device, format: this.format, alphaMode: 'opaque' });
 
-    const hasF32Filter = this.device.features.has('float32-filterable');
-    const pipelines = await createRendererPipelines(this.device, this.format, isApple, hasF32Filter);
-    this.pipeline = pipelines.pointPipeline;
-    this.terrainPipeline = pipelines.terrainPipeline;
-    this.previewPipeline = pipelines.previewPipeline;
-    this.trajectoryPipeline = pipelines.trajectoryPipeline;
-    this.sunDiscPipeline = pipelines.sunDiscPipeline;
-    this.routePipeline = pipelines.routePipeline;
-    this.pointBindGroupLayout = pipelines.pointBindGroupLayout;
-    this.terrainBindGroupLayout = pipelines.terrainBindGroupLayout;
-
-    const bufferSize = 80 * 4; // 320 bytes
-    this.cameraBuffer = this.device.createBuffer({
-      size: bufferSize,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-    this.cameraBufferVoxel = this.device.createBuffer({
-      size: bufferSize,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-
-    this.heightTexture = this.device.createTexture({
-      size: [1, 1],
-      format: 'r32float',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-    });
-    this.heightSampler = this.device.createSampler({
-      magFilter: hasF32Filter ? 'linear' : 'nearest',
-      minFilter: hasF32Filter ? 'linear' : 'nearest',
-      addressModeU: 'clamp-to-edge',
-      addressModeV: 'clamp-to-edge',
-    });
-
-    this.snowTexture = this.device.createTexture({
-      size: [1, 1],
-      format: 'r32float',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-    });
-    this.device.queue.writeTexture(
-      { texture: this.snowTexture },
-      new Float32Array([0]) as Float32Array<ArrayBuffer>,
-      { bytesPerRow: 4 },
-      { width: 1, height: 1 },
+    this.pipelines = await createRendererPipelines(this.device, this.format, this.sampleCount);
+    this.nodePool = new NodeGpuPool(
+      this.device,
+      this.pipelines.nodeBindGroupLayout,
+      this.pipelines.shadingBindGroupLayout,
+      NODE_POOL_CAPACITY,
     );
 
-    this.slopeTexture = this.device.createTexture({
-      size: [256, 1],
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-    });
-    const initialSlopeRamp = new Uint8Array(256 * 4);
-    this.device.queue.writeTexture(
-      { texture: this.slopeTexture },
-      initialSlopeRamp as Uint8Array<ArrayBuffer>,
-      { bytesPerRow: 256 * 4 },
-      { width: 256, height: 1 },
-    );
-    this.slopeSampler = this.device.createSampler({
-      magFilter: 'linear',
-      minFilter: 'linear',
-      addressModeU: 'clamp-to-edge',
-      addressModeV: 'clamp-to-edge',
+    this.cameraBuffer = this.createUniformBuffer(this.uniformCache.byteLength);
+    this.pointParamsBuffer = this.createUniformBuffer(this.pointParams.byteLength);
+    this.edlParamsBuffer = this.createUniformBuffer(this.edlParams.byteLength);
+    this.pointParamsBindGroup = this.device.createBindGroup({
+      layout: this.pipelines.pointParamsBindGroupLayout,
+      entries: [{ binding: 0, resource: { buffer: this.pointParamsBuffer } }],
     });
 
-    this.altitudeTexture = this.device.createTexture({
-      size: [512, 1],
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-    });
-    const initialAltRamp = new Uint8Array(512 * 4);
-    this.device.queue.writeTexture(
-      { texture: this.altitudeTexture },
-      initialAltRamp as Uint8Array<ArrayBuffer>,
-      { bytesPerRow: 512 * 4 },
-      { width: 512, height: 1 },
-    );
-    this.altitudeSampler = this.device.createSampler({
-      magFilter: 'linear',
-      minFilter: 'linear',
-      addressModeU: 'clamp-to-edge',
-      addressModeV: 'clamp-to-edge',
-    });
-
-    this.shadowTexture = this.device.createTexture({
-      size: [1, 1],
-      format: 'r32float',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-    });
-    this.device.queue.writeTexture(
-      { texture: this.shadowTexture },
-      new Float32Array([0]) as Float32Array<ArrayBuffer>,
-      { bytesPerRow: 4 },
-      { width: 1, height: 1 },
-    );
-
+    this.heightTexture = this.createFloatTexture(1, 1, new Float32Array([0]));
+    this.snowTexture = this.createFloatTexture(1, 1, new Float32Array([0]));
+    this.shadowTexture = this.createFloatTexture(1, 1, new Float32Array([0]));
+    this.slopeTexture = this.createRampTexture(256);
+    this.altitudeTexture = this.createRampTexture(512);
     this.sunlightMapTexture = this.device.createTexture({
       size: [1, 1],
       format: 'rgba8unorm',
@@ -263,31 +228,134 @@ export class LidarRenderer {
       { bytesPerRow: 4 },
       { width: 1, height: 1 },
     );
+    this.slopeSampler = this.createRampSampler('linear');
+    this.altitudeSampler = this.createRampSampler('linear');
 
     this.rebuildBindGroups();
     this.resize(canvas.width, canvas.height);
   }
 
-  getPointChunkCapacity(): number {
-    return this.pointChunkCapacity;
+  /** Smoothed GPU cost per frame in ms (0 until measured), see `GpuFrameTimer`. */
+  getGpuFrameMs(): number {
+    return this.gpuTimer?.getFrameMs() ?? 0;
   }
 
-  getLastRenderStats(): { leafBatches: number; voxelBatches: number; drawCalls: number; gpuDrivenDensity: boolean } {
-    return {
-      leafBatches: this.lastLeafBatchCount,
-      voxelBatches: this.lastVoxelBatchCount,
-      drawCalls: this.lastDrawCallCount,
-      gpuDrivenDensity: this.gpuDrivenDensityActive,
-    };
+  /** False when frame cost is only approximated (no `timestamp-query`): includes presentation waits. */
+  hasPreciseGpuTiming(): boolean {
+    return this.gpuTimer?.usesTimestamps ?? false;
+  }
+
+  getLastRenderStats(): { drawCalls: number; outOfMemory: number } {
+    return { drawCalls: this.lastDrawCallCount, outOfMemory: this.nodePool?.outOfMemoryCount ?? 0 };
+  }
+
+  /** Max LOD nodes the GPU pool can hold at once (uniform slots). */
+  getNodeCapacity(): number {
+    return this.nodePool?.capacity ?? 0;
+  }
+
+  get msaaSamples(): number {
+    return this.sampleCount;
+  }
+
+  /**
+   * Drops MSAA (first step of the automatic quality downgrade on a GPU that
+   * stays too slow at the minimum point budget). Resolves to false when it
+   * was already off.
+   */
+  async disableMsaa(): Promise<boolean> {
+    if (this.sampleCount === 1 || !this.device || this.deviceLost) return false;
+    this.pipelines = await createRendererPipelines(this.device, this.format, 1, this.pipelines);
+    this.sampleCount = 1;
+    this.resize(this.canvasWidth, this.canvasHeight);
+    console.log('[LiDAR GPU] MSAA disabled to keep the frame rate.');
+    return true;
+  }
+
+  // --- SceneNodeUploader ---
+
+  uploadNode(node: SceneNode, block: ArrayBuffer): boolean {
+    if (!this.nodePool || this.deviceLost) return false;
+    return this.nodePool.upload(node, block);
+  }
+
+  releaseNode(node: SceneNode): void {
+    this.nodePool?.release(node);
+  }
+
+  /**
+   * Eye-Dome Lighting: `strength` ≈ 1 matches CloudCompare/Potree defaults,
+   * `radiusPx` is in device pixels (scale it with the canvas pixel ratio).
+   */
+  setEdl(enabled: boolean, strength: number, radiusPx: number): void {
+    this.edlEnabled = enabled;
+    this.edlStrength = Math.max(0, strength);
+    this.edlRadiusPx = Math.max(1, radiusPx);
+  }
+
+  setColorMode(mode: PointColorMode): void {
+    if (mode === this.colorMode) return;
+    this.colorMode = mode;
+    this.invalidateShading();
+  }
+
+  getColorMode(): PointColorMode {
+    return this.colorMode;
+  }
+
+  private invalidateShading(): void {
+    this.nodePool?.invalidateShading();
+  }
+
+  private createUniformBuffer(size: number): GPUBuffer {
+    return this.device.createBuffer({ size, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  }
+
+  private createFloatTexture(width: number, height: number, data: Float32Array): GPUTexture {
+    const texture = this.device.createTexture({
+      size: [width, height],
+      format: 'r32float',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+    this.device.queue.writeTexture(
+      { texture },
+      data as Float32Array<ArrayBuffer>,
+      { bytesPerRow: width * 4 },
+      { width, height },
+    );
+    return texture;
+  }
+
+  private createRampTexture(width: number): GPUTexture {
+    const texture = this.device.createTexture({
+      size: [width, 1],
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+    this.device.queue.writeTexture(
+      { texture },
+      new Uint8Array(width * 4) as Uint8Array<ArrayBuffer>,
+      { bytesPerRow: width * 4 },
+      { width, height: 1 },
+    );
+    return texture;
+  }
+
+  private createRampSampler(filter: GPUFilterMode): GPUSampler {
+    return this.device.createSampler({
+      magFilter: filter,
+      minFilter: filter,
+      addressModeU: 'clamp-to-edge',
+      addressModeV: 'clamp-to-edge',
+    });
   }
 
   private rebuildBindGroups() {
-    this.pointBindGroup = this.device.createBindGroup({
-      layout: this.pointBindGroupLayout,
+    this.sceneBindGroup = this.device.createBindGroup({
+      layout: this.pipelines.sceneBindGroupLayout,
       entries: [
         { binding: 0, resource: { buffer: this.cameraBuffer } },
         { binding: 1, resource: this.heightTexture.createView() },
-        { binding: 2, resource: this.heightSampler },
         { binding: 3, resource: this.snowTexture.createView() },
         { binding: 4, resource: this.slopeTexture.createView() },
         { binding: 5, resource: this.slopeSampler },
@@ -297,36 +365,7 @@ export class LidarRenderer {
         { binding: 9, resource: this.sunlightMapTexture.createView() },
       ],
     });
-
-    this.pointBindGroupVoxel = this.device.createBindGroup({
-      layout: this.pointBindGroupLayout,
-      entries: [
-        { binding: 0, resource: { buffer: this.cameraBufferVoxel } },
-        { binding: 1, resource: this.heightTexture.createView() },
-        { binding: 2, resource: this.heightSampler },
-        { binding: 3, resource: this.snowTexture.createView() },
-        { binding: 4, resource: this.slopeTexture.createView() },
-        { binding: 5, resource: this.slopeSampler },
-        { binding: 6, resource: this.altitudeTexture.createView() },
-        { binding: 7, resource: this.altitudeSampler },
-        { binding: 8, resource: this.shadowTexture.createView() },
-        { binding: 9, resource: this.sunlightMapTexture.createView() },
-      ],
-    });
-
-    this.terrainBindGroup = this.device.createBindGroup({
-      layout: this.terrainBindGroupLayout,
-      entries: [
-        { binding: 0, resource: { buffer: this.cameraBuffer } },
-        { binding: 3, resource: this.snowTexture.createView() },
-        { binding: 4, resource: this.slopeTexture.createView() },
-        { binding: 5, resource: this.slopeSampler },
-        { binding: 6, resource: this.altitudeTexture.createView() },
-        { binding: 7, resource: this.altitudeSampler },
-        { binding: 8, resource: this.shadowTexture.createView() },
-        { binding: 9, resource: this.sunlightMapTexture.createView() },
-      ],
-    });
+    this.invalidateShading();
   }
 
   setHeightmap(params: HeightmapParams) {
@@ -334,14 +373,6 @@ export class LidarRenderer {
     this.hmOriginZ = params.originZ;
     this.hmScaleX = params.scaleX;
     this.hmScaleZ = params.scaleZ;
-
-    if (this.heightTexture) this.heightTexture.destroy();
-
-    this.heightTexture = this.device.createTexture({
-      size: [params.width, params.height],
-      format: 'r32float',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-    });
 
     const flipped = new Float32Array(params.data.length);
     const w = params.width;
@@ -354,29 +385,14 @@ export class LidarRenderer {
       }
     }
 
-    this.device.queue.writeTexture(
-      { texture: this.heightTexture },
-      flipped as Float32Array<ArrayBuffer>,
-      { bytesPerRow: params.width * 4 },
-      { width: params.width, height: params.height },
-    );
-
+    this.heightTexture.destroy();
+    this.heightTexture = this.createFloatTexture(w, h, flipped);
     this.rebuildBindGroups();
   }
 
   setSnow(params: SnowParams) {
-    if (this.snowTexture) this.snowTexture.destroy();
-    this.snowTexture = this.device.createTexture({
-      size: [params.width, params.height],
-      format: 'r32float',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-    });
-    this.device.queue.writeTexture(
-      { texture: this.snowTexture },
-      params.data as Float32Array<ArrayBuffer>,
-      { bytesPerRow: params.width * 4 },
-      { width: params.width, height: params.height },
-    );
+    this.snowTexture.destroy();
+    this.snowTexture = this.createFloatTexture(params.width, params.height, params.data);
     this.snowOriginX = params.originX;
     this.snowOriginZ = params.originZ;
     this.snowScaleX = params.scaleX;
@@ -385,6 +401,7 @@ export class LidarRenderer {
   }
 
   setSnowMode(mode: 0 | 1 | 2) {
+    if (this.snowMode !== mode) this.invalidateShading();
     this.snowMode = mode;
   }
 
@@ -392,8 +409,7 @@ export class LidarRenderer {
     if (!this.device || this.deviceLost) return;
     this.slopeEnabled = state.enabled ? 1 : 0;
     this.slopeOpacity = (state.opacity ?? 50) / 100;
-    const isStepped = state.colorization === 'stepped';
-    const desiredFilter: GPUFilterMode = isStepped ? 'nearest' : 'linear';
+    const desiredFilter: GPUFilterMode = state.colorization === 'stepped' ? 'nearest' : 'linear';
 
     if (state.bands && state.bands.length > 0) {
       const data = buildSlopeRampData(state.bands, state.colorization, 256);
@@ -405,37 +421,19 @@ export class LidarRenderer {
       );
     }
 
-    let needsRebind = false;
     if (this.slopeFilter !== desiredFilter) {
       this.slopeFilter = desiredFilter;
-      this.slopeSampler = this.device.createSampler({
-        magFilter: desiredFilter,
-        minFilter: desiredFilter,
-        addressModeU: 'clamp-to-edge',
-        addressModeV: 'clamp-to-edge',
-      });
-      needsRebind = true;
-    }
-
-    if (needsRebind) {
+      this.slopeSampler = this.createRampSampler(desiredFilter);
       this.rebuildBindGroups();
     }
-
-    this.uniformCache[49] = this.slopeEnabled;
-    this.uniformCache[50] = this.slopeOpacity;
-
-    if (this.cameraBuffer && this.cameraBufferVoxel) {
-      this.device.queue.writeBuffer(this.cameraBuffer, 49 * 4, this.uniformCache.subarray(49, 51));
-      this.device.queue.writeBuffer(this.cameraBufferVoxel, 49 * 4, this.uniformCache.subarray(49, 51));
-    }
+    this.invalidateShading();
   }
 
   setAltitudeState(state: ViewerAltitudeState): void {
     if (!this.device || this.deviceLost) return;
     this.altitudeEnabled = state.enabled ? 1 : 0;
     this.altitudeOpacity = (state.opacity ?? 50) / 100;
-    const isStepped = state.colorization === 'stepped';
-    const desiredFilter: GPUFilterMode = isStepped ? 'nearest' : 'linear';
+    const desiredFilter: GPUFilterMode = state.colorization === 'stepped' ? 'nearest' : 'linear';
 
     if (state.bands && state.bands.length > 0) {
       const data = buildAltitudeRampData(state.bands, state.colorization, this.maxAltitude, 512);
@@ -447,33 +445,17 @@ export class LidarRenderer {
       );
     }
 
-    let needsRebind = false;
     if (this.altitudeFilter !== desiredFilter) {
       this.altitudeFilter = desiredFilter;
-      this.altitudeSampler = this.device.createSampler({
-        magFilter: desiredFilter,
-        minFilter: desiredFilter,
-        addressModeU: 'clamp-to-edge',
-        addressModeV: 'clamp-to-edge',
-      });
-      needsRebind = true;
-    }
-
-    if (needsRebind) {
+      this.altitudeSampler = this.createRampSampler(desiredFilter);
       this.rebuildBindGroups();
     }
-
-    this.uniformCache[51] = this.altitudeEnabled;
-    this.uniformCache[52] = this.altitudeOpacity;
-
-    if (this.cameraBuffer && this.cameraBufferVoxel) {
-      this.device.queue.writeBuffer(this.cameraBuffer, 51 * 4, this.uniformCache.subarray(51, 53));
-      this.device.queue.writeBuffer(this.cameraBufferVoxel, 51 * 4, this.uniformCache.subarray(51, 53));
-    }
+    this.invalidateShading();
   }
 
   setMaxAltitude(maxAltitude: number): void {
     this.maxAltitude = maxAltitude;
+    this.invalidateShading();
   }
 
   setSunlightRenderState(renderState: SolarRenderState): void {
@@ -491,7 +473,6 @@ export class LidarRenderer {
 
     let needsRebind = false;
 
-    // Update shadow texture if provided
     if (renderState.shadowMapData && renderState.shadowMapWidth > 0 && renderState.shadowMapHeight > 0) {
       const sw = renderState.shadowMapWidth;
       const sh = renderState.shadowMapHeight;
@@ -499,26 +480,15 @@ export class LidarRenderer {
       for (let i = 0; i < sw * sh; i++) {
         f32Shadow[i] = renderState.shadowMapData[i]! / 255;
       }
-      if (this.shadowTexture) this.shadowTexture.destroy();
-      this.shadowTexture = this.device.createTexture({
-        size: [sw, sh],
-        format: 'r32float',
-        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-      });
-      this.device.queue.writeTexture(
-        { texture: this.shadowTexture },
-        f32Shadow as Float32Array<ArrayBuffer>,
-        { bytesPerRow: sw * 4 },
-        { width: sw, height: sh },
-      );
+      this.shadowTexture.destroy();
+      this.shadowTexture = this.createFloatTexture(sw, sh, f32Shadow);
       needsRebind = true;
     }
 
-    // Update sunlight cumulative map texture if provided
     if (renderState.sunlightMapRgba && renderState.sunlightMapWidth > 0 && renderState.sunlightMapHeight > 0) {
       const mw = renderState.sunlightMapWidth;
       const mh = renderState.sunlightMapHeight;
-      if (this.sunlightMapTexture) this.sunlightMapTexture.destroy();
+      this.sunlightMapTexture.destroy();
       this.sunlightMapTexture = this.device.createTexture({
         size: [mw, mh],
         format: 'rgba8unorm',
@@ -533,46 +503,14 @@ export class LidarRenderer {
       needsRebind = true;
     }
 
-    if (needsRebind) {
-      this.rebuildBindGroups();
-    }
-
-    // Sun direction
-    const sunLen = Math.hypot(this.sunDir[0], this.sunDir[1], this.sunDir[2]) || 1;
-    this.uniformCache[32] = this.sunDir[0] / sunLen;
-    this.uniformCache[33] = this.sunDir[1] / sunLen;
-    this.uniformCache[34] = this.sunDir[2] / sunLen;
-    this.uniformCache[35] = 0;
-
-    // Sunlight uniforms
-    this.uniformCache[53] = this.sunlightEnabled;
-    this.uniformCache[54] = this.shadowEnabled;
-    this.uniformCache[55] = this.shadowOpacity;
-    this.uniformCache[56] = this.sunlightMapEnabled;
-    this.uniformCache[57] = this.sunlightMapOpacity;
-    this.uniformCache[58] = this.sunIntensity;
-    this.uniformCache[59] = this.exposure;
-
-    // Sun color
-    this.uniformCache[60] = this.sunColor[0];
-    this.uniformCache[61] = this.sunColor[1];
-    this.uniformCache[62] = this.sunColor[2];
-    this.uniformCache[63] = 1.0;
-
-    // Sky color
-    this.uniformCache[64] = this.skyColor[0];
-    this.uniformCache[65] = this.skyColor[1];
-    this.uniformCache[66] = this.skyColor[2];
-    this.uniformCache[67] = 1.0;
+    if (needsRebind) this.rebuildBindGroups();
 
     this.trajectoryEnabled = renderState.trajectoryEnabled;
     this.sunDiscPos = renderState.sunDiscPos;
     this.sunDiscRadius = renderState.sunDiscRadius;
 
     if (renderState.trajectoryVertices && renderState.trajectoryVertexCount > 0) {
-      if (this.trajectoryBuffer) {
-        this.trajectoryBuffer.destroy();
-      }
+      this.trajectoryBuffer?.destroy();
       this.trajectoryBuffer = this.device.createBuffer({
         size: renderState.trajectoryVertices.byteLength,
         usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
@@ -586,85 +524,79 @@ export class LidarRenderer {
     } else {
       this.trajectoryVertexCount = 0;
     }
-
-    if (this.sunDiscPos) {
-      this.uniformCache[68] = this.sunDiscPos[0];
-      this.uniformCache[69] = this.sunDiscPos[1];
-      this.uniformCache[70] = this.sunDiscPos[2];
-      this.uniformCache[71] = this.sunDiscRadius;
-    } else {
-      this.uniformCache[68] = 0;
-      this.uniformCache[69] = 0;
-      this.uniformCache[70] = 0;
-      this.uniformCache[71] = 0;
-    }
-
-    if (this.cameraBuffer && this.cameraBufferVoxel) {
-      this.device.queue.writeBuffer(this.cameraBuffer, 32 * 4, this.uniformCache.subarray(32, 36));
-      this.device.queue.writeBuffer(this.cameraBuffer, 53 * 4, this.uniformCache.subarray(53, 72));
-      this.device.queue.writeBuffer(this.cameraBufferVoxel, 32 * 4, this.uniformCache.subarray(32, 36));
-      this.device.queue.writeBuffer(this.cameraBufferVoxel, 53 * 4, this.uniformCache.subarray(53, 72));
-    }
+    this.invalidateShading();
   }
 
   resize(w: number, h: number) {
-    this.canvasWidth = w;
-    this.canvasHeight = h;
-    if (this.depthTexture) this.depthTexture.destroy();
+    this.canvasWidth = Math.max(1, w);
+    this.canvasHeight = Math.max(1, h);
+    if (!this.device) return;
+
+    this.sceneColorTexture?.destroy();
+    this.sceneColorMsTexture?.destroy();
+    this.depthTexture?.destroy();
+
+    const size = [this.canvasWidth, this.canvasHeight];
+    this.sceneColorTexture = this.device.createTexture({
+      size,
+      format: this.format,
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+    this.sceneColorView = this.sceneColorTexture.createView();
+    if (this.sampleCount > 1) {
+      this.sceneColorMsTexture = this.device.createTexture({
+        size,
+        format: this.format,
+        sampleCount: this.sampleCount,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+      this.sceneColorMsView = this.sceneColorMsTexture.createView();
+    } else {
+      this.sceneColorMsTexture = null;
+      this.sceneColorMsView = null;
+    }
     this.depthTexture = this.device.createTexture({
-      size: [w, h],
-      format: 'depth24plus',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT,
+      size,
+      format: SCENE_DEPTH_FORMAT,
+      sampleCount: this.sampleCount,
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
     this.depthView = this.depthTexture.createView();
+
+    this.edlBindGroup = this.device.createBindGroup({
+      layout: this.pipelines.edlBindGroupLayout,
+      entries: [
+        { binding: 0, resource: this.sceneColorView },
+        { binding: 1, resource: this.depthView },
+        { binding: 2, resource: { buffer: this.edlParamsBuffer } },
+      ],
+    });
   }
 
-  uploadPointCloud(tree: FlatOctree): void {
-    destroyPointChunks(this.leafChunks);
-    destroyPointChunks(this.voxelChunks);
-    this.totalPoints = tree.totalLeafPoints;
-    this.leafChunks = uploadPointChunks(this.device, this.pointChunkCapacity, tree.leafPositions, tree.leafColors);
-    this.voxelChunks = uploadPointChunks(this.device, this.pointChunkCapacity, tree.voxelPositions, tree.voxelColors);
+  private createMeshBuffers(vertices: Float32Array, colors: Uint8Array, indices: Uint32Array, count: number): MeshBuffers {
+    const vertBuf = this.device.createBuffer({ size: vertices.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+    this.device.queue.writeBuffer(vertBuf, 0, vertices as Float32Array<ArrayBuffer>);
+    const colBuf = this.device.createBuffer({ size: colors.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+    this.device.queue.writeBuffer(colBuf, 0, colors as Uint8Array<ArrayBuffer>);
+    const idxBuf = this.device.createBuffer({ size: indices.byteLength, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST });
+    this.device.queue.writeBuffer(idxBuf, 0, indices as Uint32Array<ArrayBuffer>);
+    return { vertBuf, colBuf, idxBuf, count };
   }
 
-  setOctreeData(tree: FlatOctree): void {
-    this.uploadPointCloud(tree);
+  private static destroyMesh(mesh: MeshBuffers | null): void {
+    if (!mesh) return;
+    mesh.vertBuf.destroy();
+    mesh.colBuf.destroy();
+    mesh.idxBuf.destroy();
   }
 
   setMesh(vertices: Float32Array, colors: Uint8Array, indices: Uint32Array, count?: number): void {
-    this.setTerrainMesh({
-      vertices,
-      colors,
-      indices,
-      count: count ?? indices.length,
-    });
+    this.setTerrainMesh({ vertices, colors, indices, count: count ?? indices.length });
   }
 
   setTerrainMesh(mesh: { vertices: Float32Array; colors: Uint8Array; indices: Uint32Array; count: number }) {
-    if (this.terrainMesh) {
-      this.terrainMesh.vertBuf.destroy();
-      this.terrainMesh.colBuf.destroy();
-      this.terrainMesh.idxBuf.destroy();
-    }
-    const vertBuf = this.device.createBuffer({
-      size: mesh.vertices.byteLength,
-      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-    });
-    this.device.queue.writeBuffer(vertBuf, 0, mesh.vertices as Float32Array<ArrayBuffer>);
-
-    const colBuf = this.device.createBuffer({
-      size: mesh.colors.byteLength,
-      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-    });
-    this.device.queue.writeBuffer(colBuf, 0, mesh.colors as Uint8Array<ArrayBuffer>);
-
-    const idxBuf = this.device.createBuffer({
-      size: mesh.indices.byteLength,
-      usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
-    });
-    this.device.queue.writeBuffer(idxBuf, 0, mesh.indices as Uint32Array<ArrayBuffer>);
-
-    this.terrainMesh = { vertBuf, colBuf, idxBuf, count: mesh.count };
+    LidarRenderer.destroyMesh(this.terrainMesh);
+    this.terrainMesh = this.createMeshBuffers(mesh.vertices, mesh.colors, mesh.indices, mesh.count);
   }
 
   setPreviewMesh(
@@ -675,82 +607,27 @@ export class LidarRenderer {
     if (meshOrVertices instanceof Float32Array) {
       if (!colors || !indices) return;
       this.clearPreviewMesh();
-      const vertBuf = this.device.createBuffer({
-        size: meshOrVertices.byteLength,
-        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-      });
-      this.device.queue.writeBuffer(vertBuf, 0, meshOrVertices as Float32Array<ArrayBuffer>);
-
-      const colBuf = this.device.createBuffer({
-        size: colors.byteLength,
-        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-      });
-      this.device.queue.writeBuffer(colBuf, 0, colors as Uint8Array<ArrayBuffer>);
-
-      const idxBuf = this.device.createBuffer({
-        size: indices.byteLength,
-        usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
-      });
-      this.device.queue.writeBuffer(idxBuf, 0, indices as Uint32Array<ArrayBuffer>);
-
-      this.previewMesh = { vertBuf, colBuf, idxBuf, count: indices.length };
+      this.previewMesh = this.createMeshBuffers(meshOrVertices, colors, indices, indices.length);
       return;
     }
-
     this.clearPreviewMesh();
-    const vertBuf = this.device.createBuffer({
-      size: meshOrVertices.vertices.byteLength,
-      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-    });
-    this.device.queue.writeBuffer(vertBuf, 0, meshOrVertices.vertices as Float32Array<ArrayBuffer>);
-
-    const colBuf = this.device.createBuffer({
-      size: meshOrVertices.colors.byteLength,
-      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-    });
-    this.device.queue.writeBuffer(colBuf, 0, meshOrVertices.colors as Uint8Array<ArrayBuffer>);
-
-    const idxBuf = this.device.createBuffer({
-      size: meshOrVertices.indices.byteLength,
-      usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
-    });
-    this.device.queue.writeBuffer(idxBuf, 0, meshOrVertices.indices as Uint32Array<ArrayBuffer>);
-
-    this.previewMesh = { vertBuf, colBuf, idxBuf, count: meshOrVertices.count };
+    this.previewMesh = this.createMeshBuffers(
+      meshOrVertices.vertices,
+      meshOrVertices.colors,
+      meshOrVertices.indices,
+      meshOrVertices.count,
+    );
   }
 
   clearPreviewMesh(): void {
-    if (this.previewMesh) {
-      this.previewMesh.vertBuf.destroy();
-      this.previewMesh.colBuf.destroy();
-      this.previewMesh.idxBuf.destroy();
-      this.previewMesh = null;
-    }
+    LidarRenderer.destroyMesh(this.previewMesh);
+    this.previewMesh = null;
   }
 
   setRouteMesh(vertices: Float32Array, colors: Uint8Array, indices: Uint32Array, count?: number): void {
     this.clearRouteMesh();
     if (!this.device || vertices.length === 0 || indices.length === 0) return;
-
-    const vertBuf = this.device.createBuffer({
-      size: vertices.byteLength,
-      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-    });
-    this.device.queue.writeBuffer(vertBuf, 0, vertices as Float32Array<ArrayBuffer>);
-
-    const colBuf = this.device.createBuffer({
-      size: colors.byteLength,
-      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-    });
-    this.device.queue.writeBuffer(colBuf, 0, colors as Uint8Array<ArrayBuffer>);
-
-    const idxBuf = this.device.createBuffer({
-      size: indices.byteLength,
-      usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
-    });
-    this.device.queue.writeBuffer(idxBuf, 0, indices as Uint32Array<ArrayBuffer>);
-
-    this.routeMesh = { vertBuf, colBuf, idxBuf, count: count ?? indices.length };
+    this.routeMesh = this.createMeshBuffers(vertices, colors, indices, count ?? indices.length);
   }
 
   setPointFilterState(state: ViewerPointFilterState): void {
@@ -759,14 +636,15 @@ export class LidarRenderer {
   }
 
   clearRouteMesh(): void {
-    if (this.routeMesh) {
-      this.routeMesh.vertBuf.destroy();
-      this.routeMesh.colBuf.destroy();
-      this.routeMesh.idxBuf.destroy();
-      this.routeMesh = null;
-    }
+    LidarRenderer.destroyMesh(this.routeMesh);
+    this.routeMesh = null;
   }
 
+  /**
+   * @param projMat render projection (reversed-Z, infinite far: see
+   *   `CameraController.getRenderProjMatrix`). Its row 3 equals the standard
+   *   one, so LOD screen sizes and frustum culling are unaffected.
+   */
   updateCamera(
     viewMat: Float32Array | number[],
     projMat: Float32Array | number[],
@@ -782,6 +660,7 @@ export class LidarRenderer {
       vArr[i] = viewMat[i]!;
       pArr[i] = projMat[i]!;
     }
+    this.lastProjScaleY = pArr[5]!;
 
     let cpx = 0, cpy = 0, cpz = 0;
     if (camPos && camPos.length >= 3) {
@@ -801,37 +680,18 @@ export class LidarRenderer {
 
     this.lastCamPos = [cpx, cpy, cpz];
     this.lastCamFwd = [cfx, cfy, cfz];
-    const posArr = this._lastCamPosArr;
-    posArr[0] = cpx; posArr[1] = cpy; posArr[2] = cpz;
-    const fwdArr = this._lastCamFwdArr;
-    fwdArr[0] = cfx; fwdArr[1] = cfy; fwdArr[2] = cfz;
 
     const f = this.uniformCache;
 
     // 0..15: viewProj
     mat4MultiplyInto(this._cachedViewProj, pArr, vArr);
-    for (let i = 0; i < 16; i++) {
-      f[i] = this._cachedViewProj[i]!;
-    }
+    f.set(this._cachedViewProj, 0);
     this.lastViewProj.set(this._cachedViewProj);
 
-    // 16..19: right
-    f[16] = viewMat[0]!;
-    f[17] = viewMat[4]!;
-    f[18] = viewMat[8]!;
-    f[19] = 0;
-
-    // 20..23: up
-    f[20] = viewMat[1]!;
-    f[21] = viewMat[5]!;
-    f[22] = viewMat[9]!;
-    f[23] = 0;
-
-    // 24..27: cameraPos
-    f[24] = cpx;
-    f[25] = cpy;
-    f[26] = cpz;
-    f[27] = 1;
+    // 16..19: right, 20..23: up, 24..27: cameraPos
+    f[16] = vArr[0]!; f[17] = vArr[4]!; f[18] = vArr[8]!; f[19] = 0;
+    f[20] = vArr[1]!; f[21] = vArr[5]!; f[22] = vArr[9]!; f[23] = 0;
+    f[24] = cpx; f[25] = cpy; f[26] = cpz; f[27] = 1;
 
     // 28..31: scalars
     f[28] = this.pointSize;
@@ -847,29 +707,17 @@ export class LidarRenderer {
     f[35] = 0;
 
     // 36..39: heightmap params
-    f[36] = this.hmOriginX;
-    f[37] = this.hmOriginZ;
-    f[38] = this.hmScaleX;
-    f[39] = this.hmScaleZ;
+    f[36] = this.hmOriginX; f[37] = this.hmOriginZ; f[38] = this.hmScaleX; f[39] = this.hmScaleZ;
 
-    // 40..43: density & altitude params
-    f[40] = density;
-    f[41] = this.centerAltitude;
-    f[42] = this.maxAltitude;
-    f[43] = 0;
+    // 40..43: density, altitude params, colour mode
+    f[40] = density; f[41] = this.centerAltitude; f[42] = this.maxAltitude; f[43] = COLOR_MODE_INDEX[this.colorMode];
 
     // 44..48: snow params
     f[44] = this.snowMode;
-    f[45] = this.snowOriginX;
-    f[46] = this.snowOriginZ;
-    f[47] = this.snowScaleX;
-    f[48] = this.snowScaleZ;
+    f[45] = this.snowOriginX; f[46] = this.snowOriginZ; f[47] = this.snowScaleX; f[48] = this.snowScaleZ;
 
     // 49..52: slope and altitude state
-    f[49] = this.slopeEnabled;
-    f[50] = this.slopeOpacity;
-    f[51] = this.altitudeEnabled;
-    f[52] = this.altitudeOpacity;
+    f[49] = this.slopeEnabled; f[50] = this.slopeOpacity; f[51] = this.altitudeEnabled; f[52] = this.altitudeOpacity;
 
     // 53..59: sunlight params
     f[53] = this.sunlightEnabled;
@@ -880,86 +728,87 @@ export class LidarRenderer {
     f[58] = this.sunIntensity;
     f[59] = this.exposure;
 
-    // 60..63: sun color
-    f[60] = this.sunColor[0];
-    f[61] = this.sunColor[1];
-    f[62] = this.sunColor[2];
-    f[63] = 1.0;
-
-    // 64..67: sky color
-    f[64] = this.skyColor[0];
-    f[65] = this.skyColor[1];
-    f[66] = this.skyColor[2];
-    f[67] = 1.0;
+    // 60..67: sun & sky colours
+    f[60] = this.sunColor[0]; f[61] = this.sunColor[1]; f[62] = this.sunColor[2]; f[63] = 1.0;
+    f[64] = this.skyColor[0]; f[65] = this.skyColor[1]; f[66] = this.skyColor[2]; f[67] = 1.0;
 
     // 68..71: sun disc
     if (this.sunDiscPos) {
-      f[68] = this.sunDiscPos[0];
-      f[69] = this.sunDiscPos[1];
-      f[70] = this.sunDiscPos[2];
-      f[71] = this.sunDiscRadius;
+      f[68] = this.sunDiscPos[0]; f[69] = this.sunDiscPos[1]; f[70] = this.sunDiscPos[2]; f[71] = this.sunDiscRadius;
     } else {
-      f[68] = 0;
-      f[69] = 0;
-      f[70] = 0;
-      f[71] = 0;
+      f[68] = 0; f[69] = 0; f[70] = 0; f[71] = 0;
     }
 
-    // 72..75: point filter params
-    f[72] = this.pointFilterEnabled;
-    f[73] = 0;
-    f[74] = 0;
-    f[75] = 0;
-
-    // 76..79: point filter bitmask (u32 words)
+    // 72..75: point filter params, 76..79: bitmask (u32 words)
+    f[72] = this.pointFilterEnabled; f[73] = 0; f[74] = 0; f[75] = 0;
     this.uniformCacheU32[76] = this.pointFilterMask[0] >>> 0;
     this.uniformCacheU32[77] = this.pointFilterMask[1] >>> 0;
     this.uniformCacheU32[78] = this.pointFilterMask[2] >>> 0;
     this.uniformCacheU32[79] = this.pointFilterMask[3] >>> 0;
 
-    const q = this.device.queue;
-    q.writeBuffer(this.cameraBuffer, 0, f as Float32Array<ArrayBuffer>);
-    q.writeBuffer(this.cameraBufferVoxel, 0, f as Float32Array<ArrayBuffer>);
+    this.device.queue.writeBuffer(this.cameraBuffer, 0, f as Float32Array<ArrayBuffer>);
   }
 
-  renderLOD(visibleNodes: VisibleNode[], voxelPointSize?: number): void {
-    if (!this.device || this.deviceLost) return;
-    if (this.leafChunks.length === 0 && this.voxelChunks.length === 0 && !this.terrainMesh) return;
+  private writeFrameParams(): void {
+    const p = this.pointParams;
+    p[0] = POINT_MIN_PX;
+    p[1] = POINT_MAX_PX;
+    p[2] = this.fixedPointPixels;
+    p[3] = Math.abs(this.lastProjScaleY) * this.canvasHeight * 0.5;
+    p[4] = this.canvasWidth;
+    p[5] = this.canvasHeight;
+    p[6] = this.sampleCount > 1 ? 1 : 0;
+    p[7] = this.pointSize;
+    this.device.queue.writeBuffer(this.pointParamsBuffer, 0, p as Float32Array<ArrayBuffer>);
 
-    const colorView = this.context.getCurrentTexture().createView();
-    const effectiveVoxelSize = voxelPointSize ?? this.pointSize;
-    this.lastLeafBatchCount = 0;
-    this.lastVoxelBatchCount = 0;
+    this.edlParams[0] = this.edlStrength;
+    this.edlParams[1] = this.edlRadiusPx;
+    this.edlParams[2] = this.edlEnabled ? 1 : 0;
+    this.device.queue.writeBuffer(this.edlParamsBuffer, 0, this.edlParams as Float32Array<ArrayBuffer>);
+  }
+
+  /** Renders the terrain, the given LOD nodes (front to back) and overlays. */
+  renderScene(nodes: readonly SceneNode[]): void {
+    if (!this.device || this.deviceLost || !this.edlBindGroup || !this.nodePool) return;
+
+    const canvasView = this.context.getCurrentTexture().createView();
     this.lastDrawCallCount = 0;
-
-    if (effectiveVoxelSize !== this.pointSize) {
-      this._tempFloat[0] = effectiveVoxelSize;
-      this.device.queue.writeBuffer(this.cameraBufferVoxel, 28 * 4, this._tempFloat);
-    }
+    this.writeFrameParams();
 
     const clearR = this.sunlightEnabled ? this.skyColor[0] : 0.76;
     const clearG = this.sunlightEnabled ? this.skyColor[1] : 0.87;
     const clearB = this.sunlightEnabled ? this.skyColor[2] : 0.96;
 
     const enc = this.device.createCommandEncoder();
+    this.nodePool.encodeShading(enc, this.pipelines.shadingPipeline, this.sceneBindGroup);
+
+    const timed = this.gpuTimer?.beginFrame() ?? false;
+    const msaa = this.sceneColorMsView !== null;
     const pass = enc.beginRenderPass({
       colorAttachments: [{
-        view: colorView,
+        view: msaa ? this.sceneColorMsView! : this.sceneColorView,
+        resolveTarget: msaa ? this.sceneColorView : undefined,
         clearValue: { r: clearR, g: clearG, b: clearB, a: 1 },
         loadOp: 'clear',
-        storeOp: 'store',
+        storeOp: msaa ? 'discard' : 'store',
       }],
       depthStencilAttachment: {
         view: this.depthView,
-        depthClearValue: 1,
+        depthClearValue: 0,
         depthLoadOp: 'clear',
         depthStoreOp: 'store',
       },
+      timestampWrites: timed ? this.gpuTimer!.passTimestamps(0) : undefined,
     });
+    pass.setBindGroup(0, this.sceneBindGroup);
+
+    // Points first (front to back), then the terrain only fills what is left.
+    pass.setPipeline(this.pipelines.pointPipeline);
+    pass.setBindGroup(1, this.pointParamsBindGroup);
+    this.lastDrawCallCount += this.nodePool.draw(pass, nodes);
 
     if (this.terrainMesh && this.terrainVisible) {
-      pass.setPipeline(this.terrainPipeline);
-      pass.setBindGroup(0, this.terrainBindGroup);
+      pass.setPipeline(this.pipelines.terrainPipeline);
       pass.setVertexBuffer(0, this.terrainMesh.vertBuf);
       pass.setVertexBuffer(1, this.terrainMesh.colBuf);
       pass.setIndexBuffer(this.terrainMesh.idxBuf, 'uint32');
@@ -968,8 +817,7 @@ export class LidarRenderer {
     }
 
     if (this.previewMesh) {
-      pass.setPipeline(this.previewPipeline);
-      pass.setBindGroup(0, this.terrainBindGroup);
+      pass.setPipeline(this.pipelines.previewPipeline);
       pass.setVertexBuffer(0, this.previewMesh.vertBuf);
       pass.setVertexBuffer(1, this.previewMesh.colBuf);
       pass.setIndexBuffer(this.previewMesh.idxBuf, 'uint32');
@@ -977,81 +825,72 @@ export class LidarRenderer {
       this.lastDrawCallCount += 1;
     }
 
-    pass.setPipeline(this.pipeline);
-
-    if (this.voxelChunks.length > 0) {
-      pass.setBindGroup(0, this.pointBindGroupVoxel);
-      const voxelStats = drawNodesBatched(pass, visibleNodes, this.voxelChunks, true, this.pointChunkCapacity);
-      this.lastVoxelBatchCount = voxelStats.batches;
-      this.lastDrawCallCount += voxelStats.drawCalls;
-    }
-
-    if (this.leafChunks.length > 0) {
-      pass.setBindGroup(0, this.pointBindGroup);
-      const leafStats = drawNodesBatched(pass, visibleNodes, this.leafChunks, false, this.pointChunkCapacity);
-      this.lastLeafBatchCount = leafStats.batches;
-      this.lastDrawCallCount += leafStats.drawCalls;
-    }
-
-    // Draw 3D Sun Trajectory Arc (if active)
     if (this.trajectoryEnabled && this.trajectoryVertexCount > 1 && this.trajectoryBuffer) {
-      pass.setPipeline(this.trajectoryPipeline);
-      pass.setBindGroup(0, this.pointBindGroup);
+      pass.setPipeline(this.pipelines.trajectoryPipeline);
       pass.setVertexBuffer(0, this.trajectoryBuffer);
       pass.draw(this.trajectoryVertexCount, 1, 0, 0);
       this.lastDrawCallCount += 1;
     }
 
-    // Draw 3D Celestial Sun Disc Billboard (if active)
     if (this.trajectoryEnabled && this.sunDiscPos) {
-      pass.setPipeline(this.sunDiscPipeline);
-      pass.setBindGroup(0, this.pointBindGroup);
+      pass.setPipeline(this.pipelines.sunDiscPipeline);
       pass.draw(6, 1, 0, 0);
       this.lastDrawCallCount += 1;
     }
 
-    // Draw 3D GPX Route Overlay Ribbon (if active)
     if (this.routeMesh && this.routeMesh.count > 0) {
-      pass.setPipeline(this.routePipeline);
-      pass.setBindGroup(0, this.pointBindGroup);
+      pass.setPipeline(this.pipelines.routePipeline);
       pass.setVertexBuffer(0, this.routeMesh.vertBuf);
       pass.setVertexBuffer(1, this.routeMesh.colBuf);
       pass.setIndexBuffer(this.routeMesh.idxBuf, 'uint32');
       pass.drawIndexed(this.routeMesh.count);
       this.lastDrawCallCount += 1;
     }
-
     pass.end();
+
+    const edlPass = enc.beginRenderPass({
+      colorAttachments: [{
+        view: canvasView,
+        clearValue: { r: clearR, g: clearG, b: clearB, a: 1 },
+        loadOp: 'clear',
+        storeOp: 'store',
+      }],
+      timestampWrites: timed ? this.gpuTimer!.passTimestamps(1) : undefined,
+    });
+    edlPass.setPipeline(this.pipelines.edlPipeline);
+    edlPass.setBindGroup(0, this.edlBindGroup);
+    edlPass.draw(3);
+    edlPass.end();
+
+    if (timed) this.gpuTimer!.encodeResolve(enc);
     this.device.queue.submit([enc.finish()]);
+    this.gpuTimer?.afterSubmit();
   }
 
   destroy(): void {
-    if (this.terrainMesh) {
-      this.terrainMesh.vertBuf.destroy();
-      this.terrainMesh.colBuf.destroy();
-      this.terrainMesh.idxBuf.destroy();
-      this.terrainMesh = null;
-    }
+    this.gpuTimer?.destroy();
+    this.gpuTimer = null;
+    LidarRenderer.destroyMesh(this.terrainMesh);
+    this.terrainMesh = null;
     this.clearPreviewMesh();
     this.clearRouteMesh();
-    if (this.trajectoryBuffer) {
-      this.trajectoryBuffer.destroy();
-      this.trajectoryBuffer = null;
-    }
-    destroyPointChunks(this.leafChunks);
-    destroyPointChunks(this.voxelChunks);
-    this.leafChunks = [];
-    this.voxelChunks = [];
+    this.trajectoryBuffer?.destroy();
+    this.trajectoryBuffer = null;
+    this.nodePool?.destroy();
+    this.nodePool = null;
 
-    if (this.cameraBuffer) this.cameraBuffer.destroy();
-    if (this.cameraBufferVoxel) this.cameraBufferVoxel.destroy();
-    if (this.depthTexture) this.depthTexture.destroy();
-    if (this.heightTexture) this.heightTexture.destroy();
-    if (this.snowTexture) this.snowTexture.destroy();
-    if (this.slopeTexture) this.slopeTexture.destroy();
-    if (this.altitudeTexture) this.altitudeTexture.destroy();
-    if (this.shadowTexture) this.shadowTexture.destroy();
-    if (this.sunlightMapTexture) this.sunlightMapTexture.destroy();
-    if (this.device) this.device.destroy();
+    this.cameraBuffer?.destroy();
+    this.pointParamsBuffer?.destroy();
+    this.edlParamsBuffer?.destroy();
+    this.sceneColorTexture?.destroy();
+    this.sceneColorMsTexture?.destroy();
+    this.depthTexture?.destroy();
+    this.heightTexture?.destroy();
+    this.snowTexture?.destroy();
+    this.slopeTexture?.destroy();
+    this.altitudeTexture?.destroy();
+    this.shadowTexture?.destroy();
+    this.sunlightMapTexture?.destroy();
+    this.device?.destroy();
   }
 }

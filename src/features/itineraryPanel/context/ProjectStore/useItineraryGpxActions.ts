@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import type { MutableRefObject } from 'react';
+import { translateAppText } from '@/shared/i18n';
 import { routeLengthM } from '@/features/poi/lib/gpx-loader';
 import {
   applyGpxQuality,
@@ -468,7 +469,7 @@ export function useItineraryGpxActions({
           const copy = structuredClone(it);
 
           copy.gpxRoute = {
-            name: copy.gpxRoute?.name ?? copy.name ?? 'Trace modifiée',
+            name: copy.gpxRoute?.name ?? copy.name ?? translateAppText('Trace modifiée'),
             source: copy.gpxRoute?.source ?? 'gpx',
             points: normalizedPoints,
             originalPoints: copy.gpxRoute?.originalPoints,

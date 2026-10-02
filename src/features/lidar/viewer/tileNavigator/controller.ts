@@ -1,4 +1,5 @@
 import type { TileCoord } from '../../types';
+import { translateAppText } from '@/shared/i18n/config';
 import { LidarManager } from '../../lib/lidarManager';
 import { MAX_VIEWER_SCENE_TILES } from '../../lib/viewerUrl';
 import { ensureViewerPanel } from '../panel/template';
@@ -118,9 +119,10 @@ export function createViewerTileNavigator(options: ViewerTileNavigatorOptions) {
   let cachedTileKeys = new Set<string>();
   let previewTileKey: string | null = null;
 
-  const defaultStatus =
-    `${activeTiles.length}/${MAX_VIEWER_SCENE_TILES} tuile(s) active(s) · ` +
-    '1er clic = prévisualisation 3D | 2e clic = télécharger';
+  const defaultStatus = translateAppText(
+    '{{count}}/{{max}} tuile(s) active(s) · 1er clic = prévisualisation 3D | 2e clic = télécharger',
+    { count: activeTiles.length, max: MAX_VIEWER_SCENE_TILES },
+  );
 
   const setStatus = (message: string) => {
     statusEl.textContent = message;
@@ -239,7 +241,7 @@ export function createViewerTileNavigator(options: ViewerTileNavigatorOptions) {
         previewTileKey = null;
         options.onPreviewTile?.(null);
       }
-      setStatus(`Retrait ${coord.xKm}/${coord.yKm}...`);
+      setStatus(translateAppText('Retrait {{x}}/{{y}}...', { x: coord.xKm, y: coord.yKm }));
       options.onSelectTiles(activeTiles.filter((tile) => !sameTile(tile, coord)));
       return;
     }
@@ -251,8 +253,8 @@ export function createViewerTileNavigator(options: ViewerTileNavigatorOptions) {
       const isCached = cachedTileKeys.has(targetKey);
       setStatus(
         isCached
-          ? `Tuile ${coord.xKm}/${coord.yKm} en prévisualisation 3D · Recliquez pour afficher`
-          : `Tuile ${coord.xKm}/${coord.yKm} en prévisualisation 3D · Recliquez pour confirmer et télécharger`,
+          ? translateAppText('Tuile {{x}}/{{y}} en prévisualisation 3D · Recliquez pour afficher', { x: coord.xKm, y: coord.yKm })
+          : translateAppText('Tuile {{x}}/{{y}} en prévisualisation 3D · Recliquez pour confirmer et télécharger', { x: coord.xKm, y: coord.yKm }),
       );
       render();
       return;
@@ -263,14 +265,14 @@ export function createViewerTileNavigator(options: ViewerTileNavigatorOptions) {
     options.onPreviewTile?.(null);
 
     if (activeTiles.length >= MAX_VIEWER_SCENE_TILES) {
-      setStatus(`Limite atteinte: ${MAX_VIEWER_SCENE_TILES} tuiles maximum.`);
+      setStatus(translateAppText('Limite atteinte : {{max}} tuiles maximum.', { max: MAX_VIEWER_SCENE_TILES }));
       render();
       return;
     }
 
     // If tile is already in cache (OPFS), assemble immediately
     if (cachedTileKeys.has(targetKey)) {
-      setStatus(`Assemblage ${activeTiles.length + 1}/${MAX_VIEWER_SCENE_TILES} tuiles en cours...`);
+      setStatus(translateAppText('Assemblage {{count}}/{{max}} tuiles en cours...', { count: activeTiles.length + 1, max: MAX_VIEWER_SCENE_TILES }));
       options.onSelectTiles([...activeTiles, coord]);
       return;
     }
@@ -279,7 +281,7 @@ export function createViewerTileNavigator(options: ViewerTileNavigatorOptions) {
     loadingTileKey = targetKey;
     dock.setProgress(0);
     dock.show();
-    setStatus(`Téléchargement de la dalle ${coord.xKm}/${coord.yKm}...`);
+    setStatus(translateAppText('Téléchargement de la dalle {{x}}/{{y}}...', { x: coord.xKm, y: coord.yKm }));
     render();
 
     const ok = await waitForDownload(coord);
@@ -290,7 +292,7 @@ export function createViewerTileNavigator(options: ViewerTileNavigatorOptions) {
 
     if (!ok) {
       dock.hide();
-      setStatus(`Échec du téléchargement ${coord.xKm}/${coord.yKm}`);
+      setStatus(translateAppText('Échec du téléchargement {{x}}/{{y}}', { x: coord.xKm, y: coord.yKm }));
       render();
       return;
     }
@@ -300,7 +302,7 @@ export function createViewerTileNavigator(options: ViewerTileNavigatorOptions) {
       if (!loadingTileKey) dock.hide();
     }, 400);
 
-    setStatus(`Téléchargement terminé · Affichage simultané des ${activeTiles.length + 1} dalles...`);
+    setStatus(translateAppText('Téléchargement terminé · Affichage simultané des {{count}} dalles...', { count: activeTiles.length + 1 }));
     options.onSelectTiles([...activeTiles, coord]);
   };
 
@@ -337,14 +339,14 @@ export function createViewerTileNavigator(options: ViewerTileNavigatorOptions) {
             : 0);
         dock.setProgress(pct);
       }
-      setStatus(event.progress?.message ?? `Téléchargement ${event.tileCoord.xKm}/${event.tileCoord.yKm}...`);
+      setStatus(event.progress?.message ?? translateAppText('Téléchargement {{x}}/{{y}}...', { x: event.tileCoord.xKm, y: event.tileCoord.yKm }));
     }
     if (event.type === 'tileLoaded' || event.type === 'tileRemoved') {
       void refreshCachedTiles();
     }
     if (event.type === 'error' && eventKey === loadingTileKey) {
       dock.hide();
-      setStatus(event.error ?? 'Erreur de téléchargement');
+      setStatus(event.error ?? translateAppText('Erreur de téléchargement'));
     }
   });
 

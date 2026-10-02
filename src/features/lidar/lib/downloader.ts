@@ -1,4 +1,5 @@
 import type { TileCoord, DownloadProgress } from '../types';
+import { translateAppText } from '@/shared/i18n/config';
 import { resolveDownloadUrls, cacheDownloadUrl } from './wfsClient';
 import { saveTile, hasTile, loadTile, hasValidLasSignature, hasValidZipSignature } from './storage';
 import { resolveSwissDownloadUrls } from './swiss/stacClient';
@@ -32,7 +33,7 @@ type DownloadFailure = Error & {
 /** Erreur levée lorsqu'un téléchargement est annulé par l'utilisateur. */
 export class DownloadCancelledError extends Error {
   constructor() {
-    super('Téléchargement annulé');
+    super(translateAppText('Téléchargement annulé'));
     this.name = 'DownloadCancelledError';
     (this as unknown as { code?: string }).code = 'ERR_DOWNLOAD_CANCELLED';
   }
@@ -147,7 +148,7 @@ function invalidLasSignatureError(buffer: ArrayBuffer): DownloadFailure {
   const preview = Array.from(bytes)
     .map((value) => String.fromCharCode(value >= 32 && value <= 126 ? value : 0xFFFD))
     .join('');
-  const err = new Error(`Signature LAS/COPC invalide: ${preview || 'vide'}`) as DownloadFailure;
+  const err = new Error(translateAppText('Signature LAS/COPC invalide : {{preview}}', { preview: preview || translateAppText('vide') })) as DownloadFailure;
   err.code = 'ERR_INVALID_LAS_SIGNATURE';
   return err;
 }
@@ -160,7 +161,7 @@ export async function downloadTile(
   throwIfCancelled(signal);
 
   if (await hasTile(coord)) {
-    onProgress?.({ tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'cached', message: 'Chargement depuis le cache...' });
+    onProgress?.({ tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'cached', message: translateAppText('Chargement depuis le cache...') });
     const cached = await loadTile(coord);
     if (cached) return cached;
   }
@@ -182,7 +183,7 @@ export async function downloadTile(
         bytesDownloaded: 0,
         totalBytes: 0,
         phase: 'downloading',
-        message: 'Hors couverture swisstopo, recherche IGN LiDAR HD...',
+        message: translateAppText('Hors couverture swisstopo, recherche IGN LiDAR HD...'),
       });
       try {
         return await downloadIgnTile(lambCoord, onProgress, signal);
@@ -190,8 +191,10 @@ export async function downloadTile(
         if (isDownloadCancelledError(ignErr)) throw ignErr;
         if (ignErr instanceof NoCoverageError) {
           throw new Error(
-            `Aucune couverture LiDAR à cet emplacement — ni swisstopo swissSURFACE3D, ni IGN LiDAR HD ` +
-            `(LV95 ${coord.xKm}/${coord.yKm}, LAMB93 ${lambCoord.xKm}/${lambCoord.yKm}).`
+            translateAppText(
+              'Aucune couverture LiDAR à cet emplacement — ni swisstopo swissSURFACE3D, ni IGN LiDAR HD (LV95 {{x}}/{{y}}, LAMB93 {{lambX}}/{{lambY}}).',
+              { x: coord.xKm, y: coord.yKm, lambX: lambCoord.xKm, lambY: lambCoord.yKm },
+            )
           );
         }
         throw ignErr;
@@ -232,12 +235,12 @@ async function downloadIgnTile(
 ): Promise<ArrayBuffer> {
   throwIfCancelled(signal);
 
-  onProgress?.({ tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'downloading', message: 'Découverte des zones...' });
+  onProgress?.({ tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'downloading', message: translateAppText('Découverte des zones...') });
 
   const urls = await resolveDownloadUrls(coord);
   throwIfCancelled(signal);
   if (urls.length === 0) {
-    throw new NoCoverageError(`Pas de couverture LiDAR HD à cet emplacement (${coord.xKm}, ${coord.yKm}). Le programme LiDAR HD de l'IGN ne couvre pas encore cette zone.`);
+    throw new NoCoverageError(translateAppText("Pas de couverture LiDAR HD à cet emplacement ({{x}}, {{y}}). Le programme LiDAR HD de l'IGN ne couvre pas encore cette zone.", { x: coord.xKm, y: coord.yKm }));
   }
 
   let lastError: DownloadFailure | null = null;
@@ -287,13 +290,23 @@ async function downloadIgnTile(
     // Chaque zone candidate a répondu 404 : le fichier n'existe nulle part
     // chez IGN → absence de couverture confirmée (utile au fallback CH→IGN).
     throw new NoCoverageError(
-      `Pas de couverture LiDAR HD à cet emplacement (${coord.xKm}, ${coord.yKm}) — ${urls.length} URL(s) testée(s), toutes introuvables (404).`
+      translateAppText(
+        'Pas de couverture LiDAR HD à cet emplacement ({{x}}, {{y}}) — {{count}} URL(s) testée(s), toutes introuvables (404).',
+        { x: coord.xKm, y: coord.yKm, count: urls.length },
+      )
     );
   }
   throw new Error(
-    `Impossible de télécharger la tuile LiDAR HD pour (${coord.xKm}, ${coord.yKm}) — ` +
-    `${urls.length} URL(s) testée(s), candidats [${triedCandidates.slice(0, 5).join(', ')}${triedCandidates.length > 5 ? '...' : ''}]. ` +
-    `Dernière erreur utile: ${finalError?.message || 'inconnue'}`
+    translateAppText(
+      'Impossible de télécharger la tuile LiDAR HD pour ({{x}}, {{y}}) — {{count}} URL(s) testée(s), candidats [{{candidates}}]. Dernière erreur utile : {{error}}',
+      {
+        x: coord.xKm,
+        y: coord.yKm,
+        count: urls.length,
+        candidates: `${triedCandidates.slice(0, 5).join(', ')}${triedCandidates.length > 5 ? '...' : ''}`,
+        error: finalError?.message || translateAppText('inconnue'),
+      },
+    )
   );
 }
 
@@ -372,7 +385,7 @@ async function fetchWithRetry(
       }
       setRateLimit(delay);
       if (attempt < MAX_RETRIES) {
-        onProgress?.({ tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'downloading', message: `Limite de débit, attente ${(delay / 1000).toFixed(0)}s...` });
+        onProgress?.({ tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'downloading', message: translateAppText('Limite de débit, attente {{seconds}} s...', { seconds: (delay / 1000).toFixed(0) }) });
         cleanup();
         await sleep(delay, signal);
         return fetchWithRetry(url, coord, onProgress, attempt + 1, incompleteRetryCount, resumeState, allowZip, signal);
@@ -389,7 +402,7 @@ async function fetchWithRetry(
         await sleep(delay, signal);
         return fetchWithRetry(url, coord, onProgress, attempt + 1, incompleteRetryCount, resumeState, allowZip, signal);
       }
-      throw new Error(`Server error ${response.status} after ${MAX_RETRIES} retries`);
+      throw new Error(translateAppText('Erreur serveur {{status}} après {{max}} tentatives', { status: response.status, max: MAX_RETRIES }));
     }
 
     if (!response.ok) {
@@ -440,8 +453,8 @@ async function fetchWithRetry(
         totalBytes,
         phase: 'downloading',
         message: totalBytes > 0
-          ? `Reprise du téléchargement ${formatBytesAsMb(bytesDownloaded)} / ${formatBytesAsMb(totalBytes)}`
-          : `Reprise du téléchargement ${formatBytesAsMb(bytesDownloaded)}`,
+          ? translateAppText('Reprise du téléchargement {{done}} / {{total}}', { done: formatBytesAsMb(bytesDownloaded), total: formatBytesAsMb(totalBytes) })
+          : translateAppText('Reprise du téléchargement {{done}}', { done: formatBytesAsMb(bytesDownloaded) }),
       });
     }
 
@@ -455,7 +468,7 @@ async function fetchWithRetry(
         // Flux figé : on garde ce qui a été reçu et on relance en reprise.
         console.warn(`[Download] No data for ${READ_IDLE_TIMEOUT_MS / 1000}s on ${url}; aborting stalled stream`);
         const err = new Error(
-          `Téléchargement bloqué: aucune donnée reçue depuis ${READ_IDLE_TIMEOUT_MS / 1000} s.`
+          translateAppText('Téléchargement bloqué : aucune donnée reçue depuis {{seconds}} s.', { seconds: READ_IDLE_TIMEOUT_MS / 1000 })
         ) as Error & { code?: string; resumeState?: ResumeState };
         err.code = 'ERR_INCOMPLETE_DOWNLOAD';
         err.resumeState = { chunks, bytesDownloaded, totalBytes };
@@ -474,15 +487,15 @@ async function fetchWithRetry(
         totalBytes,
         phase: 'downloading',
         message: totalBytes > 0
-          ? `Téléchargement ${(bytesDownloaded / 1024 / 1024).toFixed(1)} / ${(totalBytes / 1024 / 1024).toFixed(1)} MB`
-          : `Téléchargement ${(bytesDownloaded / 1024 / 1024).toFixed(1)} MB`,
+          ? translateAppText('Téléchargement {{done}} / {{total}} MB', { done: (bytesDownloaded / 1024 / 1024).toFixed(1), total: (totalBytes / 1024 / 1024).toFixed(1) })
+          : translateAppText('Téléchargement {{done}} MB', { done: (bytesDownloaded / 1024 / 1024).toFixed(1) }),
       });
     }
 
     if (totalBytes > 0 && bytesDownloaded !== totalBytes) {
       cleanup();
       const err = new Error(
-        `Téléchargement incomplet: ${formatBytesAsMb(bytesDownloaded)} reçus sur ${formatBytesAsMb(totalBytes)} attendus.`
+        translateAppText('Téléchargement incomplet : {{done}} reçus sur {{total}} attendus.', { done: formatBytesAsMb(bytesDownloaded), total: formatBytesAsMb(totalBytes) })
       ) as Error & { code?: string; resumeState?: ResumeState };
       err.code = 'ERR_INCOMPLETE_DOWNLOAD';
       err.resumeState = {
@@ -522,7 +535,7 @@ async function fetchWithRetry(
         await sleep(delay, signal);
         return fetchWithRetry(url, coord, onProgress, attempt + 1, incompleteRetryCount, resumeState, allowZip, signal);
       }
-      throw new Error('Download timeout after retries');
+      throw new Error(translateAppText('Download timeout after retries'));
     }
 
     if (err?.code === 'ERR_INCOMPLETE_DOWNLOAD') {
@@ -539,8 +552,8 @@ async function fetchWithRetry(
           totalBytes: nextResumeState?.totalBytes ?? 0,
           phase: 'downloading',
           message: willResume
-            ? `Téléchargement interrompu, reprise ${incompleteRetryCount + 2}/${MAX_INCOMPLETE_DOWNLOAD_RETRIES + 1}...`
-            : `Téléchargement interrompu, nouvelle tentative ${incompleteRetryCount + 2}/${MAX_INCOMPLETE_DOWNLOAD_RETRIES + 1}...`,
+            ? translateAppText('Téléchargement interrompu, reprise {{attempt}}/{{max}}...', { attempt: incompleteRetryCount + 2, max: MAX_INCOMPLETE_DOWNLOAD_RETRIES + 1 })
+            : translateAppText('Téléchargement interrompu, nouvelle tentative {{attempt}}/{{max}}...', { attempt: incompleteRetryCount + 2, max: MAX_INCOMPLETE_DOWNLOAD_RETRIES + 1 }),
         });
         await sleep(delay, signal);
         return fetchWithRetry(url, coord, onProgress, attempt, incompleteRetryCount + 1, nextResumeState, allowZip, signal);
@@ -561,12 +574,12 @@ async function downloadSwissTile(
   signal?: AbortSignal
 ): Promise<ArrayBuffer> {
   throwIfCancelled(signal);
-  onProgress?.({ tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'downloading', message: 'Recherche STAC swisstopo...' });
+  onProgress?.({ tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'downloading', message: translateAppText('Recherche STAC swisstopo...') });
 
   const urls = await resolveSwissDownloadUrls({ eastKm: coord.xKm, northKm: coord.yKm });
   throwIfCancelled(signal);
   if (urls.length === 0) {
-    throw new NoCoverageError(`Pas de couverture swissSURFACE3D à cet emplacement (E${coord.xKm}, N${coord.yKm}).`);
+    throw new NoCoverageError(translateAppText('Pas de couverture swissSURFACE3D à cet emplacement (E{{x}}, N{{y}}).', { x: coord.xKm, y: coord.yKm }));
   }
 
   let lastError: Error | null = null;
@@ -587,7 +600,7 @@ async function downloadSwissTile(
           bytesDownloaded: downloadedBuffer.byteLength,
           totalBytes: downloadedBuffer.byteLength,
           phase: 'downloading',
-          message: 'Décompression .las.zip...',
+          message: translateAppText('Décompression .las.zip...'),
         });
         lasBuffer = await extractLasFromZip(downloadedBuffer);
       } else {
@@ -596,7 +609,7 @@ async function downloadSwissTile(
 
       throwIfCancelled(signal);
       if (!hasValidLasSignature(lasBuffer)) {
-        throw new Error('Fichier nuage de points suisse corrompu (signature LAS invalide).');
+        throw new Error(translateAppText('Fichier nuage de points suisse corrompu (signature LAS invalide).'));
       }
 
       onProgress?.({
@@ -604,7 +617,7 @@ async function downloadSwissTile(
         bytesDownloaded: lasBuffer.byteLength,
         totalBytes: lasBuffer.byteLength,
         phase: 'downloading',
-        message: 'Sauvegarde en cache local...',
+        message: translateAppText('Sauvegarde en cache local...'),
       });
       try {
         await saveTile(coord, lasBuffer);
@@ -630,11 +643,17 @@ async function downloadSwissTile(
     // Toutes les URLs (y compris prédites) ont répondu 404 : swisstopo n'a
     // pas cette tuile → déclenche le fallback IGN côté downloadTile.
     throw new NoCoverageError(
-      `Pas de couverture swissSURFACE3D à cet emplacement (E${coord.xKm}, N${coord.yKm}) — ${urls.length} URL(s) testée(s), toutes introuvables (404).`
+      translateAppText(
+        'Pas de couverture swissSURFACE3D à cet emplacement (E{{x}}, N{{y}}) — {{count}} URL(s) testée(s), toutes introuvables (404).',
+        { x: coord.xKm, y: coord.yKm, count: urls.length },
+      )
     );
   }
   throw new Error(
-    `Impossible de télécharger la tuile swissSURFACE3D (E${coord.xKm}, N${coord.yKm}) — ${urls.length} URL(s) testée(s). Dernière erreur: ${lastError?.message || 'inconnue'}`
+    translateAppText(
+      'Impossible de télécharger la tuile swissSURFACE3D (E{{x}}, N{{y}}) — {{count}} URL(s) testée(s). Dernière erreur : {{error}}',
+      { x: coord.xKm, y: coord.yKm, count: urls.length, error: lastError?.message || translateAppText('inconnue') },
+    )
   );
 }
 
@@ -648,14 +667,14 @@ async function downloadNzTile(
   signal?: AbortSignal
 ): Promise<ArrayBuffer> {
   throwIfCancelled(signal);
-  onProgress?.({ tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'downloading', message: 'Recherche nuage de points LiDAR Nouvelle-Zélande...' });
+  onProgress?.({ tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'downloading', message: translateAppText('Recherche nuage de points LiDAR Nouvelle-Zélande...') });
 
   const { resolveNzDownloadUrls } = await import('./nz/stacClient');
   throwIfCancelled(signal);
   const urls = await resolveNzDownloadUrls({ eastKm: coord.xKm, northKm: coord.yKm });
   throwIfCancelled(signal);
   if (urls.length === 0) {
-    throw new Error(`Pas de nuage de points LiDAR classifié disponible pour la dalle (${coord.xKm}, ${coord.yKm}). Cette zone n'a pas encore fait l'objet d'un survol LiDAR.`);
+    throw new Error(translateAppText("Pas de nuage de points LiDAR classifié disponible pour la dalle ({{x}}, {{y}}). Cette zone n'a pas encore fait l'objet d'un survol LiDAR.", { x: coord.xKm, y: coord.yKm }));
   }
 
   let lastError: Error | null = null;
@@ -675,7 +694,7 @@ async function downloadNzTile(
           bytesDownloaded: downloadedBuffer.byteLength,
           totalBytes: downloadedBuffer.byteLength,
           phase: 'downloading',
-          message: 'Décompression archive point cloud .laz...',
+          message: translateAppText('Décompression archive point cloud .laz...'),
         });
         lasBuffer = await extractLasFromZip(downloadedBuffer);
       } else {
@@ -684,7 +703,7 @@ async function downloadNzTile(
 
       throwIfCancelled(signal);
       if (!hasValidLasSignature(lasBuffer)) {
-        throw new Error('Fichier nuage de points néo-zélandais corrompu (signature LAS invalide).');
+        throw new Error(translateAppText('Fichier nuage de points néo-zélandais corrompu (signature LAS invalide).'));
       }
 
       onProgress?.({
@@ -692,7 +711,7 @@ async function downloadNzTile(
         bytesDownloaded: lasBuffer.byteLength,
         totalBytes: lasBuffer.byteLength,
         phase: 'downloading',
-        message: 'Sauvegarde en cache local...',
+        message: translateAppText('Sauvegarde en cache local...'),
       });
       try {
         await saveTile(coord, lasBuffer);
@@ -714,7 +733,10 @@ async function downloadNzTile(
   }
 
   throw new Error(
-    `Impossible de télécharger le nuage de points LiDAR Nouvelle-Zélande (${coord.xKm}, ${coord.yKm}) — ${urls.length} URL(s) testée(s). Dernière erreur: ${lastError?.message || 'inconnue'}`
+    translateAppText(
+      'Impossible de télécharger le nuage de points LiDAR Nouvelle-Zélande ({{x}}, {{y}}) — {{count}} URL(s) testée(s). Dernière erreur : {{error}}',
+      { x: coord.xKm, y: coord.yKm, count: urls.length, error: lastError?.message || translateAppText('inconnue') },
+    )
   );
 }
 
@@ -734,7 +756,7 @@ async function downloadJapanTile(
     bytesDownloaded: 0,
     totalBytes: 0,
     phase: 'downloading',
-    message: `Recherche nuage de points LiDAR Japon (Zone ${zone})...`,
+    message: translateAppText('Recherche nuage de points LiDAR Japon (zone {{zone}})...', { zone }),
   });
 
   const { resolveJapanDownloadUrls } = await import('./japan/stacClient');
@@ -748,7 +770,10 @@ async function downloadJapanTile(
 
   if (urls.length === 0) {
     throw new Error(
-      `Pas de nuage de points LiDAR classifié disponible pour la dalle (${coord.xKm}, ${coord.yKm}) en zone JGD2011 ${zone}. Cette zone n'a pas encore fait l'objet d'un relevé ouvert.`
+      translateAppText(
+        "Pas de nuage de points LiDAR classifié disponible pour la dalle ({{x}}, {{y}}) en zone JGD2011 {{zone}}. Cette zone n'a pas encore fait l'objet d'un relevé ouvert.",
+        { x: coord.xKm, y: coord.yKm, zone },
+      )
     );
   }
 
@@ -769,7 +794,7 @@ async function downloadJapanTile(
           bytesDownloaded: downloadedBuffer.byteLength,
           totalBytes: downloadedBuffer.byteLength,
           phase: 'downloading',
-          message: 'Décompression archive point cloud LAS Japon...',
+          message: translateAppText('Décompression archive point cloud LAS Japon...'),
         });
         lasBuffer = await extractLasFromZip(downloadedBuffer);
       } else {
@@ -778,7 +803,7 @@ async function downloadJapanTile(
 
       throwIfCancelled(signal);
       if (!hasValidLasSignature(lasBuffer)) {
-        throw new Error('Fichier nuage de points japonais corrompu (signature LAS invalide).');
+        throw new Error(translateAppText('Fichier nuage de points japonais corrompu (signature LAS invalide).'));
       }
 
       onProgress?.({
@@ -786,7 +811,7 @@ async function downloadJapanTile(
         bytesDownloaded: lasBuffer.byteLength,
         totalBytes: lasBuffer.byteLength,
         phase: 'downloading',
-        message: 'Sauvegarde en cache local...',
+        message: translateAppText('Sauvegarde en cache local...'),
       });
       try {
         await saveTile(coord, lasBuffer);
@@ -808,7 +833,10 @@ async function downloadJapanTile(
   }
 
   throw new Error(
-    `Impossible de télécharger le nuage de points LiDAR Japon (${coord.xKm}, ${coord.yKm}, zone ${zone}) — ${urls.length} URL(s) testée(s). Dernière erreur: ${lastError?.message || 'inconnue'}`
+    translateAppText(
+      'Impossible de télécharger le nuage de points LiDAR Japon ({{x}}, {{y}}, zone {{zone}}) — {{count}} URL(s) testée(s). Dernière erreur : {{error}}',
+      { x: coord.xKm, y: coord.yKm, zone, count: urls.length, error: lastError?.message || translateAppText('inconnue') },
+    )
   );
 }
 

@@ -8,17 +8,24 @@ import '@/shared/styles/dropdown.css';
 import './loading/styles.css';
 import './panel/styles.css';
 import './tileNavigator/styles.css';
+import { createAppTranslationBundle, readStoredAppLocale, translateAppText } from '@/shared/i18n/config';
+import { buildTranslationLookup, observeDomTranslation } from '@/shared/i18n/domTranslation';
 import { LidarRenderer, type HeightmapParams } from './renderer';
 import { CameraController } from './camera';
 import { getTimeZoneForCoordinates, toWgs84 } from '../lib/coordConvert';
-import type { AABB } from './lod/types';
-import { LodManager } from './lod/lodManager';
+import { SceneLod } from './lod/sceneLod';
+import { AdaptivePointBudget } from './lod/lodBudget';
 import { LidarManager } from '../lib/lidarManager';
 import { buildViewerUrl } from '../lib/viewerUrl';
 import {
   createViewerPanel,
   densityScaleToPercent,
+  FIXED_POINT_PX_MAX,
+  FIXED_POINT_PX_MIN,
+  fixedPointPixelsToPercent,
   percentToDensityScale,
+  percentToEdlStrength,
+  percentToFixedPointPixels,
   percentToPointSize,
   POINT_SIZE_MAX,
   POINT_SIZE_MIN,
@@ -37,15 +44,9 @@ import { buildTilePreviewMesh } from './preview/tilePreview';
 import { createViewerLoadingOverlay } from './loading/controller';
 import { loadViewerSceneData } from './session/dataset';
 import { buildTileFileCandidates } from './session/datasetPointCap';
-import {
-  computeSceneBudgetScale,
-  parseViewerParamsFromUrl,
-} from './session/viewerUrlParams';
+import { parseViewerParamsFromUrl } from './session/viewerUrlParams';
 import { ViewerSnowController } from './session/viewerSnowController';
 import {
-  buildOctreeInWorker,
-  buildRGBA,
-  centerPositions,
   explainWorkerError,
   launchWebGLFallback,
   loadTileFromOPFS,
@@ -53,6 +54,13 @@ import {
   setViewerStatus,
   showFatalError,
 } from './runtime';
+
+// --- i18n ---
+// No React here: the viewer's DOM (static HTML + imperative panels) is
+// translated by the same observer as the app, in the locale stored by it.
+const viewerLocale = readStoredAppLocale();
+document.documentElement.lang = viewerLocale;
+observeDomTranslation(document.body, buildTranslationLookup(createAppTranslationBundle(viewerLocale).entries));
 
 // --- DOM refs ---
 const canvas = document.getElementById('canvas') as HTMLCanvasElement;
@@ -94,14 +102,54 @@ function enqueueBackgroundCacheWrite(label: string, task: () => Promise<void>): 
 }
 
 let renderer: LidarRenderer | null = null;
+/** Lowered by the automatic quality downgrade when the GPU cannot keep up. */
+let resolutionScale = 1;
+const MIN_RESOLUTION_SCALE = 0.55;
 
 function resizeCanvas() {
   const dpr = window.devicePixelRatio || 1;
   const maxDim = Math.max(window.innerWidth, window.innerHeight);
   const maxCanvasDim = renderer?.platform?.maxCanvasDim ?? 4096;
-  const effectiveDpr = Math.min(dpr, maxCanvasDim / maxDim);
+  const dprCap = renderer?.platform?.dprCap ?? 1.25;
+  const effectiveDpr = Math.min(dpr, dprCap, maxCanvasDim / maxDim) * resolutionScale;
   canvas.width = Math.floor(window.innerWidth * effectiveDpr);
   canvas.height = Math.floor(window.innerHeight * effectiveDpr);
+}
+
+/** Frames rendered after the camera stops so the LOD reaches its resting quality. */
+const MAX_SETTLE_FRAMES = 240;
+const EDL_DEFAULT_PERCENT = 50;
+
+/** EDL neighbour radius: 1.4 CSS px (Potree default), in canvas pixels. */
+function edlRadiusPx(): number {
+  return 1.4 * (canvas.width / Math.max(1, window.innerWidth));
+}
+const GPU_RETRY_STORAGE_KEY = 'redview-lidar-webgpu-retry-at';
+const GPU_RETRY_WINDOW_MS = 120_000;
+
+/**
+ * Leaves WebGPU after a lost device or an out-of-memory upload. The canvas
+ * already holds a WebGPU context, so the WebGL engine needs a fresh page:
+ * the first loss reloads WebGPU once (tiles come back from the OPFS cache),
+ * a second one within two minutes switches to `?engine=webgl`.
+ */
+function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
+  const url = new URL(window.location.href);
+  let recentRetry = false;
+  try {
+    const last = Number(window.sessionStorage.getItem(GPU_RETRY_STORAGE_KEY) || 0);
+    recentRetry = Date.now() - last < GPU_RETRY_WINDOW_MS;
+    window.sessionStorage.setItem(GPU_RETRY_STORAGE_KEY, String(Date.now()));
+  } catch {
+    recentRetry = true;
+  }
+  if (!allowRetry || recentRetry) {
+    console.warn(`[Viewer] WebGPU failure (${reason}), switching to the WebGL engine.`);
+    url.searchParams.set('engine', 'webgl');
+  } else {
+    console.warn(`[Viewer] WebGPU failure (${reason}), reloading once.`);
+  }
+  window.location.replace(url.toString());
 }
 
 (async () => {
@@ -179,71 +227,100 @@ function resizeCanvas() {
     }
 
     const deviceMemoryGiB = (navigator as MemoryAwareNavigator).deviceMemory;
-    const scene = await loadViewerSceneData(sceneTileCoords, setStatus, {
-      deviceMemoryGiB,
-      gpuInfo: { vendor: pre.vendor, arch: pre.arch, desc: pre.desc },
-    });
-    const pointCloud = scene.pointCloud;
-    const rgba = buildRGBA(pointCloud);
-    const { positions } = centerPositions(pointCloud);
-
-    const cx = (pointCloud.bounds.minX + pointCloud.bounds.maxX) / 2;
-    const cy = (pointCloud.bounds.minY + pointCloud.bounds.maxY) / 2;
-    const cz = (pointCloud.bounds.minZ + pointCloud.bounds.maxZ) / 2;
-    const centeredBounds: AABB = {
-      minX: pointCloud.bounds.minX - cx,
-      maxX: pointCloud.bounds.maxX - cx,
-      minY: (pointCloud.bounds.minZ - (pointCloud.bounds.minZ + pointCloud.bounds.maxZ) / 2),
-      maxY: (pointCloud.bounds.maxZ - (pointCloud.bounds.minZ + pointCloud.bounds.maxZ) / 2),
-      minZ: -(pointCloud.bounds.maxY - cy),
-      maxZ: -(pointCloud.bounds.minY - cy),
-    };
-
-    // Octree build (worker), terrain heightmap (worker) and WebGPU init run
-    // concurrently; none of them depends on the others.
-    setStatus('Construction octree LOD...', 84);
-    const octreePromise = buildOctreeInWorker(positions, rgba, centeredBounds, setStatus);
-    octreePromise.catch(() => undefined);
-
+    // Tiles open from their LOD cache (header + node table) or are decoded
+    // once to build it; WebGPU init runs meanwhile.
     resizeCanvas();
-    renderer = new LidarRenderer();
-    await renderer.init(canvas);
+    const rendererReady = (async () => {
+      const instance = new LidarRenderer();
+      await instance.init(canvas);
+      return instance;
+    })();
+    rendererReady.catch(() => undefined);
+    const scene = await loadViewerSceneData(sceneTileCoords, setStatus, { deviceMemoryGiB });
+    const sceneBounds = scene.bounds;
+    /** Bounds-only view of the scene for the overlay controllers. */
+    const sceneInfo = { bounds: sceneBounds };
+
+    const cx = (sceneBounds.minX + sceneBounds.maxX) / 2;
+    const cy = (sceneBounds.minY + sceneBounds.maxY) / 2;
+    const cz = (sceneBounds.minZ + sceneBounds.maxZ) / 2;
+
+    setStatus('Initialisation WebGPU...', 86);
+    renderer = await rendererReady;
+    renderer.onDeviceLost = (info) => recoverFromGpuFailure(`device lost: ${info.message || info.reason}`, true);
     resizeCanvas();
     renderer.resize(canvas.width, canvas.height);
 
     const terrainMesh = await scene.terrainMesh;
 
     renderer.centerAltitude = cz;
-    renderer.setMaxAltitude(pointCloud.bounds.maxZ);
-    const rangeX = pointCloud.bounds.maxX - pointCloud.bounds.minX;
-    const rangeY = pointCloud.bounds.maxY - pointCloud.bounds.minY;
+    renderer.setMaxAltitude(sceneBounds.maxZ);
+    const rangeX = sceneBounds.maxX - sceneBounds.minX;
+    const rangeY = sceneBounds.maxY - sceneBounds.minY;
     renderer.setHeightmap({
       data: terrainMesh.heightGrid,
       width: terrainMesh.gridWidth,
       height: terrainMesh.gridHeight,
-      originX: pointCloud.bounds.minX - cx,
-      originZ: -(pointCloud.bounds.maxY - cy),
+      originX: sceneBounds.minX - cx,
+      originZ: -(sceneBounds.maxY - cy),
       scaleX: rangeX,
       scaleZ: rangeY,
     } as HeightmapParams);
 
-    const extent = Math.max(rangeX, rangeY, pointCloud.bounds.maxZ - pointCloud.bounds.minZ);
-    renderer.pointSize = 0.59;
+    const extent = Math.max(rangeX, rangeY, sceneBounds.maxZ - sceneBounds.minZ);
+    // One diameter for every point: ≈ 1.5× the mean ground spacing (≈0.25 m
+    // for an IGN tile) closes the gaps at full density without smearing.
+    const meanSpacing = Math.sqrt((rangeX * rangeY) / Math.max(1, scene.totalPoints));
+    renderer.pointSize = Math.min(0.8, Math.max(0.1, meanSpacing * 1.5));
     renderer.lodThreshold = Math.max(50, extent * 0.5);
-
-    const octree = await octreePromise;
-    setStatus('Upload GPU (octree)...', 92);
-    renderer.setOctreeData(octree);
+    renderer.setEdl(false, percentToEdlStrength(EDL_DEFAULT_PERCENT), edlRadiusPx());
     renderer.setMesh(terrainMesh.vertices, terrainMesh.colors, terrainMesh.indices);
 
     const camera = new CameraController(canvas);
     camera.lookAt(0, 0, 0, extent * 0.6);
 
-    const lodManager = new LodManager();
-    lodManager.setOctree(octree);
-    if (renderer.platform) lodManager.applyPlatformProfile(renderer.platform);
-    const sceneBudgetScale = computeSceneBudgetScale(sceneTileCoords.length, pointCloud.count, renderer.getPointChunkCapacity());
-    lodManager.setSceneBudgetScale(sceneBudgetScale);
+    const platform = renderer.platform!;
+    // Without GPU timestamps the measured cost includes the presentation wait
+    // (≈ one vsync): aim at 30 fps worth of latency instead of 60.
+    const pointBudget = new AdaptivePointBudget(
+      renderer.hasPreciseGpuTiming() ? platform : { ...platform, targetFrameMs: platform.targetFrameMs * 2 },
+    );
+    let requestRenderRef: () => void = () => undefined;
+    const sceneLod = new SceneLod(scene.tiles, { x: cx, y: cy, z: cz }, {
+      pointBudget: pointBudget.pointBudget,
+      poolBudget: platform.poolBudget,
+      maxResidentNodes: renderer.getNodeCapacity(),
+      uploader: renderer,
+      onNodeResident: () => requestRenderRef(),
+    });
+
+    if (import.meta.env.DEV) {
+      (window as unknown as { __rvLidar?: unknown }).__rvLidar = { sceneLod, pointBudget, renderer };
+    }
+
+    // Automatic downgrade for GPUs too slow even at the minimum point budget:
+    // MSAA off first, then the render resolution in steps.
+    let degrading = false;
+    const degradeQuality = async (): Promise<void> => {
+      if (!renderer) return;
+      degrading = true;
+      try {
+        let changed = await renderer.disableMsaa();
+        if (!changed && resolutionScale > MIN_RESOLUTION_SCALE) {
+          resolutionScale = Math.max(MIN_RESOLUTION_SCALE, resolutionScale * 0.8);
+          resizeCanvas();
+          renderer.resize(canvas.width, canvas.height);
+          applyEdlRef();
+          changed = true;
+          console.log(`[Viewer] Render resolution lowered to ${(resolutionScale * 100).toFixed(0)} % to keep the frame rate.`);
+        }
+        if (changed) pointBudget.resetMeasurements();
+      } finally {
+        degrading = false;
+        requestRenderRef();
+      }
+    };
+    let applyEdlRef: () => void = () => undefined;
 
     let showLodStats = true;
     let lastCpuFrameMs = 16.6;
@@ -252,9 +329,11 @@ function resizeCanvas() {
     let idleReset = true;
     let cleanedUp = false;
     let lastStatsUpdateTime = 0;
+    let settleFramesLeft = MAX_SETTLE_FRAMES;
 
     const requestRender = () => {
       renderRequested = true;
+      settleFramesLeft = MAX_SETTLE_FRAMES;
       if (cleanedUp || document.hidden || frameHandle != null) return;
       frameHandle = window.requestAnimationFrame(renderLoop);
     };
@@ -266,53 +345,82 @@ function resizeCanvas() {
         return;
       }
       const frameStart = performance.now();
-      const budgetSampleMs = idleReset ? Math.max(16.6, lastCpuFrameMs) : lastCpuFrameMs;
+      // GPU time drives the budget; the JS encoding time only covers the CPU side.
+      const frameCostMs = Math.max(lastCpuFrameMs, renderer.getGpuFrameMs());
+      const budgetSampleMs = idleReset ? Math.max(16.6, frameCostMs) : frameCostMs;
       idleReset = false;
       renderRequested = false;
 
-      renderer.updateCamera(camera.getViewMatrix(), camera.getProjMatrix(), camera.getEye());
+      renderer.updateCamera(camera.getViewMatrix(), camera.getRenderProjMatrix(), camera.getEye());
 
+      pointBudget.sample(budgetSampleMs);
+      if (pointBudget.isStarved() && !degrading) void degradeQuality();
+      sceneLod.setPointBudget(pointBudget.pointBudget);
       const [cpx, cpy, cpz] = renderer.lastCamPos;
-      const [cfx, cfy, cfz] = renderer.lastCamFwd;
-      lodManager.update(renderer.lastViewProj, cpx, cpy, cpz, cfx, cfy, cfz, canvas.width, canvas.height, budgetSampleMs);
-
-      const voxelSize = lodManager.getVoxelPointSize(renderer.pointSize);
-      renderer.renderLOD(lodManager.getVisibleNodes(), voxelSize);
+      sceneLod.update(renderer.lastViewProj, renderer.lastProjScaleY, cpx, cpy, cpz, canvas.height);
+      renderer.renderScene(sceneLod.getSelectedNodes());
+      const lodStats = sceneLod.getStats();
+      // Budget growth only matters while it limits the selection.
+      const budgetSettled = pointBudget.isSettled() || lodStats.selectedPoints < lodStats.pointBudget * 0.98;
+      const keepSettling = !renderRequested && (!budgetSettled || !sceneLod.isIdle()) && settleFramesLeft > 0;
+      const goingIdle = !renderRequested && !keepSettling;
 
       const now = performance.now();
-      if (now - lastStatsUpdateTime >= 100) {
+      // The last frame before idling always refreshes the stats (no stale "loading").
+      if (now - lastStatsUpdateTime >= 100 || goingIdle) {
         lastStatsUpdateTime = now;
-        const s = lodManager.stats;
         const renderStats = renderer.getLastRenderStats();
-        const gpu = renderer.platform?.isApple ? ' [Apple]' : '';
+        const gpuMs = renderer.getGpuFrameMs();
         if (showLodStats) {
           statsEl.textContent =
-            `${s.visiblePoints.toLocaleString()} / ${s.totalPoints.toLocaleString()} pts` +
-            ` · ${s.fps} fps · budget ${(s.pointBudget / 1000).toFixed(0)}K` +
-            ` · ${s.visibleNodes} nodes · cull ${s.frustumCulled} · lod ${s.lodSkipped}` +
-            ` · draws ${renderStats.drawCalls} · batches ${renderStats.leafBatches + renderStats.voxelBatches}${renderStats.gpuDrivenDensity ? ' gpu' : ''}` +
-            ` · qual ${(s.qualityScale * 100).toFixed(0)}% · move ${(s.motionPressure * 100).toFixed(0)}%` +
-            ` · voxel ${renderer.pointSize.toFixed(2)}m` +
-            ` · ${sceneTileCoords.length} tuile(s) · ${canvas.width}×${canvas.height}${gpu}`;
+            `${lodStats.selectedPoints.toLocaleString()} / ${lodStats.totalPoints.toLocaleString()} pts` +
+            ` · ${pointBudget.fps} fps${gpuMs > 0 ? ` · GPU ${gpuMs.toFixed(1)} ms` : ''}` +
+            ` · budget ${(lodStats.pointBudget / 1e6).toFixed(1)}M` +
+            ` · ${lodStats.selectedNodes}/${lodStats.totalNodes} nodes · draws ${renderStats.drawCalls}` +
+            ` · GPU ${(lodStats.residentPoints / 1e6).toFixed(1)}/${(lodStats.poolBudget / 1e6).toFixed(0)}M pts` +
+            (lodStats.pendingLoads > 0 ? ` · ${translateAppText('chargement {{count}}', { count: lodStats.pendingLoads })}` : '') +
+            ` · ${translateAppText('{{count}} tuile(s)', { count: sceneTileCoords.length })}` +
+            ` · ${canvas.width}×${canvas.height} ${platform.tier}`;
         } else {
-          statsEl.textContent = `${pointCloud.count.toLocaleString()} pts · voxel ${renderer.pointSize.toFixed(2)}m · ${scene.tileFileLabel}`;
+          statsEl.textContent = `${scene.totalPoints.toLocaleString()} pts · ${scene.tileFileLabel}`;
         }
       }
 
       lastCpuFrameMs = Math.max(1, performance.now() - frameStart);
-      if (renderRequested) requestRender();
-      else idleReset = true;
+      if (renderRequested) {
+        requestRender();
+      } else if (keepSettling) {
+        // Camera is still, but nodes are still streaming in or the budget is adapting.
+        settleFramesLeft -= 1;
+        frameHandle = window.requestAnimationFrame(renderLoop);
+      } else {
+        idleReset = true;
+      }
     };
+    requestRenderRef = requestRender;
 
     const [lon, lat] = toWgs84(cx, cy, crs);
     const snowController = new ViewerSnowController();
+
+    let lastFixedPointPixels = 2;
+    // EDL darkens every depth step (outlines around points and against the
+    // sky); it stays available but off by default.
+    let edlEnabled = false;
+    let edlStrengthPercent = EDL_DEFAULT_PERCENT;
+    const applyEdl = () => renderer?.setEdl(edlEnabled, percentToEdlStrength(edlStrengthPercent), edlRadiusPx());
+    applyEdlRef = applyEdl;
+    const pointSizeSliderPercent = (r: LidarRenderer) => (r.fixedPointPixels > 0
+      ? fixedPointPixelsToPercent(r.fixedPointPixels)
+      : pointSizeToPercent(r.pointSize));
 
     const panel = createViewerPanel({
       tileLabel: panelTileLabel,
       locationLabel: buildTileLocationLabel(lon, lat),
       googleMapsUrl: buildGoogleMapsTileCenterUrl(lon, lat),
       pointSizePercent: pointSizeToPercent(renderer.pointSize),
-      densityPercent: densityScaleToPercent(lodManager.getUserDensityScale()),
+      densityPercent: densityScaleToPercent(pointBudget.userScale),
+      edlEnabled,
+      edlStrengthPercent,
       engineMode: 'webgpu',
       engineOptions: [
         { key: 'webgpu' },
@@ -323,11 +431,29 @@ function resizeCanvas() {
       ],
       onPointSizeChange: (percent) => {
         if (!renderer) return;
-        renderer.pointSize = percentToPointSize(percent);
+        if (renderer.fixedPointPixels > 0) renderer.fixedPointPixels = percentToFixedPointPixels(percent);
+        else renderer.pointSize = percentToPointSize(percent);
+        requestRender();
+      },
+      onFixedSizeChange: (fixed) => {
+        if (!renderer) return;
+        if (!fixed && renderer.fixedPointPixels > 0) lastFixedPointPixels = renderer.fixedPointPixels;
+        renderer.fixedPointPixels = fixed ? lastFixedPointPixels : 0;
+        panel.setPointSizePercent(pointSizeSliderPercent(renderer));
+        requestRender();
+      },
+      onEdlChange: (enabled, strengthPercent) => {
+        edlEnabled = enabled;
+        edlStrengthPercent = strengthPercent;
+        applyEdl();
+        requestRender();
+      },
+      onColorModeChange: (mode) => {
+        renderer?.setColorMode(mode);
         requestRender();
       },
       onDensityChange: (percent) => {
-        lodManager.setUserDensityScale(percentToDensityScale(percent));
+        pointBudget.userScale = percentToDensityScale(percent);
         requestRender();
       },
       onEngineModeChange: (mode) => switchViewerEngine(mode),
@@ -335,7 +461,7 @@ function resizeCanvas() {
         void snowController.handleSnowModeChange(
           mode,
           renderer,
-          pointCloud,
+          sceneInfo,
           terrainMesh,
           crs,
           cx,
@@ -356,7 +482,7 @@ function resizeCanvas() {
     const slopeController = new ViewerSlopeController(renderer, () => requestRender());
     const altitudeController = new ViewerAltitudeController(renderer, () => requestRender());
     const sunlightController = new SunlightController({
-      bounds: pointCloud.bounds,
+      bounds: sceneBounds,
       centerX: cx,
       centerY: cy,
       centerZ: cz,
@@ -371,7 +497,7 @@ function resizeCanvas() {
 
     const routeController = new ViewerRouteController({
       sceneParams: {
-        bounds: pointCloud.bounds,
+        bounds: sceneBounds,
         crs,
         centerX: cx,
         centerY: cy,
@@ -430,7 +556,7 @@ function resizeCanvas() {
           renderer.clearPreviewMesh();
           return;
         }
-        const previewMesh = buildTilePreviewMesh(coord, pointCloud.bounds, terrainMesh);
+        const previewMesh = buildTilePreviewMesh(coord, sceneBounds, terrainMesh);
         renderer.setPreviewMesh(previewMesh.vertices, previewMesh.colors, previewMesh.indices);
         requestRender();
       },
@@ -444,6 +570,7 @@ function resizeCanvas() {
     for (const write of scene.cacheWrites) {
       enqueueBackgroundCacheWrite(write.label, write.task);
     }
+    scene.cacheWrites.length = 0;
 
     camera.onChange = () => {
       requestRender();
@@ -455,6 +582,7 @@ function resizeCanvas() {
       if (!renderer) return;
       resizeCanvas();
       renderer.resize(canvas.width, canvas.height);
+      applyEdl();
       routeController.updateOverlay();
       requestRender();
     };
@@ -470,9 +598,12 @@ function resizeCanvas() {
         routeController.setEditMode(!curState.editMode);
         return;
       }
-      if (e.key === '+' || e.key === '=') renderer.pointSize *= 1.2;
-      if (e.key === '-' || e.key === '_') renderer.pointSize /= 1.2;
-      renderer.pointSize = Math.max(POINT_SIZE_MIN, Math.min(POINT_SIZE_MAX, renderer.pointSize));
+      const sizeStep = e.key === '+' || e.key === '=' ? 1.2 : e.key === '-' || e.key === '_' ? 1 / 1.2 : 1;
+      if (renderer.fixedPointPixels > 0) {
+        renderer.fixedPointPixels = Math.max(FIXED_POINT_PX_MIN, Math.min(FIXED_POINT_PX_MAX, renderer.fixedPointPixels * sizeStep));
+      } else {
+        renderer.pointSize = Math.max(POINT_SIZE_MIN, Math.min(POINT_SIZE_MAX, renderer.pointSize * sizeStep));
+      }
       if (e.key === 't' || e.key === 'T') renderer.terrainVisible = !renderer.terrainVisible;
       if (e.key === 'l' || e.key === 'L') {
         renderer.lodThreshold = renderer.lodThreshold > 0 ? 0 : Math.max(50, extent * 0.5);
@@ -487,7 +618,7 @@ function resizeCanvas() {
         void snowController.handleSnowModeChange(
           nextMode,
           renderer,
-          pointCloud,
+          sceneInfo,
           terrainMesh,
           crs,
           cx,
@@ -497,7 +628,7 @@ function resizeCanvas() {
           requestRender,
         );
       }
-      panel.setPointSizePercent(pointSizeToPercent(renderer.pointSize));
+      panel.setPointSizePercent(pointSizeSliderPercent(renderer));
       requestRender();
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -533,6 +664,7 @@ function resizeCanvas() {
       routeController.destroy();
       panel.destroy();
       rightPanel.destroy();
+      sceneLod.destroy();
       renderer?.destroy();
       renderer = null;
     };

@@ -10,7 +10,7 @@ const PLACEHOLDER = '--';
 export const HEADER_CELLS = [
   'Distance',
   'Durée',
-  'Dénivelé /',
+  'Dénivelé +',
   'Dénivelé -',
   'Pente moyenne',
   'Tarmac',

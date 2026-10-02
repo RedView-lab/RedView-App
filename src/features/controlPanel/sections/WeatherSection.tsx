@@ -51,7 +51,7 @@ interface Props {
 }
 
 const TABS: { value: WeatherTab; label: string }[] = [
-  { value: 'forecast', label: 'Forecast (+2j)' },
+  { value: 'forecast', label: 'Prévisions (+2 j)' },
   { value: 'trends', label: 'Tendances' },
 ];
 

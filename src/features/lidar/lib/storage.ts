@@ -1,10 +1,11 @@
-import type { TileCoord, CachedTileInfo, PointCloudData, DetectedCrs } from '../types';
+import type { TileCoord, CachedTileInfo } from '../types';
+import { translateAppText } from '@/shared/i18n/config';
 import { buildTileFileName } from './coordConvert';
+import { LIDAR_OPFS_DIR, lodCacheKey } from './lodCache';
 
-const LIDAR_DIR = 'lidar-hd';
+const LIDAR_DIR = LIDAR_OPFS_DIR;
 const CACHE_NAME = 'redview-lidar-hd-v1';
 const inMemoryTileCache = new Map<string, ArrayBuffer>();
-const MAX_COLORIZED_CACHE_BYTES = 512 * 1024 * 1024;
 const MAX_TERRAIN_CACHE_BYTES = 256 * 1024 * 1024;
 
 let opfsAvailable: boolean | null = null;
@@ -77,7 +78,7 @@ export function hasValidZipSignature(data: ArrayBuffer): boolean {
 
 export async function saveTile(coord: TileCoord, data: ArrayBuffer): Promise<void> {
   if (!hasValidLasSignature(data)) {
-    throw new Error('Tuile LiDAR corrompue: signature LAS/COPC invalide.');
+    throw new Error(translateAppText('Tuile LiDAR corrompue : signature LAS/COPC invalide.'));
   }
   const fileName = tileKey(coord);
 
@@ -193,7 +194,7 @@ export async function hasTile(coord: TileCoord): Promise<boolean> {
 
 export async function deleteTile(coord: TileCoord): Promise<void> {
   const fileName = tileKey(coord);
-  const companion = colorizedKey(fileName);
+  const companion = lodCacheKey(fileName);
   const terrain = terrainKey(fileName);
 
   // 1. Delete from OPFS
@@ -202,6 +203,7 @@ export async function deleteTile(coord: TileCoord): Promise<void> {
     if (dir) {
       await removeFileIfPresent(dir, companion);
       await removeFileIfPresent(dir, terrain);
+      await removeLegacyDerivedCaches(dir, fileName);
       await dir.removeEntry(fileName);
     }
   } catch (err: any) {
@@ -335,101 +337,27 @@ export async function clearAllTiles(): Promise<void> {
   inMemoryTileCache.clear();
 }
 
-// --- Colorized point cloud cache ---
+// --- Derived caches ---
 
-function colorizedKey(baseName: string): string {
-  return baseName.replace(/(\.copc)?\.laz$/, '.colorized_v3');
+// Superseded per-tile caches: v3 stored absolute float32 positions (northings
+// quantised to 0.5 m), v4 whole decoded clouds; the LOD cache (lodCache.ts)
+// replaces both, and terrain v2 meshes were built from quantised points.
+const LEGACY_DERIVED_SUFFIXES = ['.colorized_v3', '.colorized_v4', '.terrain_hd_v2'] as const;
+
+function legacyDerivedKeys(baseName: string): string[] {
+  return LEGACY_DERIVED_SUFFIXES.map((suffix) => baseName.replace(/(\.copc)?\.laz$/, suffix));
 }
 
-export async function saveColorizedData(lazFileName: string, pc: PointCloudData): Promise<void> {
-  const dir = await getLidarDir();
-  if (!dir) return;
-  const fileName = colorizedKey(lazFileName);
-  const crsBytes = new TextEncoder().encode(pc.crs);
-
-  const headerSize = 4 + 48 + 1 + crsBytes.length;
-  const posBytes = pc.count * 12;
-  const colBytes = pc.count * 3;
-  const clsBytes = pc.count;
-  const totalSize = headerSize + posBytes + colBytes + clsBytes;
-
-  if (totalSize > MAX_COLORIZED_CACHE_BYTES) {
-    console.log(`[LiDAR storage] Skip colorized cache for ${lazFileName}: ${(totalSize / 1024 / 1024).toFixed(1)} MB exceeds cap.`);
-    await removeFileIfPresent(dir, fileName);
-    return;
-  }
-
-  const header = new ArrayBuffer(headerSize);
-  const view = new DataView(header);
-  let offset = 0;
-
-  view.setUint32(offset, pc.count, true); offset += 4;
-  view.setFloat64(offset, pc.bounds.minX, true); offset += 8;
-  view.setFloat64(offset, pc.bounds.minY, true); offset += 8;
-  view.setFloat64(offset, pc.bounds.minZ, true); offset += 8;
-  view.setFloat64(offset, pc.bounds.maxX, true); offset += 8;
-  view.setFloat64(offset, pc.bounds.maxY, true); offset += 8;
-  view.setFloat64(offset, pc.bounds.maxZ, true); offset += 8;
-  view.setUint8(offset, crsBytes.length); offset += 1;
-  new Uint8Array(header, offset, crsBytes.length).set(crsBytes);
-
-  try {
-    const fileHandle = await dir.getFileHandle(fileName, { create: true });
-    const writable = await fileHandle.createWritable();
-    try {
-      await writeBufferChunk(writable, header);
-      await writeBufferChunk(writable, new Uint8Array(pc.positions.buffer, pc.positions.byteOffset, posBytes));
-      await writeBufferChunk(writable, pc.colors.subarray(0, colBytes));
-      await writeBufferChunk(writable, pc.classifications.subarray(0, clsBytes));
-    } finally {
-      await writable.close();
-    }
-  } catch (err) {
-    console.warn(`[LiDAR storage] Failed to write colorized cache:`, err);
-  }
-}
-
-export async function loadColorizedData(lazFileName: string): Promise<PointCloudData | null> {
-  try {
-    const dir = await getLidarDir();
-    if (!dir) return null;
-    const fileName = colorizedKey(lazFileName);
-    const fileHandle = await dir.getFileHandle(fileName);
-    const file = await fileHandle.getFile();
-    if (file.size > MAX_COLORIZED_CACHE_BYTES) {
-      console.log(`[LiDAR storage] Ignore oversized colorized cache for ${lazFileName}: ${(file.size / 1024 / 1024).toFixed(1)} MB.`);
-      await removeFileIfPresent(dir, fileName);
-      return null;
-    }
-    const buf = await file.arrayBuffer();
-    const view = new DataView(buf);
-    let offset = 0;
-
-    const count = view.getUint32(offset, true); offset += 4;
-    const minX = view.getFloat64(offset, true); offset += 8;
-    const minY = view.getFloat64(offset, true); offset += 8;
-    const minZ = view.getFloat64(offset, true); offset += 8;
-    const maxX = view.getFloat64(offset, true); offset += 8;
-    const maxY = view.getFloat64(offset, true); offset += 8;
-    const maxZ = view.getFloat64(offset, true); offset += 8;
-    const crsLen = view.getUint8(offset); offset += 1;
-    const crs = new TextDecoder().decode(new Uint8Array(buf, offset, crsLen)) as DetectedCrs; offset += crsLen;
-
-    const positions = new Float32Array(count * 3);
-    positions.set(new Float32Array(buf.slice(offset, offset + count * 12))); offset += count * 12;
-    const colors = new Uint8Array(buf, offset, count * 3); offset += count * 3;
-    const classifications = new Uint8Array(buf, offset, count);
-
-    return { positions, colors, classifications, count, bounds: { minX, minY, minZ, maxX, maxY, maxZ }, crs };
-  } catch {
-    return null;
+async function removeLegacyDerivedCaches(dir: FileSystemDirectoryHandle | null, lazFileName: string): Promise<void> {
+  for (const key of legacyDerivedKeys(lazFileName)) {
+    await removeFileIfPresent(dir, key);
   }
 }
 
 // --- Terrain mesh cache ---
 
 function terrainKey(baseName: string): string {
-  return baseName.replace(/\.copc\.laz$/, '.terrain_hd_v2');
+  return baseName.replace(/\.copc\.laz$/, '.terrain_hd_v3');
 }
 
 export interface TerrainCache {
@@ -447,6 +375,7 @@ export async function saveTerrainData(lazFileName: string, mesh: TerrainCache): 
   const dir = await getLidarDir();
   if (!dir) return;
   const fileName = terrainKey(lazFileName);
+  await removeLegacyDerivedCaches(dir, lazFileName);
   const headerSize = 16;
   const vertBytes = mesh.vertexCount * 24;
   const colBytes = mesh.vertexCount * 4;

@@ -84,7 +84,7 @@ export function TimelineEventCard({
   const title =
     event.item.kind === 'pause' && event.item.durationMin
       ? formatPauseDuration(event.item.durationMin)
-      : event.item.label || 'Point sans nom';
+      : event.item.label || t('Point sans nom');
 
   const eventStyle = {
     top: previewEvent.topPx,

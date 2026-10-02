@@ -1,3 +1,5 @@
+import { translateAppText } from '@/shared/i18n';
+
 interface ProjectRouteTarget {
   id: string;
   name: string;
@@ -48,7 +50,7 @@ export function replaceProjectLocation(project: ProjectRouteTarget | null): void
   if (typeof document !== 'undefined') {
     document.title = project?.name && project.name !== 'project'
       ? `${project.name} · RedView`
-      : 'RedView — Cartographie 3D Haute Résolution & LiDAR Outdoor';
+      : translateAppText('RedView — Cartographie 3D Haute Résolution & LiDAR Outdoor');
   }
   if (window.location.pathname === nextPath) return;
   window.history.replaceState(null, '', nextPath);

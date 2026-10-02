@@ -1,4 +1,5 @@
 import { OPENMETEO_FORECAST_URL } from '@/features/weather/lib/openMeteoConfig';
+import { readDocumentAppLocale, translateAppText } from '@/shared/i18n';
 import type {
   MapContextMenuOverlayContext,
   MapContextMenuOverlayDetail,
@@ -34,16 +35,18 @@ export function formatRain(value: number | null | undefined): string | null {
 
 export function formatHumidity(value: number | null | undefined): string | null {
   if (!Number.isFinite(value)) return null;
-  return `${Math.round(Number(value))}% humidité`;
+  return translateAppText('{{value}}% humidité', { value: Math.round(Number(value)) });
 }
 
 export function formatCloudCover(value: number | null | undefined): string | null {
   if (!Number.isFinite(value)) return null;
-  return `${Math.round(Number(value))}% nuages`;
+  return translateAppText('{{value}}% nuages', { value: Math.round(Number(value)) });
 }
 
 export function formatWindDirection(degrees: number): string {
-  const headings = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
+  const headings = readDocumentAppLocale() === 'en'
+    ? ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+    : ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
   const index = Math.round((((degrees % 360) + 360) % 360) / 45) % headings.length;
   return headings[index];
 }
@@ -57,7 +60,7 @@ export function formatWindLabel(
   const speedKmh = Math.round(Number(speed) * 3.6);
   const dirLabel = Number.isFinite(direction) ? ` ${formatWindDirection(Number(direction))}` : '';
   const gustsKmh = Number.isFinite(gusts) ? Math.round(Number(gusts) * 3.6) : null;
-  const gustsLabel = gustsKmh && gustsKmh > speedKmh + 4 ? ` (raf. ${gustsKmh})` : '';
+  const gustsLabel = gustsKmh && gustsKmh > speedKmh + 4 ? ` ${translateAppText('(raf. {{value}})', { value: gustsKmh })}` : '';
   return `${speedKmh} km/h${dirLabel}${gustsLabel}`;
 }
 
@@ -155,7 +158,10 @@ export async function fetchOverlayDetails(
         id: 'sunlight',
         kind: 'sunlight',
         icon: 'sun',
-        label: [sunrise ? `Lever ${sunrise}` : null, sunset ? `Coucher ${sunset}` : null].filter(Boolean).join('  '),
+        label: [
+          sunrise ? translateAppText('Lever {{time}}', { time: sunrise }) : null,
+          sunset ? translateAppText('Coucher {{time}}', { time: sunset }) : null,
+        ].filter(Boolean).join('  '),
       });
     }
   }
@@ -169,7 +175,7 @@ export async function fetchOverlayDetails(
           case 'feelsLike':
             return payload.hourly?.apparent_temperature?.[0] == null
               ? null
-              : `Ressenti ${formatTemperature(payload.hourly.apparent_temperature[0])}`;
+              : translateAppText('Ressenti {{value}}', { value: formatTemperature(payload.hourly.apparent_temperature[0]) ?? '' });
           case 'rain':
             return formatRain(payload.hourly?.precipitation?.[0]);
           case 'cloudCover':

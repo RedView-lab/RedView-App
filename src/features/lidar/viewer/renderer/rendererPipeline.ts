@@ -1,5 +1,18 @@
-import { choosePointShaderVariant } from './platform';
-import { ROUTE_SHADER, SUN_DISC_SHADER, TERRAIN_SHADER, TRAJECTORY_SHADER } from './shaders';
+import { LOD_POINT_STRIDE } from '../lod/lodTile';
+import {
+  EDL_SHADER,
+  EDL_SHADER_MSAA,
+  NODE_UNIFORM_BYTES,
+  POINT_SHADER,
+  POINT_SHADING_SHADER,
+  ROUTE_SHADER,
+  SUN_DISC_SHADER,
+  TERRAIN_SHADER,
+  TRAJECTORY_SHADER,
+} from './shaders';
+
+/** Reversed-Z (cleared to 0, `greater`): float depth keeps precision at every distance. */
+export const SCENE_DEPTH_FORMAT: GPUTextureFormat = 'depth32float';
 
 export interface RendererPipelines {
   pointPipeline: GPURenderPipeline;
@@ -8,232 +21,217 @@ export interface RendererPipelines {
   trajectoryPipeline: GPURenderPipeline;
   sunDiscPipeline: GPURenderPipeline;
   routePipeline: GPURenderPipeline;
-  pointBindGroupLayout: GPUBindGroupLayout;
-  terrainBindGroupLayout: GPUBindGroupLayout;
+  edlPipeline: GPURenderPipeline;
+  shadingPipeline: GPUComputePipeline;
+  sceneBindGroupLayout: GPUBindGroupLayout;
+  pointParamsBindGroupLayout: GPUBindGroupLayout;
+  /** Group 2 of the point pipeline: per-node uniform, dynamic offset. */
+  nodeBindGroupLayout: GPUBindGroupLayout;
+  shadingBindGroupLayout: GPUBindGroupLayout;
+  edlBindGroupLayout: GPUBindGroupLayout;
 }
 
+const ALL_STAGES = GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE;
+
+const ALPHA_BLEND: GPUBlendState = {
+  color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+  alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+};
+
+const ADDITIVE_BLEND: GPUBlendState = {
+  color: { srcFactor: 'src-alpha', dstFactor: 'one', operation: 'add' },
+  alpha: { srcFactor: 'zero', dstFactor: 'one', operation: 'add' },
+};
+
+const TERRAIN_VERTEX_BUFFERS: GPUVertexBufferLayout[] = [
+  {
+    arrayStride: 24,
+    stepMode: 'vertex',
+    attributes: [
+      { shaderLocation: 0, offset: 0, format: 'float32x3' },
+      { shaderLocation: 1, offset: 12, format: 'float32x3' },
+    ],
+  },
+  { arrayStride: 4, stepMode: 'vertex', attributes: [{ shaderLocation: 2, offset: 0, format: 'unorm8x4' }] },
+];
+
+function depthState(compare: GPUCompareFunction, write: boolean): GPUDepthStencilState {
+  return { format: SCENE_DEPTH_FORMAT, depthCompare: compare, depthWriteEnabled: write };
+}
+
+type SharedLayouts = Pick<
+  RendererPipelines,
+  'sceneBindGroupLayout' | 'pointParamsBindGroupLayout' | 'nodeBindGroupLayout' | 'shadingBindGroupLayout'
+>;
+
+/**
+ * @param reuse layouts of a previous set (e.g. when MSAA is switched off at
+ *   runtime) so bind groups created against them stay valid.
+ */
 export async function createRendererPipelines(
   device: GPUDevice,
   format: GPUTextureFormat,
-  isApple: boolean,
-  hasF32Filter: boolean,
+  sampleCount: number,
+  reuse?: SharedLayouts,
 ): Promise<RendererPipelines> {
-  const pointBindGroupLayout = device.createBindGroupLayout({
+  const sceneBindGroupLayout = reuse?.sceneBindGroupLayout ?? device.createBindGroupLayout({
     entries: [
-      { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
-      { binding: 1, visibility: GPUShaderStage.VERTEX, texture: { sampleType: hasF32Filter ? 'float' : 'unfilterable-float' } },
-      { binding: 2, visibility: GPUShaderStage.VERTEX, sampler: { type: hasF32Filter ? 'filtering' : 'non-filtering' } },
-      { binding: 3, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
-      { binding: 4, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
-      { binding: 5, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
-      { binding: 6, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
-      { binding: 7, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
-      { binding: 8, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
-      { binding: 9, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
+      { binding: 0, visibility: ALL_STAGES, buffer: { type: 'uniform' } },
+      { binding: 1, visibility: ALL_STAGES, texture: { sampleType: 'unfilterable-float' } },
+      { binding: 3, visibility: ALL_STAGES, texture: { sampleType: 'unfilterable-float' } },
+      { binding: 4, visibility: ALL_STAGES, texture: { sampleType: 'float' } },
+      { binding: 5, visibility: ALL_STAGES, sampler: { type: 'filtering' } },
+      { binding: 6, visibility: ALL_STAGES, texture: { sampleType: 'float' } },
+      { binding: 7, visibility: ALL_STAGES, sampler: { type: 'filtering' } },
+      { binding: 8, visibility: ALL_STAGES, texture: { sampleType: 'unfilterable-float' } },
+      { binding: 9, visibility: ALL_STAGES, texture: { sampleType: 'unfilterable-float' } },
     ],
   });
 
-  const terrainBindGroupLayout = device.createBindGroupLayout({
+  const pointParamsBindGroupLayout = reuse?.pointParamsBindGroupLayout ?? device.createBindGroupLayout({
     entries: [
       { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
-      { binding: 3, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
-      { binding: 4, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
-      { binding: 5, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
-      { binding: 6, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
-      { binding: 7, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
-      { binding: 8, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
-      { binding: 9, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
     ],
   });
 
-  const { shaderCode } = choosePointShaderVariant(isApple, hasF32Filter);
+  const nodeBindGroupLayout = reuse?.nodeBindGroupLayout ?? device.createBindGroupLayout({
+    entries: [
+      {
+        binding: 0,
+        visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+        buffer: { type: 'uniform', hasDynamicOffset: true, minBindingSize: NODE_UNIFORM_BYTES },
+      },
+    ],
+  });
+
+  const shadingBindGroupLayout = reuse?.shadingBindGroupLayout ?? device.createBindGroupLayout({
+    entries: [
+      { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+      { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+      { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform', minBindingSize: NODE_UNIFORM_BYTES } },
+    ],
+  });
+
+  const edlBindGroupLayout = device.createBindGroupLayout({
+    entries: [
+      { binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+      {
+        binding: 1,
+        visibility: GPUShaderStage.FRAGMENT,
+        texture: { sampleType: 'depth', multisampled: sampleCount > 1 },
+      },
+      { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+    ],
+  });
+
+  const sceneLayout = device.createPipelineLayout({ bindGroupLayouts: [sceneBindGroupLayout] });
+  const multisample: GPUMultisampleState = { count: sampleCount };
 
   device.pushErrorScope('validation');
 
-  const shader = device.createShaderModule({ code: shaderCode });
+  const pointShader = device.createShaderModule({ code: POINT_SHADER });
   const pointPipeline = device.createRenderPipeline({
-    layout: device.createPipelineLayout({ bindGroupLayouts: [pointBindGroupLayout] }),
+    layout: device.createPipelineLayout({
+      bindGroupLayouts: [sceneBindGroupLayout, pointParamsBindGroupLayout, nodeBindGroupLayout],
+    }),
     vertex: {
-      module: shader,
+      module: pointShader,
       entryPoint: 'vs_main',
       buffers: [
-        { arrayStride: 12, stepMode: 'instance', attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' as GPUVertexFormat }] },
-        { arrayStride: 4, stepMode: 'instance', attributes: [{ shaderLocation: 1, offset: 0, format: 'unorm8x4' as GPUVertexFormat }] },
+        // Packed record: u16×3 quantized position (+ class|intensity), see lodTile.ts.
+        { arrayStride: LOD_POINT_STRIDE, stepMode: 'instance', attributes: [{ shaderLocation: 0, offset: 0, format: 'unorm16x4' }] },
+        // Pre-shaded colour written by the shading pass.
+        { arrayStride: 4, stepMode: 'instance', attributes: [{ shaderLocation: 1, offset: 0, format: 'unorm8x4' }] },
       ],
     },
-    fragment: {
-      module: shader,
-      entryPoint: 'fs_main',
-      targets: [{
-        format,
-        blend: {
-          color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
-          alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
-        },
-      }],
-    },
+    // Opaque sprites: no blending, so no halo of half-transparent edges that
+    // write depth over the points behind them (unsorted). With MSAA the soft
+    // edge goes through alpha-to-coverage, which stays order-independent.
+    fragment: { module: pointShader, entryPoint: 'fs_main', targets: [{ format }] },
     primitive: { topology: 'triangle-strip' },
-    depthStencil: { depthWriteEnabled: true, depthCompare: 'less', format: 'depth24plus' },
+    depthStencil: depthState('greater', true),
+    multisample: { count: sampleCount, alphaToCoverageEnabled: sampleCount > 1 },
   });
 
   const terrainShader = device.createShaderModule({ code: TERRAIN_SHADER });
   const terrainPipeline = device.createRenderPipeline({
-    layout: device.createPipelineLayout({ bindGroupLayouts: [terrainBindGroupLayout] }),
-    vertex: {
-      module: terrainShader,
-      entryPoint: 'terrain_vs',
-      buffers: [
-        {
-          arrayStride: 24,
-          stepMode: 'vertex',
-          attributes: [
-            { shaderLocation: 0, offset: 0, format: 'float32x3' as GPUVertexFormat },
-            { shaderLocation: 1, offset: 12, format: 'float32x3' as GPUVertexFormat },
-          ],
-        },
-        {
-          arrayStride: 4,
-          stepMode: 'vertex',
-          attributes: [
-            { shaderLocation: 2, offset: 0, format: 'unorm8x4' as GPUVertexFormat },
-          ],
-        },
-      ],
-    },
-    fragment: {
-      module: terrainShader,
-      entryPoint: 'terrain_fs',
-      targets: [{ format }],
-    },
+    layout: sceneLayout,
+    vertex: { module: terrainShader, entryPoint: 'terrain_vs', buffers: TERRAIN_VERTEX_BUFFERS },
+    fragment: { module: terrainShader, entryPoint: 'terrain_fs', targets: [{ format }] },
     primitive: { topology: 'triangle-list', cullMode: 'back' },
-    depthStencil: { depthWriteEnabled: true, depthCompare: 'less', format: 'depth24plus' },
+    depthStencil: depthState('greater', true),
+    multisample,
   });
 
   const previewPipeline = device.createRenderPipeline({
-    layout: device.createPipelineLayout({ bindGroupLayouts: [terrainBindGroupLayout] }),
-    vertex: {
-      module: terrainShader,
-      entryPoint: 'terrain_vs',
-      buffers: [
-        {
-          arrayStride: 24,
-          stepMode: 'vertex',
-          attributes: [
-            { shaderLocation: 0, offset: 0, format: 'float32x3' as GPUVertexFormat },
-            { shaderLocation: 1, offset: 12, format: 'float32x3' as GPUVertexFormat },
-          ],
-        },
-        {
-          arrayStride: 4,
-          stepMode: 'vertex',
-          attributes: [
-            { shaderLocation: 2, offset: 0, format: 'unorm8x4' as GPUVertexFormat },
-          ],
-        },
-      ],
-    },
-    fragment: {
-      module: terrainShader,
-      entryPoint: 'terrain_fs',
-      targets: [{
-        format,
-        blend: {
-          color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
-          alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
-        },
-      }],
-    },
+    layout: sceneLayout,
+    vertex: { module: terrainShader, entryPoint: 'terrain_vs', buffers: TERRAIN_VERTEX_BUFFERS },
+    fragment: { module: terrainShader, entryPoint: 'terrain_fs', targets: [{ format, blend: ALPHA_BLEND }] },
     primitive: { topology: 'triangle-list', cullMode: 'none' },
-    depthStencil: { depthWriteEnabled: true, depthCompare: 'less', format: 'depth24plus' },
+    depthStencil: depthState('greater', true),
+    multisample,
   });
 
   const trajectoryShader = device.createShaderModule({ code: TRAJECTORY_SHADER });
   const trajectoryPipeline = device.createRenderPipeline({
-    layout: device.createPipelineLayout({ bindGroupLayouts: [pointBindGroupLayout] }),
+    layout: sceneLayout,
     vertex: {
       module: trajectoryShader,
       entryPoint: 'trajectory_vs',
-      buffers: [
-        {
-          arrayStride: 28,
-          stepMode: 'vertex',
-          attributes: [
-            { shaderLocation: 0, offset: 0, format: 'float32x3' as GPUVertexFormat },
-            { shaderLocation: 1, offset: 12, format: 'float32x4' as GPUVertexFormat },
-          ],
-        },
-      ],
-    },
-    fragment: {
-      module: trajectoryShader,
-      entryPoint: 'trajectory_fs',
-      targets: [{
-        format,
-        blend: {
-          color: { srcFactor: 'src-alpha', dstFactor: 'one', operation: 'add' },
-          alpha: { srcFactor: 'zero', dstFactor: 'one', operation: 'add' },
-        },
+      buffers: [{
+        arrayStride: 28,
+        stepMode: 'vertex',
+        attributes: [
+          { shaderLocation: 0, offset: 0, format: 'float32x3' },
+          { shaderLocation: 1, offset: 12, format: 'float32x4' },
+        ],
       }],
     },
+    fragment: { module: trajectoryShader, entryPoint: 'trajectory_fs', targets: [{ format, blend: ADDITIVE_BLEND }] },
     primitive: { topology: 'line-strip' },
-    depthStencil: { depthWriteEnabled: false, depthCompare: 'less-equal', format: 'depth24plus' },
+    depthStencil: depthState('greater-equal', false),
+    multisample,
   });
 
   const sunDiscShader = device.createShaderModule({ code: SUN_DISC_SHADER });
   const sunDiscPipeline = device.createRenderPipeline({
-    layout: device.createPipelineLayout({ bindGroupLayouts: [pointBindGroupLayout] }),
-    vertex: {
-      module: sunDiscShader,
-      entryPoint: 'sun_disc_vs',
-      buffers: [],
-    },
-    fragment: {
-      module: sunDiscShader,
-      entryPoint: 'sun_disc_fs',
-      targets: [{
-        format,
-        blend: {
-          color: { srcFactor: 'src-alpha', dstFactor: 'one', operation: 'add' },
-          alpha: { srcFactor: 'zero', dstFactor: 'one', operation: 'add' },
-        },
-      }],
-    },
+    layout: sceneLayout,
+    vertex: { module: sunDiscShader, entryPoint: 'sun_disc_vs', buffers: [] },
+    fragment: { module: sunDiscShader, entryPoint: 'sun_disc_fs', targets: [{ format, blend: ADDITIVE_BLEND }] },
     primitive: { topology: 'triangle-list', cullMode: 'none' },
-    depthStencil: { depthWriteEnabled: false, depthCompare: 'always', format: 'depth24plus' },
+    depthStencil: depthState('always', false),
+    multisample,
   });
 
   const routeShader = device.createShaderModule({ code: ROUTE_SHADER });
   const routePipeline = device.createRenderPipeline({
-    layout: device.createPipelineLayout({ bindGroupLayouts: [pointBindGroupLayout] }),
+    layout: sceneLayout,
     vertex: {
       module: routeShader,
       entryPoint: 'route_vs',
       buffers: [
-        {
-          arrayStride: 12,
-          stepMode: 'vertex',
-          attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' as GPUVertexFormat }],
-        },
-        {
-          arrayStride: 4,
-          stepMode: 'vertex',
-          attributes: [{ shaderLocation: 1, offset: 0, format: 'unorm8x4' as GPUVertexFormat }],
-        },
+        { arrayStride: 12, stepMode: 'vertex', attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }] },
+        { arrayStride: 4, stepMode: 'vertex', attributes: [{ shaderLocation: 1, offset: 0, format: 'unorm8x4' }] },
       ],
     },
-    fragment: {
-      module: routeShader,
-      entryPoint: 'route_fs',
-      targets: [{
-        format,
-        blend: {
-          color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
-          alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
-        },
-      }],
-    },
+    fragment: { module: routeShader, entryPoint: 'route_fs', targets: [{ format, blend: ALPHA_BLEND }] },
     primitive: { topology: 'triangle-list', cullMode: 'none' },
-    depthStencil: { depthWriteEnabled: false, depthCompare: 'less-equal', format: 'depth24plus' },
+    depthStencil: depthState('greater-equal', false),
+    multisample,
+  });
+
+  const edlShader = device.createShaderModule({ code: sampleCount > 1 ? EDL_SHADER_MSAA : EDL_SHADER });
+  const edlPipeline = device.createRenderPipeline({
+    layout: device.createPipelineLayout({ bindGroupLayouts: [edlBindGroupLayout] }),
+    vertex: { module: edlShader, entryPoint: 'edl_vs', buffers: [] },
+    fragment: { module: edlShader, entryPoint: 'edl_fs', targets: [{ format }] },
+    primitive: { topology: 'triangle-list' },
+  });
+
+  const shadingShader = device.createShaderModule({ code: POINT_SHADING_SHADER });
+  const shadingPipeline = device.createComputePipeline({
+    layout: device.createPipelineLayout({ bindGroupLayouts: [sceneBindGroupLayout, shadingBindGroupLayout] }),
+    compute: { module: shadingShader, entryPoint: 'shade_main' },
   });
 
   const pipelineError = await device.popErrorScope();
@@ -248,7 +246,12 @@ export async function createRendererPipelines(
     trajectoryPipeline,
     sunDiscPipeline,
     routePipeline,
-    pointBindGroupLayout,
-    terrainBindGroupLayout,
+    edlPipeline,
+    shadingPipeline,
+    sceneBindGroupLayout,
+    pointParamsBindGroupLayout,
+    nodeBindGroupLayout,
+    shadingBindGroupLayout,
+    edlBindGroupLayout,
   };
 }

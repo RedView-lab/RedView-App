@@ -1,14 +1,14 @@
-import {
-  FRAME_WINDOW,
-  MIN_DENSITY,
-  TEMPORAL_POS_THRESHOLD,
-  TEMPORAL_ROT_THRESHOLD,
-} from './types';
+import type { PlatformProfile } from './types';
 
-export const QUALITY_TIER_SCALES = [1.0, 0.72, 0.48, 0.28] as const;
-export const IDLE_DENSITY_BUCKETS = 20;
-export const ACTIVE_DENSITY_BUCKETS = 12;
-export const STRESSED_DENSITY_BUCKETS = 8;
+/** Rolling frame window before the budget starts adapting. */
+const FRAME_WINDOW = 8;
+/** A single frame slower than this multiple of the target halves the budget at once. */
+const EMERGENCY_FRAME_FACTOR = 3;
+const EMERGENCY_COOLDOWN_FRAMES = 6;
+/** Frames without a budget change before it is considered settled. */
+const SETTLED_FRAMES = 8;
+/** Frames at the budget floor and still slow before render settings are lowered. */
+const STARVED_FRAMES = 20;
 
 export interface LodBudgetState {
   pointBudget: number;
@@ -19,149 +19,57 @@ export interface LodBudgetState {
   framesSeen: number;
   slowFrameCount: number;
   fastFrameCount: number;
-  motionPressure: number;
-  framePressure: number;
-  userDensityScale: number;
-  sceneBudgetScale: number;
-  minScreenSizePx: number;
+  /** Frames left before another emergency cut is allowed (measurements lag by a few frames). */
+  emergencyCooldown: number;
 }
 
-export function computeEffectivePointBudget(
-  pointBudget: number,
-  userDensityScale: number,
-  sceneBudgetScale: number,
-): number {
-  return Math.max(1, Math.floor(pointBudget * userDensityScale * sceneBudgetScale));
-}
-
-export function computeDynamicLodScale(
-  sceneBudgetScale: number,
-  motionPressure: number,
-  framePressure: number,
-): number {
-  const multiTilePressure = 1 + (1 - sceneBudgetScale) * 1.15;
-  const motionPressureScale = 1 + motionPressure * 0.55;
-  const framePressureScale = 1 + Math.max(0, framePressure - 1) * 0.75;
-  return Math.min(2.4, multiTilePressure * motionPressureScale * framePressureScale);
-}
-
-export function computeDynamicMinScreenSizePx(
-  minScreenSizePx: number,
-  sceneBudgetScale: number,
-  motionPressure: number,
-  framePressure: number,
-): number {
-  const scenePressure = 1 + (1 - sceneBudgetScale) * 0.9;
-  const motionPressureScale = 1 + motionPressure * 0.35;
-  const framePressureScale = 1 + Math.max(0, framePressure - 1) * 0.45;
-  return Math.min(7.5, minScreenSizePx * scenePressure * motionPressureScale * framePressureScale);
-}
-
-export function quantizeLeafDensityValue(
-  density: number,
-  framePressure: number,
-  motionPressure: number,
-): number {
-  const clamped = Math.max(MIN_DENSITY, Math.min(1.0, density));
-  if (clamped >= 0.995) return 1.0;
-
-  const bucketCount = framePressure > 1.16 || motionPressure > 0.55
-    ? STRESSED_DENSITY_BUCKETS
-    : framePressure > 1.04 || motionPressure > 0.18
-      ? ACTIVE_DENSITY_BUCKETS
-      : IDLE_DENSITY_BUCKETS;
-
-  return Math.max(MIN_DENSITY, Math.round(clamped * bucketCount) / bucketCount);
-}
-
-export function selectLodQualityTier(
-  screenSize: number,
-  budgetPressure: number,
-  motionPressure: number,
-  framePressure: number,
-): number {
-  let tier = 0;
-  if (screenSize < 55) tier = 2;
-  else if (screenSize < 110) tier = 1;
-
-  if (screenSize < 40) tier += 1;
-  if (motionPressure > 0.18) tier += 1;
-  if (motionPressure > 0.55) tier += 1;
-  if (framePressure > 1.04) tier += 1;
-  if (framePressure > 1.18) tier += 1;
-  if (budgetPressure > 1.08) tier += 1;
-  if (budgetPressure > 1.32) tier += 1;
-  if (screenSize > 220) tier -= 1;
-  if (screenSize > 320) tier -= 1;
-
-  return Math.max(0, Math.min(QUALITY_TIER_SCALES.length - 1, tier));
-}
-
-export function updateMotionPressureValue(
-  currentMotionPressure: number,
-  lastCamera: { posX: number; posY: number; posZ: number; fwdX: number; fwdY: number; fwdZ: number } | null,
-  px: number, py: number, pz: number,
-  fx: number, fy: number, fz: number,
-): number {
-  if (!lastCamera) {
-    return currentMotionPressure * 0.85;
-  }
-
-  const dx = px - lastCamera.posX;
-  const dy = py - lastCamera.posY;
-  const dz = pz - lastCamera.posZ;
-  const posDist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-  const posPressure = Math.min(1, posDist / (TEMPORAL_POS_THRESHOLD * 5));
-
-  const dot = fx * lastCamera.fwdX + fy * lastCamera.fwdY + fz * lastCamera.fwdZ;
-  const angle = Math.acos(Math.min(1, Math.max(-1, dot))) * (180 / Math.PI);
-  const rotPressure = Math.min(1, angle / (TEMPORAL_ROT_THRESHOLD * 7));
-
-  const targetPressure = Math.max(posPressure, rotPressure);
-  return currentMotionPressure + (targetPressure - currentMotionPressure) * 0.25;
-}
-
-export function updateAdaptiveBudget(
-  budgetState: LodBudgetState,
-  deltaMs: number,
-): { pointBudget: number; avgFrameMs: number; framesSeen: number; slowFrameCount: number; fastFrameCount: number; fps: number; framePressure: number } {
-  const sample = Math.max(1, Math.min(deltaMs, budgetState.targetFrameMs * 4));
+/**
+ * `deltaMs` is the measured frame cost (GPU time when available, see
+ * `LidarRenderer.getGpuFrameMs`). Sustained slow/fast frames scale the budget
+ * by ×0.9/×1.2; a single pathological frame halves it immediately so a weak
+ * GPU never stays seconds per frame (Windows TDR → device lost).
+ */
+export function updateAdaptiveBudget(state: LodBudgetState, deltaMs: number): LodBudgetState & { fps: number } {
+  const sample = Math.max(1, Math.min(deltaMs, state.targetFrameMs * 4));
   const alpha = 1 / 8;
-  const nextAvgFrameMs = budgetState.avgFrameMs * (1 - alpha) + sample * alpha;
-  const nextFramesSeen = budgetState.framesSeen + 1;
+  const avgFrameMs = state.avgFrameMs * (1 - alpha) + sample * alpha;
+  const framesSeen = state.framesSeen + 1;
+  const cooldown = Math.max(0, state.emergencyCooldown - 1);
+  const fps = Math.round(1000 / Math.max(avgFrameMs, 1));
 
-  if (nextFramesSeen < FRAME_WINDOW) {
+  if (deltaMs > state.targetFrameMs * EMERGENCY_FRAME_FACTOR && cooldown === 0) {
     return {
-      pointBudget: budgetState.pointBudget,
-      avgFrameMs: nextAvgFrameMs,
-      framesSeen: nextFramesSeen,
-      slowFrameCount: budgetState.slowFrameCount,
-      fastFrameCount: budgetState.fastFrameCount,
-      fps: Math.round(1000 / Math.max(nextAvgFrameMs, 1)),
-      framePressure: nextAvgFrameMs / Math.max(budgetState.targetFrameMs, 1),
+      ...state,
+      pointBudget: Math.max(state.minBudget, Math.floor(state.pointBudget * 0.5)),
+      avgFrameMs,
+      framesSeen,
+      slowFrameCount: 0,
+      fastFrameCount: 0,
+      emergencyCooldown: EMERGENCY_COOLDOWN_FRAMES,
+      fps,
     };
   }
 
-  const fps = Math.round(1000 / nextAvgFrameMs);
-  const framePressure = nextAvgFrameMs / Math.max(budgetState.targetFrameMs, 1);
-  const target = budgetState.targetFrameMs;
+  if (framesSeen < FRAME_WINDOW) {
+    return { ...state, avgFrameMs, framesSeen, emergencyCooldown: cooldown, fps };
+  }
 
-  let pointBudget = budgetState.pointBudget;
-  let slowFrameCount = budgetState.slowFrameCount;
-  let fastFrameCount = budgetState.fastFrameCount;
-
-  if (nextAvgFrameMs > target * 1.15) {
+  // Asymmetric and slow on purpose: every budget step reshuffles the LOD
+  // selection, so it shrinks after a short run of slow frames and only grows
+  // after a longer run of clearly fast ones.
+  let { pointBudget, slowFrameCount, fastFrameCount } = state;
+  if (avgFrameMs > state.targetFrameMs * 1.15) {
     slowFrameCount++;
     fastFrameCount = 0;
-    if (slowFrameCount >= 4) {
-      pointBudget = Math.max(budgetState.minBudget, Math.floor(pointBudget * 0.90));
+    if (slowFrameCount >= 6) {
+      pointBudget = Math.max(state.minBudget, Math.floor(pointBudget * 0.9));
       slowFrameCount = 0;
     }
-  } else if (nextAvgFrameMs < target * 0.80) {
+  } else if (avgFrameMs < state.targetFrameMs * 0.75) {
     fastFrameCount++;
     slowFrameCount = 0;
-    if (fastFrameCount >= 4) {
-      pointBudget = Math.min(budgetState.maxBudget, Math.floor(pointBudget * 1.20));
+    if (fastFrameCount >= 12) {
+      pointBudget = Math.min(state.maxBudget, Math.floor(pointBudget * 1.15));
       fastFrameCount = 0;
     }
   } else {
@@ -169,13 +77,76 @@ export function updateAdaptiveBudget(
     fastFrameCount = 0;
   }
 
-  return {
-    pointBudget,
-    avgFrameMs: nextAvgFrameMs,
-    framesSeen: nextFramesSeen,
-    slowFrameCount,
-    fastFrameCount,
-    fps,
-    framePressure,
-  };
+  return { ...state, pointBudget, avgFrameMs, framesSeen, slowFrameCount, fastFrameCount, emergencyCooldown: cooldown, fps };
+}
+
+/** Point budget driven by measured frame cost, scaled by the user's density slider. */
+export class AdaptivePointBudget {
+  private state: LodBudgetState;
+  private framesSinceChange = 0;
+  private starvedFrames = 0;
+  /** User density slider (0.01–1). */
+  userScale = 1;
+  fps = 60;
+
+  constructor(profile: PlatformProfile) {
+    this.state = {
+      pointBudget: profile.initialBudget,
+      minBudget: Math.min(profile.initialBudget, profile.minBudget),
+      maxBudget: profile.maxBudget,
+      targetFrameMs: profile.targetFrameMs,
+      avgFrameMs: profile.targetFrameMs,
+      framesSeen: 0,
+      slowFrameCount: 0,
+      fastFrameCount: 0,
+      emergencyCooldown: 0,
+    };
+  }
+
+  /** Feeds the cost of one frame (ms). */
+  sample(frameMs: number): void {
+    const next = updateAdaptiveBudget(this.state, frameMs);
+    this.framesSinceChange = next.pointBudget === this.state.pointBudget ? this.framesSinceChange + 1 : 0;
+    this.fps = next.fps;
+    this.state = next;
+    const atFloor = next.pointBudget <= next.minBudget;
+    this.starvedFrames = atFloor && next.avgFrameMs > next.targetFrameMs * 1.3 ? this.starvedFrames + 1 : 0;
+  }
+
+  /**
+   * The budget sits at its floor and frames are still clearly too slow:
+   * fewer points cannot help any more, the render settings must get cheaper.
+   */
+  isStarved(): boolean {
+    return this.starvedFrames >= STARVED_FRAMES;
+  }
+
+  /** Restarts the measurements after a render-settings change. */
+  resetMeasurements(): void {
+    this.starvedFrames = 0;
+    this.state = { ...this.state, framesSeen: 0, slowFrameCount: 0, fastFrameCount: 0, emergencyCooldown: EMERGENCY_COOLDOWN_FRAMES };
+  }
+
+  /** Points the LOD may draw this frame. */
+  get pointBudget(): number {
+    return Math.max(1, Math.floor(this.state.pointBudget * this.userScale));
+  }
+
+  get rawBudget(): number {
+    return this.state.pointBudget;
+  }
+
+  /** GPU time leaves clear headroom and the ceiling is not reached: the budget would grow. */
+  canGrow(): boolean {
+    return this.state.pointBudget < this.state.maxBudget && this.state.avgFrameMs < this.state.targetFrameMs * 0.75;
+  }
+
+  /**
+   * No recent change and no pending growth. The render loop keeps drawing
+   * while this is false, otherwise a still camera would freeze the budget
+   * (growth needs a run of measured fast frames).
+   */
+  isSettled(): boolean {
+    return this.framesSinceChange >= SETTLED_FRAMES && !this.canGrow();
+  }
 }

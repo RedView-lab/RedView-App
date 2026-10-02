@@ -85,7 +85,7 @@ export default function DevAuthScreen({ onDevLogin, landingUrl }: DevAuthScreenP
             Bienvenue sur RedView
           </h1>
           <p style={{ fontSize: '13px', color: '#9ca3af', lineHeight: 1.5, margin: 0 }}>
-            Visualisation 3D haute résolution &amp; calculs d&apos;itinéraires en temps réel.
+            Visualisation 3D haute résolution & calculs d’itinéraires en temps réel.
           </p>
         </div>
 
@@ -120,7 +120,7 @@ export default function DevAuthScreen({ onDevLogin, landingUrl }: DevAuthScreenP
               e.currentTarget.style.boxShadow = '0 4px 14px rgba(239, 68, 68, 0.35)'
             }}
           >
-            ⚡ Accéder à l&apos;application (Accès Démo Immédiat)
+            ⚡ Accéder à l’application (Accès Démo Immédiat)
           </button>
           <span style={{ fontSize: '11px', color: '#6b7280', textAlign: 'center' }}>
             Accès instantané avec toutes les fonctionnalités débloquées (3D, BRouter, POIs)

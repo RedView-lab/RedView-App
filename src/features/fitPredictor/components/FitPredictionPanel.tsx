@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { trackAnalyticsEvent } from '../../../shared/lib/analytics';
+import { translateAppText, useAppI18n } from '../../../shared/i18n';
 import { createFitPredictionEngine } from '../engine/api';
 import {
   cardHeaderStyle,
@@ -56,6 +57,7 @@ interface FitPredictionPanelProps {
 }
 
 export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelProps) {
+  const { t } = useAppI18n();
   const engineRef = useRef<ReturnType<typeof createFitPredictionEngine> | null>(null);
   const fitInputRef = useRef<HTMLInputElement | null>(null);
   const gpxInputRef = useRef<HTMLInputElement | null>(null);
@@ -112,7 +114,7 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
 
   const validateFileSize = (file: File): boolean => {
     if (file.size > MAX_FILE_SIZE) {
-      setError(`File "${file.name}" exceeds 100 MB limit`);
+      setError(t('File "{{name}}" exceeds 100 MB limit', { name: file.name }));
       return false;
     }
     return true;
@@ -216,8 +218,8 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
           </button>
         )}
         {busy && <div style={statusChipStyle}>Calcul</div>}
-        {!busy && comparisonResult && <div style={successChipStyle}>Compare</div>}
-        {!busy && predictionResult && <div style={successChipStyle}>Route</div>}
+        {!busy && comparisonResult && <div style={successChipStyle}>Comparaison</div>}
+        {!busy && predictionResult && <div style={successChipStyle}>Prédiction</div>}
         {error && <div style={errorChipStyle}>Erreur</div>}
       </div>
 
@@ -226,11 +228,11 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
           <div style={summaryRowStyle}>
             <div style={summaryCardStyle}>
               <span style={summaryLabelStyle}>Mode</span>
-              <strong style={summaryValueStyle}>{mode === 'route' ? 'FIT + GPX' : 'Temps reel'}</strong>
+              <strong style={summaryValueStyle}>{mode === 'route' ? 'FIT + GPX' : 'Prédit vs réel'}</strong>
             </div>
             <div style={summaryCardStyle}>
               <span style={summaryLabelStyle}>Historique</span>
-              <strong style={summaryValueStyle}>{fitFiles.length > 0 ? `${fitFiles.length} FIT` : 'Aucun'}</strong>
+              <strong style={summaryValueStyle}>{fitFiles.length > 0 ? `${fitFiles.length} FIT` : 'Aucun fichier'}</strong>
             </div>
             <div style={summaryCardStyle}>
               <span style={summaryLabelStyle}>Local</span>
@@ -244,14 +246,14 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
               onClick={() => setMode('route')}
               style={{ ...segmentButtonStyle, ...(mode === 'route' ? segmentButtonActiveStyle : null) }}
             >
-              Prediction GPX
+              Prédiction GPX
             </button>
             <button
               type="button"
               onClick={() => setMode('compare')}
               style={{ ...segmentButtonStyle, ...(mode === 'compare' ? segmentButtonActiveStyle : null) }}
             >
-              Predit vs reel
+              Prédit vs réel
             </button>
           </div>
 
@@ -278,11 +280,11 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
                 onChange={handleGpxChange}
                 style={fileInputStyle}
               />
-              <p style={fieldMetaStyle}>{gpxFile ? gpxFile.name : 'Aucun GPX charge'}</p>
+              <p style={fieldMetaStyle}>{gpxFile ? gpxFile.name : 'Aucun GPX chargé'}</p>
             </div>
           ) : (
             <div style={cardStyle}>
-              <label style={fieldLabelStyle}>FIT reel de validation</label>
+              <label style={fieldLabelStyle}>FIT réel de validation</label>
               <input
                 ref={validationInputRef}
                 type="file"
@@ -292,8 +294,8 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
               />
               <p style={fieldMetaStyle}>
                 {validationFile
-                  ? `${validationFile.name} utilise la trace reelle hors entrainement`
-                  : 'Le FIT reel sert de route et de temps observe'}
+                  ? t('{{name}} : tracé réel, exclu de l’entraînement', { name: validationFile.name })
+                  : 'Le FIT réel sert de tracé et de temps observé'}
               </p>
             </div>
           )}
@@ -317,7 +319,7 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
                   step="1"
                   value={ftpWatts}
                   onChange={(event) => setFtpWatts(event.target.value)}
-                  placeholder={fitFiles.length > 0 ? 'Auto (estimé)' : 'ex: 250'}
+                  placeholder={fitFiles.length > 0 ? 'Auto (estimé)' : 'ex. 250'}
                   style={{ ...textInputStyle, ...(ftpWatts === '' && fitFiles.length === 0 ? requiredInputStyle : null) }}
                 />
               </div>
@@ -330,12 +332,12 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
                   step="0.5"
                   value={riderWeightKg}
                   onChange={(event) => setRiderWeightKg(event.target.value)}
-                  placeholder={fitFiles.length > 0 ? (gender === 'female' ? '56 (défaut)' : '70 (défaut)') : 'ex: 70'}
+                  placeholder={fitFiles.length > 0 ? (gender === 'female' ? '56 (défaut)' : '70 (défaut)') : 'ex. 70'}
                   style={{ ...textInputStyle, ...(riderWeightKg === '' && fitFiles.length === 0 ? requiredInputStyle : null) }}
                 />
               </div>
               <div style={configFieldStyle}>
-                <label style={fieldLabelStyle}>Vélo + équip (kg) *</label>
+                <label style={fieldLabelStyle}>Vélo + équip. (kg) *</label>
                 <input
                   type="number"
                   min="5"
@@ -343,14 +345,14 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
                   step="0.5"
                   value={bikeWeightKg}
                   onChange={(event) => setBikeWeightKg(event.target.value)}
-                  placeholder="ex: 10"
+                  placeholder="ex. 10"
                   style={{ ...textInputStyle, ...(bikeWeightKg === '' ? requiredInputStyle : null) }}
                 />
               </div>
             </div>
             <div style={{ ...configGridStyle, marginTop: 8 }}>
               <div style={configFieldStyle}>
-                <label style={fieldLabelStyle}>Pacing</label>
+                <label style={fieldLabelStyle}>Gestion de l’effort</label>
                 <select value={pacingFactor} onChange={(event) => setPacingFactor(event.target.value)} style={textInputStyle}>
                   <option value="0.85">Conservateur</option>
                   <option value="1.0">Normal</option>
@@ -374,7 +376,7 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
                   step="1"
                   value={startTimeH}
                   onChange={(event) => setStartTimeH(event.target.value)}
-                  placeholder="ex: 8"
+                  placeholder="ex. 8"
                   style={textInputStyle}
                 />
               </div>
@@ -382,7 +384,7 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
             <div style={{ ...configGridStyle, marginTop: 8 }}>
               <div style={{ ...configFieldStyle, justifyContent: 'flex-end' }}>
                 <p style={fieldMetaStyle}>
-                  Total: {(parsedRiderWeight > 0 && Number.parseFloat(bikeWeightKg) > 0) ? `${(parsedRiderWeight + Number.parseFloat(bikeWeightKg)).toFixed(1)} kg` : '—'}
+                  Total : {(parsedRiderWeight > 0 && Number.parseFloat(bikeWeightKg) > 0) ? `${(parsedRiderWeight + Number.parseFloat(bikeWeightKg)).toFixed(1)} kg` : '—'}
                 </p>
               </div>
             </div>
@@ -390,21 +392,23 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
 
           <div style={hintStyle}>
             {mode === 'route'
-              ? 'FTP + poids obligatoires. Le W/kg pilote les predictions en montee. Charge FIT historiques + GPX cible.'
-              : 'FTP + poids obligatoires. Charge FIT historiques + un FIT reel pour comparer temps predit vs observe.'}
+              ? 'FTP + poids obligatoires. Le W/kg pilote les prédictions en montée. Chargez les FIT historiques + le GPX cible.'
+              : 'FTP + poids obligatoires. Chargez les FIT historiques + un FIT réel pour comparer temps prédit et observé.'}
           </div>
 
           {error && <div style={errorStyle}>{error}</div>}
 
           <button type="button" onClick={handleRun} disabled={!canRun} style={{ ...runButtonStyle, ...(canRun ? null : runButtonDisabledStyle) }}>
-            {busy ? 'Calcul en cours...' : mode === 'route' ? 'Lancer prediction' : 'Comparer'}
+            {busy ? 'Calcul en cours...' : mode === 'route' ? 'Lancer la prédiction' : 'Comparer'}
           </button>
 
           {busy && mode === 'route' && logs.length > 0 && (
             <div style={cardStyle}>
               <div style={cardHeaderStyle}>
                 <span style={sectionTitleStyle}>Progression</span>
-                <span style={mutedTextStyle}>{logs.length} etapes</span>
+                <span style={mutedTextStyle}>
+                  {logs.length === 1 ? t('1 étape') : t('{{count}} étapes', { count: logs.length })}
+                </span>
               </div>
               <div style={logListStyle}>
                 {logs.map((line, index) => (
@@ -419,22 +423,22 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
           {predictionResult && (
             <div style={cardStyle}>
               <div style={cardHeaderStyle}>
-                <span style={sectionTitleStyle}>Resultat</span>
-                <span style={mutedTextStyle}>Prediction route</span>
+                <span style={sectionTitleStyle}>Résultat</span>
+                <span style={mutedTextStyle}>Prédiction du tracé</span>
               </div>
               <div style={metricsGridStyle}>
-                <Metric label="Temps predit" value={formatDuration(predictionResult.total_time_s)} accent />
-                <Metric label="Temps roule" value={formatDuration(predictionResult.riding_time_s)} />
-                <Metric label="Temps d arret" value={formatDuration(predictionResult.stop_time_s)} />
+                <Metric label="Temps prédit" value={formatDuration(predictionResult.total_time_s)} accent />
+                <Metric label="Temps roulé" value={formatDuration(predictionResult.riding_time_s)} />
+                <Metric label="Temps d’arrêt" value={formatDuration(predictionResult.stop_time_s)} />
                 <Metric label="Distance" value={`${(predictionResult.total_distance_m / 1000).toFixed(1)} km`} />
-                <Metric label="Vitesse moy" value={`${predictionResult.avg_speed_kmh.toFixed(1)} km/h`} />
+                <Metric label="Vitesse moy." value={`${predictionResult.avg_speed_kmh.toFixed(1)} km/h`} />
                 <Metric label="D+ / D-" value={`${Math.round(predictionResult.elevation_gain_m)} / ${Math.round(predictionResult.elevation_loss_m)} m`} />
                 {predictionResult.rider_profile && (
                   <>
-                    <Metric label="W/kg" value={predictionResult.rider_profile.wkg > 0 ? `${predictionResult.rider_profile.wkg.toFixed(2)}` : 'N/A'} accent />
-                    <Metric label="FTP" value={predictionResult.rider_profile.ftp_w > 0 ? `${Math.round(predictionResult.rider_profile.ftp_w)} W` : 'N/A'} />
+                    <Metric label="W/kg" value={predictionResult.rider_profile.wkg > 0 ? `${predictionResult.rider_profile.wkg.toFixed(2)}` : 'N/D'} accent />
+                    <Metric label="FTP" value={predictionResult.rider_profile.ftp_w > 0 ? `${Math.round(predictionResult.rider_profile.ftp_w)} W` : 'N/D'} />
                     <Metric label="Coureur" value={`${predictionResult.rider_profile.rider_weight_kg.toFixed(1)} kg`} />
-                    <Metric label="Velo + equip" value={`${predictionResult.rider_profile.bike_weight_kg.toFixed(1)} kg`} />
+                    <Metric label="Vélo + équip." value={`${predictionResult.rider_profile.bike_weight_kg.toFixed(1)} kg`} />
                   </>
                 )}
               </div>
@@ -445,17 +449,17 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
             <div style={cardStyle}>
               <div style={cardHeaderStyle}>
                 <span style={sectionTitleStyle}>Comparaison</span>
-                <span style={mutedTextStyle}>Temps trouve vs temps reel</span>
+                <span style={mutedTextStyle}>Temps prédit vs temps réel</span>
               </div>
               <div style={metricsGridStyle}>
-                <Metric label="Temps predit" value={formatDuration(comparisonResult.prediction.total_time_s)} accent />
-                <Metric label="Temps reel" value={formatDuration(comparisonResult.actual_total_time_s)} />
-                <Metric label="Ecart" value={formatSignedDuration(comparisonResult.prediction.total_time_s - comparisonResult.actual_total_time_s)} />
+                <Metric label="Temps prédit" value={formatDuration(comparisonResult.prediction.total_time_s)} accent />
+                <Metric label="Temps observé" value={formatDuration(comparisonResult.actual_total_time_s)} />
+                <Metric label="Écart" value={formatSignedDuration(comparisonResult.prediction.total_time_s - comparisonResult.actual_total_time_s)} />
                 <Metric label="Erreur" value={formatPercent(comparisonResult.prediction.total_time_s, comparisonResult.actual_total_time_s)} />
                 <Metric label="Distance" value={`${(comparisonResult.actual_distance_m / 1000).toFixed(1)} km`} />
-                <Metric label="Vit. predite" value={`${comparisonResult.prediction.avg_speed_kmh.toFixed(1)} km/h`} />
-                <Metric label="Vit. reelle" value={`${comparisonResult.actual_avg_speed_kmh.toFixed(1)} km/h`} />
-                <Metric label="Temps roule reel" value={formatDuration(comparisonResult.actual_riding_time_s)} />
+                <Metric label="Vit. prédite" value={`${comparisonResult.prediction.avg_speed_kmh.toFixed(1)} km/h`} />
+                <Metric label="Vit. réelle" value={`${comparisonResult.actual_avg_speed_kmh.toFixed(1)} km/h`} />
+                <Metric label="Temps roulé réel" value={formatDuration(comparisonResult.actual_riding_time_s)} />
               </div>
             </div>
           )}
@@ -507,13 +511,15 @@ function buildConfig(ftpWatts: string, riderWeightKg: string, bikeWeightKg: stri
 
 function formatFitSummary(files: readonly File[]): string {
   if (files.length === 0) {
-    return 'Aucun FIT charge';
+    return 'Aucun FIT chargé';
   }
   if (files.length === 1) {
     return files[0].name;
   }
   const preview = files.slice(0, 2).map((file) => file.name).join(', ');
-  return files.length > 2 ? `${files.length} fichiers · ${preview}...` : `${files.length} fichiers · ${preview}`;
+  return files.length > 2
+    ? translateAppText('{{count}} fichiers · {{preview}}...', { count: files.length, preview })
+    : translateAppText('{{count}} fichiers · {{preview}}', { count: files.length, preview });
 }
 
 function formatDuration(seconds: number): string {
@@ -537,7 +543,7 @@ function formatSignedDuration(seconds: number): string {
 
 function formatPercent(predicted: number, actual: number): string {
   if (!Number.isFinite(predicted) || !Number.isFinite(actual) || actual <= 0) {
-    return 'N/A';
+    return 'N/D';
   }
   const delta = ((predicted - actual) / actual) * 100;
   return `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}%`;

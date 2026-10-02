@@ -6,7 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react';
-import { useAppI18n } from '@/shared/i18n';
+import { translateAppText, useAppI18n } from '@/shared/i18n';
 import { IconMoon, IconSun } from '../../CenterPanelIcons';
 import type { AxisMetricId, AxisMode, ChartSeries } from '../series';
 import { formatAxisLabel, xAnchorTransformFor } from './format';
@@ -117,7 +117,7 @@ const ChartBackgroundLayer = memo(function ChartBackgroundLayer({
               left: `${clampedStart * 100}%`,
               width: `${width * 100}%`,
             }}
-            title={label ? `${label}${durationMin ? ` · ${durationMin} min` : ''}` : undefined}
+            title={label ? `${translateAppText(label)}${durationMin ? ` · ${durationMin} min` : ''}` : undefined}
           />
         );
       })}

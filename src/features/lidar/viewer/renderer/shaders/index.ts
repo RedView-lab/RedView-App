@@ -7,3 +7,4 @@ export * from './pointShader';
 export * from './terrainShader';
 export * from './celestialShader';
 export * from './routeShader';
+export * from './edlShader';

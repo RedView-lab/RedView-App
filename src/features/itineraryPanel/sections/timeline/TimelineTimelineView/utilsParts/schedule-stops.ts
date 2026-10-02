@@ -1,3 +1,4 @@
+import { translateAppText } from '@/shared/i18n';
 import { elapsedSecondsAtDistance } from '@/features/centerPanel/flyover/playback';
 import type { PredictionResult } from '@/features/fitPredictor';
 import { isAutoHotelOption } from '../../../../lib/schedule/poi-to-timeline';
@@ -126,7 +127,7 @@ export function buildTimedAutoPauses(
 
     pauses.push({
       id: pauseId,
-      label: `Pause ${entry.item.label}`,
+      label: translateAppText('Pause {{label}}', { label: entry.item.label }),
       source: 'favorite-poi',
       attachedToItemId: entry.item.id,
       poiCategory: entry.item.poiCategory,

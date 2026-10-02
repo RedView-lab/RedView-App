@@ -15,11 +15,9 @@ export {
   getStorageUsage,
   hasTile,
   listCachedTiles,
-  loadColorizedData,
   loadTerrainData,
   loadTile,
   loadTileByFileName,
-  saveColorizedData,
   saveTerrainData,
   saveTile,
 } from './storage';

@@ -169,7 +169,7 @@ export function useShadowWorkerBridge({
       setTimeout(() => URL.revokeObjectURL(previous), BLOB_REVOKE_DELAY_MS);
     }
 
-    publishStatus(shadowReadyStatus('Overlay pret'));
+    publishStatus(shadowReadyStatus('Overlay prêt'));
   };
 
   const runWorkerCompute = async (
@@ -181,7 +181,7 @@ export function useShadowWorkerBridge({
 
     publishStatus(shadowLoadingStatus(
       job.quality === 'preview' ? 62 : 68,
-      job.quality === 'preview' ? 'Apercu des ombres' : 'Calcul des ombres',
+      job.quality === 'preview' ? 'Aperçu des ombres' : 'Calcul des ombres',
     ));
 
     const current = optsRef.current;

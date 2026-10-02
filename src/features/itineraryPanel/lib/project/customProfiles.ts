@@ -1,3 +1,4 @@
+import { translateAppText } from '@/shared/i18n';
 import type { PrioritiesState, RoadTypesState } from '../../types';
 
 export interface SavedCustomProfile {
@@ -56,9 +57,10 @@ export function deleteCustomProfileFromStorage(id: string): void {
 
 export function getNextCustomProfileName(existingProfiles: SavedCustomProfile[]): string {
   const existingNames = new Set(existingProfiles.map((p) => p.name.trim().toLowerCase()));
+  const nameFor = (num: number) => translateAppText('Profil {{number}}', { number: num });
   let num = 1;
-  while (existingNames.has(`profil ${num}`)) {
+  while (existingNames.has(`profil ${num}`) || existingNames.has(nameFor(num).toLowerCase())) {
     num++;
   }
-  return `Profil ${num}`;
+  return nameFor(num);
 }

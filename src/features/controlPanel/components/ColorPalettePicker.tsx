@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 
 interface ColorPalettePickerProps {
   color: string;
@@ -54,6 +55,7 @@ export function ColorPalettePicker({
   ariaLabel,
   children,
 }: ColorPalettePickerProps) {
+  const { t } = useAppI18n();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -129,7 +131,7 @@ export function ColorPalettePicker({
             transformOrigin: position.placeAbove ? 'bottom left' : 'top left',
           }}
           role="dialog"
-          aria-label={ariaLabel ?? 'Choisir une couleur'}
+          aria-label={t(ariaLabel ?? 'Choisir une couleur')}
         >
           <div className="rvc-color-palette__grid">
             {PALETTE_COLORS.map((paletteColor) => {
@@ -142,7 +144,7 @@ export function ColorPalettePicker({
                   type="button"
                   className={`rvc-color-palette__swatch${isActive ? ' is-active' : ''}`}
                   style={{ backgroundColor: paletteColor }}
-                  aria-label={`Choisir ${normalized}`}
+                  aria-label={t('Choisir {{color}}', { color: normalized })}
                   aria-pressed={isActive}
                   onClick={() => {
                     onChange?.(normalized);

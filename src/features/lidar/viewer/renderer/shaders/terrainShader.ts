@@ -6,12 +6,12 @@ import {
   WGSL_CAMERA_STRUCT,
   WGSL_COLOR_HELPERS,
   WGSL_OVERLAY_HELPERS,
-  WGSL_TERRAIN_BINDINGS,
+  WGSL_SCENE_BINDINGS,
 } from './common';
 
 export const TERRAIN_SHADER = /* wgsl */ `
 ${WGSL_CAMERA_STRUCT}
-${WGSL_TERRAIN_BINDINGS}
+${WGSL_SCENE_BINDINGS}
 
 struct TerrainVsOut {
   @builtin(position) pos: vec4<f32>,

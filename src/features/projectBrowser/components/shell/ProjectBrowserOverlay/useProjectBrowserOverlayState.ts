@@ -393,7 +393,7 @@ export function useProjectBrowserOverlayState({
           const isFounder = requestedPlanId === 'founder';
           const defaultPrice = isFounder ? 5 : 15;
           const currentAmount = amount ?? defaultPrice;
-          const planName = isFounder ? 'Pass Fondateur' : 'Mécène & Soutien';
+          const planName = isFounder ? t('Pass Fondateur') : t('Mécène & Soutien');
           const planPrice = `${currentAmount} €`;
           setBillingModal({
             mode: 'subscription',
@@ -401,9 +401,9 @@ export function useProjectBrowserOverlayState({
             subscriptionId: result.subscriptionId,
             planId: requestedPlanId,
             amount: currentAmount,
-            title: 'Finaliser votre paiement',
-            description: `Paiement unique de ${planPrice} · ${planName} avec avantages à vie.`,
-            submitLabel: `Payer ${planPrice}`,
+            title: t('Finaliser votre paiement'),
+            description: t('Paiement unique de {{price}} · {{plan}} avec avantages à vie.', { price: planPrice, plan: planName }),
+            submitLabel: t('Payer {{price}}', { price: planPrice }),
           });
           return;
         }
@@ -441,7 +441,7 @@ export function useProjectBrowserOverlayState({
       const result = await createSubscriptionIntent(planId, validAmount);
       if (result.clientSecret) {
         const isFounder = planId === 'founder';
-        const planName = isFounder ? 'Pass Fondateur' : 'Mécène & Soutien';
+        const planName = isFounder ? t('Pass Fondateur') : t('Mécène & Soutien');
         const planPrice = `${validAmount} €`;
         setBillingModal((prev) =>
           prev
@@ -450,14 +450,14 @@ export function useProjectBrowserOverlayState({
                 clientSecret: result.clientSecret!,
                 subscriptionId: result.subscriptionId,
                 amount: validAmount,
-                description: `Paiement unique de ${planPrice} · ${planName} avec avantages à vie.`,
-                submitLabel: `Payer ${planPrice}`,
+                description: t('Paiement unique de {{price}} · {{plan}} avec avantages à vie.', { price: planPrice, plan: planName }),
+                submitLabel: t('Payer {{price}}', { price: planPrice }),
               }
             : null,
         );
       }
     },
-    [billingModal],
+    [billingModal, t],
   );
   const handleManagedSubscriptionToggle = useCallback(async () => {
     if (!hasPaidSubscription(subscriptionState.snapshot)) {

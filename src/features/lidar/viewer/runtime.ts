@@ -1,9 +1,18 @@
-import type { AltitudeRef, DetectedCrs, PointCloudBounds, PointCloudData } from '../types';
+import type { AltitudeRef, DetectedCrs, PointCloudBounds, PointCloudData, PointCloudOrigin } from '../types';
+import { translateAppText } from '@/shared/i18n/config';
 import type { WorkerRequest, WorkerResponse } from '../workers/processWorker';
 import type { CopcDecodeRequest, CopcDecodeResponse } from '../workers/copcDecodeWorker';
-import type { AABB, FlatOctree, OctreeWorkerResponse } from './lod/types';
+import type { LodCacheRequest, LodCacheResponse } from '../workers/lodCacheWorker';
+import type { LodTileInput } from './lod/lodTile';
+import { createInMemoryLodTile, openLodTile, type OpenedLodTile } from '../lib/lodCache';
 import { getLazWasmModule } from '../lib/lazWasm';
-import { canFastDecodeCopc, readCopcLayout } from '../lib/lazParser';
+import {
+  canFastDecodeCopc,
+  computeLocalOrigin,
+  hasUsableEmbeddedRgb,
+  readCopcLayout,
+  toCopcHierarchyInfo,
+} from '../lib/lazParser';
 import { detectCrs } from '../lib/coordConvert';
 import { loadTileByFileName } from '../lib/storage';
 
@@ -19,6 +28,23 @@ export interface ViewerDomElements {
 
 export type ViewerStatusReporter = (msg: string, pct?: number) => void;
 
+/**
+ * Translates a progress label posted by a decode worker. Workers have no
+ * document/locale, so they post the French source text; dynamic forms
+ * ("LAZ (1/3) : …", "Lecture COPC 4/10...") are re-keyed here.
+ */
+export function translateLidarWorkerProgress(message: string): string {
+  const laz = /^LAZ \((\d+)\/(\d+)\) : (.*)$/.exec(message);
+  if (laz) {
+    return `LAZ (${laz[1]}/${laz[2]}) : ${translateLidarWorkerProgress(laz[3]!)}`;
+  }
+  const copc = /^Lecture COPC (\d+)\/(\d+)\.\.\.$/.exec(message);
+  if (copc) {
+    return translateAppText('Lecture COPC {{done}}/{{total}}...', { done: copc[1]!, total: copc[2]! });
+  }
+  return translateAppText(message);
+}
+
 export function setViewerStatus(
   statusEl: HTMLElement,
   barFill: HTMLElement,
@@ -29,8 +55,9 @@ export function setViewerStatus(
     detailEl?: HTMLElement;
   },
 ) {
-  const isErrorState = /^(?:❌|⚠️)/.test(msg) || /\berreur\b/i.test(msg) || /\bimpossible\b/i.test(msg);
-  const visibleMessage = isErrorState ? msg : 'Chargement du Viewer LIDAR';
+  const isErrorState = /^(?:❌|⚠️)/.test(msg) || /\b(?:erreur|error)\b/i.test(msg) || /\b(?:impossible|unable)\b/i.test(msg);
+  msg = translateAppText(msg);
+  const visibleMessage = isErrorState ? msg : translateAppText('Chargement du Viewer LIDAR');
   statusEl.textContent = visibleMessage;
   statusEl.toggleAttribute('data-loading-error', isErrorState);
   if (!isErrorState) {
@@ -68,7 +95,9 @@ export async function loadTileFromOPFS(tileFileNames: string[]): Promise<ArrayBu
       // try next candidate
     }
   }
-  throw new Error(`Tuile introuvable dans le stockage local: ${tileFileNames[0] ?? 'inconnue'}`);
+  throw new Error(translateAppText('Tuile introuvable dans le stockage local : {{file}}', {
+    file: tileFileNames[0] ?? translateAppText('inconnue'),
+  }));
 }
 
 function runProcessWorker(
@@ -83,7 +112,12 @@ function runProcessWorker(
       if (msg.type === 'progress') {
         const base = msg.phase === 'parsing' ? 15 : 50;
         const scale = msg.phase === 'parsing' ? 0.35 : 0.3;
-        setStatus(`${msg.phase === 'parsing' ? 'Parsing' : 'Colorisation'} : ${msg.message}`, base + msg.percent * scale);
+        setStatus(
+          translateAppText(msg.phase === 'parsing' ? 'Analyse : {{step}}' : 'Colorisation : {{step}}', {
+            step: translateLidarWorkerProgress(msg.message),
+          }),
+          base + msg.percent * scale,
+        );
       } else if (msg.type === 'done') {
         worker.terminate();
         resolve({
@@ -92,7 +126,10 @@ function runProcessWorker(
           classifications: msg.classifications,
           count: msg.count,
           bounds: msg.bounds,
+          origin: msg.origin,
           crs: msg.crs as DetectedCrs,
+          intensities: msg.intensities,
+          copc: msg.copc,
         });
       } else if (msg.type === 'error') {
         worker.terminate();
@@ -145,7 +182,17 @@ async function decodeCopcInParallel(
   wasmModule: WebAssembly.Module,
   workerCount: number,
   setStatus: ViewerStatusReporter,
-): Promise<{ positions: Float32Array; classifications: Uint8Array; count: number; bounds: PointCloudBounds }> {
+): Promise<{
+  positions: Float32Array;
+  classifications: Uint8Array;
+  intensities: Uint16Array;
+  /** Embedded RGB when the file carries usable (16-bit scaled) colour, else null. */
+  colors: Uint8Array | null;
+  count: number;
+  bounds: PointCloudBounds;
+  origin: PointCloudOrigin;
+}> {
+  const origin = computeLocalOrigin(layout.header.min);
   const groups = splitContiguous(layout.nodes, Math.max(1, Math.min(workerCount, layout.nodes.length)));
   const fileBytes = new Uint8Array(buffer);
   const totalChunks = layout.nodes.length;
@@ -170,7 +217,12 @@ async function decodeCopcInParallel(
           if (msg.type === 'progress') {
             doneByGroup[groupIndex] = msg.done;
             const done = doneByGroup.reduce((sum, value) => sum + value, 0);
-            setStatus(`Parsing : Lecture COPC ${done}/${totalChunks}...`, 15 + (10 + (done / totalChunks) * 50) * 0.35);
+            setStatus(
+              translateAppText('Analyse : {{step}}', {
+                step: translateAppText('Lecture COPC {{done}}/{{total}}...', { done, total: totalChunks }),
+              }),
+              15 + (10 + (done / totalChunks) * 50) * 0.35,
+            );
           } else if (msg.type === 'done') {
             resolve(msg);
           } else {
@@ -181,6 +233,7 @@ async function decodeCopcInParallel(
         const request: CopcDecodeRequest = {
           type: 'decode',
           header: layout.header,
+          origin,
           bytes: bytes.buffer,
           pointCounts: group.map((node) => node.pointCount),
           byteLengths: group.map((node) => node.pointDataLength),
@@ -193,6 +246,11 @@ async function decodeCopcInParallel(
     const count = parts.reduce((sum, part) => sum + part.count, 0);
     const positions = new Float32Array(count * 3);
     const classifications = new Uint8Array(count);
+    const intensities = new Uint16Array(count);
+    const maxRgb = parts.reduce((max, part) => Math.max(max, part.maxRgb), 0);
+    const colors = parts.every((part) => part.colors !== null) && hasUsableEmbeddedRgb(maxRgb)
+      ? new Uint8Array(count * 3)
+      : null;
     const bounds: PointCloudBounds = {
       minX: Infinity, minY: Infinity, minZ: Infinity,
       maxX: -Infinity, maxY: -Infinity, maxZ: -Infinity,
@@ -201,6 +259,8 @@ async function decodeCopcInParallel(
     for (const part of parts) {
       positions.set(part.positions, pointOffset * 3);
       classifications.set(part.classifications, pointOffset);
+      intensities.set(part.intensities, pointOffset);
+      if (colors && part.colors) colors.set(part.colors, pointOffset * 3);
       pointOffset += part.count;
       bounds.minX = Math.min(bounds.minX, part.bounds.minX);
       bounds.minY = Math.min(bounds.minY, part.bounds.minY);
@@ -209,7 +269,7 @@ async function decodeCopcInParallel(
       bounds.maxY = Math.max(bounds.maxY, part.bounds.maxY);
       bounds.maxZ = Math.max(bounds.maxZ, part.bounds.maxZ);
     }
-    return { positions, classifications, count, bounds };
+    return { positions, classifications, intensities, colors, count, bounds, origin };
   } finally {
     for (const worker of workers) worker.terminate();
   }
@@ -246,25 +306,58 @@ export async function processPointCloudInWorker(
   try {
     const [minX, minY, minZ] = layout.header.min as [number, number, number];
     const [maxX, maxY, maxZ] = layout.header.max as [number, number, number];
-    const prefetchCrs = crs ?? detectCrs(minY, maxY, minX, maxX);
-    colorWorker.postMessage({
-      type: 'prefetch',
-      bounds: { minX, minY, minZ, maxX, maxY, maxZ },
-      crs: prefetchCrs,
-    } satisfies WorkerRequest);
+    // Formats with RGB usually carry real colour: only prefetch orthophotos
+    // when the file cannot provide it.
+    if (!fileFormatHasRgb(layout.header.pointDataRecordFormat)) {
+      colorWorker.postMessage({
+        type: 'prefetch',
+        bounds: { minX, minY, minZ, maxX, maxY, maxZ },
+        crs: crs ?? detectCrs(minY, maxY, minX, maxX),
+      } satisfies WorkerRequest);
+    }
 
     const decoded = await decodeCopcInParallel(buffer, layout, wasmModule, workerCount, setStatus);
     const resolvedCrs = crs ?? detectCrs(decoded.bounds.minY, decoded.bounds.maxY, decoded.bounds.minX, decoded.bounds.maxX);
-    return await runProcessWorker(
+    const copc = toCopcHierarchyInfo(layout.nodes, layout.cube, layout.spacing);
+    if (decoded.colors) {
+      colorWorker.terminate();
+      return {
+        positions: decoded.positions,
+        colors: decoded.colors,
+        classifications: decoded.classifications,
+        intensities: decoded.intensities,
+        count: decoded.count,
+        bounds: decoded.bounds,
+        origin: decoded.origin,
+        crs: resolvedCrs,
+        embeddedRgb: true,
+        copc,
+      };
+    }
+    const colorized = await runProcessWorker(
       colorWorker,
-      { type: 'colorize', ...decoded, crs: resolvedCrs },
+      {
+        type: 'colorize',
+        positions: decoded.positions,
+        classifications: decoded.classifications,
+        count: decoded.count,
+        bounds: decoded.bounds,
+        origin: decoded.origin,
+        crs: resolvedCrs,
+      },
       [decoded.positions.buffer, decoded.classifications.buffer],
       setStatus,
     );
+    return { ...colorized, intensities: decoded.intensities, copc };
   } catch (error) {
     colorWorker.terminate();
     throw error;
   }
+}
+
+function fileFormatHasRgb(pointDataRecordFormat: number): boolean {
+  const format = pointDataRecordFormat & 0x3f;
+  return format === 2 || format === 3 || format === 5 || format === 7 || format === 8 || format === 10;
 }
 
 export type PreflightResult =
@@ -273,19 +366,19 @@ export type PreflightResult =
 
 export async function preflightWebGPU(): Promise<PreflightResult> {
   if (!('gpu' in navigator) || !navigator.gpu) {
-    return { ok: false, code: 'no-webgpu', detail: 'navigator.gpu indisponible' };
+    return { ok: false, code: 'no-webgpu', detail: translateAppText('navigator.gpu indisponible') };
   }
   let adapter: GPUAdapter | null = null;
   try {
     adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
   } catch (e: any) {
-    return { ok: false, code: 'no-adapter', detail: e?.message || 'requestAdapter a échoué' };
+    return { ok: false, code: 'no-adapter', detail: e?.message || translateAppText('requestAdapter a échoué') };
   }
   if (!adapter) {
-    return { ok: false, code: 'no-adapter', detail: 'Aucun GPUAdapter retourné' };
+    return { ok: false, code: 'no-adapter', detail: translateAppText('Aucun GPUAdapter retourné') };
   }
   if ((adapter as any).isFallbackAdapter === true) {
-    return { ok: false, code: 'fallback-adapter', detail: 'Adapter logiciel (fallback) détecté' };
+    return { ok: false, code: 'fallback-adapter', detail: translateAppText('Adapter logiciel (fallback) détecté') };
   }
   const info = (adapter as any).info ?? {};
   const vendor = String(info.vendor ?? '').toLowerCase();
@@ -301,7 +394,11 @@ export async function preflightWebGPU(): Promise<PreflightResult> {
   ];
   const haystack = `${vendor} ${arch} ${desc}`;
   if (softwareSignatures.some((signature) => haystack.includes(signature))) {
-    return { ok: false, code: 'software-adapter', detail: `Adapter logiciel: ${desc || vendor || 'inconnu'}` };
+    return {
+      ok: false,
+      code: 'software-adapter',
+      detail: translateAppText('Adapter logiciel : {{name}}', { name: desc || vendor || '?' }),
+    };
   }
   return { ok: true, vendor, arch, desc };
 }
@@ -337,17 +434,17 @@ export function showFatalError(
       text-align: center;
     `);
   card.appendChild(createStyledElement('div', 'font-size: 40px; margin-bottom: 8px;', '⚠️'));
-  card.appendChild(createStyledElement('h1', 'font-size: 1.35rem; margin: 0 0 12px; color:#ffb4b4;', opts.title));
+  card.appendChild(createStyledElement('h1', 'font-size: 1.35rem; margin: 0 0 12px; color:#ffb4b4;', translateAppText(opts.title)));
   card.appendChild(
-    createStyledElement('p', 'font-size: 0.95rem; line-height: 1.55; color:#e6e8f0; margin: 0 0 14px;', opts.message),
+    createStyledElement('p', 'font-size: 0.95rem; line-height: 1.55; color:#e6e8f0; margin: 0 0 14px;', translateAppText(opts.message)),
   );
   if (opts.hint) {
-    card.appendChild(createStyledElement('p', 'font-size:0.85rem; color:#9aa3bd; margin:0 0 14px;', opts.hint));
+    card.appendChild(createStyledElement('p', 'font-size:0.85rem; color:#9aa3bd; margin:0 0 14px;', translateAppText(opts.hint)));
   }
   if (opts.technical) {
     const details = createStyledElement('details', 'margin-top:10px; text-align:left;');
     details.appendChild(
-      createStyledElement('summary', 'cursor:pointer; color:#7ea1ff; font-size:0.8rem;', 'Détails techniques'),
+      createStyledElement('summary', 'cursor:pointer; color:#7ea1ff; font-size:0.8rem;', translateAppText('Détails techniques')),
     );
     details.appendChild(createStyledElement('pre', `
             margin-top: 8px; padding: 10px; font-size: 11px;
@@ -361,7 +458,7 @@ export function showFatalError(
         background: rgba(80,120,255,0.25); color:#fff;
         border: 1px solid rgba(120,160,255,0.55);
         border-radius: 999px; cursor: pointer; font-size: 0.9rem;
-      `, "Fermer l'onglet");
+      `, translateAppText("Fermer l'onglet"));
   closeButton.id = 'err-close';
   closeButton.addEventListener('click', () => window.close());
   card.appendChild(closeButton);
@@ -439,74 +536,60 @@ export async function launchWebGLFallback({
   );
 }
 
-export function buildRGBA(pc: PointCloudData): Uint8Array {
-  const rgba = new Uint8Array(pc.count * 4);
-  const cls = pc.classifications;
-  for (let index = 0; index < pc.count; index++) {
-    rgba[index * 4 + 0] = pc.colors[index * 3 + 0]!;
-    rgba[index * 4 + 1] = pc.colors[index * 3 + 1]!;
-    rgba[index * 4 + 2] = pc.colors[index * 3 + 2]!;
-    rgba[index * 4 + 3] = cls ? (cls[index] ?? 0) : 0;
-  }
-  return rgba;
-}
-
-export function centerPositions(pc: PointCloudData): { positions: Float32Array; origin: [number, number, number] } {
-  const cx = (pc.bounds.minX + pc.bounds.maxX) / 2;
-  const cy = (pc.bounds.minY + pc.bounds.maxY) / 2;
-  const cz = (pc.bounds.minZ + pc.bounds.maxZ) / 2;
-
-  const out = new Float32Array(pc.count * 3);
-  for (let index = 0; index < pc.count; index++) {
-    const offset = index * 3;
-    out[offset + 0] = pc.positions[offset + 0] - cx;
-    out[offset + 1] = pc.positions[offset + 2] - cz;
-    out[offset + 2] = -(pc.positions[offset + 1] - cy);
-  }
-
-  return { positions: out, origin: [cx, cy, cz] };
-}
-
-export function buildOctreeInWorker(
-  positions: Float32Array,
-  colors: Uint8Array,
-  bounds: AABB,
-  setStatus: ViewerStatusReporter,
-): Promise<FlatOctree> {
+/**
+ * Builds the tile's LOD octree in a worker and stores it in the OPFS LOD
+ * cache, then reopens it for streaming. The point arrays of `pointCloud` are
+ * transferred (detached): take any copy you need (heightmap) before.
+ */
+export function buildLodTileInWorker(
+  lazFileName: string,
+  pointCloud: PointCloudData,
+  options: { persist: boolean } = { persist: true },
+): Promise<OpenedLodTile> {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(new URL('./lod/octreeWorker.ts', import.meta.url), { type: 'module' });
-
-    worker.onmessage = (e: MessageEvent<OctreeWorkerResponse>) => {
+    const worker = new Worker(new URL('../workers/lodCacheWorker.ts', import.meta.url), { type: 'module' });
+    worker.onmessage = async (e: MessageEvent<LodCacheResponse>) => {
       const msg = e.data;
-      if (msg.type === 'progress') {
-        setStatus(`Octree: ${msg.message}`, 87 + msg.percent * 0.05);
-      } else if (msg.type === 'done') {
-        worker.terminate();
-        resolve({
-          root: msg.root,
-          leafPositions: msg.leafPositions,
-          leafColors: msg.leafColors,
-          voxelPositions: msg.voxelPositions,
-          voxelColors: msg.voxelColors,
-          totalLeafPoints: msg.totalLeafPoints,
-          totalVoxelSamples: msg.totalVoxelSamples,
-          maxDepthReached: msg.maxDepthReached,
-          nodeCount: msg.nodeCount,
-        });
-      } else if (msg.type === 'error') {
-        worker.terminate();
+      worker.terminate();
+      if (msg.type === 'error') {
         reject(new Error(msg.message));
+        return;
       }
+      if (!msg.stored && msg.packed) {
+        resolve(createInMemoryLodTile({ header: msg.header, nodes: msg.nodes, packed: msg.packed }));
+        return;
+      }
+      const opened = await openLodTile(lazFileName);
+      if (opened) resolve(opened);
+      else reject(new Error(translateAppText('Cache LOD illisible après écriture : {{file}}', { file: lazFileName })));
     };
-
     worker.onerror = (err) => {
       worker.terminate();
       reject(new Error(err.message));
     };
 
+    const input: LodTileInput = {
+      positions: pointCloud.positions,
+      colors: pointCloud.colors,
+      classifications: pointCloud.classifications,
+      intensities: pointCloud.intensities,
+      count: pointCloud.count,
+      bounds: pointCloud.bounds,
+      origin: pointCloud.origin,
+      crs: pointCloud.crs,
+      embeddedRgb: pointCloud.embeddedRgb,
+      copc: pointCloud.copc,
+    };
+    const transfer: Transferable[] = [pointCloud.positions.buffer, pointCloud.colors.buffer, pointCloud.classifications.buffer];
+    if (pointCloud.intensities) transfer.push(pointCloud.intensities.buffer);
     worker.postMessage(
-      { type: 'build', positions, colors, bounds },
-      [positions.buffer, colors.buffer],
+      { type: 'build', lazFileName, input, persist: options.persist } satisfies LodCacheRequest,
+      uniqueBuffers(transfer),
     );
   });
+}
+
+/** A buffer may back several views (e.g. cache reads); transfer each only once. */
+function uniqueBuffers(transfer: Transferable[]): Transferable[] {
+  return Array.from(new Set(transfer));
 }

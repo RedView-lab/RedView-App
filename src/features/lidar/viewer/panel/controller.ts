@@ -2,6 +2,7 @@ import { ensureViewerPanel } from './template';
 
 export type SnowModeKey = 'off' | 'cover' | 'thickness';
 export type ViewerEngineKey = 'webgpu' | 'webgl';
+export type PointColorModeKey = 'rgb' | 'intensity' | 'classification';
 
 export const POINT_SIZE_MIN = 0.02;
 export const POINT_SIZE_MAX = 1.0;
@@ -35,6 +36,12 @@ interface ViewerPanelOptions {
   engineOptions?: ViewerEngineOption[];
   onPointSizeChange?: (percent: number) => void;
   onDensityChange?: (percent: number) => void;
+  /** Point size slider switches between metres (adaptive) and fixed pixels. */
+  onFixedSizeChange?: (fixed: boolean) => void;
+  edlEnabled?: boolean;
+  edlStrengthPercent?: number;
+  onEdlChange?: (enabled: boolean, strengthPercent: number) => void;
+  onColorModeChange?: (mode: PointColorModeKey) => void;
   onElevationChange?: (percent: number, factor: number) => void;
   onEngineModeChange?: (mode: ViewerEngineKey) => void;
   onSnowModeChange?: (mode: SnowModeKey) => void;
@@ -48,13 +55,19 @@ interface PrimaryActionState {
 }
 
 const ENGINE_MODE_LABELS: Record<ViewerEngineKey, string> = {
-  webgpu: 'WebGpu (+ précis)',
-  webgl: 'WebGl HD',
+  webgpu: 'WebGPU (+ précis)',
+  webgl: 'WebGL HD',
 };
 
 const SNOW_MODE_LABELS: Record<Exclude<SnowModeKey, 'off'>, string> = {
   cover: 'Couverture neigeuse',
-  thickness: 'Epaisseur (cm)',
+  thickness: 'Épaisseur (cm)',
+};
+
+const COLOR_MODE_LABELS: Record<PointColorModeKey, string> = {
+  rgb: 'Couleurs réelles',
+  intensity: 'Intensité LiDAR',
+  classification: 'Classification',
 };
 
 function normalizeEngineOptions(options?: ViewerEngineOption[]): ViewerEngineOption[] {
@@ -109,6 +122,25 @@ export function percentToDensityScale(percent: number): number {
   return toSliderPercent(percent) / 100;
 }
 
+export const FIXED_POINT_PX_MIN = 1;
+export const FIXED_POINT_PX_MAX = 10;
+
+export function percentToFixedPointPixels(percent: number): number {
+  const normalized = (toSliderPercent(percent) - 1) / 99;
+  return FIXED_POINT_PX_MIN + normalized * (FIXED_POINT_PX_MAX - FIXED_POINT_PX_MIN);
+}
+
+export function fixedPointPixelsToPercent(pixels: number): number {
+  const normalized = (clamp(pixels, FIXED_POINT_PX_MIN, FIXED_POINT_PX_MAX) - FIXED_POINT_PX_MIN)
+    / (FIXED_POINT_PX_MAX - FIXED_POINT_PX_MIN);
+  return toSliderPercent(1 + normalized * 99);
+}
+
+/** EDL strength: slider 50 ≈ 1.0, the CloudCompare/Potree default. */
+export function percentToEdlStrength(percent: number): number {
+  return toSliderPercent(percent) / 50;
+}
+
 export function elevationPercentToFactor(percent: number): number {
   const normalized = (toSliderPercent(percent) - 1) / 99;
   return ELEVATION_EXAGGERATION_MIN + normalized * (ELEVATION_EXAGGERATION_MAX - ELEVATION_EXAGGERATION_MIN);
@@ -146,6 +178,15 @@ export function createViewerPanel(options: ViewerPanelOptions) {
   const elevationControlsGroup = queryElement<HTMLDivElement>('panel-elevation-controls');
   const pointSizeInput = queryElement<HTMLInputElement>('panel-point-size');
   const densityInput = queryElement<HTMLInputElement>('panel-point-density');
+  const fixedSizeToggle = queryElement<HTMLInputElement>('panel-fixed-size-toggle');
+  const edlToggle = queryElement<HTMLInputElement>('panel-edl-toggle');
+  const edlStrengthInput = queryElement<HTMLInputElement>('panel-edl-strength');
+  const colorModeButton = queryElement<HTMLButtonElement>('panel-color-mode-button');
+  const colorModeValue = queryElement<HTMLSpanElement>('panel-color-mode-value');
+  const colorModeMenu = queryElement<HTMLDivElement>('panel-color-mode-menu');
+  const colorModeOptions = Array.from(
+    root.querySelectorAll<HTMLButtonElement>('[data-color-mode-option]'),
+  );
   const elevationInput = queryElement<HTMLInputElement>('panel-elevation-exaggeration');
   const engineModeButton = queryElement<HTMLButtonElement>('panel-engine-mode-button');
   const engineModeValue = queryElement<HTMLSpanElement>('panel-engine-mode-value');
@@ -168,6 +209,8 @@ export function createViewerPanel(options: ViewerPanelOptions) {
   let engineModeMenuOpen = false;
   let snowModeMenuOpen = false;
   let lastSnowMode: Exclude<SnowModeKey, 'off'> = 'cover';
+  let colorMode: PointColorModeKey = 'rgb';
+  let colorModeMenuOpen = false;
   let currentEngineMode: ViewerEngineKey = options.engineMode ?? 'webgpu';
   let availableEngineOptions = normalizeEngineOptions(options.engineOptions);
 
@@ -351,7 +394,65 @@ export function createViewerPanel(options: ViewerPanelOptions) {
   const syncPointControls = () => {
     if (pointSizeInput) pointSizeInput.disabled = pointControlsDisabled;
     if (densityInput) densityInput.disabled = pointControlsDisabled;
+    if (fixedSizeToggle) fixedSizeToggle.disabled = pointControlsDisabled;
+    if (edlToggle) edlToggle.disabled = pointControlsDisabled;
+    if (edlStrengthInput) edlStrengthInput.disabled = pointControlsDisabled || !(edlToggle?.checked ?? false);
     root?.classList.toggle('is-point-controls-disabled', pointControlsDisabled);
+  };
+
+  const emitEdlChange = () => {
+    syncPointControls();
+    options.onEdlChange?.(edlToggle?.checked ?? false, toSliderPercent(Number(edlStrengthInput?.value ?? 50)));
+  };
+
+  const handleEdlStrengthInput = () => {
+    syncRangeFill(edlStrengthInput);
+    emitEdlChange();
+  };
+
+  const handleFixedSizeToggle = () => {
+    options.onFixedSizeChange?.(fixedSizeToggle?.checked ?? false);
+  };
+
+  const syncColorModeSelection = () => {
+    if (colorModeValue) colorModeValue.textContent = COLOR_MODE_LABELS[colorMode];
+    colorModeOptions.forEach((option) => {
+      const isSelected = option.dataset.colorModeOption === colorMode;
+      option.classList.toggle('is-selected', isSelected);
+      option.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+    });
+  };
+
+  const closeColorModeMenu = () => {
+    colorModeMenuOpen = false;
+    colorModeMenu?.setAttribute('hidden', '');
+    colorModeButton?.setAttribute('aria-expanded', 'false');
+    root?.classList.remove('is-color-menu-open');
+  };
+
+  const handleColorModeButtonClick = (event: MouseEvent) => {
+    event.stopPropagation();
+    if (!colorModeMenu || !colorModeButton || colorModeButton.disabled) return;
+    if (colorModeMenuOpen) {
+      closeColorModeMenu();
+      return;
+    }
+    colorModeMenuOpen = true;
+    colorModeMenu.removeAttribute('hidden');
+    colorModeButton.setAttribute('aria-expanded', 'true');
+    root?.classList.add('is-color-menu-open');
+  };
+
+  const handleColorModeOptionClick = (event: MouseEvent) => {
+    const option = event.currentTarget;
+    if (!(option instanceof HTMLButtonElement)) return;
+    const selected = option.dataset.colorModeOption as PointColorModeKey | undefined;
+    if (!selected) return;
+    closeColorModeMenu();
+    if (selected === colorMode) return;
+    colorMode = selected;
+    syncColorModeSelection();
+    options.onColorModeChange?.(selected);
   };
 
   const handleDocumentClick = (event: MouseEvent) => {
@@ -363,12 +464,16 @@ export function createViewerPanel(options: ViewerPanelOptions) {
     if (snowModeMenu && snowModeMenuOpen) {
       if (!snowModeMenu.contains(target) && !snowModeButton?.contains(target)) closeSnowModeMenu();
     }
+    if (colorModeMenu && colorModeMenuOpen) {
+      if (!colorModeMenu.contains(target) && !colorModeButton?.contains(target)) closeColorModeMenu();
+    }
   };
 
   const handleEscape = (event: KeyboardEvent) => {
     if (event.key !== 'Escape') return;
     closeEngineModeMenu();
     closeSnowModeMenu();
+    closeColorModeMenu();
   };
 
   const handlePointSizeInput = () => {
@@ -445,9 +550,12 @@ export function createViewerPanel(options: ViewerPanelOptions) {
   if (elevationInput) {
     elevationInput.value = String(toSliderPercent(options.elevationPercent ?? factorToElevationPercent(1.0)));
   }
+  if (edlToggle) edlToggle.checked = options.edlEnabled ?? false;
+  if (edlStrengthInput) edlStrengthInput.value = String(toSliderPercent(options.edlStrengthPercent ?? 50));
   syncRangeFill(pointSizeInput);
   syncRangeFill(densityInput);
   syncRangeFill(elevationInput);
+  syncRangeFill(edlStrengthInput);
   syncEngineSelection();
   syncSnowModeSelection();
 
@@ -459,6 +567,12 @@ export function createViewerPanel(options: ViewerPanelOptions) {
 
   pointSizeInput?.addEventListener('input', handlePointSizeInput);
   densityInput?.addEventListener('input', handleDensityInput);
+  fixedSizeToggle?.addEventListener('change', handleFixedSizeToggle);
+  edlToggle?.addEventListener('change', emitEdlChange);
+  edlStrengthInput?.addEventListener('input', handleEdlStrengthInput);
+  colorModeButton?.addEventListener('click', handleColorModeButtonClick);
+  colorModeOptions.forEach((option) => option.addEventListener('click', handleColorModeOptionClick));
+  syncColorModeSelection();
   elevationInput?.addEventListener('input', handleElevationInput);
   engineModeButton?.addEventListener('click', handleEngineModeButtonClick);
   engineModeOptions.forEach((option) => option.addEventListener('click', handleEngineModeOptionClick));
@@ -533,6 +647,11 @@ export function createViewerPanel(options: ViewerPanelOptions) {
       restoreButton?.removeEventListener('click', restoreLeftPanel);
       pointSizeInput?.removeEventListener('input', handlePointSizeInput);
       densityInput?.removeEventListener('input', handleDensityInput);
+      fixedSizeToggle?.removeEventListener('change', handleFixedSizeToggle);
+      edlToggle?.removeEventListener('change', emitEdlChange);
+      edlStrengthInput?.removeEventListener('input', handleEdlStrengthInput);
+      colorModeButton?.removeEventListener('click', handleColorModeButtonClick);
+      colorModeOptions.forEach((option) => option.removeEventListener('click', handleColorModeOptionClick));
       elevationInput?.removeEventListener('input', handleElevationInput);
       engineModeButton?.removeEventListener('click', handleEngineModeButtonClick);
       engineModeOptions.forEach((option) => option.removeEventListener('click', handleEngineModeOptionClick));

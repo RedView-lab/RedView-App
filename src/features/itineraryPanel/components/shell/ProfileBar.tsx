@@ -45,7 +45,7 @@ export function ProfileBar({
         type="button"
         className="rvi-ghostbtn"
         onClick={onUndo}
-        aria-label={t('Annuler')}
+        aria-label={t('Annuler la modification')}
         aria-disabled={!canUndo}
       >
         <IconCornerUpLeft size={16} />

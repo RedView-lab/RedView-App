@@ -1,4 +1,5 @@
 import { buildLidarRouteMesh } from './builder';
+import { translateAppText } from '@/shared/i18n/config';
 import { loadLidarRouteOverlay, subscribeToLidarRouteOverlay } from './storage';
 import {
   broadcastLidarRouteCreate,
@@ -263,7 +264,7 @@ export class ViewerRouteController {
       DEFAULT_ROUTE_PALETTE[(routeIndex - 1) % DEFAULT_ROUTE_PALETTE.length] ?? '#E53935';
     const newRoute: LidarRouteOverlayItem = {
       id: `route-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      name: name?.trim() || `Trace 3D ${routeIndex}`,
+      name: name?.trim() || translateAppText('Trace 3D {{index}}', { index: routeIndex }),
       color: color || defaultColor,
       opacity: 1,
       visible: true,
@@ -347,7 +348,7 @@ export class ViewerRouteController {
     const newRoute: LidarRouteOverlayItem = {
       ...structuredClone(source),
       id: `route-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      name: `${source.name} (copie)`,
+      name: translateAppText('{{name}} (copie)', { name: source.name }),
     };
 
     this.routes.push(newRoute);

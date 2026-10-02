@@ -1,3 +1,4 @@
+import { translateAppText } from '@/shared/i18n';
 import { ITINERARY_COLORS } from './defaultState';
 import type { Itinerary, ItineraryProject } from '../../types';
 import {
@@ -28,7 +29,7 @@ function pickSplitChildColor(project: ItineraryProject, sourceColor: string): st
 }
 
 function buildUniqueSplitName(project: ItineraryProject, sourceName: string): string {
-  const baseName = `Découpage de ${sourceName}`;
+  const baseName = translateAppText('Découpage de {{name}}', { name: sourceName });
   let nextName = baseName;
   let suffix = 2;
   while (project.itineraries.some((itinerary) => itinerary.name === nextName)) {

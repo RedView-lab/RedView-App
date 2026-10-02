@@ -20,7 +20,7 @@ export class ViewerSnowController {
 
   async ensureSnowFieldLoaded(
     renderer: LidarRenderer | null,
-    pointCloud: PointCloudData,
+    pointCloud: Pick<PointCloudData, 'bounds'>,
     terrainMesh: TerrainCache,
     crs: DetectedCrs,
     cx: number,
@@ -82,7 +82,7 @@ export class ViewerSnowController {
   async handleSnowModeChange(
     nextMode: SnowModeKey,
     renderer: LidarRenderer | null,
-    pointCloud: PointCloudData,
+    pointCloud: Pick<PointCloudData, 'bounds'>,
     terrainMesh: TerrainCache,
     crs: DetectedCrs,
     cx: number,

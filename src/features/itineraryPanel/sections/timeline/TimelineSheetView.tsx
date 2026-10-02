@@ -861,7 +861,7 @@ function renderNameCell(item: TimelineItem, extras: RenderCellExtras) {
   const isPause = item.kind === 'pause';
   const primaryLabel =
     isPause && item.durationMin
-      ? (isAutoIntervalPause ? `${item.label} · ${item.durationMin}min` : `${item.durationMin}min`)
+      ? (isAutoIntervalPause ? `${t(item.label)} · ${item.durationMin}min` : `${item.durationMin}min`)
       : item.label;
 
   if (useSearchInput) {

@@ -410,15 +410,23 @@ assign costfactor
   add noise_penalty
       weightedbase
 
-${inClimbMode ? `# ─── Climbing-mode: per-way uphill/downhill cost factors ──────────
+${inClimbMode ? `# ─── Climbing-mode: cheaper climbs, same ranking ──────────────────
+# BRouter substitutes uphillcostfactor for costfactor on climbs. A flat
+# per-category value would drop the user's surface choices (Interdire /
+# Éviter), the wrong-way oneway, access and town penalties on every climb:
+# scale the full costfactor instead, keeping the 10000 sentinel.
+assign climb_relief =
+  if is_major            then 1.0
+  else if is_gravel      then 0.4
+  else if is_offroad     then 0.5
+  else if is_singletrack then 0.65
+  else if is_bikelane    then 0.55
+  else if is_road_paved  then 0.55
+  else 0.7
+
 assign uphillcostfactor =
-  if is_major            then 4.0
-  else if is_road_paved  then 1.45
-  else if is_bikelane    then 1.1
-  else if is_gravel      then 1.15
-  else if is_offroad     then 1.35
-  else if is_singletrack then 2.2
-  else 1.5
+  if greater costfactor 9998 then costfactor
+  else multiply costfactor climb_relief
 
 assign downhillcostfactor = 0
 ` : ''}

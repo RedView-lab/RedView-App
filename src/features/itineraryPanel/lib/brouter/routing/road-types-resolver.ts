@@ -28,6 +28,7 @@
  * 4. maxSlopePercent < 1 is meaningless (no climb allowed = no route).
  *    We clamp to ≥ 3 %.
  */
+import { translateAppText } from '@/shared/i18n';
 import type { RoadTypesState, RoadPreference } from '../../../types';
 
 export interface RoadTypesResolution {
@@ -68,7 +69,10 @@ export function resolveRoadTypes(input: RoadTypesState): RoadTypesResolution {
       if (out[k] === 'forbid') {
         out[k] = 'tolerate';
         warnings.push(
-          `Toutes les surfaces étaient interdites — ${KEY_LABELS[k]} ré-autorisé pour permettre le calcul.`,
+          translateAppText(
+            'Toutes les surfaces étaient interdites — {{surface}} ré-autorisé pour permettre le calcul.',
+            { surface: translateAppText(KEY_LABELS[k]) },
+          ),
         );
         corrected = true;
         break;
@@ -83,7 +87,7 @@ export function resolveRoadTypes(input: RoadTypesState): RoadTypesResolution {
     out.majorRoads === 'forbid'
   ) {
     warnings.push(
-      'Tout le réseau goudronné est interdit : l’itinéraire passera uniquement par des chemins.',
+      translateAppText('Tout le réseau goudronné est interdit : l’itinéraire passera uniquement par des chemins.'),
     );
   }
 
@@ -94,7 +98,10 @@ export function resolveRoadTypes(input: RoadTypesState): RoadTypesResolution {
   // Rule 4 — max-slope sanity
   if (out.maxSlopePercent != null && out.maxSlopePercent < 3) {
     warnings.push(
-      `Pente max. ${out.maxSlopePercent}% trop basse — relevée à 3 % (en deçà aucun itinéraire n’est calculable).`,
+      translateAppText(
+        'Pente max. {{value}}% trop basse — relevée à 3 % (en deçà aucun itinéraire n’est calculable).',
+        { value: out.maxSlopePercent },
+      ),
     );
     out.maxSlopePercent = 3;
     corrected = true;

@@ -1,19 +1,16 @@
 import type { Itinerary } from '@/features/itineraryPanel/types';
 import {
+  buildPoiExportDescription,
   collectExportAnchors,
   escapeXml,
   formatCoordinate,
   formatDecimal,
   getExportRoutePoints,
   KML_NAMESPACE,
-  POI_CATEGORY_LABEL_FR,
   POI_CATEGORY_TO_KML_COLOR,
   type ExportAnchor,
 } from './exportHelpers';
-
-function resolvePoiCategoryLabel(anchor: ExportAnchor): string {
-  return anchor.poiCategory ? (POI_CATEGORY_LABEL_FR[anchor.poiCategory] ?? 'POI') : 'POI';
-}
+import { translateAppText } from '@/shared/i18n/config';
 
 function kmlStyleIdForAnchor(anchor: ExportAnchor): string {
   if (anchor.kind === 'start') return 'rv-start';
@@ -42,7 +39,7 @@ export function buildItineraryKml(
 ): string {
   const routePoints = getExportRoutePoints(itinerary);
   const anchors = collectExportAnchors(itinerary, routePoints, options);
-  const routeName = itinerary.gpxRoute?.name?.trim() || itinerary.name.trim() || 'Itineraire';
+  const routeName = itinerary.gpxRoute?.name?.trim() || itinerary.name.trim() || translateAppText('Itinéraire');
 
   const styleIds = new Set<string>(['rv-track']);
   for (const anchor of anchors) {
@@ -79,8 +76,7 @@ export function buildItineraryKml(
   const poiPlacemarkXml = anchors
     .filter((anchor) => anchor.kind === 'poi')
     .map((anchor) => {
-      const distanceKm = (anchor.distanceM / 1000).toFixed(1);
-      const description = `${resolvePoiCategoryLabel(anchor)} - km ${distanceKm}${anchor.favorite ? ' (favori)' : ''}`;
+      const description = buildPoiExportDescription(anchor);
       const coord = anchor.elevationM != null
         ? `${formatCoordinate(anchor.lon)},${formatCoordinate(anchor.lat)},${formatDecimal(anchor.elevationM, 1)}`
         : `${formatCoordinate(anchor.lon)},${formatCoordinate(anchor.lat)},0`;
@@ -127,15 +123,15 @@ export function buildItineraryKml(
     `<kml xmlns="${KML_NAMESPACE}">`,
     '  <Document>',
     `    <name>${escapeXml(routeName)}</name>`,
-    `    <description>${escapeXml('Trace et POI favoris exportes depuis RedView.')}</description>`,
+    `    <description>${escapeXml(translateAppText('Trace et POI favoris exportés depuis RedView.'))}</description>`,
     styleXml,
     '    <Folder>',
-    `      <name>${escapeXml('POI favoris')}</name>`,
+    `      <name>${escapeXml(translateAppText('POI favoris'))}</name>`,
     poiPlacemarkXml,
     checkpointPlacemarkXml,
     '    </Folder>',
     '    <Folder>',
-    `      <name>${escapeXml('Trace')}</name>`,
+    `      <name>${escapeXml(translateAppText('Trace'))}</name>`,
     '      <Placemark>',
     `        <name>${escapeXml(routeName)}</name>`,
     '        <styleUrl>#rv-track</styleUrl>',

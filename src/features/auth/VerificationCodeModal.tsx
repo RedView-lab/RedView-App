@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, type ChangeEvent, type KeyboardEvent, type ClipboardEvent } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 import './VerificationCodeModal.css';
 
 interface VerificationCodeModalProps {
@@ -31,6 +32,9 @@ export default function VerificationCodeModal({
   onConfirm,
   onResend,
 }: VerificationCodeModalProps) {
+  // La carte est un sous-arbre `data-rv-no-translate` : l'observer DOM ne la
+  // traduit pas, tous les textes passent donc par t().
+  const { t } = useAppI18n();
   const [digits, setDigits] = useState<string[]>(emptyDigits);
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
@@ -221,7 +225,7 @@ export default function VerificationCodeModal({
             type="button"
             className="rv-modal-close-btn"
             onClick={onClose}
-            aria-label="Fermer"
+            aria-label={t('Fermer')}
           >
             <svg
               width="20"
@@ -240,9 +244,9 @@ export default function VerificationCodeModal({
 
           {/* Text and supporting text */}
           <div className="rv-modal-text-group">
-            <h2 className="rv-modal-title">Vérifiez vos e-mails.</h2>
+            <h2 className="rv-modal-title">{t('Vérifiez vos e-mails.')}</h2>
             <p className="rv-modal-supporting-text">
-              Si l’adresse est valide, nous vous avons envoyé un e-mail avec un code de confirmation à 6 chiffres.
+              {t('Si l’adresse est valide, nous vous avons envoyé un e-mail avec un code de confirmation à 6 chiffres.')}
             </p>
           </div>
         </header>
@@ -250,7 +254,7 @@ export default function VerificationCodeModal({
         {/* Content */}
         <div className="rv-modal-content">
           {/* Error Message */}
-          {errorMessage && <div className="rv-modal-error">{errorMessage}</div>}
+          {errorMessage && <div className="rv-modal-error">{t(errorMessage)}</div>}
 
           {/* 6 Mega inputs row */}
           <div className="rv-modal-digits-row" style={DIGITS_ROW_STYLE}>
@@ -272,16 +276,18 @@ export default function VerificationCodeModal({
                 className={`rv-mega-input ${errorMessage ? 'is-error' : ''}`}
                 style={DIGIT_INPUT_STYLE}
                 autoComplete="one-time-code"
-                aria-label={`Chiffre ${idx + 1}`}
+                aria-label={t('Chiffre {{index}}', { index: idx + 1 })}
               />
             ))}
           </div>
 
           {/* Hint text / Resend */}
           <div className="rv-modal-hint-row">
-            <span className="rv-modal-hint-label">Vous n'avez rien reçu ?</span>
+            <span className="rv-modal-hint-label">{t("Vous n'avez rien reçu ?")}</span>
             {countdown > 0 ? (
-              <span className="rv-modal-hint-countdown">Cliquez ici pour renvoyer ({countdown}s)</span>
+              <span className="rv-modal-hint-countdown">
+                {t('Cliquez ici pour renvoyer ({{seconds}}s)', { seconds: countdown })}
+              </span>
             ) : (
               <button
                 type="button"
@@ -289,7 +295,7 @@ export default function VerificationCodeModal({
                 onClick={handleResend}
                 disabled={resending}
               >
-                {resending ? 'Envoi...' : 'Cliquez ici pour renvoyer'}
+                {resending ? t('Envoi...') : t('Cliquez ici pour renvoyer')}
               </button>
             )}
           </div>
@@ -304,7 +310,7 @@ export default function VerificationCodeModal({
             onClick={onClose}
             disabled={loading}
           >
-            Annuler
+            {t('Annuler')}
           </button>
 
           {/* Verify */}
@@ -314,7 +320,7 @@ export default function VerificationCodeModal({
             onClick={() => verify(digits.join(''))}
             disabled={loading || digits.some((d) => !d)}
           >
-            {loading ? <div className="rv-modal-spinner" /> : 'Vérifier'}
+            {loading ? <div className="rv-modal-spinner" /> : t('Vérifier')}
           </button>
         </div>
       </div>

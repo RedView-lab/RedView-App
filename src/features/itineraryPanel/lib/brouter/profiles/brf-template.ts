@@ -3,7 +3,7 @@
  * Itinerary Panel's basic + expert state.
  */
 import type { BrfBuildInputs } from './brf-template/types';
-import { resolveBrfProfileValues } from './brf-template/values';
+import { estimateSearchCostScale, resolveBrfProfileValues } from './brf-template/values';
 import { buildBrfWayContext } from './brf-template/brfWayContext';
 import { BRF_NODE_CONTEXT } from './brf-template/brfNodeContext';
 import { buildBrfFootWayContext } from './brf-template/brfFootWayContext';
@@ -138,6 +138,11 @@ assign pass2coefficient = ${brfNum(values.pass2Coefficient)}
   const nodeContext = foot ? buildBrfFootNodeContext(foot.style) : BRF_NODE_CONTEXT;
 
   return `${globalContext}\n\n${wayContext}\n${nodeContext}`;
+}
+
+/** Échelle de coût au mètre attendue pour ce profil (coefficient A*). */
+export function estimateBrfSearchCostScale(inputs: BrfBuildInputs): number {
+  return estimateSearchCostScale(resolveBrfProfileValues(inputs));
 }
 
 /** FNV-1a 32-bit hash → 8-char hex. Plenty of entropy to dedup uploads. */

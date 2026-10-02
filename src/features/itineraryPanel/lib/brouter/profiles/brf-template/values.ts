@@ -158,19 +158,30 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
         break;
     }
   } else {
-    // Range of surfaces:
+    // Range of surfaces. A surface inside the range is pulled towards
+    // « preferred » only when the user tolerates or prefers it: « Éviter » /
+    // « Interdire » stay as chosen (the range used to lower a gravel preset's
+    // « Éviter la route » 1.15 to 0.9, below its gravel factor).
+    const included = (preference: RoadPreference, factor: number, cap: number): number =>
+      preference === 'avoid' || preference === 'forbid' ? factor : Math.min(factor, cap);
+
     // If tarmac (0) excluded
     if (minIdx > 0) {
       effectiveFRoad = Math.max(effectiveFRoad, 2.5 * tolFactor);
     } else {
-      effectiveFRoad = Math.min(effectiveFRoad, 0.9);
+      effectiveFRoad = included(roadTypes.road, effectiveFRoad, 0.9);
     }
 
     // Gravel (2)
     if (maxIdx < 2) {
       effectiveFGravel = Math.max(effectiveFGravel, 2.5 * tolFactor);
     } else if (minIdx <= 2 && maxIdx >= 2) {
-      effectiveFGravel = Math.min(effectiveFGravel, 0.85);
+      // Track base costs (trekking heritage: grade2 2.5, untagged 3.0) outweigh
+      // a ×0.85 preference against a small road (1.0–1.4): « Privilégier » the
+      // gravel must compensate, or a Gravel preset rides 90–97 % tarmac.
+      effectiveFGravel = roadTypes.gravel === 'prefer'
+        ? Math.min(effectiveFGravel, 0.6)
+        : included(roadTypes.gravel, effectiveFGravel, 0.85);
     }
 
     // Other (3: singletrack & offroad)
@@ -178,8 +189,8 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
       effectiveFSingletrack = Math.max(effectiveFSingletrack, 2.8 * tolFactor);
       effectiveFOffroad = Math.max(effectiveFOffroad, 3.2 * tolFactor);
     } else {
-      effectiveFSingletrack = Math.min(effectiveFSingletrack, 0.85);
-      effectiveFOffroad = Math.min(effectiveFOffroad, 0.95);
+      effectiveFSingletrack = included(roadTypes.singletrack, effectiveFSingletrack, 0.85);
+      effectiveFOffroad = included(roadTypes.offroad, effectiveFOffroad, 0.95);
     }
   }
 
@@ -197,8 +208,12 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
     ? 1
     : Math.max(0, sElev);
   const climbAvoid = Math.max(0, -sElev);
-  const distanceFocus = Math.max(0, sDist);
-  const distanceDetourAllowance = Math.max(0, -sDist);
+  // Priorité « Distance » des presets : haute = au plus direct (Vitesse 55–70),
+  // basse = détours acceptés (Aventure / Confort 35–45). L'ancien code lisait
+  // l'inverse : Vitesse pénalisait les routes directes (×1.5) et allégeait les
+  // chemins, à l'opposé du commentaire de `is_distance_detour_surface`.
+  const directnessFocus = Math.max(0, sDist);
+  const detourAppetite = Math.max(0, -sDist);
   const durationFocus = Math.max(0, sDur);
   const durationRelax = Math.max(0, -sDur);
   const tranquilityFocus = Math.max(0, sTranq);
@@ -230,7 +245,7 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
     elevPenaltyBuffer = 8 - (climbScale * 7.25);
     elevMaxBuffer = 16 - (climbScale * 14.5);
     elevBufferReduce = 0.35 + (climbScale * 1.4);
-    climbMul = 1.0 + (climbScale * (distanceFocus > 0.7 ? 3.0 : 2.0));
+    climbMul = 1.0 + (climbScale * (detourAppetite > 0.7 ? 3.0 : 2.0));
   }
 
   // Factor in explicit elevationPreference if chosen in panel
@@ -265,10 +280,11 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
 
   const considerElevation = true;
   const inClimbMode = climbFocus > 0.25 || roadTypes.elevationPreference === 'prefer';
-  const shortestMode = distanceDetourAllowance >= 0.65 && climbFocus < 0.2 && durationFocus < 0.4;
+  const shortestMode = directnessFocus >= 0.65 && climbFocus < 0.2 && durationFocus < 0.4;
   
-  // Ultra-fast One-Pass BRouter mode: pass1=3.5 directs A* linearly to destination, pass2=-1 disables quadratic 2nd pass
-  let pass1Coefficient = 3.5;
+  // Passe unique (pass2=-1). Le coefficient A* réel est fixé à chaque requête
+  // (lib/brouter/api/searchCoefficient.ts) ; la valeur du profil n'est qu'un défaut.
+  const pass1Coefficient = 3.5;
   const pass2Coefficient = -1;
 
   const maxSlope = Math.min(99, Math.max(1, roadTypes.maxSlopePercent || 99));
@@ -288,15 +304,15 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
     return 1.0;
   })();
 
-  let turnFactor = baseTurnFactor * (1 + (durationFocus * 0.3) + (distanceDetourAllowance * 0.2));
+  let turnFactor = baseTurnFactor * (1 + (durationFocus * 0.3) + (directnessFocus * 0.2));
 
-  const ignoreCycleroutes = distanceFocus >= 0.75 || distanceDetourAllowance >= 0.75 || durationFocus >= 0.85;
-  let distDetourRelief = distanceFocus > 0
+  const ignoreCycleroutes = detourAppetite >= 0.75 || directnessFocus >= 0.75 || durationFocus >= 0.85;
+  let distDetourRelief = detourAppetite > 0
     ? (inClimbMode
-        ? clamp(1 - (distanceFocus * 0.3), 0.7, 1)
-        : clamp(1 - (distanceFocus * 0.2), 0.8, 1))
-    : 1 + (distanceDetourAllowance * 0.5);
-  const distDirectPenalty = 1 + (distanceFocus * (inClimbMode ? 1.4 : 1.2));
+        ? clamp(1 - (detourAppetite * 0.3), 0.7, 1)
+        : clamp(1 - (detourAppetite * 0.2), 0.8, 1))
+    : 1 + (directnessFocus * 0.5);
+  const distDirectPenalty = 1 + (detourAppetite * (inClimbMode ? 1.4 : 1.2));
   let durSlowPenalty = 1 + (durationFocus * 0.6);
   const durFastPenalty = durationRelax > 0 ? 1 + (durationRelax * 0.2) : 1;
   const durMinorPenalty = 1 + (durationFocus * 0.4);
@@ -363,7 +379,6 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
     signalPenalty = Math.max(signalPenalty, 40);
     durSlowPenalty = Math.max(durSlowPenalty, 1.7);
     maxSpeed *= 1.1;
-    pass1Coefficient = 4.0;
   } else if (roadTypes.tracingMode === 'aventure') {
     considerRiver = true;
     distDetourRelief = Math.min(distDetourRelief, 0.7);
@@ -373,6 +388,12 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
     considerTraffic = true;
     avoidUnsafe = true;
     tranqFastTrafficPenalty = Math.max(tranqFastTrafficPenalty, 1.6);
+  }
+
+  // Gravel : le chemin carrossable est la surface même du preset, y compris en
+  // Vitesse (×1,7 « surface lente » donnait 3 % de non-revêtu sur un preset Gravel).
+  if (roadTypes.activityType === 'gravel-default') {
+    durSlowPenalty = Math.min(durSlowPenalty, 1.2);
   }
 
   return {
@@ -433,3 +454,38 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
     foot,
   };
 }
+
+/**
+ * Coût BRouter « brut » au mètre du réseau qu'un tracé emprunte avec ce profil :
+ * surtout le réseau le moins cher (petite route, chemin carrossable ou sentier,
+ * à plat, hors agglomération), un peu de routes de liaison, multiplicateurs
+ * « tranquillité » de fond et de grimpe compris (ce dernier atténué : les
+ * montées en mode grimpe coûtent moins cher).
+ */
+export function searchCostNetwork(values: BrfProfileValues): number {
+  const tranquil =
+    (values.considerForest ? values.forestReliefByClass[0] : 1) *
+    (values.considerRiver ? values.riverReliefByClass[0] : 1);
+  const climb = values.inClimbMode ? 1 + (values.climbMul - 1) * 0.45 : values.climbMul;
+  if (values.foot) {
+    return 1.1 * Math.min(values.fRoad, values.fGravel, values.fSingletrack, values.fBikelane) * tranquil * climb;
+  }
+  const offroadMult = values.distDetourRelief * values.durSlowPenalty;
+  const road = 1.3 * values.fRoad * values.distDirectPenalty;
+  const cheapest = Math.min(road, 1.8 * values.fGravel * offroadMult, 3.0 * values.fSingletrack * offroadMult);
+  return (0.8 * cheapest + 0.2 * road) * tranquil * climb;
+}
+
+/**
+ * Coût BRouter typique au mètre d'un tracé avec ce profil (réseau + surcoûts
+ * moyens de dénivelé et de virages) : cale le coefficient A* avant que le coût
+ * réel n'ait été observé (lib/brouter/api/searchCoefficient.ts). Constantes
+ * ajustées sur script-test-bench/routing-quality (coûts mesurés).
+ */
+export function estimateSearchCostScale(values: BrfProfileValues): number {
+  const scale = SEARCH_SCALE_A * searchCostNetwork(values) + SEARCH_SCALE_B;
+  return Math.round(Math.max(0.8, Math.min(8, scale)) * 100) / 100;
+}
+
+const SEARCH_SCALE_A = 0.88;
+const SEARCH_SCALE_B = 0.7;

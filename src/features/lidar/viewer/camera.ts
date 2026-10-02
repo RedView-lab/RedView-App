@@ -160,6 +160,28 @@ export class CameraController {
     return m;
   }
 
+  private _renderProjMatrix = new Float32Array(16);
+
+  /**
+   * Projection used for rendering: reversed-Z with an infinite far plane
+   * (depth = near / viewDistance, cleared to 0, compared with `greater`).
+   * With a depth32float target this keeps precision at every distance, so a
+   * tiny near plane no longer causes z-fighting between ground points and
+   * the terrain mesh. Picking/overlays keep using `getProjMatrix()`.
+   */
+  getRenderProjMatrix(): Float32Array {
+    const aspect = this.canvas.width / Math.max(this.canvas.height, 1);
+    const f = 1 / Math.tan(Math.PI / 8);
+    const near = 0.05;
+    const m = this._renderProjMatrix;
+    m.fill(0);
+    m[0] = f / aspect;
+    m[5] = f;
+    m[11] = -1;
+    m[14] = near;
+    return m;
+  }
+
   getProjMatrix(): Float32Array {
     const aspect = this.canvas.width / Math.max(this.canvas.height, 1);
     const fov = Math.PI / 4;

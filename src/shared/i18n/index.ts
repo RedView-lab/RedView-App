@@ -1,6 +1,7 @@
 export {
   APP_LOCALE_OPTIONS,
   PROJECT_BROWSER_SETTINGS_STORAGE_KEY,
+  canonicalizeAppText,
   createAppTranslationBundle,
   detectNavigatorAppLocale,
   interpolateAppTranslation,
@@ -16,3 +17,4 @@ export {
   type AppTranslationVars,
 } from './config';
 export { AppI18nProvider, useAppI18n } from './AppI18nProvider';
+export { buildTranslationLookup, observeDomTranslation } from './domTranslation';

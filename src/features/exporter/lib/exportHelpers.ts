@@ -2,6 +2,7 @@ import { cumulativeRouteLengthsM, projectDistanceAlongRouteM } from '@/features/
 import { FEATURE_TO_PANEL_POI } from '@/features/itineraryPanel/lib/schedule';
 import type { Itinerary, TimelineItem } from '@/features/itineraryPanel/types';
 import { POI_LABELS } from '@/features/poi/types';
+import { translateAppText } from '@/shared/i18n/config';
 
 export interface ExportAnchor {
   id: string;
@@ -63,23 +64,41 @@ export const POI_CATEGORY_TO_KML_COLOR: Record<string, string> = {
   transport: 'ff646464',
 };
 
+/** Source (FR) labels; translated into the user's locale at export time (`resolvePoiCategoryExportLabel`). */
 export const POI_CATEGORY_LABEL_FR: Record<string, string> = {
   fountains: "Point d'eau",
   toilets: 'Toilettes',
-  supermarkets: 'Supermarche',
+  supermarkets: 'Supermarché',
   gasStations: 'Station-service',
   bakeries: 'Boulangerie',
   fastFood: 'Restauration rapide',
-  cafes: 'Cafe',
+  cafes: 'Café',
   bars: 'Bar',
   restaurants: 'Restaurant',
-  bikeShops: 'Magasin velo',
-  hotels: 'Hotel',
-  refuges: 'Refuge / gite',
+  bikeShops: 'Magasin de vélo',
+  hotels: 'Hôtel',
+  refuges: 'Refuge / gîte',
   passes: 'Col',
-  health: 'Sante',
+  health: 'Santé',
   transport: 'Transport',
 };
+
+/** Category label written into exported files, in the user's locale. */
+export function resolvePoiCategoryExportLabel(poiCategory: string | undefined): string {
+  const label = poiCategory ? POI_CATEGORY_LABEL_FR[poiCategory] : undefined;
+  return label ? translateAppText(label) : 'POI';
+}
+
+/** "<category> - km 12.3" (+ favourite marker) description of an exported POI. */
+export function buildPoiExportDescription(anchor: ExportAnchor): string {
+  const vars = {
+    category: resolvePoiCategoryExportLabel(anchor.poiCategory),
+    km: (anchor.distanceM / 1000).toFixed(1),
+  };
+  return anchor.favorite
+    ? translateAppText('{{category}} - km {{km}} (favori)', vars)
+    : translateAppText('{{category}} - km {{km}}', vars);
+}
 
 function roundTo(value: number, digits: number): number {
   const factor = 10 ** digits;
@@ -105,7 +124,7 @@ export function buildExportFileName(itinerary: Itinerary, format: string): strin
 export function getExportRoutePoints(itinerary: Itinerary): ExportRoutePoint[] {
   const points = itinerary.gpxRoute?.originalPoints ?? itinerary.gpxRoute?.points;
   if (!points || points.length < 2) {
-    throw new Error("L'itineraire actif n'a pas de trace exportable.");
+    throw new Error(translateAppText("L'itinéraire actif n'a pas de trace exportable."));
   }
 
   const cumulativeLengths = cumulativeRouteLengthsM(points);
@@ -131,17 +150,17 @@ function shouldExportTimelineItem(item: TimelineItem): boolean {
 function defaultAnchorName(item: TimelineItem): string {
   switch (item.kind) {
     case 'start':
-      return 'Depart';
+      return translateAppText('Départ');
     case 'end':
-      return 'Arrivee';
+      return translateAppText('Arrivée');
     case 'waypoint':
-      return 'Waypoint';
+      return translateAppText('Waypoint');
     case 'poi':
     case 'water':
     case 'supermarket':
       return 'POI';
     default:
-      return 'Point';
+      return translateAppText('Point');
   }
 }
 
@@ -258,7 +277,7 @@ export function collectExportAnchors(
 
       anchors.push({
         id: `poi-${f.id}`,
-        name: f.name?.trim() || POI_LABELS[f.category] || 'POI',
+        name: f.name?.trim() || (POI_LABELS[f.category] ? translateAppText(POI_LABELS[f.category]) : 'POI'),
         lat: f.lat,
         lon: f.lon,
         distanceM,

@@ -14,6 +14,7 @@ import type {
   WeatherOverlayState,
 } from '../types';
 import { createOverlayStatus } from '@/features/map3d';
+import { translateAppText } from '@/shared/i18n';
 import {
   MIN_FETCH_INTERVAL_MS,
   MOVE_DEBOUNCE_MS,
@@ -166,7 +167,7 @@ export function useWeatherDataPipeline({
           label: 'Météo',
           state: 'loading',
           progress: progressBase + (renderedCount / renderableCount) * 18,
-          detail: 'Rendu',
+          detail: translateAppText('Rendu'),
           reloadable: true,
         }));
         continue;
@@ -203,7 +204,7 @@ export function useWeatherDataPipeline({
         label: 'Météo',
         state: 'loading',
         progress: progressBase + (renderedCount / renderableCount) * 18,
-        detail: 'Rendu',
+        detail: translateAppText('Rendu'),
         reloadable: true,
       }));
     }
@@ -213,7 +214,7 @@ export function useWeatherDataPipeline({
       label: 'Météo',
       state: 'ready',
       progress: 100,
-      detail: 'Overlay prêt',
+      detail: translateAppText('Overlay prêt'),
       reloadable: true,
     }));
     completeStyleRecovery();
@@ -298,7 +299,7 @@ export function useWeatherDataPipeline({
             label: 'Météo (VPS)',
             state: 'ready',
             progress: 100,
-            detail: 'Overlay VPS prêt',
+            detail: translateAppText('Overlay VPS prêt'),
             reloadable: true,
           }));
           completeStyleRecovery();
@@ -340,7 +341,7 @@ export function useWeatherDataPipeline({
       label: 'Météo (VPS)',
       state: 'loading',
       progress: cachedMeta ? 40 : 25,
-      detail: cachedMeta ? 'Chargement des prévisions' : 'Connexion serveur météo',
+      detail: translateAppText(cachedMeta ? 'Chargement des prévisions' : 'Connexion serveur météo'),
       reloadable: true,
     }));
 
@@ -373,7 +374,7 @@ export function useWeatherDataPipeline({
       label: 'Météo (VPS)',
       state: 'loading',
       progress: 50,
-      detail: 'Préparation des cartes',
+      detail: translateAppText('Préparation des cartes'),
       reloadable: true,
     }));
 
@@ -461,7 +462,7 @@ export function useWeatherDataPipeline({
       } catch (decodeErr) {
         if (isAbortError(decodeErr) || generation !== generationRef.current || isCancelled() || signal?.aborted) return false;
         console.warn(`[weather-vps] Failed to load tile for ${key}:`, decodeErr);
-        throw new Error(`Tuile météo indisponible (${key})`);
+        throw new Error(translateAppText('Tuile météo indisponible ({{layer}})', { layer: key }));
       }
 
       if (generation !== generationRef.current || isCancelled() || signal?.aborted || !canMutateStyle()) return false;
@@ -471,7 +472,7 @@ export function useWeatherDataPipeline({
         label: 'Météo (VPS)',
         state: 'loading',
         progress: 70 + Math.round((renderedCount / renderableCount) * 20),
-        detail: `Affichage ${key}`,
+        detail: translateAppText('Affichage {{layer}}', { layer: key }),
         reloadable: true,
       }));
 
@@ -538,7 +539,7 @@ export function useWeatherDataPipeline({
       label: 'Météo (VPS)',
       state: 'ready',
       progress: 100,
-      detail: 'Overlay VPS prêt',
+      detail: translateAppText('Overlay VPS prêt'),
       reloadable: true,
     }));
     completeStyleRecovery();
@@ -582,7 +583,7 @@ export function useWeatherDataPipeline({
               label: 'Météo (VPS)',
               state: 'ready',
               progress: 100,
-              detail: 'Overlay prêt',
+              detail: translateAppText('Overlay prêt'),
               reloadable: true,
             }));
           }
@@ -594,7 +595,7 @@ export function useWeatherDataPipeline({
           id: STATUS_ID,
           label: 'Météo (VPS)',
           state: 'error',
-          detail: vpsErr instanceof Error ? vpsErr.message : 'Erreur chargement météo VPS',
+          detail: translateAppText(vpsErr instanceof Error ? vpsErr.message : 'Erreur chargement météo VPS'),
           reloadable: true,
         }));
       }
@@ -619,7 +620,7 @@ export function useWeatherDataPipeline({
       label: 'Météo',
       state: 'loading',
       progress: 25,
-      detail: 'Récupération météo',
+      detail: translateAppText('Récupération météo'),
       reloadable: true,
     }));
 
@@ -632,7 +633,7 @@ export function useWeatherDataPipeline({
           label: 'Météo',
           state: 'loading',
           progress: Math.min(74, 25 + Math.round(progress * 49)),
-          detail: 'Téléchargement données',
+          detail: translateAppText('Téléchargement données'),
           reloadable: true,
         }));
       });
@@ -651,7 +652,7 @@ export function useWeatherDataPipeline({
         id: STATUS_ID,
         label: 'Météo',
         state: 'error',
-        detail: err instanceof Error ? err.message : 'Erreur chargement météo',
+        detail: translateAppText(err instanceof Error ? err.message : 'Erreur chargement météo'),
         reloadable: true,
       }));
     }

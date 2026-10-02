@@ -4,6 +4,7 @@ import {
   type OverlayStatusId,
   type OverlayStatusSnapshot,
 } from '@/features/map3d';
+import { translateAppText } from '@/shared/i18n';
 
 // ── Loading guard ────────────────────────────────────────────────────────
 // Last line of defence so no pill ever sits on "loading" forever: each
@@ -145,7 +146,7 @@ export function useDashboardOverlayStatus(): UseDashboardOverlayStatusResult {
           label: 'Carte',
           state: 'ready',
           progress: 100,
-          detail: 'Carte prête',
+          detail: translateAppText('Carte prête'),
           reloadable: true,
         });
       }

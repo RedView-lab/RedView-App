@@ -1,5 +1,6 @@
 import { useState, useEffect, type FormEvent } from 'react'
 import { trackAnalyticsEvent } from '@/shared/lib/analytics'
+import { useAppI18n } from '@/shared/i18n'
 import {
   account,
   ID,
@@ -56,6 +57,7 @@ function EyeOffIcon() {
 }
 
 export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tech' }: LoginScreenProps) {
+  const { t } = useAppI18n()
   const [mode, setMode] = useState<AuthMode>('login')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -591,7 +593,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
                       }
                     }}
                   >
-                    {resendCooldown > 0 ? `Renvoyer un autre e-mail (${resendCooldown}s)` : 'Renvoyer un autre e-mail'}
+                    {resendCooldown > 0 ? t('Renvoyer un autre e-mail ({{seconds}}s)', { seconds: resendCooldown }) : 'Renvoyer un autre e-mail'}
                   </button>
                 </div>
               </div>
@@ -754,7 +756,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
                     : mode === 'reset-password'
                     ? 'Enregistrer le nouveau mot de passe'
                     : isLogin
-                    ? 'Sign in'
+                    ? 'Log in'
                     : 'Get started'}
                 </button>
 

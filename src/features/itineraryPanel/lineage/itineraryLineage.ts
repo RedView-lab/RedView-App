@@ -1,5 +1,11 @@
 import type { Itinerary } from '../types';
 
+/** Noms générés par le découpage (« Découpage de … » / « Split of … » selon la langue). */
+function isSplitItineraryName(name: string): boolean {
+  const lower = name.toLowerCase();
+  return lower.startsWith('découpage') || lower.startsWith('split of ');
+}
+
 export interface ItineraryVisualNode {
   itinerary: Itinerary;
   depth: number;
@@ -9,12 +15,12 @@ export interface ItineraryVisualNode {
 }
 
 export function getItineraryStartDistanceKm(itinerary: Itinerary): number {
-  if (itinerary.name.toLowerCase().startsWith('découpage')) return 0;
+  if (isSplitItineraryName(itinerary.name)) return 0;
   return itinerary.splitRelation?.startDistanceKm ?? 0;
 }
 
 export function getItineraryDepth(itinerary: Itinerary): number {
-  if (itinerary.name.toLowerCase().startsWith('découpage')) return 0;
+  if (isSplitItineraryName(itinerary.name)) return 0;
   return itinerary.splitRelation?.depth ?? 0;
 }
 
@@ -49,7 +55,7 @@ export function buildItineraryVisualNodes(itineraries: Itinerary[]): ItineraryVi
 
   const childrenByParentId = new Map<string | null, Itinerary[]>();
   for (const itinerary of itineraries) {
-    const isSplit = itinerary.name.toLowerCase().startsWith('découpage');
+    const isSplit = isSplitItineraryName(itinerary.name);
     const parentId = isSplit ? null : itinerary.splitRelation?.parentItineraryId;
     const key = parentId && itineraryById.has(parentId) ? parentId : null;
     const bucket = childrenByParentId.get(key);
@@ -73,7 +79,7 @@ export function buildItineraryVisualNodes(itineraries: Itinerary[]): ItineraryVi
   const visit = (itinerary: Itinerary) => {
     if (visited.has(itinerary.id)) return;
     visited.add(itinerary.id);
-    const isSplit = itinerary.name.toLowerCase().startsWith('découpage');
+    const isSplit = isSplitItineraryName(itinerary.name);
     result.push({
       itinerary,
       depth: getItineraryDepth(itinerary),

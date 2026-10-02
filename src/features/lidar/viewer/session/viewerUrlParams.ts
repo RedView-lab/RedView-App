@@ -1,9 +1,10 @@
 import { buildTileFileName, getTileInfo } from '../../lib/coordConvert';
+import { translateAppText } from '@/shared/i18n/config';
 import type { DetectedCrs, AltitudeRef, TileCoord } from '../../types';
 import { MAX_VIEWER_SCENE_TILES } from '../../lib/viewerUrl';
 
 export function buildPanelTileLabel(x: number, y: number, projection: DetectedCrs): string {
-  return `Tuile ${x}/${y} (${projection})`;
+  return translateAppText('Tuile {{x}}/{{y}} ({{projection}})', { x, y, projection });
 }
 
 export function tileCoordKey(coord: Pick<TileCoord, 'xKm' | 'yKm' | 'projection' | 'altRef'>): string {
@@ -39,18 +40,6 @@ export function parseSceneTileCoords(params: URLSearchParams, primaryTile: TileC
   appendTile(legacySecondaryXKm, legacySecondaryYKm);
 
   return tiles;
-}
-
-export function computeSceneBudgetScale(tileCount: number, totalPoints: number, pointChunkCapacity: number): number {
-  if (tileCount <= 1) return 1.0;
-
-  const tilePressureScale = 1 / (1 + (tileCount - 1) * 0.16);
-  const chunkPressureRatio = totalPoints / Math.max(pointChunkCapacity * 1.5, 1);
-  const chunkPressureScale = chunkPressureRatio <= 1
-    ? 1.0
-    : 1 / (1 + Math.log2(chunkPressureRatio) * 0.18);
-
-  return Math.max(0.35, Math.min(1.0, tilePressureScale * chunkPressureScale));
 }
 
 const ALLOWED_BASE_CRS: ReadonlySet<string> = new Set<DetectedCrs>([
@@ -101,7 +90,7 @@ export function parseViewerParamsFromUrl(): {
   const forceWebGL = params.get('engine') === 'webgl';
 
   if (!Number.isFinite(xKm) || !Number.isFinite(yKm) || !parsedCrs || !parsedAltRef) {
-    throw new Error('Paramètres invalides. URL: ?x=1003&y=6547&crs=LAMB93&alt=IGN69');
+    throw new Error(translateAppText('Paramètres invalides. URL attendue : ?x=1003&y=6547&crs=LAMB93&alt=IGN69'));
   }
   const crs: DetectedCrs = parsedCrs;
   const altRef: AltitudeRef = parsedAltRef;

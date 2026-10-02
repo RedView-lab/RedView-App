@@ -30,7 +30,7 @@
     { "key": "drinking_water", "label": "Point d'eau potable", "group": "water", "icon": "drinking_water", "rules": [[{ "k": "amenity", "v": "drinking_water" }]] },
     { "key": "water_point", "label": "Point d'eau", "group": "water", "icon": "drinking_water", "rules": [[{ "k": "amenity", "v": "water_point" }]] },
     { "key": "water_tap", "label": "Robinet d'eau", "group": "water", "icon": "drinking_water", "rules": [[{ "k": "man_made", "v": "water_tap" }]] },
-    { "key": "spring", "label": "Source", "group": "water", "icon": "drinking_water", "rules": [[{ "k": "natural", "v": "spring" }]] },
+    { "key": "spring", "label": "Source d'eau", "group": "water", "icon": "drinking_water", "rules": [[{ "k": "natural", "v": "spring" }]] },
     { "key": "fountain", "label": "Fontaine", "group": "water", "icon": "drinking_water", "rules": [[{ "k": "amenity", "v": "fountain" }]] },
 
     { "key": "supermarket", "label": "Supermarché", "group": "food", "icon": "supermarket", "rules": [[{ "k": "shop", "v": "supermarket" }]] },

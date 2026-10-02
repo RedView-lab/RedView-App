@@ -211,7 +211,7 @@ export function useMap(
           `[map3d] stuck on empty bootstrap shell after ${STUCK_SHELL_WATCHDOG_MS} ms — forcing direct setStyle from URL`,
         );
         try {
-          lifecycle.prepareStyleChange('Fond de carte (recovery)');
+          lifecycle.prepareStyleChange('Fond de carte (récupération)');
           map.setStyle(resolveStyleInputSync(basemapConfig.styleUrl) as Parameters<typeof map.setStyle>[0], {
             diff: false,
             localFontFamily: null,

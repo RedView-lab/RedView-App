@@ -15,7 +15,7 @@
 import type { Itinerary } from '../../../types';
 import type { ExpertProfileState } from '../../../expert/types';
 import { isFootDiscipline, normalizeDiscipline } from '@/shared/lib/discipline';
-import { buildBrfProfile } from '../profiles/brf-template';
+import { buildBrfProfile, estimateBrfSearchCostScale } from '../profiles/brf-template';
 import { ensureProfileUploaded } from '../profiles/profile-cache';
 import { isBrouterRateLimitError } from '../api/client';
 import { panelProfileToBrouter } from '../profiles/profile-overrides';
@@ -34,6 +34,11 @@ export interface ResolvedRouting {
   brf: string | null;
   /** Stock server profile to retry with when the custom one fails. */
   stockProfileId: string;
+  /**
+   * Coût BRouter au mètre attendu avec ce profil (coefficient A*, voir
+   * api/searchCoefficient.ts) ; absent pour un profil stock.
+   */
+  searchCostScale?: number;
 }
 
 /**
@@ -84,15 +89,16 @@ export async function resolveItineraryRouting(
     return { profileId: DEFAULT_PROFILE, roadTypes, brf: null, stockProfileId };
   }
 
-  const brf = buildBrfProfile({
+  const brfInputs = {
     priorities: it.priorities,
     roadTypes: roadTypes.effective,
     expert,
     discipline,
-  });
+  };
+  const brf = buildBrfProfile(brfInputs);
   try {
     const profileId = await ensureProfileUploaded(brf, signal);
-    return { profileId, roadTypes, brf, stockProfileId };
+    return { profileId, roadTypes, brf, stockProfileId, searchCostScale: estimateBrfSearchCostScale(brfInputs) };
   } catch (err) {
     if ((err as { name?: string })?.name === 'AbortError' || isBrouterRateLimitError(err)) {
       throw err;

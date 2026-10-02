@@ -250,7 +250,7 @@ export function PoiBadge({
   return (
     <span className="rvi-poi-pause-wrap" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
       {badgeContent}
-      <span className="rvi-poi-pause-badge" title={`Pause ${pauseDurationMin} min`}>
+      <span className="rvi-poi-pause-badge" title={translateAppText('Pause {{min}} min', { min: pauseDurationMin ?? 0 })}>
         <span className="rvi-poi-pause-badge__icon">❚❚</span>
         <span className="rvi-poi-pause-badge__text">{pauseDurationMin} min</span>
       </span>
@@ -408,7 +408,7 @@ export function KindBadge({
           className={favorite ? 'rvi-kind--pin rvi-kind--water' : 'rvi-kind--round rvi-kind--water'}
         />
         {pauseDurationMin && pauseDurationMin > 0 ? (
-          <span className="rvi-poi-pause-badge" title={`Pause ${pauseDurationMin} min`}>
+          <span className="rvi-poi-pause-badge" title={translateAppText('Pause {{min}} min', { min: pauseDurationMin })}>
             <span className="rvi-poi-pause-badge__icon">❚❚</span>
             <span className="rvi-poi-pause-badge__text">{pauseDurationMin} min</span>
           </span>
@@ -427,7 +427,7 @@ export function KindBadge({
           className={favorite ? 'rvi-kind--pin rvi-kind--supermarket' : 'rvi-kind--round rvi-kind--supermarket'}
         />
         {pauseDurationMin && pauseDurationMin > 0 ? (
-          <span className="rvi-poi-pause-badge" title={`Pause ${pauseDurationMin} min`}>
+          <span className="rvi-poi-pause-badge" title={translateAppText('Pause {{min}} min', { min: pauseDurationMin })}>
             <span className="rvi-poi-pause-badge__icon">❚❚</span>
             <span className="rvi-poi-pause-badge__text">{pauseDurationMin} min</span>
           </span>

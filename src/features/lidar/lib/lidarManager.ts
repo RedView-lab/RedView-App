@@ -1,6 +1,7 @@
 import type {
   TileCoord, LidarEvent, LidarEventCallback, CachedTileInfo,
 } from '../types';
+import { translateAppText } from '@/shared/i18n/config';
 import { wgs84ToTileCoord, toWgs84, buildTileFileName } from './coordConvert';
 import { downloadTile, isDownloadCancelledError } from './downloader';
 import { deleteTile, listCachedTiles, getStorageUsage } from './storage';
@@ -53,7 +54,7 @@ export class LidarManager {
       this.emit({
         type: 'progress',
         tileCoord: coord,
-        progress: { tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'downloading', message: 'Téléchargement...' },
+        progress: { tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'downloading', message: translateAppText('Téléchargement...') },
       });
 
       await downloadTile(coord, (progress) => {
@@ -98,8 +99,8 @@ export class LidarManager {
       console.error(`[LiDAR] Failed to delete tile (${coord.xKm}, ${coord.yKm}):`, err);
       const hint =
         err && err.name === 'NoModificationAllowedError'
-          ? 'Fichier en cours d’utilisation (ferme le viewer 3D et réessaie).'
-          : err?.message ?? 'Suppression impossible';
+          ? translateAppText("Fichier en cours d'utilisation (ferme le viewer 3D et réessaie).")
+          : err?.message ?? translateAppText('Suppression impossible');
       this.emit({ type: 'error', tileCoord: coord, error: hint });
     }
   }

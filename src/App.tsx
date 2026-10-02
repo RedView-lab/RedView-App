@@ -106,7 +106,7 @@ function resolveInitialAppwriteSession(refresh = false): Promise<SessionProbeRes
 }
 
 function App() {
-  const { t } = useAppI18n()
+  const { locale, t } = useAppI18n()
   const isPasswordResetUrl = isPasswordResetLocation()
 
   const [session, setSession] = useState<{ user: { id: string; email?: string } } | null>(() => {
@@ -125,6 +125,13 @@ function App() {
 
   const landingUrl = import.meta.env.VITE_LANDING_URL || 'https://redview.tech'
   const offersUrl = `${landingUrl.replace(/\/$/, '')}/pricing`
+
+  // Titre d'onglet par défaut (index.html / replaceProjectLocation) : suit la langue.
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const translated = t(document.title)
+    if (translated !== document.title) document.title = translated
+  }, [locale, t])
 
   useEffect(() => {
     const syncPathname = () => {

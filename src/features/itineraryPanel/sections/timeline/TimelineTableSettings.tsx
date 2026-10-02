@@ -103,7 +103,7 @@ export function TimelineTableSettings({
       <div className="rvi-tl-table__bar">
         <div className={`rvi-tl-table__auto${value.distanceBetweenWaypoints ? ' is-on' : ''}`}>
           <span className="rvi-tl-table__auto-label">
-            <span className="rvi-tl-table__auto-label--full">{t('Points de passages automatiques')}</span>
+            <span className="rvi-tl-table__auto-label--full">{t('Points de passage automatiques')}</span>
             <span className="rvi-tl-table__auto-label--short">{t('Passages auto.')}</span>
           </span>
           <span className="rvi-tl-table__auto-value">

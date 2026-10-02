@@ -214,7 +214,7 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
             </>
           ) : null}
 
-          <ToolbarIconButton label="Annuler" onClick={handleUndoTraceEdit} disabled={!canUndoTraceEdit}>
+          <ToolbarIconButton label="Annuler la modification" onClick={handleUndoTraceEdit} disabled={!canUndoTraceEdit}>
             <IconUndo />
           </ToolbarIconButton>
 

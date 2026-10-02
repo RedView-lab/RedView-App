@@ -1,3 +1,4 @@
+import { translateAppText } from '@/shared/i18n';
 import type { BrouterRoute } from '../brouter';
 import type { Itinerary, ItineraryRouteAuditFinding } from '../../types';
 
@@ -502,15 +503,15 @@ function chooseFindingWindow(shortWindow: GradeWindow | null, longWindow: GradeW
 }
 
 function findingTitle(category: FindingCategory): string {
-  if (category === 'offroad-uphill') return 'Montée trop raide / portage probable';
-  if (category === 'offroad-downhill') return 'Descente très raide / prudence';
-  if (category === 'steep-12') return 'Pente raide (> 12%)';
-  if (category === 'steep-downhill') return 'Descente raide (< -14%)';
-  if (category === 'technical-sand') return 'Segment technique : Sable';
-  if (category === 'technical-mud') return 'Segment technique : Boue';
-  if (category === 'technical-rock') return 'Segment technique : Roches / Pierrier';
-  if (category === 'technical-rough') return 'Segment technique : Terrain très accidenté';
-  return 'Pente extrême détectée';
+  if (category === 'offroad-uphill') return translateAppText('Montée trop raide / portage probable');
+  if (category === 'offroad-downhill') return translateAppText('Descente très raide / prudence');
+  if (category === 'steep-12') return translateAppText('Pente raide (> 12%)');
+  if (category === 'steep-downhill') return translateAppText('Descente raide (< -14%)');
+  if (category === 'technical-sand') return translateAppText('Segment technique : Sable');
+  if (category === 'technical-mud') return translateAppText('Segment technique : Boue');
+  if (category === 'technical-rock') return translateAppText('Segment technique : Roches / Pierrier');
+  if (category === 'technical-rough') return translateAppText('Segment technique : Terrain très accidenté');
+  return translateAppText('Pente extrême détectée');
 }
 
 function findingDetail(finding: FindingSeed): string {
@@ -520,31 +521,32 @@ function findingDetail(finding: FindingSeed): string {
     ? `${Math.round(finding.spanM / 10) * 10} m`
     : `${Math.round(finding.spanM)} m`;
   const surface = finding.offroadShare >= 0.6
-    ? 'terrain non roulant'
+    ? translateAppText('terrain non roulant')
     : finding.tarmacShare >= 0.6
-      ? 'route goudronnée'
-      : 'surface mixte';
+      ? translateAppText('route goudronnée')
+      : translateAppText('surface mixte');
+  const vars = { distance, grade, degrees, surface };
 
   if (finding.category === 'technical-sand') {
-    return `Passage sablonneux sur ~${distance}. Risque d'enlisement ou portage nécessaire.`;
+    return translateAppText('Passage sablonneux sur ~{{distance}}. Risque d’enlisement ou portage nécessaire.', vars);
   }
   if (finding.category === 'technical-mud') {
-    return `Passage boueux sur ~${distance}. Terrain glissant, adhérence précaire.`;
+    return translateAppText('Passage boueux sur ~{{distance}}. Terrain glissant, adhérence précaire.', vars);
   }
   if (finding.category === 'technical-rock') {
-    return `Section rocheuse ou pierrier sur ~${distance}. Pilotage technique et prudence requis.`;
+    return translateAppText('Section rocheuse ou pierrier sur ~{{distance}}. Pilotage technique et prudence requis.', vars);
   }
   if (finding.category === 'technical-rough') {
-    return `Piste très dégradée ou sentier accidenté sur ~${distance}. Roulabilité difficile.`;
+    return translateAppText('Piste très dégradée ou sentier accidenté sur ~{{distance}}. Roulabilité difficile.', vars);
   }
   if (finding.category === 'steep-12') {
-    return `Montée raide avec pente de ${grade} (${degrees}°) sur ~${distance}, ${surface}.`;
+    return translateAppText('Montée raide avec pente de {{grade}} ({{degrees}}°) sur ~{{distance}}, {{surface}}.', vars);
   }
   if (finding.category === 'steep-downhill') {
-    return `Descente prononcée à ${grade} (${degrees}°) sur ~${distance}, ${surface}. Contrôlez votre vitesse.`;
+    return translateAppText('Descente prononcée à {{grade}} ({{degrees}}°) sur ~{{distance}}, {{surface}}. Contrôlez votre vitesse.', vars);
   }
 
-  return `Pente fenêtrée jusqu'à ${grade} (${degrees}°) sur ~${distance}, ${surface}.`;
+  return translateAppText('Pente fenêtrée jusqu’à {{grade}} ({{degrees}}°) sur ~{{distance}}, {{surface}}.', vars);
 }
 
 function formatSignedPercent(value: number): string {

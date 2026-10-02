@@ -11,18 +11,24 @@ export function buildFitStatusText(runtime: ItineraryFitRuntime | null): string 
   if (!runtime) return null;
   const count = runtime.fitFiles.length;
   const countLabel =
-    count <= 0 ? null : count === 1 ? '1 fit chargé' : `${count} fit chargés`;
+    count <= 0
+      ? null
+      : count === 1
+        ? translateAppText('1 fit chargé')
+        : translateAppText('{{count}} fit chargés', { count });
   if (runtime.status === 'error' && runtime.error) {
     return runtime.error;
   }
   if (runtime.status === 'running') {
     const progress = runtime.progress.at(-1);
-    return progress ?? (countLabel ? `${countLabel} · calcul en cours...` : 'Calcul en cours...');
+    return progress ?? (countLabel
+      ? translateAppText('{{count}} · calcul en cours...', { count: countLabel })
+      : translateAppText('Calcul en cours...'));
   }
   if (runtime.status === 'success') {
     return countLabel
-      ? `${countLabel} · prédiction terminée`
-      : 'Prédiction terminée';
+      ? translateAppText('{{count}} · prédiction terminée', { count: countLabel })
+      : translateAppText('Prédiction terminée');
   }
   if (countLabel) {
     return countLabel;

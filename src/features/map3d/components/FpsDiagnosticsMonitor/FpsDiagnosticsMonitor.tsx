@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
+import { translateAppText } from '@/shared/i18n';
 import './styles.css';
 
 export interface FpsDiagnosticsMonitorProps {
@@ -250,21 +251,21 @@ export function FpsDiagnosticsMonitor({
       return {
         level: 'is-critical',
         icon: '⚠️',
-        text: `Relief 3D à fort pitch (${snapshot.pitch}°) : l'iGPU calcule des milliers de triangles DEM jusqu'à l'horizon.`,
+        text: translateAppText("Relief 3D à fort pitch ({{pitch}}°) : l'iGPU calcule des milliers de triangles DEM jusqu'à l'horizon.", { pitch: snapshot.pitch }),
       };
     }
     if (snapshot.megaPixels >= 4.0) {
       return {
         level: 'is-warning',
         icon: '⚠️',
-        text: `Résolution élevée (${snapshot.megaPixels} MP / DPR ${snapshot.dpr}) : le fillrate sature la mémoire partagée de l'APU.`,
+        text: translateAppText("Résolution élevée ({{megaPixels}} MP / DPR {{dpr}}) : le fillrate sature la mémoire partagée de l'APU.", { megaPixels: snapshot.megaPixels, dpr: snapshot.dpr }),
       };
     }
     if (snapshot.renderRate > 45) {
       return {
         level: 'is-warning',
         icon: '⚡',
-        text: `Nombreux rafraîchissements WebGL (${snapshot.renderRate} r/s) : saturation shaders fragment.`,
+        text: translateAppText('Nombreux rafraîchissements WebGL ({{rate}} r/s) : saturation shaders fragment.', { rate: snapshot.renderRate }),
       };
     }
     return {

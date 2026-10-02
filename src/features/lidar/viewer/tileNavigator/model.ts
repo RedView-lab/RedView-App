@@ -1,4 +1,5 @@
 import type { TileCoord } from '../../types';
+import { translateAppText } from '@/shared/i18n/config';
 
 export interface TileNavigatorCell {
   coord: TileCoord;
@@ -30,28 +31,41 @@ export function buildTileNavigatorCells(center: TileCoord): TileNavigatorCell[] 
   return cells;
 }
 
+/** Neighbour tile labels, keyed by `<vertical>-<horizontal>` offset. */
+const NEIGHBOUR_TILE_LABELS: Record<string, string> = {
+  'north-west': 'Tuile nord-ouest {{x}}/{{y}}',
+  'north-center': 'Tuile nord {{x}}/{{y}}',
+  'north-east': 'Tuile nord-est {{x}}/{{y}}',
+  'center-west': 'Tuile ouest {{x}}/{{y}}',
+  'center-east': 'Tuile est {{x}}/{{y}}',
+  'south-west': 'Tuile sud-ouest {{x}}/{{y}}',
+  'south-center': 'Tuile sud {{x}}/{{y}}',
+  'south-east': 'Tuile sud-est {{x}}/{{y}}',
+};
+
 export function buildTileNavigatorLabel(
   cell: TileNavigatorCell,
   state?: { isCurrent?: boolean; isActiveSecondary?: boolean; isCached?: boolean; isPreviewing?: boolean },
 ): string {
   if (state?.isCurrent || (cell.offsetX === 0 && cell.offsetY === 0)) {
-    return `Tuile principale ${cell.coord.xKm}/${cell.coord.yKm}`;
+    return translateAppText('Tuile principale {{x}}/{{y}}', { x: cell.coord.xKm, y: cell.coord.yKm });
   }
 
-  const horizontal = cell.offsetX < 0 ? 'ouest' : cell.offsetX > 0 ? 'est' : 'centre';
-  const vertical = cell.offsetY > 0 ? 'nord' : cell.offsetY < 0 ? 'sud' : 'centre';
-  const loc = `Tuile ${horizontal} ${vertical} ${cell.coord.xKm}/${cell.coord.yKm}`;
+  const vertical = cell.offsetY > 0 ? 'north' : cell.offsetY < 0 ? 'south' : 'center';
+  const horizontal = cell.offsetX < 0 ? 'west' : cell.offsetX > 0 ? 'east' : 'center';
+  const locTemplate = NEIGHBOUR_TILE_LABELS[`${vertical}-${horizontal}`] ?? 'Tuile {{x}}/{{y}}';
+  const tile = translateAppText(locTemplate, { x: cell.coord.xKm, y: cell.coord.yKm });
 
   if (state?.isActiveSecondary) {
-    return `${loc} · Affichée (clic pour masquer)`;
+    return translateAppText('{{tile}} · Affichée (clic pour masquer)', { tile });
   }
   if (state?.isPreviewing) {
     return state.isCached
-      ? `${loc} · En prévisualisation 3D (cliquez à nouveau pour afficher)`
-      : `${loc} · En prévisualisation 3D (cliquez à nouveau pour confirmer et télécharger)`;
+      ? translateAppText('{{tile}} · En prévisualisation 3D (cliquez à nouveau pour afficher)', { tile })
+      : translateAppText('{{tile}} · En prévisualisation 3D (cliquez à nouveau pour confirmer et télécharger)', { tile });
   }
   if (state?.isCached) {
-    return `${loc} · Téléchargée (clic pour prévisualiser en 3D)`;
+    return translateAppText('{{tile}} · Téléchargée (clic pour prévisualiser en 3D)', { tile });
   }
-  return `${loc} · Clic pour prévisualiser en 3D`;
+  return translateAppText('{{tile}} · Clic pour prévisualiser en 3D', { tile });
 }

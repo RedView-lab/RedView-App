@@ -1,19 +1,14 @@
-import type { PointCloudData, TileCoord } from '../../types';
+import type { PointCloudBounds, TileCoord } from '../../types';
 import type { TerrainCache } from '../../lib/storage';
-
-/** Only the point cloud is needed to merge/sample points. */
-export type PointCloudTile = Pick<LoadedViewerTile, 'pointCloud'>;
 
 export interface LoadedViewerTile {
   coord: TileCoord;
-  fileName: string;
-  pointCloud: PointCloudData;
+  /** Absolute CRS bounds of the tile's points. */
+  bounds: PointCloudBounds;
   terrainMesh: TerrainCache;
-  shouldSaveColorizedCache: boolean;
-  shouldSaveTerrainCache: boolean;
 }
 
-export function unionBounds(boundsList: PointCloudData['bounds'][]): PointCloudData['bounds'] {
+export function unionBounds(boundsList: PointCloudBounds[]): PointCloudBounds {
   const first = boundsList[0];
   if (!first) {
     return { minX: 0, minY: 0, minZ: 0, maxX: 0, maxY: 0, maxZ: 0 };
@@ -26,147 +21,6 @@ export function unionBounds(boundsList: PointCloudData['bounds'][]): PointCloudD
     maxY: Math.max(acc.maxY, bounds.maxY),
     maxZ: Math.max(acc.maxZ, bounds.maxZ),
   }), first);
-}
-
-export function computeMergedPointTargetCount(
-  tiles: PointCloudTile[],
-  multiTilePointCap: number,
-): { totalCount: number; targetCount: number } {
-  const totalCount = tiles.reduce((sum, tile) => sum + tile.pointCloud.count, 0);
-  if (tiles.length <= 1 || totalCount <= multiTilePointCap) {
-    return { totalCount, targetCount: totalCount };
-  }
-  return { totalCount, targetCount: multiTilePointCap };
-}
-
-export function computeTilePointQuotas(tiles: PointCloudTile[], targetCount: number, totalCount: number): Uint32Array {
-  const quotas = new Uint32Array(tiles.length);
-  if (targetCount >= totalCount) {
-    for (let index = 0; index < tiles.length; index += 1) quotas[index] = tiles[index]!.pointCloud.count;
-    return quotas;
-  }
-
-  const remainders: Array<{ index: number; remainder: number; count: number }> = [];
-  let assigned = 0;
-
-  for (let index = 0; index < tiles.length; index += 1) {
-    const count = tiles[index]!.pointCloud.count;
-    const rawQuota = (count / totalCount) * targetCount;
-    const baseQuota = Math.min(count, Math.floor(rawQuota));
-    quotas[index] = baseQuota;
-    assigned += baseQuota;
-    remainders.push({ index, remainder: rawQuota - baseQuota, count });
-  }
-
-  const nonEmptyTileCount = tiles.reduce((sum, tile) => sum + (tile.pointCloud.count > 0 ? 1 : 0), 0);
-  if (targetCount >= nonEmptyTileCount) {
-    for (let index = 0; index < tiles.length; index += 1) {
-      if (tiles[index]!.pointCloud.count === 0 || quotas[index]! > 0) continue;
-      quotas[index] = 1;
-      assigned += 1;
-    }
-  }
-
-  if (assigned > targetCount) {
-    const trimOrder = [...remainders].sort((left, right) => left.count - right.count || left.remainder - right.remainder);
-    for (const entry of trimOrder) {
-      if (assigned <= targetCount) break;
-      if (quotas[entry.index]! <= 1) continue;
-      quotas[entry.index] -= 1;
-      assigned -= 1;
-    }
-  }
-
-  if (assigned < targetCount) {
-    const growOrder = [...remainders].sort((left, right) => right.remainder - left.remainder || right.count - left.count);
-    let growCursor = 0;
-    while (assigned < targetCount && growOrder.length > 0) {
-      const entry = growOrder[growCursor % growOrder.length]!;
-      growCursor += 1;
-      if (quotas[entry.index]! >= tiles[entry.index]!.pointCloud.count) continue;
-      quotas[entry.index] += 1;
-      assigned += 1;
-    }
-  }
-
-  return quotas;
-}
-
-export function copyTilePointSample(
-  tile: PointCloudTile,
-  quota: number,
-  positions: Float32Array,
-  colors: Uint8Array,
-  classifications: Uint8Array,
-  pointOffset: number,
-): number {
-  if (quota <= 0 || tile.pointCloud.count <= 0) return pointOffset;
-
-  if (quota >= tile.pointCloud.count) {
-    positions.set(tile.pointCloud.positions, pointOffset * 3);
-    colors.set(tile.pointCloud.colors, pointOffset * 3);
-    classifications.set(tile.pointCloud.classifications, pointOffset);
-    return pointOffset + tile.pointCloud.count;
-  }
-
-  const sampleStep = tile.pointCloud.count / quota;
-  for (let sampleIndex = 0; sampleIndex < quota; sampleIndex += 1) {
-    const srcIndex = Math.min(tile.pointCloud.count - 1, Math.floor((sampleIndex + 0.5) * sampleStep));
-    const srcPos = srcIndex * 3;
-    const dstPos = (pointOffset + sampleIndex) * 3;
-    positions[dstPos] = tile.pointCloud.positions[srcPos]!;
-    positions[dstPos + 1] = tile.pointCloud.positions[srcPos + 1]!;
-    positions[dstPos + 2] = tile.pointCloud.positions[srcPos + 2]!;
-    colors[dstPos] = tile.pointCloud.colors[srcPos]!;
-    colors[dstPos + 1] = tile.pointCloud.colors[srcPos + 1]!;
-    colors[dstPos + 2] = tile.pointCloud.colors[srcPos + 2]!;
-    classifications[pointOffset + sampleIndex] = tile.pointCloud.classifications[srcIndex]!;
-  }
-
-  return pointOffset + quota;
-}
-
-export function mergePointClouds(tiles: PointCloudTile[], multiTilePointCap: number): PointCloudData {
-  if (tiles.length === 1) return tiles[0]!.pointCloud;
-
-  const { totalCount, targetCount } = computeMergedPointTargetCount(tiles, multiTilePointCap);
-  const positions = new Float32Array(targetCount * 3);
-  const colors = new Uint8Array(targetCount * 3);
-  const classifications = new Uint8Array(targetCount);
-  const bounds = unionBounds(tiles.map((tile) => tile.pointCloud.bounds));
-  const quotas = computeTilePointQuotas(tiles, targetCount, totalCount);
-
-  let pointOffset = 0;
-  for (let index = 0; index < tiles.length; index += 1) {
-    pointOffset = copyTilePointSample(
-      tiles[index]!,
-      quotas[index]!,
-      positions,
-      colors,
-      classifications,
-      pointOffset,
-    );
-  }
-
-  const mergedCount = pointOffset;
-  if (mergedCount !== targetCount) {
-    throw new Error(`Merged point cloud quota mismatch: expected ${targetCount}, got ${mergedCount}`);
-  }
-
-  if (targetCount < totalCount) {
-    console.warn(
-      `[Viewer] Multi-tile scene sampled from ${totalCount.toLocaleString()} to ${targetCount.toLocaleString()} points before octree build.`,
-    );
-  }
-
-  return {
-    positions,
-    colors,
-    classifications,
-    count: targetCount,
-    bounds,
-    crs: tiles[0]!.pointCloud.crs,
-  };
 }
 
 export function fillMissingHeightSamples(heightGrid: Float32Array, gridWidth: number, gridHeight: number): void {
@@ -198,11 +52,17 @@ export function fillMissingHeightSamples(heightGrid: Float32Array, gridWidth: nu
   }
 }
 
-export function mergeHeightGrid(tiles: LoadedViewerTile[], mergedPointCloud: PointCloudData): {
+/**
+ * Merges the tiles' height grids (rows south→north, heights relative to each
+ * tile's centre altitude) into one grid over `mergedBounds`, relative to the
+ * merged centre altitude. Each merged cell is bilinearly resampled from the
+ * tile covering it, so tiles whose grid steps differ slightly still merge.
+ */
+export function mergeHeightGrid(tiles: LoadedViewerTile[], mergedBounds: PointCloudBounds): {
   heightGrid: Float32Array;
   gridWidth: number;
   gridHeight: number;
-} | null {
+} {
   if (tiles.length === 1) {
     return {
       heightGrid: tiles[0]!.terrainMesh.heightGrid,
@@ -211,49 +71,49 @@ export function mergeHeightGrid(tiles: LoadedViewerTile[], mergedPointCloud: Poi
     };
   }
 
-  const firstTile = tiles[0]!;
-  const firstBounds = firstTile.pointCloud.bounds;
-  const firstTerrain = firstTile.terrainMesh;
-  const stepX = (firstBounds.maxX - firstBounds.minX) / Math.max(1, firstTerrain.gridWidth - 1);
-  const stepY = (firstBounds.maxY - firstBounds.minY) / Math.max(1, firstTerrain.gridHeight - 1);
-
-  for (const tile of tiles.slice(1)) {
-    const bounds = tile.pointCloud.bounds;
-    const terrain = tile.terrainMesh;
-    const candidateStepX = (bounds.maxX - bounds.minX) / Math.max(1, terrain.gridWidth - 1);
-    const candidateStepY = (bounds.maxY - bounds.minY) / Math.max(1, terrain.gridHeight - 1);
-    if (Math.abs(candidateStepX - stepX) > 0.001 || Math.abs(candidateStepY - stepY) > 0.001) {
-      return null;
-    }
-  }
-
-  const mergedBounds = mergedPointCloud.bounds;
+  const steps = tiles.map((tile) => ({
+    x: (tile.bounds.maxX - tile.bounds.minX) / Math.max(1, tile.terrainMesh.gridWidth - 1),
+    y: (tile.bounds.maxY - tile.bounds.minY) / Math.max(1, tile.terrainMesh.gridHeight - 1),
+  }));
+  const step = Math.max(1e-3, Math.min(...steps.map((s) => Math.min(s.x, s.y))));
   const mergedCenterZ = (mergedBounds.minZ + mergedBounds.maxZ) / 2;
-  const gridWidth = Math.round((mergedBounds.maxX - mergedBounds.minX) / stepX) + 1;
-  const gridHeight = Math.round((mergedBounds.maxY - mergedBounds.minY) / stepY) + 1;
+  const gridWidth = Math.round((mergedBounds.maxX - mergedBounds.minX) / step) + 1;
+  const gridHeight = Math.round((mergedBounds.maxY - mergedBounds.minY) / step) + 1;
   const heightGrid = new Float32Array(gridWidth * gridHeight).fill(Number.NaN);
 
-  for (const tile of tiles) {
-    const bounds = tile.pointCloud.bounds;
-    const terrain = tile.terrainMesh;
-    const tileCenterZ = (bounds.minZ + bounds.maxZ) / 2;
-    const deltaHeight = tileCenterZ - mergedCenterZ;
-    const offsetX = Math.round((bounds.minX - mergedBounds.minX) / stepX);
-    const offsetY = Math.round((bounds.minY - mergedBounds.minY) / stepY);
+  tiles.forEach((tile, tileIndex) => {
+    const { bounds, terrainMesh } = tile;
+    const { heightGrid: src, gridWidth: w, gridHeight: h } = terrainMesh;
+    const tileStep = steps[tileIndex]!;
+    const deltaHeight = (bounds.minZ + bounds.maxZ) / 2 - mergedCenterZ;
+    const firstCol = Math.max(0, Math.ceil((bounds.minX - mergedBounds.minX) / step - 1e-6));
+    const lastCol = Math.min(gridWidth - 1, Math.floor((bounds.maxX - mergedBounds.minX) / step + 1e-6));
+    const firstRow = Math.max(0, Math.ceil((bounds.minY - mergedBounds.minY) / step - 1e-6));
+    const lastRow = Math.min(gridHeight - 1, Math.floor((bounds.maxY - mergedBounds.minY) / step + 1e-6));
 
-    for (let row = 0; row < terrain.gridHeight; row += 1) {
-      const dstStart = (offsetY + row) * gridWidth + offsetX;
-      for (let column = 0; column < terrain.gridWidth; column += 1) {
-        heightGrid[dstStart + column] = terrain.heightGrid[row * terrain.gridWidth + column]! + deltaHeight;
+    for (let row = firstRow; row <= lastRow; row++) {
+      const v = Math.min(h - 1, Math.max(0, (mergedBounds.minY + row * step - bounds.minY) / tileStep.y));
+      const v0 = Math.floor(v);
+      const v1 = Math.min(h - 1, v0 + 1);
+      const fv = v - v0;
+      for (let col = firstCol; col <= lastCol; col++) {
+        const u = Math.min(w - 1, Math.max(0, (mergedBounds.minX + col * step - bounds.minX) / tileStep.x));
+        const u0 = Math.floor(u);
+        const u1 = Math.min(w - 1, u0 + 1);
+        const fu = u - u0;
+        const top = src[v0 * w + u0]! * (1 - fu) + src[v0 * w + u1]! * fu;
+        const bottom = src[v1 * w + u0]! * (1 - fu) + src[v1 * w + u1]! * fu;
+        heightGrid[row * gridWidth + col] = top * (1 - fv) + bottom * fv + deltaHeight;
       }
     }
-  }
+  });
 
   fillMissingHeightSamples(heightGrid, gridWidth, gridHeight);
   return { heightGrid, gridWidth, gridHeight };
 }
 
-export function mergeTerrainMeshes(tiles: LoadedViewerTile[], mergedPointCloud: PointCloudData): TerrainCache | null {
+/** Concatenates the tiles' terrain meshes in the merged (centred) frame. */
+export function mergeTerrainMeshes(tiles: LoadedViewerTile[], mergedBounds: PointCloudBounds): TerrainCache {
   if (tiles.length === 1) return tiles[0]!.terrainMesh;
 
   const totalVertexCount = tiles.reduce((sum, tile) => sum + tile.terrainMesh.vertexCount, 0);
@@ -261,7 +121,6 @@ export function mergeTerrainMeshes(tiles: LoadedViewerTile[], mergedPointCloud: 
   const vertices = new Float32Array(totalVertexCount * 6);
   const colors = new Uint8Array(totalVertexCount * 4);
   const indices = new Uint32Array(totalIndexCount);
-  const mergedBounds = mergedPointCloud.bounds;
   const mergedCenterX = (mergedBounds.minX + mergedBounds.maxX) / 2;
   const mergedCenterY = (mergedBounds.minY + mergedBounds.maxY) / 2;
   const mergedCenterZ = (mergedBounds.minZ + mergedBounds.maxZ) / 2;
@@ -269,13 +128,10 @@ export function mergeTerrainMeshes(tiles: LoadedViewerTile[], mergedPointCloud: 
   let vertexOffset = 0;
   let indexOffset = 0;
   for (const tile of tiles) {
-    const bounds = tile.pointCloud.bounds;
-    const tileCenterX = (bounds.minX + bounds.maxX) / 2;
-    const tileCenterY = (bounds.minY + bounds.maxY) / 2;
-    const tileCenterZ = (bounds.minZ + bounds.maxZ) / 2;
-    const deltaX = tileCenterX - mergedCenterX;
-    const deltaY = tileCenterY - mergedCenterY;
-    const deltaZ = tileCenterZ - mergedCenterZ;
+    const bounds = tile.bounds;
+    const deltaX = (bounds.minX + bounds.maxX) / 2 - mergedCenterX;
+    const deltaY = (bounds.minY + bounds.maxY) / 2 - mergedCenterY;
+    const deltaZ = (bounds.minZ + bounds.maxZ) / 2 - mergedCenterZ;
     const terrain = tile.terrainMesh;
 
     for (let i = 0; i < terrain.vertexCount; i += 1) {
@@ -299,9 +155,7 @@ export function mergeTerrainMeshes(tiles: LoadedViewerTile[], mergedPointCloud: 
     indexOffset += terrain.indexCount;
   }
 
-  const mergedGrid = mergeHeightGrid(tiles, mergedPointCloud);
-  if (!mergedGrid) return null;
-
+  const mergedGrid = mergeHeightGrid(tiles, mergedBounds);
   return {
     vertices,
     colors,

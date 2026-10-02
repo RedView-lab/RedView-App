@@ -14,7 +14,7 @@ export function sunlightMapLoadingStatus(progress: number, detail: string) {
   });
 }
 
-export function sunlightMapReadyStatus(detail = 'Overlay pret') {
+export function sunlightMapReadyStatus(detail = 'Overlay prêt') {
   return createOverlayStatus({
     id: STATUS_ID,
     label: STATUS_LABEL,

@@ -102,6 +102,9 @@ start-dev.bat
 
 # Test bench json reports
 script-test-bench/reports/*.json
+script-test-bench/reports/routing-quality/*.json
+script-test-bench/reports/routing-quality/*.html
+script-test-bench/routing-quality/vps/dist/
 
 # Claude temp files
 .claude-temp/

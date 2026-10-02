@@ -1,0 +1,487 @@
+<title>Banc de routage RedView</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout : rapport d'une colonne (max 1180 px), tableaux défilants, bornes kilométriques pour les tranches. */
+:root {
+  --paper: #f4f5f7;
+  --surface: #ffffff;
+  --ink: #15181c;
+  --muted: #5b6370;
+  --rule: #dadee4;
+  --accent: #c8102e;
+  --accent-soft: #c8102e1f;
+  --before: #8994a3;
+  --good: #1d7f47;
+  --bad: #b83b12;
+  --warn: #a8700f;
+  --bar-asphalt: #3d4652;
+  --bar-paved: #7c8796;
+  --bar-gravel: #c08a3e;
+  --bar-dirt: #8a5a2b;
+  --bar-unknown: #c9ced6;
+  --font-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #101317; --surface: #171b20; --ink: #e7eaee; --muted: #9aa3ae; --rule: #2a3039;
+    --accent: #ff5468; --accent-soft: #ff546824; --before: #7f8a98; --good: #49c07b; --bad: #ff8a5b; --warn: #e3b34f;
+    --bar-asphalt: #b8c0cb; --bar-paved: #7b8592; --bar-gravel: #d9a25a; --bar-dirt: #a7713d; --bar-unknown: #3a414b;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #101317; --surface: #171b20; --ink: #e7eaee; --muted: #9aa3ae; --rule: #2a3039;
+  --accent: #ff5468; --accent-soft: #ff546824; --before: #7f8a98; --good: #49c07b; --bad: #ff8a5b; --warn: #e3b34f;
+  --bar-asphalt: #b8c0cb; --bar-paved: #7b8592; --bar-gravel: #d9a25a; --bar-dirt: #a7713d; --bar-unknown: #3a414b;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink); font: 15px/1.55 var(--font-body); }
+.page { max-width: 1180px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 64px; display: grid; gap: 40px; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing: .01em; text-wrap: balance; margin: 0; line-height: 1.05; }
+h1 { font-size: clamp(2.4rem, 6vw, 3.6rem); }
+h2 { font-size: 1.75rem; }
+h3 { font-size: 1.2rem; font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+.eyebrow { font: 600 .78rem/1 var(--font-display); text-transform: uppercase; letter-spacing: .14em; color: var(--accent); }
+.muted { color: var(--muted); }
+header { display: grid; gap: 14px; }
+section { display: grid; gap: 16px; min-width: 0; }
+.section-head { display: grid; gap: 6px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.tile .label { font: 600 .8rem/1.2 var(--font-display); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.tile .values { font: 600 1.6rem/1 var(--font-display); font-variant-numeric: tabular-nums; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.tile .values .from { color: var(--before); font-weight: 500; font-size: 1.15rem; }
+.tile .values .to { color: var(--accent); }
+.tile .hint { font-size: .83rem; color: var(--muted); }
+.checks { display: flex; flex-wrap: wrap; gap: 8px; }
+.check { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--rule); background: var(--surface); border-radius: 999px; padding: 5px 12px 5px 8px; font-size: .86rem; }
+.check .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--good); flex: none; }
+.check.fail .dot { background: var(--bad); }
+.check .detail { font-family: var(--font-data); font-size: .78rem; color: var(--muted); }
+.fixes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.fix { border-top: 3px solid var(--accent); background: var(--surface); padding: 12px 14px 14px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.fix h3 { font-size: 1.08rem; }
+.fix p { font-size: .9rem; color: var(--muted); }
+.fix code { font-family: var(--font-data); font-size: .8rem; color: var(--ink); }
+.scroll { overflow-x: auto; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 8px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font: 600 .82rem/1.2 var(--font-display); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); position: sticky; top: 0; background: var(--surface); }
+th:first-child, td:first-child { text-align: left; }
+tbody tr:last-child td { border-bottom: 0; }
+tr.total td { font-weight: 600; background: var(--accent-soft); }
+td .b { color: var(--before); font-family: var(--font-data); font-size: .82rem; }
+td .a { font-family: var(--font-data); font-size: .86rem; }
+td .d { display: block; font-size: .74rem; font-family: var(--font-data); color: var(--muted); }
+td .d.up { color: var(--accent); }
+td .d.good { color: var(--good); }
+td .d.bad { color: var(--bad); }
+.borne { display: inline-grid; justify-items: center; min-width: 58px; border: 1px solid var(--rule); border-radius: 7px 7px 3px 3px; overflow: hidden; background: var(--surface); font: 600 .82rem/1 var(--font-display); }
+.borne::before { content: ""; display: block; width: 100%; height: 6px; background: var(--accent); }
+.borne span { padding: 4px 8px 5px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tabs button, select, input[type="search"] { font: 500 .9rem var(--font-body); color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 6px 12px; }
+.tabs button { cursor: pointer; }
+.tabs button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bars { display: grid; gap: 14px; }
+.bar-row { display: grid; grid-template-columns: minmax(150px, 220px) 1fr; gap: 6px 14px; align-items: center; }
+.bar-row .name { font-weight: 600; font-size: .9rem; }
+.bar-pair { display: grid; gap: 4px; min-width: 0; }
+.bar { display: flex; height: 14px; border-radius: 3px; overflow: hidden; background: var(--rule); }
+.bar span { display: block; height: 100%; }
+.bar-caption { display: flex; justify-content: space-between; gap: 10px; font: .74rem var(--font-data); color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .82rem; color: var(--muted); }
+.legend i { display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.explorer { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.map { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; aspect-ratio: 4 / 3; max-width: 100%; }
+.map svg { width: 100%; height: 100%; display: block; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.controls select { max-width: 100%; }
+.key { display: flex; gap: 16px; font-size: .84rem; color: var(--muted); flex-wrap: wrap; }
+.key b { display: inline-block; width: 22px; height: 3px; vertical-align: middle; margin-right: 6px; }
+.status { font: 500 .74rem var(--font-data); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--rule); }
+.status.ok { color: var(--good); }
+.status.fallback { color: var(--warn); }
+.status.error { color: var(--bad); }
+.notes { display: grid; gap: 8px; padding-left: 1.1em; margin: 0; max-width: 80ch; }
+footer { font-size: .82rem; color: var(--muted); }
+@media (max-width: 760px) {
+  .explorer { grid-template-columns: 1fr; }
+  .bar-row { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bar span { transition: width .4s ease; }
+}
+</style>
+
+<div class="page">
+  <header>
+    <span class="eyebrow">RedView · BRouter 1.7.10 · VPS Oracle (4 threads)</span>
+    <h1>Banc de routage</h1>
+    <p class="muted" id="scope"></p>
+    <div class="tiles" id="tiles"></div>
+  </header>
+
+  <section>
+    <div class="section-head">
+      <span class="eyebrow">Garde-fous</span>
+      <h2>Contrôles automatiques de la passe « après »</h2>
+    </div>
+    <div class="checks" id="checks"></div>
+  </section>
+
+  <section id="fixes-section">
+    <div class="section-head">
+      <span class="eyebrow">Corrections</span>
+      <h2>Ce qui a changé dans le routage</h2>
+    </div>
+    <div class="fixes" id="fixes"></div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="eyebrow">Vélo · 9 presets</span>
+      <h2>Par tranche de distance</h2>
+      <p class="muted">Route, Gravel et VTT en modes Vitesse, Aventure et Confort sur les mêmes trajets. Distances, D+ et D− sont des totaux sur les trajets calculés avant comme après (un échec d’un côté est compté dans la dernière colonne) ; les parts sont pondérées par la distance. Valeur grise = avant, valeur noire = après.</p>
+    </div>
+    <div class="scroll"><table id="bands"></table></div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="eyebrow">Par configuration</span>
+      <h2>Presets, variantes et course à pied</h2>
+    </div>
+    <div class="tabs" id="family-tabs" role="group" aria-label="Famille de configurations"></div>
+    <div class="scroll"><table id="configs"></table></div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="eyebrow">Revêtements et types de voies</span>
+      <h2>Ce que le tracé fait rouler</h2>
+      <p class="muted">Pour chaque configuration, barre du haut = avant, barre du bas = après, en part de la distance totale.</p>
+    </div>
+    <div class="tabs" id="mix-tabs" role="group" aria-label="Répartition affichée"></div>
+    <div class="legend" id="mix-legend"></div>
+    <div class="bars" id="mix"></div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="eyebrow">Explorateur</span>
+      <h2>Un trajet, deux tracés</h2>
+    </div>
+    <div class="controls">
+      <label for="pick-config" class="muted">Configuration</label>
+      <select id="pick-config"></select>
+      <label for="pick-route" class="muted">Trajet</label>
+      <select id="pick-route"></select>
+    </div>
+    <div class="explorer">
+      <div class="map" id="map"></div>
+      <div class="scroll"><table id="route-stats"></table></div>
+    </div>
+    <div class="key"><span><b style="background: var(--before)"></b>Avant</span><span><b style="background: var(--accent)"></b>Après</span></div>
+  </section>
+
+  <section id="sweep-section">
+    <div class="section-head">
+      <span class="eyebrow">Calibration</span>
+      <h2>Coefficient de la recherche A*</h2>
+      <p class="muted">Coefficient = poids × coût BRouter au mètre du profil. Cellule : écart de coût à la meilleure solution (médiane, pire cas) puis latence médiane. « 3.5 » est l'ancien réglage, identique pour tous les profils.</p>
+    </div>
+    <div class="scroll"><table id="sweep"></table></div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <span class="eyebrow">Détail</span>
+      <h2>Tous les scénarios</h2>
+    </div>
+    <div class="controls">
+      <label for="detail-family" class="muted">Famille</label>
+      <select id="detail-family"></select>
+      <label for="detail-band" class="muted">Tranche</label>
+      <select id="detail-band"></select>
+      <input type="search" id="detail-search" placeholder="Filtrer un trajet ou un preset" aria-label="Filtrer un trajet ou un preset">
+    </div>
+    <div class="scroll" style="max-height: 640px"><table id="detail"></table></div>
+  </section>
+
+  <section id="vps-section">
+    <div class="section-head">
+      <span class="eyebrow">Serveur</span>
+      <h2>Constats sur le VPS</h2>
+    </div>
+    <ul class="notes" id="vps"></ul>
+  </section>
+
+  <footer id="footer"></footer>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null;
+const { summary, geo, sweep, notes } = DATA;
+const rows = summary.rows;
+const BANDS = ['<100', '100-200', '200-500', '>500'];
+const BAND_LABEL = { '<100': '< 100 km', '100-200': '100–200', '200-500': '200–500', '>500': '> 500 km' };
+const FAMILIES = [
+  { id: 'vélo', label: 'Vélo · presets' },
+  { id: 'vélo-variante', label: 'Vélo · variantes' },
+  { id: 'running', label: 'Running' },
+  { id: 'trail', label: 'Trail' },
+];
+const el = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmt0 = (v) => Number.isFinite(v) ? Math.round(v).toLocaleString('fr-FR') : '—';
+const fmt1 = (v) => Number.isFinite(v) ? v.toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—';
+const sec = (ms) => Number.isFinite(ms) ? (ms / 1000).toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—';
+
+function quantile(values, q) {
+  if (!values.length) return NaN;
+  const s = [...values].sort((a, b) => a - b);
+  const pos = (s.length - 1) * q, lo = Math.floor(pos), hi = Math.ceil(pos);
+  return s[lo] + (s[hi] - s[lo]) * (pos - lo);
+}
+
+// Totaux sur les paires calculées des deux côtés ; statuts et latences sur toutes.
+function agg(list, side) {
+  const sides = list.map((r) => r[side]);
+  const okRows = list.filter((r) => Number.isFinite(r.before.km) && Number.isFinite(r.after.km)).map((r) => r[side]);
+  const sum = (k) => okRows.reduce((t, s) => t + (s[k] || 0), 0);
+  const km = sum('km') || 1;
+  const pct = (k) => (sum(k) / km) * 100;
+  const lat = sides.filter((s) => s.status !== 'error').map((s) => s.latencyMs);
+  return {
+    n: list.length,
+    ok: sides.filter((s) => s.status === 'ok').length,
+    fallback: sides.filter((s) => s.status === 'fallback').length,
+    error: sides.filter((s) => s.status === 'error').length,
+    km: sum('km'), dplus: sum('dplus'), dminus: sum('dminus'),
+    paved: pct('asphaltKm') + pct('pavedKm'), asphalt: pct('asphaltKm'), pavedOnly: pct('pavedKm'),
+    unpaved: pct('unpavedKm'), unknown: pct('unknownKm'),
+    major: pct('majorKm'), secondary: pct('secondaryKm'), tertiary: pct('tertiaryKm'), minor: pct('minorKm'),
+    cycleway: pct('cyclewayKm'), track: pct('trackKm'), path: pct('pathKm'), cycleRoute: pct('cycleRouteKm'),
+    wrongWay: sum('wrongWayKm'), aboveMax: sum('aboveMaxSlopeKm'),
+    detour: quantile(list.filter((r) => Number.isFinite(r.before.km) && Number.isFinite(r.after.km)).map((r) => r[side].km / (r.beelineKm || 1)), 0.5),
+    p50: quantile(lat, 0.5), p95: quantile(lat, 0.95),
+  };
+}
+
+function pair(b, a, kind = 'num') {
+  const f = kind === 'pct' || kind === 'one' ? fmt1 : kind === 's' ? sec : fmt0;
+  let d = '';
+  if (kind === 'num' && Number.isFinite(a) && Number.isFinite(b) && b !== 0) {
+    const pc = ((a - b) / b) * 100;
+    d = `<span class="d${Math.abs(pc) >= 0.5 ? ' up' : ''}">${pc > 0 ? '+' : ''}${pc.toFixed(1).replace('.', ',')} %</span>`;
+  } else if (kind === 'pct' && Number.isFinite(a) && Number.isFinite(b)) {
+    const pp = a - b;
+    d = `<span class="d${Math.abs(pp) >= 0.5 ? ' up' : ''}">${pp > 0 ? '+' : ''}${pp.toFixed(1).replace('.', ',')} pt</span>`;
+  }
+  return `<span class="b">${f(b)}</span> → <span class="a">${f(a)}</span>${d}`;
+}
+function lowerIsBetter(b, a, f) {
+  const cls = !Number.isFinite(a) || !Number.isFinite(b) || Math.abs(a - b) < 1e-9 ? '' : a < b ? ' good' : ' bad';
+  return `<span class="b">${f(b)}</span> → <span class="a">${f(a)}</span><span class="d${cls}">${cls === ' good' ? 'mieux' : cls === ' bad' ? 'moins bien' : '='}</span>`;
+}
+
+const HEAD = ['', 'n', 'Distance km', 'D+ m', 'D− m', 'Détour méd.', 'Revêtu %', 'Non revêtu %', 'Axes majeurs %', 'Cyclables %', 'Balisés %', 'Contresens km', 'km > pente max', 'Latence p50 s', 'Latence p95 s', 'Replis + échecs'];
+function aggCells(b, a, bike) {
+  return [
+    a.n,
+    pair(b.km, a.km), pair(b.dplus, a.dplus), pair(b.dminus, a.dminus),
+    pair(b.detour, a.detour, 'one').replace(/,(\d)$/, ',$1'),
+    pair(b.paved, a.paved, 'pct'), pair(b.unpaved, a.unpaved, 'pct'), pair(b.major, a.major, 'pct'),
+    pair(b.cycleway, a.cycleway, 'pct'), pair(b.cycleRoute, a.cycleRoute, 'pct'),
+    bike ? lowerIsBetter(b.wrongWay, a.wrongWay, fmt1) : '—',
+    lowerIsBetter(b.aboveMax, a.aboveMax, fmt1),
+    lowerIsBetter(b.p50, a.p50, sec), lowerIsBetter(b.p95, a.p95, sec),
+    lowerIsBetter(b.fallback + b.error, a.fallback + a.error, fmt0),
+  ];
+}
+function tableHtml(head, body) {
+  return `<thead><tr>${head.map((h) => `<th scope="col">${h}</th>`).join('')}</tr></thead><tbody>${body.join('')}</tbody>`;
+}
+
+// ── En-tête ───────────────────────────────────────────────────────────
+const configs = [...new Map(rows.map((r) => [r.configId, r])).values()];
+el('scope').textContent = `${rows.length} scénarios appariés (${configs.length} configurations × ${new Set(rows.map((r) => r.route)).size} trajets de 15 à 1 200 km), calculés par le vrai pipeline de l'app contre le BRouter de prod. Avant : ${summary.before.gitHead}, après : ${summary.after.gitHead}.`;
+const bike = rows.filter((r) => r.family === 'vélo');
+const gravel = bike.filter((r) => r.configId.startsWith('gravel'));
+const allB = agg(rows, 'before'), allA = agg(rows, 'after');
+const bikeB = agg(bike, 'before'), bikeA = agg(bike, 'after');
+const gB = agg(gravel, 'before'), gA = agg(gravel, 'after');
+const longBike = bike.filter((r) => r.band === '>500');
+const lB = agg(longBike, 'before'), lA = agg(longBike, 'after');
+const tile = (label, from, to, hint) => `<div class="tile"><span class="label">${label}</span><span class="values"><span class="from">${from}</span><span aria-hidden="true">→</span><span class="to">${to}</span></span><span class="hint">${hint}</span></div>`;
+el('tiles').innerHTML = [
+  tile('Tracés avec le profil choisi', `${allB.ok}`, `${allA.ok}`, `sur ${rows.length} ; le reste retombe sur un profil générique ou échoue`),
+  tile('Gravel : part non revêtue', `${fmt1(gB.unpaved)} %`, `${fmt1(gA.unpaved)} %`, 'presets Gravel, toutes distances'),
+  tile('Vélo : km à contresens', fmt1(bikeB.wrongWay), fmt1(bikeA.wrongWay), 'cumul sur les 9 presets vélo'),
+  tile('Vélo > 500 km : latence p95', `${sec(lB.p95)} s`, `${sec(lA.p95)} s`, `${lB.fallback + lB.error} → ${lA.fallback + lA.error} replis ou échecs`),
+].join('');
+
+el('checks').innerHTML = summary.checks.map((c) => `<span class="check${c.ok ? '' : ' fail'}"><span class="dot" aria-hidden="true"></span>${esc(c.name)}<span class="detail">${esc(c.detail)}</span></span>`).join('');
+
+if (notes.fixes?.length) {
+  el('fixes').innerHTML = notes.fixes.map((f) => `<article class="fix"><h3>${esc(f.title)}</h3><p>${f.body}</p></article>`).join('');
+} else el('fixes-section').hidden = true;
+
+// ── Tranches vélo ─────────────────────────────────────────────────────
+el('bands').innerHTML = tableHtml(['Tranche', ...HEAD.slice(1)], [
+  ...BANDS.map((band) => {
+    const list = bike.filter((r) => r.band === band);
+    return `<tr><td><span class="borne"><span>${BAND_LABEL[band]}</span></span></td>${aggCells(agg(list, 'before'), agg(list, 'after'), true).map((c) => `<td>${c}</td>`).join('')}</tr>`;
+  }),
+  `<tr class="total"><td>Toutes</td>${aggCells(bikeB, bikeA, true).map((c) => `<td>${c}</td>`).join('')}</tr>`,
+]);
+
+// ── Par configuration ────────────────────────────────────────────────
+let family = 'vélo';
+function renderConfigs() {
+  const list = configs.filter((c) => c.family === family);
+  el('configs').innerHTML = tableHtml(['Configuration', ...HEAD.slice(1)], list.map((c) => {
+    const sel = rows.filter((r) => r.configId === c.configId);
+    return `<tr><td>${esc(c.config)}</td>${aggCells(agg(sel, 'before'), agg(sel, 'after'), family.startsWith('vélo')).map((x) => `<td>${x}</td>`).join('')}</tr>`;
+  }));
+  el('family-tabs').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.f === family)));
+}
+el('family-tabs').innerHTML = FAMILIES.filter((f) => configs.some((c) => c.family === f.id)).map((f) => `<button type="button" data-f="${f.id}">${f.label}</button>`).join('');
+el('family-tabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { family = b.dataset.f; renderConfigs(); } });
+renderConfigs();
+
+// ── Répartitions ─────────────────────────────────────────────────────
+const MIXES = {
+  surface: { label: 'Revêtements', parts: [['asphalt', 'Asphalte', '--bar-asphalt'], ['pavedOnly', 'Pavés / béton', '--bar-paved'], ['unpaved', 'Gravier / terre / sable', '--bar-gravel'], ['unknown', 'Inconnu', '--bar-unknown']] },
+  roads: { label: 'Types de voies', parts: [['major', 'Trunk / primary', '--bad'], ['secondary', 'Secondary', '--bar-asphalt'], ['tertiary', 'Tertiary', '--bar-paved'], ['minor', 'Petites routes', '--before'], ['cycleway', 'Pistes cyclables', '--good'], ['track', 'Chemins (track)', '--bar-gravel'], ['path', 'Sentiers', '--bar-dirt']] },
+};
+let mix = 'surface';
+function bar(a, parts) {
+  return `<div class="bar">${parts.map(([k, label, color]) => `<span title="${label} ${fmt1(a[k])} %" style="width:${Math.max(0, a[k])}%;background:var(${color})"></span>`).join('')}</div>`;
+}
+function renderMix() {
+  const m = MIXES[mix];
+  el('mix-legend').innerHTML = m.parts.map(([, label, color]) => `<span><i style="background:var(${color})"></i>${label}</span>`).join('');
+  el('mix').innerHTML = configs.map((c) => {
+    const sel = rows.filter((r) => r.configId === c.configId);
+    const b = agg(sel, 'before'), a = agg(sel, 'after');
+    const key = mix === 'surface' ? ['unpaved', 'non revêtu'] : ['major', 'axes majeurs'];
+    return `<div class="bar-row"><span class="name">${esc(c.config)}</span><div class="bar-pair">${bar(b, m.parts)}${bar(a, m.parts)}<div class="bar-caption"><span>${key[1]} : ${fmt1(b[key[0]])} % → ${fmt1(a[key[0]])} %</span><span>${sel.length} trajets</span></div></div></div>`;
+  }).join('');
+  el('mix-tabs').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.m === mix)));
+}
+el('mix-tabs').innerHTML = Object.entries(MIXES).map(([k, m]) => `<button type="button" data-m="${k}">${m.label}</button>`).join('');
+el('mix-tabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { mix = b.dataset.m; renderMix(); } });
+renderMix();
+
+// ── Explorateur ──────────────────────────────────────────────────────
+const pickConfig = el('pick-config'), pickRoute = el('pick-route');
+pickConfig.innerHTML = configs.map((c) => `<option value="${esc(c.configId)}">${esc(c.config)}</option>`).join('');
+function fillRoutes() {
+  const list = rows.filter((r) => r.configId === pickConfig.value);
+  const current = pickRoute.value;
+  pickRoute.innerHTML = list.map((r) => `<option value="${esc(r.id)}">${esc(r.route)} (${BAND_LABEL[r.band]})</option>`).join('');
+  const keep = list.find((r) => r.id.endsWith(current.split('::')[1] ?? '###'));
+  pickRoute.value = keep ? keep.id : (list.find((r) => r.band === '100-200') ?? list[0]).id;
+}
+function drawMap(row) {
+  const g = geo[row.id] ?? {};
+  const lines = [g.b, g.a].filter(Boolean);
+  if (!lines.length) { el('map').innerHTML = '<p class="muted" style="padding:16px">Pas de géométrie.</p>'; return; }
+  const pts = lines.flat();
+  const midLat = pts.reduce((t, p) => t + p[1], 0) / pts.length;
+  const kx = Math.cos(midLat * Math.PI / 180);
+  const xs = pts.map((p) => p[0] * kx), ys = pts.map((p) => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const W = 400, H = 300, pad = 18;
+  const s = Math.min((W - 2 * pad) / Math.max(1e-6, maxX - minX), (H - 2 * pad) / Math.max(1e-6, maxY - minY));
+  const ox = (W - s * (maxX - minX)) / 2, oy = (H - s * (maxY - minY)) / 2;
+  const proj = (p) => [ox + (p[0] * kx - minX) * s, H - (oy + (p[1] - minY) * s)];
+  const path = (line) => line.map((p, i) => `${i ? 'L' : 'M'}${proj(p).map((v) => v.toFixed(1)).join(' ')}`).join('');
+  const start = proj((g.a ?? g.b)[0]), end = proj((g.a ?? g.b).at(-1));
+  el('map').innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Tracés avant et après : ${esc(row.route)}">
+    ${g.b ? `<path d="${path(g.b)}" fill="none" stroke="var(--before)" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" opacity=".9"/>` : ''}
+    ${g.a ? `<path d="${path(g.a)}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>` : ''}
+    <circle cx="${start[0]}" cy="${start[1]}" r="5" fill="var(--surface)" stroke="var(--ink)" stroke-width="2"/>
+    <circle cx="${end[0]}" cy="${end[1]}" r="5" fill="var(--ink)"/>
+  </svg>`;
+}
+function renderRoute() {
+  const row = rows.find((r) => r.id === pickRoute.value);
+  if (!row) return;
+  drawMap(row);
+  const b = row.before, a = row.after;
+  const pct = (s, k) => Number.isFinite(s.km) && s.km > 0 ? (s[k] / s.km) * 100 : NaN;
+  const line = (label, vb, va, kind) => `<tr><td>${label}</td><td>${pair(vb, va, kind)}</td></tr>`;
+  el('route-stats').innerHTML = tableHtml(['Mesure', 'Avant → après'], [
+    `<tr><td>Statut</td><td><span class="status ${b.status}">${b.status}</span> → <span class="status ${a.status}">${a.status}</span></td></tr>`,
+    line('Distance (km)', b.km, a.km, 'one'),
+    line('D+ (m)', b.dplus, a.dplus), line('D− (m)', b.dminus, a.dminus),
+    line('Temps BRouter (h)', b.durationMin / 60, a.durationMin / 60, 'one'),
+    line('Asphalte (%)', pct(b, 'asphaltKm'), pct(a, 'asphaltKm'), 'pct'),
+    line('Non revêtu (%)', pct(b, 'unpavedKm'), pct(a, 'unpavedKm'), 'pct'),
+    line('Axes majeurs (%)', pct(b, 'majorKm'), pct(a, 'majorKm'), 'pct'),
+    line('Pistes cyclables (%)', pct(b, 'cyclewayKm'), pct(a, 'cyclewayKm'), 'pct'),
+    line('Chemins + sentiers (%)', pct(b, 'trackKm') + pct(b, 'pathKm'), pct(a, 'trackKm') + pct(a, 'pathKm'), 'pct'),
+    line('Itinéraires balisés (%)', pct(b, 'cycleRouteKm'), pct(a, 'cycleRouteKm'), 'pct'),
+    `<tr><td>Contresens (km)</td><td>${lowerIsBetter(b.wrongWayKm, a.wrongWayKm, fmt1)}</td></tr>`,
+    `<tr><td>km > pente max (${row.maxSlopePct} %)</td><td>${lowerIsBetter(b.aboveMaxSlopeKm, a.aboveMaxSlopeKm, fmt1)}</td></tr>`,
+    `<tr><td>Latence (s)</td><td>${lowerIsBetter(b.latencyMs, a.latencyMs, sec)}</td></tr>`,
+  ]);
+}
+pickConfig.addEventListener('change', () => { fillRoutes(); renderRoute(); });
+pickRoute.addEventListener('change', renderRoute);
+pickConfig.value = configs.find((c) => c.configId === 'gravel-aventure')?.configId ?? configs[0].configId;
+fillRoutes();
+const demo = rows.find((r) => r.id === 'gravel-aventure::lyon-grenoble');
+if (demo) pickRoute.value = demo.id;
+renderRoute();
+
+// ── Calibration ──────────────────────────────────────────────────────
+if (sweep.length) {
+  const cols = [{ label: '3.5 (avant)', m: (p) => p.weight == null && !p.exact }, ...[3.0, 2.2, 1.7, 1.4, 1.2, 1.05, 0.9].map((w) => ({ label: `poids ${String(w).replace('.', ',')}`, m: (p) => p.weight === w })), { label: 'exacte', m: (p) => p.exact }];
+  el('sweep').innerHTML = tableHtml(['Tranche', 'n', ...cols.map((c) => c.label)], BANDS.map((band) => {
+    const entries = sweep.filter((e) => e.band === band);
+    return `<tr><td><span class="borne"><span>${BAND_LABEL[band]}</span></span></td><td>${entries.length}</td>${cols.map((c) => {
+      const gaps = [], ms = [];
+      for (const e of entries) {
+        const ok = e.points.filter((p) => p.ok);
+        if (!ok.length) continue;
+        const best = Math.min(...ok.map((p) => p.cost));
+        const p = e.points.find(c.m);
+        if (!p?.ok) continue;
+        gaps.push(((p.cost - best) / best) * 100); ms.push(p.ms);
+      }
+      return `<td>${gaps.length ? `<span class="a">${fmt1(quantile(gaps, 0.5))} %</span><span class="d">pire ${fmt1(Math.max(...gaps))} % · ${sec(quantile(ms, 0.5))} s</span>` : '—'}</td>`;
+    }).join('')}</tr>`;
+  }));
+} else el('sweep-section').hidden = true;
+
+// ── Détail ───────────────────────────────────────────────────────────
+el('detail-family').innerHTML = `<option value="">Toutes</option>` + FAMILIES.map((f) => `<option value="${f.id}">${f.label}</option>`).join('');
+el('detail-band').innerHTML = `<option value="">Toutes</option>` + BANDS.map((b) => `<option value="${b}">${BAND_LABEL[b]}</option>`).join('');
+function renderDetail() {
+  const fam = el('detail-family').value, band = el('detail-band').value, q = el('detail-search').value.trim().toLowerCase();
+  const list = rows.filter((r) => (!fam || r.family === fam) && (!band || r.band === band) && (!q || `${r.route} ${r.config}`.toLowerCase().includes(q)));
+  const pct = (s, k) => Number.isFinite(s.km) && s.km > 0 ? (s[k] / s.km) * 100 : NaN;
+  el('detail').innerHTML = tableHtml(['Configuration', 'Trajet', 'Tranche', 'km', 'D+', 'D−', 'Non revêtu %', 'Axes majeurs %', 'Latence s', 'Statut'], list.map((r) => {
+    const b = r.before, a = r.after;
+    return `<tr><td>${esc(r.config)}</td><td style="text-align:left">${esc(r.route)}</td><td>${BAND_LABEL[r.band]}</td><td>${pair(b.km, a.km, 'one')}</td><td>${pair(b.dplus, a.dplus)}</td><td>${pair(b.dminus, a.dminus)}</td><td>${pair(pct(b, 'unpavedKm'), pct(a, 'unpavedKm'), 'pct')}</td><td>${pair(pct(b, 'majorKm'), pct(a, 'majorKm'), 'pct')}</td><td>${lowerIsBetter(b.latencyMs, a.latencyMs, sec)}</td><td><span class="status ${b.status}">${b.status}</span> → <span class="status ${a.status}">${a.status}</span></td></tr>`;
+  }));
+}
+['detail-family', 'detail-band'].forEach((id) => el(id).addEventListener('change', renderDetail));
+el('detail-search').addEventListener('input', renderDetail);
+renderDetail();
+
+if (notes.vps?.length) el('vps').innerHTML = notes.vps.map((n) => `<li>${n}</li>`).join('');
+else el('vps-section').hidden = true;
+el('footer').textContent = `Généré par script-test-bench/routing-quality (npm run bench:routing, bench:routing:sweep, bench:routing:compare). Passe avant du ${summary.before.startedAt.slice(0, 10)}, passe après du ${summary.after.startedAt.slice(0, 10)}.`;
+</script>

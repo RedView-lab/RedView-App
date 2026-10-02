@@ -4,11 +4,17 @@ import type { CachedTileInfo, DownloadProgress, TileCoord } from '@/features/lid
 import { loadLidarTileLabels, setLidarTileLabel, syncLidarRouteOverlay } from '@/features/lidar';
 import type { Itinerary } from '@/features/itineraryPanel/types';
 import type { ControlPanelPersistedState } from '../../lib/persistedState';
+import { translateAppText } from '@/shared/i18n';
 
 function formatLidarTileLabel(info: CachedTileInfo): string {
   const sizeMb = Math.round(info.sizeBytes / (1024 * 1024));
   const year = new Date(info.cachedAt).getFullYear();
-  return `Tuile ${info.coord.xKm}×${info.coord.yKm} (LIDAR) (${sizeMb}mo) (${year} IGN)`;
+  return translateAppText('Tuile {{x}}×{{y}} (LIDAR) ({{size}}mo) ({{year}} IGN)', {
+    x: info.coord.xKm,
+    y: info.coord.yKm,
+    size: sizeMb,
+    year,
+  });
 }
 
 function tileKey(coord: TileCoord): string {

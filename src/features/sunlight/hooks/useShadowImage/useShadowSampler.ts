@@ -29,6 +29,7 @@ import {
   shadowLoadingStatus,
   shadowReadyStatus,
 } from './status';
+import { translateAppText } from '@/shared/i18n';
 
 interface UseShadowSamplerArgs {
   map: MapboxMap | null;
@@ -89,7 +90,7 @@ export function useShadowSampler({
     const current = optsRef.current;
     if (!current.enabled || !map) return;
     if (!canMutateStyle()) {
-      publishStatus(shadowLoadingStatus(6, 'Style en preparation'));
+      publishStatus(shadowLoadingStatus(6, 'Style en préparation'));
       if (sampleTimerRef.current === null) {
         sampleTimerRef.current = (setTimeout(() => {
           sampleTimerRef.current = null;
@@ -99,7 +100,7 @@ export function useShadowSampler({
       return;
     }
 
-    publishStatus(shadowLoadingStatus(12, 'Preparation'));
+    publishStatus(shadowLoadingStatus(12, 'Préparation'));
 
     const myGen = ++sampleGenRef.current;
     const zone = current.analysisZone ?? null;
@@ -134,7 +135,7 @@ export function useShadowSampler({
       ? chooseZoneDemZoom(sampledBounds, gridW)
       : chooseDemZoom(map, gridW);
 
-    publishStatus(shadowLoadingStatus(28, 'Echantillonnage du relief'));
+    publishStatus(shadowLoadingStatus(28, 'Échantillonnage du relief'));
 
     const sampleAck = await post<SampleAck | ErrAck>({
       type: 'sample',
@@ -150,7 +151,7 @@ export function useShadowSampler({
       console.warn('[shadow] sample failed', sampleAck.message);
       if (hasPreviousSample) {
         applyVisibleOpacity();
-        publishStatus(shadowReadyStatus('Dernier relief valide conserve'));
+        publishStatus(shadowReadyStatus('Dernier relief valide conservé'));
         return;
       }
       publishStatus(shadowErrorStatus(sampleAck.message));
@@ -160,7 +161,7 @@ export function useShadowSampler({
       console.info('[shadow] sample skipped: viewport spans too many DEM tiles');
       if (hasPreviousSample) {
         applyVisibleOpacity();
-        publishStatus(shadowReadyStatus('Dernier relief valide conserve'));
+        publishStatus(shadowReadyStatus('Dernier relief valide conservé'));
         return;
       }
       removeSourceAndLayer(true);
@@ -172,12 +173,12 @@ export function useShadowSampler({
       console.warn('[shadow] sample empty: no DEM coverage in viewport', { demZoom, bounds: sampledBounds });
       if (hasPreviousSample) {
         applyVisibleOpacity();
-        publishStatus(shadowReadyStatus('Dernier relief valide conserve'));
+        publishStatus(shadowReadyStatus('Dernier relief valide conservé'));
         return;
       }
       removeSourceAndLayer(true);
       setLayerOpacity(0);
-      publishStatus(shadowErrorStatus('Aucune donnee terrain'));
+      publishStatus(shadowErrorStatus('Aucune donnée terrain'));
       return;
     }
 
@@ -191,7 +192,7 @@ export function useShadowSampler({
         sampledBoundsRef.current = sampledBounds;
         publishStatus(shadowLoadingStatus(
           58,
-          `Relief partiel (${Math.round(fillRatio * 100)}%)`,
+          translateAppText('Relief partiel ({{percent}} %)', { percent: Math.round(fillRatio * 100) }),
         ));
         requestCompute(sampledBounds, myGen, isCancelled);
         return;
@@ -204,11 +205,11 @@ export function useShadowSampler({
         );
         if (hasPreviousSample) {
           applyVisibleOpacity();
-          publishStatus(shadowReadyStatus('Dernier relief valide conserve'));
+          publishStatus(shadowReadyStatus('Dernier relief valide conservé'));
         } else {
           publishStatus(shadowLoadingStatus(
             34,
-            `Chargement du relief (${Math.round(fillRatio * 100)}%)`,
+            translateAppText('Chargement du relief ({{percent}} %)', { percent: Math.round(fillRatio * 100) }),
           ));
         }
         if (sampleTimerRef.current === null) {

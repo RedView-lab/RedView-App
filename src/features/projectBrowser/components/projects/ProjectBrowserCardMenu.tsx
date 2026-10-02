@@ -111,7 +111,7 @@ export function ProjectBrowserCardMenu({
         aria-expanded={moveOpen}
         onClick={() => setMoveOpen((prev) => !prev)}
       >
-        <span className="rv-dropdown__label">{t('Déplacer vers...')}</span>
+        <span className="rv-dropdown__label">{t('Déplacer vers…')}</span>
         <span className="rv-dropdown__icon" aria-hidden>
           <SvgV2Icon name="arrow-circle-right.svg" size={16} />
         </span>

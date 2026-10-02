@@ -15,6 +15,7 @@ import {
   RADAR_SOURCE_ID,
 } from './constants';
 import { releaseOverlayBlobUrl } from '../vpsTileRenderer';
+import { translateAppText } from '@/shared/i18n';
 import {
   imageCoords,
   logWeatherOverlay,
@@ -268,7 +269,7 @@ export function useWeatherStyleManager({
       label: 'Météo',
       state: 'loading',
       progress: Math.max(0, Math.min(99, progress)),
-      detail: 'Synchronisation du style',
+      detail: translateAppText('Synchronisation du style'),
       reloadable: true,
     }));
   };

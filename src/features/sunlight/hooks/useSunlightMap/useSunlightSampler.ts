@@ -26,6 +26,7 @@ import {
   sunlightMapLoadingStatus,
   sunlightMapReadyStatus,
 } from './status';
+import { translateAppText } from '@/shared/i18n';
 
 interface UseSunlightSamplerArgs {
   map: MapboxMap | null;
@@ -110,7 +111,7 @@ export function useSunlightSampler({
     const current = optsRef.current;
     if (!current.enabled || !map) return;
     if (!canMutateMapStyle(map)) {
-      publishStatus(sunlightMapLoadingStatus(6, 'Style en preparation'));
+      publishStatus(sunlightMapLoadingStatus(6, 'Style en préparation'));
       if (sampleTimerRef.current === null) {
         sampleTimerRef.current = (setTimeout(() => {
           sampleTimerRef.current = null;
@@ -120,7 +121,7 @@ export function useSunlightSampler({
       return;
     }
 
-    publishStatus(sunlightMapLoadingStatus(14, 'Preparation'));
+    publishStatus(sunlightMapLoadingStatus(14, 'Préparation'));
 
     const myGen = ++sampleGenRef.current;
     const zone = current.analysisZone ?? null;
@@ -166,7 +167,7 @@ export function useSunlightSampler({
       ? chooseZoneDemZoom(sampledBounds, gridW)
       : chooseDemZoom(map, gridW);
 
-    publishStatus(sunlightMapLoadingStatus(18, 'Echantillonnage du relief'));
+    publishStatus(sunlightMapLoadingStatus(18, 'Échantillonnage du relief'));
 
     const sampleAck = await postSample({
       type: 'sm-sample',
@@ -183,7 +184,7 @@ export function useSunlightSampler({
       console.warn('[sunlight-map] sample failed', sampleAck.message);
       if (hasPreviousSample) {
         applyVisibleOpacity();
-        publishStatus(sunlightMapReadyStatus('Dernier relief valide conserve'));
+        publishStatus(sunlightMapReadyStatus('Dernier relief valide conservé'));
         return;
       }
       publishStatus(sunlightMapErrorStatus(sampleAck.message));
@@ -192,7 +193,7 @@ export function useSunlightSampler({
     if (sampleAck.tooMany) {
       if (hasPreviousSample) {
         applyVisibleOpacity();
-        publishStatus(sunlightMapReadyStatus('Dernier relief valide conserve'));
+        publishStatus(sunlightMapReadyStatus('Dernier relief valide conservé'));
         return;
       }
       removeOverlay(true);
@@ -203,12 +204,12 @@ export function useSunlightSampler({
     if (sampleAck.filled === 0) {
       if (hasPreviousSample) {
         applyVisibleOpacity();
-        publishStatus(sunlightMapReadyStatus('Dernier relief valide conserve'));
+        publishStatus(sunlightMapReadyStatus('Dernier relief valide conservé'));
         return;
       }
       removeOverlay(true);
       setLayerOpacity(0);
-      publishStatus(sunlightMapErrorStatus('Aucune donnee terrain'));
+      publishStatus(sunlightMapErrorStatus('Aucune donnée terrain'));
       return;
     }
 
@@ -223,11 +224,11 @@ export function useSunlightSampler({
 
       if (hasPreviousSample) {
         applyVisibleOpacity();
-        publishStatus(sunlightMapReadyStatus('Dernier relief valide conserve'));
+        publishStatus(sunlightMapReadyStatus('Dernier relief valide conservé'));
       } else {
         publishStatus(sunlightMapLoadingStatus(
           20,
-          `Relief partiel (${Math.round(fillRatio * 100)}%) — nouvel essai`,
+          translateAppText('Relief partiel ({{percent}} %) — nouvel essai', { percent: Math.round(fillRatio * 100) }),
         ));
       }
       if (partialSampleRetryRef.current < MAX_PARTIAL_SAMPLE_RETRIES) {

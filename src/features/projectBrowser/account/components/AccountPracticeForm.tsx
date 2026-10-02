@@ -5,6 +5,7 @@ import { useAppI18n } from '@/shared/i18n';
 import {
   ACCOUNT_LEVEL_OPTIONS,
   ACCOUNT_SPORT_OPTIONS,
+  accountOptionDisplayLabel,
   buildAccountCountryOptions,
 } from '../lib/options';
 import { AccountSelect, type AccountSelectOption } from './AccountSelect';
@@ -53,7 +54,7 @@ export function AccountPracticeForm({
     () =>
       ACCOUNT_SPORT_OPTIONS.map((option) => ({
         value: option,
-        label: t(option),
+        label: t(accountOptionDisplayLabel(option)),
       })),
     [t],
   );
@@ -61,7 +62,7 @@ export function AccountPracticeForm({
     () =>
       ACCOUNT_LEVEL_OPTIONS.map((option) => ({
         value: option,
-        label: t(option),
+        label: t(accountOptionDisplayLabel(option)),
       })),
     [t],
   );

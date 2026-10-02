@@ -1,6 +1,7 @@
 export {
   APP_LOCALE_OPTIONS,
   PROJECT_BROWSER_SETTINGS_STORAGE_KEY,
+  canonicalizeAppText,
   createAppTranslationBundle,
   detectNavigatorAppLocale,
   interpolateAppTranslation,

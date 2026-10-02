@@ -1,4 +1,5 @@
 import type { ViewerEngineKey } from '../controller';
+import { translateAppText } from '@/shared/i18n/config';
 
 function getSafeReferrerUrl(): string | null {
   if (!document.referrer) return null;
@@ -20,12 +21,12 @@ export function switchViewerEngine(targetEngine: ViewerEngineKey): void {
   if (targetEngine === currentEngine) return;
 
   if (targetEngine === 'webgl') {
-    const confirmed = window.confirm(
+    const confirmed = window.confirm(translateAppText(
       'Basculer vers le moteur WebGL HD ?\n\n' +
       '• Terrain texturé orthophoto en haute résolution\n' +
       '• Pas de nuage de points LiDAR (compatible toutes machines)\n' +
       '• Action irréversible : il faudra recharger pour revenir à WebGPU.'
-    );
+    ));
     if (!confirmed) return;
     url.searchParams.set('engine', 'webgl');
   } else {

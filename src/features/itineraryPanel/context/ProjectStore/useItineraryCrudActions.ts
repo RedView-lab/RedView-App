@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
+import { translateAppText } from '@/shared/i18n';
 import {
   createDefaultItinerary,
   ITINERARY_COLORS,
@@ -212,7 +213,7 @@ export function useItineraryCrudActions({
         const color =
           ITINERARY_COLORS[currentProject.itineraries.length % ITINERARY_COLORS.length] ??
           ITINERARY_COLORS[0];
-        const duplicateNameBase = `${source.name} (copie)`;
+        const duplicateNameBase = translateAppText('{{name}} (copie)', { name: source.name });
         let duplicateName = duplicateNameBase;
         let suffix = 2;
         while (currentProject.itineraries.some((itinerary) => itinerary.name === duplicateName)) {

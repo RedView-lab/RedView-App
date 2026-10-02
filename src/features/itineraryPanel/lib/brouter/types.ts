@@ -55,6 +55,18 @@ export interface BrouterRequest {
    * Format: `lon,lat,radiusM[,weight]|...`.
    */
   nogos?: string;
+  /**
+   * Échelle de coût au mètre du profil (voir api/searchCoefficient.ts) : fixe
+   * le coefficient de la recherche A*. Absente → échelle des profils stock.
+   */
+  searchCostScale?: number;
+  /** Poids imposé de l'heuristique (tracé grossier) au lieu du poids selon la distance. */
+  searchWeight?: number;
+  /**
+   * Appelé dès réception des en-têtes : BRouter ne répond qu'une fois le tracé
+   * calculé, le reste n'est que du téléchargement.
+   */
+  onResponseHeaders?: () => void;
   signal?: AbortSignal;
 }
 

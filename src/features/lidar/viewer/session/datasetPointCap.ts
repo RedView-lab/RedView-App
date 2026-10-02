@@ -1,22 +1,14 @@
 import type { TileCoord } from '../../types';
+import { translateAppText } from '@/shared/i18n/config';
 import { buildTileFileName } from '../../lib/coordConvert';
 import type { ViewerStatusReporter } from '../runtime';
 
-export const DEFAULT_MULTI_TILE_POINT_CAP = 8_000_000;
-export const MIN_MULTI_TILE_POINT_CAP = 2_500_000;
-export const MAX_MULTI_TILE_POINT_CAP = 12_000_000;
 export const TILE_LOAD_COMPLETE_PROGRESS = 0.92;
 export const SCENE_LOAD_START_PCT = 4;
 export const SCENE_LOAD_END_PCT = 80;
 
 export interface ViewerSceneLoadOptions {
-  multiTilePointCap?: number;
   deviceMemoryGiB?: number;
-  gpuInfo?: {
-    vendor?: string;
-    arch?: string;
-    desc?: string;
-  };
 }
 
 interface SceneTileProgressState {
@@ -28,14 +20,17 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function roundPointCap(value: number): number {
-  return Math.max(MIN_MULTI_TILE_POINT_CAP, Math.round(value / 250_000) * 250_000);
-}
-
-export function getSceneLoadConcurrency(totalTiles: number): number {
+/**
+ * Tiles processed at once. A first visit holds a whole decoded tile in
+ * memory (~18 B/point, 35 M points for a dense IGN tile) while its LOD cache
+ * is built, so low-memory machines take tiles one at a time; cached tiles
+ * only cost a header read either way.
+ */
+export function getSceneLoadConcurrency(totalTiles: number, deviceMemoryGiB?: number): number {
   const hardwareThreads = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 4 : 4;
-  const preferred = Math.max(2, Math.ceil(hardwareThreads / 4));
-  return Math.max(1, Math.min(totalTiles, Math.min(4, preferred)));
+  const memoryCap = deviceMemoryGiB !== undefined && deviceMemoryGiB <= 4 ? 1 : deviceMemoryGiB !== undefined && deviceMemoryGiB < 8 ? 2 : 3;
+  const preferred = Math.max(1, Math.ceil(hardwareThreads / 4));
+  return Math.max(1, Math.min(totalTiles, memoryCap, preferred));
 }
 
 export async function mapWithConcurrency<T, R>(
@@ -76,10 +71,10 @@ export function createSceneProgressReporter(
 } {
   const states: SceneTileProgressState[] = tileCoords.map((coord) => ({
     progress: 0,
-    detail: `En attente ${coord.xKm}/${coord.yKm}`,
+    detail: translateAppText('En attente {{x}}/{{y}}', { x: coord.xKm, y: coord.yKm }),
   }));
   let sceneFloor = 0;
-  let sceneDetail = states[0]?.detail ?? 'Préparation de la scène';
+  let sceneDetail = states[0]?.detail ?? translateAppText('Préparation de la scène');
 
   const emit = (overrideDetail?: string) => {
     const averageTileProgress = states.length > 0
@@ -110,48 +105,4 @@ export function createSceneProgressReporter(
       emit(detail);
     },
   };
-}
-
-export function resolveMultiTilePointCap(
-  tileCount: number,
-  options?: ViewerSceneLoadOptions,
-): number {
-  const explicitCap = options?.multiTilePointCap;
-  if (Number.isFinite(explicitCap) && explicitCap && explicitCap > 0) {
-    return Math.floor(explicitCap);
-  }
-
-  const rawMemoryGiB = options?.deviceMemoryGiB;
-  const memoryGiB = Number.isFinite(rawMemoryGiB) && rawMemoryGiB
-    ? clamp(rawMemoryGiB, 1, 16)
-    : 4;
-
-  const gpuInfo = options?.gpuInfo;
-  const gpuHaystack = `${gpuInfo?.vendor ?? ''} ${gpuInfo?.arch ?? ''} ${gpuInfo?.desc ?? ''}`.toLowerCase();
-  const isApple = gpuHaystack.includes('apple');
-  const isDedicatedGpu = /nvidia|geforce|rtx|quadro|tesla|radeon\s+rx|radeon\s+pro|amd|arc\s|battlemage|alchemist/.test(gpuHaystack);
-  const isIntegratedGpu = !isDedicatedGpu && /intel|iris|uhd|hd graphics|vega|apu|integrated/.test(gpuHaystack);
-
-  let cap = memoryGiB <= 2
-    ? 2_500_000
-    : memoryGiB <= 4
-      ? 4_500_000
-      : memoryGiB < 8
-        ? 6_500_000
-        : DEFAULT_MULTI_TILE_POINT_CAP;
-
-  const boostScale = tileCount >= 8 ? 0.25 : tileCount >= 6 ? 0.5 : tileCount >= 4 ? 0.75 : 1;
-  if (isDedicatedGpu) {
-    cap += (memoryGiB >= 8 ? 2_000_000 : 1_000_000) * boostScale;
-  } else if (isApple) {
-    cap += (memoryGiB >= 8 ? 750_000 : 250_000) * boostScale;
-  } else if (isIntegratedGpu) {
-    cap -= memoryGiB <= 4 ? 750_000 : 250_000;
-  }
-
-  if (tileCount >= 8) cap *= 0.7;
-  else if (tileCount >= 6) cap *= 0.8;
-  else if (tileCount >= 4) cap *= 0.9;
-
-  return clamp(roundPointCap(cap), MIN_MULTI_TILE_POINT_CAP, MAX_MULTI_TILE_POINT_CAP);
 }

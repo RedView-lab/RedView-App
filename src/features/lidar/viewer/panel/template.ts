@@ -41,16 +41,16 @@ const PANEL_TEMPLATE = `
       <p class="viewer-panel__label">Moteur</p>
       <div class="viewer-panel__select-wrap viewer-panel__select-wrap--engine">
         <button id="panel-engine-mode-button" class="viewer-panel__select-trigger viewer-panel__select-trigger--soft" type="button" aria-haspopup="listbox" aria-expanded="false">
-          <span id="panel-engine-mode-value">WebGpu (+ precis)</span>
+          <span id="panel-engine-mode-value">WebGPU (+ précis)</span>
           <svg class="viewer-panel__select-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="m5 7.5 5 5 5-5"></path>
           </svg>
         </button>
         <div id="panel-engine-mode-menu" class="rv-dropdown viewer-panel__select-menu viewer-panel__select-menu--engine" role="listbox" hidden>
           <button class="rv-dropdown__item viewer-panel__select-option is-selected" type="button" role="option" data-engine-mode-option="webgpu" aria-selected="true">
-            <span class="rv-dropdown__label">WebGpu (+ precis)</span>          </button>
+            <span class="rv-dropdown__label">WebGPU (+ précis)</span>          </button>
           <button class="rv-dropdown__item viewer-panel__select-option" type="button" role="option" data-engine-mode-option="webgl" aria-selected="false">
-            <span class="rv-dropdown__label">WebGl HD</span>          </button>
+            <span class="rv-dropdown__label">WebGL HD</span>          </button>
         </div>
       </div>
     </div>
@@ -67,6 +67,47 @@ const PANEL_TEMPLATE = `
         <input id="panel-point-density" class="viewer-panel__range" type="range" min="1" max="100" value="100" />
         <span class="viewer-panel__range-bound">100</span>
       </div>
+      <div class="viewer-panel__toggle-row">
+        <p class="viewer-panel__label">Taille fixe (pixels)</p>
+        <label class="viewer-panel__switch" aria-label="Taille des points fixe en pixels">
+          <input id="panel-fixed-size-toggle" type="checkbox" />
+          <span class="viewer-panel__switch-track"></span>
+          <span class="viewer-panel__switch-thumb"></span>
+        </label>
+      </div>
+      <div class="viewer-panel__toggle-row">
+        <p class="viewer-panel__label">Éclairage EDL</p>
+        <label class="viewer-panel__switch" aria-label="Activer ou désactiver l'éclairage EDL">
+          <input id="panel-edl-toggle" type="checkbox" />
+          <span class="viewer-panel__switch-track"></span>
+          <span class="viewer-panel__switch-thumb"></span>
+        </label>
+      </div>
+      <div class="viewer-panel__range-row">
+        <p class="viewer-panel__label">Intensité EDL</p>
+        <span class="viewer-panel__range-bound">1</span>
+        <input id="panel-edl-strength" class="viewer-panel__range" type="range" min="1" max="100" value="50" />
+        <span class="viewer-panel__range-bound">100</span>
+      </div>
+      <div class="viewer-panel__select-row viewer-panel__select-row--color">
+        <p class="viewer-panel__label">Couleurs</p>
+        <div class="viewer-panel__select-wrap">
+          <button id="panel-color-mode-button" class="viewer-panel__select-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+            <span id="panel-color-mode-value">Couleurs réelles</span>
+            <svg class="viewer-panel__select-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m4 6 4 4 4-4"></path>
+            </svg>
+          </button>
+          <div id="panel-color-mode-menu" class="rv-dropdown viewer-panel__select-menu" role="listbox" hidden>
+            <button class="rv-dropdown__item viewer-panel__select-option is-selected" type="button" role="option" data-color-mode-option="rgb" aria-selected="true">
+              <span class="rv-dropdown__label">Couleurs réelles</span>          </button>
+            <button class="rv-dropdown__item viewer-panel__select-option" type="button" role="option" data-color-mode-option="intensity" aria-selected="false">
+              <span class="rv-dropdown__label">Intensité LiDAR</span>          </button>
+            <button class="rv-dropdown__item viewer-panel__select-option" type="button" role="option" data-color-mode-option="classification" aria-selected="false">
+              <span class="rv-dropdown__label">Classification</span>          </button>
+          </div>
+        </div>
+      </div>
     </div>
     <div id="panel-elevation-controls" class="viewer-panel__elevation-controls" hidden>
       <div class="viewer-panel__range-row">
@@ -79,7 +120,7 @@ const PANEL_TEMPLATE = `
     <div class="viewer-panel__divider"></div>
     <div class="viewer-panel__toggle-row">
       <p class="viewer-panel__label">Neige</p>
-      <label class="viewer-panel__switch" aria-label="Activer ou desactiver la neige">
+      <label class="viewer-panel__switch" aria-label="Activer ou désactiver la neige">
         <input id="panel-snow-toggle" type="checkbox" />
         <span class="viewer-panel__switch-track"></span>
         <span class="viewer-panel__switch-thumb"></span>
@@ -98,7 +139,7 @@ const PANEL_TEMPLATE = `
           <button class="rv-dropdown__item viewer-panel__select-option is-selected" type="button" role="option" data-snow-mode-option="cover" aria-selected="true">
             <span class="rv-dropdown__label">Couverture neigeuse</span>          </button>
           <button class="rv-dropdown__item viewer-panel__select-option" type="button" role="option" data-snow-mode-option="thickness" aria-selected="false">
-            <span class="rv-dropdown__label">Epaisseur (cm)</span>          </button>
+            <span class="rv-dropdown__label">Épaisseur (cm)</span>          </button>
         </div>
       </div>
     </div>

@@ -131,4 +131,36 @@ Pour résumer, voici ce qu'il se passe, en quelques centaines de millisecondes, 
 8.  **Retour** : Le GeoJSON (contenant les coordonnées, la distance, l'ascent/descent et les temps estimés) traverse le proxy, arrive dans le client, est casté selon l'interface `BrouterRoute`, puis injecté dans la Mapbox et la Timeline.
 
 ---
+
+## 7. Recherche A*, longues distances et robustesse (octobre 2026)
+
+Mesuré avec `npm run bench:routing` (684 scénarios, pipeline réel contre le BRouter de prod ; rapport dans `script-test-bench/reports/routing-quality/`).
+
+### 7.1 Coefficient A* adaptatif
+BRouter ne fait qu'une passe (`pass2coefficient = -1`, la passe exacte est trop lente sur les longs tracés). L'heuristique vaut `pass1coefficient × distance à vol d'oiseau restante` : rapportée au **coût au mètre du profil** (de ~1,4 pour la route à ~5 pour le VTT), elle fixe le compromis vitesse / qualité. L'ancien `3.5` fixe était très glouton pour la route (tracés 15 à 40 % plus coûteux que l'optimum du profil) et quasi exhaustif pour le VTT (au-delà de 55 s sur 1 000 km).
+- `lib/brouter/api/searchCoefficient.ts` : coefficient = échelle de coût × poids selon la distance d'effort √(Σ Lᵢ²) des tronçons (0,8 sous 60 km → 2,0 à 1 000 km).
+- Échelle : estimée a priori depuis les valeurs du profil (`estimateSearchCostScale`, `brf-template/values.ts`), puis apprise sur le coût réellement renvoyé par BRouter pour ce profil (`recordObservedCostScale`).
+- `api/_lib/brouter-search.ts` : le proxy borne la valeur reçue (plancher selon la distance) ou la calcule si elle manque. Garder les paliers des deux fichiers en phase.
+
+### 7.2 Très longs tracés : tracé grossier puis ancres
+Un tronçon de plus de ~180 km à vol d'oiseau est d'abord calculé vite (poids 2,4), puis des ancres sont posées **sur ce tracé** environ tous les 160 km, et les tronçons courts sont recalculés finement, en deux moitiés parallèles (`routing/long-distance-anchors.ts`, `hooks/useItineraryBrouterRouting/resolveRouteRequest.ts`). Si l'affinage échoue ou coûte plus cher, le tracé grossier est gardé plutôt qu'un repli sur un profil stock.
+
+### 7.3 Points isolés (« îlots »)
+BRouter accroche un point à la voie la plus proche même si elle n'est pas reliée au réseau (zone piétonne fermée, parking privé…) : « no track found » / « target island detected ». Le point fautif est décalé de 200 puis 500 m vers son voisin, avec un avertissement (`routing/island-repair.ts`).
+
+### 7.4 Délais, requête de secours et compression
+- Le repli sur le profil stock se déclenche après un délai proportionnel à la distance (14 s jusqu'à 150 km, jusqu'à 45 s), et plus du tout pour un îlot avant d'avoir tenté de déplacer le point.
+- Au départ d'un réseau très dense (Paris), une recherche fine peut explorer plusieurs secondes : passé un délai proportionnel à la distance (~4 s à 110 km), une recherche plus gloutonne (même profil) part en parallèle et la première réponse l'emporte (`profileFallback.ts`).
+- Ces délais portent sur le calcul : ils s'arrêtent dès les en-têtes de la réponse (BRouter ne répond qu'une fois le tracé calculé), une connexion lente ne déclenche donc ni secours ni repli.
+- `api/brouter.ts` compresse le GeoJSON (brotli ou gzip) : `server.mjs` ne compresse que les fichiers statiques, et un tracé de 1 000 km pèse ~5 Mo.
+
+### 7.5 Best-of-N
+Les stratégies multi-alternatives (§5.3) ne s'appliquent qu'aux profils stock : tous les presets génèrent un profil personnalisé, routé en une requête.
+
+### 7.6 Corrections du profil BRF
+- **Mode grimpe** (remplace §5.2) : `uphillcostfactor = costfactor × relief` par catégorie (gravier 0,4 … axes majeurs 1,0), avec la sentinelle 10000 conservée. Les anciennes valeurs fixes faisaient ignorer en montée les choix « Éviter / Interdire », les sens interdits et les pénalités d'accès.
+- **Priorité « Distance »** : haute = au plus direct (presets Vitesse), basse = détours acceptés (Aventure / Confort). Le sens était inversé : Vitesse pénalisait les routes directes ×1,5.
+- **Plage de surfaces** : une surface incluse n'écrase plus « Éviter / Interdire » ; « Privilégier le gravier » vaut ×0,6 pour compenser le coût de base des chemins (héritage trekking), sinon un preset Gravel roulait à 90–97 % sur le goudron.
+
+---
 *Ce document technique peut servir de référence pour l'architecture complète de l'interopérabilité BRouter / Cloud dans le projet RedView.*

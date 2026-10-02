@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import * as Sentry from '@sentry/react';
 import { logger } from '../lib/logger';
+import { translateAppText } from '../i18n';
 
 interface Props {
   children: ReactNode;
@@ -99,7 +100,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
                 margin: '0 0 10px 0',
               }}
             >
-              Anomalie d&apos;affichage 3D
+              {translateAppText("Anomalie d'affichage 3D")}
             </h1>
 
             <p
@@ -110,8 +111,9 @@ export class GlobalErrorBoundary extends Component<Props, State> {
                 margin: '0 0 24px 0',
               }}
             >
-              Une erreur inattendue est survenue dans le moteur graphique ou l&apos;interface. Vous
-              pouvez recharger l&apos;application en toute sécurité.
+              {translateAppText(
+                "Une erreur inattendue est survenue dans le moteur graphique ou l'interface. Vous pouvez recharger l'application en toute sécurité.",
+              )}
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -136,7 +138,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
                   (e.target as HTMLElement).style.backgroundColor = '#890000';
                 }}
               >
-                Recharger l&apos;application
+                {translateAppText("Recharger l'application")}
               </button>
 
               <button
@@ -152,7 +154,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
                   cursor: 'pointer',
                 }}
               >
-                Réinitialiser la vue et recharger
+                {translateAppText('Réinitialiser la vue et recharger')}
               </button>
             </div>
 
@@ -166,7 +168,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
                 }}
               >
                 <summary style={{ cursor: 'pointer', marginBottom: '8px' }}>
-                  Détails techniques
+                  {translateAppText('Détails techniques')}
                 </summary>
                 <pre
                   style={{

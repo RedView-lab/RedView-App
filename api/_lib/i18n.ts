@@ -15,10 +15,10 @@ export function resolveAppLocale(value: unknown): AppLocale {
 
 export function createAppTranslationBundle(locale: AppLocale): AppTranslationBundle {
   const entries: Record<string, string> = {};
-  for (const pair of APP_TRANSLATION_PAIRS) {
-    const target = locale === 'fr' ? pair.fr : pair.en;
-    entries[pair.fr] = target;
-    entries[pair.en] = target;
-  }
+  // Same order as the client bundle (src/shared/i18n/config/bundle.ts):
+  // the locale's own keys win over the other language's.
+  const sourceLocale: AppLocale = locale === 'fr' ? 'en' : 'fr';
+  for (const pair of APP_TRANSLATION_PAIRS) entries[pair[sourceLocale]] = pair[locale];
+  for (const pair of APP_TRANSLATION_PAIRS) entries[pair[locale]] = pair[locale];
   return { locale, entries };
 }

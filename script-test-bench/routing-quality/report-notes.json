@@ -1,0 +1,53 @@
+{
+  "fixes": [
+    {
+      "title": "Recherche A* adaptée au profil et à la distance",
+      "body": "Le coefficient <code>3.5</code> était forcé pour tous les profils. Rapporté au coût au mètre du profil (1,4 pour la route, 5 pour le VTT), il rendait la route très gloutonne (tracés 15 à 40 % plus coûteux que l'optimum) et le VTT quasi exhaustif (plus de 55 s sur 1 000 km). Le coefficient vaut maintenant échelle de coût × poids selon la distance, l'échelle étant estimée puis apprise sur les réponses BRouter."
+    },
+    {
+      "title": "Très longs tracés découpés en tronçons",
+      "body": "Au-delà de ~180 km à vol d'oiseau : tracé grossier rapide, ancres posées sur ce tracé tous les ~160 km, puis recalcul fin de chaque tronçon en deux moitiés parallèles. Le tracé grossier sert de repli au lieu du profil stock."
+    },
+    {
+      "title": "Latence bornée au départ des réseaux denses",
+      "body": "Au départ de Paris, la recherche fine peut explorer longtemps (3 s de calcul serveur pour Paris→Rouen). Passé un délai proportionnel à la distance (~4 s à 110 km), une recherche plus gloutonne avec le même profil part en parallèle et la première réponse l'emporte. Les délais portent sur le calcul, pas sur le téléchargement : une connexion lente ne déclenche ni secours ni repli."
+    },
+    {
+      "title": "Réponses compressées vers le navigateur",
+      "body": "<code>server.mjs</code> ne compresse que les fichiers statiques : un tracé de 1 000 km partait en ~5 Mo de GeoJSON brut. <code>api/brouter.ts</code> compresse désormais en brotli ou gzip (5 à 8 fois plus léger), ce qui compte sur mobile en itinérance."
+    },
+    {
+      "title": "Gravel : le gravier enfin privilégié",
+      "body": "La plage de surfaces « tarmac → gravel » ramenait « Éviter la route » (1,15) à 0,9, et « Privilégier le gravier » (0,85) ne compensait pas le coût de base des chemins hérité du profil trekking. Un preset Gravel roulait à 90-97 % sur le goudron."
+    },
+    {
+      "title": "Mode grimpe : plus de contresens ni de voies interdites en montée",
+      "body": "En montée, <code>uphillcostfactor</code> remplaçait le coût par des valeurs fixes (1,15 à 4,0) qui ignoraient « Éviter / Interdire », les sens uniques et les accès. Il vaut maintenant le coût complet × un allègement par catégorie."
+    },
+    {
+      "title": "Priorité « Distance » remise dans le bon sens",
+      "body": "Les presets Vitesse (Distance 55-70 = au plus direct) pénalisaient en réalité les routes directes ×1,5 et allégeaient les chemins : le générateur lisait l'échelle à l'envers."
+    },
+    {
+      "title": "Points isolés réparés automatiquement",
+      "body": "Un point accroché à une voie non reliée au réseau (zone piétonne, parking…) faisait échouer tout le calcul, pour tous les profils. Le point est décalé de 200 puis 500 m vers son voisin, avec un avertissement."
+    },
+    {
+      "title": "Délai et replis",
+      "body": "Le repli sur le profil stock (tracé générique) intervenait après 14 s quelle que soit la distance ; le délai croît désormais avec la distance (jusqu'à 45 s, sous les 55 s du proxy)."
+    },
+    {
+      "title": "Petits correctifs",
+      "body": "D− renvoyé par le client BRouter négatif (signe inversé) ; coût total des tracés multi-tronçons limité au premier tronçon ; coefficient 4.0 du mode Vitesse jamais appliqué."
+    }
+  ],
+  "vps": [
+    "BRouter 1.7.10, 4 threads, heap Java fixe de 16 Go sur 22 Go de RAM : le swap de 5 Go est entièrement utilisé. Réduire le heap à ~12 Go (les segments ne pèsent que 1,8 Go) libérerait de la marge pour le serveur POI, la météo et Coolify.",
+    "Pendant le bench : 560 Mo de RAM libre, swap de 5 Go plein, et un processus <code>sentinel</code> (root) à ~90 % d'un cœur. BRouter lui-même répondait normalement (sonde Lyon→Grenoble identique en début et fin de session).",
+    "4 threads seulement : au-delà de 4 calculs simultanés, le watchdog BRouter tue la requête la plus ancienne. Le découpage parallèle des longs tracés en utilise 2 par utilisateur pendant quelques secondes.",
+    "Tuiles couvrant l'Europe de l'Ouest (France, Benelux, Suisse, Italie du Nord, Espagne, Sud de l'Angleterre) datées du 6 septembre 2026. Autriche, Slovénie, Danemark et Europe centrale sont absents : un tracé vers Vienne ou Ljubljana échoue.",
+    "605 profils personnalisés stockés sans purge (identifiants par contenu, donc sans risque de collision ; un nettoyage périodique des fichiers de plus de 30 jours suffirait).",
+    "maxRunningTime = 300 s côté BRouter alors que le proxy coupe à 55 s : BRouter ne surveille pas la déconnexion du client, donc un calcul abandonné par le proxy peut continuer jusqu'à 5 min sur l'un des 4 threads. L'aligner sur ~60 s limiterait ces calculs orphelins.",
+    "Le débit entre un poste client et le VPS est très variable (25 Ko/s à plusieurs Mo/s observés le même jour) : raison de plus pour compresser les réponses. La passe « après » et la passe « avant » de ce rapport ont été exécutées sur le VPS lui-même, à côté de BRouter, pour mesurer la latence sans le réseau."
+  ]
+}

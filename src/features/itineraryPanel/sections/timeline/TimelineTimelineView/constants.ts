@@ -14,3 +14,4 @@ export const TIMELINE_VIEWPORT_TOP_INSET_PX = 10;
 export const TIMELINE_VIEWPORT_BOTTOM_INSET_PX = 10;
 
 export const WEEKDAY_SHORT = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'] as const;
+export const WEEKDAY_SHORT_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;

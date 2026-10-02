@@ -54,6 +54,18 @@ export const ACCOUNT_SPORT_OPTIONS = [
 
 export const ACCOUNT_LEVEL_OPTIONS = ['Debutant', 'Intermediaire', 'Avance', 'Expert'] as const;
 
+/** Display labels for the persisted (unaccented) sport/level values. */
+const ACCOUNT_OPTION_DISPLAY_LABELS: Readonly<Record<string, string>> = {
+  'Velo de route': 'Cyclisme sur route',
+  Debutant: 'Débutant',
+  Intermediaire: 'Intermédiaire',
+  Avance: 'Avancé',
+};
+
+export function accountOptionDisplayLabel(value: string): string {
+  return ACCOUNT_OPTION_DISPLAY_LABELS[value] ?? value;
+}
+
 export const DEFAULT_COUNTRY = 'FR';
 export const DEFAULT_SPORT = ACCOUNT_SPORT_OPTIONS[0];
 export const DEFAULT_LEVEL = ACCOUNT_LEVEL_OPTIONS[0];

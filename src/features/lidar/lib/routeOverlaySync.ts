@@ -1,4 +1,5 @@
 import type { Itinerary } from '@/features/itineraryPanel/types';
+import { translateAppText } from '@/shared/i18n/config';
 
 export const LIDAR_ROUTE_OVERLAY_STORAGE_KEY = 'redview:lidar:route_overlay';
 export const LIDAR_ROUTE_OVERLAY_CHANNEL_NAME = 'redview:lidar:route_overlay';
@@ -140,7 +141,7 @@ export function extractLidarRouteOverlayState(
 
     routes.push({
       id: itinerary.id,
-      name: itinerary.name || 'Itinéraire',
+      name: itinerary.name || translateAppText('Itinéraire'),
       color: normalizeRouteColor(itinerary.color),
       opacity: normalizeRouteOpacity(itinerary.opacity),
       visible: itinerary.visible !== false,

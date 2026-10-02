@@ -25,6 +25,7 @@ import {
   sunlightMapLoadingStatus,
   sunlightMapReadyStatus,
 } from './status';
+import { translateAppText } from '@/shared/i18n';
 
 export type ComputeTerminal = SmComputeAck | SmComputeEmpty | SmComputeCancelled | SmErrAck;
 
@@ -69,7 +70,7 @@ export function useSunlightWorkerBridge({
         if (activeComputeIdRef.current === ack.id) {
           const totalSteps = Math.max(1, ack.totalSteps);
           const pct = Math.round((ack.stepsDone / totalSteps) * 70) + 22;
-          publishStatus(sunlightMapLoadingStatus(pct, `Ensoleillement ${ack.stepsDone}/${totalSteps}`));
+          publishStatus(sunlightMapLoadingStatus(pct, translateAppText('Ensoleillement {{done}}/{{total}}', { done: ack.stepsDone, total: totalSteps })));
         }
         return;
       }
@@ -215,7 +216,7 @@ export function useSunlightWorkerBridge({
       setTimeout(() => URL.revokeObjectURL(previous), BLOB_REVOKE_DELAY_MS);
     }
 
-    publishStatus(sunlightMapReadyStatus('Overlay pret'));
+    publishStatus(sunlightMapReadyStatus('Overlay prêt'));
   };
 
   const processComputeQueue = async (initialJob: ComputeJob, isCancelled: () => boolean) => {

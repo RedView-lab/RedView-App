@@ -1,6 +1,7 @@
 import { useEffect, useRef, type MutableRefObject } from 'react';
 import type { ErrorEvent as MapboxErrorEvent, Map as MapboxMap, MapSourceDataEvent } from 'mapbox-gl';
 import { createOverlayStatus, type OverlayStatusReporter } from '@/features/map3d';
+import { translateAppText } from '@/shared/i18n';
 import { SLOPE_SOURCE_ID } from '../../lib/slope-source';
 import { canStartSlopeWork } from './helpers';
 
@@ -97,7 +98,7 @@ export function useSlopeProgressReporter({
       }
       const ratio = done / Math.max(total, 1);
       const pct = Math.max(1, Math.min(99, Math.round(ratio * 100)));
-      emit('loading', pct, `Tuiles ${done}/${total}`);
+      emit('loading', pct, translateAppText('Tuiles {{done}}/{{total}}', { done, total }));
     };
 
     const STAGNATION_MS = 8000;
@@ -137,13 +138,13 @@ export function useSlopeProgressReporter({
         if (sinceProgress >= STAGNATION_MS) {
           const stragglers = requested.size - loaded.size;
           if (stragglers <= READY_STRAGGLER_THRESHOLD || sinceProgress >= HARD_STAGNATION_MS) {
-            emit('ready', 100, `Pentes prêtes (${stragglers} en attente)`);
+            emit('ready', 100, translateAppText('Pentes prêtes ({{count}} en attente)', { count: stragglers }));
             return;
           }
           const total = requested.size;
           const done = loaded.size;
           const pct = Math.max(1, Math.min(99, Math.round((done / Math.max(total, 1)) * 100)));
-          emit('loading', pct, `Tuiles ${done}/${total} (${stragglers} en traitement)`);
+          emit('loading', pct, translateAppText('Tuiles {{done}}/{{total}} ({{count}} en traitement)', { done, total, count: stragglers }));
           armWatchdog();
           return;
         }
@@ -229,7 +230,7 @@ export function useSlopeProgressReporter({
 
       if (phase === 'low') {
         const p = typeof percent === 'number' && percent > 0 ? percent : Math.max(5, Math.min(50, Math.round(((count || 0) / (totalCount || 1)) * 50)));
-        emit('loading', p, `Pentes 30m (${count}/${totalCount})`);
+        emit('loading', p, translateAppText('Pentes 30 m ({{done}}/{{total}})', { done: count, total: totalCount }));
       } else if (phase === 'hd') {
         const p = typeof percent === 'number' && percent > 0 ? percent : Math.max(50, Math.min(99, 50 + Math.round(((count || 0) / (totalCount || 1)) * 49)));
         emit('loading', p, `LiDAR HD (${count}/${totalCount})`);

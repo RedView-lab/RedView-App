@@ -2,16 +2,17 @@ import type { Itinerary } from '@/features/itineraryPanel/types';
 import {
   APP_CREATOR,
   buildBounds,
+  buildPoiExportDescription,
   collectExportAnchors,
   escapeXml,
   formatCoordinate,
   formatDecimal,
   getExportRoutePoints,
   GPX_NAMESPACE,
-  POI_CATEGORY_LABEL_FR,
   POI_CATEGORY_TO_GPX_SYM,
   type ExportAnchor,
 } from './exportHelpers';
+import { translateAppText } from '@/shared/i18n/config';
 
 export function mapPoiCategoryToGpxSym(anchor: ExportAnchor): string {
   if (anchor.kind === 'start') return 'Flag, Green';
@@ -31,15 +32,11 @@ export function buildGpxWaypointType(anchor: ExportAnchor): string {
 }
 
 export function buildWaypointDescription(anchor: ExportAnchor): string {
-  if (anchor.kind === 'waypoint') return 'Point de passage exporte depuis la feuille de route.';
-  if (anchor.kind === 'poi') {
-    const catLabel = anchor.poiCategory ? (POI_CATEGORY_LABEL_FR[anchor.poiCategory] ?? 'POI') : 'POI';
-    const distKm = (anchor.distanceM / 1000).toFixed(1);
-    return `${catLabel} - km ${distKm}${anchor.favorite ? ' (favori)' : ''}`;
-  }
-  if (anchor.kind === 'start') return 'Depart du parcours.';
-  if (anchor.kind === 'end') return 'Arrivee du parcours.';
-  return 'Point exporte depuis RedView.';
+  if (anchor.kind === 'waypoint') return translateAppText('Point de passage exporté depuis la feuille de route.');
+  if (anchor.kind === 'poi') return buildPoiExportDescription(anchor);
+  if (anchor.kind === 'start') return translateAppText('Départ du parcours.');
+  if (anchor.kind === 'end') return translateAppText('Arrivée du parcours.');
+  return translateAppText('Point exporté depuis RedView.');
 }
 
 /**
@@ -50,7 +47,7 @@ export function buildItineraryGpx(itinerary: Itinerary, options?: { favoritesOnl
   const anchors = collectExportAnchors(itinerary, routePoints, options);
   const bounds = buildBounds(routePoints);
   const exportedAt = new Date().toISOString();
-  const routeName = itinerary.gpxRoute?.name?.trim() || itinerary.name.trim() || 'Itineraire';
+  const routeName = itinerary.gpxRoute?.name?.trim() || itinerary.name.trim() || translateAppText('Itinéraire');
 
   const waypointXml = anchors
     .map((anchor) => {
@@ -85,7 +82,7 @@ export function buildItineraryGpx(itinerary: Itinerary, options?: { favoritesOnl
     '  <metadata>',
     `    <name>${escapeXml(routeName)}</name>`,
     `    <time>${exportedAt}</time>`,
-    `    <desc>${escapeXml('Trace exportee depuis RedView sans donnees de vitesse, cadence ou puissance.')}</desc>`,
+    `    <desc>${escapeXml(translateAppText('Trace exportée depuis RedView sans données de vitesse, cadence ou puissance.'))}</desc>`,
     `    <bounds minlat="${formatCoordinate(bounds.minLat)}" minlon="${formatCoordinate(bounds.minLon)}" maxlat="${formatCoordinate(bounds.maxLat)}" maxlon="${formatCoordinate(bounds.maxLon)}" />`,
     '  </metadata>',
     waypointXml,

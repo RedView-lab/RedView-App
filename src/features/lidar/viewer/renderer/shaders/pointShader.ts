@@ -1,219 +1,189 @@
 // ============================================
 // WGSL Shader Components — Point Cloud Shaders
 // ============================================
+//
+// Points are streamed per LOD node as 12-byte records (see lod/lodTile.ts):
+// u16×3 position quantized in the node cube, class, intensity, RGB. They
+// are shaded once per point by a compute pass (colour mode, overlays, DTM
+// lighting) when a node arrives or that state changes; the per-frame
+// vertex shader only decodes the position, projects a screen-aligned
+// sprite and reads the pre-shaded colour — no texture fetch per vertex.
 
 import {
+  WGSL_CAMERA_BINDING,
   WGSL_CAMERA_STRUCT,
   WGSL_COLOR_HELPERS,
   WGSL_HEIGHT_HELPERS,
+  WGSL_LIGHTING_HELPERS,
   WGSL_OVERLAY_HELPERS,
-  WGSL_POINT_BINDINGS,
+  WGSL_SCENE_BINDINGS,
 } from './common';
 
-export const SHADER_GATHER = /* wgsl */ `
+/** Group 1 of the point pipeline: per-frame sprite parameters. */
+export const POINT_PARAMS_FLOATS = 8;
+/** Per-node uniform record (bound with a dynamic offset). */
+export const NODE_UNIFORM_BYTES = 32;
+
+const WGSL_NODE_STRUCT = /* wgsl */ `
+struct NodeParams {
+  origin: vec3<f32>,
+  size: f32,
+  _pad0: f32,
+  count: u32,
+  _pad1: f32,
+  _pad2: f32,
+};
+`;
+
+export const POINT_SHADER = /* wgsl */ `
 ${WGSL_CAMERA_STRUCT}
-${WGSL_POINT_BINDINGS}
+${WGSL_CAMERA_BINDING}
+${WGSL_NODE_STRUCT}
+
+struct PointParams {
+  minPx: f32,
+  maxPx: f32,
+  fixedPx: f32,
+  focalPx: f32,
+  viewportW: f32,
+  viewportH: f32,
+  antialias: f32,
+  /** Point diameter in metres, the same for every point. */
+  worldSize: f32,
+};
+
+@group(1) @binding(0) var<uniform> params: PointParams;
+@group(2) @binding(0) var<uniform> node: NodeParams;
+
+${WGSL_COLOR_HELPERS}
 
 struct VsOut {
   @builtin(position) pos: vec4<f32>,
-  @location(0) color: vec4<f32>,
-  @location(1) worldPos: vec3<f32>,
-  @location(2) center: vec3<f32>,
-  @location(3) localUV: vec2<f32>,
-  @location(4) sobelNormal: vec3<f32>,
-  @location(5) @interpolate(flat) camDist: f32,
-  @location(6) @interpolate(flat) radius: f32,
-  @location(7) @interpolate(flat) stochasticKeep: f32,
+  @location(0) @interpolate(flat) color: vec4<f32>,
+  @location(1) uv: vec2<f32>,
+  @location(2) @interpolate(flat) px: f32,
 };
-
-${WGSL_OVERLAY_HELPERS}
-${WGSL_COLOR_HELPERS}
-${WGSL_HEIGHT_HELPERS}
 
 @vertex
 fn vs_main(
   @builtin(vertex_index) vi: u32,
-  @builtin(instance_index) ii: u32,
-  @location(0) pos: vec3<f32>,
+  @location(0) q: vec4<f32>,
   @location(1) col: vec4<f32>,
 ) -> VsOut {
   var out: VsOut;
-  var keep = 1.0;
-  if (camera.density < 0.999) {
-    let h = pcgHash(ii);
-    let r = f32(h) / 4294967295.0;
-    keep = select(0.0, 1.0, r < camera.density);
-  }
-  let rawClass = u32(col.a * 255.0 + 0.5);
-  if (!isPointClassVisible(rawClass)) {
-    keep = 0.0;
-  }
-  out.stochasticKeep = keep;
+  let cls = u32(col.a * 255.0 + 0.5);
   let uv = vec2<f32>(select(-1.0, 1.0, (vi & 1u) != 0u), select(-1.0, 1.0, (vi & 2u) != 0u));
-  let toCamera = camera.cameraPos.xyz - pos;
-  let dist = length(toCamera);
-  let distScale = clamp(1.0 + 0.12 * log2(max(dist / 200.0, 1.0)), 1.0, 2.5);
-  let baseRadius = camera.pointSize * 0.5;
-  let scaledRadius = baseRadius * distScale;
-  let billboardScale = scaledRadius * 1.5;
-  let scale = select(0.0, 1.0, keep > 0.5);
-  let wp = pos + camera.right.xyz * uv.x * billboardScale * scale + camera.up.xyz * uv.y * billboardScale * scale;
-  out.pos = camera.viewProj * vec4<f32>(wp, 1.0);
-  out.color = vec4<f32>(col.rgb, 1.0);
-  out.worldPos = wp;
-  out.center = pos;
-  out.localUV = uv;
-  out.sobelNormal = computeSobelNormal(pos);
-  out.camDist = dist;
-  out.radius = scaledRadius;
-  return out;
-}
+  // Quantized CRS axes (east, north, up) → render frame (east, up, −north).
+  let pos = node.origin + vec3<f32>(q.x, q.z, -q.y) * node.size;
+  let clip = camera.viewProj * vec4<f32>(pos, 1.0);
 
-fn shadePoint(N: vec3<f32>, baseColorSrgb: vec3<f32>, worldPos: vec3<f32>) -> vec3<f32> {
-  let baseColor = srgbToLinear(baseColorSrgb);
-  let L = normalize(camera.sunDir.xyz);
-  let ndotl = clamp(dot(N, L), 0.0, 1.0);
-
-  if (camera.sunlightEnabled > 0.5) {
-    let castShadow = sampleCastShadow(worldPos);
-    let directLit = ndotl * (1.0 - castShadow) * camera.sunIntensity;
-    let shadowDarkness = camera.shadowOpacity;
-    let shadowMask = clamp(1.0 - (1.0 - directLit) * shadowDarkness, 0.0, 1.0);
-    let directSun = baseColor * camera.sunColor.rgb * directLit;
-    let upFacing = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);
-    let ambientBase = baseColor * camera.skyColor.rgb * (0.18 + 0.22 * upFacing);
-    let lit = (directSun + ambientBase * shadowMask) * camera.exposure;
-    return linearToSrgb(lit);
+  // Diameter in pixels: one world size for every point (perspective only), or
+  // a fixed pixel size; clamped so far points never vanish.
+  var px = params.fixedPx;
+  if (px <= 0.0) {
+    px = params.worldSize * params.focalPx / max(clip.w, 1e-4);
   }
+  px = clamp(px, params.minPx, params.maxPx);
+  let visible = isPointClassVisible(cls);
+  let halfNdc = select(0.0, px, visible) / vec2<f32>(params.viewportW, params.viewportH);
 
-  let diffuse = dot(N, L) * 0.5 + 0.5;
-  let lighting = 0.15 + 0.85 * diffuse;
-  return linearToSrgb(baseColor * lighting);
+  out.pos = vec4<f32>(clip.xy + uv * halfNdc * clip.w, clip.z, clip.w);
+  out.color = vec4<f32>(col.rgb, 1.0);
+  out.uv = uv;
+  out.px = px;
+  return out;
 }
 
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
-  if (in.stochasticKeep < 0.5) { discard; }
-  let dist2 = dot(in.localUV, in.localUV);
-  if (dist2 > 1.0) { discard; }
-  let edge = 1.0 - smoothstep(0.55, 1.0, sqrt(dist2));
-
-  let snowed = applySnow(in.color.rgb, in.center);
-  let sloped = applySlope(snowed, in.sobelNormal);
-  let altituded = applyAltitude(sloped, in.center);
-  let coloredBase = applySunlightMap(altituded, in.center);
-
-  let N = normalize(in.sobelNormal);
-  let color = shadePoint(N, coloredBase, in.center);
-  return vec4<f32>(color, edge);
+  let r = length(in.uv);
+  // Below ~2.5 px a disc would lose its only covered pixel: draw a square.
+  if (in.px > 2.5 && r > 1.0) { discard; }
+  var alpha = 1.0;
+  if (params.antialias > 0.5 && in.px > 2.5) {
+    // About one pixel of soft edge, resolved by alpha-to-coverage (MSAA).
+    alpha = clamp((1.0 - r) * in.px * 0.5 + 0.5, 0.0, 1.0);
+  }
+  return vec4<f32>(in.color.rgb, alpha);
 }
 `;
 
-export const SHADER_LOAD = SHADER_GATHER;
+export const POINT_SHADING_WORKGROUP_SIZE = 256;
 
-export const SHADER_APPLE_LITE = /* wgsl */ `
+/**
+ * Writes one pre-shaded RGBA8 word per point: rgb = final colour (colour
+ * mode, overlays, lighting), a = classification. Ground points (classes 2/9,
+ * or unclassified points lying on the DTM) get the DTM hillshade; everything
+ * else (trees, buildings, wires) gets flat-ground lighting, since the ground
+ * normal under a roof or a canopy says nothing about its own orientation.
+ * Eye-Dome Lighting then brings out the 3D structure in screen space.
+ */
+export const POINT_SHADING_SHADER = /* wgsl */ `
 ${WGSL_CAMERA_STRUCT}
-${WGSL_POINT_BINDINGS}
+${WGSL_SCENE_BINDINGS}
+${WGSL_NODE_STRUCT}
 
-struct VsOutLite {
-  @builtin(position) pos: vec4<f32>,
-  @location(0) color: vec4<f32>,
-  @location(1) localUV: vec2<f32>,
-  @location(2) normal: vec3<f32>,
-  @location(3) worldCenter: vec3<f32>,
-};
+@group(1) @binding(0) var<storage, read> packed: array<u32>;
+@group(1) @binding(1) var<storage, read_write> shadedColors: array<u32>;
+@group(1) @binding(2) var<uniform> node: NodeParams;
 
-${WGSL_OVERLAY_HELPERS}
 ${WGSL_COLOR_HELPERS}
+${WGSL_OVERLAY_HELPERS}
+${WGSL_HEIGHT_HELPERS}
+${WGSL_LIGHTING_HELPERS}
 
-fn sampleHeightSmoothLite(u: f32, v: f32) -> f32 {
-  let dims = vec2<f32>(textureDimensions(heightTex, 0));
-  let coord = clamp(vec2<f32>(u, v), vec2<f32>(0.0), vec2<f32>(1.0)) * dims - vec2<f32>(0.5);
-  let base = floor(coord);
-  let f = coord - base;
-  let w = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
-  let i = vec2<i32>(base);
-  let maxCoord = vec2<i32>(dims) - vec2<i32>(1);
-  let x0 = clamp(i.x, 0, maxCoord.x);
-  let x1 = clamp(i.x + 1, 0, maxCoord.x);
-  let y0 = clamp(i.y, 0, maxCoord.y);
-  let y1 = clamp(i.y + 1, 0, maxCoord.y);
-  let h00 = textureLoad(heightTex, vec2<i32>(x0, y0), 0).r;
-  let h10 = textureLoad(heightTex, vec2<i32>(x1, y0), 0).r;
-  let h01 = textureLoad(heightTex, vec2<i32>(x0, y1), 0).r;
-  let h11 = textureLoad(heightTex, vec2<i32>(x1, y1), 0).r;
-  return mix(mix(h00, h10, w.x), mix(h01, h11, w.x), w.y);
+fn isGroundPoint(cls: u32, p: vec3<f32>) -> bool {
+  if (cls == 2u || cls == 9u) { return true; }
+  if (cls <= 1u) { return abs(p.y - sampleGroundHeight(p)) < 0.5; }
+  return false;
 }
 
-fn computeNormalCross(worldPos: vec3<f32>) -> vec3<f32> {
-  let u = (worldPos.x - camera.hmOriginX) / camera.hmScaleX;
-  let v = (worldPos.z - camera.hmOriginZ) / camera.hmScaleZ;
-  let dims = vec2<f32>(textureDimensions(heightTex, 0));
-  let texel = 1.0 / dims;
-  let hR = sampleHeightSmoothLite(u + texel.x, v);
-  let hL = sampleHeightSmoothLite(u - texel.x, v);
-  let hS = sampleHeightSmoothLite(u, v + texel.y);
-  let hN = sampleHeightSmoothLite(u, v - texel.y);
-  let cellWorldX = camera.hmScaleX / dims.x;
-  let cellWorldZ = camera.hmScaleZ / dims.y;
-  let dzdx = (hR - hL) / (2.0 * cellWorldX);
-  let dzdz = (hS - hN) / (2.0 * cellWorldZ);
-  return normalize(vec3<f32>(-dzdx, 1.0, -dzdz));
+/** ASPRS / IGN LiDAR HD classes. */
+fn classificationColor(cls: u32) -> vec3<f32> {
+  switch (cls) {
+    case 2u: { return vec3<f32>(0.70, 0.56, 0.38); }
+    case 3u: { return vec3<f32>(0.62, 0.82, 0.38); }
+    case 4u: { return vec3<f32>(0.33, 0.68, 0.27); }
+    case 5u: { return vec3<f32>(0.13, 0.47, 0.17); }
+    case 6u: { return vec3<f32>(0.86, 0.31, 0.24); }
+    case 7u, 18u: { return vec3<f32>(0.92, 0.25, 0.86); }
+    case 9u: { return vec3<f32>(0.20, 0.47, 0.88); }
+    case 17u: { return vec3<f32>(0.62, 0.62, 0.68); }
+    case 64u: { return vec3<f32>(0.95, 0.66, 0.22); }
+    case 65u: { return vec3<f32>(0.55, 0.20, 0.55); }
+    case 66u: { return vec3<f32>(0.45, 0.80, 0.85); }
+    case 67u: { return vec3<f32>(0.80, 0.80, 0.40); }
+    default: { return vec3<f32>(0.78, 0.78, 0.78); }
+  }
 }
 
-@vertex
-fn vs_main(
-  @builtin(vertex_index) vi: u32,
-  @builtin(instance_index) ii: u32,
-  @location(0) pos: vec3<f32>,
-  @location(1) col: vec4<f32>,
-) -> VsOutLite {
-  var out: VsOutLite;
-  let _unused = ii;
-  let rawClass = u32(col.a * 255.0 + 0.5);
-  let keep = select(0.0, 1.0, isPointClassVisible(rawClass));
-  let uv = vec2<f32>(select(-1.0, 1.0, (vi & 1u) != 0u), select(-1.0, 1.0, (vi & 2u) != 0u));
-  let toCamera = camera.cameraPos.xyz - pos;
-  let dist = length(toCamera);
-  let distScale = clamp(1.0 + 0.12 * log2(max(dist / 200.0, 1.0)), 1.0, 2.5);
-  let billboardScale = camera.pointSize * 0.5 * distScale * 1.35 * keep;
-  let wp = pos + camera.right.xyz * uv.x * billboardScale + camera.up.xyz * uv.y * billboardScale;
-  out.pos = camera.viewProj * vec4<f32>(wp, 1.0);
-  out.color = vec4<f32>(col.rgb, 1.0);
-  out.localUV = uv;
-  out.normal = computeNormalCross(pos);
-  out.worldCenter = pos;
-  return out;
-}
+@compute @workgroup_size(${POINT_SHADING_WORKGROUP_SIZE})
+fn shade_main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let i = gid.x;
+  if (i >= node.count) { return; }
+  let w0 = packed[i * 3u];
+  let w1 = packed[i * 3u + 1u];
+  let w2 = packed[i * 3u + 2u];
+  let q = vec3<f32>(f32(w0 & 0xffffu), f32(w0 >> 16u), f32(w1 & 0xffffu)) / 65535.0;
+  let p = node.origin + vec3<f32>(q.x, q.z, -q.y) * node.size;
+  let cls = (w1 >> 16u) & 0xffu;
+  let intensity = f32(w1 >> 24u) / 255.0;
 
-@fragment
-fn fs_main(in: VsOutLite) -> @location(0) vec4<f32> {
-  let dist2 = dot(in.localUV, in.localUV);
-  if (dist2 > 1.0) { discard; }
-  let edge = 1.0 - smoothstep(0.55, 1.0, sqrt(dist2));
-  let snowed = applySnow(in.color.rgb, in.worldCenter);
-  let sloped = applySlope(snowed, in.normal);
-  let altituded = applyAltitude(sloped, in.worldCenter);
-  let colored = applySunlightMap(altituded, in.worldCenter);
-  let baseColor = srgbToLinearLite(colored);
-  let N = normalize(in.normal);
-  let L = normalize(camera.sunDir.xyz);
-  let ndotl = clamp(dot(N, L), 0.0, 1.0);
-
-  if (camera.sunlightEnabled > 0.5) {
-    let castShadow = sampleCastShadow(in.worldCenter);
-    let directLit = ndotl * (1.0 - castShadow) * camera.sunIntensity;
-    let shadowDarkness = camera.shadowOpacity;
-    let shadowMask = clamp(1.0 - (1.0 - directLit) * shadowDarkness, 0.0, 1.0);
-    let directSun = baseColor * camera.sunColor.rgb * directLit;
-    let upFacing = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);
-    let ambientBase = baseColor * camera.skyColor.rgb * (0.18 + 0.22 * upFacing);
-    let lit = (directSun + ambientBase * shadowMask) * camera.exposure;
-    return vec4<f32>(linearToSrgbLite(lit), edge);
+  var base = unpack4x8unorm(w2).rgb;
+  if (camera.colorMode > 1.5) {
+    base = classificationColor(cls);
+  } else if (camera.colorMode > 0.5) {
+    base = vec3<f32>(pow(intensity, 0.8));
   }
 
-  let diffuse = dot(N, L) * 0.5 + 0.5;
-  let lighting = 0.18 + 0.82 * diffuse;
-  return vec4<f32>(linearToSrgbLite(baseColor * lighting), edge);
+  let terrainNormal = computeSobelNormal(p);
+  var c = applySnow(base, p);
+  c = applySlope(c, terrainNormal);
+  c = applyAltitude(c, p);
+  c = applySunlightMap(c, p);
+
+  let N = select(vec3<f32>(0.0, 1.0, 0.0), terrainNormal, isGroundPoint(cls, p));
+  let lit = shadeSurface(N, c, p);
+  shadedColors[i] = pack4x8unorm(vec4<f32>(lit, f32(cls) / 255.0));
 }
 `;

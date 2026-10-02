@@ -4,7 +4,7 @@
  *
  * Run: node scripts/prebuild-api-i18n.mjs
  */
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, readdirSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -12,7 +12,24 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 const translationsDir = join(root, 'src', 'shared', 'i18n', 'config', 'translations');
 
-const files = ['global.ts', 'projectBrowser.ts', 'controlPanel.ts', 'dashboard.ts'];
+// Every pair file of the translations directory (index.ts only re-exports).
+// Same order as translations/index.ts: on a duplicate key the later pair wins.
+const LEADING_FILES = ['global.ts', 'projectBrowser.ts', 'controlPanel.ts', 'dashboard.ts'];
+const files = [
+  ...LEADING_FILES,
+  ...readdirSync(translationsDir)
+    .filter((name) => name.endsWith('.ts') && name !== 'index.ts' && !LEADING_FILES.includes(name))
+    .sort(),
+];
+
+/** Decodes the escapes of a quoted TS string literal body (\', \", \\, \n, \u…). */
+function unescapeLiteral(body) {
+  return body.replace(/\\(u\{[0-9a-fA-F]+\}|u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|.)/g, (_, esc) => {
+    if (esc[0] === 'u') return String.fromCodePoint(parseInt(esc.replace(/[u{}]/g, ''), 16));
+    if (esc[0] === 'x') return String.fromCharCode(parseInt(esc.slice(1), 16));
+    return { n: '\n', t: '\t', r: '\r', 0: '\0' }[esc] ?? esc;
+  });
+}
 
 // Extract all { fr: '...', en: '...' } pairs from each file
 const allPairs = [];
@@ -20,11 +37,13 @@ const allPairs = [];
 for (const file of files) {
   const content = readFileSync(join(translationsDir, file), 'utf-8');
   // Match each { fr: '...' | "...", en: '...' | "..." } object in the array
-  const pairRegex = /\{\s*fr:\s*(?:'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)")\s*,\s*en:\s*(?:'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)")\s*\}/gs;
+  const pairRegex = /\{\s*fr:\s*(?:'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)")\s*,\s*en:\s*(?:'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)")\s*,?\s*\}/gs;
   let match;
   while ((match = pairRegex.exec(content)) !== null) {
-    const fr = match[1] ?? match[2];
-    const en = match[3] ?? match[4];
+    const frRaw = match[1] ?? match[2];
+    const enRaw = match[3] ?? match[4];
+    const fr = frRaw == null ? null : unescapeLiteral(frRaw);
+    const en = enRaw == null ? null : unescapeLiteral(enRaw);
     if (fr != null && en != null) {
       allPairs.push({ fr, en });
     }

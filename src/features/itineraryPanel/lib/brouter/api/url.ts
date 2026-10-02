@@ -11,6 +11,7 @@ import {
   type BrouterRequest,
 } from '../types';
 import { sanitizeOverrides } from '../profiles/param-encoding';
+import { observedCostScale, resolveSearchCoefficient } from './searchCoefficient';
 
 interface ResolvedEndpoint {
   /** Base URL (no trailing slash). */
@@ -56,12 +57,14 @@ export function buildBrouterUrl(req: BrouterRequest): string {
     }
   }
 
-  // Fast One-Pass mode (pass2coefficient = -1): linear in distance, 5-15x faster (unconditionally enforced)
+  // Passe unique (pass2coefficient = -1) ; coefficient A* adapté à la distance
+  // et à l'échelle de coût du profil (le proxy le borne).
   params.set('profile:pass2coefficient', '-1');
-  const pass1 = Number(params.get('profile:pass1coefficient'));
-  if (!params.has('profile:pass1coefficient') || !Number.isFinite(pass1) || pass1 < 1.0) {
-    params.set('profile:pass1coefficient', '3.5');
-  }
+  params.set('profile:pass1coefficient', String(resolveSearchCoefficient(
+    points,
+    observedCostScale(req.profile) ?? req.searchCostScale,
+    req.searchWeight,
+  )));
 
   return `${base}${appendBrouter ? '/brouter' : ''}?${params.toString()}`;
 }

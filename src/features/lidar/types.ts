@@ -66,14 +66,46 @@ export interface PointCloudBounds {
   maxX: number; maxY: number; maxZ: number;
 }
 
+/**
+ * Local origin (CRS units, float64) that `PointCloudData.positions` are
+ * relative to. Absolute Lambert-93 northings (~6.5e6 m) stored as float32 are
+ * quantised to 0.5 m; relative to a km-aligned origin they keep ~0.1 mm.
+ */
+export interface PointCloudOrigin {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/**
+ * COPC octree of a decoded tile: `nodes` are listed in the order their points
+ * appear in `PointCloudData.positions` (coarse levels first).
+ */
+export interface CopcHierarchyInfo {
+  nodes: { key: string; pointCount: number }[];
+  /** Absolute octree cube [minX, minY, minZ, maxX, maxY, maxZ]. */
+  cube: number[];
+  /** Point spacing of the root node (halves at each level). */
+  spacing: number;
+}
+
 /** Data returned from LAZ parsing (transferable buffers) */
 export interface PointCloudData {
+  /** XYZ relative to `origin` (never absolute CRS coordinates). */
   positions: Float32Array;
   colors: Uint8Array;
   classifications: Uint8Array;
   count: number;
+  /** Absolute CRS bounds (float64). */
   bounds: PointCloudBounds;
+  origin: PointCloudOrigin;
   crs: DetectedCrs;
+  /** `colors` come from the file's own RGB (PDRF 7/8); orthophoto colourisation is skipped. */
+  embeddedRgb?: boolean;
+  /** Raw LAS intensity per point, when decoded. */
+  intensities?: Uint16Array;
+  /** Present for COPC files: lets the viewer use the file's own octree as LOD. */
+  copc?: CopcHierarchyInfo;
 }
 
 /** Download progress event */

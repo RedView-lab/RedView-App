@@ -1,4 +1,5 @@
-import type { PointCloudData, PointCloudBounds, DetectedCrs } from '../types';
+import type { Getter, Hierarchy } from 'copc';
+import type { CopcHierarchyInfo, PointCloudData, PointCloudBounds, PointCloudOrigin, DetectedCrs } from '../types';
 import { detectCrs } from './coordConvert';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -31,9 +32,21 @@ export async function getLazPerf(wasmModule?: WebAssembly.Module) {
   return lazPerfPromise;
 }
 
-function makeGetter(ab: ArrayBuffer): (begin: number, end: number) => Promise<Uint8Array> {
+function makeGetter(ab: ArrayBuffer): Getter {
   const view = new Uint8Array(ab);
   return async (begin: number, end: number) => view.subarray(begin, end);
+}
+
+/**
+ * Km-aligned origin for the float32 positions. Snapping to whole kilometres
+ * keeps origins of neighbouring tiles exact multiples of 1000 m, so re-basing
+ * tiles onto a shared scene origin is lossless.
+ */
+export function computeLocalOrigin(min: readonly number[]): PointCloudOrigin {
+  const snap = (value: number | undefined) => (
+    value !== undefined && Number.isFinite(value) ? Math.floor(value / 1000) * 1000 : 0
+  );
+  return { x: snap(min[0]), y: snap(min[1]), z: 0 };
 }
 
 export interface CopcDecodeHeader {
@@ -48,9 +61,22 @@ export interface CopcChunk {
   bytes: Uint8Array;
 }
 
+export interface CopcNodeEntry {
+  /** COPC octree key "D-X-Y-Z". */
+  key: string;
+  pointCount: number;
+  pointDataOffset: number;
+  pointDataLength: number;
+}
+
 export interface DecodedCopcChunks {
   positions: Float32Array;
   classifications: Uint8Array;
+  intensities: Uint16Array;
+  /** High bytes of the embedded 16-bit RGB (PDRF 7/8), or null when the format has no colour. */
+  colors: Uint8Array | null;
+  /** Largest raw 16-bit RGB channel value seen (0 without colour), see `hasUsableEmbeddedRgb`. */
+  maxRgb: number;
   count: number;
   bounds: PointCloudBounds;
 }
@@ -61,25 +87,87 @@ export function canFastDecodeCopc(header: { pointDataRecordFormat: number }): bo
   return format === 6 || format === 7 || format === 8;
 }
 
+/** PDRF 7/8 store Red/Green/Blue as u16 at byte 30 (after the f64 GPS time). */
+function copcRgbOffset(pointDataRecordFormat: number): number | null {
+  const format = pointDataRecordFormat & 0x3f;
+  return format === 7 || format === 8 ? 30 : null;
+}
+
+/**
+ * Embedded colour is used only when it is 16-bit scaled as the LAS spec
+ * requires (some channel above 255): all-zero RGB means "not colourised",
+ * and 8-bit-scaled values would have been truncated by the `>> 8` decode.
+ */
+export function hasUsableEmbeddedRgb(maxRgb: number): boolean {
+  return maxRgb > 255;
+}
+
+function compareCopcKeys(a: string, b: string): number {
+  const pa = a.split('-');
+  const pb = b.split('-');
+  for (let i = 0; i < 4; i++) {
+    const diff = Number(pa[i]) - Number(pb[i]);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+/**
+ * Walks every hierarchy page (a COPC hierarchy may be split into child pages,
+ * which the root page only references) and returns the non-empty nodes,
+ * coarse levels first.
+ */
+export async function loadCopcNodes(getter: Getter, rootPage: Hierarchy.Page): Promise<CopcNodeEntry[]> {
+  const { Copc } = await import('copc');
+  const entries: CopcNodeEntry[] = [];
+  const pages: Hierarchy.Page[] = [rootPage];
+  for (let i = 0; i < pages.length; i++) {
+    const subtree = await Copc.loadHierarchyPage(getter, pages[i]!);
+    for (const [key, node] of Object.entries(subtree.nodes)) {
+      if (!node || node.pointCount <= 0) continue;
+      entries.push({
+        key,
+        pointCount: node.pointCount,
+        pointDataOffset: node.pointDataOffset,
+        pointDataLength: node.pointDataLength,
+      });
+    }
+    for (const page of Object.values(subtree.pages)) {
+      if (page) pages.push(page);
+    }
+  }
+  entries.sort((a, b) => compareCopcKeys(a.key, b.key));
+  return entries;
+}
+
 /**
  * Decompresses COPC chunks and extracts only what the viewer needs
- * (X/Y/Z, Classification), reading each decoded record straight from the
- * laz-perf heap. Equivalent to `Copc.loadPointDataView` + per-point getters,
- * without the per-point Uint8Array/closure overhead.
+ * (X/Y/Z relative to `origin`, Classification), reading each decoded record
+ * straight from the laz-perf heap. Equivalent to `Copc.loadPointDataView` +
+ * per-point getters, without the per-point Uint8Array/closure overhead.
  */
 export function decodeCopcChunks(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   lazPerf: any,
   header: CopcDecodeHeader,
   chunks: CopcChunk[],
+  origin: PointCloudOrigin,
   onChunk?: (done: number, total: number) => void,
 ): DecodedCopcChunks {
   const count = chunks.reduce((sum, chunk) => sum + chunk.pointCount, 0);
   const positions = new Float32Array(count * 3);
   const classifications = new Uint8Array(count);
+  const intensities = new Uint16Array(count);
   const { pointDataRecordFormat, pointDataRecordLength } = header;
+  const rgbOffset = copcRgbOffset(pointDataRecordFormat);
+  const colors = rgbOffset !== null ? new Uint8Array(count * 3) : null;
+  let maxRgb = 0;
   const [sx, sy, sz] = header.scale as [number, number, number];
   const [ox, oy, oz] = header.offset as [number, number, number];
+  // Offsets relative to the local origin (float64): x_local = X * sx + lox.
+  const lox = ox - origin.x;
+  const loy = oy - origin.y;
+  const loz = oz - origin.z;
   let minX = Infinity, minY = Infinity, minZ = Infinity;
   let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
   let written = 0;
@@ -101,14 +189,26 @@ export function decodeCopcChunks(
             heap = lazPerf.HEAPU8.buffer as ArrayBuffer;
             dv = new DataView(heap);
           }
-          const x = dv.getInt32(dataPointer, true) * sx + ox;
-          const y = dv.getInt32(dataPointer + 4, true) * sy + oy;
-          const z = dv.getInt32(dataPointer + 8, true) * sz + oz;
+          const x = dv.getInt32(dataPointer, true) * sx + lox;
+          const y = dv.getInt32(dataPointer + 4, true) * sy + loy;
+          const z = dv.getInt32(dataPointer + 8, true) * sz + loz;
           const idx = written * 3;
           positions[idx] = x;
           positions[idx + 1] = y;
           positions[idx + 2] = z;
           classifications[written] = dv.getUint8(dataPointer + 16);
+          intensities[written] = dv.getUint16(dataPointer + 12, true);
+          if (colors !== null) {
+            const r = dv.getUint16(dataPointer + rgbOffset!, true);
+            const g = dv.getUint16(dataPointer + rgbOffset! + 2, true);
+            const b = dv.getUint16(dataPointer + rgbOffset! + 4, true);
+            colors[idx] = r >> 8;
+            colors[idx + 1] = g >> 8;
+            colors[idx + 2] = b >> 8;
+            if (r > maxRgb) maxRgb = r;
+            if (g > maxRgb) maxRgb = g;
+            if (b > maxRgb) maxRgb = b;
+          }
           written++;
 
           if (x < minX) minX = x; if (x > maxX) maxX = x;
@@ -125,29 +225,46 @@ export function decodeCopcChunks(
     lazPerf._free(dataPointer);
   }
 
-  return { positions, classifications, count, bounds: { minX, minY, minZ, maxX, maxY, maxZ } };
+  return {
+    positions,
+    classifications,
+    intensities,
+    colors,
+    maxRgb,
+    count,
+    bounds: {
+      minX: minX + origin.x, minY: minY + origin.y, minZ: minZ + origin.z,
+      maxX: maxX + origin.x, maxY: maxY + origin.y, maxZ: maxZ + origin.z,
+    },
+  };
 }
 
-/** Reads the COPC header + root hierarchy page and returns the chunk list. */
+/** Reads the COPC header + full hierarchy and returns the chunk list (coarse levels first). */
 export async function readCopcLayout(buffer: ArrayBuffer): Promise<{
   header: CopcDecodeHeader & { min: number[]; max: number[] };
-  nodes: { pointCount: number; pointDataOffset: number; pointDataLength: number }[];
+  nodes: CopcNodeEntry[];
+  cube: number[];
+  spacing: number;
 }> {
   const { Copc } = await import('copc');
   const getter = makeGetter(buffer);
   const copc = await Copc.create(getter);
-  const { nodes } = await Copc.loadHierarchyPage(getter, copc.info.rootHierarchyPage);
-  const list = Object.values(nodes)
-    .filter((node): node is NonNullable<typeof node> => !!node)
-    .map((node) => ({
-      pointCount: node.pointCount,
-      pointDataOffset: node.pointDataOffset,
-      pointDataLength: node.pointDataLength,
-    }));
+  const nodes = await loadCopcNodes(getter, copc.info.rootHierarchyPage);
   const { pointDataRecordFormat, pointDataRecordLength, scale, offset, min, max } = copc.header;
   return {
     header: { pointDataRecordFormat, pointDataRecordLength, scale: [...scale], offset: [...offset], min: [...min], max: [...max] },
-    nodes: list,
+    nodes,
+    cube: [...copc.info.cube],
+    spacing: copc.info.spacing,
+  };
+}
+
+/** Hierarchy summary handed to the viewer with the decoded points. */
+export function toCopcHierarchyInfo(nodes: CopcNodeEntry[], cube: readonly number[], spacing: number): CopcHierarchyInfo {
+  return {
+    nodes: nodes.map((node) => ({ key: node.key, pointCount: node.pointCount })),
+    cube: [...cube],
+    spacing,
   };
 }
 
@@ -165,84 +282,63 @@ export async function parseLazBuffer(
   ]);
   const fileBytes = new Uint8Array(buffer);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let view: any;
-  let pointCount: number;
-
   // Try COPC first
   try {
     onProgress?.('Décompression COPC...', 10);
     const getter = makeGetter(buffer);
     const copc = await Copc.create(getter);
-    const { nodes } = await Copc.loadHierarchyPage(getter, copc.info.rootHierarchyPage);
-
-    const allNodes = Object.values(nodes);
+    const allNodes = await loadCopcNodes(getter, copc.info.rootHierarchyPage);
     if (allNodes.length === 0) throw new Error('No nodes in COPC hierarchy');
+    const origin = computeLocalOrigin(copc.header.min);
 
     if (canFastDecodeCopc(copc.header)) {
       const fileView = new Uint8Array(buffer);
       const chunks: CopcChunk[] = allNodes.map((node) => ({
-        pointCount: node!.pointCount,
-        bytes: fileView.subarray(node!.pointDataOffset, node!.pointDataOffset + node!.pointDataLength),
+        pointCount: node.pointCount,
+        bytes: fileView.subarray(node.pointDataOffset, node.pointDataOffset + node.pointDataLength),
       }));
-      const decoded = decodeCopcChunks(lazPerf, copc.header, chunks, (done, total) => {
+      const decoded = decodeCopcChunks(lazPerf, copc.header, chunks, origin, (done, total) => {
         onProgress?.(`Lecture COPC ${done}/${total}...`, 10 + (done / total) * 50);
       });
       const crs = hintCrs ?? detectCrs(decoded.bounds.minY, decoded.bounds.maxY, decoded.bounds.minX, decoded.bounds.maxX);
+      const embeddedRgb = decoded.colors !== null && hasUsableEmbeddedRgb(decoded.maxRgb);
       onProgress?.('Prêt', 100);
       return {
         positions: decoded.positions,
-        colors: new Uint8Array(decoded.count * 3),
+        colors: embeddedRgb ? decoded.colors! : new Uint8Array(decoded.count * 3),
         classifications: decoded.classifications,
+        intensities: decoded.intensities,
         count: decoded.count,
         bounds: decoded.bounds,
+        origin,
         crs,
+        embeddedRgb,
+        copc: toCopcHierarchyInfo(allNodes, copc.info.cube, copc.info.spacing),
       };
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const views: { v: any; count: number }[] = [];
     let loaded = 0;
     for (const node of allNodes) {
-      const v = await Copc.loadPointDataView(getter, copc, node!, { lazPerf });
+      const v = await Copc.loadPointDataView(getter, copc, node, { lazPerf });
       views.push({ v, count: v.pointCount });
       loaded++;
       onProgress?.(`Lecture COPC ${loaded}/${allNodes.length}...`, 10 + (loaded / allNodes.length) * 50);
     }
 
-    pointCount = views.reduce((s, v) => s + v.count, 0);
-    const positions = new Float32Array(pointCount * 3);
-    const classifications = new Uint8Array(pointCount);
-    let minX = Infinity, minY = Infinity, minZ = Infinity;
-    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
-    let offset = 0;
-
-    for (const { v, count } of views) {
-      const getX = v.getter('X');
-      const getY = v.getter('Y');
-      const getZ = v.getter('Z');
-      const getCls = v.getter('Classification');
-      for (let i = 0; i < count; i++) {
-        const x = getX(i);
-        const y = getY(i);
-        const z = getZ(i);
-        const idx = (offset + i) * 3;
-        positions[idx] = x;
-        positions[idx + 1] = y;
-        positions[idx + 2] = z;
-        classifications[offset + i] = getCls(i);
-
-        if (x < minX) minX = x; if (x > maxX) maxX = x;
-        if (y < minY) minY = y; if (y > maxY) maxY = y;
-        if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
-      }
-      offset += count;
-    }
-
-    const bounds: PointCloudBounds = { minX, minY, minZ, maxX, maxY, maxZ };
-    const crs = hintCrs ?? detectCrs(bounds.minY, bounds.maxY, bounds.minX, bounds.maxX);
+    const pointCount = views.reduce((s, v) => s + v.count, 0);
+    const extracted = extractViewPoints(views, pointCount, origin);
+    const crs = hintCrs ?? detectCrs(extracted.bounds.minY, extracted.bounds.maxY, extracted.bounds.minX, extracted.bounds.maxX);
 
     onProgress?.('Prêt', 100);
-    return { positions, colors: new Uint8Array(pointCount * 3), classifications, count: pointCount, bounds, crs };
+    return {
+      ...extracted,
+      count: pointCount,
+      origin,
+      crs,
+      copc: toCopcHierarchyInfo(allNodes, copc.info.cube, copc.info.spacing),
+    };
   } catch {
     // Not COPC — parse as regular LAZ/LAS
   }
@@ -251,40 +347,90 @@ export async function parseLazBuffer(
 
   const header = Las.Header.parse(fileBytes);
   const rawPoints = await Las.PointData.decompressFile(fileBytes, lazPerf);
-  view = Las.View.create(rawPoints, header);
-  pointCount = view.pointCount;
+  const view = Las.View.create(rawPoints, header);
+  const pointCount = view.pointCount;
+  const origin = computeLocalOrigin(header.min);
 
   onProgress?.('Extraction des points...', 50);
 
-  const positions = new Float32Array(pointCount * 3);
-  const classifications = new Uint8Array(pointCount);
-
-  const getX = view.getter('X');
-  const getY = view.getter('Y');
-  const getZ = view.getter('Z');
-  const getCls = view.getter('Classification');
-
-  let minX = Infinity, minY = Infinity, minZ = Infinity;
-  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
-
-  for (let i = 0; i < pointCount; i++) {
-    const x = getX(i);
-    const y = getY(i);
-    const z = getZ(i);
-    const idx = i * 3;
-    positions[idx] = x;
-    positions[idx + 1] = y;
-    positions[idx + 2] = z;
-    classifications[i] = getCls(i);
-
-    if (x < minX) minX = x; if (x > maxX) maxX = x;
-    if (y < minY) minY = y; if (y > maxY) maxY = y;
-    if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
-  }
-
-  const bounds: PointCloudBounds = { minX, minY, minZ, maxX, maxY, maxZ };
-  const crs = hintCrs ?? detectCrs(bounds.minY, bounds.maxY, bounds.minX, bounds.maxX);
+  const extracted = extractViewPoints([{ v: view, count: pointCount }], pointCount, origin);
+  const crs = hintCrs ?? detectCrs(extracted.bounds.minY, extracted.bounds.maxY, extracted.bounds.minX, extracted.bounds.maxX);
 
   onProgress?.('Prêt', 100);
-  return { positions, colors: new Uint8Array(pointCount * 3), classifications, count: pointCount, bounds, crs };
+  return { ...extracted, count: pointCount, origin, crs };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function tryGetter(view: any, dimension: string): ((index: number) => number) | null {
+  try {
+    return view.getter(dimension);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Copies X/Y/Z (made relative to `origin` in float64), Classification and,
+ * when the format has it, RGB out of copc Views.
+ */
+function extractViewPoints(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  views: { v: any; count: number }[],
+  pointCount: number,
+  origin: PointCloudOrigin,
+): {
+  positions: Float32Array;
+  classifications: Uint8Array;
+  intensities: Uint16Array;
+  colors: Uint8Array;
+  embeddedRgb: boolean;
+  bounds: PointCloudBounds;
+} {
+  const positions = new Float32Array(pointCount * 3);
+  const classifications = new Uint8Array(pointCount);
+  const intensities = new Uint16Array(pointCount);
+  const colors = new Uint8Array(pointCount * 3);
+  let maxRgb = 0;
+  let minX = Infinity, minY = Infinity, minZ = Infinity;
+  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+  let offset = 0;
+
+  for (const { v, count } of views) {
+    const getX = v.getter('X');
+    const getY = v.getter('Y');
+    const getZ = v.getter('Z');
+    const getCls = v.getter('Classification');
+    const getIntensity = tryGetter(v, 'Intensity');
+    const getR = tryGetter(v, 'Red');
+    const getG = tryGetter(v, 'Green');
+    const getB = tryGetter(v, 'Blue');
+    const hasRgb = getR !== null && getG !== null && getB !== null;
+    for (let i = 0; i < count; i++) {
+      const x = getX(i);
+      const y = getY(i);
+      const z = getZ(i);
+      const idx = (offset + i) * 3;
+      positions[idx] = x - origin.x;
+      positions[idx + 1] = y - origin.y;
+      positions[idx + 2] = z - origin.z;
+      classifications[offset + i] = getCls(i);
+      if (getIntensity) intensities[offset + i] = getIntensity(i);
+      if (hasRgb) {
+        const r = getR(i), g = getG(i), b = getB(i);
+        colors[idx] = r >> 8;
+        colors[idx + 1] = g >> 8;
+        colors[idx + 2] = b >> 8;
+        maxRgb = Math.max(maxRgb, r, g, b);
+      }
+
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+      if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+    }
+    offset += count;
+  }
+
+  const embeddedRgb = hasUsableEmbeddedRgb(maxRgb);
+  if (!embeddedRgb) colors.fill(0);
+  return { positions, classifications, intensities, colors, embeddedRgb, bounds: { minX, minY, minZ, maxX, maxY, maxZ } };
 }
