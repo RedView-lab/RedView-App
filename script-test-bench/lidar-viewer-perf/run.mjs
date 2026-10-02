@@ -1,0 +1,317 @@
+/**
+ * RedView Test-Bench : cadence réelle du viewer LiDAR WebGPU (Edge headless + CDP)
+ *
+ * Sert `dist/` (lancer `npm run build` avant), dépose une vraie tuile COPC
+ * dans l'OPFS d'un profil Edge dédié (gardé entre deux runs, avec le cache
+ * LOD), ouvre `viewer.html?…&bench=orbit` et récupère le rapport du parcours
+ * caméra scripté (src/features/lidar/viewer/perf/viewerBench.ts) : fps réels,
+ * p50/p95 de l'intervalle entre frames, part de vsync ratées, coût GPU des
+ * passes de dessin et d'ombrage, temps JS, points affichés, blocs chargés.
+ *
+ * Pour comparer deux variantes (A/B), figer le budget (`--params budget=…`) :
+ * à charge égale, seul le coût GPU change. Le GPU baisse sa fréquence quand
+ * il a de la marge, donc un écart de « GPU ms » sous 60 fps se lit avec les
+ * frames ratées. Sans vsync (--disable-gpu-vsync) Edge headless empile les
+ * frames sans attendre le GPU : la cadence mesurée n'y veut rien dire.
+ * `?mscale=1&msquare=0` désactive la qualité réduite en mouvement.
+ * `--route N` injecte une trace de N points comme le fait l'app (coût de
+ * l'overlay de route).
+ *
+ * Usage :
+ *   LIDAR_TILE=<fichier .copc.laz> [LIDAR_TILE_XY=965,6500] npm run bench:lidar-fps -- \
+ *     [--label avant] [--params "budget=1500000&mscale=1"] [--size 1600x900] [--route 20000]
+ *   npm run bench:lidar-fps -- --compare avant,apres
+ *
+ * Les rapports JSON vont dans script-test-bench/reports/lidar-viewer-perf/<label>.json.
+ */
+import { createServer } from 'node:http';
+import { createReadStream } from 'node:fs';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { spawn, spawnSync } from 'node:child_process';
+import { basename, extname, join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
+const DIST = join(ROOT, 'dist');
+const REPORT_DIR = join(ROOT, 'script-test-bench', 'reports', 'lidar-viewer-perf');
+const EDGE = process.env.EDGE_PATH ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
+const CDP_PORT = Number(process.env.CDP_PORT ?? 18962);
+const TYPES = {
+  '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.html': 'text/html',
+  '.json': 'application/json', '.wasm': 'application/wasm', '.png': 'image/png', '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon', '.jpg': 'image/jpeg', '.woff2': 'font/woff2',
+};
+
+function parseArgs(argv) {
+  const args = { label: null, params: '', size: '1600x900', compare: null, route: 0 };
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === '--label') args.label = argv[++i];
+    else if (arg === '--params') args.params = argv[++i] ?? '';
+    else if (arg === '--size') args.size = argv[++i] ?? args.size;
+    else if (arg === '--compare') args.compare = (argv[++i] ?? '').split(',');
+    else if (arg === '--route') args.route = Number(argv[++i] ?? 0);
+  }
+  return args;
+}
+
+/** Lambert-93 → WGS84 (GRS80, inverse Lambert conformal conic), enough to place a synthetic route. */
+function lambert93ToWgs84(x, y) {
+  const a = 6378137;
+  const e = 0.0818191910428158;
+  const deg = Math.PI / 180;
+  const [phi0, phi1, phi2, lambda0] = [46.5 * deg, 44 * deg, 49 * deg, 3 * deg];
+  const m = (phi) => Math.cos(phi) / Math.sqrt(1 - (e * Math.sin(phi)) ** 2);
+  const t = (phi) => Math.tan(Math.PI / 4 - phi / 2) / ((1 - e * Math.sin(phi)) / (1 + e * Math.sin(phi))) ** (e / 2);
+  const n = (Math.log(m(phi1)) - Math.log(m(phi2))) / (Math.log(t(phi1)) - Math.log(t(phi2)));
+  const F = m(phi1) / (n * t(phi1) ** n);
+  const rho0 = a * F * t(phi0) ** n;
+  const dx = x - 700000;
+  const dy = rho0 - (y - 6600000);
+  const rho = Math.sign(n) * Math.hypot(dx, dy);
+  const tt = (rho / (a * F)) ** (1 / n);
+  let phi = Math.PI / 2 - 2 * Math.atan(tt);
+  for (let i = 0; i < 8; i++) {
+    phi = Math.PI / 2 - 2 * Math.atan(tt * ((1 - e * Math.sin(phi)) / (1 + e * Math.sin(phi))) ** (e / 2));
+  }
+  return { lat: phi / deg, lon: (Math.atan2(dx, dy) / n + lambda0) / deg };
+}
+
+/**
+ * Route overlay state as the app stores it (lib/routeOverlaySync.ts): a
+ * straight 200 km line of `count` points through the tile centre, so most
+ * points lie outside the scene, like a real itinerary.
+ */
+function syntheticRouteState(count, xKm, yKm) {
+  const cx = xKm * 1000 + 500;
+  const cy = yKm * 1000 - 500;
+  const points = [];
+  for (let i = 0; i < count; i++) {
+    const s = i / Math.max(1, count - 1) - 0.5;
+    points.push(lambert93ToWgs84(cx + s * 160_000, cy + s * 120_000));
+  }
+  return {
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    source: 'redview_app',
+    routes: [{ id: 'bench-route', name: 'Bench', color: '#ff3b30', opacity: 1, visible: true, points }],
+  };
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const pct = (ratio) => `${(ratio * 100).toFixed(1)} %`;
+
+function printReport(report) {
+  console.log(`\n${report.meta.label ?? '(sans label)'} · ${report.meta.size}` +
+    `${report.meta.route ? ` · trace ${report.meta.route} pts` : ''}` +
+    `${report.meta.params ? ` · ${report.meta.params}` : ''} · écran ${(1000 / report.result.refreshMs).toFixed(0)} Hz`);
+  if (report.meta.adapter) console.log(report.meta.adapter);
+  const rows = [];
+  for (const pass of report.result.passes) {
+    for (const s of [...pass.segments, pass.total]) {
+      rows.push({
+        passe: pass.pass,
+        segment: s.segment,
+        frames: s.frames,
+        fps: s.fps,
+        'p50 ms': s.p50Ms,
+        'p95 ms': s.p95Ms,
+        'max ms': s.maxMs,
+        'ratées': pct(s.missedRatio),
+        'GPU ms': s.drawMs,
+        'ombrage ms': s.shadeMs,
+        'CPU ms': s.cpuMs,
+        'points M': Number((s.points / 1e6).toFixed(2)),
+        'budget M': Number((s.budget / 1e6).toFixed(2)),
+        blocs: s.uploads,
+      });
+    }
+  }
+  console.table(rows);
+}
+
+async function compare(labels) {
+  const reports = await Promise.all(labels.map(async (label) => JSON.parse(await readFile(join(REPORT_DIR, `${label}.json`), 'utf8'))));
+  const keys = [['fps', 'fps'], ['p95Ms', 'p95 ms'], ['missedRatio', 'ratées'], ['drawMs', 'GPU ms'], ['shadeMs', 'ombrage ms'], ['cpuMs', 'CPU ms'], ['points', 'points']];
+  const rows = [];
+  for (const passIndex of [0, 1]) {
+    const segmentNames = reports[0].result.passes[passIndex].segments.map((s) => s.segment).concat('total');
+    for (const name of segmentNames) {
+      const row = { passe: reports[0].result.passes[passIndex].pass, segment: name };
+      for (const [key, title] of keys) {
+        row[title] = reports.map((r) => {
+          const pass = r.result.passes[passIndex];
+          const s = name === 'total' ? pass.total : pass.segments.find((seg) => seg.segment === name);
+          if (!s) return '—';
+          if (key === 'missedRatio') return pct(s[key]);
+          if (key === 'points') return (s[key] / 1e6).toFixed(2);
+          return s[key];
+        }).join(' → ');
+      }
+      rows.push(row);
+    }
+  }
+  console.log(`\n${labels.join(' → ')}`);
+  console.table(rows);
+}
+
+async function run(args) {
+  const tilePath = process.env.LIDAR_TILE;
+  if (!tilePath) throw new Error('LIDAR_TILE=<fichier .copc.laz> requis');
+  const tileStat = await stat(tilePath);
+  const xy = process.env.LIDAR_TILE_XY ?? /LHD_FXX_(\d+)_(\d+)_/.exec(basename(tilePath))?.slice(1, 3).join(',');
+  if (!xy) throw new Error('LIDAR_TILE_XY=<x>,<y> requis (nom de fichier non IGN)');
+  const [xKm, yKm] = xy.split(',').map(Number);
+  const tileName = `LHD_FXX_${String(xKm).padStart(4, '0')}_${yKm}_PTS_LAMB93_IGN69.copc.laz`;
+  await stat(join(DIST, 'viewer.html')).catch(() => {
+    throw new Error('dist/viewer.html absent : lancer `npm run build` avant le bench');
+  });
+
+  const server = createServer(async (req, res) => {
+    const path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    try {
+      if (path === '/__bench-tile.copc.laz') {
+        res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': tileStat.size });
+        createReadStream(tilePath).pipe(res);
+        return;
+      }
+      const file = join(DIST, path === '/' ? 'index.html' : path.replace(/^\/+/, ''));
+      const body = await readFile(file);
+      res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' });
+      res.end(body);
+    } catch {
+      res.writeHead(404);
+      res.end();
+    }
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const origin = `http://127.0.0.1:${server.address().port}`;
+
+  const [width, height] = args.size.split('x').map(Number);
+  const flags = [
+    '--headless=new', '--enable-unsafe-webgpu', '--ignore-gpu-blocklist', '--no-first-run', '--no-default-browser-check',
+    `--user-data-dir=${join(tmpdir(), 'redview-lidar-perf-profile')}`, `--remote-debugging-port=${CDP_PORT}`,
+    `--window-size=${width},${height}`,
+  ];
+  const browser = spawn(EDGE, [...flags, 'about:blank'], { stdio: 'ignore' });
+
+  try {
+    let targets = null;
+    for (let i = 0; i < 80 && !targets; i++) {
+      await sleep(250);
+      targets = await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`).then((r) => r.json()).catch(() => null);
+    }
+    const page = targets?.find((t) => t.type === 'page');
+    if (!page) throw new Error('Edge headless injoignable (CDP)');
+    const ws = new WebSocket(page.webSocketDebuggerUrl);
+    await new Promise((r) => ws.addEventListener('open', r));
+    let id = 0;
+    const pending = new Map();
+    const logs = [];
+    ws.addEventListener('message', (event) => {
+      const msg = JSON.parse(event.data);
+      if (msg.id && pending.has(msg.id)) {
+        pending.get(msg.id)(msg);
+        pending.delete(msg.id);
+      }
+      if (msg.method === 'Runtime.consoleAPICalled') {
+        const line = `[${msg.params.type}] ${msg.params.args.map((a) => a.value ?? a.description).join(' ')}`;
+        logs.push(line);
+        if (msg.params.type === 'error' || msg.params.type === 'warning') console.log(line.slice(0, 300));
+      }
+      if (msg.method === 'Runtime.exceptionThrown') console.log('[exception]', msg.params.exceptionDetails.exception?.description?.slice(0, 400));
+    });
+    const send = (method, params = {}) => new Promise((r) => {
+      const mid = ++id;
+      pending.set(mid, r);
+      ws.send(JSON.stringify({ id: mid, method, params }));
+    });
+    const evaluate = async (expression) => {
+      const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
+      if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description ?? r.result.exceptionDetails.text);
+      return r.result?.result?.value;
+    };
+    await send('Runtime.enable');
+    await send('Page.enable');
+
+    // 1. The tile goes into OPFS as the app's downloader stores it (kept across runs).
+    await send('Page.navigate', { url: `${origin}/favicon.ico` });
+    await sleep(800);
+    const stored = await evaluate(`(async () => {
+      const root = await navigator.storage.getDirectory();
+      const dir = await root.getDirectoryHandle('lidar-hd', { create: true });
+      try {
+        const existing = await (await dir.getFileHandle(${JSON.stringify(tileName)})).getFile();
+        if (existing.size === ${tileStat.size}) return 'déjà en cache';
+      } catch {}
+      const buf = await (await fetch('/__bench-tile.copc.laz')).arrayBuffer();
+      const fh = await dir.getFileHandle(${JSON.stringify(tileName)}, { create: true });
+      const w = await fh.createWritable(); await w.write(buf); await w.close();
+      return buf.byteLength + ' o écrits';
+    })()`);
+    console.log(`Tuile ${tileName} : ${stored}`);
+    const routeState = args.route > 0 ? JSON.stringify(syntheticRouteState(args.route, xKm, yKm)) : null;
+    await evaluate(routeState
+      ? `localStorage.setItem('redview:lidar:route_overlay', ${JSON.stringify(routeState)}), 'ok'`
+      : `localStorage.removeItem('redview:lidar:route_overlay'), 'ok'`);
+    if (routeState) console.log(`Trace synthétique : ${args.route} points`);
+
+    // 2. Viewer with the scripted path.
+    const extra = args.params ? `&${args.params}` : '';
+    const t0 = Date.now();
+    await send('Page.navigate', { url: `${origin}/viewer.html?x=${xKm}&y=${yKm}&crs=LAMB93&alt=IGN69&bench=orbit${extra}` });
+    let ready = false;
+    for (let i = 0; i < 600 && !ready; i++) {
+      await sleep(500);
+      ready = await evaluate(`document.getElementById('overlay')?.classList.contains('hidden') === true`).catch(() => false);
+    }
+    if (!ready) throw new Error(`viewer pas prêt après ${((Date.now() - t0) / 1000).toFixed(0)} s`);
+    console.log(`Viewer prêt en ${((Date.now() - t0) / 1000).toFixed(1)} s, parcours en cours…`);
+    let result = null;
+    for (let i = 0; i < 240 && !result; i++) {
+      await sleep(500);
+      result = await evaluate('window.__rvLidarBench ?? null').catch(() => null);
+    }
+    if (!result) throw new Error('rapport de bench absent (window.__rvLidarBench)');
+    ws.close();
+
+    const report = {
+      meta: {
+        label: args.label,
+        date: new Date().toISOString(),
+        route: args.route,
+        size: args.size,
+        params: args.params,
+        adapter: logs.find((line) => line.includes('[LiDAR GPU] Tier')) ?? null,
+      },
+      result,
+    };
+    printReport(report);
+    if (args.label) {
+      await mkdir(REPORT_DIR, { recursive: true });
+      const out = join(REPORT_DIR, `${args.label}.json`);
+      await writeFile(out, JSON.stringify(report, null, 2));
+      console.log(`Rapport : ${out}`);
+    }
+  } finally {
+    // Kill the whole tree: on Windows `kill()` only ends the browser process,
+    // and its GPU/renderer children may linger.
+    if (process.platform === 'win32' && browser.pid) {
+      spawnSync('taskkill', ['/PID', String(browser.pid), '/T', '/F'], { stdio: 'ignore' });
+    } else {
+      browser.kill();
+    }
+    server.close();
+  }
+}
+
+const args = parseArgs(process.argv.slice(2));
+try {
+  if (args.compare) await compare(args.compare);
+  else await run(args);
+  process.exit(0);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
+}

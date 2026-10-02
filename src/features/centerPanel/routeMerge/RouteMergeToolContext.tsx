@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import { useProjectStoreOptional } from '@/features/itineraryPanel';
+import { resolveRouteRequest, useProjectStoreOptional, type Itinerary } from '@/features/itineraryPanel';
 import {
   MERGE_CONNECT_THRESHOLD_M,
   shouldRouteMergedGap,
@@ -16,12 +16,9 @@ import {
 } from '@/features/itineraryPanel/lib/project';
 import {
   checkRouteWithinFrance,
-  fetchBrouterRoute,
-  fetchBrouterRouteBestOfN,
   formatBrouterErrorMessage,
   formatForbiddenZonePolygons,
-  isClimbingMode,
-  resolveItineraryRouting,
+  type BrouterRoute,
 } from '@/features/itineraryPanel/lib/brouter';
 import {
   computeRouteSurfaceMetricsFromBrouter,
@@ -47,13 +44,7 @@ interface RouteMergeToolProviderProps {
   children: ReactNode;
 }
 
-interface MergeConnectorFetchResult {
-  connector: MergeItineraryConnectorSegment;
-  usedFallbackProfile: boolean;
-  droppedPolygons: boolean;
-}
-
-function toConnectorSegment(route: Awaited<ReturnType<typeof fetchBrouterRoute>>): MergeItineraryConnectorSegment {
+function toConnectorSegment(route: BrouterRoute): MergeItineraryConnectorSegment {
   const profile = extractRouteProfileFromBrouter(route);
   const surfaceMetrics = computeRouteSurfaceMetricsFromBrouter(route);
   return {
@@ -76,81 +67,24 @@ function toConnectorSegment(route: Awaited<ReturnType<typeof fetchBrouterRoute>>
   };
 }
 
-function isBrouterWatchdogError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  const message = error.message.toLowerCase();
-  return message.includes('brouter http 422') && message.includes('thread-priority-watchdog');
-}
-
-async function fetchMergeConnectorWithFallbacks(
-  source: NonNullable<ReturnType<typeof useProjectStoreOptional>>['project']['itineraries'][number],
+/**
+ * Raccord entre deux tracés : même pipeline que le tracé principal (profil
+ * personnalisé de la trace source, ancres sur les longs raccords, zones
+ * interdites des deux traces), jamais de profil stock.
+ */
+async function fetchMergeConnector(
+  source: Itinerary,
   start: { lat: number; lon: number },
   end: { lat: number; lon: number },
   polygons: string | undefined,
-): Promise<MergeConnectorFetchResult> {
-  const resolved = await resolveItineraryRouting(source);
-  const stockProfile = resolved.stockProfileId;
-  const climbing = isClimbingMode(source.priorities);
-  const attempts = [
-    {
-      profile: resolved.profileId,
-      polygons,
-      useBestOfN: climbing,
-      usedFallbackProfile: false,
-      droppedPolygons: false,
-    },
-    {
-      profile: stockProfile,
-      polygons,
-      useBestOfN: false,
-      usedFallbackProfile: stockProfile !== resolved.profileId,
-      droppedPolygons: false,
-    },
-    {
-      profile: stockProfile,
-      polygons: undefined,
-      useBestOfN: false,
-      usedFallbackProfile: stockProfile !== resolved.profileId,
-      droppedPolygons: Boolean(polygons),
-    },
-  ].filter((attempt, index, all) =>
-    all.findIndex(
-      (candidate) =>
-        candidate.profile === attempt.profile &&
-        candidate.polygons === attempt.polygons &&
-        candidate.useBestOfN === attempt.useBestOfN,
-    ) === index,
-  );
-
-  let lastError: unknown = null;
-
-  for (let index = 0; index < attempts.length; index += 1) {
-    const attempt = attempts[index];
-    try {
-      const request = {
-        start,
-        end,
-        via: [] as Array<{ lat: number; lon: number }>,
-        polygons: attempt.polygons,
-        profile: attempt.profile,
-      };
-      const route = attempt.useBestOfN
-        ? await fetchBrouterRouteBestOfN(request, 4)
-        : await fetchBrouterRoute(request);
-      return {
-        connector: toConnectorSegment(route),
-        usedFallbackProfile: attempt.usedFallbackProfile,
-        droppedPolygons: attempt.droppedPolygons,
-      };
-    } catch (error) {
-      lastError = error;
-      if (!isBrouterWatchdogError(error) || index === attempts.length - 1) {
-        throw error;
-      }
-    }
-  }
-
-  throw lastError;
+): Promise<MergeItineraryConnectorSegment> {
+  const { route } = await resolveRouteRequest({
+    itinerary: source,
+    signal: new AbortController().signal,
+    requestBase: { start, end, via: [], polygons },
+    setRouteWarnings: () => {},
+  });
+  return toConnectorSegment(route);
 }
 
 export function RouteMergeToolProvider({ children }: RouteMergeToolProviderProps) {
@@ -218,8 +152,6 @@ export function RouteMergeToolProvider({ children }: RouteMergeToolProviderProps
 
       try {
         let connector: MergeItineraryConnectorSegment | undefined;
-        let connectorUsedFallbackProfile = false;
-        let connectorDroppedPolygons = false;
         if (shouldRouteMergedGap(source, target, MERGE_CONNECT_THRESHOLD_M)) {
           const sourceEnd = sourceRoute.points[sourceRoute.points.length - 1];
           const targetStart = targetRoute.points[0];
@@ -236,15 +168,12 @@ export function RouteMergeToolProvider({ children }: RouteMergeToolProviderProps
             ...(source.forbiddenZones ?? []),
             ...(target.forbiddenZones ?? []),
           ]);
-          const connectorResult = await fetchMergeConnectorWithFallbacks(
+          connector = await fetchMergeConnector(
             source,
             { lat: sourceEnd.lat, lon: sourceEnd.lon },
             { lat: targetStart.lat, lon: targetStart.lon },
             polygons,
           );
-          connector = connectorResult.connector;
-          connectorUsedFallbackProfile = connectorResult.usedFallbackProfile;
-          connectorDroppedPolygons = connectorResult.droppedPolygons;
         }
 
         const resultBox = store.mergeItineraries(sourceId, targetId, { connector });
@@ -258,11 +187,7 @@ export function RouteMergeToolProvider({ children }: RouteMergeToolProviderProps
         setSelectedIds([]);
         setStatusMessage(
           usedConnector
-            ? connectorDroppedPolygons
-              ? translateAppText('Fusion créée avec raccord BRouter simplifié entre les deux traces.')
-              : connectorUsedFallbackProfile
-                ? translateAppText('Fusion créée avec raccord BRouter allégé entre les deux traces.')
-                : translateAppText('Fusion créée avec raccord BRouter entre les deux traces.')
+            ? translateAppText('Fusion créée avec raccord BRouter entre les deux traces.')
             : translateAppText('Fusion créée.'),
         );
         return true;

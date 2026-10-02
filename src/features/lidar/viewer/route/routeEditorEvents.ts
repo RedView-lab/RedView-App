@@ -1,12 +1,12 @@
 import type { CameraController } from '../camera';
 import type { HoverReticleInfo, InsertGhostHandle } from './routeHandlesOverlay';
+import type { ProjectedScreenPoint } from './terrainRaycaster';
 import type { LidarRouteOverlayItem, LidarRouteOverlayPoint, ViewerRouteSceneParams } from './types';
 import type { RouteEditTool } from './routeEditorController';
 import {
   computeAppendHoverReticle,
   findHoveredGhostSegment,
   findHoveredHandle,
-  projectPointsToScreen,
   raycastAtScreen,
 } from './routePicking';
 
@@ -35,6 +35,8 @@ export interface RouteEditorHost {
   notifyStateChange(): void;
   updateOverlay(): void;
   requestRender(): void;
+  /** Screen positions of the route points for the current camera (cached per pose). */
+  getProjectedRoutePoints(points: LidarRouteOverlayPoint[]): ProjectedScreenPoint[];
 }
 
 export class RouteEditorInputManager {
@@ -177,11 +179,11 @@ export class RouteEditorInputManager {
   };
 
   private onPointerMove = (e: PointerEvent): void => {
+    const activeRoute = this.host.getActiveRoute();
+    if (!activeRoute) return;
     const rect = this.host.canvas.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
-    const activeRoute = this.host.getActiveRoute();
-    if (!activeRoute) return;
 
     const sceneParams = this.host.getSceneParams();
 
@@ -229,9 +231,11 @@ export class RouteEditorInputManager {
       return;
     }
 
-    // C) Hover Detection (Handles & Segments)
+    // C) Hover Detection (Handles & Segments). Not while a button drags the
+    // camera: the overlay follows the camera from the render loop.
+    if (e.buttons !== 0) return;
     const points = activeRoute.points;
-    const projectedNodes = projectPointsToScreen(points, sceneParams, this.host.canvas, this.host.camera);
+    const projectedNodes = this.host.getProjectedRoutePoints(points);
     const nearestPointIndex = findHoveredHandle(screenX, screenY, projectedNodes);
 
     this.host.hoveredPointIndex = nearestPointIndex;

@@ -136,7 +136,8 @@ export function applyTraceAppend(
     return row;
   });
 
-  if (itinerary.gpxRoute?.source === 'brouter' && (itinerary.gpxRoute.points.length ?? 0) >= 2) {
+  // Tracé BRouter ou GPX importé : on le prolonge depuis l'ancienne arrivée.
+  if ((itinerary.gpxRoute?.points.length ?? 0) >= 2) {
     itinerary.pendingTraceExtension = {
       from: { lat: previousEndLat, lon: previousEndLon },
       to: { lat: point.lat, lon: point.lon },

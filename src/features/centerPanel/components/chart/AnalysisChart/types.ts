@@ -3,7 +3,7 @@ import type { PredictionResult } from '@/features/fitPredictor';
 import type { ChartPoiAnnotation } from '../annotations/buildPoiAnnotations';
 import type { ChartDayNightOverlay } from '../dayNight';
 import type { ChartPauseOverlay } from '../pause';
-import type { ChartAlertOverlay } from '../alerts/buildSteepAlertOverlay';
+import type { ChartAlertOverlay, ChartAlertWindow } from '../alerts/buildSteepAlertOverlay';
 import type { ChartSlopeOverlay, ChartSlopeSegment } from '../slope';
 import type {
   AxisDomain,
@@ -68,6 +68,8 @@ export interface AnalysisChartProps {
   controlledHoverXValue?: number | null;
   onPlotClick?: (xValue: number) => void;
   onPoiClick?: (annotation: ChartPoiAnnotation) => void;
+  /** Clic sur l'icône d'une colonne « Alertes ». */
+  onAlertClick?: (window: ChartAlertWindow) => void;
   onPlotRangeSelect?: (range: { startX: number; endX: number }) => void;
   selectedXRange?: { startX: number; endX: number } | null;
   onClearSelectedXRange?: () => void;

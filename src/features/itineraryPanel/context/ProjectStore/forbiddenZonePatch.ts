@@ -2,6 +2,7 @@ import {
   cumulativeRouteLengthsM,
   projectPointAlongRoute,
 } from '../../lib/routes';
+import { narrowRoutePatchToEdit } from '../../hooks/useItineraryBrouterRoutingShared';
 import type {
   Itinerary,
   ItineraryForbiddenZone,
@@ -165,7 +166,7 @@ export function buildPendingRoutePatchForForbiddenZone(
   const endRow = rowsWithDistances[endIndex]?.row;
   if (!startRow || !endRow) return undefined;
 
-  return {
+  const patch: NonNullable<Itinerary['pendingRoutePatch']> = {
     start: { lat: startRow.lat, lon: startRow.lon, kind: startRow.kind === 'start' ? 'start' : 'waypoint' },
     end: { lat: endRow.lat, lon: endRow.lon, kind: endRow.kind === 'end' ? 'end' : 'waypoint' },
     via: rowsWithDistances
@@ -173,4 +174,10 @@ export function buildPendingRoutePatchForForbiddenZone(
       .filter((entry) => entry.row.kind === 'waypoint')
       .map((entry) => ({ lat: entry.row.lat, lon: entry.row.lon })),
   };
+  // Seule la traversée de la zone (et une marge pour la contourner) est recalculée.
+  return narrowRoutePatchToEdit(patch, routePoints, {
+    fromM: minAffectedDistanceM,
+    toM: maxAffectedDistanceM,
+    projected: false,
+  });
 }

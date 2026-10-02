@@ -4,11 +4,14 @@
  * Automatically checks, starts, and monitors:
  * 1. BRouter Standalone Server (port 17777)
  * 2. RedView POI Server (port 17778)
+ * 3. SSH tunnel to the VPS nginx when the .env upstreams point at it
+ *    (`startVpsTunnel` / `applyVpsTunnel`, used by the Vite dev API)
  */
 import { spawn } from 'node:child_process';
 import net from 'node:net';
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -173,6 +176,142 @@ export async function ensurePoiServerStarted() {
   }
 
   return child;
+}
+
+/* ------------------------------------------------------------------ */
+/* Tunnel SSH vers le VPS (dev)                                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Le nginx du VPS n'accepte /brouter, /poi/ et /weather/ que depuis le VPS
+ * lui-même (server/weather-daemon/brouter.conf) : depuis un poste de dev, les
+ * amonts du .env répondent 403. En dev, un tunnel SSH vers son port 80 fait
+ * arriver ces requêtes depuis 127.0.0.1, comme celles de l'app en prod.
+ *
+ *   REDVIEW_DEV_TUNNEL=0        désactive le tunnel
+ *   REDVIEW_DEV_SSH_KEY=<path>  clé (défaut ~/.ssh/oracle_brouter.key)
+ *   REDVIEW_DEV_SSH_USER=<user> utilisateur (défaut opc)
+ *   REDVIEW_DEV_TUNNEL_PORT=<n> port local (défaut 18080)
+ */
+const VPS_UPSTREAM_KEYS = ['BROUTER_UPSTREAM', 'POI_UPSTREAM', 'WEATHER_UPSTREAM'];
+
+/** @type {{ host: string, port: number, ready: Promise<boolean>, active: boolean } | null} */
+let vpsTunnel = null;
+/** Après un échec, pas de nouvel essai avant cette date (chaque requête /api attendrait ssh). */
+let vpsTunnelRetryAt = 0;
+const VPS_TUNNEL_RETRY_DELAY_MS = 60_000;
+
+function isLocalHostname(hostname) {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]';
+}
+
+/** URL d'amont servie par le nginx du VPS (http, port 80, hôte distant), sinon null. */
+function parseVpsUpstream(raw) {
+  let url;
+  try {
+    url = new URL(String(raw ?? '').trim());
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'http:' || (url.port !== '' && url.port !== '80') || isLocalHostname(url.hostname)) return null;
+  return url;
+}
+
+/** Messages de ssh utiles à l'utilisateur (sans l'avertissement post-quantique). */
+function sshErrorSummary(stderr) {
+  return stderr
+    .split(/\r?\n/)
+    .filter((line) => line.trim() && !line.startsWith('**'))
+    .join(' ')
+    .slice(0, 300);
+}
+
+/**
+ * Ouvre (ou réutilise) le tunnel vers le nginx du VPS désigné par les amonts
+ * de `env`. Résout `true` quand il est prêt. Un tunnel tombé est rouvert au
+ * prochain appel.
+ */
+export function startVpsTunnel(env = process.env) {
+  if (vpsTunnel) return vpsTunnel.ready;
+  if (env.REDVIEW_DEV_TUNNEL === '0' || Date.now() < vpsTunnelRetryAt) return Promise.resolve(false);
+  const host = VPS_UPSTREAM_KEYS.map((key) => parseVpsUpstream(env[key])?.hostname).find(Boolean);
+  if (!host) return Promise.resolve(false);
+
+  const keyPath = env.REDVIEW_DEV_SSH_KEY || path.join(os.homedir(), '.ssh', 'oracle_brouter.key');
+  if (!fs.existsSync(keyPath)) {
+    console.warn(`\x1b[33m[VPS]\x1b[0m Clé SSH introuvable (${keyPath}) : BRouter / POI / météo du VPS répondront 403 en local.`);
+    vpsTunnelRetryAt = Number.POSITIVE_INFINITY;
+    return Promise.resolve(false);
+  }
+  const user = env.REDVIEW_DEV_SSH_USER || 'opc';
+  const port = Number(env.REDVIEW_DEV_TUNNEL_PORT) || 18080;
+
+  const tunnel = { host, port, ready: Promise.resolve(false), active: false };
+  vpsTunnel = tunnel;
+  tunnel.ready = (async () => {
+    if (await isPortOpen(port)) {
+      console.log(`\x1b[32m[VPS]\x1b[0m Tunnel déjà ouvert sur \x1b[1mhttp://127.0.0.1:${port}\x1b[0m`);
+      return true;
+    }
+    console.log(`\x1b[36m[VPS]\x1b[0m Ouverture du tunnel SSH vers ${host} (port local ${port})...`);
+    const child = spawn('ssh', [
+      '-i', keyPath,
+      '-N',
+      '-o', 'BatchMode=yes',
+      '-o', 'ExitOnForwardFailure=yes',
+      '-o', 'ConnectTimeout=10',
+      '-o', 'ServerAliveInterval=30',
+      '-o', 'ServerAliveCountMax=3',
+      '-L', `${port}:127.0.0.1:80`,
+      `${user}@${host}`,
+    ], { stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true });
+
+    let stderr = '';
+    child.stderr?.on('data', (chunk) => {
+      stderr += String(chunk);
+    });
+    const exited = new Promise((resolve) => {
+      child.once('error', (error) => {
+        stderr += String(error?.message ?? error);
+        resolve(false);
+      });
+      child.once('exit', () => resolve(false));
+    });
+    // Tunnel tombé (veille, réseau) : rouvert à la prochaine requête /api.
+    child.once('exit', (code) => {
+      if (vpsTunnel === tunnel) vpsTunnel = null;
+      if (tunnel.active) console.warn(`\x1b[33m[VPS]\x1b[0m Tunnel fermé (code ${code}), réouverture à la prochaine requête.`);
+    });
+    const stop = () => child.kill();
+    process.once('exit', stop);
+    child.once('exit', () => process.off('exit', stop));
+
+    const ok = await Promise.race([waitForPort(port, 15000, 250), exited]);
+    if (ok) {
+      console.log(`\x1b[32m[VPS]\x1b[0m Tunnel prêt : BRouter / POI / météo via \x1b[1mhttp://127.0.0.1:${port}\x1b[0m`);
+    } else {
+      child.kill();
+      console.warn(`\x1b[31m[VPS]\x1b[0m Tunnel SSH impossible${stderr ? ` : ${sshErrorSummary(stderr)}` : ''}. Les amonts du VPS répondront 403 en local.`);
+    }
+    return ok;
+  })();
+  tunnel.ready.then((ok) => {
+    tunnel.active = ok;
+    if (ok) return;
+    if (vpsTunnel === tunnel) vpsTunnel = null;
+    vpsTunnelRetryAt = Date.now() + VPS_TUNNEL_RETRY_DELAY_MS;
+  });
+  return tunnel.ready;
+}
+
+/** Dirige les amonts du VPS de `env` vers le tunnel, s'il est ouvert. */
+export function applyVpsTunnel(env = process.env) {
+  if (!vpsTunnel?.active) return;
+  for (const key of VPS_UPSTREAM_KEYS) {
+    const url = parseVpsUpstream(env[key]);
+    if (!url || url.hostname !== vpsTunnel.host) continue;
+    env[key] = `http://127.0.0.1:${vpsTunnel.port}${url.pathname.replace(/\/+$/, '')}${url.search}`;
+  }
 }
 
 export async function startDevServices() {

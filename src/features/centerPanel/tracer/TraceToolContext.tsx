@@ -25,7 +25,10 @@ import {
   moveTracePointInItinerary,
   resolveTraceAppendKind,
 } from '@/features/itineraryPanel/lib/tracer/traceEdits';
-import { buildPendingRoutePatchForEditedRow } from '@/features/itineraryPanel/components/ItineraryPanelContainer/timelineMutations';
+import {
+  buildPendingRoutePatchForEditedRow,
+  hasEditableRoute,
+} from '@/features/itineraryPanel/components/ItineraryPanelContainer/timelineMutations';
 import { translateAppText } from '@/shared/i18n';
 import { isVariantModifierPressed } from '@/shared/lib/platform';
 import { useRouteSplitToolOptional } from '../routeSplit';
@@ -222,9 +225,9 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
 
         if (!moveTracePointInItinerary(targetItinerary, target.rowId, lon, lat)) return false;
 
-        if (targetItinerary.gpxRoute?.source === 'brouter') {
+        if (hasEditableRoute(targetItinerary)) {
           targetItinerary.pendingRoutePatch = buildPendingRoutePatchForEditedRow(
-            targetItinerary.timeline,
+            targetItinerary,
             target.rowId,
           );
         }

@@ -143,19 +143,26 @@ BRouter ne fait qu'une passe (`pass2coefficient = -1`, la passe exacte est trop 
 - `api/_lib/brouter-search.ts` : le proxy borne la valeur reçue (plancher selon la distance) ou la calcule si elle manque. Garder les paliers des deux fichiers en phase.
 
 ### 7.2 Très longs tracés : tracé grossier puis ancres
-Un tronçon de plus de ~180 km à vol d'oiseau est d'abord calculé vite (poids 2,4), puis des ancres sont posées **sur ce tracé** environ tous les 160 km, et les tronçons courts sont recalculés finement, en deux moitiés parallèles (`routing/long-distance-anchors.ts`, `hooks/useItineraryBrouterRouting/resolveRouteRequest.ts`). Si l'affinage échoue ou coûte plus cher, le tracé grossier est gardé plutôt qu'un repli sur un profil stock.
+Un tronçon de plus de ~180 km à vol d'oiseau est d'abord calculé vite (poids 2,4), puis des ancres sont posées **sur ce tracé** environ tous les 160 km, et les tronçons courts sont recalculés finement, en deux moitiés parallèles (`routing/long-distance-anchors.ts`, `hooks/useItineraryBrouterRouting/resolveRouteRequest.ts`). Si l'affinage échoue ou coûte plus cher, le tracé grossier est gardé ; si le grossier n'aboutit pas, un second essai plus glouton (poids 4) part, toujours avec le profil personnalisé.
+
+Le même mécanisme sert partout :
+- **Recherche fine en échec** (délai dépassé, watchdog, serveur saturé) sur un tronçon plus court : même méthode, ancres resserrées (~60 km). Seules l'annulation, le quota et les erreurs liées aux points (hors carte, zone interdite, îlot, aucun chemin permis) sont remontées telles quelles.
+- **Éditions locales** (déplacer / insérer / supprimer un point, zone interdite) : le tracé stocké est déjà le résultat de l'ancrage, donc le patch ne recalcule qu'une fenêtre de ±80 km autour de l'édition, bornée par des points pris sur ce tracé (`narrowRoutePatchToEdit`, `hooks/useItineraryBrouterRoutingShared/routeSegments.ts`), au lieu de tout le tronçon entre les étapes voisines. Les bornes portent leur distance le long du tracé (`distanceM`) ; sur une boucle ou un aller-retour où la position éditée est ambiguë, on garde le patch entre voisines.
+- **GPX importés** : un GPX fait foi, il n'est jamais rerouté implicitement (pas même pour un `<wpt>` hors trace) ; ses éditions sont des patchs locaux comme sur un tracé BRouter, et « Recalculer le tracé » prend les ancres des longs tronçons directement sur le GPX.
+- **Fusion de tracés** : le raccord passe par le même pipeline.
 
 ### 7.3 Points isolés (« îlots »)
 BRouter accroche un point à la voie la plus proche même si elle n'est pas reliée au réseau (zone piétonne fermée, parking privé…) : « no track found » / « target island detected ». Le point fautif est décalé de 200 puis 500 m vers son voisin, avec un avertissement (`routing/island-repair.ts`).
 
 ### 7.4 Délais, requête de secours et compression
-- Le repli sur le profil stock se déclenche après un délai proportionnel à la distance (14 s jusqu'à 150 km, jusqu'à 45 s), et plus du tout pour un îlot avant d'avoir tenté de déplacer le point.
-- Au départ d'un réseau très dense (Paris), une recherche fine peut explorer plusieurs secondes : passé un délai proportionnel à la distance (~4 s à 110 km), une recherche plus gloutonne (même profil) part en parallèle et la première réponse l'emporte (`profileFallback.ts`).
-- Ces délais portent sur le calcul : ils s'arrêtent dès les en-têtes de la réponse (BRouter ne répond qu'une fois le tracé calculé), une connexion lente ne déclenche donc ni secours ni repli.
+- Il n'y a plus de repli sur un profil stock : tout itinéraire est calculé avec son profil généré, y compris aux curseurs neutres. Un upload de profil en échec est retenté une fois, puis signalé.
+- Une recherche a un délai proportionnel à la distance (14 s jusqu'à 150 km, jusqu'à 45 s) ; passé ce délai, `resolveRouteRequest` passe au tracé grossier et aux ancres (§7.2).
+- Au départ d'un réseau très dense (Paris), une recherche fine peut explorer plusieurs secondes : passé un délai proportionnel à la distance (~4 s à 110 km), une recherche plus gloutonne (même profil) part en parallèle et la première réponse l'emporte (`customProfileFetch.ts`).
+- Ces délais portent sur le calcul : ils s'arrêtent dès les en-têtes de la réponse (BRouter ne répond qu'une fois le tracé calculé), une connexion lente ne déclenche donc ni secours ni escalade.
 - `api/brouter.ts` compresse le GeoJSON (brotli ou gzip) : `server.mjs` ne compresse que les fichiers statiques, et un tracé de 1 000 km pèse ~5 Mo.
 
 ### 7.5 Best-of-N
-Les stratégies multi-alternatives (§5.3) ne s'appliquent qu'aux profils stock : tous les presets génèrent un profil personnalisé, routé en une requête.
+Les stratégies multi-alternatives (§5.3) ne servaient qu'aux profils stock : tout itinéraire utilise désormais son profil personnalisé, routé en une requête (les fonctions `fetchBrouterRouteBest*` ne sont plus appelées par le routage).
 
 ### 7.6 Corrections du profil BRF
 - **Mode grimpe** (remplace §5.2) : `uphillcostfactor = costfactor × relief` par catégorie (gravier 0,4 … axes majeurs 1,0), avec la sentinelle 10000 conservée. Les anciennes valeurs fixes faisaient ignorer en montée les choix « Éviter / Interdire », les sens interdits et les pénalités d'accès.

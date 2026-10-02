@@ -32,27 +32,6 @@ export function raycastAtScreen(
   return raycastTerrain(ray, sceneParams, camera.getEye());
 }
 
-export function projectPointsToScreen(
-  points: LidarRouteOverlayPoint[],
-  sceneParams: ViewerRouteSceneParams,
-  canvas: HTMLCanvasElement,
-  camera: CameraController,
-): Array<{ screenX: number; screenY: number; inFront: boolean }> {
-  const width = canvas.clientWidth || window.innerWidth;
-  const height = canvas.clientHeight || window.innerHeight;
-  const viewMat = camera.getViewMatrix();
-  const projMat = camera.getProjMatrix();
-
-  const projectedNodes: Array<{ screenX: number; screenY: number; inFront: boolean }> = [];
-  for (let i = 0; i < points.length; i++) {
-    const pt = points[i]!;
-    const { localX, localY, localZ } = geoToLocal3D(pt.lat, pt.lon, sceneParams, 0.65, pt.elevationM);
-    const scr = projectToScreen(localX, localY, localZ, width, height, viewMat, projMat);
-    projectedNodes.push(scr);
-  }
-  return projectedNodes;
-}
-
 export function findHoveredHandle(
   screenX: number,
   screenY: number,

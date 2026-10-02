@@ -9,19 +9,27 @@
 // gap between the offscreen scene pass and the canvas pass contains the wait
 // for the swap-chain image (≈ one vsync), which is not rendering cost — timed
 // as one interval it made every frame look ~20 ms and starved the budget.
+// The shading compute pass (new or stale nodes) is reported apart: the point
+// budget controls the draw passes, not the streaming.
 // Without the feature, the latency of `queue.onSubmittedWorkDone()` is used
 // as a coarse proxy (see `usesTimestamps`).
 
 const READBACK_SLOTS = 3;
 const SAMPLE_BLEND = 0.35;
-/** Passes timed per frame (scene, EDL/present). */
-export const TIMED_PASSES = 2;
+/** Timed passes of a frame, in encoding order. */
+export const TIMED_PASS = { shading: 0, scene: 1, edl: 2 } as const;
+const TIMED_PASSES = 3;
 const QUERY_COUNT = TIMED_PASSES * 2;
 const QUERY_BYTES = QUERY_COUNT * 8;
+
+/** Begin/end writes of one pass; the same shape for render and compute passes. */
+export type PassTimestampWrites = GPURenderPassTimestampWrites & GPUComputePassTimestampWrites;
 
 interface ReadbackSlot {
   buffer: GPUBuffer;
   busy: boolean;
+  /** Passes (bit per index) that wrote timestamps in the frame it holds. */
+  passes: number;
 }
 
 export class GpuFrameTimer {
@@ -31,7 +39,8 @@ export class GpuFrameTimer {
   private readonly slots: ReadbackSlot[] = [];
   private frameSlot: ReadbackSlot | null = null;
   private fallbackPending = false;
-  private frameMs = 0;
+  private drawMs = 0;
+  private shadeMs = 0;
   private hasSample = false;
   private destroyed = false;
 
@@ -48,6 +57,7 @@ export class GpuFrameTimer {
         this.slots.push({
           buffer: device.createBuffer({ size: QUERY_BYTES, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST }),
           busy: false,
+          passes: 0,
         });
       }
     } catch {
@@ -60,21 +70,28 @@ export class GpuFrameTimer {
     return this.querySet !== null;
   }
 
-  /** Smoothed GPU cost of recent frames in ms, or 0 before the first sample. */
+  /** Smoothed GPU cost of the draw passes (scene, EDL) in ms, or 0 before the first sample. */
   getFrameMs(): number {
-    return this.hasSample ? this.frameMs : 0;
+    return this.hasSample ? this.drawMs : 0;
+  }
+
+  /** Smoothed GPU cost of the shading compute pass per frame in ms (0 without timestamps). */
+  getShadeMs(): number {
+    return this.hasSample ? this.shadeMs : 0;
   }
 
   /** Starts measuring a frame; returns false when every readback slot is still in flight. */
   beginFrame(): boolean {
     if (!this.querySet) return false;
     this.frameSlot = this.slots.find((slot) => !slot.busy) ?? null;
+    if (this.frameSlot) this.frameSlot.passes = 0;
     return this.frameSlot !== null;
   }
 
-  /** Begin/end timestamp writes for pass `passIndex` (0 … TIMED_PASSES − 1) of the measured frame. */
-  passTimestamps(passIndex: number): GPURenderPassTimestampWrites | undefined {
+  /** Begin/end timestamp writes for pass `passIndex` (see `TIMED_PASS`) of the measured frame. */
+  passTimestamps(passIndex: number): PassTimestampWrites | undefined {
     if (!this.querySet || !this.frameSlot || passIndex < 0 || passIndex >= TIMED_PASSES) return undefined;
+    this.frameSlot.passes |= 1 << passIndex;
     return {
       querySet: this.querySet,
       beginningOfPassWriteIndex: passIndex * 2,
@@ -100,14 +117,16 @@ export class GpuFrameTimer {
       slot.buffer.mapAsync(GPUMapMode.READ)
         .then(() => {
           const stamps = new BigUint64Array(slot.buffer.getMappedRange());
-          let ns = 0;
-          for (let pass = 0; pass < TIMED_PASSES; pass++) {
+          const passNs = (pass: number): number => {
+            if ((slot.passes & (1 << pass)) === 0) return 0;
             const begin = stamps[pass * 2]!;
             const end = stamps[pass * 2 + 1]!;
-            if (end > begin) ns += Number(end - begin);
-          }
+            return end > begin ? Number(end - begin) : 0;
+          };
+          const drawNs = passNs(TIMED_PASS.scene) + passNs(TIMED_PASS.edl);
+          const shadeNs = passNs(TIMED_PASS.shading);
           slot.buffer.unmap();
-          if (ns > 0) this.addSample(ns / 1e6);
+          if (drawNs > 0) this.addSample(drawNs / 1e6, shadeNs / 1e6);
         })
         .catch(() => undefined)
         .finally(() => {
@@ -120,7 +139,7 @@ export class GpuFrameTimer {
     this.fallbackPending = true;
     const submittedAt = performance.now();
     this.device.queue.onSubmittedWorkDone()
-      .then(() => this.addSample(performance.now() - submittedAt))
+      .then(() => this.addSample(performance.now() - submittedAt, 0))
       .catch(() => undefined)
       .finally(() => {
         this.fallbackPending = false;
@@ -136,9 +155,15 @@ export class GpuFrameTimer {
     this.resolveBuffer = null;
   }
 
-  private addSample(ms: number): void {
-    if (!Number.isFinite(ms) || ms <= 0) return;
-    this.frameMs = this.hasSample ? this.frameMs + (ms - this.frameMs) * SAMPLE_BLEND : ms;
+  private addSample(drawMs: number, shadeMs: number): void {
+    if (!Number.isFinite(drawMs) || drawMs <= 0) return;
+    if (this.hasSample) {
+      this.drawMs += (drawMs - this.drawMs) * SAMPLE_BLEND;
+      this.shadeMs += (shadeMs - this.shadeMs) * SAMPLE_BLEND;
+    } else {
+      this.drawMs = drawMs;
+      this.shadeMs = shadeMs;
+    }
     this.hasSample = true;
   }
 }

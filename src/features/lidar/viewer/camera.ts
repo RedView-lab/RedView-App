@@ -1,6 +1,31 @@
 // ============================================
-// Standalone LiDAR HD Viewer — Orbit CameraTEST
+// Standalone LiDAR HD Viewer — Orbit Camera
 // ============================================
+//
+// Mouse and wheel input move a goal pose; `update()` (once per rendered
+// frame) eases the camera towards it. The motion stays continuous when the
+// input arrives unevenly or a frame is late, and the wheel zooms smoothly
+// instead of jumping by notches. Matrices and picking use the current pose.
+
+/** Orbit pose: angles from the +Z axis (theta) and the vertical (phi), distance to the target. */
+export interface CameraPose {
+  theta: number;
+  phi: number;
+  radius: number;
+  targetX: number;
+  targetY: number;
+  targetZ: number;
+}
+
+/** Time constants (ms) of the easing towards the goal pose. */
+const ORBIT_SMOOTHING_MS = 45;
+const ZOOM_SMOOTHING_MS = 80;
+/** The camera snaps to its goal once this close (rad, or share of the radius for distances). */
+const SNAP_EPSILON = 1e-4;
+/** Frame step assumed when the camera starts moving (no previous frame). */
+const DEFAULT_STEP_MS = 1000 / 60;
+const MIN_PHI = 0.05;
+const MAX_PHI = Math.PI - 0.05;
 
 export class CameraController {
   canvas: HTMLCanvasElement;
@@ -14,6 +39,9 @@ export class CameraController {
   sceneRadius = 500;
   onChange: (() => void) | null = null;
 
+  /** Pose the input asks for; the current pose eases to it in `update`. */
+  private readonly goal: CameraPose = { theta: Math.PI / 4, phi: Math.PI / 4, radius: 500, targetX: 0, targetY: 0, targetZ: 0 };
+  private lastUpdateTime = -1;
   private isDragging = false;
   private isPanning = false;
   private lastX = 0;
@@ -45,14 +73,72 @@ export class CameraController {
   }
 
   lookAt(cx: number, cy: number, cz: number, extent: number) {
-    this.targetX = cx;
-    this.targetY = cy;
-    this.targetZ = cz;
     this.sceneRadius = Math.max(extent, 1);
-    this.radius = this.sceneRadius * 1.2;
-    this.theta = Math.PI / 4;
-    this.phi = Math.PI / 3;
+    this.setPose({
+      targetX: cx,
+      targetY: cy,
+      targetZ: cz,
+      radius: this.sceneRadius * 1.2,
+      theta: Math.PI / 4,
+      phi: Math.PI / 3,
+    });
+  }
+
+  getPose(): CameraPose {
+    return {
+      theta: this.theta,
+      phi: this.phi,
+      radius: this.radius,
+      targetX: this.targetX,
+      targetY: this.targetY,
+      targetZ: this.targetZ,
+    };
+  }
+
+  /** Jumps to a pose (current and goal), as for scripted paths and benchmarks. */
+  setPose(pose: Partial<CameraPose>): void {
+    const goal = this.goal;
+    if (pose.theta !== undefined) goal.theta = pose.theta;
+    if (pose.phi !== undefined) goal.phi = Math.max(MIN_PHI, Math.min(MAX_PHI, pose.phi));
+    if (pose.radius !== undefined) goal.radius = Math.max(1, pose.radius);
+    if (pose.targetX !== undefined) goal.targetX = pose.targetX;
+    if (pose.targetY !== undefined) goal.targetY = pose.targetY;
+    if (pose.targetZ !== undefined) goal.targetZ = pose.targetZ;
+    this.theta = goal.theta;
+    this.phi = goal.phi;
+    this.radius = goal.radius;
+    this.targetX = goal.targetX;
+    this.targetY = goal.targetY;
+    this.targetZ = goal.targetZ;
     this.notifyChange();
+  }
+
+  /**
+   * Eases the current pose towards the goal; call once per rendered frame
+   * with its timestamp (ms). Returns true while the camera still moves.
+   */
+  update(now: number): boolean {
+    const step = this.lastUpdateTime >= 0 ? Math.min(100, Math.max(0, now - this.lastUpdateTime)) : DEFAULT_STEP_MS;
+    const goal = this.goal;
+    const orbit = 1 - Math.exp(-step / ORBIT_SMOOTHING_MS);
+    const zoom = 1 - Math.exp(-step / ZOOM_SMOOTHING_MS);
+    const panEpsilon = SNAP_EPSILON * Math.max(1, goal.radius);
+    let moving = false;
+    const ease = (current: number, target: number, k: number, epsilon: number): number => {
+      if (Math.abs(target - current) <= epsilon) return target;
+      moving = true;
+      return current + (target - current) * k;
+    };
+    this.theta = ease(this.theta, goal.theta, orbit, SNAP_EPSILON);
+    this.phi = ease(this.phi, goal.phi, orbit, SNAP_EPSILON);
+    this.targetX = ease(this.targetX, goal.targetX, orbit, panEpsilon);
+    this.targetY = ease(this.targetY, goal.targetY, orbit, panEpsilon);
+    this.targetZ = ease(this.targetZ, goal.targetZ, orbit, panEpsilon);
+    // Zoom eases in log space: the same speed per wheel notch at any distance.
+    const logRadius = ease(Math.log(this.radius), Math.log(goal.radius), zoom, SNAP_EPSILON);
+    this.radius = Math.exp(logRadius);
+    this.lastUpdateTime = moving ? now : -1;
+    return moving;
   }
 
   private onMouseDown = (e: MouseEvent) => {
@@ -82,22 +168,22 @@ export class CameraController {
     const dy = e.clientY - this.lastY;
     this.lastX = e.clientX;
     this.lastY = e.clientY;
+    const goal = this.goal;
 
     if (this.isDragging) {
-      this.theta -= dx * 0.005;
-      this.phi -= dy * 0.005;
-      this.phi = Math.max(0.05, Math.min(Math.PI - 0.05, this.phi));
+      goal.theta -= dx * 0.005;
+      goal.phi = Math.max(MIN_PHI, Math.min(MAX_PHI, goal.phi - dy * 0.005));
     } else if (this.isPanning) {
-      const speed = this.radius * 0.002;
-      const sinPhi = Math.sin(this.phi);
-      const rX = Math.cos(this.theta);
-      const rZ = -Math.sin(this.theta);
-      const uX = -Math.cos(this.phi) * Math.sin(this.theta);
+      const speed = goal.radius * 0.002;
+      const sinPhi = Math.sin(goal.phi);
+      const rX = Math.cos(goal.theta);
+      const rZ = -Math.sin(goal.theta);
+      const uX = -Math.cos(goal.phi) * Math.sin(goal.theta);
       const uY = sinPhi;
-      const uZ = -Math.cos(this.phi) * Math.cos(this.theta);
-      this.targetX += (-dx * rX + dy * uX) * speed;
-      this.targetY += dy * uY * speed;
-      this.targetZ += (-dx * rZ + dy * uZ) * speed;
+      const uZ = -Math.cos(goal.phi) * Math.cos(goal.theta);
+      goal.targetX += (-dx * rX + dy * uX) * speed;
+      goal.targetY += dy * uY * speed;
+      goal.targetZ += (-dx * rZ + dy * uZ) * speed;
     }
     this.notifyChange();
   };
@@ -109,8 +195,7 @@ export class CameraController {
 
   private onWheel = (e: WheelEvent) => {
     e.preventDefault();
-    this.radius *= 1 + e.deltaY * 0.001;
-    this.radius = Math.max(1, this.radius);
+    this.goal.radius = Math.max(1, this.goal.radius * (1 + e.deltaY * 0.001));
     this.notifyChange();
   };
 

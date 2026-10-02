@@ -31,6 +31,12 @@ export const SEARCH_SATELLITE_FAR_RESTORE_MS = 900;
 export const VIEWPORT_POI_MIN_ZOOM = 5;
 export const VIEWPORT_POI_FETCH_DEBOUNCE_MS = 160;
 export const POI_MENU_CLOSE_MS = 150;
+/**
+ * Width (logical px, panel toggle included) the search bar needs with every
+ * filter label shown. Below it the filters go icon-only (label in the
+ * tooltip) and wrap to a second row rather than squeezing their icons.
+ */
+export const PLACE_SEARCH_FULL_WIDTH = 1040;
 
 export const DROPDOWN_VIEWPORT_POI_ICON_URLS: Partial<Record<PoiCategory, string>> = {
   drinking_water: '/svgv2/poi/dropdown-maps/water.svg',

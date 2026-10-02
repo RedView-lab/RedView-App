@@ -6,6 +6,7 @@ import {
   MAPBOX_TOKEN,
 } from '../../lib/mapbox.config';
 import { loadViewport } from '../../lib/viewport-persist';
+import { transformMapboxRequest } from '../../lib/satelliteTiles';
 import { TerrainManager } from '../../lib/terrain';
 import { createMapLifecycleController } from './controller';
 import { styleHasUsableContent } from './controller/styleContent';
@@ -105,6 +106,7 @@ export function useMap(
       fadeDuration: 0,
       maxTileCacheSize: runtimeProfile.maxTileCacheSize,
       minTileCacheSize: runtimeProfile.minTileCacheSize,
+      transformRequest: transformMapboxRequest,
     } as mapboxgl.MapOptions);
 
     mapRef.current = map;

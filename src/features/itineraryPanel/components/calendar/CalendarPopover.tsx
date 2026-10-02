@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { appScaledOverlayStyle, readAppScale } from '@/shared/lib/appScale';
 import { Calendar, type CalendarProps } from './Calendar';
 
 /**
@@ -38,7 +39,7 @@ export function CalendarPopover({
   markedDates,
 }: CalendarPopoverProps) {
   const popoverRef = useRef<HTMLDivElement | null>(null);
-  const [pos, setPos] = useState<{ top: number; left: number; scale: number; placeAbove: boolean } | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; scale: number } | null>(null);
 
   // Position computation — runs on open, scroll, and resize.
   useLayoutEffect(() => {
@@ -48,9 +49,7 @@ export function CalendarPopover({
       const trigger = anchorRef.current;
       if (!trigger) return;
 
-      const computed = window.getComputedStyle(trigger);
-      const rawScale = Number.parseFloat(computed.getPropertyValue('--app-scale'));
-      const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
+      const scale = readAppScale(trigger);
 
       const rect = trigger.getBoundingClientRect();
       const popHeight = (popoverRef.current?.offsetHeight ?? 360) * scale;
@@ -68,7 +67,7 @@ export function CalendarPopover({
       const maxLeft = window.innerWidth - popWidth - VIEWPORT_PADDING;
       const left = Math.max(VIEWPORT_PADDING, Math.min(rawLeft, maxLeft));
 
-      setPos({ top, left, scale, placeAbove });
+      setPos({ top, left, scale });
     };
 
     compute();
@@ -111,11 +110,8 @@ export function CalendarPopover({
       ref={popoverRef}
       className="rvi-calendar-popover"
       style={{
-        top: pos?.top ?? -9999,
-        left: pos?.left ?? -9999,
+        ...(pos ? appScaledOverlayStyle(pos) : { top: -9999, left: -9999 }),
         width: POPOVER_WIDTH,
-        transform: pos && pos.scale !== 1 ? `scale(${pos.scale})` : undefined,
-        transformOrigin: pos?.placeAbove ? 'bottom left' : 'top left',
         // Hide the popover for one frame while we measure to avoid a flash
         // at the wrong position.
         visibility: pos ? 'visible' : 'hidden',

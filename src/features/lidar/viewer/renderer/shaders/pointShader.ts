@@ -8,6 +8,10 @@
 // lighting) when a node arrives or that state changes; the per-frame
 // vertex shader only decodes the position, projects a screen-aligned
 // sprite and reads the pre-shaded colour — no texture fetch per vertex.
+//
+// Each point is one instance of a 4-vertex strip. Vertex pulling (one
+// indexed draw per node reading storage buffers) was measured ~20 % slower
+// on an integrated Radeon (bench:lidar-fps), so the instanced path stays.
 
 import {
   WGSL_CAMERA_BINDING,
@@ -20,7 +24,7 @@ import {
 } from './common';
 
 /** Group 1 of the point pipeline: per-frame sprite parameters. */
-export const POINT_PARAMS_FLOATS = 8;
+export const POINT_PARAMS_FLOATS = 12;
 /** Per-node uniform record (bound with a dynamic offset). */
 export const NODE_UNIFORM_BYTES = 32;
 
@@ -28,10 +32,12 @@ const WGSL_NODE_STRUCT = /* wgsl */ `
 struct NodeParams {
   origin: vec3<f32>,
   size: f32,
-  _pad0: f32,
+  /** Spacing (m) the points grow to where no child is drawn; 0 for leaves. */
+  adaptiveSpacing: f32,
   count: u32,
-  _pad1: f32,
-  _pad2: f32,
+  /** Pool slot: index of the node's child mask in \`childMasks\`. */
+  slot: u32,
+  _pad0: f32,
 };
 `;
 
@@ -50,9 +56,16 @@ struct PointParams {
   antialias: f32,
   /** Point diameter in metres, the same for every point. */
   worldSize: f32,
+  /** Diameter of the finest points on screen per metre of their node spacing (0 = off). */
+  adaptiveScale: f32,
+  _pad0: f32,
+  _pad1: f32,
+  _pad2: f32,
 };
 
 @group(1) @binding(0) var<uniform> params: PointParams;
+/** Per pool slot: octants (x | y << 1 | z << 2, CRS axes) covered by a drawn child this frame. */
+@group(1) @binding(1) var<storage, read> childMasks: array<u32>;
 @group(2) @binding(0) var<uniform> node: NodeParams;
 
 ${WGSL_COLOR_HELPERS}
@@ -78,10 +91,18 @@ fn vs_main(
   let clip = camera.viewProj * vec4<f32>(pos, 1.0);
 
   // Diameter in pixels: one world size for every point (perspective only), or
-  // a fixed pixel size; clamped so far points never vanish.
+  // a fixed pixel size; clamped so far points never vanish. Adaptive size:
+  // where none of the node's children is drawn (far away, or cut by the
+  // budget), its points are the finest on screen and grow to their spacing,
+  // so a coarser level still closes the surface.
   var px = params.fixedPx;
   if (px <= 0.0) {
-    px = params.worldSize * params.focalPx / max(clip.w, 1e-4);
+    var worldSize = params.worldSize;
+    let octant = select(0u, 1u, q.x >= 0.5) | select(0u, 2u, q.y >= 0.5) | select(0u, 4u, q.z >= 0.5);
+    if (((childMasks[node.slot] >> octant) & 1u) == 0u) {
+      worldSize = max(worldSize, node.adaptiveSpacing * params.adaptiveScale);
+    }
+    px = worldSize * params.focalPx / max(clip.w, 1e-4);
   }
   px = clamp(px, params.minPx, params.maxPx);
   let visible = isPointClassVisible(cls);
@@ -105,6 +126,12 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     alpha = clamp((1.0 - r) * in.px * 0.5 + 0.5, 0.0, 1.0);
   }
   return vec4<f32>(in.color.rgb, alpha);
+}
+
+/** While the camera moves: plain squares, no discard, so depth is tested before shading. */
+@fragment
+fn fs_square(in: VsOut) -> @location(0) vec4<f32> {
+  return vec4<f32>(in.color.rgb, 1.0);
 }
 `;
 

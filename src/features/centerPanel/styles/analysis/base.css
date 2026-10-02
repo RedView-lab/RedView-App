@@ -7,7 +7,9 @@
   gap: 12px;
   font-family: inherit;
   min-width: 0;
-  min-height: 235px;
+  /* 235 px at the regular 390 px panel; less on a short canvas, where the
+     dashboard layout allows a 220 px panel (pages/Dashboard/lib/layout.ts). */
+  min-height: clamp(100px, calc(var(--rvc-center-panel-height, 390px) - 155px), 235px);
 }
 
 /*
@@ -25,9 +27,13 @@
   --rvc-tb-radius: 5px;
 
   display: flex;
+  /* Narrow center column (half-screen window): wraps onto a second row
+     instead of running under the panel edge. Not a scroller: the axis and
+     surface dropdowns are positioned inside and must not be clipped. */
+  flex-wrap: wrap;
   align-items: center;
   flex: 0 0 auto;
-  gap: 8px;
+  gap: 6px 8px;
   min-height: 28px;
   min-width: 0;
   position: relative;
@@ -265,6 +271,7 @@
 
 .rvc-center-analysis__filters {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   flex: 0 1 auto;
   gap: 4px;

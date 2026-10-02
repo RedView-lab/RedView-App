@@ -1,5 +1,6 @@
 import { LOD_POINT_STRIDE } from '../lod/lodTile';
 import {
+  BLIT_SHADER,
   EDL_SHADER,
   EDL_SHADER_MSAA,
   NODE_UNIFORM_BYTES,
@@ -16,12 +17,16 @@ export const SCENE_DEPTH_FORMAT: GPUTextureFormat = 'depth32float';
 
 export interface RendererPipelines {
   pointPipeline: GPURenderPipeline;
+  /** Same sprites as plain squares (no discard), drawn while the camera moves. */
+  pointPipelineSquare: GPURenderPipeline;
   terrainPipeline: GPURenderPipeline;
   previewPipeline: GPURenderPipeline;
   trajectoryPipeline: GPURenderPipeline;
   sunDiscPipeline: GPURenderPipeline;
   routePipeline: GPURenderPipeline;
   edlPipeline: GPURenderPipeline;
+  /** Upscales a scene rendered below the canvas resolution. */
+  blitPipeline: GPURenderPipeline;
   shadingPipeline: GPUComputePipeline;
   sceneBindGroupLayout: GPUBindGroupLayout;
   pointParamsBindGroupLayout: GPUBindGroupLayout;
@@ -29,6 +34,7 @@ export interface RendererPipelines {
   nodeBindGroupLayout: GPUBindGroupLayout;
   shadingBindGroupLayout: GPUBindGroupLayout;
   edlBindGroupLayout: GPUBindGroupLayout;
+  blitBindGroupLayout: GPUBindGroupLayout;
 }
 
 const ALL_STAGES = GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE;
@@ -91,6 +97,8 @@ export async function createRendererPipelines(
   const pointParamsBindGroupLayout = reuse?.pointParamsBindGroupLayout ?? device.createBindGroupLayout({
     entries: [
       { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+      // Child masks of every pool slot (adaptive point size).
+      { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
     ],
   });
 
@@ -124,13 +132,23 @@ export async function createRendererPipelines(
     ],
   });
 
+  const blitBindGroupLayout = device.createBindGroupLayout({
+    entries: [
+      { binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+      { binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
+    ],
+  });
+
   const sceneLayout = device.createPipelineLayout({ bindGroupLayouts: [sceneBindGroupLayout] });
   const multisample: GPUMultisampleState = { count: sampleCount };
 
   device.pushErrorScope('validation');
 
   const pointShader = device.createShaderModule({ code: POINT_SHADER });
-  const pointPipeline = device.createRenderPipeline({
+  // Opaque sprites: no blending, so no halo of half-transparent edges that
+  // write depth over the points behind them (unsorted). With MSAA the soft
+  // edge goes through alpha-to-coverage, which stays order-independent.
+  const pointDescriptor: GPURenderPipelineDescriptor = {
     layout: device.createPipelineLayout({
       bindGroupLayouts: [sceneBindGroupLayout, pointParamsBindGroupLayout, nodeBindGroupLayout],
     }),
@@ -144,13 +162,15 @@ export async function createRendererPipelines(
         { arrayStride: 4, stepMode: 'instance', attributes: [{ shaderLocation: 1, offset: 0, format: 'unorm8x4' }] },
       ],
     },
-    // Opaque sprites: no blending, so no halo of half-transparent edges that
-    // write depth over the points behind them (unsorted). With MSAA the soft
-    // edge goes through alpha-to-coverage, which stays order-independent.
     fragment: { module: pointShader, entryPoint: 'fs_main', targets: [{ format }] },
     primitive: { topology: 'triangle-strip' },
     depthStencil: depthState('greater', true),
     multisample: { count: sampleCount, alphaToCoverageEnabled: sampleCount > 1 },
+  };
+  const pointPipeline = device.createRenderPipeline(pointDescriptor);
+  const pointPipelineSquare = device.createRenderPipeline({
+    ...pointDescriptor,
+    fragment: { module: pointShader, entryPoint: 'fs_square', targets: [{ format }] },
   });
 
   const terrainShader = device.createShaderModule({ code: TERRAIN_SHADER });
@@ -228,6 +248,14 @@ export async function createRendererPipelines(
     primitive: { topology: 'triangle-list' },
   });
 
+  const blitShader = device.createShaderModule({ code: BLIT_SHADER });
+  const blitPipeline = device.createRenderPipeline({
+    layout: device.createPipelineLayout({ bindGroupLayouts: [blitBindGroupLayout] }),
+    vertex: { module: blitShader, entryPoint: 'blit_vs', buffers: [] },
+    fragment: { module: blitShader, entryPoint: 'blit_fs', targets: [{ format }] },
+    primitive: { topology: 'triangle-list' },
+  });
+
   const shadingShader = device.createShaderModule({ code: POINT_SHADING_SHADER });
   const shadingPipeline = device.createComputePipeline({
     layout: device.createPipelineLayout({ bindGroupLayouts: [sceneBindGroupLayout, shadingBindGroupLayout] }),
@@ -241,17 +269,20 @@ export async function createRendererPipelines(
 
   return {
     pointPipeline,
+    pointPipelineSquare,
     terrainPipeline,
     previewPipeline,
     trajectoryPipeline,
     sunDiscPipeline,
     routePipeline,
     edlPipeline,
+    blitPipeline,
     shadingPipeline,
     sceneBindGroupLayout,
     pointParamsBindGroupLayout,
     nodeBindGroupLayout,
     shadingBindGroupLayout,
     edlBindGroupLayout,
+    blitBindGroupLayout,
   };
 }

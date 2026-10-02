@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Fetch intercept — routes /dem-tiles, /ortho-tiles, /slope-tiles,
+// Fetch intercept — routes /dem-tiles, /ortho-tiles, /vhr-tiles, /slope-tiles,
 // /altitude-tiles to the corresponding handler module. Legacy
 // /shadow-tiles is hard-410'd (handler retired Apr 29).
 //
@@ -103,7 +103,7 @@ self.addEventListener('fetch', (event) => {
   // Uniquement les routes de tuiles de NOTRE origine.
   if (url.origin !== self.location.origin) return;
 
-  const tileMatch = url.pathname.match(/^\/(?:dem|ortho|slope|altitude|radar)-tiles\/(\d+)\/(\d+)\/(\d+)$/);
+  const tileMatch = url.pathname.match(/^\/(?:dem|ortho|vhr|slope|altitude|radar)-tiles\/(\d+)\/(\d+)\/(\d+)$/);
   if (tileMatch && !parseRouterTileCoords(tileMatch)) {
     event.respondWith(noTileResponseRouter('invalid-coords'));
     return;
@@ -134,6 +134,19 @@ self.addEventListener('fetch', (event) => {
       parseInt(orthoMatch[1], 10),
       parseInt(orthoMatch[2], 10),
       parseInt(orthoMatch[3], 10),
+    ));
+    return;
+  }
+
+  // Very-high-resolution ortho overlay (satellite basemap). `r=2` asks for
+  // 512 px tiles on high-DPI screens.
+  const vhrMatch = url.pathname.match(/^\/vhr-tiles\/(\d+)\/(\d+)\/(\d+)$/);
+  if (vhrMatch) {
+    event.respondWith(handleVhrRequest(
+      parseInt(vhrMatch[1], 10),
+      parseInt(vhrMatch[2], 10),
+      parseInt(vhrMatch[3], 10),
+      url.searchParams.get('r') === '2',
     ));
     return;
   }

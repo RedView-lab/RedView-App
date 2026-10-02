@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, memo } from 'react';
+import { useEffect, useMemo, useRef, useState, memo } from 'react';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
+import { useHorizontalScrollOverflow } from '@/shared/hooks/useHorizontalScrollOverflow';
 import { useAppI18n } from '@/shared/i18n';
 import { variantModifierLabel } from '@/shared/lib/platform';
 import { useRouteMergeToolOptional } from '../../routeMerge';
@@ -37,6 +38,9 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
   onTogglePanel,
 }: CenterPanelToolbarProps) {
   const { t } = useAppI18n();
+  // Half-screen window: the track overflows, wheel scrolls it, edges fade.
+  const viewportRef = useRef<HTMLDivElement>(null);
+  useHorizontalScrollOverflow(viewportRef);
   const store = useProjectStoreOptional();
   const routeMergeTool = useRouteMergeToolOptional();
   const routeSplitTool = useRouteSplitToolOptional();
@@ -189,7 +193,7 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
 
   return (
     <section className="rvc-center-toolbar" aria-label={t("Barre d'outils centrale")}>
-      <div className="rvc-center-toolbar__viewport">
+      <div ref={viewportRef} className="rvc-center-toolbar__viewport">
         <div className="rvc-center-toolbar__track" role="toolbar" aria-label={t("Outils d'édition du parcours")}>
           {/*
            * Center panel toggle — mirrors the map-side panel toggles:

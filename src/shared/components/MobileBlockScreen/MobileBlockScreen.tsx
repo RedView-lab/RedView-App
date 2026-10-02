@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type KeyboardEvent } from 'react';
+import { MIN_VIEWPORT_HEIGHT, MIN_VIEWPORT_WIDTH } from '@/shared/hooks/useIsMobileDevice';
 import { useAppI18n } from '@/shared/i18n';
 import './MobileBlockScreen.css';
 
@@ -87,11 +88,14 @@ export function NarrowViewportOverlay({ onContinue }: NarrowViewportOverlayProps
         />
 
         <h1 id={titleId} className="rv-mobile-block-title">
-          {t('Fenêtre trop étroite')}
+          {t('Fenêtre trop petite')}
         </h1>
 
         <p id={descId} className="rv-mobile-block-desc">
-          {t("RedView est conçu pour un écran d'ordinateur d'au moins 960 px de large. Agrandissez la fenêtre pour retrouver l'interface complète.")}
+          {t("RedView est conçu pour une fenêtre d'au moins {{width}} × {{height}} px. Agrandissez-la pour retrouver l'interface complète.", {
+            width: MIN_VIEWPORT_WIDTH,
+            height: MIN_VIEWPORT_HEIGHT,
+          })}
         </p>
 
         <button

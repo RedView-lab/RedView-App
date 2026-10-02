@@ -123,6 +123,40 @@
   line-height: 1;
 }
 
+/*
+ * Short canvas (pages/Dashboard/lib/layout.ts, MAP_VIEWPORT_CONTROLS_COMPACT_*):
+ * 2 columns of 32 px buttons (68 × 140 px) so the map stage stays usable at
+ * 1:1 on a 1366×768 or 1080p-at-150 % screen. View toggles stay in the right
+ * column, zoom and 2D/3D on the left. Icons keep their size.
+ */
+.rvmvc-map-tools--compact {
+  display: grid;
+  grid-template-columns: 32px 32px;
+  grid-auto-rows: 32px;
+  grid-template-areas:
+    'zoom-in fullscreen'
+    'zoom-out panel'
+    'dimension compass'
+    '. legend';
+  gap: 4px;
+}
+
+.rvmvc-map-tools--compact .rvmvc-map-tools__button,
+.rvmvc-map-tools--compact .rvmvc-map-tools__button--label {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 6px;
+}
+
+.rvmvc-map-tools--compact .rvmvc-map-tools__slot-fullscreen { grid-area: fullscreen; }
+.rvmvc-map-tools--compact .rvmvc-map-tools__button--panel { grid-area: panel; }
+.rvmvc-map-tools--compact .rvmvc-map-tools__slot-compass { grid-area: compass; }
+.rvmvc-map-tools--compact .rvmvc-map-tools__slot-zoom-in { grid-area: zoom-in; }
+.rvmvc-map-tools--compact .rvmvc-map-tools__slot-zoom-out { grid-area: zoom-out; }
+.rvmvc-map-tools--compact .rvmvc-map-tools__slot-dimension { grid-area: dimension; }
+.rvmvc-map-tools--compact .rvmvc-map-tools__legend-row { grid-area: legend; }
+
 .rvmvc-map-tools__legend-row {
   position: relative;
   display: flex;

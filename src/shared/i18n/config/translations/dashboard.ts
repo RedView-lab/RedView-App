@@ -392,8 +392,6 @@ export const dashboardTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Fusion impossible: extrémités de trace invalides.', en: 'Merge failed: invalid route endpoints.' },
   { fr: 'Le raccord de fusion sort de la zone autorisée.', en: 'The merge connector leaves the allowed area.' },
   { fr: 'Fusion impossible avec les traces sélectionnées.', en: 'Merge failed with the selected routes.' },
-  { fr: 'Fusion créée avec raccord BRouter simplifié entre les deux traces.', en: 'Merge created with a simplified BRouter connector between the two routes.' },
-  { fr: 'Fusion créée avec raccord BRouter allégé entre les deux traces.', en: 'Merge created with a lighter BRouter connector between the two routes.' },
   { fr: 'Fusion créée avec raccord BRouter entre les deux traces.', en: 'Merge created with a BRouter connector between the two routes.' },
   { fr: 'Fusion créée.', en: 'Merge created.' },
   { fr: 'Erreur pendant la fusion.', en: 'Error while merging.' },

@@ -1,7 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
 
-/** Largeur de fenêtre en dessous de laquelle l'interface n'est plus confortable. */
-export const NARROW_VIEWPORT_MAX_WIDTH = 960;
+/**
+ * Plus petite fenêtre (px CSS, l'interface est à 1:1) où le dashboard tient
+ * sans chevauchement : un panneau latéral + panneau central (816 px de large),
+ * outils carte compacts + panneau central court (~480 px de haut), voir
+ * pages/Dashboard/lib/layout.ts. Une fenêtre demi-écran 1080p (~958 px) passe.
+ */
+export const MIN_VIEWPORT_WIDTH = 820;
+export const MIN_VIEWPORT_HEIGHT = 500;
 /** Taille d'écran max d'un « vrai » appareil mobile (téléphone, petite tablette). */
 const MOBILE_DEVICE_MAX_WIDTH = 1024;
 
@@ -37,7 +43,7 @@ function detectMobileDevice(): boolean {
 
 function isNarrowViewport(): boolean {
   if (typeof window === 'undefined') return false;
-  return window.innerWidth < NARROW_VIEWPORT_MAX_WIDTH;
+  return window.innerWidth < MIN_VIEWPORT_WIDTH || window.innerHeight < MIN_VIEWPORT_HEIGHT;
 }
 
 function readNarrowOverlayDismissed(): boolean {
@@ -51,10 +57,10 @@ function readNarrowOverlayDismissed(): boolean {
 /**
  * - `isMobile` : vrai appareil mobile détecté au chargement → écran bloquant
  *   (l'app n'est pas montée).
- * - `showNarrowViewportOverlay` : fenêtre de bureau trop étroite → simple
+ * - `showNarrowViewportOverlay` : fenêtre de bureau trop petite (MIN_VIEWPORT_*) → simple
  *   superposition au-dessus de l'app, qui reste montée (historique, imports,
  *   contexte WebGL conservés). Disparaît d'elle-même quand la fenêtre est
- *   ré-élargie ; `dismissNarrowViewportOverlay` la masque pour la session.
+ *   agrandie ; `dismissNarrowViewportOverlay` la masque pour la session.
  */
 export function useIsMobileDevice() {
   const [isMobile] = useState<boolean>(() => detectMobileDevice());

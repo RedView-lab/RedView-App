@@ -10,6 +10,7 @@ import { attachStatus } from './status';
 import { attachDemSource } from './demSource';
 import { attachReload } from './reload';
 import { attachIgnOrtho } from './ignOrtho';
+import { attachVhrOrtho } from './vhrOrtho';
 import { attachListeners } from './listeners';
 import { attachStyleBootstrap } from './styleBootstrap';
 import { attachHeartbeat } from './heartbeat';
@@ -30,6 +31,7 @@ import { attachHeartbeat } from './heartbeat';
  *  - `demSource.ts`        : DEM source attach/refresh + terrain bind.
  *  - `reload.ts`           : reload pipeline + escalation.
  *  - `ignOrtho.ts`         : optional IGN ortho overlay.
+ *  - `vhrOrtho.ts`         : IGN PCRS / THR overlay above Mapbox Satellite.
  *  - `listeners.ts`        : tile-tracking + idle/style hooks.
  *  - `styleBootstrap.ts`   : initial + post-switch style bootstrap.
  *  - `heartbeat.ts`        : anti-flat periodic terrain verification.
@@ -49,6 +51,7 @@ export function createMapLifecycleController(
   attachDemSource(ctx);
   attachReload(ctx);
   attachIgnOrtho(ctx);
+  attachVhrOrtho(ctx);
   attachListeners(ctx);
   attachStyleBootstrap(ctx);
   attachHeartbeat(ctx);

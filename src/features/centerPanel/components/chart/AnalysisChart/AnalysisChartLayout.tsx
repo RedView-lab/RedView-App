@@ -29,7 +29,7 @@ type PauseBand = {
 
 const EMPTY_PAUSE_BANDS: PauseBand[] = [];
 
-type AlertBand = { id: string; startRatio: number; endRatio: number };
+type AlertBand = { id: string; startRatio: number; endRatio: number; label: string };
 
 const EMPTY_ALERT_BANDS: AlertBand[] = [];
 
@@ -52,6 +52,8 @@ interface AnalysisChartLayoutProps {
   dayNightBands: Array<{ id: string; startRatio: number; endRatio: number }>;
   pauseBands?: PauseBand[];
   alertBands?: AlertBand[];
+  /** Clic sur l'icône d'une colonne « Alertes » (id de la fenêtre). */
+  onAlertClick?: (alertId: string) => void;
   yPositions: Array<{ value: number; ratio: number }>;
   y2Positions: Array<{ value: number; ratio: number }>;
   xPositions: Array<{ value: number; ratio: number }>;
@@ -130,9 +132,7 @@ const ChartBackgroundLayer = memo(function ChartBackgroundLayer({
             key={id}
             className="rvchart__alert-band"
             style={{ left: `${clampedStart * 100}%`, width: `${(clampedEnd - clampedStart) * 100}%` }}
-          >
-            <img className="rvchart__alert-icon" src="/svgv2/icone/search-filter-alertes.svg" alt="" />
-          </div>
+          />
         );
       })}
       {dayNightBands.map(({ id, startRatio, endRatio }) =>
@@ -242,6 +242,49 @@ const ChartSeriesRows = memo(function ChartSeriesRows({
 
 const MemoChartZoomNavigator = memo(ChartZoomNavigator);
 
+/**
+ * Icônes cliquables des colonnes « Alertes » : ouvrent la fiche du tronçon,
+ * comme les icônes de la carte. Au-dessus des POI, hors de la couche de fond
+ * (`aria-hidden`, sans pointeur).
+ */
+const ChartAlertIconLayer = memo(function ChartAlertIconLayer({
+  alertBands,
+  handlerRef,
+}: {
+  alertBands: AlertBand[];
+  handlerRef: RefObject<((alertId: string) => void) | undefined>;
+}) {
+  if (alertBands.length === 0) return null;
+  return (
+    <div className="rvchart__layer rvchart__layer--alerts">
+      {alertBands.map(({ id, startRatio, endRatio, label }) => {
+        const clampedStart = Math.max(0, startRatio);
+        const clampedEnd = Math.min(1, endRatio);
+        if (clampedEnd <= clampedStart) return null;
+        return (
+          <button
+            key={id}
+            type="button"
+            className="rvchart__alert-icon"
+            style={{ left: `${((clampedStart + clampedEnd) / 2) * 100}%` }}
+            title={label}
+            aria-label={label}
+            // Le clic ne doit pas lancer la sélection / le centrage du graphe.
+            onPointerDown={(event) => event.stopPropagation()}
+            onDoubleClick={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              handlerRef.current?.(id);
+            }}
+          >
+            <img src="/svgv2/icone/search-filter-alertes.svg" alt="" draggable={false} />
+          </button>
+        );
+      })}
+    </div>
+  );
+});
+
 export function AnalysisChartLayout({
   style,
   axis1Metric,
@@ -255,6 +298,7 @@ export function AnalysisChartLayout({
   dayNightBands,
   pauseBands = EMPTY_PAUSE_BANDS,
   alertBands = EMPTY_ALERT_BANDS,
+  onAlertClick,
   yPositions,
   y2Positions,
   xPositions,
@@ -286,8 +330,10 @@ export function AnalysisChartLayout({
   // Handlers POI lus au clic : la couche marqueurs reste mémoïsée même si le parent
   // recrée ses callbacks à chaque rendu (survol).
   const poiHandlersRef = useRef<PoiCanvasHandlers>({ onPoiClusterClick, onPoiClick });
+  const alertHandlerRef = useRef(onAlertClick);
   useEffect(() => {
     poiHandlersRef.current = { onPoiClusterClick, onPoiClick };
+    alertHandlerRef.current = onAlertClick;
   });
 
   const hoverLeft = activeHover ? `${(activeHover.ratioX * 100).toFixed(4)}%` : '0%';
@@ -352,6 +398,8 @@ export function AnalysisChartLayout({
               height={plotHeight}
             />
           </div>
+
+          <ChartAlertIconLayer alertBands={alertBands} handlerRef={alertHandlerRef} />
 
           <div className="rvchart__layer rvchart__layer--overlay" aria-hidden="true">
             {hoverOverlay}

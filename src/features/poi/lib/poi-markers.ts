@@ -29,7 +29,7 @@ import type {
   Map as MapboxMap,
   MapMouseEvent,
 } from 'mapbox-gl';
-import { buildPopupClearanceOffset, flyToPoi, isEventFromDomMarker } from '@/features/map3d';
+import { buildPopupClearanceOffset, flyToPoi, isEventFromDomMarker, keepPopupInVisibleMap } from '@/features/map3d';
 
 import type { PoiFeature } from '../types';
 import { POI_LABELS } from '../types';
@@ -544,6 +544,7 @@ export class PoiMarkerManager {
 
     this.popup = popup;
     this.popupKey = key;
+    keepPopupInVisibleMap(popup, this.map);
     popup.setLngLat([feature.lon, feature.lat]).addTo(this.map);
     this.getActions().onSelectPoi?.(feature);
   }

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { useAppI18n } from '@/shared/i18n';
+import { appScaledOverlayStyle, readAppScale } from '@/shared/lib/appScale';
 
 type MenuDestination = {
   id: string | null;
@@ -62,10 +63,7 @@ export function ProjectBrowserCardMenu({
     const updatePosition = () => {
       // Portaled to <body>, outside the scaled dashboard canvas: read the
       // canvas scale on the anchor so the menu keeps the browser's density.
-      const rawScale = Number.parseFloat(
-        window.getComputedStyle(anchorEl).getPropertyValue('--app-scale'),
-      );
-      const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
+      const scale = readAppScale(anchorEl);
       const scaledWidth = MENU_WIDTH * scale;
       const rect = anchorEl.getBoundingClientRect();
       const nextTop = rect.bottom + MENU_GAP * scale;
@@ -95,11 +93,8 @@ export function ProjectBrowserCardMenu({
       role="menu"
       aria-label={t(title)}
       style={{
-        top: menuStyle.top,
-        left: menuStyle.left,
+        ...appScaledOverlayStyle(menuStyle),
         width: MENU_WIDTH,
-        transform: menuStyle.scale !== 1 ? `scale(${menuStyle.scale})` : undefined,
-        transformOrigin: 'top left',
       }}
     >
       {onDuplicate ? (

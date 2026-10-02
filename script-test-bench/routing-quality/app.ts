@@ -13,13 +13,13 @@ export interface LoadedApp {
   createDefaultItinerary(index?: number): any;
   syncTracageOnActivityChange(activity: string, mode: string, tolerance?: number): { roadTypes: any; priorities?: any };
   syncTracageOnSurfaceRangeChange(min: string, max: string, activity: string): { roadTypes: any };
-  resolveItineraryRouting(it: any, signal?: AbortSignal): Promise<{ profileId: string; stockProfileId: string; brf: string | null; roadTypes: { warnings: string[] } }>;
+  resolveItineraryRouting(it: any, signal?: AbortSignal): Promise<{ profileId: string; brf: string; roadTypes: { warnings: string[] } }>;
   resolveRouteRequest(args: {
     itinerary: any;
     signal: AbortSignal;
     requestBase: { start: Pt; end: Pt; via?: Pt[]; signal?: AbortSignal };
     setRouteWarnings: (w: string[]) => void;
-  }): Promise<{ route: any; usedFallbackProfile: boolean; resolvedWarnings: string[]; resolved: { profileId: string } }>;
+  }): Promise<{ route: any; resolvedWarnings: string[]; resolved: { profileId: string } }>;
   buildBrfProfile(inputs: any): string;
   resolveRoadTypes(rt: any): { effective: any; warnings: string[] };
   ensureProfileUploaded(brf: string, signal?: AbortSignal): Promise<string>;

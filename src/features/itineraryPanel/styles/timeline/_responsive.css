@@ -24,7 +24,7 @@
   }
 
   .rvi-tl-schedule__km-marker {
-    font-size: var(--rv-font-size-2xs);
+    font-size: var(--rv-font-size-xs);
   }
 
   .rvi-tl-schedule__event-metric {
@@ -103,7 +103,7 @@
     font-size: var(--rv-font-size-xs);
   }
 
-  .rvi-tl-schedule__km-marker { font-size: var(--rv-font-size-2xs); }
+  .rvi-tl-schedule__km-marker { font-size: var(--rv-font-size-xs); }
 
   .rvi-tl-schedule__event-name {
     font-size: var(--rv-font-size-md);

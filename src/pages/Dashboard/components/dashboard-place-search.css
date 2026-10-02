@@ -19,9 +19,10 @@
   margin: 0;
 }
 
+/* Wraps rather than squeezes: a chip never clips its icon or label. */
 .rvd-place-search__row {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
   width: 100%;
@@ -108,7 +109,7 @@
 
 .rvd-place-search__filters {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
   min-width: 0;
@@ -117,8 +118,17 @@
 
 .rvd-place-search__filter {
   position: relative;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   min-width: 0;
+}
+
+/* Narrow map stage (PLACE_SEARCH_FULL_WIDTH): icon-only filters, label in the tooltip. */
+.rvd-place-search--compact .rvd-place-search__filter-label {
+  display: none;
+}
+
+.rvd-place-search--compact .rvd-place-search__filter-shell {
+  padding-right: 8px;
 }
 
 .rvd-place-search__filter-shell {

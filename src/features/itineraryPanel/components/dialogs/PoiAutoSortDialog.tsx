@@ -11,6 +11,7 @@ import { createPortal } from 'react-dom';
 
 import { DEFAULT_AUTO_SORT_RULES } from '@/features/poi/lib/autoSort';
 import { useAppI18n } from '@/shared/i18n';
+import { appScaleStyle, readAppScale } from '@/shared/lib/appScale';
 
 import type { PoiAutoSortSummary } from '../../types';
 import {
@@ -35,12 +36,6 @@ interface PoiAutoSortDialogProps {
   stale: boolean;
   /** Toggle « Affiner les résultats » éteint : propose de l'activer. */
   onEnable?: () => void;
-}
-
-function readAppScale(el: HTMLElement | null): number {
-  if (!el) return 1;
-  const raw = Number.parseFloat(window.getComputedStyle(el).getPropertyValue('--app-scale'));
-  return Number.isFinite(raw) && raw > 0 ? raw : 1;
 }
 
 function formatHours(hours: number): string {
@@ -171,7 +166,7 @@ export function PoiAutoSortDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="rvi-autosort-dialog-title"
-        style={{ transform: `scale(${scale})` }}
+        style={appScaleStyle(scale)}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <header className="rvi-autosort-dialog__header">

@@ -133,10 +133,12 @@ export function useItineraryGpxActions({
             const existingZones = copy.forbiddenZones ?? [];
             const withoutCurrentZone = existingZones.filter((existing) => existing.id !== zone.id);
             copy.forbiddenZones = [...withoutCurrentZone, partialZone];
-            if (copy.gpxRoute?.source === 'brouter' && (copy.gpxRoute.points.length ?? 0) >= 2) {
+            // Tracé BRouter ou GPX importé : la traversée de la zone est recalculée.
+            const routePoints = copy.gpxRoute?.points;
+            if (routePoints && routePoints.length >= 2) {
               copy.pendingRoutePatch = buildPendingRoutePatchForForbiddenZone(
                 copy.timeline,
-                copy.gpxRoute.points,
+                routePoints,
                 partialZone,
               );
             }

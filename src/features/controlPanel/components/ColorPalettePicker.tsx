@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useAppI18n } from '@/shared/i18n';
+import { appScaledOverlayStyle, readAppScale } from '@/shared/lib/appScale';
 
 interface ColorPalettePickerProps {
   color: string;
@@ -59,16 +60,14 @@ export function ColorPalettePicker({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState<{ top: number; left: number; scale: number; placeAbove: boolean } | null>(null);
+  const [position, setPosition] = useState<{ top: number; left: number; scale: number } | null>(null);
   const currentColor = normalizeHex(color);
 
   const updatePosition = useCallback(() => {
     const trigger = triggerRef.current;
     if (!trigger) return;
 
-    const computed = window.getComputedStyle(trigger);
-    const rawScale = Number.parseFloat(computed.getPropertyValue('--app-scale'));
-    const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
+    const scale = readAppScale(trigger);
 
     const rect = trigger.getBoundingClientRect();
     const popupWidth = POPUP_WIDTH * scale;
@@ -83,7 +82,7 @@ export function ColorPalettePicker({
     const maxTop = Math.max(VIEWPORT_GAP, window.innerHeight - popupHeight - VIEWPORT_GAP);
     const top = Math.min(Math.max(preferredTop, VIEWPORT_GAP), maxTop);
 
-    setPosition({ top, left, scale, placeAbove });
+    setPosition({ top, left, scale });
   }, []);
 
   useLayoutEffect(() => {
@@ -124,12 +123,7 @@ export function ColorPalettePicker({
         <div
           ref={popupRef}
           className="rvc-color-palette__popup"
-          style={{
-            top: position.top,
-            left: position.left,
-            transform: position.scale !== 1 ? `scale(${position.scale})` : undefined,
-            transformOrigin: position.placeAbove ? 'bottom left' : 'top left',
-          }}
+          style={appScaledOverlayStyle(position)}
           role="dialog"
           aria-label={t(ariaLabel ?? 'Choisir une couleur')}
         >

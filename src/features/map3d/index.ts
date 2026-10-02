@@ -40,6 +40,7 @@ export {
 	haversineDistanceKm,
 } from './lib/cameraFlight';
 export { buildPopupClearanceOffset } from './lib/popupOffset';
+export { keepPopupInVisibleMap } from './lib/mapPopupSafeArea';
 export type { MarkerClearance } from './lib/popupOffset';
 export type {
 	FlyToBoundsOptions,

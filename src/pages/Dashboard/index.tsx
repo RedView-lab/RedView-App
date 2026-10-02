@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { setDprLayoutScale } from '@/features/map3d';
+import { appScaleStyle, publishRootAppScale } from '@/shared/lib/appScale';
 import { ProjectBrowserOverlay } from '@/features/projectBrowser';
 import { LidarProvider } from '@/features/lidar/components/LidarContext';
 import { DashboardEditor } from './components/DashboardEditor';
@@ -112,7 +113,7 @@ export default function Dashboard({
   });
 
   // Render canvases (Mapbox, charts) at on-screen resolution despite the
-  // `transform: scale(appScale)` wrapper. Layout effect: runs before useMap's
+  // canvas scale (`appScaleStyle`). Layout effect: runs before useMap's
   // passive effect creates the map. The logical size can stay constant while
   // appScale changes (proportional window resize), so force a map resize.
   useLayoutEffect(() => {
@@ -122,14 +123,8 @@ export default function Dashboard({
 
   // Mirror the scale on :root for overlays portaled to <body> (outside the
   // scaled canvas) that must keep the dashboard density: `.rv-app-scaled-layer`
-  // in src/index.css.
-  useLayoutEffect(() => {
-    const root = document.documentElement;
-    root.style.setProperty('--app-scale', String(layout.appScale));
-    return () => {
-      root.style.removeProperty('--app-scale');
-    };
-  }, [layout.appScale]);
+  // in src/index.css, `appScaledOverlayStyle` in shared/lib/appScale.ts.
+  useLayoutEffect(() => publishRootAppScale(layout.appScale), [layout.appScale]);
 
   const handleMapReady = useCallback((map: MapboxMap) => {
     setMapInstance(map);
@@ -143,7 +138,11 @@ export default function Dashboard({
     ? PANEL_PADDING
     : rightDockWidth + PANEL_PADDING;
 
-  const statusDockRight = rightDockOffset;
+  // Short canvas: the status dock no longer fits under the map tools in the
+  // map stage height, it moves beside them.
+  const statusDockRight = layout.isShortCanvas
+    ? rightDockOffset + layout.mapToolsWidth + PANEL_PADDING
+    : rightDockOffset;
   const statusDockBottom = layout.centerToolbarVisible
     ? layout.designH - layout.centerToolbarTop + CENTER_PANEL_STACK_GAP
     : 88;
@@ -158,7 +157,7 @@ export default function Dashboard({
   const dashboardSearchLeft = !leftPanelOpen
     ? PANEL_PADDING
     : leftPanelWidth + PANEL_PADDING * 2;
-  const dashboardSearchRight = rightDockOffset + 40 + PANEL_PADDING;
+  const dashboardSearchRight = rightDockOffset + layout.mapToolsWidth + PANEL_PADDING;
   const dashboardSearchVisible = !projectBrowserOpen && activeProjectId != null;
 
   const styles = getDashboardStyles({
@@ -193,6 +192,7 @@ export default function Dashboard({
     <LidarProvider>
       <div style={{ position: 'relative', width: '100vw', height: '100dvh', overflow: 'hidden' }}>
         <div
+          data-rv-canvas=""
           style={{
             position: 'absolute',
             top: 0,
@@ -200,8 +200,9 @@ export default function Dashboard({
             width: `${layout.scaledViewportWidth}px`,
             height: `${layout.scaledViewportHeight}px`,
             overflow: 'hidden',
-            transform: `scale(${layout.appScale})`,
-            transformOrigin: 'top left',
+            // 1:1 up to the design reference, gentle growth above with CSS
+            // zoom (text laid out at its final size, never resampled).
+            ...appScaleStyle(layout.appScale),
             // Logical canvas: `@container rv-canvas (...)` and the
             // --rv-canvas-* sizes replace viewport media queries and vw/vh
             // units, which measure the real screen instead (src/index.css).

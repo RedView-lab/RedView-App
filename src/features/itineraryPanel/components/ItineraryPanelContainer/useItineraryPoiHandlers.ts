@@ -17,9 +17,11 @@ import type { Itinerary, ItineraryProject, PoiAutoSortSummary } from '../../type
 import { cumulativeRouteLengthsM, projectDistanceAlongRouteM, roundDistanceKm } from '../../lib/routes';
 import {
   buildPendingRoutePatchForEditedRow,
+  hasEditableRoute,
   insertTimelineItem,
   insertWaypointIntoTimeline,
   setPendingRouteEditForPlacedRow,
+  setPendingRoutePatchAfterRemoval,
 } from './timelineMutations';
 import { removePoiAndLinkedWaypoints } from './poiDraft';
 import { setManualFavoriteOrigin, setPoiFeatureFavoriteState } from './poiFeatureUtils';
@@ -224,8 +226,8 @@ export function useItineraryPoiHandlers({
         delete it.pendingTraceExtension;
         it.prediction = null;
 
-        if (it.gpxRoute?.source === 'brouter') {
-          it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, row.id);
+        if (hasEditableRoute(it)) {
+          it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it, row.id);
         }
       });
     }
@@ -255,7 +257,7 @@ export function useItineraryPoiHandlers({
 
       delete it.routeAudit;
 
-      if (it.gpxRoute?.source === 'brouter' && !result.isDirectOnRoute) {
+      if (hasEditableRoute(it) && !result.isDirectOnRoute) {
         setPendingRouteEditForPlacedRow(it, createdId);
         it.prediction = null;
       } else {
@@ -284,8 +286,8 @@ export function useItineraryPoiHandlers({
       delete it.pendingTraceExtension;
       it.prediction = null;
 
-      if (it.gpxRoute?.source === 'brouter') {
-        it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, row.id);
+      if (hasEditableRoute(it)) {
+        it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it, row.id);
       }
     });
   }, [resolvePoiTitle, updateActive]);
@@ -348,6 +350,8 @@ export function useItineraryPoiHandlers({
     updateActive((it) => {
       const waypointId = `poi-waypoint-${feature.id}`;
       const existingIndex = it.timeline.findIndex((row) => row.id === waypointId);
+      // Copie : la timeline est modifiée en place ci-dessous.
+      const previousTimeline = [...it.timeline];
 
       if (nextEnabled) {
         if (existingIndex >= 0) return;
@@ -375,8 +379,9 @@ export function useItineraryPoiHandlers({
       delete it.pendingTraceExtension;
       delete it.routeAudit;
 
-      if (it.gpxRoute?.source === 'brouter') {
-        it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, waypointId);
+      if (hasEditableRoute(it)) {
+        if (nextEnabled) it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it, waypointId);
+        else setPendingRoutePatchAfterRemoval(it, previousTimeline);
         it.prediction = null;
       }
     });
@@ -405,8 +410,9 @@ export function useItineraryPoiHandlers({
 
   const handlePoiDelete = useCallback((feature: PoiFeature) => {
     const applyDelete = (it: Itinerary) => {
+      const previousTimeline = it.timeline;
       const removed = removePoiAndLinkedWaypoints(it, feature.id);
-      delete it.pendingRoutePatch;
+      setPendingRoutePatchAfterRemoval(it, previousTimeline);
       delete it.pendingTraceExtension;
       delete it.routeAudit;
       it.prediction = null;

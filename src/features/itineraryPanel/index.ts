@@ -6,4 +6,5 @@ export {
   usePredictionStore,
   usePredictionStoreOptional,
 } from './context/PredictionStore';
+export { resolveRouteRequest } from './hooks/useItineraryBrouterRouting/resolveRouteRequest';
 export type * from './types';

@@ -13,7 +13,8 @@
   gap: 4px;
   min-width: 0;
   min-height: 0;
-  max-height: clamp(80px, calc(var(--rvc-center-panel-height, 390px) - 310px), 160px);
+  /* 80 px from the regular 390 px panel up, 40 px (one row) on a 220 px one. */
+  max-height: clamp(40px, calc(var(--rvc-center-panel-height, 390px) - 310px), 80px);
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 2px;

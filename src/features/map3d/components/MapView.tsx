@@ -18,6 +18,7 @@ import type { OverlayReloadRegistrar, OverlayStatusReporter } from '../lib/overl
 import type { BasemapRenderConfig } from '@/features/controlPanel/lib';
 import { dispatchItineraryMapAction } from '@/features/itineraryPanel/lib/mapActionBridge';
 import { resolvePanelArea, resolvePanelPlacement, type MapOverlayInsets } from './panelPlacement';
+import { setMapOverlayInsets } from '../lib/mapOverlayInsets';
 
 function sampleSlopePct(map: MapboxMap, lng: number, lat: number): number | null {
   const elevation = map.queryTerrainElevation?.([lng, lat]);
@@ -104,6 +105,11 @@ export default memo(function MapView({
       onMapReady(map.current);
     }
   }, [isLoaded, map, onMapReady]);
+
+  // Publié pour les popups Mapbox (`keepPopupInVisibleMap`), hors de l'arbre React.
+  useEffect(() => {
+    if (isLoaded && map.current) setMapOverlayInsets(map.current, overlayInsets);
+  }, [isLoaded, map, overlayInsets]);
 
   const handleMapContextMenuAction = useCallback((payload: MapContextMenuActionPayload) => {
     onMapContextMenuAction?.(payload);

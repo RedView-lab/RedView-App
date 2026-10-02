@@ -20,6 +20,7 @@ export { buildBrouterUrl, formatLonlats, resolveEndpoint } from './api';
 export {
   COARSE_SEARCH_WEIGHT,
   DEFAULT_SEARCH_COST_SCALE,
+  GREEDY_COARSE_SEARCH_WEIGHT,
   effectiveSearchKm,
   requestBeelineKm,
   resolveSearchCoefficient,
@@ -70,6 +71,8 @@ export {
 } from './routing';
 export {
   ANCHOR_SECTION_KM,
+  LOCAL_EDIT_WINDOW_KM,
+  TIGHT_ANCHOR_SPACING_KM,
   buildAnchoredVia,
   needsLongDistanceAnchors,
 } from './routing';

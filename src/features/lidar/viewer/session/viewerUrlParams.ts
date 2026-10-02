@@ -76,6 +76,16 @@ export function parseViewerParamsFromUrl(): {
   crs: DetectedCrs;
   altRef: AltitudeRef;
   forceWebGL: boolean;
+  /** `?bench=orbit`: scripted camera path that reports the real frame cadence (see perf/viewerBench). */
+  bench: 'orbit' | null;
+  /** `?budget=<points>`: fixed point budget (benches comparing variants at equal load), else null. */
+  pinnedBudget: number | null;
+  /**
+   * Quality while the camera moves, for A/B benches: `?mscale=<0.3–1>`
+   * overrides the platform's render scale (null: platform default),
+   * `?msquare=0` keeps round sprites.
+   */
+  motionQuality: { scale: number | null; squares: boolean };
   tileFileName: string;
   legacyTileFileName: string;
   viewerTileCoord: TileCoord;
@@ -88,6 +98,14 @@ export function parseViewerParamsFromUrl(): {
   const parsedCrs = parseCrsParam(params.get('crs'));
   const parsedAltRef = parseAltRefParam(params.get('alt'));
   const forceWebGL = params.get('engine') === 'webgl';
+  const bench = params.get('bench') === 'orbit' ? 'orbit' : null;
+  const rawBudget = Number(params.get('budget'));
+  const pinnedBudget = Number.isFinite(rawBudget) && rawBudget >= 10_000 ? Math.min(Math.round(rawBudget), 100_000_000) : null;
+  const rawMotionScale = Number(params.get('mscale'));
+  const motionQuality = {
+    scale: params.has('mscale') && Number.isFinite(rawMotionScale) ? Math.min(1, Math.max(0.3, rawMotionScale)) : null,
+    squares: params.get('msquare') !== '0',
+  };
 
   if (!Number.isFinite(xKm) || !Number.isFinite(yKm) || !parsedCrs || !parsedAltRef) {
     throw new Error(translateAppText('Paramètres invalides. URL attendue : ?x=1003&y=6547&crs=LAMB93&alt=IGN69'));
@@ -116,6 +134,9 @@ export function parseViewerParamsFromUrl(): {
     crs,
     altRef,
     forceWebGL,
+    bench,
+    pinnedBudget,
+    motionQuality,
     tileFileName,
     legacyTileFileName,
     viewerTileCoord,

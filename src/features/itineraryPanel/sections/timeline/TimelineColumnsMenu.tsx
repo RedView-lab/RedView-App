@@ -14,6 +14,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useAppI18n } from '@/shared/i18n';
+import { appScaledOverlayStyle, readAppScale } from '@/shared/lib/appScale';
 import type { TimelineColumnDef, TimelineColumnId } from './TimelineColumns';
 
 interface MenuStyle {
@@ -38,9 +39,7 @@ const ROW_HEIGHT = 30;
 
 function computeStyle(anchorEl: HTMLElement, rowCount: number): MenuStyle {
   const rect = anchorEl.getBoundingClientRect();
-  const computed = window.getComputedStyle(anchorEl);
-  const rawScale = Number.parseFloat(computed.getPropertyValue('--app-scale'));
-  const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
+  const scale = readAppScale(anchorEl);
 
   const offset = 6 * scale;
   const fullHeight = rowCount * ROW_HEIGHT * scale + 8;
@@ -120,6 +119,7 @@ export function TimelineColumnsMenu({
   if (!open || !anchorEl || !menuStyle) return null;
 
   const portalTarget = resolvePortalTarget(anchorEl);
+  const inScaledLayer = portalTarget !== anchorEl.ownerDocument.body;
 
   return createPortal(
     <div
@@ -128,12 +128,9 @@ export function TimelineColumnsMenu({
       role="menu"
       aria-label={t('Colonnes')}
       style={{
-        top: menuStyle.top,
-        left: menuStyle.left,
+        ...appScaledOverlayStyle(menuStyle, inScaledLayer),
         width: menuStyle.width,
         maxHeight: menuStyle.maxHeight,
-        transform: `scale(${menuStyle.scale})`,
-        transformOrigin: 'top left',
       }}
       onMouseDown={(event) => event.stopPropagation()}
     >

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Itinerary, ItineraryProject, TimelineItem } from '../../types';
 import { resolveRouteRequest } from '../../hooks/useItineraryBrouterRouting/resolveRouteRequest';
-import type { RouteRequestBase } from '../../hooks/useItineraryBrouterRouting/profileFallback';
+import type { RouteRequestBase } from '../../hooks/useItineraryBrouterRouting/customProfileFetch';
 import {
   buildStoredRoutePointsFromBrouter,
   toGeometryRoutePoints,
@@ -52,6 +52,40 @@ function getTimelineAnchors(
 
   return anchors;
 }
+
+/**
+ * Tracé actuel entre chaque paire d'ancres consécutives ([lon, lat]), pour
+ * servir de tracé de référence aux longs tronçons (ancres prises dessus).
+ */
+function sliceTrackBetweenAnchors(
+  routePoints: GpxRoutePoint[],
+  anchors: { lat: number; lon: number }[],
+): [number, number][][] {
+  const indices = [0];
+  for (let a = 1; a < anchors.length - 1; a += 1) {
+    const anchor = anchors[a]!;
+    const kx = Math.cos((anchor.lat * Math.PI) / 180);
+    let best = indices[a - 1]!;
+    let bestD2 = Number.POSITIVE_INFINITY;
+    for (let i = indices[a - 1]!; i < routePoints.length; i += 1) {
+      const dLon = (routePoints[i]!.lon - anchor.lon) * kx;
+      const dLat = routePoints[i]!.lat - anchor.lat;
+      const d2 = dLon * dLon + dLat * dLat;
+      if (d2 < bestD2) {
+        bestD2 = d2;
+        best = i;
+      }
+    }
+    indices.push(best);
+  }
+  indices.push(routePoints.length - 1);
+  return indices.slice(1).map((to, i) =>
+    routePoints.slice(indices[i]!, to + 1).map((point): [number, number] => [point.lon, point.lat]),
+  );
+}
+
+/** Tronçons calculés en parallèle (BRouter de prod : 4 threads). */
+const RECALCULATE_CONCURRENCY = 2;
 
 function buildRoutePointsFromBrouterRoute(
   route: BrouterRoute,
@@ -163,43 +197,67 @@ export function useRecalculateTrace({
     const targetId = active.id;
     const sourceRoutePoints = active.gpxRoute.points;
     const segmentCount = anchors.length - 1;
-    const segments: GpxRoutePoint[][] = [];
-    const segmentRoutes: BrouterRoute[] = [];
+    const segments: GpxRoutePoint[][] = new Array(segmentCount);
+    const segmentRoutes: BrouterRoute[] = new Array(segmentCount);
     const forbiddenPolygons = formatForbiddenZonePolygons(active.forbiddenZones);
+    // Un GPX est l'intention de l'utilisateur : les ancres des longs tronçons
+    // y sont prises directement, au lieu d'un tracé grossier.
+    const referenceTracks = active.gpxRoute.source === 'gpx'
+      ? sliceTrackBetweenAnchors(sourceRoutePoints, anchors)
+      : null;
+
+    const routeSegment = async (i: number) => {
+      const start = anchors[i];
+      const end = anchors[i + 1];
+
+      console.log(
+        `[Recalculate] segment ${i + 1}/${segmentCount}:`,
+        `${start.lon.toFixed(4)},${start.lat.toFixed(4)}`,
+        '→',
+        `${end.lon.toFixed(4)},${end.lat.toFixed(4)}`,
+      );
+
+      const requestBase: RouteRequestBase = {
+        start,
+        end,
+        via: [],
+        polygons: forbiddenPolygons,
+        signal: ctrl.signal,
+      };
+
+      const { route } = await resolveRouteRequest({
+        itinerary: active,
+        signal: ctrl.signal,
+        requestBase,
+        setRouteWarnings: () => {},
+        referenceTrack: referenceTracks?.[i],
+      });
+
+      segmentRoutes[i] = route;
+      segments[i] = buildRoutePointsFromBrouterRoute(route);
+    };
 
     try {
-      for (let i = 0; i < segmentCount; i++) {
-        if (ctrl.signal.aborted) return;
-
-        const start = anchors[i];
-        const end = anchors[i + 1];
-
-        console.log(
-          `[Recalculate] segment ${i + 1}/${segmentCount}:`,
-          `${start.lon.toFixed(4)},${start.lat.toFixed(4)}`,
-          '→',
-          `${end.lon.toFixed(4)},${end.lat.toFixed(4)}`,
-        );
-
-        const requestBase: RouteRequestBase = {
-          start,
-          end,
-          via: [],
-          polygons: forbiddenPolygons,
-          signal: ctrl.signal,
-        };
-
-        const { route } = await resolveRouteRequest({
-          itinerary: active,
-          signal: ctrl.signal,
-          requestBase,
-          setRouteWarnings: () => {},
-        });
-
-        segmentRoutes.push(route);
-        segments.push(buildRoutePointsFromBrouterRoute(route));
-        setProgress((i + 1) / segmentCount);
-      }
+      let nextSegment = 0;
+      let doneSegments = 0;
+      // Un tronçon en échec arrête l'autre file : le recalcul est abandonné.
+      let failed = false;
+      await Promise.all(
+        Array.from({ length: Math.min(RECALCULATE_CONCURRENCY, segmentCount) }, async () => {
+          while (nextSegment < segmentCount && !failed && !ctrl.signal.aborted) {
+            const i = nextSegment;
+            nextSegment += 1;
+            try {
+              await routeSegment(i);
+            } catch (error) {
+              failed = true;
+              throw error;
+            }
+            doneSegments += 1;
+            setProgress(doneSegments / segmentCount);
+          }
+        }),
+      );
 
       if (ctrl.signal.aborted) return;
 

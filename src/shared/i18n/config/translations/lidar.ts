@@ -89,6 +89,7 @@ export const lidarTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Initialisation WebGPU...', en: 'Initializing WebGPU...' },
   { fr: 'Index LOD {{x}}/{{y}}', en: 'LOD index {{x}}/{{y}}' },
   { fr: 'chargement {{count}}', en: 'loading {{count}}' },
+  { fr: 'ombrage {{ms}} ms', en: 'shading {{ms}} ms' },
   { fr: 'Cache LOD illisible après écriture : {{file}}', en: 'LOD cache unreadable after writing: {{file}}' },
   { fr: 'Exagération d\'élévation', en: 'Elevation exaggeration' },
   { fr: 'Neige', en: 'Snow' },

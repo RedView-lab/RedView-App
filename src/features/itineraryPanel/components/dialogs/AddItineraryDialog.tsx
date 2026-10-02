@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAppI18n } from '@/shared/i18n';
+import { appScaledOverlayStyle, readAppScale } from '@/shared/lib/appScale';
 import { IconCopy04, IconPlus, IconUploadCircle } from '../icons';
 
 const MENU_WIDTH = 330;
@@ -74,9 +75,7 @@ export function AddItineraryDialog({
 
     const updatePosition = () => {
       const rect = anchorEl.getBoundingClientRect();
-      const computed = window.getComputedStyle(anchorEl);
-      const rawScale = Number.parseFloat(computed.getPropertyValue('--app-scale'));
-      const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
+      const scale = readAppScale(anchorEl);
       const menuHeight = MENU_ROW_HEIGHT * visibleRowCount * scale;
       const gap = MENU_GAP * scale;
       const maxLeft = Math.max(8, window.innerWidth - MENU_WIDTH * scale - 8);
@@ -129,11 +128,8 @@ export function AddItineraryDialog({
       role="menu"
       aria-label={t('Créer un itinéraire')}
       style={{
-        top: menuStyle.top,
-        left: menuStyle.left,
+        ...appScaledOverlayStyle(menuStyle),
         width: MENU_WIDTH,
-        transform: `scale(${menuStyle.scale})`,
-        transformOrigin: 'top left',
       }}
       onMouseDown={(e) => e.stopPropagation()}
     >

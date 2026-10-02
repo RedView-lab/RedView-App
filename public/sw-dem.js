@@ -5,7 +5,7 @@
 // logic lives under /sw-dem/ subfolders grouped by responsibility:
 //
 //   /sw-dem/core/               — config, geometry, interpolation, RGB decode.
-//   /sw-dem/sources/            — IGN / AWS / Mapbox / ortho fetch adapters.
+//   /sw-dem/sources/            — IGN / AWS / Mapbox / ortho / VHR ortho fetch adapters.
 //   /sw-dem/processing/         — tile build, composite, slope, altitude math.
 //   /sw-dem/swiss/              — swissSURFACE3D config, coords, COG, fetch, build.
 //   /sw-dem/norway/             — Norway NHM DTM WCS config, coords, build.
@@ -22,7 +22,10 @@
 // ---------------------------------------------------------------------------
 // Cache stamp — bumped on every cache-invalidating change so the browser
 // detects a byte diff in this file and triggers install→activate→purge.
-// Current: dem-tiles-v51-mns-1x / radar-v3 / dem-negative-v29 / slope-tiles-v3-aligned
+// Current: dem-tiles-v51-mns-1x / radar-v3 / dem-negative-v29 / slope-tiles-v3-aligned / vhr-tiles-v1
+// 2026-10-02 vhr-ortho: /vhr-tiles overlay (satellite basemap, z18–21, 512 px) —
+// IGN PCRS 5 cm + THR 5–10 cm via WMS-R in EPSG:3857, gated by per-layer
+// z14 coverage masks, transparent elsewhere so Mapbox Satellite shows.
 // 2026-10-01 slope-terrain-aligned: the overlay requests the 3D terrain's own
 // DEM tiles (z = floor(zoom − 1) instead of round(zoom + 1): 16–64× fewer DEM
 // builds), slope 2× Catmull-Rom gray+alpha, per-row cell size, in-flight
@@ -76,6 +79,7 @@ importScripts(
   withEpoch('/sw-dem/processing/build-tile.js'),
   withEpoch('/sw-dem/processing/composite.js'),
   withEpoch('/sw-dem/sources/ortho.js'),
+  withEpoch('/sw-dem/sources/vhr-ortho.js'),
   withEpoch('/sw-dem/processing/slope.js'),
   withEpoch('/sw-dem/processing/altitude.js'),
   // Switzerland — swissSURFACE3D Raster (COG over STAC, 0.5 m LiDAR DSM)

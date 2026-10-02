@@ -106,6 +106,11 @@ export function observedCostScale(profile: string | undefined): number | undefin
 
 /** Poids d'un tracé grossier (repérage des ancres des très longs tracés). */
 export const COARSE_SEARCH_WEIGHT = 2.4;
+/**
+ * Second essai du tracé grossier quand le premier n'aboutit pas dans le délai :
+ * très glouton, mais toujours avec le profil personnalisé.
+ */
+export const GREEDY_COARSE_SEARCH_WEIGHT = 4;
 
 export function resolveSearchCoefficient(
   points: BrouterPoint[],

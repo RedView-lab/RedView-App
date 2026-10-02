@@ -7,9 +7,11 @@ import { translateAppText } from '@/shared/i18n';
 import type { Itinerary, ItineraryProject } from '../../types';
 import {
   buildPendingRoutePatchForEditedRow,
+  hasEditableRoute,
   insertTimelineItem,
   insertWaypointIntoTimeline,
   setPendingRouteEditForPlacedRow,
+  setPendingRoutePatchAfterRemoval,
 } from './timelineMutations';
 import { pointInPolygon } from '../../context/ProjectStore/forbiddenZonePatch';
 import {
@@ -89,8 +91,8 @@ export function useItineraryMapActions({
             delete it.pendingTraceExtension;
             it.prediction = null;
 
-            if (it.gpxRoute?.source === 'brouter') {
-              it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, row.id);
+            if (hasEditableRoute(it)) {
+              it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it, row.id);
             }
           });
         }
@@ -111,7 +113,7 @@ export function useItineraryMapActions({
 
           delete it.routeAudit;
 
-          if (it.gpxRoute?.source === 'brouter' && !result.isDirectOnRoute) {
+          if (hasEditableRoute(it) && !result.isDirectOnRoute) {
             setPendingRouteEditForPlacedRow(it, createdId);
             it.prediction = null;
           } else {
@@ -140,8 +142,8 @@ export function useItineraryMapActions({
           delete it.pendingTraceExtension;
           it.prediction = null;
 
-          if (it.gpxRoute?.source === 'brouter') {
-            it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, row.id);
+          if (hasEditableRoute(it)) {
+            it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it, row.id);
           }
         });
         break;
@@ -216,8 +218,8 @@ export function useItineraryMapActions({
             delete it.pendingTraceExtension;
             it.prediction = null;
 
-            if (it.gpxRoute?.source === 'brouter') {
-              it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, row.id);
+            if (hasEditableRoute(it)) {
+              it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it, row.id);
             }
           });
         }
@@ -242,7 +244,7 @@ export function useItineraryMapActions({
 
           delete it.routeAudit;
 
-          if (it.gpxRoute?.source === 'brouter' && !result.isDirectOnRoute) {
+          if (hasEditableRoute(it) && !result.isDirectOnRoute) {
             setPendingRouteEditForPlacedRow(it, createdId);
             it.prediction = null;
           } else {
@@ -273,15 +275,16 @@ export function useItineraryMapActions({
           delete it.pendingTraceExtension;
           it.prediction = null;
 
-          if (it.gpxRoute?.source === 'brouter') {
-            it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, row.id);
+          if (hasEditableRoute(it)) {
+            it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it, row.id);
           }
         });
         break;
       case 'delete': {
         const applyDelete = (it: Itinerary) => {
+          const previousTimeline = it.timeline;
           const removed = removePoiAndLinkedWaypoints(it, resolveDraftFeatureId(payload.draft));
-          delete it.pendingRoutePatch;
+          setPendingRoutePatchAfterRemoval(it, previousTimeline);
           delete it.pendingTraceExtension;
           delete it.routeAudit;
           it.prediction = null;

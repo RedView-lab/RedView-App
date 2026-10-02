@@ -29,16 +29,13 @@ html[data-rv-map-moving] * {
 /*
  * Full-viewport overlays (project manager, loading page, modals, mobile block).
  *
- * These are rendered inside the dashboard's `transform: scale(appScale)` canvas,
- * and a transformed ancestor becomes the containing block for its fixed
- * descendants. `inset: 0` would therefore span the *canvas* box rather than the
- * screen, leaving whatever is underneath showing through at the right/bottom
- * edges.
- *
- * Both axes use `100%`, which resolves against that box — already exactly the
- * region an `inset: 0` overlay is meant to fill — instead of mixing in viewport
- * units, which resolve in a different coordinate space (the real viewport) and
- * would therefore disagree with the width axis.
+ * These are rendered inside the dashboard's scaled canvas (`appScaleStyle`,
+ * shared/lib/appScale.ts). With the `transform: scale()` fallback, a
+ * transformed ancestor becomes the containing block for its fixed
+ * descendants: `inset: 0` would then span the *canvas* box in logical px
+ * rather than the screen. `100%` on both axes fills the screen exactly with
+ * either technique (zoom keeps the viewport as containing block), whereas
+ * viewport units resolve in a different coordinate space and would disagree.
  *
  * Any new full-screen overlay rendered inside the dashboard canvas MUST carry
  * the `rv-fixed-viewport` class instead of relying on `inset: 0`.
@@ -55,8 +52,9 @@ html[data-rv-map-moving] * {
 /*
  * Full-screen layer portaled to <body>, i.e. OUTSIDE the scaled canvas, that
  * must still render at the dashboard density (same type sizes as the panels).
- * The Dashboard mirrors `--app-scale` on :root; the layer gets the canvas's
- * logical size and the same scale, so it covers the screen exactly.
+ * The Dashboard mirrors `--app-scale` and the technique (`data-rv-scale-mode`)
+ * on :root; the layer gets the canvas's logical size and the same scale, so
+ * it covers the screen exactly.
  *
  * Inside the canvas, measure the logical layout with `@container rv-canvas`
  * and `var(--rv-canvas-width / --rv-canvas-height)`, never with viewport
@@ -74,6 +72,11 @@ html[data-rv-map-moving] * {
   height: var(--rv-canvas-height);
   transform: scale(var(--app-scale, 1));
   transform-origin: top left;
+}
+
+:root[data-rv-scale-mode='zoom'] .rv-app-scaled-layer {
+  transform: none;
+  zoom: var(--app-scale, 1);
 }
 
 .loading {

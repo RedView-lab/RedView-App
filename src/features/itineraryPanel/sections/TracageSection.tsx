@@ -907,12 +907,13 @@ export function TracageSection({
               className={`rvi-tracage__tolerance-btn${toleranceOpen ? ' is-open' : ''}`}
               onClick={() => setToleranceOpen((prev) => !prev)}
               aria-expanded={toleranceOpen}
-              aria-label={t('Tolérance')}
+              aria-label={t('Hors plage')}
+              title={t('Part du parcours autorisée hors de la plage de surfaces choisie (0 % = strict)')}
             >
               <span>{`${currentTolerance}%`}</span>
               <IconFigmaChevronDown size={12} />
             </button>
-            <span className="rvi-tracage__tolerance-sublabel">{t('Tolérance')}</span>
+            <span className="rvi-tracage__tolerance-sublabel">{t('Hors plage')}</span>
 
             <PortalDropdown
               open={toleranceOpen}

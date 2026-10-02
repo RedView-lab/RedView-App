@@ -158,6 +158,7 @@ export function bootstrapUnifiedDem({
     if (fns.shouldUseIgnOrthoOverlay()) {
       fns.addIgnOrthoOverlay();
     }
+    fns.addVhrOrthoOverlay();
     fns.refreshTrackedSourceIds();
     st.demTrackingEnabled = true;
     fns.scheduleDemSettle();

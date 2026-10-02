@@ -7,6 +7,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useAppI18n } from '@/shared/i18n';
+import { appScaledOverlayStyle, readAppScale } from '@/shared/lib/appScale';
 import type { TimelineAddItemKind } from '../../types';
 
 interface TimelineKindMenuStyle {
@@ -36,9 +37,7 @@ function computeMenuStyle(
   optionCount: number,
 ): TimelineKindMenuStyle {
   const rect = anchorEl.getBoundingClientRect();
-  const computed = window.getComputedStyle(anchorEl);
-  const rawScale = Number.parseFloat(computed.getPropertyValue('--app-scale'));
-  const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
+  const scale = readAppScale(anchorEl);
   const menuWidth = 140 * scale;
   const menuHeight = optionCount * 30 * scale + 2;
   const offset = 6 * scale;
@@ -122,6 +121,9 @@ export function TimelineKindMenu({
     return null;
   }
 
+  const portalTarget = resolvePortalTarget(anchorEl);
+  const inScaledLayer = portalTarget !== anchorEl.ownerDocument.body;
+
   return createPortal(
     <div
       ref={menuRef}
@@ -129,11 +131,8 @@ export function TimelineKindMenu({
       role="menu"
       aria-label={t('Ajouter un élément')}
       style={{
-        top: menuStyle.top,
-        left: menuStyle.left,
+        ...appScaledOverlayStyle(menuStyle, inScaledLayer),
         width: menuStyle.width,
-        transform: `scale(${menuStyle.scale})`,
-        transformOrigin: 'top left',
       }}
       onMouseDown={(event) => event.stopPropagation()}
     >
@@ -157,6 +156,6 @@ export function TimelineKindMenu({
         </button>
       ))}
     </div>,
-    resolvePortalTarget(anchorEl),
+    portalTarget,
   );
 }

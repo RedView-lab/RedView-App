@@ -13,6 +13,7 @@ export { buildBrouterUrl, buildProfileUploadUrl, formatLonlats, resolveEndpoint 
 export {
   COARSE_SEARCH_WEIGHT,
   DEFAULT_SEARCH_COST_SCALE,
+  GREEDY_COARSE_SEARCH_WEIGHT,
   effectiveSearchKm,
   requestBeelineKm,
   resolveSearchCoefficient,

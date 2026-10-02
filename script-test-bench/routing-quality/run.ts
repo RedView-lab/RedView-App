@@ -35,6 +35,7 @@ export interface ScenarioResult {
   family: string;
   band: Band;
   beelineKm: number;
+  /** `fallback` (repli sur un profil stock) n'existe plus que dans les anciens runs. */
   status: 'ok' | 'fallback' | 'error';
   error?: string;
   latencyMs: number;
@@ -42,6 +43,7 @@ export interface ScenarioResult {
   transferMs?: number;
   uploadMs: number | null;
   profileId: string | null;
+  /** Toujours faux depuis la suppression du repli stock (gardé pour comparer aux anciens runs). */
   usedFallbackProfile: boolean;
   warnings: string[];
   maxSlopePct: number;
@@ -191,11 +193,10 @@ async function main() {
       const parallelSaving = calls.length >= 3 ? Math.min(...calls.slice(-2).map((call) => call.transferMs)) : 0;
       const transferMs = calls.reduce((total, call) => total + call.transferMs, 0) - parallelSaving;
       base.profileId = res.resolved.profileId;
-      base.usedFallbackProfile = res.usedFallbackProfile;
       base.warnings = res.resolvedWarnings;
       result = {
         ...base,
-        status: res.usedFallbackProfile ? 'fallback' : 'ok',
+        status: 'ok',
         latencyMs,
         transferMs,
         metrics: computeRouteMetrics(app.metricFns, res.route, scenario.beelineKm, maxSlopePct),

@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import type { Map as MapboxMap } from 'mapbox-gl';
-import { buildPopupClearanceOffset, closeMarkerPopupOnSecondClick, flyToPoi } from '@/features/map3d';
+import {
+  buildPopupClearanceOffset,
+  closeMarkerPopupOnSecondClick,
+  flyToPoi,
+  keepPopupInVisibleMap,
+} from '@/features/map3d';
 import type { ItineraryProject } from '../types';
 import { readDocumentAppLocale, translateAppText } from '@/shared/i18n';
 import { cumulativeRouteLengthsM, projectPointAlongRoute, type RouteDistancePoint } from '../lib/routes';
@@ -1115,6 +1120,7 @@ export function useItineraryCheckpointMarkers({
 
         if (popup) {
           marker.setPopup(popup);
+          keepPopupInVisibleMap(popup, map);
           closeMarkerPopupOnSecondClick(element, popup);
         }
 

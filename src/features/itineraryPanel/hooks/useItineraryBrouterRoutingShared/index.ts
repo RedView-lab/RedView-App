@@ -14,10 +14,12 @@ export {
   appendRoutePoints,
   getRoutePointTotalDistanceM,
   mergeSurfaceMetrics,
+  narrowRoutePatchToEdit,
   recomputeApproxSurfaceMetrics,
   replaceRouteSegment,
   roundRouteDistanceKm,
   routePointsEqual,
+  type RoutePatchEdit,
 } from './routeSegments';
 export {
   isBrouterUnmappedPointError,

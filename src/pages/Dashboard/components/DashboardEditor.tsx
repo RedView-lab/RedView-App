@@ -44,7 +44,7 @@ import { DashboardPlaceSearch } from './DashboardPlaceSearch';
 import type { DashboardFilterId, DashboardPoiOptionId } from './DashboardPlaceSearch.types';
 import { DASHBOARD_POI_OPTIONS } from './DashboardPlaceSearch.constants';
 import type { TimelineFilterState } from '@/features/itineraryPanel/sections/timeline/TimelineFilters';
-import { CENTER_TOOLBAR_HEIGHT, PANEL_PADDING } from '../lib/constants';
+import { CENTER_TOOLBAR_HEIGHT, DASHBOARD_SEARCH_BAR_HEIGHT, PANEL_PADDING } from '../lib/constants';
 import { getDashboardStyles } from '../lib/dashboardStyles';
 import { getDashboardLayout } from '../lib/layout';
 
@@ -271,14 +271,18 @@ export function DashboardEditor({
     return `${itinerary.name} (${t('Pente').toLocaleLowerCase()})`;
   }, [activeProjectInitial, t]);
 
-  // Bords de la carte couverts par les panneaux : le menu contextuel et la
-  // fiche POI s'ouvrent dans la carte visible, pas sous le panneau du bas.
+  // Bords de la carte couverts par l'interface : le menu contextuel, la fiche
+  // POI et toutes les popups de la carte (`keepPopupInVisibleMap`) s'ouvrent
+  // dans la carte visible — ni sous le panneau du bas, ni sous les panneaux
+  // latéraux, la colonne d'outils de carte ou la barre de recherche.
+  const dashboardSearchRight = searchRightProp ?? (statusDockRight + 40 + PANEL_PADDING);
   const leftInset = leftPanelOpen ? PANEL_PADDING + leftPanelWidth : 0;
-  const rightInset = isRightPanelCollapsed ? 0 : panelWidth + PANEL_PADDING;
+  const rightInset = Math.max(isRightPanelCollapsed ? 0 : panelWidth + PANEL_PADDING, dashboardSearchRight);
+  const topInset = dashboardSearchVisible ? PANEL_PADDING + DASHBOARD_SEARCH_BAR_HEIGHT : 0;
   const bottomInset = layout.centerToolbarVisible ? Math.max(0, layout.designH - layout.centerToolbarTop) : 0;
   const mapOverlayInsets = useMemo(
-    () => ({ top: 0, right: rightInset, bottom: bottomInset, left: leftInset }),
-    [bottomInset, leftInset, rightInset],
+    () => ({ top: topInset, right: rightInset, bottom: bottomInset, left: leftInset }),
+    [bottomInset, leftInset, rightInset, topInset],
   );
 
   const handleLidarSelectionDisable = useCallback(() => {
@@ -331,6 +335,7 @@ export function DashboardEditor({
           isMapLoaded={mapLoaded}
           immersiveMode={isAllPanelsCollapsed}
           onToggleImmersiveMode={onToggleMapFocusMode}
+          compact={layout.isShortCanvas}
           isRightPanelVisible={!isRightPanelCollapsed}
           onToggleRightPanel={isRightPanelCollapsed ? onRestoreRightPanel : onCollapseRightPanel}
           routeSlopeLegendTitle={routeSlopeLegendTitle}
@@ -342,11 +347,8 @@ export function DashboardEditor({
         basemapConfig={activeBasemapConfig}
         visible={dashboardSearchVisible}
         left={dashboardSearchLeft}
-        right={searchRightProp ?? (statusDockRight + 40 + PANEL_PADDING)}
-        maxWidth={Math.max(
-          0,
-          layout.designW - dashboardSearchLeft - (searchRightProp ?? (statusDockRight + 40 + PANEL_PADDING)),
-        )}
+        right={dashboardSearchRight}
+        maxWidth={Math.max(0, layout.designW - dashboardSearchLeft - dashboardSearchRight)}
         top={PANEL_PADDING}
         isResizing={isResizing || isLeftResizing}
         activeFilters={dashboardSearchActiveFilters}
@@ -419,7 +421,7 @@ export function DashboardEditor({
             <RouteDragWaypointProvider map={mapInstance}>
                 <PredictionProvider>
                   <div style={styles.leftPanelStyle}>
-                    <div style={styles.leftPanelContentStyle}>
+                    <div data-rv-region="left-panel" style={styles.leftPanelContentStyle}>
                       <ItineraryPanel
                         projectId={activeProjectId}
                         map={mapInstance}
@@ -446,7 +448,7 @@ export function DashboardEditor({
 
                   <AnalysisFlyoverProvider map={mapInstance}>
                     {layout.centerToolbarVisible ? (
-                      <div style={styles.centerToolbarShellStyle}>
+                      <div data-rv-region="center-toolbar" style={styles.centerToolbarShellStyle}>
                         <CenterPanelToolbar
                           isPanelVisible={layout.centerPanelVisible}
                           onTogglePanel={isCenterPanelCollapsed ? onRestoreCenterPanel : onCollapseCenterPanel}
@@ -463,14 +465,14 @@ export function DashboardEditor({
                     ) : null}
 
                     {layout.centerToolbarVisible ? (
-                      <div style={styles.centerPanelShellStyle}>
-                        <CenterPanel map={mapInstance} globalFilters={globalTimelineFilters} />
+                      <div data-rv-region="center-panel" style={styles.centerPanelShellStyle}>
+                        <CenterPanel map={mapInstance} globalFilters={globalTimelineFilters} compact={layout.isShortCanvas} />
                       </div>
                     ) : null}
                   </AnalysisFlyoverProvider>
 
                   <div style={styles.rightPanelStyle}>
-                    <div style={styles.rightPanelContentStyle}>
+                    <div data-rv-region="right-panel" style={styles.rightPanelContentStyle}>
                       <div ref={rightPrimaryPanelHostRef} style={styles.rightPrimaryPanelStyle}>
                         <ControlPanelContainer
                           map={mapInstance}

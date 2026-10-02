@@ -14,7 +14,9 @@
   flex-direction: column;
   flex: 1 1 auto;
   min-width: 0;
-  min-height: 190px;
+  /* 190 px in the regular 390 px center panel, down to 110 px in the 220 px
+     one of a short canvas (pages/Dashboard/lib/layout.ts), axis kept visible. */
+  min-height: clamp(110px, calc(var(--rvc-center-panel-height, 390px) - 200px), 190px);
   background: rgba(0, 0, 0, 0.6);
   cursor: crosshair;
   isolation: isolate;
@@ -28,7 +30,7 @@
 .rvchart__plot {
   position: relative;
   flex: 1 1 auto;
-  min-height: 135px;
+  min-height: clamp(60px, calc(var(--rvc-center-panel-height, 390px) - 255px), 135px);
   display: grid;
   grid-template-columns: var(--rvchart-left, 80px) 1fr var(--rvchart-right, 0px) 16px;
 }
@@ -118,16 +120,38 @@
   pointer-events: none;
 }
 
+.rvchart__layer--alerts { z-index: 4; }
+
+/* Icône cliquable (ouvre la fiche du tronçon) : seule zone qui capte le pointeur. */
 .rvchart__alert-icon {
   position: absolute;
   top: 3px;
-  left: 50%;
+  display: grid;
+  place-items: center;
   width: 14px;
   height: 14px;
   padding: 2px;
+  border: 0;
   border-radius: 4px;
   background: #ff3b30;
   transform: translateX(-50%);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: filter 120ms ease, box-shadow 120ms ease;
+}
+
+.rvchart__alert-icon img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.rvchart__alert-icon:hover,
+.rvchart__alert-icon:focus-visible {
+  filter: brightness(1.15);
+  box-shadow: 0 0 0 2px rgba(255, 59, 48, 0.45);
+  outline: none;
 }
 
 .rvchart__card-metric--alert {

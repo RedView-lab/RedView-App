@@ -2,18 +2,17 @@
  * Audit B4 — BRouter through the PUBLIC prod proxy (https://app.redview.tech/api/brouter)
  * using the app's real routing pipeline:
  *   createDefaultItinerary → resolveItineraryRouting (BRF build + upload via
- *   profile-cache) → fetchRouteForPrioritiesWithFallback (14 s custom-profile
- *   timeout + stock fallback) → fetchBrouterRoute (api/url.ts URL builder).
+ *   profile-cache) → fetchCustomProfileRoute (custom profile only, 14 s+
+ *   timeout + hedge) → fetchBrouterRoute (api/url.ts URL builder).
  *
  *   npx tsx script-test-bench/audit/b-brouter-live.ts
  *
  * Budget: hard cap of 14 live requests, >= 3.1 s apart (shared 120 req/min/IP).
- * Reports latency, payload size, content-encoding, cache HIT, fallback use and
- * D+ coherence (BRouter "filtered ascend" vs the app's computeRouteElevationMetrics
- * vs the GPX the route was derived from).
+ * Reports latency, payload size, content-encoding, cache HIT and D+ coherence
+ * (BRouter "filtered ascend" vs the app's computeRouteElevationMetrics vs the
+ * GPX the route was derived from).
  *
- * Exit 1 when a custom-profile request falls back (>14 s or refused) or a
- * route fails.
+ * Exit 1 when a route fails (timeout included: there is no stock fallback).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -26,7 +25,7 @@ async function main() {
   const live = installLiveFetch({ maxLive: 14, minGapMs: 3100, log });
   const defaults = await loadSrc<any>('src/features/itineraryPanel/lib/project/defaultState.ts');
   const brouter = await loadSrc<any>('src/features/itineraryPanel/lib/brouter/index.ts');
-  const fallback = await loadSrc<any>('src/features/itineraryPanel/hooks/useItineraryBrouterRouting/profileFallback.ts');
+  const customFetch = await loadSrc<any>('src/features/itineraryPanel/hooks/useItineraryBrouterRouting/customProfileFetch.ts');
   const shared = await loadSrc<any>('src/features/itineraryPanel/hooks/useItineraryBrouterRoutingShared/index.ts');
   const metrics = await loadSrc<any>('src/features/itineraryPanel/lib/route-metrics/index.ts');
   const { parseGpxText } = await loadSrc<any>('src/features/poi/lib/gpx-parse.ts');
@@ -39,17 +38,14 @@ async function main() {
     let resolved: any;
     try {
       resolved = await brouter.resolveItineraryRouting(it);
-      const { route, usedFallbackProfile } = await fallback.fetchRouteForPrioritiesWithFallback(
-        { start, end, via }, it.priorities, resolved.profileId, resolved.stockProfileId,
-      );
+      const route = await customFetch.fetchCustomProfileRoute({ start, end, via }, resolved.profileId);
       const ms = performance.now() - t0;
       const pts = shared.buildStoredRoutePointsFromBrouter(shared.toGeometryRoutePoints(route.coordinates), metrics.extractRouteProfileFromBrouter(route), route.distanceM);
       const em = metrics.computeRouteElevationMetrics(pts);
       const calls = log.slice(before).map((l) => `${l.method} ${l.status} ${l.ms}ms ${(l.bytes / 1024).toFixed(0)}KB enc=${l.headers['content-encoding'] ?? 'none'} cache=${l.headers['x-route-cache'] ?? '-'}`);
-      console.log(`\n[${label}] profile=${resolved.profileId} (stock ${resolved.stockProfileId}) brf=${resolved.brf ? resolved.brf.length + 'B' : 'none'} fallback=${usedFallbackProfile}`);
+      console.log(`\n[${label}] profile=${resolved.profileId} brf=${resolved.brf.length}B`);
       console.log(`  total ${ms.toFixed(0)} ms | ${(route.distanceM / 1000).toFixed(1)} km | ${route.coordinates.length} coords | BRouter filtered ascend ${Math.round(route.ascentM)} m | app D+ ${em ? Math.round(em.ascentM) : '?'} m${ref ? ` | GPX ref ${ref.km} km / D+ ${ref.dplus} m` : ''}`);
       calls.forEach((c) => console.log('   ' + c));
-      if (usedFallbackProfile) failures.push(`${label}: custom profile fell back to stock (timeout >14 s or refused)`);
       return route;
     } catch (e) {
       console.log(`\n[${label}] FAILED after ${(performance.now() - t0).toFixed(0)} ms: ${(e as Error).message.slice(0, 200)}`);
@@ -76,7 +72,7 @@ async function main() {
   await run('TdF stage default', mk(), stored[0], stored[stored.length - 1], via, { km: m.distanceKm, dplus: m.ascentM });
   await run('TdF stage custom', custom(mk()), stored[0], stored[stored.length - 1], via, { km: m.distanceKm, dplus: m.ascentM });
 
-  // 3. Long ~1000 km: Paris → Bordeaux → Toulouse → Montpellier (2 long requests, 3rd only if fallback)
+  // 3. Long ~1000 km: Paris → Bordeaux → Toulouse → Montpellier
   const paris = { lat: 48.8566, lon: 2.3522 }, bordeaux = { lat: 44.8378, lon: -0.5792 }, toulouse = { lat: 43.6047, lon: 1.4442 }, montpellier = { lat: 43.6108, lon: 3.8767 };
   await run('long default', mk(), paris, montpellier, [bordeaux, toulouse]);
   await run('long custom', custom(mk()), paris, montpellier, [bordeaux, toulouse]);

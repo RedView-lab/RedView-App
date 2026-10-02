@@ -260,12 +260,14 @@ const server = http.createServer(async (req, res) => {
     // n'est pas (encore) contrôlée :
     //  - /dem-tiles : le DEM n'existe que côté SW (la page non contrôlée
     //    utilise AWS Terrarium en direct) → 204 immédiat, hors quota ;
+    //  - /vhr-tiles : l'ortho très haute résolution n'existe que côté SW
+    //    (Mapbox Satellite reste visible dessous) → 204 immédiat, hors quota ;
     //  - ?pf=1 : préchargement spéculatif sans SW, inutile → 204, hors quota ;
     //  - sinon un quota PAR famille, pour qu'une rafale pente ne prive pas
     //    l'altitude ou le radar (et inversement).
-    const tileFamily = /^\/(radar|slope|altitude|dem)-tiles\//.exec(pathname)?.[1];
+    const tileFamily = /^\/(radar|slope|altitude|dem|vhr)-tiles\//.exec(pathname)?.[1];
     if (tileFamily) {
-      if (tileFamily === 'dem' || parsedUrl.searchParams.get('pf') === '1') {
+      if (tileFamily === 'dem' || tileFamily === 'vhr' || parsedUrl.searchParams.get('pf') === '1') {
         return sendNoTile(res);
       }
       if (!checkRateLimit(req, `tiles:${tileFamily}`, MAX_TILE_REQUESTS)) {

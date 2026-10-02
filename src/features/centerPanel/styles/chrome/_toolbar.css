@@ -215,6 +215,11 @@
     border-radius: 7px;
   }
 
+  /* Ajouter / Tracer: icon only (aria-label + title kept). */
+  .rvc-center-toolbar__button-text {
+    display: none;
+  }
+
   .rvc-center-toolbar__button {
     height: 30px;
     min-width: 30px;
@@ -234,7 +239,23 @@
   }
 
   .rvc-center-toolbar__metrics {
-    width: 108px;
-    font-size: var(--rv-font-size-2xs);
+    width: 100px;
   }
+}
+
+/*
+ * Narrow center column (half-screen window): the track scrolls horizontally
+ * (wheel included, CenterPanelToolbar.tsx); the clipped edge fades out so the
+ * hidden controls read as reachable.
+ */
+.rvc-center-toolbar__viewport[data-overflow='end'] {
+  mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
+}
+
+.rvc-center-toolbar__viewport[data-overflow='start'] {
+  mask-image: linear-gradient(to left, #000 calc(100% - 40px), transparent);
+}
+
+.rvc-center-toolbar__viewport[data-overflow='both'] {
+  mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent);
 }

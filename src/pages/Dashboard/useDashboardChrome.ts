@@ -18,7 +18,7 @@ import {
   PANEL_WIDTH_MIN_FALLBACK,
 } from './lib/constants';
 
-import { getDashboardLayout } from './lib/layout';
+import { getDashboardLayout, type SidePanelSide } from './lib/layout';
 import type { DashboardPersistedMutator, DashboardPersistOptions } from './useDashboardProjectState';
 import {
   clampLeftPanelWidth,
@@ -74,7 +74,8 @@ export function useDashboardChrome({
   const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
-  const leftPanelOpen = !isLeftPanelCollapsed;
+  // Panel kept when the canvas is too narrow for both (lib/layout.ts).
+  const [sidePanelPriority, setSidePanelPriority] = useState<SidePanelSide>('left');
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(() =>
     readStoredLeftWidth(),
   );
@@ -132,6 +133,7 @@ export function useDashboardChrome({
     setIsLeftPanelCollapsed(false);
     setIsCenterPanelCollapsed(isEmptyProject);
     setIsRightPanelCollapsed(isEmptyProject);
+    setSidePanelPriority('left');
     setLidarModeEnabled(dashboard?.lidarDownloadModeEnabled ?? false);
   }
 
@@ -268,6 +270,7 @@ export function useDashboardChrome({
     isLeftPanelCollapsed,
     isCenterPanelCollapsed,
     isRightPanelCollapsed,
+    sidePanelPriority,
   });
 
   useEffect(() => {
@@ -337,6 +340,7 @@ export function useDashboardChrome({
     lastExpandedPanelWidthRef.current = nextWidth;
     setPanelWidth(nextWidth);
     setIsRightPanelCollapsed(false);
+    setSidePanelPriority('right');
   }, [panelMinWidth]);
 
   // Stable callbacks (no width/height deps): lastExpanded*Ref is kept in sync by
@@ -408,6 +412,7 @@ export function useDashboardChrome({
     lastExpandedLeftPanelWidthRef.current = nextWidth;
     setLeftPanelWidth(nextWidth);
     setIsLeftPanelCollapsed(false);
+    setSidePanelPriority('left');
   }, []);
 
   const collapseLeftPanel = useCallback(() => {
@@ -490,8 +495,9 @@ export function useDashboardChrome({
 
   const handleToggleMapFocusMode = useCallback(() => {
     if (isAllPanelsCollapsed) {
-      restoreLeftPanel();
+      // Left last: it keeps the priority on a canvas too narrow for both.
       restoreRightPanel();
+      restoreLeftPanel();
       restoreCenterPanel();
       return;
     }
@@ -525,13 +531,14 @@ export function useDashboardChrome({
     lidarModeEnabled,
     setLidarModeEnabled,
     isAllPanelsCollapsed,
-    leftPanelOpen,
-    // Widths as rendered (fitted to the canvas, see fitSidePanelWidths); the
-    // user's preferred widths stay in state and in the persisted dashboard.
+    // Widths and side-panel collapse states as rendered (fitted to the canvas,
+    // see resolveSidePanels); the user's preferences stay in state and in the
+    // persisted dashboard.
+    leftPanelOpen: !layout.isLeftPanelCollapsed,
     panelWidth: layout.rightPanelWidth,
-    isLeftPanelCollapsed,
+    isLeftPanelCollapsed: layout.isLeftPanelCollapsed,
     isCenterPanelCollapsed,
-    isRightPanelCollapsed,
+    isRightPanelCollapsed: layout.isRightPanelCollapsed,
     leftPanelWidth: layout.leftPanelWidth,
     isResizing,
     isLeftResizing,

@@ -124,8 +124,9 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
 
         if (!result.isDirectOnRoute) {
           targetItinerary.pendingRoutePatch = buildPendingRoutePatchForEditedRow(
-            targetItinerary.timeline,
+            targetItinerary,
             result.newRowId,
+            result.anchorDistanceM,
           );
           targetItinerary.prediction = null;
         } else {

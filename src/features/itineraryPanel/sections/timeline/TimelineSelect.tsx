@@ -5,6 +5,7 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { appScaledOverlayStyle, readAppScale } from '@/shared/lib/appScale';
 import { IconChevronDown } from '../../components/icons';
 
 export interface TimelineSelectOption<T extends string | number> {
@@ -25,6 +26,8 @@ interface PopoverStyle {
   /** Unscaled px — the popover itself is scaled by `--app-scale`. */
   width: number;
   scale: number;
+  /** Portaled into the fullscreen panel, which already renders at `scale`. */
+  inScaledLayer: boolean;
 }
 
 function resolvePortalTarget(anchorEl: HTMLElement): HTMLElement {
@@ -35,9 +38,7 @@ function resolvePortalTarget(anchorEl: HTMLElement): HTMLElement {
 
 function computePopoverStyle(anchorEl: HTMLElement): PopoverStyle {
   const rect = anchorEl.getBoundingClientRect();
-  const computed = window.getComputedStyle(anchorEl);
-  const rawScale = Number.parseFloat(computed.getPropertyValue('--app-scale'));
-  const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
+  const scale = readAppScale(anchorEl);
   const offset = 4 * scale;
 
   return {
@@ -45,6 +46,7 @@ function computePopoverStyle(anchorEl: HTMLElement): PopoverStyle {
     left: rect.left,
     width: Math.max(140, rect.width / scale),
     scale,
+    inScaledLayer: resolvePortalTarget(anchorEl) !== anchorEl.ownerDocument.body,
   };
 }
 
@@ -133,11 +135,8 @@ export function TimelineSelect<T extends string | number>({
               className="rv-dropdown rvi-tl-select-popover"
               role="listbox"
               style={{
-                top: popoverStyle.top,
-                left: popoverStyle.left,
+                ...appScaledOverlayStyle(popoverStyle, popoverStyle.inScaledLayer),
                 width: popoverStyle.width,
-                transform: `scale(${popoverStyle.scale})`,
-                transformOrigin: 'top left',
               }}
               onMouseDown={(e) => e.stopPropagation()}
             >

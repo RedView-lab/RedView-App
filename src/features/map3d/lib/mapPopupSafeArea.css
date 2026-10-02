@@ -1,0 +1,16 @@
+/* Popups Mapbox gardées dans la carte visible (lib/mapPopupSafeArea.ts).
+ * Sélecteurs doublés : passent devant les styles propres à chaque fiche
+ * (`.rv-poi-popup .mapboxgl-popup-content { overflow: visible }`). */
+
+/* Plus haute que la zone libre entre les panneaux : le contenu défile. */
+.mapboxgl-popup.mapboxgl-popup.rv-map-popup--capped .mapboxgl-popup-content {
+  box-sizing: border-box;
+  max-height: var(--rv-map-popup-max-height);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Poussée hors de son point (point sous un panneau) : la pointe ne vise plus rien. */
+.mapboxgl-popup.mapboxgl-popup.rv-map-popup--detached .mapboxgl-popup-tip {
+  visibility: hidden;
+}

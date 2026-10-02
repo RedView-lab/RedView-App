@@ -98,3 +98,32 @@ export const awsFastDEMSource = {
   minzoom: 4,
   maxzoom: 14,
 };
+
+/**
+ * Very-high-resolution orthophoto overlay (IGN PCRS 5 cm + THR 5–10 cm),
+ * built by the Service Worker (`public/sw-dem/sources/vhr-ortho.js`) and
+ * drawn right above Mapbox Satellite. Mapbox Satellite in France is the IGN
+ * 20 cm ortho up to z19 (plus, in a few cities, a PCRS at z20 only — its own
+ * z21 there is the 20 cm ortho upscaled 4×). Tiles without coverage come
+ * back transparent so the Mapbox imagery stays visible.
+ *
+ * z18–21, always 512 px tiles (`r=2`; the WMS renders any size: twice the
+ * detail for the same tile count, like the `@2x` Mapbox Satellite tiles, see
+ * `satelliteTiles.ts`), so a 256 px tile shown over up to 362 screen px
+ * never drops below the imagery: one zoom step out keeps the 5 cm look
+ * instead of falling back to the 20 cm ortho. 5 cm is native at z21 (the SW
+ * serves 256 px there, Mapbox overzooms beyond).
+ */
+export const VHR_ORTHO_SOURCE_ID = 'rv-vhr-ortho';
+
+export function buildVhrOrthoSource() {
+  return {
+    type: 'raster' as const,
+    tiles: ['/vhr-tiles/{z}/{x}/{y}?r=2'],
+    tileSize: 256,
+    minzoom: 18,
+    maxzoom: 21,
+    bounds: FRANCE_BOUNDS,
+    attribution: '&copy; IGN - Géoplateforme (PCRS, ortho THR)',
+  };
+}

@@ -1,6 +1,7 @@
 import { type ReactNode, useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useAppI18n } from '@/shared/i18n';
+import { appScaledOverlayStyle, readAppScale } from '@/shared/lib/appScale';
 import { IconChevronDown } from '../icons';
 
 interface SelectOption<T extends string = string> {
@@ -61,9 +62,7 @@ export function Select<T extends string = string>({
   useLayoutEffect(() => {
     if (!open || !ref.current) return;
     const rect = ref.current.getBoundingClientRect();
-    const computed = window.getComputedStyle(ref.current);
-    const rawScale = Number.parseFloat(computed.getPropertyValue('--app-scale'));
-    const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
+    const scale = readAppScale(ref.current);
     const rowHeight = 30 * scale;
     const maxDropdownHeight = 260 * scale;
     const rawDropdownHeight = options.length * rowHeight;
@@ -87,11 +86,8 @@ export function Select<T extends string = string>({
           className="rv-dropdown rvc-select__dropdown"
           role="listbox"
           style={{
-            top: dropPos.top,
-            left: dropPos.left,
+            ...appScaledOverlayStyle(dropPos),
             width: dropPos.width,
-            transform: `scale(${dropPos.scale})`,
-            transformOrigin: 'top left',
           }}
           onMouseDown={(e) => e.stopPropagation()}
         >

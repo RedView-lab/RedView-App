@@ -58,6 +58,8 @@ export class RouteHandlesOverlay {
   private ctx: CanvasRenderingContext2D;
 
   private enabled = true;
+  /** The canvas was cleared for an empty render and nothing was drawn since. */
+  private clearedEmpty = false;
   public handles: RouteHandleInfo[] = [];
   private ghostHandle: InsertGhostHandle | null = null;
   private draggingHandle: DraggingHandleInfo | null = null;
@@ -116,6 +118,11 @@ export class RouteHandlesOverlay {
     this.ghostHandle = ghost;
     this.draggingHandle = dragging;
     this.hoverReticle = reticle;
+
+    // Nothing to draw (no route): clear once, not on every camera move.
+    const empty = handles.length === 0 && !ghost && !dragging && !reticle;
+    if (empty && this.clearedEmpty) return;
+    this.clearedEmpty = empty;
 
     this.resize();
     const width = this.sceneCanvas.clientWidth || window.innerWidth;

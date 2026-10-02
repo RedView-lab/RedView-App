@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 import fs from 'fs'
 // @ts-expect-error JS module without declarations
-import { startDevServices } from './scripts/start-dev-services.mjs'
+import { applyVpsTunnel, startDevServices, startVpsTunnel } from './scripts/start-dev-services.mjs'
 // @ts-expect-error JS module without declarations
 import { recolorRadarPng } from './server/radar-recolor.mjs'
 // @ts-expect-error JS module without declarations
@@ -63,6 +63,9 @@ function redviewDevApiPlugin(): Plugin {
       startDevServices().catch((err: unknown) => {
         console.warn('[redview-dev-api] Error starting dev services:', err)
       })
+      // Amonts du .env sur le VPS : son nginx refuse les postes de dev (403),
+      // on passe par un tunnel SSH (cf. scripts/start-dev-services.mjs).
+      void startVpsTunnel(process.env)
 
       server.middlewares.use(async (req, res, next) => {
         if (!req.url) return next()
@@ -108,11 +111,13 @@ function redviewDevApiPlugin(): Plugin {
           return res.end()
         }
 
-        // 2b'. Sans SW : /dem-tiles n'a pas de repli (la page non contrôlée
-        // utilise AWS Terrarium en direct) et les préchargements `?pf=1` sont
+        // 2b'. Sans SW : /dem-tiles et /vhr-tiles n'ont pas de repli (la page
+        // non contrôlée utilise AWS Terrarium en direct, Mapbox Satellite reste
+        // visible sans l'ortho très haute résolution) et les préchargements `?pf=1` sont
         // inutiles → 204 immédiat (même contrat que server.mjs).
         if (
           req.url.startsWith('/dem-tiles/')
+          || req.url.startsWith('/vhr-tiles/')
           || (/^\/(?:radar|slope|altitude)-tiles\//.test(req.url)
             && new URL(req.url, 'http://localhost').searchParams.get('pf') === '1')
         ) {
@@ -182,6 +187,9 @@ function redviewDevApiPlugin(): Plugin {
           } catch {
             // ignore
           }
+          // Tunnel vers le VPS (ouvert au démarrage, rouvert s'il est tombé).
+          await startVpsTunnel(process.env)
+          applyVpsTunnel(process.env)
 
           const urlObj = new URL(req.url, 'http://localhost')
           const pathname: string | null = decodeSafePathname(urlObj.pathname)

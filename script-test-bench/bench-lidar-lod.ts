@@ -12,8 +12,26 @@
  * 4. Streaming 9 tuiles : densité complète près de la caméra, budget de points
  *    respecté, mémoire GPU bornée (l'ancien chargement décimait la scène
  *    entière avant l'octree).
+ * 5. Chargements : depuis une scène vierge et une caméra fixe, chaque bloc lu
+ *    est affiché (la cible compte les nœuds en attente), sélection stable.
+ * 6. Couverture : en vue rasante avec un budget minuscule, chaque tuile
+ *    visible garde au moins sa racine.
+ * 7. Taille de point adaptative : les masques d'octants envoyés au GPU
+ *    correspondent exactement aux enfants affichés.
+ * 8. Bornes serrées des nœuds : chaque point tient dans son nœud et dans tous
+ *    ses ancêtres une fois les bornes resserrées sur les points chargés.
+ * 9. Cadence réelle : FrameClock retrouve la période d'écran (60/120/144 Hz)
+ *    malgré des vsync ratées, et ne prend jamais un GPU à 30 fps pour un
+ *    écran à 30 Hz.
+ * 10. Budget de points : sur un GPU dont les frames ratent la vsync au-delà
+ *    d'un certain nombre de points, il se stabilise juste en dessous (l'ancien
+ *    contrôleur, calé sur 16,6 ms de GPU, restait entre 12,5 et 19 ms : une
+ *    vsync sur deux ratée à 60 Hz) ; quand le GPU baisse sa fréquence (temps
+ *    de passe stable) et que la cadence tient, il monte au plafond ; une frame
+ *    à l'arrêt (pleine résolution) ne le fait jamais baisser.
  * Optionnel : LIDAR_TILE=<fichier .copc.laz> mesure le pipeline sur une vraie
- * tuile (décodage laz-perf, construction de l'octree LOD, sélection).
+ * tuile (décodage laz-perf, construction de l'octree LOD, sélection) et
+ * vérifie que la marge des bornes serrées (2 mailles) couvre ses sous-arbres.
  *
  * Usage : npm run bench:lidar-lod   (LIDAR_TILE=... npm run bench:lidar-lod)
  */
@@ -27,17 +45,21 @@ import {
   type CopcChunk,
 } from '../src/features/lidar/lib/lazParser.ts';
 import { createInMemoryLodTile, type OpenedLodTile } from '../src/features/lidar/lib/lodCache.ts';
-import { screenSpaceSize } from '../src/features/lidar/viewer/lod/frustum.ts';
+import { extractFrustumPlanes, frustumTestAABB, OUTSIDE, screenSpaceSize } from '../src/features/lidar/viewer/lod/frustum.ts';
 import {
   buildLodTile,
   LOD_POINT_STRIDE,
   lodNodeCube,
+  lodNodeSpacing,
   unpackLodPosition,
+  type LodTile,
   type LodTileInput,
 } from '../src/features/lidar/viewer/lod/lodTile.ts';
-import { SceneLod, type SceneNode, type SceneNodeUploader } from '../src/features/lidar/viewer/lod/sceneLod.ts';
+import { CONTENT_MARGIN_CELLS, SceneLod, type SceneNode, type SceneNodeUploader } from '../src/features/lidar/viewer/lod/sceneLod.ts';
 import { mat4MultiplyInto } from '../src/features/lidar/viewer/renderer/math.ts';
-import type { AABB } from '../src/features/lidar/viewer/lod/types.ts';
+import type { AABB, PlatformProfile } from '../src/features/lidar/viewer/lod/types.ts';
+import { AdaptivePointBudget } from '../src/features/lidar/viewer/lod/lodBudget.ts';
+import { FrameClock } from '../src/features/lidar/viewer/perf/frameClock.ts';
 import type { PointCloudData } from '../src/features/lidar/types.ts';
 
 interface CheckResult {
@@ -317,9 +339,11 @@ function runLodTileCheck(): void {
 class CountingUploader implements SceneNodeUploader {
   resident = new Set<number>();
   peakPoints = 0;
+  uploads = 0;
   private points = 0;
   uploadNode(node: SceneNode): boolean {
     this.resident.add(node.id);
+    this.uploads++;
     this.points += node.entry.count;
     this.peakPoints = Math.max(this.peakPoints, this.points);
     return true;
@@ -428,6 +452,150 @@ async function runStreamingCheck(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// 5–8. Sélection : chargements, couverture, masques d'octants, bornes serrées
+// ---------------------------------------------------------------------------
+
+function selectedIds(scene: SceneLod): string {
+  return scene.getSelectedNodes().map((node) => node.id).join(',');
+}
+
+/** Points of a node in the render frame (x east, y up, z = −north), relative to `center`. */
+function nodePoints(tile: LodTile, node: SceneNode, center: { x: number; y: number; z: number }): Float64Array {
+  const view = new DataView(tile.packed.buffer, tile.packed.byteOffset, tile.packed.byteLength);
+  const cube = lodNodeCube(tile.header, node.entry);
+  const out = new Float64Array(node.entry.count * 3);
+  for (let k = 0; k < node.entry.count; k++) {
+    const [x, y, z] = unpackLodPosition(view, node.entry.byteOffset + k * LOD_POINT_STRIDE, cube);
+    out[k * 3] = tile.header.origin.x + x - center.x;
+    out[k * 3 + 1] = tile.header.origin.z + z - center.z;
+    out[k * 3 + 2] = -(tile.header.origin.y + y - center.y);
+  }
+  return out;
+}
+
+async function runSelectionCheck(): Promise<void> {
+  // Denser than the streaming scene: deeper octrees (≈ 0.9 m spacing).
+  const built: LodTile[] = [];
+  for (let ty = -1; ty <= 1; ty++) {
+    for (let tx = -1; tx <= 1; tx++) built.push(buildLodTile(syntheticTile(tx, ty, 1_200_000)));
+  }
+  const tiles = built.map((tile) => createInMemoryLodTile(tile));
+  const center = { x: 1_000_500, y: 6_543_500, z: 1200 };
+  const uploader = new CountingUploader();
+  const scene = new SceneLod(tiles, center, {
+    pointBudget: 2_000_000,
+    poolBudget: 2_700_000,
+    maxResidentNodes: 16384,
+    uploader,
+    onNodeResident: () => undefined,
+  });
+  const proj = renderProjection(1920 / 1080);
+  const viewProj = new Float32Array(16);
+  const frameAt = (radius: number, theta: number, phi: number) => () => {
+    const { view, eye } = orbitViewMatrix(radius, theta, phi);
+    mat4MultiplyInto(viewProj, proj, view);
+    scene.update(viewProj, proj[5]!, eye[0], eye[1], eye[2], 1080);
+  };
+
+  // 5. A fresh scene and a still camera load exactly what is drawn, then stop changing.
+  const oblique = frameAt(700, 0.4, 1.1);
+  await settle(scene, oblique);
+  const loads = uploader.uploads;
+  const drawnNodes = scene.getStats().selectedNodes;
+  const reference = selectedIds(scene);
+  let churn = 0;
+  for (let i = 0; i < 30; i++) {
+    oblique();
+    if (selectedIds(scene) !== reference) churn++;
+  }
+  check(
+    'Chargements : la sélection cible compte les nœuds en attente',
+    loads <= drawnNodes + 2 && churn === 0,
+    'nœuds en attente hors budget : la sélection se recompose à chaque arrivée (3–5× plus de blocs lus sur tuiles IGN)',
+    `${loads} blocs lus pour ${drawnNodes} nœuds affichés, sélection figée sur 30 frames`,
+  );
+
+  // 6. Grazing view with a tiny budget: no visible tile goes blank.
+  scene.setPointBudget(150_000);
+  const grazing = frameAt(450, 0.4, 1.47);
+  await settle(scene, grazing);
+  const drawn = new Set(scene.getSelectedNodes().map((node) => node.id));
+  const planes = Float64Array.from(extractFrustumPlanes(viewProj));
+  let visibleRoots = 0;
+  let drawnRoots = 0;
+  for (const node of scene.nodes) {
+    if (node.parent >= 0 || frustumTestAABB(planes, node) === OUTSIDE) continue;
+    visibleRoots++;
+    if (drawn.has(node.id)) drawnRoots++;
+  }
+  check(
+    'Couverture : la racine de chaque tuile visible est toujours affichée',
+    visibleRoots > 0 && drawnRoots === visibleRoots,
+    'priorité seule : un budget serré pouvait laisser une tuile lointaine vide',
+    `${drawnRoots}/${visibleRoots} tuiles visibles en vue rasante avec 150 k pts de budget`,
+  );
+
+  // 7. Octant masks of the adaptive point size match the drawn children.
+  scene.setPointBudget(2_000_000);
+  const close = frameAt(150, 1.2, 0.8);
+  await settle(scene, close);
+  const frameDrawn = new Set(scene.getSelectedNodes().map((node) => node.id));
+  let maskErrors = 0;
+  let partialMasks = 0;
+  for (const node of scene.getSelectedNodes()) {
+    let expected = 0;
+    for (const childId of node.children) {
+      const child = scene.nodes[childId]!;
+      if (child.entry.count > 0 && frameDrawn.has(childId)) {
+        expected |= 1 << ((child.entry.x & 1) | ((child.entry.y & 1) << 1) | ((child.entry.z & 1) << 2));
+      }
+    }
+    if (node.children.every((id) => scene.nodes[id]!.entry.count > 0) && expected !== node.childMask) maskErrors++;
+    if (node.childMask !== 0 && node.childMask !== 0xff) partialMasks++;
+  }
+  check(
+    'Taille adaptative : masques d’octants conformes aux enfants affichés',
+    maskErrors === 0,
+    'taille de point unique : les niveaux grossiers laissent voir le terrain (51 % de pixels ajourés à 1,5 M pts sur tuile IGN)',
+    `${scene.getSelectedNodes().length} nœuds, ${partialMasks} masques partiels, ${maskErrors} incohérence(s)`,
+  );
+
+  // 8. Bounds shrunk to the loaded points still hold every point of the subtree.
+  await settle(scene, frameAt(900, 2.5, 0.05));
+  await settle(scene, frameAt(60, 4.0, 1.0));
+  let checkedPoints = 0;
+  let outside = 0;
+  let heightRatio = 0;
+  let tightened = 0;
+  for (const node of scene.nodes) {
+    if (node.entry.count === 0) continue;
+    if (node.depth > 0) {
+      heightRatio += (node.maxY - node.minY) / node.size;
+      tightened++;
+    }
+    const points = nodePoints(built[node.tileIndex]!, node, center);
+    for (let k = 0; k < node.entry.count; k++) {
+      const x = points[k * 3]!, y = points[k * 3 + 1]!, z = points[k * 3 + 2]!;
+      checkedPoints++;
+      for (let at: SceneNode | undefined = node; at; at = at.parent >= 0 ? scene.nodes[at.parent] : undefined) {
+        const tol = 1e-3;
+        if (x < at.minX - tol || x > at.maxX + tol || y < at.minY - tol || y > at.maxY + tol || z < at.minZ - tol || z > at.maxZ + tol) {
+          outside++;
+          break;
+        }
+      }
+    }
+  }
+  check(
+    'Bornes serrées des nœuds : toujours conservatrices',
+    outside === 0 && checkedPoints > 0,
+    'cube de l’octree : hauteur = largeur, surtout de l’air sur un terrain',
+    `${(checkedPoints / 1e6).toFixed(1)} M pts testés dans leur nœud et tous ses ancêtres, ${outside} hors bornes · ` +
+    `hauteur moyenne ${((heightRatio / Math.max(1, tightened)) * 100).toFixed(0)} % du cube`,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Optionnel : vraie tuile (LIDAR_TILE)
 // ---------------------------------------------------------------------------
 
@@ -451,6 +619,42 @@ async function runRealTile(path: string): Promise<void> {
     `  décodage ${(decodeMs / 1000).toFixed(1)} s (1 thread) · octree LOD ${(buildMs / 1000).toFixed(2)} s · ` +
     `${tile.nodes.length} nœuds (${[...depthCounts.entries()].map(([d, n]) => `p${d}:${n}`).join(' ')}) · ` +
     `${(tile.packed.byteLength / 1e6).toFixed(0)} Mo (12 o/pt) contre ${((pc.count * 16) / 1e6).toFixed(0)} Mo + voxels avant`,
+  );
+
+  // The LOD shrinks a node's bounds to its own points plus CONTENT_MARGIN_CELLS
+  // cells: every point of its subtree must fall within that margin.
+  const view = new DataView(tile.packed.buffer, tile.packed.byteOffset, tile.packed.byteLength);
+  const own = tile.nodes.map((node) => {
+    const cube = lodNodeCube(tile.header, node);
+    const box = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+    for (let k = 0; k < node.count; k++) {
+      const p = unpackLodPosition(view, node.byteOffset + k * LOD_POINT_STRIDE, cube);
+      for (let axis = 0; axis < 3; axis++) {
+        box[axis] = Math.min(box[axis]!, p[axis]!);
+        box[axis + 3] = Math.max(box[axis + 3]!, p[axis]!);
+      }
+    }
+    return box;
+  });
+  let worstCells = 0;
+  tile.nodes.forEach((node, i) => {
+    const box = own[i]!;
+    if (!Number.isFinite(box[0]!)) return;
+    let excess = 0;
+    tile.nodes.forEach((other, j) => {
+      const shift = other.depth - node.depth;
+      if (shift <= 0 || (other.x >> shift) !== node.x || (other.y >> shift) !== node.y || (other.z >> shift) !== node.z) return;
+      const sub = own[j]!;
+      if (!Number.isFinite(sub[0]!)) return;
+      for (let axis = 0; axis < 3; axis++) excess = Math.max(excess, box[axis]! - sub[axis]!, sub[axis + 3]! - box[axis + 3]!);
+    });
+    worstCells = Math.max(worstCells, excess / lodNodeSpacing(tile.header, node.depth));
+  });
+  check(
+    'Tuile réelle : marge des bornes serrées',
+    worstCells < CONTENT_MARGIN_CELLS,
+    'bornes = cube de l’octree',
+    `sous-arbres à ${worstCells.toFixed(2)} maille(s) au plus des points de leur nœud < marge ${CONTENT_MARGIN_CELLS}`,
   );
 
   const opened = createInMemoryLodTile(tile);
@@ -479,9 +683,124 @@ async function runRealTile(path: string): Promise<void> {
     const s = scene.getStats();
     notes.push(
       `  ${label} : ${(s.selectedPoints / 1e6).toFixed(2)} M pts en ${s.selectedNodes} nœuds · ` +
-      `GPU résident ${(s.residentPoints / 1e6).toFixed(2)} M · convergé en ${elapsed.toFixed(0)} ms`,
+      `GPU résident ${(s.residentPoints / 1e6).toFixed(2)} M · ${uploader.uploads} blocs lus depuis le début · convergé en ${elapsed.toFixed(0)} ms`,
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// 9–10. Cadence réelle et budget de points
+// ---------------------------------------------------------------------------
+
+function runFrameClockCheck(): void {
+  const rand = createRandom(99);
+  const cases = [60, 120, 144].map((hz) => {
+    const clock = new FrameClock();
+    const period = 1000 / hz;
+    let now = 0;
+    for (let i = 0; i < 400; i++) {
+      // 30 % of the frames miss one or two vsyncs, with a little timer jitter.
+      const vsyncs = rand() < 0.3 ? (rand() < 0.5 ? 2 : 3) : 1;
+      now += vsyncs * period + (rand() - 0.5) * 0.4;
+      clock.frame(now);
+    }
+    return { hz, refresh: clock.getRefreshMs(), target: clock.getTargetIntervalMs(), period };
+  });
+  const slow = new FrameClock();
+  for (let i = 0; i < 400; i++) slow.frame(i * (1000 / 30));
+  const detected = cases.every((c) => Math.abs(c.refresh - c.period) < 0.05);
+  const targets = cases.map((c) => `${c.hz} Hz → ${(1000 / c.target).toFixed(0)} fps visés`).join(', ');
+  check(
+    "Cadence réelle : période d'écran retrouvée malgré les vsync ratées",
+    detected && Math.abs(slow.getRefreshMs() - 1000 / 60) < 0.05,
+    'fps affichés = 1000 / coût GPU de la frame (50 fps affichés pour 25 réels)',
+    `${cases.map((c) => `${c.hz} Hz lu ${(1000 / c.refresh).toFixed(1)} Hz`).join(', ')} · ${targets} · GPU à 30 fps lu ${(1000 / slow.getRefreshMs()).toFixed(0)} Hz`,
+  );
+}
+
+const BUDGET_PROFILE: PlatformProfile = {
+  tier: 'integrated', minBudget: 400_000, initialBudget: 1_500_000, maxBudget: 6_000_000, poolBudget: 8_000_000,
+  maxCanvasDim: 4096, dprCap: 1.25, isApple: false, motionScale: 0.7,
+};
+
+/**
+ * Drives the budget with a modelled GPU at 60 Hz: `gpuMs(points)` for the
+ * draw passes, plus `overheadMs` the timestamps do not see (compositor,
+ * panels' blur). A frame lands on the next vsync after both.
+ */
+function simulateBudget(gpuMs: (points: number) => number, overheadMs: number, frames: number, rest = false) {
+  const budget = new AdaptivePointBudget(BUDGET_PROFILE, { preciseGpu: true });
+  const period = 1000 / 60;
+  const missed: boolean[] = [];
+  const budgets: number[] = [];
+  for (let i = 0; i < frames; i++) {
+    const gpu = gpuMs(budget.pointBudget);
+    const vsyncs = Math.max(1, Math.ceil((gpu + overheadMs) / period - 1e-9));
+    budget.sample({ gpuMs: gpu, cpuMs: 1, intervalMs: vsyncs * period, targetIntervalMs: period, refreshMs: period, rest });
+    missed.push(vsyncs > 1);
+    budgets.push(budget.pointBudget);
+  }
+  const tail = (values: number[]) => values.slice(-600);
+  const tailMissed = tail(missed.map(Number));
+  return {
+    missedRatio: tailMissed.reduce((sum, value) => sum + value, 0) / tailMissed.length,
+    minBudget: Math.min(...tail(budgets)),
+    maxBudget: Math.max(...tail(budgets)),
+    finalBudget: budget.pointBudget,
+  };
+}
+
+/**
+ * The former controller (before the real-cadence one), same GPU model: a
+ * fixed 16.6 ms target on the measured cost, shrinking above 19.1 ms and
+ * growing below 12.5 ms, blind to the vsync.
+ */
+function simulateLegacyBudget(gpuMs: (points: number) => number, overheadMs: number, frames: number) {
+  const target = 16.6;
+  const period = 1000 / 60;
+  let budget = BUDGET_PROFILE.initialBudget;
+  let avg = target;
+  let slow = 0;
+  let fast = 0;
+  let missed = 0;
+  for (let i = 0; i < frames; i++) {
+    const gpu = gpuMs(budget);
+    if (i >= frames - 600 && gpu + overheadMs > period) missed++;
+    avg += (Math.min(gpu, target * 4) - avg) / 8;
+    if (i < 8) continue;
+    if (avg > target * 1.15) {
+      fast = 0;
+      if (++slow >= 6) { budget = Math.max(BUDGET_PROFILE.minBudget, Math.floor(budget * 0.9)); slow = 0; }
+    } else if (avg < target * 0.75) {
+      slow = 0;
+      if (++fast >= 12) { budget = Math.min(BUDGET_PROFILE.maxBudget, Math.floor(budget * 1.15)); fast = 0; }
+    } else {
+      slow = 0;
+      fast = 0;
+    }
+  }
+  return { missedRatio: missed / 600, finalBudget: budget };
+}
+
+function runBudgetCheck(): void {
+  // Linear GPU, 5 ms the timestamps do not see: frames miss the vsync above ~2.9 M points.
+  const linear = (points: number) => 3 + points * 3e-6;
+  const overheadMs = 5;
+  const limited = simulateBudget(linear, overheadMs, 3000);
+  const legacy = simulateLegacyBudget(linear, overheadMs, 3000);
+  const limitPoints = (1000 / 60 - 3 - overheadMs) / 3e-6;
+  // DVFS: the GPU lowers its clock, so its pass time stays ~11 ms whatever the load.
+  const dvfs = simulateBudget(() => 11, 3, 3000);
+  // Still frames at full resolution cost 1.5× the interval: they must not cut the moving budget.
+  const rest = simulateBudget(() => 25, 3, 600, true);
+  check(
+    'Budget de points : calé sur la cadence réelle, pas sur 16,6 ms de GPU',
+    limited.missedRatio < 0.1 && limited.minBudget > limitPoints * 0.7 && limited.maxBudget < limitPoints * 1.15
+      && dvfs.finalBudget === BUDGET_PROFILE.maxBudget && dvfs.missedRatio === 0
+      && rest.finalBudget === BUDGET_PROFILE.initialBudget,
+    `cible 16,6 ms de GPU (bande 12,5–19 ms), sans voir la vsync : budget ${(legacy.finalBudget / 1e6).toFixed(2)} M, ${(legacy.missedRatio * 100).toFixed(0)} % de frames ratées (≈ 30 fps réels)`,
+    `limite ${(limitPoints / 1e6).toFixed(2)} M pts : budget ${(limited.minBudget / 1e6).toFixed(2)}–${(limited.maxBudget / 1e6).toFixed(2)} M, ${(limited.missedRatio * 100).toFixed(1)} % ratées · GPU à fréquence variable : ${(dvfs.finalBudget / 1e6).toFixed(1)} M (plafond) · arrêt : budget inchangé`,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -490,6 +809,9 @@ runPrecisionCheck();
 runScreenSizeCheck();
 runLodTileCheck();
 await runStreamingCheck();
+await runSelectionCheck();
+runFrameClockCheck();
+runBudgetCheck();
 if (process.env.LIDAR_TILE) await runRealTile(process.env.LIDAR_TILE);
 
 console.log('\nLiDAR WebGPU — précision / LOD / streaming\n');

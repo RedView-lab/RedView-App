@@ -172,6 +172,7 @@ export interface ControllerFns {
 
   // ign overlay
   addIgnOrthoOverlay: () => void;
+  addVhrOrthoOverlay: () => void;
 
   // style bootstrap
   prepareStyleChange: (detail?: string) => void;

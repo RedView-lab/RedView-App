@@ -1,13 +1,15 @@
 import { useCallback } from 'react';
 import type { TimelineAddItemKind, TimelineAddItemOptions, TimelineView } from '../../types';
 import {
-  buildPendingRoutePatchAfterRemoval,
   buildPendingRoutePatchForEditedRow,
   buildTimelineAfterRemoval,
+  hasEditableRoute,
   insertTimelineItem,
   moveTimelinePauseItem,
   setPendingRouteEditForPlacedRow,
+  setPendingRoutePatchAfterRemoval,
 } from './timelineMutations';
+import { projectDistanceAlongRouteM } from '../../lib/routes';
 import { normalizeItineraryRhythmState } from '../../lib/project';
 import { setManualFavoriteOrigin, setPoiFeatureFavoriteState } from './poiFeatureUtils';
 import type { ItineraryProject } from '../../types';
@@ -80,18 +82,13 @@ export function useItineraryTimelineCallbacks({
 
   const handleRemoveTimelineItem = useCallback((id: string) => {
     const applyRemoval = (it: ItineraryProject['itineraries'][number]) => {
-      const removedIndex = it.timeline.findIndex((item) => item.id === id);
-      const removedRow = removedIndex >= 0 ? it.timeline[removedIndex] : null;
       const nextTimeline = buildTimelineAfterRemoval(it.timeline, id);
       if (!nextTimeline) return false;
 
+      const previousTimeline = it.timeline;
       it.timeline = nextTimeline;
-      if (it.gpxRoute?.source === 'brouter') {
-        it.pendingRoutePatch = buildPendingRoutePatchAfterRemoval(
-          nextTimeline,
-          removedIndex,
-          removedRow,
-        );
+      if (hasEditableRoute(it)) {
+        setPendingRoutePatchAfterRemoval(it, previousTimeline);
         delete it.pendingTraceExtension;
         delete it.routeAudit;
         it.prediction = null;
@@ -124,12 +121,17 @@ export function useItineraryTimelineCallbacks({
     updateActive((it) => {
       const row = it.timeline.find((item) => item.id === id);
       if (!row) return;
+      // Nouvelle étape : rien à retirer du tracé, la fenêtre se pose là où elle le rejoint.
+      const newlyPlaced = row.lat == null || row.lon == null;
       row.label = place.name;
       row.lat = place.lat;
       row.lon = place.lon;
-      if (it.gpxRoute?.points && it.gpxRoute.points.length >= 2) {
+      if (hasEditableRoute(it)) {
         delete row.onRoute;
-        setPendingRouteEditForPlacedRow(it, id);
+        const placedAtM = newlyPlaced
+          ? projectDistanceAlongRouteM(place, it.gpxRoute!.points) ?? undefined
+          : undefined;
+        setPendingRouteEditForPlacedRow(it, id, placedAtM);
         delete it.routeAudit;
         it.prediction = null;
       }
@@ -144,8 +146,8 @@ export function useItineraryTimelineCallbacks({
         row.lat = lat;
         row.lon = lon;
         delete row.onRoute;
-        if (it.gpxRoute?.points && it.gpxRoute.points.length >= 2) {
-          it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, id);
+        if (hasEditableRoute(it)) {
+          it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it, id);
           delete it.pendingTraceExtension;
           delete it.routeAudit;
           it.prediction = null;

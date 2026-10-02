@@ -5,6 +5,7 @@ import type { Map as MapboxMap, PopupOptions } from 'mapbox-gl';
 
 import {
   formatCoordinates,
+  keepPopupInVisibleMap,
   MapAlertSectionCard,
   type MapAlertSection,
   type MapAlertSectionActionPayload,
@@ -195,11 +196,13 @@ export function AnalysisAlertSectionPopover({
     popup.on('close', () => {
       if (!disposed) onCloseRef.current();
     });
+    const releaseSafeArea = keepPopupInVisibleMap(popup, map);
     popupRef.current = popup;
     return () => {
       disposed = true;
       popupRef.current = null;
       popup.remove();
+      releaseSafeArea();
     };
   }, [host, map, selection.itineraryId, selection.key]);
 

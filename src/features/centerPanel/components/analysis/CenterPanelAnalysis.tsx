@@ -27,6 +27,8 @@ import {
   SlopeLegend,
   type AxisMetricId,
   type AxisMode,
+  listItinerarySteepAlerts,
+  type ChartAlertWindow,
   type ChartPoiAnnotation,
   type ItinerarySteepAlert,
 } from '../chart';
@@ -555,6 +557,37 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
     [activeItinerary, map, predictions, updateHoverPoint, visibleChartNodes, xMode],
   );
 
+  // Icône « Alertes » du graphe : même fiche que l'icône de la carte, la carte
+  // vole vers le tronçon (le type de voie se lit une fois la vue posée).
+  const handleChartAlertClick = useCallback(
+    (alertWindow: ChartAlertWindow) => {
+      const itinerary = itineraries.find((it) => it.id === alertWindow.itineraryId);
+      const alert = itinerary
+        ? listItinerarySteepAlerts(itinerary).find((candidate) => candidate.id === alertWindow.id)
+        : null;
+      if (!alert) return;
+
+      const midX = (alertWindow.startX + alertWindow.endX) / 2;
+      setSelectedChartX(midX);
+      updateHoverPoint(midX);
+      handleSelectAlert(alert);
+      if (!map) return;
+
+      const { lon, lat } = alert.mid;
+      flyToPoi(map, { lon, lat });
+      map.once('moveend', () => {
+        setSelectedAlert((prev) => {
+          if (!prev || prev.itineraryId !== alert.itineraryId || prev.key !== alert.key || prev.roadTypeLabel) {
+            return prev;
+          }
+          const roadTypeLabel = resolveRoadTypeLabel(map, lon, lat);
+          return roadTypeLabel ? { ...prev, roadTypeLabel } : prev;
+        });
+      });
+    },
+    [handleSelectAlert, itineraries, map, updateHoverPoint],
+  );
+
   // Latest-closure ref + stable wrapper: a fresh `onPlotClick` on every render
   // defeated `AnalysisChart`'s memo (re-rendering it on each map-hover /
   // flyover frame) and re-bound its window pointer listeners.
@@ -694,6 +727,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
           controlledHoverXValue={chartControlledHoverXValue}
           onPlotClick={handleChartClick}
           onPoiClick={handlePoiAnnotationClick}
+          onAlertClick={handleChartAlertClick}
           onPlotRangeSelect={handlePlotRangeSelect}
           selectedXRange={selectedXRange}
           onClearSelectedXRange={handleClearSelectedXRange}
@@ -708,7 +742,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
           </div>
         ) : null}
       </div>
-      {map && selectedAlert && alertMarkersEnabled ? (
+      {map && selectedAlert && filters.alertes ? (
         <AnalysisAlertSectionPopover
           map={map}
           selection={selectedAlert}

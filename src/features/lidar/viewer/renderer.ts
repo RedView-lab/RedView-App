@@ -13,7 +13,7 @@ import type { ViewerSlopeState, ViewerAltitudeState } from './rightPanel/types';
 import type { ViewerPointFilterState } from './pointFilter';
 import { computePointFilterBitmasks } from './pointFilter';
 import type { SolarRenderState } from '../viewer-webgl/sunlightController';
-import { GpuFrameTimer } from './renderer/gpuTimer';
+import { GpuFrameTimer, TIMED_PASS } from './renderer/gpuTimer';
 
 export type { HeightmapParams, SnowParams } from './renderer/types';
 export type { ViewerSlopeState, ViewerAltitudeState, ViewerPointFilterState };
@@ -25,8 +25,29 @@ const COLOR_MODE_INDEX: Record<PointColorMode, number> = { rgb: 0, intensity: 1,
 /** Projected point diameter bounds (device pixels) for the metre-sized mode. */
 const POINT_MIN_PX = 1.0;
 const POINT_MAX_PX = 64;
+/**
+ * Adaptive size of the finest points on screen, per metre of their node's
+ * surface spacing: the same 1.5 × spacing the default point size gives the
+ * full-density points (see `pointSizeReference`).
+ */
+const ADAPTIVE_SPACING_FACTOR = 1.5;
 /** Uniform slots of the node pool (one per resident LOD node). */
 const NODE_POOL_CAPACITY = 16384;
+
+/** Offscreen scene render targets of one size. */
+interface SceneTargets {
+  width: number;
+  height: number;
+  /** Single-sample colour (MSAA resolve target), read by the EDL or upscale pass. */
+  colorTexture: GPUTexture;
+  colorView: GPUTextureView;
+  colorMsTexture: GPUTexture | null;
+  colorMsView: GPUTextureView | null;
+  depthTexture: GPUTexture;
+  depthView: GPUTextureView;
+  edlBindGroup: GPUBindGroup;
+  blitBindGroup: GPUBindGroup;
+}
 
 interface MeshBuffers {
   vertBuf: GPUBuffer;
@@ -38,9 +59,10 @@ interface MeshBuffers {
 /**
  * WebGPU point-cloud renderer.
  *
- * Frame = shading compute pass (new nodes, or all after an overlay change)
- * → scene pass into an offscreen colour + depth32float target (reversed-Z,
- * MSAA ×4 on discrete GPUs) → Eye-Dome Lighting pass resolving to the canvas.
+ * Frame = shading compute pass (drawn nodes that are new, or stale after an
+ * overlay change) → scene pass (depth32float reversed-Z, MSAA ×4 on
+ * discrete GPUs), straight into the canvas, or with EDL on into an
+ * offscreen target that the Eye-Dome Lighting pass resolves to the canvas.
  * Point data lives in LOD nodes streamed by `SceneLod`; this class is its
  * GPU residency backend (`SceneNodeUploader`).
  */
@@ -57,14 +79,20 @@ export class LidarRenderer implements SceneNodeUploader {
   private edlParamsBuffer!: GPUBuffer;
   private sceneBindGroup!: GPUBindGroup;
   private pointParamsBindGroup!: GPUBindGroup;
-  private edlBindGroup: GPUBindGroup | null = null;
-
-  private sceneColorTexture: GPUTexture | null = null;
-  private sceneColorMsTexture: GPUTexture | null = null;
-  private depthTexture: GPUTexture | null = null;
-  private sceneColorView!: GPUTextureView;
-  private sceneColorMsView: GPUTextureView | null = null;
-  private depthView!: GPUTextureView;
+  /** Canvas-sized targets (EDL path; without EDL the scene goes straight to the canvas). */
+  private fullTargets: SceneTargets | null = null;
+  /** Reduced targets drawn while the camera moves (`motionScale` < 1), upscaled to the canvas. */
+  private motionTargets: SceneTargets | null = null;
+  private blitSampler!: GPUSampler;
+  /**
+   * Scene resolution while the camera moves, as a share of the canvas
+   * (1 = off). Fill rate is what limits integrated GPUs: 0.7 draws half
+   * the pixels. Set before `resize`.
+   */
+  motionScale = 1;
+  /** Square sprites (no discard) while the camera moves. */
+  motionSquares = true;
+  private lastRenderScale = 1;
 
   private uniformCache = new Float32Array(80);
   private uniformCacheU32 = new Uint32Array(this.uniformCache.buffer);
@@ -134,7 +162,14 @@ export class LidarRenderer implements SceneNodeUploader {
   pointSize = 0.3;
   /** Point diameter in device pixels; 0 = adaptive (world size, clamped in pixels). */
   fixedPointPixels = 0;
-  lodThreshold = 500;
+  /**
+   * Coarser LOD levels drawn as the finest on screen grow to their own
+   * spacing (Potree-style adaptive size): no holes where the budget or the
+   * distance stops the refinement.
+   */
+  adaptivePointSize = true;
+  /** Default `pointSize` of the scene; the adaptive size follows the user's changes to it. */
+  pointSizeReference = 0;
   terrainVisible = true;
 
   private edlEnabled = false;
@@ -209,7 +244,10 @@ export class LidarRenderer implements SceneNodeUploader {
     this.edlParamsBuffer = this.createUniformBuffer(this.edlParams.byteLength);
     this.pointParamsBindGroup = this.device.createBindGroup({
       layout: this.pipelines.pointParamsBindGroupLayout,
-      entries: [{ binding: 0, resource: { buffer: this.pointParamsBuffer } }],
+      entries: [
+        { binding: 0, resource: { buffer: this.pointParamsBuffer } },
+        { binding: 1, resource: { buffer: this.nodePool.childMaskBuffer } },
+      ],
     });
 
     this.heightTexture = this.createFloatTexture(1, 1, new Float32Array([0]));
@@ -228,6 +266,7 @@ export class LidarRenderer implements SceneNodeUploader {
       { bytesPerRow: 4 },
       { width: 1, height: 1 },
     );
+    this.blitSampler = this.createRampSampler('linear');
     this.slopeSampler = this.createRampSampler('linear');
     this.altitudeSampler = this.createRampSampler('linear');
 
@@ -235,9 +274,14 @@ export class LidarRenderer implements SceneNodeUploader {
     this.resize(canvas.width, canvas.height);
   }
 
-  /** Smoothed GPU cost per frame in ms (0 until measured), see `GpuFrameTimer`. */
+  /** Smoothed GPU cost of the draw passes per frame in ms (0 until measured), see `GpuFrameTimer`. */
   getGpuFrameMs(): number {
     return this.gpuTimer?.getFrameMs() ?? 0;
+  }
+
+  /** Smoothed GPU cost of the point shading pass per frame in ms (0 until measured). */
+  getGpuShadeMs(): number {
+    return this.gpuTimer?.getShadeMs() ?? 0;
   }
 
   /** False when frame cost is only approximated (no `timestamp-query`): includes presentation waits. */
@@ -532,45 +576,72 @@ export class LidarRenderer implements SceneNodeUploader {
     this.canvasHeight = Math.max(1, h);
     if (!this.device) return;
 
-    this.sceneColorTexture?.destroy();
-    this.sceneColorMsTexture?.destroy();
-    this.depthTexture?.destroy();
+    this.destroySceneTargets(this.fullTargets);
+    this.destroySceneTargets(this.motionTargets);
+    this.fullTargets = this.createSceneTargets(this.canvasWidth, this.canvasHeight);
+    this.motionTargets = this.motionScale < 1
+      ? this.createSceneTargets(
+        Math.max(1, Math.round(this.canvasWidth * this.motionScale)),
+        Math.max(1, Math.round(this.canvasHeight * this.motionScale)),
+      )
+      : null;
+  }
 
-    const size = [this.canvasWidth, this.canvasHeight];
-    this.sceneColorTexture = this.device.createTexture({
+  private createSceneTargets(width: number, height: number): SceneTargets {
+    const size = [width, height];
+    const colorTexture = this.device.createTexture({
       size,
       format: this.format,
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
-    this.sceneColorView = this.sceneColorTexture.createView();
-    if (this.sampleCount > 1) {
-      this.sceneColorMsTexture = this.device.createTexture({
+    const colorView = colorTexture.createView();
+    const colorMsTexture = this.sampleCount > 1
+      ? this.device.createTexture({
         size,
         format: this.format,
         sampleCount: this.sampleCount,
         usage: GPUTextureUsage.RENDER_ATTACHMENT,
-      });
-      this.sceneColorMsView = this.sceneColorMsTexture.createView();
-    } else {
-      this.sceneColorMsTexture = null;
-      this.sceneColorMsView = null;
-    }
-    this.depthTexture = this.device.createTexture({
+      })
+      : null;
+    const depthTexture = this.device.createTexture({
       size,
       format: SCENE_DEPTH_FORMAT,
       sampleCount: this.sampleCount,
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
-    this.depthView = this.depthTexture.createView();
+    const depthView = depthTexture.createView();
+    return {
+      width,
+      height,
+      colorTexture,
+      colorView,
+      colorMsTexture,
+      colorMsView: colorMsTexture?.createView() ?? null,
+      depthTexture,
+      depthView,
+      edlBindGroup: this.device.createBindGroup({
+        layout: this.pipelines.edlBindGroupLayout,
+        entries: [
+          { binding: 0, resource: colorView },
+          { binding: 1, resource: depthView },
+          { binding: 2, resource: { buffer: this.edlParamsBuffer } },
+        ],
+      }),
+      blitBindGroup: this.device.createBindGroup({
+        layout: this.pipelines.blitBindGroupLayout,
+        entries: [
+          { binding: 0, resource: colorView },
+          { binding: 1, resource: this.blitSampler },
+        ],
+      }),
+    };
+  }
 
-    this.edlBindGroup = this.device.createBindGroup({
-      layout: this.pipelines.edlBindGroupLayout,
-      entries: [
-        { binding: 0, resource: this.sceneColorView },
-        { binding: 1, resource: this.depthView },
-        { binding: 2, resource: { buffer: this.edlParamsBuffer } },
-      ],
-    });
+  private destroySceneTargets(targets: SceneTargets | null): void {
+    if (!targets) return;
+    targets.colorTexture.destroy();
+    targets.colorMsTexture?.destroy();
+    targets.depthTexture.destroy();
   }
 
   private createMeshBuffers(vertices: Float32Array, colors: Uint8Array, indices: Uint32Array, count: number): MeshBuffers {
@@ -695,7 +766,7 @@ export class LidarRenderer implements SceneNodeUploader {
 
     // 28..31: scalars
     f[28] = this.pointSize;
-    f[29] = this.lodThreshold;
+    f[29] = 0;
     f[30] = this.canvasWidth;
     f[31] = this.canvasHeight;
 
@@ -749,61 +820,91 @@ export class LidarRenderer implements SceneNodeUploader {
     this.device.queue.writeBuffer(this.cameraBuffer, 0, f as Float32Array<ArrayBuffer>);
   }
 
-  private writeFrameParams(): void {
+  /** Per-frame sprite and EDL parameters for scene targets of `width`×`height` (`scale` of the canvas). */
+  private writeFrameParams(width: number, height: number, scale: number): void {
     const p = this.pointParams;
+    // Pixel sizes follow the target, so the upscaled image keeps the same point sizes.
     p[0] = POINT_MIN_PX;
-    p[1] = POINT_MAX_PX;
-    p[2] = this.fixedPointPixels;
-    p[3] = Math.abs(this.lastProjScaleY) * this.canvasHeight * 0.5;
-    p[4] = this.canvasWidth;
-    p[5] = this.canvasHeight;
+    p[1] = POINT_MAX_PX * scale;
+    p[2] = this.fixedPointPixels * scale;
+    p[3] = Math.abs(this.lastProjScaleY) * height * 0.5;
+    p[4] = width;
+    p[5] = height;
     p[6] = this.sampleCount > 1 ? 1 : 0;
     p[7] = this.pointSize;
+    p[8] = this.adaptivePointSize
+      ? ADAPTIVE_SPACING_FACTOR * (this.pointSizeReference > 0 ? this.pointSize / this.pointSizeReference : 1)
+      : 0;
     this.device.queue.writeBuffer(this.pointParamsBuffer, 0, p as Float32Array<ArrayBuffer>);
 
     this.edlParams[0] = this.edlStrength;
-    this.edlParams[1] = this.edlRadiusPx;
+    this.edlParams[1] = Math.max(1, this.edlRadiusPx * scale);
     this.edlParams[2] = this.edlEnabled ? 1 : 0;
+    this.edlParams[3] = scale;
     this.device.queue.writeBuffer(this.edlParamsBuffer, 0, this.edlParams as Float32Array<ArrayBuffer>);
   }
 
-  /** Renders the terrain, the given LOD nodes (front to back) and overlays. */
-  renderScene(nodes: readonly SceneNode[]): void {
-    if (!this.device || this.deviceLost || !this.edlBindGroup || !this.nodePool) return;
+  /** Share of the canvas resolution the last frame was rendered at. */
+  getLastRenderScale(): number {
+    return this.lastRenderScale;
+  }
+
+  /**
+   * Renders the terrain, the given LOD nodes (front to back) and overlays.
+   * `motion`: the camera is moving — reduced resolution (`motionScale`) and
+   * square sprites; the next still frame restores full quality.
+   */
+  renderScene(nodes: readonly SceneNode[], options: { motion?: boolean } = {}): void {
+    if (!this.device || this.deviceLost || !this.fullTargets || !this.nodePool) return;
 
     const canvasView = this.context.getCurrentTexture().createView();
     this.lastDrawCallCount = 0;
-    this.writeFrameParams();
+    const reduced = options.motion === true && this.motionTargets !== null;
+    const targets = reduced ? this.motionTargets! : this.fullTargets;
+    const scale = targets.width / this.canvasWidth;
+    this.lastRenderScale = scale;
+    this.writeFrameParams(targets.width, targets.height, scale);
 
     const clearR = this.sunlightEnabled ? this.skyColor[0] : 0.76;
     const clearG = this.sunlightEnabled ? this.skyColor[1] : 0.87;
     const clearB = this.sunlightEnabled ? this.skyColor[2] : 0.96;
 
     const enc = this.device.createCommandEncoder();
-    this.nodePool.encodeShading(enc, this.pipelines.shadingPipeline, this.sceneBindGroup);
-
     const timed = this.gpuTimer?.beginFrame() ?? false;
-    const msaa = this.sceneColorMsView !== null;
+    this.nodePool.prepareFrame(
+      enc,
+      this.pipelines.shadingPipeline,
+      this.sceneBindGroup,
+      nodes,
+      timed ? () => this.gpuTimer!.passTimestamps(TIMED_PASS.shading) : undefined,
+    );
+
+    const msaa = targets.colorMsView !== null;
+    // At full resolution without EDL the scene goes straight to the canvas
+    // (resolved there with MSAA): no full-screen copy. Depth is only stored
+    // for EDL.
+    const direct = !this.edlEnabled && !reduced;
+    const target = direct ? canvasView : targets.colorView;
     const pass = enc.beginRenderPass({
       colorAttachments: [{
-        view: msaa ? this.sceneColorMsView! : this.sceneColorView,
-        resolveTarget: msaa ? this.sceneColorView : undefined,
+        view: msaa ? targets.colorMsView! : target,
+        resolveTarget: msaa ? target : undefined,
         clearValue: { r: clearR, g: clearG, b: clearB, a: 1 },
         loadOp: 'clear',
         storeOp: msaa ? 'discard' : 'store',
       }],
       depthStencilAttachment: {
-        view: this.depthView,
+        view: targets.depthView,
         depthClearValue: 0,
         depthLoadOp: 'clear',
-        depthStoreOp: 'store',
+        depthStoreOp: this.edlEnabled ? 'store' : 'discard',
       },
-      timestampWrites: timed ? this.gpuTimer!.passTimestamps(0) : undefined,
+      timestampWrites: timed ? this.gpuTimer!.passTimestamps(TIMED_PASS.scene) : undefined,
     });
     pass.setBindGroup(0, this.sceneBindGroup);
 
     // Points first (front to back), then the terrain only fills what is left.
-    pass.setPipeline(this.pipelines.pointPipeline);
+    pass.setPipeline(options.motion && this.motionSquares ? this.pipelines.pointPipelineSquare : this.pipelines.pointPipeline);
     pass.setBindGroup(1, this.pointParamsBindGroup);
     this.lastDrawCallCount += this.nodePool.draw(pass, nodes);
 
@@ -848,19 +949,26 @@ export class LidarRenderer implements SceneNodeUploader {
     }
     pass.end();
 
-    const edlPass = enc.beginRenderPass({
-      colorAttachments: [{
-        view: canvasView,
-        clearValue: { r: clearR, g: clearG, b: clearB, a: 1 },
-        loadOp: 'clear',
-        storeOp: 'store',
-      }],
-      timestampWrites: timed ? this.gpuTimer!.passTimestamps(1) : undefined,
-    });
-    edlPass.setPipeline(this.pipelines.edlPipeline);
-    edlPass.setBindGroup(0, this.edlBindGroup);
-    edlPass.draw(3);
-    edlPass.end();
+    if (!direct) {
+      const edlPass = enc.beginRenderPass({
+        colorAttachments: [{
+          view: canvasView,
+          clearValue: { r: clearR, g: clearG, b: clearB, a: 1 },
+          loadOp: 'clear',
+          storeOp: 'store',
+        }],
+        timestampWrites: timed ? this.gpuTimer!.passTimestamps(TIMED_PASS.edl) : undefined,
+      });
+      if (this.edlEnabled) {
+        edlPass.setPipeline(this.pipelines.edlPipeline);
+        edlPass.setBindGroup(0, targets.edlBindGroup);
+      } else {
+        edlPass.setPipeline(this.pipelines.blitPipeline);
+        edlPass.setBindGroup(0, targets.blitBindGroup);
+      }
+      edlPass.draw(3);
+      edlPass.end();
+    }
 
     if (timed) this.gpuTimer!.encodeResolve(enc);
     this.device.queue.submit([enc.finish()]);
@@ -882,9 +990,10 @@ export class LidarRenderer implements SceneNodeUploader {
     this.cameraBuffer?.destroy();
     this.pointParamsBuffer?.destroy();
     this.edlParamsBuffer?.destroy();
-    this.sceneColorTexture?.destroy();
-    this.sceneColorMsTexture?.destroy();
-    this.depthTexture?.destroy();
+    this.destroySceneTargets(this.fullTargets);
+    this.destroySceneTargets(this.motionTargets);
+    this.fullTargets = null;
+    this.motionTargets = null;
     this.heightTexture?.destroy();
     this.snowTexture?.destroy();
     this.slopeTexture?.destroy();

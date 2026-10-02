@@ -27,6 +27,8 @@ interface MapViewportControlsProps {
   onToggleRightPanel?: () => void;
   routeSlopeLegendTitle?: string | null;
   routeColor?: string | null;
+  /** Short canvas: 2-column grid of 32 px buttons (pages/Dashboard/lib/layout.ts reserves its size). */
+  compact?: boolean;
 }
 
 type SurfaceType = 'asphalt' | 'paved' | 'gravel' | 'dirt' | 'sand';
@@ -146,6 +148,7 @@ export const MapViewportControls = memo(function MapViewportControls({
   onToggleRightPanel,
   routeSlopeLegendTitle = null,
   routeColor = null,
+  compact = false,
 }: MapViewportControlsProps) {
   const { t } = useAppI18n();
   const [bearing, setBearing] = useState(0);
@@ -278,10 +281,12 @@ export const MapViewportControls = memo(function MapViewportControls({
   };
 
   return (
-    <aside className="rvmvc-map-tools" aria-label={t('Contrôles de la vue carte')} data-node-id="1765:66284">
+    <aside
+      className={`rvmvc-map-tools${compact ? ' rvmvc-map-tools--compact' : ''}`}
+      aria-label={t('Contrôles de la vue carte')} data-node-id="1765:66284">
       <button
         type="button"
-        className={`rvmvc-map-tools__button${immersiveMode ? ' is-active' : ' is-inactive'}`}
+        className={`rvmvc-map-tools__button rvmvc-map-tools__slot-fullscreen${immersiveMode ? ' is-active' : ' is-inactive'}`}
         aria-label={t('Activer ou quitter le mode plein écran')}
         aria-pressed={immersiveMode}
         title={t('Plein écran')}
@@ -307,7 +312,7 @@ export const MapViewportControls = memo(function MapViewportControls({
 
       <button
         type="button"
-        className="rvmvc-map-tools__button"
+        className="rvmvc-map-tools__button rvmvc-map-tools__slot-compass"
         aria-label={t('Recentrer la boussole vers le nord')}
         title={t('Nord')}
         onClick={handleResetNorth}
@@ -323,7 +328,7 @@ export const MapViewportControls = memo(function MapViewportControls({
 
       <button
         type="button"
-        className="rvmvc-map-tools__button rvmvc-map-tools__button--compact"
+        className="rvmvc-map-tools__button rvmvc-map-tools__button--compact rvmvc-map-tools__slot-zoom-in"
         aria-label={t('Zoomer')}
         title={t('Zoomer')}
         onClick={handleZoomIn}
@@ -334,7 +339,7 @@ export const MapViewportControls = memo(function MapViewportControls({
 
       <button
         type="button"
-        className="rvmvc-map-tools__button rvmvc-map-tools__button--compact"
+        className="rvmvc-map-tools__button rvmvc-map-tools__button--compact rvmvc-map-tools__slot-zoom-out"
         aria-label={t('Dézoomer')}
         title={t('Dézoomer')}
         onClick={handleZoomOut}
@@ -345,7 +350,7 @@ export const MapViewportControls = memo(function MapViewportControls({
 
       <button
         type="button"
-        className={`rvmvc-map-tools__button rvmvc-map-tools__button--label${is3DView ? ' is-active' : ' is-inactive'}`}
+        className={`rvmvc-map-tools__button rvmvc-map-tools__button--label rvmvc-map-tools__slot-dimension${is3DView ? ' is-active' : ' is-inactive'}`}
         aria-label={is3DView ? t('Passer en vue 2D') : t('Passer en vue 3D')}
         aria-pressed={is3DView}
         title={is3DView ? t('Passer en 2D') : t('Passer en 3D')}

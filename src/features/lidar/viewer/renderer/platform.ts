@@ -5,15 +5,15 @@ import type { GpuTier, PlatformProfile } from '../lod/types';
 const PROFILES: Record<GpuTier, PlatformProfile> = {
   apple: {
     tier: 'apple', minBudget: 1_000_000, initialBudget: 4_000_000, maxBudget: 9_000_000, poolBudget: 12_000_000,
-    maxCanvasDim: 4096, dprCap: 1.5, isApple: true, targetFrameMs: 16.6,
+    maxCanvasDim: 4096, dprCap: 1.5, isApple: true, motionScale: 0.75,
   },
   integrated: {
     tier: 'integrated', minBudget: 400_000, initialBudget: 1_500_000, maxBudget: 6_000_000, poolBudget: 8_000_000,
-    maxCanvasDim: 4096, dprCap: 1.25, isApple: false, targetFrameMs: 16.6,
+    maxCanvasDim: 4096, dprCap: 1.25, isApple: false, motionScale: 0.7,
   },
   discrete: {
     tier: 'discrete', minBudget: 1_500_000, initialBudget: 6_000_000, maxBudget: 32_000_000, poolBudget: 40_000_000,
-    maxCanvasDim: 8192, dprCap: 2.0, isApple: false, targetFrameMs: 16.6,
+    maxCanvasDim: 8192, dprCap: 2.0, isApple: false, motionScale: 0.75,
   },
 };
 

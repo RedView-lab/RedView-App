@@ -182,6 +182,13 @@
 
 .rvi-panel__mode-main-collapse {
   width: 100%;
+  /*
+   * Keeps its content height: as a flex item with `overflow: hidden` it would
+   * otherwise shrink to the mode area's max height and clip the bottom of the
+   * settings (custom-profile actions, POI list…) instead of letting the mode
+   * area scroll.
+   */
+  flex-shrink: 0;
 }
 
 .rvi-panel__dock-slot {

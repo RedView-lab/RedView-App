@@ -15,7 +15,7 @@ import { LidarRenderer, type HeightmapParams } from './renderer';
 import { CameraController } from './camera';
 import { getTimeZoneForCoordinates, toWgs84, trueNorthGridBearingDeg } from '../lib/coordConvert';
 import { resolveTimeZoneAt } from '@/shared/lib/timeZoneAt';
-import { SceneLod } from './lod/sceneLod';
+import { SceneLod, type SceneLodStats } from './lod/sceneLod';
 import { AdaptivePointBudget } from './lod/lodBudget';
 import { LidarManager } from '../lib/lidarManager';
 import { buildViewerUrl } from '../lib/viewerUrl';
@@ -42,6 +42,10 @@ import { createViewerRightPanel } from './rightPanel';
 import { ViewerSlopeController } from './slope/viewerSlopeController';
 import { ViewerAltitudeController } from './altitude/viewerAltitudeController';
 import { ViewerRouteController } from './route/viewerRouteController';
+import { sampleElevationAtProj } from './route/terrainRaycaster';
+import type { ViewerRouteSceneParams } from './route/types';
+import { FrameClock } from './perf/frameClock';
+import { ViewerBench } from './perf/viewerBench';
 import { SunlightController } from '../viewer-webgl/sunlightController';
 import { buildTilePreviewMesh } from './preview/tilePreview';
 import { createViewerLoadingOverlay } from './loading/controller';
@@ -127,6 +131,10 @@ function resizeCanvas() {
 
 /** Frames rendered after the camera stops so the LOD reaches its resting quality. */
 const MAX_SETTLE_FRAMES = 240;
+/** Stats line refresh period (ms). */
+const STATS_INTERVAL_MS = 250;
+/** Frames keep the moving-camera quality this long after the last camera change (ms). */
+const MOTION_HOLD_MS = 150;
 const EDL_DEFAULT_PERCENT = 50;
 
 /** EDL neighbour radius: 1.4 CSS px (Potree default), in canvas pixels. */
@@ -167,6 +175,9 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
       crs,
       altRef,
       forceWebGL,
+      bench: benchMode,
+      pinnedBudget,
+      motionQuality,
       viewerTileCoord,
       sceneTileCoords,
       panelTileLabel,
@@ -257,10 +268,25 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
     setStatus('Initialisation WebGPU...', 86);
     renderer = await rendererReady;
     renderer.onDeviceLost = (info) => recoverFromGpuFailure(`device lost: ${info.message || info.reason}`, true);
+    renderer.motionScale = motionQuality.scale ?? renderer.platform!.motionScale;
+    renderer.motionSquares = motionQuality.squares;
     resizeCanvas();
     renderer.resize(canvas.width, canvas.height);
 
     const terrainMesh = await scene.terrainMesh;
+    /** Scene frame + DTM grid, shared by the route overlay and the ground lookups. */
+    const heightSceneParams: ViewerRouteSceneParams = {
+      bounds: sceneBounds,
+      crs,
+      centerX: cx,
+      centerY: cy,
+      centerZ: cz,
+      heightGrid: terrainMesh.heightGrid,
+      gridWidth: terrainMesh.gridWidth,
+      gridHeight: terrainMesh.gridHeight,
+      // Grid centred on cz (heightmapWorker / mergeHeightGrid).
+      heightGridOffsetZ: 0,
+    };
 
     renderer.centerAltitude = cz;
     renderer.setMaxAltitude(sceneBounds.maxZ);
@@ -281,7 +307,7 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
     // for an IGN tile) closes the gaps at full density without smearing.
     const meanSpacing = Math.sqrt((rangeX * rangeY) / Math.max(1, scene.totalPoints));
     renderer.pointSize = Math.min(0.8, Math.max(0.1, meanSpacing * 1.5));
-    renderer.lodThreshold = Math.max(50, extent * 0.5);
+    renderer.pointSizeReference = renderer.pointSize;
     renderer.setEdl(false, percentToEdlStrength(EDL_DEFAULT_PERCENT), edlRadiusPx());
     renderer.setMesh(terrainMesh.vertices, terrainMesh.colors, terrainMesh.indices);
 
@@ -289,10 +315,12 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
     camera.lookAt(0, 0, 0, extent * 0.6);
 
     const platform = renderer.platform!;
-    // Without GPU timestamps the measured cost includes the presentation wait
-    // (≈ one vsync): aim at 30 fps worth of latency instead of 60.
+    // `?budget=<points>` pins the budget (A/B benches at equal load).
     const pointBudget = new AdaptivePointBudget(
-      renderer.hasPreciseGpuTiming() ? platform : { ...platform, targetFrameMs: platform.targetFrameMs * 2 },
+      pinnedBudget
+        ? { ...platform, minBudget: pinnedBudget, initialBudget: pinnedBudget, maxBudget: pinnedBudget }
+        : platform,
+      { preciseGpu: renderer.hasPreciseGpuTiming() },
     );
     let requestRenderRef: () => void = () => undefined;
     const sceneLod = new SceneLod(scene.tiles, { x: cx, y: cy, z: cz }, {
@@ -335,10 +363,16 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
     let lastCpuFrameMs = 16.6;
     let frameHandle: number | null = null;
     let renderRequested = true;
-    let idleReset = true;
     let cleanedUp = false;
+    /** The camera moved since the route handles were last projected (done once per rendered frame). */
+    let routeOverlayStale = true;
+    let updateRouteOverlayRef: () => void = () => undefined;
     let lastStatsUpdateTime = 0;
     let settleFramesLeft = MAX_SETTLE_FRAMES;
+    const frameClock = new FrameClock();
+    let benchRun: ViewerBench | null = null;
+    /** Last time the camera moved (rAF clock); frames stay in motion quality for MOTION_HOLD_MS after it. */
+    let lastMotionTime = -Infinity;
 
     const requestRender = () => {
       renderRequested = true;
@@ -347,55 +381,92 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
       frameHandle = window.requestAnimationFrame(renderLoop);
     };
 
-    const renderLoop = () => {
+    const formatLodStats = (lodStats: SceneLodStats): string => {
+      const cadence = frameClock.getCadence();
+      const gpuMs = renderer?.getGpuFrameMs() ?? 0;
+      const shadeMs = renderer?.getGpuShadeMs() ?? 0;
+      const drawCalls = renderer?.getLastRenderStats().drawCalls ?? 0;
+      const renderScale = renderer?.getLastRenderScale() ?? 1;
+      return (cadence.samples > 0 ? `${cadence.fps} fps · p95 ${cadence.p95Ms.toFixed(0)} ms` : '— fps') +
+        (gpuMs > 0 ? ` · GPU ${gpuMs.toFixed(1)} ms` : '') +
+        (shadeMs >= 0.05 ? ` + ${translateAppText('ombrage {{ms}} ms', { ms: shadeMs.toFixed(1) })}` : '') +
+        ` · CPU ${lastCpuFrameMs.toFixed(1)} ms` +
+        ` · ${lodStats.selectedPoints.toLocaleString()} / ${lodStats.totalPoints.toLocaleString()} pts` +
+        ` · budget ${(lodStats.pointBudget / 1e6).toFixed(1)}M` +
+        ` · ${lodStats.selectedNodes}/${lodStats.totalNodes} nodes · draws ${drawCalls}` +
+        ` · GPU ${(lodStats.residentPoints / 1e6).toFixed(1)}/${(lodStats.poolBudget / 1e6).toFixed(0)}M pts` +
+        (lodStats.pendingLoads > 0 ? ` · ${translateAppText('chargement {{count}}', { count: lodStats.pendingLoads })}` : '') +
+        ` · ${translateAppText('{{count}} tuile(s)', { count: sceneTileCoords.length })}` +
+        ` · ${canvas.width}×${canvas.height}${renderScale < 1 ? ` ×${renderScale.toFixed(2)}` : ''} ${platform.tier}`;
+    };
+
+    const renderLoop = (frameTime: number) => {
       frameHandle = null;
       if (!renderer || cleanedUp || document.hidden) {
-        idleReset = true;
+        frameClock.pause();
         return;
       }
+      const intervalMs = frameClock.frame(frameTime);
       const frameStart = performance.now();
-      // GPU time drives the budget; the JS encoding time only covers the CPU side.
-      const frameCostMs = Math.max(lastCpuFrameMs, renderer.getGpuFrameMs());
-      const budgetSampleMs = idleReset ? Math.max(16.6, frameCostMs) : frameCostMs;
-      idleReset = false;
       renderRequested = false;
+
+      if (camera.update(frameTime)) {
+        lastMotionTime = frameTime;
+        routeOverlayStale = true;
+      }
+      // Moving frames trade resolution and round sprites for cadence; the
+      // first still frame after the hold restores full quality.
+      const motion = frameTime - lastMotionTime < MOTION_HOLD_MS;
 
       renderer.updateCamera(camera.getViewMatrix(), camera.getRenderProjMatrix(), camera.getEye());
 
-      pointBudget.sample(budgetSampleMs);
-      if (pointBudget.isStarved() && !degrading) void degradeQuality();
+      // GPU time of the draw passes and the real cadence drive the budget,
+      // sized on moving frames (see lodBudget).
+      pointBudget.sample({
+        gpuMs: renderer.getGpuFrameMs(),
+        cpuMs: lastCpuFrameMs,
+        intervalMs,
+        targetIntervalMs: frameClock.getTargetIntervalMs(),
+        refreshMs: frameClock.getRefreshMs(),
+        rest: !motion,
+      });
+      if (!pinnedBudget && pointBudget.isStarved() && !degrading) void degradeQuality();
       sceneLod.setPointBudget(pointBudget.pointBudget);
       const [cpx, cpy, cpz] = renderer.lastCamPos;
+      // LOD at the canvas resolution in both modes: starting or stopping
+      // the camera does not reshuffle the selection.
       sceneLod.update(renderer.lastViewProj, renderer.lastProjScaleY, cpx, cpy, cpz, canvas.height);
-      renderer.renderScene(sceneLod.getSelectedNodes());
+      renderer.renderScene(sceneLod.getSelectedNodes(), { motion });
+      if (motion) renderRequested = true;
+      if (routeOverlayStale) {
+        routeOverlayStale = false;
+        updateRouteOverlayRef();
+      }
       const lodStats = sceneLod.getStats();
-      // Budget growth only matters while it limits the selection.
-      const budgetSettled = pointBudget.isSettled() || lodStats.selectedPoints < lodStats.pointBudget * 0.98;
+      // Budget growth only matters while it limits the selection (new nodes
+      // only fill ~97 % of it, see sceneLod).
+      const budgetSettled = pointBudget.isSettled() || lodStats.targetPoints < lodStats.pointBudget * 0.95;
       const keepSettling = !renderRequested && (!budgetSettled || !sceneLod.isIdle()) && settleFramesLeft > 0;
       const goingIdle = !renderRequested && !keepSettling;
 
       const now = performance.now();
       // The last frame before idling always refreshes the stats (no stale "loading").
-      if (now - lastStatsUpdateTime >= 100 || goingIdle) {
+      if (now - lastStatsUpdateTime >= STATS_INTERVAL_MS || goingIdle) {
         lastStatsUpdateTime = now;
-        const renderStats = renderer.getLastRenderStats();
-        const gpuMs = renderer.getGpuFrameMs();
-        if (showLodStats) {
-          statsEl.textContent =
-            `${lodStats.selectedPoints.toLocaleString()} / ${lodStats.totalPoints.toLocaleString()} pts` +
-            ` · ${pointBudget.fps} fps${gpuMs > 0 ? ` · GPU ${gpuMs.toFixed(1)} ms` : ''}` +
-            ` · budget ${(lodStats.pointBudget / 1e6).toFixed(1)}M` +
-            ` · ${lodStats.selectedNodes}/${lodStats.totalNodes} nodes · draws ${renderStats.drawCalls}` +
-            ` · GPU ${(lodStats.residentPoints / 1e6).toFixed(1)}/${(lodStats.poolBudget / 1e6).toFixed(0)}M pts` +
-            (lodStats.pendingLoads > 0 ? ` · ${translateAppText('chargement {{count}}', { count: lodStats.pendingLoads })}` : '') +
-            ` · ${translateAppText('{{count}} tuile(s)', { count: sceneTileCoords.length })}` +
-            ` · ${canvas.width}×${canvas.height} ${platform.tier}`;
-        } else {
-          statsEl.textContent = `${scene.totalPoints.toLocaleString()} pts · ${scene.tileFileLabel}`;
-        }
+        const text = showLodStats ? formatLodStats(lodStats) : `${scene.totalPoints.toLocaleString()} pts · ${scene.tileFileLabel}`;
+        if (statsEl.textContent !== text) statsEl.textContent = text;
       }
 
-      lastCpuFrameMs = Math.max(1, performance.now() - frameStart);
+      lastCpuFrameMs = Math.max(0.1, performance.now() - frameStart);
+      benchRun?.recordFrame(frameTime, {
+        drawMs: renderer.getGpuFrameMs(),
+        shadeMs: renderer.getGpuShadeMs(),
+        cpuMs: lastCpuFrameMs,
+        selectedPoints: lodStats.selectedPoints,
+        pointBudget: lodStats.pointBudget,
+        uploadedNodes: lodStats.uploadedNodes,
+        renderScale: renderer.getLastRenderScale(),
+      });
       if (renderRequested) {
         requestRender();
       } else if (keepSettling) {
@@ -403,7 +474,7 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
         settleFramesLeft -= 1;
         frameHandle = window.requestAnimationFrame(renderLoop);
       } else {
-        idleReset = true;
+        frameClock.pause();
       }
     };
     requestRenderRef = requestRender;
@@ -506,18 +577,7 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
     });
 
     const routeController = new ViewerRouteController({
-      sceneParams: {
-        bounds: sceneBounds,
-        crs,
-        centerX: cx,
-        centerY: cy,
-        centerZ: cz,
-        heightGrid: terrainMesh.heightGrid,
-        gridWidth: terrainMesh.gridWidth,
-        gridHeight: terrainMesh.gridHeight,
-        // Grid centred on cz (heightmapWorker / mergeHeightGrid).
-        heightGridOffsetZ: 0,
-      },
+      sceneParams: heightSceneParams,
       canvas,
       container: canvas.parentElement ?? document.body,
       camera,
@@ -584,18 +644,44 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
     }
     scene.cacheWrites.length = 0;
 
+    updateRouteOverlayRef = () => routeController.updateOverlay();
     camera.onChange = () => {
+      routeOverlayStale = true;
+      lastMotionTime = performance.now();
       requestRender();
-      routeController.updateOverlay();
     };
     requestRender();
+
+    if (benchMode === 'orbit') {
+      void (async () => {
+        // Start from a settled scene: the first pass then measures streaming
+        // driven by the motion only.
+        const deadline = performance.now() + 30_000;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        while (!sceneLod.isIdle() && performance.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        benchRun = new ViewerBench({
+          camera,
+          extent,
+          groundAt: (x, z) => sampleElevationAtProj(x + cx, cy - z, heightSceneParams),
+          getRefreshMs: () => frameClock.getRefreshMs(),
+          onDone: (result) => {
+            (window as unknown as { __rvLidarBench?: unknown }).__rvLidarBench = result;
+            console.log(`[LiDAR bench] ${JSON.stringify(result)}`);
+          },
+        });
+        benchRun.start();
+      })();
+    }
 
     const handleResize = () => {
       if (!renderer) return;
       resizeCanvas();
       renderer.resize(canvas.width, canvas.height);
       applyEdl();
-      routeController.updateOverlay();
+      routeOverlayStale = true;
       requestRender();
     };
     window.addEventListener('resize', handleResize);
@@ -617,9 +703,7 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
         renderer.pointSize = Math.max(POINT_SIZE_MIN, Math.min(POINT_SIZE_MAX, renderer.pointSize * sizeStep));
       }
       if (e.key === 't' || e.key === 'T') renderer.terrainVisible = !renderer.terrainVisible;
-      if (e.key === 'l' || e.key === 'L') {
-        renderer.lodThreshold = renderer.lodThreshold > 0 ? 0 : Math.max(50, extent * 0.5);
-      }
+      if (e.key === 'l' || e.key === 'L') renderer.adaptivePointSize = !renderer.adaptivePointSize;
       if (e.key === 'q' || e.key === 'Q') showLodStats = !showLodStats;
       if (e.key === 'n' || e.key === 'N') {
         const nextMode: SnowModeKey = snowController.getMode() === 'off'
@@ -651,10 +735,9 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
           window.cancelAnimationFrame(frameHandle);
           frameHandle = null;
         }
-        idleReset = true;
+        frameClock.pause();
         return;
       }
-      idleReset = true;
       requestRender();
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);

@@ -95,8 +95,7 @@ export const itineraryTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: "Debug : affiche tous les tags présents même s'ils ne sont pas utilisés.", en: 'Debug: shows every tag present, even unused ones.' },
 
   // Profils BRouter, avertissements de routage
-  { fr: 'Profil BRouter personnalisé refusé par le serveur, repli sur le profil de base.', en: 'Custom BRouter profile rejected by the server, falling back to the base profile.' },
-  { fr: 'Profil personnalisé momentanément indisponible, calcul avec le profil standard.', en: 'Custom profile temporarily unavailable, calculating with the standard profile.' },
+  { fr: 'Impossible de calculer l’itinéraire : le profil de traçage est momentanément indisponible. Réessayez dans quelques secondes.', en: 'Unable to calculate the route: the routing profile is temporarily unavailable. Try again in a few seconds.' },
   { fr: 'Point de départ isolé du réseau routable : décalé de {{distance}} m pour calculer le tracé.', en: 'Start point cut off from the routable network: moved {{distance}} m to calculate the route.' },
   { fr: 'Point d’arrivée isolé du réseau routable : décalé de {{distance}} m pour calculer le tracé.', en: 'End point cut off from the routable network: moved {{distance}} m to calculate the route.' },
   { fr: 'Point de passage isolé du réseau routable : décalé de {{distance}} m pour calculer le tracé.', en: 'Waypoint cut off from the routable network: moved {{distance}} m to calculate the route.' },
@@ -211,7 +210,8 @@ export const itineraryTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Confort', en: 'Comfort' },
   { fr: 'Surface minimale', en: 'Minimum surface' },
   { fr: 'Surface maximale', en: 'Maximum surface' },
-  { fr: 'Tolérance', en: 'Tolerance' },
+  { fr: 'Hors plage', en: 'Off-range' },
+  { fr: 'Part du parcours autorisée hors de la plage de surfaces choisie (0 % = strict)', en: 'Share of the route allowed outside the chosen surface range (0% = strict)' },
   { fr: 'Paramètres additionnels', en: 'Additional settings' },
   { fr: 'Bois (protection vent et soleil)', en: 'Woods (shelter from wind and sun)' },
   { fr: 'Intersections', en: 'Intersections' },

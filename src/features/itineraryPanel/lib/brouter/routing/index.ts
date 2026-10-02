@@ -20,6 +20,8 @@ export {
 } from './island-repair';
 export {
   ANCHOR_SECTION_KM,
+  LOCAL_EDIT_WINDOW_KM,
+  TIGHT_ANCHOR_SPACING_KM,
   buildAnchoredVia,
   needsLongDistanceAnchors,
 } from './long-distance-anchors';

@@ -7,12 +7,15 @@
   --rvc-center-red-strong: #700000;
   --rvc-center-red-accent: #c50000;
   --rvc-center-font-family: var(--rv-font-sans);
-  --rvc-center-panel-height: 390px;
+  /* --rvc-center-panel-height is inherited from the dashboard shell
+     (lib/dashboardStyles.ts); uses fall back to 390px. */
 
   width: 100%;
   height: 100%;
   min-width: 0;
-  min-height: 390px;
+  /* Height comes from the dashboard layout (390 px minimum, 220 px on a short
+     canvas), never more than the shell it fills. */
+  min-height: 0;
   padding: 12px;
   border-radius: 8px;
   background: var(--rvc-center-bg);
@@ -32,6 +35,20 @@
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+/* Short canvas (pages/Dashboard/lib/layout.ts): every pixel goes to the chart. */
+.rvc-center-panel--compact {
+  padding: 8px;
+  gap: 8px;
+}
+
+.rvc-center-panel--compact .rvc-center-analysis {
+  gap: 8px;
+}
+
+.rvc-center-panel--compact .rvc-center-summary__row--header {
+  min-height: 24px;
 }
 
 .rvc-center-panel *,

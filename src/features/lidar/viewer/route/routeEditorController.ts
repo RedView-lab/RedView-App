@@ -1,4 +1,4 @@
-import { geoToLocal3D, projectToScreen } from './terrainRaycaster';
+import { geoToLocal3D, projectToScreen, type ProjectedScreenPoint } from './terrainRaycaster';
 import {
   RouteHandlesOverlay,
   type HoverReticleInfo,
@@ -11,7 +11,7 @@ import type {
   ViewerRouteSceneParams,
 } from './types';
 import { RouteEditorHistory } from './routeEditorHistory';
-import { buildDraggingHandleInfo, buildRouteHandles } from './routeOverlaySync';
+import { buildDraggingHandleInfo, RouteHandleCache } from './routeOverlaySync';
 import { RouteEditorInputManager, type RouteEditorHost } from './routeEditorEvents';
 
 export type RouteEditTool = 'move' | 'insert' | 'append' | 'delete';
@@ -61,6 +61,8 @@ export class RouteEditorController implements RouteEditorHost {
   public isDragging = false;
   public dragPointIndex: number | null = null;
   public dragInitialPoints: LidarRouteOverlayPoint[] | null = null;
+
+  private handleCache: RouteHandleCache | null = null;
 
   constructor(opts: RouteEditorControllerOptions) {
     this.canvas = opts.canvas;
@@ -236,6 +238,22 @@ export class RouteEditorController implements RouteEditorHost {
     return true;
   }
 
+  /** Handles of the route, rebuilt only when the route or the scene changes. */
+  private getHandleCache(points: LidarRouteOverlayPoint[]): RouteHandleCache {
+    const sceneParams = this.getSceneParams();
+    if (this.handleCache?.points !== points || this.handleCache.sceneParams !== sceneParams) {
+      this.handleCache = new RouteHandleCache(points, sceneParams);
+    }
+    return this.handleCache;
+  }
+
+  /** Screen positions of the route points for the current camera (re-projected once per pose). */
+  public getProjectedRoutePoints(points: LidarRouteOverlayPoint[]): ProjectedScreenPoint[] {
+    const cache = this.getHandleCache(points);
+    cache.project(this.canvas, this.camera);
+    return cache.projected;
+  }
+
   /**
    * Recomputes screen projected handles and renders overlay.
    */
@@ -247,16 +265,11 @@ export class RouteEditorController implements RouteEditorHost {
     }
 
     this.overlay.setRouteColor(activeRoute.color);
-    const sceneParams = this.getSceneParams();
 
-    const handles = buildRouteHandles(
-      activeRoute.points,
-      this.selectedPointIndex,
-      this.hoveredPointIndex,
-      sceneParams,
-      this.canvas,
-      this.camera,
-    );
+    const cache = this.getHandleCache(activeRoute.points);
+    cache.project(this.canvas, this.camera);
+    cache.setHighlight(this.selectedPointIndex, this.hoveredPointIndex);
+    const handles = cache.handles;
 
     const draggingInfo = buildDraggingHandleInfo(
       this.dragPointIndex,

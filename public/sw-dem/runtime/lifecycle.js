@@ -464,6 +464,7 @@ const MAP_CACHE_PREFIXES = [
   'dem-tiles-',
   'dem-negative-',
   'ortho-tiles-',
+  'vhr-tiles-',
   'slope-tiles-',
   'altitude-tiles-',
   'shadow-tiles-',
@@ -474,6 +475,7 @@ const CURRENT_MAP_CACHE_NAMES = new Set([
   CACHE_NAME,
   NEGATIVE_CACHE_NAME,
   ORTHO_CACHE_NAME,
+  VHR_CACHE_NAME,
   SLOPE_CACHE_NAME,
   ALTITUDE_CACHE_NAME,
   STATIC_CACHE_NAME,
@@ -493,7 +495,7 @@ function purgeManagedMapCaches({ includeCurrent = false } = {}) {
 }
 
 // ── Static routing (Service Worker Static Routing API, Chrome/Edge 123+) ──
-// router.js only answers the five tile families below; every other request
+// router.js only answers the six tile families below; every other request
 // (Mapbox satellite/vector tiles, sprites, glyphs, API calls, app assets)
 // falls through to the network. Without routes the browser still dispatches
 // each of those to the SW thread first — so while the SW is busy building a
@@ -505,6 +507,7 @@ function purgeManagedMapCaches({ includeCurrent = false } = {}) {
 const SW_FETCH_EVENT_PATHS = [
   '/dem-tiles/*',
   '/ortho-tiles/*',
+  '/vhr-tiles/*',
   '/slope-tiles/*',
   '/altitude-tiles/*',
   '/radar-tiles/*',
@@ -600,6 +603,7 @@ self.addEventListener('message', (e) => {
     try { slopeHotClear(); } catch { /* ignore */ }
     try { altitudeHotClear(); } catch { /* ignore */ }
     try { orthoHotClear(); } catch { /* ignore */ }
+    try { vhrHotClear(); } catch { /* ignore */ }
     purgeManagedMapCaches({ includeCurrent: true });
     return;
   }

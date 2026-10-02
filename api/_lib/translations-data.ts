@@ -37,12 +37,12 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Back to website"
   },
   {
-    "fr": "Fenêtre trop étroite",
-    "en": "Window too narrow"
+    "fr": "Fenêtre trop petite",
+    "en": "Window too small"
   },
   {
-    "fr": "RedView est conçu pour un écran d'ordinateur d'au moins 960 px de large. Agrandissez la fenêtre pour retrouver l'interface complète.",
-    "en": "RedView is designed for a computer screen at least 960 px wide. Widen the window to get the full interface back."
+    "fr": "RedView est conçu pour une fenêtre d'au moins {{width}} × {{height}} px. Agrandissez-la pour retrouver l'interface complète.",
+    "en": "RedView is designed for a window of at least {{width}} × {{height}} px. Enlarge it to get the full interface back."
   },
   {
     "fr": "Continuer quand même",
@@ -3273,14 +3273,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Merge failed with the selected routes."
   },
   {
-    "fr": "Fusion créée avec raccord BRouter simplifié entre les deux traces.",
-    "en": "Merge created with a simplified BRouter connector between the two routes."
-  },
-  {
-    "fr": "Fusion créée avec raccord BRouter allégé entre les deux traces.",
-    "en": "Merge created with a lighter BRouter connector between the two routes."
-  },
-  {
     "fr": "Fusion créée avec raccord BRouter entre les deux traces.",
     "en": "Merge created with a BRouter connector between the two routes."
   },
@@ -5269,12 +5261,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Debug: shows every tag present, even unused ones."
   },
   {
-    "fr": "Profil BRouter personnalisé refusé par le serveur, repli sur le profil de base.",
-    "en": "Custom BRouter profile rejected by the server, falling back to the base profile."
-  },
-  {
-    "fr": "Profil personnalisé momentanément indisponible, calcul avec le profil standard.",
-    "en": "Custom profile temporarily unavailable, calculating with the standard profile."
+    "fr": "Impossible de calculer l’itinéraire : le profil de traçage est momentanément indisponible. Réessayez dans quelques secondes.",
+    "en": "Unable to calculate the route: the routing profile is temporarily unavailable. Try again in a few seconds."
   },
   {
     "fr": "Point de départ isolé du réseau routable : décalé de {{distance}} m pour calculer le tracé.",
@@ -5693,8 +5681,12 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Maximum surface"
   },
   {
-    "fr": "Tolérance",
-    "en": "Tolerance"
+    "fr": "Hors plage",
+    "en": "Off-range"
+  },
+  {
+    "fr": "Part du parcours autorisée hors de la plage de surfaces choisie (0 % = strict)",
+    "en": "Share of the route allowed outside the chosen surface range (0% = strict)"
   },
   {
     "fr": "Paramètres additionnels",
@@ -6059,6 +6051,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "chargement {{count}}",
     "en": "loading {{count}}"
+  },
+  {
+    "fr": "ombrage {{ms}} ms",
+    "en": "shading {{ms}} ms"
   },
   {
     "fr": "Cache LOD illisible après écriture : {{file}}",

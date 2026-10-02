@@ -22,6 +22,7 @@ import {
   type GeocodeSuggestion,
 } from '../../../lib/geocoding';
 import { useAppI18n } from '@/shared/i18n';
+import { appScaleStyle, readAppScale } from '@/shared/lib/appScale';
 
 interface PlaceSearchInputProps {
   value: string;
@@ -128,9 +129,7 @@ export function PlaceSearchInput({
       if (!el) return;
 
       const r = el.getBoundingClientRect();
-      const computed = window.getComputedStyle(el);
-      const rawScale = Number.parseFloat(computed.getPropertyValue('--app-scale'));
-      const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
+      const scale = readAppScale(el);
       const viewport = window.visualViewport;
       const viewportLeft = viewport?.offsetLeft ?? 0;
       const viewportTop = viewport?.offsetTop ?? 0;
@@ -268,7 +267,8 @@ export function PlaceSearchInput({
               className="rv-dropdown rvi-place-search__menu-shell"
               style={{
                 width: menuRect.width / menuRect.scale,
-                transform: `scale(${menuRect.scale})`,
+                ...appScaleStyle(menuRect.scale),
+                // Transform fallback only (zoom grows the anchor's layout box).
                 transformOrigin: menuRect.placeAbove ? 'bottom left' : 'top left',
               }}
               onMouseDown={(e) => e.preventDefault() /* keep input focused */}

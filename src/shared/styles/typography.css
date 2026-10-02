@@ -7,11 +7,16 @@
  * valeurs numériques 400 / 500 / 600 / 700 indiquées par la table).
  *
  * Unités : px LOGIQUES. Le dashboard est rendu sur un canevas mis à l'échelle
- * par `--app-scale` (shared/lib/appScale.ts) ; le viewer LiDAR applique la même
- * échelle à ses panneaux (`zoom`). Une même taille rend donc à l'identique dans
- * tous les panneaux, et suit l'écran (laptop → ultra-wide) automatiquement.
+ * par `--app-scale` (shared/lib/appScale.ts, CSS `zoom`) ; le viewer LiDAR
+ * applique la même échelle à ses panneaux. L'échelle ne descend JAMAIS sous 1 :
+ * une taille de cette table est la taille affichée (px CSS, donc déjà mise à
+ * l'échelle de l'OS et du zoom navigateur) sur tout écran jusqu'à 1920×1080,
+ * un peu plus grande au-delà. Une petite fenêtre réorganise la mise en page,
+ * elle ne rétrécit pas le texte.
  * Aucune taille fluide (vw, cqi, clamp) : la largeur d'un conteneur se gère par
  * paliers @container, la densité de l'écran par le canevas.
+ * Plancher de lisibilité : 11 px (xs) pour tout texte ; 2xs / 3xs sont réservés
+ * aux pastilles et glyphes (compteur dans un badge, marqueurs carte).
  *
  * ── Panneaux (dashboard, viewer, pop-ins) ─────────────────────────────────
  *  Rôle                                         Token        Graisse
@@ -28,12 +33,13 @@
  *  Compact : grille dense à 2 colonnes, barre   sm  12       500
  *    d'outils (Traçage, analyse), chip de filtre
  *  Texte d'aide, info-bulle, notice, statut     sm  12       400 / 500
- *  Légende : méta, unité, borne, valeur de      xs  11       500
- *    curseur, graduation d'axe (600)
+ *  Légende : méta, unité, borne, valeur et      xs  11       500
+ *    repère de curseur, sous-libellé,
+ *    graduation d'axe (600)
  *  En-tête de tableau (atténué)                 xs  11       600
  *  Badge                                        xs  11       600 / 700
  *  Surtitre : xs + 700 + uppercase + --rv-letter-spacing-wide
- *  Micro : repère de curseur, sous-libellé      2xs 10       500
+ *  Micro : chiffre de pastille, glyphe          2xs 10       500 / 700
  *  Badge posé sur la carte (marqueur POI)       3xs 9        700
  *
  * ── Pages (Project Browser, compte, paiement, connexion) ──────────────────

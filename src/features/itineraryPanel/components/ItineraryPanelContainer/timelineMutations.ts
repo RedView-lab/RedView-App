@@ -10,6 +10,10 @@ import {
   getRoutingInputsSignature,
 } from '../../hooks/useItineraryBrouterRouting/projectMutations';
 import {
+  getRoutePointTotalDistanceM,
+  narrowRoutePatchToEdit,
+} from '../../hooks/useItineraryBrouterRoutingShared';
+import {
   cumulativeRouteLengthsM,
   projectPointAlongRoute,
   roundDistanceKm,
@@ -26,7 +30,71 @@ function isRoutableTimelineRow(
   );
 }
 
+/**
+ * Tracé stocké éditable localement, qu'il vienne de BRouter ou d'un GPX
+ * importé : une édition patche le tronçon concerné au lieu de tout recalculer.
+ */
+export function hasEditableRoute(itinerary: Itinerary): boolean {
+  return (itinerary.gpxRoute?.points.length ?? 0) >= 2;
+}
+
+/** Position sur le tracé stocké (m) qu'une édition invalide. */
+interface EditedRoutePosition {
+  atM: number;
+  /** Déduite d'un kilométrage projeté (cf. RoutePatchEdit.projected). */
+  projected: boolean;
+}
+
+/**
+ * Ancienne position d'une ligne sur le tracé stocké : départ et arrivée en
+ * sont les extrémités ; une étape déplacée garde son kilométrage jusqu'au
+ * recalcul, une étape insérée reçoit celui de sa projection.
+ */
+function editedRowRoutePosition(itinerary: Itinerary, rowId: string): EditedRoutePosition | null {
+  const row = itinerary.timeline.find((item) => item.id === rowId);
+  const points = itinerary.gpxRoute?.points;
+  if (!row || !points || points.length < 2) return null;
+  if (row.kind === 'start') return { atM: 0, projected: false };
+  if (row.kind === 'end') return { atM: getRoutePointTotalDistanceM(points), projected: false };
+  return row.kind === 'waypoint' && row.distanceKm != null && Number.isFinite(row.distanceKm)
+    ? { atM: row.distanceKm * 1_000, projected: true }
+    : null;
+}
+
+/** Restreint le patch à une fenêtre du tracé stocké autour de l'édition (cf. narrowRoutePatchToEdit). */
+function narrowPatchAroundEdit(
+  itinerary: Itinerary,
+  patch: Itinerary['pendingRoutePatch'],
+  edited: EditedRoutePosition | null,
+): Itinerary['pendingRoutePatch'] {
+  const points = itinerary.gpxRoute?.points;
+  if (!patch || !edited || !points || points.length < 2) return patch;
+  return narrowRoutePatchToEdit(patch, points, {
+    fromM: edited.atM,
+    toM: edited.atM,
+    projected: edited.projected,
+  });
+}
+
+/**
+ * Patch d'une ligne déplacée, ajoutée ou placée : recalcul entre ses voisines,
+ * restreint à une fenêtre du tracé stocké autour de l'édition.
+ * `editedAtM` : position (m de tracé) de l'édition quand la ligne n'en porte
+ * pas (point inséré en tirant le tracé, lieu choisi pour une nouvelle étape).
+ */
 export function buildPendingRoutePatchForEditedRow(
+  itinerary: Itinerary,
+  rowId: string,
+  editedAtM?: number,
+): Itinerary['pendingRoutePatch'] {
+  const edited = editedAtM != null && Number.isFinite(editedAtM)
+    ? { atM: editedAtM, projected: true }
+    : editedRowRoutePosition(itinerary, rowId);
+  return narrowPatchAroundEdit(itinerary, buildNeighbourRoutePatch(itinerary.timeline, rowId), edited);
+}
+
+/** Patch entre les lignes routables voisines de `rowId`, via la ligne elle-même. */
+function buildNeighbourRoutePatch(
   timeline: TimelineItem[],
   rowId: string,
 ): Itinerary['pendingRoutePatch'] {
@@ -65,48 +133,86 @@ export function buildPendingRoutePatchForEditedRow(
   };
 }
 
-export function buildPendingRoutePatchAfterRemoval(
-  timeline: TimelineItem[],
-  removedIndex: number,
+/**
+ * Patch après le retrait de `removedRow` (`itinerary.timeline` déjà mise à
+ * jour, `previousTimeline` celle d'avant) : recalcul entre ses anciennes
+ * voisines encore présentes, restreint à une fenêtre autour de sa position.
+ * Une étape posée sur le tracé sans le contraindre (`onRoute`) ne change rien.
+ */
+function buildPendingRoutePatchAfterRemoval(
+  itinerary: Itinerary,
+  previousTimeline: TimelineItem[],
   removedRow: TimelineItem | null,
 ): Itinerary['pendingRoutePatch'] {
-  if (!isRoutableTimelineRow(removedRow)) {
+  if (!isRoutableTimelineRow(removedRow) || removedRow.onRoute) {
     return undefined;
   }
+  const { timeline } = itinerary;
 
   if (removedRow.kind === 'start') {
     const promotedStart = timeline.find((row) => row.kind === 'start');
-    return promotedStart ? buildPendingRoutePatchForEditedRow(timeline, promotedStart.id) : undefined;
+    return promotedStart ? buildNeighbourRoutePatch(timeline, promotedStart.id) : undefined;
   }
 
   if (removedRow.kind === 'end') {
     const promotedEnd = timeline.find((row) => row.kind === 'end');
-    return promotedEnd ? buildPendingRoutePatchForEditedRow(timeline, promotedEnd.id) : undefined;
+    return promotedEnd ? buildNeighbourRoutePatch(timeline, promotedEnd.id) : undefined;
   }
 
-  const before = [...timeline]
-    .slice(0, Math.max(0, removedIndex))
-    .reverse()
-    .find(isRoutableTimelineRow);
-  const after = timeline
-    .slice(Math.max(0, removedIndex))
-    .find(isRoutableTimelineRow);
-  if (!before || !after) return undefined;
+  // Voisines dans l'ordre d'avant le retrait, parmi les lignes restantes
+  // (d'autres lignes liées, un POI par exemple, ont pu partir avec elle).
+  const remainingIds = new Set(timeline.filter(isRoutableTimelineRow).map((row) => row.id));
+  const rows = previousTimeline.filter(
+    (row) => row.id === removedRow.id || (isRoutableTimelineRow(row) && remainingIds.has(row.id)),
+  );
+  const removedAt = rows.findIndex((row) => row.id === removedRow.id);
+  const before = rows[removedAt - 1];
+  const after = rows[removedAt + 1];
+  if (!isRoutableTimelineRow(before) || !isRoutableTimelineRow(after)) return undefined;
 
-  return {
+  const patch: Itinerary['pendingRoutePatch'] = {
     start: { lat: before.lat, lon: before.lon, kind: before.kind === 'start' ? 'start' : 'waypoint' },
     end: { lat: after.lat, lon: after.lon, kind: after.kind === 'end' ? 'end' : 'waypoint' },
     via: [],
   };
+  const edited = removedRow.distanceKm != null && Number.isFinite(removedRow.distanceKm)
+    ? { atM: removedRow.distanceKm * 1_000, projected: true }
+    : null;
+  return narrowPatchAroundEdit(itinerary, patch, edited);
+}
+
+/**
+ * Lignes retirées (étape, ou POI avec ses étapes liées ; `itinerary.timeline`
+ * déjà mise à jour) : une seule étape qui contraignait le tracé → patch local
+ * autour d'elle ; sinon aucun patch, le changement des via déclenche au besoin
+ * le recalcul complet.
+ */
+export function setPendingRoutePatchAfterRemoval(
+  itinerary: Itinerary,
+  previousTimeline: TimelineItem[],
+): void {
+  const remainingIds = new Set(itinerary.timeline.map((row) => row.id));
+  const removed = previousTimeline.filter(
+    (row) => !remainingIds.has(row.id) && isRoutableTimelineRow(row) && !row.onRoute,
+  );
+  const patch = removed.length === 1 && hasEditableRoute(itinerary)
+    ? buildPendingRoutePatchAfterRemoval(itinerary, previousTimeline, removed[0]!)
+    : undefined;
+  if (patch) itinerary.pendingRoutePatch = patch;
+  else delete itinerary.pendingRoutePatch;
 }
 
 /**
  * Ligne qui vient de recevoir sa position (étape ajoutée, lieu choisi) : pose
  * l'édition de tracé en attente. Sans arrivée, une étape ajoutée en queue
  * prolonge le tracé depuis le dernier point routé (extension, comme le
- * traceur) ; sinon patch local entre ses voisins, ou recalcul complet.
+ * traceur) ; sinon patch local autour d'elle, ou recalcul complet.
  */
-export function setPendingRouteEditForPlacedRow(itinerary: Itinerary, rowId: string): void {
+export function setPendingRouteEditForPlacedRow(
+  itinerary: Itinerary,
+  rowId: string,
+  editedAtM?: number,
+): void {
   const extension = buildOpenRouteExtension(itinerary, rowId);
   if (extension) {
     itinerary.pendingTraceExtension = extension;
@@ -114,7 +220,7 @@ export function setPendingRouteEditForPlacedRow(itinerary: Itinerary, rowId: str
     return;
   }
   delete itinerary.pendingTraceExtension;
-  itinerary.pendingRoutePatch = buildPendingRoutePatchForEditedRow(itinerary.timeline, rowId);
+  itinerary.pendingRoutePatch = buildPendingRoutePatchForEditedRow(itinerary, rowId, editedAtM);
 }
 
 function buildOpenRouteExtension(
@@ -146,8 +252,9 @@ function buildOpenRouteExtension(
  * so the downstream patch (`buildPendingRoutePatchForEditedRow`) reroutes the
  * correct local segment.
  *
- * Returns the new row's id (or null when the geometry is unusable), so the
- * caller can feed it straight to `buildPendingRoutePatchForEditedRow`.
+ * Returns the new row's id and the grabbed position along the route (or null
+ * when the geometry is unusable), so the caller can feed them straight to
+ * `buildPendingRoutePatchForEditedRow`.
  *
  * @param routePoints  Active Brouter route points (must be ≥ 2).
  * @param anchorLonLat Geographic coordinate the user grabbed on the trace.
@@ -162,7 +269,7 @@ export function insertWaypointAtRoutePosition(
   routePoints: Array<{ lat: number; lon: number }>,
   anchorLonLat: { lat: number; lon: number },
   dropLatLon: { lat: number; lon: number },
-): { newRowId: string; isDirectOnRoute: boolean } | null {
+): { newRowId: string; isDirectOnRoute: boolean; anchorDistanceM: number } | null {
   if (routePoints.length < 2) return null;
 
   const cumulative = cumulativeRouteLengthsM(routePoints);
@@ -207,7 +314,7 @@ export function insertWaypointAtRoutePosition(
     onRoute: isDirectOnRoute || undefined,
   };
   timeline.splice(insertIndex, 0, newRow);
-  return { newRowId, isDirectOnRoute };
+  return { newRowId, isDirectOnRoute, anchorDistanceM: anchor.distanceM };
 }
 
 export interface InsertWaypointOptions {

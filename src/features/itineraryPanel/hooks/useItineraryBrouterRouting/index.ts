@@ -23,7 +23,6 @@ import {
   type UseItineraryBrouterRoutingArgs,
 } from '../useItineraryBrouterRoutingShared';
 
-import { applyRouteWarnings } from './profileFallback';
 import {
   applyPendingRoutePatch,
   applyPendingTraceAppend,
@@ -36,7 +35,7 @@ import {
   type RouteRefinementBase,
 } from './projectMutations';
 import { resolveRouteRequest } from './resolveRouteRequest';
-import type { RouteRequestBase } from './profileFallback';
+import type { RouteRequestBase } from './customProfileFetch';
 import { planPendingRouteEdit, type UnresolvedRouteEdit } from './pendingEditPlan';
 
 /** Marqueur « tracé restauré par undo/redo, à vérifier par estampille ». */
@@ -187,7 +186,6 @@ export function useItineraryBrouterRouting({
     viaKey: routingViaKey,
   } = getRoutingEndpointsKey(active);
   const activeId = active?.id ?? '';
-  const hasWaypointOverride = routingViaKey.length > 0;
   const profileId = active?.profileId ?? 'road';
   const climbing = active ? isClimbingMode(active.priorities) : false;
   const forbiddenPolygons = formatForbiddenZonePolygons(active?.forbiddenZones);
@@ -343,9 +341,9 @@ export function useItineraryBrouterRouting({
         requestBase,
         setRouteWarnings,
       })
-        .then(({ route, usedFallbackProfile, resolvedWarnings }) => {
+        .then(({ route, resolvedWarnings }) => {
           if (ctrl.signal.aborted) return;
-          setRouteWarnings(applyRouteWarnings(resolvedWarnings, usedFallbackProfile));
+          setRouteWarnings(resolvedWarnings);
           // Render route immediately with native BRouter elevation data
           const refinementBase: { current: RouteRefinementBase | null } = { current: null };
           setProject((project) => {
@@ -440,9 +438,9 @@ export function useItineraryBrouterRouting({
         requestBase,
         setRouteWarnings,
       })
-        .then(({ route, usedFallbackProfile, resolvedWarnings }) => {
+        .then(({ route, resolvedWarnings }) => {
           if (ctrl.signal.aborted) return;
-          setRouteWarnings(applyRouteWarnings(resolvedWarnings, usedFallbackProfile));
+          setRouteWarnings(resolvedWarnings);
           // Render route immediately with native BRouter elevation data
           const refinementBase: { current: RouteRefinementBase | null } = { current: null };
           setProject((project) => {
@@ -496,7 +494,11 @@ export function useItineraryBrouterRouting({
       return;
     }
 
-    if (currentActive?.gpxRoute?.source === 'gpx' && !hasWaypointOverride) {
+    // GPX importé : il fait foi. Ses éditions passent par des patchs locaux
+    // (cf. hasEditableRoute) ; seul le recalcul d'une édition perdue en route
+    // le reroute en entier. Ses étapes hors trace (<wpt> importés à plus de
+    // 25 m) ne le recalculent plus dès l'import.
+    if (currentActive?.gpxRoute?.source === 'gpx' && editPlan.mode !== 'full') {
       deferRouteState(null);
       return;
     }
@@ -612,17 +614,17 @@ export function useItineraryBrouterRouting({
         requestBase,
         setRouteWarnings,
       })
-        .then(({ route, usedFallbackProfile, resolvedWarnings, resolved }) => {
+        .then(({ route, resolvedWarnings, resolved }) => {
           if (activeCtrl.signal.aborted) return;
           console.log(
             '[BRouter] profile resolved →',
             resolved.profileId,
             '| brf=',
-            resolved.brf ? `${resolved.brf.length}B` : 'stock',
+            `${resolved.brf.length}B`,
             '| warnings=',
             resolved.roadTypes.warnings.length,
           );
-          setRouteWarnings(applyRouteWarnings(resolvedWarnings, usedFallbackProfile));
+          setRouteWarnings(resolvedWarnings);
           console.log(
             '[BRouter] route OK in',
             Math.round(performance.now() - t0),
@@ -685,7 +687,6 @@ export function useItineraryBrouterRouting({
     deferRouteState,
     gpxRoutePointCount,
     gpxRouteSource,
-    hasWaypointOverride,
     historyRevision,
     isMapLoaded,
     map,

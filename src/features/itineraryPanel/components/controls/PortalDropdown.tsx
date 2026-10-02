@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useState, useRef, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
+import { appScaledOverlayStyle, readAppScale } from '@/shared/lib/appScale';
 
 interface PortalDropdownProps {
   open: boolean;
@@ -70,10 +71,7 @@ export function PortalDropdown({
     const updatePos = () => {
       if (!anchorRef.current) return;
       const rect = anchorRef.current.getBoundingClientRect();
-      const rawScale = Number.parseFloat(
-        window.getComputedStyle(anchorRef.current).getPropertyValue('--app-scale'),
-      );
-      const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
+      const scale = readAppScale(anchorRef.current);
 
       const unscaledWidth = typeof width === 'number' ? width : Math.max(minWidth, rect.width / scale);
       const scaledWidth = unscaledWidth * scale;
@@ -121,11 +119,8 @@ export function PortalDropdown({
       className={`rv-dropdown rvi-portal-dropdown ${className}`}
       style={{
         position: 'fixed',
-        top: `${pos?.top ?? 0}px`,
-        left: `${pos?.left ?? 0}px`,
+        ...appScaledOverlayStyle(pos ?? { top: 0, left: 0, scale: 1 }),
         width: `${pos?.width ?? minWidth}px`,
-        transform: `scale(${pos?.scale ?? 1})`,
-        transformOrigin: 'top left',
         visibility: pos ? 'visible' : 'hidden',
         zIndex: 2147483647,
       }}

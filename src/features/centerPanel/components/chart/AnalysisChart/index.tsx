@@ -69,6 +69,7 @@ export const AnalysisChart = memo(function AnalysisChart({
   controlledHoverXValue = null,
   onPlotClick,
   onPoiClick,
+  onAlertClick,
   onPlotRangeSelect,
   selectedXRange: controlledSelectedXRange,
   onClearSelectedXRange,
@@ -376,9 +377,17 @@ export const AnalysisChart = memo(function AnalysisChart({
           id: window.id,
           startRatio: ratioFor(window.startX, plotXDomain),
           endRatio: ratioFor(window.endX, plotXDomain),
+          label: `${translateAppText('Pente')} ${Math.round(window.maxGradientPct)} % · ${Math.round(window.lengthM)} m`,
         }))
         .filter((window) => window.endRatio > 0 && window.startRatio < 1),
     [alertOverlay, plotXDomain],
+  );
+  const handleAlertClick = useCallback(
+    (alertId: string) => {
+      const alertWindow = alertOverlay?.alertWindows.find((candidate) => candidate.id === alertId);
+      if (alertWindow) onAlertClick?.(alertWindow);
+    },
+    [alertOverlay, onAlertClick],
   );
 
   const nightFrames = useMemo(() => {
@@ -853,6 +862,7 @@ export const AnalysisChart = memo(function AnalysisChart({
       dayNightBands={dayNightBands}
       pauseBands={pauseBands}
       alertBands={alertBands}
+      onAlertClick={handleAlertClick}
       yPositions={yPositions}
       y2Positions={y2Positions}
       xPositions={xPositions}

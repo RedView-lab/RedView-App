@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 
 import { useAppI18n } from '@/shared/i18n';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
+import { appScaledOverlayStyle, readAppScale } from '@/shared/lib/appScale';
 import type { Itinerary } from '@/features/itineraryPanel';
 import { IconCopy04, IconTrash } from '@/features/itineraryPanel/components/icons';
 
@@ -36,7 +37,6 @@ export function SummaryActionMenu({
     top: number;
     left: number;
     scale: number;
-    transformOrigin: string;
   } | null>(null);
 
   useEffect(() => {
@@ -67,9 +67,7 @@ export function SummaryActionMenu({
   useLayoutEffect(() => {
     const updatePosition = () => {
       const rect = anchorEl.getBoundingClientRect();
-      const computed = window.getComputedStyle(anchorEl);
-      const rawScale = Number.parseFloat(computed.getPropertyValue('--app-scale'));
-      const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
+      const scale = readAppScale(anchorEl);
       const menuHeight = MENU_ROW_HEIGHT * 3 * scale;
       const gap = MENU_GAP * scale;
       const maxLeft = Math.max(8, window.innerWidth - MENU_WIDTH * scale - 8);
@@ -80,7 +78,6 @@ export function SummaryActionMenu({
         top: placeAbove ? rect.top - menuHeight - gap : rect.bottom + gap,
         left: Math.min(rect.left, maxLeft),
         scale,
-        transformOrigin: placeAbove ? 'bottom left' : 'top left',
       });
     };
 
@@ -105,11 +102,8 @@ export function SummaryActionMenu({
       role="menu"
       aria-label={t('Actions pour {{name}}', { name: itinerary.name })}
       style={{
-        top: menuStyle.top,
-        left: menuStyle.left,
+        ...appScaledOverlayStyle(menuStyle),
         width: MENU_WIDTH,
-        transform: `scale(${menuStyle.scale})`,
-        transformOrigin: menuStyle.transformOrigin,
       }}
       onMouseDown={(event) => event.stopPropagation()}
     >

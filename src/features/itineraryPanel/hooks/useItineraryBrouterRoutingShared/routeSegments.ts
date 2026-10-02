@@ -5,6 +5,7 @@ import {
   projectPointAlongRoute,
   roundDistanceKm,
 } from '../../lib/routes';
+import { LOCAL_EDIT_WINDOW_KM } from '../../lib/brouter';
 import { computeRouteSurfaceMetricsFromBrouter } from '../../lib/route-metrics';
 import type { Itinerary } from '../../types';
 
@@ -287,12 +288,162 @@ function normalizeRoutePointDistances(points: RoutePoints): RoutePoints {
   });
 }
 
+type RoutePatch = NonNullable<Itinerary['pendingRoutePatch']>;
+type RoutePatchBoundary = RoutePatch['start'] | RoutePatch['end'];
+
+/**
+ * Tolérance autour de la distance mémorisée d'une borne de fenêtre : le tracé
+ * a pu être ré-échantillonné entre-temps (affinage altimétrique).
+ */
+const PATCH_BOUNDARY_HINT_TOLERANCE_M = 5_000;
+
 function routePatchBoundaryDistanceM(
-  patchPoint: { lat: number; lon: number; kind: 'start' | 'waypoint' | 'end' },
+  patchPoint: RoutePatchBoundary,
   routePoints: RoutePoints,
   routeDistances: number[],
 ): number | null {
   if (patchPoint.kind === 'start') return 0;
   if (patchPoint.kind === 'end') return routeDistances[routeDistances.length - 1] ?? 0;
+  if (patchPoint.distanceM != null && Number.isFinite(patchPoint.distanceM)) {
+    const near = projectNearDistanceM(
+      patchPoint,
+      routePoints,
+      routeDistances,
+      patchPoint.distanceM,
+      PATCH_BOUNDARY_HINT_TOLERANCE_M,
+    );
+    if (near != null) return near;
+  }
   return projectPointAlongRoute(patchPoint, routePoints, routeDistances)?.distanceM ?? null;
+}
+
+/** Projection de `point` sur les seuls segments situés à ±`toleranceM` de `hintM`. */
+function projectNearDistanceM(
+  point: { lat: number; lon: number },
+  routePoints: RoutePoints,
+  routeDistances: number[],
+  hintM: number,
+  toleranceM: number,
+): number | null {
+  const cosLat = Math.cos((point.lat * Math.PI) / 180);
+  let bestDistanceSq = Number.POSITIVE_INFINITY;
+  let bestM: number | null = null;
+  const first = Math.max(0, firstIndexAtOrAfter(routeDistances, hintM - toleranceM) - 1);
+  for (let index = first; index < routePoints.length - 1; index += 1) {
+    if (routeDistances[index]! > hintM + toleranceM) break;
+    const a = routePoints[index]!;
+    const b = routePoints[index + 1]!;
+    const dx = (b.lon - a.lon) * cosLat;
+    const dy = b.lat - a.lat;
+    const px = (point.lon - a.lon) * cosLat;
+    const py = point.lat - a.lat;
+    const lengthSq = (dx * dx) + (dy * dy);
+    const t = lengthSq > 0 ? Math.max(0, Math.min(1, ((px * dx) + (py * dy)) / lengthSq)) : 0;
+    const distanceSq = ((px - (t * dx)) ** 2) + ((py - (t * dy)) ** 2);
+    if (distanceSq < bestDistanceSq) {
+      bestDistanceSq = distanceSq;
+      bestM = routeDistances[index]! + (t * (routeDistances[index + 1]! - routeDistances[index]!));
+    }
+  }
+  return bestM;
+}
+
+/** Premier indice dont la distance est ≥ `targetM` (distances croissantes). */
+function firstIndexAtOrAfter(distances: number[], targetM: number): number {
+  let low = 0;
+  let high = distances.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if (distances[mid]! < targetM) low = mid + 1;
+    else high = mid;
+  }
+  return low;
+}
+
+/** Une fenêtre n'a d'intérêt que si elle épargne au moins ça de tracé. */
+const MIN_WINDOW_GAIN_M = 20_000;
+/** Distance sous laquelle le tracé « repasse » par la position éditée. */
+const REVISIT_CLEARANCE_M = 1_000;
+/** Écart toléré entre le kilométrage d'une ligne et les distances du tracé. */
+const EDIT_POSITION_TOLERANCE_M = 5_000;
+
+function approxDistanceM(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
+  const kx = 111_320 * Math.cos((((a.lat + b.lat) / 2) * Math.PI) / 180);
+  return Math.hypot((b.lon - a.lon) * kx, (b.lat - a.lat) * 110_540);
+}
+
+export interface RoutePatchEdit {
+  /** Portion du tracé stocké que l'édition invalide (m depuis le départ). */
+  fromM: number;
+  toM: number;
+  /**
+   * Position déduite d'une projection (kilométrage d'une ligne) : sur une
+   * boucle ou un aller-retour, elle peut désigner le mauvais passage. La
+   * fenêtre n'est alors posée que si le tracé ne repasse pas par là ailleurs.
+   */
+  projected: boolean;
+}
+
+/**
+ * Fenêtre locale, même méthode que les ancres des très longs tracés appliquée
+ * au tracé stocké. Un patch reroute tout le tronçon entre les lignes voisines
+ * de l'édition — sur un tracé géant sans étape, tout le tracé. Le tracé stocké
+ * étant déjà le meilleur pour ce profil, ses bornes sont rapprochées à
+ * `LOCAL_EDIT_WINDOW_KM` de part et d'autre de la portion éditée, prises sur
+ * le tracé lui-même : le reste est conservé tel quel, et la recherche reste
+ * courte (pas de délai dépassé, heuristique peu gloutonne).
+ * Renvoie le patch inchangé quand il n'y a rien à gagner ou en cas de doute.
+ */
+export function narrowRoutePatchToEdit(
+  patch: RoutePatch,
+  routePoints: RoutePoints,
+  edit: RoutePatchEdit,
+): RoutePatch {
+  if (routePoints.length < 2) return patch;
+  const distances = getRoutePointDistances(routePoints);
+  const startM = routePatchBoundaryDistanceM(patch.start, routePoints, distances);
+  const endM = routePatchBoundaryDistanceM(patch.end, routePoints, distances);
+  if (startM == null || endM == null || endM <= startM) return patch;
+  // Édition projetée hors du tronçon de ses voisines : autre passage, on ne touche à rien.
+  if (edit.fromM < startM - EDIT_POSITION_TOLERANCE_M || edit.toM > endM + EDIT_POSITION_TOLERANCE_M) {
+    return patch;
+  }
+  const fromM = Math.min(endM, Math.max(startM, edit.fromM));
+  const toM = Math.min(endM, Math.max(fromM, edit.toM));
+
+  const windowM = LOCAL_EDIT_WINDOW_KM * 1_000;
+  const startIndex = fromM - windowM > startM + MIN_WINDOW_GAIN_M
+    ? Math.max(0, firstIndexAtOrAfter(distances, fromM - windowM) - 1)
+    : null;
+  const endIndex = toM + windowM < endM - MIN_WINDOW_GAIN_M
+    ? Math.min(routePoints.length - 1, firstIndexAtOrAfter(distances, toM + windowM))
+    : null;
+  if (startIndex == null && endIndex == null) return patch;
+  const windowStartM = startIndex != null ? distances[startIndex]! : startM;
+  const windowEndM = endIndex != null ? distances[endIndex]! : endM;
+
+  if (edit.projected) {
+    const targets = [fromM, toM]
+      .map((distanceM) => interpolateRoutePointAtDistance(routePoints, distances, distanceM))
+      .filter((target): target is RoutePoint => target !== null);
+    for (let index = 0; index < routePoints.length; index += 1) {
+      const distanceM = distances[index]!;
+      if (distanceM < startM || distanceM > endM) continue;
+      if (distanceM >= windowStartM && distanceM <= windowEndM) continue;
+      const point = routePoints[index]!;
+      if (targets.some((target) => approxDistanceM(point, target) < REVISIT_CLEARANCE_M)) return patch;
+    }
+  }
+
+  const boundary = (index: number) => ({
+    lat: routePoints[index]!.lat,
+    lon: routePoints[index]!.lon,
+    kind: 'waypoint' as const,
+    distanceM: distances[index]!,
+  });
+  return {
+    ...patch,
+    start: startIndex != null ? boundary(startIndex) : patch.start,
+    end: endIndex != null ? boundary(endIndex) : patch.end,
+  };
 }

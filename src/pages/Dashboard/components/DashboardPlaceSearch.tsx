@@ -12,6 +12,7 @@ import {
 } from '@/features/poi/lib/poi-popup';
 import { getViewportPrefetch } from '@/features/map3d/lib/viewportPrefetch';
 import { closeMarkerPopupOnSecondClick } from '@/features/map3d/lib/pointPanelDismiss';
+import { keepPopupInVisibleMap } from '@/features/map3d/lib/mapPopupSafeArea';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { useAppI18n } from '@/shared/i18n';
 
@@ -19,6 +20,7 @@ import { getSearchCameraProfile } from './DashboardPlaceSearch.camera';
 import {
   DASHBOARD_FILTER_OPTIONS,
   DASHBOARD_POI_OPTIONS,
+  PLACE_SEARCH_FULL_WIDTH,
   POI_MENU_CLOSE_MS,
   SEARCH_COUNTRIES,
   VIEWPORT_POI_FETCH_DEBOUNCE_MS,
@@ -288,6 +290,7 @@ export function DashboardPlaceSearch({
 
       refresh();
       popup.on('open', () => refresh());
+      keepPopupInVisibleMap(popup, map);
 
       const markerElement = createViewportPoiMarkerElement(feature);
       closeMarkerPopupOnSecondClick(markerElement, popup);
@@ -539,7 +542,11 @@ export function DashboardPlaceSearch({
   );
 
   return (
-    <div className="rvd-place-search" style={wrapperStyle} aria-hidden={!visible}>
+    <div
+      className={`rvd-place-search${typeof maxWidth === 'number' && maxWidth < PLACE_SEARCH_FULL_WIDTH ? ' rvd-place-search--compact' : ''}`}
+      style={wrapperStyle}
+      aria-hidden={!visible}
+    >
       {/*
        * Left drawer toggle. It shares the search wrapper's flex row so the
        * panel / button / search-bar gutters stay exactly PANEL_PADDING wide

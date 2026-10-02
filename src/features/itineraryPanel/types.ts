@@ -417,11 +417,19 @@ export interface ItineraryPendingRoutePatch {
     lat: number;
     lon: number;
     kind: 'start' | 'waypoint';
+    /**
+     * Borne prise sur le tracé stocké (fenêtre locale autour de l'édition) :
+     * sa distance le long du tracé, pour la retrouver sans ambiguïté sur une
+     * boucle ou un aller-retour.
+     */
+    distanceM?: number;
   };
   end: {
     lat: number;
     lon: number;
     kind: 'waypoint' | 'end';
+    /** Cf. `start.distanceM`. */
+    distanceM?: number;
   };
   via: Array<{
     lat: number;

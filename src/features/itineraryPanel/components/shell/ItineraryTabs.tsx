@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { useAppI18n } from '@/shared/i18n';
+import { appScaledOverlayStyle, readAppScale } from '@/shared/lib/appScale';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { IconEye, IconPlus, IconTrash } from '../icons';
 import type { Itinerary, RouteProfile } from '../../types';
@@ -109,8 +110,7 @@ export function ItineraryTabs({
       const trigger = triggerRefs.current[openMenuId];
       if (!trigger) return;
       const rect = trigger.getBoundingClientRect();
-      const rawScale = Number.parseFloat(window.getComputedStyle(trigger).getPropertyValue('--app-scale'));
-      const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
+      const scale = readAppScale(trigger);
       const menuWidth = MENU_WIDTH * scale;
       const rawLeft = rect.right - menuWidth;
       const maxLeft = window.innerWidth - menuWidth - VIEWPORT_PADDING;
@@ -317,11 +317,8 @@ export function ItineraryTabs({
               role="menu"
               aria-label={t('Actions de l’itinéraire')}
               style={{
-                top: menuPosition.top,
-                left: menuPosition.left,
+                ...appScaledOverlayStyle(menuPosition),
                 width: MENU_WIDTH,
-                transform: `scale(${menuPosition.scale})`,
-                transformOrigin: 'top left',
               }}
             >
               {canRename ? (

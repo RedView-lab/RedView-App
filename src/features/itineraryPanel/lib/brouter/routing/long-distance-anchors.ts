@@ -9,6 +9,10 @@
  * finement. Les ancres sont prises sur le tracé grossier (et non sur la ligne
  * droite, qui peut tomber dans un lac ou sur un sommet) : elles restent sur un
  * itinéraire plausible tout en laissant chaque tronçon explorer ses variantes.
+ *
+ * Même méthode pour les éditions : le tracé stocké est le résultat de cet
+ * ancrage, une édition ne recalcule qu'une fenêtre de `LOCAL_EDIT_WINDOW_KM`
+ * de part et d'autre (cf. narrowRoutePatchToEdit) au lieu de tout le tronçon.
  */
 import type { BrouterPoint } from '../types';
 
@@ -16,6 +20,17 @@ import type { BrouterPoint } from '../types';
 export const ANCHOR_SECTION_KM = 180;
 /** Espacement visé des ancres le long du tracé grossier (km de tracé). */
 export const ANCHOR_SPACING_KM = 160;
+/**
+ * Espacement resserré : tronçon plus court dont la recherche fine n'a pas
+ * abouti (réseau très dense, profil très restrictif). Même méthode, ancres
+ * plus proches, plutôt qu'un repli sur un profil stock.
+ */
+export const TIGHT_ANCHOR_SPACING_KM = 60;
+/**
+ * Demi-fenêtre recalculée autour d'une édition (km de tracé) : une édition
+ * reroute au plus l'espacement des ancres, le reste du tracé est conservé.
+ */
+export const LOCAL_EDIT_WINDOW_KM = ANCHOR_SPACING_KM / 2;
 
 function haversineKm(a: BrouterPoint, b: BrouterPoint): number {
   const toRad = Math.PI / 180;
@@ -32,12 +47,23 @@ export function needsLongDistanceAnchors(points: BrouterPoint[]): boolean {
   return false;
 }
 
+export interface AnchoredViaOptions {
+  /** Espacement des ancres (km de tracé). */
+  spacingKm?: number;
+  /** Seuls les tronçons plus longs (vol d'oiseau, km) sont ancrés. */
+  minSectionKm?: number;
+}
+
 /**
  * Via de la requête affinée : via de l'utilisateur + ancres posées sur le
  * tracé grossier `coarse` ([lon, lat] de départ → arrivée), dans l'ordre.
- * `null` si le tracé grossier est inexploitable.
+ * `null` si le tracé grossier est inexploitable ou n'apporte aucune ancre.
  */
-export function buildAnchoredVia(points: BrouterPoint[], coarse: [number, number][]): BrouterPoint[] | null {
+export function buildAnchoredVia(
+  points: BrouterPoint[],
+  coarse: [number, number][],
+  { spacingKm = ANCHOR_SPACING_KM, minSectionKm = ANCHOR_SECTION_KM }: AnchoredViaOptions = {},
+): BrouterPoint[] | null {
   if (points.length < 2 || coarse.length < 2) return null;
   const coords = coarse.map(([lon, lat]) => ({ lon, lat }));
   const cumKm = [0];
@@ -62,18 +88,20 @@ export function buildAnchoredVia(points: BrouterPoint[], coarse: [number, number
   indices.push(coords.length - 1);
 
   const via: BrouterPoint[] = [];
+  let anchorCount = 0;
   for (let section = 0; section < points.length - 1; section += 1) {
     if (section > 0) via.push(points[section]!);
-    if (haversineKm(points[section]!, points[section + 1]!) <= ANCHOR_SECTION_KM) continue;
+    if (haversineKm(points[section]!, points[section + 1]!) <= minSectionKm) continue;
     const fromKm = cumKm[indices[section]!]!;
     const lengthKm = cumKm[indices[section + 1]!]! - fromKm;
-    const anchors = Math.ceil(lengthKm / ANCHOR_SPACING_KM) - 1;
+    const anchors = Math.ceil(lengthKm / spacingKm) - 1;
     let i = indices[section]!;
     for (let a = 1; a <= anchors; a += 1) {
       const targetKm = fromKm + (lengthKm * a) / (anchors + 1);
       while (i < indices[section + 1]! && cumKm[i]! < targetKm) i += 1;
       via.push(coords[i]!);
+      anchorCount += 1;
     }
   }
-  return via;
+  return anchorCount > 0 ? via : null;
 }
