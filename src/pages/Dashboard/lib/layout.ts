@@ -20,10 +20,11 @@ function reservedWidth(width: number, collapsed: boolean) {
 
 /**
  * Side panels give way to the center panel when the logical canvas is too
- * narrow for the user's preferred widths (e.g. both panels widened on a 16:10
- * laptop, whose canvas is 1600 logical px): the right panel shrinks first,
- * then the left one, never below their minimum. The preferred widths stay in
- * state and come back as soon as the canvas is wide enough again.
+ * narrow for the user's preferred widths (half-screen window, 16:10 laptop:
+ * the canvas stays 1:1 down to APP_SCALE_MIN_CANVAS_WIDTH, see
+ * shared/lib/appScale.ts): the right panel shrinks first, then the left one,
+ * never below their minimum. The preferred widths stay in state and come back
+ * as soon as the canvas is wide enough again.
  */
 function fitSidePanelWidths({
   designW,

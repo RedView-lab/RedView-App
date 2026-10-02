@@ -6,20 +6,31 @@
  * controls keep a comfortable physical size from 13" laptops to ultrawides:
  *
  * - Below the minimum canvas (MIN_CANVAS): the scale tracks the contain-fit
- *   ratio exactly, so the logical canvas never gets smaller than what the
- *   dashboard layout needs (side panels + center panel min width, map stage +
- *   center panel min height).
- * - Between the minimum canvas and the design reference: 1:1, no scaling. A
- *   1080p browser window (≈1920×960 once the browser chrome is gone) or a 16:10
- *   laptop no longer shrinks the whole UI just to preserve a 1080px-tall canvas.
+ *   ratio, so the logical canvas never gets smaller than what the dashboard
+ *   layout needs, down to a readability floor (MIN).
+ * - Between the minimum canvas and the design reference: 1:1, no scaling; the
+ *   side panels give way to the center panel instead (`fitSidePanelWidths`,
+ *   pages/Dashboard/lib/layout.ts). A half-screen window or a 16:10 laptop
+ *   keeps full-size text rather than shrinking the whole UI.
  * - Above the design reference (DESIGN): the scale keeps growing gently
  *   (GROW_FACTOR of the surplus) up to MAX — 1440p and ultrawide monitors gain
  *   text comfort without turning into a giant zoom. Extra width on ultrawides
  *   goes to the map, not to bigger text (the fit uses the limiting axis).
+ *
+ * Shrinking is a last resort: `transform: scale()` below 1 renders glyphs
+ * smaller and softer, badly so on non-HiDPI screens (at 0.6 a 13 px label ends
+ * up ~8 px, unreadable).
  */
-export const APP_SCALE_MIN = 0.45;
-export const APP_SCALE_MIN_CANVAS_WIDTH = 1600;
-export const APP_SCALE_MIN_CANVAS_HEIGHT = 900;
+/** Readability floor: 13 px labels stay ≥ ~10 px on screen, 11 px captions ≥ ~8 px. */
+export const APP_SCALE_MIN = 0.75;
+/**
+ * Smallest logical canvas the dashboard layout fits in (pages/Dashboard/lib/
+ * constants.ts): both side panels at their minimum width (2 × (360 + 2 × 12))
+ * plus the center panel minimum (420) ≈ 1188 px; toolbar (12 + 48 + 12) +
+ * center panel minimum (390) + map stage clearance (384) ≈ 846 px.
+ */
+export const APP_SCALE_MIN_CANVAS_WIDTH = 1200;
+export const APP_SCALE_MIN_CANVAS_HEIGHT = 860;
 export const APP_SCALE_DESIGN_WIDTH = 1920;
 export const APP_SCALE_DESIGN_HEIGHT = 1080;
 export const APP_SCALE_MAX = 1.12;
