@@ -55,8 +55,8 @@
 
 .rvi-dialog__title {
   margin: 0;
-  font-size: 18px;
-  font-weight: 700;
+  font-size: var(--rv-font-size-2xl);
+  font-weight: 600;
   color: #fff;
   letter-spacing: -0.01em;
 }
@@ -94,8 +94,8 @@
   z-index: 1;
   padding: 8px 12px 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.04);
-  font-size: 10px;
-  line-height: 1.35;
+  font-size: var(--rv-font-size-xs);
+  line-height: var(--rv-line-height-snug);
   color: #ffb0b0;
   background: rgba(197, 0, 0, 0.08);
 }

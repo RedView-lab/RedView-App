@@ -47,8 +47,8 @@
   justify-content: center;
   gap: 6px;
   flex: 0 0 auto;
-  font-size: 12px;
-  font-weight: 400;
+  font-size: var(--rv-font-size-md);
+  font-weight: 600;
   line-height: 1;
   cursor: pointer;
   transition:
@@ -122,7 +122,6 @@
   padding-left: 12px;
   padding-right: 8px;
   background: var(--rvc-center-red);
-  font-weight: 600;
 }
 
 .rvc-center-toolbar__button--accent:hover {
@@ -169,7 +168,7 @@
   min-width: 160px;
   padding-left: 4px;
   color: rgba(255, 255, 255, 0.82);
-  font-size: 11px;
+  font-size: var(--rv-font-size-sm);
   line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
@@ -189,7 +188,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  font-size: 10px;
+  font-size: var(--rv-font-size-xs);
   font-weight: 400;
   line-height: 1.2;
 }
@@ -231,11 +230,11 @@
   .rvc-center-toolbar__status-inline {
     flex-basis: 180px;
     min-width: 96px;
-    font-size: 10px;
+    font-size: var(--rv-font-size-xs);
   }
 
   .rvc-center-toolbar__metrics {
     width: 108px;
-    font-size: 9px;
+    font-size: var(--rv-font-size-2xs);
   }
 }

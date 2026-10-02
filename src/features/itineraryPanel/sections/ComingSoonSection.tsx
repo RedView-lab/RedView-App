@@ -10,7 +10,7 @@ export function ComingSoonSection({ title, description }: ComingSoonProps) {
   return (
     <div className="rvi-params">
       <h3 className="rvi-section-title">{t(title)}</h3>
-      <p style={{ margin: 0, fontSize: 13, opacity: 0.6, fontWeight: 500 }}>
+      <p style={{ margin: 0, fontSize: 'var(--rv-font-size-md)', opacity: 0.6, fontWeight: 500 }}>
         {description ? t(description) : t('Bientôt disponible.')}
       </p>
     </div>

@@ -42,7 +42,7 @@
   position: relative;
   display: block;
   padding: 0;
-  font: 600 11px/1 'DM Sans', system-ui, sans-serif;
+  font: 600 var(--rv-font-size-xs)/1 var(--rv-font-sans);
   color: rgba(255, 255, 255, 0.68);
   user-select: none;
 }
@@ -238,8 +238,8 @@
   -webkit-backdrop-filter: blur(60px);
   box-shadow: 0 14px 28px rgba(0, 0, 0, 0.32);
   color: #ffffff;
-  font-family: 'Rethink Sans', 'DM Sans', system-ui, sans-serif;
-  font-size: 12px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-sm);
   font-weight: 700;
   line-height: normal;
   white-space: nowrap;
@@ -272,9 +272,9 @@
   flex-direction: column;
   gap: 4px;
   align-items: flex-start;
-  font-family: 'Rethink Sans', 'DM Sans', system-ui, sans-serif;
+  font-family: var(--rv-font-sans);
   font-weight: 700;
-  font-size: 12px;
+  font-size: var(--rv-font-size-sm);
   color: #ffffff;
   line-height: normal;
   white-space: nowrap;
@@ -284,7 +284,7 @@
 .rvchart__card-distance {
   color: #ffffff;
   font-weight: 700;
-  font-size: 12px;
+  font-size: var(--rv-font-size-sm);
   line-height: normal;
   font-variant-numeric: tabular-nums;
 }
@@ -292,7 +292,7 @@
 .rvchart__card-metric {
   color: #ffffff;
   font-weight: 700;
-  font-size: 12px;
+  font-size: var(--rv-font-size-sm);
   line-height: normal;
   font-variant-numeric: tabular-nums;
 }
@@ -462,7 +462,7 @@
   align-items: center;
   padding-left: 4px;
   color: #fff;
-  font: 600 clamp(10px, 1.05vw, 12px)/1 'DM Sans', system-ui, sans-serif;
+  font: 600 var(--rv-font-size-xs)/1 var(--rv-font-sans);
   border-left: 1px solid rgba(255, 255, 255, 0.24);
   white-space: nowrap;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
@@ -490,7 +490,7 @@
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.06);
   color: #fff;
-  font: 400 11px/1 'DM Sans', system-ui, sans-serif;
+  font: 500 var(--rv-font-size-sm)/1 var(--rv-font-sans);
   cursor: pointer;
   overflow: hidden;
 }
@@ -524,7 +524,7 @@
   align-items: center;
   padding-left: 6px;
   color: rgba(255, 255, 255, 0.7);
-  font: 600 12px/1 'DM Sans', system-ui, sans-serif;
+  font: 600 var(--rv-font-size-sm)/1 var(--rv-font-sans);
   border-left: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -557,7 +557,7 @@
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.18);
   color: rgba(255, 255, 255, 0.9);
-  font: 500 11px/1 'DM Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font: 500 var(--rv-font-size-sm)/1 var(--rv-font-sans);
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
   transition: all 160ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -593,9 +593,9 @@
 
 .rvchart-slope-legend__title {
   flex: 0 0 auto;
-  font-size: 11px;
+  font-size: var(--rv-font-size-xs);
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--rv-letter-spacing-wide);
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.5);
 }
@@ -625,7 +625,7 @@
   align-items: center;
   gap: 6px;
   flex: 0 0 auto;
-  font-size: 12px;
+  font-size: var(--rv-font-size-sm);
   line-height: 16px;
   white-space: nowrap;
   transition: opacity 120ms ease;
@@ -669,7 +669,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: var(--rv-font-size-xs);
   color: rgba(255, 255, 255, 0.38);
 }
 

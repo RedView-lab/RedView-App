@@ -188,7 +188,7 @@ export const ExporterPanel = memo(function ExporterPanel({ width }: ExporterPane
                 aria-live="polite"
                 style={{
                   margin: '8px 0 0',
-                  fontSize: 12,
+                  fontSize: 'var(--rv-font-size-sm)',
                   lineHeight: 1.4,
                   color: status.tone === 'error' ? '#ff8d8d' : '#cbe8b1',
                 }}

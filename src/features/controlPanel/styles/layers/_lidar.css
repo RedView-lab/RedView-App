@@ -22,7 +22,7 @@
   flex: 1 1 0;
   min-width: 0;
   color: var(--rvc-text);
-  font-size: 12px;
+  font-size: var(--rv-font-size-md);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -118,7 +118,7 @@
   padding: 7px 8px;
   background: #890000;
   color: #ffffff;
-  font-size: 14px;
+  font-size: var(--rv-font-size-lg);
   font-weight: 500;
   border-radius: 6px;
   cursor: pointer;
@@ -178,7 +178,7 @@
   padding: 7px 8px;
   background: rgba(255, 255, 255, 0.08);
   color: #ffffff;
-  font-size: 14px;
+  font-size: var(--rv-font-size-lg);
   font-weight: 500;
   border-radius: 6px;
   cursor: pointer;
@@ -216,8 +216,8 @@
 }
 
 .rvc-lidar__error-meta {
-  font-size: 11px;
-  line-height: 1.35;
+  font-size: var(--rv-font-size-xs);
+  line-height: var(--rv-line-height-snug);
   color: #ff9999;
   background: rgba(255, 69, 58, 0.12);
   border: 1px solid rgba(255, 69, 58, 0.25);

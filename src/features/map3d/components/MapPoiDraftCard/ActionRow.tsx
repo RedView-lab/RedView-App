@@ -66,7 +66,7 @@ export function ActionRow({
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
-          fontSize: 13,
+          fontSize: 'var(--rv-font-size-md)',
           fontWeight: danger ? 400 : 600,
           lineHeight: '17px',
           color: '#ffffff',

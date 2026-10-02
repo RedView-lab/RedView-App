@@ -1,0 +1,72 @@
+/*
+ * RedView — typographie unique de l'application (source de vérité).
+ *
+ * Toute taille de texte d'un panneau, d'une page ou d'un pop-in passe par ces
+ * variables. Ne jamais écrire de `font-size` en dur dans une feature :
+ * choisir le rôle dans la table ci-dessous et prendre son token (graisses :
+ * valeurs numériques 400 / 500 / 600 / 700 indiquées par la table).
+ *
+ * Unités : px LOGIQUES. Le dashboard est rendu sur un canevas mis à l'échelle
+ * par `--app-scale` (shared/lib/appScale.ts) ; le viewer LiDAR applique la même
+ * échelle à ses panneaux (`zoom`). Une même taille rend donc à l'identique dans
+ * tous les panneaux, et suit l'écran (laptop → ultra-wide) automatiquement.
+ * Aucune taille fluide (vw, cqi, clamp) : la largeur d'un conteneur se gère par
+ * paliers @container, la densité de l'écran par le canevas.
+ *
+ * ── Panneaux (dashboard, viewer, pop-ins) ─────────────────────────────────
+ *  Rôle                                         Token        Graisse
+ *  Titre de panneau                             xl  16       600
+ *  Titre de dialogue, statistique clef          2xl 18       600
+ *  Titre de section, onglet, titre de ligne     lg  14       600
+ *    de liste, titre de pop-in, champ de recherche
+ *  Titre de groupe de champs (« Surfaces »)     lg  14       400
+ *  Grand contrôle (≥ 36 px), bouton pleine      lg  14       500
+ *    largeur
+ *  Label de champ (atténué 64 %)                md  13       500
+ *  Valeur de contrôle (select, input, chip),    md  13       600
+ *    bouton, item de menu / dropdown
+ *  Compact : grille dense à 2 colonnes, barre   sm  12       500
+ *    d'outils (Traçage, analyse), chip de filtre
+ *  Texte d'aide, info-bulle, notice, statut     sm  12       400 / 500
+ *  Légende : méta, unité, borne, valeur de      xs  11       500
+ *    curseur, graduation d'axe (600)
+ *  En-tête de tableau (atténué)                 xs  11       600
+ *  Badge                                        xs  11       600 / 700
+ *  Surtitre : xs + 700 + uppercase + --rv-letter-spacing-wide
+ *  Micro : repère de curseur, sous-libellé      2xs 10       500
+ *  Badge posé sur la carte (marqueur POI)       3xs 9        700
+ *
+ * ── Pages (Project Browser, compte, paiement, connexion) ──────────────────
+ *  Titre de page 3xl 24 (700) · accroche 4xl 30 · titre de carte / de section
+ *  xl 16 (700) · corps, label, onglet, bouton lg 14 · méta md 13 · champ de
+ *  saisie xl 16 (aligné sur les champs Stripe, non stylables) · affichage
+ *  ponctuel display 48 / display-lg 60.
+ */
+
+:root {
+  /* Police unique (chargée dans index.html / viewer.html). Hors DOM (canvas,
+     sprites) : RV_FONT_SANS, shared/lib/typography.ts. */
+  --rv-font-sans: 'Rethink Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* Échelle */
+  --rv-font-size-3xs: 9px;
+  --rv-font-size-2xs: 10px;
+  --rv-font-size-xs: 11px;
+  --rv-font-size-sm: 12px;
+  --rv-font-size-md: 13px;
+  --rv-font-size-lg: 14px;
+  --rv-font-size-xl: 16px;
+  --rv-font-size-2xl: 18px;
+  --rv-font-size-3xl: 24px;
+  --rv-font-size-4xl: 30px;
+  --rv-font-size-display: 48px;
+  --rv-font-size-display-lg: 60px;
+
+  /* Interlignes du texte courant (paragraphes, notices) */
+  --rv-line-height-snug: 1.35;
+  --rv-line-height-relaxed: 1.5;
+
+  /* Approche */
+  --rv-letter-spacing-tight: -0.01em;
+  --rv-letter-spacing-wide: 0.04em;
+}

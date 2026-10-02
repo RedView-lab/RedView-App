@@ -155,7 +155,8 @@ export function applyRuntimeProfileDpr(profile: MapRuntimeProfile): void {
  * Declares the CSS scale applied to the dashboard canvas (`appScale`).
  * A layout box of W logical px is shown on W * appScale screen px, so the
  * backing store only needs `W * appScale * dpr` pixels. On a 1366 or 1470 px
- * wide laptop (appScale ~0.7-0.77) this removes 40-50 % of rendered pixels.
+ * wide laptop (appScale ~0.72-0.92, see shared/lib/appScale.ts) this removes
+ * 15-48 % of rendered pixels.
  * Takes effect on the next canvas resize (Mapbox resizes with its container).
  */
 export function setDprLayoutScale(scale: number): void {

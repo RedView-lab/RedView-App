@@ -49,8 +49,8 @@
   height: 32px;
   padding: 0 8px;
   color: var(--rvi-text-dim);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: var(--rv-font-size-xs);
+  font-weight: 600;
   letter-spacing: 0.01em;
   background: transparent;
   border: 0;
@@ -236,7 +236,7 @@
   width: 100%;
   max-width: 100%;
   padding: 6px 8px;
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
   color: var(--rvi-text);
   background: rgba(255, 255, 255, 0.08);
   border-top: 1px solid transparent;
@@ -353,7 +353,7 @@
   width: 58px;
   height: 24px;
   padding: 0 6px;
-  font-size: 12px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   font-family: inherit;
   color: var(--rvi-text);
@@ -368,7 +368,6 @@
 .rvi-tl-td__duration-input {
   width: 72px;
   text-align: left;
-  font-size: 13px;
 }
 
 .rvi-tl-td__check {

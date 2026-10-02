@@ -154,8 +154,8 @@
   border: 1px solid rgba(255, 255, 255, 0.85);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
   color: #ffffff;
-  font-family: 'Rethink Sans', system-ui, sans-serif;
-  font-size: 10px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-2xs);
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
@@ -168,13 +168,15 @@
 }
 
 .rv-poi-marker__pause-symbol {
+  /* Glyphe « ‖ » (icône, pas du texte) : hors échelle typographique,
+     géométrie reproduite au pixel près par poi/lib/poi-sprites.ts. */
   font-size: 8px;
   letter-spacing: -1px;
   color: #ff9f43;
 }
 
 .rv-poi-marker__pause-duration {
-  font-size: 10px;
+  font-size: var(--rv-font-size-2xs);
   font-weight: 700;
 }
 
@@ -192,8 +194,8 @@
   border: 1px solid rgba(255, 255, 255, 0.7);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
   color: #ffffff;
-  font-family: 'Rethink Sans', system-ui, sans-serif;
-  font-size: 9px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-3xs);
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
@@ -342,8 +344,8 @@
   padding: 4px;
   background: #0f0f0f;
   color: var(--rv-poi-popup-text);
-  font-family: 'Rethink Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 14px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-lg);
   line-height: 1.2;
   overflow: visible;
 }
@@ -408,7 +410,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
+  font-size: var(--rv-font-size-lg);
   font-weight: 600;
   line-height: 1.15;
 }
@@ -435,7 +437,7 @@
 /* Raison du favori posé par le tri automatique. */
 .rv-poi-popup__auto-reason {
   margin-top: 4px;
-  font-size: 11px;
+  font-size: var(--rv-font-size-xs);
   line-height: 1.3;
   color: var(--rv-poi-popup-text-muted);
 }
@@ -445,7 +447,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
   font-weight: 500;
   line-height: 1.15;
   color: var(--rv-poi-popup-text-muted);
@@ -496,7 +498,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: left;
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   line-height: 1.15;
 }
@@ -631,7 +633,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   line-height: 1.15;
 }

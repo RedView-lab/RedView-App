@@ -139,9 +139,9 @@
   width: calc(var(--rvc-center-plot-gutter) - 8px);
   padding-right: clamp(8px, 1.2cqi, 16px);
   color: var(--rvc-center-text-dim);
-  font-family: 'DM Sans', 'Rethink Sans', system-ui, sans-serif;
-  font-size: clamp(10px, 0.92cqi, 12px);
-  font-weight: 400;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-xs);
+  font-weight: 600;
   text-align: right;
   transform: translateY(-50%);
   z-index: 4;
@@ -154,8 +154,8 @@
   bottom: clamp(12px, calc(var(--rvc-center-plot-axis-bottom) - 20px), 20px);
   height: 14px;
   color: #fff;
-  font-size: clamp(10px, 0.92cqi, 12px);
-  font-weight: 400;
+  font-size: var(--rv-font-size-xs);
+  font-weight: 600;
   z-index: 4;
 }
 
@@ -177,14 +177,14 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
-  font-weight: 400;
+  font-size: var(--rv-font-size-sm);
+  font-weight: 500;
   justify-content: flex-start;
   overflow: hidden;
 }
 
 .rvc-center-analysis__add-plus {
-  font-size: 14px;
+  font-size: var(--rv-font-size-lg);
   line-height: 1;
 }
 

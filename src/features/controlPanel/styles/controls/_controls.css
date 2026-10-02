@@ -84,8 +84,8 @@
 }
 
 .rvc-cp-checkbox__label {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--rv-font-size-md);
+  font-weight: 500;
   color: var(--rvc-text);
   opacity: 0.64;
   overflow: hidden;
@@ -104,7 +104,7 @@
   background: var(--rvc-bg-chip);
   border-radius: 5px;
   color: var(--rvc-text);
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   cursor: pointer;
   user-select: none;
@@ -265,8 +265,8 @@
   flex: 1 1 0;
   min-width: 0;
   color: var(--rvc-text);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--rv-font-size-md);
+  font-weight: 500;
   opacity: 0.64;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -275,7 +275,7 @@
 
 .rvc-row__value-sm {
   color: var(--rvc-text);
-  font-size: 11px;
+  font-size: var(--rv-font-size-xs);
   font-weight: 500;
   white-space: nowrap;
   flex-shrink: 0;

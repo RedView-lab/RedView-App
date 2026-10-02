@@ -2,7 +2,7 @@
   margin-bottom: 16px;
   padding: 10px 14px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
   font-weight: 500;
 }
 
@@ -43,7 +43,7 @@
 .rvpb-account-field__label,
 .rvpb-account-password-label {
   color: #fff;
-  font-size: 15px;
+  font-size: var(--rv-font-size-lg);
   font-weight: 600;
   line-height: 1.33;
 }
@@ -151,7 +151,7 @@
   background: transparent;
   color: #fff;
   font: inherit;
-  font-size: 16px;
+  font-size: var(--rv-font-size-xl);
   line-height: 1.5;
   outline: none;
 }
@@ -168,7 +168,7 @@
   left: 0;
   z-index: 12;
   width: 100%;
-  max-height: min(var(--rv-dropdown-max-height), calc(100vh - 160px));
+  max-height: min(var(--rv-dropdown-max-height), calc(var(--rv-canvas-height, 100vh) - 160px));
 }
 
 .rvpb-account-input-shell input::placeholder {
@@ -177,7 +177,7 @@
 
 .rvpb-account-input-suffix {
   color: rgba(255, 255, 255, 0.72);
-  font-size: 15px;
+  font-size: var(--rv-font-size-lg);
 }
 
 .rvpb-account-actions {
@@ -197,7 +197,7 @@
   flex: 1 1 auto;
   min-width: 0;
   color: rgba(255, 255, 255, 0.48);
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
 }
 
 .rvpb-account-password-row {

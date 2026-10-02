@@ -45,7 +45,7 @@ export function MapContextMenuMetadata({
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
-            fontSize: 12,
+            fontSize: 'var(--rv-font-size-sm)',
             fontWeight: 500,
             fontStyle: 'italic',
             lineHeight: '16px',
@@ -62,7 +62,7 @@ export function MapContextMenuMetadata({
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
-            fontSize: 12,
+            fontSize: 'var(--rv-font-size-sm)',
             fontWeight: 500,
             fontStyle: 'italic',
             lineHeight: '16px',
@@ -101,7 +101,7 @@ export function MapContextMenuMetadata({
             <SlopeGlyph />
             <span
               style={{
-                fontSize: 12,
+                fontSize: 'var(--rv-font-size-sm)',
                 fontWeight: 500,
                 fontStyle: 'italic',
                 lineHeight: '16px',
@@ -117,7 +117,7 @@ export function MapContextMenuMetadata({
           <ElevationGlyph />
           <span
             style={{
-              fontSize: 12,
+              fontSize: 'var(--rv-font-size-sm)',
               fontWeight: 500,
               fontStyle: 'italic',
               lineHeight: '16px',
@@ -137,7 +137,7 @@ export function MapContextMenuMetadata({
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
-                fontSize: 12,
+                fontSize: 'var(--rv-font-size-sm)',
                 fontWeight: 500,
                 fontStyle: 'italic',
                 lineHeight: '16px',
@@ -159,7 +159,7 @@ export function MapContextMenuMetadata({
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
-              fontSize: 12,
+              fontSize: 'var(--rv-font-size-sm)',
               fontWeight: 500,
               fontStyle: 'italic',
               lineHeight: '16px',

@@ -42,7 +42,7 @@
   padding: 5px 5px 5px 8px;
   background: rgba(255, 255, 255, 0.08);
   border-radius: 5px;
-  font-size: 14px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
 }
 
@@ -52,8 +52,8 @@
   justify-content: flex-start;
   min-width: 0;
   color: var(--rvc-text);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--rv-font-size-md);
+  font-weight: 500;
   opacity: 0.64;
   text-align: left;
   overflow: hidden;
@@ -91,7 +91,7 @@
   min-width: 0;
   padding: 0;
   color: var(--rvc-text);
-  font-size: 14px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -116,7 +116,7 @@
   width: max(24px, calc(var(--rvc-panel-route-opacity-width) - 40px));
   text-align: right;
   color: var(--rvc-text);
-  font-size: 14px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -157,7 +157,7 @@
   padding: 0 4px;
   border-radius: 6px;
   color: var(--rvc-text);
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   cursor: pointer;
   box-sizing: border-box;
@@ -213,7 +213,7 @@
 
 .rvc-routes__trace-width-value {
   color: var(--rvc-text);
-  font-size: 11px;
+  font-size: var(--rv-font-size-xs);
   font-weight: 500;
   white-space: nowrap;
   flex-shrink: 0;
@@ -232,16 +232,16 @@
   padding: 5px 5px 5px 8px;
   background: rgba(255, 255, 255, 0.08);
   border-radius: 5px;
-  font-size: 14px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
 }
 
 .rvc-routes__quality-unavailable {
   margin-top: 4px;
   color: rgba(255, 255, 255, 0.64);
-  font-size: 11px;
+  font-size: var(--rv-font-size-sm);
   font-weight: 500;
-  line-height: 1.25;
+  line-height: var(--rv-line-height-snug);
 }
 
 .rvc-routes__quality-meta {
@@ -266,7 +266,7 @@
 .rvc-routes__quality-expert-caption,
 .rvc-routes__quality-expert-subtitle {
   color: rgba(255, 255, 255, 0.64);
-  font-size: 11px;
+  font-size: var(--rv-font-size-xs);
   font-weight: 500;
   line-height: 1.2;
 }
@@ -275,7 +275,7 @@
 .rvc-routes__quality-expert-title,
 .rvc-routes__quality-expert-value {
   color: var(--rvc-text);
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   line-height: 1.2;
 }
@@ -291,7 +291,7 @@
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.1);
   color: var(--rvc-text);
-  font-size: 12px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s ease, transform 0.15s ease;
@@ -347,7 +347,7 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px 10px;
   color: var(--rvc-text);
-  font-size: 12px;
+  font-size: var(--rv-font-size-sm);
   font-weight: 500;
 }
 

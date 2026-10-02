@@ -23,7 +23,7 @@
   cursor: pointer;
   transition: background 0.15s ease, opacity 0.15s ease, color 0.15s ease;
   color: var(--rvi-text);
-  font-size: 14px;
+  font-size: var(--rv-font-size-lg);
   font-weight: 600;
   line-height: normal;
   box-sizing: border-box;
@@ -118,12 +118,10 @@
 }
 
 .rvi-itin__profile {
-  width: clamp(88px, 28vw, 120px);
-  min-width: 88px;
-  max-width: 120px;
+  width: 120px;
   background: rgba(255, 255, 255, 0.07);
   color: rgba(255, 255, 255, 0.8);
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
   font-weight: 400;
 }
 
@@ -176,26 +174,6 @@
 .rvi-itin-actions-menu {
   position: fixed;
   z-index: 1200;
-}
-
-@media (max-width: 420px) {
-  .rvi-itin {
-    gap: 5px;
-    padding-right: 2px;
-  }
-
-  .rvi-itin__meta {
-    gap: 4px;
-  }
-
-  .rvi-itin__profile {
-    padding: 0 7px;
-    font-size: 12px;
-  }
-
-  .rvi-itin__profile {
-    width: clamp(88px, 30vw, 120px);
-  }
 }
 
 /* ── Mode tabs ────────────────────────────────────────────────── */
@@ -293,7 +271,7 @@
   padding: 7px 10px 7px 8px;
   border-radius: 6px;
   color: var(--rvi-text);
-  font-size: 14px;
+  font-size: var(--rv-font-size-lg);
   font-weight: 600;
   cursor: pointer;
   opacity: 0.6;
@@ -329,7 +307,7 @@
   padding: 16px 12px;
   color: var(--rvi-text);
   opacity: 0.55;
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
   font-weight: 500;
   line-height: 1.45;
   text-align: center;

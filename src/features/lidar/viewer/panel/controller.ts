@@ -1,3 +1,4 @@
+import { readRootAppScale } from '@/shared/lib/appScale';
 import { ensureViewerPanel } from './template';
 
 export type SnowModeKey = 'off' | 'cover' | 'thickness';
@@ -240,7 +241,7 @@ export function createViewerPanel(options: ViewerPanelOptions) {
   const applyPanelWidth = (width: number) => {
     leftPanelWidth = width;
     root.style.setProperty('--viewer-panel-width', `${width}px`);
-    root.style.width = `min(${width}px, calc(100vw / 0.75 - 32px))`;
+    root.style.width = `min(${width}px, calc(100vw / var(--app-scale, 1) - 32px))`;
     try {
       localStorage.setItem(LEFT_PANEL_STORAGE_WIDTH_KEY, String(width));
     } catch {
@@ -274,11 +275,13 @@ export function createViewerPanel(options: ViewerPanelOptions) {
     resizeHandle?.classList.add('is-dragging');
     const startX = event.clientX;
     const startWidth = leftPanelWidth;
+    // The panel is zoomed by --app-scale: screen px -> panel px.
+    const uiScale = readRootAppScale();
 
     const onMove = (nextEvent: MouseEvent) => {
-      const delta = (nextEvent.clientX - startX) / 0.75;
+      const delta = (nextEvent.clientX - startX) / uiScale;
       const raw = startWidth + delta;
-      const maxAllowed = Math.min(LEFT_PANEL_WIDTH_MAX, (window.innerWidth - 32) / 0.75);
+      const maxAllowed = Math.min(LEFT_PANEL_WIDTH_MAX, (window.innerWidth - 32) / uiScale);
       const minAllowed = Math.min(LEFT_PANEL_WIDTH_MIN, maxAllowed);
 
       if (raw <= minAllowed - LEFT_PANEL_COLLAPSE_DRAG_THRESHOLD) {

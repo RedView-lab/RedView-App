@@ -42,10 +42,10 @@
   width: 100%;
   margin: 0;
 
-  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-family: var(--rv-font-sans);
   font-style: normal;
   font-weight: 600;
-  font-size: 30px;
+  font-size: var(--rv-font-size-4xl);
   line-height: 38px;
   text-align: center;
 
@@ -62,10 +62,10 @@
   width: 100%;
   margin: 0;
 
-  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-family: var(--rv-font-sans);
   font-style: normal;
   font-weight: 400;
-  font-size: 15px;
+  font-size: var(--rv-font-size-lg);
   line-height: 20px;
   display: flex;
   align-items: center;
@@ -118,10 +118,10 @@
   height: 36px;
   border-radius: 6px;
 
-  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-family: var(--rv-font-sans);
   font-style: normal;
   font-weight: 600;
-  font-size: 15px;
+  font-size: var(--rv-font-size-lg);
   line-height: 20px;
   color: #FFFFFF;
 

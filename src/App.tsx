@@ -55,7 +55,7 @@ function ServerUnreachableScreen({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="loading" role="alert">
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center', padding: 16 }}>
-        <p style={{ margin: 0, fontSize: 16, color: 'inherit' }}>{t('Connexion au serveur impossible')}</p>
+        <p style={{ margin: 0, fontSize: 'var(--rv-font-size-xl)', color: 'inherit' }}>{t('Connexion au serveur impossible')}</p>
         <p style={{ margin: 0 }}>{t('Vérifiez votre connexion internet puis réessayez.')}</p>
         <button
           type="button"

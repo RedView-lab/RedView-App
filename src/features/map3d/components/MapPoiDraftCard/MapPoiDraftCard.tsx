@@ -155,7 +155,7 @@ export function MapPoiDraftCard({
         borderBottomLeftRadius: 0,
         boxShadow: '0 12px 36px rgba(0,0,0,0.38)',
         color: '#ffffff',
-        fontFamily: 'Rethink Sans, system-ui, -apple-system, Segoe UI, sans-serif',
+        fontFamily: 'var(--rv-font-sans)',
         pointerEvents: 'none',
       }}
     >
@@ -191,7 +191,7 @@ export function MapPoiDraftCard({
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
-            fontSize: 12,
+            fontSize: 'var(--rv-font-size-sm)',
             fontWeight: 500,
             lineHeight: '16px',
             color: '#ffffff',
@@ -234,7 +234,7 @@ export function MapPoiDraftCard({
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
-              fontSize: 12,
+              fontSize: 'var(--rv-font-size-sm)',
               fontWeight: 500,
               fontStyle: 'italic',
               lineHeight: '16px',
@@ -251,7 +251,7 @@ export function MapPoiDraftCard({
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
-              fontSize: 12,
+              fontSize: 'var(--rv-font-size-sm)',
               fontWeight: 500,
               fontStyle: 'italic',
               lineHeight: '16px',
@@ -293,7 +293,7 @@ export function MapPoiDraftCard({
               <SlopeGlyph />
               <span
                 style={{
-                  fontSize: 12,
+                  fontSize: 'var(--rv-font-size-sm)',
                   fontWeight: 500,
                   fontStyle: 'italic',
                   lineHeight: '16px',
@@ -309,7 +309,7 @@ export function MapPoiDraftCard({
             <ElevationGlyph />
             <span
               style={{
-                fontSize: 12,
+                fontSize: 'var(--rv-font-size-sm)',
                 fontWeight: 500,
                 fontStyle: 'italic',
                 lineHeight: '16px',
@@ -328,7 +328,7 @@ export function MapPoiDraftCard({
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
-                fontSize: 12,
+                fontSize: 'var(--rv-font-size-sm)',
                 fontWeight: 500,
                 fontStyle: 'italic',
                 lineHeight: '16px',

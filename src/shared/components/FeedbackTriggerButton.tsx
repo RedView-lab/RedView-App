@@ -57,7 +57,7 @@ export function FeedbackTriggerButton({
           backdropFilter: 'blur(16px)',
           WebkitBackdropFilter: 'blur(16px)',
           color: isHovered ? '#ffffff' : 'rgba(255, 255, 255, 0.75)',
-          fontSize: 12,
+          fontSize: 'var(--rv-font-size-sm)',
           fontWeight: 500,
           cursor: 'pointer',
           transition: 'all 0.15s ease',
@@ -80,7 +80,7 @@ export function FeedbackTriggerButton({
             ? '1px solid rgba(255, 255, 255, 0.16)'
             : '1px solid rgba(255, 255, 255, 0.08)',
           color: isHovered ? '#ffffff' : 'rgba(255, 255, 255, 0.85)',
-          fontSize: 14,
+          fontSize: 'var(--rv-font-size-lg)',
           fontWeight: 500,
           cursor: 'pointer',
           transition: 'all 0.15s ease',
@@ -100,7 +100,7 @@ export function FeedbackTriggerButton({
             ? 'rgba(255, 255, 255, 0.06)'
             : 'rgba(255, 255, 255, 0.02)',
           color: isHovered ? '#ffffff' : 'rgba(255, 255, 255, 0.75)',
-          fontSize: 13,
+          fontSize: 'var(--rv-font-size-md)',
           fontWeight: 500,
           cursor: 'pointer',
           transition: 'all 0.15s ease',

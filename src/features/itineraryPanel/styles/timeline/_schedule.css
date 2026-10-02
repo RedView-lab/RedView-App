@@ -24,7 +24,7 @@
   width: 100%;
   flex: 1 1 auto;
   height: 100%;
-  font-family: 'Rethink Sans', system-ui, -apple-system, Segoe UI, sans-serif;
+  font-family: var(--rv-font-sans);
 }
 
 .rvi-tl-schedule__days {
@@ -62,7 +62,7 @@
 .rvi-tl-schedule__day:hover { background: rgba(255, 255, 255, 0.04); }
 
 .rvi-tl-schedule__day-label {
-  font-size: 12px;
+  font-size: var(--rv-font-size-sm);
   font-weight: 500;
   line-height: 18px;
   color: var(--rvi-tl-label-color);
@@ -76,7 +76,7 @@
   height: 24px;
   padding: 0;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: var(--rv-font-size-sm);
   font-weight: 600;
   line-height: 18px;
   color: #fff;
@@ -96,7 +96,7 @@
   gap: 0;
   flex-shrink: 0;
   min-height: 18px;
-  font-size: 12px;
+  font-size: var(--rv-font-size-sm);
   font-weight: 500;
   line-height: 18px;
   color: var(--rvi-tl-label-color);
@@ -214,7 +214,7 @@
   position: absolute;
   right: 7px;
   top: -8px;
-  font-size: 12px;
+  font-size: var(--rv-font-size-sm);
   font-weight: 500;
   line-height: 18px;
   color: var(--rvi-tl-label-color);
@@ -233,7 +233,7 @@
   transform: translateY(-50%);
   background: rgba(255, 255, 255, 0.04);
   color: var(--rvi-text-dim);
-  font-size: 11px;
+  font-size: var(--rv-font-size-xs);
   line-height: 16px;
   justify-content: flex-end;
   box-sizing: border-box;
@@ -315,7 +315,7 @@
 }
 
 .rvi-tl-schedule__now-label {
-  font-size: 12px;
+  font-size: var(--rv-font-size-sm);
   font-weight: 500;
   line-height: 18px;
   color: #fff;
@@ -330,7 +330,7 @@
   border: 1px dashed rgba(255, 255, 255, 0.12);
   border-radius: var(--rvi-radius);
   color: var(--rvi-text-dim);
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
   background: rgba(0, 0, 0, 0.16);
 }
 
@@ -431,7 +431,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
+  font-size: var(--rv-font-size-lg);
   font-weight: 600;
   line-height: 24px;
 }
@@ -461,7 +461,7 @@
   border-radius: 6px;
   background: var(--rvi-tl-grid-surface);
   color: #fff;
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
   font-weight: 400;
   line-height: 18px;
   white-space: nowrap;
@@ -521,7 +521,7 @@
 
 .rvi-tl-schedule__event-metric {
   text-align: right;
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
   font-weight: 400;
   line-height: 18px;
   color: #fff;

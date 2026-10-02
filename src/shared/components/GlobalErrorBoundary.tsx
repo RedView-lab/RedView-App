@@ -94,7 +94,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
 
             <h1
               style={{
-                fontSize: '20px',
+                fontSize: 'var(--rv-font-size-2xl)',
                 fontWeight: 600,
                 color: '#ffffff',
                 margin: '0 0 10px 0',
@@ -105,7 +105,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
 
             <p
               style={{
-                fontSize: '14px',
+                fontSize: 'var(--rv-font-size-lg)',
                 color: 'rgba(255, 255, 255, 0.65)',
                 lineHeight: '22px',
                 margin: '0 0 24px 0',
@@ -126,7 +126,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
                   border: 'none',
                   borderRadius: '10px',
                   padding: '12px 20px',
-                  fontSize: '14px',
+                  fontSize: 'var(--rv-font-size-lg)',
                   fontWeight: 600,
                   cursor: 'pointer',
                   transition: 'background-color 0.15s ease',
@@ -150,7 +150,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
                   border: '1px solid rgba(255, 255, 255, 0.12)',
                   borderRadius: '10px',
                   padding: '10px 20px',
-                  fontSize: '13px',
+                  fontSize: 'var(--rv-font-size-md)',
                   cursor: 'pointer',
                 }}
               >
@@ -163,7 +163,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
                 style={{
                   marginTop: '20px',
                   textAlign: 'left',
-                  fontSize: '12px',
+                  fontSize: 'var(--rv-font-size-sm)',
                   color: 'rgba(255, 255, 255, 0.4)',
                 }}
               >

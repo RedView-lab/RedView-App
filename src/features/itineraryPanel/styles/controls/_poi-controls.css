@@ -26,8 +26,8 @@
   margin-top: 2px;
   padding: 6px 8px;
   border-radius: var(--rvi-radius-sm);
-  font-size: 11px;
-  line-height: 1.35;
+  font-size: var(--rv-font-size-sm);
+  line-height: var(--rv-line-height-snug);
 }
 .rvi-poi-msg--error {
   color: #ffd3d3;
@@ -50,7 +50,7 @@
 }
 .rvi-poi-refine__count {
   flex: 0 0 auto;
-  font-size: 11px;
+  font-size: var(--rv-font-size-xs);
   font-weight: 500;
   color: var(--rvi-text-dim);
   white-space: nowrap;

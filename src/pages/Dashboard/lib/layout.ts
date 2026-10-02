@@ -1,9 +1,5 @@
+import { computeAppScale } from '@/shared/lib/appScale';
 import {
-  APP_SCALE_DESIGN_HEIGHT,
-  APP_SCALE_DESIGN_WIDTH,
-  APP_SCALE_GROW_FACTOR,
-  APP_SCALE_MAX,
-  APP_SCALE_MIN,
   CENTER_PANEL_DEFAULT_HEIGHT_RATIO,
   CENTER_PANEL_MAX_HEIGHT_RATIO,
   CENTER_PANEL_MIN_HEIGHT,
@@ -12,9 +8,56 @@ import {
   CENTER_PANEL_RESIZE_HIT_AREA,
   CENTER_PANEL_STACK_GAP,
   CENTER_TOOLBAR_HEIGHT,
+  LEFT_PANEL_WIDTH_MIN,
   PANEL_PADDING,
+  PANEL_WIDTH_MIN_FALLBACK,
 } from './constants';
 import { clampNumber } from './utils';
+
+function reservedWidth(width: number, collapsed: boolean) {
+  return collapsed ? PANEL_PADDING : width + PANEL_PADDING * 2;
+}
+
+/**
+ * Side panels give way to the center panel when the logical canvas is too
+ * narrow for the user's preferred widths (e.g. both panels widened on a 16:10
+ * laptop, whose canvas is 1600 logical px): the right panel shrinks first,
+ * then the left one, never below their minimum. The preferred widths stay in
+ * state and come back as soon as the canvas is wide enough again.
+ */
+function fitSidePanelWidths({
+  designW,
+  leftPanelWidth,
+  rightPanelWidth,
+  isLeftPanelCollapsed,
+  isRightPanelCollapsed,
+}: {
+  designW: number;
+  leftPanelWidth: number;
+  rightPanelWidth: number;
+  isLeftPanelCollapsed: boolean;
+  isRightPanelCollapsed: boolean;
+}) {
+  let left = leftPanelWidth;
+  let right = rightPanelWidth;
+  let overflow =
+    reservedWidth(left, isLeftPanelCollapsed) +
+    reservedWidth(right, isRightPanelCollapsed) +
+    CENTER_PANEL_MIN_WIDTH -
+    designW;
+
+  if (overflow > 0 && !isRightPanelCollapsed) {
+    const give = Math.min(overflow, Math.max(0, right - PANEL_WIDTH_MIN_FALLBACK));
+    right -= give;
+    overflow -= give;
+  }
+  if (overflow > 0 && !isLeftPanelCollapsed) {
+    const give = Math.min(overflow, Math.max(0, left - LEFT_PANEL_WIDTH_MIN));
+    left -= give;
+  }
+
+  return { left, right };
+}
 
 interface DashboardLayoutInput {
   viewport: { w: number; h: number };
@@ -37,19 +80,8 @@ export function getDashboardLayout({
   isCenterPanelCollapsed,
   isRightPanelCollapsed,
 }: DashboardLayoutInput) {
-  // Fluid UI density — see APP_SCALE_* docs in constants.ts.
-  // `fit` is the contain-fit ratio of the viewport against the design canvas.
-  const fit = Math.min(
-    viewport.w / APP_SCALE_DESIGN_WIDTH,
-    viewport.h / APP_SCALE_DESIGN_HEIGHT,
-  );
-  // Below the design reference: track the fit exactly so the logical canvas
-  // stays at least design-sized (all layout minimums remain satisfied).
-  // Above it: apply only a fraction of the surplus, clamped, so large
-  // displays gain text comfort without a bloated zoom.
-  const appScale = fit <= 1
-    ? clampNumber(fit, APP_SCALE_MIN, 1)
-    : clampNumber(1 + (fit - 1) * APP_SCALE_GROW_FACTOR, 1, APP_SCALE_MAX);
+  // Fluid UI density — see src/shared/lib/appScale.ts.
+  const appScale = computeAppScale(viewport);
   const scaledViewportWidth = viewport.w / appScale;
   const scaledViewportHeight = viewport.h / appScale;
   const designW = scaledViewportWidth;
@@ -61,13 +93,22 @@ export function getDashboardLayout({
     rightDockContentHeight - exporterPanelHeight - PANEL_PADDING,
   );
 
-  const leftPanelReservedWidth = isLeftPanelCollapsed
-    ? PANEL_PADDING
-    : leftPanelWidth + PANEL_PADDING * 2;
+  const fittedPanels = fitSidePanelWidths({
+    designW,
+    leftPanelWidth,
+    rightPanelWidth: panelWidth,
+    isLeftPanelCollapsed,
+    isRightPanelCollapsed,
+  });
+  const leftPanelReservedWidth = reservedWidth(fittedPanels.left, isLeftPanelCollapsed);
   const centerPanelBaseRegionLeft = leftPanelReservedWidth;
-  const rightPanelReservedWidth = isRightPanelCollapsed
-    ? PANEL_PADDING
-    : panelWidth + PANEL_PADDING * 2;
+  const rightPanelReservedWidth = reservedWidth(fittedPanels.right, isRightPanelCollapsed);
+  // Widest each panel may be dragged while the other keeps its width and the
+  // center panel keeps CENTER_PANEL_MIN_WIDTH.
+  const leftPanelMaxWidth =
+    designW - rightPanelReservedWidth - CENTER_PANEL_MIN_WIDTH - PANEL_PADDING * 2;
+  const rightPanelMaxWidth =
+    designW - leftPanelReservedWidth - CENTER_PANEL_MIN_WIDTH - PANEL_PADDING * 2;
   const centerPanelBaseRegionRight = rightPanelReservedWidth;
   const centerPanelRegionLeft = leftPanelReservedWidth;
   const centerPanelRegionRight = rightPanelReservedWidth;
@@ -140,6 +181,10 @@ export function getDashboardLayout({
     scaledViewportHeight,
     designW,
     designH,
+    leftPanelWidth: fittedPanels.left,
+    rightPanelWidth: fittedPanels.right,
+    leftPanelMaxWidth,
+    rightPanelMaxWidth,
     rightPrimaryPanelHeight,
     centerToolbarWidth,
     centerToolbarVisible,

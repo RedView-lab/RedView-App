@@ -10,7 +10,7 @@
   --rvc-center-red-strong: #700000;
   --rvc-center-red-accent: #c50000;
   --rvc-center-amber: rgba(112, 73, 20, 0.44);
-  --rvc-center-font-family: 'Rethink Sans', system-ui, -apple-system, Segoe UI, sans-serif;
+  --rvc-center-font-family: var(--rv-font-sans);
   --rvc-center-font-weight-medium: 400;
   --rvc-center-font-weight-semibold: 400;
   --rvc-center-font-weight-bold: 500;

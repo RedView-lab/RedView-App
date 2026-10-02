@@ -6,15 +6,15 @@
   gap: 10px;
   width: 100%;
   box-sizing: border-box;
-  font-family: 'Rethink Sans', system-ui, -apple-system, sans-serif;
+  font-family: var(--rv-font-sans);
   color: #ffffff;
 }
 
 .rvi-tracage__label {
-  font-family: 'Rethink Sans', sans-serif;
+  font-family: var(--rv-font-sans);
   font-style: normal;
   font-weight: 400;
-  font-size: 14px;
+  font-size: var(--rv-font-size-lg);
   line-height: 19.5px;
   color: #ffffff;
   margin: 0;
@@ -76,10 +76,10 @@
 }
 
 .rvi-tracage__mode-btn-text {
-  font-family: 'Rethink Sans', sans-serif;
+  font-family: var(--rv-font-sans);
   font-weight: 500;
-  font-size: 14px;
-  letter-spacing: -0.0133em;
+  font-size: var(--rv-font-size-lg);
+  letter-spacing: var(--rv-letter-spacing-tight);
   color: #ffffff;
   text-align: left;
   flex: 1;
@@ -240,10 +240,10 @@
 }
 
 .rvi-tracage__tick-label {
-  font-family: 'Rethink Sans', sans-serif;
+  font-family: var(--rv-font-sans);
   font-style: normal;
   font-weight: 500;
-  font-size: 10px;
+  font-size: var(--rv-font-size-2xs);
   letter-spacing: -0.02em;
   color: rgba(255, 255, 255, 0.64);
   cursor: pointer;
@@ -286,10 +286,10 @@
   cursor: pointer;
   box-sizing: border-box;
   color: #ffffff;
-  font-family: 'Rethink Sans', sans-serif;
+  font-family: var(--rv-font-sans);
   font-style: normal;
-  font-weight: 400;
-  font-size: 13px;
+  font-weight: 600;
+  font-size: var(--rv-font-size-md);
   line-height: 1;
   transition: border-color 0.15s ease, background-color 0.15s ease;
   user-select: none;
@@ -302,9 +302,9 @@
 }
 
 .rvi-tracage__tolerance-sublabel {
-  font-family: 'Rethink Sans', sans-serif;
+  font-family: var(--rv-font-sans);
   font-weight: 500;
-  font-size: 10px;
+  font-size: var(--rv-font-size-2xs);
   letter-spacing: -0.02em;
   color: rgba(255, 255, 255, 0.64);
   text-align: center;
@@ -335,9 +335,9 @@
 }
 
 .rvi-tracage__params-title {
-  font-family: 'Rethink Sans', sans-serif;
+  font-family: var(--rv-font-sans);
   font-weight: 400;
-  font-size: 14px;
+  font-size: var(--rv-font-size-lg);
   color: #ffffff;
   text-align: left;
   flex: 1;
@@ -411,9 +411,9 @@
 }
 
 .rvi-tracage__param-label {
-  font-family: 'Rethink Sans', sans-serif;
+  font-family: var(--rv-font-sans);
   font-weight: 500;
-  font-size: 12px;
+  font-size: var(--rv-font-size-sm);
   color: rgba(255, 255, 255, 0.64);
   white-space: nowrap;
   overflow: hidden;
@@ -434,9 +434,9 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 5px;
   background: transparent;
-  font-family: 'Rethink Sans', sans-serif;
+  font-family: var(--rv-font-sans);
   font-weight: 500;
-  font-size: 12px;
+  font-size: var(--rv-font-size-sm);
   letter-spacing: -0.0154em;
   color: #ffffff;
   display: flex;
@@ -472,9 +472,9 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 5px;
   background: transparent;
-  font-family: 'Rethink Sans', sans-serif;
+  font-family: var(--rv-font-sans);
   font-weight: 500;
-  font-size: 12px;
+  font-size: var(--rv-font-size-sm);
   letter-spacing: -0.0154em;
   color: #ffffff;
   outline: none;
@@ -525,9 +525,9 @@
 }
 
 .rvi-tracage__checkbox-text {
-  font-family: 'Rethink Sans', sans-serif;
+  font-family: var(--rv-font-sans);
   font-weight: 500;
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
   color: rgba(255, 255, 255, 0.64);
   line-height: 1.2;
 }
@@ -563,9 +563,9 @@
   gap: 8px;
   cursor: pointer;
   box-sizing: border-box;
-  font-family: 'Rethink Sans', sans-serif;
+  font-family: var(--rv-font-sans);
   font-weight: 500;
-  font-size: 14px;
+  font-size: var(--rv-font-size-lg);
   letter-spacing: -0.01em;
   padding: 0 12px;
   transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease;
@@ -677,10 +677,10 @@
   gap: 10px;
   cursor: pointer;
   box-sizing: border-box;
-  font-family: 'Rethink Sans', sans-serif;
-  font-weight: 600;
-  font-size: 13.5px;
-  letter-spacing: -0.01em;
+  font-family: var(--rv-font-sans);
+  font-weight: 500;
+  font-size: var(--rv-font-size-lg);
+  letter-spacing: var(--rv-letter-spacing-tight);
   padding: 0 16px;
   margin-top: 10px;
   background: #890000;

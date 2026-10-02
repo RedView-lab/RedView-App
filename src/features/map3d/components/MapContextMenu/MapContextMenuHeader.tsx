@@ -37,7 +37,7 @@ export function MapContextMenuHeader({
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
-          fontSize: 13,
+          fontSize: 'var(--rv-font-size-md)',
           fontWeight: 500,
           lineHeight: '17px',
           color: '#ffffff',

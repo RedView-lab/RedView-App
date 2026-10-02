@@ -508,7 +508,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
                   background: 'rgba(34, 197, 94, 0.15)',
                   border: '1px solid rgba(34, 197, 94, 0.3)',
                   color: '#86efac',
-                  fontSize: '14px',
+                  fontSize: 'var(--rv-font-size-lg)',
                   lineHeight: '1.4',
                   textAlign: 'center',
                 }}
@@ -526,7 +526,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
                   background: 'rgba(239, 68, 68, 0.15)',
                   border: '1px solid rgba(239, 68, 68, 0.3)',
                   color: '#fca5a5',
-                  fontSize: '14px',
+                  fontSize: 'var(--rv-font-size-lg)',
                   lineHeight: '1.4',
                   textAlign: 'center',
                 }}
@@ -557,10 +557,10 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
                     <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
                   </svg>
                 </div>
-                <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#ffffff', margin: '0 0 10px' }}>
+                <h2 style={{ fontSize: 'var(--rv-font-size-2xl)', fontWeight: 600, color: '#ffffff', margin: '0 0 10px' }}>
                   E-mail de récupération envoyé
                 </h2>
-                <p style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.7)', lineHeight: '1.5', margin: '0 0 24px' }}>
+                <p style={{ fontSize: 'var(--rv-font-size-lg)', color: 'rgba(255, 255, 255, 0.7)', lineHeight: '1.5', margin: '0 0 24px' }}>
                   Un lien de réinitialisation sécurisé a été envoyé à <strong>{email.trim()}</strong>.<br />
                   Consultez votre boîte de réception ainsi que vos courriers indésirables (spams).
                 </p>
@@ -583,7 +583,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
                       background: 'none',
                       border: 'none',
                       color: resendCooldown > 0 ? 'rgba(255, 255, 255, 0.35)' : 'rgba(255, 255, 255, 0.5)',
-                      fontSize: '13px',
+                      fontSize: 'var(--rv-font-size-md)',
                       cursor: resendCooldown > 0 ? 'not-allowed' : 'pointer',
                       textDecoration: resendCooldown > 0 ? 'none' : 'underline',
                     }}

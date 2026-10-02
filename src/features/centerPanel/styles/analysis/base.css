@@ -20,13 +20,13 @@
 }
 
 /*
- * Typographie de la barre d'outils alignée sur le menu Traçage du panel gauche
- * (.rvi-tracage__param-label / .rvi-tracage__param-btn) : Rethink Sans 500,
- * étiquettes à 64 % d'opacité, contrôles blancs, en plus compact. Tout se règle
- * ici.
+ * Typographie de la barre d'outils identique au menu Traçage du panel gauche
+ * (.rvi-tracage__param-label / .rvi-tracage__param-btn) : rôle « barre
+ * d'outils compacte » de shared/styles/typography.css (sm, 500), étiquettes à
+ * 64 % d'opacité, contrôles blancs. Tout se règle ici.
  */
 .rvc-center-analysis__toolbar {
-  --rvc-tb-font-size: 11px;
+  --rvc-tb-font-size: var(--rv-font-size-sm);
   --rvc-tb-font-weight: 500;
   --rvc-tb-letter-spacing: -0.0154em;
   --rvc-tb-label-color: rgba(255, 255, 255, 0.64);
@@ -163,7 +163,7 @@
   background: rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.85);
   font-family: var(--rvc-center-font-family);
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
   font-weight: 400;
   line-height: 1;
   cursor: pointer;
@@ -306,7 +306,7 @@
   right: 0;
   z-index: 100;
   width: max(var(--rv-dropdown-width), 100%);
-  max-height: min(var(--rv-dropdown-max-height), calc(100vh - 220px));
+  max-height: min(var(--rv-dropdown-max-height), calc(var(--rv-canvas-height, 100vh) - 220px));
   pointer-events: auto;
 }
 
@@ -415,16 +415,16 @@
   z-index: 200;
   width: max-content;
   min-width: 180px;
-  max-width: min(340px, calc(100vw - 32px));
+  max-width: min(340px, calc(var(--rv-canvas-width, 100vw) - 32px));
   padding: 8px 10px;
   border: 0.5px solid rgba(255, 255, 255, 0.4);
   border-radius: 4px;
   background: #000000;
   color: #ffffff;
   font-family: var(--rvc-center-font-family);
-  font-size: 12px;
+  font-size: var(--rv-font-size-sm);
   font-weight: 400;
-  line-height: 1.35;
+  line-height: var(--rv-line-height-snug);
   white-space: normal;
   /*
    * Décoratif, et indispensable : le pop-in reste affiché tant que le filtre est
@@ -540,8 +540,8 @@
   border-radius: 8px;
   background: rgba(20, 20, 24, 0.88);
   color: #ffd666;
-  font-size: 12px;
-  line-height: 1.35;
+  font-size: var(--rv-font-size-sm);
+  line-height: var(--rv-line-height-snug);
   text-align: center;
   pointer-events: none;
 }

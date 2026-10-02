@@ -8,8 +8,8 @@
 }
 
 .rvi-tl-filters__label {
-  font-size: 12px;
-  font-weight: 700;
+  font-size: var(--rv-font-size-xs);
+  font-weight: 600;
   color: var(--rvi-text-dim);
   letter-spacing: 0.01em;
 }
@@ -40,8 +40,8 @@
   min-width: 0;
 }
 .rvi-tl-table__auto-label {
-  font-family: 'Rethink Sans', system-ui, sans-serif;
-  font-size: 13px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-md);
   font-weight: 500;
   color: rgba(255, 255, 255, 0.64);
   white-space: nowrap;
@@ -80,8 +80,8 @@
   border-radius: 5px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: transparent;
-  font-family: 'Rethink Sans', system-ui, sans-serif;
-  font-size: 14px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   color: #fff;
   cursor: pointer;
@@ -109,8 +109,8 @@
   box-sizing: border-box;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 5px;
-  font-family: 'Rethink Sans', system-ui, sans-serif;
-  font-size: 13px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   color: #fff;
   cursor: pointer;
@@ -153,18 +153,18 @@
 }
 
 .rvi-tl-sheet-filters__title {
-  font-family: 'Rethink Sans', system-ui, sans-serif;
-  font-size: 11px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-xs);
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--rv-letter-spacing-wide);
   color: rgba(255, 255, 255, 0.45);
 }
 
 /* Filtres alignés sur ceux du haut de page (aucun override local). */
 .rvi-tl-sheet-filters__sync {
-  font-family: 'Rethink Sans', system-ui, sans-serif;
-  font-size: 11px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-xs);
   font-weight: 500;
   color: rgba(255, 255, 255, 0.45);
 }
@@ -174,8 +174,8 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-family: 'Rethink Sans', system-ui, sans-serif;
-  font-size: 11px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-xs);
   font-weight: 600;
   color: rgba(255, 255, 255, 0.7);
   padding: 3px 8px;
@@ -237,9 +237,9 @@
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.72);
-  font-family: 'Rethink Sans', system-ui, sans-serif;
-  font-size: 12px;
-  font-weight: 600;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-sm);
+  font-weight: 500;
   cursor: pointer;
   box-sizing: border-box;
   transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
@@ -308,7 +308,7 @@
   background: rgba(0, 0, 0, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.2);
   color: #fff;
-  font-size: 10px;
+  font-size: var(--rv-font-size-2xs);
   flex-shrink: 0;
 }
 
@@ -324,7 +324,7 @@
 }
 
 .rvi-tl-sheet-filters__cat-count {
-  font-size: 11px;
+  font-size: var(--rv-font-size-xs);
   opacity: 0.75;
   font-weight: 500;
   margin-left: 2px;
@@ -337,7 +337,7 @@
   top: calc(100% + 4px);
   left: 0;
   width: 180px;
-  max-height: min(var(--rv-dropdown-max-height), calc(100vh - 220px));
+  max-height: min(var(--rv-dropdown-max-height), calc(var(--rv-canvas-height, 100vh) - 220px));
   z-index: 1000;
 }
 

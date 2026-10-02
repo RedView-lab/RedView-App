@@ -25,9 +25,10 @@
     <meta name="twitter:title" content="RedView — Cartographie 3D Haute Résolution & LiDAR Outdoor" />
     <meta name="twitter:description" content="L'environnement 3D géospatial haute résolution (40 cm) et LiDAR (20 cm) pour préparer, explorer et sécuriser vos aventures outdoor." />
     <meta name="twitter:image" content="https://redview.tech/images/og/redview-preview.png?v=2" />
-    <!-- Rethink Sans — design-system font (Figma source of truth).
-         Without this, system-ui only ships Regular + Bold, so every
-         SemiBold (600) / Medium (500) request renders as full Bold. -->
+    <!-- Rethink Sans — the app's only font (token --rv-font-sans,
+         src/shared/styles/typography.css). Without this, system-ui only ships
+         Regular + Bold, so every SemiBold (600) / Medium (500) request
+         renders as full Bold. -->
         <!-- Tile-origin warmup. Each preconnect saves the cold DNS+TCP+TLS
              handshake (~150–400 ms one-shot) on the FIRST tile fetched from
              that origin — multiplied across France/Spain/Norway/Switzerland/
@@ -52,7 +53,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Inter:wght@400;500;600;700&family=Rethink+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500;1,600;1,700;1,800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Rethink+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500;1,600;1,700;1,800&display=swap"
     />
   </head>
   <body>

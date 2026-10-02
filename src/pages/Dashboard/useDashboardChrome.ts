@@ -302,7 +302,7 @@ export function useDashboardChrome({
             setIsRightPanelCollapsed(true);
           } else {
             setIsRightPanelCollapsed(false);
-            setPanelWidth(clampPanelWidth(lastRaw, panelMinWidth));
+            setPanelWidth(clampPanelWidth(Math.min(lastRaw, layout.rightPanelMaxWidth), panelMinWidth));
           }
         });
       };
@@ -318,7 +318,7 @@ export function useDashboardChrome({
         if (pendingCollapse) {
           setIsRightPanelCollapsed(true);
         } else if (lastRaw > 0) {
-          const finalW = clampPanelWidth(lastRaw, panelMinWidth);
+          const finalW = clampPanelWidth(Math.min(lastRaw, layout.rightPanelMaxWidth), panelMinWidth);
           setPanelWidth(finalW);
           lastExpandedPanelWidthRef.current = finalW;
         }
@@ -329,7 +329,7 @@ export function useDashboardChrome({
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
     },
-    [layout.appScale, layout.scaledViewportWidth, panelMinWidth],
+    [layout.appScale, layout.scaledViewportWidth, layout.rightPanelMaxWidth, panelMinWidth],
   );
 
   const restoreRightPanel = useCallback(() => {
@@ -373,7 +373,7 @@ export function useDashboardChrome({
             setIsLeftPanelCollapsed(true);
           } else {
             setIsLeftPanelCollapsed(false);
-            setLeftPanelWidth(clampLeftPanelWidth(lastRaw));
+            setLeftPanelWidth(clampLeftPanelWidth(Math.min(lastRaw, layout.leftPanelMaxWidth)));
           }
         });
       };
@@ -389,7 +389,7 @@ export function useDashboardChrome({
         if (pendingCollapse) {
           setIsLeftPanelCollapsed(true);
         } else if (lastRaw > 0) {
-          const finalW = clampLeftPanelWidth(lastRaw);
+          const finalW = clampLeftPanelWidth(Math.min(lastRaw, layout.leftPanelMaxWidth));
           setLeftPanelWidth(finalW);
           lastExpandedLeftPanelWidthRef.current = finalW;
         }
@@ -400,7 +400,7 @@ export function useDashboardChrome({
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
     },
-    [layout.appScale, panelMinWidth],
+    [layout.appScale, layout.leftPanelMaxWidth, panelMinWidth],
   );
 
   const restoreLeftPanel = useCallback(() => {
@@ -526,11 +526,13 @@ export function useDashboardChrome({
     setLidarModeEnabled,
     isAllPanelsCollapsed,
     leftPanelOpen,
-    panelWidth,
+    // Widths as rendered (fitted to the canvas, see fitSidePanelWidths); the
+    // user's preferred widths stay in state and in the persisted dashboard.
+    panelWidth: layout.rightPanelWidth,
     isLeftPanelCollapsed,
     isCenterPanelCollapsed,
     isRightPanelCollapsed,
-    leftPanelWidth,
+    leftPanelWidth: layout.leftPanelWidth,
     isResizing,
     isLeftResizing,
     isCenterResizing,

@@ -15,7 +15,7 @@
 
   .rvc-center-analysis__axis-label {
     width: auto;
-    font-size: 10px;
+    font-size: var(--rv-font-size-2xs);
   }
 
   .rvc-center-analysis {

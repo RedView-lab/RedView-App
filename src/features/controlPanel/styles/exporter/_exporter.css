@@ -41,7 +41,7 @@
 }
 
 .rvc-exporter-panel__title {
-  font-size: 14px;
+  font-size: var(--rv-font-size-lg);
   font-weight: 600;
   color: var(--rvc-text);
   line-height: 1.2;

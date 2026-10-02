@@ -36,7 +36,7 @@ export function ProjectBrowserCardMenu({
 }: ProjectBrowserCardMenuProps) {
   const { t } = useAppI18n();
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const [menuStyle, setMenuStyle] = useState<{ top: number; left: number } | null>(null);
+  const [menuStyle, setMenuStyle] = useState<{ top: number; left: number; scale: number } | null>(null);
   const [moveOpen, setMoveOpen] = useState(false);
   const isFolderMenu = title === 'Actions du dossier';
 
@@ -60,12 +60,20 @@ export function ProjectBrowserCardMenu({
 
   useLayoutEffect(() => {
     const updatePosition = () => {
+      // Portaled to <body>, outside the scaled dashboard canvas: read the
+      // canvas scale on the anchor so the menu keeps the browser's density.
+      const rawScale = Number.parseFloat(
+        window.getComputedStyle(anchorEl).getPropertyValue('--app-scale'),
+      );
+      const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
+      const scaledWidth = MENU_WIDTH * scale;
       const rect = anchorEl.getBoundingClientRect();
-      const nextTop = rect.bottom + MENU_GAP;
-      const nextLeft = Math.min(rect.right - MENU_WIDTH, window.innerWidth - MENU_WIDTH - 12);
+      const nextTop = rect.bottom + MENU_GAP * scale;
+      const nextLeft = Math.min(rect.right - scaledWidth, window.innerWidth - scaledWidth - 12);
       setMenuStyle({
         top: nextTop,
         left: Math.max(12, nextLeft),
+        scale,
       });
     };
 
@@ -86,7 +94,13 @@ export function ProjectBrowserCardMenu({
       className="rv-dropdown rvpb-card-menu"
       role="menu"
       aria-label={t(title)}
-      style={{ top: menuStyle.top, left: menuStyle.left, width: MENU_WIDTH }}
+      style={{
+        top: menuStyle.top,
+        left: menuStyle.left,
+        width: MENU_WIDTH,
+        transform: menuStyle.scale !== 1 ? `scale(${menuStyle.scale})` : undefined,
+        transformOrigin: 'top left',
+      }}
     >
       {onDuplicate ? (
         <button type="button" className="rv-dropdown__item" role="menuitem" onClick={onDuplicate}>

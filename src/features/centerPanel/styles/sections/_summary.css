@@ -145,8 +145,8 @@
   min-width: 0;
   overflow: hidden;
   color: var(--rvc-center-text);
-  font-size: clamp(11px, 1.05cqi, 13px);
-  font-weight: 400;
+  font-size: var(--rv-font-size-lg);
+  font-weight: 600;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -229,7 +229,7 @@
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  font-size: 10px;
+  font-size: var(--rv-font-size-2xs);
   font-weight: 700;
   line-height: 1;
 }
@@ -240,7 +240,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--rvc-center-text);
-  font-size: clamp(11px, 1.08cqi, 14px);
+  font-size: var(--rv-font-size-lg);
   font-weight: 500;
   white-space: nowrap;
   cursor: text;
@@ -257,7 +257,7 @@
   background: rgba(255, 255, 255, 0.08);
   padding: 0 8px;
   color: var(--rvc-center-text);
-  font-size: clamp(11px, 1.05cqi, 14px);
+  font-size: var(--rv-font-size-lg);
   font-weight: 500;
 }
 
@@ -267,19 +267,26 @@
   box-shadow: 0 0 0 1px rgba(197, 0, 0, 0.22);
 }
 
+/*
+ * Colonnes bornées à 160px : sur un écran ultra-large (panneau central de
+ * 2 000 à 3 800px logiques), les chiffres restent groupés à côté du nom de
+ * l'itinéraire au lieu de s'étaler sur toute la largeur. En dessous, les dix
+ * colonnes se partagent la place à parts égales, comme avant.
+ */
 .rvc-center-summary__metrics {
   display: grid;
-  grid-template-columns: repeat(10, minmax(0, 1fr));
+  grid-template-columns: repeat(10, minmax(0, 160px));
   gap: 2px;
   min-width: 0;
   align-items: center;
 }
 
+/* Lignes d'itinéraire : chiffres clefs, plus grands que l'en-tête. */
 .rvc-center-summary__metric {
   min-width: 0;
   overflow: hidden;
   color: var(--rvc-center-text);
-  font-size: clamp(10px, 0.98cqi, 13px);
+  font-size: var(--rv-font-size-lg);
   font-weight: 400;
   text-align: right;
   text-overflow: ellipsis;
@@ -287,19 +294,11 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Lignes d'itinéraire (chiffres clefs) : typo plus grande que l'en-tête. */
-.rvc-center-summary__row--item .rvc-center-summary__metric {
-  font-size: clamp(12px, 1.22cqi, 15.5px);
-}
-
-.rvc-center-summary__row--item .rvc-center-summary__name,
-.rvc-center-summary__row--item .rvc-center-summary__inline-input {
-  font-size: clamp(12.5px, 1.3cqi, 16px);
-}
-
+/* En-tête de tableau (rôle commun à toutes les tables de l'app). */
 .rvc-center-summary__metric--header {
   color: var(--rvc-center-text-dim);
-  font-size: clamp(10px, 1.02cqi, 13px);
+  font-size: var(--rv-font-size-xs);
+  font-weight: 600;
 }
 
 .rvc-center-summary__icon-button,
@@ -343,9 +342,9 @@
 
 .rvc-center-summary__rename-title {
   color: rgba(255, 255, 255, 0.78);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-size: var(--rv-font-size-xs);
+  font-weight: 700;
+  letter-spacing: var(--rv-letter-spacing-wide);
   text-transform: uppercase;
 }
 
@@ -357,7 +356,7 @@
   background: rgba(255, 255, 255, 0.06);
   padding: 8px 10px;
   color: #fff;
-  font-size: 12px;
+  font-size: var(--rv-font-size-md);
   line-height: 1.3;
 }
 
@@ -391,6 +390,15 @@
 
   .rvc-center-summary__metrics {
     gap: 1px;
+  }
+
+  /* ~70px par colonne : un cran plus petit pour garder les valeurs entières. */
+  .rvc-center-summary__metric {
+    font-size: var(--rv-font-size-md);
+  }
+
+  .rvc-center-summary__metric--header {
+    font-size: var(--rv-font-size-xs);
   }
 }
 

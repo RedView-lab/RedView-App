@@ -21,7 +21,7 @@ export function OverlayDetailRow({ detail }: OverlayDetailRowProps) {
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
-          fontSize: 12,
+          fontSize: 'var(--rv-font-size-sm)',
           fontWeight: 500,
           fontStyle: 'italic',
           lineHeight: '16px',

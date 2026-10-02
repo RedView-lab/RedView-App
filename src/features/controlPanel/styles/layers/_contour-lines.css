@@ -11,9 +11,9 @@
 .rvc-contour-lines__hint {
   margin: 0;
   color: var(--rvc-text);
-  font-size: 11px;
+  font-size: var(--rv-font-size-sm);
   font-weight: 500;
-  line-height: 1.35;
+  line-height: var(--rv-line-height-snug);
   opacity: 0.72;
 }
 
@@ -47,7 +47,7 @@
 
 .rvc-contour-lines__opacity-value {
   color: var(--rvc-text);
-  font-size: 11px;
+  font-size: var(--rv-font-size-xs);
   font-weight: 500;
   white-space: nowrap;
   flex-shrink: 0;

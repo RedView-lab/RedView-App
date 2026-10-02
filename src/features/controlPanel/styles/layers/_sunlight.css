@@ -64,9 +64,9 @@
   flex: 1 1 0;
   min-width: 0;
   color: var(--rvc-text);
-  font-family: 'Rethink Sans', sans-serif;
-  font-size: 13px;
-  font-weight: 600;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-md);
+  font-weight: 500;
   opacity: 0.9;
   white-space: nowrap;
   overflow: hidden;
@@ -83,8 +83,8 @@
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.08);
   color: var(--rvc-text);
-  font-family: 'Rethink Sans', sans-serif;
-  font-size: 13px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   flex-shrink: 0;
   box-sizing: border-box;
@@ -108,8 +108,8 @@
 
 .rvc-sunlight__time-text {
   color: var(--rvc-text);
-  font-family: 'Rethink Sans', sans-serif;
-  font-size: 13px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   letter-spacing: 0.2px;
 }
@@ -138,9 +138,9 @@
 .rvc-sunlight__time-bound {
   flex-shrink: 0;
   color: var(--rvc-text);
-  font-family: 'Rethink Sans', sans-serif;
-  font-size: 11px;
-  font-weight: 600;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-xs);
+  font-weight: 500;
   opacity: 0.8;
 }
 
@@ -166,9 +166,9 @@
 
 .rvc-sunlight__sun-label {
   color: var(--rvc-text);
-  font-family: 'Rethink Sans', sans-serif;
-  font-size: 13px;
-  font-weight: 600;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-md);
+  font-weight: 500;
   opacity: 0.85;
   white-space: nowrap;
 }
@@ -179,9 +179,9 @@
   justify-content: flex-end;
   margin-left: auto;
   color: var(--rvc-text);
-  font-family: 'Rethink Sans', sans-serif;
-  font-size: 13px;
-  font-weight: 700;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-md);
+  font-weight: 600;
   text-align: right;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -213,8 +213,8 @@
 
 
 .rvc-sunlight__shadow-opacity-value {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--rv-font-size-xs);
+  font-weight: 500;
   color: var(--rvc-text);
   min-width: 38px;
   text-align: right;
@@ -258,8 +258,8 @@
   flex: 1 1 0;
   min-width: 0;
   color: var(--rvc-text);
-  font-family: 'Rethink Sans', sans-serif;
-  font-size: 13px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -308,7 +308,7 @@
   padding: 5px 8px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.08);
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
 }
 
@@ -362,8 +362,8 @@
   flex: 1 1 0;
   min-width: 0;
   color: var(--rvc-text);
-  font-family: 'Rethink Sans', sans-serif;
-  font-size: 13px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -391,9 +391,9 @@
   gap: 2px;
   flex: 1 1 0;
   min-width: 0;
-  font-family: 'Rethink Sans', sans-serif;
-  font-size: 13px;
-  font-weight: 600;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-md);
+  font-weight: 500;
   color: var(--rvc-text);
   overflow: hidden;
 }
@@ -405,7 +405,7 @@
   padding: 1px 4px;
   min-width: 24px;
   font-variant-numeric: tabular-nums;
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   color: var(--rvc-text);
   background: transparent;
@@ -436,7 +436,7 @@
   min-width: 44px;
   padding: 1px 3px;
   font-variant-numeric: tabular-nums;
-  font-size: 12px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   color: #fff;
   background: rgba(255, 255, 255, 0.1);
@@ -466,7 +466,7 @@
 .rvc-sunlight__duration-value {
   padding: 1px 4px;
   font-variant-numeric: tabular-nums;
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   color: var(--rvc-text);
 }

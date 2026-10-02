@@ -243,7 +243,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
 
   if (isTimelineFullscreenOpen && fullscreenTimelinePanel && typeof document !== 'undefined') {
     return createPortal(
-      <div className="rvi-panel-fullscreen-root rv-fixed-viewport">
+      <div className="rvi-panel-fullscreen-root rv-app-scaled-layer">
         <aside
           className="rvi-panel rvi-panel--timeline-fullscreen"
           role="dialog"

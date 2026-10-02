@@ -40,8 +40,8 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   border-radius: var(--rvc-radius);
   color: var(--rvc-text);
-  font-family: 'Rethink Sans', system-ui, -apple-system, Segoe UI, sans-serif;
-  font-size: 14px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-lg);
   line-height: 1;
   display: flex;
   flex-direction: column;

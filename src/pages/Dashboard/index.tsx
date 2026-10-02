@@ -120,6 +120,17 @@ export default function Dashboard({
     mapInstance?.resize();
   }, [layout.appScale, mapInstance]);
 
+  // Mirror the scale on :root for overlays portaled to <body> (outside the
+  // scaled canvas) that must keep the dashboard density: `.rv-app-scaled-layer`
+  // in src/index.css.
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty('--app-scale', String(layout.appScale));
+    return () => {
+      root.style.removeProperty('--app-scale');
+    };
+  }, [layout.appScale]);
+
   const handleMapReady = useCallback((map: MapboxMap) => {
     setMapInstance(map);
     setMapLoaded(true);
@@ -191,7 +202,14 @@ export default function Dashboard({
             overflow: 'hidden',
             transform: `scale(${layout.appScale})`,
             transformOrigin: 'top left',
+            // Logical canvas: `@container rv-canvas (...)` and the
+            // --rv-canvas-* sizes replace viewport media queries and vw/vh
+            // units, which measure the real screen instead (src/index.css).
+            containerType: 'inline-size',
+            containerName: 'rv-canvas',
             ['--app-scale' as string]: String(layout.appScale),
+            ['--rv-canvas-width' as string]: `${layout.scaledViewportWidth}px`,
+            ['--rv-canvas-height' as string]: `${layout.scaledViewportHeight}px`,
           }}
         >
           {editorOpen ? (

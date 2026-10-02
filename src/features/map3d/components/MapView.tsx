@@ -179,7 +179,7 @@ export default memo(function MapView({
             zIndex: 10,
           }}
         >
-          <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>
+          <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 'var(--rv-font-size-lg)' }}>
             Chargement du globe...
           </span>
         </div>

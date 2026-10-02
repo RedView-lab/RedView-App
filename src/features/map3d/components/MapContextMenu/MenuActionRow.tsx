@@ -41,7 +41,7 @@ export function MenuActionRow({ label, icon, onClick }: MenuActionRowProps) {
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
-          fontSize: 14,
+          fontSize: 'var(--rv-font-size-md)',
           fontWeight: 600,
           lineHeight: 'normal',
         }}

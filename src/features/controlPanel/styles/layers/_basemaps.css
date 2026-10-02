@@ -44,7 +44,7 @@
   flex: 1 1 0;
   min-width: 0;
   color: var(--rvc-text);
-  font-size: 14px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -68,8 +68,8 @@
   flex: 1 1 0;
   min-width: 0;
   color: var(--rvc-text-dim);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--rv-font-size-md);
+  font-weight: 500;
   line-height: normal;
 }
 
@@ -77,6 +77,6 @@
   min-height: 30px;
   padding: 5px 5px 5px 8px;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
   width: 185px;
 }

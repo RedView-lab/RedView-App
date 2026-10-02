@@ -10,10 +10,12 @@
 // the number of POIs.
 
 import type { PoiCategory, PoiFeature } from '../types';
+import { RV_FONT_SANS } from '@/shared/lib/typography';
+
 import { getPoiIconUrl, hasDedicatedFavoritePoiIcon } from './poi-icons';
 
 const FAVORITE_BADGE_ICON_URL = '/svgv2/icone/star-01.svg';
-const PAUSE_FONT_FAMILY = "'Rethink Sans', system-ui, sans-serif";
+const PAUSE_FONT_FAMILY = RV_FONT_SANS;
 
 // Base (icon-size = 1) geometry, from floating-markers.css.
 const ROUND_SIZE_PX = 38;

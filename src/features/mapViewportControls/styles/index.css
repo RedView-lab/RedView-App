@@ -132,8 +132,8 @@
   min-width: 40px;
   height: 40px;
   padding: 10px;
-  font-family: 'Rethink Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 15px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-lg);
   font-weight: 600;
   line-height: 1;
 }
@@ -151,7 +151,7 @@
   top: 0;
   right: calc(100% + 10px);
   width: 242px;
-  max-height: calc(100vh - 280px);
+  max-height: calc(var(--rv-canvas-height, 100vh) - 280px);
   overflow-y: auto;
   padding: 10px 12px;
   border-radius: 8px;
@@ -175,9 +175,9 @@
 
 .rvmvc-route-legend-popover__title {
   overflow: hidden;
-  font-family: 'Rethink Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 13.5px;
-  font-weight: 700;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-lg);
+  font-weight: 600;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -196,8 +196,8 @@
   border: none;
   background: transparent;
   color: rgba(255, 255, 255, 0.64);
-  font-family: 'Rethink Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 11.5px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-sm);
   font-weight: 600;
   padding: 5px 8px;
   border-radius: 4px;
@@ -243,8 +243,8 @@
 }
 
 .rvmvc-route-legend-popover__item-label {
-  font-family: 'Rethink Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 12.5px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   color: rgba(255, 255, 255, 0.95);
   line-height: 1.2;
@@ -269,8 +269,8 @@
 .rvmvc-route-legend-popover__slope-label {
   overflow: hidden;
   color: rgba(255, 255, 255, 0.78);
-  font-family: 'Rethink Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 12px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-sm);
   font-weight: 600;
   line-height: 1.2;
   text-overflow: ellipsis;
@@ -302,8 +302,8 @@
 
 .rvmvc-analysis-zone-popover__title {
   overflow: hidden;
-  font-family: 'Rethink Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 14px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-lg);
   font-weight: 600;
   line-height: 1.25;
   text-overflow: ellipsis;
@@ -313,8 +313,8 @@
 .rvmvc-analysis-zone-popover__hint {
   margin-top: 4px;
   color: rgba(255, 255, 255, 0.6);
-  font-family: 'Rethink Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 11.5px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-sm);
   font-weight: 500;
   line-height: 1.3;
 }
@@ -334,8 +334,8 @@
   align-items: center;
   background: rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.92);
-  font-family: 'Rethink Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 12.5px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   line-height: 1.2;
   text-align: left;
@@ -364,10 +364,10 @@
   border-radius: 8px;
   background: rgba(137, 0, 0, 0.88);
   color: #fff;
-  font-family: 'Rethink Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 11.5px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-sm);
   font-weight: 600;
-  line-height: 1.35;
+  line-height: var(--rv-line-height-snug);
   box-shadow: 0 10px 30px rgba(77, 0, 0, 0.4);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
@@ -396,8 +396,8 @@
   background: rgba(255, 255, 255, 0.16);
   color: #ffffff;
   font-family: inherit;
-  font-size: 10.5px;
-  font-weight: 700;
+  font-size: var(--rv-font-size-sm);
+  font-weight: 600;
   padding: 4px 8px;
   border-radius: 4px;
   cursor: pointer;
@@ -421,43 +421,4 @@
 .rvmvc-analysis-zone-hint__action:disabled {
   opacity: 0.4;
   cursor: not-allowed;
-}
-
-@media (max-width: 1080px) {
-  .rvmvc-map-tools__button {
-    width: 36px;
-    min-width: 36px;
-    height: 36px;
-    padding: 9px;
-  }
-
-  .rvmvc-map-tools__button--label {
-    width: 36px;
-    min-width: 36px;
-    height: 36px;
-    padding: 9px;
-    font-size: 14px;
-  }
-
-  .rvmvc-route-legend-popover {
-    width: 224px;
-    padding: 10px;
-  }
-
-  .rvmvc-route-legend-popover__title {
-    font-size: 12.5px;
-  }
-
-  .rvmvc-route-legend-popover__item-label {
-    font-size: 11.5px;
-  }
-
-  .rvmvc-route-legend-popover__item-desc {
-    font-size: 10px;
-  }
-
-  .rvmvc-analysis-zone-popover,
-  .rvmvc-analysis-zone-hint {
-    width: 176px;
-  }
 }

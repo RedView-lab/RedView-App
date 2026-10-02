@@ -22,7 +22,7 @@ const DIGIT_INPUT_STYLE = {
   height: 60,
   minWidth: 52,
   minHeight: 60,
-  fontSize: 32,
+  fontSize: 'var(--rv-font-size-4xl)',
   lineHeight: '60px',
 } as const;
 

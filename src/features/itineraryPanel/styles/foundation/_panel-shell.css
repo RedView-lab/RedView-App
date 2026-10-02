@@ -37,8 +37,8 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   border-radius: var(--rvi-radius);
   color: var(--rvi-text);
-  font-family: 'Rethink Sans', system-ui, -apple-system, Segoe UI, sans-serif;
-  font-size: 14px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-lg);
   line-height: 1.2;
   display: flex;
   flex-direction: column;
@@ -46,9 +46,9 @@
   overflow: hidden;
 }
 
+/* Portaled to <body>: position and size come from .rv-app-scaled-layer
+   (src/index.css), which keeps the panel density on every screen. */
 .rvi-panel-fullscreen-root {
-  position: fixed;
-  inset: 0;
   z-index: 2147483000;
   overflow: hidden;
   padding: 12px;
@@ -268,8 +268,8 @@
   margin: 8px 12px;
   padding: 8px 10px;
   border-radius: 8px;
-  font-size: 11.5px;
-  line-height: 1.35;
+  font-size: var(--rv-font-size-sm);
+  line-height: var(--rv-line-height-snug);
   border: 1px solid transparent;
 }
 .rvi-route-banner--error {

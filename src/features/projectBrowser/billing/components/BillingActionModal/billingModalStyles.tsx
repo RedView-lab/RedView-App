@@ -109,10 +109,12 @@ export const appearance = {
       borderColor: 'rgba(137,0,0,0.9)',
       boxShadow: '0 0 0 1px rgba(137,0,0,0.65)',
     },
+    // Iframe Stripe : pas d'accès aux variables CSS. Valeurs de l'échelle
+    // « page » de shared/styles/typography.css (label lg 14, champ xl 16).
     '.Label': {
       color: '#ffffff',
       fontWeight: '600',
-      fontSize: '15px',
+      fontSize: '14px',
     },
     '.Text': {
       color: 'rgba(255,255,255,0.74)',

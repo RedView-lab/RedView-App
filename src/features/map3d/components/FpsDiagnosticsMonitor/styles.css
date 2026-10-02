@@ -1,7 +1,7 @@
 .rv-fps-monitor {
   position: absolute;
   z-index: 40;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: var(--rv-font-sans);
   user-select: none;
   transition: right 360ms cubic-bezier(0.22, 1, 0.36, 1), top 360ms cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -36,20 +36,20 @@
 }
 
 .rv-fps-val {
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
   font-weight: 700;
   font-feature-settings: 'tnum' 1;
   letter-spacing: -0.2px;
 }
 
 .rv-fps-ms {
-  font-size: 11px;
+  font-size: var(--rv-font-size-xs);
   color: rgba(255, 255, 255, 0.55);
   font-feature-settings: 'tnum' 1;
 }
 
 .rv-fps-chevron {
-  font-size: 10px;
+  font-size: var(--rv-font-size-2xs);
   color: rgba(255, 255, 255, 0.4);
   transition: transform 200ms ease;
   margin-left: 2px;
@@ -71,7 +71,7 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   color: #fff;
-  font-size: 12px;
+  font-size: var(--rv-font-size-sm);
   animation: rvFpsCardEnter 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -97,14 +97,14 @@
 
 .rv-fps-title {
   font-weight: 600;
-  font-size: 12px;
+  font-size: var(--rv-font-size-sm);
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.7);
 }
 
 .rv-fps-gpu-badge {
-  font-size: 10px;
+  font-size: var(--rv-font-size-2xs);
   padding: 2px 6px;
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.08);
@@ -120,7 +120,7 @@
   padding: 8px 10px;
   border-radius: 8px;
   margin-bottom: 10px;
-  font-size: 11px;
+  font-size: var(--rv-font-size-xs);
   line-height: 1.35;
   display: flex;
   align-items: flex-start;
@@ -160,13 +160,13 @@
 }
 
 .rv-fps-stat-label {
-  font-size: 10px;
+  font-size: var(--rv-font-size-2xs);
   color: rgba(255, 255, 255, 0.45);
   margin-bottom: 2px;
 }
 
 .rv-fps-stat-value {
-  font-size: 12px;
+  font-size: var(--rv-font-size-sm);
   font-weight: 600;
   font-feature-settings: 'tnum' 1;
   color: rgba(255, 255, 255, 0.92);
@@ -179,7 +179,7 @@
 }
 
 .rv-fps-actions-title {
-  font-size: 10px;
+  font-size: var(--rv-font-size-2xs);
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.4);
   margin-bottom: 6px;
@@ -198,7 +198,7 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.85);
-  font-size: 11px;
+  font-size: var(--rv-font-size-xs);
   font-weight: 500;
   cursor: pointer;
   transition: all 140ms ease;

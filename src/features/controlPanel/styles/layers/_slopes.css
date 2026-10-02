@@ -18,8 +18,8 @@
 }
 
 .rvc-slopes__resolution-hint {
-  font-family: 'Rethink Sans', sans-serif;
-  font-size: 10px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-xs);
   color: var(--rvc-text-muted, #8e8e93);
   line-height: 1.2;
 }
@@ -32,8 +32,8 @@
   border: 1px solid var(--rvc-border-subtle, rgba(255, 255, 255, 0.12));
   border-radius: 4px;
   color: var(--rvc-text, #ffffff);
-  font-family: 'Rethink Sans', sans-serif;
-  font-size: 11px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-xs);
   font-weight: 600;
   letter-spacing: 0.2px;
   white-space: nowrap;
@@ -65,8 +65,8 @@
 .rvc-slopes__opacity-value {
   flex-shrink: 0;
   color: var(--rvc-text);
-  font-family: 'Rethink Sans', sans-serif;
-  font-size: 11px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-xs);
   font-weight: 500;
   line-height: normal;
   white-space: nowrap;
@@ -111,8 +111,8 @@
   align-items: center;
   gap: 2px;
   color: var(--rvc-text);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--rv-font-size-md);
+  font-weight: 500;
   opacity: 0.64;
   white-space: nowrap;
   overflow: hidden;
@@ -124,7 +124,7 @@
   align-items: center;
   padding: 1px 3px;
   font-variant-numeric: tabular-nums;
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   color: var(--rvc-text);
   opacity: 0.5;
@@ -140,7 +140,7 @@
   padding: 1px 4px;
   min-width: 28px;
   font-variant-numeric: tabular-nums;
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   color: var(--rvc-text);
   background: transparent;
@@ -173,7 +173,7 @@
   min-width: 32px;
   padding: 1px 4px;
   font-variant-numeric: tabular-nums;
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   color: #fff;
   background: rgba(255, 255, 255, 0.1);
@@ -205,7 +205,7 @@
 .rvc-slopes__band-category {
   opacity: 0.45;
   font-weight: 500;
-  font-size: 12px;
+  font-size: var(--rv-font-size-sm);
   margin-left: 3px;
   white-space: nowrap;
   overflow: hidden;
@@ -220,8 +220,8 @@
   flex: 1 1 0;
   min-width: 0;
   color: var(--rvc-text);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--rv-font-size-md);
+  font-weight: 500;
   opacity: 0.64;
   white-space: nowrap;
   overflow: hidden;
@@ -252,7 +252,7 @@
 .rvc-slopes__color-hex {
   flex: 1 1 0;
   min-width: 0;
-  font-size: 14px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;

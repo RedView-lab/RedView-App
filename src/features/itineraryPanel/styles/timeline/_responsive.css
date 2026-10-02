@@ -15,31 +15,31 @@
   }
 
   .rvi-tl-schedule__legend {
-    font-size: 11px;
+    font-size: var(--rv-font-size-xs);
   }
 
   .rvi-tl-schedule__time-label {
     right: 4px;
-    font-size: 11px;
+    font-size: var(--rv-font-size-xs);
   }
 
   .rvi-tl-schedule__km-marker {
-    font-size: 10px;
+    font-size: var(--rv-font-size-2xs);
   }
 
   .rvi-tl-schedule__event-metric {
     min-width: 0;
-    font-size: 12px;
+    font-size: var(--rv-font-size-sm);
     line-height: 18px;
   }
 
   .rvi-tl-schedule__pause-chip {
-    font-size: 12px;
+    font-size: var(--rv-font-size-sm);
     line-height: 18px;
   }
 
   .rvi-tl-schedule__pause-name {
-    font-size: 12px;
+    font-size: var(--rv-font-size-sm);
     line-height: 18px;
   }
 
@@ -55,7 +55,7 @@
 
 @container (max-width: 340px) {
   .rvi-tl-tabs__btn { gap: 4px; padding: 6px; }
-  .rvi-tl-tabs__label { font-size: 11px; }
+  .rvi-tl-tabs__label { font-size: var(--rv-font-size-xs); }
   .rvi-tl-row__kind-text { width: 44px; }
   .rvi-tl-row__distance { min-width: 36px; }
 
@@ -73,11 +73,11 @@
   }
 
   .rvi-tl-schedule__legend {
-    font-size: 11px;
+    font-size: var(--rv-font-size-xs);
   }
 
   .rvi-tl-schedule__pause-chip {
-    font-size: 12px;
+    font-size: var(--rv-font-size-sm);
   }
 }
 
@@ -105,20 +105,20 @@
 
   .rvi-tl-schedule__time-label {
     right: 4px;
-    font-size: 11px;
+    font-size: var(--rv-font-size-xs);
   }
 
-  .rvi-tl-schedule__km-marker { font-size: 10px; }
+  .rvi-tl-schedule__km-marker { font-size: var(--rv-font-size-2xs); }
 
   .rvi-tl-schedule__event-name {
-    font-size: 13px;
+    font-size: var(--rv-font-size-md);
   }
   .rvi-tl-schedule__event-metric {
-    font-size: 12px;
+    font-size: var(--rv-font-size-sm);
     line-height: 18px;
   }
   .rvi-tl-schedule__pause-chip {
-    font-size: 12px;
+    font-size: var(--rv-font-size-sm);
   }
 }
 

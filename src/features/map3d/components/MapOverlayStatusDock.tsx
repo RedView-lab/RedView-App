@@ -178,7 +178,7 @@ const pillStyle: CSSProperties = {
   alignItems: 'center',
   gap: 8,
   color: 'rgba(255,255,255,0.92)',
-  fontFamily: '"Rethink Sans", "Segoe UI", sans-serif',
+  fontFamily: 'var(--rv-font-sans)',
 };
 
 const trackShellStyle: CSSProperties = {
@@ -198,7 +198,7 @@ const trackFillStyle: CSSProperties = {
 };
 
 const percentStyle: CSSProperties = {
-  fontSize: 13,
+  fontSize: 'var(--rv-font-size-md)',
   lineHeight: 1,
   minWidth: 28,
   textAlign: 'right',

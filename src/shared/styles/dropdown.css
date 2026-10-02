@@ -2,7 +2,9 @@
  * RedView — style unique de TOUS les dropdowns / menus déroulants.
  *
  * Source de vérité : Figma "REGLAGE ECHELLE" (liste 140px, fond sombre,
- * lignes de 30px, Rethink Sans 600 14/18, coche 16px sur l'item sélectionné).
+ * lignes de 30px, coche 16px sur l'item sélectionné). Typo : rôle « valeur de
+ * contrôle » de shared/styles/typography.css (md 13 / 600, interligne 18px),
+ * identique à la valeur affichée par le select fermé.
  *
  * Pour changer l'apparence de tous les dropdowns de l'app, modifier
  * uniquement les variables ci-dessous.
@@ -49,8 +51,8 @@
   --rv-dropdown-item-danger-color: #ff6b6b;
 
   /* Typo */
-  --rv-dropdown-font-family: 'Rethink Sans', system-ui, -apple-system, sans-serif;
-  --rv-dropdown-font-size: 14px;
+  --rv-dropdown-font-family: var(--rv-font-sans);
+  --rv-dropdown-font-size: var(--rv-font-size-md);
   --rv-dropdown-font-weight: 600;
   --rv-dropdown-line-height: 18px;
   --rv-dropdown-color: #ffffff;

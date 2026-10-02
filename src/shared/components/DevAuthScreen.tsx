@@ -42,7 +42,7 @@ export default function DevAuthScreen({ onDevLogin, landingUrl }: DevAuthScreenP
         justifyContent: 'center',
         background: '#090a0f',
         color: '#f3f4f6',
-        fontFamily: "'Rethink Sans', 'DM Sans', system-ui, sans-serif",
+        fontFamily: 'var(--rv-font-sans)',
         padding: '24px',
       }}
     >
@@ -71,7 +71,7 @@ export default function DevAuthScreen({ onDevLogin, landingUrl }: DevAuthScreenP
               border: '1px solid rgba(239, 68, 68, 0.3)',
               borderRadius: '999px',
               padding: '4px 12px',
-              fontSize: '12px',
+              fontSize: 'var(--rv-font-size-sm)',
               fontWeight: 600,
               color: '#f87171',
               letterSpacing: '0.04em',
@@ -81,10 +81,10 @@ export default function DevAuthScreen({ onDevLogin, landingUrl }: DevAuthScreenP
             <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444' }} />
             Plateforme RedView 3D
           </div>
-          <h1 style={{ fontSize: '24px', fontWeight: 700, margin: '6px 0 2px', letterSpacing: '-0.02em', color: '#fff' }}>
+          <h1 style={{ fontSize: 'var(--rv-font-size-3xl)', fontWeight: 700, margin: '6px 0 2px', letterSpacing: '-0.02em', color: '#fff' }}>
             Bienvenue sur RedView
           </h1>
-          <p style={{ fontSize: '13px', color: '#9ca3af', lineHeight: 1.5, margin: 0 }}>
+          <p style={{ fontSize: 'var(--rv-font-size-md)', color: '#9ca3af', lineHeight: 1.5, margin: 0 }}>
             Visualisation 3D haute résolution & calculs d’itinéraires en temps réel.
           </p>
         </div>
@@ -101,7 +101,7 @@ export default function DevAuthScreen({ onDevLogin, landingUrl }: DevAuthScreenP
               color: '#ffffff',
               border: 'none',
               borderRadius: '10px',
-              fontSize: '14px',
+              fontSize: 'var(--rv-font-size-lg)',
               fontWeight: 600,
               cursor: 'pointer',
               display: 'flex',
@@ -122,7 +122,7 @@ export default function DevAuthScreen({ onDevLogin, landingUrl }: DevAuthScreenP
           >
             ⚡ Accéder à l’application (Accès Démo Immédiat)
           </button>
-          <span style={{ fontSize: '11px', color: '#6b7280', textAlign: 'center' }}>
+          <span style={{ fontSize: 'var(--rv-font-size-xs)', color: '#6b7280', textAlign: 'center' }}>
             Accès instantané avec toutes les fonctionnalités débloquées (3D, BRouter, POIs)
           </span>
         </div>
@@ -130,7 +130,7 @@ export default function DevAuthScreen({ onDevLogin, landingUrl }: DevAuthScreenP
         {/* Divider */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ flex: 1, height: '1px', background: 'rgba(255, 255, 255, 0.08)' }} />
-          <span style={{ fontSize: '11px', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>ou</span>
+          <span style={{ fontSize: 'var(--rv-font-size-xs)', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>ou</span>
           <div style={{ flex: 1, height: '1px', background: 'rgba(255, 255, 255, 0.08)' }} />
         </div>
 
@@ -146,7 +146,7 @@ export default function DevAuthScreen({ onDevLogin, landingUrl }: DevAuthScreenP
               border: '1px solid rgba(255, 255, 255, 0.08)',
               borderRadius: '10px',
               color: '#d1d5db',
-              fontSize: '13px',
+              fontSize: 'var(--rv-font-size-md)',
               fontWeight: 500,
               cursor: 'pointer',
               transition: 'background 0.15s ease',
@@ -159,7 +159,7 @@ export default function DevAuthScreen({ onDevLogin, landingUrl }: DevAuthScreenP
         ) : (
           <form onSubmit={handleAppwriteLogin} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '12px', color: '#9ca3af', fontWeight: 500 }}>Email Appwrite</label>
+              <label style={{ fontSize: 'var(--rv-font-size-sm)', color: '#9ca3af', fontWeight: 500 }}>Email Appwrite</label>
               <input
                 type="email"
                 value={email}
@@ -173,13 +173,13 @@ export default function DevAuthScreen({ onDevLogin, landingUrl }: DevAuthScreenP
                   border: '1px solid rgba(255, 255, 255, 0.12)',
                   borderRadius: '8px',
                   color: '#fff',
-                  fontSize: '13px',
+                  fontSize: 'var(--rv-font-size-md)',
                   outline: 'none',
                 }}
               />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '12px', color: '#9ca3af', fontWeight: 500 }}>Mot de passe</label>
+              <label style={{ fontSize: 'var(--rv-font-size-sm)', color: '#9ca3af', fontWeight: 500 }}>Mot de passe</label>
               <input
                 type="password"
                 value={password}
@@ -193,7 +193,7 @@ export default function DevAuthScreen({ onDevLogin, landingUrl }: DevAuthScreenP
                   border: '1px solid rgba(255, 255, 255, 0.12)',
                   borderRadius: '8px',
                   color: '#fff',
-                  fontSize: '13px',
+                  fontSize: 'var(--rv-font-size-md)',
                   outline: 'none',
                 }}
               />
@@ -202,7 +202,7 @@ export default function DevAuthScreen({ onDevLogin, landingUrl }: DevAuthScreenP
             {errorMessage && (
               <div
                 style={{
-                  fontSize: '12px',
+                  fontSize: 'var(--rv-font-size-sm)',
                   color: '#f87171',
                   background: 'rgba(239, 68, 68, 0.1)',
                   border: '1px solid rgba(239, 68, 68, 0.2)',
@@ -224,7 +224,7 @@ export default function DevAuthScreen({ onDevLogin, landingUrl }: DevAuthScreenP
                 color: '#fff',
                 border: 'none',
                 borderRadius: '8px',
-                fontSize: '13px',
+                fontSize: 'var(--rv-font-size-md)',
                 fontWeight: 600,
                 cursor: loading ? 'not-allowed' : 'pointer',
                 opacity: loading ? 0.7 : 1,
@@ -240,7 +240,7 @@ export default function DevAuthScreen({ onDevLogin, landingUrl }: DevAuthScreenP
           <a
             href={landingUrl}
             style={{
-              fontSize: '12px',
+              fontSize: 'var(--rv-font-size-sm)',
               color: '#6b7280',
               textDecoration: 'none',
               transition: 'color 0.15s ease',

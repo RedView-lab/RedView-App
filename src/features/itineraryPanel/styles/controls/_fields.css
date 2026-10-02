@@ -1,7 +1,7 @@
 /* Section titles, sliders, selects, inputs, toggles, checkboxes */
 
 .rvi-section-title {
-  font-size: 13px;
+  font-size: var(--rv-font-size-lg);
   font-weight: 600;
   color: var(--rvi-text);
   margin: 0;
@@ -46,7 +46,8 @@
   flex: 1 1 0;
   min-width: 40px;
   max-width: 64px;
-  font-size: 13px;
+  /* Grille dense à 2 colonnes : label compact (typography.css). */
+  font-size: var(--rv-font-size-sm);
   font-weight: 500; /* Medium — Figma 1697:23230 (Rethink_Sans:Medium) */
   color: var(--rvi-text);
   opacity: 0.64;
@@ -65,7 +66,7 @@
 }
 
 .rvi-sfield__sign {
-  font-size: 11px;
+  font-size: var(--rv-font-size-xs);
   font-weight: 600;
   color: var(--rvi-text);
   flex-shrink: 0;
@@ -136,10 +137,10 @@
 .rvi-lfield__label {
   flex: 0 1 auto;
   min-width: 0;
-  font-family: 'Rethink Sans', sans-serif;
-  font-size: 12.5px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-sm);
   font-weight: 500;
-  letter-spacing: -0.01em;
+  letter-spacing: var(--rv-letter-spacing-tight);
   color: var(--rvi-text);
   opacity: 0.64;
   overflow: hidden;
@@ -161,7 +162,7 @@
   border: 1px solid var(--rvi-border);
   border-radius: var(--rvi-radius-sm);
   color: var(--rvi-text);
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   background: transparent;
   cursor: pointer;
@@ -238,7 +239,7 @@
 .rvi-input__native {
   flex: 1 1 0;
   min-width: 0;
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   color: var(--rvi-text);
   font-family: inherit;
@@ -269,7 +270,7 @@
 .rvi-chip-input__native {
   width: 100%;
   min-width: 0;
-  font-size: 13px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   color: var(--rvi-text);
   font-family: inherit;
@@ -292,8 +293,8 @@
   background: var(--rvi-bg-chip);
   border-radius: 6px;
   color: var(--rvi-text);
-  font-family: 'Rethink Sans', sans-serif;
-  font-size: 13px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   cursor: pointer;
   height: 28px;
@@ -333,8 +334,8 @@
   border-radius: 6px;
   background: var(--rvi-bg-chip);
   color: var(--rvi-text);
-  font-family: 'Rethink Sans', sans-serif;
-  font-size: 13px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   box-sizing: border-box;
   cursor: pointer;
@@ -444,8 +445,8 @@
   flex: 1 1 auto;
   min-width: 0;
   max-width: none;
-  font-family: 'Rethink Sans', sans-serif;
-  font-size: 11.5px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-sm);
   font-weight: 600;
   line-height: normal;
   color: var(--rvi-text);
@@ -505,10 +506,10 @@
   flex: 1 1 0;
   min-width: 0;
   margin-left: 0;
-  font-family: 'Rethink Sans', sans-serif;
-  font-size: 12.5px;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-sm);
   font-weight: 500;
-  letter-spacing: -0.01em;
+  letter-spacing: var(--rv-letter-spacing-tight);
   color: var(--rvi-text);
   opacity: 0.72;
   overflow: hidden;
@@ -537,7 +538,7 @@
   all: unset;
   flex: 1 1 0;
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   color: var(--rvi-text);
   overflow: hidden;
@@ -742,12 +743,6 @@
     gap: 4px;
   }
 
-  .rvi-sfield__label,
-  .rvi-lfield__label,
-  .rvi-cfield__label {
-    font-size: 12px;
-  }
-
   .rvi-chip-input,
   .rvi-datechip,
   .rvi-time-input,
@@ -758,11 +753,11 @@
   .rvi-chip-input__native,
   .rvi-datechip,
   .rvi-time-input {
-    font-size: 12px;
+    font-size: var(--rv-font-size-sm);
   }
 
   .rvi-uploadchip__text {
-    font-size: 11px;
+    font-size: var(--rv-font-size-xs);
   }
 
   .rvi-row--road-type .rvi-lfield,
@@ -790,61 +785,5 @@
   }
 }
 
-@media (max-width: 440px) {
-  .rvi-priorities,
-  .rvi-row:has(> .rvi-cfield + .rvi-cfield),
-  .rvi-row:has(> .rvi-cfield + .rvi-lfield),
-  .rvi-row:has(> .rvi-lfield + .rvi-cfield),
-  .rvi-row:has(> .rvi-lfield + .rvi-lfield) {
-    gap: 6px;
-  }
-
-  .rvi-sfield,
-  .rvi-lfield,
-  .rvi-cfield {
-    gap: 4px;
-  }
-
-  .rvi-sfield__label,
-  .rvi-lfield__label,
-  .rvi-cfield__label {
-    font-size: 12px;
-  }
-
-  .rvi-sfield__control {
-    min-width: 72px;
-    gap: 3px;
-  }
-
-  .rvi-slider {
-    min-width: 56px;
-  }
-
-  .rvi-sfield__sign {
-    font-size: 10px;
-  }
-
-  .rvi-select,
-  .rvi-input,
-  .rvi-input__native {
-    font-size: 13px;
-  }
-
-  .rvi-select {
-    padding: 4px 6px 4px 8px;
-  }
-
-  .rvi-input {
-    padding: 4px 6px 4px 8px;
-  }
-}
-
-@media (max-width: 300px) {
-  .rvi-lfield { flex-wrap: wrap; }
-
-  .rvi-select,
-  .rvi-input {
-    max-width: 100%;
-    width: 100%;
-  }
-}
+/* Pas de @media ici : le panneau vit dans le canevas mis à l'échelle, seule
+   sa largeur logique compte (@container rvipanel ci-dessus). */

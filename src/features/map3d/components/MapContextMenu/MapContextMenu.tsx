@@ -452,7 +452,7 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
         borderBottomLeftRadius: 0,
         boxShadow: '0 12px 36px rgba(0,0,0,0.38)',
         color: '#ffffff',
-        fontFamily: 'Rethink Sans, system-ui, -apple-system, Segoe UI, sans-serif',
+        fontFamily: 'var(--rv-font-sans)',
         pointerEvents: 'auto',
       }}
     >

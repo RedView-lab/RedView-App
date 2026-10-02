@@ -6,9 +6,10 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  zoom: 0.75;
-  width: min(var(--viewer-panel-width, 300px), calc(100vw / 0.75 - 32px));
-  max-height: calc((100vh - 32px) / 0.75);
+  /* Same density as the dashboard: --app-scale (shared/lib/appScale.ts). */
+  zoom: var(--app-scale, 1);
+  width: min(var(--viewer-panel-width, 300px), calc(100vw / var(--app-scale, 1) - 32px));
+  max-height: calc((100vh - 32px) / var(--app-scale, 1));
   overflow-y: auto;
   overflow-x: hidden;
   padding: 12px;
@@ -19,7 +20,7 @@
   -webkit-backdrop-filter: blur(24px);
   box-shadow: 0 22px 60px rgba(0, 0, 0, 0.28);
   color: #fff;
-  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-family: var(--rv-font-sans);
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
   transform: translate3d(0, 0, 0) scale(1);
@@ -87,7 +88,7 @@
   top: 50%;
   left: 6px;
   z-index: 75;
-  zoom: 0.75;
+  zoom: var(--app-scale, 1);
   transform: translate3d(-18px, -50%, 0);
   opacity: 0;
   pointer-events: none;
@@ -191,9 +192,9 @@
 }
 
 .viewer-panel__title {
-  font-size: 14px;
+  font-size: var(--rv-font-size-xl);
   font-weight: 600;
-  line-height: 20px;
+  line-height: 22px;
 }
 
 .viewer-panel__icon {
@@ -232,7 +233,7 @@
 
 .viewer-panel__tile-label {
   width: 100%;
-  font-size: 12px;
+  font-size: var(--rv-font-size-sm);
   font-weight: 500;
   line-height: 18px;
 }
@@ -250,7 +251,7 @@
 
 .viewer-panel__section-title {
   width: 100%;
-  font-size: 14px;
+  font-size: var(--rv-font-size-lg);
   font-weight: 600;
   line-height: 20px;
 }
@@ -271,7 +272,7 @@
 
 .viewer-panel__location-value,
 .viewer-panel__maps-link {
-  font-size: 12px;
+  font-size: var(--rv-font-size-sm);
   font-weight: 500;
   line-height: 18px;
 }
@@ -302,8 +303,8 @@
 .viewer-panel__label {
   flex: 1 1 0;
   min-width: 0;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--rv-font-size-md);
+  font-weight: 500;
   line-height: 18px;
   color: rgba(255, 255, 255, 0.64);
 }
@@ -326,7 +327,7 @@
   min-width: 16px;
   width: auto;
   padding: 0 2px;
-  font-size: 11px;
+  font-size: var(--rv-font-size-xs);
   font-weight: 500;
   line-height: 16px;
   text-align: center;
@@ -457,7 +458,7 @@
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
-  font-size: 14px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   line-height: 20px;
   text-align: left;
@@ -521,7 +522,7 @@
   border-radius: 6px;
   background: #890000;
   color: #fff;
-  font-size: 14px;
+  font-size: var(--rv-font-size-lg);
   font-weight: 500;
   line-height: 20px;
   cursor: pointer;
@@ -554,7 +555,7 @@
   .viewer-panel {
     top: 12px;
     left: 12px;
-    max-height: calc((100vh - 24px) / 0.75);
-    width: min(var(--viewer-panel-width, 300px), calc(100vw / 0.75 - 24px));
+    max-height: calc((100vh - 24px) / var(--app-scale, 1));
+    width: min(var(--viewer-panel-width, 300px), calc(100vw / var(--app-scale, 1) - 24px));
   }
 }

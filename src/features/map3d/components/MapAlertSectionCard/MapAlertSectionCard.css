@@ -59,7 +59,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--rv-font-size-sm);
   font-weight: 500;
   font-style: italic;
   line-height: 16px;
@@ -122,17 +122,17 @@
 }
 
 .rv-alert-popup__advice-title {
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 16px;
+  font-size: var(--rv-font-size-md);
+  font-weight: 600;
+  line-height: 18px;
   color: var(--rv-poi-popup-text);
 }
 
 .rv-alert-popup__advice-summary,
 .rv-alert-popup__advice-text {
-  font-size: 11px;
+  font-size: var(--rv-font-size-sm);
   font-weight: 500;
-  line-height: 15px;
+  line-height: 16px;
   color: var(--rv-poi-popup-text-muted);
 }
 

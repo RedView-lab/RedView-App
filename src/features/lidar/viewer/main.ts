@@ -3,6 +3,7 @@
 // ============================================
 // Reads tile params from URL, loads from OPFS, parses+colorizes in a Worker, renders with WebGPU.
 
+import '@/shared/styles/typography.css';
 import '@/shared/styles/glass.css';
 import '@/shared/styles/dropdown.css';
 import './loading/styles.css';
@@ -17,6 +18,7 @@ import { SceneLod } from './lod/sceneLod';
 import { AdaptivePointBudget } from './lod/lodBudget';
 import { LidarManager } from '../lib/lidarManager';
 import { buildViewerUrl } from '../lib/viewerUrl';
+import { syncRootAppScale } from '@/shared/lib/appScale';
 import {
   createViewerPanel,
   densityScaleToPercent,
@@ -61,6 +63,12 @@ import {
 const viewerLocale = readStoredAppLocale();
 document.documentElement.lang = viewerLocale;
 observeDomTranslation(document.body, buildTranslationLookup(createAppTranslationBundle(viewerLocale).entries));
+
+// --- UI density ---
+// Same screen-dependent scale as the dashboard canvas, applied to the floating
+// panels with `zoom: var(--app-scale)`: the shared control panel renders at
+// the same type size here and in the app.
+syncRootAppScale();
 
 // --- DOM refs ---
 const canvas = document.getElementById('canvas') as HTMLCanvasElement;

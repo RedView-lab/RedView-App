@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppI18nProvider, translateAppText } from '@/shared/i18n';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
+import { readRootAppScale } from '@/shared/lib/appScale';
 import { SlopesSection } from '@/features/controlPanel/sections/SlopesSection';
 import { AltitudeSection } from '@/features/controlPanel/sections/AltitudeSection';
 import { SunlightSection } from '@/features/controlPanel/sections/SunlightSection';
@@ -172,11 +173,13 @@ export function LidarViewerRightPanelContent({
       setIsResizing(true);
       const startX = event.clientX;
       const startWidth = panelWidth;
+      // The panel is zoomed by --app-scale: screen px -> panel px.
+      const uiScale = readRootAppScale();
 
       const onMove = (nextEvent: MouseEvent) => {
-        const delta = (startX - nextEvent.clientX) / 0.75;
+        const delta = (startX - nextEvent.clientX) / uiScale;
         const raw = startWidth + delta;
-        const maxAllowed = Math.min(PANEL_WIDTH_MAX, (window.innerWidth - 32) / 0.75);
+        const maxAllowed = Math.min(PANEL_WIDTH_MAX, (window.innerWidth - 32) / uiScale);
         const minAllowed = Math.min(PANEL_WIDTH_MIN, maxAllowed);
 
         if (raw <= minAllowed - PANEL_COLLAPSE_DRAG_THRESHOLD) {
@@ -473,7 +476,7 @@ export function LidarViewerRightPanelContent({
     <>
       <aside
         className={`rvc-panel lidar-viewer-right-panel${isResizing ? ' is-resizing' : ''}${isCollapsed ? ' is-collapsed' : ''}`}
-        style={{ width: `min(${panelWidth}px, calc(100vw / 0.75 - 32px))` }}
+        style={{ width: `min(${panelWidth}px, calc(100vw / var(--app-scale, 1) - 32px))` }}
         aria-label="Panneau des couches d'analyse"
       >
         <div

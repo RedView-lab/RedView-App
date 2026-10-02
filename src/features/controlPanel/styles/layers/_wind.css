@@ -29,7 +29,7 @@
 
 .rvc-wind__bound {
   color: #ffffff;
-  font-size: 11px;
+  font-size: var(--rv-font-size-xs);
   font-weight: 500;
   line-height: normal;
   white-space: nowrap;
@@ -66,7 +66,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   line-height: normal;
 }
@@ -84,7 +84,7 @@
   align-items: center;
   height: 100%;
   min-width: 0;
-  font-size: 14px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   line-height: normal;
 }
@@ -130,15 +130,15 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #ffffff;
-  font-size: 12px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   line-height: normal;
 }
 
 .rvc-wind__scale-label {
   color: #ffffff;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--rv-font-size-md);
+  font-weight: 500;
   line-height: normal;
   opacity: 0.64;
   padding-top: 8px;
@@ -167,8 +167,8 @@
 .rvc-wind__band-threshold {
   min-width: 0;
   color: #ffffff;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--rv-font-size-md);
+  font-weight: 500;
   line-height: normal;
   opacity: 0.64;
   overflow: hidden;
@@ -208,23 +208,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
+  font-size: var(--rv-font-size-md);
   font-weight: 600;
   line-height: normal;
 }
 
-@media (max-width: 360px) {
-  .rvc-wind__slider-row {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-  }
-
-  .rvc-wind__picker-chip {
-    grid-column: 1 / -1;
-    justify-self: end;
-  }
-
-  .rvc-wind__toggles {
-    flex-direction: column;
-    gap: 4px;
-  }
-}

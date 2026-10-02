@@ -7,6 +7,7 @@
 import { PROVIDED_POI_SVG } from '@/features/poi/lib/providedPoiSvg';
 import { loadPoiImage } from '@/features/poi/lib/poi-sprites';
 import type { PoiCategory } from '@/features/itineraryPanel/types';
+import { RV_FONT_SANS } from '@/shared/lib/typography';
 import {
   MULTI_POI_MARKER_HEIGHT_PX,
   MULTI_POI_MARKER_WIDTH_PX,
@@ -291,7 +292,7 @@ async function rasterize(kind: ChartPoiSpriteKind, hover: boolean): Promise<Char
         ctx.fillStyle = 'rgba(25, 25, 25, 0.88)';
         ctx.fill();
         ctx.fillStyle = '#ffffff';
-        ctx.font = "700 10px 'DM Sans', system-ui, sans-serif";
+        ctx.font = `700 10px ${RV_FONT_SANS}`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText('POI', boxW / 2, boxH / 2);

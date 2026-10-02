@@ -28,7 +28,7 @@ export function CategorySelector({
       <span
         style={{
           flex: '0 0 auto',
-          fontSize: 12,
+          fontSize: 'var(--rv-font-size-sm)',
           fontWeight: 500,
           lineHeight: 'normal',
           color: metadataColor,
