@@ -341,12 +341,6 @@ export function useItineraryMapActions({
             detail.extra?.durationMin ?? 5,
           );
           break;
-        case 'toggle-manual-trace':
-          poiHandlers.handlePoiManualTraceToggle(
-            detail.feature,
-            detail.extra?.nextEnabled ?? false,
-          );
-          break;
         case 'set-pause-duration':
           poiHandlers.handlePoiSelectPauseDuration(
             detail.feature,

@@ -162,14 +162,6 @@ export function buildRouteTrailPoints(
   return trail;
 }
 
-export function buildRouteTrailCoordinates(
-  routePoints: RouteChartPoint[] | null | undefined,
-  geometry: RoutePlaybackGeometry | null,
-  targetDistanceM: number,
-): [number, number][] {
-  return buildRouteTrailPoints(routePoints, geometry, targetDistanceM).map((pt) => [pt.lon, pt.lat]);
-}
-
 function bearingDegrees(from: RoutePlaybackPoint, to: RoutePlaybackPoint): number {
   const toRad = (degrees: number) => (degrees * Math.PI) / 180;
   const toDeg = (radians: number) => (radians * 180) / Math.PI;

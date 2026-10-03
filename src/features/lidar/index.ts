@@ -2,7 +2,7 @@ export { LidarManager } from './lib/lidarManager';
 export type {
   TileCoord, DownloadProgress, LidarEvent,
   LidarEventCallback, CachedTileInfo, PointCloudData,
-  DetectedCrs, AltitudeRef, PointCloudBounds,
+  DetectedCrs, AltitudeRef, PointCloudBounds, TileFootprint,
 } from './types';
 export {
   buildTileFileName,
@@ -21,6 +21,7 @@ export {
   type LidarRouteOverlayState,
   type LidarRouteSyncMessage,
   type LidarRouteEditMessage,
+  tileFootprintSuffix,
   toWgs84,
   wgs84ToTileCoord,
 } from './lib';

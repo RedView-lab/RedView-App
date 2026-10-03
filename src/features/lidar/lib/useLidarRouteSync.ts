@@ -15,6 +15,7 @@ interface UseLidarRouteSyncOptions {
     actionName?: string,
   ) => void;
   onLidarRouteCreate?: (route: LidarRouteOverlayItem) => void;
+  onLidarRouteDuplicate?: (sourceRouteId: string, route: LidarRouteOverlayItem) => void;
   onLidarRouteRename?: (routeId: string, name: string) => void;
   onLidarRouteDelete?: (routeId: string) => void;
 }
@@ -25,22 +26,13 @@ interface UseLidarRouteSyncOptions {
  */
 export function useLidarRouteSync({
   itineraries,
-  onLidarRouteEdit,
-  onLidarRouteCreate,
-  onLidarRouteRename,
-  onLidarRouteDelete,
+  ...handlers
 }: UseLidarRouteSyncOptions): void {
-  const onLidarRouteEditRef = useRef(onLidarRouteEdit);
-  onLidarRouteEditRef.current = onLidarRouteEdit;
-
-  const onLidarRouteCreateRef = useRef(onLidarRouteCreate);
-  onLidarRouteCreateRef.current = onLidarRouteCreate;
-
-  const onLidarRouteRenameRef = useRef(onLidarRouteRename);
-  onLidarRouteRenameRef.current = onLidarRouteRename;
-
-  const onLidarRouteDeleteRef = useRef(onLidarRouteDelete);
-  onLidarRouteDeleteRef.current = onLidarRouteDelete;
+  // Latest handlers, read by the long-lived channel subscription below.
+  const handlersRef = useRef(handlers);
+  useEffect(() => {
+    handlersRef.current = handlers;
+  });
 
   // 1) Outbound sync: When itineraries change in RedView, push to LiDAR overlay
   useEffect(() => {
@@ -56,13 +48,15 @@ export function useLidarRouteSync({
         if (msg.source !== 'lidar_viewer') return;
 
         if (msg.type === 'UPDATE_ROUTE_POINTS') {
-          onLidarRouteEditRef.current?.(msg.routeId, msg.points, msg.actionName);
+          handlersRef.current.onLidarRouteEdit?.(msg.routeId, msg.points, msg.actionName);
         } else if (msg.type === 'CREATE_ROUTE') {
-          onLidarRouteCreateRef.current?.(msg.route);
+          handlersRef.current.onLidarRouteCreate?.(msg.route);
+        } else if (msg.type === 'DUPLICATE_ROUTE') {
+          handlersRef.current.onLidarRouteDuplicate?.(msg.sourceRouteId, msg.route);
         } else if (msg.type === 'RENAME_ROUTE') {
-          onLidarRouteRenameRef.current?.(msg.routeId, msg.name);
+          handlersRef.current.onLidarRouteRename?.(msg.routeId, msg.name);
         } else if (msg.type === 'DELETE_ROUTE') {
-          onLidarRouteDeleteRef.current?.(msg.routeId);
+          handlersRef.current.onLidarRouteDelete?.(msg.routeId);
         }
       }
     });

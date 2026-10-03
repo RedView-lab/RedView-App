@@ -35,6 +35,7 @@ import {
   type RouteRefinementBase,
 } from './projectMutations';
 import { resolveRouteRequest } from './resolveRouteRequest';
+import { resolveElasticRoutePatch } from './elasticRoutePatch';
 import type { RouteRequestBase } from './customProfileFetch';
 import { planPendingRouteEdit, type UnresolvedRouteEdit } from './pendingEditPlan';
 
@@ -327,27 +328,26 @@ export function useItineraryBrouterRouting({
         pendingKey: editPlan.pendingKey,
       };
       unresolvedEdits.set(itineraryForRouting.id, { kind: 'patch', pendingKey: editPlan.pendingKey });
-      const requestBase: RouteRequestBase = {
-        start: pendingRoutePatch.start,
-        end: pendingRoutePatch.end,
-        via: pendingRoutePatch.via,
-        polygons: forbiddenPolygons,
-        signal: ctrl.signal,
-      };
 
-      resolveRouteRequest({
+      resolveElasticRoutePatch(pendingRoutePatch, existingRoutePoints, ctrl.signal, (patch) => resolveRouteRequest({
         itinerary: itineraryForRouting,
         signal: ctrl.signal,
-        requestBase,
+        requestBase: {
+          start: patch.start,
+          end: patch.end,
+          via: patch.via,
+          polygons: forbiddenPolygons,
+          signal: ctrl.signal,
+        },
         setRouteWarnings,
-      })
-        .then(({ route, resolvedWarnings }) => {
+      }))
+        .then(({ route, resolvedWarnings, patch: routedPatch }) => {
           if (ctrl.signal.aborted) return;
           setRouteWarnings(resolvedWarnings);
           // Render route immediately with native BRouter elevation data
           const refinementBase: { current: RouteRefinementBase | null } = { current: null };
           setProject((project) => {
-            const next = applyPendingRoutePatch(project, target, route, null);
+            const next = applyPendingRoutePatch(project, target, route, null, routedPatch);
             refinementBase.current = captureRouteRefinementBase(project, next, target.itineraryId);
             return next;
           });
@@ -366,7 +366,7 @@ export function useItineraryBrouterRouting({
             target.itineraryId,
             route,
             refinementBase,
-            (project, profile) => applyPendingRoutePatch(project, target, route, profile),
+            (project, profile) => applyPendingRoutePatch(project, target, route, profile, routedPatch),
             'local patch',
           );
         })

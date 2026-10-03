@@ -1,5 +1,4 @@
 const STORAGE_KEY = 'redview-map-viewport';
-const SAVE_DEBOUNCE_MS = 1000;
 
 export interface MapViewport {
   center: [number, number];
@@ -31,26 +30,4 @@ export function saveViewport(vp: MapViewport): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(vp));
   } catch { /* quota exceeded, non-critical */ }
-}
-
-export function createViewportTracker(
-  getViewport: () => MapViewport,
-): { start: () => void; stop: () => void } {
-  let timer: ReturnType<typeof setTimeout> | null = null;
-
-  const save = () => {
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(() => {
-      saveViewport(getViewport());
-    }, SAVE_DEBOUNCE_MS);
-  };
-
-  return {
-    start: () => save,
-    stop: () => {
-      if (timer) clearTimeout(timer);
-      // Final save on cleanup
-      saveViewport(getViewport());
-    },
-  };
 }

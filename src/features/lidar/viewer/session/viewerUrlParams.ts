@@ -1,29 +1,26 @@
-import { buildTileFileName, getTileInfo } from '../../lib/coordConvert';
+import { getTileInfo, kmTileCoord, parseTileFootprint, tileCoordFileName, tileFootprintSuffix } from '../../lib/coordConvert';
 import { translateAppText } from '@/shared/i18n/config';
-import type { DetectedCrs, AltitudeRef, TileCoord } from '../../types';
+import type { DetectedCrs, AltitudeRef, TileCoord, TileFootprint } from '../../types';
 import { MAX_VIEWER_SCENE_TILES } from '../../lib/viewerUrl';
 
 export function buildPanelTileLabel(x: number, y: number, projection: DetectedCrs): string {
   return translateAppText('Tuile {{x}}/{{y}} ({{projection}})', { x, y, projection });
 }
 
-export function tileCoordKey(coord: Pick<TileCoord, 'xKm' | 'yKm' | 'projection' | 'altRef'>): string {
-  return `${coord.xKm}_${coord.yKm}_${coord.projection}_${coord.altRef}`;
+export function tileCoordKey(coord: Pick<TileCoord, 'xKm' | 'yKm' | 'projection' | 'altRef' | 'footprint'>): string {
+  return `${coord.xKm}_${coord.yKm}_${coord.projection}_${coord.altRef}${tileFootprintSuffix(coord)}`;
 }
 
 export function parseSceneTileCoords(params: URLSearchParams, primaryTile: TileCoord): TileCoord[] {
   const tiles: TileCoord[] = [primaryTile];
   const seen = new Set<string>([tileCoordKey(primaryTile)]);
 
-  const appendTile = (xKm: number, yKm: number) => {
+  const appendTile = (xKm: number, yKm: number, footprint?: TileFootprint | null) => {
     if (!Number.isFinite(xKm) || !Number.isFinite(yKm)) return;
     if (tiles.length >= MAX_VIEWER_SCENE_TILES) return;
 
-    const coord: TileCoord = {
-      ...primaryTile,
-      xKm,
-      yKm,
-    };
+    const base = kmTileCoord({ ...primaryTile, xKm, yKm });
+    const coord: TileCoord = footprint ? { ...base, footprint } : base;
     const key = tileCoordKey(coord);
     if (seen.has(key)) return;
     seen.add(key);
@@ -31,8 +28,10 @@ export function parseSceneTileCoords(params: URLSearchParams, primaryTile: TileC
   };
 
   for (const rawTile of params.getAll('tile')) {
-    const [rawX, rawY] = rawTile.split(',', 2);
-    appendTile(parseInt(rawX || '', 10), parseInt(rawY || '', 10));
+    const [rawX, rawY, ...rawFootprint] = rawTile.split(',');
+    const footprint = rawFootprint.length > 0 ? parseTileFootprint(rawFootprint.join(',')) : null;
+    if (rawFootprint.length > 0 && !footprint) continue;
+    appendTile(parseInt(rawX || '', 10), parseInt(rawY || '', 10), footprint);
   }
 
   const legacySecondaryXKm = parseInt(params.get('sx') || '', 10);
@@ -47,6 +46,8 @@ const ALLOWED_BASE_CRS: ReadonlySet<string> = new Set<DetectedCrs>([
   'RGR92UTM40S',
   'CH1903_LV95',
   'NZTM2000',
+  'RD_NEW',
+  'BL72',
 ]);
 const JGD2011_ZONE_CRS_RE = /^JGD2011_ZONE_(0[1-9]|1[0-9])$/;
 const ALLOWED_ALT_REFS: ReadonlySet<string> = new Set<AltitudeRef>([
@@ -56,6 +57,8 @@ const ALLOWED_ALT_REFS: ReadonlySet<string> = new Set<AltitudeRef>([
   'LN02',
   'NZVD2016',
   'TP',
+  'NAP',
+  'TAW',
 ]);
 
 /** Valide `crs` contre la liste des systèmes supportés (pas de simple cast d'un paramètre d'URL). */
@@ -113,16 +116,18 @@ export function parseViewerParamsFromUrl(): {
   const crs: DetectedCrs = parsedCrs;
   const altRef: AltitudeRef = parsedAltRef;
 
-  const tileFileName = `${buildTileFileName(xKm, yKm, crs, altRef)}.copc.laz`;
-  const legacyTileFileName = `${buildTileFileName(xKm, yKm - 1, crs, altRef)}.copc.laz`;
+  const footprint = parseTileFootprint(params.get('fp'));
   const tileInfo = getTileInfo(crs);
-  const viewerTileCoord = {
+  const viewerTileCoord: TileCoord = {
     xKm,
     yKm,
     territory: tileInfo.territory,
     projection: crs,
     altRef,
-  } as TileCoord;
+    ...(footprint ? { footprint } : {}),
+  };
+  const tileFileName = tileCoordFileName(viewerTileCoord);
+  const legacyTileFileName = tileCoordFileName({ ...viewerTileCoord, yKm: yKm - 1 });
   const sceneTileCoords = parseSceneTileCoords(params, viewerTileCoord);
   const panelTileLabel = sceneTileCoords
     .map((coord) => buildPanelTileLabel(coord.xKm, coord.yKm, coord.projection))

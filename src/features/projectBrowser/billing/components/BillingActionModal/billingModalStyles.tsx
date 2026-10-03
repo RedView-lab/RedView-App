@@ -1,47 +1,6 @@
-import { useAppI18n } from '@/shared/i18n';
-import type { AccountSelectOption } from '../../../account/components';
-
 export type BillingPaymentMethod = 'card' | 'paypal';
 
 export const COUNTRY_FLAG_BASE_PATH = '/landing/svg';
-
-export function findCountryOption(countryCode: string, options: readonly AccountSelectOption[]) {
-  return options.find((option) => option.value === countryCode);
-}
-
-export function CountryFlag({ option }: { option?: AccountSelectOption }) {
-  if (!option?.flagCode) {
-    return <span className="rvpb-account-flag rvpb-account-flag--fallback" aria-hidden="true" />;
-  }
-
-  return (
-    <span className="rvpb-account-flag" aria-hidden="true">
-      <img
-        className="rvpb-account-flag__image"
-        src={`${COUNTRY_FLAG_BASE_PATH}/${option.flagCode}.svg`}
-        alt=""
-        loading="lazy"
-      />
-    </span>
-  );
-}
-
-export const stripeCardElementStyle = {
-  base: {
-    color: '#ffffff',
-    fontFamily: 'Rethink Sans, system-ui, sans-serif',
-    fontSize: '16px',
-    fontSmoothing: 'antialiased',
-    '::placeholder': {
-      color: 'rgba(255, 255, 255, 0.48)',
-    },
-    iconColor: 'rgba(255, 255, 255, 0.88)',
-  },
-  invalid: {
-    color: '#ffb4b4',
-    iconColor: '#ffb4b4',
-  },
-};
 
 export const appearance = {
   theme: 'night' as const,
@@ -151,44 +110,6 @@ export function PayPalMethodIcon() {
         fill="#0079C1"
       />
     </svg>
-  );
-}
-
-export function PaymentMethodTile({
-  method,
-  selected,
-  onSelect,
-}: {
-  method: BillingPaymentMethod;
-  selected: boolean;
-  onSelect: (method: BillingPaymentMethod) => void;
-}) {
-  const { t } = useAppI18n();
-  const title = method === 'card' ? t('Carte Bancaire') : 'PayPal';
-
-  return (
-    <button
-      type="button"
-      className={`rvpb-billing-page__method-tile rvpb-billing-page__method-tile--${method.replace('_', '-')}${selected ? ' rvpb-billing-page__method-tile--selected' : ''}`}
-      onClick={() => onSelect(method)}
-      role="radio"
-      aria-checked={selected}
-    >
-      <span className="rvpb-billing-page__method-radio" aria-hidden="true">
-        <span className="rvpb-billing-page__method-radio-dot" />
-      </span>
-      <span className="rvpb-billing-page__method-title">{title}</span>
-      <span
-        className={`rvpb-billing-page__method-icon${method === 'paypal' ? ' rvpb-billing-page__method-icon--paypal' : ''}`}
-        aria-hidden="true"
-      >
-        {method === 'card' ? (
-          <CardMethodIcon />
-        ) : (
-          <PayPalMethodIcon />
-        )}
-      </span>
-    </button>
   );
 }
 

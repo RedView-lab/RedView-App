@@ -8,7 +8,6 @@ export const MAP_CACHE_EPOCH = APP_CACHE_EPOCH;
  * utiliser cette valeur, pas MAP_CACHE_EPOCH.
  */
 export const SW_TILE_CACHE_EPOCH = APP_CACHE_FIX_EPOCH;
-export const MAP_CACHE_EPOCH_STORAGE_KEY = 'redview:app-cache-epoch';
 export const PROJECT_CACHE_KEY_PREFIX_BASE = 'redview:project-cache:';
 export const PROJECT_CACHE_KEY_PREFIX = `${PROJECT_CACHE_KEY_PREFIX_BASE}${MAP_CACHE_EPOCH}:`;
 

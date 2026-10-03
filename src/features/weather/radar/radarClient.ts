@@ -21,13 +21,7 @@ export interface RadarMapsPayload {
 let cachedRadarMeta: RadarMapsPayload | null = null;
 let cachedRadarMetaTime = 0;
 let inFlightRadarPromise: Promise<RadarMapsPayload> | null = null;
-const RADAR_META_TTL_MS = 90 * 1000; // 90 seconds cache
-
-export function clearRadarMetaCache(): void {
-  cachedRadarMeta = null;
-  cachedRadarMetaTime = 0;
-  inFlightRadarPromise = null;
-}
+const RADAR_META_TTL_MS = 90 * 1000;
 
 export async function fetchRadarMeta(signal?: AbortSignal): Promise<RadarMapsPayload> {
   const now = Date.now();
@@ -160,13 +154,4 @@ export function isInstantT(targetDate?: string, targetTime?: string): boolean {
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
   return Math.abs(targetMinutes - nowMinutes) <= 75;
-}
-
-/**
- * Formats a Unix timestamp (seconds) to local "HH:mm".
- */
-export function formatRadarObservationTime(timestampSeconds: number, locale = 'fr-FR'): string {
-  if (!timestampSeconds) return '';
-  const date = new Date(timestampSeconds * 1000);
-  return new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' }).format(date);
 }

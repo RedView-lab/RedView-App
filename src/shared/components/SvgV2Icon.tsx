@@ -59,6 +59,7 @@ const SVGV2_ICONE_ASSETS = new Set([
   'layout-grid-02.svg',
   'link-external-02.svg',
   'line-chart.svg',
+  'line-chart-up-01.svg',
   'list.svg',
   'log-out-03.svg',
   'mail-02.svg',

@@ -57,34 +57,6 @@ export function clampPanelWidth(value: number, minWidth: number) {
   return Math.min(PANEL_WIDTH_MAX, Math.max(minWidth, value));
 }
 
-export function measurePanelMinWidth(node: HTMLDivElement | null): number | null {
-  if (!node || typeof document === 'undefined') return null;
-
-  const panel = node.firstElementChild;
-  if (!(panel instanceof HTMLElement)) return null;
-
-  const clone = panel.cloneNode(true);
-  if (!(clone instanceof HTMLElement)) return null;
-
-  clone.removeAttribute('style');
-  clone.style.position = 'fixed';
-  clone.style.left = '-10000px';
-  clone.style.top = '0';
-  clone.style.width = 'max-content';
-  clone.style.maxWidth = 'none';
-  clone.style.minWidth = '0';
-  clone.style.height = 'auto';
-  clone.style.visibility = 'hidden';
-  clone.style.pointerEvents = 'none';
-  clone.style.overflow = 'visible';
-
-  document.body.appendChild(clone);
-  const width = Math.ceil(clone.getBoundingClientRect().width);
-  clone.remove();
-
-  return Number.isFinite(width) && width > 0 ? width : null;
-}
-
 export function formatDisplayName(email: string): string {
   const localPart = email.split('@')[0] ?? 'Utilisateur';
   return localPart

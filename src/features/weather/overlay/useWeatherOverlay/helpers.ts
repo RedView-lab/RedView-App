@@ -63,13 +63,6 @@ export function getViewportBounds(map: MapboxMap): ViewportBounds {
   };
 }
 
-export function containsBounds(container: [number, number, number, number], viewport: ViewportBounds): boolean {
-  return viewport.west >= container[0]
-    && viewport.south >= container[1]
-    && viewport.east <= container[2]
-    && viewport.north <= container[3];
-}
-
 export function selectionFromState(state: WeatherOverlayState): WeatherSelection {
   if (state.tab === 'trends') {
     const monthIso = state.date.slice(0, 7);

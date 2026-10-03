@@ -20,7 +20,6 @@ export const FLYOVER_TURN_LOOKAHEAD_THRESHOLD_DEG = 10;
 export const FLYOVER_RELIEF_ENGAGE_THRESHOLD_M = 50;
 export const FLYOVER_RELIEF_RELEASE_THRESHOLD_M = 32;
 export const HOVER_X_VALUE_EPSILON = 1e-5;
-export const HOVER_MARKER_MIN_MOVE_M = 1;
 
 export interface AnalysisFlyoverContextValue {
   canPlay: boolean;

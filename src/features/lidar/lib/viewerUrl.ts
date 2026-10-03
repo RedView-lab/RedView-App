@@ -1,11 +1,12 @@
 import type { TileCoord } from '../types';
+import { formatTileFootprint, tileFootprintSuffix } from './coordConvert';
 
-type ViewerTileParams = Pick<TileCoord, 'xKm' | 'yKm' | 'projection' | 'altRef'>;
+type ViewerTileParams = Pick<TileCoord, 'xKm' | 'yKm' | 'projection' | 'altRef' | 'footprint'>;
 
 export const MAX_VIEWER_SCENE_TILES = 9;
 
 function viewerTileKey(coord: ViewerTileParams): string {
-  return `${coord.xKm}_${coord.yKm}_${coord.projection}_${coord.altRef}`;
+  return `${coord.xKm}_${coord.yKm}_${coord.projection}_${coord.altRef}${tileFootprintSuffix(coord)}`;
 }
 
 function normalizeViewerSceneTiles(
@@ -42,11 +43,13 @@ export function buildViewerUrl(
     crs: coord.projection,
     alt: coord.altRef,
   });
+  // Dalle-fichier (Japon, NZ) : emprise du fichier, `x`/`y` étant le km de son centre.
+  if (coord.footprint) params.set('fp', formatTileFootprint(coord.footprint));
 
   const sceneTiles = normalizeViewerSceneTiles(coord, selectedCoords);
   for (let index = 1; index < sceneTiles.length; index += 1) {
     const tile = sceneTiles[index];
-    params.append('tile', `${tile.xKm},${tile.yKm}`);
+    params.append('tile', tile.footprint ? `${tile.xKm},${tile.yKm},${formatTileFootprint(tile.footprint)}` : `${tile.xKm},${tile.yKm}`);
   }
 
   return `/viewer.html?${params.toString()}`;

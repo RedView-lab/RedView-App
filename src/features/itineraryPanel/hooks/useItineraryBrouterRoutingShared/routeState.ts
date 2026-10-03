@@ -1,4 +1,4 @@
-import { cumulativeRouteLengthsM, projectPointAlongRoute, roundDistanceKm } from '../../lib/routes';
+import { cumulativeRouteLengthsM, projectViaPointAlongRoute, roundDistanceKm } from '../../lib/routes';
 import type { Itinerary, ItineraryRouteAuditFinding } from '../../types';
 
 import type { RoutePoints } from './types';
@@ -41,6 +41,7 @@ export function projectTimelineLocationDistances(
 ): Itinerary['timeline'] {
   const cumulativeLengths = cumulativeRouteLengthsM(routePoints);
   let changed = false;
+  let previousWaypointM = 0;
 
   const nextTimeline = timeline.map((row) => {
     if (row.kind === 'start') {
@@ -67,14 +68,18 @@ export function projectTimelineLocationDistances(
 
     if (row.kind !== 'waypoint') return row;
 
+    // Étapes routées dans l'ordre : chacune est cherchée après la précédente,
+    // au premier passage de la trace (boucle, aller-retour).
     const snappedWaypoint =
       row.lat != null && row.lon != null
-        ? projectPointAlongRoute(
+        ? projectViaPointAlongRoute(
             { lat: row.lat, lon: row.lon },
             routePoints,
             cumulativeLengths,
+            previousWaypointM,
           )
         : null;
+    if (snappedWaypoint) previousWaypointM = snappedWaypoint.distanceM;
     const projectedDistanceKm =
       snappedWaypoint == null ? null : roundDistanceKm(snappedWaypoint.distanceM);
     if (row.distanceKm === projectedDistanceKm) {

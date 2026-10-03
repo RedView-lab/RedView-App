@@ -10,6 +10,24 @@ export interface RouteSignaturePoint {
 const FNV_OFFSET = 0x811c9dc5;
 const FNV_PRIME = 0x01000193;
 const routeSignatureCache = new WeakMap<readonly RouteSignaturePoint[], string>();
+const routeGeometrySignatureCache = new WeakMap<readonly RouteSignaturePoint[], string>();
+
+function createFnvHasher() {
+  let hash = FNV_OFFSET;
+  return {
+    mix(value: number) {
+      hash ^= value & 0xff;
+      hash = Math.imul(hash, FNV_PRIME) >>> 0;
+      hash ^= (value >>> 8) & 0xff;
+      hash = Math.imul(hash, FNV_PRIME) >>> 0;
+      hash ^= (value >>> 16) & 0xff;
+      hash = Math.imul(hash, FNV_PRIME) >>> 0;
+      hash ^= (value >>> 24) & 0xff;
+      hash = Math.imul(hash, FNV_PRIME) >>> 0;
+    },
+    digest: () => hash.toString(36),
+  };
+}
 
 export function buildRouteContentSignature(
   points: readonly RouteSignaturePoint[] | null | undefined,
@@ -19,18 +37,7 @@ export function buildRouteContentSignature(
   const cached = routeSignatureCache.get(points);
   if (cached) return cached;
 
-  let hash = FNV_OFFSET;
-  const mix = (value: number) => {
-    hash ^= value & 0xff;
-    hash = Math.imul(hash, FNV_PRIME) >>> 0;
-    hash ^= (value >>> 8) & 0xff;
-    hash = Math.imul(hash, FNV_PRIME) >>> 0;
-    hash ^= (value >>> 16) & 0xff;
-    hash = Math.imul(hash, FNV_PRIME) >>> 0;
-    hash ^= (value >>> 24) & 0xff;
-    hash = Math.imul(hash, FNV_PRIME) >>> 0;
-  };
-
+  const { mix, digest } = createFnvHasher();
   mix(points.length);
   for (const point of points) {
     mix(quantize(point.lon, 1e6));
@@ -41,8 +48,32 @@ export function buildRouteContentSignature(
     mix(hashString(point.surface ?? 'unknown'));
   }
 
-  const signature = `${points.length}:${hash.toString(36)}`;
+  const signature = `${points.length}:${digest()}`;
   routeSignatureCache.set(points, signature);
+  return signature;
+}
+
+/**
+ * Empreinte du seul tracé (lat/lon) : insensible à l'enrichissement
+ * altitude / pente / surface, qui ne déplace pas la trace.
+ */
+export function buildRouteGeometrySignature(
+  points: readonly RouteSignaturePoint[] | null | undefined,
+): string {
+  if (!points || points.length === 0) return 'empty';
+
+  const cached = routeGeometrySignatureCache.get(points);
+  if (cached) return cached;
+
+  const { mix, digest } = createFnvHasher();
+  mix(points.length);
+  for (const point of points) {
+    mix(quantize(point.lon, 1e6));
+    mix(quantize(point.lat, 1e6));
+  }
+
+  const signature = `${points.length}:${digest()}`;
+  routeGeometrySignatureCache.set(points, signature);
   return signature;
 }
 

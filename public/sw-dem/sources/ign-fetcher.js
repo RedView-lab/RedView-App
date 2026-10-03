@@ -191,7 +191,10 @@ function evict(cache, max) {
   }
 }
 
-function scheduleIGN(fn, purpose, coords) {
+// `mapTile` ({ key: 'z/x/y', requestedAt }) tags work done for a DEM tile the
+// map itself asked for, so pruneUnwantedMapDemWork() can drop it once the map
+// no longer waits on that tile.
+function scheduleIGN(fn, purpose, coords, mapTile = null) {
   return new Promise((resolve, reject) => {
     let lng = 0, lat = 0;
     let hasCoords = false;
@@ -212,6 +215,7 @@ function scheduleIGN(fn, purpose, coords) {
       reject,
       ts: performance.now(),
       purpose: purpose || null,
+      mapTile,
       lng,
       lat,
       hasCoords,
@@ -257,26 +261,28 @@ function drainIGN() {
   }
 }
 
-// Drain every queued-but-not-yet-running IGN entry, resolving each with
-// PRUNED_SENTINEL. Posted by the browser on user gesture (`zoomstart` /
-// `movestart`) via the `CANCEL_STALE_DEM` SW message: when the viewport
-// changes, the previous viewport's queued IGN sub-tile fetches are now
-// targeting the wrong zoom — they would just block the new viewport's
-// burst from reaching the IGN concurrency slots. In-flight fetches are
-// aborted by `cancelInFlightIGN()` (paired call from the same message
-// handler) so all 40 concurrency slots become available immediately for
-// the new viewport instead of trickling free over up to 15 s as the
-// previous viewport's HTTP responses landed one by one.
+// Drain the queued-but-not-yet-running speculative IGN entries (slope,
+// prefetch, warm-ups), resolving each with PRUNED_SENTINEL. Posted by the
+// browser on user gesture (`zoomstart` / `movestart`) via the
+// `CANCEL_STALE_DEM` SW message so the previous viewport's speculative
+// work does not hold the IGN slots.
+//
+// Basemap entries (no purpose) are kept: a gesture start says nothing about
+// which DEM tiles the map still needs — after a rotation or a pitch it is
+// nearly all of them. Flushing them made those very tiles fall back to the
+// correlation MNS / 30 m relief (the "3D drops to 30 m when I turn the
+// camera" bug). Stale basemap work is dropped per tile instead, once the
+// map stops waiting on it (pruneUnwantedMapDemWork / DEM_WANTED_TILES).
 //
 // Returns the number of pruned entries for diagnostics.
 function flushIGNQueue() {
   const total = totalIGNQueueLength();
   if (total === 0) return 0;
-  // Keep PURPOSE_SLOPE_ZONE entries in foreground queue!
+  // Keep basemap and PURPOSE_SLOPE_ZONE entries in the foreground queue.
   const keptForeground = [];
   while (ignForegroundQueue.length > 0) {
     const entry = ignForegroundQueue.pop();
-    if (entry.purpose === PURPOSE_SLOPE_ZONE) {
+    if (!entry.purpose || entry.purpose === PURPOSE_SLOPE_ZONE) {
       keptForeground.unshift(entry);
     } else {
       entry.resolve(PRUNED_SENTINEL);
@@ -317,15 +323,17 @@ const ignActiveControllersByPurpose = new Map();
 
 function ignFetchInit(extra) {
   const purpose = extra && typeof extra === 'object' ? extra.purpose || null : null;
+  const mapTile = extra && typeof extra === 'object' ? extra.mapTile || null : null;
   const priority = isIGNBackgroundPurpose(purpose) ? 'low' : 'high';
-  // Strip the SW-internal `purpose` field before forwarding to fetch init —
-  // it isn't a valid RequestInit option and would be ignored, but keeping it
-  // out of the spread avoids future linter/typing surprises.
+  // Strip the SW-internal `purpose` / `mapTile` fields before forwarding to
+  // fetch init — they aren't valid RequestInit options and would be ignored,
+  // but keeping them out of the spread avoids future linter/typing surprises.
   const fetchExtra = (extra && typeof extra === 'object')
-    ? Object.fromEntries(Object.entries(extra).filter(([k]) => k !== 'purpose'))
+    ? Object.fromEntries(Object.entries(extra).filter(([k]) => k !== 'purpose' && k !== 'mapTile'))
     : (extra || {});
   const controller = new AbortController();
   controller._purpose = purpose;
+  controller._mapTile = mapTile;
   const timeout = setTimeout(() => {
     try { controller.abort('rv-ign-timeout'); } catch { /* ignore */ }
   }, IGN_FETCH_TIMEOUT_MS);
@@ -464,17 +472,70 @@ function isIGNUserCancel(controller) {
   return controller.signal.aborted && controller.signal.reason === USER_CANCEL_REASON;
 }
 
+// Abort the in-flight speculative IGN fetches on a gesture start. Basemap
+// fetches (no purpose) keep running for the same reason flushIGNQueue()
+// keeps their queue entries; analysis-zone requests are user-initiated.
 function cancelInFlightIGN() {
   if (ignActiveControllers.size === 0) return 0;
   let n = 0;
   for (const c of Array.from(ignActiveControllers)) {
-    // Analysis-zone requests are user-initiated and must NOT be cancelled by camera movements
-    if (c._purpose === PURPOSE_SLOPE_ZONE) continue;
+    if (!c._purpose || c._purpose === PURPOSE_SLOPE_ZONE) continue;
     try { c.abort(USER_CANCEL_REASON); n++; } catch { /* ignore */ }
     ignActiveControllers.delete(c);
   }
   if (DEBUG) console.warn(`[sw-dem][queue] aborted ${n} in-flight IGN fetches on viewport change`);
   return n;
+}
+
+// ── DEM tiles the map is still waiting on ─────────────────────────────
+// Chromium does not propagate a page-side fetch abort to the service worker
+// (FetchEvent.request.signal never fires — checked on Edge 154), so the SW
+// cannot see Mapbox dropping a DEM tile that left the view. The page posts
+// instead the tiles its DEM source still has in flight (DEM_WANTED_TILES,
+// `features/map3d/hooks/useMap/controller/demWantedTiles.ts`): work tagged
+// with a map tile outside that list is stale and gets dropped, everything
+// else runs to completion whatever the camera does.
+//
+// `sentAt` (Date.now() on the page, same clock as the SW) guards the race
+// with requests issued after the snapshot: only work requested before it
+// can be judged by it.
+let mapWantedDemTiles = null; // { keys: Set<'z/x/y'>, sentAt }
+
+function isMapDemTileWanted(mapTile) {
+  if (!mapTile || !mapWantedDemTiles) return true;
+  if (mapTile.requestedAt >= mapWantedDemTiles.sentAt) return true;
+  return mapWantedDemTiles.keys.has(mapTile.key);
+}
+
+// Records the snapshot and drops the stale basemap work it reveals: queued
+// entries resolve PRUNED_SENTINEL, in-flight fetches abort with
+// USER_CANCEL_REASON (no negative caching). Returns the tile keys dropped.
+function pruneUnwantedMapDemWork(keys, sentAt) {
+  if (mapWantedDemTiles && sentAt <= mapWantedDemTiles.sentAt) return [];
+  mapWantedDemTiles = { keys, sentAt };
+  const dropped = new Set();
+  const queues = [ignForegroundQueue, ignSlopeVisibleQueue, ignBackgroundQueue];
+  for (const queue of queues) {
+    for (let i = queue.length - 1; i >= 0; i--) {
+      const entry = queue[i];
+      if (!entry.mapTile || isMapDemTileWanted(entry.mapTile)) continue;
+      queue.splice(i, 1);
+      entry.resolve(PRUNED_SENTINEL);
+      dropped.add(entry.mapTile.key);
+    }
+  }
+  for (const c of Array.from(ignActiveControllers)) {
+    if (!c._mapTile || isMapDemTileWanted(c._mapTile)) continue;
+    try { c.abort(USER_CANCEL_REASON); } catch { /* ignore */ }
+    ignActiveControllers.delete(c);
+    dropped.add(c._mapTile.key);
+  }
+  if (dropped.size > 0) {
+    ignPrunedTotal += dropped.size;
+    drainIGN();
+    if (DEBUG) console.warn(`[sw-dem][queue] dropped work of ${dropped.size} DEM tiles the map no longer waits on`);
+  }
+  return Array.from(dropped);
 }
 
 // Drain queued (not-yet-running) IGN entries that match a purpose tag.
@@ -977,7 +1038,9 @@ function cacheTerrainWmsNull(key, errorType) {
   terrainWmsTileCache.set(key, { _null: true, ts: Date.now(), ttl, errorType });
 }
 
-async function getTerrainWmsTile(mercZ, mercX, mercY, purpose = PURPOSE_SLOPE_VISIBLE) {
+// Returns the resampled raster, null (no data / transient failure) or
+// IGN_FETCH_CANCELLED. `mapTile`: see scheduleIGN().
+async function getTerrainWmsTile(mercZ, mercX, mercY, purpose = PURPOSE_SLOPE_VISIBLE, mapTile = null) {
   const supersample = ignWmsSupersampleFactor(mercZ);
   const key = `wms-mnt/${mercZ}/${mercX}/${mercY}@${supersample}x`;
   const cached = getCachedTerrainWms(key);
@@ -989,7 +1052,7 @@ async function getTerrainWmsTile(mercZ, mercX, mercY, purpose = PURPOSE_SLOPE_VI
     const cached2 = getCachedTerrainWms(key);
     if (cached2.hit) return cached2.data;
 
-    const { controller, cleanup, init } = ignFetchInit({ purpose });
+    const { controller, cleanup, init } = ignFetchInit({ purpose, mapTile });
     try {
       const { width: srcW, height: srcH } = mnsWmsRequestSize(mercZ, mercX, mercY, supersample);
       // 1. LiDAR HD MNT (0.5 m bare earth), 2. RGE ALTI for the pixels it
@@ -1024,14 +1087,14 @@ async function getTerrainWmsTile(mercZ, mercX, mercY, purpose = PURPOSE_SLOPE_VI
       terrainWmsTileCache.set(key, data);
       return data;
     } catch {
-      if (isIGNUserCancel(controller)) return null;
+      if (isIGNUserCancel(controller)) return IGN_FETCH_CANCELLED;
       cacheTerrainWmsNull(key, 'transient');
       return null;
     } finally {
       cleanup();
     }
-  }, purpose, mercatorTileCenterCoords(mercZ, mercX, mercY)).then((result) => {
-    if (result === PRUNED_SENTINEL) return null;
+  }, purpose, mercatorTileCenterCoords(mercZ, mercX, mercY), mapTile).then((result) => {
+    if (result === PRUNED_SENTINEL) return IGN_FETCH_CANCELLED;
     return result;
   }).finally(() => {
     terrainWmsInflight.delete(key);
@@ -1075,7 +1138,9 @@ function isMnsWmsConfirmedEmpty(mercZ, mercX, mercY) {
   return cached.hit && !cached.data && mnsWmsTileCache.get(key)?.errorType === 'permanent';
 }
 
-async function getMnsWmsTile(mercZ, mercX, mercY, purpose = null) {
+// Returns the resampled raster, null (no data / transient failure) or
+// IGN_FETCH_CANCELLED. `mapTile`: see scheduleIGN().
+async function getMnsWmsTile(mercZ, mercX, mercY, purpose = null, mapTile = null) {
   const supersample = mnsWmsSupersampleFactor();
   const { width: srcW, height: srcH } = mnsWmsRequestSize(mercZ, mercX, mercY, supersample);
   const key = mnsWmsCacheKey(mercZ, mercX, mercY);
@@ -1089,7 +1154,7 @@ async function getMnsWmsTile(mercZ, mercX, mercY, purpose = null) {
     if (cached2.hit) return cached2.data;
 
     // 1. Primary: True LiDAR HD MNS WMS (~0.40m surface model)
-    const { controller, cleanup, init } = ignFetchInit({ purpose });
+    const { controller, cleanup, init } = ignFetchInit({ purpose, mapTile });
     try {
       let data = null;
       let answered = false;
@@ -1107,7 +1172,7 @@ async function getMnsWmsTile(mercZ, mercX, mercY, purpose = null) {
           if (tiledValid > 0) data = tiled;
         }
       } catch {
-        if (isIGNUserCancel(controller)) return null;
+        if (isIGNUserCancel(controller)) return IGN_FETCH_CANCELLED;
       }
 
       // No WMS fallback to the HIGHRES / HIGHRES.MNS correlation layers.
@@ -1136,14 +1201,14 @@ async function getMnsWmsTile(mercZ, mercX, mercY, purpose = null) {
       cacheMnsWmsNull(key, answered ? 'permanent' : 'transient');
       return null;
     } catch {
-      if (isIGNUserCancel(controller)) return null;
+      if (isIGNUserCancel(controller)) return IGN_FETCH_CANCELLED;
       cacheMnsWmsNull(key, 'transient');
       return null;
     } finally {
       cleanup();
     }
-  }, purpose, mercatorTileCenterCoords(mercZ, mercX, mercY)).then((result) => {
-    if (result === PRUNED_SENTINEL) return null;
+  }, purpose, mercatorTileCenterCoords(mercZ, mercX, mercY), mapTile).then((result) => {
+    if (result === PRUNED_SENTINEL) return IGN_FETCH_CANCELLED;
     return result;
   }).finally(() => {
     mnsWmsInflight.delete(key);

@@ -18,9 +18,9 @@ import { GpuFrameTimer, TIMED_PASS } from './renderer/gpuTimer';
 export type { HeightmapParams, SnowParams } from './renderer/types';
 export type { ViewerSlopeState, ViewerAltitudeState, ViewerPointFilterState };
 
-/** Point colouring: orthophoto/embedded RGB, LiDAR intensity, or classification. */
-export type PointColorMode = 'rgb' | 'intensity' | 'classification';
-const COLOR_MODE_INDEX: Record<PointColorMode, number> = { rgb: 0, intensity: 1, classification: 2 };
+/** Point colouring: orthophoto/embedded RGB, uniform grey (relief only), LiDAR intensity, or classification. */
+export type PointColorMode = 'rgb' | 'grey' | 'intensity' | 'classification';
+const COLOR_MODE_INDEX: Record<PointColorMode, number> = { rgb: 0, intensity: 1, classification: 2, grey: 3 };
 
 /** Projected point diameter bounds (device pixels) for the metre-sized mode. */
 const POINT_MIN_PX = 1.0;

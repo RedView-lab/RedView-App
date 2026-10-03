@@ -18,8 +18,10 @@ import { useItineraryRouteLayerSync } from '../../hooks/useItineraryRouteLayerSy
 import { useItineraryCheckpointMarkers } from '../../hooks/useItineraryCheckpointMarkers';
 import {
   buildPoiAutoSortSignature,
+  buildPoiRouteSignature,
   buildPoiSearchSignature,
   poiFeaturesToTimelineItems,
+  resetPoisForRouteChange,
 } from '../../lib/schedule';
 import { fitToRoute } from '../../lib/route-layer';
 import { useProjectStore } from '../../context/ProjectStore';
@@ -44,7 +46,7 @@ import {
   CUSTOM_PROFILES_CHANGED_EVENT,
   type SavedCustomProfile,
 } from '../../lib/project/customProfiles';
-import type { PoiFeature } from '@/features/poi/types';
+import type { GpxRoute, PoiFeature } from '@/features/poi/types';
 import {
   dispatchSelectPoiOnChart,
   listenOpenPoiOnMap,
@@ -359,6 +361,9 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
           container = container.parentElement;
         }
 
+        // Pas de liste défilante (feuille de route courte) : la ligne est déjà
+        // visible. Jamais de scrollIntoView ici : il ferait aussi défiler les
+        // coques du dashboard et décalerait toute l'interface.
         if (container) {
           const rowRect = rowEl.getBoundingClientRect();
           const containerRect = container.getBoundingClientRect();
@@ -372,8 +377,6 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
             top: Math.max(0, targetScrollTop),
             behavior: 'smooth',
           });
-        } else {
-          rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
         return;
       }
@@ -569,7 +572,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     });
   }, [setProjectWithoutHistory]);
 
-  const handleCorridorComplete = useCallback((features: PoiFeature[]) => {
+  const handleCorridorComplete = useCallback((features: PoiFeature[], searchedRoutePoints: GpxRoute['points']) => {
     const targetId = activeIdRef.current;
     setProjectWithoutHistory((p) => {
       const target = p.itineraries.find((i) => i.id === targetId);
@@ -621,6 +624,9 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
               timeline: merged,
               poiFeatures: mergedFeatures,
               poiSearchSignature: buildPoiSearchSignature(target.poi),
+              // Trace interrogée, pas la courante : si elle a bougé pendant
+              // la recherche, l'écart relance une recherche.
+              poiRouteSignature: buildPoiRouteSignature(searchedRoutePoints),
             }
             : it,
         ),
@@ -686,7 +692,6 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
       onSelectPauseDuration: poiHandlers.handlePoiSelectPauseDuration,
       onToggleFavorite: poiHandlers.handlePoiFavoriteToggle,
       onTogglePause: poiHandlers.handlePoiPauseToggle,
-      onToggleManualTrace: poiHandlers.handlePoiManualTraceToggle,
       onOpenStreetView: poiHandlers.handlePoiStreetView,
       onDelete: poiHandlers.handlePoiDelete,
       onSelectPoi: handleMapPoiSelect,
@@ -837,6 +842,58 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     seenHistoryRevisionRef.current = historyRevision;
     if (poiLoading) cancelSearchCorridor();
   }, [cancelSearchCorridor, historyRevision, poiLoading]);
+
+  // Trace modifiée (routage, import, inversion, annuler…) : POI, lignes de
+  // feuille de route et tri auto portaient sur l'ancienne trace. Une fois la
+  // trace stabilisée, on les retire et on relance la recherche (le tri auto
+  // suit tout seul, ses entrées ayant changé).
+  const activeRoutePoints = active?.gpxRoute?.points;
+  const currentPoiRouteSignature = useMemo(
+    () => buildPoiRouteSignature(activeRoutePoints),
+    [activeRoutePoints],
+  );
+  const storedPoiRouteSignature = active?.poiRouteSignature;
+  const activeHasPois = Boolean(
+    active && ((active.poiFeatures?.length ?? 0) > 0 || active.timeline.some((row) => row.kind === 'poi')),
+  );
+  const routeBusy = routeLoading || recalculateLoading;
+  const activeId = active?.id ?? null;
+  useEffect(() => {
+    if (!activeId || routeBusy) return;
+    if (storedPoiRouteSignature === currentPoiRouteSignature) return;
+    if (storedPoiRouteSignature === undefined) {
+      // POI enregistrés avant l'empreinte : on les rattache à la trace courante.
+      if (!activeHasPois) return;
+      setProjectWithoutHistory((p) => ({
+        ...p,
+        itineraries: p.itineraries.map((it) =>
+          it.id === activeId ? { ...it, poiRouteSignature: buildPoiRouteSignature(it.gpxRoute?.points) } : it,
+        ),
+      }));
+      return;
+    }
+    if (poiLoading) cancelSearchCorridor();
+    setProjectWithoutHistory((p) => ({
+      ...p,
+      itineraries: p.itineraries.map((it) => {
+        if (it.id !== activeId) return it;
+        const copy = cloneItineraryForMutation(it);
+        resetPoisForRouteChange(copy);
+        return copy;
+      }),
+    }));
+    if (hasEnabledCategories) setPendingCorridorFor(activeId);
+  }, [
+    activeHasPois,
+    activeId,
+    cancelSearchCorridor,
+    currentPoiRouteSignature,
+    hasEnabledCategories,
+    poiLoading,
+    routeBusy,
+    setProjectWithoutHistory,
+    storedPoiRouteSignature,
+  ]);
 
   // Toggle « Affiner les résultats » actif : re-trie dès que les entrées du
   // dernier tri changent (POI rechargés, départ, prédiction…). Clé sur la

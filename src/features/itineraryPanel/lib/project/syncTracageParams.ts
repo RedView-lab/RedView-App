@@ -338,14 +338,3 @@ export function syncTracageOnSurfaceRangeChange(
 
   return { roadTypes: updates };
 }
-
-/**
- * Backward compatibility wrapper for single-surface selection.
- */
-export function syncTracageOnSurfaceChange(
-  surface: SurfaceType,
-  currentActivity: ActivityType = 'road',
-): TracageSyncResult {
-  return syncTracageOnSurfaceRangeChange('tarmac', surface, currentActivity);
-}
-

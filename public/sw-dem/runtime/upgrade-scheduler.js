@@ -76,6 +76,7 @@ function notifyDemTileCacheUpdated(z, x, y, source, profile) {
 const pendingUpgrades = new Set();
 
 async function materializeUpgradeResult(result, z, x, y, compositeSource, skipDatumBias = false) {
+  if (result?.cancelled) return { cancelled: true };
   if (!result?.elevations) return null;
   if (result.blob) {
     return { blob: result.blob, source: result.source || compositeSource };
@@ -128,8 +129,13 @@ function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches, preferredS
         .then((result) => materializeUpgradeResult(result, z, x, y, 'ign-rgealti-wms-composite', skipDatumBias));
       const highresRebuilder = () => buildIGNFallbackTile(z, x, y)
         .then((result) => materializeUpgradeResult(result, z, x, y, 'ign-highres-composite', skipDatumBias));
+      // A legacy correlation-MNS surface (LiDAR HD WMS still failing) is not
+      // an upgrade: stop there rather than commit it — or the bare-earth
+      // HIGHRES rebuilder after it — as the tile's permanent answer.
       const mnsRebuilder = () => buildIGNTile(z, x, y, tileClass)
-        .then((result) => materializeUpgradeResult(result, z, x, y, 'ign-composite', skipDatumBias));
+        .then((result) => (isProvisionalMnsBuild(result, z, x, y)
+          ? { provisional: true }
+          : materializeUpgradeResult(result, z, x, y, 'ign-composite', skipDatumBias)));
       const rebuilders = demProfile === 'terrain'
         ? (terrainWmsEligible ? [terrainRebuilder, highresRebuilder] : [highresRebuilder])
         : preferHighres
@@ -145,6 +151,7 @@ function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches, preferredS
       let upgraded = null;
       for (const rebuild of rebuilders) {
         upgraded = await rebuild();
+        if (upgraded?.cancelled || upgraded?.provisional) return;
         if (upgraded?.blob) break;
       }
       if (!upgraded?.blob) return;
@@ -192,8 +199,8 @@ function scheduleSurfaceMnsRecovery(cache, cacheKey, z, x, y, tileClass, demProf
 
   (async () => {
     try {
-      for (const delayMs of SURFACE_RECOVERY_DELAYS_MS) {
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      for (let attempt = 0; attempt < SURFACE_RECOVERY_DELAYS_MS.length; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, SURFACE_RECOVERY_DELAYS_MS[attempt]));
         // A long-lived entry means a fresh foreground build already produced
         // the real tile; stand-ins always carry x-cache-ttl-ms.
         const existing = await cache.match(cacheKey);
@@ -201,6 +208,11 @@ function scheduleSurfaceMnsRecovery(cache, cacheKey, z, x, y, tileClass, demProf
 
         const result = await buildIGNTile(z, x, y, tileClass, PURPOSE_DEM_PREFETCH);
         if (result?.allPermanent404) return;
+        // Only the WMS answer recovers the surface; the legacy correlation-MNS
+        // fallback is accepted on the last attempt only (still better than an
+        // AWS 30 m stand-in).
+        const lastAttempt = attempt === SURFACE_RECOVERY_DELAYS_MS.length - 1;
+        if (result?.cancelled || (!lastAttempt && isProvisionalMnsBuild(result, z, x, y))) continue;
         const upgraded = await materializeUpgradeResult(
           result, z, x, y, 'ign-composite', tileClass === 'inside',
         );

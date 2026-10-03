@@ -134,15 +134,6 @@ export function queryPoiAtPoint(
   return managersByMap.get(map)?.queryAt(point, radiusPx) ?? null;
 }
 
-/** Opens the POI under a canvas point, as a click on it would. */
-export function activatePoiAtPoint(
-  map: MapboxMap,
-  point: { x: number; y: number },
-  radiusPx = 0,
-): boolean {
-  return managersByMap.get(map)?.activateAt(point, radiusPx) ?? false;
-}
-
 // ── Manager ───────────────────────────────────────────────────────────
 
 /**

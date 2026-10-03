@@ -4,6 +4,7 @@ import { AxisDropdown, type AxisOption } from './AxisDropdown';
 import { axisOptions, axis2Options, surfaceFilterOptions } from './shared';
 import type { RouteSurfaceFilter } from '@/features/itineraryPanel/types';
 import { SLOPE_COLOR_CLASSES, type AxisMetricId, type AxisMode } from '../chart';
+import { useToolbarFitDensity } from './useToolbarFitDensity';
 import { useAppI18n } from '@/shared/i18n';
 
 export type ToolbarFilterKey = 'pente' | 'jourNuit' | 'alertes' | 'slopeColors';
@@ -85,6 +86,8 @@ export function AnalysisToolbar({
   const { t } = useAppI18n();
   const [hovered, setHovered] = useState<ToolbarFilterKey | null>(null);
   const [hoveredXMode, setHoveredXMode] = useState<AxisMode | null>(null);
+  const toolbarRef = useRef<HTMLDivElement | null>(null);
+  useToolbarFitDensity(toolbarRef);
 
   /**
    * Un pop-in d'aide est affiché UNIQUEMENT au survol du chip quand un prérequis
@@ -100,7 +103,7 @@ export function AnalysisToolbar({
   const activeHint = activeHintKey ? disabledFilters?.[activeHintKey] : undefined;
 
   return (
-    <div className="rvc-center-analysis__toolbar">
+    <div ref={toolbarRef} className="rvc-center-analysis__toolbar">
       <div className="rvc-center-analysis__label">{t('Analyse')}</div>
 
       <div className="rvc-center-analysis__segmented" role="tablist" aria-label={t("Mode d'analyse")}>
@@ -199,6 +202,7 @@ export function AnalysisToolbar({
 
           const className = [
             'rvc-center-analysis__filter-chip',
+            icon || slopeSwatch ? 'rvc-center-analysis__filter-chip--iconic' : '',
             checked ? '' : 'rvc-center-analysis__filter-chip--off',
             hasHint ? 'rvc-center-analysis__filter-chip--hint' : '',
           ]
@@ -216,7 +220,7 @@ export function AnalysisToolbar({
                 setHovered((curr) => (curr === key ? null : curr));
               }}
             >
-              <label className={className}>
+              <label className={className} title={hasHint ? undefined : t(label)}>
                 {/*
                   Volontairement PAS de `disabled` : le chip doit rester coché/
                   décochable même sans ses prérequis. Sinon le filtre (actif par
@@ -245,7 +249,7 @@ export function AnalysisToolbar({
                     aria-hidden="true"
                   />
                 ) : null}
-                <span className="rvc-center-analysis__filter-label" title={t(label)}>
+                <span className="rvc-center-analysis__filter-label">
                   {t(label)}
                 </span>
               </label>

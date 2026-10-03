@@ -39,6 +39,9 @@ export function getDashboardStyles({
 }: DashboardStylesInput) {
   const isAnyResizing = isResizing || isLeftResizing || isCenterResizing;
 
+  // Shells clip with `overflow: clip`, never `hidden`: a hidden box stays
+  // scrollable by code (scrollIntoView, focus()) and would shift its panel.
+
   const rightPanelStyle: CSSProperties = {
     position: 'absolute',
     top: 0,
@@ -47,7 +50,7 @@ export function getDashboardStyles({
     width: rightDockWidth,
     zIndex: 25,
     boxSizing: 'border-box',
-    overflow: 'hidden',
+    overflow: 'clip',
     transition: isResizing
       ? 'none'
       : `width ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
@@ -84,7 +87,7 @@ export function getDashboardStyles({
     width: leftDockWidth,
     zIndex: 25,
     boxSizing: 'border-box',
-    overflow: 'hidden',
+    overflow: 'clip',
     transition: isLeftResizing
       ? 'none'
       : `width ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
@@ -142,7 +145,7 @@ export function getDashboardStyles({
     width: layout.centerToolbarWidth,
     height: CENTER_TOOLBAR_HEIGHT,
     zIndex: 25,
-    overflow: 'hidden',
+    overflow: 'clip',
     transition: isAnyResizing
       ? 'none'
       : `top ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, left ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, width ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
@@ -172,7 +175,7 @@ export function getDashboardStyles({
     height: layout.centerPanelHeight,
     ['--rvc-center-panel-height' as string]: `${layout.centerPanelHeight}px`,
     zIndex: 25,
-    overflow: 'hidden',
+    overflow: 'clip',
     opacity: layout.centerPanelVisible ? 1 : 0,
     transform: layout.centerPanelVisible
       ? 'translate3d(0, 0, 0) scale(1)'

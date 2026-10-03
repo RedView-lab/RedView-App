@@ -26,13 +26,17 @@ export type DetectedCrs =
   | 'RGR92UTM40S'
   | 'CH1903_LV95'
   | 'NZTM2000'
+  /** Pays-Bas : Amersfoort / RD New (EPSG:28992), altitudes NAP. */
+  | 'RD_NEW'
+  /** Belgique : Belge 1972 / Belgian Lambert 72 (EPSG:31370), altitudes TAW/DNG. */
+  | 'BL72'
   | Jgd2011ZoneCrs;
 
 /** Territory code for IGN/Swiss/NZ/Japan tile naming */
-export type Territory = 'FXX' | 'REU' | 'CH' | 'NZ' | 'JP';
+export type Territory = 'FXX' | 'REU' | 'CH' | 'NZ' | 'JP' | 'NL' | 'BE';
 
 /** Altitude reference system */
-export type AltitudeRef = 'IGN69' | 'IGN78' | 'REUN89' | 'LN02' | 'NZVD2016' | 'TP';
+export type AltitudeRef = 'IGN69' | 'IGN78' | 'REUN89' | 'LN02' | 'NZVD2016' | 'TP' | 'NAP' | 'TAW';
 
 /** Status of a LiDAR tile in the pipeline */
 export type LidarTileStatus =
@@ -51,6 +55,14 @@ export interface ZoneInfo {
   date: string;
 }
 
+/** Emprise d'un fichier source, en mètres du SCR de la dalle. */
+export interface TileFootprint {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
 /** 1km x 1km tile coordinate in Lambert93 km grid */
 export interface TileCoord {
   xKm: number;
@@ -58,6 +70,14 @@ export interface TileCoord {
   territory: Territory;
   projection: DetectedCrs;
   altRef: AltitudeRef;
+  /**
+   * Japon / NZ / Pays-Bas / Flandre : la dalle est un fichier précis de
+   * l'index (sous-feuille de grille, emprise propre, sous-dalle AHN de
+   * 1 × 1,25 km, cellule DHMV de 500 m), identifié par son emprise ;
+   * `xKm`/`yKm` sont alors le km de son centre. Absent : la dalle de 1 km,
+   * servie par le meilleur fichier sous son centre.
+   */
+  footprint?: TileFootprint;
 }
 
 /** Bounding box of a point cloud in native CRS */

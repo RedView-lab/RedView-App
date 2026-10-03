@@ -57,20 +57,8 @@ export const IconScissors = ({ size = 16, ...rest }: ToolbarIconProps) => (
   <SvgV2Icon name="scissors.svg" size={size} {...rest} />
 );
 
-export const IconReflectVertical = ({ size = 16, ...rest }: ToolbarIconProps) => (
-  <SvgV2Icon name={TOOLBAR_ICON_ASSETS.reflectVertical} size={size} {...rest} />
-);
-
-export const IconBezier = ({ size = 16, ...rest }: ToolbarIconProps) => (
-  <SvgV2Icon name={TOOLBAR_ICON_ASSETS.bezier} size={size} {...rest} />
-);
-
 export const IconSlashOctagon = ({ size = 16, ...rest }: ToolbarIconProps) => (
   <SvgV2Icon name={TOOLBAR_ICON_ASSETS.slashOctagon} size={size} {...rest} />
-);
-
-export const IconWrench = ({ size = 16, ...rest }: ToolbarIconProps) => (
-  <SvgV2Icon name={TOOLBAR_ICON_ASSETS.wrench} size={size} {...rest} />
 );
 
 export const IconTrash = ({ size = 14, ...rest }: ToolbarIconProps) => (

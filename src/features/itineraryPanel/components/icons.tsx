@@ -470,3 +470,18 @@ export const IconNiceManYellow = ({ size = 15, className, style, ...p }: AssetGl
     </span>
   );
 };
+
+/** Vertical "⋮" trigger of the per-row actions menus. */
+export function IconKebab({ size = 14 }: { size?: number }) {
+  const radius = Math.max(1.1, size * 0.1);
+  const centerX = size / 2;
+  const offsets = [size * 0.22, size / 2, size * 0.78];
+
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none" aria-hidden>
+      {offsets.map((centerY) => (
+        <circle key={centerY} cx={centerX} cy={centerY} r={radius} fill="currentColor" />
+      ))}
+    </svg>
+  );
+}

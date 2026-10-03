@@ -4,6 +4,7 @@ import { getActiveDem3dQuality } from '../../../lib/dem3dQualityBus';
 import { getActiveDemProfilePreference } from '../../../lib/demProfileBus';
 import { installViewportPrefetch } from '../../../lib/viewportPrefetch';
 import type { Ctx } from './context';
+import { installDemWantedTilesSync } from './demWantedTiles';
 
 /**
  * Tile-tracking listeners + style/idle event hooks. Centralised so the
@@ -396,6 +397,11 @@ export function attachListeners(ctx: Ctx): void {
       });
       st.disposeViewportPrefetch = handle.dispose;
     }
+    // The SW keeps the LiDAR work of every terrain tile the map still waits
+    // on, whatever the camera does, and drops the rest (demWantedTiles.ts).
+    if (!st.disposeDemWantedTilesSync) {
+      st.disposeDemWantedTilesSync = installDemWantedTilesSync(map);
+    }
     // ── DEM ↔ Ortho pairing flag (SW-side speed-up) ──────────────────
     // When the satellite basemap is active, instruct the SW to pair
     // every /dem-tiles request with an immediate /ortho-tiles
@@ -456,6 +462,8 @@ export function attachListeners(ctx: Ctx): void {
     st.disposeViewportPrefetch = null;
     st.disposeOrthoPairingSync?.();
     st.disposeOrthoPairingSync = null;
+    st.disposeDemWantedTilesSync?.();
+    st.disposeDemWantedTilesSync = null;
     st.trackingListenersBound = false;
   };
 

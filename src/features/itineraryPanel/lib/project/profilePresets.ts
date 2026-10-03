@@ -79,8 +79,6 @@ export function getProfilePreset(profileId: string): RouteProfilePreset | undefi
   return ROUTE_PROFILE_PRESETS[profileId];
 }
 
-export const PRIORITY_KEYS: (keyof PrioritiesState)[] = ['duration', 'elevation', 'distance', 'tranquility'];
-
 /**
  * Keys representing manual user adjustments:
  * - Surface sliders & tolerance
@@ -111,8 +109,6 @@ export const CUSTOMIZABLE_ROAD_TYPE_KEYS: (keyof RoadTypesState)[] = [
   'singletrack',
   'offroad',
 ];
-
-export const ROAD_TYPE_KEYS = CUSTOMIZABLE_ROAD_TYPE_KEYS as (keyof Omit<RoadTypesState, 'applyToAllItineraries'>)[];
 
 /**
  * Checks whether current road types differ from a baseline reference
@@ -186,5 +182,3 @@ export function resolveProfilePresetId(
 
   return currentProfileId && currentProfileId !== 'custom' ? currentProfileId : 'custom';
 }
-
-

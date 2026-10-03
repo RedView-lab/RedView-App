@@ -4,6 +4,7 @@ export {
   detectCrs,
   isCorsica,
   tileCoordToWgs84Polygon,
+  tileFootprintSuffix,
   toWgs84,
   wgs84ToTileCoord,
 } from './coordConvert';

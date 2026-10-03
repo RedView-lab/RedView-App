@@ -123,7 +123,7 @@ export function formatPauseDuration(minutes: number): string {
   return remainder > 0 ? `${hours}h${String(remainder).padStart(2, '0')}` : `${hours}h`;
 }
 
-export function formatHourLabel(hour: number, _isBoundary?: boolean): string {
+export function formatHourLabel(hour: number): string {
   const normalizedMinuteOfDay = ((Math.round(hour) % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
   const hours = Math.floor(normalizedMinuteOfDay / 60);
   const minutes = normalizedMinuteOfDay % 60;

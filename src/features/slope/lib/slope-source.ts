@@ -1,5 +1,5 @@
 import { TERRAIN_ALIGNED_RASTER_TILE_SIZE } from '@/features/map3d/lib/sources';
-import type { SlopeColorMode, SlopeCategory, SlopeDemProfile, SlopeResolutionKey } from '../types';
+import type { SlopeColorMode, SlopeCategory, SlopeDemProfile } from '../types';
 import { buildSlopeColorExpression, MAX_SLOPE_DEG } from './slope-config';
 
 // ── Source & Layer IDs ────────────────────────────────────────────────
@@ -28,31 +28,6 @@ const DEFAULT_SOURCE_OPTIONS: SlopeTileSourceOptions = {
   demProfile: 'default',
   resolutionFactor: 1,
 };
-
-const RESOLUTION_OPTIONS: Record<SlopeResolutionKey, SlopeTileSourceOptions> = {
-  '0.40m (LIDAR SURFACE)': {
-    demProfile: 'default',
-    resolutionFactor: 1,
-    sourceDem: 'hd',
-  },
-  '1m (LIDAR TERRAIN)': {
-    demProfile: 'terrain',
-    resolutionFactor: 1,
-    sourceDem: 'hd',
-  },
-  '30m': {
-    demProfile: 'default',
-    resolutionFactor: 1,
-    sourceDem: 'fast-30m',
-  },
-};
-
-export function resolutionToSourceOptions(
-  res: SlopeResolutionKey | undefined,
-): SlopeTileSourceOptions {
-  if (!res) return DEFAULT_SOURCE_OPTIONS;
-  return RESOLUTION_OPTIONS[res] ?? DEFAULT_SOURCE_OPTIONS;
-}
 
 export function buildSlopeSourceKey(options: SlopeTileSourceOptions | undefined): string {
   const resolved = options ?? DEFAULT_SOURCE_OPTIONS;

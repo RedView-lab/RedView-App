@@ -19,6 +19,7 @@ export {
   replaceRouteSegment,
   roundRouteDistanceKm,
   routePointsEqual,
+  widenUnjoinedRoutePatchWindow,
   type RoutePatchEdit,
 } from './routeSegments';
 export {

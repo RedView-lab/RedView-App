@@ -76,7 +76,7 @@
 /*
  * Center panel toggle. Same convention as the map-viewport panel toggles:
  * panel shown -> engaged, filled with 60% black; panel hidden -> red, to pull
- * the eye back to the control. No icon: a small neutral placeholder glyph.
+ * the eye back to the control. Icon: line-chart-up-01 (the analysis chart).
  */
 .rvc-center-toolbar__button--panel-toggle {
   width: 32px;
@@ -100,22 +100,6 @@
 
 .rvc-center-toolbar__button--panel-toggle.is-panel-hidden:hover {
   background: rgba(160, 0, 0, 0.9);
-}
-
-.rvc-center-toolbar__panel-glyph {
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  background: rgba(132, 132, 132, 0.55);
-  transition: background-color 140ms ease;
-}
-
-.rvc-center-toolbar__button--panel-toggle:hover .rvc-center-toolbar__panel-glyph {
-  background: rgba(170, 170, 170, 0.7);
-}
-
-.rvc-center-toolbar__button--panel-toggle.is-panel-hidden:hover .rvc-center-toolbar__panel-glyph {
-  background: rgba(255, 255, 255, 0.6);
 }
 
 .rvc-center-toolbar__button--accent {

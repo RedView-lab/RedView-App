@@ -281,11 +281,7 @@ export function canvasToBlobUrl(canvas: HTMLCanvasElement): Promise<string> {
 }
 
 const recoloredBlobCache = new Map<string, string>();
-const MAX_RECOLORED_BLOBS = 128; // Covers all 48 hours for multiple metrics easily
-
-export function hasCachedRecoloredBlob(signature: string): boolean {
-  return recoloredBlobCache.has(signature);
-}
+const MAX_RECOLORED_BLOBS = 128;
 
 export function getCachedRecoloredBlob(signature: string): string | undefined {
   return recoloredBlobCache.get(signature);
@@ -375,5 +371,3 @@ export async function preRecolorTile(
   cacheRecoloredBlob(signature, blobUrl);
   return blobUrl;
 }
-
-

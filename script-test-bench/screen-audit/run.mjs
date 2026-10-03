@@ -173,6 +173,8 @@ async function auditScreen(session, screen) {
   const outside = Object.entries(R).filter(([, r]) => r && (r.x < -1 || r.y < -1 || r.x + r.w > screen.w + 1 || r.y + r.h > screen.h + 1));
   check(screen.id, 'rien ne déborde de la fenêtre', outside.length === 0 && m.docOverflow.sw <= screen.w + 1, outside.map(([k]) => k).join(', '));
   check(screen.id, 'panneau central et barre d’outils présents', !!R.center && !!R.toolbar);
+  const bar = m.analysisToolbar;
+  check(screen.id, 'barre d’analyse sur une ligne', !!bar && !bar.wraps, bar ? `${bar.w} px, palier ${bar.density.split(' ').pop() || 0}` : 'absente');
   return { screen, scale, texts: effs.length, minText: effs[0], regions: R };
 }
 

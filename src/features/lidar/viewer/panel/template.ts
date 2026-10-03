@@ -101,6 +101,8 @@ const PANEL_TEMPLATE = `
           <div id="panel-color-mode-menu" class="rv-dropdown viewer-panel__select-menu" role="listbox" hidden>
             <button class="rv-dropdown__item viewer-panel__select-option is-selected" type="button" role="option" data-color-mode-option="rgb" aria-selected="true">
               <span class="rv-dropdown__label">Couleurs réelles</span>          </button>
+            <button class="rv-dropdown__item viewer-panel__select-option" type="button" role="option" data-color-mode-option="grey" aria-selected="false">
+              <span class="rv-dropdown__label">Gris (relief)</span>          </button>
             <button class="rv-dropdown__item viewer-panel__select-option" type="button" role="option" data-color-mode-option="intensity" aria-selected="false">
               <span class="rv-dropdown__label">Intensité LiDAR</span>          </button>
             <button class="rv-dropdown__item viewer-panel__select-option" type="button" role="option" data-color-mode-option="classification" aria-selected="false">

@@ -1,23 +1,10 @@
 /**
  * Date utilities for the Calendar popover.
  *
- * Locale: French (fr-FR). All helpers are pure and timezone-stable
- * (we always operate at local midnight to avoid the classic
+ * All helpers are pure and timezone-stable (we always operate at local
+ * midnight to avoid the classic
  * `new Date('2025-01-10').getDate() === 9` UTC bug).
  */
-
-const FR_MONTHS = [
-  'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
-  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
-] as const;
-
-const EN_MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-] as const;
-
-/** Mo, Tu, We, Th, Fr, Sa, Su — week starts Monday (Figma spec). */
-export const WEEKDAY_LABELS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'] as const;
 
 /** Parse an ISO `yyyy-mm-dd` string to a local-midnight Date, or null. */
 export function parseISO(iso: string | null | undefined): Date | null {
@@ -32,16 +19,6 @@ export function parseISO(iso: string | null | undefined): Date | null {
 export function toISO(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-/** "10 Janvier, 2025" — the long French label shown in the active row. */
-export function formatLongFr(d: Date): string {
-  return `${d.getDate()} ${FR_MONTHS[d.getMonth()]}, ${d.getFullYear()}`;
-}
-
-/** "January 2025" — the English month header used in the Figma design. */
-export function formatMonthEn(d: Date): string {
-  return `${EN_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 /** Returns midnight today (local). */

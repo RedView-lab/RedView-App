@@ -1,5 +1,9 @@
 import type { PredictionResult } from '@/features/fitPredictor';
-import { buildPauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule';
+import {
+  buildPauseAwareSchedule,
+  getPoiAutoSortPicks,
+  keepsTimelineItemWithPoiAutoSort,
+} from '@/features/itineraryPanel/lib/schedule';
 import { poiLabel } from '@/features/itineraryPanel/sections/timeline/KindBadge';
 import { buildScheduledTimelineState, parseStartReference } from '@/features/itineraryPanel/sections/timeline/TimelineTimelineView/utils';
 import type { Itinerary, PoiCategory, TimelineItem } from '@/features/itineraryPanel/types';
@@ -185,10 +189,13 @@ export function buildPoiAnnotationsForItinerary(
     });
   };
 
-  // 1. POI rows
+  // 1. POI rows — toggle « Affiner les résultats » actif : mêmes POI que la
+  // feuille de route (retenus par le tri, favoris, pauses).
+  const autoSortPicks = getPoiAutoSortPicks(itinerary);
   const seenPoiKeys = new Set<string | number>();
   const poiRows = (itinerary.timeline ?? []).filter((row) => {
     if (row.kind !== 'poi' || row.visible === false) return false;
+    if (autoSortPicks && !keepsTimelineItemWithPoiAutoSort(row, autoSortPicks)) return false;
     const key = row.osmId ?? row.id;
     if (seenPoiKeys.has(key)) return false;
     seenPoiKeys.add(key);

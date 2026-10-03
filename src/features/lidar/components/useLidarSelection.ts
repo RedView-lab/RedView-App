@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
 import type { Feature, FeatureCollection, Polygon } from 'geojson';
-import { type GeoJSONSource, type Map as MapboxMap, type MapMouseEvent } from 'mapbox-gl';
+import { type GeoJSONSource, type LngLat, type Map as MapboxMap, type MapMouseEvent, type Point } from 'mapbox-gl';
 import type { TileCoord } from '../types';
-import { tileCoordToWgs84Polygon, wgs84ToTileCoord } from '../lib/coordConvert';
+import { sameTileCoord, tileCoordToWgs84Polygon, tileFootprintSuffix, wgs84ToTileCoord } from '../lib/coordConvert';
+import { fileTileCoordAt, loadFileTileIndex, resolveFileTileCoord } from '../lib/fileTiles';
 import { useLidarManager } from './LidarContext';
 import { lidarCoverageJapanZoneAt, removeLidarCoverageLayers, syncLidarCoverageLayers } from './lidarCoverageLayers';
 
@@ -49,17 +50,12 @@ function readStyleHealth(map: MapboxMap): StyleHealth {
 
 type SelectionFeature = Feature<Polygon, { role: 'hover' | 'selected'; tileId: string }>;
 
-function sameTile(a: TileCoord | null, b: TileCoord | null): boolean {
-  if (!a || !b) return false;
-  return a.xKm === b.xKm && a.yKm === b.yKm && a.projection === b.projection;
-}
-
 function createFeature(coord: TileCoord, role: 'hover' | 'selected'): SelectionFeature {
   return {
     type: 'Feature',
     properties: {
       role,
-      tileId: `${coord.xKm}_${coord.yKm}_${coord.projection}`,
+      tileId: `${coord.xKm}_${coord.yKm}_${coord.projection}${tileFootprintSuffix(coord)}`,
     },
     geometry: {
       type: 'Polygon',
@@ -79,7 +75,7 @@ function buildFeatureCollection(
     features.push(createFeature(selected, 'selected'));
   }
 
-  if (enabled && hovered && !sameTile(hovered, selected)) {
+  if (enabled && hovered && !sameTileCoord(hovered, selected)) {
     features.push(createFeature(hovered, 'hover'));
   }
 
@@ -231,6 +227,8 @@ export function useLidarSelection(
   const syncFrameRef = useRef<number | null>(null);
   const syncTimeoutRef = useRef<number | null>(null);
   const styleFallbackUsableRef = useRef(false);
+  /** Resynchronise la couche via l'instance courante de l'effet (sélection résolue après coup). */
+  const syncOverlayRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     enabledRef.current = enabled;
@@ -274,7 +272,7 @@ export function useLidarSelection(
     const updateSourceData = (): boolean => {
       if (!canMutateOverlayStyle() && !promoteStyleFallbackIfUsable()) return false;
 
-      // Couverture LiDAR dense (Japon / NZ) sous les couches de sélection.
+      // Couverture LiDAR dense (France, Suisse, Japon, NZ) sous les couches de sélection.
       syncLidarCoverageLayers(map, enabledRef.current);
       const ready = ensureSelectionLayers(map);
       if (!ready) return false;
@@ -315,11 +313,14 @@ export function useLidarSelection(
       });
     };
 
+    syncOverlayRef.current = scheduleOverlaySync;
+    let disposed = false;
+
     const clearSelectionForTile = (coord: TileCoord | null | undefined) => {
       if (!coord) return;
 
-      const hoveredMatches = sameTile(coord, hoveredRef.current);
-      const selectedMatches = sameTile(coord, selectedRef.current);
+      const hoveredMatches = sameTileCoord(coord, hoveredRef.current);
+      const selectedMatches = sameTileCoord(coord, selectedRef.current);
 
       if (!hoveredMatches && !selectedMatches) return;
 
@@ -341,29 +342,58 @@ export function useLidarSelection(
       }
     });
 
-    const handleMouseMove = (event: MapMouseEvent) => {
-      if (!enabledRef.current) return;
+    // Dalle de 1 km sous le point ; la zone JGD2011 est celle des données LiDAR affichées.
+    const kmTileCoordAt = (lngLat: LngLat, point: Point): TileCoord =>
+      wgs84ToTileCoord(lngLat.lng, lngLat.lat, { japanZone: lidarCoverageJapanZoneAt(map, point) });
 
-      const japanZone = lidarCoverageJapanZoneAt(map, event.point);
-      const nextCoord = wgs84ToTileCoord(event.lngLat.lng, event.lngLat.lat, { japanZone });
-      if (sameTile(nextCoord, hoveredRef.current)) return;
-
-      hoveredRef.current = nextCoord;
+    const setHovered = (coord: TileCoord | null) => {
+      if (coord === hoveredRef.current || sameTileCoord(coord, hoveredRef.current)) return;
+      hoveredRef.current = coord;
       if (!updateSourceData()) {
         scheduleOverlaySync();
       }
     };
 
+    let pointer: { lngLat: LngLat; point: Point } | null = null;
+
+    // Au Japon, en NZ, aux Pays-Bas et en Flandre, la dalle survolée est le
+    // fichier réel sous le curseur (emprise de l'index), pas un carré de 1 km.
+    const refreshHover = () => {
+      if (disposed || !enabledRef.current || !pointer) return;
+      const coord = kmTileCoordAt(pointer.lngLat, pointer.point);
+      const fileCoord = fileTileCoordAt(coord, pointer.lngLat.lng, pointer.lngLat.lat);
+      if (fileCoord) {
+        setHovered(fileCoord);
+        return;
+      }
+      // Index du pays en cours de chargement : pas de contour plutôt qu'un carré trompeur.
+      setHovered(null);
+      void loadFileTileIndex(coord, pointer.lngLat.lng, pointer.lngLat.lat).then(refreshHover);
+    };
+
+    const handleMouseMove = (event: MapMouseEvent) => {
+      if (!enabledRef.current) return;
+      pointer = { lngLat: event.lngLat, point: event.point };
+      refreshHover();
+    };
+
+    const selectTile = (coord: TileCoord) => {
+      selectedRef.current = coord;
+      syncOverlayRef.current?.();
+      void manager.downloadTile(coord);
+    };
+
     const handleClick = (event: MapMouseEvent) => {
       if (!enabledRef.current) return;
 
-      const coord = hoveredRef.current ?? wgs84ToTileCoord(event.lngLat.lng, event.lngLat.lat, {
-        japanZone: lidarCoverageJapanZoneAt(map, event.point),
-      });
+      const hovered = hoveredRef.current;
       hoveredRef.current = null;
-      selectedRef.current = coord;
-      scheduleOverlaySync();
-      void manager.downloadTile(coord);
+      if (hovered) {
+        selectTile(hovered);
+      } else {
+        const { lng, lat } = event.lngLat;
+        void resolveFileTileCoord(kmTileCoordAt(event.lngLat, event.point), lng, lat).then(selectTile);
+      }
       onDisableRef.current?.();
     };
 
@@ -380,6 +410,7 @@ export function useLidarSelection(
     };
 
     const handleMouseLeave = () => {
+      pointer = null;
       hoveredRef.current = null;
       if (!updateSourceData()) {
         scheduleOverlaySync();
@@ -394,9 +425,22 @@ export function useLidarSelection(
       scheduleOverlaySync();
     };
 
+    // Index des dalles-fichiers (Japon, NZ, Pays-Bas, Flandre) chargé dès que la vue arrive sur le pays.
+    const preloadFileTileIndex = () => {
+      if (!enabledRef.current) return;
+      try {
+        const center = map.getCenter();
+        void loadFileTileIndex(wgs84ToTileCoord(center.lng, center.lat), center.lng, center.lat);
+      } catch {
+        /* map may be tearing down */
+      }
+    };
+
     // La couverture d'un pays n'est chargée qu'une fois la vue arrivée dessus.
     const handleMoveEnd = () => {
-      if (enabledRef.current) scheduleOverlaySync();
+      if (!enabledRef.current) return;
+      scheduleOverlaySync();
+      preloadFileTileIndex();
     };
 
     const handleContextMenu = (event: MapMouseEvent) => {
@@ -421,6 +465,7 @@ export function useLidarSelection(
     if (enabled) {
       if (canvas) canvas.style.cursor = 'crosshair';
       scheduleOverlaySync();
+      preloadFileTileIndex();
     } else {
       hoveredRef.current = null;
       if (canvas) canvas.style.cursor = '';
@@ -428,6 +473,8 @@ export function useLidarSelection(
     }
 
     return () => {
+      disposed = true;
+      if (syncOverlayRef.current === scheduleOverlaySync) syncOverlayRef.current = null;
       unsubscribeManager();
       clearScheduledSync();
       map.off('mousemove', handleMouseMove);

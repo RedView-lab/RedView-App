@@ -1,5 +1,3 @@
-import type { Map as MapboxMap } from 'mapbox-gl';
-
 // ── Label categories for toggling map labels ──────────────────────────
 
 export const LABEL_CATEGORIES = [
@@ -30,11 +28,4 @@ export interface LabelCategoryDef {
   label: string;
   defaultEnabled: boolean;
   mapping: LabelCategoryKind;
-}
-
-// ── Component props ───────────────────────────────────────────────────
-
-export interface LabelsPanelProps {
-  map: MapboxMap | null;
-  isMapLoaded: boolean;
 }

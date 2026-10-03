@@ -199,6 +199,21 @@ async function main() {
       maxFileSize: 30000000, // 30MB
       allowedFileExtensions: ['fit'],
     },
+    {
+      // Gros projets dont le JSON gzip dépasse ce que le document `projects.data`
+      // accepte (≈12 M car. derrière nginx) : `<projectId>.json.gz`, pointé par
+      // `data = "file:<fileId>"` (src/shared/utils/projects/payloadFiles.ts).
+      id: 'project-payloads',
+      name: 'Project Payloads',
+      // Collection/bucket : création seulement. Lecture/écriture accordées
+      // par document/fichier à son propriétaire (Role.user) — une permission
+      // read("users") ici exposerait les données de TOUS les utilisateurs.
+      permissions: ['create("users")'],
+      fileSecurity: true,
+      maxFileSize: 30000000, // 30MB = MAX_CLOUD_PROJECT_FILE_BYTES (≤ _APP_STORAGE_LIMIT)
+      allowedFileExtensions: ['gz'],
+      compression: 'none', // déjà gzip côté client
+    },
   ];
 
   for (const b of buckets) {
@@ -212,6 +227,7 @@ async function main() {
         fileSecurity: b.fileSecurity,
         maximumFileSize: b.maxFileSize,
         allowedFileExtensions: b.allowedFileExtensions,
+        ...(b.compression ? { compression: b.compression } : {}),
       });
       console.log(`Created bucket ${b.id}:`, bRes.status, bRes.data?.name || bRes.data?.message);
     } else {

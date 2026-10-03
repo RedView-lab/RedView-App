@@ -435,6 +435,22 @@ export interface ItineraryPendingRoutePatch {
     lat: number;
     lon: number;
   }>;
+  /**
+   * Fenêtre locale (cf. narrowRoutePatchToEdit) : `start` / `end` sont alors
+   * des bornes provisoires prises sur le tracé stocké. Une borne que le
+   * nouveau tracé ne rejoint pas déjà en suivant l'ancien est reculée, au plus
+   * jusqu'aux bornes réelles ci-dessous : jamais de point de passage imposé.
+   */
+  window?: {
+    /** Bornes réelles (lignes voisines de l'édition). */
+    start: ItineraryPendingRoutePatch['start'];
+    end: ItineraryPendingRoutePatch['end'];
+    /** Portion du tracé stocké que l'édition invalide (m depuis le départ). */
+    fromM: number;
+    toM: number;
+    /** Position déduite d'une projection (cf. RoutePatchEdit.projected). */
+    projected: boolean;
+  };
 }
 
 export interface ItineraryForbiddenZonePoint {
@@ -577,6 +593,12 @@ export interface Itinerary {
    * « Relancer la recherche ». Voir `buildPoiSearchSignature`.
    */
   poiSearchSignature?: string;
+  /**
+   * Empreinte de la trace (`buildPoiRouteSignature`) sur laquelle les POI
+   * enregistrés ont été cherchés : si la trace change, ils sont retirés et la
+   * recherche relancée.
+   */
+  poiRouteSignature?: string;
   /** Toggle « Affiner les résultats » : le tri auto filtre les POI de la feuille de route. */
   poiAutoSortEnabled?: boolean;
   /** Dernier tri automatique des POI (POI retenus, bilan affiché dans la pop-in). */

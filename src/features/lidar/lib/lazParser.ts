@@ -344,20 +344,166 @@ export async function parseLazBuffer(
   }
 
   onProgress?.('Décompression LAZ...', 10);
-
   const header = Las.Header.parse(fileBytes);
-  const rawPoints = await Las.PointData.decompressFile(fileBytes, lazPerf);
-  const view = Las.View.create(rawPoints, header);
-  const pointCount = view.pointCount;
   const origin = computeLocalOrigin(header.min);
-
-  onProgress?.('Extraction des points...', 50);
-
-  const extracted = extractViewPoints([{ v: view, count: pointCount }], pointCount, origin);
+  const extracted = decodeLasRecords(fileBytes, header, lazPerf, origin, (done) => {
+    onProgress?.('Décompression LAZ...', 10 + done * 85);
+  });
   const crs = hintCrs ?? detectCrs(extracted.bounds.minY, extracted.bounds.maxY, extracted.bounds.minX, extracted.bounds.maxX);
 
   onProgress?.('Prêt', 100);
-  return { ...extracted, count: pointCount, origin, crs };
+  return { ...extracted, origin, crs };
+}
+
+/**
+ * Budget de points d'un fichier LAS/LAZ non COPC. Au-delà (sous-dalles AHN
+ * urbaines : jusqu'à ~100 M points), les points sont éclaircis uniformément
+ * dans l'ordre du fichier — l'ordre spatial des dalles garde une densité
+ * homogène (≥ 30 pts/m² sur une sous-dalle AHN de 1,3 km²).
+ */
+export const LAS_POINT_BUDGET = 40_000_000;
+
+interface LasRecordLayout {
+  classOffset: number;
+  /** Classes sur 5 bits (formats 0–5) ou 8 bits (formats 6–10). */
+  classMask: number;
+  rgbOffset: number | null;
+}
+
+function lasRecordLayout(pointDataRecordFormat: number): LasRecordLayout {
+  if (pointDataRecordFormat <= 5) {
+    const rgbOffset = pointDataRecordFormat === 2 ? 20 : pointDataRecordFormat === 3 || pointDataRecordFormat === 5 ? 28 : null;
+    return { classOffset: 15, classMask: 0x1f, rgbOffset };
+  }
+  if (pointDataRecordFormat <= 10) {
+    const rgbOffset = pointDataRecordFormat === 7 || pointDataRecordFormat === 8 || pointDataRecordFormat === 10 ? 30 : null;
+    return { classOffset: 16, classMask: 0xff, rgbOffset };
+  }
+  throw new Error(`Format de point LAS ${pointDataRecordFormat} non pris en charge`);
+}
+
+/**
+ * Lit les points d'un LAS (brut) ou LAZ (laz-perf, point par point) sans
+ * matérialiser le tableau d'enregistrements complet (38 o/point en PDRF 8),
+ * en ne gardant que ce qu'utilise le viewer — au plus `LAS_POINT_BUDGET`.
+ */
+function decodeLasRecords(
+  fileBytes: Uint8Array,
+  header: { pointCount: number; pointDataRecordFormat: number; pointDataRecordLength: number; pointDataOffset: number; scale: readonly number[]; offset: readonly number[] },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  lazPerf: any,
+  origin: PointCloudOrigin,
+  onProgress?: (done: number) => void,
+): Omit<PointCloudData, 'origin' | 'crs'> {
+  const total = header.pointCount;
+  const recordLength = header.pointDataRecordLength;
+  const layout = lasRecordLayout(header.pointDataRecordFormat);
+  const compressed = (fileBytes[104]! & 0xc0) !== 0;
+  const count = Math.min(total, LAS_POINT_BUDGET);
+  const [sx, sy, sz] = header.scale as [number, number, number];
+  const ox = header.offset[0]! - origin.x;
+  const oy = header.offset[1]! - origin.y;
+  const oz = header.offset[2]! - origin.z;
+
+  const positions = new Float32Array(count * 3);
+  const classifications = new Uint8Array(count);
+  const intensities = new Uint16Array(count);
+  const colors = new Uint8Array(count * 3);
+  // Octets de poids faible : certaines sources (sous-dalles AHN de GeoTiles)
+  // stockent un RVB 8 bits dans les champs 16 bits ; l'échelle n'est connue
+  // qu'une fois tous les points lus.
+  const colorsLow = layout.rgbOffset !== null ? new Uint8Array(count * 3) : null;
+  let maxRgb = 0;
+  let minX = Infinity, minY = Infinity, minZ = Infinity;
+  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+  let kept = 0;
+  let carry = 0;
+
+  const take = (view: DataView, at: number) => {
+    const x = view.getInt32(at, true) * sx + ox;
+    const y = view.getInt32(at + 4, true) * sy + oy;
+    const z = view.getInt32(at + 8, true) * sz + oz;
+    const idx = kept * 3;
+    positions[idx] = x;
+    positions[idx + 1] = y;
+    positions[idx + 2] = z;
+    intensities[kept] = view.getUint16(at + 12, true);
+    classifications[kept] = view.getUint8(at + layout.classOffset) & layout.classMask;
+    if (colorsLow && layout.rgbOffset !== null) {
+      const r = view.getUint16(at + layout.rgbOffset, true);
+      const g = view.getUint16(at + layout.rgbOffset + 2, true);
+      const b = view.getUint16(at + layout.rgbOffset + 4, true);
+      colors[idx] = r >> 8;
+      colors[idx + 1] = g >> 8;
+      colors[idx + 2] = b >> 8;
+      colorsLow[idx] = r;
+      colorsLow[idx + 1] = g;
+      colorsLow[idx + 2] = b;
+      if (r > maxRgb) maxRgb = r;
+      if (g > maxRgb) maxRgb = g;
+      if (b > maxRgb) maxRgb = b;
+    }
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+    if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+    kept++;
+  };
+  // Éclaircissement de Bresenham : exactement `count` points sur `total`, à pas régulier.
+  const shouldTake = () => {
+    carry += count;
+    if (carry < total) return false;
+    carry -= total;
+    return true;
+  };
+  const PROGRESS_STEP = 1_000_000;
+
+  if (!compressed) {
+    const end = header.pointDataOffset + total * recordLength;
+    if (end > fileBytes.byteLength) throw new Error('Fichier LAS tronqué');
+    const view = new DataView(fileBytes.buffer, fileBytes.byteOffset, fileBytes.byteLength);
+    for (let i = 0; i < total && kept < count; i++) {
+      if (shouldTake()) take(view, header.pointDataOffset + i * recordLength);
+      if (i % PROGRESS_STEP === 0) onProgress?.(i / total);
+    }
+  } else {
+    const filePointer = lazPerf._malloc(fileBytes.byteLength);
+    const pointPointer = lazPerf._malloc(recordLength);
+    const reader = new lazPerf.LASZip();
+    try {
+      lazPerf.HEAPU8.set(fileBytes, filePointer);
+      reader.open(filePointer, fileBytes.byteLength);
+      let heap: ArrayBuffer = lazPerf.HEAPU8.buffer;
+      let view = new DataView(heap);
+      for (let i = 0; i < total && kept < count; i++) {
+        reader.getPoint(pointPointer);
+        if (!shouldTake()) continue;
+        if (lazPerf.HEAPU8.buffer !== heap) {
+          heap = lazPerf.HEAPU8.buffer;
+          view = new DataView(heap);
+        }
+        take(view, pointPointer);
+        if (i % PROGRESS_STEP === 0) onProgress?.(i / total);
+      }
+    } finally {
+      reader.delete();
+      lazPerf._free(filePointer);
+      lazPerf._free(pointPointer);
+    }
+  }
+
+  if (kept < count) throw new Error(`Fichier LAS incomplet : ${kept}/${count} points lus`);
+  // RVB 16 bits (norme LAS) : octet fort ; RVB 8 bits : octet faible ; tout à 0 : non colorisé.
+  const embeddedRgb = maxRgb > 0;
+  const rgb = hasUsableEmbeddedRgb(maxRgb) ? colors : embeddedRgb && colorsLow ? colorsLow : colors.fill(0);
+  return {
+    positions,
+    classifications,
+    intensities,
+    colors: rgb,
+    embeddedRgb,
+    count,
+    bounds: { minX: minX + origin.x, minY: minY + origin.y, minZ: minZ + origin.z, maxX: maxX + origin.x, maxY: maxY + origin.y, maxZ: maxZ + origin.z },
+  };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

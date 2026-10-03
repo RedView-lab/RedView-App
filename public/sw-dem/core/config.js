@@ -217,7 +217,13 @@ const ORTHO_TILE_SIZE = 256;
 // fallback as the tile's permanent answer — buildings vanished on zoom-in.
 // Stand-ins are now short-cached + MNS-recovered; the purge drops the bare
 // tiles already cached under the surface profile.
-const MAP_CACHE_EPOCH = '2026-10-01-surface-standin-1';
+//
+// 2026-10-02-gesture-cancel-1: every camera gesture (rotate, pitch, pan) used
+// to abort the LiDAR HD fetches of the tiles still on screen; the build then
+// fell back to the correlation MNS / 30 m prefill and cached that for good,
+// so the relief dropped to ~30 m just by turning the camera. Gestures no
+// longer touch the visible tiles' work; the purge drops the degraded tiles.
+const MAP_CACHE_EPOCH = '2026-10-02-gesture-cancel-1';
 
 // ── Slope pipeline tuning (2026-06-20 multicore pass) ─────────────────
 // Dedicated slope build worker pool depth. We reserve one core for the SW
@@ -333,6 +339,13 @@ const NEGATIVE_TTL_PIPELINE = 2;         // 2s  — transient France pipeline fa
 
 // Sentinel object returned by queue pruning — never cache these failures
 const PRUNED_SENTINEL = Object.freeze({ _pruned: true });
+
+// Answer of the IGN raster fetchers (getMnsWmsTile, getTerrainWmsTile) when
+// their request was cancelled or pruned — a gesture flush, a stale-tile prune
+// (DEM_WANTED_TILES) — rather than answered. Never a coverage verdict: the
+// builders retry while the tile is still wanted, otherwise they give up
+// without committing any fallback tile (fetchIgnRasterThroughCancels).
+const IGN_FETCH_CANCELLED = Object.freeze({ _cancelled: true });
 
 // Maximum zoom levels to fall back when IGN tile is missing
 const IGN_FALLBACK_MAX_DEPTH = 3;

@@ -73,8 +73,8 @@ export const REDVIEW_CSP_HEADER = [
   "child-src 'self' blob:",
   "style-src 'self' 'unsafe-inline' https://api.mapbox.com https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com data:",
-  "img-src 'self' data: blob: https://appwrite.redview.tech https://*.tilecache.rainviewer.com https://*.rainviewer.com https://*.rainviewer.net https://api.mapbox.com https://*.mapbox.com https://s3.amazonaws.com/elevation-tiles-prod/ https://japan-pointcloud.s3.ap-northeast-1.amazonaws.com https://virtual-shizuoka.s3.ap-northeast-1.amazonaws.com https://kanagawa-pointcloud.s3.ap-northeast-1.amazonaws.com https://gsvrg.ipri.aist.go.jp https://data.geopf.fr https://*.geopf.fr https://data.geo.admin.ch https://*.geo.admin.ch https://*.admin.ch https://servicios.idee.es https://*.idee.es https://www.ign.es https://*.ign.es https://hoydedata.no https://*.hoydedata.no https://cyberjapandata.gsi.go.jp https://*.gsi.go.jp https://server.arcgisonline.com https://*.arcgisonline.com",
-  "connect-src 'self' blob: data: https://appwrite.redview.tech https://errors.redview.tech https://api.stripe.com https://api.mapbox.com https://events.mapbox.com https://*.mapbox.com https://*.rainviewer.com https://*.rainviewer.net https://api.open-meteo.com https://climate-api.open-meteo.com https://*.open-meteo.com https://nominatim.openstreetmap.org https://analytics.redview.tech https://s3.amazonaws.com/elevation-tiles-prod/ https://japan-pointcloud.s3.ap-northeast-1.amazonaws.com https://virtual-shizuoka.s3.ap-northeast-1.amazonaws.com https://kanagawa-pointcloud.s3.ap-northeast-1.amazonaws.com https://gsvrg.ipri.aist.go.jp https://opentopography.s3.sdsc.edu https://data.geopf.fr https://*.geopf.fr https://data.geo.admin.ch https://*.geo.admin.ch https://*.admin.ch https://servicios.idee.es https://*.idee.es https://www.ign.es https://*.ign.es https://hoydedata.no https://*.hoydedata.no https://cyberjapandata.gsi.go.jp https://*.gsi.go.jp https://server.arcgisonline.com https://*.arcgisonline.com",
+  "img-src 'self' data: blob: https://appwrite.redview.tech https://*.tilecache.rainviewer.com https://*.rainviewer.com https://*.rainviewer.net https://api.mapbox.com https://*.mapbox.com https://s3.amazonaws.com/elevation-tiles-prod/ https://japan-pointcloud.s3.ap-northeast-1.amazonaws.com https://virtual-shizuoka.s3.ap-northeast-1.amazonaws.com https://kanagawa-pointcloud.s3.ap-northeast-1.amazonaws.com https://gsvrg.ipri.aist.go.jp https://data.geopf.fr https://*.geopf.fr https://data.geo.admin.ch https://*.geo.admin.ch https://*.admin.ch https://servicios.idee.es https://*.idee.es https://www.ign.es https://*.ign.es https://hoydedata.no https://*.hoydedata.no https://cyberjapandata.gsi.go.jp https://*.gsi.go.jp https://server.arcgisonline.com https://*.arcgisonline.com https://service.pdok.nl https://geo.api.vlaanderen.be https://remotesensing.vlaanderen.be",
+  "connect-src 'self' blob: data: https://appwrite.redview.tech https://errors.redview.tech https://api.stripe.com https://api.mapbox.com https://events.mapbox.com https://*.mapbox.com https://*.rainviewer.com https://*.rainviewer.net https://api.open-meteo.com https://climate-api.open-meteo.com https://*.open-meteo.com https://nominatim.openstreetmap.org https://analytics.redview.tech https://s3.amazonaws.com/elevation-tiles-prod/ https://japan-pointcloud.s3.ap-northeast-1.amazonaws.com https://virtual-shizuoka.s3.ap-northeast-1.amazonaws.com https://kanagawa-pointcloud.s3.ap-northeast-1.amazonaws.com https://gsvrg.ipri.aist.go.jp https://opentopography.s3.sdsc.edu https://data.geopf.fr https://*.geopf.fr https://data.geo.admin.ch https://*.geo.admin.ch https://*.admin.ch https://servicios.idee.es https://*.idee.es https://www.ign.es https://*.ign.es https://hoydedata.no https://*.hoydedata.no https://cyberjapandata.gsi.go.jp https://*.gsi.go.jp https://server.arcgisonline.com https://*.arcgisonline.com https://service.pdok.nl https://geo.api.vlaanderen.be https://remotesensing.vlaanderen.be",
   "frame-src https://js.stripe.com",
   "object-src 'none'",
   "base-uri 'self'",
@@ -95,6 +95,11 @@ const MAX_WEATHER_REQUESTS = 600;
 // des fetchs upstream, donc pas illimité. Quota par famille (radar, slope,
 // altitude) ; /dem-tiles et les préchargements `?pf=1` ne sont pas comptés.
 const MAX_TILE_REQUESTS = 600;
+// Proxy LiDAR (/api/pointcloud) : un fichier par dalle (Pays-Bas) ou par
+// morceau de bande (Flandre, ≤ 10 par cellule), plus les reprises Range ;
+// bucket dédié pour qu'une série de téléchargements n'épuise pas le quota
+// général (BRouter, POI…).
+const MAX_POINTCLOUD_REQUESTS = 120;
 
 function checkRateLimit(req, bucket, max) {
   const ipKey = rateLimitKeyForIp(getClientIp(req));
@@ -240,11 +245,14 @@ const server = http.createServer(async (req, res) => {
       // peut plus atteindre `auth/*` en passant par le quota général.
       const isAuth = apiRoute?.isAuth ?? false;
       const isWeather = apiRoute?.route === 'weather';
+      const isPointcloud = apiRoute?.route === 'pointcloud';
       const [bucket, max] = isAuth
         ? ['auth', MAX_AUTH_REQUESTS]
         : isWeather
           ? ['weather', MAX_WEATHER_REQUESTS]
-          : ['general', MAX_API_REQUESTS];
+          : isPointcloud
+            ? ['pointcloud', MAX_POINTCLOUD_REQUESTS]
+            : ['general', MAX_API_REQUESTS];
       if (!checkRateLimit(req, bucket, max)) {
         return sendTooManyRequests(res);
       }

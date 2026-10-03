@@ -13,6 +13,8 @@
 //   "top N per km" shortlist, NO opening-hours exclusion and NO zoom-based
 //   culling any more — the map must show *all* the POIs that exist within
 //   the requested distance. See lib/corridor-distance-filter.ts.
+//   Exception, opt-in: `refinedPoiIds` (toggle « Affiner les résultats »)
+//   restricts the display to the POIs kept by the auto sort.
 
 import { useEffect, useMemo, useRef, useCallback, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
@@ -25,6 +27,7 @@ import { filterPoisByLateralDistance } from '../lib/corridor-distance-filter';
 import { PoiMarkerManager } from '../lib/poi-markers';
 import type { UsePoiPopupActions } from '../lib/poi-popup';
 import { matchesPoiCategory } from '@/features/itineraryPanel/sections/timeline/poiCategoryMatch';
+import { buildRouteGeometrySignature } from '@/features/itineraryPanel/lib/routes';
 import '../styles/floating-markers.css';
 
 // Re-exported so existing consumers keep importing from the hook module.
@@ -126,7 +129,8 @@ export function usePoi(
   radiusM: number = 1000,
   maxLateralDistanceByCategory: Partial<Record<PoiCategory, number>> | null = null,
   onCorridorUpdate?: (features: PoiFeature[]) => void,
-  onCorridorComplete?: (features: PoiFeature[]) => void,
+  /** Fin de recherche : POI à enregistrer et trace sur laquelle ils ont été cherchés. */
+  onCorridorComplete?: (features: PoiFeature[], routePoints: GpxRoute['points']) => void,
   /**
    * Pre-loaded POI features to render immediately (e.g. rehydrated from
    * a saved project). Seeds the marker registry so itinerary switches
@@ -145,6 +149,13 @@ export function usePoi(
    * `enabledCategories`.
    */
   searchCategories?: Set<PoiCategory>,
+  /**
+   * Toggle « Affiner les résultats » : seuls ces POI (plus les favoris et les
+   * POI marqués d'une pause) sont affichés. null = pas de filtre. Affichage
+   * seulement : la recherche enregistre toujours tous les POI. Doit rester
+   * stable tant que son contenu ne change pas (dépendance d'effet).
+   */
+  refinedPoiIds: ReadonlySet<number> | null = null,
 ) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -167,6 +178,8 @@ export function usePoi(
   poisRouteEnabledRef.current = poisRouteEnabled;
   const selectedPoiCategoriesRef = useRef(selectedPoiCategories);
   selectedPoiCategoriesRef.current = selectedPoiCategories;
+  const refinedPoiIdsRef = useRef(refinedPoiIds);
+  refinedPoiIdsRef.current = refinedPoiIds;
   const gpxRef = useRef(gpxRoute);
   gpxRef.current = gpxRoute;
   const radiusRef = useRef(radiusM);
@@ -217,7 +230,8 @@ export function usePoi(
   //   2. lateral distance to the track <= the X metres set for that
   //      category.
   // Favorites are rendered ONLY if `favorisEnabled` is true (and category matches).
-  // Non-favorites are rendered ONLY if `poisRouteEnabled` is true (and category matches).
+  // Non-favorites are rendered ONLY if `poisRouteEnabled` is true (and category matches),
+  // and, with « Affiner les résultats » on, only when kept by the auto sort or paused.
 
   const buildRenderableFeatures = useCallback((features: PoiFeature[]) => {
     if (features.length === 0) return [];
@@ -230,6 +244,9 @@ export function usePoi(
 
     const isFavEnabled = favorisEnabledRef.current;
     const isRoutePoisEnabled = poisRouteEnabledRef.current;
+    const refined = refinedPoiIdsRef.current;
+    const keptByRefine = (feature: PoiFeature) =>
+      !refined || refined.has(feature.id) || (feature.pauseDurationMin ?? 0) > 0;
 
     const favorites = isFavEnabled
       ? features.filter((feature) => feature.favorite && matchesCategory(feature.category))
@@ -239,7 +256,8 @@ export function usePoi(
           (feature) =>
             !feature.favorite &&
             enabledRef.current.has(feature.category) &&
-            matchesCategory(feature.category),
+            matchesCategory(feature.category) &&
+            keptByRefine(feature),
         )
       : [];
 
@@ -340,7 +358,7 @@ export function usePoi(
         const all = mergeCorridorWithSavedFeatures(features, initialFeaturesRef.current);
         lastCorridorFeatures.current = all;
         syncRenderedFeatures(buildRenderableFeatures(all));
-        onCorridorCompleteRef.current?.(buildStoredFeatures(all));
+        onCorridorCompleteRef.current?.(buildStoredFeatures(all), route.points);
       }
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -431,9 +449,22 @@ export function usePoi(
     favorisEnabled,
     poisRouteEnabled,
     selectedPoiCategoriesKey,
+    refinedPoiIds,
     buildRenderableFeatures,
     syncRenderedFeatures,
   ]);
+
+  // ── Trace déplacée : le dernier corridor appartient à l'ancienne trace ──
+  //
+  // Sans ça, la réhydratation ci-dessous le refusionnerait avec les POI
+  // enregistrés et l'ancien corridor resterait affiché.
+  const routeGeometryKey = useMemo(
+    () => buildRouteGeometrySignature(gpxRoute?.points),
+    [gpxRoute?.points],
+  );
+  useEffect(() => {
+    lastCorridorFeatures.current = [];
+  }, [routeGeometryKey]);
 
   // ── Rehydrate when the active itinerary's saved features change ───
 

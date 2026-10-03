@@ -88,11 +88,6 @@ export function buildPoiMarkerGroups(
   return [...nonFavoriteGroups, ...favoriteGroups];
 }
 
-export function buildPoiSpreadOffsetPx(_index: number, _count: number): number {
-  // POIs superpose at their actual route position with no horizontal shift
-  return 0;
-}
-
 export function shouldRenderPoiCluster(
   group: PoiMarkerGroup,
   visibleFraction: number,

@@ -24,8 +24,20 @@ const HEADER_BYTES = 160;
 const NODE_ENTRY_BYTES = 24;
 const MAX_CRS_BYTES = HEADER_BYTES - 130;
 
+// The LOD and terrain caches bake the ortho colours in. When a territory's
+// imagery source changes, its revision suffix changes so those tiles are
+// recoloured from the cached LAZ; the previous keys are listed as legacy.
+// NZ `_c2`: Esri "Map data not yet available" placeholders no longer used.
+const COLOUR_REVISIONS: ReadonlyArray<{ match: RegExp; suffix: string }> = [
+  { match: /_PTS_NZTM2000_/, suffix: '_c2' },
+];
+
+export function colourRevisionSuffix(lazFileName: string): string {
+  return COLOUR_REVISIONS.find(({ match }) => match.test(lazFileName))?.suffix ?? '';
+}
+
 export function lodCacheKey(lazFileName: string): string {
-  return lazFileName.replace(/(\.copc)?\.laz$/, '.lod_v1');
+  return lazFileName.replace(/(\.copc)?\.laz$/, `.lod_v1${colourRevisionSuffix(lazFileName)}`);
 }
 
 export interface OpenedLodTile {

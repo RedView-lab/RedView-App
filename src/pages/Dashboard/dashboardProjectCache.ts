@@ -23,13 +23,6 @@ export const LOCAL_PROJECT_CACHE_MAX_ENTRIES = 3;
 
 let projectCacheStorageCompacted = false;
 
-export function isQuotaExceededError(error: unknown): boolean {
-  return (
-    error instanceof DOMException &&
-    (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED')
-  );
-}
-
 export function estimateSerializedBytes(value: string): number {
   try {
     return new Blob([value]).size;
@@ -213,20 +206,3 @@ export async function readFullProjectCacheAsync(projectId: string): Promise<Loca
   }
   return null;
 }
-
-export async function readProjectCacheAsync(projectId: string): Promise<LocalProjectCacheEntry | null> {
-  try {
-    const idbEntry = await idbGetProjectCache(projectId);
-    if (idbEntry?.project && idbEntry.ownerId === getCachedCurrentUserIdSync()) {
-      return {
-        ownerId: idbEntry.ownerId,
-        cachedAt: idbEntry.cachedAt,
-        project: idbEntry.project,
-      };
-    }
-  } catch {
-    // fallback to sync cache
-  }
-  return readProjectCache(projectId);
-}
-

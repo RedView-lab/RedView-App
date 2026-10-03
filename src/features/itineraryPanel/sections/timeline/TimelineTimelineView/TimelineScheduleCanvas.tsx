@@ -42,6 +42,8 @@ interface TimelineScheduleCanvasProps {
   onVerticalNavigatorReset?: () => void;
   onZoomWheel?: (e: React.WheelEvent<HTMLDivElement>) => void;
   hourMarks: number[];
+  /** Graduations étiquetées (hourMarks moins une borne finale trop proche). */
+  hourLabelMarks: number[];
   hourRowHeightPx: number;
   kmMarkers: KmMarker[];
   canvasStyle: CSSProperties;
@@ -98,6 +100,7 @@ export function TimelineScheduleCanvas({
   onVerticalNavigatorReset,
   onZoomWheel,
   hourMarks,
+  hourLabelMarks,
   kmMarkers,
   canvasStyle,
   displayDays,
@@ -320,12 +323,12 @@ export function TimelineScheduleCanvas({
 
       <div ref={viewportRef} className="rvi-tl-schedule__viewport">
         <div className="rvi-tl-schedule__times" aria-hidden>
-        {hourMarks.map((markMinute, index) => {
+        {hourLabelMarks.map((markMinute) => {
           const topPx = (markMinute - startMinutes) * pixelsPerMinute + TIMELINE_VIEWPORT_TOP_INSET_PX;
           return (
             <div key={markMinute} className="rvi-tl-schedule__time" style={{ top: topPx }}>
               <span className="rvi-tl-schedule__time-label">
-                {formatHourLabel(markMinute, index === 0 || index === hourMarks.length - 1)}
+                {formatHourLabel(markMinute)}
               </span>
             </div>
           );

@@ -510,6 +510,10 @@ export function LidarViewerRightPanelContent({
                   if (nextEdit) routeController?.setActiveTool('append');
                 }
               }}
+              onRenameRoute={(id, name) => routeController?.renameRoute(id, name)}
+              onDuplicateRoute={(id) => routeController?.duplicateRoute(id)}
+              onExportRouteGpx={(id) => routeController?.exportRouteGpx(id)}
+              onDeleteRoute={(id) => routeController?.deleteRoute(id)}
             />
           )}
 

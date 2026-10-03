@@ -275,3 +275,35 @@ export function buildRadarUpstreamUrl(searchParams, { z, x, y }) {
   const cleanPath = rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
   return `${host}${cleanPath}/512/${z}/${x}/${y}/2/1_1.png`;
 }
+
+// ── Proxy nuages de points (/api/pointcloud) ───────────────────────────────
+
+/**
+ * Sources LiDAR sans en-têtes CORS, relayées par `/api/pointcloud` : hôte
+ * exact et forme de chemin imposés (sous-dalles AHN de GeoTiles, morceaux de
+ * bandes DHMV II d'EODaS OpenLidar). Toute autre URL est refusée (SSRF).
+ */
+const POINTCLOUD_UPSTREAMS = [
+  { origin: 'https://geotiles.citg.tudelft.nl', path: /^\/AHN[45]_T\/\d{2}[A-H][NZ][12]_\d{2}\.LAZ$/ },
+  { origin: 'https://remotesensing.vlaanderen.be', path: /^\/download\/openlidar\/LiDAR_DHMV_2_V2(?:\/[\w-]+)+\.laz$/i },
+];
+
+/** URL amont autorisée (normalisée), ou null. */
+export function resolvePointcloudUpstream(rawUrl) {
+  if (typeof rawUrl !== 'string' || rawUrl.length > 400) return null;
+  let url;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return null;
+  }
+  if (url.username || url.password || url.search || url.hash || url.port) return null;
+  const rule = POINTCLOUD_UPSTREAMS.find(({ origin }) => origin === url.origin);
+  if (!rule || !rule.path.test(url.pathname)) return null;
+  return `${url.origin}${url.pathname}`;
+}
+
+/** En-tête `Range` relayé tel quel s'il est simple (`bytes=a-b`, une seule plage). */
+export function sanitizeRangeHeader(raw) {
+  return typeof raw === 'string' && /^bytes=\d{0,15}-\d{0,15}$/.test(raw) && raw !== 'bytes=-' ? raw : null;
+}

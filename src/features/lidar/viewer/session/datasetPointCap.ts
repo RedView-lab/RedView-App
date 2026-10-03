@@ -1,6 +1,6 @@
 import type { TileCoord } from '../../types';
 import { translateAppText } from '@/shared/i18n/config';
-import { buildTileFileName } from '../../lib/coordConvert';
+import { tileCoordFileName } from '../../lib/coordConvert';
 import type { ViewerStatusReporter } from '../runtime';
 
 export const TILE_LOAD_COMPLETE_PROGRESS = 0.92;
@@ -57,8 +57,8 @@ export async function mapWithConcurrency<T, R>(
 
 export function buildTileFileCandidates(coord: TileCoord): { fileName: string; legacyFileName: string } {
   return {
-    fileName: `${buildTileFileName(coord.xKm, coord.yKm, coord.projection, coord.altRef)}.copc.laz`,
-    legacyFileName: `${buildTileFileName(coord.xKm, coord.yKm - 1, coord.projection, coord.altRef)}.copc.laz`,
+    fileName: tileCoordFileName(coord),
+    legacyFileName: tileCoordFileName({ ...coord, yKm: coord.yKm - 1 }),
   };
 }
 

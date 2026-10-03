@@ -57,8 +57,9 @@
   box-sizing: border-box;
 }
 
-.rvc-center-panel button,
-.rvc-center-panel label {
+/* Zero specificity: a reset must not outrank component classes (it used to
+   force the analysis toolbar to 16 px and white over its 12 px dimmed role). */
+:where(.rvc-center-panel) :where(button, label) {
   font-family: inherit;
   font-size: inherit;
   font-style: inherit;

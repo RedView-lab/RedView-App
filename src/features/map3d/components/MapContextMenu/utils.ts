@@ -1,7 +1,3 @@
-export function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
-}
-
 export function formatCoordinates(lat: number, lng: number) {
   return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
 }

@@ -54,7 +54,6 @@ export const mapTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Roche', en: 'Rock' },
   { fr: 'Non revêtu', en: 'Unpaved' },
   { fr: 'Bois', en: 'Wood' },
-  { fr: 'Tracé manuel', en: 'Manual route' },
   { fr: 'Chargement du globe...', en: 'Loading globe...' },
   { fr: 'Légende de pente du tracé', en: 'Route gradient legend' },
   { fr: 'Masquer le panneau droit', en: 'Hide right panel' },

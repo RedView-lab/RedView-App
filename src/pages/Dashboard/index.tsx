@@ -190,7 +190,10 @@ export default function Dashboard({
 
   return (
     <LidarProvider>
-      <div style={{ position: 'relative', width: '100vw', height: '100dvh', overflow: 'hidden' }}>
+      {/* `clip`, not `hidden`: a hidden box can still be scrolled by code
+          (scrollIntoView, focus()) and would shift the whole UI up, leaving
+          its top unreachable. A clip box never scrolls. */}
+      <div style={{ position: 'relative', width: '100vw', height: '100dvh', overflow: 'clip' }}>
         <div
           data-rv-canvas=""
           style={{
@@ -199,7 +202,7 @@ export default function Dashboard({
             left: 0,
             width: `${layout.scaledViewportWidth}px`,
             height: `${layout.scaledViewportHeight}px`,
-            overflow: 'hidden',
+            overflow: 'clip',
             // 1:1 up to the design reference, gentle growth above with CSS
             // zoom (text laid out at its final size, never resampled).
             ...appScaleStyle(layout.appScale),

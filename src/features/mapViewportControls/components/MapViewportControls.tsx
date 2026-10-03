@@ -8,6 +8,7 @@ import {
   IconCompass,
   IconInfo,
   IconMaximize,
+  IconPanelLayers,
   IconZoomIn,
   IconZoomOut,
 } from './MapViewportControlIcons';
@@ -306,7 +307,7 @@ export const MapViewportControls = memo(function MapViewportControls({
           title={rightPanelToggleLabel}
           onClick={onToggleRightPanel}
         >
-          <span className="rvmvc-map-tools__panel-glyph" aria-hidden="true" />
+          <IconPanelLayers />
         </button>
       ) : null}
 

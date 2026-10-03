@@ -53,10 +53,20 @@ async function handleDemRequest(_request, z, x, y, _depth, demProfile) {
   // ourselves through a Promise chain.
   if (_depth === 0) {
     const inflightKey = `${demProfile}:${z}/${x}/${y}`;
-    const existing = DEM_INFLIGHT.get(inflightKey);
-    if (existing) {
-      try { return (await existing).clone(); }
-      catch { /* fall through and recompute */ }
+    // A build cancelled for its original requester (the map dropped the tile,
+    // then asked for it again) is no answer for this one: join the rebuild
+    // another waiter may have started, else start it.
+    const awaited = new Set();
+    let existing = DEM_INFLIGHT.get(inflightKey);
+    while (existing && !awaited.has(existing)) {
+      awaited.add(existing);
+      try {
+        const shared = await existing;
+        const cancelled = shared.status === 204
+          && shared.headers.get('X-DEM-Reason') === DEM_CANCELLED_REASON;
+        if (!cancelled) return shared.clone();
+      } catch { /* fall through and recompute */ }
+      existing = DEM_INFLIGHT.get(inflightKey);
     }
 
     const work = computeDemRequest(_request, z, x, y, _depth, demProfile);
@@ -65,7 +75,8 @@ async function handleDemRequest(_request, z, x, y, _depth, demProfile) {
       const response = await work;
       return response.clone();
     } finally {
-      DEM_INFLIGHT.delete(inflightKey);
+      // A newer build may own the key (DEM_WANTED_TILES dropped this one).
+      if (DEM_INFLIGHT.get(inflightKey) === work) DEM_INFLIGHT.delete(inflightKey);
     }
   }
 

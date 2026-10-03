@@ -36,6 +36,13 @@ export function IconInfo({ size = 16, ...rest }: AssetIconProps) {
   );
 }
 
+/** Bouton du panneau droit (calques / réglages carte). */
+export function IconPanelLayers({ size = 18, ...rest }: AssetIconProps) {
+  return (
+    <AssetIcon src="/svgv2/icone/layers-three-01.svg" size={size} {...rest} />
+  );
+}
+
 export function IconPolygonZone({ size = 18, ...rest }: AssetIconProps) {
   return (
     <AssetIcon src="/svgv2/icone/polygon-zone.svg" size={size} {...rest} />

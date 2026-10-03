@@ -33,13 +33,3 @@ export function loadLabelState(): Record<LabelCategory, boolean> {
     return defaults();
   }
 }
-
-// ── Persist label state to localStorage ───────────────────────────────
-
-export function saveLabelState(state: Record<LabelCategory, boolean>): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    // Quota exceeded — silently ignore
-  }
-}

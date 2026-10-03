@@ -21,7 +21,6 @@ export type ItineraryMapActionEventDetail =
         | 'delete'
         | 'toggle-favorite'
         | 'toggle-pause'
-        | 'toggle-manual-trace'
         | 'set-pause-duration'
         | 'cycle-pause-duration';
       feature: PoiFeature;

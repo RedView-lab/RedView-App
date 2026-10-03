@@ -36,3 +36,4 @@ export {
   upsertPoiTimelineRow,
 } from './poiAutoSort';
 export type { PoiAutoSortRun } from './poiAutoSort';
+export { buildPoiRouteSignature, resetPoisForRouteChange } from './poiRouteReset';

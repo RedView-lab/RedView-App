@@ -40,10 +40,12 @@ export function buildDemTilesTemplate(
 ): string[] {
   const queryParams = [
     `rv-map-cache-epoch=${encodeURIComponent(MAP_CACHE_EPOCH)}`,
+    // Marks the terrain source's own requests: the SW keeps their LiDAR work
+    // alive until the map stops waiting on the tile (demWantedTiles.ts).
+    'rv-src=map',
     ...(profile === 'terrain' ? ['rv-dem-profile=terrain'] : []),
     ...(cacheBust > 0 ? [`rv-dem=${cacheBust}`] : []),
   ];
 
-  if (queryParams.length === 0) return unifiedDEMSource.tiles;
   return unifiedDEMSource.tiles.map((tile) => `${tile}?${queryParams.join('&')}`);
 }

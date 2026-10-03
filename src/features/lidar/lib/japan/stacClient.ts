@@ -1,10 +1,13 @@
-import type { JapanLidarDataset, JapanTileCoord } from './types';
+import type { JapanLidarDataset, JapanTileCoord, JapanZoneNumber } from './types';
 import { getJapanTileBounds, japanTileKey } from './coordConvert';
 import { JAPAN_LIDAR_DATASETS } from './japanLazIndex';
 import {
   boundsIntersect,
+  bucketTileBounds,
+  findTileBoundsAt,
   hasMaskBit,
   parseBoundedTiles,
+  rankFootprintCandidates,
   rankTileCandidates,
   type TileBounds,
   type TileCandidate,
@@ -37,6 +40,8 @@ interface IndexedDataset {
   /** Feuille 1:5000 (« ME28 ») → masque hex de ses sous-feuilles. */
   masks: Map<string, string>;
   tiles: { name: string; bounds: TileBounds }[];
+  /** Index spatial de `tiles`, construit à la première recherche sous un point. */
+  buckets?: Map<string, number[]>;
 }
 
 let indexed: IndexedDataset[] | null = null;
@@ -67,54 +72,89 @@ function subSheetSuffix(level: number, r: number, c: number): string {
   return String(quarterOf(r, c));
 }
 
-function gridCandidates(entry: IndexedDataset, tile: TileBounds, out: TileCandidate[]): void {
+/** Fichier de la sous-feuille (ligne, colonne) de la grille du jeu, null s'il n'est pas publié. */
+function gridCell(entry: IndexedDataset, row: number, col: number): TileCandidate | null {
   const { dataset } = entry;
   const n = SPLIT[dataset.level]!;
+  if (row < 0 || col < 0) return null;
+  const row5k = Math.floor(row / n);
+  const col5k = Math.floor(col / n);
+  const rowLetter = ROWS[Math.floor(row5k / 10)];
+  const colLetter = COLS[Math.floor(col5k / 10)];
+  if (!rowLetter || !colLetter) return null;
+  const letters = `${rowLetter}${colLetter}`;
+  const sheet5k = `${row5k % 10}${col5k % 10}`;
+  const mask = entry.masks.get(letters + sheet5k);
+  const r = row % n;
+  const c = col % n;
+  if (!mask || !hasMaskBit(mask, r * n + c)) return null;
+  const zone = String(dataset.zone).padStart(2, '0');
+  const caseOf = (value: string) => (dataset.lower ? value.toLowerCase() : value);
+  const dir = dataset.dir.replace('{z}', zone).replace('{L}', caseOf(letters)).replace('{s}', sheet5k);
+  const code = caseOf(`${zone}${letters}${sheet5k}${subSheetSuffix(dataset.level, r, c)}`);
+  const h = SHEET_5K_N_M / n;
+  const w = SHEET_5K_E_M / n;
+  const maxN = GRID_NORTH_M - row * h;
+  const minE = GRID_WEST_M + col * w;
+  return {
+    url: `${dataset.base}${dir}${code}${dataset.ext}`,
+    bounds: { minE, minN: maxN - h, maxE: minE + w, maxN },
+    rank: entry.rank,
+  };
+}
+
+function gridCandidates(entry: IndexedDataset, tile: TileBounds, out: TileCandidate[]): void {
+  const n = SPLIT[entry.dataset.level]!;
   const h = SHEET_5K_N_M / n;
   const w = SHEET_5K_E_M / n;
   const row0 = Math.floor((GRID_NORTH_M - tile.maxN) / h);
   const row1 = Math.ceil((GRID_NORTH_M - tile.minN) / h) - 1;
   const col0 = Math.floor((tile.minE - GRID_WEST_M) / w);
   const col1 = Math.ceil((tile.maxE - GRID_WEST_M) / w) - 1;
-  const zone = String(dataset.zone).padStart(2, '0');
-  const caseOf = (value: string) => (dataset.lower ? value.toLowerCase() : value);
-
-  for (let row = Math.max(0, row0); row <= row1; row++) {
-    const row5k = Math.floor(row / n);
-    const rowLetter = ROWS[Math.floor(row5k / 10)];
-    if (!rowLetter) continue;
-    for (let col = Math.max(0, col0); col <= col1; col++) {
-      const col5k = Math.floor(col / n);
-      const colLetter = COLS[Math.floor(col5k / 10)];
-      if (!colLetter) continue;
-      const letters = `${rowLetter}${colLetter}`;
-      const sheet5k = `${row5k % 10}${col5k % 10}`;
-      const mask = entry.masks.get(letters + sheet5k);
-      const r = row % n;
-      const c = col % n;
-      if (!mask || !hasMaskBit(mask, r * n + c)) continue;
-      const dir = dataset.dir.replace('{z}', zone).replace('{L}', caseOf(letters)).replace('{s}', sheet5k);
-      const code = caseOf(`${zone}${letters}${sheet5k}${subSheetSuffix(dataset.level, r, c)}`);
-      const maxN = GRID_NORTH_M - row * h;
-      const minE = GRID_WEST_M + col * w;
-      out.push({
-        url: `${dataset.base}${dir}${code}${dataset.ext}`,
-        bounds: { minE, minN: maxN - h, maxE: minE + w, maxN },
-        rank: entry.rank,
-      });
+  for (let row = row0; row <= row1; row++) {
+    for (let col = col0; col <= col1; col++) {
+      const candidate = gridCell(entry, row, col);
+      if (candidate) out.push(candidate);
     }
   }
 }
 
+/**
+ * Emprise (m, zone `zone`) du fichier qui sert le point : jeu prioritaire
+ * d'abord, comme au téléchargement. Null hors couverture.
+ */
+export function findJapanFileFootprintAt(east: number, north: number, zone: JapanZoneNumber): TileBounds | null {
+  for (const entry of getIndexedDatasets()) {
+    if (entry.dataset.zone !== zone) continue;
+    if (entry.dataset.level) {
+      const n = SPLIT[entry.dataset.level]!;
+      const row = Math.floor((GRID_NORTH_M - north) / (SHEET_5K_N_M / n));
+      const col = Math.floor((east - GRID_WEST_M) / (SHEET_5K_E_M / n));
+      const cell = gridCell(entry, row, col);
+      if (cell) return cell.bounds;
+      continue;
+    }
+    entry.buckets ??= bucketTileBounds(entry.tiles);
+    const bounds = findTileBoundsAt(entry.tiles, entry.buckets, east, north);
+    if (bounds) return bounds;
+  }
+  return null;
+}
+
 const itemCache = new Map<string, string[]>();
 
-/** Fichiers candidats d'une dalle de 1 km, du plus pertinent au moins pertinent. */
-export async function resolveJapanDownloadUrls(coord: JapanTileCoord): Promise<string[]> {
-  const key = japanTileKey(coord);
+/**
+ * Fichiers candidats d'une dalle, du plus pertinent au moins pertinent : ceux
+ * de l'emprise `footprint` pour une dalle-fichier, sinon ceux de la dalle de 1 km.
+ */
+export async function resolveJapanDownloadUrls(coord: JapanTileCoord, footprint?: TileBounds): Promise<string[]> {
+  const key = footprint
+    ? `Z${coord.zone}_${footprint.minE},${footprint.minN},${footprint.maxE},${footprint.maxN}`
+    : japanTileKey(coord);
   const cached = itemCache.get(key);
   if (cached) return cached;
 
-  const tile = getJapanTileBounds(coord);
+  const tile = footprint ?? getJapanTileBounds(coord);
   const candidates: TileCandidate[] = [];
   for (const entry of getIndexedDatasets()) {
     if (entry.dataset.zone !== coord.zone) continue;
@@ -127,7 +167,7 @@ export async function resolveJapanDownloadUrls(coord: JapanTileCoord): Promise<s
     }
   }
 
-  const urls = rankTileCandidates(candidates, tile);
+  const urls = footprint ? rankFootprintCandidates(candidates, footprint) : rankTileCandidates(candidates, tile);
   itemCache.set(key, urls);
   return urls;
 }

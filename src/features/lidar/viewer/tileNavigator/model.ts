@@ -1,5 +1,6 @@
 import type { TileCoord } from '../../types';
 import { translateAppText } from '@/shared/i18n/config';
+import { kmTileCoord, tileFootprintSuffix } from '../../lib/coordConvert';
 
 export interface TileNavigatorCell {
   coord: TileCoord;
@@ -7,8 +8,8 @@ export interface TileNavigatorCell {
   offsetY: number;
 }
 
-export function tileCoordKey(coord: Pick<TileCoord, 'xKm' | 'yKm' | 'projection' | 'altRef'>): string {
-  return `${coord.xKm}_${coord.yKm}_${coord.projection}_${coord.altRef}`;
+export function tileCoordKey(coord: Pick<TileCoord, 'xKm' | 'yKm' | 'projection' | 'altRef' | 'footprint'>): string {
+  return `${coord.xKm}_${coord.yKm}_${coord.projection}_${coord.altRef}${tileFootprintSuffix(coord)}`;
 }
 
 export function buildTileNavigatorCells(center: TileCoord): TileNavigatorCell[] {
@@ -16,12 +17,11 @@ export function buildTileNavigatorCells(center: TileCoord): TileNavigatorCell[] 
 
   for (let offsetY = 1; offsetY >= -1; offsetY -= 1) {
     for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
+      // Les voisines sont des dalles de 1 km, même autour d'une dalle-fichier (Japon, NZ).
       cells.push({
-        coord: {
-          ...center,
-          xKm: center.xKm + offsetX,
-          yKm: center.yKm + offsetY,
-        },
+        coord: offsetX === 0 && offsetY === 0
+          ? center
+          : kmTileCoord({ ...center, xKm: center.xKm + offsetX, yKm: center.yKm + offsetY }),
         offsetX,
         offsetY,
       });

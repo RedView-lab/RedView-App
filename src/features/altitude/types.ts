@@ -1,5 +1,3 @@
-import type { Map as MapboxMap } from 'mapbox-gl';
-
 export interface AltitudeCategory {
   id: string;
   label: string;
@@ -20,9 +18,4 @@ export interface AltitudeState {
   scaleSetting: AltitudeScaleSettingKey;
   hiddenBandIds: string[];
   customColors: Record<string, string>;
-}
-
-export interface AltitudePanelProps {
-  map: MapboxMap | null;
-  isMapLoaded: boolean;
 }

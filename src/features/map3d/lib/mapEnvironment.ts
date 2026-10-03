@@ -101,10 +101,6 @@ function notify(): void {
   }
 }
 
-export function getActiveMapEnvironment(): MapEnvironment {
-  return currentEnvironment;
-}
-
 export function setActiveMapEnvironment(next: string | null | undefined): void {
   const normalized = normalizeMapEnvironment(next);
   if (normalized === currentEnvironment) return;

@@ -67,6 +67,7 @@ export function splitItineraryProject(
   nextSource.prediction = null;
   delete nextSource.poiFeatures;
   delete nextSource.poiSearchSignature;
+  delete nextSource.poiRouteSignature;
   delete nextSource.poiAutoSort;
   delete nextSource.routeAudit;
 
@@ -88,6 +89,7 @@ export function splitItineraryProject(
   delete createdItinerary.pendingFitRecompute;
   delete createdItinerary.poiFeatures;
   delete createdItinerary.poiSearchSignature;
+  delete createdItinerary.poiRouteSignature;
   delete createdItinerary.poiAutoSort;
   delete createdItinerary.routeAudit;
 

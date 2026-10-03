@@ -3,8 +3,11 @@ import { getNzTileBounds, nzTileKey } from './coordConvert';
 import { NZ_LIDAR_DATASETS } from './nzLazIndex';
 import {
   boundsIntersect,
+  bucketTileBounds,
+  findTileBoundsAt,
   hasMaskBit,
   parseBoundedTiles,
+  rankFootprintCandidates,
   rankTileCandidates,
   type TileBounds,
   type TileCandidate,
@@ -38,6 +41,8 @@ interface IndexedDataset {
   /** Feuille Topo50 → masque hex de ses dalles. */
   masks: Map<string, string>;
   tiles: { name: string; bounds: TileBounds }[];
+  /** Index spatial de `tiles`, construit à la première recherche sous un point. */
+  buckets?: Map<string, number[]>;
 }
 
 let indexed: IndexedDataset[] | null = null;
@@ -58,47 +63,83 @@ function getIndexedDatasets(): IndexedDataset[] {
   return indexed;
 }
 
-function topoCandidates(entry: IndexedDataset, tile: TileBounds, out: TileCandidate[]): void {
+/** Fichier de la cellule (ligne, colonne) de la grille Topo50 du jeu, null s'il n'est pas publié. */
+function topoCell(entry: IndexedDataset, row: number, col: number): TileCandidate | null {
   const { dataset } = entry;
   const n = PER_SHEET[dataset.scale]!;
+  if (row < 0 || col < 0) return null;
+  const letters = ROW_LETTERS[Math.floor(row / n)];
+  if (!letters) return null;
+  const sheet = `${letters}${String(Math.floor(col / n)).padStart(2, '0')}`;
+  const mask = entry.masks.get(sheet);
+  if (!mask) return null;
+  const r = row % n;
+  const c = col % n;
+  if (!hasMaskBit(mask, r * n + c)) return null;
+  const digits = n === 100 ? 3 : 2;
+  const rc = `${String(r + 1).padStart(digits, '0')}${String(c + 1).padStart(digits, '0')}`;
+  const w = SHEET_W / n;
+  const h = SHEET_H / n;
+  const minE = WEST_ORIGIN + col * w;
+  const maxN = NORTH_ORIGIN - row * h;
+  return {
+    url: `${dataset.base}${dataset.name.replace('{sheet}', sheet).replace('{rc}', rc)}`,
+    bounds: { minE, minN: maxN - h, maxE: minE + w, maxN },
+    rank: entry.rank,
+  };
+}
+
+function topoCandidates(entry: IndexedDataset, tile: TileBounds, out: TileCandidate[]): void {
+  const n = PER_SHEET[entry.dataset.scale]!;
   const w = SHEET_W / n;
   const h = SHEET_H / n;
   const col0 = Math.floor((tile.minE - WEST_ORIGIN) / w);
   const col1 = Math.ceil((tile.maxE - WEST_ORIGIN) / w) - 1;
   const row0 = Math.floor((NORTH_ORIGIN - tile.maxN) / h);
   const row1 = Math.ceil((NORTH_ORIGIN - tile.minN) / h) - 1;
-  const digits = n === 100 ? 3 : 2;
-  for (let row = Math.max(0, row0); row <= row1; row++) {
-    const letters = ROW_LETTERS[Math.floor(row / n)];
-    if (!letters) continue;
-    for (let col = Math.max(0, col0); col <= col1; col++) {
-      const sheet = `${letters}${String(Math.floor(col / n)).padStart(2, '0')}`;
-      const mask = entry.masks.get(sheet);
-      if (!mask) continue;
-      const r = row % n;
-      const c = col % n;
-      if (!hasMaskBit(mask, r * n + c)) continue;
-      const rc = `${String(r + 1).padStart(digits, '0')}${String(c + 1).padStart(digits, '0')}`;
-      const minE = WEST_ORIGIN + col * w;
-      const maxN = NORTH_ORIGIN - row * h;
-      out.push({
-        url: `${dataset.base}${dataset.name.replace('{sheet}', sheet).replace('{rc}', rc)}`,
-        bounds: { minE, minN: maxN - h, maxE: minE + w, maxN },
-        rank: entry.rank,
-      });
+  for (let row = row0; row <= row1; row++) {
+    for (let col = col0; col <= col1; col++) {
+      const candidate = topoCell(entry, row, col);
+      if (candidate) out.push(candidate);
     }
   }
 }
 
+/**
+ * Emprise (NZTM2000, m) du fichier qui sert le point : jeu prioritaire d'abord,
+ * comme au téléchargement. Null hors couverture.
+ */
+export function findNzFileFootprintAt(east: number, north: number): TileBounds | null {
+  for (const entry of getIndexedDatasets()) {
+    if (entry.dataset.scale) {
+      const n = PER_SHEET[entry.dataset.scale]!;
+      const row = Math.floor((NORTH_ORIGIN - north) / (SHEET_H / n));
+      const col = Math.floor((east - WEST_ORIGIN) / (SHEET_W / n));
+      const cell = topoCell(entry, row, col);
+      if (cell) return cell.bounds;
+      continue;
+    }
+    entry.buckets ??= bucketTileBounds(entry.tiles);
+    const bounds = findTileBoundsAt(entry.tiles, entry.buckets, east, north);
+    if (bounds) return bounds;
+  }
+  return null;
+}
+
 const itemCache = new Map<string, string[]>();
 
-/** Fichiers candidats d'une dalle de 1 km, du plus pertinent au moins pertinent. */
-export async function resolveNzDownloadUrls(coord: NzTileCoord): Promise<string[]> {
-  const key = nzTileKey(coord);
+/**
+ * Fichiers candidats d'une dalle, du plus pertinent au moins pertinent : ceux
+ * de l'emprise `footprint` pour une dalle-fichier, sinon ceux de la dalle de 1 km.
+ */
+export async function resolveNzDownloadUrls(coord: NzTileCoord, footprint?: TileBounds): Promise<string[]> {
+  const key = footprint
+    ? `${footprint.minE},${footprint.minN},${footprint.maxE},${footprint.maxN}`
+    : nzTileKey(coord);
   const cached = itemCache.get(key);
   if (cached) return cached;
 
-  const tile = getNzTileBounds(coord);
+  const tile = footprint ?? getNzTileBounds(coord);
   const candidates: TileCandidate[] = [];
   for (const entry of getIndexedDatasets()) {
     if (entry.dataset.scale) {
@@ -110,7 +151,7 @@ export async function resolveNzDownloadUrls(coord: NzTileCoord): Promise<string[
     }
   }
 
-  const urls = rankTileCandidates(candidates, tile);
+  const urls = footprint ? rankFootprintCandidates(candidates, footprint) : rankTileCandidates(candidates, tile);
   itemCache.set(key, urls);
   return urls;
 }

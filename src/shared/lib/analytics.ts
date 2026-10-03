@@ -33,16 +33,3 @@ export function trackAnalyticsEvent(event: AnalyticsEvent): void {
     }
   }
 }
-
-export function trackCustomEvent(
-  name: string,
-  data?: Record<string, string | number | boolean>,
-): void {
-  if (typeof window !== 'undefined' && window.umami) {
-    try {
-      window.umami.track(name, data);
-    } catch (e) {
-      console.warn('[Analytics] Failed to track event:', name, e);
-    }
-  }
-}

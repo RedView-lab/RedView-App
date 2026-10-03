@@ -77,6 +77,11 @@
   cursor: crosshair;
 }
 
+/* Survol d'un tronçon « Pente » : un clic sélectionne tout le tronçon. */
+.rvchart__plotarea--segment {
+  cursor: pointer;
+}
+
 /* ---- Layers ---- */
 .rvchart__layer {
   position: absolute;

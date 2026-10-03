@@ -10,6 +10,7 @@ import type {
   ItineraryProject,
   RouteRenderMode,
 } from '../../types';
+import type { DuplicateItineraryOverrides } from './types';
 
 interface UseItineraryCrudActionsArgs {
   setProject: Dispatch<SetStateAction<ItineraryProject>>;
@@ -202,12 +203,15 @@ export function useItineraryCrudActions({
   );
 
   const duplicateItinerary = useCallback(
-    (id: string) => {
+    (id: string, overrides: DuplicateItineraryOverrides = {}) => {
       let resultBox: { createdItineraryId: string; createdItineraryName: string } | null = null;
 
       commitTraceMutation(id, (currentProject) => {
         const source = currentProject.itineraries.find((itinerary) => itinerary.id === id);
         if (!source) return false;
+        if (overrides.id && currentProject.itineraries.some((itinerary) => itinerary.id === overrides.id)) {
+          return false;
+        }
 
         const nextIndex = currentProject.itineraries.length + 1;
         const color =
@@ -222,10 +226,10 @@ export function useItineraryCrudActions({
         }
 
         const duplicate = structuredClone(source);
-        duplicate.id = `it-${Date.now()}-${nextIndex}`;
-        duplicate.name = duplicateName;
-        duplicate.color = color;
-        duplicate.visible = false;
+        duplicate.id = overrides.id ?? `it-${Date.now()}-${nextIndex}`;
+        duplicate.name = overrides.name?.trim() || duplicateName;
+        duplicate.color = overrides.color ?? color;
+        duplicate.visible = overrides.visible ?? false;
         duplicate.prediction = null;
         delete duplicate.fitUploads;
         delete duplicate.pendingFitRecompute;
@@ -277,6 +281,7 @@ export function useItineraryCrudActions({
         delete target.metrics;
         delete target.poiFeatures;
         delete target.poiSearchSignature;
+        delete target.poiRouteSignature;
         delete target.poiAutoSort;
         delete target.routeAudit;
         delete target.pendingTraceExtension;

@@ -128,15 +128,21 @@
   filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4));
 }
 
+/*
+ * Pin de pause (checkpoint-pause.svg, 44 × 48, pointe à y ≈ 37) : tête du
+ * même diamètre visible que le disque des POI (sprite rond de 38 px, voir
+ * poi/lib/poi-sprites.ts), avec le même facteur de zoom. La hauteur de la
+ * boîte s'arrête à la pointe (ancre 'bottom').
+ */
 .rv-poi-marker--pin {
-  width: calc(52px * (0.8 + 0.35 * var(--rv-poi-marker-scale, 1)));
-  height: calc(44px * (0.8 + 0.35 * var(--rv-poi-marker-scale, 1)));
+  width: calc(43px * (0.8 + 0.35 * var(--rv-poi-marker-scale, 1)));
+  height: calc(36px * (0.8 + 0.35 * var(--rv-poi-marker-scale, 1)));
 }
 
 .rv-poi-marker--pin .rv-poi-marker__img {
-  width: calc(52px * (0.8 + 0.35 * var(--rv-poi-marker-scale, 1)));
-  height: calc(58px * (0.8 + 0.35 * var(--rv-poi-marker-scale, 1)));
-  transform-origin: 50% calc(44px * (0.8 + 0.35 * var(--rv-poi-marker-scale, 1)));
+  width: calc(43px * (0.8 + 0.35 * var(--rv-poi-marker-scale, 1)));
+  height: calc(47px * (0.8 + 0.35 * var(--rv-poi-marker-scale, 1)));
+  transform-origin: 50% calc(36px * (0.8 + 0.35 * var(--rv-poi-marker-scale, 1)));
 }
 
 .rv-poi-marker__pause-badge {
@@ -393,10 +399,6 @@
   color: var(--rv-poi-popup-text-muted);
 }
 
-.rv-poi-popup__toggle-label--solid {
-  color: #fff;
-}
-
 .rv-poi-popup__select-wrap {
   position: relative;
   display: inline-flex;
@@ -478,8 +480,7 @@
   height: 18px;
 }
 
-.rv-poi-popup__toggle-wrap,
-.rv-poi-popup__toggle-row {
+.rv-poi-popup__toggle-wrap {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -492,8 +493,7 @@
   padding: 0 8px;
 }
 
-.rv-poi-popup__toggle-wrap--button,
-.rv-poi-popup__toggle-row--button {
+.rv-poi-popup__toggle-wrap--button {
   border: 0;
   background: transparent;
   color: inherit;
@@ -502,16 +502,8 @@
   transition: background-color 140ms ease;
 }
 
-.rv-poi-popup__toggle-row {
-  width: 100%;
-  height: 30px;
-  padding: 0 8px;
-}
-
 .rv-poi-popup__toggle-wrap--button:hover,
-.rv-poi-popup__toggle-wrap--button:focus-visible,
-.rv-poi-popup__toggle-row--button:hover,
-.rv-poi-popup__toggle-row--button:focus-visible {
+.rv-poi-popup__toggle-wrap--button:focus-visible {
   background: var(--rv-poi-popup-surface);
   outline: none;
 }

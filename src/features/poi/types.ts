@@ -158,6 +158,9 @@ export interface GpxRoute {
 /** `tags.source` des POI issus d'un import GPX (ids négatifs, hors base POI). */
 export const GPX_IMPORT_POI_SOURCE = 'redview_gpx_import';
 
+/** `tags.source` des POI créés à la main sur la carte. */
+export const CUSTOM_POI_SOURCE = 'redview_custom_poi';
+
 /** Un élément <wpt> brut lu dans un GPX. */
 export interface GpxWaypoint {
   lat: number;

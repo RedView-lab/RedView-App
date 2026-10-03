@@ -442,7 +442,3 @@ export const ALL_PARAMETERS: ParameterDefinition[] = [
     advanced: true,
   },
 ];
-
-export function getParameter(id: string): ParameterDefinition | undefined {
-  return ALL_PARAMETERS.find((p) => p.id === id);
-}

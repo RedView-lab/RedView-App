@@ -54,9 +54,6 @@ export interface PoiTaxonomy {
 
 export const POI_TAXONOMY = rawTaxonomy as unknown as PoiTaxonomy;
 
-/** Toutes les clés de catégories servies par la base POI. */
-export const POI_TAXONOMY_KEYS: string[] = POI_TAXONOMY.categories.map((c) => c.key);
-
 /** Libellé FR par clé de catégorie. */
 export const POI_TAXONOMY_LABELS: Record<string, string> = Object.fromEntries(
   POI_TAXONOMY.categories.map((c) => [c.key, c.label]),
@@ -71,24 +68,3 @@ export const POI_TAXONOMY_ICON: Record<string, string> = Object.fromEntries(
 export const POI_TAXONOMY_GROUP: Record<string, string> = Object.fromEntries(
   POI_TAXONOMY.categories.map((c) => [c.key, c.group]),
 );
-
-/** Filtres Overpass (`nwr["k"="v"]`) pour une catégorie donnée. */
-export function buildOverpassFilters(categoryKey: string): string[] {
-  const cat = POI_TAXONOMY.categories.find((c) => c.key === categoryKey);
-  if (!cat) return [];
-  const out: string[] = [];
-  for (const rule of cat.rules) {
-    if (rule.length === 1) {
-      const { k, v, in: values } = rule[0]!;
-      if (v != null) out.push(`["${k}"="${v}"]`);
-      else if (values) for (const value of values) out.push(`["${k}"="${value}"]`);
-      continue;
-    }
-    // Règle AND : Overpass n'exprime pas ça en un seul filtre, on approxime
-    // par la première condition (les tags secondaires sont de toute façon
-    // vérifiés côté client/importeur).
-    const first = rule[0]!;
-    if (first.v != null) out.push(`["${first.k}"="${first.v}"]`);
-  }
-  return out;
-}

@@ -4,6 +4,7 @@ import { loadLidarRouteOverlay, subscribeToLidarRouteOverlay } from './storage';
 import {
   broadcastLidarRouteCreate,
   broadcastLidarRouteDelete,
+  broadcastLidarRouteDuplicate,
   broadcastLidarRouteEdit,
   broadcastLidarRouteRename,
 } from '../../lib/routeOverlaySync';
@@ -327,12 +328,11 @@ export class ViewerRouteController {
     const exists = this.routes.some((r) => r.id === id);
     if (!exists) return false;
 
+    // Stop 3D drawing rather than carry on into the route that takes its place.
+    if (this.getActiveRoute()?.id === id) this.setEditMode(false);
     this.routes = this.routes.filter((r) => r.id !== id);
     if (this.selectedRouteId === id) {
       this.selectedRouteId = this.routes[0]?.id ?? null;
-    }
-    if (this.routes.length === 0) {
-      this.setEditMode(false);
     }
 
     broadcastLidarRouteDelete(id, 'lidar_viewer');
@@ -345,15 +345,24 @@ export class ViewerRouteController {
     const source = this.routes.find((r) => r.id === id);
     if (!source) return null;
 
+    // Same naming as the app's duplicate: "Name (copie)", then "… 2", "… 3".
+    const nameBase = translateAppText('{{name}} (copie)', { name: source.name });
+    let name = nameBase;
+    for (let suffix = 2; this.routes.some((r) => r.name === name); suffix += 1) {
+      name = `${nameBase} ${suffix}`;
+    }
+
     const newRoute: LidarRouteOverlayItem = {
       ...structuredClone(source),
       id: `route-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      name: translateAppText('{{name}} (copie)', { name: source.name }),
+      name,
+      color: DEFAULT_ROUTE_PALETTE[this.routes.length % DEFAULT_ROUTE_PALETTE.length] ?? source.color,
+      visible: true,
     };
 
     this.routes.push(newRoute);
     this.selectedRouteId = newRoute.id;
-    broadcastLidarRouteCreate(newRoute, 'lidar_viewer');
+    broadcastLidarRouteDuplicate(id, newRoute, 'lidar_viewer');
     this.rebuildAndEmit(true);
     this.editor?.updateOverlay();
     return newRoute;

@@ -128,15 +128,21 @@ function resolveRouteProfile(
   return routeProfileOverride ?? extractRouteProfileFromBrouter(route);
 }
 
+/**
+ * `routedPatch` : bornes réellement routées quand la fenêtre locale a été
+ * élargie (cf. widenUnjoinedRoutePatchWindow) ; par défaut, le patch en attente.
+ */
 export function applyPendingRoutePatch(
   project: ItineraryProject,
   target: RouteResultTarget,
   route: BrouterRoute,
   routeProfileOverride?: RouteProfilePoint[] | null,
+  routedPatch?: Itinerary['pendingRoutePatch'],
 ): ItineraryProject {
   const itinerary = project.itineraries.find((item) => item.id === target.itineraryId);
   if (!itinerary || !itinerary.pendingRoutePatch) return project;
   if (JSON.stringify(itinerary.pendingRoutePatch) !== target.pendingKey) return project;
+  const patch = routedPatch ?? itinerary.pendingRoutePatch;
 
   const basePoints = itinerary.gpxRoute?.points ?? [];
   if (basePoints.length < 2) return project;
@@ -154,7 +160,7 @@ export function applyPendingRoutePatch(
   const mergedRoutePoints = cleanGpxGlitches(
     replaceRouteSegment(
       basePoints,
-      itinerary.pendingRoutePatch,
+      patch,
       surfacedPatchRoutePoints,
     ),
   );
@@ -169,7 +175,7 @@ export function applyPendingRoutePatch(
   const surfaceMetrics = recomputeApproxSurfaceMetrics(
     itinerary.metrics,
     basePoints,
-    itinerary.pendingRoutePatch,
+    patch,
     patchSurfaceMetrics,
     route.distanceM > 0 ? route.distanceM : getRoutePointTotalDistanceM(patchRoutePoints),
   );

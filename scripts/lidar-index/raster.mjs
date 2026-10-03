@@ -2,6 +2,7 @@
 //
 // Les cellules couvertes sont dissoutes en polygones disjoints : un remplissage
 // semi-transparent (overlay vert 18 %) ne doit jamais se superposer à lui-même.
+import { diff as martinezDiff } from 'martinez-polygon-clipping';
 
 /**
  * @param {Uint8Array} grid  w*h, 1 = couvert ; ligne 0 en haut (nord), y vers le bas.
@@ -68,6 +69,79 @@ export function traceCoverage(grid, w, h) {
   }
   if (edgeCount !== 0) throw new Error(`traceCoverage: ${edgeCount} arêtes orphelines`);
   return groupRings(rings);
+}
+
+/**
+ * Couverture d'une grille régulière de dalles (carrées : France, Suisse,
+ * Flandre ; 1 × 1,25 km : Pays-Bas) → coordonnées de MultiPolygon WGS84,
+ * anneaux extérieurs anti-horaires.
+ *
+ * @param {Iterable<[number, number]>} cells  [colonne, ligne] du coin sud-ouest
+ *   de chaque dalle, en unités de dalle (E / sizeM, N / sizeYM).
+ * @param {number} sizeM  largeur d'une dalle en mètres.
+ * @param {(xy: [number, number]) => [number, number]} toLonLat  SCR natif → [lon, lat].
+ * @param {(lonLat: [number, number]) => [number, number]} round  arrondi des sommets.
+ * @param {number} [sizeYM]  hauteur d'une dalle en mètres (défaut : `sizeM`).
+ */
+export function squareGridCoverage(cells, sizeM, toLonLat, round, sizeYM = sizeM) {
+  const list = [...cells];
+  if (list.length === 0) return [];
+  let minCol = Infinity, maxCol = -Infinity, minRow = Infinity, maxRow = -Infinity;
+  for (const [c, r] of list) {
+    if (c < minCol) minCol = c; if (c > maxCol) maxCol = c;
+    if (r < minRow) minRow = r; if (r > maxRow) maxRow = r;
+  }
+  const w = maxCol - minCol + 1;
+  const h = maxRow - minRow + 1;
+  const grid = new Uint8Array(w * h);
+  // Ligne 0 de la grille = nord.
+  for (const [c, r] of list) grid[(maxRow - r) * w + (c - minCol)] = 1;
+  return traceCoverage(grid, w, h).map(rings => rings.map(ring => {
+    const coords = ring.map(([x, y]) => round(toLonLat([(minCol + x) * sizeM, (maxRow + 1 - y) * sizeYM])));
+    coords.push(coords[0]);
+    return coords.reverse();
+  }));
+}
+
+function lonLatBox(polygon) {
+  return bbox(polygon[0]);
+}
+
+/**
+ * Retire de `polygons` la surface couverte par `clip` (coordonnées de
+ * MultiPolygon WGS84) : deux overlays semi-transparents voisins (France /
+ * Suisse) ne doivent pas foncer en se recouvrant le long de la frontière.
+ * Seuls les polygones dont l'emprise recoupe celle de `clip` sont découpés.
+ */
+export function subtractCoverage(polygons, clip, round) {
+  if (polygons.length === 0 || clip.length === 0) return polygons;
+  const clipBoxes = clip.map(lonLatBox);
+  const clipBox = {
+    minX: Math.min(...clipBoxes.map(b => b.minX)), minY: Math.min(...clipBoxes.map(b => b.minY)),
+    maxX: Math.max(...clipBoxes.map(b => b.maxX)), maxY: Math.max(...clipBoxes.map(b => b.maxY)),
+  };
+  const near = [];
+  const far = [];
+  for (const polygon of polygons) {
+    const b = lonLatBox(polygon);
+    const overlaps = b.minX < clipBox.maxX && b.maxX > clipBox.minX && b.minY < clipBox.maxY && b.maxY > clipBox.minY;
+    (overlaps ? near : far).push(polygon);
+  }
+  if (near.length === 0) return polygons;
+  const result = martinezDiff(near, clip) ?? [];
+  // Polygon seul → MultiPolygon ; sommets arrondis comme le reste du fichier.
+  const multi = result.length > 0 && typeof result[0][0][0] === 'number' ? [result] : result;
+  const cleaned = multi
+    .map(polygon => polygon.map(ring => {
+      const out = [];
+      for (const p of ring.map(round)) {
+        const last = out[out.length - 1];
+        if (!last || last[0] !== p[0] || last[1] !== p[1]) out.push(p);
+      }
+      return out;
+    }).filter(ring => ring.length >= 4))
+    .filter(polygon => polygon.length > 0);
+  return [...far, ...cleaned];
 }
 
 // Aire signée en repère écran (y vers le bas) : > 0 pour un anneau horaire.

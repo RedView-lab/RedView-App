@@ -11,7 +11,7 @@
 export type ProjectCloudErrorKind =
   /** Réseau indisponible, timeout, 5xx, 429 : réessayable. */
   | 'offline'
-  /** Charge utile au-delà de la limite cloud (compressée > 12 M car.) ou refus de taille. */
+  /** Charge utile au-delà de la limite cloud (fichier gzip > 30 Mo) ou refus de taille. */
   | 'too-large'
   /** Session absente / expirée, ou permission refusée. */
   | 'unauthorized'
@@ -24,7 +24,7 @@ export type ProjectCloudErrorKind =
 
 export const PROJECT_CLOUD_ERROR_MESSAGES: Record<ProjectCloudErrorKind, string> = {
   offline: 'Connexion au cloud impossible : les modifications sont conservées sur cet appareil et seront synchronisées automatiquement.',
-  'too-large': 'Projet trop volumineux pour la sauvegarde cloud (limite 12 Mo compressés). Les modifications sont conservées sur cet appareil : allégez le projet ou exportez-le.',
+  'too-large': 'Projet trop volumineux pour la sauvegarde cloud (limite 30 Mo compressés, environ 100 Mo de projet). Les modifications sont conservées sur cet appareil : allégez le projet ou exportez-le.',
   unauthorized: 'Session expirée : reconnectez-vous pour synchroniser vos projets.',
   conflict: 'Ce projet a été modifié sur un autre appareil.',
   'not-found': 'Ce projet a été supprimé.',

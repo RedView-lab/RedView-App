@@ -91,11 +91,6 @@ export function resolveRouteWeatherDateRange(
   return { startDate, endDate: formatLocalDateIso(endDay) };
 }
 
-export function clearRouteWeatherCache(): void {
-  weatherCache.clear();
-  inFlightRequests.clear();
-}
-
 // ── Échantillonnage spatial de la trace ───────────────────────────────
 
 export function sampleRouteForWeather(

@@ -325,7 +325,3 @@ export function generateDynamicCategories(
     };
   });
 }
-
-// ── Slope categories ──────────────────────────────────────────────────
-
-export const SLOPE_CATEGORIES: SlopeCategory[] = generateDynamicCategories(10, generateBreakpointsForCount(10));

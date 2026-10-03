@@ -109,6 +109,30 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
 
   const itineraries = projectStore?.project.itineraries;
 
+  // A route created in the LiDAR viewer becomes a plain GPX itinerary.
+  const addLidarRouteItinerary = useCallback(
+    (route: LidarRouteOverlayItem) => {
+      projectStore?.addItinerary({
+        id: route.id,
+        name: route.name,
+        color: route.color,
+        opacity: Math.round(route.opacity * 100),
+        visible: route.visible,
+        gpxRoute: {
+          name: route.name,
+          source: 'gpx',
+          points: route.points.map((pt, idx: number) => ({
+            lat: pt.lat,
+            lon: pt.lon,
+            elevationM: pt.elevationM ?? null,
+            distanceM: pt.distanceM ?? idx * 10,
+          })),
+        },
+      });
+    },
+    [projectStore],
+  );
+
   useLidarRouteSync({
     itineraries,
     onLidarRouteEdit: useCallback(
@@ -124,27 +148,24 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
       },
       [projectStore],
     ),
-    onLidarRouteCreate: useCallback(
-      (route: LidarRouteOverlayItem) => {
-        projectStore?.addItinerary({
+    onLidarRouteCreate: addLidarRouteItinerary,
+    onLidarRouteDuplicate: useCallback(
+      (sourceRouteId: string, route: LidarRouteOverlayItem) => {
+        // Same id/name/colour as the viewer's copy; profile, timeline… come
+        // from the project's own duplicate.
+        const duplicated = projectStore?.duplicateItinerary(sourceRouteId, {
           id: route.id,
           name: route.name,
           color: route.color,
-          opacity: Math.round(route.opacity * 100),
           visible: route.visible,
-          gpxRoute: {
-            name: route.name,
-            source: 'gpx',
-            points: route.points.map((pt, idx: number) => ({
-              lat: pt.lat,
-              lon: pt.lon,
-              elevationM: pt.elevationM ?? null,
-              distanceM: pt.distanceM ?? idx * 10,
-            })),
-          },
         });
+        // A route the project does not know (drawn in a viewer without the
+        // app open) is added as a plain copy instead.
+        if (!duplicated && !projectStore?.project.itineraries.some((it) => it.id === route.id)) {
+          addLidarRouteItinerary(route);
+        }
       },
-      [projectStore],
+      [projectStore, addLidarRouteItinerary],
     ),
     onLidarRouteRename: useCallback(
       (routeId: string, name: string) => {

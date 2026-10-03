@@ -1,37 +1,75 @@
-@container center-panel (max-width: 1280px) {
-  .rvc-center-analysis__toolbar {
-    gap: 6px;
-  }
+/*
+ * Compaction steps of the analysis toolbar. useToolbarFitDensity measures the
+ * real layout and sets the first step that keeps it on one row:
+ * data-density="1 … n", so `[data-density~='n']` means "step n or denser".
+ * Each step drops the least informative pixels first; past the last one the
+ * toolbar wraps.
+ */
+
+/* 1. The "Analyse" title: the controls speak for themselves. */
+.rvc-center-analysis__toolbar[data-density~='1'] .rvc-center-analysis__label {
+  display: none;
 }
 
-@container center-panel (max-width: 1100px) {
-  .rvc-center-analysis__label {
-    display: none;
-  }
-
-  .rvc-center-analysis__axis-label {
-    width: auto;
-    font-size: var(--rv-font-size-xs);
-  }
+/* 2. Tighter spacing, no separator. */
+.rvc-center-analysis__toolbar[data-density~='2'] {
+  column-gap: 4px;
 }
 
-@container center-panel (max-width: 950px) {
-  .rvc-center-analysis__select {
-    max-width: 96px;
-    padding: 4px 6px;
-  }
-
-  .rvc-center-analysis__axis {
-    gap: 4px;
-  }
+.rvc-center-analysis__toolbar[data-density~='2'] .rvc-center-analysis__separator {
+  display: none;
 }
 
-@container center-panel (max-width: 820px) {
-  .rvc-center-analysis__toolbar {
-    gap: 4px;
-  }
+.rvc-center-analysis__toolbar[data-density~='2'] .rvc-center-analysis__segment {
+  padding: 0 5px;
+}
 
-  .rvc-center-analysis__separator {
-    display: none;
-  }
+.rvc-center-analysis__toolbar[data-density~='2'] .rvc-center-analysis__axis {
+  gap: 2px;
+}
+
+.rvc-center-analysis__toolbar[data-density~='2'] .rvc-center-analysis__axis-picker {
+  padding: 2px 3px;
+}
+
+.rvc-center-analysis__toolbar[data-density~='2'] .rvc-center-analysis__select {
+  min-width: 0;
+  padding: 3px 3px 3px 6px;
+}
+
+.rvc-center-analysis__toolbar[data-density~='2'] .rvc-center-analysis__filters {
+  gap: 2px;
+}
+
+.rvc-center-analysis__toolbar[data-density~='2'] .rvc-center-analysis__filter-chip {
+  gap: 4px;
+  padding: 3px 5px 3px 4px;
+}
+
+.rvc-center-analysis__toolbar[data-density~='2'] .rvc-center-analysis__surface-chip {
+  padding: 3px 3px 3px 6px;
+}
+
+/* 3. "Axe 1 / Axe 2": the solid/dashed swatch matches the curve (label kept as tooltip). */
+.rvc-center-analysis__toolbar[data-density~='3'] .rvc-center-analysis__axis-label {
+  display: none;
+}
+
+.rvc-center-analysis__toolbar[data-density~='3'] .rvc-center-analysis__axis-picker {
+  align-self: stretch;
+}
+
+.rvc-center-analysis__toolbar[data-density~='3'] .rvc-center-analysis__select {
+  max-width: 96px;
+}
+
+/* 4. Chips that carry an icon (slope scale, alerts) keep only the icon (label kept as tooltip). */
+.rvc-center-analysis__toolbar[data-density~='4']
+  .rvc-center-analysis__filter-chip--iconic
+  .rvc-center-analysis__filter-label {
+  display: none;
+}
+
+.rvc-center-analysis__toolbar[data-density~='4'] .rvc-center-analysis__filter-chip--iconic {
+  padding: 3px 4px;
 }

@@ -37,11 +37,6 @@ export function fmtClock(elapsedS: number | null, reference: StartReference): st
   return `${hh}:${mm}`;
 }
 
-export function fmtSpeed(kmh: number | null | undefined): string {
-  if (kmh == null || !Number.isFinite(kmh) || kmh <= 0) return DASH;
-  return `${kmh.toFixed(1)} km/h`;
-}
-
 /** Sort key of a speed cell: speed for cycling, pace (s/km) for Trail / Running. */
 export function speedSortKey(kmh: number | null, discipline: SportDiscipline): number | null {
   if (kmh == null) return null;
@@ -139,21 +134,6 @@ export function gainLossBetween(
     else loss += Math.abs(diff);
   }
   return { gain, loss };
-}
-
-export function avgSpeedBetween(
-  prediction: PredictionResult | null | undefined,
-  fromM: number | null,
-  toM: number | null,
-): number | null {
-  if (prediction == null || fromM == null || toM == null) return null;
-  const pA = pointAtDistanceM(prediction, Math.min(fromM, toM));
-  const pB = pointAtDistanceM(prediction, Math.max(fromM, toM));
-  if (!pA || !pB) return null;
-  const dtS = pB.elapsed_time_s - pA.elapsed_time_s;
-  const dxM = pB.distance_m - pA.distance_m;
-  if (dtS <= 0 || dxM <= 0) return null;
-  return (dxM / dtS) * 3.6;
 }
 
 export function avgPowerBetween(

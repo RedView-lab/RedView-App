@@ -89,7 +89,9 @@ export async function runWebGLFallback(
   const headers = rawBuffers.map((buf) => readBoundsFromLasHeader(buf)).filter(Boolean);
   const boundsList = headers.map((h) => h!.bounds);
   const primaryHeader = headers[0];
-  const crs = (primaryHeader?.crs as DetectedCrs) ?? opts.tileCoord?.projection ?? 'LAMB93';
+  // Le SCR de la dalle fait foi : `detectCrs` ne sait pas distinguer d'après
+  // les seules bornes RD New / Lambert 72 des zones JGD2011, ni la NZ sans X.
+  const crs = opts.tileCoord?.projection ?? (primaryHeader?.crs as DetectedCrs | undefined) ?? 'LAMB93';
   const combinedBounds = unionBounds(boundsList);
 
   setStatus('Orthophoto HD en cours…', 10);

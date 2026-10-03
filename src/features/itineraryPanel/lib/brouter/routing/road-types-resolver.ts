@@ -29,7 +29,7 @@
  *    We clamp to ≥ 3 %.
  */
 import { translateAppText } from '@/shared/i18n';
-import type { RoadTypesState, RoadPreference } from '../../../types';
+import type { RoadTypesState } from '../../../types';
 
 export interface RoadTypesResolution {
   effective: RoadTypesState;
@@ -111,9 +111,4 @@ export function resolveRoadTypes(input: RoadTypesState): RoadTypesResolution {
   // (no-op — kept for future heuristics).
 
   return { effective: out, warnings, corrected };
-}
-
-/* Helper for unit tests / external consumers ---------------------------- */
-export function isForbid(p: RoadPreference): boolean {
-  return p === 'forbid';
 }

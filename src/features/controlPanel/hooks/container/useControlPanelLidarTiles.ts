@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLidarManager } from '@/features/lidar/components/LidarContext';
 import type { CachedTileInfo, DownloadProgress, TileCoord } from '@/features/lidar/types';
-import { loadLidarTileLabels, setLidarTileLabel, syncLidarRouteOverlay } from '@/features/lidar';
+import { loadLidarTileLabels, setLidarTileLabel, syncLidarRouteOverlay, tileFootprintSuffix } from '@/features/lidar';
 import type { Itinerary } from '@/features/itineraryPanel/types';
 import type { ControlPanelPersistedState } from '../../lib/persistedState';
 import { translateAppText } from '@/shared/i18n';
@@ -18,7 +18,7 @@ function formatLidarTileLabel(info: CachedTileInfo): string {
 }
 
 function tileKey(coord: TileCoord): string {
-  return `${coord.xKm}_${coord.yKm}_${coord.projection}`;
+  return `${coord.xKm}_${coord.yKm}_${coord.projection}${tileFootprintSuffix(coord)}`;
 }
 
 interface UseControlPanelLidarTilesArgs {

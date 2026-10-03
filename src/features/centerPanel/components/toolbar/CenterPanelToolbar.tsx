@@ -7,6 +7,7 @@ import { useRouteMergeToolOptional } from '../../routeMerge';
 import { useRouteSplitToolOptional } from '../../routeSplit';
 import { useTraceToolOptional } from '../../tracer';
 import { useForbiddenZoneToolOptional } from '../../forbiddenZones';
+import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { IconChevronDown } from '../CenterPanelIcons';
 import { useAnalysisFlyover } from '../../flyover';
 import {
@@ -211,7 +212,7 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
                 title={isPanelVisible ? t('Masquer le panneau central') : t('Afficher le panneau central')}
                 onClick={onTogglePanel}
               >
-                <span className="rvc-center-toolbar__panel-glyph" aria-hidden="true" />
+                <SvgV2Icon name="line-chart-up-01.svg" size={16} />
               </button>
 
               <div className="rvc-center-toolbar__separator" aria-hidden="true" />

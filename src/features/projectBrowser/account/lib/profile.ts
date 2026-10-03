@@ -3,11 +3,7 @@ import {
   clearStoredAppwriteSession,
   getAppwriteUser,
 } from '@/shared/services/appwrite';
-import {
-  normalizeAccountSportLabel,
-  publishAccountSports,
-  resetAccountSports,
-} from '@/shared/services/accountPrefs';
+import { normalizeAccountSportLabel } from '@/shared/services/accountPrefs';
 import {
   PROJECT_BROWSER_SETTINGS_STORAGE_KEY,
   readDocumentAppLocale,
@@ -168,8 +164,6 @@ export async function saveAccountPractice(form: AccountPracticeForm) {
     country: form.country,
     sports: form.sports.map((sport, index) => buildSportEntry(sport, index)),
   };
-  // The itinerary panel offers Trail / Running from these sports: update it now.
-  publishAccountSports(updatedPrefs.sports.map((entry) => entry.sport));
 
   try {
     return await account.updatePrefs(updatedPrefs);
@@ -264,8 +258,6 @@ export async function signOutAccount({ force = false }: { force?: boolean } = {}
     const pending = await syncPendingProjectsBeforeSignOut();
     if (pending.length > 0) throw new UnsyncedProjectsError(pending);
   }
-
-  resetAccountSports();
 
   // 1. Révoquer la session serveur EN PREMIER : le SDK Appwrite a besoin du
   //    `cookieFallback` (header X-Fallback-Cookies) pour authentifier cet appel

@@ -55,15 +55,6 @@ export interface PreparedChartNode {
   altitudeShiftedPoints: ChartSeries['points'] | null;
 }
 
-export const filterDefs: ReadonlyArray<{ key: FilterKey; label: string }> = [
-  { key: 'waypoint', label: 'Waypoint' },
-  { key: 'poi', label: 'POI' },
-  { key: 'pause', label: 'Pause' },
-  { key: 'pente', label: "Profil d'altitude" },
-  { key: 'jourNuit', label: 'Jour/nuit' },
-  { key: 'alertes', label: 'Alertes' },
-];
-
 export const axisOptions: AxisOption[] = [
   { value: 'Altitude', label: 'Élévation', tone: 'primary' },
   { value: 'Vitesse', label: 'Vitesse', tone: 'primary' },
@@ -130,7 +121,6 @@ export function mapAxisMetricForDiscipline<T extends string | null>(
 export const DETAIL_ZOOM_STEP = 0.1;
 const DETAIL_MIN_VISIBLE_FRACTION = 0.04;
 export const VIEWPORT_COMMIT_DEBOUNCE_MS = 140;
-export const CHART_CLICK_CAMERA_DURATION_MS = 950;
 export const CHART_CLICK_FOCUS_ZOOM = 13.5;
 export const CHART_CLICK_FOCUS_PITCH = 68;
 export const DEFAULT_ANALYSIS_AXIS_COLORS = {
@@ -254,22 +244,6 @@ export function extractRouteSegmentPoints(
   return segmentPoints;
 }
 
-/**
- * Extrait les coordonnées géographiques [lon, lat][] d'un tronçon d'itinéraire
- * délimité par une plage [startX, endX] sur l'axe du graphique.
- */
-export function extractRouteSegmentCoordinates(
-  routePoints: Array<{ lat: number; lon: number; distanceM?: number; elevationM?: number | null }> | null | undefined,
-  prediction: Parameters<typeof locateRoutePointAtX>[1],
-  xMode: AxisMode,
-  startX: number,
-  endX: number,
-  startTime?: string | null,
-): [number, number][] {
-  const points = extractRouteSegmentPoints(routePoints, prediction, xMode, startX, endX, startTime);
-  return points.map((p) => [p.lon, p.lat]);
-}
-
 export function normalizeAnalysisState(
   state?: Partial<AnalysisPanelState> | null,
 ): AnalysisPanelState {
@@ -309,10 +283,6 @@ export function normalizeUnitInterval(value: number | undefined, fallback = 0): 
 
 export function detailZoomToVisibleFraction(detailZoom: number): number {
   return 1 - normalizeUnitInterval(detailZoom) * (1 - DETAIL_MIN_VISIBLE_FRACTION);
-}
-
-export function visibleFractionToDetailZoom(visibleFraction: number): number {
-  return normalizeUnitInterval((1 - visibleFraction) / (1 - DETAIL_MIN_VISIBLE_FRACTION));
 }
 
 export function detailOffsetForCenter(center: number, visibleFraction: number): number {

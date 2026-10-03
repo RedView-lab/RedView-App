@@ -135,18 +135,10 @@ export function classifySegment(tagsStr: string): Surface {
   return 'unknown';
 }
 
-export function isAsphaltSurface(surface: Surface | null | undefined): boolean {
-  return surface === 'asphalt';
-}
-
 export function isPavedSurface(surface: Surface | null | undefined): boolean {
   return surface === 'asphalt' || surface === 'paved';
 }
 
 export function isOffroadSurface(surface: Surface | null | undefined): boolean {
   return surface === 'gravel' || surface === 'dirt' || surface === 'sand';
-}
-
-export function isStyledSurface(surface: Surface | null | undefined): boolean {
-  return surface === 'asphalt' || surface === 'paved' || isOffroadSurface(surface);
 }

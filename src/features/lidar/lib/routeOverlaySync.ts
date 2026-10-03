@@ -45,6 +45,19 @@ export interface LidarRouteCreateMessage {
   route: LidarRouteOverlayItem;
 }
 
+/**
+ * A copy made in the viewer: the app duplicates `sourceRouteId` itself (profile,
+ * timeline…) under `route.id`, or adds `route` as is when it has no such source.
+ */
+export interface LidarRouteDuplicateMessage {
+  type: 'DUPLICATE_ROUTE';
+  version: 1;
+  updatedAt: string;
+  source: 'redview_app' | 'lidar_viewer';
+  sourceRouteId: string;
+  route: LidarRouteOverlayItem;
+}
+
 export interface LidarRouteRenameMessage {
   type: 'RENAME_ROUTE';
   version: 1;
@@ -65,6 +78,7 @@ export interface LidarRouteDeleteMessage {
 export type LidarRouteSyncMessage =
   | LidarRouteOverlayState
   | LidarRouteCreateMessage
+  | LidarRouteDuplicateMessage
   | LidarRouteEditMessage
   | LidarRouteRenameMessage
   | LidarRouteDeleteMessage;
@@ -236,8 +250,34 @@ export function broadcastLidarRouteCreate(
     source,
     route,
   };
+  storeAddedRoute(route, source, msg.updatedAt);
+  postRouteMessage(msg);
+}
 
-  // 1) Update localStorage
+export function broadcastLidarRouteDuplicate(
+  sourceRouteId: string,
+  route: LidarRouteOverlayItem,
+  source: 'redview_app' | 'lidar_viewer' = 'lidar_viewer',
+): void {
+  if (typeof window === 'undefined') return;
+
+  const msg: LidarRouteDuplicateMessage = {
+    type: 'DUPLICATE_ROUTE',
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    source,
+    sourceRouteId,
+    route,
+  };
+  storeAddedRoute(route, source, msg.updatedAt);
+  postRouteMessage(msg);
+}
+
+function storeAddedRoute(
+  route: LidarRouteOverlayItem,
+  source: 'redview_app' | 'lidar_viewer',
+  updatedAt: string,
+): void {
   try {
     const raw = window.localStorage.getItem(LIDAR_ROUTE_OVERLAY_STORAGE_KEY);
     const parsed = raw ? (JSON.parse(raw) as LidarRouteOverlayState) : null;
@@ -245,20 +285,21 @@ export function broadcastLidarRouteCreate(
     const nextRoutes = [...currentRoutes.filter((r) => r.id !== route.id), route];
     scheduleStorageWrite({
       version: 1,
-      updatedAt: msg.updatedAt,
+      updatedAt,
       source,
       routes: nextRoutes,
     });
   } catch (err) {
     console.warn('[LiDAR] Failed to update localStorage on route create:', err);
   }
+}
 
-  // 2) Broadcast
+function postRouteMessage(msg: LidarRouteSyncMessage): void {
   try {
     const bc = getSharedBroadcastChannel();
     bc?.postMessage(msg);
   } catch (err) {
-    console.warn('[LiDAR] Failed to broadcast route create message:', err);
+    console.warn('[LiDAR] Failed to broadcast route message:', err);
   }
 }
 

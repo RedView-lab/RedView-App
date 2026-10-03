@@ -96,6 +96,7 @@ export interface ControllerState {
   disposeStyleRecovery: (() => void) | null;
   disposeViewportPrefetch: (() => void) | null;
   disposeOrthoPairingSync: (() => void) | null;
+  disposeDemWantedTilesSync: (() => void) | null;
   orthoBootTimer: ReturnType<typeof setTimeout> | null;
   finishOnIdle: (() => void) | null;
   readyFallbackTimer: ReturnType<typeof setTimeout> | null;
@@ -209,6 +210,7 @@ export function createInitialState(): ControllerState {
     disposeStyleRecovery: null,
     disposeViewportPrefetch: null,
     disposeOrthoPairingSync: null,
+    disposeDemWantedTilesSync: null,
     orthoBootTimer: null,
     finishOnIdle: null,
     readyFallbackTimer: null,

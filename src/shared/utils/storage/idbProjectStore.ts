@@ -241,23 +241,6 @@ export async function idbUpdateProjectMeta(
   });
 }
 
-export async function idbListProjects(): Promise<ProjectRow[]> {
-  await migrateFromLocalStorageIfNeeded();
-  const db = await getDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction([STORE_PROJECTS], 'readonly');
-    const store = tx.objectStore(STORE_PROJECTS);
-    const req = store.getAll();
-    req.onsuccess = () => {
-      const list = ((req.result || []) as StoredProjectRow[])
-        .map((stored) => hydrate(stored))
-        .filter((row): row is ProjectRow => row !== null);
-      resolve(sortByUpdatedDesc(list));
-    };
-    req.onerror = () => reject(req.error);
-  });
-}
-
 /** Liste les métadonnées des lignes (sans désérialiser les contenus). */
 export async function idbListProjectMetas(): Promise<ProjectRowMeta[]> {
   await migrateFromLocalStorageIfNeeded();
@@ -293,28 +276,6 @@ export interface IdbCacheEntry {
   ownerId?: string;
   cachedAt: string;
   project: ItineraryProject;
-}
-
-export async function idbSaveProjectCache(
-  projectId: string,
-  project: ItineraryProject,
-  ownerId: string,
-): Promise<void> {
-  const db = await getDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction([STORE_CACHE], 'readwrite');
-    const store = tx.objectStore(STORE_CACHE);
-    // IndexedDB copie déjà la valeur (clonage structuré) : pas de copie en plus.
-    const entry: IdbCacheEntry = {
-      projectId,
-      ownerId,
-      cachedAt: new Date().toISOString(),
-      project,
-    };
-    const req = store.put(entry);
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
-  });
 }
 
 export async function idbGetProjectCache(projectId: string): Promise<IdbCacheEntry | null> {

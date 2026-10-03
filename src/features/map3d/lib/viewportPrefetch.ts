@@ -404,10 +404,14 @@ export function installViewportPrefetch(
   };
   map.on('style.load', onStyleLoad);
 
-  // A user gesture aborts speculative fetches and the stale IGN / ortho
-  // network work. Slope and altitude tiles are NOT cancelled any more: they
-  // read the terrain's own DEM tiles, and a cancelled request answered a
-  // transparent tile that Mapbox kept as final (holes after every pan).
+  // A user gesture aborts speculative fetches and the speculative IGN /
+  // ortho network work. The terrain tiles' own LiDAR work is NOT cancelled:
+  // after a rotation or a pitch the map still needs nearly all of them, and
+  // killing it left them on 30 m relief — the SW drops it per tile once the
+  // map stops waiting on it (controller/demWantedTiles.ts). Slope and
+  // altitude tiles are NOT cancelled either: they read the terrain's own DEM
+  // tiles, and a cancelled request answered a transparent tile that Mapbox
+  // kept as final (holes after every pan).
   const cancelOnUserGesture = (e: unknown): void => {
     const evt = e as { originalEvent?: unknown } | null | undefined;
     if (!evt || !evt.originalEvent) return;

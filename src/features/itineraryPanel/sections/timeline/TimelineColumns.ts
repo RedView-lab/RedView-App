@@ -9,32 +9,11 @@ import { elapsedSecondsAtDistance } from '@/features/centerPanel/flyover/playbac
 import { getRouteWeatherAtDistanceAndTime } from '@/features/weather';
 import { resolvePredictionDiscipline } from '@/shared/lib/discipline';
 import { pointAtDistanceM } from './timelineColumnsFormatters';
-import { TIMELINE_COLUMNS } from './timelineColumnsRegistry';
-import type {
-  BuildContextArgs,
-  TimelineColumnContext,
-  TimelineColumnDef,
-  TimelineColumnId,
-} from './TimelineColumnsTypes';
+import type { BuildContextArgs, TimelineColumnContext } from './TimelineColumnsTypes';
 
 export * from './TimelineColumnsTypes';
 export * from './timelineColumnsFormatters';
 export * from './timelineColumnsRegistry';
-
-export const TIMELINE_COLUMN_MAP: Readonly<Record<TimelineColumnId, TimelineColumnDef>> =
-  Object.freeze(
-    Object.fromEntries(TIMELINE_COLUMNS.map((c) => [c.id, c])) as Record<
-      TimelineColumnId,
-      TimelineColumnDef
-    >,
-  );
-
-export const DEFAULT_TIMELINE_COLUMN_VISIBILITY: Record<TimelineColumnId, boolean> =
-  Object.freeze(
-    Object.fromEntries(
-      TIMELINE_COLUMNS.map((c) => [c.id, c.defaultOn]),
-    ) as Record<TimelineColumnId, boolean>,
-  );
 
 function toMeters(km: number | null | undefined): number | null {
   if (km == null || !Number.isFinite(km)) return null;

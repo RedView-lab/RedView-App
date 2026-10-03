@@ -150,10 +150,6 @@
 .rvi-tl-tr:hover .rvi-tl-td--sticky-left {
   background: rgba(36, 36, 42, 0.92);
 }
-.rvi-tl-tr.is-selected .rvi-tl-td--sticky-left {
-  background: rgba(45, 12, 12, 0.94);
-}
-
 .rvi-tl-td--sticky-right {
   position: sticky;
   right: 0;
@@ -165,9 +161,6 @@
 }
 .rvi-tl-tr:hover .rvi-tl-td--sticky-right {
   background: rgba(36, 36, 42, 0.92);
-}
-.rvi-tl-tr.is-selected .rvi-tl-td--sticky-right {
-  background: rgba(45, 12, 12, 0.94);
 }
 
 /* Sticky check + actions edges for header row (transparent, no grey background) */
@@ -257,9 +250,10 @@
 .rvi-tl-td--check {
   cursor: default;
 }
+/* Sélection : même langage que la vue liste (surface neutre surélevée,
+   liseré rouge de l'app sur la cellule de gauche). */
 .rvi-tl-tr.is-selected .rvi-tl-td {
-  background: rgba(197, 0, 0, 0.18);
-  box-shadow: inset 0 1px 0 rgba(197, 0, 0, 0.5), inset 0 -1px 0 rgba(197, 0, 0, 0.5);
+  background: rgba(255, 255, 255, 0.16);
 }
 /* The first / last cells get the leading / trailing rounded corners. */
 .rvi-tl-td--sticky-left {
@@ -274,7 +268,8 @@
   background: rgba(36, 36, 42, 0.92);
 }
 .rvi-tl-tr.is-selected .rvi-tl-td--sticky-left {
-  background: rgba(45, 12, 12, 0.94);
+  background: rgba(46, 46, 52, 0.96);
+  box-shadow: inset 2px 0 0 var(--rvi-red-accent), 8px 0 16px -4px rgba(0, 0, 0, 0.45);
 }
 .rvi-tl-td--sticky-right {
   border-top-right-radius: var(--rvi-radius-md);
@@ -288,7 +283,7 @@
   background: rgba(36, 36, 42, 0.92);
 }
 .rvi-tl-tr.is-selected .rvi-tl-td--sticky-right {
-  background: rgba(45, 12, 12, 0.94);
+  background: rgba(46, 46, 52, 0.96);
 }
 
 .rvi-tl-td--left   { justify-content: flex-start; }

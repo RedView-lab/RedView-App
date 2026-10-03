@@ -1,4 +1,3 @@
-import type { Map as MapboxMap } from 'mapbox-gl';
 import type { WindData } from '../wind-gl';
 
 // ── Re-export WindData so consumers don't need wind-gl directly ────────
@@ -120,38 +119,4 @@ export function adaptiveSimulationScale(zoom: number): number {
 export function pitchSizeCorrection(pitchDeg: number): number {
   const pitchRad = pitchDeg * Math.PI / 180;
   return 1 / Math.max(0.45, Math.cos(pitchRad));
-}
-
-/** Adaptive altitude offset to prevent terrain clipping.
- *  Accounts for zoom (metersPerPx), slope steepness, and camera pitch. */
-export function adaptiveAltitudeOffset(
-  map: MapboxMap,
-  lng: number,
-  lat: number,
-  metersPerPx: number,
-  arrowMeters: number,
-): number {
-  // Base offset: 10 screen-pixels' worth of meters — generous clearance
-  const baseOffset = metersPerPx * 10;
-
-  // Slope detection: sample elevation in a small cross pattern
-  const delta = metersPerPx * 10 / 111_320; // ~10px in degrees
-  const elev = map.queryTerrainElevation?.([lng, lat]) ?? 0;
-  const elevN = map.queryTerrainElevation?.([lng, lat + delta]) ?? elev;
-  const elevS = map.queryTerrainElevation?.([lng, lat - delta]) ?? elev;
-  const elevE = map.queryTerrainElevation?.([lng + delta, lat]) ?? elev;
-  const elevW = map.queryTerrainElevation?.([lng - delta, lat]) ?? elev;
-  const slopeX = Math.abs(elevE - elevW) / (2 * delta * 111_320);
-  const slopeY = Math.abs(elevN - elevS) / (2 * delta * 111_320);
-  const slopeMag = Math.hypot(slopeX, slopeY); // rise/run (unitless)
-  const slopeBoost = slopeMag * metersPerPx * 20; // steeper → more offset
-
-  // Pitch factor: oblique views lose Z-buffer precision
-  const pitch = map.getPitch?.() ?? 0;
-  const pitchFactor = 1 + (pitch / 90) * 0.8;
-
-  // Floor: never less than 5m or 5% of arrow length
-  const floor = Math.max(5, arrowMeters * 0.05);
-
-  return Math.max(floor, (baseOffset + slopeBoost) * pitchFactor);
 }

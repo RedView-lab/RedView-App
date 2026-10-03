@@ -193,14 +193,6 @@ export function DashboardPlaceSearch({
         extra: { nextEnabled, durationMin },
       });
     },
-    onToggleManualTrace: (feature, nextEnabled) => {
-      dispatchItineraryMapAction({
-        kind: 'poi-action',
-        action: 'toggle-manual-trace',
-        feature,
-        extra: { nextEnabled },
-      });
-    },
     onSelectPauseDuration: (feature, durationMin) => {
       dispatchItineraryMapAction({
         kind: 'poi-action',
@@ -564,7 +556,7 @@ export function DashboardPlaceSearch({
             title={isLeftPanelCollapsed ? t('Afficher le panneau gauche') : t('Masquer le panneau gauche')}
             onClick={isLeftPanelCollapsed ? onRestoreLeftPanel : onCollapseLeftPanel}
           >
-            <span className="rvmvc-map-tools__panel-glyph" aria-hidden="true" />
+            <SvgV2Icon name="route.svg" size={18} />
           </button>
         </div>
       ) : null}

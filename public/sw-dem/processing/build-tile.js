@@ -55,13 +55,61 @@ function postProcessFranceMnsTile(elevations, coverage, mercZ) {
   }
 }
 
-async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null) {
+// A cancelled IGN raster fetch (IGN_FETCH_CANCELLED) says nothing about the
+// tile: it is either fetched again — the tile is still wanted — or the build
+// gives up with a `cancelled` result that the callers never commit. Falling
+// through to the next source instead (correlation MNS, RGE ALTI, AWS 30 m)
+// cached a degraded tile for good whenever a gesture or a queue flush hit a
+// tile still on screen.
+const IGN_CANCEL_RETRY_MAX_MAP = 6;
+const IGN_CANCEL_RETRY_MAX_OTHER = 2;
+
+async function fetchIgnRasterThroughCancels(fetchOnce, purpose, mapTile) {
+  let result = await fetchOnce();
+  for (let attempt = 0; result === IGN_FETCH_CANCELLED; attempt++) {
+    // Speculative work (prefetch, warm-ups) is not worth a second request.
+    if (isIGNBackgroundPurpose(purpose)) break;
+    if (mapTile) {
+      if (attempt >= IGN_CANCEL_RETRY_MAX_MAP || !isMapDemTileWanted(mapTile)) break;
+    } else if (attempt >= IGN_CANCEL_RETRY_MAX_OTHER) {
+      break;
+    }
+    result = await fetchOnce();
+  }
+  return result;
+}
+
+// A buildIGNTile() surface that is not the LiDAR HD WMS answer although the
+// WMS never confirmed a coverage gap: the legacy correlation-MNS path ran
+// because the WMS failed transiently. Provisional, never a final tile.
+function isProvisionalMnsBuild(result, mercZ, mercX, mercY) {
+  return Boolean(result?.elevations)
+    && result.source !== 'ign-lidar-hd-wms'
+    && typeof isMnsWmsConfirmedEmpty === 'function'
+    && !isMnsWmsConfirmedEmpty(mercZ, mercX, mercY);
+}
+
+function cancelledIgnBuild() {
+  return {
+    blob: null, elevations: null, coverage: null,
+    source: 'ign-cancelled', cancelled: true, allPermanent404: false, pendingFetches: null,
+  };
+}
+
+// `mapTile` ({ key, requestedAt }): set when the map itself requested this
+// tile (see scheduleIGN / isMapDemTileWanted in sources/ign-fetcher.js).
+async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null, mapTile = null) {
   const t0 = performance.now();
   const isBorder = tileClass === 'border';
 
   // ── High-Performance WMS LiDAR HD Path (1 single HTTP request per Mercator tile) ──
   if (typeof getMnsWmsTile === 'function') {
-    const rawElevations = await getMnsWmsTile(mercZ, mercX, mercY, tilePurpose);
+    const rawElevations = await fetchIgnRasterThroughCancels(
+      () => getMnsWmsTile(mercZ, mercX, mercY, tilePurpose, mapTile),
+      tilePurpose,
+      mapTile,
+    );
+    if (rawElevations === IGN_FETCH_CANCELLED) return cancelledIgnBuild();
     if (rawElevations && rawElevations.length === DEM_TILE_SIZE * DEM_TILE_SIZE) {
       const totalPixels = DEM_TILE_SIZE * DEM_TILE_SIZE;
       const elevations = new Float32Array(totalPixels);
@@ -742,7 +790,13 @@ async function buildIGNFallbackTile(mercZ, mercX, mercY) {
 async function buildIGNTerrainTile(mercZ, mercX, mercY, options) {
   const t0 = performance.now();
   const terrainPurpose = options?.purpose;
-  const rawElevations = await getTerrainWmsTile(mercZ, mercX, mercY, terrainPurpose);
+  const mapTile = options?.mapTile || null;
+  const rawElevations = await fetchIgnRasterThroughCancels(
+    () => getTerrainWmsTile(mercZ, mercX, mercY, terrainPurpose, mapTile),
+    terrainPurpose,
+    mapTile,
+  );
+  if (rawElevations === IGN_FETCH_CANCELLED) return cancelledIgnBuild();
   if (!rawElevations || rawElevations.length !== DEM_TILE_SIZE * DEM_TILE_SIZE) {
     return null;
   }

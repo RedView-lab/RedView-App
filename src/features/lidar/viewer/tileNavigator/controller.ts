@@ -1,6 +1,7 @@
 import type { TileCoord } from '../../types';
 import { translateAppText } from '@/shared/i18n/config';
 import { LidarManager } from '../../lib/lidarManager';
+import { tileFootprintSuffix } from '../../lib/coordConvert';
 import { MAX_VIEWER_SCENE_TILES } from '../../lib/viewerUrl';
 import { ensureViewerPanel } from '../panel/template';
 import { buildTileNavigatorCells, buildTileNavigatorLabel, tileCoordKey } from './model';
@@ -18,7 +19,8 @@ function sameTile(a: TileCoord | undefined, b: TileCoord): boolean {
     && a!.xKm === b.xKm
     && a!.yKm === b.yKm
     && a!.projection === b.projection
-    && a!.altRef === b.altRef;
+    && a!.altRef === b.altRef
+    && tileFootprintSuffix(a!) === tileFootprintSuffix(b);
 }
 
 const DOWNLOAD_ICON = `

@@ -154,6 +154,66 @@
   transform: scale(0.96);
 }
 
+/* Routes: per-row "⋮" actions menu (rename, duplicate, GPX, delete) */
+.lidar-viewer-right-panel-host .rvc-routes__row.rvc-routes__row--actions {
+  grid-template-columns:
+    auto minmax(0, 1fr) var(--rvc-panel-route-mode-width) var(--rvc-panel-route-opacity-width)
+    24px;
+}
+
+/* Block, not flex: `text-overflow: ellipsis` only applies to block text */
+.lidar-viewer-right-panel-host .rvc-routes__label:not(.rvc-routes__label-input) {
+  display: block;
+}
+
+.rvc-routes__menu-trigger {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: var(--rvc-text);
+  cursor: pointer;
+  opacity: 0.64;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.rvc-routes__menu-trigger:hover,
+.rvc-routes__menu-trigger:focus-visible,
+.rvc-routes__menu-trigger.is-open {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rvc-routes__label.rvc-routes__label-input {
+  min-width: 0;
+  width: 100%;
+  min-height: 26px;
+  box-sizing: border-box;
+  padding: 2px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--rvc-text);
+  font: inherit;
+  font-size: var(--rv-font-size-md);
+  font-weight: 600;
+  opacity: 1;
+  outline: none;
+}
+
+.rvc-routes__label.rvc-routes__label-input:focus {
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* Portaled to <body>, like the Select dropdowns */
+.rvc-routes__actions-menu {
+  position: fixed;
+  z-index: 99999;
+}
+
 /* Ensure right-side values and labels have proper alignment */
 .lidar-viewer-right-panel-host .rvc-sunlight__opacity-row {
   justify-content: space-between;

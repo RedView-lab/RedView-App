@@ -3,6 +3,7 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 
 import { usePoi } from '@/features/poi/hooks/usePoi';
 import type {
+  GpxRoute,
   PoiCategory as FeaturePoiCategory,
   PoiFeature,
 } from '@/features/poi/types';
@@ -85,7 +86,7 @@ export function useItineraryPoiMap(
   isMapLoaded: boolean,
   active: Itinerary | null,
   onCorridorUpdate?: (features: PoiFeature[]) => void,
-  onCorridorComplete?: (features: PoiFeature[]) => void,
+  onCorridorComplete?: (features: PoiFeature[], routePoints: GpxRoute['points']) => void,
   popupActions?: UsePoiPopupActions,
   poisRouteEnabled: boolean = true,
   favorisEnabled: boolean = true,
@@ -167,6 +168,21 @@ export function useItineraryPoiMap(
     return Object.keys(next).length > 0 ? next : null;
   }, [active]);
 
+  // ── Toggle « Affiner les résultats » : la carte n'affiche que les POI
+  // retenus par le tri auto, comme la feuille de route. Clé sur les ids :
+  // l'itinéraire est cloné à chaque édition, la référence de `picks` aussi.
+  const autoSortPicks = active?.poiAutoSortEnabled ? active.poiAutoSort?.picks : undefined;
+  const refinedPoiIdsKey = useMemo(
+    () => (autoSortPicks ? autoSortPicks.map((pick) => pick.id).join(',') : null),
+    [autoSortPicks],
+  );
+  const refinedPoiIds = useMemo<ReadonlySet<number> | null>(
+    () => (refinedPoiIdsKey == null
+      ? null
+      : new Set(refinedPoiIdsKey ? refinedPoiIdsKey.split(',').map(Number) : [])),
+    [refinedPoiIdsKey],
+  );
+
   const gpxRoute = active?.gpxRoute ?? null;
   const persistedPoiFeatures = active?.poiFeatures ?? null;
 
@@ -194,6 +210,7 @@ export function useItineraryPoiMap(
     favorisEnabled,
     selectedPoiCategories,
     searchCategories,
+    refinedPoiIds,
   );
 
   return {

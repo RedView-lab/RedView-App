@@ -59,3 +59,60 @@ export function parseBoundedTiles(tiles: string | undefined): { name: string; bo
 export function boundsIntersect(a: TileBounds, b: TileBounds): boolean {
   return a.maxE > b.minE && a.minE < b.maxE && a.maxN > b.minN && a.minN < b.maxN;
 }
+
+export function sameBounds(a: TileBounds, b: TileBounds): boolean {
+  return a.minE === b.minE && a.minN === b.minN && a.maxE === b.maxE && a.maxN === b.maxN;
+}
+
+/**
+ * Fichiers d'une dalle-fichier (emprise exacte d'un fichier de l'index) : ceux
+ * de cette emprise, jeu prioritaire d'abord. Aucun repli sur un fichier voisin :
+ * la dalle montrée au survol est celle qui est téléchargée.
+ */
+export function rankFootprintCandidates(candidates: TileCandidate[], footprint: TileBounds): string[] {
+  const exact = candidates.filter((candidate) => sameBounds(candidate.bounds, footprint));
+  exact.sort((a, b) => a.rank - b.rank);
+  return Array.from(new Set(exact.map((candidate) => candidate.url)));
+}
+
+/** Côté des carrés de l'index spatial des emprises stockées. */
+const BUCKET_M = 2_000;
+
+const bucketKey = (col: number, row: number) => `${col}:${row}`;
+
+/** Index spatial (carrés de 2 km) d'emprises stockées, pour la recherche sous un point. */
+export function bucketTileBounds(tiles: readonly { bounds: TileBounds }[]): Map<string, number[]> {
+  const buckets = new Map<string, number[]>();
+  tiles.forEach(({ bounds }, index) => {
+    for (let col = Math.floor(bounds.minE / BUCKET_M); col <= Math.floor(bounds.maxE / BUCKET_M); col++) {
+      for (let row = Math.floor(bounds.minN / BUCKET_M); row <= Math.floor(bounds.maxN / BUCKET_M); row++) {
+        const key = bucketKey(col, row);
+        const list = buckets.get(key);
+        if (list) list.push(index);
+        else buckets.set(key, [index]);
+      }
+    }
+  });
+  return buckets;
+}
+
+/** Emprise stockée contenant le point (la mieux centrée sur lui si plusieurs se chevauchent), null sinon. */
+export function findTileBoundsAt(
+  tiles: readonly { bounds: TileBounds }[],
+  buckets: Map<string, number[]>,
+  east: number,
+  north: number,
+): TileBounds | null {
+  let best: TileBounds | null = null;
+  let bestDistance = Infinity;
+  for (const index of buckets.get(bucketKey(Math.floor(east / BUCKET_M), Math.floor(north / BUCKET_M))) ?? []) {
+    const { bounds } = tiles[index]!;
+    if (east < bounds.minE || east >= bounds.maxE || north < bounds.minN || north >= bounds.maxN) continue;
+    const distance = Math.hypot((bounds.minE + bounds.maxE) / 2 - east, (bounds.minN + bounds.maxN) / 2 - north);
+    if (distance < bestDistance) {
+      best = bounds;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}

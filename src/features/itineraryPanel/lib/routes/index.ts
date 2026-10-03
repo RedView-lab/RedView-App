@@ -10,10 +10,11 @@ export {
   cumulativeRouteLengthsM,
   projectDistanceAlongRouteM,
   projectPointAlongRoute,
+  projectViaPointAlongRoute,
   roundDistanceKm,
 } from './route-distance';
 export type { RouteDistancePoint, ProjectedRoutePoint } from './route-distance';
-export { buildRouteContentSignature } from './route-signature';
+export { buildRouteContentSignature, buildRouteGeometrySignature } from './route-signature';
 export type { RouteSignaturePoint } from './route-signature';
 export {
   applyGpxQuality,

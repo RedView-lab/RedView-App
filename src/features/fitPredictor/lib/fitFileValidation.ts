@@ -46,10 +46,6 @@ export function validateFitHeader(head: Uint8Array, totalSize: number): FitFileP
   return null;
 }
 
-export function validateFitBytes(bytes: Uint8Array): FitFileProblem | null {
-  return validateFitHeader(bytes, bytes.length) ?? validateFitFileType(bytes);
-}
-
 export async function validateFitFile(file: File): Promise<FitFileProblem | null> {
   if (file.size === 0) return 'empty';
   // Refusé par le bucket de toute façon : on le signale dès la sélection.

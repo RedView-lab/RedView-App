@@ -108,6 +108,18 @@ export const POI_BADGE_REGISTRY: Partial<Record<PoiCategory, PoiBadgeSpec>> = {
   passes:       { color: '#5a5a5a', Icon: IconMountain },
 };
 
+/**
+ * Disque du waypoint (`IconWaypointDot`, r 7 + trait 2,5 sur 20) : 82,5 % de
+ * son emplacement. Les badges POI ronds visent le même diamètre visible.
+ */
+const WAYPOINT_DISC_RATIO = 16.5 / 20;
+/**
+ * Les SVG ronds `dropdown-maps/*` (33 × 33) réservent la marge de leur ombre :
+ * le disque n'en occupe que 19,6 / 33. On agrandit l'image dans un emplacement
+ * inchangé (colonnes alignées) pour que le disque égale celui du waypoint.
+ */
+const ROUND_BADGE_ART_SCALE = WAYPOINT_DISC_RATIO / (19.6 / 33);
+
 const PROVIDED_TIMELINE_ROUND_BADGE_URLS: Partial<Record<PoiCategory, string>> = {
   fountains: '/svgv2/poi/dropdown-maps/water.svg',
   toilets: '/svgv2/poi/dropdown-maps/toilets.svg',
@@ -220,26 +232,29 @@ export function PoiBadge({
   ) : (
     <span
       className="rvi-kind rvi-kind--round"
-      style={{
-        width: size,
-        height: size,
-        position: 'relative',
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: '50%',
-        backgroundColor: POI_BADGE_REGISTRY[category]?.color ?? '#5a5a5a',
-        border: '1.5px solid rgba(255, 255, 255, 0.9)',
-        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.25)',
-        boxSizing: 'border-box',
-      }}
+      style={{ width: size, height: size, position: 'relative', display: 'inline-flex' }}
       aria-hidden
     >
-      {!hideGlyph && POI_BADGE_REGISTRY[category] ? (
-        <span style={{ width: Math.round(size * 0.55), height: Math.round(size * 0.55), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {React.createElement(POI_BADGE_REGISTRY[category]!.Icon, { size: Math.round(size * 0.55) })}
-        </span>
-      ) : null}
+      <span
+        style={{
+          width: Math.round(size * WAYPOINT_DISC_RATIO),
+          height: Math.round(size * WAYPOINT_DISC_RATIO),
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: '50%',
+          backgroundColor: POI_BADGE_REGISTRY[category]?.color ?? '#5a5a5a',
+          border: '1.5px solid rgba(255, 255, 255, 0.9)',
+          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.25)',
+          boxSizing: 'border-box',
+        }}
+      >
+        {!hideGlyph && POI_BADGE_REGISTRY[category] ? (
+          <span style={{ width: Math.round(size * 0.45), height: Math.round(size * 0.45), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {React.createElement(POI_BADGE_REGISTRY[category]!.Icon, { size: Math.round(size * 0.45) })}
+          </span>
+        ) : null}
+      </span>
     </span>
   );
 
@@ -271,6 +286,10 @@ function ProvidedPoiSvgBadge({
 }) {
   const isPin = className?.includes('rvi-kind--pin');
   const height = isPin ? Math.round(size * (48 / 44)) : size;
+  // Rond : image agrandie autour du centre, la marge d'ombre déborde de
+  // l'emplacement (voir ROUND_BADGE_ART_SCALE).
+  const artSize = isPin ? size : Math.round(size * ROUND_BADGE_ART_SCALE);
+  const artHeight = isPin ? height : artSize;
   return (
     <span
       className={`rvi-kind ${className ?? ''}`.trim()}
@@ -280,9 +299,21 @@ function ProvidedPoiSvgBadge({
       <img
         src={url}
         alt=""
-        width={size}
-        height={height}
-        style={{ width: size, height, display: 'block', objectFit: 'contain' }}
+        width={artSize}
+        height={artHeight}
+        style={isPin
+          ? { width: artSize, height: artHeight, display: 'block', objectFit: 'contain' }
+          : {
+            position: 'absolute',
+            left: '50%',
+            top: '50%',
+            width: artSize,
+            height: artHeight,
+            maxWidth: 'none',
+            transform: 'translate(-50%, -50%)',
+            display: 'block',
+            objectFit: 'contain',
+          }}
         draggable={false}
       />
       {showStarBadge && (
@@ -350,19 +381,17 @@ export function KindBadge({
     );
   }
 
+  // La durée d'une pause est déjà la colonne nom : le badge reste une icône
+  // seule, un peu plus petite que les autres, centrée dans le même emplacement
+  // pour garder les colonnes alignées.
   if (kind === 'pause') {
     return (
       <span
         className="rvi-kind rvi-kind--pause"
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+        style={{ width: size, height: size }}
         aria-hidden
       >
-        <IconPauseBadge size={size} />
-        {pauseDurationMin && pauseDurationMin > 0 ? (
-          <span className="rvi-poi-pause-badge__text rvi-poi-pause-badge__text--standalone">
-            {pauseDurationMin} min
-          </span>
-        ) : null}
+        <IconPauseBadge size={Math.round(size * 0.8)} />
       </span>
     );
   }

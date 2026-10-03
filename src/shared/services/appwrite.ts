@@ -26,6 +26,8 @@ export const CUSTOMERS_COLLECTION_ID = 'customers';
 export const SUBSCRIPTIONS_COLLECTION_ID = 'subscriptions';
 export const THUMBNAILS_BUCKET_ID = 'project-thumbnails';
 export const FIT_FILES_BUCKET_ID = 'itinerary-fit-files';
+/** Charges utiles des gros projets (gzip), trop lourdes pour l'attribut `projects.data`. */
+export const PROJECT_PAYLOADS_BUCKET_ID = 'project-payloads';
 
 export const APPWRITE_AUTH_STORAGE_KEY = 'redview:appwrite-session';
 

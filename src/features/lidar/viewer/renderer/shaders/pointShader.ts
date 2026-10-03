@@ -197,7 +197,10 @@ fn shade_main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let intensity = f32(w1 >> 24u) / 255.0;
 
   var base = unpack4x8unorm(w2).rgb;
-  if (camera.colorMode > 1.5) {
+  if (camera.colorMode > 2.5) {
+    // Uniform grey: only the lighting and EDL draw the relief.
+    base = vec3<f32>(0.8);
+  } else if (camera.colorMode > 1.5) {
     base = classificationColor(cls);
   } else if (camera.colorMode > 0.5) {
     base = vec3<f32>(pow(intensity, 0.8));

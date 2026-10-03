@@ -29,6 +29,10 @@ function buildDemResponse(pngBlob, demSource, shortCache, healthStatus = 'ok') {
 
 // 204 No Content: canonical "no tile here" signal for the terrain renderer.
 // The renderer reuses the parent tile mesh instead of rendering a hole.
+// 204 reason of a build whose IGN work was cancelled (see computeDemRequest):
+// a request coalesced onto it rebuilds instead of keeping that empty answer.
+const DEM_CANCELLED_REASON = 'cancelled';
+
 function noTileResponse(reason) {
   return new Response(null, {
     status: 204,
@@ -86,6 +90,18 @@ function resolveDemRequestPurposeFromRequest(request) {
     return null;
   } catch {
     return null;
+  }
+}
+
+// The map's own terrain tiles carry `rv-src=map` (buildDemTilesTemplate in
+// features/map3d/hooks/useMap/demTiles.ts). Other /dem-tiles readers (sun
+// shadows, slope, prefetch, parent overzoom) never do: only the map's
+// requests are judged by the DEM_WANTED_TILES snapshots it posts.
+function isMapDemTileRequest(request) {
+  try {
+    return new URL(request.url, self.location.origin).searchParams.get('rv-src') === 'map';
+  } catch {
+    return false;
   }
 }
 

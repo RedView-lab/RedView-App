@@ -46,7 +46,7 @@ export function AxisDropdown({
         className="rvc-center-analysis__axis-picker"
         ariaLabel={t('Choisir la couleur de {{name}}', { name: translatedAxisLabel })}
       >
-        <span className="rvc-center-analysis__axis-meta" aria-hidden="true">
+        <span className="rvc-center-analysis__axis-meta" aria-hidden="true" title={translatedAxisLabel}>
           <span className="rvc-center-analysis__axis-label">{translatedAxisLabel}</span>
           <span
             className={`rvc-center-analysis__axis-line${isDashed ? ' rvc-center-analysis__axis-line--dashed' : ''}`}

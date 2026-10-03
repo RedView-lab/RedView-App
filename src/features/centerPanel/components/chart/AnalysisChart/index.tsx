@@ -581,10 +581,15 @@ export const AnalysisChart = memo(function AnalysisChart({
     return rows;
   }, [alertOverlay, hoverXValue]);
 
+  // Tronçon « Pente » sous le pointeur : même découpage que la couleur affichée.
+  const hoverSlopeSegment = useMemo(
+    () => (hoverXValue != null && slopeSegments ? slopeSegmentAtX(slopeSegments, hoverXValue) : null),
+    [hoverXValue, slopeSegments],
+  );
+
   const hoverSlopeRows = useMemo<HoverCardRow[]>(() => {
-    if (hoverXValue == null || !slopeOverlay || !slopeSegments) return [];
-    // Même tronçon que la couleur affichée : pente moyenne et longueur.
-    const segment = slopeSegmentAtX(slopeSegments, hoverXValue);
+    if (!slopeOverlay) return [];
+    const segment = hoverSlopeSegment;
     if (!segment) return [];
     const node = chartNodes.find((entry) => entry.itinerary.id === slopeOverlay.itineraryId);
     const seriesEntry = series.find((entry) => entry.itineraryId === slopeOverlay.itineraryId);
@@ -611,7 +616,7 @@ export const AnalysisChart = memo(function AnalysisChart({
       slopeLabel: `${translateAppText('Pente moy.', undefined, locale)} ${value} % · ${length}`,
       slopeColor: SLOPE_COLOR_CLASSES[segment.classIndex]?.color,
     }];
-  }, [chartNodes, hoverXValue, series, slopeOverlay, slopeSegments]);
+  }, [chartNodes, hoverSlopeSegment, series, slopeOverlay]);
 
   const hoverRows = useMemo(
     () => [...(hoverData ?? []), ...hoverBackdropData, ...hoverChartNodesData, ...hoverAlertRows, ...hoverSlopeRows],
@@ -724,9 +729,7 @@ export const AnalysisChart = memo(function AnalysisChart({
       const ratioX = x / rect.width;
       const currentXVal = plotXDomain.min + ratioX * (plotXDomain.max - plotXDomain.min);
 
-      if (wasDragging) {
-        const minX = Math.min(dragStart.xValue, currentXVal);
-        const maxX = Math.max(dragStart.xValue, currentXVal);
+      const selectRange = (minX: number, maxX: number) => {
         const range = {
           startX: minX,
           endX: maxX,
@@ -749,11 +752,21 @@ export const AnalysisChart = memo(function AnalysisChart({
           onViewportChange?.({ detailZoom: nextDetailZoom, detailOffset: nextOffset });
           onDetailOffsetChange?.(nextOffset);
         }
-      } else {
-        // Clic simple sans glissement : centrage direct
-        setActiveDragRange(null);
-        onPlotClick?.(dragStart.xValue);
+      };
+
+      if (wasDragging) {
+        selectRange(Math.min(dragStart.xValue, currentXVal), Math.max(dragStart.xValue, currentXVal));
+        return;
       }
+      // Clic simple sur un tronçon « Pente » : comme un glisser sur tout le tronçon.
+      const slopeSegment = slopeSegments ? slopeSegmentAtX(slopeSegments, dragStart.xValue) : null;
+      if (slopeSegment && slopeSegment.endX > slopeSegment.startX) {
+        selectRange(slopeSegment.startX, slopeSegment.endX);
+        return;
+      }
+      // Clic simple sans glissement : centrage direct
+      setActiveDragRange(null);
+      onPlotClick?.(dragStart.xValue);
     };
 
     window.addEventListener('pointermove', handleWindowPointerMove);
@@ -771,6 +784,7 @@ export const AnalysisChart = memo(function AnalysisChart({
     plotAreaRef,
     plotXDomain.max,
     plotXDomain.min,
+    slopeSegments,
     xDomain.max,
     xDomain.min,
   ]);
@@ -856,6 +870,7 @@ export const AnalysisChart = memo(function AnalysisChart({
       plotAreaRef={plotAreaRef}
       onPlotPointerDown={handlePointerDown}
       onPlotDoubleClick={handleResetZoom}
+      plotPointerOverSegment={hoverSlopeSegment != null}
       onResetZoom={handleResetZoom}
       isZoomed={isZoomed}
       selectionBand={selectionBand}

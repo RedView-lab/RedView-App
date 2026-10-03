@@ -1,8 +1,6 @@
 import type { DemTileProfile } from '../hooks/useMap/demTiles';
 import type { Dem3dQuality } from './dem3dQualityBus';
 
-export type Dem3dSelectionId = 'slow-040' | 'terrain-1m' | 'fast-30m';
-
 export interface Dem3dSelectionState {
   quality: Dem3dQuality;
   profile: DemTileProfile;

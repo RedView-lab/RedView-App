@@ -38,9 +38,3 @@ export function formatSpeedOrPace(
   if (typeof kmh !== 'number' || !Number.isFinite(kmh) || kmh <= 0) return '—';
   return `${kmh.toFixed(digits)} km/h`;
 }
-
-/** Pace as an Excel time value (fraction of a day) for an `m:ss` number format. */
-export function paceToExcelTime(kmh: number | null | undefined): number | null {
-  const pace = kmhToPaceSecPerKm(kmh);
-  return pace == null ? null : pace / 86400;
-}

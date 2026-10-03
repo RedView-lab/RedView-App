@@ -19,6 +19,11 @@
 async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
   const t0 = performance.now();
   const requestPurpose = resolveDemRequestPurposeFromRequest(_request);
+  // Set only for the map's own tile requests: their IGN work is dropped once
+  // the map stops waiting on the tile (DEM_WANTED_TILES), and never before.
+  const mapTile = _depth === 0 && requestPurpose == null && isMapDemTileRequest(_request)
+    ? { key: `${z}/${x}/${y}`, requestedAt: Date.now() }
+    : null;
   const inLiDARRiskRegion = isExpertFallbackRiskTile(z, x, y);
   const cacheKey = buildDemCacheKey(z, x, y, demProfile);
   const hotKey = cacheKey.url;
@@ -192,7 +197,7 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
     const raceIGNBorderTile = considerSwiss && tileTrulyTouchesFrance && useFranceMNS;
     let ignResultPromise = null;
     if (raceIGNBorderTile) {
-      ignResultPromise = buildIGNTile(z, x, y, franceClass, requestPurpose);
+      ignResultPromise = buildIGNTile(z, x, y, franceClass, requestPurpose, mapTile);
     }
     if (z >= 12 && typeof swLog !== 'undefined' && swLog.isDebug()) {
       swLog.debug(
@@ -306,13 +311,29 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
     if (!pngBlob && tileTrulyTouchesFrance && useFranceMNS) {
       const ignResult = ignResultPromise
         ? await ignResultPromise
-        : await buildIGNTile(z, x, y, franceClass, requestPurpose);
+        : await buildIGNTile(z, x, y, franceClass, requestPurpose, mapTile);
+      // Cancelled and not retried: the map no longer waits on this tile (or
+      // the retries ran out). Commit nothing — no stand-in, no bare-earth or
+      // 30 m fallback: the next request for the tile builds it from scratch.
+      if (ignResult?.cancelled) {
+        if (mapTile && isMapDemTileWanted(mapTile)) {
+          scheduleSurfaceMnsRecovery(cache, cacheKey, z, x, y, franceClass, demProfile);
+        }
+        return noTileResponse(DEM_CANCELLED_REASON);
+      }
       if (ignResult) {
         upgradePending = ignResult.pendingFetches;
         if (ignResult.pendingFetches?.length) upgradeSourceHint = 'ign';
         if (ignResult.elevations) {
           ignHadSomeData = true;
           franceHadSomeData = true;
+          // Built by the legacy correlation-MNS path because the LiDAR HD WMS
+          // failed transiently (timeout, 5xx): coarser, partly 30 m prefilled.
+          // Provisional like the stand-ins below — short-cached and rebuilt
+          // from the WMS — instead of the tile's permanent answer.
+          if (isProvisionalMnsBuild(ignResult, z, x, y)) {
+            franceSurfaceTransient = true;
+          }
           if (spainBorderFillPromise && !ignResult.blob) {
             try {
               const sp = await spainBorderFillPromise;
@@ -404,7 +425,8 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
 
     // 3a. Verified terrain path for slope math & uniform 1m LiDAR fallback.
     if (!pngBlob && tileTrulyTouchesFrance && (useFranceTerrainWms || useFranceMNS || useFranceHighres)) {
-      const terrainResult = await buildIGNTerrainTile(z, x, y, { purpose: requestPurpose });
+      const terrainResult = await buildIGNTerrainTile(z, x, y, { purpose: requestPurpose, mapTile });
+      if (terrainResult?.cancelled) return noTileResponse(DEM_CANCELLED_REASON);
       if (terrainResult?.elevations) {
         franceHadSomeData = true;
         await acquireComposite();

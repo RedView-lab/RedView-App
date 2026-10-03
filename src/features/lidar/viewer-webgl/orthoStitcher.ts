@@ -8,6 +8,8 @@
 // pre-compute per-vertex UVs.
 
 import { toWgs84, isJgd2011Crs } from '../lib/coordConvert';
+import { fetchEsriImageryTile } from '../lib/nz/esriImagery';
+import { beneluxOrthoTileUrl } from '../lib/beneluxOrtho';
 import type { PointCloudBounds, DetectedCrs } from '../types';
 import type { CornerUV } from './terrainWorker';
 
@@ -57,9 +59,13 @@ async function fetchTile(col: number, row: number, crs: DetectedCrs): Promise<Im
     } catch {
       return null;
     }
+  } else if (crs === 'RD_NEW' || crs === 'BL72') {
+    url = beneluxOrthoTileUrl(crs, WMTS_ZOOM, col, row)!;
   } else if (crs === 'NZTM2000') {
-    // New Zealand — ESRI World Imagery (Web-Mercator, public + CORS)
-    url = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${WMTS_ZOOM}/${row}/${col}`;
+    // New Zealand — Esri World Imagery, falling back to the closest ancestor
+    // where z19 only exists as a "Map data not yet available" placeholder.
+    // The caller draws the bitmap into a full tile cell, which upscales it.
+    return fetchEsriImageryTile(WMTS_ZOOM, col, row);
   } else {
     url =
       `https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0` +

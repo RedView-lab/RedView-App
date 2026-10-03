@@ -22,7 +22,15 @@
 // ---------------------------------------------------------------------------
 // Cache stamp — bumped on every cache-invalidating change so the browser
 // detects a byte diff in this file and triggers install→activate→purge.
-// Current: dem-tiles-v51-mns-1x / radar-v3 / dem-negative-v29 / slope-tiles-v3-aligned / vhr-tiles-v1
+// Current: dem-tiles-v52-gesture-cancel / radar-v3 / dem-negative-v30 / slope-tiles-v3-aligned / vhr-tiles-v1
+// 2026-10-02 gesture-cancel: a camera gesture (rotate, pitch, pan, zoom) no
+// longer flushes/aborts the LiDAR fetches of the terrain tiles still on
+// screen — they used to fall back to the correlation MNS / AWS 30 m and stay
+// cached that way (relief "jumping" to 30 m when turning the camera). The
+// page posts the DEM tiles it still waits on (DEM_WANTED_TILES): only the
+// others' work is dropped. A cancelled fetch is retried or answered 204
+// uncached, never committed as a fallback; a legacy-MNS surface is
+// provisional (short cache + WMS recovery). MAP_CACHE_EPOCH bumped (purge).
 // 2026-10-02 vhr-ortho: /vhr-tiles overlay (satellite basemap, z18–21, 512 px) —
 // IGN PCRS 5 cm + THR 5–10 cm via WMS-R in EPSG:3857, gated by per-layer
 // z14 coverage masks, transparent elsewhere so Mapbox Satellite shows.

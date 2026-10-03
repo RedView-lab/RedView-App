@@ -181,15 +181,7 @@ export function buildVpsTileUrl(variable: string, isoHour: string, tileFormat: s
 
 const tileImageCache = new Map<string, HTMLImageElement>();
 const inFlightImagePromises = new Map<string, Promise<HTMLImageElement>>();
-const MAX_IMAGE_CACHE_SIZE = 128; // Holds 48 hours for multiple metrics easily
-
-export function hasCachedTileImage(url: string): boolean {
-  return tileImageCache.has(url);
-}
-
-export function getCachedTileImage(url: string): HTMLImageElement | undefined {
-  return tileImageCache.get(url);
-}
+const MAX_IMAGE_CACHE_SIZE = 128;
 
 /**
  * Resilient tile image loader.
@@ -319,5 +311,3 @@ export function prefetchAdjacentHours(
     }
   }, 100);
 }
-
-

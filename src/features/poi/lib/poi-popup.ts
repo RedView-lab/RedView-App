@@ -27,7 +27,6 @@ export interface PoiPopupState {
   autoReason?: PoiAutoSortReason | null;
   pauseEnabled: boolean;
   pauseDurationMin: number;
-  manualTraceEnabled: boolean;
   isDurationDropdownOpen?: boolean;
 }
 
@@ -44,7 +43,6 @@ export interface UsePoiPopupActions {
     nextEnabled: boolean,
     durationMin: number,
   ) => void;
-  onToggleManualTrace?: (feature: PoiFeature, nextEnabled: boolean) => void;
   onOpenStreetView?: (feature: PoiFeature) => void;
   onDelete?: (feature: PoiFeature) => void;
   onSelectPoi?: (feature: PoiFeature) => void;
@@ -54,7 +52,6 @@ const DEFAULT_POPUP_STATE: PoiPopupState = {
   favoriteEnabled: false,
   pauseEnabled: false,
   pauseDurationMin: 5,
-  manualTraceEnabled: false,
   isDurationDropdownOpen: false,
 };
 
@@ -166,14 +163,6 @@ function buildPopupHtml(feature: PoiFeature, state: PoiPopupState): string {
         </div>
       </div>
 
-      <div class="rv-poi-popup__divider"></div>
-
-      <button type="button" class="rv-poi-popup__toggle-row rv-poi-popup__toggle-row--button" data-action="manual-trace" aria-pressed="${state.manualTraceEnabled}">
-        <span class="rv-poi-popup__checkbox${state.manualTraceEnabled ? ' is-active' : ''}">
-          <img src="${UI_ICON_URLS.check}" alt="" class="rv-poi-popup__checkbox-icon" />
-        </span>
-        <span class="rv-poi-popup__toggle-label rv-poi-popup__toggle-label--solid">Tracé manuel</span>
-      </button>
 
       <div class="rv-poi-popup__divider"></div>
 
@@ -278,12 +267,6 @@ export function buildPopupContent(
       }
     });
   }
-
-  bindClick('[data-action="manual-trace"]', () => {
-    const nextState = { ...state, manualTraceEnabled: !state.manualTraceEnabled, isDurationDropdownOpen: false };
-    actions.onToggleManualTrace?.(feature, nextState.manualTraceEnabled);
-    refresh(nextState);
-  });
 
   bindClick('[data-action="start-here"]', () => {
     actions.onStartHere?.(feature);

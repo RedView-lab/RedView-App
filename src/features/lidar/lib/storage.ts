@@ -1,7 +1,7 @@
 import type { TileCoord, CachedTileInfo } from '../types';
 import { translateAppText } from '@/shared/i18n/config';
-import { buildTileFileName } from './coordConvert';
-import { LIDAR_OPFS_DIR, lodCacheKey } from './lodCache';
+import { parseTileFootprint, tileCoordFileName } from './coordConvert';
+import { LIDAR_OPFS_DIR, colourRevisionSuffix, lodCacheKey } from './lodCache';
 
 const LIDAR_DIR = LIDAR_OPFS_DIR;
 const CACHE_NAME = 'redview-lidar-hd-v1';
@@ -54,7 +54,7 @@ async function writeBufferChunk(
 }
 
 function tileKey(coord: TileCoord): string {
-  return `${buildTileFileName(coord.xKm, coord.yKm, coord.projection, coord.altRef)}.copc.laz`;
+  return tileCoordFileName(coord);
 }
 
 export function hasValidLasSignature(data: ArrayBuffer): boolean {
@@ -230,14 +230,19 @@ export async function listCachedTiles(): Promise<CachedTileInfo[]> {
   const tilesMap = new Map<string, CachedTileInfo>();
 
   const parseTileName = (name: string, sizeBytes: number, cachedAt: number) => {
-    const match = name.match(/^LHD_(\w+)_([-\w]+)_([-\w]+)_PTS_(\w+)_(\w+)\.copc\.laz$/);
+    // Dalle-fichier (Japon, NZ) : `…_<alt>~minX,minY,maxX,maxY.copc.laz`.
+    const footprintMatch = name.match(/^(.+)~([-\d,]+)\.copc\.laz$/);
+    const footprint = footprintMatch ? parseTileFootprint(footprintMatch[2]) : null;
+    if (footprintMatch && !footprint) return;
+    const baseName = footprintMatch ? `${footprintMatch[1]}.copc.laz` : name;
+    const match = baseName.match(/^LHD_(\w+)_([-\w]+)_([-\w]+)_PTS_(\w+)_(\w+)\.copc\.laz$/);
     if (!match) return;
 
     const [, territory, xStr, yStr, projection, altRef] = match;
     const isSwiss = territory === 'CH';
     const isNz = territory === 'NZ';
     const isJapan = territory === 'JP';
-    const isSwCorner = isSwiss || isNz || isJapan;
+    const isSwCorner = isSwiss || isNz || isJapan || territory === 'NL' || territory === 'BE';
 
     let xKm = parseInt(xStr, 10);
     let yKm = parseInt(yStr, 10);
@@ -253,6 +258,7 @@ export async function listCachedTiles(): Promise<CachedTileInfo[]> {
         territory: territory as any,
         projection: (isSwiss ? 'CH1903_LV95' : isNz ? 'NZTM2000' : projection) as any,
         altRef: altRef as any,
+        ...(footprint ? { footprint } : {}),
       },
       fileName: name,
       sizeBytes,
@@ -345,8 +351,12 @@ export async function clearAllTiles(): Promise<void> {
 // splatted the points with a step that did not match the mesh node spacing.
 const LEGACY_DERIVED_SUFFIXES = ['.colorized_v3', '.colorized_v4', '.terrain_hd_v2', '.terrain_hd_v3'] as const;
 
+// A tile whose colours were revised (`colourRevisionSuffix`) also drops its
+// unrevised LOD/terrain caches.
 function legacyDerivedKeys(baseName: string): string[] {
-  return LEGACY_DERIVED_SUFFIXES.map((suffix) => baseName.replace(/(\.copc)?\.laz$/, suffix));
+  const suffixes: string[] = [...LEGACY_DERIVED_SUFFIXES];
+  if (colourRevisionSuffix(baseName)) suffixes.push('.lod_v1', '.terrain_hd_v4');
+  return suffixes.map((suffix) => baseName.replace(/(\.copc)?\.laz$/, suffix));
 }
 
 async function removeLegacyDerivedCaches(dir: FileSystemDirectoryHandle | null, lazFileName: string): Promise<void> {
@@ -358,7 +368,7 @@ async function removeLegacyDerivedCaches(dir: FileSystemDirectoryHandle | null, 
 // --- Terrain mesh cache ---
 
 function terrainKey(baseName: string): string {
-  return baseName.replace(/\.copc\.laz$/, '.terrain_hd_v4');
+  return baseName.replace(/\.copc\.laz$/, `.terrain_hd_v4${colourRevisionSuffix(baseName)}`);
 }
 
 export interface TerrainCache {

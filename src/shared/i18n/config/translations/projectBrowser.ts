@@ -209,7 +209,7 @@ export const projectBrowserTranslationPairs: ReadonlyArray<AppTranslationPair> =
   { fr: 'Ouvrir le dossier {{name}}', en: 'Open folder {{name}}' },
   { fr: 'Entrer dans le dossier {{name}}', en: 'Enter folder {{name}}' },
   { fr: 'Connexion au cloud impossible : les modifications sont conservées sur cet appareil et seront synchronisées automatiquement.', en: 'Cannot reach the cloud: your changes are kept on this device and will be synced automatically.' },
-  { fr: 'Projet trop volumineux pour la sauvegarde cloud (limite 12 Mo compressés). Les modifications sont conservées sur cet appareil : allégez le projet ou exportez-le.', en: 'Project too large for cloud backup (12 MB compressed limit). Your changes are kept on this device: slim the project down or export it.' },
+  { fr: 'Projet trop volumineux pour la sauvegarde cloud (limite 30 Mo compressés, environ 100 Mo de projet). Les modifications sont conservées sur cet appareil : allégez le projet ou exportez-le.', en: 'Project too large for cloud backup (30 MB compressed limit, about 100 MB of project). Your changes are kept on this device: slim the project down or export it.' },
   { fr: 'Session expirée : reconnectez-vous pour synchroniser vos projets.', en: 'Session expired: sign in again to sync your projects.' },
   { fr: 'Ce projet a été modifié sur un autre appareil.', en: 'This project was modified on another device.' },
   { fr: 'Ce projet a été supprimé.', en: 'This project has been deleted.' },

@@ -301,6 +301,7 @@ export function mergeItineraryProject(
       mergedItinerary.forbiddenZones = forbiddenZones;
       delete mergedItinerary.poiFeatures;
       delete mergedItinerary.poiSearchSignature;
+      delete mergedItinerary.poiRouteSignature;
       delete mergedItinerary.poiAutoSort;
       delete mergedItinerary.routeAudit;
       delete mergedItinerary.pendingTraceExtension;

@@ -9,6 +9,17 @@ import type {
 } from '../../types';
 import type { MergeItineraryConnectorSegment, MergeItineraryProjectResult, SplitItineraryProjectResult } from '../../lib/project';
 
+/**
+ * Identity of a copy already made elsewhere (LiDAR viewer), so both sides keep
+ * referring to the same itinerary.
+ */
+export interface DuplicateItineraryOverrides {
+  id?: string;
+  name?: string;
+  color?: string;
+  visible?: boolean;
+}
+
 export interface TraceHistoryEntry {
   itineraryId: string;
   before: ItineraryProject;
@@ -62,7 +73,10 @@ export interface ProjectStoreValue {
   setItineraryAnalysisVisibility: (id: string, visible: boolean) => void;
   setItineraryRenderMode: (id: string, mode: RouteRenderMode) => void;
   setItineraryOpacity: (id: string, opacity: number) => void;
-  duplicateItinerary: (id: string) => { createdItineraryId: string; createdItineraryName: string } | null;
+  duplicateItinerary: (
+    id: string,
+    overrides?: DuplicateItineraryOverrides,
+  ) => { createdItineraryId: string; createdItineraryName: string } | null;
   removeItinerary: (id: string) => boolean;
   clearItineraryRoute: (id: string) => void;
   reverseItineraryGpx: (id: string) => boolean;

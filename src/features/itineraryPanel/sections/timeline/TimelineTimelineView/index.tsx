@@ -39,6 +39,9 @@ const HOUR_ZOOM_MAX = 3.0;
 const HOUR_ZOOM_FLOOR = 0.05;
 const NAVIGATOR_MIN_FRACTION = 0.04;
 const CANVAS_INSETS_PX = TIMELINE_VIEWPORT_TOP_INSET_PX + TIMELINE_VIEWPORT_BOTTOM_INSET_PX;
+/** Écart minimal entre deux graduations horaires (libellé de 18 px + air). */
+const HOUR_LABEL_MIN_SPACING_PX = 24;
+const HOUR_LABEL_STEPS_H = [1, 2, 3, 4, 6, 12, 24];
 
 export function TimelineTimelineView({
   items,
@@ -263,34 +266,6 @@ export function TimelineTimelineView({
     () => resolveMarkerKmStep(config, markerStepKm),
     [config, markerStepKm],
   );
-  const kmMarkers = useMemo(
-    () =>
-      buildKmMarkers(
-        items,
-        prediction,
-        reference,
-        displayDayKeySet,
-        startMinutes,
-        pixelsPerMinute,
-        canvasHeight,
-        kmMarkerStep,
-        maxDistanceKm,
-        stopAnchors,
-      ),
-    [
-      canvasHeight,
-      displayDayKeySet,
-      items,
-      kmMarkerStep,
-      maxDistanceKm,
-      pixelsPerMinute,
-      prediction,
-      reference,
-      startMinutes,
-      stopAnchors,
-    ],
-  );
-
   const handleMovePauseScheduled = useCallback(
     (id: string, scheduledElapsedSeconds: number) => {
       if (!prediction) return;
@@ -356,27 +331,65 @@ export function TimelineTimelineView({
     return () => onRegisterPauseInsertionResolver?.(null);
   }, [onRegisterPauseInsertionResolver, resolveVisiblePauseInsertionDistanceKm]);
 
+  // Zoom bas (« tout voir ») : une heure peut ne faire que quelques pixels, on
+  // espace alors graduations et lignes de grille de 2, 3, 4… heures.
+  const hourStepMinutes = useMemo(
+    () => (HOUR_LABEL_STEPS_H.find((step) => step * hourRowHeightPx >= HOUR_LABEL_MIN_SPACING_PX) ?? 24) * 60,
+    [hourRowHeightPx],
+  );
+
   const hourMarks = useMemo(
     () => {
-      const marks = [startMinutes];
-      let nextHourMinute = Math.ceil(startMinutes / 60) * 60;
-
-      if (nextHourMinute <= startMinutes) {
-        nextHourMinute += 60;
+      const marks: number[] = [];
+      for (let minute = startMinutes; minute < endMinutes; minute += hourStepMinutes) {
+        marks.push(minute);
       }
-
-      while (nextHourMinute < endMinutes) {
-        marks.push(nextHourMinute);
-        nextHourMinute += 60;
-      }
-
-      if (marks[marks.length - 1] !== endMinutes) {
-        marks.push(endMinutes);
-      }
-
+      marks.push(endMinutes);
       return marks;
     },
-    [endMinutes, startMinutes],
+    [endMinutes, hourStepMinutes, startMinutes],
+  );
+
+  // La dernière borne n'est étiquetée que si elle ne touche pas la précédente.
+  const hourLabelMarks = useMemo(() => {
+    if (hourMarks.length < 2) return hourMarks;
+    const last = hourMarks[hourMarks.length - 1]!;
+    const previous = hourMarks[hourMarks.length - 2]!;
+    return (last - previous) * pixelsPerMinute >= HOUR_LABEL_MIN_SPACING_PX
+      ? hourMarks
+      : hourMarks.slice(0, -1);
+  }, [hourMarks, pixelsPerMinute]);
+
+  const kmMarkers = useMemo(
+    () =>
+      buildKmMarkers(
+        items,
+        prediction,
+        reference,
+        displayDayKeySet,
+        startMinutes,
+        pixelsPerMinute,
+        canvasHeight,
+        kmMarkerStep,
+        maxDistanceKm,
+        stopAnchors,
+        hourLabelMarks.map(
+          (markMinute) => (markMinute - startMinutes) * pixelsPerMinute + TIMELINE_VIEWPORT_TOP_INSET_PX,
+        ),
+      ),
+    [
+      canvasHeight,
+      displayDayKeySet,
+      hourLabelMarks,
+      items,
+      kmMarkerStep,
+      maxDistanceKm,
+      pixelsPerMinute,
+      prediction,
+      reference,
+      startMinutes,
+      stopAnchors,
+    ],
   );
 
   const currentTimeLineTopPx = useMemo(() => {
@@ -615,6 +628,7 @@ export function TimelineTimelineView({
         onVerticalNavigatorReset={handleVerticalNavigatorReset}
         onZoomWheel={handleZoomWheel}
         hourMarks={hourMarks}
+        hourLabelMarks={hourLabelMarks}
         hourRowHeightPx={hourRowHeightPx}
         kmMarkers={kmMarkers}
         canvasStyle={canvasStyle}

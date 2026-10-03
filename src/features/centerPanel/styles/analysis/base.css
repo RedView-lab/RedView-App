@@ -168,12 +168,6 @@
   outline-offset: 2px;
 }
 
-.rvc-center-analysis__axis-label {
-  width: 32px;
-  text-align: right;
-  flex-shrink: 0;
-}
-
 .rvc-center-analysis__axis-line {
   width: 12px;
   height: 2px;

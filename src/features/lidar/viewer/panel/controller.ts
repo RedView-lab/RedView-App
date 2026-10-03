@@ -3,7 +3,7 @@ import { ensureViewerPanel } from './template';
 
 export type SnowModeKey = 'off' | 'cover' | 'thickness';
 export type ViewerEngineKey = 'webgpu' | 'webgl';
-export type PointColorModeKey = 'rgb' | 'intensity' | 'classification';
+export type PointColorModeKey = 'rgb' | 'grey' | 'intensity' | 'classification';
 
 export const POINT_SIZE_MIN = 0.02;
 export const POINT_SIZE_MAX = 1.0;
@@ -67,6 +67,7 @@ const SNOW_MODE_LABELS: Record<Exclude<SnowModeKey, 'off'>, string> = {
 
 const COLOR_MODE_LABELS: Record<PointColorModeKey, string> = {
   rgb: 'Couleurs réelles',
+  grey: 'Gris (relief)',
   intensity: 'Intensité LiDAR',
   classification: 'Classification',
 };

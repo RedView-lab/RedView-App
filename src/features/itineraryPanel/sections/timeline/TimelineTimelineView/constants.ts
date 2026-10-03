@@ -1,8 +1,6 @@
-export const RAIL_HEADER_HEIGHT_PX = 30;
 export const RAIL_ITEM_HEIGHT_PX = 32;
 export const BASE_HOUR_ROW_HEIGHT_PX = 96;
 export const DEFAULT_START_MINUTES = 8 * 60;
-export const MIN_TIMELINE_HOURS = 1;
 export const DAY_WINDOW_DAYS = 6;
 export const KM_MARKER_MIN_STEP = 25;
 export const MIN_RENDER_DURATION_MIN = 15;

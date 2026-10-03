@@ -1,5 +1,7 @@
 import type { PointCloudData, DetectedCrs } from '../types';
 import { toWgs84, isJgd2011Crs } from './coordConvert';
+import { fetchEsriImageryTile } from './nz/esriImagery';
+import { beneluxOrthoTileUrl } from './beneluxOrtho';
 
 const WMTS_ZOOM = 19;
 const TILE_SIZE = 256;
@@ -18,14 +20,18 @@ const SWISS_ORTHO_URL = (z: number, x: number, y: number) => {
   return `https://wmts${sub}.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/${z}/${x}/${y}.jpeg`;
 };
 
-// ESRI World Imagery / NZ Basemaps — High resolution aerial imagery for New Zealand
-const NZ_ORTHO_URL = (z: number, x: number, y: number) =>
-  `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
-
+// New Zealand: Esri World Imagery through `fetchEsriImageryTile`, which skips
+// Esri's "Map data not yet available" placeholders (see nz/esriImagery.ts).
 function orthoUrlForCrs(crs: DetectedCrs, z: number, x: number, y: number): string {
   if (crs === 'CH1903_LV95') return SWISS_ORTHO_URL(z, x, y);
-  if (crs === 'NZTM2000') return NZ_ORTHO_URL(z, x, y);
-  return IGN_ORTHO_URL(z, x, y);
+  return beneluxOrthoTileUrl(crs, z, x, y) ?? IGN_ORTHO_URL(z, x, y);
+}
+
+async function fetchOrthoBitmap(crs: DetectedCrs, z: number, x: number, y: number): Promise<ImageBitmap | null> {
+  if (crs === 'NZTM2000') return fetchEsriImageryTile(z, x, y);
+  const response = await fetch(orthoUrlForCrs(crs, z, x, y));
+  if (!response.ok) return null;
+  return createImageBitmap(await response.blob());
 }
 
 let _sharedOrthoCanvas: OffscreenCanvas | null = null;
@@ -74,11 +80,8 @@ async function fetchOrthoTile(
       }
     }
 
-    const response = await fetch(orthoUrlForCrs(crs, zoom, tileX, tileY));
-    if (!response.ok) return null;
-
-    const blob = await response.blob();
-    const bitmap = await createImageBitmap(blob);
+    const bitmap = await fetchOrthoBitmap(crs, zoom, tileX, tileY);
+    if (!bitmap) return null;
     const ctx = getSharedOrthoCtx(TILE_SIZE, TILE_SIZE);
     ctx.clearRect(0, 0, TILE_SIZE, TILE_SIZE);
     ctx.drawImage(bitmap, 0, 0, TILE_SIZE, TILE_SIZE);

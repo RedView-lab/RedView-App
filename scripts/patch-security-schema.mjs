@@ -1,7 +1,7 @@
 /**
  * Script de durcissement et mise à jour des permissions Appwrite existantes.
  * Met à jour les collections `customers`, `subscriptions`, `projects`, `project_folders`
- * et les buckets `project-thumbnails` / `itinerary-fit-files`.
+ * et les buckets `project-thumbnails` / `itinerary-fit-files` / `project-payloads`.
  *
  * Usage:
  *   node scripts/patch-security-schema.mjs
@@ -104,13 +104,13 @@ async function main() {
     console.warn(`   ⚠️ Erreur mise à jour 'subscriptions' (${subsRes.status}):`, subsRes.data?.message);
   }
 
-  // 3. Durcir les buckets 'project-thumbnails' et 'itinerary-fit-files'.
+  // 3. Durcir les buckets 'project-thumbnails', 'itinerary-fit-files' et 'project-payloads'.
   // Au niveau bucket : création seulement. La lecture/écriture est portée par
   // chaque fichier (Role.user(owner)). Un read("any") / read("users") ici
   // exposerait les miniatures ou les fichiers FIT de TOUS les utilisateurs.
   // On relit la config actuelle pour ne modifier QUE les permissions (un PUT
   // partiel remettrait taille max / extensions à leurs valeurs par défaut).
-  for (const bucketId of ['project-thumbnails', 'itinerary-fit-files']) {
+  for (const bucketId of ['project-thumbnails', 'itinerary-fit-files', 'project-payloads']) {
     console.log(`
 3. Sécurisation du bucket '${bucketId}' (permissions: ['create("users")'], fileSecurity: true)...`);
     const current = await api(`/storage/buckets/${bucketId}`);

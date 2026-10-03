@@ -25,10 +25,6 @@ export const MULTI_POI_MARKER_WIDTH_PX = 34;
 export const MULTI_POI_MARKER_HEIGHT_PX = 38;
 export const POI_CLUSTER_DISTANCE_WINDOW_KM = 1.0;
 export const POI_CLUSTER_MIN_COUNT = 10;
-export const POI_CLUSTER_OVERLAP_X_PX = 36;
-export const POI_CLUSTER_OVERLAP_Y_PX = 22;
-export const POI_CLUSTER_OVERLAP_X_PX_COMPACT = 40;
-export const POI_CLUSTER_OVERLAP_Y_PX_COMPACT = 32;
 export const POI_CLUSTER_COMPACT_VISIBLE_FRACTION = 0.88;
 
 export interface ChartItineraryNode {

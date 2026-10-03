@@ -40,6 +40,8 @@ interface AnalysisChartLayoutProps {
   plotAreaRef: RefObject<HTMLDivElement | null>;
   onPlotPointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onPlotDoubleClick?: () => void;
+  /** Pointeur sur un tronçon « Pente » cliquable (le clic le sélectionne). */
+  plotPointerOverSegment?: boolean;
   onResetZoom?: () => void;
   isZoomed?: boolean;
   selectionBand?: {
@@ -292,6 +294,7 @@ export function AnalysisChartLayout({
   plotAreaRef,
   onPlotPointerDown,
   onPlotDoubleClick,
+  plotPointerOverSegment = false,
   onResetZoom,
   isZoomed,
   selectionBand,
@@ -372,7 +375,7 @@ export function AnalysisChartLayout({
 
         <div
           ref={plotAreaRef}
-          className="rvchart__plotarea"
+          className={`rvchart__plotarea${plotPointerOverSegment ? ' rvchart__plotarea--segment' : ''}`}
           onPointerDown={onPlotPointerDown}
           onDoubleClick={onPlotDoubleClick}
         >

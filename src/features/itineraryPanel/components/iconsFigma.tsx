@@ -125,49 +125,6 @@ export function IconFigmaChevronDown({ size = 20, ...props }: SVGProps<SVGSVGEle
   );
 }
 
-export function IconFigmaChevronUp({ size = 24, ...props }: SVGProps<SVGSVGElement> & { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      {...props}
-    >
-      <path
-        d="M18 15L12 9L6 15"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-export function IconWalk({ size = 16, ...props }: SVGProps<SVGSVGElement> & { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      {...props}
-    >
-      <circle cx="8" cy="2.5" r="1.5" fill="currentColor" />
-      <path
-        d="M6 6.2L7.8 5.2C8.3 4.9 8.9 5.1 9.2 5.6L10.5 7.5L12 8M6.2 8.8L5 8.2M8.5 9.5L6.5 14M8.5 9.5L10.2 11.2L9.5 14"
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 export function IconRun({ size = 16, ...props }: SVGProps<SVGSVGElement> & { size?: number }) {
   return (
     <svg
@@ -309,4 +266,3 @@ export function IconSaveFigma({ size = 14, ...props }: SVGProps<SVGSVGElement> &
     </svg>
   );
 }
-

@@ -706,46 +706,48 @@ self.addEventListener('message', (e) => {
     caches.delete(NEGATIVE_CACHE_NAME);
     return;
   }
-  // Drain queued IGN + Ortho fetches AND abort their in-flight HTTP
-  // requests on user gesture (zoomstart/movestart). Without aborting
-  // in-flight, the new viewport's burst still waits up to 15 s for the
-  // 40 IGN concurrency slots (occupied by previous viewport's pending
-  // fetches) to free one-by-one — visible as "burst then nothing then
-  // burst" loading after a dezoom. The abortable controllers carry
+  // Drain queued speculative IGN fetches + Ortho fetches AND abort their
+  // in-flight HTTP requests on user gesture (zoomstart/movestart), so the
+  // new viewport's burst does not wait for the previous viewport's
+  // speculative work to free the IGN slots. The abortable controllers carry
   // USER_CANCEL_REASON so the per-fetch catch handlers skip negative
-  // caching for tiles WE just killed (a re-request issued moments
-  // later for the new — often overlapping — viewport must hit the
-  // network, not a transient null entry).
+  // caching for tiles WE just killed.
+  //
+  // The basemap DEM work is left alone (see flushIGNQueue): a gesture start
+  // does not tell which terrain tiles the map still needs, and killing those
+  // turned the tiles on screen into 30 m / correlation-MNS fallbacks. The
+  // stale ones are dropped by DEM_WANTED_TILES below. DEM_INFLIGHT is kept
+  // too: the builds in flight are now the real tiles, worth coalescing onto.
   if (e.data?.type === 'CANCEL_STALE_DEM') {
     let ignQ = 0, ignF = 0, orthoQ = 0, orthoF = 0;
     try { ignQ = typeof flushIGNQueue === 'function' ? flushIGNQueue() : 0; } catch { /* ignore */ }
     try { ignF = typeof cancelInFlightIGN === 'function' ? cancelInFlightIGN() : 0; } catch { /* ignore */ }
     try { orthoQ = typeof flushOrthoQueue === 'function' ? flushOrthoQueue() : 0; } catch { /* ignore */ }
     try { orthoF = typeof cancelInFlightOrtho === 'function' ? cancelInFlightOrtho() : 0; } catch { /* ignore */ }
-    // ── Clear DEM_INFLIGHT so new-viewport requests don't coalesce onto
-    //    stale builds ──────────────────────────────────────────────────
-    // Previously CANCEL_STALE_DEM drained the IGN/ortho queues + aborted
-    // their HTTP fetches but LEFT the DEM_INFLIGHT dedup map intact. Every
-    // in-flight buildIGNTile promise stayed registered, so when the user
-    // panned/zoomed and Mapbox re-requested the SAME tile for the new
-    // viewport, handleDemRequest found the stale entry and awaited it —
-    // getting either the old-viewport result or waiting up to the soft
-    // deadline (5 s at z14) for a build targeting tiles the user had
-    // already left behind. Result: "plus rien ne se charge" — the basemap
-    // froze until every stale build finished. Clearing the map here lets
-    // the next request start a fresh build for the current viewport.
-    // (The stale build completes in the background and writes to cache
-    // harmlessly — it just isn't shared with anyone anymore.)
-    let demDropped = 0;
-    try {
-      demDropped = DEM_INFLIGHT.size;
-      DEM_INFLIGHT.clear();
-    } catch { /* ignore */ }
-    if (DEBUG && (ignQ + ignF + orthoQ + orthoF + demDropped) > 0) {
+    if (DEBUG && (ignQ + ignF + orthoQ + orthoF) > 0) {
       console.warn(
-        `[sw-dem][cancel-stale] ign queued=${ignQ} inflight=${ignF}, ortho queued=${orthoQ} inflight=${orthoF}, demInflight=${demDropped}`,
+        `[sw-dem][cancel-stale] ign queued=${ignQ} inflight=${ignF}, ortho queued=${orthoQ} inflight=${orthoF}`,
       );
     }
+    return;
+  }
+  // DEM tiles the map's terrain source is still waiting on, posted while the
+  // camera moves (features/map3d/hooks/useMap/controller/demWantedTiles.ts).
+  // Work for the map's other tiles is stale: drop it, and forget its builds
+  // so a later request for one of those tiles starts afresh.
+  if (e.data?.type === 'DEM_WANTED_TILES') {
+    const keys = Array.isArray(e.data.keys)
+      ? e.data.keys.filter((key) => typeof key === 'string')
+      : null;
+    const sentAt = Number(e.data.sentAt);
+    if (!keys || !Number.isFinite(sentAt) || typeof pruneUnwantedMapDemWork !== 'function') return;
+    try {
+      const dropped = pruneUnwantedMapDemWork(new Set(keys), sentAt);
+      for (const key of dropped) {
+        DEM_INFLIGHT.delete(`default:${key}`);
+        DEM_INFLIGHT.delete(`terrain:${key}`);
+      }
+    } catch { /* ignore */ }
     return;
   }
   // Per-tile invalidation of slope+altitude derived caches. Sent by the

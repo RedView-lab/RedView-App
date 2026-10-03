@@ -1197,8 +1197,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Cannot reach the cloud: your changes are kept on this device and will be synced automatically."
   },
   {
-    "fr": "Projet trop volumineux pour la sauvegarde cloud (limite 12 Mo compressés). Les modifications sont conservées sur cet appareil : allégez le projet ou exportez-le.",
-    "en": "Project too large for cloud backup (12 MB compressed limit). Your changes are kept on this device: slim the project down or export it."
+    "fr": "Projet trop volumineux pour la sauvegarde cloud (limite 30 Mo compressés, environ 100 Mo de projet). Les modifications sont conservées sur cet appareil : allégez le projet ou exportez-le.",
+    "en": "Project too large for cloud backup (30 MB compressed limit, about 100 MB of project). Your changes are kept on this device: slim the project down or export it."
   },
   {
     "fr": "Session expirée : reconnectez-vous pour synchroniser vos projets.",
@@ -6033,6 +6033,14 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "True colors"
   },
   {
+    "fr": "Gris (relief)",
+    "en": "Grey (relief)"
+  },
+  {
+    "fr": "Exporter en GPX",
+    "en": "Export as GPX"
+  },
+  {
     "fr": "Intensité LiDAR",
     "en": "LiDAR intensity"
   },
@@ -6377,6 +6385,42 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Unable to download the swissSURFACE3D tile (E{{x}}, N{{y}}) — {{count}} URL(s) tried. Last error: {{error}}"
   },
   {
+    "fr": "Recherche nuage de points AHN (Pays-Bas)...",
+    "en": "Searching AHN point cloud (Netherlands)..."
+  },
+  {
+    "fr": "Pas de nuage de points AHN pour la dalle ({{x}}, {{y}}) : zone hors des Pays-Bas ou sans relevé publié.",
+    "en": "No AHN point cloud for tile ({{x}}, {{y}}): area outside the Netherlands or not yet published."
+  },
+  {
+    "fr": "Impossible de télécharger le nuage de points AHN ({{x}}, {{y}}) — {{count}} fichier(s) testé(s). Dernière erreur : {{error}}",
+    "en": "Unable to download the AHN point cloud ({{x}}, {{y}}) — {{count}} file(s) tried. Last error: {{error}}"
+  },
+  {
+    "fr": "Recherche des bandes LiDAR DHMV II (Flandre)...",
+    "en": "Searching DHMV II LiDAR strips (Flanders)..."
+  },
+  {
+    "fr": "Pas de nuage de points DHMV II pour la dalle ({{x}}, {{y}}) : zone hors de la Flandre ou sans relevé publié.",
+    "en": "No DHMV II point cloud for tile ({{x}}, {{y}}): area outside Flanders or not yet published."
+  },
+  {
+    "fr": "Bande {{index}}/{{count}}",
+    "en": "Strip {{index}}/{{count}}"
+  },
+  {
+    "fr": "Bande LiDAR DHMV II introuvable ({{index}}/{{count}}) : la dalle ({{x}}, {{y}}) ne peut pas être reconstituée.",
+    "en": "DHMV II LiDAR strip not found ({{index}}/{{count}}): tile ({{x}}, {{y}}) cannot be assembled."
+  },
+  {
+    "fr": "Fusion des bandes de vol {{percent}} %",
+    "en": "Merging flight strips {{percent}}%"
+  },
+  {
+    "fr": "Fusion des bandes LiDAR impossible : {{error}}",
+    "en": "Unable to merge the LiDAR strips: {{error}}"
+  },
+  {
     "fr": "Recherche nuage de points LiDAR Nouvelle-Zélande...",
     "en": "Searching New Zealand LiDAR point cloud..."
   },
@@ -6679,10 +6723,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Bois",
     "en": "Wood"
-  },
-  {
-    "fr": "Tracé manuel",
-    "en": "Manual route"
   },
   {
     "fr": "Chargement du globe...",

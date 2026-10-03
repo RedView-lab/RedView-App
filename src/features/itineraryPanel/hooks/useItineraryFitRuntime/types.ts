@@ -1,4 +1,4 @@
-import type { ChangeEvent, Dispatch, SetStateAction } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 
 import type { PredictionResult } from '@/features/fitPredictor';
 
@@ -33,23 +33,6 @@ export interface UseItineraryFitRuntimeArgs {
   projectId: string | null;
   predictionStore: PredictionStoreBridge | null;
   setProject: Dispatch<SetStateAction<ItineraryProject>>;
-}
-
-export interface UseItineraryFitRuntimeResult {
-  calculateDisabled: boolean;
-  /** Échec du calcul de prédiction (masque le résultat). */
-  calculateError: string | null;
-  calculateLabel: string;
-  /** Avertissement non bloquant sur les .fit (fichiers écartés, envoi impossible). */
-  fitNotice: string | null;
-  cancelCalculatePrediction: () => void;
-  fitFileNames: string[];
-  fitInputRef: React.RefObject<HTMLInputElement | null>;
-  handleCalculatePrediction: () => void;
-  handleClearFitFiles: () => void;
-  handleFitInputChange: (event: ChangeEvent<HTMLInputElement>) => void;
-  handleRemoveFitFile: (index: number) => void;
-  handleUploadFitRequest: () => void;
 }
 
 export function createEmptyFitRuntime(): ItineraryFitRuntime {

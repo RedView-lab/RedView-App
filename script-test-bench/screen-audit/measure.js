@@ -80,5 +80,19 @@
   const canvas = document.querySelector('[data-rv-canvas]') ?? document.querySelector('#root div[style*="container-name"]');
   const canvasStyle = canvas ? { transform: canvas.style.transform, zoom: canvas.style.zoom } : null;
   const docOverflow = { sw: document.documentElement.scrollWidth, sh: document.documentElement.scrollHeight };
-  return { vw, vh, appScale: scaleVar, canvasStyle, texts, targets, regions, docOverflow };
+  // Analysis toolbar of the center panel: rows actually used (useToolbarFitDensity).
+  const analysisBar = document.querySelector('.rvc-center-analysis__toolbar');
+  let analysisToolbar = null;
+  if (analysisBar && analysisBar.checkVisibility?.()) {
+    const tops = [...analysisBar.querySelectorAll(':scope > *, :scope > .rvc-center-analysis__filters > *')]
+      .map((el) => el.getBoundingClientRect())
+      .filter((r) => r.width > 0 || r.height > 0);
+    const firstRowBottom = Math.min(...tops.map((r) => r.bottom));
+    analysisToolbar = {
+      wraps: tops.some((r) => r.top >= firstRowBottom - 0.5),
+      density: analysisBar.dataset.density ?? '',
+      w: +analysisBar.getBoundingClientRect().width.toFixed(1),
+    };
+  }
+  return { vw, vh, appScale: scaleVar, canvasStyle, texts, targets, regions, docOverflow, analysisToolbar };
 })()

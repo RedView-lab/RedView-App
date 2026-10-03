@@ -78,36 +78,3 @@ export interface GroupMeta {
   label: string;
   description?: string;
 }
-
-export const PARAMETER_GROUPS: GroupMeta[] = [
-  {
-    id: 'comportement',
-    label: 'Comportement',
-    description: 'Quels types de chemins / itinéraires privilégier ou éviter.',
-  },
-  {
-    id: 'elevation',
-    label: 'Dénivelé',
-    description:
-      'Réglage fin des coûts et seuils utilisés pour décider si BRouter ' +
-      'évite ou accepte les montées et descentes.',
-  },
-  {
-    id: 'cinematique',
-    label: 'Cinématique (calcul du temps)',
-    description:
-      'Modèle physique servant à estimer le temps de parcours (sans impact ' +
-      'sur le tracé lui-même).',
-  },
-  {
-    id: 'instructions',
-    label: 'Instructions de navigation',
-    description: 'Format et seuils des instructions vocales.',
-  },
-  {
-    id: 'moteur',
-    label: 'Moteur de routage',
-    description:
-      'Paramètres internes du moteur BRouter — manipuler avec précaution.',
-  },
-];

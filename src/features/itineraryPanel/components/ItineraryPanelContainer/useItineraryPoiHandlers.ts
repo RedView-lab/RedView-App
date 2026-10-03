@@ -70,7 +70,6 @@ export function useItineraryPoiHandlers({
         favoriteEnabled: Boolean(feature.favorite),
         pauseEnabled: false,
         pauseDurationMin: 5,
-        manualTraceEnabled: false,
       };
     }
 
@@ -82,7 +81,6 @@ export function useItineraryPoiHandlers({
       ?? (feature.pauseDurationMin && feature.pauseDurationMin > 0 ? feature.pauseDurationMin : undefined)
       ?? (panelCategory ? rhythm.poiPauseDurations[panelCategory] : undefined)
       ?? 5;
-    const manualTraceWaypointId = `poi-waypoint-${feature.id}`;
 
     const pauseEnabled = poiRow?.durationMin != null
       ? poiRow.durationMin > 0
@@ -93,9 +91,6 @@ export function useItineraryPoiHandlers({
       autoReason: getPoiAutoSortPicks(itinerary)?.get(feature.id) ?? null,
       pauseEnabled,
       pauseDurationMin,
-      manualTraceEnabled: itinerary.timeline.some(
-        (row) => row.id === manualTraceWaypointId,
-      ),
     };
   }, [activeItineraryRef]);
 
@@ -346,47 +341,6 @@ export function useItineraryPoiHandlers({
     });
   }, [handlePoiFavoriteToggle, updateActive]);
 
-  const handlePoiManualTraceToggle = useCallback((feature: PoiFeature, nextEnabled: boolean) => {
-    updateActive((it) => {
-      const waypointId = `poi-waypoint-${feature.id}`;
-      const existingIndex = it.timeline.findIndex((row) => row.id === waypointId);
-      // Copie : la timeline est modifiée en place ci-dessous.
-      const previousTimeline = [...it.timeline];
-
-      if (nextEnabled) {
-        if (existingIndex >= 0) return;
-
-        const poiIndex = it.timeline.findIndex((row) => row.kind === 'poi' && row.osmId === feature.id);
-        const endIndex = it.timeline.findIndex((row) => row.kind === 'end');
-        const anchorRow = poiIndex >= 0 ? it.timeline[poiIndex] : null;
-        const insertAt = poiIndex >= 0 ? poiIndex : endIndex >= 0 ? endIndex : it.timeline.length;
-
-        it.timeline.splice(insertAt, 0, {
-          id: waypointId,
-          kind: 'waypoint',
-          label: resolvePoiTitle(feature),
-          distanceKm: anchorRow?.distanceKm ?? null,
-          lat: feature.lat,
-          lon: feature.lon,
-          osmId: feature.id,
-          visible: true,
-        });
-      } else {
-        if (existingIndex < 0) return;
-        it.timeline.splice(existingIndex, 1);
-      }
-
-      delete it.pendingTraceExtension;
-      delete it.routeAudit;
-
-      if (hasEditableRoute(it)) {
-        if (nextEnabled) it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it, waypointId);
-        else setPendingRoutePatchAfterRemoval(it, previousTimeline);
-        it.prediction = null;
-      }
-    });
-  }, [resolvePoiTitle, updateActive]);
-
   const handlePoiStreetView = useCallback((feature: PoiFeature) => {
     if (typeof window === 'undefined') return;
     const url = new URL('https://www.google.com/maps/@');
@@ -437,7 +391,6 @@ export function useItineraryPoiHandlers({
     handlePoiCyclePauseDuration,
     handlePoiSelectPauseDuration,
     handlePoiPauseToggle,
-    handlePoiManualTraceToggle,
     handlePoiStreetView,
     handlePoiDelete,
   };

@@ -1,5 +1,5 @@
 import { FEATURE_TO_PANEL_POI, poiFeaturesToTimelineItems } from '../../lib/schedule';
-import { POI_LABELS, type PoiFeature } from '@/features/poi/types';
+import { CUSTOM_POI_SOURCE, POI_LABELS, type PoiFeature } from '@/features/poi/types';
 import type {
   Itinerary,
 } from '../../types';
@@ -39,7 +39,7 @@ export function buildDraftPoiFeature(draft: MapPoiDraft): PoiFeature | null {
     lon: draft.point.lng,
     category: draft.category,
     name: resolveDraftTitle(draft),
-    tags: { source: 'redview_custom_poi' },
+    tags: { source: CUSTOM_POI_SOURCE },
     favorite: draft.favorite,
   };
 }

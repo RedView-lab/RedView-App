@@ -4,27 +4,13 @@ import { createPortal } from 'react-dom';
 import { useAppI18n } from '@/shared/i18n';
 import { appScaledOverlayStyle, readAppScale } from '@/shared/lib/appScale';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
-import { IconEye, IconPlus, IconTrash } from '../icons';
+import { IconEye, IconKebab, IconPlus, IconTrash } from '../icons';
 import type { Itinerary, RouteProfile } from '../../types';
 
 const MENU_WIDTH = 140;
 const MENU_MAX_HEIGHT = 90;
 const MENU_GAP = 6;
 const VIEWPORT_PADDING = 8;
-
-function IconKebab({ size = 14 }: { size?: number }) {
-  const radius = Math.max(1.1, size * 0.1);
-  const centerX = size / 2;
-  const offsets = [size * 0.22, size / 2, size * 0.78];
-
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none" aria-hidden>
-      {offsets.map((centerY) => (
-        <circle key={centerY} cx={centerX} cy={centerY} r={radius} fill="currentColor" />
-      ))}
-    </svg>
-  );
-}
 
 interface ItineraryTabsProps {
   itineraries: Itinerary[];

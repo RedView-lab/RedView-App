@@ -12,7 +12,7 @@
 // réutilisent l'icône la plus proche, et un asset dédié pourra être ajouté
 // plus tard sans toucher à la taxonomie ni à la base.
 
-import { POI_CATEGORIES, POI_ICON_NAMES, type PoiCategory } from '../types';
+import { POI_ICON_NAMES, type PoiCategory } from '../types';
 import { PROVIDED_POI_SVG } from './providedPoiSvg';
 
 const FALLBACK_POI_ICON_URL = '/svgv2/icone/x.svg';
@@ -102,12 +102,4 @@ export function getPoiIconUrl(category: PoiCategory, favorite: boolean = false):
     return LOGICAL_ROUND_ICON_URLS[name] ?? LOGICAL_ICON_URLS[name] ?? FALLBACK_POI_ICON_URL;
   }
   return LOGICAL_FAVORITE_ICON_URLS[name] ?? LOGICAL_ICON_URLS[name] ?? FALLBACK_POI_ICON_URL;
-}
-
-/** Catégories dont l'icône logique n'a pas d'asset dédié (audit design). */
-export function listCategoriesWithoutDedicatedIcon(): PoiCategory[] {
-  return POI_CATEGORIES.filter((category) => {
-    const name = logicalName(category);
-    return name === 'fallback' || !LOGICAL_ICON_URLS[name];
-  });
 }

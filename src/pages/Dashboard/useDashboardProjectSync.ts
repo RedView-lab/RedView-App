@@ -60,8 +60,23 @@ export function useDashboardProjectSync({
   const firstQueuedAtRef = useRef<number | null>(null);
   const retryTimerRef = useRef<number | null>(null);
   const retryAttemptRef = useRef(0);
-  /** Envoi cloud suspendu pour ce projet (conflit / supprimé) : copie locale seulement. */
-  const blockedRef = useRef<{ id: string; kind: 'conflict' | 'not-found' } | null>(null);
+  /**
+   * Envoi cloud suspendu pour ce projet : copie locale seulement. Conflit /
+   * supprimé : jusqu'à une sauvegarde explicite. Trop gros : tant que le
+   * projet n'a pas rétréci sous `sizeChars` (longueur JSON refusée), plutôt
+   * que de recompresser et renvoyer tout le projet à chaque modification.
+   */
+  const blockedRef = useRef<
+    | { id: string; kind: 'conflict' | 'not-found' }
+    | { id: string; kind: 'too-large'; sizeChars: number }
+    | null
+  >(null);
+  /**
+   * Projet dont le dernier envoi a échoué : les nouveaux essais automatiques
+   * restent silencieux (pas d'« Enregistrement… » entre deux « Échec »), seul
+   * un succès change l'indicateur.
+   */
+  const failingIdRef = useRef<string | null>(null);
   const flushSaveRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   const clearRetryTimer = useCallback(() => {
@@ -83,12 +98,13 @@ export function useDashboardProjectSync({
   }, [clearRetryTimer]);
 
   const reportFailure = useCallback(
-    (item: PendingSave, error: ProjectCloudError) => {
+    (item: PendingSave, error: ProjectCloudError, sizeChars: number) => {
       const status = {
         projectId: item.id,
         errorKind: error.kind,
         message: error.message,
       };
+      failingIdRef.current = item.id;
       switch (error.kind) {
         case 'offline':
           logger.projects.warn('autosave postponed: cloud unreachable', item.id);
@@ -103,8 +119,15 @@ export function useDashboardProjectSync({
           blockedRef.current = { id: item.id, kind: error.kind };
           setProjectSyncStatus({ ...status, state: 'error' });
           return;
+        case 'too-large':
+          // Inutile de retenter tant que le projet n'a pas rétréci (le bouton
+          // Enregistrer retente quand même).
+          logger.projects.error('autosave paused (too-large)', item.id, error);
+          blockedRef.current = { id: item.id, kind: 'too-large', sizeChars };
+          setProjectSyncStatus({ ...status, state: 'error' });
+          return;
         default:
-          // too-large / unauthorized / rejected : nouvel essai à la prochaine
+          // unauthorized / rejected : nouvel essai à la prochaine
           // modification, au retour du réseau ou via le bouton Enregistrer.
           logger.projects.error(`autosave failed (${error.kind})`, item.id, error);
           setProjectSyncStatus({ ...status, state: 'error' });
@@ -113,34 +136,50 @@ export function useDashboardProjectSync({
     [scheduleRetry],
   );
 
-  /** Un envoi : renvoie l'erreur cloud (copie locale déjà écrite) ou null. */
-  const persistOnce = useCallback(async (item: PendingSave): Promise<ProjectCloudError | null> => {
+  /**
+   * Un envoi : renvoie l'erreur cloud (copie locale déjà écrite) ou null, et
+   * la longueur du JSON envoyé.
+   */
+  const persistOnce = useCallback(async (
+    item: PendingSave,
+  ): Promise<{ error: ProjectCloudError | null; sizeChars: number }> => {
     // Une seule sérialisation par envoi, réutilisée pour la taille, la
     // compression et la copie locale.
     const serialized = JSON.stringify(item.project);
+    const sizeChars = serialized.length;
     const last = lastSavedRef.current;
-    if (!item.force && last && last.id === item.id && last.serialized === serialized) return null;
+    if (!item.force && last && last.id === item.id && last.serialized === serialized) {
+      return { error: null, sizeChars };
+    }
 
     const blocked = blockedRef.current;
+    const stillBlocked = blocked != null
+      && blocked.id === item.id
+      && (blocked.kind !== 'too-large' || sizeChars >= blocked.sizeChars);
     // Autosave d'un projet bloqué : copie locale seulement. Une sauvegarde explicite
     // (bouton Enregistrer) retente le cloud pour afficher l'erreur à jour.
-    if (!item.force && item.callbacks.length === 0 && blocked && blocked.id === item.id) {
+    if (!item.force && item.callbacks.length === 0 && stillBlocked) {
       try {
         await saveProjectLocally(item.id, item.project, serialized);
       } catch (error) {
         logger.projects.warn('local-only save failed', error);
       }
-      return null;
+      return { error: null, sizeChars };
     }
 
-    setProjectSyncStatus({ projectId: item.id, state: 'saving' });
+    // Nouvel essai après un échec : l'indicateur garde l'échec jusqu'au succès.
+    if (failingIdRef.current !== item.id) {
+      setProjectSyncStatus({ projectId: item.id, state: 'saving' });
+    }
     try {
       await saveProject(item.id, item.project, { serialized, force: item.force });
       lastSavedRef.current = { id: item.id, serialized };
-      if (item.force && blockedRef.current?.id === item.id) blockedRef.current = null;
-      return null;
+      // Le cloud a accepté cet état : plus rien ne bloque l'autosave.
+      if (blockedRef.current?.id === item.id) blockedRef.current = null;
+      if (failingIdRef.current === item.id) failingIdRef.current = null;
+      return { error: null, sizeChars };
     } catch (error) {
-      return toProjectCloudError(error);
+      return { error: toProjectCloudError(error), sizeChars };
     }
   }, []);
 
@@ -151,7 +190,7 @@ export function useDashboardProjectSync({
       if (!item) return;
       pendingSaveRef.current = null;
 
-      const error = await persistOnce(item);
+      const { error, sizeChars } = await persistOnce(item);
       for (const callback of item.callbacks) callback(error);
 
       if (!error) {
@@ -164,7 +203,7 @@ export function useDashboardProjectSync({
         continue;
       }
 
-      reportFailure(item, error);
+      reportFailure(item, error, sizeChars);
       // Un état plus récent est arrivé pendant l'envoi : on le traite (il porte
       // peut-être une sauvegarde explicite qui attend son résultat).
       if (pendingSaveRef.current) continue;
@@ -352,6 +391,7 @@ export function useDashboardProjectSync({
       clearRetryTimer();
       retryAttemptRef.current = 0;
       blockedRef.current = null;
+      failingIdRef.current = null;
       const pending = pendingSaveRef.current;
       if (pending) {
         const dropped = new ProjectCloudError('offline');

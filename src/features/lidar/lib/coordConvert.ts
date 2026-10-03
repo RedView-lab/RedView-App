@@ -1,5 +1,5 @@
 import proj4 from 'proj4';
-import type { DetectedCrs, Territory, AltitudeRef, TileCoord, Jgd2011ZoneCrs } from '../types';
+import type { DetectedCrs, Territory, AltitudeRef, TileCoord, TileFootprint, Jgd2011ZoneCrs } from '../types';
 import {
   isInSwissCoverage,
   swissToWgs84,
@@ -13,6 +13,8 @@ import {
   wgs84ToNzTileCoord,
   PROJ_NZTM2000,
 } from './nz/coordConvert';
+import { PROJ_RD_NEW } from './netherlands/coordConvert';
+import { PROJ_BL72 } from './flanders/coordConvert';
 import {
   isInJapanCoverage,
   japanToWgs84,
@@ -74,6 +76,8 @@ function getProj(crs: DetectedCrs): string {
   if (crs === 'RGR92UTM40S') return PROJ_UTM40S;
   if (crs === 'CH1903_LV95') return PROJ_LV95;
   if (crs === 'NZTM2000') return PROJ_NZTM2000;
+  if (crs === 'RD_NEW') return PROJ_RD_NEW;
+  if (crs === 'BL72') return PROJ_BL72;
   if (isJgd2011Crs(crs)) {
     const zone = parseJgd2011Zone(crs);
     return JGD2011_ZONE_DEFS[zone]?.epsg ?? 'EPSG:6677';
@@ -153,6 +157,8 @@ export function getTileInfo(crs: DetectedCrs): { territory: Territory; altRef: A
   if (crs === 'RGR92UTM40S') return { territory: 'REU', altRef: 'REUN89' };
   if (crs === 'CH1903_LV95') return { territory: 'CH', altRef: 'LN02' };
   if (crs === 'NZTM2000') return { territory: 'NZ', altRef: 'NZVD2016' };
+  if (crs === 'RD_NEW') return { territory: 'NL', altRef: 'NAP' };
+  if (crs === 'BL72') return { territory: 'BE', altRef: 'TAW' };
   if (isJgd2011Crs(crs)) return { territory: 'JP', altRef: 'TP' };
   return { territory: 'FXX', altRef: 'IGN69' };
 }
@@ -164,6 +170,8 @@ export function getTimeZoneForCoordinates(lon: number, lat: number, crs?: string
   if (crs === 'NZTM2000' || (lon >= 165.0 && lon <= 180.0 && lat >= -48.0 && lat <= -33.0) || (lon >= -180.0 && lon <= -175.0 && lat >= -45.0 && lat <= -43.0)) {
     return 'Pacific/Auckland';
   }
+  if (crs === 'RD_NEW') return 'Europe/Amsterdam';
+  if (crs === 'BL72') return 'Europe/Brussels';
   if (crs === 'RGR92UTM40S' || (lon >= 54.5 && lon <= 56.5 && lat >= -22.0 && lat <= -20.0)) {
     return 'Indian/Reunion';
   }
@@ -212,11 +220,11 @@ export function buildTileFileName(xKm: number, yKm: number, crs: DetectedCrs, al
     const y4 = String(yKm).padStart(4, '0');
     return `LHD_${info.territory}_${x4}_${y4}_PTS_CH1903_LV95_${altRef ?? info.altRef}`;
   }
-  if (crs === 'NZTM2000') {
-    // NZ naming: SW corner (xKm = east km, yKm = north km).
+  if (crs === 'NZTM2000' || crs === 'RD_NEW' || crs === 'BL72') {
+    // NZ / Pays-Bas / Flandre : coin sud-ouest (xKm = est, yKm = nord).
     const x4 = String(xKm).padStart(4, '0');
     const y4 = String(yKm).padStart(4, '0');
-    return `LHD_${info.territory}_${x4}_${y4}_PTS_NZTM2000_${altRef ?? info.altRef}`;
+    return `LHD_${info.territory}_${x4}_${y4}_PTS_${crs}_${altRef ?? info.altRef}`;
   }
   if (isJgd2011Crs(crs)) {
     // Japan naming: SW corner with signed/formatted km coordinates
@@ -231,12 +239,69 @@ export function buildTileFileName(xKm: number, yKm: number, crs: DetectedCrs, al
   return `LHD_${info.territory}_${x4}_${y4}_PTS_${crs}_${altRef ?? info.altRef}`;
 }
 
+/** `minX,minY,maxX,maxY` (mètres entiers) : forme de l'emprise dans les URL et noms de fichiers. */
+export function formatTileFootprint(footprint: TileFootprint): string {
+  return `${footprint.minX},${footprint.minY},${footprint.maxX},${footprint.maxY}`;
+}
+
+/** Côté maximal d'une dalle-fichier (les plus grandes font 1,5 × 2 km). */
+const MAX_FOOTPRINT_SIDE_M = 5_000;
+
+/** Inverse de `formatTileFootprint` ; null pour une valeur invalide (paramètre d'URL, nom de fichier). */
+export function parseTileFootprint(raw: string | null | undefined): TileFootprint | null {
+  const parts = raw?.split(',');
+  if (!parts || parts.length !== 4 || !parts.every((part) => /^-?\d{1,8}$/.test(part))) return null;
+  const [minX, minY, maxX, maxY] = parts.map(Number) as [number, number, number, number];
+  const width = maxX - minX;
+  const height = maxY - minY;
+  if (!(width > 0 && height > 0 && width <= MAX_FOOTPRINT_SIDE_M && height <= MAX_FOOTPRINT_SIDE_M)) return null;
+  return { minX, minY, maxX, maxY };
+}
+
+/** Partie de l'identité d'une dalle propre à son fichier (`~minX,minY,maxX,maxY`), vide pour une dalle de 1 km. */
+export function tileFootprintSuffix(coord: Pick<TileCoord, 'footprint'>): string {
+  return coord.footprint ? `~${formatTileFootprint(coord.footprint)}` : '';
+}
+
+/** Dalle-fichier d'emprise `footprint`, rattachée au km de son centre. */
+export function footprintTileCoord(base: TileCoord, footprint: TileFootprint): TileCoord {
+  return {
+    xKm: Math.floor((footprint.minX + footprint.maxX) / 2000),
+    yKm: Math.floor((footprint.minY + footprint.maxY) / 2000),
+    territory: base.territory,
+    projection: base.projection,
+    altRef: base.altRef,
+    footprint,
+  };
+}
+
+/** Dalle de 1 km portant la même identité de base, sans emprise de fichier. */
+export function kmTileCoord(coord: TileCoord): TileCoord {
+  const { xKm, yKm, territory, projection, altRef } = coord;
+  return { xKm, yKm, territory, projection, altRef };
+}
+
+/** Même dalle (même km et, pour une dalle-fichier, même emprise) ; l'altimétrie n'entre pas en compte. */
+export function sameTileCoord(a: TileCoord | null | undefined, b: TileCoord | null | undefined): boolean {
+  if (!a || !b) return false;
+  return a.xKm === b.xKm
+    && a.yKm === b.yKm
+    && a.projection === b.projection
+    && tileFootprintSuffix(a) === tileFootprintSuffix(b);
+}
+
+/** Nom du fichier mis en cache (OPFS / CacheStorage) pour la dalle. */
+export function tileCoordFileName(coord: TileCoord): string {
+  return `${buildTileFileName(coord.xKm, coord.yKm, coord.projection, coord.altRef)}${tileFootprintSuffix(coord)}.copc.laz`;
+}
+
 export function getTileBounds(coord: TileCoord): {
   minX: number;
   minY: number;
   maxX: number;
   maxY: number;
 } {
+  if (coord.footprint) return { ...coord.footprint };
   return {
     minX: coord.xKm * 1000,
     minY: coord.yKm * 1000,

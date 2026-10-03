@@ -2,7 +2,8 @@ import type {
   TileCoord, LidarEvent, LidarEventCallback, CachedTileInfo,
 } from '../types';
 import { translateAppText } from '@/shared/i18n/config';
-import { wgs84ToTileCoord, toWgs84, buildTileFileName } from './coordConvert';
+import { wgs84ToTileCoord, toWgs84, getTileBounds, tileCoordFileName, tileFootprintSuffix } from './coordConvert';
+import { resolveFileTileCoord } from './fileTiles';
 import { downloadTile, isDownloadCancelledError } from './downloader';
 import { deleteTile, listCachedTiles, getStorageUsage } from './storage';
 import { buildViewerUrl } from './viewerUrl';
@@ -26,11 +27,11 @@ export class LidarManager {
   }
 
   private tileKey(coord: TileCoord): string {
-    return `${coord.xKm}_${coord.yKm}_${coord.projection}`;
+    return `${coord.xKm}_${coord.yKm}_${coord.projection}${tileFootprintSuffix(coord)}`;
   }
 
   async downloadTileAtLonLat(lon: number, lat: number, signal?: AbortSignal): Promise<void> {
-    const coord = wgs84ToTileCoord(lon, lat);
+    const coord = await resolveFileTileCoord(wgs84ToTileCoord(lon, lat), lon, lat);
     return this.downloadTile(coord, signal);
   }
 
@@ -118,13 +119,12 @@ export class LidarManager {
   }
 
   getTileCenter(coord: TileCoord): [number, number] {
-    const centerX = coord.xKm * 1000 + 500;
-    const centerY = coord.yKm * 1000 + 500;
-    return toWgs84(centerX, centerY, coord.projection);
+    const { minX, minY, maxX, maxY } = getTileBounds(coord);
+    return toWgs84((minX + maxX) / 2, (minY + maxY) / 2, coord.projection);
   }
 
   getTileFileName(coord: TileCoord): string {
-    return `${buildTileFileName(coord.xKm, coord.yKm, coord.projection, coord.altRef)}.copc.laz`;
+    return tileCoordFileName(coord);
   }
 
   openViewer(coord: TileCoord): void {

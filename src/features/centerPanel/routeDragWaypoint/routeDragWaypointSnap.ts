@@ -1,8 +1,4 @@
 import type { Map as MapboxMap } from 'mapbox-gl';
-import {
-  cumulativeRouteLengthsM,
-  projectPointAlongRoute,
-} from '@/features/itineraryPanel/lib/routes';
 import { projectPointToSegment } from '../routeSplit/routeSnap';
 
 /**
@@ -249,52 +245,4 @@ export interface RouteAnchorPoint {
   distanceM: number;
   lat: number;
   lon: number;
-}
-
-/**
- * Project a free geographic coordinate onto the route polyline and return the
- * exact interpolated anchor point plus its cumulative distance. Returns null
- * when the geometry is too short.
- */
-export function projectClickOntoRoute(
-  routePoints: Array<{ lat: number; lon: number }>,
-  lon: number,
-  lat: number,
-): RouteAnchorPoint | null {
-  if (routePoints.length < 2) return null;
-  const cumulative = cumulativeRouteLengthsM(routePoints);
-  const projected = projectPointAlongRoute({ lat, lon }, routePoints, cumulative);
-  if (!projected) return null;
-  return {
-    distanceM: projected.distanceM,
-    lat: projected.lat,
-    lon: projected.lon,
-  };
-}
-
-/**
- * Resolve the timeline index at which a new waypoint grabbed at
- * `anchorDistanceM` (cumulative distance along the route) should be inserted.
- *
- * The waypoint is placed just after the last routable row whose distance is
- * smaller than the anchor — i.e. in physical order along the route. Falls back
- * to `fallbackLength` (typically the timeline length) when the anchor is past
- * every row, which lands the waypoint at the tail.
- *
- * Mirrors the distance-driven walk used by `resolvePauseInsertIndex` in
- * `timelineMutations.ts`. Not currently used by the drag tool (the equivalent
- * walk lives inline in {@link insertWaypointAtRoutePosition}) but exposed for
- * future tools that need the raw index without splicing.
- */
-export function resolveTimelineInsertIndex(
-  routableRows: Array<{ distanceM: number }>,
-  anchorDistanceM: number,
-  fallbackLength: number,
-): number {
-  for (let index = 0; index < routableRows.length; index += 1) {
-    if (routableRows[index].distanceM > anchorDistanceM) {
-      return index;
-    }
-  }
-  return fallbackLength;
 }

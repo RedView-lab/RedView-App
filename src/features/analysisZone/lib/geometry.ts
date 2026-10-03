@@ -114,15 +114,3 @@ export function analysisZoneRingPayload(zone: AnalysisZone): number[] {
   }
   return out;
 }
-
-/** Rough max side of the bbox in km — powers the “huge zone” hint. */
-export function analysisZoneMaxSideKm(zone: AnalysisZone): number {
-  const [w, s, e, n] = analysisZoneBBox(zone);
-  const midLat = ((n + s) / 2) * (Math.PI / 180);
-  const widthKm = ((e - w) * (Math.PI / 180)) * 6371 * Math.cos(midLat);
-  const heightKm = ((n - s) * (Math.PI / 180)) * 6371;
-  return Math.max(Math.abs(widthKm), Math.abs(heightKm));
-}
-
-/** Suggested soft cap — beyond this the “zone-limited” gain shrinks fast. */
-export const ANALYSIS_ZONE_RECOMMENDED_MAX_SIDE_KM = 60;

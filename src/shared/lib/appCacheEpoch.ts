@@ -1,6 +1,6 @@
 // Doit rester identique à MAP_CACHE_EPOCH de public/sw-dem/core/config.js :
 // le SW nomme ses caches `dem-tiles-<epoch>` avec cette seule valeur.
-export const APP_CACHE_FIX_EPOCH = '2026-10-01-surface-standin-1';
+export const APP_CACHE_FIX_EPOCH = '2026-10-02-gesture-cancel-1';
 
 export const APP_BUILD_ID = __REDVIEW_BUILD_ID__;
 export const APP_CACHE_EPOCH = `${__REDVIEW_BUILD_ID__}:${APP_CACHE_FIX_EPOCH}`;

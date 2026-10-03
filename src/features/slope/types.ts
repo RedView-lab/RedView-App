@@ -1,5 +1,3 @@
-import type { Map as MapboxMap } from 'mapbox-gl';
-
 // ── Slope category definition ─────────────────────────────────────────
 
 export interface SlopeCategory {
@@ -39,11 +37,4 @@ export interface SlopeState {
   colorMode: SlopeColorMode;
   /** @deprecated Resolution is now dynamically inherited from the active 3D map */
   resolution?: string;
-}
-
-// ── Panel props ───────────────────────────────────────────────────────
-
-export interface SlopePanelProps {
-  map: MapboxMap | null;
-  isMapLoaded: boolean;
 }
