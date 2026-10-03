@@ -29,6 +29,14 @@
  *    vsync sur deux ratée à 60 Hz) ; quand le GPU baisse sa fréquence (temps
  *    de passe stable) et que la cadence tient, il monte au plafond ; une frame
  *    à l'arrêt (pleine résolution) ne le fait jamais baisser.
+ * 11. Couleurs filtrées : chaque point d'un nœud qui a des enfants porte la
+ *    moyenne de sa maille sur tout le sous-arbre (niveaux grossiers = image
+ *    sous-échantillonnée, pas un échantillon isolé de l'ortho).
+ * 12. Terrain LOD : un bord cousu vers un voisin plus grossier n'utilise que
+ *    les sommets de ce voisin (pas de fissure en T), à chaque niveau.
+ * 13. Image au repos : le budget monte vers ~50 ms de GPU par frame fixe,
+ *    puis 16 frames décalées sous le pixel sont accumulées ; un mouvement
+ *    revient aussitôt au budget du mouvement.
  * Optionnel : LIDAR_TILE=<fichier .copc.laz> mesure le pipeline sur une vraie
  * tuile (décodage laz-perf, construction de l'octree LOD, sélection) et
  * vérifie que la marge des bornes serrées (2 mailles) couvre ses sous-arbres.
@@ -40,6 +48,7 @@ import { notes, results } from './lidar-lod/harness.ts';
 import { runLodTileCheck } from './lidar-lod/lodTileCheck.ts';
 import { runPrecisionCheck } from './lidar-lod/precisionCheck.ts';
 import { runRealTile } from './lidar-lod/realTileCheck.ts';
+import { runRenderQualityCheck } from './lidar-lod/renderQualityCheck.ts';
 import { runScreenSizeCheck } from './lidar-lod/screenSizeCheck.ts';
 import { runSelectionCheck } from './lidar-lod/selectionCheck.ts';
 import { runStreamingCheck } from './lidar-lod/streamingCheck.ts';
@@ -51,6 +60,7 @@ await runStreamingCheck();
 await runSelectionCheck();
 runFrameClockCheck();
 runBudgetCheck();
+runRenderQualityCheck();
 if (process.env.LIDAR_TILE) await runRealTile(process.env.LIDAR_TILE);
 
 console.log('\nLiDAR WebGPU — précision / LOD / streaming\n');

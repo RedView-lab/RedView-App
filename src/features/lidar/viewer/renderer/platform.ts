@@ -1,21 +1,35 @@
 import type { GpuTier, PlatformProfile } from '../lod/types';
 
 // Budgets start low and are raised by the adaptive budget only when measured
-// GPU time leaves headroom; `maxBudget` is a hard ceiling per class.
+// GPU time leaves headroom; `maxBudget` is a hard ceiling per class for
+// moving frames, `restMaxBudget` for still frames (refined once the camera
+// stops). The pool holds the still selection plus a margin for turning
+// back: 20 B per point on the GPU (16 B record + 4 B shaded colour), e.g.
+// 480 MB for 24 M points.
 const PROFILES: Record<GpuTier, PlatformProfile> = {
   apple: {
-    tier: 'apple', minBudget: 1_000_000, initialBudget: 4_000_000, maxBudget: 9_000_000, poolBudget: 12_000_000,
-    maxCanvasDim: 4096, dprCap: 1.5, isApple: true, motionScale: 0.75,
+    tier: 'apple', minBudget: 1_000_000, initialBudget: 4_000_000, maxBudget: 9_000_000, restMaxBudget: 22_000_000,
+    poolBudget: 26_000_000, maxCanvasDim: 4096, dprCap: 1.5, isApple: true, motionScale: 0.75,
   },
   integrated: {
-    tier: 'integrated', minBudget: 400_000, initialBudget: 1_500_000, maxBudget: 6_000_000, poolBudget: 8_000_000,
-    maxCanvasDim: 4096, dprCap: 1.25, isApple: false, motionScale: 0.7,
+    tier: 'integrated', minBudget: 400_000, initialBudget: 1_500_000, maxBudget: 8_000_000, restMaxBudget: 20_000_000,
+    poolBudget: 24_000_000, maxCanvasDim: 4096, dprCap: 1.25, isApple: false, motionScale: 0.7,
   },
   discrete: {
-    tier: 'discrete', minBudget: 1_500_000, initialBudget: 6_000_000, maxBudget: 32_000_000, poolBudget: 40_000_000,
-    maxCanvasDim: 8192, dprCap: 2.0, isApple: false, motionScale: 0.75,
+    tier: 'discrete', minBudget: 1_500_000, initialBudget: 6_000_000, maxBudget: 32_000_000, restMaxBudget: 48_000_000,
+    poolBudget: 56_000_000, maxCanvasDim: 8192, dprCap: 2.0, isApple: false, motionScale: 0.75,
   },
 };
+
+/**
+ * Machines reporting little memory (`navigator.deviceMemory` ≤ 4 GiB; integrated
+ * GPUs share it) keep half the still budget and pool.
+ */
+export function fitProfileToMemory(profile: PlatformProfile, deviceMemoryGiB: number | undefined): PlatformProfile {
+  if (deviceMemoryGiB === undefined || deviceMemoryGiB > 4) return profile;
+  const restMaxBudget = Math.max(profile.maxBudget, Math.round(profile.restMaxBudget / 2));
+  return { ...profile, restMaxBudget, poolBudget: Math.max(restMaxBudget, Math.round(profile.poolBudget / 2)) };
+}
 
 const INTEL_DISCRETE_RE = /xe-?hpg|xe2-?hpg|alchemist|battlemage|\barc\b/;
 const AMD_APU_RE = /radeon\(tm\) graphics|radeon graphics|vega \d+ graphics|\b(6[0-9]0|7[0-9]0|8[0-9]0)m\b/;

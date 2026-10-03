@@ -11,8 +11,11 @@ export interface PlatformProfile {
   /** Floor of the adaptive budget (emergency cuts never go below). */
   minBudget: number;
   initialBudget: number;
+  /** Ceiling of the moving-camera budget. */
   maxBudget: number;
-  /** Points kept resident on the GPU (≥ maxBudget; the rest is evicted LRU). */
+  /** Ceiling of the still-camera budget (see RestRefinement). */
+  restMaxBudget: number;
+  /** Points kept resident on the GPU (≥ restMaxBudget; the rest is evicted LRU). */
   poolBudget: number;
   maxCanvasDim: number;
   dprCap: number;

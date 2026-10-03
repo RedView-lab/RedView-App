@@ -10,16 +10,28 @@
 //   point data (16-byte aligned): node blocks of LOD_POINT_STRIDE bytes/point
 // Opening a cached tile reads only the header and the table; the viewer then
 // streams node blocks with `File.slice()` as the LOD asks for them.
+// Version 1 stored 12-byte points without the filtered attributes; such a
+// file is upgraded instead of rebuilt (`upgradeLegacyLodTile`): no LAZ
+// decoding, no orthophoto download.
 //
 // Kept free of app imports so the cache worker stays small.
 
 import type { DetectedCrs } from '../types';
-import { LOD_POINT_STRIDE, type LodNode, type LodTile, type LodTileHeader } from '../viewer/lod/lodTile';
+import {
+  filterLodAttributes,
+  LOD_POINT_STRIDE,
+  type LodNode,
+  type LodTile,
+  type LodTileHeader,
+} from '../viewer/lod/lodTile';
 
 export const LIDAR_OPFS_DIR = 'lidar-hd';
 
 const MAGIC = 0x314c5652; // "RVL1"
-const VERSION = 1;
+const VERSION = 2;
+const LEGACY_VERSION = 1;
+/** Point record of version 1: position, class, intensity, RGB, padding. */
+const LEGACY_POINT_STRIDE = 12;
 const HEADER_BYTES = 160;
 const NODE_ENTRY_BYTES = 24;
 const MAX_CRS_BYTES = HEADER_BYTES - 130;
@@ -37,6 +49,11 @@ export function colourRevisionSuffix(lazFileName: string): string {
 }
 
 export function lodCacheKey(lazFileName: string): string {
+  return lazFileName.replace(/(\.copc)?\.laz$/, `.lod_v2${colourRevisionSuffix(lazFileName)}`);
+}
+
+/** Version 1 cache of the same tile and colours (see `upgradeLegacyLodTile`). */
+export function legacyLodCacheKey(lazFileName: string): string {
   return lazFileName.replace(/(\.copc)?\.laz$/, `.lod_v1${colourRevisionSuffix(lazFileName)}`);
 }
 
@@ -88,10 +105,10 @@ export function encodeLodTileIndex(header: LodTileHeader, nodes: LodNode[]): Uin
   return out;
 }
 
-function decodeHeader(buffer: ArrayBuffer): { header: LodTileHeader; nodeCount: number } | null {
+function decodeHeader(buffer: ArrayBuffer, version = VERSION): { header: LodTileHeader; nodeCount: number } | null {
   if (buffer.byteLength < HEADER_BYTES) return null;
   const view = new DataView(buffer);
-  if (view.getUint32(0, true) !== MAGIC || view.getUint32(4, true) !== VERSION) return null;
+  if (view.getUint32(0, true) !== MAGIC || view.getUint32(4, true) !== version) return null;
   const crsLength = view.getUint8(129);
   if (crsLength > MAX_CRS_BYTES) return null;
   const f = (at: number) => view.getFloat64(at, true);
@@ -114,7 +131,7 @@ function decodeHeader(buffer: ArrayBuffer): { header: LodTileHeader; nodeCount: 
   };
 }
 
-function decodeNodes(buffer: ArrayBuffer, nodeCount: number): LodNode[] {
+function decodeNodes(buffer: ArrayBuffer, nodeCount: number, pointStride = LOD_POINT_STRIDE): LodNode[] {
   const view = new DataView(buffer);
   const nodes: LodNode[] = new Array(nodeCount);
   for (let i = 0; i < nodeCount; i++) {
@@ -125,7 +142,7 @@ function decodeNodes(buffer: ArrayBuffer, nodeCount: number): LodNode[] {
       y: view.getUint32(at + 8, true),
       z: view.getUint32(at + 12, true),
       count: view.getUint32(at + 16, true),
-      byteOffset: view.getUint32(at + 20, true) * LOD_POINT_STRIDE,
+      byteOffset: view.getUint32(at + 20, true) * pointStride,
     };
   }
   return nodes;
@@ -190,6 +207,63 @@ export async function openLodTile(lazFileName: string): Promise<OpenedLodTile | 
   } catch {
     return null;
   }
+}
+
+/**
+ * Rewrites a version 1 cache of `lazFileName` as version 2: records widened
+ * to 16 bytes, filtered attributes computed, then the old file removed.
+ * Node blocks are read one by one, so only the new tile is held in memory.
+ * Resolves to false when there is no usable version 1 file (or OPFS fails).
+ */
+export async function upgradeLegacyLodTile(lazFileName: string): Promise<boolean> {
+  const dir = await getLidarDirectory();
+  if (!dir) return false;
+  const legacyName = legacyLodCacheKey(lazFileName);
+  let file: File;
+  try {
+    file = await (await dir.getFileHandle(legacyName)).getFile();
+  } catch {
+    return false;
+  }
+  const decoded = decodeHeader(await file.slice(0, HEADER_BYTES).arrayBuffer(), LEGACY_VERSION);
+  if (!decoded) return false;
+  const tableEnd = HEADER_BYTES + decoded.nodeCount * NODE_ENTRY_BYTES;
+  const dataOffset = align16(tableEnd);
+  const legacyNodes = decodeNodes(await file.slice(HEADER_BYTES, tableEnd).arrayBuffer(), decoded.nodeCount, LEGACY_POINT_STRIDE);
+  const pointCount = decoded.header.pointCount;
+  if (file.size < dataOffset + pointCount * LEGACY_POINT_STRIDE) return false;
+
+  const packed = new Uint8Array(pointCount * LOD_POINT_STRIDE);
+  const nodes: LodNode[] = [];
+  let written = 0;
+  for (const legacy of legacyNodes) {
+    const start = dataOffset + legacy.byteOffset;
+    const block = new Uint8Array(await file.slice(start, start + legacy.count * LEGACY_POINT_STRIDE).arrayBuffer());
+    if (block.byteLength < legacy.count * LEGACY_POINT_STRIDE) return false;
+    const byteOffset = written * LOD_POINT_STRIDE;
+    for (let k = 0; k < legacy.count; k++) {
+      const src = k * LEGACY_POINT_STRIDE;
+      const dst = byteOffset + k * LOD_POINT_STRIDE;
+      packed.set(block.subarray(src, src + 11), dst);
+      // Filtered copies; the cell means of nodes with children replace them below.
+      packed[dst + 11] = block[src + 7]!;
+      packed[dst + 12] = block[src + 8]!;
+      packed[dst + 13] = block[src + 9]!;
+      packed[dst + 14] = block[src + 10]!;
+    }
+    nodes.push({ ...legacy, byteOffset });
+    written += legacy.count;
+  }
+  if (written !== pointCount) return false;
+  const tile: LodTile = { header: { ...decoded.header, nodeCount: nodes.length }, nodes, packed };
+  filterLodAttributes(tile);
+  if (!(await saveLodTile(lazFileName, tile))) return false;
+  try {
+    await dir.removeEntry(legacyName);
+  } catch {
+    /* already gone */
+  }
+  return true;
 }
 
 export async function readLodNodeBlock(tile: OpenedLodTile, node: LodNode): Promise<ArrayBuffer> {

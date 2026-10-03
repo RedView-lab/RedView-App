@@ -2,14 +2,16 @@
 // GPU residency of streamed LOD nodes
 // ============================================
 //
-// Each resident node owns its packed point buffer (12 B/point, uploaded
+// Each resident node owns its packed point buffer (16 B/point, uploaded
 // as read from the LOD cache) and a pre-shaded colour buffer (4 B/point)
 // written by the shading compute pass. Per-node parameters live in one
 // uniform buffer, one 256-byte slot per node; the child masks of every slot
-// (adaptive point size) live in one storage buffer written once per frame.
-// Shading is lazy: a change of colour mode, overlay or lighting only bumps
-// an epoch, and a node is re-shaded the next time it is drawn, so a slider
-// drag costs the visible points, not the whole pool.
+// (adaptive point size, filtered colours) live in one storage buffer written
+// once per frame. Shading is lazy: a change of colour mode, overlay or
+// lighting only bumps an epoch, and a node is re-shaded the next time it is
+// drawn, so a slider drag costs the visible points, not the whole pool. A
+// node is also re-shaded when its drawn children change (its points switch
+// between their own and their cell-filtered colours).
 
 import type { SceneNode } from '../lod/sceneLod';
 import { LOD_POINT_STRIDE } from '../lod/lodTile';
@@ -25,6 +27,8 @@ interface NodeGpu {
   shadingBindGroup: GPUBindGroup;
   /** Shading epoch the colours were written for (−1: never shaded). */
   shadedEpoch: number;
+  /** Child mask the colours were written for. */
+  shadedMask: number;
 }
 
 export class NodeGpuPool {
@@ -120,9 +124,10 @@ export class NodeGpuPool {
         { binding: 0, resource: { buffer: packed } },
         { binding: 1, resource: { buffer: shaded } },
         { binding: 2, resource: { buffer: this.uniformBuffer, offset: slot * NODE_UNIFORM_STRIDE, size: NODE_UNIFORM_BYTES } },
+        { binding: 3, resource: { buffer: this.childMaskBuffer } },
       ],
     });
-    this.gpu.set(node.id, { packed, shaded, slot, count, shadingBindGroup, shadedEpoch: -1 });
+    this.gpu.set(node.id, { packed, shaded, slot, count, shadingBindGroup, shadedEpoch: -1, shadedMask: 0 });
     return true;
   }
 
@@ -144,8 +149,10 @@ export class NodeGpuPool {
 
   /**
    * Prepares the nodes about to be drawn: uploads the child masks that
-   * changed (one write for the dirty range) and encodes the shading of those
-   * whose colours are stale (new nodes, or every node after `invalidateShading`).
+   * changed (one write for the dirty range, queued before the frame's
+   * submit, so this frame's shading reads them) and encodes the shading of
+   * those whose colours are stale (new nodes, every node after
+   * `invalidateShading`, nodes whose drawn children changed).
    */
   prepareFrame(
     encoder: GPUCommandEncoder,
@@ -159,7 +166,7 @@ export class NodeGpuPool {
       const entry = this.gpu.get(node.id);
       if (!entry) continue;
       this.setChildMask(entry.slot, node.childMask);
-      if (entry.shadedEpoch === this.shadingEpoch) continue;
+      if (entry.shadedEpoch === this.shadingEpoch && entry.shadedMask === node.childMask) continue;
       if (!pass) {
         pass = encoder.beginComputePass({ timestampWrites: timestampWrites?.() });
         pass.setPipeline(pipeline);
@@ -168,6 +175,7 @@ export class NodeGpuPool {
       pass.setBindGroup(1, entry.shadingBindGroup);
       pass.dispatchWorkgroups(Math.ceil(entry.count / POINT_SHADING_WORKGROUP_SIZE));
       entry.shadedEpoch = this.shadingEpoch;
+      entry.shadedMask = node.childMask;
     }
     pass?.end();
     if (this.dirtyMaskMax >= this.dirtyMaskMin) {

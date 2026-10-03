@@ -3,7 +3,7 @@ import type { SceneNode, SceneNodeUploader } from './lod/sceneLod';
 import { cameraForwardFromView, cameraPositionFromView, mat4MultiplyInto, vec3Of } from './renderer/math';
 import { NodeGpuPool } from './renderer/nodePool';
 import { requestLidarGpu, showDeviceLostNotice } from './renderer/device';
-import { createRendererPipelines, type RendererPipelines } from './renderer/rendererPipeline';
+import { ACCUMULATION_FORMAT, createRendererPipelines, type RendererPipelines } from './renderer/rendererPipeline';
 import {
   createFloatTexture,
   createMeshBuffers,
@@ -20,6 +20,7 @@ import {
   type MeshBuffers,
 } from './renderer/gpuResources';
 import { createSceneTargets, destroySceneTargets, type SceneTargets } from './renderer/sceneTargets';
+import { TerrainLod, type TerrainMeshData } from './renderer/terrainLod';
 import { packSceneUniforms, SCENE_UNIFORM_FLOATS } from './renderer/sceneUniforms';
 import { EDL_PARAMS_FLOATS, POINT_PARAMS_FLOATS } from './renderer/shaders';
 import type { HeightmapParams, SnowParams } from './renderer/types';
@@ -59,6 +60,8 @@ const NODE_POOL_CAPACITY = 16384;
  * overlay change) → scene pass (depth32float reversed-Z, MSAA ×4 on
  * discrete GPUs), straight into the canvas, or with EDL on into an
  * offscreen target that the Eye-Dome Lighting pass resolves to the canvas.
+ * Still frames being anti-aliased (`accumulate`, see RestRefinement) are
+ * resolved into a linear rgba16float running mean instead, then presented.
  * Point data lives in LOD nodes streamed by `SceneLod`; this class is its
  * GPU residency backend (`SceneNodeUploader`).
  */
@@ -89,6 +92,14 @@ export class LidarRenderer implements SceneNodeUploader {
   /** Square sprites (no discard) while the camera moves. */
   motionSquares = true;
   private lastRenderScale = 1;
+  /** Running mean of the still frames (canvas size, linear light) and its present bind group. */
+  private accumTexture: GPUTexture | null = null;
+  private accumView: GPUTextureView | null = null;
+  private presentBindGroup: GPUBindGroup | null = null;
+  /** Sub-pixel offset (canvas px) of the projection, for the accumulated still frames. */
+  private jitterX = 0;
+  private jitterY = 0;
+  private readonly jitteredViewProj = new Float32Array(16);
 
   private uniformCache = new Float32Array(SCENE_UNIFORM_FLOATS);
   private uniformCacheU32 = new Uint32Array(this.uniformCache.buffer);
@@ -145,7 +156,8 @@ export class LidarRenderer implements SceneNodeUploader {
   private _lastView = new Float32Array(16);
   private _lastProj = new Float32Array(16);
 
-  private terrainMesh: MeshBuffers | null = null;
+  /** DTM mesh filling the gaps between points, drawn per chunk at the level the view needs. */
+  private terrain: TerrainLod | null = null;
   private previewMesh: MeshBuffers | null = null;
   private routeMesh: MeshBuffers | null = null;
   /** Draped analysis zones of the viewer tools (avalanche reach, viewshed). */
@@ -262,8 +274,12 @@ export class LidarRenderer implements SceneNodeUploader {
     return this.gpuTimer?.usesTimestamps ?? false;
   }
 
-  getLastRenderStats(): { drawCalls: number; outOfMemory: number } {
-    return { drawCalls: this.lastDrawCallCount, outOfMemory: this.nodePool?.outOfMemoryCount ?? 0 };
+  getLastRenderStats(): { drawCalls: number; outOfMemory: number; terrainTriangles: number } {
+    return {
+      drawCalls: this.lastDrawCallCount,
+      outOfMemory: this.nodePool?.outOfMemoryCount ?? 0,
+      terrainTriangles: this.terrain && this.terrainVisible ? this.terrain.lastTriangles : 0,
+    };
   }
 
   /** Max LOD nodes the GPU pool can hold at once (uniform slots). */
@@ -484,6 +500,17 @@ export class LidarRenderer implements SceneNodeUploader {
       blitSampler: this.blitSampler,
     };
     this.fullTargets = createSceneTargets(config, this.canvasWidth, this.canvasHeight);
+    this.accumTexture?.destroy();
+    this.accumTexture = this.device.createTexture({
+      size: [this.canvasWidth, this.canvasHeight],
+      format: ACCUMULATION_FORMAT,
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+    this.accumView = this.accumTexture.createView();
+    this.presentBindGroup = this.device.createBindGroup({
+      layout: this.pipelines.presentBindGroupLayout,
+      entries: [{ binding: 0, resource: this.accumView }],
+    });
     this.motionTargets = this.motionScale < 1
       ? createSceneTargets(
         config,
@@ -493,13 +520,10 @@ export class LidarRenderer implements SceneNodeUploader {
       : null;
   }
 
-  setMesh(vertices: Float32Array, colors: Uint8Array, indices: Uint32Array, count?: number): void {
-    this.setTerrainMesh({ vertices, colors, indices, count: count ?? indices.length });
-  }
-
-  setTerrainMesh(mesh: { vertices: Float32Array; colors: Uint8Array; indices: Uint32Array; count: number }) {
-    destroyMeshBuffers(this.terrainMesh);
-    this.terrainMesh = createMeshBuffers(this.device, mesh.vertices, mesh.colors, mesh.indices, mesh.count);
+  /** Tiles' DTM grids (merged vertex buffers), see `TerrainLod`. */
+  setTerrainMesh(mesh: TerrainMeshData): void {
+    this.terrain?.destroy();
+    this.terrain = new TerrainLod(this.device, mesh, this.pipelines.terrainLodBindGroupLayout);
   }
 
   setPreviewMesh(
@@ -556,6 +580,16 @@ export class LidarRenderer implements SceneNodeUploader {
   }
 
   /**
+   * Sub-pixel offset (canvas px) applied to the projection of the next
+   * `updateCamera` calls, for the accumulated still frames; (0, 0) otherwise.
+   * LOD selection, culling and picking keep the unshifted matrices.
+   */
+  setSubpixelJitter(x: number, y: number): void {
+    this.jitterX = x;
+    this.jitterY = y;
+  }
+
+  /**
    * @param projMat render projection (reversed-Z, infinite far: see
    *   `CameraController.getRenderProjMatrix`). Its row 3 equals the standard
    *   one, so LOD screen sizes and frustum culling are unaffected.
@@ -583,7 +617,20 @@ export class LidarRenderer implements SceneNodeUploader {
 
     mat4MultiplyInto(this._cachedViewProj, pArr, vArr);
     this.lastViewProj.set(this._cachedViewProj);
-    packSceneUniforms(this.uniformCache, this.uniformCacheU32, this._cachedViewProj, vArr, pos, {
+    let drawViewProj = this._cachedViewProj;
+    if (this.jitterX !== 0 || this.jitterY !== 0) {
+      // Clip-space shift by (dx, dy)·w: the whole image moves by the offset in pixels.
+      const vp = this.jitteredViewProj;
+      vp.set(this._cachedViewProj);
+      const dx = (2 * this.jitterX) / this.canvasWidth;
+      const dy = (2 * this.jitterY) / this.canvasHeight;
+      for (let col = 0; col < 4; col++) {
+        vp[col * 4] = vp[col * 4]! + dx * vp[col * 4 + 3]!;
+        vp[col * 4 + 1] = vp[col * 4 + 1]! + dy * vp[col * 4 + 3]!;
+      }
+      drawViewProj = vp;
+    }
+    packSceneUniforms(this.uniformCache, this.uniformCacheU32, drawViewProj, vArr, pos, {
       pointSize: this.pointSize,
       canvasWidth: this.canvasWidth,
       canvasHeight: this.canvasHeight,
@@ -655,13 +702,19 @@ export class LidarRenderer implements SceneNodeUploader {
    * Renders the terrain, the given LOD nodes (front to back) and overlays.
    * `motion`: the camera is moving — reduced resolution (`motionScale`) and
    * square sprites; the next still frame restores full quality.
+   * `accumulate`: index of a still frame of the progressive anti-aliasing
+   * (0 restarts the running mean); set the frame's sub-pixel jitter before
+   * `updateCamera`.
    */
-  renderScene(nodes: readonly SceneNode[], options: { motion?: boolean } = {}): void {
+  renderScene(nodes: readonly SceneNode[], options: { motion?: boolean; accumulate?: number } = {}): void {
     if (!this.device || this.deviceLost || !this.fullTargets || !this.nodePool) return;
 
     const canvasView = this.context.getCurrentTexture().createView();
     this.lastDrawCallCount = 0;
     const reduced = options.motion === true && this.motionTargets !== null;
+    const accumulateSample = !reduced && options.accumulate !== undefined && this.accumView && this.presentBindGroup
+      ? options.accumulate
+      : -1;
     const targets = reduced ? this.motionTargets! : this.fullTargets;
     const scale = targets.width / this.canvasWidth;
     this.lastRenderScale = scale;
@@ -685,7 +738,7 @@ export class LidarRenderer implements SceneNodeUploader {
     // At full resolution without EDL the scene goes straight to the canvas
     // (resolved there with MSAA): no full-screen copy. Depth is only stored
     // for EDL.
-    const direct = !this.edlEnabled && !reduced;
+    const direct = !this.edlEnabled && !reduced && accumulateSample < 0;
     const target = direct ? canvasView : targets.colorView;
     const pass = enc.beginRenderPass({
       colorAttachments: [{
@@ -710,9 +763,10 @@ export class LidarRenderer implements SceneNodeUploader {
     pass.setBindGroup(1, this.pointParamsBindGroup);
     this.lastDrawCallCount += this.nodePool.draw(pass, nodes);
 
-    if (this.terrainMesh && this.terrainVisible) {
-      drawMesh(pass, this.pipelines.terrainPipeline, this.terrainMesh);
-      this.lastDrawCallCount += 1;
+    if (this.terrain && this.terrainVisible) {
+      // Levels picked at the canvas resolution, like the points.
+      const focalPx = Math.abs(this.lastProjScaleY) * this.canvasHeight * 0.5;
+      this.lastDrawCallCount += this.terrain.draw(pass, this.pipelines.terrainLodPipeline, this.lastViewProj, this.lastCamPos, focalPx);
     }
 
     if (this.previewMesh) {
@@ -748,7 +802,38 @@ export class LidarRenderer implements SceneNodeUploader {
     }
     pass.end();
 
-    if (!direct) {
+    if (accumulateSample >= 0) {
+      // EDL (or a plain copy) in linear light, blended into the running mean:
+      // weight 1 / (n + 1), the first sample replaces the history.
+      const resolve = enc.beginRenderPass({
+        colorAttachments: [{
+          view: this.accumView!,
+          clearValue: { r: 0, g: 0, b: 0, a: 1 },
+          loadOp: accumulateSample === 0 ? 'clear' : 'load',
+          storeOp: 'store',
+        }],
+        timestampWrites: timed ? this.gpuTimer!.passTimestamps(TIMED_PASS.edl) : undefined,
+      });
+      const weight = 1 / (accumulateSample + 1);
+      resolve.setPipeline(this.pipelines.accumulatePipeline);
+      resolve.setBindGroup(0, targets.edlBindGroup);
+      resolve.setBlendConstant({ r: weight, g: weight, b: weight, a: weight });
+      resolve.draw(3);
+      resolve.end();
+
+      const present = enc.beginRenderPass({
+        colorAttachments: [{
+          view: canvasView,
+          clearValue: { r: clearR, g: clearG, b: clearB, a: 1 },
+          loadOp: 'clear',
+          storeOp: 'store',
+        }],
+      });
+      present.setPipeline(this.pipelines.presentPipeline);
+      present.setBindGroup(0, this.presentBindGroup!);
+      present.draw(3);
+      present.end();
+    } else if (!direct) {
       const edlPass = enc.beginRenderPass({
         colorAttachments: [{
           view: canvasView,
@@ -777,8 +862,8 @@ export class LidarRenderer implements SceneNodeUploader {
   destroy(): void {
     this.gpuTimer?.destroy();
     this.gpuTimer = null;
-    destroyMeshBuffers(this.terrainMesh);
-    this.terrainMesh = null;
+    this.terrain?.destroy();
+    this.terrain = null;
     this.clearPreviewMesh();
     this.clearRouteMesh();
     this.clearAnalysisMesh();
@@ -794,6 +879,10 @@ export class LidarRenderer implements SceneNodeUploader {
     destroySceneTargets(this.motionTargets);
     this.fullTargets = null;
     this.motionTargets = null;
+    this.accumTexture?.destroy();
+    this.accumTexture = null;
+    this.accumView = null;
+    this.presentBindGroup = null;
     this.heightTexture?.destroy();
     this.snowTexture?.destroy();
     this.slopeTexture?.destroy();

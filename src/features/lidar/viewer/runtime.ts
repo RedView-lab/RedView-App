@@ -555,6 +555,10 @@ export function buildLodTileInWorker(
         reject(new Error(msg.message));
         return;
       }
+      if (msg.type !== 'done') {
+        reject(new Error(`Unexpected LOD worker reply: ${msg.type}`));
+        return;
+      }
       if (!msg.stored && msg.packed) {
         resolve(createInMemoryLodTile({ header: msg.header, nodes: msg.nodes, packed: msg.packed }));
         return;
@@ -586,6 +590,31 @@ export function buildLodTileInWorker(
       { type: 'build', lazFileName, input, persist: options.persist } satisfies LodCacheRequest,
       uniqueBuffers(transfer),
     );
+  });
+}
+
+/**
+ * Upgrades an older LOD cache of the tile in a worker (no decoding, see
+ * `upgradeLegacyLodTile`) and opens the result; null when there is no
+ * older cache to upgrade, so the caller rebuilds from the LAZ.
+ */
+export function upgradeLodTileInWorker(lazFileName: string): Promise<OpenedLodTile | null> {
+  return new Promise((resolve) => {
+    const worker = new Worker(new URL('../workers/lodCacheWorker.ts', import.meta.url), { type: 'module' });
+    const finish = (tile: OpenedLodTile | null) => {
+      worker.terminate();
+      resolve(tile);
+    };
+    worker.onmessage = async (e: MessageEvent<LodCacheResponse>) => {
+      const msg = e.data;
+      if (msg.type === 'error') console.warn(`[Viewer] LOD cache upgrade failed for ${lazFileName}:`, msg.message);
+      finish(msg.type === 'upgraded' && msg.upgraded ? await openLodTile(lazFileName) : null);
+    };
+    worker.onerror = (err) => {
+      console.warn(`[Viewer] LOD cache upgrade failed for ${lazFileName}:`, err.message);
+      finish(null);
+    };
+    worker.postMessage({ type: 'upgrade', lazFileName } satisfies LodCacheRequest);
   });
 }
 

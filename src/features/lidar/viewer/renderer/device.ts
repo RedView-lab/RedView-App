@@ -1,6 +1,6 @@
 import { translateAppText } from '@/shared/i18n/config';
 import type { PlatformProfile } from '../lod/types';
-import { resolvePlatformInfo } from './platform';
+import { fitProfileToMemory, resolvePlatformInfo } from './platform';
 
 /**
  * High-performance adapter + device (with `timestamp-query` when offered)
@@ -11,7 +11,9 @@ export async function requestLidarGpu(): Promise<{ device: GPUDevice; profile: P
   const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
   if (!adapter) throw new Error(translateAppText('Pas de GPUAdapter'));
 
-  const { vendor, arch, desc, profile } = resolvePlatformInfo((adapter as unknown as { info?: unknown }).info ?? null);
+  const platform = resolvePlatformInfo((adapter as unknown as { info?: unknown }).info ?? null);
+  const { vendor, arch, desc } = platform;
+  const profile = fitProfileToMemory(platform.profile, (navigator as Navigator & { deviceMemory?: number }).deviceMemory);
   console.log(`[LiDAR GPU] Adapter: vendor=${vendor} arch=${arch} desc=${desc}`);
 
   const features: GPUFeatureName[] = [];

@@ -11,6 +11,9 @@
 // Optional (off by default): it also outlines individual large points.
 // While the camera moves the scene may be rendered smaller than the canvas
 // (`scale` < 1): the pass then reads the texel under each canvas pixel.
+// `edl_accumulate_fs` is the same pass for the progressive anti-aliasing of
+// still frames: it outputs linear light, blended into the accumulation
+// target with a constant weight of 1 / (n + 1) (a running mean).
 
 export const EDL_PARAMS_FLOATS = 4;
 
@@ -39,18 +42,17 @@ fn loadDepth(c: vec2<i32>) -> f32 {
   return textureLoad(depthTex, c, 0);
 }
 
-@fragment
-fn edl_fs(@builtin(position) fragCoord: vec4<f32>) -> @location(0) vec4<f32> {
+fn edlColor(fragCoord: vec4<f32>) -> vec3<f32> {
   let dims = vec2<i32>(textureDimensions(colorTex));
   let c = min(vec2<i32>(fragCoord.xy * edl.scale), dims - vec2<i32>(1));
   let color = textureLoad(colorTex, c, 0).rgb;
   if (edl.enabled < 0.5) {
-    return vec4<f32>(color, 1.0);
+    return color;
   }
 
   let d = loadDepth(c);
   if (d <= 0.0) {
-    return vec4<f32>(color, 1.0);
+    return color;
   }
   let centerLog = -log2(d);
   var sum = 0.0;
@@ -64,7 +66,19 @@ fn edl_fs(@builtin(position) fragCoord: vec4<f32>) -> @location(0) vec4<f32> {
   }
   let response = sum / 8.0;
   let shade = exp(-response * 300.0 * edl.strength);
-  return vec4<f32>(color * shade, 1.0);
+  return color * shade;
+}
+
+@fragment
+fn edl_fs(@builtin(position) fragCoord: vec4<f32>) -> @location(0) vec4<f32> {
+  return vec4<f32>(edlColor(fragCoord), 1.0);
+}
+
+@fragment
+fn edl_accumulate_fs(@builtin(position) fragCoord: vec4<f32>) -> @location(0) vec4<f32> {
+  let c = clamp(edlColor(fragCoord), vec3<f32>(0.0), vec3<f32>(1.0));
+  let linear = select(c / 12.92, pow((c + 0.055) / 1.055, vec3<f32>(2.4)), c > vec3<f32>(0.04045));
+  return vec4<f32>(linear, 1.0);
 }
 `;
 }

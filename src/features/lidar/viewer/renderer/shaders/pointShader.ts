@@ -2,12 +2,14 @@
 // WGSL Shader Components — Point Cloud Shaders
 // ============================================
 //
-// Points are streamed per LOD node as 12-byte records (see lod/lodTile.ts):
-// u16×3 position quantized in the node cube, class, intensity, RGB. They
-// are shaded once per point by a compute pass (colour mode, overlays, DTM
-// lighting) when a node arrives or that state changes; the per-frame
-// vertex shader only decodes the position, projects a screen-aligned
-// sprite and reads the pre-shaded colour — no texture fetch per vertex.
+// Points are streamed per LOD node as 16-byte records (see lod/lodTile.ts):
+// u16×3 position quantized in the node cube, class, intensity, RGB, and the
+// cell-filtered intensity and RGB. They are shaded once per point by a
+// compute pass (colour mode, overlays, DTM lighting) when a node arrives,
+// when that state changes or when the node's drawn children change; the
+// per-frame vertex shader only decodes the position, projects a
+// screen-aligned sprite and reads the pre-shaded colour — no texture fetch
+// per vertex.
 //
 // Each point is one instance of a 4-vertex strip. Vertex pulling (one
 // indexed draw per node reading storage buffers) was measured ~20 % slower
@@ -144,6 +146,10 @@ export const POINT_SHADING_WORKGROUP_SIZE = 256;
  * else (trees, buildings, wires) gets flat-ground lighting, since the ground
  * normal under a roof or a canopy says nothing about its own orientation.
  * Eye-Dome Lighting then brings out the 3D structure in screen space.
+ * Where no child of the node is drawn (octant mask, as for the adaptive
+ * size) its points are the finest on screen and take the colour and
+ * intensity filtered over their cell: a coarse level then looks like a
+ * downsampled image of the full one, not like scattered samples of it.
  */
 export const POINT_SHADING_SHADER = /* wgsl */ `
 ${WGSL_CAMERA_STRUCT}
@@ -153,6 +159,8 @@ ${WGSL_NODE_STRUCT}
 @group(1) @binding(0) var<storage, read> packed: array<u32>;
 @group(1) @binding(1) var<storage, read_write> shadedColors: array<u32>;
 @group(1) @binding(2) var<uniform> node: NodeParams;
+/** Per pool slot: octants covered by a drawn child this frame (see the point pipeline). */
+@group(1) @binding(3) var<storage, read> childMasks: array<u32>;
 
 ${WGSL_COLOR_HELPERS}
 ${WGSL_OVERLAY_HELPERS}
@@ -188,15 +196,19 @@ fn classificationColor(cls: u32) -> vec3<f32> {
 fn shade_main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let i = gid.x;
   if (i >= node.count) { return; }
-  let w0 = packed[i * 3u];
-  let w1 = packed[i * 3u + 1u];
-  let w2 = packed[i * 3u + 2u];
+  // Words: x|y, z|class|intensity, rgb|filtered intensity, filtered rgb.
+  let w0 = packed[i * 4u];
+  let w1 = packed[i * 4u + 1u];
+  let w2 = packed[i * 4u + 2u];
+  let w3 = packed[i * 4u + 3u];
   let q = vec3<f32>(f32(w0 & 0xffffu), f32(w0 >> 16u), f32(w1 & 0xffffu)) / 65535.0;
   let p = node.origin + vec3<f32>(q.x, q.z, -q.y) * node.size;
   let cls = (w1 >> 16u) & 0xffu;
-  let intensity = f32(w1 >> 24u) / 255.0;
+  let octant = select(0u, 1u, q.x >= 0.5) | select(0u, 2u, q.y >= 0.5) | select(0u, 4u, q.z >= 0.5);
+  let finest = ((childMasks[node.slot] >> octant) & 1u) == 0u;
+  let intensity = f32(select(w1 >> 24u, w2 >> 24u, finest)) / 255.0;
 
-  var base = unpack4x8unorm(w2).rgb;
+  var base = unpack4x8unorm(select(w2, w3, finest)).rgb;
   if (camera.colorMode > 2.5) {
     // Uniform grey: only the lighting and EDL draw the relief.
     base = vec3<f32>(0.8);

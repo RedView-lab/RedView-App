@@ -1,5 +1,16 @@
 import type { PointCloudBounds, TileCoord } from '../../types';
 import type { TerrainCache } from '../../lib/storage';
+import type { TerrainPart } from '../renderer/terrainLod';
+
+/**
+ * Scene terrain: the tiles' meshes concatenated, without an index list (the
+ * renderer draws each tile grid per chunk, see TerrainLod), and the merged
+ * height grid.
+ */
+export interface SceneTerrain extends TerrainCache {
+  /** Vertex grid of each tile inside `vertices`. */
+  parts: TerrainPart[];
+}
 
 export interface LoadedViewerTile {
   coord: TileCoord;
@@ -118,21 +129,27 @@ export function mergeHeightGrid(tiles: LoadedViewerTile[], mergedBounds: PointCl
   return { heightGrid, gridWidth, gridHeight };
 }
 
+/** Grid of a tile mesh (vertices row-major, `gridWidth` per row). */
+function tilePart(terrain: TerrainCache, vertexOffset: number): TerrainPart {
+  return { vertexOffset, gridWidth: terrain.gridWidth, gridHeight: terrain.gridHeight };
+}
+
 /** Concatenates the tiles' terrain meshes in the merged (centred) frame. */
-export function mergeTerrainMeshes(tiles: LoadedViewerTile[], mergedBounds: PointCloudBounds): TerrainCache {
-  if (tiles.length === 1) return tiles[0]!.terrainMesh;
+export function mergeTerrainMeshes(tiles: LoadedViewerTile[], mergedBounds: PointCloudBounds): SceneTerrain {
+  if (tiles.length === 1) {
+    const terrain = tiles[0]!.terrainMesh;
+    return { ...terrain, parts: [tilePart(terrain, 0)] };
+  }
 
   const totalVertexCount = tiles.reduce((sum, tile) => sum + tile.terrainMesh.vertexCount, 0);
-  const totalIndexCount = tiles.reduce((sum, tile) => sum + tile.terrainMesh.indexCount, 0);
   const vertices = new Float32Array(totalVertexCount * 6);
   const colors = new Uint8Array(totalVertexCount * 4);
-  const indices = new Uint32Array(totalIndexCount);
+  const parts: TerrainPart[] = [];
   const mergedCenterX = (mergedBounds.minX + mergedBounds.maxX) / 2;
   const mergedCenterY = (mergedBounds.minY + mergedBounds.maxY) / 2;
   const mergedCenterZ = (mergedBounds.minZ + mergedBounds.maxZ) / 2;
 
   let vertexOffset = 0;
-  let indexOffset = 0;
   for (const tile of tiles) {
     const bounds = tile.bounds;
     const deltaX = (bounds.minX + bounds.maxX) / 2 - mergedCenterX;
@@ -152,22 +169,18 @@ export function mergeTerrainMeshes(tiles: LoadedViewerTile[], mergedBounds: Poin
     }
 
     colors.set(terrain.colors.subarray(0, terrain.vertexCount * 4), vertexOffset * 4);
-
-    for (let i = 0; i < terrain.indexCount; i += 1) {
-      indices[indexOffset + i] = terrain.indices[i]! + vertexOffset;
-    }
-
+    parts.push(tilePart(terrain, vertexOffset));
     vertexOffset += terrain.vertexCount;
-    indexOffset += terrain.indexCount;
   }
 
   const mergedGrid = mergeHeightGrid(tiles, mergedBounds);
   return {
     vertices,
     colors,
-    indices,
+    indices: new Uint32Array(0),
     vertexCount: totalVertexCount,
-    indexCount: totalIndexCount,
+    indexCount: 0,
+    parts,
     heightGrid: mergedGrid.heightGrid,
     gridWidth: mergedGrid.gridWidth,
     gridHeight: mergedGrid.gridHeight,

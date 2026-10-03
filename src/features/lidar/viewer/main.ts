@@ -12,11 +12,12 @@ import './tileNavigator/styles.css';
 import { createAppTranslationBundle, readStoredAppLocale, translateAppText } from '@/shared/i18n/config';
 import { buildTranslationLookup, observeDomTranslation } from '@/shared/i18n/domTranslation';
 import { LidarRenderer, type HeightmapParams } from './renderer';
-import { CameraController } from './camera';
+import { CameraController, type CameraPose } from './camera';
 import { getTimeZoneForCoordinates, toWgs84, trueNorthGridBearingDeg } from '../lib/coordConvert';
 import { resolveTimeZoneAt } from '@/shared/lib/timeZoneAt';
 import { SceneLod, type SceneLodStats } from './lod/sceneLod';
 import { AdaptivePointBudget } from './lod/lodBudget';
+import { REST_SAMPLES, RestRefinement } from './lod/restRefinement';
 import { LidarManager } from '../lib/lidarManager';
 import { buildViewerUrl } from '../lib/viewerUrl';
 import { syncRootAppScale } from '@/shared/lib/appScale';
@@ -310,7 +311,7 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
     renderer.pointSize = Math.min(0.8, Math.max(0.1, meanSpacing * 1.5));
     renderer.pointSizeReference = renderer.pointSize;
     renderer.setEdl(false, percentToEdlStrength(EDL_DEFAULT_PERCENT), edlRadiusPx());
-    renderer.setMesh(terrainMesh.vertices, terrainMesh.colors, terrainMesh.indices);
+    renderer.setTerrainMesh(terrainMesh);
 
     const camera = new CameraController(canvas);
     camera.lookAt(0, 0, 0, extent * 0.6);
@@ -323,6 +324,9 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
         : platform,
       { preciseGpu: renderer.hasPreciseGpuTiming() },
     );
+    // Still camera: denser selection, then progressive anti-aliasing (off
+    // with a pinned budget: benches compare variants at equal load).
+    const restRefinement = new RestRefinement(!pinnedBudget);
     let requestRenderRef: () => void = () => undefined;
     const sceneLod = new SceneLod(scene.tiles, { x: cx, y: cy, z: cz }, {
       pointBudget: pointBudget.pointBudget,
@@ -378,6 +382,8 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
     const requestRender = () => {
       renderRequested = true;
       settleFramesLeft = MAX_SETTLE_FRAMES;
+      // Whatever changed, the averaged still image is stale.
+      restRefinement.invalidate();
       if (cleanedUp || document.hidden || frameHandle != null) return;
       frameHandle = window.requestAnimationFrame(renderLoop);
     };
@@ -386,7 +392,9 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
       const cadence = frameClock.getCadence();
       const gpuMs = renderer?.getGpuFrameMs() ?? 0;
       const shadeMs = renderer?.getGpuShadeMs() ?? 0;
-      const drawCalls = renderer?.getLastRenderStats().drawCalls ?? 0;
+      const renderStats = renderer?.getLastRenderStats();
+      const drawCalls = renderStats?.drawCalls ?? 0;
+      const terrainTriangles = renderStats?.terrainTriangles ?? 0;
       const renderScale = renderer?.getLastRenderScale() ?? 1;
       return (cadence.samples > 0 ? `${cadence.fps} fps · p95 ${cadence.p95Ms.toFixed(0)} ms` : '— fps') +
         (gpuMs > 0 ? ` · GPU ${gpuMs.toFixed(1)} ms` : '') +
@@ -395,8 +403,14 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
         ` · ${lodStats.selectedPoints.toLocaleString()} / ${lodStats.totalPoints.toLocaleString()} pts` +
         ` · budget ${(lodStats.pointBudget / 1e6).toFixed(1)}M` +
         ` · ${lodStats.selectedNodes}/${lodStats.totalNodes} nodes · draws ${drawCalls}` +
+        (terrainTriangles > 0 ? ` · terrain ${(terrainTriangles / 1e6).toFixed(2)}M △` : '') +
         ` · GPU ${(lodStats.residentPoints / 1e6).toFixed(1)}/${(lodStats.poolBudget / 1e6).toFixed(0)}M pts` +
         (lodStats.pendingLoads > 0 ? ` · ${translateAppText('chargement {{count}}', { count: lodStats.pendingLoads })}` : '') +
+        (restRefinement.phase === 'refine'
+          ? ` · ${translateAppText('affinage')}`
+          : restRefinement.phase === 'accumulate'
+            ? ` · ${translateAppText('lissage {{done}}/{{total}}', { done: restRefinement.sample, total: REST_SAMPLES })}`
+            : '') +
         ` · ${translateAppText('{{count}} tuile(s)', { count: sceneTileCoords.length })}` +
         ` · ${canvas.width}×${canvas.height}${renderScale < 1 ? ` ×${renderScale.toFixed(2)}` : ''} ${platform.tier}`;
     };
@@ -418,27 +432,38 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
       // Moving frames trade resolution and round sprites for cadence; the
       // first still frame after the hold restores full quality.
       const motion = frameTime - lastMotionTime < MOTION_HOLD_MS;
+      if (motion) restRefinement.setMoving();
+      const accumulating = restRefinement.phase === 'accumulate';
+      const [jitterX, jitterY] = restRefinement.jitter();
+      renderer.setSubpixelJitter(jitterX, jitterY);
 
       renderer.setEyeLevelPoints(camera.getMode() === 'look');
       renderer.updateCamera(camera.getViewMatrix(), camera.getRenderProjMatrix(), camera.getEye());
 
-      // GPU time of the draw passes and the real cadence drive the budget,
-      // sized on moving frames (see lodBudget).
-      pointBudget.sample({
-        gpuMs: renderer.getGpuFrameMs(),
-        cpuMs: lastCpuFrameMs,
-        intervalMs,
-        targetIntervalMs: frameClock.getTargetIntervalMs(),
-        refreshMs: frameClock.getRefreshMs(),
-        rest: !motion,
-      });
-      if (!pinnedBudget && pointBudget.isStarved() && !degrading) void degradeQuality();
-      sceneLod.setPointBudget(pointBudget.pointBudget);
+      if (restRefinement.phase === 'moving') {
+        // GPU time of the draw passes and the real cadence drive the budget,
+        // sized on moving frames (see lodBudget).
+        pointBudget.sample({
+          gpuMs: renderer.getGpuFrameMs(),
+          cpuMs: lastCpuFrameMs,
+          intervalMs,
+          targetIntervalMs: frameClock.getTargetIntervalMs(),
+          refreshMs: frameClock.getRefreshMs(),
+          rest: !motion,
+        });
+        if (!pinnedBudget && pointBudget.isStarved() && !degrading) void degradeQuality();
+        sceneLod.setPointBudget(pointBudget.pointBudget);
+      } else {
+        // Refining a still view: these frames may take a few vsyncs and do
+        // not feed the moving budget.
+        const restBudget = restRefinement.budget(pointBudget.rawBudget, platform.restMaxBudget);
+        sceneLod.setPointBudget(Math.max(1, Math.floor(restBudget * pointBudget.userScale)));
+      }
       const [cpx, cpy, cpz] = renderer.lastCamPos;
       // LOD at the canvas resolution in both modes: starting or stopping
       // the camera does not reshuffle the selection.
       sceneLod.update(renderer.lastViewProj, renderer.lastProjScaleY, cpx, cpy, cpz, canvas.height);
-      renderer.renderScene(sceneLod.getSelectedNodes(), { motion });
+      renderer.renderScene(sceneLod.getSelectedNodes(), { motion, accumulate: accumulating ? restRefinement.sample : undefined });
       if (motion) renderRequested = true;
       if (routeOverlayStale) {
         routeOverlayStale = false;
@@ -448,7 +473,32 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
       // Budget growth only matters while it limits the selection (new nodes
       // only fill ~97 % of it, see sceneLod).
       const budgetSettled = pointBudget.isSettled() || lodStats.targetPoints < lodStats.pointBudget * 0.95;
-      const keepSettling = !renderRequested && (!budgetSettled || !sceneLod.isIdle()) && settleFramesLeft > 0;
+      if (!motion) {
+        // Still view: once the moving budget has settled with its selection
+        // drawn, refine it, then anti-alias it (see RestRefinement).
+        if (restRefinement.phase === 'moving') {
+          if (budgetSettled && sceneLod.isIdle()) restRefinement.startRefine();
+        } else {
+          const stillMs = renderer.hasPreciseGpuTiming() ? renderer.getGpuFrameMs() : intervalMs;
+          if (restRefinement.phase === 'refine') {
+            restRefinement.onRefineFrame(
+              {
+                lodIdle: sceneLod.isIdle(),
+                gpuMs: stillMs,
+                // New nodes only fill ~97 % of the budget (see sceneLod).
+                budgetLimited: lodStats.targetPoints >= lodStats.pointBudget * 0.95,
+              },
+              pointBudget.rawBudget,
+              platform.restMaxBudget,
+            );
+          } else if (accumulating) {
+            restRefinement.onAccumulatedFrame(stillMs, pointBudget.rawBudget);
+          }
+        }
+      }
+      const keepSettling = !renderRequested
+        && (!budgetSettled || !sceneLod.isIdle() || restRefinement.pending || (!motion && restRefinement.phase === 'moving'))
+        && settleFramesLeft > 0;
       const goingIdle = !renderRequested && !keepSettling;
 
       const now = performance.now();
@@ -472,7 +522,8 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
       if (renderRequested) {
         requestRender();
       } else if (keepSettling) {
-        // Camera is still, but nodes are still streaming in or the budget is adapting.
+        // Camera is still, but nodes are still streaming in, the budget is
+        // adapting or the still image is being refined.
         settleFramesLeft -= 1;
         frameHandle = window.requestAnimationFrame(renderLoop);
       } else {
@@ -700,6 +751,16 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
         });
         benchRun.start();
       })();
+    } else if (benchMode === 'shots') {
+      // Still views for visual A/B captures (script-test-bench/lidar-viewer-shots):
+      // the script sets a pose, waits until the loop goes idle (the image has
+      // reached its resting quality), then takes a screenshot.
+      (window as unknown as { __rvLidarShots?: unknown }).__rvLidarShots = {
+        extent,
+        setPose: (pose: Partial<CameraPose>) => camera.setPose(pose),
+        groundAt: (x: number, z: number) => sampleElevationAtProj(x + cx, cy - z, heightSceneParams),
+        state: () => ({ rendering: frameHandle !== null, idle: sceneLod.isIdle(), stats: sceneLod.getStats() }),
+      };
     }
 
     const handleResize = () => {

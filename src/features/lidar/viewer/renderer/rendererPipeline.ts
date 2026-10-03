@@ -5,6 +5,7 @@ import {
   EDL_SHADER_MSAA,
   NODE_UNIFORM_BYTES,
   POINT_SHADER,
+  PRESENT_SHADER,
   POINT_SHADING_SHADER,
   ROUTE_SHADER,
   SUN_DISC_SHADER,
@@ -14,12 +15,15 @@ import {
 
 /** Reversed-Z (cleared to 0, `greater`): float depth keeps precision at every distance. */
 export const SCENE_DEPTH_FORMAT: GPUTextureFormat = 'depth32float';
+/** Running mean of the still frames (linear light), see RestRefinement. */
+export const ACCUMULATION_FORMAT: GPUTextureFormat = 'rgba16float';
 
 export interface RendererPipelines {
   pointPipeline: GPURenderPipeline;
   /** Same sprites as plain squares (no discard), drawn while the camera moves. */
   pointPipelineSquare: GPURenderPipeline;
-  terrainPipeline: GPURenderPipeline;
+  /** Chunked terrain (TerrainLod): group 1 = per-chunk push-back. */
+  terrainLodPipeline: GPURenderPipeline;
   previewPipeline: GPURenderPipeline;
   trajectoryPipeline: GPURenderPipeline;
   sunDiscPipeline: GPURenderPipeline;
@@ -27,14 +31,21 @@ export interface RendererPipelines {
   edlPipeline: GPURenderPipeline;
   /** Upscales a scene rendered below the canvas resolution. */
   blitPipeline: GPURenderPipeline;
+  /** EDL (or plain copy) of a still frame blended into the accumulation target (blend constant = weight). */
+  accumulatePipeline: GPURenderPipeline;
+  /** Accumulation target → canvas. */
+  presentPipeline: GPURenderPipeline;
   shadingPipeline: GPUComputePipeline;
   sceneBindGroupLayout: GPUBindGroupLayout;
   pointParamsBindGroupLayout: GPUBindGroupLayout;
   /** Group 2 of the point pipeline: per-node uniform, dynamic offset. */
   nodeBindGroupLayout: GPUBindGroupLayout;
+  /** Group 1 of the terrain pipeline: push-back per chunk. */
+  terrainLodBindGroupLayout: GPUBindGroupLayout;
   shadingBindGroupLayout: GPUBindGroupLayout;
   edlBindGroupLayout: GPUBindGroupLayout;
   blitBindGroupLayout: GPUBindGroupLayout;
+  presentBindGroupLayout: GPUBindGroupLayout;
 }
 
 const ALL_STAGES = GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE;
@@ -76,7 +87,7 @@ const TERRAIN_DEPTH_SLOPE_BIAS = -4;
 
 type SharedLayouts = Pick<
   RendererPipelines,
-  'sceneBindGroupLayout' | 'pointParamsBindGroupLayout' | 'nodeBindGroupLayout' | 'shadingBindGroupLayout'
+  'sceneBindGroupLayout' | 'pointParamsBindGroupLayout' | 'nodeBindGroupLayout' | 'shadingBindGroupLayout' | 'terrainLodBindGroupLayout'
 >;
 
 /**
@@ -126,7 +137,13 @@ export async function createRendererPipelines(
       { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
       { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
       { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform', minBindingSize: NODE_UNIFORM_BYTES } },
+      // Child masks of every pool slot (filtered colours where no child is drawn).
+      { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
     ],
+  });
+
+  const terrainLodBindGroupLayout = reuse?.terrainLodBindGroupLayout ?? device.createBindGroupLayout({
+    entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } }],
   });
 
   const edlBindGroupLayout = device.createBindGroupLayout({
@@ -146,6 +163,10 @@ export async function createRendererPipelines(
       { binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
       { binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
     ],
+  });
+
+  const presentBindGroupLayout = device.createBindGroupLayout({
+    entries: [{ binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } }],
   });
 
   const sceneLayout = device.createPipelineLayout({ bindGroupLayouts: [sceneBindGroupLayout] });
@@ -183,9 +204,9 @@ export async function createRendererPipelines(
   });
 
   const terrainShader = device.createShaderModule({ code: TERRAIN_SHADER });
-  const terrainPipeline = device.createRenderPipeline({
-    layout: sceneLayout,
-    vertex: { module: terrainShader, entryPoint: 'terrain_vs', buffers: TERRAIN_VERTEX_BUFFERS },
+  const terrainLodPipeline = device.createRenderPipeline({
+    layout: device.createPipelineLayout({ bindGroupLayouts: [sceneBindGroupLayout, terrainLodBindGroupLayout] }),
+    vertex: { module: terrainShader, entryPoint: 'terrain_lod_vs', buffers: TERRAIN_VERTEX_BUFFERS },
     fragment: { module: terrainShader, entryPoint: 'terrain_fs', targets: [{ format }] },
     primitive: { topology: 'triangle-list', cullMode: 'back' },
     depthStencil: { ...depthState('greater', true), depthBiasSlopeScale: TERRAIN_DEPTH_SLOPE_BIAS },
@@ -257,6 +278,31 @@ export async function createRendererPipelines(
     primitive: { topology: 'triangle-list' },
   });
 
+  const accumulatePipeline = device.createRenderPipeline({
+    layout: device.createPipelineLayout({ bindGroupLayouts: [edlBindGroupLayout] }),
+    vertex: { module: edlShader, entryPoint: 'edl_vs', buffers: [] },
+    fragment: {
+      module: edlShader,
+      entryPoint: 'edl_accumulate_fs',
+      targets: [{
+        format: ACCUMULATION_FORMAT,
+        blend: {
+          color: { srcFactor: 'constant', dstFactor: 'one-minus-constant', operation: 'add' },
+          alpha: { srcFactor: 'constant', dstFactor: 'one-minus-constant', operation: 'add' },
+        },
+      }],
+    },
+    primitive: { topology: 'triangle-list' },
+  });
+
+  const presentShader = device.createShaderModule({ code: PRESENT_SHADER });
+  const presentPipeline = device.createRenderPipeline({
+    layout: device.createPipelineLayout({ bindGroupLayouts: [presentBindGroupLayout] }),
+    vertex: { module: presentShader, entryPoint: 'present_vs', buffers: [] },
+    fragment: { module: presentShader, entryPoint: 'present_fs', targets: [{ format }] },
+    primitive: { topology: 'triangle-list' },
+  });
+
   const blitShader = device.createShaderModule({ code: BLIT_SHADER });
   const blitPipeline = device.createRenderPipeline({
     layout: device.createPipelineLayout({ bindGroupLayouts: [blitBindGroupLayout] }),
@@ -279,19 +325,23 @@ export async function createRendererPipelines(
   return {
     pointPipeline,
     pointPipelineSquare,
-    terrainPipeline,
+    terrainLodPipeline,
     previewPipeline,
     trajectoryPipeline,
     sunDiscPipeline,
     routePipeline,
     edlPipeline,
     blitPipeline,
+    accumulatePipeline,
+    presentPipeline,
     shadingPipeline,
     sceneBindGroupLayout,
     pointParamsBindGroupLayout,
     nodeBindGroupLayout,
     shadingBindGroupLayout,
+    terrainLodBindGroupLayout,
     edlBindGroupLayout,
     blitBindGroupLayout,
+    presentBindGroupLayout,
   };
 }

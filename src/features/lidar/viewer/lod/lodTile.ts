@@ -8,12 +8,20 @@
 // COPC files already are such an octree; other LAS/LAZ files get one built
 // here (first point per 128³ grid cell stays in the node).
 //
-// Points are packed per node in 12 bytes:
+// Points are packed per node in 16 bytes:
 //   [0..5] x, y, z as u16, quantized in the node cube (≤ 1.5 cm at the root
 //          of a 1 km tile, sub-centimetre below; LiDAR HD scale is 1 cm)
 //   [6] classification  [7] intensity (8-bit, tile percentile-scaled)
-//   [8..10] r, g, b     [11] 0
+//   [8..10] r, g, b
+//   [11] filtered intensity  [12..14] filtered r, g, b  [15] 0
 // so a node block is read from disk and uploaded to the GPU as is.
+//
+// Filtered values (see `filterLodAttributes`) are the mean over the point's
+// cell of the node grid (node size / 128) of every point of the subtree. Where
+// a node is the finest level drawn, each of its points stands for its whole
+// cell, as a texel of a texture mip level does; drawn with its own colour it
+// would be one sample of a 20 cm orthophoto, and far away the coarse levels
+// turned into salt-and-pepper noise. Leaves keep their own values.
 
 import type {
   CopcHierarchyInfo,
@@ -22,9 +30,21 @@ import type {
   PointCloudOrigin,
 } from '../../types';
 
-export const LOD_POINT_STRIDE = 12;
+export const LOD_POINT_STRIDE = 16;
+/** Byte offsets of the attributes inside a packed point record. */
+export const LOD_RECORD = {
+  classification: 6,
+  intensity: 7,
+  rgb: 8,
+  filteredIntensity: 11,
+  filteredRgb: 12,
+} as const;
 /** Grid resolution of the additive subsampling (spacing = node size / 128). */
 export const LOD_GRID = 128;
+/** u16 position → cell of the node grid (65536 / LOD_GRID = 2^9). */
+const CELL_SHIFT = 9;
+const CELL_BITS = 7;
+const CELL_MASK = LOD_GRID - 1;
 const LEAF_MAX_POINTS = 60_000;
 const MAX_DEPTH = 16;
 
@@ -151,12 +171,18 @@ function writePackedPoint(
   view.setUint16(byteOffset, qx < 0 ? 0 : qx > 65535 ? 65535 : qx, true);
   view.setUint16(byteOffset + 2, qy < 0 ? 0 : qy > 65535 ? 65535 : qy, true);
   view.setUint16(byteOffset + 4, qz < 0 ? 0 : qz > 65535 ? 65535 : qz, true);
+  const intensity = intensityScale(input.intensities?.[pointIndex] ?? 0);
   bytes[byteOffset + 6] = input.classifications[pointIndex]!;
-  bytes[byteOffset + 7] = intensityScale(input.intensities?.[pointIndex] ?? 0);
+  bytes[byteOffset + 7] = intensity;
   bytes[byteOffset + 8] = input.colors[p]!;
   bytes[byteOffset + 9] = input.colors[p + 1]!;
   bytes[byteOffset + 10] = input.colors[p + 2]!;
-  bytes[byteOffset + 11] = 0;
+  // Filtered copies, replaced by the cell means for nodes with children.
+  bytes[byteOffset + 11] = intensity;
+  bytes[byteOffset + 12] = input.colors[p]!;
+  bytes[byteOffset + 13] = input.colors[p + 1]!;
+  bytes[byteOffset + 14] = input.colors[p + 2]!;
+  bytes[byteOffset + 15] = 0;
 }
 
 function makeHeader(
@@ -323,11 +349,153 @@ function buildAdditive(input: LodTileInput): LodTile {
 
 /** Builds the LOD tile, reusing the COPC octree when the file has one. */
 export function buildLodTile(input: LodTileInput): LodTile {
-  if (input.copc) {
-    const fromCopc = buildFromCopc(input, input.copc);
-    if (fromCopc) return fromCopc;
+  const tile = (input.copc ? buildFromCopc(input, input.copc) : null) ?? buildAdditive(input);
+  filterLodAttributes(tile);
+  return tile;
+}
+
+/** Occupied cells of a node grid with the attribute sums of the points they hold. */
+interface CellSums {
+  /** Cell keys: x | y << 7 | z << 14 in the node grid. */
+  keys: Uint32Array;
+  /** Per cell: r, g, b, intensity, point count. */
+  sums: Uint32Array;
+  size: number;
+}
+
+const SUM_FIELDS = 5;
+
+/**
+ * Writes the filtered attributes of every node that has children: each
+ * point gets the mean colour and intensity of all the points of its subtree
+ * lying in its cell of the node grid (box filter of the node spacing, cells
+ * in 3D so a canopy and the ground under it stay apart). Cell sums are built
+ * bottom-up, a node merging its children's cells into its own twice coarser
+ * grid (child cubes nest exactly in their parent's), so the whole tile costs
+ * one pass over the points plus one over the occupied cells per level.
+ * Nodes without points are skipped: their children feed the nearest
+ * ancestor that has points.
+ */
+export function filterLodAttributes(tile: LodTile): void {
+  const { nodes, packed } = tile;
+  const count = nodes.length;
+  if (count === 0) return;
+  if (packed.byteOffset % 2 !== 0) throw new Error('LOD point data must be 2-byte aligned');
+  const words = new Uint16Array(packed.buffer, packed.byteOffset, packed.byteLength >> 1);
+  const wordStride = LOD_POINT_STRIDE >> 1;
+
+  const keyOf = (d: number, x: number, y: number, z: number) => `${d}-${x}-${y}-${z}`;
+  const byKey = new Map<string, number>();
+  nodes.forEach((node, i) => byKey.set(keyOf(node.depth, node.x, node.y, node.z), i));
+  const children: number[][] = nodes.map(() => []);
+  const roots: number[] = [];
+  nodes.forEach((node, i) => {
+    if (node.count === 0) return;
+    for (let d = node.depth - 1; d >= 0; d--) {
+      const shift = node.depth - d;
+      const j = byKey.get(keyOf(d, node.x >> shift, node.y >> shift, node.z >> shift));
+      if (j !== undefined && nodes[j]!.count > 0) {
+        children[j]!.push(i);
+        return;
+      }
+    }
+    roots.push(i);
+  });
+
+  const slotOfCell = new Int32Array(1 << (3 * CELL_BITS)).fill(-1);
+  const summaries: (CellSums | null)[] = new Array(count).fill(null);
+
+  const merge = (index: number): CellSums => {
+    const node = nodes[index]!;
+    let capacity = node.count;
+    for (const child of children[index]!) capacity += summaries[child]!.size;
+    const keys = new Uint32Array(capacity);
+    const sums = new Uint32Array(capacity * SUM_FIELDS);
+    let size = 0;
+    const firstWord = node.byteOffset >> 1;
+
+    for (let k = 0; k < node.count; k++) {
+      const w = firstWord + k * wordStride;
+      const cell = (words[w]! >> CELL_SHIFT)
+        | ((words[w + 1]! >> CELL_SHIFT) << CELL_BITS)
+        | ((words[w + 2]! >> CELL_SHIFT) << (2 * CELL_BITS));
+      let slot = slotOfCell[cell]!;
+      if (slot < 0) {
+        slot = size++;
+        slotOfCell[cell] = slot;
+        keys[slot] = cell;
+      }
+      const at = node.byteOffset + k * LOD_POINT_STRIDE;
+      const s = slot * SUM_FIELDS;
+      sums[s] = sums[s]! + packed[at + LOD_RECORD.rgb]!;
+      sums[s + 1] = sums[s + 1]! + packed[at + LOD_RECORD.rgb + 1]!;
+      sums[s + 2] = sums[s + 2]! + packed[at + LOD_RECORD.rgb + 2]!;
+      sums[s + 3] = sums[s + 3]! + packed[at + LOD_RECORD.intensity]!;
+      sums[s + 4] = sums[s + 4]! + 1;
+    }
+
+    for (const childIndex of children[index]!) {
+      const child = nodes[childIndex]!;
+      const summary = summaries[childIndex]!;
+      summaries[childIndex] = null;
+      const shift = child.depth - node.depth;
+      const ox = (child.x - (node.x << shift)) << CELL_BITS;
+      const oy = (child.y - (node.y << shift)) << CELL_BITS;
+      const oz = (child.z - (node.z << shift)) << CELL_BITS;
+      for (let e = 0; e < summary.size; e++) {
+        const key = summary.keys[e]!;
+        const cell = ((ox + (key & CELL_MASK)) >> shift)
+          | (((oy + ((key >> CELL_BITS) & CELL_MASK)) >> shift) << CELL_BITS)
+          | (((oz + (key >> (2 * CELL_BITS))) >> shift) << (2 * CELL_BITS));
+        let slot = slotOfCell[cell]!;
+        if (slot < 0) {
+          slot = size++;
+          slotOfCell[cell] = slot;
+          keys[slot] = cell;
+        }
+        const s = slot * SUM_FIELDS;
+        const c = e * SUM_FIELDS;
+        for (let f = 0; f < SUM_FIELDS; f++) sums[s + f] = sums[s + f]! + summary.sums[c + f]!;
+      }
+    }
+
+    if (children[index]!.length > 0) {
+      for (let k = 0; k < node.count; k++) {
+        const w = firstWord + k * wordStride;
+        const cell = (words[w]! >> CELL_SHIFT)
+          | ((words[w + 1]! >> CELL_SHIFT) << CELL_BITS)
+          | ((words[w + 2]! >> CELL_SHIFT) << (2 * CELL_BITS));
+        const s = slotOfCell[cell]! * SUM_FIELDS;
+        const n = sums[s + 4]!;
+        const at = node.byteOffset + k * LOD_POINT_STRIDE;
+        packed[at + LOD_RECORD.filteredRgb] = Math.round(sums[s]! / n);
+        packed[at + LOD_RECORD.filteredRgb + 1] = Math.round(sums[s + 1]! / n);
+        packed[at + LOD_RECORD.filteredRgb + 2] = Math.round(sums[s + 2]! / n);
+        packed[at + LOD_RECORD.filteredIntensity] = Math.round(sums[s + 3]! / n);
+      }
+    }
+
+    for (let e = 0; e < size; e++) slotOfCell[keys[e]!] = -1;
+    // Trimmed: a summary waits for its parent while the siblings are merged.
+    return { keys: keys.slice(0, size), sums: sums.slice(0, size * SUM_FIELDS), size };
+  };
+
+  // Post-order, depth first: only the summaries of the current path's
+  // siblings are alive at once (tens of MB, not one per node of a level).
+  for (const root of roots) {
+    const stack: Array<{ index: number; next: number }> = [{ index: root, next: 0 }];
+    while (stack.length > 0) {
+      const top = stack[stack.length - 1]!;
+      const kids = children[top.index]!;
+      if (top.next < kids.length) {
+        stack.push({ index: kids[top.next++]!, next: 0 });
+        continue;
+      }
+      stack.pop();
+      const summary = merge(top.index);
+      summaries[top.index] = stack.length > 0 ? summary : null;
+    }
   }
-  return buildAdditive(input);
 }
 
 /** Decodes the position of one packed point (relative to the tile origin). */

@@ -6057,12 +6057,24 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "LOD index {{x}}/{{y}}"
   },
   {
+    "fr": "Mise à niveau du cache LOD {{x}}/{{y}}",
+    "en": "Upgrading LOD cache {{x}}/{{y}}"
+  },
+  {
     "fr": "chargement {{count}}",
     "en": "loading {{count}}"
   },
   {
     "fr": "ombrage {{ms}} ms",
     "en": "shading {{ms}} ms"
+  },
+  {
+    "fr": "affinage",
+    "en": "refining"
+  },
+  {
+    "fr": "lissage {{done}}/{{total}}",
+    "en": "smoothing {{done}}/{{total}}"
   },
   {
     "fr": "Cache LOD illisible après écriture : {{file}}",

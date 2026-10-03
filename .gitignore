@@ -105,6 +105,7 @@ script-test-bench/reports/*.json
 script-test-bench/reports/routing-quality/*.json
 script-test-bench/reports/routing-quality/*.html
 script-test-bench/reports/lidar-viewer-perf/*.json
+script-test-bench/reports/lidar-viewer-shots/
 script-test-bench/reports/screen-audit/
 script-test-bench/routing-quality/vps/dist/
 

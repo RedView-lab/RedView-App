@@ -79,8 +79,11 @@ export function parseViewerParamsFromUrl(): {
   crs: DetectedCrs;
   altRef: AltitudeRef;
   forceWebGL: boolean;
-  /** `?bench=orbit`: scripted camera path that reports the real frame cadence (see perf/viewerBench). */
-  bench: 'orbit' | null;
+  /**
+   * `?bench=orbit`: scripted camera path that reports the real frame cadence (see perf/viewerBench);
+   * `?bench=shots`: still poses set by a capture script (`window.__rvLidarShots`).
+   */
+  bench: 'orbit' | 'shots' | null;
   /** `?budget=<points>`: fixed point budget (benches comparing variants at equal load), else null. */
   pinnedBudget: number | null;
   /**
@@ -101,7 +104,8 @@ export function parseViewerParamsFromUrl(): {
   const parsedCrs = parseCrsParam(params.get('crs'));
   const parsedAltRef = parseAltRefParam(params.get('alt'));
   const forceWebGL = params.get('engine') === 'webgl';
-  const bench = params.get('bench') === 'orbit' ? 'orbit' : null;
+  const rawBench = params.get('bench');
+  const bench = rawBench === 'orbit' || rawBench === 'shots' ? rawBench : null;
   const rawBudget = Number(params.get('budget'));
   const pinnedBudget = Number.isFinite(rawBudget) && rawBudget >= 10_000 ? Math.min(Math.round(rawBudget), 100_000_000) : null;
   const rawMotionScale = Number(params.get('mscale'));

@@ -349,13 +349,16 @@ export async function clearAllTiles(): Promise<void> {
 // quantised to 0.5 m), v4 whole decoded clouds; the LOD cache (lodCache.ts)
 // replaces both. Terrain v2 meshes were built from quantised points, v3 ones
 // splatted the points with a step that did not match the mesh node spacing.
-const LEGACY_DERIVED_SUFFIXES = ['.colorized_v3', '.colorized_v4', '.terrain_hd_v2', '.terrain_hd_v3'] as const;
+// LOD v1 had no filtered colours (normally upgraded on open, see
+// `upgradeLegacyLodTile`; dropped here when the tile is deleted or rebuilt).
+const LEGACY_DERIVED_SUFFIXES = ['.colorized_v3', '.colorized_v4', '.terrain_hd_v2', '.terrain_hd_v3', '.lod_v1'] as const;
 
 // A tile whose colours were revised (`colourRevisionSuffix`) also drops its
-// unrevised LOD/terrain caches.
+// unrevised terrain cache and its revised LOD v1.
 function legacyDerivedKeys(baseName: string): string[] {
   const suffixes: string[] = [...LEGACY_DERIVED_SUFFIXES];
-  if (colourRevisionSuffix(baseName)) suffixes.push('.lod_v1', '.terrain_hd_v4');
+  const revision = colourRevisionSuffix(baseName);
+  if (revision) suffixes.push(`.lod_v1${revision}`, '.terrain_hd_v4');
   return suffixes.map((suffix) => baseName.replace(/(\.copc)?\.laz$/, suffix));
 }
 

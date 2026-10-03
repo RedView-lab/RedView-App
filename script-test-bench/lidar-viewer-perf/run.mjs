@@ -19,21 +19,23 @@
  *
  * Usage :
  *   LIDAR_TILE=<fichier .copc.laz> [LIDAR_TILE_XY=965,6500] npm run bench:lidar-fps -- \
- *     [--label avant] [--params "budget=1500000&mscale=1"] [--size 1600x900] [--route 20000]
+ *     [--label avant] [--params "budget=1500000&mscale=1"] [--size 1600x900] [--route 20000] [--dist <build>]
  *   npm run bench:lidar-fps -- --compare avant,apres
+ * `LIDAR_TILES_DIR=<dossier>` (à la place de LIDAR_TILE) ouvre une scène de
+ * plusieurs tuiles IGN voisines (jusqu'à 9, centre LIDAR_TILE_XY ou la première) ;
+ * le profil Edge et le port HTTP sont alors fixes pour garder tuiles et caches LOD.
  *
  * Les rapports JSON vont dans script-test-bench/reports/lidar-viewer-perf/<label>.json.
  */
 import { createServer } from 'node:http';
 import { createReadStream } from 'node:fs';
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { spawn, spawnSync } from 'node:child_process';
 import { basename, extname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
-const DIST = join(ROOT, 'dist');
 const REPORT_DIR = join(ROOT, 'script-test-bench', 'reports', 'lidar-viewer-perf');
 const EDGE = process.env.EDGE_PATH ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
 const CDP_PORT = Number(process.env.CDP_PORT ?? 18962);
@@ -44,7 +46,7 @@ const TYPES = {
 };
 
 function parseArgs(argv) {
-  const args = { label: null, params: '', size: '1600x900', compare: null, route: 0 };
+  const args = { label: null, params: '', size: '1600x900', compare: null, route: 0, dist: join(ROOT, 'dist') };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--label') args.label = argv[++i];
@@ -52,6 +54,7 @@ function parseArgs(argv) {
     else if (arg === '--size') args.size = argv[++i] ?? args.size;
     else if (arg === '--compare') args.compare = (argv[++i] ?? '').split(',');
     else if (arg === '--route') args.route = Number(argv[++i] ?? 0);
+    else if (arg === '--dist') args.dist = resolve(argv[++i]);
   }
   return args;
 }
@@ -156,27 +159,47 @@ async function compare(labels) {
   console.table(rows);
 }
 
-async function run(args) {
+/** Tiles of the run: one file (LIDAR_TILE) or the IGN tiles of a folder (LIDAR_TILES_DIR, centre first). */
+async function benchTiles() {
+  const dir = process.env.LIDAR_TILES_DIR;
+  if (dir) {
+    const tiles = [];
+    for (const name of await readdir(dir)) {
+      const m = /^LHD_FXX_(\d+)_(\d+)_PTS_LAMB93_IGN69\.copc\.laz$/.exec(name);
+      if (m) tiles.push({ path: join(dir, name), name, x: Number(m[1]), y: Number(m[2]), size: (await stat(join(dir, name))).size });
+    }
+    if (tiles.length === 0) throw new Error(`aucune tuile IGN dans ${dir}`);
+    const [cx, cy] = (process.env.LIDAR_TILE_XY ?? `${tiles[0].x},${tiles[0].y}`).split(',').map(Number);
+    const primary = tiles.find((t) => t.x === cx && t.y === cy) ?? tiles[0];
+    return [primary, ...tiles.filter((t) => t !== primary).slice(0, 8)];
+  }
   const tilePath = process.env.LIDAR_TILE;
-  if (!tilePath) throw new Error('LIDAR_TILE=<fichier .copc.laz> requis');
-  const tileStat = await stat(tilePath);
+  if (!tilePath) throw new Error('LIDAR_TILE=<fichier .copc.laz> ou LIDAR_TILES_DIR=<dossier> requis');
   const xy = process.env.LIDAR_TILE_XY ?? /LHD_FXX_(\d+)_(\d+)_/.exec(basename(tilePath))?.slice(1, 3).join(',');
   if (!xy) throw new Error('LIDAR_TILE_XY=<x>,<y> requis (nom de fichier non IGN)');
-  const [xKm, yKm] = xy.split(',').map(Number);
-  const tileName = `LHD_FXX_${String(xKm).padStart(4, '0')}_${yKm}_PTS_LAMB93_IGN69.copc.laz`;
-  await stat(join(DIST, 'viewer.html')).catch(() => {
-    throw new Error('dist/viewer.html absent : lancer `npm run build` avant le bench');
+  const [x, y] = xy.split(',').map(Number);
+  const name = `LHD_FXX_${String(x).padStart(4, '0')}_${y}_PTS_LAMB93_IGN69.copc.laz`;
+  return [{ path: tilePath, name, x, y, size: (await stat(tilePath)).size }];
+}
+
+async function run(args) {
+  const tiles = await benchTiles();
+  const multi = !!process.env.LIDAR_TILES_DIR;
+  const { x: xKm, y: yKm } = tiles[0];
+  await stat(join(args.dist, 'viewer.html')).catch(() => {
+    throw new Error(`${args.dist}/viewer.html absent : lancer \`npm run build\` avant le bench`);
   });
 
   const server = createServer(async (req, res) => {
     const path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
     try {
-      if (path === '/__bench-tile.copc.laz') {
-        res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': tileStat.size });
-        createReadStream(tilePath).pipe(res);
+      const tile = path.startsWith('/__bench-tiles/') ? tiles.find((t) => `/__bench-tiles/${t.name}` === path) : null;
+      if (tile) {
+        res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': tile.size });
+        createReadStream(tile.path).pipe(res);
         return;
       }
-      const file = join(DIST, path === '/' ? 'index.html' : path.replace(/^\/+/, ''));
+      const file = join(args.dist, path === '/' ? 'index.html' : path.replace(/^\/+/, ''));
       const body = await readFile(file);
       res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' });
       res.end(body);
@@ -185,13 +208,14 @@ async function run(args) {
       res.end();
     }
   });
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  // A multi-tile scene keeps its origin (OPFS is per origin) to reuse the tiles and their caches.
+  await new Promise((r) => server.listen(multi ? Number(process.env.PERF_HTTP_PORT ?? 18972) : 0, '127.0.0.1', r));
   const origin = `http://127.0.0.1:${server.address().port}`;
 
   const [width, height] = args.size.split('x').map(Number);
   const flags = [
     '--headless=new', '--enable-unsafe-webgpu', '--ignore-gpu-blocklist', '--no-first-run', '--no-default-browser-check',
-    `--user-data-dir=${join(tmpdir(), 'redview-lidar-perf-profile')}`, `--remote-debugging-port=${CDP_PORT}`,
+    `--user-data-dir=${join(tmpdir(), multi ? 'redview-lidar-perf-scene-profile' : 'redview-lidar-perf-profile')}`, `--remote-debugging-port=${CDP_PORT}`,
     `--window-size=${width},${height}`,
   ];
   const browser = spawn(EDGE, [...flags, 'about:blank'], { stdio: 'ignore' });
@@ -235,22 +259,24 @@ async function run(args) {
     await send('Runtime.enable');
     await send('Page.enable');
 
-    // 1. The tile goes into OPFS as the app's downloader stores it (kept across runs).
+    // 1. Tiles go into OPFS as the app's downloader stores them (kept across runs).
     await send('Page.navigate', { url: `${origin}/favicon.ico` });
     await sleep(800);
-    const stored = await evaluate(`(async () => {
-      const root = await navigator.storage.getDirectory();
-      const dir = await root.getDirectoryHandle('lidar-hd', { create: true });
-      try {
-        const existing = await (await dir.getFileHandle(${JSON.stringify(tileName)})).getFile();
-        if (existing.size === ${tileStat.size}) return 'déjà en cache';
-      } catch {}
-      const buf = await (await fetch('/__bench-tile.copc.laz')).arrayBuffer();
-      const fh = await dir.getFileHandle(${JSON.stringify(tileName)}, { create: true });
-      const w = await fh.createWritable(); await w.write(buf); await w.close();
-      return buf.byteLength + ' o écrits';
-    })()`);
-    console.log(`Tuile ${tileName} : ${stored}`);
+    for (const tile of tiles) {
+      const stored = await evaluate(`(async () => {
+        const root = await navigator.storage.getDirectory();
+        const dir = await root.getDirectoryHandle('lidar-hd', { create: true });
+        try {
+          const existing = await (await dir.getFileHandle(${JSON.stringify(tile.name)})).getFile();
+          if (existing.size === ${tile.size}) return 'déjà en cache';
+        } catch {}
+        const buf = await (await fetch(${JSON.stringify(`/__bench-tiles/${tile.name}`)})).arrayBuffer();
+        const fh = await dir.getFileHandle(${JSON.stringify(tile.name)}, { create: true });
+        const w = await fh.createWritable(); await w.write(buf); await w.close();
+        return buf.byteLength + ' o écrits';
+      })()`);
+      console.log(`Tuile ${tile.name} : ${stored}`);
+    }
     const routeState = args.route > 0 ? JSON.stringify(syntheticRouteState(args.route, xKm, yKm)) : null;
     await evaluate(routeState
       ? `localStorage.setItem('redview:lidar:route_overlay', ${JSON.stringify(routeState)}), 'ok'`
@@ -260,7 +286,8 @@ async function run(args) {
     // 2. Viewer with the scripted path.
     const extra = args.params ? `&${args.params}` : '';
     const t0 = Date.now();
-    await send('Page.navigate', { url: `${origin}/viewer.html?x=${xKm}&y=${yKm}&crs=LAMB93&alt=IGN69&bench=orbit${extra}` });
+    const tileParams = tiles.slice(1).map((t) => `&tile=${t.x},${t.y}`).join('');
+    await send('Page.navigate', { url: `${origin}/viewer.html?x=${xKm}&y=${yKm}&crs=LAMB93&alt=IGN69${tileParams}&bench=orbit${extra}` });
     let ready = false;
     for (let i = 0; i < 600 && !ready; i++) {
       await sleep(500);
@@ -281,6 +308,7 @@ async function run(args) {
         label: args.label,
         date: new Date().toISOString(),
         route: args.route,
+        tiles: tiles.length,
         size: args.size,
         params: args.params,
         adapter: logs.find((line) => line.includes('[LiDAR GPU] Tier')) ?? null,

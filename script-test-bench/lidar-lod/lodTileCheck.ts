@@ -97,7 +97,7 @@ export function runLodTileCheck(): void {
     `Octree LOD additive (600k pts, ${tile.nodes.length} nœuds, ${buildMs.toFixed(0)} ms)`,
     total === count && tile.packed.byteLength === count * LOD_POINT_STRIDE && withinBound,
     'octree reconstruite + échantillons voxels dupliqués (16 o/pt + doublons)',
-    `${total === count ? 'chaque point une fois' : `${total} ≠ ${count}`}, 12 o/pt, ` +
+    `${total === count ? 'chaque point une fois' : `${total} ≠ ${count}`}, ${LOD_POINT_STRIDE} o/pt (couleurs filtrées incluses), ` +
     `erreur moyenne ${((sumErr / Math.max(1, samples)) * 1000).toFixed(2)} mm (max ${(maxErr * 1000).toFixed(1)} mm, racine d’1 km)`,
   );
 }

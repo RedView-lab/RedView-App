@@ -40,7 +40,7 @@ export async function runRealTile(path: string): Promise<void> {
     `${pc.copc ? 'COPC' : 'LAS/LAZ'}, origine ${pc.origin.x}/${pc.origin.y}`,
     `  décodage ${(decodeMs / 1000).toFixed(1)} s (1 thread) · octree LOD ${(buildMs / 1000).toFixed(2)} s · ` +
     `${tile.nodes.length} nœuds (${[...depthCounts.entries()].map(([d, n]) => `p${d}:${n}`).join(' ')}) · ` +
-    `${(tile.packed.byteLength / 1e6).toFixed(0)} Mo (12 o/pt) contre ${((pc.count * 16) / 1e6).toFixed(0)} Mo + voxels avant`,
+    `${(tile.packed.byteLength / 1e6).toFixed(0)} Mo (${LOD_POINT_STRIDE} o/pt, couleurs filtrées incluses)`,
   );
 
   // The LOD shrinks a node's bounds to its own points plus CONTENT_MARGIN_CELLS

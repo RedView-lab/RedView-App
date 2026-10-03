@@ -8,6 +8,7 @@ import {
   getDefaultDecodeWorkerCount,
   loadTileFromOPFS,
   processPointCloudInWorker,
+  upgradeLodTileInWorker,
   type ViewerStatusReporter,
 } from '../runtime';
 import {
@@ -17,7 +18,7 @@ import {
   mapWithConcurrency,
   type ViewerSceneLoadOptions,
 } from './datasetPointCap';
-import { mergeTerrainMeshes, unionBounds, type LoadedViewerTile } from './datasetMerge';
+import { mergeTerrainMeshes, unionBounds, type LoadedViewerTile, type SceneTerrain } from './datasetMerge';
 
 export type { ViewerSceneLoadOptions } from './datasetPointCap';
 
@@ -37,7 +38,7 @@ export interface ViewerSceneData {
    * Resolves once the terrain mesh is ready. Kept as a promise so the caller
    * can initialise the GPU while the heightmap is still being generated.
    */
-  terrainMesh: Promise<TerrainCache>;
+  terrainMesh: Promise<SceneTerrain>;
   cacheWrites: CacheWriteTask[];
   tileFileLabel: string;
 }
@@ -77,7 +78,14 @@ async function loadViewerTile(
   const tileVars = { x: coord.xKm, y: coord.yKm };
 
   onProgress(translateAppText('Recherche cache {{x}}/{{y}}', tileVars), 0.05);
-  const [cachedLod, cachedTerrain] = await Promise.all([openLodTile(fileName), loadTerrainData(fileName)]);
+  const [openedLod, cachedTerrain] = await Promise.all([openLodTile(fileName), loadTerrainData(fileName)]);
+  let cachedLod = openedLod;
+  if (!cachedLod && cachedTerrain) {
+    // A cache from the previous format is upgraded in a second or two;
+    // rebuilding it would decode and colourise the whole tile again.
+    onProgress(translateAppText('Mise à niveau du cache LOD {{x}}/{{y}}', tileVars), 0.3);
+    cachedLod = await upgradeLodTileInWorker(fileName);
+  }
   if (cachedLod && cachedTerrain && cachedLod.header.crs === coord.projection) {
     onProgress(translateAppText('Tuile prête {{x}}/{{y}}', tileVars), 0.92);
     return {
@@ -144,7 +152,7 @@ export async function loadViewerSceneData(
   });
 
   const bounds = unionBounds(pendingTiles.map((tile) => tile.lod.header.bounds));
-  const terrainMesh = (async (): Promise<TerrainCache> => {
+  const terrainMesh = (async (): Promise<SceneTerrain> => {
     const meshes = await Promise.all(pendingTiles.map((tile) => tile.terrainMesh));
     const tiles: LoadedViewerTile[] = pendingTiles.map((tile, index) => ({
       coord: tile.coord,
