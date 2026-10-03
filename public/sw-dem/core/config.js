@@ -22,7 +22,7 @@ const IGN_DEM_FORMAT = 'image/x-bil;bits=32';
 // LiDAR HD MNS — true ~0.40 m LiDAR surface model, served through the WMS so a
 // whole Mercator tile costs ONE request instead of the 20-63 sub-tile WMTS
 // fan-out. The request MUST stay metre-square (WIDTH = HEIGHT / cos(lat)); see
-// mnsWmsRequestSize() in sources/ign-fetcher.js for the measured 1 - cos(lat)
+// mnsWmsRequestSize() in sources/ign-wms-raster.js for the measured 1 - cos(lat)
 // row-duplication defect that a degree-square request causes.
 const IGN_LIDAR_MNS_LAYER = 'IGNF_LIDAR-HD_MNS_ELEVATION.ELEVATIONGRIDCOVERAGE.WGS84G';
 

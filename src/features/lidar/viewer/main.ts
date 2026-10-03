@@ -42,6 +42,7 @@ import { createViewerRightPanel } from './rightPanel';
 import { ViewerSlopeController } from './slope/viewerSlopeController';
 import { ViewerAltitudeController } from './altitude/viewerAltitudeController';
 import { ViewerRouteController } from './route/viewerRouteController';
+import { pointFilterClassPredicate, ViewerToolsController } from './tools';
 import { sampleElevationAtProj } from './route/terrainRaycaster';
 import type { ViewerRouteSceneParams } from './route/types';
 import { FrameClock } from './perf/frameClock';
@@ -418,6 +419,7 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
       // first still frame after the hold restores full quality.
       const motion = frameTime - lastMotionTime < MOTION_HOLD_MS;
 
+      renderer.setEyeLevelPoints(camera.getMode() === 'look');
       renderer.updateCamera(camera.getViewMatrix(), camera.getRenderProjMatrix(), camera.getEye());
 
       // GPU time of the draw passes and the real cadence drive the budget,
@@ -592,12 +594,33 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
       onRequestRender: () => requestRender(),
     });
 
+    /** Point-filter visibility of an ASPRS class (picking skips hidden returns). */
+    let isClassVisible: (classification: number) => boolean = () => true;
+    const tools = ViewerToolsController.create({
+      canvas,
+      container: canvas.parentElement ?? document.body,
+      camera,
+      sceneParams: heightSceneParams,
+      tiles: scene.tiles,
+      getDrawnNodes: () => sceneLod.getSelectedNodes(),
+      isClassVisible: (classification) => isClassVisible(classification),
+      getPointSize: () => renderer?.pointSize ?? 0.3,
+      routeController,
+      setAnalysisMesh: (mesh) => {
+        if (!renderer) return;
+        if (mesh) renderer.setAnalysisMesh(mesh.vertices, mesh.colors, mesh.indices);
+        else renderer.clearAnalysisMesh();
+      },
+      requestRender: () => requestRender(),
+    });
+
     const rightPanel = createViewerRightPanel({
       centerLon: lon,
       centerLat: lat,
       timeZone: tileTimeZone,
       routeController,
       onPointFilterChange: (pointFilterState) => {
+        isClassVisible = pointFilterClassPredicate(pointFilterState);
         if (renderer) {
           renderer.setPointFilterState(pointFilterState);
           requestRender();
@@ -644,7 +667,10 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
     }
     scene.cacheWrites.length = 0;
 
-    updateRouteOverlayRef = () => routeController.updateOverlay();
+    updateRouteOverlayRef = () => {
+      routeController.updateOverlay();
+      tools?.updateOverlay();
+    };
     camera.onChange = () => {
       routeOverlayStale = true;
       lastMotionTime = performance.now();
@@ -756,6 +782,7 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
       camera.destroy();
       tileNavigator.destroy();
       lidarManager.destroy();
+      tools?.destroy();
       routeController.destroy();
       panel.destroy();
       rightPanel.destroy();

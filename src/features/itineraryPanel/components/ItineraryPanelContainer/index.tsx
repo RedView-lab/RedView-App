@@ -2,11 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { useAppI18n } from '@/shared/i18n';
 import { normalizeDiscipline } from '@/shared/lib/discipline';
-import {
-  createOverlayStatus,
-  flyToPoi,
-  type OverlayStatusReporter,
-} from '@/features/map3d';
+import type { OverlayStatusReporter } from '@/features/map3d';
 
 import { ItineraryPanel } from '../ItineraryPanel';
 import { AddItineraryDialog } from '../dialogs';
@@ -18,59 +14,44 @@ import { useItineraryRouteLayerSync } from '../../hooks/useItineraryRouteLayerSy
 import { useItineraryCheckpointMarkers } from '../../hooks/useItineraryCheckpointMarkers';
 import {
   buildPoiAutoSortSignature,
-  buildPoiRouteSignature,
   buildPoiSearchSignature,
-  poiFeaturesToTimelineItems,
-  resetPoisForRouteChange,
 } from '../../lib/schedule';
-import { fitToRoute } from '../../lib/route-layer';
 import { useProjectStore } from '../../context/ProjectStore';
 import { cloneItineraryForMutation } from '../../context/ProjectStore/historyClone';
 import { useTraceToolOptional } from '@/features/centerPanel/tracer';
 import { useForbiddenZoneToolOptional } from '@/features/centerPanel/forbiddenZones';
 import { usePredictionStoreOptional } from '../../context/PredictionStore';
 import { useItineraryUndoRedoShortcut } from '../../hooks/useItineraryUndoRedoShortcut';
-import {
-  DEFAULT_PROFILES,
-  getProfilePreset,
-  isActivityPresetId,
-  resolveProfilePresetId,
-} from '../../lib/project';
+import { resolveProfilePresetId } from '../../lib/project';
 import type { TimelineFilterState } from '../../sections/timeline/TimelineFilters';
-import { requestTimelineRowReveal } from '../../sections/timeline/useVirtualRows';
-import { syncTracageOnActivityChange } from '../../lib/project/syncTracageParams';
-import {
-  getSavedCustomProfiles,
-  saveCustomProfileToStorage,
-  deleteCustomProfileFromStorage,
-  CUSTOM_PROFILES_CHANGED_EVENT,
-  type SavedCustomProfile,
-} from '../../lib/project/customProfiles';
 import type { GpxRoute, PoiFeature } from '@/features/poi/types';
-import {
-  dispatchSelectPoiOnChart,
-  listenOpenPoiOnMap,
-} from '@/features/poi/lib/chartPoiSyncBridge';
-import { deleteProjectItineraryFitFiles, isProjectCloudError } from '@/shared/utils/projects';
-import { useProjectSyncStatus } from '@/shared/hooks/useProjectSyncStatus';
+import { dispatchSelectPoiOnChart } from '@/features/poi/lib/chartPoiSyncBridge';
+import { deleteProjectItineraryFitFiles } from '@/shared/utils/projects';
 import type {
   Itinerary,
   ItineraryProject,
   PanelMode,
-  ProjectSaveStatus,
   PrioritiesState,
   RhythmState,
-  RoadTypesState,
-  RouteProfile,
-  TimelineItem,
 } from '../../types';
-import { mergePoiFeatureFavorites } from './poiFeatureUtils';
 
 import { useItineraryPoiHandlers } from './useItineraryPoiHandlers';
 import { useItineraryMapActions } from './useItineraryMapActions';
-import { GpxFileTooLargeError, useItineraryGpxImport } from './useItineraryGpxImport';
 import { useItineraryTimelineCallbacks } from './useItineraryTimelineCallbacks';
 import { useRecalculateTrace } from './useRecalculateTrace';
+import { useGpxFilePicker } from './useGpxFilePicker';
+import { useTimelineMapSelection } from './useTimelineMapSelection';
+import { useProjectSave } from './useProjectSave';
+import { useCustomProfiles } from './useCustomProfiles';
+import { useRouteOverlayStatus } from './useRouteOverlayStatus';
+import { usePoiRouteInvalidation } from './usePoiRouteInvalidation';
+import { applyCorridorComplete, applyCorridorUpdate } from './poiCorridorMutations';
+import {
+  applyBatchRoadTypeChange,
+  applyProfileChange,
+  applyRoadTypeChange,
+} from './routingPreferenceMutations';
+import { centerTimelineRowInList, findTimelineItemForPoiFeature } from './timelineRowLookup';
 
 interface ItineraryPanelContainerProps {
   projectId?: string | null;
@@ -137,10 +118,6 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const addButtonRef = useRef<HTMLButtonElement | null>(null);
   const [pendingCorridorFor, setPendingCorridorFor] = useState<string | null>(null);
-  const [saveStatus, setSaveStatus] = useState<ProjectSaveStatus>('idle');
-  const [saveErrorMessage, setSaveErrorMessage] = useState<string | null>(null);
-  const saveStatusTimerRef = useRef<number | null>(null);
-  const syncStatus = useProjectSyncStatus();
   const { t } = useAppI18n();
 
   const active = useMemo(
@@ -265,42 +242,9 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     skipNextRouteRecompute,
   });
 
-  useEffect(() => {
-    if (!onRouteStatusChange) return;
 
-    if (routeLoading) {
-      onRouteStatusChange(createOverlayStatus({
-        id: 'itinerary',
-        label: t('Itinéraire'),
-        state: 'loading',
-        progress: 0,
-        detail: t('Calcul du tracé en cours'),
-        nonce: routeRequestNonce,
-        reloadable: false,
-      }));
-      return;
-    }
+  useRouteOverlayStatus({ onRouteStatusChange, routeLoading, routeError, routeRequestNonce });
 
-    if (routeError) {
-      onRouteStatusChange(createOverlayStatus({
-        id: 'itinerary',
-        label: t('Itinéraire'),
-        state: 'error',
-        progress: 100,
-        detail: routeError,
-        reloadable: false,
-      }));
-      return;
-    }
-
-    onRouteStatusChange(null);
-  }, [onRouteStatusChange, routeError, routeLoading, routeRequestNonce, t]);
-
-  useEffect(() => {
-    return () => {
-      onRouteStatusChange?.(null);
-    };
-  }, [onRouteStatusChange]);
 
   const updateActive = useCallback(
     (mutateItinerary: (itinerary: ItineraryProject['itineraries'][number]) => void) => {
@@ -347,55 +291,12 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     setSelectedTimelineIds([]);
   }, [project.activeItineraryId]);
 
-  const centerTimelineRowInList = useCallback((itemId: string) => {
-    const tryScroll = (attempts = 6) => {
-      const rowEl = document.querySelector<HTMLElement>(`[data-timeline-id="${itemId}"]`);
-      if (rowEl) {
-        let container: HTMLElement | null = rowEl.parentElement;
-        while (container) {
-          const style = window.getComputedStyle(container);
-          const overflowY = style.overflowY;
-          if ((overflowY === 'auto' || overflowY === 'scroll') && container.scrollHeight > container.clientHeight) {
-            break;
-          }
-          container = container.parentElement;
-        }
-
-        // Pas de liste défilante (feuille de route courte) : la ligne est déjà
-        // visible. Jamais de scrollIntoView ici : il ferait aussi défiler les
-        // coques du dashboard et décalerait toute l'interface.
-        if (container) {
-          const rowRect = rowEl.getBoundingClientRect();
-          const containerRect = container.getBoundingClientRect();
-          const targetScrollTop =
-            container.scrollTop +
-            (rowRect.top - containerRect.top) -
-            (container.clientHeight / 2) +
-            (rowRect.height / 2);
-
-          container.scrollTo({
-            top: Math.max(0, targetScrollTop),
-            behavior: 'smooth',
-          });
-        }
-        return;
-      }
-      // Feuille de route fenêtrée : la ligne hors écran n'est pas montée,
-      // on la fait défiler jusqu'à la fenêtre puis on réessaie.
-      if (attempts === 6) requestTimelineRowReveal(itemId);
-      if (attempts > 0) {
-        setTimeout(() => tryScroll(attempts - 1), 50);
-      }
-    };
-    window.requestAnimationFrame(() => tryScroll());
-  }, []);
-
   const handleSelectAndCenterTimelineRow = useCallback(
     (rowId: string) => {
       setSelectedTimelineIds([rowId]);
       centerTimelineRowInList(rowId);
     },
-    [centerTimelineRowInList],
+    [],
   );
 
   const getPrediction = useCallback(
@@ -446,69 +347,25 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     onSelectAndCenterTimelineRow: handleSelectAndCenterTimelineRow,
   });
 
-  // GPX import progress, surfaced as a loading row in the itinerary list.
-  const [pendingImportName, setPendingImportName] = useState<string | null>(null);
-  const gpxInputRef = useRef<HTMLInputElement | null>(null);
-
-  const fitMapToImportedRoute = useCallback(
-    (points: [number, number][]) => {
-      if (!map || points.length === 0) return;
-      try {
-        const leftPadding = Math.max(80, (width ?? 360) + 40);
-        fitToRoute(map, points, {
-          padding: {
-            top: 80,
-            bottom: Math.min(270, Math.round(window.innerHeight * 0.35)),
-            left: Math.min(leftPadding, Math.round(window.innerWidth * 0.4)),
-            right: 80,
-          },
-          maxZoom: 14,
-          duration: 800,
-        });
-      } catch (error) {
-        console.warn('[ItineraryPanelContainer] fitToRoute after GPX import failed', error);
-      }
-    },
-    [map, width],
-  );
-
-  const { addItineraryFromGpxFile } = useItineraryGpxImport({
-    setProject: setProjectWithoutHistory,
+  const {
+    gpxInputRef,
+    pendingImportName,
+    addItineraryFromGpxFile,
+    handleGpxFileChange,
+    openGpxPicker,
+  } = useGpxFilePicker({
+    map,
+    panelWidth: width,
+    setProjectWithoutHistory,
     addItinerary,
     setPendingCorridorFor,
-    onImportStateChange: setPendingImportName,
-    onItineraryImported: (_id, points) => {
-      fitMapToImportedRoute(points);
-      onRevealCenterPanel?.();
-    },
+    onRevealCenterPanel,
   });
-
-  const handleGpxFileChange = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      e.target.value = '';
-      if (!file) return;
-      if (!file.name.toLowerCase().endsWith('.gpx')) {
-        console.warn('[ItineraryPanelContainer] Selected file is not a .gpx');
-        return;
-      }
-      try {
-        await addItineraryFromGpxFile(file);
-      } catch (err) {
-        console.warn('[ItineraryPanelContainer] GPX import failed', err);
-        if (err instanceof GpxFileTooLargeError) {
-          // No toast system in the itinerary panel: a native alert is the minimal visible feedback.
-          window.alert(err.message);
-        }
-      }
-    },
-    [addItineraryFromGpxFile],
-  );
 
   const handlePickGpx = useCallback(() => {
     setAddDialogOpen(false);
-    gpxInputRef.current?.click();
-  }, []);
+    openGpxPicker();
+  }, [openGpxPicker]);
 
   const timelineCallbacks = useItineraryTimelineCallbacks({
     setProject,
@@ -538,100 +395,12 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   // Résultats de la recherche POI (async) : hors historique.
   const handleCorridorUpdate = useCallback((features: PoiFeature[]) => {
     const targetId = activeIdRef.current;
-    setProjectWithoutHistory((p) => {
-      const target = p.itineraries.find((i) => i.id === targetId);
-      if (!target) return p;
-      const mergedFeatures = mergePoiFeatureFavorites(
-        features,
-        target.timeline,
-        target.poiFeatures ?? [],
-        target.rhythm,
-      );
-      const current = target.poiFeatures ?? [];
-      const unchanged =
-        current.length === mergedFeatures.length
-        && current.every((feature, index) => {
-          const next = mergedFeatures[index];
-          return (
-            feature.id === next?.id
-            && feature.lat === next.lat
-            && feature.lon === next.lon
-            && feature.category === next.category
-            && feature.name === next.name
-            && Boolean(feature.favorite) === Boolean(next.favorite)
-            && (feature.pauseDurationMin ?? null) === (next?.pauseDurationMin ?? null)
-          );
-        });
-      if (unchanged) return p;
-      return {
-        ...p,
-        itineraries: p.itineraries.map((it) =>
-          it.id === targetId ? { ...it, poiFeatures: mergedFeatures } : it,
-        ),
-      };
-    });
+    setProjectWithoutHistory((p) => applyCorridorUpdate(p, targetId, features));
   }, [setProjectWithoutHistory]);
 
   const handleCorridorComplete = useCallback((features: PoiFeature[], searchedRoutePoints: GpxRoute['points']) => {
     const targetId = activeIdRef.current;
-    setProjectWithoutHistory((p) => {
-      const target = p.itineraries.find((i) => i.id === targetId);
-      if (!target) return p;
-      const route = target.gpxRoute?.points;
-      if (!route || route.length < 2) return p;
-      const mergedFeatures = mergePoiFeatureFavorites(
-        features,
-        target.timeline,
-        target.poiFeatures ?? [],
-        target.rhythm,
-      );
-
-      const existingPoiRows = new Map(
-        target.timeline
-          .filter((row) => row.kind === 'poi' && row.osmId != null)
-          .map((row) => [row.osmId as number, row]),
-      );
-
-      const newPoiRows = poiFeaturesToTimelineItems(mergedFeatures, route).map((row) => {
-        const previous = row.osmId != null ? existingPoiRows.get(row.osmId) : undefined;
-        if (!previous) return row;
-        const favorite = Boolean(previous.favorite || row.favorite);
-        const origin = previous.favorite ? previous : row;
-        return {
-          ...row,
-          favorite,
-          visible: previous.visible ?? row.visible,
-          ...(favorite && origin?.favoriteSource ? { favoriteSource: origin.favoriteSource } : {}),
-          ...(favorite && origin?.autoReason ? { autoReason: origin.autoReason } : {}),
-        };
-      });
-
-      const stripped = target.timeline.filter((row) => row.kind !== 'poi');
-      const endIdx = stripped.findIndex((row) => row.kind === 'end');
-      const insertAt = endIdx >= 0 ? endIdx : stripped.length;
-      const merged = [
-        ...stripped.slice(0, insertAt),
-        ...newPoiRows,
-        ...stripped.slice(insertAt),
-      ];
-
-      return {
-        ...p,
-        itineraries: p.itineraries.map((it) =>
-          it.id === targetId
-            ? {
-              ...it,
-              timeline: merged,
-              poiFeatures: mergedFeatures,
-              poiSearchSignature: buildPoiSearchSignature(target.poi),
-              // Trace interrogée, pas la courante : si elle a bougé pendant
-              // la recherche, l'écart relance une recherche.
-              poiRouteSignature: buildPoiRouteSignature(searchedRoutePoints),
-            }
-            : it,
-        ),
-      };
-    });
+    setProjectWithoutHistory((p) => applyCorridorComplete(p, targetId, features, searchedRoutePoints));
   }, [setProjectWithoutHistory]);
 
   const handleMapPoiSelect = useCallback(
@@ -639,14 +408,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
       const currentActive = activeItineraryRef.current;
       if (!currentActive) return;
 
-      const matchingItem = currentActive.timeline.find((item) => {
-        if (item.kind === 'poi' && item.osmId != null && item.osmId === feature.id) return true;
-        if (item.id === `poi-${feature.id}`) return true;
-        if (item.lat != null && item.lon != null) {
-          return Math.abs(item.lat - feature.lat) < 0.0001 && Math.abs(item.lon - feature.lon) < 0.0001;
-        }
-        return false;
-      });
+      const matchingItem = findTimelineItemForPoiFeature(currentActive.timeline, feature);
 
       if (matchingItem) {
         setSelectedTimelineIds([matchingItem.id]);
@@ -664,7 +426,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         source: 'map',
       });
     },
-    [centerTimelineRowInList],
+    [],
   );
 
   const {
@@ -701,103 +463,13 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     selectedPoiCategories,
   );
 
-  const handleSelectTimelineRow = useCallback(
-    (id: string, item: TimelineItem) => {
-      setSelectedTimelineIds([id]);
-      if (item.kind === 'poi') {
-        const opened = openPoiMarker(
-          item.osmId ?? item.id,
-          item.poiCategory,
-          item.lat != null && item.lon != null ? { lat: item.lat, lon: item.lon } : undefined,
-        );
-        if (!opened && map && item.lat != null && item.lon != null) {
-          flyToPoi(map, { lon: item.lon, lat: item.lat });
-        }
-      } else if (isCheckpointKind(item.kind)) {
-        const opened = openCheckpointMarker(
-          item.id,
-          item.lat != null && item.lon != null ? { lat: item.lat, lon: item.lon } : undefined,
-          { itineraryId: activeItineraryRef.current?.id, kind: item.kind },
-        );
-        if (!opened && map && item.lat != null && item.lon != null) {
-          flyToPoi(map, { lon: item.lon, lat: item.lat });
-        }
-      } else if (map && item.lat != null && item.lon != null) {
-        flyToPoi(map, { lon: item.lon, lat: item.lat });
-      }
-
-      dispatchSelectPoiOnChart({
-        id: item.id,
-        osmId: item.osmId,
-        lat: item.lat,
-        lon: item.lon,
-        distanceKm: item.distanceKm,
-        category: item.poiCategory,
-        itineraryId: activeItineraryRef.current?.id,
-        source: 'timeline',
-      });
-    },
-    [map, openPoiMarker, openCheckpointMarker],
-  );
-
-  useEffect(() => {
-    return listenOpenPoiOnMap((payload) => {
-      const currentActive = activeItineraryRef.current;
-      if (!currentActive) return;
-
-      const matchingItem = currentActive.timeline.find((item) => {
-        if (
-          payload.id != null &&
-          (String(item.id) === String(payload.id) ||
-            (typeof payload.id === 'string' && payload.id.endsWith(`::${item.id}`)) ||
-            item.id === `poi-${payload.id}` ||
-            String(item.osmId) === String(payload.id))
-        ) {
-          return true;
-        }
-        if (payload.osmId != null && String(item.osmId) === String(payload.osmId)) return true;
-        if (payload.lat != null && payload.lon != null && item.lat != null && item.lon != null) {
-          return Math.abs(item.lat - payload.lat) < 0.0005 && Math.abs(item.lon - payload.lon) < 0.0005;
-        }
-        return false;
-      });
-
-      if (matchingItem) {
-        setSelectedTimelineIds([matchingItem.id]);
-        centerTimelineRowInList(matchingItem.id);
-        if (matchingItem.kind === 'poi') {
-          openPoiMarker(
-            matchingItem.osmId ?? matchingItem.id,
-            matchingItem.poiCategory,
-            matchingItem.lat != null && matchingItem.lon != null
-              ? { lat: matchingItem.lat, lon: matchingItem.lon }
-              : undefined,
-          );
-        } else if (isCheckpointKind(matchingItem.kind)) {
-          openCheckpointMarker(
-            matchingItem.id,
-            matchingItem.lat != null && matchingItem.lon != null
-              ? { lat: matchingItem.lat, lon: matchingItem.lon }
-              : undefined,
-            { itineraryId: currentActive.id, kind: matchingItem.kind },
-          );
-        }
-      } else if (payload.lat != null && payload.lon != null) {
-        const opened = openPoiMarker(
-          payload.osmId ?? payload.id ?? '',
-          payload.category,
-          { lat: payload.lat, lon: payload.lon },
-        );
-        if (!opened) {
-          openCheckpointMarker(
-            String(payload.id ?? ''),
-            { lat: payload.lat, lon: payload.lon },
-            { itineraryId: payload.itineraryId ?? currentActive.id },
-          );
-        }
-      }
-    });
-  }, [centerTimelineRowInList, openPoiMarker, openCheckpointMarker]);
+  const { handleSelectTimelineRow } = useTimelineMapSelection({
+    map,
+    activeItineraryRef,
+    setSelectedTimelineIds,
+    openPoiMarker,
+    openCheckpointMarker,
+  });
 
   const duplicateActiveItinerary = useCallback(() => {
     duplicateItinerary(project.activeItineraryId);
@@ -816,84 +488,20 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     traceTool?.activate();
   }, [addItinerary, traceTool]);
 
-  useEffect(() => {
-    if (!pendingCorridorFor) return;
-    if (!active || active.id !== pendingCorridorFor) return;
-    if (!hasGpxRoute || !hasEnabledCategories || !isMapLoaded) return;
-    const handle = setTimeout(() => {
-      searchCorridor();
-      setPendingCorridorFor(null);
-    }, 50);
-    return () => clearTimeout(handle);
-  }, [
-    pendingCorridorFor,
+  usePoiRouteInvalidation({
     active,
+    isMapLoaded,
+    historyRevision,
+    routeBusy: routeLoading || recalculateLoading,
+    pendingCorridorFor,
+    setPendingCorridorFor,
+    setProjectWithoutHistory,
+    poiLoading,
     hasGpxRoute,
     hasEnabledCategories,
-    isMapLoaded,
     searchCorridor,
-  ]);
-
-  // Undo / redo : une recherche POI lancée sur l'état quitté ne doit pas
-  // s'appliquer à l'état restauré.
-  const seenHistoryRevisionRef = useRef(historyRevision);
-  useEffect(() => {
-    if (seenHistoryRevisionRef.current === historyRevision) return;
-    seenHistoryRevisionRef.current = historyRevision;
-    if (poiLoading) cancelSearchCorridor();
-  }, [cancelSearchCorridor, historyRevision, poiLoading]);
-
-  // Trace modifiée (routage, import, inversion, annuler…) : POI, lignes de
-  // feuille de route et tri auto portaient sur l'ancienne trace. Une fois la
-  // trace stabilisée, on les retire et on relance la recherche (le tri auto
-  // suit tout seul, ses entrées ayant changé).
-  const activeRoutePoints = active?.gpxRoute?.points;
-  const currentPoiRouteSignature = useMemo(
-    () => buildPoiRouteSignature(activeRoutePoints),
-    [activeRoutePoints],
-  );
-  const storedPoiRouteSignature = active?.poiRouteSignature;
-  const activeHasPois = Boolean(
-    active && ((active.poiFeatures?.length ?? 0) > 0 || active.timeline.some((row) => row.kind === 'poi')),
-  );
-  const routeBusy = routeLoading || recalculateLoading;
-  const activeId = active?.id ?? null;
-  useEffect(() => {
-    if (!activeId || routeBusy) return;
-    if (storedPoiRouteSignature === currentPoiRouteSignature) return;
-    if (storedPoiRouteSignature === undefined) {
-      // POI enregistrés avant l'empreinte : on les rattache à la trace courante.
-      if (!activeHasPois) return;
-      setProjectWithoutHistory((p) => ({
-        ...p,
-        itineraries: p.itineraries.map((it) =>
-          it.id === activeId ? { ...it, poiRouteSignature: buildPoiRouteSignature(it.gpxRoute?.points) } : it,
-        ),
-      }));
-      return;
-    }
-    if (poiLoading) cancelSearchCorridor();
-    setProjectWithoutHistory((p) => ({
-      ...p,
-      itineraries: p.itineraries.map((it) => {
-        if (it.id !== activeId) return it;
-        const copy = cloneItineraryForMutation(it);
-        resetPoisForRouteChange(copy);
-        return copy;
-      }),
-    }));
-    if (hasEnabledCategories) setPendingCorridorFor(activeId);
-  }, [
-    activeHasPois,
-    activeId,
     cancelSearchCorridor,
-    currentPoiRouteSignature,
-    hasEnabledCategories,
-    poiLoading,
-    routeBusy,
-    setProjectWithoutHistory,
-    storedPoiRouteSignature,
-  ]);
+  });
 
   // Toggle « Affiner les résultats » actif : re-trie dès que les entrées du
   // dernier tri changent (POI rechargés, départ, prédiction…). Clé sur la
@@ -913,100 +521,14 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     ? t('Importez un fichier GPX pour rechercher les POI le long du parcours.')
     : null;
 
-  const [savedCustomProfiles, setSavedCustomProfiles] = useState<SavedCustomProfile[]>(() =>
-    getSavedCustomProfiles(),
-  );
+  const { savedCustomProfiles, combinedProfiles, saveCustomProfile, deleteCustomProfile } = useCustomProfiles();
 
-  useEffect(() => {
-    const handler = () => setSavedCustomProfiles(getSavedCustomProfiles());
-    window.addEventListener(CUSTOM_PROFILES_CHANGED_EVENT, handler);
-    return () => window.removeEventListener(CUSTOM_PROFILES_CHANGED_EVENT, handler);
-  }, []);
+  const { handleSaveProject, displayedSaveStatus, displayedSaveMessage } = useProjectSave({
+    projectId,
+    onSaveProject,
+    setProject,
+  });
 
-  const combinedProfiles = useMemo<RouteProfile[]>(() => {
-    const customItems: RouteProfile[] = savedCustomProfiles.map((cp) => ({
-      id: cp.id,
-      name: cp.name,
-    }));
-    return [...DEFAULT_PROFILES, ...customItems];
-  }, [savedCustomProfiles]);
-
-  useEffect(() => () => {
-    if (saveStatusTimerRef.current != null) window.clearTimeout(saveStatusTimerRef.current);
-  }, []);
-
-  const handleSaveProject = useCallback(async () => {
-    if (!onSaveProject || saveStatus === 'saving') return;
-    if (saveStatusTimerRef.current != null) {
-      window.clearTimeout(saveStatusTimerRef.current);
-      saveStatusTimerRef.current = null;
-    }
-    setSaveStatus('saving');
-    setSaveErrorMessage(null);
-    let nextStatus: ProjectSaveStatus;
-    try {
-      let saved: ItineraryProject | null;
-      try {
-        saved = await onSaveProject();
-      } catch (error) {
-        // Version cloud modifiée sur un autre appareil : écraser seulement sur confirmation.
-        if (
-          isProjectCloudError(error)
-          && error.kind === 'conflict'
-          && window.confirm(t('Ce projet a été modifié sur un autre appareil. Remplacer la version du cloud par la vôtre ? (Annuler : vos modifications restent sur cet appareil.)'))
-        ) {
-          saved = await onSaveProject({ force: true });
-        } else {
-          throw error;
-        }
-      }
-      const savedProject = saved;
-      if (savedProject) {
-        setProject((p) => ({ ...p, savedAt: savedProject.savedAt, sizeBytes: savedProject.sizeBytes }));
-      }
-      nextStatus = 'saved';
-    } catch (error) {
-      console.error('[ItineraryPanel] project save failed', error);
-      setSaveErrorMessage(
-        isProjectCloudError(error) ? t(error.message) : t('Échec de l’enregistrement'),
-      );
-      nextStatus = 'error';
-    }
-    setSaveStatus(nextStatus);
-    saveStatusTimerRef.current = window.setTimeout(() => {
-      saveStatusTimerRef.current = null;
-      setSaveStatus('idle');
-    }, nextStatus === 'error' ? 6000 : 2000);
-  }, [onSaveProject, saveStatus, setProject, t]);
-
-  // Indicateur : résultat du bouton Enregistrer, sinon état de l'autosave
-  // (hors-ligne en attente / erreur persistante) du projet affiché.
-  const autosaveStatus = syncStatus.projectId != null && syncStatus.projectId === projectId ? syncStatus : null;
-  const displayedSaveStatus: ProjectSaveStatus = saveStatus !== 'idle'
-    ? saveStatus
-    : autosaveStatus?.state === 'pending-offline'
-      ? 'pending'
-      : autosaveStatus?.state === 'error'
-        ? 'error'
-        : 'idle';
-  const displayedSaveMessage = saveStatus !== 'idle'
-    ? saveErrorMessage
-    : autosaveStatus?.message
-      ? t(autosaveStatus.message)
-      : null;
-
-  const handleSaveProjectRef = useRef(handleSaveProject);
-  handleSaveProjectRef.current = handleSaveProject;
-  useEffect(() => {
-    if (!onSaveProject) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== 's') return;
-      event.preventDefault();
-      void handleSaveProjectRef.current();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onSaveProject]);
 
   return (
     <>
@@ -1049,58 +571,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         onChangeMode={(mode: PanelMode) =>
           setProject((p) => ({ ...p, activeMode: mode }))
         }
-        onChangeProfile={(id) => {
-          const custom = savedCustomProfiles.find((p) => p.id === id);
-          if (custom) {
-            setProject((prev) => ({
-              ...prev,
-              itineraries: prev.itineraries.map((itinerary) => {
-                if (itinerary.id !== prev.activeItineraryId) return itinerary;
-                const copy = cloneItineraryForMutation(itinerary);
-                copy.profileId = id;
-                copy.priorities = { ...custom.priorities };
-                copy.roadTypes = {
-                  ...custom.roadTypes,
-                  applyToAllItineraries: copy.roadTypes.applyToAllItineraries,
-                };
-                return copy;
-              }),
-            }));
-            return;
-          }
-          const preset = getProfilePreset(id);
-          setProject((prev) => ({
-            ...prev,
-            itineraries: prev.itineraries.map((itinerary) => {
-              if (itinerary.id !== prev.activeItineraryId) return itinerary;
-              const copy = cloneItineraryForMutation(itinerary);
-              copy.profileId = id;
-              if (preset) {
-                const currentMode = copy.roadTypes.tracingMode ?? 'vitesse';
-                const currentTolerance = copy.roadTypes.surfaceTolerance ?? 10;
-                if (isActivityPresetId(id)) {
-                  const sync = syncTracageOnActivityChange(id, currentMode, currentTolerance);
-                  if (sync.priorities) {
-                    copy.priorities = { ...copy.priorities, ...sync.priorities };
-                  }
-                  copy.roadTypes = {
-                    ...copy.roadTypes,
-                    ...sync.roadTypes,
-                    applyToAllItineraries: copy.roadTypes.applyToAllItineraries,
-                  };
-                } else {
-                  copy.priorities = { ...preset.priorities };
-                  copy.roadTypes = {
-                    ...preset.roadTypes,
-                    tracingMode: currentMode,
-                    applyToAllItineraries: copy.roadTypes.applyToAllItineraries,
-                  };
-                }
-              }
-              return copy;
-            }),
-          }));
-        }}
+        onChangeProfile={(id) => setProject((prev) => applyProfileChange(prev, id, savedCustomProfiles))}
         onChangeDiscipline={(discipline) => {
           const current = project.itineraries.find(
             (it) => it.id === project.activeItineraryId,
@@ -1121,88 +592,17 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         onRedo={handleRedo}
         canUndo={canUndo}
         canRedo={canRedo}
-        onSaveProfile={(profile) => {
-          if (profile) {
-            saveCustomProfileToStorage(profile);
-            setSavedCustomProfiles(getSavedCustomProfiles());
-          }
-        }}
-        onDeleteProfile={(id) => {
-          deleteCustomProfileFromStorage(id);
-          setSavedCustomProfiles(getSavedCustomProfiles());
-        }}
+        onSaveProfile={saveCustomProfile}
+        onDeleteProfile={deleteCustomProfile}
         onChangePriority={(key: keyof PrioritiesState, value) =>
           updateActive((it) => {
             it.priorities[key] = value;
             it.profileId = resolveProfilePresetId(it.priorities, it.roadTypes, it.profileId);
           })
         }
-        onChangeRoadType={(key, value) =>
-          setProject((prev) => {
-            // Toggling 'applyToAllItineraries' must only affect the active itinerary and never modify profiles!
-            if (key === 'applyToAllItineraries') {
-              return {
-                ...prev,
-                itineraries: prev.itineraries.map((itinerary) => {
-                  if (itinerary.id !== prev.activeItineraryId) return itinerary;
-                  return {
-                    ...itinerary,
-                    roadTypes: {
-                      ...itinerary.roadTypes,
-                      applyToAllItineraries: Boolean(value),
-                    },
-                  };
-                }),
-              };
-            }
-
-            const active = prev.itineraries.find((it) => it.id === prev.activeItineraryId);
-            const applyToAll = active?.roadTypes.applyToAllItineraries;
-            return {
-              ...prev,
-              itineraries: prev.itineraries.map((itinerary) => {
-                if (itinerary.id !== prev.activeItineraryId && !applyToAll) return itinerary;
-                const copy = cloneItineraryForMutation(itinerary);
-                (copy.roadTypes[key] as RoadTypesState[typeof key]) = value;
-                if (key === 'activityType' && itinerary.id === prev.activeItineraryId) {
-                  copy.profileId = value as string;
-                }
-                return copy;
-              }),
-            };
-          })
-        }
+        onChangeRoadType={(key, value) => setProject((prev) => applyRoadTypeChange(prev, key, value))}
         onBatchChangeRoadTypes={(roadUpdates, priorityUpdates) =>
-          setProject((prev) => {
-            const active = prev.itineraries.find((it) => it.id === prev.activeItineraryId);
-            const applyToAll = active?.roadTypes.applyToAllItineraries;
-            return {
-              ...prev,
-              itineraries: prev.itineraries.map((itinerary) => {
-                const isActive = itinerary.id === prev.activeItineraryId;
-                if (!isActive && !applyToAll) return itinerary;
-                const copy = cloneItineraryForMutation(itinerary);
-
-                if (isActive) {
-                  Object.assign(copy.roadTypes, roadUpdates);
-                  if (priorityUpdates) {
-                    Object.assign(copy.priorities, priorityUpdates);
-                  }
-                  if (roadUpdates.activityType) {
-                    copy.profileId = roadUpdates.activityType;
-                  }
-                } else {
-                  // For other itineraries when applyToAll is true:
-                  // Only propagate specific road preferences, never change their activityType or profileId or applyToAllItineraries
-                  const safeRoadUpdates = { ...roadUpdates };
-                  delete safeRoadUpdates.activityType;
-                  delete safeRoadUpdates.applyToAllItineraries;
-                  Object.assign(copy.roadTypes, safeRoadUpdates);
-                }
-                return copy;
-              }),
-            };
-          })
+          setProject((prev) => applyBatchRoadTypeChange(prev, roadUpdates, priorityUpdates))
         }
         onRefreshRoute={() => requestRouteRefresh()}
         onCancelRoute={() => cancelRouteRequest()}
@@ -1297,10 +697,3 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
 });
 
 export type { ItineraryPanelContainerProps };
-
-/** Lignes de timeline portées par un marqueur de checkpoint (popup dédiée). */
-function isCheckpointKind(
-  kind: TimelineItem['kind'],
-): kind is 'start' | 'end' | 'pause' | 'waypoint' {
-  return kind === 'start' || kind === 'end' || kind === 'pause' || kind === 'waypoint';
-}

@@ -1,22 +1,12 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAppI18n } from '@/shared/i18n';
-import { isFootDiscipline, type FootDiscipline, type SportDiscipline } from '@/shared/lib/discipline';
-import type { PrioritiesState, RoadPreference, RoadTypesState, RouteProfile } from '../types';
+import { isFootDiscipline, type SportDiscipline } from '@/shared/lib/discipline';
+import type { PrioritiesState, RoadTypesState, RouteProfile } from '../types';
 import {
-  IconBikeShop,
-  IconComfort,
-  IconFigmaCheck,
-  IconFigmaChevronDown,
-  IconFlash,
-  IconTelescope,
-  IconSlidersFigma,
-  IconTrashFigma,
   IconRepeatFigma,
   IconSaveFigma,
-  IconRun,
-  IconTrail,
+  IconSlidersFigma,
 } from '../components/iconsFigma';
-import { PortalDropdown } from '../components/controls/PortalDropdown';
 import {
   syncTracageOnActivityChange,
   syncTracageOnTracingModeChange,
@@ -39,6 +29,19 @@ import {
   CUSTOM_PROFILES_CHANGED_EVENT,
   type SavedCustomProfile,
 } from '../lib/project/customProfiles';
+import {
+  ACTIVITY_LABELS,
+  SURFACES,
+  disciplineForActivity,
+  resolveActivityKey,
+} from './tracage/activity';
+import { ActivityIcon } from './tracage/ActivityIcon';
+import { ActivitySelector } from './tracage/ActivitySelector';
+import { AdditionalParams } from './tracage/AdditionalParams';
+import { buildCustomProfileToSave } from './tracage/customProfileDraft';
+import { SurfaceRangeSlider } from './tracage/SurfaceRangeSlider';
+import { ToleranceSelect } from './tracage/ToleranceSelect';
+import { TracingModeSelector } from './tracage/TracingModeSelector';
 
 export interface TracageSectionProps {
   priorities: PrioritiesState;
@@ -78,58 +81,6 @@ export interface TracageSectionProps {
   onChangeDiscipline?: (discipline: SportDiscipline) => void;
 }
 
-const ACTIVITY_LABELS: Record<ActivityType, string> = {
-  road: 'Cyclisme sur route',
-  'gravel-default': 'Gravel',
-  mtb: 'VTT',
-  running: 'Running',
-  trail: 'Trail',
-};
-
-const BIKE_ACTIVITIES: ActivityType[] = ['road', 'gravel-default', 'mtb'];
-const FOOT_ACTIVITIES: FootDiscipline[] = ['running', 'trail'];
-
-function ActivityIcon({ activity, size }: { activity: ActivityType; size: number }) {
-  if (activity === 'trail') return <IconTrail size={size} />;
-  if (activity === 'running') return <IconRun size={size} />;
-  return <IconBikeShop size={size} />;
-}
-
-/** Built-in preset behind the active profile (a saved profile keeps its base preset). */
-function resolveActivityKey(
-  baseId: string,
-  saved: SavedCustomProfile | undefined,
-  footDiscipline: FootDiscipline | null,
-): ActivityType {
-  if (isActivityPresetId(baseId)) return baseId;
-  if (isActivityPresetId(saved?.basePresetId)) return saved.basePresetId;
-  return footDiscipline ?? 'road';
-}
-
-function disciplineForActivity(activity: ActivityType): SportDiscipline {
-  return isFootActivity(activity) ? activity : 'bike';
-}
-
-const ROAD_PREF_OPTIONS: { value: RoadPreference; label: string }[] = [
-  { value: 'prefer', label: 'Privilégier' },
-  { value: 'tolerate', label: 'Tolérer' },
-  { value: 'avoid', label: 'Éviter' },
-  { value: 'forbid', label: 'Interdire' },
-];
-
-const TOLERANCE_OPTIONS = [0, 5, 10, 15, 20, 25, 30, 40, 50, 75, 100];
-
-const SLOPE_OPTIONS = [8, 10, 12, 15, 20, 25];
-/** On foot, mountain paths routinely exceed 25 %. */
-const FOOT_SLOPE_OPTIONS = [...SLOPE_OPTIONS, 30, 40, 50];
-
-const SURFACES: { id: SurfaceType; label: string; pct: number }[] = [
-  { id: 'tarmac', label: 'Tarmac', pct: 0 },
-  { id: 'paved', label: 'Paved', pct: 33.333 },
-  { id: 'gravel', label: 'Gravel', pct: 66.667 },
-  { id: 'other', label: 'Other', pct: 100 },
-];
-
 /**
  * TracageSection — Pixel perfect implementation of Figma nodes 5918:103512 & 5918:112682.
  */
@@ -151,21 +102,6 @@ export function TracageSection({
 }: TracageSectionProps) {
   const { t } = useAppI18n();
   const footDiscipline = isFootDiscipline(discipline) ? discipline : null;
-
-  // Collapsible additional params (smooth accordion)
-  const [paramsOpen, setParamsOpen] = useState(false);
-
-  // Activity type dropdown state
-  const [activityOpen, setActivityOpen] = useState(false);
-  const activityBtnRef = useRef<HTMLButtonElement>(null);
-
-  // Tracing mode dropdown state
-  const [tracingOpen, setTracingOpen] = useState(false);
-  const tracingBtnRef = useRef<HTMLButtonElement>(null);
-
-  // Tolerance dropdown state
-  const [toleranceOpen, setToleranceOpen] = useState(false);
-  const toleranceBtnRef = useRef<HTMLButtonElement>(null);
 
   // Saved custom profiles from storage
   const [savedProfiles, setSavedProfiles] = useState<SavedCustomProfile[]>(() =>
@@ -259,24 +195,6 @@ export function TracageSection({
   // Built-in preset highlighted in the dropdown (none while a custom profile is active).
   const selectedPresetId = !activeBaseSaved && !isCustomized ? basePresetKey : null;
 
-  // Surface slider position and smooth dragging
-  const sliderWrapRef = useRef<HTMLDivElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [activeDraggingKnob, setActiveDraggingKnob] = useState<'min' | 'max' | 'superposed' | null>(null);
-  const [dragMinPct, setDragMinPct] = useState<number | null>(null);
-  const [dragMaxPct, setDragMaxPct] = useState<number | null>(null);
-  const dragMinIdxRef = useRef<number>(safeMinIdx);
-  const dragMaxIdxRef = useRef<number>(safeMaxIdx);
-  const startClientXRef = useRef<number>(0);
-
-  useEffect(() => {
-    dragMinIdxRef.current = safeMinIdx;
-    dragMaxIdxRef.current = safeMaxIdx;
-  }, [safeMinIdx, safeMaxIdx]);
-
-  const activeMinPct = SURFACES[safeMinIdx].pct;
-  const activeMaxPct = SURFACES[safeMaxIdx].pct;
-
   const applyRoadUpdates = (updates: Partial<RoadTypesState>) => {
     (Object.keys(updates) as (keyof RoadTypesState)[]).forEach((key) => {
       const val = updates[key];
@@ -301,7 +219,6 @@ export function TracageSection({
     onChangeProfile?.(activityId);
     const nextDiscipline = disciplineForActivity(activityId);
     if (nextDiscipline !== discipline) onChangeDiscipline?.(nextDiscipline);
-    setActivityOpen(false);
   };
 
   const handleCustomProfileSelect = (profile: SavedCustomProfile) => {
@@ -313,7 +230,6 @@ export function TracageSection({
     onChangeProfile?.(profile.id);
     const nextDiscipline = disciplineForActivity(resolveActivityKey(profile.id, profile, null));
     if (nextDiscipline !== discipline) onChangeDiscipline?.(nextDiscipline);
-    setActivityOpen(false);
   };
 
   const handleTracingModeSelect = (mode: TracingModeType) => {
@@ -331,7 +247,6 @@ export function TracageSection({
     if (!activeBaseSaved) {
       onChangeProfile?.(currentActivity);
     }
-    setTracingOpen(false);
   };
 
   const handleSurfaceRangeSelect = (surfaceMin: SurfaceType, surfaceMax: SurfaceType) => {
@@ -342,13 +257,6 @@ export function TracageSection({
     } else {
       applyRoadUpdates(syncResult.roadTypes);
     }
-  };
-
-
-
-  const handleToleranceSelect = (val: number) => {
-    onChangeRoadType?.('surfaceTolerance', val);
-    setToleranceOpen(false);
   };
 
   const handleReset = () => {
@@ -377,64 +285,13 @@ export function TracageSection({
   };
 
   const handleSave = () => {
-    let profileToSave: SavedCustomProfile;
-
-    if (activeBaseSaved) {
-      profileToSave = {
-        ...activeBaseSaved,
-        roadTypes: {
-          road: roadTypes.road,
-          gravel: roadTypes.gravel,
-          singletrack: roadTypes.singletrack,
-          offroad: roadTypes.offroad,
-          bikeLanes: roadTypes.bikeLanes,
-          majorRoads: roadTypes.majorRoads,
-          ferry: roadTypes.ferry,
-          turns: roadTypes.turns,
-          maxSlopePercent: roadTypes.maxSlopePercent,
-          cities: roadTypes.cities,
-          elevationPreference: roadTypes.elevationPreference,
-          woods: roadTypes.woods,
-          surfacePreference: roadTypes.surfacePreference,
-          surfaceMin: roadTypes.surfaceMin,
-          surfaceMax: roadTypes.surfaceMax,
-          surfaceTolerance: roadTypes.surfaceTolerance,
-          activityType: activeBaseSaved.name,
-          tracingMode: roadTypes.tracingMode,
-        },
-        priorities: { ...priorities },
-      };
-    } else {
-      const nextName = nextProfileName;
-      const newId = `custom_${Date.now()}`;
-      profileToSave = {
-        id: newId,
-        name: nextName,
-        basePresetId: effectiveBaseId,
-        roadTypes: {
-          road: roadTypes.road,
-          gravel: roadTypes.gravel,
-          singletrack: roadTypes.singletrack,
-          offroad: roadTypes.offroad,
-          bikeLanes: roadTypes.bikeLanes,
-          majorRoads: roadTypes.majorRoads,
-          ferry: roadTypes.ferry,
-          turns: roadTypes.turns,
-          maxSlopePercent: roadTypes.maxSlopePercent,
-          cities: roadTypes.cities,
-          elevationPreference: roadTypes.elevationPreference,
-          woods: roadTypes.woods,
-          surfacePreference: roadTypes.surfacePreference,
-          surfaceMin: roadTypes.surfaceMin,
-          surfaceMax: roadTypes.surfaceMax,
-          surfaceTolerance: roadTypes.surfaceTolerance,
-          activityType: nextName,
-          tracingMode: roadTypes.tracingMode,
-        },
-        priorities: { ...priorities },
-        createdAt: Date.now(),
-      };
-    }
+    const profileToSave = buildCustomProfileToSave({
+      activeSaved: activeBaseSaved,
+      roadTypes,
+      priorities,
+      newProfileName: nextProfileName,
+      basePresetId: effectiveBaseId,
+    });
 
     saveCustomProfileToStorage(profileToSave);
     const updated = getSavedCustomProfiles();
@@ -453,588 +310,48 @@ export function TracageSection({
     }
   };
 
-  const getRatioFromPointerEvent = (clientX: number): number => {
-    if (!sliderWrapRef.current) return 0;
-    const rect = sliderWrapRef.current.getBoundingClientRect();
-    const usableWidth = rect.width - 38;
-    if (usableWidth <= 0) return 0;
-    const clickX = clientX - rect.left - 19;
-    return Math.max(0, Math.min(1, clickX / usableWidth));
-  };
-
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    setIsDragging(true);
-
-    const ratio = getRatioFromPointerEvent(e.clientX);
-    const clickPct = ratio * 100;
-    const minPct = SURFACES[safeMinIdx].pct;
-    const maxPct = SURFACES[safeMaxIdx].pct;
-
-    startClientXRef.current = e.clientX;
-
-    // Both knobs superposed on same surface
-    if (safeMinIdx === safeMaxIdx) {
-      const distToKnob = Math.abs(clickPct - minPct);
-      if (distToKnob < 15) {
-        setActiveDraggingKnob('superposed');
-        setDragMinPct(minPct);
-        setDragMaxPct(maxPct);
-        return;
-      } else if (clickPct < minPct) {
-        setActiveDraggingKnob('min');
-        const nearestIndex = Math.min(safeMaxIdx, Math.max(0, Math.round(ratio * (SURFACES.length - 1))));
-        dragMinIdxRef.current = nearestIndex;
-        setDragMinPct(clickPct);
-        handleSurfaceRangeSelect(SURFACES[nearestIndex].id, SURFACES[safeMaxIdx].id);
-        return;
-      } else {
-        setActiveDraggingKnob('max');
-        const nearestIndex = Math.max(safeMinIdx, Math.min(SURFACES.length - 1, Math.round(ratio * (SURFACES.length - 1))));
-        dragMaxIdxRef.current = nearestIndex;
-        setDragMaxPct(clickPct);
-        handleSurfaceRangeSelect(SURFACES[safeMinIdx].id, SURFACES[nearestIndex].id);
-        return;
-      }
-    }
-
-    // Separate knobs: pick closer knob
-    if (clickPct <= minPct) {
-      setActiveDraggingKnob('min');
-      const nearestIndex = Math.min(safeMaxIdx, Math.max(0, Math.round(ratio * (SURFACES.length - 1))));
-      dragMinIdxRef.current = nearestIndex;
-      setDragMinPct(clickPct);
-      handleSurfaceRangeSelect(SURFACES[nearestIndex].id, SURFACES[safeMaxIdx].id);
-    } else if (clickPct >= maxPct) {
-      setActiveDraggingKnob('max');
-      const nearestIndex = Math.max(safeMinIdx, Math.min(SURFACES.length - 1, Math.round(ratio * (SURFACES.length - 1))));
-      dragMaxIdxRef.current = nearestIndex;
-      setDragMaxPct(clickPct);
-      handleSurfaceRangeSelect(SURFACES[safeMinIdx].id, SURFACES[nearestIndex].id);
-    } else {
-      const distMin = Math.abs(clickPct - minPct);
-      const distMax = Math.abs(clickPct - maxPct);
-      if (distMin <= distMax) {
-        setActiveDraggingKnob('min');
-        const nearestIndex = Math.min(safeMaxIdx, Math.max(0, Math.round(ratio * (SURFACES.length - 1))));
-        dragMinIdxRef.current = nearestIndex;
-        setDragMinPct(clickPct);
-        handleSurfaceRangeSelect(SURFACES[nearestIndex].id, SURFACES[safeMaxIdx].id);
-      } else {
-        setActiveDraggingKnob('max');
-        const nearestIndex = Math.max(safeMinIdx, Math.min(SURFACES.length - 1, Math.round(ratio * (SURFACES.length - 1))));
-        dragMaxIdxRef.current = nearestIndex;
-        setDragMaxPct(clickPct);
-        handleSurfaceRangeSelect(SURFACES[safeMinIdx].id, SURFACES[nearestIndex].id);
-      }
-    }
-  };
-
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDragging) return;
-    e.preventDefault();
-
-    const ratio = getRatioFromPointerEvent(e.clientX);
-    const clickPct = ratio * 100;
-
-    let targetKnob = activeDraggingKnob;
-    if (targetKnob === 'superposed') {
-      const dx = e.clientX - startClientXRef.current;
-      if (Math.abs(dx) > 3) {
-        targetKnob = dx > 0 ? 'max' : 'min';
-        setActiveDraggingKnob(targetKnob);
-      } else {
-        return;
-      }
-    }
-
-    if (targetKnob === 'min') {
-      const maxBoundPct = SURFACES[safeMaxIdx].pct;
-      const clampedPct = Math.max(0, Math.min(maxBoundPct, clickPct));
-      setDragMinPct(clampedPct);
-
-      const nearestIndex = Math.min(safeMaxIdx, Math.max(0, Math.round(ratio * (SURFACES.length - 1))));
-      if (nearestIndex !== dragMinIdxRef.current) {
-        dragMinIdxRef.current = nearestIndex;
-        handleSurfaceRangeSelect(SURFACES[nearestIndex].id, SURFACES[safeMaxIdx].id);
-      }
-    } else if (targetKnob === 'max') {
-      const minBoundPct = SURFACES[safeMinIdx].pct;
-      const clampedPct = Math.max(minBoundPct, Math.min(100, clickPct));
-      setDragMaxPct(clampedPct);
-
-      const nearestIndex = Math.max(safeMinIdx, Math.min(SURFACES.length - 1, Math.round(ratio * (SURFACES.length - 1))));
-      if (nearestIndex !== dragMaxIdxRef.current) {
-        dragMaxIdxRef.current = nearestIndex;
-        handleSurfaceRangeSelect(SURFACES[safeMinIdx].id, SURFACES[nearestIndex].id);
-      }
-    }
-  };
-
-  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDragging) return;
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {
-      // ignore
-    }
-    setIsDragging(false);
-    setActiveDraggingKnob(null);
-    setDragMinPct(null);
-    setDragMaxPct(null);
-  };
-
-  const handleTickLabelClick = (index: number) => {
-    if (index < safeMinIdx) {
-      handleSurfaceRangeSelect(SURFACES[index].id, SURFACES[safeMaxIdx].id);
-    } else if (index > safeMaxIdx) {
-      handleSurfaceRangeSelect(SURFACES[safeMinIdx].id, SURFACES[index].id);
-    } else if (index === safeMinIdx && safeMinIdx < safeMaxIdx) {
-      handleSurfaceRangeSelect(SURFACES[index].id, SURFACES[index].id);
-    } else if (index === safeMaxIdx && safeMinIdx < safeMaxIdx) {
-      handleSurfaceRangeSelect(SURFACES[index].id, SURFACES[index].id);
-    } else if (safeMinIdx < index && index < safeMaxIdx) {
-      const distToMin = index - safeMinIdx;
-      const distToMax = safeMaxIdx - index;
-      if (distToMin <= distToMax) {
-        handleSurfaceRangeSelect(SURFACES[index].id, SURFACES[safeMaxIdx].id);
-      } else {
-        handleSurfaceRangeSelect(SURFACES[safeMinIdx].id, SURFACES[index].id);
-      }
-    }
-  };
-
-  // Interpolated knob positions and fill range
-  const effectiveMinPct =
-    isDragging && dragMinPct !== null ? dragMinPct : activeMinPct;
-  const effectiveMaxPct =
-    isDragging && dragMaxPct !== null ? dragMaxPct : activeMaxPct;
-
-  const knobMinLeftStyle = `calc(19px + (100% - 38px) * ${effectiveMinPct / 100})`;
-  const knobMaxLeftStyle = `calc(19px + (100% - 38px) * ${effectiveMaxPct / 100})`;
-  const fillLeftStyle = `calc(19px + (100% - 38px) * ${effectiveMinPct / 100})`;
-  const fillWidthStyle = `calc((100% - 38px) * ${(effectiveMaxPct - effectiveMinPct) / 100})`;
-
   return (
     <div className="rvi-tracage">
       {/* ── Top Row: Type d'activité & Mode de traçage (Figma 5918:103513) ── */}
       <div className="rvi-tracage__mode-row">
-        {/* Column 1: Type d’activité */}
-        <div className="rvi-tracage__mode-col">
-          <span className="rvi-tracage__label">{t('Type d’activité')}</span>
-          <button
-            ref={activityBtnRef}
-            type="button"
-            className="rvi-tracage__mode-btn rvi-tracage__mode-btn--activity"
-            onClick={() => setActivityOpen((prev) => !prev)}
-            aria-expanded={activityOpen}
-            aria-haspopup="listbox"
-          >
-            <span className="rvi-tracage__mode-btn-icon">
-              {currentActivityIcon}
-            </span>
-            <span className="rvi-tracage__mode-btn-text" title={currentActivityName}>
-              {currentActivityName}
-            </span>
-            <span className={`rvi-tracage__mode-btn-chevron${activityOpen ? ' is-open' : ''}`}>
-              <IconFigmaChevronDown size={14} />
-            </span>
-          </button>
-
-          <PortalDropdown
-            open={activityOpen}
-            anchorRef={activityBtnRef}
-            onClose={() => setActivityOpen(false)}
-            minWidth={140}
-            align="left"
-          >
-            {/* Bike presets: Cyclisme sur route, Gravel, VTT */}
-            {BIKE_ACTIVITIES.map((activity) => (
-              <button
-                key={activity}
-                type="button"
-                className={`rv-dropdown__item${selectedPresetId === activity ? ' is-selected' : ''}`}
-                onClick={() => handleActivitySelect(activity)}
-              >
-                <ActivityIcon activity={activity} size={15} />
-                <span>{t(ACTIVITY_LABELS[activity])}</span>
-              </button>
-            ))}
-
-            {/* Foot presets: Running (route) & Trail, on the pedestrian network */}
-            <div className="rv-dropdown__divider" />
-            {FOOT_ACTIVITIES.map((activity) => (
-              <button
-                key={activity}
-                type="button"
-                className={`rv-dropdown__item${selectedPresetId === activity ? ' is-selected' : ''}`}
-                onClick={() => handleActivitySelect(activity)}
-              >
-                <ActivityIcon activity={activity} size={15} />
-                <span>{t(ACTIVITY_LABELS[activity])}</span>
-              </button>
-            ))}
-
-            {/* Current in-progress draft profile before saving */}
-            {isCustomized && !activeBaseSaved && (
-              <>
-                <div className="rv-dropdown__divider" />
-                <button
-                  type="button"
-                  className="rv-dropdown__item is-selected"
-                  onClick={() => setActivityOpen(false)}
-                >
-                  <IconSlidersFigma size={15} />
-                  <span>{nextProfileName}</span>
-                </button>
-              </>
-            )}
-
-            {/* Saved custom profiles if any */}
-            {savedProfiles.length > 0 && (
-              <>
-                <div className="rv-dropdown__divider" />
-                {savedProfiles.map((cp) => (
-                  <div key={cp.id} className="rvi-tracage__mode-menu-item-row">
-                    <button
-                      type="button"
-                      className={`rv-dropdown__item${effectiveBaseId === cp.id ? ' is-selected' : ''}`}
-                      onClick={() => handleCustomProfileSelect(cp)}
-                    >
-                      <IconSlidersFigma size={15} />
-                      <span>{cp.name}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="rvi-tracage__delete-profile-btn"
-                      title={t('Supprimer le profil')}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteProfile(cp.id);
-                      }}
-                    >
-                      <IconTrashFigma size={13} />
-                    </button>
-                  </div>
-                ))}
-              </>
-            )}
-          </PortalDropdown>
-        </div>
-
-        {/* Column 2: Mode de traçage */}
-        <div className="rvi-tracage__mode-col">
-          <span className="rvi-tracage__label">{t('Mode de traçage ')}</span>
-          <button
-            ref={tracingBtnRef}
-            type="button"
-            className="rvi-tracage__mode-btn rvi-tracage__mode-btn--tracing"
-            onClick={() => setTracingOpen((prev) => !prev)}
-            aria-expanded={tracingOpen}
-            aria-haspopup="listbox"
-          >
-            <span className="rvi-tracage__mode-btn-icon">
-              {currentTracingMode === 'vitesse' && <IconFlash size={16} />}
-              {currentTracingMode === 'aventure' && <IconTelescope size={16} />}
-              {currentTracingMode === 'comfort' && <IconComfort size={16} />}
-            </span>
-            <span className="rvi-tracage__mode-btn-text">
-              {currentTracingMode === 'vitesse' && t('Vitesse')}
-              {currentTracingMode === 'aventure' && t('Aventure')}
-              {currentTracingMode === 'comfort' && t('Comfort')}
-            </span>
-            <span className={`rvi-tracage__mode-btn-chevron${tracingOpen ? ' is-open' : ''}`}>
-              <IconFigmaChevronDown size={14} />
-            </span>
-          </button>
-
-          <PortalDropdown
-            open={tracingOpen}
-            anchorRef={tracingBtnRef}
-            onClose={() => setTracingOpen(false)}
-            minWidth={140}
-            align="right"
-          >
-            <button
-              type="button"
-              className={`rv-dropdown__item${currentTracingMode === 'vitesse' ? ' is-selected' : ''}`}
-              onClick={() => handleTracingModeSelect('vitesse')}
-            >
-              <IconFlash size={15} />
-              <span>{t('Vitesse')}</span>
-            </button>
-            <button
-              type="button"
-              className={`rv-dropdown__item${currentTracingMode === 'aventure' ? ' is-selected' : ''}`}
-              onClick={() => handleTracingModeSelect('aventure')}
-            >
-              <IconTelescope size={15} />
-              <span>{t('Aventure')}</span>
-            </button>
-            <button
-              type="button"
-              className={`rv-dropdown__item${currentTracingMode === 'comfort' ? ' is-selected' : ''}`}
-              onClick={() => handleTracingModeSelect('comfort')}
-            >
-              <IconComfort size={15} />
-              <span>{t('Comfort')}</span>
-            </button>
-          </PortalDropdown>
-        </div>
+        <ActivitySelector
+          currentActivityName={currentActivityName}
+          currentActivityIcon={currentActivityIcon}
+          selectedPresetId={selectedPresetId}
+          effectiveBaseId={effectiveBaseId}
+          savedProfiles={savedProfiles}
+          draftProfileName={isCustomized && !activeBaseSaved ? nextProfileName : null}
+          onSelectActivity={handleActivitySelect}
+          onSelectCustomProfile={handleCustomProfileSelect}
+          onDeleteProfile={handleDeleteProfile}
+        />
+        <TracingModeSelector
+          currentTracingMode={currentTracingMode}
+          onSelect={handleTracingModeSelect}
+        />
       </div>
 
       {/* ── Surfaces (Figma 5918:103521 & 5918:112691) ── */}
       <div className="rvi-tracage__surfaces">
         <span className="rvi-tracage__label">{t('Surfaces')}</span>
         <div className="rvi-tracage__surfaces-row">
-          {/* Sliders Frame */}
-          <div className="rvi-tracage__slider-box">
-            <div className="rvi-tracage__slider-frame">
-              <div
-                ref={sliderWrapRef}
-                className="rvi-tracage__slider-track-wrap"
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                onPointerCancel={handlePointerUp}
-              >
-                {/* Background track line */}
-                <div className="rvi-tracage__slider-track" />
-
-                {/* Active RED line connecting min and max */}
-                <div
-                  className={`rvi-tracage__slider-fill${isDragging ? ' is-dragging' : ''}`}
-                  style={{ left: fillLeftStyle, width: fillWidthStyle }}
-                />
-
-                {/* Discrete 4 Ticks aligned to knob centers */}
-                {SURFACES.map((s, idx) => {
-                  const tickLeft =
-                    idx === 0
-                      ? '19px'
-                      : idx === SURFACES.length - 1
-                        ? 'calc(100% - 19px)'
-                        : `calc(19px + (100% - 38px) * ${s.pct / 100})`;
-                  const isInRange = idx >= safeMinIdx && idx <= safeMaxIdx;
-                  return (
-                    <div
-                      key={s.id}
-                      className="rvi-tracage__slider-tick"
-                      style={{
-                        left: tickLeft,
-                        background: isInRange
-                          ? '#ffffff'
-                          : 'rgba(255, 255, 255, 0.28)',
-                      }}
-                    />
-                  );
-                })}
-
-                {/* Knob Min Pill (38px x 24px) */}
-                <div
-                  className={`rvi-tracage__slider-knob rvi-tracage__slider-knob--min${activeDraggingKnob === 'min' ? ' is-dragging' : ''}`}
-                  style={{ left: knobMinLeftStyle }}
-                  role="slider"
-                  aria-label={t('Surface minimale')}
-                  aria-valuemin={0}
-                  aria-valuemax={safeMaxIdx}
-                  aria-valuenow={safeMinIdx}
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
-                      e.preventDefault();
-                      const next = Math.min(safeMaxIdx, safeMinIdx + 1);
-                      handleSurfaceRangeSelect(SURFACES[next].id, SURFACES[safeMaxIdx].id);
-                    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
-                      e.preventDefault();
-                      const prev = Math.max(0, safeMinIdx - 1);
-                      handleSurfaceRangeSelect(SURFACES[prev].id, SURFACES[safeMaxIdx].id);
-                    }
-                  }}
-                />
-
-                {/* Knob Max Pill (38px x 24px) */}
-                <div
-                  className={`rvi-tracage__slider-knob rvi-tracage__slider-knob--max${activeDraggingKnob === 'max' ? ' is-dragging' : ''}`}
-                  style={{ left: knobMaxLeftStyle }}
-                  role="slider"
-                  aria-label={t('Surface maximale')}
-                  aria-valuemin={safeMinIdx}
-                  aria-valuemax={SURFACES.length - 1}
-                  aria-valuenow={safeMaxIdx}
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
-                      e.preventDefault();
-                      const next = Math.min(SURFACES.length - 1, safeMaxIdx + 1);
-                      handleSurfaceRangeSelect(SURFACES[safeMinIdx].id, SURFACES[next].id);
-                    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
-                      e.preventDefault();
-                      const prev = Math.max(safeMinIdx, safeMaxIdx - 1);
-                      handleSurfaceRangeSelect(SURFACES[safeMinIdx].id, SURFACES[prev].id);
-                    }
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Ticks labels row */}
-            <div className="rvi-tracage__ticks-labels">
-              {SURFACES.map((s, idx) => {
-                const isActive = idx >= safeMinIdx && idx <= safeMaxIdx;
-                return (
-                  <span
-                    key={s.id}
-                    className={`rvi-tracage__tick-label${isActive ? ' is-active' : ''}`}
-                    onClick={() => handleTickLabelClick(idx)}
-                    onDoubleClick={() => handleSurfaceRangeSelect(s.id, s.id)}
-                    title={t(s.label)}
-                  >
-                    {s.label}
-                  </span>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Tolerance Column with red border */}
-          <div className="rvi-tracage__tolerance-col">
-            <button
-              ref={toleranceBtnRef}
-              type="button"
-              className={`rvi-tracage__tolerance-btn${toleranceOpen ? ' is-open' : ''}`}
-              onClick={() => setToleranceOpen((prev) => !prev)}
-              aria-expanded={toleranceOpen}
-              aria-label={t('Hors plage')}
-              title={t('Part du parcours autorisée hors de la plage de surfaces choisie (0 % = strict)')}
-            >
-              <span>{`${currentTolerance}%`}</span>
-              <IconFigmaChevronDown size={12} />
-            </button>
-            <span className="rvi-tracage__tolerance-sublabel">{t('Hors plage')}</span>
-
-            <PortalDropdown
-              open={toleranceOpen}
-              anchorRef={toleranceBtnRef}
-              onClose={() => setToleranceOpen(false)}
-              align="right"
-              estimatedHeight={260}
-            >
-              {TOLERANCE_OPTIONS.map((val) => (
-                <button
-                  key={val}
-                  type="button"
-                  className={`rv-dropdown__item${val === currentTolerance ? ' is-selected' : ''}`}
-                  onClick={() => handleToleranceSelect(val)}
-                >
-                  <span>{`${val}%`}</span>
-                </button>
-              ))}
-            </PortalDropdown>
-          </div>
+          <SurfaceRangeSlider
+            safeMinIdx={safeMinIdx}
+            safeMaxIdx={safeMaxIdx}
+            onSelectRange={handleSurfaceRangeSelect}
+          />
+          <ToleranceSelect
+            currentTolerance={currentTolerance}
+            onSelect={(val) => onChangeRoadType?.('surfaceTolerance', val)}
+          />
         </div>
       </div>
 
-      {/* ── Paramètres additionnels (Smooth Accordion & Red Small Dropdowns) ── */}
-      <div className="rvi-tracage__params">
-        <button
-          type="button"
-          className="rvi-tracage__params-trigger"
-          onClick={() => setParamsOpen((prev) => !prev)}
-          aria-expanded={paramsOpen}
-        >
-          <span className="rvi-tracage__params-title">{t('Paramètres additionnels')}</span>
-          <span className={`rvi-tracage__params-chevron${paramsOpen ? ' is-open' : ''}`}>
-            <IconFigmaChevronDown size={15} />
-          </span>
-        </button>
-
-        {/* Smooth CSS Grid Accordion */}
-        <div className={`rvi-tracage__params-accordion${paramsOpen ? ' is-open' : ''}`}>
-          <div className="rvi-tracage__params-accordion-inner">
-            <div className="rvi-tracage__params-grid">
-              {/* Row 1: Dénivelé & Pentes max. */}
-              <div className="rvi-tracage__params-row">
-                <ParamDropdownItem
-                  label={t('Dénivelé')}
-                  value={roadTypes.elevationPreference ?? 'avoid'}
-                  onChange={(val) => onChangeRoadType?.('elevationPreference', val)}
-                />
-                <SlopeParamItem
-                  label={t('Pentes max.')}
-                  value={roadTypes.maxSlopePercent ?? 12}
-                  options={footDiscipline ? FOOT_SLOPE_OPTIONS : SLOPE_OPTIONS}
-                  onChange={(val) => onChangeRoadType?.('maxSlopePercent', val)}
-                />
-              </div>
-
-              {/* Row 2: Axes majeurs & Voies cyclables (trottoirs à pied) */}
-              <div className="rvi-tracage__params-row">
-                <ParamDropdownItem
-                  label={t('Axes majeurs')}
-                  value={roadTypes.majorRoads ?? 'prefer'}
-                  onChange={(val) => onChangeRoadType?.('majorRoads', val)}
-                />
-                <ParamDropdownItem
-                  label={footDiscipline ? t('Trottoirs & voies piétonnes') : t('Voies cyclables')}
-                  value={roadTypes.bikeLanes ?? 'tolerate'}
-                  onChange={(val) => onChangeRoadType?.('bikeLanes', val)}
-                />
-              </div>
-
-              {/* Row 3: Bois (protection vent et soleil) & Intersections */}
-              <div className="rvi-tracage__params-row">
-                <ParamDropdownItem
-                  label={t('Bois (protection vent et soleil)')}
-                  value={roadTypes.woods ?? 'prefer'}
-                  onChange={(val) => onChangeRoadType?.('woods', val)}
-                />
-                <ParamDropdownItem
-                  label={t('Intersections')}
-                  value={roadTypes.turns ?? 'tolerate'}
-                  onChange={(val) => onChangeRoadType?.('turns', val)}
-                />
-              </div>
-
-              {/* Row 4: Ferry & Villes */}
-              <div className="rvi-tracage__params-row">
-                <ParamDropdownItem
-                  label={t('Ferry')}
-                  value={roadTypes.ferry ?? 'forbid'}
-                  onChange={(val) => onChangeRoadType?.('ferry', val)}
-                />
-                <ParamDropdownItem
-                  label={t('Villes')}
-                  value={roadTypes.cities ?? 'avoid'}
-                  onChange={(val) => onChangeRoadType?.('cities', val)}
-                />
-              </div>
-            </div>
-
-            {/* Checkbox: Appliquer à tout les itinéraires (Figma 5925:123599) */}
-            <button
-              type="button"
-              className="rvi-tracage__checkbox-row"
-              onClick={() =>
-                onChangeRoadType?.('applyToAllItineraries', !roadTypes.applyToAllItineraries)
-              }
-              role="checkbox"
-              aria-checked={Boolean(roadTypes.applyToAllItineraries)}
-            >
-              <span
-                className={`rvi-tracage__checkbox${roadTypes.applyToAllItineraries ? ' is-checked' : ''}`}
-              >
-                {roadTypes.applyToAllItineraries && <IconFigmaCheck size={10} />}
-              </span>
-              <span className="rvi-tracage__checkbox-text">
-                {t('Appliquer à tout les itinéraires')}
-              </span>
-            </button>
-          </div>
-        </div>
-      </div>
+      <AdditionalParams
+        roadTypes={roadTypes}
+        isFoot={footDiscipline != null}
+        onChangeRoadType={onChangeRoadType}
+      />
 
       {/* ── Recalculer la trace (GPX import with waypoints) ── */}
       {showRecalculateTrace ? (
@@ -1096,125 +413,6 @@ export function TracageSection({
           </button>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-/**
- * 88px Dropdown Item with red border & unclipped Portal positioning.
- */
-function ParamDropdownItem({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: RoadPreference;
-  onChange: (val: RoadPreference) => void;
-}) {
-  const { t } = useAppI18n();
-  const [open, setOpen] = useState(false);
-  const btnRef = useRef<HTMLButtonElement>(null);
-
-  const selectedOption = ROAD_PREF_OPTIONS.find((o) => o.value === value) ?? ROAD_PREF_OPTIONS[1];
-
-  return (
-    <div className="rvi-tracage__param-item">
-      <span className="rvi-tracage__param-label" title={label}>
-        {label}
-      </span>
-      <button
-        ref={btnRef}
-        type="button"
-        className={`rvi-tracage__param-btn${open ? ' is-open' : ''}`}
-        onClick={() => setOpen((prev) => !prev)}
-        aria-expanded={open}
-        aria-label={label}
-      >
-        <span className="rvi-tracage__param-btn-text">{t(selectedOption.label)}</span>
-        <IconFigmaChevronDown size={12} />
-      </button>
-
-      <PortalDropdown
-        open={open}
-        anchorRef={btnRef}
-        onClose={() => setOpen(false)}
-        align="right"
-        estimatedHeight={138}
-      >
-        {ROAD_PREF_OPTIONS.map((opt) => (
-          <button
-            key={opt.value}
-            type="button"
-            className={`rv-dropdown__item${opt.value === value ? ' is-selected' : ''}`}
-            onClick={() => {
-              onChange(opt.value);
-              setOpen(false);
-            }}
-          >
-            <span>{t(opt.label)}</span>
-          </button>
-        ))}
-      </PortalDropdown>
-    </div>
-  );
-}
-
-/**
- * Slope (Pentes max.) Picker with red border & unclipped Portal positioning.
- */
-function SlopeParamItem({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  options: number[];
-  onChange: (val: number) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const btnRef = useRef<HTMLButtonElement>(null);
-
-  return (
-    <div className="rvi-tracage__param-item">
-      <span className="rvi-tracage__param-label" title={label}>
-        {label}
-      </span>
-      <button
-        ref={btnRef}
-        type="button"
-        className={`rvi-tracage__param-btn${open ? ' is-open' : ''}`}
-        onClick={() => setOpen((prev) => !prev)}
-        aria-expanded={open}
-        aria-label={label}
-      >
-        <span className="rvi-tracage__param-btn-text">{`${value}%`}</span>
-        <IconFigmaChevronDown size={12} />
-      </button>
-
-      <PortalDropdown
-        open={open}
-        anchorRef={btnRef}
-        onClose={() => setOpen(false)}
-        align="right"
-        estimatedHeight={180}
-      >
-        {options.map((val) => (
-          <button
-            key={val}
-            type="button"
-            className={`rv-dropdown__item${val === value ? ' is-selected' : ''}`}
-            onClick={() => {
-              onChange(val);
-              setOpen(false);
-            }}
-          >
-            <span>{`${val}%`}</span>
-          </button>
-        ))}
-      </PortalDropdown>
     </div>
   );
 }

@@ -65,6 +65,15 @@ function depthState(compare: GPUCompareFunction, write: boolean): GPUDepthStenci
   return { format: SCENE_DEPTH_FORMAT, depthCompare: compare, depthWriteEnabled: write };
 }
 
+/**
+ * Slope-scaled depth bias of the terrain mesh (reversed-Z: negative pushes
+ * it back). The mesh is a smoothed ground model lying a few centimetres
+ * above some ground returns; seen at a grazing angle (eye-level view, low
+ * orbit) it would hide them. Pushed back where the triangle is steep in
+ * depth, it only fills the holes between points, as intended.
+ */
+const TERRAIN_DEPTH_SLOPE_BIAS = -4;
+
 type SharedLayouts = Pick<
   RendererPipelines,
   'sceneBindGroupLayout' | 'pointParamsBindGroupLayout' | 'nodeBindGroupLayout' | 'shadingBindGroupLayout'
@@ -179,7 +188,7 @@ export async function createRendererPipelines(
     vertex: { module: terrainShader, entryPoint: 'terrain_vs', buffers: TERRAIN_VERTEX_BUFFERS },
     fragment: { module: terrainShader, entryPoint: 'terrain_fs', targets: [{ format }] },
     primitive: { topology: 'triangle-list', cullMode: 'back' },
-    depthStencil: depthState('greater', true),
+    depthStencil: { ...depthState('greater', true), depthBiasSlopeScale: TERRAIN_DEPTH_SLOPE_BIAS },
     multisample,
   });
 

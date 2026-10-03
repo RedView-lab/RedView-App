@@ -9,7 +9,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   BASE_HOUR_ROW_HEIGHT_PX,
+  CARD_COMPACT_MIN_WIDTH_PX,
+  CARD_REGULAR_MIN_WIDTH_PX,
+  DAY_WINDOW_DAYS,
   MINUTES_PER_DAY,
+  SCHEDULE_RAIL_WIDTH_PX,
+  SINGLE_DAY_CARD_MAX_WIDTH_PX,
   TIMELINE_VIEWPORT_BOTTOM_INSET_PX,
   TIMELINE_VIEWPORT_TOP_INSET_PX,
 } from './constants';
@@ -17,6 +22,7 @@ import { TimelineScheduleCanvas } from './TimelineScheduleCanvas';
 import { TimelineScheduleHeader } from './TimelineScheduleHeader';
 import type { TimelineTimelineViewProps } from './types';
 import {
+  addDays,
   buildDayWindow,
   buildKmMarkers,
   buildPauseAttachment,
@@ -34,6 +40,14 @@ import {
 
 /** Zoom minimal « normal » (boutons, barre) tant que la journée ne tient pas déjà à l'écran. */
 const HOUR_ZOOM_MIN = 0.4;
+
+type CardDensity = 'regular' | 'compact' | 'tight';
+
+function resolveCardDensity(cardWidthPx: number): CardDensity {
+  if (cardWidthPx >= CARD_REGULAR_MIN_WIDTH_PX) return 'regular';
+  if (cardWidthPx >= CARD_COMPACT_MIN_WIDTH_PX) return 'compact';
+  return 'tight';
+}
 const HOUR_ZOOM_MAX = 3.0;
 /** Plancher absolu, atteint seulement par le « tout voir » de la barre verticale. */
 const HOUR_ZOOM_FLOOR = 0.05;
@@ -117,6 +131,8 @@ export function TimelineTimelineView({
 
   const [selectedDayKey, setSelectedDayKey] = useState(() => defaultAnchorDayKey);
   const [isCompactLayout, setIsCompactLayout] = useState(false);
+  const [multiDayCardDensity, setMultiDayCardDensity] = useState<CardDensity>('regular');
+  const [singleDayCardDensity, setSingleDayCardDensity] = useState<CardDensity>('regular');
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     setSelectedDayKey(defaultAnchorDayKey);
@@ -129,7 +145,12 @@ export function TimelineTimelineView({
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
-      setIsCompactLayout(entry.contentRect.width < 860);
+      // 6 jours seulement si chaque colonne garde une carte lisible ; sinon 1 jour.
+      const canvasWidthPx = Math.max(0, entry.contentRect.width - SCHEDULE_RAIL_WIDTH_PX);
+      const multiDayCardWidthPx = canvasWidthPx / DAY_WINDOW_DAYS;
+      setIsCompactLayout(multiDayCardWidthPx < CARD_COMPACT_MIN_WIDTH_PX);
+      setMultiDayCardDensity(resolveCardDensity(multiDayCardWidthPx));
+      setSingleDayCardDensity(resolveCardDensity(Math.min(canvasWidthPx, SINGLE_DAY_CARD_MAX_WIDTH_PX)));
     });
 
     observer.observe(node);
@@ -154,6 +175,14 @@ export function TimelineTimelineView({
   }, [dayWindow, isCompactLayout, reference.hasRealDate, selectedDayDate]);
   const displayDayKeys = useMemo(() => displayDays.map((day) => toDayKey(day)), [displayDays]);
   const displayDayKeySet = useMemo(() => new Set(displayDayKeys), [displayDayKeys]);
+  // + la veille du premier jour affiché : ce qui y commence et passe minuit
+  // (nuit à l'hôtel, longue pause) continue en haut du premier jour.
+  const scheduledDayKeySet = useMemo(() => {
+    const keys = new Set(displayDayKeys);
+    const firstDay = displayDays[0];
+    if (firstDay) keys.add(toDayKey(addDays(firstDay, -1)));
+    return keys;
+  }, [displayDayKeys, displayDays]);
   const dayIndexByKey = useMemo(
     () => new Map(displayDayKeys.map((dayKey, index) => [dayKey, index])),
     [displayDayKeys],
@@ -171,20 +200,20 @@ export function TimelineTimelineView({
 
   const filteredPrimaryItems = useMemo(() => {
     if (!reference.hasRealDate) return primaryItems;
-    return primaryItems.filter((entry) => entry.dayKey && displayDayKeySet.has(entry.dayKey));
-  }, [displayDayKeySet, primaryItems, reference.hasRealDate]);
+    return primaryItems.filter((entry) => entry.dayKey && scheduledDayKeySet.has(entry.dayKey));
+  }, [primaryItems, reference.hasRealDate, scheduledDayKeySet]);
 
   const filteredPauseItems = useMemo(() => {
     if (filters && !filters.pause) return [];
     if (!reference.hasRealDate) return pauseItems;
-    return pauseItems.filter((entry) => entry.dayKey && displayDayKeySet.has(entry.dayKey));
-  }, [displayDayKeySet, filters, pauseItems, reference.hasRealDate]);
+    return pauseItems.filter((entry) => entry.dayKey && scheduledDayKeySet.has(entry.dayKey));
+  }, [filters, pauseItems, reference.hasRealDate, scheduledDayKeySet]);
 
   const filteredAutoPauseItems = useMemo(() => {
     if (filters && !filters.pause) return [];
     if (!reference.hasRealDate) return autoPauseItems;
-    return autoPauseItems.filter((entry) => entry.dayKey && displayDayKeySet.has(entry.dayKey));
-  }, [autoPauseItems, displayDayKeySet, filters, reference.hasRealDate]);
+    return autoPauseItems.filter((entry) => entry.dayKey && scheduledDayKeySet.has(entry.dayKey));
+  }, [autoPauseItems, filters, reference.hasRealDate, scheduledDayKeySet]);
 
   const pauseAttachment = useMemo(
     () => buildPauseAttachment(filteredPrimaryItems, filteredAutoPauseItems),
@@ -197,8 +226,18 @@ export function TimelineTimelineView({
   );
 
   const startMinutes = useMemo(() => {
+    // Sortie sur plusieurs jours : chaque colonne est une journée entière
+    // (minuit → minuit), pour qu'un bloc qui passe minuit continue en haut du
+    // lendemain et que la nuit (0 h → heure de départ) reste visible.
+    if (reference.hasRealDate && reference.reference) {
+      const departureDayKey = toDayKey(reference.reference);
+      const spansSeveralDays = [...scheduleState.timedItems, ...scheduleState.autoPauses].some(
+        (entry) => entry.dayKey !== null && entry.dayKey !== departureDayKey,
+      );
+      if (spansSeveralDays) return 0;
+    }
     return Math.max(0, Math.floor(reference.startMinutes / 60) * 60);
-  }, [reference.startMinutes]);
+  }, [reference.hasRealDate, reference.reference, reference.startMinutes, scheduleState.autoPauses, scheduleState.timedItems]);
 
   const endMinutes = useMemo(() => {
     // Hauteur du canevas stable quels que soient les filtres.
@@ -214,6 +253,8 @@ export function TimelineTimelineView({
   const hourRowHeightPx = BASE_HOUR_ROW_HEIGHT_PX * normalizedHourZoom;
   const pixelsPerMinute = hourRowHeightPx / 60;
   const canvasBaseHeight = Math.max(visibleDurationMinutes * pixelsPerMinute, 0);
+  // Minuit sur le canevas : avec des dates réelles, aucune carte ne le dépasse.
+  const dayEndPx = reference.hasRealDate ? (MINUTES_PER_DAY - startMinutes) * pixelsPerMinute : null;
 
   const scheduledEvents = useMemo(
     () =>
@@ -236,8 +277,18 @@ export function TimelineTimelineView({
         filteredPrimaryItems,
         pixelsPerMinute,
         startMinutes,
+        displayDays,
+        reference.hasRealDate,
       ),
-    [filteredPauseItems, filteredPrimaryItems, pauseAttachment.unattachedPauses, pixelsPerMinute, startMinutes],
+    [
+      displayDays,
+      filteredPauseItems,
+      filteredPrimaryItems,
+      pauseAttachment.unattachedPauses,
+      pixelsPerMinute,
+      reference.hasRealDate,
+      startMinutes,
+    ],
   );
 
   const standalonePauseDayKeyById = useMemo(
@@ -258,8 +309,9 @@ export function TimelineTimelineView({
         scheduledStandalonePauses,
         standalonePauseDayKeyById,
         canvasBaseHeight,
+        dayEndPx,
       ),
-    [canvasBaseHeight, scheduledEvents, scheduledStandalonePauses, standalonePauseDayKeyById],
+    [canvasBaseHeight, dayEndPx, scheduledEvents, scheduledStandalonePauses, standalonePauseDayKeyById],
   );
 
   const kmMarkerStep = useMemo(
@@ -612,7 +664,14 @@ export function TimelineTimelineView({
   }
 
   return (
-    <div ref={scheduleRef} className="rvi-tl-schedule" style={scheduleStyle} aria-label="Timeline journaliere">
+    <div
+      ref={scheduleRef}
+      className="rvi-tl-schedule"
+      style={scheduleStyle}
+      data-layout={dayColumnCount > 1 ? 'multi-day' : 'single-day'}
+      data-density={dayColumnCount > 1 ? multiDayCardDensity : singleDayCardDensity}
+      aria-label="Timeline journaliere"
+    >
       <TimelineScheduleHeader
         displayDays={headerDays}
         selectedDayKey={selectedDayKey}
@@ -654,6 +713,7 @@ export function TimelineTimelineView({
         onChangeFavoritePoiPauseDuration={onChangeFavoritePoiPauseDuration}
         onToggleFavorite={onToggleFavorite}
         onRemove={onRemove}
+        dayEndPx={dayEndPx}
         resolveColumnPlacement={resolveColumnPlacement}
         resolveNowLinePlacement={resolveNowLinePlacement}
       />

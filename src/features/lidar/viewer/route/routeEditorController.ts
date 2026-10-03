@@ -152,6 +152,17 @@ export class RouteEditorController implements RouteEditorHost {
     this.notifyStateChange();
   }
 
+  /** Replaces the active route's points as one undoable edit (context-menu placements). */
+  public commitPoints(points: LidarRouteOverlayPoint[], actionName: string): void {
+    const currentRoute = this.getActiveRoute();
+    if (!currentRoute) return;
+    this.history.push(currentRoute.points);
+    this.onPointsChangeCommit(points, actionName);
+    this.notifyStateChange();
+    this.updateOverlay();
+    this.requestRender();
+  }
+
   public undo(): boolean {
     const currentRoute = this.getActiveRoute();
     if (!currentRoute?.points) return false;

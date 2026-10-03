@@ -202,7 +202,7 @@ function terminateSlopePool() {
 }
 
 // ── Cancel handling (per-kind) ────────────────────────────────────────
-// Called from lifecycle.js when slopeCancelGeneration / altitudeCancelGeneration
+// Called from build-queues.js when slopeCancelGeneration / altitudeCancelGeneration
 // bumps. We cannot interrupt a worker mid-job, but we CAN drop every pending
 // callback tagged to that kind so the SW caller sees the cancellation and
 // returns a transparent tile. The worker finishes its current job in the
@@ -337,7 +337,7 @@ async function computeSlopeViaPool(demBlob, neighbourBlobs, z, x, y, resFactor, 
   }
 }
 
-// Expose hooks for lifecycle.js to call on cancel / teardown.
+// Expose hooks for build-queues.js to call on cancel / teardown.
 // (Plain function declarations — these files are importScripts'd into the
 // SW global scope, so they're already global; the references below just
 // make the intent explicit for readers.)

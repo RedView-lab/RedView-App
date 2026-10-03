@@ -1,6 +1,7 @@
 import { PAUSE_CHIP_MIN_HEIGHT_PX } from '../constants';
 import type { TimedAutoPause, TimedTimelineItem, TimelineStandalonePause } from '../types';
-import { resolveVisualDurationMin } from './format';
+import { buildDaySegments } from './event-schedule';
+import { resolveVisualDurationMin, toDayKey } from './format';
 
 export function buildScheduledStandalonePauses(
   manualPauseItems: TimedTimelineItem[],
@@ -8,7 +9,32 @@ export function buildScheduledStandalonePauses(
   primaryItems: TimedTimelineItem[],
   pixelsPerMinute: number,
   startMinutes: number,
+  displayDays: Date[],
+  hasRealDate: boolean,
 ): TimelineStandalonePause[] {
+  const displayDayKeys = new Set(displayDays.map((day) => toDayKey(day)));
+  const startsBeforeWindow = (dayKey: string | null) => (
+    hasRealDate && dayKey !== null && !displayDayKeys.has(dayKey)
+  );
+  const resolveContinuations = (
+    entry: Pick<TimedTimelineItem, 'dayKey' | 'date' | 'minuteOfDay'>,
+    durationMin: number,
+  ) => {
+    const visualDurationMin = resolveVisualDurationMin(durationMin);
+    return buildDaySegments(
+      entry.dayKey,
+      entry.date,
+      entry.minuteOfDay,
+      visualDurationMin,
+      visualDurationMin,
+      displayDays,
+      hasRealDate,
+      startMinutes,
+      pixelsPerMinute,
+    ).slice(startsBeforeWindow(entry.dayKey) ? 0 : 1);
+  };
+
+
   const manualPauses = manualPauseItems.map((pause) => ({
     id: pause.item.id,
     label: pause.item.label,
@@ -23,6 +49,8 @@ export function buildScheduledStandalonePauses(
     heightPx: resolveStandalonePauseHeightPx(pause.item.durationMin ?? 0, pixelsPerMinute),
     sortIndex: pause.sortIndex,
     dayKey: pause.dayKey,
+    continuations: resolveContinuations(pause, pause.item.durationMin ?? 0),
+    startsBeforeWindow: startsBeforeWindow(pause.dayKey),
   }));
 
   const autoPauses = autoPauseItems.map((pause) => ({
@@ -40,11 +68,15 @@ export function buildScheduledStandalonePauses(
     heightPx: resolveStandalonePauseHeightPx(pause.durationMin, pixelsPerMinute),
     sortIndex: pause.sortIndex,
     dayKey: pause.dayKey,
+    continuations: resolveContinuations(pause, pause.durationMin),
+    startsBeforeWindow: startsBeforeWindow(pause.dayKey),
   }));
 
-  return [...manualPauses, ...autoPauses].sort(
-    (left, right) => left.scheduledTopPx - right.scheduledTopPx || left.sortIndex - right.sortIndex,
-  );
+  return [...manualPauses, ...autoPauses]
+    .filter((pause) => !pause.startsBeforeWindow || pause.continuations.length > 0)
+    .sort(
+      (left, right) => left.scheduledTopPx - right.scheduledTopPx || left.sortIndex - right.sortIndex,
+    );
 }
 
 function resolveStandalonePauseHeightPx(durationMin: number, pixelsPerMinute: number): number {

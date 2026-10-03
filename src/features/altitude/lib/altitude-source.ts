@@ -9,6 +9,7 @@ import {
   TERRAIN_ALIGNED_RASTER_TILE_SIZE,
   unifiedDEMSource,
 } from '@/features/map3d/lib/sources';
+import { mapboxRasterColorMix } from '@/features/map3d/lib/rasterColorMix';
 import type { Dem3dQuality } from '@/features/map3d/lib/dem3dQualityBus';
 import type { DemTileProfile } from '@/features/map3d/hooks/useMap/demTiles';
 
@@ -32,11 +33,13 @@ export const ALTITUDE_MAXZOOM = 14;
  */
 const ALTITUDE_TILE_SIZE = TERRAIN_ALIGNED_RASTER_TILE_SIZE;
 
-// raster-color-mix works on 0..1 normalised channels (×255 folded in).
+// raster-color-mix works on 0..1 normalised channels (×255 folded in), with
+// Mapbox's own RGB scaling compensated (see rasterColorMix.ts: without it,
+// everything below ~29 m / ~96 m decoded under 0 and showed as sea level).
 // Mapbox Terrain-RGB: -10000 + (R·65536 + G·256 + B) · 0.1
-const MAPBOX_RGB_DECODE_MIX: [number, number, number, number] = [1671168, 6528, 25.5, -10000];
+const MAPBOX_RGB_DECODE_MIX = mapboxRasterColorMix([1671168, 6528, 25.5, -10000]);
 // Terrarium: R·256 + G + B/256 - 32768
-const TERRARIUM_DECODE_MIX: [number, number, number, number] = [65280, 255, 255 / 256, -32768];
+const TERRARIUM_DECODE_MIX = mapboxRasterColorMix([65280, 255, 255 / 256, -32768]);
 const ALTITUDE_DECODE_RANGE: [number, number] = [MIN_ALTITUDE_M, MAX_ALTITUDE_M];
 
 export type AltitudeEncoding = 'mapbox' | 'terrarium';

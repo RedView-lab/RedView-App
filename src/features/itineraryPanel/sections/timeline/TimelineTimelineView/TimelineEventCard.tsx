@@ -10,6 +10,7 @@ import {
   IconTrash,
 } from '../../../components/icons';
 import { KindBadge } from '../KindBadge';
+import { CARD_NAME_LINE_HEIGHT_PX, CARD_NAME_MAX_LINES } from './constants';
 import type { PoiCategory, TimelineItem } from '../../../types';
 import type { TimelineEvent } from './types';
 import { formatDistanceLabel, formatLegDuration, formatPauseDuration } from './utils';
@@ -86,10 +87,17 @@ export function TimelineEventCard({
       ? formatPauseDuration(event.item.durationMin)
       : event.item.label || t('Point sans nom');
 
+  // Carte haute (longue pause attachée) : le nom peut passer sur 2–3 lignes.
+  const nameLines = Math.max(1, Math.min(
+    CARD_NAME_MAX_LINES,
+    Math.floor((previewEvent.cardHeightPx - 8) / CARD_NAME_LINE_HEIGHT_PX),
+  ));
+
   const eventStyle = {
     top: previewEvent.topPx,
     minHeight: previewEvent.heightPx,
     '--rvi-tl-card-height': `${previewEvent.cardHeightPx}px`,
+    '--rvi-tl-name-lines': String(nameLines),
     animationDelay: `${Math.min(index * 18, 240)}ms`,
     ...resolveColumnPlacement(previewEvent.spanSegments[0]?.dayKey ?? previewEvent.dayKey),
   } as CSSProperties;
@@ -100,6 +108,7 @@ export function TimelineEventCard({
       style={eventStyle}
       data-kind={event.item.kind}
       data-timeline-id={event.item.id}
+      data-multiline-name={nameLines > 1 ? '' : undefined}
     >
       <button
         type="button"
@@ -223,18 +232,6 @@ export function TimelineEventCard({
           aria-pressed={visible}
         >
           <IconNiceManYellow size={15} style={!visible ? { opacity: 0.35, filter: 'grayscale(1)' } : undefined} />
-        </button>
-        <button
-          type="button"
-          className={`rvi-tl-schedule__action rvi-tl-schedule__action--favorite${event.item.favorite ? ' is-on is-fav' : ''}`}
-          onClick={(actionEvent) => {
-            stopEventPropagation(actionEvent);
-            onToggleFavorite?.(event.item.id, !event.item.favorite);
-          }}
-          aria-label={t('Favori')}
-          aria-pressed={!!event.item.favorite}
-        >
-          <IconStar size={12} />
         </button>
         <button
           type="button"

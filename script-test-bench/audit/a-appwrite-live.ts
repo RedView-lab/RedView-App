@@ -18,7 +18,7 @@ import { performance } from 'node:perf_hooks';
 import { compressProjectPayload, decompressProjectPayload } from '../../src/shared/utils/projects/compression.ts';
 import { computeProjectSizeBytes } from '../../src/shared/utils/projects/limits.ts';
 import { createDefaultProject } from '../../src/features/itineraryPanel/lib/project/index.ts';
-import type { ItineraryProject } from '../../src/features/itineraryPanel/types.ts';
+import type { ItineraryProject } from '../../src/features/itineraryPanel/types/index.ts';
 import { buildReferenceProjects } from './a-project-size.ts';
 
 const EMAIL = process.env.RV_TEST_EMAIL ?? '';

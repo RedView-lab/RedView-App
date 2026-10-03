@@ -415,7 +415,7 @@ function drainOrtho() {
 }
 
 // Drain queued-but-not-yet-running ortho entries on viewport change.
-// Mirror of `flushIGNQueue()` in ign-fetcher.js — see that function for
+// Mirror of `flushIGNQueue()` in ign-scheduler.js — see that function for
 // the rationale. Paired with `cancelInFlightOrtho()` so the new viewport
 // gets all 16 ortho concurrency slots immediately instead of waiting
 // up to 8 s for the previous viewport's HTTP responses to land.
@@ -431,7 +431,7 @@ function flushOrthoQueue() {
   return pruned;
 }
 
-// In-flight AbortController registry — see ign-fetcher.js for the
+// In-flight AbortController registry — see ign-network.js for the
 // detailed rationale (same pattern). USER_CANCEL_REASON is the abort
 // reason used by `cancelInFlightOrtho()`; when the catch handler sees
 // it, it skips `orthoNegSet()` so a re-request for the new viewport
@@ -470,7 +470,7 @@ function cancelInFlightOrtho() {
   return n;
 }
 
-// In-flight deduplication for ortho tiles (same pattern as ignInflight in ign-fetcher.js)
+// In-flight deduplication for ortho tiles (same pattern as ignInflight in ign-scheduler.js)
 const orthoInflight = new Map();
 
 // In-memory negative cache for failed ortho tiles { key → { ts, ttl } }

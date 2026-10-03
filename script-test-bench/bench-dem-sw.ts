@@ -31,7 +31,13 @@ const SW_MODULES = [
   'core/interpolation.js',
   'core/terrain-rgb.js',
   'sources/mapbox.js',
+  'sources/ign-scheduler.js',
+  'sources/ign-network.js',
+  'sources/ign-cancel.js',
   'sources/ign-fetcher.js',
+  'sources/ign-highres.js',
+  'sources/ign-wms-raster.js',
+  'sources/ign-wms-tiles.js',
   'runtime/dem-helpers.js',
   'runtime/dem-health.js',
 ];

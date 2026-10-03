@@ -38,8 +38,8 @@ async function finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgrad
         Array.from(response.headers.entries()),
       );
     } catch { /* ignore */ }
-    // Provisional slope tiles that lacked this DEM tile can now be rebuilt.
-    if (typeof notifySlopeDemTileReady === 'function') notifySlopeDemTileReady(z, x, y, demProfile);
+    // Provisional slope/altitude tiles that lacked this DEM tile can now be rebuilt.
+    if (typeof notifyDerivedDemTileReady === 'function') notifyDerivedDemTileReady(z, x, y, demProfile);
   }
   if (DEBUG) {
     const dt = (performance.now() - t0).toFixed(0);
@@ -177,7 +177,7 @@ async function commitUpgradedDemTile(cache, cacheKey, z, x, y, upgraded, demProf
     demHotPut(cacheKey.url, upgraded.blob, Array.from(response.headers.entries()));
   } catch { /* ignore */ }
   notifyDemTileCacheUpdated(z, x, y, upgraded.source, demProfile);
-  if (typeof notifySlopeDemTileReady === 'function') notifySlopeDemTileReady(z, x, y, demProfile);
+  if (typeof notifyDerivedDemTileReady === 'function') notifyDerivedDemTileReady(z, x, y, demProfile);
 }
 
 // ── Surface (MNS) recovery ────────────────────────────────────────────

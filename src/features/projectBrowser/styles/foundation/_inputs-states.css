@@ -1,0 +1,110 @@
+/* Inline inputs (rename, search), empty / error states, and the shared hover / focus / disabled states. */
+
+.rvpb-card__rename-input {
+  width: 100%;
+  margin: 0;
+  padding: 4px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  font-size: var(--rv-font-size-xl);
+  font-weight: 700;
+  line-height: 1.25;
+  outline: none;
+}
+
+.rvpb-card__rename-input:focus,
+.rvpb-search-input:focus {
+  border-color: rgba(255, 255, 255, 0.55);
+}
+
+.rvpb-search-input {
+  width: 220px;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  background: #383838;
+  color: #fff;
+  font-size: var(--rv-font-size-lg);
+  outline: none;
+}
+
+.rvpb-empty {
+  grid-column: 1 / -1;
+  padding: 48px 24px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: var(--rv-font-size-lg);
+  font-weight: 500;
+}
+
+.rvpb-error {
+  margin-top: 4px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: rgba(180, 30, 30, 0.18);
+  color: #ffb4b4;
+  font-size: var(--rv-font-size-md);
+  font-weight: 500;
+}
+
+.rvpb-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.rvpb-icon-button:hover,
+.rvpb-square-button:hover,
+.rvpb-card__open:hover,
+.rvpb-breadcrumb__item:not(.is-current):hover,
+.rvpb-top-tabs__item:hover,
+.rvpb-view-toggle__item:hover,
+.rvpb-create-button:hover,
+.rvpb-card__preview:hover,
+.rvpb-inline-cta:hover,
+.rvpb-text-link:hover,
+.rvpb-add-row:hover,
+.rvpb-logout-button:hover {
+  filter: brightness(1.08);
+}
+
+.rvpb-icon-button:focus-visible,
+.rvpb-square-button:focus-visible,
+.rvpb-card__open:focus-visible,
+.rvpb-breadcrumb__item:focus-visible,
+.rvpb-top-tabs__item:focus-visible,
+.rvpb-view-toggle__item:focus-visible,
+.rvpb-create-button:focus-visible,
+.rvpb-card__preview:focus-visible,
+.rvpb-inline-cta:focus-visible,
+.rvpb-text-link:focus-visible,
+.rvpb-add-row:focus-visible,
+.rvpb-logout-button:focus-visible,
+.rvpb-subscription-card:focus-visible,
+.rvpb-contact-option:focus-within,
+.rvpb-input-wrap:focus-within,
+.rvpb-account-input-shell:focus-within,
+.rvpb-account-select-shell:focus-within {
+  outline: 2px solid rgba(255, 255, 255, 0.38);
+  outline-offset: 2px;
+}
+
+.rvpb-icon-button:disabled,
+.rvpb-square-button:disabled,
+.rvpb-card__open:disabled,
+.rvpb-create-button:disabled,
+.rvpb-inline-cta:disabled,
+.rvpb-logout-button:disabled,
+.rvpb-card__preview:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

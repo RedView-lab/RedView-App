@@ -86,6 +86,14 @@
   transition: all 0.15s ease;
 }
 
+/* Ellipsis target of the compaction steps (responsive.css). */
+.rvc-center-analysis__segment-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .rvc-center-analysis__segment-item {
   position: relative;
   display: inline-flex;

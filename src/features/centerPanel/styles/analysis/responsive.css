@@ -6,6 +6,12 @@
  * toolbar wraps.
  */
 
+/* While measuring (useToolbarFitDensity): each step's spacing applies at once. */
+.rvc-center-analysis__toolbar[data-fitting] *,
+.rvc-center-analysis__toolbar[data-fitting] {
+  transition: none !important;
+}
+
 /* 1. The "Analyse" title: the controls speak for themselves. */
 .rvc-center-analysis__toolbar[data-density~='1'] .rvc-center-analysis__label {
   display: none;
@@ -72,4 +78,70 @@
 
 .rvc-center-analysis__toolbar[data-density~='4'] .rvc-center-analysis__filter-chip--iconic {
   padding: 3px 4px;
+}
+
+/* 5. Long labels give way: ellipsis on the filter chips, axis and surface values (full text in the tooltip). */
+.rvc-center-analysis__toolbar[data-density~='5'] .rvc-center-analysis__filter-label {
+  max-width: 64px;
+}
+
+.rvc-center-analysis__toolbar[data-density~='5'] .rvc-center-analysis__select {
+  max-width: 84px;
+}
+
+.rvc-center-analysis__toolbar[data-density~='5'] .rvc-center-analysis__segment {
+  padding: 0 4px;
+}
+
+/* 6. Short stubs ("Profi…", "Élév…"). */
+.rvc-center-analysis__toolbar[data-density~='6'] .rvc-center-analysis__filter-label {
+  max-width: 36px;
+}
+
+.rvc-center-analysis__toolbar[data-density~='6'] .rvc-center-analysis__select {
+  max-width: 64px;
+}
+
+.rvc-center-analysis__toolbar[data-density~='6'] .rvc-center-analysis__filter-chip {
+  gap: 3px;
+  padding: 3px 4px 3px 3px;
+}
+
+/* 7. Narrow column (wide side panels): the x-axis modes give way too ("Dist…", "Tem…"). */
+.rvc-center-analysis__toolbar[data-density~='7'] .rvc-center-analysis__segment {
+  padding: 0 3px;
+}
+
+.rvc-center-analysis__toolbar[data-density~='7'] .rvc-center-analysis__segment-text {
+  max-width: 36px;
+}
+
+.rvc-center-analysis__toolbar[data-density~='7'] .rvc-center-analysis__filter-label {
+  max-width: 26px;
+}
+
+.rvc-center-analysis__toolbar[data-density~='7'] .rvc-center-analysis__select {
+  max-width: 54px;
+  padding-left: 4px;
+}
+
+/* 8. Last step before wrapping: shortest stubs, tightest spacing. */
+.rvc-center-analysis__toolbar[data-density~='8'] {
+  column-gap: 3px;
+}
+
+.rvc-center-analysis__toolbar[data-density~='8'] .rvc-center-analysis__segment-text {
+  max-width: 26px;
+}
+
+.rvc-center-analysis__toolbar[data-density~='8'] .rvc-center-analysis__filter-label {
+  max-width: 16px;
+}
+
+.rvc-center-analysis__toolbar[data-density~='8'] .rvc-center-analysis__select {
+  max-width: 46px;
+}
+
+.rvc-center-analysis__toolbar[data-density~='8'] .rvc-center-analysis__axis-picker {
+  padding: 2px 1px;
 }

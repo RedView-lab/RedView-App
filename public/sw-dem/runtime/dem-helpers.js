@@ -225,7 +225,7 @@ async function tryParentOverzoom(cache, z, x, y, depth, demProfile = 'default', 
     const pY = y >> (z - pZ);
     const parentKey = buildDemCacheKey(pZ, pX, pY, demProfile);
 
-    // Fast path: in-memory hot tier (see DEM_HOT_CACHE in lifecycle.js).
+    // Fast path: in-memory hot tier (see DEM_HOT_CACHE in hot-caches.js).
     // Overzoom is in the hot path for every miss inside FR/CH/ES/NO at
     // z>14 and on every short-TTL refresh; skipping CacheStorage here
     // for already-warm parents removes another 5-25 ms × parent-depth

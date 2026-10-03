@@ -150,8 +150,9 @@ export function AnalysisToolbar({
                 }}
                 aria-label={label}
                 aria-describedby={showHint ? `rvc-analysis-xmode-hint-${mode}` : undefined}
+                title={isDisabled ? undefined : label}
               >
-                {label}
+                <span className="rvc-center-analysis__segment-text">{label}</span>
               </button>
 
               {showHint && hint ? (

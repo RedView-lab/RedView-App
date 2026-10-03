@@ -59,101 +59,25 @@ async function invalidateParentDownsampledSlopeTiles(z, x, y, zoneHash) {
 }
 
 // ── Stale slope tiles → page-side source reload ───────────────────────
-// Mapbox treats any 200 image as final: a provisional slope tile (missing
-// neighbour, stand-in DEM, ancestor fallback, transparent placeholder) stays
-// on screen until the tile leaves the viewport. The SW cannot push a tile,
-// so it tells the page, which reloads the slope source once the map settles
-// (listeners.ts); complete tiles come straight back from the hot tier, the
-// stale ones are rebuilt.
-//
-// Notifications driven by a DEM tile landing (notifySlopeDemTileReady) are
-// never capped — each DEM tile lands once. Blind retries (nothing specific
-// to wait for) are capped per tile so a tile that cannot improve does not
-// keep the reload loop alive.
-const SLOPE_STALE_NOTIFY_DEBOUNCE_MS = 700;
-const SLOPE_STALE_NOTIFY_MAX_WAIT_MS = 3000;
-const SLOPE_STALE_MAX_RETRIES = 3;
-const SLOPE_STALE_RETRY_MAX_KEYS = 4096;
-const slopeStaleRetries = new Map(); // tile cache key → reloads already asked
-let slopeStaleTimer = null;
-let slopeStaleFirstAt = 0;
-let slopeStaleCount = 0;
+// A provisional slope tile (missing neighbour, stand-in DEM, ancestor
+// fallback, transparent placeholder) is served but not cached; the page
+// reloads the slope source on SLOPE_TILES_STALE (derived-tile-stale.js).
+// A slope tile built while a cardinal neighbour DEM is not there yet (the
+// terrain never asked for it: outside the viewport), or while its own DEM is
+// a stand-in, waits on that DEM tile and comes back seam-complete once it
+// lands.
+const SLOPE_STALE_TRACKER = createDerivedTileStaleTracker('SLOPE_TILES_STALE');
 
-function flushSlopeStaleNotify() {
-  slopeStaleTimer = null;
-  slopeStaleFirstAt = 0;
-  const count = slopeStaleCount;
-  slopeStaleCount = 0;
-  if (count === 0) return;
-  try {
-    self.clients.matchAll({ type: 'window' }).then((clients) => {
-      clients.forEach((client) => client.postMessage({ type: 'SLOPE_TILES_STALE', count }));
-    }).catch(() => {});
-  } catch { /* ignore */ }
-}
-
-function noteSlopeTileStale(tileKey, { capped = true } = {}) {
-  if (capped) {
-    const n = slopeStaleRetries.get(tileKey) || 0;
-    if (n >= SLOPE_STALE_MAX_RETRIES) return;
-    slopeStaleRetries.delete(tileKey);
-    slopeStaleRetries.set(tileKey, n + 1);
-    if (slopeStaleRetries.size > SLOPE_STALE_RETRY_MAX_KEYS) {
-      slopeStaleRetries.delete(slopeStaleRetries.keys().next().value);
-    }
-  }
-  slopeStaleCount++;
-  const now = Date.now();
-  if (!slopeStaleFirstAt) slopeStaleFirstAt = now;
-  if (slopeStaleTimer) clearTimeout(slopeStaleTimer);
-  const wait = Math.min(
-    SLOPE_STALE_NOTIFY_DEBOUNCE_MS,
-    Math.max(0, slopeStaleFirstAt + SLOPE_STALE_NOTIFY_MAX_WAIT_MS - now),
-  );
-  slopeStaleTimer = setTimeout(flushSlopeStaleNotify, wait);
+function noteSlopeTileStale(tileKey, options) {
+  SLOPE_STALE_TRACKER.noteStale(tileKey, options);
 }
 
 function noteSlopeTileFinal(tileKey) {
-  slopeStaleRetries.delete(tileKey);
-}
-
-// ── Provisional slope tiles waiting on a DEM tile ─────────────────────
-// A slope tile built while a cardinal neighbour DEM is not there yet (the
-// terrain never asked for it: outside the viewport), or while its own DEM is
-// a stand-in, is served but not cached. When that DEM tile becomes final —
-// the terrain reaching it on a pan, the prefetch ring, a background upgrade
-// — finalize() calls notifySlopeDemTileReady() and the page reloads the
-// slope source: the tile comes back seam-complete and gets cached.
-const SLOPE_DEM_WAITERS = new Map(); // `${profile}:${z}/${x}/${y}` → Set<slope tile key>
-const SLOPE_DEM_WAITERS_MAX = 4096;
-
-function slopeDemWaitKey(demProfile, z, x, y) {
-  return `${demProfile || 'default'}:${z}/${x}/${y}`;
+  SLOPE_STALE_TRACKER.noteFinal(tileKey);
 }
 
 function waitSlopeTileOnDem(tileKey, demProfile, z, tiles) {
-  for (const [tx, ty] of tiles) {
-    const key = slopeDemWaitKey(demProfile, z, tx, ty);
-    let waiting = SLOPE_DEM_WAITERS.get(key);
-    if (!waiting) {
-      if (SLOPE_DEM_WAITERS.size >= SLOPE_DEM_WAITERS_MAX) {
-        SLOPE_DEM_WAITERS.delete(SLOPE_DEM_WAITERS.keys().next().value);
-      }
-      waiting = new Set();
-      SLOPE_DEM_WAITERS.set(key, waiting);
-    }
-    waiting.add(tileKey);
-  }
-}
-
-// Called for every DEM tile committed as final (finalize, background upgrade).
-function notifySlopeDemTileReady(z, x, y, demProfile) {
-  if (SLOPE_DEM_WAITERS.size === 0) return;
-  const key = slopeDemWaitKey(demProfile, z, x, y);
-  const waiting = SLOPE_DEM_WAITERS.get(key);
-  if (!waiting) return;
-  SLOPE_DEM_WAITERS.delete(key);
-  for (const tileKey of waiting) noteSlopeTileStale(tileKey, { capped: false });
+  SLOPE_STALE_TRACKER.waitOnDem(tileKey, demProfile, z, tiles);
 }
 
 function isSlopeWorkCancelled(generation) {

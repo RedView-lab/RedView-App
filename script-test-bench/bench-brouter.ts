@@ -15,7 +15,7 @@ import { BenchmarkSuite } from './core/harness.ts';
 import { printSuiteHeader, printSuiteResults } from './core/reporter.ts';
 import { generateSyntheticRoute, type TrackPoint } from './core/synthetic-data.ts';
 import { buildBrfProfile } from '../src/features/itineraryPanel/lib/brouter/profiles/brf-template.ts';
-import type { PrioritiesState, RoadTypesState } from '../src/features/itineraryPanel/types.ts';
+import type { PrioritiesState, RoadTypesState } from '../src/features/itineraryPanel/types/index.ts';
 
 export async function runBrouterBenchmark(options: { quick?: boolean } = {}): Promise<BenchmarkSuite> {
   const suite = new BenchmarkSuite('BRouter (Routing Engine & BRF)');

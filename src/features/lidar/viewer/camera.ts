@@ -1,11 +1,18 @@
 // ============================================
-// Standalone LiDAR HD Viewer — Orbit Camera
+// Standalone LiDAR HD Viewer — Camera (orbit + look-around)
 // ============================================
 //
+// Two modes share the matrices every consumer reads (renderer, LOD,
+// picking, overlays):
+//  - orbit: the camera circles a target (left drag orbits, right/middle
+//    drag or Shift pans, wheel zooms);
+//  - look: the eye stays at one spot (a person standing on the terrain)
+//    and the view turns around it over 360° (drag), the wheel narrows or
+//    widens the field of view like binoculars.
 // Mouse and wheel input move a goal pose; `update()` (once per rendered
 // frame) eases the camera towards it. The motion stays continuous when the
-// input arrives unevenly or a frame is late, and the wheel zooms smoothly
-// instead of jumping by notches. Matrices and picking use the current pose.
+// input arrives unevenly or a frame is late. Matrices and picking use the
+// current pose.
 
 /** Orbit pose: angles from the +Z axis (theta) and the vertical (phi), distance to the target. */
 export interface CameraPose {
@@ -17,15 +24,49 @@ export interface CameraPose {
   targetZ: number;
 }
 
+/**
+ * Look-around pose: eye position (render frame), heading `yaw` (radians,
+ * clockwise from the grid north, −Z), `pitch` above the horizon, and the
+ * horizontal field of view `fovX` (radians).
+ */
+export interface LookPose {
+  eyeX: number;
+  eyeY: number;
+  eyeZ: number;
+  yaw: number;
+  pitch: number;
+  fovX: number;
+}
+
+export type CameraMode = 'orbit' | 'look';
+
 /** Time constants (ms) of the easing towards the goal pose. */
 const ORBIT_SMOOTHING_MS = 45;
 const ZOOM_SMOOTHING_MS = 80;
+/** The eye flies to (or back from) a look-around spot over a few hundred ms. */
+const FLY_SMOOTHING_MS = 220;
 /** The camera snaps to its goal once this close (rad, or share of the radius for distances). */
 const SNAP_EPSILON = 1e-4;
 /** Frame step assumed when the camera starts moving (no previous frame). */
 const DEFAULT_STEP_MS = 1000 / 60;
 const MIN_PHI = 0.05;
 const MAX_PHI = Math.PI - 0.05;
+/** Vertical field of view of the orbit camera. */
+const ORBIT_FOV_Y = Math.PI / 4;
+const DEG = Math.PI / 180;
+/** Look-around limits: no gimbal flip at the zenith/nadir, binoculars to wide angle. */
+const LOOK_MAX_PITCH = 85 * DEG;
+export const LOOK_MIN_FOV_X = 3 * DEG;
+export const LOOK_MAX_FOV_X = 120 * DEG;
+
+function wrapAngle(a: number): number {
+  return ((a % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
+}
+
+function forwardOf(yaw: number, pitch: number): [number, number, number] {
+  const c = Math.cos(pitch);
+  return [Math.sin(yaw) * c, Math.sin(pitch), -Math.cos(yaw) * c];
+}
 
 export class CameraController {
   canvas: HTMLCanvasElement;
@@ -41,6 +82,11 @@ export class CameraController {
 
   /** Pose the input asks for; the current pose eases to it in `update`. */
   private readonly goal: CameraPose = { theta: Math.PI / 4, phi: Math.PI / 4, radius: 500, targetX: 0, targetY: 0, targetZ: 0 };
+  private mode: CameraMode = 'orbit';
+  private readonly look: LookPose = { eyeX: 0, eyeY: 0, eyeZ: 0, yaw: 0, pitch: 0, fovX: 90 * DEG };
+  private readonly lookGoal: LookPose = { eyeX: 0, eyeY: 0, eyeZ: 0, yaw: 0, pitch: 0, fovX: 90 * DEG };
+  /** Orbit goal to return to when the look-around ends. */
+  private savedOrbit: CameraPose | null = null;
   private lastUpdateTime = -1;
   private isDragging = false;
   private isPanning = false;
@@ -84,6 +130,10 @@ export class CameraController {
     });
   }
 
+  getMode(): CameraMode {
+    return this.mode;
+  }
+
   getPose(): CameraPose {
     return {
       theta: this.theta,
@@ -95,8 +145,32 @@ export class CameraController {
     };
   }
 
+  /** Current look-around pose (meaningful in `look` mode). */
+  getLookPose(): LookPose {
+    return { ...this.look };
+  }
+
+  /** Changes whenever the rendered view changes (projection caches key on it). */
+  getViewKey(): number[] {
+    const aspect = this.canvas.width / Math.max(this.canvas.height, 1);
+    if (this.mode === 'look') {
+      const l = this.look;
+      return [1, l.eyeX, l.eyeY, l.eyeZ, l.yaw, l.pitch, l.fovX, aspect];
+    }
+    return [0, this.theta, this.phi, this.radius, this.targetX, this.targetY, this.targetZ, aspect];
+  }
+
+  /** Vertical field of view of the current projection (radians). */
+  getFovY(): number {
+    if (this.mode === 'orbit') return ORBIT_FOV_Y;
+    const aspect = this.canvas.width / Math.max(this.canvas.height, 1);
+    return 2 * Math.atan(Math.tan(this.look.fovX / 2) / aspect);
+  }
+
   /** Jumps to a pose (current and goal), as for scripted paths and benchmarks. */
   setPose(pose: Partial<CameraPose>): void {
+    this.mode = 'orbit';
+    this.savedOrbit = null;
     const goal = this.goal;
     if (pose.theta !== undefined) goal.theta = pose.theta;
     if (pose.phi !== undefined) goal.phi = Math.max(MIN_PHI, Math.min(MAX_PHI, pose.phi));
@@ -113,39 +187,142 @@ export class CameraController {
     this.notifyChange();
   }
 
+  /** Eases to an orbit pose (sets the goal only), like a mouse gesture would; ends a look-around. */
+  animateTo(pose: Partial<CameraPose>): void {
+    if (this.mode === 'look') this.orbitFromLook();
+    this.savedOrbit = null;
+    const goal = this.goal;
+    if (pose.theta !== undefined) goal.theta += wrapAngle(pose.theta - goal.theta);
+    if (pose.phi !== undefined) goal.phi = Math.max(MIN_PHI, Math.min(MAX_PHI, pose.phi));
+    if (pose.radius !== undefined) goal.radius = Math.max(1, pose.radius);
+    if (pose.targetX !== undefined) goal.targetX = pose.targetX;
+    if (pose.targetY !== undefined) goal.targetY = pose.targetY;
+    if (pose.targetZ !== undefined) goal.targetZ = pose.targetZ;
+    this.notifyChange();
+  }
+
+  // ── Look-around ─────────────────────────────────────────────────────────────
+
+  /**
+   * Flies the eye to `eye` (render frame) and turns into look-around mode.
+   * The flight starts from the current view, so the move reads as one.
+   */
+  enterLook(eye: [number, number, number], pose: { yaw: number; pitch: number; fovX: number }): void {
+    if (this.mode === 'orbit') {
+      this.savedOrbit = { ...this.goal };
+      const from = this.getEye();
+      const fx = this.targetX - from[0];
+      const fy = this.targetY - from[1];
+      const fz = this.targetZ - from[2];
+      const len = Math.hypot(fx, fy, fz) || 1;
+      const aspect = this.canvas.width / Math.max(this.canvas.height, 1);
+      Object.assign(this.look, {
+        eyeX: from[0],
+        eyeY: from[1],
+        eyeZ: from[2],
+        yaw: Math.atan2(fx, -fz),
+        pitch: Math.asin(Math.max(-1, Math.min(1, fy / len))),
+        fovX: 2 * Math.atan(Math.tan(ORBIT_FOV_Y / 2) * aspect),
+      });
+      this.mode = 'look';
+    }
+    Object.assign(this.lookGoal, { eyeX: eye[0], eyeY: eye[1], eyeZ: eye[2] });
+    this.setLookGoal(pose);
+  }
+
+  /** Eases the look-around orientation / field of view (look mode only). */
+  setLookGoal(pose: Partial<Pick<LookPose, 'yaw' | 'pitch' | 'fovX'>>): void {
+    if (this.mode !== 'look') return;
+    const goal = this.lookGoal;
+    if (pose.yaw !== undefined) goal.yaw = this.look.yaw + wrapAngle(pose.yaw - this.look.yaw);
+    if (pose.pitch !== undefined) goal.pitch = Math.max(-LOOK_MAX_PITCH, Math.min(LOOK_MAX_PITCH, pose.pitch));
+    if (pose.fovX !== undefined) goal.fovX = Math.max(LOOK_MIN_FOV_X, Math.min(LOOK_MAX_FOV_X, pose.fovX));
+    this.notifyChange();
+  }
+
+  /** Target of the look-around (eye, heading, pitch, field of view) once eased. */
+  getLookGoal(): LookPose {
+    return { ...this.lookGoal };
+  }
+
+  /** Ends the look-around and flies back to the orbit view it started from. */
+  exitLook(): void {
+    if (this.mode !== 'look') return;
+    const saved = this.savedOrbit;
+    this.orbitFromLook();
+    if (saved) Object.assign(this.goal, saved, { theta: this.goal.theta + wrapAngle(saved.theta - this.goal.theta) });
+    this.savedOrbit = null;
+    this.notifyChange();
+  }
+
+  /** Switches to orbit with a pose that reproduces the current look-around view (no jump). */
+  private orbitFromLook(): void {
+    const l = this.look;
+    const [fx, fy, fz] = forwardOf(l.yaw, l.pitch);
+    // Orbit around a point ahead, at the distance the saved view had.
+    const radius = Math.max(5, this.savedOrbit?.radius ?? 100);
+    this.mode = 'orbit';
+    this.targetX = l.eyeX + fx * radius;
+    this.targetY = l.eyeY + fy * radius;
+    this.targetZ = l.eyeZ + fz * radius;
+    this.radius = radius;
+    this.phi = Math.max(MIN_PHI, Math.min(MAX_PHI, Math.acos(-fy)));
+    this.theta = Math.atan2(-fx, -fz);
+    Object.assign(this.goal, this.getPose());
+  }
+
+  // ── Frame update ────────────────────────────────────────────────────────────
+
   /**
    * Eases the current pose towards the goal; call once per rendered frame
    * with its timestamp (ms). Returns true while the camera still moves.
    */
   update(now: number): boolean {
     const step = this.lastUpdateTime >= 0 ? Math.min(100, Math.max(0, now - this.lastUpdateTime)) : DEFAULT_STEP_MS;
-    const goal = this.goal;
     const orbit = 1 - Math.exp(-step / ORBIT_SMOOTHING_MS);
     const zoom = 1 - Math.exp(-step / ZOOM_SMOOTHING_MS);
-    const panEpsilon = SNAP_EPSILON * Math.max(1, goal.radius);
     let moving = false;
     const ease = (current: number, target: number, k: number, epsilon: number): number => {
       if (Math.abs(target - current) <= epsilon) return target;
       moving = true;
       return current + (target - current) * k;
     };
-    this.theta = ease(this.theta, goal.theta, orbit, SNAP_EPSILON);
-    this.phi = ease(this.phi, goal.phi, orbit, SNAP_EPSILON);
-    this.targetX = ease(this.targetX, goal.targetX, orbit, panEpsilon);
-    this.targetY = ease(this.targetY, goal.targetY, orbit, panEpsilon);
-    this.targetZ = ease(this.targetZ, goal.targetZ, orbit, panEpsilon);
-    // Zoom eases in log space: the same speed per wheel notch at any distance.
-    const logRadius = ease(Math.log(this.radius), Math.log(goal.radius), zoom, SNAP_EPSILON);
-    this.radius = Math.exp(logRadius);
+    if (this.mode === 'look') {
+      const fly = 1 - Math.exp(-step / FLY_SMOOTHING_MS);
+      const l = this.look;
+      const g = this.lookGoal;
+      l.eyeX = ease(l.eyeX, g.eyeX, fly, 1e-3);
+      l.eyeY = ease(l.eyeY, g.eyeY, fly, 1e-3);
+      l.eyeZ = ease(l.eyeZ, g.eyeZ, fly, 1e-3);
+      l.yaw = ease(l.yaw, g.yaw, orbit, SNAP_EPSILON);
+      l.pitch = ease(l.pitch, g.pitch, orbit, SNAP_EPSILON);
+      l.fovX = Math.exp(ease(Math.log(l.fovX), Math.log(g.fovX), zoom, SNAP_EPSILON));
+    } else {
+      const goal = this.goal;
+      const panEpsilon = SNAP_EPSILON * Math.max(1, goal.radius);
+      this.theta = ease(this.theta, goal.theta, orbit, SNAP_EPSILON);
+      this.phi = ease(this.phi, goal.phi, orbit, SNAP_EPSILON);
+      this.targetX = ease(this.targetX, goal.targetX, orbit, panEpsilon);
+      this.targetY = ease(this.targetY, goal.targetY, orbit, panEpsilon);
+      this.targetZ = ease(this.targetZ, goal.targetZ, orbit, panEpsilon);
+      // Zoom eases in log space: the same speed per wheel notch at any distance.
+      const logRadius = ease(Math.log(this.radius), Math.log(goal.radius), zoom, SNAP_EPSILON);
+      this.radius = Math.exp(logRadius);
+    }
     this.lastUpdateTime = moving ? now : -1;
     return moving;
   }
+
+  // ── Input ───────────────────────────────────────────────────────────────────
 
   private onMouseDown = (e: MouseEvent) => {
     if (this.isLocked) return;
     this.lastX = e.clientX;
     this.lastY = e.clientY;
-    if (e.button === 0) {
+    if (this.mode === 'look') {
+      // Every button turns the head; there is nothing to pan around.
+      this.isDragging = true;
+    } else if (e.button === 0) {
       if (e.shiftKey) {
         this.isPanning = true;
       } else {
@@ -168,8 +345,20 @@ export class CameraController {
     const dy = e.clientY - this.lastY;
     this.lastX = e.clientX;
     this.lastY = e.clientY;
-    const goal = this.goal;
 
+    if (this.mode === 'look') {
+      // The scene follows the cursor: one pixel turns the view by one
+      // pixel's worth of field of view, whatever the zoom.
+      const g = this.lookGoal;
+      const perPixelX = g.fovX / Math.max(1, this.canvas.clientWidth);
+      const perPixelY = this.getFovY() / Math.max(1, this.canvas.clientHeight);
+      g.yaw -= dx * perPixelX;
+      g.pitch = Math.max(-LOOK_MAX_PITCH, Math.min(LOOK_MAX_PITCH, g.pitch + dy * perPixelY));
+      this.notifyChange();
+      return;
+    }
+
+    const goal = this.goal;
     if (this.isDragging) {
       goal.theta -= dx * 0.005;
       goal.phi = Math.max(MIN_PHI, Math.min(MAX_PHI, goal.phi - dy * 0.005));
@@ -195,7 +384,12 @@ export class CameraController {
 
   private onWheel = (e: WheelEvent) => {
     e.preventDefault();
-    this.goal.radius = Math.max(1, this.goal.radius * (1 + e.deltaY * 0.001));
+    if (this.mode === 'look') {
+      const g = this.lookGoal;
+      g.fovX = Math.max(LOOK_MIN_FOV_X, Math.min(LOOK_MAX_FOV_X, g.fovX * (1 + e.deltaY * 0.001)));
+    } else {
+      this.goal.radius = Math.max(1, this.goal.radius * (1 + e.deltaY * 0.001));
+    }
     this.notifyChange();
   };
 
@@ -203,11 +397,19 @@ export class CameraController {
     this.onChange?.();
   }
 
+  // ── Matrices ────────────────────────────────────────────────────────────────
+
   private _viewMatrix = new Float32Array(16);
   private _projMatrix = new Float32Array(16);
   private _eye: [number, number, number] = [0, 0, 0];
 
   getEye(): [number, number, number] {
+    if (this.mode === 'look') {
+      this._eye[0] = this.look.eyeX;
+      this._eye[1] = this.look.eyeY;
+      this._eye[2] = this.look.eyeZ;
+      return this._eye;
+    }
     const x = this.targetX + this.radius * Math.sin(this.phi) * Math.sin(this.theta);
     const y = this.targetY + this.radius * Math.cos(this.phi);
     const z = this.targetZ + this.radius * Math.sin(this.phi) * Math.cos(this.theta);
@@ -217,12 +419,20 @@ export class CameraController {
     return this._eye;
   }
 
+  /** Unit view direction. */
+  getForward(): [number, number, number] {
+    if (this.mode === 'look') return forwardOf(this.look.yaw, this.look.pitch);
+    const eye = this.getEye();
+    const fx = this.targetX - eye[0];
+    const fy = this.targetY - eye[1];
+    const fz = this.targetZ - eye[2];
+    const len = Math.hypot(fx, fy, fz) || 1;
+    return [fx / len, fy / len, fz / len];
+  }
+
   getViewMatrix(): Float32Array {
     const eye = this.getEye();
-    const tx = this.targetX, ty = this.targetY, tz = this.targetZ;
-    let fx = tx - eye[0], fy = ty - eye[1], fz = tz - eye[2];
-    const fLen = Math.hypot(fx, fy, fz) || 1;
-    fx /= fLen; fy /= fLen; fz /= fLen;
+    const [fx, fy, fz] = this.getForward();
     const upX = 0, upY = 1, upZ = 0;
     let rx = fy * upZ - fz * upY;
     let ry = fz * upX - fx * upZ;
@@ -256,7 +466,7 @@ export class CameraController {
    */
   getRenderProjMatrix(): Float32Array {
     const aspect = this.canvas.width / Math.max(this.canvas.height, 1);
-    const f = 1 / Math.tan(Math.PI / 8);
+    const f = 1 / Math.tan(this.getFovY() / 2);
     const near = 0.05;
     const m = this._renderProjMatrix;
     m.fill(0);
@@ -269,10 +479,12 @@ export class CameraController {
 
   getProjMatrix(): Float32Array {
     const aspect = this.canvas.width / Math.max(this.canvas.height, 1);
-    const fov = Math.PI / 4;
-    const near = Math.max(0.05, Math.min(2, this.radius * 0.01));
-    const far = Math.max(this.radius * 10, this.radius + this.sceneRadius * 4);
-    const f = 1 / Math.tan(fov / 2);
+    const look = this.mode === 'look';
+    const near = look ? 0.05 : Math.max(0.05, Math.min(2, this.radius * 0.01));
+    const far = look
+      ? this.sceneRadius * 8 + 1000
+      : Math.max(this.radius * 10, this.radius + this.sceneRadius * 4);
+    const f = 1 / Math.tan(this.getFovY() / 2);
     const nf = 1 / (near - far);
 
     const m = this._projMatrix;
@@ -284,4 +496,3 @@ export class CameraController {
     return m;
   }
 }
-

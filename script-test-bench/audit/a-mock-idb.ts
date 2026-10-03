@@ -3,7 +3,7 @@
  * (même API, structuredClone comme IndexedDB). Utilisé par a-persistence-sim.ts.
  */
 import type { ProjectRow, ProjectRowMeta } from '../../src/shared/utils/projects/types.ts';
-import type { ItineraryProject } from '../../src/features/itineraryPanel/types.ts';
+import type { ItineraryProject } from '../../src/features/itineraryPanel/types/index.ts';
 
 const projects = new Map<string, ProjectRow>();
 const cache = new Map<string, { projectId: string; ownerId?: string; cachedAt: string; project: ItineraryProject }>();

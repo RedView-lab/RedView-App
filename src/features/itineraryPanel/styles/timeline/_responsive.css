@@ -1,21 +1,11 @@
 /* Timeline responsive rules */
 
+/* Les colonnes et tailles de texte des cartes ne dépendent pas de la largeur
+ * du panneau mais de celle d'une colonne-jour : voir `data-density` dans
+ * _schedule.css. Ici seulement le rail des heures et la barre des jours. */
 @container (max-width: 560px) {
   .rvi-tl-schedule {
     --rvi-tl-times-col: 48px;
-    --rvi-tl-icon-col: 22px;
-    --rvi-tl-pause-col: 72px;
-    --rvi-tl-start-col: 60px;
-    --rvi-tl-next-col: 56px;
-    --rvi-tl-fav-col: 16px;
-    --rvi-tl-actions-gutter: 0px;
-    --rvi-tl-card-gap: 4px;
-    --rvi-tl-card-pad-left: 6px;
-    --rvi-tl-card-pad-right: 6px;
-  }
-
-  .rvi-tl-schedule__legend {
-    font-size: var(--rv-font-size-xs);
   }
 
   .rvi-tl-schedule__time-label {
@@ -26,68 +16,11 @@
   .rvi-tl-schedule__km-marker {
     font-size: var(--rv-font-size-xs);
   }
-
-  .rvi-tl-schedule__event-metric {
-    min-width: 0;
-    font-size: var(--rv-font-size-sm);
-    line-height: 18px;
-  }
-
-  .rvi-tl-schedule__pause-chip {
-    font-size: var(--rv-font-size-sm);
-    line-height: 18px;
-  }
-
-  .rvi-tl-schedule__event-card {
-    min-height: 32px;
-  }
-
-  .rvi-tl-schedule__pause-card {
-    min-height: 32px;
-    padding: 4px calc(var(--rvi-tl-card-pad-right) + var(--rvi-tl-actions-gutter)) 4px var(--rvi-tl-card-pad-left);
-  }
-}
-
-@container (max-width: 340px) {
-  .rvi-tl-tabs__btn { gap: 4px; padding: 6px; }
-  .rvi-tl-tabs__label { font-size: var(--rv-font-size-xs); }
-  .rvi-tl-row__kind-text { width: 44px; }
-  .rvi-tl-row__distance { min-width: 36px; }
-
-  .rvi-tl-schedule {
-    --rvi-tl-times-col: 44px;
-    --rvi-tl-icon-col: 20px;
-    --rvi-tl-pause-col: 64px;
-    --rvi-tl-start-col: 52px;
-    --rvi-tl-next-col: 48px;
-    --rvi-tl-fav-col: 16px;
-    --rvi-tl-actions-gutter: 0px;
-    --rvi-tl-card-gap: 3px;
-    --rvi-tl-card-pad-left: 4px;
-    --rvi-tl-card-pad-right: 4px;
-  }
-
-  .rvi-tl-schedule__legend {
-    font-size: var(--rv-font-size-xs);
-  }
-
-  .rvi-tl-schedule__pause-chip {
-    font-size: var(--rv-font-size-sm);
-  }
 }
 
 @container (max-width: 460px) {
   .rvi-tl-schedule {
     --rvi-tl-times-col: 44px;
-    --rvi-tl-icon-col: 20px;
-    --rvi-tl-pause-col: 64px;
-    --rvi-tl-start-col: 52px;
-    --rvi-tl-next-col: 48px;
-    --rvi-tl-fav-col: 16px;
-    --rvi-tl-actions-gutter: 0px;
-    --rvi-tl-card-gap: 3px;
-    --rvi-tl-card-pad-left: 4px;
-    --rvi-tl-card-pad-right: 4px;
   }
 
   .rvi-tl-schedule__days {
@@ -97,24 +30,13 @@
   .rvi-tl-schedule__day {
     padding: 7px 2px 9px;
   }
+}
 
-  .rvi-tl-schedule__time-label {
-    right: 4px;
-    font-size: var(--rv-font-size-xs);
-  }
-
-  .rvi-tl-schedule__km-marker { font-size: var(--rv-font-size-xs); }
-
-  .rvi-tl-schedule__event-name {
-    font-size: var(--rv-font-size-md);
-  }
-  .rvi-tl-schedule__event-metric {
-    font-size: var(--rv-font-size-sm);
-    line-height: 18px;
-  }
-  .rvi-tl-schedule__pause-chip {
-    font-size: var(--rv-font-size-sm);
-  }
+@container (max-width: 340px) {
+  .rvi-tl-tabs__btn { gap: 4px; padding: 6px; }
+  .rvi-tl-tabs__label { font-size: var(--rv-font-size-xs); }
+  .rvi-tl-row__kind-text { width: 44px; }
+  .rvi-tl-row__distance { min-width: 36px; }
 }
 
 @media (max-width: 400px) {

@@ -1,0 +1,180 @@
+/* Project and folder cards, card menu. */
+
+.rvpb-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  transition:
+    transform 180ms ease,
+    filter 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease;
+}
+
+.rvpb-card.is-dragging {
+  opacity: 0.44;
+  transform: scale(0.985);
+}
+
+.rvpb-folder-card.is-drop-target {
+  transform: translateY(-2px);
+}
+
+.rvpb-folder-card.is-drop-target .rvpb-card__preview {
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.7);
+}
+
+.rvpb-folder-card .rvpb-card__preview {
+  position: relative;
+}
+
+.rvpb-folder-card .rvpb-card__preview::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  opacity: 0;
+  transition: opacity 180ms ease;
+  pointer-events: none;
+}
+
+.rvpb-folder-card:hover .rvpb-card__preview::after,
+.rvpb-folder-card.is-drop-target .rvpb-card__preview::after {
+  opacity: 1;
+}
+
+.rvpb-card__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.rvpb-card__title-stack {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rvpb-card__title-stack h3 {
+  margin: 0;
+  font-size: var(--rv-font-size-xl);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.rvpb-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: var(--rv-font-size-md);
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.rvpb-card__meta-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rvpb-card__open {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.rvpb-card__menu-button {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rvpb-card__preview {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 194px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.16);
+  cursor: pointer;
+}
+
+.rvpb-card__preview-image {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.rvpb-card__preview-image.is-ready {
+  opacity: 1;
+}
+
+.rvpb-card__preview-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.96);
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.rvpb-card__preview-placeholder.is-loading {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.rvpb-folder-card__placeholder {
+  border: 0;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rvpb-card__preview-placeholder.is-loading img {
+  animation: rvpb-card-preview-loading 1.2s ease-in-out infinite;
+}
+
+@keyframes rvpb-card-preview-loading {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: translateY(-2px);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateY(3px);
+  }
+}
+
+/* Menu carte/dossier (portal) — apparence : shared/styles/dropdown.css (.rv-dropdown) */
+.rvpb-card-menu {
+  position: fixed;
+  z-index: 90;
+}
+
+.rvpb-card-menu__move-list {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Sous-liste « Déplacer vers » : simple retrait */
+:root .rv-dropdown .rvpb-card-menu__move-item {
+  padding-left: 22px;
+}

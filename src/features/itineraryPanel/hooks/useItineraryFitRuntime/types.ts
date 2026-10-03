@@ -1,8 +1,10 @@
-import type { Dispatch, SetStateAction } from 'react';
+import type { Dispatch, RefObject, SetStateAction } from 'react';
 
 import type { PredictionResult } from '@/features/fitPredictor';
 
-import type { ItineraryProject } from '../../types';
+import type { FitEngineRejection, FitFileProblem } from '@/features/fitPredictor/lib/fitFileValidation';
+
+import type { ItineraryFitUpload, ItineraryProject } from '../../types';
 
 export type FitRuntimeStatus = 'idle' | 'ready' | 'running' | 'success' | 'error';
 
@@ -48,3 +50,21 @@ export function createEmptyFitRuntime(): ItineraryFitRuntime {
     uploadNotice: null,
   };
 }
+
+/** État d'exécution .fit par itinéraire, lu hors rendu par les gestionnaires. */
+export type FitRuntimeRef = RefObject<Record<string, ItineraryFitRuntime>>;
+
+export type UpdateFitRuntime = (
+  itineraryId: string,
+  mut: (current: ItineraryFitRuntime) => ItineraryFitRuntime,
+) => void;
+
+export type ExcludeFitFiles = (
+  itineraryId: string,
+  uploadsSnapshot: readonly ItineraryFitUpload[],
+  rejected: ReadonlyArray<{
+    file: { name: string; lastModified: number; size: number };
+    reason: FitFileProblem | FitEngineRejection;
+  }>,
+  recompute: boolean,
+) => void;

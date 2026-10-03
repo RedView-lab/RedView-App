@@ -22,7 +22,17 @@
 // ---------------------------------------------------------------------------
 // Cache stamp — bumped on every cache-invalidating change so the browser
 // detects a byte diff in this file and triggers install→activate→purge.
-// Current: dem-tiles-v52-gesture-cancel / radar-v3 / dem-negative-v30 / slope-tiles-v3-aligned / vhr-tiles-v1
+// Current: dem-tiles-v52-gesture-cancel / radar-v3 / dem-negative-v30 / slope-tiles-v3-aligned / vhr-tiles-v1 / altitude-stale-v1
+// 2026-10-03 altitude-stale: an /altitude-tiles request whose DEM tile was not
+// final yet (LiDAR pending under load, cancelled build, stand-in) answered a
+// transparent tile that Mapbox kept for good — holes in the altitude overlay
+// on a cold load. It now serves the cached ancestor DEM overzoomed, uncached,
+// and the page reloads the source on ALTITUDE_TILES_STALE when the real tile
+// lands (tracker shared with slope: runtime/derived-tile-stale.js). Tile
+// bytes unchanged — MAP_CACHE_EPOCH not bumped.
+// 2026-10-03 module-split: sources/ign-fetcher.js, processing/build-tile.js and
+// runtime/lifecycle.js split into smaller scripts (same code, new
+// importScripts list). Tile bytes unchanged — MAP_CACHE_EPOCH not bumped.
 // 2026-10-02 gesture-cancel: a camera gesture (rotate, pitch, pan, zoom) no
 // longer flushes/aborts the LiDAR fetches of the terrain tiles still on
 // screen — they used to fall back to the correlation MNS / AWS 30 m and stay
@@ -81,10 +91,19 @@ importScripts(
   withEpoch('/sw-dem/core/analysis-zone.js'),
   withEpoch('/sw-dem/core/interpolation.js'),
   withEpoch('/sw-dem/core/terrain-rgb.js'),
+  withEpoch('/sw-dem/sources/ign-scheduler.js'),
+  withEpoch('/sw-dem/sources/ign-network.js'),
+  withEpoch('/sw-dem/sources/ign-cancel.js'),
   withEpoch('/sw-dem/sources/ign-fetcher.js'),
+  withEpoch('/sw-dem/sources/ign-highres.js'),
+  withEpoch('/sw-dem/sources/ign-wms-raster.js'),
+  withEpoch('/sw-dem/sources/ign-wms-tiles.js'),
   withEpoch('/sw-dem/sources/mapbox.js'),
   withEpoch('/sw-dem/sources/aws-terrain.js'),
+  withEpoch('/sw-dem/processing/build-tile-support.js'),
   withEpoch('/sw-dem/processing/build-tile.js'),
+  withEpoch('/sw-dem/processing/build-fallback-tile.js'),
+  withEpoch('/sw-dem/processing/build-terrain-tile.js'),
   withEpoch('/sw-dem/processing/composite.js'),
   withEpoch('/sw-dem/sources/ortho.js'),
   withEpoch('/sw-dem/sources/vhr-ortho.js'),
@@ -109,9 +128,9 @@ importScripts(
   // Order matters only for declaration-before-use of `const`/`let` at
   // module evaluation time. All cross-references happen inside fetch
   // events that fire AFTER the install phase, so functions can be
-  // defined in any order. We list lifecycle first (declares the global
-  // in-flight Maps + composite limiter), then helpers, then handlers,
-  // then the router (which only registers a listener).
+  // defined in any order. We list the hot caches, build queues (global
+  // in-flight Maps + composite limiter) and lifecycle first, then helpers,
+  // then handlers, then the router (which only registers a listener).
   //
   // slope-pool.js (the dedicated Worker pool manager) MUST load before
   // slope-handler.js — handleSlopeRequest references computeSlopeViaPool
@@ -120,10 +139,15 @@ importScripts(
   // actual call sites run well after this importScripts block finishes,
   // but keeping the order stable makes the dependency obvious.
   withEpoch('/sw-dem/workers/slope-math.js'),
+  withEpoch('/sw-dem/runtime/hot-caches.js'),
+  withEpoch('/sw-dem/runtime/build-queues.js'),
   withEpoch('/sw-dem/runtime/lifecycle.js'),
   withEpoch('/sw-dem/runtime/dem-helpers.js'),
   withEpoch('/sw-dem/runtime/dem-health.js'),
   withEpoch('/sw-dem/runtime/upgrade-scheduler.js'),
+  // Before slope-handler.js / altitude-handler.js: both create their stale
+  // tracker at evaluation time.
+  withEpoch('/sw-dem/runtime/derived-tile-stale.js'),
   withEpoch('/sw-dem/runtime/dem-handler.js'),
   withEpoch('/sw-dem/runtime/slope-pool.js'),
   withEpoch('/sw-dem/runtime/slope-handler.js'),

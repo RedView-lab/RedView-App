@@ -13,7 +13,6 @@
  *    `project-payloads` (payloadFiles.ts) ; le document garde un pointeur.
  */
 import { createDefaultProject } from '@/features/itineraryPanel/lib/project';
-import { PROJECT_CACHE_KEY_PREFIX } from '@/features/map3d/lib/mapCacheEpoch';
 import {
   databases,
   APPWRITE_DATABASE_ID,
@@ -37,20 +36,18 @@ import {
 import { getCurrentUserId, isLocalFallbackUser, isOwnedBy, toCloudFailure } from './auth';
 import { listAllCloudDocuments } from './cloudList';
 import {
-  decompressProjectBytes,
-  decompressProjectPayload,
-  encodeGzipPayload,
-  gzipProjectJson,
-} from './compression';
+  buildCloudPayload,
+  docToProjectRow,
+  PROJECT_META_FIELDS,
+  settlePayloadFiles,
+  withNameSync,
+  writeCloudData,
+  type CloudProjectDoc,
+} from './cloudDocuments';
 import { ProjectCloudError } from './errors';
-import {
-  gzipPayloadChars,
-  isCloudPayloadTooLarge,
-  isProjectTooLarge,
-  MAX_CLOUD_PROJECT_FILE_BYTES,
-  MAX_CLOUD_PROJECT_PAYLOAD_CHARS,
-  utf8ByteLength,
-} from './limits';
+import { readLocalProjects, removeLocalProjectCacheEntry, writeLocalProjects } from './legacyLocalProjects';
+import { utf8ByteLength } from './limits';
+import { markLocalSynced, writeLocalCopy } from './localCopy';
 import {
   deletePayloadFile,
   downloadProjectPayloadFile,
@@ -58,324 +55,25 @@ import {
   pruneProjectPayloadFiles,
   uploadProjectPayloadFile,
 } from './payloadFiles';
+import {
+  cloudQueues,
+  enqueue,
+  filePayloadProjects,
+  isNewer,
+  knownCloudVersions,
+  localQueues,
+  localRevisions,
+  payloadFilesChecked,
+  rememberCloudVersion,
+  withTimeout,
+} from './projectSession';
 import { rowToSummary } from './mappers';
 import type { ItineraryProject, ProjectRow, ProjectRowMeta, ProjectSummary } from './types';
 
-const LOCAL_PROJECTS_KEY = 'redview:local-projects:v1';
-
-/** Champs lus pour la liste et le contrôle de fraîcheur (jamais `data`). */
-const PROJECT_META_FIELDS = [
-  '$id',
-  'name',
-  'folder_id',
-  'privacy',
-  'size_bytes',
-  'user_id',
-  '$createdAt',
-  '$updatedAt',
-];
+export { saveProjectLocally } from './localCopy';
 
 /** Au-delà, une lecture cloud est considérée hors-ligne (copie locale servie). */
 const CLOUD_READ_TIMEOUT_MS = 15_000;
-
-type CloudProjectDoc = {
-  $id: string;
-  $createdAt: string;
-  $updatedAt: string;
-  user_id?: string;
-  folder_id?: string | null;
-  name?: string;
-  data?: unknown;
-  size_bytes?: number;
-  privacy?: ProjectRow['privacy'];
-};
-
-// ── État de session ─────────────────────────────────────────────────────────
-
-/** `$updatedAt` cloud connu par cette session (version chargée ou dernière sauvegarde). */
-const knownCloudVersions = new Map<string, string>();
-/** Révision locale par projet : seule la dernière écriture locale peut être marquée propre. */
-const localRevisions = new Map<string, number>();
-const localQueues = new Map<string, Promise<unknown>>();
-const cloudQueues = new Map<string, Promise<unknown>>();
-/** Projets dont la charge utile cloud est (ou était) un fichier du bucket. */
-const filePayloadProjects = new Set<string>();
-/** Projets dont les fichiers de charge utile ont déjà été vérifiés dans cette session. */
-const payloadFilesChecked = new Set<string>();
-
-function enqueue<T>(queues: Map<string, Promise<unknown>>, id: string, task: () => Promise<T>): Promise<T> {
-  const previous = queues.get(id) ?? Promise.resolve();
-  const run = previous.catch(() => undefined).then(task);
-  const tail = run.catch(() => undefined);
-  queues.set(id, tail);
-  void tail.then(() => {
-    if (queues.get(id) === tail) queues.delete(id);
-  });
-  return run;
-}
-
-function rememberCloudVersion(id: string, updatedAt: string | null | undefined): void {
-  if (updatedAt) knownCloudVersions.set(id, updatedAt);
-}
-
-function isNewer(candidate: string | null | undefined, reference: string | null | undefined): boolean {
-  if (!candidate) return false;
-  if (!reference) return true;
-  const a = Date.parse(candidate);
-  const b = Date.parse(reference);
-  if (!Number.isFinite(a) || !Number.isFinite(b)) return candidate !== reference;
-  return a > b;
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`Cloud request timed out after ${ms} ms`)), ms);
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (error: unknown) => {
-        clearTimeout(timer);
-        reject(error);
-      },
-    );
-  });
-}
-
-// ── Stockage local hérité (mode dev sans Appwrite) ─────────────────────────
-
-function readLocalProjects(): ProjectRow[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = window.localStorage.getItem(LOCAL_PROJECTS_KEY);
-    return raw ? (JSON.parse(raw) as ProjectRow[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeLocalProjects(projects: ProjectRow[]): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(LOCAL_PROJECTS_KEY, JSON.stringify(projects));
-  } catch (e) {
-    // QuotaExceededError ignoré sans risque : IndexedDB a déjà persisté la donnée complète
-    logger.projects.debug('LocalStorage write skipped or quota exceeded', e);
-  }
-}
-
-function removeLocalProjectCacheEntry(id: string): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.removeItem(`${PROJECT_CACHE_KEY_PREFIX}${id}`);
-  } catch {
-    // ignore storage access errors
-  }
-}
-
-// ── Conversions ────────────────────────────────────────────────────────────
-
-/** Le nom du document (renommage sans réécrire `data`) fait foi sur `data.name`. */
-function withNameSync(row: ProjectRow): ProjectRow {
-  if (!row.name || row.data.name === row.name) return row;
-  return { ...row, data: { ...row.data, name: row.name } };
-}
-
-/** Lit le fichier pointé par `data` ; une erreur remonte (jamais un projet vide à la place). */
-async function readPayloadFile(pointer: string): Promise<ItineraryProject> {
-  let bytes: Uint8Array<ArrayBuffer>;
-  try {
-    bytes = await downloadProjectPayloadFile(pointer);
-  } catch (error) {
-    // Fichier introuvable : ce n'est pas le projet qui est supprimé. Sans code
-    // HTTP, l'erreur est classée « cloud injoignable » et la copie locale sert.
-    const code = (error as { code?: unknown } | null)?.code;
-    throw code === 404 ? new Error(`Project payload file missing: ${pointer}`, { cause: error }) : error;
-  }
-  return decompressProjectBytes(bytes);
-}
-
-async function docToProjectRow(doc: CloudProjectDoc): Promise<ProjectRow> {
-  let parsedData: ItineraryProject;
-  if (isPayloadFilePointer(doc.data)) {
-    filePayloadProjects.add(doc.$id);
-    parsedData = await readPayloadFile(doc.data);
-  } else if (typeof doc.data === 'string') {
-    try {
-      parsedData = await decompressProjectPayload(doc.data);
-    } catch (error) {
-      logger.projects.error('Project payload could not be decoded', doc.$id, error);
-      parsedData = createDefaultProject();
-    }
-  } else if (doc.data && typeof doc.data === 'object') {
-    parsedData = doc.data as ItineraryProject;
-  } else {
-    parsedData = createDefaultProject();
-  }
-
-  return withNameSync({
-    id: doc.$id,
-    user_id: doc.user_id ?? '',
-    folder_id: doc.folder_id ?? null,
-    name: doc.name || parsedData.name || 'Untitled',
-    data: parsedData,
-    size_bytes: typeof doc.size_bytes === 'number' ? doc.size_bytes : 0,
-    privacy: doc.privacy || 'private',
-    created_at: doc.$createdAt,
-    updated_at: doc.$updatedAt,
-    dirty: false,
-    cloud_updated_at: doc.$updatedAt,
-  });
-}
-
-/** Charge utile cloud : dans le document (`data`), ou gzip à envoyer dans le bucket. */
-type CloudPayload =
-  | { sizeBytes: number; data: string; gzip?: undefined }
-  | { sizeBytes: number; data?: undefined; gzip: Uint8Array<ArrayBuffer> };
-
-/**
- * Prépare la charge utile cloud d'un projet : sérialise une seule fois (ou
- * réutilise `serialized`) et compresse. Jusqu'à 12 M car. (`gz:` + base64,
- * limite du proxy devant Appwrite) elle reste dans le document ; au-delà, le
- * gzip part dans le bucket (`writeCloudData`). Lève une
- * `ProjectCloudError('too-large')` au-delà de la limite du bucket au lieu
- * d'envoyer une requête vouée à l'échec.
- */
-async function buildCloudPayload(project: ItineraryProject, serialized?: string): Promise<CloudPayload> {
-  const json = serialized ?? JSON.stringify(project);
-  const sizeBytes = utf8ByteLength(json);
-  if (isProjectTooLarge(sizeBytes)) {
-    throw new ProjectCloudError('too-large');
-  }
-  const gzip = await gzipProjectJson(json);
-  if (!gzip) {
-    // Pas de CompressionStream : JSON brut dans le document s'il tient.
-    if (isCloudPayloadTooLarge(json)) throw new ProjectCloudError('too-large');
-    return { sizeBytes, data: json };
-  }
-  if (gzipPayloadChars(gzip.byteLength) <= MAX_CLOUD_PROJECT_PAYLOAD_CHARS) {
-    return { sizeBytes, data: encodeGzipPayload(gzip) };
-  }
-  if (gzip.byteLength > MAX_CLOUD_PROJECT_FILE_BYTES) {
-    logger.projects.warn('Cloud payload exceeds file limit', {
-      sizeBytes,
-      gzipBytes: gzip.byteLength,
-      maxBytes: MAX_CLOUD_PROJECT_FILE_BYTES,
-    });
-    throw new ProjectCloudError('too-large');
-  }
-  return { sizeBytes, gzip };
-}
-
-/**
- * Valeur à écrire dans `data` : la charge utile du document, ou le pointeur
- * du fichier tout juste envoyé (`uploaded`, à supprimer si l'écriture du
- * document échoue ensuite).
- */
-async function writeCloudData(
-  projectId: string,
-  userId: string,
-  payload: CloudPayload,
-): Promise<{ data: string; uploaded: string | null }> {
-  if (payload.data !== undefined) return { data: payload.data, uploaded: null };
-  try {
-    const pointer = await uploadProjectPayloadFile(projectId, userId, payload.gzip);
-    filePayloadProjects.add(projectId);
-    return { data: pointer, uploaded: pointer };
-  } catch (error) {
-    // Bucket absent (404) ou fichier refusé (400 : taille / extension) : le
-    // projet ne peut pas aller dans le cloud, mais ce n'est pas lui qui a
-    // disparu. Réseau / session : classés normalement par l'appelant.
-    const code = (error as { code?: unknown } | null)?.code;
-    if (code === 404 || code === 400) {
-      logger.projects.error('Project payload upload refused', { projectId, code, error });
-      throw new ProjectCloudError('too-large', { status: code, cause: error });
-    }
-    throw error;
-  }
-}
-
-/**
- * Après une écriture confirmée du document : supprime les anciens fichiers de
- * charge utile du projet. Appelée dans la file cloud du projet, donc aucune
- * sauvegarde suivante n'a pu envoyer un fichier entre-temps. Un projet jamais
- * vu en fichier dans cette session est quand même vérifié une fois (fichier
- * laissé par un autre appareil avant que le projet ne repasse sous la limite).
- */
-async function settlePayloadFiles(projectId: string, data: string): Promise<void> {
-  if (!filePayloadProjects.has(projectId) && payloadFilesChecked.has(projectId)) return;
-  payloadFilesChecked.add(projectId);
-  await pruneProjectPayloadFiles(projectId, data);
-  if (!isPayloadFilePointer(data)) filePayloadProjects.delete(projectId);
-}
-
-// ── Copie locale ───────────────────────────────────────────────────────────
-
-/**
- * Écrit la copie locale d'un projet (IndexedDB), sans réseau. Conserve dossier,
- * date de création et version cloud de base de la ligne existante. Renvoie la
- * révision locale écrite.
- */
-function writeLocalCopy(
-  id: string,
-  project: ItineraryProject,
-  userId: string,
-  json: string,
-  sizeBytes: number,
-  dirty: boolean,
-): Promise<number> {
-  const revision = (localRevisions.get(id) ?? 0) + 1;
-  localRevisions.set(id, revision);
-  return enqueue(localQueues, id, async () => {
-    const existing = await idbGetProjectMeta(id).catch(() => null);
-    const owned = existing && isOwnedBy(existing, userId) ? existing : null;
-    const now = new Date().toISOString();
-    const row: ProjectRow = {
-      id,
-      user_id: userId,
-      folder_id: owned?.folder_id ?? null,
-      name: project.name,
-      data: project,
-      size_bytes: sizeBytes,
-      privacy: project.privacy ?? 'private',
-      created_at: owned?.created_at ?? now,
-      updated_at: now,
-      dirty,
-      cloud_updated_at: owned?.cloud_updated_at ?? knownCloudVersions.get(id) ?? null,
-    };
-    await idbSaveProject(row, json);
-    return revision;
-  });
-}
-
-/** Après confirmation cloud : nouvelle version de base, et propre si aucune écriture locale plus récente. */
-function markLocalSynced(id: string, revision: number, cloudUpdatedAt: string): Promise<void> {
-  return enqueue(localQueues, id, async () => {
-    await idbUpdateProjectMeta(id, (meta) => ({
-      cloud_updated_at: cloudUpdatedAt,
-      dirty: localRevisions.get(id) === revision ? false : meta.dirty,
-    }));
-  }).catch((error: unknown) => {
-    logger.projects.warn('IndexedDB markLocalSynced failed', error);
-  });
-}
-
-/**
- * Sauvegarde uniquement locale (IndexedDB, ligne marquée `dirty`) : utilisée à
- * la fermeture / mise en arrière-plan de l'onglet, quand la requête cloud n'a
- * pas le temps d'aboutir. La ligne sera resynchronisée à la prochaine ouverture.
- */
-export async function saveProjectLocally(
-  id: string,
-  project: ItineraryProject,
-  serialized?: string,
-): Promise<void> {
-  const userId = await getCurrentUserId();
-  const json = serialized ?? JSON.stringify(project);
-  const localOnly = isLocalFallbackUser(userId) || id.startsWith('local-');
-  await writeLocalCopy(id, project, userId, json, utf8ByteLength(json), !localOnly);
-}
 
 // ── Lecture ────────────────────────────────────────────────────────────────
 

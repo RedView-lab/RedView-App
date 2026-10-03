@@ -73,6 +73,7 @@ export function buildScheduledEvents(
   reference: StartReference,
   startMinutes: number,
 ): TimelineEvent[] {
+  const displayDayKeys = new Set(displayDays.map((day) => toDayKey(day)));
   return filteredPrimaryItems.map((entry, index): TimelineEvent => {
     const rawAttachedPauses = pauseAttachment.attachedByEventId.get(entry.item.id) ?? [];
     const attachedPauses = rawAttachedPauses.map((pause) => ({
@@ -86,11 +87,12 @@ export function buildScheduledEvents(
       rawAttachedPauses,
       spanToNextSeconds,
     );
-    const spanSegments = buildEventSpanSegments(
+    const spanSegments = buildDaySegments(
       entry.dayKey,
       entry.date,
       entry.minuteOfDay,
       displayDurationMin,
+      resolveAttachedPauseDurationMin(rawAttachedPauses),
       displayDays,
       reference.hasRealDate,
       startMinutes,
@@ -120,8 +122,11 @@ export function buildScheduledEvents(
       cardHeightPx,
       heightPx,
       spanSegments,
+      startsBeforeWindow: reference.hasRealDate
+        && entry.dayKey !== null
+        && !displayDayKeys.has(entry.dayKey),
     };
-  });
+  }).filter((event) => !event.startsBeforeWindow || event.spanSegments.length > 0);
 }
 
 function resolveSecondsToNextCheckpoint(
@@ -202,11 +207,17 @@ function collectVisibleMinuteBounds(
   });
 }
 
-function buildEventSpanSegments(
+/**
+ * Découpe [début, début + durée] par jour affiché : un bloc qui passe minuit
+ * continue en haut de la colonne du lendemain. `pauseDurationMin` (pauses
+ * attachées, depuis le début) donne la part de pause de chaque segment.
+ */
+export function buildDaySegments(
   dayKey: string | null,
   startDate: Date | null,
   minuteOfDay: number,
   durationMin: number,
+  pauseDurationMin: number,
   displayDays: Date[],
   hasRealDate: boolean,
   startMinutes: number,
@@ -215,14 +226,18 @@ function buildEventSpanSegments(
   if (durationMin <= 0) return [];
 
   if (!hasRealDate || !startDate) {
+    const topPx = (minuteOfDay - startMinutes) * pixelsPerMinute;
     return [{
       dayKey,
-      topPx: (minuteOfDay - startMinutes) * pixelsPerMinute,
+      scheduledTopPx: topPx,
+      topPx,
       heightPx: durationMin * pixelsPerMinute,
+      pauseHeightPx: pauseDurationMin * pixelsPerMinute,
     }];
   }
 
   const endDate = new Date(startDate.getTime() + durationMin * 60_000);
+  const pauseEndMs = startDate.getTime() + Math.max(0, pauseDurationMin) * 60_000;
   const segments: EventSpanSegment[] = [];
 
   displayDays.forEach((day) => {
@@ -235,11 +250,18 @@ function buildEventSpanSegments(
 
     const segmentStartMinute = getMinuteOfDay(new Date(overlapStartMs));
     const rawDurationMin = (overlapEndMs - overlapStartMs) / 60_000;
-    const segmentHeightMin = Math.max(resolveVisualDurationMin(rawDurationMin), rawDurationMin);
+    const segmentHeightMin = Math.min(
+      Math.max(resolveVisualDurationMin(rawDurationMin), rawDurationMin),
+      MINUTES_PER_DAY - segmentStartMinute,
+    );
+    const pauseMin = Math.max(0, (Math.min(pauseEndMs, dayEnd.getTime()) - overlapStartMs) / 60_000);
+    const topPx = (segmentStartMinute - startMinutes) * pixelsPerMinute;
     segments.push({
       dayKey: currentDayKey,
-      topPx: (segmentStartMinute - startMinutes) * pixelsPerMinute,
+      scheduledTopPx: topPx,
+      topPx,
       heightPx: segmentHeightMin * pixelsPerMinute,
+      pauseHeightPx: Math.min(pauseMin, segmentHeightMin) * pixelsPerMinute,
     });
   });
 

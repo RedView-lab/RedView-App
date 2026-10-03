@@ -107,7 +107,8 @@
  * Short canvas (pages/Dashboard/lib/layout.ts, MAP_VIEWPORT_CONTROLS_COMPACT_*):
  * 2 columns of 32 px buttons (68 × 140 px) so the map stage stays usable at
  * 1:1 on a 1366×768 or 1080p-at-150 % screen. View toggles stay in the right
- * column, zoom and 2D/3D on the left. Icons keep their size.
+ * column, zoom and 2D/3D on the left. Icons (MapViewportControls `iconSize`)
+ * and the 2D/3D label scale with the button, same ratio as the 40 px column.
  */
 .rvmvc-map-tools--compact {
   display: grid;
@@ -127,6 +128,10 @@
   min-width: 32px;
   height: 32px;
   padding: 6px;
+}
+
+.rvmvc-map-tools--compact .rvmvc-map-tools__button--label {
+  font-size: var(--rv-font-size-sm);
 }
 
 .rvmvc-map-tools--compact .rvmvc-map-tools__slot-fullscreen { grid-area: fullscreen; }

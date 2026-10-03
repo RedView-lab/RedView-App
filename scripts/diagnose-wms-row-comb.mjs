@@ -8,7 +8,7 @@
 // duplicate ~(1 - cos(lat)) of them — 29.4 % at 45°N, 33.3 % at 48°N. Horn's
 // ∂z/∂y then alternates between 0 and ~2× the true value on successive rows,
 // which paints the terrain as horizontal dashes instead of a smooth slope
-// field. `mnsWmsRequestSize()` in public/sw-dem/sources/ign-fetcher.js avoids
+// field. `mnsWmsRequestSize()` in public/sw-dem/sources/ign-wms-raster.js avoids
 // this by asking for 1/cos(lat) more columns than rows.
 //
 // Usage:

@@ -2,6 +2,18 @@ import { updateSlopeRampTexture } from './slopeRamp';
 import { updateAltitudeRampTexture, DEFAULT_MAX_ALTITUDE_M } from './altitudeRamp';
 import type { ViewerSlopeState, ViewerAltitudeState } from '../viewer/rightPanel/types';
 import type { SolarRenderState } from './sunlightController';
+import { FRAGMENT_SHADER, VERTEX_SHADER } from './renderer/terrainShader';
+import {
+  PREVIEW_FRAGMENT_SHADER,
+  PREVIEW_VERTEX_SHADER,
+  ROUTE_FRAGMENT_SHADER,
+  ROUTE_VERTEX_SHADER,
+  SUN_DISC_FRAGMENT_SHADER,
+  SUN_DISC_VERTEX_SHADER,
+  TRAJECTORY_FRAGMENT_SHADER,
+  TRAJECTORY_VERTEX_SHADER,
+} from './renderer/auxShaders';
+import { createPlaceholderTexture, createProgram, mustLoc, normalize3 } from './renderer/glUtils';
 
 // ============================================
 // LiDAR HD — WebGL2 fallback renderer
@@ -10,330 +22,7 @@ import type { SolarRenderState } from './sunlightController';
 // single textured + lit heightmap mesh with support for real-time astronomical
 // sun lighting, horizon-sweep cast shadows, cumulative sunlight map,
 // slope ramp, altitude ramp, and 3D celestial sun trajectory.
-
-const VERTEX_SHADER = /* glsl */ `#version 300 es
-precision highp float;
-
-layout(location = 0) in vec3 a_pos;
-layout(location = 1) in vec3 a_normal;
-layout(location = 2) in vec2 a_uv;
-
-uniform mat4 u_viewProj;
-uniform float u_elevationExaggeration;
-
-out vec3 v_normal;
-out vec2 v_uv;
-out vec3 v_worldPos;
-
-void main() {
-  v_normal = normalize(vec3(a_normal.x, a_normal.y / max(u_elevationExaggeration, 0.001), a_normal.z));
-  v_uv = a_uv;
-  vec3 pos = vec3(a_pos.x, a_pos.y * u_elevationExaggeration, a_pos.z);
-  v_worldPos = pos;
-  gl_Position = u_viewProj * vec4(pos, 1.0);
-}
-`;
-
-const FRAGMENT_SHADER = /* glsl */ `#version 300 es
-precision highp float;
-precision highp sampler2D;
-
-in vec3 v_normal;
-in vec2 v_uv;
-in vec3 v_worldPos;
-
-uniform sampler2D u_ortho;
-uniform sampler2D u_snow;          // R32F snow depth in cm (NEAREST sampling)
-uniform sampler2D u_slopeRamp;     // 1D/2D LUT (256x1 RGBA) for slope colorization
-uniform sampler2D u_altitudeRamp;  // 1D/2D LUT (512x1 RGBA) for altitude colorization
-uniform sampler2D u_shadowMap;     // R8 (0 = lit, 255 = cast shadow)
-uniform sampler2D u_sunlightMap;   // RGBA (cumulative sunshine map)
-
-uniform vec3 u_sunDir;             // already normalised, points FROM surface TO sun
-uniform vec3 u_sunColor;           // physical sun color from solar altitude
-uniform float u_sunIntensity;      // 0.0 (night) to 1.0 (noon)
-uniform vec3 u_skyColor;           // ambient sky tint
-uniform float u_exposure;
-uniform int u_sunlightEnabled;     // 0=off, 1=on
-
-uniform int u_shadowEnabled;       // 0=off, 1=on
-uniform float u_shadowOpacity;     // 0.0 to 1.0
-uniform int u_sunlightMapEnabled;  // 0=off, 1=on
-uniform float u_sunlightMapOpacity;// 0.0 to 1.0
-
-uniform int u_snowMode;            // 0=off, 1=cover, 2=thickness
-uniform vec2 u_snowOrigin;         // (originX, originZ) in renderer space
-uniform vec2 u_snowScale;          // (scaleX,  scaleZ)  in renderer space
-uniform vec2 u_terrainOrigin;      // (originX, originZ) for grid-aligned maps
-uniform vec2 u_terrainScale;       // (scaleX,  scaleZ)  for grid-aligned maps
-
-uniform int u_slopeEnabled;        // 0=off, 1=on
-uniform float u_slopeOpacity;      // 0.0 to 1.0
-uniform int u_altitudeEnabled;     // 0=off, 1=on
-uniform float u_altitudeOpacity;   // 0.0 to 1.0
-uniform float u_centerAltitude;    // center elevation in meters
-uniform float u_maxAltitude;       // max elevation scale (default 5000.0)
-uniform float u_elevationExaggeration;
-
-out vec4 fragColor;
-
-vec3 srgbToLinear(vec3 c) {
-  return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
-}
-vec3 linearToSrgb(vec3 c) {
-  return pow(clamp(c, 0.0, 1.0), vec3(1.0 / 2.2));
-}
-
-// Shadow / sunlight maps are node grids spanning the terrain bounds edge to
-// edge: map uv 0..1 onto the first..last texel centres before filtering.
-vec2 nodeGridUV(vec2 uv, ivec2 dims) {
-  vec2 n = vec2(dims);
-  return (clamp(uv, 0.0, 1.0) * (n - 1.0) + 0.5) / n;
-}
-
-float sampleSnowDepthCm() {
-  if (u_snowMode == 0) return 0.0;
-  vec2 uv = (v_worldPos.xz - u_snowOrigin) / u_snowScale;
-  if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return 0.0;
-  ivec2 dims = textureSize(u_snow, 0);
-  ivec2 px = clamp(ivec2(uv * vec2(dims)), ivec2(0), dims - ivec2(1));
-  return texelFetch(u_snow, px, 0).r;
-}
-
-vec3 snowThicknessColor(float depthCm) {
-  float t = clamp(depthCm / 200.0, 0.0, 1.0);
-  float r = clamp(1.6 * t - 0.4, 0.0, 1.0);
-  float g = clamp(1.0 - abs(t - 0.55) * 2.2, 0.0, 1.0);
-  float b = clamp(1.0 - t * 1.4 + 0.15, 0.0, 1.0);
-  return vec3(r, g, b);
-}
-
-vec3 applySnow(vec3 baseSrgb) {
-  if (u_snowMode == 0) return baseSrgb;
-  float depth = sampleSnowDepthCm();
-  if (u_snowMode == 2) {
-    if (depth <= 0.5) return baseSrgb * 0.35;
-    return snowThicknessColor(depth);
-  }
-  // cover
-  float t = smoothstep(0.0, 30.0, depth) * 0.93;
-  return mix(baseSrgb, vec3(0.97, 0.98, 1.0), t);
-}
-
-void main() {
-  vec3 base = texture(u_ortho, v_uv).rgb;
-  vec3 tinted = applySnow(base);
-
-  vec3 N = normalize(v_normal);
-
-  // Surface slope angle in degrees, from the real (un-exaggerated) normal:
-  // v_normal carries the vertical exaggeration for shading only.
-  if (u_slopeEnabled == 1 && u_slopeOpacity > 0.0) {
-    vec3 terrainN = normalize(vec3(N.x, N.y * u_elevationExaggeration, N.z));
-    float cosSlope = clamp(terrainN.y, 0.0, 1.0);
-    float slopeDeg = acos(cosSlope) * 57.29577951308232;
-    float slopeU = clamp(slopeDeg / 90.0, 0.0, 1.0);
-    vec4 slopeSample = texture(u_slopeRamp, vec2(slopeU, 0.5));
-    if (slopeSample.a > 0.0) {
-      tinted = mix(tinted, slopeSample.rgb, slopeSample.a * u_slopeOpacity);
-    }
-  }
-
-  // Altitude colorization
-  if (u_altitudeEnabled == 1 && u_altitudeOpacity > 0.0) {
-    float realAltitude = (v_worldPos.y / max(u_elevationExaggeration, 0.001)) + u_centerAltitude;
-    float altU = clamp(realAltitude / u_maxAltitude, 0.0, 1.0);
-    vec4 altSample = texture(u_altitudeRamp, vec2(altU, 0.5));
-    if (altSample.a > 0.0) {
-      tinted = mix(tinted, altSample.rgb, altSample.a * u_altitudeOpacity);
-    }
-  }
-
-  // Cumulative sunlight map (insolation) overlay
-  vec2 gridUV = (v_worldPos.xz - u_terrainOrigin) / u_terrainScale;
-  if (u_sunlightEnabled == 1 && u_sunlightMapEnabled == 1 && u_sunlightMapOpacity > 0.0) {
-    if (all(greaterThanEqual(gridUV, vec2(0.0))) && all(lessThanEqual(gridUV, vec2(1.0)))) {
-      vec4 smSample = texture(u_sunlightMap, nodeGridUV(gridUV, textureSize(u_sunlightMap, 0)));
-      if (smSample.a > 0.0) {
-        tinted = mix(tinted, smSample.rgb, smSample.a * u_sunlightMapOpacity);
-      }
-    }
-  }
-
-  vec3 baseLin = srgbToLinear(tinted);
-
-  float ndotl = clamp(dot(N, u_sunDir), 0.0, 1.0);
-
-  // Cast shadow sampling
-  float castShadow = 0.0;
-  if (u_sunlightEnabled == 1 && u_shadowEnabled == 1 && u_shadowOpacity > 0.0) {
-    if (all(greaterThanEqual(gridUV, vec2(0.0))) && all(lessThanEqual(gridUV, vec2(1.0)))) {
-      castShadow = texture(u_shadowMap, nodeGridUV(gridUV, textureSize(u_shadowMap, 0))).r;
-    }
-  }
-
-  if (u_sunlightEnabled == 1) {
-    // Physical Sun Lighting
-    // Direct sunlight factor: self-shadow (ndotl) + cast shadow
-    float directLit = ndotl * (1.0 - castShadow) * u_sunIntensity;
-
-    // At shadowOpacity = 100% (1.0), all light (direct + ambient) in shadowed areas is fully extinguished to pure black (noir noir)
-    float shadowDarkness = u_shadowOpacity;
-    float shadowMask = clamp(1.0 - (1.0 - directLit) * shadowDarkness, 0.0, 1.0);
-
-    vec3 directSun = baseLin * u_sunColor * directLit;
-    float upFacing = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);
-    vec3 ambientBase = baseLin * u_skyColor * (0.18 + 0.22 * upFacing);
-
-    vec3 lit = (directSun + ambientBase * shadowMask) * u_exposure;
-    fragColor = vec4(linearToSrgb(lit), 1.0);
-  } else {
-
-    // Default studio directional lighting
-    float wrap = ndotl * 0.5 + 0.5;
-    vec3 sunLight = baseLin * wrap;
-
-    float upFacing = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);
-    vec3 ambient = baseLin * u_skyColor * (0.18 + 0.22 * upFacing);
-
-    vec3 lit = (sunLight * 0.85 + ambient) * u_exposure;
-    fragColor = vec4(linearToSrgb(lit), 1.0);
-  }
-}
-`;
-
-const PREVIEW_VERTEX_SHADER = /* glsl */ `#version 300 es
-precision highp float;
-
-layout(location = 0) in vec3 a_pos;
-layout(location = 1) in vec3 a_normal;
-layout(location = 2) in vec4 a_color;
-
-uniform mat4 u_viewProj;
-uniform float u_elevationExaggeration;
-
-out vec3 v_normal;
-out vec4 v_color;
-
-void main() {
-  v_normal = normalize(vec3(a_normal.x, a_normal.y / max(u_elevationExaggeration, 0.001), a_normal.z));
-  v_color = a_color;
-  vec3 pos = vec3(a_pos.x, a_pos.y * u_elevationExaggeration, a_pos.z);
-  gl_Position = u_viewProj * vec4(pos, 1.0);
-}
-`;
-
-const PREVIEW_FRAGMENT_SHADER = /* glsl */ `#version 300 es
-precision highp float;
-
-in vec3 v_normal;
-in vec4 v_color;
-
-uniform vec3 u_sunDir;
-out vec4 fragColor;
-
-void main() {
-  float diff = max(dot(v_normal, u_sunDir), 0.0);
-  float light = 0.6 + 0.4 * diff;
-  fragColor = vec4(v_color.rgb * light, v_color.a);
-}
-`;
-
-const TRAJECTORY_VERTEX_SHADER = /* glsl */ `#version 300 es
-precision highp float;
-
-layout(location = 0) in vec3 a_pos;
-layout(location = 1) in vec4 a_color;
-
-uniform mat4 u_viewProj;
-out vec4 v_color;
-
-void main() {
-  v_color = a_color;
-  gl_Position = u_viewProj * vec4(a_pos, 1.0);
-}
-`;
-
-const TRAJECTORY_FRAGMENT_SHADER = /* glsl */ `#version 300 es
-precision highp float;
-
-in vec4 v_color;
-out vec4 fragColor;
-
-void main() {
-  fragColor = v_color;
-}
-`;
-
-const ROUTE_VERTEX_SHADER = /* glsl */ `#version 300 es
-precision highp float;
-
-layout(location = 0) in vec3 a_pos;
-layout(location = 1) in vec4 a_color;
-
-uniform mat4 u_viewProj;
-out vec4 v_color;
-
-void main() {
-  v_color = a_color;
-  gl_Position = u_viewProj * vec4(a_pos, 1.0);
-}
-`;
-
-const ROUTE_FRAGMENT_SHADER = /* glsl */ `#version 300 es
-precision highp float;
-
-in vec4 v_color;
-out vec4 fragColor;
-
-void main() {
-  fragColor = v_color;
-}
-`;
-
-const SUN_DISC_VERTEX_SHADER = /* glsl */ `#version 300 es
-precision highp float;
-
-layout(location = 0) in vec2 a_quadPos;
-
-uniform mat4 u_viewProj;
-uniform vec3 u_sunDiscPos;
-uniform float u_sunDiscRadius;
-uniform vec3 u_camRight;
-uniform vec3 u_camUp;
-
-out vec2 v_localPos;
-
-void main() {
-  v_localPos = a_quadPos;
-  vec3 worldPos = u_sunDiscPos + (a_quadPos.x * u_camRight + a_quadPos.y * u_camUp) * u_sunDiscRadius;
-  gl_Position = u_viewProj * vec4(worldPos, 1.0);
-}
-`;
-
-const SUN_DISC_FRAGMENT_SHADER = /* glsl */ `#version 300 es
-precision highp float;
-
-in vec2 v_localPos;
-uniform vec3 u_sunColor;
-uniform float u_sunIntensity;
-
-out vec4 fragColor;
-
-void main() {
-  float dist = length(v_localPos);
-  if (dist > 1.0) discard;
-
-  float core = smoothstep(0.35, 0.05, dist);
-  float corona = exp(-dist * 4.5) * 0.75;
-  float glow = exp(-dist * 2.0) * 0.35;
-  float brightness = clamp(core + corona + glow, 0.0, 1.0) * max(u_sunIntensity, 0.15);
-
-  vec3 white = vec3(1.0, 1.0, 0.98);
-  vec3 col = mix(u_sunColor, white, core);
-  fragColor = vec4(col * brightness, brightness);
-}
-`;
+// Shaders and GL helpers live in ./renderer/.
 
 export interface TerrainGPUData {
   vertices: Float32Array;   // interleaved pos.xyz | normal.xyz | uv.xy
@@ -501,20 +190,7 @@ export class WebGLTerrainRenderer {
 
   private compileProgram() {
     const gl = this.gl;
-    const vs = compile(gl, gl.VERTEX_SHADER, VERTEX_SHADER);
-    const fs = compile(gl, gl.FRAGMENT_SHADER, FRAGMENT_SHADER);
-    const prog = gl.createProgram();
-    if (!prog) throw new Error('createProgram failed');
-    gl.attachShader(prog, vs);
-    gl.attachShader(prog, fs);
-    gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-      const log = gl.getProgramInfoLog(prog) || '';
-      gl.deleteProgram(prog);
-      throw new Error(`Program link failed: ${log}`);
-    }
-    gl.deleteShader(vs);
-    gl.deleteShader(fs);
+    const prog = createProgram(gl, VERTEX_SHADER, FRAGMENT_SHADER, 'terrain', { verifyLink: true });
     this.program = prog;
 
     this.uViewProj   = mustLoc(gl, prog, 'u_viewProj');
@@ -547,94 +223,30 @@ export class WebGLTerrainRenderer {
     this.uSnowOrigin = mustLoc(gl, prog, 'u_snowOrigin');
     this.uSnowScale  = mustLoc(gl, prog, 'u_snowScale');
 
-    // 1×1 placeholder snow texture
-    this.snowTexture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, this.snowTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, 1, 1, 0, gl.RED, gl.FLOAT, new Float32Array([0]));
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-    // 1×1 placeholder slope ramp texture
-    this.slopeTexture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, this.slopeTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-    // 1×1 placeholder altitude ramp texture
-    this.altitudeTexture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, this.altitudeTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-    // 1×1 placeholder shadow map texture (0 = lit)
-    this.shadowTexture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, this.shadowTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 1, 1, 0, gl.RED, gl.UNSIGNED_BYTE, new Uint8Array([0]));
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-    // 1×1 placeholder sunlight map texture
-    this.sunlightMapTexture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, this.sunlightMapTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    // 1×1 placeholders until the real snow grid / ramps / shadow and sunlight maps arrive
+    this.snowTexture = createPlaceholderTexture(gl, gl.R32F, gl.RED, gl.FLOAT, new Float32Array([0]), gl.NEAREST);
+    this.slopeTexture = createPlaceholderTexture(gl, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]), gl.NEAREST);
+    this.altitudeTexture = createPlaceholderTexture(gl, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]), gl.NEAREST);
+    // Shadow map: 0 = lit
+    this.shadowTexture = createPlaceholderTexture(gl, gl.R8, gl.RED, gl.UNSIGNED_BYTE, new Uint8Array([0]), gl.LINEAR);
+    this.sunlightMapTexture = createPlaceholderTexture(gl, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]), gl.LINEAR);
     gl.bindTexture(gl.TEXTURE_2D, null);
   }
 
   private compileAuxPrograms() {
     const gl = this.gl;
 
-    // Compile preview program
-    const pvs = compile(gl, gl.VERTEX_SHADER, PREVIEW_VERTEX_SHADER);
-    const pfs = compile(gl, gl.FRAGMENT_SHADER, PREVIEW_FRAGMENT_SHADER);
-    const pprog = gl.createProgram();
-    if (!pprog) throw new Error('createProgram for preview failed');
-    gl.attachShader(pprog, pvs);
-    gl.attachShader(pprog, pfs);
-    gl.linkProgram(pprog);
-    gl.deleteShader(pvs);
-    gl.deleteShader(pfs);
+    const pprog = createProgram(gl, PREVIEW_VERTEX_SHADER, PREVIEW_FRAGMENT_SHADER, 'preview');
     this.previewProgram = pprog;
     this.uPreviewViewProj = mustLoc(gl, pprog, 'u_viewProj');
     this.uPreviewElevationExaggeration = mustLoc(gl, pprog, 'u_elevationExaggeration');
     this.uPreviewSunDir = mustLoc(gl, pprog, 'u_sunDir');
 
-    // Compile trajectory program
-    const tvs = compile(gl, gl.VERTEX_SHADER, TRAJECTORY_VERTEX_SHADER);
-    const tfs = compile(gl, gl.FRAGMENT_SHADER, TRAJECTORY_FRAGMENT_SHADER);
-    const tprog = gl.createProgram();
-    if (!tprog) throw new Error('createProgram for trajectory failed');
-    gl.attachShader(tprog, tvs);
-    gl.attachShader(tprog, tfs);
-    gl.linkProgram(tprog);
-    gl.deleteShader(tvs);
-    gl.deleteShader(tfs);
+    const tprog = createProgram(gl, TRAJECTORY_VERTEX_SHADER, TRAJECTORY_FRAGMENT_SHADER, 'trajectory');
     this.trajectoryProgram = tprog;
     this.uTrajectoryViewProj = mustLoc(gl, tprog, 'u_viewProj');
 
-    // Compile sun disc program
-    const dvs = compile(gl, gl.VERTEX_SHADER, SUN_DISC_VERTEX_SHADER);
-    const dfs = compile(gl, gl.FRAGMENT_SHADER, SUN_DISC_FRAGMENT_SHADER);
-    const dprog = gl.createProgram();
-    if (!dprog) throw new Error('createProgram for sun disc failed');
-    gl.attachShader(dprog, dvs);
-    gl.attachShader(dprog, dfs);
-    gl.linkProgram(dprog);
-    gl.deleteShader(dvs);
-    gl.deleteShader(dfs);
+    const dprog = createProgram(gl, SUN_DISC_VERTEX_SHADER, SUN_DISC_FRAGMENT_SHADER, 'sun disc');
     this.sunDiscProgram = dprog;
     this.uSunDiscViewProj = mustLoc(gl, dprog, 'u_viewProj');
     this.uSunDiscPos = mustLoc(gl, dprog, 'u_sunDiscPos');
@@ -644,16 +256,7 @@ export class WebGLTerrainRenderer {
     this.uSunDiscColor = mustLoc(gl, dprog, 'u_sunColor');
     this.uSunDiscIntensity = mustLoc(gl, dprog, 'u_sunIntensity');
 
-    // Compile route program
-    const rvs = compile(gl, gl.VERTEX_SHADER, ROUTE_VERTEX_SHADER);
-    const rfs = compile(gl, gl.FRAGMENT_SHADER, ROUTE_FRAGMENT_SHADER);
-    const rprog = gl.createProgram();
-    if (!rprog) throw new Error('createProgram for route failed');
-    gl.attachShader(rprog, rvs);
-    gl.attachShader(rprog, rfs);
-    gl.linkProgram(rprog);
-    gl.deleteShader(rvs);
-    gl.deleteShader(rfs);
+    const rprog = createProgram(gl, ROUTE_VERTEX_SHADER, ROUTE_FRAGMENT_SHADER, 'route');
     this.routeProgram = rprog;
     this.uRouteViewProj = mustLoc(gl, rprog, 'u_viewProj');
 
@@ -1178,28 +781,4 @@ export class WebGLTerrainRenderer {
   setElevationExaggeration(val: number): void {
     this.elevationExaggeration = Math.max(0.1, Math.min(10.0, val));
   }
-}
-
-function compile(gl: WebGL2RenderingContext, type: number, src: string): WebGLShader {
-  const sh = gl.createShader(type);
-  if (!sh) throw new Error('createShader failed');
-  gl.shaderSource(sh, src);
-  gl.compileShader(sh);
-  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-    const log = gl.getShaderInfoLog(sh) || '';
-    gl.deleteShader(sh);
-    throw new Error(`Shader compile failed: ${log}`);
-  }
-  return sh;
-}
-
-function mustLoc(gl: WebGL2RenderingContext, prog: WebGLProgram, name: string): WebGLUniformLocation {
-  const loc = gl.getUniformLocation(prog, name);
-  if (!loc) throw new Error(`Uniform ${name} not found`);
-  return loc;
-}
-
-function normalize3(x: number, y: number, z: number): [number, number, number] {
-  const len = Math.hypot(x, y, z) || 1;
-  return [x / len, y / len, z / len];
 }

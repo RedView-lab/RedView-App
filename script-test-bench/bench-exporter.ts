@@ -20,7 +20,7 @@ import { BenchmarkSuite } from './core/harness.ts';
 import { printSuiteHeader, printSuiteResults } from './core/reporter.ts';
 import { generateSyntheticRoute, type TrackPoint } from './core/synthetic-data.ts';
 import { parseGpxText } from '../src/features/poi/lib/gpx-parse.ts';
-import type { Itinerary } from '../src/features/itineraryPanel/types.ts';
+import type { Itinerary } from '../src/features/itineraryPanel/types/index.ts';
 
 export async function runExporterBenchmark(options: { quick?: boolean } = {}): Promise<BenchmarkSuite> {
   // Dynamically import buildItineraryGpx and helpers after env shim

@@ -31,6 +31,7 @@ import {
 import { useTimelinePauseDrag } from './useTimelinePauseDrag';
 import { TimelineEventCard } from './TimelineEventCard';
 import { TimelineStandalonePauseCard } from './TimelineStandalonePauseCard';
+import { TimelineEventContinuation, TimelinePauseContinuation } from './TimelineDayContinuation';
 import { ChartZoomNavigator } from '@/features/centerPanel/components/chart';
 
 interface TimelineScheduleCanvasProps {
@@ -59,6 +60,8 @@ interface TimelineScheduleCanvasProps {
   startMinutes: number;
   pixelsPerMinute: number;
   canvasHeight: number;
+  /** Minuit sur le canevas (dates réelles) : limite d'empilement des cartes. */
+  dayEndPx: number | null;
   selectedIds?: ReadonlySet<string>;
   onSelectRow?: (id: string, item: TimelineItem) => void;
   onToggleSelect?: (id: string, selected: boolean) => void;
@@ -115,6 +118,7 @@ export function TimelineScheduleCanvas({
   startMinutes,
   pixelsPerMinute,
   canvasHeight,
+  dayEndPx,
   selectedIds,
   onSelectRow,
   onToggleSelect,
@@ -289,11 +293,13 @@ export function TimelineScheduleCanvas({
             heightPx: dragState.heightPx,
             sortIndex: Number.MAX_SAFE_INTEGER,
             dayKey: dragState.dayKey,
+            continuations: [],
+            startsBeforeWindow: false,
           },
         ];
 
-    return positionTimelineBlocks(events, previewStandalonePauses, previewPauseDayKeyById, 0);
-  }, [dragState, events, standalonePauseDayKeyById, standalonePauses]);
+    return positionTimelineBlocks(events, previewStandalonePauses, previewPauseDayKeyById, 0, dayEndPx);
+  }, [dayEndPx, dragState, events, standalonePauseDayKeyById, standalonePauses]);
 
   const previewEventMap = useMemo(
     () => new Map(previewPositioning.events.map((event) => [event.item.id, event] as const)),
@@ -384,24 +390,22 @@ export function TimelineScheduleCanvas({
 
         {events.flatMap((event, eventIndex) => {
           const selected = selectedIds?.has(event.item.id) ?? false;
-          return event.spanSegments.slice(1).map((segment, segmentIndex) => (
-            <div
+          const previewEvent = previewEventMap.get(event.item.id) ?? event;
+          const firstContinuationIndex = previewEvent.startsBeforeWindow ? 0 : 1;
+          return previewEvent.spanSegments.slice(firstContinuationIndex).map((segment, segmentIndex) => (
+            <TimelineEventContinuation
               key={`${event.item.id}-span-${segment.dayKey ?? 'single'}-${segmentIndex}`}
-              className={`rvi-tl-schedule__event-span${selected ? ' is-selected' : ''}`}
-              style={{
-                top: segment.topPx,
-                minHeight: segment.heightPx,
-                height: segment.heightPx,
-                animationDelay: `${Math.min((eventIndex + segmentIndex + 1) * 18, 240)}ms`,
-                ...resolveColumnPlacement(segment.dayKey),
-              } as CSSProperties}
-              data-kind={event.item.kind}
-              aria-hidden
+              event={previewEvent}
+              segment={segment}
+              selected={selected}
+              animationDelayMs={Math.min((eventIndex + segmentIndex + 1) * 18, 240)}
+              resolveColumnPlacement={resolveColumnPlacement}
             />
           ));
         })}
 
         {events.map((event, index) => {
+          if (event.startsBeforeWindow) return null;
           const previewEvent = previewEventMap.get(event.item.id) ?? event;
           const selected = selectedIds?.has(event.item.id) ?? false;
           const canEditFavoritePoiPause = Boolean(
@@ -439,6 +443,7 @@ export function TimelineScheduleCanvas({
         })}
 
         {standalonePauses.map((pause, index) => {
+          if (pause.startsBeforeWindow) return null;
           const previewPause = previewStandalonePauseMap.get(pause.id) ?? pause;
           const dragging = dragState?.id === pause.id;
           const pauseDayKey = dragging
@@ -484,6 +489,18 @@ export function TimelineScheduleCanvas({
               resolveColumnPlacement={resolveColumnPlacement}
             />
           );
+        })}
+
+        {standalonePauses.flatMap((pause) => {
+          const previewPause = previewStandalonePauseMap.get(pause.id) ?? pause;
+          return previewPause.continuations.map((segment) => (
+            <TimelinePauseContinuation
+              key={`${pause.id}-day-${segment.dayKey ?? 'single'}`}
+              pause={previewPause}
+              segment={segment}
+              resolveColumnPlacement={resolveColumnPlacement}
+            />
+          ));
         })}
 
         {dragState && isAttachedPauseDragging && dragOverlayStyle ? (

@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState, useCallback, memo, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback, memo, type CSSProperties } from 'react';
 import { useChartHover } from '../useChartHover';
-import { computeDomain, computeXDomain, isInclinationMetric, type AxisDomain, type ChartMetricId } from '../series';
+import { computeDomain, computeXDomain, isInclinationMetric, type AxisDomain } from '../series';
 import '../chart.css';
 import { AnalysisChartLayout } from './AnalysisChartLayout';
 import { drawAnalysisChartCanvas } from './canvas';
+import { withAlpha } from './color';
 import { buildResponsiveXAxisLabels, buildXAxisTicks } from './format';
 import {
   buildInterpolatedTicks,
@@ -13,8 +14,6 @@ import {
   clampXDomainToRoute,
   defaultDomainFor,
   detailZoomToVisibleFraction,
-  interpolateY,
-  MIN_VISIBLE_FRACTION,
   normalizeMetricDomain,
   normalizeUnitInterval,
   ratioFor,
@@ -28,22 +27,14 @@ import {
   Y_MAJOR_TARGET_PX,
   X_MAJOR_TARGET_PX,
   type AnalysisChartProps,
-  type HoverCardRow,
   type PoiMarkerGroup,
   type VisiblePoiAnnotation,
 } from './types';
 import { usePlotAreaSize } from './usePlotAreaSize';
-import { resolveItineraryHoverMetrics } from './hoverMetrics';
-import { readDocumentAppLocale, translateAppText } from '@/shared/i18n';
-import { SLOPE_COLOR_CLASSES, pickSlopeLevel, slopeSegmentAtX } from '../slope';
-
-function pointSeriesCoversX(points: Array<{ x: number; y: number }>, xValue: number): boolean {
-  if (!Number.isFinite(xValue) || points.length === 0) return false;
-  const firstPoint = points[0];
-  const lastPoint = points[points.length - 1];
-  if (!firstPoint || !lastPoint) return false;
-  return xValue >= firstPoint.x && xValue <= lastPoint.x;
-}
+import { useChartHoverRows } from './useChartHoverRows';
+import { usePlotRangeSelection } from './usePlotRangeSelection';
+import { translateAppText } from '@/shared/i18n';
+import { pickSlopeLevel } from '../slope';
 
 export const AnalysisChart = memo(function AnalysisChart({
   series,
@@ -439,399 +430,40 @@ export const AnalysisChart = memo(function AnalysisChart({
   const hoverXValue = activeHover
     ? plotXDomain.min + activeHover.ratioX * (plotXDomain.max - plotXDomain.min)
     : null;
-  const hoverData = useMemo<HoverCardRow[] | null>(() => {
-    if (hoverXValue == null || !series.length) return null;
-    return series
-      .map<HoverCardRow | null>((entry) => {
-        if (!pointSeriesCoversX(entry.points, hoverXValue)) return null;
-        const val = interpolateY(entry.points, hoverXValue);
-        if (!Number.isFinite(val)) return null;
-
-        const matchingNode = chartNodes.find(
-          (n) => n.itinerary.id === entry.itineraryId || n.itinerary.name === entry.itineraryName,
-        );
-        const matchingProfile = backdropProfiles.find(
-          (p) => p.itineraryName === entry.itineraryName || p.id.startsWith(entry.itineraryId),
-        );
-        const metrics = resolveItineraryHoverMetrics({
-          hoverXValue,
-          xMode,
-          node: matchingNode,
-          profilePoints: matchingProfile?.points ?? matchingNode?.altitudeShiftedPoints,
-        });
-
-        return {
-          id: entry.id,
-          itineraryName: entry.itineraryName,
-          color: entry.color,
-          axis: entry.axis,
-          axisLabel: `Axe ${entry.axis}`,
-          metric: entry.metricId,
-          value: val,
-          distanceFormatted: metrics.distanceFormatted,
-          gainM: metrics.gainM,
-          lossM: metrics.lossM,
-          durationFormatted: metrics.durationFormatted,
-          timeFormatted: metrics.timeFormatted,
-        };
-      })
-      .filter((entry): entry is HoverCardRow => entry !== null);
-  }, [backdropProfiles, chartNodes, hoverXValue, series, xMode]);
-
-  const hoverBackdropData = useMemo<HoverCardRow[]>(() => {
-    if (hoverXValue == null || !backdropProfiles.length) return [];
-    const hasAltitudeSeries = series.some((entry) => entry.metricId === 'Altitude');
-    if (hasAltitudeSeries) return [];
-
-    return backdropProfiles
-      .map<HoverCardRow | null>((profile) => {
-        if (!pointSeriesCoversX(profile.points, hoverXValue)) return null;
-        const value = interpolateY(profile.points, hoverXValue);
-        if (!Number.isFinite(value)) return null;
-
-        const matchingNode = chartNodes.find(
-          (n) =>
-            n.itinerary.id === profile.id.replace('::altitude-backdrop', '') ||
-            n.itinerary.name === profile.itineraryName,
-        );
-        const metrics = resolveItineraryHoverMetrics({
-          hoverXValue,
-          xMode,
-          node: matchingNode,
-          profilePoints: profile.points,
-        });
-
-        return {
-          id: `${profile.id}::hover-altitude`,
-          itineraryName: profile.itineraryName,
-          color: withAlpha(profile.color, 0.95),
-          axis: null,
-          axisLabel: "Profil d'altitude",
-          metric: 'Altitude' as ChartMetricId,
-          value,
-          distanceFormatted: metrics.distanceFormatted,
-          gainM: metrics.gainM,
-          lossM: metrics.lossM,
-          durationFormatted: metrics.durationFormatted,
-          timeFormatted: metrics.timeFormatted,
-        };
-      })
-      .filter((entry): entry is HoverCardRow => entry !== null);
-  }, [backdropProfiles, chartNodes, hoverXValue, series, xMode]);
-
-  const hoverChartNodesData = useMemo<HoverCardRow[]>(() => {
-    if (hoverXValue == null || !chartNodes || chartNodes.length === 0) return [];
-    const existingNames = new Set([
-      ...(hoverData ?? []).map((r) => r.itineraryName),
-      ...hoverBackdropData.map((r) => r.itineraryName),
-    ]);
-
-    return chartNodes
-      .map<HoverCardRow | null>((node) => {
-        if (existingNames.has(node.itinerary.name)) return null;
-        const points = node.altitudeShiftedPoints || node.axis1ShiftedPoints || [];
-        const covers =
-          points.length > 0
-            ? pointSeriesCoversX(points, hoverXValue)
-            : hoverXValue >= node.startDistanceKm &&
-              hoverXValue <= node.startDistanceKm + (node.itinerary.metrics?.distanceKm ?? 0);
-        if (!covers) return null;
-
-        const metrics = resolveItineraryHoverMetrics({
-          hoverXValue,
-          xMode,
-          node,
-          profilePoints: node.altitudeShiftedPoints,
-        });
-
-        return {
-          id: `${node.itinerary.id}::hover-node`,
-          itineraryName: node.itinerary.name,
-          color: node.itinerary.color,
-          axis: null,
-          axisLabel: '',
-          metric: 'Altitude' as ChartMetricId,
-          value: 0,
-          distanceFormatted: metrics.distanceFormatted,
-          gainM: metrics.gainM,
-          lossM: metrics.lossM,
-          durationFormatted: metrics.durationFormatted,
-          timeFormatted: metrics.timeFormatted,
-        };
-      })
-      .filter((entry): entry is HoverCardRow => entry !== null);
-  }, [chartNodes, hoverBackdropData, hoverData, hoverXValue, xMode]);
-
-  const hoverAlertRows = useMemo<HoverCardRow[]>(() => {
-    if (hoverXValue == null || !alertOverlay) return [];
-    const rows: HoverCardRow[] = [];
-    for (const window of alertOverlay.alertWindows) {
-      if (hoverXValue < window.startX || hoverXValue > window.endX) continue;
-      rows.push({
-        id: `${window.id}::hover`,
-        itineraryName: window.itineraryName,
-        color: '#ff3b30',
-        axis: null,
-        axisLabel: '',
-        metric: 'Altitude' as ChartMetricId,
-        value: 0,
-        alertLabel: `${translateAppText('Pente')} ${Math.round(window.maxGradientPct)} % · ${Math.round(window.lengthM)} m`,
-      });
-    }
-    return rows;
-  }, [alertOverlay, hoverXValue]);
-
-  // Tronçon « Pente » sous le pointeur : même découpage que la couleur affichée.
-  const hoverSlopeSegment = useMemo(
-    () => (hoverXValue != null && slopeSegments ? slopeSegmentAtX(slopeSegments, hoverXValue) : null),
-    [hoverXValue, slopeSegments],
-  );
-
-  const hoverSlopeRows = useMemo<HoverCardRow[]>(() => {
-    if (!slopeOverlay) return [];
-    const segment = hoverSlopeSegment;
-    if (!segment) return [];
-    const node = chartNodes.find((entry) => entry.itinerary.id === slopeOverlay.itineraryId);
-    const seriesEntry = series.find((entry) => entry.itineraryId === slopeOverlay.itineraryId);
-    const itineraryName = node?.itinerary.name ?? seriesEntry?.itineraryName;
-    if (!itineraryName) return [];
-    const locale = readDocumentAppLocale();
-    const numberLocale = locale === 'fr' ? 'fr-FR' : 'en-US';
-    const value = new Intl.NumberFormat(numberLocale, {
-      minimumFractionDigits: 1,
-      maximumFractionDigits: 1,
-    }).format(segment.avgPct);
-    const lengthKm = segment.lengthM / 1000;
-    const length = segment.lengthM < 1000
-      ? `${Math.round(segment.lengthM / 10) * 10} m`
-      : `${new Intl.NumberFormat(numberLocale, { maximumFractionDigits: lengthKm < 10 ? 1 : 0 }).format(lengthKm)} km`;
-    return [{
-      id: `${slopeOverlay.itineraryId}::hover-slope`,
-      itineraryName,
-      color: node?.itinerary.color ?? seriesEntry?.color ?? '#ffffff',
-      axis: null,
-      axisLabel: '',
-      metric: 'Altitude' as ChartMetricId,
-      value: 0,
-      slopeLabel: `${translateAppText('Pente moy.', undefined, locale)} ${value} % · ${length}`,
-      slopeColor: SLOPE_COLOR_CLASSES[segment.classIndex]?.color,
-    }];
-  }, [chartNodes, hoverSlopeSegment, series, slopeOverlay]);
-
-  const hoverRows = useMemo(
-    () => [...(hoverData ?? []), ...hoverBackdropData, ...hoverChartNodesData, ...hoverAlertRows, ...hoverSlopeRows],
-    [hoverAlertRows, hoverBackdropData, hoverChartNodesData, hoverData, hoverSlopeRows],
-  );
-
-  const hoverMarkers = useMemo(() => {
-    if (hoverXValue == null || !activeHover) return [];
-
-    const markers: Array<{ id: string; topRatio: number; color: string; backdrop: boolean }> = [];
-    const hasAltitudeSeries = series.some((entry) => entry.metricId === 'Altitude');
-
-    if (!hasAltitudeSeries && backdropYDomain) {
-      for (const profile of backdropProfiles) {
-        if (!pointSeriesCoversX(profile.points, hoverXValue)) continue;
-        const yValue = interpolateY(profile.points, hoverXValue);
-        if (!Number.isFinite(yValue)) continue;
-        const ratio = ratioFor(yValue, backdropYDomain);
-        markers.push({
-          id: `${profile.id}::backdrop-marker`,
-          topRatio: 1 - ratio,
-          color: withAlpha(profile.color, 0.98),
-          backdrop: true,
-        });
-      }
-    }
-
-    for (const entry of series) {
-      if (!pointSeriesCoversX(entry.points, hoverXValue)) continue;
-      const yValue = interpolateY(entry.points, hoverXValue);
-      if (!Number.isFinite(yValue)) continue;
-      const domain = entry.axis === 2 ? plotY2Domain : plotYDomain;
-      const ratio = ratioFor(yValue, domain);
-      markers.push({
-        id: `${entry.id}::series-marker`,
-        topRatio: 1 - ratio,
-        color: entry.color,
-        backdrop: false,
-      });
-    }
-
-    return markers;
-  }, [activeHover, backdropProfiles, backdropYDomain, hoverXValue, plotY2Domain, plotYDomain, series]);
+  const { hoverRows, hoverMarkers, hoverSlopeSegment } = useChartHoverRows({
+    hoverXValue,
+    hasActiveHover: activeHover != null,
+    series,
+    chartNodes,
+    backdropProfiles,
+    alertOverlay,
+    slopeOverlay,
+    slopeSegments,
+    xMode,
+    plotYDomain,
+    plotY2Domain,
+    backdropYDomain,
+  });
 
   useEffect(() => {
     if (!onHoverXValueChange) return;
     if (Number.isFinite(controlledHoverXValue) && hover == null) return;
     onHoverXValueChange(hoverXValue);
   }, [controlledHoverXValue, hover, hoverXValue, onHoverXValueChange]);
-
-  const [internalSelectedXRange, setInternalSelectedXRange] = useState<{ startX: number; endX: number } | null>(null);
-  const selectedXRange = controlledSelectedXRange !== undefined ? controlledSelectedXRange : internalSelectedXRange;
-
-  const [activeDragRange, setActiveDragRange] = useState<{ startX: number; endX: number } | null>(null);
-  const dragStartRef = useRef<{ clientX: number; clientY: number; xValue: number } | null>(null);
-  const isDraggingRef = useRef(false);
-
-  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
-    const rect = plotAreaRef.current?.getBoundingClientRect();
-    if (!rect || rect.width <= 0) return;
-
-    const x = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
-    const ratioX = x / rect.width;
-    const xValue = plotXDomain.min + ratioX * (plotXDomain.max - plotXDomain.min);
-
-    dragStartRef.current = { clientX: event.clientX, clientY: event.clientY, xValue };
-    isDraggingRef.current = false;
-  };
-
-  useEffect(() => {
-    const handleWindowPointerMove = (e: PointerEvent) => {
-      const dragStart = dragStartRef.current;
-      if (!dragStart) return;
-
-      const rect = plotAreaRef.current?.getBoundingClientRect();
-      if (!rect || rect.width <= 0) return;
-
-      const dx = Math.abs(e.clientX - dragStart.clientX);
-      if (!isDraggingRef.current && dx >= 5) {
-        isDraggingRef.current = true;
-      }
-
-      if (isDraggingRef.current) {
-        const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
-        const ratioX = x / rect.width;
-        const currentXVal = plotXDomain.min + ratioX * (plotXDomain.max - plotXDomain.min);
-        setActiveDragRange({
-          startX: dragStart.xValue,
-          endX: currentXVal,
-        });
-      }
-    };
-
-    const handleWindowPointerUp = (e: PointerEvent) => {
-      const dragStart = dragStartRef.current;
-      if (!dragStart) return;
-
-      const wasDragging = isDraggingRef.current;
-      dragStartRef.current = null;
-      isDraggingRef.current = false;
-
-      const rect = plotAreaRef.current?.getBoundingClientRect();
-      if (!rect || rect.width <= 0) {
-        setActiveDragRange(null);
-        return;
-      }
-
-      const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
-      const ratioX = x / rect.width;
-      const currentXVal = plotXDomain.min + ratioX * (plotXDomain.max - plotXDomain.min);
-
-      const selectRange = (minX: number, maxX: number) => {
-        const range = {
-          startX: minX,
-          endX: maxX,
-        };
-        setActiveDragRange(null);
-        setInternalSelectedXRange(range);
-        onPlotRangeSelect?.(range);
-
-        // Zoom in sur la portion sélectionnée dans le tableau / graphe d'altitude (comme sur Komoot)
-        const fullSpan = xDomain.max - xDomain.min;
-        const rangeSpan = maxX - minX;
-        if (fullSpan > 0 && rangeSpan > 0) {
-          const targetVisibleFraction = Math.max(MIN_VISIBLE_FRACTION, Math.min(1, rangeSpan / fullSpan));
-          const targetSpan = fullSpan * targetVisibleFraction;
-          const remainingSpan = Math.max(0, fullSpan - targetSpan);
-          const start = Math.max(xDomain.min, Math.min(xDomain.max - targetSpan, minX));
-          const nextOffset = remainingSpan <= 1e-6 ? 0 : Math.max(0, Math.min(1, (start - xDomain.min) / remainingSpan));
-          const nextDetailZoom = visibleFractionToDetailZoom(targetVisibleFraction);
-
-          onViewportChange?.({ detailZoom: nextDetailZoom, detailOffset: nextOffset });
-          onDetailOffsetChange?.(nextOffset);
-        }
-      };
-
-      if (wasDragging) {
-        selectRange(Math.min(dragStart.xValue, currentXVal), Math.max(dragStart.xValue, currentXVal));
-        return;
-      }
-      // Clic simple sur un tronçon « Pente » : comme un glisser sur tout le tronçon.
-      const slopeSegment = slopeSegments ? slopeSegmentAtX(slopeSegments, dragStart.xValue) : null;
-      if (slopeSegment && slopeSegment.endX > slopeSegment.startX) {
-        selectRange(slopeSegment.startX, slopeSegment.endX);
-        return;
-      }
-      // Clic simple sans glissement : centrage direct
-      setActiveDragRange(null);
-      onPlotClick?.(dragStart.xValue);
-    };
-
-    window.addEventListener('pointermove', handleWindowPointerMove);
-    window.addEventListener('pointerup', handleWindowPointerUp);
-
-    return () => {
-      window.removeEventListener('pointermove', handleWindowPointerMove);
-      window.removeEventListener('pointerup', handleWindowPointerUp);
-    };
-  }, [
+  const { handlePointerDown, handleResetZoom, isZoomed, selectionBand } = usePlotRangeSelection({
+    plotAreaRef,
+    xDomain,
+    plotXDomain,
+    visibleFraction,
+    detailZoom,
+    slopeSegments,
+    controlledSelectedXRange,
+    onViewportChange,
     onDetailOffsetChange,
     onPlotClick,
     onPlotRangeSelect,
-    onViewportChange,
-    plotAreaRef,
-    plotXDomain.max,
-    plotXDomain.min,
-    slopeSegments,
-    xDomain.max,
-    xDomain.min,
-  ]);
-
-  const handleResetZoom = useCallback(() => {
-    onViewportChange?.({ detailZoom: 0, detailOffset: 0 });
-    onDetailOffsetChange?.(0);
-    setInternalSelectedXRange(null);
-    setActiveDragRange(null);
-    onClearSelectedXRange?.();
-  }, [onClearSelectedXRange, onDetailOffsetChange, onViewportChange]);
-
-  const isZoomed = useMemo(() => {
-    return visibleFraction < 0.98 || normalizeUnitInterval(detailZoom) > 0.02;
-  }, [detailZoom, visibleFraction]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (isZoomed || selectedXRange || activeDragRange) {
-          handleResetZoom();
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeDragRange, handleResetZoom, isZoomed, selectedXRange]);
-
-  const selectionBand = useMemo(() => {
-    const effectiveRange = activeDragRange;
-    if (!effectiveRange) return null;
-
-    const minX = Math.min(effectiveRange.startX, effectiveRange.endX);
-    const maxX = Math.max(effectiveRange.startX, effectiveRange.endX);
-    const startRatio = ratioFor(minX, plotXDomain);
-    const endRatio = ratioFor(maxX, plotXDomain);
-
-    if (endRatio <= 0 || startRatio >= 1) return null;
-
-    return {
-      startRatio,
-      endRatio,
-      startX: minX,
-      endX: maxX,
-      isDragging: true,
-    };
-  }, [activeDragRange, plotXDomain]);
+    onClearSelectedXRange,
+  });
 
   const handlePoiClusterClick = (group: PoiMarkerGroup) => {
     setExpandedPoiClusterId(group.id);
@@ -906,19 +538,3 @@ export const AnalysisChart = memo(function AnalysisChart({
     />
   );
 });
-
-function withAlpha(color: string, alpha: number): string {
-  const normalizedAlpha = Math.max(0, Math.min(1, alpha));
-  const hex = color.trim();
-  const match = /^#([0-9a-f]{6}|[0-9a-f]{3})$/i.exec(hex);
-  if (!match) return color;
-
-  const raw = match[1];
-  const expanded = raw.length === 3
-    ? raw.split('').map((channel) => channel + channel).join('')
-    : raw;
-  const red = Number.parseInt(expanded.slice(0, 2), 16);
-  const green = Number.parseInt(expanded.slice(2, 4), 16);
-  const blue = Number.parseInt(expanded.slice(4, 6), 16);
-  return `rgba(${red}, ${green}, ${blue}, ${normalizedAlpha})`;
-}

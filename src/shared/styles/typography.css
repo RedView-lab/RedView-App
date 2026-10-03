@@ -8,11 +8,13 @@
  *
  * Unités : px LOGIQUES. Le dashboard est rendu sur un canevas mis à l'échelle
  * par `--app-scale` (shared/lib/appScale.ts, CSS `zoom`) ; le viewer LiDAR
- * applique la même échelle à ses panneaux. L'échelle ne descend JAMAIS sous 1 :
- * une taille de cette table est la taille affichée (px CSS, donc déjà mise à
- * l'échelle de l'OS et du zoom navigateur) sur tout écran jusqu'à 1920×1080,
- * un peu plus grande au-delà. Une petite fenêtre réorganise la mise en page,
- * elle ne rétrécit pas le texte.
+ * applique la même échelle à ses panneaux. Sur écran standard l'échelle ne
+ * descend JAMAIS sous 1 : une taille de cette table est la taille affichée (px
+ * CSS, donc déjà mise à l'échelle de l'OS et du zoom navigateur) sur tout écran
+ * jusqu'à 1920×1080, un peu plus grande au-delà. Une petite fenêtre réorganise
+ * la mise en page, elle ne rétrécit pas le texte. Seule exception : Retina
+ * (≥ 2 px physiques par px CSS, MacBook), où l'échelle descend jusqu'à 0,85
+ * sous 1920×1080 — texte toujours net (11 px → 9,35 px CSS = 18,7 px physiques).
  * Aucune taille fluide (vw, cqi, clamp) : la largeur d'un conteneur se gère par
  * paliers @container, la densité de l'écran par le canevas.
  * Plancher de lisibilité : 11 px (xs) pour tout texte ; 2xs / 3xs sont réservés

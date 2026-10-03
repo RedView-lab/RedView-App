@@ -1,7 +1,7 @@
 import { useLayoutEffect, type RefObject } from 'react';
 
 /** Highest compaction step defined in styles/analysis/responsive.css. */
-const MAX_DENSITY = 4;
+const MAX_DENSITY = 8;
 
 /** Wrapping units: the toolbar's children, and the chips inside the filter group (it wraps on its own). */
 const ITEM_SELECTOR = ':scope > *, :scope > .rvc-center-analysis__filters > *';
@@ -40,12 +40,17 @@ export function useToolbarFitDensity(ref: RefObject<HTMLElement | null>): void {
     const fit = () => {
       if (el.clientWidth === 0) return; // collapsed panel: keep the last step
       const items = Array.from(el.querySelectorAll(ITEM_SELECTOR));
+      // Controls transition their padding: measured mid-transition, a step
+      // would be judged on the previous step's spacing (data-fitting turns
+      // transitions off, responsive.css).
+      el.dataset.fitting = '';
       let level = 0;
       applyDensity(level);
       while (level < MAX_DENSITY && wrapsOntoSecondRow(items)) {
         level += 1;
         applyDensity(level);
       }
+      delete el.dataset.fitting;
     };
 
     fit();

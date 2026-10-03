@@ -20,7 +20,8 @@ import { getSearchCameraProfile } from './DashboardPlaceSearch.camera';
 import {
   DASHBOARD_FILTER_OPTIONS,
   DASHBOARD_POI_OPTIONS,
-  PLACE_SEARCH_FULL_WIDTH,
+  PLACE_SEARCH_ICONS_WIDTH,
+  PLACE_SEARCH_TIGHT_WIDTH,
   POI_MENU_CLOSE_MS,
   SEARCH_COUNTRIES,
   VIEWPORT_POI_FETCH_DEBOUNCE_MS,
@@ -533,9 +534,16 @@ export function DashboardPlaceSearch({
     [activeFilters],
   );
 
+  const densityClassName =
+    typeof maxWidth !== 'number' || maxWidth >= PLACE_SEARCH_TIGHT_WIDTH
+      ? ''
+      : maxWidth >= PLACE_SEARCH_ICONS_WIDTH
+        ? ' rvd-place-search--tight'
+        : ' rvd-place-search--tight rvd-place-search--icons';
+
   return (
     <div
-      className={`rvd-place-search${typeof maxWidth === 'number' && maxWidth < PLACE_SEARCH_FULL_WIDTH ? ' rvd-place-search--compact' : ''}`}
+      className={`rvd-place-search${densityClassName}`}
       style={wrapperStyle}
       aria-hidden={!visible}
     >
@@ -582,8 +590,8 @@ export function DashboardPlaceSearch({
             const active = isFilterActive(filter.id);
             const isMenuOpen = openDropdownFilterId === filter.id;
             const shellClassName = `rvd-place-search__filter${
-              active ? ' is-active' : ''
-            }${filter.hasDropdown && isMenuOpen ? ' is-open' : ''}`;
+              filter.hasDropdown ? ' rvd-place-search__filter--menu' : ''
+            }${active ? ' is-active' : ''}${filter.hasDropdown && isMenuOpen ? ' is-open' : ''}`;
             return (
               <div key={filter.id} className={shellClassName}>
                 <div className="rv-glass rvd-place-search__filter-shell">

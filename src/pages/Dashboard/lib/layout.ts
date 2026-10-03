@@ -1,4 +1,4 @@
-import { computeAppScale } from '@/shared/lib/appScale';
+import { computeAppScale, type AppScaleViewport } from '@/shared/lib/appScale';
 import {
   CENTER_PANEL_COMFORT_WIDTH,
   CENTER_PANEL_DEFAULT_HEIGHT_RATIO,
@@ -113,7 +113,7 @@ function resolveSidePanels({
 }
 
 interface DashboardLayoutInput {
-  viewport: { w: number; h: number };
+  viewport: AppScaleViewport;
   panelWidth: number;
   leftPanelWidth: number;
   exporterPanelHeight: number;

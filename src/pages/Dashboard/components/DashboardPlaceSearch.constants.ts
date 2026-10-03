@@ -31,12 +31,19 @@ export const SEARCH_SATELLITE_FAR_RESTORE_MS = 900;
 export const VIEWPORT_POI_MIN_ZOOM = 5;
 export const VIEWPORT_POI_FETCH_DEBOUNCE_MS = 160;
 export const POI_MENU_CLOSE_MS = 150;
-/**
- * Width (logical px, panel toggle included) the search bar needs with every
- * filter label shown. Below it the filters go icon-only (label in the
- * tooltip) and wrap to a second row rather than squeezing their icons.
+/*
+ * Widths (logical px, panel toggle included) of the search bar's density
+ * steps; the row never wraps, labels shrink with an ellipsis in between
+ * (dashboard-place-search.css).
+ *
+ * TIGHT: regular chips with 22 px label stubs — toggle 40 + gap 12 + search
+ * field at its 96 px minimum + 5 chips (2 × 121 with a chevron, 3 × 100) and
+ * their gaps. Below it the chips tighten (--tight: 2 × 87 + 3 × 71, search
+ * field down to its magnifier), which holds down to ~480 px.
+ * ICONS: below that, the labels go (tooltip only).
  */
-export const PLACE_SEARCH_FULL_WIDTH = 1040;
+export const PLACE_SEARCH_TIGHT_WIDTH = 720;
+export const PLACE_SEARCH_ICONS_WIDTH = 480;
 
 export const DROPDOWN_VIEWPORT_POI_ICON_URLS: Partial<Record<PoiCategory, string>> = {
   drinking_water: '/svgv2/poi/dropdown-maps/water.svg',

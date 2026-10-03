@@ -281,6 +281,9 @@ export const MapViewportControls = memo(function MapViewportControls({
     });
   };
 
+  // 32 px buttons of the compact grid: icons shrink with them (40 → 32 px).
+  const iconSize = (regular: number) => (compact ? Math.round(regular * 0.8) : regular);
+
   return (
     <aside
       className={`rvmvc-map-tools${compact ? ' rvmvc-map-tools--compact' : ''}`}
@@ -293,7 +296,7 @@ export const MapViewportControls = memo(function MapViewportControls({
         title={t('Plein écran')}
         onClick={onToggleImmersiveMode}
       >
-        <IconMaximize size={18} />
+        <IconMaximize size={iconSize(18)} />
       </button>
 
       {showRightPanelToggle ? (
@@ -307,7 +310,7 @@ export const MapViewportControls = memo(function MapViewportControls({
           title={rightPanelToggleLabel}
           onClick={onToggleRightPanel}
         >
-          <IconPanelLayers />
+          <IconPanelLayers size={iconSize(18)} />
         </button>
       ) : null}
 
@@ -323,7 +326,7 @@ export const MapViewportControls = memo(function MapViewportControls({
           ref={compassNeedleRef}
           style={{ display: 'inline-flex', transform: `rotate(${-bearing}deg)`, transformOrigin: 'center', transition: 'none' }}
         >
-          <IconCompass size={20} />
+          <IconCompass size={iconSize(20)} />
         </span>
       </button>
 
@@ -335,7 +338,7 @@ export const MapViewportControls = memo(function MapViewportControls({
         onClick={handleZoomIn}
         disabled={disabled}
       >
-        <IconZoomIn size={16} />
+        <IconZoomIn size={iconSize(16)} />
       </button>
 
       <button
@@ -346,7 +349,7 @@ export const MapViewportControls = memo(function MapViewportControls({
         onClick={handleZoomOut}
         disabled={disabled}
       >
-        <IconZoomOut size={16} />
+        <IconZoomOut size={iconSize(16)} />
       </button>
 
       <button
@@ -423,7 +426,7 @@ export const MapViewportControls = memo(function MapViewportControls({
             setIsLegendOpen((value) => !value);
           }}
         >
-          <IconInfo size={16} />
+          <IconInfo size={iconSize(16)} />
         </button>
       </div>
     </aside>

@@ -13,10 +13,19 @@ import type { CameraController } from '../camera';
 import type {
   LidarRouteMeshGeometry,
   LidarRouteOverlayItem,
+  LidarRouteOverlayPoint,
   ViewerRouteRenderOptions,
   ViewerRouteSceneParams,
   ViewerRouteState,
 } from './types';
+
+/** Equirectangular distance between two route points (m), enough to rank legs. */
+function groundDistanceM(a: LidarRouteOverlayPoint, b: LidarRouteOverlayPoint): number {
+  const meanLat = ((a.lat + b.lat) / 2) * (Math.PI / 180);
+  const dx = (b.lon - a.lon) * Math.cos(meanLat);
+  const dy = b.lat - a.lat;
+  return Math.hypot(dx, dy) * 111_320;
+}
 
 const DEFAULT_ROUTE_PALETTE = [
   '#E53935', // Rouge dynamique
@@ -437,6 +446,50 @@ ${trkpts}
 
   public snapAllPointsToTerrain(): boolean {
     return this.editor?.snapAllPointsToTerrain() ?? false;
+  }
+
+  /**
+   * Context-menu placement, as in the app: "Démarrer ici" sets the start,
+   * "Finir ici" the finish (the last point once there are two), "Ajouter une
+   * étape" inserts on the leg it lengthens least. Creates a route if needed.
+   */
+  public placePoint(position: 'start' | 'waypoint' | 'end', point: LidarRouteOverlayPoint): boolean {
+    let route = this.getActiveRoute();
+    if (!route) {
+      route = this.createRoute();
+      // Placement continues from the menu: no click-to-append mode.
+      this.setEditMode(false);
+    }
+    const points = route.points;
+    let next: LidarRouteOverlayPoint[];
+    if (position === 'start') {
+      next = points.length === 0 ? [point] : [point, ...points.slice(1)];
+    } else if (position === 'end') {
+      next = points.length < 2 ? [...points, point] : [...points.slice(0, -1), point];
+    } else if (points.length < 2) {
+      next = [...points, point];
+    } else {
+      let bestLeg = 0;
+      let bestDetour = Infinity;
+      for (let k = 0; k < points.length - 1; k++) {
+        const detour = groundDistanceM(points[k]!, point) + groundDistanceM(point, points[k + 1]!)
+          - groundDistanceM(points[k]!, points[k + 1]!);
+        if (detour < bestDetour) {
+          bestDetour = detour;
+          bestLeg = k;
+        }
+      }
+      next = [...points.slice(0, bestLeg + 1), point, ...points.slice(bestLeg + 1)];
+    }
+    const actionName = position === 'start' ? 'set_start' : position === 'end' ? 'set_finish' : 'add_waypoint';
+    if (this.editor) {
+      this.editor.commitPoints(next, actionName);
+    } else {
+      route.points = next;
+      this.rebuildAndEmit(true, true);
+      broadcastLidarRouteEdit(route.id, next, 'lidar_viewer', actionName);
+    }
+    return true;
   }
 
   public updateOverlay(): void {

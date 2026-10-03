@@ -13,10 +13,16 @@
   --rvi-tl-start-col: 68px;
   --rvi-tl-next-col: 64px;
   --rvi-tl-fav-col: 16px;
+  --rvi-tl-actions-col: 50px;
+  --rvi-tl-action-size: 24px;
   --rvi-tl-actions-gutter: 0px;
   --rvi-tl-card-gap: 6px;
   --rvi-tl-card-pad-left: 6px;
   --rvi-tl-card-pad-right: 6px;
+  --rvi-tl-chip-min-width: 74px;
+  --rvi-tl-chip-pad: 0 6px 0 4px;
+  --rvi-tl-chip-gap: 4px;
+  --rvi-tl-card-max-width: none;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -25,6 +31,101 @@
   flex: 1 1 auto;
   height: 100%;
   font-family: var(--rv-font-sans);
+}
+
+/* ── Densité des cartes ────────────────────────────────────────────────────
+ * Posée par TimelineTimelineView selon la largeur réelle d'une colonne-jour
+ * (constants.ts) : regular ≥ 440 px (valeurs ci-dessus), compact 260–440 px,
+ * tight < 260 px (vue 1 jour dans un panneau étroit). Les colonnes chiffrées
+ * gardent une largeur fixe, calée sur « 1234.5 km » / « 12h05m » dans la
+ * taille de la densité, pour rester alignées d'une carte à l'autre ; le nom
+ * prend le reste. En vue 1 jour la carte est plafonnée : le nom ne s'écarte
+ * pas de ses chiffres sur toute la largeur de l'écran. */
+.rvi-tl-schedule[data-layout='single-day'] {
+  --rvi-tl-card-max-width: 600px;
+}
+
+.rvi-tl-schedule[data-density='compact'] {
+  --rvi-tl-pause-col: 66px;
+  --rvi-tl-start-col: 60px;
+  --rvi-tl-next-col: 52px;
+  --rvi-tl-fav-col: 12px;
+  --rvi-tl-actions-col: 42px;
+  --rvi-tl-action-size: 20px;
+  --rvi-tl-card-gap: 4px;
+  --rvi-tl-card-pad-left: 5px;
+  --rvi-tl-card-pad-right: 5px;
+  --rvi-tl-chip-min-width: 0px;
+  --rvi-tl-chip-pad: 0 4px 0 0;
+  --rvi-tl-chip-gap: 2px;
+}
+
+/* Tight : « depuis le départ » et « jusqu'au suivant » s'empilent dans une
+ * seule colonne (2 lignes de 12 px tiennent dans la carte de 32 px). */
+.rvi-tl-schedule[data-density='tight'] {
+  --rvi-tl-pause-col: 64px;
+  --rvi-tl-start-col: 54px;
+  --rvi-tl-next-col: 0px;
+  --rvi-tl-fav-col: 12px;
+  --rvi-tl-actions-col: 42px;
+  --rvi-tl-action-size: 20px;
+  --rvi-tl-card-gap: 3px;
+  --rvi-tl-card-pad-left: 4px;
+  --rvi-tl-card-pad-right: 4px;
+  --rvi-tl-chip-min-width: 0px;
+  --rvi-tl-chip-pad: 0 4px 0 0;
+  --rvi-tl-chip-gap: 2px;
+}
+
+.rvi-tl-schedule[data-density='compact'] .rvi-tl-schedule__event-name {
+  font-size: var(--rv-font-size-md);
+}
+
+.rvi-tl-schedule[data-density='tight'] .rvi-tl-schedule__event-name {
+  font-size: var(--rv-font-size-sm);
+}
+
+.rvi-tl-schedule[data-density='compact'] .rvi-tl-schedule__event-metric,
+.rvi-tl-schedule[data-density='compact'] .rvi-tl-schedule__pause-chip,
+.rvi-tl-schedule[data-density='compact'] .rvi-tl-schedule__legend {
+  font-size: var(--rv-font-size-sm);
+}
+
+.rvi-tl-schedule[data-density='tight'] .rvi-tl-schedule__event-metric,
+.rvi-tl-schedule[data-density='tight'] .rvi-tl-schedule__pause-chip,
+.rvi-tl-schedule[data-density='tight'] .rvi-tl-schedule__legend {
+  font-size: var(--rv-font-size-xs);
+}
+
+.rvi-tl-schedule[data-density='tight'] :is(.rvi-tl-schedule__event-main, .rvi-tl-schedule__pause-main, .rvi-tl-schedule__legend-grid) {
+  grid-template-rows: 1fr auto auto 1fr;
+}
+
+.rvi-tl-schedule[data-density='tight'] :is(
+  .rvi-tl-schedule__event-icon,
+  .rvi-tl-schedule__event-name,
+  .rvi-tl-schedule__event-pauses,
+  .rvi-tl-schedule__pause-chip--standalone,
+  .rvi-tl-schedule__event-favorite,
+  .rvi-tl-schedule__legend-name,
+  .rvi-tl-schedule__legend-pause
+) {
+  grid-row: 1 / -1;
+  align-self: center;
+}
+
+.rvi-tl-schedule[data-density='tight'] :is(.rvi-tl-schedule__event-metric, .rvi-tl-schedule__legend-metric, .rvi-tl-schedule__legend-next) {
+  grid-column: 4;
+  grid-row: 2;
+  line-height: 12px;
+}
+
+.rvi-tl-schedule[data-density='tight'] :is(
+  .rvi-tl-schedule__event-metric--next,
+  .rvi-tl-schedule__pause-metric--next,
+  .rvi-tl-schedule__legend-next
+) {
+  grid-row: 3;
 }
 
 .rvi-tl-schedule__days {
@@ -111,10 +212,13 @@
     fit-content(var(--rvi-tl-pause-col))
     var(--rvi-tl-start-col)
     var(--rvi-tl-next-col)
+    var(--rvi-tl-actions-col)
     var(--rvi-tl-fav-col);
   column-gap: var(--rvi-tl-card-gap);
   align-items: end;
   min-width: 0;
+  max-width: var(--rvi-tl-card-max-width);
+  box-sizing: border-box;
   padding-left: var(--rvi-tl-card-pad-left);
   padding-right: calc(var(--rvi-tl-card-pad-right) + var(--rvi-tl-actions-gutter));
 }
@@ -366,6 +470,17 @@
   box-shadow: inset 0 0 0 1px rgba(197, 0, 0, 0.32);
 }
 
+/* Suite d'une carte qui passe minuit, en haut de la colonne du lendemain. */
+.rvi-tl-schedule__event-span-main {
+  box-sizing: border-box;
+  padding: 0 calc(var(--rvi-tl-card-pad-right) + var(--rvi-tl-actions-gutter)) 0 var(--rvi-tl-card-pad-left);
+  color: var(--rvi-text);
+}
+
+.rvi-tl-schedule__pause--continuation .rvi-tl-schedule__pause-card {
+  pointer-events: none;
+}
+
 .rvi-tl-schedule__event-span[data-kind='start'],
 .rvi-tl-schedule__event-span[data-kind='end'] {
   background: rgba(255, 255, 255, 0.1);
@@ -376,6 +491,11 @@
   align-items: stretch;
   min-width: 0;
   z-index: 2;
+}
+
+.rvi-tl-schedule__event,
+.rvi-tl-schedule__pause--standalone {
+  max-width: var(--rvi-tl-card-max-width);
 }
 
 .rvi-tl-schedule__event-card {
@@ -418,6 +538,7 @@
     fit-content(var(--rvi-tl-pause-col))
     var(--rvi-tl-start-col)
     var(--rvi-tl-next-col)
+    var(--rvi-tl-actions-col)
     var(--rvi-tl-fav-col);
   align-items: center;
   align-content: center;
@@ -447,6 +568,17 @@
   line-height: 24px;
 }
 
+:is(.rvi-tl-schedule__event, .rvi-tl-schedule__event-span)[data-multiline-name] .rvi-tl-schedule__event-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--rvi-tl-name-lines, 2);
+  line-clamp: var(--rvi-tl-name-lines, 2);
+  white-space: normal;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  line-height: 18px;
+}
+
 .rvi-tl-schedule__event-pauses {
   grid-column: 3;
   display: flex;
@@ -462,13 +594,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
-  min-width: 0;
   width: 100%;
-  min-width: 74px;
+  min-width: var(--rvi-tl-chip-min-width);
   min-height: 24px;
   height: 24px;
-  gap: 4px;
-  padding: 0 6px 0 4px;
+  gap: var(--rvi-tl-chip-gap);
+  padding: var(--rvi-tl-chip-pad);
   border-radius: 6px;
   background: var(--rvi-tl-grid-surface);
   color: #fff;
@@ -549,7 +680,7 @@
 }
 
 .rvi-tl-schedule__event-favorite {
-  grid-column: 6;
+  grid-column: 7;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -617,8 +748,9 @@
     var(--rvi-tl-icon-col)
     minmax(0, 1fr)
     minmax(0, var(--rvi-tl-pause-col))
-    minmax(0, var(--rvi-tl-start-col))
-    minmax(0, var(--rvi-tl-next-col))
+    var(--rvi-tl-start-col)
+    var(--rvi-tl-next-col)
+    var(--rvi-tl-actions-col)
     var(--rvi-tl-fav-col);
   align-items: center;
   column-gap: var(--rvi-tl-card-gap);
@@ -628,6 +760,8 @@
 
 .rvi-tl-schedule__pause-chip--standalone {
   grid-column: 2 / 4;
+  min-width: min(74px, 100%);
+  padding: 0 6px 0 4px;
   width: auto;
   max-width: 100%;
   justify-self: start;
@@ -643,7 +777,7 @@
 }
 
 .rvi-tl-schedule__pause-favorite {
-  grid-column: 6;
+  grid-column: 7;
   justify-self: end;
   flex-shrink: 0;
   min-width: var(--rvi-tl-fav-col);
@@ -667,24 +801,20 @@
     inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
+/* Afficher / supprimer : toujours visibles, posés sur la colonne réservée
+ * (--rvi-tl-actions-col) entre « To next » et l'étoile de la carte. Hors du
+ * <button> de la carte (pas de bouton dans un bouton), centrés sur sa ligne. */
 .rvi-tl-schedule__actions {
   position: absolute;
-  top: 50%;
-  right: 0;
+  top: calc(var(--rvi-tl-card-height, 32px) / 2);
+  right: calc(var(--rvi-tl-card-pad-right) + var(--rvi-tl-fav-col) + var(--rvi-tl-card-gap));
+  width: var(--rvi-tl-actions-col);
   display: inline-flex;
   align-items: center;
-  gap: 2.4px;
-  padding: 0 2px;
-  transform: translate(100%, -50%);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.18s ease;
-}
-
-.rvi-tl-schedule__event:hover .rvi-tl-schedule__actions,
-.rvi-tl-schedule__event:focus-within .rvi-tl-schedule__actions {
-  opacity: 1;
-  pointer-events: auto;
+  justify-content: flex-end;
+  gap: 2px;
+  transform: translateY(-50%);
+  z-index: 1;
 }
 
 .rvi-tl-schedule__action {
@@ -692,8 +822,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: var(--rvi-tl-action-size);
+  height: var(--rvi-tl-action-size);
   color: var(--rvi-text);
   opacity: 0.62;
   border-radius: 4.5px;
@@ -707,7 +837,6 @@
 }
 
 .rvi-tl-schedule__action.is-on { opacity: 1; }
-.rvi-tl-schedule__action.is-on.is-fav { color: #FDB022; }
 .rvi-tl-schedule__action--danger:hover { color: #ff7272; }
 .rvi-tl-schedule__action:focus-visible {
   outline: 2px solid var(--rvi-red-accent);

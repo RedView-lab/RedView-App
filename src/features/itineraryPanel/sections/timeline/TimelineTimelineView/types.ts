@@ -91,8 +91,12 @@ export interface AttachedPause {
 
 export interface EventSpanSegment {
   dayKey: string | null;
+  /** Position horaire du segment, avant empilement (positionTimelineBlocks). */
+  scheduledTopPx: number;
   topPx: number;
   heightPx: number;
+  /** Part des pauses attachées qui tombe dans ce jour (suite après minuit). */
+  pauseHeightPx: number;
 }
 
 export interface TimelineEvent extends TimedTimelineItem {
@@ -104,6 +108,8 @@ export interface TimelineEvent extends TimedTimelineItem {
   cardHeightPx: number;
   heightPx: number;
   spanSegments: EventSpanSegment[];
+  /** Commencé la veille du premier jour affiché : seule sa suite (segments) est dessinée. */
+  startsBeforeWindow: boolean;
 }
 
 export interface TimelineStandalonePause {
@@ -121,6 +127,10 @@ export interface TimelineStandalonePause {
   heightPx: number;
   sortIndex: number;
   dayKey: string | null;
+  /** Suite de la pause dans les jours suivants quand elle passe minuit. */
+  continuations: EventSpanSegment[];
+  /** Commencée la veille du premier jour affiché : seule sa suite est dessinée. */
+  startsBeforeWindow: boolean;
 }
 
 export interface PauseAttachmentState {

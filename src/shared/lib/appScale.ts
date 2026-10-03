@@ -6,12 +6,20 @@ import type { CSSProperties } from 'react';
  * The UI is laid out in LOGICAL pixels (type scale: shared/styles/typography.css)
  * and rendered at `appScale` CSS pixels per logical pixel.
  *
- * Rule: the UI is NEVER shrunk below 1:1. A CSS pixel already carries the
- * user's OS scaling (125 %, 150 %…) and browser zoom; shrinking on top of it
- * gave 8–10 px text, blurry on non-HiDPI screens (half-screen 1080p window,
- * 1366×768 laptop, 1080p laptop at 125–150 %). Small or short windows reflow
- * instead (pages/Dashboard/lib/layout.ts: side panels give way, center panel
- * and map tools compact); browser zoom stays the user's density control.
+ * Rule: on a standard-density screen the UI is NEVER shrunk below 1:1. A CSS
+ * pixel already carries the user's OS scaling (125 %, 150 %…) and browser
+ * zoom; shrinking on top of it gave 8–10 px text, blurry on non-HiDPI screens
+ * (half-screen 1080p window, 1366×768 laptop, 1080p laptop at 125–150 %).
+ * Small or short windows reflow instead (pages/Dashboard/lib/layout.ts: side
+ * panels give way, center panel and map tools compact); browser zoom stays
+ * the user's density control.
+ *
+ * Retina exception (≥ 2 device px per CSS px: MacBook, 4K at 200 %): a text
+ * shrunk to 9.5 CSS px is still drawn on 19 device px, sharp. A 13–14"
+ * MacBook (≈1440–1512 × 800–870 CSS px) at 1:1 looked oversized and crammed
+ * the map/center toolbars onto two rows, so below the design reference the
+ * scale follows HIDPI_SHRINK_FACTOR of the deficit, never under HIDPI_MIN
+ * (MacBook Air 13" ≈ 0.87, MacBook Pro 14" ≈ 0.89).
  *
  * Above the design reference (DESIGN) the scale grows gently (GROW_FACTOR of
  * the surplus) up to MAX: 1440p and ultrawide monitors gain text comfort
@@ -27,19 +35,66 @@ export const APP_SCALE_DESIGN_HEIGHT = 1080;
 export const APP_SCALE_MAX = 1.12;
 /** Fraction of the viewport surplus (above the design reference) applied to the scale. */
 export const APP_SCALE_GROW_FACTOR = 0.55;
+/**
+ * Pixel ratio from which the canvas may shrink below 1:1 (Retina). Read with
+ * a `resolution` media query: `window.devicePixelRatio` is capped for Mapbox
+ * (map3d/hooks/useMap/runtimeProfile.ts) and no longer reports the screen.
+ */
+const HIDPI_QUERY = '(min-resolution: 1.95dppx)';
+/** Fraction of the viewport deficit (below the design reference) applied on Retina. */
+export const APP_SCALE_HIDPI_SHRINK_FACTOR = 0.5;
+/** Retina floor: the 11 px text floor shows at 9.35 CSS px, 18.7 device px. */
+export const APP_SCALE_HIDPI_MIN = 0.85;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-export function computeAppScale(viewport: { w: number; h: number }): number {
+export interface AppScaleViewport {
+  w: number;
+  h: number;
+  /** Screen of ≥ 2 device px per CSS px (Retina); false when unknown. */
+  hiDpi?: boolean;
+}
+
+/** Current window size and pixel density, as `computeAppScale` takes them. */
+export function readAppScaleViewport(): AppScaleViewport {
+  return {
+    w: window.innerWidth,
+    h: window.innerHeight,
+    hiDpi: window.matchMedia?.(HIDPI_QUERY).matches ?? false,
+  };
+}
+
+/**
+ * Calls `onChange` when the window is resized or crosses the Retina threshold
+ * (window moved to a screen of another density fires no `resize`). Returns a
+ * cleanup.
+ */
+export function watchAppScaleViewport(onChange: () => void): () => void {
+  const media = window.matchMedia?.(HIDPI_QUERY) ?? null;
+  media?.addEventListener('change', onChange);
+  window.addEventListener('resize', onChange, { passive: true });
+  return () => {
+    window.removeEventListener('resize', onChange);
+    media?.removeEventListener('change', onChange);
+  };
+}
+
+export function computeAppScale(viewport: AppScaleViewport): number {
   const fitDesign = Math.min(
     viewport.w / APP_SCALE_DESIGN_WIDTH,
     viewport.h / APP_SCALE_DESIGN_HEIGHT,
   );
-  if (!Number.isFinite(fitDesign) || fitDesign <= 1) return 1;
+  if (!Number.isFinite(fitDesign)) return 1;
+  let scale = 1;
+  if (fitDesign > 1) {
+    scale = clamp(1 + (fitDesign - 1) * APP_SCALE_GROW_FACTOR, 1, APP_SCALE_MAX);
+  } else if (viewport.hiDpi) {
+    scale = clamp(1 - (1 - fitDesign) * APP_SCALE_HIDPI_SHRINK_FACTOR, APP_SCALE_HIDPI_MIN, 1);
+  }
   // Rounded so that layout sizes stay on a short decimal grid.
-  return Math.round(clamp(1 + (fitDesign - 1) * APP_SCALE_GROW_FACTOR, 1, APP_SCALE_MAX) * 1000) / 1000;
+  return Math.round(scale * 1000) / 1000;
 }
 
 let standardZoomSupport: boolean | null = null;
@@ -144,18 +199,14 @@ export function publishRootAppScale(scale: number): () => void {
  * apply it with `zoom: var(--app-scale)`. Returns a cleanup function.
  */
 export function syncRootAppScale(): () => void {
-  let cleanup = publishRootAppScale(
-    computeAppScale({ w: window.innerWidth, h: window.innerHeight }),
-  );
+  let cleanup = publishRootAppScale(computeAppScale(readAppScaleViewport()));
   const apply = () => {
     cleanup();
-    cleanup = publishRootAppScale(
-      computeAppScale({ w: window.innerWidth, h: window.innerHeight }),
-    );
+    cleanup = publishRootAppScale(computeAppScale(readAppScaleViewport()));
   };
-  window.addEventListener('resize', apply, { passive: true });
+  const stopWatching = watchAppScaleViewport(apply);
   return () => {
-    window.removeEventListener('resize', apply);
+    stopWatching();
     cleanup();
   };
 }

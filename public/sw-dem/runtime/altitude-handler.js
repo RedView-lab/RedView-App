@@ -13,11 +13,52 @@
 // terrain loads itself. A genuine miss at those zooms joins the terrain's own
 // build (same DEM_INFLIGHT key); above the cap we never build.
 //
-// Zone-masked: unchanged — polygon mask via worker pool / in-process builder,
-// cached under the `?zone=` key.
+// Zone-masked: polygon mask via worker pool / in-process builder, cached
+// under the `?zone=` key.
+//
+// No final DEM tile yet (LiDAR still pending under load, build cancelled,
+// transient failure, short-cached stand-in): Mapbox keeps any 200 image as
+// final, and the transparent tile served here used to stay as a hole in the
+// overlay for good. The tile is now provisional — the closest cached ancestor
+// DEM, overzoomed (what the terrain renders there too), never cached — and
+// the page reloads the altitude source on ALTITUDE_TILES_STALE once the real
+// DEM tile lands (derived-tile-stale.js).
 // ---------------------------------------------------------------------------
 
 const ALTITUDE_MAX_BUILD_ZOOM = 14;
+
+const ALTITUDE_STALE_TRACKER = createDerivedTileStaleTracker('ALTITUDE_TILES_STALE');
+
+// Stand-in DEM tiles: short-cached (parent overzoom, bare earth, AWS
+// emergency) or overzoomed from an ancestor.
+function isProvisionalDemResponse(response) {
+  if (response.headers.get('x-cache-ttl-ms')) return true;
+  return (response.headers.get('X-DEM-Source') || '').toLowerCase().startsWith('overzoom');
+}
+
+// Capped blind retry (a 204 may be transient) + reload as soon as the real
+// DEM tile is committed.
+function noteAltitudeTileProvisional(tileKey, demProfile, z, x, y) {
+  ALTITUDE_STALE_TRACKER.noteStale(tileKey);
+  ALTITUDE_STALE_TRACKER.waitOnDem(tileKey, demProfile, z, [[x, y]]);
+}
+
+// The closest ancestor DEM already in the hot tier / CacheStorage,
+// overzoomed to this tile. Never builds anything.
+async function altitudeAncestorResponse(demCache, z, x, y, demProfile) {
+  if (typeof tryParentOverzoom !== 'function') return null;
+  const parent = await tryParentOverzoom(demCache, z, x, y, 0, demProfile, { cachedOnly: true });
+  if (!parent?.blob) return null;
+  return new Response(parent.blob, {
+    status: 200,
+    headers: {
+      'Content-Type': 'image/png',
+      'Cache-Control': 'no-store',
+      'X-DEM-Source': parent.source,
+      'X-Tile-Type': 'altitude-provisional',
+    },
+  });
+}
 
 function isAltitudeWorkCancelled(generation) {
   if (generation === null || generation === undefined) return false;
@@ -74,8 +115,12 @@ async function handleAltitudeRequest(z, x, y, zoneHash = '', demProfile = 'defau
       : null;
 
     if (isAltitudeWorkCancelled(generation) || !demResponse || demResponse.status !== 200) {
+      noteAltitudeTileProvisional(hotKey, demProfile, z, x, y);
       return transparentTileResponse();
     }
+    const provisional = isProvisionalDemResponse(demResponse);
+    if (provisional) noteAltitudeTileProvisional(hotKey, demProfile, z, x, y);
+    else ALTITUDE_STALE_TRACKER.noteFinal(hotKey);
 
     try {
       const demBlob = await demResponse.clone().blob();
@@ -123,11 +168,12 @@ async function handleAltitudeRequest(z, x, y, zoneHash = '', demProfile = 'defau
         status: 200,
         headers: {
           'Content-Type': 'image/png',
-          'Cache-Control': 'public, max-age=604800',
+          'Cache-Control': provisional ? 'no-store' : 'public, max-age=604800',
           'X-Tile-Type': 'altitude',
         },
       });
-      if (!isAltitudeWorkCancelled(generation)) {
+      // A tile masked over a stand-in DEM is rebuilt when the real one lands.
+      if (!provisional && !isAltitudeWorkCancelled(generation)) {
         altitudeCache.put(cacheKey, response.clone());
         // Promote the freshly built tile into the altitude hot tier so an
         // immediate re-request (Mapbox repaint, toggle off/on a moment
@@ -160,6 +206,7 @@ async function handleAltitudeRequest(z, x, y, zoneHash = '', demProfile = 'defau
 // altitude-source.ts), and a cancelled request used to answer a transparent
 // tile that Mapbox kept as final — holes in the overlay after a pan.
 async function handleAltitudePassthrough(z, x, y, demProfile) {
+  const tileKey = `/altitude-tiles/${demProfile}/${z}/${x}/${y}`;
   try {
     const demCache = await caches.open(CACHE_NAME);
     const demResponse = (typeof getExistingTerrainDemResponse === 'function')
@@ -167,14 +214,23 @@ async function handleAltitudePassthrough(z, x, y, demProfile) {
           allowBuild: z <= ALTITUDE_MAX_BUILD_ZOOM,
         })
       : null;
-    if (!demResponse || demResponse.status !== 200) {
-      return transparentTileResponse();
+    if (demResponse && demResponse.status === 200) {
+      if (isProvisionalDemResponse(demResponse)) {
+        noteAltitudeTileProvisional(tileKey, demProfile, z, x, y);
+      } else {
+        ALTITUDE_STALE_TRACKER.noteFinal(tileKey);
+      }
+      const headers = new Headers(demResponse.headers);
+      headers.set('X-Tile-Type', 'altitude');
+      return new Response(demResponse.body, { status: 200, headers });
     }
-    const headers = new Headers(demResponse.headers);
-    headers.set('X-Tile-Type', 'altitude');
-    return new Response(demResponse.body, { status: 200, headers });
+    // No DEM tile for now: the terrain renders its parent mesh here, so does
+    // the overlay until the tile lands.
+    noteAltitudeTileProvisional(tileKey, demProfile, z, x, y);
+    const ancestor = await altitudeAncestorResponse(demCache, z, x, y, demProfile);
+    if (ancestor) return ancestor;
   } catch (err) {
     console.error('[altitude]', z, x, y, err);
-    return transparentTileResponse();
   }
+  return transparentTileResponse();
 }

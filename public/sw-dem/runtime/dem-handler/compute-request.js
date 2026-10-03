@@ -28,7 +28,7 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
   const cacheKey = buildDemCacheKey(z, x, y, demProfile);
   const hotKey = cacheKey.url;
 
-  // 0. Hot in-memory tier — see DEM_HOT_CACHE in runtime/lifecycle.js.
+  // 0. Hot in-memory tier — see DEM_HOT_CACHE in runtime/hot-caches.js.
   // Returns a fresh Response in <1 ms, sparing the SW thread an entire
   // CacheStorage round-trip (open + match ≈ 5-25 ms each) for the very
   // common case of re-displaying tiles the user just panned past.

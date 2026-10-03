@@ -1,10 +1,26 @@
 import type { PlatformProfile } from './lod/types';
 import type { SceneNode, SceneNodeUploader } from './lod/sceneLod';
-import { translateAppText } from '@/shared/i18n/config';
-import { mat4MultiplyInto } from './renderer/math';
+import { cameraForwardFromView, cameraPositionFromView, mat4MultiplyInto, vec3Of } from './renderer/math';
 import { NodeGpuPool } from './renderer/nodePool';
-import { resolvePlatformInfo } from './renderer/platform';
-import { createRendererPipelines, SCENE_DEPTH_FORMAT, type RendererPipelines } from './renderer/rendererPipeline';
+import { requestLidarGpu, showDeviceLostNotice } from './renderer/device';
+import { createRendererPipelines, type RendererPipelines } from './renderer/rendererPipeline';
+import {
+  createFloatTexture,
+  createMeshBuffers,
+  createRampSampler,
+  createRampTexture,
+  createRgbaTexture,
+  createUniformBuffer,
+  createVertexBuffer,
+  destroyMeshBuffers,
+  drawMesh,
+  flipRows,
+  unitFloatsFromBytes,
+  writeRampTexture,
+  type MeshBuffers,
+} from './renderer/gpuResources';
+import { createSceneTargets, destroySceneTargets, type SceneTargets } from './renderer/sceneTargets';
+import { packSceneUniforms, SCENE_UNIFORM_FLOATS } from './renderer/sceneUniforms';
 import { EDL_PARAMS_FLOATS, POINT_PARAMS_FLOATS } from './renderer/shaders';
 import type { HeightmapParams, SnowParams } from './renderer/types';
 import { buildSlopeRampData } from './slope/slopeRamp';
@@ -25,6 +41,8 @@ const COLOR_MODE_INDEX: Record<PointColorMode, number> = { rgb: 0, intensity: 1,
 /** Projected point diameter bounds (device pixels) for the metre-sized mode. */
 const POINT_MIN_PX = 1.0;
 const POINT_MAX_PX = 64;
+/** Point diameter cap of the eye-level (first-person) view, device px. */
+const EYE_LEVEL_POINT_MAX_PX = 14;
 /**
  * Adaptive size of the finest points on screen, per metre of their node's
  * surface spacing: the same 1.5 × spacing the default point size gives the
@@ -33,28 +51,6 @@ const POINT_MAX_PX = 64;
 const ADAPTIVE_SPACING_FACTOR = 1.5;
 /** Uniform slots of the node pool (one per resident LOD node). */
 const NODE_POOL_CAPACITY = 16384;
-
-/** Offscreen scene render targets of one size. */
-interface SceneTargets {
-  width: number;
-  height: number;
-  /** Single-sample colour (MSAA resolve target), read by the EDL or upscale pass. */
-  colorTexture: GPUTexture;
-  colorView: GPUTextureView;
-  colorMsTexture: GPUTexture | null;
-  colorMsView: GPUTextureView | null;
-  depthTexture: GPUTexture;
-  depthView: GPUTextureView;
-  edlBindGroup: GPUBindGroup;
-  blitBindGroup: GPUBindGroup;
-}
-
-interface MeshBuffers {
-  vertBuf: GPUBuffer;
-  colBuf: GPUBuffer;
-  idxBuf: GPUBuffer;
-  count: number;
-}
 
 /**
  * WebGPU point-cloud renderer.
@@ -94,7 +90,7 @@ export class LidarRenderer implements SceneNodeUploader {
   motionSquares = true;
   private lastRenderScale = 1;
 
-  private uniformCache = new Float32Array(80);
+  private uniformCache = new Float32Array(SCENE_UNIFORM_FLOATS);
   private uniformCacheU32 = new Uint32Array(this.uniformCache.buffer);
   private pointParams = new Float32Array(POINT_PARAMS_FLOATS);
   private edlParams = new Float32Array(EDL_PARAMS_FLOATS);
@@ -152,6 +148,8 @@ export class LidarRenderer implements SceneNodeUploader {
   private terrainMesh: MeshBuffers | null = null;
   private previewMesh: MeshBuffers | null = null;
   private routeMesh: MeshBuffers | null = null;
+  /** Draped analysis zones of the viewer tools (avalanche reach, viewshed). */
+  private analysisMesh: MeshBuffers | null = null;
   private canvasWidth = 1;
   private canvasHeight = 1;
   private hmOriginX = 0;
@@ -162,6 +160,8 @@ export class LidarRenderer implements SceneNodeUploader {
   pointSize = 0.3;
   /** Point diameter in device pixels; 0 = adaptive (world size, clamped in pixels). */
   fixedPointPixels = 0;
+  /** Largest projected point diameter (device px); lowered for the eye-level view. */
+  private maxPointPixels = POINT_MAX_PX;
   /**
    * Coarser LOD levels drawn as the finest on screen grow to their own
    * spacing (Potree-style adaptive size): no holes where the budget or the
@@ -190,39 +190,22 @@ export class LidarRenderer implements SceneNodeUploader {
   private lastDrawCallCount = 0;
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
-    if (!navigator.gpu) throw new Error(translateAppText('WebGPU non supporté'));
-    const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
-    if (!adapter) throw new Error(translateAppText('Pas de GPUAdapter'));
-
-    const { vendor, arch, desc, profile } = resolvePlatformInfo((adapter as unknown as { info?: unknown }).info ?? null);
+    const { device, profile } = await requestLidarGpu();
+    this.device = device;
     this.platform = profile;
     // MSAA ×4 (with alpha-to-coverage on point edges) only where fill rate is cheap.
     this.sampleCount = profile.tier === 'discrete' ? 4 : 1;
-
-    console.log(`[LiDAR GPU] Adapter: vendor=${vendor} arch=${arch} desc=${desc}`);
-
-    const features: GPUFeatureName[] = [];
-    if (adapter.features.has('timestamp-query')) features.push('timestamp-query');
-
-    this.device = await adapter.requestDevice({ requiredFeatures: features });
     this.gpuTimer = new GpuFrameTimer(this.device);
     console.log(
       `[LiDAR GPU] Tier: ${profile.tier} · MSAA ×${this.sampleCount}` +
       ` · frame timing: ${this.gpuTimer.usesTimestamps ? 'timestamp-query' : 'onSubmittedWorkDone'}`,
     );
 
-    this.device.addEventListener('uncapturederror', (event) => {
-      console.error('[LiDAR GPU] Uncaptured error:', (event as GPUUncapturedErrorEvent).error.message);
-    });
-
     this.device.lost.then((info) => {
       console.error(`[LiDAR GPU] Device lost: reason=${info.reason}, message=${info.message}`);
       this.deviceLost = true;
       if (info.reason !== 'destroyed') {
-        const statusEl = document.getElementById('status');
-        const overlay = document.getElementById('overlay');
-        if (statusEl) statusEl.textContent = translateAppText('⚠️ Périphérique GPU perdu : {{reason}}. Rechargez la page.', { reason: info.message || info.reason });
-        if (overlay) overlay.classList.remove('hidden');
+        showDeviceLostNotice(info);
         this.onDeviceLost?.(info);
       }
     });
@@ -239,9 +222,9 @@ export class LidarRenderer implements SceneNodeUploader {
       NODE_POOL_CAPACITY,
     );
 
-    this.cameraBuffer = this.createUniformBuffer(this.uniformCache.byteLength);
-    this.pointParamsBuffer = this.createUniformBuffer(this.pointParams.byteLength);
-    this.edlParamsBuffer = this.createUniformBuffer(this.edlParams.byteLength);
+    this.cameraBuffer = createUniformBuffer(this.device, this.uniformCache.byteLength);
+    this.pointParamsBuffer = createUniformBuffer(this.device, this.pointParams.byteLength);
+    this.edlParamsBuffer = createUniformBuffer(this.device, this.edlParams.byteLength);
     this.pointParamsBindGroup = this.device.createBindGroup({
       layout: this.pipelines.pointParamsBindGroupLayout,
       entries: [
@@ -250,25 +233,15 @@ export class LidarRenderer implements SceneNodeUploader {
       ],
     });
 
-    this.heightTexture = this.createFloatTexture(1, 1, new Float32Array([0]));
-    this.snowTexture = this.createFloatTexture(1, 1, new Float32Array([0]));
-    this.shadowTexture = this.createFloatTexture(1, 1, new Float32Array([0]));
-    this.slopeTexture = this.createRampTexture(256);
-    this.altitudeTexture = this.createRampTexture(512);
-    this.sunlightMapTexture = this.device.createTexture({
-      size: [1, 1],
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-    });
-    this.device.queue.writeTexture(
-      { texture: this.sunlightMapTexture },
-      new Uint8Array([0, 0, 0, 0]) as Uint8Array<ArrayBuffer>,
-      { bytesPerRow: 4 },
-      { width: 1, height: 1 },
-    );
-    this.blitSampler = this.createRampSampler('linear');
-    this.slopeSampler = this.createRampSampler('linear');
-    this.altitudeSampler = this.createRampSampler('linear');
+    this.heightTexture = createFloatTexture(this.device, 1, 1, new Float32Array([0]));
+    this.snowTexture = createFloatTexture(this.device, 1, 1, new Float32Array([0]));
+    this.shadowTexture = createFloatTexture(this.device, 1, 1, new Float32Array([0]));
+    this.slopeTexture = createRampTexture(this.device, 256);
+    this.altitudeTexture = createRampTexture(this.device, 512);
+    this.sunlightMapTexture = createRgbaTexture(this.device, 1, 1, new Uint8Array([0, 0, 0, 0]));
+    this.blitSampler = createRampSampler(this.device, 'linear');
+    this.slopeSampler = createRampSampler(this.device, 'linear');
+    this.altitudeSampler = createRampSampler(this.device, 'linear');
 
     this.rebuildBindGroups();
     this.resize(canvas.width, canvas.height);
@@ -331,6 +304,15 @@ export class LidarRenderer implements SceneNodeUploader {
    * Eye-Dome Lighting: `strength` ≈ 1 matches CloudCompare/Potree defaults,
    * `radiusPx` is in device pixels (scale it with the canvas pixel ratio).
    */
+  /**
+   * Eye-level view: returns a few metres away would project to 50+ px
+   * discs (a 30 cm point at 3 m); they are capped and the terrain mesh drawn
+   * behind them fills the ground between, as the eye sees a surface.
+   */
+  setEyeLevelPoints(enabled: boolean): void {
+    this.maxPointPixels = enabled ? EYE_LEVEL_POINT_MAX_PX : POINT_MAX_PX;
+  }
+
   setEdl(enabled: boolean, strength: number, radiusPx: number): void {
     this.edlEnabled = enabled;
     this.edlStrength = Math.max(0, strength);
@@ -349,49 +331,6 @@ export class LidarRenderer implements SceneNodeUploader {
 
   private invalidateShading(): void {
     this.nodePool?.invalidateShading();
-  }
-
-  private createUniformBuffer(size: number): GPUBuffer {
-    return this.device.createBuffer({ size, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-  }
-
-  private createFloatTexture(width: number, height: number, data: Float32Array): GPUTexture {
-    const texture = this.device.createTexture({
-      size: [width, height],
-      format: 'r32float',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-    });
-    this.device.queue.writeTexture(
-      { texture },
-      data as Float32Array<ArrayBuffer>,
-      { bytesPerRow: width * 4 },
-      { width, height },
-    );
-    return texture;
-  }
-
-  private createRampTexture(width: number): GPUTexture {
-    const texture = this.device.createTexture({
-      size: [width, 1],
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-    });
-    this.device.queue.writeTexture(
-      { texture },
-      new Uint8Array(width * 4) as Uint8Array<ArrayBuffer>,
-      { bytesPerRow: width * 4 },
-      { width, height: 1 },
-    );
-    return texture;
-  }
-
-  private createRampSampler(filter: GPUFilterMode): GPUSampler {
-    return this.device.createSampler({
-      magFilter: filter,
-      minFilter: filter,
-      addressModeU: 'clamp-to-edge',
-      addressModeV: 'clamp-to-edge',
-    });
   }
 
   private rebuildBindGroups() {
@@ -418,25 +357,16 @@ export class LidarRenderer implements SceneNodeUploader {
     this.hmScaleX = params.scaleX;
     this.hmScaleZ = params.scaleZ;
 
-    const flipped = new Float32Array(params.data.length);
     const w = params.width;
     const h = params.height;
-    for (let y = 0; y < h; y++) {
-      const srcRow = (h - 1 - y) * w;
-      const dstRow = y * w;
-      for (let x = 0; x < w; x++) {
-        flipped[dstRow + x] = params.data[srcRow + x]!;
-      }
-    }
-
     this.heightTexture.destroy();
-    this.heightTexture = this.createFloatTexture(w, h, flipped);
+    this.heightTexture = createFloatTexture(this.device, w, h, flipRows(params.data, w, h));
     this.rebuildBindGroups();
   }
 
   setSnow(params: SnowParams) {
     this.snowTexture.destroy();
-    this.snowTexture = this.createFloatTexture(params.width, params.height, params.data);
+    this.snowTexture = createFloatTexture(this.device, params.width, params.height, params.data);
     this.snowOriginX = params.originX;
     this.snowOriginZ = params.originZ;
     this.snowScaleX = params.scaleX;
@@ -456,18 +386,12 @@ export class LidarRenderer implements SceneNodeUploader {
     const desiredFilter: GPUFilterMode = state.colorization === 'stepped' ? 'nearest' : 'linear';
 
     if (state.bands && state.bands.length > 0) {
-      const data = buildSlopeRampData(state.bands, state.colorization, 256);
-      this.device.queue.writeTexture(
-        { texture: this.slopeTexture },
-        data as Uint8Array<ArrayBuffer>,
-        { bytesPerRow: 256 * 4 },
-        { width: 256, height: 1 },
-      );
+      writeRampTexture(this.device, this.slopeTexture, buildSlopeRampData(state.bands, state.colorization, 256), 256);
     }
 
     if (this.slopeFilter !== desiredFilter) {
       this.slopeFilter = desiredFilter;
-      this.slopeSampler = this.createRampSampler(desiredFilter);
+      this.slopeSampler = createRampSampler(this.device, desiredFilter);
       this.rebuildBindGroups();
     }
     this.invalidateShading();
@@ -481,17 +405,12 @@ export class LidarRenderer implements SceneNodeUploader {
 
     if (state.bands && state.bands.length > 0) {
       const data = buildAltitudeRampData(state.bands, state.colorization, this.maxAltitude, 512);
-      this.device.queue.writeTexture(
-        { texture: this.altitudeTexture },
-        data as Uint8Array<ArrayBuffer>,
-        { bytesPerRow: 512 * 4 },
-        { width: 512, height: 1 },
-      );
+      writeRampTexture(this.device, this.altitudeTexture, data, 512);
     }
 
     if (this.altitudeFilter !== desiredFilter) {
       this.altitudeFilter = desiredFilter;
-      this.altitudeSampler = this.createRampSampler(desiredFilter);
+      this.altitudeSampler = createRampSampler(this.device, desiredFilter);
       this.rebuildBindGroups();
     }
     this.invalidateShading();
@@ -520,12 +439,8 @@ export class LidarRenderer implements SceneNodeUploader {
     if (renderState.shadowMapData && renderState.shadowMapWidth > 0 && renderState.shadowMapHeight > 0) {
       const sw = renderState.shadowMapWidth;
       const sh = renderState.shadowMapHeight;
-      const f32Shadow = new Float32Array(sw * sh);
-      for (let i = 0; i < sw * sh; i++) {
-        f32Shadow[i] = renderState.shadowMapData[i]! / 255;
-      }
       this.shadowTexture.destroy();
-      this.shadowTexture = this.createFloatTexture(sw, sh, f32Shadow);
+      this.shadowTexture = createFloatTexture(this.device, sw, sh, unitFloatsFromBytes(renderState.shadowMapData, sw * sh));
       needsRebind = true;
     }
 
@@ -533,17 +448,7 @@ export class LidarRenderer implements SceneNodeUploader {
       const mw = renderState.sunlightMapWidth;
       const mh = renderState.sunlightMapHeight;
       this.sunlightMapTexture.destroy();
-      this.sunlightMapTexture = this.device.createTexture({
-        size: [mw, mh],
-        format: 'rgba8unorm',
-        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-      });
-      this.device.queue.writeTexture(
-        { texture: this.sunlightMapTexture },
-        renderState.sunlightMapRgba as Uint8Array<ArrayBuffer>,
-        { bytesPerRow: mw * 4 },
-        { width: mw, height: mh },
-      );
+      this.sunlightMapTexture = createRgbaTexture(this.device, mw, mh, renderState.sunlightMapRgba);
       needsRebind = true;
     }
 
@@ -555,15 +460,7 @@ export class LidarRenderer implements SceneNodeUploader {
 
     if (renderState.trajectoryVertices && renderState.trajectoryVertexCount > 0) {
       this.trajectoryBuffer?.destroy();
-      this.trajectoryBuffer = this.device.createBuffer({
-        size: renderState.trajectoryVertices.byteLength,
-        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-      });
-      this.device.queue.writeBuffer(
-        this.trajectoryBuffer,
-        0,
-        renderState.trajectoryVertices as Float32Array<ArrayBuffer>,
-      );
+      this.trajectoryBuffer = createVertexBuffer(this.device, renderState.trajectoryVertices);
       this.trajectoryVertexCount = renderState.trajectoryVertexCount;
     } else {
       this.trajectoryVertexCount = 0;
@@ -576,89 +473,24 @@ export class LidarRenderer implements SceneNodeUploader {
     this.canvasHeight = Math.max(1, h);
     if (!this.device) return;
 
-    this.destroySceneTargets(this.fullTargets);
-    this.destroySceneTargets(this.motionTargets);
-    this.fullTargets = this.createSceneTargets(this.canvasWidth, this.canvasHeight);
+    destroySceneTargets(this.fullTargets);
+    destroySceneTargets(this.motionTargets);
+    const config = {
+      device: this.device,
+      pipelines: this.pipelines,
+      format: this.format,
+      sampleCount: this.sampleCount,
+      edlParamsBuffer: this.edlParamsBuffer,
+      blitSampler: this.blitSampler,
+    };
+    this.fullTargets = createSceneTargets(config, this.canvasWidth, this.canvasHeight);
     this.motionTargets = this.motionScale < 1
-      ? this.createSceneTargets(
+      ? createSceneTargets(
+        config,
         Math.max(1, Math.round(this.canvasWidth * this.motionScale)),
         Math.max(1, Math.round(this.canvasHeight * this.motionScale)),
       )
       : null;
-  }
-
-  private createSceneTargets(width: number, height: number): SceneTargets {
-    const size = [width, height];
-    const colorTexture = this.device.createTexture({
-      size,
-      format: this.format,
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-    });
-    const colorView = colorTexture.createView();
-    const colorMsTexture = this.sampleCount > 1
-      ? this.device.createTexture({
-        size,
-        format: this.format,
-        sampleCount: this.sampleCount,
-        usage: GPUTextureUsage.RENDER_ATTACHMENT,
-      })
-      : null;
-    const depthTexture = this.device.createTexture({
-      size,
-      format: SCENE_DEPTH_FORMAT,
-      sampleCount: this.sampleCount,
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-    });
-    const depthView = depthTexture.createView();
-    return {
-      width,
-      height,
-      colorTexture,
-      colorView,
-      colorMsTexture,
-      colorMsView: colorMsTexture?.createView() ?? null,
-      depthTexture,
-      depthView,
-      edlBindGroup: this.device.createBindGroup({
-        layout: this.pipelines.edlBindGroupLayout,
-        entries: [
-          { binding: 0, resource: colorView },
-          { binding: 1, resource: depthView },
-          { binding: 2, resource: { buffer: this.edlParamsBuffer } },
-        ],
-      }),
-      blitBindGroup: this.device.createBindGroup({
-        layout: this.pipelines.blitBindGroupLayout,
-        entries: [
-          { binding: 0, resource: colorView },
-          { binding: 1, resource: this.blitSampler },
-        ],
-      }),
-    };
-  }
-
-  private destroySceneTargets(targets: SceneTargets | null): void {
-    if (!targets) return;
-    targets.colorTexture.destroy();
-    targets.colorMsTexture?.destroy();
-    targets.depthTexture.destroy();
-  }
-
-  private createMeshBuffers(vertices: Float32Array, colors: Uint8Array, indices: Uint32Array, count: number): MeshBuffers {
-    const vertBuf = this.device.createBuffer({ size: vertices.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
-    this.device.queue.writeBuffer(vertBuf, 0, vertices as Float32Array<ArrayBuffer>);
-    const colBuf = this.device.createBuffer({ size: colors.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
-    this.device.queue.writeBuffer(colBuf, 0, colors as Uint8Array<ArrayBuffer>);
-    const idxBuf = this.device.createBuffer({ size: indices.byteLength, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST });
-    this.device.queue.writeBuffer(idxBuf, 0, indices as Uint32Array<ArrayBuffer>);
-    return { vertBuf, colBuf, idxBuf, count };
-  }
-
-  private static destroyMesh(mesh: MeshBuffers | null): void {
-    if (!mesh) return;
-    mesh.vertBuf.destroy();
-    mesh.colBuf.destroy();
-    mesh.idxBuf.destroy();
   }
 
   setMesh(vertices: Float32Array, colors: Uint8Array, indices: Uint32Array, count?: number): void {
@@ -666,8 +498,8 @@ export class LidarRenderer implements SceneNodeUploader {
   }
 
   setTerrainMesh(mesh: { vertices: Float32Array; colors: Uint8Array; indices: Uint32Array; count: number }) {
-    LidarRenderer.destroyMesh(this.terrainMesh);
-    this.terrainMesh = this.createMeshBuffers(mesh.vertices, mesh.colors, mesh.indices, mesh.count);
+    destroyMeshBuffers(this.terrainMesh);
+    this.terrainMesh = createMeshBuffers(this.device, mesh.vertices, mesh.colors, mesh.indices, mesh.count);
   }
 
   setPreviewMesh(
@@ -678,11 +510,11 @@ export class LidarRenderer implements SceneNodeUploader {
     if (meshOrVertices instanceof Float32Array) {
       if (!colors || !indices) return;
       this.clearPreviewMesh();
-      this.previewMesh = this.createMeshBuffers(meshOrVertices, colors, indices, indices.length);
+      this.previewMesh = createMeshBuffers(this.device, meshOrVertices, colors, indices, indices.length);
       return;
     }
     this.clearPreviewMesh();
-    this.previewMesh = this.createMeshBuffers(
+    this.previewMesh = createMeshBuffers(this.device, 
       meshOrVertices.vertices,
       meshOrVertices.colors,
       meshOrVertices.indices,
@@ -691,14 +523,14 @@ export class LidarRenderer implements SceneNodeUploader {
   }
 
   clearPreviewMesh(): void {
-    LidarRenderer.destroyMesh(this.previewMesh);
+    destroyMeshBuffers(this.previewMesh);
     this.previewMesh = null;
   }
 
   setRouteMesh(vertices: Float32Array, colors: Uint8Array, indices: Uint32Array, count?: number): void {
     this.clearRouteMesh();
     if (!this.device || vertices.length === 0 || indices.length === 0) return;
-    this.routeMesh = this.createMeshBuffers(vertices, colors, indices, count ?? indices.length);
+    this.routeMesh = createMeshBuffers(this.device, vertices, colors, indices, count ?? indices.length);
   }
 
   setPointFilterState(state: ViewerPointFilterState): void {
@@ -707,8 +539,20 @@ export class LidarRenderer implements SceneNodeUploader {
   }
 
   clearRouteMesh(): void {
-    LidarRenderer.destroyMesh(this.routeMesh);
+    destroyMeshBuffers(this.routeMesh);
     this.routeMesh = null;
+  }
+
+  /** Translucent coloured triangles in the render frame, drawn like the route (no depth write). */
+  setAnalysisMesh(vertices: Float32Array, colors: Uint8Array, indices: Uint32Array): void {
+    this.clearAnalysisMesh();
+    if (!this.device || vertices.length === 0 || indices.length === 0) return;
+    this.analysisMesh = createMeshBuffers(this.device, vertices, colors, indices, indices.length);
+  }
+
+  clearAnalysisMesh(): void {
+    destroyMeshBuffers(this.analysisMesh);
+    this.analysisMesh = null;
   }
 
   /**
@@ -733,91 +577,49 @@ export class LidarRenderer implements SceneNodeUploader {
     }
     this.lastProjScaleY = pArr[5]!;
 
-    let cpx = 0, cpy = 0, cpz = 0;
-    if (camPos && camPos.length >= 3) {
-      cpx = camPos[0]!; cpy = camPos[1]!; cpz = camPos[2]!;
-    } else {
-      cpx = -(vArr[0]! * vArr[12]! + vArr[1]! * vArr[13]! + vArr[2]! * vArr[14]!);
-      cpy = -(vArr[4]! * vArr[12]! + vArr[5]! * vArr[13]! + vArr[6]! * vArr[14]!);
-      cpz = -(vArr[8]! * vArr[12]! + vArr[9]! * vArr[13]! + vArr[10]! * vArr[14]!);
-    }
+    const pos = camPos && camPos.length >= 3 ? vec3Of(camPos) : cameraPositionFromView(vArr);
+    this.lastCamPos = pos;
+    this.lastCamFwd = camFwd && camFwd.length >= 3 ? vec3Of(camFwd) : cameraForwardFromView(vArr);
 
-    let cfx = 0, cfy = 0, cfz = -1;
-    if (camFwd && camFwd.length >= 3) {
-      cfx = camFwd[0]!; cfy = camFwd[1]!; cfz = camFwd[2]!;
-    } else {
-      cfx = -vArr[8]!; cfy = -vArr[9]!; cfz = -vArr[10]!;
-    }
-
-    this.lastCamPos = [cpx, cpy, cpz];
-    this.lastCamFwd = [cfx, cfy, cfz];
-
-    const f = this.uniformCache;
-
-    // 0..15: viewProj
     mat4MultiplyInto(this._cachedViewProj, pArr, vArr);
-    f.set(this._cachedViewProj, 0);
     this.lastViewProj.set(this._cachedViewProj);
-
-    // 16..19: right, 20..23: up, 24..27: cameraPos
-    f[16] = vArr[0]!; f[17] = vArr[4]!; f[18] = vArr[8]!; f[19] = 0;
-    f[20] = vArr[1]!; f[21] = vArr[5]!; f[22] = vArr[9]!; f[23] = 0;
-    f[24] = cpx; f[25] = cpy; f[26] = cpz; f[27] = 1;
-
-    // 28..31: scalars
-    f[28] = this.pointSize;
-    f[29] = 0;
-    f[30] = this.canvasWidth;
-    f[31] = this.canvasHeight;
-
-    // 32..35: sunDir
-    const sunLen = Math.hypot(this.sunDir[0], this.sunDir[1], this.sunDir[2]) || 1;
-    f[32] = this.sunDir[0] / sunLen;
-    f[33] = this.sunDir[1] / sunLen;
-    f[34] = this.sunDir[2] / sunLen;
-    f[35] = 0;
-
-    // 36..39: heightmap params
-    f[36] = this.hmOriginX; f[37] = this.hmOriginZ; f[38] = this.hmScaleX; f[39] = this.hmScaleZ;
-
-    // 40..43: density, altitude params, colour mode
-    f[40] = density; f[41] = this.centerAltitude; f[42] = this.maxAltitude; f[43] = COLOR_MODE_INDEX[this.colorMode];
-
-    // 44..48: snow params
-    f[44] = this.snowMode;
-    f[45] = this.snowOriginX; f[46] = this.snowOriginZ; f[47] = this.snowScaleX; f[48] = this.snowScaleZ;
-
-    // 49..52: slope and altitude state
-    f[49] = this.slopeEnabled; f[50] = this.slopeOpacity; f[51] = this.altitudeEnabled; f[52] = this.altitudeOpacity;
-
-    // 53..59: sunlight params
-    f[53] = this.sunlightEnabled;
-    f[54] = this.shadowEnabled;
-    f[55] = this.shadowOpacity;
-    f[56] = this.sunlightMapEnabled;
-    f[57] = this.sunlightMapOpacity;
-    f[58] = this.sunIntensity;
-    f[59] = this.exposure;
-
-    // 60..67: sun & sky colours
-    f[60] = this.sunColor[0]; f[61] = this.sunColor[1]; f[62] = this.sunColor[2]; f[63] = 1.0;
-    f[64] = this.skyColor[0]; f[65] = this.skyColor[1]; f[66] = this.skyColor[2]; f[67] = 1.0;
-
-    // 68..71: sun disc
-    if (this.sunDiscPos) {
-      f[68] = this.sunDiscPos[0]; f[69] = this.sunDiscPos[1]; f[70] = this.sunDiscPos[2]; f[71] = this.sunDiscRadius;
-    } else {
-      f[68] = 0; f[69] = 0; f[70] = 0; f[71] = 0;
-    }
-
-    // 72..75: point filter params, 76..79: bitmask (u32 words)
-    f[72] = this.pointFilterEnabled; f[73] = 0; f[74] = 0; f[75] = 0;
-    this.uniformCacheU32[76] = this.pointFilterMask[0] >>> 0;
-    this.uniformCacheU32[77] = this.pointFilterMask[1] >>> 0;
-    this.uniformCacheU32[78] = this.pointFilterMask[2] >>> 0;
-    this.uniformCacheU32[79] = this.pointFilterMask[3] >>> 0;
-
-    this.device.queue.writeBuffer(this.cameraBuffer, 0, f as Float32Array<ArrayBuffer>);
+    packSceneUniforms(this.uniformCache, this.uniformCacheU32, this._cachedViewProj, vArr, pos, {
+      pointSize: this.pointSize,
+      canvasWidth: this.canvasWidth,
+      canvasHeight: this.canvasHeight,
+      sunDir: this.sunDir,
+      hmOriginX: this.hmOriginX,
+      hmOriginZ: this.hmOriginZ,
+      hmScaleX: this.hmScaleX,
+      hmScaleZ: this.hmScaleZ,
+      density,
+      centerAltitude: this.centerAltitude,
+      maxAltitude: this.maxAltitude,
+      colorModeIndex: COLOR_MODE_INDEX[this.colorMode],
+      snowMode: this.snowMode,
+      snowOriginX: this.snowOriginX,
+      snowOriginZ: this.snowOriginZ,
+      snowScaleX: this.snowScaleX,
+      snowScaleZ: this.snowScaleZ,
+      slopeEnabled: this.slopeEnabled,
+      slopeOpacity: this.slopeOpacity,
+      altitudeEnabled: this.altitudeEnabled,
+      altitudeOpacity: this.altitudeOpacity,
+      sunlightEnabled: this.sunlightEnabled,
+      shadowEnabled: this.shadowEnabled,
+      shadowOpacity: this.shadowOpacity,
+      sunlightMapEnabled: this.sunlightMapEnabled,
+      sunlightMapOpacity: this.sunlightMapOpacity,
+      sunIntensity: this.sunIntensity,
+      exposure: this.exposure,
+      sunColor: this.sunColor,
+      skyColor: this.skyColor,
+      sunDiscPos: this.sunDiscPos,
+      sunDiscRadius: this.sunDiscRadius,
+      pointFilterEnabled: this.pointFilterEnabled,
+      pointFilterMask: this.pointFilterMask,
+    });
+    this.device.queue.writeBuffer(this.cameraBuffer, 0, this.uniformCache as Float32Array<ArrayBuffer>);
   }
 
   /** Per-frame sprite and EDL parameters for scene targets of `width`×`height` (`scale` of the canvas). */
@@ -825,7 +627,7 @@ export class LidarRenderer implements SceneNodeUploader {
     const p = this.pointParams;
     // Pixel sizes follow the target, so the upscaled image keeps the same point sizes.
     p[0] = POINT_MIN_PX;
-    p[1] = POINT_MAX_PX * scale;
+    p[1] = this.maxPointPixels * scale;
     p[2] = this.fixedPointPixels * scale;
     p[3] = Math.abs(this.lastProjScaleY) * height * 0.5;
     p[4] = width;
@@ -909,20 +711,12 @@ export class LidarRenderer implements SceneNodeUploader {
     this.lastDrawCallCount += this.nodePool.draw(pass, nodes);
 
     if (this.terrainMesh && this.terrainVisible) {
-      pass.setPipeline(this.pipelines.terrainPipeline);
-      pass.setVertexBuffer(0, this.terrainMesh.vertBuf);
-      pass.setVertexBuffer(1, this.terrainMesh.colBuf);
-      pass.setIndexBuffer(this.terrainMesh.idxBuf, 'uint32');
-      pass.drawIndexed(this.terrainMesh.count);
+      drawMesh(pass, this.pipelines.terrainPipeline, this.terrainMesh);
       this.lastDrawCallCount += 1;
     }
 
     if (this.previewMesh) {
-      pass.setPipeline(this.pipelines.previewPipeline);
-      pass.setVertexBuffer(0, this.previewMesh.vertBuf);
-      pass.setVertexBuffer(1, this.previewMesh.colBuf);
-      pass.setIndexBuffer(this.previewMesh.idxBuf, 'uint32');
-      pass.drawIndexed(this.previewMesh.count);
+      drawMesh(pass, this.pipelines.previewPipeline, this.previewMesh);
       this.lastDrawCallCount += 1;
     }
 
@@ -939,12 +733,17 @@ export class LidarRenderer implements SceneNodeUploader {
       this.lastDrawCallCount += 1;
     }
 
-    if (this.routeMesh && this.routeMesh.count > 0) {
+    if (this.analysisMesh && this.analysisMesh.count > 0) {
       pass.setPipeline(this.pipelines.routePipeline);
-      pass.setVertexBuffer(0, this.routeMesh.vertBuf);
-      pass.setVertexBuffer(1, this.routeMesh.colBuf);
-      pass.setIndexBuffer(this.routeMesh.idxBuf, 'uint32');
-      pass.drawIndexed(this.routeMesh.count);
+      pass.setVertexBuffer(0, this.analysisMesh.vertBuf);
+      pass.setVertexBuffer(1, this.analysisMesh.colBuf);
+      pass.setIndexBuffer(this.analysisMesh.idxBuf, 'uint32');
+      pass.drawIndexed(this.analysisMesh.count);
+      this.lastDrawCallCount += 1;
+    }
+
+    if (this.routeMesh && this.routeMesh.count > 0) {
+      drawMesh(pass, this.pipelines.routePipeline, this.routeMesh);
       this.lastDrawCallCount += 1;
     }
     pass.end();
@@ -978,10 +777,11 @@ export class LidarRenderer implements SceneNodeUploader {
   destroy(): void {
     this.gpuTimer?.destroy();
     this.gpuTimer = null;
-    LidarRenderer.destroyMesh(this.terrainMesh);
+    destroyMeshBuffers(this.terrainMesh);
     this.terrainMesh = null;
     this.clearPreviewMesh();
     this.clearRouteMesh();
+    this.clearAnalysisMesh();
     this.trajectoryBuffer?.destroy();
     this.trajectoryBuffer = null;
     this.nodePool?.destroy();
@@ -990,8 +790,8 @@ export class LidarRenderer implements SceneNodeUploader {
     this.cameraBuffer?.destroy();
     this.pointParamsBuffer?.destroy();
     this.edlParamsBuffer?.destroy();
-    this.destroySceneTargets(this.fullTargets);
-    this.destroySceneTargets(this.motionTargets);
+    destroySceneTargets(this.fullTargets);
+    destroySceneTargets(this.motionTargets);
     this.fullTargets = null;
     this.motionTargets = null;
     this.heightTexture?.destroy();

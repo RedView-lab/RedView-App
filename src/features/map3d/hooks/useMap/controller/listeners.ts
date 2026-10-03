@@ -20,7 +20,10 @@ export function attachListeners(ctx: Ctx): void {
   const fns = ctx.fns;
   const st = ctx.state;
   let styleDataTerrainRepairTimer: ReturnType<typeof setTimeout> | null = null;
-  let slopeStaleAwaitingMoveEnd = false;
+  // Derived overlay sources (slope, altitude) waiting for a reload: one timer
+  // reloads every source queued before it fires.
+  const pendingDerivedReloads = new Set<string>();
+  const staleSourcesAwaitingMoveEnd = new Set<string>();
 
   const repairManagedTerrain = (): boolean => {
     const managedSourceId = fns.getManagedTerrainSourceId();
@@ -210,10 +213,17 @@ export function attachListeners(ctx: Ctx): void {
       return;
     }
 
-    const scheduleDerivedCachesReload = (delayMs = 250) => {
+    // Slope by default. Altitude only on ALTITUDE_TILES_STALE: it re-reads
+    // the terrain DEM (Terrarium in fast-30m, SW passthrough in HD) and
+    // hypsometric bands gain nothing from a full pyramid reload on every DEM
+    // upgrade — only its provisional tiles need one.
+    const scheduleDerivedCachesReload = (delayMs = 250, sourceIds: readonly string[] = ['slope-tiles']) => {
+      for (const id of sourceIds) pendingDerivedReloads.add(id);
       if (st.derivedReloadTimer) clearTimeout(st.derivedReloadTimer);
       st.derivedReloadTimer = setTimeout(() => {
         st.derivedReloadTimer = null;
+        const ids = [...pendingDerivedReloads];
+        pendingDerivedReloads.clear();
         try {
           const sourceCaches = (map.style as unknown as {
             _sourceCaches?: Record<string, { reload?: () => void }>;
@@ -221,14 +231,8 @@ export function attachListeners(ctx: Ctx): void {
           });
           const caches = sourceCaches?._sourceCaches ?? sourceCaches?.sourceCaches;
           if (!caches) return;
-          // Altitude is deliberately absent: it re-reads the terrain DEM
-          // (Terrarium in fast-30m, SW passthrough in HD) and hypsometric
-          // bands gain nothing from a full pyramid reload on DEM upgrades.
-          const isDerivedSourceCache = (key: string): boolean => (
-            key === 'slope-tiles' || key.endsWith(':slope-tiles')
-          );
           for (const key of Object.keys(caches)) {
-            if (isDerivedSourceCache(key)) {
+            if (ids.some((id) => key === id || key.endsWith(`:${id}`))) {
               try { caches[key].reload?.(); } catch { /* noop */ }
             }
           }
@@ -242,25 +246,30 @@ export function attachListeners(ctx: Ctx): void {
       return;
     }
 
-    // The SW answered some slope tiles with a placeholder or a provisional
-    // build (work cancelled by a pan/zoom gesture, DEM not built yet, missing
-    // neighbours). Mapbox keeps any 200 image as final, so those tiles stayed
-    // empty until they left the viewport. Reload the slope source once the
-    // gesture is over — a reload during it would be cancelled again by the
-    // next movestart. Complete tiles come back from the SW hot tier.
-    if (event.data?.type === 'SLOPE_TILES_STALE') {
+    // The SW answered some slope / altitude tiles with a placeholder or a
+    // provisional build (work cancelled by a pan/zoom gesture, DEM not built
+    // yet, missing neighbours). Mapbox keeps any 200 image as final, so those
+    // tiles stayed empty until they left the viewport. Reload that source
+    // once the gesture is over — a reload during it would be cancelled again
+    // by the next movestart. Complete tiles come back from the SW hot tier.
+    const staleSourceId = event.data?.type === 'SLOPE_TILES_STALE'
+      ? 'slope-tiles'
+      : event.data?.type === 'ALTITUDE_TILES_STALE'
+        ? 'altitude-tiles'
+        : null;
+    if (staleSourceId) {
       const reloadWhenSettled = (): void => {
         if (isCancelled()) return;
         if (map.isMoving()) {
-          if (slopeStaleAwaitingMoveEnd) return;
-          slopeStaleAwaitingMoveEnd = true;
+          if (staleSourcesAwaitingMoveEnd.has(staleSourceId)) return;
+          staleSourcesAwaitingMoveEnd.add(staleSourceId);
           map.once('moveend', () => {
-            slopeStaleAwaitingMoveEnd = false;
+            staleSourcesAwaitingMoveEnd.delete(staleSourceId);
             reloadWhenSettled();
           });
           return;
         }
-        scheduleDerivedCachesReload(400);
+        scheduleDerivedCachesReload(400, [staleSourceId]);
       };
       reloadWhenSettled();
       return;

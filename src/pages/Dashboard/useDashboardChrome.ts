@@ -9,6 +9,7 @@ import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import { hasProjectTracedContent } from '@/features/itineraryPanel/lib/project';
 import { DEFAULT_VIEW } from '@/features/map3d/lib/mapbox.config';
 import type { MapViewport } from '@/features/map3d/lib/viewport-persist';
+import { readAppScaleViewport, watchAppScaleViewport } from '@/shared/lib/appScale';
 import {
   CENTER_PANEL_HEIGHT_KEY,
   LEFT_PANEL_WIDTH_KEY,
@@ -86,10 +87,7 @@ export function useDashboardChrome({
     () => readStoredCenterPanelHeight(),
   );
   const [exporterPanelHeight, setExporterPanelHeight] = useState(0);
-  const [viewport, setViewport] = useState(() => ({
-    w: window.innerWidth,
-    h: window.innerHeight,
-  }));
+  const [viewport, setViewport] = useState(readAppScaleViewport);
 
   // ── Per-project chrome reset, applied DURING RENDER ────────────────────
   // Everything below is derived from the active project. Doing this in an
@@ -144,14 +142,7 @@ export function useDashboardChrome({
   const lastExpandedCenterPanelHeightRef = useRef<number | null>(null);
   const panelMinWidth = PANEL_WIDTH_MIN_FALLBACK;
 
-  useEffect(() => {
-    const onResize = () => {
-      setViewport({ w: window.innerWidth, h: window.innerHeight });
-    };
-
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
+  useEffect(() => watchAppScaleViewport(() => setViewport(readAppScaleViewport())), []);
 
   useEffect(() => {
     if (isRightPanelCollapsed) return;

@@ -1,0 +1,85 @@
+/* Toasts and the drag preview. */
+
+.rvpb-toast {
+  position: fixed;
+  right: 28px;
+  bottom: 28px;
+  z-index: 88;
+  min-width: 240px;
+  max-width: 360px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(20, 20, 20, 0.94);
+  color: #fff;
+  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(18px);
+  font-size: var(--rv-font-size-lg);
+  font-weight: 500;
+}
+
+.rvpb-toast--success {
+  box-shadow:
+    0 18px 32px rgba(0, 0, 0, 0.34),
+    0 0 0 1px rgba(112, 196, 140, 0.18);
+}
+
+.rvpb-toast--error {
+  box-shadow:
+    0 18px 32px rgba(0, 0, 0, 0.34),
+    0 0 0 1px rgba(196, 112, 112, 0.22);
+}
+
+.rvpb-toast--info {
+  box-shadow:
+    0 18px 32px rgba(0, 0, 0, 0.34),
+    0 0 0 1px rgba(124, 160, 220, 0.2);
+}
+
+.rvpb-drag-preview {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 89;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  width: 124px;
+  padding: 8px 6px 10px;
+  border-radius: 8px;
+  background: #3a3a3a;
+  pointer-events: none;
+  /* Le curseur reste à l'angle haut-gauche de la vignette (elle s'étend vers le bas-droite). */
+  translate: 6px 4px;
+}
+
+.rvpb-drag-preview__tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  background: #4a4a4a;
+  color: #fff;
+}
+
+.rvpb-drag-preview__label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #fff;
+  font-size: var(--rv-font-size-xs);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.rvpb-drag-preview__eyebrow {
+  color: rgba(255, 255, 255, 0.52);
+  font-size: var(--rv-font-size-xs);
+  font-weight: 700;
+  letter-spacing: var(--rv-letter-spacing-wide);
+  line-height: 1;
+  text-transform: uppercase;
+}

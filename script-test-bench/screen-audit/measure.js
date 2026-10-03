@@ -94,5 +94,21 @@
       w: +analysisBar.getBoundingClientRect().width.toFixed(1),
     };
   }
-  return { vw, vh, appScale: scaleVar, canvasStyle, texts, targets, regions, docOverflow, analysisToolbar };
+  // Map search bar + filter chips (DashboardPlaceSearch): one row, nothing clipped.
+  const searchRow = document.querySelector('.rvd-place-search__row');
+  let placeSearch = null;
+  if (searchRow && searchRow.checkVisibility?.({ opacityProperty: true })) {
+    const items = [...searchRow.querySelectorAll(':scope > *, .rvd-place-search__filter')]
+      .map((el) => el.getBoundingClientRect())
+      .filter((r) => r.width > 0 || r.height > 0);
+    const firstRowBottom = Math.min(...items.map((r) => r.bottom));
+    const host = searchRow.closest('.rvd-place-search');
+    placeSearch = {
+      wraps: items.some((r) => r.top >= firstRowBottom - 0.5),
+      overflows: searchRow.scrollWidth > searchRow.clientWidth + 1,
+      density: host?.className.replace('rvd-place-search', '').trim() ?? '',
+      w: +searchRow.getBoundingClientRect().width.toFixed(1),
+    };
+  }
+  return { vw, vh, appScale: scaleVar, canvasStyle, texts, targets, regions, docOverflow, analysisToolbar, placeSearch };
 })()

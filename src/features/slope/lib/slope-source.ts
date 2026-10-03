@@ -1,4 +1,5 @@
 import { TERRAIN_ALIGNED_RASTER_TILE_SIZE } from '@/features/map3d/lib/sources';
+import { mapboxRasterColorMix } from '@/features/map3d/lib/rasterColorMix';
 import type { SlopeColorMode, SlopeCategory, SlopeDemProfile } from '../types';
 import { buildSlopeColorExpression, MAX_SLOPE_DEG } from './slope-config';
 
@@ -137,12 +138,9 @@ export function buildSlopeTileSource(options: SlopeTileSourceOptions = DEFAULT_S
 // ABOVE the orthophoto. With slot: 'middle' the ortho tiles fully occlude
 // the slope raster inside France and the user sees nothing.
 
-const SLOPE_DECODE_MIX: [number, number, number, number] = [
-  MAX_SLOPE_DEG,
-  0,
-  0,
-  0,
-];
+// Mapbox's −0.29 % RGB scaling compensated (rasterColorMix.ts) so band
+// breakpoints fall on the exact degree.
+const SLOPE_DECODE_MIX = mapboxRasterColorMix([MAX_SLOPE_DEG, 0, 0, 0]);
 const SLOPE_DECODE_RANGE: [number, number] = [0, MAX_SLOPE_DEG];
 
 export function buildSlopeLayer(

@@ -75,8 +75,7 @@ export class RouteHandleCache {
   project(canvas: HTMLCanvasElement, camera: CameraController): void {
     const width = canvas.clientWidth || window.innerWidth;
     const height = canvas.clientHeight || window.innerHeight;
-    const { theta, phi, radius, targetX, targetY, targetZ } = camera.getPose();
-    const key = [theta, phi, radius, targetX, targetY, targetZ, width, height];
+    const key = [...camera.getViewKey(), width, height];
     if (key.every((value, i) => value === this.poseKey[i])) return;
     this.poseKey = key;
     const viewMat = camera.getViewMatrix();

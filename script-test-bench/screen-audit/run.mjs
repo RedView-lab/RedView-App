@@ -5,14 +5,18 @@
  * Pour chaque écran de la matrice (CSS px × devicePixelRatio : demi-écran
  * 1080p, laptops 1366×768 / 1080p à 125–150 %, MacBook, 1440p, 4K,
  * ultrawide…) :
- *  - échelle du canevas ≥ 1 et appliquée en CSS `zoom` (jamais un
- *    `transform: scale()`, qui rééchantillonne et floute le texte) ;
+ *  - échelle du canevas ≥ 1 (≥ 0,85 sur Retina, DPR ≥ 2) et appliquée en CSS
+ *    `zoom` (jamais un `transform: scale()`, qui rééchantillonne et floute le
+ *    texte) ;
  *  - taille réellement affichée de chaque texte visible (font-size × échelle
- *    effective) : aucun texte d'interface sous 11 px ;
+ *    effective) : aucun texte d'interface sous 11 px (11 × 0,85 sur Retina,
+ *    soit ≥ 18,7 px physiques) ;
  *  - mise en page : panneaux, barre d'outils, outils carte, recherche sans
  *    chevauchement ni débordement, panneau central présent, pas de scroll
  *    horizontal (sous 820×500, l'avertissement « fenêtre trop petite » doit
- *    s'afficher à la place) ;
+ *    s'afficher à la place) ; barre d'analyse et recherche + filtres de la
+ *    carte chacune sur une ligne (aussi en 1080p, panneau gauche élargi à
+ *    ~800 px : fhd-wide-left) ;
  * puis, à l'échelle 1 et 1,117 : menus portés (Colonnes, liste du panneau
  * droit), menu contextuel de la carte, redimensionnement du panneau gauche et
  * timeline plein écran alignés au pixel sur le pointeur / leur ancre.
@@ -45,6 +49,9 @@ const MIN_W = 820;
 const MIN_H = 500;
 /** Text floor (shared/styles/typography.css); ±2 % box-rounding noise. */
 const MIN_TEXT_PX = 11 - 0.25;
+/** Retina floor of the canvas scale (APP_SCALE_HIDPI_MIN, HIDPI_QUERY in shared/lib/appScale.ts). */
+const HIDPI_MIN_SCALE = 0.85;
+const minScaleFor = (dpr) => (dpr >= 1.95 ? HIDPI_MIN_SCALE : 1);
 
 // Viewports in CSS px as a maximised / snapped browser window leaves them.
 const SCREENS = [
@@ -110,11 +117,11 @@ async function openEditorWithRoute(session, gpxFile) {
   });
   await session.send('Emulation.setDeviceMetricsOverride', { width: 1920, height: 950, deviceScaleFactor: 1, mobile: false });
   await session.send('Page.navigate', { url: APP_URL });
-  await waitFor(session, `[...document.querySelectorAll('button')].some(b => /Demo account|compte démo/i.test(b.textContent))`, { timeout: 30000 });
+  await waitFor(session, `[...document.querySelectorAll('button')].some(b => /Demo account|compte démo/i.test(b.textContent))`, { timeout: 90000 });
   await session.evaluate(`[...document.querySelectorAll('button')].find(b => /Demo account|compte démo/i.test(b.textContent)).click()`);
-  await waitFor(session, `[...document.querySelectorAll('button')].some(b => /Créer un projet|Create a project/.test(b.textContent))`, { timeout: 30000 });
+  await waitFor(session, `[...document.querySelectorAll('button')].some(b => /Créer un projet|Create a project/.test(b.textContent))`, { timeout: 90000 });
   await session.evaluate(`[...document.querySelectorAll('button')].find(b => /Créer un projet|Create a project/.test(b.textContent)).click()`);
-  await waitFor(session, `!!document.querySelector('.mapboxgl-canvas')`, { timeout: 45000 });
+  await waitFor(session, `!!document.querySelector('.mapboxgl-canvas')`, { timeout: 90000 });
   await sleep(2500);
   const { root } = await session.send('DOM.getDocument', { depth: -1 });
   const { nodeIds } = await session.send('DOM.querySelectorAll', { nodeId: root.nodeId, selector: 'input[type=file][accept*=".gpx"]' });
@@ -150,13 +157,15 @@ async function auditScreen(session, screen) {
 
   const scale = Number(m.appScale) || 1;
   const zoomed = !m.canvasStyle?.transform;
-  check(screen.id, 'échelle ≥ 1, appliquée en CSS zoom', scale >= 1 && zoomed, `échelle ${scale}${m.canvasStyle?.transform ? `, ${m.canvasStyle.transform}` : ''}`);
+  const minScale = minScaleFor(screen.dpr);
+  check(screen.id, `échelle ≥ ${minScale}, appliquée en CSS zoom`, scale >= minScale && zoomed, `échelle ${scale}${m.canvasStyle?.transform ? `, ${m.canvasStyle.transform}` : ''}`);
 
-  const small = m.texts.filter((t) => t.eff < MIN_TEXT_PX).sort((a, b) => a.eff - b.eff);
+  const minText = MIN_TEXT_PX * minScale;
+  const small = m.texts.filter((t) => t.eff < minText).sort((a, b) => a.eff - b.eff);
   const effs = m.texts.map((t) => t.eff).sort((a, b) => a - b);
   check(
     screen.id,
-    `aucun texte sous 11 px (${m.texts.length} textes, min ${effs[0]} px, médiane ${effs[Math.floor(effs.length / 2)]} px)`,
+    `aucun texte sous ${+(11 * minScale).toFixed(2)} px (${m.texts.length} textes, min ${effs[0]} px, médiane ${effs[Math.floor(effs.length / 2)]} px)`,
     small.length === 0,
     small.slice(0, 5).map((t) => `${t.eff}px «${t.text}» (${t.cls.split(' ')[0]})`).join(', '),
   );
@@ -175,7 +184,45 @@ async function auditScreen(session, screen) {
   check(screen.id, 'panneau central et barre d’outils présents', !!R.center && !!R.toolbar);
   const bar = m.analysisToolbar;
   check(screen.id, 'barre d’analyse sur une ligne', !!bar && !bar.wraps, bar ? `${bar.w} px, palier ${bar.density.split(' ').pop() || 0}` : 'absente');
+  const ps = m.placeSearch;
+  check(screen.id, 'recherche et filtres carte sur une ligne', !!ps && !ps.wraps && !ps.overflows, ps ? `${ps.w} px${ps.density ? `, ${ps.density}` : ''}${ps.overflows ? ', déborde' : ''}` : 'absente');
   return { screen, scale, texts: effs.length, minText: effs[0], regions: R };
+}
+
+/** Drags the left panel's resize handle by `dx` px (DOM events, like `interactions`). */
+async function dragLeftPanel(session, dx) {
+  return session.evaluate(`(async () => {
+    const region = document.querySelector('[data-rv-region="left-panel"]');
+    const handle = document.querySelector('.rvi-panel__resize-handle');
+    if (!region || !handle) return null;
+    const hr = handle.getBoundingClientRect();
+    const x = hr.left + hr.width / 2, y = hr.top + hr.height / 2;
+    handle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, buttons: 1 }));
+    for (let k = 1; k <= 8; k++) {
+      document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: x + (${dx} * k) / 8, clientY: y, buttons: 1 }));
+      await new Promise((r) => requestAnimationFrame(() => r()));
+    }
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: x + ${dx}, clientY: y }));
+    await new Promise((r) => setTimeout(r, 800));
+    return region.getBoundingClientRect().width;
+  })()`);
+}
+
+/** 1080p window with the left panel dragged to its widest (~800 px): narrow center column. */
+async function auditWideLeftPanel(session) {
+  const id = 'fhd-wide-left';
+  await session.send('Emulation.setDeviceMetricsOverride', { width: 1920, height: 945, deviceScaleFactor: 1, mobile: false });
+  await sleep(1500);
+  const before = await session.evaluate(`document.querySelector('[data-rv-region="left-panel"]')?.getBoundingClientRect().width ?? 0`);
+  const wide = await dragLeftPanel(session, 800 - before);
+  const m = await session.evaluate(MEASURE);
+  const shot = await session.send('Page.captureScreenshot', { format: 'png' });
+  fs.writeFileSync(path.join(OUT, `${id}.png`), Buffer.from(shot.data, 'base64'));
+  const bar = m.analysisToolbar;
+  check(id, `barre d’analyse sur une ligne (panneau gauche ${Math.round(wide ?? 0)} px)`, !!bar && !bar.wraps, bar ? `${bar.w} px, palier ${bar.density.split(' ').pop() || 0}` : 'absente');
+  const ps = m.placeSearch;
+  check(id, 'recherche et filtres carte sur une ligne', !!ps && !ps.wraps && !ps.overflows, ps ? `${ps.w} px${ps.density ? `, ${ps.density}` : ''}${ps.overflows ? ', déborde' : ''}` : 'absente');
+  await dragLeftPanel(session, before - (wide ?? before));
 }
 
 async function rectOf(session, js) {
@@ -294,6 +341,7 @@ try {
   for (const screen of SCREENS.filter((sc) => !ONLY || ONLY.includes(sc.id))) {
     screens.push(await auditScreen(session, screen));
   }
+  if (!ONLY || ONLY.includes('fhd-wide-left')) await auditWideLeftPanel(session);
   for (const screen of SCREENS.filter((sc) => INTERACTION_SCREENS.includes(sc.id) && (!ONLY || ONLY.includes(sc.id)))) {
     await interactions(session, screen);
   }

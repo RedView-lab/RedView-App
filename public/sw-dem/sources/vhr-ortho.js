@@ -22,7 +22,7 @@
 //   - the coverage renders at every scale (64 px of a z14 tile = one pixel
 //     per z20 tile), which is what the coverage masks below rely on.
 // The WMS quota (40 req/s per IP, shared with the LiDAR slope pipeline) is
-// enforced by fetchIgnWithRetry (ign-fetcher.js).
+// enforced by fetchIgnWithRetry (ign-network.js).
 // ---------------------------------------------------------------------------
 
 const VHR_CACHE_NAME = `vhr-tiles-v1-${MAP_CACHE_EPOCH}`;

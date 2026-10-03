@@ -29,7 +29,7 @@ import {
 } from '../src/features/itineraryPanel/lib/schedule/container-prediction.ts';
 import { applyPoiAutoSort, computePoiAutoSort } from '../src/features/itineraryPanel/lib/schedule/poiAutoSort.ts';
 import { FEATURE_TO_PANEL_POI, poiFeaturesToTimelineItems } from '../src/features/itineraryPanel/lib/schedule/poi-to-timeline.ts';
-import type { Itinerary, PoiCategory as PanelPoiCategory } from '../src/features/itineraryPanel/types.ts';
+import type { Itinerary, PoiCategory as PanelPoiCategory } from '../src/features/itineraryPanel/types/index.ts';
 
 // ── Arguments ─────────────────────────────────────────────────────────
 const args = process.argv.slice(2);

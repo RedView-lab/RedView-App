@@ -19,10 +19,15 @@
   margin: 0;
 }
 
-/* Wraps rather than squeezes: a chip never clips its icon or label. */
+/*
+ * Always one row: the search field and the filter labels shrink together
+ * (ellipsis, "Favo…"), then the chips tighten (--tight); only a map stage too
+ * narrow even for that drops the labels (--icons). Widths:
+ * PLACE_SEARCH_*_WIDTH (DashboardPlaceSearch.constants.ts).
+ */
 .rvd-place-search__row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 4px;
   width: 100%;
@@ -35,7 +40,7 @@
   display: flex;
   align-items: center;
   flex: 0 1 180px;
-  min-width: 140px;
+  min-width: 96px;
   width: 180px;
   height: 32px;
   min-height: 32px;
@@ -91,6 +96,7 @@
   line-height: 24px;
   -webkit-font-smoothing: antialiased;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  text-overflow: ellipsis;
 }
 
 .rvd-place-search__field .rvi-place-search__input:hover,
@@ -109,26 +115,94 @@
 
 .rvd-place-search__filters {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 4px;
   min-width: 0;
   flex: 0 1 auto;
 }
 
+/*
+ * Labelled chips shrink (label ellipsis) rather than leave the row, down to a
+ * 22 px label stub. Explicit minimum: the clipping shells (overflow: hidden)
+ * have no automatic one. Padding 8 + 12, checkbox 16, gaps 2 × 6, marker 30,
+ * label 22 (+ gap 6 + chevron 15 on the chips with a menu).
+ */
 .rvd-place-search__filter {
   position: relative;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 100px;
+}
+
+.rvd-place-search__filter--menu {
+  min-width: 121px;
+}
+
+/* Narrow map stage (PLACE_SEARCH_TIGHT_WIDTH): smaller markers, tighter chips,
+   shorter label stubs; the search field may shrink down to its magnifier. */
+.rvd-place-search--tight .rvd-place-search__search-shell {
+  min-width: 32px;
+}
+
+.rvd-place-search--tight .rvd-place-search__filter-label {
+  min-width: 16px;
+}
+
+/* Padding 6 + 5, checkbox 14, gaps 2 × 3, marker 24, label 16 (+ 3 + 13). */
+.rvd-place-search--tight .rvd-place-search__filter {
+  min-width: 71px;
+}
+
+.rvd-place-search--tight .rvd-place-search__filter--menu {
+  min-width: 87px;
+}
+
+.rvd-place-search--tight .rvd-place-search__row,
+.rvd-place-search--tight .rvd-place-search__filters {
+  gap: 3px;
+}
+
+.rvd-place-search--tight .rvd-place-search__filter-shell {
+  gap: 3px;
+  padding: 0 5px 0 6px;
+}
+
+.rvd-place-search--tight .rvd-place-search__filter-toggle {
+  gap: 3px;
+}
+
+.rvd-place-search--tight .rvd-place-search__filter-checkbox {
+  flex-basis: 14px;
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  min-height: 14px;
+}
+
+.rvd-place-search--tight .rvd-place-search__filter-marker,
+.rvd-place-search--tight .rvd-place-search__filter-marker-image {
+  flex-basis: 24px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+}
+
+.rvd-place-search--tight .rvd-place-search__filter-chevron {
+  flex-basis: 13px;
+  width: 13px;
+  min-width: 13px;
+}
+
+/* Last resort (PLACE_SEARCH_ICONS_WIDTH): icon-only chips, label in the tooltip. */
+.rvd-place-search--icons .rvd-place-search__filters,
+.rvd-place-search--icons .rvd-place-search__filter {
+  flex-shrink: 0;
   min-width: 0;
 }
 
-/* Narrow map stage (PLACE_SEARCH_FULL_WIDTH): icon-only filters, label in the tooltip. */
-.rvd-place-search--compact .rvd-place-search__filter-label {
+.rvd-place-search--icons .rvd-place-search__filter-label {
   display: none;
-}
-
-.rvd-place-search--compact .rvd-place-search__filter-shell {
-  padding-right: 8px;
 }
 
 .rvd-place-search__filter-shell {
@@ -234,7 +308,8 @@
 .rvd-place-search__filter-label {
   position: relative;
   z-index: 2;
-  min-width: 0;
+  /* Always a stub left ("Fa…"), never an empty ellipsis. */
+  min-width: 22px;
   flex: 0 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;

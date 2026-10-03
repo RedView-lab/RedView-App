@@ -48,7 +48,7 @@ import {
   MAX_PROJECT_SIZE_BYTES,
   utf8ByteLength,
 } from '../../src/shared/utils/projects/limits.ts';
-import type { Itinerary, ItineraryProject, TimelineItem } from '../../src/features/itineraryPanel/types.ts';
+import type { Itinerary, ItineraryProject, TimelineItem } from '../../src/features/itineraryPanel/types/index.ts';
 import type { PoiCategory, PoiFeature } from '../../src/features/poi/types.ts';
 import type { PredictionResult } from '../../src/features/fitPredictor/types.ts';
 
