@@ -32,12 +32,15 @@ export function usePoiDraftCardPosition({
   const syncCardPosition = useCallback(() => {
     if (!cardRef.current || !containerRef.current) return;
 
-    const cardRect = cardRef.current.getBoundingClientRect();
-    const containerRect = containerRef.current.getBoundingClientRect();
-    const fallbackPoint = {
-      x: draft.screenPoint.x - containerRect.left,
-      y: draft.screenPoint.y - containerRect.top,
-    };
+    // Layout px of the map container, like `map.project()`, the insets and the
+    // card's own left/top (the dashboard canvas may be CSS-zoomed:
+    // getBoundingClientRect() would give on-screen px).
+    const cardWidth = cardRef.current.offsetWidth;
+    const cardHeight = cardRef.current.offsetHeight;
+    const containerWidth = containerRef.current.clientWidth;
+    const containerHeight = containerRef.current.clientHeight;
+    // `screenPoint` is the click's `event.point`: already map-container px.
+    const fallbackPoint = draft.screenPoint;
     const projectedPoint = map
       ? map.project([draft.point.lng, draft.point.lat])
       : fallbackPoint;
@@ -47,27 +50,25 @@ export function usePoiDraftCardPosition({
     if (
       !isFiniteCoordinate(anchorX)
       || !isFiniteCoordinate(anchorY)
-      || !isFiniteCoordinate(cardRect.width)
-      || !isFiniteCoordinate(cardRect.height)
-      || !isFiniteCoordinate(containerRect.width)
-      || !isFiniteCoordinate(containerRect.height)
+      || !(containerWidth > 0)
+      || !(containerHeight > 0)
     ) {
       return;
     }
 
     const area = resolvePanelArea(
-      containerRect.width,
-      containerRect.height,
-      cardRect.width,
-      cardRect.height,
+      containerWidth,
+      containerHeight,
+      cardWidth,
+      cardHeight,
       EDGE_PADDING,
       overlayInsets,
     );
     const areaPosition = computePanelPosition(
       anchorX - area.left,
       anchorY - area.top,
-      cardRect.width,
-      cardRect.height,
+      cardWidth,
+      cardHeight,
       area.width,
       area.height,
       EDGE_PADDING,

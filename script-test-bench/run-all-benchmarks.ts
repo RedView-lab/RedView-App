@@ -32,6 +32,7 @@ import { runPoiBenchmark } from './bench-poi.ts';
 import { runExporterBenchmark } from './bench-exporter.ts';
 import { runCenterPanelBenchmark } from './bench-center-panel.ts';
 import { runServerApiBenchmark } from './bench-server-api.ts';
+import { runFlyoverBenchmark } from './bench-flyover.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -81,6 +82,7 @@ const REGISTRY: FeatureRunner[] = [
   { id: 'exporter', name: 'Exporter (GPX, GeoJSON, XML)', run: runExporterBenchmark },
   { id: 'chart', name: 'Center Panel & Graphiques Multi-Axes', run: runCenterPanelBenchmark },
   { id: 'server', name: 'Serveur Node & Infrastructure API', run: runServerApiBenchmark },
+  { id: 'flyover', name: 'Flyover 3D (rail caméra & transport)', run: runFlyoverBenchmark },
 ];
 
 async function main(): Promise<void> {

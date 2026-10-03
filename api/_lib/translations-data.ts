@@ -6621,10 +6621,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Measurement cancelled: not enough points"
   },
   {
-    "fr": "Terrain plat : pas de ligne de pente",
-    "en": "Flat ground: no fall line"
-  },
-  {
     "fr": "{{distance}} au sol",
     "en": "{{distance}} on the ground"
   },
@@ -6661,28 +6657,16 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Max slope {{angle}} (over 10 m)"
   },
   {
-    "fr": "angle moyen {{angle}}",
-    "en": "mean angle {{angle}}"
+    "fr": "Calcul de la ligne de pente…",
+    "en": "Computing the fall line…"
   },
   {
-    "fr": "Barre rocheuse de {{height}}",
-    "en": "Rock step of {{height}}"
+    "fr": "Pente trop faible : rien ne glisse ici",
+    "en": "Slope too gentle: nothing slides here"
   },
   {
-    "fr": "Arrêt sur un replat",
-    "en": "Stops on a flat"
-  },
-  {
-    "fr": "Arrêt dans un creux (piège)",
-    "en": "Stops in a hollow (terrain trap)"
-  },
-  {
-    "fr": "Sort de la zone chargée",
-    "en": "Leaves the loaded area"
-  },
-  {
-    "fr": "Limite de 4 km atteinte",
-    "en": "4 km limit reached"
+    "fr": "Ligne de pente calculée",
+    "en": "Fall line computed"
   },
   {
     "fr": "Hors de portée estimée",

@@ -15,6 +15,8 @@ export type {
   RouteSlopeBand,
 } from './routeStyle';
 
+export { getRouteElevationContext } from './routeElevation';
+
 export {
   hasRouteLayer,
   isAnyRouteOnMap,
@@ -36,7 +38,9 @@ export {
   clearRouteHoverPreview,
   fitToRoute,
   type FitToRouteOptions,
+  isAnalysisFlyoverRouteMounted,
   setAnalysisFlyoverProgress,
+  setAnalysisFlyoverRoute,
   setAnalysisHoverPoint,
   setAnalysisSelectedSegment,
   setForbiddenZoneDraft,

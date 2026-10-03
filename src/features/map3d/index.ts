@@ -59,3 +59,6 @@ export {
 	isMapCursorManaged,
 	setMapCursor,
 } from './lib/mapCursor';
+export { getCameraOwner, setCameraOwner, subscribeCameraOwner } from './lib/cameraOwnership';
+export type { CameraOwner } from './lib/cameraOwnership';
+export { suspendMapInteractions } from './lib/mapInteractions';

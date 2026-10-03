@@ -21,7 +21,7 @@ import { projectToScreen } from '../route/terrainRaycaster';
 import type { ViewerRouteSceneParams } from '../route/types';
 import type { ViewerRouteController } from '../route/viewerRouteController';
 import { readLookAround, resolveLookAroundStart } from './lookAround/lookAround';
-import { createMeasurement, MIN_VERTICES } from './measurements/compute';
+import { createMeasurement, MIN_VERTICES, nextMeasurementId } from './measurements/compute';
 import { draftLayer, measurementLayer, measurementMesh } from './measurements/layers';
 import type { Measurement } from './measurements/types';
 import { mergeMeshes, type OverlayMeshData } from './overlay/cellMesh';
@@ -29,6 +29,8 @@ import { ToolsOverlay, type OverlayLayer, type Projector } from './overlay/tools
 import { PointCloudPicker } from './picking/pointCloudPicker';
 import { ScenePicker } from './picking/scenePicker';
 import { toolForKey } from './shortcuts';
+import { FallCoverBuilder, type CoverBounds, type FallCover } from './terrain/fallCover';
+import { computeFallLine, displayedFallScenario, fallLineBounds } from './terrain/fallLine';
 import { TerrainField } from './terrain/terrainField';
 import { isDrawingTool, type ScenePick, type ToolId, type Vec3 } from './types';
 import { ToolsUiStore, type ContextMenuAction, type LookAroundModel, type ToolsUiActions } from './ui/toolsUiStore';
@@ -74,6 +76,8 @@ const LOOK_KEYS: Readonly<Record<string, [number, number]>> = {
 
 /** One analysis of each of these kinds is shown at a time (overlapping zones would mix). */
 const SINGLE_INSTANCE_KINDS = new Set<Measurement['kind']>(['avalanche', 'viewshed', 'profile']);
+/** Ground cover is read this far around the nominal fall lines (the fan spreads), m. */
+const FALL_COVER_MARGIN_M = 60;
 
 interface PointerPress {
   button: number;
@@ -87,6 +91,7 @@ export class ViewerToolsController {
   private readonly opts: ViewerToolsOptions;
   private readonly field: TerrainField;
   private readonly picker: ScenePicker;
+  private readonly pointPicker: PointCloudPicker;
   private readonly overlay: ToolsOverlay;
   private readonly store = new ToolsUiStore();
   private readonly unmountUi: () => void;
@@ -101,6 +106,7 @@ export class ViewerToolsController {
   private hover: ScenePick | null = null;
   private profileMarker: Vec3 | null = null;
   private press: PointerPress | null = null;
+  private destroyed = false;
   /** Bumped by every new press: a pick still running for an older one is dropped. */
   private pickToken = 0;
   private hoverFrame: number | null = null;
@@ -120,11 +126,12 @@ export class ViewerToolsController {
   private constructor(opts: ViewerToolsOptions, field: TerrainField) {
     this.opts = opts;
     this.field = field;
+    this.pointPicker = new PointCloudPicker(opts.tiles, opts.getDrawnNodes, opts.isClassVisible);
     this.picker = new ScenePicker({
       canvas: opts.canvas,
       camera: opts.camera,
       field,
-      pointPicker: new PointCloudPicker(opts.tiles, opts.getDrawnNodes, opts.isClassVisible),
+      pointPicker: this.pointPicker,
       getPointSize: opts.getPointSize,
     });
     this.overlay = new ToolsOverlay(opts.container, opts.canvas);
@@ -155,6 +162,7 @@ export class ViewerToolsController {
   }
 
   destroy(): void {
+    this.destroyed = true;
     const { canvas } = this.opts;
     canvas.removeEventListener('pointerdown', this.onPointerDown);
     canvas.removeEventListener('dblclick', this.onDoubleClick);
@@ -298,15 +306,69 @@ export class ViewerToolsController {
 
   private runPointTool(tool: ToolId, pick: ScenePick): void {
     this.cancelTool();
+    if (tool === 'fallLine') {
+      void this.runFallLine(pick);
+      return;
+    }
     const measurement = createMeasurement(tool, [pick], this.field);
     if (!measurement) {
       this.notify(t('Hors de la zone chargée'));
       return;
     }
     this.addMeasurement(measurement);
-    if (measurement.kind === 'fallLine' && measurement.result.dropM < 1) {
-      this.notify(t('Terrain plat : pas de ligne de pente'));
+  }
+
+  /**
+   * Fall line: nominal trajectories first (they bound the ground cover read
+   * from the point cloud), then the whole fan over that cover.
+   */
+  private async runFallLine(pick: ScenePick): Promise<void> {
+    const field = this.field;
+    const stale = () => this.destroyed;
+    const yieldToPage = () => new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+    this.notify(t('Calcul de la ligne de pente…'));
+    const preview = await computeFallLine(field, pick.projX, pick.projY, { runs: 1 });
+    if (stale()) return;
+    if (!preview) {
+      this.notify(t('Hors de la zone chargée'));
+      return;
     }
+    const cover = await this.readFallCover(fallLineBounds(preview, FALL_COVER_MARGIN_M));
+    if (stale()) return;
+    const result = await computeFallLine(field, pick.projX, pick.projY, { cover, yieldToPage });
+    if (stale() || !result) return;
+    this.addMeasurement({ id: nextMeasurementId(), kind: 'fallLine', origin: pick, result, scenario: displayedFallScenario(result) });
+    this.notify(result.scenarios.every((s) => s.end === 'noSlide')
+      ? t('Pente trop faible : rien ne glisse ici')
+      : t('Ligne de pente calculée'));
+  }
+
+  /** Trees, buildings and water around a fall line, from the drawn LiDAR returns; `null` on failure. */
+  private async readFallCover(bounds: CoverBounds): Promise<FallCover | null> {
+    const field = this.field;
+    const clipped: CoverBounds = {
+      minX: Math.max(field.minX, bounds.minX),
+      minY: Math.max(field.minY, bounds.minY),
+      maxX: Math.min(field.maxX, bounds.maxX),
+      maxY: Math.min(field.maxY, bounds.maxY),
+    };
+    const builder = new FallCoverBuilder(field, clipped);
+    try {
+      // Render frame: x east, y up, z = −north.
+      await this.pointPicker.forEachPointInBox(
+        {
+          minX: clipped.minX - field.centerX,
+          maxX: clipped.maxX - field.centerX,
+          minZ: field.centerY - clipped.maxY,
+          maxZ: field.centerY - clipped.minY,
+        },
+        (x, y, z, cls) => builder.add(x + field.centerX, field.centerY - z, y + field.centerZ, cls),
+      );
+    } catch (error) {
+      console.warn('[LiDAR tools] Ground cover read failed:', error);
+      return null;
+    }
+    return builder.finish();
   }
 
   // ── Measurements ───────────────────────────────────────────────────────────

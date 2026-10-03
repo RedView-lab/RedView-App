@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { isFreeCamActive } from '@/features/freeCam';
+import { getCameraOwner } from '../lib/cameraOwnership';
 
 export interface UseCinematicIdleRotateOptions {
   /**
@@ -64,7 +65,7 @@ export function useCinematicIdleRotate(
 
     const rotateStep = (time: number) => {
       if (!isRotatingRef.current) return;
-      if (!map || typeof map.getBearing !== 'function') {
+      if (!map || typeof map.getBearing !== 'function' || getCameraOwner() != null) {
         stopRotation();
         return;
       }
@@ -88,7 +89,7 @@ export function useCinematicIdleRotate(
     const startRotation = () => {
       if (isRotatingRef.current) return;
       if (document.hidden) return;
-      if (isFreeCamActive()) return;
+      if (isFreeCamActive() || getCameraOwner() != null) return;
       if (!map || typeof map.getBearing !== 'function') return;
 
       isRotatingRef.current = true;

@@ -6,6 +6,7 @@ import {
   MAPBOX_TOKEN,
 } from '../../lib/mapbox.config';
 import { loadViewport } from '../../lib/viewport-persist';
+import { installCssZoomAwareMapSizing } from '../../lib/mapContainerZoom';
 import { transformMapboxRequest } from '../../lib/satelliteTiles';
 import { TerrainManager } from '../../lib/terrain';
 import { createMapLifecycleController } from './controller';
@@ -30,6 +31,10 @@ mapboxgl.accessToken = MAPBOX_TOKEN;
 // connection and the external hosts are HTTP/2, so a wider queue costs
 // nothing on the network side.
 mapboxgl.maxParallelImageRequests = 32;
+
+// The map lives in the dashboard canvas, scaled with CSS `zoom` (appScale):
+// Mapbox must size itself in the canvas' layout px (lib/mapContainerZoom.ts).
+installCssZoomAwareMapSizing();
 
 // Request maximum clock state from Windows D3D11 / AMD graphics driver for APUs
 if ((mapboxgl.supported as any)?.webGLContextAttributes) {

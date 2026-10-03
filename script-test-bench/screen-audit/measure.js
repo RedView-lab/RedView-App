@@ -110,5 +110,19 @@
       w: +searchRow.getBoundingClientRect().width.toFixed(1),
     };
   }
-  return { vw, vh, appScale: scaleVar, canvasStyle, texts, targets, regions, docOverflow, analysisToolbar, placeSearch };
+  // 3D map: the Mapbox canvas must cover its container exactly (under the
+  // canvas CSS zoom it used to cover appScale² of it, map3d/lib/mapContainerZoom.ts).
+  const mapEl = document.querySelector('.mapboxgl-map');
+  const mapCanvas = mapEl?.querySelector('.mapboxgl-canvas');
+  let mapFill = null;
+  if (mapEl && mapCanvas) {
+    const a = mapEl.getBoundingClientRect();
+    const b = mapCanvas.getBoundingClientRect();
+    mapFill = {
+      w: +a.width.toFixed(1), h: +a.height.toFixed(1),
+      cw: +b.width.toFixed(1), ch: +b.height.toFixed(1),
+      dx: +(b.left - a.left).toFixed(1), dy: +(b.top - a.top).toFixed(1),
+    };
+  }
+  return { vw, vh, appScale: scaleVar, canvasStyle, texts, targets, regions, docOverflow, analysisToolbar, placeSearch, mapFill };
 })()

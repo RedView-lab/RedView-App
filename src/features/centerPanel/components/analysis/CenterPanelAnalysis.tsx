@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useAnalysisFlyover } from '../../flyover';
+import { useFlyoverSeek, useFlyoverSessionActive } from '../../flyover';
 import { useRouteSplitToolOptional } from '../../routeSplit';
 import { useTraceToolOptional } from '../../tracer';
 import {
@@ -21,7 +21,6 @@ import {
   selectInteractiveItineraryForChartX,
 } from './shared';
 import {
-  AnalysisChart,
   isWeatherMetric,
   locateRoutePointAtX,
   SlopeLegend,
@@ -56,6 +55,7 @@ import type { AnalysisPanelState } from '@/features/itineraryPanel/types';
 import { isFootDiscipline } from '@/shared/lib/discipline';
 import { useAnalysisViewportSync } from './useAnalysisViewportSync';
 import { useAnalysisChartData } from './useAnalysisChartData';
+import { AnalysisChartWithFlyoverCursor } from './AnalysisChartWithFlyoverCursor';
 import { useAnalysisHoverPointMarker } from './useAnalysisHoverPointMarker';
 import { useAnalysisAlertMapMarkers } from './useAnalysisAlertMapMarkers';
 import {
@@ -77,7 +77,8 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
   const predictionStore = usePredictionStoreOptional();
   const routeSplitTool = useRouteSplitToolOptional();
   const traceTool = useTraceToolOptional();
-  const { controlledHoverXValue, setManualHoverXValue } = useAnalysisFlyover();
+  const seekFlyoverToChartX = useFlyoverSeek();
+  const flyoverSessionActive = useFlyoverSessionActive();
   const project = projectStore?.project ?? null;
   const itineraries = useMemo(() => project?.itineraries ?? [], [project?.itineraries]);
   const activeItineraryId = project?.activeItineraryId ?? null;
@@ -194,21 +195,18 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
   const [mapHoverXValue, setMapHoverXValue] = useState<number | null>(null);
   const [selectedChartX, setSelectedChartX] = useState<number | null>(null);
 
-  const handleMapHoverXValueChange = useCallback(
-    (xValue: number | null) => {
-      setMapHoverXValue(xValue);
-      setManualHoverXValue(xValue);
-    },
-    [setManualHoverXValue],
-  );
+  const handleMapHoverXValueChange = useCallback((xValue: number | null) => {
+    setMapHoverXValue(xValue);
+  }, []);
 
   const handleTraceClick = useCallback(
     (xValue: number) => {
+      // Flyover ouvert : le clic sur la trace déplace la tête de lecture.
+      if (seekFlyoverToChartX(xValue)) return;
       setSelectedChartX(xValue);
       setMapHoverXValue(xValue);
-      setManualHoverXValue(xValue);
     },
-    [setManualHoverXValue],
+    [seekFlyoverToChartX],
   );
 
   const alertMarkersEnabled = filters.alertes && (project?.controlPanel?.toggles?.routesEnabled ?? true);
@@ -239,22 +237,31 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
     xMode,
     predictions,
     onMapHoverXValueChange: handleMapHoverXValueChange,
-    selectedXValue: selectedChartX,
+    selectedXValue: flyoverSessionActive ? null : selectedChartX,
     onTraceClick: handleTraceClick,
     disabled: isMapEditToolArmed,
   });
 
+  // Pendant un flyover, le curseur du graphique suit la tête de lecture
+  // (AnalysisChartWithFlyoverCursor) et le point de la carte est la tête : ici
+  // seulement le survol de la carte, plus la sélection hors lecture.
+  const chartControlledHoverXValue = flyoverSessionActive ? mapHoverXValue : mapHoverXValue ?? selectedChartX;
+  const chartControlledHoverXRef = useRef(chartControlledHoverXValue);
+  useLayoutEffect(() => {
+    chartControlledHoverXRef.current = chartControlledHoverXValue;
+  });
+
+  // Fin de survol du graphique : le point revient à la valeur imposée (ou disparaît).
   const handleHoverXValueChange = useCallback(
     (xValue: number | null) => {
-      setManualHoverXValue(xValue);
-      updateHoverPoint(xValue);
+      updateHoverPoint(xValue ?? chartControlledHoverXRef.current);
     },
-    [setManualHoverXValue, updateHoverPoint],
+    [updateHoverPoint],
   );
 
-  const effectiveHoverXValue = mapHoverXValue ?? selectedChartX;
-  const chartControlledHoverXValue =
-    Number.isFinite(controlledHoverXValue) ? controlledHoverXValue : effectiveHoverXValue;
+  useEffect(() => {
+    if (flyoverSessionActive) updateHoverPoint(null);
+  }, [flyoverSessionActive, updateHoverPoint]);
 
   useEffect(() => {
     if (Number.isFinite(chartControlledHoverXValue)) {
@@ -596,6 +603,8 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
     chartClickImplRef.current(xValue);
   }, []);
   const handleChartClickImpl = (xValue: number) => {
+    // Flyover ouvert : le clic déplace la tête de lecture (la caméra suit), sauf découpe armée.
+    if (!routeSplitTool?.armed && seekFlyoverToChartX(xValue)) return;
     setSelectedChartX(xValue);
     handleClearSelectedXRange();
 
@@ -703,7 +712,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
       />
 
       <div className="rvc-center-analysis__results" aria-label={t("Graphique d'analyse")}>
-        <AnalysisChart
+        <AnalysisChartWithFlyoverCursor
           series={series}
           chartNodes={preparedChartNodes}
           backdropProfiles={altitudeBackdropProfiles}

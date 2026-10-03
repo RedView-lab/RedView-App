@@ -18,8 +18,21 @@ export class TerrainManager {
     this.applyTerrain();
   }
 
+  /**
+   * Binds the terrain, or does nothing when the style already has it with the
+   * same source and exaggeration. The anti-flat guards call this on every
+   * `styledata` / idle / heartbeat: an unconditional `setTerrain` dirties the
+   * style and makes Mapbox resample its average elevation on the next frame
+   * instead of every 500 ms — ~11 calls/s during a zoom gesture, camera
+   * framing nudged each time.
+   */
   private applyTerrain(): void {
     try {
+      const current = this.map.getTerrain();
+      if (current?.source === this.sourceId && current.exaggeration === this.exaggeration) {
+        this.applied = true;
+        return;
+      }
       this.map.setTerrain({
         source: this.sourceId,
         exaggeration: this.exaggeration,

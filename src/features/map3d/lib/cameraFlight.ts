@@ -136,6 +136,17 @@ export function getMapViewportPadding(map: MapboxMap): MapViewportPadding {
       bottom = Math.round(bottom * scale);
     }
 
+    // Measured in on-screen px; Mapbox pads in its container's layout px (the
+    // dashboard canvas may be CSS-zoomed, see lib/mapContainerZoom.ts).
+    const toMapPx = container.offsetWidth / cRect.width;
+    if (Number.isFinite(toMapPx) && toMapPx > 0 && Math.abs(toMapPx - 1) > 1e-3) {
+      return {
+        top: Math.round(top * toMapPx),
+        bottom: Math.round(bottom * toMapPx),
+        left: Math.round(left * toMapPx),
+        right: Math.round(right * toMapPx),
+      };
+    }
     return { top, bottom, left, right };
   } catch {
     return { top: 48, bottom: 280, left: 340, right: 340 };

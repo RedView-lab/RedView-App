@@ -125,6 +125,14 @@ function poiDisplayName(feature: PoiFeature): string {
 
 const managersByMap = new WeakMap<MapboxMap, PoiMarkerManager>();
 
+/**
+ * Hides every POI while another feature needs a clean map (flyover: the
+ * route alone). Survives style reloads; popup and hover are dropped.
+ */
+export function setPoiLayersSuppressed(map: MapboxMap, suppressed: boolean): void {
+  managersByMap.get(map)?.setSuppressed(suppressed);
+}
+
 /** POI rendered under (or within `radiusPx` of) a canvas point, nearest first. */
 export function queryPoiAtPoint(
   map: MapboxMap,
@@ -164,6 +172,7 @@ export class PoiMarkerManager {
    * repère, recliquer le POI ouvert le rouvrait aussitôt au lieu de le fermer.
    */
   private pressedOpenPopupKey: string | null = null;
+  private suppressed = false;
   private zoomFrameId: number | null = null;
   private raiseFrameId: number | null = null;
 
@@ -305,6 +314,16 @@ export class PoiMarkerManager {
     flyToPoi(this.map, { lon: target.lon, lat: target.lat });
 
     return true;
+  }
+
+  setSuppressed(suppressed: boolean): void {
+    if (this.suppressed === suppressed) return;
+    this.suppressed = suppressed;
+    if (suppressed) {
+      this.popup?.remove();
+      this.setHovered(null);
+    }
+    this.applyVisibility();
   }
 
   /** Nearest rendered POI under / around a canvas point. */
@@ -453,9 +472,23 @@ export class PoiMarkerManager {
           },
         });
       }
+      this.applyVisibility();
       return true;
     } catch {
       return false;
+    }
+  }
+
+  private applyVisibility(): void {
+    const visibility = this.suppressed ? 'none' : 'visible';
+    try {
+      for (const layerId of [POI_GPU_LAYER_ID, POI_GPU_HOVER_LAYER_ID]) {
+        if (this.map.getLayer(layerId) && this.map.getLayoutProperty(layerId, 'visibility') !== visibility) {
+          this.map.setLayoutProperty(layerId, 'visibility', visibility);
+        }
+      }
+    } catch {
+      // Style swapping: re-applied by ensureLayers on the next styledata.
     }
   }
 

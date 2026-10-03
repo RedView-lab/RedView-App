@@ -5,6 +5,7 @@ import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdr
 import { useAppI18n } from '@/shared/i18n';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import { isFreeCamActive } from '@/features/freeCam';
+import { getCameraOwner } from '../../lib/cameraOwnership';
 
 import {
   computePanelPosition,
@@ -162,7 +163,7 @@ export function MapContextMenu({
 
     const handleContextMenu = (event: MapMouseEvent) => {
       event.preventDefault();
-      if (isFreeCamActive()) return;
+      if (isFreeCamActive() || getCameraOwner() != null) return;
 
       if (pendingCleanupTimerRef.current != null) {
         window.clearTimeout(pendingCleanupTimerRef.current);

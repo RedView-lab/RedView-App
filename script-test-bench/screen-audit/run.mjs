@@ -17,6 +17,10 @@
  *    s'afficher à la place) ; barre d'analyse et recherche + filtres de la
  *    carte chacune sur une ligne (aussi en 1080p, panneau gauche élargi à
  *    ~800 px : fhd-wide-left) ;
+ *  - carte 3D : le canvas Mapbox couvre exactement sa zone (échelle ≠ 1
+ *    comprise) et, au repos, la carte n'émet pas de `styledata` en boucle
+ *    (un handler qui mute le style à chaque `styledata` la re-stylait à
+ *    chaque image) ;
  * puis, à l'échelle 1 et 1,117 : menus portés (Colonnes, liste du panneau
  * droit), menu contextuel de la carte, redimensionnement du panneau gauche et
  * timeline plein écran alignés au pixel sur le pointeur / leur ancre.
@@ -117,8 +121,17 @@ async function openEditorWithRoute(session, gpxFile) {
   });
   await session.send('Emulation.setDeviceMetricsOverride', { width: 1920, height: 950, deviceScaleFactor: 1, mobile: false });
   await session.send('Page.navigate', { url: APP_URL });
-  await waitFor(session, `[...document.querySelectorAll('button')].some(b => /Demo account|compte démo/i.test(b.textContent))`, { timeout: 90000 });
-  await session.evaluate(`[...document.querySelectorAll('button')].find(b => /Demo account|compte démo/i.test(b.textContent)).click()`);
+  // On a fresh profile the map Service Worker installs and reloads the page
+  // once (map cache epoch): a click before that reload is lost. Wait for the
+  // controller, then click until the project browser shows up.
+  await waitFor(session, `!!navigator.serviceWorker?.controller`, { timeout: 90000 });
+  await sleep(3000);
+  for (let attempt = 0; attempt < 4; attempt++) {
+    await waitFor(session, `[...document.querySelectorAll('button')].some(b => /Demo account|compte démo|Créer un projet|Create a project/i.test(b.textContent))`, { timeout: 90000 });
+    if (await session.evaluate(`[...document.querySelectorAll('button')].some(b => /Créer un projet|Create a project/.test(b.textContent))`)) break;
+    await session.evaluate(`[...document.querySelectorAll('button')].find(b => /Demo account|compte démo/i.test(b.textContent))?.click()`);
+    await sleep(8000);
+  }
   await waitFor(session, `[...document.querySelectorAll('button')].some(b => /Créer un projet|Create a project/.test(b.textContent))`, { timeout: 90000 });
   await session.evaluate(`[...document.querySelectorAll('button')].find(b => /Créer un projet|Create a project/.test(b.textContent)).click()`);
   await waitFor(session, `!!document.querySelector('.mapboxgl-canvas')`, { timeout: 90000 });
@@ -131,6 +144,33 @@ async function openEditorWithRoute(session, gpxFile) {
   await session.evaluate(`document.querySelector('.rvmvc-map-tools__button--panel.is-panel-hidden')?.click()`);
   await sleep(1200);
 }
+
+/**
+ * `styledata` events fired by the map while nothing happens. A handler that
+ * mutates the style on every `styledata` re-fires it each frame — the map is
+ * never idle and Mapbox flushes its terrain drape cache every frame. The map
+ * instance is reached through the React fiber of its container (no app global).
+ */
+const STYLE_REST_WINDOW_MS = 2500;
+const MAX_STYLE_EVENTS_AT_REST = 2;
+const STYLE_EVENTS_AT_REST = `(async () => {
+  const el = document.querySelector('.mapboxgl-map');
+  const fiberKey = el && Object.keys(el).find((k) => k.startsWith('__reactFiber'));
+  let map = null;
+  for (let f = fiberKey ? el[fiberKey] : null, depth = 0; f && !map && depth < 60; f = f.return, depth++) {
+    for (let h = f.memoizedState, i = 0; h && i < 80; h = h.next, i++) {
+      const v = h.memoizedState && h.memoizedState.current;
+      if (v && typeof v.getCanvas === 'function' && typeof v.getStyle === 'function') { map = v; break; }
+    }
+  }
+  if (!map) return null;
+  let n = 0;
+  const count = () => { n++; };
+  map.on('styledata', count);
+  await new Promise((resolve) => setTimeout(resolve, ${STYLE_REST_WINDOW_MS}));
+  map.off('styledata', count);
+  return n;
+})()`;
 
 function overlapArea(a, b) {
   if (!a || !b) return 0;
@@ -171,6 +211,20 @@ async function auditScreen(session, screen) {
   );
 
   if (!supported) return { screen, scale, texts: effs.length };
+  const mf = m.mapFill;
+  check(
+    screen.id,
+    'carte 3D : le canvas couvre toute sa zone',
+    !!mf && near(mf.cw, mf.w, 1.5) && near(mf.ch, mf.h, 1.5) && near(mf.dx, 0, 1) && near(mf.dy, 0, 1),
+    mf ? `zone ${mf.w}×${mf.h}, canvas ${mf.cw}×${mf.ch} @${mf.dx},${mf.dy}` : 'carte absente',
+  );
+  const styleEvents = await session.evaluate(STYLE_EVENTS_AT_REST);
+  check(
+    screen.id,
+    'carte au repos : style stable (pas de boucle styledata)',
+    styleEvents != null && styleEvents <= MAX_STYLE_EVENTS_AT_REST,
+    styleEvents == null ? 'carte introuvable' : `${styleEvents} styledata en ${STYLE_REST_WINDOW_MS / 1000} s`,
+  );
   const R = m.regions;
   const pairs = [
     ['mapTools', 'toolbar'], ['mapTools', 'center'], ['mapTools', 'right'], ['search', 'right'],

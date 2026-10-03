@@ -85,18 +85,82 @@ function buildFeatureCollection(
   };
 }
 
-function restackSelectionLayers(map: MapboxMap): void {
-  if (!canInspectStyle(map)) return;
-  for (const layerId of LAYER_ORDER) {
-    try {
-      if (!map.getLayer(layerId)) continue;
-      map.moveLayer(layerId);
-    } catch {
-      // Mapbox can reject a move while the style graph is still settling.
-    }
+type SelectionLayer = Parameters<MapboxMap['addLayer']>[0];
+
+const SELECTION_LAYERS: Record<(typeof LAYER_ORDER)[number], SelectionLayer> = {
+  [HOVER_FILL_ID]: {
+    id: HOVER_FILL_ID,
+    type: 'fill',
+    source: SOURCE_ID,
+    slot: 'top',
+    filter: ['==', ['get', 'role'], 'hover'],
+    paint: {
+      'fill-color': '#ff453a',
+      'fill-opacity': 0.08,
+      'fill-emissive-strength': 1,
+    },
+  },
+  [SELECTED_FILL_ID]: {
+    id: SELECTED_FILL_ID,
+    type: 'fill',
+    source: SOURCE_ID,
+    slot: 'top',
+    filter: ['==', ['get', 'role'], 'selected'],
+    paint: {
+      'fill-color': '#ff3b30',
+      'fill-opacity': 0.14,
+      'fill-emissive-strength': 1,
+    },
+  },
+  [HOVER_LINE_ID]: {
+    id: HOVER_LINE_ID,
+    type: 'line',
+    source: SOURCE_ID,
+    slot: 'top',
+    filter: ['==', ['get', 'role'], 'hover'],
+    paint: {
+      'line-color': '#ff453a',
+      'line-opacity': 0.95,
+      'line-width': 2,
+      'line-dasharray': [2, 2],
+      'line-emissive-strength': 1,
+      'line-occlusion-opacity': 1,
+    },
+  },
+  [SELECTED_LINE_ID]: {
+    id: SELECTED_LINE_ID,
+    type: 'line',
+    source: SOURCE_ID,
+    slot: 'top',
+    filter: ['==', ['get', 'role'], 'selected'],
+    paint: {
+      'line-color': '#ff3b30',
+      'line-opacity': 1,
+      'line-width': 2.5,
+      'line-emissive-strength': 1,
+      'line-occlusion-opacity': 1,
+    },
+  },
+};
+
+/** First selection layer present in the style: coverage overlays go under it. */
+function firstSelectionLayerId(map: MapboxMap): string | undefined {
+  try {
+    return LAYER_ORDER.find((layerId) => map.getLayer(layerId));
+  } catch {
+    return undefined;
   }
 }
 
+/**
+ * Adds the missing selection layers, each right under the next selection
+ * layer already present, so the stack is always LAYER_ORDER without moving
+ * anything. This runs on every `styledata`: it must not touch the style when
+ * nothing is missing. (It used to `moveLayer` all four layers on each call;
+ * Mapbox marks the style dirty even for a no-op move, so every `styledata`
+ * produced the next one — a style update every frame, forever: terrain drape
+ * cache flushed each frame, full label placement, map never idle.)
+ */
 function ensureSelectionLayers(map: MapboxMap): boolean {
   if (!canInspectStyle(map)) return false;
 
@@ -115,80 +179,13 @@ function ensureSelectionLayers(map: MapboxMap): boolean {
     return false;
   }
 
-  try {
-    if (!map.getLayer(HOVER_FILL_ID)) {
-      map.addLayer({
-        id: HOVER_FILL_ID,
-        type: 'fill',
-        source: SOURCE_ID,
-        slot: 'top',
-        filter: ['==', ['get', 'role'], 'hover'],
-        paint: {
-          'fill-color': '#ff453a',
-          'fill-opacity': 0.08,
-          'fill-emissive-strength': 1,
-        },
-      });
-    }
-  } catch { /* skip */ }
-
-  try {
-    if (!map.getLayer(HOVER_LINE_ID)) {
-      map.addLayer({
-        id: HOVER_LINE_ID,
-        type: 'line',
-        source: SOURCE_ID,
-        slot: 'top',
-        filter: ['==', ['get', 'role'], 'hover'],
-        paint: {
-          'line-color': '#ff453a',
-          'line-opacity': 0.95,
-          'line-width': 2,
-          'line-dasharray': [2, 2],
-          'line-emissive-strength': 1,
-          'line-occlusion-opacity': 1,
-        },
-      });
-    }
-  } catch { /* skip */ }
-
-  try {
-    if (!map.getLayer(SELECTED_FILL_ID)) {
-      map.addLayer({
-        id: SELECTED_FILL_ID,
-        type: 'fill',
-        source: SOURCE_ID,
-        slot: 'top',
-        filter: ['==', ['get', 'role'], 'selected'],
-        paint: {
-          'fill-color': '#ff3b30',
-          'fill-opacity': 0.14,
-          'fill-emissive-strength': 1,
-        },
-      });
-    }
-  } catch { /* skip */ }
-
-  try {
-    if (!map.getLayer(SELECTED_LINE_ID)) {
-      map.addLayer({
-        id: SELECTED_LINE_ID,
-        type: 'line',
-        source: SOURCE_ID,
-        slot: 'top',
-        filter: ['==', ['get', 'role'], 'selected'],
-        paint: {
-          'line-color': '#ff3b30',
-          'line-opacity': 1,
-          'line-width': 2.5,
-          'line-emissive-strength': 1,
-          'line-occlusion-opacity': 1,
-        },
-      });
-    }
-  } catch { /* skip */ }
-
-  restackSelectionLayers(map);
+  LAYER_ORDER.forEach((layerId, index) => {
+    try {
+      if (map.getLayer(layerId)) return;
+      const beforeId = LAYER_ORDER.slice(index + 1).find((nextId) => map.getLayer(nextId));
+      map.addLayer(SELECTION_LAYERS[layerId], beforeId);
+    } catch { /* skip */ }
+  });
 
   // Source may not be immediately queryable right after addSource during a style
   // graph rebuild — signal success only when we can actually retrieve it.
@@ -267,20 +264,31 @@ export function useLidarSelection(
       return true;
     };
 
+    // Selection last pushed, and to which source instance (a style reload
+    // recreates it empty): a sync that changes nothing pushes nothing — each
+    // `setData` is a worker re-parse and a source update.
+    let pushedSource: GeoJSONSource | null = null;
+    let pushedKey = '';
+
     // Returns true when data was successfully pushed, false when the style
     // graph was not ready (caller can schedule a retry).
     const updateSourceData = (): boolean => {
       if (!canMutateOverlayStyle() && !promoteStyleFallbackIfUsable()) return false;
 
       // Couverture LiDAR dense (France, Suisse, Japon, NZ) sous les couches de sélection.
-      syncLidarCoverageLayers(map, enabledRef.current);
+      syncLidarCoverageLayers(map, enabledRef.current, firstSelectionLayerId(map));
       const ready = ensureSelectionLayers(map);
       if (!ready) return false;
 
       const source = map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
       if (!source) return false;
 
-      source.setData(buildFeatureCollection(hoveredRef.current, selectedRef.current, enabledRef.current));
+      const data = buildFeatureCollection(hoveredRef.current, selectedRef.current, enabledRef.current);
+      const key = data.features.map((feature) => `${feature.properties.role}:${feature.properties.tileId}`).join('|');
+      if (source === pushedSource && key === pushedKey) return true;
+      source.setData(data);
+      pushedSource = source;
+      pushedKey = key;
       return true;
     };
 

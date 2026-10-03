@@ -75,6 +75,36 @@ export class PointCloudPicker {
     return best;
   }
 
+  /**
+   * Visits every return (noise excluded) of the drawn LOD nodes inside a
+   * render-frame plan box (x east, z = −north), whatever the class filter:
+   * the terrain tools read the ground cover, not what is shown.
+   */
+  async forEachPointInBox(
+    box: { minX: number; maxX: number; minZ: number; maxZ: number },
+    visit: (x: number, y: number, z: number, classification: number) => void,
+  ): Promise<void> {
+    const nodes = this.getDrawnNodes().filter((node) => !node.virtual && node.entry.count > 0
+      && node.maxX >= box.minX && node.minX <= box.maxX && node.maxZ >= box.minZ && node.minZ <= box.maxZ);
+    for (const node of nodes) {
+      const block = await this.readBlock(node);
+      if (!block) continue;
+      const count = Math.min(node.entry.count, Math.floor(block.byteLength / LOD_POINT_STRIDE));
+      const words = new Uint16Array(block, 0, (count * LOD_POINT_STRIDE) >> 1);
+      const bytes = new Uint8Array(block, 0, count * LOD_POINT_STRIDE);
+      const s = node.size / 65535;
+      const step = LOD_POINT_STRIDE >> 1;
+      for (let p = 0, w = 0; p < count; p++, w += step) {
+        const x = node.originX + words[w]! * s;
+        const z = node.originZ - words[w + 1]! * s;
+        if (x < box.minX || x > box.maxX || z < box.minZ || z > box.maxZ) continue;
+        const cls = bytes[p * LOD_POINT_STRIDE + 6]!;
+        if (NOISE_CLASSES.has(cls)) continue;
+        visit(x, node.originY + words[w + 2]! * s, z, cls);
+      }
+    }
+  }
+
   private collectCandidates(query: PointPickQuery): Candidate[] {
     const [ox, oy, oz] = query.origin;
     const [dx, dy, dz] = query.direction;

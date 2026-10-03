@@ -1,32 +1,56 @@
-export const SPEED_STEPS = [0.5, 0.75, 1, 1.5, 2, 3] as const;
-export const DEFAULT_SPEED_INDEX = 2;
-export const FLYOVER_REFERENCE_DISTANCE_KM = 80;
-export const FLYOVER_REFERENCE_DURATION_MS = 40_000;
-export const FLYOVER_MIN_DURATION_MS = 12_000;
-export const FLYOVER_MAX_DURATION_MS = 180_000;
-export const FLYOVER_CAMERA_ZOOM = 15.6;
-export const FLYOVER_CAMERA_PITCH = 70;
-export const FLYOVER_CENTER_SMOOTHING = 0.12;
-export const FLYOVER_BEARING_SMOOTHING = 0.075;
-export const FLYOVER_ZOOM_SMOOTHING = 0.14;
-export const FLYOVER_PITCH_SMOOTHING = 0.09;
-export const FLYOVER_RELIEF_PITCH_ATTACK_SMOOTHING = 0.032;
-export const FLYOVER_RELIEF_PITCH_RELEASE_SMOOTHING = 0.11;
-export const FLYOVER_RELIEF_PITCH_DEADBAND_DEG = 0.08;
-export const FLYOVER_RELIEF_PITCH_MAX_STEP_DEG = 0.14;
-export const FLYOVER_MICRO_TURN_THRESHOLD_DEG = 4.5;
-export const FLYOVER_MIN_BEARING_PROGRESS_M = 18;
-export const FLYOVER_TURN_LOOKAHEAD_THRESHOLD_DEG = 10;
-export const FLYOVER_RELIEF_ENGAGE_THRESHOLD_M = 50;
-export const FLYOVER_RELIEF_RELEASE_THRESHOLD_M = 32;
-export const HOVER_X_VALUE_EPSILON = 1e-5;
+import type { FlyoverRoutePoint } from './engine/routeTrack';
+
+/**
+ * Cycle de vie d'une lecture :
+ * idle → approaching (survol jusqu'au rail) → handoff (raccord) → playing
+ * ⇄ pausing → paused ; playing → arriving (freinage + tenue) → overview
+ * (vue d'ensemble) → ended.
+ */
+export type FlyoverPhase =
+  | 'idle'
+  | 'approaching'
+  | 'handoff'
+  | 'playing'
+  | 'pausing'
+  | 'paused'
+  | 'arriving'
+  | 'overview'
+  | 'ended';
+
+export interface FlyoverStatus {
+  readonly canPlay: boolean;
+  readonly phase: FlyoverPhase;
+  /** Lecture en cours ou sur le point de reprendre (icône Pause). */
+  readonly isPlaying: boolean;
+  /** Une session est ouverte : tête, traînée, tracé normal masqué. */
+  readonly playbackActive: boolean;
+  readonly speedIndex: number;
+  /** Position de la tête (m) pendant une session. */
+  readonly distanceM: number | null;
+  readonly totalM: number;
+  /** Temps de lecture écoulé et total au palier de vitesse courant (s). */
+  readonly elapsedS: number;
+  readonly durationS: number;
+}
+
+export interface FlyoverRouteInput {
+  readonly itineraryId: string;
+  readonly points: readonly FlyoverRoutePoint[];
+  /** Distance cumulée de chaque point, même repère que le graphique d'analyse. */
+  readonly distancesM: readonly number[];
+  readonly color: string;
+}
+
+export interface FlyoverInput {
+  readonly route: FlyoverRouteInput | null;
+  /** Abscisse du graphique pour une distance sur la trace (`null` si non projetable). */
+  readonly toChartX: ((distanceM: number) => number | null) | null;
+}
 
 export interface AnalysisFlyoverContextValue {
   canPlay: boolean;
   isPlaying: boolean;
   playbackActive: boolean;
-  controlledHoverXValue: number | null;
-  setManualHoverXValue: (xValue: number | null) => void;
   togglePlayback: () => void;
   slowDown: () => void;
   speedUp: () => void;
@@ -35,5 +59,10 @@ export interface AnalysisFlyoverContextValue {
   canSpeedUp: boolean;
   distanceLabel: string;
   timeLabel: string;
-  speedLabel: string;
 }
+
+/**
+ * Déplace la tête au point du graphique `x` quand une lecture est ouverte.
+ * Rend `false` sinon (le clic garde alors son comportement normal).
+ */
+export type FlyoverSeekToChartX = (xValue: number) => boolean;

@@ -115,20 +115,20 @@ export default memo(function MapView({
     onMapContextMenuAction?.(payload);
     dispatchItineraryMapAction({ kind: 'context-menu', payload });
     if (payload.action !== 'create-poi') return;
-    const containerRect = containerRef.current?.getBoundingClientRect();
-    const anchorX = containerRect ? payload.screenPoint.x - containerRect.left : payload.screenPoint.x;
-    const anchorY = containerRect ? payload.screenPoint.y - containerRect.top : payload.screenPoint.y;
+    // `screenPoint` is the click's `event.point` (map-container layout px), the
+    // space of the insets and of the card's left/top: no client rect involved.
+    const container = containerRef.current;
     const area = resolvePanelArea(
-      containerRect?.width ?? window.innerWidth,
-      containerRect?.height ?? window.innerHeight,
+      container?.clientWidth || window.innerWidth,
+      container?.clientHeight || window.innerHeight,
       0,
       0,
       0,
       overlayInsets,
     );
     const placement = resolvePanelPlacement(
-      anchorX - area.left,
-      anchorY - area.top,
+      payload.screenPoint.x - area.left,
+      payload.screenPoint.y - area.top,
       area.width,
       area.height,
     );

@@ -67,10 +67,11 @@ function removeArea(map: MapboxMap, area: CoverageArea): void {
 }
 
 /**
- * Ajoute (ou retire) les couches de couverture. À appeler avant d'empiler les
- * couches de sélection : l'overlay reste sous la dalle survolée / choisie.
+ * Ajoute (ou retire) les couches de couverture, sous `beforeId` (première
+ * couche de sélection) : l'overlay reste sous la dalle survolée / choisie,
+ * même quand la couverture d'un pays arrive après coup, sans rien déplacer.
  */
-export function syncLidarCoverageLayers(map: MapboxMap, visible: boolean): void {
+export function syncLidarCoverageLayers(map: MapboxMap, visible: boolean, beforeId?: string): void {
   for (const area of COVERAGE_AREAS) {
     if (!visible) {
       removeArea(map, area);
@@ -93,7 +94,7 @@ export function syncLidarCoverageLayers(map: MapboxMap, visible: boolean): void 
             'fill-opacity': 0.18,
             'fill-emissive-strength': 1,
           },
-        });
+        }, beforeId);
       }
     } catch {
       /* graphe de style en cours de reconstruction : nouvel essai au prochain sync */

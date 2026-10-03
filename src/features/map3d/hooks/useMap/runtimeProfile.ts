@@ -131,9 +131,10 @@ function resolveNativeDprGetter(): () => number {
  * painter viewports, projection matrices, and shader uniforms remain in sync.
  *
  * The getter is live: it follows the native DPR (window moved between screens),
- * applies the profile cap, and compensates the dashboard `transform: scale(appScale)`
- * (see {@link setDprLayoutScale}) so canvases are rendered at on-screen resolution
- * instead of the larger logical size then downscaled by the compositor.
+ * applies the profile cap, and compensates the dashboard canvas scale (CSS
+ * `zoom: appScale`, see {@link setDprLayoutScale}) so canvases sized in logical
+ * px are rendered at on-screen resolution. Mapbox sizes its canvas in those
+ * logical px (lib/mapContainerZoom.ts).
  */
 export function applyRuntimeProfileDpr(profile: MapRuntimeProfile): void {
   if (typeof window === 'undefined') return;
@@ -154,9 +155,8 @@ export function applyRuntimeProfileDpr(profile: MapRuntimeProfile): void {
 /**
  * Declares the CSS scale applied to the dashboard canvas (`appScale`).
  * A layout box of W logical px is shown on W * appScale screen px, so the
- * backing store only needs `W * appScale * dpr` pixels. On a 1366 or 1470 px
- * wide laptop (appScale ~0.72-0.92, see shared/lib/appScale.ts) this removes
- * 15-48 % of rendered pixels.
+ * backing store only needs `W * appScale * dpr` pixels: per on-screen px it
+ * keeps the profile's (capped) DPR whatever the canvas scale.
  * Takes effect on the next canvas resize (Mapbox resizes with its container).
  */
 export function setDprLayoutScale(scale: number): void {

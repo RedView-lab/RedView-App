@@ -4,7 +4,6 @@
 
 import { computeAreaStats } from '../terrain/areaStats';
 import { computeAvalancheExposure } from '../terrain/avalancheExposure';
-import { traceFallLine } from '../terrain/fallLine';
 import { computeProfile } from '../terrain/profile';
 import type { TerrainField } from '../terrain/terrainField';
 import { computeViewshed } from '../terrain/viewshed';
@@ -21,12 +20,16 @@ export const MIN_VERTICES: Record<'distance' | 'height' | 'area' | 'profile', nu
 
 let nextId = 1;
 
+export function nextMeasurementId(): string {
+  return `m${nextId++}`;
+}
+
 /**
  * Builds the measurement of `tool` from its picks (one for the point tools).
  * `null` when the picks cannot give one (too few, or off the ground model).
  */
 export function createMeasurement(tool: ToolId, picks: readonly ScenePick[], field: TerrainField): Measurement | null {
-  const id = `m${nextId++}`;
+  const id = nextMeasurementId();
   const first = picks[0];
   if (!first) return null;
   switch (tool) {
@@ -43,10 +46,9 @@ export function createMeasurement(tool: ToolId, picks: readonly ScenePick[], fie
       const profile = computeProfile(field, picks);
       return profile ? { id, kind: 'profile', vertices: [...picks], profile } : null;
     }
-    case 'fallLine': {
-      const result = traceFallLine(field, first.projX, first.projY);
-      return result ? { id, kind: 'fallLine', origin: first, result } : null;
-    }
+    case 'fallLine':
+      // Asynchronous (a fan of trajectories and the ground cover): see the controller.
+      return null;
     case 'avalanche': {
       const result = computeAvalancheExposure(field, first.projX, first.projY);
       return result ? { id, kind: 'avalanche', origin: first, result } : null;

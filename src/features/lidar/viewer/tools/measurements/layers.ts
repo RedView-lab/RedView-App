@@ -20,13 +20,14 @@ import {
 } from '../format';
 import { buildCellMesh, type OverlayMeshData } from '../overlay/cellMesh';
 import { buildDrapedPolygonMesh } from '../overlay/polygonMesh';
-import type { OverlayLabelTone, OverlayLayer, OverlayPath } from '../overlay/toolsOverlay';
+import type { OverlayLabelTone, OverlayLayer } from '../overlay/toolsOverlay';
 import { ALPHA_EXPOSED_DEG, type AvalancheExposureLevel } from '../terrain/avalancheExposure';
-import type { FallLineStop } from '../terrain/fallLine';
+import { FALL_SCENARIOS, type FallLineResult, type FallScenarioId } from '../terrain/fallLine';
 import type { ProfileResult } from '../terrain/profile';
 import { slopeBandOf } from '../terrain/slopeBands';
 import type { DrapedSample, TerrainField } from '../terrain/terrainField';
 import type { ScenePick, ToolId, Vec3 } from '../types';
+import { FALL_EXPOSURE_TONES, fallExposureTag, fallRunoutText } from './fallLineText';
 import type { Measurement } from './types';
 
 /** Draped lines float this high above the ground model (m). */
@@ -130,6 +131,8 @@ export function measurementLayer(m: Measurement, field: TerrainField): OverlayLa
 /** Draped surface of a measurement, for the renderer's analysis mesh. */
 export function measurementMesh(m: Measurement, field: TerrainField): OverlayMeshData | null {
   switch (m.kind) {
+    case 'fallLine':
+      return fallCorridorMesh(field, m.result, m.scenario);
     case 'avalanche': {
       const { grid, reachingCells, reachingAlphaDeg } = m.result;
       return buildCellMesh(field, grid, reachingCells, (k) => (reachingAlphaDeg[k]! >= ALPHA_EXPOSED_DEG
@@ -263,41 +266,90 @@ function profileLayer(m: Measurement & { kind: 'profile' }, field: TerrainField)
   return layer;
 }
 
-const FALL_LINE_STOP_LABELS: Record<FallLineStop, string> = {
-  runout: 'Arrêt sur un replat',
-  trap: 'Arrêt dans un creux (piège)',
-  edge: 'Sort de la zone chargée',
-  maxLength: 'Limite de 4 km atteinte',
-};
+/** Corridor cells crossed by fewer runs than this share are not drawn. */
+const FALL_CORRIDOR_MIN_SHARE = 0.05;
+
+function fallScenarioColor(id: FallScenarioId): string {
+  return FALL_SCENARIOS.find((s) => s.id === id)?.color ?? '#ffffff';
+}
 
 function fallLineLayer(m: Measurement & { kind: 'fallLine' }, field: TerrainField): OverlayLayer {
   const layer = emptyLayer(m.id);
   const { result } = m;
-  const samples = decimate(result.samples, MAX_PATH_POINTS);
-  const path: OverlayPath = {
-    points: samples.map((s) => draped(field, s)),
-    color: samples.slice(1).map((s, k) => slopeBandOf(Math.max(s.slopeDeg, samples[k]!.slopeDeg)).color),
-    width: 3,
-  };
-  layer.paths.push(path);
-  const start = path.points[0]!;
-  const end = path.points[path.points.length - 1]!;
-  layer.dots.push({ at: start, color: '#ffffff', radius: 4 }, { at: end, color: '#111111', radius: 4 });
+  const selected = result.scenarios.find((s) => s.id === m.scenario) ?? result.scenarios[0]!;
 
-  const severe = result.maxSlopeDeg >= 45 || result.maxCliffDropM > 0 || result.stop === 'trap';
-  const details = [
-    t(FALL_LINE_STOP_LABELS[result.stop]),
-    `${t('angle moyen {{angle}}', { angle: formatAngle(result.pathAngleDeg) })} · ${t('Pente max {{angle}} (sur 10 m)', { angle: formatAngle(result.maxSlopeDeg) })}`,
-  ];
-  if (result.maxCliffDropM > 0) details.push(t('Barre rocheuse de {{height}}', { height: formatDistance(result.maxCliffDropM) }));
+  // The other surfaces: thin lines (they part from the selected one where
+  // speed carries them elsewhere) and where they stop.
+  for (const scenario of result.scenarios) {
+    if (scenario === selected || scenario.lengthM < 1) continue;
+    const points = decimate(scenario.samples, MAX_PATH_POINTS).map((s) => draped(field, s));
+    layer.paths.push({ points, color: 'rgba(255, 255, 255, 0.55)', width: 1.5 });
+    layer.dots.push({ at: points[points.length - 1]!, color: fallScenarioColor(scenario.id), radius: 3.5 });
+  }
+
+  // The selected surface: on the ground coloured by slope, in the air dashed.
+  const samples = decimate(selected.samples, MAX_PATH_POINTS);
+  let run: typeof samples = [];
+  const flush = (airborne: boolean) => {
+    if (run.length < 2) return;
+    const points = run.map((s) => draped(field, s));
+    layer.paths.push(airborne
+      ? { points, color: '#ffffff', width: 2.5, dash: [6, 4] }
+      : {
+          points,
+          color: run.slice(1).map((s, k) => slopeBandOf(Math.max(s.slopeDeg, run[k]!.slopeDeg)).color),
+          width: 3,
+        });
+  };
+  for (let k = 0; k < samples.length; k++) {
+    const s = samples[k]!;
+    const previous = samples[k - 1];
+    if (previous && previous.airborne !== s.airborne) {
+      // Segments share their joint so the line stays continuous.
+      run.push(s);
+      flush(previous.airborne);
+      run = [previous.airborne ? s : previous];
+      if (!previous.airborne) run.push(s);
+      continue;
+    }
+    run.push(s);
+  }
+  flush(samples[samples.length - 1]?.airborne ?? false);
+
+  for (const hazard of selected.hazards) {
+    if (hazard.kind !== 'cliff' || hazard.heightM == null) continue;
+    const at = selected.samples.find((s) => s.distanceM >= hazard.distanceM) ?? selected.samples[0]!;
+    layer.labels.push({ at: draped(field, at), headline: `↓ ${formatDistance(hazard.heightM)}`, size: 'small' });
+  }
+
+  const start = draped(field, selected.samples[0]!);
+  const end = draped(field, selected.samples[selected.samples.length - 1]!);
+  layer.dots.push({ at: start, color: '#ffffff', radius: 4 }, { at: end, color: fallScenarioColor(selected.id), radius: 5 });
+
   // At the clicked point: the end is often far away, or off screen.
   layer.labels.push({
     at: start,
-    headline: `${t('Ligne de pente')} · ${formatDistance(result.lengthM)} · ${formatElevationDelta(-result.dropM)}`,
-    details,
-    tone: severe ? 'danger' : 'warning',
+    headline: `${t('Ligne de pente')} · ${fallExposureTag(selected.exposure)} · ${fallRunoutText(selected)}`,
+    tone: FALL_EXPOSURE_TONES[selected.exposure],
   });
   return layer;
+}
+
+/** Where the fan of the drawn ground type goes: cells shaded by the share of runs crossing them. */
+function fallCorridorMesh(field: TerrainField, result: FallLineResult, scenarioId: FallScenarioId): OverlayMeshData | null {
+  const scenario = result.scenarios.find((s) => s.id === scenarioId);
+  if (!scenario || scenario.runs < 2) return null;
+  const min = Math.max(2, Math.ceil(scenario.runs * FALL_CORRIDOR_MIN_SHARE));
+  const cells: number[] = [];
+  const shares: number[] = [];
+  for (const [cell, count] of scenario.corridor) {
+    if (count < min) continue;
+    cells.push(cell);
+    shares.push(count / scenario.runs);
+  }
+  if (cells.length === 0) return null;
+  // Violet: apart from the slope classes drawn on the line and from rock and grass tones.
+  return buildCellMesh(field, result.corridor, cells, (k) => [124, 92, 255, Math.round(70 + 120 * shares[k]!)]);
 }
 
 const AVALANCHE_HEADLINES: Record<AvalancheExposureLevel, string> = {

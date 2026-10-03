@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import mapboxgl from 'mapbox-gl';
-import type { Map as MapboxMap, MapMouseEvent } from 'mapbox-gl';
+import type { Map as MapboxMap, MapMouseEvent, Marker } from 'mapbox-gl';
 import { isEventFromDomMarker } from '@/features/map3d';
 import { queryPoiAtPoint } from '@/features/poi/lib/poi-markers';
 import type { Itinerary } from '@/features/itineraryPanel/types';
@@ -16,6 +15,7 @@ import {
 import { xValueFromDistance } from '../../flyover/playback';
 import { locateRoutePointAtX, type AxisMode } from '../chart';
 import { selectInteractiveItineraryForChartX } from './shared';
+import { createRouteDotMarker, setRouteDotMarkerColor } from './routeDotMarker';
 import { buildPauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule';
 
 const ENTER_ROUTE_HOVER_DISTANCE_PX = 36;
@@ -34,53 +34,16 @@ function getCumulativeLengths(points: RouteDistancePoint[]): number[] {
 
 function renderHoverMarker(
   activeMap: MapboxMap,
-  markerRef: React.MutableRefObject<mapboxgl.Marker | null>,
+  markerRef: React.MutableRefObject<Marker | null>,
   lon: number,
   lat: number,
   color: string,
 ) {
   if (!markerRef.current) {
-    const el = document.createElement('div');
-    el.className = 'rvi-analysis-hover-dot';
-    el.style.width = '14px';
-    el.style.height = '14px';
-    el.style.boxSizing = 'border-box';
-    el.style.borderRadius = '50%';
-    el.style.backgroundColor = '#ffffff';
-    el.style.border = `3px solid ${color}`;
-    el.style.boxShadow = '0 0 0 1.5px rgba(0, 0, 0, 0.75), 0 2px 8px rgba(0, 0, 0, 0.85)';
-    el.style.pointerEvents = 'none';
-    el.style.zIndex = '1';
-
-    const marker = new mapboxgl.Marker({
-      element: el,
-      anchor: 'center',
-      pitchAlignment: 'viewport',
-      rotationAlignment: 'viewport',
-      occludedOpacity: 1,
-    })
-      .setLngLat([lon, lat])
-      .addTo(activeMap);
-
-    const markerWrapper = marker.getElement();
-    if (markerWrapper) {
-      markerWrapper.style.pointerEvents = 'none';
-    }
-    markerRef.current = marker;
+    markerRef.current = createRouteDotMarker(activeMap, [lon, lat], color);
   } else {
     markerRef.current.setLngLat([lon, lat]);
-    const el = markerRef.current.getElement();
-    // Hot path (every hover frame): only touch the DOM when the color changes.
-    if (el && el.dataset.rvHoverColor !== color) {
-      el.dataset.rvHoverColor = color;
-      el.style.pointerEvents = 'none';
-      const inner = (el.classList.contains('rvi-analysis-hover-dot')
-        ? el
-        : el.querySelector('.rvi-analysis-hover-dot')) as HTMLElement | null;
-      if (inner) {
-        inner.style.borderColor = color;
-      }
-    }
+    setRouteDotMarkerColor(markerRef.current, color);
   }
 }
 
@@ -112,7 +75,7 @@ export function useAnalysisHoverPointMarker({
   onTraceClick,
   disabled = false,
 }: UseAnalysisHoverPointMarkerArgs) {
-  const domMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const domMarkerRef = useRef<Marker | null>(null);
   const lastEmittedXValueRef = useRef<number | null>(null);
   const pendingEventRef = useRef<MapMouseEvent | null>(null);
   const rafRef = useRef<number | null>(null);

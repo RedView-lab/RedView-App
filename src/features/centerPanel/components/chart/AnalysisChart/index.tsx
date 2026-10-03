@@ -445,9 +445,20 @@ export const AnalysisChart = memo(function AnalysisChart({
     backdropYDomain,
   });
 
+  // Survol local terminé alors qu'une valeur est imposée (survol de la carte,
+  // sélection, tête du flyover) : signalé une fois, sans renvoyer la valeur
+  // imposée en écho.
+  const hadLocalHoverRef = useRef(false);
   useEffect(() => {
     if (!onHoverXValueChange) return;
-    if (Number.isFinite(controlledHoverXValue) && hover == null) return;
+    if (Number.isFinite(controlledHoverXValue) && hover == null) {
+      if (hadLocalHoverRef.current) {
+        hadLocalHoverRef.current = false;
+        onHoverXValueChange(null);
+      }
+      return;
+    }
+    hadLocalHoverRef.current = hover != null;
     onHoverXValueChange(hoverXValue);
   }, [controlledHoverXValue, hover, hoverXValue, onHoverXValueChange]);
   const { handlePointerDown, handleResetZoom, isZoomed, selectionBand } = usePlotRangeSelection({

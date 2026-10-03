@@ -5,7 +5,7 @@ import { FREECAM_ESCAPE_AFTER_UNLOCK_GRACE_MS, FREECAM_MIN_ZOOM } from '../lib/c
 import { createInputState, resetInputState } from '../lib/inputState';
 import { raiseToFreeCamZoom, readPoseFromMap } from '../lib/cameraBridge';
 import { isFreeCamEvent } from '../lib/eventData';
-import { suspendMapInteractions } from '../lib/mapInteractions';
+import { suspendMapInteractions } from '@/features/map3d/lib/mapInteractions';
 import { isPointerLockedOn, lockPointer, unlockPointer } from '../lib/pointerLock';
 import { registerFreeCamExitHandler, setFreeCamActive } from '../lib/freeCamRuntime';
 import { useFreeCamKeyboard } from './useFreeCamKeyboard';

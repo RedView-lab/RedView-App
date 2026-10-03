@@ -262,28 +262,33 @@ export function clearRouteHoverPreview(map: MapboxMap): void {
   }
 }
 
-export function setAnalysisFlyoverProgress(
+const FLYOVER_PROGRESS_LAYER_IDS = [
+  ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID,
+  ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID,
+] as const;
+const flyoverProgressState = new WeakMap<MapboxMap, number>();
+
+/**
+ * Flyover : pose la trace complète une seule fois par session, entièrement
+ * masquée. L'avancement se règle ensuite avec `setAnalysisFlyoverProgress`
+ * (`line-trim-offset`, un simple uniform GPU : ni `setData` ni re-tuilage
+ * par frame). Renvoie `false` si le style ne peut pas encore être modifié.
+ */
+export function setAnalysisFlyoverRoute(
   map: MapboxMap,
-  segment: RouteLayerPoint[] | [number, number][],
+  points: readonly RouteLayerPoint[],
   color?: string,
-): void {
+): boolean {
   try {
     const source = ensureAnalysisFlyoverProgressLayers(map);
-    if (!source) return;
+    if (!source) return false;
 
-    if (!segment || segment.length < 2) {
+    if (points.length < 2) {
       clearAnalysisFlyoverProgress(map);
-      return;
+      return false;
     }
 
-    const isCoordinateArray = Array.isArray(segment[0]);
-    const coords: [number, number][] = isCoordinateArray
-      ? (segment as [number, number][])
-      : (segment as RouteLayerPoint[]).map((pt) => [pt.lon, pt.lat]);
-    const points: RouteLayerPoint[] = isCoordinateArray
-      ? (segment as [number, number][]).map(([lon, lat]) => ({ lon, lat }))
-      : (segment as RouteLayerPoint[]);
-
+    const coords = points.map((pt): [number, number] => [pt.lon, pt.lat]);
     const geoJson = buildAnalysisFlyoverProgressGeoJson(coords, color);
     const elevationContext = getRouteElevationContext(map);
     const elevationProfileApplied =
@@ -308,37 +313,62 @@ export function setAnalysisFlyoverProgress(
         : 0;
 
     source.setData(geoJson);
+    flyoverProgressState.delete(map);
 
-    if (map.getLayer(ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID)) {
-      setLayoutPropertyIfChanged(map, ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID, 'line-elevation-reference', elevationReference);
-      setLayoutPropertyIfChanged(map, ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID, 'line-z-offset', zOffset);
-      setPaintPropertyIfChanged(map, ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID, 'line-occlusion-opacity', 0);
-      setLayoutPropertyIfChanged(map, ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID, 'visibility', 'visible');
-      map.moveLayer(ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID);
-    }
-    if (map.getLayer(ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID)) {
-      setLayoutPropertyIfChanged(map, ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID, 'line-elevation-reference', elevationReference);
-      setLayoutPropertyIfChanged(map, ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID, 'line-z-offset', zOffset);
-      setPaintPropertyIfChanged(map, ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID, 'line-occlusion-opacity', 0);
-      setLayoutPropertyIfChanged(map, ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID, 'visibility', 'visible');
-      map.moveLayer(ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID);
+    for (const layerId of FLYOVER_PROGRESS_LAYER_IDS) {
+      if (!map.getLayer(layerId)) continue;
+      setLayoutPropertyIfChanged(map, layerId, 'line-elevation-reference', elevationReference);
+      setLayoutPropertyIfChanged(map, layerId, 'line-z-offset', zOffset);
+      setPaintPropertyIfChanged(map, layerId, 'line-occlusion-opacity', 0);
+      map.setPaintProperty(layerId, 'line-trim-offset', [0, 1]);
+      setLayoutPropertyIfChanged(map, layerId, 'visibility', 'visible');
+      map.moveLayer(layerId);
     }
     if (map.getLayer(ANALYSIS_HOVER_HALO_LAYER_ID)) map.moveLayer(ANALYSIS_HOVER_HALO_LAYER_ID);
     if (map.getLayer(ANALYSIS_HOVER_POINT_LAYER_ID)) map.moveLayer(ANALYSIS_HOVER_POINT_LAYER_ID);
+    return true;
   } catch {
-    /* noop */
+    return false;
+  }
+}
+
+/**
+ * Part déjà parcourue de la trace posée par `setAnalysisFlyoverRoute`, en
+ * fraction de `line-progress` (longueur d'arc Mercator projetée). Appelé à
+ * chaque frame : ne touche le style que si la valeur change.
+ */
+export function setAnalysisFlyoverProgress(map: MapboxMap, lineProgress: number): void {
+  const fraction = Math.max(0, Math.min(1, lineProgress));
+  if (flyoverProgressState.get(map) === fraction) return;
+  flyoverProgressState.set(map, fraction);
+  // [f, 1] masque la suite ; [1, 1] ne masque rien (trace complète).
+  const trim: [number, number] = fraction >= 1 ? [1, 1] : [fraction, 1];
+  try {
+    for (const layerId of FLYOVER_PROGRESS_LAYER_IDS) {
+      if (map.getLayer(layerId)) map.setPaintProperty(layerId, 'line-trim-offset', trim, { validate: false });
+    }
+  } catch {
+    /* style en cours de remplacement */
+  }
+}
+
+/** Vrai tant que la trace du flyover est montée et visible (sert au retour d'un changement de style). */
+export function isAnalysisFlyoverRouteMounted(map: MapboxMap): boolean {
+  try {
+    return Boolean(map.getLayer(ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID))
+      && map.getLayoutProperty(ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID, 'visibility') === 'visible';
+  } catch {
+    return false;
   }
 }
 
 export function clearAnalysisFlyoverProgress(map: MapboxMap): void {
+  flyoverProgressState.delete(map);
   try {
     const source = map.getSource(ANALYSIS_FLYOVER_PROGRESS_SOURCE_ID) as GeoJSONSource | undefined;
     source?.setData(buildAnalysisFlyoverProgressGeoJson(null));
-    if (map.getLayer(ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID)) {
-      setLayoutPropertyIfChanged(map, ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID, 'visibility', 'none');
-    }
-    if (map.getLayer(ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID)) {
-      setLayoutPropertyIfChanged(map, ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID, 'visibility', 'none');
+    for (const layerId of FLYOVER_PROGRESS_LAYER_IDS) {
+      if (map.getLayer(layerId)) setLayoutPropertyIfChanged(map, layerId, 'visibility', 'none');
     }
   } catch {
     /* noop */

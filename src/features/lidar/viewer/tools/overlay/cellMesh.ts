@@ -8,6 +8,9 @@
 // still hide them.
 
 import type { AnalysisGrid, TerrainField } from '../terrain/terrainField';
+
+/** Regular cells (centre of cell 0 at origin), with their altitude when known. */
+export type CellLattice = Pick<AnalysisGrid, 'width' | 'cell' | 'originX' | 'originY'> & { altitude?: ArrayLike<number> };
 import type { Rgba } from '../types';
 
 export interface OverlayMeshData {
@@ -19,12 +22,12 @@ export interface OverlayMeshData {
 }
 
 /**
- * Quads of `cells` (analysis grid indices), coloured by `colorOf(k)` for
+ * Quads of `cells` (lattice indices), coloured by `colorOf(k)` for
  * the k-th listed cell, lifted above the ground so they do not z-fight it.
  */
 export function buildCellMesh(
   field: TerrainField,
-  grid: AnalysisGrid,
+  grid: CellLattice,
   cells: ArrayLike<number>,
   colorOf: (k: number) => Rgba,
 ): OverlayMeshData {
@@ -43,7 +46,7 @@ export function buildCellMesh(
     const row = (i - col) / grid.width;
     const cx = grid.originX + col * grid.cell;
     const cy = grid.originY + row * grid.cell;
-    const fallback = grid.altitude[i]!;
+    const fallback = grid.altitude ? grid.altitude[i]! : field.altitudeAt(cx, cy) ?? field.minAltitudeM;
     const color = colorOf(k);
     for (const [dx, dy] of QUAD_CORNERS) {
       const x = cx + dx * half;

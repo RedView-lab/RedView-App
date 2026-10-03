@@ -33,6 +33,18 @@ export interface SlopeSample {
   gradY: number;
 }
 
+/** Local shape of the ground: altitude, gradient and second derivatives (CRS axes). */
+export interface SurfaceSample {
+  altitudeM: number;
+  /** ∂z/∂x, ∂z/∂y (m/m). */
+  gradX: number;
+  gradY: number;
+  /** ∂²z/∂x², ∂²z/∂y², ∂²z/∂x∂y (1/m). */
+  hxx: number;
+  hyy: number;
+  hxy: number;
+}
+
 export interface DrapedSample {
   projX: number;
   projY: number;
@@ -158,6 +170,31 @@ export class TerrainField {
     const gradX = ((c + 2 * f + i) - (a + 2 * d + g)) / (8 * r);
     const gradY = ((a + 2 * b + c) - (g + 2 * h + i)) / (8 * r);
     return this.slopeFromGradient(gradX, gradY);
+  }
+
+  /**
+   * Gradient and curvature of the ground over `baselineM` (3×3 samples
+   * `baselineM / 2` apart: Horn's gradient, central second differences),
+   * for the motion of a body on the surface. `null` off the scene.
+   */
+  surfaceAt(projX: number, projY: number, baselineM: number): SurfaceSample | null {
+    const r = Math.max(this.cell, baselineM / 2);
+    const z = (dx: number, dy: number) => this.altitudeAt(projX + dx * r, projY + dy * r);
+    const a = z(-1, 1), b = z(0, 1), c = z(1, 1);
+    const d = z(-1, 0), e = z(0, 0), f = z(1, 0);
+    const g = z(-1, -1), h = z(0, -1), i = z(1, -1);
+    if (a == null || b == null || c == null || d == null || e == null || f == null || g == null || h == null || i == null) {
+      return null;
+    }
+    const r2 = r * r;
+    return {
+      altitudeM: e,
+      gradX: ((c + 2 * f + i) - (a + 2 * d + g)) / (8 * r),
+      gradY: ((a + 2 * b + c) - (g + 2 * h + i)) / (8 * r),
+      hxx: (d + f - 2 * e) / r2,
+      hyy: (b + h - 2 * e) / r2,
+      hxy: (c + g - a - i) / (4 * r2),
+    };
   }
 
   slopeFromGradient(gradX: number, gradY: number): SlopeSample {
