@@ -7,7 +7,7 @@ import { Checkbox } from '../components/Checkbox';
 import { Select } from '../components/Select';
 import { Toggle } from '../components/Toggle';
 import { Slider } from '../components/Slider';
-import { IconCalendar, IconChevronDown, IconClock, IconEye, IconEyeOff, IconInfo, IconWeather } from '../icons';
+import { IconChevronDown, IconClock, IconEye, IconEyeOff, IconInfo, IconWeather } from '../icons';
 import type {
   ControlPanelHandlers,
   WeatherPaletteBand,
@@ -15,7 +15,6 @@ import type {
   WeatherLayerKey,
   WeatherRenderMode,
   WeatherState,
-  WeatherTab,
 } from '../types';
 import { formatWeatherPaletteBandLabel, formatWeatherPaletteValue, weatherPaletteMetricSpec } from '../lib/weatherPalette';
 import {
@@ -38,7 +37,6 @@ interface Props {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   onEnabledChange: ControlPanelHandlers['onWeatherEnabledChange'];
-  onTabChange: ControlPanelHandlers['onWeatherTabChange'];
   onDateChange: ControlPanelHandlers['onWeatherDateChange'];
   onLayerToggle: ControlPanelHandlers['onWeatherLayerToggle'];
   onLayerModeChange: ControlPanelHandlers['onWeatherLayerModeChange'];
@@ -49,19 +47,6 @@ interface Props {
   onPaletteBandBreakpointChange: ControlPanelHandlers['onWeatherPaletteBandBreakpointChange'];
   onAddAlert: ControlPanelHandlers['onWeatherAddAlert'];
 }
-
-const TABS: { value: WeatherTab; label: string }[] = [
-  { value: 'forecast', label: 'Prévisions (+2 j)' },
-  { value: 'trends', label: 'Tendances' },
-];
-
-const TREND_LAYER_ORDER: WeatherLayerKey[] = [
-  'temperature',
-  'feelsLike',
-  'humidity',
-  'rain',
-  'cloudCover',
-];
 
 const FORECAST_HIDDEN_LAYER_KEYS = new Set<WeatherLayerKey>(['wind', 'sunshine']);
 
@@ -98,26 +83,6 @@ const MODE_OPTIONS_BY_LAYER: Partial<Record<WeatherLayerKey, { value: WeatherRen
   cloudCover: GRADIENT_FILL_OPTIONS,
   humidity: GRADIENT_FILL_OPTIONS,
 };
-
-function getMonthIndexFromIso(iso: string): number {
-  const value = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(value.getTime())) return 0;
-  return value.getMonth();
-}
-
-function setMonthOnIsoDate(iso: string, monthIndex: number): string {
-  const base = new Date(`${iso}T00:00:00`);
-  const safeDate = Number.isNaN(base.getTime()) ? new Date() : base;
-  safeDate.setMonth(monthIndex, 1);
-  return safeDate.toISOString().slice(0, 10);
-}
-
-function formatMonthInputValue(iso: string): string {
-  const value = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(value.getTime())) return '';
-  const month = String(value.getMonth() + 1).padStart(2, '0');
-  return `${value.getFullYear()}-${month}`;
-}
 
 function getModeOptions(key: WeatherLayerKey): { value: WeatherRenderMode; label: string }[] {
   return MODE_OPTIONS_BY_LAYER[key] ?? DISABLED_ONLY_OPTION;
@@ -306,7 +271,6 @@ export function WeatherSection({
   open,
   onOpenChange,
   onEnabledChange,
-  onTabChange,
   onDateChange,
   onLayerToggle,
   onLayerModeChange,
@@ -327,10 +291,6 @@ export function WeatherSection({
   const h = timeParts[0] || '00';
   const m = timeParts[1] || '00';
 
-  const monthShortLabels = useMemo(() => {
-    const formatter = new Intl.DateTimeFormat(dateLocale, { month: 'short' });
-    return Array.from({ length: 12 }, (_, index) => formatter.format(new Date(2026, index, 1)));
-  }, [dateLocale]);
   // Re-rendu quand la méta VPS fixe l'horizon réel des prévisions.
   useSyncExternalStore(subscribeForecastHorizon, getForecastHorizonEnd);
   const forecastMaxDayOffset = getForecastMaxDayOffset();
@@ -343,32 +303,20 @@ export function WeatherSection({
       return formatter.format(new Date(`${dateIso}T00:00:00`));
     });
   }, [dateLocale, t, forecastMaxDayOffset]);
-  const isForecast = state.tab === 'forecast';
   const forecastDay = getForecastOffsetForDate(state.date);
-  const trendMonth = getMonthIndexFromIso(state.date);
-  const trendMonthLabel = useMemo(
-    () => new Intl.DateTimeFormat(dateLocale, { month: 'long' }).format(new Date(`${state.date}T00:00:00`)),
-    [dateLocale, state.date],
-  );
-  const trendMonthValue = formatMonthInputValue(state.date);
   const forecastMinMinutes = getForecastMinMinutesForDate(state.date);
   const forecastMaxMinutes = getForecastMaxMinutesForDate(state.date);
   const forecastBoundsStart = minutesToTime(forecastMinMinutes);
   const forecastBoundsEnd = minutesToTime(forecastMaxMinutes);
   const safeForecastMinutes = Math.max(forecastMinMinutes, Math.min(forecastMaxMinutes, timeToMinutes(state.time)));
 
-  const displayedLayers = useMemo(() => {
-    if (isForecast) {
-      return state.layers.filter((layer) => !FORECAST_HIDDEN_LAYER_KEYS.has(layer.key));
-    }
-
-    return TREND_LAYER_ORDER.map((key) => state.layers.find((layer) => layer.key === key)).filter(
-      (layer): layer is WeatherState['layers'][number] => Boolean(layer),
-    );
-  }, [isForecast, state.layers]);
+  const displayedLayers = useMemo(
+    () => state.layers.filter((layer) => !FORECAST_HIDDEN_LAYER_KEYS.has(layer.key)),
+    [state.layers],
+  );
 
   const isRainActive = state.enabled && state.layers.some((layer) => layer.key === 'rain' && layer.enabled);
-  const isLiveInstant = isForecast && forecastDay === 0 && isInstantT(state.date, state.time);
+  const isLiveInstant = forecastDay === 0 && isInstantT(state.date, state.time);
 
   return (
     <Section
@@ -378,122 +326,76 @@ export function WeatherSection({
       open={open}
       onOpenChange={onOpenChange}
     >
-      {/* Tabs */}
-      <div className="rvc-weather__tabs">
-        {TABS.map((tab) => (
-          <button
-            key={tab.value}
-            type="button"
-            className={`rvc-weather__tab${state.tab === tab.value ? ' is-active' : ''}`}
-            onClick={() => onTabChange?.(tab.value)}
-          >
-            {t(tab.label)}
-          </button>
-        ))}
+      {/* Discrete day slider for forecast */}
+      <div className="rvc-weather__day-selector">
+        <div className="rvc-weather__day-slider-wrapper">
+          <Slider
+            min={0}
+            max={forecastMaxDayOffset}
+            value={forecastDay}
+            onChange={(v) => onDateChange?.({ forecastDay: v, date: getForecastDateForOffset(v) })}
+            width="100%"
+          />
+        </div>
+        <div className="rvc-weather__day-labels">
+          {dayLabels.map((label, i) => (
+            <button
+              key={i}
+              type="button"
+              className={`rvc-weather__day-label${forecastDay === i ? ' is-active' : ''}`}
+              onClick={() => onDateChange?.({ forecastDay: i, date: getForecastDateForOffset(i) })}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {isForecast ? (
-        <>
-          {/* Discrete day slider for forecast */}
-          <div className="rvc-weather__day-selector">
-            <div className="rvc-weather__day-slider-wrapper">
-              <Slider
-                min={0}
-                max={forecastMaxDayOffset}
-                value={forecastDay}
-                onChange={(v) => onDateChange?.({ forecastDay: v, date: getForecastDateForOffset(v) })}
-                width="100%"
-              />
-            </div>
-            <div className="rvc-weather__day-labels">
-              {dayLabels.map((label, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  className={`rvc-weather__day-label${forecastDay === i ? ' is-active' : ''}`}
-                  onClick={() => onDateChange?.({ forecastDay: i, date: getForecastDateForOffset(i) })}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Time row for forecast */}
-          <div className="rvc-weather__time-row">
-            <span className="rvc-weather__time-bound">{forecastBoundsStart}</span>
-            <div style={{ flex: 1, padding: '0 4px', display: 'flex', alignItems: 'center' }}>
-              <Slider
-                min={forecastMinMinutes}
-                max={forecastMaxMinutes}
-                step={FORECAST_TIME_STEP_MINUTES}
-                value={safeForecastMinutes}
-                onChange={handleTimeSliderChange}
-                width="100%"
-              />
-            </div>
-            <span className="rvc-weather__time-bound">{forecastBoundsEnd}</span>
-            <div className="rvc-weather__time-input">
-              <IconClock size={12} />
-              <div className="rvc-weather__time-display">
-                <div className="rvc-weather__time-display-segment">{h}</div>
-                <div className="rvc-weather__time-display-colon">:</div>
-                <div className="rvc-weather__time-display-segment">{m}</div>
-              </div>
-              <input
-                type="time"
-                value={state.time}
-                min={forecastBoundsStart}
-                max={forecastBoundsEnd}
-                step={FORECAST_TIME_STEP_MINUTES * 60}
-                onChange={(e) => onDateChange?.({ time: e.target.value })}
-                className="rvc-weather__native-input"
-              />
-            </div>
-          </div>
-
-          {isRainActive && (
-            isLiveInstant ? (
-              <div className="rvc-weather__radar-badge">
-                <span className="rvc-weather__radar-badge-dot" />
-                <span>{t('Radar pluie direct (Instant T · Nowcasting)')}</span>
-              </div>
-            ) : (
-              <div className="rvc-weather__forecast-badge">
-                <span>📅</span>
-                <span>{t('Prévision modèle DWD ICON-EU')}</span>
-              </div>
-            )
-          )}
-        </>
-      ) : (
-        <div className="rvc-weather__month-row">
-          <span className="rvc-weather__month-bound">{monthShortLabels[0]}</span>
-          <div className="rvc-weather__month-slider">
-            <Slider
-              min={0}
-              max={11}
-              value={trendMonth}
-              onChange={(value) => onDateChange?.({ date: setMonthOnIsoDate(state.date, value), trendMode: 'date' })}
-              width="100%"
-            />
-          </div>
-          <span className="rvc-weather__month-bound">{monthShortLabels[11]}</span>
-          <label className="rvc-weather__month-chip">
-            <IconCalendar size={12} />
-            <span className="rvc-weather__month-chip-label">{trendMonthLabel}</span>
-            <input
-              type="month"
-              value={trendMonthValue}
-              onChange={(e) => {
-                if (!e.target.value) return;
-                const [year, month] = e.target.value.split('-');
-                onDateChange?.({ date: `${year}-${month}-01`, trendMode: 'date' });
-              }}
-              className="rvc-weather__native-input"
-            />
-          </label>
+      {/* Time row for forecast */}
+      <div className="rvc-weather__time-row">
+        <span className="rvc-weather__time-bound">{forecastBoundsStart}</span>
+        <div style={{ flex: 1, padding: '0 4px', display: 'flex', alignItems: 'center' }}>
+          <Slider
+            min={forecastMinMinutes}
+            max={forecastMaxMinutes}
+            step={FORECAST_TIME_STEP_MINUTES}
+            value={safeForecastMinutes}
+            onChange={handleTimeSliderChange}
+            width="100%"
+          />
         </div>
+        <span className="rvc-weather__time-bound">{forecastBoundsEnd}</span>
+        <div className="rvc-weather__time-input">
+          <IconClock size={12} />
+          <div className="rvc-weather__time-display">
+            <div className="rvc-weather__time-display-segment">{h}</div>
+            <div className="rvc-weather__time-display-colon">:</div>
+            <div className="rvc-weather__time-display-segment">{m}</div>
+          </div>
+          <input
+            type="time"
+            value={state.time}
+            min={forecastBoundsStart}
+            max={forecastBoundsEnd}
+            step={FORECAST_TIME_STEP_MINUTES * 60}
+            onChange={(e) => onDateChange?.({ time: e.target.value })}
+            className="rvc-weather__native-input"
+          />
+        </div>
+      </div>
+
+      {isRainActive && (
+        isLiveInstant ? (
+          <div className="rvc-weather__radar-badge">
+            <span className="rvc-weather__radar-badge-dot" />
+            <span>{t('Radar pluie direct (Instant T · Nowcasting)')}</span>
+          </div>
+        ) : (
+          <div className="rvc-weather__forecast-badge">
+            <span>📅</span>
+            <span>{t('Prévision modèle DWD ICON-EU')}</span>
+          </div>
+        )
       )}
 
       {/* Layer list */}

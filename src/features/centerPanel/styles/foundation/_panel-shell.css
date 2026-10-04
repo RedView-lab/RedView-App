@@ -51,6 +51,10 @@
   min-height: 24px;
 }
 
+.rvc-center-panel--compact .rvc-center-summary__fullscreen-toggle {
+  height: 24px;
+}
+
 .rvc-center-panel *,
 .rvc-center-panel *::before,
 .rvc-center-panel *::after {
@@ -66,6 +70,37 @@
   line-height: inherit;
   letter-spacing: inherit;
   color: inherit;
+}
+
+/* Summary + analysis, moved as one node between the docked and the fullscreen
+   panel (CenterPanel.tsx): lays out as direct children of either. */
+.rvc-center-panel__content {
+  display: contents;
+}
+
+/* Portaled into .rvi-panel-fullscreen-root (.rv-app-scaled-layer), like the
+   feuille de route's fullscreen: the whole center panel takes the canvas. */
+.rvc-center-panel.rvc-center-panel--fullscreen {
+  --rvc-center-panel-height: calc(var(--rv-canvas-height, 100vh) - 24px);
+  position: relative;
+  padding: 14px;
+  background: rgba(14, 16, 20, 0.94);
+  backdrop-filter: blur(48px);
+  -webkit-backdrop-filter: blur(48px);
+  border-radius: 12px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.72);
+  animation: rvc-center-panel-fullscreen-enter 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes rvc-center-panel-fullscreen-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .rvc-center-panel__divider {

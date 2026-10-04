@@ -1,0 +1,205 @@
+/* ── Scène : copie N&B du dashboard ───────────────────────────────────── */
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #fff; }
+#wb-stage {
+  position: fixed; inset: 0; overflow: clip;
+  background: #e6e6e6;
+  --wb-scroll-thumb: #c9c9c9;
+  user-select: none; -webkit-user-select: none;
+  cursor: default;
+}
+#wb-stage *, #wb-stage *::before, #wb-stage *::after {
+  box-shadow: none !important; text-shadow: none !important;
+  filter: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  transition: none !important; animation: none !important;
+  background-image: none !important;
+  caret-color: transparent !important;
+  outline: none !important;
+}
+#wb-stage *, #wb-stage *::before, #wb-stage *::after { cursor: default !important; }
+/* Les fonds et couleurs de l'app sont retirés : sans ces deux règles, ceux du
+   navigateur (boutons gris, liens bleus) reviendraient. Les gris de la capture
+   (classes wb-b* / wb-c*, !important) passent devant. */
+#wb-stage *, #wb-stage *::before, #wb-stage *::after { background-color: transparent; color: inherit; }
+#wb-stage img.wb-img { filter: grayscale(1) invert(1) !important; }
+#wb-stage img.wb-img-acc { filter: grayscale(1) !important; }
+#wb-stage ::-webkit-scrollbar-thumb { background-color: var(--wb-scroll-thumb) !important; }
+#wb-stage ::-webkit-scrollbar-track { background-color: transparent !important; }
+#wb-stage input, #wb-stage select, #wb-stage textarea { accent-color: #111; color: inherit; }
+#wb-stage input::placeholder, #wb-stage textarea::placeholder { color: #8a8a8a !important; opacity: 1; }
+#wb-stage input[type="range"]::-webkit-slider-thumb { background-color: #111 !important; }
+#wb-stage input[type="range"]::-webkit-slider-runnable-track { background-color: #d2d2d2 !important; }
+#wb-stage .wb-ph { background-color: #f4f4f4 !important; outline: 1px dashed #c6c6c6 !important; outline-offset: -1px; }
+#wb-portal { position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 100000; pointer-events: none; }
+#wb-portal > * { pointer-events: auto; }
+/* Les ombres sont retirées : un filet (hors mise en page) détache les pop-ins. */
+#wb-stage #wb-portal > * { outline: 1px solid #b4b4b4 !important; }
+
+/* ── Interface du workbench ──────────────────────────────────────────── */
+#wb-ui {
+  --u-bg: #ffffff; --u-fg: #111111; --u-muted: #6e6e6e; --u-faint: #9a9a9a;
+  --u-line: #e3e3e3; --u-soft: #f4f4f4; --u-accent: #0a7cff; --u-accent-soft: rgba(10, 124, 255, 0.1);
+  --u-font: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --u-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  position: fixed; inset: 0; z-index: 2147483000; pointer-events: none;
+  font: 12px/1.4 var(--u-font); color: var(--u-fg);
+  -webkit-font-smoothing: antialiased;
+}
+/* Remise à zéro sans spécificité : les classes du panneau passent devant. */
+:where(#wb-ui) :where(*) { box-sizing: border-box; margin: 0; padding: 0; }
+:where(#wb-ui) :where(button, input, select, textarea) { font: inherit; color: inherit; letter-spacing: inherit; }
+#wb-ui.is-peek > *:not(.wb-ref) { visibility: hidden; }
+
+.wb-hl { position: fixed; pointer-events: none; border: 1px solid var(--u-accent); }
+.wb-hl--select { border-width: 2px; margin: -1px 0 0 -1px; }
+.wb-hl--shared { border-style: dashed; opacity: 0.75; }
+.wb-hl--pad { border: 0; background: rgba(10, 124, 255, 0.12); }
+.wb-tag {
+  position: fixed; pointer-events: none; white-space: nowrap;
+  background: var(--u-accent); color: #fff; font: 600 10.5px/1 var(--u-mono);
+  padding: 3px 5px; border-radius: 3px;
+}
+.wb-annot { position: fixed; inset: 0; pointer-events: none; }
+.wb-annot span {
+  position: fixed; white-space: nowrap; pointer-events: none;
+  background: rgba(17, 17, 17, 0.82); color: #fff; font: 600 9px/1 var(--u-mono);
+  padding: 2px 3px; border-radius: 2px; transform: translateY(-100%);
+}
+.wb-annot span.is-mod { background: var(--u-accent); }
+.wb-ref { position: fixed; left: 0; top: 0; pointer-events: none; max-width: none; image-rendering: pixelated; }
+
+.wb-panel {
+  position: fixed; pointer-events: auto;
+  width: 336px; max-height: calc(100vh - 24px);
+  display: flex; flex-direction: column;
+  background: var(--u-bg); border: 1px solid #d6d6d6; border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+.wb-panel.is-collapsed .wb-tabs, .wb-panel.is-collapsed .wb-body, .wb-panel.is-collapsed .wb-foot { display: none; }
+.wb-head {
+  display: flex; align-items: center; gap: 8px; padding: 9px 10px 9px 12px;
+  border-bottom: 1px solid var(--u-line); cursor: grab; user-select: none;
+}
+.wb-head:active { cursor: grabbing; }
+.wb-title { font-weight: 650; font-size: 12.5px; }
+.wb-sub { color: var(--u-faint); font-size: 11px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wb-icon-btn {
+  width: 22px; height: 22px; border: 0; background: transparent; border-radius: 5px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; color: var(--u-muted); font-size: 14px; line-height: 1;
+}
+.wb-icon-btn:hover { background: var(--u-soft); color: var(--u-fg); }
+.wb-tabs { display: flex; gap: 2px; padding: 6px 8px 0; border-bottom: 1px solid var(--u-line); }
+.wb-tab {
+  border: 0; background: transparent; cursor: pointer; padding: 6px 8px 7px; color: var(--u-muted);
+  font-weight: 550; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap;
+}
+.wb-tab:hover { color: var(--u-fg); }
+.wb-tab.is-active { color: var(--u-fg); border-bottom-color: var(--u-fg); }
+.wb-tab b { font-weight: 650; background: var(--u-fg); color: #fff; border-radius: 8px; padding: 0 5px; margin-left: 3px; font-size: 10px; }
+.wb-body { overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 14px; min-height: 120px; }
+.wb-foot { border-top: 1px solid var(--u-line); padding: 8px 10px; display: flex; gap: 6px; align-items: center; }
+.wb-foot .wb-hint { flex: 1; color: var(--u-faint); font-size: 10.5px; }
+
+.wb-sec { display: flex; flex-direction: column; gap: 8px; }
+.wb-sec + .wb-sec { border-top: 1px solid var(--u-line); padding-top: 12px; }
+.wb-sec-title { font-size: 10.5px; font-weight: 650; color: var(--u-muted); text-transform: uppercase !important; letter-spacing: 0.04em !important; display: flex; align-items: center; gap: 6px; }
+.wb-sec-title span { flex: 1; }
+.wb-muted { color: var(--u-muted); }
+.wb-faint { color: var(--u-faint); }
+.wb-mono { font-family: var(--u-mono) !important; font-size: 11px; }
+.wb-help { color: var(--u-muted); line-height: 1.5; }
+.wb-help kbd { font: 600 10.5px/1 var(--u-mono); border: 1px solid var(--u-line); border-bottom-width: 2px; border-radius: 4px; padding: 1px 4px; background: var(--u-soft); }
+
+.wb-el-head { display: flex; flex-direction: column; gap: 3px; }
+.wb-el-sample { font-weight: 650; font-size: 13px; word-break: break-word; }
+.wb-crumbs { display: flex; flex-wrap: wrap; gap: 2px 4px; color: var(--u-faint); font-size: 10.5px; }
+.wb-crumbs button { border: 0; background: transparent; cursor: pointer; color: var(--u-muted); font: 10.5px/1.4 var(--u-mono); }
+.wb-crumbs button:hover { color: var(--u-accent); }
+.wb-crumbs .is-current { color: var(--u-fg); font-weight: 650; }
+
+.wb-row { display: grid; grid-template-columns: 74px 1fr; align-items: start; gap: 8px; }
+.wb-row > label { color: var(--u-muted); padding-top: 5px; display: flex; align-items: center; gap: 4px; }
+.wb-row > label i { width: 6px; height: 6px; border-radius: 50%; background: var(--u-accent); display: inline-block; font-style: normal; }
+.wb-ctl { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.wb-ctl-line { display: flex; gap: 4px; align-items: center; min-width: 0; }
+.wb-src { font: 10.5px/1.35 var(--u-mono); color: var(--u-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-src b { font-weight: 600; color: var(--u-muted); }
+.wb-src a { color: var(--u-accent); cursor: pointer; text-decoration: none; }
+
+.wb-input, .wb-select {
+  height: 26px; border: 1px solid var(--u-line); border-radius: 6px; background: #fff; padding: 0 7px; min-width: 0;
+  font: 12px/1 var(--u-font); color: var(--u-fg); outline: none;
+}
+.wb-input:focus, .wb-select:focus { border-color: var(--u-accent); box-shadow: 0 0 0 2px var(--u-accent-soft); }
+.wb-input.is-num { width: 58px; font-family: var(--u-mono); font-size: 11.5px; }
+.wb-input.is-wide { flex: 1; }
+.wb-select { padding-right: 4px; flex: 1; }
+textarea.wb-input { height: auto; min-height: 54px; padding: 6px 7px; line-height: 1.4; resize: vertical; }
+.wb-seg { display: inline-flex; border: 1px solid var(--u-line); border-radius: 6px; overflow: hidden; }
+.wb-seg button { border: 0; background: #fff; padding: 0 8px; height: 24px; cursor: pointer; font: 11.5px/1 var(--u-mono); color: var(--u-muted); }
+.wb-seg button + button { border-left: 1px solid var(--u-line); }
+.wb-seg button.is-on { background: var(--u-fg); color: #fff; }
+.wb-btn {
+  height: 28px; border: 1px solid var(--u-line); background: #fff; border-radius: 6px; padding: 0 10px; cursor: pointer;
+  font-weight: 600; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;
+}
+.wb-btn:hover { border-color: #c8c8c8; background: var(--u-soft); }
+.wb-btn.is-primary { background: var(--u-fg); border-color: var(--u-fg); color: #fff; }
+.wb-btn.is-primary:hover { background: #333; }
+.wb-btn.is-small { height: 22px; padding: 0 7px; font-size: 11px; }
+.wb-link { border: 0; background: transparent; color: var(--u-accent); cursor: pointer; font-size: 11px; padding: 0; }
+.wb-link:hover { text-decoration: underline; }
+.wb-link.is-muted { color: var(--u-muted); }
+
+.wb-chip-line { display: flex; flex-wrap: wrap; gap: 4px; }
+.wb-chip { font: 10.5px/1 var(--u-mono); background: var(--u-soft); border-radius: 4px; padding: 3px 5px; color: var(--u-muted); }
+.wb-chip.is-dark { background: var(--u-fg); color: #fff; }
+.wb-render { font: 10.5px/1.4 var(--u-mono); color: var(--u-muted); background: var(--u-soft); border-radius: 6px; padding: 6px 8px; }
+
+.wb-pad-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.wb-pad-grid .wb-input { width: 100%; }
+.wb-pad-grid span { font-size: 9.5px; color: var(--u-faint); text-align: center; }
+
+.wb-list { display: flex; flex-direction: column; }
+.wb-list-item {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center;
+  padding: 7px 4px; border-bottom: 1px solid var(--u-line); cursor: pointer; border-radius: 4px;
+}
+.wb-list-item:hover { background: var(--u-soft); }
+.wb-list-item .wb-li-main { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-list-item .wb-li-sub { grid-column: 1 / -1; font: 10.5px/1.3 var(--u-mono); color: var(--u-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-list-item.is-mod .wb-li-main::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--u-accent); margin-right: 6px; vertical-align: 1px; }
+
+.wb-token { display: grid; grid-template-columns: 44px 1fr 64px 36px; gap: 6px; align-items: center; padding: 3px 0; }
+.wb-token .wb-token-name { font: 600 11px/1 var(--u-mono); }
+.wb-token .wb-token-sample { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: 'Rethink Sans', sans-serif !important; }
+.wb-token .wb-token-count { color: var(--u-faint); font-size: 10.5px; text-align: right; }
+.wb-token.is-mod .wb-token-name { color: var(--u-accent); }
+
+.wb-change { display: flex; flex-direction: column; gap: 3px; padding: 7px 0; border-bottom: 1px solid var(--u-line); }
+.wb-change-head { display: flex; gap: 6px; align-items: baseline; }
+.wb-change-head b { font: 600 11px/1.3 var(--u-mono); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-change-line { display: flex; gap: 6px; align-items: center; font: 11px/1.35 var(--u-mono); }
+.wb-change-line .wb-from { color: var(--u-faint); text-decoration: line-through; }
+.wb-change-line .wb-to { font-weight: 650; }
+.wb-change-line .wb-prop { color: var(--u-muted); min-width: 84px; }
+.wb-change-line button { margin-left: auto; }
+
+.wb-kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 11.5px; }
+.wb-kv dt { color: var(--u-muted); }
+.wb-kv dd { font-family: var(--u-mono); font-size: 11px; }
+.wb-check { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.wb-check input { accent-color: #111; }
+.wb-radio-line { display: flex; flex-direction: column; gap: 4px; }
+.wb-empty { color: var(--u-faint); padding: 8px 0; }
+.wb-toast {
+  position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); pointer-events: none;
+  background: #111; color: #fff; padding: 8px 12px; border-radius: 8px; font-weight: 600; opacity: 0; transition: opacity 0.2s;
+}
+.wb-toast.is-on { opacity: 1; }
+.wb-dropzone { position: fixed; inset: 0; background: rgba(10, 124, 255, 0.08); border: 2px dashed var(--u-accent); display: none; align-items: center; justify-content: center; font-weight: 650; color: var(--u-accent); font-size: 15px; }
+.wb-dropzone.is-on { display: flex; }
+.wb-pill {
+  position: fixed; pointer-events: auto; right: 12px; bottom: 12px; border: 1px solid #d6d6d6; background: #fff; border-radius: 16px;
+  padding: 6px 10px; font-weight: 650; cursor: pointer; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+}

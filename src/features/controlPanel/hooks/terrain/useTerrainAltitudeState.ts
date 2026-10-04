@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import {
@@ -38,6 +38,15 @@ function altitudeColorModeToPanel(mode: AltitudeColorMode): AltitudeColorization
 function altitudeColorModeFromPanel(colorization: AltitudeColorization): AltitudeColorMode {
   return colorization === 'stepped' ? 'step' : 'gradient';
 }
+
+/**
+ * Persistence (project document + localStorage) stays off the interaction
+ * path: an opacity drag emits ~60 changes/s and every project write
+ * re-renders the dashboard (~80 ms each, two writes per tick before). The map
+ * follows the local state at once; one write lands when the value settles and
+ * a pending one is flushed on unmount (project switch, panel teardown).
+ */
+const ALTITUDE_PERSIST_DELAY_MS = 250;
 
 function buildAltitudeBandsFromDynamic(
   categories: ReturnType<typeof buildAltitudeCategories>,
@@ -85,30 +94,33 @@ export function useTerrainAltitudeState({
     return persisted.byCount;
   });
 
-  const persistAltitudeToProject = useCallback(
-    (
-      nextState: typeof altitudeState,
-      nextBreakpointsByCount: Record<number, number[]> = altitudeBreakpointsByCount,
-    ) => {
-      updateProjectControlPanel((draft) => {
-        draft.toggles.altitudeEnabled = nextState.enabled;
-        draft.altitude = {
-          state: structuredClone(nextState),
-          breakpoints: {
-            bandCount: altitudeBandCountFromSetting(nextState.scaleSetting),
-            byCount: structuredClone(nextBreakpointsByCount),
-          },
-        };
-      });
-    },
-    [altitudeBreakpointsByCount, updateProjectControlPanel],
-  );
+  const persistInputsRef = useRef({ altitudeState, altitudeBreakpointsByCount, updateProjectControlPanel });
+  useLayoutEffect(() => {
+    persistInputsRef.current = { altitudeState, altitudeBreakpointsByCount, updateProjectControlPanel };
+  });
+  const persistPendingRef = useRef(false);
+  const flushAltitudePersist = useCallback(() => {
+    if (!persistPendingRef.current) return;
+    persistPendingRef.current = false;
+    const { altitudeState: state, altitudeBreakpointsByCount: byCount, updateProjectControlPanel: update } = persistInputsRef.current;
+    const bandCount = altitudeBandCountFromSetting(state.scaleSetting);
+    saveAltitudeState(state);
+    saveAltitudeBreakpoints({ bandCount, byCount });
+    update((draft) => {
+      draft.toggles.altitudeEnabled = state.enabled;
+      draft.altitude = {
+        state: structuredClone(state),
+        breakpoints: { bandCount, byCount: structuredClone(byCount) },
+      };
+    });
+  }, []);
 
-  const persistAltitude = useCallback((next: typeof altitudeState) => {
-    setAltitudeState(next);
-    saveAltitudeState(next);
-    persistAltitudeToProject(next);
-  }, [persistAltitudeToProject]);
+  useEffect(() => {
+    persistPendingRef.current = true;
+    const timer = setTimeout(flushAltitudePersist, ALTITUDE_PERSIST_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [altitudeState, altitudeBreakpointsByCount, flushAltitudePersist]);
+  useEffect(() => flushAltitudePersist, [flushAltitudePersist]);
 
   const altitudeBandCount = useMemo(
     () => altitudeBandCountFromSetting(altitudeState.scaleSetting),
@@ -130,24 +142,6 @@ export function useTerrainAltitudeState({
     () => new Set(altitudeState.hiddenBandIds),
     [altitudeState.hiddenBandIds],
   );
-
-  useEffect(() => {
-    updateProjectControlPanel((draft) => {
-      draft.toggles.altitudeEnabled = altitudeState.enabled;
-      draft.altitude = {
-        state: structuredClone(altitudeState),
-        breakpoints: {
-          bandCount: altitudeBandCount,
-          byCount: structuredClone(altitudeBreakpointsByCount),
-        },
-      };
-    });
-  }, [
-    altitudeBandCount,
-    altitudeBreakpointsByCount,
-    altitudeState,
-    updateProjectControlPanel,
-  ]);
 
   // ── Altitude source follows the 3D terrain DEM ───────────────────────
   // The overlay re-reads the exact tiles the terrain streams (AWS Terrarium
@@ -183,48 +177,44 @@ export function useTerrainAltitudeState({
     [altitudeCategories, altitudeHiddenIds, altitudeState],
   );
 
+  // Functional updates: consecutive slider ticks never read a stale state.
   const handlers = {
     onAltitudeEnabledChange: useCallback(
-      (enabled: boolean) => persistAltitude({ ...altitudeState, enabled }),
-      [altitudeState, persistAltitude],
+      (enabled: boolean) => setAltitudeState((prev) => ({ ...prev, enabled })),
+      [],
     ),
     onAltitudeColorizationChange: useCallback(
       (value: AltitudeColorization) =>
-        persistAltitude({ ...altitudeState, colorMode: altitudeColorModeFromPanel(value) }),
-      [altitudeState, persistAltitude],
+        setAltitudeState((prev) => ({ ...prev, colorMode: altitudeColorModeFromPanel(value) })),
+      [],
     ),
     onAltitudeScaleSettingChange: useCallback(
       (value: AltitudeScaleSetting) => {
         const valid: AltitudeScaleSettingKey[] = ['2 couleurs', '3 couleurs', '4 couleurs', '6 couleurs'];
         if (!valid.includes(value as AltitudeScaleSettingKey)) return;
-        persistAltitude({ ...altitudeState, scaleSetting: value as AltitudeScaleSettingKey });
+        setAltitudeState((prev) => ({ ...prev, scaleSetting: value as AltitudeScaleSettingKey }));
       },
-      [altitudeState, persistAltitude],
+      [],
     ),
     onAltitudeOpacityChange: useCallback(
       (value: number) =>
-        persistAltitude({
-          ...altitudeState,
-          opacity: Math.max(0, Math.min(1, value / 100)),
-        }),
-      [altitudeState, persistAltitude],
+        setAltitudeState((prev) => ({ ...prev, opacity: Math.max(0, Math.min(1, value / 100)) })),
+      [],
     ),
     onAltitudeBandColorChange: useCallback(
       (id: string, color: string) =>
-        persistAltitude({
-          ...altitudeState,
-          customColors: { ...altitudeState.customColors, [id]: color },
-        }),
-      [altitudeState, persistAltitude],
+        setAltitudeState((prev) => ({ ...prev, customColors: { ...prev.customColors, [id]: color } })),
+      [],
     ),
     onAltitudeBandVisibilityToggle: useCallback(
-      (id: string) => {
-        const hidden = new Set(altitudeState.hiddenBandIds);
-        if (hidden.has(id)) hidden.delete(id);
-        else hidden.add(id);
-        persistAltitude({ ...altitudeState, hiddenBandIds: Array.from(hidden) });
-      },
-      [altitudeState, persistAltitude],
+      (id: string) =>
+        setAltitudeState((prev) => {
+          const hidden = new Set(prev.hiddenBandIds);
+          if (hidden.has(id)) hidden.delete(id);
+          else hidden.add(id);
+          return { ...prev, hiddenBandIds: Array.from(hidden) };
+        }),
+      [],
     ),
     onAltitudeBandBreakpointChange: useCallback(
       (bandIndex: number, field: 'min' | 'max', valueMeters: number) => {
@@ -244,15 +234,9 @@ export function useTerrainAltitudeState({
 
         breakpoints[breakpointIndex] = valueMeters;
         const clamped = clampAltitudeBreakpoints(breakpoints, count);
-
-        setAltitudeBreakpointsByCount((prev) => {
-          const next = { ...prev, [count]: clamped };
-          saveAltitudeBreakpoints({ bandCount: count, byCount: next });
-          persistAltitudeToProject(altitudeState, next);
-          return next;
-        });
+        setAltitudeBreakpointsByCount((prev) => ({ ...prev, [count]: clamped }));
       },
-      [altitudeCategories, altitudeState, persistAltitudeToProject],
+      [altitudeCategories],
     ),
   };
 

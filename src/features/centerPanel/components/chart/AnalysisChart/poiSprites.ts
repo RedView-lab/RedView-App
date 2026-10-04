@@ -86,6 +86,15 @@ export function getChartPoiSpriteKind(annotation: VisiblePoiAnnotation): ChartPo
   return { type: 'fallback', favorite };
 }
 
+/**
+ * POI drawn on the chart: a checkpoint, a favourite, or a category with its own
+ * icon. The rest would only be an empty grey disc — not shown on the chart.
+ */
+export function hasChartPoiIcon(annotation: Pick<VisiblePoiAnnotation, 'kind' | 'favorite' | 'poiCategory'>): boolean {
+  if (annotation.kind === 'pause' || annotation.kind === 'waypoint' || annotation.favorite) return true;
+  return annotation.poiCategory != null && ROUND_BADGE_URLS[annotation.poiCategory] != null;
+}
+
 export function getChartPoiSpriteKey(kind: ChartPoiSpriteKind, hover: boolean): string {
   const suffix = hover ? ':h' : '';
   switch (kind.type) {

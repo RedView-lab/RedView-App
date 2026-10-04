@@ -1,3 +1,6 @@
+// Frozen copy of the v1 snow engine (src/features/snow before the v2 rewrite),
+// kept only as the "before" of the snow-quality bench. Not used by the app.
+
 // ============================================================================
 // Snow redistribution — TypeScript port of RedView v0.1
 // ----------------------------------------------------------------------------
@@ -22,7 +25,7 @@
 // ============================================================================
 
 import type { SnowRedistributionConfig } from './config';
-import type { SnowProgress } from '../types';
+import type { SnowProgress } from './types';
 import {
   computeDinfFlow,
   computeElevationFactor,

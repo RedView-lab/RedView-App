@@ -21,6 +21,8 @@ export type {
 	MapPoiDraftActionId,
 	MapPoiDraftActionPayload,
 } from './components/MapPoiDraftCard';
+export { requestMapPoiDraft } from './lib/poiDraftRequest';
+export type { MapPoiDraftRequest } from './lib/poiDraftRequest';
 export { createOverlayStatus } from './lib/overlayStatus';
 export type {
 	OverlayReloadRegistrar,

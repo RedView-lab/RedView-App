@@ -13,8 +13,10 @@
   gap: 4px;
   min-width: 0;
   min-height: 0;
-  /* 80 px from the regular 390 px panel up, 40 px (one row) on a 220 px one. */
-  max-height: clamp(40px, calc(var(--rvc-center-panel-height, 390px) - 310px), 80px);
+  /* Only as tall as its rows, up to what leaves the chart ≥ 274 px of the
+     panel: one row (40 px) on a short panel, three (116 px) at the regular
+     390 px, four (156 px) from 430 px. Beyond: scroll, or fullscreen. */
+  max-height: clamp(40px, calc(var(--rvc-center-panel-height, 390px) - 274px), 156px);
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 2px;
@@ -68,6 +70,7 @@
 
 .rvc-center-summary__row--item.rvc-center-summary__row--active {
   background: rgba(0, 0, 0, 0.6);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
 }
 
 .rvc-center-summary__row--item.rvc-center-summary__row--active:hover:not(.rvc-center-summary__row--merge-armed):not(.rvc-center-summary__row--merge-selected) {
@@ -334,6 +337,23 @@
 
 .rvc-center-summary__ghost-button:disabled {
   cursor: default;
+}
+
+/* Plein écran (même icône et même bascule que la feuille de route). */
+.rvc-center-summary__fullscreen-toggle:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--rvc-center-text);
+}
+
+.rvc-center-summary__fullscreen-toggle.is-active {
+  background: rgba(255, 255, 255, 0.24);
+  color: var(--rvc-center-text);
+}
+
+/* Center panel fullscreen (CenterPanel.tsx): more of the canvas for the table,
+   the analysis keeps the rest. */
+.rvc-center-panel--fullscreen .rvc-center-summary__rows {
+  max-height: calc(var(--rv-canvas-height, 100vh) * 0.35);
 }
 
 /* Menu d'actions (portal) — apparence : shared/styles/dropdown.css (.rv-dropdown) */

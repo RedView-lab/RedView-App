@@ -4025,6 +4025,54 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Weather forecast unavailable for this departure (error or date beyond 16 days): the weather curve is hidden."
   },
   {
+    "fr": "Panneau central d'analyse en plein écran",
+    "en": "Fullscreen analysis panel"
+  },
+  {
+    "fr": "Ajouter un élément sur le graphique",
+    "en": "Add an item on the chart"
+  },
+  {
+    "fr": "Tracez ou importez un itinéraire pour ajouter des éléments",
+    "en": "Draw or import a route to add items"
+  },
+  {
+    "fr": "Annuler l’ajout",
+    "en": "Cancel adding"
+  },
+  {
+    "fr": "Cliquez sur le graphique pour placer : {{kind}}",
+    "en": "Click on the chart to place: {{kind}}"
+  },
+  {
+    "fr": "Cliquez sur le profil de l’itinéraire actif",
+    "en": "Click on the active route’s profile"
+  },
+  {
+    "fr": "Étape ajoutée au km {{km}}",
+    "en": "Step added at km {{km}}"
+  },
+  {
+    "fr": "Point de passage ajouté au km {{km}}",
+    "en": "Waypoint added at km {{km}}"
+  },
+  {
+    "fr": "POI au km {{km}} : choisissez sa catégorie sur la carte",
+    "en": "POI at km {{km}}: choose its category on the map"
+  },
+  {
+    "fr": "Pause ajoutée au km {{km}}",
+    "en": "Pause added at km {{km}}"
+  },
+  {
+    "fr": "Départ placé au km {{km}}",
+    "en": "Start set at km {{km}}"
+  },
+  {
+    "fr": "Destination placée au km {{km}}",
+    "en": "Destination set at km {{km}}"
+  },
+  {
     "fr": "RedView — Cartographie 3D Haute Résolution & LiDAR Outdoor",
     "en": "RedView — High-Resolution 3D Mapping & Outdoor LiDAR"
   },

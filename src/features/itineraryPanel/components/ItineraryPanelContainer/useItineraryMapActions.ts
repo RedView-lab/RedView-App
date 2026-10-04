@@ -6,10 +6,10 @@ import type {
 import { translateAppText } from '@/shared/i18n';
 import type { Itinerary, ItineraryProject } from '../../types';
 import {
-  buildPendingRoutePatchForEditedRow,
   hasEditableRoute,
   insertTimelineItem,
   insertWaypointIntoTimeline,
+  placeRouteEndpoint,
   setPendingRouteEditForPlacedRow,
   setPendingRoutePatchAfterRemoval,
 } from './timelineMutations';
@@ -21,7 +21,7 @@ import {
   upsertDraftPoiIntoItinerary,
   removePoiAndLinkedWaypoints,
 } from './poiDraft';
-import { listenItineraryMapAction } from '../../lib/mapActionBridge';
+import { listenItineraryMapAction, type RoutePointAddPayload } from '../../lib/mapActionBridge';
 import type { useItineraryPoiHandlers } from './useItineraryPoiHandlers';
 
 interface UseItineraryMapActionsArgs {
@@ -76,24 +76,12 @@ export function useItineraryMapActions({
           });
         } else {
           updateActive((it) => {
-            let row = it.timeline.find((item) => item.kind === 'start');
-            if (!row) {
-              insertTimelineItem(it.timeline, 'start');
-              row = it.timeline.find((item) => item.kind === 'start');
-            }
-            if (!row) return;
-
-            row.label = resolveMapContextPointTitle(payload.point);
-            row.lat = payload.point.lat;
-            row.lon = payload.point.lng;
-            row.distanceKm = 0;
-            delete it.routeAudit;
-            delete it.pendingTraceExtension;
-            it.prediction = null;
-
-            if (hasEditableRoute(it)) {
-              it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it, row.id);
-            }
+            placeRouteEndpoint(
+              it,
+              'start',
+              { lat: payload.point.lat, lon: payload.point.lng },
+              resolveMapContextPointTitle(payload.point),
+            );
           });
         }
         break;
@@ -127,24 +115,12 @@ export function useItineraryMapActions({
       }
       case 'set-finish':
         updateActive((it) => {
-          let row = it.timeline.find((item) => item.kind === 'end');
-          if (!row) {
-            insertTimelineItem(it.timeline, 'end');
-            row = it.timeline.find((item) => item.kind === 'end');
-          }
-          if (!row) return;
-
-          row.label = resolveMapContextPointTitle(payload.point);
-          row.lat = payload.point.lat;
-          row.lon = payload.point.lng;
-          row.distanceKm = null;
-          delete it.routeAudit;
-          delete it.pendingTraceExtension;
-          it.prediction = null;
-
-          if (hasEditableRoute(it)) {
-            it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it, row.id);
-          }
+          placeRouteEndpoint(
+            it,
+            'end',
+            { lat: payload.point.lat, lon: payload.point.lng },
+            resolveMapContextPointTitle(payload.point),
+          );
         });
         break;
       case 'delete-forbidden-zone':
@@ -202,25 +178,12 @@ export function useItineraryMapActions({
         } else {
           updateActive((it) => {
             upsertDraftPoiIntoItinerary(it, payload.draft);
-
-            let row = it.timeline.find((item) => item.kind === 'start');
-            if (!row) {
-              insertTimelineItem(it.timeline, 'start');
-              row = it.timeline.find((item) => item.kind === 'start');
-            }
-            if (!row) return;
-
-            row.label = resolveDraftTitle(payload.draft);
-            row.lat = payload.draft.point.lat;
-            row.lon = payload.draft.point.lng;
-            row.distanceKm = 0;
-            delete it.routeAudit;
-            delete it.pendingTraceExtension;
-            it.prediction = null;
-
-            if (hasEditableRoute(it)) {
-              it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it, row.id);
-            }
+            placeRouteEndpoint(
+              it,
+              'start',
+              { lat: payload.draft.point.lat, lon: payload.draft.point.lng },
+              resolveDraftTitle(payload.draft),
+            );
           });
         }
         break;
@@ -259,25 +222,12 @@ export function useItineraryMapActions({
       case 'finish-here':
         updateActive((it) => {
           upsertDraftPoiIntoItinerary(it, payload.draft);
-
-          let row = it.timeline.find((item) => item.kind === 'end');
-          if (!row) {
-            insertTimelineItem(it.timeline, 'end');
-            row = it.timeline.find((item) => item.kind === 'end');
-          }
-          if (!row) return;
-
-          row.label = resolveDraftTitle(payload.draft);
-          row.lat = payload.draft.point.lat;
-          row.lon = payload.draft.point.lng;
-          row.distanceKm = null;
-          delete it.routeAudit;
-          delete it.pendingTraceExtension;
-          it.prediction = null;
-
-          if (hasEditableRoute(it)) {
-            it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it, row.id);
-          }
+          placeRouteEndpoint(
+            it,
+            'end',
+            { lat: payload.draft.point.lat, lon: payload.draft.point.lng },
+            resolveDraftTitle(payload.draft),
+          );
         });
         break;
       case 'delete': {
@@ -303,9 +253,50 @@ export function useItineraryMapActions({
     }
   }, [addItinerary, project?.itineraries?.length, updateActive, updateActiveWithHistory]);
 
+  // Point placed on the active route from the analysis chart: it lies on the
+  // trace, so a step adds a row without rerouting; start / finish move like
+  // « Démarrer ici » / « Finir ici ».
+  const handleRoutePointAdd = useCallback((payload: RoutePointAddPayload) => {
+    if (payload.itineraryId !== project?.activeItineraryId) return;
+    const point = { lat: payload.lat, lon: payload.lon };
+    let createdId: string | null = null;
+    updateActive((it) => {
+      switch (payload.kind) {
+        case 'pause':
+          createdId = insertTimelineItem(it.timeline, 'pause', { distanceKm: payload.distanceM / 1_000 })?.id ?? null;
+          break;
+        case 'step':
+        case 'waypoint': {
+          const result = insertWaypointIntoTimeline(it.timeline, point, it.gpxRoute?.points, {
+            label: payload.label,
+            routeDistanceM: payload.distanceM,
+          });
+          createdId = result.newRow.id;
+          delete it.routeAudit;
+          delete it.pendingTraceExtension;
+          break;
+        }
+        case 'start':
+        case 'end':
+          createdId = placeRouteEndpoint(it, payload.kind, point, payload.label)?.id ?? null;
+          break;
+        default:
+          break;
+      }
+    });
+    if (createdId) {
+      onSelectAndCenterTimelineRow?.(createdId);
+    }
+  }, [onSelectAndCenterTimelineRow, project?.activeItineraryId, updateActive]);
+
   useEffect(() => listenItineraryMapAction((detail) => {
     if (detail.kind === 'context-menu') {
       handleExternalMapContextAction(detail.payload);
+      return;
+    }
+
+    if (detail.kind === 'route-point-add') {
+      handleRoutePointAdd(detail.payload);
       return;
     }
 
@@ -354,7 +345,7 @@ export function useItineraryMapActions({
           break;
       }
     }
-  }), [handleExternalMapContextAction, handleExternalPoiDraftAction, poiHandlers]);
+  }), [handleExternalMapContextAction, handleExternalPoiDraftAction, handleRoutePointAdd, poiHandlers]);
 
   return {
     handleExternalMapContextAction,

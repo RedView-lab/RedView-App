@@ -19,6 +19,9 @@ import type { BasemapRenderConfig } from '@/features/controlPanel/lib';
 import { dispatchItineraryMapAction } from '@/features/itineraryPanel/lib/mapActionBridge';
 import { resolvePanelArea, resolvePanelPlacement, type MapOverlayInsets } from './panelPlacement';
 import { setMapOverlayInsets } from '../lib/mapOverlayInsets';
+import { listenMapPoiDraftRequest } from '../lib/poiDraftRequest';
+import { resolvePointContext } from './MapContextMenu/contextMenuHelpers';
+import { formatCoordinates } from './MapContextMenu/utils';
 
 function sampleSlopePct(map: MapboxMap, lng: number, lat: number): number | null {
   const elevation = map.queryTerrainElevation?.([lng, lat]);
@@ -111,10 +114,7 @@ export default memo(function MapView({
     if (isLoaded && map.current) setMapOverlayInsets(map.current, overlayInsets);
   }, [isLoaded, map, overlayInsets]);
 
-  const handleMapContextMenuAction = useCallback((payload: MapContextMenuActionPayload) => {
-    onMapContextMenuAction?.(payload);
-    dispatchItineraryMapAction({ kind: 'context-menu', payload });
-    if (payload.action !== 'create-poi') return;
+  const openPoiDraft = useCallback((payload: MapContextMenuActionPayload, mapInstance: MapboxMap | null) => {
     // `screenPoint` is the click's `event.point` (map-container layout px), the
     // space of the insets and of the card's left/top: no client rect involved.
     const container = containerRef.current;
@@ -132,8 +132,43 @@ export default memo(function MapView({
       area.width,
       area.height,
     );
-    setPoiDraft(createPoiDraft(payload, map.current, placement));
-  }, [map, onMapContextMenuAction, overlayInsets]);
+    setPoiDraft(createPoiDraft(payload, mapInstance, placement));
+  }, [overlayInsets]);
+
+  const handleMapContextMenuAction = useCallback((payload: MapContextMenuActionPayload) => {
+    onMapContextMenuAction?.(payload);
+    dispatchItineraryMapAction({ kind: 'context-menu', payload });
+    if (payload.action === 'create-poi') openPoiDraft(payload, map.current);
+  }, [map, onMapContextMenuAction, openPoiDraft]);
+
+  // « Créer un POI » asked from outside the map (analysis chart): same card as
+  // the context menu, opened where the point lands once the camera stops.
+  useEffect(() => {
+    if (!isLoaded) return;
+    return listenMapPoiDraftRequest(({ lat, lon }) => {
+      const mapInstance = map.current;
+      if (!mapInstance) return;
+      const open = () => {
+        const screenPoint = mapInstance.project([lon, lat]);
+        const elevation = mapInstance.queryTerrainElevation?.([lon, lat]);
+        openPoiDraft({
+          action: 'create-poi',
+          point: {
+            lat,
+            lng: lon,
+            elevationMeters: Number.isFinite(elevation) ? Number(elevation) : null,
+            slopePct: sampleSlopePct(mapInstance, lon, lat),
+            coordinatesLabel: formatCoordinates(lat, lon),
+            ...resolvePointContext(mapInstance, screenPoint),
+            overlayDetails: [],
+          },
+          screenPoint: { x: screenPoint.x, y: screenPoint.y },
+        }, mapInstance);
+      };
+      if (mapInstance.isMoving()) mapInstance.once('moveend', open);
+      else open();
+    });
+  }, [isLoaded, map, openPoiDraft]);
 
   const handlePoiDraftAction = useCallback((payload: MapPoiDraftActionPayload) => {
     onMapPoiDraftAction?.(payload);

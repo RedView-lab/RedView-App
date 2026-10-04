@@ -328,7 +328,6 @@ export interface ControlPanelHandlers {
   onAltitudeBandBreakpointChange?: (bandIndex: number, field: 'min' | 'max', valueMeters: number) => void;
 
   onWeatherEnabledChange?: (enabled: boolean) => void;
-  onWeatherTabChange?: (tab: WeatherTab) => void;
   onWeatherDateChange?: (dateState: Partial<Pick<WeatherState, 'customDateEnabled' | 'date' | 'time' | 'forecastDay' | 'trendMode'>>) => void;
   onWeatherLayerToggle?: (key: WeatherLayerKey, enabled: boolean) => void;
   onWeatherLayerModeChange?: (key: WeatherLayerKey, mode: WeatherRenderMode) => void;

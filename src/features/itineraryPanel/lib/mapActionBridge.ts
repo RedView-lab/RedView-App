@@ -1,7 +1,24 @@
 import type { MapContextMenuActionPayload, MapPoiDraftActionPayload } from '@/features/map3d';
 import type { PoiFeature } from '@/features/poi/types';
+import type { TimelineAddItemKind } from '../types';
 
 export const ITINERARY_MAP_ACTION_EVENT = 'redview:itinerary-map-action';
+
+/**
+ * Point placed on the active route from the analysis chart (toolbar « Ajouter »).
+ * A POI goes through the map's draft card instead.
+ */
+export interface RoutePointAddPayload {
+  /** Itinerary active when the point was placed; ignored if another one is active by then. */
+  itineraryId: string;
+  kind: Exclude<TimelineAddItemKind, 'poi'>;
+  lat: number;
+  lon: number;
+  /** Position along the itinerary's route, from its start. */
+  distanceM: number;
+  /** Row label until the place name resolves. */
+  label: string;
+}
 
 export type ItineraryMapActionEventDetail =
   | {
@@ -11,6 +28,10 @@ export type ItineraryMapActionEventDetail =
   | {
       kind: 'poi-draft';
       payload: MapPoiDraftActionPayload;
+    }
+  | {
+      kind: 'route-point-add';
+      payload: RoutePointAddPayload;
     }
   | {
       kind: 'poi-action';

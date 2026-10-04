@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useFlyoverSeek, useFlyoverSessionActive } from '../../flyover';
 import { useRouteSplitToolOptional } from '../../routeSplit';
 import { useTraceToolOptional } from '../../tracer';
+import { useChartPlacementToolOptional } from '../../chartPlacement';
 import {
   axis2Options,
   axisOptions,
@@ -21,8 +22,11 @@ import {
   selectInteractiveItineraryForChartX,
 } from './shared';
 import {
+  getRoutePointDistances,
+  interpolateRoutePointAtDistance,
   isWeatherMetric,
   locateRoutePointAtX,
+  projectXToDistanceM,
   SlopeLegend,
   type AxisMetricId,
   type AxisMode,
@@ -77,6 +81,8 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
   const predictionStore = usePredictionStoreOptional();
   const routeSplitTool = useRouteSplitToolOptional();
   const traceTool = useTraceToolOptional();
+  const chartPlacementTool = useChartPlacementToolOptional();
+  const placementArmed = chartPlacementTool?.armedKind != null;
   const seekFlyoverToChartX = useFlyoverSeek();
   const flyoverSessionActive = useFlyoverSessionActive();
   const project = projectStore?.project ?? null;
@@ -187,6 +193,18 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
     activeItinerary,
     weatherByItinerary,
   });
+
+  // Span of the active itinerary's curve on the X axis (« Ajouter » only places on it).
+  const activeChartXRange = useMemo(() => {
+    let min = Number.POSITIVE_INFINITY;
+    let max = Number.NEGATIVE_INFINITY;
+    for (const entry of [...series, ...altitudeBackdropProfiles]) {
+      if (entry.itineraryId !== activeItinerary?.id || entry.points.length === 0) continue;
+      min = Math.min(min, entry.points[0].x);
+      max = Math.max(max, entry.points[entry.points.length - 1].x);
+    }
+    return max > min ? { min, max } : null;
+  }, [activeItinerary?.id, altitudeBackdropProfiles, series]);
 
   const isSplitArmed = Boolean(routeSplitTool?.armed);
   // Découpe et Tracer ont leur propre point de survol sur la trace : le survol
@@ -602,7 +620,69 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
   const handleChartClick = useCallback((xValue: number) => {
     chartClickImplRef.current(xValue);
   }, []);
+  const flyMapToRoutePoint = (point: { lat: number; lon: number }) => {
+    if (!map) return;
+    const currentPitch = map.getPitch();
+    const is2D = currentPitch <= 8;
+    const targetPitch = is2D ? 0 : Math.max(currentPitch, CHART_CLICK_FOCUS_PITCH);
+
+    flyToLocation(
+      map,
+      { lon: point.lon, lat: point.lat },
+      {
+        zoom: CHART_CLICK_FOCUS_ZOOM,
+        pitch: targetPitch,
+      },
+    );
+  };
+
+  // « Ajouter » armé : le clic pose l'élément sur la trace de l'itinéraire actif,
+  // au point du profil sous le curseur.
+  const placeOnActiveRoute = (xValue: number) => {
+    const points = activeItinerary?.gpxRoute?.points ?? null;
+    if (!chartPlacementTool || !activeItinerary || !points || points.length < 2) return;
+    if (activeChartXRange) {
+      const margin = (activeChartXRange.max - activeChartXRange.min) * 0.002;
+      if (xValue < activeChartXRange.min - margin || xValue > activeChartXRange.max + margin) {
+        chartPlacementTool.rejectOutsideRoute();
+        return;
+      }
+    }
+
+    const distances = getRoutePointDistances(points);
+    const totalM = distances[distances.length - 1] ?? 0;
+    const localXValue = xMode === 'distance' ? xValue - getItineraryStartDistanceKm(activeItinerary) : xValue;
+    const prediction = predictions?.[activeItinerary.id] ?? activeItinerary.prediction ?? null;
+    const distanceM = projectXToDistanceM(
+      points,
+      prediction,
+      xMode,
+      localXValue,
+      activeItinerary.rhythm.startTime,
+      buildPauseAwareSchedule(activeItinerary, prediction),
+    );
+    // Hors du profil actif (portion d'une autre variante, au-delà de l'arrivée).
+    const toleranceM = Math.max(25, totalM * 0.002);
+    if (!Number.isFinite(distanceM) || distanceM < -toleranceM || distanceM > totalM + toleranceM) {
+      chartPlacementTool.rejectOutsideRoute();
+      return;
+    }
+
+    const routeDistanceM = Math.min(totalM, Math.max(0, distanceM));
+    const point = interpolateRoutePointAtDistance(points, routeDistanceM);
+    if (!point) return;
+
+    setSelectedChartX(xValue);
+    updateHoverPoint(xValue);
+    flyMapToRoutePoint(point);
+    chartPlacementTool.placeAt({ lat: point.lat, lon: point.lon, distanceM: routeDistanceM });
+  };
+
   const handleChartClickImpl = (xValue: number) => {
+    if (placementArmed) {
+      placeOnActiveRoute(xValue);
+      return;
+    }
     // Flyover ouvert : le clic déplace la tête de lecture (la caméra suit), sauf découpe armée.
     if (!routeSplitTool?.armed && seekFlyoverToChartX(xValue)) return;
     setSelectedChartX(xValue);
@@ -653,19 +733,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
     );
     if (!point) return;
 
-    const currentPitch = map.getPitch();
-    const is2D = currentPitch <= 8;
-    const targetPitch = is2D ? 0 : Math.max(currentPitch, CHART_CLICK_FOCUS_PITCH);
-
-    flyToLocation(
-      map,
-      { lon: point.lon, lat: point.lat },
-      {
-        zoom: CHART_CLICK_FOCUS_ZOOM,
-        pitch: targetPitch,
-      },
-    );
-
+    flyMapToRoutePoint(point);
     updateHoverPoint(xValue);
   };
   useLayoutEffect(() => {
@@ -735,6 +803,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
           onHoverXValueChange={handleHoverXValueChange}
           controlledHoverXValue={chartControlledHoverXValue}
           onPlotClick={handleChartClick}
+          placementActive={placementArmed}
           onPoiClick={handlePoiAnnotationClick}
           onAlertClick={handleChartAlertClick}
           onPlotRangeSelect={handlePlotRangeSelect}

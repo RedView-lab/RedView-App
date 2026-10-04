@@ -42,14 +42,7 @@ import {
   type RouteHoverPreviewPoint,
 } from './geojson';
 import type { RouteLayerPoint } from './routeStyle';
-import {
-  LINE_CLEARANCE_M,
-  ROUTE_PROFILE_Z_OFFSET,
-  ROUTE_SELECTION_CLEARANCE_M,
-  applyRouteElevationProfile,
-  getRouteElevationContext,
-} from './routeElevation';
-import { isValidElevation } from '../route-metrics/elevationSanitizer';
+import { ROUTE_SELECTION_CLEARANCE_M, getRouteLineElevation } from './routeElevation';
 import { setLayoutPropertyIfChanged, setPaintPropertyIfChanged } from './itineraryLayers';
 
 const analysisHoverVisibilityState = new WeakMap<MapboxMap, boolean>();
@@ -290,27 +283,7 @@ export function setAnalysisFlyoverRoute(
 
     const coords = points.map((pt): [number, number] => [pt.lon, pt.lat]);
     const geoJson = buildAnalysisFlyoverProgressGeoJson(coords, color);
-    const elevationContext = getRouteElevationContext(map);
-    const elevationProfileApplied =
-      elevationContext.scale !== null && !elevationContext.isLowResDem && points.some((pt) => isValidElevation(pt.elevationM))
-        ? applyRouteElevationProfile(
-            { data: geoJson, requiresLineMetrics: true },
-            points,
-            elevationContext.scale,
-            ROUTE_SELECTION_CLEARANCE_M,
-          )
-        : false;
-
-    const elevationReference = elevationProfileApplied
-      ? 'sea'
-      : elevationContext.scale !== null
-        ? 'ground'
-        : 'none';
-    const zOffset = elevationProfileApplied
-      ? ROUTE_PROFILE_Z_OFFSET
-      : elevationContext.scale !== null
-        ? LINE_CLEARANCE_M
-        : 0;
+    const { reference: elevationReference, zOffset } = getRouteLineElevation(map, ROUTE_SELECTION_CLEARANCE_M);
 
     source.setData(geoJson);
     flyoverProgressState.delete(map);
@@ -389,36 +362,12 @@ export function setAnalysisSelectedSegment(
       return;
     }
 
-    const isCoordinateArray = Array.isArray(segment[0]);
-    const coords: [number, number][] = isCoordinateArray
+    const coords: [number, number][] = Array.isArray(segment[0])
       ? (segment as [number, number][])
       : (segment as RouteLayerPoint[]).map((pt) => [pt.lon, pt.lat]);
-    const points: RouteLayerPoint[] = isCoordinateArray
-      ? (segment as [number, number][]).map(([lon, lat]) => ({ lon, lat }))
-      : (segment as RouteLayerPoint[]);
 
     const geoJson = buildAnalysisSelectionGeoJson(coords, color);
-    const elevationContext = getRouteElevationContext(map);
-    const elevationProfileApplied =
-      elevationContext.scale !== null && !elevationContext.isLowResDem && points.some((pt) => isValidElevation(pt.elevationM))
-        ? applyRouteElevationProfile(
-            { data: geoJson, requiresLineMetrics: true },
-            points,
-            elevationContext.scale,
-            ROUTE_SELECTION_CLEARANCE_M,
-          )
-        : false;
-
-    const elevationReference = elevationProfileApplied
-      ? 'sea'
-      : elevationContext.scale !== null
-        ? 'ground'
-        : 'none';
-    const zOffset = elevationProfileApplied
-      ? ROUTE_PROFILE_Z_OFFSET
-      : elevationContext.scale !== null
-        ? LINE_CLEARANCE_M
-        : 0;
+    const { reference: elevationReference, zOffset } = getRouteLineElevation(map, ROUTE_SELECTION_CLEARANCE_M);
 
     source.setData(geoJson);
 

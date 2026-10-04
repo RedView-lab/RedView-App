@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef, useState, memo } from 'react';
-import { useProjectStoreOptional } from '@/features/itineraryPanel';
+import { useEffect, useMemo, useRef, useState, memo, type MouseEvent } from 'react';
+import { useProjectStoreOptional, type TimelineAddItemKind } from '@/features/itineraryPanel';
+import { TimelineKindMenu } from '@/features/itineraryPanel/sections/timeline/TimelineKindMenu';
+import { TIMELINE_ADD_MENU_OPTIONS } from '@/features/itineraryPanel/sections/timeline/timelineAddMenuOptions';
 import { useHorizontalScrollOverflow } from '@/shared/hooks/useHorizontalScrollOverflow';
 import { useAppI18n } from '@/shared/i18n';
 import { variantModifierLabel } from '@/shared/lib/platform';
@@ -7,6 +9,7 @@ import { useRouteMergeToolOptional } from '../../routeMerge';
 import { useRouteSplitToolOptional } from '../../routeSplit';
 import { useTraceToolOptional } from '../../tracer';
 import { useForbiddenZoneToolOptional } from '../../forbiddenZones';
+import { useChartPlacementToolOptional } from '../../chartPlacement';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { IconChevronDown } from '../CenterPanelIcons';
 import { useAnalysisFlyover } from '../../flyover';
@@ -47,7 +50,9 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
   const routeSplitTool = useRouteSplitToolOptional();
   const traceTool = useTraceToolOptional();
   const forbiddenZoneTool = useForbiddenZoneToolOptional();
+  const chartPlacementTool = useChartPlacementToolOptional();
   const [toolbarStatus, setToolbarStatus] = useState<string | null>(null);
+  const [addMenuAnchor, setAddMenuAnchor] = useState<HTMLElement | null>(null);
   const {
     canPlay,
     canSlowDown,
@@ -86,10 +91,32 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
     store.clearItineraryRoute(activeItinerary.id);
     setToolbarStatus(t('Trace supprimée'));
   };
-  const handleAddItinerary = () => {
-    if (!store) return;
-    store.addItinerary();
-    setToolbarStatus(t('Nouvel itinéraire créé'));
+  const canPlaceOnChart = chartPlacementTool?.canPlace ?? false;
+  const placementArmed = chartPlacementTool?.armedKind != null;
+  const placementStatusMessage = chartPlacementTool?.statusMessage ?? null;
+  const addButtonTitle = placementArmed
+    ? t('Annuler l’ajout')
+    : canPlaceOnChart
+      ? t('Ajouter un élément sur le graphique')
+      : t('Tracez ou importez un itinéraire pour ajouter des éléments');
+  // « Ajouter » : choix du type (menu « + » de la feuille de route), puis clic
+  // sur le graphique à l'endroit voulu. Re-cliquer annule.
+  const handleAddButtonClick = (event: MouseEvent<HTMLButtonElement>) => {
+    if (placementArmed) {
+      chartPlacementTool?.deactivate();
+      setAddMenuAnchor(null);
+      return;
+    }
+    const anchor = event.currentTarget;
+    setAddMenuAnchor((current) => (current === anchor ? null : anchor));
+  };
+  const handleSelectAddKind = (kind: TimelineAddItemKind) => {
+    routeMergeTool?.deactivate();
+    routeSplitTool?.deactivate();
+    traceTool?.deactivate();
+    forbiddenZoneTool?.deactivate();
+    chartPlacementTool?.arm(kind);
+    setToolbarStatus(null);
   };
   const reversibleRoute = activeItinerary?.gpxRoute ?? null;
   const reversibleTracePointCount = reversibleRoute?.points.length ?? 0;
@@ -116,6 +143,7 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
     ? canRedoForbiddenZoneDraft
     : (store?.canRedoTraceEdit ?? false);
   const inlineToolbarStatus = useMemo(() => {
+    if (placementStatusMessage) return placementStatusMessage;
     if (splitStatusMessage) return splitStatusMessage;
     if (forbiddenZoneStatusMessage) return forbiddenZoneStatusMessage;
     if (traceStatusMessage) return traceStatusMessage;
@@ -123,6 +151,7 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
     return null;
   }, [
     forbiddenZoneStatusMessage,
+    placementStatusMessage,
     splitStatusMessage,
     traceStatusMessage,
     toolbarStatus,
@@ -140,6 +169,7 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
 
   const handleToggleRouteSplit = () => {
     if (!splitArmed) {
+      chartPlacementTool?.deactivate();
       routeMergeTool?.deactivate();
       traceTool?.deactivate();
       forbiddenZoneTool?.deactivate();
@@ -150,6 +180,7 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
 
   const handleToggleTrace = () => {
     if (!traceArmed) {
+      chartPlacementTool?.deactivate();
       routeMergeTool?.deactivate();
       routeSplitTool?.deactivate();
       forbiddenZoneTool?.deactivate();
@@ -160,6 +191,7 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
 
   const handleToggleForbiddenZone = () => {
     if (!forbiddenZoneArmed) {
+      chartPlacementTool?.deactivate();
       routeMergeTool?.deactivate();
       routeSplitTool?.deactivate();
       traceTool?.deactivate();
@@ -234,17 +266,30 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
           </ToolbarIconButton>
 
           <button
-            className="rvc-center-toolbar__button rvc-center-toolbar__button--accent"
+            className={placementArmed
+              ? 'rvc-center-toolbar__button rvc-center-toolbar__button--accent rvc-center-toolbar__button--accent-armed'
+              : 'rvc-center-toolbar__button rvc-center-toolbar__button--accent'}
             type="button"
-            aria-label="Ajouter"
-            title="Ajouter"
-            onClick={handleAddItinerary}
-            disabled={!store}
+            aria-label={t('Ajouter')}
+            title={addButtonTitle}
+            onClick={handleAddButtonClick}
+            disabled={!canPlaceOnChart}
+            aria-haspopup="menu"
+            aria-expanded={addMenuAnchor != null}
+            aria-pressed={placementArmed}
           >
             <IconPlusCircle />
-            <span className="rvc-center-toolbar__button-text">Ajouter</span>
+            <span className="rvc-center-toolbar__button-text">{t('Ajouter')}</span>
             <IconChevronDown size={16} />
           </button>
+
+          <TimelineKindMenu
+            anchorEl={addMenuAnchor}
+            open={addMenuAnchor != null && canPlaceOnChart}
+            options={TIMELINE_ADD_MENU_OPTIONS}
+            onClose={() => setAddMenuAnchor(null)}
+            onSelect={handleSelectAddKind}
+          />
 
           <button
             className={traceArmed

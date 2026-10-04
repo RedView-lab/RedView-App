@@ -1,0 +1,237 @@
+/**
+ * Capture du dashboard réel pour le workbench : DOM noir et blanc par région
+ * et par état (modes du panneau gauche, sections du panneau droit, frise,
+ * pop-ins), feuilles CSS chargées, et pour chaque texte / conteneur la liste
+ * des déclarations candidates de chaque propriété éditable (règle, inline ou
+ * navigateur, spécificité, !important, héritage), via
+ * CSS.getMatchedStylesForNode. Écrit .cache/capture.json.
+ *
+ * Usage : node scripts/design-workbench/capture.mjs [--viewport 1920x950]
+ * (le serveur `npm run dev` doit tourner : le compte démo n'existe qu'en dev).
+ */
+import fs from 'node:fs';
+import path from 'node:path';
+import { execSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { launch, sleep } from '../../script-test-bench/screen-audit/cdp.mjs';
+import { openEditorWithRoute, writeGpx, APP_URL } from './session.mjs';
+import {
+  ATTR_PROPS, TEXT_PROPS, PAINT_PROP_LIST,
+  buildOriginMap, parseSheet, declaresProp, matchableSelector, splitSelectorList, specificity, cmpSpec,
+} from './css.mjs';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(HERE, '../..');
+const CACHE = path.join(HERE, '.cache');
+const COLLECT = fs.readFileSync(path.join(HERE, 'page-collect.js'), 'utf8').trim();
+
+const argValue = (name) => {
+  const i = process.argv.indexOf(`--${name}`);
+  return i > 0 ? process.argv[i + 1] : undefined;
+};
+const [VW, VH] = (argValue('viewport') ?? '1920x950').split('x').map(Number);
+const DPR = Number(argValue('dpr') ?? 1);
+
+const log = (...a) => console.log('[capture]', ...a);
+
+async function collect(session, args) {
+  return session.evaluate(`(${COLLECT})(${JSON.stringify({ paintProps: PAINT_PROP_LIST, ...args })})`);
+}
+
+/** Souris posée sur la carte, loin des panneaux : aucun état :hover capturé. */
+async function parkMouse(session) {
+  const p = await session.evaluate(`(() => {
+    const r = document.querySelector('[data-rv-canvas]').getBoundingClientRect();
+    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + 140) };
+  })()`);
+  await session.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: p.x, y: p.y });
+}
+
+async function clickAt(session, x, y, button = 'left') {
+  await session.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
+  await session.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button, clickCount: 1 });
+  await session.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button, clickCount: 1 });
+}
+
+/** Clique (vrais événements souris) l'élément trouvé par l'expression JS. */
+async function clickEl(session, js, button = 'left') {
+  const r = await session.evaluate(`(() => { const el = ${js}; if (!el) return null; el.scrollIntoView?.({ block: 'nearest' }); const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+  if (!r) return false;
+  await clickAt(session, Math.round(r.x), Math.round(r.y), button);
+  return true;
+}
+
+async function escape(session) {
+  await session.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+  await session.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+}
+
+// ── Feuilles ──────────────────────────────────────────────────────────────
+
+async function readSheets(session, headers) {
+  const sheets = [];
+  const order = await session.evaluate(`[...document.querySelectorAll('style[data-vite-dev-id]')].map((s) => s.getAttribute('data-vite-dev-id'))`);
+  const byDevId = new Map();
+  for (const h of headers.values()) {
+    if (h.origin !== 'regular' || h.ownerNode == null) continue;
+    try {
+      const { node } = await session.send('DOM.describeNode', { backendNodeId: h.ownerNode });
+      const attrs = node.attributes ?? [];
+      const i = attrs.indexOf('data-vite-dev-id');
+      if (i >= 0) byDevId.set(attrs[i + 1], h);
+    } catch {
+      /* feuille retirée */
+    }
+  }
+  let nextId = 1;
+  for (const devId of order) {
+    const h = byDevId.get(devId);
+    if (!h) continue;
+    const { text } = await session.send('CSS.getStyleSheetText', { styleSheetId: h.styleSheetId });
+    const origin = buildOriginMap(devId, text, ROOT);
+    const parsed = parseSheet(text, nextId, origin);
+    nextId = parsed.nextId;
+    sheets.push({
+      sid: h.styleSheetId,
+      devId,
+      file: path.relative(ROOT, devId).split(path.sep).join('/'),
+      text,
+      rules: parsed.rules,
+      byKey: new Map(parsed.rules.map((r) => [r.key, r])),
+    });
+  }
+  return sheets;
+}
+
+/** Règles conditionnelles (@container / @media) qui déclarent une propriété éditable. */
+function conditionalRules(sheets) {
+  const out = [];
+  for (const s of sheets) {
+    for (const r of s.rules) {
+      if (!r.conds.some((c) => c.type === 'container' || c.type === 'media')) continue;
+      const names = new Set(Object.keys(r.decls));
+      if (!ATTR_PROPS.some((p) => declaresProp(names, p))) continue;
+      for (const sel of splitSelectorList(r.selector)) {
+        if (/:(hover|active|focus)/.test(sel)) continue;
+        out.push({ i: r.id, sel: matchableSelector(sel), spec: specificity(sel) });
+      }
+    }
+  }
+  return out;
+}
+
+// ── Attribution ───────────────────────────────────────────────────────────
+
+const SHORTHAND_OF = {
+  'font-size': ['font'], 'font-weight': ['font'], 'line-height': ['font'],
+  'padding-top': ['padding', 'padding-block'], 'padding-bottom': ['padding', 'padding-block'],
+  'padding-left': ['padding', 'padding-inline'], 'padding-right': ['padding', 'padding-inline'],
+  'row-gap': ['gap'], 'column-gap': ['gap'],
+};
+
+function lastDecl(style, prop) {
+  if (!style?.cssProperties) return null;
+  let found = null;
+  let pending = false;
+  for (const p of style.cssProperties) {
+    if (p.name !== prop || p.disabled || p.parsedOk === false) continue;
+    if (p.value === '') {
+      pending = true;
+      continue;
+    }
+    found = { value: p.value, imp: p.important ? 1 : 0 };
+  }
+  if (found) return found;
+  // Raccourci avec var() (« font: 600 var(--rv-font-size-xs)/1 … ») : ses
+  // sous-propriétés restent vides jusqu'au calcul, le candidat est le raccourci.
+  for (const sh of SHORTHAND_OF[prop] ?? []) {
+    const e = [...(style.shorthandEntries ?? [])].reverse().find((x) => x.name === sh);
+    if (e && (pending || /var\(/.test(e.value))) return { value: `${sh}: ${e.value}`, imp: e.important ? 1 : 0 };
+  }
+  return null;
+}
+
+function makeRuleResolver(sheets) {
+  const bySid = new Map(sheets.map((s) => [s.sid, s]));
+  return (rule) => {
+    const s = bySid.get(rule.styleSheetId);
+    const range = rule.selectorList?.selectors?.[0]?.range;
+    if (!s || !range) return null;
+    return s.byKey.get(`${range.startLine}:${range.startColumn}`) ?? null;
+  };
+}
+
+function maxSpec(rm) {
+  let best = [0, 0, 0];
+  for (const i of rm.matchingSelectors ?? []) {
+    const sp = rm.rule.selectorList.selectors[i]?.specificity;
+    const v = sp ? [sp.a, sp.b, sp.c] : [0, 0, 0];
+    if (cmpSpec(v, best) > 0) best = v;
+  }
+  return best;
+}
+
+/**
+ * Candidats d'une propriété dans un bloc (règles d'un niveau + inline).
+ * Format compact : [type, ruleId|null, spec 'a.b.c', imp, valeur]
+ * type : r = règle d'auteur, i = style inline, u = navigateur.
+ */
+function candidatesFrom(matchedRules, inlineStyle, prop, resolveRule) {
+  const out = [];
+  for (const rm of matchedRules ?? []) {
+    const d = lastDecl(rm.rule.style, prop);
+    if (!d) continue;
+    if (rm.rule.origin === 'user-agent') {
+      out.push(['u', null, '0.0.0', d.imp, d.value]);
+      continue;
+    }
+    if (rm.rule.origin !== 'regular') continue;
+    const rule = resolveRule(rm.rule);
+    out.push(['r', rule ? rule.id : null, maxSpec(rm).join('.'), d.imp, d.value]);
+  }
+  const inl = lastDecl(inlineStyle, prop);
+  if (inl) out.push(['i', null, '1.0.0.0', inl.imp, inl.value]);
+  return out;
+}
+
+async function attribute(session, ids, resolveRule, extras, condById) {
+  const { root } = await session.send('DOM.getDocument', { depth: 0 });
+  const { nodeIds } = await session.send('DOM.querySelectorAll', { nodeId: root.nodeId, selector: '[data-wbq]' });
+  if (nodeIds.length !== ids.length) throw new Error(`attribution : ${nodeIds.length} nœuds pour ${ids.length} ids`);
+  const out = {};
+  for (let k = 0; k < nodeIds.length; k++) {
+    const id = ids[k];
+    let m;
+    try {
+      m = await session.send('CSS.getMatchedStylesForNode', { nodeId: nodeIds[k] });
+    } catch {
+      continue;
+    }
+    const rec = {};
+    for (const prop of ATTR_PROPS) {
+      const own = candidatesFrom(m.matchedCSSRules, m.inlineStyle, prop, resolveRule);
+      for (const ruleId of extras[id] ?? []) {
+        const c = condById.get(ruleId);
+        if (!c || own.some((o) => o[1] === ruleId)) continue;
+        const value = c.rule.decls[prop];
+        if (value == null) continue;
+        const imp = /!important$/.test(value) ? 1 : 0;
+        own.push(['r', ruleId, c.spec.join('.'), imp, value.replace(/\s*!important$/, '')]);
+      }
+      const entry = {};
+      if (own.length) entry.o = own;
+      if (TEXT_PROPS.includes(prop)) {
+        const inh = [];
+        (m.inherited ?? []).forEach((level, depth) => {
+          const c = candidatesFrom(level.matchedCSSRules, level.inlineStyle, prop, resolveRule);
+          if (c.length) inh.push([depth + 1, c]);
+        });
+        if (inh.length) entry.h = inh;
+      }
+      if (entry.o || entry.h) rec[prop] = entry;
+    }
+    out[id] = rec;
+  }
+  return out;
+}
+

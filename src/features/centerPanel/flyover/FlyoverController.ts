@@ -428,7 +428,7 @@ export class FlyoverController {
     this.mountLayers(session);
   }
 
-  /** Vérification lente : style rechargé, qualité DEM / exagération changées, tracé ré-affiché par sa couche. */
+  /** Vérification lente : style rechargé, passage relief ↔ globe, tracé ré-affiché par sa couche. */
   private checkLayerContext(): void {
     const session = this.session;
     if (!session || !isMapAlive(this.map)) return;

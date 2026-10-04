@@ -85,6 +85,8 @@ export function SummaryRow({
     <div
       className={rowClassName}
       style={rowStyle}
+      data-summary-row-id={itinerary.id}
+      aria-current={isActive ? 'true' : undefined}
       title={
         depth > 0
           ? t('{{name}} commence à {{distance}} km', { name: itinerary.name, distance: startDistanceKm.toFixed(1) })

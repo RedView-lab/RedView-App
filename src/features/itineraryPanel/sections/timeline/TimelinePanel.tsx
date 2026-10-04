@@ -19,15 +19,12 @@ import type {
   TimelineRailConfig,
   TimelineView,
 } from '../../types';
-import { KindBadge } from './KindBadge';
 import { TimelineEditPanel } from './TimelineEditPanel';
 import { TimelineHeader } from './TimelineHeader';
 import { TimelineSheetView } from './TimelineSheetView';
 import { TimelineTimelineView } from './TimelineTimelineView';
-import {
-  TimelineKindMenu,
-  type TimelineKindMenuOption,
-} from './TimelineKindMenu.tsx';
+import { TimelineKindMenu } from './TimelineKindMenu.tsx';
+import { TIMELINE_ADD_MENU_OPTIONS } from './timelineAddMenuOptions';
 import {
   type TimelineFilterState,
   DEFAULT_TIMELINE_FILTER,
@@ -250,39 +247,6 @@ export function TimelinePanel({
     [deduplicatedItems, effectiveFilters],
   );
 
-  const addMenuOptions: TimelineKindMenuOption[] = [
-    {
-      value: 'step',
-      label: t('Étape'),
-      icon: <span className="rvi-tl-kind-menu__step-dot" />,
-    },
-    {
-      value: 'waypoint',
-      label: t('Waypoint'),
-      icon: <KindBadge kind="waypoint" />,
-    },
-    {
-      value: 'poi',
-      label: t('POI'),
-      icon: <KindBadge kind="poi" />,
-    },
-    {
-      value: 'pause',
-      label: t('Pause'),
-      icon: <KindBadge kind="pause" />,
-    },
-    {
-      value: 'start',
-      label: t('Départ'),
-      icon: <KindBadge kind="start" />,
-    },
-    {
-      value: 'end',
-      label: t('Destination'),
-      icon: <KindBadge kind="end" />,
-    },
-  ];
-
   const showTimelineTopbar = view === 'timeline' && timelineEditOpen;
   const showSheetTopbar = view === 'sheet' && sheetSettingsOpen;
 
@@ -392,7 +356,7 @@ export function TimelinePanel({
       <TimelineKindMenu
         anchorEl={addMenuAnchor}
         open={!!addMenuAnchor}
-        options={addMenuOptions}
+        options={TIMELINE_ADD_MENU_OPTIONS}
         onClose={handleCloseKindMenu}
         onSelect={handleSelectAddKind}
       />

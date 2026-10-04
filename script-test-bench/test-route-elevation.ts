@@ -1,13 +1,23 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import type { Map as MapboxMap } from 'mapbox-gl';
-import { applyRouteElevationProfile, getRouteElevationContext, ROUTE_PROFILE_Z_OFFSET } from '../src/features/itineraryPanel/lib/route-layer/routeElevation';
-import { buildRouteGeoJson, type RouteLayerPoint, type RouteLayerRenderSpec } from '../src/features/itineraryPanel/lib/route-layer/routeStyle';
+import {
+  LINE_CLEARANCE_M,
+  ROUTE_ELEVATED_MIN_ZOOM,
+  getRouteElevationContext,
+} from '../src/features/itineraryPanel/lib/route-layer/routeElevation';
+import type { RouteLayerPoint } from '../src/features/itineraryPanel/lib/route-layer/routeStyle';
 import { upsertRouteLayer } from '../src/features/itineraryPanel/lib/route-layer/itineraryLayers';
 import { ids } from '../src/features/itineraryPanel/lib/route-layer/constants';
 
+// Contract: every route line reads its altitude from the terrain itself
+// (`line-elevation-reference: ground`), i.e. the very DEM tile the 3D mesh is
+// drawn with. The former absolute (`sea`) profile, built from bare-earth
+// route altitudes, sank under the HD surface model and hid up to half the
+// visible trace depending on the zoom level.
+
 const require = createRequire(import.meta.url);
-const { expression, latest, validate } = require('../node_modules/mapbox-gl/dist/style-spec/index.cjs');
+const { validate } = require('../node_modules/mapbox-gl/dist/style-spec/index.cjs');
 const options = { color: '#ff0000', opacity01: 1, visible: true, traceWidthPx: 8 };
 let passed = 0;
 function test(name: string, run: () => void) {
@@ -18,77 +28,6 @@ function test(name: string, run: () => void) {
 function points(heights: (number | null)[]): RouteLayerPoint[] {
   return heights.map((elevationM, i) => ({ lon: 6 + i * 0.00012704, lat: 45, elevationM }));
 }
-function features(spec: RouteLayerRenderSpec) {
-  return spec.data.type === 'FeatureCollection' ? spec.data.features : [spec.data];
-}
-function heights(spec: RouteLayerRenderSpec, index = 0): number[] {
-  return features(spec)[index].properties!.__routeHeights;
-}
-function profile(route: RouteLayerPoint[], scale = 1.5) {
-  const spec = buildRouteGeoJson(route, options, 8);
-  assert.ok(applyRouteElevationProfile(spec, route, scale));
-  return spec;
-}
-const compiled = expression.createPropertyExpression(ROUTE_PROFILE_Z_OFFSET, latest.layout_line['line-z-offset']);
-
-test('native renderer accepts and interpolates the absolute-height expression', () => {
-  assert.equal(compiled.result, 'success');
-  for (const [progress, expected] of [[0, 100], [0.25, 150], [0.5, 200], [1, 300]]) {
-    assert.equal(compiled.value.evaluate({ zoom: 16, lineProgress: progress }, {
-      type: 2, properties: { __routeHeights: [100, 200, 300] },
-    }), expected);
-  }
-});
-test('flat trail stays flat and uses the existing terrain scale only once', () => {
-  assert.ok(heights(profile(points(Array(101).fill(500)))).every(h => Math.abs(h - 750.8) < 1e-8));
-});
-test('isolated altitude spike is removed from the visual profile', () => {
-  const values = Array(101).fill(500);
-  values[50] = 560;
-  assert.ok(Math.max(...heights(profile(points(values)))) < 752);
-});
-test('sustained climbs and both endpoints remain, not a constant-altitude line', () => {
-  const h = heights(profile(points(Array.from({ length: 101 }, (_, i) => 500 + i))));
-  assert.equal(h[0], 750.8);
-  assert.equal(h.at(-1), 900.8);
-  assert.ok(h.every((value, i) => i === 0 || value >= h[i - 1]));
-});
-test('GPX coordinates, raw elevations and slope colors are untouched', () => {
-  const route = points([500, 505, 590, 515, 520]);
-  const original = structuredClone(route);
-  const spec = buildRouteGeoJson(route, { ...options, renderMode: 'slope', slopeBands: [{ id: 'a', minDeg: -90, maxDeg: 90, color: '#ff0000' }] }, 8);
-  const geometry = structuredClone(features(spec)[0].geometry);
-  const gradient = structuredClone(spec.lineGradientPaint);
-  assert.ok(applyRouteElevationProfile(spec, route, 1.5));
-  assert.deepEqual(route, original);
-  assert.deepEqual(features(spec)[0].geometry, geometry);
-  assert.deepEqual(spec.lineGradientPaint, gradient);
-});
-test('missing and sentinel elevations interpolate without a drop to sea level', () => {
-  const h = heights(profile(points([null, 500, -32768, null, 520, null])));
-  assert.ok(h.every(value => Number.isFinite(value) && value >= 750.8 && value <= 780.8));
-  const route = points([null, -9999, null]);
-  assert.equal(applyRouteElevationProfile(buildRouteGeoJson(route, options, 8), route, 1.5), false);
-});
-test('duplicate coordinates and zero-length routes produce finite heights', () => {
-  const route = points([500, 510, 520]).map(p => ({ ...p, lon: 6 }));
-  assert.ok(heights(profile(route)).every(Number.isFinite));
-});
-test('all surface runs share continuous heights with their casing and patterns', () => {
-  const route = points(Array.from({ length: 51 }, (_, i) => 500 + i));
-  route.forEach((p, i) => { p.surface = i < 10 ? 'paved' : i < 20 ? 'gravel' : i < 30 ? 'dirt' : 'sand'; });
-  const spec = profile(route);
-  assert.equal(features(spec).length, 4);
-  for (let i = 1; i < 4; i += 1) assert.equal(heights(spec, i - 1).at(-1), heights(spec, i)[0]);
-});
-test('100k-point profiles have bounded sampling cost', () => {
-  const route = points(Array.from({ length: 100_000 }, (_, i) => 500 + Math.sin(i / 1000) * 50));
-  const start = performance.now();
-  const spec = profile(route);
-  assert.ok(heights(spec).length <= 16_384);
-  assert.ok(heights(spec).every(Number.isFinite));
-  console.log(`  100k vertices: ${(performance.now() - start).toFixed(1)} ms; ${heights(spec).length} height samples`);
-});
 
 type Layer = { id: string; type: string; source: string; layout: Record<string, unknown>; paint: Record<string, unknown>; filter?: unknown };
 class FakeMap {
@@ -96,6 +35,7 @@ class FakeMap {
   zoom = 16;
   sourceAdds = 0;
   dataUpdates = 0;
+  rejectLayers = false;
   layers = new Map<string, Layer>();
   sources = new Map<string, { type: 'geojson'; lineMetrics: boolean; data: unknown; setData: (data: unknown) => void }>();
   getTerrain() { return this.terrain; }
@@ -108,15 +48,19 @@ class FakeMap {
   }
   removeSource(id: string) { this.sources.delete(id); }
   getLayer(id: string) { return this.layers.get(id); }
-  addLayer(layer: Layer) { this.layers.set(layer.id, layer); }
+  addLayer(layer: Layer) {
+    if (this.rejectLayers) throw new Error('Style is not done loading');
+    this.layers.set(layer.id, layer);
+  }
   removeLayer(id: string) { this.layers.delete(id); }
+  moveLayer() { /* order is irrelevant here */ }
   getPaintProperty(id: string, name: string) { return this.layers.get(id)!.paint[name]; }
   setPaintProperty(id: string, name: string, value: unknown) { this.layers.get(id)!.paint[name] = value; }
   getLayoutProperty(id: string, name: string) { return this.layers.get(id)!.layout[name]; }
   setLayoutProperty(id: string, name: string, value: unknown) { this.layers.get(id)!.layout[name] = value; }
   setFilter(id: string, filter: unknown) { this.layers.get(id)!.filter = filter; }
   setTerrain() { assert.fail('The 3D map must not change'); }
-  queryTerrainElevation() { assert.fail('The visual profile must not depend on canopy tiles'); }
+  queryTerrainElevation() { assert.fail('The trace must not sample the terrain on the CPU'); }
 }
 const fake = new FakeMap();
 const map = fake as unknown as MapboxMap;
@@ -124,46 +68,56 @@ const route = points(Array(31).fill(500));
 route.forEach((p, i) => { p.surface = i < 10 ? 'gravel' : 'dirt'; });
 const lineId = ids('test').line;
 
-test('main trail, casing and patterns all use the same absolute heights and visibility', () => {
-  upsertRouteLayer(map, 'test', route, options);
-  assert.equal(fake.layers.size, 4);
+function assertAllLayers(reference: string, zOffset: number) {
+  assert.ok(fake.layers.size >= 2);
   for (const layer of fake.layers.values()) {
-    assert.equal(layer.layout['line-elevation-reference'], 'sea');
-    assert.deepEqual(layer.layout['line-z-offset'], ROUTE_PROFILE_Z_OFFSET);
-    assert.equal(layer.paint['line-occlusion-opacity'], 1);
+    assert.equal(layer.layout['line-elevation-reference'], reference, layer.id);
+    assert.equal(layer.layout['line-z-offset'], zOffset, layer.id);
+    assert.equal(layer.paint['line-occlusion-opacity'], 0, layer.id);
   }
+}
+
+test('trace, casing and surface patterns all sit on the rendered terrain', () => {
+  assert.equal(upsertRouteLayer(map, 'test', route, options), true);
+  assertAllLayers('ground', LINE_CLEARANCE_M);
   const style = fake.getStyle();
   const errors = validate({ ...style, sources: Object.fromEntries([...fake.sources].map(([id, spec]) => [id, { type: spec.type, lineMetrics: spec.lineMetrics, data: spec.data }])) });
   assert.deepEqual(errors.map((e: Error) => e.message), []);
 });
-test('unchanged replays do not rebuild sources or resample terrain', () => {
+test('no per-route altitude profile is baked into the data', () => {
+  const data = fake.sources.get(ids('test').source)!.data as GeoJSON.FeatureCollection | GeoJSON.Feature;
+  const features = data.type === 'FeatureCollection' ? data.features : [data];
+  for (const feature of features) assert.equal(feature.properties?.__routeHeights, undefined);
+});
+test('unchanged replays do not rebuild sources', () => {
   upsertRouteLayer(map, 'test', route, options);
   assert.equal(fake.sourceAdds, 1);
   assert.equal(fake.dataUpdates, 0);
   upsertRouteLayer(map, 'test', route, { ...options, color: '#00ff00' });
   assert.equal(fake.sourceAdds, 1, 'lineMetrics must not cause source recreation');
 });
-test('terrain scale changes refresh heights, not the terrain', () => {
-  fake.terrain!.exaggeration = 2;
-  upsertRouteLayer(map, 'test', route, options);
-  const data = fake.sources.get(ids('test').source)!.data as GeoJSON.FeatureCollection;
-  assert.equal(data.features[0].properties!.__routeHeights[0], 1000.8);
+test('DEM quality / exaggeration changes do not touch the trace', () => {
+  const updates = fake.dataUpdates;
+  fake.terrain = { source: 'other-dem', exaggeration: 2 };
+  upsertRouteLayer(map, 'test', route, { ...options, color: '#00ff00' });
+  assert.equal(fake.dataUpdates, updates);
+  fake.terrain = { source: 'unchanged-dem', exaggeration: 1.5 };
 });
-test('globe overview and terrain-off remain ordinary visible 2D lines', () => {
-  fake.zoom = 4;
-  assert.equal(getRouteElevationContext(map).scale, null);
+test('globe overview and terrain-off remain ordinary draped lines', () => {
+  fake.zoom = ROUTE_ELEVATED_MIN_ZOOM - 0.01;
+  assert.equal(getRouteElevationContext(map).elevated, false);
   upsertRouteLayer(map, 'test', route, options);
-  assert.equal(fake.layers.get(lineId)!.layout['line-elevation-reference'], 'none');
-  assert.equal(fake.layers.get(lineId)!.layout['line-z-offset'], 0);
-  fake.zoom = 16;
+  assertAllLayers('none', 0);
+  fake.zoom = ROUTE_ELEVATED_MIN_ZOOM;
   upsertRouteLayer(map, 'test', route, options);
-  assert.equal(fake.layers.get(lineId)!.layout['line-elevation-reference'], 'sea');
+  assertAllLayers('ground', LINE_CLEARANCE_M);
   fake.terrain = null;
   upsertRouteLayer(map, 'test', route, options);
-  assert.equal(fake.layers.get(lineId)!.layout['line-elevation-reference'], 'none');
-});
-test('visibility toggle and recreated style restore the smooth trail', () => {
+  assertAllLayers('none', 0);
   fake.terrain = { source: 'unchanged-dem', exaggeration: 1.5 };
+  fake.zoom = 16;
+});
+test('visibility toggle and recreated style restore the trace', () => {
   upsertRouteLayer(map, 'test', route, { ...options, visible: false });
   assert.equal(fake.layers.get(lineId)!.layout.visibility, 'none');
   upsertRouteLayer(map, 'test', route, options);
@@ -171,6 +125,19 @@ test('visibility toggle and recreated style restore the smooth trail', () => {
   fake.sources.clear();
   fake.layers.clear();
   upsertRouteLayer(map, 'test', route, options);
-  assert.equal(fake.layers.get(lineId)!.layout['line-elevation-reference'], 'sea');
+  assertAllLayers('ground', LINE_CLEARANCE_M);
+});
+test('a refused layer is reported and rebuilt by the next replay', () => {
+  fake.sources.clear();
+  fake.layers.clear();
+  fake.rejectLayers = true;
+  assert.equal(upsertRouteLayer(map, 'test', route, options), false);
+  assert.equal(fake.layers.has(lineId), false);
+  fake.rejectLayers = false;
+  // Same inputs: the signature was not recorded, so the line layer is added
+  // even though the source already exists.
+  assert.equal(upsertRouteLayer(map, 'test', route, options), true);
+  assert.ok(fake.layers.has(lineId));
+  assertAllLayers('ground', LINE_CLEARANCE_M);
 });
 console.log(`\n${passed} route elevation regression checks passed.`);

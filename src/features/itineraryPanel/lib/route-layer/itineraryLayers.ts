@@ -1,4 +1,4 @@
-import type { ExpressionSpecification, GeoJSONSource, Map as MapboxMap } from 'mapbox-gl';
+import type { GeoJSONSource, Map as MapboxMap } from 'mapbox-gl';
 
 import {
   CASING_PREFIX,
@@ -20,14 +20,11 @@ import {
   type RouteLayerPoint,
 } from './routeStyle';
 import {
-  LINE_CLEARANCE_M,
-  ROUTE_PROFILE_Z_OFFSET,
-  applyRouteElevationProfile,
   getRouteElevationContext,
+  getRouteLineElevation,
+  type RouteLineElevationReference,
 } from './routeElevation';
 import { buildRouteContentSignature } from '../routes';
-
-type RouteLineElevationReference = 'sea' | 'ground' | 'none';
 
 const ROUTE_LINE_OCCLUSION_OPACITY = 0;
 
@@ -156,7 +153,7 @@ function syncPatternLayer(
     filter: unknown[] | null;
     lineCap: 'butt' | 'round';
     elevationReference: RouteLineElevationReference;
-    zOffset: ExpressionSpecification | number;
+    zOffset: number;
   },
 ): void {
   const {
@@ -238,12 +235,17 @@ export function isAnyRouteOnMap(map: MapboxMap): boolean {
   return false;
 }
 
+/**
+ * Mounts or updates one itinerary's trace. Returns false when the map could
+ * not take it (style being replaced, map tearing down): the caller must retry,
+ * the applied signature is only recorded once every layer is in place.
+ */
 export function upsertRouteLayer(
   map: MapboxMap,
   itineraryId: string,
   points: RouteLayerPoint[],
   opts: RouteLayerOptions,
-): void {
+): boolean {
   const {
     source: srcId,
     casing: casingId,
@@ -259,9 +261,8 @@ export function upsertRouteLayer(
   const traceWidthPx = normalizeTraceWidthPx(opts.traceWidthPx);
   const lineMetricsRegistry = getRouteLineMetricsRegistry(map);
   const appliedSignatureRegistry = getRouteAppliedSignatureRegistry(map);
-  const elevationContext = getRouteElevationContext(map);
   const contentSignature = buildRouteContentSignature(points);
-  const optionSignature = buildRouteOptionSignature(opts, contentSignature, elevationContext.signature);
+  const optionSignature = buildRouteOptionSignature(opts, contentSignature, getRouteElevationContext(map).signature);
 
   let existing = map.getSource(srcId) as GeoJSONSource | undefined;
 
@@ -271,38 +272,23 @@ export function upsertRouteLayer(
       setRouteLayerVisibility(map, itineraryId, false);
       appliedSignatureRegistry.set(itineraryId, optionSignature);
     }
-    return;
+    return true;
   }
 
-  // Short-circuit: if the source already existed and nothing changed, do nothing.
-  if (existing && appliedSignatureRegistry.get(itineraryId) === optionSignature) {
+  // Short-circuit: if the trace is mounted and nothing changed, do nothing.
+  if (existing && map.getLayer(lineId) && appliedSignatureRegistry.get(itineraryId) === optionSignature) {
     try {
       raiseRouteLayer(map, itineraryId);
     } catch {
       /* map may be tearing down */
     }
-    return;
+    return true;
   }
+  appliedSignatureRegistry.delete(itineraryId);
 
   const renderSpec = buildRouteGeoJson(points, opts, traceWidthPx);
   renderSpec.requiresLineMetrics = true;
-  // Low-res DEM (30 m): drape the route directly on the terrain mesh — the
-  // coarse grid makes a sea-referenced absolute profile clip through hills.
-  // HD DEM (0.40 m): use the smooth sea-referenced elevation profile so the
-  // route floats above the high-fidelity mesh without hugging jagged facets.
-  const elevationProfileApplied = elevationContext.scale !== null && !elevationContext.isLowResDem
-    ? applyRouteElevationProfile(renderSpec, points, elevationContext.scale)
-    : false;
-  const elevationReference: RouteLineElevationReference = elevationProfileApplied
-    ? 'sea'
-    : elevationContext.scale !== null
-      ? 'ground'
-      : 'none';
-  const zOffset: ExpressionSpecification | number = elevationProfileApplied
-    ? ROUTE_PROFILE_Z_OFFSET
-    : elevationContext.scale !== null
-      ? LINE_CLEARANCE_M
-      : 0;
+  const { reference: elevationReference, zOffset } = getRouteLineElevation(map);
   const mountedSourceRequiresLineMetrics = getMountedSourceRequiresLineMetrics(map, srcId);
   const mountedLayerUsesLineProgress = routeLayerUsesLineGradient(map, lineId)
     || routeLayerUsesLineGradient(map, legacyGlowId)
@@ -336,50 +322,48 @@ export function upsertRouteLayer(
     existing = undefined;
   }
 
-  if (existing) {
-    try {
+  try {
+    if (existing) {
       existing.setData(renderSpec.data);
-    } catch {
-      /* noop */
+    } else {
+      if (!canMutateStyle(map)) return false;
+      map.addSource(srcId, {
+        type: 'geojson',
+        lineMetrics: true,
+        tolerance: 0,
+        data: renderSpec.data,
+      });
     }
-  } else {
-    if (!canMutateStyle(map)) return;
-    map.addSource(srcId, {
-      type: 'geojson',
-      lineMetrics: true,
-      tolerance: 0,
-      data: renderSpec.data,
-    });
-    map.addLayer({
-      id: lineId,
-      type: 'line',
-      source: srcId,
-      slot: 'top',
-      layout: {
-        'line-cap': 'round',
-        'line-join': 'round',
-        'line-elevation-reference': elevationReference,
-        'line-z-offset': zOffset,
-        visibility,
-      },
-      paint: {
-        'line-color': renderSpec.lineColorPaint as never,
-        'line-width': traceWidthPx,
-        'line-opacity': opacity,
-        'line-emissive-strength': 1,
-        'line-occlusion-opacity': ROUTE_LINE_OCCLUSION_OPACITY,
-        'line-border-width': renderSpec.lineBorderWidthPx,
-        'line-border-color': renderSpec.lineBorderColorPaint as never,
-        ...(renderSpec.lineGradientPaint ? { 'line-gradient': renderSpec.lineGradientPaint as never } : {}),
-      },
-    });
-    lineMetricsRegistry.set(itineraryId, renderSpec.requiresLineMetrics);
+  } catch {
+    return false;
   }
 
-  appliedSignatureRegistry.set(itineraryId, optionSignature);
-
   try {
-    if (map.getLayer(lineId)) {
+    if (!map.getLayer(lineId)) {
+      map.addLayer({
+        id: lineId,
+        type: 'line',
+        source: srcId,
+        slot: 'top',
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+          'line-elevation-reference': elevationReference,
+          'line-z-offset': zOffset,
+          visibility,
+        },
+        paint: {
+          'line-color': renderSpec.lineColorPaint as never,
+          'line-width': traceWidthPx,
+          'line-opacity': opacity,
+          'line-emissive-strength': 1,
+          'line-occlusion-opacity': ROUTE_LINE_OCCLUSION_OPACITY,
+          'line-border-width': renderSpec.lineBorderWidthPx,
+          'line-border-color': renderSpec.lineBorderColorPaint as never,
+          ...(renderSpec.lineGradientPaint ? { 'line-gradient': renderSpec.lineGradientPaint as never } : {}),
+        },
+      });
+    } else {
       map.setPaintProperty(lineId, 'line-color', renderSpec.lineColorPaint as never);
       if (renderSpec.lineGradientPaint) {
         map.setPaintProperty(lineId, 'line-gradient', renderSpec.lineGradientPaint as never);
@@ -501,8 +485,12 @@ export function upsertRouteLayer(
     lineMetricsRegistry.set(itineraryId, renderSpec.requiresLineMetrics);
     raiseRouteLayer(map, itineraryId);
   } catch {
-    /* map may be tearing down */
+    // Style being replaced / map tearing down: leave the signature unset so
+    // the next replay rebuilds whatever is missing.
+    return false;
   }
+  appliedSignatureRegistry.set(itineraryId, optionSignature);
+  return true;
 }
 
 export function raiseRouteLayer(map: MapboxMap, itineraryId: string): void {

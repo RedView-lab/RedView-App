@@ -116,6 +116,13 @@
   background: var(--rvc-center-red-strong);
 }
 
+/* Type chosen, waiting for the click on the chart (a second click cancels). */
+.rvc-center-toolbar__button--accent-armed,
+.rvc-center-toolbar__button--accent-armed:hover {
+  background: var(--rvc-center-red-strong);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55) inset;
+}
+
 .rvc-center-toolbar__button--label {
   padding-left: 8px;
   padding-right: 12px;

@@ -107,10 +107,16 @@ script-test-bench/reports/routing-quality/*.html
 script-test-bench/reports/lidar-viewer-perf/*.json
 script-test-bench/reports/lidar-viewer-shots/
 script-test-bench/reports/screen-audit/
+script-test-bench/reports/snow-quality/*.json
+script-test-bench/reports/snow-quality/*.html
+script-test-bench/reports/snow-quality/*.png
+script-test-bench/reports/snow-quality/cache/
 script-test-bench/routing-quality/vps/dist/
 
 # Cache des crawls S3 de l'index LiDAR Japon / NZ (scripts/lidar-index)
 scripts/lidar-index/.cache/
+scripts/design-workbench/.cache/
+scripts/design-workbench/out/
 
 # Claude temp files
 .claude-temp/

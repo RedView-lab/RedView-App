@@ -10,7 +10,6 @@ import type {
   WeatherPaletteScaleSetting,
   WeatherRenderMode,
   WeatherState,
-  WeatherTab,
 } from '../types';
 
 import { useOverlayLabelsState } from './overlays/useOverlayLabelsState';
@@ -46,7 +45,6 @@ export interface OverlayHandlers {
   onLabelsEnabledChange: (enabled: boolean) => void;
   onLabelToggle: (key: LabelKey, checked: boolean) => void;
   onWeatherEnabledChange: (enabled: boolean) => void;
-  onWeatherTabChange: (tab: WeatherTab) => void;
   onWeatherDateChange: (changes: Partial<Pick<WeatherState, 'customDateEnabled' | 'date' | 'time' | 'forecastDay' | 'trendMode'>>) => void;
   onWeatherLayerToggle: (key: WeatherLayerKey, enabled: boolean) => void;
   onWeatherLayerModeChange: (key: WeatherLayerKey, mode: WeatherRenderMode) => void;

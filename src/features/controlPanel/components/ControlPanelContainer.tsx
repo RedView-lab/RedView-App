@@ -417,7 +417,6 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
       onSlopeBandVisibilityToggle={terrainState.handlers.onSlopeBandVisibilityToggle}
       onSlopeBandBreakpointChange={terrainState.handlers.onSlopeBandBreakpointChange}
       onWeatherEnabledChange={overlayState.handlers.onWeatherEnabledChange}
-      onWeatherTabChange={overlayState.handlers.onWeatherTabChange}
       onWeatherDateChange={overlayState.handlers.onWeatherDateChange}
       onWeatherLayerToggle={overlayState.handlers.onWeatherLayerToggle}
       onWeatherLayerModeChange={overlayState.handlers.onWeatherLayerModeChange}

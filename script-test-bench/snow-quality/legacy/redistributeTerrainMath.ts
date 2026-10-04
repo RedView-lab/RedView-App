@@ -1,3 +1,6 @@
+// Frozen copy of the v1 snow engine (src/features/snow before the v2 rewrite),
+// kept only as the "before" of the snow-quality bench. Not used by the app.
+
 // ============================================================================
 //  S A M P L I N G   +   T E R R A I N   M A T H
 // ============================================================================

@@ -54,7 +54,7 @@ import { createViewerLoadingOverlay } from './loading/controller';
 import { loadViewerSceneData } from './session/dataset';
 import { buildTileFileCandidates } from './session/datasetPointCap';
 import { parseViewerParamsFromUrl } from './session/viewerUrlParams';
-import { ViewerSnowController } from './session/viewerSnowController';
+import { ViewerSnowController, type SnowSceneContext } from './session/viewerSnowController';
 import {
   explainWorkerError,
   launchWebGLFallback,
@@ -534,6 +534,19 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
 
     const [lon, lat] = toWgs84(cx, cy, crs);
     const snowController = new ViewerSnowController();
+    // Read when the snow is first computed (the panel and the tools exist by then).
+    const snowContext = (): SnowSceneContext => ({
+      renderer,
+      pointCloud: sceneInfo,
+      terrainMesh,
+      crs,
+      cx,
+      cy,
+      cz,
+      readCanopy: (cellM) => tools?.readSceneCanopy(cellM) ?? Promise.resolve(null),
+      onProgressState: (loading) => panel.setSnowLoading(loading),
+      requestRender,
+    });
 
     let lastFixedPointPixels = 2;
     // EDL darkens every depth step (outlines around points and against the
@@ -591,18 +604,7 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
       },
       onEngineModeChange: (mode) => switchViewerEngine(mode),
       onSnowModeChange: (mode) => {
-        void snowController.handleSnowModeChange(
-          mode,
-          renderer,
-          sceneInfo,
-          terrainMesh,
-          crs,
-          cx,
-          cy,
-          (loading) => panel.setSnowLoading(loading),
-          (next) => panel.setSnowMode(next),
-          requestRender,
-        );
+        void snowController.handleSnowModeChange(mode, snowContext(), (next) => panel.setSnowMode(next));
       },
       onPrimaryActionClick: () => exitLidarViewer(),
     });
@@ -798,18 +800,7 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
           : snowController.getMode() === 'cover'
             ? 'thickness'
             : 'off';
-        void snowController.handleSnowModeChange(
-          nextMode,
-          renderer,
-          sceneInfo,
-          terrainMesh,
-          crs,
-          cx,
-          cy,
-          (loading) => panel.setSnowLoading(loading),
-          (next) => panel.setSnowMode(next),
-          requestRender,
-        );
+        void snowController.handleSnowModeChange(nextMode, snowContext(), (next) => panel.setSnowMode(next));
       }
       panel.setPointSizePercent(pointSizeSliderPercent(renderer));
       requestRender();

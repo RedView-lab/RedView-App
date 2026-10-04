@@ -249,6 +249,8 @@ export async function runWebGLFallback(
           height: mesh.gridHeight,
           bounds: mesh.bounds,
           crs,
+          // The height grid stores altitudes around the scene centre.
+          altitudeOffsetM: mesh.centerZ,
         },
         { progress: () => undefined },
       );

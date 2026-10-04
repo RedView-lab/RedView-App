@@ -5,11 +5,11 @@ import {
   ALTITUDE_LAYER_ID,
   ALTITUDE_SOURCE_ID,
   type AltitudeTileSourceOptions,
+  altitudeUsesServiceWorker,
   buildAltitudeColorExpression,
   buildAltitudeLayer,
+  buildAltitudeSource,
   buildAltitudeSourceKey,
-  buildAltitudeTileSource,
-  getAltitudeEncoding,
 } from '../lib/altitude-source';
 import type { OverlayStatusReporter } from '@/features/map3d';
 import { useAltitudeLoadStatus } from './useAltitudeLoadStatus';
@@ -78,13 +78,15 @@ function ensureAltitudeLayer(
     if (hasLayer || map.getSource(ALTITUDE_SOURCE_ID)) removeAltitudeLayer(map);
     mountedKeyRef.current = null;
 
-    map.addSource(ALTITUDE_SOURCE_ID, buildAltitudeTileSource(props.sourceOptions));
+    map.addSource(
+      ALTITUDE_SOURCE_ID,
+      buildAltitudeSource(props.sourceOptions) as Parameters<MapboxMap['addSource']>[1],
+    );
     const layer = buildAltitudeLayer(
       props.opacity,
       props.colorMode,
       props.categories,
       props.hiddenIds,
-      getAltitudeEncoding(props.sourceOptions),
     );
     map.addLayer(layer as Parameters<MapboxMap['addLayer']>[0]);
     mountedKeyRef.current = sourceKey;
@@ -97,10 +99,10 @@ function ensureAltitudeLayer(
 /**
  * Altitude (hypsometric tint) overlay.
  *
- * The overlay never computes elevation itself: it re-reads the DEM tiles the
- * 3D terrain already loaded and colours them on the GPU (`raster-color`).
- * Disabling only hides the layer — Mapbox stops requesting its tiles and a
- * re-enable repaints instantly from the GPU/HTTP caches.
+ * The overlay never downloads elevation itself: its tiles are the DEM tiles
+ * the 3D terrain already decoded (`AltitudeDemSource`), coloured on the GPU
+ * (`raster-color`). Disabling only hides the layer — a re-enable repaints
+ * from the tiles still held by the source.
  */
 export function useAltitude(
   map: MapboxMap | null,
@@ -115,7 +117,7 @@ export function useAltitude(
 ) {
   const hiddenIds = useMemo(() => new Set(hiddenBandIds ?? []), [hiddenBandIds]);
   const sourceKey = buildAltitudeSourceKey(sourceOptions);
-  const usesServiceWorker = getAltitudeEncoding(sourceOptions) === 'mapbox';
+  const usesServiceWorker = altitudeUsesServiceWorker(sourceOptions);
 
   // Latest paint/source props, read when (re)building the layer so the mount
   // effect doesn't re-run on every slider tick.
@@ -168,8 +170,8 @@ export function useAltitude(
     };
   }, [map, isMapLoaded, enabled, sourceKey]);
 
-  // ── Service-Worker pressure (HD / zone path only) ─────────────────────
-  // The fast-30m path streams straight from AWS and never touches the SW.
+  // ── Service-Worker pressure (zone-masked path only) ───────────────────
+  // The shared-DEM source reads the terrain's tiles and never asks the SW.
   useEffect(() => {
     if (!map || !isMapLoaded || !enabled || !usesServiceWorker) return;
     postToServiceWorker({ type: 'ALTITUDE_ACTIVE_STATE', active: true });

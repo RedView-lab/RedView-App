@@ -31,6 +31,7 @@ import { CenterPanel, CenterPanelToolbar } from '@/features/centerPanel';
 import { AnalysisFlyoverProvider } from '@/features/centerPanel/flyover';
 import { RouteMergeToolProvider } from '@/features/centerPanel/routeMerge';
 import { RouteSplitToolProvider } from '@/features/centerPanel/routeSplit';
+import { ChartPlacementToolProvider } from '@/features/centerPanel/chartPlacement';
 import { RouteDragWaypointProvider } from '@/features/centerPanel/routeDragWaypoint';
 import { TraceToolProvider } from '@/features/centerPanel/tracer';
 import { ForbiddenZoneToolProvider } from '@/features/centerPanel/forbiddenZones';
@@ -446,6 +447,7 @@ export function DashboardEditor({
                     </div>
                   </div>
 
+                  <ChartPlacementToolProvider>
                   <AnalysisFlyoverProvider map={mapInstance}>
                     {layout.centerToolbarVisible ? (
                       <div data-rv-region="center-toolbar" style={styles.centerToolbarShellStyle}>
@@ -470,6 +472,7 @@ export function DashboardEditor({
                       </div>
                     ) : null}
                   </AnalysisFlyoverProvider>
+                  </ChartPlacementToolProvider>
 
                   <div style={styles.rightPanelStyle}>
                     <div data-rv-region="right-panel" style={styles.rightPanelContentStyle}>

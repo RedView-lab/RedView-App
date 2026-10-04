@@ -1,11 +1,13 @@
 import {
   useEffect,
+  useRef,
   useState,
   useMemo,
   useCallback,
 } from 'react';
 import { useAppI18n } from '@/shared/i18n';
 import { useRouteMergeToolOptional } from '@/features/centerPanel/routeMerge';
+import { IconMaximize } from '@/features/mapViewportControls/components/MapViewportControlIcons';
 import {
   useProjectStoreOptional,
   type Itinerary,
@@ -21,14 +23,23 @@ import {
 import {
   HEADER_CELLS,
   buildSummaryTree,
+  findSummaryAncestorIds,
 } from './summary-utils';
 import type { InlineRenameState } from './types';
+import { useCenterActiveSummaryRow } from './useCenterActiveSummaryRow';
 
-export function CenterPanelSummary() {
+interface CenterPanelSummaryProps {
+  /** The whole center panel is shown fullscreen (toggle owned by `CenterPanel`). */
+  fullscreen?: boolean;
+  onToggleFullscreen?: () => void;
+}
+
+export function CenterPanelSummary({ fullscreen = false, onToggleFullscreen }: CenterPanelSummaryProps) {
   const { t } = useAppI18n();
   const store = useProjectStoreOptional();
   const routeMergeTool = useRouteMergeToolOptional();
   const itineraries = store?.project.itineraries ?? [];
+  const activeItineraryId = store?.project.activeItineraryId ?? null;
   const visualNodes = useMemo(() => buildItineraryVisualNodes(itineraries), [itineraries]);
   const summaryTree = useMemo(() => buildSummaryTree(visualNodes), [visualNodes]);
   const handleToggleAnalysisVisibility =
@@ -39,6 +50,29 @@ export function CenterPanelSummary() {
     itineraryId: string;
     anchorEl: HTMLButtonElement;
   } | null>(null);
+  const rowsRef = useRef<HTMLDivElement>(null);
+
+  // Row clicked in the table: it is under the pointer, no need to scroll to it.
+  const [pickedRowId, setPickedRowId] = useState<string | null>(null);
+  // New active itinerary (picked here or elsewhere): unfold the branches hiding it.
+  const [trackedActiveId, setTrackedActiveId] = useState(activeItineraryId);
+  if (trackedActiveId !== activeItineraryId) {
+    setTrackedActiveId(activeItineraryId);
+    if (pickedRowId !== activeItineraryId) setPickedRowId(null);
+    if (activeItineraryId) {
+      const hidingIds = findSummaryAncestorIds(summaryTree, activeItineraryId).filter((id) => collapsedIds.has(id));
+      if (hidingIds.length > 0) {
+        setCollapsedIds((current) => {
+          const next = new Set(current);
+          hidingIds.forEach((id) => next.delete(id));
+          return next;
+        });
+      }
+    }
+  }
+
+  const followActiveRow = pickedRowId !== activeItineraryId;
+  useCenterActiveSummaryRow(rowsRef, activeItineraryId, itineraries.length, fullscreen ? 'fullscreen' : 'dock', followActiveRow);
 
   const selectedItinerary = menuState
     ? itineraries.find((itinerary) => itinerary.id === menuState.itineraryId) ?? null
@@ -71,6 +105,13 @@ export function CenterPanelSummary() {
       return changed ? next : current;
     });
   }, [itineraries]);
+
+  const handleToggleFullscreen = () => {
+    // An open menu or rename is placed for the panel being left.
+    setMenuState(null);
+    setEditingState(null);
+    onToggleFullscreen?.();
+  };
 
   const handleOpenMenu = (itinerary: Itinerary, anchorEl: HTMLButtonElement) => {
     setMenuState((current) => {
@@ -129,6 +170,7 @@ export function CenterPanelSummary() {
 
   const handleSelectItinerary = useCallback(
     (itineraryId: string) => {
+      setPickedRowId(itineraryId);
       store?.setProject((p) => ({
         ...p,
         activeItineraryId: itineraryId,
@@ -140,52 +182,72 @@ export function CenterPanelSummary() {
     [store],
   );
 
-  return (
-    <section className="rvc-center-summary" aria-label={t("Synthèse d'itinéraire")}>
-      <div className="rvc-center-summary__row rvc-center-summary__row--header">
-        <div className="rvc-center-summary__title">{t('Synthèse')}</div>
-        <div className="rvc-center-summary__metrics" aria-hidden="true">
-          {HEADER_CELLS.map((cell, index) => (
-            <div
-              key={`header-${index}-${cell}`}
-              className="rvc-center-summary__metric rvc-center-summary__metric--header"
-              title={t(cell)}
-            >
-              {t(cell)}
-            </div>
-          ))}
-        </div>
-      </div>
+  const fullscreenLabel = fullscreen ? t('Quitter le plein écran') : t('Ouvrir en plein écran');
 
-      <div className="rvc-center-summary__rows">
-        {itineraries.length === 0 ? (
-          <EmptyRow />
-        ) : (
-          summaryTree.map((branch) => (
-            <SummaryTreeBranch
-              key={branch.node.itinerary.id}
-              branch={branch}
-              collapsedIds={collapsedIds}
-              editingState={editingState}
-              mergeArmed={routeMergeTool?.armed ?? false}
-              mergeSelectable={(id) => routeMergeTool?.canSelectItinerary(id) ?? false}
-              mergeSelectionOrder={(id) => routeMergeTool?.getSelectionOrder(id) ?? null}
-              activeItineraryId={store?.project.activeItineraryId}
-              onSelectItinerary={handleSelectItinerary}
-              onToggleAnalysisVisibility={handleToggleAnalysisVisibility}
-              onToggleExpanded={handleToggleExpanded}
-              onStartRename={handleStartRename}
-              onRenameDraftChange={(draft) =>
-                setEditingState((current) => (current ? { ...current, draft } : current))
-              }
-              onCommitRename={handleCommitRename}
-              onCancelRename={handleCancelRename}
-              onSelectForMerge={handleSelectForMerge}
-              onOpenMenu={handleOpenMenu}
-            />
-          ))
-        )}
-      </div>
+  return (
+    <>
+      <section
+        className="rvc-center-summary"
+        aria-label={t("Synthèse d'itinéraire")}
+      >
+        <div className="rvc-center-summary__row rvc-center-summary__row--header">
+          <div className="rvc-center-summary__title">{t('Synthèse')}</div>
+          <div className="rvc-center-summary__metrics" aria-hidden="true">
+            {HEADER_CELLS.map((cell, index) => (
+              <div
+                key={`header-${index}-${cell}`}
+                className="rvc-center-summary__metric rvc-center-summary__metric--header"
+                title={t(cell)}
+              >
+                {t(cell)}
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            className={`rvc-center-summary__ghost-button rvc-center-summary__fullscreen-toggle${fullscreen ? ' is-active' : ''}`}
+            onClick={handleToggleFullscreen}
+            aria-label={fullscreenLabel}
+            title={fullscreenLabel}
+            aria-pressed={fullscreen}
+          >
+            <IconMaximize size={16} />
+          </button>
+        </div>
+
+        <div
+          ref={rowsRef}
+          className="rvc-center-summary__rows"
+        >
+          {itineraries.length === 0 ? (
+            <EmptyRow />
+          ) : (
+            summaryTree.map((branch) => (
+              <SummaryTreeBranch
+                key={branch.node.itinerary.id}
+                branch={branch}
+                collapsedIds={collapsedIds}
+                editingState={editingState}
+                mergeArmed={routeMergeTool?.armed ?? false}
+                mergeSelectable={(id) => routeMergeTool?.canSelectItinerary(id) ?? false}
+                mergeSelectionOrder={(id) => routeMergeTool?.getSelectionOrder(id) ?? null}
+                activeItineraryId={activeItineraryId}
+                onSelectItinerary={handleSelectItinerary}
+                onToggleAnalysisVisibility={handleToggleAnalysisVisibility}
+                onToggleExpanded={handleToggleExpanded}
+                onStartRename={handleStartRename}
+                onRenameDraftChange={(draft) =>
+                  setEditingState((current) => (current ? { ...current, draft } : current))
+                }
+                onCommitRename={handleCommitRename}
+                onCancelRename={handleCancelRename}
+                onSelectForMerge={handleSelectForMerge}
+                onOpenMenu={handleOpenMenu}
+              />
+            ))
+          )}
+        </div>
+      </section>
 
       {menuState && selectedItinerary ? (
         <SummaryActionMenu
@@ -198,6 +260,6 @@ export function CenterPanelSummary() {
           onDelete={handleDelete}
         />
       ) : null}
-    </section>
+    </>
   );
 }

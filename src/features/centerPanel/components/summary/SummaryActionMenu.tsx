@@ -11,6 +11,16 @@ const MENU_WIDTH = 200;
 const MENU_ROW_HEIGHT = 30;
 const MENU_GAP = 6;
 
+/**
+ * Portaled into the fullscreen summary when it is open (it renders above the
+ * page and is already scaled), on <body> otherwise.
+ */
+function resolvePortalTarget(anchorEl: HTMLElement): HTMLElement {
+  const fullscreenRoot = anchorEl.closest('.rvi-panel-fullscreen-root');
+  if (fullscreenRoot instanceof HTMLElement) return fullscreenRoot;
+  return anchorEl.ownerDocument.body ?? document.body;
+}
+
 interface SummaryActionMenuProps {
   itinerary: Itinerary;
   anchorEl: HTMLButtonElement;
@@ -47,7 +57,10 @@ export function SummaryActionMenu({
       onClose();
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key !== 'Escape') return;
+      // Consumed: the fullscreen summary behind stays open.
+      event.preventDefault();
+      onClose();
     };
     document.addEventListener('mousedown', onDocPointerDown);
     document.addEventListener('keydown', onKeyDown);
@@ -95,6 +108,9 @@ export function SummaryActionMenu({
 
   if (!menuStyle) return null;
 
+  const portalTarget = resolvePortalTarget(anchorEl);
+  const inScaledLayer = portalTarget !== anchorEl.ownerDocument.body;
+
   return createPortal(
     <div
       ref={menuRef}
@@ -102,7 +118,7 @@ export function SummaryActionMenu({
       role="menu"
       aria-label={t('Actions pour {{name}}', { name: itinerary.name })}
       style={{
-        ...appScaledOverlayStyle(menuStyle),
+        ...appScaledOverlayStyle(menuStyle, inScaledLayer),
         width: MENU_WIDTH,
       }}
       onMouseDown={(event) => event.stopPropagation()}
@@ -143,6 +159,6 @@ export function SummaryActionMenu({
         </span>
       </button>
     </div>,
-    document.body,
+    portalTarget,
   );
 }

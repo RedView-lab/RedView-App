@@ -34,7 +34,7 @@ import { ScenePicker } from './picking/scenePicker';
 import { toolForKey } from './shortcuts';
 import { FallCoverBuilder, type CoverBounds, type FallCover } from './terrain/fallCover';
 import { computeFallLine, displayedFallScenario, fallLineBounds } from './terrain/fallLine';
-import { TerrainField } from './terrain/terrainField';
+import { TerrainField, type AnalysisGrid } from './terrain/terrainField';
 import { isDrawingTool, type ScenePick, type ToolId, type Vec3 } from './types';
 import { ToolsUiStore, type ContextMenuAction, type LookAroundModel, type ToolsUiActions } from './ui/toolsUiStore';
 import { mountViewerToolsUi } from './ui/mount';
@@ -155,6 +155,28 @@ export class ViewerToolsController {
     window.addEventListener('pointermove', this.onPointerMove);
     window.addEventListener('pointerup', this.onPointerUp);
     window.addEventListener('keydown', this.onKeyDown);
+  }
+
+  /**
+   * Canopy cover (0–1) of the whole scene on a node grid of about `cellM`
+   * spacing over the ground model bounds (snow model input, read like the
+   * avalanche forest: high-vegetation returns 3 m above the ground). `null`
+   * when the cloud carries no ground classification.
+   */
+  async readSceneCanopy(cellM: number): Promise<{ data: Float32Array; width: number; height: number } | null> {
+    const field = this.field;
+    const width = Math.max(2, Math.round((field.maxX - field.minX) / cellM) + 1);
+    const cell = (field.maxX - field.minX) / (width - 1);
+    const height = Math.max(2, Math.round((field.maxY - field.minY) / cell) + 1);
+    const grid: AnalysisGrid = {
+      width, height, cell, originX: field.minX, originY: field.minY,
+      altitude: new Float32Array(0), slopeDeg: new Float32Array(0),
+    };
+    const builder = new CanopyGridBuilder(field, grid);
+    await this.pointPicker.forEachPointToSpacing(builder.bounds, CANOPY_SPACING_M, (x, y, z, cls) => builder.add(x, y, z, cls));
+    const cover = builder.finish();
+    if (!cover) return null;
+    return { data: Float32Array.from(cover.canopyPct, (v) => (Number.isFinite(v) ? v / 100 : 0)), width, height };
   }
 
   /** Reprojects the overlay; call once per rendered frame after a camera move. */

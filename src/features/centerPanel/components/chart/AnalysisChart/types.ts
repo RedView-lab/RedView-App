@@ -63,6 +63,11 @@ export interface AnalysisChartProps {
   onHoverXValueChange?: (xValue: number | null) => void;
   controlledHoverXValue?: number | null;
   onPlotClick?: (xValue: number) => void;
+  /**
+   * A point is being placed (toolbar « Ajouter »): a click always reaches
+   * `onPlotClick`, never selects a « Pente » section.
+   */
+  placementActive?: boolean;
   onPoiClick?: (annotation: ChartPoiAnnotation) => void;
   /** Clic sur l'icône d'une colonne « Alertes ». */
   onAlertClick?: (window: ChartAlertWindow) => void;

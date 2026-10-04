@@ -322,6 +322,12 @@ export interface InsertWaypointOptions {
   label?: string;
   osmId?: number;
   poiCategory?: TimelineItem['poiCategory'];
+  /**
+   * Position along the route (m) when the point was picked on the route
+   * itself (analysis chart): used as is instead of projecting the point, which
+   * could land on another pass of a loop or an out-and-back.
+   */
+  routeDistanceM?: number;
 }
 
 export interface InsertWaypointResult {
@@ -364,14 +370,20 @@ export function insertWaypointIntoTimeline(
 
   const hasRoute = Boolean(routePoints && routePoints.length >= 2);
   const cumulative = hasRoute ? cumulativeRouteLengthsM(routePoints!) : null;
-  const anchor = hasRoute && cumulative
+  const routeDistanceM = options?.routeDistanceM;
+  const knownRouteDistanceM = hasRoute && routeDistanceM != null && Number.isFinite(routeDistanceM)
+    ? routeDistanceM
+    : null;
+  const anchor = hasRoute && cumulative && knownRouteDistanceM == null
     ? projectPointAlongRoute(point, routePoints!, cumulative)
     : null;
 
-  const distanceKm = anchor ? roundDistanceKm(anchor.distanceM) : null;
-  const isDirectOnRoute = anchor
+  const distanceKm = knownRouteDistanceM != null
+    ? roundDistanceKm(knownRouteDistanceM)
+    : anchor ? roundDistanceKm(anchor.distanceM) : null;
+  const isDirectOnRoute = knownRouteDistanceM != null || (anchor
     ? Math.abs(point.lat - anchor.lat) < 0.0003 && Math.abs(point.lon - anchor.lon) < 0.0003
-    : false;
+    : false);
 
   const endIndex = timeline.findIndex((row) => row.kind === 'end');
   const searchLimit = endIndex >= 0 ? endIndex : timeline.length;
@@ -464,6 +476,37 @@ export function buildTimelineAfterRemoval(
   }
 
   return timeline.filter((row) => row.id !== rowId);
+}
+
+/**
+ * « Démarrer ici » / « Finir ici » : pose le départ ou l'arrivée sur `point`
+ * (ligne créée si absente) et prépare le recalcul local du tracé stocké.
+ */
+export function placeRouteEndpoint(
+  itinerary: Itinerary,
+  endpoint: 'start' | 'end',
+  point: { lat: number; lon: number },
+  label: string,
+): TimelineItem | null {
+  let row = itinerary.timeline.find((item) => item.kind === endpoint);
+  if (!row) {
+    insertTimelineItem(itinerary.timeline, endpoint);
+    row = itinerary.timeline.find((item) => item.kind === endpoint);
+  }
+  if (!row) return null;
+
+  row.label = label;
+  row.lat = point.lat;
+  row.lon = point.lon;
+  row.distanceKm = endpoint === 'start' ? 0 : null;
+  delete itinerary.routeAudit;
+  delete itinerary.pendingTraceExtension;
+  itinerary.prediction = null;
+
+  if (hasEditableRoute(itinerary)) {
+    itinerary.pendingRoutePatch = buildPendingRoutePatchForEditedRow(itinerary, row.id);
+  }
+  return row;
 }
 
 export function insertTimelineItem(

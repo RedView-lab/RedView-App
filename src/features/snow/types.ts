@@ -1,73 +1,56 @@
 // ============================================================================
-// Snow feature — Types
-// ----------------------------------------------------------------------------
-// Port web de la pipeline RedView v0.1 (crates/redview-scene/.../snow).
-// Récupération AROME (Météo-France) via Open-Meteo + redistribution
-// physique (López-Moreno, SnowSlide, D-inf, Winstral Sx, Liston-Elder).
+// Snow feature — public types
 // ============================================================================
 
 import type { DetectedCrs } from '../lidar/types';
+import type { CanopyGrid, SnowDiagnostics, SnowObservation } from './lib/engine/types';
 
 /** Affichage neige dans le viewer. */
 export type SnowDisplayMode = 'off' | 'cover' | 'thickness';
 
-/** Grille AROME brute (entrée de la pipeline). */
-export interface AromeSnowGrid {
-  /** Largeur (longitude). */
-  width: number;
-  /** Hauteur (latitude). */
-  height: number;
-  /** Épaisseur de neige en cm, row-major, sud→nord. */
-  snowDepthCm: Float32Array;
-  /** Bbox du CRS de travail (LiDAR), [minX, minY, maxX, maxY] en mètres. */
-  boundsMeters: [number, number, number, number];
-  /** Résolution AROME en mètres (≈ 1100 m). */
-  resolutionM: number;
-  /** Horodatage UTC du run AROME utilisé. */
-  timestamp: string;
-  /** Heure du run (ex: "00", "06"). */
-  runHour: string;
-  /** Source effective (debug). */
-  source:
-    | 'open-meteo-arome'
-    | 'open-meteo-ecmwf'
-    | 'open-meteo-best-match'
-    | 'fallback';
-}
-
-/** Résultat de la redistribution. */
+/** Snow depth over a LiDAR scene. */
 export interface SnowField {
-  /** Profondeur de neige en cm, row-major. */
+  /** Snow depth (vertical), cm, row-major, row 0 = southern edge (node grid over the bounds). */
   data: Float32Array;
   width: number;
   height: number;
-  /** Bbox dans le repère du LiDAR (Lambert93/UTM), [minX, minY, maxX, maxY]. */
+  /** Scene bounds in the LiDAR CRS, [minX, minY, maxX, maxY]. */
   boundsMeters: [number, number, number, number];
-  /** Statistiques globales. */
   stats: {
+    /** Mean depth of the snow-covered nodes, cm. */
     meanCm: number;
     maxCm: number;
     coveragePct: number;
     elapsedMs: number;
   };
-  /** Métadonnées AROME. */
+  /** Coarse snow field used (AROME, or a global model outside the AROME domain). */
   arome: {
     timestamp: string;
     runHour: string;
     source: string;
   };
+  /** What the engine did and with which data (stations, bulletin, wind, melt…). */
+  diagnostics: SnowDiagnostics;
+  /** State of every data source (ok, empty, error, unavailable…). */
+  sources: Record<string, string>;
 }
 
-/** Heightmap d'entrée pour la pipeline (vient du viewer LiDAR). */
+/** Scene DTM handed to the pipeline (the LiDAR viewer's height grid). */
 export interface SnowHeightmap {
+  /** Heights relative to `altitudeOffsetM`, node grid spanning the bounds, row 0 = minY. */
   data: Float32Array;
   width: number;
   height: number;
-  /** Bbox monde en mètres (CRS du LiDAR : Lambert93 ou RGR92/UTM40S). */
+  /** Bounds in the LiDAR CRS, m. */
   bounds: { minX: number; minY: number; maxX: number; maxY: number };
-  /** CRS du LiDAR — sert à reconvertir vers WGS84 pour l'API AROME. */
   crs: DetectedCrs;
+  /** Absolute altitude = data + altitudeOffsetM (the viewer stores heights around the scene centre). */
+  altitudeOffsetM: number;
+  /** Canopy cover 0–1 on a node grid over the same bounds, when the point cloud tells it. */
+  canopy?: CanopyGrid | null;
 }
+
+export type { CanopyGrid, SnowObservation };
 
 /** Progression. */
 export type SnowProgress = (pct: number, label: string) => void;

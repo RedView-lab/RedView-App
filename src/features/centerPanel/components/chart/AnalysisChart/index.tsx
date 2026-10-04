@@ -21,6 +21,7 @@ import {
   visibleFractionToDetailZoom,
 } from './math';
 import { buildPoiMarkerGroups, buildViewportForPoiCluster } from './poi';
+import { hasChartPoiIcon } from './poiSprites';
 import {
   DEFAULT_TICK_COUNT,
   POI_CLUSTER_COMPACT_VISIBLE_FRACTION,
@@ -59,6 +60,7 @@ export const AnalysisChart = memo(function AnalysisChart({
   onHoverXValueChange,
   controlledHoverXValue = null,
   onPlotClick,
+  placementActive = false,
   onPoiClick,
   onAlertClick,
   onPlotRangeSelect,
@@ -315,6 +317,7 @@ export const AnalysisChart = memo(function AnalysisChart({
     const result: VisiblePoiAnnotation[] = [];
     for (const annotation of poiAnnotations) {
       if (annotation.x < plotXDomain.min || annotation.x > plotXDomain.max) continue;
+      if (!hasChartPoiIcon(annotation)) continue;
       result.push({
         ...annotation,
         xRatio: ratioFor(annotation.x, plotXDomain),
@@ -467,7 +470,7 @@ export const AnalysisChart = memo(function AnalysisChart({
     plotXDomain,
     visibleFraction,
     detailZoom,
-    slopeSegments,
+    slopeSegments: placementActive ? null : slopeSegments,
     controlledSelectedXRange,
     onViewportChange,
     onDetailOffsetChange,
@@ -513,7 +516,7 @@ export const AnalysisChart = memo(function AnalysisChart({
       plotAreaRef={plotAreaRef}
       onPlotPointerDown={handlePointerDown}
       onPlotDoubleClick={handleResetZoom}
-      plotPointerOverSegment={hoverSlopeSegment != null}
+      plotPointerOverSegment={!placementActive && hoverSlopeSegment != null}
       onResetZoom={handleResetZoom}
       isZoomed={isZoomed}
       selectionBand={selectionBand}

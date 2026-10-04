@@ -10,6 +10,9 @@ import { useAppI18n } from '@/shared/i18n';
 import { appScaledOverlayStyle, readAppScale } from '@/shared/lib/appScale';
 import type { TimelineAddItemKind } from '../../types';
 
+/** Fits « Point de passage » / « Destination » with their icon, untruncated. */
+const MENU_WIDTH = 168;
+
 interface TimelineKindMenuStyle {
   top: number;
   left: number;
@@ -38,7 +41,7 @@ function computeMenuStyle(
 ): TimelineKindMenuStyle {
   const rect = anchorEl.getBoundingClientRect();
   const scale = readAppScale(anchorEl);
-  const menuWidth = 140 * scale;
+  const menuWidth = MENU_WIDTH * scale;
   const menuHeight = optionCount * 30 * scale + 2;
   const offset = 6 * scale;
   const maxLeft = Math.max(8, window.innerWidth - menuWidth - 8);
@@ -53,7 +56,7 @@ function computeMenuStyle(
   return {
     top,
     left,
-    width: 140,
+    width: MENU_WIDTH,
     scale,
   };
 }

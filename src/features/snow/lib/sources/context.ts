@@ -1,0 +1,112 @@
+// ============================================================================
+// Snow sources — measurements, avalanche bulletin and weather history
+// (/api/snow-context, see api/snow-context.ts)
+// ============================================================================
+
+import type { BraSnowProfile, CoarseSnowGrid, LonLat, SnowObservation, WeatherHistory } from '../engine/types';
+
+interface ContextStation {
+  id: string;
+  source: string;
+  name: string;
+  lon: number;
+  lat: number;
+  elevationM: number;
+  hsCm: number;
+  time: string;
+}
+
+interface ContextResponse {
+  stations: ContextStation[];
+  rejectedStations: number;
+  bra: BraSnowProfile | null;
+  weather: {
+    startMs: number;
+    elevationM: number;
+    temperatureC: number[];
+    precipitationMm: number[];
+    snowfallCm: number[];
+    windSpeedMs: number[];
+    windDirDeg: number[];
+  } | null;
+  coarse: {
+    width: number;
+    height: number;
+    lonMin: number;
+    latMin: number;
+    dLon: number;
+    dLat: number;
+    hsCm: number[];
+    resolutionM: number;
+  } | null;
+  sources: Record<string, string>;
+}
+
+export interface SnowContext {
+  observations: SnowObservation[];
+  rejectedStations: number;
+  bra: BraSnowProfile | null;
+  weather: WeatherHistory | null;
+  coarse: CoarseSnowGrid | null;
+  sources: Record<string, string>;
+}
+
+export async function fetchSnowContext(
+  center: LonLat,
+  sceneAltitudeM: number,
+  options: { coarse: boolean; signal?: AbortSignal },
+): Promise<SnowContext> {
+  const q = new URLSearchParams({
+    lat: center.lat.toFixed(5),
+    lon: center.lon.toFixed(5),
+    elevation: String(Math.round(sceneAltitudeM)),
+    radiusKm: '50',
+    pastDays: '60',
+  });
+  if (options.coarse) q.set('coarse', '1');
+  const res = await fetch(`/api/snow-context?${q.toString()}`, { signal: options.signal });
+  if (!res.ok) throw new Error(`snow-context HTTP ${res.status}`);
+  const json = (await res.json()) as ContextResponse;
+  const w = json.weather;
+  return {
+    observations: json.stations.map((s) => ({
+      id: s.id,
+      source: s.source,
+      name: s.name,
+      lon: s.lon,
+      lat: s.lat,
+      elevationM: s.elevationM,
+      hsCm: s.hsCm,
+      time: s.time,
+      kind: 'flat' as const,
+    })),
+    rejectedStations: json.rejectedStations,
+    bra: json.bra,
+    weather: w
+      ? {
+        startMs: w.startMs,
+        elevationM: w.elevationM,
+        temperatureC: Float32Array.from(w.temperatureC),
+        precipitationMm: Float32Array.from(w.precipitationMm),
+        snowfallCm: Float32Array.from(w.snowfallCm),
+        windSpeedMs: Float32Array.from(w.windSpeedMs),
+        windDirDeg: Float32Array.from(w.windDirDeg),
+      }
+      : null,
+    coarse: json.coarse
+      ? {
+        source: 'open-meteo',
+        width: json.coarse.width,
+        height: json.coarse.height,
+        lonMin: json.coarse.lonMin,
+        latMin: json.coarse.latMin,
+        dLon: json.coarse.dLon,
+        dLat: json.coarse.dLat,
+        hsCm: Float32Array.from(json.coarse.hsCm),
+        orographyM: null,
+        resolutionM: json.coarse.resolutionM,
+      }
+      : null,
+    sources: json.sources,
+  };
+}

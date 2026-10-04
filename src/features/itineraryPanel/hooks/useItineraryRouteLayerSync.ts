@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { ROUTE_SLOPE_LEGEND_BANDS } from '@/features/controlPanel/lib';
 
@@ -25,10 +25,12 @@ function canAccessStyle(map: MapboxMap): boolean {
   }
 }
 
-// Debounce window for coalescing bursts of styledata / sourcedata events.
-// These fire repeatedly while DEM terrain tiles stream in, but the route
-// geometry itself does not depend on terrain, so we batch them hard.
+// Debounce window for coalescing bursts of styledata events. The trace reads
+// its altitude from the terrain on the GPU: streamed DEM tiles never need a
+// replay.
 const REPLAY_DEBOUNCE_MS = 120;
+const REPLAY_RETRY_MS = 250;
+const REPLAY_MAX_RETRIES = 40;
 
 interface UseItineraryRouteLayerSyncArgs {
   active: ItineraryProject['itineraries'][number] | null;
@@ -97,20 +99,9 @@ export function useItineraryRouteLayerSync({
   }, [itineraries, routeSlopeBandSignature, routeTraceWidthPx, routesEnabled, surfaceFilter]);
 
   // Ref bag so the stable map listeners always read the latest values without
-  // having to re-subscribe on every project mutation. Updated synchronously
-  // during render so effects always see the freshest committed state.
-  const stateRef = useRef({
-    active,
-    isMapLoaded,
-    itineraries,
-    map,
-    routeSlopeBands,
-    routeTraceWidthPx,
-    routesEnabled,
-    surfaceFilter,
-    layerSignature,
-  });
-  stateRef.current = {
+  // having to re-subscribe on every project mutation. Synced in a layout
+  // effect, i.e. before any passive effect below reads it.
+  const latestState = {
     active,
     isMapLoaded,
     itineraries,
@@ -121,6 +112,10 @@ export function useItineraryRouteLayerSync({
     surfaceFilter,
     layerSignature,
   };
+  const stateRef = useRef(latestState);
+  useLayoutEffect(() => {
+    stateRef.current = latestState;
+  });
 
   const replayRouteState = useCallback((force = false): boolean => {
     const {
@@ -136,11 +131,12 @@ export function useItineraryRouteLayerSync({
     } = stateRef.current;
     if (!currentMap || !loaded || !canAccessStyle(currentMap)) return false;
 
-    // Include only terrain mode/scale and the globe-to-Mercator threshold, not
-    // streamed tile contents: the smooth route must not acquire canopy spikes.
+    // Elevated (terrain, Mercator) vs draped (globe / no terrain): the line
+    // layers' elevation reference follows it. Streamed DEM tiles never matter.
     const renderSignature = `${signature}::elevation:${getRouteElevationContext(currentMap).signature}`;
     if (!force && lastReplayedSignatureRef.current === renderSignature) return true;
 
+    let allMounted = true;
     for (const it of currentItineraries) {
       const pts = it.gpxRoute?.points;
       if (!pts || pts.length < 2) continue;
@@ -149,7 +145,7 @@ export function useItineraryRouteLayerSync({
       // chart/profile, not the map line.)
       const routeVisible = areRoutesEnabled && it.visible !== false;
       try {
-        upsertRouteLayer(currentMap, it.id, pts, {
+        const mounted = upsertRouteLayer(currentMap, it.id, pts, {
           color: it.color,
           opacity01: (it.opacity ?? 100) / 100,
           traceWidthPx,
@@ -158,7 +154,9 @@ export function useItineraryRouteLayerSync({
           slopeBands: bands,
           surfaceFilter: activeSurfaceFilter,
         });
+        if (!mounted) allMounted = false;
       } catch (error) {
+        allMounted = false;
         console.warn('[route-layer] upsert failed for', it.id, error);
       }
     }
@@ -183,20 +181,29 @@ export function useItineraryRouteLayerSync({
       clearForbiddenZoneDraft(currentMap);
     }
 
-    lastReplayedSignatureRef.current = renderSignature;
-    return true;
+    // A trace the style could not take yet is retried by the next event /
+    // timer instead of being considered done.
+    lastReplayedSignatureRef.current = allMounted ? renderSignature : null;
+    return allMounted;
   }, []);
 
   const scheduleReplayRouteState = useCallback((force = false): void => {
     if (force) forceReplayPendingRef.current = true;
     // Already scheduled — the pending timer will pick up the `force` flag.
     if (replayTimerRef.current) return;
-    replayTimerRef.current = setTimeout(() => {
-      replayTimerRef.current = null;
-      const pendingForce = forceReplayPendingRef.current;
-      forceReplayPendingRef.current = false;
-      replayRouteState(pendingForce);
-    }, REPLAY_DEBOUNCE_MS);
+    const run = (attempt: number): void => {
+      replayTimerRef.current = setTimeout(() => {
+        replayTimerRef.current = null;
+        const pendingForce = forceReplayPendingRef.current;
+        forceReplayPendingRef.current = false;
+        if (replayRouteState(pendingForce) || attempt >= REPLAY_MAX_RETRIES) return;
+        // The style refused a trace (being replaced): retry on a timer too, a
+        // settled map may not emit another event for a long time.
+        if (pendingForce) forceReplayPendingRef.current = true;
+        run(attempt + 1);
+      }, attempt === 0 ? REPLAY_DEBOUNCE_MS : REPLAY_RETRY_MS);
+    };
+    run(0);
   }, [replayRouteState]);
 
   // Replay whenever the actual route state (points / colors / visibility) changes.
@@ -227,22 +234,21 @@ export function useItineraryRouteLayerSync({
     const onStyleData = () => {
       scheduleReplayRouteState(false);
     };
-    const onSourceData = (event: { sourceId?: string } | undefined) => {
-      const terrainSourceId = map.getTerrain()?.source;
-      if (!terrainSourceId || event?.sourceId !== terrainSourceId) return;
-      try {
-        if (!map.isSourceLoaded(terrainSourceId)) return;
-      } catch {
-        return;
-      }
-      scheduleReplayRouteState(false);
+    // Elevated lines are not drawn on the globe: switch the layers as soon as
+    // the zoom crosses ROUTE_ELEVATED_MIN_ZOOM, not after zoomend + debounce
+    // (a zoom-out used to leave the whole trace invisible until then).
+    let lastElevated = getRouteElevationContext(map).elevated;
+    const onZoom = () => {
+      const elevated = getRouteElevationContext(map).elevated;
+      if (elevated === lastElevated) return;
+      lastElevated = elevated;
+      if (!replayRouteState()) scheduleReplayRouteState();
     };
-
     map.on('style.load', onStyleLoad);
     map.on('styledata', onStyleData);
     map.on('zoomend', onStyleData);
+    map.on('zoom', onZoom);
     map.on('terrain', onStyleData);
-    map.on('sourcedata', onSourceData as never);
     return () => {
       if (replayTimerRef.current) {
         clearTimeout(replayTimerRef.current);
@@ -252,8 +258,8 @@ export function useItineraryRouteLayerSync({
       map.off('style.load', onStyleLoad);
       map.off('styledata', onStyleData);
       map.off('zoomend', onStyleData);
+      map.off('zoom', onZoom);
       map.off('terrain', onStyleData);
-      map.off('sourcedata', onSourceData as never);
     };
-  }, [isMapLoaded, map, scheduleReplayRouteState]);
+  }, [isMapLoaded, map, replayRouteState, scheduleReplayRouteState]);
 }

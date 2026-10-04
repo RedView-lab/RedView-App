@@ -23,7 +23,6 @@ import type {
   WeatherPaletteScaleSetting,
   WeatherRenderMode,
   WeatherState,
-  WeatherTab,
 } from '../../types';
 
 function normalizeWeatherLayerMode(layer: WeatherState['layers'][number]): WeatherState['layers'][number] {
@@ -100,13 +99,13 @@ export function useOverlayWeatherState({
 
     return {
       ...merged,
-      ...(merged.tab === 'forecast'
-        ? clampForecastSelection({
-            date: merged.date,
-            time: merged.time,
-            forecastDay: merged.forecastDay,
-          })
-        : null),
+      // L'onglet « Tendances » a été retiré : un projet enregistré dessus revient aux prévisions.
+      tab: 'forecast',
+      ...clampForecastSelection({
+        date: merged.date,
+        time: merged.time,
+        forecastDay: merged.forecastDay,
+      }),
       palettes: nextPalettes,
     };
   });
@@ -133,22 +132,6 @@ export function useOverlayWeatherState({
   const handlers = {
     onWeatherEnabledChange: useCallback(
       (enabled: boolean) => setWeatherState((prev) => ({ ...prev, enabled })),
-      [],
-    ),
-    onWeatherTabChange: useCallback(
-      (tab: WeatherTab) =>
-        setWeatherState((prev) => {
-          if (tab !== 'forecast') return { ...prev, tab };
-          return {
-            ...prev,
-            tab,
-            ...clampForecastSelection({
-              date: prev.date,
-              time: prev.time,
-              forecastDay: prev.forecastDay,
-            }),
-          };
-        }),
       [],
     ),
     onWeatherDateChange: useCallback(
