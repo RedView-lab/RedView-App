@@ -31,7 +31,10 @@ if (sentryDsn && !sentryDsn.includes('placeholder')) {
       'Extension context invalidated',
     ],
     beforeSend(event) {
-      if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+      // VITE_SENTRY_ALLOW_LOCAL=1 au build : envoi depuis localhost (vérifier
+      // les sourcemaps d'un build local, cf. scripts/upload-sourcemaps.mjs).
+      const allowLocal = import.meta.env.VITE_SENTRY_ALLOW_LOCAL === '1'
+      if (!allowLocal && typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
         return null
       }
       return event

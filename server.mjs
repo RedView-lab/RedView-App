@@ -20,6 +20,8 @@ import {
   readBodyLimited,
   resolveApiRoute,
 } from './server/http-security.mjs';
+import { captureServerError, flushServerObservability, initServerObservability } from './server/observability.mjs';
+import { createRequestLogger, normalizeRoutePath } from './server/request-logging.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -210,9 +212,15 @@ function sendTooManyRequests(res) {
   return res.end(JSON.stringify({ error: 'Trop de requêtes. Veuillez patienter une minute.' }));
 }
 
+initServerObservability();
+const logRequest = createRequestLogger();
+
 const server = http.createServer(async (req, res) => {
+  // Pose req.id (X-Request-ID) et req.log ; la ligne est écrite à la fin de la réponse.
+  logRequest(req, res);
   try {
     if (!req.url) {
+      req.redviewRoute = normalizeRoutePath(null);
       res.statusCode = 400;
       return res.end('Bad Request');
     }
@@ -221,6 +229,7 @@ const server = http.createServer(async (req, res) => {
 
     const parsedUrl = new URL(req.url, 'http://localhost');
     let pathname = decodeSafePathname(parsedUrl.pathname);
+    req.redviewRoute = normalizeRoutePath(pathname);
     if (pathname === null) {
       res.statusCode = 400;
       return res.end('Bad Request');
@@ -241,6 +250,7 @@ const server = http.createServer(async (req, res) => {
     // 2. Handle /api/* routes with rate limiting
     if (pathname.startsWith('/api/')) {
       const apiRoute = resolveApiRoute(API_DIR, pathname);
+      req.redviewRoute = normalizeRoutePath(pathname, apiRoute?.route);
       // Le bucket est choisi d'après la route RÉSOLUE : un chemin détourné ne
       // peut plus atteindre `auth/*` en passant par le quota général.
       const isAuth = apiRoute?.isAuth ?? false;
@@ -304,6 +314,14 @@ const server = http.createServer(async (req, res) => {
       res.setHeader('Allow', 'GET, HEAD');
       res.setHeader('Content-Type', 'text/plain; charset=utf-8');
       return res.end('Method Not Allowed');
+    }
+
+    // Sourcemaps : uploadées sur GlitchTip et supprimées au build, jamais servies.
+    if (pathname.endsWith('.map')) {
+      res.statusCode = 404;
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store');
+      return res.end('Not Found');
     }
 
     let filePath = path.join(DIST_DIR, pathname);
@@ -411,7 +429,8 @@ const server = http.createServer(async (req, res) => {
 
     const stream = fs.createReadStream(filePath);
     stream.on('error', (err) => {
-      console.error('Static stream error:', err);
+      req.log.error({ err }, 'static stream error');
+      captureServerError(err, { route: req.redviewRoute, requestId: req.id, method: req.method });
       if (!res.headersSent) {
         res.statusCode = 500;
         res.end('Internal Server Error');
@@ -421,7 +440,8 @@ const server = http.createServer(async (req, res) => {
     });
     stream.pipe(res);
   } catch (err) {
-    console.error('Server error:', err);
+    req.log.error({ err }, 'server error');
+    captureServerError(err, { route: req.redviewRoute, requestId: req.id, method: req.method });
     if (!res.headersSent) {
       res.statusCode = 500;
       res.end('Internal Server Error');
@@ -479,6 +499,8 @@ async function handleApiRoute(apiRoute, parsedUrl, req, res) {
     query,
     cookies: {},
     body: parsedBody,
+    // X-Request-ID de la requête (journal, GlitchTip), à relayer aux services amont.
+    requestId: req.id,
     [Symbol.asyncIterator]: async function* () {
       yield rawBody;
     },
@@ -532,7 +554,8 @@ async function handleApiRoute(apiRoute, parsedUrl, req, res) {
       res.end(JSON.stringify({ error: 'Internal Server Error' }));
     }
   } catch (err) {
-    console.error(`[API Error ${route}]:`, err);
+    req.log.error({ err, route: req.redviewRoute }, 'api handler error');
+    captureServerError(err, { route: req.redviewRoute, requestId: req.id, method: req.method });
     if (!res.headersSent) {
       res.statusCode = 500;
       res.setHeader('Content-Type', 'application/json');
@@ -630,6 +653,11 @@ if (isMain) {
   server.requestTimeout = 120_000;
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`[RedView Server] Running on http://0.0.0.0:${PORT}`);
+  });
+  // Arrêt du conteneur (node en PID 1) : erreurs en attente envoyées avant de sortir.
+  process.once('SIGTERM', () => {
+    server.close();
+    void flushServerObservability(2000).finally(() => process.exit(0));
   });
 }
 

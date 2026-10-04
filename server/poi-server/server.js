@@ -11,14 +11,56 @@
  * dossier. Ce fichier est la copie de référence : toute modification doit
  * être redéployée sur le VPS.
  */
-import Fastify from 'fastify';
+import { randomUUID } from 'node:crypto';
+import Fastify, { LogController } from 'fastify';
 import { db } from './db.js';
 import { createViewportSampler } from './viewport-sampler.js';
 import { corridorQueryBoxes, selectCorridorCandidates } from './corridor-geometry.js';
 
+const REQUEST_ID_RE = /^[A-Za-z0-9._-]{8,128}$/;
+
 // bodyLimit : `api/poi.ts` plafonne déjà le corps à 256 Ko ; 512 Ko laisse
 // de la marge sans permettre d'épuiser la mémoire avec un corps géant.
-const fastify = Fastify({ logger: false, bodyLimit: 512 * 1024 });
+//
+// Journal (pino, JSON sur stdout → journald) : une ligne par requête (hook
+// onResponse) avec la route déclarée, jamais l'URL ni les en-têtes (la query
+// porte des coordonnées). L'id de requête est le X-Request-ID relayé par
+// api/poi.ts, pour corréler avec le journal du serveur de l'app.
+const fastify = Fastify({
+  bodyLimit: 512 * 1024,
+  logger: {
+    level: process.env.LOG_LEVEL || 'info',
+    base: { service: 'poi-server' },
+    // ISO 8601, comme le journal du serveur de l'app.
+    timestamp: () => `,"time":"${new Date().toISOString()}"`,
+    redact: { paths: ['req.headers', 'res.headers'], remove: true },
+  },
+  // Lignes « incoming request / request completed » de Fastify coupées : le
+  // hook onResponse écrit la seule ligne par requête.
+  logController: new LogController({ disableRequestLogging: true }),
+  requestIdHeader: false,
+  genReqId(req) {
+    const header = req.headers['x-request-id'];
+    return typeof header === 'string' && REQUEST_ID_RE.test(header) ? header : randomUUID();
+  },
+});
+
+function routeOf(req) {
+  return req.routeOptions?.url ?? ':unmatched';
+}
+
+fastify.addHook('onResponse', (req, reply, done) => {
+  const route = routeOf(req);
+  const statusCode = reply.statusCode;
+  if (!(route === '/health' && statusCode < 400)) {
+    const level = statusCode >= 500 ? 'error' : statusCode >= 400 ? 'warn' : 'info';
+    req.log[level](
+      { method: req.method, route, statusCode, responseTime: Math.round(reply.elapsedTime) },
+      'request completed',
+    );
+  }
+  done();
+});
 
 const PORT = parseInt(process.env.POI_PORT || '17778', 10);
 const HOST = process.env.POI_HOST || '127.0.0.1';
@@ -29,10 +71,10 @@ fastify.setErrorHandler((err, req, reply) => {
   const code = Number(err.statusCode);
   const status = Number.isInteger(code) && code >= 400 && code < 600 ? code : 500;
   if (status >= 500) {
-    console.error(`[poi-server] erreur interne ${req.method} ${req.url} :`, err);
+    req.log.error({ err, route: routeOf(req) }, 'internal error');
     return reply.status(status).send({ error: 'Internal error' });
   }
-  console.warn(`[poi-server] requête rejetée (${status}) ${req.method} ${req.url} : ${err.message}`);
+  req.log.warn({ route: routeOf(req), statusCode: status, reason: err.message }, 'request rejected');
   return reply.status(status).send({ error: 'Bad request' });
 });
 
@@ -63,10 +105,10 @@ const SELECT_COLUMNS = [
 ].join(', ');
 
 if (!HAS_OSM_TYPE) {
-  console.warn('[poi-server] colonne osm_type absente — base historique détectée.');
+  fastify.log.warn('colonne osm_type absente — base historique détectée');
 }
 if (HAS_SOURCE) {
-  console.log('[poi-server] base enrichie détectée (colonnes source / src_confidence).');
+  fastify.log.info('base enrichie détectée (colonnes source / src_confidence)');
 }
 
 // Échantillonnage spatial de `/bbox?level=…` (vue « POI carte »). Construit
@@ -76,7 +118,7 @@ let viewportSampler = null;
 try {
   viewportSampler = createViewportSampler(db, { hasSource: HAS_SOURCE, selectColumns: SELECT_COLUMNS });
 } catch (err) {
-  console.error('[poi-server] échantillonnage spatial indisponible :', err);
+  fastify.log.error({ err }, 'échantillonnage spatial indisponible');
 }
 
 function toFeature(r) {
@@ -352,9 +394,9 @@ fastify.post('/corridor', { schema: corridorSchema }, async (req, reply) => {
 });
 
 try {
-  const address = await fastify.listen({ port: PORT, host: HOST });
-  console.log(`🚀 Serveur POI RedView actif sur ${address}`);
+  // Fastify journalise lui-même l'adresse d'écoute.
+  await fastify.listen({ port: PORT, host: HOST });
 } catch (err) {
-  console.error(err);
+  fastify.log.error({ err }, 'démarrage impossible');
   process.exit(1);
 }

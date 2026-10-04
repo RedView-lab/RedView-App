@@ -18,18 +18,11 @@ import {
   resolveApiRoute,
   // @ts-expect-error JS module without declarations
 } from './server/http-security.mjs'
+// @ts-expect-error JS module without declarations
+import { resolveBuildId } from './server/build-id.mjs'
 
-// Identifiant de build (release Sentry, APP_CACHE_EPOCH). En prod Docker /
-// Coolify, SOURCE_COMMIT est passé en ARG de build (voir Dockerfile) ; sans
-// lui, npm_package_version (« 0.0.0 ») ne change jamais d'un déploiement à
-// l'autre.
-const redviewBuildId = (
-  process.env.VERCEL_GIT_COMMIT_SHA
-  || process.env.GITHUB_SHA
-  || process.env.SOURCE_COMMIT
-  || process.env.npm_package_version
-  || 'dev'
-).slice(0, 12)
+// Identifiant de build (release GlitchTip, tag des sourcemaps, APP_CACHE_EPOCH).
+const redviewBuildId: string = resolveBuildId()
 
 /**
  * Vite plugin that serves serverless API routes (`api/*.ts`) and handles
@@ -371,7 +364,10 @@ export default defineConfig({
     },
   },
   build: {
-    sourcemap: false,
+    // Maps produites sans commentaire `sourceMappingURL` : uploadées sur
+    // GlitchTip puis supprimées de dist/ au build Docker
+    // (scripts/upload-sourcemaps.mjs) ; server.mjs ne sert jamais un `.map`.
+    sourcemap: 'hidden',
     chunkSizeWarningLimit: 2500,
     rollupOptions: {
       input: {

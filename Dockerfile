@@ -10,13 +10,26 @@ RUN npm ci
 COPY . .
 
 # Commit déployé, injecté par Coolify (option « Include Source Commit in
-# Build ») : lu par vite.config.ts comme identifiant de build (release Sentry,
-# APP_CACHE_EPOCH). Déclaré après COPY pour ne pas invalider le cache npm ci.
+# Build ») : identifiant de build (server/build-id.mjs : release GlitchTip,
+# tag des sourcemaps, APP_CACHE_EPOCH). Déclaré après COPY pour ne pas
+# invalider le cache npm ci.
 ARG SOURCE_COMMIT=""
 ENV SOURCE_COMMIT=${SOURCE_COMMIT}
 
 ENV NODE_ENV=production
 RUN npm run build
+
+# Sourcemaps → GlitchTip (release = identifiant de build), puis suppression des
+# .map de dist/ : jamais dans l'image. Sans configuration, l'upload est ignoré
+# et les maps supprimées quand même. Token : secret de build de préférence
+# (Coolify « Use Docker Build Secrets ») ; l'ARG est un repli qui ne quitte pas
+# ce stage (le runner ne reçoit que dist/).
+ARG SENTRY_URL=""
+ARG SENTRY_ORG=""
+ARG SENTRY_PROJECT=""
+ARG SENTRY_AUTH_TOKEN=""
+RUN --mount=type=secret,id=SENTRY_AUTH_TOKEN \
+    node scripts/upload-sourcemaps.mjs dist
 
 FROM node:22-alpine AS runner
 WORKDIR /app
@@ -35,6 +48,11 @@ COPY --from=builder /app/api ./api
 # Seuls les modules runtime du serveur (pas les confs nginx/systemd ni l'ingest POI).
 COPY --from=builder /app/server/*.mjs ./server/
 COPY --from=builder /app/server.mjs ./server.mjs
+
+# Release des erreurs serveur (server/build-id.mjs), même valeur que le front ;
+# après npm ci pour ne pas invalider son cache à chaque commit.
+ARG SOURCE_COMMIT=""
+ENV SOURCE_COMMIT=${SOURCE_COMMIT}
 
 USER redview
 

@@ -4,6 +4,8 @@ export interface ApiRequest extends IncomingMessage {
   query: Record<string, string | string[]>;
   body: any;
   cookies?: Record<string, string>;
+  /** X-Request-ID de la requête (serveur de prod seulement), à relayer aux services amont. */
+  requestId?: string;
 }
 
 export interface ApiResponse extends ServerResponse {

@@ -83,10 +83,7 @@ async function handleBbox(
     const upstream = await fetch(`${base}/bbox?${params.toString()}`, {
       method: 'GET',
       signal: ctrl.signal,
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': 'RedView/1.0 (+https://redview.tech)',
-      },
+      headers: upstreamHeaders(req),
     });
     clearTimeout(timer);
     if (!upstream.ok) {
@@ -137,11 +134,7 @@ async function handleCorridor(
     const upstream = await fetch(`${base}/corridor`, {
       method: 'POST',
       signal: ctrl.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        'User-Agent': 'RedView/1.0 (+https://redview.tech)',
-      },
+      headers: upstreamHeaders(req, { 'Content-Type': 'application/json' }),
       body,
     });
     clearTimeout(timer);
@@ -171,6 +164,16 @@ async function handleCorridor(
 // pourrait pas le distinguer d'un corridor réellement vide et effacerait les
 // POI déjà trouvés. 413 (corridor trop large) est relayé tel quel, toute
 // autre erreur amont devient 502. Jamais mis en cache.
+
+/** En-têtes vers le serveur POI ; X-Request-ID relayé pour corréler les deux journaux. */
+function upstreamHeaders(req: ApiRequest, extra: Record<string, string> = {}): Record<string, string> {
+  return {
+    Accept: 'application/json',
+    'User-Agent': 'RedView/1.0 (+https://redview.tech)',
+    ...extra,
+    ...(req.requestId ? { 'X-Request-ID': req.requestId } : {}),
+  };
+}
 
 /** Réponse amont exploitable : un objet GeoJSON avec un tableau `features`. */
 function hasFeatureArray(value: unknown): value is { features: unknown[] } {
