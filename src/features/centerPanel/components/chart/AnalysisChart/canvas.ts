@@ -226,6 +226,8 @@ const SLOPE_CALM_FILL_ALPHA = 0.32;
 /** Pastille de pente moyenne : tronçon minimal (px, m de D+), écart et géométrie (px). */
 const GRADE_LABEL_MIN_BLOCK_PX = 16;
 const GRADE_LABEL_MIN_GAIN_M = 25;
+/** Pente moyenne minimale (%) d'une montée pour porter une pastille (pas de faux plats). */
+const GRADE_LABEL_MIN_PCT = 3;
 const GRADE_LABEL_GAP_PX = 6;
 const GRADE_LABEL_HEIGHT_PX = 17;
 const GRADE_LABEL_BOTTOM_PX = 6;
@@ -315,7 +317,7 @@ function hexWithAlpha(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-/** Texte sombre sur les teintes claires (jaune, orange), blanc sinon. */
+/** Texte sombre sur les teintes claires (beige, orange), blanc sinon. */
 function labelTextColor(hex: string): string {
   const [r, g, b] = hexToRgb(hex).map((channel) => {
     const c = channel / 255;
@@ -477,7 +479,7 @@ function drawSlopeGradeLabels(
   for (let index = firstVisibleSegment(segments, xDomain); index < segments.length; index += 1) {
     const segment = segments[index]!;
     if (segment.startX > xDomain.max) break;
-    if (!SLOPE_COLOR_CLASSES[segment.classIndex]?.climb) continue;
+    if (!SLOPE_COLOR_CLASSES[segment.classIndex]?.climb || segment.avgPct < GRADE_LABEL_MIN_PCT) continue;
     const startPx = Math.max(0, ((segment.startX - xDomain.min) / span) * width);
     const endPx = Math.min(width, ((segment.endX - xDomain.min) / span) * width);
     const gainM = (segment.avgPct / 100) * segment.lengthM;

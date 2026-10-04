@@ -18,8 +18,9 @@ function formatKm(distanceM: number, locale: string): string {
 }
 
 /**
- * Légende de la colorisation « Pente » sur une ligne : descente et plat en
- * retrait, puis les montées avec la distance parcourue dans chaque classe.
+ * Légende de la colorisation « Pente » sur une ligne, mêmes classes et
+ * couleurs que la légende du tracé : descentes et plat en retrait, puis les
+ * montées, avec la distance parcourue dans chaque classe.
  * Les classes absentes restent affichées, atténuées, pour que la mise en page
  * ne saute pas d'un itinéraire à l'autre.
  */
@@ -37,7 +38,7 @@ export const SlopeLegend = memo(function SlopeLegend({ overlay, itineraryName }:
         {SLOPE_COLOR_CLASSES.map((entry, index) => {
           const distanceM = distributionM[index] ?? 0;
           const percent = Math.round((distanceM / totalM) * 100);
-          const label = entry.climb ? entry.label : t(entry.label);
+          const { label } = entry;
           const firstClimb = entry.climb && !SLOPE_COLOR_CLASSES[index - 1]?.climb;
           const className = [
             'rvchart-slope-legend__item',

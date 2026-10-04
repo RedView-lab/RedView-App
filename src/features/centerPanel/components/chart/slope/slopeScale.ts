@@ -1,11 +1,12 @@
+import { ROUTE_SLOPE_LEGEND_BANDS } from '@/features/controlPanel/lib/routeSlopeLegend';
+
 /**
- * Échelle de colorisation « Pente » du profil d'altitude.
- *
- * Six classes seulement, calées sur la lecture d'un profil de col : la pente
- * affichée est une moyenne par tronçon (voir `buildSlopeColorRuns`), donc des
- * paliers de 3 % suffisent et restent lisibles d'un coup d'œil. Descente et
- * plat restent neutres (et estompés au rendu) pour que les montées ressortent ;
- * au-delà de 12 %, le pourpre se détache nettement du rouge.
+ * Échelle de colorisation « Pente » du profil d'altitude : la même que la
+ * légende du tracé sur la carte (`ROUTE_SLOPE_LEGEND_BANDS`, -16 % → 16 %),
+ * pour qu'un tronçon ait la même couleur sur le graphe et sur la carte.
+ * La pente affichée est une moyenne par tronçon (voir `buildSlopeColorRuns`).
+ * Descentes et plat restent estompés au remplissage pour que les montées
+ * ressortent ; la ligne garde partout la couleur de la légende.
  */
 export interface SlopeColorClass {
   id: string;
@@ -14,25 +15,28 @@ export interface SlopeColorClass {
   /** Borne haute exclue (%) ; Infinity pour la dernière classe. */
   maxPct: number;
   color: string;
-  /** Libellé source (FR), traduit via `t()`. */
+  /** Libellé (numérique, identique à la légende du tracé). */
   label: string;
-  /** Classe de montée (comptée dans la répartition « montées »). */
+  /** Classe de montée (pente ≥ 1 %) : remplissage plein, légende mise en avant. */
   climb: boolean;
 }
 
-export const SLOPE_COLOR_CLASSES: ReadonlyArray<SlopeColorClass> = [
-  { id: 'descent', minPct: -Infinity, maxPct: -3, color: '#5B8BC9', label: 'Descente', climb: false },
-  { id: 'flat', minPct: -3, maxPct: 3, color: '#7D8590', label: 'Plat', climb: false },
-  { id: '3-6', minPct: 3, maxPct: 6, color: '#F4D35E', label: '3–6 %', climb: true },
-  { id: '6-9', minPct: 6, maxPct: 9, color: '#F7931E', label: '6–9 %', climb: true },
-  { id: '9-12', minPct: 9, maxPct: 12, color: '#E5322D', label: '9–12 %', climb: true },
-  { id: '12+', minPct: 12, maxPct: Infinity, color: '#B03CD0', label: '12 % +', climb: true },
-];
+export const SLOPE_COLOR_CLASSES: ReadonlyArray<SlopeColorClass> = ROUTE_SLOPE_LEGEND_BANDS.map((band) => ({
+  id: band.id,
+  minPct: band.minPct,
+  maxPct: band.maxPct,
+  color: band.color,
+  label: band.label,
+  climb: band.minPct > 0,
+}));
 
-/** Index de la classe « plat » : couleur neutre (pauses, données manquantes). */
-export const SLOPE_NEUTRAL_CLASS_INDEX = 1;
+/** Index de la classe « plat » (contient 0 %) : couleur neutre (pauses, données manquantes). */
+export const SLOPE_NEUTRAL_CLASS_INDEX = Math.max(
+  0,
+  SLOPE_COLOR_CLASSES.findIndex((entry) => entry.minPct <= 0 && entry.maxPct > 0),
+);
 
-/** Index de classe pour une pente (%) ; les bornes basses sont incluses (9 % → 9–12). */
+/** Index de classe pour une pente (%) ; les bornes basses sont incluses (8 % → 8–12). */
 export function classifyGradientPct(gradientPct: number): number {
   if (!Number.isFinite(gradientPct)) return SLOPE_NEUTRAL_CLASS_INDEX;
   for (let index = SLOPE_COLOR_CLASSES.length - 1; index >= 0; index -= 1) {

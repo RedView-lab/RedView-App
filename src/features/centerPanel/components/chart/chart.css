@@ -617,7 +617,7 @@
 .rvchart-slope-legend__items {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
