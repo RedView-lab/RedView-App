@@ -1,20 +1,18 @@
-import { createContext, useContext, useRef, useEffect, type ReactNode } from 'react';
-import { LidarManager } from '../lib/lidarManager';
+import { useEffect, useState, type ReactNode } from 'react';
 
-const LidarCtx = createContext<LidarManager | null>(null);
+import { LidarManagerSlot, LidarManagerSlotContext } from './lidarManagerSlot';
 
+/**
+ * Fournit l'emplacement du LidarManager de la session (cf. LidarManagerSlot).
+ * Léger : n'importe pas le moteur LiDAR, que seul l'éditeur charge.
+ */
 export function LidarProvider({ children }: { children: ReactNode }) {
-  const ref = useRef<LidarManager>(new LidarManager());
+  const [slot] = useState(() => new LidarManagerSlot());
 
   useEffect(() => {
-    return () => ref.current.destroy();
-  }, []);
+    slot.cancelDispose();
+    return () => slot.scheduleDispose();
+  }, [slot]);
 
-  return <LidarCtx.Provider value={ref.current}>{children}</LidarCtx.Provider>;
-}
-
-export function useLidarManager(): LidarManager {
-  const ctx = useContext(LidarCtx);
-  if (!ctx) throw new Error('useLidarManager must be used within LidarProvider');
-  return ctx;
+  return <LidarManagerSlotContext.Provider value={slot}>{children}</LidarManagerSlotContext.Provider>;
 }

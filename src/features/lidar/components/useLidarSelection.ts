@@ -4,7 +4,7 @@ import { type GeoJSONSource, type LngLat, type Map as MapboxMap, type MapMouseEv
 import type { TileCoord } from '../types';
 import { sameTileCoord, tileCoordToWgs84Polygon, tileFootprintSuffix, wgs84ToTileCoord } from '../lib/coordConvert';
 import { fileTileCoordAt, loadFileTileIndex, resolveFileTileCoord } from '../lib/fileTiles';
-import { useLidarManager } from './LidarContext';
+import { useLidarManager } from './useLidarManager';
 import { lidarCoverageJapanZoneAt, removeLidarCoverageLayers, syncLidarCoverageLayers } from './lidarCoverageLayers';
 
 const SOURCE_ID = 'lidar-selection-source';

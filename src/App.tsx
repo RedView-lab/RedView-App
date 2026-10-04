@@ -42,10 +42,22 @@ function injectAnalyticsRecorder(): void {
   document.body.appendChild(script)
 }
 
+/** Tracé du logo de l'écran de démarrage (même valeur que dans index.html). */
+const RV_BOOT_MARK_PATH = 'M19.4062 0C30.1245 4.68511e-07 38.8135 8.68894 38.8135 19.4072C38.8134 30.1255 30.1245 38.8145 19.4062 38.8145H0V19.4072C4.68499e-07 8.68922 8.68835 0.000449258 19.4062 0ZM18.3975 9.5752C16.4695 6.89461 13.0946 6.02423 10.8594 7.63184C8.62427 9.23948 8.37583 12.7159 10.3037 15.3965C10.6901 15.9337 11.1354 16.3968 11.6172 16.7832C8.02224 19.2662 5.54738 23.1551 5.85449 28.0723C10.6499 41.0727 34.9963 36.8349 32.8154 20.3682C30.9355 16.1664 27.0222 14.0922 22.7451 13.7637C24.6583 14.907 25.9403 16.9979 25.9404 19.3887C25.9403 23.0056 23.0075 25.9373 19.3906 25.9375C15.7739 25.9371 12.8419 23.0055 12.8418 19.3887C12.8418 18.7932 12.9223 18.2164 13.0713 17.668C14.6945 18.3774 16.4797 18.3195 17.8418 17.3398C20.077 15.7322 20.3253 12.2558 18.3975 9.5752Z'
+
+/**
+ * Écran de démarrage : même markup que celui peint par index.html avant le
+ * JS (styles `.rv-boot` inline dans index.html), pour un passage sans flash
+ * jusqu'au gestionnaire de projets.
+ */
 function BootstrapScreen({ label }: { label: string }) {
   return (
-    <div className="loading">
-      <p>{label}</p>
+    <div className="rv-boot" role="status" aria-live="polite">
+      <svg className="rv-boot__mark" viewBox="0 0 39 39" aria-hidden="true">
+        <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d={RV_BOOT_MARK_PATH} />
+      </svg>
+      <div className="rv-boot__bar" />
+      <span className="rv-boot__label">{label}</span>
     </div>
   )
 }

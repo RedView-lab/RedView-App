@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+// Module précis, pas le barrel controlPanel : le shell du Dashboard ne doit
+// pas tirer les panneaux de l'éditeur (scripts/quality/check-bundle.mjs).
 import {
   DEFAULT_BASEMAP_ID,
   getBasemapConfig,
   normalizeBasemapId,
-  type BasemapId,
   type BasemapRenderConfig,
-} from '@/features/controlPanel';
+} from '@/features/controlPanel/lib/basemaps';
+import type { BasemapId } from '@/features/controlPanel/types';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
 
 interface UseDashboardBasemapArgs {

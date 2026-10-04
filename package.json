@@ -40,6 +40,7 @@
     "services:stop": "node scripts/stop-dev-services.mjs",
     "build": "node scripts/prebuild-api-i18n.mjs && tsc -b && vite build",
     "build:vite": "vite build",
+    "bundle:check": "node scripts/quality/check-bundle.mjs",
     "typecheck": "node scripts/prebuild-api-i18n.mjs && tsc -b",
     "lint": "eslint . --cache --cache-location node_modules/.cache/eslint/",
     "lint:prune": "eslint . --prune-suppressions",

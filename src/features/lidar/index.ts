@@ -25,4 +25,5 @@ export {
   toWgs84,
   wgs84ToTileCoord,
 } from './lib';
-export { LidarProvider, useLidarManager } from './components/LidarContext';
+export { LidarProvider } from './components/LidarContext';
+export { useLidarManager } from './components/useLidarManager';

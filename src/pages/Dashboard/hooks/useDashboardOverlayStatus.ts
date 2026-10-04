@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+// Module précis, pas le barrel map3d (qui tire mapbox-gl dans le shell du Dashboard).
 import {
   createOverlayStatus,
   type OverlayStatusId,
   type OverlayStatusSnapshot,
-} from '@/features/map3d';
+} from '@/features/map3d/lib/overlayStatus';
 import { translateAppText } from '@/shared/i18n';
 
 // ── Loading guard ────────────────────────────────────────────────────────

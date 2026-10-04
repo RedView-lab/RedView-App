@@ -320,12 +320,43 @@ function redviewDevApiPlugin(): Plugin {
   }
 }
 
+/**
+ * Rapport de bundle (modules, imports et CSS de chaque chunk) écrit hors de
+ * dist/ (jamais servi), lu par scripts/quality/check-bundle.mjs : budget et
+ * contenu du chargement initial (le gestionnaire de projets ne doit pas tirer
+ * l'éditeur 3D).
+ */
+function redviewBundleReportPlugin(): Plugin {
+  const toRelative = (id: string) => path.relative(__dirname, id).split(path.sep).join('/')
+  return {
+    name: 'redview-bundle-report',
+    apply: 'build',
+    generateBundle(_options, bundle) {
+      const chunks = Object.values(bundle)
+        .filter((output) => output.type === 'chunk')
+        .map((chunk) => ({
+          fileName: chunk.fileName,
+          isEntry: chunk.isEntry,
+          isDynamicEntry: chunk.isDynamicEntry,
+          facadeModuleId: chunk.facadeModuleId ? toRelative(chunk.facadeModuleId) : null,
+          imports: chunk.imports,
+          dynamicImports: chunk.dynamicImports,
+          importedCss: [...(chunk.viteMetadata?.importedCss ?? [])],
+          modules: chunk.moduleIds.map(toRelative),
+        }))
+      const outDir = path.resolve(__dirname, 'dist-meta')
+      fs.mkdirSync(outDir, { recursive: true })
+      fs.writeFileSync(path.join(outDir, 'bundle-report.json'), JSON.stringify({ chunks }, null, 1))
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   define: {
     __REDVIEW_BUILD_ID__: JSON.stringify(redviewBuildId),
   },
-  plugins: [react(), redviewDevApiPlugin()],
+  plugins: [react(), redviewDevApiPlugin(), redviewBundleReportPlugin()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

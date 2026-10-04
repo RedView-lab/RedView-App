@@ -195,6 +195,7 @@ export function ProjectCard({
 
     return (
       <article
+        data-rv-project-card=""
         className={`rvpb-card rvpb-card--list${dragActive ? ' is-dragging' : ''}`}
         draggable={!renaming && !busy}
         onDragStart={(event) => {
@@ -255,6 +256,7 @@ export function ProjectCard({
 
   return (
     <article
+      data-rv-project-card=""
       className={`rvpb-card${dragActive ? ' is-dragging' : ''}`}
       draggable={!renaming && !busy}
       onDragStart={(event) => {

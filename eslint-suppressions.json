@@ -221,14 +221,6 @@
       "count": 1
     }
   },
-  "src/features/lidar/components/LidarContext.tsx": {
-    "react-hooks/refs": {
-      "count": 1
-    },
-    "react-refresh/only-export-components": {
-      "count": 1
-    }
-  },
   "src/features/lidar/lib/download/archiveCandidates.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1

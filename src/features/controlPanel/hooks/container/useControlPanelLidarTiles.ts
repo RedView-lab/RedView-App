@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useLidarManager } from '@/features/lidar/components/LidarContext';
+import { useLidarManager } from '@/features/lidar/components/useLidarManager';
 import type { CachedTileInfo, DownloadProgress, TileCoord } from '@/features/lidar/types';
 import { loadLidarTileLabels, setLidarTileLabel, syncLidarRouteOverlay, tileFootprintSuffix } from '@/features/lidar';
 import type { Itinerary } from '@/features/itineraryPanel/types';

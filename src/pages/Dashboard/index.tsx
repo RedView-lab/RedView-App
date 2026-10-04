@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useState, type PointerEvent } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
-import { setDprLayoutScale } from '@/features/map3d';
+import { setDprLayoutScale } from '@/features/map3d/hooks/useMap/runtimeProfile';
 import { appScaleStyle, publishRootAppScale } from '@/shared/lib/appScale';
 import { ProjectBrowserOverlay } from '@/features/projectBrowser';
 import { LidarProvider } from '@/features/lidar/components/LidarContext';
-import { DashboardEditor } from './components/DashboardEditor';
 import { DashboardProjectLoading } from './components/DashboardProjectLoading';
 import { useDashboardBasemap } from './hooks/useDashboardBasemap';
 import { useDashboardOverlayStatus } from './hooks/useDashboardOverlayStatus';
@@ -13,6 +12,16 @@ import { getDashboardStyles } from './lib/dashboardStyles';
 import { useDashboardChrome } from './useDashboardChrome';
 import { useDashboardProjectState } from './useDashboardProjectState';
 import { formatDisplayName } from './lib/utils';
+import { loadDashboardEditor, prefetchDashboardEditor, prefetchDashboardEditorWhenIdle } from './editorLoader';
+
+// Éditeur 3D chargé à la demande : le gestionnaire de projets s'affiche sans
+// lui (carte, LiDAR, panneaux). Préchargé dès qu'un projet est visé.
+const DashboardEditor = lazy(() => loadDashboardEditor().then((module) => ({ default: module.DashboardEditor })));
+
+/** Survol d'une carte projet : intention d'ouvrir, l'éditeur est préchargé. */
+function prefetchEditorOnProjectIntent(event: PointerEvent<HTMLElement>) {
+  if ((event.target as Element | null)?.closest?.('[data-rv-project-card]')) prefetchDashboardEditor();
+}
 
 interface DashboardProps {
   email: string;
@@ -188,6 +197,16 @@ export default function Dashboard({
     setMapInstance(null);
   }, [editorOpen]);
 
+  // Projet en cours d'ouverture (lien direct compris) : l'éditeur se charge
+  // en parallèle du projet. Gestionnaire affiché : préchargement au repos.
+  useEffect(() => {
+    if (activeProjectId != null) prefetchDashboardEditor();
+  }, [activeProjectId]);
+  useEffect(() => {
+    if (!projectBrowserVisible) return;
+    return prefetchDashboardEditorWhenIdle();
+  }, [projectBrowserVisible]);
+
   return (
     <LidarProvider>
       {/* `clip`, not `hidden`: a hidden box can still be scrolled by code
@@ -196,6 +215,7 @@ export default function Dashboard({
       <div style={{ position: 'relative', width: '100vw', height: '100dvh', overflow: 'clip' }}>
         <div
           data-rv-canvas=""
+          onPointerOver={editorOpen ? undefined : prefetchEditorOnProjectIntent}
           style={{
             position: 'absolute',
             top: 0,
@@ -217,6 +237,7 @@ export default function Dashboard({
           }}
         >
           {editorOpen ? (
+            <Suspense fallback={<DashboardProjectLoading projectName={activeProjectInitial?.name ?? null} />}>
             <DashboardEditor
               activeProjectId={activeProjectId}
               activeProjectInitial={activeProjectInitial}
@@ -280,6 +301,7 @@ export default function Dashboard({
               onAltitudeOverlayStatusChange={handleAltitudeOverlayStatusChange}
               onItineraryRouteStatusChange={handleItineraryRouteStatusChange}
             />
+            </Suspense>
         ) : null}
 
         <ProjectBrowserOverlay
