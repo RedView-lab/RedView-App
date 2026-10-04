@@ -17,11 +17,14 @@ import {
   formatDistance,
   formatElevationDelta,
   formatPercent,
+  formatSpeed,
 } from '../format';
 import { buildCellMesh, type OverlayMeshData } from '../overlay/cellMesh';
 import { buildDrapedPolygonMesh } from '../overlay/polygonMesh';
 import type { OverlayLabelTone, OverlayLayer } from '../overlay/toolsOverlay';
-import { ALPHA_EXPOSED_DEG, type AvalancheExposureLevel } from '../terrain/avalancheExposure';
+import type { AtesClass, CanopyClass } from '../terrain/avalanche/ates';
+import type { AvalancheTerrainResult } from '../terrain/avalanche/exposure';
+import { AVALANCHE_SCENARIOS } from '../terrain/avalanche/params';
 import { FALL_SCENARIOS, type FallLineResult, type FallScenarioId } from '../terrain/fallLine';
 import type { ProfileResult } from '../terrain/profile';
 import { slopeBandOf } from '../terrain/slopeBands';
@@ -133,12 +136,8 @@ export function measurementMesh(m: Measurement, field: TerrainField): OverlayMes
   switch (m.kind) {
     case 'fallLine':
       return fallCorridorMesh(field, m.result, m.scenario);
-    case 'avalanche': {
-      const { grid, reachingCells, reachingAlphaDeg } = m.result;
-      return buildCellMesh(field, grid, reachingCells, (k) => (reachingAlphaDeg[k]! >= ALPHA_EXPOSED_DEG
-        ? [226, 52, 43, 115]
-        : [242, 138, 46, 95]));
-    }
+    case 'avalanche':
+      return avalancheMesh(field, m.result);
     case 'viewshed': {
       const { grid, visible } = m.result;
       const cells: number[] = [];
@@ -352,57 +351,114 @@ function fallCorridorMesh(field: TerrainField, result: FallLineResult, scenarioI
   return buildCellMesh(field, result.corridor, cells, (k) => [124, 92, 255, Math.round(70 + 120 * shares[k]!)]);
 }
 
-const AVALANCHE_HEADLINES: Record<AvalancheExposureLevel, string> = {
-  exposed: 'Avalanche : exposé',
-  possible: 'Avalanche : portée possible',
-  low: 'Avalanche : hors de portée',
-  none: 'Avalanche : aucune zone de départ',
+/** ATES v.2 class names (Statham & Campbell, 2025). */
+const ATES_NAMES: Record<AtesClass, string> = {
+  0: 'Non avalancheux',
+  1: 'Simple',
+  2: 'Exigeant',
+  3: 'Complexe',
+  4: 'Extrême',
 };
 
-const AVALANCHE_EXPLANATIONS: Record<AvalancheExposureLevel, string> = {
-  exposed: 'Sous une zone de départ (α ≥ 24°)',
-  possible: 'À portée d’une grosse avalanche (α 20–24°)',
-  low: 'Hors de portée estimée (α < 20°)',
-  none: 'Aucune pente de départ en amont dans la zone chargée',
+/** Short reading of each ATES class. */
+const ATES_EXPLANATIONS: Record<AtesClass, string> = {
+  0: 'Pas d’avalanche à conséquences attendue',
+  1: 'Exposition minime, facile à réduire ou éviter',
+  2: 'Exposition importante, évitable par un bon itinéraire',
+  3: 'Exposition importante, souvent impossible à éviter',
+  4: 'Exposition prolongée sous des pentes très actives',
 };
 
-const AVALANCHE_TONES: Record<AvalancheExposureLevel, OverlayLabelTone> = {
-  exposed: 'danger',
-  possible: 'warning',
-  low: 'ok',
-  none: 'ok',
+const ATES_TONES: Record<AtesClass, OverlayLabelTone> = {
+  0: 'ok',
+  1: 'ok',
+  2: 'warning',
+  3: 'danger',
+  4: 'danger',
+};
+
+const CANOPY_NAMES: Record<CanopyClass, string> = {
+  open: 'ouvert',
+  sparse: 'clairsemé',
+  moderate: 'moyen',
+  dense: 'dense',
 };
 
 function avalancheLayer(m: Measurement & { kind: 'avalanche' }, field: TerrainField): OverlayLayer {
   const layer = emptyLayer(m.id);
   const { result, origin } = m;
-  const tone = result.inReleaseArea && result.level !== 'exposed' ? 'warning' : AVALANCHE_TONES[result.level];
+  const { ates, scenarios } = result;
+  const tone = ATES_TONES[ates.atesClass];
   const at = field.toLocal(origin.projX, origin.projY, (origin.groundAltitudeM ?? origin.altitudeM) + DRAPE_LIFT_M);
   layer.dots.push({ at, color: TONE_STROKE[tone], radius: 5 });
-  if (result.source && result.maxAlphaDeg != null) {
-    const source = field.toLocal(result.source.projX, result.source.projY, result.source.altitudeM + DRAPE_LIFT_M);
-    const color = TONE_STROKE[AVALANCHE_TONES[result.level]];
-    layer.paths.push({ points: [at, source], color, width: 2, dash: [8, 5] });
-    layer.dots.push({ at: source, color, radius: 3 });
+
+  // To the release cell seen at the largest travel angle.
+  const reach = scenarios.typical.reached ? scenarios.typical : scenarios.infrequent;
+  const source = [scenarios.typical, scenarios.infrequent]
+    .filter((s) => s.source && s.travelAngleDeg != null)
+    .sort((a, b) => b.travelAngleDeg! - a.travelAngleDeg!)[0]?.source;
+  if (source) {
+    const top = field.toLocal(source.projX, source.projY, source.altitudeM + DRAPE_LIFT_M);
+    layer.paths.push({ points: [at, top], color: TONE_STROKE[tone], width: 2, dash: [8, 5] });
+    layer.dots.push({ at: top, color: TONE_STROKE[tone], radius: 3 });
   }
-  const details = [t(AVALANCHE_EXPLANATIONS[result.level])];
-  if (result.reachingZoneCount > 0) {
-    details.push(t('{{count}} zone(s) de départ l’atteignent · {{area}}', {
-      count: result.reachingZoneCount,
-      area: formatArea(result.reachingAreaM2),
+
+  const details = [t(ATES_EXPLANATIONS[ates.atesClass])];
+  if (reach.reached) {
+    details.push(t(scenarios.typical.reached
+      ? 'Atteint par une avalanche fréquente (α {{alpha}}) · angle de parcours {{angle}}'
+      : 'Atteint seulement par une grosse avalanche rare (α {{alpha}}) · angle de parcours {{angle}}', {
+      alpha: formatAngle(scenarios.typical.reached ? AVALANCHE_SCENARIOS.typical.alphaDeg : AVALANCHE_SCENARIOS.infrequent.alphaDeg),
+      angle: formatAngle(Math.max(scenarios.typical.travelAngleDeg ?? 0, scenarios.infrequent.travelAngleDeg ?? 0), 1),
     }));
+    const widest = scenarios.infrequent.reached ? scenarios.infrequent : scenarios.typical;
+    const line = t('{{count}} zone(s) de départ · {{area}}', { count: widest.zoneCount, area: formatArea(widest.releaseAreaM2) });
+    const speed = widest.speedMs != null && widest.speedMs >= 1
+      ? ` · ${t('jusqu’à {{speed}}', { speed: formatSpeed(widest.speedMs) })}`
+      : '';
+    details.push(line + speed);
+  } else {
+    details.push(t('Aucune avalanche modélisée ne l’atteint'));
   }
-  if (result.inReleaseArea) details.push(t('Ce point est lui-même dans une pente de départ'));
-  details.push(t('Modèle α–β : ni forêt, ni manteau neigeux'));
+  const slopeAngle = formatAngle(result.slopeDeg);
+  details.push(result.inReleaseArea === 'typical'
+    ? t('Pente {{angle}} · dans une zone de départ', { angle: slopeAngle })
+    : result.inReleaseArea === 'infrequent'
+      ? t('Pente {{angle}} · dans une zone de départ d’avalanche rare', { angle: slopeAngle })
+      : t('Pente {{angle}}', { angle: slopeAngle }));
+  if (!result.forestKnown) {
+    details.push(t('Forêt inconnue (nuage non classé) : terrain supposé ouvert'));
+  } else if (ates.canopyClass && ates.canopyClass !== 'open') {
+    details.push(ates.atesClass < ates.terrainClass
+      ? t('Forêt {{cover}} ({{density}}) : classe abaissée', { cover: formatPercent((result.canopyPct ?? 0) / 100), density: t(CANOPY_NAMES[ates.canopyClass]) })
+      : t('Forêt {{cover}} ({{density}})', { cover: formatPercent((result.canopyPct ?? 0) / 100), density: t(CANOPY_NAMES[ates.canopyClass]) }));
+  }
+  if (result.upslopeCut) details.push(t('Le versant continue hors de la zone chargée'));
+  if (result.incomplete) details.push(t('Calcul partiel : versant très étendu'));
+
   layer.labels.push({
     at,
-    headline: result.maxAlphaDeg != null
-      ? `${t(AVALANCHE_HEADLINES[result.level])} · α ${formatAngle(result.maxAlphaDeg, 1)}`
-      : t(AVALANCHE_HEADLINES[result.level]),
+    headline: `${t('Avalanche')} · ${t(ATES_NAMES[ates.atesClass])} · ATES ${ates.atesClass} ${t('(d’après le terrain, pas la neige)')}`,
     details,
     tone,
   });
   return layer;
+}
+
+/**
+ * Release cells reaching the point (red: frequent avalanches, orange: only
+ * large rare ones) and the flow paths to it (violet, stronger where faster).
+ */
+function avalancheMesh(field: TerrainField, result: AvalancheTerrainResult): OverlayMeshData | null {
+  const { lattice, releaseCells, releaseTypical, pathCells, pathZDelta, pathTypical } = result;
+  const cells = Int32Array.from([...pathCells, ...releaseCells]);
+  if (cells.length === 0) return null;
+  const paths = pathCells.length;
+  return buildCellMesh(field, lattice, cells, (k) => {
+    if (k >= paths) return releaseTypical[k - paths] ? [226, 52, 43, 125] : [242, 138, 46, 105];
+    const strength = Math.min(1, pathZDelta[k]! / 60);
+    return [124, 92, 255, Math.round((pathTypical[k] ? 60 : 40) + 70 * strength)];
+  });
 }
 
 function viewshedLayer(m: Measurement & { kind: 'viewshed' }): OverlayLayer {

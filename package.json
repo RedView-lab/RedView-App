@@ -31,6 +31,7 @@
     "bench:server": "tsx script-test-bench/bench-server-api.ts",
     "bench:screens": "node script-test-bench/screen-audit/run.mjs",
     "bench:flyover": "tsx script-test-bench/bench-flyover.ts",
+    "bench:avalanche": "tsx script-test-bench/bench-avalanche.ts",
     "bench:analysis-chart": "node --experimental-strip-types ./scripts/benchmark-analysis-chart-cache.mjs",
     "dev": "node scripts/prebuild-api-i18n.mjs && vite",
     "services": "node scripts/start-dev-services.mjs",

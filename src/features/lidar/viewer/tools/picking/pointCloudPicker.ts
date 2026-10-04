@@ -9,7 +9,7 @@
 // small LRU, so successive picks in one area stay instant.
 
 import { readLodNodeBlock, type OpenedLodTile } from '../../../lib/lodCache';
-import { LOD_POINT_STRIDE } from '../../lod/lodTile';
+import { LOD_POINT_STRIDE, lodNodeCube, lodNodeSpacing } from '../../lod/lodTile';
 import type { SceneNode } from '../../lod/sceneLod';
 import type { Vec3 } from '../types';
 
@@ -101,6 +101,53 @@ export class PointCloudPicker {
         const cls = bytes[p * LOD_POINT_STRIDE + 6]!;
         if (NOISE_CLASSES.has(cls)) continue;
         visit(x, node.originY + words[w + 2]! * s, z, cls);
+      }
+    }
+  }
+
+  /**
+   * Visits every return (noise excluded) of the scene inside a CRS plan box,
+   * down to an octree spacing of about `spacingM`, whatever the camera
+   * shows: area analyses must not depend on the view. Positions are
+   * absolute (CRS x east, y north, altitude). Blocks are read straight from
+   * the LOD cache, not kept in the picking LRU.
+   */
+  async forEachPointToSpacing(
+    box: { minX: number; minY: number; maxX: number; maxY: number },
+    spacingM: number,
+    visit: (projX: number, projY: number, altitudeM: number, classification: number) => void,
+  ): Promise<void> {
+    for (const tile of this.tiles) {
+      const { header } = tile;
+      for (const node of tile.nodes) {
+        // Additive octree: a level adds points between its parent's, so the
+        // levels down to the spacing give that density everywhere.
+        if (node.count === 0 || lodNodeSpacing(header, node.depth) < spacingM * 0.75) continue;
+        const cube = lodNodeCube(header, node);
+        const x0 = header.origin.x + cube.minX;
+        const y0 = header.origin.y + cube.minY;
+        if (x0 > box.maxX || y0 > box.maxY || x0 + cube.size < box.minX || y0 + cube.size < box.minY) continue;
+        let block: ArrayBuffer;
+        try {
+          block = await readLodNodeBlock(tile, node);
+        } catch (error) {
+          console.warn('[LiDAR tools] Node read failed:', error);
+          continue;
+        }
+        const count = Math.min(node.count, Math.floor(block.byteLength / LOD_POINT_STRIDE));
+        const words = new Uint16Array(block, 0, (count * LOD_POINT_STRIDE) >> 1);
+        const bytes = new Uint8Array(block, 0, count * LOD_POINT_STRIDE);
+        const s = cube.size / 65535;
+        const z0 = header.origin.z + cube.minZ;
+        const step = LOD_POINT_STRIDE >> 1;
+        for (let p = 0, w = 0; p < count; p++, w += step) {
+          const x = x0 + words[w]! * s;
+          const y = y0 + words[w + 1]! * s;
+          if (x < box.minX || x > box.maxX || y < box.minY || y > box.maxY) continue;
+          const cls = bytes[p * LOD_POINT_STRIDE + 6]!;
+          if (NOISE_CLASSES.has(cls)) continue;
+          visit(x, y, z0 + words[w + 2]! * s, cls);
+        }
       }
     }
   }

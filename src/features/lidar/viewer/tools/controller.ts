@@ -26,6 +26,9 @@ import { draftLayer, measurementLayer, measurementMesh } from './measurements/la
 import type { Measurement } from './measurements/types';
 import { mergeMeshes, type OverlayMeshData } from './overlay/cellMesh';
 import { ToolsOverlay, type OverlayLayer, type Projector } from './overlay/toolsOverlay';
+import { CanopyGridBuilder } from './terrain/avalanche/canopy';
+import { AvalancheComputer } from './terrain/avalanche/client';
+import { avalancheReadBounds, type AvalancheTerrainResult } from './terrain/avalanche/exposure';
 import { PointCloudPicker } from './picking/pointCloudPicker';
 import { ScenePicker } from './picking/scenePicker';
 import { toolForKey } from './shortcuts';
@@ -78,6 +81,8 @@ const LOOK_KEYS: Readonly<Record<string, [number, number]>> = {
 const SINGLE_INSTANCE_KINDS = new Set<Measurement['kind']>(['avalanche', 'viewshed', 'profile']);
 /** Ground cover is read this far around the nominal fall lines (the fan spreads), m. */
 const FALL_COVER_MARGIN_M = 60;
+/** Octree spacing the canopy cover is read at (crowns seen in 2 m columns), m. */
+const CANOPY_SPACING_M = 2;
 
 interface PointerPress {
   button: number;
@@ -96,6 +101,9 @@ export class ViewerToolsController {
   private readonly store = new ToolsUiStore();
   private readonly unmountUi: () => void;
   private readonly unsubscribeRoute: () => void;
+  private readonly avalanche = new AvalancheComputer();
+  /** Bumped by every avalanche request: an older one still running is dropped. */
+  private avalancheToken = 0;
 
   private measurements: Measurement[] = [];
   private readonly layers = new Map<string, OverlayLayer>();
@@ -174,6 +182,7 @@ export class ViewerToolsController {
     if (this.noticeTimer != null) window.clearTimeout(this.noticeTimer);
     this.unsubscribeRoute();
     this.unmountUi();
+    this.avalanche.destroy();
     this.overlay.destroy();
     this.opts.setAnalysisMesh(null);
   }
@@ -310,6 +319,10 @@ export class ViewerToolsController {
       void this.runFallLine(pick);
       return;
     }
+    if (tool === 'avalanche') {
+      void this.runAvalanche(pick);
+      return;
+    }
     const measurement = createMeasurement(tool, [pick], this.field);
     if (!measurement) {
       this.notify(t('Hors de la zone chargée'));
@@ -341,6 +354,58 @@ export class ViewerToolsController {
     this.notify(result.scenarios.every((s) => s.end === 'noSlide')
       ? t('Pente trop faible : rien ne glisse ici')
       : t('Ligne de pente calculée'));
+  }
+
+  /**
+   * Avalanche terrain exposure (AutoATES chain, see terrain/avalanche): the
+   * canopy cover is read from the point cloud here, the model runs in a worker.
+   */
+  private async runAvalanche(pick: ScenePick): Promise<void> {
+    const token = ++this.avalancheToken;
+    const stale = () => this.destroyed || token !== this.avalancheToken;
+    const field = this.field;
+    const grid = field.getAvalancheGrid();
+    this.notify(t('Calcul de l’exposition avalanche…'), { persistent: true });
+    const canopy = new CanopyGridBuilder(field, grid);
+    const bounds = avalancheReadBounds(grid, pick.projX, pick.projY);
+    let forestRead = true;
+    try {
+      await this.pointPicker.forEachPointToSpacing(bounds, CANOPY_SPACING_M, (x, y, z, cls) => canopy.add(x, y, z, cls));
+    } catch (error) {
+      console.warn('[LiDAR tools] Canopy read failed:', error);
+      forestRead = false;
+    }
+    if (stale()) return;
+    const cover = forestRead ? canopy.finish() : null;
+    let result: AvalancheTerrainResult | null;
+    try {
+      result = await this.avalanche.compute(`${grid.width}x${grid.height}@${grid.originX},${grid.originY}/${grid.cell}`, {
+        grid: {
+          width: grid.width,
+          height: grid.height,
+          cell: grid.cell,
+          originX: grid.originX,
+          originY: grid.originY,
+          altitude: grid.altitude,
+          slopeDeg: grid.slopeDeg,
+        },
+        canopyPct: cover?.canopyPct ?? null,
+        projX: pick.projX,
+        projY: pick.projY,
+      });
+    } catch (error) {
+      if (stale()) return;
+      console.warn('[LiDAR tools] Avalanche exposure failed:', error);
+      this.notify(t('Calcul de l’exposition avalanche impossible'));
+      return;
+    }
+    if (stale()) return;
+    if (!result) {
+      this.notify(t('Hors de la zone chargée'));
+      return;
+    }
+    this.addMeasurement({ id: nextMeasurementId(), kind: 'avalanche', origin: pick, result });
+    this.notify(t('Exposition avalanche calculée'));
   }
 
   /** Trees, buildings and water around a fall line, from the drawn LiDAR returns; `null` on failure. */
@@ -697,9 +762,12 @@ export class ViewerToolsController {
     return (v) => projectToScreen(v[0], v[1], v[2], width, height, view, proj);
   }
 
-  private notify(message: string): void {
+  /** Shows a notice; a `persistent` one (work in progress) stays until the next. */
+  private notify(message: string, { persistent = false }: { persistent?: boolean } = {}): void {
     if (this.noticeTimer != null) window.clearTimeout(this.noticeTimer);
+    this.noticeTimer = null;
     this.store.update({ notice: message });
+    if (persistent) return;
     this.noticeTimer = window.setTimeout(() => {
       this.noticeTimer = null;
       this.store.update({ notice: null });

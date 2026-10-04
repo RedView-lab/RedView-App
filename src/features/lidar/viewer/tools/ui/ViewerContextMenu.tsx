@@ -75,6 +75,8 @@ interface SubmenuItem {
   tool: ToolId;
   icon: ReactNode;
   label: string;
+  /** Second, dimmed line under the label. */
+  note?: string;
   title?: string;
 }
 
@@ -90,7 +92,13 @@ function submenuItems(id: SubmenuId): SubmenuItem[] {
   }
   return [
     { tool: 'fallLine', icon: <FallLineGlyph />, label: t('Ligne de pente'), title: t('Où part une glissade ou une pierre lâchée ici') },
-    { tool: 'avalanche', icon: <AvalancheGlyph />, label: t('Exposition avalanche'), title: t('Zones de départ qui peuvent atteindre ce point (angle α)') },
+    {
+      tool: 'avalanche',
+      icon: <AvalancheGlyph />,
+      label: t('Exposition avalanche'),
+      note: t('(d’après le terrain, pas la neige)'),
+      title: t('Classe ATES de ce point : zones de départ, avalanches qui peuvent l’atteindre et forêt, sans la neige du jour'),
+    },
     { tool: 'viewshed', icon: <ViewshedGlyph />, label: t('Zones visibles d’ici'), title: t('Tout le terrain visible depuis ce point, œil à 1,7 m') },
   ];
 }
@@ -403,6 +411,7 @@ export function ViewerContextMenu({ model, actions }: ViewerContextMenuProps) {
                 key={item.tool}
                 icon={item.icon}
                 label={item.label}
+                note={item.note}
                 title={item.title}
                 shortcut={TOOL_SHORTCUTS[item.tool]?.toUpperCase()}
                 onClick={() => run({ type: 'tool', tool: item.tool })}
@@ -418,6 +427,7 @@ export function ViewerContextMenu({ model, actions }: ViewerContextMenuProps) {
 function MenuRow({
   icon,
   label,
+  note,
   title,
   shortcut,
   disabled,
@@ -426,6 +436,7 @@ function MenuRow({
 }: {
   icon: ReactNode;
   label: string;
+  note?: string;
   title?: string;
   shortcut?: string;
   disabled?: boolean;
@@ -443,7 +454,14 @@ function MenuRow({
       onClick={onClick}
     >
       <span className="rv-lidar-ctx__icon-box" aria-hidden>{icon}</span>
-      <span className="rv-lidar-ctx__row-label">{label}</span>
+      {note ? (
+        <span className="rv-lidar-ctx__row-text">
+          <span className="rv-lidar-ctx__row-label">{label}</span>
+          <span className="rv-lidar-ctx__row-note">{note}</span>
+        </span>
+      ) : (
+        <span className="rv-lidar-ctx__row-label">{label}</span>
+      )}
       {shortcut ? <kbd className="rv-lidar-ctx__kbd">{shortcut}</kbd> : null}
     </button>
   );

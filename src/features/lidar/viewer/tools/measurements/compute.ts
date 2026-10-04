@@ -3,7 +3,6 @@
 // ============================================
 
 import { computeAreaStats } from '../terrain/areaStats';
-import { computeAvalancheExposure } from '../terrain/avalancheExposure';
 import { computeProfile } from '../terrain/profile';
 import type { TerrainField } from '../terrain/terrainField';
 import { computeViewshed } from '../terrain/viewshed';
@@ -47,12 +46,9 @@ export function createMeasurement(tool: ToolId, picks: readonly ScenePick[], fie
       return profile ? { id, kind: 'profile', vertices: [...picks], profile } : null;
     }
     case 'fallLine':
-      // Asynchronous (a fan of trajectories and the ground cover): see the controller.
+    case 'avalanche':
+      // Asynchronous (ground cover from the point cloud, seconds of compute): see the controller.
       return null;
-    case 'avalanche': {
-      const result = computeAvalancheExposure(field, first.projX, first.projY);
-      return result ? { id, kind: 'avalanche', origin: first, result } : null;
-    }
     case 'viewshed': {
       const result = computeViewshed(field, first.projX, first.projY);
       return result ? { id, kind: 'viewshed', origin: first, result } : null;

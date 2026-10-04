@@ -6681,18 +6681,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Fall line computed"
   },
   {
-    "fr": "Hors de portée estimée",
-    "en": "Estimated out of reach"
-  },
-  {
-    "fr": "Aucune pente de départ en amont",
-    "en": "No starting slope above"
-  },
-  {
-    "fr": "Ce point est lui-même dans une pente de départ",
-    "en": "This point is itself on a starting slope"
-  },
-  {
     "fr": "{{share}} de la zone",
     "en": "{{share}} of the area"
   },
@@ -6733,10 +6721,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Where a slide or a rock released here goes"
   },
   {
-    "fr": "Zones de départ qui peuvent atteindre ce point (angle α)",
-    "en": "Starting zones that can reach this point (α angle)"
-  },
-  {
     "fr": "Zones visibles d’ici",
     "en": "Viewshed from here"
   },
@@ -6773,44 +6757,136 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "{{share}} of the loaded area"
   },
   {
-    "fr": "{{count}} zone(s) de départ l’atteignent · {{area}}",
-    "en": "{{count}} starting zone(s) reach it · {{area}}"
+    "fr": "(d’après le terrain, pas la neige)",
+    "en": "(based on terrain, not snow)"
   },
   {
-    "fr": "Avalanche : exposé",
-    "en": "Avalanche: exposed"
+    "fr": "Exposition avalanche (d’après le terrain, pas la neige)",
+    "en": "Avalanche exposure (based on terrain, not snow)"
   },
   {
-    "fr": "Avalanche : portée possible",
-    "en": "Avalanche: possible reach"
+    "fr": "Classe ATES de ce point : zones de départ, avalanches qui peuvent l’atteindre et forêt, sans la neige du jour",
+    "en": "ATES class of this point: start zones, avalanches that can reach it and forest, regardless of the day’s snow"
   },
   {
-    "fr": "Avalanche : hors de portée",
-    "en": "Avalanche: out of reach"
+    "fr": "Calcul de l’exposition avalanche…",
+    "en": "Computing the avalanche exposure…"
   },
   {
-    "fr": "Avalanche : aucune zone de départ",
-    "en": "Avalanche: no starting zone"
+    "fr": "Calcul de l’exposition avalanche impossible",
+    "en": "Avalanche exposure could not be computed"
   },
   {
-    "fr": "Sous une zone de départ (α ≥ 24°)",
-    "en": "Below a starting zone (α ≥ 24°)"
+    "fr": "Exposition avalanche calculée",
+    "en": "Avalanche exposure computed"
   },
   {
-    "fr": "À portée d’une grosse avalanche (α 20–24°)",
-    "en": "Within reach of a large avalanche (α 20–24°)"
+    "fr": "Non avalancheux",
+    "en": "Non-avalanche"
   },
   {
-    "fr": "Hors de portée estimée (α < 20°)",
-    "en": "Estimated out of reach (α < 20°)"
+    "fr": "Simple",
+    "en": "Simple"
   },
   {
-    "fr": "Aucune pente de départ en amont dans la zone chargée",
-    "en": "No starting slope above in the loaded area"
+    "fr": "Exigeant",
+    "en": "Challenging"
   },
   {
-    "fr": "Modèle α–β : ni forêt, ni manteau neigeux",
-    "en": "α–β model: no forest, no snowpack"
+    "fr": "Complexe",
+    "en": "Complex"
+  },
+  {
+    "fr": "Extrême",
+    "en": "Extreme"
+  },
+  {
+    "fr": "Pas d’avalanche à conséquences attendue",
+    "en": "Avalanches with consequences are not expected"
+  },
+  {
+    "fr": "Exposition minime, facile à réduire ou éviter",
+    "en": "Minimal exposure, easy to reduce or avoid"
+  },
+  {
+    "fr": "Exposition importante, évitable par un bon itinéraire",
+    "en": "Significant exposure, avoidable with careful route-finding"
+  },
+  {
+    "fr": "Exposition importante, souvent impossible à éviter",
+    "en": "Significant exposure, often impossible to avoid"
+  },
+  {
+    "fr": "Exposition prolongée sous des pentes très actives",
+    "en": "Sustained exposure below very active slopes"
+  },
+  {
+    "fr": "Atteint par une avalanche fréquente (α {{alpha}}) · angle de parcours {{angle}}",
+    "en": "Reached by a frequent avalanche (α {{alpha}}) · travel angle {{angle}}"
+  },
+  {
+    "fr": "Atteint seulement par une grosse avalanche rare (α {{alpha}}) · angle de parcours {{angle}}",
+    "en": "Reached only by a large, rare avalanche (α {{alpha}}) · travel angle {{angle}}"
+  },
+  {
+    "fr": "{{count}} zone(s) de départ · {{area}}",
+    "en": "{{count}} start zone(s) · {{area}}"
+  },
+  {
+    "fr": "jusqu’à {{speed}}",
+    "en": "up to {{speed}}"
+  },
+  {
+    "fr": "Aucune avalanche modélisée ne l’atteint",
+    "en": "No modelled avalanche reaches it"
+  },
+  {
+    "fr": "Pente {{angle}}",
+    "en": "Slope {{angle}}"
+  },
+  {
+    "fr": "Pente {{angle}} · dans une zone de départ",
+    "en": "Slope {{angle}} · in a start zone"
+  },
+  {
+    "fr": "Pente {{angle}} · dans une zone de départ d’avalanche rare",
+    "en": "Slope {{angle}} · in a start zone of rare avalanches"
+  },
+  {
+    "fr": "Forêt inconnue (nuage non classé) : terrain supposé ouvert",
+    "en": "Forest unknown (unclassified cloud): open terrain assumed"
+  },
+  {
+    "fr": "Forêt {{cover}} ({{density}})",
+    "en": "Forest {{cover}} ({{density}})"
+  },
+  {
+    "fr": "Forêt {{cover}} ({{density}}) : classe abaissée",
+    "en": "Forest {{cover}} ({{density}}): class lowered"
+  },
+  {
+    "fr": "ouvert",
+    "en": "open"
+  },
+  {
+    "fr": "clairsemé",
+    "en": "sparse"
+  },
+  {
+    "fr": "moyen",
+    "en": "moderate"
+  },
+  {
+    "fr": "dense",
+    "en": "dense"
+  },
+  {
+    "fr": "Le versant continue hors de la zone chargée",
+    "en": "The slope continues outside the loaded area"
+  },
+  {
+    "fr": "Calcul partiel : versant très étendu",
+    "en": "Partial result: very large slope"
   },
   {
     "fr": "Clic",

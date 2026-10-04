@@ -4,8 +4,8 @@
 //
 // Wraps the scene height grid (ground returns, ≈ 1 m per cell on a 1 km
 // tile, row 0 = south edge, heights relative to the scene centre) with the
-// queries every terrain tool needs: altitude, slope/aspect, draping and a
-// coarser analysis grid for the area-wide models (avalanche, viewshed).
+// queries every terrain tool needs: altitude, slope/aspect, draping and
+// coarser grids for the area-wide models (viewshed 5 m, avalanche 10 m).
 
 import { toWgs84, trueNorthGridBearingDeg } from '../../../lib/coordConvert';
 import type { DetectedCrs } from '../../../types';
@@ -18,10 +18,17 @@ import type { Vec3 } from '../types';
  * skier or a slab stands on.
  */
 export const SLOPE_BASELINE_M = 6;
-/** Cell (m) of the analysis grid: the scale of avalanche terrain models. */
+/** Cell (m) of the analysis grid (viewshed). */
 const ANALYSIS_TARGET_CELL_M = 5;
 /** Upper bound of analysis cells (memory and overlay mesh size). */
 const ANALYSIS_MAX_CELLS = 160_000;
+/**
+ * Cell (m) of the avalanche terrain grid: AutoATES runs on 10 m models
+ * (Toft et al., 2024; little gain under 5 m, Sykes et al., 2023), the scale
+ * of release areas and avalanche paths rather than of boulders.
+ */
+const AVALANCHE_TARGET_CELL_M = 10;
+const AVALANCHE_MAX_CELLS = 160_000;
 
 export interface SlopeSample {
   /** Slope angle, degrees. */
@@ -92,6 +99,7 @@ export class TerrainField {
   readonly minAltitudeM: number;
   readonly maxAltitudeM: number;
   private analysis: AnalysisGrid | null = null;
+  private avalanche: AnalysisGrid | null = null;
 
   private constructor(params: ViewerRouteSceneParams, grid: Float32Array, width: number, height: number) {
     this.crs = params.crs;
@@ -351,20 +359,26 @@ export class TerrainField {
 
   /** Analysis grid, built on first use (≈ 5 m cells, at most 160 k cells). */
   getAnalysisGrid(): AnalysisGrid {
-    if (!this.analysis) this.analysis = this.buildAnalysisGrid();
+    if (!this.analysis) this.analysis = this.buildGrid(ANALYSIS_TARGET_CELL_M, ANALYSIS_MAX_CELLS, CELL_SAMPLES);
     return this.analysis;
   }
 
-  private buildAnalysisGrid(): AnalysisGrid {
+  /** Avalanche terrain grid, built on first use (≈ 10 m cells, at most 160 k cells). */
+  getAvalancheGrid(): AnalysisGrid {
+    if (!this.avalanche) this.avalanche = this.buildGrid(AVALANCHE_TARGET_CELL_M, AVALANCHE_MAX_CELLS, COARSE_CELL_SAMPLES);
+    return this.avalanche;
+  }
+
+  private buildGrid(targetCell: number, maxCells: number, samples: ReadonlyArray<[number, number]>): AnalysisGrid {
     const rangeX = this.maxX - this.minX;
     const rangeY = this.maxY - this.minY;
-    const cell = Math.max(ANALYSIS_TARGET_CELL_M, this.cell, Math.sqrt((rangeX * rangeY) / ANALYSIS_MAX_CELLS));
+    const cell = Math.max(targetCell, this.cell, Math.sqrt((rangeX * rangeY) / maxCells));
     const width = Math.max(2, Math.floor(rangeX / cell));
     const height = Math.max(2, Math.floor(rangeY / cell));
     const originX = this.minX + (rangeX - (width - 1) * cell) / 2;
     const originY = this.minY + (rangeY - (height - 1) * cell) / 2;
     const altitude = new Float32Array(width * height);
-    // Mean of 5 samples per cell: the cell value, not one ground point.
+    // Mean of several samples per cell: the cell value, not one ground point.
     const q = cell / 4;
     for (let row = 0; row < height; row++) {
       const y = originY + row * cell;
@@ -372,7 +386,7 @@ export class TerrainField {
         const x = originX + col * cell;
         let sum = 0;
         let n = 0;
-        for (const [dx, dy] of CELL_SAMPLES) {
+        for (const [dx, dy] of samples) {
           const z = this.altitudeAt(x + dx * q, y + dy * q);
           if (z != null) {
             sum += z;
@@ -399,7 +413,11 @@ export class TerrainField {
   }
 }
 
+/** Sample offsets in quarter cells: 5 for the analysis grid, 4 × 4 for coarser cells. */
 const CELL_SAMPLES: ReadonlyArray<[number, number]> = [[0, 0], [-1, -1], [1, -1], [-1, 1], [1, 1]];
+const COARSE_CELL_SAMPLES: ReadonlyArray<[number, number]> = [-1.5, -0.5, 0.5, 1.5].flatMap((dy) => (
+  [-1.5, -0.5, 0.5, 1.5].map((dx): [number, number] => [dx, dy])
+));
 
 /** Index of the analysis cell holding a CRS point, -1 outside. */
 export function analysisCellAt(grid: AnalysisGrid, projX: number, projY: number): number {

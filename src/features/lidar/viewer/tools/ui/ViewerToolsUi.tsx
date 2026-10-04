@@ -18,7 +18,7 @@ const TOOL_NAMES: Record<ToolId, string> = {
   area: 'Surface',
   profile: 'Profil',
   fallLine: 'Ligne de pente',
-  avalanche: 'Exposition avalanche',
+  avalanche: 'Exposition avalanche (d’après le terrain, pas la neige)',
   viewshed: 'Zones visibles d’ici',
   pin: 'Épingler le point',
 };

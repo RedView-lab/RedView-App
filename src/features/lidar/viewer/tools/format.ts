@@ -51,6 +51,11 @@ export function formatPercent(ratio: number): string {
   return `${formatNumber(ratio * 100, 0)} %`;
 }
 
+/** Speed from m/s, rounded to 5 km/h: 85 km/h. */
+export function formatSpeed(metersPerSecond: number): string {
+  return `${formatNumber(Math.round((metersPerSecond * 3.6) / 5) * 5, 0)} km/h`;
+}
+
 /** 2 430 m² · 2.43 ha · 1.24 km² */
 export function formatArea(squareMeters: number): string {
   if (squareMeters < 10_000) return `${formatNumber(squareMeters, 0)} m²`;
