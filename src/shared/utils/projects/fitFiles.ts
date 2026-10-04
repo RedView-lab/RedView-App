@@ -2,6 +2,7 @@ import {
   FIT_FILES_BUCKET_ID,
   ID,
   Permission,
+  client,
   Role,
   storage,
 } from '@/shared/services/appwrite';
@@ -114,19 +115,16 @@ export async function downloadProjectItineraryFitFileEntries(
       .map(async (upload) => {
         const fileId = upload.path as string;
         try {
-          const downloadUrl = storage.getFileDownload(FIT_FILES_BUCKET_ID, fileId);
-          const res = await fetch(downloadUrl);
-          if (!res.ok) {
-            console.warn(`[fit-predictor] FIT file ${upload.name} (${fileId}) could not be downloaded (status ${res.status}).`);
-            return {
-              path: fileId,
-              name: upload.name,
-              file: null,
-              notFound: res.status === 404,
-            };
+          // Via le client Appwrite (session cookie + `X-Fallback-Cookies`) : un
+          // `fetch` nu partait sans session, Appwrite répondait 404 sur ces
+          // fichiers lisibles par leur seul propriétaire, et l'hydratation les
+          // retirait du projet comme supprimés.
+          const downloadUrl = new URL(storage.getFileDownload(FIT_FILES_BUCKET_ID, fileId));
+          const data: unknown = await client.call('get', downloadUrl, {}, {}, 'arrayBuffer');
+          if (!(data instanceof ArrayBuffer)) {
+            throw new Error('Unexpected FIT download response');
           }
-          const blob = await res.blob();
-          const file = new File([blob], upload.name, {
+          const file = new File([data], upload.name, {
             type: upload.type || 'application/octet-stream',
             lastModified: upload.lastModified,
           });
@@ -137,12 +135,13 @@ export async function downloadProjectItineraryFitFileEntries(
             notFound: false,
           };
         } catch (err) {
-          console.warn(`[fit-predictor] Error fetching FIT file ${upload.name} (${fileId}):`, err);
+          const code = (err as { code?: number } | null)?.code;
+          console.warn(`[fit-predictor] FIT file ${upload.name} (${fileId}) could not be downloaded (status ${code ?? 'network'}).`, err);
           return {
             path: fileId,
             name: upload.name,
             file: null,
-            notFound: false,
+            notFound: code === 404,
           };
         }
       }),

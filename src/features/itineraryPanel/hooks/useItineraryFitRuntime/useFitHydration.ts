@@ -2,12 +2,13 @@ import { useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
 import type { PredictionResult } from '@/features/fitPredictor';
 import { translateAppText } from '@/shared/i18n';
 import type { Itinerary, ItineraryFitUpload, ItineraryProject } from '../../types';
-import { fitFilesEqual } from './files';
+import { fitFileKey, fitFilesEqual } from './files';
 import { hydratePersistedFitRuntime } from './hydration';
 import {
   createEmptyFitRuntime,
   type ExcludeFitFiles,
   type FitRuntimeRef,
+  type ItineraryFitRuntime,
   type UpdateFitRuntime,
 } from './types';
 
@@ -53,6 +54,30 @@ export function useFitHydration({
       && failedHydrationSignatureRef.current[itineraryId] === persistedUploadSignature;
 
     if (alreadyFailedSameSignature) {
+      return;
+    }
+
+    // Fichiers déjà en mémoire pour cette liste persistée (ajout de la session,
+    // hydratation précédente) ou fichiers locaux non enregistrés : rien à
+    // télécharger, seule la prédiction chargée est reportée. Sans ce raccourci,
+    // chaque nouvelle prédiction re-téléchargeait tous les .fit du bucket.
+    if (holdsPersistedFiles(currentRuntime, activeFitHydrationInput.fitUploads, persistedUploadSignature)) {
+      const predictionResult = activeFitHydrationInput.prediction ?? null;
+      updateFitRuntime(itineraryId, (current) => {
+        if (current.predictionResult === predictionResult) return current;
+        return {
+          ...current,
+          predictionResult,
+          status:
+            current.status === 'running'
+              ? current.status
+              : predictionResult
+                ? 'success'
+                : current.fitFiles.length > 0
+                  ? 'ready'
+                  : 'idle',
+        };
+      });
       return;
     }
 
@@ -119,7 +144,12 @@ export function useFitHydration({
                     ? 'ready'
                     : 'idle',
             error: current.status === 'running' ? current.error : null,
-            persistedUploadSignature: hydrated.persistedUploadSignature,
+            // Fichiers locaux gardés : leur signature aussi. Remise à « vide »,
+            // l'hydratation suivante (nouvelle prédiction) ne les reconnaissait
+            // plus et vidait la liste.
+            persistedUploadSignature: shouldPreserveLocalFiles
+              ? current.persistedUploadSignature
+              : hydrated.persistedUploadSignature,
           };
         });
 
@@ -169,4 +199,21 @@ export function useFitHydration({
       cancelled = true;
     };
   }, [active?.id, activeFitHydrationInput, activePersistedUploadSignature, activePrediction, excludeFitFiles, fitRuntimeRef, setProject, updateFitRuntime]);
+}
+
+/**
+ * Vrai quand l'état local tient déjà les .fit de la liste persistée (chacun
+ * présent en mémoire), ou des .fit locaux que le projet n'a pas (projet non
+ * enregistré, envoi échoué, uploads disparus du bucket).
+ */
+function holdsPersistedFiles(
+  runtime: ItineraryFitRuntime,
+  uploads: readonly ItineraryFitUpload[],
+  persistedUploadSignature: string,
+): boolean {
+  if (runtime.fitFiles.length === 0) return false;
+  if (persistedUploadSignature.length === 0) return runtime.persistedUploadSignature.length > 0;
+  if (runtime.persistedUploadSignature !== persistedUploadSignature) return false;
+  const loadedKeys = new Set(runtime.fitFiles.map(fitFileKey));
+  return uploads.every((upload) => loadedKeys.has(fitFileKey(upload)));
 }
