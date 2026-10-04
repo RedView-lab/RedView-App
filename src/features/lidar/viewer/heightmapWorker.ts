@@ -229,7 +229,7 @@ function generateHeightmap(
       const dzdx = ((z20 + 2 * z21 + z22) - (z00 + 2 * z01 + z02)) / Math.max(0.0001, scaleX);
       const dzdy = ((z02 + 2 * z12 + z22) - (z00 + 2 * z10 + z20)) / Math.max(0.0001, scaleY);
 
-      let nx = -dzdx, ny = 1.0, nz = dzdy;
+      const nx = -dzdx, ny = 1.0, nz = dzdy;
       const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
       vertices[vi + 3] = nx / len;
       vertices[vi + 4] = ny / len;

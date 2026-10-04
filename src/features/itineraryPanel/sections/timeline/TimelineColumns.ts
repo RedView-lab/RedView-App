@@ -5,7 +5,7 @@
  * view. Each column knows how to render its header label and compute its cell value.
  */
 
-import { elapsedSecondsAtDistance } from '@/features/centerPanel/flyover/playback';
+import { elapsedSecondsAtDistance } from '@/features/itineraryPanel/lib/schedule/predictionElapsed';
 import { getRouteWeatherAtDistanceAndTime } from '@/features/weather';
 import { resolvePredictionDiscipline } from '@/shared/lib/discipline';
 import { pointAtDistanceM } from './timelineColumnsFormatters';

@@ -16,7 +16,7 @@ export function interpolateAppTranslation(template: string, vars?: AppTranslatio
 /** Key used for lookups: NBSP → space, curly → straight apostrophe, collapsed whitespace. */
 export function canonicalizeAppText(text: string): string {
   return text
-    .replace(/ /g, ' ')
+    .replace(/\u00a0/g, ' ')
     .replace(/[‘’]/g, "'")
     .replace(/\s+/g, ' ')
     .trim();

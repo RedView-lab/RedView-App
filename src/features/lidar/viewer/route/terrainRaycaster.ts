@@ -47,7 +47,7 @@ export function invertMatrix4(out: Float32Array, m: Float32Array): boolean {
   const b10 = m21 * m33 - m23 * m31;
   const b11 = m22 * m33 - m23 * m32;
 
-  let det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
+  const det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
   if (!det || Math.abs(det) < 1e-12) return false;
   const invDet = 1.0 / det;
 

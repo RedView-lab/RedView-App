@@ -328,7 +328,7 @@ function buildTerrain(
       const dzdy = ((z02 + 2 * z12 + z22) - (z00 + 2 * z10 + z20)) / Math.max(0.0001, scaleY);
 
       // Y up → ground normal = (-dz/dx, 1, +dz/dy) in renderer space
-      let nx = -dzdx, ny = 1.0, nz = dzdy;
+      const nx = -dzdx, ny = 1.0, nz = dzdy;
       const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
       vertices[vi + 3] = nx / len;
       vertices[vi + 4] = ny / len;

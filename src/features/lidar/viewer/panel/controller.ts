@@ -546,8 +546,8 @@ export function createViewerPanel(options: ViewerPanelOptions) {
     if (snowToggle?.checked) options.onSnowModeChange?.(selected);
   };
 
-  tileLabelEl && (tileLabelEl.textContent = options.tileLabel);
-  locationEl && (locationEl.textContent = options.locationLabel);
+  if (tileLabelEl) tileLabelEl.textContent = options.tileLabel;
+  if (locationEl) locationEl.textContent = options.locationLabel;
   if (mapsLinkEl) mapsLinkEl.href = options.googleMapsUrl;
   if (pointSizeInput) pointSizeInput.value = String(toSliderPercent(options.pointSizePercent ?? 50));
   if (densityInput) densityInput.value = String(toSliderPercent(options.densityPercent ?? 100));

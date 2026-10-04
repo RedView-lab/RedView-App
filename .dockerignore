@@ -22,3 +22,9 @@ server/poi-ingest
 server/poi-server/node_modules
 script-test-bench
 vendor/redviewalgo/target
+
+# Tests unitaires et CI : jamais dans le contexte de build ni dans l'image.
+**/*.test.ts
+**/*.test.tsx
+**/__tests__
+.github

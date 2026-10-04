@@ -1,5 +1,5 @@
 import { translateAppText } from '@/shared/i18n';
-import { elapsedSecondsAtDistance } from '@/features/centerPanel/flyover/playback';
+import { elapsedSecondsAtDistance } from '@/features/itineraryPanel/lib/schedule/predictionElapsed';
 import type { PredictionResult } from '@/features/fitPredictor';
 import { isAutoHotelOption } from '../../../../lib/schedule/poi-to-timeline';
 import type { RhythmState, TimelineItem } from '../../../../types';

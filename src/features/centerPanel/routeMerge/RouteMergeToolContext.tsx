@@ -8,7 +8,9 @@ import {
   type ReactNode,
 } from 'react';
 
-import { resolveRouteRequest, useProjectStoreOptional, type Itinerary } from '@/features/itineraryPanel';
+import { useProjectStoreOptional } from '@/features/itineraryPanel/context/ProjectStore/hooks';
+import { resolveRouteRequest } from '@/features/itineraryPanel/hooks/useItineraryBrouterRouting/resolveRouteRequest';
+import type { Itinerary } from '@/features/itineraryPanel/types';
 import {
   MERGE_CONNECT_THRESHOLD_M,
   shouldRouteMergedGap,

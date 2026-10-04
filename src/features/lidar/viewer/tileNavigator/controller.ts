@@ -113,7 +113,7 @@ export function createViewerTileNavigator(options: ViewerTileNavigatorOptions) {
     throw new Error('Tile navigator DOM is incomplete.');
   }
 
-  let currentTile = options.currentTile;
+  const currentTile = options.currentTile;
   const activeTiles = options.activeTiles.slice(0, MAX_VIEWER_SCENE_TILES);
   const activeTileKeys = new Set(activeTiles.map((tile) => tileCoordKey(tile)));
   let destroyed = false;

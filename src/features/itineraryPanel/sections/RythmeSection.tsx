@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { readDocumentAppLocale, translateAppText, useAppI18n } from '@/shared/i18n';
 import { ActionButtonStack, ToggleRow } from '../components/controls';
 import { PortalDropdown } from '../components/controls/PortalDropdown';
-import { Collapse } from '../components/shell';
+import { Collapse } from '../components/shell/Collapse';
 import { PauseIntervalList, PoiPauseGrid, RunReferenceFields, TerrainTechnicalityRow } from './rythme/components';
 import { isFootDiscipline, type SportDiscipline } from '@/shared/lib/discipline';
 import { CalendarPopover } from '../components/calendar';

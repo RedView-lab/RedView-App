@@ -1,4 +1,4 @@
-import { buildPopupClearanceOffset } from '@/features/map3d';
+import { buildPopupClearanceOffset } from '@/features/map3d/lib/popupOffset';
 import {
   CHECKPOINT_MIN_ZOOM,
   MARKER_MAX_SCALE_ZOOM,

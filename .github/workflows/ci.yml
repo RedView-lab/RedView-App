@@ -1,0 +1,34 @@
+# Même gate que `npm run deploy` (scripts/check.mjs --full) : types, lint,
+# tests unitaires, knip, cycles, build de prod, régressions hors ligne.
+# Le déploiement reste manuel ; la CI donne le verdict sur chaque push et PR.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Comme l'image de prod (Dockerfile : node:22-alpine).
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run check:full

@@ -6,7 +6,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import type { BenchmarkSuite, MetricStatistics } from './harness.ts';
+import type { BenchmarkSuite } from './harness.ts';
 
 const COLORS = {
   reset: '\x1b[0m',

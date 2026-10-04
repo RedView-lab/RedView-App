@@ -159,7 +159,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         : 'https://tilecache.rainviewer.com';
 
       const rawFramePath = decodeURIComponent(parsed.searchParams.get('path') || '').trim();
-      if (!rawFramePath || !/^\/?[a-zA-Z0-9_\-\/]+$/.test(rawFramePath)) {
+      if (!rawFramePath || !/^\/?[a-zA-Z0-9_\-/]+$/.test(rawFramePath)) {
         res.status(400);
         return res.json({ error: 'Invalid frame path parameter' });
       }

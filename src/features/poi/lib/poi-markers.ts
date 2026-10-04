@@ -29,7 +29,10 @@ import type {
   Map as MapboxMap,
   MapMouseEvent,
 } from 'mapbox-gl';
-import { buildPopupClearanceOffset, flyToPoi, isEventFromDomMarker, keepPopupInVisibleMap } from '@/features/map3d';
+import { flyToPoi } from '@/features/map3d/lib/cameraFlight';
+import { keepPopupInVisibleMap } from '@/features/map3d/lib/mapPopupSafeArea';
+import { isEventFromDomMarker } from '@/features/map3d/lib/pointPanelDismiss';
+import { buildPopupClearanceOffset } from '@/features/map3d/lib/popupOffset';
 
 import type { PoiFeature } from '../types';
 import { POI_LABELS } from '../types';

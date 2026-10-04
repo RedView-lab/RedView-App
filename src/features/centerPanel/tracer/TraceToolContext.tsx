@@ -11,7 +11,7 @@ import {
 import type { Map as MapboxMap, MapMouseEvent } from 'mapbox-gl';
 import { queryPoiAtPoint } from '@/features/poi/lib/poi-markers';
 
-import { useProjectStoreOptional } from '@/features/itineraryPanel';
+import { useProjectStoreOptional } from '@/features/itineraryPanel/context/ProjectStore/hooks';
 import {
   formatGpsCoordinateLabel,
   reverseGeocodeSettlement,
@@ -34,12 +34,11 @@ import { isVariantModifierPressed } from '@/shared/lib/platform';
 import { useRouteSplitToolOptional } from '../routeSplit';
 import { useRouteMergeToolOptional } from '../routeMerge';
 import { useTracePointDrag, type TracePointDragCommit } from './useTracePointDrag';
+import { MAP_CURSOR_PRIORITY, setMapCursor } from '@/features/map3d/lib/mapCursor';
 import {
-  MAP_CURSOR_PRIORITY,
   handlePointPanelMousedown,
-  setMapCursor,
   shouldIgnoreMapClickAfterPanelDismiss,
-} from '@/features/map3d';
+} from '@/features/map3d/lib/pointPanelDismiss';
 
 export const TRACE_CURSOR = 'url("/svgv2/icone/edit-04.svg") 3 17, crosshair';
 

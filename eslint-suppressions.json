@@ -1,0 +1,388 @@
+{
+  "api/_lib/billing/customers.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "api/_lib/billing/overview.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "api/_lib/billing/subscriptions.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "api/_lib/types.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "script-test-bench/test-elevation-sanitizer.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "scripts/brouter-scenarios/geometry.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "scripts/test-alpine-gravel-100k.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/features/auth/LoginScreen.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 5
+    }
+  },
+  "src/features/auth/VerificationCodeModal.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "src/features/centerPanel/chartPlacement/ChartPlacementToolContext.tsx": {
+    "react-refresh/only-export-components": {
+      "count": 1
+    }
+  },
+  "src/features/centerPanel/components/summary/CenterPanelSummary.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 3
+    }
+  },
+  "src/features/centerPanel/components/toolbar/CenterPanelToolbar.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/features/centerPanel/forbiddenZones/ForbiddenZoneToolContext.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    }
+  },
+  "src/features/centerPanel/routeDragWaypoint/RouteDragWaypointContext.tsx": {
+    "react-refresh/only-export-components": {
+      "count": 1
+    }
+  },
+  "src/features/centerPanel/routeMerge/RouteMergeToolContext.tsx": {
+    "react-refresh/only-export-components": {
+      "count": 1
+    }
+  },
+  "src/features/centerPanel/routeSplit/RouteSplitToolContext.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    },
+    "react-refresh/only-export-components": {
+      "count": 1
+    }
+  },
+  "src/features/centerPanel/tracer/TraceToolContext.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    },
+    "react-refresh/only-export-components": {
+      "count": 1
+    }
+  },
+  "src/features/controlPanel/components/ControlPanel.tsx": {
+    "no-constant-binary-expression": {
+      "count": 1
+    }
+  },
+  "src/features/controlPanel/components/ControlPanelContainer.tsx": {
+    "react-hooks/refs": {
+      "count": 8
+    }
+  },
+  "src/features/controlPanel/components/Section.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/features/controlPanel/components/Select.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/features/controlPanel/components/Slider.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/features/controlPanel/hooks/container/useControlPanelLidarTiles.ts": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/features/controlPanel/hooks/overlays/useOverlaySunlightState.ts": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/features/controlPanel/sections/RoutesSection.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/features/controlPanel/sections/SunlightSection.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/features/itineraryPanel/components/ItineraryPanelContainer/useItineraryMapActions.ts": {
+    "react-hooks/preserve-manual-memoization": {
+      "count": 2
+    }
+  },
+  "src/features/itineraryPanel/components/dialogs/AddItineraryDialog.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/features/itineraryPanel/components/shell/Collapse.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/features/itineraryPanel/components/shell/ItineraryPanelModeContent.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    }
+  },
+  "src/features/itineraryPanel/context/PredictionStore.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    },
+    "react-refresh/only-export-components": {
+      "count": 2
+    }
+  },
+  "src/features/itineraryPanel/context/ProjectStore.tsx": {
+    "react-refresh/only-export-components": {
+      "count": 3
+    }
+  },
+  "src/features/itineraryPanel/context/ProjectStore/provider.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "src/features/itineraryPanel/hooks/useItineraryBrouterRouting/index.ts": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/features/itineraryPanel/hooks/useItineraryFitRuntime/index.ts": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "src/features/itineraryPanel/sections/timeline/KindBadge.tsx": {
+    "react-refresh/only-export-components": {
+      "count": 4
+    }
+  },
+  "src/features/itineraryPanel/sections/timeline/TimelineKindMenu.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/features/itineraryPanel/sections/timeline/TimelinePanel.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    }
+  },
+  "src/features/itineraryPanel/sections/timeline/TimelineSelect.tsx": {
+    "react-hooks/refs": {
+      "count": 2
+    }
+  },
+  "src/features/itineraryPanel/sections/timeline/TimelineTableSettings.tsx": {
+    "react-refresh/only-export-components": {
+      "count": 1
+    }
+  },
+  "src/features/itineraryPanel/types/panelProps.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/features/labels/hooks/useLabels.ts": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "src/features/lidar/components/LidarContext.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    },
+    "react-refresh/only-export-components": {
+      "count": 1
+    }
+  },
+  "src/features/lidar/lib/download/archiveCandidates.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/features/lidar/lib/download/ign.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/features/lidar/lib/download/transport.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
+    }
+  },
+  "src/features/lidar/lib/lidarManager.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "src/features/lidar/lib/storage.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 6
+    }
+  },
+  "src/features/lidar/viewer-webgl/renderer.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "src/features/lidar/viewer/heightmapWorker.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/features/lidar/viewer/renderer/platform.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/features/lidar/viewer/rightPanel/LidarViewerRightPanel.tsx": {
+    "react-hooks/preserve-manual-memoization": {
+      "count": 1
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/features/lidar/viewer/rightPanel/RouteSection.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/features/lidar/viewer/runtime.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "src/features/lidar/workers/processWorker.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/features/map3d/hooks/useCinematicIdleRotate.ts": {
+    "react-hooks/purity": {
+      "count": 1
+    }
+  },
+  "src/features/map3d/hooks/useMap/index.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "src/features/mapViewportControls/components/MapViewportControls.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/features/projectBrowser/account/lib/profile.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "src/features/projectBrowser/billing/components/BillingActionModal/BillingActionForm.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "src/features/projectBrowser/settings/components/SettingsPanel.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/features/sunlight/hooks/useShadowImage/hook.ts": {
+    "react-hooks/refs": {
+      "count": 5
+    }
+  },
+  "src/features/sunlight/hooks/useSunlightMap/hook.ts": {
+    "react-hooks/refs": {
+      "count": 6
+    }
+  },
+  "src/features/weather/hooks/useRouteWeather.ts": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/features/weather/hooks/useWind.ts": {
+    "react-hooks/immutability": {
+      "count": 1
+    }
+  },
+  "src/features/weather/overlay/useWeatherOverlay/hook.ts": {
+    "react-hooks/refs": {
+      "count": 3
+    }
+  },
+  "src/features/weather/overlay/useWeatherOverlay/useWeatherDataPipeline.ts": {
+    "react-hooks/purity": {
+      "count": 2
+    }
+  },
+  "src/features/weather/overlay/useWindTerrainOverlay.ts": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "src/pages/Dashboard/hooks/useDashboardBasemap.ts": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/pages/Dashboard/hooks/useDashboardOverlayStatus.ts": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "src/pages/Dashboard/index.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/shared/components/SvgV2Icon.tsx": {
+    "react-refresh/only-export-components": {
+      "count": 2
+    }
+  },
+  "src/shared/i18n/AppI18nProvider.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    },
+    "react-refresh/only-export-components": {
+      "count": 1
+    }
+  }
+}

@@ -10,14 +10,14 @@ import {
 import type { Map as MapboxMap, MapMouseEvent } from 'mapbox-gl';
 import { queryPoiAtPoint } from '@/features/poi/lib/poi-markers';
 
-import { useProjectStoreOptional } from '@/features/itineraryPanel';
+import { useProjectStoreOptional } from '@/features/itineraryPanel/context/ProjectStore/hooks';
 import { translateAppText } from '@/shared/i18n';
 import { useRouteHoverPreview } from '../hooks/useRouteHoverPreview';
 import { findSplitIndexForMapClick } from './routeSnap';
 import {
   handlePointPanelMousedown,
   shouldIgnoreMapClickAfterPanelDismiss,
-} from '@/features/map3d';
+} from '@/features/map3d/lib/pointPanelDismiss';
 
 const SPLIT_CURSOR = 'url("/svgv2/icone/scissors.svg") 4 4, crosshair';
 

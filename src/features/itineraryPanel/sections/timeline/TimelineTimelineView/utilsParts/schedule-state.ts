@@ -1,4 +1,4 @@
-import { elapsedSecondsAtDistance } from '@/features/centerPanel/flyover/playback';
+import { elapsedSecondsAtDistance } from '@/features/itineraryPanel/lib/schedule/predictionElapsed';
 import type { PredictionResult } from '@/features/fitPredictor';
 import type { RhythmState, TimelineItem } from '../../../../types';
 import type {

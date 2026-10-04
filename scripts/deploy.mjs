@@ -4,11 +4,19 @@
  *   npm run push
  *   npm run push "feat: my change"
  *   node scripts/deploy.mjs "fix(weather): update palette"
+ *   node scripts/deploy.mjs --skip-checks "fix: hotfix"   (urgence : gate qualité sauté)
+ *
+ * Le gate qualité (scripts/check.mjs --full) tourne d'abord, sur l'arbre qui
+ * va être commité : en cas d'échec, rien n'est commité ni poussé.
  */
-import { execFileSync, execSync } from 'node:child_process';
+import { execFileSync, execSync, spawnSync } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
+
+const SKIP_CHECKS_FLAG = '--skip-checks';
+const CHECK_SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'check.mjs');
 
 const VPS_HOST = '141.145.220.99';
 const VPS_USER = 'opc';
@@ -40,11 +48,32 @@ function error(msg) {
   console.error(`\x1b[31m[RedView Deploy] ✖ ${msg}\x1b[0m`);
 }
 
+/** Gate qualité complet, sortie affichée en direct. */
+function runQualityGate() {
+  log('Running quality gate (types, lint, tests, knip, cycles, build, regressions)...');
+  const result = spawnSync(process.execPath, [CHECK_SCRIPT, '--full'], { stdio: 'inherit' });
+  return result.status === 0;
+}
+
 async function main() {
-  const customMessage = process.argv.slice(2).join(' ').trim();
-  const commitMessage = customMessage || 'fix: update and deploy to production';
+  const args = process.argv.slice(2);
+  const skipChecks = args.includes(SKIP_CHECKS_FLAG);
+  const customMessage = args.filter((arg) => arg !== SKIP_CHECKS_FLAG).join(' ').trim();
+  const baseCommitMessage = customMessage || 'fix: update and deploy to production';
+  // Trace dans l'historique d'un déploiement sans gate.
+  const commitMessage = skipChecks ? `${baseCommitMessage}\n\nChecks-Skipped: true` : baseCommitMessage;
 
   log('Starting deployment pipeline...');
+
+  // 0. Quality gate, before anything is committed or pushed
+  if (skipChecks) {
+    warn('QUALITY GATE SKIPPED (--skip-checks): deploying unverified code.');
+  } else if (!runQualityGate()) {
+    error('Quality gate failed: nothing was committed or pushed. Fix the errors above, then deploy again.');
+    process.exit(1);
+  } else {
+    success('Quality gate passed.');
+  }
 
   // 1. Check git status
   const status = run('git status --porcelain');

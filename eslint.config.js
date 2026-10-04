@@ -5,8 +5,18 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
+// Erreurs existantes figées dans eslint-suppressions.json (cliquet) : toute
+// nouvelle erreur échoue ; `npx eslint . --prune-suppressions` après correction.
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores([
+    'dist',
+    // Générés (wasm-bindgen, prebuild-api-i18n, npm run lidar:index).
+    'src/features/fitPredictor/engine/pkg/**',
+    'script-test-bench/pace-accuracy/.*-pkg/**',
+    'api/_lib/translations-data.ts',
+    'src/features/lidar/lib/japan/japanLazIndex.ts',
+    'src/features/lidar/lib/nz/nzLazIndex.ts',
+  ]),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -18,6 +28,29 @@ export default defineConfig([
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,
+    },
+    rules: {
+      // Même convention que `noUnusedParameters` de tsc : `_x` = inutilisé exprès.
+      '@typescript-eslint/no-unused-vars': ['error', {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+        destructuredArrayIgnorePattern: '^_',
+      }],
+      // `catch {}` best-effort (stockage, caches) : autorisé, les autres blocs vides non.
+      'no-empty': ['error', { allowEmptyCatch: true }],
+      // `let { a, b } = …` dont seul `b` est réaffecté : pas d'erreur.
+      'prefer-const': ['error', { destructuring: 'all' }],
+    },
+  },
+  {
+    // Serveur de prod (livré dans l'image Docker).
+    files: ['server.mjs', 'server/*.mjs'],
+    extends: [js.configs.recommended],
+    languageOptions: {
+      ecmaVersion: 2024,
+      sourceType: 'module',
+      globals: globals.node,
     },
   },
   {

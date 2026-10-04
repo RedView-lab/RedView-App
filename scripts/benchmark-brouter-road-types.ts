@@ -1,5 +1,5 @@
-import { buildBrfProfile } from '../src/features/itineraryPanel/lib/brouter/brf-template';
-import { resolveRoadTypes } from '../src/features/itineraryPanel/lib/brouter/road-types-resolver';
+import { buildBrfProfile } from '../src/features/itineraryPanel/lib/brouter/profiles/brf-template';
+import { resolveRoadTypes } from '../src/features/itineraryPanel/lib/brouter/routing/road-types-resolver';
 import type { BrouterRoute } from '../src/features/itineraryPanel/lib/brouter/types';
 import { computeRouteSurfaceMetricsFromBrouter } from '../src/features/itineraryPanel/lib/route-metrics/metrics';
 import type { PrioritiesState, RoadTypesState } from '../src/features/itineraryPanel/types';

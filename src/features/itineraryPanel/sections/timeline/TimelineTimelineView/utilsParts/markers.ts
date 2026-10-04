@@ -1,4 +1,4 @@
-import { elapsedSecondsAtDistance } from '@/features/centerPanel/flyover/playback';
+import { elapsedSecondsAtDistance } from '@/features/itineraryPanel/lib/schedule/predictionElapsed';
 import type { PredictionResult } from '@/features/fitPredictor';
 import type { TimelineItem, TimelineRailConfig } from '../../../../types';
 import { DEFAULT_TIMELINE_RAIL } from '../../../../types';

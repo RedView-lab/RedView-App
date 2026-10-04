@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import type { Map as MapboxMap } from 'mapbox-gl';
-import {
-  closeMarkerPopupOnSecondClick,
-  flyToPoi,
-  keepPopupInVisibleMap,
-} from '@/features/map3d';
+import { flyToPoi } from '@/features/map3d/lib/cameraFlight';
+import { keepPopupInVisibleMap } from '@/features/map3d/lib/mapPopupSafeArea';
+import { closeMarkerPopupOnSecondClick } from '@/features/map3d/lib/pointPanelDismiss';
 import type { ItineraryProject } from '../../types';
 import { collectItineraryCheckpoints } from './collectCheckpoints';
 import { findCheckpointMarkerEntry } from './findMarkerEntry';

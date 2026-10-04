@@ -10,7 +10,7 @@ import {
 } from 'react';
 import type { Map as MapboxMap, MapMouseEvent } from 'mapbox-gl';
 
-import { useProjectStoreOptional } from '@/features/itineraryPanel';
+import { useProjectStoreOptional } from '@/features/itineraryPanel/context/ProjectStore/hooks';
 import {
   clearForbiddenZoneDraft,
   setForbiddenZoneDraft,

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useAppI18n } from '@/shared/i18n';
-import { createOverlayStatus, type OverlayStatusReporter } from '@/features/map3d';
+import { createOverlayStatus, type OverlayStatusReporter } from '@/features/map3d/lib/overlayStatus';
 
 interface UseRouteOverlayStatusOptions {
   onRouteStatusChange?: OverlayStatusReporter;

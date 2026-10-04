@@ -17,7 +17,7 @@ export interface BasemapRenderConfig {
   lightPreset?: BasemapLightPreset;
 }
 
-interface BasemapOption extends BasemapRenderConfig {}
+type BasemapOption = BasemapRenderConfig;
 
 // Stick to Mapbox-owned public styles so the app only pays for the same GL JS
 // map usage it already has, without introducing custom Styles API churn. The

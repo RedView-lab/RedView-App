@@ -1,0 +1,9 @@
+{
+  "fileExtensions": ["ts", "tsx"],
+  "tsConfig": "tsconfig.app.json",
+  "excludeRegExp": ["\\.test\\.tsx?$", "/engine/pkg/"],
+  "detectiveOptions": {
+    "ts": { "skipTypeImports": true, "skipAsyncImports": true },
+    "tsx": { "skipTypeImports": true, "skipAsyncImports": true }
+  }
+}

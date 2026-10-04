@@ -1,3 +1,6 @@
+/** Corps JSON renvoyé par l'API Resend (succès : id ; échec : message). */
+type ResendResult = { id?: string; message?: string };
+
 interface SendVerificationEmailOptions {
   to: string;
   code: string;
@@ -20,9 +23,6 @@ export async function sendVerificationEmail({
 }: SendVerificationEmailOptions): Promise<{ sent: boolean; debugCode?: string }> {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.RESEND_FROM || 'RedView <noreply@redview.tech>';
-  const rawRecipientName = name || to.split('@')[0] || 'Aventurier';
-  const recipientName = escapeHtml(rawRecipientName);
-
   const maskedEmail = to.replace(/^(.)(.*)(@.*)$/, (_, first, middle, domain) => `${first}${'*'.repeat(Math.min(middle.length, 5))}${domain}`);
   console.log(`[AUTH] 📧 Dispatching verification email to ${maskedEmail}`);
 
@@ -175,7 +175,7 @@ export async function sendVerificationEmail({
       }),
     });
 
-    let data = await response.json().catch(() => ({}));
+    let data = (await response.json().catch(() => ({}))) as ResendResult;
 
     // If custom domain is not yet verified and we're sending during test/propagation, attempt fallback
     if (!response.ok && from !== 'RedView <onboarding@resend.dev>') {
@@ -194,7 +194,7 @@ export async function sendVerificationEmail({
           html,
         }),
       });
-      const fallbackData = await fallbackResponse.json().catch(() => ({}));
+      const fallbackData = (await fallbackResponse.json().catch(() => ({}))) as ResendResult;
       if (fallbackResponse.ok) {
         response = fallbackResponse;
         data = fallbackData;
@@ -340,7 +340,6 @@ export async function sendAccountExistsEmail({
     });
 
   try {
-    type ResendResult = { id?: string; message?: string };
     let response = await send(from);
     let data = (await response.json().catch(() => ({}))) as ResendResult;
 
@@ -461,7 +460,7 @@ export async function sendFeedbackNotificationEmail({
       }),
     });
 
-    let data = await response.json().catch(() => ({}));
+    let data = (await response.json().catch(() => ({}))) as ResendResult;
 
     if (!response.ok && from !== 'RedView <onboarding@resend.dev>') {
       const fallbackResponse = await fetch('https://api.resend.com/emails', {
@@ -480,7 +479,7 @@ export async function sendFeedbackNotificationEmail({
       });
       if (fallbackResponse.ok) {
         response = fallbackResponse;
-        data = await fallbackResponse.json().catch(() => ({}));
+        data = (await fallbackResponse.json().catch(() => ({}))) as ResendResult;
       }
     }
 

@@ -2,9 +2,6 @@ import {
   cleanAndInterpolateElevations,
   hasCorruptedElevations,
   isValidElevation,
-  sanitizeRawElevation,
-  MIN_VALID_TERRESTRIAL_ELEVATION_M,
-  MAX_VALID_TERRESTRIAL_ELEVATION_M,
 } from '../src/features/itineraryPanel/lib/route-metrics/elevationSanitizer.ts';
 import { parseGpxText } from '../src/features/poi/lib/gpx-parse.ts';
 import { buildImportedRouteMetrics } from '../src/features/itineraryPanel/lib/routes/imported-route.ts';

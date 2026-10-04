@@ -1,6 +1,6 @@
 import { useCallback, useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
-import { flyToPoi } from '@/features/map3d';
+import { flyToPoi } from '@/features/map3d/lib/cameraFlight';
 import {
   dispatchSelectPoiOnChart,
   listenOpenPoiOnMap,

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  // Les deux pages Vite (index.html, viewer.html) et les tests Vitest sont
+  // détectés par les plugins de knip. `!` = code livré (`knip --production`).
+  "entry": [
+    // API publique d'une feature (CLAUDE.md : index.ts), importée ou non.
+    "src/features/*/index.ts!",
+    "api/**/*.ts!",
+    "server.mjs!",
+    "server/*.mjs!",
+    "scripts/**/*.{mjs,ts}",
+    "script-test-bench/**/*.{ts,mjs}"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}!",
+    "api/**/*.ts!",
+    "server.mjs!",
+    "server/*.mjs!",
+    "scripts/**/*.{mjs,ts}",
+    "script-test-bench/**/*.{ts,mjs}"
+  ],
+  "ignore": [
+    // Générés (wasm-bindgen, prebuild-api-i18n).
+    "src/features/fitPredictor/engine/pkg/**",
+    "api/_lib/translations-data.ts",
+    "script-test-bench/pace-accuracy/.*-pkg/**"
+  ],
+  // Fixture du bench POI : dépendance du package séparé server/poi-server.
+  "ignoreDependencies": ["better-sqlite3"],
+  // Outils système lancés par les scripts de dev (BRouter, arrêt des services).
+  "ignoreBinaries": ["java", "netstat"],
+  // Bloquants : fichiers, dépendances, imports non résolus. Exports et types
+  // inutilisés : signalés seulement, à résorber au fil de l'eau.
+  "rules": {
+    "exports": "warn",
+    "types": "warn",
+    "duplicates": "warn",
+    "enumMembers": "warn"
+  }
+}

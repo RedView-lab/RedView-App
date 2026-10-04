@@ -41,9 +41,9 @@ if (!EMAIL || !PASSWORD || !ENDPOINT || !PROJECT) {
 let sessionCookie = '';
 let fallbackCookies = '';
 
-interface ApiResult<T = any> { ok: boolean; status: number; data: T; ms: number; bytes: number } // eslint-disable-line @typescript-eslint/no-explicit-any
+interface ApiResult<T = any> { ok: boolean; status: number; data: T; ms: number; bytes: number }  
 
-async function api<T = any>( // eslint-disable-line @typescript-eslint/no-explicit-any
+async function api<T = any>(  
   method: string,
   p: string,
   body?: unknown,
@@ -72,7 +72,7 @@ async function api<T = any>( // eslint-disable-line @typescript-eslint/no-explic
     sessionCookie = setCookies.map((c) => c.split(';')[0]).filter((c) => c.startsWith('a_session_')).join('; ');
     fallbackCookies = res.headers.get('x-fallback-cookies') ?? '';
   }
-  let data: any = null; // eslint-disable-line @typescript-eslint/no-explicit-any
+  let data: any = null;  
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
   return { ok: res.ok, status: res.status, data, ms, bytes: text.length };
 }

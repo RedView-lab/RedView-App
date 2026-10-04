@@ -12,7 +12,6 @@
  */
 import { BenchmarkSuite } from './core/harness.ts';
 import { printSuiteHeader, printSuiteResults } from './core/reporter.ts';
-import { generateSyntheticRoute } from './core/synthetic-data.ts';
 import { toWgs84, wgs84ToTile } from '../src/features/lidar/lib/coordConvert.ts';
 
 export async function runLidarBenchmark(options: { quick?: boolean } = {}): Promise<BenchmarkSuite> {

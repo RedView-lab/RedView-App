@@ -93,8 +93,8 @@ async function handleBbox(
       console.warn(`[api/poi] Upstream returned HTTP ${upstream.status}`);
       return sendUpstreamFailure(res, upstream);
     }
-    const data = await upstream.json().catch(() => null);
-    if (!data || !Array.isArray(data.features)) {
+    const data: unknown = await upstream.json().catch(() => null);
+    if (!hasFeatureArray(data)) {
       return sendProxyError(res, 502, 'POI upstream returned an invalid response');
     }
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -149,8 +149,8 @@ async function handleCorridor(
       console.warn(`[api/poi] Upstream corridor returned HTTP ${upstream.status}`);
       return sendUpstreamFailure(res, upstream);
     }
-    const data = await upstream.json().catch(() => null);
-    if (!data || !Array.isArray(data.features)) {
+    const data: unknown = await upstream.json().catch(() => null);
+    if (!hasFeatureArray(data)) {
       return sendProxyError(res, 502, 'POI upstream returned an invalid response');
     }
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -171,6 +171,11 @@ async function handleCorridor(
 // pourrait pas le distinguer d'un corridor réellement vide et effacerait les
 // POI déjà trouvés. 413 (corridor trop large) est relayé tel quel, toute
 // autre erreur amont devient 502. Jamais mis en cache.
+
+/** Réponse amont exploitable : un objet GeoJSON avec un tableau `features`. */
+function hasFeatureArray(value: unknown): value is { features: unknown[] } {
+  return typeof value === 'object' && value !== null && Array.isArray((value as { features?: unknown }).features);
+}
 
 function isAbortError(err: unknown): boolean {
   return (err as { name?: string } | undefined)?.name === 'AbortError';

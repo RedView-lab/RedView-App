@@ -3,7 +3,7 @@ import type { Map as MapboxMap, MapMouseEvent } from 'mapbox-gl';
 
 import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
 import { useAppI18n } from '@/shared/i18n';
-import { useProjectStoreOptional } from '@/features/itineraryPanel';
+import { useProjectStoreOptional } from '@/features/itineraryPanel/context/ProjectStore/hooks';
 import { isFreeCamActive } from '@/features/freeCam';
 import { getCameraOwner } from '../../lib/cameraOwnership';
 

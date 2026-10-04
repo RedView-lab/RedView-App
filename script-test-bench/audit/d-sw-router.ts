@@ -107,7 +107,7 @@ function pngValid(buf: Uint8Array): string {
   while (off + 12 <= b.length) {
     const len = b.readUInt32BE(off); const type = b.subarray(off + 4, off + 8).toString('latin1');
     if (off + 12 + len > b.length) return 'truncated';
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+     
     if ((globalThis as any).__crc(b.subarray(off + 4, off + 8 + len)) !== b.readUInt32BE(off + 8 + len)) return `crc(${type})`;
     if (type === 'IDAT') idat++;
     off += 12 + len;
