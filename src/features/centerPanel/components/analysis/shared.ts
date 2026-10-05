@@ -23,7 +23,7 @@ import type { TimelineFilterState } from '@/features/itineraryPanel/sections/tim
 
 export type FilterKey = keyof AnalysisFiltersState;
 
-export const surfaceFilterOptions: ReadonlyArray<{ value: RouteSurfaceFilter; label: string }> = [
+const surfaceFilterOptions: ReadonlyArray<{ value: RouteSurfaceFilter; label: string }> = [
   { value: 'all', label: 'Toutes surfaces' },
   { value: 'asphalt', label: 'Asphalte' },
   { value: 'paved', label: 'Pavé / béton' },

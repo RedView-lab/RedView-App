@@ -20,6 +20,9 @@ export const X_MAJOR_TARGET_PX = 80;
 export const DEFAULT_TICK_COUNT = 6;
 export const POI_MARKER_SIZE_PX = 30;
 export const POI_FAVORITE_MARKER_SIZE_PX = 44;
+/** Point de passage : plus discret que les POI (cercle visible ≈ 2/3 de la boîte). */
+export const WAYPOINT_MARKER_SIZE_PX = 22;
+export const WAYPOINT_FAVORITE_MARKER_SIZE_PX = 32;
 export const POI_MARKER_SPREAD_STEP_PX = 0;
 export const MULTI_POI_MARKER_WIDTH_PX = 34;
 export const MULTI_POI_MARKER_HEIGHT_PX = 38;

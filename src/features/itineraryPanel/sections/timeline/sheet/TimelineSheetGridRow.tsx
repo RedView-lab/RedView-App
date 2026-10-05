@@ -73,6 +73,8 @@ export const TimelineSheetGridRow = memo(function TimelineSheetGridRow({
         </div>
       ))}
 
+      <div className="rvi-tl-td rvi-tl-td--filler" aria-hidden />
+
       <div className="rvi-tl-td rvi-tl-td--sticky-right rvi-tl-td--actions" role="cell">
         <button
           type="button"

@@ -13,6 +13,8 @@ import {
   MULTI_POI_MARKER_WIDTH_PX,
   POI_FAVORITE_MARKER_SIZE_PX,
   POI_MARKER_SIZE_PX,
+  WAYPOINT_FAVORITE_MARKER_SIZE_PX,
+  WAYPOINT_MARKER_SIZE_PX,
   type VisiblePoiAnnotation,
 } from './types';
 
@@ -227,7 +229,9 @@ async function rasterize(kind: ChartPoiSpriteKind, hover: boolean): Promise<Char
     };
   } else {
     const favorite = kind.favorite;
-    const size = favorite ? POI_FAVORITE_MARKER_SIZE_PX : POI_MARKER_SIZE_PX;
+    const size = kind.type === 'checkpoint' && kind.checkpoint === 'waypoint'
+      ? (favorite ? WAYPOINT_FAVORITE_MARKER_SIZE_PX : WAYPOINT_MARKER_SIZE_PX)
+      : (favorite ? POI_FAVORITE_MARKER_SIZE_PX : POI_MARKER_SIZE_PX);
     outerShadow = favorite
       ? { offsetY: 3, blur: 6, color: 'rgba(0, 0, 0, 0.65)' }
       : { offsetY: 2, blur: 4, color: 'rgba(0, 0, 0, 0.5)' };

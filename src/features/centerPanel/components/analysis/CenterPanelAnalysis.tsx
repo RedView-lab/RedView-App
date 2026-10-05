@@ -340,14 +340,12 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
    */
   const altitudeShown =
     axis1Value === 'Altitude' || axis2Value === 'Altitude' || Boolean(filters.pente);
-  const slopeColorsHint = t('Affichez l’altitude (axe ou profil d’altitude) pour colorer la pente.');
 
   const disabledFilters = useMemo(() => {
     const hints: Partial<Record<ToolbarFilterKey, string>> = {};
     if (dayNightUnavailable) hints.jourNuit = dayNightHint;
-    if (!altitudeShown) hints.slopeColors = slopeColorsHint;
     return Object.keys(hints).length > 0 ? hints : undefined;
-  }, [altitudeShown, dayNightUnavailable, dayNightHint, slopeColorsHint]);
+  }, [dayNightUnavailable, dayNightHint]);
 
   // Par défaut l'option Jour/nuit est désactivée tant que le rythme n'a pas été édité.
   // Si un projet existant avait conservé l'ancien défaut `jourNuit: true`, on l'aligne sur `false`.
@@ -358,6 +356,16 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
       });
     }
   }, [dayNightStartReady]);
+
+  // Le filtre « Surface » n'est plus réglable : un ancien choix ne doit pas
+  // laisser la trace de la carte filtrée sans moyen d'en sortir.
+  const storedSurfaceFilter = rawAnalysis?.surfaceFilter;
+  useEffect(() => {
+    if (!storedSurfaceFilter || storedSurfaceFilter === 'all') return;
+    updateAnalysis((draft) => {
+      draft.surfaceFilter = 'all';
+    });
+  }, [storedSurfaceFilter]);
 
   const hasStartTime = Boolean(activeItinerary?.rhythm.startTime);
   const hourScaleHint = t(
@@ -771,8 +779,6 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
         onAxis2ColorChange={(col) => updateAnalysis((d) => { d.axis2Color = col; })}
         filters={filters}
         onToggleFilter={toggleFilter}
-        surfaceFilter={analysisState.surfaceFilter ?? 'all'}
-        onSurfaceFilterChange={(value) => updateAnalysis((d) => { d.surfaceFilter = value; })}
         disabledFilters={disabledFilters}
         disabledXModes={disabledXModes}
         axis1Options={axis1Options}

@@ -1,7 +1,6 @@
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 
 import type {
-  GpxQualityMode,
   Itinerary,
   ItineraryForbiddenZone,
   ItineraryProject,
@@ -103,12 +102,6 @@ export interface ProjectStoreValue {
     id: string,
     options?: { zoneId?: string; point?: { lat: number; lon: number } },
   ) => boolean;
-  simplifyItineraryGpx: (id: string, targetPointsPerKm: number) => void;
-  changeItineraryGpxQuality: (
-    id: string,
-    quality: GpxQualityMode,
-    options?: { pointsPerKm?: number | null },
-  ) => void;
   cleanItineraryGpxGlitches: (id: string) => void;
   mergeItineraries: (
     sourceId: string,

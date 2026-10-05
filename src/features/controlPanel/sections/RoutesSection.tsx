@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { GpxQualityMode } from '@/features/itineraryPanel/types';
-import type { GpxQualityStats } from '@/features/itineraryPanel/lib/routes';
+import type { RouteDisplayQuality } from '@/features/itineraryPanel/types';
 import { useAppI18n } from '@/shared/i18n';
 import { Section } from '../components/Section';
 import { Select } from '../components/Select';
@@ -14,10 +13,7 @@ interface Props {
   enabled: boolean;
   items: ControlPanelState['routes']['items'];
   traceWidthPx: number;
-  gpxQuality?: GpxQualityMode | null;
-  gpxQualityAvailable?: boolean;
-  gpxQualityPointsPerKm?: number | null;
-  gpxQualityStats?: GpxQualityStats | null;
+  quality: RouteDisplayQuality;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   onEnabledChange: ControlPanelHandlers['onRoutesEnabledChange'];
@@ -26,9 +22,15 @@ interface Props {
   onOpacityChange: ControlPanelHandlers['onRouteOpacityChange'];
   onVisibilityToggle: ControlPanelHandlers['onRouteVisibilityToggle'];
   onTraceWidthChange?: ControlPanelHandlers['onRouteTraceWidthChange'];
-  onGpxQualityChange?: (quality: GpxQualityMode) => void;
-  onGpxQualityExpertApply?: (pointsPerKm: number) => void;
+  onQualityChange?: ControlPanelHandlers['onRouteQualityChange'];
 }
+
+const QUALITY_OPTIONS: { value: RouteDisplayQuality; label: string }[] = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'default', label: 'Rapide' },
+  { value: 'balanced', label: 'Équilibré' },
+  { value: 'max', label: 'Maximum' },
+];
 
 const MODE_OPTIONS: { value: RouteRenderMode; label: string }[] = [
   { value: 'default', label: 'Défaut' },
@@ -115,7 +117,7 @@ export function RoutesSection({
   enabled,
   items,
   traceWidthPx,
-  gpxQuality,
+  quality,
   open,
   onOpenChange,
   onEnabledChange,
@@ -124,10 +126,9 @@ export function RoutesSection({
   onOpacityChange,
   onVisibilityToggle,
   onTraceWidthChange,
-  onGpxQualityChange,
+  onQualityChange,
 }: Props) {
   const { t } = useAppI18n();
-  const effectiveQuality = gpxQuality ?? 'default';
 
   return (
     <Section
@@ -193,19 +194,17 @@ export function RoutesSection({
           </div>
         </div>
 
-        <div className="rvc-row rvc-row--split rvc-routes__quality-row">
+        <div
+          className="rvc-row rvc-row--split rvc-routes__quality-row"
+          title={t('Auto : rapide en 2D et sur le relief 30 m, maximum en 3D sur le relief HD (1 m, 0,40 m).')}
+        >
           <span className="rvc-row__label">{t('Qualité tracé')}</span>
           <Select
             className="rvc-routes__quality-select"
             width="140px"
-            value={effectiveQuality}
-            options={[
-              { value: 'default', label: 'Défaut (rapide)' },
-              { value: 'balanced', label: 'Équilibré' },
-              { value: 'max', label: 'Maximum' },
-              { value: 'expert', label: 'Expert' },
-            ]}
-            onChange={onGpxQualityChange}
+            value={quality}
+            options={QUALITY_OPTIONS}
+            onChange={onQualityChange}
           />
         </div>
       </div>

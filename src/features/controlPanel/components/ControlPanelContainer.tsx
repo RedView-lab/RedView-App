@@ -479,7 +479,6 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
       }}
       onRouteTraceWidthChange={routeHandlers.onRouteTraceWidthChange}
       onRouteQualityChange={routeHandlers.onRouteQualityChange}
-      onRouteQualityExpertApply={routeHandlers.onRouteQualityExpertApply}
       onRouteVisibilityToggle={routeHandlers.onRouteVisibilityToggle}
     />
   );

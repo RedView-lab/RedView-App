@@ -3,24 +3,30 @@ import { useEffect, type RefObject } from 'react';
 const LINE_HEIGHT_PX = 16;
 
 /**
+ * Sets `data-overflow` on a horizontal scroller: `start` | `end` | `both`
+ * (the edges hiding content), absent when everything fits.
+ */
+export function syncHorizontalOverflow(el: HTMLElement): void {
+  const max = el.scrollWidth - el.clientWidth;
+  const start = el.scrollLeft > 1;
+  const end = el.scrollLeft < max - 1;
+  const state = start && end ? 'both' : start ? 'start' : end ? 'end' : '';
+  if (state) el.dataset.overflow = state;
+  else delete el.dataset.overflow;
+}
+
+/**
  * Horizontal strip that may overflow its box (toolbar in a half-screen
  * window): a vertical mouse wheel scrolls it sideways, and `data-overflow`
- * (`start` | `end` | `both`, absent when everything fits) tells CSS which
- * edge hides content (fade mask).
+ * (see {@link syncHorizontalOverflow}) tells CSS which edge hides content
+ * (fade mask).
  */
 export function useHorizontalScrollOverflow(ref: RefObject<HTMLElement | null>): void {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
 
-    const update = () => {
-      const max = el.scrollWidth - el.clientWidth;
-      const start = el.scrollLeft > 1;
-      const end = el.scrollLeft < max - 1;
-      const state = start && end ? 'both' : start ? 'start' : end ? 'end' : '';
-      if (state) el.dataset.overflow = state;
-      else delete el.dataset.overflow;
-    };
+    const update = () => syncHorizontalOverflow(el);
 
     const onWheel = (event: WheelEvent) => {
       if (event.ctrlKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;

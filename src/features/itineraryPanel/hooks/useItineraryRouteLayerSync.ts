@@ -15,7 +15,10 @@ import {
 } from '../lib/route-layer';
 import { buildRouteContentSignature } from '../lib/routes';
 import { getRouteElevationContext } from '../lib/route-layer/routeElevation';
-import type { ItineraryProject, RouteRenderMode, RouteSurfaceFilter } from '../types';
+import { DEFAULT_ROUTE_TRACE_WIDTH_PX } from '../lib/route-layer/constants';
+import { resolveRouteDisplayPoints, resolveRouteDisplayPreset } from '../lib/route-layer/displayQuality';
+import type { ItineraryProject, RouteDisplayQuality, RouteRenderMode, RouteSurfaceFilter } from '../types';
+import { useRouteDisplayContext } from './useRouteDisplayContext';
 
 function canAccessStyle(map: MapboxMap): boolean {
   try {
@@ -38,6 +41,8 @@ interface UseItineraryRouteLayerSyncArgs {
   itineraries: ItineraryProject['itineraries'];
   map: MapboxMap | null;
   routeTraceWidthPx?: number;
+  /** Finesse des traces dessinées (vue) ; `auto` suit la 2D / 3D et le relief. */
+  routeDisplayQuality?: RouteDisplayQuality;
   /** When false the entire Routes section is off and NO trace renders. */
   routesEnabled?: boolean;
   /** Filtre « Surface » du panneau d'analyse. */
@@ -62,7 +67,8 @@ export function useItineraryRouteLayerSync({
   isMapLoaded,
   itineraries,
   map,
-  routeTraceWidthPx = 8,
+  routeTraceWidthPx = DEFAULT_ROUTE_TRACE_WIDTH_PX,
+  routeDisplayQuality = 'auto',
   routesEnabled = true,
   surfaceFilter = 'all',
   slopeItineraryId = null,
@@ -83,6 +89,8 @@ export function useItineraryRouteLayerSync({
     })),
     [],
   );
+  const displayContext = useRouteDisplayContext(map);
+  const routeDisplayPreset = resolveRouteDisplayPreset(routeDisplayQuality, displayContext);
   const routeSlopeBandSignature = useMemo(
     () => routeSlopeBands.map((band) => `${band.id}:${band.minDeg}:${band.maxDeg}:${band.color}`).join('|'),
     [routeSlopeBands],
@@ -95,6 +103,7 @@ export function useItineraryRouteLayerSync({
         return [
           it.id,
           len,
+          it.gpxRoute?.originalPoints?.length ?? 0,
           routeKey,
           it.color,
           it.opacity ?? 100,
@@ -109,8 +118,8 @@ export function useItineraryRouteLayerSync({
         ].join(':');
       })
       .join('|');
-    return `${routesEnabled ? 1 : 0}::${itinerarySignature}::bands:${routeSlopeBandSignature}::surface:${surfaceFilter}`;
-  }, [itineraries, routeSlopeBandSignature, routeTraceWidthPx, routesEnabled, slopeItineraryId, surfaceFilter]);
+    return `${routesEnabled ? 1 : 0}::${itinerarySignature}::bands:${routeSlopeBandSignature}::surface:${surfaceFilter}::quality:${routeDisplayPreset}`;
+  }, [itineraries, routeDisplayPreset, routeSlopeBandSignature, routeTraceWidthPx, routesEnabled, slopeItineraryId, surfaceFilter]);
 
   // Ref bag so the stable map listeners always read the latest values without
   // having to re-subscribe on every project mutation. Synced in a layout
@@ -122,6 +131,7 @@ export function useItineraryRouteLayerSync({
     map,
     routeSlopeBands,
     routeTraceWidthPx,
+    routeDisplayPreset,
     routesEnabled,
     surfaceFilter,
     slopeItineraryId,
@@ -140,6 +150,7 @@ export function useItineraryRouteLayerSync({
       active: currentActive,
       routeSlopeBands: bands,
       routeTraceWidthPx: traceWidthPx,
+      routeDisplayPreset: displayPreset,
       layerSignature: signature,
       routesEnabled: areRoutesEnabled,
       surfaceFilter: activeSurfaceFilter,
@@ -154,8 +165,9 @@ export function useItineraryRouteLayerSync({
 
     let allMounted = true;
     for (const it of currentItineraries) {
-      const pts = it.gpxRoute?.points;
-      if (!pts || pts.length < 2) continue;
+      const route = it.gpxRoute;
+      if (!route || route.points.length < 2) continue;
+      const pts = resolveRouteDisplayPoints(route, displayPreset);
       // Visible iff the Routes section is active AND the user has not
       // explicitly hidden this trace. (`analysisVisible` controls the central
       // chart/profile, not the map line.)

@@ -22,7 +22,9 @@ import { useTraceToolOptional } from '@/features/centerPanel/tracer';
 import { useForbiddenZoneToolOptional } from '@/features/centerPanel/forbiddenZones';
 import { usePredictionStoreOptional } from '../../context/PredictionStore';
 import { useItineraryUndoRedoShortcut } from '../../hooks/useItineraryUndoRedoShortcut';
+import { useRouteDistanceLabels } from '../../hooks/useRouteDistanceLabels';
 import { resolveProfilePresetId } from '../../lib/project';
+import { DEFAULT_ROUTE_TRACE_WIDTH_PX } from '../../lib/route-layer/constants';
 import type { TimelineFilterState } from '../../sections/timeline/TimelineFilters';
 import type { GpxRoute, PoiFeature } from '@/features/poi/types';
 import { dispatchSelectPoiOnChart } from '@/features/poi/lib/chartPoiSyncBridge';
@@ -161,12 +163,20 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     isMapLoaded,
     itineraries,
     map,
-    routeTraceWidthPx: project.controlPanel?.routes?.traceWidthPx ?? 8,
+    routeTraceWidthPx: project.controlPanel?.routes?.traceWidthPx ?? DEFAULT_ROUTE_TRACE_WIDTH_PX,
+    routeDisplayQuality: project.controlPanel?.routes?.quality ?? 'auto',
     routesEnabled: project.controlPanel?.toggles?.routesEnabled ?? true,
     surfaceFilter: project.analysis?.surfaceFilter ?? 'all',
     // Chip « Pente » du graphe central : l'itinéraire actif passe en mode pente
     // sur la carte, comme son profil.
     slopeItineraryId: project.analysis?.filters?.slopeColors ? (active?.id ?? null) : null,
+  });
+  // Même chip : bornes kilométriques (25 / 50 km) sur la trace en pente.
+  useRouteDistanceLabels({
+    map,
+    isMapLoaded,
+    itinerary: project.analysis?.filters?.slopeColors ? active : null,
+    routesEnabled: project.controlPanel?.toggles?.routesEnabled ?? true,
   });
 
 

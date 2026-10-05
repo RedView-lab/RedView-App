@@ -219,7 +219,7 @@ export function DashboardEditor({
   onItineraryRouteStatusChange,
 }: DashboardEditorProps) {
   const [dashboardSearchActiveFilters, setDashboardSearchActiveFilters] = useState<Set<DashboardFilterId>>(
-    () => new Set<DashboardFilterId>(['pois_route', 'favoris', 'pauses', 'waypoints']),
+    () => new Set<DashboardFilterId>(['pois_route', 'favoris', 'pauses']),
   );
   const [dashboardSearchSelectedPoiCategories, setDashboardSearchSelectedPoiCategories] = useState<Set<DashboardPoiOptionId>>(
     () => new Set<DashboardPoiOptionId>(DASHBOARD_POI_OPTIONS.map((opt) => opt.id)),
@@ -228,7 +228,8 @@ export function DashboardEditor({
   const globalTimelineFilters = useMemo<TimelineFilterState>(() => {
     return {
       etape: true,
-      waypoint: dashboardSearchActiveFilters.has('waypoints'),
+      // Plus de filtre « Points de passage » : ils restent toujours affichés.
+      waypoint: true,
       poi: dashboardSearchActiveFilters.has('pois_route'),
       pause: dashboardSearchActiveFilters.has('pauses'),
       favorite: dashboardSearchActiveFilters.has('favoris'),
@@ -510,7 +511,6 @@ export function DashboardEditor({
                         collaborators={collaborators}
                         sessionStatus={sessionStatus}
                         pausesEnabled={dashboardSearchActiveFilters.has('pauses')}
-                        waypointsEnabled={dashboardSearchActiveFilters.has('waypoints')}
                         poisRouteEnabled={dashboardSearchActiveFilters.has('pois_route')}
                         favorisEnabled={dashboardSearchActiveFilters.has('favoris')}
                         selectedPoiCategories={dashboardSearchSelectedPoiCategories as Set<string>}

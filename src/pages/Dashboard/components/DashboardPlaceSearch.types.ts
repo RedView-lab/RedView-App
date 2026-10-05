@@ -37,18 +37,29 @@ export type DashboardPoiOptionId =
   | 'pass'
   | 'bicycle';
 
+/** Filtres d'affichage tenus par le Dashboard (le chip « POI » en regroupe deux). */
 export type DashboardFilterId =
   | 'pois_map'
   | 'pois_route'
   | 'favoris'
-  | 'pauses'
-  | 'waypoints';
+  | 'pauses';
+
+/** Chips de la barre ; « Alertes » et « Pente » sont les filtres d'analyse du projet. */
+export type DashboardFilterChipId = 'favoris' | 'pois' | 'pauses' | 'alertes' | 'pente';
 
 export interface DashboardFilterOption {
-  id: DashboardFilterId;
+  id: DashboardFilterChipId;
   label: string;
-  icon: string;
+  /** Fichier de `/svgv2/icone/`. */
+  icon?: string;
+  /** Pastille dégradée de l'échelle de pente à la place d'une icône. */
+  slopeSwatch?: boolean;
   hasDropdown?: boolean;
+}
+
+export interface DashboardPoiSourceOption {
+  id: Extract<DashboardFilterId, 'pois_route' | 'pois_map'>;
+  label: string;
 }
 
 export interface DashboardPoiOption {

@@ -52,10 +52,6 @@
   padding: 3px 5px 3px 4px;
 }
 
-.rvc-center-analysis__toolbar[data-density~='2'] .rvc-center-analysis__surface-chip {
-  padding: 3px 3px 3px 6px;
-}
-
 /* 3. "Axe 1 / Axe 2": the solid/dashed swatch matches the curve (label kept as tooltip). */
 .rvc-center-analysis__toolbar[data-density~='3'] .rvc-center-analysis__axis-label {
   display: none;
@@ -69,18 +65,9 @@
   max-width: 96px;
 }
 
-/* 4. Chips that carry an icon (slope scale, alerts) keep only the icon (label kept as tooltip). */
-.rvc-center-analysis__toolbar[data-density~='4']
-  .rvc-center-analysis__filter-chip--iconic
-  .rvc-center-analysis__filter-label {
-  display: none;
-}
+/* 4. (no rule: the icon chips — slope, alerts — moved to the map filter bar.) */
 
-.rvc-center-analysis__toolbar[data-density~='4'] .rvc-center-analysis__filter-chip--iconic {
-  padding: 3px 4px;
-}
-
-/* 5. Long labels give way: ellipsis on the filter chips, axis and surface values (full text in the tooltip). */
+/* 5. Long labels give way: ellipsis on the filter chip and axis values (full text in the tooltip). */
 .rvc-center-analysis__toolbar[data-density~='5'] .rvc-center-analysis__filter-label {
   max-width: 64px;
 }
@@ -93,7 +80,7 @@
   padding: 0 4px;
 }
 
-/* 6. Short stubs ("Profi…", "Élév…"). */
+/* 6. Short stubs ("Jour…", "Élév…"). */
 .rvc-center-analysis__toolbar[data-density~='6'] .rvc-center-analysis__filter-label {
   max-width: 36px;
 }

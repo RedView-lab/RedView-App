@@ -1,6 +1,10 @@
 import type { Map as MapboxMap } from 'mapbox-gl';
 
+/** Épaisseur des traces sur la carte tant que la vue n'en choisit pas une. */
+export const DEFAULT_ROUTE_TRACE_WIDTH_PX = 5;
+
 export const SOURCE_PREFIX = 'brouter-route-source-';
+export const OUTLINE_PREFIX = 'brouter-route-outline-';
 export const CASING_PREFIX = 'brouter-route-casing-';
 export const GLOW_PREFIX = 'brouter-route-glow-';
 export const PAVED_PATTERN_PREFIX = 'brouter-route-paved-pattern-';
@@ -60,6 +64,7 @@ export function ids(itineraryId: string) {
   const safe = sanitizeId(itineraryId);
   return {
     source: `${SOURCE_PREFIX}${safe}`,
+    outline: `${OUTLINE_PREFIX}${safe}`,
     casing: `${CASING_PREFIX}${safe}`,
     glow: `${GLOW_PREFIX}${safe}`,
     pavedPattern: `${PAVED_PATTERN_PREFIX}${safe}`,

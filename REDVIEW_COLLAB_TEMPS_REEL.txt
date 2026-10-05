@@ -1,0 +1,304 @@
+REDVIEW — CO-ÉDITION EN TEMPS RÉEL : COMMENT ÇA MARCHE
+Référence pour les prochaines sessions de code. État au 05/10/2026 (commit 58c0604).
+Détails complets : CLAUDE.md (paragraphes « Real-time co-editing server » et « features/collab »).
+
+========================================================================
+1. LE PRINCIPE (modèle de Figma)
+========================================================================
+- Le serveur fait foi. Chaque projet partagé ouvert a une « salle » en mémoire
+  sur le serveur temps réel. Elle reçoit les modifications des éditeurs, les
+  numérote dans un ordre unique (séquence), les applique, puis les diffuse à
+  tous.
+- Pas de CRDT, pas de Yjs. Le document est mis « à plat » en objets avec des
+  propriétés. Règle de fusion : le dernier qui écrit une propriété gagne
+  (propriété par propriété, pas document par document).
+- Chaque client applique ses modifications tout de suite (pas d'attente du
+  serveur). Il les envoie par lots ; le serveur renvoie chaque lot numéroté,
+  ce qui sert d'accusé de réception.
+- Chacun n'annule que ses propres actions (annuler/rétablir par éditeur).
+- Un seul éditeur calcule les résultats dérivés (tracé BRouter, prédiction,
+  POI) grâce à un « bail » donné par le serveur ; les autres reçoivent le
+  résultat.
+- Seul le DOCUMENT est partagé. La VUE (panneaux, itinéraire actif, opacité…)
+  reste propre à chaque utilisateur, et le TRAVAIL LOCAL (pendingRoutePatch…)
+  propre à chaque appareil. Les trois couches sont définies dans
+  itineraryPanel/lib/project/layers.ts.
+
+========================================================================
+2. LES PIÈCES
+========================================================================
+Client (navigateur)            src/features/collab/
+Contrat avec le ProjectStore   src/features/itineraryPanel/context/ProjectStore/collab.ts
+Serveur temps réel             server/multiplayer/  (service Coolify « redview-multiplayer »)
+Partage / suppression (API)    api/projects/share.ts + api/_lib/projectSharing.ts
+Stockage durable               Appwrite (collections projects, project_journal ; bucket project-payloads)
+
+Le ProjectStore ne connaît QUE le contrat ProjectCollabLink : il ne dépend pas
+du moteur de synchronisation.
+
+========================================================================
+3. LE DOCUMENT À PLAT (src/features/collab/model/)
+========================================================================
+- Objets identifiés par un chemin déduit du document (pas de table de
+  correspondance) : racine « p », itinéraire « p/itineraries:<id> », élément
+  de liste « <parent>/<champ>:<clé> ».
+- Réglages (record) : une propriété par clé (ex. « priorities.elevation »).
+- Listes : un objet par élément, avec une position fractionnaire
+  (fractional-indexing). Deux insertions au même endroit : le serveur décale
+  l'une des deux.
+- Tracés : un en-tête en propriété + des segments de points adressés par leur
+  contenu (routeChunks.ts). Une fenêtre modifiée n'envoie que ses segments.
+- Règles de fusion par champ : collab/schema.ts.
+- 4 opérations (ops.ts) :
+    c = créer, d = supprimer (avec descendants), s = écrire une propriété,
+    m = déplacer dans une liste.
+  Chacune a un inverse exact (applyOpsWithInverse).
+- diffDocument(store, avant, après) produit les opérations minimales, en
+  comparant les objets par référence (une partie inchangée n'est pas
+  parcourue).
+- Materializer : objets → ProjectDocument. Il ne reconstruit que les objets
+  remplacés, donc l'application garde ses références (rendus en cache).
+- materializeJson(store) : le JSON du document directement depuis le magasin,
+  sans construire les points ; identique octet pour octet à
+  JSON.stringify(materialize()). C'est ce que le serveur écrit dans
+  projects.data.
+
+========================================================================
+4. CÔTÉ CLIENT (src/features/collab/client/)
+========================================================================
+SyncEngine
+  - État confirmé (celui du serveur, à la séquence N) + lots locaux en attente.
+  - État visible = confirmé + lots en attente rejoués par-dessus. Une valeur
+    distante sur une propriété qu'on vient de changer reste masquée jusqu'à
+    l'accusé de réception (pas de clignotement).
+  - Les lots acquittés mais pas encore « durables » (journal du serveur pas
+    écrit) sont gardés, et renvoyés si le serveur redémarre.
+    welcome.clientSeq indique ce que le serveur a déjà.
+
+CollabClient (implémente ProjectCollabLink)
+  - bind(base, changes) : le store se branche dès que la session existe, AVANT
+    l'état du serveur.
+      * le document affiché devient l'état « provisoire » ;
+      * les écritures faites pendant le chargement du module sont rejouées
+        exactement ;
+      * au premier « welcome », l'état du serveur remplace la base et les
+        modifications de l'utilisateur sont rejouées dessus, puis envoyées.
+  - Avant le premier welcome, un résultat calculé (change = 'background') est
+    marqué « localOnly » : il n'est jamais envoyé (il écraserait celui de la
+    session) et disparaît au welcome.
+  - pushLocalDocument(doc, 'user' | 'step' | 'background') ; undo/redo ;
+    subscribe ; computeGate.
+
+UndoHistory
+  - Annuler par éditeur, inverses calculés côté client.
+  - Ne remet jamais une propriété qu'un autre a changée depuis.
+  - Un résultat 'background' est rattaché à l'étape qui l'a provoqué : annuler
+    un déplacement de point remet aussi l'ancien tracé, sans re-router.
+
+LeaseGate (porte des calculs dérivés)
+  - Bail donné par le serveur : l'auteur de la dernière modification des
+    entrées (DERIVED_INPUTS : route = timeline/profil/priorités/…, prediction
+    = gpxRoute/rythme/…, poi = gpxRoute/poi) est prioritaire 5 s, ensuite le
+    premier qui demande.
+  - Durée du bail 20 s, renouvelé pendant le calcul.
+  - Hors ligne plus de 4 s : l'appareil calcule seul.
+
+CollabConnection (WebSocket)
+  - Ouverte au bind. Lots regroupés à ~30 Hz.
+  - Reconnexion avec attente exponentielle + aléa ; code 1012 = reconnexion
+    rapide.
+  - Refus définitifs : 4403 (accès retiré), 4404 (projet introuvable), 4426
+    (version), 4401 ×3 (session expirée).
+
+CollabSession + unsyncedStore (modifications gardées sur l'appareil)
+  - Les lots non écrits par le serveur sont copiés dans IndexedDB
+    « redview-collab », ≤ 250 ms après un changement et au pagehide.
+  - Un verrou Web Locks par client : la session suivante du même utilisateur
+    adopte la copie d'un onglet fermé avec le MÊME clientId, renvoie les lots,
+    et le serveur ne les applique jamais deux fois.
+  - Sans Web Locks : rien n'est gardé.
+
+useCollabSession (hook React)
+  - Crée la session d'un projet partagé (import dynamique : rien dans le
+    bundle d'un projet solo).
+  - pending = session attendue mais module pas encore chargé. Le store garde
+    alors ses écritures et ne calcule rien (SESSION_PENDING_COMPUTE_GATE).
+  - Dev : ?collab=server pour forcer une session sur n'importe quel projet.
+
+========================================================================
+5. INTÉGRATION DANS L'APPLICATION
+========================================================================
+- ProjectProvider (ProjectStore/provider.tsx) :
+    * reçoit collab (le lien) et collabPending ;
+    * appelle bind au branchement ;
+    * pousse chaque document validé ;
+    * recompose les documents reçus avec la vue et le travail local de
+      l'appareil (externalRevision augmente) ;
+    * en session, l'historique d'annulation est celui de la session.
+- Un projet partagé est « possédé par le serveur »
+  (shared/utils/projects/liveSessions.ts, isServerOwnedDocument) :
+    * l'autosave n'écrit jamais le cloud (copie locale seulement, jamais
+      « dirty ») ;
+    * jamais de conflit ni de copie « version d'un autre appareil ».
+- Ouverture : getProject prend la copie locale si elle est plus récente que
+  le dernier point de sauvegarde. Elle n'est qu'affichée en attendant le
+  welcome, jamais renvoyée au cloud.
+- Premier partage : projet enregistré au cloud → invitation → la session
+  démarre.
+- En-tête du panneau :
+    * attribut data-rv-collab-status (connecting / online / offline) ;
+    * ligne d'état seulement si elle dure (> 1,2 s / 2 s) ;
+    * pastilles des autres éditeurs.
+- Refus du serveur (projet supprimé, accès retiré) : un toast, puis retour au
+  gestionnaire de projets. La copie de l'appareil est abandonnée.
+
+========================================================================
+6. CÔTÉ SERVEUR (server/multiplayer/)
+========================================================================
+Cœur sans entrée/sortie (src/features/collab/room/), partagé avec le simulateur :
+  - RoomState : valide (model/validate.ts), ordonne, dédoublonne
+    (clientId + clientSeq), note l'auteur de chaque champ pour les baux.
+  - Room : messages, rattrapage par lots à la reconnexion (même « epoch »,
+    borné à la moitié du document, ≥ 64 Ko), baux, présence.
+
+Hôte (roomHost.ts) :
+  - Journal écrit toutes les ~250 ms (project_journal, document
+    « <projet>_<séquence de début> »). En échec : nouvel essai avec attente
+    exponentielle.
+  - Barrière : si un 2e serveur écrit la même séquence, il reçoit un 409 et
+    ferme sa salle (déploiements qui se chevauchent).
+  - Point de sauvegarde toutes les 60 s / 600 lots, et au déchargement :
+      * projects.data = document au format de l'application ;
+      * <projet>.collab.gz = état exact ;
+      * projects.collab = {seq, snapshotFile, dataHash}.
+    En échec : attente 1 s → 60 s.
+  - Reprise après un arrêt : point de sauvegarde exact + journal au-delà.
+    Un point de sauvegarde valable gagne toujours sur un « data » réécrit
+    hors salle.
+  - Salle inactive : déchargée dès que son journal est durable, même si le
+    point de sauvegarde échoue.
+  - Projet supprimé (404 au point de sauvegarde, ou « not-found » à la
+    revérification des droits chaque minute) :
+      * clients fermés en 4404 ;
+      * journal et points de sauvegarde purgés ;
+      * plus aucun essai.
+  - Validation fantôme (shadow.ts, au plus toutes les 10 min par salle) :
+    avant un point de sauvegarde, l'état durable relu et rejoué est comparé
+    à la mémoire. Un écart est signalé (log error + GlitchTip), jamais
+    corrigé.
+  - SIGTERM : journal écrit, clients fermés en 1012 (ils se reconnectent au
+    nouveau conteneur et renvoient ce qui n'était pas durable).
+
+Authentification (auth.ts) :
+  - JWT Appwrite + propriétaire ou membre de l'équipe « p<projectId> ».
+  - Vérifié à la connexion puis toutes les minutes.
+
+Partage (api/_lib/projectSharing.ts) :
+  - Une équipe Appwrite par projet ; invitation par e-mail d'un compte
+    existant.
+  - Actions : list / invite / remove / leave / delete.
+  - « delete » (propriétaire) efface aussi le journal, les points de
+    sauvegarde et l'équipe (écrits avec la clé admin).
+
+Réseau / exploitation :
+  - Conteneur publié sur 127.0.0.1:17790 seulement. L'nginx de l'hôte
+    (/etc/nginx/conf.d/app.conf) relaie wss://app.redview.tech/multiplayer.
+  - /multiplayer/health = {"ok":true} (lu par l'app : « Partager » n'apparaît
+    que s'il répond).
+  - Mesures sur le port INTERNE 17791 seulement :
+      sudo docker exec $(sudo docker ps -q -f name=krejrvgvs2w5kmfo27rutffz) wget -qO- http://127.0.0.1:17791/metrics.json
+  - Journaux : sudo docker logs --tail 200 <conteneur>. Chaque refus 4xxx/1011
+    est journalisé avec le projet.
+  - Erreurs → GlitchTip (SENTRY_DSN_SERVER, défini sur le service Coolify).
+
+========================================================================
+7. PROTOCOLE (src/features/collab/protocol.ts, PROTOCOL_VERSION = 1)
+========================================================================
+Client → serveur :
+  hello (jeton, clientId, epoch + lastSeq pour reprendre), batch (clientSeq,
+  ops, blobs), lease (request / renew / release), presence, ping
+Serveur → client :
+  welcome (état complet, ou lots manquants ; clientSeq ; pairs ; baux),
+  batch (lot numéroté), durable, duplicate, reject, leases, lease-denied,
+  peers, error, pong
+Codes de fermeture :
+  4400 requête invalide, 4401 jeton, 4403 accès, 4404 introuvable,
+  4408 client lent, 4426 version, 4429 trop de messages,
+  1011/1013 erreur/occupé, 1012 redémarrage
+
+========================================================================
+8. RÈGLES À RESPECTER EN MODIFIANT LE CODE
+========================================================================
+- Nouveau champ d'un projet : il va dans le DOCUMENT par défaut (donc partagé).
+  Un état d'affichage va dans les clés de VUE (layers.ts). Un état propre à
+  l'appareil va dans les clés de TRAVAIL LOCAL.
+- Un nouveau champ qui sert d'entrée à un calcul dérivé doit être ajouté à
+  DERIVED_INPUTS (schema.ts). Sinon, le bail n'ira pas à son auteur.
+- Liste ou réglage avec une fusion particulière : décrire sa spec dans
+  schema.ts.
+- Changer le format des messages : incrémenter PROTOCOL_VERSION. Les anciens
+  clients sont refusés en 4426 et doivent recharger.
+- Changer Materializer.object : changer AUSSI materializeJson (même
+  construction). L'égalité est vérifiée par model.test.ts.
+- Écritures du ProjectStore :
+    * setProject = action de l'utilisateur ;
+    * setProjectWithoutHistory = résultat calculé (« background »).
+  Ne jamais appeler pushLocalDocument hors du provider.
+- Un résultat calculé doit porter son estampille (routedInputsKey,
+  predictionInputsKey) : un document reçu est revérifié par estampille, sans
+  recalcul.
+- Côté serveur, ajouter une route ou une mesure : /health reste minimal, les
+  mesures restent sur le port interne.
+- Toute la logique sans réseau va dans src/features/collab (testable par le
+  simulateur). server/multiplayer ne fait que brancher WebSocket et Appwrite.
+
+========================================================================
+9. TESTS ET BANCS
+========================================================================
+npx vitest run src/features/collab server/multiplayer api/_lib/__tests__/projectSharing.test.ts
+  - client : connexion lente, branchement, onglet rechargé, annuler, baux ;
+  - modèle : aller-retour, différences, materializeJson ;
+  - serveur réel + ws : redémarrage, modification pendant la connexion,
+    projet supprimé, santé/mesures ;
+  - stockage Appwrite simulé : purge, attente, validation fantôme ;
+  - API : suppression d'un projet partagé.
+npm run bench:collab
+  Simulateur déterministe sur de nombreuses graines (réseau perturbé, arrêts
+  du serveur, onglets rechargés). Invariants : convergence, journal = mémoire,
+  aucune modification perdue.
+npm run bench:collab-load
+  50 salles × 5 clients × 20 lots/s. Cibles : diffusion p95 < 50 ms, journal
+  p95 < 600 ms, mémoire par salle ≤ 2× le document.
+  Mesuré le 05/10 : 40 ms, 330 ms, 1,95×.
+npm run bench:collab-e2e   (nécessite npm run dev)
+  Deux onglets réels sur le serveur de dev, dont une modification pendant la
+  connexion et la latence locale (p95 ~140 ms).
+npm run bench:collab-prod  (PRODUCTION, deux comptes de test, ~8 min)
+  Parcours complet : partage, synchro, baux, annuler, rechargements, onglet
+  fermé, redéploiement en pleine édition, mesures par SSH.
+  La latence mesurée dépend du réseau du poste de test (elle traverse deux
+  fois le réseau).
+npm run bench:collab-trace (PRODUCTION)
+  Trace d'une réouverture toutes les 100 ms, pour diagnostiquer une
+  modification perdue ou écrasée.
+
+========================================================================
+10. FICHIERS CLÉS
+========================================================================
+src/features/collab/client/syncEngine.ts      état confirmé / en attente / provisoire
+src/features/collab/client/collabClient.ts    bind, push, undo, réception
+src/features/collab/client/session.ts         session + copie sur l'appareil
+src/features/collab/client/unsyncedStore.ts   IndexedDB + Web Locks
+src/features/collab/client/connection.ts      WebSocket, reconnexion, refus
+src/features/collab/client/leaseGate.ts       baux des calculs dérivés
+src/features/collab/client/undoHistory.ts     annuler par éditeur
+src/features/collab/useCollabSession.ts       hook React
+src/features/collab/model/*                   document à plat, ops, différence, matérialisation
+src/features/collab/room/*                    cœur de la salle (sans entrée/sortie)
+src/features/collab/sim/*                     simulateur déterministe
+src/features/collab/schema.ts                 règles de fusion, DERIVED_INPUTS
+src/features/itineraryPanel/context/ProjectStore/{collab.ts,provider.tsx}
+src/pages/Dashboard/components/DashboardEditor.tsx   branchement, refus, état
+server/multiplayer/{main,server,connection,roomHost,appwriteStorage,shadow,auth}.ts
+api/_lib/projectSharing.ts, api/projects/share.ts
+Dockerfile.multiplayer

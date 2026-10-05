@@ -64,7 +64,10 @@ export function buildGridTemplate(
   cols: TimelineColumnDef[],
   widths: Partial<Record<TimelineColumnId, number>> = {},
 ): string {
-  // Sticky check (left) + N data columns + sticky actions (right).
+  // Sticky check (left) + N data columns + filler + sticky actions (right).
+  // The filler takes the width the columns leave (wide panel, full screen):
+  // every row spans the table, actions on its right edge as in the list view.
+  // It shrinks to 0 once the columns overflow (horizontal scroll).
   const middle = cols
     .map((c) => {
       const customW = widths[c.id];
@@ -75,7 +78,7 @@ export function buildGridTemplate(
       return `${initialW}px`;
     })
     .join(' ');
-  return `28px ${middle} 72px`;
+  return `28px ${middle} minmax(0, 1fr) 72px`;
 }
 
 export interface RenderCellExtras {

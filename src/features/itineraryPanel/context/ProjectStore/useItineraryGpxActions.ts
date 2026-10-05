@@ -3,11 +3,8 @@ import type { MutableRefObject } from 'react';
 import { translateAppText } from '@/shared/i18n';
 import { routeLengthM } from '@/features/poi/lib/gpx-loader';
 import {
-  applyGpxQuality,
   cleanGpxGlitches,
-  normalizeImportedRoutePoints,
   cumulativeRouteLengthsM,
-  projectDistanceAlongRouteM,
   roundDistanceKm,
 } from '../../lib/routes';
 import {
@@ -26,7 +23,6 @@ import {
 } from './forbiddenZonePatch';
 import { applyTraceAppend, resolveTraceAppendKind } from '../../lib/tracer/traceEdits';
 import type {
-  GpxQualityMode,
   ItineraryForbiddenZone,
   ItineraryProject,
 } from '../../types';
@@ -206,136 +202,6 @@ export function useItineraryGpxActions({
       return true;
     },
     [projectRef, pushTraceHistoryEntry],
-  );
-
-  const simplifyItineraryGpx = useCallback(
-    (id: string, targetPointsPerKm: number) => {
-      updateItinerary(id, (it) => {
-        const route = it.gpxRoute;
-        if (!route) return;
-
-        const basePoints = route.originalPoints || route.points;
-        const qualityResult = applyGpxQuality(basePoints, 'expert', targetPointsPerKm);
-        if (qualityResult.points.length >= route.points.length && route.gpxQuality === 'expert') return;
-
-        const simplifiedPoints = normalizeImportedRoutePoints(qualityResult.points);
-        const elevationMetrics = computeRouteElevationMetrics(basePoints);
-        const surfaceMetrics = computeRouteSurfaceMetricsFromPoints(basePoints);
-        const lastBasePoint = basePoints[basePoints.length - 1];
-        const distanceM =
-          (typeof lastBasePoint?.distanceM === 'number' && lastBasePoint.distanceM > 0)
-            ? lastBasePoint.distanceM
-            : (elevationMetrics?.distanceM ?? routeLengthM(basePoints));
-        const distanceKm = Math.round(distanceM / 100) / 10;
-
-        it.gpxRoute = {
-          ...route,
-          points: simplifiedPoints,
-          originalPoints: basePoints,
-          gpxQuality: 'expert',
-          gpxQualityPointsPerKm: qualityResult.pointsPerKm,
-        };
-        it.metrics = {
-          ...it.metrics,
-          distanceKm,
-          ascentM: elevationMetrics
-            ? Math.max(0, Math.round(elevationMetrics.ascentM))
-            : it.metrics?.ascentM,
-          descentM: elevationMetrics
-            ? Math.max(0, Math.round(elevationMetrics.descentM))
-            : it.metrics?.descentM,
-          avgSlopePercent: elevationMetrics
-            ? Math.round(elevationMetrics.avgSlopePercent * 10) / 10
-            : it.metrics?.avgSlopePercent,
-          tarmacPercent: surfaceMetrics
-            ? Math.round(surfaceMetrics.tarmacPercent)
-            : it.metrics?.tarmacPercent,
-          offroadPercent: surfaceMetrics
-            ? Math.round(surfaceMetrics.offroadPercent)
-            : it.metrics?.offroadPercent,
-        };
-        it.timeline = it.timeline.map((row) =>
-          row.kind === 'end' ? { ...row, distanceKm } : row,
-        );
-        it.prediction = null;
-      });
-    },
-    [updateItinerary],
-  );
-
-  const changeItineraryGpxQuality = useCallback(
-    (
-      id: string,
-      quality: GpxQualityMode,
-      options?: { pointsPerKm?: number | null },
-    ) => {
-      updateItinerary(id, (it) => {
-        const route = it.gpxRoute;
-        if (!route) return;
-
-        const basePoints = route.originalPoints || route.points;
-        const qualityResult = applyGpxQuality(basePoints, quality, options?.pointsPerKm);
-        const simplifiedPoints = normalizeImportedRoutePoints(qualityResult.points);
-
-        const elevationMetrics = computeRouteElevationMetrics(basePoints);
-        const surfaceMetrics = computeRouteSurfaceMetricsFromPoints(basePoints);
-        const lastBasePoint = basePoints[basePoints.length - 1];
-        const distanceM =
-          (typeof lastBasePoint?.distanceM === 'number' && lastBasePoint.distanceM > 0)
-            ? lastBasePoint.distanceM
-            : (elevationMetrics?.distanceM ?? routeLengthM(basePoints));
-        const distanceKm = Math.round(distanceM / 100) / 10;
-
-        it.gpxRoute = {
-          ...route,
-          points: simplifiedPoints,
-          originalPoints: basePoints,
-          gpxQuality: quality,
-          gpxQualityPointsPerKm: quality === 'expert' ? qualityResult.pointsPerKm : null,
-        };
-        it.metrics = {
-          ...it.metrics,
-          distanceKm,
-          ascentM: elevationMetrics
-            ? Math.max(0, Math.round(elevationMetrics.ascentM))
-            : it.metrics?.ascentM,
-          descentM: elevationMetrics
-            ? Math.max(0, Math.round(elevationMetrics.descentM))
-            : it.metrics?.descentM,
-          avgSlopePercent: elevationMetrics
-            ? Math.round(elevationMetrics.avgSlopePercent * 10) / 10
-            : it.metrics?.avgSlopePercent,
-          tarmacPercent: surfaceMetrics
-            ? Math.round(surfaceMetrics.tarmacPercent)
-            : it.metrics?.tarmacPercent,
-          offroadPercent: surfaceMetrics
-            ? Math.round(surfaceMetrics.offroadPercent)
-            : it.metrics?.offroadPercent,
-        };
-        const cumulativeLengthsM = cumulativeRouteLengthsM(simplifiedPoints);
-        it.timeline = it.timeline.map((row) => {
-          if (row.kind === 'start') {
-            return { ...row, distanceKm: 0 };
-          }
-          if (row.kind === 'end') {
-            return { ...row, distanceKm };
-          }
-          if (row.lat != null && row.lon != null) {
-            const projectedDistM = projectDistanceAlongRouteM(
-              { lat: row.lat, lon: row.lon },
-              simplifiedPoints,
-              cumulativeLengthsM,
-            );
-            if (projectedDistM != null) {
-              return { ...row, distanceKm: roundDistanceKm(projectedDistM) };
-            }
-          }
-          return row;
-        });
-        it.prediction = null;
-      });
-    },
-    [updateItinerary],
   );
 
   const cleanItineraryGpxGlitches = useCallback(
@@ -532,8 +398,6 @@ export function useItineraryGpxActions({
     appendTracePoint,
     addForbiddenZone,
     removeForbiddenZone,
-    simplifyItineraryGpx,
-    changeItineraryGpxQuality,
     cleanItineraryGpxGlitches,
     mergeItineraries,
     splitItineraryAtPointIndex,

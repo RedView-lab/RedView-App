@@ -10,7 +10,9 @@
  *
  * The first column (checkbox) and last column (actions) are sticky to keep
  * essential UI affordances visible while the user scrolls horizontally
- * through additional data columns.
+ * through additional data columns. A filler track before the actions takes
+ * the width the columns leave, so every row spans the table (wide panel,
+ * full screen); it is 0 wide while the columns overflow.
  * ─────────────────────────────────────────────────────────────────────── */
 
 .rvi-tl-table-wrap {
@@ -24,15 +26,23 @@
 }
 
 .rvi-tl-table-grid {
+  /* Under the sticky columns while data columns scroll beneath them: an
+     opaque stand-in for the panel colour (side panel over the map glass,
+     measured ≈ rgb(25 25 28) in dark). */
+  --rvi-tl-sticky-surface: light-dark(rgb(255 255 255), rgb(25 25 28));
+  --rvi-tl-sticky-shadow: light-dark(rgba(16, 18, 24, 0.08), rgba(0, 0, 0, 0.45));
   display: grid;
   width: 100%;
+  /* Horizontal scroll only: the grid is as tall as its rows, so no vertical
+     scrollbar and no gutter reserved for one (it cut the rows short). */
   overflow-x: auto;
-  overflow-y: visible;
+  overflow-y: hidden;
   row-gap: 4px;
-  /* Pad the right edge so the sticky actions column never overlaps a
-     scrollbar nub on platforms that show one. */
-  scrollbar-gutter: stable;
   flex-shrink: 0;
+}
+/* Full screen: near-opaque, darker panel. */
+.rvi-timeline--fullscreen .rvi-tl-table-grid {
+  --rvi-tl-sticky-surface: light-dark(rgb(255 255 255), rgb(8 10 15));
 }
 
 /* ───── Header row ───────────────────────────────────────────────────── */
@@ -137,50 +147,25 @@
   left: 2px;
 }
 
-/* Sticky check + actions edges for body rows */
-.rvi-tl-td--sticky-left {
-  position: sticky;
-  left: 0;
-  z-index: 3;
-  background: light-dark(rgba(255, 255, 255, 0.94), rgba(14, 14, 16, 0.88));
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: 8px 0 16px -4px light-dark(rgba(16, 18, 24, 0.08), rgba(0, 0, 0, 0.45));
-}
-.rvi-tl-tr:hover .rvi-tl-td--sticky-left {
-  background: light-dark(rgba(244, 244, 245, 0.97), rgba(36, 36, 42, 0.92));
-}
-.rvi-tl-td--sticky-right {
-  position: sticky;
-  right: 0;
-  z-index: 3;
-  background: light-dark(rgba(255, 255, 255, 0.94), rgba(14, 14, 16, 0.88));
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: -8px 0 16px -4px light-dark(rgba(16, 18, 24, 0.08), rgba(0, 0, 0, 0.45));
-}
-.rvi-tl-tr:hover .rvi-tl-td--sticky-right {
-  background: light-dark(rgba(244, 244, 245, 0.97), rgba(36, 36, 42, 0.92));
-}
-
-/* Sticky check + actions edges for header row (transparent, no grey background) */
-.rvi-tl-th--sticky-left {
-  position: sticky;
-  left: 0;
-  z-index: 3;
-  background: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  box-shadow: none;
-}
+/* Sticky check + actions edges for the header row: no fill (opaque only while
+   a column scrolls beneath, see "Sticky edges" below). */
+.rvi-tl-th--sticky-left,
 .rvi-tl-th--sticky-right {
   position: sticky;
-  right: 0;
   z-index: 3;
-  background: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  box-shadow: none;
+  transition: none;
+}
+.rvi-tl-th--sticky-left {
+  left: 0;
+}
+.rvi-tl-th--sticky-right {
+  right: 0;
+}
+.rvi-tl-th[aria-hidden='true'] {
+  cursor: default;
+}
+.rvi-tl-th--filler {
+  padding: 0;
 }
 .rvi-tl-th--check,
 .rvi-tl-td--check {
@@ -215,9 +200,23 @@
 
 /* ───── Body rows ────────────────────────────────────────────────────── */
 
+/* One fill per row state, read by every cell (sticky and filler included):
+   the row is a single band from the check box to the actions. Sélection :
+   même langage que la vue liste (surface neutre surélevée, liseré rouge de
+   l'app sur la cellule de gauche). */
 .rvi-tl-tr {
+  --rvi-tl-row-fill: rgb(var(--rv-ink) / 0.08);
   display: contents;
   animation: rvi-tl-fade 260ms ease-out both;
+}
+.rvi-tl-tr:hover {
+  --rvi-tl-row-fill: rgb(var(--rv-ink) / 0.12);
+}
+.rvi-tl-tr.is-selected {
+  --rvi-tl-row-fill: rgb(var(--rv-ink) / 0.16);
+}
+.rvi-tl-tr.is-selected:hover {
+  --rvi-tl-row-fill: rgb(var(--rv-ink) / 0.2);
 }
 
 .rvi-tl-td {
@@ -231,7 +230,7 @@
   padding: 6px 8px;
   font-size: var(--rv-font-size-md);
   color: var(--rvi-text);
-  background: rgb(var(--rv-ink) / 0.08);
+  background: var(--rvi-tl-row-fill);
   border-top: 1px solid transparent;
   border-bottom: 1px solid transparent;
   box-sizing: border-box;
@@ -240,9 +239,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.rvi-tl-tr:hover .rvi-tl-td {
-  background: rgb(var(--rv-ink) / 0.12);
-}
 .rvi-tl-tr .rvi-tl-td {
   cursor: pointer;
 }
@@ -250,40 +246,62 @@
 .rvi-tl-td--check {
   cursor: default;
 }
-/* Sélection : même langage que la vue liste (surface neutre surélevée,
-   liseré rouge de l'app sur la cellule de gauche). */
-.rvi-tl-tr.is-selected .rvi-tl-td {
-  background: rgb(var(--rv-ink) / 0.16);
+.rvi-tl-td--filler {
+  padding: 0;
 }
-/* The first / last cells get the leading / trailing rounded corners. */
+
+/* Sticky check + actions cells. The row fill rides on a layer above the
+   cell's own background, which stays clear unless a column scrolls beneath
+   (then an opaque surface, see "Sticky edges"). They get the row's leading /
+   trailing rounded corners. */
+.rvi-tl-td--sticky-left,
+.rvi-tl-td--sticky-right {
+  position: sticky;
+  z-index: 3;
+  overflow: visible;
+  background: transparent;
+  transition: box-shadow 0.15s ease;
+}
 .rvi-tl-td--sticky-left {
+  left: 0;
   border-top-left-radius: var(--rvi-radius-md);
   border-bottom-left-radius: var(--rvi-radius-md);
-  background: light-dark(rgba(255, 255, 255, 0.94), rgba(14, 14, 16, 0.88));
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: 8px 0 16px -4px light-dark(rgba(16, 18, 24, 0.08), rgba(0, 0, 0, 0.45));
-}
-.rvi-tl-tr:hover .rvi-tl-td--sticky-left {
-  background: light-dark(rgba(244, 244, 245, 0.97), rgba(36, 36, 42, 0.92));
-}
-.rvi-tl-tr.is-selected .rvi-tl-td--sticky-left {
-  background: light-dark(rgba(237, 237, 239, 0.98), rgba(46, 46, 52, 0.96));
-  box-shadow: inset 2px 0 0 var(--rvi-red-accent), 8px 0 16px -4px light-dark(rgba(16, 18, 24, 0.08), rgba(0, 0, 0, 0.45));
 }
 .rvi-tl-td--sticky-right {
+  right: 0;
   border-top-right-radius: var(--rvi-radius-md);
   border-bottom-right-radius: var(--rvi-radius-md);
-  background: light-dark(rgba(255, 255, 255, 0.94), rgba(14, 14, 16, 0.88));
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: -8px 0 16px -4px light-dark(rgba(16, 18, 24, 0.08), rgba(0, 0, 0, 0.45));
 }
-.rvi-tl-tr:hover .rvi-tl-td--sticky-right {
-  background: light-dark(rgba(244, 244, 245, 0.97), rgba(36, 36, 42, 0.92));
+.rvi-tl-td--sticky-left::before,
+.rvi-tl-td--sticky-right::before {
+  content: '';
+  position: absolute;
+  /* Under the transparent top / bottom borders too, like the other cells'
+     background (not clipped: the cell overflows visibly). */
+  inset: -1px 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--rvi-tl-row-fill);
+  transition: background 0.15s ease;
+  pointer-events: none;
 }
-.rvi-tl-tr.is-selected .rvi-tl-td--sticky-right {
-  background: light-dark(rgba(237, 237, 239, 0.98), rgba(46, 46, 52, 0.96));
+.rvi-tl-tr.is-selected .rvi-tl-td--sticky-left::before {
+  box-shadow: inset 2px 0 0 var(--rvi-red-accent);
+}
+
+/* Sticky edges: `data-overflow` (useGridOverflowEdges) names the edges with
+   data columns scrolled beneath the sticky columns. There they hide them
+   (opaque surface, switched at once: a fade would let the first scrolled
+   pixels show through) and cast a shadow over them. */
+.rvi-tl-table-grid:is([data-overflow='start'], [data-overflow='both']) :is(.rvi-tl-td--sticky-left, .rvi-tl-th--sticky-left),
+.rvi-tl-table-grid:is([data-overflow='end'], [data-overflow='both']) :is(.rvi-tl-td--sticky-right, .rvi-tl-th--sticky-right) {
+  background: var(--rvi-tl-sticky-surface);
+}
+.rvi-tl-table-grid:is([data-overflow='start'], [data-overflow='both']) .rvi-tl-td--sticky-left {
+  box-shadow: 8px 0 16px -4px var(--rvi-tl-sticky-shadow);
+}
+.rvi-tl-table-grid:is([data-overflow='end'], [data-overflow='both']) .rvi-tl-td--sticky-right {
+  box-shadow: -8px 0 16px -4px var(--rvi-tl-sticky-shadow);
 }
 
 .rvi-tl-td--left   { justify-content: flex-start; }

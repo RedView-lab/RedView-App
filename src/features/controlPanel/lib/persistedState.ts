@@ -5,6 +5,8 @@ import type { PersistedAltitudeBreakpoints } from '@/features/altitude/lib/altit
 import type { AltitudeState } from '@/features/altitude/types';
 import type { PersistedBreakpoints } from '@/features/slope/lib/slope-persist';
 import type { SlopeState } from '@/features/slope/types';
+import type { RouteDisplayQuality } from '@/features/itineraryPanel/types';
+import { DEFAULT_ROUTE_TRACE_WIDTH_PX } from '@/features/itineraryPanel/lib/route-layer/constants';
 import type {
   BasemapId,
   Basemap3dQualityId,
@@ -57,6 +59,8 @@ export interface ControlPanelContourLinesPersistedState {
 
 export interface ControlPanelRoutesPersistedState {
   traceWidthPx: number;
+  /** Finesse des traces dessinées ; absente = `auto` (suit la 2D / 3D et le relief). */
+  quality?: RouteDisplayQuality;
 }
 
 export type ControlPanelSunlightPersistedState = Omit<
@@ -172,7 +176,7 @@ export function createDefaultControlPanelPersistedState(): ControlPanelPersisted
       opacity: 100,
     },
     routes: {
-      traceWidthPx: 8,
+      traceWidthPx: DEFAULT_ROUTE_TRACE_WIDTH_PX,
     },
     weather: undefined,
   };

@@ -1,6 +1,10 @@
 import type { PoiCategory } from '@/features/poi/types';
 
-import type { DashboardFilterOption, DashboardPoiOption } from './DashboardPlaceSearch.types';
+import type {
+  DashboardFilterOption,
+  DashboardPoiOption,
+  DashboardPoiSourceOption,
+} from './DashboardPlaceSearch.types';
 
 export const SEARCH_PRELOAD_LEAD_MS = 140;
 export const SEARCH_SATELLITE_PRELOAD_LEAD_MS = 240;
@@ -37,12 +41,12 @@ export const POI_MENU_CLOSE_MS = 150;
  * (dashboard-place-search.css).
  *
  * TIGHT: regular chips with 22 px label stubs — toggle 40 + gap 12 + search
- * field at its 96 px minimum + 5 chips (2 × 121 with a chevron, 3 × 100) and
- * their gaps. Below it the chips tighten (--tight: 2 × 87 + 3 × 71, search
- * field down to its magnifier), which holds down to ~480 px.
+ * field at its 96 px minimum + 5 chips (1 × 121 with a chevron, 4 × 100) and
+ * their gaps. Below it the chips tighten (--tight: 87 + 4 × 71, search field
+ * down to its magnifier), which holds down to ~465 px.
  * ICONS: below that, the labels go (tooltip only).
  */
-export const PLACE_SEARCH_TIGHT_WIDTH = 720;
+export const PLACE_SEARCH_TIGHT_WIDTH = 700;
 export const PLACE_SEARCH_ICONS_WIDTH = 480;
 
 export const DROPDOWN_VIEWPORT_POI_ICON_URLS: Partial<Record<PoiCategory, string>> = {
@@ -77,9 +81,15 @@ export const DASHBOARD_POI_OPTIONS: readonly DashboardPoiOption[] = [
 ] as const;
 
 export const DASHBOARD_FILTER_OPTIONS: readonly DashboardFilterOption[] = [
-  { id: 'pois_route', label: 'POI itinéraire', icon: 'search-filter-pois-route.svg', hasDropdown: true },
   { id: 'favoris', label: 'Favoris', icon: 'search-filter-favoris.svg' },
+  { id: 'pois', label: 'POI', icon: 'search-filter-pois-route.svg', hasDropdown: true },
   { id: 'pauses', label: 'Pauses', icon: 'search-filter-pauses.svg' },
-  { id: 'waypoints', label: 'Points de passage', icon: 'search-filter-waypoints.svg' },
-  { id: 'pois_map', label: 'POI carte', icon: 'search-filter-pois-map.svg', hasDropdown: true },
+  { id: 'alertes', label: 'Alertes', icon: 'search-filter-alertes.svg' },
+  { id: 'pente', label: 'Pente', slopeSwatch: true },
+] as const;
+
+/** Cases du menu « POI », au-dessus des catégories. */
+export const DASHBOARD_POI_SOURCE_OPTIONS: readonly DashboardPoiSourceOption[] = [
+  { id: 'pois_route', label: 'POI sur itinéraire' },
+  { id: 'pois_map', label: 'POI carte' },
 ] as const;

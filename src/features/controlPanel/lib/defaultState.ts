@@ -6,6 +6,7 @@ import { buildDefaultWeatherPalettePresets } from '../weather/defaultPalettes';
 import { clampForecastSelection, getForecastDateForOffset } from '@/features/weather/lib/forecastTime.ts';
 import { generateDynamicCategories, formatSlopeDegreeLabel } from '@/features/slope/lib/slope-config';
 import { DEFAULT_MAP_ENVIRONMENT, MAP_ENVIRONMENT_OPTIONS } from '@/features/map3d/lib/mapEnvironment';
+import { DEFAULT_ROUTE_TRACE_WIDTH_PX } from '@/features/itineraryPanel/lib/route-layer/constants';
 
 const WEATHER_PALETTE_PRESETS = buildDefaultWeatherPalettePresets();
 const DEFAULT_SLOPE_BANDS = generateDynamicCategories(10).map((category) => ({
@@ -63,7 +64,8 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
   },
   routes: {
     enabled: true,
-    traceWidthPx: 8,
+    traceWidthPx: DEFAULT_ROUTE_TRACE_WIDTH_PX,
+    quality: 'auto',
     items: [
       { id: 'route-1', label: translateAppText('Itinéraire {{index}}', { index: 1 }), color: '#c50000', mode: 'default', opacity: 100, visible: true },
       { id: 'route-2', label: translateAppText('Variante 2'), color: '#ffa630', mode: 'slope', opacity: 100, visible: true },

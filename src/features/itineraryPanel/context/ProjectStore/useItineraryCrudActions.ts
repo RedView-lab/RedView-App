@@ -182,7 +182,10 @@ export function useItineraryCrudActions({
         duplicate.id = overrides.id ?? createDocumentId('it');
         duplicate.name = overrides.name?.trim() || duplicateName;
         duplicate.color = overrides.color ?? color;
-        duplicate.visible = overrides.visible ?? false;
+        // La copie s'affiche par-dessus (dernière couche ajoutée) : carte et graphe,
+        // comme l'œil qui règle les deux à la fois.
+        duplicate.visible = overrides.visible ?? true;
+        duplicate.analysisVisible = duplicate.visible;
         duplicate.prediction = null;
         delete duplicate.fitUploads;
         delete duplicate.pendingFitRecompute;

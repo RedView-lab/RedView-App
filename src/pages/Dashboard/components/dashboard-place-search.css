@@ -306,6 +306,37 @@
   object-fit: contain;
 }
 
+/* « Alertes » : glyphe blanc sur la pastille rouge des alertes de pente. */
+.rvd-place-search__filter-alert-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  background: #ff3b30;
+}
+
+.rvd-place-search__filter-alert-badge img {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+/* « Pente » : l'échelle de couleur du tracé. */
+.rvd-place-search__filter-slope-swatch {
+  display: block;
+  width: 20px;
+  height: 10px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+/* Cases « POI sur itinéraire » / « POI carte » du menu POI. */
+.rvd-place-search__poi-menu .rvd-place-search__filter-checkbox {
+  margin-right: 4px;
+}
+
 .rvd-place-search__filter-label {
   position: relative;
   z-index: 2;

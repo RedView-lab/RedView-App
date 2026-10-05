@@ -2,6 +2,12 @@
 
 export type GpxQualityPreset = 'default' | 'balanced' | 'max';
 export type GpxQualityMode = GpxQualityPreset | 'expert';
+/**
+ * Finesse des traces dessinées sur la carte (vue, propre à chaque
+ * utilisateur, jamais le document) : `auto` suit la vue — 2D ou relief 30 m :
+ * rapide ; relief HD (1 m, 0,40 m) : maximum.
+ */
+export type RouteDisplayQuality = 'auto' | GpxQualityPreset;
 
 /**
  * Persisted state of the bottom analysis chart (centerPanel). Stored on

@@ -3353,6 +3353,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "POI route"
   },
   {
+    "fr": "POI sur itinéraire",
+    "en": "POI on route"
+  },
+  {
     "fr": "POIs sur carte",
     "en": "POIs on map"
   },
@@ -4705,8 +4709,12 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Track quality"
   },
   {
-    "fr": "Défaut (rapide)",
-    "en": "Default (fast)"
+    "fr": "Auto : rapide en 2D et sur le relief 30 m, maximum en 3D sur le relief HD (1 m, 0,40 m).",
+    "en": "Auto: fast in 2D and on the 30 m relief, maximum in 3D on the HD relief (1 m, 0.40 m)."
+  },
+  {
+    "fr": "Rapide",
+    "en": "Fast"
   },
   {
     "fr": "Équilibré",

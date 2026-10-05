@@ -23,7 +23,9 @@
  *    chaque image) ;
  * puis, à l'échelle 1 et 1,117 : menus portés (Colonnes, liste du panneau
  * droit), menu contextuel de la carte, redimensionnement du panneau gauche et
- * timeline plein écran alignés au pixel sur le pointeur / leur ancre.
+ * timeline plein écran alignés au pixel sur le pointeur / leur ancre ; en
+ * plein écran, colonnes ajoutées, les lignes de la feuille de route couvrent
+ * toute la largeur du tableau d'un fond uniforme.
  *
  * Le compte démo n'existe qu'en dev : lancer `npm run dev` avant (ou
  * RV_URL=<url du serveur de dev>). Captures + rapport JSON dans
@@ -376,6 +378,45 @@ async function interactions(session, screen) {
       await sleep(400);
       const m2 = await rectOf(session, `document.querySelector('.rvi-tl-columns-menu')`);
       check(id, 'menu « Colonnes » aligné en plein écran', columnsMenuAligned(m2, a2, s));
+      // Colonnes ajoutées (grille) : chaque ligne couvre toute la largeur du
+      // tableau, d'un même fond, cases à cocher et actions comprises. Les
+      // colonnes sont retirées ensuite (retour à la liste compacte).
+      // One click per render: a toggle starts from the columns last rendered.
+      const toggleColumns = async () => {
+        let toggled = 0;
+        for (const label of ['Altitude', 'Temp(é|e)rature']) {
+          toggled += await session.evaluate(`(() => {
+            const item = [...document.querySelectorAll('.rvi-tl-columns-menu [role=menuitemcheckbox]')]
+              .find((b) => /^${label}$/.test(b.textContent.trim()));
+            item?.click();
+            return item ? 1 : 0;
+          })()`);
+          await sleep(250);
+        }
+        return toggled;
+      };
+      if (await toggleColumns()) {
+        await sleep(500);
+        const row = await session.evaluate(`(() => {
+          const grid = document.querySelector('.rvi-panel-fullscreen-root .rvi-tl-table-grid');
+          const tr = grid?.querySelector('.rvi-tl-tr');
+          if (!tr) return null;
+          const g = grid.getBoundingClientRect();
+          const cells = [...tr.children];
+          const rects = cells.map((c) => c.getBoundingClientRect());
+          return {
+            gl: g.left, gr: g.right,
+            l: Math.min(...rects.map((r) => r.left)), r: Math.max(...rects.map((r) => r.right)),
+            fill: getComputedStyle(cells[1]).backgroundColor,
+            stickyFills: [cells[0], cells[cells.length - 1]].map((c) => getComputedStyle(c, '::before').backgroundColor),
+          };
+        })()`);
+        check(id, 'feuille de route plein écran : lignes sur toute la largeur, fond uniforme',
+          !!row && near(row.l, row.gl, 1) && near(row.r, row.gr, 1) && row.stickyFills.every((f) => f === row.fill),
+          row ? `ligne ${row.l.toFixed(1)}–${row.r.toFixed(1)}, tableau ${row.gl.toFixed(1)}–${row.gr.toFixed(1)}, fonds ${row.fill} / ${row.stickyFills.join(' / ')}` : 'grille absente');
+        await toggleColumns();
+        await sleep(300);
+      }
       await escape(session);
       await sleep(300);
     }

@@ -7,9 +7,8 @@ import type {
   ControlPanelSectionKey,
   ControlPanelSectionsOpenState,
 } from './lib/persistedState';
-import type { GpxQualityMode } from '@/features/itineraryPanel/types';
+import type { RouteDisplayQuality } from '@/features/itineraryPanel/types';
 import type { DownloadProgress } from '@/features/lidar/types';
-import type { GpxQualityStats } from '@/features/itineraryPanel/lib/routes';
 import type { MapEnvironment } from '@/features/map3d/lib/mapEnvironment';
 
 export type BasemapId =
@@ -88,10 +87,8 @@ export interface RoutesSectionState {
   items: RouteItem[];
   /** Global route line width in px. */
   traceWidthPx: number;
-  gpxQuality?: GpxQualityMode | null;
-  gpxQualityAvailable?: boolean;
-  gpxQualityPointsPerKm?: number | null;
-  gpxQualityStats?: GpxQualityStats | null;
+  /** Finesse des traces dessinées (vue) ; `auto` suit la 2D / 3D et le relief. */
+  quality: RouteDisplayQuality;
 }
 
 export type SlopeResolution = '0.40m (LIDAR SURFACE)' | '1m (LIDAR TERRAIN)' | string;
@@ -304,8 +301,7 @@ export interface ControlPanelHandlers {
   onRouteOpacityChange?: (id: string, opacity: number) => void;
   onRouteVisibilityToggle?: (id: string) => void;
   onRouteTraceWidthChange?: (value: number) => void;
-  onRouteQualityChange?: (quality: GpxQualityMode) => void;
-  onRouteQualityExpertApply?: (pointsPerKm: number) => void;
+  onRouteQualityChange?: (quality: RouteDisplayQuality) => void;
 
   onSlopesEnabledChange?: (enabled: boolean) => void;
   onSlopeResolutionChange?: (value: SlopeResolution) => void;

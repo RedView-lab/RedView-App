@@ -382,6 +382,7 @@ export const dashboardTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Favoris', en: 'Favorites' },
   { fr: 'POI carte', en: 'POI map' },
   { fr: 'POI itinéraire', en: 'POI route' },
+  { fr: 'POI sur itinéraire', en: 'POI on route' },
   { fr: 'POIs sur carte', en: 'POIs on map' },
   { fr: 'POIs sur itinéraires', en: 'POIs on routes' },
   { fr: 'Pauses', en: 'Pauses' },

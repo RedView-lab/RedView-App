@@ -6,6 +6,7 @@ import {
   GLOW_PREFIX,
   GRAVEL_PATTERN_PREFIX,
   LINE_PREFIX,
+  OUTLINE_PREFIX,
   PAVED_PATTERN_PREFIX,
   SAND_PATTERN_PREFIX,
   SOURCE_PREFIX,
@@ -16,6 +17,7 @@ import {
   buildRouteGeoJson,
   inferMountedRouteUsesLineGradient,
   normalizeTraceWidthPx,
+  ROUTE_OUTLINE_COLOR,
   type RouteLayerOptions,
   type RouteLayerPoint,
 } from './routeStyle';
@@ -248,6 +250,7 @@ export function upsertRouteLayer(
 ): boolean {
   const {
     source: srcId,
+    outline: outlineId,
     casing: casingId,
     glow: legacyGlowId,
     pavedPattern: pavedPatternId,
@@ -276,7 +279,12 @@ export function upsertRouteLayer(
   }
 
   // Short-circuit: if the trace is mounted and nothing changed, do nothing.
-  if (existing && map.getLayer(lineId) && appliedSignatureRegistry.get(itineraryId) === optionSignature) {
+  if (
+    existing
+    && map.getLayer(lineId)
+    && map.getLayer(outlineId)
+    && appliedSignatureRegistry.get(itineraryId) === optionSignature
+  ) {
     try {
       raiseRouteLayer(map, itineraryId);
     } catch {
@@ -306,6 +314,7 @@ export function upsertRouteLayer(
 
   if (shouldRecreateSource) {
     try {
+      removeLayerIfPresent(map, outlineId);
       removeLayerIfPresent(map, casingId);
       removeLayerIfPresent(map, legacyGlowId);
       removeLayerIfPresent(map, pavedPatternId);
@@ -417,6 +426,36 @@ export function upsertRouteLayer(
     } else if (map.getLayer(casingId)) {
       map.removeLayer(casingId);
     }
+    // Contour sous le liseré et la trace (même source, mêmes tronçons).
+    if (!map.getLayer(outlineId)) {
+      map.addLayer({
+        id: outlineId,
+        type: 'line',
+        source: srcId,
+        slot: 'top',
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+          'line-elevation-reference': elevationReference,
+          'line-z-offset': zOffset,
+          visibility,
+        },
+        paint: {
+          'line-color': ROUTE_OUTLINE_COLOR,
+          'line-width': renderSpec.outlineWidthPaint as never,
+          'line-opacity': opacity,
+          'line-emissive-strength': 1,
+          'line-occlusion-opacity': ROUTE_LINE_OCCLUSION_OPACITY,
+        },
+      }, map.getLayer(casingId) ? casingId : lineId);
+    } else {
+      map.setPaintProperty(outlineId, 'line-width', renderSpec.outlineWidthPaint as never);
+      setPaintPropertyIfChanged(map, outlineId, 'line-opacity', opacity);
+      setPaintPropertyIfChanged(map, outlineId, 'line-occlusion-opacity', ROUTE_LINE_OCCLUSION_OPACITY);
+      setLayoutPropertyIfChanged(map, outlineId, 'line-elevation-reference', elevationReference);
+      setLayoutPropertyIfChanged(map, outlineId, 'line-z-offset', zOffset);
+      setLayoutPropertyIfChanged(map, outlineId, 'visibility', visibility);
+    }
     syncPatternLayer(map, {
       layerId: legacyGlowId,
       sourceId: srcId,
@@ -495,6 +534,7 @@ export function upsertRouteLayer(
 
 export function raiseRouteLayer(map: MapboxMap, itineraryId: string): void {
   const {
+    outline: outlineId,
     casing: casingId,
     glow: legacyGlowId,
     pavedPattern: pavedPatternId,
@@ -505,6 +545,7 @@ export function raiseRouteLayer(map: MapboxMap, itineraryId: string): void {
   } = ids(itineraryId);
   try {
     if (!hasRasterLayerAbove(map, lineId)) return;
+    if (map.getLayer(outlineId)) map.moveLayer(outlineId);
     if (map.getLayer(casingId)) map.moveLayer(casingId);
     if (map.getLayer(lineId)) map.moveLayer(lineId);
     if (map.getLayer(legacyGlowId)) map.moveLayer(legacyGlowId);
@@ -520,6 +561,7 @@ export function raiseRouteLayer(map: MapboxMap, itineraryId: string): void {
 export function removeRouteLayer(map: MapboxMap, itineraryId: string): void {
   const {
     source: srcId,
+    outline: outlineId,
     casing: casingId,
     glow: legacyGlowId,
     pavedPattern: pavedPatternId,
@@ -529,6 +571,7 @@ export function removeRouteLayer(map: MapboxMap, itineraryId: string): void {
     line: lineId,
   } = ids(itineraryId);
   try {
+    removeLayerIfPresent(map, outlineId);
     removeLayerIfPresent(map, casingId);
     removeLayerIfPresent(map, pavedPatternId);
     removeLayerIfPresent(map, gravelPatternId);
@@ -550,6 +593,7 @@ export function setRouteLayerVisibility(
   visible: boolean,
 ): void {
   const {
+    outline: outlineId,
     casing: casingId,
     glow: legacyGlowId,
     pavedPattern: pavedPatternId,
@@ -560,6 +604,7 @@ export function setRouteLayerVisibility(
   } = ids(itineraryId);
   const visibility = visible ? 'visible' : 'none';
   try {
+    if (map.getLayer(outlineId)) setLayoutPropertyIfChanged(map, outlineId, 'visibility', visibility);
     if (map.getLayer(casingId)) setLayoutPropertyIfChanged(map, casingId, 'visibility', visibility);
     if (map.getLayer(legacyGlowId)) setLayoutPropertyIfChanged(map, legacyGlowId, 'visibility', visibility);
     if (map.getLayer(pavedPatternId)) setLayoutPropertyIfChanged(map, pavedPatternId, 'visibility', visibility);
@@ -581,6 +626,7 @@ export function removeAllRouteLayers(map: MapboxMap): void {
     for (const key of Object.keys(style.sources)) {
       if (!key.startsWith(SOURCE_PREFIX)) continue;
       const safe = key.slice(SOURCE_PREFIX.length);
+      const outlineId = `${OUTLINE_PREFIX}${safe}`;
       const casingId = `${CASING_PREFIX}${safe}`;
       const glowId = `${GLOW_PREFIX}${safe}`;
       const pavedPatternId = `${PAVED_PATTERN_PREFIX}${safe}`;
@@ -589,6 +635,7 @@ export function removeAllRouteLayers(map: MapboxMap): void {
       const sandPatternId = `${SAND_PATTERN_PREFIX}${safe}`;
       const lineId = `${LINE_PREFIX}${safe}`;
       try {
+        removeLayerIfPresent(map, outlineId);
         removeLayerIfPresent(map, casingId);
         removeLayerIfPresent(map, pavedPatternId);
         removeLayerIfPresent(map, gravelPatternId);

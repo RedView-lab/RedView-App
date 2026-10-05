@@ -1,6 +1,7 @@
 import { haversineRouteDistanceM } from '../routes';
 import type { Surface } from '../route-metrics/types';
 import type { RouteSurfaceFilter } from '../../types';
+import { DEFAULT_ROUTE_TRACE_WIDTH_PX } from './constants';
 
 export interface RouteLayerPoint {
   lat: number;
@@ -45,6 +46,8 @@ export interface RouteLayerRenderSpec {
   lineGradientPaint: unknown[] | null;
   lineBorderColorPaint: string | unknown[];
   lineBorderWidthPx: number;
+  /** Contour blanc sous toute la trace (largeur totale, liseré de revêtement compris). */
+  outlineWidthPaint: number | unknown[];
   casingColorPaint: string | unknown[] | null;
   casingWidthPx: number;
   casingFilter: unknown[] | null;
@@ -55,6 +58,9 @@ export interface RouteLayerRenderSpec {
   requiresLineMetrics: boolean;
 }
 
+/** Rendu d'une trace hors contour (ajouté par `buildRouteGeoJson`). */
+type RouteFillRenderSpec = Omit<RouteLayerRenderSpec, 'outlineWidthPaint'>;
+
 const ROUTE_SLOPE_TARGET_SEGMENT_M = 10;
 const ROUTE_MIN_SEGMENT_DISTANCE_M = 0.5;
 const ROUTE_PAVED_DASHARRAY = [3.6, 0.35];
@@ -62,6 +68,11 @@ const ROUTE_GRAVEL_DASHARRAY = [1.05, 1.05];
 const ROUTE_DIRT_DASHARRAY = [0.42, 1.25];
 const ROUTE_SAND_DASHARRAY = [0.01, 1.75];
 const ROUTE_TRANSPARENT_COLOR = 'rgba(0,0,0,0)';
+/**
+ * Contour fin façon Strava / Komoot : détache la trace du fond (relief,
+ * satellite, couleurs de pente proches de celles de la carte).
+ */
+export const ROUTE_OUTLINE_COLOR = '#ffffff';
 
 interface RgbColor {
   red: number;
@@ -72,7 +83,12 @@ interface RgbColor {
 type StyledSurface = 'asphalt' | 'paved' | 'gravel' | 'dirt' | 'sand' | 'unknown';
 
 export function normalizeTraceWidthPx(value: number | null | undefined): number {
-  return Math.max(1, Math.min(20, Math.round(value ?? 8)));
+  return Math.max(1, Math.min(20, Math.round(value ?? DEFAULT_ROUTE_TRACE_WIDTH_PX)));
+}
+
+/** Épaisseur du contour de chaque côté de la trace : 1,5 px pour 5 px. */
+export function routeOutlineWidthPx(traceWidthPx: number): number {
+  return Math.max(1, Math.min(2.5, Math.round(traceWidthPx * 0.6) / 2));
 }
 
 export function inferMountedRouteUsesLineGradient(
@@ -513,7 +529,7 @@ function buildSlopeRouteRenderSpec(
   points: readonly RouteLayerPoint[],
   bands: ReadonlyArray<RouteSlopeBand>,
   fallbackColor: string,
-): RouteLayerRenderSpec {
+): RouteFillRenderSpec {
   const samples = buildRouteSlopeSamples(points);
   return {
     data: buildDefaultRouteGeoJson(points),
@@ -536,7 +552,7 @@ function buildSurfaceRouteRenderSpec(
   points: readonly RouteLayerPoint[],
   fallbackColor: string,
   traceWidthPx: number,
-): RouteLayerRenderSpec {
+): RouteFillRenderSpec {
   const borderWidthPx = tarmacBorderWidthPx(traceWidthPx);
   const pavedPresent = hasSurface(points, 'paved');
   const gravelPresent = hasSurface(points, 'gravel');
@@ -606,7 +622,7 @@ function buildSurfaceFilteredRouteRenderSpec(
   fallbackColor: string,
   traceWidthPx: number,
   filter: RouteSurfaceFilter,
-): RouteLayerRenderSpec {
+): RouteFillRenderSpec {
   const spec = buildSurfaceRouteRenderSpec(points, fallbackColor, traceWidthPx);
   const collection = spec.data as GeoJSON.FeatureCollection<GeoJSON.LineString>;
   spec.data = {
@@ -623,6 +639,21 @@ export function buildRouteGeoJson(
   opts: RouteLayerOptions,
   traceWidthPx: number,
 ): RouteLayerRenderSpec {
+  const spec = buildRouteFillRenderSpec(points, opts, traceWidthPx);
+  const outlinePx = 2 * routeOutlineWidthPx(traceWidthPx);
+  // Le contour déborde du liseré de revêtement là où il y en a un, de la
+  // trace ailleurs : même épaisseur visible sur tous les tronçons.
+  const outlineWidthPaint = spec.casingFilter && spec.casingWidthPx > traceWidthPx
+    ? ['case', spec.casingFilter, spec.casingWidthPx + outlinePx, traceWidthPx + outlinePx]
+    : traceWidthPx + outlinePx;
+  return { ...spec, outlineWidthPaint };
+}
+
+function buildRouteFillRenderSpec(
+  points: readonly RouteLayerPoint[],
+  opts: RouteLayerOptions,
+  traceWidthPx: number,
+): RouteFillRenderSpec {
   if (opts.surfaceFilter && opts.surfaceFilter !== 'all') {
     return buildSurfaceFilteredRouteRenderSpec(points, opts.color, traceWidthPx, opts.surfaceFilter);
   }

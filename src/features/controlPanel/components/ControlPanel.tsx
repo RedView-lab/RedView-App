@@ -50,7 +50,6 @@ export function ControlPanel({
   onRouteVisibilityToggle,
   onRouteTraceWidthChange,
   onRouteQualityChange,
-  onRouteQualityExpertApply,
   onSlopesEnabledChange,
   onSlopeResolutionChange,
   onSlopeColorizationChange,
@@ -160,10 +159,7 @@ export function ControlPanel({
         enabled={state.routes.enabled}
         items={state.routes.items}
         traceWidthPx={state.routes.traceWidthPx}
-        gpxQuality={state.routes.gpxQuality}
-        gpxQualityAvailable={state.routes.gpxQualityAvailable}
-        gpxQualityPointsPerKm={state.routes.gpxQualityPointsPerKm}
-        gpxQualityStats={state.routes.gpxQualityStats}
+        quality={state.routes.quality}
         open={sectionsOpen?.routes}
         onOpenChange={(open) => onSectionOpenChange?.('routes', open)}
         onEnabledChange={onRoutesEnabledChange}
@@ -172,8 +168,7 @@ export function ControlPanel({
         onOpacityChange={onRouteOpacityChange}
         onVisibilityToggle={onRouteVisibilityToggle}
         onTraceWidthChange={onRouteTraceWidthChange}
-        onGpxQualityChange={onRouteQualityChange}
-        onGpxQualityExpertApply={onRouteQualityExpertApply}
+        onQualityChange={onRouteQualityChange}
       />
 
       <SlopesSection

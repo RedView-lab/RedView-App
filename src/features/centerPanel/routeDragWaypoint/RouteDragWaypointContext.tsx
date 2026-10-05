@@ -17,6 +17,7 @@ import {
 } from '@/features/itineraryPanel/components/ItineraryPanelContainer/timelineMutations';
 import { addItineraryVariantInPlace } from '@/features/itineraryPanel/lib/project';
 import { reverseGeocodeSettlement } from '@/features/itineraryPanel/lib/geocoding';
+import { DEFAULT_ROUTE_TRACE_WIDTH_PX } from '@/features/itineraryPanel/lib/route-layer/constants';
 import { translateAppText } from '@/shared/i18n';
 import { useRouteSplitToolOptional } from '../routeSplit';
 import { useTraceToolOptional } from '../tracer';
@@ -77,14 +78,14 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
   const activeItineraryIdRef = useRef(activeItinerary?.id);
   const routePointsRef = useRef(routePoints);
   const routeColorRef = useRef(activeItinerary?.color);
-  const routeTraceWidthRef = useRef(store?.project.controlPanel?.routes?.traceWidthPx ?? 8);
+  const routeTraceWidthRef = useRef(store?.project.controlPanel?.routes?.traceWidthPx ?? DEFAULT_ROUTE_TRACE_WIDTH_PX);
 
   useEffect(() => {
     storeRef.current = store;
     activeItineraryIdRef.current = activeItinerary?.id;
     routePointsRef.current = routePoints;
     routeColorRef.current = activeItinerary?.color;
-    routeTraceWidthRef.current = store?.project.controlPanel?.routes?.traceWidthPx ?? 8;
+    routeTraceWidthRef.current = store?.project.controlPanel?.routes?.traceWidthPx ?? DEFAULT_ROUTE_TRACE_WIDTH_PX;
   });
 
   const commitWaypoint = useCallback(

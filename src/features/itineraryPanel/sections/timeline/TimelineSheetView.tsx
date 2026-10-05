@@ -11,7 +11,7 @@
  * The component is fully stateless: selection / visibility / favorite /
  * sort all flow through callbacks.
  */
-import { useMemo, type MouseEventHandler } from 'react';
+import { useCallback, useMemo, type MouseEventHandler } from 'react';
 import type { PredictionResult } from '@/features/fitPredictor';
 import { useAppI18n } from '@/shared/i18n';
 import type { SportDiscipline } from '@/shared/lib/discipline';
@@ -45,6 +45,7 @@ import {
 import { SortIcon } from './sheet/SortIcon';
 import { TimelineSheetGridRow } from './sheet/TimelineSheetGridRow';
 import { useColumnWidths } from './sheet/useColumnWidths';
+import { useGridOverflowEdges } from './sheet/useGridOverflowEdges';
 
 interface TimelineSheetViewProps {
   items: TimelineItem[];
@@ -164,6 +165,12 @@ export function TimelineSheetView({
     bottomSpacerPx,
   } = useVirtualRows({ keys: rowKeys, estimateRowPx: 36, gapPx: 4 });
   const windowRows = sortedRows.slice(windowStart, windowEnd);
+  const gridTemplate = buildGridTemplate(visibleColumns, columnWidths);
+  const attachOverflowEdges = useGridOverflowEdges(gridTemplate);
+  const attachGrid = useCallback((grid: HTMLDivElement | null) => {
+    attachRowsRoot(grid);
+    attachOverflowEdges(grid);
+  }, [attachOverflowEdges, attachRowsRoot]);
   const cellExtras = useMemo<RenderCellExtras>(() => ({
     onSelectPlace,
     onMovePause,
@@ -279,8 +286,8 @@ export function TimelineSheetView({
       <div
         className="rvi-tl-table-grid"
         role="table"
-        ref={attachRowsRoot}
-        style={{ gridTemplateColumns: buildGridTemplate(visibleColumns, columnWidths) }}
+        ref={attachGrid}
+        style={{ gridTemplateColumns: gridTemplate }}
       >
         {/* ── Header row ─────────────────────────────────────────── */}
         <div className="rvi-tl-thead" role="row">
@@ -326,6 +333,7 @@ export function TimelineSheetView({
               </div>
             );
           })}
+          <div className="rvi-tl-th rvi-tl-th--filler" aria-hidden />
           <div className="rvi-tl-th rvi-tl-th--sticky-right rvi-tl-th--actions" role="columnheader" aria-hidden>
             <span className="rvi-tl-th__action-icon">
               <IconNiceManYellow size={15} />

@@ -4,6 +4,8 @@ import type { PoiCategory, PoiFeature } from '@/features/poi/types';
 import { PlaceSearchInput } from '@/features/itineraryPanel/sections/timeline/components';
 import type { GeocodeSuggestion } from '@/features/itineraryPanel/lib/geocoding';
 import { dispatchItineraryMapAction } from '@/features/itineraryPanel/lib/mapActionBridge';
+import { useProjectStoreOptional } from '@/features/itineraryPanel/context/ProjectStore';
+import { createDefaultAnalysisPanelState } from '@/features/itineraryPanel/lib/project/defaultState';
 import {
   buildPopupContent,
   resolvePopupState,
@@ -20,6 +22,7 @@ import { getSearchCameraProfile } from './DashboardPlaceSearch.camera';
 import {
   DASHBOARD_FILTER_OPTIONS,
   DASHBOARD_POI_OPTIONS,
+  DASHBOARD_POI_SOURCE_OPTIONS,
   PLACE_SEARCH_ICONS_WIDTH,
   PLACE_SEARCH_TIGHT_WIDTH,
   POI_MENU_CLOSE_MS,
@@ -29,11 +32,14 @@ import {
 } from './DashboardPlaceSearch.constants';
 import { IMMERSIVE_EASING, IMMERSIVE_TRANSITION_MS, PANEL_PADDING } from '../lib/constants';
 import {
+  FilterCheckbox,
   FilterChipIcon,
   PoiOptionMarker,
   SearchIcon,
+  SlopeSwatchIcon,
 } from './DashboardPlaceSearch.icons';
 import type {
+  DashboardFilterChipId,
   DashboardFilterId,
   DashboardPlaceSearchProps,
   DashboardPoiOptionId,
@@ -69,6 +75,7 @@ export function DashboardPlaceSearch({
   onCollapseLeftPanel,
 }: DashboardPlaceSearchProps) {
   const { t } = useAppI18n();
+  const projectStore = useProjectStoreOptional();
   const [proximity, setProximity] = useState<{ lon: number; lat: number } | undefined>(
     undefined,
   );
@@ -79,7 +86,7 @@ export function DashboardPlaceSearch({
   const poiFetchTimerRef = useRef<number | null>(null);
   const poiAbortRef = useRef<AbortController | null>(null);
   const poiMarkerRegistryRef = useRef<Map<string, ViewportPoiMarkerEntry>>(new Map());
-  const [openDropdownFilterId, setOpenDropdownFilterId] = useState<DashboardFilterId | null>(null);
+  const [openDropdownFilterId, setOpenDropdownFilterId] = useState<DashboardFilterChipId | null>(null);
   const [dropdownMounted, setDropdownMounted] = useState(false);
   const [internalSelectedPoiIds, setInternalSelectedPoiIds] = useState<Set<DashboardPoiOptionId>>(
     () => new Set(DASHBOARD_POI_OPTIONS.map((opt) => opt.id)),
@@ -96,7 +103,7 @@ export function DashboardPlaceSearch({
     setOpenDropdownFilterId(null);
   }, []);
 
-  const handleToggleDropdown = useCallback((filterId: DashboardFilterId) => {
+  const handleToggleDropdown = useCallback((filterId: DashboardFilterChipId) => {
     setDropdownMounted(true);
     setOpenDropdownFilterId((current) => (current === filterId ? null : filterId));
   }, []);
@@ -504,20 +511,20 @@ export function DashboardPlaceSearch({
     }
   }, [onSelectedPoiCategoriesChange, selectedPoiIds]);
 
-  const handleToggleFilter = useCallback(
-    (filterId: DashboardFilterId) => {
+  /** Allume ou éteint des filtres ; une source POI allumée sans catégorie les reprend toutes. */
+  const setFiltersEnabled = useCallback(
+    (filterIds: readonly DashboardFilterId[], enabled: boolean) => {
       const next = new Set(activeFilters);
-      if (next.has(filterId)) {
-        next.delete(filterId);
-      } else {
-        next.add(filterId);
-        if ((filterId === 'pois_map' || filterId === 'pois_route') && selectedPoiIds.size === 0) {
-          const allCategories = new Set(DASHBOARD_POI_OPTIONS.map((option) => option.id));
-          if (onSelectedPoiCategoriesChange) {
-            onSelectedPoiCategoriesChange(allCategories);
-          } else {
-            setInternalSelectedPoiIds(allCategories);
-          }
+      for (const filterId of filterIds) {
+        if (enabled) next.add(filterId);
+        else next.delete(filterId);
+      }
+      if (enabled && selectedPoiIds.size === 0 && filterIds.some((id) => id === 'pois_map' || id === 'pois_route')) {
+        const allCategories = new Set(DASHBOARD_POI_OPTIONS.map((option) => option.id));
+        if (onSelectedPoiCategoriesChange) {
+          onSelectedPoiCategoriesChange(allCategories);
+        } else {
+          setInternalSelectedPoiIds(allCategories);
         }
       }
       if (onFilterChange) {
@@ -529,10 +536,49 @@ export function DashboardPlaceSearch({
     [activeFilters, onFilterChange, onSelectedPoiCategoriesChange, selectedPoiIds],
   );
 
-  const isFilterActive = useCallback(
-    (filterId: DashboardFilterId) => activeFilters.has(filterId),
-    [activeFilters],
+  // « Alertes » et « Pente » : filtres d'analyse du projet (vue de l'utilisateur),
+  // partagés avec le graphique et le tracé de la carte.
+  const setProject = projectStore?.setProject;
+  const analysisFilters = {
+    ...createDefaultAnalysisPanelState().filters,
+    ...projectStore?.project.analysis?.filters,
+  };
+  const toggleAnalysisFilter = useCallback(
+    (key: 'alertes' | 'slopeColors') => {
+      setProject?.((prev) => {
+        const fallback = createDefaultAnalysisPanelState();
+        const analysis = prev.analysis ?? fallback;
+        const filters = { ...fallback.filters, ...analysis.filters };
+        return { ...prev, analysis: { ...analysis, filters: { ...filters, [key]: !filters[key] } } };
+      });
+    },
+    [setProject],
   );
+
+  const isChipActive = (chipId: DashboardFilterChipId): boolean => {
+    switch (chipId) {
+      case 'pois': return activeFilters.has('pois_route') || activeFilters.has('pois_map');
+      case 'alertes': return analysisFilters.alertes;
+      case 'pente': return analysisFilters.slopeColors;
+      default: return activeFilters.has(chipId);
+    }
+  };
+
+  const handleToggleChip = (chipId: DashboardFilterChipId) => {
+    switch (chipId) {
+      case 'pois':
+        setFiltersEnabled(['pois_route', 'pois_map'], !isChipActive('pois'));
+        return;
+      case 'alertes':
+        toggleAnalysisFilter('alertes');
+        return;
+      case 'pente':
+        toggleAnalysisFilter('slopeColors');
+        return;
+      default:
+        setFiltersEnabled([chipId], !activeFilters.has(chipId));
+    }
+  };
 
   const densityClassName =
     typeof maxWidth !== 'number' || maxWidth >= PLACE_SEARCH_TIGHT_WIDTH
@@ -587,7 +633,7 @@ export function DashboardPlaceSearch({
 
         <div className="rvd-place-search__filters">
           {DASHBOARD_FILTER_OPTIONS.map((filter) => {
-            const active = isFilterActive(filter.id);
+            const active = isChipActive(filter.id);
             const isMenuOpen = openDropdownFilterId === filter.id;
             const shellClassName = `rvd-place-search__filter${
               filter.hasDropdown ? ' rvd-place-search__filter--menu' : ''
@@ -601,18 +647,12 @@ export function DashboardPlaceSearch({
                     aria-pressed={active}
                     aria-label={t(filter.label)}
                     title={t(filter.label)}
-                    onClick={() => handleToggleFilter(filter.id)}
+                    onClick={() => handleToggleChip(filter.id)}
                   >
-                    <span
-                      className={`rvd-place-search__filter-checkbox${
-                        active ? ' is-checked' : ''
-                      }`}
-                      aria-hidden="true"
-                    >
-                      {active ? <SvgV2Icon name="check.svg" size={12} /> : null}
-                    </span>
+                    <FilterCheckbox checked={active} />
                     <span className="rvd-place-search__filter-marker">
-                      <FilterChipIcon name={filter.icon} />
+                      {filter.slopeSwatch ? <SlopeSwatchIcon /> : null}
+                      {filter.icon ? <FilterChipIcon name={filter.icon} /> : null}
                     </span>
                     <span className="rvd-place-search__filter-label" title={t(filter.label)}>{t(filter.label)}</span>
                   </button>
@@ -638,6 +678,23 @@ export function DashboardPlaceSearch({
                     role="menu"
                     aria-label={t('Catégories POI')}
                   >
+                    {DASHBOARD_POI_SOURCE_OPTIONS.map((source) => {
+                      const enabled = activeFilters.has(source.id);
+                      return (
+                        <button
+                          key={source.id}
+                          type="button"
+                          role="menuitemcheckbox"
+                          aria-checked={enabled}
+                          className="rv-dropdown__item rv-dropdown__item--no-check"
+                          onClick={() => setFiltersEnabled([source.id], !enabled)}
+                        >
+                          <FilterCheckbox checked={enabled} />
+                          <span className="rv-dropdown__label">{t(source.label)}</span>
+                        </button>
+                      );
+                    })}
+                    <div className="rv-dropdown__divider" />
                     <button
                       type="button"
                       role="menuitemcheckbox"

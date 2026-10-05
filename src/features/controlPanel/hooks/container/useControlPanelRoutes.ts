@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
-import { buildGpxQualityStats } from '@/features/itineraryPanel/lib/routes';
-import type { GpxQualityMode, RouteRenderMode as ItinRouteRenderMode } from '@/features/itineraryPanel/types';
+import type { RouteDisplayQuality, RouteRenderMode as ItinRouteRenderMode } from '@/features/itineraryPanel/types';
+import { DEFAULT_ROUTE_TRACE_WIDTH_PX } from '@/features/itineraryPanel/lib/route-layer/constants';
 import { DEFAULT_CONTROL_PANEL_STATE } from '../../lib/defaultState';
 import type { ControlPanelPersistedState } from '../../lib/persistedState';
 
@@ -33,39 +33,6 @@ export function useControlPanelRoutes({
     [projectItineraries],
   );
 
-  const activeItineraryId = projectStore?.project.activeItineraryId;
-  const activeItinerary = useMemo(
-    () => projectItineraries.find((it) => it.id === activeItineraryId) ?? null,
-    [projectItineraries, activeItineraryId],
-  );
-
-  const activeQualityRoute = useMemo(() => {
-    const route = activeItinerary?.gpxRoute;
-    return route && route.points.length >= 2 ? route : null;
-  }, [activeItinerary]);
-
-  const activeGpxQualityVisible = activeItinerary != null;
-  const activeGpxQualityAvailable = activeQualityRoute != null;
-  const activeGpxQuality = useMemo(
-    () => (activeGpxQualityVisible ? activeItinerary?.gpxRoute?.gpxQuality ?? 'default' : null),
-    [activeGpxQualityVisible, activeItinerary],
-  );
-  const activeGpxQualityPointsPerKm = useMemo(
-    () => (activeGpxQualityVisible ? activeItinerary?.gpxRoute?.gpxQualityPointsPerKm ?? null : null),
-    [activeGpxQualityVisible, activeItinerary],
-  );
-  const activeGpxQualityStats = useMemo(() => {
-    const route = activeQualityRoute;
-    if (!route) return null;
-    const basePoints = route.originalPoints ?? route.points;
-    return buildGpxQualityStats(
-      route.points,
-      basePoints,
-      (route.gpxQuality ?? 'default') as GpxQualityMode,
-      route.gpxQualityPointsPerKm,
-    );
-  }, [activeQualityRoute]);
-
   const routesTraceWidthPx =
     projectControlPanel?.routes?.traceWidthPx ?? DEFAULT_CONTROL_PANEL_STATE.routes.traceWidthPx;
 
@@ -73,10 +40,7 @@ export function useControlPanelRoutes({
     enabled: routesEnabled,
     items: routeItems,
     traceWidthPx: routesTraceWidthPx,
-    gpxQuality: activeGpxQuality,
-    gpxQualityAvailable: activeGpxQualityAvailable,
-    gpxQualityPointsPerKm: activeGpxQualityPointsPerKm,
-    gpxQualityStats: activeGpxQualityStats,
+    quality: projectControlPanel?.routes?.quality ?? 'auto',
   };
 
   const handlers = {
@@ -114,25 +78,25 @@ export function useControlPanelRoutes({
       (value: number) => {
         updateProjectControlPanel((draft) => {
           draft.routes = {
+            ...draft.routes,
             traceWidthPx: Math.max(1, Math.min(20, Math.round(value))),
           };
         });
       },
       [updateProjectControlPanel],
     ),
+    // Vue (par utilisateur) : ne réécrit jamais les points des itinéraires.
     onRouteQualityChange: useCallback(
-      (quality: GpxQualityMode) => {
-        if (!projectStore || !activeItineraryId) return;
-        projectStore.changeItineraryGpxQuality(activeItineraryId, quality);
+      (quality: RouteDisplayQuality) => {
+        updateProjectControlPanel((draft) => {
+          draft.routes = {
+            traceWidthPx: DEFAULT_ROUTE_TRACE_WIDTH_PX,
+            ...draft.routes,
+            quality,
+          };
+        });
       },
-      [activeItineraryId, projectStore],
-    ),
-    onRouteQualityExpertApply: useCallback(
-      (pointsPerKm: number) => {
-        if (!projectStore || !activeItineraryId) return;
-        projectStore.changeItineraryGpxQuality(activeItineraryId, 'expert', { pointsPerKm });
-      },
-      [activeItineraryId, projectStore],
+      [updateProjectControlPanel],
     ),
     onRouteVisibilityToggle: useCallback(
       (id: string) => {

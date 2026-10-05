@@ -5,6 +5,7 @@ import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import type { Itinerary } from '@/features/itineraryPanel';
 import { useAppI18n } from '@/shared/i18n';
 import { DEFAULT_VIEW } from '@/features/map3d/lib/mapbox.config';
+import { isThreeDPitch } from '@/features/map3d/lib/viewDimension';
 import {
   IconCompass,
   IconInfo,
@@ -132,7 +133,6 @@ function SurfacePatternPreview({ type, color = '#ff3b30' }: { type: SurfaceType;
 
 const CAMERA_DURATION_MS = 650;
 const ZOOM_DURATION_MS = 220;
-const THREE_D_PITCH_THRESHOLD = 8;
 
 function clampZoom(map: MapboxMap, delta: number) {
   const target = map.getZoom() + delta;
@@ -152,7 +152,7 @@ export const MapViewportControls = memo(function MapViewportControls({
 }: MapViewportControlsProps) {
   const { t } = useAppI18n();
   const [bearing, setBearing] = useState(0);
-  const [is3DView, setIs3DView] = useState(DEFAULT_VIEW.pitch > THREE_D_PITCH_THRESHOLD);
+  const [is3DView, setIs3DView] = useState(isThreeDPitch(DEFAULT_VIEW.pitch));
   const [isLegendOpen, setIsLegendOpen] = useState(false);
   const [activeLegendTab, setActiveLegendTab] = useState<'surfaces' | 'slopes'>('surfaces');
 
@@ -220,7 +220,7 @@ export const MapViewportControls = memo(function MapViewportControls({
   useEffect(() => {
     if (!map) {
       setBearing(0);
-      setIs3DView(DEFAULT_VIEW.pitch > THREE_D_PITCH_THRESHOLD);
+      setIs3DView(isThreeDPitch(DEFAULT_VIEW.pitch));
       return;
     }
 
@@ -229,14 +229,14 @@ export const MapViewportControls = memo(function MapViewportControls({
       if (compassNeedleRef.current) {
         compassNeedleRef.current.style.transform = `rotate(${-b}deg)`;
       }
-      const next3D = map.getPitch() > THREE_D_PITCH_THRESHOLD;
+      const next3D = isThreeDPitch(map.getPitch());
       setIs3DView((prev) => (prev !== next3D ? next3D : prev));
     };
 
     const syncCameraState = () => {
       const b = map.getBearing();
       setBearing(b);
-      const next3D = map.getPitch() > THREE_D_PITCH_THRESHOLD;
+      const next3D = isThreeDPitch(map.getPitch());
       setIs3DView((prev) => (prev !== next3D ? next3D : prev));
       if (compassNeedleRef.current) {
         compassNeedleRef.current.style.transform = `rotate(${-b}deg)`;
@@ -304,7 +304,7 @@ export const MapViewportControls = memo(function MapViewportControls({
   const handleToggleDimension = () => {
     if (!map) return;
 
-    if (map.getPitch() > THREE_D_PITCH_THRESHOLD) {
+    if (isThreeDPitch(map.getPitch())) {
       map.easeTo({
         pitch: 0,
         bearing: 0,
