@@ -87,6 +87,23 @@ async function reloadPage(page) {
   await page.send('Page.reload', {});
   await waitFor(page, `!window.__rvBeforeReload`, { timeout: 60_000 });
 }
+/**
+ * Premier éditeur ouvert dans un contexte neuf : le Service Worker des tuiles
+ * s'installe puis recharge la page une fois (`map cache epoch changed`, au plus
+ * 2,5 s après son enregistrement, map3d/hooks/useMap/serviceWorker.ts). Une
+ * modification faite avant ce rechargement serait perdue : on l'attend (ou
+ * son absence), puis l'éditeur rouvert (`ready` : condition complète).
+ */
+async function settleFirstEditorLoad(page, ready = EDITOR_READY) {
+  const deadline = Date.now() + 8_000;
+  while (Date.now() < deadline) {
+    const reloaded = await page.evaluate(`sessionStorage.getItem('redview:map-cache-auto-reload') !== null`).catch(() => false);
+    if (reloaded) break;
+    await sleep(250);
+  }
+  await waitFor(page, ready, { timeout: 120_000 });
+  await sleep(1_000);
+}
 const click = (selector) => `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return false; el.click(); return true; })()`;
 const clickButton = (pattern) => `(() => { const b = [...document.querySelectorAll('button')].find((x) => ${pattern}.test(x.textContent || x.getAttribute('aria-label') || '')); if (!b) return false; b.click(); return true; })()`;
 const setInput = (selector, value) => `(() => {
@@ -280,7 +297,7 @@ try {
   // ── A crée un projet et trace un itinéraire ────────────────────────────
   await A.evaluate(clickButton('/Créer un projet|Create a project/'));
   await waitFor(A, `!!document.querySelector('.mapboxgl-canvas') && !!window.__rvStore?.()`, { timeout: 120_000 });
-  await sleep(1500);
+  await settleFirstEditorLoad(A);
   projectId = (await A.evaluate('location.pathname')).split('--').pop();
   note('projet', projectId);
   const projectName = `Test co-édition ${new Date().toISOString().slice(0, 16)}`;
@@ -321,6 +338,7 @@ try {
   check(opened, 'B : carte du projet partagé trouvée');
   await waitFor(B, `${EDITOR_READY} && ${SESSION_ONLINE}`, { timeout: 120_000 });
   note('ouverture du projet partagé par B (ms)', Date.now() - openStart);
+  await settleFirstEditorLoad(B, `${EDITOR_READY} && ${SESSION_ONLINE}`);
   await waitFor(B, store('(s.project.itineraries[0]?.gpxRoute?.points?.length ?? 0) > 10'), { timeout: 30_000 });
   check(out.brouter.B.length === 0, `B à l'ouverture : aucun appel BRouter (${out.brouter.B.length})`);
   check(await B.evaluate(store(`s.project.name === ${JSON.stringify(projectName)}`)), 'B voit le projet de A (nom, itinéraire, tracé)');
