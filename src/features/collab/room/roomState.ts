@@ -18,7 +18,8 @@ import { serializeStore } from '../protocol';
  *  - chaque lot accepté reçoit le numéro de séquence suivant (ordre unique
  *    pour tous) ; un lot renvoyé après une reconnexion (même client, même
  *    numéro de lot) n'est jamais appliqué deux fois ;
- *  - un lot invalide est refusé en entier (model/validate.ts) ;
+ *  - un lot invalide est refusé en entier (model/validate.ts), y compris
+ *    une écriture sur le commentaire d'un autre (model/commentRules.ts) ;
  *  - l'auteur de la dernière modification de chaque champ d'itinéraire est
  *    connu : c'est lui qui calcule les résultats dérivés (baux, cf. leases).
  */
@@ -93,7 +94,7 @@ export class RoomState {
   applyClientBatch(input: ClientBatchInput, userId: string, now: number): BatchOutcome {
     const last = this.lastClientSeq.get(input.clientId) ?? 0;
     if (input.clientSeq <= last) return { kind: 'duplicate' };
-    const check = checkBatch(this.store, input.ops, input.blobs);
+    const check = checkBatch(this.store, input.ops, input.blobs, { userId });
     if (!check.ok) return { kind: 'rejected', reason: check.reason, missingBlobs: check.missingBlobs };
     for (const [id, json] of Object.entries(input.blobs)) this.store.putBlob(id, json);
     this.recordAuthors(check.ops, { clientId: input.clientId, userId, at: now });

@@ -34,6 +34,10 @@ import type { ProjectDocument } from '@/features/itineraryPanel/lib/project/laye
  * | ├ fichiers .fit                         | liste par chemin               |
  * | ├ tracé                                 | segments adressés par contenu  |
  * | └ métriques, prédiction, POI, audit     | atomique (résultats dérivés)   |
+ * | commentaires (fils)                     | liste par id, champ par champ  |
+ * | ├ ancre, zone, point de vue             | atomique (par champ)           |
+ * | └ messages                              | liste par id, champ par champ  |
+ * |   └ réactions                           | clé par clé (une par auteur)   |
  *
  * Un champ absent du modèle est atomique : un nouveau champ du document
  * voyage sans rien changer ici.
@@ -108,8 +112,19 @@ export const ITINERARY_SPEC: RecordSpec = { kind: 'record', other: ATOMIC, field
 
 type ProjectFieldSpecs = Partial<Record<keyof ProjectDocument, MergeSpec>>;
 
+/** Message d'un fil : chaque réaction (`${emoji}~${userId}`) est sa propre propriété. */
+const COMMENT_MESSAGE_SPEC: RecordSpec = { kind: 'record', other: ATOMIC, fields: { reactions: SETTINGS } };
+
+/** Fil de commentaires : ses messages sont une liste (deux réponses simultanées sont gardées). */
+export const COMMENT_THREAD_SPEC: RecordSpec = {
+  kind: 'record',
+  other: ATOMIC,
+  fields: { messages: list(byId, COMMENT_MESSAGE_SPEC) },
+};
+
 const PROJECT_FIELDS: ProjectFieldSpecs = {
   itineraries: list(byId, ITINERARY_SPEC),
+  comments: list(byId, COMMENT_THREAD_SPEC),
 };
 
 /** Racine du document partagé. */

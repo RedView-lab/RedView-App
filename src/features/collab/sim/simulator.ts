@@ -16,7 +16,7 @@ import {
 } from '../protocol';
 import { Room, type RoomPeer } from '../room/room';
 import { RoomState } from '../room/roomState';
-import { incrementCounter, randomEdit, readCounter, sampleDocument } from './fixtures';
+import { incrementCounter, randomEdit, readCounter, sampleDocument, simUserId } from './fixtures';
 import { Scheduler, seededRandom } from './scheduler';
 
 /**
@@ -104,7 +104,7 @@ class SimConnection {
     this.client = client;
     this.peer = {
       clientId: client.id,
-      userId: `user-${client.id}`,
+      userId: simUserId(client.id),
       send: (message) => this.toClient(message),
     };
   }

@@ -221,6 +221,30 @@ describe('document à plat', () => {
     expect(materializeJson(partial)).toBe(JSON.stringify(new Materializer().materialize(partial)));
   });
 
+  it('fils de commentaires : aller-retour, réactions clé par clé, JSON identique', () => {
+    const message = (id: string, authorId: string, extra = {}) => ({ id, authorId, authorName: authorId, text: `Texte ${id}`, createdAt: '2026-10-05T10:00:00.000Z', ...extra });
+    const source = {
+      ...doc(10),
+      comments: [
+        {
+          id: 'cm-1', anchor: { lng: 6.87, lat: 45.92, elevationM: 1035.5 }, createdBy: 'u-a', createdAt: '2026-10-05T10:00:00.000Z',
+          zone: { ring: [[6.8, 45.9], [6.9, 45.9], [6.9, 46]] }, camera: { zoom: 13, pitch: 60, bearing: -20 },
+          messages: [message('m-1', 'u-a', { reactions: { '👍~u-b': true, '❤️~u-a': true } }), message('m-2', 'u-b', { mentions: ['u-a'] })],
+        },
+        { id: 'cm-2', anchor: { lng: 6.9, lat: 45.95, elevationM: null }, createdBy: 'u-b', createdAt: 't', resolvedAt: 't2', resolvedBy: 'u-a', messages: [message('m-3', 'u-b')] },
+      ],
+    } as ProjectDocument;
+    const store = build(source);
+    expect(same(new Materializer().materialize(store), source)).toBe(true);
+    expect(materializeJson(store)).toBe(JSON.stringify(new Materializer().materialize(store)));
+    const messageObject = store.get(childObjectId(childObjectId('p', 'comments', 'cm-1'), 'messages', 'm-1'))!;
+    expect([...messageObject.props.keys()].filter((key) => key.startsWith('reactions.'))).toHaveLength(2);
+    // Dernier fil supprimé : le champ disparaît du document.
+    const ops = change(store, source, { ...source, comments: undefined } as ProjectDocument);
+    expect(ops.every((op) => op.t === 'd')).toBe(true);
+    expect(new Materializer().materialize(store).comments).toBeUndefined();
+  });
+
   it('même élément créé deux fois (deux éditeurs) : fusion des propriétés', () => {
     const store = build(doc(10));
     const id = childObjectId(itineraryObjectId('it-1'), 'timeline', 'poi-42');

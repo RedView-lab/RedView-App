@@ -19,7 +19,7 @@ import { deepEqual } from './deepEqual';
  *  - la **vue** (`ProjectViewState`) : propre à chaque utilisateur —
  *    itinéraire et mode actifs, feuille de route, panneau de droite, graphe,
  *    panneaux et vue carte, affichage de chaque itinéraire (œil, rendu,
- *    opacité). Stockée à part (`project_views`, cf. projectViews.ts) : la
+ *    opacité), lu / non lu des commentaires. Stockée à part (`project_views`, cf. projectViews.ts) : la
  *    modifier ne crée jamais de version du document, donc jamais de conflit.
  *  - le **travail local** (`ProjectLocalWork`) : éditions en attente de
  *    routage / de prédiction sur cet appareil (`pending*`). Jamais partagé :
@@ -41,6 +41,7 @@ export const PROJECT_VIEW_KEYS = [
   'controlPanel',
   'analysis',
   'dashboard',
+  'commentsView',
 ] as const satisfies readonly (keyof ItineraryProject)[];
 
 /** Champs d'un itinéraire propres à chaque utilisateur (affichage). */

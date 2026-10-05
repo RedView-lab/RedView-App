@@ -21,7 +21,11 @@ import type { Op } from './model/ops';
  *     s'arrête avant de les écrire, il les renvoie à la reconnexion
  *     (`welcome.clientSeq` dit lesquels le serveur a déjà).
  */
-export const PROTOCOL_VERSION = 1;
+/**
+ * 2 : fils de commentaires dans le document (`p/comments:*`, schema.ts) ; un
+ * client de la version 1 les réécrirait en valeur atomique.
+ */
+export const PROTOCOL_VERSION = 2;
 
 /** Lot numéroté par le serveur (diffusé à tous ; pour son émetteur, c'est l'acquittement). */
 export interface SequencedBatch {

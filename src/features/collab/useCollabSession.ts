@@ -26,20 +26,38 @@ import { multiplayerSocketUrl } from './queries/multiplayerHealth';
  * Développement : `?collab=server` dans l'URL (gardé pour l'onglet) ou
  * `localStorage['redview:dev-collab'] = 'server'` ouvre une session pour
  * n'importe quel projet (serveur local lancé par `npm run dev`, projet créé
- * côté serveur à partir du document de ce client).
+ * côté serveur à partir du document de ce client). `?devUser=<id>` (gardé
+ * pour l'onglet) fait de l'onglet un autre utilisateur du serveur de dev
+ * (jeton `dev:<id>`, auteur des commentaires) : deux onglets, deux personnes.
  */
 const DEV_COLLAB_KEY = 'redview:dev-collab';
 const DEV_COLLAB_VALUE = 'server';
+const DEV_USER_KEY = 'redview:dev-user';
+/** Ids acceptés par l'authentification de dev du serveur (server/multiplayer/auth.ts). */
+const DEV_USER_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
 function readUrlFlag(): void {
   if (!import.meta.env.DEV || typeof window === 'undefined') return;
   try {
-    const param = new URLSearchParams(window.location.search).get('collab');
-    if (param === null) return;
+    const params = new URLSearchParams(window.location.search);
+    const param = params.get('collab');
     if (param === DEV_COLLAB_VALUE) window.sessionStorage.setItem(DEV_COLLAB_KEY, DEV_COLLAB_VALUE);
-    else window.sessionStorage.removeItem(DEV_COLLAB_KEY);
+    else if (param !== null) window.sessionStorage.removeItem(DEV_COLLAB_KEY);
+    const devUser = params.get('devUser');
+    if (devUser && DEV_USER_PATTERN.test(devUser)) window.sessionStorage.setItem(DEV_USER_KEY, devUser);
+    else if (devUser !== null) window.sessionStorage.removeItem(DEV_USER_KEY);
   } catch {
     // stockage indisponible : réglage ignoré
+  }
+}
+
+/** Développement sans session Appwrite : utilisateur de l'onglet (`?devUser=<id>`), sinon null. */
+export function devTabUserId(): string | null {
+  if (!import.meta.env.DEV || typeof window === 'undefined') return null;
+  try {
+    return window.sessionStorage.getItem(DEV_USER_KEY);
+  } catch {
+    return null;
   }
 }
 
@@ -56,13 +74,18 @@ function isDevCollabForced(): boolean {
   }
 }
 
-const DEV_USER_ID = 'dev-user-001';
+/**
+ * Utilisateur des jetons de développement sans session Appwrite (compte démo) :
+ * aussi l'auteur des commentaires dans ce cas (features/comments), pour que le
+ * serveur de dev reconnaisse ses fils.
+ */
+export const DEV_USER_ID = 'dev-user-001';
 
 /** JWT Appwrite ; en développement sans session (compte démo), jeton de dev. */
 async function sessionToken(): Promise<string> {
   const jwt = await getAppwriteJwt();
   if (jwt) return jwt;
-  if (import.meta.env.DEV) return `dev:${getSessionUserIdSync() ?? DEV_USER_ID}`;
+  if (import.meta.env.DEV) return `dev:${getSessionUserIdSync() ?? devTabUserId() ?? DEV_USER_ID}`;
   throw new Error('session Appwrite requise pour la co-édition');
 }
 
@@ -121,12 +144,12 @@ export function useCollabSession(
       const created = await Session.start({
         url: multiplayerSocketUrl(),
         projectId,
-        userId: getSessionUserIdSync() ?? DEV_USER_ID,
+        userId: getSessionUserIdSync() ?? devTabUserId() ?? DEV_USER_ID,
         getToken: sessionToken,
         // Nom affiché aux autres éditeurs (pastilles de l'en-tête).
         presence: () => {
           const user = readStoredAppwriteSession()?.user;
-          return { name: user?.name || user?.email || undefined };
+          return { name: user?.name || user?.email || devTabUserId() || undefined };
         },
         seed: import.meta.env.DEV
           ? () => toProjectDocument(getSnapshotRef.current() ?? createDefaultProject())

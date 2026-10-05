@@ -1,5 +1,6 @@
 import type { ControlPanelPersistedState } from '../../controlPanel/lib/persistedState';
 import type { AnalysisPanelState } from './analysis';
+import type { ProjectCommentsView, ProjectCommentThread } from './comments';
 import type { Itinerary } from './itinerary';
 import type { SavedCustomProfile } from './routing';
 import type { TimelineView } from './timeline';
@@ -35,6 +36,13 @@ export interface ItineraryProject {
    * chaque sauvegarde. Absent quand aucun profil perso n'est utilisé.
    */
   routingProfiles?: SavedCustomProfile[];
+  /**
+   * Document : fils de commentaires posés sur la carte (features/comments).
+   * Absent tant qu'aucun commentaire n'a été posé.
+   */
+  comments?: ProjectCommentThread[];
+  /** Vue : lu / non lu des fils, bulles masquées, tri et filtres de la liste. */
+  commentsView?: ProjectCommentsView;
   /** Vue : itinéraire sélectionné. */
   activeItineraryId: string;
   /** Vue : mode du panneau itinéraire. */

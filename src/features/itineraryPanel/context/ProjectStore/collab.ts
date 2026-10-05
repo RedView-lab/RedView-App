@@ -61,7 +61,12 @@ export type CollabLocalChange =
   /** Action de l'utilisateur formant à elle seule une étape d'annulation. */
   | 'step'
   /** Résultat calculé (routage, altimétrie, POI, prédiction) : rattaché à l'action qui l'a provoqué. */
-  | 'background';
+  | 'background'
+  /**
+   * Commentaire (features/comments) : envoyé même avant le premier état du
+   * serveur, jamais une étape d'annulation (comme chez Figma).
+   */
+  | 'comment';
 
 /** Écriture faite avant le branchement à la session (rejouée par `bind`). */
 export interface PreSessionChange {

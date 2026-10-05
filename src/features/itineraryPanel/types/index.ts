@@ -14,4 +14,5 @@ export * from './rhythm';
 export * from './timeline';
 export * from './itinerary';
 export * from './project';
+export * from './comments';
 export * from './panelProps';

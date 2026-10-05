@@ -1,5 +1,6 @@
+import { applyCommentAction, COMMENT_REACTIONS, type CommentAction } from '@/features/comments/lib/commentActions';
 import type { ProjectDocument } from '@/features/itineraryPanel/lib/project/layers';
-import type { Itinerary } from '@/features/itineraryPanel/types';
+import type { Itinerary, ProjectCommentThread } from '@/features/itineraryPanel/types';
 
 /**
  * Documents de test et modifications aléatoires « comme dans l'application »
@@ -68,7 +69,7 @@ export function sampleDocument(routeSize = 1_500): ProjectDocument {
 }
 
 type Random = () => number;
-type Edit = { document: ProjectDocument; change: 'user' | 'step' | 'background' } | null;
+type Edit = { document: ProjectDocument; change: 'user' | 'step' | 'background' | 'comment' } | null;
 
 const pick = <T>(random: Random, items: readonly T[]): T => items[Math.floor(random() * items.length)];
 
@@ -106,8 +107,61 @@ export function readCounter(document: ProjectDocument, clientId: string): number
   return ((counters?.steepAlertOverrides ?? {}) as Record<string, { count?: number }>)[clientId]?.count ?? 0;
 }
 
+/** Auteur des commentaires d'un client du simulateur (son utilisateur côté serveur). */
+export function simUserId(clientId: string): string {
+  return `user-${clientId}`;
+}
+
+/**
+ * Action de commentaire au hasard, par le réducteur de l'app (mêmes droits que
+ * le serveur : aucune ne doit être refusée, sinon le lot entier — et le
+ * compteur qu'il porte peut-être — serait perdu).
+ */
+function randomCommentEdit(document: ProjectDocument, random: Random, clientId: string, n: number): Edit {
+  const me = { userId: simUserId(clientId), name: clientId };
+  const threads: readonly ProjectCommentThread[] = document.comments ?? [];
+  const at = new Date(Date.UTC(2026, 9, 5, 10, 0, n % 3_600)).toISOString();
+  const roll = random();
+  let action: CommentAction;
+  if (threads.length === 0 || roll < 0.25) {
+    const lng = 6.8 + random() * 0.2;
+    const lat = 45.8 + random() * 0.2;
+    action = {
+      type: 'create-thread', threadId: `cm-${clientId}-${n}`, messageId: `msg-${clientId}-${n}`,
+      anchor: { lng, lat, elevationM: 1000 + n }, text: `Fil ${clientId} ${n}`, at,
+      ...(random() < 0.3 ? { zone: { ring: [[lng, lat], [lng + 0.01, lat], [lng + 0.01, lat + 0.01]] as Array<[number, number]> } } : {}),
+    };
+  } else {
+    const thread = pick(random, threads);
+    const own = thread.messages.filter((message) => message.authorId === me.userId);
+    const message = pick(random, thread.messages);
+    if (roll < 0.5) {
+      action = { type: 'reply', threadId: thread.id, messageId: `msg-${clientId}-${n}`, text: `Réponse ${n}`, at };
+    } else if (roll < 0.6) {
+      action = { type: 'set-resolved', threadId: thread.id, resolved: thread.resolvedAt === undefined, at };
+    } else if (roll < 0.72) {
+      action = { type: 'toggle-reaction', threadId: thread.id, messageId: message.id, emoji: pick(random, COMMENT_REACTIONS.slice(0, 3)) };
+    } else if (roll < 0.82 && own.length > 0) {
+      action = { type: 'edit-message', threadId: thread.id, messageId: pick(random, own).id, text: `Modifié ${n}`, at };
+    } else if (roll < 0.9 && own.length > 0) {
+      action = { type: 'delete-message', threadId: thread.id, messageId: pick(random, own).id };
+    } else if (thread.createdBy === me.userId) {
+      action = { type: 'move-thread', threadId: thread.id, anchor: { ...thread.anchor, lng: thread.anchor.lng + 0.001 } };
+    } else {
+      action = { type: 'reply', threadId: thread.id, messageId: `msg-${clientId}-${n}`, text: `Réponse ${n}`, at };
+    }
+  }
+  const comments = applyCommentAction(threads, action, me);
+  if (!comments) return null;
+  const next = { ...document };
+  if (comments.length > 0) next.comments = [...comments];
+  else delete next.comments;
+  return { document: next, change: 'comment' };
+}
+
 /** Modification aléatoire de `document` par `clientId` (n-ième de ce client). */
 export function randomEdit(document: ProjectDocument, random: Random, clientId: string, n: number): Edit {
+  if (random() < 0.15) return randomCommentEdit(document, random, clientId, n);
   const list = editable(document);
   const roll = random();
   if (list.length === 0 || roll < 0.03) {

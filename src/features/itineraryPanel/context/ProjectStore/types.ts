@@ -4,6 +4,7 @@ import type {
   Itinerary,
   ItineraryForbiddenZone,
   ItineraryProject,
+  ProjectCommentThread,
   RouteRenderMode,
 } from '../../types';
 import type { MergeItineraryConnectorSegment, MergeItineraryProjectResult, SplitItineraryProjectResult } from '../../lib/project';
@@ -65,6 +66,13 @@ export interface ProjectStoreValue {
   commitTraceMutation: (
     itineraryId: string,
     mutate: (draft: ItineraryProject) => boolean | void,
+  ) => boolean;
+  /**
+   * Écrit les fils de commentaires (`update` rend les suivants, ou null : rien
+   * à écrire). Hors historique : annuler ne touche jamais aux commentaires.
+   */
+  commitComments: (
+    update: (comments: readonly ProjectCommentThread[]) => readonly ProjectCommentThread[] | null,
   ) => boolean;
   rollbackPendingTraceAppend: (itineraryId: string) => boolean;
   addItinerary: (overrides?: Partial<Itinerary>) => string | null;

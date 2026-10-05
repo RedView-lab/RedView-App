@@ -278,6 +278,7 @@ export class CollabClient implements ProjectCollabLink {
   /**
    * Avant le premier état du serveur, un résultat calculé (tracé, altimétrie…)
    * l'a été sur le document d'ouverture, peut-être en retard : il reste local.
+   * Un commentaire part toujours (c'est une action de l'utilisateur).
    */
   private isSendable(change: CollabLocalChange): boolean {
     return this.engine.isReady || change !== 'background';

@@ -8,6 +8,7 @@ import { WebSocket } from 'ws';
 import { canonicalJson } from '../../src/features/itineraryPanel/lib/project/canonicalJson.ts';
 import type { ProjectDocument } from '../../src/features/itineraryPanel/lib/project/layers.ts';
 import type { Itinerary } from '../../src/features/itineraryPanel/types/index.ts';
+import { applyCommentAction, type CommentAction } from '../../src/features/comments/lib/commentActions.ts';
 import { CollabConnection } from '../../src/features/collab/client/connection.ts';
 import { PROTOCOL_VERSION } from '../../src/features/collab/protocol.ts';
 import { sampleDocument } from '../../src/features/collab/sim/fixtures.ts';
@@ -37,6 +38,8 @@ async function start(): Promise<void> {
   port = await server.listen(port);
 }
 
+const rejections: string[] = [];
+
 function createConnection(user: string, seed?: ProjectDocument): CollabConnection {
   const connection = new CollabConnection({
     url: `ws://127.0.0.1:${port}/multiplayer`,
@@ -44,6 +47,7 @@ function createConnection(user: string, seed?: ProjectDocument): CollabConnectio
     getToken: async () => `dev:${user}`,
     seed: () => seed,
     WebSocketImpl: WebSocket as unknown as typeof globalThis.WebSocket,
+    onRejection: (rejection) => rejections.push(`${user}:${rejection.reason}`),
   });
   connections.push(connection);
   return connection;
@@ -95,6 +99,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  rejections.length = 0;
   for (const connection of connections.splice(0)) connection.stop();
   await server?.shutdown();
   server = null;
@@ -162,6 +167,33 @@ describe('serveur temps réel', () => {
     await waitFor(() => itinerary(b, 'it-1').name === 'Alice' && itinerary(a, 'it-2').color === '#3d8bff', 'convergence');
     expect(json(a)).toBe(json(b));
     await waitFor(() => a.client.getState().peers.length === 2, 'présence');
+  });
+
+  it('commentaires : fil et réponse croisés, écriture sur le message d’un autre refusée', async () => {
+    const a = connect('alice', sampleDocument(200));
+    await waitFor(() => a.client.getState().ready, 'a prêt');
+    const b = connect('bob');
+    await waitFor(() => b.client.getState().ready, 'b prêt');
+    const act = (connection: CollabConnection, user: string, action: CommentAction) => {
+      const document = connection.client.getDocument();
+      const comments = applyCommentAction(document.comments ?? [], action, { userId: user, name: user })!;
+      connection.client.pushLocalDocument({ ...document, comments: [...comments] }, 'comment');
+    };
+    act(a, 'alice', { type: 'create-thread', threadId: 'cm-1', messageId: 'm-1', anchor: { lng: 6.87, lat: 45.92, elevationM: 1000 }, text: 'Col fermé', at: 't0' });
+    await waitFor(() => b.client.getDocument().comments?.length === 1, 'fil reçu par B');
+    act(b, 'bob', { type: 'reply', threadId: 'cm-1', messageId: 'm-2', text: 'Merci !', at: 't1' });
+    await waitFor(() => a.client.getDocument().comments?.[0].messages.length === 2, 'réponse reçue par A');
+
+    // Client modifié : B réécrit le message de A.
+    const forged = b.client.getDocument();
+    b.client.pushLocalDocument({
+      ...forged,
+      comments: forged.comments!.map((thread) => ({ ...thread, messages: thread.messages.map((message) => ({ ...message, text: 'Réécrit' })) })),
+    }, 'comment');
+    await waitFor(() => rejections.includes('bob:comment-not-author'), 'lot refusé');
+    await waitFor(() => b.client.getDocument().comments![0].messages[0].text === 'Col fermé', 'B revient à l’état du serveur');
+    expect(a.client.getDocument().comments![0].messages.map((message) => message.text)).toEqual(['Col fermé', 'Merci !']);
+    expect(json(a)).toBe(json(b));
   });
 
   it('redémarrage du serveur en pleine édition : rien n’est perdu', async () => {

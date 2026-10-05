@@ -34,7 +34,7 @@ import { diffHistoryDocument, shareProjectStructure } from './historyDocument';
 import { useTraceHistory, type HistoryWriteSource } from './useTraceHistory';
 import { useItineraryCrudActions } from './useItineraryCrudActions';
 import { useItineraryGpxActions } from './useItineraryGpxActions';
-import type { ItineraryProject } from '../../types';
+import type { ItineraryProject, ProjectCommentThread } from '../../types';
 import type {
   ProjectProviderProps,
   ProjectStoreValue,
@@ -167,7 +167,7 @@ export function ProjectProvider({
    * perdrait les rendus en cache.
    */
   const writeProject = useCallback(
-    (next: ItineraryProject, alreadyNormalized: boolean, source: HistoryWriteSource | 'remote') => {
+    (next: ItineraryProject, alreadyNormalized: boolean, source: HistoryWriteSource | 'remote' | 'comment') => {
       const prev = projectRef.current;
       const prepared = prepareProject(prev, next, alreadyNormalized);
       if (prepared === prev) return false;
@@ -238,6 +238,27 @@ export function ProjectProvider({
           : action;
       if (next === prev) return;
       writeProject(next, false, 'background');
+    },
+    [writeProject],
+  );
+
+  /**
+   * Canal des commentaires (features/comments) : `update` reçoit les fils
+   * courants et rend les suivants (null ou les mêmes : rien à écrire). Jamais
+   * dans l'historique (annuler ne touche pas aux commentaires, comme chez
+   * Figma) ; dans une session, envoyé même avant le premier état du serveur.
+   */
+  const commitComments = useCallback(
+    (update: (comments: readonly ProjectCommentThread[]) => readonly ProjectCommentThread[] | null) => {
+      const prev = projectRef.current;
+      const current = prev.comments ?? [];
+      const next = update(current);
+      if (!next || next === current) return false;
+      const project: ItineraryProject = { ...prev };
+      if (next.length > 0) project.comments = [...next];
+      else delete project.comments;
+      // Seuls les fils changent : l'état courant est déjà normalisé.
+      return writeProject(project, true, 'comment');
     },
     [writeProject],
   );
@@ -351,6 +372,7 @@ export function ProjectProvider({
       derivedComputeGate,
       collabActive: collab !== null,
       commitTraceMutation,
+      commitComments,
       rollbackPendingTraceAppend,
       addItinerary,
       updateItinerary,
@@ -381,6 +403,7 @@ export function ProjectProvider({
       cleanItineraryGpxGlitches,
       clearItineraryRoute,
       collab,
+      commitComments,
       commitTraceMutation,
       derivedComputeGate,
       duplicateItinerary,

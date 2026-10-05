@@ -4,6 +4,8 @@ import { canonicalJson } from '@/features/itineraryPanel/lib/project/canonicalJs
 import type { ProjectDocument } from '@/features/itineraryPanel/lib/project/layers';
 import type { Itinerary } from '@/features/itineraryPanel/types';
 
+import { applyCommentAction } from '@/features/comments/lib/commentActions';
+
 import { CollabClient } from './client/collabClient';
 import type { UnsyncedBatch } from './client/syncEngine';
 import { diffDocument } from './model/diff';
@@ -464,6 +466,53 @@ describe('connexion lente, branchement, onglet rechargé', () => {
     a.client.denied('not-found');
     a.client.disconnected(false);
     expect(a.client.getState()).toMatchObject({ status: 'denied', deniedReason: 'not-found' });
+  });
+});
+
+function withThread(document: ProjectDocument, userId: string, id: string, text: string): ProjectDocument {
+  const comments = applyCommentAction(document.comments ?? [], {
+    type: 'create-thread', threadId: id, messageId: `${id}-m`, anchor: { lng: 6.87, lat: 45.92, elevationM: null }, text, at: '2026-10-05T10:00:00.000Z',
+  }, { userId, name: userId })!;
+  return { ...document, comments: [...comments] };
+}
+
+describe('commentaires', () => {
+  it('jamais dans annuler : annuler défait l’action d’avant, le commentaire reste', () => {
+    const { clients: [a, b], settle } = directSetup(['a', 'b']);
+    a.pushLocalDocument(mapIt(a.getDocument(), 'it-1', (it) => ({ ...it, name: 'Renommé' })), 'step');
+    a.pushLocalDocument(withThread(a.getDocument(), 'u-a', 'cm-1', 'Col fermé'), 'comment');
+    settle();
+    expect(b.getDocument().comments?.[0].messages[0].text).toBe('Col fermé');
+    a.undo();
+    settle();
+    expect((b.getDocument().itineraries[1] as Itinerary).name).toBe('Principal');
+    expect(b.getDocument().comments).toHaveLength(1);
+    expect(a.canUndo()).toBe(false);
+  });
+
+  it('posé pendant la connexion (et avant le branchement) : envoyé, jamais perdu au premier état', () => {
+    const { room, make } = manualSetup();
+    const cloud = room.state.document();
+    const b = make('b');
+    b.client.bind(cloud, [{ document: withThread(cloud, 'u-b', 'cm-avant', 'Avant le branchement'), change: 'comment' }]);
+    b.client.pushLocalDocument(withThread(b.client.getDocument(), 'u-b', 'cm-pendant', 'Pendant la connexion'), 'comment');
+    b.join();
+    settleAll(b);
+    expect(room.state.document().comments?.map((thread) => thread.id)).toEqual(['cm-avant', 'cm-pendant']);
+  });
+
+  it('écrire sur le commentaire d’un autre : lot refusé par le serveur, la valeur de l’auteur reste', () => {
+    const { clients: [a, b], settle } = directSetup(['a', 'b']);
+    a.pushLocalDocument(withThread(a.getDocument(), 'u-a', 'cm-1', 'Texte de A'), 'comment');
+    settle();
+    const forged = b.getDocument();
+    b.pushLocalDocument({
+      ...forged,
+      comments: forged.comments!.map((thread) => ({ ...thread, messages: thread.messages.map((message) => ({ ...message, text: 'Réécrit par B' })) })),
+    }, 'comment');
+    settle();
+    expect(a.getDocument().comments![0].messages[0].text).toBe('Texte de A');
+    expect(b.getDocument().comments![0].messages[0].text).toBe('Texte de A');
   });
 });
 

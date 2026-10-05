@@ -1,5 +1,6 @@
 import { generateKeyBetween } from 'fractional-indexing';
 
+import { checkCommentOp } from './commentRules';
 import { isRouteHeader, objectSpec, specAtPath } from './diff';
 import type { ObjectStore } from './objects';
 import { applyOp, type Op } from './ops';
@@ -16,7 +17,9 @@ import { decodePath } from './paths';
  *    autre élément de la même liste (deux insertions concurrentes au même
  *    endroit) est remplacée par une position libre juste après, comme chez
  *    Figma ;
- *  - un en-tête de tracé ne référence que des segments connus ou fournis.
+ *  - un en-tête de tracé ne référence que des segments connus ou fournis ;
+ *  - avec l'auteur du lot (`userId`), les règles d'auteur des commentaires
+ *    (commentRules.ts).
  */
 
 export const MAX_OPS_PER_BATCH = 20_000;
@@ -56,10 +59,16 @@ function freePosition(store: ObjectStore, parent: string, field: string, id: str
   return generateKeyBetween(pos, above);
 }
 
+export interface BatchCheckOptions {
+  /** Auteur du lot : les règles d'auteur des commentaires s'appliquent. */
+  userId?: string;
+}
+
 export function checkBatch(
   store: ObjectStore,
   ops: unknown,
   blobs: Readonly<Record<string, string>>,
+  options: BatchCheckOptions = {},
 ): BatchCheck {
   if (!Array.isArray(ops)) return { ok: false, reason: 'ops-not-array' };
   if (ops.length > MAX_OPS_PER_BATCH) return { ok: false, reason: 'too-many-ops' };
@@ -102,24 +111,29 @@ export function checkBatch(
         const fixed: Op = scratch.has(op.parent)
           ? { ...op, pos: freePosition(scratch, op.parent, op.field, op.id, op.pos) }
           : op;
+        const denied = deniedByRules(scratch, fixed, options);
+        if (denied) return { ok: false, reason: denied };
         out.push(fixed);
         applyForValidation(scratch, fixed);
         break;
       }
-      case 'd':
-        out.push({ t: 'd', id: op.id });
-        applyForValidation(scratch, out[out.length - 1]);
+      case 'd': {
+        const fixed: Op = { t: 'd', id: op.id };
+        const denied = deniedByRules(scratch, fixed, options);
+        if (denied) return { ok: false, reason: denied };
+        out.push(fixed);
+        applyForValidation(scratch, fixed);
         break;
+      }
       case 's': {
         if (typeof op.k !== 'string' || op.k.length === 0 || op.k.length > 1024) return { ok: false, reason: 'bad-key' };
-        if ('v' in op) {
-          if (valueChars(op.v) > MAX_VALUE_CHARS) return { ok: false, reason: 'value-too-large' };
-          collectMissingBlobs(op.v, scratch, blobs, missing);
-          out.push({ t: 's', id: op.id, k: op.k, v: op.v });
-        } else {
-          out.push({ t: 's', id: op.id, k: op.k });
-        }
-        applyForValidation(scratch, out[out.length - 1]);
+        if ('v' in op && valueChars(op.v) > MAX_VALUE_CHARS) return { ok: false, reason: 'value-too-large' };
+        if ('v' in op) collectMissingBlobs(op.v, scratch, blobs, missing);
+        const fixed: Op = 'v' in op ? { t: 's', id: op.id, k: op.k, v: op.v } : { t: 's', id: op.id, k: op.k };
+        const denied = deniedByRules(scratch, fixed, options);
+        if (denied) return { ok: false, reason: denied };
+        out.push(fixed);
+        applyForValidation(scratch, fixed);
         break;
       }
       case 'm': {
@@ -155,4 +169,9 @@ function collectMissingBlobs(
 
 function applyForValidation(store: ObjectStore, op: Op): void {
   applyOp(store, op);
+}
+
+/** Refus d'une opération par les règles d'auteur (avant de l'appliquer au brouillon). */
+function deniedByRules(store: ObjectStore, op: Op, options: BatchCheckOptions): string | null {
+  return options.userId === undefined ? null : checkCommentOp(store, op, options.userId);
 }

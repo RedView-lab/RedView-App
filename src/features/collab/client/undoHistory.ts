@@ -20,6 +20,8 @@ import { itineraryIdOf } from '../model/paths';
  *    résultat calculé (`background` : tracé, altimétrie, POI, prédiction) est
  *    rattaché à la dernière étape qui touche le même itinéraire : annuler un
  *    déplacement de point remet aussi l'ancien tracé, sans recalcul.
+ *  - Un commentaire (`comment`) n'est jamais une étape : annuler ne touche pas
+ *    aux fils de discussion, comme chez Figma.
  */
 
 const USER_COALESCE_MS = 600;
@@ -125,7 +127,7 @@ export class UndoHistory {
    * d'avant (`invertOps`).
    */
   record(change: CollabLocalChange, ops: readonly Op[], inverse: Op[], now: number): void {
-    if (ops.length === 0) return;
+    if (ops.length === 0 || change === 'comment') return;
     if (change === 'background') {
       const itineraries = new Set(ops.map((op) => itineraryIdOf(op.id)).filter((id): id is string => !!id));
       for (let index = this.undoStack.length - 1; index >= 0; index -= 1) {

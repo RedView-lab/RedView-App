@@ -10,6 +10,7 @@
  * récente compatible) sont conservés. Le projet passe ensuite par la même
  * normalisation qu'un projet du cloud (`normalizeItineraryProject`).
  */
+import { sanitizeCommentThreads } from '@/features/comments/lib/sanitize';
 import { ITINERARY_COLORS, normalizeItineraryProject } from '@/features/itineraryPanel/lib/project/defaultState';
 import { ROUTE_PROFILE_PRESETS } from '@/features/itineraryPanel/lib/project/profilePresets';
 import type { SavedCustomProfile } from '@/features/itineraryPanel/lib/project/customProfiles';
@@ -224,6 +225,9 @@ export function sanitizeImportedProject(raw: unknown): ItineraryProject {
     dashboard: sanitizeDashboard(raw.dashboard),
     // Copie des profils perso embarquée dans le document (venue d'un tiers).
     routingProfiles: Array.isArray(raw.routingProfiles) ? sanitizeRoutingProfiles(raw.routingProfiles) : undefined,
+    // Bulles d'info de l'expéditeur (texte brut, validé) ; son lu / non lu reste chez lui.
+    comments: sanitizeCommentThreads(raw.comments),
+    commentsView: undefined,
   };
   for (const key of Object.keys(project)) {
     if (project[key] === undefined) delete project[key];
