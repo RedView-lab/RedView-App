@@ -25,6 +25,11 @@ import { PublicError } from './errors.js';
  * fichiers (.fit, miniature, charge utile du bucket) ; la suppression reste
  * au propriétaire. Le serveur temps réel vérifie l'appartenance à l'équipe à
  * chaque connexion et toutes les minutes (server/multiplayer/auth.ts).
+ *
+ * Supprimer un projet partagé passe par ici (`deleteSharedProject`) : son
+ * journal et ses points de sauvegarde de co-édition sont écrits par le
+ * serveur temps réel avec la clé admin, que le client ne peut ni lire ni
+ * effacer, et son équipe aussi.
  */
 
 export type ShareRole = 'owner' | 'editor';
@@ -52,6 +57,9 @@ interface ProjectRowAccess {
   data?: unknown;
 }
 
+const JOURNAL_COLLECTION_ID = 'project_journal';
+/** Garde-fou de la purge du journal (pages de 100 paquets). */
+const MAX_JOURNAL_PAGES = 1_000;
 const PROJECT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,35}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_MEMBERS = 50;
@@ -235,6 +243,66 @@ export async function removeFromProject(user: AuthenticatedUser, projectId: stri
     if (membership) await getAppwriteTeams().deleteMembership(row.team_id, membership.$id);
   }
   return stateFor(row, user);
+}
+
+/**
+ * Supprime un projet partagé (propriétaire seulement) : journal et points de
+ * sauvegarde de la co-édition, équipe, puis la ligne. Une salle encore
+ * ouverte est fermée par le serveur temps réel (4404) dès qu'il voit le
+ * projet disparu. Déjà supprimé : rien à faire.
+ */
+export async function deleteSharedProject(user: AuthenticatedUser, projectId: string): Promise<void> {
+  let row: ProjectRowAccess;
+  try {
+    row = await readProject(projectId);
+  } catch (error) {
+    if (error instanceof PublicError && error.status === 404) return;
+    throw error;
+  }
+  if (row.user_id !== user.id) throw new PublicError('Only the owner can delete this project', 403);
+  await purgeCollabData(projectId);
+  await ignoreNotFound(() => getAppwriteTeams().delete(row.team_id || projectTeamId(projectId)));
+  await ignoreNotFound(() => getAppwriteDatabases().deleteDocument(APPWRITE_DATABASE_ID, PROJECTS_COLLECTION_ID, projectId));
+}
+
+async function ignoreNotFound(operation: () => Promise<unknown>): Promise<void> {
+  try {
+    await operation();
+  } catch (error) {
+    if (errorCode(error) !== 404) throw error;
+  }
+}
+
+/** Journal (et ses gros paquets en fichiers) et points de sauvegarde exacts du serveur temps réel. */
+async function purgeCollabData(projectId: string): Promise<void> {
+  const databases = getAppwriteDatabases();
+  const storage = getAppwriteStorage();
+  for (let page = 0; page < MAX_JOURNAL_PAGES; page += 1) {
+    let rows: Array<{ $id: string; payload?: unknown }>;
+    try {
+      const list = await databases.listDocuments(APPWRITE_DATABASE_ID, JOURNAL_COLLECTION_ID, [
+        Query.equal('project_id', projectId),
+        Query.select(['$id', 'payload']),
+        Query.limit(100),
+      ]);
+      rows = list.documents as unknown as Array<{ $id: string; payload?: unknown }>;
+    } catch (error) {
+      // Collection absente (co-édition jamais installée) : rien à purger.
+      if (errorCode(error) === 404) break;
+      throw error;
+    }
+    if (rows.length === 0) break;
+    await Promise.all(rows.map(async (row) => {
+      if (typeof row.payload === 'string' && row.payload.startsWith('file:')) {
+        await ignoreNotFound(() => storage.deleteFile(PROJECT_PAYLOADS_BUCKET_ID, (row.payload as string).slice('file:'.length)));
+      }
+      await ignoreNotFound(() => databases.deleteDocument(APPWRITE_DATABASE_ID, JOURNAL_COLLECTION_ID, row.$id));
+    }));
+  }
+  for (const name of [`${projectId}.collab.gz`, `${projectId}.json.gz`]) {
+    const list = await storage.listFiles(PROJECT_PAYLOADS_BUCKET_ID, [Query.equal('name', name), Query.limit(100)]);
+    await Promise.all(list.files.map((file) => ignoreNotFound(() => storage.deleteFile(PROJECT_PAYLOADS_BUCKET_ID, file.$id))));
+  }
 }
 
 export async function leaveProject(user: AuthenticatedUser, projectId: string): Promise<void> {

@@ -1,13 +1,14 @@
 import type {
   CollabChangeCause,
   CollabLocalChange,
+  PreSessionChange,
   ProjectCollabLink,
 } from '@/features/itineraryPanel/context/ProjectStore/collab';
 import type { ProjectDocument } from '@/features/itineraryPanel/lib/project/layers';
 
-import { diffDocument } from '../model/diff';
+import { diffDocument, storeFromDocument } from '../model/diff';
 import { Materializer } from '../model/materialize';
-import type { Op } from '../model/ops';
+import { applyOps, type Op } from '../model/ops';
 import type { ClientMessage, LeaseInfo, PeerInfo, PresenceState, ServerMessage } from '../protocol';
 import { BROWSER_CLOCK, LeaseGate, type GateClock } from './leaseGate';
 import { SyncEngine, type Rejection } from './syncEngine';
@@ -17,6 +18,10 @@ import { UndoHistory } from './undoHistory';
  * Client de co-édition, sans réseau : la connexion WebSocket (connection.ts)
  * et le simulateur de tests branchent leur transport. Implémente le contrat du
  * ProjectStore (`ProjectCollabLink`) :
+ *  - branchement (`bind`) dès la création de la session : le document
+ *    affiché devient l'état provisoire, les écritures faites depuis sont
+ *    rejouées ; tout ce que l'utilisateur modifie pendant la connexion part
+ *    avec ses lots, rejoués sur l'état du serveur au premier `welcome` ;
  *  - document local poussé → différence avec l'état visible → opérations
  *    appliquées tout de suite, envoyées par lots ;
  *  - lots distants → état visible reconstruit → document rematérialisé
@@ -38,6 +43,9 @@ export interface CollabTransport {
 
 export type CollabStatus = 'connecting' | 'online' | 'offline' | 'denied';
 
+/** Refus définitif du serveur : accès retiré, projet supprimé, version, session expirée. */
+export type CollabDeniedReason = 'forbidden' | 'not-found' | 'version' | 'unauthorized';
+
 export interface CollabState {
   status: CollabStatus;
   /** Premier état reçu : le document de la session est connu. */
@@ -47,7 +55,7 @@ export interface CollabState {
   /** Modifications locales pas encore acquittées. */
   unsynced: number;
   /** Raison d'un refus d'accès (`denied`). */
-  deniedReason?: string;
+  deniedReason?: CollabDeniedReason;
 }
 
 export interface CollabClientOptions {
@@ -55,6 +63,10 @@ export interface CollabClientOptions {
   transport: CollabTransport;
   clock?: GateClock;
   onRejection?(rejection: Rejection): void;
+  /** Store branché : la connexion peut s'ouvrir (son état provisoire est connu). */
+  onBind?(): void;
+  /** Les lots que le serveur n'a peut-être pas écrits ont pu changer (copie sur l'appareil). */
+  onUnsyncedChange?(): void;
 }
 
 type DocumentListener = (document: ProjectDocument, cause: CollabChangeCause) => void;
@@ -69,6 +81,7 @@ export class CollabClient implements ProjectCollabLink {
   private readonly materializer = new Materializer();
   private readonly history = new UndoHistory();
   private document: ProjectDocument | null = null;
+  private bound = false;
   private readonly documentListeners = new Set<DocumentListener>();
   private readonly historyListeners = new Set<() => void>();
   private readonly stateListeners = new Set<() => void>();
@@ -93,24 +106,39 @@ export class CollabClient implements ProjectCollabLink {
 
   // ── ProjectCollabLink ─────────────────────────────────────────────────────
 
+  bind(base: ProjectDocument, changes: readonly PreSessionChange[]): ProjectDocument {
+    if (this.bound) return this.getDocument();
+    this.bound = true;
+    if (!this.engine.isReady) {
+      const seed = storeFromDocument(base);
+      this.engine.seedProvisional(seed);
+      // Ce qui n'a pas changé garde les objets de l'application.
+      this.materializer.adopt(seed, base);
+      this.document = this.materializer.materialize(this.engine.visible);
+    }
+    if (changes.length > 0) this.replay(base, changes);
+    this.options.onBind?.();
+    return this.getDocument();
+  }
+
   getDocument(): ProjectDocument {
-    if (!this.document) throw new Error('CollabClient: document pas encore reçu');
+    if (!this.document) throw new Error('CollabClient: store pas encore branché');
     return this.document;
   }
 
   pushLocalDocument(next: ProjectDocument, change: CollabLocalChange): void {
     const current = this.document;
     if (!current || next === current) return;
-    const visible = this.engine.visible;
-    const { ops, blobs } = diffDocument(visible, current, next);
+    const { ops, blobs } = diffDocument(this.engine.visible, current, next);
     this.document = next;
-    const { applied, inverse } = ops.length > 0 ? this.engine.applyLocal(ops, blobs) : { applied: [], inverse: [] };
+    const sendable = this.isSendable(change);
+    const { applied, inverse } = ops.length > 0
+      ? this.engine.applyLocal(ops, blobs, { sendable })
+      : { applied: [], inverse: [] };
     this.materializer.adopt(this.engine.visible, next);
     if (applied.length === 0) return;
-    this.history.record(change, applied, inverse, this.clock.now());
-    this.transport.requestFlush();
-    this.notifyHistory();
-    this.updateState({ unsynced: this.engine.unsyncedCount });
+    if (sendable) this.history.record(change, applied, inverse, this.clock.now());
+    this.afterLocalChange();
   }
 
   subscribe(listener: DocumentListener): () => void {
@@ -166,27 +194,29 @@ export class CollabClient implements ProjectCollabLink {
   disconnected(retrying: boolean): void {
     this.engine.disconnected();
     this.computeGate.connectionChanged(false);
-    this.updateState({ status: retrying && !this.engine.isReady ? 'connecting' : 'offline', peers: [], leases: [] });
+    // Un refus reste affiché : la fermeture qui le suit ne le remplace pas.
+    const status = this.state.status === 'denied'
+      ? 'denied'
+      : retrying && !this.engine.isReady ? 'connecting' : 'offline';
+    this.updateState({ status, peers: [], leases: [] });
   }
 
-  denied(reason: string): void {
-    this.updateState({ status: 'denied', deniedReason: reason });
+  denied(reason: CollabDeniedReason): void {
+    this.updateState({ status: 'denied', deniedReason: reason, peers: [], leases: [] });
   }
 
   receive(message: ServerMessage): void {
     switch (message.type) {
       case 'welcome': {
-        const firstWelcome = !this.engine.isReady;
         this.engine.receive(message);
         this.computeGate.connectionChanged(true);
         this.computeGate.setLeases(message.leases);
-        if (firstWelcome) {
-          this.document = this.materializer.materialize(this.engine.visible);
-        } else {
-          this.emitRemote();
-        }
+        // Premier état : il remplace le document provisoire (les modifications
+        // faites pendant la connexion sont rejouées par-dessus).
+        this.emitRemote();
         this.updateState({ status: 'online', ready: true, peers: message.peers, leases: message.leases });
         this.flush();
+        this.options.onUnsyncedChange?.();
         break;
       }
       case 'batch':
@@ -200,6 +230,7 @@ export class CollabClient implements ProjectCollabLink {
           return;
         }
         if (outcome === 'changed') this.emitRemote();
+        if (message.type !== 'batch' || message.batch.clientId === this.clientId) this.options.onUnsyncedChange?.();
         break;
       }
       case 'leases':
@@ -244,6 +275,47 @@ export class CollabClient implements ProjectCollabLink {
 
   // ── Interne ───────────────────────────────────────────────────────────────
 
+  /**
+   * Avant le premier état du serveur, un résultat calculé (tracé, altimétrie…)
+   * l'a été sur le document d'ouverture, peut-être en retard : il reste local.
+   */
+  private isSendable(change: CollabLocalChange): boolean {
+    return this.engine.isReady || change !== 'background';
+  }
+
+  /**
+   * Écritures faites avant le branchement, rejouées comme des modifications
+   * locales : chacune est la différence avec la précédente (calculée sur un
+   * magasin qui suit les documents du store), appliquée sur l'état visible
+   * (provisoire, ou déjà celui du serveur).
+   */
+  private replay(base: ProjectDocument, changes: readonly PreSessionChange[]): void {
+    const shadow = storeFromDocument(base, { blobs: false });
+    const now = this.clock.now();
+    let previous = base;
+    let appliedAny = false;
+    for (const { document, change } of changes) {
+      const { ops, blobs } = diffDocument(shadow, previous, document);
+      applyOps(shadow, ops);
+      previous = document;
+      if (ops.length === 0) continue;
+      const sendable = this.isSendable(change);
+      const { applied, inverse } = this.engine.applyLocal(ops, blobs, { sendable });
+      if (applied.length === 0) continue;
+      appliedAny = true;
+      if (sendable) this.history.record(change, applied, inverse, now);
+    }
+    this.document = this.materializer.materialize(this.engine.visible);
+    if (appliedAny) this.afterLocalChange();
+  }
+
+  private afterLocalChange(): void {
+    this.transport.requestFlush();
+    this.notifyHistory();
+    this.updateState({ unsynced: this.engine.unsyncedCount });
+    this.options.onUnsyncedChange?.();
+  }
+
   private applyHistory(cause: 'undo' | 'redo'): void {
     if (!this.document) return;
     const apply = (ops: Op[]) => this.engine.applyLocal(ops, new Map());
@@ -255,9 +327,7 @@ export class CollabClient implements ProjectCollabLink {
     const document = this.materializer.materialize(this.engine.visible);
     this.document = document;
     for (const listener of [...this.documentListeners]) listener(document, cause);
-    this.transport.requestFlush();
-    this.notifyHistory();
-    this.updateState({ unsynced: this.engine.unsyncedCount });
+    this.afterLocalChange();
   }
 
   private emitRemote(): void {

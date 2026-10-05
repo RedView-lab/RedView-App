@@ -5,8 +5,8 @@ import type { ProjectDocument } from '@/features/itineraryPanel/lib/project/laye
 
 import { chunkRoutePoints } from '../routeChunks';
 import { fieldSpec, PROJECT_DOCUMENT_SPEC, type ListSpec, type MergeSpec, type RecordSpec } from '../schema';
-import { comparePositions, type DocObject, type ObjectStore } from './objects';
-import type { Op } from './ops';
+import { comparePositions, ObjectStore, type DocObject } from './objects';
+import { applyOps, type Op } from './ops';
 import { childKey, childObjectId, decodePath, encodePath, ROOT_OBJECT_ID } from './paths';
 
 /**
@@ -223,6 +223,20 @@ export function diffDocument(store: ObjectStore, prev: ProjectDocument | null, n
 /** Document complet → magasin vide : opérations de premier remplissage. */
 export function documentOps(store: ObjectStore, document: ProjectDocument): DocumentChanges {
   return diffDocument(store, null, document);
+}
+
+/**
+ * Magasin d'un document complet. Sans ses segments de tracé (`blobs: false`),
+ * une différence calculée dessus fournit tous les segments des tracés
+ * modifiés : de quoi la rejouer sur un autre état (qui ne les connaît pas
+ * forcément).
+ */
+export function storeFromDocument(document: ProjectDocument, { blobs = true }: { blobs?: boolean } = {}): ObjectStore {
+  const store = new ObjectStore();
+  const changes = documentOps(store, document);
+  if (blobs) for (const [id, json] of changes.blobs) store.putBlob(id, json);
+  applyOps(store, changes.ops);
+  return store;
 }
 
 function setProp(store: ObjectStore, id: string, key: string, value: unknown, ctx: Context): void {

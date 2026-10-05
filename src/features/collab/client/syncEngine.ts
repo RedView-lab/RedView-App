@@ -21,6 +21,14 @@ import { deserializeStore, type ClientMessage, type SequencedBatch, type ServerM
  * gardés : si le serveur s'arrête avant de les écrire, ils sont renvoyés à la
  * reconnexion. Aucune entrée/sortie ici : la connexion (connection.ts) et le
  * simulateur de tests branchent leurs messages.
+ *
+ * Avant le premier `welcome`, l'état confirmé est provisoire
+ * (`seedProvisional` : le document affiché à l'ouverture, qui peut dater du
+ * dernier point de sauvegarde). Les modifications de l'utilisateur s'y
+ * appliquent comme des lots en attente, rejoués sur l'état du serveur dès
+ * qu'il arrive puis envoyés ; les résultats calculés sur cette base
+ * (`sendable: false`) restent locaux et disparaissent avec elle : envoyés,
+ * ils écraseraient ceux de la session.
  */
 
 interface LocalBatch {
@@ -28,6 +36,15 @@ interface LocalBatch {
   ops: Op[];
   /** Séquence serveur, une fois acquitté. */
   seq?: number;
+  /** Calculé sur l'état provisoire : jamais envoyé, retiré au premier `welcome`. */
+  localOnly?: true;
+}
+
+/** Lot pas encore écrit par le serveur, avec ses segments : de quoi le renvoyer depuis une autre session. */
+export interface UnsyncedBatch {
+  clientSeq: number;
+  ops: Op[];
+  blobs: Record<string, string>;
 }
 
 export type ReceiveOutcome =
@@ -92,7 +109,12 @@ export class SyncEngine {
 
   /** Modifications locales pas encore acquittées par le serveur. */
   get unsyncedCount(): number {
-    return this.pending.length + (this.queued.length > 0 ? 1 : 0);
+    return this.pending.filter((batch) => !batch.localOnly).length + (this.queued.length > 0 ? 1 : 0);
+  }
+
+  /** Prochain numéro de lot (gardé avec les lots non écrits). */
+  get nextSeq(): number {
+    return this.nextClientSeq;
   }
 
   /** Refus du serveur depuis le dernier appel (anomalies : journalisées par l'appelant). */
@@ -106,10 +128,67 @@ export class SyncEngine {
   }
 
   /**
+   * État confirmé provisoire, avant le premier `welcome` (document affiché à
+   * l'ouverture) ; les lots déjà en attente (`restoreUnsynced`) sont rejoués
+   * par-dessus.
+   */
+  seedProvisional(store: ObjectStore): void {
+    if (this.ready) throw new Error('SyncEngine: état du serveur déjà reçu');
+    for (const id of store.blobIds()) this.library.set(id, store.getBlob(id)!);
+    this.confirmed = store;
+    this.rebuild();
+  }
+
+  /**
+   * Lots d'une session précédente de ce client (onglet fermé avant que le
+   * serveur ne les écrive), avant le premier `welcome` : rejoués sur l'état
+   * visible, puis renvoyés ; `welcome.clientSeq` écarte ceux que le serveur a
+   * déjà appliqués.
+   */
+  restoreUnsynced(batches: readonly UnsyncedBatch[], nextClientSeq: number): void {
+    if (this.ready) throw new Error('SyncEngine: état du serveur déjà reçu');
+    for (const batch of batches) {
+      for (const [id, json] of Object.entries(batch.blobs)) this.library.set(id, json);
+      this.pending.push({ clientSeq: batch.clientSeq, ops: batch.ops });
+      this.nextClientSeq = Math.max(this.nextClientSeq, batch.clientSeq + 1);
+    }
+    this.pending.sort((a, b) => a.clientSeq - b.clientSeq);
+    this.nextClientSeq = Math.max(this.nextClientSeq, nextClientSeq);
+    this.needsRebuild = true;
+  }
+
+  /**
+   * Empreinte de `unsyncedBatches()` (lots immuables une fois numérotés) :
+   * inchangée, inutile de récrire la copie de l'appareil.
+   */
+  unsyncedSignature(): string {
+    const seqs = [...this.undurable, ...this.pending.filter((batch) => !batch.localOnly)].map((batch) => batch.clientSeq);
+    return `${this.nextClientSeq}|${this.queued.length}|${seqs.join(',')}`;
+  }
+
+  /**
+   * Lots que le serveur n'a peut-être pas encore écrits (en attente, ou
+   * acquittés mais pas durables), avec leurs segments : gardés sur l'appareil
+   * pour survivre à la fermeture de l'onglet.
+   */
+  unsyncedBatches(): UnsyncedBatch[] {
+    this.seal();
+    return [...this.undurable, ...this.pending.filter((batch) => !batch.localOnly)]
+      .sort((a, b) => a.clientSeq - b.clientSeq)
+      .map((batch) => ({ clientSeq: batch.clientSeq, ops: batch.ops, blobs: this.referencedLibraryBlobs(batch.ops) }));
+  }
+
+  /**
    * Modification locale (opérations calculées sur l'état visible) ; renvoie
    * celles qui ont eu un effet et leur inverse (pour l'annuler).
+   * `sendable: false` (avant le premier `welcome` seulement) : gardée
+   * localement, jamais envoyée.
    */
-  applyLocal(ops: readonly Op[], blobs: ReadonlyMap<string, string>): { applied: Op[]; inverse: Op[] } {
+  applyLocal(
+    ops: readonly Op[],
+    blobs: ReadonlyMap<string, string>,
+    { sendable = true }: { sendable?: boolean } = {},
+  ): { applied: Op[]; inverse: Op[] } {
     for (const [id, json] of blobs) this.library.set(id, json);
     // Segments fournis, ou déjà connus (annuler qui remet un ancien tracé).
     for (const id of referencedBlobs(ops)) {
@@ -117,7 +196,15 @@ export class SyncEngine {
       if (json !== undefined) this.visibleStore.putBlob(id, json);
     }
     const result = applyOpsWithInverse(this.visibleStore, ops);
-    this.queued.push(...result.applied);
+    if (result.applied.length === 0) return result;
+    if (sendable || this.ready) {
+      this.queued.push(...result.applied);
+    } else {
+      // Lot à part, à sa place parmi les autres : l'état visible reste exact.
+      this.seal();
+      this.pending.push({ clientSeq: this.nextClientSeq, ops: result.applied, localOnly: true });
+      this.nextClientSeq += 1;
+    }
     return result;
   }
 
@@ -136,7 +223,7 @@ export class SyncEngine {
     this.seal();
     const messages: ClientMessage[] = [];
     for (const batch of this.pending) {
-      if (batch.clientSeq <= this.sentUpTo) continue;
+      if (batch.clientSeq <= this.sentUpTo || batch.localOnly) continue;
       messages.push({ type: 'batch', clientSeq: batch.clientSeq, ops: batch.ops, blobs: this.blobsFor(batch.ops) });
       this.sentUpTo = batch.clientSeq;
     }
@@ -187,6 +274,9 @@ export class SyncEngine {
   }
 
   private welcome(message: Extract<ServerMessage, { type: 'welcome' }>): void {
+    this.seal();
+    // L'état provisoire est remplacé : ce qui a été calculé dessus disparaît avec lui.
+    if (!this.ready) this.pending = this.pending.filter((batch) => !batch.localOnly);
     const sameEpoch = message.epoch === this.epochId;
     this.epochId = message.epoch;
     const mine = [...this.undurable, ...this.pending].sort((a, b) => a.clientSeq - b.clientSeq);
@@ -256,6 +346,16 @@ export class SyncEngine {
     this.confirmed.shareObjects(next, (id) => !touched.has(id));
     this.visibleStore = next;
     return next.root() !== previous.root();
+  }
+
+  /** Tous les segments référencés par les opérations (connus de ce client). */
+  private referencedLibraryBlobs(ops: readonly Op[]): Record<string, string> {
+    const blobs: Record<string, string> = {};
+    for (const id of referencedBlobs(ops)) {
+      const json = this.library.get(id);
+      if (json !== undefined) blobs[id] = json;
+    }
+    return blobs;
   }
 
   /** Segments référencés par les opérations et inconnus du serveur (état confirmé). */

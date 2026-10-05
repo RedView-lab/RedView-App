@@ -27,7 +27,7 @@ import type { TimelineFilterState } from '../../sections/timeline/TimelineFilter
 import type { GpxRoute, PoiFeature } from '@/features/poi/types';
 import { dispatchSelectPoiOnChart } from '@/features/poi/lib/chartPoiSyncBridge';
 import { deleteProjectItineraryFitFiles } from '@/shared/utils/projects';
-import type { Itinerary, ItineraryProject, PanelMode, PrioritiesState, RhythmState, ProjectCollaborator } from '../../types';
+import type { Itinerary, ItineraryProject, PanelMode, PrioritiesState, RhythmState, ProjectCollaborator, ProjectSessionStatus } from '../../types';
 
 import { useItineraryPoiHandlers } from './useItineraryPoiHandlers';
 import { useItineraryMapActions } from './useItineraryMapActions';
@@ -61,6 +61,7 @@ interface ItineraryPanelContainerProps {
   /** « Partager » (co-édition) ; absent pour un projet local. */
   onShareProject?: (anchor: HTMLElement) => void;
   collaborators?: ProjectCollaborator[];
+  sessionStatus?: ProjectSessionStatus;
   pausesEnabled?: boolean;
   waypointsEnabled?: boolean;
   poisRouteEnabled?: boolean;
@@ -87,6 +88,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   onSaveProject,
   onShareProject,
   collaborators,
+  sessionStatus,
   pausesEnabled,
   waypointsEnabled,
   poisRouteEnabled,
@@ -548,6 +550,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         saveStatusMessage={displayedSaveMessage ?? undefined}
         onShareProject={onShareProject}
         collaborators={collaborators}
+        sessionStatus={sessionStatus}
         onRenameProject={(next) => setProject((p) => ({ ...p, name: next }))}
         // La sélection ne touche pas à la visibilité (œil indépendant).
         onSelectItinerary={(id) => setProject((p) => ({ ...p, activeItineraryId: id }))}

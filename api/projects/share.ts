@@ -5,6 +5,7 @@ import { PublicError, sendSafeError } from '../_lib/errors.js';
 import { readJsonBody, sendMethodNotAllowed } from '../_lib/http.js';
 import {
   assertProjectId,
+  deleteSharedProject,
   getShareState,
   inviteToProject,
   leaveProject,
@@ -17,7 +18,9 @@ import {
  *  - `invite` `{ email }` : ajoute un compte RedView existant comme éditeur
  *    (propriétaire seulement) ;
  *  - `remove` `{ userId }` : retire un éditeur (propriétaire seulement) ;
- *  - `leave` : un éditeur quitte le projet.
+ *  - `leave` : un éditeur quitte le projet ;
+ *  - `delete` : le propriétaire supprime le projet partagé (avec l'équipe et
+ *    les données de la co-édition, que seule la clé admin peut effacer).
  */
 interface ShareBody {
   action?: unknown;
@@ -42,6 +45,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         return res.status(200).json(await removeFromProject(user, projectId, body.userId));
       case 'leave':
         await leaveProject(user, projectId);
+        return res.status(200).json({ ok: true });
+      case 'delete':
+        await deleteSharedProject(user, projectId);
         return res.status(200).json({ ok: true });
       default:
         throw new PublicError('Unknown action', 400);

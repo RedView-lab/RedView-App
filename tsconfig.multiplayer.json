@@ -16,6 +16,9 @@
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,
+    /* server/observability.mjs (GlitchTip, partagé avec le serveur de l'app) : types déduits, non vérifiés */
+    "allowJs": true,
+    "checkJs": false,
 
     /* Linting */
     "strict": true,

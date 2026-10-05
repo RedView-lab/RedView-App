@@ -1,25 +1,38 @@
 import { randomUUID } from 'node:crypto';
+import { monitorEventLoopDelay } from 'node:perf_hooks';
 
 import type { ProjectDocument } from '../../src/features/itineraryPanel/lib/project/layers.ts';
 import { referencedRouteBlobs } from '../../src/features/collab/model/diff.ts';
+import { materializeJson } from '../../src/features/collab/model/materialize.ts';
 import { deserializeStore, type ClientMessage, type SequencedBatch } from '../../src/features/collab/protocol.ts';
 import { Room, type JoinRequest, type RoomPeer } from '../../src/features/collab/room/room.ts';
 import { RoomState } from '../../src/features/collab/room/roomState.ts';
 import { CheckpointSerializer } from './serialize.ts';
-import type { LoadedRoom, RoomStorage } from './storage.ts';
+import { storeDigest, verifyDurable, type ShadowResult } from './shadow.ts';
+import { ProjectNotFoundError, type LoadedRoom, type RoomStorage } from './storage.ts';
 
 /**
  * Salles chargées en mémoire (une par projet ouvert en co-édition) et leur
  * durabilité :
  *  - journal écrit par paquets toutes les `journalFlushMs` (≈ 250 ms ; les
- *    clients gardent leurs lots tant qu'ils ne sont pas durables) ;
+ *    clients gardent leurs lots tant qu'ils ne sont pas durables) ; en échec,
+ *    nouvel essai avec attente exponentielle ;
  *  - point de sauvegarde toutes les `checkpointIntervalMs` ou
- *    `checkpointBatches` lots, et au déchargement de la salle ;
+ *    `checkpointBatches` lots, et au déchargement de la salle ; en échec,
+ *    attente exponentielle (1 s → 60 s) ;
+ *  - une salle sans client est déchargée dès que son journal est écrit, même
+ *    si le point de sauvegarde échoue : la reprise se fait par le dernier
+ *    point de sauvegarde + le journal ;
+ *  - projet supprimé (introuvable au point de sauvegarde ou à la
+ *    revérification des droits) : clients fermés en 4404, journal et points
+ *    de sauvegarde purgés, salle oubliée, plus aucun essai ;
  *  - toutes les écritures d'une salle passent par une seule file (jamais un
  *    élagage du journal pendant un ajout) ;
  *  - barrière : un paquet de journal refusé (`conflict`) veut dire qu'un
  *    autre serveur tient la salle — celle-ci est fermée sans rien écrire et
- *    ses clients se reconnectent (leurs lots non durables sont renvoyés).
+ *    ses clients se reconnectent (leurs lots non durables sont renvoyés) ;
+ *  - validation fantôme (shadow.ts) au plus une fois par
+ *    `shadowValidationIntervalMs` et par salle.
  */
 
 export interface RoomHostOptions {
@@ -28,6 +41,8 @@ export interface RoomHostOptions {
   checkpointIntervalMs?: number;
   checkpointBatches?: number;
   idleUnloadMs?: number;
+  /** Validation fantôme d'une salle au plus une fois par période (0 : jamais). */
+  shadowValidationIntervalMs?: number;
   log?: (level: 'info' | 'warn' | 'error', message: string, data?: Record<string, unknown>) => void;
 }
 
@@ -39,11 +54,20 @@ export interface PeerHandle {
 
 /** Code de fermeture « service redémarré » : le client se reconnecte sans attendre longtemps. */
 export const CLOSE_RESTART = 1012;
+/** Code de fermeture « projet introuvable » : refus définitif côté client. */
+const CLOSE_NOT_FOUND = 4404;
 const TICK_MS = 100;
 const MAINTENANCE_MS = 1_000;
-/** Journal en échec plus longtemps : la salle est fermée (les clients gardent leurs lots). */
+/** Journal en échec plus longtemps avec des clients connectés : la salle est fermée (ils gardent leurs lots). */
 const MAX_JOURNAL_OUTAGE_MS = 60_000;
+const JOURNAL_RETRY_MAX_MS = 30_000;
+const CHECKPOINT_RETRY_MIN_MS = 1_000;
+const CHECKPOINT_RETRY_MAX_MS = 60_000;
+const DEFAULT_SHADOW_INTERVAL_MS = 10 * 60_000;
+const MIN_CATCH_UP_BYTES = 64 * 1024;
 const LATENCY_SAMPLES = 1_000;
+
+const backoff = (failures: number, minMs: number, maxMs: number) => Math.min(maxMs, minMs * 2 ** Math.max(0, failures - 1));
 
 export class HostedRoom {
   readonly projectId: string;
@@ -56,8 +80,16 @@ export class HostedRoom {
   private queue: Promise<void> = Promise.resolve();
   private journaledSeq: number;
   private checkpointSeq: number;
+  /** Un point de sauvegarde de cette salle existe dans le stockage (validation fantôme possible). */
+  private hasDurableCheckpoint: boolean;
   private lastCheckpointAt = Date.now();
+  private checkpointFailures = 0;
+  private nextCheckpointAt = 0;
+  private journalQueued = false;
+  private journalFailures = 0;
+  private nextJournalAt = 0;
   private flushFailingSince: number | null = null;
+  private lastShadowAt = 0;
   private maintenanceQueued = false;
   private readonly timers: NodeJS.Timeout[] = [];
   idleSince: number | null = Date.now();
@@ -70,6 +102,7 @@ export class HostedRoom {
     const state = recoverRoomState(loaded);
     this.journaledSeq = state.seq;
     this.checkpointSeq = loaded.checkpoint && loaded.journal.length === 0 ? state.seq : -1;
+    this.hasDurableCheckpoint = loaded.checkpoint !== null;
     this.room = new Room(state, {
       epoch: randomUUID(),
       now: () => Date.now(),
@@ -115,9 +148,31 @@ export class HostedRoom {
     this.close(CLOSE_RESTART, 'shutdown');
   }
 
+  /**
+   * Projet supprimé : définitif. Clients fermés en 4404 (« projet
+   * introuvable »), journal et points de sauvegarde purgés après les
+   * écritures en cours, salle oubliée.
+   */
+  projectDeleted(): void {
+    if (this.closed) return;
+    this.host.metrics.deletedRooms += 1;
+    this.host.log('warn', 'projet supprimé : salle fermée, données de co-édition purgées', { projectId: this.projectId });
+    this.close(CLOSE_NOT_FOUND, 'not-found');
+    void this.enqueue(async () => {
+      try {
+        await this.host.options.storage.purgeRoom(this.projectId);
+      } catch (error) {
+        this.host.log('warn', 'purge du projet supprimé incomplète', { projectId: this.projectId, error: String(error) });
+      }
+    });
+  }
+
   private flush(): void {
-    if (this.unflushed.length === 0 || this.closed) return;
-    void this.enqueue(() => this.writeJournal());
+    if (this.unflushed.length === 0 || this.closed || this.journalQueued || Date.now() < this.nextJournalAt) return;
+    this.journalQueued = true;
+    void this.enqueue(() => this.writeJournal()).finally(() => {
+      this.journalQueued = false;
+    });
   }
 
   private async writeJournal(): Promise<void> {
@@ -132,6 +187,8 @@ export class HostedRoom {
         return;
       }
       this.flushFailingSince = null;
+      this.journalFailures = 0;
+      this.nextJournalAt = 0;
       this.unflushed.splice(0, batches.length);
       const last = batches[batches.length - 1].seq;
       this.journaledSeq = last;
@@ -143,23 +200,40 @@ export class HostedRoom {
       }
       this.room.markDurable(last);
     } catch (error) {
-      this.flushFailingSince ??= Date.now();
+      const now = Date.now();
+      this.flushFailingSince ??= now;
+      this.journalFailures += 1;
+      this.nextJournalAt = now + backoff(this.journalFailures, this.host.options.journalFlushMs ?? 250, JOURNAL_RETRY_MAX_MS);
       this.host.metrics.journalErrors += 1;
-      this.host.log('error', 'écriture du journal en échec', { projectId: this.projectId, error: String(error) });
-      if (Date.now() - this.flushFailingSince > MAX_JOURNAL_OUTAGE_MS) this.close(CLOSE_RESTART, 'storage-unavailable');
+      this.host.log(this.journalFailures === 1 ? 'error' : 'warn', 'écriture du journal en échec', {
+        projectId: this.projectId,
+        failures: this.journalFailures,
+        error: String(error),
+      });
+      // Avec des clients : salle fermée, ils renverront leurs lots non durables
+      // à la suivante. Sans client, personne d'autre n'a ces lots : on les garde
+      // et on réessaie.
+      if (now - this.flushFailingSince > MAX_JOURNAL_OUTAGE_MS && this.peers.size > 0) this.close(CLOSE_RESTART, 'storage-unavailable');
     }
   }
 
   private maintain(): void {
-    if (this.closed || this.closing) return;
+    if (this.closed || this.closing || this.maintenanceQueued) return;
     const options = this.host.options;
+    const now = Date.now();
     const seq = this.room.state.seq;
     const due = seq > this.checkpointSeq && (
       seq - Math.max(0, this.checkpointSeq) >= (options.checkpointBatches ?? 600)
-      || Date.now() - this.lastCheckpointAt >= (options.checkpointIntervalMs ?? 60_000)
+      || now - this.lastCheckpointAt >= (options.checkpointIntervalMs ?? 60_000)
     );
-    const idle = this.idleSince !== null && Date.now() - this.idleSince >= (options.idleUnloadMs ?? 60_000);
-    if ((!due && !idle) || this.maintenanceQueued) return;
+    const idle = this.idleSince !== null && now - this.idleSince >= (options.idleUnloadMs ?? 60_000);
+    if (now < this.nextCheckpointAt) {
+      // En attente après un échec : une salle inactive au journal écrit est
+      // déchargée sans attendre (reprise = dernier point de sauvegarde + journal).
+      if (idle) this.unloadIfIdle();
+      return;
+    }
+    if (!due && !idle) return;
     this.maintenanceQueued = true;
     void this.enqueue(() => this.checkpoint(idle)).finally(() => {
       this.maintenanceQueued = false;
@@ -186,23 +260,84 @@ export class HostedRoom {
       const started = Date.now();
       // Sérialisé maintenant (état à `seq`), écrit après le journal jusqu'à `seq`.
       const checkpointJson = this.serializer.checkpoint(state);
-      const document = state.document();
-      const documentJson = this.serializer.document(document);
+      const documentJson = materializeJson(state.store);
+      const shadowDigest = this.shadowDue(started) ? storeDigest(state.store) : null;
       await this.writeJournal();
-      if (this.closed || this.journaledSeq < seq) return;
-      try {
-        await this.host.options.storage.saveCheckpoint(this.projectId, { seq, checkpointJson, document, documentJson });
-        this.checkpointSeq = seq;
-        this.lastCheckpointAt = Date.now();
-        this.host.recordCheckpoint(Date.now() - started);
-        await this.host.options.storage.pruneJournal(this.projectId, seq);
-      } catch (error) {
-        this.host.metrics.checkpointErrors += 1;
-        this.host.log('error', 'point de sauvegarde en échec', { projectId: this.projectId, error: String(error) });
+      if (this.closed) return;
+      if (this.journaledSeq < seq) {
+        // Journal en échec (déjà signalé) : nouvel essai plus tard.
+        this.checkpointFailures += 1;
+        this.nextCheckpointAt = Date.now() + backoff(this.checkpointFailures, CHECKPOINT_RETRY_MIN_MS, CHECKPOINT_RETRY_MAX_MS);
         return;
       }
+      if (shadowDigest) await this.shadowValidate(seq, shadowDigest);
+      try {
+        await this.host.options.storage.saveCheckpoint(this.projectId, { seq, checkpointJson, documentJson });
+      } catch (error) {
+        if (error instanceof ProjectNotFoundError) {
+          this.projectDeleted();
+          return;
+        }
+        this.checkpointFailed(error);
+        if (unload) this.unloadIfIdle();
+        return;
+      }
+      this.checkpointSeq = seq;
+      this.hasDurableCheckpoint = true;
+      // Rattrapage par lots borné à la moitié du document : au-delà, l'état complet coûte moins.
+      this.room.setCatchUpBudget(Math.max(MIN_CATCH_UP_BYTES, Math.floor(documentJson.length / 2)));
+      this.lastCheckpointAt = Date.now();
+      this.checkpointFailures = 0;
+      this.nextCheckpointAt = 0;
+      this.host.recordCheckpoint(Date.now() - started);
+      try {
+        await this.host.options.storage.pruneJournal(this.projectId, seq);
+      } catch (error) {
+        // Paquets en trop : relus puis ignorés à la reprise (séquence déjà couverte).
+        this.host.log('warn', 'élagage du journal en échec', { projectId: this.projectId, error: String(error) });
+      }
     }
-    if (unload && this.peers.size === 0 && this.unflushed.length === 0) this.close(1000, 'idle');
+    if (unload) this.unloadIfIdle();
+  }
+
+  private checkpointFailed(error: unknown): void {
+    this.checkpointFailures += 1;
+    const retryInMs = backoff(this.checkpointFailures, CHECKPOINT_RETRY_MIN_MS, CHECKPOINT_RETRY_MAX_MS);
+    this.nextCheckpointAt = Date.now() + retryInMs;
+    this.host.metrics.checkpointErrors += 1;
+    this.host.log(this.checkpointFailures === 1 ? 'error' : 'warn', 'point de sauvegarde en échec', {
+      projectId: this.projectId,
+      failures: this.checkpointFailures,
+      retryInMs,
+      error: String(error),
+    });
+  }
+
+  /** Personne, rien en attente, journal écrit jusqu'au bout : déchargée (reprise = point de sauvegarde + journal). */
+  private unloadIfIdle(): void {
+    if (this.peers.size === 0 && this.unflushed.length === 0 && this.journaledSeq >= this.room.state.seq) this.close(1000, 'idle');
+  }
+
+  private shadowDue(now: number): boolean {
+    const interval = this.host.options.shadowValidationIntervalMs ?? DEFAULT_SHADOW_INTERVAL_MS;
+    return interval > 0 && this.hasDurableCheckpoint && now - this.lastShadowAt >= interval;
+  }
+
+  /** Validation fantôme : état durable rejoué jusqu'à `seq` = mémoire à `seq` ? (signalé, jamais corrigé). */
+  private async shadowValidate(seq: number, expected: string): Promise<void> {
+    this.lastShadowAt = Date.now();
+    let result: ShadowResult;
+    try {
+      result = verifyDurable(await this.host.options.storage.readDurable(this.projectId), seq, expected);
+    } catch (error) {
+      this.host.metrics.shadowErrors += 1;
+      this.host.log('warn', 'validation fantôme impossible (lecture du stockage)', { projectId: this.projectId, error: String(error) });
+      return;
+    }
+    this.host.metrics.shadowChecks += 1;
+    if (result.ok) return;
+    this.host.metrics.shadowMismatches += 1;
+    this.host.log('error', 'validation fantôme : état durable différent de la mémoire', { projectId: this.projectId, seq, reason: result.reason });
   }
 
   /** Chargement abandonné : minuteries arrêtées, rien d'écrit. */
@@ -244,11 +379,24 @@ export class RoomHost {
   private readonly loading = new Map<string, Promise<HostedRoom | null>>();
   private readonly journalLatencies: number[] = [];
   private readonly checkpointDurations: number[] = [];
+  private readonly eventLoopDelay = monitorEventLoopDelay({ resolution: 20 });
   private shuttingDown = false;
-  readonly metrics = { batches: 0, fenced: 0, journalErrors: 0, checkpointErrors: 0, loads: 0, loadErrors: 0 };
+  readonly metrics = {
+    batches: 0,
+    fenced: 0,
+    journalErrors: 0,
+    checkpointErrors: 0,
+    loads: 0,
+    loadErrors: 0,
+    deletedRooms: 0,
+    shadowChecks: 0,
+    shadowMismatches: 0,
+    shadowErrors: 0,
+  };
 
   constructor(options: RoomHostOptions) {
     this.options = options;
+    this.eventLoopDelay.enable();
   }
 
   log(level: 'info' | 'warn' | 'error', message: string, data?: Record<string, unknown>): void {
@@ -293,6 +441,7 @@ export class RoomHost {
 
   async shutdown(): Promise<void> {
     this.shuttingDown = true;
+    this.eventLoopDelay.disable();
     await Promise.allSettled([...this.rooms.values()].map((hosted) => hosted.shutdown()));
   }
 
@@ -306,9 +455,14 @@ export class RoomHost {
     if (this.checkpointDurations.length > LATENCY_SAMPLES) this.checkpointDurations.shift();
   }
 
+  /** Mesures du serveur ; le retard de la boucle d'événements repart de zéro à chaque lecture. */
   snapshotMetrics(): Record<string, number> {
     let clients = 0;
     for (const hosted of this.rooms.values()) clients += hosted.peers.size;
+    const memory = process.memoryUsage();
+    const loopP99 = this.eventLoopDelay.count > 0 ? this.eventLoopDelay.percentile(99) / 1e6 : 0;
+    const loopMax = this.eventLoopDelay.count > 0 ? this.eventLoopDelay.max / 1e6 : 0;
+    this.eventLoopDelay.reset();
     return {
       rooms: this.rooms.size,
       clients,
@@ -316,6 +470,10 @@ export class RoomHost {
       journal_latency_p50_ms: percentile(this.journalLatencies, 0.5),
       journal_latency_p95_ms: percentile(this.journalLatencies, 0.95),
       checkpoint_p95_ms: percentile(this.checkpointDurations, 0.95),
+      event_loop_delay_p99_ms: Math.round(loopP99 * 10) / 10,
+      event_loop_delay_max_ms: Math.round(loopMax * 10) / 10,
+      rss_bytes: memory.rss,
+      heap_used_bytes: memory.heapUsed,
     };
   }
 }

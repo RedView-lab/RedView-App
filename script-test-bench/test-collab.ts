@@ -6,8 +6,9 @@
  *     références gardées chez l'autre éditeur ;
  *  2. document distant recomposé avec la vue et le travail local ;
  *  3. simulateur déterministe sur de nombreuses graines (réseau perturbé,
- *     coupures, arrêts brutaux du serveur) : convergence, journal relu =
- *     mémoire, aucune modification perdue ;
+ *     coupures, arrêts brutaux du serveur, onglets rechargés qui modifient
+ *     pendant la connexion et reprennent leurs lots non écrits) :
+ *     convergence, journal relu = mémoire, aucune modification perdue ;
  *  4. débit de la salle (lots par seconde, un seul fil).
  *
  *   npx tsx script-test-bench/test-collab.ts [--seeds=10]   (40 pour une passe profonde, ≈ 5 min)
@@ -155,9 +156,13 @@ function session(document: ProjectDocument, names: string[]) {
     { label: '3 éditeurs, réseau ordinaire', options: { clients: 3, durationMs: 30_000 } },
     { label: '5 éditeurs, coupures et arrêts fréquents', options: { clients: 5, durationMs: 30_000, disconnectRate: 0.3, crashRate: 0.06, latencyMs: [20, 600] } },
     { label: '2 éditeurs, rafales de modifications', options: { clients: 2, durationMs: 20_000, editRate: 20, disconnectRate: 0.1 } },
+    {
+      label: '4 éditeurs, onglets rechargés souvent (modifications pendant la connexion, lots non écrits repris)',
+      options: { clients: 4, durationMs: 30_000, reloadRate: 0.4, disconnectRate: 0.1, crashRate: 0.03, latencyMs: [20, 400] },
+    },
   ];
   for (const profile of profiles) {
-    const totals = { edits: 0, undos: 0, redos: 0, batches: 0, disconnects: 0, crashes: 0, snapshots: 0, rejections: 0 };
+    const totals = { edits: 0, undos: 0, redos: 0, batches: 0, disconnects: 0, crashes: 0, reloads: 0, preWelcomeActions: 0, snapshots: 0, rejections: 0 };
     const failed: string[] = [];
     const t0 = performance.now();
     for (let seed = 1; seed <= seedCount; seed += 1) {
@@ -170,7 +175,8 @@ function session(document: ProjectDocument, names: string[]) {
     assert(
       failed.length === 0,
       `${profile.label} — ${seedCount} graines en ${seconds.toFixed(1)} s : ${totals.edits} modifications, ${totals.undos} annuler, ${totals.redos} rétablir, `
-        + `${totals.batches} lots, ${totals.disconnects} coupures, ${totals.crashes} arrêts serveur, ${totals.snapshots} états complets ; `
+        + `${totals.batches} lots, ${totals.disconnects} coupures, ${totals.crashes} arrêts serveur, ${totals.reloads} rechargements `
+        + `(${totals.preWelcomeActions} actions pendant la connexion), ${totals.snapshots} états complets ; `
         + 'convergence, journal = mémoire, aucune modification perdue',
     );
     assert(totals.rejections === 0, `${profile.label} : aucun lot refusé par le serveur (${totals.rejections})`);

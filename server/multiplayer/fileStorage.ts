@@ -1,12 +1,14 @@
-import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import type { ProjectDocument } from '../../src/features/itineraryPanel/lib/project/layers.ts';
 import type { SequencedBatch } from '../../src/features/collab/protocol.ts';
 import {
   assertContiguous,
+  ProjectNotFoundError,
   type AppendResult,
   type CheckpointWrite,
+  type DurableState,
   type LoadedRoom,
   type ProjectAccess,
   type RoomCheckpoint,
@@ -16,7 +18,8 @@ import {
 /**
  * Stockage de développement (un dossier par projet, un seul processus) :
  * `room.json` (point de sauvegarde exact + document) et `journal.ndjson` (un
- * lot par ligne). Les projets y sont créés par le premier client (`seed`).
+ * lot par ligne). Les projets y sont créés par le premier client (`seed`) ;
+ * un dossier supprimé est un projet supprimé.
  */
 
 interface RoomFile {
@@ -94,10 +97,12 @@ export function createFileStorage(root: string, ownerId = 'dev-user-001'): RoomS
       return 'ok';
     },
 
-    async saveCheckpoint(projectId: string, { checkpointJson, document }: CheckpointWrite): Promise<void> {
+    async saveCheckpoint(projectId: string, { checkpointJson, documentJson }: CheckpointWrite): Promise<void> {
       const previous = await readRoomFile(projectId);
+      if (!previous) throw new ProjectNotFoundError(projectId);
       const checkpoint = JSON.parse(checkpointJson) as RoomCheckpoint;
-      await writeRoomFile(projectId, { checkpoint, document, ownerId: previous?.ownerId ?? ownerId });
+      const document = JSON.parse(documentJson) as ProjectDocument;
+      await writeRoomFile(projectId, { checkpoint, document, ownerId: previous.ownerId ?? ownerId });
     },
 
     async pruneJournal(projectId: string, uptoSeq: number): Promise<void> {
@@ -105,6 +110,19 @@ export function createFileStorage(root: string, ownerId = 'dev-user-001'): RoomS
       const target = path.join(dirOf(projectId), 'journal.ndjson');
       await writeFile(`${target}.tmp`, kept.map((batch) => `${JSON.stringify(batch)}\n`).join(''));
       await rename(`${target}.tmp`, target);
+    },
+
+    async readDurable(projectId: string): Promise<DurableState | null> {
+      const file = await readRoomFile(projectId);
+      if (!file?.checkpoint) return null;
+      const afterSeq = file.checkpoint.seq;
+      const journal = (await readJournal(projectId)).filter((batch) => batch.seq > afterSeq).sort((a, b) => a.seq - b.seq);
+      return { checkpoint: file.checkpoint, journal };
+    },
+
+    async purgeRoom(projectId: string): Promise<void> {
+      lastJournalSeq.delete(projectId);
+      await rm(dirOf(projectId), { recursive: true, force: true });
     },
   };
 }

@@ -28,7 +28,7 @@ export interface CheckpointWrite {
   seq: number;
   /** JSON d'un `RoomCheckpoint`. */
   checkpointJson: string;
-  document: ProjectDocument;
+  /** JSON du document matérialisé (`projects.data`), au format de l'application. */
   documentJson: string;
 }
 
@@ -51,6 +51,24 @@ export interface ProjectAccess {
 
 export type AppendResult = 'ok' | 'conflict';
 
+/** État durable d'une salle, relu sans rien modifier (validation fantôme). */
+export interface DurableState {
+  checkpoint: RoomCheckpoint;
+  /** Lots journalisés au-delà du point de sauvegarde, triés (contiguïté non vérifiée). */
+  journal: SequencedBatch[];
+}
+
+/**
+ * Le projet n'existe plus (supprimé pendant que sa salle était ouverte) :
+ * définitif, la salle est fermée et ses données de co-édition purgées.
+ */
+export class ProjectNotFoundError extends Error {
+  constructor(projectId: string) {
+    super(`projet ${projectId} introuvable`);
+    this.name = 'ProjectNotFoundError';
+  }
+}
+
 export interface RoomStorage {
   readonly kind: 'appwrite' | 'file';
   /** Propriétaire et équipe du projet ; null : introuvable. */
@@ -61,10 +79,17 @@ export interface RoomStorage {
    */
   loadRoom(projectId: string, seed?: ProjectDocument): Promise<LoadedRoom | null>;
   appendJournal(projectId: string, batches: readonly SequencedBatch[]): Promise<AppendResult>;
-  /** Point de sauvegarde (après un journal à jour jusqu'à `write.seq`). */
+  /**
+   * Point de sauvegarde (après un journal à jour jusqu'à `write.seq`) ;
+   * `ProjectNotFoundError` si le projet a été supprimé.
+   */
   saveCheckpoint(projectId: string, write: CheckpointWrite): Promise<void>;
   /** Retire du journal les paquets entièrement couverts par le point de sauvegarde. */
   pruneJournal(projectId: string, uptoSeq: number): Promise<void>;
+  /** Point de sauvegarde et journal tels qu'écrits, en lecture seule ; null sans point de sauvegarde lisible. */
+  readDurable(projectId: string): Promise<DurableState | null>;
+  /** Projet supprimé : journal et points de sauvegarde de la co-édition effacés. */
+  purgeRoom(projectId: string): Promise<void>;
 }
 
 /** Paquet de journal invalide ou lu dans le désordre : on refuse de charger plutôt que de diverger. */

@@ -131,5 +131,10 @@ export interface ProjectProviderProps {
   onProjectChange?: (project: ItineraryProject) => void;
   /** Session de co-édition ouverte sur ce projet (null : seul sur le projet). */
   collab?: ProjectCollabLink | null;
+  /**
+   * Session attendue mais pas encore créée (projet partagé, module en
+   * chargement) : les écritures sont gardées pour elle et rien n'est calculé.
+   */
+  collabPending?: boolean;
   children: ReactNode;
 }

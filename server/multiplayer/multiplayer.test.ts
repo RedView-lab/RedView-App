@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { access, mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -17,7 +17,9 @@ import { createMultiplayerServer, type MultiplayerServer } from './server.ts';
 /**
  * Serveur temps réel réel (HTTP + WebSocket, stockage de fichiers) et vrais
  * clients (`CollabConnection` sur le WebSocket de `ws`) : synchronisation,
- * redémarrage du serveur en pleine édition, refus d'accès.
+ * redémarrage du serveur en pleine édition, modifications faites pendant la
+ * connexion, projet supprimé en pleine session, refus d'accès, santé et
+ * mesures.
  */
 
 let dir: string;
@@ -35,7 +37,7 @@ async function start(): Promise<void> {
   port = await server.listen(port);
 }
 
-function connect(user: string, seed?: ProjectDocument): CollabConnection {
+function createConnection(user: string, seed?: ProjectDocument): CollabConnection {
   const connection = new CollabConnection({
     url: `ws://127.0.0.1:${port}/multiplayer`,
     projectId: 'local-test',
@@ -44,6 +46,11 @@ function connect(user: string, seed?: ProjectDocument): CollabConnection {
     WebSocketImpl: WebSocket as unknown as typeof globalThis.WebSocket,
   });
   connections.push(connection);
+  return connection;
+}
+
+function connect(user: string, seed?: ProjectDocument): CollabConnection {
+  const connection = createConnection(user, seed);
   connection.start();
   return connection;
 }
@@ -95,6 +102,54 @@ afterEach(async () => {
 });
 
 describe('serveur temps réel', () => {
+  it('santé publique minimale ; mesures sur le port interne seulement', async () => {
+    const health = await fetch(`http://127.0.0.1:${port}/multiplayer/health`);
+    expect(await health.json()).toEqual({ ok: true });
+    expect((await fetch(`http://127.0.0.1:${port}/multiplayer/metrics`)).status).toBe(404);
+    expect((await fetch(`http://127.0.0.1:${port}/metrics`)).status).toBe(404);
+    const metricsPort = await server!.listenMetrics(0);
+    const metrics = await (await fetch(`http://127.0.0.1:${metricsPort}/metrics.json`)).json() as Record<string, number>;
+    expect(metrics).toMatchObject({ ok: true, rooms: 0, clients: 0, checkpointErrors: 0 });
+    expect(metrics.heap_used_bytes).toBeGreaterThan(0);
+    expect(await (await fetch(`http://127.0.0.1:${metricsPort}/metrics`)).text()).toContain('redview_multiplayer_journal_latency_p95_ms');
+  });
+
+  it('modification faite pendant la connexion (document du cloud en retard) : arrive chez les autres', async () => {
+    const a = connect('alice', sampleDocument(300));
+    await waitFor(() => a.client.getState().ready, 'a prêt');
+    const cloud = a.client.getDocument();
+    edit(a, 'it-2', (it) => ({ ...it, name: 'Après le point de sauvegarde' }));
+    await waitFor(() => a.client.getState().unsynced === 0, 'a acquitté');
+
+    // B ouvre le projet : le store se branche sur le document du cloud, la
+    // connexion part au branchement ; il renomme avant l'état du serveur.
+    const b = createConnection('bob');
+    b.client.bind(cloud, []);
+    edit(b, 'it-1', (it) => ({ ...it, name: 'Pendant la connexion' }));
+    expect(b.client.getState().ready).toBe(false);
+    await waitFor(() => itinerary(a, 'it-1').name === 'Pendant la connexion', 'renommage reçu par A');
+    await waitFor(() => itinerary(b, 'it-2').name === 'Après le point de sauvegarde', 'état du serveur chez B');
+    expect(json(a)).toBe(json(b));
+  });
+
+  it('projet supprimé en pleine session : clients refusés (4404), salle fermée et purgée', async () => {
+    const a = connect('alice', sampleDocument(200));
+    await waitFor(() => a.client.getState().ready, 'a prêt');
+    const b = connect('bob');
+    await waitFor(() => b.client.getState().ready, 'b prêt');
+    await rm(path.join(dir, 'local-test'), { recursive: true, force: true });
+    edit(a, 'it-1', (it) => ({ ...it, name: 'Après la suppression' }));
+    await waitFor(
+      () => a.client.getState().status === 'denied' && b.client.getState().status === 'denied',
+      'clients refusés',
+    );
+    expect(a.client.getState().deniedReason).toBe('not-found');
+    expect(server!.host.metrics.deletedRooms).toBe(1);
+    expect(server!.host.metrics.checkpointErrors).toBe(0);
+    await waitFor(() => server!.host.snapshotMetrics().rooms === 0, 'salle oubliée');
+    await expect(access(path.join(dir, 'local-test'))).rejects.toThrow();
+  });
+
   it('deux clients : état initial, modifications croisées, convergence', async () => {
     const a = connect('alice', sampleDocument(500));
     await waitFor(() => a.client.getState().ready, 'a prêt');

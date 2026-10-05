@@ -5101,6 +5101,34 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Editor"
   },
   {
+    "fr": "Connexion à la session…",
+    "en": "Connecting to the session…"
+  },
+  {
+    "fr": "Hors ligne : vos modifications partiront à la reconnexion.",
+    "en": "Offline: your changes will be sent when you reconnect."
+  },
+  {
+    "fr": "Vos modifications sont gardées sur cet appareil et partiront dès la connexion.",
+    "en": "Your changes are kept on this device and will be sent as soon as you are connected."
+  },
+  {
+    "fr": "Ce projet a été supprimé.",
+    "en": "This project has been deleted."
+  },
+  {
+    "fr": "Vous n’avez plus accès à ce projet.",
+    "en": "You no longer have access to this project."
+  },
+  {
+    "fr": "Une nouvelle version de RedView est disponible : rechargez la page pour continuer à modifier ce projet partagé.",
+    "en": "A new version of RedView is available: reload the page to keep editing this shared project."
+  },
+  {
+    "fr": "Session expirée : reconnectez-vous pour continuer à modifier ce projet partagé.",
+    "en": "Session expired: sign in again to keep editing this shared project."
+  },
+  {
     "fr": "Identifiant de projet invalide",
     "en": "Invalid project id"
   },
@@ -5139,6 +5167,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Le propriétaire ne peut pas quitter son propre projet",
     "en": "The owner cannot leave their own project"
+  },
+  {
+    "fr": "Seul le propriétaire peut supprimer ce projet",
+    "en": "Only the owner can delete this project"
   },
   {
     "fr": "Membre invalide",

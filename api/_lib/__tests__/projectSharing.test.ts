@@ -4,8 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Partage d'un projet (projectSharing.ts) sur un faux `node-appwrite` en
- * mémoire : qui peut inviter / retirer / quitter / lister, permissions données
- * à l'équipe (document, .fit, miniature), comptes inconnus refusés.
+ * mémoire : qui peut inviter / retirer / quitter / lister / supprimer,
+ * permissions données à l'équipe (document, .fit, miniature), comptes
+ * inconnus refusés, données de la co-édition purgées à la suppression.
  */
 
 const fake = vi.hoisted(() => ({
@@ -13,6 +14,7 @@ const fake = vi.hoisted(() => ({
   users: [] as Array<{ $id: string; email: string; name: string }>,
   teams: new Map<string, { name: string; memberships: Array<{ $id: string; userId: string; roles: string[] }> }>(),
   files: new Map<string, { name: string; $permissions: string[] }>(),
+  journal: new Map<string, { $id: string; project_id: string; payload: string }>(),
   nextId: 0,
 }));
 
@@ -39,6 +41,17 @@ vi.mock('node-appwrite', async (importActual) => {
       if (permissions) doc.$permissions = permissions;
       return doc;
     }
+    async listDocuments(_db: string, col: string, queries: string[] = []) {
+      if (col !== 'project_journal') throw error(404);
+      const projectId = queryValue(queries, 'equal', 'project_id');
+      const documents = [...fake.journal.values()].filter((row) => row.project_id === projectId).slice(0, 100);
+      return { total: documents.length, documents };
+    }
+    async deleteDocument(_db: string, col: string, id: string) {
+      const deleted = col === 'project_journal' ? fake.journal.delete(id) : fake.projects.delete(id);
+      if (!deleted) throw error(404);
+      return {};
+    }
   }
   class Users {
     async list(queries: string[] = []) {
@@ -47,6 +60,10 @@ vi.mock('node-appwrite', async (importActual) => {
     }
   }
   class Teams {
+    async delete(teamId: string) {
+      if (!fake.teams.delete(teamId)) throw error(404);
+      return {};
+    }
     async get(teamId: string) {
       if (!fake.teams.has(teamId)) throw error(404);
       return { $id: teamId };
@@ -93,6 +110,14 @@ vi.mock('node-appwrite', async (importActual) => {
       if (permissions) file.$permissions = permissions;
       return file;
     }
+    async listFiles(_bucket: string, queries: string[] = []) {
+      const name = queryValue(queries, 'equal', 'name');
+      return { total: 0, files: [...fake.files].filter(([, file]) => file.name === name).map(([$id]) => ({ $id })) };
+    }
+    async deleteFile(_bucket: string, fileId: string) {
+      if (!fake.files.delete(fileId)) throw error(404);
+      return {};
+    }
   }
   class Client {
     setEndpoint() { return this; }
@@ -102,7 +127,7 @@ vi.mock('node-appwrite', async (importActual) => {
   return { ...actual, Client, Databases, Users, Teams, Storage };
 });
 
-const { getShareState, inviteToProject, leaveProject, projectTeamId, removeFromProject } = await import('../projectSharing.ts');
+const { deleteSharedProject, getShareState, inviteToProject, leaveProject, projectTeamId, removeFromProject } = await import('../projectSharing.ts');
 const { PublicError } = await import('../errors.ts');
 
 const owner = { id: 'owner', email: 'owner@example.test' };
@@ -116,6 +141,7 @@ beforeEach(() => {
   fake.projects.clear();
   fake.teams.clear();
   fake.files.clear();
+  fake.journal.clear();
   fake.users = [
     { $id: 'owner', email: 'owner@example.test', name: 'Owner' },
     { $id: 'editor', email: 'editor@example.test', name: 'Editor' },
@@ -183,5 +209,27 @@ describe('partage d’un projet', () => {
     await leaveProject(editor, PROJECT);
     await rejects(getShareState(editor, PROJECT), 404);
     await rejects(leaveProject(stranger, PROJECT), 404);
+  });
+
+  it('supprimer un projet partagé : propriétaire seulement ; journal, points de sauvegarde, équipe et ligne effacés', async () => {
+    await inviteToProject(owner, PROJECT, 'editor@example.test');
+    fake.files.set('snap1', { name: `${PROJECT}.collab.gz`, $permissions: [] });
+    fake.files.set('big1', { name: `${PROJECT}.journal-7.gz`, $permissions: [] });
+    fake.files.set('other', { name: 'autre.collab.gz', $permissions: [] });
+    fake.journal.set('j1', { $id: 'j1', project_id: PROJECT, payload: 'H4sI' });
+    fake.journal.set('j2', { $id: 'j2', project_id: PROJECT, payload: 'file:big1' });
+    fake.journal.set('j3', { $id: 'j3', project_id: 'autre', payload: 'H4sI' });
+
+    await rejects(deleteSharedProject(editor, PROJECT), 403);
+    expect(fake.projects.has(PROJECT)).toBe(true);
+
+    await deleteSharedProject(owner, PROJECT);
+    expect(fake.projects.has(PROJECT)).toBe(false);
+    expect(fake.teams.has(TEAM)).toBe(false);
+    expect([...fake.journal.keys()]).toEqual(['j3']);
+    expect(fake.files.has('snap1') || fake.files.has('big1')).toBe(false);
+    expect(fake.files.has('other')).toBe(true);
+    // Déjà supprimé : rien à faire, pas d'erreur.
+    await deleteSharedProject(owner, PROJECT);
   });
 });

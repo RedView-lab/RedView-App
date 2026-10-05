@@ -1,9 +1,9 @@
 import type { DerivedKind } from '@/features/itineraryPanel/context/ProjectStore/collab';
 import type { ProjectDocument } from '@/features/itineraryPanel/lib/project/layers';
 
-import { documentOps } from '../model/diff';
+import { storeFromDocument } from '../model/diff';
 import { Materializer } from '../model/materialize';
-import { ObjectStore } from '../model/objects';
+import type { ObjectStore } from '../model/objects';
 import { applyOps, type Op } from '../model/ops';
 import { decodePath, itineraryIdOf } from '../model/paths';
 import { checkBatch } from '../model/validate';
@@ -57,7 +57,6 @@ export class RoomState {
   private sequence: number;
   private readonly lastClientSeq = new Map<string, number>();
   private readonly authors = new Map<string, Map<string, FieldAuthor>>();
-  private readonly materializer = new Materializer();
 
   constructor(store: ObjectStore, seq: number, clientSeqs: Readonly<Record<string, number>> = {}) {
     this.store = store;
@@ -73,11 +72,7 @@ export class RoomState {
     seq: number,
     clientSeqs: Readonly<Record<string, number>> = {},
   ): RoomState {
-    const store = new ObjectStore();
-    const { ops, blobs } = documentOps(store, document);
-    for (const [id, json] of blobs) store.putBlob(id, json);
-    applyOps(store, ops);
-    return new RoomState(store, seq, clientSeqs);
+    return new RoomState(storeFromDocument(document), seq, clientSeqs);
   }
 
   get seq(): number {
@@ -135,9 +130,9 @@ export class RoomState {
     return serializeStore(this.store, this.sequence);
   }
 
-  /** Document courant (point de sauvegarde, réponse aux clients sans session). */
+  /** Document courant (rien n'est gardé : le serveur écrit le sien avec `materializeJson`). */
   document(): ProjectDocument {
-    return this.materializer.materialize(this.store);
+    return new Materializer().materialize(this.store);
   }
 
   /** Dernier auteur d'une entrée du résultat `kind` de l'itinéraire. */

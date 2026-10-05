@@ -1,3 +1,4 @@
+import type { PreSessionChange } from '@/features/itineraryPanel/context/ProjectStore/collab';
 import { canonicalJson } from '@/features/itineraryPanel/lib/project/canonicalJson';
 import type { ProjectDocument } from '@/features/itineraryPanel/lib/project/layers';
 
@@ -22,15 +23,20 @@ import { Scheduler, seededRandom } from './scheduler';
  * Simulateur déterministe de co-édition (à la manière du prototype à trois
  * clients de Figma) : un serveur (salle + journal + points de sauvegarde), N
  * clients qui modifient, annulent et rétablissent au hasard, un réseau simulé
- * (latence, connexions FIFO comme TCP, coupures, reconnexions) et des arrêts
- * brutaux du serveur. Tout est rejouable à partir de la graine.
+ * (latence, connexions FIFO comme TCP, coupures, reconnexions), des arrêts
+ * brutaux du serveur et des onglets rechargés : le client repart d'un
+ * document en retard (point de sauvegarde du « cloud », ou sa copie locale),
+ * reprend ses lots non écrits avec le même `clientId`, et modifie avant
+ * d'être branché puis avant l'état du serveur. Tout est rejouable à partir de
+ * la graine.
  *
  * Vérifié à la fin (`SimulationReport`) :
  *  - convergence : tous les clients affichent exactement le document du
  *    serveur, sans modification en attente ;
  *  - durabilité : point de sauvegarde + journal relus = état en mémoire ;
  *  - aucune modification perdue : le compteur que chaque client est seul à
- *    écrire vaut sa dernière valeur écrite, malgré coupures et arrêts ;
+ *    écrire vaut la dernière valeur que ce client y a mise (écriture,
+ *    annuler, rétablir), malgré coupures, arrêts et rechargements ;
  *  - après chaque action, le document de l'application est exactement l'état
  *    visible du client rematérialisé (différence ↔ opérations sans perte).
  */
@@ -46,6 +52,8 @@ export interface SimulationOptions {
   disconnectRate?: number;
   /** Probabilité par seconde d'un arrêt brutal du serveur. */
   crashRate?: number;
+  /** Probabilité par seconde et par client d'un onglet rechargé. */
+  reloadRate?: number;
   latencyMs?: [number, number];
   routeSize?: number;
 }
@@ -63,6 +71,9 @@ export interface SimulationReport {
     batches: number;
     disconnects: number;
     crashes: number;
+    reloads: number;
+    /** Actions faites avant l'état du serveur (connexion en cours). */
+    preWelcomeActions: number;
     snapshots: number;
     rejections: number;
     finalSeq: number;
@@ -208,14 +219,18 @@ class SimServer {
 
 class SimClient {
   readonly id: string;
-  readonly collab: CollabClient;
+  collab: CollabClient;
   private connection: SimConnection | null = null;
   private flushScheduled = false;
   private reconnectAttempt = 0;
+  /** Le « store » est branché (document affiché) : l'utilisateur peut agir. */
+  private bound = false;
   edits = 0;
   undos = 0;
   redos = 0;
-  /** Dernière valeur écrite de son compteur. */
+  reloads = 0;
+  preWelcomeActions = 0;
+  /** Dernière valeur que ce client a mise dans son compteur (écriture, annuler, rétablir). */
   counter = 0;
   rejections = 0;
   snapshots = 0;
@@ -226,9 +241,14 @@ class SimClient {
   constructor(sim: Simulation, id: string) {
     this.sim = sim;
     this.id = id;
-    this.collab = new CollabClient({
-      clientId: id,
-      clock: sim.scheduler,
+    this.collab = this.createClient();
+  }
+
+  /** Client de ce `clientId` (le même après un rechargement : le serveur reconnaît ses lots). */
+  private createClient(): CollabClient {
+    return new CollabClient({
+      clientId: this.id,
+      clock: this.sim.scheduler,
       transport: {
         isOnline: () => !!this.connection?.open && this.connection.welcomed,
         send: (message) => this.connection?.toServer(message),
@@ -239,6 +259,50 @@ class SimClient {
         this.rejections += 1;
       },
     });
+  }
+
+  /** Branche le « store » : document affiché et écritures faites avant le branchement. */
+  bind(base: ProjectDocument, changes: PreSessionChange[]): void {
+    this.collab.bind(base, changes);
+    this.bound = true;
+    this.checkVisible('branchement');
+  }
+
+  /**
+   * Onglet rechargé : connexion coupée sans prévenir, lots non écrits gardés
+   * (copie de l'appareil) et repris par un nouveau client du même `clientId`,
+   * qui part de `base` (document en retard) et modifie avant d'être branché
+   * puis avant l'état du serveur.
+   */
+  reload(base: ProjectDocument): void {
+    const unsynced = this.collab.engine.unsyncedBatches();
+    const nextSeq = this.collab.engine.nextSeq;
+    const previous = this.connection;
+    this.connection = null;
+    previous?.close();
+    this.collab.dispose();
+    this.collab = this.createClient();
+    this.collab.engine.restoreUnsynced(unsynced, nextSeq);
+    this.bound = false;
+    this.reloads += 1;
+
+    const changes: PreSessionChange[] = [];
+    let document = base;
+    const count = Math.floor(this.sim.random() * 3);
+    for (let index = 0; index < count; index += 1) {
+      const edit = randomEdit(document, this.sim.random, this.id, 10_000 + this.reloads * 10 + index);
+      if (!edit) continue;
+      document = edit.document;
+      changes.push({ document, change: edit.change });
+    }
+    if (this.sim.random() < 0.5) {
+      const next = incrementCounter(document, this.id);
+      document = next.document;
+      changes.push({ document, change: 'user' });
+      this.counter = next.value;
+    }
+    this.bind(base, changes);
+    this.sim.scheduler.after(100 + this.sim.random() * 1_500, () => this.connect());
   }
 
   get online(): boolean {
@@ -283,9 +347,17 @@ class SimClient {
     this.sim.scheduler.after(delay, () => this.connect());
   }
 
-  /** Une action de l'utilisateur (si le document est connu). */
+  /** Une action de l'utilisateur (dès que le store est branché, avant même l'état du serveur). */
   act(): void {
-    if (!this.collab.getState().ready) return;
+    if (!this.bound) return;
+    if (!this.collab.engine.isReady) this.preWelcomeActions += 1;
+    const before = readCounter(this.collab.getDocument(), this.id);
+    this.perform();
+    const after = readCounter(this.collab.getDocument(), this.id);
+    if (after !== before) this.counter = after;
+  }
+
+  private perform(): void {
     const roll = this.sim.random();
     if (roll < 0.08) {
       if (this.collab.canUndo()) {
@@ -303,9 +375,10 @@ class SimClient {
     }
     const document = this.collab.getDocument();
     if (roll < 0.2) {
+      // En session, un « résultat calculé » (jamais dans annuler) ; avant l'état
+      // du serveur, une action de l'utilisateur (un calcul y resterait local).
       const next = incrementCounter(document, this.id);
-      this.collab.pushLocalDocument(next.document, 'background');
-      this.counter = next.value;
+      this.collab.pushLocalDocument(next.document, this.collab.engine.isReady ? 'background' : 'user');
       return;
     }
     const edit = randomEdit(document, this.sim.random, this.id, this.edits);
@@ -347,6 +420,7 @@ class Simulation {
       editRate: 4,
       disconnectRate: 0.05,
       crashRate: 0.01,
+      reloadRate: 0.02,
       latencyMs: [5, 120],
       routeSize: 800,
       ...options,
@@ -367,7 +441,10 @@ class Simulation {
     scheduler.setInterval(() => this.server.flushJournal(), JOURNAL_FLUSH_MS);
     scheduler.setInterval(() => this.server.checkpoint(), CHECKPOINT_EVERY_MS);
     scheduler.setInterval(() => this.server.tick(), ROOM_TICK_MS);
+    const initial = sampleDocument(this.options.routeSize);
     for (const client of this.clients) {
+      // Store branché à l'ouverture (document du cloud) ; connexion un peu plus tard.
+      client.bind(initial, []);
       scheduler.after(this.random() * 500, () => client.connect());
       this.scheduleActions(client);
     }
@@ -401,6 +478,10 @@ class Simulation {
           client.disconnect();
           this.disconnects += 1;
         }
+        if (this.random() < this.options.reloadRate / 10) {
+          // Document affiché à la réouverture : point de sauvegarde (cloud), ou la copie locale.
+          client.reload(this.random() < 0.5 ? this.cloudDocument() : client.collab.getDocument());
+        }
       }
       if (this.server.room && this.random() < this.options.crashRate / 10) {
         this.server.crash();
@@ -409,6 +490,14 @@ class Simulation {
       this.scheduler.after(100, tick);
     };
     this.scheduler.after(100, tick);
+  }
+
+  /** Document du cloud : celui du dernier point de sauvegarde (en retard sur la salle). */
+  private cloudDocument(): ProjectDocument {
+    const checkpoint = this.server.storage.checkpoint;
+    return checkpoint
+      ? new Materializer().materialize(deserializeStore(checkpoint.snapshot))
+      : sampleDocument(this.options.routeSize);
   }
 
   private report(): SimulationReport {
@@ -485,6 +574,8 @@ class Simulation {
         batches: this.server.batches,
         disconnects: this.disconnects,
         crashes: this.crashes,
+        reloads: sum(this.clients, (client) => client.reloads),
+        preWelcomeActions: sum(this.clients, (client) => client.preWelcomeActions),
         snapshots: sum(this.clients, (client) => client.snapshots),
         rejections: sum(this.clients, (client) => client.rejections),
         finalSeq: room?.state.seq ?? -1,

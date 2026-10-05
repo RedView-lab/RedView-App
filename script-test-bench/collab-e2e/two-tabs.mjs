@@ -3,6 +3,10 @@
 // servi par Vite sous /multiplayer). Compte les appels BRouter de chaque
 // onglet : seul l'auteur d'une modification doit router.
 import { launch, connect, sleep, waitFor } from '../screen-audit/cdp.mjs';
+import { armSlowWelcome, SLOW_WELCOME_SCRIPT } from './slowWelcome.mjs';
+
+/** Session temps réel en ligne (état du serveur reçu) : attribut de l'en-tête du panneau. */
+const SESSION_ONLINE = `!!document.querySelector('[data-rv-collab-status="online"]')`;
 
 const PORT = 9371;
 const APP = 'http://localhost:5173';
@@ -120,8 +124,8 @@ try {
   await B.send('Page.navigate', { url: `${APP}${projectUrl}?collab=server` });
   await openWithDemoAccount(B);
   out.steps.screenB = await B.evaluate(`({ url: location.pathname + location.search, text: document.body.innerText.slice(0, 160) })`);
-  await waitFor(B, store(`s.collabActive === true`), { timeout: 30000 });
-  await waitFor(A, store(`s.collabActive === true`), { timeout: 30000 });
+  await waitFor(B, SESSION_ONLINE, { timeout: 30000 });
+  await waitFor(A, SESSION_ONLINE, { timeout: 30000 });
   await sleep(4000);
   out.steps.multiplayerSockets = { A: out.sockets.A.length, B: out.sockets.B.length };
   check(out.sockets.A.length > 0 && out.sockets.B.length > 0, 'les deux onglets sont connectés au serveur temps réel');
@@ -193,14 +197,34 @@ try {
   // 7. B recharge la page : l'état revient du serveur (sans BRouter, sans recalcul).
   const beforeReload = await A.evaluate(store(`JSON.stringify(s.project.itineraries.map((it) => [it.id, it.name, it.color, it.gpxRoute?.routedInputsKey]))`));
   const brouterBeforeReload = out.brouter.B.length;
+  await B.evaluate(`window.__rvBeforeReload = true`);
   await B.send('Page.reload', {});
+  await waitFor(B, `!window.__rvBeforeReload`, { timeout: 30000 });
   await openWithDemoAccount(B);
   out.steps.reloadB = await B.evaluate(`({ url: location.pathname + location.search, flag: sessionStorage.getItem('redview:dev-collab'), text: document.body.innerText.slice(0, 120) })`);
-  await waitFor(B, store(`s.collabActive === true`), { timeout: 30000 });
-  await sleep(3000);
-  const afterReload = await B.evaluate(store(`JSON.stringify(s.project.itineraries.map((it) => [it.id, it.name, it.color, it.gpxRoute?.routedInputsKey]))`));
+  await waitFor(B, SESSION_ONLINE, { timeout: 30000 });
+  const docOf = `JSON.stringify(window.__rvStore().project.itineraries.map((it) => [it.id, it.name, it.color, it.gpxRoute?.routedInputsKey]))`;
+  await waitFor(B, `${docOf} === ${JSON.stringify(beforeReload)}`, { timeout: 10000 }).catch(() => null);
+  const afterReload = await B.evaluate(docOf);
   check(afterReload === beforeReload, 'B recharge : même document que A (état du serveur)');
   check(out.brouter.B.length === brouterBeforeReload, 'B recharge : aucun appel BRouter');
+
+  // 8. B recharge et renomme pendant la connexion (état du serveur retardé de 8 s) : rien n'est perdu.
+  await B.send('Page.addScriptToEvaluateOnNewDocument', { source: SLOW_WELCOME_SCRIPT });
+  await B.evaluate(armSlowWelcome(8000));
+  await B.evaluate(`window.__rvBeforeReload = true`);
+  await B.send('Page.reload', {});
+  await waitFor(B, `!window.__rvBeforeReload`, { timeout: 30000 });
+  await openWithDemoAccount(B);
+  await waitFor(B, `!!window.__rvStore?.()`, { timeout: 120000 });
+  const statusAtEdit = await B.evaluate(`document.querySelector('[data-rv-collab-status]')?.dataset.rvCollabStatus ?? 'aucun'`);
+  await B.evaluate(store(`(s.setItineraryName(${JSON.stringify(itineraryId)}, 'Renommé pendant la connexion'), 0)`));
+  out.steps.statusAtEditDuringConnect = statusAtEdit;
+  await waitFor(A, store(`s.project.itineraries[0].name === 'Renommé pendant la connexion'`), { timeout: 15000 }).catch(() => null);
+  check(statusAtEdit === 'connecting', `B renomme pendant la connexion (état de la session : ${statusAtEdit})`);
+  check(await A.evaluate(store(`s.project.itineraries[0].name === 'Renommé pendant la connexion'`)), 'modification de B faite pendant sa connexion : reçue par A');
+  await waitFor(B, SESSION_ONLINE, { timeout: 30000 });
+  check(await B.evaluate(store(`s.project.itineraries[0].name === 'Renommé pendant la connexion'`)), 'B garde sa modification une fois en ligne');
   out.steps.brouterSetupA = brouterAfterSetupA;
 } catch (error) {
   out.fatal = String(error?.stack ?? error);

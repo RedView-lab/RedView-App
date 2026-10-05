@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -21,9 +22,12 @@ import {
 } from '../../lib/project/layers';
 
 import {
+  SESSION_PENDING_COMPUTE_GATE,
   SOLO_COMPUTE_GATE,
   type CollabChangeCause,
   type CollabLocalChange,
+  type PreSessionChange,
+  type ProjectCollabLink,
 } from './collab';
 import { ProjectStoreContext } from './context';
 import { diffHistoryDocument, shareProjectStructure } from './historyDocument';
@@ -38,6 +42,9 @@ import type {
 
 /** Origine d'une écriture du projet. */
 type CommitSource = CollabLocalChange | 'restore' | 'remote';
+
+/** Au-delà, les écritures d'avant la session sont fusionnées (module de session jamais chargé). */
+const MAX_PRE_SESSION_CHANGES = 200;
 
 /**
  * Annuler/rétablir dans une session : l'itinéraire qui réapparaît (ajout ou
@@ -63,11 +70,15 @@ function focusReappearingItinerary(current: ItineraryProject, next: ItineraryPro
  * Avec une session de co-édition (`collab`), chaque document produit ici lui
  * est envoyé, ceux des autres éditeurs sont appliqués (recomposés avec la vue
  * et le travail local de cet appareil), et annuler/rétablir passent par elle.
+ * Tant que la session se prépare (`collabPending`), les écritures sont notées
+ * puis rejouées dans la session à son branchement (`bind`) : rien de ce qui
+ * est fait pendant la connexion n'est perdu.
  */
 export function ProjectProvider({
   initialProject,
   onProjectChange,
   collab = null,
+  collabPending = false,
   children,
 }: ProjectProviderProps) {
   const [project, setProjectInternal] = useState<ItineraryProject>(
@@ -85,9 +96,23 @@ export function ProjectProvider({
   useEffect(() => {
     collabRef.current = collab;
   }, [collab]);
+  /**
+   * Session attendue (lien pas encore branché) : les écritures sont notées
+   * pour elle. Juste dès le premier rendu, puis tenu à jour avant tout effet
+   * passif (résultats async, événements).
+   */
+  const collabExpectedRef = useRef(collab !== null || collabPending);
+  useLayoutEffect(() => {
+    collabExpectedRef.current = collab !== null || collabPending;
+  }, [collab, collabPending]);
+  /** Lien branché (`bind` fait) : les écritures lui sont envoyées. */
+  const boundLinkRef = useRef<ProjectCollabLink | null>(null);
+  /** Écritures faites avant le branchement, et le document d'où elles partent. */
+  const preSessionRef = useRef<{ base: ProjectDocument; changes: PreSessionChange[] } | null>(null);
 
   /** Publie un état déjà préparé (normalisé + partagé) et le persiste. */
   const commitProject = useCallback((next: ItineraryProject, source: CommitSource) => {
+    const prev = projectRef.current;
     projectRef.current = next;
     setProjectInternal(next);
     try {
@@ -95,13 +120,34 @@ export function ProjectProvider({
     } catch (err) {
       console.error('[ProjectProvider] onProjectChange threw', err);
     }
-    const link = collabRef.current;
-    if (link && source !== 'remote' && source !== 'restore') {
+    if (source === 'remote') return;
+    const link = boundLinkRef.current;
+    if (link) {
+      // En session, annuler/rétablir passent par elle : jamais de 'restore' ici.
+      if (source === 'restore') return;
       try {
         link.pushLocalDocument(toProjectDocument(next), source);
       } catch (err) {
         console.error('[ProjectProvider] collab push failed', err);
       }
+      return;
+    }
+    if (!collabExpectedRef.current) return;
+    // Session en préparation : écriture notée, rejouée au branchement. Une
+    // rafale du même type n'en garde que le dernier document (même différence).
+    const change: CollabLocalChange = source === 'restore' ? 'step' : source;
+    const pre = preSessionRef.current ?? { base: toProjectDocument(prev), changes: [] };
+    preSessionRef.current = pre;
+    const document = toProjectDocument(next);
+    const last = pre.changes[pre.changes.length - 1];
+    if (last && last.change === change) {
+      last.document = document;
+    } else if (last && pre.changes.length >= MAX_PRE_SESSION_CHANGES) {
+      // Session jamais prête : fusionnées, envoyées si l'une vient de l'utilisateur.
+      last.document = document;
+      if (change !== 'background') last.change = change;
+    } else {
+      pre.changes.push({ document, change });
     }
   }, []);
 
@@ -131,7 +177,8 @@ export function ProjectProvider({
     [commitProject, prepareProject],
   );
 
-  const isRecordingHistory = useCallback(() => collabRef.current === null, []);
+  // Session attendue ou ouverte : son historique (par éditeur) remplace celui-ci.
+  const isRecordingHistory = useCallback(() => !collabExpectedRef.current, []);
 
   const {
     canUndoTraceEdit,
@@ -225,12 +272,19 @@ export function ProjectProvider({
       }
     };
     const syncHistory = () => setCollabHistory({ canUndo: collab.canUndo(), canRedo: collab.canRedo() });
-    // État de la session (reçu d'un autre éditeur, ou semé depuis ce projet).
-    apply(collab.getDocument(), 'remote');
+    // Branchement : le document d'avant la session et les écritures faites
+    // depuis y sont rejoués ; on affiche ensuite celui de la session (état
+    // provisoire avec ces écritures, ou déjà celui du serveur).
+    const pre = preSessionRef.current;
+    preSessionRef.current = null;
+    const document = collab.bind(pre?.base ?? toProjectDocument(projectRef.current), pre?.changes ?? []);
+    boundLinkRef.current = collab;
+    apply(document, 'remote');
     syncHistory();
     const unsubscribeDocument = collab.subscribe(apply);
     const unsubscribeHistory = collab.subscribeHistory(syncHistory);
     return () => {
+      boundLinkRef.current = null;
       unsubscribeDocument();
       unsubscribeHistory();
       setCollabHistory({ canUndo: false, canRedo: false });
@@ -248,7 +302,9 @@ export function ProjectProvider({
   const canUndo = collab ? collabHistory.canUndo : canUndoTraceEdit;
   const canRedo = collab ? collabHistory.canRedo : canRedoTraceEdit;
   const historyRevision = traceHistoryRevision + collabHistoryRevision;
-  const derivedComputeGate = collab?.computeGate ?? SOLO_COMPUTE_GATE;
+  // Session en préparation : rien n'est calculé sur le document d'ouverture
+  // (peut-être en retard sur la session) ; la porte de la session prend le relais.
+  const derivedComputeGate = collab?.computeGate ?? (collabPending ? SESSION_PENDING_COMPUTE_GATE : SOLO_COMPUTE_GATE);
 
   const {
     updateItinerary,

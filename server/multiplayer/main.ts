@@ -1,5 +1,6 @@
 import path from 'node:path';
 
+import { captureServerError, flushServerObservability, initServerObservability } from '../observability.mjs';
 import { createAppwriteStorage } from './appwriteStorage.ts';
 import { createFileStorage } from './fileStorage.ts';
 import { createMultiplayerServer } from './server.ts';
@@ -10,16 +11,21 @@ import type { RoomStorage } from './storage.ts';
  * en dev, lancé par scripts/start-dev-services.mjs et servi par Vite sous
  * `/multiplayer`).
  *
- *   MULTIPLAYER_PORT          port d'écoute (17790)
+ *   MULTIPLAYER_PORT          port d'écoute public (17790 ; /health et WebSocket)
+ *   MULTIPLAYER_METRICS_PORT  port interne des mesures (127.0.0.1 ; absent : pas de mesures)
+ *   MULTIPLAYER_SHADOW_VALIDATION_MS  validation fantôme d'une salle au plus une fois
+ *                             par période (défaut 10 min ; 0 : jamais)
  *   MULTIPLAYER_STORAGE       `appwrite` (production) ou `file` (défaut hors production)
  *   MULTIPLAYER_DATA_DIR      dossier du stockage `file` (.multiplayer-data)
  *   MULTIPLAYER_DEV_AUTH=1    jetons `dev:<utilisateur>`, projets créés par le premier
  *                             client (ignoré quand NODE_ENV=production)
  *   APPWRITE_ENDPOINT / APPWRITE_PROJECT_ID / APPWRITE_API_KEY / APPWRITE_DATABASE_ID
+ *   SENTRY_DSN_SERVER         erreurs vers GlitchTip (comme le serveur de l'app)
  *
- * GET /health : 200 tant que le serveur accepte des connexions (503 pendant
- * l'arrêt) ; GET /metrics : salles, clients, retard du journal, points de
- * sauvegarde (texte Prometheus).
+ * GET /health : `{"ok":true}` tant que le serveur accepte des connexions (503
+ * pendant l'arrêt). Mesures (port interne) : GET /metrics (texte Prometheus)
+ * et /metrics.json — salles, clients, latence du journal, points de
+ * sauvegarde, erreurs, validation fantôme, boucle d'événements, mémoire.
  */
 
 /**
@@ -35,6 +41,10 @@ console.warn = (...args: unknown[]) => {
 
 const production = process.env.NODE_ENV === 'production';
 const port = Number(process.env.MULTIPLAYER_PORT ?? 17790);
+const metricsPort = process.env.MULTIPLAYER_METRICS_PORT ? Number(process.env.MULTIPLAYER_METRICS_PORT) : null;
+const shadowValidationIntervalMs = process.env.MULTIPLAYER_SHADOW_VALIDATION_MS
+  ? Number(process.env.MULTIPLAYER_SHADOW_VALIDATION_MS)
+  : undefined;
 const storageKind = process.env.MULTIPLAYER_STORAGE ?? (production ? 'appwrite' : 'file');
 const devAuth = !production && process.env.MULTIPLAYER_DEV_AUTH === '1';
 
@@ -58,25 +68,50 @@ function createStorage(): RoomStorage {
   return createFileStorage(path.resolve(process.env.MULTIPLAYER_DATA_DIR ?? '.multiplayer-data'));
 }
 
+initServerObservability();
+
+/** Journal JSON sur la sortie standard ; les erreurs partent aussi vers GlitchTip (sans donnée utilisateur). */
+function log(level: 'info' | 'warn' | 'error', message: string, data?: Record<string, unknown>): void {
+  const line = JSON.stringify({ level, time: new Date().toISOString(), service: 'multiplayer', message, ...data });
+  if (level === 'error') {
+    console.error(line);
+    captureServerError(new Error(message), { route: 'multiplayer' });
+  } else if (level === 'warn') {
+    console.warn(line);
+  } else {
+    console.log(line);
+  }
+}
+
 const storage = createStorage();
-const server = createMultiplayerServer({ storage, appwrite, devAuth });
+const server = createMultiplayerServer({ storage, appwrite, devAuth, host: { log, shadowValidationIntervalMs } });
 
 server.listen(port).then((actual) => {
-  server.host.log('info', 'serveur temps réel prêt', { port: actual, storage: storage.kind, devAuth });
+  log('info', 'serveur temps réel prêt', { port: actual, storage: storage.kind, devAuth });
 }, (error: unknown) => {
-  server.host.log('error', 'écoute impossible', { port, error: String(error) });
+  log('error', 'écoute impossible', { port, error: String(error) });
   process.exit(1);
 });
+
+if (metricsPort !== null) {
+  server.listenMetrics(metricsPort).then((actual) => {
+    log('info', 'mesures servies sur le port interne', { port: actual });
+  }, (error: unknown) => {
+    // Sans mesures, le service reste utile : on le signale seulement.
+    log('warn', 'port des mesures indisponible', { port: metricsPort, error: String(error) });
+  });
+}
 
 let stopping = false;
 async function stop(signal: string): Promise<void> {
   if (stopping) return;
   stopping = true;
-  server.host.log('info', 'arrêt demandé', { signal });
+  log('info', 'arrêt demandé', { signal });
   setTimeout(() => process.exit(0), 10_000).unref();
   // Journal écrit, puis connexions fermées (1012) : les clients se reconnectent
   // au serveur suivant et renvoient ce qui n'était pas acquitté.
   await server.shutdown();
+  await flushServerObservability();
   process.exit(0);
 }
 

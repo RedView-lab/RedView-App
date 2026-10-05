@@ -121,9 +121,15 @@ export function handleConnection(socket: WebSocket, options: ConnectionOptions):
     };
     phase = 'joined';
     room.attach(handle, { epoch: message.epoch ?? null, lastSeq: message.lastSeq ?? null, presence: message.presence });
+    // Seulement l'id : le message (et un éventuel document de départ) n'est pas gardé avec la connexion.
+    const { projectId } = message;
+    const joined = room;
     recheck = setInterval(() => {
-      options.auth.checkAccess(userId, message.projectId).then((result) => {
-        if (result !== 'ok') fail(result === 'not-found' ? 'not-found' : 'forbidden', 'access-revoked');
+      options.auth.checkAccess(userId, projectId).then((result) => {
+        // Projet supprimé : toute la salle est fermée (4404) et purgée ;
+        // accès retiré : seulement cette connexion (4403).
+        if (result === 'not-found') joined.projectDeleted();
+        else if (result !== 'ok') fail('forbidden', 'access-revoked');
       }, (error: unknown) => options.log('warn', 'revérification des droits impossible', { error: String(error) }));
     }, ACCESS_RECHECK_MS);
   }

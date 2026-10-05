@@ -9,14 +9,19 @@ import { getAppwriteJwt, getSessionUserIdSync, readStoredAppwriteSession } from 
 import { registerLiveSession } from '@/shared/utils/projects/liveSessions';
 
 import type { CollabState } from './client/collabClient';
+import type { CollabSession } from './client/session';
 import { multiplayerSocketUrl } from './queries/multiplayerHealth';
-import type { CollabConnection } from './client/connection';
 
 /**
  * Session de co-édition du projet ouvert : connexion au serveur temps réel
  * (server/multiplayer) pour un projet partagé. Le moteur n'est chargé qu'à
  * l'ouverture d'une session (import dynamique) : rien de plus dans le bundle
  * d'un projet solo.
+ *
+ * Le lien est donné au ProjectStore dès que la session existe, avant l'état
+ * du serveur : le store s'y branche, la connexion s'ouvre, et ce qui est
+ * modifié pendant ce temps part avec la session. Tant que la session se
+ * prépare (`pending`), le store ne calcule rien sur le document d'ouverture.
  *
  * Développement : `?collab=server` dans l'URL (gardé pour l'onglet) ou
  * `localStorage['redview:dev-collab'] = 'server'` ouvre une session pour
@@ -51,23 +56,34 @@ function isDevCollabForced(): boolean {
   }
 }
 
+const DEV_USER_ID = 'dev-user-001';
 
 /** JWT Appwrite ; en développement sans session (compte démo), jeton de dev. */
 async function sessionToken(): Promise<string> {
   const jwt = await getAppwriteJwt();
   if (jwt) return jwt;
-  if (import.meta.env.DEV) return `dev:${getSessionUserIdSync() ?? 'dev-user-001'}`;
+  if (import.meta.env.DEV) return `dev:${getSessionUserIdSync() ?? DEV_USER_ID}`;
   throw new Error('session Appwrite requise pour la co-édition');
 }
 
 export interface CollabSessionHandle {
-  /** Contrat du ProjectStore ; null tant que le document de la session n'est pas reçu. */
+  /** Contrat du ProjectStore ; null tant que la session n'est pas créée. */
   link: ProjectCollabLink | null;
   /** État de la session (connexion, éditeurs présents, baux, modifications en attente). */
   state: CollabState | null;
+  /** Session attendue mais pas encore créée (module en chargement). */
+  pending: boolean;
 }
 
-const NO_SESSION: CollabSessionHandle = { link: null, state: null };
+interface SessionSnapshot {
+  /** Projet de la session : au rendu qui suit un changement de projet, l'ancienne n'est jamais donnée. */
+  projectId: string | null;
+  link: ProjectCollabLink | null;
+  state: CollabState | null;
+  failed: boolean;
+}
+
+const NO_SESSION: SessionSnapshot = { projectId: null, link: null, state: null, failed: false };
 
 /**
  * Session du projet `projectId` si `shared` (ou forcée en dev), sinon aucune.
@@ -79,7 +95,7 @@ export function useCollabSession(
   getProjectSnapshot: () => ItineraryProject | null,
   shared: boolean,
 ): CollabSessionHandle {
-  const [handle, setHandle] = useState<CollabSessionHandle>(NO_SESSION);
+  const [snapshot, setSnapshot] = useState<SessionSnapshot>(NO_SESSION);
   const getSnapshotRef = useRef(getProjectSnapshot);
   useEffect(() => {
     getSnapshotRef.current = getProjectSnapshot;
@@ -92,20 +108,20 @@ export function useCollabSession(
     // le fait), même avant la première connexion.
     const release = registerLiveSession(projectId);
     let active = true;
-    let connection: CollabConnection | null = null;
+    let session: CollabSession | null = null;
     let unsubscribe: (() => void) | null = null;
     const warnBeforeUnload = (event: BeforeUnloadEvent) => {
-      if ((connection?.client.getState().unsynced ?? 0) === 0) return;
-      // Modifications pas encore reçues par le serveur (hors ligne) : le navigateur demande confirmation.
-      event.preventDefault();
+      // Modifications que ni le serveur ni la copie de l'appareil n'ont encore : le navigateur demande confirmation.
+      if (session?.hasUnprotectedChanges()) event.preventDefault();
     };
 
     void (async () => {
-      const { CollabConnection: Connection } = await import('./client/connection');
+      const { CollabSession: Session } = await import('./client/session');
       if (!active) return;
-      const current = new Connection({
+      const created = await Session.start({
         url: multiplayerSocketUrl(),
         projectId,
+        userId: getSessionUserIdSync() ?? DEV_USER_ID,
         getToken: sessionToken,
         // Nom affiché aux autres éditeurs (pastilles de l'en-tête).
         presence: () => {
@@ -117,31 +133,45 @@ export function useCollabSession(
           : undefined,
         onRejection: (rejection) => logger.projects.error('[collab] lot refusé par le serveur', rejection),
       });
-      connection = current;
-      const { client } = current;
+      if (!active) {
+        void created.stop();
+        return;
+      }
+      session = created;
+      const { client } = created;
       const sync = () => {
         if (!active) return;
         const state = client.getState();
-        setHandle((previous) => {
-          const link = state.ready ? client : previous.link;
-          return previous.link === link && previous.state === state ? previous : { link, state };
-        });
+        // Accès retiré ou projet supprimé : plus rien ne pourra être envoyé.
+        if (state.status === 'denied' && (state.deniedReason === 'forbidden' || state.deniedReason === 'not-found')) {
+          created.discardUnsynced();
+        }
+        setSnapshot((previous) => (previous.link === client && previous.state === state
+          ? previous
+          : { projectId, link: client, state, failed: false }));
       };
       unsubscribe = client.subscribeState(sync);
       window.addEventListener('beforeunload', warnBeforeUnload);
-      current.start();
       sync();
-    })();
+    })().catch((error: unknown) => {
+      logger.projects.error('[collab] session de co-édition impossible', error);
+      if (active) setSnapshot({ projectId, link: null, state: null, failed: true });
+    });
 
     return () => {
       active = false;
       unsubscribe?.();
       window.removeEventListener('beforeunload', warnBeforeUnload);
-      connection?.stop();
+      void session?.stop();
       release();
-      setHandle(NO_SESSION);
+      setSnapshot(NO_SESSION);
     };
   }, [enabled, projectId]);
 
-  return handle;
+  const current = enabled && projectId !== null && snapshot.projectId === projectId ? snapshot : NO_SESSION;
+  return {
+    link: current.link,
+    state: current.state,
+    pending: enabled && projectId !== null && current.link === null && !current.failed,
+  };
 }

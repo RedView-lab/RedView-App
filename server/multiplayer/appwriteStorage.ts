@@ -9,8 +9,10 @@ import { readStoredProject } from '../../src/features/itineraryPanel/lib/project
 import type { SequencedBatch } from '../../src/features/collab/protocol.ts';
 import {
   assertContiguous,
+  ProjectNotFoundError,
   type AppendResult,
   type CheckpointWrite,
+  type DurableState,
   type LoadedRoom,
   type ProjectAccess,
   type RoomCheckpoint,
@@ -31,6 +33,9 @@ import {
  *  - `project_journal` : un document par paquet de lots, d'id
  *    `<projet>_<séquence de début>` — deux serveurs ne peuvent pas écrire le
  *    même (409 : barrière).
+ * Projet supprimé (404 au point de sauvegarde) : `ProjectNotFoundError` ;
+ * `purgeRoom` efface alors journal et points de sauvegarde (clé admin : ni le
+ * propriétaire ni les éditeurs ne peuvent les lire ou les supprimer).
  */
 
 const gzipAsync = promisify(gzip);
@@ -113,7 +118,7 @@ export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStor
 
   async function filePermissions(projectId: string): Promise<string[]> {
     const owner = await access(projectId);
-    if (!owner) return [];
+    if (!owner) throw new ProjectNotFoundError(projectId);
     const permissions = [
       Permission.read(Role.user(owner.ownerId)),
       Permission.update(Role.user(owner.ownerId)),
@@ -151,6 +156,23 @@ export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStor
     }
   }
 
+  /** Ligne du projet (null : supprimé). */
+  async function readRow(projectId: string, queries: string[] = []): Promise<Record<string, unknown> | null> {
+    try {
+      return await databases.getDocument(db, PROJECTS_COLLECTION_ID, projectId, queries) as unknown as Record<string, unknown>;
+    } catch (error) {
+      if (errorCode(error) === 404) return null;
+      throw error;
+    }
+  }
+
+  /** Lots journalisés au-delà de `seq`, triés. */
+  async function readJournalAfter(projectId: string, seq: number): Promise<SequencedBatch[]> {
+    const rows = await listJournal(projectId, [Query.greaterThan('end_seq', seq)]);
+    const batches = (await Promise.all(rows.map((entry) => decodeJournalPayload(entry.payload)))).flat();
+    return batches.filter((batch) => batch.seq > seq).sort((a, b) => a.seq - b.seq);
+  }
+
   async function decodeJournalPayload(payload: string): Promise<SequencedBatch[]> {
     const bytes = payload.startsWith(FILE_PREFIX)
       ? await downloadFile(payload.slice(FILE_PREFIX.length))
@@ -176,13 +198,8 @@ export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStor
     access,
 
     async loadRoom(projectId: string): Promise<LoadedRoom | null> {
-      let row: Record<string, unknown>;
-      try {
-        row = await databases.getDocument(db, PROJECTS_COLLECTION_ID, projectId) as unknown as Record<string, unknown>;
-      } catch (error) {
-        if (errorCode(error) === 404) return null;
-        throw error;
-      }
+      const row = await readRow(projectId);
+      if (!row) return null;
       const stored = readStoredProject(await readData(row.data));
       if (!stored) throw new Error(`projet ${projectId} : données illisibles`);
       const meta = parseMeta(row.collab);
@@ -198,8 +215,7 @@ export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStor
             seq: meta.seq,
           }));
         }
-        const rows = await listJournal(projectId, [Query.greaterThan('end_seq', meta.seq)]);
-        const batches = (await Promise.all(rows.map((entry) => decodeJournalPayload(entry.payload)))).flat();
+        const batches = await readJournalAfter(projectId, meta.seq);
         return { checkpoint, document: stored.document, baseSeq: meta.seq, journal: assertContiguous(batches, meta.seq) };
       }
       // Pas de point de sauvegarde valable (première session, ou document
@@ -258,6 +274,10 @@ export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStor
         });
       } catch (error) {
         await Promise.allSettled(uploads.map((fileId) => storage.deleteFile(PAYLOADS_BUCKET_ID, fileId)));
+        if (errorCode(error) === 404) {
+          accessCache.delete(projectId);
+          throw new ProjectNotFoundError(projectId);
+        }
         throw error;
       }
       await pruneFiles(`${projectId}.collab.gz`, snapshotFile);
@@ -265,15 +285,34 @@ export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStor
     },
 
     async pruneJournal(projectId: string, uptoSeq: number): Promise<void> {
-      const rows = await listJournal(projectId, [Query.lessThanEqual('end_seq', uptoSeq)]);
-      await Promise.allSettled(rows.map(async (entry) => {
-        if (entry.payload.startsWith(FILE_PREFIX)) {
-          await storage.deleteFile(PAYLOADS_BUCKET_ID, entry.payload.slice(FILE_PREFIX.length)).catch(() => undefined);
-        }
-        await databases.deleteDocument(db, JOURNAL_COLLECTION_ID, entry.$id);
-      }));
+      await deleteJournalRows(await listJournal(projectId, [Query.lessThanEqual('end_seq', uptoSeq)]));
+    },
+
+    async readDurable(projectId: string): Promise<DurableState | null> {
+      const row = await readRow(projectId, [Query.select(['$id', 'collab'])]);
+      const meta = row ? parseMeta(row.collab) : null;
+      if (!meta) return null;
+      const checkpoint = await readCheckpoint(projectId, meta);
+      if (!checkpoint) return null;
+      return { checkpoint, journal: await readJournalAfter(projectId, meta.seq) };
+    },
+
+    async purgeRoom(projectId: string): Promise<void> {
+      accessCache.delete(projectId);
+      await deleteJournalRows(await listJournal(projectId, []));
+      await pruneFiles(`${projectId}.collab.gz`, null);
+      await pruneFiles(`${projectId}.json.gz`, null);
     },
   };
+
+  async function deleteJournalRows(rows: ReadonlyArray<{ $id: string; payload: string }>): Promise<void> {
+    await Promise.allSettled(rows.map(async (entry) => {
+      if (entry.payload.startsWith(FILE_PREFIX)) {
+        await storage.deleteFile(PAYLOADS_BUCKET_ID, entry.payload.slice(FILE_PREFIX.length)).catch(() => undefined);
+      }
+      await databases.deleteDocument(db, JOURNAL_COLLECTION_ID, entry.$id);
+    }));
+  }
 }
 
 function parseMeta(value: unknown): CollabMeta | null {

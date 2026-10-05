@@ -1,7 +1,7 @@
 import type { ProjectDocument } from '@/features/itineraryPanel/lib/project/layers';
 
 import { PROTOCOL_VERSION, type ClientMessage, type PresenceState, type ServerMessage } from '../protocol';
-import { CollabClient } from './collabClient';
+import { CollabClient, type CollabDeniedReason } from './collabClient';
 import type { Rejection } from './syncEngine';
 
 /**
@@ -11,6 +11,9 @@ import type { Rejection } from './syncEngine';
  * temps), battement de cœur (connexion à moitié morte détectée en < 45 s).
  * Les refus définitifs (accès retiré, projet supprimé, version) arrêtent la
  * session (`denied`).
+ *
+ * La connexion s'ouvre quand le store se branche au client (`bind`) : son
+ * état provisoire est alors connu, et le premier `welcome` le remplace.
  */
 
 export interface CollabConnectionOptions {
@@ -25,6 +28,8 @@ export interface CollabConnectionOptions {
   WebSocketImpl?: typeof WebSocket;
   clientId?: string;
   onRejection?(rejection: Rejection): void;
+  /** Lots que le serveur n'a peut-être pas écrits changés (copie sur l'appareil). */
+  onUnsyncedChange?(): void;
 }
 
 const FLUSH_DELAY_MS = 33;
@@ -32,8 +37,12 @@ const PING_INTERVAL_MS = 20_000;
 const SILENCE_TIMEOUT_MS = 45_000;
 const BACKOFF_BASE_MS = 500;
 const BACKOFF_MAX_MS = 15_000;
-/** Refus définitifs : inutile de réessayer. */
-const TERMINAL_CODES = new Set([4403, 4404, 4426]);
+/** Refus définitifs (code de fermeture → raison) : inutile de réessayer. */
+const TERMINAL_CODES = new Map<number, CollabDeniedReason>([
+  [4403, 'forbidden'],
+  [4404, 'not-found'],
+  [4426, 'version'],
+]);
 const MAX_UNAUTHORIZED_RETRIES = 3;
 
 function createClientId(): string {
@@ -48,6 +57,7 @@ export class CollabConnection {
   private welcomed = false;
   private attempt = 0;
   private unauthorized = 0;
+  private started = false;
   private stopped = false;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -62,6 +72,9 @@ export class CollabConnection {
     this.client = new CollabClient({
       clientId: options.clientId ?? createClientId(),
       onRejection: options.onRejection,
+      onUnsyncedChange: options.onUnsyncedChange,
+      // Store branché : la session a son état provisoire, on peut se connecter.
+      onBind: () => this.start(),
       transport: {
         isOnline: () => this.welcomed && this.socket?.readyState === this.WebSocketImpl.OPEN,
         send: (message) => this.send(message),
@@ -71,8 +84,10 @@ export class CollabConnection {
     });
   }
 
+  /** Ouvre la connexion (une fois ; sans effet après `stop`). */
   start(): void {
-    this.stopped = false;
+    if (this.started || this.stopped) return;
+    this.started = true;
     void this.open();
   }
 
@@ -136,12 +151,7 @@ export class CollabConnection {
         this.attempt = 0;
         this.unauthorized = 0;
       }
-      if (message.type === 'error') {
-        if (message.code === 'unauthorized') this.unauthorized += 1;
-        if (message.code === 'forbidden' || message.code === 'not-found' || message.code === 'version') {
-          this.client.denied(message.code);
-        }
-      }
+      if (message.type === 'error' && message.code === 'unauthorized') this.unauthorized += 1;
       this.client.receive(message);
     };
     socket.onclose = (event: CloseEvent) => {
@@ -151,8 +161,10 @@ export class CollabConnection {
       if (this.pingTimer) clearInterval(this.pingTimer);
       this.pingTimer = null;
       if (this.stopped) return;
-      if (TERMINAL_CODES.has(event.code) || (event.code === 4401 && this.unauthorized >= MAX_UNAUTHORIZED_RETRIES)) {
-        this.client.denied(event.code === 4401 ? 'unauthorized' : event.reason || String(event.code));
+      const denied = TERMINAL_CODES.get(event.code)
+        ?? (event.code === 4401 && this.unauthorized >= MAX_UNAUTHORIZED_RETRIES ? 'unauthorized' : null);
+      if (denied) {
+        this.client.denied(denied);
         this.client.disconnected(false);
         return;
       }

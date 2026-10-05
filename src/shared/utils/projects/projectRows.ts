@@ -78,7 +78,8 @@ import {
 import { deleteProjectView, queueProjectViewSave, readProjectView, saveProjectViewNow } from './projectViews';
 import { legacyViewOf, serializeProjectForStorage } from './storedProject';
 import { rowToSummary } from './mappers';
-import { isServerOwnedDocument, markSharedProject } from './liveSessions';
+import { isServerOwnedDocument, isSharedProject, markSharedProject } from './liveSessions';
+import { deleteSharedProjectOnServer } from './sharing';
 import type { ItineraryProject, ProjectRow, ProjectRowMeta, ProjectSummary } from './types';
 
 export { saveProjectLocally } from './localCopy';
@@ -323,10 +324,18 @@ async function getProjectRow(id: string): Promise<ProjectRow | null> {
     return local;
   }
 
-  // Projet partagé : son document vient du serveur temps réel (version cloud,
-  // jamais de conflit ni de copie) ; la copie locale n'est qu'un cache.
+  // Projet partagé : son document vient du serveur temps réel (jamais de
+  // conflit ni de copie) ; ce qui est ouvert ici n'est affiché que le temps
+  // de la connexion, puis remplacé par l'état de la session. La copie locale
+  // (état de la session vu ici en dernier) sert si elle est plus récente que
+  // le dernier point de sauvegarde du serveur ; jamais renvoyée au cloud.
   if (meta.team_id || local.team_id) {
     markSharedProject(id, meta.team_id || local.team_id, meta.user_id);
+    const localAt = Date.parse(local.updated_at);
+    const cloudAt = Date.parse(meta.$updatedAt);
+    if (Number.isFinite(localAt) && Number.isFinite(cloudAt) && localAt > cloudAt) {
+      return { ...local, dirty: false, team_id: meta.team_id || local.team_id };
+    }
     try {
       return await fetchCloudRow(id);
     } catch (e) {
@@ -698,6 +707,9 @@ export async function deleteProject(id: string): Promise<void> {
   // 1. Suppression cloud d'abord : en cas d'échec la copie locale reste intacte
   //    et l'erreur remonte (pas de faux succès suivi d'une « réapparition »).
   if (!isDev && !id.startsWith('local-')) {
+    // Projet partagé : le serveur supprime aussi l'équipe, le journal et les
+    // points de sauvegarde de la co-édition (clé admin) ; la ligne avec.
+    if (isSharedProject(id)) await deleteSharedProjectOnServer(id);
     try {
       await enqueue(cloudQueues, id, () =>
         databases.deleteDocument(APPWRITE_DATABASE_ID, PROJECTS_COLLECTION_ID, id),

@@ -131,6 +131,95 @@ export class Materializer {
   }
 }
 
+// ── JSON du document, sans le construire ─────────────────────────────────────
+
+/** Valeur déjà au format JSON (feuille). `undefined` : absente (clé omise, `null` dans une liste). */
+class RawJson {
+  readonly json: string | undefined;
+
+  constructor(json: string | undefined) {
+    this.json = json;
+  }
+}
+
+type JsonTree = RawJson | JsonTree[] | { [key: string]: JsonTree };
+
+/**
+ * JSON du document matérialisé, identique à
+ * `JSON.stringify(new Materializer().materialize(store))`, mais sans en
+ * construire les valeurs : les segments de tracé (JSON des points) sont
+ * recollés tels quels, rien n'est relu ni gardé. Pour le point de sauvegarde
+ * du serveur (`projects.data`) : ni le document ni ses points ne restent en
+ * mémoire. Même construction que `Materializer.object` (précédences
+ * comprises) ; l'égalité est vérifiée par model.test.ts.
+ */
+export function materializeJson(store: ObjectStore): string {
+  const specs = new Map<string, MergeSpec>();
+  return writeJson(jsonObject(store, store.root(), specs)) ?? 'null';
+}
+
+function jsonObject(store: ObjectStore, object: DocObject, specs: Map<string, MergeSpec>): JsonTree {
+  const spec = objectSpec(store, object.id, specs);
+  if (spec.kind !== 'record' || (object.props.has(ATOMIC_VALUE_KEY) && object.props.size === 1 && object.children.size === 0)) {
+    return new RawJson(JSON.stringify(object.props.get(ATOMIC_VALUE_KEY)));
+  }
+  const out: { [key: string]: JsonTree } = {};
+  const built = new WeakSet<object>([out]);
+  for (const [path, raw] of object.props) {
+    if (path === ATOMIC_VALUE_KEY) continue;
+    const segments = decodePath(path);
+    const leaf = specAtPath(spec, segments)?.kind === 'route' && isRouteHeader(raw)
+      ? new RawJson(routeJson(store, raw))
+      : new RawJson(JSON.stringify(raw));
+    insert(out, segments, leaf, built);
+  }
+  for (const [field, ids] of object.children) {
+    const items = ids.map((id) => store.get(id)).filter((child): child is DocObject => !!child);
+    insertList(out, decodePath(field), items.map((child) => jsonObject(store, child, specs)), built);
+  }
+  return out;
+}
+
+/** Points d'un tracé : JSON des segments recollés (même texte que les points relus puis réécrits). */
+function pointsJson(store: ObjectStore, ids: readonly string[]): string {
+  const parts: string[] = [];
+  for (const id of ids) {
+    const json = store.getBlob(id);
+    // Segment introuvable : tracé vide, comme `Materializer.points`.
+    if (json === undefined) return '[]';
+    if (json.length > 2) parts.push(json.slice(1, -1));
+  }
+  return `[${parts.join(',')}]`;
+}
+
+function routeJson(store: ObjectStore, header: RouteHeader): string {
+  // Ordre des clés de `Materializer.route` : métadonnées, points, points d'origine.
+  const shape: PlainRecord = { ...header.meta, points: null };
+  if (header.originalPoints) shape.originalPoints = null;
+  const parts: string[] = [];
+  for (const key of Object.keys(shape)) {
+    const json = key === 'points'
+      ? pointsJson(store, header.points)
+      : key === 'originalPoints' && header.originalPoints
+        ? pointsJson(store, header.originalPoints)
+        : JSON.stringify(shape[key]);
+    if (json !== undefined) parts.push(`${JSON.stringify(key)}:${json}`);
+  }
+  return `{${parts.join(',')}}`;
+}
+
+function writeJson(tree: JsonTree): string | undefined {
+  if (tree instanceof RawJson) return tree.json;
+  if (Array.isArray(tree)) return `[${tree.map((item) => writeJson(item) ?? 'null').join(',')}]`;
+  const parts: string[] = [];
+  // Object.keys : même ordre que JSON.stringify (clés entières d'abord).
+  for (const key of Object.keys(tree)) {
+    const json = writeJson(tree[key]);
+    if (json !== undefined) parts.push(`${JSON.stringify(key)}:${json}`);
+  }
+  return `{${parts.join(',')}}`;
+}
+
 function valueAtPath(value: PlainRecord, segments: readonly string[]): unknown {
   let current: unknown = value;
   for (const segment of segments) {

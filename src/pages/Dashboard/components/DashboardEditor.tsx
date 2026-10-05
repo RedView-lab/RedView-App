@@ -38,10 +38,11 @@ import { ForbiddenZoneToolProvider } from '@/features/centerPanel/forbiddenZones
 import { ItineraryPanel, PredictionProvider, ProjectProvider, useProjectStore } from '@/features/itineraryPanel';
 import { useMultiplayerAvailable } from '@/features/collab/queries/multiplayerHealth';
 import { useCollabSession } from '@/features/collab/useCollabSession';
-import type { ItineraryProject, ProjectCollaborator } from '@/features/itineraryPanel/types';
+import type { ItineraryProject, ProjectCollaborator, ProjectSessionStatus } from '@/features/itineraryPanel/types';
 import { ShareProjectDialog } from '@/features/projectBrowser/components/projects/ShareProjectDialog';
 import { useAppI18n } from '@/shared/i18n';
 import { getSessionUserIdSync } from '@/shared/services/appwrite';
+import { notify } from '@/shared/ui/notify';
 import { hasProjectTracedContent } from '@/features/itineraryPanel/lib/project';
 import { MapViewportControls } from '@/features/mapViewportControls';
 import type { MapViewport } from '@/features/map3d/lib/viewport-persist';
@@ -297,6 +298,33 @@ export function DashboardEditor({
     activeProjectShared || (activeProjectId !== null && sharedNowProjectId === activeProjectId),
   );
   const { t } = useAppI18n();
+  const collabState = collabSession.state;
+  // Refus définitif : on le dit ; sans accès (retiré, projet supprimé), retour aux projets.
+  const deniedReason = collabState?.status === 'denied' ? collabState.deniedReason ?? 'forbidden' : null;
+  useEffect(() => {
+    if (!deniedReason) return;
+    switch (deniedReason) {
+      case 'not-found':
+        notify.error('Ce projet a été supprimé.');
+        onBackToBrowser();
+        break;
+      case 'forbidden':
+        notify.error('Vous n’avez plus accès à ce projet.');
+        onBackToBrowser();
+        break;
+      case 'version':
+        notify.info('Une nouvelle version de RedView est disponible : rechargez la page pour continuer à modifier ce projet partagé.');
+        break;
+      case 'unauthorized':
+        notify.error('Session expirée : reconnectez-vous pour continuer à modifier ce projet partagé.');
+        break;
+    }
+  }, [deniedReason, onBackToBrowser]);
+  // Session refusée pour une raison passagère (version, session expirée) : les
+  // modifications restent sur l'appareil, comme hors ligne.
+  const sessionStatus: ProjectSessionStatus | undefined = collabState
+    ? collabState.status === 'denied' ? 'offline' : collabState.status
+    : collabSession.pending ? 'connecting' : undefined;
   const collabPeers = collabSession.state?.peers;
   const collaborators = useMemo<ProjectCollaborator[] | undefined>(() => {
     if (!collabPeers) return undefined;
@@ -328,6 +356,7 @@ export function DashboardEditor({
         initialProject={activeProjectInitial ?? undefined}
         onProjectChange={onProjectChange}
         collab={collabSession.link}
+        collabPending={collabSession.pending}
       >
         <MapView
           onMapReady={onMapReady}
@@ -479,6 +508,7 @@ export function DashboardEditor({
                         onSaveProject={onSaveProject}
                         onShareProject={canShare ? handleShareProject : undefined}
                         collaborators={collaborators}
+                        sessionStatus={sessionStatus}
                         pausesEnabled={dashboardSearchActiveFilters.has('pauses')}
                         waypointsEnabled={dashboardSearchActiveFilters.has('waypoints')}
                         poisRouteEnabled={dashboardSearchActiveFilters.has('pois_route')}

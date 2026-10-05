@@ -19,6 +19,9 @@ export interface ProjectCollaborator {
   name: string;
 }
 
+/** Session de co-édition : état du serveur attendu, en ligne, ou connexion coupée. */
+export type ProjectSessionStatus = 'connecting' | 'online' | 'offline';
+
 export interface ItineraryPanelProps {
   project: ItineraryProject;
   profiles: RouteProfile[];
@@ -39,6 +42,8 @@ export interface ItineraryPanelProps {
   onShareProject?: (anchor: HTMLElement) => void;
   /** Éditeurs présents sur le projet (co-édition), cet utilisateur compris. */
   collaborators?: ProjectCollaborator[];
+  /** État de la session de co-édition (absent hors session). */
+  sessionStatus?: ProjectSessionStatus;
   onRenameProject?: (next: string) => void;
 
   // itineraries

@@ -28,6 +28,15 @@ export const collabTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: '{{count}} éditeurs sur le projet', en: '{{count}} editors on the project' },
   { fr: 'Éditeur', en: 'Editor' },
 
+  // ── Session temps réel (en-tête, refus du serveur) ─────────────────────────
+  { fr: 'Connexion à la session…', en: 'Connecting to the session…' },
+  { fr: 'Hors ligne : vos modifications partiront à la reconnexion.', en: 'Offline: your changes will be sent when you reconnect.' },
+  { fr: 'Vos modifications sont gardées sur cet appareil et partiront dès la connexion.', en: 'Your changes are kept on this device and will be sent as soon as you are connected.' },
+  { fr: 'Ce projet a été supprimé.', en: 'This project has been deleted.' },
+  { fr: 'Vous n’avez plus accès à ce projet.', en: 'You no longer have access to this project.' },
+  { fr: 'Une nouvelle version de RedView est disponible : rechargez la page pour continuer à modifier ce projet partagé.', en: 'A new version of RedView is available: reload the page to keep editing this shared project.' },
+  { fr: 'Session expirée : reconnectez-vous pour continuer à modifier ce projet partagé.', en: 'Session expired: sign in again to keep editing this shared project.' },
+
   // ── Réponses du serveur (api/_lib/projectSharing.ts, messages en anglais) ──
   { fr: 'Identifiant de projet invalide', en: 'Invalid project id' },
   { fr: 'Projet introuvable', en: 'Project not found' },
@@ -39,6 +48,7 @@ export const collabTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Seul le propriétaire peut retirer un éditeur', en: 'Only the owner can remove an editor' },
   { fr: 'Le propriétaire ne peut pas être retiré', en: 'The owner cannot be removed' },
   { fr: 'Le propriétaire ne peut pas quitter son propre projet', en: 'The owner cannot leave their own project' },
+  { fr: 'Seul le propriétaire peut supprimer ce projet', en: 'Only the owner can delete this project' },
   { fr: 'Membre invalide', en: 'Invalid member' },
   { fr: 'Action inconnue', en: 'Unknown action' },
   { fr: 'Impossible de mettre à jour le partage du projet', en: 'Unable to update project sharing' },

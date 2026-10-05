@@ -51,3 +51,11 @@ export function removeProjectEditor(projectId: string, userId: string): Promise<
 export async function leaveSharedProject(projectId: string): Promise<void> {
   await shareRequest({ action: 'leave', projectId });
 }
+
+/**
+ * Supprime un projet partagé (propriétaire) côté serveur : ligne, équipe,
+ * journal et points de sauvegarde de la co-édition (clé admin).
+ */
+export async function deleteSharedProjectOnServer(projectId: string): Promise<void> {
+  await shareRequest({ action: 'delete', projectId });
+}

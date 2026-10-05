@@ -9,9 +9,13 @@ import { CLOSE_RESTART, RoomHost, type RoomHostOptions } from './roomHost.ts';
 import type { RoomStorage } from './storage.ts';
 
 /**
- * Serveur temps réel : HTTP (`/health`, `/metrics`) + WebSocket
- * (`/multiplayer`). Démarré par main.ts (variables d'environnement) et par
- * les tests d'intégration (stockage de fichiers, authentification de dev).
+ * Serveur temps réel : HTTP public (`/health`, seulement `{"ok":true}` : lu
+ * par l'application et par la vérification du déploiement) + WebSocket
+ * (`/multiplayer`). Les mesures (salles, clients, latences, erreurs,
+ * validation fantôme, mémoire) sont servies à part, sur un port interne
+ * (`listenMetrics`, 127.0.0.1 du conteneur) : jamais derrière le proxy
+ * public. Démarré par main.ts (variables d'environnement) et par les tests
+ * d'intégration (stockage de fichiers, authentification de dev).
  */
 
 export interface MultiplayerServerOptions {
@@ -24,6 +28,8 @@ export interface MultiplayerServerOptions {
 export interface MultiplayerServer {
   host: RoomHost;
   listen(port: number): Promise<number>;
+  /** Mesures sur un port interne (`/metrics` au format Prometheus, `/metrics.json`). */
+  listenMetrics(port: number, hostname?: string): Promise<number>;
   /** Arrêt propre : journal écrit, connexions fermées (1012). */
   shutdown(): Promise<void>;
 }
@@ -32,13 +38,20 @@ const HEARTBEAT_MS = 30_000;
 
 /**
  * Chemins acceptés : `/multiplayer` (proxy qui garde le chemin, Vite en dev)
- * ou `/` (Traefik/Coolify avec « strip prefix ») ; idem pour `/health` et
- * `/metrics`, avec ou sans le préfixe.
+ * ou `/` (proxy avec « strip prefix ») ; idem pour `/health`, avec ou sans
+ * le préfixe.
  */
 const SOCKET_PATHS = new Set(['/', '/multiplayer', '/multiplayer/']);
 
 function routeOf(pathname: string): string {
   return pathname.startsWith('/multiplayer/') ? pathname.slice('/multiplayer'.length) : pathname;
+}
+
+function listenOn(server: http.Server, port: number, hostname?: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, hostname, () => resolve((server.address() as AddressInfo).port));
+  });
 }
 
 export function createMultiplayerServer(options: MultiplayerServerOptions): MultiplayerServer {
@@ -48,13 +61,26 @@ export function createMultiplayerServer(options: MultiplayerServerOptions): Mult
 
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
-    const route = routeOf(url.pathname);
-    if (req.method === 'GET' && route === '/health') {
-      res.writeHead(shuttingDown ? 503 : 200, { 'content-type': 'application/json' });
+    if (req.method === 'GET' && routeOf(url.pathname) === '/health') {
+      res.writeHead(shuttingDown ? 503 : 200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+      res.end(JSON.stringify({ ok: !shuttingDown }));
+      return;
+    }
+    res.writeHead(404).end();
+  });
+
+  const metricsServer = http.createServer((req, res) => {
+    const url = new URL(req.url ?? '/', 'http://localhost');
+    if (req.method !== 'GET') {
+      res.writeHead(405).end();
+      return;
+    }
+    if (url.pathname === '/metrics.json') {
+      res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ ok: !shuttingDown, ...host.snapshotMetrics() }));
       return;
     }
-    if (req.method === 'GET' && route === '/metrics') {
+    if (url.pathname === '/metrics') {
       const lines = Object.entries(host.snapshotMetrics()).map(([key, value]) => `redview_multiplayer_${key} ${value}`);
       res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4' });
       res.end(`${lines.join('\n')}\n`);
@@ -97,12 +123,8 @@ export function createMultiplayerServer(options: MultiplayerServerOptions): Mult
 
   return {
     host,
-    listen(port: number): Promise<number> {
-      return new Promise((resolve, reject) => {
-        server.once('error', reject);
-        server.listen(port, () => resolve((server.address() as AddressInfo).port));
-      });
-    },
+    listen: (port) => listenOn(server, port),
+    listenMetrics: (port, hostname = '127.0.0.1') => listenOn(metricsServer, port, hostname),
     async shutdown(): Promise<void> {
       if (shuttingDown) return;
       shuttingDown = true;
@@ -111,6 +133,7 @@ export function createMultiplayerServer(options: MultiplayerServerOptions): Mult
       for (const socket of wss.clients) socket.close(CLOSE_RESTART, 'shutdown');
       await new Promise<void>((resolve) => wss.close(() => resolve()));
       await new Promise<void>((resolve) => server.close(() => resolve()));
+      if (metricsServer.listening) await new Promise<void>((resolve) => metricsServer.close(() => resolve()));
     },
   };
 }

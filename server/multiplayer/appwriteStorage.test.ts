@@ -23,6 +23,8 @@ const fake = vi.hoisted(() => ({
   collections: new Map<string, Map<string, Record<string, unknown> & { $id: string }>>(),
   files: new Map<string, { name: string; bytes: Uint8Array }>(),
   nextFile: 0,
+  /** Appwrite en panne pour les mises à jour de documents (500). */
+  failUpdates: false,
 }));
 
 vi.mock('node-appwrite', async (importActual) => {
@@ -69,6 +71,7 @@ vi.mock('node-appwrite', async (importActual) => {
       return { ...data, $id: id };
     }
     async updateDocument(_db: string, col: string, id: string, data: Record<string, unknown>) {
+      if (fake.failUpdates) throw error(500);
       const doc = collection(col).get(id);
       if (!doc) throw error(404);
       Object.assign(doc, data);
@@ -125,27 +128,36 @@ function seedProjectRow(document: ProjectDocument): void {
   }]]));
 }
 
-function newHost() {
+type LogEntry = { level: string; message: string; data?: Record<string, unknown> };
+
+function newHost(overrides: Partial<ConstructorParameters<typeof RoomHost>[0]> = {}) {
   return new RoomHost({
     storage: createAppwriteStorage(options),
     journalFlushMs: 10,
     checkpointIntervalMs: 60_000,
     checkpointBatches: 3,
     idleUnloadMs: 60_000,
+    shadowValidationIntervalMs: 0,
     log: () => undefined,
+    ...overrides,
   });
 }
 
-/** Client minimal relié à la salle : renvoie la boîte de réception. */
+/** Client minimal relié à la salle : renvoie la boîte de réception et le code de fermeture. */
 function join(room: HostedRoom | null, clientId: string) {
   const inbox: ServerMessage[] = [];
+  const closed: { code: number | null } = { code: null };
   const handle = {
     peer: { clientId, userId: `u-${clientId}`, send: (message: ServerMessage) => inbox.push(JSON.parse(JSON.stringify(message)) as ServerMessage) },
-    close: () => undefined,
+    close: (code: number) => {
+      closed.code = code;
+    },
   };
   room!.attach(handle, { epoch: null, lastSeq: null });
-  return { inbox, handle };
+  return { inbox, handle, closed };
 }
+
+const collabFiles = () => [...fake.files.values()].filter((file) => file.name === `${PROJECT}.collab.gz`);
 
 const waitFor = async (condition: () => boolean, label: string) => {
   const deadline = Date.now() + 5_000;
@@ -165,6 +177,7 @@ function renameBatch(room: HostedRoom, clientSeq: number, name: string): ClientM
 beforeEach(() => {
   fake.collections.clear();
   fake.files.clear();
+  fake.failUpdates = false;
   seedProjectRow(sampleDocument(300));
 });
 
@@ -264,5 +277,93 @@ describe('stockage Appwrite de la salle', () => {
     const host = newHost();
     expect(await host.open('absent')).toBeNull();
     await host.shutdown();
+  });
+
+  it('projet supprimé pendant la session : clients fermés (4404), journal et points de sauvegarde purgés, plus aucun essai', async () => {
+    const host = newHost();
+    const room = (await host.open(PROJECT))!;
+    const { handle, closed } = join(room, 'a');
+    room.handle(handle, renameBatch(room, 1, 'Un'));
+    room.handle(handle, renameBatch(room, 2, 'Deux'));
+    await waitFor(() => room.room.durableSeq === room.room.state.seq, 'journal');
+    expect(fake.collections.get('project_journal')!.size).toBeGreaterThan(0);
+
+    // Le propriétaire supprime le projet ; le lot suivant déclenche le point de sauvegarde.
+    fake.collections.get('projects')!.delete(PROJECT);
+    room.handle(handle, renameBatch(room, 3, 'Trois'));
+    await waitFor(() => room.closed, 'salle fermée');
+    expect(closed.code).toBe(4404);
+    await waitFor(() => (fake.collections.get('project_journal')?.size ?? 0) === 0 && collabFiles().length === 0, 'purge');
+    expect(host.metrics.deletedRooms).toBe(1);
+    // Ni erreur comptée ni nouvel essai (la salle est oubliée).
+    await new Promise((resolve) => setTimeout(resolve, 1_200));
+    expect(host.metrics.checkpointErrors).toBe(0);
+    expect(host.snapshotMetrics().rooms).toBe(0);
+    await host.shutdown();
+  });
+
+  it('point de sauvegarde en échec : attente exponentielle, salle inactive déchargée dès que le journal est écrit', async () => {
+    const logs: LogEntry[] = [];
+    const host = newHost({ checkpointIntervalMs: 20, idleUnloadMs: 2_500, log: (level, message, data) => logs.push({ level, message, data }) });
+    const room = (await host.open(PROJECT))!;
+    const { handle } = join(room, 'a');
+    fake.failUpdates = true;
+    room.handle(handle, renameBatch(room, 1, 'Pendant la panne'));
+    await waitFor(() => host.metrics.checkpointErrors >= 2, 'deux échecs');
+    const failures = logs.filter((entry) => entry.message === 'point de sauvegarde en échec');
+    // Première erreur signalée en erreur, les suivantes en avertissement, attente doublée.
+    expect(failures.map((entry) => entry.level).slice(0, 2)).toEqual(['error', 'warn']);
+    expect(failures.map((entry) => entry.data?.retryInMs).slice(0, 2)).toEqual([1_000, 2_000]);
+
+    // Plus personne : déchargée sans attendre un point de sauvegarde réussi.
+    room.detach(handle);
+    await waitFor(() => room.closed, 'salle déchargée');
+    expect(room.room.durableSeq).toBe(room.room.state.seq);
+
+    // Reprise : dernier point de sauvegarde + journal.
+    fake.failUpdates = false;
+    const next = newHost();
+    const reopened = (await next.open(PROJECT))!;
+    expect((reopened.room.state.document().itineraries[1] as { name: string }).name).toBe('Pendant la panne');
+    await next.shutdown();
+    await host.shutdown();
+  }, 15_000);
+
+  it('validation fantôme : l’état durable rejoué égale la mémoire ; un paquet de journal perdu est signalé', async () => {
+    const logs: LogEntry[] = [];
+    const host = newHost({ shadowValidationIntervalMs: 1, log: (level, message, data) => logs.push({ level, message, data }) });
+    const room = (await host.open(PROJECT))!;
+    const { handle } = join(room, 'a');
+    for (let seq = 1; seq <= 3; seq += 1) room.handle(handle, renameBatch(room, seq, `Nom ${seq}`));
+    await waitFor(() => host.metrics.shadowChecks >= 1 && room.room.durableSeq === room.room.state.seq, 'première validation');
+    expect(host.metrics.shadowMismatches).toBe(0);
+
+    // Deux lots journalisés puis perdus par le stockage : la validation suivante le voit.
+    room.handle(handle, renameBatch(room, 4, 'Nom 4'));
+    room.handle(handle, renameBatch(room, 5, 'Nom 5'));
+    await waitFor(() => room.room.durableSeq === room.room.state.seq, 'journal');
+    const journal = fake.collections.get('project_journal')!;
+    for (const id of [...journal.keys()]) journal.delete(id);
+    room.handle(handle, renameBatch(room, 6, 'Nom 6'));
+    await waitFor(() => host.metrics.shadowMismatches === 1, 'écart signalé');
+    expect(logs.some((entry) => entry.level === 'error' && entry.message.startsWith('validation fantôme'))).toBe(true);
+    await host.shutdown();
+  });
+
+  it('état durable relu sans rien modifier, même sans point de sauvegarde lisible', async () => {
+    const host = newHost();
+    const room = (await host.open(PROJECT))!;
+    const { handle } = join(room, 'a');
+    room.handle(handle, renameBatch(room, 1, 'Un'));
+    await waitFor(() => room.room.durableSeq === room.room.state.seq, 'journal');
+    await host.shutdown();
+    const storage = createAppwriteStorage(options);
+    const durable = await storage.readDurable(PROJECT);
+    expect(durable?.journal.map((batch) => batch.clientSeq)).toEqual([1]);
+    const meta = JSON.parse(String(fake.collections.get('projects')!.get(PROJECT)!.collab)) as { snapshotFile: string };
+    fake.files.delete(meta.snapshotFile);
+    const journalSize = fake.collections.get('project_journal')!.size;
+    expect(await storage.readDurable(PROJECT)).toBeNull();
+    expect(fake.collections.get('project_journal')!.size).toBe(journalSize);
   });
 });

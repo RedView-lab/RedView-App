@@ -4,7 +4,11 @@
 #
 # Variables : APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID, APPWRITE_API_KEY,
 # APPWRITE_DATABASE_ID (stockage `appwrite`, défaut en production),
-# MULTIPLAYER_PORT (17790).
+# MULTIPLAYER_PORT (17790), SENTRY_DSN_SERVER (erreurs vers GlitchTip).
+#
+# Mesures (salles, latences, erreurs, validation fantôme, mémoire) sur le port
+# interne 17791, jamais publié ni relayé par nginx :
+#   docker exec <conteneur> wget -qO- http://127.0.0.1:17791/metrics.json
 #
 # Arrêt (SIGTERM) : journal écrit, connexions fermées en 1012, les clients se
 # reconnectent au conteneur suivant et renvoient ce qui n'était pas acquitté.
@@ -16,7 +20,11 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV MULTIPLAYER_PORT=17790
+ENV MULTIPLAYER_METRICS_PORT=17791
 ENV MULTIPLAYER_STORAGE=appwrite
+# Release GlitchTip (server/build-id.mjs), passée par Coolify comme pour l'app.
+ARG SOURCE_COMMIT=""
+ENV SOURCE_COMMIT=${SOURCE_COMMIT}
 
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 redview
 
@@ -29,6 +37,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY tsconfig.json ./
 COPY src ./src
 COPY server/multiplayer ./server/multiplayer
+COPY server/observability.mjs server/build-id.mjs ./server/
 
 USER redview
 

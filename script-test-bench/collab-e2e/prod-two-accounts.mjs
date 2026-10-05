@@ -1,8 +1,10 @@
 // E2E co-édition EN PRODUCTION (https://app.redview.tech) avec deux vrais
 // comptes (scripts/collab-test-accounts.mjs) dans deux contextes de navigation
 // isolés : invitation par e-mail, « Partagés avec moi », pastilles, synchro,
-// seul l'auteur route, annuler par utilisateur, latence mesurée, rechargement,
-// redéploiement du serveur temps réel en pleine édition, persistance Appwrite,
+// seul l'auteur route, annuler par utilisateur, latence mesurée, rechargement
+// (modification faite pendant la connexion, onglet fermé avant l'état du
+// serveur puis rouvert), redéploiement du serveur temps réel en pleine
+// édition, persistance Appwrite, mesures du serveur (port interne, par SSH),
 // départ d'un éditeur ; le projet de test est supprimé à la fin.
 //
 //   node --env-file=.env script-test-bench/collab-e2e/prod-two-accounts.mjs [--skip-redeploy]
@@ -17,6 +19,7 @@ import { gunzipSync } from 'node:zlib';
 import { Client, Databases, Query, Storage, Teams } from 'node-appwrite';
 
 import { connect, launch, sleep, waitFor } from '../screen-audit/cdp.mjs';
+import { armSlowWelcome, SLOW_WELCOME_SCRIPT } from './slowWelcome.mjs';
 
 const APP = process.env.RV_APP_URL ?? 'https://app.redview.tech';
 const PORT = 9381;
@@ -58,6 +61,16 @@ const STORE_HELPER = `(() => {
   };
 })()`;
 const store = (expr) => `(() => { const s = window.__rvStore(); return ${expr}; })()`;
+/** Session temps réel en ligne (état du serveur reçu) : attribut de l'en-tête du panneau. */
+const SESSION_ONLINE = `!!document.querySelector('[data-rv-collab-status="online"]')`;
+const SESSION_STATUS = `document.querySelector('[data-rv-collab-status]')?.dataset.rvCollabStatus ?? 'aucun'`;
+const EDITOR_READY = `!!document.querySelector('.mapboxgl-canvas') && !!window.__rvStore?.()`;
+/** Rechargement réel (et non l'ancienne page, encore là juste après la commande). */
+async function reloadPage(page) {
+  await page.evaluate(`window.__rvBeforeReload = true`);
+  await page.send('Page.reload', {});
+  await waitFor(page, `!window.__rvBeforeReload`, { timeout: 60_000 });
+}
 const click = (selector) => `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return false; el.click(); return true; })()`;
 const clickButton = (pattern) => `(() => { const b = [...document.querySelectorAll('button')].find((x) => ${pattern}.test(x.textContent || x.getAttribute('aria-label') || '')); if (!b) return false; b.click(); return true; })()`;
 const setInput = (selector, value) => `(() => {
@@ -77,6 +90,7 @@ async function newPage(browser, name) {
   await page.send('Runtime.enable');
   await page.send('Network.enable');
   await page.send('Page.addScriptToEvaluateOnNewDocument', { source: STORE_HELPER });
+  await page.send('Page.addScriptToEvaluateOnNewDocument', { source: SLOW_WELCOME_SCRIPT });
   await page.send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false });
   page.on('Page.javascriptDialogOpening', () => void page.send('Page.handleJavaScriptDialog', { accept: true }));
   page.on('Network.requestWillBeSent', (p) => {
@@ -151,6 +165,12 @@ async function readHealth() {
   return res.json();
 }
 
+/** Mesures du serveur temps réel : port interne du conteneur, jamais public (lu par SSH). */
+function readServerMetrics() {
+  const container = `$(sudo docker ps -q -f name=${MULTIPLAYER_APP_UUID} | head -n1)`;
+  return JSON.parse(ssh(`sudo docker exec ${container} wget -qO- http://127.0.0.1:17791/metrics.json`));
+}
+
 async function deleteProject(projectId, errors) {
   const attempt = async (label, fn) => {
     try {
@@ -220,6 +240,9 @@ try {
 
   const health = await readHealth();
   check(health.ok === true, 'serveur temps réel en ligne (/multiplayer/health)');
+  check(Object.keys(health).join() === 'ok', `santé publique minimale (${JSON.stringify(health)})`);
+  const publicMetrics = await fetch(`${APP}/multiplayer/metrics`, { cache: 'no-store' });
+  check(publicMetrics.status === 404, `mesures fermées au public (/multiplayer/metrics → ${publicMetrics.status})`);
 
   // ── Connexion des deux comptes ──────────────────────────────────────────
   await Promise.all([login(A, accounts.A), login(B, accounts.B)]);
@@ -256,7 +279,7 @@ try {
   note('invitation (ms)', Date.now() - inviteStart);
   check(true, 'A invite B par e-mail : B apparaît dans « Personnes ayant accès »');
   await A.evaluate(clickButton('/^Terminé$|^Done$/'));
-  await waitFor(A, store('s.collabActive === true'), { timeout: 30_000 });
+  await waitFor(A, SESSION_ONLINE, { timeout: 30_000 });
   check(out.sockets.A.length > 0, 'A passe en session temps réel après la première invitation');
 
   // ── B ouvre le projet depuis « Partagés avec moi » ───────────────────────
@@ -267,7 +290,7 @@ try {
   const openStart = Date.now();
   const opened = await B.evaluate(`(() => { const b = [...document.querySelectorAll('button[aria-label]')].find((x) => x.getAttribute('aria-label').includes(${JSON.stringify(projectName)})); if (!b) return false; b.click(); return true; })()`);
   check(opened, 'B : carte du projet partagé trouvée');
-  await waitFor(B, `!!document.querySelector('.mapboxgl-canvas') && !!window.__rvStore?.() && window.__rvStore().collabActive === true`, { timeout: 120_000 });
+  await waitFor(B, `${EDITOR_READY} && ${SESSION_ONLINE}`, { timeout: 120_000 });
   note('ouverture du projet partagé par B (ms)', Date.now() - openStart);
   await waitFor(B, store('(s.project.itineraries[0]?.gpxRoute?.points?.length ?? 0) > 10'), { timeout: 30_000 });
   check(out.brouter.B.length === 0, `B à l'ouverture : aucun appel BRouter (${out.brouter.B.length})`);
@@ -333,10 +356,19 @@ try {
   // ── Rechargement de A (propriétaire) en pleine session ──────────────────
   const rowBeforeReload = await databases.getDocument(DB, 'projects', projectId, [Query.select(['$id', 'collab'])]);
   const collabBeforeReload = rowBeforeReload.collab;
-  await A.send('Page.reload', {});
-  await waitFor(A, `!!document.querySelector('.mapboxgl-canvas') && !!window.__rvStore?.() && window.__rvStore().collabActive === true`, { timeout: 120_000 });
+  // Connexion ralentie (état du serveur retardé de 6 s) : A renomme dès que l'éditeur est là.
+  await A.evaluate(armSlowWelcome(6_000));
+  await reloadPage(A);
+  await waitFor(A, EDITOR_READY, { timeout: 120_000 });
+  const statusAtEdit = await A.evaluate(SESSION_STATUS);
+  const nameDuringConnect = `pendant-la-connexion-${Date.now()}`;
+  const seenDuringConnect = B.evaluate(waitInPage(`window.__rvStore()?.project.itineraries[0].name === ${JSON.stringify(nameDuringConnect)}`, 30_000));
+  await A.evaluate(store(`(s.setItineraryName(${JSON.stringify(itineraryId)}, ${JSON.stringify(nameDuringConnect)}), 0)`));
+  check(statusAtEdit === 'connecting', `A renomme pendant sa connexion (état de la session : ${statusAtEdit})`);
+  check((await seenDuringConnect) !== null, 'modification de A faite pendant la connexion : reçue par B');
+  await waitFor(A, SESSION_ONLINE, { timeout: 60_000 });
+  check(await A.evaluate(store(`s.project.itineraries[0].name === ${JSON.stringify(nameDuringConnect)}`)), 'A garde sa modification une fois en ligne');
   check(true, 'A recharge : le projet rouvre en session temps réel');
-  await sleep(4000);
   const nameAfterReload = `apres-rechargement-${Date.now()}`;
   const seenAfterReload = B.evaluate(waitInPage(`window.__rvStore()?.project.itineraries[0].name === ${JSON.stringify(nameAfterReload)}`, 15_000));
   await A.evaluate(store(`(s.setItineraryName(${JSON.stringify(itineraryId)}, ${JSON.stringify(nameAfterReload)}), 0)`));
@@ -349,13 +381,29 @@ try {
   void collabBeforeReload;
   check((await testAccountProjects()).length === 1, 'aucune copie de conflit créée (un seul projet de test)');
 
+  // ── A ferme l'onglet avant l'état du serveur : la modification revient ──
+  // État du serveur retardé de 60 s : le renommage reste en attente, gardé sur
+  // l'appareil ; l'onglet est rechargé (fermé) avant ; la session suivante le
+  // reprend et l'envoie.
+  await A.evaluate(armSlowWelcome(60_000));
+  await reloadPage(A);
+  await waitFor(A, EDITOR_READY, { timeout: 120_000 });
+  const nameBeforeClose = `onglet-ferme-${Date.now()}`;
+  await A.evaluate(store(`(s.setItineraryName(${JSON.stringify(itineraryId)}, ${JSON.stringify(nameBeforeClose)}), 0)`));
+  await sleep(1_500);
+  const seenAfterClose = B.evaluate(waitInPage(`window.__rvStore()?.project.itineraries[0].name === ${JSON.stringify(nameBeforeClose)}`, 60_000));
+  check(await B.evaluate(store(`s.project.itineraries[0].name !== ${JSON.stringify(nameBeforeClose)}`)), 'onglet fermé avant l’état du serveur : rien n’est encore parti');
+  await reloadPage(A);
+  await waitFor(A, `${EDITOR_READY} && ${SESSION_ONLINE}`, { timeout: 120_000 });
+  check((await seenAfterClose) !== null, 'modification faite avant la fermeture de l’onglet : reprise et reçue par B');
+
   // ── Rechargement de B : état du serveur ─────────────────────────────────
   const snapshotOf = `JSON.stringify(window.__rvStore().project.itineraries.map((it) => [it.id, it.name, it.color, it.gpxRoute?.routedInputsKey, it.timeline.length]))`;
   const beforeReload = await A.evaluate(snapshotOf);
   const brouterBeforeReload = out.brouter.B.length;
-  await B.send('Page.reload', {});
-  await waitFor(B, `!!document.querySelector('.mapboxgl-canvas') && !!window.__rvStore?.() && window.__rvStore().collabActive === true`, { timeout: 120_000 });
-  await sleep(2500);
+  await reloadPage(B);
+  await waitFor(B, `${EDITOR_READY} && ${SESSION_ONLINE}`, { timeout: 120_000 });
+  await waitFor(B, `${snapshotOf} === ${JSON.stringify(beforeReload)}`, { timeout: 15_000 }).catch(() => null);
   const afterReloadB = await B.evaluate(snapshotOf);
   const afterReloadA = await A.evaluate(snapshotOf);
   check(afterReloadB === afterReloadA, 'B recharge : même document que A');
@@ -394,10 +442,23 @@ try {
   check(stored?.schema === 2 && stored.itineraries?.length >= 1, 'projects.data : document lisible par l’application (schéma 2)');
   const journal = await databases.listDocuments(DB, 'project_journal', [Query.equal('project_id', projectId), Query.limit(100)]);
   note('journal (paquets au-delà du point de sauvegarde)', journal.total);
-  const finalHealth = await readHealth();
-  note('serveur temps réel', { journalP50: finalHealth.journal_latency_p50_ms, journalP95: finalHealth.journal_latency_p95_ms, checkpointP95: finalHealth.checkpoint_p95_ms, journalErrors: finalHealth.journalErrors, checkpointErrors: finalHealth.checkpointErrors, fenced: finalHealth.fenced });
-  check(finalHealth.journalErrors === 0 && finalHealth.checkpointErrors === 0, 'serveur : aucune erreur de journal ni de point de sauvegarde');
-  check((finalHealth.journal_latency_p95_ms ?? 0) < 600, `journal durable p95 < 600 ms (${finalHealth.journal_latency_p95_ms} ms)`);
+  const metrics = readServerMetrics();
+  note('serveur temps réel', {
+    rooms: metrics.rooms,
+    journalP50: metrics.journal_latency_p50_ms,
+    journalP95: metrics.journal_latency_p95_ms,
+    checkpointP95: metrics.checkpoint_p95_ms,
+    journalErrors: metrics.journalErrors,
+    checkpointErrors: metrics.checkpointErrors,
+    shadowChecks: metrics.shadowChecks,
+    shadowMismatches: metrics.shadowMismatches,
+    fenced: metrics.fenced,
+    eventLoopP99: metrics.event_loop_delay_p99_ms,
+    heapMb: Math.round(metrics.heap_used_bytes / 1e6),
+  });
+  check(metrics.journalErrors === 0 && metrics.checkpointErrors === 0, 'serveur : aucune erreur de journal ni de point de sauvegarde');
+  check(metrics.shadowMismatches === 0, `validation fantôme : aucun écart (${metrics.shadowChecks} contrôle(s))`);
+  check((metrics.journal_latency_p95_ms ?? 0) < 600, `journal durable p95 < 600 ms (${metrics.journal_latency_p95_ms} ms)`);
 
   // ── B quitte le projet ──────────────────────────────────────────────────
   await B.evaluate(click('.rvi-header__share'));

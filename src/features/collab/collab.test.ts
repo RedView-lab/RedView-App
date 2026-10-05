@@ -5,6 +5,7 @@ import type { ProjectDocument } from '@/features/itineraryPanel/lib/project/laye
 import type { Itinerary } from '@/features/itineraryPanel/types';
 
 import { CollabClient } from './client/collabClient';
+import type { UnsyncedBatch } from './client/syncEngine';
 import { diffDocument } from './model/diff';
 import { Materializer } from './model/materialize';
 import type { Op } from './model/ops';
@@ -276,6 +277,193 @@ describe('client : synchro et annuler par éditeur', () => {
     end();
     settle();
     expect(a.getState().leases).toHaveLength(0);
+  });
+});
+
+/**
+ * Salle + clients reliés sans latence, chacun branché puis connecté quand le
+ * test le décide (connexion lente, onglet rechargé).
+ */
+function manualSetup(document = sampleDocument(300)) {
+  const scheduler = new Scheduler();
+  const room = new Room(RoomState.fromDocument(document, 0), { epoch: 'e1', now: () => scheduler.now() });
+  const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+  const make = (clientId: string, restore?: { batches: UnsyncedBatch[]; nextSeq: number }) => {
+    let online = false;
+    const inbox: ServerMessage[] = [];
+    const peer: RoomPeer = { clientId, userId: `u-${clientId}`, send: (message) => inbox.push(clone(message)) };
+    const client = new CollabClient({
+      clientId,
+      clock: scheduler,
+      transport: {
+        isOnline: () => online,
+        send: (message: ClientMessage) => {
+          if (online) room.handle(clientId, clone(message));
+        },
+        requestFlush: () => undefined,
+        resync: () => undefined,
+      },
+    });
+    if (restore) client.engine.restoreUnsynced(restore.batches, restore.nextSeq);
+    const deliver = () => {
+      while (inbox.length > 0) {
+        const message = inbox.shift()!;
+        if (message.type === 'welcome') online = true;
+        client.receive(message);
+      }
+    };
+    return {
+      client,
+      deliver,
+      join: () => {
+        room.join(peer, { epoch: null, lastSeq: null });
+        deliver();
+      },
+      leave: () => {
+        online = false;
+        room.leave(clientId, peer);
+        client.disconnected(true);
+      },
+    };
+  };
+  return { room, make };
+}
+
+type ManualClient = ReturnType<ReturnType<typeof manualSetup>['make']>;
+
+function settleAll(...clients: ManualClient[]): void {
+  for (let round = 0; round < 10; round += 1) {
+    for (const { client } of clients) client.flush();
+    for (const { deliver } of clients) deliver();
+  }
+}
+
+const itineraryOf = (document: ProjectDocument, id: string) => (document.itineraries as Itinerary[]).find((it) => it.id === id)!;
+
+describe('connexion lente, branchement, onglet rechargé', () => {
+  it('modification faite pendant la connexion : envoyée, rejouée sur l’état du serveur ; un calcul sur l’ancien document reste local', () => {
+    const { room, make } = manualSetup();
+    // Document du cloud (dernier point de sauvegarde), en retard sur la salle.
+    const cloud = room.state.document();
+    const a = make('a');
+    a.client.bind(cloud, []);
+    a.join();
+    a.client.pushLocalDocument(mapIt(a.client.getDocument(), 'it-2', (it) => ({ ...it, name: 'A2' })), 'user');
+    settleAll(a);
+
+    const b = make('b');
+    expect(b.client.bind(cloud, [])).toBe(cloud);
+    b.client.pushLocalDocument(mapIt(b.client.getDocument(), 'it-1', (it) => ({ ...it, name: 'B pendant la connexion' })), 'user');
+    b.client.pushLocalDocument(mapIt(b.client.getDocument(), 'it-1', (it) => ({
+      ...it,
+      gpxRoute: { ...it.gpxRoute!, points: it.gpxRoute!.points.slice(0, 50), routedInputsKey: 'calcul-ancien-document' },
+    })), 'background');
+    expect(b.client.getState().unsynced).toBe(1);
+    b.join();
+    settleAll(a, b);
+
+    expect(itineraryOf(b.client.getDocument(), 'it-2').name).toBe('A2');
+    expect(itineraryOf(a.client.getDocument(), 'it-1').name).toBe('B pendant la connexion');
+    expect(itineraryOf(a.client.getDocument(), 'it-1').gpxRoute!.routedInputsKey).toBe('k0');
+    expect(itineraryOf(b.client.getDocument(), 'it-1').gpxRoute!.routedInputsKey).toBe('k0');
+    expect(same(a.client.getDocument(), b.client.getDocument())).toBe(true);
+    // L'utilisateur peut annuler ce qu'il a fait pendant la connexion.
+    expect(b.client.canUndo()).toBe(true);
+  });
+
+  it('écritures faites avant le branchement : rejouées chacune d’après la précédente', () => {
+    const { room, make } = manualSetup();
+    const cloud = room.state.document();
+    const a = make('a');
+    a.client.bind(cloud, []);
+    a.join();
+    a.client.pushLocalDocument(mapIt(a.client.getDocument(), 'it-1', (it) => ({ ...it, color: '#22aa55' })), 'user');
+    settleAll(a);
+
+    const renamed = mapIt(cloud, 'it-1', (it) => ({ ...it, name: 'Avant le branchement' }));
+    const routed = mapIt(renamed, 'it-1', (it) => ({ ...it, gpxRoute: { ...it.gpxRoute!, routedInputsKey: 'local' } }));
+    const recolored = mapIt(routed, 'it-2', (it) => ({ ...it, color: '#ffaa00' }));
+    const b = make('b');
+    const shown = b.client.bind(cloud, [
+      { document: renamed, change: 'user' },
+      { document: routed, change: 'background' },
+      { document: recolored, change: 'step' },
+    ]);
+    expect(itineraryOf(shown, 'it-1').name).toBe('Avant le branchement');
+    b.join();
+    settleAll(a, b);
+
+    const it1 = itineraryOf(a.client.getDocument(), 'it-1');
+    expect(it1.name).toBe('Avant le branchement');
+    // La couleur de A (changée après le point de sauvegarde) n'est pas écrasée.
+    expect(it1.color).toBe('#22aa55');
+    expect(it1.gpxRoute!.routedInputsKey).toBe('k0');
+    expect(itineraryOf(a.client.getDocument(), 'it-2').color).toBe('#ffaa00');
+    expect(same(a.client.getDocument(), b.client.getDocument())).toBe(true);
+  });
+
+  it('branchement après l’état du serveur : les écritures sont rejouées sur la session', () => {
+    const { room, make } = manualSetup();
+    const cloud = room.state.document();
+    const a = make('a');
+    a.client.bind(cloud, []);
+    a.join();
+    a.client.pushLocalDocument(mapIt(a.client.getDocument(), 'it-2', (it) => ({ ...it, name: 'A2' })), 'user');
+    settleAll(a);
+
+    const b = make('b');
+    b.join();
+    const local = mapIt(cloud, 'it-1', (it) => ({ ...it, name: 'B local' }));
+    const shown = b.client.bind(cloud, [{ document: local, change: 'user' }]);
+    expect(itineraryOf(shown, 'it-1').name).toBe('B local');
+    expect(itineraryOf(shown, 'it-2').name).toBe('A2');
+    settleAll(a, b);
+    expect(itineraryOf(a.client.getDocument(), 'it-1').name).toBe('B local');
+  });
+
+  it('onglet fermé avec des lots non écrits : repris par la session suivante du même client, jamais appliqués deux fois', () => {
+    const { room, make } = manualSetup();
+    const cloud = room.state.document();
+    const a = make('a');
+    a.client.bind(cloud, []);
+    a.join();
+    // Lot 1 : appliqué par le serveur, acquittement jamais reçu (onglet fermé avant).
+    a.client.pushLocalDocument(mapIt(a.client.getDocument(), 'it-1', (it) => ({ ...it, name: 'un' })), 'user');
+    a.client.flush();
+    // Lot 2 : fait hors ligne, jamais envoyé.
+    a.leave();
+    a.client.pushLocalDocument(mapIt(a.client.getDocument(), 'it-2', (it) => ({ ...it, name: 'deux' })), 'user');
+    const unsynced = a.client.engine.unsyncedBatches();
+    expect(unsynced.map((batch) => batch.clientSeq)).toEqual([1, 2]);
+
+    // Entre-temps, un autre éditeur renomme it-1 : le lot 1 ne doit pas l'écraser une seconde fois.
+    const b = make('b');
+    b.client.bind(cloud, []);
+    b.join();
+    b.client.pushLocalDocument(mapIt(b.client.getDocument(), 'it-1', (it) => ({ ...it, name: 'B' })), 'user');
+    settleAll(b);
+    const seqBefore = room.state.seq;
+
+    const reopened = make('a', { batches: unsynced, nextSeq: a.client.engine.nextSeq });
+    const shown = reopened.client.bind(cloud, []);
+    // Visible dès l'ouverture, avant l'état du serveur.
+    expect(itineraryOf(shown, 'it-2').name).toBe('deux');
+    reopened.join();
+    settleAll(b, reopened);
+    expect(room.state.seq).toBe(seqBefore + 1);
+    expect(itineraryOf(b.client.getDocument(), 'it-1').name).toBe('B');
+    expect(itineraryOf(b.client.getDocument(), 'it-2').name).toBe('deux');
+    expect(reopened.client.getState().unsynced).toBe(0);
+    expect(same(b.client.getDocument(), reopened.client.getDocument())).toBe(true);
+  });
+
+  it('refus du serveur : l’état reste « refusé » après la fermeture qui le suit', () => {
+    const { room, make } = manualSetup();
+    const a = make('a');
+    a.client.bind(room.state.document(), []);
+    a.client.denied('not-found');
+    a.client.disconnected(false);
+    expect(a.client.getState()).toMatchObject({ status: 'denied', deniedReason: 'not-found' });
   });
 });
 

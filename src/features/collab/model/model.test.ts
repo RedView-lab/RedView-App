@@ -5,7 +5,9 @@ import type { ProjectDocument } from '@/features/itineraryPanel/lib/project/laye
 import type { Itinerary } from '@/features/itineraryPanel/types';
 
 import { diffDocument, documentOps } from './diff';
-import { Materializer } from './materialize';
+import { randomEdit, sampleDocument } from '../sim/fixtures';
+import { seededRandom } from '../sim/scheduler';
+import { Materializer, materializeJson } from './materialize';
 import { ObjectStore } from './objects';
 import { applyOps, invertOps, type Op } from './ops';
 import { childObjectId, itineraryIdOf, itineraryObjectId } from './paths';
@@ -190,6 +192,33 @@ describe('document à plat', () => {
     const applied = applyOps(store, [{ t: 's', id: itineraryObjectId('it-2'), k: 'name', v: 'x' }]);
     expect(applied).toHaveLength(0);
     expect(store.has(childObjectId(itineraryObjectId('it-2'), 'timeline', 'start'))).toBe(false);
+  });
+
+  it('JSON du document sans le construire : identique à celui du document matérialisé', () => {
+    // Clés entières (ordre propre aux objets JS), tracé avec points d'origine, puis modifications au hasard.
+    let document = mapIt(doc(900), 'it-1', (it) => ({
+      ...it,
+      steepAlertOverrides: { zeta: { kind: 'a' }, '12': { kind: 'b' }, '3': { kind: 'c' } } as never,
+      gpxRoute: { ...it.gpxRoute!, originalPoints: route(300, 7) } as never,
+    }));
+    const store = build(document);
+    expect(materializeJson(store)).toBe(JSON.stringify(new Materializer().materialize(store)));
+    const random = seededRandom(7);
+    let sample = sampleDocument(600);
+    const sampleStore = build(sample);
+    for (let n = 0; n < 300; n += 1) {
+      const edit = randomEdit(sample, random, 'c0', n);
+      if (!edit) continue;
+      change(sampleStore, sample, edit.document);
+      sample = edit.document;
+      if (n % 30 === 0) expect(materializeJson(sampleStore)).toBe(JSON.stringify(new Materializer().materialize(sampleStore)));
+    }
+    expect(materializeJson(sampleStore)).toBe(JSON.stringify(new Materializer().materialize(sampleStore)));
+    // Segment absent : tracé vide des deux côtés.
+    document = mapIt(document, 'it-2', (it) => ({ ...it, gpxRoute: { name: null, source: 'brouter', points: route(80, 3), routedInputsKey: 'k' } as never }));
+    const partial = build(document);
+    partial.pruneBlobs(new Set());
+    expect(materializeJson(partial)).toBe(JSON.stringify(new Materializer().materialize(partial)));
   });
 
   it('même élément créé deux fois (deux éditeurs) : fusion des propriétés', () => {

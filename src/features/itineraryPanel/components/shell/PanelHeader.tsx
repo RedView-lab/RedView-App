@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 import {
   IconClose,
   IconSave,
@@ -5,7 +7,7 @@ import {
 } from '../icons';
 import { UserAvatar } from '@/shared/components/UserAvatar/UserAvatar';
 import { useAppI18n } from '@/shared/i18n';
-import type { ProjectCollaborator, ProjectSaveStatus } from '../../types';
+import type { ProjectCollaborator, ProjectSaveStatus, ProjectSessionStatus } from '../../types';
 
 interface PanelHeaderProps {
   title: string;
@@ -23,10 +25,25 @@ interface PanelHeaderProps {
   onShare?: (anchor: HTMLElement) => void;
   /** Éditeurs présents (cet utilisateur compris) : pastilles affichées dès qu'un autre est là. */
   collaborators?: ProjectCollaborator[];
+  /** Session de co-édition (absent hors session) : connexion lente ou coupée signalée sous le titre. */
+  sessionStatus?: ProjectSessionStatus;
 }
 
 /** Pastilles visibles avant « +N ». */
 const MAX_VISIBLE_COLLABORATORS = 3;
+
+/** Signalée seulement si elle dure : une connexion normale (≈ 1 s) ou une reconnexion rapide n'affiche rien. */
+const SESSION_STATUS_DELAY_MS = { connecting: 1200, offline: 2000 } as const;
+
+function useLastingSessionStatus(status: ProjectSessionStatus | undefined): 'connecting' | 'offline' | null {
+  const [lasting, setLasting] = useState<ProjectSessionStatus | undefined>(undefined);
+  useEffect(() => {
+    const delay = status === 'connecting' || status === 'offline' ? SESSION_STATUS_DELAY_MS[status] : 0;
+    const timer = window.setTimeout(() => setLasting(delay > 0 ? status : undefined), delay);
+    return () => window.clearTimeout(timer);
+  }, [status]);
+  return (status === 'connecting' || status === 'offline') && lasting === status ? status : null;
+}
 
 function formatSavedAt(iso: string, locale: string): string {
   const d = new Date(iso);
@@ -62,8 +79,10 @@ export function PanelHeader({
   onRename,
   onShare,
   collaborators = [],
+  sessionStatus,
 }: PanelHeaderProps) {
   const { locale, t } = useAppI18n();
+  const lastingSessionStatus = useLastingSessionStatus(sessionStatus);
   const privacyLabel = privacy === 'private' ? t('Privé') : t('Public');
   const saveLabel =
     saveStatus === 'saving'
@@ -77,7 +96,7 @@ export function PanelHeader({
             : t('Enregistrer');
   const saveTitle = saveStatusMessage || t('Enregistrer le projet (Ctrl+S)');
   return (
-    <header className="rvi-header">
+    <header className="rvi-header" data-rv-collab-status={sessionStatus}>
       <div className="rvi-header__title-group">
         <button
           type="button"
@@ -116,7 +135,17 @@ export function PanelHeader({
             {sizeBytes !== null ? (
               <span className="rvi-header__size">{formatSize(sizeBytes, locale)}</span>
             ) : null}
-            {saveStatusMessage && (saveStatus === 'error' || saveStatus === 'pending') ? (
+            {lastingSessionStatus ? (
+              <span
+                className="rvi-header__sync-message is-pending"
+                role="status"
+                title={t('Vos modifications sont gardées sur cet appareil et partiront dès la connexion.')}
+              >
+                {lastingSessionStatus === 'connecting'
+                  ? t('Connexion à la session…')
+                  : t('Hors ligne : vos modifications partiront à la reconnexion.')}
+              </span>
+            ) : saveStatusMessage && (saveStatus === 'error' || saveStatus === 'pending') ? (
               <span
                 className={`rvi-header__sync-message is-${saveStatus}`}
                 role="status"

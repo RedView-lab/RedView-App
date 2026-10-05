@@ -35,6 +35,8 @@ export interface RoomOptions {
   onBatch?(batch: SequencedBatch): void;
   /** Lots gardés en mémoire pour rattraper une reconnexion sans renvoyer l'état complet. */
   catchUpLimit?: number;
+  /** Taille (≈ octets JSON) de ces lots ; au-delà, l'état complet coûte moins (cf. `setCatchUpBudget`). */
+  catchUpBudgetBytes?: number;
   /** Séquence déjà durable au chargement (point de sauvegarde + journal relu). */
   durableSeq?: number;
 }
@@ -46,6 +48,7 @@ export interface JoinRequest {
 }
 
 const DEFAULT_CATCH_UP_LIMIT = 2_000;
+const DEFAULT_CATCH_UP_BUDGET_BYTES = 256 * 1024;
 const MAX_PRESENCE_CHARS = 2_048;
 
 interface Member {
@@ -60,6 +63,10 @@ export class Room {
   private readonly members = new Map<string, Member>();
   private readonly leases = new LeaseTable();
   private readonly recent: SequencedBatch[] = [];
+  /** Taille estimée de chaque lot de `recent`, dans le même ordre. */
+  private readonly recentBytes: number[] = [];
+  private recentTotalBytes = 0;
+  private catchUpBudget: number;
   private durable: number;
   private peersDirty = false;
 
@@ -68,6 +75,13 @@ export class Room {
     this.epoch = options.epoch;
     this.options = options;
     this.durable = options.durableSeq ?? state.seq;
+    this.catchUpBudget = options.catchUpBudgetBytes ?? DEFAULT_CATCH_UP_BUDGET_BYTES;
+  }
+
+  /** Budget du rattrapage par lots (le serveur le règle sur la taille du document). */
+  setCatchUpBudget(bytes: number): void {
+    this.catchUpBudget = bytes;
+    this.trimRecent();
   }
 
   get memberCount(): number {
@@ -176,9 +190,11 @@ export class Room {
       return;
     }
     const { batch } = outcome;
+    const bytes = estimateBatchBytes(batch);
     this.recent.push(batch);
-    const limit = this.options.catchUpLimit ?? DEFAULT_CATCH_UP_LIMIT;
-    if (this.recent.length > limit) this.recent.splice(0, this.recent.length - limit);
+    this.recentBytes.push(bytes);
+    this.recentTotalBytes += bytes;
+    this.trimRecent();
     this.options.onBatch?.(batch);
     this.broadcast({ type: 'batch', batch });
     this.dropLeasesOfDeletedItineraries(batch);
@@ -227,6 +243,21 @@ export class Room {
     return this.recent.filter((batch) => batch.seq > request.lastSeq!);
   }
 
+  /** Plus vieux lots retirés au-delà du nombre ou de la taille permis (une reconnexion plus ancienne reçoit l'état complet). */
+  private trimRecent(): void {
+    const limit = this.options.catchUpLimit ?? DEFAULT_CATCH_UP_LIMIT;
+    let drop = 0;
+    let total = this.recentTotalBytes;
+    while (drop < this.recent.length && (this.recent.length - drop > limit || total > this.catchUpBudget)) {
+      total -= this.recentBytes[drop];
+      drop += 1;
+    }
+    if (drop === 0) return;
+    this.recent.splice(0, drop);
+    this.recentBytes.splice(0, drop);
+    this.recentTotalBytes = total;
+  }
+
   private dropLeasesOfDeletedItineraries(batch: SequencedBatch): void {
     let changed = false;
     for (const op of batch.ops) {
@@ -251,6 +282,26 @@ export class Room {
 }
 
 const DERIVED_KINDS: readonly DerivedKind[] = ['route', 'prediction', 'poi'];
+
+/** Taille approximative d'un lot (sans le sérialiser) : de quoi borner le rattrapage. */
+function estimateBatchBytes(batch: SequencedBatch): number {
+  let bytes = 160;
+  for (const op of batch.ops) {
+    bytes += 48 + op.id.length;
+    if (op.t === 's') bytes += op.k.length + valueBytes(op.v);
+    else if (op.t === 'c') for (const [key, value] of op.props) bytes += key.length + valueBytes(value);
+  }
+  for (const json of Object.values(batch.blobs)) bytes += json.length;
+  return bytes;
+}
+
+function valueBytes(value: unknown): number {
+  if (value === null || value === undefined) return 4;
+  if (typeof value === 'string') return value.length + 2;
+  if (typeof value !== 'object') return 8;
+  // Valeur composée (réglage, en-tête de tracé) : rare et petite, mesurée.
+  return JSON.stringify(value)?.length ?? 4;
+}
 
 function isDerivedKind(value: unknown): value is DerivedKind {
   return DERIVED_KINDS.includes(value as DerivedKind);
