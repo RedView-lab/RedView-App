@@ -123,7 +123,7 @@ export async function listProjects(): Promise<ProjectSummary[]> {
 }
 
 function cloudDocToSummary(doc: CloudProjectDoc, sharedWithMe: boolean): ProjectSummary {
-  markSharedProject(doc.$id, doc.team_id);
+  markSharedProject(doc.$id, doc.team_id, doc.user_id);
   return {
     id: doc.$id,
     // Le dossier d'un projet partagé est celui de son propriétaire.
@@ -193,7 +193,7 @@ async function fetchCloudRow(id: string): Promise<ProjectRow> {
     CLOUD_READ_TIMEOUT_MS,
   )) as unknown as CloudProjectDoc;
   const row = await docToProjectRow(doc);
-  markSharedProject(id, row.team_id);
+  markSharedProject(id, row.team_id, row.user_id);
   rememberCloudVersion(id, doc.$updatedAt);
   // Copie locale propre (accès hors-ligne), écrite dans la file du projet.
   void enqueue(localQueues, id, () => idbSaveProject(row)).catch((error: unknown) => {
@@ -326,7 +326,7 @@ async function getProjectRow(id: string): Promise<ProjectRow | null> {
   // Projet partagé : son document vient du serveur temps réel (version cloud,
   // jamais de conflit ni de copie) ; la copie locale n'est qu'un cache.
   if (meta.team_id || local.team_id) {
-    markSharedProject(id, meta.team_id || local.team_id);
+    markSharedProject(id, meta.team_id || local.team_id, meta.user_id);
     try {
       return await fetchCloudRow(id);
     } catch (e) {

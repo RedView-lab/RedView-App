@@ -356,7 +356,10 @@ try {
   await B.send('Page.reload', {});
   await waitFor(B, `!!document.querySelector('.mapboxgl-canvas') && !!window.__rvStore?.() && window.__rvStore().collabActive === true`, { timeout: 120_000 });
   await sleep(2500);
-  check((await B.evaluate(snapshotOf)) === beforeReload, 'B recharge : même document que A');
+  const afterReloadB = await B.evaluate(snapshotOf);
+  const afterReloadA = await A.evaluate(snapshotOf);
+  check(afterReloadB === afterReloadA, 'B recharge : même document que A');
+  if (afterReloadB !== afterReloadA) note('écart après rechargement de B', { avant: beforeReload, A: afterReloadA, B: afterReloadB });
   check(out.brouter.B.length === brouterBeforeReload, 'B recharge : aucun appel BRouter');
 
   // ── Redéploiement du serveur temps réel en pleine édition ───────────────
@@ -403,6 +406,17 @@ try {
   await waitFor(B, `${projectsVisible} && !document.querySelector('.mapboxgl-canvas')`, { timeout: 30_000 }).catch(() => null);
   const memberships = await teams.listMemberships(`p${projectId}`, [Query.limit(100)]);
   check(!memberships.memberships.some((membership) => membership.userId === accounts.B.userId), 'B a quitté le projet (retiré de l’équipe)');
+  // ── Erreurs réseau / console : seules celles attendues sont tolérées ─────
+  const EXPECTED = [
+    /^HTTP 401 https:\/\/appwrite\.redview\.tech\/v1\/account(\/sessions\/current)?$/, // avant la connexion
+    /^HTTP 404 https:\/\/appwrite\.redview\.tech\/v1\/databases\/[^/]+\/collections\/project_views\/documents\/[^/]+$/, // vue pas encore enregistrée
+    /^HTTP 404 https:\/\/appwrite\.redview\.tech\/v1\/storage\/buckets\/project-thumbnails\/files\/[^/]+$/, // miniature pas encore créée
+  ];
+  for (const name of ['A', 'B']) {
+    const unexpected = out.errors[name].filter((entry) => !EXPECTED.some((pattern) => pattern.test(entry)));
+    if (unexpected.length > 0) note(`erreurs inattendues ${name}`, unexpected.slice(0, 10));
+    check(unexpected.length === 0, `${name} : aucune erreur inattendue (réseau, console, exceptions)`);
+  }
 } catch (error) {
   out.fatal = String(error?.stack ?? error);
   console.error(`❌ ${out.fatal}`);

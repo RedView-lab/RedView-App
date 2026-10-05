@@ -131,11 +131,20 @@ async function main() {
 
   // 5. Verification
   log('Verifying production endpoint...');
-  try {
-    const testRes = run('node -e "fetch(\'https://app.redview.tech\').then(r => console.log(r.status))"');
-    success(`Production is LIVE on https://app.redview.tech (HTTP ${testRes})`);
-  } catch {
-    log('Production URL: https://app.redview.tech');
+  // Le conteneur vient de redémarrer : 502 le temps qu'il démarre, on attend un vrai 200.
+  let appStatus = '';
+  for (let attempt = 0; attempt < 30 && appStatus !== '200'; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 3000));
+    try {
+      appStatus = run('node -e "fetch(\'https://app.redview.tech\', { cache: \'no-store\' }).then(r => console.log(r.status), () => console.log(\'error\'))"');
+    } catch {
+      appStatus = 'error';
+    }
+  }
+  if (appStatus === '200') success('Production is LIVE on https://app.redview.tech (HTTP 200)');
+  else {
+    error(`Production not answering 200 after 90 s (last: ${appStatus}) — check Coolify.`);
+    process.exitCode = 1;
   }
   try {
     // Sans le service, l'app répond 200 avec index.html : seul `{"ok":true}` compte.

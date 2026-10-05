@@ -48,7 +48,10 @@ export function useInviteProjectEditor(userId: string | null) {
     mutationFn: ({ id, email }: { id: string; email: string }) => inviteProjectEditor(id, email),
     onSuccess: (state) => {
       // Dès maintenant, ce client n'écrit plus le document au cloud (serveur temps réel).
-      if (state.shared) markSharedProject(state.projectId, sharedProjectTeamId(state.projectId) ?? 'shared');
+      if (state.shared) {
+        const owner = state.members.find((member) => member.role === 'owner')?.userId ?? null;
+        markSharedProject(state.projectId, sharedProjectTeamId(state.projectId) ?? 'shared', owner);
+      }
       cache.setState(state);
       cache.updateLibrary((snapshot) => patchProject(snapshot, state.projectId, { shared: state.shared }));
     },

@@ -10,6 +10,8 @@ import {
 } from '@/shared/services/appwrite';
 import { idbSaveThumbnail, idbGetThumbnail } from '@/shared/utils/storage/idbProjectStore';
 
+import { isSharedProject, sharedProjectOwner, sharedProjectTeamId } from './liveSessions';
+
 function safeThumbnailFileId(projectId: string): string {
   const sanitized = projectId.replace(/[^a-zA-Z0-9._-]/g, '');
   return sanitized.slice(0, 36) || 'thumbnail';
@@ -33,6 +35,11 @@ export async function uploadProjectThumbnail(projectId: string, blob: Blob): Pro
 
   try {
     const userId = await getAuthenticatedUserId();
+    // Projet partagé : la miniature cloud est celle du propriétaire, lisible par
+    // l'équipe ; celle d'un éditeur reste locale (le fichier ne lui appartient pas).
+    const shared = isSharedProject(projectId);
+    if (shared && sharedProjectOwner(projectId) !== userId) return;
+    const teamId = shared ? sharedProjectTeamId(projectId) : null;
     const fileId = safeThumbnailFileId(projectId);
     const mime = blob.type || 'image/webp';
     const ext = mime.includes('webp') ? 'webp' : 'jpg';
@@ -47,6 +54,7 @@ export async function uploadProjectThumbnail(projectId: string, blob: Blob): Pro
         Permission.read(Role.user(userId)),
         Permission.update(Role.user(userId)),
         Permission.delete(Role.user(userId)),
+        ...(teamId ? [Permission.read(Role.team(teamId))] : []),
       ],
     );
   } catch (error) {

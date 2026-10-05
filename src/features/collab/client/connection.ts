@@ -51,6 +51,8 @@ export class CollabConnection {
   private stopped = false;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private flushQueued = false;
+  private lastFlushAt = 0;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private lastMessageAt = 0;
 
@@ -196,12 +198,31 @@ export class CollabConnection {
     }, delay);
   }
 
+  /**
+   * Envoi au front montant : la première modification après un temps calme
+   * part tout de suite (fin de la tâche courante, pour regrouper les écritures
+   * synchrones d'une même action) ; une rafale est regroupée à ≈ 30 Hz.
+   */
   private scheduleFlush(): void {
-    if (this.flushTimer) return;
+    if (this.flushTimer || this.flushQueued) return;
+    const wait = FLUSH_DELAY_MS - (Date.now() - this.lastFlushAt);
+    if (wait <= 0) {
+      this.flushQueued = true;
+      queueMicrotask(() => {
+        this.flushQueued = false;
+        this.flushNow();
+      });
+      return;
+    }
     this.flushTimer = setTimeout(() => {
       this.flushTimer = null;
-      this.client.flush();
-    }, FLUSH_DELAY_MS);
+      this.flushNow();
+    }, wait);
+  }
+
+  private flushNow(): void {
+    this.lastFlushAt = Date.now();
+    this.client.flush();
   }
 
   private send(message: ClientMessage): void {

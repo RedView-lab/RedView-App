@@ -11,7 +11,8 @@
  * `dirty`, n'entre jamais en conflit et n'est jamais réenvoyée.
  */
 const live = new Map<string, number>();
-const shared = new Set<string>();
+/** Projets partagés connus → propriétaire (null s'il n'est pas encore connu). */
+const shared = new Map<string, string | null>();
 
 /** Marque le projet comme géré par une session ; renvoie la fonction qui l'en retire. */
 export function registerLiveSession(projectId: string): () => void {
@@ -31,8 +32,14 @@ export function isLiveSession(projectId: string): boolean {
 }
 
 /** Projet partagé (équipe) vu par ce client : lu sur les lignes cloud / locales. */
-export function markSharedProject(projectId: string, teamId: string | null | undefined): void {
-  if (teamId) shared.add(projectId);
+export function markSharedProject(projectId: string, teamId: string | null | undefined, ownerId?: string | null): void {
+  if (!teamId) return;
+  shared.set(projectId, ownerId || shared.get(projectId) || null);
+}
+
+/** Propriétaire d'un projet partagé (null : inconnu). */
+export function sharedProjectOwner(projectId: string): string | null {
+  return shared.get(projectId) ?? null;
 }
 
 export function isSharedProject(projectId: string): boolean {
