@@ -20,7 +20,7 @@ import { Client, Databases, Query, Storage, Teams } from 'node-appwrite';
 
 import { connect, launch, sleep, waitFor } from '../screen-audit/cdp.mjs';
 import { armSlowWelcome, SLOW_WELCOME_SCRIPT } from './slowWelcome.mjs';
-import { DENIAL_CODES, READ_SOCKET_LOG, SOCKET_LOG_SCRIPT } from './socketLog.mjs';
+import { DENIAL_CODES, PAGE_STATE, READ_SOCKET_LOG, SOCKET_LOG_SCRIPT } from './socketLog.mjs';
 
 const APP = process.env.RV_APP_URL ?? 'https://app.redview.tech';
 const PORT = 9381;
@@ -50,13 +50,28 @@ const note = (label, value) => {
   console.error(`   ${label} : ${typeof value === 'string' ? value : JSON.stringify(value)}`);
 };
 
+// Valeur du ProjectStore, trouvée en remontant les fibres React depuis des
+// éléments de l'éditeur (en-tête du panneau, panneau, carte : une carte qui se
+// recharge perd un instant sa classe), fibre courante et son alternative.
 const STORE_HELPER = `(() => {
-  window.__rvStore = () => {
-    const el = document.querySelector('.mapboxgl-map');
+  const isStore = (v) => v && typeof v.setProject === 'function' && v.project && 'derivedComputeGate' in v;
+  const fromElement = (el) => {
     const key = el && Object.keys(el).find((k) => k.startsWith('__reactFiber'));
-    for (let f = key ? el[key] : null; f; f = f.return) {
-      const v = f.memoizedProps && f.memoizedProps.value;
-      if (v && typeof v.setProject === 'function' && v.project && 'derivedComputeGate' in v) return v;
+    if (!key) return null;
+    for (const start of [el[key], el[key].alternate]) {
+      for (let f = start; f; f = f.return) {
+        const v = f.memoizedProps && f.memoizedProps.value;
+        if (isStore(v)) return v;
+      }
+    }
+    return null;
+  };
+  window.__rvStore = () => {
+    for (const selector of ['.rvi-header', '[data-rv-region="left-panel"]', '.mapboxgl-map']) {
+      for (const el of document.querySelectorAll(selector)) {
+        const store = fromElement(el);
+        if (store) return store;
+      }
     }
     return null;
   };
@@ -523,6 +538,18 @@ try {
 } catch (error) {
   out.fatal = String(error?.stack ?? error);
   console.error(`❌ ${out.fatal}`);
+  // État de chaque page au moment de l'erreur (+ capture d'écran à côté du rapport).
+  out.diagnostics.pages = {};
+  for (const [name, page] of Object.entries(pages)) {
+    out.diagnostics.pages[name] = await page.evaluate(PAGE_STATE).catch((reason) => String(reason));
+    console.error(`   ${name} — page : ${JSON.stringify(out.diagnostics.pages[name])}`);
+    const shot = await page.send('Page.captureScreenshot', { format: 'png' }).catch(() => null);
+    if (shot?.data) {
+      const file = path.join(os.tmpdir(), `collab-prod-${name}-${Date.now()}.png`);
+      (await import('node:fs')).writeFileSync(file, Buffer.from(shot.data, 'base64'));
+      console.error(`   ${name} — capture : ${file}`);
+    }
+  }
 } finally {
   // Diagnostic avant le nettoyage (qui supprime le projet) : connexions de chaque page, journal du serveur.
   for (const [name, page] of Object.entries(pages)) {

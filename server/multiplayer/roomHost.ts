@@ -270,7 +270,9 @@ export class HostedRoom {
         this.nextCheckpointAt = Date.now() + backoff(this.checkpointFailures, CHECKPOINT_RETRY_MIN_MS, CHECKPOINT_RETRY_MAX_MS);
         return;
       }
-      if (shadowDigest) await this.shadowValidate(seq, shadowDigest);
+      // Relu avant d'écrire le nouveau (qui remplace le précédent), jugé après :
+      // un projet supprimé entre-temps n'est pas un écart.
+      const shadow = shadowDigest ? await this.shadowValidate(seq, shadowDigest) : null;
       try {
         await this.host.options.storage.saveCheckpoint(this.projectId, { seq, checkpointJson, documentJson });
       } catch (error) {
@@ -278,10 +280,12 @@ export class HostedRoom {
           this.projectDeleted('point de sauvegarde');
           return;
         }
+        if (shadow) this.reportShadow(seq, shadow);
         this.checkpointFailed(error);
         if (unload) this.unloadIfIdle();
         return;
       }
+      if (shadow) this.reportShadow(seq, shadow);
       this.checkpointSeq = seq;
       this.hasDurableCheckpoint = true;
       // Rattrapage par lots borné à la moitié du document : au-delà, l'état complet coûte moins.
@@ -323,17 +327,20 @@ export class HostedRoom {
     return interval > 0 && this.hasDurableCheckpoint && now - this.lastShadowAt >= interval;
   }
 
-  /** Validation fantôme : état durable rejoué jusqu'à `seq` = mémoire à `seq` ? (signalé, jamais corrigé). */
-  private async shadowValidate(seq: number, expected: string): Promise<void> {
+  /** Validation fantôme : état durable rejoué jusqu'à `seq` = mémoire à `seq` ? null : lecture impossible. */
+  private async shadowValidate(seq: number, expected: string): Promise<ShadowResult | null> {
     this.lastShadowAt = Date.now();
-    let result: ShadowResult;
     try {
-      result = verifyDurable(await this.host.options.storage.readDurable(this.projectId), seq, expected);
+      return verifyDurable(await this.host.options.storage.readDurable(this.projectId), seq, expected);
     } catch (error) {
       this.host.metrics.shadowErrors += 1;
       this.host.log('warn', 'validation fantôme impossible (lecture du stockage)', { projectId: this.projectId, error: String(error) });
-      return;
+      return null;
     }
+  }
+
+  /** Résultat de la validation fantôme (signalé, jamais corrigé). */
+  private reportShadow(seq: number, result: ShadowResult): void {
     this.host.metrics.shadowChecks += 1;
     if (result.ok) return;
     this.host.metrics.shadowMismatches += 1;

@@ -280,7 +280,8 @@ describe('stockage Appwrite de la salle', () => {
   });
 
   it('projet supprimé pendant la session : clients fermés (4404), journal et points de sauvegarde purgés, plus aucun essai', async () => {
-    const host = newHost();
+    // Validation fantôme active : un projet supprimé n'est pas un écart.
+    const host = newHost({ shadowValidationIntervalMs: 1 });
     const room = (await host.open(PROJECT))!;
     const { handle, closed } = join(room, 'a');
     room.handle(handle, renameBatch(room, 1, 'Un'));
@@ -295,6 +296,7 @@ describe('stockage Appwrite de la salle', () => {
     expect(closed.code).toBe(4404);
     await waitFor(() => (fake.collections.get('project_journal')?.size ?? 0) === 0 && collabFiles().length === 0, 'purge');
     expect(host.metrics.deletedRooms).toBe(1);
+    expect(host.metrics.shadowMismatches).toBe(0);
     // Ni erreur comptée ni nouvel essai (la salle est oubliée).
     await new Promise((resolve) => setTimeout(resolve, 1_200));
     expect(host.metrics.checkpointErrors).toBe(0);

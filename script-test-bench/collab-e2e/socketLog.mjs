@@ -36,14 +36,28 @@ export const SOCKET_LOG_SCRIPT = `(() => {
     },
   });
   const seen = new WeakSet();
-  new MutationObserver(() => {
+  const observe = () => new MutationObserver(() => {
     for (const toast of document.querySelectorAll('[data-sonner-toast]')) {
       if (seen.has(toast)) continue;
       seen.add(toast);
       log({ event: 'toast', text: (toast.textContent || '').slice(0, 200) });
     }
   }).observe(document.documentElement, { childList: true, subtree: true });
+  // Injecté avant le document : on observe dès qu'il existe.
+  if (document.documentElement) observe();
+  else document.addEventListener('DOMContentLoaded', observe, { once: true });
 })()`;
+
+/** État d'une page pour un diagnostic (éditeur présent ? cartes, en-tête, texte). */
+export const PAGE_STATE = `(() => ({
+  url: location.pathname,
+  maps: document.querySelectorAll('.mapboxgl-map').length,
+  canvas: !!document.querySelector('.mapboxgl-canvas'),
+  store: !!(window.__rvStore && window.__rvStore()),
+  header: document.querySelector('.rvi-header')?.innerText?.slice(0, 160) ?? null,
+  collabStatus: document.querySelector('[data-rv-collab-status]')?.dataset.rvCollabStatus ?? null,
+  text: document.body.innerText.slice(0, 240),
+}))()`;
 
 export const READ_SOCKET_LOG = `JSON.parse(sessionStorage.getItem(${JSON.stringify(KEY)}) || '[]')`;
 
