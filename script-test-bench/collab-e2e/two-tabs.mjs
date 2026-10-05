@@ -143,6 +143,38 @@ try {
   await waitFor(B, store(`s.project.itineraries[0].name === 'Renommé par A'`), { timeout: 10000 }).catch(() => null);
   check(await B.evaluate(store(`s.project.itineraries[0].name === 'Renommé par A'`)), 'renommage de A reçu par B');
 
+  // 1 bis. Latence A → B sans réseau (serveur local) : toute la chaîne de l'application.
+  const latencies = [];
+  for (let index = 0; index < 40; index += 1) {
+    const name = `lat-${index}-${Date.now()}`;
+    const seen = B.evaluate(`new Promise((resolve) => {
+      const start = Date.now();
+      const tick = () => {
+        const s = window.__rvStore?.();
+        if (s && s.project.itineraries[0].name === ${JSON.stringify(name)}) resolve(Date.now());
+        else if (Date.now() - start > 10000) resolve(null);
+        else setTimeout(tick, 4);
+      };
+      tick();
+    })`);
+    const sentAt = await A.evaluate(store(`(s.setItineraryName(${JSON.stringify(itineraryId)}, ${JSON.stringify(name)}), Date.now())`));
+    const seenAt = await seen;
+    if (seenAt === null) break;
+    latencies.push(seenAt - sentAt);
+    await sleep(150);
+  }
+  const sortedLatencies = [...latencies].sort((a, b) => a - b);
+  out.steps.localLatencyMs = {
+    p50: sortedLatencies[Math.floor(sortedLatencies.length * 0.5)],
+    p95: sortedLatencies[Math.min(sortedLatencies.length - 1, Math.floor(sortedLatencies.length * 0.95))],
+    max: sortedLatencies[sortedLatencies.length - 1],
+  };
+  check(latencies.length === 40, `latence locale : 40 renommages reçus (${latencies.length})`);
+  check(out.steps.localLatencyMs.p95 < 500, `latence locale A → B p95 < 500 ms (${out.steps.localLatencyMs.p95} ms)`);
+  // Nom d'avant la mesure : les étapes suivantes le vérifient.
+  await A.evaluate(store(`(s.setItineraryName(${JSON.stringify(itineraryId)}, 'Renommé par A'), 0)`));
+  await waitFor(B, store(`s.project.itineraries[0].name === 'Renommé par A'`), { timeout: 10000 }).catch(() => null);
+
   // 2. Vue propre à chacun : le mode de A ne change pas celui de B.
   const modeB = await B.evaluate(store(`s.project.activeMode`));
   await A.evaluate(store(`(s.setProject((p) => ({ ...p, activeMode: 'poi' })), 0)`));

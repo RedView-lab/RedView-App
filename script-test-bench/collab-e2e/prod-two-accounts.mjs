@@ -330,9 +330,10 @@ try {
   await waitFor(A, `${avatars} >= 2`, { timeout: 15_000 }).catch(() => null);
   check((await A.evaluate(avatars)) >= 2 && (await B.evaluate(avatars)) >= 2, 'en-tête : pastilles des deux éditeurs chez A et chez B');
 
-  // ── Latence de synchronisation A → B (10 renommages) ────────────────────
+  // ── Latence de synchronisation A → B (40 renommages : un p95 qui n'est pas le maximum) ──
   const latencies = [];
-  for (let index = 0; index < 10; index += 1) {
+  const SAMPLES = 40;
+  for (let index = 0; index < SAMPLES; index += 1) {
     const name = `lat-${index}-${Date.now()}`;
     const seen = B.evaluate(waitInPage(`window.__rvStore()?.project.itineraries[0].name === ${JSON.stringify(name)}`));
     const sentAt = await A.evaluate(`(() => { const s = window.__rvStore(); s.setItineraryName(${JSON.stringify(itineraryId)}, ${JSON.stringify(name)}); return Date.now(); })()`);
@@ -346,7 +347,18 @@ try {
   }
   if (latencies.length > 0) {
     note('latence A → B (ms)', { p50: percentile(latencies, 0.5), p95: percentile(latencies, 0.95), max: Math.max(...latencies) });
-    check(latencies.length === 10 && percentile(latencies, 0.95) < 500, `latence de synchronisation p95 < 500 ms (${percentile(latencies, 0.95)} ms)`);
+    // Aller-retour réseau de la page jusqu'au serveur (une synchro en fait deux : A → serveur → B).
+    const rtt = await A.evaluate(`(async () => {
+      const samples = [];
+      for (let i = 0; i < 5; i += 1) {
+        const t0 = performance.now();
+        await fetch('/multiplayer/health', { cache: 'no-store' });
+        samples.push(Math.round(performance.now() - t0));
+      }
+      return samples.sort((a, b) => a - b)[2];
+    })()`);
+    note('aller-retour réseau page → serveur (ms, médiane)', rtt);
+    check(latencies.length === SAMPLES && percentile(latencies, 0.95) < 500, `latence de synchronisation p95 < 500 ms (${percentile(latencies, 0.95)} ms)`);
   }
 
   // ── Vue propre à chacun ─────────────────────────────────────────────────
