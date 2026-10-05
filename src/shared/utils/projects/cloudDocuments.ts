@@ -40,11 +40,36 @@ export const PROJECT_META_FIELDS = [
   '$updatedAt',
 ];
 
+/**
+ * `team_id` (co-édition) n'existe qu'après la migration du schéma
+ * (scripts/setup-appwrite-schema.mjs) : tant qu'Appwrite le refuse (400), les
+ * lectures repartent sans lui, une fois pour toute la session.
+ */
+let teamFieldAvailable = true;
+
+function isUnknownTeamFieldError(error: unknown): boolean {
+  const { code, message } = (error ?? {}) as { code?: unknown; message?: unknown };
+  return code === 400 && typeof message === 'string' && message.includes('team_id');
+}
+
+/** Lecture avec les champs de la liste (+ `team_id` quand le schéma le connaît). */
+export async function withProjectMetaFields<T>(read: (fields: string[]) => Promise<T>): Promise<T> {
+  if (!teamFieldAvailable) return read(PROJECT_META_FIELDS);
+  try {
+    return await read([...PROJECT_META_FIELDS, 'team_id']);
+  } catch (error) {
+    if (!isUnknownTeamFieldError(error)) throw error;
+    teamFieldAvailable = false;
+    return read(PROJECT_META_FIELDS);
+  }
+}
+
 export type CloudProjectDoc = {
   $id: string;
   $createdAt: string;
   $updatedAt: string;
   user_id?: string;
+  team_id?: string | null;
   folder_id?: string | null;
   name?: string;
   data?: unknown;
@@ -106,6 +131,7 @@ export async function docToProjectRow(doc: CloudProjectDoc): Promise<ProjectRow>
     updated_at: doc.$updatedAt,
     dirty: false,
     cloud_updated_at: doc.$updatedAt,
+    team_id: doc.team_id || null,
   });
 }
 

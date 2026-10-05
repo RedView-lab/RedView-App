@@ -81,6 +81,7 @@ export function useItineraryMapActions({
               'start',
               { lat: payload.point.lat, lon: payload.point.lng },
               resolveMapContextPointTitle(payload.point),
+              { pickToleranceM: payload.point.pickToleranceM },
             );
           });
         }
@@ -120,6 +121,7 @@ export function useItineraryMapActions({
             'end',
             { lat: payload.point.lat, lon: payload.point.lng },
             resolveMapContextPointTitle(payload.point),
+            { pickToleranceM: payload.point.pickToleranceM },
           );
         });
         break;
@@ -278,7 +280,9 @@ export function useItineraryMapActions({
         }
         case 'start':
         case 'end':
-          createdId = placeRouteEndpoint(it, payload.kind, point, payload.label)?.id ?? null;
+          createdId = placeRouteEndpoint(it, payload.kind, point, payload.label, {
+            routeDistanceM: payload.distanceM,
+          })?.id ?? null;
           break;
         default:
           break;

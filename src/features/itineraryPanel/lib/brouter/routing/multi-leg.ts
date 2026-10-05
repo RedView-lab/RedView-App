@@ -1,3 +1,5 @@
+import { ROUTE_SEAM_TOLERANCE_M, RouteSeamError } from '../../routes/route-continuity';
+import { haversineRouteDistanceM } from '../../routes/route-distance';
 import type { BrouterPoint, BrouterRoute } from '../types';
 
 /**
@@ -49,6 +51,9 @@ interface BrouterFeatureProps {
  * Concatène les tracés de tronçons consécutifs en un seul tracé BRouter :
  * géométrie (point de jonction dédoublé), totaux, et lignes `messages`
  * (altitudes, distances, revêtements) réalignées sur l'en-tête du premier.
+ * Deux tronçons qui ne partagent pas leur point de jonction (point d'un îlot
+ * décalé différemment de chaque côté) rejettent `RouteSeamError` : les
+ * recoller tracerait une ligne droite.
  */
 export function concatBrouterRoutes(routes: BrouterRoute[]): BrouterRoute {
   if (routes.length === 0) throw new Error('BRouter: aucun tronçon à concaténer.');
@@ -59,6 +64,15 @@ export function concatBrouterRoutes(routes: BrouterRoute[]): BrouterRoute {
   const messageRows: unknown[][] = [];
 
   for (const route of routes) {
+    const previous = coordinates[coordinates.length - 1];
+    const first = route.coordinates[0];
+    if (previous && first) {
+      const gapM = haversineRouteDistanceM(
+        { lat: previous[1], lon: previous[0] },
+        { lat: first[1], lon: first[0] },
+      );
+      if (gapM > ROUTE_SEAM_TOLERANCE_M) throw new RouteSeamError('route legs junction', gapM);
+    }
     const startIndex = coordinates.length > 0 ? 1 : 0;
     for (let index = startIndex; index < route.coordinates.length; index += 1) {
       coordinates.push(route.coordinates[index]!);

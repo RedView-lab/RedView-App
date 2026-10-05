@@ -18,6 +18,8 @@ export interface MapContextMenuPoint {
   openingHoursLabel: string | null;
   overlayDetails: MapContextMenuOverlayDetail[];
   forbiddenZoneId?: string | null;
+  /** Imprécision du clic droit au sol (m) : quelques pixels à l'échelle de la vue. */
+  pickToleranceM?: number;
 }
 
 export type MapContextMenuOverlayDetailKind = 'sunlight' | 'weather' | 'wind';

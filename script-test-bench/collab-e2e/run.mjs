@@ -4,9 +4,10 @@
 //  - solo.mjs     : sans session (production actuelle) — routage, annuler /
 //                   rétablir sans nouveau routage, réouverture sans recalcul
 //                   (estampilles du tracé et de la prédiction) ;
-//  - two-tabs.mjs : deux onglets du même navigateur en session (`?collab=local`) —
-//                   synchronisation, vue propre à chacun, seul l'auteur route,
-//                   annuler / rétablir par utilisateur, tracé restauré sans BRouter.
+//  - two-tabs.mjs : deux onglets en session sur le serveur temps réel de dev
+//                   (`?collab=server`) — synchronisation, vue propre à chacun,
+//                   seul l'auteur route (bail), annuler / rétablir par
+//                   utilisateur, tracé restauré sans BRouter, rechargement.
 //
 //   npm run bench:collab-e2e
 import { spawnSync } from 'node:child_process';

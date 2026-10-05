@@ -16,6 +16,7 @@ import { cleanAndInterpolateElevations, hasCorruptedElevations } from '../route-
 import { buildImportedRouteMetrics } from '../routes';
 import { HIDDEN_PANEL_POI_CATEGORIES } from './poiRows';
 import { createDocumentId } from './ids';
+import { repairRouteEndpointArtifacts } from './repair-route-endpoints';
 
 export const ALL_POI_CATEGORIES: PoiCategory[] = [
   'fountains',
@@ -219,7 +220,9 @@ export function normalizeItineraryRhythmState(rhythm?: Partial<RhythmState> | nu
 }
 
 export function normalizeItineraryProject(project: ItineraryProject): ItineraryProject {
-  const itineraries = project.itineraries.map((itinerary) => {
+  const itineraries = project.itineraries.map((sourceItinerary) => {
+    // Lignes droites laissées en bout de tracé par d'anciennes éditions.
+    const itinerary = repairRouteEndpointArtifacts(sourceItinerary);
     let gpxRoute = itinerary.gpxRoute;
     let metrics = itinerary.metrics;
 

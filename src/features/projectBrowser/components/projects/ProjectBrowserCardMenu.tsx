@@ -14,14 +14,19 @@ type MenuDestination = {
 type ProjectBrowserCardMenuProps = {
   anchorEl: HTMLButtonElement;
   title: string;
-  destinations: MenuDestination[];
+  destinations?: MenuDestination[];
   onClose: () => void;
-  onRename: () => void;
-  onMove: (destinationId: string | null) => void;
+  /** Absents pour un projet partagé par un autre propriétaire. */
+  onRename?: () => void;
+  onMove?: (destinationId: string | null) => void;
   onDuplicate?: () => void;
   /** Projet uniquement : téléchargement en fichier `.redview`. */
   onExport?: () => void;
-  onDelete: () => void;
+  /** Projet uniquement : membres et invitations (co-édition). */
+  onShare?: () => void;
+  /** Projet partagé par un autre propriétaire : le quitter. */
+  onLeave?: () => void;
+  onDelete?: () => void;
 };
 
 const MENU_WIDTH = 197;
@@ -30,12 +35,14 @@ const MENU_GAP = 8;
 export function ProjectBrowserCardMenu({
   anchorEl,
   title,
-  destinations,
+  destinations = [],
   onClose,
   onRename,
   onMove,
   onDuplicate,
   onExport,
+  onShare,
+  onLeave,
   onDelete,
 }: ProjectBrowserCardMenuProps) {
   const { t } = useAppI18n();
@@ -100,6 +107,15 @@ export function ProjectBrowserCardMenu({
         width: MENU_WIDTH,
       }}
     >
+      {onShare ? (
+        <button type="button" className="rv-dropdown__item" role="menuitem" onClick={onShare}>
+          <span className="rv-dropdown__label">{t('Partager…')}</span>
+          <span className="rv-dropdown__icon" aria-hidden>
+            <SvgV2Icon name="share-07.svg" size={16} />
+          </span>
+        </button>
+      ) : null}
+
       {onDuplicate ? (
         <button type="button" className="rv-dropdown__item" role="menuitem" onClick={onDuplicate}>
           <span className="rv-dropdown__label">{t('Dupliquer')}</span>
@@ -118,27 +134,31 @@ export function ProjectBrowserCardMenu({
         </button>
       ) : null}
 
-      <button type="button" className="rv-dropdown__item" role="menuitem" onClick={onRename}>
-        <span className="rv-dropdown__label">{isFolderMenu ? t('Renommer le dossier') : t('Renommer')}</span>
-        <span className="rv-dropdown__icon" aria-hidden>
-          <SvgV2Icon name="edit-01.svg" size={16} />
-        </span>
-      </button>
+      {onRename ? (
+        <button type="button" className="rv-dropdown__item" role="menuitem" onClick={onRename}>
+          <span className="rv-dropdown__label">{isFolderMenu ? t('Renommer le dossier') : t('Renommer')}</span>
+          <span className="rv-dropdown__icon" aria-hidden>
+            <SvgV2Icon name="edit-01.svg" size={16} />
+          </span>
+        </button>
+      ) : null}
 
-      <button
-        type="button"
-        className="rv-dropdown__item"
-        role="menuitem"
-        aria-expanded={moveOpen}
-        onClick={() => setMoveOpen((prev) => !prev)}
-      >
-        <span className="rv-dropdown__label">{t('Déplacer vers…')}</span>
-        <span className="rv-dropdown__icon" aria-hidden>
-          <SvgV2Icon name="arrow-circle-right.svg" size={16} />
-        </span>
-      </button>
+      {onMove ? (
+        <button
+          type="button"
+          className="rv-dropdown__item"
+          role="menuitem"
+          aria-expanded={moveOpen}
+          onClick={() => setMoveOpen((prev) => !prev)}
+        >
+          <span className="rv-dropdown__label">{t('Déplacer vers…')}</span>
+          <span className="rv-dropdown__icon" aria-hidden>
+            <SvgV2Icon name="arrow-circle-right.svg" size={16} />
+          </span>
+        </button>
+      ) : null}
 
-      {moveOpen ? (
+      {onMove && moveOpen ? (
         <div className="rvpb-card-menu__move-list" role="group" aria-label={t('Destinations disponibles')}>
           {destinations.map((destination) => (
             <button
@@ -157,17 +177,28 @@ export function ProjectBrowserCardMenu({
         </div>
       ) : null}
 
-      <button
-        type="button"
-        className="rv-dropdown__item rv-dropdown__item--danger"
-        role="menuitem"
-        onClick={onDelete}
-      >
-        <span className="rv-dropdown__label">{isFolderMenu ? t('Supprimer le dossier') : t('Supprimer')}</span>
-        <span className="rv-dropdown__icon" aria-hidden>
-          <SvgV2Icon name="trash-03.svg" size={16} />
-        </span>
-      </button>
+      {onLeave ? (
+        <button type="button" className="rv-dropdown__item rv-dropdown__item--danger" role="menuitem" onClick={onLeave}>
+          <span className="rv-dropdown__label">{t('Quitter le projet')}</span>
+          <span className="rv-dropdown__icon" aria-hidden>
+            <SvgV2Icon name="log-out-03.svg" size={16} />
+          </span>
+        </button>
+      ) : null}
+
+      {onDelete ? (
+        <button
+          type="button"
+          className="rv-dropdown__item rv-dropdown__item--danger"
+          role="menuitem"
+          onClick={onDelete}
+        >
+          <span className="rv-dropdown__label">{isFolderMenu ? t('Supprimer le dossier') : t('Supprimer')}</span>
+          <span className="rv-dropdown__icon" aria-hidden>
+            <SvgV2Icon name="trash-03.svg" size={16} />
+          </span>
+        </button>
+      ) : null}
     </div>,
     document.body,
   );

@@ -13,7 +13,7 @@ import {
   resolvePanelPlacement,
   type MapOverlayInsets,
 } from '../panelPlacement';
-import { sampleSlopePct, resolvePointContext } from './contextMenuHelpers';
+import { sampleSlopePct, resolvePickToleranceM, resolvePointContext } from './contextMenuHelpers';
 import { fetchOverlayDetails } from './overlayForecast';
 import { MapContextMenuHeader } from './MapContextMenuHeader';
 import { MapContextMenuMetadata } from './MapContextMenuMetadata';
@@ -243,6 +243,7 @@ export function MapContextMenu({
         openingHoursLabel: pointContext.openingHoursLabel,
         overlayDetails: [],
         forbiddenZoneId,
+        pickToleranceM: resolvePickToleranceM(map, lat),
       };
 
       setCopied(false);

@@ -7,8 +7,8 @@ import type {
   MapContextMenuOverlayContext,
 } from '@/features/map3d';
 
-import { useProjectStoreOptional } from '@/features/itineraryPanel';
-import { useLidarRouteSync, type LidarRouteOverlayItem } from '@/features/lidar';
+import { applyLidarViewerRouteEdit, useProjectStoreOptional } from '@/features/itineraryPanel';
+import { syncLidarRouteOverlay, useLidarRouteSync, type LidarRouteOverlayItem } from '@/features/lidar';
 import { ControlPanel } from './ControlPanel';
 import { buildBasemapList, normalizeBasemapId } from '../lib/basemaps';
 import { DEFAULT_CONTROL_PANEL_STATE } from '../lib/defaultState';
@@ -141,7 +141,37 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
         points: Array<{ lat: number; lon: number; elevationM?: number | null; distanceM?: number }>,
         actionName?: string,
       ) => {
-        projectStore?.updateItineraryRoutePoints(routeId, points, {
+        if (!projectStore) return;
+        // Tracé routé : le geste du viewer (éditeur à main levée, segments
+        // droits) devient l'édition équivalente de l'app, routée — jamais de
+        // ligne droite stockée (cf. applyLidarViewerRouteEdit).
+        const itinerary = projectStore.project.itineraries.find((it) => it.id === routeId);
+        if (itinerary?.gpxRoute?.source === 'brouter' && (actionName === 'undo' || actionName === 'redo')) {
+          // L'historique du viewer garde ses états à main levée : celui de l'app fait foi.
+          if (actionName === 'undo') projectStore.undoTraceEdit();
+          else projectStore.redoTraceEdit();
+          syncLidarRouteOverlay(projectStore.project.itineraries);
+          return;
+        }
+        const outcome = itinerary
+          ? applyLidarViewerRouteEdit(structuredClone(itinerary), points, actionName)
+          : 'raw';
+        if (outcome === 'applied') {
+          projectStore.updateItinerary(routeId, (draft) => {
+            applyLidarViewerRouteEdit(draft, points, actionName);
+          });
+          // Le recalcul local est celui de l'itinéraire actif.
+          projectStore.setProject((project) => (
+            project.activeItineraryId === routeId ? project : { ...project, activeItineraryId: routeId }
+          ));
+          return;
+        }
+        if (outcome === 'ignored') {
+          // Le viewer revient au tracé stocké.
+          syncLidarRouteOverlay(projectStore.project.itineraries);
+          return;
+        }
+        projectStore.updateItineraryRoutePoints(routeId, points, {
           source: 'lidar_viewer',
           actionName,
         });

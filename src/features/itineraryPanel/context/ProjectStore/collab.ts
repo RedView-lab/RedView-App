@@ -2,7 +2,7 @@ import type { ProjectDocument } from '../../lib/project/layers';
 
 /**
  * Contrat entre le ProjectStore et une session de co-édition (implémentée par
- * features/collab, sans que le store dépende de Yjs).
+ * features/collab, sans que le store dépende du moteur de synchronisation).
  *
  * Le store envoie chaque document produit localement (`pushLocalDocument`) et
  * applique ceux qui viennent d'ailleurs (autres éditeurs, annuler/rétablir de

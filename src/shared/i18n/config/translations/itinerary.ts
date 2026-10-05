@@ -53,8 +53,6 @@ export const itineraryTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Privilégier forêts et parcs', en: 'Favour forests and parks' },
   { fr: 'Contourner les agglomérations', en: 'Bypass built-up areas' },
   { fr: 'Éviter le trafic estimé', en: 'Avoid estimated traffic' },
-  { fr: 'Beeline si point isolé', en: 'Beeline for isolated points' },
-  { fr: "Ajoute un segment en ligne droite quand le point de départ ou d'arrivée est loin du réseau routier.", en: 'Adds a straight-line segment when the start or end point is far from the road network.' },
   { fr: 'Tenir compte du dénivelé', en: 'Take elevation into account' },
   { fr: 'Si désactivé, le profil ignore complètement les montées/descentes.', en: 'When disabled, the profile completely ignores climbs/descents.' },
   { fr: 'Coût en montée', en: 'Uphill cost' },

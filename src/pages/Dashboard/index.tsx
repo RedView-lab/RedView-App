@@ -49,6 +49,7 @@ export default function Dashboard({
   const {
     activeProjectId,
     activeProjectInitial,
+    activeProjectShared,
     isClosingProject,
     projectLoading,
     projectBrowserOpen,
@@ -242,6 +243,7 @@ export default function Dashboard({
             <DashboardEditor
               activeProjectId={activeProjectId}
               activeProjectInitial={activeProjectInitial}
+              activeProjectShared={activeProjectShared}
               isDemoAccount={isDemoAccount}
               offersUrl={offersUrl}
               isClosingProject={isClosingProject}

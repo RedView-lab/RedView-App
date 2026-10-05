@@ -8,6 +8,7 @@ import {
 } from '@/shared/services/appwrite';
 
 import { getCurrentUserId } from './auth';
+import { isLiveSession, sharedProjectTeamId } from './liveSessions';
 import type { ItineraryFitUpload } from './types';
 
 export interface FitUploadBatchResult {
@@ -18,11 +19,13 @@ export interface FitUploadBatchResult {
 }
 
 export async function uploadProjectItineraryFitFiles(
-  _projectId: string,
+  projectId: string,
   _itineraryId: string,
   files: File[],
 ): Promise<FitUploadBatchResult> {
   const userId = await getCurrentUserId();
+  // Projet en co-édition : les autres éditeurs lisent aussi ce fichier (prédiction).
+  const teamId = isLiveSession(projectId) ? sharedProjectTeamId(projectId) : null;
   const uploads: ItineraryFitUpload[] = [];
   const failed: File[] = [];
 
@@ -37,6 +40,7 @@ export async function uploadProjectItineraryFitFiles(
           Permission.read(Role.user(userId)),
           Permission.update(Role.user(userId)),
           Permission.delete(Role.user(userId)),
+          ...(teamId ? [Permission.read(Role.team(teamId))] : []),
         ],
       );
 

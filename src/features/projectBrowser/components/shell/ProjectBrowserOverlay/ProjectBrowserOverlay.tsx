@@ -67,6 +67,8 @@ export function ProjectBrowserOverlay(props: ProjectBrowserOverlayProps) {
               breadcrumbs={state.breadcrumbs}
               visibleFolders={state.visibleFolders}
               visibleProjects={state.visibleProjects}
+              sharedProjects={state.sharedProjects}
+              userId={state.projectsUserId}
               thumbnails={state.thumbnails}
               thumbnailLoadingIds={state.thumbnailLoadingIds}
               busyIds={state.busyIds}
@@ -82,6 +84,7 @@ export function ProjectBrowserOverlay(props: ProjectBrowserOverlayProps) {
               handleDeleteFolder={state.handleDeleteFolder}
               handleDuplicateProject={state.handleDuplicateProject}
               handleExportProject={state.handleExportProject}
+              handleLeaveProject={state.handleLeaveProject}
               handleMoveProject={state.handleMoveProject}
               handleMoveFolder={state.handleMoveFolder}
               handleDragStart={state.handleDragStart}

@@ -20,6 +20,7 @@ import {
   useRenameFolder,
   useRenameProject,
 } from '../queries/projectLibrary';
+import { useLeaveSharedProject } from '../queries/projectSharing';
 import { useFolderNavigation } from './useFolderNavigation';
 import { useProjectDragAndDrop } from './useProjectDragAndDrop';
 import { useProjectThumbnails } from './useProjectThumbnails';
@@ -48,7 +49,11 @@ export function useProjectBrowserProjects({
   const library = useProjectLibrary(userId, open);
   const folders = library.data?.folders ?? EMPTY_FOLDERS;
   const projects = library.data?.projects ?? EMPTY_PROJECTS;
-  const projectIds = useMemo(() => projects.map((project) => project.id), [projects]);
+  const sharedProjects = library.data?.sharedProjects ?? EMPTY_PROJECTS;
+  const projectIds = useMemo(
+    () => [...projects, ...sharedProjects].map((project) => project.id),
+    [projects, sharedProjects],
+  );
 
   const navigation = useFolderNavigation(folders, projects);
   const { thumbnails, thumbnailLoadingIds } = useProjectThumbnails(userId, projectIds, library.data?.fetchedAt ?? 0);
@@ -66,6 +71,7 @@ export function useProjectBrowserProjects({
   const { mutateAsync: duplicateProject } = useDuplicateProject(userId);
   const { mutateAsync: moveProjectMutation } = useMoveProject(userId);
   const { mutateAsync: moveFolderMutation } = useMoveFolder(userId);
+  const { mutateAsync: leaveProject } = useLeaveSharedProject(userId);
 
   const handleCreateProject = useCallback(async () => {
     if (creatingProject) return;
@@ -173,6 +179,13 @@ export function useProjectBrowserProjects({
     [moveFolderMutation],
   );
 
+  const handleLeaveProject = useCallback(
+    async (projectId: string) => {
+      await leaveProject({ id: projectId }).catch(ignoreHandledFailure);
+    },
+    [leaveProject],
+  );
+
   const dragAndDrop = useProjectDragAndDrop({
     folders,
     projects,
@@ -187,6 +200,8 @@ export function useProjectBrowserProjects({
   return {
     folders,
     projects,
+    sharedProjects,
+    userId,
     thumbnails,
     thumbnailLoadingIds,
     loading: library.isFetching,
@@ -214,6 +229,7 @@ export function useProjectBrowserProjects({
     handleRenameFolder,
     handleDeleteFolder,
     handleDuplicateProject,
+    handleLeaveProject,
     handleMoveProject,
     handleMoveFolder,
     handleOpenFolder: navigation.navigateToFolder,

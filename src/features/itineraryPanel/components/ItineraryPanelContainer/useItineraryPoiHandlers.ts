@@ -16,10 +16,9 @@ import { normalizeItineraryRhythmState } from '../../lib/project';
 import type { Itinerary, ItineraryProject, PoiAutoSortSummary } from '../../types';
 import { cumulativeRouteLengthsM, projectDistanceAlongRouteM, roundDistanceKm } from '../../lib/routes';
 import {
-  buildPendingRoutePatchForEditedRow,
   hasEditableRoute,
-  insertTimelineItem,
   insertWaypointIntoTimeline,
+  placeRouteEndpoint,
   setPendingRouteEditForPlacedRow,
   setPendingRoutePatchAfterRemoval,
 } from './timelineMutations';
@@ -206,24 +205,7 @@ export function useItineraryPoiHandlers({
       });
     } else {
       updateActive((it) => {
-        let row = it.timeline.find((item) => item.kind === 'start');
-        if (!row) {
-          insertTimelineItem(it.timeline, 'start');
-          row = it.timeline.find((item) => item.kind === 'start');
-        }
-        if (!row) return;
-
-        row.label = resolvePoiTitle(feature);
-        row.lat = feature.lat;
-        row.lon = feature.lon;
-        row.distanceKm = 0;
-        delete it.routeAudit;
-        delete it.pendingTraceExtension;
-        it.prediction = null;
-
-        if (hasEditableRoute(it)) {
-          it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it, row.id);
-        }
+        placeRouteEndpoint(it, 'start', { lat: feature.lat, lon: feature.lon }, resolvePoiTitle(feature));
       });
     }
   }, [addItinerary, project?.itineraries?.length, resolvePoiTitle, updateActive]);
@@ -266,24 +248,7 @@ export function useItineraryPoiHandlers({
 
   const handlePoiFinishHere = useCallback((feature: PoiFeature) => {
     updateActive((it) => {
-      let row = it.timeline.find((item) => item.kind === 'end');
-      if (!row) {
-        insertTimelineItem(it.timeline, 'end');
-        row = it.timeline.find((item) => item.kind === 'end');
-      }
-      if (!row) return;
-
-      row.label = resolvePoiTitle(feature);
-      row.lat = feature.lat;
-      row.lon = feature.lon;
-      row.distanceKm = null;
-      delete it.routeAudit;
-      delete it.pendingTraceExtension;
-      it.prediction = null;
-
-      if (hasEditableRoute(it)) {
-        it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it, row.id);
-      }
+      placeRouteEndpoint(it, 'end', { lat: feature.lat, lon: feature.lon }, resolvePoiTitle(feature));
     });
   }, [resolvePoiTitle, updateActive]);
 

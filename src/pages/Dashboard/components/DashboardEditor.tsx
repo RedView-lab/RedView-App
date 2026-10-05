@@ -36,8 +36,12 @@ import { RouteDragWaypointProvider } from '@/features/centerPanel/routeDragWaypo
 import { TraceToolProvider } from '@/features/centerPanel/tracer';
 import { ForbiddenZoneToolProvider } from '@/features/centerPanel/forbiddenZones';
 import { ItineraryPanel, PredictionProvider, ProjectProvider, useProjectStore } from '@/features/itineraryPanel';
+import { useMultiplayerAvailable } from '@/features/collab/queries/multiplayerHealth';
 import { useCollabSession } from '@/features/collab/useCollabSession';
-import type { ItineraryProject } from '@/features/itineraryPanel/types';
+import type { ItineraryProject, ProjectCollaborator } from '@/features/itineraryPanel/types';
+import { ShareProjectDialog } from '@/features/projectBrowser/components/projects/ShareProjectDialog';
+import { useAppI18n } from '@/shared/i18n';
+import { getSessionUserIdSync } from '@/shared/services/appwrite';
 import { hasProjectTracedContent } from '@/features/itineraryPanel/lib/project';
 import { MapViewportControls } from '@/features/mapViewportControls';
 import type { MapViewport } from '@/features/map3d/lib/viewport-persist';
@@ -52,6 +56,8 @@ import { getDashboardLayout } from '../lib/layout';
 interface DashboardEditorProps {
   activeProjectId: string | null;
   activeProjectInitial: ItineraryProject | null;
+  /** Projet partagé : co-édition en temps réel. */
+  activeProjectShared: boolean;
   isDemoAccount: boolean;
   offersUrl: string;
   isClosingProject: boolean;
@@ -148,6 +154,7 @@ function TraceRevealWatcher({ onTraceStarted }: { onTraceStarted: () => void }) 
 export function DashboardEditor({
   activeProjectId,
   activeProjectInitial,
+  activeProjectShared,
   isDemoAccount: _isDemoAccount,
   offersUrl: _offersUrl,
   isClosingProject,
@@ -281,15 +288,46 @@ export function DashboardEditor({
     setLidarModeEnabled((value) => !value);
   }, [setLidarModeEnabled]);
 
-  // Co-édition (pour l'instant entre onglets, en développement) : null sans session.
-  const collab = useCollabSession(activeProjectId, getProjectSnapshot);
+  // Co-édition (projet partagé, ou `?collab=server` en développement) : pas de lien sans session.
+  // Un projet partagé depuis cet écran passe en session après sa première invitation.
+  const [sharedNowProjectId, setSharedNowProjectId] = useState<string | null>(null);
+  const collabSession = useCollabSession(
+    activeProjectId,
+    getProjectSnapshot,
+    activeProjectShared || (activeProjectId !== null && sharedNowProjectId === activeProjectId),
+  );
+  const { t } = useAppI18n();
+  const collabPeers = collabSession.state?.peers;
+  const collaborators = useMemo<ProjectCollaborator[] | undefined>(() => {
+    if (!collabPeers) return undefined;
+    const byUser = new Map<string, ProjectCollaborator>();
+    for (const peer of collabPeers) {
+      if (!byUser.has(peer.userId)) byUser.set(peer.userId, { userId: peer.userId, name: peer.presence.name || t('Éditeur') });
+    }
+    return [...byUser.values()];
+  }, [collabPeers, t]);
+
+  // Partager (comme Figma) : projets du cloud seulement (pas les projets locaux du compte démo).
+  const [shareAnchor, setShareAnchor] = useState<HTMLElement | null>(null);
+  // … et seulement quand le serveur temps réel répond (c'est lui qui enregistre un projet partagé).
+  const multiplayerAvailable = useMultiplayerAvailable();
+  const canShare = multiplayerAvailable && activeProjectId !== null && !activeProjectId.startsWith('local-');
+  const handleShareProject = useCallback((anchor: HTMLElement) => setShareAnchor(anchor), []);
+  const handleProjectShared = useCallback(async () => {
+    const projectId = activeProjectId;
+    if (!projectId) return;
+    // Le document part au cloud avant l'ouverture de la salle : le serveur temps
+    // réel le relit, et son état remplace celui de cet écran.
+    await onSaveProject().catch(() => null);
+    setSharedNowProjectId(projectId);
+  }, [activeProjectId, onSaveProject]);
 
   return (
     <ProjectProvider
         key={activeProjectId ?? 'no-project'}
         initialProject={activeProjectInitial ?? undefined}
         onProjectChange={onProjectChange}
-        collab={collab}
+        collab={collabSession.link}
       >
         <MapView
           onMapReady={onMapReady}
@@ -330,6 +368,19 @@ export function DashboardEditor({
           onToggleRightPanel={isRightPanelCollapsed ? onRestoreRightPanel : onCollapseRightPanel}
         />
       </div>
+
+      {shareAnchor && activeProjectId ? (
+        <ShareProjectDialog
+          projectId={activeProjectId}
+          projectName={getProjectSnapshot()?.name ?? activeProjectInitial?.name ?? ''}
+          sharedWithMe={activeProjectShared}
+          anchorEl={shareAnchor}
+          userId={getSessionUserIdSync()}
+          onClose={() => setShareAnchor(null)}
+          onShared={() => void handleProjectShared()}
+          onLeft={onBackToBrowser}
+        />
+      ) : null}
 
       <DashboardPlaceSearch
         map={mapInstance}
@@ -425,6 +476,8 @@ export function DashboardEditor({
                         isReturningToBrowser={isClosingProject}
                         onBackToHome={onBackToBrowser}
                         onSaveProject={onSaveProject}
+                        onShareProject={canShare ? handleShareProject : undefined}
+                        collaborators={collaborators}
                         pausesEnabled={dashboardSearchActiveFilters.has('pauses')}
                         waypointsEnabled={dashboardSearchActiveFilters.has('waypoints')}
                         poisRouteEnabled={dashboardSearchActiveFilters.has('pois_route')}

@@ -1,0 +1,203 @@
+/*
+ * Pop-in de l'application (rendue en portal sur <body>, hors du canevas mis à
+ * l'échelle : le composant applique `appScaleStyle(readAppScale(ancre))` sur
+ * `.rv-dialog__card`). Apparence de référence : verre des menus, en-tête avec
+ * pastille rouge, sections à surtitre, pied à boutons secondaire / principal.
+ * Utilisée par le tri automatique des POI et le partage d'un projet ; les
+ * contenus propres à chaque pop-in gardent leurs classes.
+ */
+
+.rv-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: light-dark(var(--rv-scrim), rgba(0, 0, 0, 0.45));
+  font-family: var(--rv-font-sans);
+  animation: rv-dialog-fade 0.16s ease-out;
+}
+
+.rv-dialog__card {
+  display: flex;
+  flex-direction: column;
+  width: 420px;
+  /* Portal in <body> scaled by --app-scale: bound it in logical px. */
+  max-width: calc(100vw / var(--app-scale, 1) - 48px);
+  max-height: min(680px, calc(100dvh / var(--app-scale, 1) - 48px));
+  overflow: hidden;
+  color: var(--rv-text);
+  background: light-dark(rgba(255, 255, 255, 0.96), rgba(15, 15, 15, 0.86));
+  -webkit-backdrop-filter: blur(60px);
+  backdrop-filter: blur(60px);
+  border: 1px solid rgb(var(--rv-ink) / 0.08);
+  border-radius: 8px;
+  box-shadow: 0 16px 48px light-dark(rgba(16, 18, 24, 0.2), rgba(0, 0, 0, 0.45));
+  transform-origin: center;
+  animation: rv-dialog-pop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes rv-dialog-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes rv-dialog-pop {
+  from { opacity: 0; translate: 0 6px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+/* ── En-tête ─────────────────────────────────────────────── */
+
+.rv-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 12px 12px 16px;
+}
+
+.rv-dialog__badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: #890000;
+  color: var(--rv-on-accent);
+}
+
+.rv-dialog__heading {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rv-dialog__title {
+  margin: 0;
+  font-size: var(--rv-font-size-2xl);
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.rv-dialog__subtitle {
+  margin: 0;
+  font-size: var(--rv-font-size-sm);
+  line-height: 16px;
+  color: rgb(var(--rv-ink) / 0.64);
+}
+
+.rv-dialog__close {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: rgb(var(--rv-ink) / 0.64);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.rv-dialog__close:hover,
+.rv-dialog__close:focus-visible {
+  background: rgb(var(--rv-ink) / 0.08);
+  color: var(--rv-text);
+  outline: none;
+}
+
+/* ── Corps ───────────────────────────────────────────────── */
+
+.rv-dialog__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  padding: 4px 16px 4px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--rv-ink) / 0.24) transparent;
+}
+
+.rv-dialog__section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rv-dialog__section-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--rv-font-size-xs);
+  font-weight: 600;
+  line-height: 14px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgb(var(--rv-ink) / 0.4);
+}
+
+/* ── Pied ────────────────────────────────────────────────── */
+
+.rv-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px 16px;
+  border-top: 1px solid rgb(var(--rv-ink) / 0.06);
+  margin-top: 12px;
+}
+
+.rv-dialog__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 6px;
+  background: rgb(var(--rv-ink) / 0.08);
+  color: var(--rv-text);
+  font: inherit;
+  font-size: var(--rv-font-size-md);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.rv-dialog__btn:hover {
+  background: rgb(var(--rv-ink) / 0.12);
+}
+
+.rv-dialog__btn--primary {
+  background: #890000;
+  color: var(--rv-on-accent);
+}
+
+.rv-dialog__btn--primary:hover {
+  background: #a00000;
+  color: var(--rv-on-accent);
+}
+
+.rv-dialog__btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.rv-dialog__btn:focus-visible {
+  outline: 2px solid rgb(var(--rv-ink) / 0.6);
+  outline-offset: 1px;
+}

@@ -662,6 +662,9 @@ export function useProjectBrowserOverlayState({
     view: projects.view,
     visibleFolders: projects.visibleFolders,
     visibleProjects: projects.visibleProjects,
+    sharedProjects: projects.sharedProjects,
+    projectsUserId: projects.userId,
+    handleLeaveProject: projects.handleLeaveProject,
     closeBillingModal,
     handleUpdateBillingModalAmount,
   };

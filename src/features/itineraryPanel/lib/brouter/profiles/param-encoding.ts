@@ -31,7 +31,6 @@ export const URL_SAFE_PARAMETER_IDS: ReadonlySet<string> = new Set([
   'stick_to_cycleroutes',
   'use_proposed_cycleroutes',
   'avoid_unsafe',
-  'add_beeline',
   'consider_noise',
   'consider_river',
   'consider_forest',

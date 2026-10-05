@@ -117,17 +117,8 @@ export const ALL_PARAMETERS: ParameterDefinition[] = [
     kind: 'boolean',
     default: false,
   },
-  {
-    id: 'add_beeline',
-    label: 'Beeline si point isolé',
-    hint:
-      'Ajoute un segment en ligne droite quand le point de départ ou ' +
-      'd’arrivée est loin du réseau routier.',
-    group: 'comportement',
-    kind: 'boolean',
-    default: false,
-    advanced: true,
-  },
+  // Pas de « beeline » (départ / arrivée loin du réseau rejoint en ligne
+  // droite) : un tracé ne contient jamais de ligne droite (cf. api/brouter.ts).
 
   /* ─────────────────────────── Dénivelé ────────────────────────── */
   {

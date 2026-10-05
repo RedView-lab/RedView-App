@@ -18,8 +18,10 @@ export function parseGpxText(text: string): GpxRoute {
   }
 
   const name = extractRouteName(text);
-  const trackPoints = extractPoints(text, TRACK_POINT_REGEX);
-  const routePoints = trackPoints.length > 0 ? trackPoints : extractPoints(text, ROUTE_POINT_REGEX);
+  const trackPointOffsets: number[] = [];
+  const trackPoints = extractPoints(text, TRACK_POINT_REGEX, trackPointOffsets);
+  const isTrack = trackPoints.length > 0;
+  const routePoints = isTrack ? trackPoints : extractPoints(text, ROUTE_POINT_REGEX);
 
   if (routePoints.length === 0) {
     throw new Error('Aucun point trouvé dans le GPX');
@@ -33,6 +35,8 @@ export function parseGpxText(text: string): GpxRoute {
   return {
     name,
     points: cleanedPoints,
+    pointsKind: isTrack ? 'track' : 'route',
+    segmentStarts: isTrack ? extractTrackSegmentStarts(text, trackPointOffsets) : [],
     creator: extractCreator(text),
     waypoints: extractWaypoints(text),
   };
@@ -101,7 +105,33 @@ const LAT_REGEX = /\blat\s*=\s*["']([^"']+)["']/i;
 const LON_REGEX = /\blon\s*=\s*["']([^"']+)["']/i;
 const TO_RAD = Math.PI / 180;
 
-function extractPoints(text: string, pattern: RegExp): GpxRoute['points'] {
+/** Ouverture d'une trace ou d'un segment de trace : le tracé y est interrompu. */
+const TRACK_BREAK_REGEX = /<trk(?:seg)?\b/gi;
+
+/**
+ * Indices des points qui ouvrent un nouveau segment (`<trkseg>`) ou une
+ * nouvelle trace (`<trk>`) — le premier excepté. Entre deux segments, le
+ * fichier ne dit rien du chemin suivi : le recoller en ligne droite serait
+ * inventer un tracé (cf. importedGpxGaps).
+ */
+function extractTrackSegmentStarts(text: string, pointOffsets: number[]): number[] {
+  const breaks: number[] = [];
+  let match: RegExpExecArray | null;
+  TRACK_BREAK_REGEX.lastIndex = 0;
+  while ((match = TRACK_BREAK_REGEX.exec(text)) !== null) breaks.push(match.index);
+
+  const starts: number[] = [];
+  let breakIndex = 0;
+  for (let index = 1; index < pointOffsets.length; index += 1) {
+    const previous = pointOffsets[index - 1]!;
+    const current = pointOffsets[index]!;
+    while (breakIndex < breaks.length && breaks[breakIndex]! < previous) breakIndex += 1;
+    if (breakIndex < breaks.length && breaks[breakIndex]! < current) starts.push(index);
+  }
+  return starts;
+}
+
+function extractPoints(text: string, pattern: RegExp, offsets?: number[]): GpxRoute['points'] {
   const points: GpxRoute['points'] = [];
   let distanceM = 0;
   let prevLatRad = 0;
@@ -152,6 +182,7 @@ function extractPoints(text: string, pattern: RegExp): GpxRoute['points'] {
       distanceM,
       elevationM,
     });
+    offsets?.push(match.index);
   }
 
   return points;

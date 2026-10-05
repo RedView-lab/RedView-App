@@ -142,9 +142,27 @@ const ITINERARY_LOCAL_KEY_SET: ReadonlySet<string> = new Set([
   ...ITINERARY_LOCAL_WORK_KEYS,
 ]);
 
-/** Itinéraire du document : sans affichage ni travail local (copie superficielle). */
+/**
+ * Itinéraire du document de chaque itinéraire d'interface (objets immuables) :
+ * le même itinéraire redonne le même objet, de sorte qu'une comparaison par
+ * référence (co-édition, `diffDocument`) saute les itinéraires inchangés.
+ */
+const itineraryDocuments = new WeakMap<Itinerary, ItineraryDocument>();
+
+/** Itinéraire du document : sans affichage ni travail local (copie superficielle, mémorisée). */
 export function toItineraryDocument(itinerary: Itinerary): ItineraryDocument {
-  return withoutKeys(itinerary, ITINERARY_LOCAL_KEY_SET) as ItineraryDocument;
+  let document = itineraryDocuments.get(itinerary);
+  if (!document) {
+    document = withoutKeys(itinerary, ITINERARY_LOCAL_KEY_SET) as ItineraryDocument;
+    itineraryDocuments.set(itinerary, document);
+  }
+  return document;
+}
+
+/** `composed` = `source` + affichage / travail local : même itinéraire du document. */
+function composedFrom(composed: Itinerary, source: Itinerary): Itinerary {
+  if (composed !== source) itineraryDocuments.set(composed, toItineraryDocument(source));
+  return composed;
 }
 
 /**
@@ -243,7 +261,7 @@ export function applyProjectView(project: ItineraryProject, view: ProjectViewSta
       copy ??= { ...(itinerary as unknown as Record<string, unknown>) };
       copy[key] = display[key];
     }
-    return (copy ?? itinerary) as unknown as Itinerary;
+    return composedFrom((copy ?? itinerary) as unknown as Itinerary, itinerary);
   });
   return next;
 }
@@ -260,7 +278,7 @@ export function applyProjectLocalWork(
     itineraries: project.itineraries.map((itinerary) => {
       const pending = pendingById[itinerary.id];
       return isRecord(pending)
-        ? ({ ...itinerary, ...pickDefined(pending, ITINERARY_LOCAL_WORK_KEYS) } as Itinerary)
+        ? composedFrom({ ...itinerary, ...pickDefined(pending, ITINERARY_LOCAL_WORK_KEYS) } as Itinerary, itinerary)
         : itinerary;
     }),
   };

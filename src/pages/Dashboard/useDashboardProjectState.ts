@@ -68,6 +68,8 @@ export function useDashboardProjectState({
 }: UseDashboardProjectStateArgs) {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [activeProjectInitial, setActiveProjectInitial] = useState<ItineraryProject | null>(null);
+  /** Projet partagé (équipe) : ouvert en co-édition, le serveur temps réel écrit son document. */
+  const [activeProjectShared, setActiveProjectShared] = useState(false);
   const [projectLoading, setProjectLoading] = useState(false);
   const [isClosingProject, setIsClosingProject] = useState(false);
   const [projectBrowserOpen, setProjectBrowserOpen] = useState(true);
@@ -113,6 +115,7 @@ export function useDashboardProjectState({
 
         let chosen: ItineraryProject | null = projectSnapshot ?? null;
         let needsSync = false;
+        let shared = false;
 
         if (!chosen) {
           // Le plus récent entre cloud et copie locale (getProject) et l'instantané
@@ -125,6 +128,7 @@ export function useDashboardProjectState({
 
           chosen = projectRow?.data ?? null;
           needsSync = projectRow?.dirty === true;
+          shared = Boolean(projectRow?.team_id);
           const cachedAt = cached ? Date.parse(cached.cachedAt) : Number.NaN;
           const rowAt = projectRow ? Date.parse(projectRow.updated_at) : Number.NaN;
           if (cached && (!projectRow || (Number.isFinite(cachedAt) && Number.isFinite(rowAt) && cachedAt > rowAt + 5000))) {
@@ -149,13 +153,15 @@ export function useDashboardProjectState({
         }
         setActiveProjectId(projectId);
         activeProjectIdRef.current = projectId;
+        setActiveProjectShared(shared);
         setActiveProjectInitial(normalized);
         activeProjectSnapshotRef.current = normalized;
         resetSyncState(projectId, null);
         replaceProjectLocation({ id: projectId, name: normalized.name || 'project' });
         setProjectBrowserOpen(false);
-        // Modifications locales non confirmées par le cloud : on les renvoie.
-        if (needsSync) queueProjectSave(normalized);
+        // Modifications locales non confirmées par le cloud : on les renvoie
+        // (jamais pour un projet partagé : son document vient du serveur temps réel).
+        if (needsSync && !shared) queueProjectSave(normalized);
       } catch (error) {
         console.error('[Dashboard] project loading failed', error);
       } finally {
@@ -287,6 +293,7 @@ export function useDashboardProjectState({
   return {
     activeProjectId,
     activeProjectInitial,
+    activeProjectShared,
     projectLoading,
     isClosingProject,
     projectBrowserOpen,

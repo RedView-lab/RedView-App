@@ -3229,6 +3229,14 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "GPX file too large (50 MB maximum)."
   },
   {
+    "fr": "{{count}} discontinuité(s) du GPX n’ont pas pu être reliées par le réseau routable : vérifiez le tracé importé.",
+    "en": "{{count}} gap(s) in the GPX could not be joined through the routable network: check the imported route."
+  },
+  {
+    "fr": "{{count}} discontinuité(s) du GPX reliées par le réseau routable.",
+    "en": "{{count}} gap(s) in the GPX joined through the routable network."
+  },
+  {
     "fr": "Créer un itinéraire",
     "en": "Create a route"
   },
@@ -3903,6 +3911,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Impossible de calculer l’itinéraire : aucun tracé praticable trouvé entre ces points.",
     "en": "Unable to calculate route: no viable path found between these points."
+  },
+  {
+    "fr": "Impossible de calculer l’itinéraire sans ligne droite : un point est trop loin du réseau routable. Déplacez-le sur une route ou un chemin.",
+    "en": "Unable to calculate the route without a straight line: a point is too far from the routable network. Move it onto a road or a path."
   },
   {
     "fr": "Le calcul de l’itinéraire a pris trop de temps. Déplacez vos points ou simplifiez le tracé.",
@@ -4989,6 +5001,158 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Error while validating the code."
   },
   {
+    "fr": "Partager « {{name}} »",
+    "en": "Share “{{name}}”"
+  },
+  {
+    "fr": "Invitez un compte RedView par e-mail : il modifie le projet avec vous, en temps réel.",
+    "en": "Invite a RedView account by email: they edit the project with you, in real time."
+  },
+  {
+    "fr": "Vous modifiez ce projet avec ces personnes, en temps réel.",
+    "en": "You edit this project with these people, in real time."
+  },
+  {
+    "fr": "Adresse e-mail",
+    "en": "Email address"
+  },
+  {
+    "fr": "Adresse e-mail de la personne à inviter",
+    "en": "Email address of the person to invite"
+  },
+  {
+    "fr": "Inviter",
+    "en": "Invite"
+  },
+  {
+    "fr": "Invitation…",
+    "en": "Inviting…"
+  },
+  {
+    "fr": "Personnes ayant accès",
+    "en": "People with access"
+  },
+  {
+    "fr": "Seulement vous pour l’instant.",
+    "en": "Only you for now."
+  },
+  {
+    "fr": "(vous)",
+    "en": "(you)"
+  },
+  {
+    "fr": "Propriétaire",
+    "en": "Owner"
+  },
+  {
+    "fr": "Peut modifier",
+    "en": "Can edit"
+  },
+  {
+    "fr": "Retirer l’accès",
+    "en": "Remove access"
+  },
+  {
+    "fr": "Retirer l’accès à {{name}}",
+    "en": "Remove access for {{name}}"
+  },
+  {
+    "fr": "Quitter le projet",
+    "en": "Leave project"
+  },
+  {
+    "fr": "Quitter « {{name}} » ? Vous n’y aurez plus accès.",
+    "en": "Leave “{{name}}”? You will no longer have access to it."
+  },
+  {
+    "fr": "{{email}} peut maintenant modifier ce projet.",
+    "en": "{{email}} can now edit this project."
+  },
+  {
+    "fr": "Le partage du projet a échoué.",
+    "en": "Sharing the project failed."
+  },
+  {
+    "fr": "Session expirée. Reconnectez-vous pour partager ce projet.",
+    "en": "Session expired. Sign in again to share this project."
+  },
+  {
+    "fr": "Partager le projet",
+    "en": "Share project"
+  },
+  {
+    "fr": "Partager…",
+    "en": "Share…"
+  },
+  {
+    "fr": "Partagé",
+    "en": "Shared"
+  },
+  {
+    "fr": "Partagés avec moi",
+    "en": "Shared with me"
+  },
+  {
+    "fr": "{{count}} éditeurs sur le projet",
+    "en": "{{count}} editors on the project"
+  },
+  {
+    "fr": "Éditeur",
+    "en": "Editor"
+  },
+  {
+    "fr": "Identifiant de projet invalide",
+    "en": "Invalid project id"
+  },
+  {
+    "fr": "Projet introuvable",
+    "en": "Project not found"
+  },
+  {
+    "fr": "Seul le propriétaire peut partager ce projet",
+    "en": "Only the owner can share this project"
+  },
+  {
+    "fr": "Ce projet vous appartient déjà",
+    "en": "You already own this project"
+  },
+  {
+    "fr": "Aucun compte RedView n’utilise cet e-mail",
+    "en": "No RedView account uses this email"
+  },
+  {
+    "fr": "Trop d’éditeurs sur ce projet",
+    "en": "Too many editors on this project"
+  },
+  {
+    "fr": "Adresse e-mail invalide",
+    "en": "Invalid email"
+  },
+  {
+    "fr": "Seul le propriétaire peut retirer un éditeur",
+    "en": "Only the owner can remove an editor"
+  },
+  {
+    "fr": "Le propriétaire ne peut pas être retiré",
+    "en": "The owner cannot be removed"
+  },
+  {
+    "fr": "Le propriétaire ne peut pas quitter son propre projet",
+    "en": "The owner cannot leave their own project"
+  },
+  {
+    "fr": "Membre invalide",
+    "en": "Invalid member"
+  },
+  {
+    "fr": "Action inconnue",
+    "en": "Unknown action"
+  },
+  {
+    "fr": "Impossible de mettre à jour le partage du projet",
+    "en": "Unable to update project sharing"
+  },
+  {
     "fr": "Prédire",
     "en": "Predict"
   },
@@ -5371,14 +5535,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Éviter le trafic estimé",
     "en": "Avoid estimated traffic"
-  },
-  {
-    "fr": "Beeline si point isolé",
-    "en": "Beeline for isolated points"
-  },
-  {
-    "fr": "Ajoute un segment en ligne droite quand le point de départ ou d'arrivée est loin du réseau routier.",
-    "en": "Adds a straight-line segment when the start or end point is far from the road network."
   },
   {
     "fr": "Tenir compte du dénivelé",

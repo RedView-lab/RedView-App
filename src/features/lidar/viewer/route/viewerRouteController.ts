@@ -8,6 +8,7 @@ import {
   broadcastLidarRouteEdit,
   broadcastLidarRouteRename,
 } from '../../lib/routeOverlaySync';
+import { cropRouteAt } from './cropRoute';
 import { RouteEditorController, type RouteEditTool, type RouteEditorState } from './routeEditorController';
 import type { CameraController } from '../camera';
 import type {
@@ -452,6 +453,8 @@ ${trkpts}
    * Context-menu placement, as in the app: "Démarrer ici" sets the start,
    * "Finir ici" the finish (the last point once there are two), "Ajouter une
    * étape" inserts on the leg it lengthens least. Creates a route if needed.
+   * A start / finish placed on the route crops it there (no straight line
+   * back to the former first / last point).
    */
   public placePoint(position: 'start' | 'waypoint' | 'end', point: LidarRouteOverlayPoint): boolean {
     let route = this.getActiveRoute();
@@ -463,9 +466,11 @@ ${trkpts}
     const points = route.points;
     let next: LidarRouteOverlayPoint[];
     if (position === 'start') {
-      next = points.length === 0 ? [point] : [point, ...points.slice(1)];
+      next = cropRouteAt(points, point, 'after')
+        ?? (points.length === 0 ? [point] : [point, ...points.slice(1)]);
     } else if (position === 'end') {
-      next = points.length < 2 ? [...points, point] : [...points.slice(0, -1), point];
+      next = cropRouteAt(points, point, 'before')
+        ?? (points.length < 2 ? [...points, point] : [...points.slice(0, -1), point]);
     } else if (points.length < 2) {
       next = [...points, point];
     } else {

@@ -33,6 +33,9 @@ import zlib from 'node:zlib';
 import { resolvePass1Coefficient } from './_lib/brouter-search.js';
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
 
+// Jamais de segment en ligne droite (« beeline ») dans un tracé : ni `straight`
+// (via reliés à vol d'oiseau), ni `add_beeline` (départ / arrivée loin du
+// réseau rejoint en ligne droite), même demandés par un client.
 const ALLOWED_PARAMS = new Set([
   'lonlats',
   'nogos',
@@ -43,11 +46,12 @@ const ALLOWED_PARAMS = new Set([
   'format',
   'timode',
   'heading',
-  'straight',
   'exportWaypoints',
   'exportCorrectedWaypoints',
   'trackname',
 ]);
+
+const BEELINE_OVERRIDE = 'profile:add_beeline';
 
 const ROUTE_TIMEOUT_MS = 55_000; // Vercel hobby cap is 60 s.
 const UPLOAD_TIMEOUT_MS = 15_000;
@@ -174,7 +178,7 @@ async function handleRouteQuery(
   for (const [key, value] of Object.entries(req.query)) {
     // Allow whitelisted keys + every `profile:xxx` override (BRouter syntax
     // for tweaking individual `assign` values declared in the base profile).
-    const allowed = ALLOWED_PARAMS.has(key) || key.startsWith('profile:');
+    const allowed = ALLOWED_PARAMS.has(key) || (key.startsWith('profile:') && key !== BEELINE_OVERRIDE);
     if (!allowed) continue;
     if (Array.isArray(value)) params.set(key, value[0] ?? '');
     else if (typeof value === 'string') params.set(key, value);
@@ -309,6 +313,12 @@ async function handleProfileUpload(
     profileText = profileText.replace(/assign\s+pass2coefficient\s*=\s*[\d.-]+/gi, 'assign pass2coefficient = -1');
   } else {
     profileText = `${profileText}\nassign pass2coefficient = -1\n`;
+  }
+  // Jamais de départ / d'arrivée rejoint en ligne droite (cf. ALLOWED_PARAMS).
+  if (/assign\s+add_beeline\s*=/i.test(profileText)) {
+    profileText = profileText.replace(/assign\s+add_beeline\s*=\s*[^\s#]+/gi, 'assign add_beeline = false');
+  } else {
+    profileText = `${profileText}\nassign add_beeline = false\n`;
   }
   if (/assign\s+pass1coefficient\s*=/i.test(profileText)) {
     profileText = profileText.replace(/assign\s+pass1coefficient\s*=\s*[\d.-]+/gi, 'assign pass1coefficient = 3.5');

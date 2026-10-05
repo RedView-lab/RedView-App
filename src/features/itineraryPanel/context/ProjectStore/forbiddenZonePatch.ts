@@ -162,13 +162,20 @@ export function buildPendingRoutePatchForForbiddenZone(
     startIndex = Math.max(0, endIndex - 1);
   }
 
-  const startRow = rowsWithDistances[startIndex]?.row;
-  const endRow = rowsWithDistances[endIndex]?.row;
-  if (!startRow || !endRow) return undefined;
+  const startEntry = rowsWithDistances[startIndex];
+  const endEntry = rowsWithDistances[endIndex];
+  if (!startEntry || !endEntry) return undefined;
+  const startRow = startEntry.row;
+  const endRow = endEntry.row;
 
+  // Étapes bornes : leur position sur le tracé, sans ambiguïté sur une boucle.
   const patch: NonNullable<Itinerary['pendingRoutePatch']> = {
-    start: { lat: startRow.lat, lon: startRow.lon, kind: startRow.kind === 'start' ? 'start' : 'waypoint' },
-    end: { lat: endRow.lat, lon: endRow.lon, kind: endRow.kind === 'end' ? 'end' : 'waypoint' },
+    start: startRow.kind === 'start'
+      ? { lat: startRow.lat, lon: startRow.lon, kind: 'start' }
+      : { lat: startRow.lat, lon: startRow.lon, kind: 'waypoint', distanceM: startEntry.distanceM },
+    end: endRow.kind === 'end'
+      ? { lat: endRow.lat, lon: endRow.lon, kind: 'end' }
+      : { lat: endRow.lat, lon: endRow.lon, kind: 'waypoint', distanceM: endEntry.distanceM },
     via: rowsWithDistances
       .slice(startIndex + 1, endIndex)
       .filter((entry) => entry.row.kind === 'waypoint')

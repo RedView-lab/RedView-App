@@ -45,7 +45,7 @@ import { listAllCloudDocuments } from './cloudList';
 import {
   buildCloudPayload,
   docToProjectRow,
-  PROJECT_META_FIELDS,
+  withProjectMetaFields,
   settlePayloadFiles,
   withNameSync,
   writeCloudData,
@@ -95,20 +95,12 @@ export async function listProjects(): Promise<ProjectSummary[]> {
     try {
       // Query.select : ne jamais télécharger `data` pour afficher la liste ;
       // pagination par curseur jusqu'à épuisement (plus de plafond à 100).
-      const documents = await listAllCloudDocuments<CloudProjectDoc>(PROJECTS_COLLECTION_ID, [
+      const documents = await withProjectMetaFields((fields) => listAllCloudDocuments<CloudProjectDoc>(PROJECTS_COLLECTION_ID, [
         Query.equal('user_id', userId),
         Query.orderDesc('$updatedAt'),
-        Query.select(PROJECT_META_FIELDS),
-      ]);
-      return documents.map((doc) => ({
-        id: doc.$id,
-        folderId: doc.folder_id ?? null,
-        name: doc.name || 'Untitled',
-        privacy: doc.privacy || 'private',
-        sizeBytes: typeof doc.size_bytes === 'number' ? doc.size_bytes : 0,
-        createdAt: doc.$createdAt,
-        updatedAt: doc.$updatedAt,
-      }));
+        Query.select(fields),
+      ]));
+      return documents.map((doc) => cloudDocToSummary(doc, false));
     } catch (e) {
       const error = toCloudFailure('listProjects', e);
       // Hors-ligne : copies locales de l'utilisateur. Autre erreur : on la remonte.
@@ -127,6 +119,43 @@ export async function listProjects(): Promise<ProjectSummary[]> {
 
   const local = readLocalProjects().filter((row) => isOwnedBy(row, userId));
   return local.map((row) => rowToSummary(row));
+}
+
+function cloudDocToSummary(doc: CloudProjectDoc, sharedWithMe: boolean): ProjectSummary {
+  return {
+    id: doc.$id,
+    // Le dossier d'un projet partagé est celui de son propriétaire.
+    folderId: sharedWithMe ? null : doc.folder_id ?? null,
+    name: doc.name || 'Untitled',
+    privacy: doc.privacy || 'private',
+    sizeBytes: typeof doc.size_bytes === 'number' ? doc.size_bytes : 0,
+    createdAt: doc.$createdAt,
+    updatedAt: doc.$updatedAt,
+    ...(sharedWithMe || doc.team_id ? { shared: true } : {}),
+    ...(sharedWithMe ? { sharedWithMe: true } : {}),
+  };
+}
+
+/**
+ * Projets d'autres propriétaires partagés avec l'utilisateur (Appwrite ne
+ * renvoie que les documents qu'il peut lire : ceux de ses équipes). Hors ligne
+ * ou compte local : aucun.
+ */
+export async function listSharedProjects(): Promise<ProjectSummary[]> {
+  const userId = await getCurrentUserId();
+  if (isLocalFallbackUser(userId)) return [];
+  try {
+    const documents = await withProjectMetaFields((fields) => listAllCloudDocuments<CloudProjectDoc>(PROJECTS_COLLECTION_ID, [
+      Query.notEqual('user_id', userId),
+      Query.orderDesc('$updatedAt'),
+      Query.select(fields),
+    ]));
+    return documents.map((doc) => cloudDocToSummary(doc, true));
+  } catch (e) {
+    const error = toCloudFailure('listSharedProjects', e);
+    if (error.kind === 'offline') return [];
+    throw error;
+  }
 }
 
 /** Copies locales de l'utilisateur courant avec des modifications non synchronisées. */
@@ -273,10 +302,10 @@ async function getProjectRow(id: string): Promise<ProjectRow | null> {
 
   let meta: CloudProjectDoc;
   try {
-    meta = (await withTimeout(
-      databases.getDocument(APPWRITE_DATABASE_ID, PROJECTS_COLLECTION_ID, id, [Query.select(PROJECT_META_FIELDS)]),
+    meta = (await withProjectMetaFields((fields) => withTimeout(
+      databases.getDocument(APPWRITE_DATABASE_ID, PROJECTS_COLLECTION_ID, id, [Query.select(fields)]),
       CLOUD_READ_TIMEOUT_MS,
-    )) as unknown as CloudProjectDoc;
+    ))) as unknown as CloudProjectDoc;
   } catch (e) {
     const error = toCloudFailure('getProject', e);
     if (error.kind === 'not-found') {
@@ -306,6 +335,7 @@ async function getProjectRow(id: string): Promise<ProjectRow | null> {
       folder_id: meta.folder_id ?? null,
       dirty,
       cloud_updated_at: nextBase,
+      team_id: meta.team_id || null,
     });
     void enqueue(localQueues, id, () =>
       idbUpdateProjectMeta(id, { name: row.name, folder_id: row.folder_id, dirty, cloud_updated_at: nextBase }),

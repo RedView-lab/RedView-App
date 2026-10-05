@@ -6,4 +6,5 @@ export {
   usePredictionStoreOptional,
 } from './context/PredictionStore';
 export { resolveRouteRequest } from './hooks/useItineraryBrouterRouting/resolveRouteRequest';
+export { applyLidarViewerRouteEdit } from './components/ItineraryPanelContainer/lidarViewerRouteEdit';
 export type * from './types';

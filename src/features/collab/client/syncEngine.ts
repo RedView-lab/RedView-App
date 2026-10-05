@@ -1,0 +1,309 @@
+import { deepEqual } from '@/features/itineraryPanel/lib/project/deepEqual';
+
+import { isRouteHeader } from '../model/diff';
+import { ObjectStore } from '../model/objects';
+import { applyOps, applyOpsWithInverse, type Op } from '../model/ops';
+import { MAX_OPS_PER_BATCH } from '../model/validate';
+import { deserializeStore, type ClientMessage, type SequencedBatch, type ServerMessage } from '../protocol';
+
+/**
+ * Moteur de synchronisation d'un client (modèle de Figma) :
+ *  - état confirmé : celui du serveur, à la séquence N (lots appliqués dans
+ *    l'ordre du serveur, y compris les siens une fois acquittés) ;
+ *  - modifications locales en attente : appliquées tout de suite à l'état
+ *    visible, regroupées en lots numérotés (`clientSeq`) puis envoyées ;
+ *  - état visible = confirmé + modifications en attente rejouées par-dessus.
+ *    Une valeur distante sur une propriété que ce client vient de modifier
+ *    est donc masquée jusqu'à l'acquittement de la sienne (pas de
+ *    clignotement), puis l'ordre du serveur tranche.
+ *
+ * Les lots acquittés mais pas encore durables (journal du serveur) sont
+ * gardés : si le serveur s'arrête avant de les écrire, ils sont renvoyés à la
+ * reconnexion. Aucune entrée/sortie ici : la connexion (connection.ts) et le
+ * simulateur de tests branchent leurs messages.
+ */
+
+interface LocalBatch {
+  clientSeq: number;
+  ops: Op[];
+  /** Séquence serveur, une fois acquitté. */
+  seq?: number;
+}
+
+export type ReceiveOutcome =
+  /** L'état visible a changé : document à rematérialiser. */
+  | 'changed'
+  | 'unchanged'
+  /** Message incohérent (séquence manquante) : se reconnecter pour repartir d'un état sûr. */
+  | 'resync';
+
+export interface Rejection {
+  clientSeq: number;
+  reason: string;
+}
+
+export class SyncEngine {
+  readonly clientId: string;
+  private confirmed = new ObjectStore();
+  private confirmedSeq = 0;
+  private epochId: string | null = null;
+  private durable = 0;
+  private visibleStore = new ObjectStore();
+  /** Opérations locales pas encore regroupées en lot. */
+  private queued: Op[] = [];
+  /** Lots en attente d'acquittement (envoyés ou non), dans l'ordre. */
+  private pending: LocalBatch[] = [];
+  /** Lots acquittés, pas encore durables côté serveur. */
+  private undurable: LocalBatch[] = [];
+  private nextClientSeq = 1;
+  /** Dernier lot envoyé sur la connexion courante. */
+  private sentUpTo = 0;
+  /** Segments de tracé connus de ce client (jamais purgés pendant la session : l'annuler peut les redemander). */
+  private readonly library = new Map<string, string>();
+  private ready = false;
+  private needsRebuild = false;
+  private readonly rejections: Rejection[] = [];
+
+  constructor(clientId: string) {
+    this.clientId = clientId;
+  }
+
+  /** État affiché (confirmé + en attente). */
+  get visible(): ObjectStore {
+    return this.visibleStore;
+  }
+
+  /** Premier état reçu du serveur. */
+  get isReady(): boolean {
+    return this.ready;
+  }
+
+  get seq(): number {
+    return this.confirmedSeq;
+  }
+
+  get epoch(): string | null {
+    return this.epochId;
+  }
+
+  get durableSeq(): number {
+    return this.durable;
+  }
+
+  /** Modifications locales pas encore acquittées par le serveur. */
+  get unsyncedCount(): number {
+    return this.pending.length + (this.queued.length > 0 ? 1 : 0);
+  }
+
+  /** Refus du serveur depuis le dernier appel (anomalies : journalisées par l'appelant). */
+  takeRejections(): Rejection[] {
+    return this.rejections.splice(0);
+  }
+
+  /** Champs de `hello` : reprise à partir de l'état confirmé. */
+  resumePoint(): { epoch: string | null; lastSeq: number | null } {
+    return this.ready ? { epoch: this.epochId, lastSeq: this.confirmedSeq } : { epoch: null, lastSeq: null };
+  }
+
+  /**
+   * Modification locale (opérations calculées sur l'état visible) ; renvoie
+   * celles qui ont eu un effet et leur inverse (pour l'annuler).
+   */
+  applyLocal(ops: readonly Op[], blobs: ReadonlyMap<string, string>): { applied: Op[]; inverse: Op[] } {
+    for (const [id, json] of blobs) this.library.set(id, json);
+    // Segments fournis, ou déjà connus (annuler qui remet un ancien tracé).
+    for (const id of referencedBlobs(ops)) {
+      const json = this.library.get(id);
+      if (json !== undefined) this.visibleStore.putBlob(id, json);
+    }
+    const result = applyOpsWithInverse(this.visibleStore, ops);
+    this.queued.push(...result.applied);
+    return result;
+  }
+
+  /** Regroupe les opérations locales en lots (appelé ≈ 30 fois par seconde, même hors ligne). */
+  seal(): void {
+    while (this.queued.length > 0) {
+      const ops = this.queued.splice(0, MAX_OPS_PER_BATCH);
+      this.pending.push({ clientSeq: this.nextClientSeq, ops });
+      this.nextClientSeq += 1;
+    }
+  }
+
+  /** Lots à envoyer sur la connexion courante (seulement une fois l'état reçu). */
+  outgoing(): ClientMessage[] {
+    if (!this.ready) return [];
+    this.seal();
+    const messages: ClientMessage[] = [];
+    for (const batch of this.pending) {
+      if (batch.clientSeq <= this.sentUpTo) continue;
+      messages.push({ type: 'batch', clientSeq: batch.clientSeq, ops: batch.ops, blobs: this.blobsFor(batch.ops) });
+      this.sentUpTo = batch.clientSeq;
+    }
+    return messages;
+  }
+
+  /** Connexion perdue : les lots non acquittés seront renvoyés après le prochain `welcome`. */
+  disconnected(): void {
+    this.sentUpTo = 0;
+  }
+
+  receive(message: ServerMessage): ReceiveOutcome {
+    switch (message.type) {
+      case 'welcome':
+        this.welcome(message);
+        break;
+      case 'batch':
+        if (!this.ready) return 'unchanged';
+        if (this.applyServerBatch(message.batch) === 'gap') return 'resync';
+        break;
+      case 'durable':
+        this.durable = Math.max(this.durable, message.seq);
+        this.undurable = this.undurable.filter((batch) => (batch.seq ?? 0) > this.durable);
+        return 'unchanged';
+      case 'duplicate': {
+        // Déjà appliqué par le serveur : son acquittement est arrivé ou arrivera par l'état.
+        const index = this.pending.findIndex((batch) => batch.clientSeq === message.clientSeq);
+        if (index >= 0) {
+          const [batch] = this.pending.splice(index, 1);
+          this.undurable.push({ ...batch, seq: this.confirmedSeq });
+          this.needsRebuild = true;
+        }
+        break;
+      }
+      case 'reject': {
+        const index = this.pending.findIndex((batch) => batch.clientSeq === message.clientSeq);
+        if (index >= 0) {
+          this.pending.splice(index, 1);
+          this.rejections.push({ clientSeq: message.clientSeq, reason: message.reason });
+          this.needsRebuild = true;
+        }
+        break;
+      }
+      default:
+        return 'unchanged';
+    }
+    return this.needsRebuild ? (this.rebuild() ? 'changed' : 'unchanged') : 'unchanged';
+  }
+
+  private welcome(message: Extract<ServerMessage, { type: 'welcome' }>): void {
+    const sameEpoch = message.epoch === this.epochId;
+    this.epochId = message.epoch;
+    const mine = [...this.undurable, ...this.pending].sort((a, b) => a.clientSeq - b.clientSeq);
+    if (message.snapshot) {
+      this.confirmed = deserializeStore(message.snapshot);
+      for (const [id, json] of Object.entries(message.snapshot.blobs)) this.library.set(id, json);
+      this.confirmedSeq = message.snapshot.seq;
+      // Lots déjà appliqués par le serveur (compris dans l'état) ; les autres sont renvoyés.
+      this.undurable = mine
+        .filter((batch) => batch.clientSeq <= message.clientSeq)
+        .map((batch) => ({ ...batch, seq: sameEpoch && batch.seq !== undefined ? batch.seq : message.seq }));
+      this.pending = mine.filter((batch) => batch.clientSeq > message.clientSeq);
+    } else {
+      for (const batch of message.catchUp ?? []) this.applyServerBatch(batch);
+      const applied = this.pending.filter((batch) => batch.clientSeq <= message.clientSeq);
+      this.pending = this.pending.filter((batch) => batch.clientSeq > message.clientSeq);
+      this.undurable.push(...applied.map((batch) => ({ ...batch, seq: message.seq })));
+    }
+    this.durable = message.durableSeq;
+    this.undurable = this.undurable.filter((batch) => (batch.seq ?? 0) > this.durable);
+    this.nextClientSeq = Math.max(this.nextClientSeq, message.clientSeq + 1);
+    this.sentUpTo = message.clientSeq;
+    this.ready = true;
+    this.needsRebuild = true;
+  }
+
+  private applyServerBatch(batch: SequencedBatch): 'stale' | 'gap' | 'applied' {
+    if (batch.seq <= this.confirmedSeq) return 'stale';
+    if (batch.seq !== this.confirmedSeq + 1) return 'gap';
+    for (const [id, json] of Object.entries(batch.blobs)) {
+      this.library.set(id, json);
+      this.confirmed.putBlob(id, json);
+    }
+    applyOps(this.confirmed, batch.ops);
+    this.confirmedSeq = batch.seq;
+    if (batch.clientId === this.clientId) {
+      const index = this.pending.findIndex((local) => local.clientSeq === batch.clientSeq);
+      if (index >= 0) {
+        const [local] = this.pending.splice(index, 1);
+        this.undurable.push({ ...local, seq: batch.seq });
+        // Acquittement à l'identique du premier lot en attente : l'état visible
+        // (confirmé + en attente) ne change pas.
+        if (index !== 0 || !deepEqual(local.ops, batch.ops)) this.needsRebuild = true;
+        return 'applied';
+      }
+    }
+    this.needsRebuild = true;
+    return 'applied';
+  }
+
+  /** État visible = confirmé + en attente ; renvoie true s'il a changé. */
+  private rebuild(): boolean {
+    this.needsRebuild = false;
+    const previous = this.visibleStore;
+    const next = this.confirmed.clone();
+    const pendingOps = [...this.pending.flatMap((batch) => batch.ops), ...this.queued];
+    for (const id of referencedBlobs(pendingOps)) {
+      const json = this.library.get(id);
+      if (json !== undefined) next.putBlob(id, json);
+    }
+    applyOps(next, pendingOps);
+    next.adoptEqual(previous);
+    // L'état confirmé reprend les objets que les modifications en attente
+    // n'ont pas touchés (même contenu) : la prochaine reconstruction n'aura
+    // rien à comparer pour eux.
+    const touched = touchedWithAncestors(pendingOps, this.confirmed, next);
+    this.confirmed.shareObjects(next, (id) => !touched.has(id));
+    this.visibleStore = next;
+    return next.root() !== previous.root();
+  }
+
+  /** Segments référencés par les opérations et inconnus du serveur (état confirmé). */
+  private blobsFor(ops: readonly Op[]): Record<string, string> {
+    const blobs: Record<string, string> = {};
+    for (const id of referencedBlobs(ops)) {
+      if (this.confirmed.hasBlob(id)) continue;
+      const json = this.library.get(id);
+      if (json !== undefined) blobs[id] = json;
+    }
+    return blobs;
+  }
+}
+
+function referencedBlobs(ops: readonly Op[]): Set<string> {
+  const ids = new Set<string>();
+  const add = (value: unknown) => {
+    if (!isRouteHeader(value)) return;
+    for (const id of value.points) ids.add(id);
+    for (const id of value.originalPoints ?? []) ids.add(id);
+  };
+  for (const op of ops) {
+    if (op.t === 's' && 'v' in op) add(op.v);
+    else if (op.t === 'c') for (const [, value] of op.props) add(value);
+  }
+  return ids;
+}
+
+function touchedWithAncestors(ops: readonly Op[], ...stores: ObjectStore[]): Set<string> {
+  const touched = new Set<string>();
+  const addChain = (id: string | null) => {
+    let current = id;
+    while (current && !touched.has(current)) {
+      touched.add(current);
+      let parent: string | null = null;
+      for (const store of stores) {
+        const object = store.get(current);
+        if (object) {
+          parent = object.parent;
+          break;
+        }
+      }
+      current = parent;
+    }
+  };
+  for (const op of ops) {
+    addChain(op.id);
+    if (op.t === 'c') addChain(op.parent);
+  }
+  return touched;
+}

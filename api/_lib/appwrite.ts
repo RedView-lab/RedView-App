@@ -1,5 +1,5 @@
 import type { ApiRequest, ApiResponse } from './types.js';
-import { Account, Client, Databases, Storage, Users } from 'node-appwrite';
+import { Account, Client, Databases, Storage, Teams, Users } from 'node-appwrite';
 
 import { requireEnv } from './config.js';
 
@@ -7,6 +7,7 @@ let adminClient: Client | null = null;
 let adminDb: Databases | null = null;
 let adminUsers: Users | null = null;
 let adminStorage: Storage | null = null;
+let adminTeams: Teams | null = null;
 
 export const APPWRITE_DATABASE_ID =
   process.env.APPWRITE_DATABASE_ID || process.env.VITE_APPWRITE_DATABASE_ID || 'redview-db';
@@ -73,6 +74,13 @@ export function getAppwriteStorage(): Storage {
     adminStorage = new Storage(getAppwriteAdmin());
   }
   return adminStorage;
+}
+
+export function getAppwriteTeams(): Teams {
+  if (!adminTeams) {
+    adminTeams = new Teams(getAppwriteAdmin());
+  }
+  return adminTeams;
 }
 
 function getBearerToken(req: ApiRequest): string | null {

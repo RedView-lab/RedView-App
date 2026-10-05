@@ -8,6 +8,8 @@
     "api/**/*.ts!",
     "server.mjs!",
     "server/*.mjs!",
+    // Serveur temps réel de co-édition (service à part, Dockerfile.multiplayer).
+    "server/multiplayer/main.ts!",
     "scripts/**/*.{mjs,ts}",
     "script-test-bench/**/*.{ts,mjs}"
   ],
@@ -16,6 +18,7 @@
     "api/**/*.ts!",
     "server.mjs!",
     "server/*.mjs!",
+    "server/multiplayer/**/*.ts!",
     "scripts/**/*.{mjs,ts}",
     "script-test-bench/**/*.{ts,mjs}"
   ],

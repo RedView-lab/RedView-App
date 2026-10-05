@@ -1,9 +1,11 @@
 import {
   IconClose,
   IconSave,
+  IconShare,
 } from '../icons';
+import { UserAvatar } from '@/shared/components/UserAvatar/UserAvatar';
 import { useAppI18n } from '@/shared/i18n';
-import type { ProjectSaveStatus } from '../../types';
+import type { ProjectCollaborator, ProjectSaveStatus } from '../../types';
 
 interface PanelHeaderProps {
   title: string;
@@ -17,8 +19,14 @@ interface PanelHeaderProps {
   /** Détail déjà traduit (erreur, attente hors-ligne), affiché en infobulle. */
   saveStatusMessage?: string;
   onRename?: (next: string) => void;
-  onShare?: () => void;
+  /** « Partager » (co-édition, comme Figma) : reçoit le bouton (échelle de la pop-in). */
+  onShare?: (anchor: HTMLElement) => void;
+  /** Éditeurs présents (cet utilisateur compris) : pastilles affichées dès qu'un autre est là. */
+  collaborators?: ProjectCollaborator[];
 }
+
+/** Pastilles visibles avant « +N ». */
+const MAX_VISIBLE_COLLABORATORS = 3;
 
 function formatSavedAt(iso: string, locale: string): string {
   const d = new Date(iso);
@@ -52,6 +60,8 @@ export function PanelHeader({
   saveStatus = 'idle',
   saveStatusMessage,
   onRename,
+  onShare,
+  collaborators = [],
 }: PanelHeaderProps) {
   const { locale, t } = useAppI18n();
   const privacyLabel = privacy === 'private' ? t('Privé') : t('Public');
@@ -118,19 +128,55 @@ export function PanelHeader({
           </div>
         </div>
       </div>
-      {onSave ? (
+      {onSave || onShare ? (
         <div className="rvi-header__actions">
-          <button
-            type="button"
-            className={`rvi-header__save is-${saveStatus}`}
-            onClick={onSave}
-            disabled={saveStatus === 'saving'}
-            aria-label={t('Enregistrer le projet')}
-            title={saveTitle}
-          >
-            <IconSave size={14} />
-            <span>{saveLabel}</span>
-          </button>
+          {collaborators.length > 1 ? (
+            <div
+              className="rvi-header__people"
+              role="group"
+              aria-label={t('{{count}} éditeurs sur le projet', { count: collaborators.length })}
+              title={collaborators.map((collaborator) => collaborator.name).join(', ')}
+            >
+              {/* Panneau large : jusqu'à 3 pastilles puis « +N » ; étroit : 1 pastille puis « +N ». */}
+              <span className="rvi-header__people-full">
+                {collaborators.slice(0, MAX_VISIBLE_COLLABORATORS).map((collaborator) => (
+                  <UserAvatar key={collaborator.userId} userId={collaborator.userId} name={collaborator.name} ringed />
+                ))}
+                {collaborators.length > MAX_VISIBLE_COLLABORATORS ? (
+                  <span className="rvi-header__people-more">+{collaborators.length - MAX_VISIBLE_COLLABORATORS}</span>
+                ) : null}
+              </span>
+              <span className="rvi-header__people-compact">
+                <UserAvatar userId={collaborators[0].userId} name={collaborators[0].name} ringed />
+                <span className="rvi-header__people-more">+{collaborators.length - 1}</span>
+              </span>
+            </div>
+          ) : null}
+          {onShare ? (
+            <button
+              type="button"
+              className="rvi-header__share"
+              onClick={(event) => onShare(event.currentTarget)}
+              aria-label={t('Partager le projet')}
+              title={t('Partager le projet')}
+            >
+              <IconShare size={14} />
+              <span>{t('Partager')}</span>
+            </button>
+          ) : null}
+          {onSave ? (
+            <button
+              type="button"
+              className={`rvi-header__save is-${saveStatus}`}
+              onClick={onSave}
+              disabled={saveStatus === 'saving'}
+              aria-label={t('Enregistrer le projet')}
+              title={saveTitle}
+            >
+              <IconSave size={14} />
+              <span>{saveLabel}</span>
+            </button>
+          ) : null}
         </div>
       ) : null}
     </header>

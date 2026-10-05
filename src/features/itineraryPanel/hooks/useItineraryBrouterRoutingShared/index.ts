@@ -11,10 +11,13 @@ export {
   toStoredRoutePoints,
 } from './routePoints';
 export {
+  anchorRoutePatchBound,
   appendRoutePoints,
+  cropRoutePoints,
   getRoutePointTotalDistanceM,
   mergeSurfaceMetrics,
   narrowRoutePatchToEdit,
+  planRouteSplice,
   recomputeApproxSurfaceMetrics,
   replaceRouteSegment,
   roundRouteDistanceKm,

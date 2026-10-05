@@ -15,6 +15,7 @@ import {
   type BrouterRoute,
   type ResolvedRouting,
 } from '../../lib/brouter';
+import { isRouteSeamError } from '../../lib/routes';
 import type { Itinerary } from '../../types';
 import { translateAppText } from '@/shared/i18n';
 
@@ -80,7 +81,7 @@ function routeCost(route: BrouterRoute): number {
  * le profil), qu'aucune recherche ne changera.
  */
 function canEscalate(error: unknown, signal: AbortSignal): boolean {
-  if (signal.aborted || isBrouterRateLimitError(error)) return false;
+  if (signal.aborted || isBrouterRateLimitError(error) || isRouteSeamError(error)) return false;
   const message = error instanceof Error ? error.message : String(error);
   return !/not mapped|restricted area|island detected|no track found/i.test(message);
 }
@@ -209,7 +210,8 @@ async function routeAllLegs(
 
   const fetchLeg = (leg: BrouterLeg) => fetchCustomProfileRoute({ ...request, ...leg }, resolved.profileId);
 
-  for (const [legIndex, leg] of legs.entries()) {
+  for (let legIndex = 0; legIndex < legs.length; legIndex += 1) {
+    const leg = legs[legIndex]!;
     if (signal.aborted) throw new DOMException('aborted', 'AbortError');
     const t0 = Date.now();
     let legRoute: BrouterRoute;
@@ -223,12 +225,23 @@ async function routeAllLegs(
         : null;
       if (!repaired) throw error;
       const points = [leg.start, ...leg.via, leg.end];
+      const lastIndex = points.length - 1;
       warnings.push(islandWarning(
         ends.start && legIndex === 0 && repaired.movedIndex === 0,
-        ends.end && legIndex === legs.length - 1 && repaired.movedIndex === points.length - 1,
+        ends.end && legIndex === legs.length - 1 && repaired.movedIndex === lastIndex,
         repaired.movedM,
       ));
       legRoute = repaired.result;
+      // Point de jonction décalé : les deux tronçons qui le partagent doivent
+      // passer par le même point, sinon leur recollage trace une ligne droite.
+      const moved = repaired.points[repaired.movedIndex]!;
+      if (repaired.movedIndex === lastIndex && legIndex + 1 < legs.length) {
+        legs[legIndex + 1] = { ...legs[legIndex + 1]!, start: moved };
+      } else if (repaired.movedIndex === 0 && legIndex > 0) {
+        const previousLeg = { ...legs[legIndex - 1]!, end: moved };
+        legs[legIndex - 1] = previousLeg;
+        legRoutes[legIndex - 1] = await fetchLeg(previousLeg);
+      }
     }
     legRoutes.push(legRoute);
   }
@@ -240,7 +253,7 @@ async function repairIslandLeg<T>(
   error: unknown,
   fetchLeg: (leg: BrouterLeg) => Promise<T>,
   signal: AbortSignal,
-): Promise<{ result: T; movedIndex: number; movedM: number } | null> {
+): Promise<{ result: T; points: BrouterPoint[]; movedIndex: number; movedM: number } | null> {
   for (const candidate of buildIslandRepairCandidates([leg.start, ...leg.via, leg.end], error)) {
     if (signal.aborted) return null;
     try {
@@ -249,7 +262,7 @@ async function repairIslandLeg<T>(
         via: candidate.points.slice(1, -1),
         end: candidate.points[candidate.points.length - 1]!,
       });
-      return { result, movedIndex: candidate.movedIndex, movedM: candidate.movedM };
+      return { result, points: candidate.points, movedIndex: candidate.movedIndex, movedM: candidate.movedM };
     } catch (retryError) {
       if (isBrouterRateLimitError(retryError) || !isBrouterIslandError(retryError)) throw retryError;
     }

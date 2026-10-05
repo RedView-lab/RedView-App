@@ -160,31 +160,31 @@ export function PoiAutoSortDialog({
     : [];
 
   return createPortal(
-    <div className="rvi-autosort-dialog" role="presentation" onMouseDown={onClose}>
+    <div className="rv-dialog" role="presentation" onMouseDown={onClose}>
       <div
-        className="rvi-autosort-dialog__card"
+        className="rv-dialog__card"
         role="dialog"
         aria-modal="true"
         aria-labelledby="rvi-autosort-dialog-title"
         style={appScaleStyle(scale)}
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <header className="rvi-autosort-dialog__header">
-          <span className="rvi-autosort-dialog__badge" aria-hidden>
+        <header className="rv-dialog__header">
+          <span className="rv-dialog__badge" aria-hidden>
             <IconSparkles size={16} />
           </span>
-          <div className="rvi-autosort-dialog__heading">
-            <h2 id="rvi-autosort-dialog-title" className="rvi-autosort-dialog__title">
+          <div className="rv-dialog__heading">
+            <h2 id="rvi-autosort-dialog-title" className="rv-dialog__title">
               {t('Tri automatique des POI')}
             </h2>
-            <p className="rvi-autosort-dialog__subtitle">
+            <p className="rv-dialog__subtitle">
               {t("La feuille de route ne garde que les POI utiles à vos heures de passage prévues, plus vos favoris. Rien n'est ajouté à la timeline.")}
             </p>
           </div>
           <button
             ref={closeRef}
             type="button"
-            className="rvi-autosort-dialog__close"
+            className="rv-dialog__close"
             aria-label={t('Fermer')}
             onClick={onClose}
           >
@@ -192,10 +192,10 @@ export function PoiAutoSortDialog({
           </button>
         </header>
 
-        <div className="rvi-autosort-dialog__body">
+        <div className="rv-dialog__body">
           {summary ? (
-            <section className="rvi-autosort-dialog__section">
-              <div className="rvi-autosort-dialog__section-title">
+            <section className="rv-dialog__section">
+              <div className="rv-dialog__section-title">
                 {t('Dernier tri')}
                 <span className="rvi-autosort-dialog__total">
                   {t('{{count}} POI retenus', { count: summary.total })}
@@ -240,8 +240,8 @@ export function PoiAutoSortDialog({
             </section>
           ) : null}
 
-          <section className="rvi-autosort-dialog__section">
-            <div className="rvi-autosort-dialog__section-title">{t('Critères')}</div>
+          <section className="rv-dialog__section">
+            <div className="rv-dialog__section-title">{t('Critères')}</div>
             <ul className="rvi-autosort-dialog__criteria">
               {criteria.map((criterion) => (
                 <li key={criterion.title} className="rvi-autosort-dialog__criterion">
@@ -258,14 +258,14 @@ export function PoiAutoSortDialog({
           </section>
         </div>
 
-        <footer className="rvi-autosort-dialog__footer">
-          <button type="button" className="rvi-autosort-dialog__btn" onClick={onClose}>
+        <footer className="rv-dialog__footer">
+          <button type="button" className="rv-dialog__btn" onClick={onClose}>
             {t('Fermer')}
           </button>
           {onEnable ? (
             <button
               type="button"
-              className="rvi-autosort-dialog__btn rvi-autosort-dialog__btn--primary"
+              className="rv-dialog__btn rv-dialog__btn--primary"
               onClick={onEnable}
             >
               <IconSparkles size={16} />

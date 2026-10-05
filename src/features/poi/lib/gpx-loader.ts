@@ -78,13 +78,17 @@ function parseGpxTextWithDomParser(text: string): GpxRoute {
 
   const trkpts = doc.querySelectorAll('trkpt');
   const rtepts = doc.querySelectorAll('rtept');
-  const raw = trkpts.length > 0 ? trkpts : rtepts;
+  const isTrack = trkpts.length > 0;
+  const raw = isTrack ? trkpts : rtepts;
 
   if (raw.length === 0) {
     throw new Error('Aucun point trouvé dans le GPX');
   }
 
   const points: GpxRoute['points'] = [];
+  // Points qui ouvrent un nouveau segment de trace (cf. GpxRoute.segmentStarts).
+  const segmentStarts: number[] = [];
+  let previousSegment: Element | null = null;
   let distanceM = 0;
 
   for (const element of raw) {
@@ -93,6 +97,10 @@ function parseGpxTextWithDomParser(text: string): GpxRoute {
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
       continue;
     }
+    if (isTrack && points.length > 0 && element.parentElement !== previousSegment) {
+      segmentStarts.push(points.length);
+    }
+    previousSegment = element.parentElement;
 
     const elevationText = element.querySelector('ele')?.textContent?.trim() ?? '';
     const elevationM = elevationText ? Number.parseFloat(elevationText) : Number.NaN;
@@ -134,6 +142,8 @@ function parseGpxTextWithDomParser(text: string): GpxRoute {
   return {
     name,
     points: cleanedPoints,
+    pointsKind: isTrack ? 'track' : 'route',
+    segmentStarts,
     creator: doc.documentElement.getAttribute('creator')?.trim() || null,
     waypoints,
   };

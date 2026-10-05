@@ -1,11 +1,12 @@
 // E2E co-édition entre deux onglets (vraie app, `npm run dev`, compte démo,
-// transport BroadcastChannel `?collab=local`). Compte les appels BRouter de
-// chaque onglet : seul l'auteur d'une modification doit router.
+// `?collab=server` : session sur le serveur temps réel de dev, port 17790,
+// servi par Vite sous /multiplayer). Compte les appels BRouter de chaque
+// onglet : seul l'auteur d'une modification doit router.
 import { launch, connect, sleep, waitFor } from '../screen-audit/cdp.mjs';
 
 const PORT = 9371;
 const APP = 'http://localhost:5173';
-const out = { steps: {}, errors: { A: [], B: [] }, brouter: { A: [], B: [] }, collabLogs: { A: [], B: [] } };
+const out = { steps: {}, errors: { A: [], B: [] }, brouter: { A: [], B: [] }, collabLogs: { A: [], B: [] }, sockets: { A: [], B: [] }, jwt: {}, failedRequests: {} };
 const failures = [];
 const check = (condition, label) => {
   out.steps[label] = condition ? 'ok' : 'FAILED';
@@ -44,6 +45,15 @@ async function preparePage(session, name) {
   session.on('Network.requestWillBeSent', (p) => {
     if (new URL(p.request.url).pathname.startsWith('/api/brouter')) out.brouter[name].push(`${Date.now()} ${p.request.method} ${p.request.url.slice(0, 120)}`);
   });
+  session.on('Network.requestWillBeSent', (p) => {
+    if (/\/account\/jwts?\b/.test(p.request.url)) (out.jwt[name] ??= []).push(`${Date.now()} ${p.request.method} ${p.requestId}`);
+  });
+  session.on('Network.loadingFailed', (p) => {
+    (out.failedRequests[name] ??= []).push(`${p.requestId} ${p.errorText}`);
+  });
+  session.on('Network.webSocketCreated', (p) => {
+    if (new URL(p.url).pathname === '/multiplayer') out.sockets[name].push(p.url);
+  });
   session.on('Runtime.exceptionThrown', (p) => out.errors[name].push(`exception: ${p.exceptionDetails?.exception?.description?.split('\n')[0] ?? p.exceptionDetails?.text}`));
   session.on('Runtime.consoleAPICalled', (p) => {
     const text = p.args.map((a) => a.value ?? a.description ?? '').join(' ');
@@ -65,13 +75,26 @@ async function loginDemoAndCreateProject(session) {
   await waitFor(session, `!!document.querySelector('.mapboxgl-canvas') && !!window.__rvStore()`, { timeout: 90000 });
 }
 
+/** Onglet ouvert sur l'URL d'un projet : connexion au compte démo (pas partagée entre onglets) puis carte prête. */
+async function openWithDemoAccount(session) {
+  await sleep(4000);
+  for (let attempt = 0; attempt < 8; attempt++) {
+    if (await session.evaluate(`!!document.querySelector('.mapboxgl-canvas') && !!window.__rvStore?.()`)) break;
+    if (await session.evaluate(`[...document.querySelectorAll('button')].some(b => /Demo account|compte démo/i.test(b.textContent))`)) {
+      await session.evaluate(`[...document.querySelectorAll('button')].find(b => /Demo account|compte démo/i.test(b.textContent))?.click()`);
+    }
+    await sleep(6000);
+  }
+  await waitFor(session, `!!document.querySelector('.mapboxgl-canvas') && !!window.__rvStore?.()`, { timeout: 120000 });
+}
+
 const store = (expr) => `(() => { const s = window.__rvStore(); return ${expr}; })()`;
 
 const { session: A, close } = await launch({ port: PORT });
 let B = null;
 try {
   await preparePage(A, 'A');
-  await A.send('Page.navigate', { url: `${APP}/?collab=local` });
+  await A.send('Page.navigate', { url: `${APP}/?collab=server` });
   await loginDemoAndCreateProject(A);
   await waitFor(A, `true`);
   await sleep(1500);
@@ -94,21 +117,17 @@ try {
   const target = await (await fetch(`http://127.0.0.1:${PORT}/json/new?about:blank`, { method: 'PUT' })).json();
   B = await connect(target.webSocketDebuggerUrl);
   await preparePage(B, 'B');
-  await B.send('Page.navigate', { url: `${APP}${projectUrl}?collab=local` });
-  await sleep(4000);
-  for (let attempt = 0; attempt < 6; attempt++) {
-    if (await B.evaluate(`!!document.querySelector('.mapboxgl-canvas')`)) break;
-    if (await B.evaluate(`[...document.querySelectorAll('button')].some(b => /Demo account|compte démo/i.test(b.textContent))`)) {
-      await B.evaluate(`[...document.querySelectorAll('button')].find(b => /Demo account|compte démo/i.test(b.textContent))?.click()`);
-    }
-    await sleep(6000);
-  }
+  await B.send('Page.navigate', { url: `${APP}${projectUrl}?collab=server` });
+  await openWithDemoAccount(B);
   out.steps.screenB = await B.evaluate(`({ url: location.pathname + location.search, text: document.body.innerText.slice(0, 160) })`);
-  await waitFor(B, `!!document.querySelector('.mapboxgl-canvas') && !!window.__rvStore()`, { timeout: 120000 });
   await waitFor(B, store(`s.collabActive === true`), { timeout: 30000 });
   await waitFor(A, store(`s.collabActive === true`), { timeout: 30000 });
   await sleep(4000);
-  check(out.collabLogs.A.length > 0 && out.collabLogs.B.length > 0, 'les deux onglets ont une session');
+  out.steps.multiplayerSockets = { A: out.sockets.A.length, B: out.sockets.B.length };
+  check(out.sockets.A.length > 0 && out.sockets.B.length > 0, 'les deux onglets sont connectés au serveur temps réel');
+  // Même compte dans deux onglets : une seule personne (comme Figma), donc pas de pastilles d'éditeurs.
+  const noAvatars = `!document.querySelector('.rvi-header__people')`;
+  check(await A.evaluate(noAvatars) && await B.evaluate(noAvatars), 'en-tête : même compte dans deux onglets, une seule personne (pas de pastilles)');
   check(
     await B.evaluate(store(`(s.project.itineraries[0]?.gpxRoute?.points?.length ?? 0) > 10`)),
     'B ouvre le projet : itinéraire et tracé présents',
@@ -171,6 +190,17 @@ try {
   await sleep(2000);
   const afterUndoBColor = await A.evaluate(store(`({ color: s.project.itineraries[0].color, end: s.project.itineraries[0].timeline.find((r) => r.kind === 'end').lat, name: s.project.itineraries[0].name })`));
   check(afterUndoBColor.color !== '#3d8bff' && afterUndoBColor.end === 46.0024 && afterUndoBColor.name === 'Renommé par A', 'B annule : sa couleur seule, les actions de A restent');
+  // 7. B recharge la page : l'état revient du serveur (sans BRouter, sans recalcul).
+  const beforeReload = await A.evaluate(store(`JSON.stringify(s.project.itineraries.map((it) => [it.id, it.name, it.color, it.gpxRoute?.routedInputsKey]))`));
+  const brouterBeforeReload = out.brouter.B.length;
+  await B.send('Page.reload', {});
+  await openWithDemoAccount(B);
+  out.steps.reloadB = await B.evaluate(`({ url: location.pathname + location.search, flag: sessionStorage.getItem('redview:dev-collab'), text: document.body.innerText.slice(0, 120) })`);
+  await waitFor(B, store(`s.collabActive === true`), { timeout: 30000 });
+  await sleep(3000);
+  const afterReload = await B.evaluate(store(`JSON.stringify(s.project.itineraries.map((it) => [it.id, it.name, it.color, it.gpxRoute?.routedInputsKey]))`));
+  check(afterReload === beforeReload, 'B recharge : même document que A (état du serveur)');
+  check(out.brouter.B.length === brouterBeforeReload, 'B recharge : aucun appel BRouter');
   out.steps.brouterSetupA = brouterAfterSetupA;
 } catch (error) {
   out.fatal = String(error?.stack ?? error);

@@ -19,6 +19,9 @@ import { FolderCard } from './FolderCard';
 import { ProjectBrowserCardMenu } from './ProjectBrowserCardMenu';
 import { ProjectBrowserDragPreview } from './ProjectBrowserDragPreview';
 import { ProjectCard } from './ProjectCard';
+import { useMultiplayerAvailable } from '@/features/collab/queries/multiplayerHealth';
+
+import { ShareProjectDialog } from './ShareProjectDialog';
 
 type MenuState =
   | { kind: 'project'; id: string; anchorEl: HTMLButtonElement }
@@ -53,6 +56,9 @@ type ProjectsPanelProps = {
   breadcrumbs: ProjectFolderSummary[];
   visibleFolders: Array<ProjectFolderSummary & { aggregateSizeBytes: number }>;
   visibleProjects: ProjectSummary[];
+  /** Projets partagés par d'autres propriétaires (section « Partagés avec moi », à la racine). */
+  sharedProjects: ProjectSummary[];
+  userId: string | null;
   thumbnails: Record<string, string | null>;
   thumbnailLoadingIds: Set<string>;
   busyIds: Set<string>;
@@ -68,6 +74,7 @@ type ProjectsPanelProps = {
   handleDeleteFolder: (id: string) => Promise<void>;
   handleDuplicateProject: (id: string) => Promise<void>;
   handleExportProject: (id: string) => Promise<void>;
+  handleLeaveProject: (id: string) => Promise<void>;
   handleMoveProject: (id: string, folderId: string | null) => Promise<void>;
   handleMoveFolder: (id: string, folderId: string | null) => Promise<void>;
   handleDragStart: (item: { type: 'project' | 'folder'; id: string }, x: number, y: number) => void;
@@ -100,6 +107,8 @@ export function ProjectsPanel({
   breadcrumbs,
   visibleFolders,
   visibleProjects,
+  sharedProjects,
+  userId,
   thumbnails,
   thumbnailLoadingIds,
   busyIds,
@@ -115,6 +124,7 @@ export function ProjectsPanel({
   handleDeleteFolder,
   handleDuplicateProject,
   handleExportProject,
+  handleLeaveProject,
   handleMoveProject,
   handleMoveFolder,
   handleDragStart,
@@ -126,8 +136,14 @@ export function ProjectsPanel({
   handleDropToRoot,
 }: ProjectsPanelProps) {
   const { t } = useAppI18n();
-  const visibleCount = visibleFolders.length + visibleProjects.length;
+  const visibleSharedProjects = currentFolderId === null
+    ? sharedProjects.filter((project) => !q || project.name.toLowerCase().includes(q))
+    : [];
+  const visibleCount = visibleFolders.length + visibleProjects.length + visibleSharedProjects.length;
   const [menuState, setMenuState] = useState<MenuState>(null);
+  // Partage proposé seulement quand le serveur temps réel répond.
+  const multiplayerAvailable = useMultiplayerAvailable();
+  const [shareTarget, setShareTarget] = useState<{ project: ProjectSummary; anchorEl: HTMLElement } | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const fileDropActive = useFileDropImport({
     accepting: !importingProject,
@@ -135,7 +151,9 @@ export function ProjectsPanel({
   });
 
   const activeProject = menuState?.kind === 'project'
-    ? visibleProjects.find((project) => project.id === menuState.id) ?? null
+    ? visibleProjects.find((project) => project.id === menuState.id)
+      ?? visibleSharedProjects.find((project) => project.id === menuState.id)
+      ?? null
     : null;
   const activeFolder = menuState?.kind === 'folder'
     ? visibleFolders.find((folder) => folder.id === menuState.id) ?? null
@@ -182,6 +200,11 @@ export function ProjectsPanel({
     const ok = window.confirm(t('Supprimer définitivement « {{name}} » ?', { name: project.name }));
     if (!ok) return;
     await handleDeleteProject(project.id);
+  };
+
+  const confirmLeaveProject = async (project: ProjectSummary) => {
+    if (!window.confirm(t('Quitter « {{name}} » ? Vous n’y aurez plus accès.', { name: project.name }))) return;
+    await handleLeaveProject(project.id);
   };
 
   const confirmDeleteFolder = async (folder: ProjectFolderSummary) => {
@@ -368,16 +391,68 @@ export function ProjectsPanel({
                 onDragEnd={handleDragEnd}
               />
             ))}
+
+            {visibleSharedProjects.length > 0 ? (
+              <>
+                <h2 className="rvpb-shared-section-title">{t('Partagés avec moi')}</h2>
+                {visibleSharedProjects.map((project) => (
+                  <ProjectCard
+                    key={project.id}
+                    project={project}
+                    view={view}
+                    thumbnailUrl={thumbnails[project.id] ?? null}
+                    thumbnailLoading={thumbnailLoadingIds.has(project.id)}
+                    busy={busyIds.has(project.id)}
+                    dragActive={false}
+                    onOpen={onOpenProject}
+                    onRename={handleRenameProject}
+                    onOpenMenu={(id, anchorEl) => setMenuState({ kind: 'project', id, anchorEl })}
+                    onDragStart={handleDragStart}
+                    onDragMove={handleDragMove}
+                    onDragEnd={handleDragEnd}
+                  />
+                ))}
+              </>
+            ) : null}
           </>
         )}
       </section>
 
-      {menuState && activeProject ? (
+      {menuState && activeProject && activeProject.sharedWithMe ? (
+        <ProjectBrowserCardMenu
+          anchorEl={menuState.anchorEl}
+          title="Actions du projet"
+          onClose={() => setMenuState(null)}
+          onShare={() => {
+            setShareTarget({ project: activeProject, anchorEl: menuState.anchorEl });
+            setMenuState(null);
+          }}
+          onDuplicate={() => {
+            void handleDuplicateProject(activeProject.id);
+            setMenuState(null);
+          }}
+          onExport={() => {
+            void handleExportProject(activeProject.id);
+            setMenuState(null);
+          }}
+          onLeave={() => {
+            void confirmLeaveProject(activeProject);
+            setMenuState(null);
+          }}
+        />
+      ) : null}
+
+      {menuState && activeProject && !activeProject.sharedWithMe ? (
         <ProjectBrowserCardMenu
           anchorEl={menuState.anchorEl}
           title="Actions du projet"
           destinations={moveDestinations}
           onClose={() => setMenuState(null)}
+          // Projet local (compte de démo, hors cloud) : pas de partage.
+          onShare={!multiplayerAvailable || activeProject.id.startsWith('local-') ? undefined : () => {
+            setShareTarget({ project: activeProject, anchorEl: menuState.anchorEl });
+            setMenuState(null);
+          }}
           onRename={() => {
             void requestRenameProject(activeProject);
             setMenuState(null);
@@ -397,6 +472,17 @@ export function ProjectsPanel({
             void confirmDeleteProject(activeProject);
             setMenuState(null);
           }}
+        />
+      ) : null}
+
+      {shareTarget ? (
+        <ShareProjectDialog
+          projectId={shareTarget.project.id}
+          projectName={shareTarget.project.name}
+          sharedWithMe={shareTarget.project.sharedWithMe}
+          anchorEl={shareTarget.anchorEl}
+          userId={userId}
+          onClose={() => setShareTarget(null)}
         />
       ) : null}
 

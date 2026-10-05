@@ -11,13 +11,18 @@ import {
   projectTimelineLocationDistances,
   routePointsEqual,
 } from '../../hooks/useItineraryBrouterRoutingShared';
-import { getRoutingInputsSignature } from '../../hooks/useItineraryBrouterRouting/projectMutations';
+import { getRoutingInputsSignature } from '../../hooks/useItineraryBrouterRouting/routingInputs';
 import {
   computeRouteElevationMetrics,
   computeRouteSurfaceMetricsFromBrouter,
   extractRouteProfileFromBrouter,
 } from '../../lib/route-metrics';
-import { cleanGpxGlitches } from '../../lib/routes';
+import {
+  RouteSeamError,
+  cleanGpxGlitches,
+  haversineRouteDistanceM,
+  routeSeamJoins,
+} from '../../lib/routes';
 import { formatForbiddenZonePolygons, type BrouterRoute } from '../../lib/brouter';
 
 type GpxRoutePoint = NonNullable<Itinerary['gpxRoute']>['points'][number];
@@ -113,9 +118,13 @@ function concatenateSegments(
     if (segment.length === 0) continue;
 
     // The last point of the previous segment and the first point of this
-    // segment are the same anchor — skip the duplicate.
+    // segment are the same anchor — skip the duplicate. Segments that do not
+    // meet there would be joined by a straight line: the recalculation fails.
     const lastPoint = result[result.length - 1];
     const firstOfSegment = segment[0];
+    if (lastPoint && firstOfSegment && !routeSeamJoins(lastPoint, firstOfSegment)) {
+      throw new RouteSeamError(`recalculated segment ${i}`, haversineRouteDistanceM(lastPoint, firstOfSegment));
+    }
     const startIdx =
       lastPoint &&
       firstOfSegment &&

@@ -1,0 +1,140 @@
+/*
+ * Contenus propres à la pop-in de partage (ShareProjectDialog). Carte,
+ * en-tête, sections et boutons : `.rv-dialog` (shared/styles/dialog.css).
+ * Mêmes valeurs que les contenus du tri automatique des POI (champs à fond
+ * d'encre 6 %, listes à fond 4 % et séparateurs 6 %, textes atténués 64 %).
+ */
+
+.rv-share-dialog__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rv-share-dialog__invite {
+  display: flex;
+  gap: 8px;
+}
+
+/* Valeur de contrôle : md / 600 ; même hauteur et rayon que les boutons. */
+.rv-share-dialog__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: rgb(var(--rv-ink) / 0.06);
+  color: var(--rv-text);
+  font: inherit;
+  font-size: var(--rv-font-size-md);
+  font-weight: 600;
+  outline: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.rv-share-dialog__input::placeholder {
+  color: rgb(var(--rv-ink) / 0.4);
+  font-weight: 500;
+}
+
+.rv-share-dialog__input:hover {
+  background: rgb(var(--rv-ink) / 0.08);
+}
+
+.rv-share-dialog__input:focus {
+  border-color: rgb(var(--rv-ink) / 0.24);
+  background: rgb(var(--rv-ink) / 0.08);
+}
+
+.rv-share-dialog__error {
+  padding: 6px 8px;
+  border: 1px solid rgba(197, 0, 0, 0.45);
+  border-radius: 5px;
+  background: light-dark(rgba(197, 0, 0, 0.07), rgba(137, 0, 0, 0.25));
+  font-size: var(--rv-font-size-sm);
+  line-height: 16px;
+  color: light-dark(#a30000, #ffd3d3);
+}
+
+.rv-share-dialog__empty {
+  font-size: var(--rv-font-size-sm);
+  line-height: 16px;
+  color: rgb(var(--rv-ink) / 0.64);
+}
+
+.rv-share-dialog__people {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-radius: 6px;
+  background: rgb(var(--rv-ink) / 0.04);
+}
+
+.rv-share-dialog__person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 6px 6px 8px;
+}
+
+.rv-share-dialog__person + .rv-share-dialog__person {
+  border-top: 1px solid rgb(var(--rv-ink) / 0.06);
+}
+
+.rv-share-dialog__person-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.rv-share-dialog__person-name,
+.rv-share-dialog__person-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rv-share-dialog__person-name {
+  font-size: var(--rv-font-size-md);
+  font-weight: 600;
+  line-height: 17px;
+}
+
+.rv-share-dialog__you,
+.rv-share-dialog__person-email,
+.rv-share-dialog__role {
+  color: rgb(var(--rv-ink) / 0.64);
+}
+
+.rv-share-dialog__you {
+  font-weight: 500;
+}
+
+.rv-share-dialog__person-email {
+  font-size: var(--rv-font-size-sm);
+  line-height: 16px;
+}
+
+.rv-share-dialog__role {
+  flex: 0 0 auto;
+  font-size: var(--rv-font-size-sm);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.rv-share-dialog__remove {
+  width: 24px;
+  height: 24px;
+}
+
+/* Action critique : même rouge que « Quitter le projet » du menu de la carte. */
+.rv-dialog__btn.rv-share-dialog__leave {
+  margin-right: auto;
+  color: var(--rv-dropdown-item-danger-color);
+}

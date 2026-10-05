@@ -1,0 +1,21 @@
+/* Pastille d'utilisateur (UserAvatar) : rôle typographique « Badge » (xs, 700). */
+.rv-avatar {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: var(--rv-avatar-size, 24px);
+  height: var(--rv-avatar-size, 24px);
+  border-radius: 50%;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-xs);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  user-select: none;
+}
+
+/* Pastilles empilées (en-tête du projet) : anneau de la couleur du panneau. */
+.rv-avatar--ringed {
+  box-shadow: 0 0 0 2px rgb(var(--rv-paper));
+}

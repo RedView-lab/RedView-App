@@ -128,9 +128,85 @@
 
 .rvi-header__actions {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   align-items: center;
   flex-shrink: 0;
+}
+
+/* Éditeurs présents (co-édition) : pastilles empilées, comme dans Figma. */
+.rvi-header__people {
+  display: flex;
+  align-items: center;
+}
+.rvi-header__people-full,
+.rvi-header__people-compact {
+  display: flex;
+  align-items: center;
+}
+.rvi-header__people-full > * + *,
+.rvi-header__people-compact > * + * {
+  margin-left: -4px;
+}
+.rvi-header__people-compact {
+  display: none;
+}
+.rvi-header__people-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 4px;
+  border-radius: 12px;
+  background: var(--rvi-bg-chip);
+  box-shadow: 0 0 0 2px rgb(var(--rv-paper));
+  color: var(--rvi-text-dim);
+  font-size: var(--rv-font-size-xs);
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Partager : même gabarit que Enregistrer, en action secondaire (puce). */
+.rvi-header__share {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px 0 8px;
+  border-radius: var(--rvi-radius-md);
+  background: var(--rvi-bg-chip);
+  color: var(--rvi-text);
+  font-size: var(--rv-font-size-md);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.rvi-header__share:hover {
+  background: var(--rvi-bg-chip-hover);
+}
+.rvi-header__share:focus-visible {
+  box-shadow: 0 0 0 2px rgb(var(--rv-ink) / 0.24);
+}
+
+/* Panneau étroit : Partager garde son icône seule (libellé en infobulle), une
+   seule pastille d'éditeur suivie du nombre des autres. */
+@container rvipanel (max-width: 440px) {
+  .rvi-header__share {
+    padding: 0 7px;
+  }
+  .rvi-header__share > span {
+    display: none;
+  }
+  .rvi-header__people-full {
+    display: none;
+  }
+  .rvi-header__people-compact {
+    display: flex;
+  }
 }
 
 /* Save CTA — same language as .rvi-redbtn (brand red, radius 6, 600 weight). */

@@ -1,11 +1,36 @@
 import { describe, expect, it } from 'vitest';
 
+import { haversineRouteDistanceM } from '../../lib/routes';
 import type { ItineraryPendingRoutePatch } from '../../types/itinerary';
 
-import { appendRoutePoints, narrowRoutePatchToEdit, replaceRouteSegment, routePointsEqual } from './routeSegments';
+import {
+  anchorRoutePatchBound,
+  appendRoutePoints,
+  cropRoutePoints,
+  narrowRoutePatchToEdit,
+  planRouteSplice,
+  replaceRouteSegment,
+  routePointsEqual,
+  widenUnjoinedRoutePatchWindow,
+} from './routeSegments';
 import type { RoutePoints } from './types';
 
 const KM_PER_DEGREE = (12_742 * Math.PI) / 360;
+
+/** Plus long pas du tracé (m) : une ligne droite recollée y apparaît. */
+function longestStepM(points: ReadonlyArray<{ lat: number; lon: number }>): number {
+  let longest = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    longest = Math.max(longest, haversineRouteDistanceM(points[index - 1]!, points[index]!));
+  }
+  return longest;
+}
+
+/** Tronçon parallèle au méridien, décalé de `offsetM` vers l'est, entre les km `fromKm` et `toKm`. */
+function parallelPiece(base: RoutePoints, fromKm: number, toKm: number, offsetM: number): RoutePoints {
+  const lonOffset = offsetM / (111_320 * Math.cos((base[fromKm]!.lat * Math.PI) / 180));
+  return base.slice(fromKm, toKm + 1).map((point) => ({ lat: point.lat, lon: point.lon + lonOffset }));
+}
 
 /**
  * Route along the 6°E meridian, one point per km. `legsKm` alternate north
@@ -107,8 +132,9 @@ describe('replaceRouteSegment', () => {
       { lat: base[6]!.lat, lon: 6 },
     ];
 
-    const result = replaceRouteSegment(base, patch, detour);
+    const result = replaceRouteSegment(base, patch, detour)!;
 
+    expect(result).not.toBeNull();
     expect(result.slice(0, 4).map((point) => point.lat)).toEqual(base.slice(0, 4).map((point) => point.lat));
     expect(result.some((point) => point.lon > 6.01)).toBe(true);
     expect(result[result.length - 1]!.lat).toBeCloseTo(base[10]!.lat, 9);
@@ -124,6 +150,154 @@ describe('replaceRouteSegment', () => {
     const replacement = meridianRoute([2]);
     expect(replaceRouteSegment([], wholeRoutePatch(replacement), replacement)).toBe(replacement);
   });
+
+  it('drops the old start when the start moved (« Démarrer ici »): no straight line from it', () => {
+    const base = meridianRoute([100]);
+    // New start at km 30, routed back onto the stored route at km 60.
+    const replacement = base.slice(30, 61).map((point) => ({ lat: point.lat, lon: point.lon }));
+    const patch: ItineraryPendingRoutePatch = {
+      start: { lat: base[30]!.lat, lon: base[30]!.lon, kind: 'start' },
+      end: { lat: base[60]!.lat, lon: base[60]!.lon, kind: 'waypoint', distanceM: 60_000 },
+      via: [],
+    };
+
+    const result = replaceRouteSegment(base, patch, replacement)!;
+
+    expect(result[0]!.lat).toBeCloseTo(base[30]!.lat, 9);
+    expect(result[result.length - 1]!.lat).toBeCloseTo(base[100]!.lat, 9);
+    expect(longestStepM(result)).toBeLessThan(1_001);
+    expect(result[result.length - 1]!.distanceM!).toBeCloseTo(70_000, -2);
+  });
+
+  it('drops the old end when the end moved (« Finir ici »): no straight line to it', () => {
+    const base = meridianRoute([100]);
+    const replacement = base.slice(20, 51).map((point) => ({ lat: point.lat, lon: point.lon }));
+    const patch: ItineraryPendingRoutePatch = {
+      start: { lat: base[20]!.lat, lon: base[20]!.lon, kind: 'waypoint', distanceM: 20_000 },
+      end: { lat: base[50]!.lat, lon: base[50]!.lon, kind: 'end' },
+      via: [],
+    };
+
+    const result = replaceRouteSegment(base, patch, replacement)!;
+
+    expect(result[0]!.lat).toBeCloseTo(base[0]!.lat, 9);
+    expect(result[result.length - 1]!.lat).toBeCloseTo(base[50]!.lat, 9);
+    expect(longestStepM(result)).toBeLessThan(1_001);
+  });
+
+  it('refuses a routed piece that does not join the stored route at an intermediate bound', () => {
+    const base = meridianRoute([20]);
+    // Starts 300 m east of the stored route (step snapped far off a GPX track) and never comes back.
+    const replacement = parallelPiece(base, 5, 15, 300);
+    const patch: ItineraryPendingRoutePatch = {
+      start: { lat: base[5]!.lat, lon: base[5]!.lon, kind: 'waypoint', distanceM: 5_000 },
+      end: { lat: base[15]!.lat, lon: base[15]!.lon, kind: 'end' },
+      via: [],
+    };
+
+    expect(replaceRouteSegment(base, patch, replacement)).toBeNull();
+    expect(planRouteSplice(base, patch, replacement)).toMatchObject({ ok: false, side: 'start' });
+  });
+
+  it('joins where the routed piece rejoins the stored route, a few points after its snapped start', () => {
+    const base = meridianRoute([20]);
+    const offRoad = parallelPiece(base, 5, 5, 120)[0]!;
+    // Snapped 120 m east, then back on the stored route from km 6 on.
+    const replacement = [offRoad, ...base.slice(6, 16).map((point) => ({ lat: point.lat, lon: point.lon }))];
+    const patch: ItineraryPendingRoutePatch = {
+      start: { lat: base[5]!.lat, lon: base[5]!.lon, kind: 'waypoint', distanceM: 5_000 },
+      end: { lat: base[15]!.lat, lon: base[15]!.lon, kind: 'waypoint', distanceM: 15_000 },
+      via: [],
+    };
+
+    const plan = planRouteSplice(base, patch, replacement);
+    expect(plan).toMatchObject({ ok: true, firstIndex: 1 });
+    const result = replaceRouteSegment(base, patch, replacement)!;
+    expect(result.some((point) => point.lon > 6.001)).toBe(false);
+    expect(longestStepM(result)).toBeLessThan(1_001);
+  });
+
+  it('refuses bounds resolved on two different passes (would duplicate the route)', () => {
+    const base = meridianRoute([200, -200]);
+    const replacement = base.slice(100, 111).map((point) => ({ lat: point.lat, lon: point.lon }));
+    const patch: ItineraryPendingRoutePatch = {
+      // Start hinted on the way back (km 300 = same place as km 100), end on the way out.
+      start: { lat: base[100]!.lat, lon: base[100]!.lon, kind: 'waypoint', distanceM: 300_000 },
+      end: { lat: base[110]!.lat, lon: base[110]!.lon, kind: 'waypoint', distanceM: 110_000 },
+      via: [],
+    };
+
+    expect(replaceRouteSegment(base, patch, replacement)).toBeNull();
+  });
+});
+
+describe('anchorRoutePatchBound', () => {
+  it('moves an intermediate bound onto the stored route, keeps start / end rows as they are', () => {
+    const base = meridianRoute([20]);
+    const hotel = parallelPiece(base, 8, 8, 900)[0]!;
+
+    const anchored = anchorRoutePatchBound({ ...hotel, kind: 'waypoint', distanceM: 8_000 }, base);
+    expect(haversineRouteDistanceM(anchored, base[8]!)).toBeLessThan(1);
+    expect(anchorRoutePatchBound({ ...hotel, kind: 'start' }, base)).toEqual({ lat: hotel.lat, lon: hotel.lon });
+  });
+});
+
+describe('widenUnjoinedRoutePatchWindow', () => {
+  it('widens a provisional bound whose seam failed even if the route follows the old one', () => {
+    const route = meridianRoute([400]);
+    const narrowed = narrowRoutePatchToEdit(wholeRoutePatch(route), route, {
+      fromM: 200_000,
+      toM: 201_000,
+      projected: false,
+    });
+    const along = route.slice(119, 282).map((point): [number, number] => [point.lon, point.lat]);
+
+    expect(widenUnjoinedRoutePatchWindow(narrowed, route, along)).toBeNull();
+    const widened = widenUnjoinedRoutePatchWindow(narrowed, route, along, { start: true });
+    // Next step (200 km before km 200) reaches the real start.
+    expect(widened?.start).toEqual(narrowed.window!.start);
+    expect(widened?.end).toEqual(narrowed.end);
+  });
+});
+
+describe('cropRoutePoints', () => {
+  it('keeps what follows a new start placed on the route, cut exactly there', () => {
+    const base = meridianRoute([10]);
+    const at = { lat: (base[3]!.lat + base[4]!.lat) / 2, lon: 6 };
+
+    const cropped = cropRoutePoints(base, at, 'after', { toleranceM: 15 })!;
+
+    expect(cropped.cutM).toBeCloseTo(3_500, -1);
+    expect(cropped.points[0]!.lat).toBeCloseTo(at.lat, 9);
+    expect(cropped.points[0]!.distanceM).toBe(0);
+    expect(cropped.points[cropped.points.length - 1]!.lat).toBeCloseTo(base[10]!.lat, 9);
+    expect(cropped.points[cropped.points.length - 1]!.distanceM!).toBeCloseTo(6_500, -1);
+  });
+
+  it('keeps what precedes a new end placed on the route', () => {
+    const base = meridianRoute([10]);
+    const cropped = cropRoutePoints(base, base[7]!, 'before', { toleranceM: 15 })!;
+
+    expect(cropped.points).toHaveLength(8);
+    expect(cropped.points[7]!.lat).toBeCloseTo(base[7]!.lat, 9);
+  });
+
+  it('refuses a point off the route or a crop that would leave nothing', () => {
+    const base = meridianRoute([10]);
+    const offRoute = parallelPiece(base, 5, 5, 100)[0]!;
+
+    expect(cropRoutePoints(base, offRoute, 'after', { toleranceM: 15 })).toBeNull();
+    expect(cropRoutePoints(base, offRoute, 'after', { toleranceM: 150 })).not.toBeNull();
+    expect(cropRoutePoints(base, base[10]!, 'after', { toleranceM: 15 })).toBeNull();
+  });
+
+  it('cuts at the pass given by the hint on an out-and-back', () => {
+    const base = meridianRoute([50, -50]);
+    // Km 20 and km 80 are the same place.
+    const cropped = cropRoutePoints(base, base[20]!, 'before', { toleranceM: 15, hintM: 80_000 })!;
+
+    expect(cropped.cutM).toBeCloseTo(80_000, -1);
+  });
 });
 
 describe('appendRoutePoints', () => {
@@ -131,10 +305,17 @@ describe('appendRoutePoints', () => {
     const base = meridianRoute([3]);
     const extension = meridianRoute([2], base[base.length - 1]!.lat);
 
-    const result = appendRoutePoints(base, extension);
+    const result = appendRoutePoints(base, extension)!;
 
     expect(result).toHaveLength(base.length + extension.length - 1);
     expect(result.slice(base.length).map((point) => point.distanceM)).toEqual([4000, 5000]);
+  });
+
+  it('refuses an extension that does not start at the end of the route', () => {
+    const base = meridianRoute([3]);
+    const extension = meridianRoute([2], base[base.length - 1]!.lat + 0.01);
+
+    expect(appendRoutePoints(base, extension)).toBeNull();
   });
 
   it('returns either side unchanged when the other is empty', () => {

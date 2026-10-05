@@ -17,6 +17,7 @@ export default defineConfig({
       'src/**/*.test.{ts,tsx}',
       'api/**/__tests__/**/*.test.ts',
       'server/__tests__/**/*.test.ts',
+      'server/multiplayer/**/*.test.ts',
     ],
     environment: 'node',
     restoreMocks: true,

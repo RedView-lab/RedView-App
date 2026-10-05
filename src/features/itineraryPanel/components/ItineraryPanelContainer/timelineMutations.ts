@@ -7,13 +7,17 @@ import type {
 import { translateAppText } from '@/shared/i18n';
 import {
   getRoutingEndpoints,
+  getRoutingInputsSignature,
   routeStampMatches,
-} from '../../hooks/useItineraryBrouterRouting/projectMutations';
+} from '../../hooks/useItineraryBrouterRouting/routingInputs';
 import {
+  cropRoutePoints,
   getRoutePointTotalDistanceM,
   narrowRoutePatchToEdit,
+  projectTimelineLocationDistances,
 } from '../../hooks/useItineraryBrouterRoutingShared';
 import {
+  buildImportedRouteMetrics,
   cumulativeRouteLengthsM,
   projectPointAlongRoute,
   roundDistanceKm,
@@ -94,6 +98,27 @@ export function buildPendingRoutePatchForEditedRow(
   return narrowPatchAroundEdit(itinerary, buildNeighbourRoutePatch(itinerary.timeline, rowId), edited);
 }
 
+type RoutePatch = NonNullable<Itinerary['pendingRoutePatch']>;
+
+/**
+ * Borne de patch sur une ligne voisine de l'édition. Une étape porte son
+ * kilométrage sur le tracé stocké : la borne y est retrouvée sans ambiguïté
+ * sur une boucle ou un aller-retour (cf. routePatchBoundaryDistanceM).
+ */
+function startBound(row: TimelineItem & { lat: number; lon: number }): RoutePatch['start'] {
+  if (row.kind === 'start') return { lat: row.lat, lon: row.lon, kind: 'start' };
+  return { lat: row.lat, lon: row.lon, kind: 'waypoint', ...rowDistanceHint(row) };
+}
+
+function endBound(row: TimelineItem & { lat: number; lon: number }): RoutePatch['end'] {
+  if (row.kind === 'end') return { lat: row.lat, lon: row.lon, kind: 'end' };
+  return { lat: row.lat, lon: row.lon, kind: 'waypoint', ...rowDistanceHint(row) };
+}
+
+function rowDistanceHint(row: TimelineItem): { distanceM?: number } {
+  return row.distanceKm != null && Number.isFinite(row.distanceKm) ? { distanceM: row.distanceKm * 1_000 } : {};
+}
+
 /** Patch entre les lignes routables voisines de `rowId`, via la ligne elle-même. */
 function buildNeighbourRoutePatch(
   timeline: TimelineItem[],
@@ -109,7 +134,7 @@ function buildNeighbourRoutePatch(
     if (!next) return undefined;
     return {
       start: { lat: focus.lat, lon: focus.lon, kind: 'start' },
-      end: { lat: next.lat, lon: next.lon, kind: next.kind === 'end' ? 'end' : 'waypoint' },
+      end: endBound(next),
       via: [],
     };
   }
@@ -118,7 +143,7 @@ function buildNeighbourRoutePatch(
     const previous = routableRows[focusIndex - 1];
     if (!previous) return undefined;
     return {
-      start: { lat: previous.lat, lon: previous.lon, kind: previous.kind === 'start' ? 'start' : 'waypoint' },
+      start: startBound(previous),
       end: { lat: focus.lat, lon: focus.lon, kind: 'end' },
       via: [],
     };
@@ -128,8 +153,8 @@ function buildNeighbourRoutePatch(
   const next = routableRows[focusIndex + 1];
   if (!previous || !next) return undefined;
   return {
-    start: { lat: previous.lat, lon: previous.lon, kind: previous.kind === 'start' ? 'start' : 'waypoint' },
-    end: { lat: next.lat, lon: next.lon, kind: next.kind === 'end' ? 'end' : 'waypoint' },
+    start: startBound(previous),
+    end: endBound(next),
     via: [{ lat: focus.lat, lon: focus.lon }],
   };
 }
@@ -172,8 +197,8 @@ function buildPendingRoutePatchAfterRemoval(
   if (!isRoutableTimelineRow(before) || !isRoutableTimelineRow(after)) return undefined;
 
   const patch: Itinerary['pendingRoutePatch'] = {
-    start: { lat: before.lat, lon: before.lon, kind: before.kind === 'start' ? 'start' : 'waypoint' },
-    end: { lat: after.lat, lon: after.lon, kind: after.kind === 'end' ? 'end' : 'waypoint' },
+    start: startBound(before),
+    end: endBound(after),
     via: [],
   };
   const edited = removedRow.distanceKm != null && Number.isFinite(removedRow.distanceKm)
@@ -479,15 +504,27 @@ export function buildTimelineAfterRemoval(
   return timeline.filter((row) => row.id !== rowId);
 }
 
+export interface RouteEndpointPlacement {
+  /** Position sur le tracé (m) quand le point y a été pris (graphique d'analyse). */
+  routeDistanceM?: number;
+  /** Imprécision du clic sur la carte (m) : un clic aussi près du tracé est dessus. */
+  pickToleranceM?: number;
+}
+
+/** Écart minimal sous lequel un départ / une arrivée posé(e) l'est sur le tracé. */
+const ON_ROUTE_ENDPOINT_TOLERANCE_M = 15;
+
 /**
  * « Démarrer ici » / « Finir ici » : pose le départ ou l'arrivée sur `point`
- * (ligne créée si absente) et prépare le recalcul local du tracé stocké.
+ * (ligne créée si absente). Posé sur le tracé, il le rogne là (cf.
+ * cropItineraryRouteAtEndpoint) ; ailleurs, recalcul local du tracé stocké.
  */
 export function placeRouteEndpoint(
   itinerary: Itinerary,
   endpoint: 'start' | 'end',
   point: { lat: number; lon: number },
   label: string,
+  placement?: RouteEndpointPlacement,
 ): TimelineItem | null {
   let row = itinerary.timeline.find((item) => item.kind === endpoint);
   if (!row) {
@@ -496,18 +533,110 @@ export function placeRouteEndpoint(
   }
   if (!row) return null;
 
+  const routeWasCurrent = storedRouteIsCurrent(itinerary);
   row.label = label;
   row.lat = point.lat;
   row.lon = point.lon;
   row.distanceKm = endpoint === 'start' ? 0 : null;
   delete itinerary.routeAudit;
-  delete itinerary.pendingTraceExtension;
   itinerary.prediction = null;
 
   if (hasEditableRoute(itinerary)) {
+    const cut = routeWasCurrent
+      ? cropItineraryRouteAtEndpoint(itinerary, endpoint, point, placement)
+      : null;
+    if (cut) {
+      row.lat = cut.lat;
+      row.lon = cut.lon;
+      finishRouteCrop(itinerary);
+      return row;
+    }
+    delete itinerary.pendingTraceExtension;
     itinerary.pendingRoutePatch = buildPendingRoutePatchForEditedRow(itinerary, row.id);
+  } else {
+    delete itinerary.pendingTraceExtension;
   }
   return row;
+}
+
+/**
+ * Le tracé stocké est-il le résultat des lignes actuelles ? GPX importé : il
+ * fait foi ; tracé BRouter : estampille à jour (ou ancien tracé sans
+ * estampille, conservé tel quel à l'ouverture) et aucune édition en attente.
+ */
+function storedRouteIsCurrent(itinerary: Itinerary): boolean {
+  const route = itinerary.gpxRoute;
+  if (!route || itinerary.pendingRoutePatch || itinerary.pendingTraceExtension) return false;
+  return route.source === 'gpx'
+    || route.routedInputsKey === undefined
+    || routeStampMatches(itinerary, route.routedInputsKey);
+}
+
+/**
+ * Rogne le tracé stocké au départ / à l'arrivée posé(e) sur lui : coupe exacte,
+ * sans routage — le GPX importé reste celui du fichier, le tracé BRouter n'est
+ * pas recalculé. Refusé (`null`, recalcul local à la place) quand le point
+ * n'est pas sur le tracé ou qu'une étape imposée se trouve dans la partie
+ * retirée : le tracé doit toujours y passer.
+ */
+function cropItineraryRouteAtEndpoint(
+  itinerary: Itinerary,
+  endpoint: 'start' | 'end',
+  point: { lat: number; lon: number },
+  placement: RouteEndpointPlacement | undefined,
+): { lat: number; lon: number } | null {
+  const route = itinerary.gpxRoute;
+  if (!route) return null;
+  const keep = endpoint === 'start' ? 'after' : 'before';
+  const cropped = cropRoutePoints(route.points, point, keep, {
+    toleranceM: Math.max(ON_ROUTE_ENDPOINT_TOLERANCE_M, placement?.pickToleranceM ?? 0),
+    hintM: placement?.routeDistanceM,
+  });
+  if (!cropped) return null;
+
+  const totalM = getRoutePointTotalDistanceM(route.points);
+  // Kilométrage des lignes (géodésique) et distances du tracé stocké : ~1 % d'écart.
+  const marginM = 200 + (totalM * 0.01);
+  const constrainsRemovedPart = itinerary.timeline.some((row) => {
+    if (row.kind !== 'waypoint' || row.onRoute || row.lat == null || row.lon == null) return false;
+    if (row.distanceKm == null || !Number.isFinite(row.distanceKm)) return true;
+    const rowM = row.distanceKm * 1_000;
+    return keep === 'after' ? rowM < cropped.cutM + marginM : rowM > cropped.cutM - marginM;
+  });
+  if (constrainsRemovedPart) return null;
+
+  // Tracé complet d'un GPX importé (non simplifié) : rogné au même endroit.
+  const originalPoints = route.originalPoints && route.originalPoints !== route.points
+    ? cropRoutePoints(route.originalPoints, cropped.cut, keep, {
+        toleranceM: ORIGINAL_POINTS_CROP_TOLERANCE_M,
+        hintM: cropped.cutM * (getRoutePointTotalDistanceM(route.originalPoints) / Math.max(1, totalM)),
+      })?.points ?? cropped.points
+    : cropped.points;
+
+  itinerary.gpxRoute = { ...route, points: cropped.points, originalPoints };
+  delete itinerary.pendingRoutePatch;
+  delete itinerary.pendingTraceExtension;
+  return cropped.cut;
+}
+
+/** Écart toléré entre le tracé affiché (simplifié) et le tracé complet d'un GPX. */
+const ORIGINAL_POINTS_CROP_TOLERANCE_M = 60;
+
+/** Métriques, kilométrages et estampille du tracé rogné. */
+function finishRouteCrop(itinerary: Itinerary): void {
+  const route = itinerary.gpxRoute;
+  if (!route) return;
+  const metrics = buildImportedRouteMetrics(route.points);
+  itinerary.metrics = { ...itinerary.metrics, ...metrics };
+  itinerary.timeline = projectTimelineLocationDistances(
+    itinerary.timeline,
+    route.points,
+    metrics.distanceKm ?? roundDistanceKm(getRoutePointTotalDistanceM(route.points)),
+  );
+  // Le tracé rogné est celui des nouvelles lignes : pas de recalcul BRouter.
+  if (route.source === 'brouter') {
+    itinerary.gpxRoute = { ...route, routedInputsKey: getRoutingInputsSignature(itinerary) };
+  }
 }
 
 export function insertTimelineItem(

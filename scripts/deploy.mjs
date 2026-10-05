@@ -22,6 +22,12 @@ const VPS_HOST = '141.145.220.99';
 const VPS_USER = 'opc';
 const SSH_KEY = path.join(os.homedir(), '.ssh', 'oracle_brouter.key');
 const APP_UUID = 'q7lznj8fhunybhvuvm3jcu0u';
+/**
+ * Serveur temps réel de co-édition (server/multiplayer, Dockerfile.multiplayer),
+ * service Coolify à part servi sous https://app.redview.tech/multiplayer.
+ * Déployé avant l'application : « Partager » n'apparaît que quand il répond.
+ */
+const MULTIPLAYER_APP_UUID = 'krejrvgvs2w5kmfo27rutffz';
 
 function run(cmd, options = {}) {
   return execSync(cmd, { stdio: 'pipe', encoding: 'utf-8', ...options }).trim();
@@ -108,68 +114,20 @@ async function main() {
     process.exit(1);
   }
 
-  // 3. Trigger Coolify deployment on Oracle VPS
-  log(`Connecting to VPS (${VPS_HOST}) via SSH to trigger Coolify build...`);
+  // 3. Coolify : serveur temps réel puis application (chacun suivi jusqu'au bout).
+  log(`Connecting to VPS (${VPS_HOST}) via SSH to trigger Coolify builds...`);
   if (!fs.existsSync(SSH_KEY)) {
     error(`SSH key not found at ${SSH_KEY}`);
     process.exit(1);
   }
-
-  const phpScript = `<?php
-require 'vendor/autoload.php';
-$app = require_once 'bootstrap/app.php';
-$kernel = $app->make(Illuminate\\Contracts\\Console\\Kernel::class);
-$kernel->bootstrap();
-$application = App\\Models\\Application::where('uuid', '${APP_UUID}')->first();
-$deployment_uuid = (string) Illuminate\\Support\\Str::uuid();
-$res = queue_application_deployment(application: $application, deployment_uuid: $deployment_uuid);
-echo json_encode($res);
-`;
-  const b64 = Buffer.from(phpScript).toString('base64');
   const sshBaseCmd = `ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=accept-new ${VPS_USER}@${VPS_HOST}`;
-  
-  let deploymentUuid = '';
-  try {
-    const triggerRes = run(`${sshBaseCmd} "echo '${b64}' | base64 -d | sudo docker exec -i coolify php"`);
-    const parsed = JSON.parse(triggerRes);
-    // Interpolé ensuite dans du SQL : uniquement un UUID strict.
-    deploymentUuid = UUID_RE.test(String(parsed.deployment_uuid ?? '')) ? parsed.deployment_uuid : '';
-    success(`Coolify deployment queued! UUID: ${deploymentUuid}`);
-  } catch (err) {
-    warn(`Deployment trigger response: ${err.message}. Checking latest deployment in database...`);
+
+  const multiplayerOk = await deployCoolifyApplication(sshBaseCmd, MULTIPLAYER_APP_UUID, 'Real-time server');
+  if (!multiplayerOk) {
+    warn('Real-time server not deployed: the app still deploys (sharing stays hidden until /multiplayer/health answers).');
   }
-
-  // 4. Poll deployment progress
-  log('Building Docker image on VPS & restarting container (typically ~25-35s)...');
-  const startTime = Date.now();
-  let finished = false;
-
-  for (let attempt = 1; attempt <= 45; attempt++) {
-    await new Promise((r) => setTimeout(r, 2000));
-    try {
-      const sql = deploymentUuid
-        ? `SELECT status FROM application_deployment_queues WHERE deployment_uuid = '${deploymentUuid}';`
-        : `SELECT status FROM application_deployment_queues ORDER BY id DESC LIMIT 1;`;
-      const dbStatus = run(`${sshBaseCmd} "echo \\"${sql}\\" | sudo docker exec -i coolify-db psql -U coolify -d coolify -t -A"`).trim();
-
-      const elapsed = Math.round((Date.now() - startTime) / 1000);
-      process.stdout.write(`\r\x1b[36m[RedView Deploy]\x1b[0m Build status: \x1b[33m${dbStatus}\x1b[0m (${elapsed}s elapsed)... `);
-
-      if (dbStatus === 'finished') {
-        finished = true;
-        console.log('\n');
-        success(`Production deployment completed in ${elapsed}s!`);
-        break;
-      }
-      if (dbStatus === 'failed' || dbStatus === 'cancelled') {
-        console.log('\n');
-        error(`Deployment ended with status: ${dbStatus}`);
-        break;
-      }
-    } catch {
-      // retry
-    }
-  }
+  const appOk = await deployCoolifyApplication(sshBaseCmd, APP_UUID, 'App');
+  if (!appOk) process.exitCode = 1;
 
   // 5. Verification
   log('Verifying production endpoint...');
@@ -179,6 +137,72 @@ echo json_encode($res);
   } catch {
     log('Production URL: https://app.redview.tech');
   }
+  try {
+    // Sans le service, l'app répond 200 avec index.html : seul `{"ok":true}` compte.
+    const health = run('node -e "fetch(\'https://app.redview.tech/multiplayer/health\').then(r => r.json()).then(b => console.log(b.ok === true ? \'ok\' : \'ko\'), () => console.log(\'ko\'))"');
+    if (health === 'ok') success('Real-time server is LIVE (https://app.redview.tech/multiplayer/health)');
+    else warn('Real-time server not answering yet (sharing stays hidden until /multiplayer/health returns {"ok":true}).');
+  } catch {
+    warn('Real-time server health check failed (sharing stays hidden until it answers).');
+  }
+}
+
+/** Met en file le déploiement Coolify d'une application et le suit ; true s'il se termine. */
+async function deployCoolifyApplication(sshBaseCmd, applicationUuid, label) {
+  const phpScript = `<?php
+require 'vendor/autoload.php';
+$app = require_once 'bootstrap/app.php';
+$kernel = $app->make(Illuminate\\Contracts\\Console\\Kernel::class);
+$kernel->bootstrap();
+$application = App\\Models\\Application::where('uuid', '${applicationUuid}')->first();
+$deployment_uuid = (string) Illuminate\\Support\\Str::uuid();
+$res = queue_application_deployment(application: $application, deployment_uuid: $deployment_uuid);
+echo json_encode($res);
+`;
+  const b64 = Buffer.from(phpScript).toString('base64');
+
+  let deploymentUuid = '';
+  try {
+    const triggerRes = run(`${sshBaseCmd} "echo '${b64}' | base64 -d | sudo docker exec -i coolify php"`);
+    const parsed = JSON.parse(triggerRes);
+    // Interpolé ensuite dans du SQL : uniquement un UUID strict.
+    deploymentUuid = UUID_RE.test(String(parsed.deployment_uuid ?? '')) ? parsed.deployment_uuid : '';
+    success(`${label}: Coolify deployment queued! UUID: ${deploymentUuid}`);
+  } catch (err) {
+    warn(`${label}: deployment trigger response: ${err.message}.`);
+    return false;
+  }
+  if (!deploymentUuid) {
+    warn(`${label}: no deployment UUID returned.`);
+    return false;
+  }
+
+  log(`${label}: building Docker image on VPS & restarting container...`);
+  const startTime = Date.now();
+  for (let attempt = 1; attempt <= 90; attempt++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    try {
+      const sql = `SELECT status FROM application_deployment_queues WHERE deployment_uuid = '${deploymentUuid}';`;
+      const dbStatus = run(`${sshBaseCmd} "echo \\"${sql}\\" | sudo docker exec -i coolify-db psql -U coolify -d coolify -t -A"`).trim();
+      const elapsed = Math.round((Date.now() - startTime) / 1000);
+      process.stdout.write(`\r\x1b[36m[RedView Deploy]\x1b[0m ${label} build status: \x1b[33m${dbStatus}\x1b[0m (${elapsed}s elapsed)... `);
+      if (dbStatus === 'finished') {
+        console.log('\n');
+        success(`${label}: deployment completed in ${elapsed}s!`);
+        return true;
+      }
+      if (dbStatus === 'failed' || dbStatus === 'cancelled') {
+        console.log('\n');
+        error(`${label}: deployment ended with status: ${dbStatus}`);
+        return false;
+      }
+    } catch {
+      // retry
+    }
+  }
+  console.log('\n');
+  warn(`${label}: still building after 3 minutes; check Coolify.`);
+  return false;
 }
 
 main().catch((err) => {

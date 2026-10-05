@@ -149,6 +149,13 @@ export interface GpxRoute {
     elevationM?: number | null;
     gradientPct?: number | null;
   }[];
+  /**
+   * `track` : points d'une trace (<trkpt>), chemin réellement suivi ;
+   * `route` : points d'une route (<rtept>), points de passage à relier.
+   */
+  pointsKind?: 'track' | 'route';
+  /** Indices des points qui ouvrent un nouveau segment de trace (le premier excepté). */
+  segmentStarts?: number[];
   /** Attribut `creator` de la balise <gpx> (ex. « RedView »), quand présent. */
   creator?: string | null;
   /** Points <wpt> du fichier (POI, points de passage, départ/arrivée). */

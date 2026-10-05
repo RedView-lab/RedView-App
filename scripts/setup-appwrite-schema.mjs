@@ -61,9 +61,35 @@ async function main() {
         { type: 'integer', key: 'size_bytes', required: false, default: 0, min: 0, max: 2147483647 },
         { type: 'string', key: 'privacy', size: 32, required: false, default: 'private' },
         { type: 'string', key: 'data', size: 16000000, required: false }, // relevé de 1 M à 16 M en prod le 2026-10-01
+        // Co-édition : équipe `p<projectId>` d'un projet partagé (api/projects/share.ts).
+        { type: 'string', key: 'team_id', size: 128, required: false },
+        // Co-édition : `{ v, seq, snapshotFile, dataHash }` écrit avec `data` par le serveur
+        // temps réel (server/multiplayer/appwriteStorage.ts).
+        { type: 'string', key: 'collab', size: 4096, required: false },
       ],
       indexes: [
         { key: 'idx_projects_user_id', type: 'key', attributes: ['user_id'] },
+        { key: 'idx_projects_team_id', type: 'key', attributes: ['team_id'] },
+      ],
+    },
+    {
+      // Journal du serveur temps réel (server/multiplayer) : un document par paquet
+      // de lots, id `<projet>_<séquence de début>` (deux serveurs ne peuvent pas
+      // écrire le même : barrière). Aucun accès client : clé API du serveur seulement.
+      id: 'project_journal',
+      name: 'Project Journal',
+      documentSecurity: true,
+      permissions: [],
+      attributes: [
+        { type: 'string', key: 'project_id', size: 128, required: true },
+        { type: 'integer', key: 'start_seq', required: true, min: 0, max: 9007199254740991 },
+        { type: 'integer', key: 'end_seq', required: true, min: 0, max: 9007199254740991 },
+        // gzip + base64 des lots (MAX_JOURNAL_INLINE_CHARS = 10 M), sinon `file:<id>` du bucket project-payloads.
+        { type: 'string', key: 'payload', size: 10500000, required: true },
+      ],
+      indexes: [
+        { key: 'idx_journal_project_end', type: 'key', attributes: ['project_id', 'end_seq'] },
+        { key: 'idx_journal_project_start', type: 'key', attributes: ['project_id', 'start_seq'] },
       ],
     },
     {

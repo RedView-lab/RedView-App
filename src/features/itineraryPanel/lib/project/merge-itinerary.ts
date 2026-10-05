@@ -1,6 +1,7 @@
 import { routeLengthM } from '@/features/poi/lib/gpx-loader';
 
 import {
+  ROUTE_SEAM_TOLERANCE_M,
   cumulativeRouteLengthsM,
   projectPointAlongRoute,
 } from '../routes';
@@ -34,7 +35,8 @@ export interface MergeItineraryProjectResult {
   connectorUsed: boolean;
 }
 
-export const MERGE_CONNECT_THRESHOLD_M = 35;
+/** Au-delà, la fin de la source et le début de la cible sont reliés par un raccord routé. */
+export const MERGE_CONNECT_THRESHOLD_M = ROUTE_SEAM_TOLERANCE_M;
 
 function hasMergeableRoute(itinerary: Itinerary | null | undefined): itinerary is Itinerary & {
   gpxRoute: NonNullable<Itinerary['gpxRoute']>;

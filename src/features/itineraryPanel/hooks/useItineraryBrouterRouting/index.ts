@@ -19,6 +19,13 @@ import {
   removeRouteLayer,
 } from '../../lib/route-layer';
 import {
+  RouteSeamError,
+  haversineRouteDistanceM,
+  isRouteSeamError,
+  routeSeamJoins,
+} from '../../lib/routes';
+import {
+  anchorRoutePatchBound,
   isBrouterUnmappedPointError,
   type UseItineraryBrouterRoutingArgs,
 } from '../useItineraryBrouterRoutingShared';
@@ -31,11 +38,13 @@ import {
   applyRefinedRouteProfile,
   applyUnroutableRouteCleared,
   captureRouteRefinementBase,
+  type RouteRefinementBase,
+} from './projectMutations';
+import {
   getRoutingEndpointsKey,
   getRoutingInputsSignature,
   routeStampMatches,
-  type RouteRefinementBase,
-} from './projectMutations';
+} from './routingInputs';
 import { resolveRouteRequest } from './resolveRouteRequest';
 import { resolveElasticRoutePatch } from './elasticRoutePatch';
 import type { RouteRequestBase } from './customProfileFetch';
@@ -43,6 +52,12 @@ import { planPendingRouteEdit, type UnresolvedRouteEdit } from './pendingEditPla
 
 /** Marqueur « tracé restauré par undo/redo, à vérifier par estampille ». */
 const VERIFY_STORED_ROUTE = '#verify-stored-route';
+/**
+ * Édition locale qui ne se recolle pas au tracé stocké sans ligne droite :
+ * enregistrée comme non résolue sous cette clé, elle force le recalcul complet
+ * (cf. planPendingRouteEdit).
+ */
+const UNJOINABLE_EDIT_KEY = '#unjoinable-edit';
 
 function dispatchRouteLoading(loading: boolean) {
   if (typeof window !== 'undefined') {
@@ -265,6 +280,7 @@ export function useItineraryBrouterRouting({
     brfHash,
     climbing ? 1 : 0,
     forbiddenPolygons ?? '',
+    // Toujours en dernier : relu par l'effet (recalcul demandé depuis le routage).
     routeRefreshNonce,
   ].join('#');
 
@@ -307,6 +323,14 @@ export function useItineraryBrouterRouting({
       if (entry && (pendingKey === undefined || entry.pendingKey === pendingKey)) {
         unresolvedEdits.delete(itineraryId);
       }
+    };
+    // Édition locale impossible à recoller sans ligne droite (étape loin du
+    // réseau routable, GPX hors voie) : tout le tracé est recalculé, seul
+    // résultat sans ligne droite.
+    const recomputeUnjoinableEdit = (itineraryId: string, error: unknown) => {
+      console.warn('[BRouter] local edit does not join the stored route: full recompute', error);
+      unresolvedEdits.set(itineraryId, { kind: 'patch', pendingKey: UNJOINABLE_EDIT_KEY });
+      requestRouteRefresh();
     };
 
     if (
@@ -355,8 +379,9 @@ export function useItineraryBrouterRouting({
         itinerary: itineraryForRouting,
         signal: ctrl.signal,
         requestBase: {
-          start: patch.start,
-          end: patch.end,
+          // Bornes intermédiaires prises sur le tracé stocké : la jonction s'y fait.
+          start: anchorRoutePatchBound(patch.start, existingRoutePoints),
+          end: anchorRoutePatchBound(patch.end, existingRoutePoints),
           via: patch.via,
           polygons: forbiddenPolygons,
           signal: ctrl.signal,
@@ -394,6 +419,10 @@ export function useItineraryBrouterRouting({
         })
         .catch((error: unknown) => {
           if ((error as { name?: string }).name === 'AbortError') return;
+          if (isRouteSeamError(error)) {
+            recomputeUnjoinableEdit(itineraryForRouting.id, error);
+            return;
+          }
           console.error('[BRouter local patch fail]', error);
           setRouteError(formatBrouterErrorMessage(error));
         })
@@ -467,6 +496,17 @@ export function useItineraryBrouterRouting({
       })
         .then(({ route, resolvedWarnings }) => {
           if (ctrl.signal.aborted) return;
+          // L'extension doit repartir de la fin du tracé stocké.
+          const storedEnd = existingRoutePoints[existingRoutePoints.length - 1]!;
+          const [fromLon, fromLat] = route.coordinates[0] ?? [Number.NaN, Number.NaN];
+          const extensionStart = { lat: fromLat, lon: fromLon };
+          if (!routeSeamJoins(storedEnd, extensionStart)) {
+            recomputeUnjoinableEdit(
+              itineraryForRouting.id,
+              new RouteSeamError('trace extension', haversineRouteDistanceM(storedEnd, extensionStart)),
+            );
+            return;
+          }
           setRouteWarnings(resolvedWarnings);
           // Render route immediately with native BRouter elevation data
           const refinementBase: { current: RouteRefinementBase | null } = { current: null };
@@ -496,6 +536,10 @@ export function useItineraryBrouterRouting({
         })
         .catch((error: unknown) => {
           if ((error as { name?: string }).name === 'AbortError') return;
+          if (isRouteSeamError(error)) {
+            recomputeUnjoinableEdit(itineraryForRouting.id, error);
+            return;
+          }
           if (currentActive && isBrouterUnmappedPointError(error)) {
             // Clic hors réseau annulé : l'état antérieur porte sa propre extension.
             resolveUnresolvedEdit(currentActive.id);
@@ -564,10 +608,17 @@ export function useItineraryBrouterRouting({
       // entrées restaurées ; figé en plein recalcul (estampille différente),
       // il est recalculé.
       const storedInputsKey = currentActive.gpxRoute?.routedInputsKey;
+      const storedStampIsCurrent = storedInputsKey !== undefined && routeStampMatches(currentActive, storedInputsKey);
       const restoredRouteIsCurrent =
         routedKey === VERIFY_STORED_ROUTE &&
-        (storedInputsKey === undefined || routeStampMatches(currentActive, storedInputsKey));
-      if (routedKey === routingInputKey || restoredRouteIsCurrent) {
+        (storedInputsKey === undefined || storedStampIsCurrent);
+      // Tracé modifié sur place pour les nouvelles entrées (départ / arrivée
+      // rognés sur le tracé) : il fait foi, sauf recalcul demandé depuis.
+      const editedInPlace =
+        routedKey !== VERIFY_STORED_ROUTE &&
+        storedStampIsCurrent &&
+        routedKey.slice(routedKey.lastIndexOf('#') + 1) === String(routeRefreshNonce);
+      if (routedKey === routingInputKey || restoredRouteIsCurrent || editedInPlace) {
         routedInputKeys.set(currentActive.id, routingInputKey);
         deferRouteState(null);
         return;
@@ -739,6 +790,7 @@ export function useItineraryBrouterRouting({
     pendingTraceExtensionKey,
     profileId,
     refineRouteInBackground,
+    requestRouteRefresh,
     routeRefreshNonce,
     routingInputKey,
     rollbackPendingTraceAppend,

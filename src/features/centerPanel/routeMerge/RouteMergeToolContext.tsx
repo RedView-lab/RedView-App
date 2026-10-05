@@ -26,6 +26,11 @@ import {
   computeRouteSurfaceMetricsFromBrouter,
   extractRouteProfileFromBrouter,
 } from '@/features/itineraryPanel/lib/route-metrics';
+import {
+  ROUTE_SNAP_TOLERANCE_M,
+  RouteSeamError,
+  haversineRouteDistanceM,
+} from '@/features/itineraryPanel/lib/routes';
 import { translateAppText } from '@/shared/i18n';
 
 interface RouteMergeToolContextValue {
@@ -86,6 +91,15 @@ async function fetchMergeConnector(
     requestBase: { start, end, via: [], polygons },
     setRouteWarnings: () => {},
   });
+  // Le raccord doit partir de la fin de la source et arriver au début de la
+  // cible : sinon la fusion les relierait par des lignes droites.
+  const first = route.coordinates[0];
+  const last = route.coordinates[route.coordinates.length - 1];
+  const startGapM = first ? haversineRouteDistanceM(start, { lat: first[1], lon: first[0] }) : Number.POSITIVE_INFINITY;
+  const endGapM = last ? haversineRouteDistanceM(end, { lat: last[1], lon: last[0] }) : Number.POSITIVE_INFINITY;
+  if (Math.max(startGapM, endGapM) > ROUTE_SNAP_TOLERANCE_M) {
+    throw new RouteSeamError('merge connector', Math.max(startGapM, endGapM));
+  }
   return toConnectorSegment(route);
 }
 

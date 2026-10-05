@@ -45,6 +45,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     saveStatus,
     saveStatusMessage,
     onShareProject,
+    collaborators,
     onRenameProject,
     onSelectItinerary,
     onAddItinerary,
@@ -263,6 +264,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
         saveStatusMessage={saveStatusMessage}
         onRename={onRenameProject}
         onShare={onShareProject}
+        collaborators={collaborators}
       />
 
       <div className="rvi-divider" />

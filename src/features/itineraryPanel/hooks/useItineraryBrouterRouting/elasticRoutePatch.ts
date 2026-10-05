@@ -1,5 +1,7 @@
+import { RouteSeamError } from '../../lib/routes';
 import type { Itinerary } from '../../types';
 import {
+  planRouteSplice,
   widenUnjoinedRoutePatchWindow,
   type RoutePoints,
 } from '../useItineraryBrouterRoutingShared';
@@ -14,15 +16,19 @@ export interface ResolvedRoutePatch extends ResolvedRouteRequest {
 }
 
 /**
- * Patch local sans point de passage fantôme. Les bornes d'une fenêtre locale
- * sont prises sur l'ancien tracé (cf. narrowRoutePatchToEdit) : quand
- * l'édition déplace le tracé loin de l'ancien, y forcer le nouveau le ferait
- * revenir en crochet. Chaque borne que le tracé obtenu ne rejoint pas en
- * suivant déjà l'ancien recule (fenêtre élargie, puis bornes réelles) et le
- * patch est rerouté ; seules les vraies étapes contraignent le tracé.
+ * Patch local sans point de passage fantôme ni ligne droite. Les bornes d'une
+ * fenêtre locale sont prises sur l'ancien tracé (cf. narrowRoutePatchToEdit) :
+ * quand l'édition déplace le tracé loin de l'ancien, y forcer le nouveau le
+ * ferait revenir en crochet. Chaque borne que le tracé obtenu ne rejoint pas
+ * en suivant déjà l'ancien — ou dont la jonction avec l'ancien tracerait une
+ * ligne droite (cf. planRouteSplice) — recule (fenêtre élargie, puis bornes
+ * réelles) et le patch est rerouté ; seules les vraies étapes contraignent le
+ * tracé.
  *
  * Un élargissement qui échoue (délai, serveur) garde le tracé précédent,
- * valide mais moins naturel, plutôt que de perdre l'édition.
+ * valide mais moins naturel, plutôt que de perdre l'édition. Une jonction
+ * impossible aux bornes réelles rejette `RouteSeamError` : l'appelant
+ * recalcule tout le tracé au lieu d'y laisser une ligne droite.
  */
 export async function resolveElasticRoutePatch(
   patch: RoutePatch,
@@ -42,13 +48,23 @@ export async function resolveElasticRoutePatch(
       return previous;
     }
     const routed: ResolvedRoutePatch = { ...resolved, patch: current };
-    const widened = widenUnjoinedRoutePatchWindow(current, storedPoints, resolved.route.coordinates);
-    if (!widened) return routed;
+    const coordinates = resolved.route.coordinates;
+    const splice = planRouteSplice(storedPoints, current, coordinates.map(([lon, lat]) => ({ lat, lon })));
+    const seamFailed = splice.ok
+      ? {}
+      : { start: splice.side !== 'end', end: splice.side !== 'start' };
+    const widened = widenUnjoinedRoutePatchWindow(current, storedPoints, coordinates, seamFailed);
+    if (!widened) {
+      if (!splice.ok) throw new RouteSeamError(`local patch ${splice.side} bound`, splice.gapM);
+      return routed;
+    }
     console.info('[BRouter] local patch: window bound not rejoined, widening', {
       start: widened.start.distanceM ?? widened.start.kind,
       end: widened.end.distanceM ?? widened.end.kind,
+      seam: splice.ok ? 'ok' : splice.side,
     });
-    previous = routed;
+    // Seul un tracé qui se recolle sans ligne droite peut servir de repli.
+    if (splice.ok) previous = routed;
     current = widened;
   }
 }

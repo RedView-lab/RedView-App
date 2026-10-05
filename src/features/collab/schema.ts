@@ -6,7 +6,8 @@ import type { ProjectDocument } from '@/features/itineraryPanel/lib/project/laye
  * Modèle de fusion du document partagé (`ProjectDocument`, cf.
  * itineraryPanel/lib/project/layers.ts) : comment chaque champ se combine
  * quand plusieurs éditeurs le modifient en même temps. Seule source de vérité
- * du codage CRDT (yjs/codec.ts).
+ * du document à plat (model/diff.ts, model/materialize.ts) : un champ
+ * `record` devient une propriété par clé, une `list` un objet par élément.
  *
  *  - `atomic` : la valeur entière, dernière écriture gagnante (départage
  *    déterministe, identique chez tous les éditeurs) ;
@@ -122,7 +123,7 @@ export function fieldSpec(spec: RecordSpec, key: string): MergeSpec {
 /**
  * Entrées dont dépend chaque résultat dérivé d'un itinéraire : la modification
  * de l'une d'elles désigne l'auteur qui doit recalculer ce résultat
- * (cf. computeGate.ts). Doit rester aligné sur `getRoutingInputsSignature`,
+ * (baux du serveur, room/leases.ts). Doit rester aligné sur `getRoutingInputsSignature`,
  * `buildPredictionStamp` et `buildPoiRouteSignature`.
  */
 export const DERIVED_INPUTS: Readonly<Record<DerivedKind, readonly (keyof Itinerary)[]>> = {

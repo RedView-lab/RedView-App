@@ -1,0 +1,11 @@
+/* Section « Partagés avec moi » du gestionnaire : surtitre (xs, 700, capitales, espacement large). */
+.rvpb-shared-section-title {
+  grid-column: 1 / -1;
+  margin: 16px 0 0;
+  color: rgb(var(--rv-ink) / 0.64);
+  font-size: var(--rv-font-size-xs);
+  font-weight: 700;
+  letter-spacing: var(--rv-letter-spacing-wide);
+  line-height: 14px;
+  text-transform: uppercase;
+}

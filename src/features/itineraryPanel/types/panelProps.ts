@@ -13,6 +13,12 @@ import type {
 
 // Props du panneau d'itinéraire (callbacks fournis par le conteneur).
 
+/** Éditeur présent sur un projet partagé (pastille de l'en-tête). */
+export interface ProjectCollaborator {
+  userId: string;
+  name: string;
+}
+
 export interface ItineraryPanelProps {
   project: ItineraryProject;
   profiles: RouteProfile[];
@@ -29,7 +35,10 @@ export interface ItineraryPanelProps {
   saveStatus?: ProjectSaveStatus;
   /** Détail (déjà traduit) de l'état d'enregistrement : erreur, attente hors-ligne. */
   saveStatusMessage?: string;
-  onShareProject?: () => void;
+  /** « Partager » de l'en-tête (co-édition) ; reçoit le bouton (échelle de la pop-in). */
+  onShareProject?: (anchor: HTMLElement) => void;
+  /** Éditeurs présents sur le projet (co-édition), cet utilisateur compris. */
+  collaborators?: ProjectCollaborator[];
   onRenameProject?: (next: string) => void;
 
   // itineraries

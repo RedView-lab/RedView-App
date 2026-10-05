@@ -35,6 +35,21 @@ export const SURFACE_LABELS: Record<string, string> = {
   wood: 'Bois',
 };
 
+/** Pixels autour du clic droit qui désignent encore l'objet visé (tracé…). */
+const PICK_TOLERANCE_PX = 6;
+/** Plafond de l'imprécision au sol (vue très dézoomée). */
+const PICK_TOLERANCE_MAX_M = 250;
+
+/**
+ * Imprécision au sol (m) d'un clic à `lat` à l'échelle de la vue : quelques
+ * pixels en mètres (tuiles de 512 px, circonférence équatoriale).
+ */
+export function resolvePickToleranceM(map: MapboxMap, lat: number): number {
+  const metersPerPixel = (40_075_016.686 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** map.getZoom());
+  if (!Number.isFinite(metersPerPixel) || metersPerPixel <= 0) return 0;
+  return Math.min(PICK_TOLERANCE_MAX_M, metersPerPixel * PICK_TOLERANCE_PX);
+}
+
 /**
  * Calcule la pente en pourcentage autour d'un point géographique via le terrain Mapbox.
  */

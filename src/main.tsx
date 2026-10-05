@@ -12,6 +12,7 @@ import './shared/styles/theme.css'
 import './index.css'
 import './shared/styles/glass.css'
 import './shared/styles/dropdown.css'
+import './shared/styles/dialog.css'
 import App from './App.tsx'
 
 const sentryDsn = import.meta.env.VITE_SENTRY_DSN || 'https://560280d647da4557b67bd2e937b5893f@errors.redview.tech/1'

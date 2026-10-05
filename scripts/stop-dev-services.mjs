@@ -1,5 +1,5 @@
 /**
- * Stops local BRouter (17777) and POI (17778) server processes on Windows/Linux.
+ * Stops local BRouter (17777), POI (17778) and real-time co-editing (17790) server processes on Windows/Linux.
  */
 import { execSync } from 'node:child_process';
 
@@ -17,7 +17,7 @@ if (process.platform === 'win32') {
       if (parts.length >= 4 && parts[0].toUpperCase().startsWith('TCP')) {
         const localAddr = parts[1] || '';
         const state = parts[3] || '';
-        const isTargetPort = localAddr.endsWith(':17777') || localAddr.endsWith(':17778');
+        const isTargetPort = localAddr.endsWith(':17777') || localAddr.endsWith(':17778') || localAddr.endsWith(':17790');
         if (isTargetPort && state.toUpperCase() === 'LISTENING') {
           const pid = parts[parts.length - 1];
           if (pid && !isNaN(Number(pid)) && Number(pid) > 0) {

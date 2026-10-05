@@ -362,11 +362,22 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  optimizeDeps: {
+    // Atteinte seulement par l'import dynamique de la co-édition : pré-groupée
+    // au démarrage, sinon sa découverte tardive force une ré-optimisation (504
+    // « Outdated Optimize Dep ») et un rechargement de la page en pleine session.
+    include: ['fractional-indexing'],
+  },
   server: {
     // Exposé sur le LAN uniquement sur demande explicite (REDVIEW_DEV_LAN=1) :
     // le serveur de dev charge tous les secrets du .env dans process.env.
     host: process.env.REDVIEW_DEV_LAN === '1' ? true : 'localhost',
     proxy: {
+      // Serveur temps réel de co-édition (server/multiplayer, lancé par startDevServices).
+      '/multiplayer': {
+        target: 'ws://127.0.0.1:17790',
+        ws: true,
+      },
       '/api/lidar/wmts': {
         target: 'https://data.geopf.fr',
         changeOrigin: true,

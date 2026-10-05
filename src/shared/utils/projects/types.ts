@@ -23,6 +23,8 @@ export interface ProjectRow {
    * copie est basée (contrôle de conflit multi-appareils).
    */
   cloud_updated_at?: string | null;
+  /** Équipe du projet partagé (co-édition), null / absent sinon. */
+  team_id?: string | null;
 }
 
 /** Ligne de projet sans le contenu `data` (lecture IndexedDB sans désérialiser). */
@@ -36,6 +38,10 @@ export interface ProjectSummary {
   sizeBytes: number;
   createdAt: string;
   updatedAt: string;
+  /** Projet partagé (co-édition) : ouvert en session temps réel. */
+  shared?: boolean;
+  /** Partagé avec l'utilisateur par un autre propriétaire (section « Partagés avec moi »). */
+  sharedWithMe?: boolean;
 }
 
 export interface ProjectFolderRow {
@@ -60,6 +66,8 @@ export interface ProjectFolderSummary {
 export interface ProjectBrowserSnapshot {
   folders: ProjectFolderSummary[];
   projects: ProjectSummary[];
+  /** Projets d'autres propriétaires dont l'utilisateur est éditeur. */
+  sharedProjects: ProjectSummary[];
 }
 
 export type { ItineraryFitUpload, ItineraryProject };

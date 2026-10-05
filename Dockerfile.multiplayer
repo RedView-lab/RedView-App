@@ -1,0 +1,40 @@
+# Serveur temps réel de co-édition (server/multiplayer) : service Coolify à part,
+# exposé en wss://app.redview.tech/multiplayer (route Traefik par chemin).
+#
+# Variables : APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID, APPWRITE_API_KEY,
+# APPWRITE_DATABASE_ID (stockage `appwrite`, défaut en production),
+# MULTIPLAYER_PORT (17790).
+#
+# Arrêt (SIGTERM) : journal écrit, connexions fermées en 1012, les clients se
+# reconnectent au conteneur suivant et renvoient ce qui n'était pas acquitté.
+# Deux conteneurs en recouvrement ne peuvent pas écrire le même journal
+# (barrière : server/multiplayer/storage.ts).
+FROM node:22-alpine
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV MULTIPLAYER_PORT=17790
+ENV MULTIPLAYER_STORAGE=appwrite
+
+RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 redview
+
+# Dépendances de production (ws, node-appwrite, fractional-indexing, tsx).
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+# Le moteur de co-édition (src/features/collab) est partagé avec l'application :
+# tsx le charge depuis les sources (alias `@/` du tsconfig racine).
+COPY tsconfig.json ./
+COPY src ./src
+COPY server/multiplayer ./server/multiplayer
+
+USER redview
+
+EXPOSE 17790
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:17790/health > /dev/null || exit 1
+
+# node directement en PID 1 (SIGTERM transmis : arrêt propre).
+CMD ["node", "--import", "tsx", "server/multiplayer/main.ts"]

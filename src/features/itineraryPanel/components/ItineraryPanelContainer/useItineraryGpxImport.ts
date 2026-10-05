@@ -18,7 +18,9 @@ import type { GpxQualityMode, Itinerary, ItineraryProject } from '../../types';
 import { resolveImportedTimelineLabel } from './importedTimelineLabel';
 import { reverseGeocodeSettlement } from '../../lib/geocoding';
 import { buildImportedGpxWaypoints, GPX_IMPORT_WAYPOINT_ID_PREFIX } from './importedGpxWaypoints';
+import { bridgeImportedGpxGaps } from './importedGpxGaps';
 import { translateAppText } from '@/shared/i18n';
+import { notify } from '@/shared/ui/notify';
 
 /** Taille maximale d'un fichier GPX importé (protection mémoire du parseur). */
 export const MAX_GPX_IMPORT_BYTES = 50 * 1024 * 1024;
@@ -229,7 +231,16 @@ export function useItineraryGpxImport({
       // a loading row named after the file until the itinerary row replaces it.
       onImportStateChange?.(file.name);
       try {
-        const route = await parseGpxFile(file);
+        // Discontinuités du fichier reliées par la route, jamais en ligne droite.
+        const { route, bridged, unbridged } = await bridgeImportedGpxGaps(await parseGpxFile(file));
+        if (unbridged > 0) {
+          notify.error(
+            '{{count}} discontinuité(s) du GPX n’ont pas pu être reliées par le réseau routable : vérifiez le tracé importé.',
+            { count: unbridged },
+          );
+        } else if (bridged > 0) {
+          notify.info('{{count}} discontinuité(s) du GPX reliées par le réseau routable.', { count: bridged });
+        }
         const ignAltimetryPoints = await refineImportedRoutePointsWithIgnAltimetry(route.points);
         const basePoints = cleanAndInterpolateElevations(ignAltimetryPoints ?? route.points);
         const storedPoints = normalizeImportedRoutePoints(basePoints, { includeGradient: false });

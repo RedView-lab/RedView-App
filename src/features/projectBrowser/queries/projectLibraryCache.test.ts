@@ -30,7 +30,7 @@ const folder = (id: string, parentFolderId: string | null = null): ProjectFolder
   createdAt: STAMP,
   updatedAt: STAMP,
 });
-const snapshot = () => ({ folders: [folder('f1')], projects: [project('a'), project('b', 'f1')], fetchedAt: 42 });
+const snapshot = () => ({ folders: [folder('f1')], projects: [project('a'), project('b', 'f1')], sharedProjects: [], fetchedAt: 42 });
 
 describe('project library cache updates', () => {
   it('prepends new projects without duplicating an id and keeps extra fields', () => {

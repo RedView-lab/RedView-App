@@ -4,6 +4,9 @@
  * Automatically checks, starts, and monitors:
  * 1. BRouter Standalone Server (port 17777)
  * 2. RedView POI Server (port 17778)
+ * 2b. Serveur temps réel de co-édition (port 17790, server/multiplayer : stockage
+ *     de fichiers .multiplayer-data/, authentification de dev ; Vite le sert
+ *     sous /multiplayer)
  * 3. SSH tunnel to the VPS nginx when the .env upstreams point at it
  *    (`startVpsTunnel` / `applyVpsTunnel`, used by the Vite dev API)
  */
@@ -314,9 +317,44 @@ export function applyVpsTunnel(env = process.env) {
   }
 }
 
+export const MULTIPLAYER_DEV_PORT = 17790;
+
+export async function ensureMultiplayerStarted() {
+  if (await isPortOpen(MULTIPLAYER_DEV_PORT)) {
+    console.log(`\x1b[32m[MULTIPLAYER]\x1b[0m Serveur temps réel actif sur \x1b[1mws://localhost:${MULTIPLAYER_DEV_PORT}\x1b[0m (npm run services:stop pour le relancer après une modification)`);
+    return null;
+  }
+  const dataDir = path.resolve(rootDir, '.multiplayer-data');
+  fs.mkdirSync(dataDir, { recursive: true });
+  const log = fs.openSync(path.join(dataDir, 'server.log'), 'a');
+  console.log(`\x1b[36m[MULTIPLAYER]\x1b[0m Démarrage du serveur temps réel (port ${MULTIPLAYER_DEV_PORT})...`);
+  const child = spawn(process.execPath, ['--import', 'tsx', 'server/multiplayer/main.ts'], {
+    cwd: rootDir,
+    detached: true,
+    stdio: ['ignore', log, log],
+    windowsHide: true,
+    env: {
+      ...process.env,
+      NODE_ENV: 'development',
+      MULTIPLAYER_PORT: String(MULTIPLAYER_DEV_PORT),
+      MULTIPLAYER_STORAGE: 'file',
+      MULTIPLAYER_DATA_DIR: dataDir,
+      MULTIPLAYER_DEV_AUTH: '1',
+    },
+  });
+  child.unref();
+  const ready = await waitForPort(MULTIPLAYER_DEV_PORT, 15000);
+  if (ready) {
+    console.log(`\x1b[32m[MULTIPLAYER]\x1b[0m Serveur temps réel prêt (journal : .multiplayer-data/server.log)`);
+  } else {
+    console.warn(`\x1b[31m[MULTIPLAYER]\x1b[0m Port ${MULTIPLAYER_DEV_PORT} non détecté après 15 s (voir .multiplayer-data/server.log).`);
+  }
+  return child;
+}
+
 export async function startDevServices() {
   console.log('\n\x1b[1m\x1b[35m=== Démarrage des Services Locaux RedView ===\x1b[0m');
-  await Promise.all([ensureBrouterStarted(), ensurePoiServerStarted()]);
+  await Promise.all([ensureBrouterStarted(), ensurePoiServerStarted(), ensureMultiplayerStarted()]);
   console.log('\x1b[1m\x1b[35m=============================================\x1b[0m\n');
 }
 

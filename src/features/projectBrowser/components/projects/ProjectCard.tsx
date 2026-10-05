@@ -43,6 +43,9 @@ export function ProjectCard({
   onDragEnd,
 }: ProjectCardProps) {
   const { t } = useAppI18n();
+  // Projet partagé par un autre propriétaire : ni renommé ni déplacé dans les dossiers d'ici.
+  const editable = !project.sharedWithMe;
+  const badgeLabel = project.shared ? t('Partagé') : privacyLabel(project.privacy);
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(project.name);
   const [previewSrc, setPreviewSrc] = useState(thumbnailUrl);
@@ -171,7 +174,7 @@ export function ProjectCard({
         title={t('Double-cliquer pour renommer')}
         onDoubleClick={(event) => {
           event.stopPropagation();
-          setRenaming(true);
+          if (editable) setRenaming(true);
         }}
       >
         {project.name}
@@ -189,7 +192,7 @@ export function ProjectCard({
           <IconSave size={14} />
           <span>{formatSavedAt(project.updatedAt)}</span>
         </span>
-        <span className="rvpb-card__badge rvpb-card__badge--list">{privacyLabel(project.privacy)}</span>
+        <span className="rvpb-card__badge rvpb-card__badge--list">{badgeLabel}</span>
       </>
     );
 
@@ -197,7 +200,7 @@ export function ProjectCard({
       <article
         data-rv-project-card=""
         className={`rvpb-card rvpb-card--list${dragActive ? ' is-dragging' : ''}`}
-        draggable={!renaming && !busy}
+        draggable={editable && !renaming && !busy}
         onDragStart={(event) => {
           event.dataTransfer.effectAllowed = 'move';
           if (dragImageRef.current) {
@@ -258,7 +261,7 @@ export function ProjectCard({
     <article
       data-rv-project-card=""
       className={`rvpb-card${dragActive ? ' is-dragging' : ''}`}
-      draggable={!renaming && !busy}
+      draggable={editable && !renaming && !busy}
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = 'move';
         if (dragImageRef.current) {
@@ -293,12 +296,12 @@ export function ProjectCard({
               }}
             />
           ) : (
-            <h3 onDoubleClick={() => setRenaming(true)} title={t('Double-cliquer pour renommer')}>
+            <h3 onDoubleClick={() => editable && setRenaming(true)} title={editable ? t('Double-cliquer pour renommer') : undefined}>
               {project.name}
             </h3>
           )}
           <div className="rvpb-card__meta">
-            <span className="rvpb-card__badge">{privacyLabel(project.privacy)}</span>
+            <span className="rvpb-card__badge">{badgeLabel}</span>
             <span className="rvpb-card__meta-group">
               <IconSave size={14} />
               <span>{formatSavedAt(project.updatedAt)}</span>

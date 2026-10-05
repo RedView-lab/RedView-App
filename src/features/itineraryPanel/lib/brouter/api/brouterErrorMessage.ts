@@ -1,4 +1,5 @@
 import { translateAppText } from '@/shared/i18n';
+import { isRouteSeamError } from '../../routes/route-continuity';
 import { isBrouterRateLimitError } from './client';
 
 /**
@@ -25,6 +26,13 @@ export function formatBrouterErrorMessage(error: unknown): string {
   if (isBrouterRateLimitError(error) || /\bhttp 429\b/.test(lower)) {
     return translateAppText(
       'Trop de calculs d’itinéraire en peu de temps. Patientez une minute puis réessayez.',
+    );
+  }
+
+  // 0 bis. Morceaux de tracé qui ne se rejoignent pas : jamais recollés par une ligne droite.
+  if (isRouteSeamError(error)) {
+    return translateAppText(
+      'Impossible de calculer l’itinéraire sans ligne droite : un point est trop loin du réseau routable. Déplacez-le sur une route ou un chemin.',
     );
   }
 

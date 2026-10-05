@@ -7,6 +7,7 @@ import {
   normalizeImportedRoutePoints,
 } from '../routes';
 import { createDocumentId } from './ids';
+import { getRoutingInputsSignature } from '../../hooks/useItineraryBrouterRouting/routingInputs';
 
 export interface SplitItineraryProjectResult {
   project: ItineraryProject;
@@ -40,6 +41,19 @@ function buildUniqueSplitName(project: ItineraryProject, sourceName: string): st
   return nextName;
 }
 
+/**
+ * Moitié découpée : exactement la portion du tracé d'origine. Aucune édition
+ * en attente n'y survit, et un tracé BRouter est estampillé pour ses nouvelles
+ * lignes — sans quoi il serait recalculé de bout en bout, autrement.
+ */
+function stampSplitRoute(itinerary: Itinerary): void {
+  delete itinerary.pendingRoutePatch;
+  delete itinerary.pendingTraceExtension;
+  if (itinerary.gpxRoute?.source === 'brouter') {
+    itinerary.gpxRoute = { ...itinerary.gpxRoute, routedInputsKey: getRoutingInputsSignature(itinerary) };
+  }
+}
+
 export function splitItineraryProject(
   project: ItineraryProject,
   itineraryId: string,
@@ -61,6 +75,8 @@ export function splitItineraryProject(
   nextSource.gpxRoute = {
     ...route,
     points: leftPoints,
+    // Tracé complet (export GPX, qualité) : la moitié, pas tout l'ancien tracé.
+    originalPoints: leftPoints,
   };
   nextSource.timeline = createImportedTimeline(leftPoints);
   nextSource.metrics = buildImportedRouteMetrics(leftPoints);
@@ -82,6 +98,7 @@ export function splitItineraryProject(
   createdItinerary.gpxRoute = {
     ...route,
     points: rightPoints,
+    originalPoints: rightPoints,
   };
   createdItinerary.timeline = createImportedTimeline(rightPoints);
   createdItinerary.metrics = buildImportedRouteMetrics(rightPoints);
@@ -93,6 +110,8 @@ export function splitItineraryProject(
   delete createdItinerary.poiRouteSignature;
   delete createdItinerary.poiAutoSort;
   delete createdItinerary.routeAudit;
+  stampSplitRoute(nextSource);
+  stampSplitRoute(createdItinerary);
 
   const nextItineraries: Itinerary[] = [];
   for (const itinerary of project.itineraries) {
