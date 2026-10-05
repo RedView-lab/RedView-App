@@ -20,6 +20,7 @@ import { Client, Databases, Query, Storage, Teams } from 'node-appwrite';
 
 import { connect, launch, sleep, waitFor } from '../screen-audit/cdp.mjs';
 import { armSlowWelcome, SLOW_WELCOME_SCRIPT } from './slowWelcome.mjs';
+import { DENIAL_CODES, READ_SOCKET_LOG, SOCKET_LOG_SCRIPT } from './socketLog.mjs';
 
 const APP = process.env.RV_APP_URL ?? 'https://app.redview.tech';
 const PORT = 9381;
@@ -90,6 +91,7 @@ async function newPage(browser, name) {
   await page.send('Runtime.enable');
   await page.send('Network.enable');
   await page.send('Page.addScriptToEvaluateOnNewDocument', { source: STORE_HELPER });
+  await page.send('Page.addScriptToEvaluateOnNewDocument', { source: SOCKET_LOG_SCRIPT });
   await page.send('Page.addScriptToEvaluateOnNewDocument', { source: SLOW_WELCOME_SCRIPT });
   await page.send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false });
   page.on('Page.javascriptDialogOpening', () => void page.send('Page.handleJavaScriptDialog', { accept: true }));
@@ -165,6 +167,13 @@ async function readHealth() {
   return res.json();
 }
 
+/** Journal du serveur temps réel (conteneur courant) depuis `since`, sans le bruit du SDK. */
+function readServerLogs(since) {
+  const container = `$(sudo docker ps -q -f name=${MULTIPLAYER_APP_UUID} | head -n1)`;
+  return ssh(`sudo docker logs --since ${since} ${container} 2>&1 | grep -v 'SDK is built for Appwrite' | tail -n 200`)
+    .split('\n').filter(Boolean);
+}
+
 /** Mesures du serveur temps réel : port interne du conteneur, jamais public (lu par SSH). */
 function readServerMetrics() {
   const container = `$(sudo docker ps -q -f name=${MULTIPLAYER_APP_UUID} | head -n1)`;
@@ -230,12 +239,17 @@ const waitInPage = (expression, timeoutMs = 10_000) => `new Promise((resolve) =>
 
 const { session: firstTab, close } = await launch({ port: PORT });
 let projectId = null;
+const benchStart = new Date().toISOString();
+/** Pages ouvertes (diagnostic final, même après une erreur). */
+const pages = {};
+out.diagnostics = { socketLog: {}, serverLogs: {} };
 out.cleanupBefore = await cleanupTestAccounts();
 try {
   const version = await (await fetch(`http://127.0.0.1:${PORT}/json/version`)).json();
   const browser = await connect(version.webSocketDebuggerUrl);
   const A = await newPage(browser, 'A');
   const B = await newPage(browser, 'B');
+  Object.assign(pages, { A, B });
   void firstTab;
 
   const health = await readHealth();
@@ -412,16 +426,37 @@ try {
 
   // ── Redéploiement du serveur temps réel en pleine édition ───────────────
   if (!skipRedeploy) {
+    // Journal du conteneur qui va être remplacé (perdu sinon).
+    try {
+      out.diagnostics.serverLogs.beforeRedeploy = readServerLogs(benchStart);
+    } catch (error) {
+      out.diagnostics.serverLogs.beforeRedeploy = [`lecture impossible : ${error?.message ?? error}`];
+    }
     const deployment = redeployMultiplayer();
     note('redéploiement du serveur temps réel', deployment);
     let status = 'queued';
     let lastName = null;
     const deployStart = Date.now();
+    let leftEditor = null;
     for (let tick = 0; tick < 150 && !['finished', 'failed', 'cancelled'].includes(status); tick += 1) {
+      // Carte rechargée (classe .mapboxgl-map absente un instant) ou A sorti de l'éditeur ?
+      const editorReady = await A.evaluate(EDITOR_READY)
+        || await waitFor(A, EDITOR_READY, { timeout: 15_000 }).then(() => true, () => false);
+      if (!editorReady) {
+        // A n'est plus dans l'éditeur : on note où il est et on poursuit sans lui.
+        leftEditor = await A.evaluate(`({ tick: ${tick}, url: location.pathname, text: document.body.innerText.slice(0, 200) })`);
+        break;
+      }
       lastName = `pendant-redeploiement-${tick}`;
       await A.evaluate(store(`(s.setItineraryName(${JSON.stringify(itineraryId)}, ${JSON.stringify(lastName)}), 0)`));
       await sleep(2000);
       if (tick % 3 === 0) status = deploymentStatus(deployment);
+    }
+    if (leftEditor) note('A hors de l’éditeur pendant le redéploiement', leftEditor);
+    check(!leftEditor, 'A reste dans l’éditeur pendant le redéploiement');
+    for (let wait = 0; wait < 60 && !['finished', 'failed', 'cancelled'].includes(status); wait += 1) {
+      await sleep(3000);
+      status = deploymentStatus(deployment);
     }
     note('redéploiement : statut / durée (s)', `${status} / ${Math.round((Date.now() - deployStart) / 1000)}`);
     check(status === 'finished', 'redéploiement du serveur temps réel terminé');
@@ -472,16 +507,38 @@ try {
     /^HTTP 401 https:\/\/appwrite\.redview\.tech\/v1\/account(\/sessions\/current)?$/, // avant la connexion
     /^HTTP 404 https:\/\/appwrite\.redview\.tech\/v1\/databases\/[^/]+\/collections\/project_views\/documents\/[^/]+$/, // vue pas encore enregistrée
     /^HTTP 404 https:\/\/appwrite\.redview\.tech\/v1\/storage\/buckets\/project-thumbnails\/files\/[^/]+$/, // miniature pas encore créée
+    /^HTTP 502 https:\/\/app\.redview\.tech\/multiplayer\/health$/, // conteneur remplacé pendant le redéploiement
   ];
   for (const name of ['A', 'B']) {
     const unexpected = out.errors[name].filter((entry) => !EXPECTED.some((pattern) => pattern.test(entry)));
     if (unexpected.length > 0) note(`erreurs inattendues ${name}`, unexpected.slice(0, 10));
     check(unexpected.length === 0, `${name} : aucune erreur inattendue (réseau, console, exceptions)`);
   }
+  // Jamais renvoyé hors du projet (accès retiré, projet introuvable, version) pendant la passe.
+  for (const name of ['A', 'B']) {
+    const log = await pages[name].evaluate(READ_SOCKET_LOG).catch(() => []);
+    const denials = log.filter((entry) => entry.event === 'close' && DENIAL_CODES.has(entry.code));
+    check(denials.length === 0, `${name} : aucun refus du serveur temps réel (${denials.map((entry) => `${entry.code} ${entry.reason}`).join(', ') || 'aucun'})`);
+  }
 } catch (error) {
   out.fatal = String(error?.stack ?? error);
   console.error(`❌ ${out.fatal}`);
 } finally {
+  // Diagnostic avant le nettoyage (qui supprime le projet) : connexions de chaque page, journal du serveur.
+  for (const [name, page] of Object.entries(pages)) {
+    out.diagnostics.socketLog[name] = await page.evaluate(READ_SOCKET_LOG).catch((error) => [`illisible : ${error?.message ?? error}`]);
+    const unusual = (out.diagnostics.socketLog[name] ?? []).filter((entry) => entry.event === 'toast' || entry.event === 'error'
+      || (entry.event === 'close' && ![1000, 1005, 1012].includes(entry.code)));
+    if (unusual.length > 0) console.error(`   ${name} — connexions : ${unusual.map((entry) => `${entry.at.slice(11, 23)} ${entry.event} ${entry.code ?? ''} ${entry.reason ?? entry.text ?? ''}`).join(' | ')}`);
+  }
+  try {
+    out.diagnostics.serverLogs.end = readServerLogs(benchStart);
+  } catch (error) {
+    out.diagnostics.serverLogs.end = [`lecture impossible : ${error?.message ?? error}`];
+  }
+  const serverWarnings = [...(out.diagnostics.serverLogs.beforeRedeploy ?? []), ...out.diagnostics.serverLogs.end]
+    .filter((line) => /"level":"(warn|error)"/.test(line));
+  if (serverWarnings.length > 0) console.error(`   serveur — avertissements et erreurs :\n     ${serverWarnings.slice(0, 20).join('\n     ')}`);
   out.cleanup = await cleanupTestAccounts();
   await close();
 }

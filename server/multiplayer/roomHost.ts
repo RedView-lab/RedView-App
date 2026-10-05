@@ -153,10 +153,10 @@ export class HostedRoom {
    * introuvable »), journal et points de sauvegarde purgés après les
    * écritures en cours, salle oubliée.
    */
-  projectDeleted(): void {
+  projectDeleted(detectedBy: string): void {
     if (this.closed) return;
     this.host.metrics.deletedRooms += 1;
-    this.host.log('warn', 'projet supprimé : salle fermée, données de co-édition purgées', { projectId: this.projectId });
+    this.host.log('warn', 'projet supprimé : salle fermée, données de co-édition purgées', { projectId: this.projectId, detectedBy });
     this.close(CLOSE_NOT_FOUND, 'not-found');
     void this.enqueue(async () => {
       try {
@@ -275,7 +275,7 @@ export class HostedRoom {
         await this.host.options.storage.saveCheckpoint(this.projectId, { seq, checkpointJson, documentJson });
       } catch (error) {
         if (error instanceof ProjectNotFoundError) {
-          this.projectDeleted();
+          this.projectDeleted('point de sauvegarde');
           return;
         }
         this.checkpointFailed(error);

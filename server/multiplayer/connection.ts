@@ -59,6 +59,8 @@ const CLOSE_CODES: Record<ServerErrorCode, number> = {
 export function handleConnection(socket: WebSocket, options: ConnectionOptions): void {
   let hosted: HostedRoom | null = null;
   let handle: PeerHandle | null = null;
+  /** Projet demandé (journal des refus). */
+  let projectId: string | null = null;
   let phase: 'hello' | 'joining' | 'joined' | 'closed' = 'hello';
   let recheck: NodeJS.Timeout | null = null;
   let windowStart = Date.now();
@@ -78,6 +80,8 @@ export function handleConnection(socket: WebSocket, options: ConnectionOptions):
   function close(code: number, reason: string): void {
     if (phase === 'closed') return;
     phase = 'closed';
+    // Refus et erreurs (4xxx, 1011) journalisés : un client renvoyé hors d'un projet se diagnostique ici.
+    if (code >= 4000 || code === 1011) options.log('warn', 'connexion fermée par le serveur', { code, reason, projectId });
     clearTimeout(helloTimer);
     if (recheck) clearInterval(recheck);
     if (hosted && handle) hosted.detach(handle);
@@ -100,6 +104,7 @@ export function handleConnection(socket: WebSocket, options: ConnectionOptions):
       || typeof message.clientId !== 'string' || !ID_PATTERN.test(message.clientId)) {
       return fail('bad-request', 'ids');
     }
+    projectId = message.projectId;
     const userId = await options.auth.verifyToken(message.token);
     if (!userId) return fail('unauthorized');
     const access = await options.auth.checkAccess(userId, message.projectId);
@@ -122,13 +127,13 @@ export function handleConnection(socket: WebSocket, options: ConnectionOptions):
     phase = 'joined';
     room.attach(handle, { epoch: message.epoch ?? null, lastSeq: message.lastSeq ?? null, presence: message.presence });
     // Seulement l'id : le message (et un éventuel document de départ) n'est pas gardé avec la connexion.
-    const { projectId } = message;
+    const joinedProjectId = message.projectId;
     const joined = room;
     recheck = setInterval(() => {
-      options.auth.checkAccess(userId, projectId).then((result) => {
+      options.auth.checkAccess(userId, joinedProjectId).then((result) => {
         // Projet supprimé : toute la salle est fermée (4404) et purgée ;
         // accès retiré : seulement cette connexion (4403).
-        if (result === 'not-found') joined.projectDeleted();
+        if (result === 'not-found') joined.projectDeleted('revérification des droits');
         else if (result !== 'ok') fail('forbidden', 'access-revoked');
       }, (error: unknown) => options.log('warn', 'revérification des droits impossible', { error: String(error) }));
     }, ACCESS_RECHECK_MS);
