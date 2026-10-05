@@ -3,7 +3,7 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import {
   flushProjectViews,
-  isLiveSession,
+  isServerOwnedDocument,
   saveProject,
   saveProjectLocally,
   serializeProjectForStorage,
@@ -164,7 +164,7 @@ export function useDashboardProjectSync({
 
     // Projet en co-édition : le serveur temps réel écrit le document partagé ;
     // ici, copie locale seulement (même pour une sauvegarde explicite).
-    if (isLiveSession(item.id)) {
+    if (isServerOwnedDocument(item.id)) {
       try {
         await saveProjectLocally(item.id, item.project, serialized);
       } catch (error) {

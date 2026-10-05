@@ -14,7 +14,7 @@ import type { HostedRoom } from './roomHost.ts';
  * mémoire : documents (id unique → 409, filtres de requête utilisés), fichiers
  * du bucket. Parcours complet avec un vrai RoomHost : première session,
  * journal, point de sauvegarde, reprise par un autre hôte, barrière entre deux
- * serveurs, document réécrit hors session.
+ * serveurs, document réécrit hors de la salle, point de sauvegarde perdu.
  */
 
 type Doc = Record<string, unknown> & { $id: string };
@@ -224,12 +224,13 @@ describe('stockage Appwrite de la salle', () => {
     await reader.shutdown();
   });
 
-  it('document réécrit hors session : il fait foi, ancien journal écarté', async () => {
+  it('document réécrit hors de la salle (ancien client) : le point de sauvegarde et le journal font foi', async () => {
     const host = newHost();
     const room = (await host.open(PROJECT))!;
     const { handle } = join(room, 'a');
     room.handle(handle, renameBatch(room, 1, 'En session'));
     await waitFor(() => room.room.durableSeq === room.room.state.seq, 'journal');
+    const seq = room.room.state.seq;
     await host.shutdown();
 
     const external = sampleDocument(100);
@@ -238,9 +239,24 @@ describe('stockage Appwrite de la salle', () => {
 
     const next = newHost();
     const reopened = (await next.open(PROJECT))!;
-    expect((reopened.room.state.document().itineraries[1] as { name: string }).name).toBe('Réécrit ailleurs');
-    expect(reopened.room.state.seq).toBeGreaterThan(1);
-    expect([...(fake.collections.get('project_journal')?.values() ?? [])].length).toBe(0);
+    expect((reopened.room.state.document().itineraries[1] as { name: string }).name).toBe('En session');
+    expect(reopened.room.state.seq).toBe(seq);
+    await next.shutdown();
+  });
+
+  it('point de sauvegarde introuvable : la salle repart du document enregistré', async () => {
+    const host = newHost();
+    await host.open(PROJECT);
+    await host.shutdown();
+    const meta = JSON.parse(String(fake.collections.get('projects')!.get(PROJECT)!.collab)) as { snapshotFile: string };
+    fake.files.delete(meta.snapshotFile);
+    const external = sampleDocument(100);
+    (external.itineraries[1] as { name: string }).name = 'Document seul';
+    fake.collections.get('projects')!.get(PROJECT)!.data = `gz:${gzipSync(JSON.stringify(external)).toString('base64')}`;
+
+    const next = newHost();
+    const reopened = (await next.open(PROJECT))!;
+    expect((reopened.room.state.document().itineraries[1] as { name: string }).name).toBe('Document seul');
     await next.shutdown();
   });
 

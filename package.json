@@ -33,6 +33,8 @@
     "bench:project-layers": "tsx script-test-bench/test-project-layers.ts",
     "bench:collab": "tsx script-test-bench/test-collab.ts",
     "bench:collab-e2e": "node script-test-bench/collab-e2e/run.mjs",
+    "bench:collab-prod": "node --env-file=.env script-test-bench/collab-e2e/prod-two-accounts.mjs",
+    "collab:test-accounts": "node --env-file=.env scripts/collab-test-accounts.mjs",
     "bench:chart": "tsx script-test-bench/bench-center-panel.ts",
     "bench:server": "tsx script-test-bench/bench-server-api.ts",
     "bench:screens": "node script-test-bench/screen-audit/run.mjs",

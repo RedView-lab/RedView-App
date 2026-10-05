@@ -313,14 +313,14 @@ export function DashboardEditor({
   const multiplayerAvailable = useMultiplayerAvailable();
   const canShare = multiplayerAvailable && activeProjectId !== null && !activeProjectId.startsWith('local-');
   const handleShareProject = useCallback((anchor: HTMLElement) => setShareAnchor(anchor), []);
-  const handleProjectShared = useCallback(async () => {
-    const projectId = activeProjectId;
-    if (!projectId) return;
-    // Le document part au cloud avant l'ouverture de la salle : le serveur temps
-    // réel le relit, et son état remplace celui de cet écran.
+  // Avant la première invitation, le document part au cloud : le serveur temps
+  // réel ouvrira la salle à partir de lui (ensuite, plus aucune écriture cloud ici).
+  const handleBeforeFirstShare = useCallback(async () => {
     await onSaveProject().catch(() => null);
-    setSharedNowProjectId(projectId);
-  }, [activeProjectId, onSaveProject]);
+  }, [onSaveProject]);
+  const handleProjectShared = useCallback(() => {
+    if (activeProjectId) setSharedNowProjectId(activeProjectId);
+  }, [activeProjectId]);
 
   return (
     <ProjectProvider
@@ -377,7 +377,8 @@ export function DashboardEditor({
           anchorEl={shareAnchor}
           userId={getSessionUserIdSync()}
           onClose={() => setShareAnchor(null)}
-          onShared={() => void handleProjectShared()}
+          onBeforeFirstShare={handleBeforeFirstShare}
+          onShared={handleProjectShared}
           onLeft={onBackToBrowser}
         />
       ) : null}

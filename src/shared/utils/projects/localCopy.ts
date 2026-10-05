@@ -6,7 +6,7 @@ import {
 } from '@/shared/utils/storage/idbProjectStore';
 import { getCurrentUserId, isLocalFallbackUser, isOwnedBy } from './auth';
 import { utf8ByteLength } from './limits';
-import { isLiveSession } from './liveSessions';
+import { isServerOwnedDocument } from './liveSessions';
 import { enqueue, knownCloudVersions, localQueues, localRevisions } from './projectSession';
 import { serializeProjectForStorage, type SerializedProject } from './storedProject';
 import type { ItineraryProject, ProjectRow } from './types';
@@ -44,8 +44,11 @@ export function writeLocalCopy(
       privacy: project.privacy ?? 'private',
       created_at: owned?.created_at ?? now,
       updated_at: now,
-      dirty,
+      // Document écrit par le serveur temps réel : jamais à resynchroniser.
+      dirty: dirty && !isServerOwnedDocument(id),
       cloud_updated_at: owned?.cloud_updated_at ?? knownCloudVersions.get(id) ?? null,
+      // Projet partagé : l'équipe reste connue hors ligne (ouverture en session).
+      team_id: owned?.team_id ?? null,
     };
     await idbSaveProject(row, serialized);
     return revision;
@@ -68,8 +71,8 @@ export function markLocalSynced(id: string, revision: number, cloudUpdatedAt: st
  * Sauvegarde uniquement locale (IndexedDB, ligne marquée `dirty`) : utilisée à
  * la fermeture / mise en arrière-plan de l'onglet, quand la requête cloud n'a
  * pas le temps d'aboutir. La ligne sera resynchronisée à la prochaine ouverture.
- * Projet en co-édition (`isLiveSession`) : jamais `dirty`, le serveur temps
- * réel écrit le document partagé (une copie resynchronisée l'écraserait).
+ * Projet partagé ou en co-édition (`isServerOwnedDocument`) : jamais `dirty`,
+ * le serveur temps réel écrit le document (une copie resynchronisée l'écraserait).
  */
 export async function saveProjectLocally(
   id: string,
@@ -78,6 +81,6 @@ export async function saveProjectLocally(
 ): Promise<void> {
   const userId = await getCurrentUserId();
   const stored = serialized ?? serializeProjectForStorage(project);
-  const localOnly = isLocalFallbackUser(userId) || id.startsWith('local-') || isLiveSession(id);
+  const localOnly = isLocalFallbackUser(userId) || id.startsWith('local-') || isServerOwnedDocument(id);
   await writeLocalCopy(id, project, userId, stored, utf8ByteLength(stored.documentJson), !localOnly);
 }

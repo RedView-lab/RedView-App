@@ -34,7 +34,12 @@ type ShareProjectDialogProps = {
   anchorEl: HTMLElement | null;
   userId: string | null;
   onClose: () => void;
-  /** Première personne invitée : le projet devient partagé. */
+  /**
+   * Avant la première invitation : le dernier état du projet part au cloud
+   * (le serveur temps réel ouvrira la salle à partir de ce document).
+   */
+  onBeforeFirstShare?: () => Promise<void>;
+  /** Première personne invitée : le projet devient partagé (session temps réel). */
   onShared?: () => void;
   /** L'utilisateur a quitté le projet. */
   onLeft?: () => void;
@@ -47,6 +52,7 @@ export function ShareProjectDialog({
   anchorEl,
   userId,
   onClose,
+  onBeforeFirstShare,
   onShared,
   onLeft,
 }: ShareProjectDialogProps) {
@@ -83,6 +89,7 @@ export function ShareProjectDialog({
     setInviteError(null);
     const wasShared = share.data?.shared ?? false;
     try {
+      if (!wasShared) await onBeforeFirstShare?.();
       const state = await invite.mutateAsync({ id: projectId, email: value });
       setEmail('');
       notify.success('{{email}} peut maintenant modifier ce projet.', { email: value });

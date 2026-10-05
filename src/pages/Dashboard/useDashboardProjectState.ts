@@ -6,7 +6,12 @@ import {
   normalizeItineraryProject,
 } from '@/features/itineraryPanel/lib/project';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
-import { flushProjectViews, getProject, queueProjectViewSave } from '@/shared/utils/projects';
+import {
+  flushProjectViews,
+  getProject,
+  queueProjectViewSave,
+  isSharedProject,
+} from '@/shared/utils/projects';
 import { replaceProjectLocation } from '@/shared/utils/projectLocation';
 import { readFullProjectCacheAsync } from './dashboardProjectCache';
 import { useDashboardProjectSync } from './useDashboardProjectSync';
@@ -128,7 +133,7 @@ export function useDashboardProjectState({
 
           chosen = projectRow?.data ?? null;
           needsSync = projectRow?.dirty === true;
-          shared = Boolean(projectRow?.team_id);
+          shared = Boolean(projectRow?.team_id) || isSharedProject(projectId);
           const cachedAt = cached ? Date.parse(cached.cachedAt) : Number.NaN;
           const rowAt = projectRow ? Date.parse(projectRow.updated_at) : Number.NaN;
           if (cached && (!projectRow || (Number.isFinite(cachedAt) && Number.isFinite(rowAt) && cachedAt > rowAt + 5000))) {

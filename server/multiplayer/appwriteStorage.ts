@@ -24,8 +24,10 @@ import {
  *    12 M car.) — les lecteurs hors session le lisent comme avant ;
  *  - `projects.collab` : `{ v, seq, snapshotFile, dataHash }`, écrit dans la
  *    même requête que `data`. Le point de sauvegarde exact (fichier
- *    `<projet>.collab.gz`) ne sert que si `dataHash` correspond encore à
- *    `data` : sinon `data` a été réécrit hors session et fait foi ;
+ *    `<projet>.collab.gz`) fait foi tant qu'il est lisible : un projet partagé
+ *    n'est écrit que par la salle, un `data` différent (`dataHash`) vient d'un
+ *    client hors session (ancienne version de l'application) et est ignoré,
+ *    avec un avertissement ; sans point de sauvegarde lisible, `data` sert ;
  *  - `project_journal` : un document par paquet de lots, d'id
  *    `<projet>_<séquence de début>` — deux serveurs ne peuvent pas écrire le
  *    même (409 : barrière).
@@ -156,6 +158,19 @@ export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStor
     return (await gunzipJson(bytes)) as SequencedBatch[];
   }
 
+  /** Point de sauvegarde exact, ou null s'il manque / ne correspond pas à sa séquence. */
+  async function readCheckpoint(projectId: string, meta: CollabMeta): Promise<RoomCheckpoint | null> {
+    try {
+      const checkpoint = (await gunzipJson(await downloadFile(meta.snapshotFile))) as RoomCheckpoint;
+      if (checkpoint.seq === meta.seq) return checkpoint;
+      console.warn(JSON.stringify({ level: 'warn', service: 'multiplayer', message: 'point de sauvegarde incohérent', projectId }));
+    } catch (error) {
+      if (errorCode(error) !== 404) throw error;
+      console.warn(JSON.stringify({ level: 'warn', service: 'multiplayer', message: 'point de sauvegarde introuvable', projectId }));
+    }
+    return null;
+  }
+
   return {
     kind: 'appwrite',
     access,
@@ -171,10 +186,18 @@ export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStor
       const stored = readStoredProject(await readData(row.data));
       if (!stored) throw new Error(`projet ${projectId} : données illisibles`);
       const meta = parseMeta(row.collab);
-      const dataMatches = !!meta && typeof row.data === 'string' && sha256(row.data) === meta.dataHash;
-      if (meta && dataMatches) {
-        const checkpoint = (await gunzipJson(await downloadFile(meta.snapshotFile))) as RoomCheckpoint;
-        if (checkpoint.seq !== meta.seq) throw new Error(`projet ${projectId} : point de sauvegarde incohérent`);
+      const checkpoint = meta ? await readCheckpoint(projectId, meta) : null;
+      if (meta && checkpoint) {
+        const dataMatches = typeof row.data === 'string' && sha256(row.data) === meta.dataHash;
+        if (!dataMatches) {
+          console.warn(JSON.stringify({
+            level: 'warn',
+            service: 'multiplayer',
+            message: 'document réécrit hors de la salle : ignoré, le point de sauvegarde fait foi',
+            projectId,
+            seq: meta.seq,
+          }));
+        }
         const rows = await listJournal(projectId, [Query.greaterThan('end_seq', meta.seq)]);
         const batches = (await Promise.all(rows.map((entry) => decodeJournalPayload(entry.payload)))).flat();
         return { checkpoint, document: stored.document, baseSeq: meta.seq, journal: assertContiguous(batches, meta.seq) };

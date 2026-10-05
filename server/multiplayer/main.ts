@@ -22,6 +22,17 @@ import type { RoomStorage } from './storage.ts';
  * sauvegarde (texte Prometheus).
  */
 
+/**
+ * Appwrite 1.6 renvoie à chaque réponse l'en-tête `x-appwrite-warning` « SDK
+ * built for Appwrite 2.0.0 » que node-appwrite affiche : bruit filtré ici
+ * (le reste des avertissements passe).
+ */
+const consoleWarn = console.warn.bind(console);
+console.warn = (...args: unknown[]) => {
+  if (typeof args[0] === 'string' && args[0].startsWith('Warning: The current SDK is built for Appwrite')) return;
+  consoleWarn(...args);
+};
+
 const production = process.env.NODE_ENV === 'production';
 const port = Number(process.env.MULTIPLAYER_PORT ?? 17790);
 const storageKind = process.env.MULTIPLAYER_STORAGE ?? (production ? 'appwrite' : 'file');

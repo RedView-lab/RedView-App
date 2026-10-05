@@ -78,6 +78,7 @@ import {
 import { deleteProjectView, queueProjectViewSave, readProjectView, saveProjectViewNow } from './projectViews';
 import { legacyViewOf, serializeProjectForStorage } from './storedProject';
 import { rowToSummary } from './mappers';
+import { isServerOwnedDocument, markSharedProject } from './liveSessions';
 import type { ItineraryProject, ProjectRow, ProjectRowMeta, ProjectSummary } from './types';
 
 export { saveProjectLocally } from './localCopy';
@@ -122,6 +123,7 @@ export async function listProjects(): Promise<ProjectSummary[]> {
 }
 
 function cloudDocToSummary(doc: CloudProjectDoc, sharedWithMe: boolean): ProjectSummary {
+  markSharedProject(doc.$id, doc.team_id);
   return {
     id: doc.$id,
     // Le dossier d'un projet partagé est celui de son propriétaire.
@@ -191,6 +193,7 @@ async function fetchCloudRow(id: string): Promise<ProjectRow> {
     CLOUD_READ_TIMEOUT_MS,
   )) as unknown as CloudProjectDoc;
   const row = await docToProjectRow(doc);
+  markSharedProject(id, row.team_id);
   rememberCloudVersion(id, doc.$updatedAt);
   // Copie locale propre (accès hors-ligne), écrite dans la file du projet.
   void enqueue(localQueues, id, () => idbSaveProject(row)).catch((error: unknown) => {
@@ -315,8 +318,21 @@ async function getProjectRow(id: string): Promise<ProjectRow | null> {
       await idbDeleteProject(id).catch(() => undefined);
       return null;
     }
-    // Hors-ligne / refus : la copie locale reste utilisable.
+    // Hors-ligne / refus : la copie locale reste utilisable (partagée si son équipe est connue).
+    markSharedProject(id, local.team_id);
     return local;
+  }
+
+  // Projet partagé : son document vient du serveur temps réel (version cloud,
+  // jamais de conflit ni de copie) ; la copie locale n'est qu'un cache.
+  if (meta.team_id || local.team_id) {
+    markSharedProject(id, meta.team_id || local.team_id);
+    try {
+      return await fetchCloudRow(id);
+    } catch (e) {
+      toCloudFailure('getProject', e);
+      return { ...local, dirty: false, team_id: meta.team_id || local.team_id };
+    }
   }
 
   const cloudUpdatedAt = meta.$updatedAt;
@@ -499,7 +515,9 @@ export async function saveProject(
   options: SaveProjectOptions = {},
 ): Promise<void> {
   const userId = await getCurrentUserId();
-  const localOnly = isLocalFallbackUser(userId) || id.startsWith('local-');
+  // Projet partagé / en session : le serveur temps réel écrit le document,
+  // ce client n'écrit que sa copie locale (jamais d'écrasement, jamais de conflit).
+  const localOnly = isLocalFallbackUser(userId) || id.startsWith('local-') || isServerOwnedDocument(id);
   const serialized = serializeProjectForStorage(project, options.documentJson);
   const json = serialized.documentJson;
   const sizeBytes = utf8ByteLength(json);

@@ -1,5 +1,6 @@
-# Serveur temps réel de co-édition (server/multiplayer) : service Coolify à part,
-# exposé en wss://app.redview.tech/multiplayer (route Traefik par chemin).
+# Serveur temps réel de co-édition (server/multiplayer) : service Coolify à part
+# (redview-multiplayer), port publié sur 127.0.0.1:17790 ; l'nginx de l'hôte
+# (/etc/nginx/conf.d/app.conf) y relaie wss://app.redview.tech/multiplayer.
 #
 # Variables : APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID, APPWRITE_API_KEY,
 # APPWRITE_DATABASE_ID (stockage `appwrite`, défaut en production),
