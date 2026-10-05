@@ -163,24 +163,33 @@ try {
   await key(V, 'Escape');
   await sleep(300);
 
-  // « Commenter une zone » : sommets au clic, clic droit pour fermer.
+  // « Commenter une zone » : sommets au clic ; un clic sur un sommet déjà posé
+  // (ici le 2e) ferme la zone sur lui — boucle 2-3-4, le 1er est abandonné.
+  // Actions envoyées par le viewer, lues sur le canal même (l'onglet de l'app,
+  // en arrière-plan, est ralenti par le navigateur).
+  await V.evaluate(`(() => { window.__sentActions = []; const ch = new BroadcastChannel('redview:lidar:comments'); ch.onmessage = (e) => { if (e.data?.type === 'COMMENT_ACTION') window.__sentActions.push(e.data.action); }; return 0; })()`);
   await click(V, canvas.x - 160, canvas.y + 40, 'right');
   await waitFor(V, `[...document.querySelectorAll('button')].some((b) => /Commenter une zone|Comment on an area/.test(b.textContent))`, { timeout: 8000 }).catch(() => null);
   await V.evaluate(`[...document.querySelectorAll('button')].find((b) => /Commenter une zone|Comment on an area/.test(b.textContent))?.click()`);
   await sleep(400);
   check(await V.evaluate(`document.querySelector('.rv-lidar-tool-hint__name')?.textContent?.includes('zone') ?? false`), 'viewer : outil « Commentaire de zone » armé');
-  for (const [dx, dy] of [[-60, 120], [40, 140], [20, 210]]) {
-    await click(V, canvas.x - 160 + dx, canvas.y + dy);
+  const zoneClicks = [[-60, 120], [40, 140], [20, 210]].map(([dx, dy]) => ({ x: canvas.x - 160 + dx, y: canvas.y + dy }));
+  for (const point of zoneClicks) {
+    await click(V, point.x, point.y);
     await sleep(500);
   }
-  await click(V, canvas.x - 140, canvas.y + 200, 'right');
+  check(await V.evaluate(`[...document.querySelectorAll('.rv-lidar-tool-hint__steps')].some((el) => /Clic sur un point|Click a point/.test(el.textContent))`), 'viewer : aide « Clic sur un point : fermer sur ce point »');
+  await click(V, zoneClicks[0].x + 2, zoneClicks[0].y + 1);
   await waitFor(V, `!!document.querySelector('[data-rv-comment-card="draft"] .rv-comment-card__draft-context')`, { timeout: 5000 }).catch(() => null);
   check(await V.evaluate(`!!document.querySelector('[data-rv-comment-card="draft"] .rv-comment-card__draft-context')`), 'viewer : zone fermée → saisie d’un commentaire de zone');
   await V.send('Input.insertText', { text: 'Zone de chutes de pierres' });
   await key(V, 'Enter');
+  await waitFor(V, `window.__sentActions.some((a) => a.type === 'create-thread' && a.zone)`, { timeout: 5000 }).catch(() => null);
+  const sentRing = await V.evaluate(`window.__sentActions.find((a) => a.type === 'create-thread' && a.zone)?.zone.ring.length ?? 0`);
+  check(sentRing === 3, `viewer : zone envoyée, fermée sur le 2e sommet (${sentRing} sommets, 3 attendus)`);
   await waitFor(A, store(`(s.project.comments?.length ?? 0) >= 3`), { timeout: 15000 }).catch(() => null);
   const zoneThread = await A.evaluate(store(`s.project.comments?.[2] ?? null`));
-  check((zoneThread?.zone?.ring?.length ?? 0) >= 3, `app : commentaire de zone créé depuis le viewer (${zoneThread?.zone?.ring?.length ?? 0} sommets)`);
+  check(zoneThread?.zone?.ring?.length === 3, `app : zone du viewer fermée sur le 2e sommet (${zoneThread?.zone?.ring?.length ?? 0} sommets, 3 attendus)`);
   await waitFor(V, `!!document.querySelector('.rv-lidar-comment-card [data-rv-comment-card="${zoneThread?.id}"]')`, { timeout: 4000 }).catch(() => null);
   check(await V.evaluate(`!!document.querySelector('.rv-lidar-comment-card [data-rv-comment-card="${zoneThread?.id}"]')`), 'viewer : le fil de zone revient de l’app et s’ouvre (app en arrière-plan)');
   await shot(V, '23-viewer-zone');

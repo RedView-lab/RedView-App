@@ -2,20 +2,76 @@
 .rv-avatar {
   display: inline-flex;
   flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
   width: var(--rv-avatar-size, 24px);
   height: var(--rv-avatar-size, 24px);
   border-radius: 50%;
   font-family: var(--rv-font-sans);
   font-size: var(--rv-font-size-xs);
   font-weight: 700;
-  line-height: 1;
-  letter-spacing: 0.02em;
   user-select: none;
 }
 
-/* Pastilles empilées (en-tête du projet) : anneau de la couleur du panneau. */
-.rv-avatar--ringed {
-  box-shadow: 0 0 0 2px rgb(var(--rv-paper));
+.rv-avatar--28 {
+  font-size: var(--rv-font-size-sm);
+}
+
+.rv-avatar__glyph {
+  display: block;
+  overflow: visible;
+}
+
+.rv-avatar__glyph text {
+  font: inherit;
+  letter-spacing: 0;
+}
+
+/*
+ * Pastilles empilées (en-tête du projet, groupes de bulles), comme dans Figma :
+ * chaque pastille est découpée là où passe la suivante (vrai jour transparent,
+ * quel que soit le fond — verre, carte, bulle blanche), au lieu d'un anneau
+ * de couleur qui ne colle jamais exactement au fond. Une pastille « +N »
+ * (`.rv-avatar-stack__more`) peut fermer la pile.
+ */
+.rv-avatar-stack {
+  --rv-stack-size: 24px;
+  --rv-stack-overlap: 4px;
+  --rv-stack-gap: 1.5px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.rv-avatar-stack > * + * {
+  margin-left: calc(var(--rv-stack-overlap) * -1);
+}
+
+.rv-avatar-stack > :not(:last-child) {
+  -webkit-mask: radial-gradient(
+    circle at calc(var(--rv-stack-size) * 1.5 - var(--rv-stack-overlap)) 50%,
+    transparent calc(var(--rv-stack-size) / 2 + var(--rv-stack-gap) - 0.5px),
+    #000 calc(var(--rv-stack-size) / 2 + var(--rv-stack-gap))
+  );
+  mask: radial-gradient(
+    circle at calc(var(--rv-stack-size) * 1.5 - var(--rv-stack-overlap)) 50%,
+    transparent calc(var(--rv-stack-size) / 2 + var(--rv-stack-gap) - 0.5px),
+    #000 calc(var(--rv-stack-size) / 2 + var(--rv-stack-gap))
+  );
+}
+
+.rv-avatar-stack__more {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--rv-stack-size);
+  height: var(--rv-stack-size);
+  padding: 0 5px;
+  border-radius: calc(var(--rv-stack-size) / 2);
+  background: rgb(var(--rv-ink) / 0.12);
+  color: rgb(var(--rv-ink) / 0.8);
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: var(--rv-stack-size);
+  user-select: none;
 }

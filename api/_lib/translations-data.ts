@@ -5233,8 +5233,12 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Click to comment, Shift + drag for an area"
   },
   {
-    "fr": "Glissez pour entourer une zone, Espace + glisser pour déplacer la carte",
-    "en": "Drag to outline an area, Space + drag to move the map"
+    "fr": "Cliquez pour poser les points de la zone, Maj + glisser pour un rectangle",
+    "en": "Click to place the area points, Shift + drag for a rectangle"
+  },
+  {
+    "fr": "Cliquez sur un point pour fermer la zone · Entrée termine, Échap annule",
+    "en": "Click a point to close the area · Enter finishes, Esc cancels"
   },
   {
     "fr": "Commentaire de {{name}}",
@@ -7667,6 +7671,18 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "fermer",
     "en": "close"
+  },
+  {
+    "fr": "Clic sur un point",
+    "en": "Click a point"
+  },
+  {
+    "fr": "fermer sur ce point",
+    "en": "close on that point"
+  },
+  {
+    "fr": "Fermer la zone",
+    "en": "Close the area"
   },
   {
     "fr": "terminer",

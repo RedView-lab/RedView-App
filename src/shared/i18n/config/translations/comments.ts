@@ -12,7 +12,8 @@ export const commentsTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Maj+C', en: 'Shift+C' },
   { fr: 'Masquer les bulles', en: 'Hide comments' },
   { fr: 'Cliquez pour commenter, Maj + glisser pour une zone', en: 'Click to comment, Shift + drag for an area' },
-  { fr: 'Glissez pour entourer une zone, Espace + glisser pour déplacer la carte', en: 'Drag to outline an area, Space + drag to move the map' },
+  { fr: 'Cliquez pour poser les points de la zone, Maj + glisser pour un rectangle', en: 'Click to place the area points, Shift + drag for a rectangle' },
+  { fr: 'Cliquez sur un point pour fermer la zone · Entrée termine, Échap annule', en: 'Click a point to close the area · Enter finishes, Esc cancels' },
   // ── Bulles sur la carte ─────────────────────────────────────────────────────
   { fr: 'Commentaire de {{name}}', en: 'Comment by {{name}}' },
   { fr: '{{count}} commentaires', en: '{{count}} comments' },

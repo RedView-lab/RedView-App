@@ -55,8 +55,16 @@ const API_ROUTE_RE = /^[a-z0-9][a-z0-9-]*(\/[a-z0-9][a-z0-9-]*)*$/i;
 /**
  * Résout `/api/...` vers un fichier handler de `apiDir`.
  * Retourne `{ route, file, isAuth }` ou `null` si la route n'existe pas.
+ *
+ * `extension` : `.ts` (sources, dev et `npm start`) ou `.mjs` (build de prod,
+ * `scripts/build-server.mjs`). `routes` : routes connues d'avance
+ * (`listApiRoutes`) ; sans elles, l'existence du fichier est testée à chaque appel.
+ *
+ * @param {string} apiDir
+ * @param {string} pathname
+ * @param {{ extension?: string, routes?: Set<string> }} [options]
  */
-export function resolveApiRoute(apiDir, pathname) {
+export function resolveApiRoute(apiDir, pathname, { extension = '.ts', routes } = {}) {
   if (!pathname.startsWith('/api/')) return null;
   let route = pathname.slice('/api/'.length).replace(/\/+$/, '');
   for (const alias of API_PREFIX_ALIASES) {
@@ -66,9 +74,32 @@ export function resolveApiRoute(apiDir, pathname) {
     }
   }
   if (!route || !API_ROUTE_RE.test(route)) return null;
-  const file = path.resolve(apiDir, `${route}.ts`);
-  if (!isInsideDir(apiDir, file) || !fs.existsSync(file)) return null;
+  const file = path.resolve(apiDir, `${route}${extension}`);
+  if (!isInsideDir(apiDir, file)) return null;
+  if (routes ? !routes.has(route) : !fs.existsSync(file)) return null;
   return { route, file, isAuth: route.startsWith('auth/') };
+}
+
+/**
+ * Routes servies par `apiDir` (fichiers `<route><extension>`), lues une fois :
+ * le serveur de prod sert un build immuable, inutile de toucher le disque à
+ * chaque requête. Même règle de nom que `resolveApiRoute` (ni `_lib`, ni
+ * fichier caché, ni test).
+ *
+ * @param {string} apiDir
+ * @param {string} extension
+ * @returns {Set<string>}
+ */
+export function listApiRoutes(apiDir, extension) {
+  const routes = new Set();
+  if (!fs.existsSync(apiDir)) return routes;
+  for (const entry of fs.readdirSync(apiDir, { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith(extension)) continue;
+    const file = path.join(entry.parentPath, entry.name);
+    const route = path.relative(apiDir, file).slice(0, -extension.length).split(path.sep).join('/');
+    if (API_ROUTE_RE.test(route)) routes.add(route);
+  }
+  return routes;
 }
 
 // ── Corps de requête ───────────────────────────────────────────────────────

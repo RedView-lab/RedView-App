@@ -14,6 +14,22 @@
 # reconnectent au conteneur suivant et renvoient ce qui n'était pas acquitté.
 # Deux conteneurs en recouvrement ne peuvent pas écrire le même journal
 # (barrière : server/multiplayer/storage.ts).
+FROM node:22-alpine AS builder
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci
+
+# Le moteur de co-édition (src/features/collab) est partagé avec l'application :
+# esbuild le bundle depuis les sources (alias `@/` de tsconfig.multiplayer.json)
+# dans dist-server/multiplayer.mjs, lancé sans tsx (scripts/build-server.mjs).
+COPY tsconfig.json tsconfig.multiplayer.json ./
+COPY scripts/build-server.mjs ./scripts/
+COPY src ./src
+COPY server ./server
+RUN node scripts/build-server.mjs --multiplayer
+
 FROM node:22-alpine
 
 WORKDIR /app
@@ -22,22 +38,20 @@ ENV NODE_ENV=production
 ENV MULTIPLAYER_PORT=17790
 ENV MULTIPLAYER_METRICS_PORT=17791
 ENV MULTIPLAYER_STORAGE=appwrite
-# Release GlitchTip (server/build-id.mjs), passée par Coolify comme pour l'app.
-ARG SOURCE_COMMIT=""
-ENV SOURCE_COMMIT=${SOURCE_COMMIT}
 
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 redview
 
-# Dépendances de production (ws, node-appwrite, fractional-indexing, tsx).
+# Dépendances d'exécution (`dependencies` de package.json : ws, node-appwrite,
+# fractional-indexing, Sentry…), externes au bundle.
 COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev
 
-# Le moteur de co-édition (src/features/collab) est partagé avec l'application :
-# tsx le charge depuis les sources (alias `@/` du tsconfig racine).
-COPY tsconfig.json ./
-COPY src ./src
-COPY server/multiplayer ./server/multiplayer
-COPY server/observability.mjs server/build-id.mjs ./server/
+COPY --from=builder /app/dist-server/multiplayer.mjs ./dist-server/multiplayer.mjs
+
+# Release GlitchTip (server/build-id.mjs), passée par Coolify comme pour l'app ;
+# après npm ci pour ne pas invalider son cache à chaque commit.
+ARG SOURCE_COMMIT=""
+ENV SOURCE_COMMIT=${SOURCE_COMMIT}
 
 USER redview
 
@@ -47,4 +61,4 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=3 \
   CMD wget -qO- http://127.0.0.1:17790/health > /dev/null || exit 1
 
 # node directement en PID 1 (SIGTERM transmis : arrêt propre).
-CMD ["node", "--import", "tsx", "server/multiplayer/main.ts"]
+CMD ["node", "dist-server/multiplayer.mjs"]

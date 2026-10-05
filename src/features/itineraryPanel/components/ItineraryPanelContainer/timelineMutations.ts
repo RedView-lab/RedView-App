@@ -221,11 +221,52 @@ export function setPendingRoutePatchAfterRemoval(
   const removed = previousTimeline.filter(
     (row) => !remainingIds.has(row.id) && isRoutableTimelineRow(row) && !row.onRoute,
   );
+  const removedEndpoint = removed.length === 1 ? removed[0]!.kind : null;
+  if (
+    (removedEndpoint === 'start' || removedEndpoint === 'end')
+    && cropRouteAtPromotedEndpoint(itinerary, previousTimeline, removedEndpoint)
+  ) {
+    return;
+  }
   const patch = removed.length === 1 && hasEditableRoute(itinerary)
     ? buildPendingRoutePatchAfterRemoval(itinerary, previousTimeline, removed[0]!)
     : undefined;
   if (patch) itinerary.pendingRoutePatch = patch;
   else delete itinerary.pendingRoutePatch;
+}
+
+/** Écart toléré entre une étape promue départ / arrivée et le tracé qui y passait (accroche à la route). */
+const PROMOTED_ENDPOINT_CROP_TOLERANCE_M = 500;
+
+/**
+ * Départ / arrivée supprimé(e) : l'étape promue à sa place est déjà sur le
+ * tracé, qui y passait. On le coupe là, sans routage — sinon le drapeau
+ * restait à l'ancienne extrémité jusqu'à la réponse de BRouter. Refusé quand
+ * le tracé stocké n'était pas celui des lignes d'avant (édition en attente).
+ */
+function cropRouteAtPromotedEndpoint(
+  itinerary: Itinerary,
+  previousTimeline: TimelineItem[],
+  endpoint: 'start' | 'end',
+): boolean {
+  const route = itinerary.gpxRoute;
+  if (!route || !hasEditableRoute(itinerary)) return false;
+  if (!storedRouteIsCurrent({ ...itinerary, timeline: previousTimeline })) return false;
+  const promoted = itinerary.timeline.find((row) => row.kind === endpoint);
+  if (!isRoutableTimelineRow(promoted)) return false;
+
+  // Kilométrage de l'étape avant sa promotion (l'arrivée n'en porte plus) :
+  // coupe au bon passage d'une boucle.
+  const previousKm = previousTimeline.find((row) => row.id === promoted.id)?.distanceKm;
+  const cut = cropItineraryRouteAtEndpoint(itinerary, endpoint, promoted, {
+    pickToleranceM: PROMOTED_ENDPOINT_CROP_TOLERANCE_M,
+    routeDistanceM: previousKm != null && Number.isFinite(previousKm) ? previousKm * 1_000 : undefined,
+  });
+  if (!cut) return false;
+  promoted.lat = cut.lat;
+  promoted.lon = cut.lon;
+  finishRouteCrop(itinerary);
+  return true;
 }
 
 /**
@@ -459,9 +500,17 @@ export function insertWaypointIntoTimeline(
   return { newRow, isDirectOnRoute, insertIndex };
 }
 
+/**
+ * Timeline sans la ligne `rowId`. Un départ / une arrivée supprimé(e) est
+ * remplacé(e) par l'étape placée la plus proche du début / de la fin du
+ * tracé (`routePoints`) — pas par l'ordre de la timeline, qui ne suit pas
+ * forcément le tracé : une étape plus loin restait sinon après la nouvelle
+ * arrivée, affichée sur sa fin. Sans tracé, l'ordre de la timeline.
+ */
 export function buildTimelineAfterRemoval(
   timeline: TimelineItem[],
   rowId: string,
+  routePoints?: ReadonlyArray<{ lat: number; lon: number }>,
 ): TimelineItem[] | null {
   const removedIndex = timeline.findIndex((row) => row.id === rowId);
   const removedRow = removedIndex >= 0 ? timeline[removedIndex] : null;
@@ -469,7 +518,7 @@ export function buildTimelineAfterRemoval(
 
   if (removedRow.kind === 'start') {
     const remaining = timeline.filter((row) => row.id !== rowId);
-    const promotedIndex = remaining.findIndex(isPromotableEndpointRow);
+    const promotedIndex = findPromotableEndpointIndex(remaining, 'start', routePoints);
     if (promotedIndex < 0) return null;
 
     const promotedRow = remaining[promotedIndex];
@@ -486,7 +535,7 @@ export function buildTimelineAfterRemoval(
 
   if (removedRow.kind === 'end') {
     const remaining = timeline.filter((row) => row.id !== rowId);
-    const promotedIndex = findLastPromotableEndpointIndex(remaining);
+    const promotedIndex = findPromotableEndpointIndex(remaining, 'end', routePoints);
     if (promotedIndex < 0) return null;
 
     const promotedRow = remaining[promotedIndex];
@@ -774,11 +823,40 @@ function isPromotableEndpointRow(
   return row.kind === 'waypoint' && row.lat != null && row.lon != null;
 }
 
-function findLastPromotableEndpointIndex(timeline: TimelineItem[]): number {
-  for (let index = timeline.length - 1; index >= 0; index -= 1) {
-    if (isPromotableEndpointRow(timeline[index])) return index;
+/** Étape qui remplace le départ (la plus proche du début) / l'arrivée (la plus proche de la fin). */
+function findPromotableEndpointIndex(
+  timeline: TimelineItem[],
+  endpoint: 'start' | 'end',
+  routePoints: ReadonlyArray<{ lat: number; lon: number }> | undefined,
+): number {
+  const candidates = timeline
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => isPromotableEndpointRow(row));
+  if (candidates.length === 0) return -1;
+
+  const points = routePoints && routePoints.length >= 2 ? [...routePoints] : null;
+  if (!points) {
+    return endpoint === 'start' ? candidates[0]!.index : candidates[candidates.length - 1]!.index;
   }
-  return -1;
+
+  const cumulative = cumulativeRouteLengthsM(points);
+  // Kilométrage du dernier routage d'abord : sans ambiguïté sur une boucle.
+  const positionM = (row: TimelineItem & { lat: number; lon: number }) =>
+    row.distanceKm != null && Number.isFinite(row.distanceKm)
+      ? row.distanceKm * 1_000
+      : projectPointAlongRoute({ lat: row.lat, lon: row.lon }, points, cumulative)?.distanceM ?? null;
+
+  let best: { index: number; atM: number } | null = null;
+  for (const { row, index } of candidates) {
+    const atM = positionM(row as TimelineItem & { lat: number; lon: number });
+    if (atM == null) continue;
+    // À égalité, l'ordre de la timeline départage (premier / dernier).
+    const better = !best
+      || (endpoint === 'start' ? atM < best.atM : atM >= best.atM);
+    if (better) best = { index, atM };
+  }
+  if (best) return best.index;
+  return endpoint === 'start' ? candidates[0]!.index : candidates[candidates.length - 1]!.index;
 }
 
 function resolveSuggestedPauseDistanceKm(timeline: TimelineItem[]): number {

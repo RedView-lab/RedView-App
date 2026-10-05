@@ -237,6 +237,16 @@
   cursor: grab;
 }
 
+/* Zone de saisie des poignées élargie au-delà du dessin : un appui à côté
+ * d'un point le prend (clic = panneau, glisser = déplacement) au lieu de
+ * saisir la trace dessous et d'y insérer un nouveau point. */
+[data-rv-trace-point]::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 999px;
+}
+
 .rv-checkpoint-marker:hover .rv-checkpoint-marker__img {
   transform: scale(1.22);
 }

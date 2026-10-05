@@ -11,9 +11,12 @@
 //    under the vegetation) or runs the one-point tool;
 //  - keys: M distance, H height/angle, S area, P profile, F fall line,
 //    A avalanche exposure, V viewshed; Enter finishes, Backspace removes the
-//    last vertex, Escape cancels.
+//    last vertex, Escape cancels;
+//  - drawing an area (measurement or comment zone), a click on a vertex
+//    already placed closes it on that vertex (`shared/lib/polygonClosing`).
 
 import { translateAppText as t } from '@/shared/i18n/config';
+import { closePolygonAt, polygonCloseIndex, polygonVertexHit } from '@/shared/lib/polygonClosing';
 import type { OpenedLodTile } from '../../lib/lodCache';
 import type { CameraController } from '../camera';
 import type { SceneNode } from '../lod/sceneLod';
@@ -123,6 +126,8 @@ export class ViewerToolsController {
   private commentZoneLayer: OverlayLayer | null = null;
   private draft: ScenePick[] = [];
   private hover: ScenePick | null = null;
+  /** Area being drawn: vertex under the cursor a click would close it on, or -1. */
+  private closeHoverIndex = -1;
   private profileMarker: Vec3 | null = null;
   private press: PointerPress | null = null;
   private destroyed = false;
@@ -240,7 +245,7 @@ export class ViewerToolsController {
   updateOverlay(): void {
     const layers: OverlayLayer[] = [...this.layers.values()];
     if (this.commentZoneLayer) layers.push(this.commentZoneLayer);
-    if (this.activeTool) layers.push(draftLayer(this.activeTool, this.draft, this.hover));
+    if (this.activeTool) layers.push(draftLayer(this.activeTool, this.draft, this.hover, this.closeHoverIndex));
     if (this.profileMarker) {
       layers.push({ id: '', paths: [], dots: [{ at: this.profileMarker, color: '#ff2a1f', radius: 5 }], labels: [] });
     }
@@ -345,6 +350,7 @@ export class ViewerToolsController {
     this.activeTool = tool;
     this.commentZoneDrawing = false;
     this.draft = firstPick && isDrawingTool(tool) ? [firstPick] : [];
+    this.closeHoverIndex = -1;
     this.store.update({ activeTool: tool, vertexCount: this.draft.length, commentZone: false });
     this.opts.canvas.style.cursor = 'crosshair';
     this.updateOverlay();
@@ -356,18 +362,31 @@ export class ViewerToolsController {
     this.commentZoneDrawing = false;
     this.draft = [];
     this.hover = null;
+    this.closeHoverIndex = -1;
     this.store.update({ activeTool: null, vertexCount: 0, commentZone: false });
     this.opts.canvas.style.cursor = '';
     this.updateOverlay();
   }
 
   private addVertex(pick: ScenePick, canvasX: number, canvasY: number): void {
+    if (this.activeTool === 'area') {
+      // A click on a placed vertex closes the area there, never adds a duplicate.
+      const click = { x: canvasX, y: canvasY };
+      const screen = this.draftScreenPoints();
+      const closeIndex = polygonCloseIndex(screen, click, MIN_VERTICES.area);
+      if (closeIndex >= 0) {
+        this.finishDrawing(closePolygonAt(this.draft, closeIndex), this.draft[closeIndex]);
+        return;
+      }
+      if (polygonVertexHit(screen, click) >= 0) return;
+    }
     const last = this.draft[this.draft.length - 1];
     if (last) {
       const p = this.projector()(last.local);
       if (p.inFront && Math.hypot(p.screenX - canvasX, p.screenY - canvasY) <= DUPLICATE_VERTEX_PX) return;
     }
     this.draft.push(pick);
+    this.closeHoverIndex = -1;
     this.store.update({ vertexCount: this.draft.length });
     if (this.activeTool === 'height' && this.draft.length >= 2) {
       this.finishDrawing();
@@ -379,23 +398,48 @@ export class ViewerToolsController {
   private removeLastVertex(): void {
     if (this.draft.length === 0) return;
     this.draft.pop();
+    this.closeHoverIndex = -1;
     this.store.update({ vertexCount: this.draft.length });
     this.updateOverlay();
   }
 
-  private finishDrawing(): void {
+  /**
+   * Vertex the hover would close the area on. Not the last one: the cursor
+   * sits there right after placing it (a second click still finishes, like a
+   * double click, but the preview would flash at every vertex).
+   */
+  private closeIndexForHover(position: { x: number; y: number }): number {
+    if (this.activeTool !== 'area') return -1;
+    const index = polygonCloseIndex(this.draftScreenPoints(), position, MIN_VERTICES.area);
+    return index === this.draft.length - 1 ? -1 : index;
+  }
+
+  /** Draft vertices on screen (canvas CSS px), null behind the camera. */
+  private draftScreenPoints(): Array<{ x: number; y: number } | null> {
+    const project = this.projector();
+    return this.draft.map((vertex) => {
+      const p = project(vertex.local);
+      return p.inFront ? { x: p.screenX, y: p.screenY } : null;
+    });
+  }
+
+  /**
+   * Ends the drawing with `picks` (the whole draft, or the loop closed on a
+   * vertex); a comment zone's bubble goes on `anchor` (default: last vertex).
+   */
+  private finishDrawing(picks: ScenePick[] = this.draft, anchor?: ScenePick): void {
     const tool = this.activeTool;
     if (!tool || !isDrawingTool(tool)) return;
-    const picks = this.draft;
     const commentZone = this.commentZoneDrawing;
     this.activeTool = null;
     this.commentZoneDrawing = false;
     this.draft = [];
     this.hover = null;
+    this.closeHoverIndex = -1;
     this.store.update({ activeTool: null, vertexCount: 0, commentZone: false });
     this.opts.canvas.style.cursor = '';
     if (commentZone) {
-      if (picks.length >= MIN_VERTICES.area) this.opts.onCommentZone?.(picks.map((p) => [p.lon, p.lat]), picks[picks.length - 1]!);
+      if (picks.length >= MIN_VERTICES.area) this.opts.onCommentZone?.(picks.map((p) => [p.lon, p.lat]), anchor ?? picks[picks.length - 1]!);
       else if (picks.length > 0) this.notify(t('Zone annulée : pas assez de points'));
       this.updateOverlay();
       return;
@@ -708,6 +752,8 @@ export class ViewerToolsController {
         this.overlay.hoveredId = hovered;
         if (this.activeTool) {
           this.hover = this.picker.pickTerrain(position.x, position.y);
+          this.closeHoverIndex = this.closeIndexForHover(position);
+          this.opts.canvas.style.cursor = this.closeHoverIndex >= 0 ? 'pointer' : 'crosshair';
           this.updateOverlay();
         } else if (hoverChanged) {
           this.updateOverlay();
@@ -718,8 +764,9 @@ export class ViewerToolsController {
 
   private readonly onPointerLeave = (): void => {
     this.hoverPosition = null;
-    if (this.hover || this.overlay.hoveredId) {
+    if (this.hover || this.overlay.hoveredId || this.closeHoverIndex >= 0) {
       this.hover = null;
+      this.closeHoverIndex = -1;
       this.overlay.hoveredId = null;
       this.updateOverlay();
     }

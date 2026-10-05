@@ -8,6 +8,7 @@
 // while the measurement is hovered.
 
 import { translateAppText as t } from '@/shared/i18n/config';
+import { closePolygonAt } from '@/shared/lib/polygonClosing';
 import { classificationLabel } from '../classification';
 import {
   formatAltitude,
@@ -494,10 +495,27 @@ function pinLayer(id: string, at: ScenePick): OverlayLayer {
 // ── While drawing ───────────────────────────────────────────────────────────
 
 /** Vertices placed so far plus the rubber band to the cursor. */
-export function draftLayer(tool: ToolId, picks: readonly ScenePick[], hover: ScenePick | null): OverlayLayer {
+/**
+ * Drawing in progress. `closeIndex`: the cursor is on that vertex and a click
+ * there closes the area (`shared/lib/polygonClosing`): the closed loop is
+ * previewed and the vertex ringed instead of the rubber band to the cursor;
+ * vertices left out of the loop (lasso tail) are dashed.
+ */
+export function draftLayer(tool: ToolId, picks: readonly ScenePick[], hover: ScenePick | null, closeIndex = -1): OverlayLayer {
   const layer = emptyLayer('');
   const color = tool === 'area' ? TOOL_COLORS.area : tool === 'height' ? TOOL_COLORS.height : tool === 'profile' ? TOOL_COLORS.profile : TOOL_COLORS.distance;
   const points = picks.map((p) => p.local);
+  if (closeIndex >= 0 && points[closeIndex]) {
+    const loop = closePolygonAt(points, closeIndex);
+    const tail = points.slice(0, closeIndex + 1);
+    if (loop.length < points.length) layer.paths.push({ points: tail, color, width: 1, dash: [3, 4] });
+    layer.paths.push({ points: [...loop, loop[0]!], color, width: 2 });
+    layer.dots.push(...vertexDots(picks));
+    layer.dots.push({ at: points[closeIndex]!, color: 'rgba(255, 255, 255, 0.95)', radius: 7 });
+    layer.dots.push({ at: points[closeIndex]!, color: TOOL_COLORS.vertex, radius: 4 });
+    layer.labels.push({ at: points[closeIndex]!, headline: t('Fermer la zone'), size: 'small' });
+    return layer;
+  }
   if (points.length > 1) layer.paths.push({ points, color, width: 2 });
   layer.dots.push(...vertexDots(picks));
   if (hover) {

@@ -133,37 +133,14 @@
   flex-shrink: 0;
 }
 
-/* Éditeurs présents (co-édition) : pastilles empilées, comme dans Figma. */
+/* Éditeurs présents (co-édition) : pastilles empilées et découpées, comme
+   dans Figma (UserAvatarStack, shared/components/UserAvatar). */
 .rvi-header__people {
   display: flex;
   align-items: center;
 }
-.rvi-header__people-full,
-.rvi-header__people-compact {
-  display: flex;
-  align-items: center;
-}
-.rvi-header__people-full > * + *,
-.rvi-header__people-compact > * + * {
-  margin-left: -4px;
-}
-.rvi-header__people-compact {
+.rvi-header__people .rvi-header__people-compact {
   display: none;
-}
-.rvi-header__people-more {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 24px;
-  height: 24px;
-  padding: 0 4px;
-  border-radius: 12px;
-  background: var(--rvi-bg-chip);
-  box-shadow: 0 0 0 2px rgb(var(--rv-paper));
-  color: var(--rvi-text-dim);
-  font-size: var(--rv-font-size-xs);
-  font-weight: 700;
-  line-height: 1;
 }
 
 /* Partager : même gabarit que Enregistrer, en action secondaire (puce). */
@@ -201,11 +178,11 @@
   .rvi-header__share > span {
     display: none;
   }
-  .rvi-header__people-full {
+  .rvi-header__people .rvi-header__people-full {
     display: none;
   }
-  .rvi-header__people-compact {
-    display: flex;
+  .rvi-header__people .rvi-header__people-compact {
+    display: inline-flex;
   }
 }
 

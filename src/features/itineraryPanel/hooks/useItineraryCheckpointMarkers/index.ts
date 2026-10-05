@@ -4,6 +4,7 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import { flyToPoi } from '@/features/map3d/lib/cameraFlight';
 import { keepPopupInVisibleMap } from '@/features/map3d/lib/mapPopupSafeArea';
 import { closeMarkerPopupOnSecondClick } from '@/features/map3d/lib/pointPanelDismiss';
+import { registerTracePointControls } from '../../lib/tracer/tracePointDataset';
 import type { ItineraryProject } from '../../types';
 import { collectItineraryCheckpoints } from './collectCheckpoints';
 import { findCheckpointMarkerEntry } from './findMarkerEntry';
@@ -34,7 +35,6 @@ interface UseItineraryCheckpointMarkersArgs {
   onTogglePauseFavorite?: (id: string, favorite: boolean) => void;
   onDeleteWaypoint?: (id: string) => void;
   onToggleWaypointFavorite?: (id: string, favorite: boolean) => void;
-  onMoveWaypoint?: (id: string, lat: number, lon: number) => void;
 }
 
 /**
@@ -56,7 +56,6 @@ export function useItineraryCheckpointMarkers({
   onTogglePauseFavorite,
   onDeleteWaypoint,
   onToggleWaypointFavorite,
-  onMoveWaypoint,
 }: UseItineraryCheckpointMarkersArgs): {
   openCheckpointMarker: OpenCheckpointMarker;
 } {
@@ -69,7 +68,6 @@ export function useItineraryCheckpointMarkers({
     onTogglePauseFavorite,
     onDeleteWaypoint,
     onToggleWaypointFavorite,
-    onMoveWaypoint,
   });
 
   useEffect(() => {
@@ -79,7 +77,6 @@ export function useItineraryCheckpointMarkers({
       onTogglePauseFavorite,
       onDeleteWaypoint,
       onToggleWaypointFavorite,
-      onMoveWaypoint,
     };
   }, [
     onChangePauseDuration,
@@ -87,8 +84,15 @@ export function useItineraryCheckpointMarkers({
     onTogglePauseFavorite,
     onDeleteWaypoint,
     onToggleWaypointFavorite,
-    onMoveWaypoint,
   ]);
+
+  const closeOtherPopups = useCallback((target: MarkerRegistryEntry) => {
+    for (const other of registryRef.current.values()) {
+      if (other !== target && other.popup?.isOpen()) {
+        other.popup.remove();
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const registry = registryRef.current;
@@ -147,28 +151,22 @@ export function useItineraryCheckpointMarkers({
                   onToggleFavorite: (id, fav) => callbacksRef.current.onToggleWaypointFavorite?.(id, fav),
                 })
               : cp.kind === 'start' || cp.kind === 'end'
-                ? createEndpointPopup(dataRef)
+                ? createEndpointPopup(dataRef, {
+                    onDelete: (rowId) => callbacksRef.current.onDeleteWaypoint?.(rowId),
+                  })
                 : undefined;
         const popup = popupHandle?.popup;
 
+        // Jamais `draggable` : départ, arrivée et étapes se déplacent par le
+        // geste de l'outil de tracé (useTracePointDrag), avec ou sans outil armé.
         const marker = new mapboxgl.Marker({
           element,
           anchor: cp.kind === 'waypoint' ? 'center' : 'bottom',
           pitchAlignment: 'viewport',
           rotationAlignment: 'viewport',
           occludedOpacity: 0,
-          draggable: cp.kind === 'waypoint',
         })
           .setLngLat(cp.coord);
-
-        if (cp.kind === 'waypoint' && cp.waypointId) {
-          marker.on('dragend', () => {
-            const wpId = dataRef.current.waypointId;
-            if (!wpId) return;
-            const lngLat = marker.getLngLat();
-            callbacksRef.current.onMoveWaypoint?.(wpId, lngLat.lat, lngLat.lng);
-          });
-        }
 
         if (popup) {
           marker.setPopup(popup);
@@ -188,11 +186,35 @@ export function useItineraryCheckpointMarkers({
           kind: cp.kind,
         };
 
+        if (cp.kind !== 'pause') {
+          registerTracePointControls(element, {
+            togglePanel: () => {
+              if (!popup) return;
+              if (popup.isOpen()) {
+                popup.remove();
+                return;
+              }
+              closeOtherPopups(entry);
+              // Le clic du geste est absorbé : on ferme les autres popups
+              // `closeOnClick` (POI…) comme l'aurait fait le clic de carte.
+              map.fire('preclick');
+              marker.togglePopup();
+            },
+            anchorPoint: () => {
+              const point = map.project(marker.getLngLat());
+              return { x: point.x, y: point.y };
+            },
+            preview: (position) => {
+              marker.setLngLat(position ? [position.lon, position.lat] : dataRef.current.coord);
+            },
+          });
+        }
+
         registry.set(cp.key, entry);
         applyMarkerVisualState(entry, currentZoom);
       }
     }
-  }, [itineraries, isMapLoaded, map, pausesEnabled, routesEnabled, waypointsEnabled, poisRouteEnabled, favorisEnabled, selectedPoiCategories]);
+  }, [itineraries, isMapLoaded, map, pausesEnabled, routesEnabled, waypointsEnabled, poisRouteEnabled, favorisEnabled, selectedPoiCategories, closeOtherPopups]);
 
   // Handle map zoom changes in real-time
   useEffect(() => {
@@ -248,11 +270,7 @@ export function useItineraryCheckpointMarkers({
       const targetEntry = findCheckpointMarkerEntry(registryRef.current, checkpointId, coords, scope);
       if (!targetEntry) return false;
 
-      for (const other of registryRef.current.values()) {
-        if (other !== targetEntry && other.popup?.isOpen()) {
-          other.popup.remove();
-        }
-      }
+      closeOtherPopups(targetEntry);
 
       // Sélection depuis la feuille de route / le graphique : on ouvre, on ne
       // referme jamais un panneau déjà ouvert.
@@ -269,7 +287,7 @@ export function useItineraryCheckpointMarkers({
 
       return true;
     },
-    [map],
+    [closeOtherPopups, map],
   );
 
   return { openCheckpointMarker };

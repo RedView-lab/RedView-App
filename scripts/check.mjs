@@ -31,6 +31,7 @@ const FAST_STEPS = [
 /** Étapes lourdes de --full, en série, seulement si les rapides passent. */
 const FULL_STEPS = [
   { id: 'build', script: 'build:vite', label: 'Build de prod (vite build)' },
+  { id: 'server', script: 'server:check', label: 'Serveurs de prod bundlés (dist-server, statiques précompressés)' },
   { id: 'bundle', script: 'bundle:check', label: 'Chargement initial (budget, éditeur hors chemin critique)' },
   { id: 'redview', script: 'bench:redview', label: 'Régression : fichier .redview' },
   { id: 'project-layers', script: 'bench:project-layers', label: 'Régression : couches du projet' },

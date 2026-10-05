@@ -27,6 +27,7 @@
  */
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
 import { GribMessageFactory, parseMessagesFromBuffer } from '@mattnucc/gribberish';
+import { createByteLru } from '../server/byte-lru.mjs';
 
 // ────────────────────────────── Constants ──────────────────────────────
 
@@ -285,38 +286,15 @@ function parseGribToGrid(buf: Uint8Array, coverageId: string): SnowGridJson {
 // ────────────────────────────── Cache LRU ──────────────────────────────
 
 const MAX_BBOX_SPAN_DEG = 15;
-const CACHE_MAX_ENTRIES = 64;
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 min
 
-interface CachedGrid {
-  grid: SnowGridJson;
-  expiresAt: number;
-}
-
-// Map = ordre d'insertion → on ré-insère à chaque hit pour un vrai LRU.
-const gridCache = new Map<string, CachedGrid>();
-
-function getCachedGrid(key: string): SnowGridJson | null {
-  const hit = gridCache.get(key);
-  if (!hit) return null;
-  if (Date.now() > hit.expiresAt) {
-    gridCache.delete(key);
-    return null;
-  }
-  gridCache.delete(key);
-  gridCache.set(key, hit);
-  return hit.grid;
-}
-
-function setCachedGrid(key: string, grid: SnowGridJson) {
-  gridCache.delete(key);
-  while (gridCache.size >= CACHE_MAX_ENTRIES) {
-    const oldestKey = gridCache.keys().next().value;
-    if (oldestKey === undefined) break;
-    gridCache.delete(oldestKey);
-  }
-  gridCache.set(key, { grid, expiresAt: Date.now() + CACHE_TTL_MS });
-}
+// Réponse JSON déjà sérialisée, bornée en octets : une grille de 15° × 15° à
+// 0,01° pèse plusieurs Mo (64 grilles en `number[]` pouvaient dépasser 450 Mo).
+const gridCache = createByteLru<string>({
+  maxBytes: 32 * 1024 * 1024,
+  sizeOf: (json) => json.length,
+  ttlMs: CACHE_TTL_MS,
+});
 
 // ────────────────────────────── Handler ──────────────────────────────
 
@@ -372,12 +350,13 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   }
 
   const cacheKey = [lonMin, latMin, lonMax, latMax].map((v) => v.toFixed(2)).join(',');
-  const cachedGrid = getCachedGrid(cacheKey);
-  if (cachedGrid) {
+  const cachedJson = gridCache.get(cacheKey);
+  if (cachedJson) {
     res.setHeader('Cache-Control', 'public, max-age=900, stale-while-revalidate=1800');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('X-Snow-Source', 'meteofrance-wcs');
     res.setHeader('X-Snow-Cache', 'HIT');
-    return res.status(200).json(cachedGrid);
+    return res.status(200).send(cachedJson);
   }
 
   try {
@@ -394,7 +373,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     );
     const grid = parseGribToGrid(gribBytes, coverageId);
     const elapsed = Date.now() - t0;
-    setCachedGrid(cacheKey, grid);
+    const json = JSON.stringify(grid);
+    gridCache.set(cacheKey, json);
 
     console.log(
       `[meteofrance] ${coverageId} time=${timeValue} ` +
@@ -403,8 +383,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     );
 
     res.setHeader('Cache-Control', 'public, max-age=900, stale-while-revalidate=1800');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('X-Snow-Source', 'meteofrance-wcs');
-    return res.status(200).json(grid);
+    return res.status(200).send(json);
   } catch (err) {
     console.error('[meteofrance] failure:', err);
     return res.status(502).json({ error: 'Météo-France WCS fetch failed' });

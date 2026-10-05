@@ -103,12 +103,7 @@ export function buildPausePopupHtml(title: string, state: PausePopupState): stri
 
       <div class="rv-poi-popup__divider"></div>
 
-      <button type="button" class="rv-poi-popup__action-row rv-poi-popup__action-row--delete" data-action="delete">
-        <span class="rv-poi-popup__utility-icon-wrap">
-          <img src="${escapeHtml(UI_ICON_URLS.trash)}" alt="" class="rv-poi-popup__utility-icon" />
-        </span>
-        <span class="rv-poi-popup__action-label rv-poi-popup__action-label--delete">${escapeHtml(translateAppText('Supprimer'))}</span>
-      </button>
+      ${buildDeleteRowHtml()}
     </div>
   `;
 }
@@ -147,16 +142,27 @@ export function buildWaypointPopupHtml(title: string, state: { favoriteEnabled: 
 
       <div class="rv-poi-popup__divider"></div>
 
+      ${buildDeleteRowHtml()}
+    </div>
+  `;
+}
+
+/** Ligne « Supprimer » commune aux popups de points (pause, waypoint, départ, arrivée). */
+function buildDeleteRowHtml(): string {
+  return `
       <button type="button" class="rv-poi-popup__action-row rv-poi-popup__action-row--delete" data-action="delete">
         <span class="rv-poi-popup__utility-icon-wrap">
           <img src="${escapeHtml(UI_ICON_URLS.trash)}" alt="" class="rv-poi-popup__utility-icon" />
         </span>
         <span class="rv-poi-popup__action-label rv-poi-popup__action-label--delete">${escapeHtml(translateAppText('Supprimer'))}</span>
       </button>
-    </div>
   `;
 }
 
+/**
+ * Popup départ / arrivée. « Supprimer » n'apparaît que si le point peut l'être
+ * (`removable` : une étape placée prend sa place).
+ */
 export function buildEndpointPopupHtml(data: CheckpointData): string {
   const isStart = data.kind === 'start';
   const kindLabel = isStart ? translateAppText('Départ') : translateAppText('Arrivée');
@@ -193,6 +199,7 @@ export function buildEndpointPopupHtml(data: CheckpointData): string {
         </button>
       </div>
       ${rows.map((row) => `<div class="rv-poi-popup__divider"></div>${row}`).join('')}
+      ${data.removable ? `<div class="rv-poi-popup__divider"></div>${buildDeleteRowHtml()}` : ''}
     </div>
   `;
 }

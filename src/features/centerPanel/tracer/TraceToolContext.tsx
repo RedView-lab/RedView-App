@@ -34,7 +34,7 @@ import { isVariantModifierPressed } from '@/shared/lib/platform';
 import { useCommentToolOptional } from '@/features/comments/context/commentTool';
 import { useRouteSplitToolOptional } from '../routeSplit';
 import { useRouteMergeToolOptional } from '../routeMerge';
-import { useTracePointDrag, type TracePointDragCommit } from './useTracePointDrag';
+import { isWithinTracePointGesture, type TracePointDragCommit } from './useTracePointDrag';
 import { MAP_CURSOR_PRIORITY, setMapCursor } from '@/features/map3d/lib/mapCursor';
 import {
   handlePointPanelMousedown,
@@ -70,6 +70,13 @@ interface TraceToolContextValue {
    */
   activate: () => void;
   deactivate: () => void;
+  /**
+   * Relâchement d'un point déplacé sur la carte (geste de `useTracePointDrag`,
+   * outil armé ou non). `false` : rien d'enregistré.
+   */
+  commitPointDrag: (commit: TracePointDragCommit) => boolean;
+  /** Curseur « grabbing » pendant le glisser d'un point. */
+  onPointDraggingChange: (dragging: boolean) => void;
 }
 
 const TraceToolContext = createContext<TraceToolContextValue | null>(null);
@@ -203,9 +210,14 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
    * tracé courant ; avec Alt/Option on crée une variante et c'est elle qui
    * reçoit le déplacement.
    */
+  const armedRef = useRef(armed);
+  useEffect(() => {
+    armedRef.current = armed;
+  });
+
   const commitTracePointDrag = useCallback(
-    (commit: TracePointDragCommit) => {
-      if (!store) return;
+    (commit: TracePointDragCommit): boolean => {
+      if (!store) return false;
       const { target, lon, lat, variant } = commit;
 
       const variantBox: { current: CreateItineraryVariantResult | null } = { current: null };
@@ -235,9 +247,11 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
         return true;
       });
 
-      if (!recorded) return;
+      if (!recorded) return false;
 
       const createdVariant = variantBox.current;
+      // Hors outil Tracer, aucun message d'outil n'est affiché.
+      if (!armedRef.current) return true;
       setStatusMessage(
         createdVariant
           ? translateAppText('Point déplacé dans la variante « {{name}} ».', {
@@ -245,6 +259,7 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
             })
           : translateAppText('Point déplacé, recalcul du tracé en cours'),
       );
+      return true;
     },
     [store],
   );
@@ -261,13 +276,6 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
     },
     [map],
   );
-
-  useTracePointDrag({
-    map,
-    armed,
-    onCommit: commitTracePointDrag,
-    onDraggingChange: handleDraggingChange,
-  });
 
   const toggle = useCallback(() => {
     if (!canTrace) return;
@@ -349,6 +357,7 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
           originalTarget.closest(
             '.mapboxgl-popup, .rv-poi-draft-card, [data-rv-poi-draft-card], .rv-poi-marker, .rv-checkpoint-marker, [data-rv-comment-pin], [data-rv-comment-card], button, a, [role="button"]',
           )) ||
+        isWithinTracePointGesture() ||
         shouldIgnoreMapClickAfterPanelDismiss(originalTarget) ||
         queryPoiAtPoint(map, event.point)
       ) {
@@ -392,8 +401,10 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
       toggle,
       activate,
       deactivate,
+      commitPointDrag: commitTracePointDrag,
+      onPointDraggingChange: handleDraggingChange,
     }),
-    [activate, armed, canTrace, deactivate, statusMessage, toggle],
+    [activate, armed, canTrace, commitTracePointDrag, deactivate, handleDraggingChange, statusMessage, toggle],
   );
 
   return (

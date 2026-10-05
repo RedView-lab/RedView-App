@@ -83,6 +83,7 @@ export const DASHBOARD_POI_OPTIONS: readonly DashboardPoiOption[] = [
 export const DASHBOARD_FILTER_OPTIONS: readonly DashboardFilterOption[] = [
   { id: 'favoris', label: 'Favoris', icon: 'search-filter-favoris.svg' },
   { id: 'pois', label: 'POI', icon: 'search-filter-pois-route.svg', hasDropdown: true },
+  { id: 'waypoints', label: 'Points de passage', icon: 'search-filter-waypoints.svg' },
   { id: 'pauses', label: 'Pauses', icon: 'search-filter-pauses.svg' },
   { id: 'alertes', label: 'Alertes', icon: 'search-filter-alertes.svg' },
   { id: 'pente', label: 'Pente', slopeSwatch: true },

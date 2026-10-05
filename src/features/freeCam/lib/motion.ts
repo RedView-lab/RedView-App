@@ -55,23 +55,6 @@ export function horizontalDisplacementM(
   };
 }
 
-export function advancePose(
-  pose: FreeCamPose,
-  axes: FreeCamAxes,
-  horizontalSpeedMps: number,
-  verticalSpeedMps: number,
-  dtSec: number,
-): FreeCamPose {
-  const { eastM, northM } = horizontalDisplacementM(pose.bearing, axes, horizontalSpeedMps, dtSec);
-  const [lng, lat] = offsetLngLat(pose.lng, pose.lat, eastM, northM);
-  return {
-    ...pose,
-    lng,
-    lat,
-    altitudeM: pose.altitudeM + axes.vertical * verticalSpeedMps * dtSec,
-  };
-}
-
 /** Souris vers la droite = tourner à droite ; souris vers le haut = regarder vers l'horizon. */
 export function applyLook(pose: FreeCamPose, delta: FreeCamLookDelta, sensitivityDegPerPx: number): FreeCamPose {
   if (delta.dx === 0 && delta.dy === 0) return pose;

@@ -1,25 +1,47 @@
 import { useEffect, useRef } from 'react';
-import type { Map as MapboxMap } from 'mapbox-gl';
+import type { Map as MapboxMap, PointLike } from 'mapbox-gl';
 
 import { isVariantModifierPressed } from '@/shared/lib/platform';
-import { unprojectMouseEvent } from '@/features/map3d/lib/mapPointer';
+import { getMapScreenPoint } from '@/features/map3d/lib/mapPointer';
 import {
+  getTracePointControls,
   readTracePointDataset,
   TRACE_POINT_SELECTOR,
+  type TracePointControls,
   type TracePointHandle,
 } from '@/features/itineraryPanel/lib/tracer/tracePointDataset';
 import type { TracePointKind } from '@/features/itineraryPanel/lib/tracer/traceEdits';
-
-/** Déplacement minimal (px) avant qu'un appui soit traité comme un drag. */
-const DRAG_THRESHOLD_PX = 4;
+import {
+  beginTracePointPress,
+  draggedAnchorPoint,
+  passesDragThreshold,
+  type TracePointPress,
+} from './tracePointGesture';
 
 /**
- * Fenêtre pendant laquelle on avale le clic naturel qui suit un `mouseup` sur
- * une poignée. Le clic est normalement émis dans le même tour de boucle que le
- * `mouseup` ; ce délai n'est qu'un filet de sécurité si aucun clic n'arrive
- * (relâchement hors de l'élément), pour ne jamais laisser traîner le listener.
+ * Durée de vie du suppresseur du clic qui suit le relâchement. Le clic est
+ * émis dans le même tour de boucle que le `mouseup` ; ce délai n'est qu'un
+ * filet de sécurité si aucun clic n'arrive (relâchement hors du conteneur).
+ * Compté depuis le relâchement : armé dès l'appui, il expirait pendant tout
+ * glisser de plus de 120 ms et le clic final ajoutait une arrivée au tracé.
  */
-const CLICK_SUPPRESSOR_TIMEOUT_MS = 120;
+const CLICK_SUPPRESSOR_TIMEOUT_MS = 300;
+
+/** Fenêtre après un geste sur une poignée où un clic de carte n'est pas une action. */
+const GESTURE_CLICK_GUARD_MS = 300;
+
+/** Opacité du marqueur pendant le glisser : la trace reste visible dessous. */
+const DRAGGING_OPACITY = '0.7';
+
+let lastGestureEndAt = -Infinity;
+
+/**
+ * Vrai juste après un geste sur une poignée : un `click` de carte qui arrive
+ * alors (rejoué, ou échappé au suppresseur) ne doit rien ajouter au tracé.
+ */
+export function isWithinTracePointGesture(now: number = performance.now()): boolean {
+  return now - lastGestureEndAt < GESTURE_CLICK_GUARD_MS;
+}
 
 export type { TracePointKind };
 
@@ -35,25 +57,39 @@ export interface TracePointDragCommit {
 
 interface UseTracePointDragArgs {
   map: MapboxMap | null;
-  /** Le drag n'est actif que lorsque l'outil Tracer est armé. */
-  armed: boolean;
-  onCommit: (commit: TracePointDragCommit) => void;
+  /** Coupé quand un outil qui consomme les clics de la carte est armé. */
+  enabled: boolean;
+  /** Applique le déplacement ; `false` = rien d'enregistré (le marqueur revient). */
+  onCommit: (commit: TracePointDragCommit) => boolean;
   /** Notifie l'état du drag (utilisé pour le curseur). */
   onDraggingChange?: (dragging: boolean) => void;
 }
 
+interface PressSession {
+  element: HTMLElement;
+  target: TracePointDragTarget;
+  controls: TracePointControls | null;
+  press: TracePointPress;
+  /** Échap, clic droit, fenêtre quittée : on attend le relâchement sans rien faire. */
+  cancelled: boolean;
+  restoreOpacity: string;
+  restoreZIndex: string;
+}
+
 /**
- * Rend déplaçables les poignées de tracé (départ, arrivée, waypoints) pendant
- * que l'outil Tracer est armé.
+ * Geste sur les poignées de tracé (départ, arrivée, étapes) de la carte, avec
+ * ou sans outil Tracer armé :
+ *   - clic : ouvre / ferme le panneau du point ;
+ *   - glisser : le marqueur suit le pointeur, le point est déplacé au relâchement.
  *
- * Écoute en phase de capture sur le conteneur du canvas : les marqueurs sont des
- * éléments DOM placés dedans, on peut donc les cibler par `closest()` sans
- * refaire de hit-test écran. Le `mousedown` est stoppé pour que Mapbox ne
- * déclenche ni son pan ni son `click` de carte (qui ajouterait un point).
+ * Écoute en phase de capture sur le conteneur du canvas : les marqueurs sont
+ * des éléments DOM placés dedans, on les cible par `closest()`. Le `mousedown`
+ * est stoppé pour que Mapbox ne lance ni pan ni `click` de carte (qui
+ * prolongerait le tracé) ; le panneau est donc ouvert ici, pas par Mapbox.
  */
 export function useTracePointDrag({
   map,
-  armed,
+  enabled,
   onCommit,
   onDraggingChange,
 }: UseTracePointDragArgs): void {
@@ -65,26 +101,22 @@ export function useTracePointDrag({
   });
 
   useEffect(() => {
-    if (!armed || !map) return;
+    if (!enabled || !map) return;
 
     // Alias non-nullable : la narrowing d'un paramètre est perdue dans les
     // closures, pas celle d'une `const`.
     const mapInstance: MapboxMap = map;
     const container = mapInstance.getCanvasContainer();
 
-    let element: HTMLElement | null = null;
-    let target: TracePointDragTarget | null = null;
-    let startX = 0;
-    let startY = 0;
-    let dragging = false;
-    let restoreOpacity = '';
-    let restoreZIndex = '';
+    let session: PressSession | null = null;
     /** On ne réactive `dragPan` que si c'est bien nous qui l'avons coupé. */
     let dragPanDisabledByUs = false;
 
     let clickSuppressor: ((event: MouseEvent) => void) | null = null;
-    let replayMarkerClick = false;
     let suppressorTimer: number | null = null;
+
+    let previewFrame: number | null = null;
+    let previewPointer: { x: number; y: number } | null = null;
 
     const removeClickSuppressor = () => {
       if (suppressorTimer !== null) {
@@ -92,44 +124,45 @@ export function useTracePointDrag({
         suppressorTimer = null;
       }
       if (!clickSuppressor) return;
-      container.removeEventListener('click', clickSuppressor, true);
+      window.removeEventListener('click', clickSuppressor, true);
       clickSuppressor = null;
     };
 
-    /**
-     * Avale le clic qui suit un appui sur une poignée. Sans ça, Mapbox
-     * déclencherait son `click` de carte et ajouterait un point parasite.
-     * Quand l'utilisateur n'a pas bougé, on rejoue nous-mêmes le clic du
-     * marqueur pour que sa popup s'ouvre comme avant.
-     */
-    const installClickSuppressor = () => {
+    /** Avale le clic natif qui suit le relâchement : le geste a déjà agi. */
+    const suppressNextClick = () => {
       removeClickSuppressor();
       clickSuppressor = (event: MouseEvent) => {
-        if (replayMarkerClick) {
-          replayMarkerClick = false;
-          return;
-        }
+        removeClickSuppressor();
+        if (!(event.target instanceof Node) || !container.contains(event.target)) return;
+        event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
-        event.preventDefault();
-        removeClickSuppressor();
       };
-      container.addEventListener('click', clickSuppressor, true);
+      window.addEventListener('click', clickSuppressor, true);
       suppressorTimer = window.setTimeout(removeClickSuppressor, CLICK_SUPPRESSOR_TIMEOUT_MS);
     };
 
-    const setDragging = (next: boolean) => {
-      if (dragging === next) return;
-      dragging = next;
-      onDraggingChangeRef.current?.(next);
+    const unprojectAnchor = (current: PressSession, pointer: { x: number; y: number }) => {
+      const anchor = draggedAnchorPoint(current.press, pointer);
+      return mapInstance.unproject([anchor.x, anchor.y] as PointLike);
     };
 
-    const restoreElement = () => {
-      if (!element) return;
-      element.style.opacity = restoreOpacity;
-      element.style.zIndex = restoreZIndex;
-      element.style.cursor = '';
-      element = null;
+    const cancelPreviewFrame = () => {
+      if (previewFrame === null) return;
+      window.cancelAnimationFrame(previewFrame);
+      previewFrame = null;
+    };
+
+    const flushPreview = () => {
+      previewFrame = null;
+      const current = session;
+      if (!current || !current.press.dragging || current.cancelled || !previewPointer) return;
+      const lngLat = unprojectAnchor(current, previewPointer);
+      current.controls?.preview({ lon: lngLat.lng, lat: lngLat.lat });
+    };
+
+    const setDragging = (dragging: boolean) => {
+      onDraggingChangeRef.current?.(dragging);
     };
 
     const restoreDragPan = () => {
@@ -142,83 +175,106 @@ export function useTracePointDrag({
       }
     };
 
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key !== 'Escape') return;
-      // Échap annule : on ne commite rien.
-      target = null;
-      release();
-    }
+    const restoreElement = (current: PressSession) => {
+      current.element.style.opacity = current.restoreOpacity;
+      current.element.style.zIndex = current.restoreZIndex;
+      current.element.style.cursor = '';
+    };
 
-    function release() {
+    function endSession() {
+      const current = session;
+      if (!current) return;
+      session = null;
       window.removeEventListener('mousemove', handleWindowMouseMove, true);
       window.removeEventListener('mouseup', handleWindowMouseUp, true);
       window.removeEventListener('keydown', handleKeyDown, true);
-      restoreElement();
-      setDragging(false);
-      target = null;
+      window.removeEventListener('blur', handleBlur);
+      container.removeEventListener('contextmenu', handleContextMenu, true);
+      cancelPreviewFrame();
+      previewPointer = null;
+      restoreElement(current);
+      if (current.press.dragging) setDragging(false);
       restoreDragPan();
     }
 
-    function handleWindowMouseMove(event: MouseEvent) {
-      if (!target) return;
+    /** Abandon du geste : le marqueur revient, rien n'est enregistré. */
+    function cancelSession() {
+      const current = session;
+      if (!current || current.cancelled) return;
+      current.cancelled = true;
+      cancelPreviewFrame();
+      if (current.press.dragging) current.controls?.preview(null);
+      restoreElement(current);
+    }
 
-      if (!dragging) {
-        const distance = Math.hypot(event.clientX - startX, event.clientY - startY);
-        if (distance < DRAG_THRESHOLD_PX) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      cancelSession();
+    }
+
+    function handleContextMenu(event: MouseEvent) {
+      event.preventDefault();
+      event.stopPropagation();
+      cancelSession();
+    }
+
+    function handleBlur() {
+      // Fenêtre quittée bouton enfoncé : aucun relâchement ne viendra.
+      cancelSession();
+      endSession();
+    }
+
+    function handleWindowMouseMove(event: MouseEvent) {
+      const current = session;
+      if (!current || current.cancelled) return;
+
+      const client = { x: event.clientX, y: event.clientY };
+      if (!current.press.dragging) {
+        if (!passesDragThreshold(current.press, client)) return;
+        current.press = { ...current.press, dragging: true };
+        current.element.style.opacity = DRAGGING_OPACITY;
+        current.element.style.zIndex = '200';
         setDragging(true);
-        if (element) element.style.opacity = '0.45';
       }
 
       event.preventDefault();
+      previewPointer = getMapScreenPoint(mapInstance, event.clientX, event.clientY);
+      if (previewFrame === null) previewFrame = window.requestAnimationFrame(flushPreview);
     }
 
     function handleWindowMouseUp(event: MouseEvent) {
       if (event.button !== 0) return;
+      const current = session;
+      if (!current) return;
 
-      const activeTarget = target;
-      const wasDragging = dragging;
-      const elementForReplay = element;
-      release();
-
-      if (!activeTarget) return;
+      suppressNextClick();
+      lastGestureEndAt = performance.now();
+      const wasDragging = current.press.dragging;
+      const pointer = getMapScreenPoint(mapInstance, event.clientX, event.clientY);
+      endSession();
+      if (current.cancelled) return;
 
       if (!wasDragging) {
-        if (!elementForReplay) return;
-        // Rejoué aux vraies coordonnées : `element.click()` émettait un clic en
-        // (0,0), donc un `event.point` Mapbox faux pour les écouteurs de carte.
-        replayMarkerClick = true;
-        elementForReplay.dispatchEvent(new MouseEvent('click', {
-          bubbles: true,
-          cancelable: true,
-          view: window,
-          button: 0,
-          clientX: event.clientX,
-          clientY: event.clientY,
-          altKey: event.altKey,
-          ctrlKey: event.ctrlKey,
-          metaKey: event.metaKey,
-          shiftKey: event.shiftKey,
-        }));
+        current.controls?.togglePanel();
         return;
       }
 
-      // Même conversion que `event.lngLat` de Mapbox (et donc que l'aperçu de
-      // survol que l'utilisateur suivait) : `map.unproject` seul ignore le
-      // conteneur réel et le facteur d'échelle CSS, ce qui faisait atterrir le
-      // point à plusieurs centaines de mètres de la cible.
-      const lngLat = unprojectMouseEvent(mapInstance, event);
-
-      onCommitRef.current({
-        target: activeTarget,
+      const lngLat = unprojectAnchor(current, pointer);
+      current.controls?.preview({ lon: lngLat.lng, lat: lngLat.lat });
+      const recorded = onCommitRef.current({
+        target: current.target,
         lon: lngLat.lng,
         lat: lngLat.lat,
         variant: isVariantModifierPressed(event),
       });
+      // Rien d'enregistré : aucun rendu ne replacera le marqueur, on le fait ici.
+      if (!recorded) current.controls?.preview(null);
     }
 
     const handleMouseDown = (event: MouseEvent) => {
-      if (event.button !== 0) return;
-      if (target) return;
+      if (event.button !== 0 || session) return;
 
       const source = event.target as HTMLElement | null;
       const handle = source?.closest?.<HTMLElement>(TRACE_POINT_SELECTOR) ?? null;
@@ -227,21 +283,26 @@ export function useTracePointDrag({
       const parsed = readTracePointDataset(handle.dataset);
       if (!parsed) return;
 
-      // Stoppe Mapbox (pan + click de carte). On ne `preventDefault` pas pour
-      // laisser le clic du marqueur se produire : c'est le suppresseur qui
-      // décide s'il faut le rejouer ou l'avaler.
+      // Stoppe Mapbox (pan + click de carte). Le clic natif qui suivra est
+      // avalé au relâchement : c'est le geste qui ouvre le panneau.
       event.stopPropagation();
 
-      element = handle;
-      target = parsed;
-      startX = event.clientX;
-      startY = event.clientY;
-      dragging = false;
-      restoreOpacity = handle.style.opacity;
-      restoreZIndex = handle.style.zIndex;
+      const controls = getTracePointControls(handle);
+      const pointer = getMapScreenPoint(mapInstance, event.clientX, event.clientY);
+      session = {
+        element: handle,
+        target: parsed,
+        controls,
+        press: beginTracePointPress(
+          { x: event.clientX, y: event.clientY },
+          pointer,
+          controls?.anchorPoint() ?? null,
+        ),
+        cancelled: false,
+        restoreOpacity: handle.style.opacity,
+        restoreZIndex: handle.style.zIndex,
+      };
       handle.style.cursor = 'grabbing';
-
-      installClickSuppressor();
 
       try {
         mapInstance.dragPan.disable();
@@ -253,23 +314,17 @@ export function useTracePointDrag({
       window.addEventListener('mousemove', handleWindowMouseMove, true);
       window.addEventListener('mouseup', handleWindowMouseUp, true);
       window.addEventListener('keydown', handleKeyDown, true);
+      window.addEventListener('blur', handleBlur);
+      container.addEventListener('contextmenu', handleContextMenu, true);
     };
 
     container.addEventListener('mousedown', handleMouseDown, true);
 
     return () => {
       container.removeEventListener('mousedown', handleMouseDown, true);
-      window.removeEventListener('mousemove', handleWindowMouseMove, true);
-      window.removeEventListener('mouseup', handleWindowMouseUp, true);
-      window.removeEventListener('keydown', handleKeyDown, true);
+      cancelSession();
+      endSession();
       removeClickSuppressor();
-      restoreElement();
-      target = null;
-      if (dragging) {
-        dragging = false;
-        onDraggingChangeRef.current?.(false);
-      }
-      restoreDragPan();
     };
-  }, [armed, map]);
+  }, [enabled, map]);
 }

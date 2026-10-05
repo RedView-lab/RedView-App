@@ -1,0 +1,36 @@
+# /opt/appwrite/docker-compose.override.yml — lu automatiquement par
+# `docker compose` à côté de docker-compose.yml. Ce dernier est réécrit à chaque
+# mise à jour d'Appwrite, pas ce fichier (server/vps/README.md).
+#
+# Services dont RedView ne se sert pas (volumes functions/builds vides, aucun
+# appel Messaging/Functions dans le code ; les e-mails partent par Resend, la
+# récupération de mot de passe par appwrite-worker-mails, qui reste) : profil
+# jamais activé, donc jamais démarrés. Aucun autre service n'en dépend.
+# openruntimes-executor et appwrite-worker-functions restent : le second
+# dépend du premier et consomme la file functions.
+services:
+  appwrite-assistant:
+    profiles: [disabled]
+  appwrite-worker-builds:
+    profiles: [disabled]
+  appwrite-task-scheduler-functions:
+    profiles: [disabled]
+  appwrite-task-scheduler-executions:
+    profiles: [disabled]
+  appwrite-worker-messaging:
+    profiles: [disabled]
+  appwrite-task-scheduler-messages:
+    profiles: [disabled]
+  appwrite-worker-migrations:
+    profiles: [disabled]
+
+  # Buffer pool 128 Mo par défaut pour ~4 Go de données : le journal temps réel
+  # et les projets relisaient le disque. O_DIRECT (défaut Linux de MariaDB
+  # 10.11, volume XFS) évite de garder chaque page deux fois (buffer pool +
+  # page cache). Arrêt propre avant tout changement : docker compose stop -t 120 mariadb.
+  mariadb:
+    command: >-
+      mysqld
+      --innodb-flush-method=O_DIRECT
+      --innodb-buffer-pool-size=2G
+      --innodb-log-file-size=256M

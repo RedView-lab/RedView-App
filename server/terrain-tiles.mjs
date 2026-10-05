@@ -16,32 +16,24 @@
  */
 import { inflateSync, deflateSync, crc32 } from 'node:zlib';
 
+import { createByteLru } from './byte-lru.mjs';
+
 const AWS_TERRAIN_BASE = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium';
 const AWS_TERRAIN_MAXZOOM = 14;
 // La source pente du client monte à z16 : au-delà de z14 (limite AWS), la
 // pente est calculée sur l'élévation z14 suréchantillonnée (bilinéaire).
 const SLOPE_UPSAMPLE_MAXZOOM = 16;
 
-// In-memory LRU caches
-const RAW_TERRARIUM_CACHE = new Map();
-const SLOPE_CACHE = new Map();
-const ALTITUDE_CACHE = new Map();
-const MAX_CACHE_ITEMS = 1024;
-const MAX_RAW_CACHE_ITEMS = 512;
+// Caches LRU bornés en octets (routes de secours, SW inactif) : 192 Ko par
+// tuile Terrarium décodée, quelques dizaines de Ko par PNG produit.
+const byteLength = (value) => value.byteLength;
+const RAW_TERRARIUM_CACHE = createByteLru({ maxBytes: 32 * 1024 * 1024, sizeOf: byteLength });
+const SLOPE_CACHE = createByteLru({ maxBytes: 16 * 1024 * 1024, sizeOf: byteLength });
+const ALTITUDE_CACHE = createByteLru({ maxBytes: 16 * 1024 * 1024, sizeOf: byteLength });
 
 const INFLIGHT_RAW = new Map();
 const INFLIGHT_SLOPE = new Map();
 const INFLIGHT_ALTITUDE = new Map();
-
-function setLru(cache, key, value, maxItems = MAX_CACHE_ITEMS) {
-  if (cache.has(key)) cache.delete(key);
-  cache.set(key, value);
-  while (cache.size > maxItems) {
-    const firstKey = cache.keys().next().value;
-    if (firstKey !== undefined) cache.delete(firstKey);
-    else break;
-  }
-}
 
 function makeChunk(typeStr, dataBuf) {
   const typeBuf = Buffer.from(typeStr, 'ascii');
@@ -109,7 +101,8 @@ function upsampleElevations(parentElev, pZ, pX, pY, tZ, tX, tY, size = 256) {
 
 async function fetchRawTerrariumRgb(fetchZ, fetchX, fetchY) {
   const rawKey = `${fetchZ}/${fetchX}/${fetchY}`;
-  if (RAW_TERRARIUM_CACHE.has(rawKey)) return RAW_TERRARIUM_CACHE.get(rawKey);
+  const cached = RAW_TERRARIUM_CACHE.get(rawKey);
+  if (cached) return cached;
   if (INFLIGHT_RAW.has(rawKey)) return INFLIGHT_RAW.get(rawKey);
 
   const work = (async () => {
@@ -168,7 +161,7 @@ async function fetchRawTerrariumRgb(fetchZ, fetchX, fetchY) {
         }
       }
 
-      setLru(RAW_TERRARIUM_CACHE, rawKey, rgb, MAX_RAW_CACHE_ITEMS);
+      RAW_TERRARIUM_CACHE.set(rawKey, rgb);
       return rgb;
     } catch {
       return null;
@@ -214,7 +207,8 @@ async function getUpsampledElevationGrid(z, x, y) {
 export async function generateSlopeTile(z, x, y) {
   if (z > SLOPE_UPSAMPLE_MAXZOOM) return null;
   const cacheKey = `${z}/${x}/${y}`;
-  if (SLOPE_CACHE.has(cacheKey)) return SLOPE_CACHE.get(cacheKey);
+  const cached = SLOPE_CACHE.get(cacheKey);
+  if (cached) return cached;
   if (INFLIGHT_SLOPE.has(cacheKey)) return INFLIGHT_SLOPE.get(cacheKey);
 
   const work = (async () => {
@@ -263,7 +257,7 @@ export async function generateSlopeTile(z, x, y) {
       }
 
       const png = buildPngFromScanlines(width, height, outRgba);
-      setLru(SLOPE_CACHE, cacheKey, png);
+      SLOPE_CACHE.set(cacheKey, png);
       return png;
     } catch (err) {
       console.error(`[terrain-tiles] Slope tile failed ${z}/${x}/${y}:`, err);
@@ -284,7 +278,8 @@ export async function generateSlopeTile(z, x, y) {
  */
 export async function generateAltitudeTile(z, x, y) {
   const cacheKey = `${z}/${x}/${y}`;
-  if (ALTITUDE_CACHE.has(cacheKey)) return ALTITUDE_CACHE.get(cacheKey);
+  const cached = ALTITUDE_CACHE.get(cacheKey);
+  if (cached) return cached;
   if (INFLIGHT_ALTITUDE.has(cacheKey)) return INFLIGHT_ALTITUDE.get(cacheKey);
 
   const work = (async () => {
@@ -314,7 +309,7 @@ export async function generateAltitudeTile(z, x, y) {
       }
 
       const png = buildPngFromScanlines(width, height, outRgba);
-      setLru(ALTITUDE_CACHE, cacheKey, png);
+      ALTITUDE_CACHE.set(cacheKey, png);
       return png;
     } catch (err) {
       console.error(`[terrain-tiles] Altitude tile failed ${z}/${x}/${y}:`, err);

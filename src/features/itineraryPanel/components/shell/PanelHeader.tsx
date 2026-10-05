@@ -5,7 +5,7 @@ import {
   IconSave,
   IconShare,
 } from '../icons';
-import { UserAvatar } from '@/shared/components/UserAvatar/UserAvatar';
+import { UserAvatarStack } from '@/shared/components/UserAvatar/UserAvatar';
 import { useAppI18n } from '@/shared/i18n';
 import type { ProjectCollaborator, ProjectSaveStatus, ProjectSessionStatus } from '../../types';
 
@@ -29,8 +29,8 @@ interface PanelHeaderProps {
   sessionStatus?: ProjectSessionStatus;
 }
 
-/** Pastilles visibles avant « +N ». */
-const MAX_VISIBLE_COLLABORATORS = 3;
+/** Places de la pile d'éditeurs (la dernière devient « +N » au-delà) : panneau large / étroit. */
+const COLLABORATOR_SLOTS = { full: 4, compact: 2 } as const;
 
 /** Signalée seulement si elle dure : une connexion normale (≈ 1 s) ou une reconnexion rapide n'affiche rien. */
 const SESSION_STATUS_DELAY_MS = { connecting: 1200, offline: 2000 } as const;
@@ -166,19 +166,9 @@ export function PanelHeader({
               aria-label={t('{{count}} éditeurs sur le projet', { count: collaborators.length })}
               title={collaborators.map((collaborator) => collaborator.name).join(', ')}
             >
-              {/* Panneau large : jusqu'à 3 pastilles puis « +N » ; étroit : 1 pastille puis « +N ». */}
-              <span className="rvi-header__people-full">
-                {collaborators.slice(0, MAX_VISIBLE_COLLABORATORS).map((collaborator) => (
-                  <UserAvatar key={collaborator.userId} userId={collaborator.userId} name={collaborator.name} ringed />
-                ))}
-                {collaborators.length > MAX_VISIBLE_COLLABORATORS ? (
-                  <span className="rvi-header__people-more">+{collaborators.length - MAX_VISIBLE_COLLABORATORS}</span>
-                ) : null}
-              </span>
-              <span className="rvi-header__people-compact">
-                <UserAvatar userId={collaborators[0].userId} name={collaborators[0].name} ringed />
-                <span className="rvi-header__people-more">+{collaborators.length - 1}</span>
-              </span>
+              {/* Panneau large : 4 places ; étroit : 2. */}
+              <UserAvatarStack people={collaborators} max={COLLABORATOR_SLOTS.full} className="rvi-header__people-full" />
+              <UserAvatarStack people={collaborators} max={COLLABORATOR_SLOTS.compact} className="rvi-header__people-compact" />
             </div>
           ) : null}
           {onShare ? (

@@ -13,6 +13,7 @@ import {
   getClientIp,
   isInsideDir,
   isPrivateOrLoopbackIp,
+  listApiRoutes,
   parseTileCoords,
   rateLimitKeyForIp,
   readBodyLimited,
@@ -103,6 +104,36 @@ describe('resolveApiRoute', () => {
     '/static/poi',
   ])('refuses %s', (pathname) => {
     expect(resolveApiRoute(API_DIR, pathname)).toBeNull();
+  });
+
+  it('resolves bundled handlers from a known route list (no disk access)', () => {
+    const bundleDir = path.resolve('/srv/dist-server/api');
+    const routes = new Set(['poi', 'auth/verify-code', 'brouter']);
+    expect(resolveApiRoute(bundleDir, '/api/poi', { extension: '.mjs', routes })).toEqual({
+      route: 'poi',
+      file: path.join(bundleDir, 'poi.mjs'),
+      isAuth: false,
+    });
+    expect(resolveApiRoute(bundleDir, '/api/brouter/profile', { extension: '.mjs', routes })?.route).toBe('brouter');
+    expect(resolveApiRoute(bundleDir, '/api/weather', { extension: '.mjs', routes })).toBeNull();
+    expect(resolveApiRoute(bundleDir, '/api/_lib/appwrite', { extension: '.mjs', routes })).toBeNull();
+  });
+});
+
+describe('listApiRoutes', () => {
+  it('lists every handler of the source tree, never _lib nor tests', () => {
+    const routes = listApiRoutes(API_DIR, '.ts');
+    expect(routes.has('poi')).toBe(true);
+    expect(routes.has('brouter')).toBe(true);
+    expect(routes.has('auth/verify-code')).toBe(true);
+    for (const route of routes) {
+      expect(route).not.toMatch(/(^|\/)_|__tests__|\.test$/);
+      expect(resolveApiRoute(API_DIR, `/api/${route}`)?.route).toBe(route);
+    }
+  });
+
+  it('answers an empty set for a missing directory', () => {
+    expect(listApiRoutes(path.join(API_DIR, 'does-not-exist'), '.mjs').size).toBe(0);
   });
 });
 

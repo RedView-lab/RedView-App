@@ -31,8 +31,15 @@ if (!DB_READONLY) {
   // l'ingestion (import-osm.mjs repasse la base en WAL à la fin).
   db.pragma('journal_mode = WAL');
   db.pragma('synchronous = NORMAL');
+  db.pragma('cache_size = -64000'); // 64 Mo de cache RAM
+} else {
+  // Lecture seule (~470 Mo en prod) : la base est lue par mmap dans le page
+  // cache du système (partagé, rendu au noyau sous pression mémoire) au lieu
+  // d'être recopiée page à page dans un cache privé de 64 Mo ; un petit cache
+  // SQLite suffit aux pages chaudes de l'index R*Tree.
+  db.pragma('mmap_size = 1073741824'); // 1 Go : couvre toute la base
+  db.pragma('cache_size = -8000');
 }
-db.pragma('cache_size = -64000'); // 64 Mo de cache RAM
 
 // Schéma produit par server/poi-ingest/import-osm.mjs :
 // `osm_type` distingue node / way / relation, et `id` est préfixé par type

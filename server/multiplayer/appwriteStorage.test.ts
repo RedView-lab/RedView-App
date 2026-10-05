@@ -25,11 +25,17 @@ const fake = vi.hoisted(() => ({
   nextFile: 0,
   /** Appwrite en panne pour les mises à jour de documents (500). */
   failUpdates: false,
+  /** Appwrite arrêté derrière son Traefik : tout appel répond 404 sans type (« 404 page not found »). */
+  proxyNotFound: false,
 }));
 
 vi.mock('node-appwrite', async (importActual) => {
   const actual = await importActual<typeof import('node-appwrite')>();
-  const error = (code: number) => Object.assign(new Error(`appwrite ${code}`), { code });
+  // Comme AppwriteException : un 404 d'Appwrite porte son type (`document_not_found`…), celui d'un proxy non.
+  const error = (code: number, type = '') => Object.assign(new Error(`appwrite ${code}`), { code, type });
+  const gate = () => {
+    if (fake.proxyNotFound) throw error(404);
+  };
   const collection = (id: string) => {
     let docs = fake.collections.get(id);
     if (!docs) {
@@ -50,11 +56,13 @@ vi.mock('node-appwrite', async (importActual) => {
   };
   class Databases {
     async getDocument(_db: string, col: string, id: string) {
+      gate();
       const doc = collection(col).get(id);
-      if (!doc) throw error(404);
+      if (!doc) throw error(404, 'document_not_found');
       return { ...doc };
     }
     async listDocuments(_db: string, col: string, queries: string[] = []) {
+      gate();
       const parsed = queries.map((raw) => JSON.parse(raw) as { method: string; attribute?: string; values?: unknown[] });
       let docs = [...collection(col).values()].filter((doc) => queries.every((raw) => matches(doc, raw)));
       const order = parsed.find((query) => query.method === 'orderAsc');
@@ -66,35 +74,41 @@ vi.mock('node-appwrite', async (importActual) => {
       return { total: docs.length, documents: docs.map((doc) => ({ ...doc })) };
     }
     async createDocument(_db: string, col: string, id: string, data: Record<string, unknown>) {
+      gate();
       if (collection(col).has(id)) throw error(409);
       collection(col).set(id, { ...data, $id: id });
       return { ...data, $id: id };
     }
     async updateDocument(_db: string, col: string, id: string, data: Record<string, unknown>) {
+      gate();
       if (fake.failUpdates) throw error(500);
       const doc = collection(col).get(id);
-      if (!doc) throw error(404);
+      if (!doc) throw error(404, 'document_not_found');
       Object.assign(doc, data);
       return { ...doc };
     }
     async deleteDocument(_db: string, col: string, id: string) {
-      if (!collection(col).delete(id)) throw error(404);
+      gate();
+      if (!collection(col).delete(id)) throw error(404, 'document_not_found');
       return {};
     }
   }
   class Storage {
     async createFile(_bucket: string, _id: string, file: { name: string; bytes: Uint8Array }) {
+      gate();
       const $id = `file${(fake.nextFile += 1)}`;
       fake.files.set($id, { name: file.name, bytes: file.bytes });
       return { $id };
     }
     async getFileDownload(_bucket: string, id: string) {
+      gate();
       const file = fake.files.get(id);
-      if (!file) throw error(404);
+      if (!file) throw error(404, 'storage_file_not_found');
       return file.bytes.buffer.slice(file.bytes.byteOffset, file.bytes.byteOffset + file.bytes.byteLength);
     }
     async deleteFile(_bucket: string, id: string) {
-      if (!fake.files.delete(id)) throw error(404);
+      gate();
+      if (!fake.files.delete(id)) throw error(404, 'storage_file_not_found');
       return {};
     }
     async listFiles(_bucket: string, queries: string[] = []) {
@@ -178,6 +192,7 @@ beforeEach(() => {
   fake.collections.clear();
   fake.files.clear();
   fake.failUpdates = false;
+  fake.proxyNotFound = false;
   seedProjectRow(sampleDocument(300));
 });
 
@@ -301,6 +316,30 @@ describe('stockage Appwrite de la salle', () => {
     await new Promise((resolve) => setTimeout(resolve, 1_200));
     expect(host.metrics.checkpointErrors).toBe(0);
     expect(host.snapshotMetrics().rooms).toBe(0);
+    await host.shutdown();
+  });
+
+  it('404 d’un proxy sans route (Appwrite en redémarrage) : panne passagère, salle ni fermée ni purgée', async () => {
+    const host = newHost();
+    const room = (await host.open(PROJECT))!;
+    const { handle, closed } = join(room, 'a');
+    room.handle(handle, renameBatch(room, 1, 'Avant'));
+    await waitFor(() => room.room.durableSeq === room.room.state.seq, 'journal');
+    const journalRows = fake.collections.get('project_journal')!.size;
+
+    fake.proxyNotFound = true;
+    // La revérification des droits échoue (réessayée) au lieu de conclure « projet supprimé ».
+    await expect(createAppwriteStorage(options).access(PROJECT)).rejects.toMatchObject({ code: 404 });
+    for (let clientSeq = 2; clientSeq <= 4; clientSeq += 1) room.handle(handle, renameBatch(room, clientSeq, `Pendant ${clientSeq}`));
+    await waitFor(() => host.metrics.journalErrors >= 1, 'journal en échec');
+    expect(room.closed).toBe(false);
+    expect(closed.code).toBeNull();
+    expect(host.metrics.deletedRooms).toBe(0);
+    expect(fake.collections.get('project_journal')!.size).toBeGreaterThanOrEqual(journalRows);
+
+    fake.proxyNotFound = false;
+    await waitFor(() => room.room.durableSeq === room.room.state.seq, 'journal rattrapé');
+    expect(room.closed).toBe(false);
     await host.shutdown();
   });
 

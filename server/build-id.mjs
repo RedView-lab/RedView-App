@@ -5,8 +5,9 @@
 // En prod Docker / Coolify, SOURCE_COMMIT est passé en ARG de build et en ENV
 // du stage runner (voir Dockerfile) ; sans lui, npm_package_version (« 0.0.0 »)
 // ne change jamais d'un déploiement à l'autre.
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+//
+// Module sans effet de bord : bundlé dans dist-server/ (scripts/build-server.mjs),
+// un test « lancé en script » via import.meta.url y serait vrai au démarrage du serveur.
 
 /** @param {Record<string, string | undefined>} [env] */
 export function resolveBuildId(env = process.env) {
@@ -18,7 +19,3 @@ export function resolveBuildId(env = process.env) {
     || 'dev'
   ).slice(0, 12);
 }
-
-// `node server/build-id.mjs` imprime l'identifiant (script d'upload des sourcemaps).
-const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
-if (isMain) process.stdout.write(resolveBuildId());

@@ -1,4 +1,5 @@
-import { access, mkdtemp, rm } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -152,7 +153,8 @@ describe('serveur temps réel', () => {
     expect(server!.host.metrics.deletedRooms).toBe(1);
     expect(server!.host.metrics.checkpointErrors).toBe(0);
     await waitFor(() => server!.host.snapshotMetrics().rooms === 0, 'salle oubliée');
-    await expect(access(path.join(dir, 'local-test'))).rejects.toThrow();
+    // La salle est oubliée à la fermeture ; la purge passe après les écritures en cours.
+    await waitFor(() => !existsSync(path.join(dir, 'local-test')), 'données purgées');
   });
 
   it('deux clients : état initial, modifications croisées, convergence', async () => {

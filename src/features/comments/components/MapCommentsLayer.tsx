@@ -140,7 +140,7 @@ function MapCommentsLayerInner({ map, tool, overlayInsets }: { map: MapboxMap; t
   }
   if (draft?.zone) zoneShapes.push({ zone: draft.zone, draft: true });
   if (tool.dragZone) zoneShapes.push({ zone: tool.dragZone, draft: true });
-  useCommentZoneLayer(map, zoneShapes);
+  useCommentZoneLayer(map, zoneShapes, tool.zoneDrawing ?? null);
 
   const { openThread, setHoveredThreadId, nameOf } = tool;
   const handleOpenPin = useCallback((threadId: string) => {

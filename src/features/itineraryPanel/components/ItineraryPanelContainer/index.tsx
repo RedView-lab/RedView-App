@@ -403,7 +403,6 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     onTogglePauseFavorite: timelineCallbacks.handleFavoriteTimelineItem,
     onDeleteWaypoint: timelineCallbacks.handleRemoveTimelineItem,
     onToggleWaypointFavorite: timelineCallbacks.handleFavoriteTimelineItem,
-    onMoveWaypoint: timelineCallbacks.handleMoveTimelineWaypoint,
   });
 
   // Résultats de la recherche POI (async) : hors historique.

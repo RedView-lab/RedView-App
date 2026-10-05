@@ -10,6 +10,7 @@ import type {
 
 import type { CommentAction, CommentAuthor, CommentTextInput } from '../lib/commentActions';
 import type { MentionCandidate } from '../lib/messageText';
+import type { CommentZoneDrawing } from '../lib/zoneDrawing';
 
 /** Contexte de l'outil Commentaire (fournisseur : CommentToolContext.tsx). */
 
@@ -55,6 +56,8 @@ export interface CommentToolValue {
   draftFocusRequest: number;
   /** Zone en cours de tracé (Maj + glisser). */
   dragZone: ProjectCommentZone | null;
+  /** Zone polygonale en cours de pose (sous-outil « zone »). */
+  zoneDrawing?: CommentZoneDrawing | null;
 
   reply(threadId: string, input: CommentTextInput): boolean;
   editMessage(threadId: string, messageId: string, input: CommentTextInput): boolean;

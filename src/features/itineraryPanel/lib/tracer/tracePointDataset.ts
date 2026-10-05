@@ -51,3 +51,28 @@ export function readTracePointDataset(dataset: DOMStringMap): TracePointHandle |
 
   return { itineraryId: rvItineraryId, rowId: rvRowId, kind: rvPointKind, lon, lat };
 }
+
+/**
+ * Actions d'une poignée, fournies par le marqueur qui la porte. Le geste sur
+ * une poignée bloque le `mousedown` avant Mapbox : la popup ne peut donc pas
+ * passer par le `click` de carte (Mapbox le juge loin d'un `mousedown` périmé
+ * et ne l'émet pas), le geste ouvre le panneau lui-même.
+ */
+export interface TracePointControls {
+  /** Ouvre le panneau du point, ou le ferme s'il est déjà ouvert. */
+  togglePanel: () => void;
+  /** Ancre du marqueur en px du conteneur de carte (comme `map.project`). */
+  anchorPoint: () => { x: number; y: number } | null;
+  /** Montre le marqueur à cette position pendant le glisser ; `null` le remet en place. */
+  preview: (position: { lon: number; lat: number } | null) => void;
+}
+
+const tracePointControls = new WeakMap<HTMLElement, TracePointControls>();
+
+export function registerTracePointControls(element: HTMLElement, controls: TracePointControls): void {
+  tracePointControls.set(element, controls);
+}
+
+export function getTracePointControls(element: HTMLElement): TracePointControls | null {
+  return tracePointControls.get(element) ?? null;
+}

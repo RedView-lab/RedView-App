@@ -14,6 +14,7 @@
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
 import fs from 'node:fs';
 import path from 'node:path';
+import { createByteLru } from '../server/byte-lru.mjs';
 
 const TIMEOUT_MS = 15_000;
 
@@ -24,8 +25,12 @@ interface CacheEntry {
   expiresAt: number;
 }
 
-const memoryCache = new Map<string, CacheEntry>();
-const MAX_CACHE_ENTRIES = 128;
+// Borné en octets (tuiles de quelques centaines de Ko) ; durée de vie par
+// entrée (tuile 1 h, méta 1 min).
+const memoryCache = createByteLru<CacheEntry>({
+  maxBytes: 32 * 1024 * 1024,
+  sizeOf: (entry) => entry.body.length,
+});
 
 function getCached(key: string): CacheEntry | undefined {
   const entry = memoryCache.get(key);
@@ -38,10 +43,6 @@ function getCached(key: string): CacheEntry | undefined {
 }
 
 function setCached(key: string, entry: CacheEntry) {
-  if (memoryCache.size >= MAX_CACHE_ENTRIES) {
-    const oldestKey = memoryCache.keys().next().value;
-    if (oldestKey) memoryCache.delete(oldestKey);
-  }
   memoryCache.set(key, entry);
 }
 

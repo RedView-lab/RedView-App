@@ -5,7 +5,8 @@ WORKDIR /app
 RUN apk add --no-cache libc6-compat
 
 COPY package*.json ./
-RUN npm ci
+# Cache npm BuildKit : réutilisé d'un build à l'autre, jamais dans une couche de l'image.
+RUN --mount=type=cache,target=/root/.npm npm ci
 
 COPY . .
 
@@ -17,7 +18,9 @@ ARG SOURCE_COMMIT=""
 ENV SOURCE_COMMIT=${SOURCE_COMMIT}
 
 ENV NODE_ENV=production
-RUN npm run build
+# Front (dist/) puis serveur bundlé (dist-server/ : server.mjs et les routes
+# api/ en .mjs, sans tsx à l'exécution — scripts/build-server.mjs).
+RUN npm run build && node scripts/build-server.mjs --app
 
 # Sourcemaps → GlitchTip (release = identifiant de build), puis suppression des
 # .map de dist/ : jamais dans l'image. Sans configuration, l'upload est ignoré
@@ -31,6 +34,10 @@ ARG SENTRY_AUTH_TOKEN=""
 RUN --mount=type=secret,id=SENTRY_AUTH_TOKEN \
     node scripts/upload-sourcemaps.mjs dist
 
+# Variantes .br/.gz des statiques, servies par négociation : la prod ne
+# compresse rien à l'exécution (ni CPU, ni cache mémoire).
+RUN node scripts/precompress-dist.mjs dist
+
 FROM node:22-alpine AS runner
 WORKDIR /app
 
@@ -39,15 +46,13 @@ ENV PORT=3000
 
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 redview
 
-# Dépendances de production uniquement (pas de vite/eslint/typescript dans l'image).
+# Dépendances d'exécution du serveur uniquement (`dependencies` de package.json :
+# Appwrite, Stripe, pino, Sentry…) ; tout le front est dans dist/.
 COPY --from=builder /app/package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/api ./api
-# Seuls les modules runtime du serveur (pas les confs nginx/systemd ni l'ingest POI).
-COPY --from=builder /app/server/*.mjs ./server/
-COPY --from=builder /app/server.mjs ./server.mjs
+COPY --from=builder /app/dist-server ./dist-server
 
 # Release des erreurs serveur (server/build-id.mjs), même valeur que le front ;
 # après npm ci pour ne pas invalider son cache à chaque commit.
@@ -62,4 +67,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD wget -qO- http://127.0.0.1:3000/health > /dev/null || exit 1
 
 # node directement en PID 1 (signaux SIGTERM transmis, pas de npm intermédiaire).
-CMD ["node", "--import", "tsx", "server.mjs"]
+CMD ["node", "dist-server/server.mjs"]

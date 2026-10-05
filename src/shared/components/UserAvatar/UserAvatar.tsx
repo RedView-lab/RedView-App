@@ -10,6 +10,11 @@ import './UserAvatar.css';
 const AVATAR_COLORS = ['#c50000', '#ff8a3d', '#ffd13a', '#5ab95a', '#3d8bff', '#9b59ff'] as const;
 /** Couleurs claires de la palette : initiales foncées (lisibles). */
 const LIGHT_COLORS = new Set<string>(['#ffd13a', '#ff8a3d']);
+/**
+ * Demi-hauteur des capitales de Rethink Sans (sCapHeight 700 / 1000) : la
+ * ligne de base posée à mi-hauteur + 0,35 em centre la lettre exactement.
+ */
+const HALF_CAP_HEIGHT_EM = 0.35;
 
 function hashString(value: string): number {
   let hash = 0;
@@ -32,12 +37,10 @@ type UserAvatarProps = {
   /** Nom affiché (ou e-mail). */
   name: string;
   size?: 20 | 24 | 28;
-  /** Anneau de la couleur du fond (pastilles qui se chevauchent). */
-  ringed?: boolean;
   title?: string;
 };
 
-export function UserAvatar({ userId, name, size = 24, ringed = false, title }: UserAvatarProps) {
+export function UserAvatar({ userId, name, size = 24, title }: UserAvatarProps) {
   const color = userAvatarColor(userId);
   const style = {
     '--rv-avatar-size': `${size}px`,
@@ -45,9 +48,45 @@ export function UserAvatar({ userId, name, size = 24, ringed = false, title }: U
     // Initiales : blanches sur les couleurs vives, encre du thème clair sur jaune / orange.
     color: LIGHT_COLORS.has(color) ? 'rgb(17 17 20)' : 'var(--rv-on-accent)',
   } as CSSProperties;
+  // Lettre en SVG : une boîte de ligne HTML de 11 px dans un rond de 28 px
+  // tombe sur un demi-pixel et se décale à l'arrondi ; le texte SVG est placé
+  // au sous-pixel, centré sur la chasse et la hauteur de capitale.
   return (
-    <span className={`rv-avatar${ringed ? ' rv-avatar--ringed' : ''}`} style={style} title={title ?? name} aria-label={name}>
-      {initialOf(name)}
+    <span className={`rv-avatar rv-avatar--${size}`} style={style} title={title ?? name} role="img" aria-label={name}>
+      <svg className="rv-avatar__glyph" width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+        <text x={size / 2} y={size / 2} dy={`${HALF_CAP_HEIGHT_EM}em`} textAnchor="middle" fill="currentColor">
+          {initialOf(name)}
+        </text>
+      </svg>
+    </span>
+  );
+}
+
+type UserAvatarStackProps = {
+  people: readonly { userId: string; name: string }[];
+  /**
+   * Places de la pile. Au-delà, la dernière devient « +N » ; jamais « +1 » :
+   * une pastille de plus tient dans la même place et dit qui c'est.
+   */
+  max: number;
+  className?: string;
+};
+
+/** Pastilles empilées et découpées (Figma) : `max` places au plus, la dernière en « +N » si besoin. */
+export function UserAvatarStack({ people, max, className }: UserAvatarStackProps) {
+  const visibleCount = people.length <= max ? people.length : Math.max(1, max - 1);
+  const visible = people.slice(0, visibleCount);
+  const hidden = people.slice(visibleCount);
+  return (
+    <span className={`rv-avatar-stack${className ? ` ${className}` : ''}`}>
+      {visible.map((person) => (
+        <UserAvatar key={person.userId} userId={person.userId} name={person.name} />
+      ))}
+      {hidden.length > 0 ? (
+        <span className="rv-avatar-stack__more" title={hidden.map((person) => person.name).join(', ')}>
+          +{hidden.length}
+        </span>
+      ) : null}
     </span>
   );
 }

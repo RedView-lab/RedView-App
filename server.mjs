@@ -4,6 +4,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { promisify } from 'node:util';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createByteLru } from './server/byte-lru.mjs';
 import { recolorRadarPng } from './server/radar-recolor.mjs';
 import { generateSlopeTile, generateAltitudeTile } from './server/terrain-tiles.mjs';
 import {
@@ -15,6 +16,7 @@ import {
   decodeSafePathname,
   getClientIp,
   isInsideDir,
+  listApiRoutes,
   parseTileCoords,
   rateLimitKeyForIp,
   readBodyLimited,
@@ -22,13 +24,24 @@ import {
 } from './server/http-security.mjs';
 import { captureServerError, flushServerObservability, initServerObservability } from './server/observability.mjs';
 import { createRequestLogger, normalizeRoutePath } from './server/request-logging.mjs';
+import { VARIANT_SUFFIX, isCompressible } from './server/static-compression.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
-const DIST_DIR = path.resolve(__dirname, 'dist');
-const API_DIR = path.resolve(__dirname, 'api');
+
+// Image de prod : server.mjs et les routes api/ sont bundlés dans dist-server/
+// (scripts/build-server.mjs), les routes en `.mjs`, sans tsx. La constante est
+// remplacée à la compilation ; non bundlé (`npm start`, tests), le serveur
+// charge les sources `.ts`.
+const BUNDLED = process.env.REDVIEW_SERVER_BUNDLE === '1';
+const ROOT_DIR = BUNDLED ? path.resolve(__dirname, '..') : __dirname;
+const DIST_DIR = path.resolve(ROOT_DIR, 'dist');
+const API_DIR = BUNDLED ? path.resolve(__dirname, 'api') : path.resolve(ROOT_DIR, 'api');
+const API_ROUTE_OPTIONS = BUNDLED
+  ? { extension: '.mjs', routes: listApiRoutes(API_DIR, '.mjs') }
+  : { extension: '.ts' };
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -54,18 +67,35 @@ const MIME_TYPES = {
 // ── Compression des statiques (le proxy amont ne compresse pas) ─────────────
 const brotliCompressAsync = promisify(zlib.brotliCompress);
 const gzipAsync = promisify(zlib.gzip);
-const COMPRESSIBLE_EXTENSIONS = new Set(['.html', '.js', '.mjs', '.css', '.json', '.svg', '.wasm', '.txt', '.brf']);
-const MIN_COMPRESS_BYTES = 1024;
-// Au-delà, on diffuse le fichier brut en flux plutôt que de le bufferiser.
-const MAX_COMPRESS_BYTES = 32 * 1024 * 1024;
-// Brotli 9 : bon ratio, ~0,3 s pour 3 MB ; 5 au-delà de 8 MB (chunk d'index LiDAR NZ).
+
+/**
+ * Variantes précompressées du build (scripts/precompress-dist.mjs, lancé dans
+ * l'image) : chemin de la variante → taille et date. Lues une fois, le build
+ * est immuable ; la prod ne compresse donc rien à l'exécution (ni CPU, ni
+ * cache mémoire). Un fichier sans variante y est servi tel quel : trop petit,
+ * ou la compression n'y gagnait pas assez.
+ */
+function scanPrecompressedVariants(dir) {
+  const variants = new Map();
+  if (!fs.existsSync(dir)) return variants;
+  for (const entry of fs.readdirSync(dir, { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile() || !/\.(br|gz)$/.test(entry.name)) continue;
+    const file = path.join(entry.parentPath, entry.name);
+    const { size, mtimeMs } = fs.statSync(file);
+    variants.set(file, { size, mtimeMs });
+  }
+  return variants;
+}
+const PRECOMPRESSED_VARIANTS = scanPrecompressedVariants(DIST_DIR);
+
+// Compression à la volée : seulement sans build précompressé (`npm start` en
+// local). Brotli 9 : bon ratio, ~0,3 s pour 3 MB ; 5 au-delà de 8 MB.
+const COMPRESS_ON_THE_FLY = PRECOMPRESSED_VARIANTS.size === 0;
 const BROTLI_HIGH_QUALITY_MAX_BYTES = 8 * 1024 * 1024;
-// Cache mémoire LRU des variantes compressées, borné en octets. Clé incluant
-// taille + mtime : un fichier remplacé n'est jamais servi périmé.
-const COMPRESSED_CACHE_MAX_BYTES = 128 * 1024 * 1024;
-const compressedCache = new Map();
+// Cache LRU des variantes compressées à la volée, borné en octets. Clé
+// incluant taille + mtime : un fichier remplacé n'est jamais servi périmé.
+const compressedCache = createByteLru({ maxBytes: 16 * 1024 * 1024, sizeOf: (body) => body.length });
 const compressionsInFlight = new Map();
-let compressedCacheBytes = 0;
 
 export const REDVIEW_CSP_HEADER = [
   "default-src 'self'",
@@ -122,11 +152,12 @@ function looksLikeStaticAsset(pathname) {
 }
 
 /**
- * Choisit l'encodage d'après Accept-Encoding (q-values respectées, `*`
- * compris) : brotli de préférence, sinon gzip, sinon identité (null).
+ * Encodages acceptés d'après Accept-Encoding (q-values respectées, `*`
+ * compris), du préféré au moins préféré : brotli d'abord à poids égal.
+ * Liste vide : identité seulement.
  */
-function negotiateEncoding(acceptEncoding) {
-  if (!acceptEncoding) return null;
+function acceptedEncodings(acceptEncoding) {
+  if (!acceptEncoding) return [];
   const weights = new Map();
   for (const part of String(acceptEncoding).split(',')) {
     const [rawToken, ...params] = part.split(';');
@@ -142,8 +173,20 @@ function negotiateEncoding(acceptEncoding) {
   const weightOf = (encoding) => weights.get(encoding) ?? weights.get('*') ?? 0;
   const br = weightOf('br');
   const gzip = weightOf('gzip');
-  if (br > 0 && br >= gzip) return 'br';
-  if (gzip > 0) return 'gzip';
+  const ordered = br > 0 && br >= gzip ? ['br', 'gzip'] : ['gzip', 'br'];
+  return ordered.filter((encoding) => (encoding === 'br' ? br : gzip) > 0);
+}
+
+/**
+ * Variante précompressée à servir pour `filePath` : la première acceptée par
+ * le client, jamais plus ancienne que le fichier (variante d'un build précédent).
+ */
+function pickPrecompressedVariant(filePath, stat, encodings) {
+  for (const encoding of encodings) {
+    const file = filePath + VARIANT_SUFFIX[encoding];
+    const variant = PRECOMPRESSED_VARIANTS.get(file);
+    if (variant && variant.mtimeMs >= stat.mtimeMs) return { encoding, file, size: variant.size };
+  }
   return null;
 }
 
@@ -151,11 +194,7 @@ function negotiateEncoding(acceptEncoding) {
 function getCompressedFile(filePath, stat, encoding) {
   const key = `${encoding}:${stat.size}:${Math.floor(stat.mtimeMs)}:${filePath}`;
   const cached = compressedCache.get(key);
-  if (cached) {
-    compressedCache.delete(key);
-    compressedCache.set(key, cached);
-    return Promise.resolve(cached);
-  }
+  if (cached) return Promise.resolve(cached);
   const inFlight = compressionsInFlight.get(key);
   if (inFlight) return inFlight;
 
@@ -169,19 +208,27 @@ function getCompressedFile(filePath, stat, encoding) {
         },
       })
       : await gzipAsync(raw, { level: 9 });
-    if (compressed.length <= COMPRESSED_CACHE_MAX_BYTES / 4) {
-      compressedCache.set(key, compressed);
-      compressedCacheBytes += compressed.length;
-      while (compressedCacheBytes > COMPRESSED_CACHE_MAX_BYTES && compressedCache.size > 0) {
-        const [oldestKey, oldest] = compressedCache.entries().next().value;
-        compressedCache.delete(oldestKey);
-        compressedCacheBytes -= oldest.length;
-      }
-    }
+    compressedCache.set(key, compressed);
     return compressed;
   })().finally(() => compressionsInFlight.delete(key));
   compressionsInFlight.set(key, work);
   return work;
+}
+
+/** Diffuse un fichier en flux ; une erreur de lecture répond 500 (ou coupe la réponse déjà commencée). */
+function streamFile(filePath, req, res) {
+  const stream = fs.createReadStream(filePath);
+  stream.on('error', (err) => {
+    req.log.error({ err }, 'static stream error');
+    captureServerError(err, { route: req.redviewRoute, requestId: req.id, method: req.method });
+    if (!res.headersSent) {
+      res.statusCode = 500;
+      res.end('Internal Server Error');
+    } else {
+      res.destroy(err);
+    }
+  });
+  stream.pipe(res);
 }
 
 /** ETag faible dérivé de la taille et de la date de modification. */
@@ -249,7 +296,7 @@ const server = http.createServer(async (req, res) => {
 
     // 2. Handle /api/* routes with rate limiting
     if (pathname.startsWith('/api/')) {
-      const apiRoute = resolveApiRoute(API_DIR, pathname);
+      const apiRoute = resolveApiRoute(API_DIR, pathname, API_ROUTE_OPTIONS);
       req.redviewRoute = normalizeRoutePath(pathname, apiRoute?.route);
       // Le bucket est choisi d'après la route RÉSOLUE : un chemin détourné ne
       // peut plus atteindre `auth/*` en passant par le quota général.
@@ -317,7 +364,8 @@ const server = http.createServer(async (req, res) => {
     }
 
     // Sourcemaps : uploadées sur GlitchTip et supprimées au build, jamais servies.
-    if (pathname.endsWith('.map')) {
+    // Variantes précompressées (.br/.gz) : servies seulement par négociation.
+    if (/\.(map|br|gz)$/.test(pathname)) {
       res.statusCode = 404;
       res.setHeader('Content-Type', 'text/plain; charset=utf-8');
       res.setHeader('Cache-Control', 'no-store');
@@ -397,10 +445,10 @@ const server = http.createServer(async (req, res) => {
       res.setHeader('Cache-Control', 'public, max-age=86400, must-revalidate');
     }
 
-    const compressible = COMPRESSIBLE_EXTENSIONS.has(ext)
-      && stat.size >= MIN_COMPRESS_BYTES
-      && stat.size <= MAX_COMPRESS_BYTES;
-    const encoding = compressible ? negotiateEncoding(req.headers['accept-encoding']) : null;
+    const compressible = isCompressible(ext, stat.size);
+    const encodings = compressible ? acceptedEncodings(req.headers['accept-encoding']) : [];
+    const precompressed = pickPrecompressedVariant(filePath, stat, encodings);
+    const encoding = precompressed?.encoding ?? (COMPRESS_ON_THE_FLY ? encodings[0] : undefined) ?? null;
     if (compressible) res.setHeader('Vary', 'Accept-Encoding');
 
     if (!isHtml) {
@@ -415,6 +463,12 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
+    if (precompressed) {
+      res.setHeader('Content-Encoding', precompressed.encoding);
+      res.setHeader('Content-Length', precompressed.size);
+      return req.method === 'HEAD' ? res.end() : streamFile(precompressed.file, req, res);
+    }
+
     if (encoding) {
       const body = await getCompressedFile(filePath, stat, encoding);
       res.setHeader('Content-Encoding', encoding);
@@ -426,19 +480,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'HEAD') {
       return res.end();
     }
-
-    const stream = fs.createReadStream(filePath);
-    stream.on('error', (err) => {
-      req.log.error({ err }, 'static stream error');
-      captureServerError(err, { route: req.redviewRoute, requestId: req.id, method: req.method });
-      if (!res.headersSent) {
-        res.statusCode = 500;
-        res.end('Internal Server Error');
-      } else {
-        res.destroy(err);
-      }
-    });
-    stream.pipe(res);
+    streamFile(filePath, req, res);
   } catch (err) {
     req.log.error({ err }, 'server error');
     captureServerError(err, { route: req.redviewRoute, requestId: req.id, method: req.method });

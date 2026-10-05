@@ -4,7 +4,21 @@ import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 
 type IconProps = { size?: number };
 
-export const IconComment = ({ size = 16 }: IconProps) => <SvgV2Icon name="annotation.svg" size={size} />;
+/**
+ * Bulle de commentaire de Figma : un rond dont le coin bas-gauche est carré
+ * (la pointe qui désigne le point) — même forme que les bulles posées sur la
+ * carte et que le curseur du mode commentaire. Trait du jeu svgv2 (1,33).
+ */
+export const IconComment = ({ size = 16 }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path
+      d="M2.25 8a5.75 5.75 0 1 1 5.75 5.75H3.25a1 1 0 0 1-1-1V8Z"
+      stroke="currentColor"
+      strokeWidth="1.33333"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
 export const IconResolve = ({ size = 16 }: IconProps) => <SvgV2Icon name="check-circle.svg" size={size} />;
 export const IconMore = ({ size = 16 }: IconProps) => <SvgV2Icon name="dots-vertical.svg" size={size} />;
 export const IconClose = ({ size = 16 }: IconProps) => <SvgV2Icon name="x-close.svg" size={size} />;

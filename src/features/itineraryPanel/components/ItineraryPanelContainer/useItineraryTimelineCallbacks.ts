@@ -1,7 +1,6 @@
 import { useCallback } from 'react';
 import type { TimelineAddItemKind, TimelineAddItemOptions, TimelineView } from '../../types';
 import {
-  buildPendingRoutePatchForEditedRow,
   buildTimelineAfterRemoval,
   hasEditableRoute,
   insertTimelineItem,
@@ -82,7 +81,7 @@ export function useItineraryTimelineCallbacks({
 
   const handleRemoveTimelineItem = useCallback((id: string) => {
     const applyRemoval = (it: ItineraryProject['itineraries'][number]) => {
-      const nextTimeline = buildTimelineAfterRemoval(it.timeline, id);
+      const nextTimeline = buildTimelineAfterRemoval(it.timeline, id, it.gpxRoute?.points);
       if (!nextTimeline) return false;
 
       const previousTimeline = it.timeline;
@@ -138,25 +137,6 @@ export function useItineraryTimelineCallbacks({
     });
   }, [updateActive]);
 
-  const handleMoveTimelineWaypoint = useCallback(
-    (id: string, lat: number, lon: number) => {
-      updateActive((it) => {
-        const row = it.timeline.find((item) => item.id === id);
-        if (!row) return;
-        row.lat = lat;
-        row.lon = lon;
-        delete row.onRoute;
-        if (hasEditableRoute(it)) {
-          it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it, id);
-          delete it.pendingTraceExtension;
-          delete it.routeAudit;
-          it.prediction = null;
-        }
-      });
-    },
-    [updateActive],
-  );
-
   return {
     handleChangeTimelineView,
     handleAddTimelineItem,
@@ -166,6 +146,5 @@ export function useItineraryTimelineCallbacks({
     handleRemoveTimelineItem,
     handleFavoriteTimelineItem,
     handleSelectTimelinePlace,
-    handleMoveTimelineWaypoint,
   };
 }

@@ -43,6 +43,15 @@ export const FREECAM_VERTICAL_SPEED_PER_AGL = 1.2;
 export const FREECAM_VERTICAL_SPEED_MIN_MPS = 3;
 export const FREECAM_VERTICAL_SPEED_MAX_MPS = 15_000;
 
+/**
+ * Vélocité (inertie) : constantes de temps de l'amortissement exponentiel.
+ * Accélération : 95 % de la vitesse en ~0,4 s ; relâché : glisse ~1 s.
+ */
+export const FREECAM_ACCELERATE_TIME_S = 0.14;
+export const FREECAM_BRAKE_TIME_S = 0.32;
+/** Fin de glisse : arrêt net sous cette fraction de la vitesse horizontale du moment. */
+export const FREECAM_REST_SPEED_RATIO = 0.01;
+
 /** Multiplicateur de vitesse réglé à la molette. */
 export const FREECAM_SPEED_MULTIPLIER_MIN = 0.25;
 export const FREECAM_SPEED_MULTIPLIER_MAX = 8;

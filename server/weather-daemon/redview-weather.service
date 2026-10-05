@@ -16,6 +16,14 @@ ExecStartPost=+/usr/bin/chcon -R -t httpd_sys_content_t /var/www/weather
 StandardOutput=journal
 StandardError=journal
 
+# Ressources : tâche de fond toutes les 3 h (~75 s, ~50 s de CPU mesurés) ;
+# elle passe après les services interactifs (BRouter, Appwrite, app) et ne peut
+# pas emporter la mémoire de l'hôte (plafond large, pic non mesuré).
+Nice=10
+CPUWeight=20
+IOWeight=20
+MemoryMax=3G
+
 # Sandboxing
 NoNewPrivileges=yes
 ProtectSystem=strict

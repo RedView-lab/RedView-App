@@ -32,6 +32,7 @@ import {
 import { mergeMentionCandidates } from '../lib/identity';
 import type { MentionCandidate } from '../lib/messageText';
 import { countUnreadThreads, markThreadRead, markThreadUnread, pruneReadMarks } from '../lib/readState';
+import type { CommentZoneDrawing } from '../lib/zoneDrawing';
 import {
   CommentToolContext,
   type CommentDraft,
@@ -80,6 +81,7 @@ export function CommentToolProvider({ children, map, projectId = null, me, membe
   const [draft, setDraft] = useState<CommentDraft | null>(null);
   const [draftFocusRequest, setDraftFocusRequest] = useState(0);
   const [dragZone, setDragZone] = useState<ProjectCommentZone | null>(null);
+  const [zoneDrawing, setZoneDrawing] = useState<CommentZoneDrawing | null>(null);
   const draftTextRef = useRef('');
 
   const members = useMemo(() => mergeMentionCandidates([{ userId: me.userId, name: me.name }], memberList), [me, memberList]);
@@ -115,6 +117,7 @@ export function CommentToolProvider({ children, map, projectId = null, me, membe
   const deactivate = useCallback(() => {
     setArmed(false);
     setDragZone(null);
+    setZoneDrawing(null);
   }, []);
   const arm = useCallback((next: CommentSubTool = 'point') => {
     setSubTool(next);
@@ -124,6 +127,7 @@ export function CommentToolProvider({ children, map, projectId = null, me, membe
     setArmed((current) => !current);
     setSubTool('point');
     setDragZone(null);
+    setZoneDrawing(null);
   }, []);
 
   // ── Fil ouvert, saisie ─────────────────────────────────────────────────
@@ -284,6 +288,21 @@ export function CommentToolProvider({ children, map, projectId = null, me, membe
     startDraft({ anchor, zone });
   }, [startDraft]);
 
+  // Premier sommet d'une zone polygonale : comme une bulle, ce clic ferme d'abord ce qui est ouvert.
+  const handleZoneStart = useCallback(() => {
+    const { openThreadId: open, draft: current } = latest.current;
+    if (open) {
+      setOpenThreadId(null);
+      return false;
+    }
+    if (current) {
+      if (draftTextRef.current.trim()) setDraftFocusRequest((request) => request + 1);
+      else cancelDraft();
+      return false;
+    }
+    return true;
+  }, [cancelDraft]);
+
   useCommentModeMapEvents({
     map,
     armed,
@@ -291,6 +310,8 @@ export function CommentToolProvider({ children, map, projectId = null, me, membe
     onPoint: handlePoint,
     onZonePreview: setDragZone,
     onZone: handleZone,
+    onZoneStart: handleZoneStart,
+    onZoneDrawing: setZoneDrawing,
   });
 
   // Hors du mode : un clic sur la carte ferme le fil ouvert, ou la saisie vide (comme Figma).
@@ -327,7 +348,9 @@ export function CommentToolProvider({ children, map, projectId = null, me, membe
 
   const statusMessage = armed
     ? subTool === 'zone'
-      ? translateAppText('Glissez pour entourer une zone, Espace + glisser pour déplacer la carte')
+      ? zoneDrawing
+        ? translateAppText('Cliquez sur un point pour fermer la zone · Entrée termine, Échap annule')
+        : translateAppText('Cliquez pour poser les points de la zone, Maj + glisser pour un rectangle')
       : translateAppText('Cliquez pour commenter, Maj + glisser pour une zone')
     : null;
 
@@ -356,6 +379,7 @@ export function CommentToolProvider({ children, map, projectId = null, me, membe
     draftTextRef,
     draftFocusRequest,
     dragZone,
+    zoneDrawing,
     reply,
     editMessage,
     deleteMessage,
@@ -372,7 +396,7 @@ export function CommentToolProvider({ children, map, projectId = null, me, membe
     navigate,
   }), [
     activeItinerary, arm, armed, cancelDraft, closeThread, deactivate, deleteMessage, deleteThread, draft, draftFocusRequest,
-    dragZone, editMessage, flyToThread, hoveredThreadId, markUnread, me, members, moveThread, nameOf, navigate, openThread,
+    dragZone, zoneDrawing, editMessage, flyToThread, hoveredThreadId, markUnread, me, members, moveThread, nameOf, navigate, openThread,
     visibleOpenThreadId, pinsHidden, reply, setResolved, setViewOptions, startDraft, statusMessage, subTool, submitDraft, threads,
     toggle, togglePinsHidden, toggleReaction, unreadCount, view,
   ]);

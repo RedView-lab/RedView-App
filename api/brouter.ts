@@ -30,6 +30,7 @@
 import crypto from 'node:crypto';
 import { promisify } from 'node:util';
 import zlib from 'node:zlib';
+import { createByteLru } from '../server/byte-lru.mjs';
 import { resolvePass1Coefficient } from './_lib/brouter-search.js';
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
 
@@ -93,51 +94,39 @@ export default async function handler(
 /* ------------------------------------------------------------------ */
 
 interface CachedRoute {
-  body: string;
+  /** GeoJSON compressé en brotli : servi tel quel à un navigateur. */
+  brotli: Buffer;
   contentType: string;
   status: number;
-  timestamp: number;
 }
-const ROUTE_CACHE = new Map<string, CachedRoute>();
 /**
- * Borne en octets (et non en nombre d'entrées) : un tracé multi-jours pèse
- * plusieurs Mo, 512 entrées pouvaient atteindre des Go en mémoire.
+ * Borné en octets (et non en nombre d'entrées) : un tracé multi-jours pèse
+ * plusieurs Mo. Garder la version brotli (~8× plus petite) tient d'autant plus
+ * de tracés et évite de recompresser à chaque HIT.
  */
-const MAX_ROUTE_CACHE_BYTES = 64 * 1024 * 1024;
-let routeCacheBytes = 0;
-
-function cachedRouteBytes(key: string, entry: CachedRoute): number {
-  return (key.length + entry.body.length) * 2;
-}
-
-function deleteCachedRoute(key: string) {
-  const entry = ROUTE_CACHE.get(key);
-  if (!entry) return;
-  routeCacheBytes -= cachedRouteBytes(key, entry);
-  ROUTE_CACHE.delete(key);
-}
-
-function rememberRoute(key: string, entry: CachedRoute) {
-  const bytes = cachedRouteBytes(key, entry);
-  if (bytes > MAX_ROUTE_CACHE_BYTES / 4) return;
-  deleteCachedRoute(key);
-  while (routeCacheBytes + bytes > MAX_ROUTE_CACHE_BYTES && ROUTE_CACHE.size > 0) {
-    const oldestKey = ROUTE_CACHE.keys().next().value;
-    if (oldestKey === undefined) break;
-    deleteCachedRoute(oldestKey);
-  }
-  ROUTE_CACHE.set(key, entry);
-  routeCacheBytes += bytes;
-}
-const ROUTE_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const ROUTE_CACHE = createByteLru<CachedRoute>({
+  maxBytes: 48 * 1024 * 1024,
+  sizeOf: (entry) => entry.brotli.length,
+  ttlMs: 60 * 60 * 1000, // 1 hour
+});
 
 /*
  * Compression du GeoJSON vers le navigateur : server.mjs ne compresse que les
  * fichiers statiques, et un tracé de 1 000 km pèse ~5 Mo (≈ 0,6 Mo en brotli).
  */
 const brotliAsync = promisify(zlib.brotliCompress);
+const brotliDecompressAsync = promisify(zlib.brotliDecompress);
 const gzipAsync = promisify(zlib.gzip);
 const COMPRESS_MIN_CHARS = 4_096;
+
+function compressRoute(raw: Buffer): Promise<Buffer> {
+  return brotliAsync(raw, {
+    params: {
+      [zlib.constants.BROTLI_PARAM_QUALITY]: 4,
+      [zlib.constants.BROTLI_PARAM_SIZE_HINT]: raw.length,
+    },
+  });
+}
 
 function negotiateEncoding(req: ApiRequest): 'br' | 'gzip' | null {
   const accepted = new Map<string, number>();
@@ -152,21 +141,28 @@ function negotiateEncoding(req: ApiRequest): 'br' | 'gzip' | null {
   return null;
 }
 
-async function sendRouteBody(req: ApiRequest, res: ApiResponse, status: number, body: string) {
+/** `brotli` : version déjà compressée du même corps (mise en cache), réutilisée si le client accepte br. */
+async function sendRouteBody(req: ApiRequest, res: ApiResponse, status: number, body: string, brotli: Buffer | null) {
   res.setHeader('Vary', 'Accept-Encoding');
   const encoding = body.length >= COMPRESS_MIN_CHARS ? negotiateEncoding(req) : null;
   if (!encoding) return res.status(status).send(body);
   const raw = Buffer.from(body, 'utf8');
   const packed = encoding === 'br'
-    ? await brotliAsync(raw, {
-        params: {
-          [zlib.constants.BROTLI_PARAM_QUALITY]: 4,
-          [zlib.constants.BROTLI_PARAM_SIZE_HINT]: raw.length,
-        },
-      })
+    ? brotli ?? await compressRoute(raw)
     : await gzipAsync(raw, { level: 6 });
   res.setHeader('Content-Encoding', encoding);
   return res.status(status).send(packed);
+}
+
+/** Tracé du cache : brotli tel quel, sinon décompressé pour un client sans br (rare). */
+async function sendCachedRoute(req: ApiRequest, res: ApiResponse, entry: CachedRoute) {
+  if (negotiateEncoding(req) === 'br') {
+    res.setHeader('Vary', 'Accept-Encoding');
+    res.setHeader('Content-Encoding', 'br');
+    return res.status(entry.status).send(entry.brotli);
+  }
+  const body = (await brotliDecompressAsync(entry.brotli)).toString('utf8');
+  return sendRouteBody(req, res, entry.status, body, null);
 }
 
 async function handleRouteQuery(
@@ -200,12 +196,11 @@ async function handleRouteQuery(
 
   const cacheKey = params.toString();
   const cached = ROUTE_CACHE.get(cacheKey);
-  const now = Date.now();
-  if (cached && now - cached.timestamp < ROUTE_CACHE_TTL_MS) {
+  if (cached) {
     res.setHeader('Content-Type', cached.contentType);
     res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=7200');
     res.setHeader('X-Route-Cache', 'HIT');
-    return sendRouteBody(req, res, cached.status, cached.body);
+    return sendCachedRoute(req, res, cached);
   }
 
   const url = `${base}/brouter?${params.toString()}`;
@@ -262,17 +257,15 @@ async function handleRouteQuery(
     // body is consumed/filtered on the way back to the browser (some
     // CDNs strip plain-text 422 bodies). Truncate to keep headers small.
     res.setHeader('x-brouter-upstream-error', sanitizeHeaderValue(body));
-  } else if (upstreamRes.status === 200) {
-    rememberRoute(cacheKey, {
-      body,
-      contentType,
-      status: upstreamRes.status,
-      timestamp: now,
-    });
+    return res.status(422).send(body);
   }
 
-  if (looksLikeError) return res.status(422).send(body);
-  return sendRouteBody(req, res, upstreamRes.status, body);
+  let brotli: Buffer | null = null;
+  if (upstreamRes.status === 200) {
+    brotli = await compressRoute(Buffer.from(body, 'utf8'));
+    ROUTE_CACHE.set(cacheKey, { brotli, contentType, status: upstreamRes.status });
+  }
+  return sendRouteBody(req, res, upstreamRes.status, body, brotli);
 }
 
 /* ------------------------------------------------------------------ */

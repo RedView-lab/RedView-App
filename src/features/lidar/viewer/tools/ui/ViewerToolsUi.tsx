@@ -35,6 +35,7 @@ function toolInstructions(tool: ToolId, vertexCount: number): Array<[string, str
   }
   return [
     [t('Clic'), t('ajouter un point')],
+    ...(tool === 'area' && vertexCount >= 3 ? [[t('Clic sur un point'), t('fermer sur ce point')] as [string, string]] : []),
     [t('Clic droit'), tool === 'area' ? t('fermer') : t('terminer')],
     ['⌫', t('retirer le dernier')],
     [t('Échap'), t('annuler')],

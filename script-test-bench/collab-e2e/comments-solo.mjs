@@ -1,6 +1,8 @@
 // Commentaires dans la vraie application (compte démo, sans session) :
 // mode commentaire (C), bulle posée au clic, réponse, réaction, survol qui
-// déplie la bulle, zone (Maj + glisser), annuler sans effet sur les
+// déplie la bulle, zone (Maj + glisser), zone polygonale (sous-outil
+// « zone » : un clic par sommet, clic sur un sommet = fermée sur lui,
+// Échap abandonne le tracé sans quitter le mode), annuler sans effet sur les
 // commentaires, Maj+C, liste du panneau droit (caméra amenée sur le fil),
 // captures sombre / clair. Nécessite `npm run dev` (APP_URL, défaut 5173).
 import { writeFileSync, mkdirSync } from 'node:fs';
@@ -241,6 +243,50 @@ try {
   check(await session.evaluate(`!!document.querySelector('[data-rv-comment-card]:not([data-rv-comment-card="draft"])')`), 'clic dans la liste : fil ouvert');
   await key(session, 'Escape', { code: 'Escape' });
   await sleep(200);
+
+  // ── Zone polygonale : clic par sommet, fermée sur un sommet ─────────────
+  await session.evaluate(`(window.__rvMap().jumpTo({ center: [6.96, 45.975], zoom: 14, pitch: 50, bearing: 0 }), 0)`);
+  await sleep(2500);
+  const zoneFeatures = (filter) => session.evaluate(`(() => {
+    const data = window.__rvMap().getSource('rv-comment-zones')?.serialize?.().data;
+    return (data?.features ?? []).filter((f) => ${filter}).length;
+  })()`);
+  const chevron = await centerOf(session, '.rv-comment-tool__chevron');
+  await click(session, chevron.x, chevron.y);
+  await sleep(300);
+  await session.evaluate(`[...document.querySelectorAll('.rv-dropdown__item')].find((b) => /Commentaire de zone|Area comment/.test(b.textContent))?.click()`);
+  await sleep(300);
+  const vertices = [[-220, 110], [-40, -90], [170, 10], [30, 190]].map(([dx, dy]) => ({ x: Math.round(mapBox.x + dx), y: Math.round(mapBox.y + dy) }));
+  for (const vertex of vertices) {
+    await click(session, vertex.x, vertex.y);
+    await sleep(450);
+  }
+  check(await zoneFeatures(`f.properties?.vertex === 1`) === 4, 'zone polygonale : 4 sommets posés au clic');
+  check(await session.evaluate(`!document.querySelector('[data-rv-comment-card="draft"]')`), 'zone polygonale : pas de saisie avant la fermeture');
+  await mouse(session, 'mouseMoved', vertices[1].x + 2, vertices[1].y + 1, { button: 'none' });
+  await sleep(300);
+  check(await zoneFeatures(`f.properties?.close === 1`) === 1, 'survol d’un sommet : fermeture prévisualisée');
+  await shot(session, '05b-polygon-close');
+  await click(session, vertices[1].x + 2, vertices[1].y + 1);
+  await sleep(500);
+  check(await session.evaluate(`!!document.querySelector('[data-rv-comment-card="draft"] .rv-comment-card__draft-context')`), 'clic sur un sommet : saisie d’un commentaire de zone');
+  check(await zoneFeatures(`f.properties?.vertex === 1`) === 0, 'tracé terminé : plus de sommets');
+  await session.send('Input.insertText', { text: 'Pierrier instable' });
+  await key(session, 'Enter', { code: 'Enter' });
+  await sleep(700);
+  const polygonThread = await session.evaluate(store(`s.project.comments?.find((c) => c.messages[0]?.text === 'Pierrier instable') ?? null`));
+  check(polygonThread?.zone?.ring?.length === 3, `fermée sur le 2e sommet : boucle 2-3-4 (${polygonThread?.zone?.ring?.length ?? 0} sommets)`);
+  await key(session, 'Escape', { code: 'Escape' });
+  await sleep(200);
+  for (const vertex of vertices.slice(0, 2)) {
+    await click(session, vertex.x, vertex.y);
+    await sleep(450);
+  }
+  check(await zoneFeatures(`f.properties?.vertex === 1`) === 2, 'nouveau tracé : 2 sommets');
+  await key(session, 'Escape', { code: 'Escape' });
+  await sleep(300);
+  check(await zoneFeatures(`f.properties?.vertex === 1`) === 0, 'Échap : tracé abandonné');
+  check(await session.evaluate(`!!document.querySelector('.rv-comments-panel')`), 'Échap sur un tracé : le mode reste armé');
 
   // ── Sortie du mode, Maj+C ──────────────────────────────────────────────
   await key(session, 'Escape', { code: 'Escape' });

@@ -1,7 +1,7 @@
 import { memo, type MouseEvent } from 'react';
 
 import type { ProjectCommentThread } from '@/features/itineraryPanel/types';
-import { UserAvatar } from '@/shared/components/UserAvatar/UserAvatar';
+import { UserAvatar, UserAvatarStack } from '@/shared/components/UserAvatar/UserAvatar';
 import { useAppI18n } from '@/shared/i18n';
 
 import { formatRelativeTime } from '../lib/relativeTime';
@@ -89,7 +89,9 @@ interface CommentClusterPinProps {
 /** Groupe de bulles qui se chevauchent : avatars empilés et nombre ; un clic zoome dessus. */
 export const CommentClusterPin = memo(function CommentClusterPin({ threads, nameOf, unread, onOpen }: CommentClusterPinProps) {
   const { t } = useAppI18n();
-  const authors = [...new Map(threads.map((thread) => [thread.createdBy, thread.messages[0]?.authorName ?? ''])).entries()].slice(0, 3);
+  const authors = [...new Map(threads.map((thread) => [thread.createdBy, thread.messages[0]?.authorName ?? ''])).entries()]
+    .slice(0, 3)
+    .map(([userId, fallback]) => ({ userId, name: nameOf(userId, fallback) }));
   return (
     <button
       type="button"
@@ -103,9 +105,7 @@ export const CommentClusterPin = memo(function CommentClusterPin({ threads, name
       }}
     >
       <span className="rv-comment-pin__stack" data-rv-no-translate="true">
-        {authors.map(([userId, fallback]) => (
-          <UserAvatar key={userId} userId={userId} name={nameOf(userId, fallback)} size={24} ringed title="" />
-        ))}
+        <UserAvatarStack people={authors} max={authors.length} />
       </span>
       <span className="rv-comment-pin__count">{threads.length}</span>
       {unread ? <span className="rv-comment-pin__dot" /> : null}

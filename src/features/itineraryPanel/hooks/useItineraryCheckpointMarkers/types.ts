@@ -20,6 +20,8 @@ export interface CheckpointData {
   timeLabel?: string | null;
   /** Arrivée : durée totale estimée (pauses incluses). */
   durationLabel?: string | null;
+  /** Départ / arrivée : une étape placée peut prendre sa place, le point est supprimable. */
+  removable?: boolean;
 }
 
 /** Données courantes d'un marqueur, relues par sa popup à chaque ouverture. */

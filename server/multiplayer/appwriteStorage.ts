@@ -83,6 +83,18 @@ function errorCode(error: unknown): number | undefined {
   return typeof code === 'number' ? code : undefined;
 }
 
+/**
+ * Absence confirmée par Appwrite lui-même (`type` de l'erreur, ex.
+ * `document_not_found`). Un 404 sans type vient d'un proxy sans route : pendant
+ * un redémarrage d'Appwrite, son Traefik répond « 404 page not found » en
+ * texte brut. Le prendre pour un projet supprimé fermait la salle en 4404 et
+ * lançait la purge de son journal (vu le 2026-10-05) : c'est une panne
+ * passagère, à réessayer.
+ */
+function isAppwriteNotFound(error: unknown, type: 'document_not_found' | 'storage_file_not_found'): boolean {
+  return errorCode(error) === 404 && (error as { type?: unknown } | null)?.type === type;
+}
+
 export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStorage {
   const client = new Client().setEndpoint(options.endpoint).setProject(options.projectId).setKey(options.apiKey);
   const databases = new Databases(client);
@@ -109,7 +121,7 @@ export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStor
       const row = await databases.getDocument(db, PROJECTS_COLLECTION_ID, projectId, [Query.select(['user_id', 'team_id'])]);
       value = { ownerId: String(row.user_id ?? ''), teamId: typeof row.team_id === 'string' && row.team_id ? row.team_id : null };
     } catch (error) {
-      if (errorCode(error) !== 404) throw error;
+      if (!isAppwriteNotFound(error, 'document_not_found')) throw error;
       value = null;
     }
     accessCache.set(projectId, { value, at: Date.now() });
@@ -161,7 +173,7 @@ export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStor
     try {
       return await databases.getDocument(db, PROJECTS_COLLECTION_ID, projectId, queries) as unknown as Record<string, unknown>;
     } catch (error) {
-      if (errorCode(error) === 404) return null;
+      if (isAppwriteNotFound(error, 'document_not_found')) return null;
       throw error;
     }
   }
@@ -187,7 +199,7 @@ export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStor
       if (checkpoint.seq === meta.seq) return checkpoint;
       console.warn(JSON.stringify({ level: 'warn', service: 'multiplayer', message: 'point de sauvegarde incohérent', projectId }));
     } catch (error) {
-      if (errorCode(error) !== 404) throw error;
+      if (!isAppwriteNotFound(error, 'storage_file_not_found')) throw error;
       console.warn(JSON.stringify({ level: 'warn', service: 'multiplayer', message: 'point de sauvegarde introuvable', projectId }));
     }
     return null;
@@ -274,7 +286,7 @@ export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStor
         });
       } catch (error) {
         await Promise.allSettled(uploads.map((fileId) => storage.deleteFile(PAYLOADS_BUCKET_ID, fileId)));
-        if (errorCode(error) === 404) {
+        if (isAppwriteNotFound(error, 'document_not_found')) {
           accessCache.delete(projectId);
           throw new ProjectNotFoundError(projectId);
         }

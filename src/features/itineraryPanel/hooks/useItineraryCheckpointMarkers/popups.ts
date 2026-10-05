@@ -34,14 +34,26 @@ function bindPopupClose(panel: Element, popup: mapboxgl.Popup): void {
   });
 }
 
-export function createEndpointPopup(dataRef: CheckpointDataRef): CheckpointPopupHandle {
+export function createEndpointPopup(
+  dataRef: CheckpointDataRef,
+  callbacks: { onDelete?: (rowId: string) => void },
+): CheckpointPopupHandle {
   const popup = createPopupShell({ offset: getEndpointPopupOffset(1) });
   const container = document.createElement('div');
 
   const refresh = () => {
     container.innerHTML = buildEndpointPopupHtml(dataRef.current);
     const panel = container.firstElementChild;
-    if (panel) bindPopupClose(panel, popup);
+    if (!panel) return;
+    bindPopupClose(panel, popup);
+
+    panel.querySelector('[data-action="delete"]')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const rowId = dataRef.current.rowId;
+      popup.remove();
+      if (rowId) callbacks.onDelete?.(rowId);
+    });
   };
 
   refresh();

@@ -19,8 +19,9 @@ import { addItineraryVariantInPlace } from '@/features/itineraryPanel/lib/projec
 import { reverseGeocodeSettlement } from '@/features/itineraryPanel/lib/geocoding';
 import { DEFAULT_ROUTE_TRACE_WIDTH_PX } from '@/features/itineraryPanel/lib/route-layer/constants';
 import { translateAppText } from '@/shared/i18n';
+import { useCommentToolOptional } from '@/features/comments/context/commentTool';
 import { useRouteSplitToolOptional } from '../routeSplit';
-import { useTraceToolOptional } from '../tracer';
+import { useTracePointDrag, useTraceToolOptional } from '../tracer';
 import { useRouteMergeToolOptional } from '../routeMerge';
 import { useForbiddenZoneToolOptional } from '../forbiddenZones';
 import {
@@ -47,10 +48,13 @@ function getPreviewRadius(traceWidthPx: number): number {
 }
 
 /**
- * Saisie de la trace active en mode Tracer : cliquer dessus insère un point de
- * passage, la glisser en dépose un là où on relâche. Toute la logique pointeur
- * (survol, curseur, clic, drag) vit dans `routeEditPointer` ; ce provider ne
- * fait que l'armer et appliquer les insertions au projet.
+ * Gestes d'édition du tracé sur la carte :
+ *   - en mode Tracer, saisie de la trace active : cliquer dessus insère un
+ *     point de passage, la glisser en dépose un là où on relâche. Toute la
+ *     logique pointeur (survol, curseur, clic, drag) vit dans `routeEditPointer` ;
+ *   - avec ou sans Tracer, clic / glisser des points eux-mêmes (départ,
+ *     arrivée, étapes : `useTracePointDrag`), sauf quand un autre outil
+ *     consomme les clics de la carte.
  */
 export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointProviderProps) {
   const store = useProjectStoreOptional();
@@ -58,10 +62,19 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
   const traceTool = useTraceToolOptional();
   const mergeTool = useRouteMergeToolOptional();
   const forbiddenZoneTool = useForbiddenZoneToolOptional();
+  const commentTool = useCommentToolOptional();
 
   const otherBlockingToolArmed = Boolean(
     splitTool?.armed || forbiddenZoneTool?.armed || mergeTool?.armed,
   );
+
+  const commitPointDrag = traceTool?.commitPointDrag;
+  useTracePointDrag({
+    map,
+    enabled: Boolean(map && commitPointDrag) && !otherBlockingToolArmed && !commentTool?.armed,
+    onCommit: (commit) => commitPointDrag?.(commit) ?? false,
+    onDraggingChange: traceTool?.onPointDraggingChange,
+  });
   // Actif pendant tout le mode Tracer, trace présente ou non : le contrôleur
   // n'est pas recréé à chaque recalcul de la trace (pas de remise à zéro du
   // curseur au milieu d'un survol).
