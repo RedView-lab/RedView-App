@@ -15,6 +15,7 @@ import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdr
 import { appScaledOverlayStyle, readRootAppScale } from '@/shared/lib/appScale';
 import { computePanelPosition, resolvePanelPlacement } from '@/features/map3d/components/panelPlacement';
 import {
+  CommentGlyph,
   CopyButtonIcon,
   ElevationGlyph,
   FinishGlyph,
@@ -369,6 +370,22 @@ export function ViewerContextMenu({ model, actions }: ViewerContextMenuProps) {
             </>
           ) : null}
         </div>
+
+        {model.commentsEnabled ? (
+          <>
+            <div className="rv-lidar-ctx__separator" aria-hidden />
+            <div className="rv-lidar-ctx__rows">
+              <MenuRow icon={<CommentGlyph />} label={t('Commenter ici')} onHover={plainRowHover} onClick={() => run({ type: 'comment' })} />
+              <MenuRow
+                icon={<AreaGlyph />}
+                label={t('Commenter une zone')}
+                title={t('Cliquez les sommets de la zone, clic droit pour fermer')}
+                onHover={plainRowHover}
+                onClick={() => run({ type: 'commentZone' })}
+              />
+            </div>
+          </>
+        ) : null}
 
         {model.measurementId || model.measurementCount > 0 ? (
           <>

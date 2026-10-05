@@ -1,0 +1,55 @@
+/*
+ * LiDAR viewer — comments layer. Bubbles and cards are the app's
+ * (features/comments/styles/comments.css); this file only lays them over the
+ * scene: above the route handles (15) and the tools overlay (16), under the
+ * floating panels (70+) and the context menu (90).
+ */
+
+.rv-lidar-comments-host {
+  position: absolute;
+  inset: 0;
+  z-index: 17;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.rv-lidar-comments {
+  position: absolute;
+  inset: 0;
+}
+
+/* Point of the bubble (placed by the controller); the bubble grows up and right from it. */
+.rv-lidar-comment-pin {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  width: 0;
+  height: 0;
+  visibility: hidden;
+}
+
+.rv-lidar-comment-pin:hover {
+  z-index: 3;
+}
+
+.rv-lidar-comment-pin > .rv-comment-pin {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  pointer-events: auto;
+}
+
+.rv-lidar-comment-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 4;
+  visibility: hidden;
+  pointer-events: auto;
+}
+
+/* Same density as the viewer's floating panels. */
+.rv-lidar-comment-card__scale {
+  zoom: var(--app-scale, 1);
+}

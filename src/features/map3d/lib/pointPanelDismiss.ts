@@ -20,7 +20,7 @@ export function isPointPanelOpen(target?: EventTarget | null): boolean {
   if (target instanceof Element) {
     if (
       target.closest(
-        '.mapboxgl-popup, .rv-poi-draft-card, [data-rv-poi-draft-card], .rv-checkpoint-popup, .rv-poi-popup, .rv-map-context-menu',
+        '.mapboxgl-popup, .rv-poi-draft-card, [data-rv-poi-draft-card], .rv-checkpoint-popup, .rv-poi-popup, .rv-map-context-menu, [data-rv-comment-card]',
       )
     ) {
       return false;
@@ -44,6 +44,12 @@ export function isPointPanelOpen(target?: EventTarget | null): boolean {
   // 3. Right-click context menu on map
   const contextMenu = document.querySelector('.rv-map-context-menu');
   if (contextMenu instanceof HTMLElement && contextMenu.offsetParent !== null) {
+    return true;
+  }
+
+  // 4. Open comment thread or new comment (features/comments)
+  const commentCard = document.querySelector('[data-rv-comment-card]');
+  if (commentCard instanceof HTMLElement && commentCard.offsetParent !== null) {
     return true;
   }
 

@@ -29,12 +29,21 @@ import {
 } from '@/features/controlPanel';
 import { CenterPanel, CenterPanelToolbar } from '@/features/centerPanel';
 import { AnalysisFlyoverProvider } from '@/features/centerPanel/flyover';
-import { RouteMergeToolProvider } from '@/features/centerPanel/routeMerge';
-import { RouteSplitToolProvider } from '@/features/centerPanel/routeSplit';
-import { ChartPlacementToolProvider } from '@/features/centerPanel/chartPlacement';
+import { RouteMergeToolProvider, useRouteMergeToolOptional } from '@/features/centerPanel/routeMerge';
+import { RouteSplitToolProvider, useRouteSplitToolOptional } from '@/features/centerPanel/routeSplit';
+import { ChartPlacementToolProvider, useChartPlacementToolOptional } from '@/features/centerPanel/chartPlacement';
 import { RouteDragWaypointProvider } from '@/features/centerPanel/routeDragWaypoint';
-import { TraceToolProvider } from '@/features/centerPanel/tracer';
-import { ForbiddenZoneToolProvider } from '@/features/centerPanel/forbiddenZones';
+import { TraceToolProvider, useTraceToolOptional } from '@/features/centerPanel/tracer';
+import { ForbiddenZoneToolProvider, useForbiddenZoneToolOptional } from '@/features/centerPanel/forbiddenZones';
+import {
+  CommentShortcuts,
+  CommentsPanel,
+  CommentToolProvider,
+  MapCommentsLayer,
+  readCommentAuthor,
+  useCommentToolOptional,
+} from '@/features/comments';
+import { useProjectShare } from '@/features/projectBrowser/queries/projectSharing';
 import { ItineraryPanel, PredictionProvider, ProjectProvider, useProjectStore } from '@/features/itineraryPanel';
 import { useMultiplayerAvailable } from '@/features/collab/queries/multiplayerHealth';
 import { useCollabSession } from '@/features/collab/useCollabSession';
@@ -137,6 +146,78 @@ interface DashboardEditorProps {
  *
  * Renders nothing.
  */
+/**
+ * Raccourcis des commentaires (C, Maj+C, Échap), placés sous les outils de la
+ * carte : armer le mode commentaire désarme Tracer, Découper, Fusionner,
+ * Interdire et Ajouter (un seul outil consomme les clics de la carte).
+ */
+function CommentShortcutsBridge() {
+  const trace = useTraceToolOptional();
+  const split = useRouteSplitToolOptional();
+  const merge = useRouteMergeToolOptional();
+  const forbidden = useForbiddenZoneToolOptional();
+  const placement = useChartPlacementToolOptional();
+  const handleBeforeArm = useCallback(() => {
+    placement?.deactivate();
+    merge?.deactivate();
+    split?.deactivate();
+    trace?.deactivate();
+    forbidden?.deactivate();
+  }, [forbidden, merge, placement, split, trace]);
+  return <CommentShortcuts onBeforeArm={handleBeforeArm} />;
+}
+
+/**
+ * Mode commentaire : la liste des commentaires prend la place du panneau droit
+ * (la barre latérale de Figma). Le panneau reste monté dessous (ses couches de
+ * carte restent actives) mais inerte ; replié, il s'ouvre pour la liste et se
+ * replie de nouveau à la sortie du mode.
+ */
+function CommentModeRightPanel({
+  contentRef,
+  panelWidth,
+  isCollapsed,
+  onRestore,
+  onCollapse,
+}: {
+  contentRef: RefObject<HTMLDivElement | null>;
+  panelWidth: number;
+  isCollapsed: boolean;
+  onRestore: () => void;
+  onCollapse: () => void;
+}) {
+  const armed = useCommentToolOptional()?.armed ?? false;
+
+  // Monté (ses couches de carte restent actives) mais ni visible sous la liste en verre, ni atteignable.
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content || !armed) return;
+    content.inert = true;
+    content.style.visibility = 'hidden';
+    return () => {
+      content.inert = false;
+      content.style.visibility = '';
+    };
+  }, [armed, contentRef]);
+
+  const previousArmedRef = useRef(armed);
+  const openedForCommentsRef = useRef(false);
+  useEffect(() => {
+    const wasArmed = previousArmedRef.current;
+    previousArmedRef.current = armed;
+    if (armed && !wasArmed && isCollapsed) {
+      openedForCommentsRef.current = true;
+      onRestore();
+    } else if (!armed && wasArmed && openedForCommentsRef.current) {
+      openedForCommentsRef.current = false;
+      if (!isCollapsed) onCollapse();
+    }
+  }, [armed, isCollapsed, onCollapse, onRestore]);
+
+  if (!armed) return null;
+  return <CommentsPanel style={{ top: PANEL_PADDING, right: PANEL_PADDING, bottom: PANEL_PADDING, width: panelWidth }} />;
+}
+
 function TraceRevealWatcher({ onTraceStarted }: { onTraceStarted: () => void }) {
   const { project } = useProjectStore();
   const wasTracedRef = useRef(hasProjectTracedContent(project));
@@ -351,6 +432,17 @@ export function DashboardEditor({
     if (activeProjectId) setSharedNowProjectId(activeProjectId);
   }, [activeProjectId]);
 
+  // Commentaires : auteur de la session ; membres du projet partagé (mentions, noms) et éditeurs présents.
+  const [commentAuthor] = useState(readCommentAuthor);
+  const isSharedProject = activeProjectShared || (activeProjectId !== null && sharedNowProjectId === activeProjectId);
+  const projectShare = useProjectShare(isSharedProject ? activeProjectId : null);
+  const shareMembers = projectShare.data?.members;
+  const commentMembers = useMemo(() => [
+    ...(shareMembers ?? []).map((member) => ({ userId: member.userId, name: member.name || member.email })),
+    ...(collaborators ?? []),
+  ], [collaborators, shareMembers]);
+  const rightPanelContentRef = useRef<HTMLDivElement>(null);
+
   return (
     <ProjectProvider
         key={activeProjectId ?? 'no-project'}
@@ -359,6 +451,7 @@ export function DashboardEditor({
         collab={collabSession.link}
         collabPending={collabSession.pending}
       >
+      <CommentToolProvider map={mapInstance} projectId={activeProjectId} me={commentAuthor} members={commentMembers}>
         <MapView
           onMapReady={onMapReady}
           onMapLoadStatusChange={onMapLoadStatusChange}
@@ -371,6 +464,8 @@ export function DashboardEditor({
           contextMenuOverlayContext={contextMenuOverlayContext}
           overlayInsets={mapOverlayInsets}
         />
+
+      <MapCommentsLayer map={mapInstance} overlayInsets={mapOverlayInsets} />
 
       <MapCursorLoader
         loading={visibleStatuses.some((s) => s.id === 'itinerary' && s.state === 'loading')}
@@ -522,6 +617,7 @@ export function DashboardEditor({
                   {/* Le flyover couvre aussi le panneau de droite : l'export vidéo y lit la trace et le palier de vitesse. */}
                   <AnalysisFlyoverProvider map={mapInstance}>
                   <ChartPlacementToolProvider>
+                    <CommentShortcutsBridge />
                     {layout.centerToolbarVisible ? (
                       <div data-rv-region="center-toolbar" style={styles.centerToolbarShellStyle}>
                         <CenterPanelToolbar
@@ -547,7 +643,7 @@ export function DashboardEditor({
                   </ChartPlacementToolProvider>
 
                   <div style={styles.rightPanelStyle}>
-                    <div data-rv-region="right-panel" style={styles.rightPanelContentStyle}>
+                    <div ref={rightPanelContentRef} data-rv-region="right-panel" style={styles.rightPanelContentStyle}>
                       <div ref={rightPrimaryPanelHostRef} style={styles.rightPrimaryPanelStyle}>
                         <ControlPanelContainer
                           map={mapInstance}
@@ -581,6 +677,13 @@ export function DashboardEditor({
                         />
                       </div>
                     </div>
+                    <CommentModeRightPanel
+                      contentRef={rightPanelContentRef}
+                      panelWidth={panelWidth}
+                      isCollapsed={isRightPanelCollapsed}
+                      onRestore={onRestoreRightPanel}
+                      onCollapse={onCollapseRightPanel}
+                    />
                   </div>
                   </AnalysisFlyoverProvider>
                 </PredictionProvider>
@@ -589,6 +692,7 @@ export function DashboardEditor({
             </TraceToolProvider>
           </RouteMergeToolProvider>
         </RouteSplitToolProvider>
+      </CommentToolProvider>
       </ProjectProvider>
   );
 }

@@ -13,6 +13,7 @@ import { useChartPlacementToolOptional } from '../../chartPlacement';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { IconChevronDown } from '../CenterPanelIcons';
 import { useAnalysisFlyover } from '../../flyover';
+import { CommentToolbarButton, useCommentToolOptional } from '@/features/comments';
 import {
   IconClockRewind,
   IconCursor,
@@ -51,6 +52,7 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
   const traceTool = useTraceToolOptional();
   const forbiddenZoneTool = useForbiddenZoneToolOptional();
   const chartPlacementTool = useChartPlacementToolOptional();
+  const commentTool = useCommentToolOptional();
   const [toolbarStatus, setToolbarStatus] = useState<string | null>(null);
   const [addMenuAnchor, setAddMenuAnchor] = useState<HTMLElement | null>(null);
   const {
@@ -115,6 +117,7 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
     routeSplitTool?.deactivate();
     traceTool?.deactivate();
     forbiddenZoneTool?.deactivate();
+    commentTool?.deactivate();
     chartPlacementTool?.arm(kind);
     setToolbarStatus(null);
   };
@@ -142,7 +145,9 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
   const canRedoTraceEdit = forbiddenZoneArmed
     ? canRedoForbiddenZoneDraft
     : (store?.canRedoTraceEdit ?? false);
+  const commentStatusMessage = commentTool?.statusMessage ?? null;
   const inlineToolbarStatus = useMemo(() => {
+    if (commentStatusMessage) return commentStatusMessage;
     if (placementStatusMessage) return placementStatusMessage;
     if (splitStatusMessage) return splitStatusMessage;
     if (forbiddenZoneStatusMessage) return forbiddenZoneStatusMessage;
@@ -150,6 +155,7 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
     if (toolbarStatus) return toolbarStatus;
     return null;
   }, [
+    commentStatusMessage,
     forbiddenZoneStatusMessage,
     placementStatusMessage,
     splitStatusMessage,
@@ -173,6 +179,7 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
       routeMergeTool?.deactivate();
       traceTool?.deactivate();
       forbiddenZoneTool?.deactivate();
+      commentTool?.deactivate();
     }
     routeSplitTool?.toggle();
     setToolbarStatus(null);
@@ -184,6 +191,7 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
       routeMergeTool?.deactivate();
       routeSplitTool?.deactivate();
       forbiddenZoneTool?.deactivate();
+      commentTool?.deactivate();
     }
     traceTool?.toggle();
     setToolbarStatus(null);
@@ -195,8 +203,19 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
       routeMergeTool?.deactivate();
       routeSplitTool?.deactivate();
       traceTool?.deactivate();
+      commentTool?.deactivate();
     }
     forbiddenZoneTool?.toggle();
+    setToolbarStatus(null);
+  };
+
+  /** Commenter : les autres outils de la carte se désarment (un seul consomme les clics). */
+  const handleBeforeArmComment = () => {
+    chartPlacementTool?.deactivate();
+    routeMergeTool?.deactivate();
+    routeSplitTool?.deactivate();
+    traceTool?.deactivate();
+    forbiddenZoneTool?.deactivate();
     setToolbarStatus(null);
   };
 
@@ -337,6 +356,13 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
           >
             <IconTrash />
           </ToolbarIconButton>
+
+          {commentTool ? (
+            <>
+              <div className="rvc-center-toolbar__separator" aria-hidden="true" />
+              <CommentToolbarButton onBeforeArm={handleBeforeArmComment} />
+            </>
+          ) : null}
 
           {inlineToolbarStatus ? (
             <div className="rvc-center-toolbar__status-inline" role="status" aria-live="polite">

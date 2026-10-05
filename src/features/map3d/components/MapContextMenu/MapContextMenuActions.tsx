@@ -1,6 +1,7 @@
 import { useAppI18n } from '@/shared/i18n';
 import { MenuActionRow } from './MenuActionRow';
 import {
+  CommentGlyph,
   FinishGlyph,
   PoiPinGlyph,
   StartGlyph,
@@ -48,6 +49,11 @@ export function MapContextMenuActions({
           />
         </>
       ) : null}
+      <MenuActionRow
+        label={t('Commenter ici')}
+        icon={<CommentGlyph />}
+        onClick={() => onAction('add-comment')}
+      />
       {hasForbiddenZone ? (
         <MenuActionRow
           label={t('Supprimer la zone interdite')}

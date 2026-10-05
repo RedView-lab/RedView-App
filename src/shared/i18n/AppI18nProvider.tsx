@@ -93,6 +93,26 @@ export function AppI18nProvider({ children }: { children: ReactNode }) {
   return <AppI18nContext.Provider value={value}>{children}</AppI18nContext.Provider>;
 }
 
+/**
+ * Hors de l'application (viewer LiDAR) : mêmes traductions pour des
+ * composants React de l'app, sans second observateur DOM (le viewer a le sien,
+ * shared/i18n/domTranslation.ts) ni changement de langue.
+ */
+export function AppI18nStaticProvider({ children }: { children: ReactNode }) {
+  const value = useMemo<AppI18nContextValue>(() => {
+    const locale = readStoredAppLocale();
+    const bundle = createAppTranslationBundle(locale);
+    const lookup = buildTranslationLookup(bundle.entries);
+    return {
+      locale,
+      setLocale: () => undefined,
+      t: (text: string, vars?: AppTranslationVars) => translateString(text, lookup, vars),
+      bundle,
+    };
+  }, []);
+  return <AppI18nContext.Provider value={value}>{children}</AppI18nContext.Provider>;
+}
+
 export function useAppI18n(): AppI18nContextValue {
   const context = useContext(AppI18nContext);
   if (!context) {

@@ -44,6 +44,8 @@ import { createViewerRightPanel } from './rightPanel';
 import { ViewerSlopeController } from './slope/viewerSlopeController';
 import { ViewerAltitudeController } from './altitude/viewerAltitudeController';
 import { ViewerRouteController } from './route/viewerRouteController';
+import { ViewerComments } from './comments/viewerComments';
+import { zoneFromPolygon } from '@/features/comments/lib/zoneGeometry';
 import { pointFilterClassPredicate, ViewerToolsController } from './tools';
 import { sampleElevationAtProj } from './route/terrainRaycaster';
 import type { ViewerRouteSceneParams } from './route/types';
@@ -650,6 +652,8 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
 
     /** Point-filter visibility of an ASPRS class (picking skips hidden returns). */
     let isClassVisible: (classification: number) => boolean = () => true;
+    /** Comments of the app project (bubbles on the scene), created once the tools give the ground model. */
+    let comments: ViewerComments | null = null;
     const tools = ViewerToolsController.create({
       canvas,
       container: canvas.parentElement ?? document.body,
@@ -666,7 +670,24 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
         else renderer.clearAnalysisMesh();
       },
       requestRender: () => requestRender(),
+      commentsAvailable: () => comments?.writable ?? false,
+      onComment: (pick) => comments?.startDraft({ lng: pick.lon, lat: pick.lat, elevationM: pick.groundAltitudeM ?? pick.altitudeM }),
+      onCommentZone: (ring, anchor) => {
+        const zone = zoneFromPolygon(ring);
+        if (zone) comments?.startDraft({ lng: anchor.lon, lat: anchor.lat, elevationM: anchor.groundAltitudeM ?? anchor.altitudeM }, zone);
+      },
     });
+    if (tools) {
+      comments = new ViewerComments({
+        container: canvas.parentElement ?? document.body,
+        toLocal: (lon, lat, altitudeM) => tools.localFromLonLat(lon, lat, altitudeM),
+        project: (local) => tools.projectLocal(local),
+        isVisible: (local) => tools.isLocalVisible(local),
+        centerOn: (local) => tools.centerOnLocal(local),
+        obstacles: () => [...document.querySelectorAll('.viewer-panel, .lidar-viewer-right-panel-host')],
+        showZone: (ring) => tools.setCommentZone(ring),
+      });
+    }
 
     const rightPanel = createViewerRightPanel({
       centerLon: lon,
@@ -724,6 +745,7 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
     updateRouteOverlayRef = () => {
       routeController.updateOverlay();
       tools?.updateOverlay();
+      comments?.updateOverlay();
     };
     camera.onChange = () => {
       routeOverlayStale = true;
@@ -835,6 +857,7 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
       camera.destroy();
       tileNavigator.destroy();
       lidarManager.destroy();
+      comments?.destroy();
       tools?.destroy();
       routeController.destroy();
       panel.destroy();

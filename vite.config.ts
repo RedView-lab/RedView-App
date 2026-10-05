@@ -375,7 +375,8 @@ export default defineConfig({
     proxy: {
       // Serveur temps réel de co-édition (server/multiplayer, lancé par startDevServices).
       '/multiplayer': {
-        target: 'ws://127.0.0.1:17790',
+        // REDVIEW_MULTIPLAYER_DEV_PORT : un second serveur de dev (autre session) avec son propre serveur temps réel.
+        target: `ws://127.0.0.1:${process.env.REDVIEW_MULTIPLAYER_DEV_PORT ?? '17790'}`,
         ws: true,
       },
       '/api/lidar/wmts': {

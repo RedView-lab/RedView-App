@@ -31,6 +31,7 @@ import {
 } from '@/features/itineraryPanel/components/ItineraryPanelContainer/timelineMutations';
 import { translateAppText } from '@/shared/i18n';
 import { isVariantModifierPressed } from '@/shared/lib/platform';
+import { useCommentToolOptional } from '@/features/comments/context/commentTool';
 import { useRouteSplitToolOptional } from '../routeSplit';
 import { useRouteMergeToolOptional } from '../routeMerge';
 import { useTracePointDrag, type TracePointDragCommit } from './useTracePointDrag';
@@ -82,6 +83,7 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
   const store = useProjectStoreOptional();
   const splitTool = useRouteSplitToolOptional();
   const mergeTool = useRouteMergeToolOptional();
+  const commentTool = useCommentToolOptional();
   const [armed, setArmed] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const activeItinerary = store?.project.itineraries.find(
@@ -280,15 +282,16 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
    * Arme l'outil, sans le garde `canTrace` de `toggle`.
    *
    * Reproduit l'exclusion mutuelle faite par la toolbar (`handleToggleTrace`) :
-   * Découper / Fusionner ne peuvent pas rester armés en même temps que Tracer,
-   * sinon les deux consomment les clics de la carte.
+   * Découper / Fusionner / Commenter ne peuvent pas rester armés en même temps
+   * que Tracer, sinon les deux consomment les clics de la carte.
    */
   const activate = useCallback(() => {
     splitTool?.deactivate();
     mergeTool?.deactivate();
+    commentTool?.deactivate();
     setArmed(true);
     setStatusMessage(buildTracePrompt());
-  }, [buildTracePrompt, mergeTool, splitTool]);
+  }, [buildTracePrompt, commentTool, mergeTool, splitTool]);
 
   useEffect(() => {
     if (canTrace) return;
@@ -344,7 +347,7 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
       if (
         (originalTarget &&
           originalTarget.closest(
-            '.mapboxgl-popup, .rv-poi-draft-card, [data-rv-poi-draft-card], .rv-poi-marker, .rv-checkpoint-marker, button, a, [role="button"]',
+            '.mapboxgl-popup, .rv-poi-draft-card, [data-rv-poi-draft-card], .rv-poi-marker, .rv-checkpoint-marker, [data-rv-comment-pin], [data-rv-comment-card], button, a, [role="button"]',
           )) ||
         shouldIgnoreMapClickAfterPanelDismiss(originalTarget) ||
         queryPoiAtPoint(map, event.point)

@@ -4,7 +4,9 @@ export type MapContextMenuActionId =
   | 'set-start'
   | 'add-waypoint'
   | 'set-finish'
-  | 'delete-forbidden-zone';
+  | 'delete-forbidden-zone'
+  /** Nouveau commentaire à ce point (features/comments). */
+  | 'add-comment';
 
 export interface MapContextMenuPoint {
   lng: number;

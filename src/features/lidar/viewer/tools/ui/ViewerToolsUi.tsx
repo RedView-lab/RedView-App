@@ -52,7 +52,7 @@ export function ViewerToolsUi({ store, actions }: { store: ToolsUiStore; actions
           <div className="rv-lidar-tool-hint" role="status">
             {state.activeTool ? (
               <>
-                <span className="rv-lidar-tool-hint__name">{t(TOOL_NAMES[state.activeTool])}</span>
+                <span className="rv-lidar-tool-hint__name">{state.commentZone ? t('Commentaire de zone') : t(TOOL_NAMES[state.activeTool])}</span>
                 <span className="rv-lidar-tool-hint__steps">
                   {toolInstructions(state.activeTool, state.vertexCount).map(([key, action]) => (
                     <Fragment key={key}>

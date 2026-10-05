@@ -17,7 +17,8 @@ import { translateAppText as t } from '@/shared/i18n/config';
 import type { OpenedLodTile } from '../../lib/lodCache';
 import type { CameraController } from '../camera';
 import type { SceneNode } from '../lod/sceneLod';
-import { projectToScreen } from '../route/terrainRaycaster';
+import { fromWgs84 } from '../../lib/coordConvert';
+import { projectToScreen, type ProjectedScreenPoint } from '../route/terrainRaycaster';
 import type { ViewerRouteSceneParams } from '../route/types';
 import type { ViewerRouteController } from '../route/viewerRouteController';
 import { readLookAround, resolveLookAroundStart } from './lookAround/lookAround';
@@ -56,6 +57,12 @@ export interface ViewerToolsOptions {
   routeController: ViewerRouteController;
   setAnalysisMesh: (mesh: OverlayMeshData | null) => void;
   requestRender: () => void;
+  /** Comments of the app project can be written from here (bridge to the app tab live). */
+  commentsAvailable?: () => boolean;
+  /** « Commenter ici » on a point of the scene. */
+  onComment?: (pick: ScenePick) => void;
+  /** « Commenter une zone » drawn like an area: WGS84 ring and its last vertex (bubble anchor). */
+  onCommentZone?: (ring: Array<[number, number]>, anchor: ScenePick) => void;
 }
 
 const CLICK_MOVE_TOLERANCE_PX = 6;
@@ -110,6 +117,10 @@ export class ViewerToolsController {
   private readonly meshes = new Map<string, OverlayMeshData>();
 
   private activeTool: ToolId | null = null;
+  /** The area being drawn outlines a comment zone, not a measurement. */
+  private commentZoneDrawing = false;
+  /** Outline of the hovered / open comment zone, draped on the ground model. */
+  private commentZoneLayer: OverlayLayer | null = null;
   private draft: ScenePick[] = [];
   private hover: ScenePick | null = null;
   private profileMarker: Vec3 | null = null;
@@ -179,9 +190,56 @@ export class ViewerToolsController {
     return { data: Float32Array.from(cover.canopyPct, (v) => (Number.isFinite(v) ? v / 100 : 0)), width, height };
   }
 
+  // ── Comments (lidar/viewer/comments) ──────────────────────────────────────
+
+  /** Render-frame point of a WGS84 position (DTM altitude when `altitudeM` is null); null outside the scene. */
+  localFromLonLat(lon: number, lat: number, altitudeM: number | null): Vec3 | null {
+    const [projX, projY] = fromWgs84(lon, lat, this.field.crs);
+    if (!Number.isFinite(projX) || !Number.isFinite(projY) || !this.field.contains(projX, projY)) return null;
+    const altitude = altitudeM ?? this.field.altitudeAt(projX, projY);
+    return altitude == null ? null : this.field.toLocal(projX, projY, altitude);
+  }
+
+  projectLocal(local: Vec3): ProjectedScreenPoint {
+    return this.projector()(local);
+  }
+
+  /** The ground model does not hide this point from the camera. */
+  isLocalVisible(local: Vec3): boolean {
+    return this.field.isVisibleFrom(local, [...this.opts.camera.getEye()]);
+  }
+
+  /** Draws (or clears, with null) the outline of a comment zone (WGS84 ring) on the ground. */
+  setCommentZone(ring: ReadonlyArray<[number, number]> | null): void {
+    if (!ring || ring.length < 3) {
+      if (!this.commentZoneLayer) return;
+      this.commentZoneLayer = null;
+      this.updateOverlay();
+      return;
+    }
+    const vertices = ring.map(([lon, lat]) => {
+      const [projX, projY] = fromWgs84(lon, lat, this.field.crs);
+      return { projX, projY };
+    });
+    const draped = this.field.drape([...vertices, vertices[0]], Math.max(2, this.field.cell));
+    const points = draped.map((sample) => this.field.toLocal(sample.projX, sample.projY, sample.altitudeM + 0.5));
+    this.commentZoneLayer = points.length >= 2
+      ? { id: '', paths: [{ points, color: '#c50000', width: 2.5 }], dots: [], labels: [] }
+      : null;
+    this.updateOverlay();
+  }
+
+  centerOnLocal(local: Vec3): void {
+    const { camera } = this.opts;
+    const eye = camera.getEye();
+    const distance = Math.hypot(eye[0] - local[0], eye[1] - local[1], eye[2] - local[2]);
+    camera.animateTo({ targetX: local[0], targetY: local[1], targetZ: local[2], radius: Math.max(60, Math.min(distance, camera.sceneRadius)) });
+  }
+
   /** Reprojects the overlay; call once per rendered frame after a camera move. */
   updateOverlay(): void {
     const layers: OverlayLayer[] = [...this.layers.values()];
+    if (this.commentZoneLayer) layers.push(this.commentZoneLayer);
     if (this.activeTool) layers.push(draftLayer(this.activeTool, this.draft, this.hover));
     if (this.profileMarker) {
       layers.push({ id: '', paths: [], dots: [{ at: this.profileMarker, color: '#ff2a1f', radius: 5 }], labels: [] });
@@ -259,6 +317,14 @@ export class ViewerToolsController {
           elevationM: pick.groundAltitudeM ?? pick.altitudeM,
         });
         break;
+      case 'comment':
+        this.opts.onComment?.(pick);
+        break;
+      case 'commentZone':
+        this.startTool('area', this.picker.toGround(pick) ?? undefined);
+        this.commentZoneDrawing = true;
+        this.store.update({ commentZone: true });
+        break;
       case 'deleteMeasurement':
         this.removeMeasurement(action.id);
         break;
@@ -277,8 +343,9 @@ export class ViewerToolsController {
     route.setSelectedPointIndex(null);
     this.store.update({ menu: null });
     this.activeTool = tool;
+    this.commentZoneDrawing = false;
     this.draft = firstPick && isDrawingTool(tool) ? [firstPick] : [];
-    this.store.update({ activeTool: tool, vertexCount: this.draft.length });
+    this.store.update({ activeTool: tool, vertexCount: this.draft.length, commentZone: false });
     this.opts.canvas.style.cursor = 'crosshair';
     this.updateOverlay();
   }
@@ -286,9 +353,10 @@ export class ViewerToolsController {
   private cancelTool(): void {
     if (!this.activeTool) return;
     this.activeTool = null;
+    this.commentZoneDrawing = false;
     this.draft = [];
     this.hover = null;
-    this.store.update({ activeTool: null, vertexCount: 0 });
+    this.store.update({ activeTool: null, vertexCount: 0, commentZone: false });
     this.opts.canvas.style.cursor = '';
     this.updateOverlay();
   }
@@ -319,11 +387,19 @@ export class ViewerToolsController {
     const tool = this.activeTool;
     if (!tool || !isDrawingTool(tool)) return;
     const picks = this.draft;
+    const commentZone = this.commentZoneDrawing;
     this.activeTool = null;
+    this.commentZoneDrawing = false;
     this.draft = [];
     this.hover = null;
-    this.store.update({ activeTool: null, vertexCount: 0 });
+    this.store.update({ activeTool: null, vertexCount: 0, commentZone: false });
     this.opts.canvas.style.cursor = '';
+    if (commentZone) {
+      if (picks.length >= MIN_VERTICES.area) this.opts.onCommentZone?.(picks.map((p) => [p.lon, p.lat]), picks[picks.length - 1]!);
+      else if (picks.length > 0) this.notify(t('Zone annulée : pas assez de points'));
+      this.updateOverlay();
+      return;
+    }
     if (picks.length < MIN_VERTICES[tool]) {
       if (picks.length > 0) this.notify(t('Mesure annulée : pas assez de points'));
       this.updateOverlay();
@@ -720,6 +796,7 @@ export class ViewerToolsController {
         measurementId: this.overlay.hitTest(x, y),
         measurementCount: this.measurements.length,
         routeHasStart: (route?.points.length ?? 0) > 0,
+        commentsEnabled: this.opts.commentsAvailable?.() ?? false,
       },
     });
   }

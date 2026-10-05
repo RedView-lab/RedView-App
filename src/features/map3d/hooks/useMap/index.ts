@@ -5,7 +5,7 @@ import {
   MAPBOX_STYLE,
   MAPBOX_TOKEN,
 } from '../../lib/mapbox.config';
-import { loadViewport } from '../../lib/viewport-persist';
+import { loadViewport, type MapViewport } from '../../lib/viewport-persist';
 import { installCssZoomAwareMapSizing } from '../../lib/mapContainerZoom';
 import { transformMapboxRequest } from '../../lib/satelliteTiles';
 import { TerrainManager } from '../../lib/terrain';
@@ -52,6 +52,14 @@ const DEFAULT_BASEMAP_CONFIG = {
 /**
  * Hook principal gérant le cycle de vie, le moteur 3D, le style et les bus de données de la carte Mapbox GL.
  */
+function sameMapViewport(a: MapViewport, b: MapViewport): boolean {
+  return a.center[0] === b.center[0]
+    && a.center[1] === b.center[1]
+    && a.zoom === b.zoom
+    && a.pitch === b.pitch
+    && a.bearing === b.bearing;
+}
+
 export function useMap(
   containerRef: RefObject<HTMLDivElement | null>,
   options: UseMapOptions = {},
@@ -74,8 +82,18 @@ export function useMap(
   const prepareStyleChangeRef = useRef<((detail?: string) => void) | null>(null);
   const bootstrapStyleRef = useRef<(() => Promise<boolean>) | null>(null);
 
+  /**
+   * Dernière vue enregistrée par la carte elle-même (500 ms après un `moveend`).
+   * Elle revient en `initialViewport` : cet écho n'est pas une demande de
+   * déplacement. Sans ce repère, un vol de caméra lancé dans ces 500 ms
+   * (liste de commentaires, recherche…) était ramené à la vue enregistrée.
+   */
+  const emittedViewportRef = useRef<MapViewport | null>(null);
   useEffect(() => {
-    onViewportChangeRef.current = onViewportChange;
+    onViewportChangeRef.current = (viewport: MapViewport) => {
+      emittedViewportRef.current = viewport;
+      onViewportChange?.(viewport);
+    };
   }, [onViewportChange]);
 
   useEffect(() => {
@@ -409,6 +427,7 @@ export function useMap(
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !initialViewport) return;
+    if (emittedViewportRef.current && sameMapViewport(emittedViewportRef.current, initialViewport)) return;
 
     const center = map.getCenter();
     const sameViewport =

@@ -2,6 +2,7 @@ import type { AppTranslationPair } from '../types';
 import { appTranslationPairs } from './app';
 import { authTranslationPairs } from './auth';
 import { collabTranslationPairs } from './collab';
+import { commentsTranslationPairs } from './comments';
 import { controlPanelTranslationPairs } from './controlPanel';
 import { dashboardTranslationPairs } from './dashboard';
 import { fitPredictorTranslationPairs } from './fitPredictor';
@@ -21,6 +22,7 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<AppTranslationPair> = [
   ...appTranslationPairs,
   ...authTranslationPairs,
   ...collabTranslationPairs,
+  ...commentsTranslationPairs,
   ...fitPredictorTranslationPairs,
   ...itineraryTranslationPairs,
   ...lidarTranslationPairs,

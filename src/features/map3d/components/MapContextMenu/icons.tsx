@@ -174,3 +174,19 @@ export function FinishGlyph() {
 export function TrashGlyph() {
   return <RightClickImageIcon src="trash-01.svg" width={14} height={15} frame={24} />;
 }
+/** Commenter ici (bulle de commentaire, features/comments). */
+export function CommentGlyph() {
+  return (
+    <span aria-hidden style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, flex: '0 0 auto' }}>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path
+          d="M2 5.2C2 4.08 2 3.52 2.218 3.092C2.41 2.716 2.716 2.41 3.092 2.218C3.52 2 4.08 2 5.2 2H10.8C11.92 2 12.48 2 12.908 2.218C13.284 2.41 13.59 2.716 13.782 3.092C14 3.52 14 4.08 14 5.2V9C14 9.932 14 10.398 13.848 10.765C13.645 11.255 13.255 11.645 12.765 11.848C12.398 12 11.932 12 11 12C10.674 12 10.511 12 10.36 12.036C10.159 12.083 9.971 12.177 9.812 12.31C9.693 12.409 9.595 12.539 9.4 12.8L8.427 14.098C8.282 14.291 8.21 14.387 8.121 14.422C8.043 14.452 7.957 14.452 7.879 14.422C7.79 14.387 7.718 14.291 7.573 14.098L6.6 12.8C6.405 12.539 6.307 12.409 6.188 12.31C6.029 12.177 5.841 12.083 5.64 12.036C5.489 12 5.326 12 5 12C4.068 12 3.602 12 3.235 11.848C2.745 11.645 2.355 11.255 2.152 10.765C2 10.398 2 9.932 2 9V5.2Z"
+          stroke="currentColor"
+          strokeWidth="1.333"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </span>
+  );
+}

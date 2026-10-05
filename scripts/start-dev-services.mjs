@@ -317,14 +317,16 @@ export function applyVpsTunnel(env = process.env) {
   }
 }
 
-export const MULTIPLAYER_DEV_PORT = 17790;
+/** Surchargeable (REDVIEW_MULTIPLAYER_DEV_PORT) : un second serveur de dev garde son propre serveur temps réel. */
+export const MULTIPLAYER_DEV_PORT = Number(process.env.REDVIEW_MULTIPLAYER_DEV_PORT ?? 17790);
 
 export async function ensureMultiplayerStarted() {
   if (await isPortOpen(MULTIPLAYER_DEV_PORT)) {
     console.log(`\x1b[32m[MULTIPLAYER]\x1b[0m Serveur temps réel actif sur \x1b[1mws://localhost:${MULTIPLAYER_DEV_PORT}\x1b[0m (npm run services:stop pour le relancer après une modification)`);
     return null;
   }
-  const dataDir = path.resolve(rootDir, '.multiplayer-data');
+  // Un second serveur temps réel (port surchargé) a ses propres salles.
+  const dataDir = path.resolve(rootDir, MULTIPLAYER_DEV_PORT === 17790 ? '.multiplayer-data' : `.multiplayer-data-${MULTIPLAYER_DEV_PORT}`);
   fs.mkdirSync(dataDir, { recursive: true });
   const log = fs.openSync(path.join(dataDir, 'server.log'), 'a');
   console.log(`\x1b[36m[MULTIPLAYER]\x1b[0m Démarrage du serveur temps réel (port ${MULTIPLAYER_DEV_PORT})...`);

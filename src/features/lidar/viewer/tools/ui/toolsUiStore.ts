@@ -16,6 +16,9 @@ export type ContextMenuAction =
   | { type: 'faceSlope' }
   | { type: 'lookAround' }
   | { type: 'route'; position: RoutePlacement }
+  /** Comments of the app project (lidar/viewer/comments). */
+  | { type: 'comment' }
+  | { type: 'commentZone' }
   | { type: 'deleteMeasurement'; id: string }
   | { type: 'clearMeasurements' };
 
@@ -31,6 +34,8 @@ export interface ContextMenuModel {
   measurementCount: number;
   /** The active route already has a start (waypoint / finish offered). */
   routeHasStart: boolean;
+  /** The app project is open in RedView: comments can be added from here. */
+  commentsEnabled: boolean;
 }
 
 export interface ProfileCardModel {
@@ -53,10 +58,12 @@ export interface ToolsUiState {
   /** Short transient message (copied, out of the loaded area…). */
   notice: string | null;
   lookAround: LookAroundModel | null;
+  /** The area tool outlines a comment zone. */
+  commentZone: boolean;
 }
 
 export class ToolsUiStore {
-  private state: ToolsUiState = { menu: null, activeTool: null, vertexCount: 0, profile: null, notice: null, lookAround: null };
+  private state: ToolsUiState = { menu: null, activeTool: null, vertexCount: 0, profile: null, notice: null, lookAround: null, commentZone: false };
   private readonly listeners = new Set<() => void>();
 
   getState = (): ToolsUiState => this.state;
