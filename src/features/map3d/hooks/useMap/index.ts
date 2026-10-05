@@ -11,6 +11,7 @@ import { transformMapboxRequest } from '../../lib/satelliteTiles';
 import { TerrainManager } from '../../lib/terrain';
 import { createMapLifecycleController } from './controller';
 import { styleHasUsableContent } from './controller/styleContent';
+import { clearVisibleTimer, setVisibleTimeout, type VisibleTimer } from './controller/visibleClock';
 import { applyRuntimeProfileDpr, getMapRuntimeProfile } from './runtimeProfile';
 import type { UseMapOptions } from './types';
 import {
@@ -202,11 +203,16 @@ export function useMap(
           if (!cancelled) setIsLoaded(true);
         });
 
+    // Retries the initial setStyle once if Mapbox hasn't parsed it after 4 s
+    // of visible time (a URL style whose request failed). Armed after the
+    // setStyle, never during the prefetch (it used to fire there on a slow
+    // link and race it with a second setStyle), and on the visible clock: a
+    // hidden page parses no style at all (`Style#loadJSON` waits for a frame).
     const STUCK_SHELL_WATCHDOG_MS = 4000;
-    let stuckShellTimer: ReturnType<typeof setTimeout> | null = null;
+    let stuckShellTimer: VisibleTimer | null = null;
     const armStuckShellWatchdog = () => {
-      if (stuckShellTimer) clearTimeout(stuckShellTimer);
-      stuckShellTimer = setTimeout(() => {
+      clearVisibleTimer(stuckShellTimer);
+      stuckShellTimer = setVisibleTimeout(() => {
         stuckShellTimer = null;
         if (cancelled) return;
         let hasContent = false;
@@ -215,11 +221,11 @@ export function useMap(
         } catch { /* getStyle threw */ }
         if (hasContent) return;
         console.warn(
-          `[map3d] stuck on empty bootstrap shell after ${STUCK_SHELL_WATCHDOG_MS} ms — forcing direct setStyle from URL`,
+          `[map3d] style not parsed after ${STUCK_SHELL_WATCHDOG_MS} ms of visible time — retrying setStyle`,
         );
         try {
           lifecycle.prepareStyleChange('Fond de carte (récupération)');
-          map.setStyle(resolveStyleInputSync(basemapConfig.styleUrl) as Parameters<typeof map.setStyle>[0], {
+          map.setStyle(resolveStyleInputSync(activeBasemapConfigRef.current.styleUrl) as Parameters<typeof map.setStyle>[0], {
             diff: false,
             localFontFamily: null,
             localIdeographFontFamily: 'sans-serif',
@@ -232,11 +238,13 @@ export function useMap(
     };
 
     const startInitialStyleAndBootstrap = async (): Promise<void> => {
-      armStuckShellWatchdog();
       let styleInput: string | MapboxStyleDefinition;
       if (shouldHydrateInitialStyle) {
         styleInput = await resolveStyleInput(basemapConfig.styleUrl);
         if (cancelled) return;
+        // A basemap switch landed during the prefetch: it already set its
+        // own style and bootstraps it.
+        if (activeBasemapConfigRef.current !== basemapConfig) return;
       } else {
         styleInput = basemapConfig.styleUrl;
       }
@@ -259,6 +267,7 @@ export function useMap(
         return;
       }
 
+      armStuckShellWatchdog();
       void attemptInitBootstrap();
     };
 
@@ -271,7 +280,7 @@ export function useMap(
       if (movingFlagTimer) clearTimeout(movingFlagTimer);
       rootEl.removeAttribute('data-rv-map-moving');
       disarmInitialReveal();
-      if (stuckShellTimer) clearTimeout(stuckShellTimer);
+      clearVisibleTimer(stuckShellTimer);
       subscriptions.cleanup();
       lifecycle.cleanup();
       subscriptions.persistCurrentViewport();

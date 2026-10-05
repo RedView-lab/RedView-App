@@ -30,7 +30,8 @@ export type {
 	OverlayStatusReporter,
 	OverlayStatusSnapshot,
 } from './lib/overlayStatus';
-export { setDprLayoutScale } from './hooks/useMap/runtimeProfile';
+export { setDprLayoutScale, withDevicePixelRatio } from './hooks/useMap/runtimeProfile';
+export { transformMapboxRequest } from './lib/satelliteTiles';
 export { useCinematicIdleRotate } from './hooks/useCinematicIdleRotate';
 export type { UseCinematicIdleRotateOptions } from './hooks/useCinematicIdleRotate';
 export {

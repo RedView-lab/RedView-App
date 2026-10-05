@@ -25,11 +25,11 @@ export function MenuActionRow({ label, icon, onClick }: MenuActionRowProps) {
         minWidth: 80,
         padding: 4,
         border: 'none',
-        background: isHovered ? 'rgba(255,255,255,0.06)' : 'transparent',
+        background: isHovered ? 'rgb(var(--rv-ink) / 0.06)' : 'transparent',
         borderRadius: 6,
         cursor: 'pointer',
         textAlign: 'left',
-        color: '#ffffff',
+        color: 'var(--rv-text)',
         pointerEvents: 'auto',
       }}
     >

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import {
   IconFolderPlus,
@@ -7,26 +7,23 @@ import {
   IconPlusCircle,
   IconSearch,
 } from '@/features/itineraryPanel/components/icons';
+import { REDVIEW_FILE_EXTENSION } from '@/features/redviewFile';
+import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { useAppI18n } from '@/shared/i18n';
 import type { ProjectFolderSummary, ProjectSummary } from '@/shared/utils/projects';
 
+import { useFileDropImport } from '../../hooks/useFileDropImport';
 import { buildFolderPathLabel, collectFolderDescendantIds } from '../../lib';
 import { BrowserBreadcrumb } from './BrowserBreadcrumb';
 import { FolderCard } from './FolderCard';
 import { ProjectBrowserCardMenu } from './ProjectBrowserCardMenu';
 import { ProjectBrowserDragPreview } from './ProjectBrowserDragPreview';
-import { ProjectBrowserToast } from './ProjectBrowserToast';
 import { ProjectCard } from './ProjectCard';
 
 type MenuState =
   | { kind: 'project'; id: string; anchorEl: HTMLButtonElement }
   | { kind: 'folder'; id: string; anchorEl: HTMLButtonElement }
   | null;
-
-type ToastState = {
-  kind: 'success' | 'error' | 'info';
-  message: string;
-} | null;
 
 type DragPreviewState = {
   type: 'project' | 'folder';
@@ -45,7 +42,9 @@ type ProjectsPanelProps = {
   setSearch: (value: string) => void;
   handleCreateProject: () => void;
   handleCreateFolder: () => void;
+  handleImportProjects: (files: File[]) => Promise<void>;
   creatingProject: boolean;
+  importingProject: boolean;
   creatingFolder: boolean;
   error: string | null;
   loading: boolean;
@@ -60,7 +59,6 @@ type ProjectsPanelProps = {
   draggedItem: { type: 'project' | 'folder'; id: string } | null;
   dropTarget: string | null;
   dragPreview: DragPreviewState;
-  toast: ToastState;
   onOpenProject: (projectId: string) => void;
   onOpenFolder: (folderId: string) => void;
   onNavigateToFolder: (folderId: string | null) => void;
@@ -69,6 +67,7 @@ type ProjectsPanelProps = {
   handleRenameFolder: (id: string, nextName: string) => Promise<void>;
   handleDeleteFolder: (id: string) => Promise<void>;
   handleDuplicateProject: (id: string) => Promise<void>;
+  handleExportProject: (id: string) => Promise<void>;
   handleMoveProject: (id: string, folderId: string | null) => Promise<void>;
   handleMoveFolder: (id: string, folderId: string | null) => Promise<void>;
   handleDragStart: (item: { type: 'project' | 'folder'; id: string }, x: number, y: number) => void;
@@ -90,7 +89,9 @@ export function ProjectsPanel({
   setSearch,
   handleCreateProject,
   handleCreateFolder,
+  handleImportProjects,
   creatingProject,
+  importingProject,
   creatingFolder,
   error,
   loading,
@@ -105,7 +106,6 @@ export function ProjectsPanel({
   draggedItem,
   dropTarget,
   dragPreview,
-  toast,
   onOpenProject,
   onOpenFolder,
   onNavigateToFolder,
@@ -114,6 +114,7 @@ export function ProjectsPanel({
   handleRenameFolder,
   handleDeleteFolder,
   handleDuplicateProject,
+  handleExportProject,
   handleMoveProject,
   handleMoveFolder,
   handleDragStart,
@@ -127,6 +128,11 @@ export function ProjectsPanel({
   const { t } = useAppI18n();
   const visibleCount = visibleFolders.length + visibleProjects.length;
   const [menuState, setMenuState] = useState<MenuState>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const fileDropActive = useFileDropImport({
+    accepting: !importingProject,
+    onFiles: (files) => void handleImportProjects(files),
+  });
 
   const activeProject = menuState?.kind === 'project'
     ? visibleProjects.find((project) => project.id === menuState.id) ?? null
@@ -262,6 +268,34 @@ export function ProjectsPanel({
             )}
           </button>
 
+          <input
+            ref={importInputRef}
+            type="file"
+            accept={REDVIEW_FILE_EXTENSION}
+            multiple
+            hidden
+            onChange={(event) => {
+              const files = Array.from(event.target.files ?? []);
+              // Même fichier choisi deux fois de suite : `change` doit repartir.
+              event.target.value = '';
+              if (files.length > 0) void handleImportProjects(files);
+            }}
+          />
+          <button
+            type="button"
+            className="rvpb-create-button rvpb-create-button--secondary"
+            title={t('Ouvrir un fichier .redview partagé (ou le déposer sur cette page)')}
+            onClick={() => importInputRef.current?.click()}
+            disabled={importingProject}
+          >
+            {importingProject ? (
+              <span className="rvpb-square-button__spinner" aria-hidden="true" />
+            ) : (
+              <SvgV2Icon name="upload-01.svg" size={20} />
+            )}
+            <span>{importingProject ? t('Import…') : t('Importer un projet')}</span>
+          </button>
+
           <button
             type="button"
             className="rvpb-create-button"
@@ -355,6 +389,10 @@ export function ProjectsPanel({
             void handleDuplicateProject(activeProject.id);
             setMenuState(null);
           }}
+          onExport={() => {
+            void handleExportProject(activeProject.id);
+            setMenuState(null);
+          }}
           onDelete={() => {
             void confirmDeleteProject(activeProject);
             setMenuState(null);
@@ -382,8 +420,21 @@ export function ProjectsPanel({
         />
       ) : null}
 
+      {fileDropActive ? (
+        <div className="rvpb-file-drop" aria-hidden="true">
+          <div className="rvpb-file-drop__panel">
+            <SvgV2Icon name="upload-03.svg" size={32} />
+            <span className="rvpb-file-drop__title">{t('Déposez le fichier .redview pour importer le projet')}</span>
+            <span className="rvpb-file-drop__hint">
+              {currentFolderId
+                ? t('Il sera ajouté au dossier « {{name}} ».', { name: breadcrumbs[breadcrumbs.length - 1]?.name ?? '' })
+                : t('Il sera ajouté à vos projets.')}
+            </span>
+          </div>
+        </div>
+      ) : null}
+
       {dragPreview ? <ProjectBrowserDragPreview {...dragPreview} /> : null}
-      {toast ? <ProjectBrowserToast kind={toast.kind} message={toast.message} /> : null}
     </>
   );
 }

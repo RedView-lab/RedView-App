@@ -6,7 +6,7 @@
   padding: 16px 0 0;
   overflow: auto;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+  scrollbar-color: rgb(var(--rv-ink) / 0.16) transparent;
 }
 
 .rvpb-account-panel::-webkit-scrollbar,
@@ -19,7 +19,7 @@
 .rvpb-subscription-panel::-webkit-scrollbar-thumb,
 .rvpb-settings-panel::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.16);
+  background: rgb(var(--rv-ink) / 0.16);
 }
 
 .rvpb-settings-panel {
@@ -64,7 +64,7 @@
 .rvpb-settings-select .rvpb-account-select-value,
 .rvpb-settings-row__label,
 .rvpb-settings-display-card__label {
-  color: #fff;
+  color: var(--rv-text);
 }
 
 .rvpb-settings-select .rvpb-account-select-shell {
@@ -93,7 +93,7 @@
   border: 0;
   padding: 0;
   background: transparent;
-  color: #fff;
+  color: var(--rv-text);
   font: inherit;
   cursor: pointer;
   display: flex;
@@ -110,8 +110,8 @@
   height: 132px;
   border-radius: 10px;
   overflow: hidden;
-  border: 1px solid rgba(213, 215, 218, 0.16);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid light-dark(rgb(var(--rv-ink) / 0.1), rgba(213, 215, 218, 0.16));
+  background: rgb(var(--rv-ink) / 0.04);
   transition:
     transform 180ms ease,
     box-shadow 180ms ease,
@@ -123,7 +123,7 @@
 }
 
 .rvpb-settings-display-card.is-selected .rvpb-settings-display-card__preview {
-  border-color: #ffffff;
+  border-color: rgb(var(--rv-ink));
   box-shadow:
     0 0 0 2px #ffffff,
     0 0 0 4px #9e77ed;
@@ -179,8 +179,8 @@
   padding: 0;
   border: none;
   border-radius: 9999px;
-  background: rgba(245, 245, 245, 0.08);
-  box-shadow: inset 0 0 0 1px rgba(233, 234, 235, 0.3);
+  background: light-dark(rgb(var(--rv-ink) / 0.1), rgba(245, 245, 245, 0.08));
+  box-shadow: inset 0 0 0 1px light-dark(rgb(var(--rv-ink) / 0.06), rgba(233, 234, 235, 0.3));
   cursor: pointer;
   flex-shrink: 0;
   transition: background-color 180ms ease, box-shadow 180ms ease;
@@ -188,6 +188,7 @@
 
 .rvpb-settings-switch.is-on {
   background: #890000;
+  color: var(--rv-on-accent);
   box-shadow: none;
 }
 
@@ -199,9 +200,9 @@
   width: 16px;
   height: 16px;
   border-radius: 9999px;
-  border: 1px solid #3F3F3F;
+  border: 1px solid light-dark(rgb(var(--rv-ink) / 0.14), #3F3F3F);
   background: #ffffff;
-  box-shadow: 0px 1px 2px rgba(10, 13, 18, 0.05);
+  box-shadow: 0px 1px 2px light-dark(rgba(16, 18, 24, 0.16), rgba(10, 13, 18, 0.05));
   transition: transform 180ms ease, border-color 180ms ease;
 }
 
@@ -221,7 +222,8 @@
   min-height: 384px;
   padding: 12px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
+  background: light-dark(#fff, rgba(255, 255, 255, 0.04));
+  box-shadow: 0 0 0 1px light-dark(rgb(var(--rv-ink) / 0.06), transparent);
   backdrop-filter: blur(60px);
 }
 
@@ -245,7 +247,7 @@
 .rvpb-settings-feedback__body-card p {
   margin: 0;
   max-width: 436px;
-  color: rgba(255, 255, 255, 0.92);
+  color: rgb(var(--rv-ink) / 0.92);
   font-size: var(--rv-font-size-2xl);
   line-height: 1.26;
 }
@@ -257,8 +259,8 @@
   min-height: 40px;
   padding: 9px 10px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: rgb(var(--rv-ink) / 0.08);
+  color: var(--rv-text);
   text-decoration: none;
   font-size: var(--rv-font-size-xl);
   font-weight: 500;
@@ -269,13 +271,13 @@
 }
 
 .rvpb-settings-feedback__chip:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgb(var(--rv-ink) / 0.12);
   transform: translateY(-1px);
 }
 
 .rvpb-settings-feedback__chip:focus-visible,
 .rvpb-settings-switch:focus-visible {
-  outline: 2px solid #000000;
+  outline: 2px solid light-dark(#9e77ed, #000000);
   outline-offset: 3px;
 }
 
@@ -284,7 +286,7 @@
 }
 
 .rvpb-settings-display-card:focus-visible .rvpb-settings-display-card__preview {
-  border-color: #ffffff;
+  border-color: rgb(var(--rv-ink));
   box-shadow:
     0 0 0 2px #ffffff,
     0 0 0 4px #9e77ed;
@@ -313,8 +315,8 @@
   min-height: 40px;
   padding: 10px 14px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: rgb(var(--rv-ink) / 0.08);
+  color: var(--rv-text);
   cursor: pointer;
   font-size: var(--rv-font-size-lg);
   font-weight: 500;
@@ -322,6 +324,7 @@
 
 .rvpb-inline-cta.is-danger {
   background: #890000;
+  color: var(--rv-on-accent);
 }
 
 .rvpb-text-link {
@@ -329,7 +332,7 @@
   align-items: center;
   padding: 0;
   background: transparent;
-  color: #fff;
+  color: var(--rv-text);
   cursor: pointer;
   text-decoration: none;
 }
@@ -341,7 +344,7 @@
   align-self: flex-start;
   padding: 0;
   background: transparent;
-  color: #fff;
+  color: var(--rv-text);
   cursor: pointer;
   font-size: var(--rv-font-size-lg);
   font-weight: 500;
@@ -349,7 +352,7 @@
 
 .rvpb-inline-note {
   margin: 0;
-  color: rgba(255, 255, 255, 0.64);
+  color: rgb(var(--rv-ink) / 0.64);
   font-size: var(--rv-font-size-lg);
   line-height: 1.45;
 }

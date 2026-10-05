@@ -48,17 +48,17 @@
 }
 
 .rvc-lidar__label-text.is-editable:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgb(var(--rv-ink) / 0.06);
 }
 
 .rvc-lidar__label-input {
   flex: 1 1 0;
   min-width: 0;
   width: 100%;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--rv-ink) / 0.08);
   color: var(--rvc-text);
   font: inherit;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgb(var(--rv-ink) / 0.18);
   border-radius: 4px;
   padding: 1px 4px;
   margin: -1px -4px;
@@ -66,8 +66,8 @@
 }
 
 .rvc-lidar__label-input:focus {
-  border-color: rgba(255, 255, 255, 0.36);
-  background: rgba(255, 255, 255, 0.12);
+  border-color: rgb(var(--rv-ink) / 0.36);
+  background: rgb(var(--rv-ink) / 0.12);
 }
 
 .rvc-lidar__actions {
@@ -91,7 +91,7 @@
 }
 
 .rvc-lidar__action-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgb(var(--rv-ink) / 0.06);
 }
 
 .rvc-lidar__actions-container {
@@ -117,7 +117,7 @@
   gap: 10px;
   padding: 7px 8px;
   background: #890000;
-  color: #ffffff;
+  color: var(--rv-on-accent);
   font-size: var(--rv-font-size-lg);
   font-weight: 500;
   border-radius: 6px;
@@ -132,20 +132,24 @@
 
 .rvc-btn-primary--lidar:hover:not(:disabled) {
   background: #a00000;
+  color: var(--rv-on-accent);
 }
 
 .rvc-btn-primary--lidar:active:not(:disabled) {
   background: #730000;
+  color: var(--rv-on-accent);
 }
 
 .rvc-btn-primary--lidar.is-loading {
   cursor: wait;
   background: #890000;
+  color: var(--rv-on-accent);
 }
 
 .rvc-btn-primary--lidar.is-selecting {
   background: #890000;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.28);
+  color: var(--rv-on-accent);
+  box-shadow: 0 0 0 1px rgb(var(--rv-ink) / 0.28);
 }
 
 .rvc-lidar-spinner {
@@ -153,7 +157,7 @@
   height: 14px;
   border-radius: 50%;
   border: 2px solid rgba(255, 255, 255, 0.28);
-  border-top-color: #ffffff;
+  border-top-color: var(--rv-on-accent);
   animation: rvc-lidar-spin 0.75s linear infinite;
   flex-shrink: 0;
 }
@@ -176,8 +180,8 @@
   gap: 4px;
   flex: 0 0 auto;
   padding: 7px 8px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
+  background: rgb(var(--rv-ink) / 0.08);
+  color: var(--rv-text);
   font-size: var(--rv-font-size-lg);
   font-weight: 500;
   border-radius: 6px;
@@ -189,11 +193,11 @@
 }
 
 .rvc-btn-secondary--lidar-cancel:hover {
-  background: rgba(255, 255, 255, 0.14);
+  background: rgb(var(--rv-ink) / 0.14);
 }
 
 .rvc-btn-secondary--lidar-cancel:active {
-  background: rgba(255, 255, 255, 0.18);
+  background: rgb(var(--rv-ink) / 0.18);
 }
 
 .rvc-btn-primary--lidar .rvc-lidar__download-bar {
@@ -218,9 +222,9 @@
 .rvc-lidar__error-meta {
   font-size: var(--rv-font-size-xs);
   line-height: var(--rv-line-height-snug);
-  color: #ff9999;
-  background: rgba(255, 69, 58, 0.12);
-  border: 1px solid rgba(255, 69, 58, 0.25);
+  color: light-dark(#b42318, #ff9999);
+  background: light-dark(rgba(217, 45, 32, 0.07), rgba(255, 69, 58, 0.12));
+  border: 1px solid light-dark(rgba(217, 45, 32, 0.24), rgba(255, 69, 58, 0.25));
   border-radius: 6px;
   padding: 6px 8px;
   word-break: break-word;

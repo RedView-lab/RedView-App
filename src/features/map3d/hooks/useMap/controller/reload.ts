@@ -4,11 +4,15 @@ import { getActiveDem3dQuality } from '../../../lib/dem3dQualityBus';
 import { buildDemTilesTemplate } from '../demTiles';
 import { resolveStyleInputSync } from '../stylePrefetch';
 import type { Ctx } from './context';
+import { clearVisibleTimer, setVisibleTimeout } from './visibleClock';
 
 // Debounce window for back-to-back DEM profile switches. The profile path
 // is cheap (no cache wipe), but a forceRebuild still removes/re-adds the
 // source, so coalescing rapid toggles avoids thrashing Mapbox's tile graph.
 const PROFILE_RELOAD_DEBOUNCE_MS = 250;
+// Readiness poll of a reload requested before the style/SW could take it.
+const RELOAD_READINESS_POLL_MS = 400;
+const RELOAD_READINESS_MAX_POLLS = 25; // ~10 s of visible time
 
 /**
  * Reload pipeline + escalation. Used both by the manual reload button
@@ -107,8 +111,8 @@ export function attachReload(ctx: Ctx): void {
   };
 
   fns.scheduleTerrainVerifyAfterReload = () => {
-    if (st.reloadVerifyTimer) clearTimeout(st.reloadVerifyTimer);
-    st.reloadVerifyTimer = setTimeout(() => {
+    clearVisibleTimer(st.reloadVerifyTimer);
+    st.reloadVerifyTimer = setVisibleTimeout(() => {
       st.reloadVerifyTimer = null;
       if (isCancelled()) return;
       if (getActiveDem3dQuality() === 'fast-30m') return;
@@ -138,7 +142,8 @@ export function attachReload(ctx: Ctx): void {
       // Do NOT destroy and re-apply style if tiles are actively in-flight
       if (unifiedPresent && (isSourceBusy || hasTileActivity)) {
         console.log('[map3d] reload verify: tiles still loading, extending grace window');
-        st.reloadVerifyTimer = setTimeout(() => {
+        st.reloadVerifyTimer = setVisibleTimeout(() => {
+          st.reloadVerifyTimer = null;
           if (isCancelled()) return;
           st.reloadInProgress = false;
         }, 5000);
@@ -175,7 +180,7 @@ export function attachReload(ctx: Ctx): void {
         const onLateStyleLoad = () => {
           map.off('style.load', onLateStyleLoad);
           if (isCancelled()) return;
-          setTimeout(() => {
+          setVisibleTimeout(() => {
             if (isCancelled()) return;
             fns.performReloadOnce();
           }, 250);
@@ -201,12 +206,12 @@ export function attachReload(ctx: Ctx): void {
 
     // Conditions weren't ready (style not loaded yet, SW controller
     // missing). Don't fake a 100% "ready" status — that's what made the
-    // button look broken. Instead poll for readiness for up to ~10s and
-    // retry, then surface a real error if it still can't run.
+    // button look broken. Instead poll for readiness for up to ~10 s of
+    // visible time and retry, then surface a real error if it still can't run.
     st.reloadInProgress = true;
     fns.reportStatus('loading', 8, 'En attente du fond de carte');
-    if (st.reloadReadinessTimer) clearTimeout(st.reloadReadinessTimer);
-    const startedAt = Date.now();
+    clearVisibleTimer(st.reloadReadinessTimer);
+    let polls = 0;
     const tryAgain = () => {
       st.reloadReadinessTimer = null;
       if (isCancelled()) {
@@ -214,15 +219,16 @@ export function attachReload(ctx: Ctx): void {
         return;
       }
       if (fns.performReloadOnce()) return;
-      if (Date.now() - startedAt > 10000) {
+      polls += 1;
+      if (polls > RELOAD_READINESS_MAX_POLLS) {
         console.warn('[map3d] reload aborted: style/SW never became ready');
         fns.reportStatus('error', 0, 'Rechargement impossible');
         st.reloadInProgress = false;
         st.demReloadCoolingUntil = 0;
         return;
       }
-      st.reloadReadinessTimer = setTimeout(tryAgain, 400);
+      st.reloadReadinessTimer = setVisibleTimeout(tryAgain, RELOAD_READINESS_POLL_MS);
     };
-    st.reloadReadinessTimer = setTimeout(tryAgain, 200);
+    st.reloadReadinessTimer = setVisibleTimeout(tryAgain, 200);
   };
 }

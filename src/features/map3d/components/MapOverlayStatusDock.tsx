@@ -83,7 +83,7 @@ export default function MapOverlayStatusDock({
     ? Math.round(loading.reduce((sum, status) => sum + status.progress, 0) / loading.length)
     : 100;
   const hasError = errored.length > 0;
-  const accentColor = hasError ? 'rgba(255, 140, 92, 0.92)' : 'rgba(255, 255, 255, 0.82)';
+  const accentColor = hasError ? 'light-dark(#c4320a, rgba(255, 140, 92, 0.92))' : 'rgb(var(--rv-ink) / 0.82)';
   const reloadDisabled = reloadTargets.length === 0
     || reloadTargets.every((status) => status.state === 'loading');
   const tooltip = [
@@ -99,7 +99,7 @@ export default function MapOverlayStatusDock({
         title={tooltip}
         style={{
           ...pillStyle,
-          borderColor: hasError ? 'rgba(255, 140, 92, 0.22)' : 'rgba(255,255,255,0.08)',
+          borderColor: hasError ? 'rgba(255, 140, 92, 0.22)' : 'rgb(var(--rv-ink) / 0.08)',
         }}
       >
         <div style={trackShellStyle}>
@@ -109,7 +109,7 @@ export default function MapOverlayStatusDock({
               width: `${progress <= 0 ? 0 : Math.max(8, progress)}%`,
               background: hasError
                 ? 'linear-gradient(90deg, rgba(255,140,92,0.96), rgba(255,190,135,0.9))'
-                : 'rgba(255,255,255,0.8)',
+                : 'rgb(var(--rv-ink) / 0.8)',
             }}
           />
         </div>
@@ -163,7 +163,8 @@ const dockStyle: CSSProperties = {
 };
 
 const glassBase: CSSProperties = {
-  background: 'rgba(15,15,15,0.74)',
+  background: 'light-dark(rgba(255, 255, 255, 0.86), rgba(15, 15, 15, 0.74))',
+  boxShadow: 'var(--rv-float-shadow)',
   backdropFilter: 'blur(24px)',
   WebkitBackdropFilter: 'blur(24px)',
 };
@@ -177,7 +178,7 @@ const pillStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 8,
-  color: 'rgba(255,255,255,0.92)',
+  color: 'rgb(var(--rv-ink) / 0.92)',
   fontFamily: 'var(--rv-font-sans)',
 };
 
@@ -187,7 +188,7 @@ const trackShellStyle: CSSProperties = {
   height: 18,
   borderRadius: 8,
   padding: 1,
-  background: 'rgba(255,255,255,0.32)',
+  background: 'rgb(var(--rv-ink) / 0.16)',
   overflow: 'hidden',
 };
 
@@ -210,7 +211,7 @@ const iconButtonStyle: CSSProperties = {
   height: 20,
   border: 'none',
   background: 'transparent',
-  color: 'rgba(255,255,255,0.88)',
+  color: 'rgb(var(--rv-ink) / 0.88)',
   padding: 0,
   display: 'inline-flex',
   alignItems: 'center',
@@ -221,8 +222,9 @@ const compactButtonStyle: CSSProperties = {
   ...glassBase,
   width: 36,
   height: 36,
+  border: 'none',
   borderRadius: 8,
-  color: 'rgba(255,255,255,0.88)',
+  color: 'rgb(var(--rv-ink) / 0.88)',
   padding: 0,
   display: 'inline-flex',
   alignItems: 'center',

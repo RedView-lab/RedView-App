@@ -4,10 +4,10 @@
   width: 100%;
   margin: 0;
   padding: 4px 6px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  border: 1px solid rgb(var(--rv-ink) / 0.25);
   border-radius: 6px;
-  background: rgba(0, 0, 0, 0.4);
-  color: #fff;
+  background: light-dark(#fff, rgba(0, 0, 0, 0.4));
+  color: var(--rv-text);
   font-size: var(--rv-font-size-xl);
   font-weight: 700;
   line-height: 1.25;
@@ -16,17 +16,17 @@
 
 .rvpb-card__rename-input:focus,
 .rvpb-search-input:focus {
-  border-color: rgba(255, 255, 255, 0.55);
+  border-color: rgb(var(--rv-ink) / 0.55);
 }
 
 .rvpb-search-input {
   width: 220px;
   height: 40px;
   padding: 0 12px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgb(var(--rv-ink) / 0.18);
   border-radius: 6px;
-  background: #383838;
-  color: #fff;
+  background: light-dark(#fff, #383838);
+  color: var(--rv-text);
   font-size: var(--rv-font-size-lg);
   outline: none;
 }
@@ -35,7 +35,7 @@
   grid-column: 1 / -1;
   padding: 48px 24px;
   text-align: center;
-  color: rgba(255, 255, 255, 0.55);
+  color: rgb(var(--rv-ink) / 0.55);
   font-size: var(--rv-font-size-lg);
   font-weight: 500;
 }
@@ -44,10 +44,50 @@
   margin-top: 4px;
   padding: 10px 14px;
   border-radius: 6px;
-  background: rgba(180, 30, 30, 0.18);
-  color: #ffb4b4;
+  background: light-dark(rgba(217, 45, 32, 0.08), rgba(180, 30, 30, 0.18));
+  color: light-dark(#b42318, #ffb4b4);
   font-size: var(--rv-font-size-md);
   font-weight: 500;
+}
+
+/* Zone de dépôt d'un fichier .redview (glissé depuis le système). */
+.rvpb-file-drop {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: light-dark(rgba(244, 244, 245, 0.82), rgba(0, 0, 0, 0.62));
+  pointer-events: none;
+}
+
+.rvpb-file-drop__panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 560px;
+  padding: 40px 32px;
+  border: 2px dashed rgb(var(--rv-ink) / 0.45);
+  border-radius: 12px;
+  background: light-dark(rgba(197, 0, 0, 0.06), rgba(137, 0, 0, 0.18));
+  color: var(--rv-text);
+  text-align: center;
+}
+
+.rvpb-file-drop__title {
+  font-size: var(--rv-font-size-xl);
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.rvpb-file-drop__hint {
+  color: rgb(var(--rv-ink) / 0.72);
+  font-size: var(--rv-font-size-lg);
+  font-weight: 400;
 }
 
 .rvpb-sr-only {
@@ -94,7 +134,7 @@
 .rvpb-input-wrap:focus-within,
 .rvpb-account-input-shell:focus-within,
 .rvpb-account-select-shell:focus-within {
-  outline: 2px solid rgba(255, 255, 255, 0.38);
+  outline: 2px solid rgb(var(--rv-ink) / 0.38);
   outline-offset: 2px;
 }
 

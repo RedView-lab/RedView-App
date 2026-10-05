@@ -126,7 +126,7 @@ export function Select<T extends string = string>({
         {startAdornment ? <span className="rvc-select__adornment">{startAdornment}</span> : null}
         <span
           className="rvc-select__value"
-          style={!selectedOption && placeholder ? { color: 'rgba(255, 255, 255, 0.64)' } : undefined}
+          style={!selectedOption && placeholder ? { color: 'rgb(var(--rv-ink) / 0.64)' } : undefined}
         >
           {selectedOption ? t(selectedOption.label) : (placeholder ?? (value ? t(value) : ''))}
         </span>

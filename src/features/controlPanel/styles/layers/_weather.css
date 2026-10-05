@@ -32,7 +32,7 @@
   font-family: var(--rv-font-sans);
   font-size: var(--rv-font-size-xs);
   font-weight: 600;
-  color: #f87171;
+  color: light-dark(#d92d20, #f87171);
   letter-spacing: 0.02em;
 }
 
@@ -41,6 +41,7 @@
   height: 6px;
   border-radius: 50%;
   background: #ef4444;
+  color: var(--rv-on-accent);
   box-shadow: 0 0 6px #ef4444;
 }
 
@@ -54,11 +55,11 @@
   font-family: var(--rv-font-sans);
   font-size: var(--rv-font-size-xs);
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.55);
+  color: rgb(var(--rv-ink) / 0.55);
 }
 
 .rvc-weather__time-bound {
-  color: white;
+  color: var(--rv-text);
   font-family: var(--rv-font-sans);
   font-size: var(--rv-font-size-xs);
   font-weight: 500;
@@ -69,7 +70,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--rv-ink) / 0.08);
   border-radius: 6px;
   padding: 2px 8px;
   height: 30px;
@@ -82,7 +83,7 @@
   display: flex;
   align-items: center;
   height: 100%;
-  color: white;
+  color: var(--rv-text);
   font-family: var(--rv-font-sans);
   font-size: var(--rv-font-size-md);
   font-weight: 600;
@@ -96,7 +97,7 @@
 }
 
 .rvc-weather__time-display-segment {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--rv-ink) / 0.08);
   border-radius: 1px;
   padding: 0;
   display: flex;
@@ -135,7 +136,7 @@
 
 .rvc-weather__layer-label {
   flex: 1;
-  color: white;
+  color: var(--rv-text);
   font-family: var(--rv-font-sans);
   font-size: var(--rv-font-size-md);
   font-weight: 500;
@@ -149,7 +150,7 @@
   width: 108px !important;
   min-width: 108px;
   max-width: 140px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgb(var(--rv-ink) / 0.08);
   border-radius: 5px;
   background: transparent;
   padding: 5px 6px 5px 10px;
@@ -172,7 +173,7 @@
 }
 
 .rvc-weather__band-eye {
-  color: rgba(255, 255, 255, 0.56);
+  color: rgb(var(--rv-ink) / 0.56);
 }
 
 .rvc-weather__band-row.is-hidden .rvc-weather__band-eye,
@@ -228,7 +229,7 @@
 
 .rvc-weather__add-alert-text {
   flex: 1;
-  color: white;
+  color: var(--rv-text);
   font-family: var(--rv-font-sans);
   font-size: var(--rv-font-size-md);
   font-weight: 600;
@@ -258,7 +259,7 @@
 
 .rvc-weather__day-label {
   all: unset;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgb(var(--rv-ink) / 0.5);
   font-family: var(--rv-font-sans);
   font-size: var(--rv-font-size-xs);
   font-weight: 500;
@@ -270,11 +271,11 @@
 }
 
 .rvc-weather__day-label.is-active {
-  color: white;
-  background: rgba(255, 255, 255, 0.1);
+  color: var(--rv-text);
+  background: rgb(var(--rv-ink) / 0.1);
 }
 
 .rvc-weather__day-label:hover {
-  color: white;
+  color: var(--rv-text);
 }
 

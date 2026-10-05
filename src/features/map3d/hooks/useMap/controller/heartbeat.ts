@@ -4,6 +4,7 @@ import {
   TERRAIN_HEARTBEAT_FAILURES_BEFORE_RELOAD,
   type Ctx,
 } from './context';
+import { clearVisibleTimer, setVisibleInterval } from './visibleClock';
 import { getActiveDem3dQuality } from '../../../lib/dem3dQualityBus';
 
 /**
@@ -32,7 +33,7 @@ export function attachHeartbeat(ctx: Ctx): void {
     if (st.heartbeatTimer) return;
     st.heartbeatFailures = 0;
     let tickCount = 0;
-    st.heartbeatTimer = setInterval(() => {
+    st.heartbeatTimer = setVisibleInterval(() => {
       tickCount += 1;
       if (isCancelled()) {
         fns.stopTerrainHeartbeat();
@@ -61,7 +62,7 @@ export function attachHeartbeat(ctx: Ctx): void {
         return;
       }
       // Allow self-heal even before the first "ready" report if the
-      // heartbeat has been ticking for a while (>15s = 3 ticks). This
+      // heartbeat has been ticking for a while (3 ticks of visible time). This
       // covers bootstraps that stall and never call finishDemActivity.
       if (!st.hasReportedReadyOnce && tickCount < 3) return;
 
@@ -151,10 +152,8 @@ export function attachHeartbeat(ctx: Ctx): void {
   };
 
   fns.stopTerrainHeartbeat = () => {
-    if (st.heartbeatTimer) {
-      clearInterval(st.heartbeatTimer);
-      st.heartbeatTimer = null;
-    }
+    clearVisibleTimer(st.heartbeatTimer);
+    st.heartbeatTimer = null;
     st.heartbeatFailures = 0;
   };
 }

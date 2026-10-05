@@ -9,14 +9,14 @@
   padding: 0 8px;
   background: var(--rvi-red);
   border-radius: 6px;
-  color: var(--rvi-text);
+  color: var(--rv-on-accent);
   cursor: pointer;
   flex-shrink: 0;
   transition: background 0.15s ease;
   font-weight: 600;
   font-size: var(--rv-font-size-md);
 }
-.rvi-redbtn:hover { background: #a00000; }
+.rvi-redbtn:hover { background: #a00000; color: var(--rv-on-accent); }
 
 /* Pixel-perfect "Calculer" button — Figma I1713:27356;1695:22640.
    Spec: bg #890000, w_full, hug height (≈30px = 7+16+7), gap 4,

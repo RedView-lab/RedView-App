@@ -23,13 +23,13 @@
   justify-content: center;
   padding: 5.5px;
   border-radius: 77px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgb(var(--rv-ink) / 0.1);
   color: var(--rvi-text);
   cursor: pointer;
   transition: background 0.15s ease;
 }
 .rvi-header__back:hover {
-  background: rgba(255, 255, 255, 0.16);
+  background: rgb(var(--rv-ink) / 0.16);
 }
 
 .rvi-header__back:disabled {
@@ -38,7 +38,7 @@
 }
 
 .rvi-header__back:disabled:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgb(var(--rv-ink) / 0.1);
 }
 
 .rvi-header__info {
@@ -73,7 +73,7 @@
 }
 
 .rvi-header__badge {
-  background: rgba(0, 0, 0, 0.24);
+  background: light-dark(rgb(var(--rv-ink) / 0.06), rgba(0, 0, 0, 0.24));
   padding: 3px 6px;
   border-radius: 6px;
   font-size: var(--rv-font-size-xs);
@@ -120,10 +120,10 @@
   white-space: nowrap;
 }
 .rvi-header__sync-message.is-pending {
-  color: #fcd9a0;
+  color: light-dark(#b54708, #fcd9a0);
 }
 .rvi-header__sync-message.is-error {
-  color: #ffd3d3;
+  color: light-dark(#b42318, #ffd3d3);
 }
 
 .rvi-header__actions {
@@ -144,7 +144,7 @@
   padding: 0 10px 0 8px;
   border-radius: var(--rvi-radius-md);
   background: var(--rvi-red);
-  color: var(--rvi-text);
+  color: var(--rv-on-accent);
   font-size: var(--rv-font-size-md);
   font-weight: 600;
   line-height: 1;
@@ -154,9 +154,10 @@
 }
 .rvi-header__save:hover {
   background: #a00000;
+  color: var(--rv-on-accent);
 }
 .rvi-header__save:focus-visible {
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.24);
+  box-shadow: 0 0 0 2px rgb(var(--rv-ink) / 0.24);
 }
 .rvi-header__save:disabled {
   opacity: 0.6;
@@ -169,13 +170,13 @@
 }
 .rvi-header__save.is-pending,
 .rvi-header__save.is-pending:hover {
-  background: rgba(146, 64, 14, 0.36);
-  color: #fcd9a0;
+  background: light-dark(rgba(247, 144, 9, 0.14), rgba(146, 64, 14, 0.36));
+  color: light-dark(#b54708, #fcd9a0);
 }
 .rvi-header__save.is-error,
 .rvi-header__save.is-error:hover {
-  background: rgba(127, 29, 29, 0.32);
-  color: #ffd3d3;
+  background: light-dark(rgba(217, 45, 32, 0.1), rgba(127, 29, 29, 0.32));
+  color: light-dark(#b42318, #ffd3d3);
 }
 
 .rvi-iconbtn {
@@ -190,7 +191,7 @@
   transition: background 0.15s ease;
 }
 .rvi-iconbtn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--rv-ink) / 0.08);
 }
 .rvi-iconbtn:disabled,
 .rvi-iconbtn[aria-disabled='true'] {

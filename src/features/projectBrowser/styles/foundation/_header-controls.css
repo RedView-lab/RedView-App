@@ -45,7 +45,8 @@
   min-height: 40px;
   padding: 10px 24px;
   border-radius: 6px;
-  background: rgba(0, 0, 0, 0.4);
+  background: light-dark(#fff, rgba(0, 0, 0, 0.4));
+  box-shadow: inset 0 0 0 1px light-dark(rgb(var(--rv-ink) / 0.1), transparent);
   cursor: pointer;
   font-size: var(--rv-font-size-lg);
   font-weight: 500;
@@ -53,12 +54,12 @@
 }
 
 .rvpb-logout-button:hover {
-  background: rgba(0, 0, 0, 0.6);
+  background: light-dark(rgb(var(--rv-ink) / 0.04), rgba(0, 0, 0, 0.6));
 }
 
 .rvpb-feedback-button {
   appearance: none;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgb(var(--rv-ink) / 0.08);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -66,8 +67,8 @@
   min-height: 40px;
   padding: 10px 18px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.035);
-  color: rgba(255, 255, 255, 0.8);
+  background: light-dark(#fff, rgba(255, 255, 255, 0.035));
+  color: rgb(var(--rv-ink) / 0.8);
   cursor: pointer;
   font-size: var(--rv-font-size-lg);
   font-weight: 500;
@@ -75,15 +76,15 @@
 }
 
 .rvpb-feedback-button:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.16);
-  color: #ffffff;
+  background: light-dark(rgb(var(--rv-ink) / 0.04), rgba(255, 255, 255, 0.08));
+  border-color: rgb(var(--rv-ink) / 0.16);
+  color: var(--rv-text);
 }
 
 .rvpb-divider {
   width: 100%;
   height: 1px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--rv-ink) / 0.08);
 }
 
 .rvpb-top-tabs {
@@ -109,7 +110,8 @@
 
 .rvpb-top-tabs__item.is-active,
 .rvpb-view-toggle__item.is-active {
-  background: rgba(0, 0, 0, 0.4);
+  background: light-dark(#fff, rgba(0, 0, 0, 0.4));
+  box-shadow: 0 1px 2px light-dark(rgba(16, 18, 24, 0.08), transparent), 0 0 0 1px light-dark(rgb(var(--rv-ink) / 0.06), transparent);
 }
 
 .rvpb-toolbar {
@@ -142,7 +144,7 @@
 }
 
 .rvpb-breadcrumb__separator {
-  color: rgba(255, 255, 255, 0.48);
+  color: rgb(var(--rv-ink) / 0.48);
   font-size: var(--rv-font-size-xl);
   font-weight: 700;
 }
@@ -152,7 +154,7 @@
   border: 0;
   padding: 0;
   background: transparent;
-  color: #fff;
+  color: var(--rv-text);
   cursor: pointer;
   font: inherit;
   font-size: var(--rv-font-size-xl);
@@ -165,7 +167,7 @@
 }
 
 .rvpb-breadcrumb__item.is-drop-target {
-  color: #ffd6d6;
+  color: light-dark(#a30000, #ffd6d6);
   text-shadow: 0 0 14px rgba(137, 0, 0, 0.46);
 }
 
@@ -176,7 +178,7 @@
   height: 40px;
   padding: 3px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--rv-ink) / 0.08);
 }
 
 .rvpb-view-toggle__item {
@@ -202,15 +204,16 @@
   width: 40px;
   height: 40px;
   border-radius: 6px;
-  background: #383838;
+  background: light-dark(#fff, #383838);
+  box-shadow: inset 0 0 0 1px light-dark(rgb(var(--rv-ink) / 0.1), transparent);
 }
 
 .rvpb-square-button__spinner {
   width: 16px;
   height: 16px;
   border-radius: 999px;
-  border: 2px solid rgba(255, 255, 255, 0.22);
-  border-top-color: #fff;
+  border: 2px solid rgb(var(--rv-ink) / 0.22);
+  border-top-color: rgb(var(--rv-ink));
   animation: rvpb-square-button-spin 900ms linear infinite;
 }
 
@@ -230,9 +233,17 @@
   padding: 0 16px;
   border-radius: 6px;
   background: #890000;
+  color: var(--rv-on-accent);
   cursor: pointer;
   font-size: var(--rv-font-size-lg);
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
+}
+
+/* « Importer un projet » (fichier .redview), à côté de « Créer un projet ». */
+.rvpb-create-button--secondary {
+  background: light-dark(#fff, #383838);
+  box-shadow: inset 0 0 0 1px light-dark(rgb(var(--rv-ink) / 0.1), transparent);
+  color: var(--rv-text);
 }

@@ -1,0 +1,63 @@
+/* Toasts (src/shared/ui/AppToaster.tsx) : même rendu que l'ancien toast du
+   gestionnaire de projets, valable dans toute l'app. */
+
+.rv-toast-layer {
+  z-index: 2147483000;
+  pointer-events: none;
+}
+
+.rv-toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 240px;
+  max-width: 360px;
+  padding: 14px 16px;
+  border: 1px solid rgb(var(--rv-ink) / 0.08);
+  border-radius: 12px;
+  background: light-dark(rgba(255, 255, 255, 0.98), rgba(20, 20, 20, 0.94));
+  color: var(--rv-text);
+  box-shadow: var(--rv-popover-shadow);
+  backdrop-filter: blur(18px);
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-lg);
+  font-weight: 500;
+  pointer-events: auto;
+}
+
+.rv-toast__icon {
+  display: inline-flex;
+  flex: none;
+}
+
+.rv-toast--success {
+  box-shadow:
+    var(--rv-popover-shadow),
+    0 0 0 1px light-dark(rgba(6, 118, 71, 0.28), rgba(112, 196, 140, 0.18));
+}
+
+.rv-toast--success .rv-toast__icon {
+  color: light-dark(#067647, rgb(112, 196, 140));
+}
+
+.rv-toast--error {
+  box-shadow:
+    var(--rv-popover-shadow),
+    0 0 0 1px light-dark(rgba(217, 45, 32, 0.3), rgba(196, 112, 112, 0.22));
+}
+
+.rv-toast--error .rv-toast__icon {
+  color: light-dark(#b42318, rgb(196, 112, 112));
+}
+
+.rv-toast--info {
+  box-shadow:
+    var(--rv-popover-shadow),
+    0 0 0 1px light-dark(rgba(21, 92, 211, 0.26), rgba(124, 160, 220, 0.2));
+}
+
+.rv-toast--info .rv-toast__icon {
+  color: light-dark(#155cd3, rgb(124, 160, 220));
+}

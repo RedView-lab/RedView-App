@@ -462,13 +462,13 @@ export function MapContextMenu({
         borderTopRightRadius: 8,
         borderBottomRightRadius: 8,
         borderBottomLeftRadius: 0,
-        boxShadow: '0 12px 36px rgba(0,0,0,0.38)',
-        color: '#ffffff',
+        boxShadow: '0 12px 36px light-dark(rgba(16, 18, 24, 0.16), rgba(0, 0, 0, 0.38))',
+        color: 'var(--rv-text)',
         fontFamily: 'var(--rv-font-sans)',
         pointerEvents: 'auto',
       }}
     >
-      <MapCanvasGlassBackdrop blur={60} saturate={1.6} tint="rgba(15, 15, 15, 0.74)" />
+      <MapCanvasGlassBackdrop blur={60} saturate={1.6} tint="light-dark(rgba(255, 255, 255, 0.86), rgba(15, 15, 15, 0.74))" />
 
       <MapContextMenuHeader
         titleLabel={titleLabel}
@@ -489,7 +489,7 @@ export function MapContextMenu({
           position: 'relative',
           width: '100%',
           height: 1,
-          background: 'rgba(255,255,255,0.12)',
+          background: 'rgb(var(--rv-ink) / 0.12)',
         }}
       />
 

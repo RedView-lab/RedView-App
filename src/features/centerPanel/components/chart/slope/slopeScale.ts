@@ -2,7 +2,7 @@ import { ROUTE_SLOPE_LEGEND_BANDS } from '@/features/controlPanel/lib/routeSlope
 
 /**
  * Échelle de colorisation « Pente » du profil d'altitude : la même que la
- * légende du tracé sur la carte (`ROUTE_SLOPE_LEGEND_BANDS`, -16 % → 16 %),
+ * légende du tracé sur la carte (`ROUTE_SLOPE_LEGEND_BANDS`, -15 % → 15 %),
  * pour qu'un tronçon ait la même couleur sur le graphe et sur la carte.
  * La pente affichée est une moyenne par tronçon (voir `buildSlopeColorRuns`).
  * Descentes et plat restent estompés au remplissage pour que les montées
@@ -36,7 +36,7 @@ export const SLOPE_NEUTRAL_CLASS_INDEX = Math.max(
   SLOPE_COLOR_CLASSES.findIndex((entry) => entry.minPct <= 0 && entry.maxPct > 0),
 );
 
-/** Index de classe pour une pente (%) ; les bornes basses sont incluses (8 % → 8–12). */
+/** Index de classe pour une pente (%) ; les bornes basses sont incluses (9 % → 9–12). */
 export function classifyGradientPct(gradientPct: number): number {
   if (!Number.isFinite(gradientPct)) return SLOPE_NEUTRAL_CLASS_INDEX;
   for (let index = SLOPE_COLOR_CLASSES.length - 1; index >= 0; index -= 1) {

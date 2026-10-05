@@ -43,9 +43,13 @@ function cacheTerrainWmsNull(key, errorType) {
 
 // Returns the resampled raster, null (no data / transient failure) or
 // IGN_FETCH_CANCELLED. `mapTile`: see scheduleIGN().
+function terrainWmsCacheKey(mercZ, mercX, mercY) {
+  return `wms-mnt/${mercZ}/${mercX}/${mercY}@${ignWmsSupersampleFactor(mercZ)}x`;
+}
+
 async function getTerrainWmsTile(mercZ, mercX, mercY, purpose = PURPOSE_SLOPE_VISIBLE, mapTile = null) {
   const supersample = ignWmsSupersampleFactor(mercZ);
-  const key = `wms-mnt/${mercZ}/${mercX}/${mercY}@${supersample}x`;
+  const key = terrainWmsCacheKey(mercZ, mercX, mercY);
   const cached = getCachedTerrainWms(key);
   if (cached.hit) return cached.data;
 
@@ -96,7 +100,7 @@ async function getTerrainWmsTile(mercZ, mercX, mercY, purpose = PURPOSE_SLOPE_VI
     } finally {
       cleanup();
     }
-  }, purpose, mercatorTileCenterCoords(mercZ, mercX, mercY), mapTile).then((result) => {
+  }, purpose, mercatorTileCenterCoords(mercZ, mercX, mercY), mapTile, { wmsBytes: wmsRasterBytes(mercZ, mercX, mercY, supersample) }).then((result) => {
     if (result === PRUNED_SENTINEL) return IGN_FETCH_CANCELLED;
     return result;
   }).finally(() => {
@@ -130,6 +134,21 @@ function cacheMnsWmsNull(key, errorType) {
 
 function mnsWmsCacheKey(mercZ, mercX, mercY) {
   return `mns/${mercZ}/${mercX}/${mercY}@${mnsWmsSupersampleFactor()}x`;
+}
+
+// Drops the transient failure (timeout, HTTP error) remembered for this
+// tile's LiDAR HD rasters, so that a retry (handleVideoDemRequest) asks geopf
+// again instead of reading the null back for IGN_NULL_TTL_TRANSIENT. A
+// confirmed coverage gap stays.
+function forgetTransientWmsFailures(mercZ, mercX, mercY) {
+  const entries = [
+    [mnsWmsTileCache, mnsWmsCacheKey(mercZ, mercX, mercY)],
+    [terrainWmsTileCache, terrainWmsCacheKey(mercZ, mercX, mercY)],
+  ];
+  for (const [cache, key] of entries) {
+    const entry = cache.get(key);
+    if (entry && entry._null && entry.errorType !== 'permanent') cache.delete(key);
+  }
 }
 
 // True only when the LiDAR HD WMS answered for this tile with no valid sample
@@ -210,7 +229,7 @@ async function getMnsWmsTile(mercZ, mercX, mercY, purpose = null, mapTile = null
     } finally {
       cleanup();
     }
-  }, purpose, mercatorTileCenterCoords(mercZ, mercX, mercY), mapTile).then((result) => {
+  }, purpose, mercatorTileCenterCoords(mercZ, mercX, mercY), mapTile, { wmsBytes: wmsRasterBytes(mercZ, mercX, mercY, supersample) }).then((result) => {
     if (result === PRUNED_SENTINEL) return IGN_FETCH_CANCELLED;
     return result;
   }).finally(() => {

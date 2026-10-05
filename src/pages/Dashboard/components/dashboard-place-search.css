@@ -65,7 +65,7 @@
   justify-content: center;
   width: 20px;
   height: 20px;
-  color: #ffffff !important;
+  color: var(--rv-text) !important;
   opacity: 1 !important;
   transform: translateY(-50%);
   pointer-events: none;
@@ -85,7 +85,7 @@
   z-index: 2;
   min-height: 24px;
   padding: 0 0 0 28px;
-  color: #ffffff !important;
+  color: var(--rv-text) !important;
   opacity: 1 !important;
   background: transparent;
   border: 0;
@@ -95,7 +95,7 @@
   font-weight: 600;
   line-height: 24px;
   -webkit-font-smoothing: antialiased;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  text-shadow: 0 1px 2px light-dark(transparent, rgba(0, 0, 0, 0.4));
   text-overflow: ellipsis;
 }
 
@@ -106,11 +106,11 @@
 }
 
 .rvd-place-search__field .rvi-place-search__input::placeholder {
-  color: #ffffff !important;
+  color: var(--rv-text) !important;
   opacity: 1 !important;
   font-style: normal;
   font-weight: 600;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  text-shadow: 0 1px 2px light-dark(transparent, rgba(0, 0, 0, 0.4));
 }
 
 .rvd-place-search__filters {
@@ -219,18 +219,18 @@
   min-width: 0;
   max-width: 100%;
   /* Fond / flou / bordure : shared/styles/glass.css (.rv-glass) */
-  color: rgba(255, 255, 255, 0.72);
+  color: rgb(var(--rv-ink) / 0.72);
 }
 
 .rvd-place-search__filter-shell:hover {
   background: var(--rv-glass-tint-hover);
   border-color: var(--rv-glass-border-hover);
-  color: #ffffff;
+  color: var(--rv-text);
 }
 
 /* Filtre actif : même verre, seul le contenu passe en blanc plein. */
 .rvd-place-search__filter.is-active .rvd-place-search__filter-shell {
-  color: #ffffff;
+  color: var(--rv-text);
 }
 
 .rvd-place-search__filter-toggle {
@@ -267,20 +267,21 @@
   min-width: 16px;
   min-height: 16px;
   border-radius: 4px;
-  color: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.38);
-  background: rgba(0, 0, 0, 0.2);
+  color: var(--rv-text);
+  border: 1px solid rgb(var(--rv-ink) / 0.38);
+  background: light-dark(#fff, rgba(0, 0, 0, 0.2));
   box-sizing: border-box;
   transition: background 150ms ease, border-color 150ms ease;
 }
 
 .rvd-place-search__filter.is-active .rvd-place-search__filter-checkbox {
-  border-color: rgba(255, 255, 255, 0.55);
+  border-color: rgb(var(--rv-ink) / 0.55);
 }
 
 .rvd-place-search__filter-checkbox.is-checked {
-  background: rgba(255, 255, 255, 0.24);
-  border: 1px solid rgba(255, 255, 255, 0.8);
+  background: light-dark(var(--rv-inverse), rgba(255, 255, 255, 0.24));
+  border: 1px solid light-dark(var(--rv-inverse), rgba(255, 255, 255, 0.8));
+  color: #fff;
 }
 
 .rvd-place-search__filter-marker {
@@ -319,7 +320,7 @@
   font-weight: 600;
   line-height: 24px;
   text-align: left;
-  color: rgba(255, 255, 255, 0.68);
+  color: rgb(var(--rv-ink) / 0.68);
   -webkit-font-smoothing: antialiased;
   letter-spacing: normal;
   transition: color 150ms ease;
@@ -327,8 +328,8 @@
 
 .rvd-place-search__filter-shell:hover .rvd-place-search__filter-label,
 .rvd-place-search__filter.is-active .rvd-place-search__filter-label {
-  color: #ffffff !important;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  color: var(--rv-text) !important;
+  text-shadow: 0 1px 2px light-dark(transparent, rgba(0, 0, 0, 0.4));
 }
 
 .rvd-place-search__filter-chevron {
@@ -345,14 +346,14 @@
   padding: 0;
   background: transparent;
   border: 0;
-  color: rgba(255, 255, 255, 0.68);
+  color: rgb(var(--rv-ink) / 0.68);
   cursor: pointer;
   transition: transform 180ms ease, color 150ms ease;
 }
 
 .rvd-place-search__filter-shell:hover .rvd-place-search__filter-chevron,
 .rvd-place-search__filter.is-active .rvd-place-search__filter-chevron {
-  color: #ffffff !important;
+  color: var(--rv-text) !important;
 }
 
 .rvd-place-search__filter.is-open .rvd-place-search__filter-chevron {

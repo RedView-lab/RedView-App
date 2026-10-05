@@ -43,7 +43,7 @@
   font-family: var(--rv-font-sans);
   font-size: var(--rv-font-size-md);
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.64);
+  color: rgb(var(--rv-ink) / 0.64);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -78,24 +78,24 @@
   padding: 6px 6px 6px 10px;
   box-sizing: border-box;
   border-radius: 5px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgb(var(--rv-ink) / 0.08);
   background: transparent;
   font-family: var(--rv-font-sans);
   font-size: var(--rv-font-size-md);
   font-weight: 600;
-  color: #fff;
+  color: var(--rv-text);
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
   white-space: nowrap;
 }
 .rvi-tl-table__auto-value-btn:hover {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.16);
+  background: rgb(var(--rv-ink) / 0.04);
+  border-color: rgb(var(--rv-ink) / 0.16);
 }
 /* When auto-waypoints are enabled, the dropdown reads as active. */
 .rvi-tl-table__auto.is-on .rvi-tl-table__auto-value-btn {
-  border-color: rgba(255, 255, 255, 0.24);
-  background: rgba(255, 255, 255, 0.06);
+  border-color: rgb(var(--rv-ink) / 0.24);
+  background: rgb(var(--rv-ink) / 0.06);
 }
 
 /* "Ajouter des colonnes" button */
@@ -107,26 +107,26 @@
   height: 32px;
   padding: 7px 10px;
   box-sizing: border-box;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgb(var(--rv-ink) / 0.08);
   border-radius: 5px;
   font-family: var(--rv-font-sans);
   font-size: var(--rv-font-size-md);
   font-weight: 600;
-  color: #fff;
+  color: var(--rv-text);
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
   flex-shrink: 0;
   white-space: nowrap;
 }
 .rvi-tl-table__columns:hover {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.16);
+  background: rgb(var(--rv-ink) / 0.04);
+  border-color: rgb(var(--rv-ink) / 0.16);
 }
 
 .rvi-tl-divider {
   border: 0;
   height: 1px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--rv-ink) / 0.08);
   margin: 0;
   flex-shrink: 0;
 }
@@ -157,7 +157,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: var(--rv-letter-spacing-wide);
-  color: rgba(255, 255, 255, 0.45);
+  color: rgb(var(--rv-ink) / 0.45);
 }
 
 /* Filtres alignés sur ceux du haut de page (aucun override local). */
@@ -165,7 +165,7 @@
   font-family: var(--rv-font-sans);
   font-size: var(--rv-font-size-xs);
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.45);
+  color: rgb(var(--rv-ink) / 0.45);
 }
 
 .rvi-tl-filter-reset {
@@ -176,19 +176,19 @@
   font-family: var(--rv-font-sans);
   font-size: var(--rv-font-size-xs);
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgb(var(--rv-ink) / 0.7);
   padding: 3px 8px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgb(var(--rv-ink) / 0.06);
+  border: 1px solid rgb(var(--rv-ink) / 0.1);
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .rvi-tl-filter-reset:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.2);
+  background: rgb(var(--rv-ink) / 0.12);
+  color: var(--rv-text);
+  border-color: rgb(var(--rv-ink) / 0.2);
 }
 
 .rvi-tl-sheet-filters__chips {
@@ -204,24 +204,24 @@
   display: inline-flex;
   align-items: center;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgb(var(--rv-ink) / 0.05);
+  border: 1px solid rgb(var(--rv-ink) / 0.08);
   transition: background 0.18s ease, border-color 0.18s ease;
 }
 
 .rvi-tl-sheet-filters__chip-group:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.14);
+  background: rgb(var(--rv-ink) / 0.08);
+  border-color: rgb(var(--rv-ink) / 0.14);
 }
 
 .rvi-tl-sheet-filters__chip-group.is-on {
-  background: rgba(255, 255, 255, 0.09);
-  border-color: rgba(255, 255, 255, 0.18);
+  background: rgb(var(--rv-ink) / 0.09);
+  border-color: rgb(var(--rv-ink) / 0.18);
 }
 
 .rvi-tl-sheet-filters__chip-group.is-menu-open {
-  border-color: rgba(255, 255, 255, 0.28);
-  background: rgba(255, 255, 255, 0.12);
+  border-color: rgb(var(--rv-ink) / 0.28);
+  background: rgb(var(--rv-ink) / 0.12);
   z-index: 1000;
 }
 
@@ -233,9 +233,9 @@
   height: 30px;
   padding: 3px 8px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.72);
+  background: rgb(var(--rv-ink) / 0.05);
+  border: 1px solid rgb(var(--rv-ink) / 0.08);
+  color: rgb(var(--rv-ink) / 0.72);
   font-family: var(--rv-font-sans);
   font-size: var(--rv-font-size-sm);
   font-weight: 500;
@@ -245,15 +245,15 @@
 }
 
 .rvi-tl-sheet-filters__chip:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.14);
-  color: #fff;
+  background: rgb(var(--rv-ink) / 0.08);
+  border-color: rgb(var(--rv-ink) / 0.14);
+  color: var(--rv-text);
 }
 
 .rvi-tl-sheet-filters__chip.is-on {
-  background: rgba(255, 255, 255, 0.09);
-  border-color: rgba(255, 255, 255, 0.18);
-  color: #fff;
+  background: rgb(var(--rv-ink) / 0.09);
+  border-color: rgb(var(--rv-ink) / 0.18);
+  color: var(--rv-text);
 }
 
 .rvi-tl-sheet-filters__chip-group .rvi-tl-sheet-filters__chip {
@@ -273,7 +273,7 @@
   height: 30px;
   border-top-right-radius: 6px;
   border-bottom-right-radius: 6px;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgb(var(--rv-ink) / 0.6);
   cursor: pointer;
   box-sizing: border-box;
   transition: background 0.15s ease, color 0.15s ease;
@@ -284,13 +284,13 @@
 }
 
 .rvi-tl-sheet-filters__chevron-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: rgb(var(--rv-ink) / 0.08);
+  color: var(--rv-text);
 }
 
 .rvi-tl-sheet-filters__chevron-btn.is-open {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.12);
+  color: var(--rv-text);
+  background: rgb(var(--rv-ink) / 0.12);
 }
 
 .rvi-tl-sheet-filters__chevron-btn.is-open svg {
@@ -304,9 +304,9 @@
   width: 14px;
   height: 14px;
   border-radius: 3px;
-  background: rgba(0, 0, 0, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #fff;
+  background: light-dark(#fff, rgba(0, 0, 0, 0.6));
+  border: 1px solid light-dark(rgb(var(--rv-ink) / 0.24), rgba(255, 255, 255, 0.2));
+  color: var(--rv-text);
   font-size: var(--rv-font-size-2xs);
   flex-shrink: 0;
 }

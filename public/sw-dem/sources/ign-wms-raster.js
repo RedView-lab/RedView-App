@@ -85,6 +85,13 @@ function mnsWmsRequestSize(mercZ, mercX, mercY, supersample = 1) {
   return { width, height };
 }
 
+// Payload of one GetMap raster (BIL32, not compressed by geopf): its weight in
+// the scheduler's WMS byte budget (IGN_WMS_INFLIGHT_BYTES_MAX).
+function wmsRasterBytes(mercZ, mercX, mercY, supersample = 1) {
+  const { width, height } = mnsWmsRequestSize(mercZ, mercX, mercY, supersample);
+  return width * height * 4;
+}
+
 function buildMnsWmsTileURL(mercZ, mercX, mercY, layer, width, height) {
   const bounds = mercatorTileBounds(mercZ, mercX, mercY);
   const bbox = [bounds.south, bounds.west, bounds.north, bounds.east].join(',');

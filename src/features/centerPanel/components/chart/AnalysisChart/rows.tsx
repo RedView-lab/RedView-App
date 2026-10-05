@@ -84,7 +84,7 @@ export function EmptySeriesRow({
         <button type="button" className="rvchart__series-button" disabled>
           <span
             className="rvchart__series-swatch"
-            style={{ background: 'rgba(255,255,255,0.16)' }}
+            style={{ background: 'rgb(var(--rv-ink) / 0.16)' }}
           />
           <span className="rvchart__series-name">{message}</span>
         </button>
@@ -200,7 +200,7 @@ export function HoverCardGroup({
                 <div className="rvchart__card-metric rvchart__card-metric--slope">
                   <span
                     className="rvchart__card-slope-dot"
-                    style={{ background: group.slopeColor ?? '#ffffff' }}
+                    style={{ background: group.slopeColor ?? 'rgb(var(--rv-ink))' }}
                     aria-hidden="true"
                   />
                   {group.slopeLabel}

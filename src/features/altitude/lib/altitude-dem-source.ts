@@ -182,6 +182,20 @@ export class AltitudeDemSource {
     this.fallback = options.fallback;
   }
 
+  /**
+   * Même source pour une autre carte (rendu vidéo hors écran) : mêmes options,
+   * aucun état partagé — chaque carte lit les tuiles de son propre relief.
+   */
+  cloneForMap(): AltitudeDemSource {
+    return new AltitudeDemSource({
+      id: this.id,
+      tileSize: this.tileSize,
+      minzoom: this.minzoom,
+      maxzoom: this.maxzoom,
+      fallback: this.fallback,
+    });
+  }
+
   onAdd(map: MapboxMap): void {
     this.map = map;
     map.on('sourcedata', this.onSourceData);

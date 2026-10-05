@@ -5,6 +5,7 @@ import { getActiveDemProfilePreference } from '../../../lib/demProfileBus';
 import { installViewportPrefetch } from '../../../lib/viewportPrefetch';
 import type { Ctx } from './context';
 import { installDemWantedTilesSync } from './demWantedTiles';
+import { clearVisibleTimer } from './visibleClock';
 
 /**
  * Tile-tracking listeners + style/idle event hooks. Centralised so the
@@ -481,30 +482,18 @@ export function attachListeners(ctx: Ctx): void {
     st.disposeTerrainBootstrap = null;
     st.disposeStyleRecovery?.();
     st.disposeStyleRecovery = null;
-    if (st.orthoBootTimer) {
-      clearTimeout(st.orthoBootTimer);
-      st.orthoBootTimer = null;
-    }
-    if (st.readyFallbackTimer) {
-      clearTimeout(st.readyFallbackTimer);
-      st.readyFallbackTimer = null;
-    }
-    if (st.terrainRecoveryTimer) {
-      clearTimeout(st.terrainRecoveryTimer);
-      st.terrainRecoveryTimer = null;
-    }
-    if (st.reloadVerifyTimer) {
-      clearTimeout(st.reloadVerifyTimer);
-      st.reloadVerifyTimer = null;
-    }
-    if (st.reloadReadinessTimer) {
-      clearTimeout(st.reloadReadinessTimer);
-      st.reloadReadinessTimer = null;
-    }
-    if (st.setTilesVerifyTimer) {
-      clearTimeout(st.setTilesVerifyTimer);
-      st.setTilesVerifyTimer = null;
-    }
+    clearVisibleTimer(st.orthoBootTimer);
+    st.orthoBootTimer = null;
+    clearVisibleTimer(st.readyFallbackTimer);
+    st.readyFallbackTimer = null;
+    clearVisibleTimer(st.terrainRecoveryTimer);
+    st.terrainRecoveryTimer = null;
+    clearVisibleTimer(st.reloadVerifyTimer);
+    st.reloadVerifyTimer = null;
+    clearVisibleTimer(st.reloadReadinessTimer);
+    st.reloadReadinessTimer = null;
+    clearVisibleTimer(st.setTilesVerifyTimer);
+    st.setTilesVerifyTimer = null;
     if (styleDataTerrainRepairTimer) {
       clearTimeout(styleDataTerrainRepairTimer);
       styleDataTerrainRepairTimer = null;

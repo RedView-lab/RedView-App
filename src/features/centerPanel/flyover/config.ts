@@ -37,6 +37,19 @@ export const CAMERA_DISTANCE_REFERENCE_SPEED_MPS = 250;
 export const CAMERA_DISTANCE_SPEED_EXPONENT = 0.75;
 export const CAMERA_DISTANCE_MIN_M = 350;
 export const CAMERA_DISTANCE_MAX_M = 30_000;
+/**
+ * La distance suit la vitesse lissée sur ce temps de lecture (σ) : un
+ * ralentissement bref (virage serré, plafond de rotation du cap) ne fait plus
+ * descendre puis remonter la caméra en une seconde ; le rythme d'ensemble
+ * (vallée → montée) garde son effet.
+ */
+export const CAMERA_DISTANCE_SPEED_SMOOTHING_S = 2.5;
+/**
+ * Variation max de la distance caméra (fraction par seconde de lecture à 1×) :
+ * même quand le rythme du parcours change vite (boucles d'un circuit), le
+ * zoom reste une lente respiration, jamais un aller-retour.
+ */
+export const CAMERA_ZOOM_RATE_MAX = 0.06;
 
 /* ── Cadrage ─────────────────────────────────────────────────────────────── */
 /** Lissage de la ligne visée (σ, en fraction de la distance caméra). */
@@ -165,6 +178,16 @@ export const MAPBOX_DEFAULT_FOV_DEG = 36.87;
 export const FLYOVER_FOV_DEG = 44;
 /** Retour au champ d'origine quand la lecture se ferme. */
 export const FOV_RESTORE_MS = 600;
+
+/* ── Cadrage portrait (vidéo 9:16, `engine/framing.ts`) ─────────────── */
+/** Champ vertical : 60° (plafond Mapbox) donne ~36° en largeur. */
+export const PORTRAIT_FOV_DEG = 60;
+/** Recul : un pixel couvre le même terrain qu'en 16:9 à 44° (1 920 px de haut contre 1 080). */
+export const PORTRAIT_DISTANCE_FACTOR = 1.02;
+/** Tête vers ~70 % de la hauteur : le point visé est plus loin devant qu'en paysage. */
+export const PORTRAIT_TARGET_LEAD_PER_DISTANCE = 0.4;
+/** Ligne visée plus près de la trace : la tête garde sa marge dans une image étroite. */
+export const PORTRAIT_CENTERLINE_MAX_OFFSET_PER_DISTANCE = 0.11;
 
 /* ── Plan hélico (montées sinueuses, lacets) ─────────────────────────── */
 /**

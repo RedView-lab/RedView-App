@@ -1,5 +1,6 @@
 import type { PrioritiesState, RoadTypesState } from '../../types';
 import type { SavedCustomProfile } from '../../lib/project/customProfiles';
+import { createDocumentId } from '../../lib/project/ids';
 
 /** Réglages de tracé copiés dans un profil enregistré (`activityType` = nom du profil). */
 function snapshotRoadTypes(roadTypes: RoadTypesState, profileName: string): SavedCustomProfile['roadTypes'] {
@@ -42,19 +43,22 @@ export function buildCustomProfileToSave({
   newProfileName: string;
   basePresetId: string;
 }): SavedCustomProfile {
+  const now = Date.now();
   if (activeSaved) {
     return {
       ...activeSaved,
       roadTypes: snapshotRoadTypes(roadTypes, activeSaved.name),
       priorities: { ...priorities },
+      updatedAt: now,
     };
   }
   return {
-    id: `custom_${Date.now()}`,
+    id: createDocumentId('custom'),
     name: newProfileName,
     basePresetId,
     roadTypes: snapshotRoadTypes(roadTypes, newProfileName),
     priorities: { ...priorities },
-    createdAt: Date.now(),
+    createdAt: now,
+    updatedAt: now,
   };
 }

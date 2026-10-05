@@ -1,47 +1,32 @@
-import type { ItineraryProject } from '../../types';
+import type { Itinerary, ItineraryProject } from '../../types';
+import { deepEqual } from '../../lib/project/deepEqual';
+import { ITINERARY_VIEW_KEYS } from '../../lib/project/layers';
 
 /**
  * Périmètre de l'historique undo/redo.
  *
  * L'historique porte sur le « document » : le contenu des itinéraires (tracé,
  * timeline, réglages de routage, rythme, POI, zones interdites, couleur…).
- * Tout le reste est de l'état d'affichage qui ne doit jamais être remonté par
- * un undo : fond de carte / environnement (`controlPanel`), graphe
- * (`analysis`), vue carte et panneaux (`dashboard`), mode du panneau, nom et
- * horodatage de sauvegarde, sélection de l'itinéraire actif et visibilités.
+ * La vue de l'utilisateur (cf. `lib/project/layers.ts`) n'est jamais remontée
+ * par un undo : fond de carte / environnement (`controlPanel`), graphe
+ * (`analysis`), vue carte et panneaux (`dashboard`), mode du panneau,
+ * sélection de l'itinéraire actif, affichage des itinéraires (œil, rendu,
+ * opacité) ; ni le nom et l'horodatage de sauvegarde.
  */
-const UNTRACKED_ITINERARY_KEYS: ReadonlySet<string> = new Set([
-  'visible',
-  'analysisVisible',
-]);
+const UNTRACKED_ITINERARY_KEYS: ReadonlySet<string> = new Set(ITINERARY_VIEW_KEYS);
 
-/** Égalité structurelle (valeurs JSON-like) ; `undefined` ≡ clé absente. */
-export function deepEqual(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') {
-    return Number.isNaN(a) && Number.isNaN(b);
+/** `restored` avec l'affichage (champs de vue) de `live`. */
+export function withLiveItineraryView(restored: Itinerary, live: Itinerary): Itinerary {
+  let copy: Itinerary | null = null;
+  for (const key of ITINERARY_VIEW_KEYS) {
+    if (restored[key] === live[key]) continue;
+    copy ??= { ...restored };
+    (copy as unknown as Record<string, unknown>)[key] = live[key];
   }
-  const aIsArray = Array.isArray(a);
-  if (aIsArray !== Array.isArray(b)) return false;
-  if (aIsArray) {
-    const left = a as unknown[];
-    const right = b as unknown[];
-    if (left.length !== right.length) return false;
-    for (let i = 0; i < left.length; i += 1) {
-      if (!deepEqual(left[i], right[i])) return false;
-    }
-    return true;
-  }
-  const left = a as Record<string, unknown>;
-  const right = b as Record<string, unknown>;
-  for (const key of Object.keys(left)) {
-    if (!deepEqual(left[key], right[key])) return false;
-  }
-  for (const key of Object.keys(right)) {
-    if (left[key] === undefined && right[key] !== undefined) return false;
-  }
-  return true;
+  return copy ?? restored;
 }
+
+export { deepEqual };
 
 export interface HistoryDocumentChange {
   /** Itinéraire concerné quand un seul a changé (sinon ''). */
@@ -197,13 +182,11 @@ export function restoreHistoryDocument(
 
   const itineraries = snapshot.itineraries.map((itinerary) => {
     const liveItinerary = liveById.get(itinerary.id);
-    const visible = itinerary.id === focusedId ? true : liveItinerary ? liveItinerary.visible : itinerary.visible;
-    const analysisVisible = itinerary.id === focusedId
-      ? true
-      : liveItinerary ? liveItinerary.analysisVisible : itinerary.analysisVisible;
-    return itinerary.visible === visible && itinerary.analysisVisible === analysisVisible
-      ? itinerary
-      : { ...itinerary, visible, analysisVisible };
+    const restored = liveItinerary ? withLiveItineraryView(itinerary, liveItinerary) : itinerary;
+    if (itinerary.id !== focusedId || (restored.visible !== false && restored.analysisVisible !== false)) {
+      return restored;
+    }
+    return { ...restored, visible: true, analysisVisible: true };
   });
 
   let activeItineraryId = focusedId ?? live.activeItineraryId;

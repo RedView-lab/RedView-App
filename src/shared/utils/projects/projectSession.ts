@@ -6,6 +6,12 @@
 
 /** `$updatedAt` cloud connu par cette session (version chargée ou dernière sauvegarde). */
 export const knownCloudVersions = new Map<string, string>();
+/**
+ * JSON du dernier document dont le cloud a confirmé l'écriture dans cette
+ * session : une sauvegarde qui ne change que le travail local (ou rien) n'a
+ * pas à réécrire le document.
+ */
+export const confirmedDocuments = new Map<string, string>();
 /** Révision locale par projet : seule la dernière écriture locale peut être marquée propre. */
 export const localRevisions = new Map<string, number>();
 export const localQueues = new Map<string, Promise<unknown>>();

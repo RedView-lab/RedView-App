@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
+import { useDerivedComputeGate } from '../../context/ProjectStore/hooks';
 import { cloneItineraryForMutation } from '../../context/ProjectStore/historyClone';
 import { buildPoiRouteSignature, resetPoisForRouteChange } from '../../lib/schedule';
 import type { Itinerary, ItineraryProject } from '../../types';
@@ -19,6 +20,9 @@ interface UsePoiRouteInvalidationOptions {
   cancelSearchCorridor: () => void;
 }
 
+/** Au-delà, une recherche annoncée aux autres éditeurs est considérée finie. */
+const POI_COMPUTE_ANNOUNCE_MAX_MS = 90_000;
+
 /**
  * Cycle de vie de la recherche POI vis-à-vis de la trace : recherche différée
  * (import GPX, trace modifiée), annulation sur undo/redo, et remise à zéro des
@@ -38,6 +42,37 @@ export function usePoiRouteInvalidation({
   searchCorridor,
   cancelSearchCorridor,
 }: UsePoiRouteInvalidationOptions): void {
+  // Co-édition : seul l'auteur du changement de trace relance la recherche ;
+  // elle est annoncée aux autres éditeurs jusqu'à son résultat.
+  const { gate, retryNonce: gateRetryNonce, markWaiting: markWaitingForGate } = useDerivedComputeGate();
+  const poiComputeRef = useRef<{ release: () => void; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const sawPoiLoadingRef = useRef(false);
+  const releasePoiCompute = useCallback(() => {
+    const current = poiComputeRef.current;
+    if (!current) return;
+    poiComputeRef.current = null;
+    clearTimeout(current.timer);
+    current.release();
+  }, []);
+  const announcePoiCompute = useCallback((itineraryId: string) => {
+    releasePoiCompute();
+    poiComputeRef.current = {
+      release: gate.beginCompute('poi', itineraryId),
+      timer: setTimeout(releasePoiCompute, POI_COMPUTE_ANNOUNCE_MAX_MS),
+    };
+  }, [gate, releasePoiCompute]);
+  useEffect(() => {
+    if (poiLoading) {
+      sawPoiLoadingRef.current = true;
+      return;
+    }
+    if (pendingCorridorFor || !sawPoiLoadingRef.current) return;
+    // Recherche terminée (sinon l'annonce expire d'elle-même).
+    sawPoiLoadingRef.current = false;
+    releasePoiCompute();
+  }, [pendingCorridorFor, poiLoading, releasePoiCompute]);
+  useEffect(() => releasePoiCompute, [releasePoiCompute]);
+
   useEffect(() => {
     if (!pendingCorridorFor) return;
     if (!active || active.id !== pendingCorridorFor) return;
@@ -94,6 +129,10 @@ export function usePoiRouteInvalidation({
       }));
       return;
     }
+    if (!gate.shouldCompute('poi', activeId)) {
+      markWaitingForGate();
+      return;
+    }
     if (poiLoading) cancelSearchCorridor();
     setProjectWithoutHistory((p) => ({
       ...p,
@@ -104,12 +143,19 @@ export function usePoiRouteInvalidation({
         return copy;
       }),
     }));
-    if (hasEnabledCategories) setPendingCorridorFor(activeId);
+    if (hasEnabledCategories) {
+      announcePoiCompute(activeId);
+      setPendingCorridorFor(activeId);
+    }
   }, [
     activeHasPois,
     activeId,
+    announcePoiCompute,
     cancelSearchCorridor,
     currentPoiRouteSignature,
+    gate,
+    gateRetryNonce,
+    markWaitingForGate,
     hasEnabledCategories,
     poiLoading,
     routeBusy,

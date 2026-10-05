@@ -9,7 +9,7 @@
   width: 100%;
   padding: 7px 8px;
   background: #890000;
-  color: #ffffff;
+  color: var(--rv-on-accent);
   font-size: var(--rv-font-size-lg);
   font-weight: 500;
   border-radius: 6px;
@@ -20,7 +20,8 @@
 
 .rvc-btn-primary.is-busy {
   background: #9b1111;
+  color: var(--rv-on-accent);
 }
 
-.rvc-btn-primary:hover { background: #a00000; }
+.rvc-btn-primary:hover { background: #a00000; color: var(--rv-on-accent); }
 

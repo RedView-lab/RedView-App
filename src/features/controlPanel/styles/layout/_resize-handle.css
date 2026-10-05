@@ -16,7 +16,7 @@
 
 .rvc-panel__resize-handle:hover,
 .rvc-panel__resize-handle.is-dragging {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--rv-ink) / 0.08);
 }
 
 .rvc-panel.is-resizing,

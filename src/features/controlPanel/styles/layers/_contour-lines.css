@@ -18,7 +18,7 @@
 }
 
 .rvc-contour-lines__select {
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgb(var(--rv-ink) / 0.08);
   min-height: 30px;
   padding-top: 4px;
   padding-bottom: 4px;

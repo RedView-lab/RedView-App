@@ -11,7 +11,7 @@ export function DeleteGlyph() {
         justifyContent: 'center',
         width: 24,
         height: 24,
-        color: '#ffffff',
+        color: 'var(--rv-text)',
       }}
     >
       <SvgV2Icon name="trash-03.svg" size={16} />
@@ -51,9 +51,9 @@ export function ActionRow({
         padding: 4,
         border: 'none',
         borderRadius: 6,
-        background: hovered ? 'rgba(255,255,255,0.06)' : 'transparent',
+        background: hovered ? 'rgb(var(--rv-ink) / 0.06)' : 'transparent',
         cursor: 'pointer',
-        color: '#ffffff',
+        color: 'var(--rv-text)',
         textAlign: 'left',
         pointerEvents: 'auto',
       }}
@@ -69,7 +69,7 @@ export function ActionRow({
           fontSize: 'var(--rv-font-size-md)',
           fontWeight: danger ? 400 : 600,
           lineHeight: '17px',
-          color: '#ffffff',
+          color: 'var(--rv-text)',
         }}
       >
         {label}

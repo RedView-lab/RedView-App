@@ -35,6 +35,7 @@ import { usePlotAreaSize } from './usePlotAreaSize';
 import { useChartHoverRows } from './useChartHoverRows';
 import { usePlotRangeSelection } from './usePlotRangeSelection';
 import { translateAppText } from '@/shared/i18n';
+import { useAppTheme } from '@/shared/lib/appTheme';
 import { pickSlopeLevel } from '../slope';
 
 export const AnalysisChart = memo(function AnalysisChart({
@@ -419,6 +420,7 @@ export const AnalysisChart = memo(function AnalysisChart({
     [plotSize.width, plotXDomain, plotY2Domain, plotYDomain, series, slopeSegments, slopeSeriesId],
   );
 
+  const theme = useAppTheme();
   useEffect(() => {
     drawAnalysisChartCanvas(seriesCanvasRef.current, {
       width: plotSize.width,
@@ -427,8 +429,9 @@ export const AnalysisChart = memo(function AnalysisChart({
       backdropYDomain,
       backdropSeries,
       seriesLayers,
+      theme,
     });
-  }, [backdropSeries, backdropYDomain, plotSize.height, plotSize.width, plotXDomain, seriesLayers]);
+  }, [backdropSeries, backdropYDomain, plotSize.height, plotSize.width, plotXDomain, seriesLayers, theme]);
 
   const hoverXValue = activeHover
     ? plotXDomain.min + activeHover.ratioX * (plotXDomain.max - plotXDomain.min)

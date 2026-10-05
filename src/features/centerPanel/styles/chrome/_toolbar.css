@@ -28,10 +28,10 @@
   min-height: 48px;
   padding: 8px;
   border-radius: 8px;
-  background: rgba(14, 14, 18, 0.58);
+  background: var(--rv-glass-tint);
   backdrop-filter: blur(20px) saturate(1.2);
   -webkit-backdrop-filter: blur(20px) saturate(1.2);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), var(--rv-float-shadow);
 }
 
 .rvc-center-toolbar__button {
@@ -40,8 +40,8 @@
   padding: 0 12px;
   border: 0;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
-  color: #fff;
+  background: rgb(var(--rv-ink) / 0.04);
+  color: var(--rv-text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -70,7 +70,8 @@
 
 .rvc-center-toolbar__button--active {
   background: rgba(137, 0, 0, 0.72);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+  color: var(--rv-on-accent);
+  box-shadow: 0 0 0 1px rgb(var(--rv-ink) / 0.06) inset;
 }
 
 /*
@@ -85,41 +86,47 @@
 }
 
 .rvc-center-toolbar__button--panel-toggle.is-panel-shown {
-  background: rgba(0, 0, 0, 0.6);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+  background: light-dark(rgb(var(--rv-ink) / 0.1), rgba(0, 0, 0, 0.6));
+  box-shadow: 0 0 0 1px rgb(var(--rv-ink) / 0.06) inset;
 }
 
 .rvc-center-toolbar__button--panel-toggle.is-panel-shown:hover {
-  background: rgba(0, 0, 0, 0.7);
+  background: light-dark(rgb(var(--rv-ink) / 0.14), rgba(0, 0, 0, 0.7));
 }
 
 .rvc-center-toolbar__button--panel-toggle.is-panel-hidden {
   background: rgba(137, 0, 0, 0.82);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+  color: var(--rv-on-accent);
+  box-shadow: 0 0 0 1px rgb(var(--rv-ink) / 0.06) inset;
 }
 
 .rvc-center-toolbar__button--panel-toggle.is-panel-hidden:hover {
   background: rgba(160, 0, 0, 0.9);
+  color: var(--rv-on-accent);
 }
 
 .rvc-center-toolbar__button--accent {
   padding-left: 12px;
   padding-right: 8px;
   background: var(--rvc-center-red);
+  color: var(--rv-on-accent);
 }
 
 .rvc-center-toolbar__button--accent:hover {
   background: #a00000;
+  color: var(--rv-on-accent);
 }
 
 .rvc-center-toolbar__button--accent:active {
   background: var(--rvc-center-red-strong);
+  color: var(--rv-on-accent);
 }
 
 /* Type chosen, waiting for the click on the chart (a second click cancels). */
 .rvc-center-toolbar__button--accent-armed,
 .rvc-center-toolbar__button--accent-armed:hover {
   background: var(--rvc-center-red-strong);
+  color: var(--rv-on-accent);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55) inset;
 }
 
@@ -130,12 +137,13 @@
 }
 
 .rvc-center-toolbar__button--play {
-  background: rgba(255, 255, 255, 0.16);
+  background: rgb(var(--rv-ink) / 0.16);
 }
 
 .rvc-center-toolbar__button--play-active {
   background: rgba(137, 0, 0, 0.92);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+  color: var(--rv-on-accent);
+  box-shadow: 0 0 0 1px rgb(var(--rv-ink) / 0.06) inset;
 }
 
 .rvc-center-toolbar__button-text {
@@ -146,7 +154,7 @@
   width: 1px;
   height: 32px;
   flex: 0 0 auto;
-  background: rgba(255, 255, 255, 0.14);
+  background: rgb(var(--rv-ink) / 0.14);
 }
 
 .rvc-center-toolbar__spacer {
@@ -158,7 +166,7 @@
   flex: 0 1 320px;
   min-width: 160px;
   padding-left: 4px;
-  color: rgba(255, 255, 255, 0.82);
+  color: rgb(var(--rv-ink) / 0.82);
   font-size: var(--rv-font-size-sm);
   line-height: 1.2;
   white-space: nowrap;
@@ -175,7 +183,7 @@
 
 .rvc-center-toolbar__metrics {
   width: 120px;
-  color: #fff;
+  color: var(--rv-text);
   display: flex;
   flex-direction: column;
   gap: 2px;

@@ -48,14 +48,14 @@
 
 /* Checkbox override for sunlight: respect gray as instructed by user */
 .rvc-sunlight__option-main .rvc-cp-checkbox__box {
-  border-color: rgba(255, 255, 255, 0.28);
-  background: rgba(255, 255, 255, 0.08);
+  border-color: rgb(var(--rv-ink) / 0.28);
+  background: rgb(var(--rv-ink) / 0.08);
 }
 
 .rvc-sunlight__option-main .rvc-cp-checkbox__box.is-checked {
-  background: rgba(255, 255, 255, 0.24);
-  border-color: rgba(255, 255, 255, 0.45);
-  color: #ffffff;
+  background: light-dark(var(--rv-inverse), rgba(255, 255, 255, 0.24));
+  border-color: light-dark(var(--rv-inverse), rgba(255, 255, 255, 0.45));
+  color: #fff;
 }
 
 .rvc-sunlight__option-label,
@@ -80,7 +80,7 @@
   align-items: center;
   gap: 6px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--rv-ink) / 0.08);
   color: var(--rvc-text);
   font-family: var(--rv-font-sans);
   font-size: var(--rv-font-size-md);
@@ -291,7 +291,7 @@
   min-height: 30px;
   padding: 5px 8px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--rv-ink) / 0.08);
   font-size: var(--rv-font-size-md);
   font-weight: 600;
 }
@@ -317,7 +317,7 @@
 }
 
 .rvc-sunlight__band-eye:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgb(var(--rv-ink) / 0.06);
 }
 
 .rvc-sunlight__color-chip {
@@ -327,9 +327,9 @@
   width: var(--rvc-panel-select-md);
   min-height: 30px;
   padding: 4px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgb(var(--rv-ink) / 0.12);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgb(var(--rv-ink) / 0.04);
   color: var(--rvc-text);
   cursor: pointer;
   user-select: none;
@@ -338,7 +338,7 @@
 }
 
 .rvc-sunlight__color-chip:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.3);
+  outline: 2px solid rgb(var(--rv-ink) / 0.3);
   outline-offset: 2px;
 }
 
@@ -402,9 +402,9 @@
 }
 
 .rvc-sunlight__duration-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.15);
-  color: #fff;
+  background: rgb(var(--rv-ink) / 0.08);
+  border-color: rgb(var(--rv-ink) / 0.15);
+  color: var(--rv-text);
 }
 
 .rvc-sunlight__duration-btn:focus-visible {
@@ -421,8 +421,8 @@
   font-variant-numeric: tabular-nums;
   font-size: var(--rv-font-size-md);
   font-weight: 600;
-  color: #fff;
-  background: rgba(255, 255, 255, 0.1);
+  color: var(--rv-text);
+  background: rgb(var(--rv-ink) / 0.1);
   border: 1px solid rgba(45, 191, 140, 0.5);
   border-radius: 4px;
   outline: none;

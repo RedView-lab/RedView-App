@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
-import { normalizeItineraryProject } from '@/features/itineraryPanel/lib/project';
+import {
+  classifyProjectChange,
+  extractProjectView,
+  normalizeItineraryProject,
+} from '@/features/itineraryPanel/lib/project';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
-import { getProject } from '@/shared/utils/projects';
+import { flushProjectViews, getProject, queueProjectViewSave } from '@/shared/utils/projects';
 import { replaceProjectLocation } from '@/shared/utils/projectLocation';
 import { readFullProjectCacheAsync } from './dashboardProjectCache';
 import { useDashboardProjectSync } from './useDashboardProjectSync';
@@ -14,23 +18,13 @@ export type DashboardPersistedMutator = (
   dashboard: NonNullable<ItineraryProject['dashboard']>,
 ) => void;
 
-export interface DashboardPersistOptions {
-  /** Changement purement local (vue carte) : ne déclenche pas de sauvegarde cloud. */
-  localOnly?: boolean;
-}
-
 type MapViewport = NonNullable<NonNullable<ItineraryProject['dashboard']>['mapViewport']>;
 
+/**
+ * Vue carte gardée en attente par les versions précédentes (avant que la vue
+ * ne soit enregistrée à part) : reprise une fois à l'ouverture, puis effacée.
+ */
 const PENDING_VIEWPORT_KEY_PREFIX = 'redview:project-viewport:v1:';
-
-function writePendingViewport(projectId: string, viewport: MapViewport | undefined): void {
-  if (!viewport) return;
-  try {
-    window.localStorage.setItem(`${PENDING_VIEWPORT_KEY_PREFIX}${projectId}`, JSON.stringify(viewport));
-  } catch {
-    // best effort
-  }
-}
 
 function clearPendingViewport(projectId: string): void {
   try {
@@ -82,8 +76,6 @@ export function useDashboardProjectState({
   const activeProjectIdRef = useRef<string | null>(null);
   const isClosingProjectRef = useRef(false);
   const suppressedInitialProjectIdRef = useRef<string | null>(null);
-  /** Modifications locales seulement (vue carte) pas encore incluses dans une sauvegarde. */
-  const localOnlyChangesRef = useRef(false);
   activeProjectIdRef.current = activeProjectId;
 
   const {
@@ -147,11 +139,13 @@ export function useDashboardProjectState({
         }
 
         const normalized = normalizeItineraryProject(chosen);
-        // Vue carte modifiée sans sauvegarde cloud lors de la session précédente.
+        // Vue carte laissée en attente par une version précédente : elle
+        // rejoint la vue enregistrée de l'utilisateur.
         const pendingViewport = readPendingViewport(projectId);
-        localOnlyChangesRef.current = pendingViewport != null;
         if (pendingViewport) {
           normalized.dashboard = { ...(normalized.dashboard ?? {}), mapViewport: pendingViewport };
+          queueProjectViewSave(projectId, extractProjectView(normalized));
+          clearPendingViewport(projectId);
         }
         setActiveProjectId(projectId);
         activeProjectIdRef.current = projectId;
@@ -198,15 +192,11 @@ export function useDashboardProjectState({
         }
       }
 
-      // Vue carte modifiée depuis la dernière sauvegarde : une sauvegarde à la fermeture.
-      const closingSnapshot = activeProjectSnapshotRef.current;
-      if (localOnlyChangesRef.current && closingSnapshot) {
-        localOnlyChangesRef.current = false;
-        queueProjectSave(closingSnapshot);
-        if (closingId) clearPendingViewport(closingId);
-      }
       await flushPendingLocally();
-      await flushSave();
+      await Promise.all([
+        flushSave(),
+        closingId ? flushProjectViews(closingId) : Promise.resolve(),
+      ]);
       resetSyncState(null, null);
 
       setActiveProjectId(null);
@@ -218,11 +208,13 @@ export function useDashboardProjectState({
       isClosingProjectRef.current = false;
       setIsClosingProject(false);
     }
-  }, [beforeCloseProject, captureThumbnailForProject, flushPendingLocally, flushSave, queueProjectSave, resetSyncState]);
+  }, [beforeCloseProject, captureThumbnailForProject, flushPendingLocally, flushSave, resetSyncState]);
 
   const saveActiveProject = useCallback(async (options?: { force?: boolean }) => {
-    const saved = await saveNow(options);
     const id = activeProjectIdRef.current;
+    // Bouton Enregistrer : la vue en attente part aussi tout de suite.
+    if (id) void flushProjectViews(id);
+    const saved = await saveNow(options);
     if (saved && id) {
       void captureThumbnailForProject(id);
     }
@@ -230,34 +222,25 @@ export function useDashboardProjectState({
   }, [captureThumbnailForProject, saveNow]);
 
   /**
-   * Met à jour `dashboard` (vue carte, tailles des panneaux). Copie superficielle :
-   * les mutateurs n'affectent que des champs de premier niveau de `dashboard`
-   * (un structuredClone du projet entier coûtait des centaines de ms par
-   * déplacement de carte). `localOnly` (vue carte) : pas de sauvegarde cloud à
-   * elle seule — la vue part avec la prochaine vraie sauvegarde (ou à la
-   * fermeture) et est gardée en attendant dans un petit cache local.
+   * Met à jour `dashboard` (vue carte, tailles des panneaux). C'est de la vue
+   * (cf. lib/project/layers.ts) : enregistrée à part (projectViews.ts), sans
+   * sérialiser ni renvoyer le projet. Copie superficielle : les mutateurs
+   * n'affectent que des champs de premier niveau de `dashboard`.
    */
   const mutateActiveProjectDashboard = useCallback(
-    (mutator: DashboardPersistedMutator, options: DashboardPersistOptions = {}) => {
+    (mutator: DashboardPersistedMutator) => {
       const current = activeProjectSnapshotRef.current;
       const id = activeProjectIdRef.current;
       if (!current || !id) return;
 
       const dashboard: NonNullable<ItineraryProject['dashboard']> = { ...(current.dashboard ?? {}) };
       mutator(dashboard);
+      if (JSON.stringify(dashboard) === JSON.stringify(current.dashboard ?? {})) return;
       const next: ItineraryProject = { ...current, dashboard };
-
-      if (options.localOnly) {
-        activeProjectSnapshotRef.current = next;
-        localOnlyChangesRef.current = true;
-        writePendingViewport(id, dashboard.mapViewport);
-        return;
-      }
-      localOnlyChangesRef.current = false;
-      clearPendingViewport(id);
-      queueProjectSave(next);
+      activeProjectSnapshotRef.current = next;
+      queueProjectViewSave(id, extractProjectView(next));
     },
-    [queueProjectSave],
+    [],
   );
 
   /**
@@ -265,20 +248,33 @@ export function useDashboardProjectState({
    * panneaux) est tenu ici par `mutateActiveProjectDashboard`, hors store : la
    * copie du store date de l'ouverture du projet et écraserait la vue et les
    * panneaux sauvegardés depuis. On garde donc toujours la version courante.
+   *
+   * Seules les couches touchées sont enregistrées : le document (et le travail
+   * en attente) par l'autosave, la vue à part — un changement de panneau, de
+   * graphe ou d'itinéraire actif ne réécrit jamais le projet.
    */
   const handleProjectChange = useCallback(
     (next: ItineraryProject) => {
-      const dashboard = activeProjectSnapshotRef.current?.dashboard;
-      // La vue carte locale part avec cette sauvegarde.
-      const id = activeProjectIdRef.current;
-      if (localOnlyChangesRef.current && id) {
-        localOnlyChangesRef.current = false;
-        clearPendingViewport(id);
+      const previous = activeProjectSnapshotRef.current;
+      const dashboard = previous?.dashboard;
+      const composed = dashboard ? { ...next, dashboard } : next;
+      const change = previous ? classifyProjectChange(previous, composed) : null;
+      if (!change || change.document || change.work) {
+        queueProjectSave(composed);
+      } else {
+        activeProjectSnapshotRef.current = composed;
       }
-      queueProjectSave(dashboard ? { ...next, dashboard } : next);
+      const id = activeProjectIdRef.current;
+      if (id && (!change || change.view)) queueProjectViewSave(id, extractProjectView(composed));
     },
     [queueProjectSave],
   );
+
+  /**
+   * État complet et à jour du projet ouvert (ProjectStore + `dashboard` tenu
+   * ici : vue carte, panneaux), pour l'export `.redview`.
+   */
+  const getActiveProjectSnapshot = useCallback(() => activeProjectSnapshotRef.current, []);
 
   useEffect(() => {
     if (!initialProjectId) return;
@@ -304,5 +300,6 @@ export function useDashboardProjectState({
     handleProjectChange,
     handleSaveProject: saveActiveProject,
     updatePersistedDashboard: mutateActiveProjectDashboard,
+    getActiveProjectSnapshot,
   };
 }

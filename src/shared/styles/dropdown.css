@@ -37,7 +37,7 @@
   --rv-dropdown-width: 140px;
   --rv-dropdown-min-width: 80px;
   --rv-dropdown-max-height: 260px;
-  --rv-dropdown-scrollbar-thumb: rgba(255, 255, 255, 0.24);
+  --rv-dropdown-scrollbar-thumb: rgb(var(--rv-ink) / 0.24);
 
   /* Lignes */
   --rv-dropdown-item-height: 30px;
@@ -45,8 +45,8 @@
   --rv-dropdown-item-gap: 4px;
   --rv-dropdown-item-radius: 0px;
   --rv-dropdown-item-bg: transparent;
-  --rv-dropdown-item-hover-bg: rgba(255, 255, 255, 0.16);
-  --rv-dropdown-item-selected-bg: rgba(255, 255, 255, 0.16);
+  --rv-dropdown-item-hover-bg: rgb(var(--rv-ink) / 0.16);
+  --rv-dropdown-item-selected-bg: rgb(var(--rv-ink) / 0.16);
   --rv-dropdown-item-disabled-opacity: 0.4;
   --rv-dropdown-item-danger-color: #ff6b6b;
 
@@ -55,7 +55,7 @@
   --rv-dropdown-font-size: var(--rv-font-size-md);
   --rv-dropdown-font-weight: 600;
   --rv-dropdown-line-height: 18px;
-  --rv-dropdown-color: #ffffff;
+  --rv-dropdown-color: var(--rv-text);
 
   /* Icônes / coche */
   --rv-dropdown-icon-size: 16px;
@@ -63,7 +63,16 @@
   --rv-dropdown-check-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M13.333 4 6 11.333 2.667 8' stroke='%23000' stroke-width='1.66667' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 
   /* Séparateur */
-  --rv-dropdown-divider-color: rgba(255, 255, 255, 0.1);
+  --rv-dropdown-divider-color: rgb(var(--rv-ink) / 0.1);
+}
+
+/* Thème clair (shared/styles/theme.css) : menu blanc, filet en ombre (pas de bordure : même taille). */
+:root[data-rv-theme='light'] {
+  --rv-dropdown-bg: rgba(255, 255, 255, 0.94);
+  --rv-dropdown-shadow: inset 0 0 0 1px rgba(17, 17, 20, 0.08), var(--rv-popover-shadow);
+  --rv-dropdown-item-hover-bg: rgb(var(--rv-ink) / 0.06);
+  --rv-dropdown-item-selected-bg: rgb(var(--rv-ink) / 0.06);
+  --rv-dropdown-item-danger-color: #d92d20;
 }
 
 /* ── Conteneur ─────────────────────────────────────────────── */

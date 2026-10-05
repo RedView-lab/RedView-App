@@ -25,7 +25,7 @@
 }
 
 .rvc-wind__bound {
-  color: #ffffff;
+  color: var(--rv-text);
   font-size: var(--rv-font-size-xs);
   font-weight: 500;
   line-height: normal;
@@ -42,8 +42,8 @@
   min-height: 30px;
   padding: 6px 8px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
+  background: rgb(var(--rv-ink) / 0.08);
+  color: var(--rv-text);
   overflow: hidden;
 }
 
@@ -55,7 +55,7 @@
 
 .rvc-wind__picker-icon {
   flex-shrink: 0;
-  color: #ffffff;
+  color: var(--rv-text);
 }
 
 .rvc-wind__picker-value {
@@ -93,7 +93,7 @@
   height: 100%;
   padding: 0 1px;
   border-radius: 1px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--rv-ink) / 0.08);
 }
 
 .rvc-wind__time-colon {
@@ -125,14 +125,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #ffffff;
+  color: var(--rv-text);
   font-size: var(--rv-font-size-md);
   font-weight: 600;
   line-height: normal;
 }
 
 .rvc-wind__scale-label {
-  color: #ffffff;
+  color: var(--rv-text);
   font-size: var(--rv-font-size-md);
   font-weight: 500;
   line-height: normal;
@@ -162,7 +162,7 @@
 
 .rvc-wind__band-threshold {
   min-width: 0;
-  color: #ffffff;
+  color: var(--rv-text);
   font-size: var(--rv-font-size-md);
   font-weight: 500;
   line-height: normal;
@@ -180,10 +180,10 @@
   width: 140px;
   min-height: 30px;
   padding: 5px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgb(var(--rv-ink) / 0.08);
   border-radius: 5px;
   background: transparent;
-  color: #ffffff;
+  color: var(--rv-text);
   cursor: pointer;
 }
 

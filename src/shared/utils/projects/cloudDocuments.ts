@@ -22,6 +22,7 @@ import {
   uploadProjectPayloadFile,
 } from './payloadFiles';
 import { filePayloadProjects, payloadFilesChecked } from './projectSession';
+import { carryLegacyView, parseStoredProject } from './storedProject';
 import type { ItineraryProject, ProjectRow } from './types';
 
 // Documents Appwrite des projets : lecture (document → ligne) et charge utile
@@ -54,11 +55,11 @@ export type CloudProjectDoc = {
 /** Le nom du document (renommage sans réécrire `data`) fait foi sur `data.name`. */
 export function withNameSync(row: ProjectRow): ProjectRow {
   if (!row.name || row.data.name === row.name) return row;
-  return { ...row, data: { ...row.data, name: row.name } };
+  return { ...row, data: carryLegacyView(row.data, { ...row.data, name: row.name }) };
 }
 
 /** Lit le fichier pointé par `data` ; une erreur remonte (jamais un projet vide à la place). */
-async function readPayloadFile(pointer: string): Promise<ItineraryProject> {
+async function readPayloadFile(pointer: string): Promise<unknown> {
   let bytes: Uint8Array<ArrayBuffer>;
   try {
     bytes = await downloadProjectPayloadFile(pointer);
@@ -71,23 +72,27 @@ async function readPayloadFile(pointer: string): Promise<ItineraryProject> {
   return decompressProjectBytes(bytes);
 }
 
+/**
+ * Document cloud → ligne projet. `data` est le document partagé (`schema: 2`)
+ * ou, pour un projet pas encore réenregistré, le projet composé des versions
+ * précédentes : sa vue sert alors de vue par défaut (cf. storedProject.ts).
+ */
 export async function docToProjectRow(doc: CloudProjectDoc): Promise<ProjectRow> {
-  let parsedData: ItineraryProject;
+  let raw: unknown;
   if (isPayloadFilePointer(doc.data)) {
     filePayloadProjects.add(doc.$id);
-    parsedData = await readPayloadFile(doc.data);
+    raw = await readPayloadFile(doc.data);
   } else if (typeof doc.data === 'string') {
     try {
-      parsedData = await decompressProjectPayload(doc.data);
+      raw = await decompressProjectPayload(doc.data);
     } catch (error) {
       logger.projects.error('Project payload could not be decoded', doc.$id, error);
-      parsedData = createDefaultProject();
+      raw = null;
     }
-  } else if (doc.data && typeof doc.data === 'object') {
-    parsedData = doc.data as ItineraryProject;
   } else {
-    parsedData = createDefaultProject();
+    raw = doc.data;
   }
+  const parsedData: ItineraryProject = parseStoredProject(raw)?.project ?? createDefaultProject();
 
   return withNameSync({
     id: doc.$id,
@@ -110,15 +115,14 @@ type CloudPayload =
   | { sizeBytes: number; data?: undefined; gzip: Uint8Array<ArrayBuffer> };
 
 /**
- * Prépare la charge utile cloud d'un projet : sérialise une seule fois (ou
- * réutilise `serialized`) et compresse. Jusqu'à 12 M car. (`gz:` + base64,
- * limite du proxy devant Appwrite) elle reste dans le document ; au-delà, le
- * gzip part dans le bucket (`writeCloudData`). Lève une
+ * Prépare la charge utile cloud du JSON d'un document de projet (déjà
+ * sérialisé par l'appelant) : compression gzip. Jusqu'à 12 M car. (`gz:` +
+ * base64, limite du proxy devant Appwrite) elle reste dans le document ;
+ * au-delà, le gzip part dans le bucket (`writeCloudData`). Lève une
  * `ProjectCloudError('too-large')` au-delà de la limite du bucket au lieu
  * d'envoyer une requête vouée à l'échec.
  */
-export async function buildCloudPayload(project: ItineraryProject, serialized?: string): Promise<CloudPayload> {
-  const json = serialized ?? JSON.stringify(project);
+export async function buildCloudPayload(json: string): Promise<CloudPayload> {
   const sizeBytes = utf8ByteLength(json);
   if (isProjectTooLarge(sizeBytes)) {
     throw new ProjectCloudError('too-large');

@@ -30,7 +30,7 @@
 
 .rvpb-subscription-section__label p {
   margin: 0;
-  color: #fff;
+  color: var(--rv-text);
   font-size: var(--rv-font-size-lg);
   line-height: normal;
 }
@@ -54,9 +54,9 @@
   flex-direction: column;
   gap: 10px;
   padding: 12px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid light-dark(rgb(var(--rv-ink) / 0.12), rgba(255, 255, 255, 0.16));
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
+  background: light-dark(#fff, rgba(255, 255, 255, 0.04));
   backdrop-filter: blur(60px);
   cursor: pointer;
   transition:
@@ -80,12 +80,12 @@
 
 .rvpb-subscription-card.is-selected {
   z-index: 2;
-  border-color: rgba(255, 255, 255, 0.16);
+  border-color: rgb(var(--rv-ink) / 0.16);
 }
 
 .rvpb-subscription-card.is-active {
   z-index: 2;
-  border-color: rgba(255, 255, 255, 0.16);
+  border-color: rgb(var(--rv-ink) / 0.16);
 }
 
 .rvpb-subscription-card:focus-within {
@@ -97,13 +97,13 @@
 .rvpb-subscription-card:has(.rvpb-icon-chip-wrap:hover),
 .rvpb-subscription-card:has(.rvpb-feature-popover:hover) {
   z-index: 50;
-  border-color: rgba(255, 255, 255, 0.22);
+  border-color: rgb(var(--rv-ink) / 0.22);
   transform: translateY(-1px);
 }
 
 .rvpb-subscription-card.is-demo {
   border: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: light-dark(rgb(var(--rv-ink) / 0.04), rgba(0, 0, 0, 0.4));
 }
 
 .rvpb-subscription-card.is-demo:hover {
@@ -122,7 +122,7 @@
   width: 16px;
   height: 16px;
   margin-top: 0;
-  border: 1px solid rgba(255, 255, 255, 0.45);
+  border: 1px solid rgb(var(--rv-ink) / 0.45);
   border-radius: 999px;
 }
 
@@ -147,13 +147,13 @@
   align-items: baseline;
   gap: 6px;
   flex-wrap: wrap;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgb(var(--rv-ink) / 0.7);
   font-size: var(--rv-font-size-lg);
   line-height: 1.4;
 }
 
 .rvpb-subscription-card__title-row strong {
-  color: #fff;
+  color: var(--rv-text);
   font-size: var(--rv-font-size-lg);
   font-weight: 600;
 }
@@ -179,8 +179,8 @@
   min-height: 28px;
   padding: 3px 9px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: rgb(var(--rv-ink) / 0.08);
+  color: var(--rv-text);
   font-size: var(--rv-font-size-sm);
   font-weight: 500;
   line-height: 1;
@@ -212,7 +212,7 @@
   padding: 0 6px;
   border: 0;
   border-radius: 6px;
-  color: #fff;
+  color: var(--rv-text);
   cursor: pointer;
   transition:
     transform 120ms ease,
@@ -227,36 +227,45 @@
   outline: none;
 }
 
+/* Clair : teinte légère + texte de la même couleur (le plein à 60 % grisait le blanc). */
 .rvpb-icon-chip.is-gold {
-  background: rgba(182, 123, 40, 0.6);
+  background: light-dark(rgba(182, 123, 40, 0.16), rgba(182, 123, 40, 0.6));
+  color: light-dark(#8a5a12, var(--rv-on-accent));
 }
 
 .rvpb-icon-chip.is-brown {
-  background: rgba(141, 84, 45, 0.6);
+  background: light-dark(rgba(141, 84, 45, 0.14), rgba(141, 84, 45, 0.6));
+  color: light-dark(#7a4520, var(--rv-on-accent));
 }
 
 .rvpb-icon-chip.is-blue {
-  background: rgba(63, 151, 234, 0.4);
+  background: light-dark(rgba(63, 151, 234, 0.14), rgba(63, 151, 234, 0.4));
+  color: light-dark(#175cd3, var(--rv-on-accent));
 }
 
 .rvpb-icon-chip.is-teal {
-  background: rgba(25, 116, 111, 0.5);
+  background: light-dark(rgba(25, 116, 111, 0.12), rgba(25, 116, 111, 0.5));
+  color: light-dark(#0e6e69, var(--rv-on-accent));
 }
 
 .rvpb-icon-chip.is-green {
-  background: rgba(63, 86, 55, 0.6);
+  background: light-dark(rgba(63, 86, 55, 0.12), rgba(63, 86, 55, 0.6));
+  color: light-dark(#3f5637, var(--rv-on-accent));
 }
 
 .rvpb-icon-chip.is-purple {
-  background: rgba(83, 56, 158, 0.6);
+  background: light-dark(rgba(83, 56, 158, 0.12), rgba(83, 56, 158, 0.6));
+  color: light-dark(#53389e, var(--rv-on-accent));
 }
 
 .rvpb-icon-chip.is-black {
-  background: rgba(18, 18, 18, 0.6);
+  background: light-dark(rgba(18, 18, 18, 0.08), rgba(18, 18, 18, 0.6));
+  color: light-dark(#111114, var(--rv-on-accent));
 }
 
 .rvpb-icon-chip.is-gray {
-  background: rgba(102, 102, 102, 0.6);
+  background: light-dark(rgba(102, 102, 102, 0.12), rgba(102, 102, 102, 0.6));
+  color: light-dark(#4d4d4d, var(--rv-on-accent));
 }
 
 .rvpb-icon-chip-wrap.is-gold {
@@ -350,7 +359,7 @@
   padding: 3px 8px;
   border-radius: 6px;
   background: var(--rvpb-feature-popover-row-bg);
-  color: #fff;
+  color: var(--rv-on-accent);
   font-size: var(--rv-font-size-md);
   font-weight: 500;
   letter-spacing: var(--rv-letter-spacing-tight);
@@ -377,7 +386,7 @@
 
 .rvpb-subscription-card__description {
   margin: 0;
-  color: rgba(255, 255, 255, 0.68);
+  color: rgb(var(--rv-ink) / 0.68);
   font-size: var(--rv-font-size-md);
   line-height: var(--rv-line-height-snug);
   white-space: nowrap;
@@ -399,9 +408,9 @@
   align-items: flex-start;
   gap: 12px;
   padding: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid rgb(var(--rv-ink) / 0.16);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
+  background: light-dark(#fff, rgba(255, 255, 255, 0.04));
   box-shadow: 0 1px 2px rgba(10, 13, 18, 0.05);
 }
 
@@ -413,8 +422,8 @@
 }
 
 .rvpb-payment-card.is-default {
-  border-color: rgba(255, 255, 255, 0.24);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.03));
+  border-color: rgb(var(--rv-ink) / 0.24);
+  background: linear-gradient(180deg, rgb(var(--rv-ink) / 0.05), rgb(var(--rv-ink) / 0.03));
 }
 
 .rvpb-payment-card__icon {
@@ -431,7 +440,7 @@
 .rvpb-payment-card__icon--visa,
 .rvpb-payment-card__icon--mastercard,
 .rvpb-payment-card__icon--amex {
-  border: 1px solid rgba(233, 234, 235, 0.92);
+  border: 1px solid light-dark(rgb(var(--rv-ink) / 0.12), rgba(233, 234, 235, 0.92));
 }
 
 .rvpb-payment-card__icon--visa {
@@ -466,8 +475,8 @@
   min-height: 22px;
   padding: 0 8px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.86);
+  background: rgb(var(--rv-ink) / 0.08);
+  color: rgb(var(--rv-ink) / 0.86);
   font-size: var(--rv-font-size-sm);
   font-weight: 600;
 }
@@ -496,7 +505,7 @@
 
 .rvpb-payment-card__copy span,
 .rvpb-contact-option__copy span {
-  color: rgba(255, 255, 255, 0.64);
+  color: rgb(var(--rv-ink) / 0.64);
   font-size: var(--rv-font-size-lg);
   line-height: 1.4;
 }
@@ -526,9 +535,9 @@
   gap: 8px;
   margin-left: 26px;
   padding: 10px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid rgb(var(--rv-ink) / 0.16);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
+  background: light-dark(#fff, rgba(255, 255, 255, 0.08));
   box-shadow: 0 1px 2px rgba(10, 13, 18, 0.05);
 }
 
@@ -536,7 +545,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgb(var(--rv-ink) / 0.7);
 }
 
 .rvpb-input-wrap input {
@@ -544,11 +553,11 @@
   min-width: 0;
   border: 0;
   background: transparent;
-  color: #fff;
+  color: var(--rv-text);
   font: inherit;
   outline: none;
 }
 
 .rvpb-input-wrap input::placeholder {
-  color: rgba(255, 255, 255, 0.44);
+  color: rgb(var(--rv-ink) / 0.44);
 }

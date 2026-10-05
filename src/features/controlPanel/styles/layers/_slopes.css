@@ -119,9 +119,9 @@
 }
 
 .rvc-slopes__deg-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.15);
-  color: #fff;
+  background: rgb(var(--rv-ink) / 0.08);
+  border-color: rgb(var(--rv-ink) / 0.15);
+  color: var(--rv-text);
   opacity: 1;
 }
 
@@ -140,8 +140,8 @@
   font-variant-numeric: tabular-nums;
   font-size: var(--rv-font-size-md);
   font-weight: 600;
-  color: #fff;
-  background: rgba(255, 255, 255, 0.1);
+  color: var(--rv-text);
+  background: rgb(var(--rv-ink) / 0.1);
   border: 1px solid rgba(45, 191, 140, 0.5);
   border-radius: 4px;
   outline: none;
@@ -190,7 +190,7 @@
   width: var(--rvc-panel-select-md);
   flex-shrink: 0;
   padding: 5px 6px 5px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgb(var(--rv-ink) / 0.08);
   border-radius: 5px;
   background: transparent;
   color: var(--rvc-text);

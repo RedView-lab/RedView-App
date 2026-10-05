@@ -7,6 +7,7 @@ import {
   MAP_LOADING_MAX_MS,
 } from '../constants';
 import type { Ctx } from './context';
+import { clearVisibleTimer, setVisibleTimeout } from './visibleClock';
 
 /**
  * Status reporting + DEM tile progress aggregation.
@@ -23,14 +24,10 @@ export function attachStatus(ctx: Ctx): void {
     st.requestedTiles.clear();
     st.loadedTiles.clear();
     st.requestedAt.clear();
-    if (st.demSettleTimer) {
-      clearTimeout(st.demSettleTimer);
-      st.demSettleTimer = null;
-    }
-    if (st.loadingWatchdog) {
-      clearTimeout(st.loadingWatchdog);
-      st.loadingWatchdog = null;
-    }
+    clearVisibleTimer(st.demSettleTimer);
+    st.demSettleTimer = null;
+    clearVisibleTimer(st.loadingWatchdog);
+    st.loadingWatchdog = null;
   };
 
   // Hard deadline per loading cycle. Bootstrap phases ("Relief" 68 %,
@@ -38,8 +35,9 @@ export function attachStatus(ctx: Ctx): void {
   // `idle` / `areTilesLoaded()`, which never fire while ANY source keeps
   // streaming (weather, POI, prefetch…). Without this cap the pill stayed
   // frozen at 80–99 % forever even though the map was fully usable.
+  // Visible time only: a hidden page loads no tile and never goes idle.
   const armLoadingDeadline = (delayMs: number) => {
-    st.loadingDeadline = setTimeout(() => {
+    st.loadingDeadline = setVisibleTimeout(() => {
       st.loadingDeadline = null;
       if (isCancelled() || st.lastReportedState !== 'loading') return;
       if (map.isMoving()) {
@@ -67,11 +65,11 @@ export function attachStatus(ctx: Ctx): void {
     if (state === 'loading') {
       if (!st.loadingDeadline) armLoadingDeadline(MAP_LOADING_MAX_MS);
     } else if (st.loadingDeadline) {
-      clearTimeout(st.loadingDeadline);
+      clearVisibleTimer(st.loadingDeadline);
       st.loadingDeadline = null;
     }
     if (state !== 'loading' && st.loadingWatchdog) {
-      clearTimeout(st.loadingWatchdog);
+      clearVisibleTimer(st.loadingWatchdog);
       st.loadingWatchdog = null;
     }
     onLoadStatusChangeRef.current?.(createOverlayStatus({
@@ -146,8 +144,8 @@ export function attachStatus(ctx: Ctx): void {
   };
 
   fns.armLoadingWatchdog = () => {
-    if (st.loadingWatchdog) clearTimeout(st.loadingWatchdog);
-    st.loadingWatchdog = setTimeout(() => {
+    clearVisibleTimer(st.loadingWatchdog);
+    st.loadingWatchdog = setVisibleTimeout(() => {
       st.loadingWatchdog = null;
       if (isCancelled() || !st.demTrackingEnabled) return;
       if (map.isMoving()) {
@@ -193,8 +191,8 @@ export function attachStatus(ctx: Ctx): void {
 
   fns.scheduleDemSettle = () => {
     if (!st.demTrackingEnabled) return;
-    if (st.demSettleTimer) clearTimeout(st.demSettleTimer);
-    st.demSettleTimer = setTimeout(() => {
+    clearVisibleTimer(st.demSettleTimer);
+    st.demSettleTimer = setVisibleTimeout(() => {
       st.demSettleTimer = null;
       if (isCancelled()) return;
       const pruned = fns.pruneStalePendingTiles();

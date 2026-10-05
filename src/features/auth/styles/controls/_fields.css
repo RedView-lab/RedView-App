@@ -63,7 +63,7 @@
   display: flex;
   align-items: center;
 
-  color: #FFFFFF;
+  color: var(--rv-text);
 
   flex: none;
   order: 0;
@@ -84,8 +84,8 @@
   max-width: 480px;
   height: 40px;
 
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(213, 215, 218, 0.16);
+  background: light-dark(#fff, rgba(255, 255, 255, 0.08));
+  border: 1px solid light-dark(rgb(var(--rv-ink) / 0.14), rgba(213, 215, 218, 0.16));
   box-shadow: 0px 1px 2px rgba(10, 13, 18, 0.05);
   border-radius: 8px;
 
@@ -94,7 +94,7 @@
   font-weight: 400;
   font-size: var(--rv-font-size-xl);
   line-height: 24px;
-  color: #FFFFFF;
+  color: var(--rv-text);
   outline: none;
 
   flex: none;
@@ -105,12 +105,12 @@
 }
 
 .rv-login-input:focus {
-  border-color: rgba(255, 255, 255, 0.4);
-  background: rgba(255, 255, 255, 0.12);
+  border-color: rgb(var(--rv-ink) / 0.4);
+  background: rgb(var(--rv-ink) / 0.12);
 }
 
 .rv-login-input::placeholder {
-  color: rgba(255, 255, 255, 0.35);
+  color: rgb(var(--rv-ink) / 0.35);
 }
 
 /* Input wrapper for password toggle */
@@ -145,18 +145,18 @@
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.45);
+  color: rgb(var(--rv-ink) / 0.45);
   transition: color 0.15s ease, background-color 0.15s ease;
   z-index: 2;
 }
 
 .rv-login-password-toggle:hover {
-  color: #FFFFFF;
-  background-color: rgba(255, 255, 255, 0.08);
+  color: var(--rv-text);
+  background-color: rgb(var(--rv-ink) / 0.08);
 }
 
 .rv-login-password-toggle:focus-visible {
-  outline: 1px solid rgba(255, 255, 255, 0.5);
+  outline: 1px solid rgb(var(--rv-ink) / 0.5);
 }
 
 /* Hint text */
@@ -169,7 +169,7 @@
   font-weight: 400;
   font-size: var(--rv-font-size-lg);
   line-height: 20px;
-  color: rgba(255, 255, 255, 0.64);
+  color: rgb(var(--rv-ink) / 0.64);
   margin-top: 2px;
   order: 2;
 }
@@ -183,7 +183,7 @@
   font-weight: 400;
   font-size: var(--rv-font-size-md);
   line-height: 18px;
-  color: #fca5a5;
+  color: light-dark(#d92d20, #fca5a5);
   margin-top: 2px;
   order: 2;
 }
@@ -229,7 +229,7 @@
   margin: 0;
   cursor: pointer;
 
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid light-dark(rgb(var(--rv-ink) / 0.24), rgba(255, 255, 255, 0.16));
   border-radius: 4px;
   background: transparent;
   accent-color: #890000;
@@ -247,7 +247,7 @@
   display: flex;
   align-items: center;
 
-  color: #FFFFFF;
+  color: var(--rv-text);
 
   flex: none;
   order: 1;
@@ -276,7 +276,7 @@
   display: flex;
   align-items: center;
 
-  color: #FFFFFF;
+  color: var(--rv-text);
   text-decoration: none;
 
   flex: none;

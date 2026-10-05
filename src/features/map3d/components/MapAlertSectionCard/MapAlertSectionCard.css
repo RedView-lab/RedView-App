@@ -9,16 +9,19 @@
   box-sizing: border-box;
   border-radius: 4px;
   background: #ff3b30;
+  color: var(--rv-on-accent);
   flex: 0 0 auto;
 }
 
 /* Mêmes teintes que les marqueurs 3D (.rvi-analysis-alert-marker--*). */
 .rv-alert-popup__badge--warning {
   background: #ff9f0a;
+  color: var(--rv-on-accent);
 }
 
 .rv-alert-popup__badge--info {
   background: #0a84ff;
+  color: var(--rv-on-accent);
 }
 
 .rv-alert-popup__badge img {

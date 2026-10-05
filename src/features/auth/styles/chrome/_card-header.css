@@ -49,7 +49,7 @@
   line-height: 38px;
   text-align: center;
 
-  color: #FFFFFF;
+  color: var(--rv-text);
 
   flex: none;
   order: 0;
@@ -72,7 +72,7 @@
   justify-content: center;
   text-align: center;
 
-  color: #FFFFFF;
+  color: var(--rv-text);
 
   flex: none;
   order: 1;
@@ -94,7 +94,7 @@
   max-width: 480px;
   height: 42px;
 
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--rv-ink) / 0.08);
   border-radius: 6px;
 
   flex: none;
@@ -123,7 +123,7 @@
   font-weight: 600;
   font-size: var(--rv-font-size-lg);
   line-height: 20px;
-  color: #FFFFFF;
+  color: var(--rv-text);
 
   background: transparent;
   flex: none;
@@ -136,6 +136,7 @@
   padding: 7px 16px;
   gap: 16px;
   height: 34px;
-  background: rgba(0, 0, 0, 0.6);
+  background: light-dark(#fff, rgba(0, 0, 0, 0.6));
+  box-shadow: 0 1px 2px light-dark(rgba(16, 18, 24, 0.08), transparent), 0 0 0 1px light-dark(rgb(var(--rv-ink) / 0.06), transparent);
   border-radius: 6px;
 }

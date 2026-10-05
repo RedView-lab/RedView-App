@@ -11,6 +11,7 @@ import type {
   RouteRenderMode,
 } from '../../types';
 import type { DuplicateItineraryOverrides } from './types';
+import { createDocumentId } from '../../lib/project/ids';
 
 interface UseItineraryCrudActionsArgs {
   setProject: Dispatch<SetStateAction<ItineraryProject>>;
@@ -96,69 +97,22 @@ export function useItineraryCrudActions({
     [updateItinerary],
   );
 
+  // L'œil (panneau gauche, synthèse, section Traces) masque/affiche la trace
+  // sur la carte ET dans le graphe central, sans toucher à l'itinéraire
+  // sélectionné : visibilité et sélection sont indépendantes.
   const setItineraryVisibility = useCallback(
     (id: string, visible: boolean) => {
-      setProject((prev) => {
-        const nextItineraries = prev.itineraries.map((it) => {
-          if (it.id !== id) return it;
-          return {
-            ...it,
-            visible,
-            analysisVisible: visible,
-          };
-        });
-
-        let nextActiveId = prev.activeItineraryId;
-        if (!visible && prev.activeItineraryId === id) {
-          const visibleCandidate = nextItineraries.find((it) => it.visible !== false && it.id !== id);
-          if (visibleCandidate) {
-            nextActiveId = visibleCandidate.id;
-          }
-        } else if (visible && (!prev.activeItineraryId || !nextItineraries.some((it) => it.id === prev.activeItineraryId && it.visible !== false))) {
-          nextActiveId = id;
-        }
-
-        return {
-          ...prev,
-          itineraries: nextItineraries,
-          activeItineraryId: nextActiveId,
-        };
-      });
+      setProject((prev) => ({
+        ...prev,
+        itineraries: prev.itineraries.map((it) =>
+          it.id === id ? { ...it, visible, analysisVisible: visible } : it,
+        ),
+      }));
     },
     [setProject],
   );
 
-  const setItineraryAnalysisVisibility = useCallback(
-    (id: string, visible: boolean) => {
-      setProject((prev) => {
-        const nextItineraries = prev.itineraries.map((it) => {
-          if (it.id !== id) return it;
-          return {
-            ...it,
-            visible,
-            analysisVisible: visible,
-          };
-        });
-
-        let nextActiveId = prev.activeItineraryId;
-        if (!visible && prev.activeItineraryId === id) {
-          const visibleCandidate = nextItineraries.find((it) => it.visible !== false && it.id !== id);
-          if (visibleCandidate) {
-            nextActiveId = visibleCandidate.id;
-          }
-        } else if (visible && (!prev.activeItineraryId || !nextItineraries.some((it) => it.id === prev.activeItineraryId && it.visible !== false))) {
-          nextActiveId = id;
-        }
-
-        return {
-          ...prev,
-          itineraries: nextItineraries,
-          activeItineraryId: nextActiveId,
-        };
-      });
-    },
-    [setProject],
-  );
+  const setItineraryAnalysisVisibility = setItineraryVisibility;
 
   const setItineraryRenderMode = useCallback(
     (id: string, mode: RouteRenderMode) => {
@@ -213,7 +167,6 @@ export function useItineraryCrudActions({
           return false;
         }
 
-        const nextIndex = currentProject.itineraries.length + 1;
         const color =
           ITINERARY_COLORS[currentProject.itineraries.length % ITINERARY_COLORS.length] ??
           ITINERARY_COLORS[0];
@@ -226,7 +179,7 @@ export function useItineraryCrudActions({
         }
 
         const duplicate = structuredClone(source);
-        duplicate.id = overrides.id ?? `it-${Date.now()}-${nextIndex}`;
+        duplicate.id = overrides.id ?? createDocumentId('it');
         duplicate.name = overrides.name?.trim() || duplicateName;
         duplicate.color = overrides.color ?? color;
         duplicate.visible = overrides.visible ?? false;

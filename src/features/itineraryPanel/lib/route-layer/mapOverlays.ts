@@ -23,6 +23,8 @@ import {
   canMutateStyle,
 } from './constants';
 import {
+  FLYOVER_PROGRESS_GLOW_OPACITY,
+  FLYOVER_PROGRESS_LINE_OPACITY,
   ensureAnalysisFlyoverProgressLayers,
   ensureAnalysisHoverLayers,
   ensureAnalysisSelectionLayers,
@@ -287,6 +289,7 @@ export function setAnalysisFlyoverRoute(
 
     source.setData(geoJson);
     flyoverProgressState.delete(map);
+    flyoverOpacityState.delete(map);
 
     for (const layerId of FLYOVER_PROGRESS_LAYER_IDS) {
       if (!map.getLayer(layerId)) continue;
@@ -319,6 +322,28 @@ export function setAnalysisFlyoverProgress(map: MapboxMap, lineProgress: number)
   try {
     for (const layerId of FLYOVER_PROGRESS_LAYER_IDS) {
       if (map.getLayer(layerId)) map.setPaintProperty(layerId, 'line-trim-offset', trim, { validate: false });
+    }
+  } catch {
+    /* style en cours de remplacement */
+  }
+}
+
+const flyoverOpacityState = new WeakMap<MapboxMap, number>();
+
+/**
+ * Opacité de la trace du flyover, 1 = rendu de la lecture (fondu du plan
+ * d'ouverture de la vidéo). Ne touche le style que si la valeur change.
+ */
+export function setAnalysisFlyoverOpacity(map: MapboxMap, opacity: number): void {
+  const value = Math.max(0, Math.min(1, opacity));
+  if (flyoverOpacityState.get(map) === value) return;
+  flyoverOpacityState.set(map, value);
+  try {
+    if (map.getLayer(ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID)) {
+      map.setPaintProperty(ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID, 'line-opacity', FLYOVER_PROGRESS_GLOW_OPACITY * value);
+    }
+    if (map.getLayer(ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID)) {
+      map.setPaintProperty(ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID, 'line-opacity', FLYOVER_PROGRESS_LINE_OPACITY * value);
     }
   } catch {
     /* style en cours de remplacement */

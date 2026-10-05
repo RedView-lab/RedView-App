@@ -2,6 +2,12 @@ import { unifiedDEMSource } from '../../../lib/sources';
 import { getActiveDem3dQuality } from '../../../lib/dem3dQualityBus';
 import { waitForMapIdleOrTimeout } from '../runtimeProfile';
 import type { Ctx } from './context';
+import {
+  clearVisibleTimer,
+  setVisibleInterval,
+  setVisibleTimeout,
+  type VisibleTimer,
+} from './visibleClock';
 
 interface BootstrapUnifiedDemOptions {
   ctx: Ctx;
@@ -46,9 +52,10 @@ export function bootstrapUnifiedDem({
   const IMPORT_GUARD_WATCH_MS = 15000;
   const IMPORT_GUARD_PROBE_INTERVAL_MS = 750;
   const FORCE_3D_ESCALATION_MS = 7000;
-  const importGuardTimers: ReturnType<typeof setTimeout>[] = [];
+  // Guards, escalation and ortho fallback count visible time: a hidden page
+  // loads no DEM tile, so its terrain is never "renderable" there.
+  const importGuardTimers: VisibleTimer[] = [];
   const importGuardCleanup: (() => void)[] = [];
-  const importGuardStartedAt = Date.now();
 
   const verifyAndReapplyTerrain = (origin: string) => {
     if (isCancelled() || runId !== st.styleBootstrapRunId) return;
@@ -73,21 +80,23 @@ export function bootstrapUnifiedDem({
   };
 
   for (const delay of [200, 600, 1500]) {
-    importGuardTimers.push(setTimeout(() => verifyAndReapplyTerrain(`t+${delay}`), delay));
+    importGuardTimers.push(setVisibleTimeout(() => verifyAndReapplyTerrain(`t+${delay}`), delay));
   }
 
-  const periodicProbe = setInterval(() => {
-    if (isCancelled() || runId !== st.styleBootstrapRunId) {
-      clearInterval(periodicProbe);
-      return;
-    }
-    if (Date.now() - importGuardStartedAt > IMPORT_GUARD_WATCH_MS) {
-      clearInterval(periodicProbe);
+  let periodicProbeTicks = 0;
+  const periodicProbe = setVisibleInterval(() => {
+    periodicProbeTicks += 1;
+    if (
+      isCancelled()
+      || runId !== st.styleBootstrapRunId
+      || periodicProbeTicks * IMPORT_GUARD_PROBE_INTERVAL_MS > IMPORT_GUARD_WATCH_MS
+    ) {
+      clearVisibleTimer(periodicProbe);
       return;
     }
     verifyAndReapplyTerrain('periodic');
   }, IMPORT_GUARD_PROBE_INTERVAL_MS);
-  importGuardCleanup.push(() => clearInterval(periodicProbe));
+  importGuardCleanup.push(() => clearVisibleTimer(periodicProbe));
 
   try {
     const mapWithEvents = map as unknown as {
@@ -104,7 +113,7 @@ export function bootstrapUnifiedDem({
     /* event name may not exist on this Mapbox version */
   }
 
-  const force3dEscalationTimer = setTimeout(() => {
+  const force3dEscalationTimer = setVisibleTimeout(() => {
     if (isCancelled() || runId !== st.styleBootstrapRunId) return;
     if (getActiveDem3dQuality() === 'fast-30m') {
       if (fns.isManagedTerrainActive() && fns.isManagedTerrainRenderable()) return;
@@ -195,15 +204,15 @@ export function bootstrapUnifiedDem({
   const priorDispose = st.disposeStyleRecovery;
   st.disposeStyleRecovery = () => {
     priorDispose?.();
-    clearTimeout(force3dEscalationTimer);
-    for (const timer of importGuardTimers) clearTimeout(timer);
+    clearVisibleTimer(force3dEscalationTimer);
+    for (const timer of importGuardTimers) clearVisibleTimer(timer);
     for (const cleanup of importGuardCleanup) {
       try { cleanup(); } catch { /* noop */ }
     }
     map.off('style.load', recoverStyleArtifacts);
   };
 
-  st.orthoBootTimer = setTimeout(() => {
+  st.orthoBootTimer = setVisibleTimeout(() => {
     void finishStyleBootstrapWhenReady();
   }, runtimeProfile.orthoBootFallbackMs);
 

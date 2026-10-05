@@ -144,6 +144,10 @@ export function ensureRouteHoverPreviewLayers(map: MapboxMap): GeoJSONSource | n
   return map.getSource(ROUTE_HOVER_PREVIEW_SOURCE_ID) as GeoJSONSource | null;
 }
 
+/** Opacités de la trace du flyover (halo, trait). */
+export const FLYOVER_PROGRESS_GLOW_OPACITY = 0.34;
+export const FLYOVER_PROGRESS_LINE_OPACITY = 0.96;
+
 export function ensureAnalysisFlyoverProgressLayers(map: MapboxMap): GeoJSONSource | null {
   if (!canMutateStyle(map)) return null;
   let existing = map.getSource(ANALYSIS_FLYOVER_PROGRESS_SOURCE_ID) as GeoJSONSource | undefined;
@@ -185,7 +189,7 @@ export function ensureAnalysisFlyoverProgressLayers(map: MapboxMap): GeoJSONSour
     paint: {
       'line-color': ['coalesce', ['get', 'color'], '#ff4d4f'],
       'line-width': 14,
-      'line-opacity': 0.34,
+      'line-opacity': FLYOVER_PROGRESS_GLOW_OPACITY,
       'line-blur': 3.2,
       'line-emissive-strength': 1.1,
       'line-occlusion-opacity': 0,
@@ -207,7 +211,7 @@ export function ensureAnalysisFlyoverProgressLayers(map: MapboxMap): GeoJSONSour
     paint: {
       'line-color': ['coalesce', ['get', 'color'], '#ff4d4f'],
       'line-width': 6,
-      'line-opacity': 0.96,
+      'line-opacity': FLYOVER_PROGRESS_LINE_OPACITY,
       'line-emissive-strength': 1.18,
       'line-border-width': 1.6,
       'line-border-color': 'rgba(255,255,255,0.54)',

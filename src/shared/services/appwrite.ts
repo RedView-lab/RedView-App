@@ -21,6 +21,8 @@ const appwriteProjectId =
 export const APPWRITE_DATABASE_ID =
   (import.meta.env.VITE_APPWRITE_DATABASE_ID as string | undefined) || 'redview-db';
 export const PROJECTS_COLLECTION_ID = 'projects';
+/** Vue de chaque utilisateur sur chaque projet (projectViews.ts), à part du document partagé. */
+export const PROJECT_VIEWS_COLLECTION_ID = 'project_views';
 export const FOLDERS_COLLECTION_ID = 'project_folders';
 export const CUSTOMERS_COLLECTION_ID = 'customers';
 export const SUBSCRIPTIONS_COLLECTION_ID = 'subscriptions';

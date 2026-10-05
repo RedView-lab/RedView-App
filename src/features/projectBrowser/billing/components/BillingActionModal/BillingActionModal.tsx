@@ -4,8 +4,9 @@ import { Elements } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
 
 import { translateAppText } from '@/shared/i18n';
+import { useAppTheme } from '@/shared/lib/appTheme';
 
-import { appearance } from './billingModalStyles';
+import { stripeAppearanceFor } from './stripeAppearance';
 import {
   BillingActionForm,
   type BillingModalCompletion,
@@ -79,12 +80,13 @@ export function BillingActionModal({
     };
   }, []);
 
+  const theme = useAppTheme();
   const elementsOptions = useMemo(
     () => ({
       clientSecret: flow.clientSecret,
-      appearance,
+      appearance: stripeAppearanceFor(theme),
     }),
-    [flow.clientSecret],
+    [flow.clientSecret, theme],
   );
 
   if (!stripePromise || !flow.clientSecret) {

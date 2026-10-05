@@ -1,6 +1,7 @@
 import { translateAppText } from '@/shared/i18n';
 import { ITINERARY_COLORS } from './defaultState';
 import type { Itinerary, ItineraryProject } from '../../types';
+import { createDocumentId } from './ids';
 
 export interface CreateItineraryVariantResult {
   createdItineraryId: string;
@@ -54,7 +55,7 @@ export function addItineraryVariantInPlace(
   const source = project.itineraries.find((itinerary) => itinerary.id === sourceId);
   if (!source) return null;
 
-  const createdItineraryId = `it-${Date.now()}-${project.itineraries.length + 1}`;
+  const createdItineraryId = createDocumentId('it');
   const created: Itinerary = structuredClone(source);
 
   created.id = createdItineraryId;

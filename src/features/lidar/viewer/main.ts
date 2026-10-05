@@ -4,6 +4,7 @@
 // Reads tile params from URL, loads from OPFS, parses+colorizes in a Worker, renders with WebGPU.
 
 import '@/shared/styles/typography.css';
+import '@/shared/styles/theme.css';
 import '@/shared/styles/glass.css';
 import '@/shared/styles/dropdown.css';
 import './loading/styles.css';

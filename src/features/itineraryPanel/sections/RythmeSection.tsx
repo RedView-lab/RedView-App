@@ -10,6 +10,7 @@ import { IconInfo, IconPlus } from '../components/icons';
 import { IconFigmaCheck, IconFigmaChevronDown, IconTrashFigma } from '../components/iconsFigma';
 import { MAX_FIT_FILES, isCustomRhythmProfile } from '../lib/rhythm/profile';
 import type { PauseIntervalRow, RhythmState } from '../types';
+import { createDocumentId } from '../lib/project/ids';
 
 type RhythmChange = <K extends keyof RhythmState>(key: K, value: RhythmState[K]) => void;
 
@@ -680,7 +681,7 @@ function formatDateForLocale(iso: string, locale: 'fr' | 'en'): string {
 
 function createPauseRow(index: number): PauseIntervalRow {
   return {
-    id: `pause-${Date.now()}-${index}`,
+    id: createDocumentId('pause'),
     label: `${translateAppText('Pause', undefined, readDocumentAppLocale())} ${index}`,
     durationMin: 5,
     intervalMin: 60,

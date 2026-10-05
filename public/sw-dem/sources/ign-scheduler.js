@@ -68,6 +68,35 @@ function isIGNSlopeZonePurpose(purpose) {
   return purpose === PURPOSE_SLOPE_ZONE;
 }
 
+// ── WMS elevation rasters: bytes in flight ────────────────────────────
+// A LiDAR HD GetMap raster weighs 370 KB (MNS, 1×) to 1.5 MB (MNT, 2×).
+// Dispatched up to IGN_CONCURRENCY (40-64) at once, they shared the client's
+// line until most of them crossed IGN_FETCH_TIMEOUT_MS. Measured 2026-10-04
+// on a ~2 MB/s line: 16 rasters in parallel took 2.4 s each, 40 took 7.4 s,
+// 64 took 12.6 s (median; 23 s max, plus 429s) — aborted downloads, bytes
+// wasted, and stand-in tiles: 42 % of the relief tiles of a 0.40 m flyover
+// video. The line's throughput is the same with a few MB in flight: each
+// raster lands in ~2 s, centre-first, while the others wait in the queue,
+// outside the fetch timeout (it starts with the job).
+const IGN_WMS_INFLIGHT_BYTES_MAX = 4_500_000;
+let activeIGNWmsBytes = 0;
+
+function canStartIGNEntry(entry) {
+  return !entry.wmsBytes
+    || activeIGNWmsBytes === 0
+    || activeIGNWmsBytes + entry.wmsBytes <= IGN_WMS_INFLIGHT_BYTES_MAX;
+}
+
+function firstStartableIGNIndex(queue) {
+  for (let i = 0; i < queue.length; i++) if (canStartIGNEntry(queue[i])) return i;
+  return -1;
+}
+
+function lastStartableIGNIndex(queue) {
+  for (let i = queue.length - 1; i >= 0; i--) if (canStartIGNEntry(queue[i])) return i;
+  return -1;
+}
+
 function totalIGNQueueLength() {
   return ignForegroundQueue.length
     + ignSlopeVisibleQueue.length
@@ -118,18 +147,21 @@ function pushIGNEntry(entry) {
 function popNextIGNEntry() {
   // 1. Basemap / Slope-Zone (foreground) — strict highest priority.
   //    Select candidate closest to current viewport center so center of screen loads first!
+  //    Strict priority: while it holds entries, nothing else starts — not
+  //    even when its WMS rasters wait for bytes in flight to land.
   if (ignForegroundQueue.length > 0) {
     if (ignForegroundQueue.length === 1 || !ignViewportCenter) {
       // FIFO when center is unknown (Mapbox sends center tiles first)
-      return { entry: ignForegroundQueue.shift(), background: false };
+      const idx = firstStartableIGNIndex(ignForegroundQueue);
+      return idx < 0 ? null : { entry: ignForegroundQueue.splice(idx, 1)[0], background: false };
     }
-    let bestIdx = 0;
+    let bestIdx = -1;
     let minD2 = Infinity;
     const cLng = ignViewportCenter.lng;
     const cLat = ignViewportCenter.lat;
     for (let i = 0; i < ignForegroundQueue.length; i++) {
       const e = ignForegroundQueue[i];
-      if (!e.hasCoords) continue;
+      if (!e.hasCoords || !canStartIGNEntry(e)) continue;
       const dLng = e.lng - cLng;
       const dLat = e.lat - cLat;
       const d2 = dLng * dLng + dLat * dLat;
@@ -138,7 +170,8 @@ function popNextIGNEntry() {
         bestIdx = i;
       }
     }
-    return { entry: ignForegroundQueue.splice(bestIdx, 1)[0], background: false };
+    if (bestIdx < 0) bestIdx = firstStartableIGNIndex(ignForegroundQueue);
+    return bestIdx < 0 ? null : { entry: ignForegroundQueue.splice(bestIdx, 1)[0], background: false };
   }
   // 2. Slope-visible — only when basemap queue is drained, and only up
   //    to its dynamic cap so a single slope burst can never monopolise
@@ -147,13 +180,15 @@ function popNextIGNEntry() {
     ignSlopeVisibleQueue.length > 0
     && activeIGNSlopeVisible < currentIGNSlopeVisibleCap()
   ) {
-    return { entry: ignSlopeVisibleQueue.pop(), background: false };
+    const idx = lastStartableIGNIndex(ignSlopeVisibleQueue);
+    if (idx >= 0) return { entry: ignSlopeVisibleQueue.splice(idx, 1)[0], background: false };
   }
   // 3. Background (prefetch / slope-warm) — separate concurrency budget so warmups
   //    cannot starve foreground basemap or slope-visible.
   if (ignBackgroundQueue.length === 0) return null;
   if (activeIGNBackground >= currentIGNBackgroundConcurrency()) return null;
-  return { entry: ignBackgroundQueue.shift(), background: true };
+  const idx = firstStartableIGNIndex(ignBackgroundQueue);
+  return idx < 0 ? null : { entry: ignBackgroundQueue.splice(idx, 1)[0], background: true };
 }
 
 function pruneOldestIGNEntry() {
@@ -195,8 +230,9 @@ function evict(cache, max) {
 
 // `mapTile` ({ key: 'z/x/y', requestedAt }) tags work done for a DEM tile the
 // map itself asked for, so pruneUnwantedMapDemWork() can drop it once the map
-// no longer waits on that tile.
-function scheduleIGN(fn, purpose, coords, mapTile = null) {
+// no longer waits on that tile. `options.wmsBytes`: size of the WMS raster the
+// job downloads (IGN_WMS_INFLIGHT_BYTES_MAX).
+function scheduleIGN(fn, purpose, coords, mapTile = null, options = {}) {
   return new Promise((resolve, reject) => {
     let lng = 0, lat = 0;
     let hasCoords = false;
@@ -218,6 +254,7 @@ function scheduleIGN(fn, purpose, coords, mapTile = null) {
       ts: performance.now(),
       purpose: purpose || null,
       mapTile,
+      wmsBytes: Math.max(0, Number(options?.wmsBytes) || 0),
       lng,
       lat,
       hasCoords,
@@ -246,8 +283,9 @@ function drainIGN() {
     const next = popNextIGNEntry();
     if (!next?.entry) break;
     const { entry, background } = next;
-    const { fn, resolve, reject, purpose } = entry;
+    const { fn, resolve, reject, purpose, wmsBytes } = entry;
     activeIGN++;
+    activeIGNWmsBytes += wmsBytes;
     if (background) activeIGNBackground++;
     const isSlopeVisible = purpose === PURPOSE_SLOPE_VISIBLE;
     if (isSlopeVisible) activeIGNSlopeVisible++;
@@ -256,6 +294,7 @@ function drainIGN() {
       .catch(reject)
       .finally(() => {
         activeIGN--;
+        activeIGNWmsBytes = Math.max(0, activeIGNWmsBytes - wmsBytes);
         if (background) activeIGNBackground = Math.max(0, activeIGNBackground - 1);
         if (isSlopeVisible) activeIGNSlopeVisible = Math.max(0, activeIGNSlopeVisible - 1);
         drainIGN();

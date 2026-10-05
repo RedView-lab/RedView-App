@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { useAppI18n } from '@/shared/i18n';
 import { appScaledOverlayStyle, readAppScale } from '@/shared/lib/appScale';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
-import { IconEye, IconKebab, IconPlus, IconTrash } from '../icons';
+import { IconEye, IconEyeOff, IconKebab, IconPlus, IconTrash } from '../icons';
 import type { Itinerary, RouteProfile } from '../../types';
 
 const MENU_WIDTH = 140;
@@ -202,9 +202,10 @@ export function ItineraryTabs({
                     onToggleVisibility?.(it.id);
                   }}
                   aria-label={it.visible !== false ? t('Masquer l’itinéraire') : t('Afficher l’itinéraire')}
+                  aria-pressed={it.visible !== false}
                   title={it.visible !== false ? t('Masquer l’itinéraire') : t('Afficher l’itinéraire')}
                 >
-                  <IconEye size={16} />
+                  {it.visible !== false ? <IconEye size={16} /> : <IconEyeOff size={16} />}
                 </button>
                 <span className="rvi-itin__swatch" style={{ background: it.color }} />
                 <span className="rvi-itin__main">

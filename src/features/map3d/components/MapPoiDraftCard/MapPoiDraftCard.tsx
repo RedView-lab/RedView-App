@@ -135,7 +135,7 @@ export function MapPoiDraftCard({
   const surfaceLabel = draft.surfaceLabel ?? draft.point.surfaceLabel ?? '—';
   const infoCategoryLabel = draft.point.categoryLabel ?? draft.roadTypeLabel ?? t('Position');
   const title = draft.name?.trim() || draft.point.title?.trim() || t('Nouveau POI');
-  const metadataColor = 'rgba(255,255,255,0.64)';
+  const metadataColor = 'rgb(var(--rv-ink) / 0.64)';
 
   return (
     <div
@@ -157,13 +157,13 @@ export function MapPoiDraftCard({
         borderTopRightRadius: 8,
         borderBottomRightRadius: 8,
         borderBottomLeftRadius: 0,
-        boxShadow: '0 12px 36px rgba(0,0,0,0.38)',
-        color: '#ffffff',
+        boxShadow: '0 12px 36px light-dark(rgba(16, 18, 24, 0.16), rgba(0, 0, 0, 0.38))',
+        color: 'var(--rv-text)',
         fontFamily: 'var(--rv-font-sans)',
         pointerEvents: 'none',
       }}
     >
-      <MapCanvasGlassBackdrop blur={60} saturate={1.6} tint="rgba(15, 15, 15, 0.74)" />
+      <MapCanvasGlassBackdrop blur={60} saturate={1.6} tint="light-dark(rgba(255, 255, 255, 0.86), rgba(15, 15, 15, 0.74))" />
 
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 4, minHeight: 32 }}>
         <button
@@ -180,7 +180,7 @@ export function MapPoiDraftCard({
             padding: 0,
             border: 'none',
             background: 'transparent',
-            color: draft.favorite ? '#ffffff' : 'rgba(255,255,255,0.64)',
+            color: draft.favorite ? 'var(--rv-text)' : 'rgb(var(--rv-ink) / 0.64)',
             cursor: 'pointer',
             pointerEvents: 'auto',
           }}
@@ -198,7 +198,7 @@ export function MapPoiDraftCard({
             fontSize: 'var(--rv-font-size-sm)',
             fontWeight: 500,
             lineHeight: '16px',
-            color: '#ffffff',
+            color: 'var(--rv-text)',
           }}
         >
           {title}
@@ -218,7 +218,7 @@ export function MapPoiDraftCard({
             padding: 4,
             border: 'none',
             background: 'transparent',
-            color: 'rgba(255,255,255,0.96)',
+            color: 'rgb(var(--rv-ink) / 0.96)',
             cursor: 'pointer',
             pointerEvents: 'auto',
           }}
@@ -227,7 +227,7 @@ export function MapPoiDraftCard({
         </button>
       </div>
 
-      <div aria-hidden style={{ position: 'relative', width: '100%', height: 1, background: 'rgba(255,255,255,0.12)' }} />
+      <div aria-hidden style={{ position: 'relative', width: '100%', height: 1, background: 'rgb(var(--rv-ink) / 0.12)' }} />
 
       <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 0, width: '100%', color: metadataColor }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 24, paddingBlock: 4 }}>
@@ -345,7 +345,7 @@ export function MapPoiDraftCard({
         </div>
       </div>
 
-      <div aria-hidden style={{ position: 'relative', width: '100%', height: 1, background: 'rgba(255,255,255,0.12)' }} />
+      <div aria-hidden style={{ position: 'relative', width: '100%', height: 1, background: 'rgb(var(--rv-ink) / 0.12)' }} />
 
       <CategorySelector
         category={draft.category}

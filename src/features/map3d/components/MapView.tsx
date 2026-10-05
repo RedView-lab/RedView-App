@@ -212,11 +212,11 @@ export default memo(function MapView({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              background: 'rgba(17, 17, 17, 0.85)',
+              background: 'light-dark(rgba(244, 244, 245, 0.9), rgba(17, 17, 17, 0.85))',
               zIndex: 10,
             }}
           >
-            <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 'var(--rv-font-size-lg)' }}>
+            <span style={{ color: 'rgb(var(--rv-ink) / 0.6)', fontSize: 'var(--rv-font-size-lg)' }}>
               Chargement du globe...
             </span>
           </div>

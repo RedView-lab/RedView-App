@@ -15,6 +15,7 @@ import { createDefaultExpertState } from '../../expert/defaults';
 import { cleanAndInterpolateElevations, hasCorruptedElevations } from '../route-metrics';
 import { buildImportedRouteMetrics } from '../routes';
 import { HIDDEN_PANEL_POI_CATEGORIES } from './poiRows';
+import { createDocumentId } from './ids';
 
 export const ALL_POI_CATEGORIES: PoiCategory[] = [
   'fountains',
@@ -288,7 +289,7 @@ export function createDefaultItinerary(
 ): Itinerary {
   const defaultPreset = ROUTE_PROFILE_PRESETS['road'];
   return {
-    id: `it-${Date.now()}-${index}`,
+    id: createDocumentId('it'),
     name: translateAppText('Itinéraire {{index}}', { index }),
     color,
     profileId: defaultPreset.id,

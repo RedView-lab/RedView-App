@@ -1,7 +1,7 @@
 /* Premiere Pro style Zoom & Pan Navigator Bar */
 .rvc-zoom-bar {
   position: relative;
-  background: rgba(0, 0, 0, 0.28);
+  background: light-dark(rgb(var(--rv-ink) / 0.04), rgba(0, 0, 0, 0.28));
   user-select: none;
   touch-action: none;
   cursor: pointer;
@@ -11,19 +11,19 @@
 .rvc-zoom-bar--horizontal {
   width: 100%;
   height: 16px;
-  background: rgba(0, 0, 0, 0.28);
+  background: light-dark(rgb(var(--rv-ink) / 0.04), rgba(0, 0, 0, 0.28));
 }
 
 .rvc-zoom-bar--vertical {
   width: 16px;
   height: 100%;
-  background: rgba(0, 0, 0, 0.28);
-  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  background: light-dark(rgb(var(--rv-ink) / 0.04), rgba(0, 0, 0, 0.28));
+  border-left: 1px solid rgb(var(--rv-ink) / 0.12);
 }
 
 .rvc-zoom-bar__thumb {
   position: absolute;
-  background: rgba(255, 255, 255, 0.28);
+  background: rgb(var(--rv-ink) / 0.28);
   cursor: grab;
   transition: background 120ms ease;
   display: flex;
@@ -34,7 +34,7 @@
 
 .rvc-zoom-bar__thumb:hover,
 .rvc-zoom-bar__thumb.is-active {
-  background: rgba(255, 255, 255, 0.42);
+  background: rgb(var(--rv-ink) / 0.42);
 }
 
 .rvc-zoom-bar.is-dragging .rvc-zoom-bar__thumb {
@@ -58,13 +58,13 @@
 /* Boundary handles (white end bars) */
 .rvc-zoom-bar__handle {
   position: absolute;
-  background: #ffffff;
+  background: rgb(var(--rv-ink));
   z-index: 2;
   transition: background 120ms ease, filter 120ms ease;
 }
 
 .rvc-zoom-bar__handle:hover {
-  background: #ffffff;
+  background: rgb(var(--rv-ink));
   filter: brightness(1.2);
 }
 
@@ -121,6 +121,6 @@
   width: 2.5px;
   height: 2.5px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.85);
+  background: rgb(var(--rv-ink) / 0.85);
   box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.4);
 }

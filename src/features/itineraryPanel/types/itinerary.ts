@@ -150,13 +150,13 @@ export interface Itinerary {
   rhythm: RhythmState;
   poi: PoiState;
   timeline: TimelineItem[];
-  /** Map render visibility (right-panel "eye" toggle). Defaults to true. */
+  /** Vue (par utilisateur) : map render visibility ("eye" toggle). Defaults to true. */
   visible?: boolean;
-  /** Bottom analysis chart visibility (center summary "eye" toggle). Defaults to true. */
+  /** Vue (par utilisateur) : bottom analysis chart visibility. Defaults to true. */
   analysisVisible?: boolean;
-  /** Right-panel polyline render mode. Defaults to 'default'. */
+  /** Vue (par utilisateur) : right-panel polyline render mode. Defaults to 'default'. */
   renderMode?: RouteRenderMode;
-  /** Right-panel opacity slider (0–100). Defaults to 100. */
+  /** Vue (par utilisateur) : right-panel opacity slider (0–100). Defaults to 100. */
   opacity?: number;
   /**
    * Hierarchical split metadata used to render child traces as a continuation
@@ -226,6 +226,13 @@ export interface Itinerary {
    */
   prediction?: PredictionResult | null;
   /**
+   * Estampille des entrées de `prediction` (`buildPredictionStamp` : tracé,
+   * discipline, rythme, fichiers .fit) : une prédiction qui la porte encore
+   * est à jour, personne ne la recalcule (ni à la réouverture, ni chez un
+   * autre éditeur). Absente sur les prédictions antérieures.
+   */
+  predictionInputsKey?: string;
+  /**
    * POI features rendered on the map for this itinerary, persisted so
    * that closing/reopening the project restores the icons without the
    * user having to click "Charger" again. Populated by the corridor
@@ -256,11 +263,14 @@ export interface Itinerary {
   steepAlertOverrides?: Record<string, ItinerarySteepAlertOverride>;
   /** Persisted FIT uploads used as prediction history for this itinerary. */
   fitUploads?: ItineraryFitUpload[];
-  /** Pending tail-segment append produced by the tracer subtool. */
+  /**
+   * Travail local (jamais dans le document partagé, cf. `lib/project/layers.ts`) :
+   * pending tail-segment append produced by the tracer subtool.
+   */
   pendingTraceExtension?: ItineraryPendingTraceExtension;
-  /** Pending local reroute patch for waypoint edits/removals. */
+  /** Travail local : pending local reroute patch for waypoint edits/removals. */
   pendingRoutePatch?: ItineraryPendingRoutePatch;
-  /** Internal flag to auto-run FIT timing again once the route is ready. */
+  /** Travail local : auto-run FIT timing again once the route is ready. */
   pendingFitRecompute?: boolean;
   /**
    * True once the user has interacted with the "Rythme" mode (edited a field,

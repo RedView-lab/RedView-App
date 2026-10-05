@@ -22,7 +22,14 @@
 // ---------------------------------------------------------------------------
 // Cache stamp — bumped on every cache-invalidating change so the browser
 // detects a byte diff in this file and triggers install→activate→purge.
-// Current: dem-tiles-v52-gesture-cancel / radar-v3 / dem-negative-v30 / slope-tiles-v3-aligned / vhr-tiles-v1 / altitude-stale-v1
+// Current: dem-tiles-v53-video-final / radar-v3 / dem-negative-v30 / slope-tiles-v3-aligned / vhr-tiles-v1 / altitude-stale-v1
+// 2026-10-04 video-final: the LiDAR HD WMS rasters are dispatched under a
+// bytes-in-flight budget (ign-scheduler.js) instead of up to 64 at once — on
+// a ~2 MB/s line they crossed the 15 s fetch timeout and the tiles fell back
+// to stand-ins (42 % of a 0.40 m flyover video's relief). The flyover video's
+// terrain requests (`rv-src=video`) skip the stand-ins and retry a
+// provisional build for up to 30 s (dem-handler/index.js). Tile bytes
+// unchanged — MAP_CACHE_EPOCH not bumped.
 // 2026-10-03 altitude-stale: an /altitude-tiles request whose DEM tile was not
 // final yet (LiDAR pending under load, cancelled build, stand-in) answered a
 // transparent tile that Mapbox kept for good — holes in the altitude overlay

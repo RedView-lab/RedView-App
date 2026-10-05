@@ -20,11 +20,11 @@
   width: 2px;
   height: 36px;
   border-radius: 1px;
-  background: rgba(255, 255, 255, 0.15);
+  background: rgb(var(--rv-ink) / 0.15);
   transition: background 0.15s ease;
 }
 .rvi-panel__resize-handle:hover::before {
-  background: rgba(255, 255, 255, 0.3);
+  background: rgb(var(--rv-ink) / 0.3);
 }
 .rvi-panel__resize-handle.is-dragging::before {
   background: var(--rvi-red-accent);

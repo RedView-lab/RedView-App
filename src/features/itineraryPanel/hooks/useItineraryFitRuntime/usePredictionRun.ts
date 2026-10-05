@@ -17,7 +17,9 @@ import { isCustomRhythmProfile } from '../../lib/rhythm/profile';
 import type { Itinerary, ItineraryProject } from '../../types';
 import { predictCyclingItinerary, type CyclingCalibrationCache } from './cycling';
 import { fitFileKey } from './files';
-import { buildPredictionInputSignature } from './signatures';
+import { useProjectStoreOptional } from '../../context/ProjectStore/hooks';
+import { SOLO_COMPUTE_GATE } from '../../context/ProjectStore/collab';
+import { buildPredictionInputSignature, buildPredictionStamp } from './signatures';
 import {
   createEmptyFitRuntime,
   type ExcludeFitFiles,
@@ -49,6 +51,11 @@ export function usePredictionRun({
   excludeFitFiles,
 }: UsePredictionRunArgs) {
   const latestPredictionRunRef = useRef<Record<string, number>>({});
+  const computeGate = useProjectStoreOptional()?.derivedComputeGate ?? SOLO_COMPUTE_GATE;
+  const computeGateRef = useRef(computeGate);
+  useEffect(() => {
+    computeGateRef.current = computeGate;
+  }, [computeGate]);
   const fitEngineRef = useRef<ReturnType<typeof createFitPredictionEngine> | null>(
     null,
   );
@@ -106,6 +113,10 @@ export function usePredictionRun({
     const discipline = normalizeDiscipline(itinerary.discipline);
     const routePoints = itinerary.gpxRoute?.points ?? null;
     const inputSignature = buildPredictionInputSignature(itinerary);
+    // Estampille des entrées de ce calcul, enregistrée avec son résultat.
+    const stamp = buildPredictionStamp(itinerary);
+    // Co-édition : les autres éditeurs attendent ce résultat au lieu de le calculer.
+    const releaseCompute = computeGateRef.current.beginCompute('prediction', itineraryId);
     const runId = (latestPredictionRunRef.current[itineraryId] ?? 0) + 1;
     latestPredictionRunRef.current[itineraryId] = runId;
 
@@ -166,6 +177,7 @@ export function usePredictionRun({
                 ? {
                     ...curr,
                     prediction: result,
+                    predictionInputsKey: stamp,
                     rhythmConfigured: true,
                     pendingFitRecompute: undefined,
                     metrics: {
@@ -249,7 +261,8 @@ export function usePredictionRun({
           updatedAt: new Date().toISOString(),
         }));
         predictionStore?.setPrediction(itineraryId, null);
-      });
+      })
+      .finally(releaseCompute);
   }, [active, excludeFitFiles, fitRuntimeRef, predictionStore, setProject, updateFitRuntime]);
 
   const cancelCalculatePrediction = useCallback(() => {

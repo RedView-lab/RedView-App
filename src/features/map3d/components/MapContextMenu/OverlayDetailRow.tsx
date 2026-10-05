@@ -13,7 +13,7 @@ export function OverlayDetailRow({ detail }: OverlayDetailRowProps) {
       : <WindGlyph />;
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 4, minHeight: 24, color: 'rgba(255,255,255,0.64)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, minHeight: 24, color: 'rgb(var(--rv-ink) / 0.64)' }}>
       {icon}
       <span
         style={{

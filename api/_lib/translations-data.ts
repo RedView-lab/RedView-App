@@ -401,6 +401,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Password must be at most 256 characters."
   },
   {
+    "fr": "Une erreur est survenue.",
+    "en": "Something went wrong."
+  },
+  {
     "fr": "Projets",
     "en": "Projects"
   },
@@ -1231,6 +1235,126 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "version d’un autre appareil",
     "en": "version from another device"
+  },
+  {
+    "fr": "Importer un projet",
+    "en": "Import project"
+  },
+  {
+    "fr": "Import…",
+    "en": "Importing…"
+  },
+  {
+    "fr": "Ouvrir un fichier .redview partagé (ou le déposer sur cette page)",
+    "en": "Open a shared .redview file (or drop it on this page)"
+  },
+  {
+    "fr": "Déposez le fichier .redview pour importer le projet",
+    "en": "Drop the .redview file to import the project"
+  },
+  {
+    "fr": "Il sera ajouté au dossier « {{name}} ».",
+    "en": "It will be added to the “{{name}}” folder."
+  },
+  {
+    "fr": "Il sera ajouté à vos projets.",
+    "en": "It will be added to your projects."
+  },
+  {
+    "fr": "Exporter (.redview)",
+    "en": "Export (.redview)"
+  },
+  {
+    "fr": "Projet complet",
+    "en": "Full project"
+  },
+  {
+    "fr": "Projet importé",
+    "en": "Imported project"
+  },
+  {
+    "fr": "importé",
+    "en": "imported"
+  },
+  {
+    "fr": "Projet importé : {{name}}",
+    "en": "Project imported: {{name}}"
+  },
+  {
+    "fr": "{{count}} projets importés.",
+    "en": "{{count}} projects imported."
+  },
+  {
+    "fr": "{{imported}} projet(s) importé(s), {{failed}} échec(s).",
+    "en": "{{imported}} project(s) imported, {{failed}} failed."
+  },
+  {
+    "fr": "Projet exporté : {{file}}",
+    "en": "Project exported: {{file}}"
+  },
+  {
+    "fr": "{{count}} fichier(s) .fit supprimé(s) du stockage non inclus.",
+    "en": "{{count}} .fit file(s) deleted from storage not included."
+  },
+  {
+    "fr": "Ce fichier n’est pas un projet RedView (.redview).",
+    "en": "This file is not a RedView project (.redview)."
+  },
+  {
+    "fr": "Le fichier .redview est endommagé ou incomplet. Demandez à l’expéditeur de l’exporter à nouveau.",
+    "en": "The .redview file is damaged or incomplete. Ask the sender to export it again."
+  },
+  {
+    "fr": "Ce projet a été exporté par une version plus récente de RedView. Rechargez la page pour mettre l’application à jour, puis réessayez.",
+    "en": "This project was exported by a newer version of RedView. Reload the page to update the app, then try again."
+  },
+  {
+    "fr": "Ce fichier .redview dépasse la taille maximale acceptée.",
+    "en": "This .redview file exceeds the maximum accepted size."
+  },
+  {
+    "fr": "Le fichier .redview ne contient pas de projet valide.",
+    "en": "The .redview file does not contain a valid project."
+  },
+  {
+    "fr": "Votre navigateur ne permet pas de lire ou d’écrire des fichiers .redview. Mettez-le à jour.",
+    "en": "Your browser cannot read or write .redview files. Please update it."
+  },
+  {
+    "fr": "Impossible de récupérer les fichiers .fit du projet : vérifiez votre connexion puis réessayez.",
+    "en": "Could not retrieve the project’s .fit files: check your connection and try again."
+  },
+  {
+    "fr": "Connexion au cloud impossible : le projet n’a pas été importé. Réessayez une fois en ligne.",
+    "en": "Cannot reach the cloud: the project was not imported. Try again once online."
+  },
+  {
+    "fr": "Projet trop volumineux pour la sauvegarde cloud (limite 30 Mo compressés, environ 100 Mo de projet) : il ne peut pas être importé.",
+    "en": "Project too large for cloud backup (30 MB compressed limit, about 100 MB of project): it cannot be imported."
+  },
+  {
+    "fr": "Session expirée : reconnectez-vous puis importez à nouveau le projet.",
+    "en": "Session expired: sign in again, then import the project again."
+  },
+  {
+    "fr": "Le serveur a refusé l’import du projet.",
+    "en": "The server rejected the project import."
+  },
+  {
+    "fr": "Impossible d’importer ce projet.",
+    "en": "Unable to import this project."
+  },
+  {
+    "fr": "Connexion au cloud impossible : le projet n’a pas pu être exporté. Réessayez une fois en ligne.",
+    "en": "Cannot reach the cloud: the project could not be exported. Try again once online."
+  },
+  {
+    "fr": "Session expirée : reconnectez-vous puis exportez à nouveau le projet.",
+    "en": "Session expired: sign in again, then export the project again."
+  },
+  {
+    "fr": "Impossible d’exporter le projet.",
+    "en": "Unable to export the project."
   },
   {
     "fr": "Fonds de carte",
@@ -2991,6 +3115,106 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Export...",
     "en": "Exporting..."
+  },
+  {
+    "fr": "Vidéo flyover",
+    "en": "Flyover video"
+  },
+  {
+    "fr": "MP4 16:9",
+    "en": "MP4 16:9"
+  },
+  {
+    "fr": "MP4 9:16",
+    "en": "MP4 9:16"
+  },
+  {
+    "fr": "Une vidéo est déjà en cours de rendu.",
+    "en": "A video is already being rendered."
+  },
+  {
+    "fr": "Aucun tracé à survoler pour la vidéo.",
+    "en": "No route to fly over for the video."
+  },
+  {
+    "fr": "Rendu de la vidéo impossible.",
+    "en": "Unable to render the video."
+  },
+  {
+    "fr": "Vidéo horizontale 16:9",
+    "en": "Landscape video 16:9"
+  },
+  {
+    "fr": "Vidéo verticale 9:16",
+    "en": "Portrait video 9:16"
+  },
+  {
+    "fr": "Préparation de la carte…",
+    "en": "Preparing the map…"
+  },
+  {
+    "fr": "Finalisation du fichier…",
+    "en": "Finalizing the file…"
+  },
+  {
+    "fr": "Rendu : image {{frame}} / {{total}}",
+    "en": "Rendering: frame {{frame}} / {{total}}"
+  },
+  {
+    "fr": "Environ {{time}} restantes",
+    "en": "About {{time}} left"
+  },
+  {
+    "fr": "Durée de la vidéo : {{duration}}",
+    "en": "Video length: {{duration}}"
+  },
+  {
+    "fr": "Annuler le rendu",
+    "en": "Cancel rendering"
+  },
+  {
+    "fr": "Vidéo exportée : {{file}} ({{size}}, {{duration}})",
+    "en": "Video exported: {{file}} ({{size}}, {{duration}})"
+  },
+  {
+    "fr": "Rendu en {{time}}.",
+    "en": "Rendered in {{time}}."
+  },
+  {
+    "fr": "Rendu de la vidéo annulé.",
+    "en": "Video rendering cancelled."
+  },
+  {
+    "fr": "{{size}} Mo",
+    "en": "{{size}} MB"
+  },
+  {
+    "fr": "{{seconds}} s",
+    "en": "{{seconds}} s"
+  },
+  {
+    "fr": "{{minutes}} min",
+    "en": "{{minutes}} min"
+  },
+  {
+    "fr": "{{minutes}} min {{seconds}} s",
+    "en": "{{minutes}} min {{seconds}} s"
+  },
+  {
+    "fr": "Ce navigateur ne sait pas encoder de vidéo H.264 (WebCodecs). Utilisez Chrome, Edge ou Safari récent.",
+    "en": "This browser cannot encode H.264 video (WebCodecs). Use a recent Chrome, Edge or Safari."
+  },
+  {
+    "fr": "L'itinéraire n'a pas de tracé exploitable pour une vidéo.",
+    "en": "The route has no usable track for a video."
+  },
+  {
+    "fr": "La carte de la vidéo ne se charge pas.",
+    "en": "The video map does not load."
+  },
+  {
+    "fr": "La mémoire graphique a manqué pendant le rendu de la vidéo. Fermez d'autres onglets ou applications, puis relancez l'export.",
+    "en": "Graphics memory ran out while rendering the video. Close other tabs or applications, then restart the export."
   },
   {
     "fr": "Veuillez sélectionner un fichier .gpx",

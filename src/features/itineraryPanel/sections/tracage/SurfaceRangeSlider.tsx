@@ -235,7 +235,7 @@ export function SurfaceRangeSlider({ safeMinIdx, safeMaxIdx, onSelectRange }: Su
                   left: tickLeft,
                   background: isInRange
                     ? '#ffffff'
-                    : 'rgba(255, 255, 255, 0.28)',
+                    : 'rgb(var(--rv-ink) / 0.28)',
                 }}
               />
             );

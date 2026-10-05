@@ -2,6 +2,12 @@ const ENDPOINT = process.env.APPWRITE_ENDPOINT || process.env.VITE_APPWRITE_ENDP
 const PROJECT_ID = process.env.APPWRITE_PROJECT_ID || process.env.VITE_APPWRITE_PROJECT_ID || 'redview-prod';
 const DATABASE_ID = process.env.APPWRITE_DATABASE_ID || process.env.VITE_APPWRITE_DATABASE_ID || 'redview-db';
 const API_KEY = process.env.APPWRITE_API_KEY || '';
+/**
+ * `--only=project_views,…` : ne traite que ces collections / buckets
+ * (idempotent ; sans option, tout le schéma est vérifié).
+ */
+const ONLY_ARG = process.argv.find((arg) => arg.startsWith('--only='));
+const ONLY = ONLY_ARG ? new Set(ONLY_ARG.slice('--only='.length).split(',').filter(Boolean)) : null;
 
 const headers = {
   'Content-Type': 'application/json',
@@ -61,6 +67,27 @@ async function main() {
       ],
     },
     {
+      // Vue de chaque utilisateur sur chaque projet (itinéraire et mode actifs,
+      // panneaux, vue carte, panneau de droite, graphe — src/shared/utils/
+      // projects/projectViews.ts), à part du document partagé `projects.data` :
+      // la modifier ne crée jamais de version du projet. Id du document =
+      // hachage (projet, utilisateur) ; `data` = JSON { updatedAt, view }.
+      id: 'project_views',
+      name: 'Project Views',
+      documentSecurity: true,
+      permissions: ['create("users")'],
+      attributes: [
+        { type: 'string', key: 'project_id', size: 128, required: true },
+        { type: 'string', key: 'user_id', size: 128, required: true },
+        { type: 'string', key: 'data', size: 1000000, required: true }, // MAX_PROJECT_VIEW_CHARS
+      ],
+      indexes: [
+        // Nettoyage de toutes les vues d'un projet supprimé (côté serveur, à plusieurs éditeurs).
+        { key: 'idx_views_project_id', type: 'key', attributes: ['project_id'] },
+        { key: 'idx_views_user_id', type: 'key', attributes: ['user_id'] },
+      ],
+    },
+    {
       id: 'project_folders',
       name: 'Project Folders',
       documentSecurity: true,
@@ -114,6 +141,7 @@ async function main() {
   ];
 
   for (const col of collections) {
+    if (ONLY && !ONLY.has(col.id)) continue;
     console.log(`Checking collection ${col.id}...`);
     const check = await api(`/databases/${DATABASE_ID}/collections/${col.id}`);
     if (!check.ok) {
@@ -217,6 +245,7 @@ async function main() {
   ];
 
   for (const b of buckets) {
+    if (ONLY && !ONLY.has(b.id)) continue;
     console.log(`Checking bucket ${b.id}...`);
     const check = await api(`/storage/buckets/${b.id}`);
     if (!check.ok) {

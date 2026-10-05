@@ -3,10 +3,12 @@
  */
 
 export {
+  ANALYSIS_HOVER_SOURCE_ID,
   FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID,
   FORBIDDEN_ZONE_DRAFT_VERTEX_HALO_LAYER_ID,
   FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID,
   FORBIDDEN_ZONE_DRAFT_VERTEX_LAYER_ID,
+  ROUTE_HOVER_PREVIEW_SOURCE_ID,
 } from './constants';
 
 export type {
@@ -39,6 +41,7 @@ export {
   fitToRoute,
   type FitToRouteOptions,
   isAnalysisFlyoverRouteMounted,
+  setAnalysisFlyoverOpacity,
   setAnalysisFlyoverProgress,
   setAnalysisFlyoverRoute,
   setAnalysisHoverPoint,

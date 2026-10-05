@@ -13,6 +13,9 @@ import type { SessionProbeResult } from './features/auth'
 import { MobileBlockScreen, NarrowViewportOverlay } from './shared/components/MobileBlockScreen'
 import { useIsMobileDevice } from './shared/hooks/useIsMobileDevice'
 import { useAppI18n } from './shared/i18n'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { appQueryClient } from './shared/services/queryClient'
+import { AppToaster } from './shared/ui/AppToaster'
 import './index.css'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -238,6 +241,13 @@ function App() {
     }
   }, [authStatus, isPasswordResetUrl, session?.user?.id])
 
+  // Aucun état serveur en cache ne passe d'un compte à l'autre (déconnexion,
+  // session expirée, autre utilisateur).
+  const sessionUserId = session?.user?.id ?? null
+  useEffect(() => {
+    appQueryClient.clear()
+  }, [sessionUserId])
+
   const { isMobile, showNarrowViewportOverlay, dismissNarrowViewportOverlay } = useIsMobileDevice()
 
   // Vrai appareil mobile (détecté au chargement) : blocage, l'app n'est pas montée.
@@ -301,10 +311,11 @@ function App() {
   // Fenêtre de bureau rétrécie : simple superposition, l'app reste montée dessous
   // (historique d'annulation, imports, LiDAR, contexte WebGL conservés).
   return (
-    <>
+    <QueryClientProvider client={appQueryClient}>
       {content}
       {showNarrowViewportOverlay && <NarrowViewportOverlay onContinue={dismissNarrowViewportOverlay} />}
-    </>
+      <AppToaster />
+    </QueryClientProvider>
   )
 }
 

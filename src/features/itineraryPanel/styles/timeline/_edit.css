@@ -41,10 +41,10 @@
   height: 32px;
   min-width: 72px;
   padding: 4px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgb(var(--rv-ink) / 0.08);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
-  color: #fff;
+  background: rgb(var(--rv-ink) / 0.04);
+  color: var(--rv-text);
   font-size: var(--rv-font-size-md);
   font-weight: 600;
   cursor: pointer;
@@ -53,13 +53,13 @@
 }
 
 .rvi-tl-select-trigger:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.14);
+  background: rgb(var(--rv-ink) / 0.08);
+  border-color: rgb(var(--rv-ink) / 0.14);
 }
 
 .rvi-tl-select-trigger.is-open {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.22);
+  background: rgb(var(--rv-ink) / 0.1);
+  border-color: rgb(var(--rv-ink) / 0.22);
 }
 
 .rvi-tl-select-value {
@@ -98,14 +98,14 @@
   width: 28px;
   height: 28px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #fff;
+  background: rgb(var(--rv-ink) / 0.05);
+  color: var(--rv-text);
   cursor: pointer;
   transition: background 0.18s ease, opacity 0.18s ease;
 }
 
 .rvi-tl-edit__zoom-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--rv-ink) / 0.08);
 }
 
 .rvi-tl-edit__zoom-btn:disabled {
@@ -120,33 +120,34 @@
   width: 20px;
   height: 20px;
   border-radius: 999px;
-  background: rgba(58, 58, 58, 0.92);
-  color: #ffbe2e;
+  background: light-dark(#fff4d6, rgba(58, 58, 58, 0.92));
+  color: light-dark(#f79009, #ffbe2e);
 }
 
 .rvi-tl-edit__divider {
   width: 100%;
   height: 1px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--rv-ink) / 0.08);
 }
 
 /* Split add button */
 .rvi-tl-add-split {
   display: inline-flex;
   background: #890000;
+  color: var(--rv-on-accent);
   border-radius: 6px;
   overflow: hidden;
   flex-shrink: 0;
   transition: background 0.18s ease;
 }
-.rvi-tl-add-split:hover { background: #9d0606; }
+.rvi-tl-add-split:hover { background: #9d0606; color: var(--rv-on-accent); }
 .rvi-tl-add-split__main,
 .rvi-tl-add-split__chevron {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 9px 8px;
-  color: #fff;
+  color: var(--rv-on-accent);
   cursor: pointer;
   transition: background 0.15s ease;
 }

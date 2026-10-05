@@ -17,10 +17,19 @@
   --rv-glass-tint-hover: rgba(14, 14, 18, 0.66);
   --rv-glass-blur: 30px;
   --rv-glass-saturate: 1.3;
-  --rv-glass-border: rgba(255, 255, 255, 0.08);
-  --rv-glass-border-hover: rgba(255, 255, 255, 0.16);
+  --rv-glass-border: rgb(var(--rv-ink) / 0.08);
+  --rv-glass-border-hover: rgb(var(--rv-ink) / 0.16);
   --rv-glass-radius: 8px;
   --rv-glass-backdrop: blur(var(--rv-glass-blur)) saturate(var(--rv-glass-saturate));
+}
+
+/* Thème clair (shared/styles/theme.css) : verre blanc, plus saturé, filet sombre. */
+:root[data-rv-theme='light'] {
+  --rv-glass-tint: rgba(255, 255, 255, 0.9);
+  --rv-glass-tint-hover: rgba(255, 255, 255, 0.96);
+  --rv-glass-saturate: 1.4;
+  --rv-glass-border: rgba(17, 17, 20, 0.08);
+  --rv-glass-border-hover: rgba(17, 17, 20, 0.16);
 }
 
 .rv-glass {
@@ -29,6 +38,6 @@
   backdrop-filter: var(--rv-glass-backdrop);
   border: 1px solid var(--rv-glass-border);
   border-radius: var(--rv-glass-radius);
-  box-shadow: none;
+  box-shadow: var(--rv-float-shadow);
   transition: background-color 160ms ease, border-color 160ms ease;
 }

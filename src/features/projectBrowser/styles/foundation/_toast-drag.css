@@ -1,40 +1,4 @@
-/* Toasts and the drag preview. */
-
-.rvpb-toast {
-  position: fixed;
-  right: 28px;
-  bottom: 28px;
-  z-index: 88;
-  min-width: 240px;
-  max-width: 360px;
-  padding: 14px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  background: rgba(20, 20, 20, 0.94);
-  color: #fff;
-  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.34);
-  backdrop-filter: blur(18px);
-  font-size: var(--rv-font-size-lg);
-  font-weight: 500;
-}
-
-.rvpb-toast--success {
-  box-shadow:
-    0 18px 32px rgba(0, 0, 0, 0.34),
-    0 0 0 1px rgba(112, 196, 140, 0.18);
-}
-
-.rvpb-toast--error {
-  box-shadow:
-    0 18px 32px rgba(0, 0, 0, 0.34),
-    0 0 0 1px rgba(196, 112, 112, 0.22);
-}
-
-.rvpb-toast--info {
-  box-shadow:
-    0 18px 32px rgba(0, 0, 0, 0.34),
-    0 0 0 1px rgba(124, 160, 220, 0.2);
-}
+/* Drag preview (toasts: src/shared/ui/toast.css). */
 
 .rvpb-drag-preview {
   position: fixed;
@@ -47,7 +11,8 @@
   width: 124px;
   padding: 8px 6px 10px;
   border-radius: 8px;
-  background: #3a3a3a;
+  background: light-dark(#fff, #3a3a3a);
+  box-shadow: 0 8px 24px light-dark(rgba(16, 18, 24, 0.16), transparent);
   pointer-events: none;
   /* Le curseur reste à l'angle haut-gauche de la vignette (elle s'étend vers le bas-droite). */
   translate: 6px 4px;
@@ -60,8 +25,8 @@
   width: 64px;
   height: 64px;
   border-radius: 8px;
-  background: #4a4a4a;
-  color: #fff;
+  background: light-dark(rgb(var(--rv-ink) / 0.06), #4a4a4a);
+  color: var(--rv-text);
 }
 
 .rvpb-drag-preview__label {
@@ -69,14 +34,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #fff;
+  color: var(--rv-text);
   font-size: var(--rv-font-size-xs);
   font-weight: 600;
   line-height: 1.2;
 }
 
 .rvpb-drag-preview__eyebrow {
-  color: rgba(255, 255, 255, 0.52);
+  color: rgb(var(--rv-ink) / 0.52);
   font-size: var(--rv-font-size-xs);
   font-weight: 700;
   letter-spacing: var(--rv-letter-spacing-wide);

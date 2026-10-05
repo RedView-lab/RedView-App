@@ -3,8 +3,8 @@ import { unifiedDEMSource, awsFallbackDEMSource, awsFastDEMSource } from '../../
 import { TerrainManager } from '../../../lib/terrain';
 import { buildDemTilesTemplate } from '../demTiles';
 import type { Ctx } from './context';
-import { DEM_SETTILE_VERIFY_MS, STYLE_LOAD_WATCHDOG_MS } from './context';
-import { getStyleContentStats } from './styleContent';
+import { DEM_SETTILE_VERIFY_MS } from './context';
+import { clearVisibleTimer, setVisibleTimeout, type VisibleTimer } from './visibleClock';
 import { getActiveDem3dQuality } from '../../../lib/dem3dQualityBus';
 
 /**
@@ -26,32 +26,8 @@ export function attachDemSource(ctx: Ctx): void {
   const fns = ctx.fns;
   const st = ctx.state;
   const terrainRecoveryRetryMs = 120;
-  const maxTerrainRecoveryAttempts = Math.ceil((STYLE_LOAD_WATCHDOG_MS + 1000) / terrainRecoveryRetryMs);
-
-  const canMutateTerrainStyle = (): boolean => {
-    if (fns.canMutateStyle()) return true;
-    try {
-      const style = map.getStyle();
-      const stats = getStyleContentStats(style);
-      if (!stats.hasContent) return false;
-      if (!st.spriteStormBypass) {
-        // Use the canonical `[map3d] <origin>: style has content while
-        // isStyleLoaded() is false — enabling sprite-storm bypass` log
-        // format so satellite cold-start diagnostics stay consistent
-        // with the styleBootstrap probe / styledata / idle / force-
-        // bypass paths. Differentiating origin (`terrain-eager`) lets
-        // us tell which code path won the race.
-        console.warn(
-          '[map3d] terrain-eager: style has content while isStyleLoaded() is false — enabling sprite-storm bypass',
-          { layers: stats.layerCount, sources: stats.sourceCount, imports: stats.importCount },
-        );
-        st.spriteStormBypass = true;
-      }
-      return true;
-    } catch {
-      return false;
-    }
-  };
+  // ~6 s of visible time for the style to become mutable again.
+  const maxTerrainRecoveryAttempts = Math.ceil(6000 / terrainRecoveryRetryMs);
 
   fns.applyManagedTerrain = () => {
     // Fast 30 m mode short-circuits the unified-DEM pipeline. AWS
@@ -130,7 +106,7 @@ export function attachDemSource(ctx: Ctx): void {
   };
 
   fns.refreshDemSource = (options: { forceRebuild?: boolean } = {}): boolean => {
-    if (!canMutateTerrainStyle()) return false;
+    if (!fns.canMutateStyle()) return false;
     if (!navigator.serviceWorker?.controller) {
       console.warn('[map3d] DEM source refresh skipped: no active service worker controller');
       return false;
@@ -138,10 +114,8 @@ export function attachDemSource(ctx: Ctx): void {
 
     st.disposeTerrainBootstrap?.();
     st.disposeTerrainBootstrap = null;
-    if (st.setTilesVerifyTimer) {
-      clearTimeout(st.setTilesVerifyTimer);
-      st.setTilesVerifyTimer = null;
-    }
+    clearVisibleTimer(st.setTilesVerifyTimer);
+    st.setTilesVerifyTimer = null;
 
     const tiles = buildDemTilesTemplate(st.demCacheBust, fns.getActiveDemProfile());
     const existingSource = map.getSource(unifiedDEMSource.id) as {
@@ -251,12 +225,12 @@ export function attachDemSource(ctx: Ctx): void {
   };
 
   fns.scheduleSetTilesVerify = () => {
-    if (st.setTilesVerifyTimer) clearTimeout(st.setTilesVerifyTimer);
-    st.setTilesVerifyTimer = setTimeout(() => {
+    clearVisibleTimer(st.setTilesVerifyTimer);
+    st.setTilesVerifyTimer = setVisibleTimeout(() => {
       st.setTilesVerifyTimer = null;
       if (isCancelled()) return;
       if (getActiveDem3dQuality() === 'fast-30m') return;
-      if (!canMutateTerrainStyle()) return;
+      if (!fns.canMutateStyle()) return;
       if (!map.getSource(unifiedDEMSource.id)) return;
       // If terrain isn't actually bound to unified-dem after setTiles,
       // force a clean rebuild — that's the symptom the user reports
@@ -296,37 +270,9 @@ export function attachDemSource(ctx: Ctx): void {
         fns.applyFastDemTerrain();
         return;
       }
-      const canRecoverDuringImportedStyleSettling = () => {
-        try {
-          const style = map.getStyle();
-          const imports = (style as unknown as { imports?: Array<{ data?: unknown }> } | null)?.imports;
-          const hasImportContent = Array.isArray(imports)
-            && imports.some((imp) => imp && imp.data != null);
-          const hasContent = style && (
-            (style.layers?.length ?? 0) > 0
-            || Object.keys(style.sources ?? {}).length > 0
-            || hasImportContent
-          );
-          if (!hasContent) return false;
-          if (!st.spriteStormBypass) {
-            console.warn(
-              '[map3d] terrain recovery: style has content while isStyleLoaded() is false — enabling sprite-storm bypass',
-              {
-                layers: style.layers?.length ?? 0,
-                sources: Object.keys(style.sources ?? {}).length,
-                imports: Array.isArray(imports) ? imports.length : 0,
-              },
-            );
-            st.spriteStormBypass = true;
-          }
-          return true;
-        } catch {
-          return false;
-        }
-      };
-      if (!fns.canMutateStyle() && !canRecoverDuringImportedStyleSettling()) {
+      if (!fns.canMutateStyle()) {
         if (attempt >= maxTerrainRecoveryAttempts) return;
-        st.terrainRecoveryTimer = setTimeout(() => {
+        st.terrainRecoveryTimer = setVisibleTimeout(() => {
           runRecovery(attempt + 1);
         }, terrainRecoveryRetryMs);
         return;
@@ -355,7 +301,7 @@ export function attachDemSource(ctx: Ctx): void {
       }
     };
 
-    st.terrainRecoveryTimer = setTimeout(() => {
+    st.terrainRecoveryTimer = setVisibleTimeout(() => {
       runRecovery(0);
     }, 60);
   };
@@ -364,15 +310,13 @@ export function attachDemSource(ctx: Ctx): void {
     st.disposeTerrainBootstrap?.();
 
     let applied = false;
-    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+    let fallbackTimer: VisibleTimer | null = null;
     const complete = () => {
       if (applied) return;
       applied = true;
       map.off('sourcedata', onSourceData);
-      if (fallbackTimer) {
-        clearTimeout(fallbackTimer);
-        fallbackTimer = null;
-      }
+      clearVisibleTimer(fallbackTimer);
+      fallbackTimer = null;
       st.disposeTerrainBootstrap = null;
       fns.applyUnifiedTerrain();
       fns.reportStatus('loading', 82, 'Terrain');
@@ -387,10 +331,8 @@ export function attachDemSource(ctx: Ctx): void {
 
     st.disposeTerrainBootstrap = () => {
       map.off('sourcedata', onSourceData);
-      if (fallbackTimer) {
-        clearTimeout(fallbackTimer);
-        fallbackTimer = null;
-      }
+      clearVisibleTimer(fallbackTimer);
+      fallbackTimer = null;
     };
 
     fns.applyUnifiedTerrain();
@@ -399,7 +341,7 @@ export function attachDemSource(ctx: Ctx): void {
     if (map.isSourceLoaded(unifiedDEMSource.id)) {
       onSourceData({ sourceId: unifiedDEMSource.id, isSourceLoaded: true } as MapSourceDataEvent);
     } else {
-      fallbackTimer = setTimeout(complete, 1200);
+      fallbackTimer = setVisibleTimeout(complete, 1200);
     }
   };
 
@@ -409,7 +351,7 @@ export function attachDemSource(ctx: Ctx): void {
   // encoding. Mapbox GL v3 handles the decode on the GPU — no SW
   // pipeline, no re-encoding, no overzoom logic. ~30 m global terrain.
   fns.attachAwsFallbackTerrain = () => {
-    if (!canMutateTerrainStyle()) return;
+    if (!fns.canMutateStyle()) return;
     // Honor user's 3D quality choice: in fast-30m mode the fast source
     // owns the terrain binding; don't let the fallback path override it.
     if (getActiveDem3dQuality() === 'fast-30m') {
@@ -490,7 +432,7 @@ export function attachDemSource(ctx: Ctx): void {
   // cache + Mapbox per-source tile cache make every subsequent swap
   // free of any visible lag.
   fns.applyFastDemTerrain = () => {
-    if (!canMutateTerrainStyle()) return false;
+    if (!fns.canMutateStyle()) return false;
     const sourceAlreadyPresent = !!map.getSource(awsFastDEMSource.id);
     if (!sourceAlreadyPresent) {
       try {
@@ -542,7 +484,7 @@ export function attachDemSource(ctx: Ctx): void {
   // with the same value (no-ops if the desired terrain is already
   // bound). Designed for zero-flicker user-facing toggling.
   fns.setDem3dQuality = (quality) => {
-    if (!canMutateTerrainStyle()) return;
+    if (!fns.canMutateStyle()) return;
 
     if (quality === 'fast-30m') {
       fns.applyFastDemTerrain();

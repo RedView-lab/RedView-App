@@ -2,6 +2,7 @@ import { Component, type ErrorInfo, type ReactNode } from 'react';
 import * as Sentry from '@sentry/react';
 import { logger } from '../lib/logger';
 import { translateAppText } from '../i18n';
+import { RedViewLogo } from './RedViewLogo';
 
 interface Props {
   children: ReactNode;
@@ -61,8 +62,8 @@ export class GlobalErrorBoundary extends Component<Props, State> {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: '#0c0e12',
-            color: '#f8fafc',
+            backgroundColor: 'light-dark(#f4f4f5, #0c0e12)',
+            color: 'light-dark(#111114, #f8fafc)',
             fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
             padding: '24px',
             zIndex: 999999,
@@ -72,18 +73,16 @@ export class GlobalErrorBoundary extends Component<Props, State> {
             style={{
               maxWidth: '460px',
               width: '100%',
-              backgroundColor: '#161922',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
+              backgroundColor: 'light-dark(#ffffff, #161922)',
+              border: '1px solid rgb(var(--rv-ink) / 0.08)',
               borderRadius: '16px',
               padding: '32px 28px',
               textAlign: 'center',
-              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.6)',
+              boxShadow: '0 20px 40px light-dark(rgba(16, 18, 24, 0.12), rgba(0, 0, 0, 0.6))',
             }}
           >
             <div style={{ marginBottom: '20px' }}>
-              <img
-                src="/landing/icons/redview-logo.svg"
-                alt="RedView"
+              <RedViewLogo
                 width="120"
                 style={{ display: 'inline-block' }}
                 onError={(e) => {
@@ -96,7 +95,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
               style={{
                 fontSize: 'var(--rv-font-size-2xl)',
                 fontWeight: 600,
-                color: '#ffffff',
+                color: 'var(--rv-text)',
                 margin: '0 0 10px 0',
               }}
             >
@@ -106,7 +105,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
             <p
               style={{
                 fontSize: 'var(--rv-font-size-lg)',
-                color: 'rgba(255, 255, 255, 0.65)',
+                color: 'rgb(var(--rv-ink) / 0.65)',
                 lineHeight: '22px',
                 margin: '0 0 24px 0',
               }}
@@ -146,8 +145,8 @@ export class GlobalErrorBoundary extends Component<Props, State> {
                 onClick={this.handleHardReset}
                 style={{
                   backgroundColor: 'transparent',
-                  color: 'rgba(255, 255, 255, 0.6)',
-                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  color: 'rgb(var(--rv-ink) / 0.6)',
+                  border: '1px solid rgb(var(--rv-ink) / 0.12)',
                   borderRadius: '10px',
                   padding: '10px 20px',
                   fontSize: 'var(--rv-font-size-md)',
@@ -164,7 +163,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
                   marginTop: '20px',
                   textAlign: 'left',
                   fontSize: 'var(--rv-font-size-sm)',
-                  color: 'rgba(255, 255, 255, 0.4)',
+                  color: 'rgb(var(--rv-ink) / 0.4)',
                 }}
               >
                 <summary style={{ cursor: 'pointer', marginBottom: '8px' }}>
@@ -174,11 +173,11 @@ export class GlobalErrorBoundary extends Component<Props, State> {
                   style={{
                     padding: '10px',
                     borderRadius: '8px',
-                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                    backgroundColor: 'light-dark(rgb(var(--rv-ink) / 0.04), rgba(0, 0, 0, 0.3))',
                     overflowX: 'auto',
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
-                    color: '#f87171',
+                    color: 'light-dark(#b42318, #f87171)',
                   }}
                 >
                   {this.state.error.message}

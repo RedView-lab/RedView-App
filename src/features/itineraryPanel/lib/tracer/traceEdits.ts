@@ -1,4 +1,5 @@
 import type { Itinerary, TimelineItem } from '../../types';
+import { createDocumentId } from '../project/ids';
 
 /**
  * Primitives pures d'édition du tracé, utilisées par l'outil « Tracer ».
@@ -109,7 +110,7 @@ export function applyTraceAppend(
 
   const previousEndLat = endRow.lat;
   const previousEndLon = endRow.lon;
-  const waypointId = `wp-${Date.now()}-${Math.round(point.lat * 1e5)}-${Math.round(point.lon * 1e5)}`;
+  const waypointId = createDocumentId('wp');
 
   const previousEndWaypoint: TimelineItem = {
     ...endRow,

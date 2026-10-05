@@ -293,6 +293,13 @@ export class FlyoverController {
     return true;
   }
 
+  /** Trace lue et palier de vitesse choisi, pour l'export vidéo (`null` sans trace lisible). */
+  getVideoSource(): { route: FlyoverRouteInput; speedIndex: number } | null {
+    const route = this.input.route;
+    if (!route || !this.status.canPlay) return null;
+    return { route, speedIndex: this.speedIndex };
+  }
+
   /* ── Rail ──────────────────────────────────────────────────────────── */
 
   private ensureRail(): CameraRail | null {

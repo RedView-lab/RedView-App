@@ -10,6 +10,24 @@ export interface RouteProfile {
   isDefault?: boolean;
 }
 
+/**
+ * Profil de tracé enregistré par l'utilisateur (bibliothèque de son compte,
+ * cf. `lib/project/customProfiles.ts`). Un itinéraire en garde les réglages
+ * effectifs (`priorities`, `roadTypes`) ; le document du projet embarque en
+ * plus une copie des profils qu'il référence (`ItineraryProject.routingProfiles`)
+ * pour qu'un autre appareil ou un collaborateur retrouve leur nom et leur préset.
+ */
+export interface SavedCustomProfile {
+  id: string;
+  name: string;
+  basePresetId?: string;
+  roadTypes: Omit<RoadTypesState, 'applyToAllItineraries'>;
+  priorities: PrioritiesState;
+  createdAt: number;
+  /** Dernière modification (ms) ; absent sur les profils antérieurs. */
+  updatedAt?: number;
+}
+
 export interface PrioritiesState {
   /** Each value ∈ [0, 100]. */
   duration: number;

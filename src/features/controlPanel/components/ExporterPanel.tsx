@@ -1,15 +1,34 @@
 import { useState, type CSSProperties, memo } from 'react';
+import type { Map as MapboxMap } from 'mapbox-gl';
 
+import {
+  flyoverVideoFileName,
+  isFlyoverVideoExportRunning,
+  startFlyoverVideoExport,
+  useFlyoverController,
+  type FlyoverVideoOrientation,
+} from '@/features/centerPanel/flyover';
 import { exportItineraryFile, type ItineraryExportFormat } from '@/features/exporter';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
+import type { ItineraryProject } from '@/features/itineraryPanel/types';
+import { describeRedviewExportError, exportProjectAsRedview } from '@/features/redviewFile';
 import { useAppI18n } from '@/shared/i18n';
+import { captureMapThumbnail } from '@/shared/utils/mapThumbnail';
 
 import { Checkbox } from './Checkbox';
 import { Select } from './Select';
+import { VideoExportStatus } from './VideoExportStatus';
 import { IconChevronDown, IconDownload01, IconShare01 } from '../icons';
 import '../styles/index.css';
 
-type ExportFormat = ItineraryExportFormat | 'pdf';
+type VideoExportFormat = 'mp4-landscape' | 'mp4-portrait';
+type ExportFormat = ItineraryExportFormat | 'redview' | VideoExportFormat;
+
+// Vidéo du flyover 3D : horizontale (1920 × 1080) ou verticale (1080 × 1920).
+const VIDEO_FORMAT_OPTIONS: { value: VideoExportFormat; label: string }[] = [
+  { value: 'mp4-landscape', label: 'MP4 16:9' },
+  { value: 'mp4-portrait', label: 'MP4 9:16' },
+];
 
 // Itinerary export formats selectable in the dropdown. KML is listed
 // alongside GPX/FIT so the user can send favorited POIs + the trace to a
@@ -22,6 +41,15 @@ const ITINERARY_FORMAT_OPTIONS: { value: ItineraryExportFormat; label: string }[
 
 interface ExporterPanelProps {
   width?: number | '100%';
+  /** Projet ouvert (miniature enregistrée en repli de la capture de la carte). */
+  projectId?: string | null;
+  /** Carte : miniature du fichier .redview capturée au moment de l'export. */
+  map?: MapboxMap | null;
+  /**
+   * État complet du projet ouvert, vue carte et panneaux compris (tenus par
+   * le Dashboard hors du ProjectStore). Sans lui, le projet du store.
+   */
+  getProjectSnapshot?: () => ItineraryProject | null;
 }
 
 interface ExportRow {
@@ -36,18 +64,30 @@ const FORMAT_OPTIONS: Record<ExportFormat, { value: ExportFormat; label: string 
   gpx: ITINERARY_FORMAT_OPTIONS,
   kml: ITINERARY_FORMAT_OPTIONS,
   fit: ITINERARY_FORMAT_OPTIONS,
-  pdf: [{ value: 'pdf', label: 'PDF' }],
+  redview: [{ value: 'redview', label: 'REDVIEW' }],
+  'mp4-landscape': VIDEO_FORMAT_OPTIONS,
+  'mp4-portrait': VIDEO_FORMAT_OPTIONS,
 };
 
 const INITIAL_ROWS: ExportRow[] = [
+  // Fichier .redview : tout le projet (tracés, prédictions, POI, .fit…), à partager
+  // et à rouvrir avec « Importer un projet » dans le gestionnaire de projets.
+  { id: 'project', label: 'Projet complet', format: 'redview', checked: false },
   { id: 'itineraries', label: 'Itinéraire(s)', format: 'gpx', checked: true },
-  { id: 'timeline', label: 'Timeline', format: 'pdf', checked: false, disabled: true },
-  { id: 'chart', label: 'Graphique', format: 'pdf', checked: false, disabled: true },
+  // Flyover de l'itinéraire rendu image par image hors écran (style de la carte
+  // du moment, palier de vitesse du flyover), encodé en MP4 H.264.
+  { id: 'video', label: 'Vidéo flyover', format: 'mp4-landscape', checked: false },
 ];
 
-export const ExporterPanel = memo(function ExporterPanel({ width }: ExporterPanelProps) {
+export const ExporterPanel = memo(function ExporterPanel({
+  width,
+  projectId = null,
+  map = null,
+  getProjectSnapshot,
+}: ExporterPanelProps) {
   const { t } = useAppI18n();
   const store = useProjectStoreOptional();
+  const flyover = useFlyoverController();
   const [open, setOpen] = useState(true);
   const [rows, setRows] = useState(INITIAL_ROWS);
   const [isExporting, setIsExporting] = useState(false);
@@ -74,39 +114,96 @@ export const ExporterPanel = memo(function ExporterPanel({ width }: ExporterPane
     );
   };
 
+  const exportActiveItinerary = (format: ExportFormat): string => {
+    if (!activeItinerary) throw new Error('Aucun itinéraire actif à exporter.');
+    if (format !== 'gpx' && format !== 'fit' && format !== 'kml') {
+      throw new Error("Le format sélectionné n'est pas encore pris en charge pour l'itinéraire.");
+    }
+    const { fileName } = exportItineraryFile(activeItinerary, format);
+    return t("{{files}} exporté depuis l'itinéraire actif.", { files: fileName });
+  };
+
+  const exportFullProject = async (): Promise<string> => {
+    const project = getProjectSnapshot?.() ?? store?.project ?? null;
+    if (!project) throw new Error('No open project');
+    // Miniature de la vue actuelle ; à défaut, celle enregistrée du projet.
+    const thumbnail = await captureMapThumbnail(map).catch(() => null);
+    const result = await exportProjectAsRedview({ project, projectId, thumbnail });
+    const exported = t('Projet exporté : {{file}}', { file: result.fileName });
+    return result.missingFitFiles.length > 0
+      ? `${exported} ${t('{{count}} fichier(s) .fit supprimé(s) du stockage non inclus.', { count: result.missingFitFiles.length })}`
+      : exported;
+  };
+
+  /** Lance le rendu (long) en arrière-plan ; son avancement s'affiche sous le bouton. */
+  const startVideoExport = (format: ExportFormat): void => {
+    if (isFlyoverVideoExportRunning()) throw new Error('Une vidéo est déjà en cours de rendu.');
+    const source = flyover?.getVideoSource() ?? null;
+    if (!map || !source) throw new Error('Aucun tracé à survoler pour la vidéo.');
+    const orientation: FlyoverVideoOrientation = format === 'mp4-portrait' ? 'portrait' : 'landscape';
+    const itinerary = store?.project.itineraries.find((candidate) => candidate.id === source.route.itineraryId);
+    const name = itinerary?.gpxRoute?.name?.trim() || itinerary?.name?.trim() || 'flyover';
+    void startFlyoverVideoExport({
+      liveMap: map,
+      route: source.route,
+      speedIndex: source.speedIndex,
+      orientation,
+      fileName: flyoverVideoFileName(name, orientation),
+    });
+  };
+
+  // Chaque export coché part indépendamment : un itinéraire sans tracé ne
+  // bloque pas l'export du projet complet, et inversement.
   const handleExport = async () => {
-    const itineraryRow = rows.find((row) => row.id === 'itineraries' && row.checked && !row.disabled);
-    if (!itineraryRow) {
+    const selected = rows.filter((row) => row.checked && !row.disabled);
+    if (selected.length === 0) {
       setStatus({ tone: 'error', message: t('Activez au moins un export avant de lancer le téléchargement.') });
       return;
     }
-    if (!activeItinerary) {
-      setStatus({ tone: 'error', message: t('Aucun itinéraire actif à exporter.') });
-      return;
-    }
-    if (
-      itineraryRow.format !== 'gpx'
-      && itineraryRow.format !== 'fit'
-      && itineraryRow.format !== 'kml'
-    ) {
-      setStatus({ tone: 'error', message: t("Le format sélectionné n'est pas encore pris en charge pour l'itinéraire.") });
-      return;
-    }
 
+    setIsExporting(true);
+    setStatus(null);
+    const outcomes: Array<{ ok: boolean; message: string }> = [];
     try {
-      setIsExporting(true);
-      setStatus(null);
-      const { fileName } = exportItineraryFile(activeItinerary, itineraryRow.format);
-      setStatus({
-        tone: 'success',
-        message: t("{{files}} exporté depuis l'itinéraire actif.", { files: fileName }),
-      });
-    } catch (error) {
-      console.error('[exporter] failed to export itinerary', error);
-      setStatus({
-        tone: 'error',
-        message: error instanceof Error ? t(error.message) : t("Impossible d'exporter l'itinéraire actif."),
-      });
+      const itineraryRow = selected.find((row) => row.id === 'itineraries');
+      if (itineraryRow) {
+        try {
+          outcomes.push({ ok: true, message: exportActiveItinerary(itineraryRow.format) });
+        } catch (error) {
+          console.error('[exporter] failed to export itinerary', error);
+          outcomes.push({
+            ok: false,
+            message: error instanceof Error ? t(error.message) : t("Impossible d'exporter l'itinéraire actif."),
+          });
+        }
+      }
+      if (selected.some((row) => row.id === 'project')) {
+        try {
+          outcomes.push({ ok: true, message: await exportFullProject() });
+        } catch (error) {
+          console.error('[exporter] failed to export project', error);
+          outcomes.push({ ok: false, message: t(describeRedviewExportError(error)) });
+        }
+      }
+      const videoRow = selected.find((row) => row.id === 'video');
+      if (videoRow) {
+        try {
+          startVideoExport(videoRow.format);
+        } catch (error) {
+          outcomes.push({
+            ok: false,
+            message: error instanceof Error ? t(error.message) : t('Rendu de la vidéo impossible.'),
+          });
+        }
+      }
+      setStatus(
+        outcomes.length === 0
+          ? null
+          : {
+              tone: outcomes.every((outcome) => outcome.ok) ? 'success' : 'error',
+              message: outcomes.map((outcome) => outcome.message).join(' '),
+            },
+      );
     } finally {
       setIsExporting(false);
     }
@@ -166,7 +263,7 @@ export const ExporterPanel = memo(function ExporterPanel({ width }: ExporterPane
                     value={row.format}
                     options={FORMAT_OPTIONS[row.format]}
                     onChange={(nextFormat) => handleFormatChange(row.id, nextFormat)}
-                    width="var(--rvc-panel-select-xs)"
+                    width="var(--rvc-exporter-select-width)"
                   />
                 </div>
               ))}
@@ -181,6 +278,8 @@ export const ExporterPanel = memo(function ExporterPanel({ width }: ExporterPane
               <IconDownload01 size={18} />
               <span>{isExporting ? t('Export...') : t('Exporter')}</span>
             </button>
+
+            <VideoExportStatus />
 
             {status ? (
               <p

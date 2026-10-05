@@ -1,4 +1,7 @@
 import {
+  CAMERA_DISTANCE_SPEED_EXPONENT,
+  CAMERA_DISTANCE_SPEED_SMOOTHING_S,
+  CAMERA_ZOOM_RATE_MAX,
   CENTERLINE_MAX_OFFSET_PER_DISTANCE,
   CENTERLINE_SMOOTHING_PER_DISTANCE,
   ELEVATION_SMOOTHING_PER_DISTANCE,
@@ -53,6 +56,11 @@ export interface CameraRail {
   readonly elevationM: Float64Array;
   /** Vitesse de lecture au sol à 1× (m/s). */
   readonly speedMps: Float64Array;
+  /**
+   * Vitesse lissée sur CAMERA_DISTANCE_SPEED_SMOOTHING_S de lecture, qui fixe
+   * la distance de la caméra : pas de plongée-remontée à chaque ralentissement bref.
+   */
+  readonly framingSpeedMps: Float64Array;
   /** Temps de lecture cumulé à 1× (s). */
   readonly playbackTimeS: Float64Array;
   readonly durationS: number;
@@ -120,7 +128,11 @@ function sigmaFromTime(speedMps: Float64Array, seconds: number, multiplier: numb
  * l'axe de la pente pendant que la tête zigzague dans le cadre), écart latéral
  * à la trace borné pour que la tête reste toujours cadrée.
  */
-function buildCenterline(rs: Resampled, distanceM: Float64Array): { x: Float64Array; y: Float64Array } {
+function buildCenterline(
+  rs: Resampled,
+  distanceM: Float64Array,
+  maxOffsetPerDistance: number,
+): { x: Float64Array; y: Float64Array } {
   const sigma = sigmaFromDistance(distanceM, CENTERLINE_SMOOTHING_PER_DISTANCE, rs.spacingM);
   const cx = gaussianSmooth(rs.x, sigma);
   const cy = gaussianSmooth(rs.y, sigma);
@@ -128,7 +140,7 @@ function buildCenterline(rs: Resampled, distanceM: Float64Array): { x: Float64Ar
     const ox = cx[i] - rs.x[i];
     const oy = cy[i] - rs.y[i];
     const offsetM = Math.hypot(ox, oy) * rs.metersPerUnit[i];
-    const maxM = CENTERLINE_MAX_OFFSET_PER_DISTANCE * distanceM[i];
+    const maxM = maxOffsetPerDistance * distanceM[i];
     if (offsetM > maxM) {
       const k = maxM / offsetM;
       cx[i] = rs.x[i] + ox * k;
@@ -332,6 +344,26 @@ function helicoWeights(density: Float64Array, speedMps: Float64Array, spacingM: 
   return smoothed;
 }
 
+/**
+ * Vitesse qui fixe la distance de la caméra : vitesse de lecture lissée
+ * (CAMERA_DISTANCE_SPEED_SMOOTHING_S), puis variation bornée en log (limiteur
+ * symétrique) pour que la distance — ∝ vitesse^CAMERA_DISTANCE_SPEED_EXPONENT —
+ * ne change jamais de plus de CAMERA_ZOOM_RATE_MAX par seconde de lecture.
+ */
+function framingSpeeds(speedMps: Float64Array, spacingM: number): Float64Array {
+  const smoothed = gaussianSmooth(speedMps, sigmaFromTime(speedMps, CAMERA_DISTANCE_SPEED_SMOOTHING_S, 1, spacingM), 'even');
+  const logSpeed = new Float64Array(smoothed.length);
+  for (let i = 0; i < smoothed.length; i += 1) logSpeed[i] = Math.log(Math.max(1e-3, smoothed[i]));
+  const last = speedMps.length - 1;
+  const maxLogStep = CAMERA_ZOOM_RATE_MAX / CAMERA_DISTANCE_SPEED_EXPONENT;
+  const limited = symmetricSlewLimit(logSpeed, (i) => {
+    const segmentSpeed = 0.5 * (speedMps[i] + speedMps[Math.min(last, i + 1)]);
+    return (maxLogStep * spacingM) / Math.max(1e-3, segmentSpeed);
+  });
+  for (let i = 0; i < limited.length; i += 1) limited[i] = Math.exp(limited[i]);
+  return limited;
+}
+
 function distancesForSpeeds(speedMps: Float64Array): Float64Array {
   const distanceM = new Float64Array(speedMps.length);
   for (let i = 0; i < distanceM.length; i += 1) distanceM[i] = cameraDistanceForSpeed(speedMps[i]);
@@ -343,14 +375,20 @@ function distancesForSpeeds(speedMps: Float64Array): Float64Array {
  * sinuosité mesurée à l'échelle de la caméra, qui dépend elle-même de la
  * vitesse (la caméra monte quand elle accélère) : itération de point fixe
  * (RAIL_FIXED_POINT_PASSES passes suffisent, l'écart devient négligeable).
+ * `centerlineMaxOffsetPerDistance` vient du cadrage (`engine/framing.ts`) :
+ * plus serré en portrait, où l'image est étroite.
  */
-export function buildCameraRail(track: RouteTrack, targetDurationS = playbackDurationForLength(track.totalM)): CameraRail {
+export function buildCameraRail(
+  track: RouteTrack,
+  targetDurationS = playbackDurationForLength(track.totalM),
+  centerlineMaxOffsetPerDistance = CENTERLINE_MAX_OFFSET_PER_DISTANCE,
+): CameraRail {
   const rs = resample(track);
   const { count, spacingM } = rs;
   let speedMps: Float64Array = new Float64Array(count).fill(track.totalM / targetDurationS);
   for (let pass = 0; pass < RAIL_FIXED_POINT_PASSES; pass += 1) {
     const distanceM = distancesForSpeeds(speedMps);
-    const centerline = buildCenterline(rs, distanceM);
+    const centerline = buildCenterline(rs, distanceM, centerlineMaxOffsetPerDistance);
     const tangents = centerlineTangents(centerline.x, centerline.y, distanceM, spacingM);
     const { heading } = smoothedHeading(tangents, speedMps, 1, spacingM);
     const density = interestDensity(rs, distanceM, track.hasElevation);
@@ -358,7 +396,7 @@ export function buildCameraRail(track: RouteTrack, targetDurationS = playbackDur
   }
 
   const distanceM = distancesForSpeeds(speedMps);
-  const centerline = buildCenterline(rs, distanceM);
+  const centerline = buildCenterline(rs, distanceM, centerlineMaxOffsetPerDistance);
   const tangents = centerlineTangents(centerline.x, centerline.y, distanceM, spacingM);
   const elevationM = track.hasElevation
     ? gaussianSmooth(rs.elevationM, sigmaFromDistance(distanceM, ELEVATION_SMOOTHING_PER_DISTANCE, spacingM))
@@ -378,6 +416,7 @@ export function buildCameraRail(track: RouteTrack, targetDurationS = playbackDur
     centerY: centerline.y,
     elevationM,
     speedMps: finalSpeed,
+    framingSpeedMps: framingSpeeds(finalSpeed, spacingM),
     playbackTimeS,
     durationS: playbackTimeS[count - 1],
     targetDurationS,

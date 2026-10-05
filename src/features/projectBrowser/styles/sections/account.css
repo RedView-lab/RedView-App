@@ -7,13 +7,13 @@
 }
 
 .rvpb-account-notice.is-success {
-  background: rgba(32, 123, 64, 0.22);
-  color: #d6ffd7;
+  background: light-dark(rgba(6, 118, 71, 0.08), rgba(32, 123, 64, 0.22));
+  color: light-dark(#067647, #d6ffd7);
 }
 
 .rvpb-account-notice.is-error {
-  background: rgba(180, 30, 30, 0.18);
-  color: #ffb4b4;
+  background: light-dark(rgba(217, 45, 32, 0.08), rgba(180, 30, 30, 0.18));
+  color: light-dark(#b42318, #ffb4b4);
 }
 
 .rvpb-account-section__content {
@@ -42,7 +42,7 @@
 
 .rvpb-account-field__label,
 .rvpb-account-password-label {
-  color: #fff;
+  color: var(--rv-text);
   font-size: var(--rv-font-size-lg);
   font-weight: 600;
   line-height: 1.33;
@@ -56,10 +56,10 @@
   min-height: 40px;
   gap: 8px;
   padding: 8px 12px;
-  border: 1px solid rgba(213, 215, 218, 0.16);
+  border: 1px solid light-dark(rgb(var(--rv-ink) / 0.14), rgba(213, 215, 218, 0.16));
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: light-dark(#fff, rgba(255, 255, 255, 0.08));
+  color: var(--rv-text);
   font: inherit;
   box-shadow: 0 1px 2px rgba(10, 13, 18, 0.05);
 }
@@ -80,8 +80,8 @@
 }
 
 .rvpb-account-select.is-open .rvpb-account-select-trigger {
-  border-color: rgba(255, 255, 255, 0.28);
-  background: rgba(255, 255, 255, 0.1);
+  border-color: rgb(var(--rv-ink) / 0.28);
+  background: rgb(var(--rv-ink) / 0.1);
 }
 
 .rvpb-account-input-shell--with-icon {
@@ -97,7 +97,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.72);
+  color: rgb(var(--rv-ink) / 0.72);
 }
 
 .rvpb-account-select-icon {
@@ -119,8 +119,8 @@
   height: 20px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  background: rgb(var(--rv-ink) / 0.08);
+  box-shadow: inset 0 0 0 1px rgb(var(--rv-ink) / 0.18);
 }
 
 .rvpb-account-flag__image {
@@ -131,7 +131,7 @@
 }
 
 .rvpb-account-flag--fallback {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgb(var(--rv-ink) / 0.12);
 }
 
 .rvpb-account-select-value {
@@ -149,7 +149,7 @@
   min-width: 0;
   border: 0;
   background: transparent;
-  color: #fff;
+  color: var(--rv-text);
   font: inherit;
   font-size: var(--rv-font-size-xl);
   line-height: 1.5;
@@ -172,11 +172,11 @@
 }
 
 .rvpb-account-input-shell input::placeholder {
-  color: rgba(255, 255, 255, 0.42);
+  color: rgb(var(--rv-ink) / 0.42);
 }
 
 .rvpb-account-input-suffix {
-  color: rgba(255, 255, 255, 0.72);
+  color: rgb(var(--rv-ink) / 0.72);
   font-size: var(--rv-font-size-lg);
 }
 
@@ -190,13 +190,13 @@
 
 .rvpb-account-actions--with-divider {
   padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgb(var(--rv-ink) / 0.08);
 }
 
 .rvpb-account-inline-status {
   flex: 1 1 auto;
   min-width: 0;
-  color: rgba(255, 255, 255, 0.48);
+  color: rgb(var(--rv-ink) / 0.48);
   font-size: var(--rv-font-size-md);
 }
 

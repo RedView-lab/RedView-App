@@ -5,9 +5,13 @@
   --rvi-tl-hour-row-height: 96px;
   --rvi-tl-zoom-col: 16px;
   --rvi-tl-times-col: 56px;
-  --rvi-tl-grid-border: rgba(255, 255, 255, 0.04);
-  --rvi-tl-grid-surface: rgba(255, 255, 255, 0.08);
-  --rvi-tl-label-color: rgba(255, 255, 255, 0.4);
+  --rvi-tl-grid-border: rgb(var(--rv-ink) / 0.04);
+  --rvi-tl-grid-surface: light-dark(rgb(var(--rv-ink) / 0.035), rgba(255, 255, 255, 0.08));
+  /* Cartes posées sur la grille : surélevées (blanches) en clair, même voile qu'elle en sombre. */
+  --rvi-tl-card-surface: light-dark(#fff, rgba(255, 255, 255, 0.08));
+  --rvi-tl-card-hover: light-dark(#f4f4f5, rgba(255, 255, 255, 0.1));
+  --rvi-tl-card-ring: 0 0 0 1px light-dark(rgb(var(--rv-ink) / 0.07), transparent), 0 1px 2px light-dark(rgba(16, 18, 24, 0.05), transparent);
+  --rvi-tl-label-color: rgb(var(--rv-ink) / 0.4);
   --rvi-tl-icon-col: 24px;
   --rvi-tl-pause-col: 78px;
   --rvi-tl-start-col: 68px;
@@ -160,7 +164,7 @@
 }
 
 .rvi-tl-schedule__day:last-child { border-right: 0; }
-.rvi-tl-schedule__day:hover { background: rgba(255, 255, 255, 0.04); }
+.rvi-tl-schedule__day:hover { background: rgb(var(--rv-ink) / 0.04); }
 
 .rvi-tl-schedule__day-label {
   font-size: var(--rv-font-size-sm);
@@ -180,7 +184,7 @@
   font-size: var(--rv-font-size-sm);
   font-weight: 600;
   line-height: 18px;
-  color: #fff;
+  color: var(--rv-text);
   font-variant-numeric: tabular-nums;
 }
 
@@ -190,6 +194,7 @@
 
 .rvi-tl-schedule__day.is-selected .rvi-tl-schedule__day-number {
   background: var(--rvi-red);
+  color: var(--rv-on-accent);
 }
 
 .rvi-tl-schedule__legend {
@@ -280,7 +285,7 @@
   height: 100%;
   border-right: 1px solid var(--rvi-tl-grid-border);
   border-left: none;
-  background: rgba(0, 0, 0, 0.35);
+  background: light-dark(rgb(var(--rv-ink) / 0.03), rgba(0, 0, 0, 0.35));
   z-index: 4;
 }
 
@@ -346,7 +351,7 @@
   padding: 0 4px;
   border-radius: 6px;
   transform: translateY(-50%);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgb(var(--rv-ink) / 0.04);
   color: var(--rvi-text-dim);
   font-size: var(--rv-font-size-xs);
   line-height: 16px;
@@ -418,7 +423,7 @@
 .rvi-tl-schedule__now::after {
   content: '';
   height: 1px;
-  background: rgba(255, 255, 255, 0.72);
+  background: rgb(var(--rv-ink) / 0.72);
   flex: 1 1 auto;
 }
 
@@ -426,14 +431,14 @@
   width: 8px;
   height: 8px;
   border-radius: 999px;
-  background: #fff;
+  background: rgb(var(--rv-ink));
 }
 
 .rvi-tl-schedule__now-label {
   font-size: var(--rv-font-size-sm);
   font-weight: 500;
   line-height: 18px;
-  color: #fff;
+  color: var(--rv-text);
   white-space: nowrap;
 }
 
@@ -442,11 +447,11 @@
   top: 18px;
   margin: 18px;
   padding: 14px 16px;
-  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border: 1px dashed rgb(var(--rv-ink) / 0.12);
   border-radius: var(--rvi-radius);
   color: var(--rvi-text-dim);
   font-size: var(--rv-font-size-md);
-  background: rgba(0, 0, 0, 0.16);
+  background: light-dark(rgb(var(--rv-ink) / 0.02), rgba(0, 0, 0, 0.16));
 }
 
 .rvi-tl-schedule__event,
@@ -460,7 +465,8 @@
 
 .rvi-tl-schedule__event-span {
   border-radius: 6px;
-  background: var(--rvi-tl-grid-surface);
+  background: var(--rvi-tl-card-surface);
+  box-shadow: var(--rvi-tl-card-ring);
   pointer-events: none;
   z-index: 1;
 }
@@ -483,7 +489,7 @@
 
 .rvi-tl-schedule__event-span[data-kind='start'],
 .rvi-tl-schedule__event-span[data-kind='end'] {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--rvi-tl-card-hover);
 }
 
 .rvi-tl-schedule__event {
@@ -509,7 +515,8 @@
   height: var(--rvi-tl-card-height, auto);
   padding: 4px calc(var(--rvi-tl-card-pad-right) + var(--rvi-tl-actions-gutter)) 4px var(--rvi-tl-card-pad-left);
   border-radius: 6px;
-  background: var(--rvi-tl-grid-surface);
+  background: var(--rvi-tl-card-surface);
+  box-shadow: var(--rvi-tl-card-ring);
   color: var(--rvi-text);
   cursor: pointer;
   box-sizing: border-box;
@@ -517,7 +524,7 @@
 }
 
 .rvi-tl-schedule__event-card:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--rvi-tl-card-hover);
 }
 
 .rvi-tl-schedule__event.is-selected .rvi-tl-schedule__event-card {
@@ -527,7 +534,7 @@
 
 .rvi-tl-schedule__event[data-kind='start'] .rvi-tl-schedule__event-card,
 .rvi-tl-schedule__event[data-kind='end'] .rvi-tl-schedule__event-card {
-  background: var(--rvi-tl-grid-surface);
+  background: var(--rvi-tl-card-surface);
 }
 
 .rvi-tl-schedule__event-main {
@@ -602,7 +609,7 @@
   padding: var(--rvi-tl-chip-pad);
   border-radius: 6px;
   background: var(--rvi-tl-grid-surface);
-  color: #fff;
+  color: var(--rv-text);
   font-size: var(--rv-font-size-md);
   font-weight: 400;
   line-height: 18px;
@@ -618,7 +625,7 @@
 }
 
 .rvi-tl-schedule__pause-chip.is-visible {
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px rgb(var(--rv-ink) / 0.04);
 }
 
 .rvi-tl-schedule__pause-chip.is-editable {
@@ -633,9 +640,9 @@
   flex: 1 1 auto;
   min-width: 0;
   width: 100%;
-  background: rgba(0, 0, 0, 0.4);
+  background: light-dark(#fff, rgba(0, 0, 0, 0.4));
   color: inherit;
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 1px solid rgb(var(--rv-ink) / 0.22);
   border-radius: 4px;
   padding: 1px 4px;
   font: inherit;
@@ -645,7 +652,7 @@
 }
 
 .rvi-tl-schedule__pause-chip-input:focus {
-  border-color: rgba(255, 255, 255, 0.5);
+  border-color: rgb(var(--rv-ink) / 0.5);
 }
 
 .rvi-tl-schedule__pause-chip-icon {
@@ -666,7 +673,7 @@
   font-size: var(--rv-font-size-md);
   font-weight: 400;
   line-height: 18px;
-  color: #fff;
+  color: var(--rv-text);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   overflow: hidden;
@@ -686,7 +693,7 @@
   justify-content: center;
   width: var(--rvi-tl-fav-col);
   height: 24px;
-  color: rgba(255, 255, 255, 0.28);
+  color: rgb(var(--rv-ink) / 0.28);
   flex-shrink: 0;
 }
 
@@ -704,7 +711,7 @@
 
 .rvi-tl-schedule__event-favorite.is-active,
 .rvi-tl-schedule__pause-favorite.is-active {
-  color: #fdb022;
+  color: light-dark(#f79009, #fdb022);
 }
 
 .rvi-tl-schedule__pause {
@@ -727,15 +734,16 @@
   min-height: 32px;
   padding: 4px calc(var(--rvi-tl-card-pad-right) + var(--rvi-tl-actions-gutter)) 4px var(--rvi-tl-card-pad-left);
   border-radius: 6px;
-  background: var(--rvi-tl-grid-surface);
-  color: #fff;
+  background: var(--rvi-tl-card-surface);
+  box-shadow: var(--rvi-tl-card-ring);
+  color: var(--rv-text);
   box-sizing: border-box;
   pointer-events: auto;
   transition: background 0.18s ease, box-shadow 0.18s ease;
 }
 
 .rvi-tl-schedule__pause.is-visible .rvi-tl-schedule__pause-card {
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px rgb(var(--rv-ink) / 0.04);
 }
 
 .rvi-tl-schedule__pause--standalone {
@@ -795,10 +803,10 @@
 .rvi-tl-schedule__pause--standalone.is-dragging .rvi-tl-schedule__pause-card {
   cursor: grabbing;
   z-index: 6;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgb(var(--rv-ink) / 0.12);
   box-shadow:
-    0 10px 24px rgba(0, 0, 0, 0.28),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+    0 10px 24px light-dark(rgba(16, 18, 24, 0.12), rgba(0, 0, 0, 0.28)),
+    inset 0 0 0 1px rgb(var(--rv-ink) / 0.08);
 }
 
 /* Afficher / supprimer : toujours visibles, posés sur la colonne réservée
@@ -833,11 +841,11 @@
 
 .rvi-tl-schedule__action:hover {
   opacity: 1;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--rv-ink) / 0.08);
 }
 
 .rvi-tl-schedule__action.is-on { opacity: 1; }
-.rvi-tl-schedule__action--danger:hover { color: #ff7272; }
+.rvi-tl-schedule__action--danger:hover { color: light-dark(#d92d20, #ff7272); }
 .rvi-tl-schedule__action:focus-visible {
   outline: 2px solid var(--rvi-red-accent);
   outline-offset: 1px;

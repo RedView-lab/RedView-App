@@ -171,13 +171,8 @@ export function CenterPanelSummary({ fullscreen = false, onToggleFullscreen }: C
   const handleSelectItinerary = useCallback(
     (itineraryId: string) => {
       setPickedRowId(itineraryId);
-      store?.setProject((p) => ({
-        ...p,
-        activeItineraryId: itineraryId,
-        itineraries: p.itineraries.map((it) =>
-          it.id === itineraryId ? { ...it, visible: true, analysisVisible: true } : it,
-        ),
-      }));
+      // La sélection ne touche pas à la visibilité (œil indépendant).
+      store?.setProject((p) => ({ ...p, activeItineraryId: itineraryId }));
     },
     [store],
   );

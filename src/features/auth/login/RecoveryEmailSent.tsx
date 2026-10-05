@@ -19,21 +19,21 @@ export function RecoveryEmailSent({ email, resendCooldown, onBackToLogin, onSend
           width: '60px',
           height: '60px',
           borderRadius: '50%',
-          background: 'rgba(34, 197, 94, 0.15)',
-          border: '1px solid rgba(34, 197, 94, 0.3)',
+          background: 'light-dark(rgba(6, 118, 71, 0.08), rgba(34, 197, 94, 0.15))',
+          border: '1px solid light-dark(rgba(6, 118, 71, 0.24), rgba(34, 197, 94, 0.3))',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           margin: '0 auto 16px',
-          color: '#4ade80',
+          color: 'light-dark(#067647, #4ade80)',
         }}
       >
         <MailIcon />
       </div>
-      <h2 style={{ fontSize: 'var(--rv-font-size-2xl)', fontWeight: 600, color: '#ffffff', margin: '0 0 10px' }}>
+      <h2 style={{ fontSize: 'var(--rv-font-size-2xl)', fontWeight: 600, color: 'var(--rv-text)', margin: '0 0 10px' }}>
         E-mail de récupération envoyé
       </h2>
-      <p style={{ fontSize: 'var(--rv-font-size-lg)', color: 'rgba(255, 255, 255, 0.7)', lineHeight: '1.5', margin: '0 0 24px' }}>
+      <p style={{ fontSize: 'var(--rv-font-size-lg)', color: 'rgb(var(--rv-ink) / 0.7)', lineHeight: '1.5', margin: '0 0 24px' }}>
         Un lien de réinitialisation sécurisé a été envoyé à <strong>{email}</strong>.<br />
         Consultez votre boîte de réception ainsi que vos courriers indésirables (spams).
       </p>
@@ -51,7 +51,7 @@ export function RecoveryEmailSent({ email, resendCooldown, onBackToLogin, onSend
           style={{
             background: 'none',
             border: 'none',
-            color: resendCooldown > 0 ? 'rgba(255, 255, 255, 0.35)' : 'rgba(255, 255, 255, 0.5)',
+            color: resendCooldown > 0 ? 'rgb(var(--rv-ink) / 0.35)' : 'rgb(var(--rv-ink) / 0.5)',
             fontSize: 'var(--rv-font-size-md)',
             cursor: resendCooldown > 0 ? 'not-allowed' : 'pointer',
             textDecoration: resendCooldown > 0 ? 'none' : 'underline',

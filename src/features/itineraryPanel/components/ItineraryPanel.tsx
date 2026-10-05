@@ -236,7 +236,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
           <MapCanvasGlassBackdrop
             blur={48}
             saturate={1.9}
-            tint="rgba(8, 10, 14, 0.92)"
+            tint="light-dark(rgba(255, 255, 255, 0.96), rgba(8, 10, 14, 0.92))"
           />
           <div className="rvi-panel__fullscreen-body">{fullscreenTimelinePanel}</div>
         </aside>

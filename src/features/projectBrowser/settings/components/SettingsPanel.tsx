@@ -10,9 +10,15 @@ import {
 import { AccountSelect, type AccountSelectOption } from '../../account/components/AccountSelect';
 import type { AccountProfile } from '../../account';
 import { readStoredAppwriteSession } from '@/shared/services/appwrite';
+import {
+  DEFAULT_APP_THEME_PREFERENCE,
+  isAppThemePreference,
+  setAppThemePreference,
+  type AppThemePreference,
+} from '@/shared/lib/appTheme';
 import { LANDING_URL } from '../../lib';
 
-type DisplayMode = 'system' | 'light' | 'dark';
+type DisplayMode = AppThemePreference;
 type UnitSetting = 'metric' | 'imperial';
 type MapPresetSetting = 'day' | 'night';
 
@@ -59,7 +65,7 @@ function createDefaultSettings(language: AppLocale): SettingsState {
     language,
     unit: 'metric',
     mapPreset: 'day',
-    displayMode: 'system',
+    displayMode: DEFAULT_APP_THEME_PREFERENCE,
     communityPromptEnabled: true,
   };
 }
@@ -70,10 +76,6 @@ function isUnitSetting(value: unknown): value is UnitSetting {
 
 function isMapPresetSetting(value: unknown): value is MapPresetSetting {
   return value === 'day' || value === 'night';
-}
-
-function isDisplayMode(value: unknown): value is DisplayMode {
-  return value === 'system' || value === 'light' || value === 'dark';
 }
 
 function resolveStoredUnit(value: unknown): UnitSetting {
@@ -103,7 +105,7 @@ function readStoredSettings(fallbackLanguage: AppLocale): SettingsState {
       language: resolveAppLocale(parsed.language ?? fallbackLanguage),
       unit: isUnitSetting(parsed.unit) ? parsed.unit : resolveStoredUnit(parsed.unit),
       mapPreset: isMapPresetSetting(parsed.mapPreset) ? parsed.mapPreset : resolveStoredMapPreset(parsed.mapPreset),
-      displayMode: isDisplayMode(parsed.displayMode) ? parsed.displayMode : defaults.displayMode,
+      displayMode: isAppThemePreference(parsed.displayMode) ? parsed.displayMode : defaults.displayMode,
       communityPromptEnabled:
         typeof parsed.communityPromptEnabled === 'boolean'
           ? parsed.communityPromptEnabled
@@ -302,7 +304,10 @@ export function SettingsPanel({ profile }: SettingsPanelProps = {}) {
                 className={`rvpb-settings-display-card${isSelected ? ' is-selected' : ''}`}
                 role="radio"
                 aria-checked={isSelected}
-                onClick={() => setSettings((current) => ({ ...current, displayMode: option.id }))}
+                onClick={() => {
+                  setSettings((current) => ({ ...current, displayMode: option.id }));
+                  setAppThemePreference(option.id);
+                }}
               >
                 <span className="rvpb-settings-display-card__preview">
                   <img src={option.imageSrc} alt="" loading="lazy" />

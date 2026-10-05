@@ -1,4 +1,6 @@
 import { normalizeDiscipline } from '@/shared/lib/discipline';
+import { canonicalJson } from '../../lib/project/canonicalJson';
+import { buildFitUploadsSignature } from '../../lib/schedule';
 import type { Itinerary } from '../../types';
 
 type RoutePoints = NonNullable<Itinerary['gpxRoute']>['points'];
@@ -20,6 +22,16 @@ export function buildPredictionInputSignature(itinerary: Itinerary): string {
   return [
     buildRouteSignature(itinerary.gpxRoute?.points),
     normalizeDiscipline(itinerary.discipline),
-    JSON.stringify(itinerary.rhythm ?? null),
+    // JSON canonique : l'ordre des clés d'un rythme fusionné (co-édition) varie.
+    canonicalJson(itinerary.rhythm ?? null),
   ].join('::');
+}
+
+/**
+ * Estampille persistée avec une prédiction (`predictionInputsKey`) : ses
+ * entrées, fichiers .fit compris. Tant qu'elle correspond, la prédiction
+ * stockée est à jour.
+ */
+export function buildPredictionStamp(itinerary: Itinerary): string {
+  return `${buildPredictionInputSignature(itinerary)}::${buildFitUploadsSignature(itinerary.fitUploads ?? [])}`;
 }

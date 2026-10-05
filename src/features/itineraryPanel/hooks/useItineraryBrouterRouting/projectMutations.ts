@@ -8,6 +8,7 @@ import {
 } from '../../lib/route-metrics';
 import type { BrouterRoute } from '../../lib/brouter';
 import type { Itinerary, ItineraryProject } from '../../types';
+import { canonicalJson } from '../../lib/project/canonicalJson';
 import { normalizeDiscipline } from '@/shared/lib/discipline';
 import {
   applyBrouterSurfaceToRoutePoints,
@@ -90,11 +91,17 @@ export function getRoutingEndpointsKey(
  * correspond plus (figé en plein recalcul) est recalculé.
  */
 export function getRoutingInputsSignature(itinerary: Itinerary): string {
+  // JSON canonique (clés triées) : un itinéraire fusionné par la co-édition
+  // n'a pas forcément ses clés dans le même ordre chez chaque éditeur.
+  return canonicalJson(routingInputs(itinerary));
+}
+
+function routingInputs(itinerary: Itinerary): unknown[] {
   const { startKey, endKey, viaKey } = getRoutingEndpointsKey(itinerary);
   // `applyToAllItineraries` est un choix d'interface, sans effet sur le tracé.
   const roadTypes: Record<string, unknown> = { ...itinerary.roadTypes };
   delete roadTypes.applyToAllItineraries;
-  return JSON.stringify([
+  return [
     startKey,
     endKey,
     viaKey,
@@ -104,7 +111,17 @@ export function getRoutingInputsSignature(itinerary: Itinerary): string {
     roadTypes,
     itinerary.expertProfile ?? null,
     (itinerary.forbiddenZones ?? []).map((zone) => zone.points),
-  ]);
+  ];
+}
+
+/**
+ * Le tracé stocké a-t-il été routé pour les entrées actuelles de
+ * l'itinéraire ? Accepte aussi les estampilles écrites avant le JSON
+ * canonique (ordre des clés d'origine) : un ancien tracé à jour le reste.
+ */
+export function routeStampMatches(itinerary: Itinerary, stamp: string | undefined): boolean {
+  if (stamp === undefined) return false;
+  return stamp === getRoutingInputsSignature(itinerary) || stamp === JSON.stringify(routingInputs(itinerary));
 }
 
 /**
@@ -426,7 +443,7 @@ export function applyUnroutableRouteCleared(
   const itinerary = project.itineraries.find((item) => item.id === itineraryId);
   const route = itinerary?.gpxRoute;
   if (!itinerary || !route || route.source !== 'brouter') return project;
-  if (route.routedInputsKey === undefined || route.routedInputsKey === getRoutingInputsSignature(itinerary)) {
+  if (route.routedInputsKey === undefined || routeStampMatches(itinerary, route.routedInputsKey)) {
     return project;
   }
   return {

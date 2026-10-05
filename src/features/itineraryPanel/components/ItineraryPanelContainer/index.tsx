@@ -163,6 +163,9 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     routeTraceWidthPx: project.controlPanel?.routes?.traceWidthPx ?? 8,
     routesEnabled: project.controlPanel?.toggles?.routesEnabled ?? true,
     surfaceFilter: project.analysis?.surfaceFilter ?? 'all',
+    // Chip « Pente » du graphe central : l'itinéraire actif passe en mode pente
+    // sur la carte, comme son profil.
+    slopeItineraryId: project.analysis?.filters?.slopeColors ? (active?.id ?? null) : null,
   });
 
 
@@ -521,7 +524,8 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     ? t('Importez un fichier GPX pour rechercher les POI le long du parcours.')
     : null;
 
-  const { savedCustomProfiles, combinedProfiles, saveCustomProfile, deleteCustomProfile } = useCustomProfiles();
+  const { savedCustomProfiles, combinedProfiles, saveCustomProfile, deleteCustomProfile } =
+    useCustomProfiles(project.routingProfiles);
 
   const { handleSaveProject, displayedSaveStatus, displayedSaveMessage } = useProjectSave({
     projectId,
@@ -545,15 +549,8 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         saveStatusMessage={displayedSaveMessage ?? undefined}
         onShareProject={() => { }}
         onRenameProject={(next) => setProject((p) => ({ ...p, name: next }))}
-        onSelectItinerary={(id) =>
-          setProject((p) => ({
-            ...p,
-            activeItineraryId: id,
-            itineraries: p.itineraries.map((it) =>
-              it.id === id ? { ...it, visible: true, analysisVisible: true } : it,
-            ),
-          }))
-        }
+        // La sélection ne touche pas à la visibilité (œil indépendant).
+        onSelectItinerary={(id) => setProject((p) => ({ ...p, activeItineraryId: id }))}
         onAddItinerary={handleCreateBlankItinerary}
         onAddButtonRef={(element) => {
           addButtonRef.current = element;

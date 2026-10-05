@@ -1,4 +1,5 @@
 import { useAppI18n } from '@/shared/i18n';
+import { RedViewLogo } from '@/shared/components/RedViewLogo';
 
 import './dashboard-project-loading.css';
 
@@ -26,7 +27,7 @@ export function DashboardProjectLoading({ projectName }: DashboardProjectLoading
       aria-busy="true"
     >
       <div className="rv-loading-screen__brand">
-        <img src="/landing/icons/redview-logo.svg" alt="RedView" width={125} height={24} />
+        <RedViewLogo width={125} height={24} />
       </div>
 
       <div className="rv-loading-screen__center">

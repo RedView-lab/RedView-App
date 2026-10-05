@@ -7,7 +7,7 @@ import type {
 import { translateAppText } from '@/shared/i18n';
 import {
   getRoutingEndpoints,
-  getRoutingInputsSignature,
+  routeStampMatches,
 } from '../../hooks/useItineraryBrouterRouting/projectMutations';
 import {
   getRoutePointTotalDistanceM,
@@ -18,6 +18,7 @@ import {
   projectPointAlongRoute,
   roundDistanceKm,
 } from '@/features/itineraryPanel/lib/routes';
+import { createDocumentId } from '../../lib/project/ids';
 
 function isRoutableTimelineRow(
   row: TimelineItem | null | undefined,
@@ -240,7 +241,7 @@ function buildOpenRouteExtension(
   // termine alors exactement au point routé précédent.
   const before = { ...itinerary, timeline: itinerary.timeline.filter((item) => item.id !== rowId) };
   const from = getRoutingEndpoints(before).end;
-  if (!from || route.routedInputsKey !== getRoutingInputsSignature(before)) return undefined;
+  if (!from || !routeStampMatches(before, route.routedInputsKey)) return undefined;
   return { from, to: { lat: end.lat, lon: end.lon } };
 }
 
@@ -303,7 +304,7 @@ export function insertWaypointAtRoutePosition(
     Math.abs(dropLatLon.lat - anchorLonLat.lat) < 1e-6 &&
     Math.abs(dropLatLon.lon - anchorLonLat.lon) < 1e-6;
 
-  const newRowId = `wp-drag-${Date.now()}`;
+  const newRowId = createDocumentId('wp-drag');
   const newRow: TimelineItem = {
     id: newRowId,
     kind: 'waypoint',
@@ -574,7 +575,7 @@ function insertEndpointBeforeCurrent(
   const currentEndpoint = timeline[currentIndex];
   const promotedWaypoint = {
     ...currentEndpoint,
-    id: `wp-${Date.now()}`,
+    id: createDocumentId('wp'),
     kind: 'waypoint' as const,
   };
 
@@ -591,7 +592,7 @@ function createBlankEndpoint(
   id?: string,
 ): TimelineItem {
   return {
-    id: id ?? `${kind}-${Date.now()}`,
+    id: id ?? createDocumentId(kind),
     kind,
     label: translateAppText('Rechercher un lieu'),
     distanceKm: kind === 'start' ? 0 : null,
@@ -599,33 +600,31 @@ function createBlankEndpoint(
 }
 
 function createTimelineItem(kind: TimelineAddItemKind): TimelineItem | null {
-  const now = Date.now();
-
   switch (kind) {
     case 'step':
       return {
-        id: `step-${now}`,
+        id: createDocumentId('step'),
         kind: 'waypoint',
         label: translateAppText('Rechercher un lieu'),
         distanceKm: null,
       };
     case 'waypoint':
       return {
-        id: `wp-${now}`,
+        id: createDocumentId('wp'),
         kind: 'waypoint',
         label: translateAppText('Nouveau point'),
         distanceKm: null,
       };
     case 'poi':
       return {
-        id: `poi-${now}`,
+        id: createDocumentId('poi'),
         kind: 'poi',
         label: 'POI',
         distanceKm: null,
       };
     case 'pause':
       return {
-        id: `pause-${now}`,
+        id: createDocumentId('pause'),
         kind: 'pause',
         label: translateAppText('Pause'),
         distanceKm: null,

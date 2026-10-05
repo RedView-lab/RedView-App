@@ -23,7 +23,7 @@ export function MapContextMenuHeader({
           justifyContent: 'center',
           width: 24,
           height: 24,
-          color: '#ffffff',
+          color: 'var(--rv-text)',
           flex: '0 0 auto',
         }}
       >
@@ -40,7 +40,7 @@ export function MapContextMenuHeader({
           fontSize: 'var(--rv-font-size-md)',
           fontWeight: 500,
           lineHeight: '17px',
-          color: '#ffffff',
+          color: 'var(--rv-text)',
         }}
       >
         {titleLabel}
@@ -60,7 +60,7 @@ export function MapContextMenuHeader({
           padding: 0,
           border: 'none',
           background: 'transparent',
-          color: 'rgba(255,255,255,0.92)',
+          color: 'rgb(var(--rv-ink) / 0.92)',
           cursor: 'pointer',
           flex: '0 0 auto',
           pointerEvents: 'auto',

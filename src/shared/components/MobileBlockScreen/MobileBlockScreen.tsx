@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, type KeyboardEvent } from 'react';
 import { MIN_VIEWPORT_HEIGHT, MIN_VIEWPORT_WIDTH } from '@/shared/hooks/useIsMobileDevice';
 import { useAppI18n } from '@/shared/i18n';
+import { RedViewLogo } from '@/shared/components/RedViewLogo';
 import './MobileBlockScreen.css';
 
 interface MobileBlockScreenProps {
@@ -14,11 +15,7 @@ export function MobileBlockScreen({ landingUrl = 'https://redview.tech' }: Mobil
   return (
     <div className="rv-mobile-block-overlay rv-fixed-viewport">
       <div className="rv-mobile-block-container">
-        <img
-          src="/landing/icons/redview-logo.svg"
-          alt="RedView"
-          className="rv-mobile-block-logo"
-        />
+        <RedViewLogo className="rv-mobile-block-logo" />
 
         <h1 className="rv-mobile-block-title">
           {t('Uniquement disponible sur desktop')}
@@ -81,11 +78,7 @@ export function NarrowViewportOverlay({ onContinue }: NarrowViewportOverlayProps
       onKeyDown={handleKeyDown}
     >
       <div className="rv-mobile-block-container">
-        <img
-          src="/landing/icons/redview-logo.svg"
-          alt="RedView"
-          className="rv-mobile-block-logo"
-        />
+        <RedViewLogo className="rv-mobile-block-logo" />
 
         <h1 id={titleId} className="rv-mobile-block-title">
           {t('Fenêtre trop petite')}

@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import {
+  flushProjectViews,
   saveProject,
   saveProjectLocally,
+  serializeProjectForStorage,
   setProjectSyncStatus,
   ProjectCloudError,
   toProjectCloudError,
@@ -54,7 +56,8 @@ export function useDashboardProjectSync({
   activeProjectSnapshotRef,
 }: UseDashboardProjectSyncArgs) {
   const pendingSaveRef = useRef<PendingSave | null>(null);
-  const lastSavedRef = useRef<{ id: string; serialized: string } | null>(null);
+  /** Dernier état envoyé (document + travail local sérialisés). */
+  const lastSavedRef = useRef<{ id: string; documentJson: string; workJson: string | null } | null>(null);
   const inFlightRef = useRef<Promise<void> | null>(null);
   const saveTimerRef = useRef<number | null>(null);
   const firstQueuedAtRef = useRef<number | null>(null);
@@ -143,12 +146,18 @@ export function useDashboardProjectSync({
   const persistOnce = useCallback(async (
     item: PendingSave,
   ): Promise<{ error: ProjectCloudError | null; sizeChars: number }> => {
-    // Une seule sérialisation par envoi, réutilisée pour la taille, la
-    // compression et la copie locale.
-    const serialized = JSON.stringify(item.project);
-    const sizeChars = serialized.length;
+    // Une seule sérialisation du document par envoi, réutilisée pour la
+    // taille, la compression et la copie locale (la vue part à part).
+    const serialized = serializeProjectForStorage(item.project);
+    const sizeChars = serialized.documentJson.length;
     const last = lastSavedRef.current;
-    if (!item.force && last && last.id === item.id && last.serialized === serialized) {
+    if (
+      !item.force
+      && last
+      && last.id === item.id
+      && last.documentJson === serialized.documentJson
+      && last.workJson === serialized.workJson
+    ) {
       return { error: null, sizeChars };
     }
 
@@ -172,8 +181,8 @@ export function useDashboardProjectSync({
       setProjectSyncStatus({ projectId: item.id, state: 'saving' });
     }
     try {
-      await saveProject(item.id, item.project, { serialized, force: item.force });
-      lastSavedRef.current = { id: item.id, serialized };
+      await saveProject(item.id, item.project, { documentJson: serialized.documentJson, force: item.force });
+      lastSavedRef.current = { id: item.id, documentJson: serialized.documentJson, workJson: serialized.workJson };
       // Le cloud a accepté cet état : plus rien ne bloque l'autosave.
       if (blockedRef.current?.id === item.id) blockedRef.current = null;
       if (failingIdRef.current === item.id) failingIdRef.current = null;
@@ -347,6 +356,7 @@ export function useDashboardProjectSync({
       // Copie locale immédiate (durable même si l'onglet se ferme), puis essai cloud.
       void flushPendingLocally();
       void flushSave();
+      void flushProjectViews();
     };
 
     const handleVisibilityChange = () => {
@@ -371,18 +381,20 @@ export function useDashboardProjectSync({
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       void flushPendingLocally();
       void flushSave();
+      void flushProjectViews();
     };
   }, [activeProjectId, clearRetryTimer, flushPendingLocally, flushSave]);
 
   /**
    * Réinitialise l'état de synchronisation à l'ouverture / fermeture d'un
-   * projet. `serialized` : JSON de l'état chargé (null = inconnu). Les envois
-   * déjà en attente pour un autre projet sont abandonnés en mémoire : leur
-   * copie locale (`dirty`) est resynchronisée à la prochaine ouverture.
+   * projet. `loaded` : document et travail local sérialisés de l'état chargé
+   * (null = inconnu). Les envois déjà en attente pour un autre projet sont
+   * abandonnés en mémoire : leur copie locale (`dirty`) est resynchronisée à la
+   * prochaine ouverture.
    */
   const resetSyncState = useCallback(
-    (projectId: string | null, serialized: string | null) => {
-      lastSavedRef.current = projectId && serialized != null ? { id: projectId, serialized } : null;
+    (projectId: string | null, loaded: { documentJson: string; workJson: string | null } | null) => {
+      lastSavedRef.current = projectId && loaded ? { id: projectId, ...loaded } : null;
       firstQueuedAtRef.current = null;
       if (saveTimerRef.current != null) {
         window.clearTimeout(saveTimerRef.current);

@@ -9,11 +9,15 @@ body.rvpb-billing-page-open {
        canvas box instead of the real viewport. */
   z-index: 160;
   overflow-y: auto;
-  color: #fff;
+  color: var(--rv-text);
   background:
-    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 42%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(153, 153, 153, 0.12) 100%),
-    #000;
+    radial-gradient(circle at 50% 0%, light-dark(rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.08)) 0%, rgba(255, 255, 255, 0) 42%),
+    linear-gradient(
+      180deg,
+      light-dark(rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.12)) 0%,
+      light-dark(rgba(17, 17, 20, 0.02), rgba(153, 153, 153, 0.12)) 100%
+    ),
+    light-dark(#f4f4f5, #000);
 }
 
 .rvpb-billing-page__chrome {
@@ -23,7 +27,7 @@ body.rvpb-billing-page-open {
   padding: 40px 80px 80px;
   display: flex;
   flex-direction: column;
-  color: #fff;
+  color: var(--rv-text);
   font-family: var(--rv-font-sans);
 }
 
@@ -68,7 +72,7 @@ body.rvpb-billing-page-open {
 
 .rvpb-billing-page__intro h2 {
   margin: 0;
-  color: #fff;
+  color: var(--rv-text);
   font-size: var(--rv-font-size-4xl);
   line-height: 38px;
   font-weight: 600;
@@ -77,7 +81,7 @@ body.rvpb-billing-page-open {
 
 .rvpb-billing-page__intro p {
   margin: 0;
-  color: rgba(255, 255, 255, 0.92);
+  color: rgb(var(--rv-ink) / 0.92);
   font-size: var(--rv-font-size-lg);
   line-height: 20px;
 }
@@ -87,8 +91,8 @@ body.rvpb-billing-page-open {
   align-items: center;
   justify-content: space-between;
   padding: 12px 18px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgb(var(--rv-ink) / 0.04);
+  border: 1px solid rgb(var(--rv-ink) / 0.12);
   border-radius: 12px;
   backdrop-filter: blur(20px);
   margin-bottom: 4px;
@@ -97,22 +101,22 @@ body.rvpb-billing-page-open {
 .rvpb-billing-page__summary-plan {
   font-size: var(--rv-font-size-lg);
   font-weight: 600;
-  color: #fff;
+  color: var(--rv-text);
 }
 
 .rvpb-billing-page__summary-price {
   font-size: var(--rv-font-size-2xl);
   font-weight: 700;
-  color: #fff;
+  color: var(--rv-text);
   letter-spacing: -0.02em;
 }
 
 .rvpb-billing-page__summary-badge {
   font-size: var(--rv-font-size-sm);
   font-weight: 500;
-  color: #ffb4b4;
-  background: rgba(137, 0, 0, 0.25);
-  border: 1px solid rgba(137, 0, 0, 0.5);
+  color: light-dark(#a30000, #ffb4b4);
+  background: light-dark(rgba(197, 0, 0, 0.07), rgba(137, 0, 0, 0.25));
+  border: 1px solid light-dark(rgba(197, 0, 0, 0.28), rgba(137, 0, 0, 0.5));
   padding: 3px 10px;
   border-radius: 999px;
 }
@@ -132,15 +136,15 @@ body.rvpb-billing-page-open {
   min-width: 0;
   padding: 12px 16px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgb(var(--rv-ink) / 0.16);
+  background: light-dark(#fff, rgba(255, 255, 255, 0.04));
   backdrop-filter: blur(60px);
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr);
   grid-template-rows: auto auto;
   gap: 8px;
   align-items: start;
-  color: #fff;
+  color: var(--rv-text);
   text-align: left;
   cursor: pointer;
   transition:
@@ -151,7 +155,7 @@ body.rvpb-billing-page-open {
 
 .rvpb-billing-page__method-tile:hover:not(:disabled) {
   transform: translateY(-1px);
-  border-color: rgba(255, 255, 255, 0.28);
+  border-color: rgb(var(--rv-ink) / 0.28);
 }
 
 .rvpb-billing-page__method-tile--selected {
@@ -164,7 +168,7 @@ body.rvpb-billing-page-open {
   height: 16px;
   margin-top: 2px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.92);
+  border: 1px solid rgb(var(--rv-ink) / 0.92);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -178,11 +182,11 @@ body.rvpb-billing-page-open {
 }
 
 .rvpb-billing-page__method-tile--selected .rvpb-billing-page__method-radio {
-  border-color: #fff;
+  border-color: rgb(var(--rv-ink));
 }
 
 .rvpb-billing-page__method-tile--selected .rvpb-billing-page__method-radio-dot {
-  background: #fff;
+  background: rgb(var(--rv-ink));
 }
 
 .rvpb-billing-page__method-title {
@@ -201,12 +205,13 @@ body.rvpb-billing-page-open {
   width: 40px;
   height: 40px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: rgb(var(--rv-ink) / 0.08);
+  color: var(--rv-text);
 }
 
 .rvpb-billing-page__method-icon--paypal {
   background: #fff;
+  box-shadow: inset 0 0 0 1px light-dark(rgb(var(--rv-ink) / 0.1), transparent);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -222,7 +227,7 @@ body.rvpb-billing-page-open {
   grid-template-columns: 18px minmax(0, 1fr);
   gap: 12px;
   align-items: start;
-  color: rgba(255, 255, 255, 0.92);
+  color: rgb(var(--rv-ink) / 0.92);
   cursor: pointer;
   margin-top: 4px;
 }
@@ -238,7 +243,7 @@ body.rvpb-billing-page-open {
 .rvpb-billing-page__consent-copy {
   font-size: var(--rv-font-size-md);
   line-height: 18px;
-  color: rgba(255, 255, 255, 0.74);
+  color: rgb(var(--rv-ink) / 0.74);
   user-select: none;
 }
 
@@ -262,7 +267,7 @@ body.rvpb-billing-page-open {
   font: inherit;
   font-size: var(--rv-font-size-lg);
   font-weight: 500;
-  color: #fff;
+  color: var(--rv-text);
   cursor: pointer;
   transition:
     background-color 120ms ease,
@@ -280,19 +285,21 @@ body.rvpb-billing-page-open {
 }
 
 .rvpb-billing-page__button--ghost {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--rv-ink) / 0.08);
 }
 
 .rvpb-billing-page__button--ghost:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgb(var(--rv-ink) / 0.12);
 }
 
 .rvpb-billing-page__button--primary {
   background: #890000;
+  color: var(--rv-on-accent);
 }
 
 .rvpb-billing-page__button--primary:hover:not(:disabled) {
   background: #a10000;
+  color: var(--rv-on-accent);
 }
 
 /* Amount selector styles */
@@ -300,8 +307,8 @@ body.rvpb-billing-page-open {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgb(var(--rv-ink) / 0.04);
+  border: 1px solid rgb(var(--rv-ink) / 0.12);
   border-radius: 12px;
   padding: 14px 16px;
   backdrop-filter: blur(12px);
@@ -313,12 +320,12 @@ body.rvpb-billing-page-open {
   justify-content: space-between;
   font-size: var(--rv-font-size-md);
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgb(var(--rv-ink) / 0.85);
 }
 
 .rvpb-billing-page__amount-subtext {
   font-size: var(--rv-font-size-sm);
-  color: rgba(255, 255, 255, 0.5);
+  color: rgb(var(--rv-ink) / 0.5);
 }
 
 .rvpb-billing-page__amount-presets {
@@ -333,9 +340,9 @@ body.rvpb-billing-page-open {
   justify-content: center;
   padding: 9px 0;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #fff;
+  background: rgb(var(--rv-ink) / 0.06);
+  border: 1px solid rgb(var(--rv-ink) / 0.12);
+  color: var(--rv-text);
   font-size: var(--rv-font-size-lg);
   font-weight: 600;
   cursor: pointer;
@@ -343,14 +350,14 @@ body.rvpb-billing-page-open {
 }
 
 .rvpb-billing-page__amount-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.25);
+  background: rgb(var(--rv-ink) / 0.12);
+  border-color: rgb(var(--rv-ink) / 0.25);
 }
 
 .rvpb-billing-page__amount-btn.is-active {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--rv-ink) / 0.08);
   border-color: #e02b2b;
-  color: #fff;
+  color: var(--rv-text);
   box-shadow: none;
 }
 
@@ -358,21 +365,21 @@ body.rvpb-billing-page-open {
   position: relative;
   display: flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgb(var(--rv-ink) / 0.06);
+  border: 1px solid rgb(var(--rv-ink) / 0.12);
   border-radius: 8px;
   padding: 0 8px;
   transition: all 0.15s ease;
 }
 
 .rvpb-billing-page__amount-custom-field:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.25);
+  background: rgb(var(--rv-ink) / 0.1);
+  border-color: rgb(var(--rv-ink) / 0.25);
 }
 
 .rvpb-billing-page__amount-custom-field.is-active {
   border-color: #e02b2b;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--rv-ink) / 0.08);
   box-shadow: none;
 }
 
@@ -391,7 +398,7 @@ body.rvpb-billing-page-open {
   width: 100%;
   border: none;
   background: transparent;
-  color: #fff;
+  color: var(--rv-text);
   font-size: var(--rv-font-size-lg);
   font-weight: 600;
   outline: none;
@@ -401,13 +408,13 @@ body.rvpb-billing-page-open {
 }
 
 .rvpb-billing-page__amount-custom-field input::placeholder {
-  color: rgba(255, 255, 255, 0.45);
+  color: rgb(var(--rv-ink) / 0.45);
   font-weight: 400;
   font-size: var(--rv-font-size-md);
 }
 
 .rvpb-billing-page__amount-custom-unit {
-  color: rgba(255, 255, 255, 0.6);
+  color: rgb(var(--rv-ink) / 0.6);
   font-size: var(--rv-font-size-lg);
   font-weight: 600;
   margin-left: 2px;
@@ -416,7 +423,7 @@ body.rvpb-billing-page-open {
 .rvpb-billing-page__amount-error {
   margin: 4px 0 0;
   font-size: var(--rv-font-size-sm);
-  color: #ff8e8e;
+  color: light-dark(#d92d20, #ff8e8e);
 }
 
 .rvpb-billing-page__amount-loading {
@@ -424,7 +431,7 @@ body.rvpb-billing-page-open {
   align-items: center;
   gap: 8px;
   font-size: var(--rv-font-size-sm);
-  color: rgba(255, 255, 255, 0.75);
+  color: rgb(var(--rv-ink) / 0.75);
   margin-top: 4px;
 }
 

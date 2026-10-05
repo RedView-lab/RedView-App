@@ -1,5 +1,6 @@
 import { useState, useEffect, type FormEvent } from 'react'
 import { trackAnalyticsEvent } from '@/shared/lib/analytics'
+import { RedViewLogo } from '@/shared/components/RedViewLogo'
 import {
   account,
   ID,
@@ -320,11 +321,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
             <div className="rv-login-header-container">
               {/* Frame 36468 — Logo */}
               <a href={landingUrl} className="rv-login-logo-link" aria-label="RedView">
-                <img
-                  src="/landing/icons/redview-logo.svg"
-                  alt="RedView"
-                  className="rv-login-logo-img"
-                />
+                <RedViewLogo className="rv-login-logo-img" />
               </a>
 
               {/* Row */}

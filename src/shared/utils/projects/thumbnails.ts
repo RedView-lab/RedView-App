@@ -106,7 +106,7 @@ async function listExistingCloudThumbnailIds(fileIds: string[]): Promise<Set<str
 }
 
 /** Miniature d'un projet : IndexedDB d'abord (instantané, hors-ligne), puis cloud. */
-async function loadProjectThumbnailBlob(
+export async function loadProjectThumbnailBlob(
   projectId: string,
   cloudIds?: Set<string> | null,
 ): Promise<Blob | null> {

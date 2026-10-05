@@ -1,44 +1,28 @@
 import {
   STYLE_READINESS_TELEMETRY_INTERVAL_MS,
-  STYLE_READINESS_FORCE_BYPASS_MS,
   type Ctx,
 } from './context';
-import { getStyleContentStats } from './styleContent';
+import { clearVisibleTimer, setVisibleInterval, type VisibleTimer } from './visibleClock';
+
+/** Mapbox fires `styledata` when it parses a style, `style.load` once its imports are in. */
+const READINESS_EVENTS = ['style.load', 'styledata', 'sourcedata', 'idle'] as const;
 
 function isActiveRun(ctx: Ctx, runId: number): boolean {
   return !ctx.isCancelled() && runId === ctx.state.styleBootstrapRunId;
 }
 
-function safeGetStyle(ctx: Ctx) {
-  try {
-    return ctx.map.getStyle();
-  } catch {
-    return null;
-  }
-}
-
-function promoteStyleContentBypass(ctx: Ctx, logLabel: string): boolean {
-  const st = ctx.state;
-
-  const style = safeGetStyle(ctx);
-  if (!style) return false;
-
-  const stats = getStyleContentStats(style);
-  if (!stats.hasContent) return false;
-  if (!st.spriteStormBypass) {
-    console.warn(
-      `[map3d] ${logLabel}: style has content while isStyleLoaded() is false — enabling sprite-storm bypass`,
-      { layers: stats.layerCount, sources: stats.sourceCount, imports: stats.importCount },
-    );
-    st.spriteStormBypass = true;
-  }
-  return true;
-}
-
+/**
+ * Resolves once the active style is parsed (`canMutateStyle()`: sources,
+ * layers and terrain can be added) — true — or once a newer bootstrap run
+ * superseded this one — false. Event-driven, no deadline: a style parses on
+ * the first animation frame after `setStyle` (a JSON style) or once its JSON
+ * arrived (a URL), and a hidden page renders no frame at all, so a timeout
+ * would only fire on a map that is not being drawn. The telemetry warning
+ * counts visible time and changes nothing.
+ */
 export async function waitForStyleReadiness(ctx: Ctx, runId: number): Promise<boolean> {
   const { map } = ctx;
   const fns = ctx.fns;
-  const st = ctx.state;
 
   await new Promise<void>((resolve) => {
     if (fns.canMutateStyle()) {
@@ -48,213 +32,39 @@ export async function waitForStyleReadiness(ctx: Ctx, runId: number): Promise<bo
     }
 
     let settled = false;
-    let telemetryTimer: ReturnType<typeof setInterval> | null = null;
+    let telemetryTimer: VisibleTimer | null = null;
     let telemetryTicks = 0;
-    let forceBypassTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const cleanup = () => {
-      map.off('style.load', onStyleLoad);
-      map.off('styledata', onStyleData);
-      map.off('sourcedata', onSourceData);
-      map.off('idle', onIdle);
-      if (telemetryTimer) {
-        clearInterval(telemetryTimer);
-        telemetryTimer = null;
-      }
-      if (forceBypassTimer) {
-        clearTimeout(forceBypassTimer);
-        forceBypassTimer = null;
-      }
-    };
-
-    const settle = (label: string) => {
-      if (settled) return;
+    const finish = (ready: boolean) => {
       settled = true;
-      cleanup();
-      fns.reportStatus('loading', 34, label);
+      for (const eventName of READINESS_EVENTS) map.off(eventName, check);
+      clearVisibleTimer(telemetryTimer);
+      telemetryTimer = null;
+      if (ready) fns.reportStatus('loading', 34, 'Style');
       resolve();
     };
 
-    const resolveIfInactive = () => {
-      if (settled) return true;
-      if (isActiveRun(ctx, runId)) return false;
-      settled = true;
-      cleanup();
-      resolve();
-      return true;
-    };
-
-    const tryReady = (origin: string) => {
+    function check() {
       if (settled) return;
-      if (resolveIfInactive()) return;
-      if (fns.canMutateStyle()) {
-        settle('Style');
+      if (!isActiveRun(ctx, runId)) {
+        finish(false);
         return;
       }
-      if (promoteStyleContentBypass(ctx, origin)) {
-        settle('Style (récupération)');
-      }
-    };
+      if (fns.canMutateStyle()) finish(true);
+    }
 
-    const onStyleLoad = () => tryReady('style.load');
-    const onStyleData = () => tryReady('styledata');
-    const onSourceData = () => tryReady('sourcedata');
-    const onIdle = () => {
+    for (const eventName of READINESS_EVENTS) map.on(eventName, check);
+
+    telemetryTimer = setVisibleInterval(() => {
+      check();
       if (settled) return;
-      if (resolveIfInactive()) return;
-      if (fns.canMutateStyle()) {
-        settle('Style');
-        return;
-      }
-      if (!promoteStyleContentBypass(ctx, 'idle') && !st.spriteStormBypass) {
-        console.warn('[map3d] first idle reached without style content — forcing sprite-storm bypass');
-        st.spriteStormBypass = true;
-      }
-      settle('Style (idle)');
-    };
-
-    map.on('style.load', onStyleLoad);
-    map.on('styledata', onStyleData);
-    map.on('sourcedata', onSourceData);
-    map.on('idle', onIdle);
-
-    let probeRafs = 0;
-    const probeOnce = (origin: string) => {
-      if (settled) return;
-      if (resolveIfInactive()) return;
-      if (fns.canMutateStyle()) {
-        settle('Style');
-        return;
-      }
-      if (promoteStyleContentBypass(ctx, origin)) {
-        settle('Style (récupération)');
-        return;
-      }
-      if (probeRafs < 2) {
-        probeRafs += 1;
-        const nextProbe = probeRafs;
-        requestAnimationFrame(() => probeOnce(`probe-raf-${nextProbe}`));
-      }
-    };
-    probeOnce('probe-sync');
-
-    forceBypassTimer = setTimeout(() => {
-      forceBypassTimer = null;
-      if (settled) return;
-      if (resolveIfInactive()) return;
-      if (fns.canMutateStyle()) {
-        settle('Style');
-        return;
-      }
-      if (!promoteStyleContentBypass(ctx, 'force-bypass') && !st.spriteStormBypass) {
-        console.warn(
-          `[map3d] no Mapbox readiness event in ${STYLE_READINESS_FORCE_BYPASS_MS} ms — forcing sprite-storm bypass to unblock terrain bootstrap`,
-        );
-        st.spriteStormBypass = true;
-      }
-      settle('Style (forcé)');
-    }, STYLE_READINESS_FORCE_BYPASS_MS);
-
-    telemetryTimer = setInterval(() => {
-      if (settled) {
-        if (telemetryTimer) {
-          clearInterval(telemetryTimer);
-          telemetryTimer = null;
-        }
-        return;
-      }
-      if (resolveIfInactive()) return;
-
       telemetryTicks += 1;
-      let layers = 0;
-      let sources = 0;
-      let importsLen = 0;
-      const style = safeGetStyle(ctx);
-      if (style) {
-        layers = style?.layers?.length ?? 0;
-        sources = Object.keys(style?.sources ?? {}).length;
-        const imports = (style as { imports?: unknown[] } | null | undefined)?.imports;
-        if (Array.isArray(imports)) importsLen = imports.length;
-      }
       const elapsedSec = telemetryTicks * (STYLE_READINESS_TELEMETRY_INTERVAL_MS / 1000);
-      const tag = elapsedSec >= 60 ? 'error' : 'warn';
-      const msg = `[map3d] style readiness still pending after ${elapsedSec}s — waiting on Mapbox events`;
-      const diag = {
-        isStyleLoaded: (() => {
-          try { return map.isStyleLoaded(); } catch { return false; }
-        })(),
-        layers,
-        sources,
-        imports: importsLen,
-      };
-      if (tag === 'error') console.error(msg, diag);
-      else console.warn(msg, diag);
-      tryReady('telemetry-probe');
+      const msg = `[map3d] style not parsed after ${elapsedSec} s of visible time — waiting on Mapbox`;
+      if (elapsedSec >= 60) console.error(msg);
+      else console.warn(msg);
     }, STYLE_READINESS_TELEMETRY_INTERVAL_MS);
   });
 
   return isActiveRun(ctx, runId);
-}
-
-export async function ensureStyleUsableForBootstrap(ctx: Ctx, runId: number): Promise<boolean> {
-  const fns = ctx.fns;
-  const st = ctx.state;
-
-  if (!isActiveRun(ctx, runId)) return false;
-
-  if (!fns.canMutateStyle() && st.spriteStormBypass) {
-    const bypassUsable = await new Promise<boolean>((resolve) => {
-      let settled = false;
-      let rafId = 0;
-      let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-      const finish = (value: boolean) => {
-        if (settled) return;
-        settled = true;
-        if (rafId) cancelAnimationFrame(rafId);
-        if (timeoutId) clearTimeout(timeoutId);
-        resolve(value);
-      };
-
-      const probe = () => {
-        if (settled) return;
-        if (!isActiveRun(ctx, runId)) {
-          finish(false);
-          return;
-        }
-        if (fns.canMutateStyle()) {
-          finish(true);
-          return;
-        }
-        rafId = requestAnimationFrame(probe);
-      };
-
-      timeoutId = setTimeout(() => finish(fns.canMutateStyle()), 1200);
-      probe();
-    });
-
-    if (!bypassUsable) {
-      console.warn('[map3d] style still unusable after forced bypass grace window');
-    }
-  }
-
-  let styleUsableForBootstrap = fns.canMutateStyle();
-  if (!styleUsableForBootstrap) {
-    const style = safeGetStyle(ctx);
-    if (style) {
-      const stats = getStyleContentStats(style);
-      if (stats.hasContent) {
-        if (!st.spriteStormBypass) {
-          console.warn(
-            '[map3d] post-readiness fallback: proceeding with usable style content while isStyleLoaded() remains false',
-            { layers: stats.layerCount, sources: stats.sourceCount, imports: stats.importCount },
-          );
-          st.spriteStormBypass = true;
-        }
-        styleUsableForBootstrap = true;
-      }
-    }
-  }
-
-  return styleUsableForBootstrap && isActiveRun(ctx, runId);
 }

@@ -13,14 +13,17 @@
 
 .rvi-action-stack__button--primary {
   background: var(--rvi-red);
+  color: var(--rv-on-accent);
 }
 
 .rvi-action-stack__button--secondary {
-  background: rgba(137, 0, 0, 0.4);
+  background: light-dark(rgba(137, 0, 0, 0.08), rgba(137, 0, 0, 0.4));
+  color: light-dark(#890000, var(--rv-on-accent));
 }
 
 .rvi-action-stack__button--secondary:not(:disabled):hover {
   background: var(--rvi-red);
+  color: var(--rv-on-accent);
 }
 
 .rvi-action-stack__button--secondary:disabled {
@@ -29,7 +32,7 @@
 }
 
 .rvi-action-stack__button.is-placeholder {
-  color: rgba(255, 255, 255, 0.48);
+  color: rgb(var(--rv-ink) / 0.48);
 }
 .rvi-action-stack__icon {
   display: inline-flex;

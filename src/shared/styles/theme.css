@@ -1,0 +1,66 @@
+/*
+ * RedView — thèmes sombre et clair.
+ *
+ * Le thème est posé sur <html data-rv-theme="dark|light"> par
+ * `shared/lib/appTheme.ts` (réglage « Préférence d'affichage »). Le sombre est
+ * le thème d'origine : ses valeurs ne changent pas.
+ *
+ * Règles d'écriture des couleurs dans les features :
+ *  - texte, filets, remplissages translucides : l'encre, `rgb(var(--rv-ink) / α)`
+ *    (blanc en sombre, presque noir en clair, même α dans les deux thèmes —
+ *    comme les couleurs « label » d'Apple). Texte plein : `var(--rv-text)` ;
+ *  - texte ou icône posé sur le rouge (ou une autre couleur pleine) :
+ *    `var(--rv-on-accent)`, blanc dans les deux thèmes ;
+ *  - surface pleine qui s'inverse (pastille blanche en sombre, noire en clair) :
+ *    `var(--rv-inverse)` / `var(--rv-on-inverse)` ;
+ *  - valeur propre à un thème : `light-dark(<clair>, <sombre>)` (d'où le
+ *    `color-scheme` ci-dessous) ;
+ *  - les couleurs de données (rouge RedView, pentes, météo, POI, traces)
+ *    restent les mêmes : seul le neutre change.
+ *
+ * Le verre (`--rv-glass-*`, shared/styles/glass.css) suit le thème.
+ */
+
+:root {
+  color-scheme: dark;
+
+  --rv-ink: 255 255 255;
+  --rv-paper: 14 14 18;
+  --rv-text: rgb(var(--rv-ink));
+  --rv-on-accent: #fff;
+  --rv-inverse: #fff;
+  --rv-on-inverse: #000;
+
+  --rv-accent: #890000;
+  --rv-accent-border: #700000;
+  --rv-accent-strong: #c50000;
+
+  /* Menus, listes déroulantes, popovers posés sur les panneaux. */
+  --rv-popover-bg: rgba(28, 28, 32, 0.96);
+  --rv-popover-border: rgba(255, 255, 255, 0.08);
+  --rv-popover-shadow: 0 18px 32px rgba(0, 0, 0, 0.34);
+  /* Ombre des éléments flottants sur la carte (aucune en sombre : le verre suffit).
+     Jamais `none` : le token se compose avec d'autres ombres (`inset …, var(--rv-float-shadow)`). */
+  --rv-float-shadow: 0 0 transparent;
+  /* Voile sous les modales. */
+  --rv-scrim: rgba(0, 0, 0, 0.65);
+  /* Infobulles : sombres dans les deux thèmes. */
+  --rv-tooltip-bg: #000;
+  --rv-tooltip-text: #fff;
+}
+
+:root[data-rv-theme='light'] {
+  color-scheme: light;
+
+  --rv-ink: 17 17 20;
+  --rv-paper: 255 255 255;
+  --rv-inverse: #111114;
+  --rv-on-inverse: #fff;
+
+  --rv-popover-bg: rgba(255, 255, 255, 0.98);
+  --rv-popover-border: rgba(17, 17, 20, 0.08);
+  --rv-popover-shadow: 0 12px 32px rgba(16, 18, 24, 0.14), 0 2px 6px rgba(16, 18, 24, 0.06);
+  --rv-float-shadow: 0 1px 2px rgba(16, 18, 24, 0.05), 0 4px 16px rgba(16, 18, 24, 0.07);
+  --rv-scrim: rgba(17, 17, 20, 0.32);
+  --rv-tooltip-bg: #18181b;
+}

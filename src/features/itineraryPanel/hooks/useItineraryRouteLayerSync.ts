@@ -15,7 +15,7 @@ import {
 } from '../lib/route-layer';
 import { buildRouteContentSignature } from '../lib/routes';
 import { getRouteElevationContext } from '../lib/route-layer/routeElevation';
-import type { ItineraryProject, RouteSurfaceFilter } from '../types';
+import type { ItineraryProject, RouteRenderMode, RouteSurfaceFilter } from '../types';
 
 function canAccessStyle(map: MapboxMap): boolean {
   try {
@@ -42,6 +42,19 @@ interface UseItineraryRouteLayerSyncArgs {
   routesEnabled?: boolean;
   /** Filtre « Surface » du panneau d'analyse. */
   surfaceFilter?: RouteSurfaceFilter;
+  /**
+   * Filtre « Pente » du graphe central : cet itinéraire est tracé en pente
+   * (même échelle que le profil), quel que soit son mode de rendu.
+   */
+  slopeItineraryId?: string | null;
+}
+
+function resolveRenderMode(
+  itinerary: ItineraryProject['itineraries'][number],
+  slopeItineraryId: string | null,
+): RouteRenderMode {
+  if (slopeItineraryId != null && itinerary.id === slopeItineraryId) return 'slope';
+  return itinerary.renderMode ?? 'default';
 }
 
 export function useItineraryRouteLayerSync({
@@ -52,6 +65,7 @@ export function useItineraryRouteLayerSync({
   routeTraceWidthPx = 8,
   routesEnabled = true,
   surfaceFilter = 'all',
+  slopeItineraryId = null,
 }: UseItineraryRouteLayerSyncArgs): void {
   const replayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const forceReplayPendingRef = useRef(false);
@@ -84,7 +98,7 @@ export function useItineraryRouteLayerSync({
           routeKey,
           it.color,
           it.opacity ?? 100,
-          it.renderMode ?? 'default',
+          resolveRenderMode(it, slopeItineraryId),
           routeTraceWidthPx,
           it.visible !== false ? 1 : 0,
           it.analysisVisible !== false ? 1 : 0,
@@ -96,7 +110,7 @@ export function useItineraryRouteLayerSync({
       })
       .join('|');
     return `${routesEnabled ? 1 : 0}::${itinerarySignature}::bands:${routeSlopeBandSignature}::surface:${surfaceFilter}`;
-  }, [itineraries, routeSlopeBandSignature, routeTraceWidthPx, routesEnabled, surfaceFilter]);
+  }, [itineraries, routeSlopeBandSignature, routeTraceWidthPx, routesEnabled, slopeItineraryId, surfaceFilter]);
 
   // Ref bag so the stable map listeners always read the latest values without
   // having to re-subscribe on every project mutation. Synced in a layout
@@ -110,6 +124,7 @@ export function useItineraryRouteLayerSync({
     routeTraceWidthPx,
     routesEnabled,
     surfaceFilter,
+    slopeItineraryId,
     layerSignature,
   };
   const stateRef = useRef(latestState);
@@ -128,6 +143,7 @@ export function useItineraryRouteLayerSync({
       layerSignature: signature,
       routesEnabled: areRoutesEnabled,
       surfaceFilter: activeSurfaceFilter,
+      slopeItineraryId: currentSlopeItineraryId,
     } = stateRef.current;
     if (!currentMap || !loaded || !canAccessStyle(currentMap)) return false;
 
@@ -150,7 +166,7 @@ export function useItineraryRouteLayerSync({
           opacity01: (it.opacity ?? 100) / 100,
           traceWidthPx,
           visible: routeVisible,
-          renderMode: it.renderMode ?? 'default',
+          renderMode: resolveRenderMode(it, currentSlopeItineraryId),
           slopeBands: bands,
           surfaceFilter: activeSurfaceFilter,
         });

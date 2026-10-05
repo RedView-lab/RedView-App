@@ -22,7 +22,7 @@ export function MapContextMenuMetadata({
   onCopyCoordinates,
 }: MapContextMenuMetadataProps) {
   const { t } = useAppI18n();
-  const metadataColor = 'rgba(255,255,255,0.64)';
+  const metadataColor = 'rgb(var(--rv-ink) / 0.64)';
 
   const categoryLabel = point.categoryLabel?.trim() || t('Position');
   const elevationLabel = useMemo(() => {

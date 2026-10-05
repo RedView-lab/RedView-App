@@ -22,7 +22,7 @@ const visibleToolbarFilters: ReadonlyArray<{
   { key: 'alertes', label: 'Alertes', icon: '/svgv2/icone/search-filter-alertes.svg' },
 ];
 
-/** Dégradé de l'échelle de pente du tracé (-16 % → 16 %), pour la pastille du chip « Pente ». */
+/** Dégradé de l'échelle de pente du tracé (-15 % → 15 %), pour la pastille du chip « Pente ». */
 const SLOPE_SWATCH_BACKGROUND = `linear-gradient(90deg, ${SLOPE_COLOR_CLASSES
   .map((entry) => entry.color)
   .join(', ')})`;

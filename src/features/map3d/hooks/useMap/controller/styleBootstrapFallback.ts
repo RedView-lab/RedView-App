@@ -2,6 +2,12 @@ import { awsFallbackDEMSource, unifiedDEMSource } from '../../../lib/sources';
 import { getActiveDem3dQuality } from '../../../lib/dem3dQualityBus';
 import { awaitController, swLateReady } from '../serviceWorker';
 import type { Ctx } from './context';
+import {
+  clearVisibleTimer,
+  setVisibleInterval,
+  setVisibleTimeout,
+  type VisibleTimer,
+} from './visibleClock';
 
 interface BootstrapAwsFallbackOptions {
   ctx: Ctx;
@@ -47,9 +53,10 @@ export function bootstrapAwsFallback({
     return false;
   }
 
-  const fallbackImportGuardTimers: ReturnType<typeof setTimeout>[] = [];
+  // Guards, upgrade checks and the ready fallback count visible time: a
+  // hidden page loads no tile and never goes idle.
+  const fallbackImportGuardTimers: VisibleTimer[] = [];
   const fallbackImportGuardCleanup: (() => void)[] = [];
-  const fallbackImportGuardStartedAt = Date.now();
 
   const verifyAndReapplyFallbackTerrain = (origin: string) => {
     if (isCancelled() || runId !== st.styleBootstrapRunId) return;
@@ -66,21 +73,23 @@ export function bootstrapAwsFallback({
   };
 
   for (const delay of [200, 600, 1500]) {
-    fallbackImportGuardTimers.push(setTimeout(() => verifyAndReapplyFallbackTerrain(`t+${delay}`), delay));
+    fallbackImportGuardTimers.push(setVisibleTimeout(() => verifyAndReapplyFallbackTerrain(`t+${delay}`), delay));
   }
 
-  const fallbackPeriodicProbe = setInterval(() => {
-    if (isCancelled() || runId !== st.styleBootstrapRunId) {
-      clearInterval(fallbackPeriodicProbe);
-      return;
-    }
-    if (Date.now() - fallbackImportGuardStartedAt > FALLBACK_IMPORT_GUARD_WATCH_MS) {
-      clearInterval(fallbackPeriodicProbe);
+  let fallbackProbeTicks = 0;
+  const fallbackPeriodicProbe = setVisibleInterval(() => {
+    fallbackProbeTicks += 1;
+    if (
+      isCancelled()
+      || runId !== st.styleBootstrapRunId
+      || fallbackProbeTicks * FALLBACK_IMPORT_GUARD_PROBE_INTERVAL_MS > FALLBACK_IMPORT_GUARD_WATCH_MS
+    ) {
+      clearVisibleTimer(fallbackPeriodicProbe);
       return;
     }
     verifyAndReapplyFallbackTerrain('periodic');
   }, FALLBACK_IMPORT_GUARD_PROBE_INTERVAL_MS);
-  fallbackImportGuardCleanup.push(() => clearInterval(fallbackPeriodicProbe));
+  fallbackImportGuardCleanup.push(() => clearVisibleTimer(fallbackPeriodicProbe));
 
   try {
     const mapWithEvents = map as unknown as {
@@ -107,25 +116,25 @@ export function bootstrapAwsFallback({
   };
   map.on('idle', st.finishOnIdle);
 
-  st.readyFallbackTimer = setTimeout(() => {
+  st.readyFallbackTimer = setVisibleTimeout(() => {
     st.readyFallbackTimer = null;
     if (isCancelled() || runId !== st.styleBootstrapRunId) return;
     if (st.lastReportedState === 'ready') return;
     fns.finishDemActivity('Carte prête (relief 30 m)');
   }, 8000);
 
-  let lateSwUpgradeTimer: ReturnType<typeof setTimeout> | null = null;
-  const lateSwUpgradeStartedAt = Date.now();
+  let lateSwUpgradeTimer: VisibleTimer | null = null;
+  let lateSwUpgradeRetries = 0;
 
   const clearLateSwUpgradeTimer = () => {
-    if (!lateSwUpgradeTimer) return;
-    clearTimeout(lateSwUpgradeTimer);
+    clearVisibleTimer(lateSwUpgradeTimer);
     lateSwUpgradeTimer = null;
   };
 
   const scheduleLateSwUpgradeRetry = () => {
     if (lateSwUpgradeTimer) return;
-    lateSwUpgradeTimer = setTimeout(() => {
+    lateSwUpgradeRetries += 1;
+    lateSwUpgradeTimer = setVisibleTimeout(() => {
       lateSwUpgradeTimer = null;
       void tryLateSwUpgrade('retry');
     }, LATE_SW_UPGRADE_RETRY_MS);
@@ -138,7 +147,7 @@ export function bootstrapAwsFallback({
     if (map.getSource(unifiedDEMSource.id)) return;
 
     if (!fns.canMutateStyle()) {
-      if (Date.now() - lateSwUpgradeStartedAt > LATE_SW_UPGRADE_WATCH_MS) {
+      if (lateSwUpgradeRetries * LATE_SW_UPGRADE_RETRY_MS > LATE_SW_UPGRADE_WATCH_MS) {
         console.warn(`[map3d] Late SW recovery gave up waiting for mutable style (${origin})`);
         return;
       }
@@ -157,7 +166,7 @@ export function bootstrapAwsFallback({
     void fns.bootstrapCurrentStyle();
   };
 
-  const forceHdUpgradeTimer = setTimeout(() => {
+  const forceHdUpgradeTimer = setVisibleTimeout(() => {
     if (isCancelled() || runId !== st.styleBootstrapRunId) return;
     if (map.getSource(unifiedDEMSource.id)) return;
 
@@ -184,8 +193,8 @@ export function bootstrapAwsFallback({
   st.disposeStyleRecovery = () => {
     priorDispose?.();
     clearLateSwUpgradeTimer();
-    clearTimeout(forceHdUpgradeTimer);
-    for (const timer of fallbackImportGuardTimers) clearTimeout(timer);
+    clearVisibleTimer(forceHdUpgradeTimer);
+    for (const timer of fallbackImportGuardTimers) clearVisibleTimer(timer);
     for (const cleanup of fallbackImportGuardCleanup) {
       try { cleanup(); } catch { /* noop */ }
     }

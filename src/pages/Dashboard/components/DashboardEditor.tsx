@@ -36,11 +36,11 @@ import { RouteDragWaypointProvider } from '@/features/centerPanel/routeDragWaypo
 import { TraceToolProvider } from '@/features/centerPanel/tracer';
 import { ForbiddenZoneToolProvider } from '@/features/centerPanel/forbiddenZones';
 import { ItineraryPanel, PredictionProvider, ProjectProvider, useProjectStore } from '@/features/itineraryPanel';
+import { useCollabSession } from '@/features/collab/useCollabSession';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import { hasProjectTracedContent } from '@/features/itineraryPanel/lib/project';
 import { MapViewportControls } from '@/features/mapViewportControls';
 import type { MapViewport } from '@/features/map3d/lib/viewport-persist';
-import { useAppI18n } from '@/shared/i18n';
 import { DashboardPlaceSearch } from './DashboardPlaceSearch';
 import type { DashboardFilterId, DashboardPoiOptionId } from './DashboardPlaceSearch.types';
 import { DASHBOARD_POI_OPTIONS } from './DashboardPlaceSearch.constants';
@@ -104,6 +104,8 @@ interface DashboardEditorProps {
   onProjectChange: (next: ItineraryProject) => void;
   onBackToBrowser: () => void;
   onSaveProject: (options?: { force?: boolean }) => Promise<ItineraryProject | null>;
+  /** État complet du projet ouvert (vue carte et panneaux compris), pour l'export `.redview`. */
+  getProjectSnapshot: () => ItineraryProject | null;
   onOverlayReload: (id: OverlayStatusId) => void;
   onBasemapChange: (id: BasemapId) => void;
   onWeatherOverlayStatusChange: OverlayStatusReporter;
@@ -193,6 +195,7 @@ export function DashboardEditor({
   onProjectChange,
   onBackToBrowser,
   onSaveProject,
+  getProjectSnapshot,
   onOverlayReload,
   onBasemapChange,
   onWeatherOverlayStatusChange,
@@ -207,7 +210,6 @@ export function DashboardEditor({
   onAltitudeOverlayStatusChange,
   onItineraryRouteStatusChange,
 }: DashboardEditorProps) {
-  const { t } = useAppI18n();
   const [dashboardSearchActiveFilters, setDashboardSearchActiveFilters] = useState<Set<DashboardFilterId>>(
     () => new Set<DashboardFilterId>(['pois_route', 'favoris', 'pauses', 'waypoints']),
   );
@@ -257,21 +259,6 @@ export function DashboardEditor({
   const shouldRenderPanelMapBlurMirrors = true;
   const shouldRenderToolbarMapBlurMirror = true;
 
-  const routeSlopeLegendTitle = useMemo(() => {
-    const project = activeProjectInitial;
-    if (!project) return null;
-
-    const activeSlopeItinerary = project.itineraries.find(
-      (itinerary) => itinerary.id === project.activeItineraryId && itinerary.renderMode === 'slope' && itinerary.visible !== false,
-    );
-    const fallbackSlopeItinerary = project.itineraries.find(
-      (itinerary) => itinerary.renderMode === 'slope' && itinerary.visible !== false,
-    );
-    const itinerary = activeSlopeItinerary ?? fallbackSlopeItinerary ?? null;
-    if (!itinerary) return null;
-    return `${itinerary.name} (${t('Pente').toLocaleLowerCase()})`;
-  }, [activeProjectInitial, t]);
-
   // Bords de la carte couverts par l'interface : le menu contextuel, la fiche
   // POI et toutes les popups de la carte (`keepPopupInVisibleMap`) s'ouvrent
   // dans la carte visible — ni sous le panneau du bas, ni sous les panneaux
@@ -294,13 +281,15 @@ export function DashboardEditor({
     setLidarModeEnabled((value) => !value);
   }, [setLidarModeEnabled]);
 
-
+  // Co-édition (pour l'instant entre onglets, en développement) : null sans session.
+  const collab = useCollabSession(activeProjectId, getProjectSnapshot);
 
   return (
     <ProjectProvider
         key={activeProjectId ?? 'no-project'}
         initialProject={activeProjectInitial ?? undefined}
         onProjectChange={onProjectChange}
+        collab={collab}
       >
         <MapView
           onMapReady={onMapReady}
@@ -339,7 +328,6 @@ export function DashboardEditor({
           compact={layout.isShortCanvas}
           isRightPanelVisible={!isRightPanelCollapsed}
           onToggleRightPanel={isRightPanelCollapsed ? onRestoreRightPanel : onCollapseRightPanel}
-          routeSlopeLegendTitle={routeSlopeLegendTitle}
         />
       </div>
 
@@ -447,8 +435,9 @@ export function DashboardEditor({
                     </div>
                   </div>
 
-                  <ChartPlacementToolProvider>
+                  {/* Le flyover couvre aussi le panneau de droite : l'export vidéo y lit la trace et le palier de vitesse. */}
                   <AnalysisFlyoverProvider map={mapInstance}>
+                  <ChartPlacementToolProvider>
                     {layout.centerToolbarVisible ? (
                       <div data-rv-region="center-toolbar" style={styles.centerToolbarShellStyle}>
                         <CenterPanelToolbar
@@ -471,7 +460,6 @@ export function DashboardEditor({
                         <CenterPanel map={mapInstance} globalFilters={globalTimelineFilters} compact={layout.isShortCanvas} />
                       </div>
                     ) : null}
-                  </AnalysisFlyoverProvider>
                   </ChartPlacementToolProvider>
 
                   <div style={styles.rightPanelStyle}>
@@ -501,10 +489,16 @@ export function DashboardEditor({
                         />
                       </div>
                       <div ref={exporterPanelHostRef} style={{ flex: '0 0 auto' }}>
-                        <ExporterPanel width={isResizing ? '100%' : panelWidth} />
+                        <ExporterPanel
+                          width={isResizing ? '100%' : panelWidth}
+                          projectId={activeProjectId}
+                          map={mapInstance}
+                          getProjectSnapshot={getProjectSnapshot}
+                        />
                       </div>
                     </div>
                   </div>
+                  </AnalysisFlyoverProvider>
                 </PredictionProvider>
             </RouteDragWaypointProvider>
               </ForbiddenZoneToolProvider>

@@ -42,9 +42,16 @@ export const __mock = {
   proxyMaxChars: 14_000_000,
   /** Nombre d'appels createDocument/updateDocument dont le champ data a dépassé le proxy. */
   proxyRejections: 0,
+  /** Collections pas (encore) créées côté serveur : 404 collection_not_found. */
+  missingCollections: new Set<string>(),
+  /** Nombre d'appels account.updatePrefs. */
+  prefsUpdates: 0,
   reset() {
     this.dataMaxChars = 16_000_000;
     this.proxyRejections = 0;
+    this.missingCollections.clear();
+    this.prefsUpdates = 0;
+    this.user = { $id: 'user-A', email: 'a@example.test', name: 'A', prefs: {} };
     this.collections.clear();
     this.accountGetMode = 'ok';
     this.accountGetFailures = -1;
@@ -70,6 +77,10 @@ const nowIso = () => new Date((clock += 1000)).toISOString();
 function netCheck(op: string) {
   __mock.calls.push(op);
   if (__mock.dbNetworkDown) throw new TypeError('Failed to fetch');
+  const col = op.split(':')[1];
+  if (col && __mock.missingCollections.has(col)) {
+    throw new AppwriteException('Collection with the requested ID could not be found.', 404, 'collection_not_found');
+  }
 }
 
 function validate(data: Doc) {
@@ -113,6 +124,13 @@ export class Account {
   async createJWT() {
     return { jwt: 'mock-jwt' };
   }
+  async updatePrefs(prefs: Doc) {
+    __mock.calls.push('account.updatePrefs');
+    if (__mock.dbNetworkDown) throw new TypeError('Failed to fetch');
+    __mock.prefsUpdates += 1;
+    __mock.user = { ...__mock.user, prefs: structuredClone(prefs) };
+    return { ...__mock.user };
+  }
   async deleteSession() {
     return {};
   }
@@ -126,6 +144,9 @@ export class Databases {
   async createDocument(_db: string, col: string, id: string, data: Doc, permissions: string[] = []) {
     netCheck(`createDocument:${col}`);
     validate(data);
+    if (__mock.col(col).has(id)) {
+      throw new AppwriteException('Document with the requested ID already exists.', 409, 'document_already_exists');
+    }
     const t = nowIso();
     const doc = { ...data, $id: id, $createdAt: t, $updatedAt: t, $permissions: permissions };
     __mock.col(col).set(id, doc);

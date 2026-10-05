@@ -1,6 +1,8 @@
 /* Exporter panel — standalone right dock card from Figma node 1949:50927 */
 
 .rvc-exporter-panel {
+  /* Formats du panneau : « REDVIEW » doit tenir sans ellipse (92 px : « REDVI… »). */
+  --rvc-exporter-select-width: 112px;
   flex: 0 0 auto;
   min-height: 0;
   transform-origin: bottom right;
@@ -137,8 +139,8 @@
 }
 
 .rvc-exporter-panel__select.rvc-select {
-  flex: 0 0 var(--rvc-panel-select-xs);
-  min-width: var(--rvc-panel-select-xs);
+  flex: 0 0 var(--rvc-exporter-select-width);
+  min-width: var(--rvc-exporter-select-width);
   padding: 5px 6px 5px 10px;
   border: 1px solid var(--rvc-border);
   border-radius: 5px;
@@ -151,4 +153,111 @@
 
 .rvc-exporter-panel__submit:active {
   background: #760000;
+  color: var(--rv-on-accent);
+}
+/* Export vidéo du flyover : avancement, résultat. */
+.rvc-exporter-video {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--rvc-border);
+  border-radius: 6px;
+  background: light-dark(rgb(var(--rv-ink) / 0.025), rgba(0, 0, 0, 0.18));
+}
+
+.rvc-exporter-video__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--rv-font-size-sm);
+  font-weight: 600;
+  color: var(--rvc-text);
+}
+
+.rvc-exporter-video__percent {
+  font-variant-numeric: tabular-nums;
+}
+
+.rvc-exporter-video__bar {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: rgb(var(--rv-ink) / 0.12);
+}
+
+.rvc-exporter-video__fill {
+  height: 100%;
+  border-radius: 2px;
+  background: #e5484d;
+  transition: width 0.2s linear;
+}
+
+.rvc-exporter-video__detail {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 8px;
+  font-size: var(--rv-font-size-xs);
+  color: var(--rvc-text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.rvc-exporter-video__cancel {
+  all: unset;
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--rvc-border);
+  border-radius: 5px;
+  font-size: var(--rv-font-size-xs);
+  font-weight: 600;
+  color: var(--rvc-text);
+  cursor: pointer;
+}
+
+.rvc-exporter-video__cancel:hover {
+  background: rgb(var(--rv-ink) / 0.08);
+}
+
+.rvc-exporter-video__result {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: var(--rv-font-size-sm);
+  line-height: 1.4;
+  color: var(--rvc-text-dim);
+}
+
+.rvc-exporter-video__result p {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.rvc-exporter-video__result.is-success {
+  color: light-dark(#067647, #cbe8b1);
+}
+
+.rvc-exporter-video__result.is-error {
+  color: light-dark(#d92d20, #ff8d8d);
+}
+
+.rvc-exporter-video__dismiss {
+  all: unset;
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 3px;
+  border-radius: 4px;
+  color: var(--rvc-text-dim);
+  cursor: pointer;
+}
+
+.rvc-exporter-video__dismiss:hover {
+  color: var(--rvc-text);
+  background: rgb(var(--rv-ink) / 0.08);
 }

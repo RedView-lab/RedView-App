@@ -7,10 +7,12 @@ import {
 import { getCurrentUserId, isLocalFallbackUser, isOwnedBy } from './auth';
 import { utf8ByteLength } from './limits';
 import { enqueue, knownCloudVersions, localQueues, localRevisions } from './projectSession';
+import { serializeProjectForStorage, type SerializedProject } from './storedProject';
 import type { ItineraryProject, ProjectRow } from './types';
 
-// Copie locale IndexedDB d'un projet : écrite avant tout appel réseau,
-// marquée propre seulement après confirmation cloud.
+// Copie locale IndexedDB d'un projet (document + travail en attente sur cet
+// appareil) : écrite avant tout appel réseau, marquée propre seulement après
+// confirmation cloud.
 
 /**
  * Écrit la copie locale d'un projet (IndexedDB), sans réseau. Conserve dossier,
@@ -21,7 +23,7 @@ export function writeLocalCopy(
   id: string,
   project: ItineraryProject,
   userId: string,
-  json: string,
+  serialized: SerializedProject,
   sizeBytes: number,
   dirty: boolean,
 ): Promise<number> {
@@ -44,7 +46,7 @@ export function writeLocalCopy(
       dirty,
       cloud_updated_at: owned?.cloud_updated_at ?? knownCloudVersions.get(id) ?? null,
     };
-    await idbSaveProject(row, json);
+    await idbSaveProject(row, serialized);
     return revision;
   });
 }
@@ -69,10 +71,10 @@ export function markLocalSynced(id: string, revision: number, cloudUpdatedAt: st
 export async function saveProjectLocally(
   id: string,
   project: ItineraryProject,
-  serialized?: string,
+  serialized?: SerializedProject,
 ): Promise<void> {
   const userId = await getCurrentUserId();
-  const json = serialized ?? JSON.stringify(project);
+  const stored = serialized ?? serializeProjectForStorage(project);
   const localOnly = isLocalFallbackUser(userId) || id.startsWith('local-');
-  await writeLocalCopy(id, project, userId, json, utf8ByteLength(json), !localOnly);
+  await writeLocalCopy(id, project, userId, stored, utf8ByteLength(stored.documentJson), !localOnly);
 }

@@ -10,10 +10,10 @@
   --rvc-panel-altitude-slider-width: 96px;
   --rvc-red: #890000;
   --rvc-bg: var(--rv-glass-tint);
-  --rvc-bg-chip: rgba(255, 255, 255, 0.08);
-  --rvc-border: rgba(255, 255, 255, 0.08);
-  --rvc-text: #ffffff;
-  --rvc-text-dim: rgba(255, 255, 255, 0.64);
+  --rvc-bg-chip: rgb(var(--rv-ink) / 0.08);
+  --rvc-border: rgb(var(--rv-ink) / 0.08);
+  --rvc-text: var(--rv-text);
+  --rvc-text-dim: rgb(var(--rv-ink) / 0.64);
   --rvc-radius: 8px;
 
   box-sizing: border-box;
@@ -24,8 +24,8 @@
   /* No backdrop-filter: the dashboard already paints a blurred copy of the map
      behind this panel (MapBlurMirror). A second backdrop blur here was recomputed
      on every map frame and every resize frame for no visible difference. */
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  border: 1px solid rgb(var(--rv-ink) / 0.10);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), var(--rv-float-shadow);
   border-radius: var(--rvc-radius);
   color: var(--rvc-text);
   font-family: var(--rv-font-sans);

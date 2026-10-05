@@ -1,4 +1,5 @@
 import { useAppI18n } from '@/shared/i18n';
+import { RedViewLogo } from '@/shared/components/RedViewLogo';
 
 import { AccountPanel } from '../../../account';
 import { BillingActionModal } from '../../../billing/components/BillingActionModal/BillingActionModal';
@@ -26,12 +27,7 @@ export function ProjectBrowserOverlay(props: ProjectBrowserOverlayProps) {
       aria-label={t('Sélecteur de projet principal')}
     >
       <div className="rvpb-brand-corner" aria-label="RedView">
-        <img
-          src="/landing/icons/redview-logo.svg"
-          alt="RedView"
-          width={125}
-          height={24}
-        />
+        <RedViewLogo width={125} height={24} />
       </div>
 
       <div className={`rvpb-shell${state.activeTab === 'account' ? ' is-account-tab' : ''}`}>
@@ -60,7 +56,9 @@ export function ProjectBrowserOverlay(props: ProjectBrowserOverlayProps) {
               setSearch={state.setSearch}
               handleCreateProject={state.handleCreateProject}
               handleCreateFolder={state.handleCreateFolder}
+              handleImportProjects={state.handleImportProjects}
               creatingProject={state.creatingProject}
+              importingProject={state.importingProject}
               creatingFolder={state.creatingFolder}
               error={state.error}
               loading={state.loading}
@@ -75,7 +73,6 @@ export function ProjectBrowserOverlay(props: ProjectBrowserOverlayProps) {
               draggedItem={state.draggedItem}
               dropTarget={state.dropTarget}
               dragPreview={state.dragPreview}
-              toast={state.toast}
               onOpenProject={props.onOpenProject}
               onOpenFolder={state.handleOpenFolder}
               onNavigateToFolder={state.handleNavigateToFolder}
@@ -84,6 +81,7 @@ export function ProjectBrowserOverlay(props: ProjectBrowserOverlayProps) {
               handleRenameFolder={state.handleRenameFolder}
               handleDeleteFolder={state.handleDeleteFolder}
               handleDuplicateProject={state.handleDuplicateProject}
+              handleExportProject={state.handleExportProject}
               handleMoveProject={state.handleMoveProject}
               handleMoveFolder={state.handleMoveFolder}
               handleDragStart={state.handleDragStart}

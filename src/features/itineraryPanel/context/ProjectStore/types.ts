@@ -8,6 +8,7 @@ import type {
   RouteRenderMode,
 } from '../../types';
 import type { MergeItineraryConnectorSegment, MergeItineraryProjectResult, SplitItineraryProjectResult } from '../../lib/project';
+import type { DerivedComputeGate, ProjectCollabLink } from './collab';
 
 /**
  * Identity of a copy already made elsewhere (LiDAR viewer), so both sides keep
@@ -48,6 +49,16 @@ export interface ProjectStoreValue {
    * leurs requêtes en vol et ne jamais recalculer un tracé restauré.
    */
   historyRevision: number;
+  /**
+   * Incrémenté quand des modifications d'autres éditeurs sont appliquées
+   * (co-édition). Les traitements dérivés (routage…) revérifient alors les
+   * résultats stockés par leur estampille au lieu de recalculer.
+   */
+  externalRevision: number;
+  /** Qui calcule les résultats dérivés (toujours cet appareil hors session). */
+  derivedComputeGate: DerivedComputeGate;
+  /** Une session de co-édition est ouverte sur ce projet. */
+  collabActive: boolean;
   /**
    * Applique une mutation au projet en l'enregistrant dans l'historique undo/redo.
    * Retourne `false` si la mutation a été déclarée sans effet (aucune entrée créée).
@@ -118,5 +129,7 @@ export interface ProjectStoreValue {
 export interface ProjectProviderProps {
   initialProject?: ItineraryProject;
   onProjectChange?: (project: ItineraryProject) => void;
+  /** Session de co-édition ouverte sur ce projet (null : seul sur le projet). */
+  collab?: ProjectCollabLink | null;
   children: ReactNode;
 }

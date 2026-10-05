@@ -16,8 +16,12 @@
 // Split out of runtime/dem-handler.js into runtime/dem-handler/ (May 15).
 // ---------------------------------------------------------------------------
 
-async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
+// options.finalOnly  video export build (handleVideoDemRequest): a short-cached
+//                    stand-in or a short negative entry is not an answer, the
+//                    tile is built again.
+async function computeDemRequest(_request, z, x, y, _depth, demProfile, options = {}) {
   const t0 = performance.now();
+  const finalOnly = Boolean(options?.finalOnly);
   const requestPurpose = resolveDemRequestPurposeFromRequest(_request);
   // Set only for the map's own tile requests: their IGN work is dropped once
   // the map stops waiting on the tile (DEM_WANTED_TILES), and never before.
@@ -64,22 +68,26 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
     }
 
     const cachedAt = parseInt(cached.headers.get('x-cached-at') || '0', 10);
-    if (cachedAt > 0 && (Date.now() - cachedAt) < ttlMs) return cached;
-
-    await cache.delete(cacheKey);
+    const fresh = cachedAt > 0 && (Date.now() - cachedAt) < ttlMs;
+    // A stand-in still in its TTL keeps serving the live map; a video build
+    // goes on to the real tile, which replaces it.
+    if (fresh && !finalOnly) return cached;
+    if (!fresh) await cache.delete(cacheKey);
   }
 
   // 2. Negative cache (TTL-bounded)
   if (negCached) {
     const age = parseInt(negCached.headers.get('x-cached-at') || '0', 10);
     const ttl = parseInt(negCached.headers.get('x-neg-ttl') || String(NEGATIVE_TTL_PIPELINE), 10);
-    if (age && (Date.now() - age) < ttl * 1000) {
+    const live = age && (Date.now() - age) < ttl * 1000;
+    // A short pipeline entry is a transient failure: a video build retries it.
+    if (live && !(finalOnly && ttl < NEGATIVE_TTL_CONFIRMED)) {
       // Try overzoom once, else honour the negative cache
       const fb = await tryParentOverzoom(cache, z, x, y, _depth, demProfile);
       if (fb) return finalize(cache, cacheKey, t0, z, x, y, fb.blob, fb.source, null, inLiDARRiskRegion, '', false, 'ok', demProfile);
       return noTileResponse('neg-cache');
     }
-    negCache.delete(cacheKey);
+    if (!live) negCache.delete(cacheKey);
   }
 
   // 2b. Fast 30m mode: directly serve AWS Terrarium (global 30m, zero country-specific oversampling)

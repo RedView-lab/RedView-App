@@ -21,7 +21,7 @@
   font-size: var(--rv-font-size-xs);
   font-weight: 600;
   letter-spacing: 0.01em;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--rv-ink) / 0.08);
   border-radius: var(--rvi-radius-md);
   flex-shrink: 0;
   transition: background 0.15s ease;
@@ -42,7 +42,7 @@
 .rvi-tl-list__col-checkbox {
   width: 16px;
   height: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.32);
+  border: 1px solid rgb(var(--rv-ink) / 0.32);
   border-radius: 4px;
   display: inline-block;
 }
@@ -89,7 +89,7 @@
   width: 12px;
   height: 12px;
   opacity: 0;
-  color: rgba(255, 255, 255, 0.56);
+  color: rgb(var(--rv-ink) / 0.56);
   transition: opacity 0.15s ease, color 0.15s ease;
 }
 .rvi-tl-list__sort:hover .rvi-tl-th__sort,
@@ -119,7 +119,7 @@
   gap: 4px;
   padding: 6px 8px;
   border-radius: var(--rvi-radius-md);
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--rv-ink) / 0.08);
   min-height: 32px;
   width: 100%;
   box-sizing: border-box;
@@ -130,19 +130,19 @@
 .rvi-tl-row__actions {
   cursor: default;
 }
-.rvi-tl-row:hover { background: rgba(255, 255, 255, 0.12); }
+.rvi-tl-row:hover { background: rgb(var(--rv-ink) / 0.12); }
 /* Sélection : surface neutre surélevée + liseré au rouge de l'app (un rouge
    translucide sur fond sombre virait au bordeaux). */
 .rvi-tl-row.is-selected {
-  background: rgba(255, 255, 255, 0.16);
+  background: rgb(var(--rv-ink) / 0.16);
   box-shadow: inset 2px 0 0 var(--rvi-red-accent);
 }
-.rvi-tl-row.is-selected:hover { background: rgba(255, 255, 255, 0.2); }
+.rvi-tl-row.is-selected:hover { background: rgb(var(--rv-ink) / 0.2); }
 .rvi-tl-row--placeholder {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgb(var(--rv-ink) / 0.04);
   cursor: pointer;
 }
-.rvi-tl-row--placeholder:hover { background: rgba(255, 255, 255, 0.08); }
+.rvi-tl-row--placeholder:hover { background: rgb(var(--rv-ink) / 0.08); }
 .rvi-tl-row--compact { padding: 4px 8px; min-height: 30px; }
 
 .rvi-tl-row__check {
@@ -163,7 +163,7 @@
 .rvi-tl-row__check-box {
   width: 16px;
   height: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.64);
+  border: 1px solid rgb(var(--rv-ink) / 0.64);
   border-radius: 4px;
   transition: background 0.15s ease, border-color 0.15s ease;
   display: inline-block;
@@ -171,6 +171,7 @@
 }
 .rvi-tl-row__check input:checked + .rvi-tl-row__check-box {
   background: var(--rvi-red-accent);
+  color: var(--rv-on-accent);
   border-color: var(--rvi-red-accent);
 }
 .rvi-tl-row__check input:checked + .rvi-tl-row__check-box::after {
@@ -180,8 +181,8 @@
   left: 5px;
   width: 4px;
   height: 8px;
-  border-right: 2px solid #fff;
-  border-bottom: 2px solid #fff;
+  border-right: 2px solid var(--rv-on-accent);
+  border-bottom: 2px solid var(--rv-on-accent);
   transform: rotate(45deg);
 }
 .rvi-tl-row__check input:focus-visible + .rvi-tl-row__check-box {
@@ -222,8 +223,8 @@
 }
 .rvi-tl-row__title--editable:hover,
 .rvi-tl-row__title--editable:focus-visible {
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
+  background: rgb(var(--rv-ink) / 0.12);
+  color: var(--rv-text);
   outline: none;
 }
 
@@ -245,9 +246,9 @@
 }
 .rvi-tl-row__distance--editable:hover,
 .rvi-tl-row__distance--editable:focus-visible {
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+  background: rgb(var(--rv-ink) / 0.12);
+  color: var(--rv-text);
+  box-shadow: inset 0 0 0 1px rgb(var(--rv-ink) / 0.22);
   outline: none;
 }
 
@@ -260,7 +261,7 @@
   font-weight: 600;
   font-family: inherit;
   color: var(--rvi-text);
-  background: rgba(0, 0, 0, 0.65);
+  background: light-dark(#fff, rgba(0, 0, 0, 0.65));
   border: 1px solid var(--rvi-red-accent, #c50000);
   border-radius: 4px;
   outline: none;
@@ -297,17 +298,17 @@
 .rvi-tl-row__action--star {
   width: 24px;
   height: 24px;
-  color: rgba(255, 255, 255, 0.32);
+  color: rgb(var(--rv-ink) / 0.32);
   opacity: 1;
 }
 .rvi-tl-row__action:hover {
   opacity: 1;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--rv-ink) / 0.08);
 }
 .rvi-tl-row__action:active { transform: scale(0.92); }
 .rvi-tl-row__action.is-on { opacity: 1; }
-.rvi-tl-row__action.is-on.is-fav { color: #FDB022; opacity: 1; }
-.rvi-tl-row__action--danger:hover { color: #ff6060; }
+.rvi-tl-row__action.is-on.is-fav { color: light-dark(#f79009, #FDB022); opacity: 1; }
+.rvi-tl-row__action--danger:hover { color: light-dark(#d92d20, #ff6060); }
 .rvi-tl-row__action[disabled] {
   opacity: 0.32;
   cursor: not-allowed;
@@ -326,8 +327,8 @@
   width: 20px;
   height: 20px;
   flex-shrink: 0;
-  color: #fff;
-  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.35));
+  color: var(--rv-text);
+  filter: drop-shadow(0 1px 1.5px light-dark(rgba(0, 0, 0, 0.16), rgba(0, 0, 0, 0.35)));
 }
 
 .rvi-kind--pin .rvi-kind__pin-icon,
@@ -339,7 +340,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--rv-text);
   pointer-events: none;
 }
 
@@ -356,9 +357,9 @@
   height: 18px;
   padding: 0 5px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  color: rgba(255, 255, 255, 0.9);
+  background: rgb(var(--rv-ink) / 0.12);
+  border: 1px solid rgb(var(--rv-ink) / 0.18);
+  color: rgb(var(--rv-ink) / 0.9);
   font-size: var(--rv-font-size-xs);
   font-weight: 600;
   line-height: 1;
@@ -368,7 +369,7 @@
 .rvi-poi-pause-badge__icon {
   font-size: var(--rv-font-size-3xs);
   letter-spacing: -1px;
-  color: #ff9f43;
+  color: light-dark(#f76707, #ff9f43);
 }
 
 .rvi-poi-pause-badge__text {
@@ -383,14 +384,14 @@
   display: flex;
   align-items: center;
   margin-top: 0;
-  background: rgba(255, 255, 255, 0.16);
+  background: rgb(var(--rv-ink) / 0.16);
   border-radius: var(--rvi-radius-md);
   overflow: hidden;
   flex-shrink: 0;
   min-height: 32px;
   transition: background 0.15s ease;
 }
-.rvi-tl-add:hover { background: rgba(255, 255, 255, 0.22); }
+.rvi-tl-add:hover { background: rgb(var(--rv-ink) / 0.22); }
 
 .rvi-tl-add__main {
   all: unset;
@@ -403,7 +404,7 @@
   min-height: 32px;
   width: 100%;
   box-sizing: border-box;
-  color: #fff;
+  color: var(--rv-text);
 }
 .rvi-tl-add__badge {
   display: inline-flex;
@@ -419,7 +420,7 @@
   justify-content: center;
   width: 16px;
   height: 16px;
-  color: #fff;
+  color: var(--rv-text);
   flex-shrink: 0;
 }
 .rvi-tl-add__label {
@@ -428,7 +429,7 @@
   font-family: var(--rv-font-sans);
   font-size: var(--rv-font-size-lg);
   font-weight: 600;
-  color: #fff;
+  color: var(--rv-text);
   text-align: left;
 }
 
@@ -465,5 +466,5 @@
   height: 12px;
   border-radius: 999px;
   background: transparent;
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.88);
+  box-shadow: inset 0 0 0 2px rgb(var(--rv-ink) / 0.88);
 }

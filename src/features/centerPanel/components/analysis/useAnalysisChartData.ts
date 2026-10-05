@@ -36,8 +36,10 @@ interface UseAnalysisChartDataArgs {
   predictions: Record<string, unknown> | null;
   axis1Value: AxisMetricId;
   axis2Value: AxisMetricId | null;
-  axis1Color: string;
-  axis2Color: string;
+  /** Couleur choisie par l'utilisateur pour l'axe 1 (itinéraire actif seulement). */
+  axis1Color?: string;
+  /** Couleur choisie par l'utilisateur pour l'axe 2 (itinéraire actif seulement). */
+  axis2Color?: string;
   xMode: AxisMode;
   detailZoom: number;
   filters: Record<FilterKey, boolean>;
@@ -149,17 +151,22 @@ export function useAnalysisChartData({
     [preparedChartNodes],
   );
 
+  // Chaque itinéraire garde sa couleur ; la couleur d'axe choisie dans la
+  // toolbar ne s'applique qu'à l'itinéraire actif (sinon tous les tracés
+  // prenaient la couleur de celui sélectionné).
+  const activeItineraryId = activeItinerary?.id ?? null;
   const series = useMemo<ChartSeries[]>(() => {
     const result: ChartSeries[] = [];
     for (const node of preparedChartNodes) {
       const { itinerary, axis1ShiftedPoints, axis2ShiftedPoints } = node;
+      const isActive = itinerary.id === activeItineraryId;
       if (axis1ShiftedPoints) {
         result.push({
           id: `${itinerary.id}::axis1`,
           itineraryId: itinerary.id,
           itineraryName: itinerary.name,
           metricId: axis1Value,
-          color: axis1Color ?? itinerary.color,
+          color: (isActive ? axis1Color : undefined) ?? itinerary.color,
           axis: 1,
           unit: unitForMetric(axis1Value),
           points: axis1ShiftedPoints,
@@ -172,7 +179,7 @@ export function useAnalysisChartData({
           itineraryId: itinerary.id,
           itineraryName: itinerary.name,
           metricId: axis2Value,
-          color: axis2Color ?? lightenColor(itinerary.color, 0.4),
+          color: (isActive ? axis2Color : undefined) ?? lightenColor(itinerary.color, 0.4),
           axis: 2,
           unit: unitForMetric(axis2Value),
           points: axis2ShiftedPoints,
@@ -180,7 +187,7 @@ export function useAnalysisChartData({
       }
     }
     return result;
-  }, [axis1Color, axis2Color, axis1Value, axis2Value, preparedChartNodes]);
+  }, [activeItineraryId, axis1Color, axis2Color, axis1Value, axis2Value, preparedChartNodes]);
 
   const showAltitudeBackdrop = Boolean(filters.pente);
 

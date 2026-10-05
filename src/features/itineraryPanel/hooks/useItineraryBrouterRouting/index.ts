@@ -23,6 +23,7 @@ import {
   type UseItineraryBrouterRoutingArgs,
 } from '../useItineraryBrouterRoutingShared';
 
+import { useDerivedComputeGate, useProjectStoreOptional } from '../../context/ProjectStore/hooks';
 import {
   applyPendingRoutePatch,
   applyPendingTraceAppend,
@@ -32,6 +33,7 @@ import {
   captureRouteRefinementBase,
   getRoutingEndpointsKey,
   getRoutingInputsSignature,
+  routeStampMatches,
   type RouteRefinementBase,
 } from './projectMutations';
 import { resolveRouteRequest } from './resolveRouteRequest';
@@ -102,6 +104,16 @@ export function useItineraryBrouterRouting({
   useEffect(() => {
     activeRef.current = active;
   }, [active]);
+
+  // Co-édition : modifications d'autres éditeurs appliquées (cf. effet de
+  // routage), et désignation de qui route (l'auteur de la modification).
+  const externalRevision = useProjectStoreOptional()?.externalRevision ?? 0;
+  const externalRevisionRef = useRef(externalRevision);
+  const seenExternalRevisionRef = useRef(externalRevision);
+  useEffect(() => {
+    externalRevisionRef.current = externalRevision;
+  }, [externalRevision]);
+  const { gate, retryNonce: gateRetryNonce, markWaiting: markWaitingForGate } = useDerivedComputeGate();
 
   useEffect(() => {
     const refinements = refinementAbortRef.current;
@@ -274,6 +286,15 @@ export function useItineraryBrouterRouting({
       // L'état restauré porte ses propres éditions en attente.
       unresolvedEditsRef.current.clear();
     }
+    if (seenExternalRevisionRef.current !== externalRevisionRef.current) {
+      // Modifications d'autres éditeurs : un tracé stocké fait foi s'il porte
+      // l'estampille des entrées actuelles (son auteur l'a routé) ; les
+      // éditions en attente de cet appareil gardent leur cours.
+      seenExternalRevisionRef.current = externalRevisionRef.current;
+      for (const id of routedInputKeys.keys()) {
+        if (!unresolvedEditsRef.current.has(id)) routedInputKeys.set(id, VERIFY_STORED_ROUTE);
+      }
+    }
     const unresolvedEdits = unresolvedEditsRef.current;
     const pendingRoutePatch = currentActive?.pendingRoutePatch;
     const existingRoutePoints = currentActive?.gpxRoute?.points ?? null;
@@ -307,6 +328,7 @@ export function useItineraryBrouterRouting({
       }
 
       const ctrl = beginRouteRequest();
+      const releaseCompute = gate.beginCompute('route', currentActive.id);
 
       const itineraryForRouting = currentActive;
       const t0 = performance.now();
@@ -376,10 +398,14 @@ export function useItineraryBrouterRouting({
           setRouteError(formatBrouterErrorMessage(error));
         })
         .finally(() => {
+          releaseCompute();
           if (!ctrl.signal.aborted) setRouteLoading(false);
         });
 
-      return () => ctrl.abort();
+      return () => {
+        ctrl.abort();
+        releaseCompute();
+      };
     }
 
     if (
@@ -399,6 +425,7 @@ export function useItineraryBrouterRouting({
       }
 
       const ctrl = beginRouteRequest();
+      const releaseCompute = gate.beginCompute('route', currentActive.id);
 
       const itineraryForRouting = currentActive;
       const t0 = performance.now();
@@ -478,10 +505,14 @@ export function useItineraryBrouterRouting({
           setRouteError(formatBrouterErrorMessage(error));
         })
         .finally(() => {
+          releaseCompute();
           if (!ctrl.signal.aborted) setRouteLoading(false);
         });
 
-      return () => ctrl.abort();
+      return () => {
+        ctrl.abort();
+        releaseCompute();
+      };
     }
 
     // Sans arrivée, le dernier point de passage en tient lieu (cf.
@@ -524,24 +555,31 @@ export function useItineraryBrouterRouting({
     // incomplet, on recalcule tout au lieu de lui faire confiance.
     const forceFullRecompute = editPlan.mode === 'full';
     if (currentActive && hasStoredRoute && !forceFullRecompute) {
-      const routedKey = routedInputKeys.get(currentActive.id);
+      // Premier passage (ouverture, duplication, autre appareil) : vérifié par
+      // estampille, comme après undo/redo — un tracé laissé en plein
+      // recalcul ailleurs (l'édition en attente reste sur son appareil) est
+      // recalculé au lieu de rester faux.
+      const routedKey = routedInputKeys.get(currentActive.id) ?? VERIFY_STORED_ROUTE;
       // Après undo/redo : le tracé restauré fait foi s'il a été routé pour les
       // entrées restaurées ; figé en plein recalcul (estampille différente),
       // il est recalculé.
       const storedInputsKey = currentActive.gpxRoute?.routedInputsKey;
       const restoredRouteIsCurrent =
         routedKey === VERIFY_STORED_ROUTE &&
-        (storedInputsKey === undefined ||
-          storedInputsKey === getRoutingInputsSignature(currentActive));
-      if (
-        routedKey === undefined ||
-        routedKey === routingInputKey ||
-        restoredRouteIsCurrent
-      ) {
+        (storedInputsKey === undefined || routeStampMatches(currentActive, storedInputsKey));
+      if (routedKey === routingInputKey || restoredRouteIsCurrent) {
         routedInputKeys.set(currentActive.id, routingInputKey);
         deferRouteState(null);
         return;
       }
+    }
+
+    if (currentActive && !gate.shouldCompute('route', currentActive.id)) {
+      // Modification d'un autre éditeur : il route, son tracé arrivera (ou
+      // cet appareil sera désigné s'il part sans l'avoir fait).
+      markWaitingForGate();
+      deferRouteState(null);
+      return;
     }
 
     const [startLon, startLat] = startKey.split(',').map(Number);
@@ -575,12 +613,14 @@ export function useItineraryBrouterRouting({
 
     setRouteLoading(true);
     let ctrl: AbortController | null = null;
+    let releaseCompute: (() => void) | null = null;
     const timer = window.setTimeout(() => {
       const activeCtrl = beginRouteRequest();
       ctrl = activeCtrl;
 
       const itineraryForRouting = activeRef.current ?? currentActive;
       if (!itineraryForRouting) return;
+      releaseCompute = gate.beginCompute('route', itineraryForRouting.id);
       const target = {
         itineraryId: itineraryForRouting.id,
         inputsSignature: getRoutingInputsSignature(itineraryForRouting),
@@ -669,6 +709,7 @@ export function useItineraryBrouterRouting({
           setRouteError(formatBrouterErrorMessage(error));
         })
         .finally(() => {
+          releaseCompute?.();
           if (!activeCtrl.signal.aborted) setRouteLoading(false);
         });
     }, 120);
@@ -676,6 +717,7 @@ export function useItineraryBrouterRouting({
     return () => {
       window.clearTimeout(timer);
       ctrl?.abort();
+      releaseCompute?.();
     };
   }, [
     activeId,
@@ -685,11 +727,14 @@ export function useItineraryBrouterRouting({
     endKey,
     forbiddenPolygons,
     deferRouteState,
+    gate,
+    gateRetryNonce,
     gpxRoutePointCount,
     gpxRouteSource,
     historyRevision,
     isMapLoaded,
     map,
+    markWaitingForGate,
     pendingRoutePatchKey,
     pendingTraceExtensionKey,
     profileId,

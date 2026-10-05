@@ -45,4 +45,34 @@ export { reverseItineraryGpxProject } from './reverse-itinerary-gpx';
 export { splitItineraryProject } from './split-itinerary';
 export type { SplitItineraryProjectResult } from './split-itinerary';
 export { addItineraryVariantInPlace } from './create-itinerary-variant';
-export type { CreateItineraryVariantResult } from './create-itinerary-variant';
+export type { CreateItineraryVariantResult } from './create-itinerary-variant';export { createDocumentId } from './ids';
+export {
+  PROJECT_DOCUMENT_SCHEMA,
+  PROJECT_VIEW_KEYS,
+  ITINERARY_VIEW_KEYS,
+  ITINERARY_LOCAL_WORK_KEYS,
+  toProjectDocument,
+  toItineraryDocument,
+  extractProjectView,
+  extractProjectLocalWork,
+  hasLocalWork,
+  splitProject,
+  applyProjectView,
+  applyProjectLocalWork,
+  composeProject,
+  stripLocalWork,
+  isProjectDocument,
+  readStoredProject,
+  classifyProjectChange,
+} from './layers';
+export type {
+  ProjectDocument,
+  ProjectViewState,
+  ProjectLocalWork,
+  ProjectLayers,
+  ProjectChange,
+  ProjectDocumentOptions,
+  ItineraryDocument,
+  ItineraryViewState,
+  ItineraryLocalWork,
+} from './layers';

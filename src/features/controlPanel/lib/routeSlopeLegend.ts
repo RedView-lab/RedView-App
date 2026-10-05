@@ -11,35 +11,40 @@ export interface RouteSlopeLegendBand {
   label: string;
 }
 
-const ROUTE_SLOPE_PERCENT_BREAKPOINTS = [1, 4, 8, 12, 16] as const;
+const ROUTE_SLOPE_PERCENT_BREAKPOINTS = [1, 4, 6, 9, 12, 15] as const;
 
 const ROUTE_SLOPE_COLORS = {
-  beyondNegative: '#210561',
-  negative16to12: '#2200A9',
-  negative12to8: '#490CFF',
-  negative8to4: '#5B87FF',
-  negative4to1: '#9CAAD0',
-  neutral: '#6F6F6F',
-  positive1to4: '#C4B191',
-  positive4to8: '#FFA25B',
-  positive8to12: '#FF4E1D',
-  positive12to16: '#C71700',
-  beyondPositive: '#7C0F00',
+  beyondNegative: '#680078',
+  negative15to12: '#5200A9',
+  negative12to9: '#2200A9',
+  negative9to6: '#1447E6',
+  negative6to4: '#2C7FFF',
+  negative4to1: '#8EC6FF',
+  neutral: '#D0D7DE',
+  positive1to4: '#FFDA6A',
+  positive4to6: '#F6BC1C',
+  positive6to9: '#E66F14',
+  positive9to12: '#C71700',
+  positive12to15: '#9F0025',
+  beyondPositive: '#3F001A',
 } as const;
 
-const [pct1, pct4, pct8, pct12, pct16] = ROUTE_SLOPE_PERCENT_BREAKPOINTS;
-const [pct1Deg, pct4Deg, pct8Deg, pct12Deg, pct16Deg] = ROUTE_SLOPE_PERCENT_BREAKPOINTS.map((value) => percentToDeg(value));
+const [pct1, pct4, pct6, pct9, pct12, pct15] = ROUTE_SLOPE_PERCENT_BREAKPOINTS;
+const [pct1Deg, pct4Deg, pct6Deg, pct9Deg, pct12Deg, pct15Deg] = ROUTE_SLOPE_PERCENT_BREAKPOINTS.map((value) => percentToDeg(value));
 
+/** Classes de pente du tracé, de la descente la plus raide à la montée la plus raide. */
 export const ROUTE_SLOPE_LEGEND_BANDS: readonly RouteSlopeLegendBand[] = [
-  { id: 'route-slope-beyond-negative', minDeg: -90, maxDeg: -pct16Deg, minPct: -Infinity, maxPct: -pct16, color: ROUTE_SLOPE_COLORS.beyondNegative, label: '< -16%' },
-  { id: 'route-slope-negative-16-12', minDeg: -pct16Deg, maxDeg: -pct12Deg, minPct: -pct16, maxPct: -pct12, color: ROUTE_SLOPE_COLORS.negative16to12, label: '-16% / -12%' },
-  { id: 'route-slope-negative-12-8', minDeg: -pct12Deg, maxDeg: -pct8Deg, minPct: -pct12, maxPct: -pct8, color: ROUTE_SLOPE_COLORS.negative12to8, label: '-12% / -8%' },
-  { id: 'route-slope-negative-8-4', minDeg: -pct8Deg, maxDeg: -pct4Deg, minPct: -pct8, maxPct: -pct4, color: ROUTE_SLOPE_COLORS.negative8to4, label: '-8% / -4%' },
-  { id: 'route-slope-negative-4-1', minDeg: -pct4Deg, maxDeg: -pct1Deg, minPct: -pct4, maxPct: -pct1, color: ROUTE_SLOPE_COLORS.negative4to1, label: '-4% / -1%' },
+  { id: 'route-slope-beyond-negative', minDeg: -90, maxDeg: -pct15Deg, minPct: -Infinity, maxPct: -pct15, color: ROUTE_SLOPE_COLORS.beyondNegative, label: '< -15%' },
+  { id: 'route-slope-negative-15-12', minDeg: -pct15Deg, maxDeg: -pct12Deg, minPct: -pct15, maxPct: -pct12, color: ROUTE_SLOPE_COLORS.negative15to12, label: '-12% / -15%' },
+  { id: 'route-slope-negative-12-9', minDeg: -pct12Deg, maxDeg: -pct9Deg, minPct: -pct12, maxPct: -pct9, color: ROUTE_SLOPE_COLORS.negative12to9, label: '-9% / -12%' },
+  { id: 'route-slope-negative-9-6', minDeg: -pct9Deg, maxDeg: -pct6Deg, minPct: -pct9, maxPct: -pct6, color: ROUTE_SLOPE_COLORS.negative9to6, label: '-6% / -9%' },
+  { id: 'route-slope-negative-6-4', minDeg: -pct6Deg, maxDeg: -pct4Deg, minPct: -pct6, maxPct: -pct4, color: ROUTE_SLOPE_COLORS.negative6to4, label: '-4% / -6%' },
+  { id: 'route-slope-negative-4-1', minDeg: -pct4Deg, maxDeg: -pct1Deg, minPct: -pct4, maxPct: -pct1, color: ROUTE_SLOPE_COLORS.negative4to1, label: '-1% / -4%' },
   { id: 'route-slope-neutral', minDeg: -pct1Deg, maxDeg: pct1Deg, minPct: -pct1, maxPct: pct1, color: ROUTE_SLOPE_COLORS.neutral, label: '-1% / 1%' },
   { id: 'route-slope-positive-1-4', minDeg: pct1Deg, maxDeg: pct4Deg, minPct: pct1, maxPct: pct4, color: ROUTE_SLOPE_COLORS.positive1to4, label: '1% / 4%' },
-  { id: 'route-slope-positive-4-8', minDeg: pct4Deg, maxDeg: pct8Deg, minPct: pct4, maxPct: pct8, color: ROUTE_SLOPE_COLORS.positive4to8, label: '4% / 8%' },
-  { id: 'route-slope-positive-8-12', minDeg: pct8Deg, maxDeg: pct12Deg, minPct: pct8, maxPct: pct12, color: ROUTE_SLOPE_COLORS.positive8to12, label: '8% / 12%' },
-  { id: 'route-slope-positive-12-16', minDeg: pct12Deg, maxDeg: pct16Deg, minPct: pct12, maxPct: pct16, color: ROUTE_SLOPE_COLORS.positive12to16, label: '12% / 16%' },
-  { id: 'route-slope-beyond-positive', minDeg: pct16Deg, maxDeg: 90, minPct: pct16, maxPct: Infinity, color: ROUTE_SLOPE_COLORS.beyondPositive, label: '16% <' },
+  { id: 'route-slope-positive-4-6', minDeg: pct4Deg, maxDeg: pct6Deg, minPct: pct4, maxPct: pct6, color: ROUTE_SLOPE_COLORS.positive4to6, label: '4% / 6%' },
+  { id: 'route-slope-positive-6-9', minDeg: pct6Deg, maxDeg: pct9Deg, minPct: pct6, maxPct: pct9, color: ROUTE_SLOPE_COLORS.positive6to9, label: '6% / 9%' },
+  { id: 'route-slope-positive-9-12', minDeg: pct9Deg, maxDeg: pct12Deg, minPct: pct9, maxPct: pct12, color: ROUTE_SLOPE_COLORS.positive9to12, label: '9% / 12%' },
+  { id: 'route-slope-positive-12-15', minDeg: pct12Deg, maxDeg: pct15Deg, minPct: pct12, maxPct: pct15, color: ROUTE_SLOPE_COLORS.positive12to15, label: '12% / 15%' },
+  { id: 'route-slope-beyond-positive', minDeg: pct15Deg, maxDeg: 90, minPct: pct15, maxPct: Infinity, color: ROUTE_SLOPE_COLORS.beyondPositive, label: '15% <' },
 ] as const;

@@ -26,9 +26,11 @@ import {
   saveCustomProfileToStorage,
   deleteCustomProfileFromStorage,
   getNextCustomProfileName,
+  mergeAvailableCustomProfiles,
   CUSTOM_PROFILES_CHANGED_EVENT,
   type SavedCustomProfile,
 } from '../lib/project/customProfiles';
+import { useProjectStoreOptional } from '../context/ProjectStore/hooks';
 import {
   ACTIVITY_LABELS,
   SURFACES,
@@ -103,9 +105,19 @@ export function TracageSection({
   const { t } = useAppI18n();
   const footDiscipline = isFootDiscipline(discipline) ? discipline : null;
 
-  // Saved custom profiles from storage
-  const [savedProfiles, setSavedProfiles] = useState<SavedCustomProfile[]>(() =>
+  // Bibliothèque du compte (copie locale synchronisée) + profils embarqués
+  // dans le projet sans être dans la bibliothèque (autre appareil, collaborateur).
+  const [libraryProfiles, setSavedProfiles] = useState<SavedCustomProfile[]>(() =>
     getSavedCustomProfiles(),
+  );
+  const projectProfiles = useProjectStoreOptional()?.project.routingProfiles;
+  const savedProfiles = useMemo(
+    () => mergeAvailableCustomProfiles(libraryProfiles, projectProfiles),
+    [libraryProfiles, projectProfiles],
+  );
+  const deletableProfileIds = useMemo(
+    () => new Set(libraryProfiles.map((profile) => profile.id)),
+    [libraryProfiles],
   );
 
   useEffect(() => {
@@ -320,6 +332,7 @@ export function TracageSection({
           selectedPresetId={selectedPresetId}
           effectiveBaseId={effectiveBaseId}
           savedProfiles={savedProfiles}
+          deletableProfileIds={deletableProfileIds}
           draftProfileName={isCustomized && !activeBaseSaved ? nextProfileName : null}
           onSelectActivity={handleActivitySelect}
           onSelectCustomProfile={handleCustomProfileSelect}

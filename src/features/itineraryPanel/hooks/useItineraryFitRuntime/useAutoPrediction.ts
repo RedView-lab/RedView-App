@@ -2,7 +2,9 @@ import { useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
 import { resolvePredictionDiscipline, type SportDiscipline } from '@/shared/lib/discipline';
 import { hasUsableRouteElevation } from '../../lib/schedule';
 import type { Itinerary, ItineraryProject } from '../../types';
+import { useDerivedComputeGate } from '../../context/ProjectStore/hooks';
 import { isCyclingPredictionOutdated } from './cycling';
+import { buildPredictionStamp } from './signatures';
 import {
   createEmptyFitRuntime,
   type FitRuntimeRef,
@@ -39,12 +41,26 @@ export function useAutoPrediction({
 }: UseAutoPredictionArgs): void {
   const lastProcessedSignatureRef = useRef<Record<string, string>>({});
   const calculateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { gate, retryNonce: gateRetryNonce, markWaiting: markWaitingForGate } = useDerivedComputeGate();
 
   useEffect(() => {
     if (!active || !activeCalculationSignature) return;
 
     const itineraryId = active.id;
     const lastSig = lastProcessedSignatureRef.current[itineraryId];
+
+    // Prédiction estampillée encore valable pour les entrées actuelles :
+    // gardée (réouverture, retour d'un annuler, calcul d'un autre éditeur).
+    if (
+      active.prediction
+      && active.pendingFitRecompute !== true
+      && active.predictionInputsKey !== undefined
+      && active.predictionInputsKey === buildPredictionStamp(active)
+      && !isCyclingPredictionOutdated(active.prediction)
+    ) {
+      lastProcessedSignatureRef.current[itineraryId] = activeCalculationSignature;
+      return;
+    }
 
     // If this is the initial load for this itinerary and we already have a matching prediction
     if (!lastSig) {
@@ -114,6 +130,11 @@ export function useAutoPrediction({
 
     if (active.gpxRoute.source === 'brouter' && !active.routeAudit) return;
     if (!hasUsableRouteElevation(active.gpxRoute.points)) return;
+    // Co-édition : entrées modifiées par un autre éditeur, qui calcule.
+    if (!gate.shouldCompute('prediction', itineraryId)) {
+      markWaitingForGate();
+      return;
+    }
 
     calculateTimeoutRef.current = setTimeout(() => {
       lastProcessedSignatureRef.current[itineraryId] = activeCalculationSignature;
@@ -131,7 +152,10 @@ export function useAutoPrediction({
     activeCalculationSignature,
     activeDiscipline,
     fitRuntimeRef,
+    gate,
+    gateRetryNonce,
     handleCalculatePrediction,
+    markWaitingForGate,
     predictionStore,
     setProject,
     updateFitRuntime,

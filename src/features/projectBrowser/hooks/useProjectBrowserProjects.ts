@@ -1,47 +1,42 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { translateAppText } from '@/shared/i18n';
+import { readStoredAppwriteSession } from '@/shared/services/appwrite';
+import { notify } from '@/shared/ui/notify';
+import type { ProjectFolderSummary, ProjectSummary } from '@/shared/utils/projects';
+
 import {
-  createProjectFolder,
-  createProject,
-  deleteProject,
-  deleteProjectFitFiles,
-  deleteProjectFolder,
-  deleteProjectThumbnail,
-  duplicateProjectItineraryFitFiles,
-  duplicateProjectThumbnail,
-  getProject,
-  getProjectThumbnailUrls,
-  listProjectBrowserSnapshot,
-  moveProjectFolder,
-  moveProjectToFolder,
-  renameProjectFolder,
-  renameProject,
-  saveProject,
-  type ProjectFolderSummary,
-  type ProjectSummary,
-} from '@/shared/utils/projects';
+  useCreateFolder,
+  useCreateProject,
+  useDeleteFolder,
+  useDeleteProject,
+  useDuplicateProject,
+  useExportProject,
+  useImportProjects,
+  useMoveFolder,
+  useMoveProject,
+  useProjectLibrary,
+  useProjectLibraryBusyIds,
+  useRenameFolder,
+  useRenameProject,
+} from '../queries/projectLibrary';
+import { useFolderNavigation } from './useFolderNavigation';
+import { useProjectDragAndDrop } from './useProjectDragAndDrop';
+import { useProjectThumbnails } from './useProjectThumbnails';
 
-import { buildCopiedName, buildFolderBreadcrumbs, computeFolderAggregateSize } from '../lib';
+const EMPTY_FOLDERS: ProjectFolderSummary[] = [];
+const EMPTY_PROJECTS: ProjectSummary[] = [];
 
-type BrowserToast = {
-  kind: 'success' | 'error' | 'info';
-  message: string;
-};
+/** Une mutation en échec est déjà signalée (toast du MutationCache) : l'appelant s'arrête là. */
+const ignoreHandledFailure = () => undefined;
 
-function revokeThumbnailUrls(urls: Iterable<string | null>, keep?: ReadonlySet<string | null>) {
-  for (const url of urls) {
-    if (url && url.startsWith('blob:') && !keep?.has(url)) URL.revokeObjectURL(url);
-  }
-}
-
-type DragPreviewState = {
-  type: 'project' | 'folder';
-  label: string;
-  x: number;
-  y: number;
-};
-
+/**
+ * Onglet « Projets » du gestionnaire : compose les données (TanStack Query,
+ * queries/projectLibrary.ts), la navigation dans les dossiers, les miniatures
+ * et le glisser-déposer. Les retours utilisateur passent par des toasts
+ * (`notify`) ; le bandeau d'erreur ne montre que l'échec de chargement de la
+ * liste et le détail d'un import partiellement raté.
+ */
 export function useProjectBrowserProjects({
   open,
   onOpenProject,
@@ -49,518 +44,182 @@ export function useProjectBrowserProjects({
   open: boolean;
   onOpenProject: (projectId: string) => void;
 }) {
-  const [folders, setFolders] = useState<ProjectFolderSummary[]>([]);
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [thumbnails, setThumbnails] = useState<Record<string, string | null>>({});
-  const [thumbnailLoadingIds, setThumbnailLoadingIds] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
-  const [creatingProject, setCreatingProject] = useState(false);
-  const [creatingFolder, setCreatingFolder] = useState(false);
-  const [search, setSearch] = useState('');
-  const [view, setView] = useState<'grid' | 'list'>('grid');
-  const [showSearch, setShowSearch] = useState(false);
-  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
-  const [draggedItem, setDraggedItem] = useState<
-    | { type: 'project'; id: string }
-    | { type: 'folder'; id: string }
-    | null
-  >(null);
-  const [dropTarget, setDropTarget] = useState<string | null>(null);
-  const [dragPreview, setDragPreview] = useState<DragPreviewState | null>(null);
-  const [toast, setToast] = useState<BrowserToast | null>(null);
-  const thumbnailRequestRef = useRef(0);
-  const thumbnailsRef = useRef<Record<string, string | null>>({});
+  const userId = readStoredAppwriteSession()?.user.id ?? null;
+  const library = useProjectLibrary(userId, open);
+  const folders = library.data?.folders ?? EMPTY_FOLDERS;
+  const projects = library.data?.projects ?? EMPTY_PROJECTS;
+  const projectIds = useMemo(() => projects.map((project) => project.id), [projects]);
 
-  // Les miniatures sont des URLs `blob:` : libérer celles qui ne sont plus affichées.
-  useEffect(() => {
-    const previous = thumbnailsRef.current;
-    thumbnailsRef.current = thumbnails;
-    if (previous === thumbnails) return;
-    revokeThumbnailUrls(Object.values(previous), new Set(Object.values(thumbnails)));
-  }, [thumbnails]);
+  const navigation = useFolderNavigation(folders, projects);
+  const { thumbnails, thumbnailLoadingIds } = useProjectThumbnails(userId, projectIds, library.data?.fetchedAt ?? 0);
+  const busyIds = useProjectLibraryBusyIds();
+  const [importError, setImportError] = useState<string | null>(null);
 
-  useEffect(() => {
-    return () => {
-      revokeThumbnailUrls(Object.values(thumbnailsRef.current));
-      thumbnailsRef.current = {};
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!toast) return;
-    const timeout = window.setTimeout(() => setToast(null), 2200);
-    return () => window.clearTimeout(timeout);
-  }, [toast]);
-
-  const showToast = useCallback((message: string, kind: BrowserToast['kind'] = 'success') => {
-    setToast({ kind, message });
-  }, []);
-
-  const setBusy = useCallback((id: string, busy: boolean) => {
-    setBusyIds((prev) => {
-      const next = new Set(prev);
-      if (busy) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-  }, []);
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const snapshot = await listProjectBrowserSnapshot();
-      const thumbnailRequestId = ++thumbnailRequestRef.current;
-      setFolders(snapshot.folders);
-      setProjects(snapshot.projects);
-      setCurrentFolderId((prev) =>
-        prev && !snapshot.folders.some((folder) => folder.id === prev) ? null : prev,
-      );
-      if (snapshot.projects.length > 0) {
-        const projectIds = snapshot.projects.map((row) => row.id);
-        setThumbnailLoadingIds(new Set(projectIds));
-        getProjectThumbnailUrls(projectIds)
-          .then((map) => {
-            if (thumbnailRequestRef.current !== thumbnailRequestId) {
-              revokeThumbnailUrls(Object.values(map));
-              return;
-            }
-            setThumbnails(map);
-          })
-          .catch((nextError) => {
-            if (thumbnailRequestRef.current !== thumbnailRequestId) return;
-            console.warn('[ProjectBrowser] thumbnails failed', nextError);
-          })
-          .finally(() => {
-            if (thumbnailRequestRef.current !== thumbnailRequestId) return;
-            setThumbnailLoadingIds(new Set());
-          });
-      } else {
-        setThumbnails({});
-        setThumbnailLoadingIds(new Set());
-      }
-    } catch (nextError) {
-      const message = nextError instanceof Error ? translateAppText(nextError.message) : translateAppText('Impossible de charger les projets.');
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (open) void refresh();
-  }, [open, refresh]);
+  const { mutateAsync: createProject, isPending: creatingProject } = useCreateProject(userId);
+  const { mutateAsync: createFolder, isPending: creatingFolder } = useCreateFolder(userId);
+  const { mutateAsync: importProjects, isPending: importingProject } = useImportProjects(userId);
+  const { mutateAsync: exportProject } = useExportProject();
+  const { mutateAsync: renameProject } = useRenameProject(userId);
+  const { mutateAsync: deleteProject } = useDeleteProject(userId);
+  const { mutateAsync: renameFolder } = useRenameFolder(userId);
+  const { mutateAsync: deleteFolder } = useDeleteFolder(userId);
+  const { mutateAsync: duplicateProject } = useDuplicateProject(userId);
+  const { mutateAsync: moveProjectMutation } = useMoveProject(userId);
+  const { mutateAsync: moveFolderMutation } = useMoveFolder(userId);
 
   const handleCreateProject = useCallback(async () => {
     if (creatingProject) return;
-    setCreatingProject(true);
-    setError(null);
-    try {
-      // Creation always happens at the root of the manager: the user then
-      // drags the project into whichever folder they created for it.
-      const row = await createProject(undefined, undefined, null);
-      setProjects((prev) => [
-        {
-          id: row.id,
-          folderId: row.folder_id,
-          name: row.name,
-          privacy: row.privacy,
-          sizeBytes: row.size_bytes,
-          createdAt: row.created_at,
-          updatedAt: row.updated_at,
-        },
-        ...prev,
-      ]);
-      onOpenProject(row.id);
-    } catch (nextError) {
-      const message = nextError instanceof Error ? translateAppText(nextError.message) : translateAppText('Échec de la création du projet.');
-      setError(message);
-      showToast(message, 'error');
-    } finally {
-      setCreatingProject(false);
-    }
-  }, [creatingProject, onOpenProject, showToast]);
+    const row = await createProject().catch(ignoreHandledFailure);
+    if (row) onOpenProject(row.id);
+  }, [createProject, creatingProject, onOpenProject]);
 
+  const { currentFolderId } = navigation;
   const handleCreateFolder = useCallback(async () => {
     if (creatingFolder) return;
-    setCreatingFolder(true);
-    setError(null);
-    try {
-      const folder = await createProjectFolder(undefined, currentFolderId);
-      setFolders((prev) => [folder, ...prev]);
-    } catch (nextError) {
-      const message = nextError instanceof Error ? translateAppText(nextError.message) : translateAppText('Échec de la création du dossier.');
-      setError(message);
-      showToast(message, 'error');
-    } finally {
-      setCreatingFolder(false);
-    }
-  }, [creatingFolder, currentFolderId, showToast]);
+    await createFolder(currentFolderId).catch(ignoreHandledFailure);
+  }, [createFolder, creatingFolder, currentFolderId]);
 
-  const handleRename = useCallback(
-    async (id: string, nextName: string) => {
-      setBusy(id, true);
-      try {
-        await renameProject(id, nextName);
-        setProjects((prev) =>
-          prev.map((project) =>
-            project.id === id
-              ? { ...project, name: nextName, updatedAt: new Date().toISOString() }
-              : project,
-          ),
-        );
-      } catch (nextError) {
-        const message = nextError instanceof Error ? translateAppText(nextError.message) : translateAppText('Échec du renommage.');
-        setError(message);
-        showToast(message, 'error');
-      } finally {
-        setBusy(id, false);
+  /**
+   * Importe des fichiers `.redview` dans le dossier affiché, chacun comme un
+   * nouveau projet. Un seul fichier importé : il s'ouvre, comme un projet créé.
+   */
+  const handleImportProjects = useCallback(
+    async (files: File[]) => {
+      if (importingProject || files.length === 0) return;
+      setImportError(null);
+      const result = await importProjects({ files, folderId: currentFolderId }).catch((error: unknown) => {
+        const message = error instanceof Error && error.message ? error.message : 'Une erreur est survenue.';
+        setImportError(translateAppText(message));
+        notify.error(message);
+        return null;
+      });
+      if (!result) return;
+      const { imported, failures } = result;
+      if (failures.length > 0) {
+        setImportError(failures.join(' · '));
+        if (imported.length > 0) {
+          notify.error('{{imported}} projet(s) importé(s), {{failed}} échec(s).', {
+            imported: imported.length,
+            failed: failures.length,
+          });
+        } else {
+          notify.error(failures[0]!);
+        }
+        return;
       }
+      if (imported.length === 1) {
+        notify.success('Projet importé : {{name}}', { name: imported[0]!.name });
+        onOpenProject(imported[0]!.id);
+        return;
+      }
+      notify.success('{{count}} projets importés.', { count: imported.length });
     },
-    [setBusy, showToast],
+    [currentFolderId, importProjects, importingProject, onOpenProject],
   );
 
-  const handleDelete = useCallback(
-    async (id: string) => {
-      setBusy(id, true);
-      try {
-        await deleteProject(id);
-        void deleteProjectFitFiles(id);
-        void deleteProjectThumbnail(id);
-        setProjects((prev) => prev.filter((project) => project.id !== id));
-        setThumbnails((prev) => {
-          if (!(id in prev)) return prev;
-          const next = { ...prev };
-          delete next[id];
-          return next;
-        });
-      } catch (nextError) {
-        const message = nextError instanceof Error ? translateAppText(nextError.message) : translateAppText('Échec de la suppression.');
-        setError(message);
-        showToast(message, 'error');
-      } finally {
-        setBusy(id, false);
-      }
+  const handleExportProject = useCallback(
+    async (projectId: string) => {
+      await exportProject({ id: projectId }).catch(ignoreHandledFailure);
     },
-    [setBusy, showToast],
+    [exportProject],
+  );
+
+  const handleRenameProject = useCallback(
+    async (id: string, name: string) => {
+      await renameProject({ id, name }).catch(ignoreHandledFailure);
+    },
+    [renameProject],
+  );
+
+  const handleDeleteProject = useCallback(
+    async (id: string) => {
+      await deleteProject({ id }).catch(ignoreHandledFailure);
+    },
+    [deleteProject],
   );
 
   const handleRenameFolder = useCallback(
-    async (id: string, nextName: string) => {
-      setBusy(id, true);
-      try {
-        await renameProjectFolder(id, nextName);
-        setFolders((prev) =>
-          prev.map((folder) =>
-            folder.id === id
-              ? { ...folder, name: nextName, updatedAt: new Date().toISOString() }
-              : folder,
-          ),
-        );
-      } catch (nextError) {
-        const message =
-          nextError instanceof Error ? translateAppText(nextError.message) : translateAppText('Échec du renommage du dossier.');
-        setError(message);
-        showToast(message, 'error');
-      } finally {
-        setBusy(id, false);
-      }
+    async (id: string, name: string) => {
+      await renameFolder({ id, name }).catch(ignoreHandledFailure);
     },
-    [setBusy, showToast],
+    [renameFolder],
   );
 
   const handleDeleteFolder = useCallback(
     async (id: string) => {
-      setBusy(id, true);
-      try {
-        await deleteProjectFolder(id);
-        setFolders((prev) => prev.filter((folder) => folder.id !== id));
-        setCurrentFolderId((prev) => (prev === id ? null : prev));
-      } catch (nextError) {
-        const message =
-          nextError instanceof Error ? translateAppText(nextError.message) : translateAppText('Échec de la suppression du dossier.');
-        setError(message);
-        showToast(message, 'error');
-      } finally {
-        setBusy(id, false);
-      }
+      await deleteFolder({ id }).catch(ignoreHandledFailure);
     },
-    [setBusy, showToast],
-  );
-
-  const handleOpenFolder = useCallback((folderId: string) => {
-    setCurrentFolderId(folderId);
-  }, []);
-
-  const handleNavigateToFolder = useCallback((folderId: string | null) => {
-    setCurrentFolderId(folderId);
-  }, []);
-
-  const handleMoveProject = useCallback(
-    async (projectId: string, folderId: string | null) => {
-      setBusy(projectId, true);
-      setError(null);
-      try {
-        await moveProjectToFolder(projectId, folderId);
-        setProjects((prev) =>
-          prev.map((project) =>
-            project.id === projectId
-              ? { ...project, folderId, updatedAt: new Date().toISOString() }
-              : project,
-          ),
-        );
-        showToast(translateAppText(folderId ? 'Projet déplacé dans le dossier.' : 'Projet déplacé à la racine.'));
-      } catch (nextError) {
-        const message =
-          nextError instanceof Error ? translateAppText(nextError.message) : translateAppText('Impossible de déplacer ce projet.');
-        setError(message);
-        showToast(message, 'error');
-      } finally {
-        setBusy(projectId, false);
-      }
-    },
-    [setBusy, showToast],
-  );
-
-  const handleMoveFolder = useCallback(
-    async (folderId: string, parentFolderId: string | null) => {
-      setBusy(folderId, true);
-      setError(null);
-      try {
-        await moveProjectFolder(folderId, parentFolderId);
-        setFolders((prev) =>
-          prev.map((folder) =>
-            folder.id === folderId
-              ? { ...folder, parentFolderId, updatedAt: new Date().toISOString() }
-              : folder,
-          ),
-        );
-        setCurrentFolderId((prev) => (prev === folderId && parentFolderId === folderId ? null : prev));
-        showToast(translateAppText(parentFolderId ? 'Dossier déplacé.' : 'Dossier déplacé à la racine.'));
-      } catch (nextError) {
-        const message =
-          nextError instanceof Error ? translateAppText(nextError.message) : translateAppText('Impossible de déplacer ce dossier.');
-        setError(message);
-        showToast(message, 'error');
-      } finally {
-        setBusy(folderId, false);
-      }
-    },
-    [setBusy, showToast],
+    [deleteFolder],
   );
 
   const handleDuplicateProject = useCallback(
     async (projectId: string) => {
-      setBusy(projectId, true);
-      setError(null);
-      let duplicateProjectId: string | null = null;
-      try {
-        const source = await getProject(projectId);
-        if (!source) throw new Error(translateAppText('Projet introuvable.'));
-
-        const siblingNames = projects
-          .filter((project) => project.folderId === source.folder_id)
-          .map((project) => project.name);
-        const duplicateName = buildCopiedName(source.name, siblingNames);
-        const duplicateData = structuredClone(source.data);
-        duplicateData.name = duplicateName;
-        duplicateData.privacy = source.privacy;
-        duplicateData.savedAt = null;
-        duplicateData.sizeBytes = null;
-
-        const row = await createProject(duplicateName, duplicateData, source.folder_id);
-        duplicateProjectId = row.id;
-
-        const duplicateFitUploads = await duplicateProjectItineraryFitFiles(
-          duplicateData.itineraries.map((itinerary) => ({
-            id: itinerary.id,
-            fitUploads: itinerary.fitUploads,
-          })),
-          row.id,
-        );
-        const nextDuplicateData = {
-          ...duplicateData,
-          itineraries: duplicateData.itineraries.map((itinerary) => ({
-            ...itinerary,
-            fitUploads: duplicateFitUploads[itinerary.id] ?? itinerary.fitUploads,
-          })),
-        };
-
-        await saveProject(row.id, nextDuplicateData);
-        const thumbnailCopied = await duplicateProjectThumbnail(projectId, row.id);
-        const nextThumbnailUrls = thumbnailCopied ? await getProjectThumbnailUrls([row.id]) : {};
-
-        setProjects((prev) => [
-          {
-            id: row.id,
-            folderId: row.folder_id,
-            name: row.name,
-            privacy: row.privacy,
-            sizeBytes: row.size_bytes,
-            createdAt: row.created_at,
-            updatedAt: row.updated_at,
-          },
-          ...prev,
-        ]);
-        if (thumbnailCopied) {
-          setThumbnails((prev) => ({
-            ...prev,
-            [row.id]: nextThumbnailUrls[row.id] ?? null,
-          }));
-        }
-        showToast(translateAppText('Projet dupliqué: {{name}}', { name: duplicateName }));
-      } catch (nextError) {
-        if (duplicateProjectId) {
-          try {
-            await deleteProject(duplicateProjectId);
-          } catch {
-            // Best effort rollback; storage cleanup still runs below.
-          }
-          await Promise.allSettled([
-            deleteProjectFitFiles(duplicateProjectId),
-            deleteProjectThumbnail(duplicateProjectId),
-          ]);
-        }
-        const message = nextError instanceof Error ? translateAppText(nextError.message) : translateAppText('Impossible de dupliquer ce projet.');
-        setError(message);
-        showToast(message, 'error');
-      } finally {
-        setBusy(projectId, false);
-      }
+      await duplicateProject({ id: projectId }).catch(ignoreHandledFailure);
     },
-    [projects, setBusy, showToast],
+    [duplicateProject],
   );
 
-  const handleDragStart = useCallback((item: { type: 'project' | 'folder'; id: string }, x = 0, y = 0) => {
-    const label =
-      item.type === 'project'
-        ? projects.find((project) => project.id === item.id)?.name ?? translateAppText('Projet')
-        : folders.find((folder) => folder.id === item.id)?.name ?? translateAppText('Dossier');
-    setDraggedItem(item);
-    setDropTarget(null);
-    setDragPreview({ type: item.type, label, x, y });
-  }, [folders, projects]);
-
-  const handleDragMove = useCallback((x: number, y: number) => {
-    setDragPreview((prev) => (prev ? { ...prev, x, y } : prev));
-  }, []);
-
-  const handleDragEnd = useCallback(() => {
-    setDraggedItem(null);
-    setDropTarget(null);
-    setDragPreview(null);
-  }, []);
-
-  const handleDragEnterTarget = useCallback((targetId: string) => {
-    setDropTarget(targetId);
-  }, []);
-
-  const handleDragLeaveTarget = useCallback((targetId: string) => {
-    setDropTarget((prev) => (prev === targetId ? null : prev));
-  }, []);
-
-  const handleDropIntoFolder = useCallback(
-    async (folderId: string) => {
-      if (!draggedItem) return;
-      setDropTarget(null);
-      if (draggedItem.type === 'project') {
-        const project = projects.find((entry) => entry.id === draggedItem.id);
-        if (!project || project.folderId === folderId) return;
-        await handleMoveProject(draggedItem.id, folderId);
-        return;
-      }
-
-      const folder = folders.find((entry) => entry.id === draggedItem.id);
-      if (!folder || folder.id === folderId || folder.parentFolderId === folderId) return;
-      await handleMoveFolder(draggedItem.id, folderId);
+  const handleMoveProject = useCallback(
+    async (projectId: string, folderId: string | null) => {
+      await moveProjectMutation({ id: projectId, folderId }).catch(ignoreHandledFailure);
     },
-    [draggedItem, folders, handleMoveFolder, handleMoveProject, projects],
+    [moveProjectMutation],
   );
 
-  const handleDropToRoot = useCallback(async () => {
-    if (!draggedItem) return;
-    setDropTarget(null);
-    if (draggedItem.type === 'project') {
-      const project = projects.find((entry) => entry.id === draggedItem.id);
-      if (!project || project.folderId == null) return;
-      await handleMoveProject(draggedItem.id, null);
-      return;
-    }
-
-    const folder = folders.find((entry) => entry.id === draggedItem.id);
-    if (!folder || folder.parentFolderId == null) return;
-    await handleMoveFolder(draggedItem.id, null);
-  }, [draggedItem, folders, handleMoveFolder, handleMoveProject, projects]);
-
-  const q = search.trim().toLowerCase();
-  const breadcrumbs = buildFolderBreadcrumbs(folders, currentFolderId);
-  // Un dossier parent inconnu (supprimé, orphelin) est traité comme la racine :
-  // aucun projet ni dossier ne doit devenir introuvable dans l'interface.
-  const knownFolderIds = new Set(folders.map((folder) => folder.id));
-  const effectiveParent = (parentId: string | null) =>
-    parentId && knownFolderIds.has(parentId) ? parentId : null;
-  const visibleFoldersBase = folders.filter(
-    (folder) => effectiveParent(folder.parentFolderId) === currentFolderId,
+  const handleMoveFolder = useCallback(
+    async (folderId: string, parentFolderId: string | null) => {
+      await moveFolderMutation({ id: folderId, parentFolderId }).catch(ignoreHandledFailure);
+    },
+    [moveFolderMutation],
   );
-  const visibleProjectsBase = projects.filter(
-    (project) => effectiveParent(project.folderId) === currentFolderId,
-  );
-  const visibleFolders = (q
-    ? visibleFoldersBase.filter((folder) => folder.name.toLowerCase().includes(q))
-    : visibleFoldersBase
-  ).map((folder) => ({
-    ...folder,
-    aggregateSizeBytes: computeFolderAggregateSize(folder.id, folders, projects),
-  }));
-  const visibleProjects = q
-    ? visibleProjectsBase.filter((project) => project.name.toLowerCase().includes(q))
-    : visibleProjectsBase;
+
+  const dragAndDrop = useProjectDragAndDrop({
+    folders,
+    projects,
+    moveProject: handleMoveProject,
+    moveFolder: handleMoveFolder,
+  });
+
+  const listError = library.error
+    ? translateAppText(library.error.message || 'Impossible de charger les projets.')
+    : null;
 
   return {
     folders,
     projects,
     thumbnails,
     thumbnailLoadingIds,
-    loading,
-    error,
+    loading: library.isFetching,
+    error: listError ?? importError,
     busyIds,
     creatingProject,
     creatingFolder,
-    search,
-    setSearch,
-    view,
-    setView,
-    showSearch,
-    setShowSearch,
+    importingProject,
+    search: navigation.search,
+    setSearch: navigation.setSearch,
+    view: navigation.view,
+    setView: navigation.setView,
+    showSearch: navigation.showSearch,
+    setShowSearch: navigation.setShowSearch,
     currentFolderId,
-    breadcrumbs,
-    draggedItem,
-    dropTarget,
-    dragPreview,
-    toast,
-    refresh,
+    breadcrumbs: navigation.breadcrumbs,
+    ...dragAndDrop,
+    refresh: library.refetch,
     handleCreateProject,
     handleCreateFolder,
-    handleRenameProject: handleRename,
-    handleDeleteProject: handleDelete,
+    handleImportProjects,
+    handleExportProject,
+    handleRenameProject,
+    handleDeleteProject,
     handleRenameFolder,
     handleDeleteFolder,
     handleDuplicateProject,
     handleMoveProject,
     handleMoveFolder,
-    handleOpenFolder,
-    handleNavigateToFolder,
-    handleDragStart,
-    handleDragMove,
-    handleDragEnd,
-    handleDragEnterTarget,
-    handleDragLeaveTarget,
-    handleDropIntoFolder,
-    handleDropToRoot,
-    q,
-    visibleFolders,
-    visibleProjects,
+    handleOpenFolder: navigation.navigateToFolder,
+    handleNavigateToFolder: navigation.navigateToFolder,
+    q: navigation.q,
+    visibleFolders: navigation.visibleFolders,
+    visibleProjects: navigation.visibleProjects,
   };
 }

@@ -20,7 +20,7 @@ import {
 } from './lib/constants';
 
 import { getDashboardLayout, type SidePanelSide } from './lib/layout';
-import type { DashboardPersistedMutator, DashboardPersistOptions } from './useDashboardProjectState';
+import type { DashboardPersistedMutator } from './useDashboardProjectState';
 import {
   clampLeftPanelWidth,
   clampPanelWidth,
@@ -31,10 +31,8 @@ import {
 
 interface UseDashboardChromeArgs {
   activeProjectInitial: ItineraryProject | null;
-  updatePersistedDashboard: (
-    mutateDashboard: DashboardPersistedMutator,
-    options?: DashboardPersistOptions,
-  ) => void;
+  /** Vue de l'utilisateur (panneaux, vue carte) : enregistrée à part du projet. */
+  updatePersistedDashboard: (mutateDashboard: DashboardPersistedMutator) => void;
 }
 
 /**
@@ -228,11 +226,11 @@ export function useDashboardChrome({
   useEffect(() => {
     if (!projectMapViewport) return;
 
-    // Vue carte : cache local seulement, incluse dans la prochaine vraie sauvegarde
-    // (un déplacement de carte ne déclenche plus de sauvegarde cloud à lui seul).
+    // Vue carte : vue de l'utilisateur, copie locale tout de suite et envoi
+    // cloud regroupé (projectViews.ts) ; le projet n'est jamais réécrit.
     updatePersistedDashboard((dashboard) => {
       dashboard.mapViewport = structuredClone(projectMapViewport);
-    }, { localOnly: true });
+    });
   }, [projectMapViewport, updatePersistedDashboard]);
 
   const handleMapViewportChange = useCallback((nextViewport: MapViewport) => {

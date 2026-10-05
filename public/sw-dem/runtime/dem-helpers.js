@@ -105,6 +105,17 @@ function isMapDemTileRequest(request) {
   }
 }
 
+// The flyover video export's offscreen map (cloneLiveStyle in
+// features/centerPanel/flyover/video/videoMap.ts) tags its terrain tiles
+// `rv-src=video`: see handleVideoDemRequest().
+function isVideoDemTileRequest(request) {
+  try {
+    return new URL(request.url, self.location.origin).searchParams.get('rv-src') === 'video';
+  } catch {
+    return false;
+  }
+}
+
 function buildDemCacheKey(z, x, y, demProfile) {
   const profileQuery = demProfile === 'terrain' ? '?rv-dem-profile=terrain' : '';
   return new Request(`/dem-tiles/${z}/${x}/${y}${profileQuery}`);

@@ -29,9 +29,9 @@
   box-sizing: border-box;
   min-width: 0;
 }
-.rvi-itin:hover { background: rgba(255, 255, 255, 0.04); }
+.rvi-itin:hover { background: rgb(var(--rv-ink) / 0.04); }
 .rvi-itin.is-active {
-  background: rgba(0, 0, 0, 0.4);
+  background: light-dark(rgb(var(--rv-ink) / 0.06), rgba(0, 0, 0, 0.4));
 }
 
 .rvi-itin__eye {
@@ -40,7 +40,7 @@
   width: 18px;
   height: 18px;
   flex-shrink: 0;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgb(var(--rv-ink) / 0.8);
   align-items: center;
   justify-content: center;
   border-radius: 4px;
@@ -48,8 +48,8 @@
   transition: color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
 }
 .rvi-itin__eye:hover {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.14);
+  color: var(--rv-text);
+  background: rgb(var(--rv-ink) / 0.14);
 }
 
 .rvi-itin__swatch {
@@ -78,9 +78,9 @@
 .rvi-itin__label--edit {
   flex: 1 1 auto;
   min-width: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: light-dark(#fff, rgba(0, 0, 0, 0.55));
   color: inherit;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  border: 1px solid rgb(var(--rv-ink) / 0.25);
   border-radius: 3px;
   padding: 1px 4px;
   font: inherit;
@@ -91,7 +91,7 @@
   box-sizing: border-box;
 }
 .rvi-itin__label--edit:focus {
-  border-color: rgba(255, 255, 255, 0.5);
+  border-color: rgb(var(--rv-ink) / 0.5);
 }
 
 .rvi-itin__meta {
@@ -119,8 +119,8 @@
 
 .rvi-itin__profile {
   width: 120px;
-  background: rgba(255, 255, 255, 0.07);
-  color: rgba(255, 255, 255, 0.8);
+  background: rgb(var(--rv-ink) / 0.07);
+  color: rgb(var(--rv-ink) / 0.8);
   font-size: var(--rv-font-size-md);
   font-weight: 400;
 }
@@ -136,7 +136,7 @@
   position: relative;
   width: 100%;
 }
-.rvi-itin-wrap.is-active { background: rgba(0, 0, 0, 0.4); }
+.rvi-itin-wrap.is-active { background: light-dark(rgb(var(--rv-ink) / 0.06), rgba(0, 0, 0, 0.4)); }
 .rvi-itin-wrap.is-active .rvi-itin { background: transparent; }
 .rvi-itin-wrap.is-hidden .rvi-itin__eye,
 .rvi-itin-wrap.is-hidden .rvi-itin__label,
@@ -166,8 +166,8 @@
 .rvi-itin__menu-trigger:hover,
 .rvi-itin__menu-trigger:focus-visible,
 .rvi-itin__menu-trigger.is-open {
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.96);
+  background: rgb(var(--rv-ink) / 0.08);
+  color: rgb(var(--rv-ink) / 0.96);
 }
 
 /* Menu d'actions (portal) — apparence : shared/styles/dropdown.css (.rv-dropdown) */
@@ -185,7 +185,7 @@
 }
 
 .rvi-itin--add:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgb(var(--rv-ink) / 0.04);
 }
 
 .rvi-itin__add-icon {
@@ -194,7 +194,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.72);
+  color: rgb(var(--rv-ink) / 0.72);
   flex: 0 0 auto;
 }
 
@@ -239,7 +239,7 @@
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  border: 1.5px solid rgb(var(--rv-ink) / 0.22);
   border-top-color: var(--rvi-text);
   animation: rvi-itin-spin 0.7s linear infinite;
 }
@@ -282,14 +282,14 @@
 }
 .rvi-mode:hover { opacity: 0.9; }
 .rvi-mode.is-active {
-  background: rgba(0, 0, 0, 0.6);
+  background: light-dark(rgb(var(--rv-ink) / 0.07), rgba(0, 0, 0, 0.6));
   opacity: 1;
 }
 
 .rvi-mode.is-active.is-collapsed {
-  background: rgba(0, 0, 0, 0.34);
+  background: light-dark(rgb(var(--rv-ink) / 0.04), rgba(0, 0, 0, 0.34));
   opacity: 0.82;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgb(var(--rv-ink) / 0.08);
 }
 
 /* No itinerary yet: the mode menu is inert (nothing to edit). */

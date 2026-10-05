@@ -1,18 +1,26 @@
 const RIGHT_CLICK_ICON_BASE = '/right-click-icons';
 
+/**
+ * Icône du menu clic droit. Les glyphes monochromes sont des masques peints à
+ * l'encre du thème (`--rv-text`, le blanc des fichiers en sombre) ; `multicolor` garde l'image telle quelle
+ * (pastilles départ / étape / arrivée, copies des marqueurs de la carte).
+ */
 function RightClickImageIcon({
   src,
   width,
   height,
   frame = Math.max(width, height),
   opacity,
+  multicolor = false,
 }: {
   src: string;
   width: number;
   height: number;
   frame?: number;
   opacity?: number;
+  multicolor?: boolean;
 }) {
+  const url = `${RIGHT_CLICK_ICON_BASE}/${src}`;
   return (
     <span
       aria-hidden
@@ -26,17 +34,30 @@ function RightClickImageIcon({
         opacity,
       }}
     >
-      <img
-        alt=""
-        aria-hidden
-        src={`${RIGHT_CLICK_ICON_BASE}/${src}`}
-        style={{
-          display: 'block',
-          width,
-          height,
-          objectFit: 'contain',
-        }}
-      />
+      {multicolor ? (
+        <img
+          alt=""
+          aria-hidden
+          src={url}
+          style={{
+            display: 'block',
+            width,
+            height,
+            objectFit: 'contain',
+          }}
+        />
+      ) : (
+        <span
+          style={{
+            display: 'block',
+            width,
+            height,
+            backgroundColor: 'var(--rv-text)',
+            WebkitMask: `url(${url}) center / contain no-repeat`,
+            mask: `url(${url}) center / contain no-repeat`,
+          }}
+        />
+      )}
     </span>
   );
 }
@@ -139,15 +160,15 @@ export function PoiPinGlyph() {
 }
 
 export function StartGlyph() {
-  return <RightClickImageIcon src="start.svg" width={24} height={24} frame={24} />;
+  return <RightClickImageIcon src="start.svg" width={24} height={24} frame={24} multicolor />;
 }
 
 export function WaypointGlyph() {
-  return <RightClickImageIcon src="ajouteruneetape.svg" width={24} height={24} frame={24} />;
+  return <RightClickImageIcon src="ajouteruneetape.svg" width={24} height={24} frame={24} multicolor />;
 }
 
 export function FinishGlyph() {
-  return <RightClickImageIcon src="finish.svg" width={24} height={24} frame={24} />;
+  return <RightClickImageIcon src="finish.svg" width={24} height={24} frame={24} multicolor />;
 }
 
 export function TrashGlyph() {

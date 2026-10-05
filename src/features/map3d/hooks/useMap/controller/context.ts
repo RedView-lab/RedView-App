@@ -15,33 +15,16 @@ import type { MapRuntimeProfile } from '../runtimeProfile';
 import { getDemTileKey, type DemSourceDataLike, type DemTileProfile } from '../demTiles';
 import { PENDING_TILE_MAX_AGE_MS, TRACKED_SOURCE_TYPES } from '../constants';
 import { styleHasUsableContent } from './styleContent';
+import type { VisibleTimer } from './visibleClock';
 
 export type BasemapVisualFamily = 'mapbox-standard-v3' | 'mapbox-classic-v12';
 export type TerrainBootstrapContract = 'unified-dem-v1';
 export type BasemapLightPreset = 'dawn' | 'day' | 'dusk' | 'night';
-// Event-driven style readiness — the bootstrap waits indefinitely for
-// real Mapbox signals (style.load / styledata-with-content / sourcedata
-// / first idle) instead of guessing at a timeout. This constant only
-// gates a periodic telemetry warning so a genuinely stuck style is still
-// observable in the console; it does not soft-fail the bootstrap.
+// Event-driven style readiness — the bootstrap waits for Mapbox to parse
+// the style (styleBootstrapReadiness.ts). This constant only gates a
+// periodic telemetry warning, counted in visible time, so a genuinely stuck
+// style is still observable in the console.
 export const STYLE_READINESS_TELEMETRY_INTERVAL_MS = 15000;
-
-// Legacy alias kept for downstream modules that still derive recovery
-// budgets from a single watchdog constant. No longer used to gate the
-// bootstrap promise itself.
-export const STYLE_LOAD_WATCHDOG_MS = 5000;
-
-// Root-level safety net: if no real Mapbox readiness signal
-// (`style.load` / `styledata` with content / `sourcedata` / first
-// `idle`) has fired within this window, we force-engage the sprite-
-// storm bypass and resume the bootstrap. This catches the cold
-// Standard-Satellite startup where listeners attach a tick after the
-// prefetched style has already started settling and Mapbox emits no
-// further events for it (visible bug: zero `[map3d]` logs, map stays
-// flat at zoom until the user reloads). 3500 ms is short enough to
-// recover before the user starts zooming and long enough to let real
-// events win on healthy starts.
-export const STYLE_READINESS_FORCE_BYPASS_MS = 3500;
 
 // Anti-flat reinforcement constants. Picked low enough to detect a
 // flat-state regression quickly but high enough to leave Mapbox time to
@@ -86,10 +69,10 @@ export interface ControllerState {
   demReloadCoolingUntil: number;
   demPassiveRefreshCoolingUntil: number;
   demPassiveRefreshPending: boolean;
-  demSettleTimer: ReturnType<typeof setTimeout> | null;
-  loadingWatchdog: ReturnType<typeof setTimeout> | null;
+  demSettleTimer: VisibleTimer | null;
+  loadingWatchdog: VisibleTimer | null;
   /** Hard deadline of the current "loading" cycle (see MAP_LOADING_MAX_MS). */
-  loadingDeadline: ReturnType<typeof setTimeout> | null;
+  loadingDeadline: VisibleTimer | null;
   lastReportedState: 'loading' | 'ready' | 'error';
   lastReportedProgress: number;
   disposeTerrainBootstrap: (() => void) | null;
@@ -97,24 +80,23 @@ export interface ControllerState {
   disposeViewportPrefetch: (() => void) | null;
   disposeOrthoPairingSync: (() => void) | null;
   disposeDemWantedTilesSync: (() => void) | null;
-  orthoBootTimer: ReturnType<typeof setTimeout> | null;
+  orthoBootTimer: VisibleTimer | null;
   finishOnIdle: (() => void) | null;
-  readyFallbackTimer: ReturnType<typeof setTimeout> | null;
-  terrainRecoveryTimer: ReturnType<typeof setTimeout> | null;
+  readyFallbackTimer: VisibleTimer | null;
+  terrainRecoveryTimer: VisibleTimer | null;
   styleBootstrapRunId: number;
   trackingListenersBound: boolean;
 
-  reloadVerifyTimer: ReturnType<typeof setTimeout> | null;
-  reloadReadinessTimer: ReturnType<typeof setTimeout> | null;
+  reloadVerifyTimer: VisibleTimer | null;
+  reloadReadinessTimer: VisibleTimer | null;
   reloadInProgress: boolean;
   reloadStyleEscalations: number;
 
   // anti-flat reinforcements
-  heartbeatTimer: ReturnType<typeof setInterval> | null;
+  heartbeatTimer: VisibleTimer | null;
   heartbeatFailures: number;
-  setTilesVerifyTimer: ReturnType<typeof setTimeout> | null;
+  setTilesVerifyTimer: VisibleTimer | null;
   hasReportedReadyOnce: boolean;
-  spriteStormBypass: boolean;
 
   /** Debounce slope/altitude sourceCache reload after burst DEM upgrades. */
   derivedReloadTimer: ReturnType<typeof setTimeout> | null;
@@ -227,7 +209,6 @@ export function createInitialState(): ControllerState {
     heartbeatFailures: 0,
     setTilesVerifyTimer: null,
     hasReportedReadyOnce: false,
-    spriteStormBypass: false,
 
     derivedReloadTimer: null,
 
@@ -246,16 +227,12 @@ export function attachHelpers(ctx: Ctx): void {
   fns.canMutateStyle = () => {
     if (isCancelled()) return false;
     try {
-      const style = map.getStyle();
-      // When Mapbox 3.x is stuck in a sprite/image rejection storm,
-      // isStyleLoaded() stays false forever even though sources, layers
-      // and the rendering pipeline are fully operational. The
-      // spriteStormBypass flag (set by the polling fallback in
-      // styleBootstrap.ts) relaxes the check so terrain can attach.
-      if (st.spriteStormBypass) {
-        return Boolean(style) && styleHasUsableContent(style);
-      }
-      return map.isStyleLoaded() && Boolean(style);
+      // Sources, layers and terrain can be added once Mapbox parsed the style
+      // (`getStyle()` throws before). `isStyleLoaded()` also waits for the
+      // sprite, every source's TileJSON and the imports — seconds on a cold
+      // start — which none of them needs. The empty bootstrap shell has no
+      // content: nothing is attached to a style about to be replaced.
+      return styleHasUsableContent(map.getStyle());
     } catch {
       return false;
     }

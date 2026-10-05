@@ -96,14 +96,14 @@
 .rvc-altitude__meter-input {
   width: 52px;
   padding: 0 4px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgb(var(--rv-ink) / 0.12);
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgb(var(--rv-ink) / 0.06);
   outline: none;
 }
 
 .rvc-altitude__meter-input:focus {
-  border-color: rgba(255, 255, 255, 0.28);
+  border-color: rgb(var(--rv-ink) / 0.28);
 }
 
 .rvc-altitude__meter-sep {
@@ -119,7 +119,7 @@
   min-height: 28px;
   flex-shrink: 0;
   padding: 5px 6px 5px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgb(var(--rv-ink) / 0.08);
   border-radius: 5px;
   background: transparent;
   color: var(--rvc-text);

@@ -1,6 +1,11 @@
 /**
  * Persistance des projets : copie locale IndexedDB + document Appwrite.
  *
+ * Le document Appwrite (`projects.data`) ne porte que le document partagé du
+ * projet (`schema: 2`, cf. lib/project/layers.ts) ; la vue de l'utilisateur
+ * est stockée à part (projectViews.ts) et le travail en attente reste dans la
+ * copie locale. `ProjectRow.data` est toujours le projet composé.
+ *
  * Invariants :
  *  - Toute sauvegarde écrit d'abord la copie locale (marquée `dirty`) avant
  *    tout appel réseau ; elle n'est marquée propre qu'après confirmation cloud.
@@ -8,11 +13,13 @@
  *    une requête ancienne ne peut pas arriver après une plus récente.
  *  - Avant d'écraser le cloud, on vérifie que son `$updatedAt` est celui
  *    connu par cette session (sinon `conflict`, rien n'est écrasé).
+ *  - Un document identique au dernier confirmé n'est pas renvoyé.
  *  - Toute erreur cloud remonte (ProjectCloudError), jamais avalée.
  *  - Une charge utile trop grosse pour le document part dans le bucket
  *    `project-payloads` (payloadFiles.ts) ; le document garde un pointeur.
  */
 import { createDefaultProject } from '@/features/itineraryPanel/lib/project';
+import { applyProjectView, extractProjectView } from '@/features/itineraryPanel/lib/project/layers';
 import {
   databases,
   APPWRITE_DATABASE_ID,
@@ -57,6 +64,7 @@ import {
 } from './payloadFiles';
 import {
   cloudQueues,
+  confirmedDocuments,
   enqueue,
   filePayloadProjects,
   isNewer,
@@ -67,6 +75,8 @@ import {
   rememberCloudVersion,
   withTimeout,
 } from './projectSession';
+import { deleteProjectView, queueProjectViewSave, readProjectView, saveProjectViewNow } from './projectViews';
+import { legacyViewOf, serializeProjectForStorage } from './storedProject';
 import { rowToSummary } from './mappers';
 import type { ItineraryProject, ProjectRow, ProjectRowMeta, ProjectSummary } from './types';
 
@@ -207,8 +217,31 @@ async function forkCloudVersion(id: string, userId: string): Promise<string> {
 }
 
 /**
- * Ouvre un projet en gardant la version la plus récente entre la copie locale
- * et le cloud :
+ * Ouvre un projet : son document (cf. `getProjectRow`) composé avec la vue la
+ * plus récente de l'utilisateur (projectViews.ts). Un projet au format
+ * précédent arrive avec sa vue d'origine ; si l'utilisateur n'en a pas encore
+ * de stockée, elle le devient (horodatée à la dernière sauvegarde du projet,
+ * elle ne remplace jamais une vraie vue).
+ */
+export async function getProject(id: string): Promise<ProjectRow | null> {
+  const [row, storedView] = await Promise.all([
+    getProjectRow(id),
+    readProjectView(id).catch(() => null),
+  ]);
+  if (!row) return null;
+  if (storedView) return { ...row, data: applyProjectView(row.data, storedView.view) };
+  const legacyView = legacyViewOf(row.data);
+  if (legacyView) {
+    queueProjectViewSave(id, legacyView, {
+      seed: { updatedAt: row.cloud_updated_at ?? row.updated_at },
+    });
+  }
+  return row;
+}
+
+/**
+ * Document d'un projet en gardant la version la plus récente entre la copie
+ * locale et le cloud :
  *  - hors-ligne (ou cloud injoignable) : copie locale ;
  *  - cloud inchangé depuis la base de la copie locale : copie locale (avec ses
  *    éventuelles modifications non synchronisées, `dirty`) ;
@@ -218,7 +251,7 @@ async function forkCloudVersion(id: string, userId: string): Promise<string> {
  *    si la copie échoue, la version locale est ouverte et la sauvegarde
  *    signalera le conflit au lieu d'écraser le cloud.
  */
-export async function getProject(id: string): Promise<ProjectRow | null> {
+async function getProjectRow(id: string): Promise<ProjectRow | null> {
   const userId = await getCurrentUserId();
   const localRow = await idbGetProject(id).catch(() => null);
   const local = localRow?.data && isOwnedBy(localRow, userId) ? withNameSync(localRow) : null;
@@ -331,8 +364,8 @@ export async function createProject(
   if (!isDev) {
     let uploaded: string | null = null;
     try {
-      const json = JSON.stringify(finalProject);
-      const cloud = await buildCloudPayload(finalProject, json);
+      const serialized = serializeProjectForStorage(finalProject);
+      const cloud = await buildCloudPayload(serialized.documentJson);
       const projectId = ID.unique();
       const written = await writeCloudData(projectId, userId, cloud);
       uploaded = written.uploaded;
@@ -371,9 +404,16 @@ export async function createProject(
         cloud_updated_at: doc.$updatedAt,
       };
       rememberCloudVersion(row.id, doc.$updatedAt);
-      void enqueue(localQueues, row.id, () => idbSaveProject(row, json)).catch((error: unknown) => {
+      confirmedDocuments.set(row.id, serialized.documentJson);
+      void enqueue(localQueues, row.id, () => idbSaveProject(row, serialized)).catch((error: unknown) => {
         logger.projects.warn('IndexedDB createProject cache failed', error);
       });
+      // Projet importé / dupliqué / copie de conflit : il garde la vue de sa source.
+      if (initialData) {
+        void saveProjectViewNow(row.id, extractProjectView(finalProject)).catch((error: unknown) => {
+          logger.projects.warn('createProject view not saved', error);
+        });
+      }
       return row;
     } catch (e) {
       if (uploaded) await deletePayloadFile(uploaded);
@@ -396,6 +436,7 @@ export async function createProject(
   };
 
   void idbSaveProject(localRow);
+  if (initialData) void saveProjectViewNow(localRow.id, extractProjectView(finalProject)).catch(() => undefined);
   const projects = readLocalProjects();
   projects.unshift(localRow);
   writeLocalProjects(projects);
@@ -403,8 +444,11 @@ export async function createProject(
 }
 
 export interface SaveProjectOptions {
-  /** JSON de `project` déjà calculé par l'appelant (une seule sérialisation par sauvegarde). */
-  serialized?: string;
+  /**
+   * JSON du document de `project` (`buildProjectDocument`) déjà calculé par
+   * l'appelant : une seule sérialisation par sauvegarde.
+   */
+  documentJson?: string;
   /**
    * Écrase la version cloud même si elle a été modifiée ailleurs depuis la
    * version connue (choix explicite de l'utilisateur après un conflit).
@@ -413,9 +457,11 @@ export interface SaveProjectOptions {
 }
 
 /**
- * Sauvegarde un projet : copie locale d'abord (IndexedDB, `dirty`), puis envoi
- * cloud sérialisé par projet. Lève une `ProjectCloudError` si le cloud n'a pas
- * confirmé ; la copie locale reste alors en attente (`dirty`).
+ * Sauvegarde le document d'un projet (la vue part par projectViews.ts) :
+ * copie locale d'abord (IndexedDB, `dirty`, avec le travail en attente), puis
+ * envoi cloud sérialisé par projet — sauf si le cloud a déjà confirmé ce
+ * document (seul le travail local a changé). Lève une `ProjectCloudError` si
+ * le cloud n'a pas confirmé ; la copie locale reste alors en attente (`dirty`).
  */
 export async function saveProject(
   id: string,
@@ -424,13 +470,14 @@ export async function saveProject(
 ): Promise<void> {
   const userId = await getCurrentUserId();
   const localOnly = isLocalFallbackUser(userId) || id.startsWith('local-');
-  const json = options.serialized ?? JSON.stringify(project);
+  const serialized = serializeProjectForStorage(project, options.documentJson);
+  const json = serialized.documentJson;
   const sizeBytes = utf8ByteLength(json);
 
   // 1. Copie locale avant tout appel réseau (survit à une fermeture d'onglet).
   let revision = localRevisions.get(id) ?? 0;
   try {
-    revision = await writeLocalCopy(id, project, userId, json, sizeBytes, !localOnly);
+    revision = await writeLocalCopy(id, project, userId, serialized, sizeBytes, !localOnly);
   } catch (err) {
     logger.projects.warn('IndexedDB saveProject error', err);
   }
@@ -439,9 +486,15 @@ export async function saveProject(
 
   // 2. Envoi cloud, un seul à la fois par projet, dans l'ordre des appels.
   await enqueue(cloudQueues, id, async () => {
+    // Vérifié dans la file, une fois les envois précédents terminés.
+    const knownVersion = knownCloudVersions.get(id);
+    if (!options.force && knownVersion && confirmedDocuments.get(id) === json) {
+      await markLocalSynced(id, revision, knownVersion);
+      return;
+    }
     let uploaded: string | null = null;
     try {
-      const cloud = await buildCloudPayload(project, json);
+      const cloud = await buildCloudPayload(json);
 
       if (!options.force) {
         const base = knownCloudVersions.get(id)
@@ -473,6 +526,7 @@ export async function saveProject(
       })) as unknown as CloudProjectDoc;
       uploaded = null;
       rememberCloudVersion(id, doc.$updatedAt);
+      confirmedDocuments.set(id, json);
       await markLocalSynced(id, revision, doc.$updatedAt);
       await settlePayloadFiles(id, written.data);
     } catch (e) {
@@ -620,7 +674,10 @@ export async function deleteProject(id: string): Promise<void> {
   }
   removeLocalProjectCacheEntry(id);
   knownCloudVersions.delete(id);
+  confirmedDocuments.delete(id);
   localRevisions.delete(id);
+  // Vue de l'utilisateur (locale et cloud), sans faire échouer la suppression.
+  await deleteProjectView(id).catch(() => undefined);
 
   const projects = readLocalProjects().filter((p) => p.id !== id);
   writeLocalProjects(projects);

@@ -22,11 +22,11 @@
 }
 
 .rvc-basemaps__row.is-active {
-  background: rgba(0, 0, 0, 0.4);
+  background: light-dark(rgb(var(--rv-ink) / 0.06), rgba(0, 0, 0, 0.4));
 }
 
 .rvc-basemaps__row:focus-visible {
-  outline: 1px solid rgba(255, 255, 255, 0.32);
+  outline: 1px solid rgb(var(--rv-ink) / 0.32);
   outline-offset: 0;
 }
 
@@ -53,7 +53,7 @@
 
 .rvc-basemaps__eye {
   flex: 0 0 auto;
-  color: rgba(255, 255, 255, 0.72);
+  color: rgb(var(--rv-ink) / 0.72);
 }
 
 .rvc-basemaps__quality-row {

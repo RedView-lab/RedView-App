@@ -17,6 +17,11 @@ export function useAnalysisFlyover(): AnalysisFlyoverContextValue {
   return context;
 }
 
+/** Moteur du flyover (`null` hors fournisseur ou sans carte), pour l'export vidéo. */
+export function useFlyoverController(): FlyoverController | null {
+  return useContext(FlyoverControllerContext);
+}
+
 /** Seek par abscisse du graphique ; stable tant que la trace et l'axe ne changent pas. */
 export function useFlyoverSeek(): FlyoverSeekToChartX {
   return useContext(FlyoverSeekContext);

@@ -9,6 +9,7 @@ import {
   IconChevronDown,
   IconDotsVertical,
   IconEye,
+  IconEyeOff,
 } from '../CenterPanelIcons';
 import {
   EMPTY_VALUES,
@@ -148,7 +149,7 @@ export function SummaryRow({
           title={analysisVisible ? t('Masquer l’itinéraire') : t('Afficher l’itinéraire')}
           data-visible={analysisVisible ? 'true' : 'false'}
         >
-          <IconEye size={14} />
+          {analysisVisible ? <IconEye size={14} /> : <IconEyeOff size={14} />}
         </button>
         <span className="rvc-center-summary__color" aria-hidden="true" style={{ background: itinerary.color }} />
         {mergeSelectionOrder != null ? (
@@ -224,7 +225,7 @@ export function EmptyRow() {
         <span
           className="rvc-center-summary__color"
           aria-hidden="true"
-          style={{ background: 'rgba(255,255,255,0.18)' }}
+          style={{ background: 'rgb(var(--rv-ink) / 0.18)' }}
         />
         <span className="rvc-center-summary__name">{t('Aucun itinéraire')}</span>
       </div>

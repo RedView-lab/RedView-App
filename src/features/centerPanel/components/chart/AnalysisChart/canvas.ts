@@ -3,6 +3,7 @@ import type { ChartSlopeSegment } from '../slope';
 import { SLOPE_COLOR_CLASSES, SLOPE_NEUTRAL_CLASS_INDEX } from '../slope';
 import { ratioFor } from './math';
 import { readDocumentAppLocale } from '@/shared/i18n';
+import type { AppTheme } from '@/shared/lib/appTheme';
 import type { CanvasBackdropLayer, CanvasSeriesLayer } from './types';
 
 export function drawAnalysisChartCanvas(
@@ -14,6 +15,7 @@ export function drawAnalysisChartCanvas(
     backdropYDomain: AxisDomain | null;
     backdropSeries: CanvasBackdropLayer[];
     seriesLayers: CanvasSeriesLayer[];
+    theme: AppTheme;
   },
 ) {
   if (!canvas) return;
@@ -50,6 +52,7 @@ export function drawAnalysisChartCanvas(
           1.6,
           width,
           height,
+          input.theme,
         );
         continue;
       }
@@ -78,6 +81,7 @@ export function drawAnalysisChartCanvas(
         Math.max(2.25, layer.lineWidth),
         width,
         height,
+        input.theme,
       );
       continue;
     }
@@ -228,6 +232,9 @@ const GRADE_LABEL_MIN_BLOCK_PX = 16;
 const GRADE_LABEL_MIN_GAIN_M = 25;
 /** Pente moyenne minimale (%) d'une montée pour porter une pastille (pas de faux plats). */
 const GRADE_LABEL_MIN_PCT = 3;
+/** Liseré sous la ligne et contour des pastilles : plus léger sur le fond blanc du thème clair. */
+const SLOPE_LINE_OUTLINE: Record<AppTheme, string> = { dark: 'rgba(0, 0, 0, 0.45)', light: 'rgba(0, 0, 0, 0.22)' };
+const GRADE_LABEL_OUTLINE: Record<AppTheme, string> = { dark: 'rgba(0, 0, 0, 0.4)', light: 'rgba(0, 0, 0, 0.18)' };
 const GRADE_LABEL_GAP_PX = 6;
 const GRADE_LABEL_HEIGHT_PX = 17;
 const GRADE_LABEL_BOTTOM_PX = 6;
@@ -376,6 +383,7 @@ function drawSlopeColoredProfile(
   lineWidth: number,
   width: number,
   height: number,
+  theme: AppTheme,
 ) {
   if (points.length < 2 || width <= 0 || height <= 0) return;
   const bands = buildSlopeBands(segments, xDomain, width);
@@ -420,7 +428,7 @@ function drawSlopeColoredProfile(
   tracePolyline(ctx, points, xDomain, yDomain, width, height);
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+  ctx.strokeStyle = SLOPE_LINE_OUTLINE[theme];
   ctx.lineWidth = lineWidth + 2;
   ctx.stroke();
   ctx.strokeStyle = createBandGradient(ctx, bands, width);
@@ -428,7 +436,7 @@ function drawSlopeColoredProfile(
   ctx.stroke();
   ctx.restore();
 
-  drawSlopeGradeLabels(ctx, canvas, points, segments, xDomain, yDomain, width, height);
+  drawSlopeGradeLabels(ctx, canvas, points, segments, xDomain, yDomain, width, height, theme);
 }
 
 /** Point le plus bas de la courbe (Y pixel max) sur [startX, endX]. */
@@ -471,6 +479,7 @@ function drawSlopeGradeLabels(
   yDomain: AxisDomain,
   width: number,
   height: number,
+  theme: AppTheme,
 ) {
   const span = xDomain.max - xDomain.min;
   if (!(span > 0) || height < GRADE_LABEL_HEIGHT_PX * 3) return;
@@ -519,7 +528,7 @@ function drawSlopeGradeLabels(
     ctx.fillStyle = color;
     ctx.fill();
     ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.strokeStyle = GRADE_LABEL_OUTLINE[theme];
     ctx.stroke();
     ctx.fillStyle = labelTextColor(color);
     ctx.fillText(text, left + pillWidth / 2, pillTop + GRADE_LABEL_HEIGHT_PX / 2 + 0.5);

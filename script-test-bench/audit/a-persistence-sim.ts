@@ -59,7 +59,10 @@ async function loadBundle() {
   const outFile = path.join(os.tmpdir(), `rv-audit-persist-${process.pid}.mjs`);
   const entry = `
     export * from ${JSON.stringify(path.join(SRC, 'shared/utils/projects/projectRows.ts'))};
+    export * from ${JSON.stringify(path.join(SRC, 'shared/utils/projects/projectViews.ts'))};
     export * from ${JSON.stringify(path.join(SRC, 'shared/utils/projects/folders.ts'))};
+    export { getSavedCustomProfiles, saveCustomProfileToStorage, deleteCustomProfileFromStorage, syncCustomProfilesWithAccount } from ${JSON.stringify(path.join(SRC, 'features/itineraryPanel/lib/project/customProfiles.ts'))};
+    export { extractProjectView, toProjectDocument, isProjectDocument } from ${JSON.stringify(path.join(SRC, 'features/itineraryPanel/lib/project/layers.ts'))};
     export { compressProjectPayload, decompressProjectPayload } from ${JSON.stringify(path.join(SRC, 'shared/utils/projects/compression.ts'))};
     export { readStoredAppwriteSession, saveStoredAppwriteSession, clearStoredAppwriteSession, getAppwriteUser, onAppwriteSessionExpired } from ${JSON.stringify(path.join(SRC, 'shared/services/appwrite.ts'))};
     export { createDefaultProject, createDefaultItinerary } from ${JSON.stringify(path.join(SRC, 'features/itineraryPanel/lib/project/index.ts'))};
@@ -546,6 +549,192 @@ async function main() {
       `en ligne : dernière synchro puis déconnexion ${threwOnline ? 'en échec' : 'ok'} ; cloud="${cloudName}" ; IDB purgée : ${purged ? 'oui' : 'non'}`,
     ]);
     loginAs('user-A');
+  }
+
+  // ── Couches du projet (lib/project/layers.ts) : document / vue / travail local ──
+  const cloudRaw = async (id: string) => {
+    const doc = __mock.col('projects').get(id);
+    return doc ? await m.decompressProjectPayload(doc.data) : null;
+  };
+  const cloudView = (projectId: string, userId = 'user-A') => {
+    const doc = __mock.col('project_views').get(m.projectViewDocumentId(projectId, userId));
+    return doc ? JSON.parse(doc.data) as { updatedAt: string; view: Record<string, any> } : null; // eslint-disable-line @typescript-eslint/no-explicit-any
+  };
+  const viewport = (zoom: number) => ({ center: [6.8, 45.9] as [number, number], zoom, pitch: 50, bearing: 20 });
+
+  // V1 : un changement de vue seul ne réécrit jamais le projet.
+  {
+    fresh();
+    const row = await m.createProject('V1', named('V1'));
+    const opened = (await m.getProject(row.id)).data;
+    await m.saveProject(row.id, opened);
+    __mock.calls = [];
+    const viewChanged = { ...opened, activeMode: 'poi', timelineView: 'timeline', dashboard: { mapViewport: viewport(13) } };
+    await m.saveProject(row.id, viewChanged); // document identique : rien à envoyer
+    m.queueProjectViewSave(row.id, m.extractProjectView(viewChanged));
+    await m.flushProjectViews(row.id);
+    const projectCalls = __mock.calls.filter((c: string) => c.endsWith(':projects')).length;
+    const view = cloudView(row.id);
+    const bad = projectCalls !== 0 || view?.view.activeMode !== 'poi' || view?.view.dashboard?.mapViewport?.zoom !== 13;
+    report('V1', 'changement de vue (mode, feuille de route, carte) réécrit le projet', bad, [
+      `appels sur « projects » après le changement de vue : ${projectCalls} ; vue cloud : mode=${view?.view.activeMode}, zoom=${view?.view.dashboard?.mapViewport?.zoom}`,
+    ]);
+  }
+
+  // V2 : la vue suit l'utilisateur d'un appareil à l'autre.
+  {
+    fresh();
+    const row = await m.createProject('V2', named('V2'));
+    const opened = (await m.getProject(row.id)).data;
+    m.queueProjectViewSave(row.id, m.extractProjectView({ ...opened, activeMode: 'rythme', dashboard: { mapViewport: viewport(11) } }));
+    await m.flushProjectViews(row.id);
+    __idb.clear(); // autre appareil, même compte
+    const onB = (await m.getProject(row.id))?.data;
+    const bad = onB?.activeMode !== 'rythme' || onB?.dashboard?.mapViewport?.zoom !== 11;
+    report('V2', 'vue (mode, vue carte) perdue en changeant d’appareil', bad, [
+      `autre appareil : mode=${onB?.activeMode}, zoom=${onB?.dashboard?.mapViewport?.zoom}`,
+    ]);
+  }
+
+  // V3 : projet enregistré au format précédent (vue + travail dans `data`) → migration sans perte.
+  {
+    fresh();
+    const it = { ...m.createDefaultItinerary(1), id: 'it-v3', opacity: 40, renderMode: 'slope', pendingFitRecompute: true };
+    const legacy = {
+      ...named('V3 ancien'),
+      itineraries: [it],
+      activeItineraryId: 'it-v3',
+      activeMode: 'poi',
+      timelineView: 'timeline',
+      dashboard: { mapViewport: viewport(12), rightPanelWidth: 410 },
+    };
+    const t0 = '2026-09-01T08:00:00.000Z';
+    __mock.col('projects').set('legacy01', {
+      $id: 'legacy01', $createdAt: t0, $updatedAt: t0, user_id: 'user-A', folder_id: null,
+      name: 'V3 ancien', data: await m.compressProjectPayload(legacy), size_bytes: 0, privacy: 'private',
+    });
+    const opened = (await m.getProject('legacy01'))?.data;
+    await m.flushProjectViews('legacy01');
+    const seeded = cloudView('legacy01');
+    await m.saveProject('legacy01', { ...opened, name: 'V3 migré' });
+    const stored = await cloudRaw('legacy01');
+    const storedJson = JSON.stringify(stored);
+    const clean = m.isProjectDocument(stored)
+      && !('activeMode' in stored) && !('dashboard' in stored) && !('controlPanel' in stored)
+      && !storedJson.includes('"opacity"') && !storedJson.includes('pendingFitRecompute');
+    __idb.clear(); // autre appareil
+    const onB = (await m.getProject('legacy01'))?.data;
+    const bad = opened?.activeMode !== 'poi'
+      || opened?.itineraries?.[0]?.pendingFitRecompute !== true
+      || seeded?.updatedAt !== t0
+      || !clean
+      || onB?.name !== 'V3 migré'
+      || onB?.activeMode !== 'poi'
+      || onB?.itineraries?.[0]?.opacity !== 40
+      || onB?.dashboard?.mapViewport?.zoom !== 12
+      || onB?.itineraries?.[0]?.pendingFitRecompute !== undefined;
+    report('V3', 'ancien format : vue ou contenu perdus à la migration', bad, [
+      `ouverture : mode=${opened?.activeMode}, travail repris=${opened?.itineraries?.[0]?.pendingFitRecompute === true ? 'oui' : 'non'} ; vue amorcée (horodatée ${seeded?.updatedAt ?? '—'})`,
+      `réenregistré : document v2 sans vue ni travail local = ${clean ? 'oui' : 'NON'}`,
+      `autre appareil : nom=${onB?.name}, mode=${onB?.activeMode}, opacité=${onB?.itineraries?.[0]?.opacity}, zoom=${onB?.dashboard?.mapViewport?.zoom}, travail=${onB?.itineraries?.[0]?.pendingFitRecompute ?? 'aucun'}`,
+    ]);
+  }
+
+  // V4 : le travail en attente reste sur l'appareil, jamais dans le document partagé.
+  {
+    fresh();
+    const row = await m.createProject('V4', named('V4'));
+    const it = {
+      ...m.createDefaultItinerary(1),
+      id: 'it-v4',
+      pendingRoutePatch: { start: { lat: 45, lon: 6, kind: 'start' }, end: { lat: 45.1, lon: 6.1, kind: 'end' }, via: [] },
+    };
+    const project = { ...named('V4'), itineraries: [it], activeItineraryId: 'it-v4' };
+    await m.saveProject(row.id, project);
+    const cloudHasWork = JSON.stringify(await cloudRaw(row.id)).includes('pendingRoutePatch');
+    const localKeeps = !!(await m.getProject(row.id))?.data?.itineraries?.[0]?.pendingRoutePatch;
+    __mock.calls = [];
+    await m.saveProject(row.id, { ...project, itineraries: [{ ...it, pendingRoutePatch: undefined }] });
+    const writes = __mock.calls.filter((c: string) => c === 'updateDocument:projects').length;
+    const dirty = __idb.projects.raw(row.id)?.dirty;
+    const bad = cloudHasWork || !localKeeps || writes !== 0 || dirty !== false;
+    report('V4', 'édition en attente envoyée dans le document partagé', bad, [
+      `cloud contient pendingRoutePatch : ${cloudHasWork ? 'OUI' : 'non'} ; copie locale la garde : ${localKeeps ? 'oui' : 'NON'}`,
+      `travail seul consommé : updateDocument=${writes}, copie locale dirty=${dirty}`,
+    ]);
+  }
+
+  // V6 : pendant qu'un autre appareil enregistre le document, changer sa vue ne crée aucun conflit.
+  {
+    fresh();
+    const row = await m.createProject('V6', named('V6 v1'));
+    const onB = (await m.getProject(row.id)).data;
+    await __mockUpdate(__mock, row.id, await m.compressProjectPayload(named('V6 v2 (A)')), 'V6 v2 (A)');
+    m.queueProjectViewSave(row.id, m.extractProjectView({ ...onB, activeMode: 'poi' }));
+    let threw: unknown = null;
+    try { await m.flushProjectViews(row.id); } catch (e) { threw = e; }
+    const projectCalls = __mock.calls.filter((c: string) => c.endsWith(':projects')).length;
+    const cloudName = (await cloudRaw(row.id))?.name;
+    const bad = !!threw || projectCalls !== 0 || cloudName !== 'V6 v2 (A)' || cloudView(row.id)?.view.activeMode !== 'poi';
+    report('V6', 'changement de vue en conflit avec le document d’un autre appareil', bad, [
+      `vue enregistrée : ${threw ? 'ERREUR' : 'ok'} ; appels « projects » : ${projectCalls} ; document cloud : « ${cloudName} »`,
+    ]);
+  }
+
+  // V5 : collection `project_views` pas encore créée → la vue reste locale, rien ne casse.
+  {
+    fresh();
+    __mock.missingCollections.add('project_views');
+    const row = await m.createProject('V5', named('V5'));
+    const opened = (await m.getProject(row.id)).data;
+    m.queueProjectViewSave(row.id, m.extractProjectView({ ...opened, activeMode: 'rythme' }));
+    let threw: unknown = null;
+    try { await m.flushProjectViews(row.id); } catch (e) { threw = e; }
+    const reopened = (await m.getProject(row.id))?.data;
+    const bad = !!threw || reopened?.activeMode !== 'rythme';
+    report('V5', 'collection project_views absente : erreur ou vue perdue', bad, [
+      `flush : ${threw ? 'lève' : 'ok'} ; réouverture (même appareil) : mode=${reopened?.activeMode}`,
+    ]);
+  }
+
+  // PR1 : profils de tracé perso dans le compte (multi-appareils) et embarqués dans le document.
+  {
+    fresh();
+    const base = m.createDefaultItinerary(1);
+    const { applyToAllItineraries: _unused, ...roadTypes } = base.roadTypes;
+    const profile = (id: string, name: string) => ({ id, name, basePresetId: 'gravel-default', roadTypes, priorities: { ...base.priorities }, createdAt: 1 });
+    const storage = g.localStorage as MemStorage;
+    storage.setItem('redview_custom_routing_profiles', JSON.stringify([profile('custom-legacy', 'Ancien')]));
+    const migrated = m.getSavedCustomProfiles().map((p: { id: string }) => p.id).join();
+    await m.syncCustomProfilesWithAccount();
+    const inPrefs = (__mock.user.prefs?.routingProfiles ?? []).map((p: { id: string }) => p.id).join();
+    const legacyGone = storage.getItem('redview_custom_routing_profiles') === null;
+    // Autre appareil (même compte) : la bibliothèque arrive du compte, puis il supprime le profil.
+    const stalePrefsCopy = storage.getItem('redview:routing-profiles:v2');
+    storage.clear();
+    await m.syncCustomProfilesWithAccount();
+    const onB = m.getSavedCustomProfiles().map((p: { id: string }) => p.id).join();
+    m.deleteCustomProfileFromStorage('custom-legacy');
+    await m.syncCustomProfilesWithAccount();
+    // Retour sur le premier appareil, copie locale périmée : le profil ne doit pas revenir.
+    storage.setItem('redview:routing-profiles:v2', stalePrefsCopy ?? '');
+    await m.syncCustomProfilesWithAccount();
+    const backOnA = m.getSavedCustomProfiles().map((p: { id: string }) => p.id).join();
+    // Projet utilisant un profil perso : copie embarquée dans le document.
+    m.saveCustomProfileToStorage(profile('custom-doc', 'Gravel doux'));
+    const row = await m.createProject('PR1', {
+      ...named('PR1'),
+      itineraries: [{ ...base, id: 'it-pr1', profileId: 'custom-doc' }],
+      activeItineraryId: 'it-pr1',
+    });
+    const embedded = ((await cloudRaw(row.id))?.routingProfiles ?? []).map((p: { name: string }) => p.name).join();
+    const bad = migrated !== 'custom-legacy' || inPrefs !== 'custom-legacy' || !legacyGone
+      || onB !== 'custom-legacy' || backOnA !== '' || embedded !== 'Gravel doux';
+    report('PR1', 'profils de tracé perso : pas synchronisés entre appareils / absents du projet', bad, [
+      `ancienne clé reprise : ${migrated || '—'} → préférences du compte : ${inPrefs || '—'} ; ancienne clé supprimée : ${legacyGone ? 'oui' : 'non'}`,
+      `autre appareil : ${onB || '—'} ; supprimé là-bas puis copie périmée resynchronisée : « ${backOnA || 'aucun'} »`,
+      `document du projet : profils embarqués = ${embedded || '—'}`,
+    ]);
   }
 
   const reproduced = results.filter((r) => r.reproduced);

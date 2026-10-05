@@ -6,6 +6,7 @@ import {
   createImportedTimeline,
   normalizeImportedRoutePoints,
 } from '../routes';
+import { createDocumentId } from './ids';
 
 export interface SplitItineraryProjectResult {
   project: ItineraryProject;
@@ -53,7 +54,7 @@ export function splitItineraryProject(
   const rightPoints = normalizeImportedRoutePoints(route.points.slice(safeSplitIndex));
   if (leftPoints.length < 2 || rightPoints.length < 2) return null;
 
-  const createdItineraryId = `it-${Date.now()}-${project.itineraries.length + 1}`;
+  const createdItineraryId = createDocumentId('it');
   const createdItineraryName = buildUniqueSplitName(project, source.name);
   const nextColor = pickSplitChildColor(project, source.color);
   const nextSource: Itinerary = structuredClone(source);

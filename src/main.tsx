@@ -5,8 +5,10 @@ import { APP_BUILD_ID, APP_CACHE_EPOCH, ensureAppCacheEpochReset } from './share
 import { logger } from './shared/lib/logger'
 import { AppI18nProvider } from './shared/i18n'
 import { GlobalErrorBoundary } from './shared/components/GlobalErrorBoundary'
+import { initAppTheme } from './shared/lib/appTheme'
 import './features/map3d/hooks/useMap/serviceWorker'
 import './shared/styles/typography.css'
+import './shared/styles/theme.css'
 import './index.css'
 import './shared/styles/glass.css'
 import './shared/styles/dropdown.css'
@@ -58,6 +60,9 @@ window.addEventListener('vite:preloadError', (event) => {
   event.preventDefault()
   window.location.reload()
 })
+
+// Avant le premier rendu : pas de flash du mauvais thème.
+initAppTheme()
 
 async function bootstrap(): Promise<void> {
   const didResetCacheEpoch = await ensureAppCacheEpochReset()

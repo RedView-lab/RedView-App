@@ -15,6 +15,7 @@ export {
   IconCalendar,
   IconClock,
   IconEye,
+  IconEyeOff,
   IconTrash,
 } from '@/features/controlPanel/icons';
 

@@ -58,6 +58,7 @@ export default function Dashboard({
     handleProjectChange,
     handleSaveProject,
     updatePersistedDashboard,
+    getActiveProjectSnapshot,
   } = useDashboardProjectState({
     initialProjectId,
     mapInstance,
@@ -287,6 +288,7 @@ export default function Dashboard({
               onProjectChange={handleProjectChange}
               onBackToBrowser={handleBackToBrowser}
               onSaveProject={handleSaveProject}
+              getProjectSnapshot={getActiveProjectSnapshot}
               onOverlayReload={handleOverlayReload}
               onBasemapChange={handleBasemapChange}
               onWeatherOverlayStatusChange={handleWeatherOverlayStatusChange}

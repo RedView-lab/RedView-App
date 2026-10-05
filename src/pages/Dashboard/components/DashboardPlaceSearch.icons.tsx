@@ -19,7 +19,20 @@ export function PoiOptionMarker({ option }: { option: DashboardPoiOption }) {
   );
 }
 
+/** Glyphes monochromes (trait blanc sans pastille) : peints à l'encre du thème. */
+const MONOCHROME_FILTER_ICONS = new Set(['search-filter-pauses.svg']);
+
 export function FilterChipIcon({ name }: { name: string }) {
+  if (MONOCHROME_FILTER_ICONS.has(name)) {
+    const mask = `url(/svgv2/icone/${name}) center / contain no-repeat`;
+    return (
+      <span
+        className="rvd-place-search__filter-marker-image"
+        aria-hidden="true"
+        style={{ backgroundColor: 'var(--rv-text)', WebkitMask: mask, mask }}
+      />
+    );
+  }
   return (
     <img
       className="rvd-place-search__filter-marker-image"

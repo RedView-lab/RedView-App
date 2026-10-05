@@ -5,12 +5,12 @@
   --rvi-red-border: #700000;
   --rvi-red-accent: #c50000;
   --rvi-bg: var(--rv-glass-tint);
-  --rvi-bg-chip: rgba(255, 255, 255, 0.08);
-  --rvi-bg-chip-hover: rgba(255, 255, 255, 0.12);
-  --rvi-border: rgba(255, 255, 255, 0.08);
-  --rvi-text: #ffffff;
-  --rvi-text-dim: rgba(255, 255, 255, 0.64);
-  --rvi-text-faint: rgba(255, 255, 255, 0.4);
+  --rvi-bg-chip: rgb(var(--rv-ink) / 0.08);
+  --rvi-bg-chip-hover: rgb(var(--rv-ink) / 0.12);
+  --rvi-border: rgb(var(--rv-ink) / 0.08);
+  --rvi-text: var(--rv-text);
+  --rvi-text-dim: rgb(var(--rv-ink) / 0.64);
+  --rvi-text-faint: rgb(var(--rv-ink) / 0.4);
   --rvi-radius: 8px;
   --rvi-radius-md: 6px;
   --rvi-radius-sm: 5px;
@@ -29,8 +29,8 @@
   container-type: inline-size;
   container-name: rvipanel;
 
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border: 1px solid rgb(var(--rv-ink) / 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), var(--rv-float-shadow);
   border-radius: var(--rvi-radius);
   color: var(--rvi-text);
   font-family: var(--rv-font-sans);
@@ -49,7 +49,7 @@
   overflow: hidden;
   padding: 12px;
   box-sizing: border-box;
-  background: rgba(0, 0, 0, 0.65);
+  background: light-dark(var(--rv-scrim), rgba(0, 0, 0, 0.65));
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
@@ -62,12 +62,12 @@
   height: 100%;
   max-height: none;
   padding: 14px;
-  background: rgba(14, 16, 20, 0.94);
+  background: light-dark(rgba(255, 255, 255, 0.96), rgba(14, 16, 20, 0.94));
   backdrop-filter: blur(48px);
   -webkit-backdrop-filter: blur(48px);
   border: 0;
   border-radius: 12px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.72);
+  box-shadow: 0 24px 64px light-dark(rgba(16, 18, 24, 0.22), rgba(0, 0, 0, 0.72));
   animation: rvi-panel-fullscreen-enter 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -150,7 +150,7 @@
    * gutter keeps the layout from shifting when the bar appears.
    */
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+  scrollbar-color: rgb(var(--rv-ink) / 0.22) transparent;
   scrollbar-gutter: stable;
   transition:
     opacity 180ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -167,7 +167,7 @@
 }
 
 .rvi-panel__mode-main::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.22);
+  background: rgb(var(--rv-ink) / 0.22);
   border-radius: 999px;
 }
 
@@ -229,11 +229,11 @@
   width: min(88px, 28%);
   height: 6px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.16);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgb(var(--rv-ink) / 0.16);
+  border: 1px solid rgb(var(--rv-ink) / 0.08);
   box-shadow:
-    0 10px 22px rgba(0, 0, 0, 0.28),
-    0 0 0 1px rgba(0, 0, 0, 0.12);
+    0 10px 22px light-dark(rgba(16, 18, 24, 0.1), rgba(0, 0, 0, 0.28)),
+    0 0 0 1px light-dark(rgba(16, 18, 24, 0.04), rgba(0, 0, 0, 0.12));
   transition:
     background 160ms ease,
     transform 160ms ease,
@@ -242,10 +242,10 @@
 
 .rvi-panel__dock-resize-hitbox:hover .rvi-panel__dock-resize-grip,
 .rvi-panel__dock-resize-hitbox.is-dragging .rvi-panel__dock-resize-grip {
-  background: rgba(255, 255, 255, 0.24);
+  background: rgb(var(--rv-ink) / 0.24);
   transform: scaleX(1.04);
   box-shadow:
-    0 12px 26px rgba(0, 0, 0, 0.32),
+    0 12px 26px light-dark(rgba(16, 18, 24, 0.12), rgba(0, 0, 0, 0.32)),
     0 0 0 1px rgba(197, 0, 0, 0.28);
 }
 
@@ -295,14 +295,14 @@
   border: 1px solid transparent;
 }
 .rvi-route-banner--error {
-  background: rgba(197, 0, 0, 0.18);
-  border-color: rgba(197, 0, 0, 0.45);
-  color: #ffd3d3;
+  background: light-dark(rgba(197, 0, 0, 0.07), rgba(197, 0, 0, 0.18));
+  border-color: light-dark(rgba(197, 0, 0, 0.28), rgba(197, 0, 0, 0.45));
+  color: light-dark(#a30000, #ffd3d3);
 }
 .rvi-route-banner--warn {
-  background: rgba(255, 170, 0, 0.12);
-  border-color: rgba(255, 170, 0, 0.35);
-  color: #ffe5b3;
+  background: light-dark(rgba(247, 144, 9, 0.1), rgba(255, 170, 0, 0.12));
+  border-color: light-dark(rgba(220, 104, 3, 0.3), rgba(255, 170, 0, 0.35));
+  color: light-dark(#b54708, #ffe5b3);
 }
 .rvi-route-banner > div + div {
   margin-top: 4px;

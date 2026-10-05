@@ -14,6 +14,7 @@ import { attachVhrOrtho } from './vhrOrtho';
 import { attachListeners } from './listeners';
 import { attachStyleBootstrap } from './styleBootstrap';
 import { attachHeartbeat } from './heartbeat';
+import { clearVisibleTimer } from './visibleClock';
 
 /**
  * Map / DEM / terrain lifecycle controller.
@@ -59,10 +60,8 @@ export function createMapLifecycleController(
   const cleanup = () => {
     ctx.fns.stopTerrainHeartbeat();
     ctx.fns.clearDemTracking();
-    if (ctx.state.loadingDeadline) {
-      clearTimeout(ctx.state.loadingDeadline);
-      ctx.state.loadingDeadline = null;
-    }
+    clearVisibleTimer(ctx.state.loadingDeadline);
+    ctx.state.loadingDeadline = null;
     ctx.fns.clearStyleBootstrapArtifacts();
     ctx.fns.removeTrackingListeners();
   };

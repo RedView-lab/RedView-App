@@ -25,9 +25,13 @@
   gap: 24px;
   overflow: hidden;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(153, 153, 153, 0.04) 100%),
-    #000;
-  color: #fff;
+    linear-gradient(
+      180deg,
+      light-dark(rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.06)) 0%,
+      light-dark(rgba(17, 17, 20, 0.02), rgba(153, 153, 153, 0.04)) 100%
+    ),
+    light-dark(#f4f4f5, #000);
+  color: var(--rv-text);
   font-family: var(--rv-font-sans);
 }
 
@@ -60,7 +64,7 @@
   width: 42px;
   height: 42px;
   border-radius: 999px;
-  border: 2px solid rgba(255, 255, 255, 0.14);
+  border: 2px solid rgb(var(--rv-ink) / 0.14);
   border-top-color: #890000;
   animation: rv-loading-spin 900ms linear infinite;
 }
@@ -70,7 +74,7 @@
   font-size: var(--rv-font-size-lg);
   font-weight: 600;
   letter-spacing: 0.01em;
-  color: rgba(255, 255, 255, 0.92);
+  color: rgb(var(--rv-ink) / 0.92);
 }
 
 .rv-loading-screen__project {
@@ -81,7 +85,7 @@
   white-space: nowrap;
   font-size: var(--rv-font-size-md);
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.42);
+  color: rgb(var(--rv-ink) / 0.42);
 }
 
 @media (prefers-reduced-motion: reduce) {

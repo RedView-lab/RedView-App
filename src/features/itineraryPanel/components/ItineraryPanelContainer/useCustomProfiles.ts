@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_PROFILES } from '../../lib/project';
 import {
+  ensureCustomProfilesSynced,
   getSavedCustomProfiles,
+  mergeAvailableCustomProfiles,
   saveCustomProfileToStorage,
   deleteCustomProfileFromStorage,
   CUSTOM_PROFILES_CHANGED_EVENT,
@@ -10,20 +12,27 @@ import {
 import type { RouteProfile } from '../../types';
 
 /**
- * Profils de tracé enregistrés par l'utilisateur (localStorage), synchronisés
- * entre onglets/panneaux via `CUSTOM_PROFILES_CHANGED_EVENT`, et liste
- * combinée présets + profils perso affichée dans le sélecteur.
+ * Profils de tracé perso : bibliothèque du compte (copie locale synchronisée
+ * avec les préférences Appwrite, cf. customProfiles.ts) complétée des profils
+ * embarqués dans le projet ouvert, et liste combinée présets + profils perso
+ * affichée dans le sélecteur.
  */
-export function useCustomProfiles() {
-  const [savedCustomProfiles, setSavedCustomProfiles] = useState<SavedCustomProfile[]>(() =>
+export function useCustomProfiles(projectProfiles?: readonly SavedCustomProfile[]) {
+  const [libraryProfiles, setLibraryProfiles] = useState<SavedCustomProfile[]>(() =>
     getSavedCustomProfiles(),
   );
 
   useEffect(() => {
-    const handler = () => setSavedCustomProfiles(getSavedCustomProfiles());
+    const handler = () => setLibraryProfiles(getSavedCustomProfiles());
     window.addEventListener(CUSTOM_PROFILES_CHANGED_EVENT, handler);
+    ensureCustomProfilesSynced();
     return () => window.removeEventListener(CUSTOM_PROFILES_CHANGED_EVENT, handler);
   }, []);
+
+  const savedCustomProfiles = useMemo(
+    () => mergeAvailableCustomProfiles(libraryProfiles, projectProfiles),
+    [libraryProfiles, projectProfiles],
+  );
 
   const combinedProfiles = useMemo<RouteProfile[]>(() => {
     const customItems: RouteProfile[] = savedCustomProfiles.map((cp) => ({
@@ -36,12 +45,12 @@ export function useCustomProfiles() {
   const saveCustomProfile = useCallback((profile: Parameters<typeof saveCustomProfileToStorage>[0] | null | undefined) => {
     if (!profile) return;
     saveCustomProfileToStorage(profile);
-    setSavedCustomProfiles(getSavedCustomProfiles());
+    setLibraryProfiles(getSavedCustomProfiles());
   }, []);
 
   const deleteCustomProfile = useCallback((id: string) => {
     deleteCustomProfileFromStorage(id);
-    setSavedCustomProfiles(getSavedCustomProfiles());
+    setLibraryProfiles(getSavedCustomProfiles());
   }, []);
 
   return { savedCustomProfiles, combinedProfiles, saveCustomProfile, deleteCustomProfile };

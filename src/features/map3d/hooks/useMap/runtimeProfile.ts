@@ -110,6 +110,7 @@ export function getMapRuntimeProfile(): MapRuntimeProfile {
 let dprPatched = false;
 let dprCap = Number.POSITIVE_INFINITY;
 let dprLayoutScale = 1;
+let dprOverride: number | null = null;
 let readNativeDpr: () => number = () => 1;
 
 function resolveNativeDprGetter(): () => number {
@@ -139,16 +140,40 @@ function resolveNativeDprGetter(): () => number {
 export function applyRuntimeProfileDpr(profile: MapRuntimeProfile): void {
   if (typeof window === 'undefined') return;
   dprCap = profile.pixelRatio;
-  if (dprPatched) return;
+  patchDevicePixelRatio();
+}
+
+function patchDevicePixelRatio(): boolean {
+  if (dprPatched) return true;
   try {
     readNativeDpr = resolveNativeDprGetter();
     Object.defineProperty(window, 'devicePixelRatio', {
-      get: () => Math.max(0.5, Math.min(readNativeDpr(), dprCap) * dprLayoutScale),
+      get: () => dprOverride ?? Math.max(0.5, Math.min(readNativeDpr(), dprCap) * dprLayoutScale),
       configurable: true,
     });
     dprPatched = true;
   } catch (error) {
     console.warn('[runtimeProfile] Failed to cap window.devicePixelRatio', error);
+  }
+  return dprPatched;
+}
+
+/**
+ * Runs `fn` with `window.devicePixelRatio` forced to `dpr`, synchronously.
+ * Mapbox has one pixel ratio for every map of the page: the offscreen map of
+ * the flyover video export (rendered at 2× while the dashboard map keeps the
+ * profile's) wraps its own render, construction and tile requests in this,
+ * nothing else sees the override. Without the getter patch `fn` simply runs
+ * at the current ratio.
+ */
+export function withDevicePixelRatio<T>(dpr: number, fn: () => T): T {
+  if (typeof window === 'undefined' || !patchDevicePixelRatio()) return fn();
+  const previous = dprOverride;
+  dprOverride = dpr;
+  try {
+    return fn();
+  } finally {
+    dprOverride = previous;
   }
 }
 

@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { ROUTE_SLOPE_LEGEND_BANDS } from '@/features/controlPanel/lib';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
+import type { Itinerary } from '@/features/itineraryPanel';
 import { useAppI18n } from '@/shared/i18n';
 import { DEFAULT_VIEW } from '@/features/map3d/lib/mapbox.config';
 import {
@@ -26,7 +27,6 @@ interface MapViewportControlsProps {
    */
   isRightPanelVisible?: boolean;
   onToggleRightPanel?: () => void;
-  routeSlopeLegendTitle?: string | null;
   routeColor?: string | null;
   /** Short canvas: 2-column grid of 32 px buttons (pages/Dashboard/lib/layout.ts reserves its size). */
   compact?: boolean;
@@ -147,7 +147,6 @@ export const MapViewportControls = memo(function MapViewportControls({
   onToggleImmersiveMode,
   isRightPanelVisible = true,
   onToggleRightPanel,
-  routeSlopeLegendTitle = null,
   routeColor = null,
   compact = false,
 }: MapViewportControlsProps) {
@@ -167,14 +166,56 @@ export const MapViewportControls = memo(function MapViewportControls({
   const legendPopoverRef = useRef<HTMLDivElement | null>(null);
   const compassNeedleRef = useRef<HTMLSpanElement | null>(null);
 
-  const hasRouteSlope = routeSlopeLegendTitle != null;
-  const slopeLegendPanelTitle = routeSlopeLegendTitle ?? t('Légende de pente du tracé');
+  // Itinéraire tracé en pente sur la carte : l'actif quand le chip « Pente »
+  // du graphe central est coché, sinon un itinéraire en mode de rendu pente.
+  const project = projectStore?.project ?? null;
+  const isSlopeDrawn = (itinerary: Itinerary) =>
+    itinerary.visible !== false
+    && (itinerary.renderMode === 'slope'
+      || (Boolean(project?.analysis?.filters?.slopeColors) && itinerary.id === project?.activeItineraryId));
+  const slopeItinerary = project
+    ? project.itineraries.find((itinerary) => itinerary.id === project.activeItineraryId && isSlopeDrawn(itinerary))
+      ?? project.itineraries.find(isSlopeDrawn)
+      ?? null
+    : null;
+  const hasRouteSlope = slopeItinerary != null;
+  const slopeLegendPanelTitle = slopeItinerary
+    ? `${slopeItinerary.name} (${t('Pente').toLocaleLowerCase()})`
+    : t('Légende de pente du tracé');
 
-  useEffect(() => {
+  // Le passage en pente ouvre la légende des pentes ; elle se referme avec lui
+  // si c'est lui qui l'avait ouverte (état ajusté au rendu, pas dans un effet).
+  const [prevHasRouteSlope, setPrevHasRouteSlope] = useState(false);
+  const [legendOpenedBySlope, setLegendOpenedBySlope] = useState(false);
+  if (prevHasRouteSlope !== hasRouteSlope) {
+    setPrevHasRouteSlope(hasRouteSlope);
     if (hasRouteSlope) {
       setActiveLegendTab('slopes');
+      if (!isLegendOpen) {
+        setIsLegendOpen(true);
+        setLegendOpenedBySlope(true);
+      }
+    } else if (legendOpenedBySlope) {
+      setLegendOpenedBySlope(false);
+      setIsLegendOpen(false);
     }
-  }, [hasRouteSlope]);
+  }
+
+  // Montée la plus raide en haut, descente la plus raide en bas.
+  const slopeLegendList = (
+    <div className="rvmvc-route-legend-popover__list rvmvc-route-legend-popover__list--slope">
+      {[...ROUTE_SLOPE_LEGEND_BANDS].reverse().map((band) => (
+        <div key={band.id} className="rvmvc-route-legend-popover__slope-item">
+          <span
+            className="rvmvc-route-legend-popover__slope-swatch"
+            style={{ backgroundColor: band.color }}
+            aria-hidden="true"
+          />
+          <span className="rvmvc-route-legend-popover__slope-label">{band.label}</span>
+        </div>
+      ))}
+    </div>
+  );
 
   useEffect(() => {
     if (!map) {
@@ -365,7 +406,19 @@ export const MapViewportControls = memo(function MapViewportControls({
       </button>
 
       <div className="rvmvc-map-tools__legend-row" ref={legendPopoverRef}>
-        {isLegendOpen ? (
+        {isLegendOpen && hasRouteSlope ? (
+          // Tracé en pente : la légende se résume à ses classes, sans onglets
+          // (les revêtements ne sont pas dessinés dans ce mode).
+          <section
+            className="rvmvc-route-legend-popover rvmvc-route-legend-popover--slope"
+            aria-label={slopeLegendPanelTitle}
+          >
+            <span className="rvmvc-route-legend-popover__title" title={slopeLegendPanelTitle}>
+              {slopeLegendPanelTitle}
+            </span>
+            {slopeLegendList}
+          </section>
+        ) : isLegendOpen ? (
           <section className="rvmvc-route-legend-popover" aria-label={t('Légende du tracé')}>
             <div className="rvmvc-route-legend-popover__header">
               <span className="rvmvc-route-legend-popover__title">
@@ -399,20 +452,7 @@ export const MapViewportControls = memo(function MapViewportControls({
                   </div>
                 ))}
               </div>
-            ) : (
-              <div className="rvmvc-route-legend-popover__list">
-                {ROUTE_SLOPE_LEGEND_BANDS.map((band) => (
-                  <div key={band.id} className="rvmvc-route-legend-popover__slope-item">
-                    <span
-                      className="rvmvc-route-legend-popover__slope-swatch"
-                      style={{ backgroundColor: band.color }}
-                      aria-hidden="true"
-                    />
-                    <span className="rvmvc-route-legend-popover__slope-label">{band.label}</span>
-                  </div>
-                ))}
-              </div>
-            )}
+            ) : slopeLegendList}
           </section>
         ) : null}
 
@@ -423,6 +463,7 @@ export const MapViewportControls = memo(function MapViewportControls({
           aria-pressed={isLegendOpen}
           title={t('Légende')}
           onClick={() => {
+            setLegendOpenedBySlope(false);
             setIsLegendOpen((value) => !value);
           }}
         >

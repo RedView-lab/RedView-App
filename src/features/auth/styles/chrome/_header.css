@@ -95,7 +95,7 @@
   align-items: center;
   text-align: center;
 
-  color: #FFFFFF;
+  color: var(--rv-text);
 
   flex: none;
   order: 0;
@@ -121,7 +121,7 @@
   font-weight: 600;
   font-size: var(--rv-font-size-lg);
   line-height: 21px;
-  color: #FFFFFF;
+  color: var(--rv-text);
   text-decoration: none;
 
   flex: none;

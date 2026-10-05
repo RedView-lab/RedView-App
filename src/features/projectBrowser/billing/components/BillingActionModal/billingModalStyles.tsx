@@ -1,88 +1,8 @@
+import { RedViewLogo } from '@/shared/components/RedViewLogo';
+
 export type BillingPaymentMethod = 'card' | 'paypal';
 
 export const COUNTRY_FLAG_BASE_PATH = '/landing/svg';
-
-export const appearance = {
-  theme: 'night' as const,
-  labels: 'above' as const,
-  variables: {
-    colorPrimary: '#890000',
-    colorBackground: '#141414',
-    colorText: '#ffffff',
-    colorDanger: '#ff8e8e',
-    colorTextPlaceholder: '#8c8c8c',
-    colorTextSecondary: '#c7c7c7',
-    colorIcon: '#d1d1d1',
-    colorSuccess: '#34d399',
-    borderRadius: '8px',
-    spacingUnit: '4px',
-    fontFamily: 'Rethink Sans, system-ui, sans-serif',
-  },
-  rules: {
-    '.AccordionItem': {
-      backgroundColor: 'rgba(255,255,255,0.04)',
-      border: '1px solid rgba(255,255,255,0.16)',
-      boxShadow: 'none',
-    },
-    '.Tab': {
-      backgroundColor: 'rgba(255,255,255,0.04)',
-      border: '1px solid rgba(255,255,255,0.16)',
-      color: '#ffffff',
-      boxShadow: 'none',
-      padding: '12px 16px',
-    },
-    '.Tab:hover': {
-      color: '#ffffff',
-      backgroundColor: 'rgba(255,255,255,0.04)',
-    },
-    '.Tab--selected': {
-      backgroundColor: 'rgba(255,255,255,0.04)',
-      borderColor: 'rgba(255,255,255,0.28)',
-      boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)',
-    },
-    '.TabLabel': {
-      color: '#ffffff',
-      fontWeight: '500',
-      fontSize: '14px',
-    },
-    '.Input': {
-      backgroundColor: 'rgba(255,255,255,0.08)',
-      border: '1px solid rgba(213,215,218,0.16)',
-      boxShadow: '0 1px 2px rgba(10,13,18,0.05)',
-    },
-    '.Block': {
-      backgroundColor: 'rgba(255,255,255,0.08)',
-      border: '1px solid rgba(213,215,218,0.16)',
-      boxShadow: '0 1px 2px rgba(10,13,18,0.05)',
-    },
-    '.CodeInput': {
-      backgroundColor: 'rgba(255,255,255,0.08)',
-      border: '1px solid rgba(213,215,218,0.16)',
-      boxShadow: '0 1px 2px rgba(10,13,18,0.05)',
-    },
-    '.Input:focus': {
-      borderColor: 'rgba(137,0,0,0.9)',
-      boxShadow: '0 0 0 1px rgba(137,0,0,0.65)',
-    },
-    '.CodeInput:focus': {
-      borderColor: 'rgba(137,0,0,0.9)',
-      boxShadow: '0 0 0 1px rgba(137,0,0,0.65)',
-    },
-    // Iframe Stripe : pas d'accès aux variables CSS. Valeurs de l'échelle
-    // « page » de shared/styles/typography.css (label lg 14, champ xl 16).
-    '.Label': {
-      color: '#ffffff',
-      fontWeight: '600',
-      fontSize: '14px',
-    },
-    '.Text': {
-      color: 'rgba(255,255,255,0.74)',
-    },
-    '.Error': {
-      color: '#ffb4b4',
-    },
-  },
-};
 
 export function CardMethodIcon() {
   return (
@@ -116,13 +36,7 @@ export function PayPalMethodIcon() {
 export function RedViewWordmark() {
   return (
     <div className="rvpb-billing-page__brand" aria-label="RedView">
-      <img
-        className="rvpb-billing-page__brand-image"
-        src="/landing/icons/redview-logo.svg"
-        alt="RedView"
-        width={125}
-        height={24}
-      />
+      <RedViewLogo className="rvpb-billing-page__brand-image" width={125} height={24} />
     </div>
   );
 }

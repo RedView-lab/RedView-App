@@ -31,6 +31,7 @@ import type {
   ItineraryProject,
 } from '../../types';
 import type { TraceHistoryEntry } from './types';
+import { createDocumentId } from '../../lib/project/ids';
 
 interface UseItineraryGpxActionsArgs {
   projectRef: MutableRefObject<ItineraryProject>;
@@ -112,7 +113,7 @@ export function useItineraryGpxActions({
       if (!itinerary) return null;
 
       const zone: ItineraryForbiddenZone = {
-        id: `fz-${Date.now()}-${Math.round(points[0].lat * 1e5)}-${Math.round(points[0].lon * 1e5)}`,
+        id: createDocumentId('fz'),
         points: points.map((point) => ({ lat: point.lat, lon: point.lon })),
         createdAt: new Date().toISOString(),
       };

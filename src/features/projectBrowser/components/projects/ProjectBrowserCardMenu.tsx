@@ -19,6 +19,8 @@ type ProjectBrowserCardMenuProps = {
   onRename: () => void;
   onMove: (destinationId: string | null) => void;
   onDuplicate?: () => void;
+  /** Projet uniquement : téléchargement en fichier `.redview`. */
+  onExport?: () => void;
   onDelete: () => void;
 };
 
@@ -33,6 +35,7 @@ export function ProjectBrowserCardMenu({
   onRename,
   onMove,
   onDuplicate,
+  onExport,
   onDelete,
 }: ProjectBrowserCardMenuProps) {
   const { t } = useAppI18n();
@@ -102,6 +105,15 @@ export function ProjectBrowserCardMenu({
           <span className="rv-dropdown__label">{t('Dupliquer')}</span>
           <span className="rv-dropdown__icon" aria-hidden>
             <SvgV2Icon name="copy-03.svg" size={16} />
+          </span>
+        </button>
+      ) : null}
+
+      {onExport ? (
+        <button type="button" className="rv-dropdown__item" role="menuitem" onClick={onExport}>
+          <span className="rv-dropdown__label">{t('Exporter (.redview)')}</span>
+          <span className="rv-dropdown__icon" aria-hidden>
+            <SvgV2Icon name="download-01.svg" size={16} />
           </span>
         </button>
       ) : null}

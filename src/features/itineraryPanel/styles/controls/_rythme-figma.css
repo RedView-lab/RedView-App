@@ -7,7 +7,7 @@
   width: 100%;
   box-sizing: border-box;
   font-family: var(--rv-font-sans);
-  color: #ffffff;
+  color: var(--rv-text);
 }
 
 /* ── Row 1 : Date & Heure (Figma node 6025:114207) ────── */
@@ -36,7 +36,7 @@
   font-weight: 500;
   font-size: var(--rv-font-size-md);
   line-height: 16px;
-  color: #ffffff;
+  color: var(--rv-text);
   opacity: 0.64;
   white-space: nowrap;
   user-select: none;
@@ -48,15 +48,15 @@
 .rvi-rythme-figma__chip-btn {
   height: 38px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgb(var(--rv-ink) / 0.08);
+  border: 1px solid rgb(var(--rv-ink) / 0.06);
   padding: 0 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   cursor: pointer;
-  color: #ffffff;
+  color: var(--rv-text);
   font-family: var(--rv-font-sans);
   font-weight: 500;
   font-size: var(--rv-font-size-lg);
@@ -70,8 +70,8 @@
 }
 
 .rvi-rythme-figma__chip-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.14);
+  background: rgb(var(--rv-ink) / 0.12);
+  border-color: rgb(var(--rv-ink) / 0.14);
 }
 
 /* Time rectangle: fixed 95px, exact Figma — ouvre la liste des créneaux */
@@ -79,15 +79,15 @@
   width: 95px;
   height: 38px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgb(var(--rv-ink) / 0.08);
+  border: 1px solid rgb(var(--rv-ink) / 0.06);
   padding: 0 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   cursor: pointer;
-  color: #ffffff;
+  color: var(--rv-text);
   font-family: var(--rv-font-sans);
   font-weight: 500;
   font-size: var(--rv-font-size-lg);
@@ -102,12 +102,12 @@
 
 .rvi-rythme-figma__time-chip:hover,
 .rvi-rythme-figma__time-chip.is-open {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.14);
+  background: rgb(var(--rv-ink) / 0.12);
+  border-color: rgb(var(--rv-ink) / 0.14);
 }
 
 .rvi-rythme-figma__time-chip:focus-visible {
-  border-color: rgba(255, 255, 255, 0.25);
+  border-color: rgb(var(--rv-ink) / 0.25);
 }
 
 /* Liste des créneaux de 30 min : ~8 lignes visibles */
@@ -121,7 +121,7 @@
   font-family: var(--rv-font-sans);
   font-weight: 500;
   font-size: var(--rv-font-size-lg);
-  color: #ffffff;
+  color: var(--rv-text);
   line-height: 1;
 }
 
@@ -131,7 +131,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--rv-ink) / 0.08);
   border-radius: 1px;
   padding: 0 1px;
   box-sizing: border-box;
@@ -139,7 +139,7 @@
 
 .rvi-rythme-figma__time-colon {
   padding: 0 1.5px;
-  color: #ffffff;
+  color: var(--rv-text);
   opacity: 0.9;
 }
 
@@ -150,7 +150,7 @@
   font-weight: 400;
   font-size: var(--rv-font-size-lg);
   line-height: 19.5px;
-  color: #ffffff;
+  color: var(--rv-text);
   margin: 0;
   padding: 0;
   user-select: none;
@@ -174,7 +174,7 @@
 .rvi-rythme-figma__profile-btn {
   height: 40px;
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.16);
+  background: rgb(var(--rv-ink) / 0.16);
   border: none;
   padding: 10px 8px 10px 12px;
   display: flex;
@@ -183,7 +183,7 @@
   width: 100%;
   box-sizing: border-box;
   cursor: pointer;
-  color: #ffffff;
+  color: var(--rv-text);
   font-family: var(--rv-font-sans);
   font-style: normal;
   font-weight: 500;
@@ -197,11 +197,11 @@
 
 .rvi-rythme-figma__profile-btn:hover,
 .rvi-rythme-figma__profile-btn.is-open {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgb(var(--rv-ink) / 0.2);
 }
 
 .rvi-rythme-figma__profile-btn:focus-visible {
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+  box-shadow: inset 0 0 0 1px rgb(var(--rv-ink) / 0.4);
 }
 
 .rvi-rythme-figma__profile-text {
@@ -254,7 +254,7 @@
 .rvi-rythme-figma__fit-btn {
   height: 38px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--rv-ink) / 0.08);
   border: none;
   padding: 0 12px;
   display: flex;
@@ -264,7 +264,7 @@
   min-width: 0;
   box-sizing: border-box;
   cursor: pointer;
-  color: #ffffff;
+  color: var(--rv-text);
   font-family: var(--rv-font-sans);
   font-style: normal;
   font-weight: 500;
@@ -278,11 +278,11 @@
 
 .rvi-rythme-figma__fit-btn:not(:disabled):hover,
 .rvi-rythme-figma__fit-btn.is-open {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgb(var(--rv-ink) / 0.12);
 }
 
 .rvi-rythme-figma__fit-btn:focus-visible {
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+  box-shadow: inset 0 0 0 1px rgb(var(--rv-ink) / 0.4);
 }
 
 .rvi-rythme-figma__fit-btn:disabled {
@@ -317,13 +317,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.24);
+  color: rgb(var(--rv-ink) / 0.24);
   transition: color 0.15s ease;
 }
 
 .rvi-rythme-figma__fit-btn--files:hover .rvi-rythme-figma__fit-trash,
 .rvi-rythme-figma__fit-btn--files.is-open .rvi-rythme-figma__fit-trash {
-  color: rgba(255, 255, 255, 0.64);
+  color: rgb(var(--rv-ink) / 0.64);
 }
 
 /* Liste des .fit (dropdown) : nom + bouton retirer */
@@ -348,7 +348,7 @@
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.48);
+  color: rgb(var(--rv-ink) / 0.48);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -358,8 +358,8 @@
 
 .rvi-rythme-figma__fit-item-remove:hover,
 .rvi-rythme-figma__fit-item-remove:focus-visible {
-  color: #ff6b6b;
-  background: rgba(255, 255, 255, 0.08);
+  color: light-dark(#d92d20, #ff6b6b);
+  background: rgb(var(--rv-ink) / 0.08);
   outline: none;
 }
 
@@ -419,8 +419,8 @@
 .rvi-rythme-figma__card-box {
   height: 36px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgb(var(--rv-ink) / 0.08);
+  border: 1px solid rgb(var(--rv-ink) / 0.06);
   padding: 0 4px;
   display: flex;
   align-items: center;
@@ -433,7 +433,7 @@
   font-weight: 500;
   font-size: var(--rv-font-size-lg);
   letter-spacing: var(--rv-letter-spacing-tight);
-  color: #ffffff;
+  color: var(--rv-text);
   outline: none;
   user-select: none;
   transition: background-color 0.15s ease, border-color 0.15s ease;
@@ -445,13 +445,13 @@ button.rvi-rythme-figma__card-box {
 
 button.rvi-rythme-figma__card-box:hover,
 button.rvi-rythme-figma__card-box.is-open {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.14);
+  background: rgb(var(--rv-ink) / 0.12);
+  border-color: rgb(var(--rv-ink) / 0.14);
 }
 
 .rvi-rythme-figma__card-box:focus-within {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.22);
+  background: rgb(var(--rv-ink) / 0.12);
+  border-color: rgb(var(--rv-ink) / 0.22);
 }
 
 .rvi-rythme-figma__card-box input {
@@ -460,7 +460,7 @@ button.rvi-rythme-figma__card-box.is-open {
   background: transparent;
   border: none;
   outline: none;
-  color: #ffffff;
+  color: var(--rv-text);
   font-family: var(--rv-font-sans);
   font-style: normal;
   font-weight: 500;
@@ -479,7 +479,7 @@ button.rvi-rythme-figma__card-box.is-open {
 }
 
 .rvi-rythme-figma__card-box input::placeholder {
-  color: #ffffff;
+  color: var(--rv-text);
   opacity: 0.9;
 }
 
@@ -502,8 +502,8 @@ button.rvi-rythme-figma__card-box.is-open {
 }
 
 button.rvi-rythme-figma__card-box.is-selected {
-  background: rgba(255, 255, 255, 0.18);
-  border-color: rgba(255, 255, 255, 0.32);
+  background: rgb(var(--rv-ink) / 0.18);
+  border-color: rgb(var(--rv-ink) / 0.32);
 }
 
 .rvi-rythme-figma__card-text--center {
@@ -512,7 +512,7 @@ button.rvi-rythme-figma__card-box.is-selected {
 
 .rvi-rythme-figma__card-unit {
   font-size: var(--rv-font-size-md);
-  color: rgba(255, 255, 255, 0.7);
+  color: rgb(var(--rv-ink) / 0.7);
   user-select: none;
   pointer-events: none;
   flex-shrink: 0;
@@ -529,20 +529,21 @@ button.rvi-rythme-figma__card-box.is-selected {
   width: 16px;
   height: 16px;
   border-radius: 4px;
-  background: rgba(0, 0, 0, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: light-dark(#fff, rgba(0, 0, 0, 0.8));
+  border: 1px solid light-dark(rgb(var(--rv-ink) / 0.24), rgba(255, 255, 255, 0.16));
   display: flex;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
   flex-shrink: 0;
-  color: #ffffff;
+  color: var(--rv-text);
   transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
 .rvi-rythme-figma__checkbox-box.is-checked {
-  background: rgba(0, 0, 0, 0.8);
-  border-color: rgba(255, 255, 255, 0.4);
+  background: light-dark(var(--rv-inverse), rgba(0, 0, 0, 0.8));
+  border-color: light-dark(var(--rv-inverse), rgba(255, 255, 255, 0.4));
+  color: #fff;
 }
 
 /* ── Row 4 : Checkbox Appliquer à tous les itinéraires ─── */
@@ -561,7 +562,7 @@ button.rvi-rythme-figma__card-box.is-selected {
 }
 
 .rvi-rythme-figma__apply-all:hover .rvi-rythme-figma__checkbox-box {
-  border-color: rgba(255, 255, 255, 0.35);
+  border-color: rgb(var(--rv-ink) / 0.35);
 }
 
 .rvi-rythme-figma__apply-all-label {
@@ -570,7 +571,7 @@ button.rvi-rythme-figma__card-box.is-selected {
   font-weight: 500;
   font-size: var(--rv-font-size-md);
   line-height: 16px;
-  color: rgba(255, 255, 255, 0.64);
+  color: rgb(var(--rv-ink) / 0.64);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -582,7 +583,7 @@ button.rvi-rythme-figma__card-box.is-selected {
   font-family: var(--rv-font-sans);
   font-size: var(--rv-font-size-sm);
   line-height: 16px;
-  color: #ff6b6b;
+  color: light-dark(#d92d20, #ff6b6b);
 }
 
 /* ── Avertissement .fit (fichiers écartés / non enregistrés), non bloquant ── */
@@ -590,11 +591,11 @@ button.rvi-rythme-figma__card-box.is-selected {
   margin: 6px 0 0;
   padding: 6px 8px;
   border-radius: 6px;
-  border-left: 2px solid #ffb340;
-  background: rgba(255, 179, 64, 0.1);
+  border-left: 2px solid light-dark(#f79009, #ffb340);
+  background: light-dark(rgba(247, 144, 9, 0.1), rgba(255, 179, 64, 0.1));
   font-family: var(--rv-font-sans);
   font-size: var(--rv-font-size-sm);
   line-height: 16px;
-  color: rgba(255, 214, 153, 0.92);
+  color: light-dark(#b54708, rgba(255, 214, 153, 0.92));
   overflow-wrap: anywhere;
 }

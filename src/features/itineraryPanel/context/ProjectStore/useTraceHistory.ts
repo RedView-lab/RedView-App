@@ -2,7 +2,7 @@ import { useCallback, useRef, useState, type MutableRefObject } from 'react';
 
 import type { ItineraryProject } from '../../types';
 import { cloneProjectForMutation } from './historyClone';
-import { restoreHistoryDocument } from './historyDocument';
+import { restoreHistoryDocument, withLiveItineraryView } from './historyDocument';
 import type { TraceHistoryEntry } from './types';
 
 /** Nombre d'étapes conservées (états partagés structurellement, sans copie). */
@@ -29,10 +29,18 @@ export interface RecordChangeOptions {
   coalesceKey?: string | null;
 }
 
+/** Nature d'une écriture faite par l'historique (cf. ProjectProvider). */
+export type HistoryWriteSource = 'step' | 'restore' | 'background';
+
 interface UseTraceHistoryArgs {
   projectRef: MutableRefObject<ItineraryProject>;
   /** Écriture brute du projet, sans enregistrement dans l'historique. */
-  writeProject: (next: ItineraryProject, alreadyNormalized?: boolean) => void;
+  writeProject: (next: ItineraryProject, alreadyNormalized: boolean, source: HistoryWriteSource) => void;
+  /**
+   * Faux pendant une session de co-édition : annuler/rétablir passent par la
+   * session (chacun n'annule que ses actions), aucun instantané n'est gardé.
+   */
+  isRecording: () => boolean;
 }
 
 /**
@@ -48,7 +56,7 @@ interface UseTraceHistoryArgs {
  * utilisateur vide `future` ; les écritures en arrière-plan (routage,
  * altimétrie, POI, prédiction) passent hors historique et le préservent.
  */
-export function useTraceHistory({ projectRef, writeProject }: UseTraceHistoryArgs) {
+export function useTraceHistory({ projectRef, writeProject, isRecording }: UseTraceHistoryArgs) {
   const [pastCount, setPastCount] = useState(0);
   const [futureCount, setFutureCount] = useState(0);
   // Incrémenté à chaque restauration (undo / redo / rollback) : les traitements
@@ -71,13 +79,14 @@ export function useTraceHistory({ projectRef, writeProject }: UseTraceHistoryArg
 
   const pushSnapshot = useCallback((before: ItineraryProject, itineraryId: string) => {
     const snapshot: HistorySnapshot = { project: before, itineraryId };
+    if (!isRecording()) return snapshot;
     const past = [...pastRef.current, snapshot];
     pastRef.current = past.length > MAX_HISTORY_STEPS
       ? past.slice(past.length - MAX_HISTORY_STEPS)
       : past;
     futureRef.current = [];
     return snapshot;
-  }, []);
+  }, [isRecording]);
 
   /**
    * Enregistre `before` comme étape (appelé par le store juste avant d'écrire
@@ -126,7 +135,7 @@ export function useTraceHistory({ projectRef, writeProject }: UseTraceHistoryArg
         pendingTraceAppendRef.current = null;
       }
       syncCounts();
-      writeProject(entry.after);
+      writeProject(entry.after, false, 'step');
     },
     [projectRef, pushSnapshot, syncCounts, writeProject],
   );
@@ -142,7 +151,7 @@ export function useTraceHistory({ projectRef, writeProject }: UseTraceHistoryArg
         pushSnapshot(entries[index].before, entries[index].itineraryId);
       }
       syncCounts();
-      writeProject(entries[entries.length - 1].after);
+      writeProject(entries[entries.length - 1].after, false, 'step');
     },
     [projectRef, pushSnapshot, syncCounts, writeProject],
   );
@@ -179,6 +188,7 @@ export function useTraceHistory({ projectRef, writeProject }: UseTraceHistoryArg
       writeProject(
         restoreHistoryDocument(projectRef.current, snapshot.project, snapshot.itineraryId),
         true,
+        'restore',
       );
     },
     [projectRef, syncCounts, writeProject],
@@ -239,20 +249,28 @@ export function useTraceHistory({ projectRef, writeProject }: UseTraceHistoryArg
       writeProject({
         ...live,
         itineraries: live.itineraries.map((it) =>
-          it.id === itineraryId
-            ? { ...beforeItinerary, visible: it.visible, analysisVisible: it.analysisVisible }
-            : it,
+          it.id === itineraryId ? withLiveItineraryView(beforeItinerary, it) : it,
         ),
-      }, true);
+      }, true, 'background');
       return true;
     },
     [projectRef, syncCounts, writeProject],
   );
 
+  /** Vide l'historique (début d'une session de co-édition : elle tient le sien). */
+  const resetHistory = useCallback(() => {
+    pastRef.current = [];
+    futureRef.current = [];
+    lastCoalesceRef.current = null;
+    pendingTraceAppendRef.current = null;
+    syncCounts();
+  }, [syncCounts]);
+
   return {
     canUndoTraceEdit: pastCount > 0,
     canRedoTraceEdit: futureCount > 0,
     historyRevision,
+    resetHistory,
     recordChange,
     pushTraceHistoryEntry,
     pushTraceHistoryEntries,

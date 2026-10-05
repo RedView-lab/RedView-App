@@ -18,6 +18,11 @@ interface ActivitySelectorProps {
   selectedPresetId: ActivityType | null;
   effectiveBaseId: string;
   savedProfiles: SavedCustomProfile[];
+  /**
+   * Profils supprimables (ceux de la bibliothèque du compte). Un profil
+   * seulement embarqué dans le projet se choisit mais ne se supprime pas.
+   */
+  deletableProfileIds?: ReadonlySet<string>;
   /** Brouillon de profil non enregistré (réglages modifiés sans profil perso). */
   draftProfileName: string | null;
   onSelectActivity: (activity: ActivityType) => void;
@@ -32,6 +37,7 @@ export function ActivitySelector({
   selectedPresetId,
   effectiveBaseId,
   savedProfiles,
+  deletableProfileIds,
   draftProfileName,
   onSelectActivity,
   onSelectCustomProfile,
@@ -134,19 +140,21 @@ export function ActivitySelector({
                   <IconSlidersFigma size={15} />
                   <span>{cp.name}</span>
                 </button>
-                <button
-                  type="button"
-                  className="rvi-tracage__delete-profile-btn"
-                  title={t('Supprimer le profil')}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    // Supprimer le profil actif rebascule sur un préset : le menu se ferme.
-                    if (effectiveBaseId === cp.id) setActivityOpen(false);
-                    onDeleteProfile(cp.id);
-                  }}
-                >
-                  <IconTrashFigma size={13} />
-                </button>
+                {!deletableProfileIds || deletableProfileIds.has(cp.id) ? (
+                  <button
+                    type="button"
+                    className="rvi-tracage__delete-profile-btn"
+                    title={t('Supprimer le profil')}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // Supprimer le profil actif rebascule sur un préset : le menu se ferme.
+                      if (effectiveBaseId === cp.id) setActivityOpen(false);
+                      onDeleteProfile(cp.id);
+                    }}
+                  >
+                    <IconTrashFigma size={13} />
+                  </button>
+                ) : null}
               </div>
             ))}
           </>

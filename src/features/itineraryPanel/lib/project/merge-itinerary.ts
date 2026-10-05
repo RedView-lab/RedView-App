@@ -15,6 +15,7 @@ import type {
   ItineraryProject,
   TimelineItem,
 } from '../../types';
+import { createDocumentId } from './ids';
 
 type RoutePoint = NonNullable<Itinerary['gpxRoute']>['points'][number];
 
@@ -174,12 +175,10 @@ function buildMergedTimeline(
     ...sourceRows.slice(1),
     ...targetRows.slice(0, -1),
   ];
-  const mergeSeed = Date.now();
-
   return [
     resolveStartRow(source, routeStart),
-    ...middleRows.map((row, index) => ({
-      id: `merge-step-${mergeSeed}-${index + 1}`,
+    ...middleRows.map((row) => ({
+      id: createDocumentId('merge-step'),
       kind: 'waypoint' as const,
       label: row.label,
       distanceKm: projectDistanceKmOnRoute(row, mergedPoints, routeDistances),

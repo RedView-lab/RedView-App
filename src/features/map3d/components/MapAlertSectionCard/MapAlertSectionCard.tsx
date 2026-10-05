@@ -155,7 +155,7 @@ export function MapAlertSectionCard({ section, onAction }: MapAlertSectionCardPr
             <span className="rv-alert-popup__meta-text">{elevationLabel}</span>
           </span>
           <span className="rv-alert-popup__meta-item">
-            <SurfaceGlyph color={section.surfaceColor ?? 'rgba(255,255,255,0.4)'} />
+            <SurfaceGlyph color={section.surfaceColor ?? 'rgb(var(--rv-ink) / 0.4)'} />
             <span className="rv-alert-popup__meta-text">{section.surfaceLabel ?? '—'}</span>
           </span>
         </div>

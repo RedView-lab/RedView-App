@@ -66,8 +66,10 @@ export interface RailFrameRequest {
   headingRad: number;
   /** Phase de l'orbite hélico (radians) ; l'amplitude vient du rail. */
   orbitPhaseRad: number;
-  /** Rapprochement lié au champ de vision (`fovDistanceFactor`). */
+  /** Distance œil → point visé / distance de cadrage (`FlyoverFraming.distanceFactor`). */
   fovDistanceFactor: number;
+  /** Avance du point visé sur la tête (fraction de la distance de cadrage) ; TARGET_LEAD_PER_DISTANCE par défaut. */
+  targetLeadPerDistance?: number;
   /** Exagération du relief rendu. */
   exaggeration: number;
   /** Altitude à viser quand la trace n'en a pas (relief rendu, déjà exagéré). */
@@ -84,12 +86,14 @@ export interface RailFrameRequest {
 export function computeRailFrame(rail: CameraRail, request: RailFrameRequest, out: RailFrame): RailFrame {
   const { spacingM, lengthM } = rail;
   const index = Math.max(0, Math.min(lengthM, request.distanceM)) / spacingM;
-  const speed = sampleAt(rail.speedMps, index) * request.speedMultiplier;
+  // Vitesse lissée : la distance suit le rythme du parcours, pas chaque ralentissement bref.
+  const speed = sampleAt(rail.framingSpeedMps, index) * request.speedMultiplier;
   const helico = sampleAt(rail.helicoWeight, index);
   // Distance de cadrage (champ Mapbox par défaut) : fixe ce qui est visible.
   const framingM = cameraDistanceForSpeed(speed) * (1 + ORBIT_EXTRA_DISTANCE_RATIO * helico);
   const distanceM = framingM * request.fovDistanceFactor;
-  const targetIndex = Math.min(lengthM, request.distanceM + TARGET_LEAD_PER_DISTANCE * framingM) / spacingM;
+  const lead = request.targetLeadPerDistance ?? TARGET_LEAD_PER_DISTANCE;
+  const targetIndex = Math.min(lengthM, request.distanceM + lead * framingM) / spacingM;
   const targetX = sampleAt(rail.centerX, targetIndex);
   const targetY = sampleAt(rail.centerY, targetIndex);
   const targetAltitudeM = rail.hasElevation
