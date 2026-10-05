@@ -1,5 +1,6 @@
 REDVIEW — CO-ÉDITION EN TEMPS RÉEL : COMMENT ÇA MARCHE
-Référence pour les prochaines sessions de code. État au 05/10/2026 (commit 58c0604).
+Référence pour les prochaines sessions de code. État au 05/10/2026 (commit 58c0604,
+puis commentaires sur la carte : section 10).
 Détails complets : CLAUDE.md (paragraphes « Real-time co-editing server » et « features/collab »).
 
 ========================================================================
@@ -212,7 +213,7 @@ Réseau / exploitation :
   - Erreurs → GlitchTip (SENTRY_DSN_SERVER, défini sur le service Coolify).
 
 ========================================================================
-7. PROTOCOLE (src/features/collab/protocol.ts, PROTOCOL_VERSION = 1)
+7. PROTOCOLE (src/features/collab/protocol.ts, PROTOCOL_VERSION = 2 depuis les commentaires)
 ========================================================================
 Client → serveur :
   hello (jeton, clientId, epoch + lastSeq pour reprendre), batch (clientSeq,
@@ -242,7 +243,9 @@ Codes de fermeture :
   construction). L'égalité est vérifiée par model.test.ts.
 - Écritures du ProjectStore :
     * setProject = action de l'utilisateur ;
-    * setProjectWithoutHistory = résultat calculé (« background »).
+    * setProjectWithoutHistory = résultat calculé (« background ») ;
+    * commitComments = commentaires (« comment » : jamais dans annuler,
+      envoyé même avant le premier welcome).
   Ne jamais appeler pushLocalDocument hors du provider.
 - Un résultat calculé doit porter son estampille (routedInputsKey,
   predictionInputsKey) : un document reçu est revérifié par estampille, sans
@@ -283,7 +286,45 @@ npm run bench:collab-trace (PRODUCTION)
   modification perdue ou écrasée.
 
 ========================================================================
-10. FICHIERS CLÉS
+10. COMMENTAIRES (bulles sur la carte, façon Figma)
+========================================================================
+- Les fils sont dans le DOCUMENT (ItineraryProject.comments) : temps réel,
+  projects.data, fichier .redview. Le lu / non lu et les options de la liste
+  sont dans la VUE de chaque utilisateur (commentsView).
+- Fusion (schema.ts) : liste de fils par id ; chaque fil a une liste de
+  messages par id ; chaque réaction est sa propre propriété
+  (« emoji~userId ») : deux réponses ou deux réactions simultanées sont
+  gardées. Ancre, zone et point de vue : valeurs atomiques.
+- Une seule porte d'écriture : le réducteur lib/commentActions.ts (droits de
+  Figma), puis ProjectStore.commitComments.
+- Le serveur vérifie les mêmes droits (model/commentRules.ts, appelé par
+  checkBatch avec l'auteur du lot) :
+    * un fil ou un message est créé au nom de l'auteur du lot ;
+    * seul le créateur déplace (ancre, zone, point de vue) ou supprime un fil ;
+    * seul l'auteur modifie ou supprime son message ;
+    * chacun pose ou retire seulement ses réactions ;
+    * tout le monde résout (resolvedBy = l'auteur du lot).
+  Une écriture interdite refuse le lot entier (le client revient à l'état du
+  serveur). Une écriture sur un fil supprimé entre-temps passe sans effet.
+- PROTOCOL_VERSION 2 : un client de la version 1 réécrirait « comments » en
+  valeur atomique ; il est refusé (4426) et recharge.
+- Viewer LiDAR : il ne parle pas au serveur. L'onglet de l'app publie les fils
+  sur le BroadcastChannel « redview:lidar:comments » et applique les actions
+  du viewer avec le même réducteur ; l'app reste le seul écrivain.
+- Développement : ?devUser=<id> fait de l'onglet un autre utilisateur du
+  serveur de dev (jeton dev:<id>, auteur des commentaires) : deux onglets,
+  deux personnes. REDVIEW_MULTIPLAYER_DEV_PORT lance un second serveur de dev
+  avec son propre serveur temps réel (sans toucher à celui d'une autre
+  session).
+- Tests : collab/model/commentRules.test.ts (droits, de bout en bout via la
+  salle), collab.test.ts (« commentaires » : jamais dans annuler, envoyés
+  pendant la connexion, écriture forgée refusée), le simulateur (actions de
+  commentaire au hasard : aucun lot refusé), server/multiplayer (vrai
+  serveur), npm run bench:collab-e2e (comments-solo, comments-two-users),
+  npm run bench:comments-viewer.
+
+========================================================================
+11. FICHIERS CLÉS
 ========================================================================
 src/features/collab/client/syncEngine.ts      état confirmé / en attente / provisoire
 src/features/collab/client/collabClient.ts    bind, push, undo, réception
@@ -302,3 +343,5 @@ src/pages/Dashboard/components/DashboardEditor.tsx   branchement, refus, état
 server/multiplayer/{main,server,connection,roomHost,appwriteStorage,shadow,auth}.ts
 api/_lib/projectSharing.ts, api/projects/share.ts
 Dockerfile.multiplayer
+src/features/collab/model/commentRules.ts       droits des commentaires (serveur)
+src/features/comments/                          commentaires (réducteur, carte, liste, pont viewer)
