@@ -6,7 +6,7 @@ import { userAvatarColor, userAvatarInk } from '@/shared/components/UserAvatar/a
 import { translateAppText } from '@/shared/i18n';
 import { notify } from '@/shared/ui/notify';
 
-import { FOLLOW_GRACE_MS, SPOTLIGHT_COUNTDOWN_MS } from '../config';
+import { FOLLOW_GRACE_MS, SPOTLIGHT_COUNTDOWN_MS, SPOTLIGHT_SPAM_DECLINES, SPOTLIGHT_SPAM_WINDOW_MS } from '../config';
 import type { FollowState, LivePeer } from '../context';
 import { pickClientOfUser, resolveFollowTarget, type FollowPeer } from '../lib/followChain';
 import { FollowController } from './FollowController';
@@ -94,6 +94,8 @@ export class LivePresenceSession {
   private graceTimer: ReturnType<typeof setTimeout> | null = null;
   /** Spotlights déjà proposés (`clientId:numéro`) : une seule proposition par présentation. */
   private readonly handledSpotlights = new Set<string>();
+  /** Refus (« Pas maintenant ») récents par présentateur : instants, dans la fenêtre anti-spam. */
+  private readonly declines = new Map<string, number[]>();
   private cancelInvite: (() => void) | null = null;
   private previousPeerIds = new Set<string>();
   private wasOnline = false;
@@ -330,6 +332,8 @@ export class LivePresenceSession {
     const key = `${presenter.clientId}:${presenter.spotlight}`;
     if (this.handledSpotlights.has(key)) return;
     this.handledSpotlights.add(key);
+    if (this.handledSpotlights.size > 1_000) this.handledSpotlights.delete(this.handledSpotlights.values().next().value!);
+    if (this.recentDeclines(presenter.userId) >= SPOTLIGHT_SPAM_DECLINES) return;
     if (this.follow?.userId === presenter.userId) {
       // Déjà en train de le suivre : le suivi devient celui de la présentation.
       this.follow = { ...this.follow, viaSpotlight: true };
@@ -347,8 +351,18 @@ export class LivePresenceSession {
       },
       onAction: () => {
         this.cancelInvite = null;
+        this.declines.set(presenterUserId, [...(this.declines.get(presenterUserId) ?? []), Date.now()]);
       },
     });
+  }
+
+  /** Refus de ce présentateur dans la fenêtre anti-spam (les plus anciens oubliés). */
+  private recentDeclines(userId: string): number {
+    const since = Date.now() - SPOTLIGHT_SPAM_WINDOW_MS;
+    const recent = (this.declines.get(userId) ?? []).filter((at) => at > since);
+    if (recent.length > 0) this.declines.set(userId, recent);
+    else this.declines.delete(userId);
+    return recent.length;
   }
 
   private startGrace(follow: FollowState): void {

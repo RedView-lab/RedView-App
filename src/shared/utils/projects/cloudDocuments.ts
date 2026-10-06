@@ -28,9 +28,14 @@ import type { ItineraryProject, ProjectRow } from './types';
 // Documents Appwrite des projets : lecture (document → ligne) et charge utile
 // à écrire (dans le document, ou fichier du bucket au-delà de la limite).
 
-/** Champs lus pour la liste et le contrôle de fraîcheur (jamais `data`). */
+/**
+ * Champs lus pour la liste et le contrôle de fraîcheur (jamais `data`) ;
+ * `$permissions` dit si la ligne est vraiment à l'utilisateur ou partagée
+ * avec lui (access.ts).
+ */
 export const PROJECT_META_FIELDS = [
   '$id',
+  '$permissions',
   'name',
   'folder_id',
   'privacy',
@@ -68,6 +73,7 @@ export type CloudProjectDoc = {
   $id: string;
   $createdAt: string;
   $updatedAt: string;
+  $permissions?: string[];
   user_id?: string;
   team_id?: string | null;
   folder_id?: string | null;

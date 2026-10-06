@@ -83,6 +83,23 @@ export function publishLidarCommentState(state: LidarCommentState): void {
   }, STORAGE_DEBOUNCE_MS);
 }
 
+/**
+ * Projet fermé dans l'app (autre projet, retour aux projets, accès retiré,
+ * projet supprimé) : sa copie locale est effacée — les fils et les membres
+ * d'un projet ne restent pas dans le navigateur après qu'on l'a quitté.
+ */
+export function clearStoredLidarCommentState(projectId: string): void {
+  if (pendingStored?.projectId === projectId) pendingStored = null;
+  try {
+    const raw = window.localStorage.getItem(LIDAR_COMMENTS_STORAGE_KEY);
+    if (raw && (JSON.parse(raw) as { projectId?: unknown }).projectId === projectId) {
+      window.localStorage.removeItem(LIDAR_COMMENTS_STORAGE_KEY);
+    }
+  } catch {
+    // Stockage indisponible : rien à effacer.
+  }
+}
+
 export function subscribeLidarComments(listener: (message: LidarCommentMessage) => void): () => void {
   const bc = channel();
   if (!bc) return () => undefined;

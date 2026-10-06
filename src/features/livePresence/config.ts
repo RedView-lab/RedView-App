@@ -27,3 +27,11 @@ export const FOLLOW_GRACE_MS = 10_000;
 
 /** Spotlight : délai avant de suivre la personne qui présente (« Pas maintenant » l'annule). */
 export const SPOTLIGHT_COUNTDOWN_MS = 3_000;
+/**
+ * Une présentation déclinée (« Pas maintenant ») puis relancée est reproposée,
+ * sauf après `SPOTLIGHT_SPAM_DECLINES` refus du même éditeur dans la fenêtre :
+ * ses présentations ne sont plus proposées pendant la fenêtre (arrêter et
+ * relancer en boucle inonderait les autres d'invitations).
+ */
+export const SPOTLIGHT_SPAM_DECLINES = 3;
+export const SPOTLIGHT_SPAM_WINDOW_MS = 2 * 60_000;

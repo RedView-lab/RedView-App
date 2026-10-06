@@ -8,7 +8,7 @@ import {
 import { isPlainRecord } from './diff';
 import type { ObjectStore } from './objects';
 import type { Op } from './ops';
-import { decodePath, ROOT_OBJECT_ID } from './paths';
+import { childKey, decodePath, ROOT_OBJECT_ID } from './paths';
 
 /**
  * Règles d'auteur des commentaires (features/comments), vérifiées par le
@@ -23,6 +23,14 @@ import { decodePath, ROOT_OBJECT_ID } from './paths';
  * Une opération sur un fil ou un message absent (supprimé entre-temps par un
  * autre éditeur) est sans effet : elle passe. Le rejeu du journal ne repasse
  * pas par ici (déjà validé par le serveur qui l'a écrit).
+ *
+ * Les clés arrivent sous leur forme canonique (validate.ts) : chaque objet
+ * n'accepte que ses champs connus (liste fermée), à un seul niveau (une clé
+ * imbriquée comme `anchor.lng` remplacerait l'ancre d'un autre à la
+ * matérialisation), sauf les réactions (`reactions.<emoji~utilisateur>`).
+ * L'`id` d'un fil ou d'un message est sa clé dans la liste, jamais autre
+ * chose ; textes, noms et dates sont bornés ; fils et messages sont en
+ * nombre borné (anti-abus, bien au-delà d'un usage normal).
  */
 
 const COMMENTS_FIELD = 'comments';
@@ -31,10 +39,22 @@ const REACTIONS_FIELD = 'reactions';
 const THREAD_PREFIX = `${ROOT_OBJECT_ID}/${COMMENTS_FIELD}:`;
 const MESSAGE_SEGMENT = `${MESSAGES_FIELD}:`;
 
+/** Champs d'un fil (ProjectCommentThread) ; `messages` n'y est qu'une liste vide (les messages sont des objets). */
+const THREAD_KEYS: ReadonlySet<string> = new Set(['id', 'anchor', 'zone', 'camera', 'createdBy', 'createdAt', 'resolvedAt', 'resolvedBy', MESSAGES_FIELD]);
 /** Propriétés d'un fil que seul son créateur écrit. */
-const THREAD_CREATOR_KEYS: ReadonlySet<string> = new Set(['anchor', 'zone', 'camera', 'createdBy', 'createdAt']);
+const THREAD_CREATOR_KEYS: ReadonlySet<string> = new Set(['id', 'anchor', 'zone', 'camera', 'createdBy', 'createdAt']);
+/** Champs d'un message (ProjectCommentMessage), réactions comprises. */
+const MESSAGE_KEYS: ReadonlySet<string> = new Set(['id', 'authorId', 'authorName', 'text', 'createdAt', 'editedAt', 'mentions', REACTIONS_FIELD]);
 /** Propriétés d'un message que seul son auteur écrit. */
-const MESSAGE_AUTHOR_KEYS: ReadonlySet<string> = new Set(['text', 'editedAt', 'mentions', 'authorId', 'authorName', 'createdAt']);
+const MESSAGE_AUTHOR_KEYS: ReadonlySet<string> = new Set(['id', 'text', 'editedAt', 'mentions', 'authorId', 'authorName', 'createdAt']);
+/** Champs qu'aucune écriture ne retire (un fil ou un message sans eux ne s'affiche plus). */
+const REQUIRED_KEYS: ReadonlySet<string> = new Set(['id', 'anchor', 'createdBy', 'authorId', 'text']);
+const MAX_AUTHOR_NAME_CHARS = 200;
+const MAX_DATE_CHARS = 64;
+const MAX_REACTION_KEY_CHARS = 300;
+/** Plafonds anti-abus (les limites d'un fichier `.redview` sont plus basses : comments/lib/limits.ts). */
+export const MAX_SHARED_COMMENT_THREADS = 2_000;
+export const MAX_SHARED_COMMENT_MESSAGES = 500;
 
 type CommentObjectKind = 'thread' | 'message';
 
@@ -83,11 +103,21 @@ function isEmptyRecord(value: unknown): boolean {
   return isPlainRecord(value) && Object.keys(value).length === 0;
 }
 
+function isShortString(value: unknown, max: number): boolean {
+  return typeof value === 'string' && value.length <= max;
+}
+
 /** Une écriture `key = value` (`present` : posée, sinon retirée) sur un fil. */
-function checkThreadWrite(creatorId: unknown, key: string, present: boolean, value: unknown, userId: string): string | null {
+function checkThreadWrite(creatorId: unknown, objectId: string, key: string, present: boolean, value: unknown, userId: string): string | null {
+  if (!THREAD_KEYS.has(key)) return 'comment-bad-key';
   if (THREAD_CREATOR_KEYS.has(key) && creatorId !== userId) return 'comment-not-creator';
-  if (!present) return null;
+  if (!present) return REQUIRED_KEYS.has(key) ? 'comment-bad-thread' : null;
   switch (key) {
+    case 'id':
+      return value === childKey(objectId) ? null : 'comment-bad-thread';
+    case 'createdAt':
+    case 'resolvedAt':
+      return isShortString(value, MAX_DATE_CHARS) ? null : 'comment-bad-date';
     case 'anchor':
       return isValidAnchor(value) ? null : 'comment-bad-anchor';
     case 'zone':
@@ -107,19 +137,27 @@ function checkThreadWrite(creatorId: unknown, key: string, present: boolean, val
 }
 
 /** Une écriture sur un message (`key` : chemin encodé de la propriété). */
-function checkMessageWrite(authorId: unknown, key: string, present: boolean, value: unknown, userId: string): string | null {
+function checkMessageWrite(authorId: unknown, objectId: string, key: string, present: boolean, value: unknown, userId: string): string | null {
   const [field, reactionKey, ...extra] = decodePath(key);
   if (field === REACTIONS_FIELD) {
     if (reactionKey === undefined) {
       // Réglage vidé : `{}` ou retiré (les clés retirées une à une, chacune vérifiée).
       return !present || isEmptyRecord(value) ? null : 'comment-bad-reactions';
     }
-    if (extra.length > 0 || !reactionKey.endsWith(`~${userId}`)) return 'comment-not-reactor';
+    if (extra.length > 0 || reactionKey.length > MAX_REACTION_KEY_CHARS || !reactionKey.endsWith(`~${userId}`)) return 'comment-not-reactor';
     return !present || value === true ? null : 'comment-bad-reactions';
   }
+  if (!MESSAGE_KEYS.has(key)) return 'comment-bad-key';
   if (MESSAGE_AUTHOR_KEYS.has(key) && authorId !== userId) return 'comment-not-author';
-  if (!present) return key === 'text' || key === 'authorId' ? 'comment-bad-message' : null;
+  if (!present) return REQUIRED_KEYS.has(key) ? 'comment-bad-message' : null;
   switch (key) {
+    case 'id':
+      return value === childKey(objectId) ? null : 'comment-bad-message';
+    case 'authorName':
+      return isShortString(value, MAX_AUTHOR_NAME_CHARS) ? null : 'comment-bad-author-name';
+    case 'createdAt':
+    case 'editedAt':
+      return isShortString(value, MAX_DATE_CHARS) ? null : 'comment-bad-date';
     case 'authorId':
       return value === userId ? null : 'comment-not-author';
     case 'text':
@@ -133,10 +171,18 @@ function checkMessageWrite(authorId: unknown, key: string, present: boolean, val
   }
 }
 
-function checkWrite(kind: CommentObjectKind, owner: unknown, key: string, present: boolean, value: unknown, userId: string): string | null {
+function checkWrite(
+  kind: CommentObjectKind,
+  owner: unknown,
+  objectId: string,
+  key: string,
+  present: boolean,
+  value: unknown,
+  userId: string,
+): string | null {
   return kind === 'thread'
-    ? checkThreadWrite(owner, key, present, value, userId)
-    : checkMessageWrite(owner, key, present, value, userId);
+    ? checkThreadWrite(owner, objectId, key, present, value, userId)
+    : checkMessageWrite(owner, objectId, key, present, value, userId);
 }
 
 const ownerKey = (kind: CommentObjectKind) => (kind === 'thread' ? 'createdBy' : 'authorId');
@@ -163,26 +209,28 @@ export function checkCommentOp(store: ObjectStore, op: Op, userId: string): stri
       if (!existing) {
         // Nouveau fil ou message : au nom de l'auteur du lot, contenu valable.
         if (!store.has(op.parent)) return null;
+        const siblings = store.childrenOf(op.parent, op.field).length;
+        if (siblings >= (kind === 'thread' ? MAX_SHARED_COMMENT_THREADS : MAX_SHARED_COMMENT_MESSAGES)) return 'comment-limit';
         const props = new Map(op.props);
         if (props.get(ownerKey(kind)) !== userId) return kind === 'thread' ? 'comment-not-creator' : 'comment-not-author';
         if (kind === 'thread' && !isValidAnchor(props.get('anchor'))) return 'comment-bad-anchor';
         if (kind === 'message' && typeof props.get('text') !== 'string') return 'comment-bad-message';
         for (const [key, value] of op.props) {
-          const denied = checkWrite(kind, userId, key, true, value, userId);
+          const denied = checkWrite(kind, userId, op.id, key, true, value, userId);
           if (denied) return denied;
         }
         return null;
       }
       // Même objet créé deux fois : ses propriétés sont des écritures.
       for (const [key, value] of op.props) {
-        const denied = checkWrite(kind, owner, key, true, value, userId);
+        const denied = checkWrite(kind, owner, op.id, key, true, value, userId);
         if (denied) return denied;
       }
       return null;
     }
     case 's':
       if (!existing) return null;
-      return checkWrite(kind, owner, op.k, 'v' in op, 'v' in op ? op.v : undefined, userId);
+      return checkWrite(kind, owner, op.id, op.k, 'v' in op, 'v' in op ? op.v : undefined, userId);
     case 'd':
       if (!existing || owner === userId) return null;
       return kind === 'thread' ? 'comment-not-creator' : 'comment-not-author';

@@ -13,11 +13,18 @@ import type { FieldAuthor } from './roomState';
  *    point) ; ensuite, ou s'il est parti, le premier demandeur l'obtient ;
  *  - un bail expire après `LEASE_TTL_MS` sans renouvellement (onglet gelé,
  *    réseau coupé sans fermeture propre) et tombe à la déconnexion ;
- *  - le titulaire le libère à l'écriture du résultat.
+ *  - le titulaire le libère à l'écriture du résultat ;
+ *  - on ne le garde pas plus de `LEASE_MAX_HOLD_MS`, renouvellements compris :
+ *    au-delà, il est retiré et son titulaire attend `LEASE_PENALTY_MS` avant
+ *    de pouvoir le reprendre (un éditeur qui accaparerait les baux sans
+ *    jamais calculer bloquerait le routage des autres).
  */
 
 export const LEASE_TTL_MS = 20_000;
 export const AUTHOR_PRIORITY_MS = 5_000;
+/** Détention maximale d'un bail (un très long routage dure ≈ 2 min). */
+export const LEASE_MAX_HOLD_MS = 5 * 60_000;
+export const LEASE_PENALTY_MS = 60_000;
 
 export interface LeaseRequester {
   clientId: string;
@@ -38,6 +45,10 @@ const leaseKey = (kind: DerivedKind, itineraryId: string) => `${kind}|${itinerar
 
 export class LeaseTable {
   private readonly leases = new Map<string, LeaseInfo>();
+  /** Instant d'attribution de chaque bail (borne de détention). */
+  private readonly grantedAt = new Map<string, number>();
+  /** Client → bail → fin d'attente après un bail gardé trop longtemps. */
+  private readonly penalties = new Map<string, number>();
 
   request(
     kind: DerivedKind,
@@ -47,6 +58,12 @@ export class LeaseTable {
     context: LeaseContext,
   ): LeaseDecision {
     const key = leaseKey(kind, itineraryId);
+    this.revokeOverheld(key, now);
+    const penaltyEnd = this.penalties.get(`${requester.clientId}|${key}`);
+    if (penaltyEnd !== undefined) {
+      if (penaltyEnd > now) return { granted: false, retryAfterMs: penaltyEnd - now };
+      this.penalties.delete(`${requester.clientId}|${key}`);
+    }
     const current = this.leases.get(key);
     if (current && current.expiresAt > now && context.isConnected(current.clientId)) {
       if (current.clientId === requester.clientId) {
@@ -73,12 +90,26 @@ export class LeaseTable {
       expiresAt: now + LEASE_TTL_MS,
     };
     this.leases.set(key, lease);
+    this.grantedAt.set(key, now);
     return { granted: true, lease, changed: true };
+  }
+
+  /** Bail tenu au-delà de la détention maximale : retiré, son titulaire attend. */
+  private revokeOverheld(key: string, now: number): boolean {
+    const current = this.leases.get(key);
+    const since = this.grantedAt.get(key);
+    if (!current || since === undefined || now - since < LEASE_MAX_HOLD_MS) return false;
+    this.leases.delete(key);
+    this.grantedAt.delete(key);
+    this.penalties.set(`${current.clientId}|${key}`, now + LEASE_PENALTY_MS);
+    if (this.penalties.size > 10_000) this.penalties.delete(this.penalties.keys().next().value!);
+    return true;
   }
 
   /** Prolonge le bail de son titulaire ; false s'il ne le tient plus. */
   renew(kind: DerivedKind, itineraryId: string, clientId: string, now: number): boolean {
     const key = leaseKey(kind, itineraryId);
+    this.revokeOverheld(key, now);
     const current = this.leases.get(key);
     if (!current || current.clientId !== clientId || current.expiresAt <= now) return false;
     this.leases.set(key, { ...current, expiresAt: now + LEASE_TTL_MS });
@@ -89,6 +120,7 @@ export class LeaseTable {
     const key = leaseKey(kind, itineraryId);
     if (this.leases.get(key)?.clientId !== clientId) return false;
     this.leases.delete(key);
+    this.grantedAt.delete(key);
     return true;
   }
 
@@ -98,18 +130,22 @@ export class LeaseTable {
     for (const [key, lease] of this.leases) {
       if (lease.clientId === clientId) {
         this.leases.delete(key);
+        this.grantedAt.delete(key);
         changed = true;
       }
     }
     return changed;
   }
 
-  /** Retire les baux expirés ; true si la table a changé. */
+  /** Retire les baux expirés ou tenus trop longtemps ; true si la table a changé. */
   expire(now: number): boolean {
     let changed = false;
     for (const [key, lease] of this.leases) {
-      if (lease.expiresAt <= now) {
+      if (this.revokeOverheld(key, now)) {
+        changed = true;
+      } else if (lease.expiresAt <= now) {
         this.leases.delete(key);
+        this.grantedAt.delete(key);
         changed = true;
       }
     }
@@ -122,6 +158,7 @@ export class LeaseTable {
     for (const [key, lease] of this.leases) {
       if (lease.itineraryId === itineraryId) {
         this.leases.delete(key);
+        this.grantedAt.delete(key);
         changed = true;
       }
     }

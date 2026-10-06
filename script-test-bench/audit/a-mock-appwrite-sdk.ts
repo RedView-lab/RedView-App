@@ -186,6 +186,7 @@ export class Databases {
     let cursorAfter: string | null = null;
     for (const q of parseQueries(queries)) {
       if (q.method === 'equal') docs = docs.filter((d) => q.values!.includes(d[q.attribute!] ?? null));
+      if (q.method === 'notEqual') docs = docs.filter((d) => !q.values!.includes(d[q.attribute!] ?? null));
       if (q.method === 'limit') limit = q.values![0];
       if (q.method === 'orderDesc') docs.sort((a, b) => String(b[q.attribute!]).localeCompare(String(a[q.attribute!])));
       if (q.method === 'select') select = q.values as string[];
@@ -209,10 +210,13 @@ export class Databases {
 
 export class Storage {}
 
+
 export const ID = { unique: () => `doc${String(++idCounter).padStart(4, '0')}` };
 export const Query = {
   equal: (attribute: string, value: unknown) =>
     JSON.stringify({ method: 'equal', attribute, values: Array.isArray(value) ? value : [value] }),
+  notEqual: (attribute: string, value: unknown) =>
+    JSON.stringify({ method: 'notEqual', attribute, values: Array.isArray(value) ? value : [value] }),
   limit: (n: number) => JSON.stringify({ method: 'limit', values: [n] }),
   orderDesc: (attribute: string) => JSON.stringify({ method: 'orderDesc', attribute }),
   select: (values: string[]) => JSON.stringify({ method: 'select', values }),

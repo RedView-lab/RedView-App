@@ -30,8 +30,10 @@ import {
   type IdbProjectViewEntry,
 } from '@/shared/utils/storage/idbProjectStore';
 
+import { isOwnDocument, loadAccessQueries } from './access';
 import { getCachedCurrentUserIdSync, isLocalFallbackUser } from './auth';
 import { enqueue, withTimeout } from './projectSession';
+import type { CloudViewDoc } from './accessQueries';
 
 export type StoredProjectView = IdbProjectViewEntry;
 
@@ -138,6 +140,26 @@ function parseCloudView(doc: { data?: unknown; project_id?: unknown; user_id?: u
   }
 }
 
+/**
+ * Mon document de vue d'un projet : celui de l'id déterministe s'il est bien
+ * à moi (`isOwnDocument`), sinon celui que je retrouve par requête (id pris
+ * par un collaborateur : accessQueries.ts).
+ */
+async function findOwnCloudView(projectId: string, ownerId: string): Promise<CloudViewDoc | null> {
+  try {
+    const doc = (await databases.getDocument(
+      APPWRITE_DATABASE_ID,
+      PROJECT_VIEWS_COLLECTION_ID,
+      projectViewDocumentId(projectId, ownerId),
+    )) as unknown as CloudViewDoc;
+    if (isOwnDocument(doc, ownerId)) return doc;
+  } catch (error) {
+    const code = errorCode(error);
+    if (code !== 404 && code !== 401) throw error;
+  }
+  return (await loadAccessQueries()).listOwnCloudView(projectId, ownerId);
+}
+
 async function upsertCloudView(record: StoredProjectView, createOnly: boolean): Promise<void> {
   if (cloudViewsUnavailable) return;
   const data = JSON.stringify({ updatedAt: record.updatedAt, view: record.view });
@@ -178,10 +200,11 @@ async function upsertCloudView(record: StoredProjectView, createOnly: boolean): 
       markCloudViewsUnavailable(error);
       return;
     }
-    // Créé entre-temps par un autre onglet / appareil (une vue d'amorçage s'efface).
+    // Créé entre-temps par un autre onglet / appareil (une vue d'amorçage
+    // s'efface), ou id pris par un autre compte (accessQueries.ts).
     if (errorCode(error) !== 409) throw error;
     if (createOnly) return;
-    await databases.updateDocument(APPWRITE_DATABASE_ID, PROJECT_VIEWS_COLLECTION_ID, documentId, { data });
+    await (await loadAccessQueries()).writeConflictedCloudView(documentId, record.projectId, record.ownerId, data);
   }
 }
 
@@ -348,15 +371,8 @@ export async function readProjectView(projectId: string): Promise<StoredProjectV
   const cloudPromise = (async (): Promise<StoredProjectView | null> => {
     if (isCloudless(projectId, ownerId) || cloudViewsUnavailable) return null;
     try {
-      const doc = await withTimeout(
-        databases.getDocument(
-          APPWRITE_DATABASE_ID,
-          PROJECT_VIEWS_COLLECTION_ID,
-          projectViewDocumentId(projectId, ownerId),
-        ),
-        CLOUD_READ_TIMEOUT_MS,
-      );
-      return parseCloudView(doc as unknown as { data?: unknown }, projectId, ownerId);
+      const doc = await withTimeout(findOwnCloudView(projectId, ownerId), CLOUD_READ_TIMEOUT_MS);
+      return doc ? parseCloudView(doc, projectId, ownerId) : null;
     } catch (error) {
       if (isMissingCollection(error)) markCloudViewsUnavailable(error);
       return null;

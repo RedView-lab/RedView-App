@@ -40,6 +40,8 @@ const server = createMultiplayerServer({
   storage: withLatency(createFileStorage(dir)),
   appwrite: null,
   devAuth: true,
+  // Toutes les connexions du banc viennent de 127.0.0.1 : plafonds par IP levés.
+  limits: { perIp: 1_000_000, upgradesPerIpPerMinute: 1_000_000, perUser: 1_000_000 },
   host: {
     checkpointIntervalMs,
     shadowValidationIntervalMs,

@@ -6,6 +6,7 @@ import type { CommentAction, CommentAuthor } from '../lib/commentActions';
 import type { MentionCandidate } from '../lib/messageText';
 import {
   postLidarCommentMessage,
+  clearStoredLidarCommentState,
   publishLidarCommentState,
   subscribeLidarComments,
   type LidarCommentState,
@@ -60,7 +61,10 @@ export function useLidarCommentSync({ projectId, me, members, threads, reads, on
   // Projet fermé (ou autre projet ouvert) : le viewer passe en lecture seule.
   useEffect(() => {
     if (!projectId) return;
-    return () => postLidarCommentMessage({ version: 1, type: 'CLOSED', projectId });
+    return () => {
+      postLidarCommentMessage({ version: 1, type: 'CLOSED', projectId });
+      clearStoredLidarCommentState(projectId);
+    };
   }, [projectId]);
 
   useEffect(() => subscribeLidarComments((message) => {

@@ -612,6 +612,8 @@ async function main() {
     __mock.col('projects').set('legacy01', {
       $id: 'legacy01', $createdAt: t0, $updatedAt: t0, user_id: 'user-A', folder_id: null,
       name: 'V3 ancien', data: await m.compressProjectPayload(legacy), size_bytes: 0, privacy: 'private',
+      // Comme toute ligne qu'Appwrite laisse lire à son propriétaire (access.ts).
+      $permissions: ['read("user:user-A")', 'update("user:user-A")', 'delete("user:user-A")'],
     });
     const opened = (await m.getProject('legacy01'))?.data;
     await m.flushProjectViews('legacy01');

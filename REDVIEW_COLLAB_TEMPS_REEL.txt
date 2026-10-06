@@ -202,16 +202,25 @@ Hôte (roomHost.ts) :
   - SIGTERM : journal écrit, clients fermés en 1012 (ils se reconnectent au
     nouveau conteneur et renvoient ce qui n'était pas durable).
 
-Authentification (auth.ts) :
-  - JWT Appwrite + propriétaire ou membre de l'équipe « p<projectId> ».
-  - Vérifié à la connexion puis toutes les minutes.
+Authentification (auth.ts, server.ts) — détails en section 14 :
+  - Le JWT Appwrite est présenté À L'OUVERTURE de la WebSocket (sous-protocole),
+    avec le projet dans l'URL. Jeton, droits, origine et plafonds sont vérifiés
+    AVANT d'accepter la connexion : rien n'est lu d'un inconnu.
+  - Droits : propriétaire (corroboré par les permissions de la ligne) ou
+    membre de l'équipe « p<projectId> » (server/project-access.mjs).
+  - Revérifiés sans cache à la connexion, puis toutes les 15 s, et tout de
+    suite quand l'API de partage retire quelqu'un (route signée).
+  - Le jeton est relevé toutes les 4 min ; un jeton expiré sans relève ferme
+    la connexion (4401) — une session fermée ne la garde pas ouverte.
 
 Partage (api/_lib/projectSharing.ts) :
   - Une équipe Appwrite par projet ; invitation par e-mail d'un compte
-    existant.
+    existant ET vérifié, 20 invitations / 10 min par compte (40 par IP).
+  - L'équipe ne fait que LIRE la ligne du projet : le document partagé n'est
+    écrit que par le serveur temps réel.
   - Actions : list / invite / remove / leave / delete.
   - « delete » (propriétaire) efface aussi le journal, les points de
-    sauvegarde et l'équipe (écrits avec la clé admin).
+    sauvegarde, les vues des éditeurs et l'équipe (écrits avec la clé admin).
 
 Réseau / exploitation :
   - Conteneur publié sur 127.0.0.1:17790 seulement. L'nginx de l'hôte
@@ -225,11 +234,14 @@ Réseau / exploitation :
   - Erreurs → GlitchTip (SENTRY_DSN_SERVER, défini sur le service Coolify).
 
 ========================================================================
-7. PROTOCOLE (src/features/collab/protocol.ts, PROTOCOL_VERSION = 3 depuis la présence en direct)
+7. PROTOCOLE (src/features/collab/protocol.ts, PROTOCOL_VERSION = 4 depuis l'audit de sécurité)
 ========================================================================
+Ouverture : wss://…/multiplayer?project=<id>, sous-protocoles « redview.v4 »
+  et « auth.<JWT en base64url> ». Un refus ferme aussitôt avec son code.
 Client → serveur :
-  hello (jeton, clientId, epoch + lastSeq pour reprendre), batch (clientSeq,
-  ops, blobs), lease (request / renew / release), presence, motion, ping
+  hello (clientId, epoch + lastSeq pour reprendre), batch (clientSeq,
+  ops, blobs), lease (request / renew / release), presence, motion, ping,
+  auth (relève du JWT, même utilisateur)
 Serveur → client :
   welcome (état complet, ou lots manquants ; clientSeq ; pairs ; baux ;
   dernier « motion » des autres), batch (lot numéroté), durable, duplicate,
@@ -285,6 +297,14 @@ Battement de cœur du serveur (ping WebSocket) toutes les 15 s : une connexion
   mesures restent sur le port interne.
 - Toute la logique sans réseau va dans src/features/collab (testable par le
   simulateur). server/multiplayer ne fait que brancher WebSocket et Appwrite.
+- Sécurité (section 14) : ne JAMAIS autoriser d'après un attribut de la
+  ligne projects (user_id, team_id, collab, data : le client les écrit) —
+  passer par server/project-access.mjs ; ne jamais suivre, avec la clé admin,
+  un id de fichier venu du client sans vérifier qu'il appartient au projet ;
+  ne jamais redonner à l'équipe l'écriture sur la ligne ; toute nouvelle
+  règle de validation doit accepter tout ce qu'un client honnête produit
+  (validate.test.ts, bench:collab : 0 lot refusé, et
+  scripts/secure-shared-projects.ts --check-documents --all sur la prod).
 
 ========================================================================
 9. TESTS ET BANCS
@@ -511,3 +531,118 @@ collab/client/connection.test.ts, shared/services/jwtCache.test.ts) :
   Désormais seul un refus d'Appwrite (400/401/403) refuse ; une panne ferme
   en 1011 (le client réessaie). Même chose pour l'API (partage, facturation) :
   503 au lieu d'un 401 « session expirée ».
+
+========================================================================
+14. SÉCURITÉ (audit du 06/10/2026)
+========================================================================
+Principe : le serveur ne croit que ce que le client ne peut pas forger.
+
+Qui possède, qui partage (server/project-access.mjs, commun à l'API et au
+serveur temps réel) :
+  - Les attributs d'une ligne « projects » (user_id, team_id, collab, data)
+    sont écrits par le client : ils ne prouvent rien. Appwrite interdit en
+    revanche à un client d'accorder un droit à un rôle qu'il n'a pas.
+  - Propriétaire = user_id SEULEMENT si la ligne donne aussi l'écriture ou la
+    suppression à « user:<user_id> ».
+  - Équipe = toujours « p<projectId> » (jamais le team_id de la ligne),
+    partagée SEULEMENT si la ligne lui donne la lecture.
+  - La ligne partagée ne donne à l'équipe que la LECTURE. Avant, l'équipe
+    pouvait écrire : un éditeur pouvait se déclarer propriétaire, supprimer le
+    projet, retirer le vrai propriétaire, ou rendre le projet public.
+  - Au premier partage, une équipe « p<projet> » qui existe déjà (n'importe
+    quel compte peut créer une équipe d'id choisi et attendre le partage) est
+    supprimée puis recréée.
+
+Fichiers suivis avec la clé admin :
+  - Charge utile « file:<id> » : nommée <projet>.json.gz et lisible par le
+    propriétaire ou l'équipe, sinon refusée.
+  - Point de sauvegarde (collab.snapshotFile) : nommé <projet>.collab.gz et
+    sans aucune permission (écrit par le serveur), sinon ignoré.
+  - Au partage, les .fit et la charge utile ne s'ouvrent à l'équipe qu'au
+    PREMIER partage et s'ils étaient déjà lisibles par le propriétaire.
+  - Avant : en recopiant ces ids dans sa propre ligne, on lisait les données
+    d'un autre projet (un éditeur retiré gardait l'accès), ou on se faisait
+    ouvrir les traces GPS d'un autre compte.
+
+Connexion au serveur temps réel (server.ts, OWASP) :
+  - Jeton et droits vérifiés à l'ouverture (sous-protocole), rien n'est lu
+    avant. Origine du navigateur vérifiée (https://app.redview.tech ; en dev
+    localhost). Plafonds : 32 connexions et 60 ouvertures/min par IP,
+    16 connexions par utilisateur, 256 authentifications en cours ; mémoire
+    au-delà de 85 % du tas : plus de nouvelle connexion (70 % : plus de
+    nouvelle salle).
+  - Débit : 120 messages/s (rafale 1 200), 16 Mo/s (rafale 64 Mo) — au-delà
+    de l'octet, la lecture est mise en pause, rien n'est coupé.
+  - Retrait d'accès : l'API de partage appelle POST /internal/access-changed
+    (HMAC-SHA256 avec MULTIPLAYER_INTERNAL_SECRET, horodaté ± 60 s) ; les
+    connexions du projet se revérifient tout de suite. Sans secret : la
+    revérification toutes les 15 s prend le relais.
+  - Nom affiché (avatars, curseurs, « suivre ») : celui du compte Appwrite,
+    plus celui que le client met dans sa présence.
+  - Une exception dans une salle ne ferme qu'elle (1011, rechargée de son
+    état durable) ; jamais le processus.
+
+Lots (src/features/collab/model/validate.ts, commentRules.ts) :
+  - Ids, champs et clés sous leur seule forme canonique : « tex%74 » (= text)
+    ou une liste « comment%73 » (= comments) contournaient les règles des
+    commentaires et permettaient de réécrire ou signer ceux des autres.
+  - La racine ne se supprime pas (le serveur en mourait au point de
+    sauvegarde) ; une propriété n'est écrite qu'à un chemin prévu par le
+    modèle (« anchor.lng » déplaçait le fil d'un autre).
+  - Valeurs : profondeur ≤ 64, aucune clé « __proto__ », taille bornée.
+  - Segments de tracé : id = hachage du contenu, JSON canonique (il est
+    recollé tel quel dans projects.data : un JSON forgé y injectait des
+    clés), points avec lat/lon numériques ; les segments que rien ne
+    référence sont écartés.
+  - Champs qui feraient planter l'interface des autres : nom et couleur
+    d'itinéraire, ligne de feuille de route, zone interdite, nom du projet ;
+    une liste posée telle quelle est un tableau (ou null), un tracé un
+    en-tête de segments (ou null).
+  - Commentaires : liste fermée de champs, id = clé, nom ≤ 200 car., dates
+    ≤ 64 car., ≤ 2 000 fils et 500 messages par fil.
+  - clientId lié à son utilisateur (gardé dans le point de sauvegarde) :
+    avant, un autre membre pouvait l'emprunter, éjecter son titulaire et
+    faire passer ses lots pour des doublons (perdus sans rien dire).
+  - Salle ≤ 150 M caractères : au-delà, seuls les petits lots passent (toast
+    « Projet partagé trop volumineux » chez l'auteur).
+  - Baux de calcul gardés ≤ 5 min (puis 60 s d'attente) ; Spotlight :
+    plus proposé après 3 refus du même éditeur en 2 min.
+  - Preuve qu'aucun client honnête n'est refusé : validate.test.ts
+    (10 000 modifications aléatoires), bench:collab (0 lot refusé), et les
+    116 documents de la prod rejoués (scripts/secure-shared-projects.ts
+    --check-documents --all : 116 acceptés le 06/10/2026).
+
+Client :
+  - « Mes projets » / « Partagés avec moi » / ouverture : seulement les lignes
+    vraiment à moi (user_id + permission sur mon rôle) ou partagées par leur
+    équipe « p<projet> » dont je suis membre
+    (src/shared/utils/projects/access.ts). Avant, n'importe quel compte
+    pouvait glisser une ligne lisible par tous dans la bibliothèque d'un
+    autre (et lire ce qu'il y saisissait).
+  - Vues par utilisateur (project_views) : un document à l'id deviné par un
+    collaborateur n'est jamais lu comme ma vue ; la mienne vit alors ailleurs.
+  - Copie locale des commentaires du viewer LiDAR effacée à la fermeture du
+    projet.
+  - Forme des itinéraires garantie à la normalisation (defaultState.ts,
+    normalizeItineraryProject : document distant, cloud, fichier) : feuille de
+    route en tableau, nom en texte, couleur sûre, priorités et rythme du bon
+    type… Un éditeur malveillant qui crée un itinéraire « nu » faisait
+    planter l'application des autres (vu par collab-e2e/hostile-peer.mjs).
+    Rien n'est copié quand tout est déjà conforme.
+
+Vérifications (06/10/2026) : Vitest (dont server/multiplayer/security.test.ts,
+validate.test.ts), bench:collab (0 lot refusé), bench:collab-e2e avec le pair
+hostile (collab-e2e/hostile-peer.mjs : 9 attaques refusées, 7 valeurs
+bizarres acceptées sans faire planter la victime). bench:collab-load : même
+diffusion qu'avant ; la mémoire par salle compte ~300 Ko fixes de plus (code
+compilé des validations, amorti sur les salles : +16 Ko à 20 salles, +9 Ko à
+30) — à 50 salles avec présence, le générateur de charge sature seul.
+
+Exploitation :
+  - Audit / mise en conformité de la prod :
+      npx tsx --env-file=.env scripts/secure-shared-projects.ts [--apply] [--check-documents [--all]]
+  - nginx de l'hôte : limit_conn / limit_req sur /multiplayer
+    (server/vps/nginx-multiplayer.conf).
+  - Variables : MULTIPLAYER_INTERNAL_SECRET (≥ 32 car., sur les DEUX services
+    Coolify), MULTIPLAYER_INTERNAL_URL (app : https://app.redview.tech/multiplayer),
+    MULTIPLAYER_ALLOWED_ORIGINS (défaut prod : https://app.redview.tech).

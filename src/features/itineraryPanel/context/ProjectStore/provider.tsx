@@ -13,6 +13,8 @@ import {
   createDefaultProject,
   normalizeItineraryProject,
 } from '../../lib/project';
+// Module concret (pas le barrel) : la garde de forme reste dans l'éditeur, hors du premier chargement.
+import { shapeProject } from '../../lib/project/shapeProject';
 import {
   composeProject,
   extractProjectLocalWork,
@@ -82,7 +84,7 @@ export function ProjectProvider({
   children,
 }: ProjectProviderProps) {
   const [project, setProjectInternal] = useState<ItineraryProject>(
-    () => (initialProject ? normalizeItineraryProject(initialProject) : createDefaultProject()),
+    () => (initialProject ? normalizeItineraryProject(shapeProject(initialProject)) : createDefaultProject()),
   );
   // Source de vérité synchrone : chaque mise à jour part de l'état le plus
   // récent (et non du dernier rendu), de sorte que les résultats async, les
@@ -152,12 +154,13 @@ export function ProjectProvider({
   }, []);
 
   /**
-   * Normalise puis partage la structure avec l'état courant : tout ce qui n'a
+   * Forme garantie (document d'un autre éditeur, cloud, fichier : shapeProject),
+   * normalise, puis partage la structure avec l'état courant : tout ce qui n'a
    * pas changé garde sa référence (et ses rendus en cache).
    */
   const prepareProject = useCallback(
     (prev: ItineraryProject, next: ItineraryProject, alreadyNormalized = false) =>
-      shareProjectStructure(prev, alreadyNormalized ? next : normalizeItineraryProject(next)),
+      shareProjectStructure(prev, alreadyNormalized ? next : normalizeItineraryProject(shapeProject(next))),
     [],
   );
 

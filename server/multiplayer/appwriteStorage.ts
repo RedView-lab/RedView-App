@@ -2,8 +2,18 @@ import { createHash } from 'node:crypto';
 import { gunzip, gzip } from 'node:zlib';
 import { promisify } from 'node:util';
 
-import { Client, Databases, ID, Permission, Query, Role, Storage } from 'node-appwrite';
+import { Client, Databases, ID, Permission, Query, Role, Storage, Teams } from 'node-appwrite';
 import { InputFile } from 'node-appwrite/file';
+
+import {
+  corroboratedOwnerId,
+  fileReadableBy,
+  grantsTeamWrite,
+  isTeamShared,
+  projectPayloadFileName,
+  projectSnapshotFileName,
+  projectTeamId,
+} from '../project-access.mjs';
 
 import { readStoredProject } from '../../src/features/itineraryPanel/lib/project/layers.ts';
 import type { SequencedBatch } from '../../src/features/collab/protocol.ts';
@@ -36,6 +46,13 @@ import {
  * Projet supprimé (404 au point de sauvegarde) : `ProjectNotFoundError` ;
  * `purgeRoom` efface alors journal et points de sauvegarde (clé admin : ni le
  * propriétaire ni les éditeurs ne peuvent les lire ou les supprimer).
+ *
+ * La ligne `projects` est écrite par le client (propriétaire) : la clé admin ne
+ * suit jamais un de ses pointeurs vers un fichier qui n'est pas celui du
+ * projet. Charge utile `file:` : nommée `<projet>.json.gz` et lisible par le
+ * propriétaire ou l'équipe ; point de sauvegarde : nommé `<projet>.collab.gz`
+ * et sans aucune permission (écrit par ce serveur seulement). Propriétaire et
+ * équipe : server/project-access.mjs.
  */
 
 const gzipAsync = promisify(gzip);
@@ -51,6 +68,8 @@ const MAX_DECOMPRESSED_BYTES = 200 * 1024 * 1024;
 const FILE_PREFIX = 'file:';
 const GZ_PREFIX = 'gz:';
 const COLLAB_META_VERSION = 1;
+/** Propriétaire et équipe d'un projet gardés en mémoire (vidés par la révocation : `forgetAccess`). */
+const ACCESS_CACHE_MS = 10_000;
 
 interface CollabMeta {
   v: number;
@@ -99,6 +118,7 @@ export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStor
   const client = new Client().setEndpoint(options.endpoint).setProject(options.projectId).setKey(options.apiKey);
   const databases = new Databases(client);
   const storage = new Storage(client);
+  const teams = new Teams(client);
   const db = options.databaseId;
   const accessCache = new Map<string, { value: ProjectAccess | null; at: number }>();
 
@@ -106,20 +126,49 @@ export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStor
     return new Uint8Array(await storage.getFileDownload(PAYLOADS_BUCKET_ID, fileId));
   }
 
-  async function readData(data: unknown): Promise<unknown> {
+  /** Document de la ligne ; un pointeur `file:` n'est suivi que vers la charge utile du projet. */
+  async function readData(projectId: string, data: unknown, projectAccess: ProjectAccess): Promise<unknown> {
     if (typeof data !== 'string') return data;
-    if (data.startsWith(FILE_PREFIX)) return gunzipJson(await downloadFile(data.slice(FILE_PREFIX.length)));
+    if (data.startsWith(FILE_PREFIX)) {
+      const fileId = data.slice(FILE_PREFIX.length);
+      const file = await storage.getFile(PAYLOADS_BUCKET_ID, fileId);
+      if (file.name !== projectPayloadFileName(projectId) || !fileReadableBy(file.$permissions, projectAccess.ownerId, projectAccess.teamId)) {
+        throw new Error(`projet ${projectId} : la charge utile pointe un fichier étranger au projet (${fileId})`);
+      }
+      return gunzipJson(await downloadFile(fileId));
+    }
     if (data.startsWith(GZ_PREFIX)) return gunzipJson(Buffer.from(data.slice(GZ_PREFIX.length), 'base64'));
     return JSON.parse(data);
   }
 
+  /** Membre confirmé de l'équipe avec le rôle `owner` (donné par l'API de partage au premier partage). */
+  async function hasOwnerRole(teamId: string, userId: string): Promise<boolean> {
+    try {
+      const list = await teams.listMemberships(teamId, [Query.equal('userId', userId), Query.limit(1)]);
+      return list.memberships.some((membership) => membership.userId === userId && membership.confirm && membership.roles.includes('owner'));
+    } catch (error) {
+      if (errorCode(error) === 404) return false;
+      throw error;
+    }
+  }
+
+  /**
+   * Propriétaire corroboré par les permissions de la ligne (sinon ''), équipe
+   * `p<projectId>` si la ligne lui donne la lecture (sinon null). Ancien
+   * format (équipe en écriture : un éditeur a pu réécrire `user_id`) : le
+   * propriétaire doit aussi avoir le rôle `owner` dans l'équipe.
+   */
   async function access(projectId: string): Promise<ProjectAccess | null> {
     const cached = accessCache.get(projectId);
-    if (cached && Date.now() - cached.at < 30_000) return cached.value;
+    if (cached && Date.now() - cached.at < ACCESS_CACHE_MS) return cached.value;
     let value: ProjectAccess | null;
     try {
-      const row = await databases.getDocument(db, PROJECTS_COLLECTION_ID, projectId, [Query.select(['user_id', 'team_id'])]);
-      value = { ownerId: String(row.user_id ?? ''), teamId: typeof row.team_id === 'string' && row.team_id ? row.team_id : null };
+      const row = await databases.getDocument(db, PROJECTS_COLLECTION_ID, projectId, [Query.select(['$id', '$permissions', 'user_id'])]);
+      const rowAccess = { $id: projectId, $permissions: row.$permissions, user_id: row.user_id };
+      const teamId = isTeamShared(rowAccess) ? projectTeamId(projectId) : null;
+      let ownerId = corroboratedOwnerId(rowAccess) ?? '';
+      if (ownerId && grantsTeamWrite(row.$permissions) && !(await hasOwnerRole(projectTeamId(projectId), ownerId))) ownerId = '';
+      value = { ownerId, teamId };
     } catch (error) {
       if (!isAppwriteNotFound(error, 'document_not_found')) throw error;
       value = null;
@@ -131,11 +180,13 @@ export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStor
   async function filePermissions(projectId: string): Promise<string[]> {
     const owner = await access(projectId);
     if (!owner) throw new ProjectNotFoundError(projectId);
-    const permissions = [
-      Permission.read(Role.user(owner.ownerId)),
-      Permission.update(Role.user(owner.ownerId)),
-      Permission.delete(Role.user(owner.ownerId)),
-    ];
+    const permissions = owner.ownerId
+      ? [
+          Permission.read(Role.user(owner.ownerId)),
+          Permission.update(Role.user(owner.ownerId)),
+          Permission.delete(Role.user(owner.ownerId)),
+        ]
+      : [];
     if (owner.teamId) permissions.push(Permission.read(Role.team(owner.teamId)));
     return permissions;
   }
@@ -192,9 +243,18 @@ export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStor
     return (await gunzipJson(bytes)) as SequencedBatch[];
   }
 
-  /** Point de sauvegarde exact, ou null s'il manque / ne correspond pas à sa séquence. */
+  /**
+   * Point de sauvegarde exact, ou null s'il manque, ne correspond pas à sa
+   * séquence, ou n'est pas un fichier de ce serveur pour ce projet (`collab`
+   * est un attribut de la ligne : le propriétaire peut l'écrire).
+   */
   async function readCheckpoint(projectId: string, meta: CollabMeta): Promise<RoomCheckpoint | null> {
     try {
+      const file = await storage.getFile(PAYLOADS_BUCKET_ID, meta.snapshotFile);
+      if (file.name !== projectSnapshotFileName(projectId) || file.$permissions.length > 0) {
+        console.error(JSON.stringify({ level: 'error', service: 'multiplayer', message: 'point de sauvegarde étranger au projet : ignoré', projectId }));
+        return null;
+      }
       const checkpoint = (await gunzipJson(await downloadFile(meta.snapshotFile))) as RoomCheckpoint;
       if (checkpoint.seq === meta.seq) return checkpoint;
       console.warn(JSON.stringify({ level: 'warn', service: 'multiplayer', message: 'point de sauvegarde incohérent', projectId }));
@@ -212,7 +272,9 @@ export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStor
     async loadRoom(projectId: string): Promise<LoadedRoom | null> {
       const row = await readRow(projectId);
       if (!row) return null;
-      const stored = readStoredProject(await readData(row.data));
+      const projectAccess = await access(projectId);
+      if (!projectAccess) return null;
+      const stored = readStoredProject(await readData(projectId, row.data, projectAccess));
       if (!stored) throw new Error(`projet ${projectId} : données illisibles`);
       const meta = parseMeta(row.collab);
       const checkpoint = meta ? await readCheckpoint(projectId, meta) : null;
@@ -307,6 +369,10 @@ export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStor
       const checkpoint = await readCheckpoint(projectId, meta);
       if (!checkpoint) return null;
       return { checkpoint, journal: await readJournalAfter(projectId, meta.seq) };
+    },
+
+    forgetAccess(projectId: string): void {
+      accessCache.delete(projectId);
     },
 
     async purgeRoom(projectId: string): Promise<void> {

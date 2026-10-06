@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocket } from 'ws';
 
 import { itineraryObjectId } from '../../src/features/collab/model/paths.ts';
-import { PROTOCOL_VERSION, type ServerMessage } from '../../src/features/collab/protocol.ts';
+import { PROTOCOL_VERSION, socketProtocols, type ServerMessage } from '../../src/features/collab/protocol.ts';
 import { sampleDocument } from '../../src/features/collab/sim/fixtures.ts';
 
 const arg = (name: string, fallback: number) =>
@@ -112,13 +112,11 @@ class LoadClient {
 
   open(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const socket = new WebSocket(`ws://127.0.0.1:${port}/multiplayer`);
+      const socket = new WebSocket(`ws://127.0.0.1:${port}/multiplayer?project=${this.projectId}`, socketProtocols(`dev:${this.clientId}`));
       this.socket = socket;
       socket.on('open', () => socket.send(JSON.stringify({
         type: 'hello',
         v: PROTOCOL_VERSION,
-        projectId: this.projectId,
-        token: `dev:${this.clientId}`,
         clientId: this.clientId,
         epoch: null,
         lastSeq: null,
@@ -147,7 +145,10 @@ class LoadClient {
       this.timer = setInterval(() => {
         this.clientSeq += 1;
         const key = ops[this.clientSeq % ops.length];
-        const value = key === 'priorities.elevation' ? this.clientSeq % 100 : `${this.clientId}-${this.clientSeq}`;
+        // Valeurs qu'un client honnête écrit (le serveur refuse une couleur qui n'en est pas une).
+        const value = key === 'priorities.elevation'
+          ? this.clientSeq % 100
+          : key === 'color' ? `#${(this.clientSeq * 2654435761 % 0xffffff).toString(16).padStart(6, '0')}` : `${this.clientId}-${this.clientSeq}`;
         sentAt.set(`${this.clientId}#${this.clientSeq}`, performance.now());
         this.socket!.send(JSON.stringify({ type: 'batch', clientSeq: this.clientSeq, ops: [{ t: 's', id, k: key, v: value }], blobs: {} }));
       }, 1000 / RATE);

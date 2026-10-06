@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { PROTOCOL_VERSION, type ServerMessage } from '../protocol';
+import { PROTOCOL_VERSION, SOCKET_PROTOCOL, tokenFromProtocols, type ServerMessage } from '../protocol';
 import { CollabConnection } from './connection';
 
 /**
@@ -28,9 +28,11 @@ class FakeSocket {
   onclose: ((event: { code: number }) => void) | null = null;
 
   readonly url: string;
+  readonly protocols: string[];
 
-  constructor(url: string) {
+  constructor(url: string, protocols: string[] = []) {
     this.url = url;
+    this.protocols = protocols;
     FakeSocket.instances.push(this);
   }
 
@@ -180,6 +182,44 @@ describe('connexion temps réel', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(FakeSocket.instances.length).toBe(count + 1);
     expect(first).not.toBe(FakeSocket.instances[count]);
+    link.stop();
+  });
+
+  it('jeton présenté à l’ouverture (sous-protocole), projet dans l’URL, jamais dans `hello`', async () => {
+    const link = connection();
+    link.start();
+    const socket = await openLatest();
+    expect(socket.url).toBe('ws://test/multiplayer?project=p1');
+    expect(socket.protocols[0]).toBe(SOCKET_PROTOCOL);
+    expect(tokenFromProtocols(socket.protocols)).toBe('jwt');
+    const hello = socket.sent.find((message) => message.type === 'hello')!;
+    expect(hello).not.toHaveProperty('token');
+    expect(hello).not.toHaveProperty('projectId');
+    link.stop();
+  });
+
+  it('relève du jeton toutes les 4 min sur la connexion ouverte (le serveur ferme un jeton expiré)', async () => {
+    const link = connection();
+    link.start();
+    const socket = await openLatest();
+    expect(socket.sent.filter((message) => message.type === 'auth')).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(4 * 60_000);
+    await settle();
+    expect(socket.sent.filter((message) => message.type === 'auth')).toEqual([{ type: 'auth', token: 'jwt' }]);
+    link.stop();
+  });
+
+  it('refus du jeton à répétition (4401) : session expirée, plus de nouvelle tentative', async () => {
+    const link = connection();
+    link.start();
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      // Refusée à l'ouverture (avant tout `welcome`), comme le fait le serveur.
+      await vi.advanceTimersByTimeAsync(0);
+      FakeSocket.instances[FakeSocket.instances.length - 1].close(4401);
+      await settle();
+      await vi.advanceTimersByTimeAsync(20_000);
+    }
+    expect(link.client.getState().status).toBe('denied');
     link.stop();
   });
 

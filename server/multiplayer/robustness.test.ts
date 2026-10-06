@@ -8,7 +8,7 @@ import { WebSocket } from 'ws';
 import type { ProjectDocument } from '../../src/features/itineraryPanel/lib/project/layers.ts';
 import type { Itinerary } from '../../src/features/itineraryPanel/types/index.ts';
 import { CollabConnection } from '../../src/features/collab/client/connection.ts';
-import { PROTOCOL_VERSION } from '../../src/features/collab/protocol.ts';
+import { PROTOCOL_VERSION, socketProtocols } from '../../src/features/collab/protocol.ts';
 import { sampleDocument } from '../../src/features/collab/sim/fixtures.ts';
 import { createFileStorage } from './fileStorage.ts';
 import { createMultiplayerServer, type MultiplayerServer } from './server.ts';
@@ -38,8 +38,8 @@ async function start(): Promise<void> {
 
 /** WebSocket de `ws` qui note les codes de fermeture vus par le client. */
 class RecordingWebSocket extends WebSocket {
-  constructor(url: string) {
-    super(url);
+  constructor(url: string, protocols?: string | string[]) {
+    super(url, protocols);
     this.addEventListener('close', (event) => closeCodes.push(event.code));
   }
 }
@@ -122,10 +122,10 @@ describe('serveur temps réel : cas limites', () => {
 
     // Deux connexions brutes du même client : la première n'est pas fermée côté client (réseau changé).
     const open = () => new Promise<{ socket: WebSocket; messages: Array<Record<string, unknown>>; closed: Promise<number> }>((resolve) => {
-      const socket = new WebSocket(`ws://127.0.0.1:${port}/multiplayer`);
+      const socket = new WebSocket(`ws://127.0.0.1:${port}/multiplayer?project=local-test`, socketProtocols('dev:alice'));
       const messages: Array<Record<string, unknown>> = [];
       const closed = new Promise<number>((done) => socket.on('close', (code) => done(code)));
-      socket.on('open', () => socket.send(JSON.stringify({ type: 'hello', v: PROTOCOL_VERSION, projectId: 'local-test', token: 'dev:alice', clientId, epoch: null, lastSeq: null })));
+      socket.on('open', () => socket.send(JSON.stringify({ type: 'hello', v: PROTOCOL_VERSION, clientId, epoch: null, lastSeq: null })));
       socket.on('message', (data) => {
         const message = JSON.parse(String(data)) as Record<string, unknown>;
         messages.push(message);

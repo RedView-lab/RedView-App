@@ -12,7 +12,7 @@ import {
 } from '../protocol';
 import { LeaseTable } from './leases';
 import { mergeMotion, MotionBucket, sanitizeMotion } from './motion';
-import type { RoomState } from './roomState';
+import { estimateBatchChars, type RoomState } from './roomState';
 
 /**
  * Salle de co-édition d'un projet, sans réseau ni stockage : le serveur
@@ -34,6 +34,12 @@ export interface SendOptions {
 export interface RoomPeer {
   readonly clientId: string;
   readonly userId: string;
+  /**
+   * Nom vérifié par le serveur (compte Appwrite) : il remplace celui que le
+   * client met dans sa présence (avatars, curseurs, « suivre »), qu'il ne
+   * choisit donc pas. Absent : nom de la présence (développement, tests).
+   */
+  readonly name?: string;
   send(message: ServerMessage, options?: SendOptions): void;
 }
 
@@ -66,6 +72,7 @@ export interface JoinRequest {
 const DEFAULT_CATCH_UP_LIMIT = 2_000;
 const DEFAULT_CATCH_UP_BUDGET_BYTES = 256 * 1024;
 const MAX_PRESENCE_CHARS = 2_048;
+const MAX_NAME_CHARS = 80;
 const VOLATILE: SendOptions = { volatile: true };
 
 interface Member {
@@ -118,18 +125,27 @@ export class Room {
     return this.members.has(clientId);
   }
 
-  /** Arrivée d'un client authentifié (le serveur a vérifié son jeton et ses droits). */
+  /**
+   * Ce client peut-il entrer sous ce `clientId` ? Non s'il appartient à un
+   * autre utilisateur (lots déjà écrits sous cet id, ou connexion en cours) :
+   * il éjecterait son titulaire et ferait passer ses lots pour des doublons.
+   */
+  canJoin(peer: RoomPeer): boolean {
+    const owner = this.state.clientOwner(peer.clientId);
+    if (owner !== undefined && owner !== peer.userId) return false;
+    const current = this.members.get(peer.clientId);
+    return !current || current.peer.userId === peer.userId;
+  }
+
+  /** Arrivée d'un client authentifié (le serveur a vérifié son jeton et ses droits, et `canJoin`). */
   join(peer: RoomPeer, request: JoinRequest): void {
     // Même client sur une nouvelle connexion : l'ancienne est remplacée.
     const previous = this.members.get(peer.clientId);
     if (previous && previous.peer !== peer) this.leave(peer.clientId);
     const motions = this.motionList(peer.clientId);
-    this.members.set(peer.clientId, {
-      peer,
-      presence: this.sanitizePresence(request.presence, null),
-      motion: null,
-      motionBucket: new MotionBucket(),
-    });
+    const member: Member = { peer, presence: {}, motion: null, motionBucket: new MotionBucket() };
+    member.presence = this.sanitizePresence(request.presence, member);
+    this.members.set(peer.clientId, member);
     const catchUp = this.catchUpFor(request);
     peer.send({
       type: 'welcome',
@@ -169,7 +185,7 @@ export class Room {
         this.handleLease(member.peer, message);
         return;
       case 'presence':
-        member.presence = this.sanitizePresence(message.presence, member.presence);
+        member.presence = this.sanitizePresence(message.presence, member);
         this.peersDirty = true;
         return;
       case 'motion':
@@ -223,7 +239,7 @@ export class Room {
       return;
     }
     const { batch } = outcome;
-    const bytes = estimateBatchBytes(batch);
+    const bytes = estimateBatchChars(batch.ops, batch.blobs);
     this.recent.push(batch);
     this.recentBytes.push(bytes);
     this.recentTotalBytes += bytes;
@@ -324,24 +340,27 @@ export class Room {
   }
 
   /**
-   * Présence envoyée par un client (n'importe quoi) → champs connus, bornés.
+   * Présence envoyée par un client (n'importe quoi) → champs connus, bornés ;
+   * le nom est celui vérifié par le serveur quand il est connu.
    * Spotlight : `true` reçoit un numéro (gardé tant qu'il reste allumé) ; un
    * numéro déjà donné (reconnexion du présentateur, même après un
    * redémarrage) est repris s'il n'est pas dans le futur.
    */
-  private sanitizePresence(presence: unknown, previous: PresenceState | null): PresenceState {
+  private sanitizePresence(presence: unknown, member: Member): PresenceState {
+    const previous = member.presence.spotlight ?? null;
     const out = sanitizePresenceFields(presence);
+    if (member.peer.name) out.name = member.peer.name.slice(0, MAX_NAME_CHARS);
     const source = presence !== null && typeof presence === 'object' ? presence as Record<string, unknown> : {};
     const resumed = source.spotlight;
     if (typeof resumed === 'number' && Number.isSafeInteger(resumed) && resumed > 0 && resumed <= this.options.now()) {
-      out.spotlight = previous?.spotlight ?? resumed;
+      out.spotlight = previous ?? resumed;
     } else if (source.spotlight === true || typeof resumed === 'number') {
-      out.spotlight = previous?.spotlight ?? this.nextSpotlight();
+      out.spotlight = previous ?? this.nextSpotlight();
     } else if (source.spotlight === false || source.spotlight === null) {
       out.spotlight = null;
-    } else if (previous?.spotlight) {
+    } else if (previous) {
       // Champ absent : le Spotlight en cours reste allumé.
-      out.spotlight = previous.spotlight;
+      out.spotlight = previous;
     }
     return JSON.stringify(out).length > MAX_PRESENCE_CHARS ? {} : out;
   }
@@ -381,26 +400,6 @@ export class Room {
 
 const DERIVED_KINDS: readonly DerivedKind[] = ['route', 'prediction', 'poi'];
 
-/** Taille approximative d'un lot (sans le sérialiser) : de quoi borner le rattrapage. */
-function estimateBatchBytes(batch: SequencedBatch): number {
-  let bytes = 160;
-  for (const op of batch.ops) {
-    bytes += 48 + op.id.length;
-    if (op.t === 's') bytes += op.k.length + valueBytes(op.v);
-    else if (op.t === 'c') for (const [key, value] of op.props) bytes += key.length + valueBytes(value);
-  }
-  for (const json of Object.values(batch.blobs)) bytes += json.length;
-  return bytes;
-}
-
-function valueBytes(value: unknown): number {
-  if (value === null || value === undefined) return 4;
-  if (typeof value === 'string') return value.length + 2;
-  if (typeof value !== 'object') return 8;
-  // Valeur composée (réglage, en-tête de tracé) : rare et petite, mesurée.
-  return JSON.stringify(value)?.length ?? 4;
-}
-
 function isDerivedKind(value: unknown): value is DerivedKind {
   return DERIVED_KINDS.includes(value as DerivedKind);
 }
@@ -418,7 +417,7 @@ function sanitizePresenceFields(presence: unknown): PresenceState {
   if (presence === null || typeof presence !== 'object') return {};
   const source = presence as Record<string, unknown>;
   const out: PresenceState = {};
-  if (typeof source.name === 'string') out.name = source.name.slice(0, 80);
+  if (typeof source.name === 'string') out.name = source.name.slice(0, MAX_NAME_CHARS);
   if (typeof source.color === 'string' && /^#[0-9a-f]{6}$/i.test(source.color)) out.color = source.color;
   if (typeof source.activeItineraryId === 'string' || source.activeItineraryId === null) {
     out.activeItineraryId = typeof source.activeItineraryId === 'string' ? source.activeItineraryId.slice(0, 200) : null;

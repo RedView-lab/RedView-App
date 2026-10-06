@@ -15,7 +15,10 @@
 //  - comments-solo.mjs / comments-two-users.mjs : commentaires sur la carte
 //                   (mode, bulles, fils, zones, liste ; deux utilisateurs
 //                   `?devUser=…` : non lu, mention, droits vérifiés par le serveur).
-//                   Le viewer LiDAR a le sien : npm run bench:comments-viewer.
+//                   Le viewer LiDAR a le sien : npm run bench:comments-viewer ;
+//  - hostile-peer.mjs : un éditeur malveillant (client WebSocket brut) — ce qui
+//                   est dangereux est refusé par le serveur, ce qu'il accepte
+//                   encore ne fait pas planter l'onglet de la victime.
 //
 //   npm run bench:collab-e2e
 import { spawnSync } from 'node:child_process';
@@ -25,7 +28,7 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 let failed = false;
 
-for (const script of ['solo.mjs', 'two-tabs.mjs', 'follow-two-users.mjs', 'comments-solo.mjs', 'comments-two-users.mjs']) {
+for (const script of ['solo.mjs', 'two-tabs.mjs', 'follow-two-users.mjs', 'comments-solo.mjs', 'comments-two-users.mjs', 'hostile-peer.mjs']) {
   const run = spawnSync(process.execPath, [path.join(here, script)], { encoding: 'utf8', timeout: 600_000 });
   let report = null;
   try {

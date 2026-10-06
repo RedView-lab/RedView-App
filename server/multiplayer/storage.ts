@@ -21,6 +21,8 @@ export interface RoomCheckpoint {
   seq: number;
   snapshot: Snapshot;
   clientSeqs: Record<string, number>;
+  /** Titulaire (utilisateur) de chaque client ; absent des points de sauvegarde d'avant (appris du journal). */
+  clientUsers?: Record<string, string>;
 }
 
 /** Point de sauvegarde à écrire, déjà sérialisé (serialize.ts : incrémental). */
@@ -44,6 +46,7 @@ export interface LoadedRoom {
 }
 
 export interface ProjectAccess {
+  /** Propriétaire établi (server/project-access.mjs), '' si aucun ne l'est. */
   ownerId: string;
   /** Équipe du projet partagé (`p<projectId>`), null s'il ne l'est pas. */
   teamId: string | null;
@@ -73,6 +76,8 @@ export interface RoomStorage {
   readonly kind: 'appwrite' | 'file';
   /** Propriétaire et équipe du projet ; null : introuvable. */
   access(projectId: string): Promise<ProjectAccess | null>;
+  /** Oublie ce qui est gardé en mémoire des accès du projet (révocation : relus au prochain contrôle). */
+  forgetAccess?(projectId: string): void;
   /**
    * État de départ d'une salle. `seed` (développement seulement : projets
    * locaux du compte démo) crée la salle à partir du document du premier client.

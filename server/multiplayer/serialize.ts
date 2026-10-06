@@ -29,6 +29,6 @@ export class CheckpointSerializer {
     for (const id of state.store.blobIds()) blobs.push(`${JSON.stringify(id)}:${JSON.stringify(state.store.getBlob(id))}`);
     const seq = state.seq;
     return `{"seq":${seq},"snapshot":{"seq":${seq},"objects":[${objects.join(',')}],"blobs":{${blobs.join(',')}}},`
-      + `"clientSeqs":${JSON.stringify(state.clientSeqs())}}`;
+      + `"clientSeqs":${JSON.stringify(state.clientSeqs())},"clientUsers":${JSON.stringify(state.clientUserMap())}}`;
   }
 }

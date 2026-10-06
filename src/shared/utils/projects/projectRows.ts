@@ -78,6 +78,7 @@ import {
 import { deleteProjectView, queueProjectViewSave, readProjectView, saveProjectViewNow } from './projectViews';
 import { legacyViewOf, serializeProjectForStorage } from './storedProject';
 import { rowToSummary } from './mappers';
+import { inaccessibleProjectError, isAccessibleDocument, isOwnDocument, loadAccessQueries } from './access';
 import { isServerOwnedDocument, isSharedProject, markSharedProject } from './liveSessions';
 import { deleteSharedProjectOnServer } from './sharing';
 import type { ItineraryProject, ProjectRow, ProjectRowMeta, ProjectSummary } from './types';
@@ -102,7 +103,8 @@ export async function listProjects(): Promise<ProjectSummary[]> {
         Query.orderDesc('$updatedAt'),
         Query.select(fields),
       ]));
-      return documents.map((doc) => cloudDocToSummary(doc, false));
+      // Ligne d'un autre compte lisible par tous, `user_id` = moi : ignorée (access.ts).
+      return documents.filter((doc) => isOwnDocument(doc, userId)).map((doc) => cloudDocToSummary(doc, false));
     } catch (e) {
       const error = toCloudFailure('listProjects', e);
       // Hors-ligne : copies locales de l'utilisateur. Autre erreur : on la remonte.
@@ -148,11 +150,14 @@ export async function listSharedProjects(): Promise<ProjectSummary[]> {
   const userId = await getCurrentUserId();
   if (isLocalFallbackUser(userId)) return [];
   try {
-    const documents = await withProjectMetaFields((fields) => listAllCloudDocuments<CloudProjectDoc>(PROJECTS_COLLECTION_ID, [
+    // Seulement les projets des équipes dont je suis membre (une ligne lisible
+    // par tous ne s'invite pas dans « Partagés avec moi » : access.ts).
+    const documents = await (await loadAccessQueries()).listSharedWithMe(userId, (teams) => withProjectMetaFields((fields) => listAllCloudDocuments<CloudProjectDoc>(PROJECTS_COLLECTION_ID, [
+      Query.equal('team_id', teams),
       Query.notEqual('user_id', userId),
       Query.orderDesc('$updatedAt'),
       Query.select(fields),
-    ]));
+    ])));
     return documents.map((doc) => cloudDocToSummary(doc, true));
   } catch (e) {
     const error = toCloudFailure('listSharedProjects', e);
@@ -189,10 +194,13 @@ export async function syncDirtyProjects(): Promise<Array<{ meta: ProjectRowMeta;
 }
 
 async function fetchCloudRow(id: string): Promise<ProjectRow> {
+  const userId = await getCurrentUserId();
   const doc = (await withTimeout(
     databases.getDocument(APPWRITE_DATABASE_ID, PROJECTS_COLLECTION_ID, id),
     CLOUD_READ_TIMEOUT_MS,
   )) as unknown as CloudProjectDoc;
+  // Ni à moi ni partagé avec moi (ligne d'un autre lisible par tous) : introuvable.
+  if (!(await isAccessibleDocument(doc, userId))) throw inaccessibleProjectError(id);
   const row = await docToProjectRow(doc);
   markSharedProject(id, row.team_id, row.user_id);
   rememberCloudVersion(id, doc.$updatedAt);
@@ -322,6 +330,12 @@ async function getProjectRow(id: string): Promise<ProjectRow | null> {
     // Hors-ligne / refus : la copie locale reste utilisable (partagée si son équipe est connue).
     markSharedProject(id, local.team_id);
     return local;
+  }
+
+  if (!(await isAccessibleDocument(meta, userId))) {
+    // Ligne d'un autre compte (lisible par tous) : jamais ouverte, sa copie locale propre est effacée.
+    if (!local.dirty) await idbDeleteProject(id).catch(() => undefined);
+    return null;
   }
 
   // Projet partagé : son document vient du serveur temps réel (jamais de

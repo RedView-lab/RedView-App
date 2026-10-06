@@ -14,6 +14,7 @@ MariaDB, GlitchTip, Umami, Beszel.
 | `journald-90-redview.conf` | `/etc/systemd/journald.conf.d/90-redview.conf` | `mkdir -p /var/log/journal`, `restart systemd-journald`, `journalctl --flush` |
 | `docker-daemon.json` | `/etc/docker/daemon.json` | `live-restore` d'abord (`kill -HUP` de dockerd), puis `restart docker` : les conteneurs continuent de tourner |
 | `appwrite/docker-compose.override.yml` | `/opt/appwrite/docker-compose.override.yml` | `docker compose config` (vérification à sec), `docker compose stop -t 120 mariadb`, `docker compose up -d` |
+| `nginx-multiplayer.conf` | zones en tête de `/etc/nginx/conf.d/app.conf`, `location`s dans le bloc `server` de app.redview.tech (remplacent `location /multiplayer`) | `nginx -t` puis `systemctl reload nginx` (connexions en cours gardées) |
 
 L'unité de l'ingest météo reste dans `server/weather-daemon/`.
 

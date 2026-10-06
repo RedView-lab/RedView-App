@@ -22,6 +22,7 @@ import type {
   TimelineItem,
 } from '@/features/itineraryPanel/types';
 import { translateAppText } from '@/shared/i18n';
+import { isSafeCssColor } from '@/shared/lib/cssColor';
 
 import { RedviewFileError } from './errors';
 import { REDVIEW_LIMITS } from './format';
@@ -29,11 +30,6 @@ import { REDVIEW_LIMITS } from './format';
 type UnknownRecord = Record<string, unknown>;
 
 const PANEL_MODES: readonly PanelMode[] = ['tracage', 'rythme', 'poi', 'nutrition'];
-/**
- * Couleur CSS sans danger (hex, rgb(), hsl(), nom) : passée telle quelle à
- * Mapbox et aux styles. Ni `;`, ni `:`, ni guillemets, ni `url(`.
- */
-const SAFE_CSS_COLOR = /^(?:#[0-9a-f]{3,8}|(?:rgb|rgba|hsl|hsla)\([0-9.,%\s/-]+\)|[a-z]{3,30})$/i;
 const MAX_ID_LENGTH = 200;
 
 function invalid(detail: string): RedviewFileError {
@@ -147,7 +143,7 @@ function sanitizeItinerary(raw: unknown, index: number, seenIds: Set<string>): I
     name: keepIf(raw.name, typeof raw.name === 'string', translateAppText('Itinéraire {{index}}', { index: index + 1 })),
     color: keepIf(
       raw.color,
-      typeof raw.color === 'string' && SAFE_CSS_COLOR.test(raw.color),
+      isSafeCssColor(raw.color),
       ITINERARY_COLORS[index % ITINERARY_COLORS.length],
     ),
     profileId: keepIf(raw.profileId, typeof raw.profileId === 'string', ''),

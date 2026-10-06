@@ -21,7 +21,9 @@ type Doc = Record<string, unknown> & { $id: string };
 
 const fake = vi.hoisted(() => ({
   collections: new Map<string, Map<string, Record<string, unknown> & { $id: string }>>(),
-  files: new Map<string, { name: string; bytes: Uint8Array }>(),
+  files: new Map<string, { name: string; bytes: Uint8Array; permissions: string[] }>(),
+  /** Équipes : rôles de chaque membre (`teamId` → `userId` → rôles). */
+  teams: new Map<string, Map<string, string[]>>(),
   nextFile: 0,
   /** Appwrite en panne pour les mises à jour de documents (500). */
   failUpdates: false,
@@ -94,11 +96,17 @@ vi.mock('node-appwrite', async (importActual) => {
     }
   }
   class Storage {
-    async createFile(_bucket: string, _id: string, file: { name: string; bytes: Uint8Array }) {
+    async createFile(_bucket: string, _id: string, file: { name: string; bytes: Uint8Array }, permissions: string[] = []) {
       gate();
       const $id = `file${(fake.nextFile += 1)}`;
-      fake.files.set($id, { name: file.name, bytes: file.bytes });
+      fake.files.set($id, { name: file.name, bytes: file.bytes, permissions: [...permissions] });
       return { $id };
+    }
+    async getFile(_bucket: string, id: string) {
+      gate();
+      const file = fake.files.get(id);
+      if (!file) throw error(404, 'storage_file_not_found');
+      return { $id: id, name: file.name, $permissions: [...file.permissions] };
     }
     async getFileDownload(_bucket: string, id: string) {
       gate();
@@ -116,12 +124,22 @@ vi.mock('node-appwrite', async (importActual) => {
       return { files: [...fake.files].filter(([, file]) => file.name === name).map(([$id]) => ({ $id })) };
     }
   }
+  class Teams {
+    async listMemberships(teamId: string, queries: string[] = []) {
+      gate();
+      const team = fake.teams.get(teamId);
+      if (!team) throw error(404, 'team_not_found');
+      const userId = (JSON.parse(queries[0] ?? '{}') as { values?: string[] }).values?.[0];
+      const memberships = [...team].filter(([member]) => member === userId).map(([member, roles]) => ({ userId: member, roles, confirm: true }));
+      return { total: memberships.length, memberships };
+    }
+  }
   class Client {
     setEndpoint() { return this; }
     setProject() { return this; }
     setKey() { return this; }
   }
-  return { ...actual, Client, Databases, Storage };
+  return { ...actual, Client, Databases, Storage, Teams };
 });
 
 vi.mock('node-appwrite/file', () => ({
@@ -134,9 +152,12 @@ const { RoomHost } = await import('./roomHost.ts');
 const PROJECT = 'proj1';
 const options = { endpoint: 'http://appwrite', projectId: 'p', apiKey: 'k', databaseId: 'db' };
 
+const OWNER_PERMISSIONS = ['read("user:owner")', 'update("user:owner")', 'delete("user:owner")'];
+
 function seedProjectRow(document: ProjectDocument): void {
   fake.collections.set('projects', new Map([[PROJECT, {
     $id: PROJECT,
+    $permissions: OWNER_PERMISSIONS,
     user_id: 'owner',
     data: `gz:${gzipSync(JSON.stringify(document)).toString('base64')}`,
   }]]));
@@ -191,6 +212,7 @@ function renameBatch(room: HostedRoom, clientSeq: number, name: string): ClientM
 beforeEach(() => {
   fake.collections.clear();
   fake.files.clear();
+  fake.teams.clear();
   fake.failUpdates = false;
   fake.proxyNotFound = false;
   seedProjectRow(sampleDocument(300));
@@ -406,5 +428,73 @@ describe('stockage Appwrite de la salle', () => {
     const journalSize = fake.collections.get('project_journal')!.size;
     expect(await storage.readDurable(PROJECT)).toBeNull();
     expect(fake.collections.get('project_journal')!.size).toBe(journalSize);
+  });
+});
+
+/**
+ * La ligne `projects` est écrite par le client : ses pointeurs (`collab`,
+ * `data: "file:…"`) et `user_id` ne doivent jamais mener la clé admin vers
+ * les données d'un autre projet.
+ */
+describe('stockage Appwrite : pointeurs de la ligne réécrits par un client', () => {
+  const putFile = (name: string, value: unknown, permissions: string[]) => {
+    const $id = `file${(fake.nextFile += 1)}`;
+    fake.files.set($id, { name, bytes: new Uint8Array(gzipSync(JSON.stringify(value))), permissions });
+    return $id;
+  };
+  const victimCheckpoint = (objects: unknown[]) => ({ seq: 5, snapshot: { seq: 5, objects, blobs: {} }, clientSeqs: {} });
+  const setRow = (fields: Record<string, unknown>) => Object.assign(fake.collections.get('projects')!.get(PROJECT)!, fields);
+
+  it('point de sauvegarde d’un autre projet pointé par `collab` : ignoré, la salle repart de son propre document', async () => {
+    const stolen = putFile('victim.collab.gz', victimCheckpoint([['p', null, null, null, [['name', 'SECRET-VICTIME']]]]), []);
+    setRow({ collab: JSON.stringify({ v: 1, seq: 5, snapshotFile: stolen, dataHash: 'x' }) });
+    const host = newHost();
+    const room = (await host.open(PROJECT))!;
+    expect(room.room.state.document().name).toBe('Tour du Mont-Blanc');
+    await host.shutdown();
+  });
+
+  it('point de sauvegarde au bon nom mais écrit par un client (avec permissions) : ignoré', async () => {
+    const forged = putFile(`${PROJECT}.collab.gz`, victimCheckpoint([['p', null, null, null, [['name', 'FORGÉ']]]]), OWNER_PERMISSIONS);
+    setRow({ collab: JSON.stringify({ v: 1, seq: 5, snapshotFile: forged, dataHash: 'x' }) });
+    const host = newHost();
+    const room = (await host.open(PROJECT))!;
+    expect(room.room.state.document().name).toBe('Tour du Mont-Blanc');
+    await host.shutdown();
+  });
+
+  it('charge utile `file:` d’un autre projet ou d’un autre compte : refusée', async () => {
+    const victim = putFile('victim.json.gz', { schema: 2, name: 'SECRET', itineraries: [] }, ['read("user:victim")']);
+    setRow({ data: `file:${victim}` });
+    await expect(newHost().open(PROJECT)).rejects.toThrow(/étranger/);
+    const renamed = putFile(`${PROJECT}.json.gz`, { schema: 2, name: 'SECRET', itineraries: [] }, ['read("user:victim")']);
+    setRow({ data: `file:${renamed}` });
+    await expect(newHost().open(PROJECT)).rejects.toThrow(/étranger/);
+    const own = putFile(`${PROJECT}.json.gz`, { schema: 2, name: 'À moi', itineraries: [] }, OWNER_PERMISSIONS);
+    setRow({ data: `file:${own}` });
+    const host = newHost();
+    expect((await host.open(PROJECT))!.room.state.document().name).toBe('À moi');
+    await host.shutdown();
+  });
+
+  it('état complet en boucle (parents en cycle) : refusé, sans figer le serveur', async () => {
+    const loop = putFile(`${PROJECT}.collab.gz`, victimCheckpoint([
+      ['p', null, null, null, []],
+      ['p/itineraries:a', 'p/itineraries:b', 'itineraries', 'a0', []],
+      ['p/itineraries:b', 'p/itineraries:a', 'itineraries', 'a1', []],
+    ]), []);
+    setRow({ collab: JSON.stringify({ v: 1, seq: 5, snapshotFile: loop, dataHash: 'x' }) });
+    await expect(newHost().open(PROJECT)).rejects.toThrow(/état complet invalide/);
+  });
+
+  it('ancien format (équipe en écriture) : un `user_id` réécrit par un éditeur n’en fait pas le propriétaire', async () => {
+    setRow({ user_id: 'editor', $permissions: ['read("team:pproj1")', 'update("team:pproj1")', 'update("user:editor")'] });
+    fake.teams.set('pproj1', new Map([['owner', ['owner']], ['editor', ['editor']]]));
+    expect(await createAppwriteStorage(options).access(PROJECT)).toEqual({ ownerId: '', teamId: 'pproj1' });
+    setRow({ user_id: 'owner', $permissions: ['read("team:pproj1")', 'update("team:pproj1")', ...OWNER_PERMISSIONS] });
+    expect(await createAppwriteStorage(options).access(PROJECT)).toEqual({ ownerId: 'owner', teamId: 'pproj1' });
+    // Format actuel (équipe en lecture seule) : `team_id` de la ligne ignoré, l'équipe est `p<projet>`.
+    setRow({ team_id: 'pautre', $permissions: [...OWNER_PERMISSIONS, 'read("team:pproj1")'] });
+    expect(await createAppwriteStorage(options).access(PROJECT)).toEqual({ ownerId: 'owner', teamId: 'pproj1' });
   });
 });

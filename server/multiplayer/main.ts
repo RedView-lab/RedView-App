@@ -12,6 +12,14 @@ import type { RoomStorage } from './storage.ts';
  * `/multiplayer`).
  *
  *   MULTIPLAYER_PORT          port d'écoute public (17790 ; /health et WebSocket)
+ *   MULTIPLAYER_HOST          interface d'écoute (production : toutes, pour le port publié
+ *                             par Docker ; sinon 127.0.0.1 — jamais le réseau local en dev)
+ *   MULTIPLAYER_ALLOWED_ORIGINS  origines de navigateur acceptées, séparées par des virgules
+ *                             (production : https://app.redview.tech ; dev : localhost)
+ *   MULTIPLAYER_INTERNAL_SECRET  secret partagé avec l'API de partage (≥ 32 car.) : révocation
+ *                             immédiate (`POST /internal/access-changed`) ; absent : route fermée
+ *   MULTIPLAYER_MAX_CONNECTIONS_PER_IP / _UPGRADES_PER_IP_PER_MINUTE / _CONNECTIONS_PER_USER
+ *                             plafonds de connexions (défauts : server.ts ; bancs de charge)
  *   MULTIPLAYER_METRICS_PORT  port interne des mesures (127.0.0.1 ; absent : pas de mesures)
  *   MULTIPLAYER_SHADOW_VALIDATION_MS  validation fantôme d'une salle au plus une fois
  *                             par période (défaut 10 min ; 0 : jamais)
@@ -47,6 +55,23 @@ const shadowValidationIntervalMs = process.env.MULTIPLAYER_SHADOW_VALIDATION_MS
   : undefined;
 const storageKind = process.env.MULTIPLAYER_STORAGE ?? (production ? 'appwrite' : 'file');
 const devAuth = !production && process.env.MULTIPLAYER_DEV_AUTH === '1';
+const listenHost = process.env.MULTIPLAYER_HOST || (production ? '0.0.0.0' : '127.0.0.1');
+const allowedOrigins = process.env.MULTIPLAYER_ALLOWED_ORIGINS
+  ? process.env.MULTIPLAYER_ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
+  : production ? ['https://app.redview.tech'] : [];
+const internalSecret = process.env.MULTIPLAYER_INTERNAL_SECRET && process.env.MULTIPLAYER_INTERNAL_SECRET.length >= 32
+  ? process.env.MULTIPLAYER_INTERNAL_SECRET
+  : undefined;
+
+function limitFromEnv(name: string): number | undefined {
+  const value = Number(process.env[name]);
+  return Number.isSafeInteger(value) && value > 0 ? value : undefined;
+}
+const limits = Object.fromEntries(Object.entries({
+  perIp: limitFromEnv('MULTIPLAYER_MAX_CONNECTIONS_PER_IP'),
+  upgradesPerIpPerMinute: limitFromEnv('MULTIPLAYER_MAX_UPGRADES_PER_IP_PER_MINUTE'),
+  perUser: limitFromEnv('MULTIPLAYER_MAX_CONNECTIONS_PER_USER'),
+}).filter(([, value]) => value !== undefined));
 
 const appwrite = process.env.APPWRITE_API_KEY
   ? {
@@ -83,11 +108,29 @@ function log(level: 'info' | 'warn' | 'error', message: string, data?: Record<st
   }
 }
 
-const storage = createStorage();
-const server = createMultiplayerServer({ storage, appwrite, devAuth, host: { log, shadowValidationIntervalMs } });
+if (process.env.MULTIPLAYER_INTERNAL_SECRET && !internalSecret) {
+  log('warn', 'MULTIPLAYER_INTERNAL_SECRET trop court (32 car. minimum) : révocation immédiate désactivée');
+}
 
-server.listen(port).then((actual) => {
-  log('info', 'serveur temps réel prêt', { port: actual, storage: storage.kind, devAuth });
+// Filet de sécurité : une promesse rejetée oubliée est consignée, jamais fatale
+// (le processus tient toutes les salles ; chaque salle isole déjà ses erreurs).
+process.on('unhandledRejection', (reason: unknown) => {
+  log('error', 'promesse rejetée non traitée', { error: String(reason) });
+});
+
+const storage = createStorage();
+const server = createMultiplayerServer({
+  storage,
+  appwrite,
+  devAuth,
+  allowedOrigins,
+  limits,
+  internalSecret,
+  host: { log, shadowValidationIntervalMs },
+});
+
+server.listen(port, listenHost).then((actual) => {
+  log('info', 'serveur temps réel prêt', { port: actual, host: listenHost, storage: storage.kind, devAuth, internalRoute: Boolean(internalSecret) });
 }, (error: unknown) => {
   log('error', 'écoute impossible', { port, error: String(error) });
   process.exit(1);

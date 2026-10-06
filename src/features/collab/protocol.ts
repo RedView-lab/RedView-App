@@ -10,7 +10,12 @@ import type { Op } from './model/ops';
  * refusé (`error: version`) et recharge l'application.
  *
  * Déroulé (comme Figma) :
- *  1. `hello` (jeton, dernière séquence connue) → `welcome` avec l'état
+ *  0. ouverture de la WebSocket : le JWT Appwrite voyage dans
+ *     `Sec-WebSocket-Protocol` (`redview.v<version>`, `auth.<jwt en
+ *     base64url>`) et le projet dans l'URL (`?project=`) — le serveur vérifie
+ *     jeton, droits, origine et plafonds AVANT d'accepter la connexion (refus :
+ *     fermée aussitôt avec son code), aucun message d'un inconnu n'est lu ;
+ *  1. `hello` (client, dernière séquence connue) → `welcome` avec l'état
  *     complet, ou seulement les lots manquants si le client se reconnecte à la
  *     même instance de salle (`epoch`) ;
  *  2. le client envoie ses modifications par lots numérotés (`clientSeq`) ;
@@ -19,7 +24,10 @@ import type { Op } from './model/ops';
  *  3. `durable` : les lots jusqu'à cette séquence sont dans le journal. Un
  *     client garde ses lots acquittés mais pas encore durables : si le serveur
  *     s'arrête avant de les écrire, il les renvoie à la reconnexion
- *     (`welcome.clientSeq` dit lesquels le serveur a déjà).
+ *     (`welcome.clientSeq` dit lesquels le serveur a déjà) ;
+ *  4. `auth` : le client présente un JWT frais toutes les quelques minutes ;
+ *     une connexion dont le jeton a expiré sans relève est fermée (4401) — une
+ *     session déconnectée ou un jeton volé ne la garde pas ouverte.
  */
 /**
  * 2 : fils de commentaires dans le document (`p/comments:*`, schema.ts) ; un
@@ -27,15 +35,55 @@ import type { Op } from './model/ops';
  * 3 : canal `motion` (caméra, curseur, survol du graphique) et présence
  * `following` / `spotlight` : tous les éditeurs d'une salle se suivent et se
  * voient (livePresence).
+ * 4 : jeton et projet présentés à l'ouverture de la WebSocket (plus dans
+ * `hello`), relève du jeton (`auth`).
  */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 /**
  * Versions dont les lots ont le format actuel : la copie des lots non écrits
  * laissée sur l'appareil par l'une d'elles est reprise (client/unsyncedStore).
- * La 3 n'a ajouté que des messages éphémères.
+ * La 3 n'a ajouté que des messages éphémères, la 4 n'a changé que l'ouverture.
  */
-export const BATCH_FORMAT_PROTOCOLS: readonly number[] = [2, 3];
+export const BATCH_FORMAT_PROTOCOLS: readonly number[] = [2, 3, 4];
+
+/** Sous-protocole WebSocket de cette version (le serveur ne retient que lui). */
+export const SOCKET_PROTOCOL = `redview.v${PROTOCOL_VERSION}`;
+const AUTH_PROTOCOL_PREFIX = 'auth.';
+
+function toBase64Url(text: string): string {
+  let binary = '';
+  for (const byte of new TextEncoder().encode(text)) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function fromBase64Url(value: string): string | null {
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) return null;
+  try {
+    const binary = atob(value.replace(/-/g, '+').replace(/_/g, '/'));
+    return new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(binary, (char) => char.charCodeAt(0)));
+  } catch {
+    return null;
+  }
+}
+
+/** Sous-protocoles présentés à l'ouverture : la version, puis le jeton (base64url : un sous-protocole est un « token » HTTP). */
+export function socketProtocols(token: string): string[] {
+  return [SOCKET_PROTOCOL, `${AUTH_PROTOCOL_PREFIX}${toBase64Url(token)}`];
+}
+
+/** Jeton d'une liste de sous-protocoles (en-tête `Sec-WebSocket-Protocol`), null s'il manque ou est illisible. */
+export function tokenFromProtocols(protocols: Iterable<string>): string | null {
+  for (const protocol of protocols) {
+    if (protocol.startsWith(AUTH_PROTOCOL_PREFIX)) return fromBase64Url(protocol.slice(AUTH_PROTOCOL_PREFIX.length));
+  }
+  return null;
+}
+
+/** URL de la WebSocket d'un projet (`wss://…/multiplayer?project=<id>`). */
+export function projectSocketUrl(url: string, projectId: string): string {
+  return `${url}${url.includes('?') ? '&' : '?'}project=${encodeURIComponent(projectId)}`;
+}
 
 /** Lot numéroté par le serveur (diffusé à tous ; pour son émetteur, c'est l'acquittement). */
 export interface SequencedBatch {
@@ -134,9 +182,6 @@ export type ClientMessage =
   | {
       type: 'hello';
       v: number;
-      projectId: string;
-      /** JWT Appwrite de l'utilisateur. */
-      token: string;
       clientId: string;
       /** Instance de salle et dernière séquence connues (reconnexion) : le serveur n'envoie que la suite. */
       epoch: string | null;
@@ -149,7 +194,9 @@ export type ClientMessage =
   | { type: 'lease'; action: 'request' | 'renew' | 'release'; kind: DerivedKind; itineraryId: string }
   | { type: 'presence'; presence: PresenceUpdate }
   | ({ type: 'motion'; t: number } & MotionFields)
-  | { type: 'ping'; t: number };
+  | { type: 'ping'; t: number }
+  /** Relève du JWT (même utilisateur) : repousse l'expiration de la connexion. */
+  | { type: 'auth'; token: string };
 
 export type ServerErrorCode = 'unauthorized' | 'forbidden' | 'not-found' | 'version' | 'busy' | 'bad-request' | 'internal';
 
@@ -193,6 +240,60 @@ export function serializeStore(store: ObjectStore, seq: number): Snapshot {
   const blobs: Record<string, string> = {};
   for (const id of store.blobIds()) blobs[id] = store.getBlob(id)!;
   return { seq, objects, blobs };
+}
+
+/** Profondeur maximale d'un objet sous la racine (le modèle en a 4 : fil → message, itinéraire → ligne). */
+const MAX_SNAPSHOT_DEPTH = 16;
+
+/**
+ * État complet relu du stockage (serveur) : structure vérifiée avant de s'en
+ * servir — une racine, des ids uniques, chaque objet sous un parent présent,
+ * sans cycle ni profondeur aberrante, des segments en texte. Un état mal formé
+ * (fichier corrompu ou forgé) lève au lieu de figer la salle (boucle sur des
+ * parents en cycle) ou de la faire planter plus tard.
+ */
+export function deserializeCheckedStore(snapshot: Snapshot): ObjectStore {
+  const fail = (reason: string): never => {
+    throw new Error(`état complet invalide : ${reason}`);
+  };
+  if (snapshot === null || typeof snapshot !== 'object' || !Array.isArray(snapshot.objects)) fail('objets');
+  const blobs: unknown = snapshot.blobs;
+  if (blobs === null || typeof blobs !== 'object' || Array.isArray(blobs)) fail('segments');
+  for (const json of Object.values(blobs as Record<string, unknown>)) if (typeof json !== 'string') fail('segment');
+  const parents = new Map<string, string | null>();
+  for (const entry of snapshot.objects as unknown[]) {
+    if (!Array.isArray(entry) || entry.length !== 5) fail('objet');
+    const [id, parent, field, pos, props] = entry as unknown[];
+    if (typeof id !== 'string' || id.length === 0 || id.length > 1024 || parents.has(id)) fail('id');
+    const root = parent === null;
+    if (root !== (field === null) || root !== (pos === null)) fail(`objet ${String(id)}`);
+    if (!root && (typeof parent !== 'string' || typeof field !== 'string' || typeof pos !== 'string')) fail(`objet ${String(id)}`);
+    if (root && id !== 'p') fail('racine');
+    if (!Array.isArray(props) || props.some((prop) => !Array.isArray(prop) || prop.length !== 2 || typeof prop[0] !== 'string')) {
+      fail(`propriétés de ${String(id)}`);
+    }
+    parents.set(id as string, parent as string | null);
+  }
+  if (!parents.has('p')) fail('racine absente');
+  const depthOf = new Map<string, number>([['p', 0]]);
+  for (const id of parents.keys()) {
+    const chain: string[] = [];
+    let current: string | null = id;
+    while (current !== null && !depthOf.has(current)) {
+      chain.push(current);
+      if (chain.length > MAX_SNAPSHOT_DEPTH) fail(`profondeur ou cycle sous ${id}`);
+      const parent: string | null | undefined = parents.get(current);
+      if (parent === undefined) fail(`parent absent de ${current}`);
+      current = parent as string | null;
+    }
+    let depth = current === null ? 0 : depthOf.get(current)!;
+    for (let index = chain.length - 1; index >= 0; index -= 1) {
+      depth += 1;
+      if (depth > MAX_SNAPSHOT_DEPTH) fail(`profondeur sous ${id}`);
+      depthOf.set(chain[index], depth);
+    }
+  }
+  return deserializeStore(snapshot);
 }
 
 /** Magasin d'objets d'un état complet (les enfants sont reconstitués et triés). */

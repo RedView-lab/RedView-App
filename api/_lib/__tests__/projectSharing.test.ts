@@ -1,6 +1,6 @@
 import { gzipSync } from 'node:zlib';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Partage d'un projet (projectSharing.ts) sur un faux `node-appwrite` en
@@ -11,10 +11,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const fake = vi.hoisted(() => ({
   projects: new Map<string, Record<string, unknown> & { $id: string; $permissions: string[] }>(),
-  users: [] as Array<{ $id: string; email: string; name: string }>,
+  users: [] as Array<{ $id: string; email: string; name: string; emailVerification?: boolean; status?: boolean }>,
   teams: new Map<string, { name: string; memberships: Array<{ $id: string; userId: string; roles: string[] }> }>(),
   files: new Map<string, { name: string; $permissions: string[] }>(),
   journal: new Map<string, { $id: string; project_id: string; payload: string }>(),
+  views: new Map<string, { $id: string; project_id: string }>(),
   nextId: 0,
 }));
 
@@ -42,14 +43,15 @@ vi.mock('node-appwrite', async (importActual) => {
       return doc;
     }
     async listDocuments(_db: string, col: string, queries: string[] = []) {
-      if (col !== 'project_journal') throw error(404);
+      const table = col === 'project_journal' ? fake.journal : col === 'project_views' ? fake.views : null;
+      if (!table) throw error(404);
       const projectId = queryValue(queries, 'equal', 'project_id');
-      const documents = [...fake.journal.values()].filter((row) => row.project_id === projectId).slice(0, 100);
+      const documents = [...table.values()].filter((row) => row.project_id === projectId).slice(0, 100);
       return { total: documents.length, documents };
     }
     async deleteDocument(_db: string, col: string, id: string) {
-      const deleted = col === 'project_journal' ? fake.journal.delete(id) : fake.projects.delete(id);
-      if (!deleted) throw error(404);
+      const table = col === 'project_journal' ? fake.journal : col === 'project_views' ? fake.views : fake.projects;
+      if (!table.delete(id)) throw error(404);
       return {};
     }
   }
@@ -91,6 +93,11 @@ vi.mock('node-appwrite', async (importActual) => {
       if (team.memberships.some((membership) => membership.userId === userId)) throw error(409);
       const membership = { $id: `m${(fake.nextId += 1)}`, userId: userId!, roles };
       team.memberships.push(membership);
+      return membership;
+    }
+    async updateMembership(teamId: string, membershipId: string, roles: string[]) {
+      const membership = fake.teams.get(teamId)!.memberships.find((candidate) => candidate.$id === membershipId)!;
+      membership.roles = roles;
       return membership;
     }
     async deleteMembership(teamId: string, membershipId: string) {
@@ -136,16 +143,25 @@ const stranger = { id: 'stranger', email: 'stranger@example.test' };
 const PROJECT = 'proj1';
 const TEAM = projectTeamId(PROJECT);
 
+// Horloge avancée de 11 min à chaque test : les limites d'invitation (fenêtre de 10 min) repartent de zéro.
+let clock = Date.UTC(2026, 9, 6);
+
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  clock += 11 * 60_000;
+  vi.setSystemTime(clock);
   vi.stubEnv('APPWRITE_API_KEY', 'test-key');
   fake.projects.clear();
   fake.teams.clear();
   fake.files.clear();
   fake.journal.clear();
+  fake.views.clear();
   fake.users = [
-    { $id: 'owner', email: 'owner@example.test', name: 'Owner' },
-    { $id: 'editor', email: 'editor@example.test', name: 'Editor' },
-    { $id: 'stranger', email: 'stranger@example.test', name: 'Stranger' },
+    { $id: 'owner', email: 'owner@example.test', name: 'Owner', emailVerification: true, status: true },
+    { $id: 'editor', email: 'editor@example.test', name: 'Editor', emailVerification: true, status: true },
+    { $id: 'stranger', email: 'stranger@example.test', name: 'Stranger', emailVerification: true, status: true },
+    { $id: 'unverified', email: 'unverified@example.test', name: 'Imposteur', emailVerification: false, status: true },
+    { $id: 'blocked', email: 'blocked@example.test', name: 'Bloqué', emailVerification: true, status: false },
   ];
   const ownerPermissions = ['read("user:owner")', 'update("user:owner")', 'delete("user:owner")'];
   const document = { schema: 2, itineraries: [{ id: 'it-1', fitUploads: [{ name: 'ride.fit', path: 'fit1' }] }] };
@@ -158,6 +174,10 @@ beforeEach(() => {
   });
   fake.files.set('fit1', { name: 'ride.fit', $permissions: ownerPermissions });
   fake.files.set(PROJECT, { name: 'thumb.webp', $permissions: ownerPermissions });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 const rejects = async (promise: Promise<unknown>, status: number) => {
@@ -173,8 +193,13 @@ describe('partage d’un projet', () => {
     expect(state.members.map((member) => [member.userId, member.role]).sort()).toEqual([['editor', 'editor'], ['owner', 'owner']]);
     const row = fake.projects.get(PROJECT)!;
     expect(row.team_id).toBe(TEAM);
-    expect(row.$permissions).toEqual(expect.arrayContaining([`read("team:${TEAM}")`, `update("team:${TEAM}")`]));
-    expect(row.$permissions.some((permission) => permission.startsWith('delete("team'))).toBe(false);
+    // L'équipe ne fait que lire : le document partagé est écrit par le serveur temps réel.
+    expect([...row.$permissions].sort()).toEqual([
+      'delete("user:owner")',
+      `read("team:${TEAM}")`,
+      'read("user:owner")',
+      'update("user:owner")',
+    ]);
     expect(fake.files.get('fit1')!.$permissions).toContain(`read("team:${TEAM}")`);
     expect(fake.files.get(PROJECT)!.$permissions).toContain(`read("team:${TEAM}")`);
     // Une seconde invitation du même compte ne duplique rien.
@@ -231,5 +256,139 @@ describe('partage d’un projet', () => {
     expect(fake.files.has('other')).toBe(true);
     // Déjà supprimé : rien à faire, pas d'erreur.
     await deleteSharedProject(owner, PROJECT);
+  });
+});
+
+/**
+ * Attaques sur le partage : attributs de la ligne réécrits par un client,
+ * équipe créée d'avance, ids de fichiers étrangers glissés dans le document,
+ * comptes non vérifiés, invitations en masse.
+ */
+describe('partage d’un projet : attaques', () => {
+  const ownerPermissions = ['read("user:owner")', 'update("user:owner")', 'delete("user:owner")'];
+
+  it('éditeur qui réécrit user_id et ses permissions (ancien format : équipe en écriture) : toujours pas propriétaire', async () => {
+    await inviteToProject(owner, PROJECT, 'editor@example.test');
+    const row = fake.projects.get(PROJECT)!;
+    // Ancienne ligne partagée : l'équipe pouvait écrire, l'éditeur s'est déclaré propriétaire.
+    row.user_id = 'editor';
+    row.$permissions = [`read("team:${TEAM}")`, `update("team:${TEAM}")`, 'update("user:editor")', 'delete("user:editor")'];
+    await rejects(deleteSharedProject(editor, PROJECT), 403);
+    await rejects(removeFromProject(editor, PROJECT, 'owner'), 403);
+    await rejects(inviteToProject(editor, PROJECT, 'stranger@example.test'), 403);
+    expect((await getShareState(editor, PROJECT)).isOwner).toBe(false);
+    expect(fake.projects.has(PROJECT)).toBe(true);
+    expect(fake.teams.get(TEAM)!.memberships.map((membership) => membership.userId).sort()).toEqual(['editor', 'owner']);
+  });
+
+  it('user_id d’un autre sans ses permissions : personne n’est propriétaire', async () => {
+    fake.projects.get(PROJECT)!.user_id = 'stranger';
+    await rejects(inviteToProject(stranger, PROJECT, 'editor@example.test'), 404);
+    await rejects(deleteSharedProject(stranger, PROJECT), 404);
+    expect(fake.teams.has(TEAM)).toBe(false);
+  });
+
+  it('team_id d’un autre projet sur sa propre ligne : l’équipe de la victime n’est ni listée, ni modifiée, ni supprimée', async () => {
+    await inviteToProject(owner, PROJECT, 'editor@example.test');
+    const attackerPermissions = ['read("user:stranger")', 'update("user:stranger")', 'delete("user:stranger")'];
+    fake.projects.set('mine', { $id: 'mine', $permissions: attackerPermissions, user_id: 'stranger', team_id: TEAM, name: 'Piège' });
+    const state = await getShareState(stranger, 'mine');
+    expect(state.members).toEqual([]);
+    await removeFromProject(stranger, 'mine', 'editor');
+    await deleteSharedProject(stranger, 'mine');
+    expect(fake.teams.get(TEAM)!.memberships.map((membership) => membership.userId).sort()).toEqual(['editor', 'owner']);
+    expect(fake.projects.has(PROJECT)).toBe(true);
+  });
+
+  it('équipe p<id> créée d’avance par un inconnu : recréée au premier partage, l’inconnu n’y est plus', async () => {
+    fake.teams.set(TEAM, { name: 'squat', memberships: [{ $id: 'm-squat', userId: 'stranger', roles: ['owner'] }] });
+    await inviteToProject(owner, PROJECT, 'editor@example.test');
+    const members = fake.teams.get(TEAM)!.memberships;
+    expect(members.map((membership) => membership.userId).sort()).toEqual(['editor', 'owner']);
+    expect(members.find((membership) => membership.userId === 'owner')!.roles).toEqual(['owner']);
+    // Partage suivant : l'équipe (la nôtre désormais) est gardée.
+    await inviteToProject(owner, PROJECT, 'stranger@example.test');
+    expect(fake.teams.get(TEAM)!.memberships.map((membership) => membership.userId).sort()).toEqual(['editor', 'owner', 'stranger']);
+  });
+
+  it('ids de fichiers étrangers dans le document : aucun droit accordé dessus', async () => {
+    const victimPermissions = ['read("user:victim")', 'update("user:victim")', 'delete("user:victim")'];
+    fake.files.set('victim-fit', { name: 'trace.fit', $permissions: victimPermissions });
+    const document = { schema: 2, itineraries: [{ id: 'it-1', fitUploads: [{ path: 'fit1' }, { path: 'victim-fit' }] }] };
+    fake.projects.get(PROJECT)!.data = JSON.stringify(document);
+    await inviteToProject(owner, PROJECT, 'editor@example.test');
+    expect(fake.files.get('fit1')!.$permissions).toContain(`read("team:${TEAM}")`);
+    expect(fake.files.get('victim-fit')!.$permissions).toEqual(victimPermissions);
+  });
+
+  it('charge utile pointant le fichier d’un autre projet, ou mal nommée : aucun droit accordé', async () => {
+    fake.files.set('foreign', { name: 'autre.json.gz', $permissions: ['read("user:victim")'] });
+    fake.files.set('renamed', { name: 'autre.json.gz', $permissions: ownerPermissions });
+    fake.projects.get(PROJECT)!.data = 'file:foreign';
+    await inviteToProject(owner, PROJECT, 'editor@example.test');
+    expect(fake.files.get('foreign')!.$permissions).toEqual(['read("user:victim")']);
+
+    fake.projects.set('second', { $id: 'second', $permissions: ownerPermissions, user_id: 'owner', name: 'B', data: 'file:renamed' });
+    await inviteToProject(owner, 'second', 'editor@example.test');
+    expect(fake.files.get('renamed')!.$permissions).toEqual(ownerPermissions);
+  });
+
+  it('les fichiers ne s’ouvrent qu’au premier partage (le document est ensuite écrit par les éditeurs)', async () => {
+    await inviteToProject(owner, PROJECT, 'editor@example.test');
+    fake.files.set('fit2', { name: 'other.fit', $permissions: ownerPermissions });
+    const document = { schema: 2, itineraries: [{ id: 'it-1', fitUploads: [{ path: 'fit2' }] }] };
+    fake.projects.get(PROJECT)!.data = JSON.stringify(document);
+    await inviteToProject(owner, PROJECT, 'stranger@example.test');
+    expect(fake.files.get('fit2')!.$permissions).toEqual(ownerPermissions);
+  });
+
+  it('compte à l’e-mail non vérifié ou bloqué : comme s’il n’existait pas', async () => {
+    await rejects(inviteToProject(owner, PROJECT, 'unverified@example.test'), 404);
+    await rejects(inviteToProject(owner, PROJECT, 'blocked@example.test'), 404);
+    expect(fake.teams.has(TEAM)).toBe(false);
+  });
+
+  it('invitations en masse : refusées au-delà de 20 par compte et par 10 minutes', async () => {
+    const spammer = { id: 'spammer', email: 'spammer@example.test' };
+    fake.projects.set('spam', { $id: 'spam', $permissions: ['read("user:spammer")', 'update("user:spammer")', 'delete("user:spammer")'], user_id: 'spammer', name: 'Spam' });
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      await inviteToProject(spammer, 'spam', `nobody${attempt}@example.test`).catch(() => undefined);
+    }
+    await rejects(inviteToProject(spammer, 'spam', 'editor@example.test'), 429);
+  });
+
+  it('retirer, quitter, supprimer : le serveur temps réel est prévenu (message signé)', async () => {
+    vi.stubEnv('MULTIPLAYER_INTERNAL_SECRET', 'secret-de-test');
+    vi.stubEnv('MULTIPLAYER_INTERNAL_URL', 'http://multiplayer.test/multiplayer/');
+    const calls: Array<{ url: string; body: string; signature: string }> = [];
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      calls.push({ url, body: String(init.body), signature: String((init.headers as Record<string, string>)['x-redview-signature']) });
+      return new Response('{}', { status: 200 });
+    });
+    try {
+      await inviteToProject(owner, PROJECT, 'editor@example.test');
+      await inviteToProject(owner, PROJECT, 'stranger@example.test');
+      await removeFromProject(owner, PROJECT, 'stranger');
+      await leaveProject(editor, PROJECT);
+      await deleteSharedProject(owner, PROJECT);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+    expect(calls).toHaveLength(3);
+    const { createHmac } = await import('node:crypto');
+    for (const call of calls) {
+      expect(call.url).toBe('http://multiplayer.test/multiplayer/internal/access-changed');
+      expect(JSON.parse(call.body).projectId).toBe(PROJECT);
+      expect(call.signature).toBe(createHmac('sha256', 'secret-de-test').update(call.body).digest('hex'));
+    }
+  });
+
+  it('supprimer : les vues des éditeurs sur ce projet sont effacées aussi', async () => {
+    await inviteToProject(owner, PROJECT, 'editor@example.test');
+    fake.views.set('v1', { $id: 'v1', project_id: PROJECT });
+    fake.views.set('v2', { $id: 'v2', project_id: 'autre' });
+    await deleteSharedProject(owner, PROJECT);
+    expect([...fake.views.keys()]).toEqual(['v2']);
   });
 });

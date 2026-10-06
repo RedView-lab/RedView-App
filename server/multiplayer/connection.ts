@@ -7,28 +7,41 @@ import {
   type ServerMessage,
 } from '../../src/features/collab/protocol.ts';
 import type { SendOptions } from '../../src/features/collab/room/room.ts';
-import type { Authenticator } from './auth.ts';
+import type { Authenticator, Identity } from './auth.ts';
 import type { HostedRoom, PeerHandle, RoomHost } from './roomHost.ts';
 
 /**
- * Une connexion WebSocket : `hello` (version, jeton, droits) → salle → messages
+ * Une connexion WebSocket déjà authentifiée à l'ouverture (server.ts : jeton,
+ * droits, origine, plafonds) : `hello` (version, client) → salle → messages
  * relayés à la salle, dans l'ordre. Codes de fermeture (le client décide s'il
- * se reconnecte) : 4400 requête invalide, 4401 jeton refusé, 4403 accès
- * retiré, 4404 projet introuvable, 4408 client trop lent, 4409 remplacée par
- * une nouvelle connexion du même client, 4426 version, 4429 trop de messages,
- * 1011/1013 erreur ou serveur occupé (réessayer), 1012 redémarrage.
+ * se reconnecte) : 4400 requête invalide, 4401 jeton refusé ou expiré sans
+ * relève, 4403 accès retiré, 4404 projet introuvable, 4408 client trop lent,
+ * 4409 remplacée par une nouvelle connexion du même client, 4426 version,
+ * 4429 trop de messages, 1011/1013 erreur ou serveur occupé (réessayer),
+ * 1012 redémarrage.
  */
 
 export interface ConnectionOptions {
   host: RoomHost;
   auth: Authenticator;
+  /** Utilisateur vérifié à l'ouverture et projet demandé (droits vérifiés). */
+  identity: Identity;
+  projectId: string;
   /** Développement : un projet inconnu est créé à partir du document du premier client. */
   acceptSeed: boolean;
   log: RoomHost['log'];
+  timings?: Partial<ConnectionTimings>;
 }
 
+export interface ConnectionTimings {
+  /** Revérification périodique des droits et de l'expiration du jeton. */
+  accessRecheckMs: number;
+  /** Délai laissé à la relève du jeton après son expiration (horloges, onglet en arrière-plan). */
+  tokenGraceMs: number;
+}
+
+const DEFAULT_TIMINGS: ConnectionTimings = { accessRecheckMs: 15_000, tokenGraceMs: 60_000 };
 const HELLO_TIMEOUT_MS = 10_000;
-const ACCESS_RECHECK_MS = 60_000;
 /** Au-delà, le client ne suit plus (réseau lent) : il se reconnectera et repartira de l'état complet. */
 const MAX_BUFFERED_BYTES = 32 * 1024 * 1024;
 /**
@@ -43,6 +56,13 @@ const MAX_VOLATILE_BUFFERED_BYTES = 256 * 1024;
  */
 const RATE_PER_SECOND = 120;
 const RATE_BURST_MESSAGES = 1_200;
+/**
+ * Débit en octets d'un client : au-delà, la lecture de sa connexion est mise
+ * en pause le temps que le seau se remplisse (TCP le ralentit, rien n'est
+ * coupé) — un client ne monopolise ni la mémoire ni le fil du serveur.
+ */
+const BYTES_PER_SECOND = 16 * 1024 * 1024;
+const BYTES_BURST = 64 * 1024 * 1024;
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 
 /** Un message diffusé à toute la salle n'est sérialisé qu'une fois. */
@@ -57,7 +77,7 @@ function toWire(message: ServerMessage): string {
   return wire;
 }
 
-const CLOSE_CODES: Record<ServerErrorCode, number> = {
+export const CLOSE_CODES: Record<ServerErrorCode, number> = {
   'unauthorized': 4401,
   'forbidden': 4403,
   'not-found': 4404,
@@ -68,14 +88,20 @@ const CLOSE_CODES: Record<ServerErrorCode, number> = {
 };
 
 export function handleConnection(socket: WebSocket, options: ConnectionOptions): void {
+  const { identity, projectId } = options;
+  const timings = { ...DEFAULT_TIMINGS, ...options.timings };
+  const userId = identity.userId;
+  let tokenExpiresAt = identity.expiresAt;
   let hosted: HostedRoom | null = null;
   let handle: PeerHandle | null = null;
-  /** Projet demandé (journal des refus). */
-  let projectId: string | null = null;
   let phase: 'hello' | 'joining' | 'joined' | 'closed' = 'hello';
   let recheck: NodeJS.Timeout | null = null;
+  let resumeTimer: NodeJS.Timeout | null = null;
   let tokens = RATE_BURST_MESSAGES;
   let tokensAt = Date.now();
+  let bytes = BYTES_BURST;
+  let bytesAt = Date.now();
+  let unregisterAccess: (() => void) | null = null;
 
   const helloTimer = setTimeout(() => fail('bad-request', 'hello-timeout'), HELLO_TIMEOUT_MS);
 
@@ -96,9 +122,11 @@ export function handleConnection(socket: WebSocket, options: ConnectionOptions):
     if (phase === 'closed') return;
     phase = 'closed';
     // Refus et erreurs (4xxx, 1011) journalisés : un client renvoyé hors d'un projet se diagnostique ici.
-    if (code >= 4000 || code === 1011) options.log('warn', 'connexion fermée par le serveur', { code, reason, projectId });
+    if (code >= 4000 || code === 1011) options.log('warn', 'connexion fermée par le serveur', { code, reason, projectId, userId });
     clearTimeout(helloTimer);
     if (recheck) clearInterval(recheck);
+    if (resumeTimer) clearTimeout(resumeTimer);
+    unregisterAccess?.();
     if (hosted && handle) hosted.detach(handle);
     try {
       socket.close(code, reason);
@@ -112,46 +140,77 @@ export function handleConnection(socket: WebSocket, options: ConnectionOptions):
     close(CLOSE_CODES[code], message ?? code);
   }
 
+  /** Droits et jeton revérifiés (périodiquement, et tout de suite sur révocation signalée). */
+  function verify(fresh: boolean): void {
+    if (phase === 'closed') return;
+    if (Date.now() > tokenExpiresAt + timings.tokenGraceMs) {
+      fail('unauthorized', 'token-expired');
+      return;
+    }
+    options.auth.checkAccess(userId, projectId, { fresh }).then((result) => {
+      // Projet supprimé : toute la salle est fermée (4404) et purgée ;
+      // accès retiré : seulement cette connexion (4403).
+      if (result === 'not-found') hosted?.projectDeleted('revérification des droits');
+      else if (result !== 'ok') fail('forbidden', 'access-revoked');
+    }, (error: unknown) => options.log('warn', 'revérification des droits impossible', { error: String(error) }));
+  }
+
+  /** Relève du jeton : même utilisateur, nouvelle expiration ; un jeton refusé ferme la connexion. */
+  function reauthenticate(token: unknown): void {
+    if (typeof token !== 'string') return fail('bad-request', 'auth');
+    options.auth.verifyToken(token).then((next) => {
+      if (phase === 'closed') return;
+      if (!next || next.userId !== userId) {
+        fail('unauthorized', 'auth-refused');
+        return;
+      }
+      tokenExpiresAt = Math.max(tokenExpiresAt, next.expiresAt);
+    }, (error: unknown) => {
+      // Appwrite injoignable : l'expiration actuelle tient, la relève suivante réessaiera.
+      options.log('warn', 'relève du jeton impossible', { error: String(error) });
+    });
+  }
+
   async function hello(message: Extract<ClientMessage, { type: 'hello' }>): Promise<void> {
     clearTimeout(helloTimer);
     if (message.v !== PROTOCOL_VERSION) return fail('version', `protocole ${PROTOCOL_VERSION} attendu`);
-    if (typeof message.projectId !== 'string' || !ID_PATTERN.test(message.projectId)
-      || typeof message.clientId !== 'string' || !ID_PATTERN.test(message.clientId)) {
-      return fail('bad-request', 'ids');
-    }
-    projectId = message.projectId;
-    const userId = await options.auth.verifyToken(message.token);
-    if (!userId) return fail('unauthorized');
-    const access = await options.auth.checkAccess(userId, message.projectId);
-    if (access !== 'ok') return fail(access);
-    if (phase !== 'joining') return;
+    if (typeof message.clientId !== 'string' || !ID_PATTERN.test(message.clientId)) return fail('bad-request', 'ids');
 
     let room: HostedRoom | null = null;
     for (let attempt = 0; attempt < 2 && (!room || room.closed); attempt += 1) {
-      room = await options.host.open(message.projectId, options.acceptSeed ? message.seed : undefined);
+      room = await options.host.open(projectId, options.acceptSeed ? message.seed : undefined);
       if (!room) return fail('not-found');
     }
     if (!room || room.closed) return fail('busy', 'room-closing');
     if (phase !== 'joining') return;
 
-    hosted = room;
-    handle = {
-      peer: { clientId: message.clientId, userId, send },
+    const peerHandle: PeerHandle = {
+      peer: { clientId: message.clientId, userId, ...(identity.name ? { name: identity.name } : {}), send },
       close: (code, reason) => close(code, reason),
     };
+    if (!room.attach(peerHandle, { epoch: message.epoch ?? null, lastSeq: message.lastSeq ?? null, presence: message.presence })) {
+      return fail('bad-request', 'client-id');
+    }
+    hosted = room;
+    handle = peerHandle;
     phase = 'joined';
-    room.attach(handle, { epoch: message.epoch ?? null, lastSeq: message.lastSeq ?? null, presence: message.presence });
-    // Seulement l'id : le message (et un éventuel document de départ) n'est pas gardé avec la connexion.
-    const joinedProjectId = message.projectId;
-    const joined = room;
-    recheck = setInterval(() => {
-      options.auth.checkAccess(userId, joinedProjectId).then((result) => {
-        // Projet supprimé : toute la salle est fermée (4404) et purgée ;
-        // accès retiré : seulement cette connexion (4403).
-        if (result === 'not-found') joined.projectDeleted('revérification des droits');
-        else if (result !== 'ok') fail('forbidden', 'access-revoked');
-      }, (error: unknown) => options.log('warn', 'revérification des droits impossible', { error: String(error) }));
-    }, ACCESS_RECHECK_MS);
+    unregisterAccess = options.host.onAccessChanged(projectId, () => verify(true));
+    recheck = setInterval(() => verify(false), timings.accessRecheckMs);
+  }
+
+  /** Seau d'octets : la lecture est suspendue tant qu'il est vide (le client est ralenti, pas coupé). */
+  function takeBytes(size: number): void {
+    const now = Date.now();
+    bytes = Math.min(BYTES_BURST, bytes + ((now - bytesAt) * BYTES_PER_SECOND) / 1000);
+    bytesAt = now;
+    bytes -= size;
+    if (bytes >= 0 || resumeTimer) return;
+    options.host.metrics.bytesThrottled += 1;
+    socket.pause();
+    resumeTimer = setTimeout(() => {
+      resumeTimer = null;
+      if (phase !== 'closed') socket.resume();
+    }, Math.ceil((-bytes * 1000) / BYTES_PER_SECOND));
   }
 
   socket.on('message', (data, isBinary) => {
@@ -165,6 +224,8 @@ export function handleConnection(socket: WebSocket, options: ConnectionOptions):
       return;
     }
     tokens -= 1;
+    const size = Array.isArray(data) ? data.reduce((total, chunk) => total + chunk.length, 0) : (data as Buffer | ArrayBuffer).byteLength;
+    takeBytes(size);
     if (isBinary) return fail('bad-request', 'binary');
     let message: ClientMessage;
     try {
@@ -178,13 +239,14 @@ export function handleConnection(socket: WebSocket, options: ConnectionOptions):
       if (message.type !== 'hello') return fail('bad-request', 'hello-expected');
       phase = 'joining';
       hello(message).catch((error: unknown) => {
-        options.log('error', 'connexion à la salle impossible', { error: String(error) });
-        fail('internal', 'room-unavailable');
+        options.log('error', 'connexion à la salle impossible', { error: String(error), projectId });
+        fail(error instanceof Error && error.message === 'busy' ? 'busy' : 'internal', 'room-unavailable');
       });
       return;
     }
     // Rien n'est envoyé avant `welcome` (le client attend) : ignoré pendant l'entrée.
     if (phase !== 'joined' || !hosted || !handle) return;
+    if (message.type === 'auth') return reauthenticate(message.token);
     hosted.handle(handle, message);
   });
 

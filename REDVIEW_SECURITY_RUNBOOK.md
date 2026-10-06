@@ -85,3 +85,27 @@ journalctl -u redview-weather.service -n 50   # vérifier que l'ingest réussit
   local contient un placeholder) ; `WEATHER_UPSTREAM` défini (plus de valeur
   par défaut codée en dur).
 - Umami (recorder) : vérifier le masquage des champs de saisie.
+
+## 5. Co-édition (audit du 2026-10-06)
+Détail des failles et des règles : section 14 de `REDVIEW_COLLAB_TEMPS_REEL.txt`.
+1. Déployer (serveur temps réel puis app, protocole 4 : les onglets restés en
+   protocole 3 voient « rechargez la page »).
+2. Mettre en conformité les projets partagés (l'ancien format donnait
+   l'écriture de la ligne à l'équipe) :
+   `npx tsx --env-file=.env scripts/secure-shared-projects.ts` (à sec), puis
+   `--apply`, puis `--check-documents --all` (chaque document passe la
+   validation du serveur). Rollback d'une ligne : remettre
+   `update("team:p<projet>")` à ses permissions (console Appwrite).
+3. nginx : `server/vps/nginx-multiplayer.conf` (zones `limit_conn` /
+   `limit_req` en tête de `/etc/nginx/conf.d/app.conf`, `location`s
+   `= /multiplayer` et `/multiplayer/`) ; sauvegarde datée, `nginx -t`,
+   `systemctl reload nginx`. Rollback : remettre la sauvegarde, recharger.
+4. Coolify (manuel) : `MULTIPLAYER_INTERNAL_SECRET` (≥ 32 car., `openssl rand
+   -hex 32`) identique sur l'app et sur `redview-multiplayer`, et
+   `MULTIPLAYER_INTERNAL_URL=https://app.redview.tech/multiplayer` sur l'app,
+   puis redéployer les deux : retrait d'un éditeur appliqué tout de suite
+   (sans : en ≤ 15 s par la revérification périodique).
+5. Console Appwrite (manuel) : clé API du serveur temps réel réduite aux
+   droits utiles (bases : lecture/écriture des documents ; stockage :
+   lecture/écriture des fichiers ; équipes : lecture).
+6. Vérifier : `npm run bench:collab-prod` (deux comptes de test réels).

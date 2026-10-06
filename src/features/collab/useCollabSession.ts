@@ -6,6 +6,7 @@ import { toProjectDocument } from '@/features/itineraryPanel/lib/project/layers'
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import { logger } from '@/shared/lib/logger';
 import { getAppwriteJwt, getSessionUserIdSync, readStoredAppwriteSession } from '@/shared/services/appwrite';
+import { notify } from '@/shared/ui/notify';
 import { registerLiveSession } from '@/shared/utils/projects/liveSessions';
 
 import type { CollabState } from './client/collabClient';
@@ -158,7 +159,11 @@ export function useCollabSession(
         seed: import.meta.env.DEV
           ? () => toProjectDocument(getSnapshotRef.current() ?? createDefaultProject())
           : undefined,
-        onRejection: (rejection) => logger.projects.error('[collab] lot refusé par le serveur', rejection),
+        onRejection: (rejection) => {
+          logger.projects.error('[collab] lot refusé par le serveur', rejection);
+          // Salle pleine (serveur, roomState.ts) : la modification est perdue, l'utilisateur doit le savoir.
+          if (rejection.reason === 'room-too-large') notify.error('Projet partagé trop volumineux : modification non enregistrée.');
+        },
       });
       if (!active) {
         void created.stop();

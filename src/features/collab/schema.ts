@@ -132,7 +132,8 @@ export const PROJECT_DOCUMENT_SPEC: RecordSpec = { kind: 'record', other: ATOMIC
 
 /** Spécification d'une clé d'un enregistrement. */
 export function fieldSpec(spec: RecordSpec, key: string): MergeSpec {
-  return spec.fields?.[key] ?? spec.other;
+  // Propriétés propres seulement : `constructor`, `toString`… ne sont pas des champs du modèle.
+  return (spec.fields && Object.hasOwn(spec.fields, key) ? spec.fields[key] : undefined) ?? spec.other;
 }
 
 /**

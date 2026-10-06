@@ -1,5 +1,6 @@
 import type { ApiRequest, ApiResponse } from '../_lib/types.js';
 
+import { createRateLimiter, getClientIp, rateLimitKeyForIp } from '../../server/http-security.mjs';
 import { requireAuthenticatedUser } from '../_lib/appwrite.js';
 import { PublicError, sendSafeError } from '../_lib/errors.js';
 import { readJsonBody, sendMethodNotAllowed } from '../_lib/http.js';
@@ -29,6 +30,10 @@ interface ShareBody {
   userId?: unknown;
 }
 
+/** Invitations par IP (en plus de la limite par compte de projectSharing.ts) : plusieurs comptes d'une même machine. */
+const MAX_INVITES_PER_IP = 40;
+const inviteIpLimiter = createRateLimiter({ windowMs: 10 * 60_000, maxKeys: 20_000 });
+
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== 'POST') return sendMethodNotAllowed(res, ['POST']);
   try {
@@ -40,6 +45,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       case 'list':
         return res.status(200).json(await getShareState(user, projectId));
       case 'invite':
+        if (!inviteIpLimiter(rateLimitKeyForIp(getClientIp(req)), MAX_INVITES_PER_IP)) {
+          throw new PublicError('Too many invitations, try again later', 429);
+        }
         return res.status(200).json(await inviteToProject(user, projectId, body.email));
       case 'remove':
         return res.status(200).json(await removeFromProject(user, projectId, body.userId));

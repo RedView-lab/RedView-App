@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
+import { getHeapStatistics } from 'node:v8';
 
 import type { ProjectDocument } from '../../src/features/itineraryPanel/lib/project/layers.ts';
 import { referencedRouteBlobs } from '../../src/features/collab/model/diff.ts';
 import { materializeJson } from '../../src/features/collab/model/materialize.ts';
-import { deserializeStore, type ClientMessage, type SequencedBatch } from '../../src/features/collab/protocol.ts';
+import { deserializeCheckedStore, type ClientMessage, type SequencedBatch } from '../../src/features/collab/protocol.ts';
 import { Room, type JoinRequest, type RoomPeer } from '../../src/features/collab/room/room.ts';
 import { RoomState } from '../../src/features/collab/room/roomState.ts';
 import { CheckpointSerializer } from './serialize.ts';
@@ -32,7 +33,11 @@ import { ProjectNotFoundError, type LoadedRoom, type RoomStorage } from './stora
  *    autre serveur tient la salle — celle-ci est fermée sans rien écrire et
  *    ses clients se reconnectent (leurs lots non durables sont renvoyés) ;
  *  - validation fantôme (shadow.ts) au plus une fois par
- *    `shadowValidationIntervalMs` et par salle.
+ *    `shadowValidationIntervalMs` et par salle ;
+ *  - une exception pendant le traitement d'un message ou l'entretien d'une
+ *    salle ne touche qu'elle : salle fermée (1011) puis rechargée de son état
+ *    durable à la reconnexion de ses clients (qui renvoient leurs lots non
+ *    durables) — jamais le processus, qui tient toutes les autres salles.
  */
 
 export interface RoomHostOptions {
@@ -67,6 +72,8 @@ const CHECKPOINT_RETRY_MIN_MS = 1_000;
 const CHECKPOINT_RETRY_MAX_MS = 60_000;
 const DEFAULT_SHADOW_INTERVAL_MS = 10 * 60_000;
 const MIN_CATCH_UP_BYTES = 64 * 1024;
+/** Au-delà de cette part du tas, aucune nouvelle salle n'est chargée (1013, le client réessaie). */
+const ROOM_LOAD_HEAP_RATIO = 0.7;
 const LATENCY_SAMPLES = 1_000;
 
 const backoff = (failures: number, minMs: number, maxMs: number) => Math.min(maxMs, minMs * 2 ** Math.max(0, failures - 1));
@@ -128,7 +135,12 @@ export class HostedRoom {
     );
   }
 
-  attach(handle: PeerHandle, request: JoinRequest): void {
+  /**
+   * Entrée d'une connexion authentifiée ; false si son `clientId` appartient
+   * à un autre utilisateur (Room.canJoin) : la connexion est alors refusée.
+   */
+  attach(handle: PeerHandle, request: JoinRequest): boolean {
+    if (!this.room.canJoin(handle.peer)) return false;
     // Même client sur une nouvelle connexion : l'ancienne (morte sans fermeture,
     // ou onglet qui s'est reconnecté avant qu'elle tombe) est fermée tout de
     // suite plutôt que d'attendre le battement de cœur (pastille et curseur
@@ -141,6 +153,7 @@ export class HostedRoom {
     this.peers.add(handle);
     this.idleSince = null;
     this.room.join(handle.peer, request);
+    return true;
   }
 
   detach(handle: PeerHandle): void {
@@ -154,7 +167,22 @@ export class HostedRoom {
     // Arrêt en cours : les lots ne sont plus acceptés (non acquittés, le
     // client les renverra au serveur suivant).
     if (this.closing && message.type !== 'ping') return;
-    this.room.handle(handle.peer.clientId, message, handle.peer);
+    try {
+      this.room.handle(handle.peer.clientId, message, handle.peer);
+    } catch (error) {
+      this.fail('traitement d’un message', error, { userId: handle.peer.userId, type: String((message as { type?: unknown }).type) });
+    }
+  }
+
+  /**
+   * Exception dans la salle (état peut-être à moitié modifié) : fermée sans
+   * rien écrire de plus (1011), rechargée de son état durable à la reconnexion.
+   */
+  fail(stage: string, error: unknown, data: Record<string, unknown> = {}): void {
+    if (this.closed) return;
+    this.host.metrics.roomFailures += 1;
+    this.host.log('error', `salle fermée après une erreur (${stage})`, { projectId: this.projectId, error: String(error), ...data });
+    this.close(1011, 'internal');
   }
 
   /** Écrit le journal, puis ferme les connexions (arrêt du serveur). */
@@ -186,9 +214,11 @@ export class HostedRoom {
   private flush(): void {
     if (this.unflushed.length === 0 || this.closed || this.journalQueued || Date.now() < this.nextJournalAt) return;
     this.journalQueued = true;
-    void this.enqueue(() => this.writeJournal()).finally(() => {
-      this.journalQueued = false;
-    });
+    void this.enqueue(() => this.writeJournal())
+      .catch((error: unknown) => this.fail('écriture du journal', error))
+      .finally(() => {
+        this.journalQueued = false;
+      });
   }
 
   private async writeJournal(): Promise<void> {
@@ -251,9 +281,11 @@ export class HostedRoom {
     }
     if (!due && !idle) return;
     this.maintenanceQueued = true;
-    void this.enqueue(() => this.checkpoint(idle)).finally(() => {
-      this.maintenanceQueued = false;
-    });
+    void this.enqueue(() => this.checkpoint(idle))
+      .catch((error: unknown) => this.fail('point de sauvegarde', error))
+      .finally(() => {
+        this.maintenanceQueued = false;
+      });
   }
 
   /**
@@ -304,6 +336,8 @@ export class HostedRoom {
       if (shadow) this.reportShadow(seq, shadow);
       this.checkpointSeq = seq;
       this.hasDurableCheckpoint = true;
+      // Taille de la salle connue exactement : son point de sauvegarde (segments périmés compris).
+      state.setSizeChars(checkpointJson.length);
       // Rattrapage par lots borné à la moitié du document : au-delà, l'état complet coûte moins.
       this.room.setCatchUpBudget(Math.max(MIN_CATCH_UP_BYTES, Math.floor(documentJson.length / 2)));
       this.lastCheckpointAt = Date.now();
@@ -387,7 +421,7 @@ export class HostedRoom {
 /** État de départ : point de sauvegarde exact + journal, sinon le document ; segments orphelins purgés. */
 function recoverRoomState(loaded: LoadedRoom): RoomState {
   const state = loaded.checkpoint
-    ? new RoomState(deserializeStore(loaded.checkpoint.snapshot), loaded.checkpoint.seq, loaded.checkpoint.clientSeqs)
+    ? new RoomState(deserializeCheckedStore(loaded.checkpoint.snapshot), loaded.checkpoint.seq, loaded.checkpoint.clientSeqs, loaded.checkpoint.clientUsers)
     : RoomState.fromDocument(loaded.document, loaded.baseSeq);
   for (const batch of loaded.journal) state.replay(batch);
   // Nouvelle instance : les clients repartent de l'état complet, les anciens
@@ -400,6 +434,8 @@ export class RoomHost {
   readonly options: RoomHostOptions;
   private readonly rooms = new Map<string, HostedRoom>();
   private readonly loading = new Map<string, Promise<HostedRoom | null>>();
+  /** Connexions à prévenir quand les accès d'un projet changent (révocation signalée par l'API). */
+  private readonly accessListeners = new Map<string, Set<() => void>>();
   private readonly journalLatencies: number[] = [];
   private readonly checkpointDurations: number[] = [];
   private readonly eventLoopDelay = monitorEventLoopDelay({ resolution: 20 });
@@ -423,6 +459,12 @@ export class RoomHost {
     /** Connexions fermées : remplacées par une nouvelle du même client (4409), trop de messages (4429). */
     connectionsReplaced: 0,
     rateLimited: 0,
+    /** Salles fermées après une exception (message ou entretien), rechargées ensuite. */
+    roomFailures: 0,
+    /** Connexions refusées à l'entrée (jeton, droits, version, origine, plafonds…). */
+    connectionsRefused: 0,
+    /** Lecture d'une connexion mise en pause (débit en octets dépassé). */
+    bytesThrottled: 0,
   };
 
   constructor(options: RoomHostOptions) {
@@ -439,6 +481,8 @@ export class RoomHost {
     if (this.shuttingDown) throw new Error('shutting-down');
     const existing = this.rooms.get(projectId);
     if (existing && !existing.closed) return existing;
+    // Mémoire presque pleine : pas de nouvelle salle (les salles chargées restent servies).
+    if (this.heapRatio() > ROOM_LOAD_HEAP_RATIO) throw new Error('busy');
     let pending = this.loading.get(projectId);
     if (!pending) {
       pending = (async () => {
@@ -464,6 +508,31 @@ export class RoomHost {
       }).finally(() => this.loading.delete(projectId));
     }
     return pending;
+  }
+
+  /** Part du tas utilisée (0–1) : soupape des nouvelles salles et connexions. */
+  heapRatio(): number {
+    const heap = getHeapStatistics();
+    return heap.heap_size_limit > 0 ? heap.used_heap_size / heap.heap_size_limit : 0;
+  }
+
+  /** `listener` est appelé quand les accès du projet changent ; renvoie de quoi se désinscrire. */
+  onAccessChanged(projectId: string, listener: () => void): () => void {
+    let listeners = this.accessListeners.get(projectId);
+    if (!listeners) {
+      listeners = new Set();
+      this.accessListeners.set(projectId, listeners);
+    }
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0 && this.accessListeners.get(projectId) === listeners) this.accessListeners.delete(projectId);
+    };
+  }
+
+  /** Accès du projet changés (éditeur retiré, départ, suppression) : chaque connexion se revérifie tout de suite. */
+  accessChanged(projectId: string): void {
+    for (const listener of [...(this.accessListeners.get(projectId) ?? [])]) listener();
   }
 
   forget(hosted: HostedRoom): void {

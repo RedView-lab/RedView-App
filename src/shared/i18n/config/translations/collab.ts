@@ -55,6 +55,7 @@ export const collabTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Vous n’avez plus accès à ce projet.', en: 'You no longer have access to this project.' },
   { fr: 'Une nouvelle version de RedView est disponible : rechargez la page pour continuer à modifier ce projet partagé.', en: 'A new version of RedView is available: reload the page to keep editing this shared project.' },
   { fr: 'Session expirée : reconnectez-vous pour continuer à modifier ce projet partagé.', en: 'Session expired: sign in again to keep editing this shared project.' },
+  { fr: 'Projet partagé trop volumineux : modification non enregistrée.', en: 'Shared project too large: change not saved.' },
 
   // ── Réponses du serveur (api/_lib/projectSharing.ts, messages en anglais) ──
   { fr: 'Identifiant de projet invalide', en: 'Invalid project id' },
@@ -68,6 +69,7 @@ export const collabTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Le propriétaire ne peut pas être retiré', en: 'The owner cannot be removed' },
   { fr: 'Le propriétaire ne peut pas quitter son propre projet', en: 'The owner cannot leave their own project' },
   { fr: 'Seul le propriétaire peut supprimer ce projet', en: 'Only the owner can delete this project' },
+  { fr: 'Trop d’invitations : réessayez dans quelques minutes', en: 'Too many invitations, try again later' },
   { fr: 'Membre invalide', en: 'Invalid member' },
   { fr: 'Action inconnue', en: 'Unknown action' },
   { fr: 'Impossible de mettre à jour le partage du projet', en: 'Unable to update project sharing' },

@@ -167,6 +167,20 @@ describe('présence en direct : Spotlight', () => {
     expect(notifications.prompts).toHaveLength(2);
   });
 
+  it('présentations relancées en boucle : plus proposées après 3 refus du même éditeur (anti-spam)', () => {
+    const session = new LivePresenceSession();
+    session.setRealtime(fakeRealtime());
+    for (let round = 1; round <= 5; round += 1) {
+      session.setCollab(collab([peer('a1', 'alice', { spotlight: round * 10 })]));
+      notifications.prompts.at(-1)?.onAction?.();
+      session.setCollab(collab([peer('a1', 'alice', { spotlight: null })]));
+    }
+    expect(notifications.prompts).toHaveLength(3);
+    // Un autre éditeur, lui, est toujours proposé.
+    session.setCollab(collab([peer('b1', 'bob', { spotlight: 99 })]));
+    expect(notifications.prompts).toHaveLength(4);
+  });
+
   it('déjà en train de le suivre : pas de proposition, le suivi devient celui de la présentation', () => {
     const session = new LivePresenceSession();
     session.setRealtime(fakeRealtime());

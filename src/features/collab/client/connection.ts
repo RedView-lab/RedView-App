@@ -2,6 +2,8 @@ import type { ProjectDocument } from '@/features/itineraryPanel/lib/project/laye
 
 import {
   PROTOCOL_VERSION,
+  projectSocketUrl,
+  socketProtocols,
   type ClientMessage,
   type MotionFields,
   type PresenceUpdate,
@@ -21,7 +23,10 @@ import type { Rejection } from './syncEngine';
  * (`denied`).
  *
  * La connexion s'ouvre quand le store se branche au client (`bind`) : son
- * état provisoire est alors connu, et le premier `welcome` le remplace.
+ * état provisoire est alors connu, et le premier `welcome` le remplace. Le
+ * jeton est présenté à l'ouverture (sous-protocole, protocol.ts), puis relevé
+ * toutes les `REAUTH_INTERVAL_MS` : le serveur ferme (4401) une connexion dont
+ * le jeton a expiré, et on se reconnecte alors avec un jeton neuf.
  */
 
 export interface CollabConnectionOptions {
@@ -67,6 +72,12 @@ const PROBE_MIN_INTERVAL_MS = 2_000;
  * des minutes ; le serveur, lui, ferme une connexion muette après 10 s).
  */
 const WELCOME_TIMEOUT_MS = 20_000;
+/**
+ * Relève du jeton : bien avant son expiration (un JWT Appwrite vit 15 min et
+ * le cache le reprend 10 min, jwtCache.ts) ; dans un onglet en arrière-plan,
+ * les minuteries peuvent prendre une minute de retard.
+ */
+const REAUTH_INTERVAL_MS = 4 * 60_000;
 const BACKOFF_BASE_MS = 500;
 const BACKOFF_MAX_MS = 15_000;
 /** Refus définitifs (code de fermeture → raison) : inutile de réessayer. */
@@ -103,6 +114,7 @@ export class CollabConnection implements CollabRealtime {
   private flushQueued = false;
   private lastFlushAt = 0;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
+  private authTimer: ReturnType<typeof setInterval> | null = null;
   /** Messages reçus sur la connexion courante : un ping a sa réponse dès que ce nombre bouge. */
   private received = 0;
   /** Ping sans réponse en cours (null : aucun) et `received` à son envoi. */
@@ -226,7 +238,7 @@ export class CollabConnection implements CollabRealtime {
       return;
     }
     if (this.stopped) return;
-    const socket = new this.WebSocketImpl(this.options.url);
+    const socket = new this.WebSocketImpl(projectSocketUrl(this.options.url, this.options.projectId), socketProtocols(token));
     this.socket = socket;
     this.welcomed = false;
     this.welcomeTimer = setTimeout(() => {
@@ -243,8 +255,6 @@ export class CollabConnection implements CollabRealtime {
       this.rawSend({
         type: 'hello',
         v: PROTOCOL_VERSION,
-        projectId: this.options.projectId,
-        token,
         presence: this.currentPresence(),
         ...resume,
         ...(seed ? { seed } : {}),
@@ -266,8 +276,9 @@ export class CollabConnection implements CollabRealtime {
         this.welcomeTimer = null;
         this.attempt = 0;
         this.unauthorized = 0;
+        if (this.authTimer) clearInterval(this.authTimer);
+        this.authTimer = setInterval(() => void this.reauthenticate(socket), REAUTH_INTERVAL_MS);
       }
-      if (message.type === 'error' && message.code === 'unauthorized') this.unauthorized += 1;
       this.client.receive(message);
       if (message.type === 'welcome' && this.presenceVersion !== this.helloPresenceVersion) this.sendPresence();
     };
@@ -277,6 +288,8 @@ export class CollabConnection implements CollabRealtime {
       this.welcomed = false;
       this.clearHeartbeat();
       if (this.stopped) return;
+      // Jeton refusé (ou expiré sans relève) : le suivant sera neuf ; au-delà de quelques refus, session expirée.
+      if (event.code === 4401) this.unauthorized += 1;
       const denied = TERMINAL_CODES.get(event.code)
         ?? (event.code === 4401 && this.unauthorized >= MAX_UNAUTHORIZED_RETRIES ? 'unauthorized' : null);
       if (denied) {
@@ -287,6 +300,17 @@ export class CollabConnection implements CollabRealtime {
       this.client.disconnected(true);
       this.scheduleReconnect(event.code);
     };
+  }
+
+  /** Relève du jeton sur la connexion courante (un échec attend la relève suivante, ou la fermeture 4401). */
+  private async reauthenticate(socket: WebSocket): Promise<void> {
+    let token: string;
+    try {
+      token = await this.options.getToken();
+    } catch {
+      return;
+    }
+    if (socket === this.socket && this.welcomed) this.rawSend({ type: 'auth', token });
   }
 
   private heartbeat(): void {
@@ -342,6 +366,8 @@ export class CollabConnection implements CollabRealtime {
 
   private clearHeartbeat(): void {
     if (this.pingTimer) clearInterval(this.pingTimer);
+    if (this.authTimer) clearInterval(this.authTimer);
+    this.authTimer = null;
     if (this.probeTimer) clearTimeout(this.probeTimer);
     if (this.welcomeTimer) clearTimeout(this.welcomeTimer);
     this.pingTimer = null;

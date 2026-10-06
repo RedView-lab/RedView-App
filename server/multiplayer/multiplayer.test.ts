@@ -11,7 +11,7 @@ import type { ProjectDocument } from '../../src/features/itineraryPanel/lib/proj
 import type { Itinerary } from '../../src/features/itineraryPanel/types/index.ts';
 import { applyCommentAction, type CommentAction } from '../../src/features/comments/lib/commentActions.ts';
 import { CollabConnection } from '../../src/features/collab/client/connection.ts';
-import { PROTOCOL_VERSION, type MotionCamera, type MotionViewport } from '../../src/features/collab/protocol.ts';
+import { PROTOCOL_VERSION, socketProtocols, type MotionCamera, type MotionViewport } from '../../src/features/collab/protocol.ts';
 import type { MotionEvent } from '../../src/features/collab/realtime.ts';
 import { sampleDocument } from '../../src/features/collab/sim/fixtures.ts';
 import { createFileStorage } from './fileStorage.ts';
@@ -81,10 +81,17 @@ function edit(connection: CollabConnection, id: string, update: (it: Itinerary) 
   } as ProjectDocument, 'step');
 }
 
-/** Message brut au serveur ; renvoie le premier message et le code de fermeture. */
-function rawHello(hello: Record<string, unknown>): Promise<{ message: unknown; code: number }> {
+/**
+ * Connexion brute (jeton `token` dans les sous-protocoles, sauf `protocols`
+ * donnés) puis premier message ; renvoie le premier message reçu et le code de
+ * fermeture.
+ */
+function rawHello(
+  hello: Record<string, unknown>,
+  { token = 'dev:x', protocols }: { token?: string; protocols?: string[] } = {},
+): Promise<{ message: unknown; code: number }> {
   return new Promise((resolve) => {
-    const socket = new WebSocket(`ws://127.0.0.1:${port}/multiplayer`);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/multiplayer?project=local-test`, protocols ?? socketProtocols(token));
     let message: unknown = null;
     socket.on('open', () => socket.send(JSON.stringify(hello)));
     socket.on('message', (data) => {
@@ -299,14 +306,15 @@ describe('serveur temps réel', () => {
   });
 
   it('refus : version du protocole, jeton invalide', async () => {
-    const version = await rawHello({ type: 'hello', v: PROTOCOL_VERSION + 1, projectId: 'local-test', token: 'dev:x', clientId: 'c-1', epoch: null, lastSeq: null });
+    const version = await rawHello({ type: 'hello', v: PROTOCOL_VERSION + 1, clientId: 'c-1', epoch: null, lastSeq: null });
     expect(version.code).toBe(4426);
     expect((version.message as { code?: string }).code).toBe('version');
-    // Onglet resté sur l'ancienne version (sans présence en direct) : refusé, il recharge.
-    const previous = await rawHello({ type: 'hello', v: 2, projectId: 'local-test', token: 'dev:x', clientId: 'c-3', epoch: null, lastSeq: null });
+    // Onglet resté sur une ancienne version (jeton dans `hello`, sans sous-protocole) : refusé, il recharge.
+    const previous = await rawHello({ type: 'hello', v: 3, projectId: 'local-test', token: 'dev:x', clientId: 'c-3', epoch: null, lastSeq: null }, { protocols: [] });
     expect(previous.code).toBe(4426);
-    const token = await rawHello({ type: 'hello', v: PROTOCOL_VERSION, projectId: 'local-test', token: 'faux', clientId: 'c-2', epoch: null, lastSeq: null });
+    const token = await rawHello({ type: 'hello', v: PROTOCOL_VERSION, clientId: 'c-2', epoch: null, lastSeq: null }, { token: 'faux' });
     expect(token.code).toBe(4401);
+    expect((token.message as { code?: string }).code).toBe('unauthorized');
     const garbage = await rawHello({ type: 'batch', clientSeq: 1, ops: [], blobs: {} });
     expect(garbage.code).toBe(4400);
   });

@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { canonicalJson } from '../../src/features/itineraryPanel/lib/project/canonicalJson.ts';
 import { referencedRouteBlobs } from '../../src/features/collab/model/diff.ts';
 import type { ObjectStore } from '../../src/features/collab/model/objects.ts';
-import { deserializeStore } from '../../src/features/collab/protocol.ts';
+import { deserializeCheckedStore } from '../../src/features/collab/protocol.ts';
 import { RoomState } from '../../src/features/collab/room/roomState.ts';
 import type { DurableState } from './storage.ts';
 
@@ -40,7 +40,7 @@ export function verifyDurable(durable: DurableState | null, seq: number, expecte
   if (!durable) return { ok: false, reason: 'point de sauvegarde illisible' };
   const { checkpoint } = durable;
   if (checkpoint.seq > seq) return { ok: false, reason: `point de sauvegarde en avance (${checkpoint.seq} > ${seq})` };
-  const state = new RoomState(deserializeStore(checkpoint.snapshot), checkpoint.seq, checkpoint.clientSeqs);
+  const state = new RoomState(deserializeCheckedStore(checkpoint.snapshot), checkpoint.seq, checkpoint.clientSeqs);
   for (const batch of durable.journal) {
     if (batch.seq > seq) break;
     if (batch.seq !== state.seq + 1) return { ok: false, reason: `journal discontinu (${batch.seq} au lieu de ${state.seq + 1})` };

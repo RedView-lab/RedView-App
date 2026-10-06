@@ -10,6 +10,7 @@ import {
 } from '@/shared/services/appwrite';
 import { logger } from '@/shared/lib/logger';
 
+import { isOwnDocument } from './access';
 import { getCurrentUserId, isLocalFallbackUser, isOwnedBy, toCloudFailure } from './auth';
 import { CLOUD_LIST_PAGE_SIZE, listAllCloudDocuments, listFirstCloudPage } from './cloudList';
 import { folderRowToSummary } from './mappers';
@@ -43,6 +44,7 @@ type CloudFolderDoc = {
   $id: string;
   $createdAt: string;
   $updatedAt: string;
+  $permissions?: string[];
   user_id?: string;
   parent_folder_id?: string | null;
   name?: string;
@@ -93,7 +95,8 @@ export async function listProjectFolders(): Promise<ProjectFolderSummary[]> {
         Query.equal('user_id', userId),
         Query.orderDesc('$updatedAt'),
       ]);
-      const folders = documents.map((doc) => folderRowToSummary(docToFolderRow(doc)));
+      // Dossier d'un autre compte lisible par tous, `user_id` = moi : ignoré (access.ts).
+      const folders = documents.filter((doc) => isOwnDocument(doc, userId)).map((doc) => folderRowToSummary(docToFolderRow(doc)));
       writeFoldersCache(userId, folders);
       return folders;
     } catch (e) {

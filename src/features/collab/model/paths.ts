@@ -31,6 +31,30 @@ export function decodePath(path: string): string[] {
   return path === '' ? [] : path.split('.').map(unescapeSegment);
 }
 
+/** Segment interdit partout (clé, champ, id) : `obj['__proto__'] = …` change le prototype au lieu d'écrire une clé. */
+const FORBIDDEN_SEGMENT = '__proto__';
+
+/**
+ * Chemin écrit sous sa seule forme canonique (`encodePath(decodePath(p)) ===
+ * p`), sans `__proto__`. Les autres écritures d'un même chemin (`tex%74` pour
+ * `text`) désigneraient la même clé une fois matérialisées tout en échappant
+ * aux règles qui lisent la clé telle quelle (commentaires).
+ */
+export function isCanonicalPath(path: string): boolean {
+  if (path === '') return false;
+  const segments = decodePath(path);
+  return encodePath(segments) === path && !segments.includes(FORBIDDEN_SEGMENT);
+}
+
+/** Id canonique de l'élément d'une liste : `<parent>/<champ canonique>:<clé échappée non vide>`. */
+export function isCanonicalChildId(id: string, parentId: string, field: string): boolean {
+  const prefix = `${parentId}/${field}:`;
+  if (!id.startsWith(prefix) || !isCanonicalPath(field)) return false;
+  const escaped = id.slice(prefix.length);
+  const key = unescapeSegment(escaped);
+  return escaped.length > 0 && escapeSegment(key) === escaped && key !== FORBIDDEN_SEGMENT;
+}
+
 /** Id de l'élément `key` de la liste `field` (chemin encodé) de l'objet `parentId`. */
 export function childObjectId(parentId: string, field: string, key: string): string {
   return `${parentId}/${field}:${escapeSegment(key)}`;

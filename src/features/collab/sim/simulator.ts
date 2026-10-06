@@ -350,8 +350,6 @@ class SimClient {
     connection.toServer({
       type: 'hello',
       v: PROTOCOL_VERSION,
-      projectId: 'sim',
-      token: 'sim',
       presence: { name: this.id },
       ...this.collab.helloFields(),
     });
