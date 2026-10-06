@@ -8,10 +8,17 @@
  *
  *  - `PlayoutClock` : temps de l'émetteur à afficher maintenant. Décalage
  *    émetteur → local = minimum glissant de `arrivée − t` (le paquet le plus
- *    rapide fixe la base, la dérive des horloges est suivie) ; délai =
- *    intervalle entre échantillons + gigue (p95), borné ; le retard total
- *    change en douceur (lecture un peu plus lente ou plus rapide, jamais un
- *    saut ni un retour en arrière).
+ *    rapide fixe la base, la dérive des horloges est suivie) ; délai = ce
+ *    qu'il faut pour avoir presque toujours l'échantillon suivant quand on
+ *    atteint le précédent : p99 de (intervalle + gigue) de chaque échantillon,
+ *    ensemble (une longue tâche de l'émetteur allonge l'intervalle ET retarde
+ *    l'envoi), borné ; les messages retenus par un blocage du réseau n'y
+ *    entrent pas. Le retard visé monte tout de suite (plus de gigue : sinon
+ *    la lecture s'affame) et ne redescend que lentement ; le retard joué le
+ *    rejoint en proportion de l'écart (lecture 1 à 2 % plus lente ou plus
+ *    rapide pour un petit écart, jusqu'à 25 % après un blocage), jamais un
+ *    saut ni un retour en arrière. Plusieurs lecteurs dans la même image
+ *    (suivi, curseurs) lisent le même temps.
  *  - `SampleTrack` : un flux (vecteur de nombres, ou absent), interpolé en
  *    Hermite monotone (PCHIP : jamais au-delà des valeurs reçues), angles
  *    déroulés (plus court chemin), sans extrapolation (on tient le dernier
@@ -28,20 +35,52 @@ export const MAX_PLAYOUT_DELAY_MS = 300;
 const DEFAULT_INTERVAL_MS = 50;
 /** Au-delà, deux échantillons ne sont pas de la même rafale (l'émetteur était au repos). */
 const BURST_GAP_MS = 250;
-/** Vitesse de lecture pendant un rattrapage du retard : ± 5 % pour un petit écart, jusqu'à ± 25 %. */
-const MIN_SLEW = 0.05;
+/**
+ * Rattrapage du retard : vitesse de lecture modifiée de `écart / SLEW_TIME_CONSTANT_MS`
+ * (approche exponentielle, aucune vitesse plancher : un écart de 4 ms ne
+ * change la vitesse que de 1 %), au plus ± 25 % (rattrapage d'un blocage).
+ */
+const SLEW_TIME_CONSTANT_MS = 400;
 const MAX_SLEW = 0.25;
-/** Écart de retard (ms) qui donne la vitesse de rattrapage maximale. */
-const SLEW_SCALE_MS = 400;
-const JITTER_SAMPLES = 64;
+/** Descente du retard visé quand la gigue diminue (ms par seconde) : ≤ 1 % de vitesse. */
+const TARGET_DECAY_MS_PER_S = 8;
+/** ≈ 4 s à 30 Hz : une longue tâche de l'émetteur qui sort de la fenêtre ne fait pas bouger le délai. */
+const JITTER_SAMPLES = 128;
+/**
+ * Gigue couverte : presque toute (un échantillon en retard au-delà affame la
+ * lecture, qui s'arrête une image). Les retards d'un blocage du réseau n'y
+ * entrent pas (cf. `STALL_GAP_MS`).
+ */
+const JITTER_PERCENTILE = 0.99;
+/** Plus rien reçu pendant ça alors que l'émetteur envoyait : réseau bloqué, les messages retenus arrivent d'un coup. */
+const STALL_GAP_MS = 150;
+/** Messages d'une même rafale de rattrapage (arrivés presque ensemble). */
+const BACKLOG_SPACING_MS = 4;
 const INTERVAL_SAMPLES = 32;
+/**
+ * Marge sur le délai mesuré (≈ une image) : un retard pas encore vu dans la
+ * fenêtre (longue tâche de l'émetteur au mauvais moment) est absorbé au lieu
+ * d'affamer la lecture. Mesuré (bench:follow-frames) : 0 image arrêtée, à-coups
+ * divisés par 3 à 10, pour ≈ 10 ms de retard en plus.
+ */
+const NEED_MARGIN_MS = 12;
+/** Mesures (intervalle + gigue) avant de s'y fier seules (sinon : intervalle médian + gigue). */
+const MIN_NEED_SAMPLES = 16;
+/**
+ * Apprentissage (≈ 1,5 s à 30 Hz) : le délai visé monte à mesure que la queue
+ * de la gigue se révèle ; le retard le suit plus vite (le début d'un suivi est
+ * de toute façon un raccord), puis reste stable.
+ */
+const WARMUP_SAMPLES = 48;
+const WARMUP_SLEW_TIME_CONSTANT_MS = 120;
 /** Échantillons gardés derrière le plus récent, même si personne ne lit. */
 const KEEP_BEHIND_NEWEST_MS = 3_000;
 
+/** Quantile (rang le plus proche sur n − 1 : le p99 de quelques dizaines de valeurs n'est pas la plus grande, une valeur aberrante isolée ne fixe pas le délai). */
 function percentile(values: readonly number[], q: number): number {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
+  return sorted[Math.floor(q * (sorted.length - 1))];
 }
 
 export class PlayoutClock {
@@ -49,7 +88,17 @@ export class PlayoutClock {
   private readonly offsets: Array<{ at: number; offset: number }> = [];
   private readonly jitters: number[] = [];
   private readonly intervals: number[] = [];
+  /** Délai qu'aurait demandé chaque échantillon : intervalle depuis le précédent + sa gigue. */
+  private readonly needs: number[] = [];
   private lastSenderT: number | null = null;
+  private lastArrival: number | null = null;
+  /** Rafale de messages retenus par un blocage du réseau en cours d'arrivée. */
+  private flushingBacklog = false;
+  /** Délai visé (`targetDelay`), recalculé seulement après une nouvelle observation. */
+  private cachedDelay: number | null = null;
+  /** Retard visé lissé : monte tout de suite, redescend lentement. */
+  private smoothedTarget: number | null = null;
+  private smoothedTargetAt: number | null = null;
   /** Retard total appliqué (décalage + délai), lissé. */
   private lag: number | null = null;
   private lastPlaybackAt: number | null = null;
@@ -62,47 +111,74 @@ export class PlayoutClock {
    */
   observe(senderT: number, arrival: number, senderWasAtRest = true): void {
     if (this.lastSenderT !== null && senderT < this.lastSenderT) this.reset();
-    if (this.lastSenderT !== null) {
-      const interval = senderT - this.lastSenderT;
+    let interval: number | null = null;
+    if (this.lastSenderT !== null && this.lastArrival !== null) {
+      interval = senderT - this.lastSenderT;
+      const arrivalGap = arrival - this.lastArrival;
+      // Blocage du réseau (l'émetteur, lui, envoyait) : le retard des messages
+      // retenus est celui de la panne, pas de la gigue — il ne fixe pas le délai
+      // visé (la lecture s'arrête puis rattrape, le retard redescend).
+      if (arrivalGap > STALL_GAP_MS && interval < BURST_GAP_MS) this.flushingBacklog = true;
+      else if (arrivalGap > BACKLOG_SPACING_MS) this.flushingBacklog = false;
       if (interval > 0 && interval < BURST_GAP_MS) push(this.intervals, interval, INTERVAL_SAMPLES);
       // L'émetteur reprend après un repos (trou dans SES horodatages, flux posés) :
       // la lecture repart au retard visé ; sauter le repos ne se voit pas (rien n'y
       // bougeait). Un trou en plein mouvement (onglet de l'émetteur ralenti) ou un
       // réseau bloqué se rattrapent en douceur, jamais d'un saut.
-      else if (interval >= BURST_GAP_MS && senderWasAtRest) this.lag = null;
+      else if (interval >= BURST_GAP_MS && senderWasAtRest) {
+        this.lag = null;
+        this.smoothedTarget = null;
+      }
     }
     this.lastSenderT = senderT;
+    this.lastArrival = arrival;
     const offset = arrival - senderT;
     this.offsets.push({ at: arrival, offset });
     while (this.offsets.length > 1 && this.offsets[0].at < arrival - OFFSET_WINDOW_MS) this.offsets.shift();
-    push(this.jitters, offset - this.minOffset(), JITTER_SAMPLES);
+    if (!this.flushingBacklog) {
+      const jitter = offset - this.minOffset();
+      push(this.jitters, jitter, JITTER_SAMPLES);
+      if (interval !== null && interval > 0 && interval < BURST_GAP_MS) push(this.needs, interval + jitter, JITTER_SAMPLES);
+    }
+    this.cachedDelay = null;
   }
 
   get ready(): boolean {
     return this.offsets.length > 0;
   }
 
-  /** Délai visé au-delà du paquet le plus rapide : un intervalle + la gigue. */
+  /** Délai visé au-delà du paquet le plus rapide : p99 de (intervalle + gigue). */
   targetDelay(): number {
+    if (this.cachedDelay !== null) return this.cachedDelay;
     const interval = this.intervals.length > 0 ? percentile(this.intervals, 0.5) : DEFAULT_INTERVAL_MS;
-    const jitter = percentile(this.jitters, 0.95);
-    return Math.min(MAX_PLAYOUT_DELAY_MS, Math.max(MIN_PLAYOUT_DELAY_MS, interval * 1.1 + jitter));
+    const estimate = interval * 1.1 + percentile(this.jitters, JITTER_PERCENTILE);
+    const measured = percentile(this.needs, JITTER_PERCENTILE) + NEED_MARGIN_MS;
+    const delay = this.needs.length >= MIN_NEED_SAMPLES ? measured : Math.max(estimate, measured);
+    this.cachedDelay = Math.min(MAX_PLAYOUT_DELAY_MS, Math.max(MIN_PLAYOUT_DELAY_MS, delay));
+    return this.cachedDelay;
   }
 
   /** Temps de l'émetteur à afficher à `now` (null tant qu'aucun échantillon en direct n'est arrivé). */
   playbackTime(now: number): number | null {
     if (!this.ready) return null;
-    const target = this.minOffset() + this.targetDelay();
+    // Lecteur en retard dans la même image (horodatage antérieur au dernier
+    // appel) : temps correspondant, sans toucher au retard — sinon chaque
+    // appel en désordre le raccourcirait et la lecture finirait affamée.
+    if (this.lag !== null && this.lastPlaybackAt !== null && this.lastPlayback !== null && now < this.lastPlaybackAt) {
+      return Math.min(this.lastPlayback, now - this.lag);
+    }
+    const target = this.target(now);
     if (this.lag === null || this.lastPlaybackAt === null || now - this.lastPlaybackAt > 1_000) {
       // Premier appel, nouvelle rafale, ou boucle restée à l'arrêt : rien d'affiché à raccorder.
       this.lag = target;
     } else {
       // Vitesse de lecture ajustée en proportion de l'écart (≤ ± 25 %) : un
-      // gros retard pris pendant un blocage se rattrape en une seconde ou deux.
+      // gros retard pris pendant un blocage se rattrape en une seconde ou deux,
+      // un petit écart sans à-coup visible.
       const dt = Math.max(0, now - this.lastPlaybackAt);
       const excess = target - this.lag;
-      const rate = Math.min(MAX_SLEW, Math.max(MIN_SLEW, Math.abs(excess) / SLEW_SCALE_MS));
-      const step = rate * dt;
+      const timeConstant = this.needs.length < WARMUP_SAMPLES ? WARMUP_SLEW_TIME_CONSTANT_MS : SLEW_TIME_CONSTANT_MS;
+      const step = Math.min(MAX_SLEW, Math.abs(excess) / timeConstant) * dt;
       this.lag += Math.max(-step, Math.min(step, excess));
     }
     // Jamais au-delà du plus récent échantillon : à court (réseau bloqué), le
@@ -119,10 +195,29 @@ export class PlayoutClock {
     this.offsets.length = 0;
     this.jitters.length = 0;
     this.intervals.length = 0;
+    this.needs.length = 0;
     this.lastSenderT = null;
+    this.lastArrival = null;
+    this.flushingBacklog = false;
+    this.cachedDelay = null;
+    this.smoothedTarget = null;
+    this.smoothedTargetAt = null;
     this.lag = null;
     this.lastPlaybackAt = null;
     this.lastPlayback = null;
+  }
+
+  /** Retard visé : monte tout de suite avec la gigue, redescend de `TARGET_DECAY_MS_PER_S`. */
+  private target(now: number): number {
+    const raw = this.minOffset() + this.targetDelay();
+    if (this.smoothedTarget === null || this.smoothedTargetAt === null) {
+      this.smoothedTarget = raw;
+    } else {
+      const decay = (Math.max(0, now - this.smoothedTargetAt) * TARGET_DECAY_MS_PER_S) / 1000;
+      this.smoothedTarget = Math.max(raw, this.smoothedTarget - decay);
+    }
+    this.smoothedTargetAt = now;
+    return this.smoothedTarget;
   }
 
   private minOffset(): number {

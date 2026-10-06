@@ -14,9 +14,9 @@ import type { HostedRoom, PeerHandle, RoomHost } from './roomHost.ts';
  * Une connexion WebSocket : `hello` (version, jeton, droits) → salle → messages
  * relayés à la salle, dans l'ordre. Codes de fermeture (le client décide s'il
  * se reconnecte) : 4400 requête invalide, 4401 jeton refusé, 4403 accès
- * retiré, 4404 projet introuvable, 4408 client trop lent, 4426 version,
- * 4429 trop de messages, 1011/1013 erreur ou serveur occupé (réessayer),
- * 1012 redémarrage.
+ * retiré, 4404 projet introuvable, 4408 client trop lent, 4409 remplacée par
+ * une nouvelle connexion du même client, 4426 version, 4429 trop de messages,
+ * 1011/1013 erreur ou serveur occupé (réessayer), 1012 redémarrage.
  */
 
 export interface ConnectionOptions {
@@ -36,9 +36,13 @@ const MAX_BUFFERED_BYTES = 32 * 1024 * 1024;
  * en attente, et le suivant le remplace (un curseur en retard ne sert à rien).
  */
 const MAX_VOLATILE_BUFFERED_BYTES = 256 * 1024;
-const RATE_WINDOW_MS = 10_000;
-/** Lots (≈ 30 Hz) + `motion` (≤ 30 Hz, débit propre dans la salle) + pings, avec de la marge. */
-const RATE_MAX_MESSAGES = 1_200;
+/**
+ * Débit d'un client (seau à jetons) : lots (≈ 30 Hz, un arriéré ≤ 120/s côté
+ * client) + `motion` (≤ 36/s, débit propre dans la salle) + présence + pings,
+ * avec de la marge ; rafale de 1 200 (reprise après une coupure).
+ */
+const RATE_PER_SECOND = 120;
+const RATE_BURST_MESSAGES = 1_200;
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 
 /** Un message diffusé à toute la salle n'est sérialisé qu'une fois. */
@@ -70,8 +74,8 @@ export function handleConnection(socket: WebSocket, options: ConnectionOptions):
   let projectId: string | null = null;
   let phase: 'hello' | 'joining' | 'joined' | 'closed' = 'hello';
   let recheck: NodeJS.Timeout | null = null;
-  let windowStart = Date.now();
-  let windowCount = 0;
+  let tokens = RATE_BURST_MESSAGES;
+  let tokensAt = Date.now();
 
   const helloTimer = setTimeout(() => fail('bad-request', 'hello-timeout'), HELLO_TIMEOUT_MS);
 
@@ -153,15 +157,14 @@ export function handleConnection(socket: WebSocket, options: ConnectionOptions):
   socket.on('message', (data, isBinary) => {
     if (phase === 'closed') return;
     const now = Date.now();
-    if (now - windowStart > RATE_WINDOW_MS) {
-      windowStart = now;
-      windowCount = 0;
-    }
-    windowCount += 1;
-    if (windowCount > RATE_MAX_MESSAGES) {
+    tokens = Math.min(RATE_BURST_MESSAGES, tokens + ((now - tokensAt) * RATE_PER_SECOND) / 1000);
+    tokensAt = now;
+    if (tokens < 1) {
+      options.host.metrics.rateLimited += 1;
       close(4429, 'rate-limit');
       return;
     }
+    tokens -= 1;
     if (isBinary) return fail('bad-request', 'binary');
     let message: ClientMessage;
     try {

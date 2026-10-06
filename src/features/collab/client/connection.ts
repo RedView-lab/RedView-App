@@ -15,9 +15,10 @@ import type { Rejection } from './syncEngine';
  * Connexion WebSocket d'un client de co-édition : `hello` → `welcome`, lots
  * regroupés à ≈ 30 Hz, reconnexion avec attente exponentielle + aléa (un
  * redémarrage du serveur, code 1012, reconnecte vite mais pas tous en même
- * temps), battement de cœur (connexion à moitié morte détectée en < 45 s).
- * Les refus définitifs (accès retiré, projet supprimé, version) arrêtent la
- * session (`denied`).
+ * temps), battement de cœur (connexion à moitié morte détectée en < 30 s,
+ * ≈ 4 s au retour de l'onglet, du réseau ou d'une mise en veille). Les refus
+ * définitifs (accès retiré, projet supprimé, version) arrêtent la session
+ * (`denied`).
  *
  * La connexion s'ouvre quand le store se branche au client (`bind`) : son
  * état provisoire est alors connu, et le premier `welcome` le remplace.
@@ -27,8 +28,11 @@ export interface CollabConnectionOptions {
   /** `wss://…/multiplayer`. */
   url: string;
   projectId: string;
-  /** JWT Appwrite frais (redemandé à chaque connexion : il expire après 15 min). */
-  getToken(): Promise<string>;
+  /**
+   * JWT Appwrite (réutilisé tant qu'il est frais, jwtCache.ts) ; `fresh` :
+   * le précédent a été refusé (4401), en créer un autre.
+   */
+  getToken(options?: { fresh?: boolean }): Promise<string>;
   /** Présence de base (nom affiché) ; `updatePresence` y ajoute l'état courant (suivi, Spotlight…). */
   presence?(): PresenceUpdate;
   /** Développement : document qui crée la salle d'un projet local inconnu du serveur. */
@@ -45,8 +49,24 @@ const FLUSH_DELAY_MS = 33;
 const PRESENCE_MIN_INTERVAL_MS = 100;
 /** Message éphémère (`motion`) sauté au-delà : il passerait derrière des lots en attente. */
 const MAX_VOLATILE_BUFFERED_BYTES = 64 * 1024;
-const PING_INTERVAL_MS = 20_000;
-const SILENCE_TIMEOUT_MS = 45_000;
+const PING_INTERVAL_MS = 15_000;
+/**
+ * Ping resté sans réponse (ni aucun autre message) au-delà : connexion morte.
+ * Compté depuis l'envoi du ping, pas depuis le dernier message : dans un
+ * onglet en arrière-plan depuis 5 min, Chrome ne réveille plus les minuteries
+ * qu'une fois par minute, et un silence compté depuis le dernier message
+ * concluait à une connexion morte à chaque réveil (reconnexion chaque minute).
+ */
+const PONG_TIMEOUT_MS = 10_000;
+/** Vérification tout de suite (onglet revenu, réseau revenu, sortie de veille) : réponse attendue sous ce délai. */
+const PROBE_TIMEOUT_MS = 4_000;
+const PROBE_MIN_INTERVAL_MS = 2_000;
+/**
+ * Connexion pas encore accueillie (`welcome`) au-delà : abandonnée et
+ * recommencée (réseau mort pendant l'ouverture : le navigateur peut attendre
+ * des minutes ; le serveur, lui, ferme une connexion muette après 10 s).
+ */
+const WELCOME_TIMEOUT_MS = 20_000;
 const BACKOFF_BASE_MS = 500;
 const BACKOFF_MAX_MS = 15_000;
 /** Refus définitifs (code de fermeture → raison) : inutile de réessayer. */
@@ -83,7 +103,18 @@ export class CollabConnection implements CollabRealtime {
   private flushQueued = false;
   private lastFlushAt = 0;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
-  private lastMessageAt = 0;
+  /** Messages reçus sur la connexion courante : un ping a sa réponse dès que ce nombre bouge. */
+  private received = 0;
+  /** Ping sans réponse en cours (null : aucun) et `received` à son envoi. */
+  private pingSentAt: number | null = null;
+  private pingMark = 0;
+  private probeTimer: ReturnType<typeof setTimeout> | null = null;
+  private welcomeTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastProbeAt = Number.NEGATIVE_INFINITY;
+  private readonly onWake = () => this.probe();
+  private readonly onVisibility = () => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') this.probe();
+  };
 
   constructor(options: CollabConnectionOptions) {
     this.options = options;
@@ -107,6 +138,16 @@ export class CollabConnection implements CollabRealtime {
   start(): void {
     if (this.started || this.stopped) return;
     this.started = true;
+    // Retour de l'onglet, du réseau, d'une mise en veille : la connexion peut être
+    // morte sans fermeture (le système ne le dit qu'au bout de minutes).
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', this.onWake);
+      window.addEventListener('pageshow', this.onWake);
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', this.onVisibility);
+      document.addEventListener('resume', this.onWake);
+    }
     void this.open();
   }
 
@@ -114,6 +155,14 @@ export class CollabConnection implements CollabRealtime {
   stop(): void {
     this.stopped = true;
     this.clearTimers();
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('online', this.onWake);
+      window.removeEventListener('pageshow', this.onWake);
+    }
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.onVisibility);
+      document.removeEventListener('resume', this.onWake);
+    }
     const socket = this.socket;
     this.socket = null;
     this.welcomed = false;
@@ -170,7 +219,8 @@ export class CollabConnection implements CollabRealtime {
     if (this.stopped) return;
     let token: string;
     try {
-      token = await this.options.getToken();
+      // Jeton refusé à la tentative précédente (4401) : un nouveau, pas celui en cache.
+      token = await this.options.getToken({ fresh: this.unauthorized > 0 });
     } catch {
       this.scheduleReconnect();
       return;
@@ -179,9 +229,14 @@ export class CollabConnection implements CollabRealtime {
     const socket = new this.WebSocketImpl(this.options.url);
     this.socket = socket;
     this.welcomed = false;
+    this.welcomeTimer = setTimeout(() => {
+      this.welcomeTimer = null;
+      if (socket === this.socket && !this.welcomed) this.restart(0);
+    }, WELCOME_TIMEOUT_MS);
     socket.onopen = () => {
       if (socket !== this.socket) return;
-      this.lastMessageAt = Date.now();
+      this.received = 0;
+      this.pingSentAt = null;
       const resume = this.client.helloFields();
       const seed = this.client.engine.isReady ? undefined : this.options.seed?.();
       this.helloPresenceVersion = this.presenceVersion;
@@ -198,7 +253,7 @@ export class CollabConnection implements CollabRealtime {
     };
     socket.onmessage = (event: MessageEvent) => {
       if (socket !== this.socket) return;
-      this.lastMessageAt = Date.now();
+      this.received += 1;
       let message: ServerMessage;
       try {
         message = JSON.parse(String(event.data)) as ServerMessage;
@@ -207,6 +262,8 @@ export class CollabConnection implements CollabRealtime {
       }
       if (message.type === 'welcome') {
         this.welcomed = true;
+        if (this.welcomeTimer) clearTimeout(this.welcomeTimer);
+        this.welcomeTimer = null;
         this.attempt = 0;
         this.unauthorized = 0;
       }
@@ -218,8 +275,7 @@ export class CollabConnection implements CollabRealtime {
       if (socket !== this.socket) return;
       this.socket = null;
       this.welcomed = false;
-      if (this.pingTimer) clearInterval(this.pingTimer);
-      this.pingTimer = null;
+      this.clearHeartbeat();
       if (this.stopped) return;
       const denied = TERMINAL_CODES.get(event.code)
         ?? (event.code === 4401 && this.unauthorized >= MAX_UNAUTHORIZED_RETRIES ? 'unauthorized' : null);
@@ -234,11 +290,64 @@ export class CollabConnection implements CollabRealtime {
   }
 
   private heartbeat(): void {
-    if (Date.now() - this.lastMessageAt > SILENCE_TIMEOUT_MS) {
+    if (this.pingUnanswered(PONG_TIMEOUT_MS)) {
       this.restart(0);
       return;
     }
-    this.send({ type: 'ping', t: Date.now() });
+    this.sendPing();
+  }
+
+  /** Un ping attend sa réponse depuis plus de `ms` (aucun message reçu depuis son envoi). */
+  private pingUnanswered(ms: number): boolean {
+    return this.pingSentAt !== null && this.received === this.pingMark && Date.now() - this.pingSentAt >= ms;
+  }
+
+  /** Ping, sauf si le précédent attend encore sa réponse (son heure d'envoi fait foi). */
+  private sendPing(): void {
+    // Avant `welcome`, le serveur ignore tout (WELCOME_TIMEOUT_MS veille).
+    if (!this.welcomed) return;
+    if (this.pingSentAt !== null && this.received === this.pingMark) return;
+    const now = Date.now();
+    this.pingSentAt = now;
+    this.pingMark = this.received;
+    this.rawSend({ type: 'ping', t: now });
+  }
+
+  /**
+   * Onglet revenu au premier plan, réseau revenu, page sortie de veille : en
+   * attente d'une nouvelle tentative, on se reconnecte tout de suite ; en
+   * ligne, un ping doit revenir sous `PROBE_TIMEOUT_MS` (sinon la connexion
+   * était morte : on en ouvre une autre).
+   */
+  private probe(): void {
+    if (!this.started || this.stopped) return;
+    const now = Date.now();
+    if (now - this.lastProbeAt < PROBE_MIN_INTERVAL_MS) return;
+    this.lastProbeAt = now;
+    if (!this.socket) {
+      if (!this.reconnectTimer) return;
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+      void this.open();
+      return;
+    }
+    if (!this.welcomed) return;
+    this.sendPing();
+    if (this.probeTimer) clearTimeout(this.probeTimer);
+    this.probeTimer = setTimeout(() => {
+      this.probeTimer = null;
+      if (this.socket && this.pingUnanswered(PROBE_TIMEOUT_MS)) this.restart(0);
+    }, PROBE_TIMEOUT_MS);
+  }
+
+  private clearHeartbeat(): void {
+    if (this.pingTimer) clearInterval(this.pingTimer);
+    if (this.probeTimer) clearTimeout(this.probeTimer);
+    if (this.welcomeTimer) clearTimeout(this.welcomeTimer);
+    this.pingTimer = null;
+    this.probeTimer = null;
+    this.welcomeTimer = null;
+    this.pingSentAt = null;
   }
 
   /** Ferme la connexion courante et se reconnecte après `delayMs`. */
@@ -246,8 +355,7 @@ export class CollabConnection implements CollabRealtime {
     const socket = this.socket;
     this.socket = null;
     this.welcomed = false;
-    if (this.pingTimer) clearInterval(this.pingTimer);
-    this.pingTimer = null;
+    this.clearHeartbeat();
     socket?.close(4000, 'resync');
     this.client.disconnected(true);
     if (this.stopped) return;
@@ -311,11 +419,10 @@ export class CollabConnection implements CollabRealtime {
   private clearTimers(): void {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.flushTimer) clearTimeout(this.flushTimer);
-    if (this.pingTimer) clearInterval(this.pingTimer);
     if (this.presenceTimer) clearTimeout(this.presenceTimer);
+    this.clearHeartbeat();
     this.reconnectTimer = null;
     this.flushTimer = null;
-    this.pingTimer = null;
     this.presenceTimer = null;
   }
 }

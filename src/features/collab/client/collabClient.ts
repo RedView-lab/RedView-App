@@ -74,6 +74,12 @@ export interface CollabClientOptions {
 
 type DocumentListener = (document: ProjectDocument, cause: CollabChangeCause) => void;
 
+/**
+ * Lots par envoi (≈ 30 envois par seconde) : 120 lots/s au plus, le débit
+ * que le serveur tient dans la durée (server/multiplayer/connection.ts).
+ */
+const MAX_BATCHES_PER_FLUSH = 4;
+
 export class CollabClient implements ProjectCollabLink {
   readonly clientId: string;
   readonly engine: SyncEngine;
@@ -99,10 +105,10 @@ export class CollabClient implements ProjectCollabLink {
     this.engine = new SyncEngine(options.clientId);
     this.computeGate = new LeaseGate(options.clientId, {
       isOnline: () => this.transport.isOnline(),
-      // Un message de bail part après les lots en attente : la libération suit
-      // toujours le résultat écrit, jamais l'inverse.
+      // Un message de bail part après TOUS les lots en attente : la libération
+      // suit toujours le résultat écrit, jamais l'inverse.
       send: (message) => {
-        this.flush();
+        this.flush(Number.POSITIVE_INFINITY);
         this.transport.send(message);
       },
     }, this.clock);
@@ -182,13 +188,18 @@ export class CollabClient implements ProjectCollabLink {
     return { clientId: this.clientId, ...this.engine.resumePoint() };
   }
 
-  /** Envoie les lots en attente (appelé par le transport). */
-  flush(): void {
+  /**
+   * Envoie les lots en attente (appelé par le transport), au plus `limit` à
+   * la fois : un arriéré (lots renvoyés après une coupure) part en quelques
+   * envois, sous le débit du serveur. Hors ligne : regroupés.
+   */
+  flush(limit = MAX_BATCHES_PER_FLUSH): void {
     if (!this.transport.isOnline()) {
-      this.engine.seal();
+      this.engine.seal(true);
       return;
     }
-    for (const message of this.engine.outgoing()) this.transport.send(message);
+    for (const message of this.engine.outgoing(limit)) this.transport.send(message);
+    if (this.engine.hasUnsent) this.transport.requestFlush();
   }
 
   /**

@@ -22,13 +22,18 @@ export interface ProjectShareState {
 }
 
 async function shareRequest<T>(body: Record<string, unknown>): Promise<T> {
-  const token = await getAppwriteJwt();
-  if (!token) throw new Error(translateAppText('Session expirée. Reconnectez-vous pour partager ce projet.'));
-  const response = await fetch('/api/projects/share', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify(body),
-  });
+  const send = async (fresh: boolean) => {
+    const token = await getAppwriteJwt({ fresh });
+    if (!token) throw new Error(translateAppText('Session expirée. Reconnectez-vous pour partager ce projet.'));
+    return fetch('/api/projects/share', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    });
+  };
+  let response = await send(false);
+  // JWT réutilisé mais refusé (session renouvelée entre-temps) : un nouveau, une fois.
+  if (response.status === 401) response = await send(true);
   const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   if (!response.ok) {
     throw new Error(translateAppText(typeof data.error === 'string' ? data.error : 'Le partage du projet a échoué.'));

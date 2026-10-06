@@ -258,11 +258,12 @@ describe('serveur temps réel', () => {
     b.updatePresence({ following: a.clientId, spotlight: true });
     await waitFor(() => a.client.getState().peers.some((peer) => peer.clientId === b.clientId && peer.presence.following === a.clientId), 'B suit A');
     const presenceOfB = () => a.client.getState().peers.find((peer) => peer.clientId === b.clientId)!.presence;
-    expect(presenceOfB().spotlight).toBe(1);
+    const spotlight = presenceOfB().spotlight!;
+    expect(spotlight).toBeGreaterThan(0);
     // Les changements de présence se fusionnent : suivi et Spotlight restent.
     b.updatePresence({ activeItineraryId: 'it-2' });
     await waitFor(() => presenceOfB().activeItineraryId === 'it-2', 'itinéraire actif de B');
-    expect(presenceOfB()).toMatchObject({ following: a.clientId, spotlight: 1 });
+    expect(presenceOfB()).toMatchObject({ following: a.clientId, spotlight });
 
     // Un arrivant part du dernier état de chacun (caméra de départ pour suivre).
     const c = createConnection('carol');

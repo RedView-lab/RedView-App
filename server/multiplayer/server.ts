@@ -34,7 +34,7 @@ export interface MultiplayerServer {
   shutdown(): Promise<void>;
 }
 
-const HEARTBEAT_MS = 30_000;
+const HEARTBEAT_MS = 15_000;
 
 /**
  * Chemins acceptés : `/multiplayer` (proxy qui garde le chemin, Vite en dev)
@@ -99,7 +99,8 @@ export function createMultiplayerServer(options: MultiplayerServerOptions): Mult
   // Les erreurs du serveur HTTP (port déjà pris…) sont aussi émises ici : traitées par `listen`.
   wss.on('error', (error) => host.log('error', 'serveur WebSocket', { error: String(error) }));
 
-  // Connexions mortes (réseau coupé sans fermeture) : ping toutes les 30 s.
+  // Connexions mortes (réseau coupé sans fermeture) : ping toutes les 15 s (pastille et
+  // curseur fantômes ≤ 30 s ; le navigateur répond même dans un onglet en arrière-plan).
   const alive = new WeakSet<object>();
   wss.on('connection', (socket) => {
     if (shuttingDown) {

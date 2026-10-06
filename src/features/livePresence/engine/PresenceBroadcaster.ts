@@ -10,14 +10,23 @@ import {
   SETTLE_KEYFRAME_DELAY_MS,
   WATCHED_SEND_INTERVAL_MS,
 } from '../config';
+import { frameTimestamp } from '../lib/frameClock';
 import { getLocalChartCursor, subscribeLocalChartCursor } from '../lib/localChartCursor';
 
 /**
  * Émission de ce que cet éditeur voit et pointe (canal `motion`) : caméra et
  * zone visible de la carte, pointeur posé sur le relief, survol du graphique.
  *
- * Échantillonné à l'envoi (horodatage = instant de l'échantillon), au front
- * descendant d'une cadence qui dépend de qui regarde : 30 Hz pour tout si
+ * Horodatage = instant où l'état envoyé est devenu vrai : l'image où la
+ * caméra a bougé (son horodatage rAF, lib/frameClock), pas l'envoi — la
+ * minuterie d'envoi passe après le rendu, parfois après une longue tâche, et
+ * dater l'échantillon à l'envoi fausserait la vitesse rejouée chez celui qui
+ * suit (à-coups). Une image clé sans changement est datée de l'envoi (l'état
+ * tient toujours). Quand la carte rend, l'envoi part à la fin d'un rendu
+ * (une image sur deux à 60 Hz : intervalles réguliers, délai d'envoi
+ * constant, donc moins de gigue à couvrir chez celui qui suit) ; une
+ * minuterie prend le relais sans rendu (pointeur seul). Cadence selon qui
+ * regarde : 30 Hz pour tout si
  * quelqu'un me suit (ou si je présente), sinon le pointeur à 20 Hz et la
  * caméra en image clé ; rien au repos, rien sans autre éditeur. Un message
  * n'emporte que les flux changés depuis le dernier envoi ; 250 ms après
@@ -31,6 +40,14 @@ type Stream = 'cam' | 'ptr' | 'chart';
 const DEFAULT_FOV_DEG = 36.87;
 /** Sans le test de Mapbox : un pointeur reprojeté plus loin que ça de lui-même est dans le ciel. */
 const HORIZON_FALLBACK_TOLERANCE_PX = 24;
+/**
+ * Envoi à la fin d'un rendu : une image un peu en avance sur la cadence part
+ * quand même (60 Hz → une image sur deux, 144 Hz → une sur quatre).
+ */
+const FRAME_ALIGNED_TOLERANCE_MS = 6;
+/** La carte a rendu il y a moins que ça : la minuterie de secours laisse passer l'image suivante. */
+const RENDERING_RECENT_MS = 50;
+const FRAME_GRACE_MS = 20;
 
 const round = (value: number, digits: number) => {
   const factor = 10 ** digits;
@@ -50,6 +67,10 @@ export class PresenceBroadcaster {
   private othersPresent = false;
   private readonly dirty = new Set<Stream>();
   private readonly lastSentAt: Record<Stream, number> = { cam: Number.NEGATIVE_INFINITY, ptr: Number.NEGATIVE_INFINITY, chart: Number.NEGATIVE_INFINITY };
+  /** Instant (image) du dernier changement pas encore envoyé de chaque flux. */
+  private readonly changedAt: Record<Stream, number | null> = { cam: null, ptr: null, chart: null };
+  /** Horodatage du dernier message (strictement croissant : le récepteur repart de zéro sur un recul). */
+  private lastSentT = Number.NEGATIVE_INFINITY;
   /** Dernières valeurs envoyées (un flux inchangé ne repart pas). */
   private sentCam: MotionCamera | null = null;
   private sentViewport: MotionViewport | null = null;
@@ -58,7 +79,11 @@ export class PresenceBroadcaster {
   /** Dernière position du pointeur sur la carte (px de mise en page), null hors de la carte. */
   private pointer: { x: number; y: number } | null = null;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Fin du dernier rendu de la carte (`performance.now()`). */
+  private lastRenderAt = Number.NEGATIVE_INFINITY;
   private settleTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Dernier changement (l'image clé de repos part `SETTLE_KEYFRAME_DELAY_MS` après). */
+  private lastDirtyAt = Number.NEGATIVE_INFINITY;
   private readonly disposers: Array<() => void> = [];
 
   constructor(map: MapboxMap, realtime: CollabRealtime) {
@@ -91,14 +116,20 @@ export class PresenceBroadcaster {
       this.dirty.add('ptr');
       this.flush(true);
     };
+    const onRender = () => {
+      this.lastRenderAt = performance.now();
+      if (this.dirty.size > 0) this.flush(false, FRAME_ALIGNED_TOLERANCE_MS);
+    };
     map.on('move', onMove);
     map.on('resize', onMove);
+    map.on('render', onRender);
     map.on('mousemove', onMouseMove);
     map.on('mouseout', onMouseOut);
     document.addEventListener('visibilitychange', onVisibility);
     this.disposers.push(
       () => map.off('move', onMove),
       () => map.off('resize', onMove),
+      () => map.off('render', onRender),
       () => map.off('mousemove', onMouseMove),
       () => map.off('mouseout', onMouseOut),
       () => document.removeEventListener('visibilitychange', onVisibility),
@@ -149,13 +180,22 @@ export class PresenceBroadcaster {
 
   private markDirty(stream: Stream): void {
     if (!this.othersPresent) return;
+    this.changedAt[stream] = frameTimestamp();
     this.dirty.add(stream);
     this.scheduleFlush();
-    if (this.settleTimer) clearTimeout(this.settleTimer);
+    // Une minuterie pour toute la rafale (pas une par événement `move`, jusqu'à 144 par seconde).
+    this.lastDirtyAt = performance.now();
+    if (!this.settleTimer) this.scheduleSettle(SETTLE_KEYFRAME_DELAY_MS);
+  }
+
+  /** Image clé de repos `SETTLE_KEYFRAME_DELAY_MS` après le dernier changement. */
+  private scheduleSettle(delayMs: number): void {
     this.settleTimer = setTimeout(() => {
       this.settleTimer = null;
-      this.sendKeyframe();
-    }, SETTLE_KEYFRAME_DELAY_MS);
+      const sinceLastChange = performance.now() - this.lastDirtyAt;
+      if (sinceLastChange < SETTLE_KEYFRAME_DELAY_MS) this.scheduleSettle(SETTLE_KEYFRAME_DELAY_MS - sinceLastChange);
+      else this.sendKeyframe();
+    }, delayMs);
   }
 
   private scheduleFlush(): void {
@@ -163,14 +203,16 @@ export class PresenceBroadcaster {
     const now = performance.now();
     let wait = Number.POSITIVE_INFINITY;
     for (const stream of this.dirty) wait = Math.min(wait, this.lastSentAt[stream] + this.interval(stream) - now);
+    // Carte en train de rendre : l'envoi part avec une image (onRender), la minuterie n'est qu'un secours.
+    if (now - this.lastRenderAt < RENDERING_RECENT_MS) wait += FRAME_GRACE_MS;
     this.flushTimer = setTimeout(() => {
       this.flushTimer = null;
       this.flush(false);
     }, Math.max(0, wait));
   }
 
-  /** Envoie les flux changés dont la cadence le permet (`force` : tous). */
-  private flush(force: boolean): void {
+  /** Envoie les flux changés dont la cadence le permet (`force` : tous ; `toleranceMs` : avance permise sur la cadence). */
+  private flush(force: boolean, toleranceMs = 1): void {
     if (!this.othersPresent || this.dirty.size === 0) return;
     if (!this.realtime.canSendVolatile()) {
       // Connexion encombrée (gros lot en cours) : on réessaie au prochain intervalle.
@@ -181,7 +223,7 @@ export class PresenceBroadcaster {
       return;
     }
     const now = performance.now();
-    const due = (stream: Stream) => this.dirty.has(stream) && (force || now - this.lastSentAt[stream] >= this.interval(stream) - 1);
+    const due = (stream: Stream) => this.dirty.has(stream) && (force || now - this.lastSentAt[stream] >= this.interval(stream) - toleranceMs);
     const fields: MotionFields = {};
     const sent: Stream[] = [];
 
@@ -193,6 +235,8 @@ export class PresenceBroadcaster {
         fields.cam = camera;
         fields.vp = viewport;
         sent.push('cam');
+      } else {
+        this.changedAt.cam = null;
       }
     }
     if (due('ptr')) {
@@ -201,6 +245,8 @@ export class PresenceBroadcaster {
       if (this.sentPtr === undefined || !sameArray(pointer, this.sentPtr)) {
         fields.ptr = pointer;
         sent.push('ptr');
+      } else {
+        this.changedAt.ptr = null;
       }
     }
     if (due('chart')) {
@@ -210,11 +256,26 @@ export class PresenceBroadcaster {
       if (this.sentChart === undefined || !sameArray(chart, this.sentChart)) {
         fields.chart = chart;
         sent.push('chart');
+      } else {
+        this.changedAt.chart = null;
       }
     }
 
-    if (sent.length > 0 && this.realtime.sendMotion(round(now, 1), fields)) {
-      for (const stream of sent) this.lastSentAt[stream] = now;
+    if (sent.length === 0) {
+      this.scheduleFlush();
+      return;
+    }
+    // Instant où cet état est devenu vrai (le plus récent des changements envoyés) ; image clé sans changement : maintenant.
+    let stamp = Number.NEGATIVE_INFINITY;
+    for (const stream of sent) stamp = Math.max(stamp, this.changedAt[stream] ?? Number.NEGATIVE_INFINITY);
+    let t = round(Number.isFinite(stamp) ? Math.min(stamp, now) : now, 1);
+    if (t <= this.lastSentT) t = round(this.lastSentT + 0.1, 1);
+    if (this.realtime.sendMotion(t, fields)) {
+      this.lastSentT = t;
+      for (const stream of sent) {
+        this.lastSentAt[stream] = now;
+        this.changedAt[stream] = null;
+      }
       if (fields.cam) {
         this.sentCam = fields.cam;
         this.sentViewport = fields.vp ?? this.sentViewport;

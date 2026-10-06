@@ -67,13 +67,15 @@ const SCENARIOS: Scenario[] = [
     },
   },
   {
+    // Cap jusqu'à ≈ 50°/s (le flyover de l'application le borne à 14°/s ; 0,004 au lieu de
+    // 0,0015 faisait tourner la caméra à 520°/s, ce qu'aucun pilote ne fait).
     name: 'flyover sinueux',
     durationMs: 6_000,
     camera: (t) => {
       const u = t / 6000;
-      const lng = 6.9 + 0.08 * u + 0.004 * Math.sin(u * Math.PI * 8);
+      const lng = 6.9 + 0.08 * u + 0.0015 * Math.sin(u * Math.PI * 8);
       const lat = 45.95 + 0.03 * u;
-      const heading = (Math.atan2(0.08 + 0.004 * Math.PI * 8 * Math.cos(u * Math.PI * 8), 0.03) * 180) / Math.PI;
+      const heading = (Math.atan2(0.08 + 0.0015 * Math.PI * 8 * Math.cos(u * Math.PI * 8), 0.03) * 180) / Math.PI;
       return [lng, lat, 14.5, normalizeAngle(heading), 62];
     },
   },

@@ -5,7 +5,7 @@ import { storeFromDocument } from '../model/diff';
 import { Materializer } from '../model/materialize';
 import type { ObjectStore } from '../model/objects';
 import { applyOps, type Op } from '../model/ops';
-import { decodePath, itineraryIdOf } from '../model/paths';
+import { decodePath, itineraryIdOf, itineraryObjectId } from '../model/paths';
 import { checkBatch } from '../model/validate';
 import { DERIVED_INPUTS } from '../schema';
 import type { SequencedBatch, Snapshot } from '../protocol';
@@ -99,6 +99,7 @@ export class RoomState {
     for (const [id, json] of Object.entries(input.blobs)) this.store.putBlob(id, json);
     this.recordAuthors(check.ops, { clientId: input.clientId, userId, at: now });
     applyOps(this.store, check.ops);
+    this.forgetDeletedItineraries(check.ops);
     this.rememberClientSeq(input.clientId, input.clientSeq);
     this.sequence += 1;
     return {
@@ -123,6 +124,7 @@ export class RoomState {
     for (const [id, json] of Object.entries(batch.blobs)) this.store.putBlob(id, json);
     this.recordAuthors(batch.ops, { clientId: batch.clientId, userId: batch.userId, at: 0 });
     applyOps(this.store, batch.ops);
+    this.forgetDeletedItineraries(batch.ops);
     this.rememberClientSeq(batch.clientId, Math.max(batch.clientSeq, this.lastClientSeqOf(batch.clientId)));
     this.sequence = batch.seq;
   }
@@ -155,6 +157,15 @@ export class RoomState {
     while (this.lastClientSeq.size > MAX_REMEMBERED_CLIENTS) {
       const oldest = this.lastClientSeq.keys().next().value!;
       this.lastClientSeq.delete(oldest);
+    }
+  }
+
+  /** Auteurs des itinéraires supprimés oubliés (la table ne grandit pas avec une longue session). */
+  private forgetDeletedItineraries(ops: readonly Op[]): void {
+    for (const op of ops) {
+      if (op.t !== 'd') continue;
+      const itineraryId = itineraryIdOf(op.id);
+      if (itineraryId && !this.store.has(itineraryObjectId(itineraryId))) this.authors.delete(itineraryId);
     }
   }
 

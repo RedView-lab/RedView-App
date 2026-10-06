@@ -1,5 +1,6 @@
 import type { Map as MapboxMap } from 'mapbox-gl';
 
+import { frameTimestamp } from '../lib/frameClock';
 import type { MotionStore } from './MotionStore';
 
 /**
@@ -64,7 +65,8 @@ export class PeerCursorsOverlay {
     if (this.disposers.length > 0) return;
     const { map, store } = this;
     map.getContainer().appendChild(this.root);
-    const onRender = () => this.update(performance.now());
+    // Horodatage de l'image (celui du suivi et de la boucle rAF), pas l'instant de fin du rendu.
+    const onRender = () => this.update(frameTimestamp());
     map.on('render', onRender);
     this.disposers.push(
       () => map.off('render', onRender),

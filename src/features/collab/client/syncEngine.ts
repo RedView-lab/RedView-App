@@ -22,6 +22,12 @@ import { deserializeStore, type ClientMessage, type SequencedBatch, type ServerM
  * reconnexion. Aucune entrée/sortie ici : la connexion (connection.ts) et le
  * simulateur de tests branchent leurs messages.
  *
+ * Hors ligne, les opérations s'ajoutent au dernier lot jamais envoyé
+ * (borné) au lieu d'en ouvrir un par image : une longue édition sans réseau
+ * repart en quelques lots, sous le débit permis par le serveur, et sa copie
+ * sur l'appareil reste petite. Un lot déjà parti sur une connexion n'est plus
+ * jamais modifié (le serveur l'a peut-être appliqué).
+ *
  * Avant le premier `welcome`, l'état confirmé est provisoire
  * (`seedProvisional` : le document affiché à l'ouverture, qui peut dater du
  * dernier point de sauvegarde). Les modifications de l'utilisateur s'y
@@ -38,7 +44,13 @@ interface LocalBatch {
   seq?: number;
   /** Calculé sur l'état provisoire : jamais envoyé, retiré au premier `welcome`. */
   localOnly?: true;
+  /** Parti sur une connexion (ou repris d'une session précédente) : plus jamais modifié. */
+  transmitted?: true;
 }
+
+/** Lot hors ligne : on y ajoute les opérations suivantes jusqu'à cette taille. */
+const COALESCE_MAX_OPS = 2_000;
+const COALESCE_MAX_CHARS = 1_000_000;
 
 /** Lot pas encore écrit par le serveur, avec ses segments : de quoi le renvoyer depuis une autre session. */
 export interface UnsyncedBatch {
@@ -112,6 +124,11 @@ export class SyncEngine {
     return this.pending.filter((batch) => !batch.localOnly).length + (this.queued.length > 0 ? 1 : 0);
   }
 
+  /** Des lots attendent encore d'être envoyés sur la connexion courante. */
+  get hasUnsent(): boolean {
+    return this.queued.length > 0 || this.pending.some((batch) => batch.clientSeq > this.sentUpTo && !batch.localOnly);
+  }
+
   /** Prochain numéro de lot (gardé avec les lots non écrits). */
   get nextSeq(): number {
     return this.nextClientSeq;
@@ -149,7 +166,8 @@ export class SyncEngine {
     if (this.ready) throw new Error('SyncEngine: état du serveur déjà reçu');
     for (const batch of batches) {
       for (const [id, json] of Object.entries(batch.blobs)) this.library.set(id, json);
-      this.pending.push({ clientSeq: batch.clientSeq, ops: batch.ops });
+      // Peut-être déjà reçu par le serveur (welcome.clientSeq le dira) : jamais fusionné.
+      this.pending.push({ clientSeq: batch.clientSeq, ops: batch.ops, transmitted: true });
       this.nextClientSeq = Math.max(this.nextClientSeq, batch.clientSeq + 1);
     }
     this.pending.sort((a, b) => a.clientSeq - b.clientSeq);
@@ -162,8 +180,10 @@ export class SyncEngine {
    * inchangée, inutile de récrire la copie de l'appareil.
    */
   unsyncedSignature(): string {
-    const seqs = [...this.undurable, ...this.pending.filter((batch) => !batch.localOnly)].map((batch) => batch.clientSeq);
-    return `${this.nextClientSeq}|${this.queued.length}|${seqs.join(',')}`;
+    const batches = [...this.undurable, ...this.pending.filter((batch) => !batch.localOnly)];
+    // Nombre d'opérations : un lot hors ligne grandit sans changer de numéro.
+    const ops = batches.reduce((count, batch) => count + batch.ops.length, 0);
+    return `${this.nextClientSeq}|${this.queued.length}|${batches.map((batch) => batch.clientSeq).join(',')}|${ops}`;
   }
 
   /**
@@ -208,8 +228,26 @@ export class SyncEngine {
     return result;
   }
 
-  /** Regroupe les opérations locales en lots (appelé ≈ 30 fois par seconde, même hors ligne). */
-  seal(): void {
+  /**
+   * Regroupe les opérations locales en lots (appelé ≈ 30 fois par seconde,
+   * même hors ligne). `coalesce` (hors ligne) : ajoutées au dernier lot jamais
+   * envoyé tant qu'il reste petit et sans segment de tracé (un lot avec des
+   * segments est déjà gros : il reste seul).
+   */
+  seal(coalesce = false): void {
+    if (this.queued.length === 0) return;
+    const last = this.pending[this.pending.length - 1];
+    if (
+      coalesce && last && !last.transmitted && !last.localOnly
+      && last.clientSeq > this.sentUpTo
+      && last.ops.length + this.queued.length <= COALESCE_MAX_OPS
+      && referencedBlobs(last.ops).size === 0 && referencedBlobs(this.queued).size === 0
+      && opsChars(last.ops) + opsChars(this.queued) <= COALESCE_MAX_CHARS
+    ) {
+      // Nouveau tableau : la copie sur l'appareil en cours d'écriture garde le sien.
+      this.pending[this.pending.length - 1] = { ...last, ops: [...last.ops, ...this.queued.splice(0)] };
+      return;
+    }
     while (this.queued.length > 0) {
       const ops = this.queued.splice(0, MAX_OPS_PER_BATCH);
       this.pending.push({ clientSeq: this.nextClientSeq, ops });
@@ -217,13 +255,18 @@ export class SyncEngine {
     }
   }
 
-  /** Lots à envoyer sur la connexion courante (seulement une fois l'état reçu). */
-  outgoing(): ClientMessage[] {
+  /**
+   * Lots à envoyer sur la connexion courante (seulement une fois l'état reçu),
+   * au plus `limit` (le reste au prochain envoi : débit permis par le serveur).
+   */
+  outgoing(limit = Number.POSITIVE_INFINITY): ClientMessage[] {
     if (!this.ready) return [];
     this.seal();
     const messages: ClientMessage[] = [];
     for (const batch of this.pending) {
+      if (messages.length >= limit) break;
       if (batch.clientSeq <= this.sentUpTo || batch.localOnly) continue;
+      batch.transmitted = true;
       messages.push({ type: 'batch', clientSeq: batch.clientSeq, ops: batch.ops, blobs: this.blobsFor(batch.ops) });
       this.sentUpTo = batch.clientSeq;
     }
@@ -368,6 +411,24 @@ export class SyncEngine {
     }
     return blobs;
   }
+}
+
+/** Taille approximative des valeurs écrites (borne d'un lot hors ligne). */
+function opsChars(ops: readonly Op[]): number {
+  let chars = 0;
+  for (const op of ops) {
+    chars += 48 + op.id.length;
+    if (op.t === 's' && 'v' in op) chars += valueChars(op.v);
+    else if (op.t === 'c') for (const [key, value] of op.props) chars += key.length + valueChars(value);
+  }
+  return chars;
+}
+
+function valueChars(value: unknown): number {
+  if (value === null || value === undefined) return 4;
+  if (typeof value === 'string') return value.length + 2;
+  if (typeof value !== 'object') return 8;
+  return JSON.stringify(value)?.length ?? 4;
 }
 
 function referencedBlobs(ops: readonly Op[]): Set<string> {

@@ -66,14 +66,19 @@ export interface PresenceState {
   /** Éditeur suivi (`clientId`), comme le mode observation de Figma. */
   following?: string | null;
   /**
-   * Présente sa vue (Spotlight) : numéro d'ordre donné par la salle, le plus
-   * grand l'emporte (le même pour tous, sans dépendre des horloges).
+   * Présente sa vue (Spotlight) : numéro d'ordre donné par la salle (instant
+   * en ms, strictement croissant), le plus grand l'emporte — le même pour
+   * tous, et jamais réutilisé après un redémarrage du serveur.
    */
   spotlight?: number | null;
 }
 
-/** Présence envoyée par un client : il demande le Spotlight (`true`), la salle le numérote. */
-export type PresenceUpdate = Omit<PresenceState, 'spotlight'> & { spotlight?: boolean };
+/**
+ * Présence envoyée par un client : il demande le Spotlight (`true`), la salle
+ * le numérote ; à la reconnexion, il redonne son numéro (gardé : une
+ * présentation qui continue n'est pas reproposée à ceux qui l'ont déclinée).
+ */
+export type PresenceUpdate = Omit<PresenceState, 'spotlight'> & { spotlight?: boolean | number };
 
 export interface PeerInfo {
   clientId: string;

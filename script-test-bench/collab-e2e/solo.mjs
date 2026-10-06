@@ -3,7 +3,7 @@
 // tracé et de la prédiction).
 import { launch, sleep, waitFor } from '../screen-audit/cdp.mjs';
 
-const APP = 'http://localhost:5173';
+const APP = process.env.APP_URL ?? 'http://localhost:5173';
 const out = { steps: {}, errors: [], brouter: [] };
 const failures = [];
 const check = (condition, label) => {

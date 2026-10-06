@@ -42,8 +42,8 @@ function summarizeResponse(data: Record<string, unknown>) {
   };
 }
 
-async function getAccessToken(): Promise<string> {
-  const token = await getAppwriteJwt();
+async function getAccessToken(fresh = false): Promise<string> {
+  const token = await getAppwriteJwt({ fresh });
 
   if (!token) {
     throw new Error(translateAppText('Session expirée. Reconnectez-vous pour gérer votre abonnement.'));
@@ -61,15 +61,17 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
     ...(import.meta.env.DEV ? { body: typeof init?.body === 'string' ? init.body : null } : {}),
   });
 
-  const token = await getAccessToken();
-  const response = await fetch(path, {
+  const send = async (fresh: boolean) => fetch(path, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${await getAccessToken(fresh)}`,
       ...(init?.headers ?? {}),
     },
   });
+  let response = await send(false);
+  // JWT réutilisé mais refusé (session renouvelée entre-temps) : un nouveau, une fois.
+  if (response.status === 401) response = await send(true);
 
   const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   const responseSummary = `${init?.method ?? 'GET'} ${path} -> ${response.status}${typeof data.error === 'string' ? ` ${data.error}` : ''}`;

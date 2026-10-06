@@ -90,7 +90,7 @@ export class Room {
   private durable: number;
   private peersDirty = false;
   /** Dernier numéro de Spotlight donné (le plus récent l'emporte chez les clients). */
-  private spotlightCounter = 0;
+  private lastSpotlight = 0;
 
   constructor(state: RoomState, options: RoomOptions) {
     this.state = state;
@@ -157,9 +157,10 @@ export class Room {
     this.peersDirty = true;
   }
 
-  handle(clientId: string, message: ClientMessage): void {
+  /** Message d'un client ; avec `peer`, seulement s'il vient de sa connexion courante (jamais d'une remplacée). */
+  handle(clientId: string, message: ClientMessage, peer?: RoomPeer): void {
     const member = this.members.get(clientId);
-    if (!member) return;
+    if (!member || (peer && member.peer !== peer)) return;
     switch (message.type) {
       case 'batch':
         this.handleBatch(member.peer, message);
@@ -324,13 +325,18 @@ export class Room {
 
   /**
    * Présence envoyée par un client (n'importe quoi) → champs connus, bornés.
-   * Spotlight : `true` reçoit un numéro (gardé tant qu'il reste allumé).
+   * Spotlight : `true` reçoit un numéro (gardé tant qu'il reste allumé) ; un
+   * numéro déjà donné (reconnexion du présentateur, même après un
+   * redémarrage) est repris s'il n'est pas dans le futur.
    */
   private sanitizePresence(presence: unknown, previous: PresenceState | null): PresenceState {
     const out = sanitizePresenceFields(presence);
     const source = presence !== null && typeof presence === 'object' ? presence as Record<string, unknown> : {};
-    if (source.spotlight === true) {
-      out.spotlight = previous?.spotlight ?? (this.spotlightCounter += 1);
+    const resumed = source.spotlight;
+    if (typeof resumed === 'number' && Number.isSafeInteger(resumed) && resumed > 0 && resumed <= this.options.now()) {
+      out.spotlight = previous?.spotlight ?? resumed;
+    } else if (source.spotlight === true || typeof resumed === 'number') {
+      out.spotlight = previous?.spotlight ?? this.nextSpotlight();
     } else if (source.spotlight === false || source.spotlight === null) {
       out.spotlight = null;
     } else if (previous?.spotlight) {
@@ -338,6 +344,16 @@ export class Room {
       out.spotlight = previous.spotlight;
     }
     return JSON.stringify(out).length > MAX_PRESENCE_CHARS ? {} : out;
+  }
+
+  /**
+   * Numéro de Spotlight : instant de la salle (ms), strictement croissant —
+   * jamais celui d'une présentation d'avant un redémarrage (déjà proposée,
+   * peut-être déclinée, chez les clients).
+   */
+  private nextSpotlight(): number {
+    this.lastSpotlight = Math.max(this.lastSpotlight + 1, Math.floor(this.options.now()));
+    return this.lastSpotlight;
   }
 
   private dropLeasesOfDeletedItineraries(batch: SequencedBatch): void {

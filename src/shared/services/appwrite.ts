@@ -12,6 +12,8 @@ import {
   type Models,
 } from 'appwrite';
 
+import { createJwtCache } from './jwtCache';
+
 const appwriteEndpoint =
   (import.meta.env.VITE_APPWRITE_ENDPOINT as string | undefined) ||
   'https://appwrite.redview.tech/v1';
@@ -154,6 +156,7 @@ export function saveStoredAppwriteSession(user: { id: string; email?: string; na
 
 export function clearStoredAppwriteSession(): void {
   cachedSessionUserId = null;
+  jwtCache.clear();
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.removeItem(APPWRITE_AUTH_STORAGE_KEY);
@@ -196,10 +199,16 @@ export async function getAppwriteUser(): Promise<Models.User<Models.Preferences>
   }
 }
 
-export async function getAppwriteJwt(): Promise<string | null> {
+/** JWT réutilisé tant qu'il est frais (jwtCache.ts : Appwrite en limite la création à 100/h par utilisateur). */
+const jwtCache = createJwtCache(async () => (await account.createJWT()).jwt, getSessionUserIdSync);
+
+/**
+ * JWT de la session (null : pas de session, ou création refusée). `fresh` :
+ * le précédent a été refusé par un serveur (401) — on en crée un autre.
+ */
+export async function getAppwriteJwt(options: { fresh?: boolean } = {}): Promise<string | null> {
   try {
-    const { jwt } = await account.createJWT();
-    return jwt;
+    return await jwtCache.get(options);
   } catch (error) {
     console.warn('[appwrite] createJWT failed', error);
     return null;

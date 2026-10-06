@@ -127,18 +127,44 @@ describe('présence en direct : suivi et Spotlight', () => {
       return setup.lastPeers('a').find((peer) => peer.clientId === clientId)?.presence.spotlight ?? null;
     };
     setup.send('a', { type: 'presence', presence: { name: 'A', spotlight: true } });
-    expect(spotlightOf('a')).toBe(1);
+    const first = spotlightOf('a')!;
+    expect(first).toBeGreaterThan(0);
     setup.send('b', { type: 'presence', presence: { name: 'B', spotlight: true } });
-    expect(spotlightOf('b')).toBe(2);
+    const second = spotlightOf('b')!;
+    expect(second).toBeGreaterThan(first);
     // Une autre mise à jour de présence garde le numéro.
     setup.send('a', { type: 'presence', presence: { name: 'A', spotlight: true, following: null } });
-    expect(spotlightOf('a')).toBe(1);
+    expect(spotlightOf('a')).toBe(first);
     setup.send('a', { type: 'presence', presence: { name: 'A', activeItineraryId: 'it-1' } });
-    expect(spotlightOf('a')).toBe(1);
+    expect(spotlightOf('a')).toBe(first);
     setup.send('a', { type: 'presence', presence: { name: 'A', spotlight: false } });
     expect(spotlightOf('a')).toBeNull();
     setup.send('a', { type: 'presence', presence: { name: 'A', spotlight: true } });
-    expect(spotlightOf('a')).toBe(3);
+    expect(spotlightOf('a')).toBeGreaterThan(second);
+  });
+
+  it('Spotlight : le présentateur qui se reconnecte garde son numéro ; un numéro du futur est refusé', () => {
+    const setup = presenceSetup();
+    setup.advance(10_000);
+    setup.join('a');
+    setup.join('b');
+    const spotlightOf = (clientId: string) => {
+      setup.room.tick();
+      return setup.lastPeers('b').find((peer) => peer.clientId === clientId)?.presence.spotlight ?? null;
+    };
+    setup.send('a', { type: 'presence', presence: { name: 'A', spotlight: true } });
+    const number = spotlightOf('a')!;
+    // Coupure de A, retour avec son numéro dans `hello` : même présentation.
+    setup.room.leave('a');
+    setup.advance(2_000);
+    setup.join('a', { name: 'A', spotlight: number });
+    expect(spotlightOf('a')).toBe(number);
+    // Un client ne peut pas se donner la priorité avec un numéro à venir.
+    setup.room.leave('a');
+    setup.join('a', { name: 'A', spotlight: number + 1_000_000 });
+    const assigned = spotlightOf('a')!;
+    expect(assigned).toBeGreaterThan(number);
+    expect(assigned).toBeLessThan(number + 1_000_000);
   });
 
   it('`following` : un id de client valide ou null, rien d’autre', () => {

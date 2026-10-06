@@ -275,7 +275,10 @@ export class FollowController {
     const frame = this.store.frame(clientId, now);
     const desired = this.desiredCamera(frame?.cam?.values ?? null, frame?.cam?.payload ?? null);
     if (!desired) {
-      // Rien encore de lui : on attend son premier échantillon (le store réveille la boucle).
+      // Rien encore de lui, ou son flux a disparu (coupure, onglet rechargé) :
+      // on attend (le store réveille la boucle) ; à son retour, raccord (vol ou
+      // fondu) depuis la vue affichée plutôt qu'un saut vers la sienne.
+      this.phase = 'waiting';
       return;
     }
     if (this.phase === 'waiting') {

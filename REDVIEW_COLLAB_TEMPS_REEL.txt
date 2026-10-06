@@ -1,6 +1,6 @@
 REDVIEW — CO-ÉDITION EN TEMPS RÉEL : COMMENT ÇA MARCHE
 Référence pour les prochaines sessions de code. État au 05/10/2026 (commit 58c0604,
-puis commentaires sur la carte : section 10).
+puis commentaires sur la carte : section 10), fiabilisé le 06/10 (section 13).
 Détails complets : CLAUDE.md (paragraphes « Real-time co-editing server » et « features/collab »).
 
 ========================================================================
@@ -105,9 +105,21 @@ LeaseGate (porte des calculs dérivés)
   - Hors ligne plus de 4 s : l'appareil calcule seul.
 
 CollabConnection (WebSocket)
-  - Ouverte au bind. Lots regroupés à ~30 Hz.
+  - Ouverte au bind. Lots regroupés à ~30 Hz ; un arriéré part à 4 lots par
+    envoi au plus (≈ 120/s, le débit du serveur).
+  - Hors ligne, les modifications s'ajoutent au dernier lot jamais envoyé
+    (≤ 2 000 opérations) : une longue édition sans réseau repart en quelques
+    lots. Un lot déjà parti n'est plus jamais modifié.
   - Reconnexion avec attente exponentielle + aléa ; code 1012 = reconnexion
     rapide.
+  - Battement de cœur : ping toutes les 15 s ; connexion morte si CE ping n'a
+    reçu aucun message en 10 s (pas « rien reçu depuis X s » : Chrome ne
+    réveille les minuteries d'un onglet en arrière-plan qu'une fois par minute).
+    Onglet revenu, réseau revenu, sortie de veille : vérification immédiate
+    (morte → rouverte en ≈ 4 s ; en attente d'un nouvel essai → tout de suite).
+    Pas de welcome en 20 s : on recommence.
+  - JWT Appwrite réutilisé 10 min (shared/services/jwtCache.ts) : Appwrite 1.6
+    n'en crée que 100 par heure et par utilisateur. Refusé (4401) : un neuf.
   - Refus définitifs : 4403 (accès retiré), 4404 (projet introuvable), 4426
     (version), 4401 ×3 (session expirée).
 
@@ -228,11 +240,16 @@ motion (présence en direct, section 12) : éphémère, avec pertes, jamais
   fermeture) ; sauté sous contre-pression (> 256 Ko en attente côté serveur,
   > 64 Ko côté client) au lieu d'être mis en file.
 presence : nom, itinéraire actif, following (clientId suivi), spotlight (le
-  client envoie true/false, la salle le numérote : le plus grand l'emporte).
+  client envoie true/false, la salle le numérote : le plus grand l'emporte ;
+  numéro = instant en ms de la salle, jamais réutilisé après un redémarrage ;
+  le présentateur qui se reconnecte redonne son numéro et le garde).
 Codes de fermeture :
   4400 requête invalide, 4401 jeton, 4403 accès, 4404 introuvable,
-  4408 client lent, 4426 version, 4429 trop de messages,
+  4408 client lent, 4409 remplacée par une nouvelle connexion du même client,
+  4426 version, 4429 trop de messages (seau à jetons : 120/s, rafale 1 200),
   1011/1013 erreur/occupé, 1012 redémarrage
+Battement de cœur du serveur (ping WebSocket) toutes les 15 s : une connexion
+  morte (pastille, curseur fantômes) tombe en ≤ 30 s.
 
 ========================================================================
 8. RÈGLES À RESPECTER EN MODIFIANT LE CODE
@@ -302,12 +319,19 @@ npm run bench:follow
   le 06/10 : retard 126–138 ms (dont 40–100 ms de réseau), écart < 1,2 %,
   aucun saut (≤ 1,3× le pas réel, blocage compris), jamais de retour en
   arrière, fin exacte, indépendant de la cadence.
+npm run bench:follow-frames  (inclus dans bench:follow)
+  Le vrai émetteur (PresenceBroadcaster) → réseau → le vrai récepteur
+  (MotionStore, FollowController, curseurs) dans un navigateur virtuel :
+  un fil principal par onglet, images rAF calées sur la synchro verticale,
+  file de rendu de Mapbox et événement render, coût des rendus, longues
+  tâches. Mesure image par image : à-coups, écart de vitesse, images
+  affamées, position du curseur (px). Profils « nominal » et « dégradé ».
 npm run bench:collab-e2e   (nécessite npm run dev)
   Deux onglets réels sur le serveur de dev, dont une modification pendant la
   connexion et la latence locale (p95 ~140 ms). follow-two-users.mjs : deux
   FENÊTRES (un onglet en arrière-plan n'a plus d'images) de tailles
-  différentes — suivre, cadrage contain exact, retard 145–215 ms en headless,
-  gigue 19–38 ms, curseur posé à 0,1 px près, survol du graphique (même
+  différentes — suivre, cadrage contain exact, retard 240–265 ms en headless
+  (145–215 ms avant le 06/10 : la lecture s'affamait), gigue 12–30 ms, curseur posé à 0,1 px près, survol du graphique (même
   abscisse), itinéraire actif, molette / Échap, Spotlight complet.
 npm run bench:collab-prod  (PRODUCTION, deux comptes de test, ~8 min)
   Parcours complet : partage, synchro, baux, annuler, rechargements, onglet
@@ -431,3 +455,46 @@ src/features/livePresence/                      curseurs, suivre un éditeur, Sp
   le simulateur (motion et présence mêlés aux lots : invariants inchangés),
   server/multiplayer (relais, débit, version 2 refusée), npm run bench:follow,
   npm run bench:collab-load, collab-e2e/follow-two-users.mjs.
+
+========================================================================
+13. FIABILISATION DU 06/10/2026 (bancs plus précis + recherche)
+========================================================================
+Trouvé avec bench:follow-frames (image par image, vrai code des deux côtés)
+et des tests ciblés (server/multiplayer/robustness.test.ts,
+collab/client/connection.test.ts, shared/services/jwtCache.test.ts) :
+- Suivi saccadé (à-coups 8 à 100 %, jusqu'à 165 images figées, curseur
+  décalé de 1 à 7 px) :
+    * l'émetteur datait chaque échantillon à l'ENVOI (minuterie après le
+      rendu, parfois après une longue tâche) : vitesse fausse chez celui qui
+      suit. Désormais : instant de l'image où l'état a changé
+      (livePresence/lib/frameClock.ts), envoi à la fin d'un rendu ;
+    * le calque des curseurs lisait l'horloge de lecture avec
+      performance.now() pendant le rendu, le suivi avec l'horodatage rAF :
+      deux temps dans la même image raccourcissaient le retard à chaque image
+      jusqu'à affamer la lecture. Désormais : même temps pour tous ;
+    * délai de lecture sur la gigue p95 seule : un intervalle allongé par une
+      longue tâche de l'émetteur affamait la lecture. Désormais : p99 de
+      (intervalle + gigue) par échantillon + 12 ms, sans les rafales d'un
+      blocage réseau ; vitesse de rattrapage proportionnelle à l'écart.
+  Après : à-coups 0,1 à 2,2 % en moyenne, au plus une image affamée (premier
+  à-coup jamais vu de l'émetteur), curseur à 0 px. Coût : ≈ 10 à 20 ms de
+  retard en plus.
+- Onglet en arrière-plan : reconnexion chaque minute (battement de cœur
+  compté depuis le dernier message, minuteries bridées à 1/min par Chrome),
+  un JWT Appwrite à chaque fois → quota de 100/h épuisé, plus aucune
+  connexion possible pour l'utilisateur pendant l'heure. Corrigé (section 4).
+- Longue édition hors ligne : des milliers de lots renvoyés d'un coup →
+  4429 → reconnexion → 4429… Corrigé (lots hors ligne regroupés, envoi
+  rythmé, seau à jetons côté serveur).
+- Connexion remplacée (réseau changé) : l'ancienne restait ouverte jusqu'au
+  battement de cœur et ses messages passaient pour ceux de la nouvelle.
+  Désormais fermée en 4409, et la salle n'écoute que la connexion courante.
+- Spotlight : un présentateur qui se reconnectait recevait un nouveau numéro
+  (présentation reproposée à ceux qui l'avaient déclinée) ; après un
+  redémarrage, les numéros repartaient de 1 (une nouvelle présentation
+  pouvait passer pour une déjà traitée). Corrigé (section 7).
+- Suivi : flux de l'éditeur suivi revenu après une coupure → saut de caméra.
+  Désormais raccord (vol ou fondu) comme au démarrage.
+- Serveur : auteurs des itinéraires supprimés oubliés (la table ne grandit
+  plus pendant une longue session) ; mesures connectionsReplaced et
+  rateLimited.

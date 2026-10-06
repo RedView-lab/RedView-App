@@ -266,7 +266,10 @@ try {
   // Écart résiduel exprimé en temps (vitesse du panoramique : 0,05° en 3 s) : la gigue du suivi.
   const jitterMs = best.error / (0.05 / 3000);
   out.metrics.motion = { frames: pathB.length, moving: moving.length, lagMs: best.lag, residualDeg: best.error, jitterMs, backwards };
-  check(best.lag <= 250, `suivi : retard ${best.lag} ms (≤ 250)`);
+  // Deux fenêtres d'un même Edge headless : images de l'émetteur irrégulières. Depuis le
+  // 06/10/2026 la lecture couvre ces irrégularités (p99 de intervalle + gigue) au lieu de
+  // s'affamer : 240–265 ms ici (gigue 12–30 ms), contre 145–215 ms (gigue 19–38 ms) avant.
+  check(best.lag <= 300, `suivi : retard ${best.lag} ms (≤ 300)`);
   check(jitterMs < 50, `suivi : trajectoire fidèle (gigue ${jitterMs.toFixed(0)} ms, < 50)`);
   check(backwards === 0, `suivi : jamais de retour en arrière (${backwards})`);
   check(Math.abs(finalB.lng - finalA.lng) < 1e-6 && Math.abs(finalB.bearing - finalA.bearing) < 0.01, 'suivi : position finale exacte');

@@ -177,6 +177,31 @@ describe('présence en direct : Spotlight', () => {
     expect(session.getSnapshot().following?.viaSpotlight).toBe(true);
   });
 
+  it('je présente : mon numéro, une fois donné par la salle, est publié (redonné à chaque reconnexion)', () => {
+    const session = new LivePresenceSession();
+    const realtime = fakeRealtime();
+    session.setRealtime(realtime);
+    session.setCollab(collab([peer('a1', 'alice')]));
+    session.setPresenting(true);
+    expect(realtime.presence.spotlight).toBe(true);
+    session.setCollab({ peers: [peer('me', 'u-me', { spotlight: 1_791_000_000_000 }), peer('a1', 'alice')], self: { clientId: 'me', userId: 'u-me' }, online: true });
+    expect(realtime.presence.spotlight).toBe(1_791_000_000_000);
+    session.setPresenting(false);
+    expect(realtime.presence.spotlight).toBe(false);
+  });
+
+  it('présentation d’un autre déclinée, puis il se reconnecte (même numéro) : pas reproposée', () => {
+    const session = new LivePresenceSession();
+    session.setRealtime(fakeRealtime());
+    session.setCollab(collab([peer('a1', 'alice', { spotlight: 1_791_000_000_000 })]));
+    expect(notifications.prompts).toHaveLength(1);
+    notifications.prompts[0].onAction?.();
+    session.setCollab(collab([]));
+    session.setCollab(collab([peer('a1', 'alice', { spotlight: 1_791_000_000_000 })]));
+    expect(notifications.prompts).toHaveLength(1);
+    expect(session.getSnapshot().following).toBeNull();
+  });
+
   it('je présente, quelqu’un présente après moi : ma présentation s’arrête, la sienne m’est proposée', () => {
     const session = new LivePresenceSession();
     const realtime = fakeRealtime();

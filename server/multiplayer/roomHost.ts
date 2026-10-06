@@ -56,6 +56,8 @@ export interface PeerHandle {
 export const CLOSE_RESTART = 1012;
 /** Code de fermeture « projet introuvable » : refus définitif côté client. */
 const CLOSE_NOT_FOUND = 4404;
+/** Connexion remplacée par une nouvelle du même client (réseau changé, l'ancienne pas encore tombée). */
+const CLOSE_REPLACED = 4409;
 const TICK_MS = 100;
 const MAINTENANCE_MS = 1_000;
 /** Journal en échec plus longtemps avec des clients connectés : la salle est fermée (ils gardent leurs lots). */
@@ -127,6 +129,15 @@ export class HostedRoom {
   }
 
   attach(handle: PeerHandle, request: JoinRequest): void {
+    // Même client sur une nouvelle connexion : l'ancienne (morte sans fermeture,
+    // ou onglet qui s'est reconnecté avant qu'elle tombe) est fermée tout de
+    // suite plutôt que d'attendre le battement de cœur (pastille et curseur
+    // fantômes, messages tardifs pris pour ceux de la nouvelle).
+    for (const other of [...this.peers]) {
+      if (other === handle || other.peer.clientId !== handle.peer.clientId) continue;
+      this.host.metrics.connectionsReplaced += 1;
+      other.close(CLOSE_REPLACED, 'replaced');
+    }
     this.peers.add(handle);
     this.idleSince = null;
     this.room.join(handle.peer, request);
@@ -143,7 +154,7 @@ export class HostedRoom {
     // Arrêt en cours : les lots ne sont plus acceptés (non acquittés, le
     // client les renverra au serveur suivant).
     if (this.closing && message.type !== 'ping') return;
-    this.room.handle(handle.peer.clientId, message);
+    this.room.handle(handle.peer.clientId, message, handle.peer);
   }
 
   /** Écrit le journal, puis ferme les connexions (arrêt du serveur). */
@@ -409,6 +420,9 @@ export class RoomHost {
     motionDroppedRate: 0,
     motionInvalid: 0,
     motionSkippedBackpressure: 0,
+    /** Connexions fermées : remplacées par une nouvelle du même client (4409), trop de messages (4429). */
+    connectionsReplaced: 0,
+    rateLimited: 0,
   };
 
   constructor(options: RoomHostOptions) {

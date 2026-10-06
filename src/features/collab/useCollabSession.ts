@@ -82,9 +82,9 @@ function isDevCollabForced(): boolean {
  */
 export const DEV_USER_ID = 'dev-user-001';
 
-/** JWT Appwrite ; en développement sans session (compte démo), jeton de dev. */
-async function sessionToken(): Promise<string> {
-  const jwt = await getAppwriteJwt();
+/** JWT Appwrite (réutilisé tant qu'il est frais) ; en développement sans session (compte démo), jeton de dev. */
+async function sessionToken({ fresh = false }: { fresh?: boolean } = {}): Promise<string> {
+  const jwt = await getAppwriteJwt({ fresh });
   if (jwt) return jwt;
   if (import.meta.env.DEV) return `dev:${getSessionUserIdSync() ?? devTabUserId() ?? DEV_USER_ID}`;
   throw new Error('session Appwrite requise pour la co-édition');

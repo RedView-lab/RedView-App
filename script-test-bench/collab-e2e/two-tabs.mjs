@@ -9,7 +9,7 @@ import { armSlowWelcome, SLOW_WELCOME_SCRIPT } from './slowWelcome.mjs';
 const SESSION_ONLINE = `!!document.querySelector('[data-rv-collab-status="online"]')`;
 
 const PORT = 9371;
-const APP = 'http://localhost:5173';
+const APP = process.env.APP_URL ?? 'http://localhost:5173';
 const out = { steps: {}, errors: { A: [], B: [] }, brouter: { A: [], B: [] }, collabLogs: { A: [], B: [] }, sockets: { A: [], B: [] }, jwt: {}, failedRequests: {} };
 const failures = [];
 const check = (condition, label) => {

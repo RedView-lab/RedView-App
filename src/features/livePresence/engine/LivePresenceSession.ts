@@ -292,8 +292,10 @@ export class LivePresenceSession {
 
     const followers = peers.filter((peer) => selfClientId !== null && peer.following === selfClientId);
 
-    // ── Ce que je publie (présence regroupée à 10 Hz par la salle).
-    this.publish({ following: this.follow?.clientId ?? null, spotlight: this.presenting });
+    // ── Ce que je publie (présence regroupée à 10 Hz par la salle). En
+    // présentation, mon numéro une fois connu : redonné à chaque reconnexion,
+    // ma présentation garde son identité (pas reproposée à qui l'a déclinée).
+    this.publish({ following: this.follow?.clientId ?? null, spotlight: this.presenting ? (mySpotlight ?? true) : false });
 
     // ── Émetteur : qui regarde, qui est là.
     const joined = [...peerIds].some((id) => !this.previousPeerIds.has(id));
