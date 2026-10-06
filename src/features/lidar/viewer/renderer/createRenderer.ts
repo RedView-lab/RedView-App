@@ -8,7 +8,6 @@
 // Windows and macOS only, and Chrome enables it for Intel Gen12+ and
 // NVIDIA on Wayland, behind flags elsewhere.
 
-import { WebGpuLidarRenderer } from '../renderer';
 import { claimViewerCanvas } from './canvas';
 import { preflightWebGPU } from './device';
 import type { LidarRenderer } from './sceneRenderer';
@@ -36,6 +35,9 @@ export async function createLidarRenderer(request: RendererRequest): Promise<Cre
   if (request === 'auto') {
     const preflight = await preflightWebGPU();
     if (preflight.ok) {
+      // Each backend is its own chunk, loaded only when chosen: no WebGPU
+      // module is evaluated in a browser without the API.
+      const { WebGpuLidarRenderer } = await import('../renderer');
       const renderer = new WebGpuLidarRenderer();
       try {
         await renderer.init(claimViewerCanvas());

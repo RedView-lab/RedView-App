@@ -48,8 +48,6 @@ export interface RendererPipelines {
   presentBindGroupLayout: GPUBindGroupLayout;
 }
 
-const ALL_STAGES = GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE;
-
 const ALPHA_BLEND: GPUBlendState = {
   color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
   alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
@@ -100,6 +98,10 @@ export async function createRendererPipelines(
   sampleCount: number,
   reuse?: SharedLayouts,
 ): Promise<RendererPipelines> {
+  // Read here, never at module level: browsers without WebGPU (Firefox on
+  // Linux) have no `GPUShaderStage`, and evaluating it on import broke the
+  // whole viewer there, WebGL 2 included.
+  const ALL_STAGES = GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE;
   const sceneBindGroupLayout = reuse?.sceneBindGroupLayout ?? device.createBindGroupLayout({
     entries: [
       { binding: 0, visibility: ALL_STAGES, buffer: { type: 'uniform' } },
