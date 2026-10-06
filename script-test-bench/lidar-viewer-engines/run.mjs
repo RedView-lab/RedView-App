@@ -165,6 +165,12 @@ async function runCase(browserName, engine, args, origin, checks) {
       if ((msg.type() === 'error' || msg.type() === 'warning') && GL_FAULT_RE.test(text)) consoleFaults.push(text.slice(0, 400));
     });
     page.on('pageerror', (error) => pageErrors.push(String(error?.stack ?? error).slice(0, 600)));
+    page.on('crash', () => pageErrors.push('onglet planté (crash du processus de contenu)'));
+    const consoleTail = [];
+    page.on('console', (msg) => {
+      consoleTail.push(`[${msg.type()}] ${msg.text().slice(0, 300)}`);
+      if (consoleTail.length > 40) consoleTail.shift();
+    });
 
     // 1. Tile into OPFS, as the app's downloader stores it.
     await page.goto(`${origin}/__blank`);
@@ -193,7 +199,16 @@ async function runCase(browserName, engine, args, origin, checks) {
     const statusText = await page.evaluate(() => document.getElementById('status-detail')?.textContent ?? '');
     checks.record('viewer prêt', ready, ready ? `${((Date.now() - startedAt) / 1000).toFixed(1)} s` : `statut : ${statusText}`);
     if (!ready) {
-      await page.screenshot({ path: join(outDir, 'echec.png') });
+      const state = await page.evaluate(() => ({
+        href: location.href,
+        readyState: document.readyState,
+        loader: !!document.getElementById('status-detail'),
+        scripts: [...document.querySelectorAll('script')].map((s) => s.src || 'inline').slice(0, 5),
+      })).catch((error) => ({ error: String(error) }));
+      console.log(`    état : ${JSON.stringify(state)}`);
+      for (const error of pageErrors) console.log(`    exception : ${error}`);
+      for (const line of consoleTail) console.log(`    ${line}`);
+      await page.screenshot({ path: join(outDir, 'echec.png') }).catch(() => undefined);
       return;
     }
 
