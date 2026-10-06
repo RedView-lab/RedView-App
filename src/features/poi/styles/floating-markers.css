@@ -462,6 +462,7 @@
 .rv-poi-popup__auto-reason {
   margin-top: 4px;
   font-size: var(--rv-font-size-xs);
+  font-weight: 500;
   line-height: 1.3;
   color: var(--rv-poi-popup-text-muted);
 }

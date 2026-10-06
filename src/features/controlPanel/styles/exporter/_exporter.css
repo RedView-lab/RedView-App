@@ -200,6 +200,7 @@
   justify-content: space-between;
   gap: 2px 8px;
   font-size: var(--rv-font-size-xs);
+  font-weight: 500;
   color: var(--rvc-text-dim);
   font-variant-numeric: tabular-nums;
 }
@@ -228,6 +229,7 @@
   align-items: flex-start;
   gap: 8px;
   font-size: var(--rv-font-size-sm);
+  font-weight: 500;
   line-height: 1.4;
   color: var(--rvc-text-dim);
 }

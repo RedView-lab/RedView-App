@@ -274,11 +274,6 @@
       "count": 1
     }
   },
-  "src/features/lidar/viewer/runtime.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    }
-  },
   "src/features/lidar/workers/processWorker.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1

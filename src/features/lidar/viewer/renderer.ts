@@ -1,5 +1,5 @@
 import type { PlatformProfile } from './lod/types';
-import type { SceneNode, SceneNodeUploader } from './lod/sceneLod';
+import type { SceneNode } from './lod/sceneLod';
 import { cameraForwardFromView, cameraPositionFromView, mat4MultiplyInto, vec3Of } from './renderer/math';
 import { NodeGpuPool } from './renderer/nodePool';
 import { requestLidarGpu, showDeviceLostNotice } from './renderer/device';
@@ -20,7 +20,8 @@ import {
   type MeshBuffers,
 } from './renderer/gpuResources';
 import { createSceneTargets, destroySceneTargets, type SceneTargets } from './renderer/sceneTargets';
-import { TerrainLod, type TerrainMeshData } from './renderer/terrainLod';
+import { TerrainLod } from './renderer/terrainLod';
+import type { TerrainMeshData } from './renderer/terrainLodCore';
 import { packSceneUniforms, SCENE_UNIFORM_FLOATS } from './renderer/sceneUniforms';
 import { EDL_PARAMS_FLOATS, POINT_PARAMS_FLOATS } from './renderer/shaders';
 import type { HeightmapParams, SnowParams } from './renderer/types';
@@ -31,13 +32,14 @@ import type { ViewerPointFilterState } from './pointFilter';
 import { computePointFilterBitmasks } from './pointFilter';
 import type { SolarRenderState } from '../viewer-webgl/sunlightController';
 import { GpuFrameTimer, TIMED_PASS } from './renderer/gpuTimer';
+import {
+  COLOR_MODE_INDEX,
+  type LidarRenderer,
+  type PointColorMode,
+  type RendererLostInfo,
+} from './renderer/sceneRenderer';
 
-export type { HeightmapParams, SnowParams } from './renderer/types';
-export type { ViewerSlopeState, ViewerAltitudeState, ViewerPointFilterState };
-
-/** Point colouring: orthophoto/embedded RGB, uniform grey (relief only), LiDAR intensity, or classification. */
-export type PointColorMode = 'rgb' | 'grey' | 'intensity' | 'classification';
-const COLOR_MODE_INDEX: Record<PointColorMode, number> = { rgb: 0, intensity: 1, classification: 2, grey: 3 };
+export type { HeightmapParams } from './renderer/types';
 
 /** Projected point diameter bounds (device pixels) for the metre-sized mode. */
 const POINT_MIN_PX = 1.0;
@@ -65,7 +67,9 @@ const NODE_POOL_CAPACITY = 16384;
  * Point data lives in LOD nodes streamed by `SceneLod`; this class is its
  * GPU residency backend (`SceneNodeUploader`).
  */
-export class LidarRenderer implements SceneNodeUploader {
+export class WebGpuLidarRenderer implements LidarRenderer {
+  readonly backend = 'webgpu' as const;
+  canvas!: HTMLCanvasElement;
   private device!: GPUDevice;
   private context!: GPUCanvasContext;
   private format!: GPUTextureFormat;
@@ -194,7 +198,7 @@ export class LidarRenderer implements SceneNodeUploader {
 
   deviceLost = false;
   /** Called once when the device is lost for any reason other than `destroy()`. */
-  onDeviceLost: ((info: GPUDeviceLostInfo) => void) | null = null;
+  onDeviceLost: ((info: RendererLostInfo) => void) | null = null;
   platform: PlatformProfile | null = null;
   /** proj[1][1] of the last camera update (LOD screen-size focal). */
   lastProjScaleY = 1;
@@ -202,6 +206,7 @@ export class LidarRenderer implements SceneNodeUploader {
   private lastDrawCallCount = 0;
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
+    this.canvas = canvas;
     const { device, profile } = await requestLidarGpu();
     this.device = device;
     this.platform = profile;
@@ -588,6 +593,9 @@ export class LidarRenderer implements SceneNodeUploader {
     this.jitterX = x;
     this.jitterY = y;
   }
+
+  /** Reversed-Z with an infinite far plane: depth precision needs no near/far range here. */
+  setDepthRange(_near: number, _far: number): void {}
 
   /**
    * @param projMat render projection (reversed-Z, infinite far: see

@@ -1,6 +1,6 @@
 import type { PointCloudBounds, TileCoord } from '../../types';
 import type { TerrainCache } from '../../lib/storage';
-import type { TerrainPart } from '../renderer/terrainLod';
+import type { TerrainPart } from '../renderer/terrainLodCore';
 
 /**
  * Scene terrain: the tiles' meshes concatenated, without an index list (the

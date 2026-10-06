@@ -213,15 +213,22 @@ Réseau / exploitation :
   - Erreurs → GlitchTip (SENTRY_DSN_SERVER, défini sur le service Coolify).
 
 ========================================================================
-7. PROTOCOLE (src/features/collab/protocol.ts, PROTOCOL_VERSION = 2 depuis les commentaires)
+7. PROTOCOLE (src/features/collab/protocol.ts, PROTOCOL_VERSION = 3 depuis la présence en direct)
 ========================================================================
 Client → serveur :
   hello (jeton, clientId, epoch + lastSeq pour reprendre), batch (clientSeq,
-  ops, blobs), lease (request / renew / release), presence, ping
+  ops, blobs), lease (request / renew / release), presence, motion, ping
 Serveur → client :
-  welcome (état complet, ou lots manquants ; clientSeq ; pairs ; baux),
-  batch (lot numéroté), durable, duplicate, reject, leases, lease-denied,
-  peers, error, pong
+  welcome (état complet, ou lots manquants ; clientSeq ; pairs ; baux ;
+  dernier « motion » des autres), batch (lot numéroté), durable, duplicate,
+  reject, leases, lease-denied, peers, motion (from = clientId), error, pong
+motion (présence en direct, section 12) : éphémère, avec pertes, jamais
+  journalisé ; relayé tout de suite aux autres (pas au tick de 10 Hz), jamais
+  à l'émetteur ; seau à jetons de 40/s par client (l'excès est jeté, sans
+  fermeture) ; sauté sous contre-pression (> 256 Ko en attente côté serveur,
+  > 64 Ko côté client) au lieu d'être mis en file.
+presence : nom, itinéraire actif, following (clientId suivi), spotlight (le
+  client envoie true/false, la salle le numérote : le plus grand l'emporte).
 Codes de fermeture :
   4400 requête invalide, 4401 jeton, 4403 accès, 4404 introuvable,
   4408 client lent, 4426 version, 4429 trop de messages,
@@ -239,6 +246,13 @@ Codes de fermeture :
   schema.ts.
 - Changer le format des messages : incrémenter PROTOCOL_VERSION. Les anciens
   clients sont refusés en 4426 et doivent recharger.
+- Les lots gardés sur l'appareil (unsyncedStore) sont relus si leur protocole
+  est dans BATCH_FORMAT_PROTOCOLS (protocol.ts). Nouvelle version qui ne
+  touche pas aux lots (ex. la 3, motion) : l'ajouter à la liste, sinon les
+  modifications non envoyées d'un onglet fermé avant le déploiement sont
+  perdues. Nouveau format de LOTS : ne garder que les versions compatibles.
+- Ce qui bouge en continu (caméra, curseur, survol) passe par « motion »,
+  jamais par le document ni par la présence (regroupée à 10 Hz).
 - Changer Materializer.object : changer AUSSI materializeJson (même
   construction). L'égalité est vérifiée par model.test.ts.
 - Écritures du ProjectStore :
@@ -270,12 +284,31 @@ npm run bench:collab
   du serveur, onglets rechargés). Invariants : convergence, journal = mémoire,
   aucune modification perdue.
 npm run bench:collab-load
-  50 salles × 5 clients × 20 lots/s. Cibles : diffusion p95 < 50 ms, journal
-  p95 < 600 ms, mémoire par salle ≤ 2× le document.
+  50 salles × 5 clients × 20 lots/s, + présence en direct : un client par
+  salle envoie caméra + pointeur à 30 Hz (--motion, --motionShare). Cibles :
+  diffusion p95 < 50 ms (lots et motion), journal p95 < 600 ms, mémoire par
+  salle ≤ 2× le document, aucun motion jeté au débit.
   Mesuré le 05/10 : 40 ms, 330 ms, 1,95×.
+  Le 06/10 (machine chargée, générateur de charge saturé à 50 salles) :
+  comparaison avec le commit d'avant sur 20 salles, au même moment —
+  diffusion p95 63–104 ms des deux côtés, mémoire 1,94× ; avec motion (2 100
+  à 4 300 messages/s relayés) : 92–94 ms, 1,96×, aucun motion jeté ni sauté.
+  Le canal motion ne coûte rien de mesurable au serveur.
+npm run bench:follow
+  Suivre un éditeur, hors navigateur : trajectoires (panoramique, zoom,
+  rotation ±180°, vol, flyover, arrêt/reprise), réseau avec gigue, pertes et
+  un blocage de 300 ms, rejouées à 30/60/144 i/s avec le vrai code de
+  lecture, plus un onglet d'émetteur figé 300 ms en plein mouvement. Mesuré
+  le 06/10 : retard 126–138 ms (dont 40–100 ms de réseau), écart < 1,2 %,
+  aucun saut (≤ 1,3× le pas réel, blocage compris), jamais de retour en
+  arrière, fin exacte, indépendant de la cadence.
 npm run bench:collab-e2e   (nécessite npm run dev)
   Deux onglets réels sur le serveur de dev, dont une modification pendant la
-  connexion et la latence locale (p95 ~140 ms).
+  connexion et la latence locale (p95 ~140 ms). follow-two-users.mjs : deux
+  FENÊTRES (un onglet en arrière-plan n'a plus d'images) de tailles
+  différentes — suivre, cadrage contain exact, retard 145–215 ms en headless,
+  gigue 19–38 ms, curseur posé à 0,1 px près, survol du graphique (même
+  abscisse), itinéraire actif, molette / Échap, Spotlight complet.
 npm run bench:collab-prod  (PRODUCTION, deux comptes de test, ~8 min)
   Parcours complet : partage, synchro, baux, annuler, rechargements, onglet
   fermé, redéploiement en pleine édition, mesures par SSH.
@@ -345,3 +378,56 @@ api/_lib/projectSharing.ts, api/projects/share.ts
 Dockerfile.multiplayer
 src/features/collab/model/commentRules.ts       droits des commentaires (serveur)
 src/features/comments/                          commentaires (réducteur, carte, liste, pont viewer)
+src/features/collab/realtime.ts                 contrat de la présence en direct (CollabRealtime)
+src/features/collab/room/motion.ts              canal motion côté salle (nettoyage, débit, fusion)
+src/features/livePresence/                      curseurs, suivre un éditeur, Spotlight
+
+========================================================================
+12. PRÉSENCE EN DIRECT (curseurs, suivre un éditeur, Spotlight — façon Figma)
+========================================================================
+- Ce que voit et pointe chacun part sur le canal « motion » (section 7) :
+  caméra Mapbox [lng, lat, zoom, cap, inclinaison, champ] + sa zone visible
+  (taille de la carte, panneaux qui la couvrent, padding), pointeur posé sur
+  le relief [lng, lat] (null hors carte ou dans le ciel), survol du graphique
+  [itinéraire, distance depuis son départ] (chacun le voit dans son mode
+  d'axe). Débits (livePresence/config.ts) : quelqu'un me suit ou je présente
+  → tout à 30 Hz ; sinon pointeur 20 Hz et caméra en image clé ; rien au
+  repos ; état complet 250 ms après l'arrêt (répare une perte).
+- Réception (livePresence/lib/playout.ts) : chaque message est horodaté par
+  l'émetteur ; on le rejoue un peu en différé (décalage = paquet le plus
+  rapide, délai = intervalle + gigue p95, borné 40–300 ms), interpolé en
+  Hermite monotone (jamais au-delà des valeurs reçues), angles au plus court.
+  À court (réseau bloqué), la lecture s'arrête puis rattrape (≤ +25 %) :
+  jamais de saut, jamais de retour en arrière. Un trou dans les horodatages
+  de l'émetteur APRÈS l'image clé de repos (flux posés) = il était au repos :
+  on repart directement ; un trou en plein mouvement (son onglet ralenti) est
+  interpolé puis rattrapé.
+- Suivre (clic sur sa pastille, en-tête) : cadrage « contain »
+  (lib/followCamera.ts) — même centre, cap, inclinaison, champ ; zoom
+  + log2(min des rapports de zones visibles) ; point principal miroir (son
+  décalage optique, ex. FreeCam qui regarde le ciel, est reproduit). Même
+  écran = vue identique. Approche par un vol si sa vue est loin, puis fondu
+  de 350 ms. La caméra est posée dans la file de rendu de Mapbox (carte,
+  marqueurs et curseurs dans la même image), événements regroupés comme une
+  animation ; au repos, plus rien ne touche la carte. Arrêt : tout geste sur
+  la carte (clic, molette, toucher, pris à la source), tout mouvement de
+  caméra lancé par l'application ou le clavier (boutons, recherche…), Échap,
+  FreeCam, flyover, ou choisir soi-même un autre itinéraire. La fin d'un geste
+  fait AVANT de suivre (inertie, zoom à la molette qui finit) n'arrête rien. L'itinéraire actif de l'éditeur suivi est suivi aussi (vue
+  seulement). Chaîne : suivre quelqu'un qui en suit un autre affiche le bout
+  de la chaîne, sans boucle. Onglet suivi rechargé : un autre onglet du même
+  utilisateur est repris ; parti pour de bon : arrêt après 10 s.
+- Spotlight (« Présenter ma vue », menu de sa propre pastille) : chacun reçoit
+  « X présente sa vue » avec « Pas maintenant » et suit au bout de 3 s ; le
+  plus récent l'emporte (numéro donné par la salle) ; la fin de la
+  présentation arrête ceux qui suivaient à cause d'elle.
+- Hors React : LivePresenceSession (état, lu par useSyncExternalStore),
+  PresenceBroadcaster (émission), MotionStore (flux reçus), FollowController
+  (caméra), PeerCursorsOverlay (curseurs DOM dans la carte). Le graphique ne
+  se redessine jamais pour les survols des autres (RemoteChartCursors bouge
+  ses lignes dans le DOM).
+- Tests : collab/presence.test.ts, collab/room/motion.test.ts,
+  livePresence/**/*.test.ts (lecture en différé, cadrage, chaîne, session),
+  le simulateur (motion et présence mêlés aux lots : invariants inchangés),
+  server/multiplayer (relais, débit, version 2 refusée), npm run bench:follow,
+  npm run bench:collab-load, collab-e2e/follow-two-users.mjs.

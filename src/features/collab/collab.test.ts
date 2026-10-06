@@ -518,11 +518,12 @@ describe('commentaires', () => {
 
 describe('simulateur : réseau perturbé, arrêts du serveur', () => {
   for (const seed of [1, 2, 3, 4, 5, 6]) {
-    it(`graine ${seed} : convergence, journal = mémoire, aucune modification perdue`, () => {
+    it(`graine ${seed} : convergence, journal = mémoire, aucune modification perdue (présence en direct mêlée)`, () => {
       const report = runSimulation({ seed, clients: 3, durationMs: 20_000, routeSize: 400 });
       expect(report.failures).toEqual([]);
       expect(report.converged && report.durableMatchesMemory && report.countersIntact).toBe(true);
       expect(report.stats.edits).toBeGreaterThan(50);
+      expect(report.stats.motions).toBeGreaterThan(1_000);
     }, 60_000);
   }
 });

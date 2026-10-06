@@ -388,6 +388,7 @@
   margin: 0;
   color: rgb(var(--rv-ink) / 0.68);
   font-size: var(--rv-font-size-md);
+  font-weight: 500;
   line-height: var(--rv-line-height-snug);
   white-space: nowrap;
 }

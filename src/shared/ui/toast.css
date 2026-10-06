@@ -61,3 +61,34 @@
 .rv-toast--info .rv-toast__icon {
   color: light-dark(#155cd3, rgb(124, 160, 220));
 }
+
+/* Action d'un toast (`notify.prompt`, ex. « Pas maintenant » du Spotlight) :
+   même puce que les actions secondaires de l'en-tête (Partager). */
+.rv-toast__action {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: 28px;
+  margin-left: auto;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: rgb(var(--rv-ink) / 0.08);
+  color: var(--rv-text);
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-md);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.rv-toast__action:hover {
+  background: rgb(var(--rv-ink) / 0.14);
+}
+
+.rv-toast__action:focus-visible {
+  box-shadow: 0 0 0 2px rgb(var(--rv-ink) / 0.24);
+}

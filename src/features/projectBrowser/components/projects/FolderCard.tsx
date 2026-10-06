@@ -257,7 +257,7 @@ export function FolderCard({
             <span className="rvpb-card__badge">{privacyLabel(folder.privacy)}</span>
             <span className="rvpb-card__meta-group">
               <IconSave size={14} />
-              <span>{formatSavedAt(folder.updatedAt)}</span>
+              <span title={formatSavedAt(folder.updatedAt)}>{formatSavedAt(folder.updatedAt)}</span>
             </span>
             <span>{formatSize(sizeBytes)}</span>
           </div>

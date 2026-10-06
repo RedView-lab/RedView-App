@@ -927,7 +927,7 @@
   margin: 0;
   color: rgb(var(--rv-ink) / 0.64);
   font-size: var(--rv-font-size-sm);
-  font-weight: 400;
+  font-weight: 500;
   line-height: var(--rv-line-height-snug);
 }
 

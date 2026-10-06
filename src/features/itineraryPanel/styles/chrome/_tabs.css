@@ -122,7 +122,7 @@
   background: rgb(var(--rv-ink) / 0.07);
   color: rgb(var(--rv-ink) / 0.8);
   font-size: var(--rv-font-size-md);
-  font-weight: 400;
+  font-weight: 500;
 }
 
 /* Wrapper hosts the trash button next to the itinerary tab */

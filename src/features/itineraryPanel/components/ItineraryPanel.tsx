@@ -46,6 +46,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     saveStatusMessage,
     onShareProject,
     collaborators,
+    onCollaboratorAction,
     sessionStatus,
     onRenameProject,
     onSelectItinerary,
@@ -266,6 +267,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
         onRename={onRenameProject}
         onShare={onShareProject}
         collaborators={collaborators}
+        onCollaboratorAction={onCollaboratorAction}
         sessionStatus={sessionStatus}
       />
 

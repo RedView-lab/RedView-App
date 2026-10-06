@@ -1,0 +1,206 @@
+/*
+ * Présence en direct (features/livePresence) : curseurs des autres éditeurs
+ * sur la carte, point qu'ils survolent sur la trace, cadre et bandeau du
+ * suivi (mode observation / Spotlight de Figma), curseurs du graphique.
+ * Contenu de carte (curseurs, points) identique dans les deux thèmes ; le
+ * bandeau suit le thème (verre de shared/styles/glass.css).
+ */
+
+/* ── Curseurs sur la carte (engine/PeerCursorsOverlay.ts) ─────────────── */
+
+.rv-peer-cursors {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.rv-peer-cursor,
+.rv-peer-cursor-dot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  will-change: transform;
+}
+
+.rv-peer-cursor.is-visible,
+.rv-peer-cursor-dot.is-visible {
+  opacity: 1;
+}
+
+.rv-peer-cursor {
+  display: flex;
+  align-items: flex-start;
+}
+
+/* Pointe de la flèche (3,5 ; 2,2) sur le point pointé. */
+.rv-peer-cursor__arrow {
+  flex: none;
+  margin: -2.2px 0 0 -3.5px;
+  overflow: visible;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.45));
+}
+
+.rv-peer-cursor__arrow path {
+  fill: var(--rv-peer-color);
+  stroke: var(--rv-on-accent);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+/* Rôle « Badge » (xs 11 / 600). */
+.rv-peer-cursor__label {
+  margin: 17px 0 0 -9px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--rv-peer-color);
+  color: var(--rv-peer-ink);
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-xs);
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
+}
+
+/* Point survolé sur la trace : même rendu que le point de survol du graphique, couleur de l'éditeur. */
+.rv-peer-cursor-dot {
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  box-sizing: border-box;
+  border: 3px solid var(--rv-peer-color);
+  border-radius: 50%;
+  background: var(--rv-on-accent);
+  box-shadow: 0 0 0 1.5px rgb(0 0 0 / 0.75), 0 2px 8px rgb(0 0 0 / 0.85);
+}
+
+/* ── Suivi : cadre et bandeau (components/FollowingFrame.tsx) ─────────── */
+
+/* Bord de la couleur de l'éditeur suivi tout autour de la carte (sous les panneaux). */
+.rv-following-frame {
+  position: absolute;
+  inset: 0;
+  z-index: 24;
+  box-shadow: inset 0 0 0 2px var(--rv-peer-color);
+  pointer-events: none;
+}
+
+.rv-following-banner-anchor {
+  position: absolute;
+  z-index: 24;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* Même verre et même gabarit que les puces flottantes de la carte (filtres de la recherche). */
+.rv-following-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 4px 0 6px;
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+  color: var(--rv-text);
+  pointer-events: auto;
+}
+
+.rv-following-banner .rv-avatar {
+  box-shadow: 0 0 0 1.5px var(--rv-peer-color);
+}
+
+/* Rôle « Valeur de contrôle » (md 13 / 600). */
+.rv-following-banner__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-md);
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.rv-following-banner__stop {
+  appearance: none;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: rgb(var(--rv-ink) / 0.08);
+  color: var(--rv-text);
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-md);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.rv-following-banner__stop:hover {
+  background: rgb(var(--rv-ink) / 0.16);
+}
+
+.rv-following-banner__stop:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(var(--rv-ink) / 0.24);
+}
+
+/* ── Graphique d'analyse : survol des autres (components/RemoteChartCursors.tsx) ── */
+
+.rv-remote-chart-cursors {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.rv-remote-chart-cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.rv-remote-chart-cursor.is-visible {
+  opacity: 1;
+}
+
+.rv-remote-chart-cursor::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -1px;
+  width: 2px;
+  background: var(--rv-peer-color);
+}
+
+/* Rôle « Badge » (xs 11 / 600) : nom en tête de ligne, comme sur la carte. */
+.rv-remote-chart-cursor__label {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--rv-peer-color);
+  color: var(--rv-peer-ink);
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-xs);
+  font-weight: 600;
+  line-height: 14px;
+  white-space: nowrap;
+}

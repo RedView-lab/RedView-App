@@ -4,6 +4,7 @@ import {
   useRef,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
   type RefObject,
 } from 'react';
 import { translateAppText, useAppI18n } from '@/shared/i18n';
@@ -81,6 +82,8 @@ interface AnalysisChartLayoutProps {
   onVerticalNavigatorChange: (next: { visibleFraction: number; offset: number }) => void;
   showSeriesRows: boolean;
   visibleSeries: ChartSeries[];
+  /** Couche en plus dans la zone de tracé (survol des autres éditeurs). */
+  plotOverlay?: ReactNode;
 }
 
 
@@ -327,6 +330,7 @@ export function AnalysisChartLayout({
   onVerticalNavigatorChange,
   showSeriesRows,
   visibleSeries,
+  plotOverlay = null,
 }: AnalysisChartLayoutProps) {
   const { t } = useAppI18n();
 
@@ -403,6 +407,12 @@ export function AnalysisChartLayout({
           </div>
 
           <ChartAlertIconLayer alertBands={alertBands} handlerRef={alertHandlerRef} />
+
+          {plotOverlay ? (
+            <div className="rvchart__layer rvchart__layer--overlay" aria-hidden="true">
+              {plotOverlay}
+            </div>
+          ) : null}
 
           <div className="rvchart__layer rvchart__layer--overlay" aria-hidden="true">
             {hoverOverlay}

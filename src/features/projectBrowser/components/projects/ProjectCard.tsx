@@ -304,7 +304,7 @@ export function ProjectCard({
             <span className="rvpb-card__badge">{badgeLabel}</span>
             <span className="rvpb-card__meta-group">
               <IconSave size={14} />
-              <span>{formatSavedAt(project.updatedAt)}</span>
+              <span title={formatSavedAt(project.updatedAt)}>{formatSavedAt(project.updatedAt)}</span>
             </span>
             <span>{formatSize(project.sizeBytes)}</span>
           </div>

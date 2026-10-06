@@ -7,6 +7,7 @@ import { resolveTimeZoneAt } from '@/shared/lib/timeZoneAt';
 import { createViewerPanel, factorToElevationPercent, type SnowModeKey } from '../viewer/panel/controller';
 import { buildGoogleMapsTileCenterUrl, buildTileLocationLabel } from '../viewer/panel/location';
 import { exitLidarViewer, switchViewerEngine } from '../viewer/panel/runtime/navigation';
+import { VIEWER_ENGINE_PARAM } from '../viewer/session/viewerEngine';
 import '../viewer/tileNavigator/styles.css';
 import { createViewerTileNavigator } from '../viewer/tileNavigator/controller';
 import { createViewerRightPanel } from '../viewer/rightPanel';
@@ -65,7 +66,7 @@ export async function runWebGLFallback(
     setViewerStatus(status, bar, msg, pct, { percentEl, detailEl });
   };
 
-  setStatus('Mode WebGL HD : initialisation…', 1);
+  setStatus('Terrain texturé : initialisation…', 1);
 
   const profile = detectDeviceTier();
   console.log(
@@ -321,13 +322,14 @@ export async function runWebGLFallback(
       : opts.tileLabel,
     locationLabel: buildTileLocationLabel(centerLon, centerLat),
     googleMapsUrl: buildGoogleMapsTileCenterUrl(centerLon, centerLat),
-    engineMode: 'webgl',
+    engineMode: 'terrain',
     pointSizePercent: 50,
     densityPercent: 100,
     elevationPercent: factorToElevationPercent(1.0),
     engineOptions: [
-      { key: 'webgpu', title: 'Basculer vers le moteur WebGPU HD.' },
-      { key: 'webgl' },
+      { key: 'webgpu', title: 'Nuage de points LiDAR, moteur WebGPU.' },
+      { key: 'webgl', title: 'Nuage de points LiDAR, moteur WebGL 2 (compatible avec tous les navigateurs).' },
+      { key: 'terrain' },
     ],
     onPointSizeChange: () => {},
     onDensityChange: () => {},
@@ -335,7 +337,9 @@ export async function runWebGLFallback(
       renderer.setElevationExaggeration(factor);
       requestRender();
     },
-    onEngineModeChange: (mode) => switchViewerEngine(mode),
+    onEngineModeChange: (mode) => {
+      if (!switchViewerEngine(mode, 'terrain')) panel.setEngineMode('terrain');
+    },
     onSnowModeChange: (mode) => {
       void handleSnowModeChange(mode);
     },
@@ -425,7 +429,7 @@ export async function runWebGLFallback(
     onSelectTiles: (coords) => {
       const baseUrl = buildViewerUrl(primaryCoord, coords.slice(1));
       const url = new URL(baseUrl, window.location.origin);
-      url.searchParams.set('engine', 'webgl');
+      url.searchParams.set(VIEWER_ENGINE_PARAM, 'terrain');
       window.location.assign(url.toString());
     },
   });

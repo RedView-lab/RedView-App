@@ -360,49 +360,6 @@ function fileFormatHasRgb(pointDataRecordFormat: number): boolean {
   return format === 2 || format === 3 || format === 5 || format === 7 || format === 8 || format === 10;
 }
 
-export type PreflightResult =
-  | { ok: true; vendor: string; arch: string; desc: string }
-  | { ok: false; code: 'no-webgpu' | 'no-adapter' | 'fallback-adapter' | 'software-adapter'; detail: string };
-
-export async function preflightWebGPU(): Promise<PreflightResult> {
-  if (!('gpu' in navigator) || !navigator.gpu) {
-    return { ok: false, code: 'no-webgpu', detail: translateAppText('navigator.gpu indisponible') };
-  }
-  let adapter: GPUAdapter | null = null;
-  try {
-    adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
-  } catch (e: any) {
-    return { ok: false, code: 'no-adapter', detail: e?.message || translateAppText('requestAdapter a échoué') };
-  }
-  if (!adapter) {
-    return { ok: false, code: 'no-adapter', detail: translateAppText('Aucun GPUAdapter retourné') };
-  }
-  if ((adapter as any).isFallbackAdapter === true) {
-    return { ok: false, code: 'fallback-adapter', detail: translateAppText('Adapter logiciel (fallback) détecté') };
-  }
-  const info = (adapter as any).info ?? {};
-  const vendor = String(info.vendor ?? '').toLowerCase();
-  const arch = String(info.architecture ?? '').toLowerCase();
-  const desc = String(info.description ?? info.device ?? '').toLowerCase();
-  const softwareSignatures = [
-    'swiftshader',
-    'llvmpipe',
-    'lavapipe',
-    'microsoft basic',
-    'basic render',
-    'warp',
-  ];
-  const haystack = `${vendor} ${arch} ${desc}`;
-  if (softwareSignatures.some((signature) => haystack.includes(signature))) {
-    return {
-      ok: false,
-      code: 'software-adapter',
-      detail: translateAppText('Adapter logiciel : {{name}}', { name: desc || vendor || '?' }),
-    };
-  }
-  return { ok: true, vendor, arch, desc };
-}
-
 function createStyledElement<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   cssText: string,
@@ -466,6 +423,19 @@ export function showFatalError(
   overlay.replaceChildren(card);
 }
 
+/**
+ * What to try when no engine starts. On Linux the usual cause is the
+ * browser's GPU acceleration being off or the driver blocklisted: without
+ * it there is no WebGL at all (Chrome no longer falls back to SwiftShader).
+ */
+export function noEngineHint(): string {
+  const ua = navigator.userAgent;
+  if (/linux/i.test(ua) && !/android/i.test(ua)) {
+    return "Sous Linux : activez l'accélération matérielle du navigateur (Chrome : chrome://settings/system puis chrome://gpu ; Firefox : about:support, section Graphiques) et installez des pilotes graphiques Mesa ou NVIDIA récents.";
+  }
+  return 'Mettez à jour vos pilotes graphiques ou utilisez un navigateur récent.';
+}
+
 export function explainWorkerError(raw: string): { title: string; message: string; hint?: string } {
   if (/Exception catching is disabled/i.test(raw) || /^\d{6,}\s*-\s*Exception/.test(raw)) {
     return {
@@ -506,8 +476,8 @@ export async function launchWebGLFallback({
   lidarManager?: import('../lib/lidarManager').LidarManager;
   setStatus: ViewerStatusReporter;
 }): Promise<void> {
-  console.warn(`[Viewer] Starting WebGL HD fallback — ${reasonForLog}`);
-  setStatus('Bascule vers le moteur WebGL HD…', 4);
+  console.warn(`[Viewer] Starting the terrain engine — ${reasonForLog}`);
+  setStatus('Bascule vers le terrain texturé…', 4);
   const loaded = await loadFromOPFS();
   const buffers = Array.isArray(loaded) ? loaded : [loaded];
   const { runWebGLFallback } = await import('../../lidar/viewer-webgl/main');

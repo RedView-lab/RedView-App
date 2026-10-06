@@ -29,7 +29,7 @@ function toolInstructions(tool: ToolId, vertexCount: number): Array<[string, str
   if (tool === 'height') {
     return [
       [t('Clic'), vertexCount === 0 ? t('premier point') : t('second point')],
-      [t('Alt+clic'), t('sol sous la végétation')],
+      [t('Alt ou Maj+clic'), t('sol sous la végétation')],
       [t('Échap'), t('annuler')],
     ];
   }

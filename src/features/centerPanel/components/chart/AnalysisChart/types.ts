@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { Itinerary } from '@/features/itineraryPanel/types';
 import type { PredictionResult } from '@/features/fitPredictor';
 import type { ChartPoiAnnotation } from '../annotations/buildPoiAnnotations';
@@ -78,6 +79,12 @@ export interface AnalysisChartProps {
   selectedXRange?: { startX: number; endX: number } | null;
   onClearSelectedXRange?: () => void;
   showSeriesRows?: boolean;
+  /**
+   * Couche ajoutée dans la zone de tracé (survol des autres éditeurs en
+   * co-édition) : rendue avec les abscisses visibles, positionnée en % de la
+   * largeur. Stable (useCallback) : le graphique ne se re-rend pas pour elle.
+   */
+  renderPlotOverlay?: (plot: { xDomain: AxisDomain }) => ReactNode;
 }
 
 export interface CanvasBackdropLayer {

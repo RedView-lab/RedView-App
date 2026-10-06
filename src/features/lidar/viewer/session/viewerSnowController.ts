@@ -1,7 +1,7 @@
 import type { CanopyGrid } from '@/features/snow';
 import type { DetectedCrs, PointCloudData } from '../../types';
 import type { TerrainCache } from '../../lib/storage';
-import type { LidarRenderer } from '../renderer';
+import type { LidarRenderer } from '../renderer/sceneRenderer';
 import type { SnowModeKey } from '../panel/controller';
 
 const SNOW_MODES: Record<SnowModeKey, 0 | 1 | 2> = {

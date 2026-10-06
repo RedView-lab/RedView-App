@@ -1,10 +1,13 @@
 /**
  * Propriétaire courant de la caméra quand une feature la pilote image par
- * image (flyover). Lisible hors React : les automatismes caméra (rotation
- * d'inactivité, menu contextuel) s'effacent tant qu'il y a un propriétaire.
+ * image (flyover, suivi d'un autre éditeur). Lisible hors React : les
+ * automatismes caméra (rotation d'inactivité, menu contextuel) s'effacent
+ * tant qu'il y a un propriétaire. Le suivi (`follow`) s'arrête dès que
+ * l'utilisateur touche la carte : les outils qui ne bougent pas la caméra
+ * (commentaires) ne s'effacent que devant le flyover.
  */
 
-export type CameraOwner = 'flyover';
+export type CameraOwner = 'flyover' | 'follow';
 
 type Listener = (owner: CameraOwner | null) => void;
 

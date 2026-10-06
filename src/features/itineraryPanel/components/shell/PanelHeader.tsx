@@ -1,13 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
   IconClose,
   IconSave,
   IconShare,
 } from '../icons';
-import { UserAvatarStack } from '@/shared/components/UserAvatar/UserAvatar';
+import { UserAvatarStack, type StackPerson } from '@/shared/components/UserAvatar/UserAvatar';
 import { useAppI18n } from '@/shared/i18n';
-import type { ProjectCollaborator, ProjectSaveStatus, ProjectSessionStatus } from '../../types';
+import type { CollaboratorAction, ProjectCollaborator, ProjectSaveStatus, ProjectSessionStatus } from '../../types';
+import { CollaboratorMenu } from './CollaboratorMenu';
 
 interface PanelHeaderProps {
   title: string;
@@ -25,6 +26,8 @@ interface PanelHeaderProps {
   onShare?: (anchor: HTMLElement) => void;
   /** Éditeurs présents (cet utilisateur compris) : pastilles affichées dès qu'un autre est là. */
   collaborators?: ProjectCollaborator[];
+  /** Pastilles cliquables (comme Figma) : suivre un éditeur, présenter sa vue (sa propre pastille). */
+  onCollaboratorAction?: (userId: string, action: CollaboratorAction) => void;
   /** Session de co-édition (absent hors session) : connexion lente ou coupée signalée sous le titre. */
   sessionStatus?: ProjectSessionStatus;
 }
@@ -79,10 +82,46 @@ export function PanelHeader({
   onRename,
   onShare,
   collaborators = [],
+  onCollaboratorAction,
   sessionStatus,
 }: PanelHeaderProps) {
   const { locale, t } = useAppI18n();
   const lastingSessionStatus = useLastingSessionStatus(sessionStatus);
+  const [menu, setMenu] = useState<{ people: ProjectCollaborator[]; anchor: HTMLElement } | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
+
+  // Infobulle de chaque pastille : ce qu'un clic fait (suivre, arrêter, présenter).
+  const stackPeople = useMemo<StackPerson[]>(() => collaborators.map((person) => {
+    let title: string;
+    if (person.isSelf) {
+      title = person.followed ? t('Vous présentez votre vue') : t('Vous : présenter ma vue');
+    } else if (person.followed) {
+      title = t('Arrêter de suivre {{name}}', { name: person.name });
+    } else if (person.presenting) {
+      title = t('{{name}} présente sa vue : le suivre', { name: person.name });
+    } else {
+      title = person.followsMe ? t('Suivre {{name}} (vous suit)', { name: person.name }) : t('Suivre {{name}}', { name: person.name });
+    }
+    const ring = person.followed && !person.isSelf ? 'followed' : person.presenting || (person.isSelf && person.followed) ? 'presenting' : null;
+    return { userId: person.userId, name: person.name, ring, title };
+  }), [collaborators, t]);
+
+  const handlePersonClick = useCallback((person: StackPerson, anchor: HTMLElement) => {
+    if (!onCollaboratorAction) return;
+    const collaborator = collaborators.find((candidate) => candidate.userId === person.userId);
+    if (!collaborator) return;
+    if (collaborator.isSelf) {
+      setMenu((current) => (current?.anchor === anchor ? null : { people: [collaborator], anchor }));
+      return;
+    }
+    onCollaboratorAction(collaborator.userId, collaborator.followed ? 'unfollow' : 'follow');
+  }, [collaborators, onCollaboratorAction]);
+
+  const handleMoreClick = useCallback((hidden: readonly StackPerson[], anchor: HTMLElement) => {
+    const ids = new Set(hidden.map((person) => person.userId));
+    const people = collaborators.filter((person) => ids.has(person.userId));
+    setMenu((current) => (current?.anchor === anchor ? null : { people, anchor }));
+  }, [collaborators]);
   const privacyLabel = privacy === 'private' ? t('Privé') : t('Public');
   const saveLabel =
     saveStatus === 'saving'
@@ -167,9 +206,24 @@ export function PanelHeader({
               title={collaborators.map((collaborator) => collaborator.name).join(', ')}
             >
               {/* Panneau large : 4 places ; étroit : 2. */}
-              <UserAvatarStack people={collaborators} max={COLLABORATOR_SLOTS.full} className="rvi-header__people-full" />
-              <UserAvatarStack people={collaborators} max={COLLABORATOR_SLOTS.compact} className="rvi-header__people-compact" />
+              <UserAvatarStack
+                people={stackPeople}
+                max={COLLABORATOR_SLOTS.full}
+                className="rvi-header__people-full"
+                onPersonClick={onCollaboratorAction ? handlePersonClick : undefined}
+                onMoreClick={onCollaboratorAction ? handleMoreClick : undefined}
+              />
+              <UserAvatarStack
+                people={stackPeople}
+                max={COLLABORATOR_SLOTS.compact}
+                className="rvi-header__people-compact"
+                onPersonClick={onCollaboratorAction ? handlePersonClick : undefined}
+                onMoreClick={onCollaboratorAction ? handleMoreClick : undefined}
+              />
             </div>
+          ) : null}
+          {menu && onCollaboratorAction ? (
+            <CollaboratorMenu people={menu.people} anchorEl={menu.anchor} onAction={onCollaboratorAction} onClose={closeMenu} />
           ) : null}
           {onShare ? (
             <button

@@ -106,8 +106,10 @@ script-test-bench/reports/routing-quality/*.json
 script-test-bench/reports/routing-quality/*.html
 script-test-bench/reports/lidar-viewer-perf/*.json
 script-test-bench/reports/lidar-viewer-shots/
+script-test-bench/reports/lidar-viewer-engines/
 script-test-bench/reports/screen-audit/
 script-test-bench/reports/comments-e2e/
+script-test-bench/reports/follow-e2e/
 script-test-bench/reports/snow-quality/*.json
 script-test-bench/reports/snow-quality/*.html
 script-test-bench/reports/snow-quality/*.png

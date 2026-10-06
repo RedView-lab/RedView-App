@@ -32,3 +32,32 @@ jobs:
       - run: npm ci
 
       - run: npm run check:full
+
+  # Viewer LiDAR sous Linux, comme ses utilisateurs : Firefox n'y a pas
+  # WebGPU et Chrome ne l'active que sur certains GPU, le viewer tourne donc
+  # en WebGL 2 (ici sans GPU : SwiftShader et llvmpipe). Tuile synthétique,
+  # aucun réseau extérieur (script-test-bench/lidar-viewer-engines).
+  viewer-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx playwright install --with-deps chromium firefox
+
+      - run: npm run build:vite
+
+      - run: npm run bench:lidar-engines -- --expect-auto webgl
+
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lidar-viewer-engines
+          path: script-test-bench/reports/lidar-viewer-engines/

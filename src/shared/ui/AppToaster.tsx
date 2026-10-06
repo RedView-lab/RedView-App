@@ -25,6 +25,7 @@ export function AppToaster() {
             info: 'rv-toast--info',
             title: 'rv-toast__title',
             icon: 'rv-toast__icon',
+            actionButton: 'rv-toast__action',
           },
         }}
       />

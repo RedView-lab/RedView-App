@@ -76,6 +76,8 @@ export interface SimulationReport {
     preWelcomeActions: number;
     snapshots: number;
     rejections: number;
+    /** Messages `motion` (caméra, curseur) reçus par les clients : jamais dans le document. */
+    motions: number;
     finalSeq: number;
   };
 }
@@ -234,6 +236,9 @@ class SimClient {
   counter = 0;
   rejections = 0;
   snapshots = 0;
+  motions = 0;
+  /** Message `motion` reçu de soi-même ou incohérent (la salle ne le renvoie jamais à l'émetteur). */
+  motionEcho: string | null = null;
   /** Premier écart document de l'application ↔ état visible (différence mal appliquée). */
   mismatch: string | null = null;
   private readonly sim: Simulation;
@@ -246,7 +251,7 @@ class SimClient {
 
   /** Client de ce `clientId` (le même après un rechargement : le serveur reconnaît ses lots). */
   private createClient(): CollabClient {
-    return new CollabClient({
+    const client = new CollabClient({
       clientId: this.id,
       clock: this.sim.scheduler,
       transport: {
@@ -259,6 +264,35 @@ class SimClient {
         this.rejections += 1;
       },
     });
+    client.subscribeMotion((event) => {
+      this.motions += 1;
+      if (!this.motionEcho && event.from === this.id) this.motionEcho = `reçu son propre message motion (t=${event.t})`;
+    });
+    return client;
+  }
+
+  /**
+   * Présence en direct, mêlée aux lots : caméra + pointeur (éphémères), et de
+   * temps en temps la présence (suivi, Spotlight). Rien de tout ça ne doit
+   * toucher le document, l'ordre des lots ni le journal.
+   */
+  live(peers: readonly SimClient[]): void {
+    if (!this.bound) return;
+    const now = this.sim.scheduler.now();
+    const x = this.sim.random();
+    this.collab.sendMotion(now, {
+      cam: [6 + x, 45 + x, 12 + x, 360 * x - 180, 60 * x, 36.87],
+      vp: [1600, 900, 64, 360, 300, 420, 0, 0, 0, 0],
+      ptr: x < 0.1 ? null : [6 + x, 45 + x],
+    });
+    if (x < 0.05) {
+      const other = peers[Math.floor(this.sim.random() * peers.length)];
+      this.collab.setPresence({
+        name: this.id,
+        following: other && other.id !== this.id ? other.id : null,
+        spotlight: this.sim.random() < 0.3,
+      });
+    }
   }
 
   /** Branche le « store » : document affiché et écritures faites avant le branchement. */
@@ -468,6 +502,13 @@ class Simulation {
       this.scheduler.after(-Math.log(1 - this.random()) * (1000 / this.options.editRate), step);
     };
     this.scheduler.after(600 + this.random() * 400, step);
+    // Présence en direct à ≈ 30 Hz, par rafales (souris, caméra qui bougent).
+    const live = () => {
+      if (!this.faults) return;
+      client.live(this.clients);
+      this.scheduler.after(this.random() < 0.95 ? 33 : 400 + this.random() * 1_000, live);
+    };
+    this.scheduler.after(500 + this.random() * 500, live);
   }
 
   private scheduleFaults(): void {
@@ -541,6 +582,10 @@ class Simulation {
         converged = false;
         failures.push(`${client.id} : document ≠ état visible après ${client.mismatch}`);
       }
+      if (client.motionEcho) {
+        converged = false;
+        failures.push(`${client.id} : ${client.motionEcho}`);
+      }
     }
 
     let durableMatchesMemory = false;
@@ -578,6 +623,7 @@ class Simulation {
         preWelcomeActions: sum(this.clients, (client) => client.preWelcomeActions),
         snapshots: sum(this.clients, (client) => client.snapshots),
         rejections: sum(this.clients, (client) => client.rejections),
+        motions: sum(this.clients, (client) => client.motions),
         finalSeq: room?.state.seq ?? -1,
       },
     };

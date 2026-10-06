@@ -34,7 +34,10 @@
  *    bouton, item de menu / dropdown
  *  Compact : grille dense à 2 colonnes, barre   sm  12       500
  *    d'outils (Traçage, analyse), chip de filtre
- *  Texte d'aide, info-bulle, notice, statut     sm  12       400 / 500
+ *  Texte d'aide, info-bulle, notice, statut,    sm  12       500
+ *    état vide, erreur
+ *  Texte saisi (message de commentaire ;        md  13       400
+ *    aperçu dans une bulle : sm)
  *  Légende : méta, unité, borne, valeur et      xs  11       500
  *    repère de curseur, sous-libellé,
  *    graduation d'axe (600)
@@ -43,6 +46,8 @@
  *  Surtitre : xs + 700 + uppercase + --rv-letter-spacing-wide
  *  Micro : chiffre de pastille, glyphe          2xs 10       500 / 700
  *  Badge posé sur la carte (marqueur POI)       3xs 9        700
+ *  Dans un panneau, 700 est réservé aux badges, surtitres et micro ; une
+ *  valeur mise en avant (carte de survol, légende) reste en 600.
  *
  * ── Pages (Project Browser, compte, paiement, connexion) ──────────────────
  *  Titre de page 3xl 24 (700) · accroche 4xl 30 · titre de carte / de section

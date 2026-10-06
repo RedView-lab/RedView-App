@@ -68,6 +68,7 @@ export const AnalysisChart = memo(function AnalysisChart({
   selectedXRange: controlledSelectedXRange,
   onClearSelectedXRange,
   showSeriesRows = true,
+  renderPlotOverlay,
 }: AnalysisChartProps) {
   const { ref: plotAreaRef, hover } = useChartHover<HTMLDivElement>();
   const seriesCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -511,8 +512,14 @@ export const AnalysisChart = memo(function AnalysisChart({
     [onYViewportChange],
   );
 
+  const plotOverlay = useMemo(
+    () => (renderPlotOverlay ? renderPlotOverlay({ xDomain: plotXDomain }) : null),
+    [plotXDomain, renderPlotOverlay],
+  );
+
   return (
     <AnalysisChartLayout
+      plotOverlay={plotOverlay}
       style={style}
       axis1Metric={axis1Metric}
       axis2Metric={axis2Metric}

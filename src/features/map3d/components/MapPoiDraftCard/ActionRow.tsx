@@ -23,14 +23,12 @@ interface ActionRowProps {
   label: string;
   icon: React.ReactNode;
   onClick: () => void;
-  danger?: boolean;
 }
 
 export function ActionRow({
   label,
   icon,
   onClick,
-  danger = false,
 }: ActionRowProps) {
   const [hovered, setHovered] = useState(false);
 
@@ -67,7 +65,7 @@ export function ActionRow({
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
           fontSize: 'var(--rv-font-size-md)',
-          fontWeight: danger ? 400 : 600,
+          fontWeight: 600,
           lineHeight: '17px',
           color: 'var(--rv-text)',
         }}

@@ -7,8 +7,8 @@
 //  - a right click (no drag, short press) opens the context menu on the
 //    point under the cursor; while a drawing tool runs it finishes it, while
 //    the route editor draws it is left to the route editor;
-//  - with a tool active, a left click places a vertex (Alt: the ground
-//    under the vegetation) or runs the one-point tool;
+//  - with a tool active, a left click places a vertex (Alt or Shift: the
+//    ground under the vegetation) or runs the one-point tool;
 //  - keys: M distance, H height/angle, S area, P profile, F fall line,
 //    A avalanche exposure, V viewshed; Enter finishes, Backspace removes the
 //    last vertex, Escape cancels;
@@ -798,7 +798,9 @@ export class ViewerToolsController {
   private async onLeftClick(event: PointerEvent): Promise<void> {
     const token = this.pickToken;
     const { x, y } = this.canvasPosition(event.clientX, event.clientY);
-    const pick = await this.picker.pick(x, y, { groundOnly: event.altKey });
+    // Shift as well as Alt: most Linux window managers (KDE, Xfce, Cinnamon)
+    // take Alt+click to move the window, so the page never sees it.
+    const pick = await this.picker.pick(x, y, { groundOnly: event.altKey || event.shiftKey });
     if (token !== this.pickToken || !this.activeTool) return;
     if (!pick) {
       this.notify(t('Aucun point sous le curseur'));

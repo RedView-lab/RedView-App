@@ -1,4 +1,4 @@
-import type { LidarRenderer } from '../renderer';
+import type { LidarRenderer } from '../renderer/sceneRenderer';
 import type { ViewerAltitudeState } from '../rightPanel/types';
 
 export class ViewerAltitudeController {

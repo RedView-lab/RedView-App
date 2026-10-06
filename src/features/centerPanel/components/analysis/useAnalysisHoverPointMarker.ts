@@ -12,8 +12,9 @@ import {
   type ProjectedRoutePoint,
   type RouteDistancePoint,
 } from '@/features/itineraryPanel/lib/routes';
+import { setLocalChartCursor } from '@/features/livePresence/lib/localChartCursor';
 import { xValueFromDistance } from '../../flyover/playback';
-import { locateRoutePointAtX, type AxisMode } from '../chart';
+import { locateRoutePointAtX, projectXToDistanceM, type AxisMode } from '../chart';
 import { selectInteractiveItineraryForChartX } from './shared';
 import { createRouteDotMarker, setRouteDotMarkerColor } from './routeDotMarker';
 import { buildPauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule';
@@ -130,6 +131,7 @@ export function useAnalysisHoverPointMarker({
         domMarkerRef.current = null;
       }
       clearAnalysisHoverPoint(activeMap);
+      setLocalChartCursor(null);
       return;
     }
 
@@ -147,6 +149,7 @@ export function useAnalysisHoverPointMarker({
         domMarkerRef.current = null;
       }
       clearAnalysisHoverPoint(activeMap);
+      setLocalChartCursor(null);
       return;
     }
 
@@ -172,11 +175,17 @@ export function useAnalysisHoverPointMarker({
         domMarkerRef.current = null;
       }
       clearAnalysisHoverPoint(activeMap);
+      setLocalChartCursor(null);
       return;
     }
 
     const color = targetItinerary.color || '#ff4d4f';
     renderHoverMarker(activeMap, domMarkerRef, point.lon, point.lat, color);
+    // Co-édition : les autres voient ce point (distance depuis le départ, quel que soit leur mode d'axe).
+    setLocalChartCursor({
+      itineraryId: targetItinerary.id,
+      distanceM: projectXToDistanceM(routePoints!, prediction, currentXMode, localXValue, targetItinerary.rhythm.startTime, pauseSchedule),
+    });
   }, []);
 
   useEffect(() => {
@@ -184,6 +193,7 @@ export function useAnalysisHoverPointMarker({
       if (domMarkerRef.current) {
         domMarkerRef.current.remove();
         domMarkerRef.current = null;
+        setLocalChartCursor(null);
       }
       if (lastEmittedXValueRef.current !== null) {
         lastEmittedXValueRef.current = null;
@@ -209,6 +219,7 @@ export function useAnalysisHoverPointMarker({
         if (map) {
           clearAnalysisHoverPoint(map);
         }
+        setLocalChartCursor(null);
       }
       mapHoverIdleRef.current = true;
     };
@@ -310,6 +321,7 @@ export function useAnalysisHoverPointMarker({
 
       // 1. Move or create map marker
       renderHoverMarker(activeMap, domMarkerRef, projected.lon, projected.lat, color);
+      setLocalChartCursor({ itineraryId: targetItinerary.id, distanceM: projected.distanceM });
 
       // 2. Compute chart xValue
       let xValue: number | null = null;
@@ -472,6 +484,7 @@ export function useAnalysisHoverPointMarker({
           projected.lat,
           targetItinerary.color || '#ff4d4f',
         );
+        setLocalChartCursor({ itineraryId: targetItinerary.id, distanceM: projected.distanceM });
         lastEmittedXValueRef.current = xValue as number;
         onTraceClick?.(xValue as number);
       }
@@ -497,6 +510,10 @@ export function useAnalysisHoverPointMarker({
       clearMapHover();
     };
   }, [disabled, map]);
+
+  // Analyse fermée : plus rien de survolé pour les autres éditeurs (après le
+  // nettoyage ci-dessus, qui peut remettre le point de la sélection).
+  useEffect(() => () => setLocalChartCursor(null), []);
 
   return { updateHoverPoint };
 }

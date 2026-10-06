@@ -19,6 +19,13 @@ const PROFILES: Record<GpuTier, PlatformProfile> = {
     tier: 'discrete', minBudget: 1_500_000, initialBudget: 6_000_000, maxBudget: 32_000_000, restMaxBudget: 48_000_000,
     poolBudget: 56_000_000, maxCanvasDim: 8192, dprCap: 2.0, isApple: false, motionScale: 0.75,
   },
+  // CPU rasteriser (a Linux VM or a machine whose GPU driver the browser
+  // blocks): every pixel and point costs CPU time, so few points, 1:1
+  // pixels and a half-resolution image while moving.
+  software: {
+    tier: 'software', minBudget: 100_000, initialBudget: 300_000, maxBudget: 1_500_000, restMaxBudget: 4_000_000,
+    poolBudget: 8_000_000, maxCanvasDim: 2048, dprCap: 1.0, isApple: false, motionScale: 0.5,
+  },
 };
 
 /**
@@ -74,6 +81,45 @@ export function probeWebglRenderer(): string {
   } catch {
     return '';
   }
+}
+
+/** CPU rasterisers behind a WebGL context: Mesa llvmpipe/softpipe/lavapipe, SwiftShader, Windows WARP. */
+const SOFTWARE_RENDERER_RE = /swiftshader|llvmpipe|lavapipe|softpipe|basic render driver|microsoft basic render|\bwarp\b/;
+
+/**
+ * GPU vendor named by a WebGL vendor/renderer string, in the vocabulary of
+ * WebGPU's `adapter.info.vendor`. Covers ANGLE ("ANGLE (NVIDIA Corporation,
+ * NVIDIA GeForce RTX 3060/PCIe/SSE2, OpenGL 4.5.0 NVIDIA 535.54.03)"), the
+ * native Mesa strings Firefox reports on Linux ("Mesa Intel(R) UHD Graphics
+ * 620 (KBL GT2)", "AMD Radeon RX 6700 XT (radeonsi, navi22, …)") and its
+ * sanitised ones ("GeForce GTX 980, or similar").
+ */
+export function webglVendorOf(text: string): string {
+  if (/nvidia|geforce|quadro|\brtx\b|\bgtx\b/.test(text)) return 'nvidia';
+  if (/\bamd\b|radeon|\bati\b|advanced micro devices/.test(text)) return 'amd';
+  if (/intel|\biris\b/.test(text)) return 'intel';
+  if (/apple/.test(text)) return 'apple';
+  if (MOBILE_VENDOR_RE.test(text)) return 'arm';
+  return '';
+}
+
+/**
+ * Platform profile of a WebGL 2 context, from its unmasked vendor/renderer
+ * strings (`WEBGL_debug_renderer_info`; empty when the browser hides them:
+ * the profile then stays `integrated` and the budget grows from the cadence).
+ */
+export function resolveWebglPlatformInfo(vendorString: string, rendererString: string): {
+  vendor: string;
+  desc: string;
+  profile: PlatformProfile;
+} {
+  const desc = rendererString.toLowerCase();
+  const haystack = `${vendorString} ${rendererString}`.toLowerCase();
+  if (SOFTWARE_RENDERER_RE.test(haystack)) {
+    return { vendor: 'software', desc, profile: { ...PROFILES.software } };
+  }
+  const vendor = webglVendorOf(haystack);
+  return { vendor, desc, profile: { ...PROFILES[resolveGpuTier(vendor, '', desc)] } };
 }
 
 export function resolvePlatformInfo(adapterInfo: any): {

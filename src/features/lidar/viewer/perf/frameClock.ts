@@ -68,6 +68,12 @@ export class FrameClock {
   private sinceRefreshUpdate = 0;
   private refreshMs = MAX_REFRESH_MS;
   private cadence: FrameCadence | null = null;
+  /**
+   * Interval before the last frame of the run, long ones included (0 for
+   * the first frame). Within a continuous run a long gap is a slow frame,
+   * not a pause: the cost of still frames when the GPU is not timed.
+   */
+  lastIntervalMs = 0;
 
   /**
    * A frame is rendered at rAF time `now` (ms). Returns the interval since
@@ -75,8 +81,10 @@ export class FrameClock {
    */
   frame(now: number): number {
     let interval = 0;
+    this.lastIntervalMs = 0;
     if (this.lastTime >= 0) {
       interval = now - this.lastTime;
+      this.lastIntervalMs = Math.max(0, interval);
       if (interval > 0 && interval < MAX_INTERVAL_MS) this.push(interval);
       else interval = 0;
     }

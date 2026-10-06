@@ -4,12 +4,14 @@ import { itineraryIdOf, itineraryObjectId } from '../model/paths';
 import {
   PROTOCOL_VERSION,
   type ClientMessage,
+  type MotionState,
   type PeerInfo,
   type PresenceState,
   type SequencedBatch,
   type ServerMessage,
 } from '../protocol';
 import { LeaseTable } from './leases';
+import { mergeMotion, MotionBucket, sanitizeMotion } from './motion';
 import type { RoomState } from './roomState';
 
 /**
@@ -21,11 +23,22 @@ import type { RoomState } from './roomState';
  * par un dans l'ordre d'arrivée, qui devient l'ordre de tous.
  */
 
+export interface SendOptions {
+  /**
+   * Message éphémère (`motion`) : le transport peut le sauter sous
+   * contre-pression plutôt que de le mettre en file (le suivant le remplace).
+   */
+  volatile?: boolean;
+}
+
 export interface RoomPeer {
   readonly clientId: string;
   readonly userId: string;
-  send(message: ServerMessage): void;
+  send(message: ServerMessage, options?: SendOptions): void;
 }
+
+/** Sort d'un message `motion` (mesures du serveur). */
+export type MotionOutcome = 'relayed' | 'rate-limited' | 'invalid';
 
 export interface RoomOptions {
   /** Instance de la salle (aléatoire à chaque chargement). */
@@ -39,21 +52,28 @@ export interface RoomOptions {
   catchUpBudgetBytes?: number;
   /** Séquence déjà durable au chargement (point de sauvegarde + journal relu). */
   durableSeq?: number;
+  /** Message `motion` relayé, jeté (débit) ou invalide : mesures du serveur. */
+  onMotion?(outcome: MotionOutcome): void;
 }
 
 export interface JoinRequest {
   epoch: string | null;
   lastSeq: number | null;
-  presence?: PresenceState;
+  /** Telle qu'envoyée par le client (`hello`) : nettoyée par la salle. */
+  presence?: unknown;
 }
 
 const DEFAULT_CATCH_UP_LIMIT = 2_000;
 const DEFAULT_CATCH_UP_BUDGET_BYTES = 256 * 1024;
 const MAX_PRESENCE_CHARS = 2_048;
+const VOLATILE: SendOptions = { volatile: true };
 
 interface Member {
   peer: RoomPeer;
   presence: PresenceState;
+  /** Dernier état `motion` (caméra, pointeur, graphique), donné aux arrivants. */
+  motion: MotionState | null;
+  motionBucket: MotionBucket;
 }
 
 export class Room {
@@ -69,6 +89,8 @@ export class Room {
   private catchUpBudget: number;
   private durable: number;
   private peersDirty = false;
+  /** Dernier numéro de Spotlight donné (le plus récent l'emporte chez les clients). */
+  private spotlightCounter = 0;
 
   constructor(state: RoomState, options: RoomOptions) {
     this.state = state;
@@ -101,7 +123,13 @@ export class Room {
     // Même client sur une nouvelle connexion : l'ancienne est remplacée.
     const previous = this.members.get(peer.clientId);
     if (previous && previous.peer !== peer) this.leave(peer.clientId);
-    this.members.set(peer.clientId, { peer, presence: sanitizePresence(request.presence) });
+    const motions = this.motionList(peer.clientId);
+    this.members.set(peer.clientId, {
+      peer,
+      presence: this.sanitizePresence(request.presence, null),
+      motion: null,
+      motionBucket: new MotionBucket(),
+    });
     const catchUp = this.catchUpFor(request);
     peer.send({
       type: 'welcome',
@@ -115,6 +143,7 @@ export class Room {
       ...(catchUp ? { catchUp } : { snapshot: this.state.snapshot() }),
       peers: this.peerList(),
       leases: this.leases.list(),
+      ...(motions.length > 0 ? { motions } : {}),
     });
     this.peersDirty = true;
   }
@@ -139,8 +168,11 @@ export class Room {
         this.handleLease(member.peer, message);
         return;
       case 'presence':
-        member.presence = sanitizePresence(message.presence);
+        member.presence = this.sanitizePresence(message.presence, member.presence);
         this.peersDirty = true;
+        return;
+      case 'motion':
+        this.handleMotion(member, message);
         return;
       case 'ping':
         member.peer.send({ type: 'pong', t: message.t });
@@ -258,6 +290,56 @@ export class Room {
     this.recentTotalBytes = total;
   }
 
+  /**
+   * Caméra, pointeur, survol du graphique : relayé tout de suite aux autres
+   * (pas de regroupement au tick : chaque milliseconde compte pour suivre),
+   * jamais à l'émetteur, jamais journalisé. Au-delà du débit permis, jeté.
+   */
+  private handleMotion(member: Member, message: unknown): void {
+    if (!member.motionBucket.take(this.options.now())) {
+      this.options.onMotion?.('rate-limited');
+      return;
+    }
+    const motion = sanitizeMotion(message);
+    if (!motion) {
+      this.options.onMotion?.('invalid');
+      return;
+    }
+    const { clientId } = member.peer;
+    member.motion = mergeMotion(member.motion, clientId, motion);
+    const relayed: ServerMessage = { type: 'motion', from: clientId, ...motion };
+    for (const other of this.members.values()) {
+      if (other !== member) other.peer.send(relayed, VOLATILE);
+    }
+    this.options.onMotion?.('relayed');
+  }
+
+  private motionList(exceptClientId: string): MotionState[] {
+    const motions: MotionState[] = [];
+    for (const [clientId, { motion }] of this.members) {
+      if (motion && clientId !== exceptClientId) motions.push(motion);
+    }
+    return motions;
+  }
+
+  /**
+   * Présence envoyée par un client (n'importe quoi) → champs connus, bornés.
+   * Spotlight : `true` reçoit un numéro (gardé tant qu'il reste allumé).
+   */
+  private sanitizePresence(presence: unknown, previous: PresenceState | null): PresenceState {
+    const out = sanitizePresenceFields(presence);
+    const source = presence !== null && typeof presence === 'object' ? presence as Record<string, unknown> : {};
+    if (source.spotlight === true) {
+      out.spotlight = previous?.spotlight ?? (this.spotlightCounter += 1);
+    } else if (source.spotlight === false || source.spotlight === null) {
+      out.spotlight = null;
+    } else if (previous?.spotlight) {
+      // Champ absent : le Spotlight en cours reste allumé.
+      out.spotlight = previous.spotlight;
+    }
+    return JSON.stringify(out).length > MAX_PRESENCE_CHARS ? {} : out;
+  }
+
   private dropLeasesOfDeletedItineraries(batch: SequencedBatch): void {
     let changed = false;
     for (const op of batch.ops) {
@@ -312,7 +394,11 @@ function isStringRecord(value: unknown): value is Record<string, string> {
   return Object.values(value).every((entry) => typeof entry === 'string');
 }
 
-function sanitizePresence(presence: unknown): PresenceState {
+/** Ids de client acceptés (mêmes règles que le serveur : server/multiplayer/connection.ts). */
+const CLIENT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+
+/** Champs de présence sans état de la salle (le Spotlight est numéroté par `Room`). */
+function sanitizePresenceFields(presence: unknown): PresenceState {
   if (presence === null || typeof presence !== 'object') return {};
   const source = presence as Record<string, unknown>;
   const out: PresenceState = {};
@@ -324,5 +410,8 @@ function sanitizePresence(presence: unknown): PresenceState {
   if (typeof source.activeMode === 'string' || source.activeMode === null) {
     out.activeMode = typeof source.activeMode === 'string' ? source.activeMode.slice(0, 40) : null;
   }
-  return JSON.stringify(out).length > MAX_PRESENCE_CHARS ? {} : out;
+  if (source.following === null || (typeof source.following === 'string' && CLIENT_ID_PATTERN.test(source.following))) {
+    out.following = source.following as string | null;
+  }
+  return out;
 }

@@ -5109,6 +5109,74 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Editor"
   },
   {
+    "fr": "Suivre {{name}}",
+    "en": "Follow {{name}}"
+  },
+  {
+    "fr": "Suivre {{name}} (vous suit)",
+    "en": "Follow {{name}} (following you)"
+  },
+  {
+    "fr": "Arrêter de suivre {{name}}",
+    "en": "Stop following {{name}}"
+  },
+  {
+    "fr": "{{name}} présente sa vue : le suivre",
+    "en": "{{name}} is presenting their view: follow"
+  },
+  {
+    "fr": "Vous : présenter ma vue",
+    "en": "You: present my view"
+  },
+  {
+    "fr": "Présenter ma vue",
+    "en": "Present my view"
+  },
+  {
+    "fr": "Arrêter de présenter",
+    "en": "Stop presenting"
+  },
+  {
+    "fr": "Vous suivez {{name}}",
+    "en": "Following {{name}}"
+  },
+  {
+    "fr": "Vous présentez votre vue",
+    "en": "You are presenting your view"
+  },
+  {
+    "fr": "Vous présentez votre vue · 1 personne vous suit",
+    "en": "You are presenting your view · 1 person following"
+  },
+  {
+    "fr": "Vous présentez votre vue · {{count}} personnes vous suivent",
+    "en": "You are presenting your view · {{count}} people following"
+  },
+  {
+    "fr": "Arrêter",
+    "en": "Stop"
+  },
+  {
+    "fr": "Arrêter de suivre (Échap)",
+    "en": "Stop following (Esc)"
+  },
+  {
+    "fr": "{{name}} présente sa vue : vous allez la suivre",
+    "en": "{{name}} is presenting their view: you are about to follow it"
+  },
+  {
+    "fr": "Pas maintenant",
+    "en": "Not now"
+  },
+  {
+    "fr": "{{name}} a arrêté de présenter",
+    "en": "{{name}} stopped presenting"
+  },
+  {
+    "fr": "{{name}} a quitté le projet",
+    "en": "{{name}} left the project"
+  },
+  {
     "fr": "Connexion à la session…",
     "en": "Connecting to the session…"
   },
@@ -6461,10 +6529,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Initializing..."
   },
   {
-    "fr": "Vérification du support WebGPU...",
-    "en": "Checking WebGPU support..."
-  },
-  {
     "fr": "Construction octree LOD...",
     "en": "Building LOD octree..."
   },
@@ -6475,14 +6539,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Prêt",
     "en": "Ready"
-  },
-  {
-    "fr": "Bascule vers le moteur WebGL HD…",
-    "en": "Switching to the WebGL HD engine…"
-  },
-  {
-    "fr": "Mode WebGL HD : initialisation…",
-    "en": "WebGL HD mode: initializing…"
   },
   {
     "fr": "Orthophoto HD en cours…",
@@ -6669,24 +6725,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Software adapter: {{name}}"
   },
   {
-    "fr": "Moteur WebGL HD indisponible",
-    "en": "WebGL HD engine unavailable"
-  },
-  {
-    "fr": "Impossible de démarrer le moteur WebGL HD demandé.",
-    "en": "Unable to start the requested WebGL HD engine."
-  },
-  {
-    "fr": "Vérifiez que la tuile est bien téléchargée ou réessayez sans le paramètre ?engine=webgl.",
-    "en": "Check that the tile has been downloaded, or try again without the ?engine=webgl parameter."
-  },
-  {
     "fr": "Aucun moteur compatible",
     "en": "No compatible engine"
-  },
-  {
-    "fr": "Ni WebGPU ni le moteur WebGL HD de secours n'ont pu démarrer sur cette machine.",
-    "en": "Neither WebGPU nor the fallback WebGL HD engine could start on this machine."
   },
   {
     "fr": "Mettez à jour vos pilotes graphiques ou utilisez un navigateur récent.",
@@ -6731,14 +6771,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Moteur",
     "en": "Engine"
-  },
-  {
-    "fr": "WebGPU (+ précis)",
-    "en": "WebGPU (more accurate)"
-  },
-  {
-    "fr": "WebGL HD",
-    "en": "WebGL HD"
   },
   {
     "fr": "Taille des points",
@@ -6791,10 +6823,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Classification",
     "en": "Classification"
-  },
-  {
-    "fr": "Initialisation WebGPU...",
-    "en": "Initializing WebGPU..."
   },
   {
     "fr": "Index LOD {{x}}/{{y}}",
@@ -6865,24 +6893,12 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Reopen the LiDAR panel"
   },
   {
-    "fr": "Basculer vers le moteur WebGL HD.",
-    "en": "Switch to the WebGL HD engine."
-  },
-  {
-    "fr": "Basculer vers le moteur WebGPU HD.",
-    "en": "Switch to the WebGPU HD engine."
-  },
-  {
     "fr": "Fermer le viewer LiDAR.",
     "en": "Close the LiDAR viewer."
   },
   {
     "fr": "Fermer le visualiseur et revenir à l'application.",
     "en": "Close the viewer and return to the app."
-  },
-  {
-    "fr": "Basculer vers le moteur WebGL HD ?\n\n• Terrain texturé orthophoto en haute résolution\n• Pas de nuage de points LiDAR (compatible toutes machines)\n• Action irréversible : il faudra recharger pour revenir à WebGPU.",
-    "en": "Switch to the WebGL HD engine?\n\n• High-resolution orthophoto-textured terrain\n• No LiDAR point cloud (works on any machine)\n• Irreversible: you will need to reload to go back to WebGPU."
   },
   {
     "fr": "Tuile {{x}}/{{y}} ({{projection}})",
@@ -7641,8 +7657,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Right click"
   },
   {
-    "fr": "Alt+clic",
-    "en": "Alt+click"
+    "fr": "Alt ou Maj+clic",
+    "en": "Alt or Shift+click"
   },
   {
     "fr": "Échap",
@@ -7755,6 +7771,90 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Champ réel d’une paire 8×42 ≈ 7,5°",
     "en": "True field of an 8×42 pair ≈ 7.5°"
+  },
+  {
+    "fr": "Préparation du rendu 3D...",
+    "en": "Preparing 3D rendering..."
+  },
+  {
+    "fr": "Initialisation du rendu 3D...",
+    "en": "Initializing 3D rendering..."
+  },
+  {
+    "fr": "WebGL 2 (compatible)",
+    "en": "WebGL 2 (compatible)"
+  },
+  {
+    "fr": "Terrain texturé (sans points)",
+    "en": "Textured terrain (no points)"
+  },
+  {
+    "fr": "Moteur WebGPU (le plus rapide).",
+    "en": "WebGPU engine (fastest)."
+  },
+  {
+    "fr": "Même viewer en WebGL 2, compatible avec tous les navigateurs (Firefox, Chrome sous Linux).",
+    "en": "Same viewer on WebGL 2, works in every browser (Firefox, Chrome on Linux)."
+  },
+  {
+    "fr": "Relief texturé par l'orthophoto, sans nuage de points.",
+    "en": "Relief textured with the orthophoto, without the point cloud."
+  },
+  {
+    "fr": "WebGPU indisponible dans ce navigateur : {{reason}}",
+    "en": "WebGPU unavailable in this browser: {{reason}}"
+  },
+  {
+    "fr": "Nuage de points LiDAR, moteur WebGPU.",
+    "en": "LiDAR point cloud, WebGPU engine."
+  },
+  {
+    "fr": "Nuage de points LiDAR, moteur WebGL 2 (compatible avec tous les navigateurs).",
+    "en": "LiDAR point cloud, WebGL 2 engine (works in every browser)."
+  },
+  {
+    "fr": "Basculer vers le terrain texturé ?\n\n• Relief LiDAR texturé par l'orthophoto en haute résolution\n• Pas de nuage de points ni d'outils de mesure\n• Le sélecteur « Moteur » ramène au nuage de points.",
+    "en": "Switch to the textured terrain?\n\n• LiDAR relief textured with the high-resolution orthophoto\n• No point cloud and no measuring tools\n• The “Engine” selector brings the point cloud back."
+  },
+  {
+    "fr": "Bascule vers le terrain texturé…",
+    "en": "Switching to the textured terrain…"
+  },
+  {
+    "fr": "Terrain texturé : initialisation…",
+    "en": "Textured terrain: initializing…"
+  },
+  {
+    "fr": "Terrain texturé indisponible",
+    "en": "Textured terrain unavailable"
+  },
+  {
+    "fr": "Impossible de démarrer le moteur de terrain texturé.",
+    "en": "Unable to start the textured terrain engine."
+  },
+  {
+    "fr": "Vérifiez que la tuile est bien téléchargée, ou rouvrez le viewer avec le moteur WebGPU ou WebGL 2.",
+    "en": "Check that the tile is fully downloaded, or reopen the viewer with the WebGPU or WebGL 2 engine."
+  },
+  {
+    "fr": "Ni WebGPU, ni WebGL 2, ni le terrain texturé n'ont pu démarrer dans ce navigateur.",
+    "en": "Neither WebGPU, WebGL 2 nor the textured terrain could start in this browser."
+  },
+  {
+    "fr": "Sous Linux : activez l'accélération matérielle du navigateur (Chrome : chrome://settings/system puis chrome://gpu ; Firefox : about:support, section Graphiques) et installez des pilotes graphiques Mesa ou NVIDIA récents.",
+    "en": "On Linux: turn on the browser's hardware acceleration (Chrome: chrome://settings/system then chrome://gpu; Firefox: about:support, Graphics section) and install recent Mesa or NVIDIA graphics drivers."
+  },
+  {
+    "fr": "WebGL 2 indisponible dans ce navigateur",
+    "en": "WebGL 2 unavailable in this browser"
+  },
+  {
+    "fr": "Contexte WebGL perdu",
+    "en": "WebGL context lost"
+  },
+  {
+    "fr": "{{step}} sans réponse après {{seconds}} s",
+    "en": "{{step}} did not answer within {{seconds}} s"
   },
   {
     "fr": "Désactivé",

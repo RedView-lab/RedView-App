@@ -2,6 +2,7 @@ import { getTileInfo, kmTileCoord, parseTileFootprint, tileCoordFileName, tileFo
 import { translateAppText } from '@/shared/i18n/config';
 import type { DetectedCrs, AltitudeRef, TileCoord, TileFootprint } from '../../types';
 import { MAX_VIEWER_SCENE_TILES } from '../../lib/viewerUrl';
+import { parseViewerEngineParam, VIEWER_ENGINE_PARAM, type ViewerEngineRequest } from './viewerEngine';
 
 export function buildPanelTileLabel(x: number, y: number, projection: DetectedCrs): string {
   return translateAppText('Tuile {{x}}/{{y}} ({{projection}})', { x, y, projection });
@@ -78,7 +79,8 @@ export function parseViewerParamsFromUrl(): {
   yKm: number;
   crs: DetectedCrs;
   altRef: AltitudeRef;
-  forceWebGL: boolean;
+  /** `?engine=` (see viewerEngine.ts). */
+  engine: ViewerEngineRequest;
   /**
    * `?bench=orbit`: scripted camera path that reports the real frame cadence (see perf/viewerBench);
    * `?bench=shots`: still poses set by a capture script (`window.__rvLidarShots`).
@@ -103,7 +105,7 @@ export function parseViewerParamsFromUrl(): {
   const yKm = parseInt(params.get('y') || '', 10);
   const parsedCrs = parseCrsParam(params.get('crs'));
   const parsedAltRef = parseAltRefParam(params.get('alt'));
-  const forceWebGL = params.get('engine') === 'webgl';
+  const engine = parseViewerEngineParam(params.get(VIEWER_ENGINE_PARAM));
   const rawBench = params.get('bench');
   const bench = rawBench === 'orbit' || rawBench === 'shots' ? rawBench : null;
   const rawBudget = Number(params.get('budget'));
@@ -142,7 +144,7 @@ export function parseViewerParamsFromUrl(): {
     yKm,
     crs,
     altRef,
-    forceWebGL,
+    engine,
     bench,
     pinnedBudget,
     motionQuality,

@@ -11,7 +11,8 @@ import type { ProjectDocument } from '../../src/features/itineraryPanel/lib/proj
 import type { Itinerary } from '../../src/features/itineraryPanel/types/index.ts';
 import { applyCommentAction, type CommentAction } from '../../src/features/comments/lib/commentActions.ts';
 import { CollabConnection } from '../../src/features/collab/client/connection.ts';
-import { PROTOCOL_VERSION } from '../../src/features/collab/protocol.ts';
+import { PROTOCOL_VERSION, type MotionCamera, type MotionViewport } from '../../src/features/collab/protocol.ts';
+import type { MotionEvent } from '../../src/features/collab/realtime.ts';
 import { sampleDocument } from '../../src/features/collab/sim/fixtures.ts';
 import { createFileStorage } from './fileStorage.ts';
 import { createMultiplayerServer, type MultiplayerServer } from './server.ts';
@@ -236,10 +237,73 @@ describe('serveur temps réel', () => {
     expect(itinerary(c, 'it-1').color).toBe('#22aa55');
   });
 
+  it('présence en direct : caméra et curseur relayés aux autres, suivi et Spotlight, rien dans le document', async () => {
+    const a = connect('alice', sampleDocument(200));
+    await waitFor(() => a.client.getState().ready, 'a prêt');
+    const b = connect('bob');
+    await waitFor(() => b.client.getState().ready, 'b prêt');
+    const seqBefore = a.client.engine.seq;
+    const atA: MotionEvent[] = [];
+    const atB: MotionEvent[] = [];
+    a.subscribeMotion((event) => atA.push(event));
+    b.subscribeMotion((event) => atB.push(event));
+
+    const cam: MotionCamera = [6.8694, 45.9237, 13.5, -20, 60, 36.87];
+    const vp: MotionViewport = [1600, 900, 64, 360, 300, 420, 0, 0, 0, 0];
+    expect(a.canSendVolatile()).toBe(true);
+    expect(a.sendMotion(100, { cam, vp, ptr: [6.87, 45.92] })).toBe(true);
+    await waitFor(() => atB.length === 1, 'motion reçu par B');
+    expect(atB[0]).toEqual({ from: a.clientId, t: 100, fields: { cam, vp, ptr: [6.87, 45.92] }, snapshot: false });
+
+    b.updatePresence({ following: a.clientId, spotlight: true });
+    await waitFor(() => a.client.getState().peers.some((peer) => peer.clientId === b.clientId && peer.presence.following === a.clientId), 'B suit A');
+    const presenceOfB = () => a.client.getState().peers.find((peer) => peer.clientId === b.clientId)!.presence;
+    expect(presenceOfB().spotlight).toBe(1);
+    // Les changements de présence se fusionnent : suivi et Spotlight restent.
+    b.updatePresence({ activeItineraryId: 'it-2' });
+    await waitFor(() => presenceOfB().activeItineraryId === 'it-2', 'itinéraire actif de B');
+    expect(presenceOfB()).toMatchObject({ following: a.clientId, spotlight: 1 });
+
+    // Un arrivant part du dernier état de chacun (caméra de départ pour suivre).
+    const c = createConnection('carol');
+    const atC: MotionEvent[] = [];
+    c.subscribeMotion((event) => atC.push(event));
+    c.start();
+    await waitFor(() => c.client.getState().ready, 'c prêt');
+    expect(atC).toEqual([{ from: a.clientId, t: 100, fields: { cam, vp, ptr: [6.87, 45.92] }, snapshot: true }]);
+
+    expect(atA).toHaveLength(0);
+    expect(a.client.engine.seq).toBe(seqBefore);
+    expect(server!.host.metrics.motionIn).toBe(1);
+  });
+
+  it('présence en direct : une rafale au-delà du débit est jetée, la connexion reste ouverte', async () => {
+    const a = connect('alice', sampleDocument(100));
+    await waitFor(() => a.client.getState().ready, 'a prêt');
+    const b = connect('bob');
+    await waitFor(() => b.client.getState().ready, 'b prêt');
+    let received = 0;
+    b.subscribeMotion(() => {
+      received += 1;
+    });
+    for (let index = 0; index < 200; index += 1) a.sendMotion(index, { ptr: [6.87, 45.92] });
+    await waitFor(() => server!.host.metrics.motionIn + server!.host.metrics.motionDroppedRate === 200, 'rafale traitée');
+    await waitFor(() => received === server!.host.metrics.motionIn, 'relayés reçus');
+    expect(received).toBeLessThan(200);
+    expect(server!.host.metrics.motionDroppedRate).toBeGreaterThan(0);
+    expect(a.client.getState().status).toBe('online');
+    // Toujours en ligne : une modification passe.
+    edit(a, 'it-1', (it) => ({ ...it, name: 'après la rafale' }));
+    await waitFor(() => itinerary(b, 'it-1').name === 'après la rafale', 'modification après la rafale');
+  });
+
   it('refus : version du protocole, jeton invalide', async () => {
     const version = await rawHello({ type: 'hello', v: PROTOCOL_VERSION + 1, projectId: 'local-test', token: 'dev:x', clientId: 'c-1', epoch: null, lastSeq: null });
     expect(version.code).toBe(4426);
     expect((version.message as { code?: string }).code).toBe('version');
+    // Onglet resté sur l'ancienne version (sans présence en direct) : refusé, il recharge.
+    const previous = await rawHello({ type: 'hello', v: 2, projectId: 'local-test', token: 'dev:x', clientId: 'c-3', epoch: null, lastSeq: null });
+    expect(previous.code).toBe(4426);
     const token = await rawHello({ type: 'hello', v: PROTOCOL_VERSION, projectId: 'local-test', token: 'faux', clientId: 'c-2', epoch: null, lastSeq: null });
     expect(token.code).toBe(4401);
     const garbage = await rawHello({ type: 'batch', clientSeq: 1, ops: [], blobs: {} });

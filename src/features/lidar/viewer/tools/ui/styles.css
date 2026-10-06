@@ -285,6 +285,7 @@
   color: #ffffff;
   font-family: var(--rv-font-sans);
   font-size: var(--rv-font-size-sm);
+  font-weight: 500;
   pointer-events: auto;
 }
 

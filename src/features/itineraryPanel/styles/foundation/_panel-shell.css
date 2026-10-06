@@ -291,6 +291,7 @@
   padding: 8px 10px;
   border-radius: 8px;
   font-size: var(--rv-font-size-sm);
+  font-weight: 500;
   line-height: var(--rv-line-height-snug);
   border: 1px solid transparent;
 }

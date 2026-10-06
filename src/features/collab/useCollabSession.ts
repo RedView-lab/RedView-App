@@ -11,6 +11,7 @@ import { registerLiveSession } from '@/shared/utils/projects/liveSessions';
 import type { CollabState } from './client/collabClient';
 import type { CollabSession } from './client/session';
 import { multiplayerSocketUrl } from './queries/multiplayerHealth';
+import type { CollabRealtime } from './realtime';
 
 /**
  * Session de co-édition du projet ouvert : connexion au serveur temps réel
@@ -96,6 +97,8 @@ export interface CollabSessionHandle {
   state: CollabState | null;
   /** Session attendue mais pas encore créée (module en chargement). */
   pending: boolean;
+  /** Présence en direct (curseurs, suivre un éditeur) ; null sans session. */
+  realtime: CollabRealtime | null;
 }
 
 interface SessionSnapshot {
@@ -103,10 +106,11 @@ interface SessionSnapshot {
   projectId: string | null;
   link: ProjectCollabLink | null;
   state: CollabState | null;
+  realtime: CollabRealtime | null;
   failed: boolean;
 }
 
-const NO_SESSION: SessionSnapshot = { projectId: null, link: null, state: null, failed: false };
+const NO_SESSION: SessionSnapshot = { projectId: null, link: null, state: null, realtime: null, failed: false };
 
 /**
  * Session du projet `projectId` si `shared` (ou forcée en dev), sinon aucune.
@@ -171,14 +175,14 @@ export function useCollabSession(
         }
         setSnapshot((previous) => (previous.link === client && previous.state === state
           ? previous
-          : { projectId, link: client, state, failed: false }));
+          : { projectId, link: client, state, realtime: created.connection, failed: false }));
       };
       unsubscribe = client.subscribeState(sync);
       window.addEventListener('beforeunload', warnBeforeUnload);
       sync();
     })().catch((error: unknown) => {
       logger.projects.error('[collab] session de co-édition impossible', error);
-      if (active) setSnapshot({ projectId, link: null, state: null, failed: true });
+      if (active) setSnapshot({ projectId, link: null, state: null, realtime: null, failed: true });
     });
 
     return () => {
@@ -196,5 +200,6 @@ export function useCollabSession(
     link: current.link,
     state: current.state,
     pending: enabled && projectId !== null && current.link === null && !current.failed,
+    realtime: current.realtime,
   };
 }

@@ -251,3 +251,11 @@
   opacity: 0.35;
   cursor: not-allowed;
 }
+
+/* Menu d'une pastille (Présenter ma vue, éditeurs masqués de la pile) :
+   rv-dropdown, avec la place d'une pastille devant chaque libellé. */
+.rvi-collaborator-menu {
+  --rv-dropdown-item-gap: 8px;
+  position: fixed;
+  z-index: 1200;
+}

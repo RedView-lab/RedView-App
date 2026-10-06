@@ -1,4 +1,4 @@
-import type { LidarRenderer } from '../renderer';
+import type { LidarRenderer } from '../renderer/sceneRenderer';
 import type { ViewerSlopeState } from '../rightPanel/types';
 
 export class ViewerSlopeController {

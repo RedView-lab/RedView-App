@@ -18,4 +18,39 @@ export const notify = {
   info: (text: string, vars?: AppTranslationVars) => {
     toast.info(translateAppText(text, vars));
   },
+  /**
+   * Proposition qui se fait d'elle-même (Spotlight de Figma : « Pas
+   * maintenant ») : `onTimeout` à la fin du délai, sauf si l'action a été
+   * choisie ou le toast fermé. Rend de quoi le retirer (sans `onTimeout`).
+   */
+  prompt: (
+    text: string,
+    vars: AppTranslationVars | undefined,
+    options: { actionLabel: string; onAction?: () => void; onTimeout?: () => void; durationMs: number },
+  ): (() => void) => {
+    let settled = false;
+    const id = toast(translateAppText(text, vars), {
+      duration: options.durationMs,
+      action: {
+        label: translateAppText(options.actionLabel),
+        onClick: () => {
+          if (settled) return;
+          settled = true;
+          options.onAction?.();
+        },
+      },
+      onAutoClose: () => {
+        if (settled) return;
+        settled = true;
+        options.onTimeout?.();
+      },
+      onDismiss: () => {
+        settled = true;
+      },
+    });
+    return () => {
+      settled = true;
+      toast.dismiss(id);
+    };
+  },
 };

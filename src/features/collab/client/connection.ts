@@ -1,6 +1,13 @@
 import type { ProjectDocument } from '@/features/itineraryPanel/lib/project/layers';
 
-import { PROTOCOL_VERSION, type ClientMessage, type PresenceState, type ServerMessage } from '../protocol';
+import {
+  PROTOCOL_VERSION,
+  type ClientMessage,
+  type MotionFields,
+  type PresenceUpdate,
+  type ServerMessage,
+} from '../protocol';
+import type { CollabRealtime, MotionEvent } from '../realtime';
 import { CollabClient, type CollabDeniedReason } from './collabClient';
 import type { Rejection } from './syncEngine';
 
@@ -22,7 +29,8 @@ export interface CollabConnectionOptions {
   projectId: string;
   /** JWT Appwrite frais (redemandé à chaque connexion : il expire après 15 min). */
   getToken(): Promise<string>;
-  presence?(): PresenceState;
+  /** Présence de base (nom affiché) ; `updatePresence` y ajoute l'état courant (suivi, Spotlight…). */
+  presence?(): PresenceUpdate;
   /** Développement : document qui crée la salle d'un projet local inconnu du serveur. */
   seed?(): ProjectDocument | undefined;
   WebSocketImpl?: typeof WebSocket;
@@ -33,6 +41,10 @@ export interface CollabConnectionOptions {
 }
 
 const FLUSH_DELAY_MS = 33;
+/** La salle regroupe la présence à 10 Hz : inutile d'en envoyer plus. */
+const PRESENCE_MIN_INTERVAL_MS = 100;
+/** Message éphémère (`motion`) sauté au-delà : il passerait derrière des lots en attente. */
+const MAX_VOLATILE_BUFFERED_BYTES = 64 * 1024;
 const PING_INTERVAL_MS = 20_000;
 const SILENCE_TIMEOUT_MS = 45_000;
 const BACKOFF_BASE_MS = 500;
@@ -49,9 +61,16 @@ function createClientId(): string {
   return globalThis.crypto.randomUUID();
 }
 
-export class CollabConnection {
+export class CollabConnection implements CollabRealtime {
   readonly client: CollabClient;
   private readonly options: CollabConnectionOptions;
+  /** État de présence ajouté à la présence de base (`options.presence`). */
+  private localPresence: Partial<PresenceUpdate> = {};
+  private presenceTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastPresenceAt = 0;
+  /** Présence changée depuis le `hello` : renvoyée au `welcome` (avant, rien ne part). */
+  private presenceVersion = 0;
+  private helloPresenceVersion = 0;
   private readonly WebSocketImpl: typeof WebSocket;
   private socket: WebSocket | null = null;
   private welcomed = false;
@@ -102,10 +121,49 @@ export class CollabConnection {
     this.client.dispose();
   }
 
-  /** Présence changée (itinéraire actif…) : envoyée si en ligne. */
-  updatePresence(): void {
-    const presence = this.options.presence?.();
-    if (presence) this.client.setPresence(presence);
+  get clientId(): string {
+    return this.client.clientId;
+  }
+
+  /**
+   * Présence changée (itinéraire actif, suivi, Spotlight…) : fusionnée, envoyée
+   * au plus à 10 Hz si en ligne, et toujours redonnée au `hello` suivant.
+   */
+  updatePresence(patch: Partial<PresenceUpdate> = {}): void {
+    this.localPresence = { ...this.localPresence, ...patch };
+    this.presenceVersion += 1;
+    if (this.presenceTimer) return;
+    const wait = PRESENCE_MIN_INTERVAL_MS - (Date.now() - this.lastPresenceAt);
+    if (wait <= 0) {
+      this.sendPresence();
+      return;
+    }
+    this.presenceTimer = setTimeout(() => {
+      this.presenceTimer = null;
+      this.sendPresence();
+    }, wait);
+  }
+
+  subscribeMotion(listener: (event: MotionEvent) => void): () => void {
+    return this.client.subscribeMotion(listener);
+  }
+
+  sendMotion(t: number, fields: MotionFields): boolean {
+    return this.client.sendMotion(t, fields);
+  }
+
+  canSendVolatile(): boolean {
+    const socket = this.socket;
+    return !!socket && this.welcomed && socket.bufferedAmount < MAX_VOLATILE_BUFFERED_BYTES;
+  }
+
+  private currentPresence(): PresenceUpdate {
+    return { ...this.options.presence?.(), ...this.localPresence };
+  }
+
+  private sendPresence(): void {
+    this.lastPresenceAt = Date.now();
+    this.client.setPresence(this.currentPresence());
   }
 
   private async open(): Promise<void> {
@@ -126,12 +184,13 @@ export class CollabConnection {
       this.lastMessageAt = Date.now();
       const resume = this.client.helloFields();
       const seed = this.client.engine.isReady ? undefined : this.options.seed?.();
+      this.helloPresenceVersion = this.presenceVersion;
       this.rawSend({
         type: 'hello',
         v: PROTOCOL_VERSION,
         projectId: this.options.projectId,
         token,
-        presence: this.options.presence?.(),
+        presence: this.currentPresence(),
         ...resume,
         ...(seed ? { seed } : {}),
       });
@@ -153,6 +212,7 @@ export class CollabConnection {
       }
       if (message.type === 'error' && message.code === 'unauthorized') this.unauthorized += 1;
       this.client.receive(message);
+      if (message.type === 'welcome' && this.presenceVersion !== this.helloPresenceVersion) this.sendPresence();
     };
     socket.onclose = (event: CloseEvent) => {
       if (socket !== this.socket) return;
@@ -252,8 +312,10 @@ export class CollabConnection {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.flushTimer) clearTimeout(this.flushTimer);
     if (this.pingTimer) clearInterval(this.pingTimer);
+    if (this.presenceTimer) clearTimeout(this.presenceTimer);
     this.reconnectTimer = null;
     this.flushTimer = null;
     this.pingTimer = null;
+    this.presenceTimer = null;
   }
 }

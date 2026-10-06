@@ -288,6 +288,7 @@ export const ExporterPanel = memo(function ExporterPanel({
                 style={{
                   margin: '8px 0 0',
                   fontSize: 'var(--rv-font-size-sm)',
+                  fontWeight: 500,
                   lineHeight: 1.4,
                   color: status.tone === 'error' ? '#ff8d8d' : '#cbe8b1',
                 }}

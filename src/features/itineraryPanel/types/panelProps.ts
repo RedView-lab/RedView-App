@@ -17,7 +17,18 @@ import type {
 export interface ProjectCollaborator {
   userId: string;
   name: string;
+  /** Cet utilisateur : sa pastille ouvre « Présenter ma vue ». */
+  isSelf?: boolean;
+  /** Je suis cet éditeur (mode observation) ; pour moi-même : je présente ma vue. */
+  followed?: boolean;
+  /** Il présente sa vue (Spotlight). */
+  presenting?: boolean;
+  /** Il me suit. */
+  followsMe?: boolean;
 }
+
+/** Action sur une pastille d'éditeur (comme Figma) : le suivre, ou présenter sa propre vue. */
+export type CollaboratorAction = 'follow' | 'unfollow' | 'spotlight-start' | 'spotlight-stop';
 
 /** Session de co-édition : état du serveur attendu, en ligne, ou connexion coupée. */
 export type ProjectSessionStatus = 'connecting' | 'online' | 'offline';
@@ -42,6 +53,8 @@ export interface ItineraryPanelProps {
   onShareProject?: (anchor: HTMLElement) => void;
   /** Éditeurs présents sur le projet (co-édition), cet utilisateur compris. */
   collaborators?: ProjectCollaborator[];
+  /** Clic sur une pastille : suivre l'éditeur, ou présenter sa vue (sa propre pastille). */
+  onCollaboratorAction?: (userId: string, action: CollaboratorAction) => void;
   /** État de la session de co-édition (absent hors session). */
   sessionStatus?: ProjectSessionStatus;
   onRenameProject?: (next: string) => void;

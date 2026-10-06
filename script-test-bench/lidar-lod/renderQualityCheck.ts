@@ -7,7 +7,7 @@ import {
   type LodTile,
 } from '../../src/features/lidar/viewer/lod/lodTile.ts';
 import { REST_SAMPLES, RestRefinement } from '../../src/features/lidar/viewer/lod/restRefinement.ts';
-import { buildChunkIndices } from '../../src/features/lidar/viewer/renderer/terrainLod.ts';
+import { buildChunkIndices } from '../../src/features/lidar/viewer/renderer/terrainLodCore.ts';
 import { check } from './harness.ts';
 import { syntheticTile } from './lodTileCheck.ts';
 

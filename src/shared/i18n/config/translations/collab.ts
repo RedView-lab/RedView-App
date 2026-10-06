@@ -28,6 +28,25 @@ export const collabTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: '{{count}} éditeurs sur le projet', en: '{{count}} editors on the project' },
   { fr: 'Éditeur', en: 'Editor' },
 
+  // ── Présence en direct (livePresence) : suivre un éditeur, Spotlight ──────
+  { fr: 'Suivre {{name}}', en: 'Follow {{name}}' },
+  { fr: 'Suivre {{name}} (vous suit)', en: 'Follow {{name}} (following you)' },
+  { fr: 'Arrêter de suivre {{name}}', en: 'Stop following {{name}}' },
+  { fr: '{{name}} présente sa vue : le suivre', en: '{{name}} is presenting their view: follow' },
+  { fr: 'Vous : présenter ma vue', en: 'You: present my view' },
+  { fr: 'Présenter ma vue', en: 'Present my view' },
+  { fr: 'Arrêter de présenter', en: 'Stop presenting' },
+  { fr: 'Vous suivez {{name}}', en: 'Following {{name}}' },
+  { fr: 'Vous présentez votre vue', en: 'You are presenting your view' },
+  { fr: 'Vous présentez votre vue · 1 personne vous suit', en: 'You are presenting your view · 1 person following' },
+  { fr: 'Vous présentez votre vue · {{count}} personnes vous suivent', en: 'You are presenting your view · {{count}} people following' },
+  { fr: 'Arrêter', en: 'Stop' },
+  { fr: 'Arrêter de suivre (Échap)', en: 'Stop following (Esc)' },
+  { fr: '{{name}} présente sa vue : vous allez la suivre', en: '{{name}} is presenting their view: you are about to follow it' },
+  { fr: 'Pas maintenant', en: 'Not now' },
+  { fr: '{{name}} a arrêté de présenter', en: '{{name}} stopped presenting' },
+  { fr: '{{name}} a quitté le projet', en: '{{name}} left the project' },
+
   // ── Session temps réel (en-tête, refus du serveur) ─────────────────────────
   { fr: 'Connexion à la session…', en: 'Connecting to the session…' },
   { fr: 'Hors ligne : vos modifications partiront à la reconnexion.', en: 'Offline: your changes will be sent when you reconnect.' },

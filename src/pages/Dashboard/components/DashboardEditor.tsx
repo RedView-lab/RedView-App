@@ -47,7 +47,13 @@ import { useProjectShare } from '@/features/projectBrowser/queries/projectSharin
 import { ItineraryPanel, PredictionProvider, ProjectProvider, useProjectStore } from '@/features/itineraryPanel';
 import { useMultiplayerAvailable } from '@/features/collab/queries/multiplayerHealth';
 import { useCollabSession } from '@/features/collab/useCollabSession';
-import type { ItineraryProject, ProjectCollaborator, ProjectSessionStatus } from '@/features/itineraryPanel/types';
+import type {
+  CollaboratorAction,
+  ItineraryProject,
+  ProjectCollaborator,
+  ProjectSessionStatus,
+} from '@/features/itineraryPanel/types';
+import { FollowingFrame, LivePresenceBridge, LivePresenceContext, useLivePresence } from '@/features/livePresence';
 import { ShareProjectDialog } from '@/features/projectBrowser/components/projects/ShareProjectDialog';
 import { useAppI18n } from '@/shared/i18n';
 import { getSessionUserIdSync } from '@/shared/services/appwrite';
@@ -407,14 +413,45 @@ export function DashboardEditor({
     ? collabState.status === 'denied' ? 'offline' : collabState.status
     : collabSession.pending ? 'connecting' : undefined;
   const collabPeers = collabSession.state?.peers;
+  // Présence en direct (comme Figma) : curseurs sur la carte, suivre un éditeur, présenter sa vue.
+  const livePresence = useLivePresence({ map: mapInstance, realtime: collabSession.realtime, collabState });
+  const selfUserId = collabState?.self?.userId ?? null;
   const collaborators = useMemo<ProjectCollaborator[] | undefined>(() => {
     if (!collabPeers) return undefined;
     const byUser = new Map<string, ProjectCollaborator>();
     for (const peer of collabPeers) {
-      if (!byUser.has(peer.userId)) byUser.set(peer.userId, { userId: peer.userId, name: peer.presence.name || t('Éditeur') });
+      if (byUser.has(peer.userId)) continue;
+      const isSelf = peer.userId === selfUserId;
+      byUser.set(peer.userId, {
+        userId: peer.userId,
+        name: peer.presence.name || t('Éditeur'),
+        isSelf,
+        followed: isSelf ? !!livePresence?.presenting : livePresence?.following?.userId === peer.userId,
+        presenting: !isSelf && !!livePresence?.peers.some((live) => live.userId === peer.userId && live.spotlight !== null),
+        followsMe: !isSelf && !!livePresence?.followers.some((live) => live.userId === peer.userId),
+      });
     }
     return [...byUser.values()];
-  }, [collabPeers, t]);
+  }, [collabPeers, livePresence, selfUserId, t]);
+  const followUser = livePresence?.followUser;
+  const stopFollowing = livePresence?.stopFollowing;
+  const setPresenting = livePresence?.setPresenting;
+  const handleCollaboratorAction = useCallback((userId: string, action: CollaboratorAction) => {
+    switch (action) {
+      case 'follow':
+        followUser?.(userId);
+        break;
+      case 'unfollow':
+        stopFollowing?.();
+        break;
+      case 'spotlight-start':
+        setPresenting?.(true);
+        break;
+      case 'spotlight-stop':
+        setPresenting?.(false);
+        break;
+    }
+  }, [followUser, setPresenting, stopFollowing]);
 
   // Partager (comme Figma) : projets du cloud seulement (pas les projets locaux du compte démo).
   const [shareAnchor, setShareAnchor] = useState<HTMLElement | null>(null);
@@ -450,6 +487,8 @@ export function DashboardEditor({
         collab={collabSession.link}
         collabPending={collabSession.pending}
       >
+      <LivePresenceContext.Provider value={livePresence}>
+      <LivePresenceBridge />
       <CommentToolProvider map={mapInstance} projectId={activeProjectId} me={commentAuthor} members={commentMembers}>
         <MapView
           onMapReady={onMapReady}
@@ -465,6 +504,8 @@ export function DashboardEditor({
         />
 
       <MapCommentsLayer map={mapInstance} overlayInsets={mapOverlayInsets} />
+
+      <FollowingFrame insets={mapOverlayInsets} />
 
       <MapCursorLoader
         loading={visibleStatuses.some((s) => s.id === 'itinerary' && s.state === 'loading')}
@@ -603,6 +644,7 @@ export function DashboardEditor({
                         onSaveProject={onSaveProject}
                         onShareProject={canShare ? handleShareProject : undefined}
                         collaborators={collaborators}
+                        onCollaboratorAction={livePresence ? handleCollaboratorAction : undefined}
                         sessionStatus={sessionStatus}
                         pausesEnabled={dashboardSearchActiveFilters.has('pauses')}
                         waypointsEnabled={dashboardSearchActiveFilters.has('waypoints')}
@@ -693,6 +735,7 @@ export function DashboardEditor({
           </RouteMergeToolProvider>
         </RouteSplitToolProvider>
       </CommentToolProvider>
+      </LivePresenceContext.Provider>
       </ProjectProvider>
   );
 }

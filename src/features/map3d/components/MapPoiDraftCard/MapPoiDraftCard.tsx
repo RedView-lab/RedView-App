@@ -380,7 +380,6 @@ export function MapPoiDraftCard({
         label={t('Supprimer')}
         icon={<DeleteGlyph />}
         onClick={() => onAction({ action: 'delete', draft })}
-        danger
       />
     </div>
   );

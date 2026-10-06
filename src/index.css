@@ -32,7 +32,8 @@ html[data-rv-map-moving] * {
  * passage, pauses, alertes…) et popups cachés le temps de la session.
  */
 [data-rv-flyover-session] .mapboxgl-marker:not([data-rv-flyover-head]),
-[data-rv-flyover-session] .mapboxgl-popup {
+[data-rv-flyover-session] .mapboxgl-popup,
+[data-rv-flyover-session] .rv-peer-cursors {
   visibility: hidden !important;
 }
 

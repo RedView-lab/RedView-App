@@ -57,6 +57,53 @@
   );
 }
 
+/* Une place de la pile (pastille, ou bouton qui la porte : suivre l'éditeur). */
+.rv-avatar-stack__person {
+  display: inline-flex;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+
+/* Remise à zéro des boutons, sans toucher au chevauchement de la pile (marge). */
+.rv-avatar-stack__person--button,
+.rv-avatar-stack__more--button {
+  appearance: none;
+  box-sizing: border-box;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.rv-avatar-stack__person--button {
+  background: none;
+  transition: filter 0.15s ease;
+}
+
+.rv-avatar-stack__person--button:hover {
+  filter: brightness(1.12);
+}
+
+.rv-avatar-stack__person--button:focus-visible .rv-avatar,
+.rv-avatar-stack__more--button:focus-visible {
+  box-shadow: 0 0 0 2px rgb(var(--rv-ink) / 0.4);
+}
+
+/*
+ * Anneaux tracés à l'intérieur de la pastille (le découpage de la pile coupe
+ * tout ce qui déborde) : je suis cet éditeur (plein), il présente sa vue
+ * (pointillé, comme le Spotlight de Figma).
+ */
+.rv-avatar-stack__person--followed .rv-avatar {
+  box-shadow: inset 0 0 0 2px var(--rv-text);
+}
+
+.rv-avatar-stack__person--presenting .rv-avatar {
+  outline: 1.5px dashed var(--rv-text);
+  outline-offset: -1.5px;
+}
+
 .rv-avatar-stack__more {
   display: inline-flex;
   flex: 0 0 auto;
@@ -74,4 +121,13 @@
   font-variant-numeric: tabular-nums;
   line-height: var(--rv-stack-size);
   user-select: none;
+}
+
+.rv-avatar-stack__more--button {
+  transition: background 0.15s ease;
+}
+
+.rv-avatar-stack__more--button:hover {
+  background: rgb(var(--rv-ink) / 0.2);
+  color: var(--rv-text);
 }

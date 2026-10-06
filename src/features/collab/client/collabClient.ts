@@ -9,7 +9,8 @@ import type { ProjectDocument } from '@/features/itineraryPanel/lib/project/laye
 import { diffDocument, storeFromDocument } from '../model/diff';
 import { Materializer } from '../model/materialize';
 import { applyOps, type Op } from '../model/ops';
-import type { ClientMessage, LeaseInfo, PeerInfo, PresenceState, ServerMessage } from '../protocol';
+import type { ClientMessage, LeaseInfo, MotionFields, PeerInfo, PresenceUpdate, ServerMessage } from '../protocol';
+import type { MotionEvent } from '../realtime';
 import { BROWSER_CLOCK, LeaseGate, type GateClock } from './leaseGate';
 import { SyncEngine, type Rejection } from './syncEngine';
 import { UndoHistory } from './undoHistory';
@@ -56,6 +57,8 @@ export interface CollabState {
   unsynced: number;
   /** Raison d'un refus d'accès (`denied`). */
   deniedReason?: CollabDeniedReason;
+  /** Ce client et son utilisateur tels que la salle les connaît (dès le premier `welcome`). */
+  self: { clientId: string; userId: string } | null;
 }
 
 export interface CollabClientOptions {
@@ -85,7 +88,8 @@ export class CollabClient implements ProjectCollabLink {
   private readonly documentListeners = new Set<DocumentListener>();
   private readonly historyListeners = new Set<() => void>();
   private readonly stateListeners = new Set<() => void>();
-  private state: CollabState = { status: 'connecting', ready: false, peers: [], leases: [], unsynced: 0 };
+  private readonly motionListeners = new Set<(event: MotionEvent) => void>();
+  private state: CollabState = { status: 'connecting', ready: false, peers: [], leases: [], unsynced: 0, self: null };
 
   constructor(options: CollabClientOptions) {
     this.clientId = options.clientId;
@@ -214,10 +218,22 @@ export class CollabClient implements ProjectCollabLink {
         // Premier état : il remplace le document provisoire (les modifications
         // faites pendant la connexion sont rejouées par-dessus).
         this.emitRemote();
-        this.updateState({ status: 'online', ready: true, peers: message.peers, leases: message.leases });
+        const self = this.state.self?.clientId === message.clientId && this.state.self.userId === message.userId
+          ? this.state.self
+          : { clientId: message.clientId, userId: message.userId };
+        this.updateState({ status: 'online', ready: true, peers: message.peers, leases: message.leases, self });
         this.flush();
         this.options.onUnsyncedChange?.();
+        for (const { clientId, t, ...fields } of message.motions ?? []) {
+          this.emitMotion({ from: clientId, t, fields, snapshot: true });
+        }
         break;
+      }
+      case 'motion': {
+        // Jusqu'à 30 Hz par éditeur : aucun état de session (ni rendu React) touché.
+        const { from, t, type: _type, ...fields } = message;
+        this.emitMotion({ from, t, fields, snapshot: false });
+        return;
       }
       case 'batch':
       case 'durable':
@@ -249,8 +265,23 @@ export class CollabClient implements ProjectCollabLink {
     this.updateState({ unsynced: this.engine.unsyncedCount });
   }
 
-  setPresence(presence: PresenceState): void {
+  setPresence(presence: PresenceUpdate): void {
     if (this.transport.isOnline() && this.engine.isReady) this.transport.send({ type: 'presence', presence });
+  }
+
+  /** Caméra, pointeur, survol du graphique (éphémère) : envoyé seulement en ligne. */
+  sendMotion(t: number, fields: MotionFields): boolean {
+    if (!this.transport.isOnline() || !this.engine.isReady) return false;
+    this.transport.send({ type: 'motion', t, ...fields });
+    return true;
+  }
+
+  /** Messages `motion` des autres éditeurs (et leur dernier état à chaque `welcome`). */
+  subscribeMotion(listener: (event: MotionEvent) => void): () => void {
+    this.motionListeners.add(listener);
+    return () => {
+      this.motionListeners.delete(listener);
+    };
   }
 
   // ── État de la session (interface) ────────────────────────────────────────
@@ -271,6 +302,7 @@ export class CollabClient implements ProjectCollabLink {
     this.documentListeners.clear();
     this.historyListeners.clear();
     this.stateListeners.clear();
+    this.motionListeners.clear();
   }
 
   // ── Interne ───────────────────────────────────────────────────────────────
@@ -340,6 +372,10 @@ export class CollabClient implements ProjectCollabLink {
 
   private notifyHistory(): void {
     for (const listener of [...this.historyListeners]) listener();
+  }
+
+  private emitMotion(event: MotionEvent): void {
+    for (const listener of [...this.motionListeners]) listener(event);
   }
 
   private updateState(patch: Partial<CollabState>): void {

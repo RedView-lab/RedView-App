@@ -29,6 +29,7 @@
   padding: 6px 8px;
   border-radius: var(--rvi-radius-sm);
   font-size: var(--rv-font-size-sm);
+  font-weight: 500;
   line-height: var(--rv-line-height-snug);
 }
 .rvi-poi-msg--error {

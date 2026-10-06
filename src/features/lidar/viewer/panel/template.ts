@@ -41,16 +41,18 @@ const PANEL_TEMPLATE = `
       <p class="viewer-panel__label">Moteur</p>
       <div class="viewer-panel__select-wrap viewer-panel__select-wrap--engine">
         <button id="panel-engine-mode-button" class="viewer-panel__select-trigger viewer-panel__select-trigger--soft" type="button" aria-haspopup="listbox" aria-expanded="false">
-          <span id="panel-engine-mode-value">WebGPU (+ précis)</span>
+          <span id="panel-engine-mode-value">WebGPU</span>
           <svg class="viewer-panel__select-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="m5 7.5 5 5 5-5"></path>
           </svg>
         </button>
         <div id="panel-engine-mode-menu" class="rv-dropdown viewer-panel__select-menu viewer-panel__select-menu--engine" role="listbox" hidden>
           <button class="rv-dropdown__item viewer-panel__select-option is-selected" type="button" role="option" data-engine-mode-option="webgpu" aria-selected="true">
-            <span class="rv-dropdown__label">WebGPU (+ précis)</span>          </button>
+            <span class="rv-dropdown__label">WebGPU</span>          </button>
           <button class="rv-dropdown__item viewer-panel__select-option" type="button" role="option" data-engine-mode-option="webgl" aria-selected="false">
-            <span class="rv-dropdown__label">WebGL HD</span>          </button>
+            <span class="rv-dropdown__label">WebGL 2 (compatible)</span>          </button>
+          <button class="rv-dropdown__item viewer-panel__select-option" type="button" role="option" data-engine-mode-option="terrain" aria-selected="false">
+            <span class="rv-dropdown__label">Terrain texturé (sans points)</span>          </button>
         </div>
       </div>
     </div>

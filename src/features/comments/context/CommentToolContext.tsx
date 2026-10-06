@@ -133,7 +133,7 @@ export function CommentToolProvider({ children, map, projectId = null, me, membe
   // ── Fil ouvert, saisie ─────────────────────────────────────────────────
   const flyToThread = useCallback((thread: ProjectCommentThread) => {
     const target = latest.current.map;
-    if (!target || getCameraOwner()) return;
+    if (!target || getCameraOwner() === 'flyover') return;
     const camera = thread.camera;
     flyToLocation(target, { lon: thread.anchor.lng, lat: thread.anchor.lat }, {
       zoom: camera?.zoom ?? Math.max(target.getZoom(), FOCUS_MIN_ZOOM),

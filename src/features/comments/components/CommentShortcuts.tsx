@@ -21,7 +21,7 @@ export function CommentShortcuts({ onBeforeArm }: { onBeforeArm(): void }) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const current = latest.current.tool;
-      if (!current || event.defaultPrevented || isTypingTarget(event.target) || getCameraOwner()) return;
+      if (!current || event.defaultPrevented || isTypingTarget(event.target) || getCameraOwner() === 'flyover') return;
       if (event.ctrlKey || event.metaKey || event.altKey) return;
       if (event.key === 'Escape') {
         if (current.draft) current.cancelDraft();

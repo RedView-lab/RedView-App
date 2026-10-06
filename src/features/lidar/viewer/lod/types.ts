@@ -2,8 +2,13 @@
 // LiDAR LOD — Shared types
 // ============================================
 
-/** Coarse GPU class, from adapter info (see `resolvePlatformInfo`). */
-export type GpuTier = 'integrated' | 'discrete' | 'apple';
+/**
+ * Coarse GPU class, from adapter info (see `resolvePlatformInfo`) or the
+ * WebGL renderer string (`resolveWebglPlatformInfo`). `software`: CPU
+ * rasteriser (llvmpipe, SwiftShader, WARP) — only the WebGL 2 backend runs
+ * on one, WebGPU refuses software adapters.
+ */
+export type GpuTier = 'integrated' | 'discrete' | 'apple' | 'software';
 
 /** Platform-dependent GPU/memory profile */
 export interface PlatformProfile {

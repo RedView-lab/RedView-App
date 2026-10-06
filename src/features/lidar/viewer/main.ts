@@ -12,7 +12,10 @@ import './panel/styles.css';
 import './tileNavigator/styles.css';
 import { createAppTranslationBundle, readStoredAppLocale, translateAppText } from '@/shared/i18n/config';
 import { buildTranslationLookup, observeDomTranslation } from '@/shared/i18n/domTranslation';
-import { LidarRenderer, type HeightmapParams } from './renderer';
+import type { HeightmapParams } from './renderer';
+import type { LidarRenderer } from './renderer/sceneRenderer';
+import { createLidarRenderer, type CreatedRenderer } from './renderer/createRenderer';
+import { claimViewerCanvas } from './renderer/canvas';
 import { CameraController, type CameraPose } from './camera';
 import { getTimeZoneForCoordinates, toWgs84, trueNorthGridBearingDeg } from '../lib/coordConvert';
 import { resolveTimeZoneAt } from '@/shared/lib/timeZoneAt';
@@ -57,12 +60,13 @@ import { createViewerLoadingOverlay } from './loading/controller';
 import { loadViewerSceneData } from './session/dataset';
 import { buildTileFileCandidates } from './session/datasetPointCap';
 import { parseViewerParamsFromUrl } from './session/viewerUrlParams';
+import { fallbackViewerEngine, viewerEngineParamValue, VIEWER_ENGINE_PARAM, type ViewerEngineKey } from './session/viewerEngine';
 import { ViewerSnowController, type SnowSceneContext } from './session/viewerSnowController';
 import {
   explainWorkerError,
   launchWebGLFallback,
   loadTileFromOPFS,
-  preflightWebGPU,
+  noEngineHint,
   setViewerStatus,
   showFatalError,
 } from './runtime';
@@ -81,7 +85,8 @@ observeDomTranslation(document.body, buildTranslationLookup(createAppTranslation
 syncRootAppScale();
 
 // --- DOM refs ---
-const canvas = document.getElementById('canvas') as HTMLCanvasElement;
+/** Replaced by the renderer's canvas once created (a fallback engine gets a fresh element, see claimViewerCanvas). */
+let canvas = document.getElementById('canvas') as HTMLCanvasElement;
 const overlay = document.getElementById('overlay')!;
 const statsEl = document.getElementById('stats')!;
 const loadingOverlay = createViewerLoadingOverlay(overlay);
@@ -150,12 +155,12 @@ const GPU_RETRY_STORAGE_KEY = 'redview-lidar-webgpu-retry-at';
 const GPU_RETRY_WINDOW_MS = 120_000;
 
 /**
- * Leaves WebGPU after a lost device or an out-of-memory upload. The canvas
- * already holds a WebGPU context, so the WebGL engine needs a fresh page:
- * the first loss reloads WebGPU once (tiles come back from the OPFS cache),
- * a second one within two minutes switches to `?engine=webgl`.
+ * Leaves an engine whose GPU context was lost. The canvas keeps its context
+ * type, so the next engine needs a fresh page: the first loss reloads the
+ * same engine once (tiles come back from the OPFS cache), a second one
+ * within two minutes moves down the chain WebGPU → WebGL 2 → terrain.
  */
-function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
+function recoverFromGpuFailure(reason: string, running: ViewerEngineKey): void {
   const url = new URL(window.location.href);
   let recentRetry = false;
   try {
@@ -165,11 +170,12 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
   } catch {
     recentRetry = true;
   }
-  if (!allowRetry || recentRetry) {
-    console.warn(`[Viewer] WebGPU failure (${reason}), switching to the WebGL engine.`);
-    url.searchParams.set('engine', 'webgl');
+  if (recentRetry) {
+    const next = fallbackViewerEngine(running);
+    console.warn(`[Viewer] ${running} failure (${reason}), switching to the ${next} engine.`);
+    url.searchParams.set(VIEWER_ENGINE_PARAM, viewerEngineParamValue(next) ?? next);
   } else {
-    console.warn(`[Viewer] WebGPU failure (${reason}), reloading once.`);
+    console.warn(`[Viewer] ${running} failure (${reason}), reloading once.`);
   }
   window.location.replace(url.toString());
 }
@@ -179,7 +185,7 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
     const {
       crs,
       altRef,
-      forceWebGL,
+      engine: requestedEngine,
       bench: benchMode,
       pinnedBudget,
       motionQuality,
@@ -192,7 +198,8 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
 
     const lidarManager = new LidarManager();
 
-    const startWebGLFallback = async (reasonForLog: string): Promise<void> => {
+    /** Terrain engine (viewer-webgl): orthophoto-draped DTM without points, on a canvas of its own. */
+    const startTerrainEngine = async (reasonForLog: string): Promise<void> => {
       const loadAllBuffers = async (): Promise<ArrayBuffer[]> => {
         const buffers: ArrayBuffer[] = [];
         for (const coord of sceneTileCoords) {
@@ -203,6 +210,7 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
         return buffers;
       };
 
+      canvas = claimViewerCanvas();
       await launchWebGLFallback({
         reasonForLog,
         dom: { canvas, overlay, statusEl, barFill, statsEl },
@@ -216,52 +224,59 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
       });
     };
 
-    if (forceWebGL) {
+    if (requestedEngine === 'terrain') {
       try {
-        await startWebGLFallback('user requested ?engine=webgl');
-        return;
+        await startTerrainEngine('?engine=terrain');
       } catch (err: unknown) {
-        console.error('[Viewer] Forced WebGL fallback failed:', err);
+        console.error('[Viewer] Terrain engine failed:', err);
         showFatalError(overlay, {
-          title: 'Moteur WebGL HD indisponible',
-          message: "Impossible de démarrer le moteur WebGL HD demandé.",
-          hint: "Vérifiez que la tuile est bien téléchargée ou réessayez sans le paramètre ?engine=webgl.",
+          title: 'Terrain texturé indisponible',
+          message: 'Impossible de démarrer le moteur de terrain texturé.',
+          hint: 'Vérifiez que la tuile est bien téléchargée, ou rouvrez le viewer avec le moteur WebGPU ou WebGL 2.',
           technical: (err as Error)?.message || String(err),
         });
-        return;
       }
-    }
-
-    setStatus('Vérification du support WebGPU...', 2);
-    const pre = await preflightWebGPU();
-    if (!pre.ok) {
-      try {
-        await startWebGLFallback(`preflight=${pre.code}`);
-        return;
-      } catch (fallbackErr: unknown) {
-        console.error('[Viewer] WebGL fallback failed:', fallbackErr);
-        const detail = (fallbackErr as Error)?.message || String(fallbackErr);
-        showFatalError(overlay, {
-          title: 'Aucun moteur compatible',
-          message: "Ni WebGPU ni le moteur WebGL HD de secours n'ont pu démarrer sur cette machine.",
-          hint: "Mettez à jour vos pilotes graphiques ou utilisez un navigateur récent.",
-          technical: `WebGPU: ${pre.code} — ${pre.detail}\nWebGL fallback: ${detail}`,
-        });
-        return;
-      }
+      return;
     }
 
     const deviceMemoryGiB = (navigator as MemoryAwareNavigator).deviceMemory;
-    // Tiles open from their LOD cache (header + node table) or are decoded
-    // once to build it; WebGPU init runs meanwhile.
+    // The renderer (WebGPU, else WebGL 2) starts while the tiles open from
+    // their LOD cache (header + node table) or are decoded once to build it.
+    setStatus('Préparation du rendu 3D...', 2);
     resizeCanvas();
-    const rendererReady = (async () => {
-      const instance = new LidarRenderer();
-      await instance.init(canvas);
-      return instance;
-    })();
-    rendererReady.catch(() => undefined);
-    const scene = await loadViewerSceneData(sceneTileCoords, setStatus, { deviceMemoryGiB });
+    const rendererReady = createLidarRenderer(requestedEngine === 'webgl' ? 'webgl' : 'auto');
+    const sceneReady = loadViewerSceneData(sceneTileCoords, setStatus, { deviceMemoryGiB });
+    sceneReady.catch(() => undefined);
+    let created: CreatedRenderer;
+    try {
+      created = await rendererReady;
+    } catch (rendererErr: unknown) {
+      // Neither WebGPU nor WebGL 2 started: last resort, the terrain engine.
+      const rendererDetail = (rendererErr as Error)?.message || String(rendererErr);
+      console.error('[Viewer] No point-cloud renderer:', rendererErr);
+      try {
+        await startTerrainEngine(`renderer: ${rendererDetail}`);
+      } catch (terrainErr: unknown) {
+        console.error('[Viewer] Terrain engine failed:', terrainErr);
+        showFatalError(overlay, {
+          title: 'Aucun moteur compatible',
+          message: "Ni WebGPU, ni WebGL 2, ni le terrain texturé n'ont pu démarrer dans ce navigateur.",
+          hint: noEngineHint(),
+          technical: `3D: ${rendererDetail}\nTerrain: ${(terrainErr as Error)?.message || String(terrainErr)}`,
+        });
+      }
+      return;
+    }
+    renderer = created.renderer;
+    canvas = renderer.canvas;
+    const runningEngine: ViewerEngineKey = renderer.backend;
+    renderer.onDeviceLost = (info) => recoverFromGpuFailure(`context lost: ${info.message || info.reason}`, runningEngine);
+    renderer.motionScale = motionQuality.scale ?? renderer.platform!.motionScale;
+    renderer.motionSquares = motionQuality.squares;
+    resizeCanvas();
+    renderer.resize(canvas.width, canvas.height);
+
+    const scene = await sceneReady;
     const sceneBounds = scene.bounds;
     /** Bounds-only view of the scene for the overlay controllers. */
     const sceneInfo = { bounds: sceneBounds };
@@ -270,13 +285,7 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
     const cy = (sceneBounds.minY + sceneBounds.maxY) / 2;
     const cz = (sceneBounds.minZ + sceneBounds.maxZ) / 2;
 
-    setStatus('Initialisation WebGPU...', 86);
-    renderer = await rendererReady;
-    renderer.onDeviceLost = (info) => recoverFromGpuFailure(`device lost: ${info.message || info.reason}`, true);
-    renderer.motionScale = motionQuality.scale ?? renderer.platform!.motionScale;
-    renderer.motionSquares = motionQuality.squares;
-    resizeCanvas();
-    renderer.resize(canvas.width, canvas.height);
+    setStatus('Initialisation du rendu 3D...', 86);
 
     const terrainMesh = await scene.terrainMesh;
     /** Scene frame + DTM grid, shared by the route overlay and the ground lookups. */
@@ -391,6 +400,7 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
       frameHandle = window.requestAnimationFrame(renderLoop);
     };
 
+    const backendLabel = renderer.backend === 'webgpu' ? 'WebGPU' : 'WebGL 2';
     const formatLodStats = (lodStats: SceneLodStats): string => {
       const cadence = frameClock.getCadence();
       const gpuMs = renderer?.getGpuFrameMs() ?? 0;
@@ -415,7 +425,7 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
             ? ` · ${translateAppText('lissage {{done}}/{{total}}', { done: restRefinement.sample, total: REST_SAMPLES })}`
             : '') +
         ` · ${translateAppText('{{count}} tuile(s)', { count: sceneTileCoords.length })}` +
-        ` · ${canvas.width}×${canvas.height}${renderScale < 1 ? ` ×${renderScale.toFixed(2)}` : ''} ${platform.tier}`;
+        ` · ${canvas.width}×${canvas.height}${renderScale < 1 ? ` ×${renderScale.toFixed(2)}` : ''} ${backendLabel} ${platform.tier}`;
     };
 
     const renderLoop = (frameTime: number) => {
@@ -441,6 +451,8 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
       renderer.setSubpixelJitter(jitterX, jitterY);
 
       renderer.setEyeLevelPoints(camera.getMode() === 'look');
+      const depthRange = camera.getDepthRange();
+      renderer.setDepthRange(depthRange.near, depthRange.far);
       renderer.updateCamera(camera.getViewMatrix(), camera.getRenderProjMatrix(), camera.getEye());
 
       if (restRefinement.phase === 'moving') {
@@ -482,7 +494,7 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
         if (restRefinement.phase === 'moving') {
           if (budgetSettled && sceneLod.isIdle()) restRefinement.startRefine();
         } else {
-          const stillMs = renderer.hasPreciseGpuTiming() ? renderer.getGpuFrameMs() : intervalMs;
+          const stillMs = renderer.hasPreciseGpuTiming() ? renderer.getGpuFrameMs() : frameClock.lastIntervalMs;
           if (restRefinement.phase === 'refine') {
             restRefinement.onRefineFrame(
               {
@@ -570,13 +582,17 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
       densityPercent: densityScaleToPercent(pointBudget.userScale),
       edlEnabled,
       edlStrengthPercent,
-      engineMode: 'webgpu',
+      engineMode: runningEngine,
       engineOptions: [
-        { key: 'webgpu' },
-        {
-          key: 'webgl',
-          title: 'Basculer vers le moteur WebGL HD.',
-        },
+        created.webgpuUnavailable !== null && requestedEngine === 'auto'
+          ? {
+            key: 'webgpu',
+            disabled: true,
+            title: translateAppText('WebGPU indisponible dans ce navigateur : {{reason}}', { reason: created.webgpuUnavailable }),
+          }
+          : { key: 'webgpu', title: 'Moteur WebGPU (le plus rapide).' },
+        { key: 'webgl', title: 'Même viewer en WebGL 2, compatible avec tous les navigateurs (Firefox, Chrome sous Linux).' },
+        { key: 'terrain', title: "Relief texturé par l'orthophoto, sans nuage de points." },
       ],
       onPointSizeChange: (percent) => {
         if (!renderer) return;
@@ -605,7 +621,9 @@ function recoverFromGpuFailure(reason: string, allowRetry: boolean): void {
         pointBudget.userScale = percentToDensityScale(percent);
         requestRender();
       },
-      onEngineModeChange: (mode) => switchViewerEngine(mode),
+      onEngineModeChange: (mode) => {
+        if (!switchViewerEngine(mode, runningEngine)) panel.setEngineMode(runningEngine);
+      },
       onSnowModeChange: (mode) => {
         void snowController.handleSnowModeChange(mode, snowContext(), (next) => panel.setSnowMode(next));
       },

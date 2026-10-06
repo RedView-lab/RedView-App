@@ -251,7 +251,7 @@ export function useCommentModeMapEvents({
 
     // Capture sur le conteneur de la carte : avant les gestionnaires de Mapbox (glisser = déplacer).
     const handleMouseDown = (event: MouseEvent) => {
-      if (event.button !== 0 || !event.shiftKey || gesture || getCameraOwner()) return;
+      if (event.button !== 0 || !event.shiftKey || gesture || getCameraOwner() === 'flyover') return;
       if (isOwnClickTarget(event.target)) return;
       event.preventDefault();
       resetPolygon();
@@ -265,7 +265,7 @@ export function useCommentModeMapEvents({
     };
 
     const handleClick = (event: MapMouseEvent) => {
-      if (performance.now() < suppressClickUntil || getCameraOwner()) return;
+      if (performance.now() < suppressClickUntil || getCameraOwner() === 'flyover') return;
       if (isOwnClickTarget(event.originalEvent?.target)) return;
       if (polygonMode) {
         handlePolygonClick(event);

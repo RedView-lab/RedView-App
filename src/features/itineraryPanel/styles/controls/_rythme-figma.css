@@ -512,6 +512,7 @@ button.rvi-rythme-figma__card-box.is-selected {
 
 .rvi-rythme-figma__card-unit {
   font-size: var(--rv-font-size-md);
+  font-weight: 500;
   color: rgb(var(--rv-ink) / 0.7);
   user-select: none;
   pointer-events: none;
@@ -582,6 +583,7 @@ button.rvi-rythme-figma__card-box.is-selected {
   margin: -4px 0 0;
   font-family: var(--rv-font-sans);
   font-size: var(--rv-font-size-sm);
+  font-weight: 500;
   line-height: 16px;
   color: light-dark(#d92d20, #ff6b6b);
 }
@@ -595,6 +597,7 @@ button.rvi-rythme-figma__card-box.is-selected {
   background: light-dark(rgba(247, 144, 9, 0.1), rgba(255, 179, 64, 0.1));
   font-family: var(--rv-font-sans);
   font-size: var(--rv-font-size-sm);
+  font-weight: 500;
   line-height: 16px;
   color: light-dark(#b54708, rgba(255, 214, 153, 0.92));
   overflow-wrap: anywhere;

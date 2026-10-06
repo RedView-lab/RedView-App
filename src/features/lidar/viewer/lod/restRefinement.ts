@@ -36,7 +36,7 @@ const MEASURE_FRAMES = 6;
 const MAX_ADJUSTMENTS = 4;
 /** First still budget, as a multiple of the moving one, before any measurement. */
 const INITIAL_FACTOR = 3;
-/** A still frame this slow stops the accumulation at once (sluggish input otherwise). */
+/** A complete still frame this slow stops the refinement or the accumulation at once (sluggish input otherwise). */
 const REST_ABORT_MS = 200;
 
 export type RestPhase = 'moving' | 'refine' | 'accumulate' | 'done';
@@ -127,6 +127,15 @@ export class RestRefinement {
     if (this.phase !== 'refine') return;
     if (!frame.lodIdle) {
       this.stableFrames = 0;
+      return;
+    }
+    if (frame.gpuMs > REST_ABORT_MS) {
+      // A complete still frame already this slow (software rasteriser, weak
+      // GPU): refining and averaging would keep the view sluggish for many
+      // seconds. This frame is the final image; the next still views start
+      // from half the budget.
+      this.restBudget = Math.max(movingBudget, this.restBudget * 0.5);
+      this.phase = 'done';
       return;
     }
     if (++this.stableFrames < MEASURE_FRAMES) return;

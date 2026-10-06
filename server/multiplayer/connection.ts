@@ -6,6 +6,7 @@ import {
   type ServerErrorCode,
   type ServerMessage,
 } from '../../src/features/collab/protocol.ts';
+import type { SendOptions } from '../../src/features/collab/room/room.ts';
 import type { Authenticator } from './auth.ts';
 import type { HostedRoom, PeerHandle, RoomHost } from './roomHost.ts';
 
@@ -30,8 +31,14 @@ const HELLO_TIMEOUT_MS = 10_000;
 const ACCESS_RECHECK_MS = 60_000;
 /** Au-delà, le client ne suit plus (réseau lent) : il se reconnectera et repartira de l'état complet. */
 const MAX_BUFFERED_BYTES = 32 * 1024 * 1024;
+/**
+ * Message éphémère (`motion`) sauté au-delà : sa place est derrière des lots
+ * en attente, et le suivant le remplace (un curseur en retard ne sert à rien).
+ */
+const MAX_VOLATILE_BUFFERED_BYTES = 256 * 1024;
 const RATE_WINDOW_MS = 10_000;
-const RATE_MAX_MESSAGES = 600;
+/** Lots (≈ 30 Hz) + `motion` (≤ 30 Hz, débit propre dans la salle) + pings, avec de la marge. */
+const RATE_MAX_MESSAGES = 1_200;
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 
 /** Un message diffusé à toute la salle n'est sérialisé qu'une fois. */
@@ -68,8 +75,12 @@ export function handleConnection(socket: WebSocket, options: ConnectionOptions):
 
   const helloTimer = setTimeout(() => fail('bad-request', 'hello-timeout'), HELLO_TIMEOUT_MS);
 
-  function send(message: ServerMessage): void {
+  function send(message: ServerMessage, sendOptions?: SendOptions): void {
     if (socket.readyState !== socket.OPEN) return;
+    if (sendOptions?.volatile && socket.bufferedAmount > MAX_VOLATILE_BUFFERED_BYTES) {
+      options.host.metrics.motionSkippedBackpressure += 1;
+      return;
+    }
     if (socket.bufferedAmount > MAX_BUFFERED_BYTES) {
       close(4408, 'slow-consumer');
       return;

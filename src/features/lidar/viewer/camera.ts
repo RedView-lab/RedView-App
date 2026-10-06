@@ -59,6 +59,25 @@ const LOOK_MAX_PITCH = 85 * DEG;
 export const LOOK_MIN_FOV_X = 3 * DEG;
 export const LOOK_MAX_FOV_X = 120 * DEG;
 
+/** Zoom per wheel pixel (log scale): ≈ ×1.1 per 100 px notch. */
+const WHEEL_ZOOM_PER_PX = 0.001;
+/** Pixels of one `DOM_DELTA_LINE` step: Firefox reports mouse wheels in lines (3 per notch). */
+const WHEEL_LINE_PX = 40;
+/** Largest step taken from one wheel event: a page-mode notch or a fling stays a gentle zoom. */
+const WHEEL_MAX_STEP_PX = 300;
+
+/**
+ * Vertical wheel delta in pixels, whatever the event's unit: Chrome and
+ * Safari send pixels (100–120 per notch, ≈ 53 on Linux X11), Firefox lines
+ * (3 per notch, on Linux too), some mice pages.
+ */
+export function wheelDeltaPixels(event: Pick<WheelEvent, 'deltaY' | 'deltaMode'>, pageHeightPx: number): number {
+  const unit = event.deltaMode === 1 ? WHEEL_LINE_PX : event.deltaMode === 2 ? Math.max(1, pageHeightPx) : 1;
+  const px = event.deltaY * unit;
+  if (!Number.isFinite(px)) return 0;
+  return Math.max(-WHEEL_MAX_STEP_PX, Math.min(WHEEL_MAX_STEP_PX, px));
+}
+
 function wrapAngle(a: number): number {
   return ((a % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
 }
@@ -384,11 +403,12 @@ export class CameraController {
 
   private onWheel = (e: WheelEvent) => {
     e.preventDefault();
+    const factor = Math.exp(wheelDeltaPixels(e, this.canvas.clientHeight) * WHEEL_ZOOM_PER_PX);
     if (this.mode === 'look') {
       const g = this.lookGoal;
-      g.fovX = Math.max(LOOK_MIN_FOV_X, Math.min(LOOK_MAX_FOV_X, g.fovX * (1 + e.deltaY * 0.001)));
+      g.fovX = Math.max(LOOK_MIN_FOV_X, Math.min(LOOK_MAX_FOV_X, g.fovX * factor));
     } else {
-      this.goal.radius = Math.max(1, this.goal.radius * (1 + e.deltaY * 0.001));
+      this.goal.radius = Math.max(1, this.goal.radius * factor);
     }
     this.notifyChange();
   };
@@ -477,13 +497,22 @@ export class CameraController {
     return m;
   }
 
+  /**
+   * Near/far planes of the current view: those of `getProjMatrix`, also
+   * the depth range of renderers that cannot use the infinite reversed-Z
+   * projection (WebGL 2).
+   */
+  getDepthRange(): { near: number; far: number } {
+    if (this.mode === 'look') return { near: 0.05, far: this.sceneRadius * 8 + 1000 };
+    return {
+      near: Math.max(0.05, Math.min(2, this.radius * 0.01)),
+      far: Math.max(this.radius * 10, this.radius + this.sceneRadius * 4),
+    };
+  }
+
   getProjMatrix(): Float32Array {
     const aspect = this.canvas.width / Math.max(this.canvas.height, 1);
-    const look = this.mode === 'look';
-    const near = look ? 0.05 : Math.max(0.05, Math.min(2, this.radius * 0.01));
-    const far = look
-      ? this.sceneRadius * 8 + 1000
-      : Math.max(this.radius * 10, this.radius + this.sceneRadius * 4);
+    const { near, far } = this.getDepthRange();
     const f = 1 / Math.tan(this.getFovY() / 2);
     const nf = 1 / (near - far);
 

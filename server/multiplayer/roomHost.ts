@@ -112,6 +112,11 @@ export class HostedRoom {
         this.acceptedAt.set(batch.seq, Date.now());
         host.metrics.batches += 1;
       },
+      onMotion: (outcome) => {
+        if (outcome === 'relayed') host.metrics.motionIn += 1;
+        else if (outcome === 'rate-limited') host.metrics.motionDroppedRate += 1;
+        else host.metrics.motionInvalid += 1;
+      },
     });
     const options = host.options;
     this.timers.push(
@@ -399,6 +404,11 @@ export class RoomHost {
     shadowChecks: 0,
     shadowMismatches: 0,
     shadowErrors: 0,
+    /** Canal `motion` (caméra, curseur) : relayés, jetés au débit, invalides, sautés sous contre-pression. */
+    motionIn: 0,
+    motionDroppedRate: 0,
+    motionInvalid: 0,
+    motionSkippedBackpressure: 0,
   };
 
   constructor(options: RoomHostOptions) {

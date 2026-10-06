@@ -88,6 +88,7 @@
 .rv-dialog__subtitle {
   margin: 0;
   font-size: var(--rv-font-size-sm);
+  font-weight: 500;
   line-height: 16px;
   color: rgb(var(--rv-ink) / 0.64);
 }

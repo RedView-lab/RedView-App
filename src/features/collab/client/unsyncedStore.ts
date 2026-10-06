@@ -1,4 +1,4 @@
-import { PROTOCOL_VERSION } from '../protocol';
+import { BATCH_FORMAT_PROTOCOLS } from '../protocol';
 import type { UnsyncedBatch } from './syncEngine';
 
 /**
@@ -21,7 +21,7 @@ export interface UnsyncedRecord {
   clientId: string;
   projectId: string;
   userId: string;
-  /** Version du protocole des lots (une autre version ne les relit pas). */
+  /** Version du protocole des lots (relus seulement si leur format est l'actuel : `BATCH_FORMAT_PROTOCOLS`). */
   protocol: number;
   nextClientSeq: number;
   batches: UnsyncedBatch[];
@@ -110,7 +110,7 @@ export function holdClientLock(clientId: string): Promise<(() => void) | null> {
 /**
  * Copie laissée par un onglet fermé (le plus ancien d'abord) pour ce projet
  * et cet utilisateur, verrouillée pour cette session ; les copies trop
- * vieilles, vides ou d'un autre protocole sont supprimées au passage.
+ * vieilles, vides ou d'un autre format de lots sont supprimées au passage.
  */
 export async function adoptUnsynced(
   projectId: string,
@@ -122,7 +122,7 @@ export async function adoptUnsynced(
   for (const record of records) {
     const release = await holdClientLock(record.clientId);
     if (!release) continue;
-    const usable = record.protocol === PROTOCOL_VERSION
+    const usable = BATCH_FORMAT_PROTOCOLS.includes(record.protocol)
       && record.batches.length > 0
       && Date.now() - record.savedAt <= MAX_AGE_MS;
     if (usable) return { record, release };

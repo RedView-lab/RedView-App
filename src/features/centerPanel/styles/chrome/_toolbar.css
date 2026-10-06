@@ -168,6 +168,7 @@
   padding-left: 4px;
   color: rgb(var(--rv-ink) / 0.82);
   font-size: var(--rv-font-size-sm);
+  font-weight: 500;
   line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
@@ -188,7 +189,7 @@
   flex-direction: column;
   gap: 2px;
   font-size: var(--rv-font-size-xs);
-  font-weight: 400;
+  font-weight: 500;
   line-height: 1.2;
 }
 

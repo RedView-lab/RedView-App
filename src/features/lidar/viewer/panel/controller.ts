@@ -1,8 +1,8 @@
 import { readRootAppScale } from '@/shared/lib/appScale';
+import type { ViewerEngineKey } from '../session/viewerEngine';
 import { ensureViewerPanel } from './template';
 
 export type SnowModeKey = 'off' | 'cover' | 'thickness';
-export type ViewerEngineKey = 'webgpu' | 'webgl';
 export type PointColorModeKey = 'rgb' | 'grey' | 'intensity' | 'classification';
 
 export const POINT_SIZE_MIN = 0.02;
@@ -56,8 +56,9 @@ interface PrimaryActionState {
 }
 
 const ENGINE_MODE_LABELS: Record<ViewerEngineKey, string> = {
-  webgpu: 'WebGPU (+ précis)',
-  webgl: 'WebGL HD',
+  webgpu: 'WebGPU',
+  webgl: 'WebGL 2 (compatible)',
+  terrain: 'Terrain texturé (sans points)',
 };
 
 const SNOW_MODE_LABELS: Record<Exclude<SnowModeKey, 'off'>, string> = {
@@ -77,6 +78,7 @@ function normalizeEngineOptions(options?: ViewerEngineOption[]): ViewerEngineOpt
     return [
       { key: 'webgpu', label: ENGINE_MODE_LABELS.webgpu },
       { key: 'webgl', label: ENGINE_MODE_LABELS.webgl },
+      { key: 'terrain', label: ENGINE_MODE_LABELS.terrain },
     ];
   }
 
@@ -344,6 +346,8 @@ export function createViewerPanel(options: ViewerPanelOptions) {
       if (!optionKey) return;
       const config = getEngineOption(optionKey);
       const isSelected = optionKey === currentEngineMode;
+      // An engine the page does not offer is not listed.
+      option.hidden = !config;
       option.classList.toggle('is-selected', isSelected);
       option.setAttribute('aria-selected', isSelected ? 'true' : 'false');
       option.setAttribute('aria-disabled', config?.disabled ? 'true' : 'false');
@@ -351,8 +355,8 @@ export function createViewerPanel(options: ViewerPanelOptions) {
       else option.removeAttribute('title');
     });
 
-    const isWebGL = currentEngineMode === 'webgl';
-    if (isWebGL) {
+    // The terrain engine draws a textured DTM: no point controls, an elevation exaggeration instead.
+    if (currentEngineMode === 'terrain') {
       pointControlsGroup?.setAttribute('hidden', '');
       elevationControlsGroup?.removeAttribute('hidden');
     } else {
@@ -512,7 +516,7 @@ export function createViewerPanel(options: ViewerPanelOptions) {
     const selected = option.dataset.engineModeOption as ViewerEngineKey | undefined;
     if (!selected) return;
     const config = getEngineOption(selected);
-    if (config?.disabled) return;
+    if (!config || config.disabled) return;
     closeEngineModeMenu();
     if (selected === currentEngineMode) return;
     currentEngineMode = selected;

@@ -65,23 +65,50 @@
   font-size: var(--rv-font-size-xl);
   font-weight: 700;
   line-height: 1.25;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
+/* Une seule ligne, toujours : toutes les cartes d'une rangée gardent leur aperçu aligné.
+   Pastille et taille restent entières, la date se rogne avec « … ». */
 .rvpb-card__meta {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
   color: rgb(var(--rv-ink) / 0.4);
   font-size: var(--rv-font-size-md);
   font-weight: 500;
   line-height: 1.2;
 }
 
+.rvpb-card__meta > * {
+  flex: 0 0 auto;
+}
+
+.rvpb-card__meta > .rvpb-card__meta-group {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
 .rvpb-card__meta-group {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+.rvpb-card__meta-group > svg {
+  flex: 0 0 auto;
+}
+
+.rvpb-card__meta-group > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .rvpb-card__open {

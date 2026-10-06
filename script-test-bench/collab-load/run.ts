@@ -13,13 +13,16 @@
  *  - boucle d'événements du serveur (retard p99) ;
  *  - mémoire par salle : tas après ramasse-miettes, salles chargées et
  *    éditées mais clients partis (rattrapage par lots compris), rapporté à la
- *    taille du document ; mémoire par connexion à part.
+ *    taille du document ; mémoire par connexion à part ;
+ *  - présence en direct : une part des clients (`--motionShare`) envoie sa
+ *    caméra + son pointeur à `--motion` Hz (cadence d'un éditeur suivi) ;
+ *    relais `motion` mesuré comme la diffusion, en même temps que les lots.
  *
- * Cibles : diffusion p95 < 50 ms, journal p95 < 600 ms, mémoire par salle
- * ≤ 2 × le document, aucune erreur serveur, aucun écart de validation
- * fantôme. Sortie non nulle sinon.
+ * Cibles : diffusion p95 < 50 ms (lots et `motion`), journal p95 < 600 ms,
+ * mémoire par salle ≤ 2 × le document, aucune erreur serveur, aucun écart de
+ * validation fantôme, aucun `motion` jeté au débit. Sortie non nulle sinon.
  *
- *   npx tsx script-test-bench/collab-load/run.ts [--rooms=50 --clients=5 --rate=20 --seconds=30 --route=1500]
+ *   npx tsx script-test-bench/collab-load/run.ts [--rooms=50 --clients=5 --rate=20 --seconds=30 --route=1500 --motion=30 --motionShare=0.2]
  */
 import { fork, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
@@ -38,6 +41,9 @@ const CLIENTS = arg('clients', 5);
 const RATE = arg('rate', 20);
 const SECONDS = arg('seconds', 30);
 const ROUTE = arg('route', 1_500);
+const MOTION_HZ = arg('motion', 30);
+/** Part des clients suivis (ou qui présentent) : par défaut un par salle de cinq. */
+const MOTION_SHARE = arg('motionShare', 0.2);
 
 const TARGETS = { broadcastP95Ms: 50, journalP95Ms: 600, memoryPerDocument: 2 };
 
@@ -80,6 +86,9 @@ const documentBytes = Buffer.byteLength(JSON.stringify(document), 'utf8');
 const sentAt = new Map<string, number>();
 const broadcast: number[] = [];
 const acks: number[] = [];
+/** Relais `motion` : envoi → réception (même processus : horloge commune). */
+const motionRelay: number[] = [];
+let motionSent = 0;
 let rejected = 0;
 let received = 0;
 
@@ -90,11 +99,15 @@ class LoadClient {
   private socket: WebSocket | null = null;
   private clientSeq = 0;
   private timer: ReturnType<typeof setInterval> | null = null;
+  private motionTimer: ReturnType<typeof setInterval> | null = null;
+  /** Ce client est suivi (ou présente) : caméra + pointeur à `MOTION_HZ`. */
+  private readonly sendsMotion: boolean;
 
   constructor(room: number, index: number) {
     this.projectId = `load-${room}`;
     this.clientId = `load-${room}-${index}`;
     this.seed = index === 0;
+    this.sendsMotion = MOTION_HZ > 0 && index < Math.round(CLIENTS * MOTION_SHARE);
   }
 
   open(): Promise<void> {
@@ -119,7 +132,8 @@ class LoadClient {
         else if (message.type === 'batch') {
           const at = sentAt.get(`${message.batch.clientId}#${message.batch.clientSeq}`);
           if (at !== undefined) (message.batch.clientId === this.clientId ? acks : broadcast).push(now - at);
-        } else if (message.type === 'reject') rejected += 1;
+        } else if (message.type === 'motion') motionRelay.push(now - message.t);
+        else if (message.type === 'reject') rejected += 1;
       });
       socket.on('error', reject);
     });
@@ -138,10 +152,27 @@ class LoadClient {
         this.socket!.send(JSON.stringify({ type: 'batch', clientSeq: this.clientSeq, ops: [{ t: 's', id, k: key, v: value }], blobs: {} }));
       }, 1000 / RATE);
     }, Math.random() * (1000 / RATE));
+    if (!this.sendsMotion) return;
+    setTimeout(() => {
+      let step = 0;
+      this.motionTimer = setInterval(() => {
+        step += 1;
+        const x = (step % 600) / 600;
+        motionSent += 1;
+        this.socket!.send(JSON.stringify({
+          type: 'motion',
+          t: Math.round(performance.now() * 10) / 10,
+          cam: [6.9 + 0.05 * x, 45.95 + 0.02 * x, 13, 360 * x - 180, 55, 36.87],
+          vp: [1600, 900, 64, 360, 300, 420, 0, 0, 0, 0],
+          ptr: [6.91 + 0.01 * x, 45.96],
+        }));
+      }, 1000 / MOTION_HZ);
+    }, Math.random() * (1000 / MOTION_HZ));
   }
 
   stop(): void {
     if (this.timer) clearInterval(this.timer);
+    if (this.motionTimer) clearInterval(this.motionTimer);
   }
 
   close(): void {
@@ -160,7 +191,8 @@ for (let room = 0; room < ROOMS; room += 1) {
 }
 await Promise.all(clients.map((client, index) => (index % CLIENTS === 0 ? Promise.resolve() : client.open())));
 const loaded = await measure();
-console.error(`${ROOMS} salles × ${CLIENTS} clients connectés ; document ${(documentBytes / 1024).toFixed(0)} Ko ; charge ${ROOMS * CLIENTS * RATE} lots/s pendant ${SECONDS} s…`);
+const motionSenders = ROOMS * (MOTION_HZ > 0 ? Math.round(CLIENTS * MOTION_SHARE) : 0);
+console.error(`${ROOMS} salles × ${CLIENTS} clients connectés ; document ${(documentBytes / 1024).toFixed(0)} Ko ; charge ${ROOMS * CLIENTS * RATE} lots/s + ${motionSenders * MOTION_HZ} motion/s (relayés ×${CLIENTS - 1}) pendant ${SECONDS} s…`);
 
 const started = performance.now();
 for (const client of clients) client.start();
@@ -180,7 +212,7 @@ child.send({ type: 'stop' });
 const memoryPerRoom = (roomsOnly.metrics.heap_used_bytes - baseline.metrics.heap_used_bytes) / ROOMS;
 const memoryPerClient = (after.metrics.heap_used_bytes - roomsOnly.metrics.heap_used_bytes) / (ROOMS * CLIENTS);
 const report = {
-  config: { rooms: ROOMS, clients: CLIENTS, rate: RATE, seconds: SECONDS, documentBytes },
+  config: { rooms: ROOMS, clients: CLIENTS, rate: RATE, seconds: SECONDS, documentBytes, motionHz: MOTION_HZ, motionSenders },
   throughput: {
     batchesSent: sentAt.size,
     batchesPerSecond: round(sentAt.size / elapsed, 0),
@@ -189,6 +221,14 @@ const report = {
   },
   broadcastMs: { p50: round(percentile(broadcast, 0.5)), p95: round(percentile(broadcast, 0.95)), p99: round(percentile(broadcast, 0.99)), max: round(broadcast.reduce((max, value) => Math.max(max, value), 0)) },
   ackMs: { p50: round(percentile(acks, 0.5)), p95: round(percentile(acks, 0.95)) },
+  motion: {
+    sent: motionSent,
+    relayed: motionRelay.length,
+    perSecondOut: round(motionRelay.length / elapsed, 0),
+    relayMs: { p50: round(percentile(motionRelay, 0.5)), p95: round(percentile(motionRelay, 0.95)), p99: round(percentile(motionRelay, 0.99)) },
+    droppedRate: after.metrics.motionDroppedRate,
+    skippedBackpressure: after.metrics.motionSkippedBackpressure,
+  },
   server: {
     journalP50Ms: after.metrics.journal_latency_p50_ms,
     journalP95Ms: after.metrics.journal_latency_p95_ms,
@@ -221,6 +261,10 @@ const check = (condition: boolean, label: string) => {
   if (!condition) failures.push(label);
 };
 check(report.broadcastMs.p95 < TARGETS.broadcastP95Ms, `diffusion p95 ${report.broadcastMs.p95} ms (< ${TARGETS.broadcastP95Ms})`);
+if (MOTION_HZ > 0) {
+  check(report.motion.relayMs.p95 < TARGETS.broadcastP95Ms, `relais motion p95 ${report.motion.relayMs.p95} ms (< ${TARGETS.broadcastP95Ms}), ${report.motion.perSecondOut} messages/s en sortie`);
+  check(report.motion.droppedRate === 0, `aucun motion jeté au débit (${report.motion.droppedRate})`);
+}
 check((report.server.journalP95Ms ?? Infinity) < TARGETS.journalP95Ms, `journal durable p95 ${report.server.journalP95Ms} ms (< ${TARGETS.journalP95Ms})`);
 check(report.memory.perRoomVsDocument <= TARGETS.memoryPerDocument, `mémoire par salle ${report.memory.perRoomKb} Ko = ${report.memory.perRoomVsDocument} × le document (≤ ${TARGETS.memoryPerDocument})`);
 check(report.throughput.rejected === 0, `aucun lot refusé (${report.throughput.rejected})`);

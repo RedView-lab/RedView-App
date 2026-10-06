@@ -24,8 +24,18 @@ import type { Op } from './model/ops';
 /**
  * 2 : fils de commentaires dans le document (`p/comments:*`, schema.ts) ; un
  * client de la version 1 les réécrirait en valeur atomique.
+ * 3 : canal `motion` (caméra, curseur, survol du graphique) et présence
+ * `following` / `spotlight` : tous les éditeurs d'une salle se suivent et se
+ * voient (livePresence).
  */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
+
+/**
+ * Versions dont les lots ont le format actuel : la copie des lots non écrits
+ * laissée sur l'appareil par l'une d'elles est reprise (client/unsyncedStore).
+ * La 3 n'a ajouté que des messages éphémères.
+ */
+export const BATCH_FORMAT_PROTOCOLS: readonly number[] = [2, 3];
 
 /** Lot numéroté par le serveur (diffusé à tous ; pour son émetteur, c'est l'acquittement). */
 export interface SequencedBatch {
@@ -47,18 +57,64 @@ export interface Snapshot {
   blobs: Record<string, string>;
 }
 
-/** Présence d'un éditeur (éphémère, jamais journalisée). */
+/** Présence d'un éditeur (éphémère, jamais journalisée), diffusée regroupée à ≈ 10 Hz. */
 export interface PresenceState {
   name?: string;
   color?: string;
   activeItineraryId?: string | null;
   activeMode?: string | null;
+  /** Éditeur suivi (`clientId`), comme le mode observation de Figma. */
+  following?: string | null;
+  /**
+   * Présente sa vue (Spotlight) : numéro d'ordre donné par la salle, le plus
+   * grand l'emporte (le même pour tous, sans dépendre des horloges).
+   */
+  spotlight?: number | null;
 }
+
+/** Présence envoyée par un client : il demande le Spotlight (`true`), la salle le numérote. */
+export type PresenceUpdate = Omit<PresenceState, 'spotlight'> & { spotlight?: boolean };
 
 export interface PeerInfo {
   clientId: string;
   userId: string;
   presence: PresenceState;
+}
+
+/**
+ * Canal `motion` : ce que voit et pointe un éditeur, échantillonné jusqu'à
+ * 30 Hz. Éphémère et avec pertes (jamais journalisé ; sauté plutôt que mis en
+ * file sous contre-pression) : chaque champ présent est l'état courant de son
+ * flux, le message suivant répare une perte. Horodaté par l'émetteur
+ * (`performance.now()`) : le récepteur le rejoue légèrement en différé,
+ * interpolé (livePresence/lib/playout).
+ */
+/** Caméra Mapbox : [lng, lat, zoom, cap, inclinaison, champ vertical (°)]. */
+export type MotionCamera = [number, number, number, number, number, number];
+/**
+ * Carte de l'émetteur, en px de mise en page : [largeur, hauteur, encarts
+ * haut droite bas gauche (panneaux qui la couvrent), padding Mapbox haut
+ * droite bas gauche].
+ */
+export type MotionViewport = [number, number, number, number, number, number, number, number, number, number];
+/** Pointeur sur la carte : [lng, lat] (posé sur le relief). */
+export type MotionPointer = [number, number];
+/** Survol du graphique d'analyse : [itinéraire, distance depuis son départ (m)]. */
+export type MotionChart = [string, number];
+
+export interface MotionFields {
+  cam?: MotionCamera;
+  vp?: MotionViewport;
+  /** null : pointeur hors de la carte. */
+  ptr?: MotionPointer | null;
+  /** null : rien de survolé. */
+  chart?: MotionChart | null;
+}
+
+/** Dernier état connu d'un éditeur (champs fusionnés), donné à l'arrivée dans la salle. */
+export interface MotionState extends MotionFields {
+  clientId: string;
+  t: number;
 }
 
 export interface LeaseInfo {
@@ -80,13 +136,14 @@ export type ClientMessage =
       /** Instance de salle et dernière séquence connues (reconnexion) : le serveur n'envoie que la suite. */
       epoch: string | null;
       lastSeq: number | null;
-      presence?: PresenceState;
+      presence?: PresenceUpdate;
       /** Développement seulement (projets locaux du compte démo) : document qui crée la salle. */
       seed?: ProjectDocument;
     }
   | { type: 'batch'; clientSeq: number; ops: Op[]; blobs: Record<string, string> }
   | { type: 'lease'; action: 'request' | 'renew' | 'release'; kind: DerivedKind; itineraryId: string }
-  | { type: 'presence'; presence: PresenceState }
+  | { type: 'presence'; presence: PresenceUpdate }
+  | ({ type: 'motion'; t: number } & MotionFields)
   | { type: 'ping'; t: number };
 
 export type ServerErrorCode = 'unauthorized' | 'forbidden' | 'not-found' | 'version' | 'busy' | 'bad-request' | 'internal';
@@ -109,8 +166,11 @@ export type ServerMessage =
       catchUp?: SequencedBatch[];
       peers: PeerInfo[];
       leases: LeaseInfo[];
+      /** Dernier état `motion` des autres éditeurs (caméra de départ pour les suivre). */
+      motions?: MotionState[];
     }
   | { type: 'batch'; batch: SequencedBatch }
+  | ({ type: 'motion'; from: string; t: number } & MotionFields)
   | { type: 'durable'; seq: number }
   | { type: 'duplicate'; clientSeq: number }
   | { type: 'reject'; clientSeq: number; reason: string; missingBlobs?: string[] }
