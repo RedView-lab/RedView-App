@@ -1,8 +1,11 @@
 import type { GpxRoute } from '../types';
+// Concrete module, not the route-metrics barrel: this parser runs in the GPX
+// worker, and the barrel pulled 72 modules into it (BRouter, i18n, a React
+// provider whose dev refresh runtime made the worker crash on `window`).
 import {
   cleanAndInterpolateElevations,
   isValidElevation,
-} from '../../itineraryPanel/lib/route-metrics';
+} from '../../itineraryPanel/lib/route-metrics/elevationSanitizer';
 
 const EARTH_RADIUS_M = 6_371_008.8;
 

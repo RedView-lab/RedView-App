@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.bench.tsbuildinfo",
+    "types": ["node", "vite/client", "@webgpu/types"],
+    /* Bench helpers import server/*.mjs: types inferred, not checked */
+    "allowJs": true,
+    "checkJs": false,
+    /* Probes and benches keep exploratory locals; ESLint already reports them */
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
+  },
+  "include": ["script-test-bench/**/*.ts", "src/vite-env.d.ts", "src/types"]
+}

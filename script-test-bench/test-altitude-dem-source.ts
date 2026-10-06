@@ -2,8 +2,12 @@ import assert from 'node:assert/strict';
 
 // Node has no ImageData: the encoder only needs width/height/data.
 class NodeImageData {
+  readonly width: number;
+  readonly height: number;
   readonly data: Uint8ClampedArray;
-  constructor(readonly width: number, readonly height: number) {
+  constructor(width: number, height: number) {
+    this.width = width;
+    this.height = height;
     this.data = new Uint8ClampedArray(width * height * 4);
   }
 }

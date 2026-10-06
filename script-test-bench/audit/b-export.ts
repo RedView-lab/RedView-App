@@ -90,7 +90,7 @@ async function main() {
   console.log(`  first record altitude=${r0?.altitude} distance=${r0?.distance}; last distance=${recs[recs.length - 1]?.distance}`);
   if (!isFit || !integrity || errors.length) failures.push(`FIT decode problem: isFIT=${isFit} integrity=${integrity} errors=${errors.length}`);
   if (recs.length !== stored.length) failures.push(`FIT record count ${recs.length} != ${stored.length}`);
-  const latDeg = (r0?.positionLat ?? 0) / SEMI;
+  const latDeg = Number(r0?.positionLat ?? 0) / SEMI;
   if (Math.abs(latDeg - stored[0].lat) > 0.001) {
     failures.push(`FIT positions not in semicircles: decoded ${latDeg.toFixed(6)}° vs route ${stored[0].lat.toFixed(6)}° (course would sit at ~0°N 0°E)`);
   }

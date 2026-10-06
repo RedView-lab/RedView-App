@@ -34,14 +34,14 @@ export const FREECAM_MIN_GROUND_CLEARANCE_M = 1.5;
 export const FREECAM_GROUND_LOOKAHEAD_S = 0.15;
 
 /** Vitesse horizontale = hauteur-sol × facteur, bornée (m/s). */
-export const FREECAM_HORIZONTAL_SPEED_PER_AGL = 1.5;
-export const FREECAM_HORIZONTAL_SPEED_MIN_MPS = 4;
-export const FREECAM_HORIZONTAL_SPEED_MAX_MPS = 20_000;
+export const FREECAM_HORIZONTAL_SPEED_PER_AGL = 3;
+export const FREECAM_HORIZONTAL_SPEED_MIN_MPS = 8;
+export const FREECAM_HORIZONTAL_SPEED_MAX_MPS = 40_000;
 
 /** Vitesse verticale = hauteur-sol × facteur, bornée (m/s). */
-export const FREECAM_VERTICAL_SPEED_PER_AGL = 1.2;
-export const FREECAM_VERTICAL_SPEED_MIN_MPS = 3;
-export const FREECAM_VERTICAL_SPEED_MAX_MPS = 15_000;
+export const FREECAM_VERTICAL_SPEED_PER_AGL = 2.4;
+export const FREECAM_VERTICAL_SPEED_MIN_MPS = 6;
+export const FREECAM_VERTICAL_SPEED_MAX_MPS = 30_000;
 
 /**
  * Vélocité (inertie) : constantes de temps de l'amortissement exponentiel.
@@ -54,7 +54,7 @@ export const FREECAM_REST_SPEED_RATIO = 0.01;
 
 /** Multiplicateur de vitesse réglé à la molette. */
 export const FREECAM_SPEED_MULTIPLIER_MIN = 0.25;
-export const FREECAM_SPEED_MULTIPLIER_MAX = 8;
+export const FREECAM_SPEED_MULTIPLIER_MAX = 16;
 export const FREECAM_SPEED_MULTIPLIER_WHEEL_STEP = 1.25;
 
 /**

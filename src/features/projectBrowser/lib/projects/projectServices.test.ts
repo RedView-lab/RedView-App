@@ -12,13 +12,16 @@ vi.mock('@/shared/utils/projects', () => ({
   getProject: vi.fn(),
   saveProject: vi.fn(),
 }));
-vi.mock('@/features/redviewFile', () => ({
+// Modules concrets importés par importProjects.ts (le lecteur est chargé à la demande).
+vi.mock('@/features/redviewFile/lib/importProject', () => ({
   importRedviewFile: vi.fn(),
+}));
+vi.mock('@/features/redviewFile/lib/messages', () => ({
   describeRedviewImportError: (error: unknown) => (error instanceof Error ? error.message : 'Fichier illisible'),
 }));
 
 import * as projectsApi from '@/shared/utils/projects';
-import * as redviewFile from '@/features/redviewFile';
+import * as redviewFile from '@/features/redviewFile/lib/importProject';
 import type { ProjectRow } from '@/shared/utils/projects';
 
 import { duplicateProjectWithAssets } from './duplicateProject';

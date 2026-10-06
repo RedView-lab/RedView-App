@@ -41,6 +41,259 @@ function _pngChunk(type, data) {
   return buf;
 }
 
+// ── zlib stream: run-length matches + dynamic Huffman ─────────────────
+// CompressionStream('deflate') is zlib level 6, whose LZ77 match search
+// costs 20-30 ms on a Paeth-filtered 512² slope tile (Chromium, Node) and
+// gains nothing there: the residuals of a smooth field have no far repeats.
+// Measured on real tiles (Mont-Blanc z12/z13, Lyon, Paris): level 6 gives
+// 69-98 KB, zlib's Z_RLE strategy 69-95 KB at a tenth of the time. This is
+// that strategy — a byte repeating the previous one becomes a distance-1
+// match (flat ground, sea), everything else a Huffman-coded literal — with
+// one dynamic block per 16 K symbols like zlib. Every tree keeps at least two
+// codes, as zlib's encoder does, so all inflaters accept it (an incomplete
+// code-length code is an error for zlib's inflate).
+// Only for the opaque gray slope tile (buildGrayPng): on Terrain-RGB the RGB
+// triplets repeat at distance 4, and on gray + alpha the pairs at distance 2,
+// so level 6 stays 12-50 % smaller there.
+
+const _ZRLE_BLOCK_SYMBOLS = 16384;
+const _ZRLE_LEN_BASE = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31,
+  35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258];
+const _ZRLE_LEN_EXTRA = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2,
+  3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
+const _ZRLE_CL_ORDER = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+// Match length (3…258) → length code index (0…28, i.e. symbols 257…285).
+const _ZRLE_LEN_CODE = (() => {
+  const t = new Uint8Array(259);
+  for (let c = 0; c < 29; c++) {
+    const hi = Math.min(258, _ZRLE_LEN_BASE[c] + (1 << _ZRLE_LEN_EXTRA[c]) - 1);
+    for (let l = _ZRLE_LEN_BASE[c]; l <= hi; l++) t[l] = c;
+  }
+  return t;
+})();
+
+// Huffman code lengths ≤ maxBits for `freq` (two-queue construction on the
+// sorted leaves; frequencies halved and rebuilt in the rare case a code is
+// too long). The caller guarantees at least two non-zero frequencies.
+function _zrleCodeLengths(freq, maxBits) {
+  const lengths = new Uint8Array(freq.length);
+  const symbols = [];
+  for (let s = 0; s < freq.length; s++) if (freq[s] > 0) symbols.push(s);
+  const m = symbols.length;
+  let weights = symbols.map((s) => freq[s]);
+  const weight = new Float64Array(2 * m);
+  const parent = new Int32Array(2 * m);
+  const depth = new Uint16Array(2 * m);
+  for (;;) {
+    const order = weights.map((_, i) => i).sort((a, b) => weights[a] - weights[b]);
+    for (let i = 0; i < m; i++) weight[i] = weights[order[i]];
+    let leaf = 0;
+    let node = m;
+    const pick = (end) => (leaf < m && (node >= end || weight[leaf] <= weight[node]) ? leaf++ : node++);
+    for (let k = m; k < 2 * m - 1; k++) {
+      const a = pick(k);
+      const b = pick(k);
+      weight[k] = weight[a] + weight[b];
+      parent[a] = k;
+      parent[b] = k;
+    }
+    depth[2 * m - 2] = 0;
+    let longest = 0;
+    for (let k = 2 * m - 3; k >= 0; k--) {
+      depth[k] = depth[parent[k]] + 1;
+      if (k < m && depth[k] > longest) longest = depth[k];
+    }
+    if (longest <= maxBits) {
+      for (let i = 0; i < m; i++) lengths[symbols[order[i]]] = depth[i];
+      return lengths;
+    }
+    weights = weights.map((w) => (w >> 1) | 1);
+  }
+}
+
+// Canonical codes (RFC 1951 §3.2.2), bit-reversed for LSB-first output.
+function _zrleCodes(lengths) {
+  const count = new Uint16Array(16);
+  for (let s = 0; s < lengths.length; s++) count[lengths[s]]++;
+  count[0] = 0;
+  const next = new Uint16Array(16);
+  let code = 0;
+  for (let bits = 1; bits < 16; bits++) {
+    code = (code + count[bits - 1]) << 1;
+    next[bits] = code;
+  }
+  const codes = new Uint16Array(lengths.length);
+  for (let s = 0; s < lengths.length; s++) {
+    const len = lengths[s];
+    if (!len) continue;
+    let c = next[len]++;
+    let r = 0;
+    for (let i = 0; i < len; i++) { r = (r << 1) | (c & 1); c >>= 1; }
+    codes[s] = r;
+  }
+  return codes;
+}
+
+function _zrleEnsureTwoCodes(freq) {
+  let used = 0;
+  for (let s = 0; s < freq.length && used < 2; s++) if (freq[s] > 0) used++;
+  for (let s = 0; used < 2; s++) if (freq[s] === 0) { freq[s] = 1; used++; }
+}
+
+function _zrleAdler32(data) {
+  let a = 1;
+  let b = 0;
+  for (let i = 0; i < data.length;) {
+    const end = Math.min(i + 5552, data.length);
+    for (; i < end; i++) { a += data[i]; b += a; }
+    a %= 65521;
+    b %= 65521;
+  }
+  return ((b << 16) | a) >>> 0;
+}
+
+// zlib stream (RFC 1950) of `data`, readable by any inflater.
+function zlibDeflateRle(data) {
+  const n = data.length;
+  let out = new Uint8Array(Math.max(1024, (n >> 1) + 1024));
+  let pos = 2;
+  out[0] = 0x78; // deflate, 32 K window
+  out[1] = 0x01; // FLEVEL 0 (fastest), FCHECK so that 0x7801 % 31 === 0
+  let bitBuf = 0;
+  let bitCnt = 0;
+  const put = (value, bits) => {
+    bitBuf |= value << bitCnt;
+    bitCnt += bits;
+    while (bitCnt >= 8) {
+      out[pos++] = bitBuf & 0xff;
+      bitBuf >>>= 8;
+      bitCnt -= 8;
+    }
+  };
+
+  const symbols = new Uint16Array(_ZRLE_BLOCK_SYMBOLS); // < 256 literal, else 256 + match length
+  const litFreq = new Uint32Array(286);
+  const distFreq = new Uint32Array(30);
+  const clFreq = new Uint32Array(19);
+  const clOps = new Uint16Array(286 + 30); // code-length symbol | extra value << 5
+  let i = 0;
+  do {
+    litFreq.fill(0);
+    distFreq.fill(0);
+    let count = 0;
+    while (i < n && count < _ZRLE_BLOCK_SYMBOLS) {
+      const byte = data[i];
+      if (i > 0 && byte === data[i - 1]) {
+        const end = Math.min(n, i + 258);
+        let j = i + 1;
+        while (j < end && data[j] === byte) j++;
+        const len = j - i;
+        if (len >= 3) {
+          symbols[count++] = 256 + len;
+          litFreq[257 + _ZRLE_LEN_CODE[len]]++;
+          distFreq[0]++;
+          i = j;
+          continue;
+        }
+      }
+      symbols[count++] = byte;
+      litFreq[byte]++;
+      i++;
+    }
+    const final = i >= n;
+    litFreq[256] = 1;
+    _zrleEnsureTwoCodes(litFreq);
+    _zrleEnsureTwoCodes(distFreq);
+    const litLen = _zrleCodeLengths(litFreq, 15);
+    const distLen = _zrleCodeLengths(distFreq, 15);
+    const litCode = _zrleCodes(litLen);
+    const distCode = _zrleCodes(distLen);
+    let nLit = 286;
+    while (nLit > 257 && litLen[nLit - 1] === 0) nLit--;
+    let nDist = 30;
+    while (nDist > 1 && distLen[nDist - 1] === 0) nDist--;
+
+    // Code lengths of both trees as one sequence, run-length coded (16/17/18).
+    const seq = new Uint8Array(nLit + nDist);
+    seq.set(litLen.subarray(0, nLit), 0);
+    seq.set(distLen.subarray(0, nDist), nLit);
+    clFreq.fill(0);
+    let nOps = 0;
+    const op = (sym, extra) => { clOps[nOps++] = sym | (extra << 5); clFreq[sym]++; };
+    for (let k = 0; k < seq.length;) {
+      const len = seq[k];
+      let run = 1;
+      while (k + run < seq.length && seq[k + run] === len) run++;
+      k += run;
+      if (len === 0) {
+        while (run >= 11) { const r = Math.min(run, 138); op(18, r - 11); run -= r; }
+        if (run >= 3) { op(17, run - 3); run = 0; }
+      } else {
+        op(len, 0);
+        run--;
+        while (run >= 3) { const r = Math.min(run, 6); op(16, r - 3); run -= r; }
+      }
+      while (run-- > 0) op(len, 0);
+    }
+    _zrleEnsureTwoCodes(clFreq);
+    const clLen = _zrleCodeLengths(clFreq, 7);
+    const clCode = _zrleCodes(clLen);
+    let nCl = 19;
+    while (nCl > 4 && clLen[_ZRLE_CL_ORDER[nCl - 1]] === 0) nCl--;
+
+    // Worst case: 21 bits per symbol (15 + 5 extra + 1 distance) + the
+    // block header (≤ 316 code-length ops of 14 bits).
+    const need = pos + count * 3 + 1024;
+    if (need > out.length) {
+      const grown = new Uint8Array(Math.max(need, out.length * 2));
+      grown.set(out.subarray(0, pos));
+      out = grown;
+    }
+
+    put(final ? 1 : 0, 1);
+    put(2, 2); // dynamic Huffman
+    put(nLit - 257, 5);
+    put(nDist - 1, 5);
+    put(nCl - 4, 4);
+    for (let k = 0; k < nCl; k++) put(clLen[_ZRLE_CL_ORDER[k]], 3);
+    for (let k = 0; k < nOps; k++) {
+      const sym = clOps[k] & 31;
+      put(clCode[sym], clLen[sym]);
+      if (sym === 16) put(clOps[k] >> 5, 2);
+      else if (sym === 17) put(clOps[k] >> 5, 3);
+      else if (sym === 18) put(clOps[k] >> 5, 7);
+    }
+    const distSym = distCode[0];
+    const distBits = distLen[0];
+    for (let k = 0; k < count; k++) {
+      const s = symbols[k];
+      if (s < 256) {
+        put(litCode[s], litLen[s]);
+      } else {
+        const len = s - 256;
+        const c = _ZRLE_LEN_CODE[len];
+        put(litCode[257 + c], litLen[257 + c]);
+        if (_ZRLE_LEN_EXTRA[c]) put(len - _ZRLE_LEN_BASE[c], _ZRLE_LEN_EXTRA[c]);
+        put(distSym, distBits);
+      }
+    }
+    put(litCode[256], litLen[256]);
+  } while (i < n);
+
+  if (bitCnt > 0) out[pos++] = bitBuf & 0xff;
+  const adler = _zrleAdler32(data);
+  if (pos + 4 > out.length) {
+    const grown = new Uint8Array(pos + 4);
+    grown.set(out.subarray(0, pos));
+    out = grown;
+  }
+  out[pos++] = adler >>> 24;
+  out[pos++] = (adler >>> 16) & 0xff;
+  out[pos++] = (adler >>> 8) & 0xff;
+  out[pos++] = adler & 0xff;
+  return out.subarray(0, pos);
+}
+
 async function buildRawPng(width, height, rgba) {
   // Build raw scanlines: filter-byte(0) + row RGBA data per row.
   // `set(subarray)` is a native memcpy — ~10x faster than a JS byte loop.
@@ -65,8 +318,11 @@ async function buildPngFromScanlines(width, height, raw, colorType = 6) {
   writer.write(raw);
   writer.close();
   const compressed = await new Response(cs.readable).arrayBuffer();
-  const compData = new Uint8Array(compressed);
+  return buildPngFromZlib(width, height, new Uint8Array(compressed), colorType);
+}
 
+// PNG around an already compressed zlib stream of the scanlines.
+function buildPngFromZlib(width, height, compData, colorType) {
   // PNG signature
   const sig = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 
@@ -104,6 +360,8 @@ async function buildPngFromScanlines(width, height, raw, colorType = 6) {
 // the NoData / zone alpha: half the scanline bytes of RGBA, so deflate runs on
 // half the data. Image decoders expand it to RGBA with R = G = B = gray, which
 // is exactly what Mapbox's raster-color-mix [90, 0, 0, 0] reads.
+// Kept on zlib level 6: the alpha bytes interleaved with the gray ones break
+// the runs, and zlibDeflateRle came out 12-18 % larger on real zone tiles.
 async function buildGrayAlphaPng(width, height, gray, alpha) {
   const rowBytes = 1 + width * 2;
   const raw = new Uint8Array(height * rowBytes);
@@ -131,6 +389,8 @@ async function buildGrayAlphaPng(width, height, gray, alpha) {
 // pixel. Paeth predicts from the left, upper and upper-left pixels, which
 // suits the smooth 2D field of an upsampled slope raster: measured on a
 // 512² LiDAR-like tile, 15 ms / 121 KB vs 27 ms / 147 KB for gray+alpha Sub.
+// zlibDeflateRle then brings a real 512² tile from 22-34 ms (level 6) to a
+// few ms at the same size.
 async function buildGrayPng(width, height, gray) {
   const rowBytes = 1 + width;
   const raw = new Uint8Array(height * rowBytes);
@@ -151,7 +411,7 @@ async function buildGrayPng(width, height, gray) {
       raw[off + 1 + x] = (gray[row + x] - pred) & 0xff;
     }
   }
-  return buildPngFromScanlines(width, height, raw, 0);
+  return buildPngFromZlib(width, height, zlibDeflateRle(raw), 0);
 }
 
 // ── Slope-optimised PNG encoder (RGBA, Sub filter) ────────────────────

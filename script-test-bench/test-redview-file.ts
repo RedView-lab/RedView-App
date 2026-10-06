@@ -110,7 +110,7 @@ function buildProject(pointCount: number): ItineraryProject {
     { id: 'end', kind: 'end', label: 'Paris', distanceKm: pointCount / 100, lat: 48.85, lon: 2.35 },
   ];
   a.prediction = { total_time_s: 75_000, riding_time_s: 70_000, stop_time_s: 5_000, total_distance_m: pointCount * 10 } as never;
-  a.poiFeatures = [{ id: 42, lat: 46.1, lon: 6.5, category: 'fountains', name: 'Fontaine <b>', tags: { amenity: 'drinking_water' } }];
+  a.poiFeatures = [{ id: 42, lat: 46.1, lon: 6.5, category: 'drinking_water', name: 'Fontaine <b>', tags: { amenity: 'drinking_water' } }];
   a.forbiddenZones = [{ id: 'z1', createdAt: '2026-10-01T10:00:00.000Z', points: [{ lat: 46, lon: 6 }, { lat: 46.1, lon: 6 }, { lat: 46.1, lon: 6.1 }] }];
   a.fitUploads = [
     { name: 'sortie-1.fit', type: 'application/octet-stream', lastModified: 1_700_000_000_000, size: 1, path: 'bucket-file-id-1' },
@@ -174,7 +174,7 @@ function buildFullProject(): ItineraryProject {
     engine_version: 4,
   } as never;
   a.poiFeatures = [
-    { id: 42, lat: 46.1, lon: 6.5, category: 'fountains', name: 'Fontaine', tags: { amenity: 'drinking_water' }, favorite: true, pauseDurationMin: 15, osmType: 'node', source: null, srcConfidence: null, favoriteSource: 'manual' },
+    { id: 42, lat: 46.1, lon: 6.5, category: 'drinking_water', name: 'Fontaine', tags: { amenity: 'drinking_water' }, favorite: true, pauseDurationMin: 15, osmType: 'node', source: null, srcConfidence: null, favoriteSource: 'manual' },
     { id: 43, lat: 46.2, lon: 6.4, category: 'bakeries', name: null, tags: {}, autoReason: 'water' } as never,
   ];
   a.poiSearchSignature = 'poi-search';

@@ -605,8 +605,13 @@ const EDIT_POSITION_TOLERANCE_M = 5_000;
 /**
  * Demi-fenêtres successives (m de tracé de part et d'autre de l'édition)
  * quand une borne n'est pas rejointe naturellement ; au-delà, borne réelle.
+ * On commence petit : la plupart des éditions (point glissé, trace tirée) se
+ * recollent à l'ancien tracé en quelques km, et le temps d'une recherche
+ * BRouter croît bien plus vite que sa longueur — une fenêtre de ±80 km
+ * d'emblée coûtait plusieurs secondes par glisser. Un cran raté ne coûte
+ * qu'une recherche courte de plus.
  */
-const WINDOW_STEPS_M = [LOCAL_EDIT_WINDOW_KM * 1_000, LOCAL_EDIT_WINDOW_KM * 2_500];
+const WINDOW_STEPS_M = [12_000, LOCAL_EDIT_WINDOW_KM * 1_000, LOCAL_EDIT_WINDOW_KM * 2_500];
 /** Tracé que le nouveau doit partager avec l'ancien juste avant une borne provisoire. */
 const REJOIN_PROOF_M = 5_000;
 /** Écart latéral sous lequel deux tracés suivent la même route (GPX bruité compris). */

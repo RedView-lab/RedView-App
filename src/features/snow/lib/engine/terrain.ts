@@ -108,6 +108,44 @@ export class AltitudeSampler {
     if (ux < 0 || uy < 0 || ux > far.width - 1 || uy > far.height - 1) return Number.NaN;
     return sampleBilinear(far.data, far.width, far.height, ux, uy);
   }
+
+  /**
+   * Largest (zs − zc − drop_k) / d_k (`drops` null: (zs − zc) / d_k) of the
+   * samples zs = at(xm + ux·d_k, ym + uy·d_k), up to the first one outside
+   * every DEM; `best` when none is higher. `at` inlined with the same
+   * arithmetic: horizons and Winstral's Sx sample ~10⁸ points per scene.
+   */
+  maxRaySlope(
+    xm: number, ym: number, ux: number, uy: number,
+    distances: Float64Array, drops: Float64Array | null, zc: number, best: number,
+  ): number {
+    const g = this.grid;
+    const far = this.far;
+    const { dx, dy, width, z } = g;
+    const xMax = g.width - 1;
+    const yMax = g.height - 1;
+    for (let k = 0; k < distances.length; k++) {
+      const dist = distances[k];
+      const qx = xm + ux * dist;
+      const qy = ym + uy * dist;
+      const fx = qx / dx;
+      const fy = qy / dy;
+      let zs: number;
+      if (fx >= 0 && fy >= 0 && fx <= xMax && fy <= yMax) {
+        zs = z[Math.round(fy) * width + Math.round(fx)];
+      } else {
+        if (!far) break;
+        const fu = (qx - far.originX) / far.cell;
+        const fv = (qy - far.originY) / far.cell;
+        if (fu < 0 || fv < 0 || fu > far.width - 1 || fv > far.height - 1) break;
+        zs = sampleBilinear(far.data, far.width, far.height, fu, fv);
+      }
+      if (!Number.isFinite(zs)) break;
+      const t = drops ? (zs - zc - drops[k]) / dist : (zs - zc) / dist;
+      if (t > best) best = t;
+    }
+    return best;
+  }
 }
 
 /**
@@ -133,19 +171,11 @@ export function shelterIndex(
     d = d < 16 * ps ? d + ps : d * 1.08;
   }
   const out = new Float32Array(w * h);
+  const ray = Float64Array.from(distances);
   for (let y = 0; y < h; y++) {
     const ym = y * dy;
     for (let x = 0; x < w; x++) {
-      const xm = x * dx;
-      const zc = z[y * w + x];
-      let best = -1e9;
-      for (let k = 0; k < distances.length; k++) {
-        const dist = distances[k];
-        const zs = sampler.at(xm + ux * dist, ym + uy * dist);
-        if (!Number.isFinite(zs)) break;
-        const t = (zs - zc) / dist;
-        if (t > best) best = t;
-      }
+      const best = sampler.maxRaySlope(x * dx, ym, ux, uy, ray, null, z[y * w + x], -1e9);
       out[y * w + x] = best > -1e8 ? Math.atan(best) * DEG : 0;
     }
   }

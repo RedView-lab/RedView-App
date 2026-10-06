@@ -101,7 +101,7 @@ async function main() {
     const oc = run(glue, [courseFit.bytes], gt20.gpx, gt20.cfg);
     const lc = `${COURSE_FILE} (course)`.padEnd(46) + ` ${oc.ok ? 'ACCEPTÉ' : `refusé : ${oc.error}`}`;
     rows.push(lc); console.log(lc);
-    if (oc.ok || !/Not an activity/.test(oc.error)) failures.push(`${COURSE_FILE}: un FIT « course » doit être refusé comme activité`);
+    if (oc.ok || !/Not an activity/.test(oc.error ?? '')) failures.push(`${COURSE_FILE}: un FIT « course » doit être refusé comme activité`);
   }
   sanity(`les ${fits.length} FIT ensemble`, run(glue, fits.map((f) => f.bytes), gt20.gpx, gt20.cfg));
 

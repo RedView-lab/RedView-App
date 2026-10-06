@@ -34,7 +34,7 @@ export function runFrameClockCheck(): void {
 }
 
 const BUDGET_PROFILE: PlatformProfile = {
-  tier: 'integrated', minBudget: 400_000, initialBudget: 1_500_000, maxBudget: 6_000_000, poolBudget: 8_000_000,
+  tier: 'integrated', minBudget: 400_000, initialBudget: 1_500_000, maxBudget: 6_000_000, restMaxBudget: 20_000_000, poolBudget: 24_000_000,
   maxCanvasDim: 4096, dprCap: 1.25, isApple: false, motionScale: 0.7,
 };
 

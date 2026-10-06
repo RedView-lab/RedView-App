@@ -11,7 +11,7 @@
   align-items: center;
   gap: 8px;
   min-height: 32px;
-  padding: 7px 8px;
+  padding: 6px 8px;
   border: 0;
   border-radius: var(--rvc-radius);
   background: transparent;
@@ -32,10 +32,18 @@
 
 .rvc-basemaps__preview {
   display: block;
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   flex: 0 0 auto;
-  border-radius: 2px;
+  border-radius: 5px;
+  overflow: hidden;
+  /* Hairline drawn over the thumbnail so light and dark maps both keep an edge. */
+  outline: 1px solid rgb(var(--rv-ink) / 0.14);
+  outline-offset: -1px;
+}
+
+.rvc-basemaps__row.is-active .rvc-basemaps__preview {
+  outline-color: rgb(var(--rv-ink) / 0.4);
 }
 
 .rvc-basemaps__label {

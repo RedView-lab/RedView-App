@@ -18,6 +18,7 @@ import {
   type ProjectedPoi,
 } from '../src/features/poi/lib/refinePoiProjection.ts';
 import { buildPoiClusters } from '../src/features/poi/lib/refinePoiClustering.ts';
+import { poiFeaturesToTimelineItems } from '../src/features/itineraryPanel/lib/schedule/poi-to-timeline.ts';
 import type { PoiFeature, PoiCategory } from '../src/features/poi/types.ts';
 
 export async function runPoiBenchmark(options: { quick?: boolean } = {}): Promise<BenchmarkSuite> {
@@ -53,16 +54,19 @@ export async function runPoiBenchmark(options: { quick?: boolean } = {}): Promis
     },
   );
 
-  // --- BENCHMARK 2 : Filtrage Corridor Rapide (Bounding Box) ---
+  // --- BENCHMARK 2 : Feuille de route des POI du corridor ---
+  // (Le filtrage du corridor lui-même est fait par le serveur POI ; jusqu'au
+  // 2026-10-06 ce bench mesurait une copie locale d'un filtre par boîte.)
+  const routeRows = route10k.map((p) => ({ lat: p.lat, lon: p.lon, elevationM: p.elevationM, distanceM: p.distanceM }));
   suite.measureSync(
     {
-      name: 'Filtrage Corridor Bounding Box (2 500 POIs)',
-      category: 'poi-corridor',
+      name: 'Feuille de route : 2 500 POI (poiFeaturesToTimelineItems)',
+      category: 'poi-timeline',
       iterations,
-      regressionThresholdP95Ms: 3.0,
+      regressionThresholdP95Ms: 40.0,
       itemsProcessedPerOp: 2_500,
     },
-    () => filterPoisByCorridorBbox(poiFeatures, route10k, 0.005),
+    () => poiFeaturesToTimelineItems(poiFeatures, routeRows),
   );
 
   // --- BENCHMARK 3 : Projection Orthogonale de POIs sur la Trace ---
@@ -86,7 +90,7 @@ export async function runPoiBenchmark(options: { quick?: boolean } = {}): Promis
           etaSec: proj.etaSec,
           baseScore: 1.0,
           score: 1.0,
-          openStatus: { isOpen: true, text: 'Ouvert' },
+          openStatus: 'open',
           clusterId: -1,
         };
       });
@@ -121,30 +125,6 @@ export async function runPoiBenchmark(options: { quick?: boolean } = {}): Promis
   );
 
   return suite;
-}
-
-function filterPoisByCorridorBbox(
-  pois: PoiFeature[],
-  route: { lat: number; lon: number }[],
-  marginDeg: number,
-): PoiFeature[] {
-  let minLat = Infinity, maxLat = -Infinity;
-  let minLon = Infinity, maxLon = -Infinity;
-
-  for (let i = 0; i < route.length; i++) {
-    const p = route[i];
-    if (p.lat < minLat) minLat = p.lat;
-    if (p.lat > maxLat) maxLat = p.lat;
-    if (p.lon < minLon) minLon = p.lon;
-    if (p.lon > maxLon) maxLon = p.lon;
-  }
-
-  minLat -= marginDeg; maxLat += marginDeg;
-  minLon -= marginDeg; maxLon += marginDeg;
-
-  return pois.filter((poi) => {
-    return poi.lat >= minLat && poi.lat <= maxLat && poi.lon >= minLon && poi.lon <= maxLon;
-  });
 }
 
 // Standalone execution

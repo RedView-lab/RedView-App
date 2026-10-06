@@ -27,6 +27,7 @@ import {
   type RouteLineElevationReference,
 } from './routeElevation';
 import { buildRouteContentSignature } from '../routes';
+import { planActiveRouteRestack } from './routeStacking';
 
 const ROUTE_LINE_OCCLUSION_OPACITY = 0;
 
@@ -650,6 +651,36 @@ export function removeAllRouteLayers(map: MapboxMap): void {
     }
   } catch {
     /* noop */
+  }
+}
+
+function routeLayerIds(itineraryId: string): string[] {
+  const { source: _source, ...layers } = ids(itineraryId);
+  return Object.values(layers);
+}
+
+/**
+ * Le tracé de l'itinéraire sélectionné passe par-dessus les autres tracés
+ * (cf. planActiveRouteRestack). Ne déplace une couche que si l'ordre est faux.
+ */
+export function stackActiveRouteOnTop(map: MapboxMap, activeItineraryId: string, itineraryIds: string[]): void {
+  try {
+    // L'ordre propre du style (`_order`), celui que `moveLayer` réordonne —
+    // pas `style.order`, l'ordre de rendu (couches drapées d'abord, tri 3D).
+    const order = (map as unknown as { style?: { _order?: string[] } }).style?._order
+      ?? map.getStyle()?.layers?.map((layer) => layer.id);
+    if (!order) return;
+    const activeLayers = new Set(routeLayerIds(activeItineraryId));
+    const otherLayers = new Set(
+      itineraryIds
+        .filter((id) => id !== activeItineraryId)
+        .flatMap((id) => routeLayerIds(id)),
+    );
+    for (const { layerId, beforeId } of planActiveRouteRestack(order, activeLayers, otherLayers)) {
+      map.moveLayer(layerId, beforeId);
+    }
+  } catch {
+    /* style being replaced: the next replay restacks */
   }
 }
 

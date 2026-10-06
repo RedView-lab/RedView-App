@@ -43,7 +43,7 @@ import { PeerCursorsOverlay } from '../../src/features/livePresence/engine/PeerC
 import { PresenceBroadcaster } from '../../src/features/livePresence/engine/PresenceBroadcaster.ts';
 import { normalizeAngle } from '../../src/features/livePresence/lib/playout.ts';
 import type { MotionFields } from '../../src/features/collab/protocol.ts';
-import type { MapMouseEvent, Map as MapboxMap } from 'mapbox-gl';
+import type { Map as MapboxMap } from 'mapbox-gl';
 import { FakeMap, Sim, Tab, installGlobals, type CameraValues, type FakeElement } from './virtualBrowser.ts';
 
 interface Scenario {
@@ -244,7 +244,7 @@ function runPass(scenario: Scenario, profile: Profile, followerHz: number, order
       instance.setOthersPresent(true);
       instance.setWatched(true);
       if (scenario.pointer) {
-        leaderMap.fire('mousemove', { point: { x: scenario.pointer[0], y: scenario.pointer[1] } } as unknown as MapMouseEvent);
+        leaderMap.fire('mousemove', { point: { x: scenario.pointer[0], y: scenario.pointer[1] } });
       }
       leaderMap.triggerRepaint();
       return instance;

@@ -38,6 +38,18 @@ html[data-rv-map-moving] * {
 }
 
 /*
+ * Point de survol de la trace / tête du flyover (`routeDotMarker.ts`) : purement
+ * visuel. Mapbox réécrit `pointer-events: auto` en style inline à chaque
+ * déplacement d'un marqueur (`Marker#_evaluateOpacity`) ; sans ce `!important`,
+ * le point qui suit le pointeur sur la trace captait l'appui : un départ, une
+ * arrivée ou une étape dessous ne se laissaient pas saisir, ni la trace en
+ * mode Tracer.
+ */
+.rvi-analysis-hover-dot {
+  pointer-events: none !important;
+}
+
+/*
  * Full-viewport overlays (project manager, loading page, modals, mobile block).
  *
  * These are rendered inside the dashboard's scaled canvas (`appScaleStyle`,

@@ -22,6 +22,10 @@ const PACKAGE_SCRIPTS = JSON.parse(readFileSync(new URL('../package.json', impor
 /** Étapes indépendantes, lancées en parallèle. */
 const FAST_STEPS = [
   { id: 'typecheck', script: 'typecheck', label: 'Types (tsc -b : app, vite, api)' },
+  // Benchs typés à part (pas dans tsc -b : le build de prod et l'image Docker
+  // n'en ont pas besoin) : une API de l'app qui change casse sinon un bench
+  // en silence — il mesure un tableau vide ou un `null` sans échouer.
+  { id: 'typecheck-bench', script: 'typecheck:bench', label: 'Types des benchs (script-test-bench)' },
   { id: 'lint', script: 'lint', label: 'ESLint (cliquet de suppressions)' },
   { id: 'test', script: 'test', label: 'Tests unitaires (Vitest)' },
   { id: 'knip', script: 'knip', label: 'Code et dépendances morts (knip)' },

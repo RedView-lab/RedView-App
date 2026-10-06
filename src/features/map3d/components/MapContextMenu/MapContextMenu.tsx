@@ -371,7 +371,10 @@ export function MapContextMenu({
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') closeMenu();
+      if (event.key !== 'Escape') return;
+      // Échap ferme le menu, pas l'outil armé dessous (`useEscapeToExit`).
+      event.preventDefault();
+      closeMenu();
     };
 
     const handleWindowChange = () => closeMenu();

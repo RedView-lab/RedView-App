@@ -28,7 +28,7 @@ export function useItineraryUndoRedoShortcut({
     const handleKeyDown = (event: KeyboardEvent) => {
       // Never hijack text typing (search inputs, title edit, notes, etc.)
       if (isTypingTarget(event.target)) return;
-      // Ctrl sert à descendre en FreeCam : Ctrl+Z (avancer) ne doit pas annuler.
+      // Cmd/Ctrl servent à descendre en FreeCam : Cmd/Ctrl+Z (avancer) ne doit pas annuler.
       if (isFreeCamActive()) return;
 
       const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);

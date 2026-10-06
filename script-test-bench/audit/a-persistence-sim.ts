@@ -535,8 +535,9 @@ async function main() {
     await m.getProject(row.id);
     __mock.dbNetworkDown = true;
     try { await m.saveProject(row.id, named('L1 v2 hors-ligne')); } catch { /* attendu */ }
-    let refused: { name?: string; projects?: Array<{ name: string }> } | null = null;
-    try { await m.signOutAccount(); } catch (e) { refused = e as typeof refused; }
+    type Refusal = { name?: string; projects?: Array<{ name: string }> };
+    let refused = null as Refusal | null;
+    try { await m.signOutAccount(); } catch (e) { refused = e as Refusal; }
     const keptOffline = __idb.projects.get(row.id)?.data?.name === 'L1 v2 hors-ligne' && !!m.readStoredAppwriteSession();
     __mock.dbNetworkDown = false;
     let threwOnline: unknown = null;

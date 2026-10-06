@@ -1,88 +1,133 @@
 /**
  * RedView Test-Bench : Météorologie (Weather)
- * 
- * Benchmarks :
- * 1. Décodage et parsing JSON du payload Open-Meteo (168h x 14 variables)
- * 2. Interpolation spatio-temporelle de météo le long d'un parcours (10 000 points)
- * 3. Calcul de grille de vent régulière vectorielle (computeWindGrid) pour GPU
- * 4. Pipeline de recoloration binaire de tuiles radar RainViewer (recolorRadarPng)
- * 5. Test de latence Live HTTP (si VPS ou serveur actif)
+ *
+ * Benchmarks (vrai code de l'app) :
+ * 1. Météo le long de la trace : réponse Open-Meteo multi-points d'une trace
+ *    de 1 200 km (26 stations × 16 jours × 7 variables) lue par
+ *    fetchRouteWeatherDataset (fetch simulé, une trace différente par
+ *    itération : le jeu de données est sinon servi par son cache).
+ * 2. Interpolation spatio-temporelle aux 24 000 points du graphique
+ *    (getRouteWeatherAtDistanceAndTime : encadrement des stations, heure,
+ *    correction d'altitude).
+ * 3. Grille de vent régulière (computeWindGrid) pour le GPU.
+ * 4. Recoloration des tuiles radar RainViewer côté serveur (recolorRadarPng).
+ * 5. Latence HTTP /api/weather si un serveur local répond.
+ * Jusqu'au 2026-10-06, 1 et 2 mesuraient des copies écrites dans le bench
+ * (JSON.parse d'une station, interpolation simplifiée).
  */
 import { BenchmarkSuite } from './core/harness.ts';
 import { printSuiteHeader, printSuiteResults } from './core/reporter.ts';
-import {
-  generateSyntheticWeather,
-  generateSyntheticRoute,
-  type SyntheticWeatherPayload,
-} from './core/synthetic-data.ts';
 import { computeWindGrid } from '../src/features/weather/lib/wind-grid.ts';
+import {
+  fetchRouteWeatherDataset,
+  getRouteWeatherAtDistanceAndTime,
+  type RouteWeatherDataset,
+} from '../src/features/weather/lib/routeWeather.ts';
+import type { RouteChartPoint } from '../src/features/centerPanel/components/chart/seriesCommon.ts';
 import { recolorRadarPng } from '../server/radar-recolor.mjs';
 import { deflateSync, crc32 } from 'node:zlib';
+
+const ROUTE_KM = 1200;
+const FORECAST_DAYS = 16;
+const HOURLY_VARS = [
+  'temperature_2m', 'apparent_temperature', 'precipitation', 'wind_speed_10m',
+  'cloud_cover', 'relative_humidity_2m', 'sunshine_duration',
+] as const;
+
+/** Trace de 1 200 km, un point tous les 600 m. */
+function syntheticRoute(): RouteChartPoint[] {
+  const n = (ROUTE_KM * 1000) / 600 + 1;
+  return Array.from({ length: n }, (_, i) => ({
+    lat: 45 + i * 0.0045,
+    lon: 6 + 0.4 * Math.sin(i / 300),
+    distanceM: i * 600,
+    elevationM: 800 + 700 * Math.sin(i / 90),
+  }));
+}
+
+/** Réponse Open-Meteo (tableau, une entrée par station), heures murales locales. */
+function openMeteoBody(stations: number, startDate: string): string {
+  const [y, m, d] = startDate.split('-').map(Number);
+  const time: string[] = [];
+  for (let h = 0; h < FORECAST_DAYS * 24; h++) {
+    const t = new Date(y, m - 1, d, h);
+    time.push(`${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}T${String(t.getHours()).padStart(2, '0')}:00`);
+  }
+  return JSON.stringify(Array.from({ length: stations }, (_, s) => ({
+    latitude: 45 + s * 0.2,
+    longitude: 6,
+    elevation: 900,
+    hourly: Object.fromEntries([
+      ['time', time],
+      ...HOURLY_VARS.map((v, k) => [v, time.map((_, h) => Math.round((10 + 8 * Math.sin((h + k + s) / 7)) * 10) / 10)]),
+    ]),
+  })));
+}
+
+function localDateIso(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
 
 export async function runMeteoBenchmark(options: { quick?: boolean } = {}): Promise<BenchmarkSuite> {
   const suite = new BenchmarkSuite('Météo (Weather & Radar)');
   const iterations = options.quick ? 5 : 20;
 
-  // 1. Préparation des données synthétiques
-  const rawWeather = generateSyntheticWeather(45.9237, 6.8694);
-  const rawWeatherJson = JSON.stringify(rawWeather);
-  const route10k = generateSyntheticRoute(10_000);
+  const route = syntheticRoute();
+  const startDate = localDateIso(new Date());
+  const body = openMeteoBody(26, startDate);
 
-  // 2. Création d'un buffer PNG 512x512 valide pour le test RainViewer radar
+  // Un PNG 512x512 valide pour la recoloration radar RainViewer.
   const mockRadarPng = createSynthetic512x512Png();
   const samplePalette = 'gradient:#2DBF8C_0_5:#7CD95F_5_15:#FFD800_15_25:#FF0000_25_50';
 
-  // --- BENCHMARK 1 : Parsing & Normalisation du JSON Open-Meteo ---
-  suite.measureSync(
-    {
-      name: 'Parsing JSON Open-Meteo (168h x 11 vars)',
-      category: 'meteo-parsing',
-      iterations,
-      regressionThresholdP95Ms: 5.0,
-      itemsProcessedPerOp: 168 * 11,
-    },
-    () => {
-      const parsed: SyntheticWeatherPayload = JSON.parse(rawWeatherJson);
-      // Extraction et vérification des séries temporelles
-      let sumTemp = 0;
-      const count = parsed.hourly.temperature_2m.length;
-      for (let i = 0; i < count; i++) {
-        sumTemp += parsed.hourly.temperature_2m[i];
-      }
-      return sumTemp;
-    },
-  );
+  // --- BENCHMARK 1 : réponse Open-Meteo de la trace (fetchRouteWeatherDataset) ---
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(body, { status: 200, headers: { 'content-type': 'application/json' } })) as typeof fetch;
+  let dataset: RouteWeatherDataset | null = null;
+  let variant = 0;
+  try {
+    await suite.measureAsync(
+      {
+        name: 'Météo trace : réponse Open-Meteo 26 stations × 16 j',
+        category: 'meteo-parsing',
+        iterations,
+        regressionThresholdP95Ms: 40.0,
+        itemsProcessedPerOp: 26 * FORECAST_DAYS * 24 * HOURLY_VARS.length,
+      },
+      async () => {
+        // Une trace différente à chaque fois (dernier point déplacé de 10 m).
+        const points = route.slice();
+        const last = points[points.length - 1];
+        points[points.length - 1] = { ...last, distanceM: (last.distanceM ?? 0) + 10 * ++variant };
+        dataset = await fetchRouteWeatherDataset('bench', points, startDate, '06:00', undefined, { rideDurationHours: 60 });
+        if (!dataset || dataset.samples.length !== 26) throw new Error('[bench-meteo] jeu de données météo incomplet');
+        return dataset;
+      },
+    );
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 
-  // --- BENCHMARK 2 : Interpolation météo le long d'une trace de 10 000 points ---
+  // --- BENCHMARK 2 : interpolation aux 24 000 points du graphique ---
+  const chartPoints = 24_000;
+  const rideSeconds = 60 * 3600;
   suite.measureSync(
     {
-      name: 'Interpolation Trace (10k pts)',
+      name: 'Météo trace : interpolation 24k pts (getRouteWeatherAtDistanceAndTime)',
       category: 'meteo-interpolation',
       iterations,
-      regressionThresholdP95Ms: 15.0,
-      itemsProcessedPerOp: 10_000,
+      regressionThresholdP95Ms: 30.0,
+      itemsProcessedPerOp: chartPoints,
     },
     () => {
-      const weather = rawWeather.hourly;
-      const hoursCount = weather.time.length;
-      const interpolated = new Float32Array(route10k.length);
-
-      for (let i = 0; i < route10k.length; i++) {
-        const pt = route10k[i];
-        // Projection temporelle sur la semaine (168h)
-        const hourIndex = Math.min(hoursCount - 1, Math.floor((pt.timeSec ?? 0) / 3600) % hoursCount);
-        const nextHourIndex = Math.min(hoursCount - 1, hourIndex + 1);
-        const frac = ((pt.timeSec ?? 0) % 3600) / 3600;
-
-        // Gradient adiabatique selon altitude (-6.5°C / 1000m)
-        const baseTemp = weather.temperature_2m[hourIndex];
-        const nextTemp = weather.temperature_2m[nextHourIndex];
-        const tempAtSea = baseTemp * (1 - frac) + nextTemp * frac;
-        const altitudeCorrection = ((pt.elevationM - rawWeather.elevation) / 1000) * -6.5;
-
-        interpolated[i] = tempAtSea + altitudeCorrection;
+      const ds = dataset as RouteWeatherDataset;
+      let sum = 0;
+      for (let i = 0; i < chartPoints; i++) {
+        const f = i / (chartPoints - 1);
+        const v = getRouteWeatherAtDistanceAndTime(ds, f * ROUTE_KM * 1000, f * rideSeconds, 800 + 700 * Math.sin(i / 90));
+        if (v) sum += v.temperature;
       }
-      return interpolated;
+      return sum;
     },
   );
 

@@ -378,9 +378,7 @@ async function fetchWithRetry(url: string, signal?: AbortSignal): Promise<Respon
   throw lastError instanceof Error ? lastError : new GeocoderError('Unknown geocoder error', 0, true);
 }
 
-export function formatGpsCoordinateLabel(lon: number, lat: number): string {
-  return `${lon.toFixed(5)}, ${lat.toFixed(5)}`;
-}
+export { formatGpsCoordinateLabel } from './coordinateLabel';
 
 /**
  * Forward-geocode a free-text query. Returns an empty array for empty

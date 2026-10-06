@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { describeRedviewExportError, exportProjectAsRedview } from '@/features/redviewFile';
+import { describeRedviewExportError } from '@/features/redviewFile/lib/messages';
 import { notify } from '@/shared/ui/notify';
 import {
   createProject,
@@ -210,6 +210,8 @@ export function useExportProject() {
     mutationFn: async ({ id }: { id: string }) => {
       const row = await getProject(id);
       if (!row) throw new Error('Project not found');
+      // Writer (ZIP, FIT copies, thumbnail) loaded on use, off the initial load.
+      const { exportProjectAsRedview } = await import('@/features/redviewFile/lib/exportProject');
       return exportProjectAsRedview({ project: row.data, projectId: id });
     },
     onSuccess: (result) => notify.success('Projet exporté : {{file}}', { file: result.fileName }),

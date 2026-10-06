@@ -54,7 +54,9 @@ export function PortalDropdown({
       }
     };
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      onClose();
     };
 
     document.addEventListener('mousedown', handlePointerDown);

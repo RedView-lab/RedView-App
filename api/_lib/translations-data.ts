@@ -5205,6 +5205,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Session expired: sign in again to keep editing this shared project."
   },
   {
+    "fr": "Projet partagé trop volumineux : modification non enregistrée.",
+    "en": "Shared project too large: change not saved."
+  },
+  {
     "fr": "Identifiant de projet invalide",
     "en": "Invalid project id"
   },
@@ -5247,6 +5251,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Seul le propriétaire peut supprimer ce projet",
     "en": "Only the owner can delete this project"
+  },
+  {
+    "fr": "Trop d’invitations : réessayez dans quelques minutes",
+    "en": "Too many invitations, try again later"
   },
   {
     "fr": "Membre invalide",

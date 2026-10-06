@@ -1,8 +1,9 @@
+import { lazy, Suspense } from 'react';
+
 import { useAppI18n } from '@/shared/i18n';
 import { RedViewLogo } from '@/shared/components/RedViewLogo';
 
 import { AccountPanel } from '../../../account';
-import { BillingActionModal } from '../../../billing/components/BillingActionModal/BillingActionModal';
 import { SettingsPanel } from '../../../settings';
 import { ProjectsPanel } from '../../projects';
 import { SubscriptionPanel } from '../../subscription';
@@ -12,6 +13,13 @@ import { ProjectBrowserOverlayHeader } from './ProjectBrowserOverlayHeader';
 import { useProjectBrowserOverlayState } from './useProjectBrowserOverlayState';
 
 import '../../../styles/index.css';
+
+// Loaded when a payment flow opens: the module starts Stripe.js (`loadStripe`)
+// as soon as it is evaluated — on the initial load it cost every user 4
+// requests and ~250 KiB from js.stripe.com, plus ~7 KiB brotli of the shell.
+const BillingActionModal = lazy(() =>
+  import('../../../billing/components/BillingActionModal/BillingActionModal').then((m) => ({ default: m.BillingActionModal })),
+);
 
 export function ProjectBrowserOverlay(props: ProjectBrowserOverlayProps) {
   const { t } = useAppI18n();
@@ -135,12 +143,14 @@ export function ProjectBrowserOverlay(props: ProjectBrowserOverlayProps) {
           ) : null}
 
         {state.billingModal ? (
-          <BillingActionModal
-            flow={state.billingModal}
-            onClose={state.closeBillingModal}
-            onComplete={state.handleBillingModalComplete}
-            onUpdateAmount={state.handleUpdateBillingModalAmount}
-          />
+          <Suspense fallback={null}>
+            <BillingActionModal
+              flow={state.billingModal}
+              onClose={state.closeBillingModal}
+              onComplete={state.handleBillingModalComplete}
+              onUpdateAmount={state.handleUpdateBillingModalAmount}
+            />
+          </Suspense>
         ) : null}
       </div>
     </div>

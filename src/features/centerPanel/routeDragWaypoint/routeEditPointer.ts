@@ -16,7 +16,9 @@ import { isVariantModifierPressed } from '@/shared/lib/platform';
 import { findRouteGrabHit, type RouteGrabHit } from './routeDragWaypointSnap';
 
 /**
- * Pointeur du mode Tracer sur la trace active : survol, clic et drag.
+ * Pointeur du mode Tracer sur les traces visibles : survol, clic et drag.
+ * Toutes les traces sont saisissables ; là où elles se superposent (variantes),
+ * celle de l'itinéraire sélectionné l'emporte.
  *
  * Une seule règle décide de tout — `classify()` — et sert à la fois au curseur
  * affiché et à l'action du clic : ce que montre le curseur est exactement ce
@@ -49,13 +51,31 @@ export interface RouteEditPoint {
   lon: number;
 }
 
+export interface RouteEditTarget {
+  /** Itinéraire de la trace. */
+  id: string;
+  points: Array<{ lat: number; lon: number }>;
+  color?: string;
+}
+
 export interface RouteEditPointerDeps {
-  /** Géométrie de la trace active (null / < 2 points : rien à saisir). */
-  getRoutePoints: () => Array<{ lat: number; lon: number }> | null;
-  /** Style du point d'aperçu (couleur de la trace, rayon). */
-  getPreviewStyle: () => { color?: string; radius: number };
-  /** Point de passage à insérer : saisi en `anchor` sur la trace, déposé en `drop`. */
-  onCommit: (anchor: RouteEditPoint, drop: RouteEditPoint, asVariant: boolean) => void;
+  /**
+   * Traces saisissables (< 2 points : ignorée), par priorité : la première
+   * (l'itinéraire sélectionné) l'emporte là où plusieurs se superposent.
+   */
+  getRoutes: () => RouteEditTarget[];
+  /** Rayon du point d'aperçu (couleur : celle de la trace saisie). */
+  getPreviewRadius: () => number;
+  /**
+   * Geste sur la trace `routeId` : saisie en `anchor`, déposée en `drop`
+   * (`dragged` faux : simple clic, `drop` = `anchor`).
+   */
+  onCommit: (
+    routeId: string,
+    anchor: RouteEditPoint,
+    drop: RouteEditPoint,
+    options: { asVariant: boolean; dragged: boolean },
+  ) => void;
   onDraggingChange: (dragging: boolean) => void;
 }
 
@@ -79,8 +99,20 @@ const INTENT_MAX_SPEED_PX_S = 700;
 const POINTER_SETTLE_MS = 45;
 /** Filet de sécurité : durée de vie max du suppresseur du clic qui suit l'appui. */
 const CLICK_SUPPRESSOR_TIMEOUT_MS = 300;
+/**
+ * Une trace moins prioritaire n'est saisie que si elle est nettement plus
+ * proche du pointeur : à égalité (variantes superposées), la sélectionnée.
+ */
+const ROUTE_PRIORITY_MARGIN_PX = 6;
+
+interface RouteHit extends RouteGrabHit {
+  route: RouteEditTarget;
+}
+
+type PreviewPoint = RouteEditPoint & { color?: string };
 
 interface PressSession {
+  route: RouteEditTarget;
   anchor: RouteEditPoint;
   startX: number;
   startY: number;
@@ -97,6 +129,8 @@ export function createRouteEditPointer(
   const container = map.getCanvasContainer();
 
   let shown: HoverState = 'trace';
+  /** Trace sous la main affichée (hystérésis : seuil de sortie pour elle seule). */
+  let shownRouteId: string | null = null;
   /** La main était affichée avant de passer sur un POI : on garde le seuil de sortie. */
   let stickyRoute = false;
   /** État brut du dernier échantillon sur le canvas (null : sur un élément DOM, hors carte). */
@@ -118,24 +152,33 @@ export function createRouteEditPointer(
   let clickSuppressorTimer: number | null = null;
 
   // ── Point d'aperçu (couche GeoJSON) : écrit au plus une fois par frame ──
-  let previewTarget: RouteEditPoint | null = null;
-  let previewWritten: RouteEditPoint | null = null;
+  let previewTarget: PreviewPoint | null = null;
+  let previewWritten: PreviewPoint | null = null;
   let previewFrame: number | null = null;
 
   const flushPreview = () => {
     previewFrame = null;
     const target = previewTarget;
     if (target) {
-      if (previewWritten && previewWritten.lon === target.lon && previewWritten.lat === target.lat) return;
-      const style = deps.getPreviewStyle();
-      setRouteHoverPreview(map, { lon: target.lon, lat: target.lat, color: style.color, radius: style.radius });
+      if (
+        previewWritten
+        && previewWritten.lon === target.lon
+        && previewWritten.lat === target.lat
+        && previewWritten.color === target.color
+      ) return;
+      setRouteHoverPreview(map, {
+        lon: target.lon,
+        lat: target.lat,
+        color: target.color,
+        radius: deps.getPreviewRadius(),
+      });
     } else if (previewWritten) {
       clearRouteHoverPreview(map);
     }
     previewWritten = target;
   };
 
-  const showPreview = (target: RouteEditPoint | null) => {
+  const showPreview = (target: PreviewPoint | null) => {
     previewTarget = target;
     if (previewFrame === null) previewFrame = window.requestAnimationFrame(flushPreview);
   };
@@ -180,7 +223,9 @@ export function createRouteEditPointer(
     }, POINTER_SETTLE_MS + 1);
   };
 
-  const commit = (state: HoverState, hit: RouteGrabHit | null) => {
+  const commit = (state: HoverState, hit: RouteHit | null) => {
+    if (state === 'route' && hit) shownRouteId = hit.route.id;
+    else if (state === 'trace') shownRouteId = null;
     if (state !== shown) {
       shown = state;
       if (state === 'route') stickyRoute = true;
@@ -192,10 +237,23 @@ export function createRouteEditPointer(
         MAP_CURSOR_PRIORITY.hover,
       );
     }
-    showPreview(state === 'route' && hit ? hit.snapped : null);
+    showPreview(state === 'route' && hit ? { ...hit.snapped, color: hit.route.color } : null);
   };
 
-  const classify = (clientX: number, clientY: number): { state: HoverState; hit: RouteGrabHit | null } => {
+  /** Trace saisie sous le pointeur : la plus prioritaire, sauf une autre nettement plus proche. */
+  const findHit = (x: number, y: number): RouteHit | null => {
+    let best: RouteHit | null = null;
+    for (const route of deps.getRoutes()) {
+      if (route.points.length < 2) continue;
+      const sticky = route.id === shownRouteId && (shown === 'route' || (shown === 'poi' && stickyRoute));
+      const hit = findRouteGrabHit(map, route.points, x, y, sticky ? 'exit' : 'enter');
+      if (!hit) continue;
+      if (!best || hit.distancePx < best.distancePx - ROUTE_PRIORITY_MARGIN_PX) best = { ...hit, route };
+    }
+    return best;
+  };
+
+  const classify = (clientX: number, clientY: number): { state: HoverState; hit: RouteHit | null } => {
     // Un panneau de point ouvert : le prochain clic sur la carte ne fait que le fermer.
     if (isPointPanelOpen(canvas)) return { state: 'trace', hit: null };
 
@@ -203,12 +261,8 @@ export function createRouteEditPointer(
     // Même test (rayon 0) que le survol / clic de la couche POI elle-même.
     if (queryPoiAtPoint(map, point)) return { state: 'poi', hit: null };
 
-    const points = deps.getRoutePoints();
-    if (points && points.length >= 2) {
-      const mode = shown === 'route' || (shown === 'poi' && stickyRoute) ? 'exit' : 'enter';
-      const hit = findRouteGrabHit(map, points, point.x, point.y, mode);
-      if (hit) return { state: 'route', hit };
-    }
+    const hit = findHit(point.x, point.y);
+    if (hit) return { state: 'route', hit };
     return { state: 'trace', hit: null };
   };
 
@@ -313,7 +367,7 @@ export function createRouteEditPointer(
 
     event.preventDefault();
     const lngLat = unprojectClientPoint(map, event.clientX, event.clientY);
-    showPreview({ lon: lngLat.lng, lat: lngLat.lat });
+    showPreview({ lon: lngLat.lng, lat: lngLat.lat, color: current.route.color });
   }
 
   function handleSessionMouseUp(event: MouseEvent) {
@@ -331,10 +385,10 @@ export function createRouteEditPointer(
       const asVariant = isVariantModifierPressed(event);
       if (current.dragging) {
         const drop = unprojectClientPoint(map, event.clientX, event.clientY);
-        deps.onCommit(current.anchor, { lat: drop.lat, lon: drop.lng }, asVariant);
+        deps.onCommit(current.route.id, current.anchor, { lat: drop.lat, lon: drop.lng }, { asVariant, dragged: true });
       } else {
         // Clic simple : le point de passage tombe exactement sur le point d'aperçu.
-        deps.onCommit(current.anchor, current.anchor, asVariant);
+        deps.onCommit(current.route.id, current.anchor, current.anchor, { asVariant, dragged: false });
       }
     }
 
@@ -396,6 +450,7 @@ export function createRouteEditPointer(
     commit('route', hit);
 
     session = {
+      route: hit.route,
       anchor: hit.snapped,
       startX: event.clientX,
       startY: event.clientY,

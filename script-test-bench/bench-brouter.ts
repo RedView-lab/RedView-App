@@ -1,29 +1,39 @@
 /**
  * RedView Test-Bench : BRouter (Routing Engine & BRF Dynamic Profiles)
  * 
- * Benchmarks :
- * 1. Génération & compilation dynamique du profil BRF (buildBrfProfile)
- * 2. Encodage et injection des No-Go Areas / Forbidden Zones
- * 3. Découpage (Split) et Fusion (Merge) géométrique de traces (10k et 50k points)
- * 4. Décodage et parsing des statistiques d'itinéraire BRouter (Haversine, tortuosité)
- * 5. Test Live HTTP si serveur BRouter local/distant actif (localhost:17777)
+ * Benchmarks (vrai code de l'app) :
+ * 1. Génération du profil BRF dynamique (buildBrfProfile)
+ * 2. Trace de 1 200 km (100 000 points) : longueurs cumulées, projection d'un
+ *    point sur la trace (survol, glisser d'un point), finesse GPX (export) et
+ *    nettoyage d'un GPX importé (cleanGpxGlitches)
+ * 3. Test Live HTTP si un serveur BRouter répond
+ * Jusqu'au 2026-10-06, 2 mesurait des copies écrites dans le bench (no-go,
+ * découpe/fusion par slice, haversine local). L'URL de routage (import.meta.env)
+ * et les requêtes réelles sont mesurées par `npm run bench:routing`.
+ * La qualité des tracés et la latence réelle : `npm run bench:routing`.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BenchmarkSuite } from './core/harness.ts';
 import { printSuiteHeader, printSuiteResults } from './core/reporter.ts';
-import { generateSyntheticRoute, type TrackPoint } from './core/synthetic-data.ts';
 import { buildBrfProfile } from '../src/features/itineraryPanel/lib/brouter/profiles/brf-template.ts';
+import { cumulativeRouteLengthsM, projectPointAlongRoute } from '../src/features/itineraryPanel/lib/routes/route-distance.ts';
+import { simplifyPointsByQuality } from '../src/features/itineraryPanel/lib/routes/simplify-route.ts';
+import { cleanGpxGlitches } from '../src/features/itineraryPanel/lib/routes/clean-gpx-glitches.ts';
 import type { PrioritiesState, RoadTypesState } from '../src/features/itineraryPanel/types/index.ts';
 
 export async function runBrouterBenchmark(options: { quick?: boolean } = {}): Promise<BenchmarkSuite> {
   const suite = new BenchmarkSuite('BRouter (Routing Engine & BRF)');
   const iterations = options.quick ? 5 : 20;
 
-  // Données synthétiques
-  const route10k = generateSyntheticRoute(10_000);
-  const route50k = generateSyntheticRoute(50_000);
+  // Trace de 1 200 km, un point tous les 12 m, sinueuse et vallonnée.
+  const route = Array.from({ length: 100_000 }, (_, i) => ({
+    lat: 45 + i * 0.000108,
+    lon: 6 + 0.05 * Math.sin(i / 900) + 0.002 * Math.sin(i / 37),
+    elevationM: 600 + 500 * Math.sin(i / 4000) + 40 * Math.sin(i / 150),
+    distanceM: i * 12,
+  }));
 
   const defaultPriorities: PrioritiesState = {
     duration: 50,
@@ -90,68 +100,52 @@ export async function runBrouterBenchmark(options: { quick?: boolean } = {}): Pr
       }),
   );
 
-  // --- BENCHMARK 3 : Encodage et validation de polygones No-Go Areas ---
-  const sampleForbiddenPolygons = [
-    [
-      { lat: 45.1, lon: 6.1 },
-      { lat: 45.15, lon: 6.1 },
-      { lat: 45.15, lon: 6.2 },
-      { lat: 45.1, lon: 6.2 },
-    ],
-    [
-      { lat: 45.2, lon: 6.3 },
-      { lat: 45.25, lon: 6.3 },
-      { lat: 45.25, lon: 6.4 },
-      { lat: 45.2, lon: 6.4 },
-    ],
-  ];
-
+  // --- BENCHMARK 3 : trace de 1 200 km (100 000 points) ---
+  const lengths = cumulativeRouteLengthsM(route);
   suite.measureSync(
     {
-      name: 'Encodage & Validation No-Go Areas (BRouter URL)',
-      category: 'brouter-nogo',
-      iterations: iterations * 10,
-      regressionThresholdP95Ms: 0.5,
-    },
-    () => encodeNoGoPolygons(sampleForbiddenPolygons),
-  );
-
-  // --- BENCHMARK 4 : Découpage géométrique d'itinéraire (Route Split sur 50k pts) ---
-  suite.measureSync(
-    {
-      name: 'Découpage Géométrique Trace (Split 50k pts à 25k)',
-      category: 'brouter-split-merge',
-      iterations,
-      regressionThresholdP95Ms: 8.0,
-      itemsProcessedPerOp: 50_000,
-    },
-    () => splitRoute(route50k, 25_000),
-  );
-
-  // --- BENCHMARK 5 : Fusion géométrique d'itinéraires (Route Merge 2x 25k pts) ---
-  const half1 = route50k.slice(0, 25_000);
-  const half2 = route50k.slice(25_000);
-  suite.measureSync(
-    {
-      name: 'Fusion Géométrique Traces (Merge 2x 25k pts)',
-      category: 'brouter-split-merge',
+      name: 'Trace 1 200 km : longueurs cumulées (100k pts)',
+      category: 'route-lengths',
       iterations,
       regressionThresholdP95Ms: 15.0,
-      itemsProcessedPerOp: 50_000,
+      itemsProcessedPerOp: route.length,
     },
-    () => mergeRoutes(half1, half2),
+    () => cumulativeRouteLengthsM(route),
   );
-
-  // --- BENCHMARK 6 : Calcul des métriques de trace (Distance, Dénivelé, Tortuosité sur 10k pts) ---
+  projectPointAlongRoute(route[50_000], route, lengths); // index de projection construit
+  let probe = 0;
   suite.measureSync(
     {
-      name: 'Calcul Métriques & Tortuosité (10k pts)',
-      category: 'brouter-metrics',
-      iterations,
-      regressionThresholdP95Ms: 4.0,
-      itemsProcessedPerOp: 10_000,
+      name: 'Trace 1 200 km : projection d’un point (survol)',
+      category: 'route-projection',
+      iterations: iterations * 10,
+      regressionThresholdP95Ms: 2.0,
     },
-    () => computeRouteMetrics(route10k),
+    () => {
+      const p = route[(probe = (probe + 7919) % route.length)];
+      return projectPointAlongRoute({ lat: p.lat + 0.0003, lon: p.lon - 0.0002 }, route, lengths);
+    },
+  );
+  suite.measureSync(
+    {
+      name: 'Trace 1 200 km : finesse GPX par défaut (export)',
+      category: 'route-simplify',
+      iterations: Math.max(3, iterations >> 1),
+      regressionThresholdP95Ms: 120.0,
+      itemsProcessedPerOp: route.length,
+    },
+    // Copie du tableau à chaque itération : le résultat est en cache par tableau de points.
+    () => simplifyPointsByQuality(route.slice(), 'default'),
+  );
+  suite.measureSync(
+    {
+      name: 'Trace 1 200 km : nettoyage GPX importé (cleanGpxGlitches)',
+      category: 'route-clean',
+      iterations: Math.max(3, iterations >> 1),
+      regressionThresholdP95Ms: 150.0,
+      itemsProcessedPerOp: route.length,
+    },
+    () => cleanGpxGlitches(route),
   );
 
   // --- BENCHMARK 7 & 8 : Test Live HTTP BRouter One-Pass (pass2=-1) vs Standard (pass2=1.2) ---
@@ -315,81 +309,6 @@ export async function runBrouterBenchmark(options: { quick?: boolean } = {}): Pr
   );
 
   return suite;
-}
-
-function encodeNoGoPolygons(polygons: { lat: number; lon: number }[][]): string {
-  return polygons
-    .map((poly) =>
-      poly.map((p) => `${p.lon.toFixed(6)},${p.lat.toFixed(6)}`).join(','),
-    )
-    .join('|');
-}
-
-function splitRoute(route: TrackPoint[], splitIndex: number): [TrackPoint[], TrackPoint[]] {
-  const p1 = route.slice(0, splitIndex);
-  const p2 = route.slice(splitIndex);
-  // Recalcul de distance cumulée sur la 2ème section
-  if (p2.length > 0) {
-    const offset = p2[0].distanceM;
-    for (let i = 0; i < p2.length; i++) {
-      p2[i] = { ...p2[i], distanceM: p2[i].distanceM - offset };
-    }
-  }
-  return [p1, p2];
-}
-
-function mergeRoutes(r1: TrackPoint[], r2: TrackPoint[]): TrackPoint[] {
-  const merged = new Array(r1.length + r2.length);
-  for (let i = 0; i < r1.length; i++) merged[i] = r1[i];
-
-  const lastDist = r1[r1.length - 1]?.distanceM ?? 0;
-  for (let j = 0; j < r2.length; j++) {
-    merged[r1.length + j] = {
-      ...r2[j],
-      distanceM: lastDist + r2[j].distanceM,
-    };
-  }
-  return merged;
-}
-
-function computeRouteMetrics(route: TrackPoint[]): {
-  distanceKm: number;
-  ascentM: number;
-  tortuosity: number;
-} {
-  if (route.length < 2) return { distanceKm: 0, ascentM: 0, tortuosity: 1.0 };
-
-  const start = route[0];
-  const end = route[route.length - 1];
-  const directDistanceM = haversineM(start.lat, start.lon, end.lat, end.lon);
-  const totalDistanceM = end.distanceM - start.distanceM;
-  const tortuosity = directDistanceM > 0 ? totalDistanceM / directDistanceM : 1.0;
-
-  let ascentM = 0;
-  for (let i = 1; i < route.length; i++) {
-    const d = route[i].elevationM - route[i - 1].elevationM;
-    if (d > 0) ascentM += d;
-  }
-
-  return {
-    distanceKm: totalDistanceM / 1000,
-    ascentM: Math.round(ascentM),
-    tortuosity: Number(tortuosity.toFixed(2)),
-  };
-}
-
-function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371000;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
 }
 
 function getBrouterUpstream(): string {

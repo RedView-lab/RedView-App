@@ -2,6 +2,7 @@ import { Section } from '../components/Section';
 import { useAppI18n } from '@/shared/i18n';
 import { Select } from '../components/Select';
 import { IconEye, IconMap } from '../icons';
+import { BasemapThumbnail } from './BasemapThumbnail';
 import type { ControlPanelHandlers, ControlPanelState } from '../types';
 
 interface Props {
@@ -45,13 +46,7 @@ export function BasemapsSection({
             onClick={() => onBasemapToggle?.(bm.id)}
             aria-pressed={bm.active}
           >
-            <img
-              className="rvc-basemaps__preview"
-              src="/control-panel/basemap-preview.svg"
-              alt=""
-              width="16"
-              height="16"
-            />
+            <BasemapThumbnail id={bm.id} />
             <span className="rvc-basemaps__label">
               <span>{t(bm.label)}</span>
             </span>

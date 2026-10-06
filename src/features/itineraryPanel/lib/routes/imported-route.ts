@@ -1,14 +1,14 @@
 import { routeLengthM } from '@/features/poi/lib/gpx-loader';
 import { translateAppText } from '@/shared/i18n';
 
-import { formatGpsCoordinateLabel } from '../geocoding';
-import {
-  cleanAndInterpolateElevations,
-  computeRouteElevationMetrics,
-  computeRouteSurfaceMetricsFromPoints,
-  extractRouteProfileFromPoints,
-  type RouteProfilePoint,
-} from '../route-metrics';
+// Concrete modules, not the geocoding / route-metrics barrels: this module is
+// on the project browser's initial load (project normalisation), and the
+// barrels pulled the Mapbox geocoder and the BRouter client into it.
+import { formatGpsCoordinateLabel } from '../geocoding/coordinateLabel';
+import { cleanAndInterpolateElevations } from '../route-metrics/elevationSanitizer';
+import { computeRouteElevationMetrics, computeRouteSurfaceMetricsFromPoints } from '../route-metrics/metrics';
+import { extractRouteProfileFromPoints } from '../route-metrics/profile';
+import type { RouteProfilePoint } from '../route-metrics/types';
 import { sampleTerrainElevationsAtPoints } from '../route-metrics/terrainTiles';
 import type { Itinerary, ItineraryMetrics, TimelineItem } from '../../types';
 

@@ -1,4 +1,4 @@
-import { Encoder, Profile } from '@garmin/fitsdk';
+import { Profile } from '@garmin/fitsdk';
 import type { Itinerary } from '@/features/itineraryPanel/types';
 import { isFootDiscipline } from '@/shared/lib/discipline';
 import { translateAppText } from '@/shared/i18n/config';
@@ -9,6 +9,7 @@ import {
   type ExportAnchor,
   type ExportRoutePoint,
 } from './exportHelpers';
+import { FitCourseWriter } from './fitCourseWriter';
 
 function roundTo(value: number, digits: number): number {
   const factor = 10 ** digits;
@@ -94,7 +95,8 @@ function mapAnchorToFitCoursePointType(anchor: ExportAnchor): string {
     case 'passes':
       return 'summit';
     case 'health':
-      return 'first_aid';
+      // Libellé du profil FIT : « first_aid » faisait échouer tout l'export.
+      return 'firstAid';
     case 'transport':
       return 'transport';
     default:
@@ -115,12 +117,12 @@ export function buildItineraryFitCourse(
   );
   const routeName = itinerary.gpxRoute?.name?.trim() || itinerary.name.trim() || translateAppText('Itinéraire');
   const createdAt = new Date();
-  const encoder = new Encoder();
+  const encoder = new FitCourseWriter();
   const recordMessages = buildFitRecordMessages(routePoints, createdAt);
   const firstRecord = recordMessages[0]!;
   const lastRecord = recordMessages[recordMessages.length - 1]!;
 
-  encoder.onMesg(Profile.MesgNum.FILE_ID, {
+  encoder.write(Profile.MesgNum.FILE_ID, {
     type: 'course',
     manufacturer: 'development',
     product: FIT_PRODUCT_ID,
@@ -128,12 +130,12 @@ export function buildItineraryFitCourse(
     timeCreated: createdAt,
   });
 
-  encoder.onMesg(Profile.MesgNum.COURSE, {
+  encoder.write(Profile.MesgNum.COURSE, {
     name: routeName,
     sport: isFootDiscipline(itinerary.discipline) ? 'running' : 'cycling',
   });
 
-  encoder.onMesg(Profile.MesgNum.LAP, {
+  encoder.write(Profile.MesgNum.LAP, {
     startTime: firstRecord.timestamp,
     timestamp: lastRecord.timestamp,
     startPositionLat: firstRecord.positionLat,
@@ -143,20 +145,20 @@ export function buildItineraryFitCourse(
     totalDistance: lastRecord.distance,
   });
 
-  encoder.onMesg(Profile.MesgNum.EVENT, {
+  encoder.write(Profile.MesgNum.EVENT, {
     timestamp: firstRecord.timestamp,
     event: 'timer',
     eventType: 'start',
   });
 
   for (const record of recordMessages) {
-    encoder.onMesg(Profile.MesgNum.RECORD, record);
+    encoder.write(Profile.MesgNum.RECORD, record);
   }
 
   for (let index = 0; index < anchors.length; index += 1) {
     const anchor = anchors[index]!;
     const linkedRecord = findNearestRecordMessage(anchor.distanceM, recordMessages);
-    encoder.onMesg(Profile.MesgNum.COURSE_POINT, {
+    encoder.write(Profile.MesgNum.COURSE_POINT, {
       messageIndex: index,
       timestamp: linkedRecord.timestamp,
       name: anchor.name,
@@ -167,7 +169,7 @@ export function buildItineraryFitCourse(
     });
   }
 
-  encoder.onMesg(Profile.MesgNum.EVENT, {
+  encoder.write(Profile.MesgNum.EVENT, {
     timestamp: lastRecord.timestamp,
     event: 'timer',
     eventType: 'stopDisableAll',

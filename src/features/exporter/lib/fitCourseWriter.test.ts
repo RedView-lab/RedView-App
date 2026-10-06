@@ -1,0 +1,97 @@
+import { Encoder, Profile } from '@garmin/fitsdk';
+import { describe, expect, it } from 'vitest';
+
+import { FitCourseWriter } from './fitCourseWriter';
+
+const M = Profile.MesgNum;
+
+function seeded(seed: number): () => number {
+  let s = seed;
+  return () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+}
+
+/** A course file's messages, shaped like exportFit's (random sizes, names, gaps). */
+function courseMessages(seed: number, points: number): Array<[number, Record<string, unknown>]> {
+  const rnd = seeded(seed);
+  const start = new Date(Date.UTC(2026, 9, 6, 6, 30));
+  const at = (i: number) => new Date(start.getTime() + i * 1000);
+  const semicircles = (deg: number) => Math.round((deg * 2 ** 31) / 180);
+  const records = Array.from({ length: points }, (_, i) => {
+    const record: Record<string, unknown> = {
+      timestamp: at(i),
+      positionLat: semicircles(45 + i * 0.0001 + rnd() * 1e-5),
+      positionLong: semicircles(6 + Math.sin(i / 300) * 0.02),
+      distance: Math.round(i * 11.13 * 100) / 100 + rnd() * 0.004,
+    };
+    // Some points without altitude: the record definition alternates.
+    if (rnd() > 0.1) record.altitude = Math.round((800 + 400 * Math.sin(i / 700) + rnd()) * 10) / 10;
+    return record;
+  });
+  const names = ['Col de la Croix-Fry', 'Boulangerie « Chez Zoé »', 'Fontaine', 'Refuge 🏔', '', 'Ravito', 'Gîte d’étape du Lac', 'É', 'Hôtel des Alpes et du Mont-Blanc'];
+  const types = ['water', 'food', 'summit', 'checkpoint', 'shelter', 'firstAid', 'store', 'generic'];
+  const messages: Array<[number, Record<string, unknown>]> = [
+    [M.FILE_ID, { type: 'course', manufacturer: 'development', product: 4242, serialNumber: 1_791_000_000, timeCreated: start }],
+    [M.COURSE, { name: `Parcours ${seed} — Chamonix → Paris`, sport: seed % 2 ? 'running' : 'cycling' }],
+    [M.LAP, {
+      startTime: at(0),
+      timestamp: at(points - 1),
+      startPositionLat: records[0]!.positionLat,
+      startPositionLong: records[0]!.positionLong,
+      endPositionLat: records[points - 1]!.positionLat,
+      endPositionLong: records[points - 1]!.positionLong,
+      totalDistance: records[points - 1]!.distance,
+    }],
+    [M.EVENT, { timestamp: at(0), event: 'timer', eventType: 'start' }],
+    ...records.map((record): [number, Record<string, unknown>] => [M.RECORD, record]),
+  ];
+  // More than 16 course point shapes (name lengths): the local message slots wrap.
+  for (let k = 0; k < 40; k++) {
+    const record = records[Math.floor(rnd() * points)]!;
+    const name = `${names[k % names.length]}${'·'.repeat(k % 23)}`;
+    messages.push([M.COURSE_POINT, {
+      messageIndex: k,
+      timestamp: record.timestamp,
+      name: name || undefined,
+      type: types[k % types.length],
+      positionLat: record.positionLat,
+      positionLong: record.positionLong,
+      distance: record.distance,
+    }]);
+  }
+  messages.push([M.EVENT, { timestamp: at(points - 1), event: 'timer', eventType: 'stopDisableAll' }]);
+  return messages;
+}
+
+function encodeWithSdk(messages: Array<[number, Record<string, unknown>]>): Uint8Array {
+  const encoder = new Encoder();
+  for (const [mesgNum, mesg] of messages) encoder.onMesg(mesgNum, mesg);
+  return encoder.close();
+}
+
+function encodeWithWriter(messages: Array<[number, Record<string, unknown>]>): Uint8Array {
+  const writer = new FitCourseWriter();
+  for (const [mesgNum, mesg] of messages) writer.write(mesgNum, mesg);
+  return writer.close();
+}
+
+/** Index of the first differing byte, -1 when identical. */
+function firstDifference(a: Uint8Array, b: Uint8Array): number {
+  for (let i = 0; i < Math.max(a.length, b.length); i++) if (a[i] !== b[i]) return i;
+  return -1;
+}
+
+describe('FitCourseWriter', () => {
+  it('writes the same bytes as the Garmin SDK encoder', () => {
+    for (const [seed, points] of [[1, 2], [2, 300], [3, 5_000], [4, 1]] as const) {
+      const messages = courseMessages(seed, points);
+      const ours = encodeWithWriter(messages);
+      const sdk = encodeWithSdk(messages);
+      expect(ours.length).toBe(sdk.length);
+      expect(firstDifference(ours, sdk)).toBe(-1);
+    }
+  });
+
+  it('refuses a message with no known field, like the SDK', () => {
+    expect(() => new FitCourseWriter().write(M.RECORD, { notAField: 1 })).toThrow();
+  });
+});

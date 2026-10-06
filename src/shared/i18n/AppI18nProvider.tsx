@@ -10,7 +10,6 @@ import {
 import {
   createAppTranslationBundle,
   readStoredAppLocale,
-  resolveAppLocale,
   writeStoredAppLocale,
   type AppLocale,
   type AppTranslationBundle,
@@ -29,51 +28,16 @@ const AppI18nContext = createContext<AppI18nContextValue | null>(null);
 
 export function AppI18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<AppLocale>(readStoredAppLocale);
-  const [bundle, setBundle] = useState<AppTranslationBundle>(() => createAppTranslationBundle(readStoredAppLocale()));
+  // Every pair ships with the app (shared/i18n/config/translations): nothing to
+  // fetch. `/api/app-translations` used to send the same dictionary again on
+  // every load (264 KiB uncompressed), then the whole DOM was re-translated.
+  const bundle = useMemo(() => createAppTranslationBundle(locale), [locale]);
 
   const translationLookup = useMemo(() => buildTranslationLookup(bundle.entries), [bundle.entries]);
 
   useEffect(() => {
     document.documentElement.lang = locale;
     writeStoredAppLocale(locale);
-  }, [locale]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    setBundle(createAppTranslationBundle(locale));
-
-    void fetch(`/api/app-translations?locale=${locale}`, {
-      headers: { Accept: 'application/json' },
-    })
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(`Translation bundle request failed with ${response.status}`);
-        }
-
-        const nextBundle = (await response.json()) as Partial<AppTranslationBundle>;
-        if (cancelled) {
-          return;
-        }
-
-        if (!nextBundle || typeof nextBundle !== 'object' || !nextBundle.entries) {
-          throw new Error('Invalid translation bundle payload');
-        }
-
-        setBundle({
-          locale: resolveAppLocale(nextBundle.locale),
-          entries: nextBundle.entries,
-        });
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setBundle(createAppTranslationBundle(locale));
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
   }, [locale]);
 
   // document.body, not #root: portals (menus, modals, color picker) mount

@@ -5,7 +5,10 @@
  *   2. récupère les POI du corridor sur le serveur POI (`POI_UPSTREAM` du .env),
  *   3. calcule la prédiction avec le VRAI moteur WASM (config issue du rythme),
  *   4. lance `computePoiAutoSort` exactement comme l'app,
- *   5. imprime la feuille de route retenue et vérifie les règles.
+ *   5. imprime la feuille de route retenue et vérifie les règles,
+ *   6. applique le tri comme l'app depuis le 2026-10-02 : un FILTRE de la
+ *      feuille de route (`poiAutoSort.picks`), jamais des favoris posés dans
+ *      la timeline ; une relance garde les favoris manuels.
  *
  * POI et prédiction sont mis en cache (dossier temp) : `--refresh` pour refaire.
  *
@@ -20,6 +23,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import type { PredictionResult } from '../src/features/fitPredictor/types.ts';
+import { CYCLING_ENGINE_VERSION } from '../src/features/fitPredictor/engine/version.ts';
 import { DEFAULT_AUTO_SORT_RULES } from '../src/features/poi/lib/autoSort/index.ts';
 import type { PoiCategory as FeaturePoiCategory, PoiFeature } from '../src/features/poi/types.ts';
 import { createDefaultItinerary } from '../src/features/itineraryPanel/lib/project/defaultState.ts';
@@ -27,7 +31,14 @@ import {
   buildPredictionConfigFromRhythm,
   buildRouteGpxFile,
 } from '../src/features/itineraryPanel/lib/schedule/container-prediction.ts';
-import { applyPoiAutoSort, computePoiAutoSort } from '../src/features/itineraryPanel/lib/schedule/poiAutoSort.ts';
+import {
+  clearPoiAutoSortFavorites,
+  computePoiAutoSort,
+  getPoiAutoSortPicks,
+  keepsTimelineItemWithPoiAutoSort,
+  toPoiAutoSortPickRefs,
+  type PoiAutoSortRun,
+} from '../src/features/itineraryPanel/lib/schedule/poiAutoSort.ts';
 import { FEATURE_TO_PANEL_POI, poiFeaturesToTimelineItems } from '../src/features/itineraryPanel/lib/schedule/poi-to-timeline.ts';
 import type { Itinerary, PoiCategory as PanelPoiCategory } from '../src/features/itineraryPanel/types/index.ts';
 
@@ -128,7 +139,8 @@ async function loadPois(): Promise<PoiFeature[]> {
 // ── 3. Prédiction WASM ────────────────────────────────────────────────
 async function loadPrediction(): Promise<PredictionResult> {
   const config = buildPredictionConfigFromRhythm(itinerary.rhythm, points);
-  const key = crypto.createHash('sha1').update(traceHash + JSON.stringify(config)).digest('hex').slice(0, 12);
+  // La version du moteur dans la clé : un moteur mis à jour ne relit pas une prédiction périmée.
+  const key = crypto.createHash('sha1').update(`${traceHash}:${CYCLING_ENGINE_VERSION}:${JSON.stringify(config)}`).digest('hex').slice(0, 12);
   const cacheFile = path.join(CACHE_DIR, `prediction-${key}.json`);
   if (!refresh && fs.existsSync(cacheFile)) return JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
 
@@ -167,7 +179,7 @@ async function main() {
   const totalKm = (prediction.total_distance_m / 1000).toFixed(0);
   console.log(`\n${itinerary.name} — ${totalKm} km, ${level}, départ ${startTime}${startDate ? ` le ${startDate}` : ''}`);
   console.log(`Prédiction : ${fmtH(prediction.total_time_s)} de roulage (${prediction.avg_speed_kmh.toFixed(1)} km/h moy.)`);
-  console.log(`POI corridor : ${features.length} · candidats : ${result.stats.candidates} · favoris auto : ${result.picks.length} · ${elapsedMs.toFixed(0)} ms`);
+  console.log(`POI corridor : ${features.length} · candidats : ${result.stats.candidates} · retenus : ${result.picks.length} · ${elapsedMs.toFixed(0)} ms`);
   console.log(`Raisons : ${Object.entries(result.stats.byReason).map(([k, v]) => `${k} ${v}`).join(' · ')}`);
   console.log(`Écart max eau ${result.stats.maxWaterGapH.toFixed(2)}h · ravito ${result.stats.maxResupplyGapH.toFixed(2)}h · points d'eau en descente écartés ${result.stats.descentsAvoided} · hôtels/nuit [${result.stats.hotelsPerNight.join(', ')}]`);
   for (const w of result.warnings) {
@@ -224,35 +236,52 @@ async function main() {
   const ids = result.picks.map((p) => p.feature.id);
   if (new Set(ids).size !== ids.length) failures.push('POI retenu deux fois');
 
-  // ── Relance : les favoris manuels restent, les auto sont remplacés ──
+  // ── Application comme l'app : un filtre de la feuille de route ──
   const draft = structuredClone(itinerary);
   draft.timeline = [...draft.timeline, ...poiFeaturesToTimelineItems(features, points)];
-  applyPoiAutoSort(draft, result.picks);
-  const autoRows = () => draft.timeline.filter((row) => row.favoriteSource === 'auto');
-  if (autoRows().length !== new Set(ids).size) failures.push(`application : ${autoRows().length} lignes auto pour ${ids.length} choix`);
-  // L'utilisateur garde un favori auto à la main et en retire un autre.
-  const kept = autoRows()[0];
-  const dropped = autoRows()[1];
-  if (kept && dropped) {
-    kept.favoriteSource = 'manual';
-    delete kept.autoReason;
-    dropped.favorite = false;
-    delete dropped.favoriteSource;
-    delete dropped.autoReason;
+  const apply = (it: Itinerary, sortRun: PoiAutoSortRun) => {
+    clearPoiAutoSortFavorites(it);
+    it.poiAutoSortEnabled = true;
+    it.poiAutoSort = {
+      signature: 'bench',
+      summary: { total: sortRun.result.picks.length, byReason: sortRun.result.stats.byReason, warnings: sortRun.result.warnings, usedPrediction: sortRun.usedPrediction },
+      picks: toPoiAutoSortPickRefs(sortRun),
+      ranAt: new Date().toISOString(),
+    };
+  };
+  const shownPoiIds = (it: Itinerary) => {
+    const picks = getPoiAutoSortPicks(it);
+    if (!picks) return null;
+    return new Set(it.timeline.filter((row) => row.kind === 'poi' && keepsTimelineItemWithPoiAutoSort(row, picks)).map((row) => row.osmId));
+  };
+  apply(draft, run);
+  const timelineIds = new Set(draft.timeline.filter((row) => row.kind === 'poi').map((row) => row.osmId));
+  const shown = shownPoiIds(draft);
+  if (!shown) failures.push('application : filtre absent');
+  else {
+    const missing = ids.filter((id) => timelineIds.has(id) && !shown.has(id));
+    if (missing.length > 0) failures.push(`application : ${missing.length} POI retenus masqués`);
+    if (shown.size > new Set(ids).size) failures.push(`application : ${shown.size} POI affichés pour ${ids.length} retenus`);
+  }
+  if (draft.timeline.some((row) => row.favoriteSource === 'auto' || (row.kind === 'poi' && row.favorite))) {
+    failures.push('application : le tri a posé des favoris dans la timeline');
+  }
+
+  // ── Relance : un favori manuel n'est plus proposé et reste affiché ──
+  const keptRow = draft.timeline.find((row) => row.kind === 'poi' && row.osmId === ids[0]);
+  if (keptRow) {
+    keptRow.favorite = true;
+    keptRow.favoriteSource = 'manual';
     draft.rhythm = { ...draft.rhythm, startTime: '09:15' };
     const rerun = computePoiAutoSort(draft, prediction, new Date());
     if (!rerun) {
       failures.push('relance : aucun résultat');
     } else {
-      if (rerun.result.picks.some((p) => p.feature.id === kept.osmId)) failures.push('relance : favori manuel re-proposé');
-      applyPoiAutoSort(draft, rerun.result.picks);
-      if (!kept.favorite || kept.favoriteSource !== 'manual') failures.push('relance : favori manuel perdu');
-      const rerunIds = new Set(rerun.result.picks.map((p) => p.feature.id));
-      const stale = autoRows().filter((row) => !rerunIds.has(row.osmId!));
-      if (stale.length > 0) failures.push(`relance : ${stale.length} anciens favoris auto non retirés`);
-      const featureAuto = (draft.poiFeatures ?? []).filter((f) => f.favoriteSource === 'auto').length;
-      if (featureAuto !== rerunIds.size) failures.push(`relance : ${featureAuto} POI auto pour ${rerunIds.size} choix`);
-      console.log(`Relance (départ 09:15, 1 favori manuel) : ${rerun.result.picks.length} favoris auto`);
+      if (rerun.result.picks.some((p) => p.feature.id === keptRow.osmId)) failures.push('relance : favori manuel re-proposé');
+      apply(draft, rerun);
+      if (!keptRow.favorite || keptRow.favoriteSource !== 'manual') failures.push('relance : favori manuel perdu');
+      if (!shownPoiIds(draft)?.has(keptRow.osmId)) failures.push('relance : favori manuel masqué par le filtre');
+      console.log(`Relance (départ 09:15, 1 favori manuel) : ${rerun.result.picks.length} POI retenus`);
     }
   }
 

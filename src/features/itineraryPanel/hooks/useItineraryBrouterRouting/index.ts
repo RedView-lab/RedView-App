@@ -12,7 +12,7 @@ import {
   type BrouterRoute,
 } from '../../lib/brouter';
 import type { RouteProfilePoint } from '../../lib/route-metrics';
-import type { ItineraryProject } from '../../types';
+import type { Itinerary, ItineraryProject } from '../../types';
 import { refineRouteProfileWithIgnAltimetry } from '../../lib/route-metrics';
 import {
   hasRouteLayer,
@@ -59,6 +59,19 @@ const VERIFY_STORED_ROUTE = '#verify-stored-route';
  */
 const UNJOINABLE_EDIT_KEY = '#unjoinable-edit';
 
+/**
+ * Patch local en vol pour un itinéraire. Il ne dépend pas de l'itinéraire
+ * actif : changer de sélection (ou éditer un autre itinéraire) ne l'annule
+ * pas ; seuls une nouvelle édition du même itinéraire, un undo / redo ou le
+ * démontage le remplacent.
+ */
+interface PatchJob {
+  pendingKey: string;
+  /** Entrées de routage (profil, zones…) avec lesquelles il est routé. */
+  inputsSignature: string;
+  ctrl: AbortController;
+}
+
 function dispatchRouteLoading(loading: boolean) {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('rv-route-loading', { detail: { loading } }));
@@ -67,6 +80,7 @@ function dispatchRouteLoading(loading: boolean) {
 
 export function useItineraryBrouterRouting({
   active,
+  itineraries,
   historyRevision,
   isMapLoaded,
   map,
@@ -83,12 +97,19 @@ export function useItineraryBrouterRouting({
   const [routeError, setRouteError] = useState<string | null>(null);
   const [routeWarnings, setRouteWarnings] = useState<string[]>([]);
   const routeAbortRef = useRef<AbortController | null>(null);
+  const activeRef = useRef(active);
+  // Patchs locaux en vol, par itinéraire (cf. PatchJob).
+  const patchJobsRef = useRef(new Map<string, PatchJob>());
   const cancelRouteRequest = useCallback(() => {
     routeAbortRef.current?.abort();
     routeAbortRef.current = null;
+    const activeId = activeRef.current?.id;
+    if (activeId) {
+      patchJobsRef.current.get(activeId)?.ctrl.abort();
+      patchJobsRef.current.delete(activeId);
+    }
     setRouteLoading(false);
   }, [setRouteLoading]);
-  const activeRef = useRef(active);
   // When set to true, the next "full recompute" branch of the routing
   // effect is skipped and the flag is cleared.  This is used by the
   // recalculate-trace feature to prevent the effect from overwriting
@@ -132,10 +153,13 @@ export function useItineraryBrouterRouting({
 
   useEffect(() => {
     const refinements = refinementAbortRef.current;
+    const patchJobs = patchJobsRef.current;
     return () => {
       dispatchRouteLoading(false);
       for (const ctrl of refinements.values()) ctrl.abort();
       refinements.clear();
+      for (const job of patchJobs.values()) job.ctrl.abort();
+      patchJobs.clear();
     };
   }, []);
 
@@ -207,6 +231,136 @@ export function useItineraryBrouterRouting({
   const requestRouteRefresh = useCallback(() => {
     setRouteRefreshNonce((current) => current + 1);
   }, []);
+
+  const abortPatchJob = useCallback((itineraryId: string) => {
+    const jobs = patchJobsRef.current;
+    jobs.get(itineraryId)?.ctrl.abort();
+    jobs.delete(itineraryId);
+  }, []);
+
+  /**
+   * Route l'édition locale en attente (`pendingRoutePatch`) d'un itinéraire,
+   * actif ou non : une édition faite sur un itinéraire non sélectionné (ou
+   * dont on change la sélection pendant le calcul) est routée quand même.
+   * Rien n'est relancé si le même patch est déjà en vol.
+   */
+  const ensurePatchJob = useCallback(
+    (itinerary: Itinerary, pendingKey: string) => {
+      const jobs = patchJobsRef.current;
+      const isActive = () => activeRef.current?.id === itinerary.id;
+      // Profil ou zones changés pendant le calcul : relancé avec les nouveaux.
+      const inputsSignature = getRoutingInputsSignature(itinerary);
+      const running = jobs.get(itinerary.id);
+      if (running?.pendingKey === pendingKey && running.inputsSignature === inputsSignature) {
+        if (isActive()) setRouteLoading(true);
+        return;
+      }
+      abortPatchJob(itinerary.id);
+
+      const pendingRoutePatch = itinerary.pendingRoutePatch;
+      const existingRoutePoints = itinerary.gpxRoute?.points ?? null;
+      if (!pendingRoutePatch || !existingRoutePoints || existingRoutePoints.length < 2) return;
+
+      const patchPoints = [pendingRoutePatch.start, ...pendingRoutePatch.via, pendingRoutePatch.end];
+      const bounds = checkRouteWithinFrance(patchPoints);
+      if (!bounds.ok) {
+        if (isActive()) deferRouteState(bounds.reason ?? 'Itinéraire hors zone autorisée.');
+        return;
+      }
+
+      const ctrl = new AbortController();
+      jobs.set(itinerary.id, { pendingKey, inputsSignature, ctrl });
+      if (isActive()) {
+        setRouteLoading(true);
+        queueMicrotask(() => {
+          setRouteRequestNonce((current) => current + 1);
+          setRouteError(null);
+        });
+      }
+      const releaseCompute = gate.beginCompute('route', itinerary.id);
+      const unresolvedEdits = unresolvedEditsRef.current;
+      unresolvedEdits.set(itinerary.id, { kind: 'patch', pendingKey });
+      const polygons = formatForbiddenZonePolygons(itinerary.forbiddenZones);
+      const target = { itineraryId: itinerary.id, pendingKey };
+      const t0 = performance.now();
+      console.log(
+        '[BRouter] local patch START itinerary=',
+        itinerary.id,
+        'start=',
+        `${pendingRoutePatch.start.lon},${pendingRoutePatch.start.lat}`,
+        'end=',
+        `${pendingRoutePatch.end.lon},${pendingRoutePatch.end.lat}`,
+        'via=',
+        pendingRoutePatch.via.length,
+      );
+
+      resolveElasticRoutePatch(pendingRoutePatch, existingRoutePoints, ctrl.signal, (patch) => resolveRouteRequest({
+        itinerary,
+        signal: ctrl.signal,
+        requestBase: {
+          // Bornes intermédiaires prises sur le tracé stocké : la jonction s'y fait.
+          start: anchorRoutePatchBound(patch.start, existingRoutePoints),
+          end: anchorRoutePatchBound(patch.end, existingRoutePoints),
+          via: patch.via,
+          polygons,
+          signal: ctrl.signal,
+        },
+        setRouteWarnings: (warnings) => {
+          if (isActive()) setRouteWarnings(warnings);
+        },
+      }))
+        .then(({ route, resolvedWarnings, patch: routedPatch }) => {
+          if (ctrl.signal.aborted) return;
+          if (isActive()) setRouteWarnings(resolvedWarnings);
+          // Render route immediately with native BRouter elevation data
+          const refinementBase: { current: RouteRefinementBase | null } = { current: null };
+          setProject((project) => {
+            const next = applyPendingRoutePatch(project, target, route, null, routedPatch);
+            refinementBase.current = captureRouteRefinementBase(project, next, target.itineraryId);
+            return next;
+          });
+          if (unresolvedEdits.get(itinerary.id)?.pendingKey === pendingKey) unresolvedEdits.delete(itinerary.id);
+          // Le tracé patché porte l'estampille de ses entrées : vérifié par
+          // elle au prochain passage de l'effet de routage.
+          routedInputKeysRef.current.set(itinerary.id, VERIFY_STORED_ROUTE);
+          console.log(
+            '[BRouter] local patch OK in',
+            Math.round(performance.now() - t0),
+            'ms | dist=',
+            (route.distanceM / 1000).toFixed(2),
+            'km | pts=',
+            route.coordinates.length,
+          );
+          refineRouteInBackground(
+            target.itineraryId,
+            route,
+            refinementBase,
+            (project, profile) => applyPendingRoutePatch(project, target, route, profile, routedPatch),
+            'local patch',
+          );
+        })
+        .catch((error: unknown) => {
+          if ((error as { name?: string }).name === 'AbortError' || ctrl.signal.aborted) return;
+          if (isRouteSeamError(error)) {
+            // Édition impossible à recoller sans ligne droite : tout le tracé
+            // est recalculé, seul résultat sans ligne droite (tout de suite si
+            // l'itinéraire est actif, sinon à sa prochaine sélection).
+            console.warn('[BRouter] local edit does not join the stored route: full recompute', error);
+            unresolvedEdits.set(itinerary.id, { kind: 'patch', pendingKey: UNJOINABLE_EDIT_KEY });
+            if (isActive()) requestRouteRefresh();
+            return;
+          }
+          console.error('[BRouter local patch fail]', error);
+          if (isActive()) setRouteError(formatBrouterErrorMessage(error));
+        })
+        .finally(() => {
+          releaseCompute();
+          if (jobs.get(itinerary.id)?.ctrl === ctrl) jobs.delete(itinerary.id);
+          if (!ctrl.signal.aborted && isActive()) setRouteLoading(false);
+        });
+    },
+    [abortPatchJob, deferRouteState, gate, refineRouteInBackground, requestRouteRefresh, setProject, setRouteLoading],
+  );
 
   const {
     startKey,
@@ -301,6 +455,7 @@ export function useItineraryBrouterRouting({
       }
       // L'état restauré porte ses propres éditions en attente.
       unresolvedEditsRef.current.clear();
+      for (const id of [...patchJobsRef.current.keys()]) abortPatchJob(id);
     }
     if (seenExternalRevisionRef.current !== externalRevisionRef.current) {
       // Modifications d'autres éditeurs : un tracé stocké fait foi s'il porte
@@ -312,7 +467,6 @@ export function useItineraryBrouterRouting({
       }
     }
     const unresolvedEdits = unresolvedEditsRef.current;
-    const pendingRoutePatch = currentActive?.pendingRoutePatch;
     const existingRoutePoints = currentActive?.gpxRoute?.points ?? null;
     const editPlan = planPendingRouteEdit(
       currentActive,
@@ -333,108 +487,22 @@ export function useItineraryBrouterRouting({
       requestRouteRefresh();
     };
 
+    if (currentActive && editPlan.mode === 'full') {
+      // Édition remplacée avant d'être routée : son patch en vol ne vaut plus.
+      abortPatchJob(currentActive.id);
+    }
+
     if (
       currentActive &&
       editPlan.mode === 'patch' &&
-      pendingRoutePatch &&
+      currentActive.pendingRoutePatch &&
       existingRoutePoints &&
       existingRoutePoints.length >= 2
     ) {
-      const patchPoints = [
-        pendingRoutePatch.start,
-        ...pendingRoutePatch.via,
-        pendingRoutePatch.end,
-      ];
-      const bounds = checkRouteWithinFrance(patchPoints);
-      if (!bounds.ok) {
-        deferRouteState(bounds.reason ?? 'Itinéraire hors zone autorisée.');
-        return;
-      }
-
-      const ctrl = beginRouteRequest();
-      const releaseCompute = gate.beginCompute('route', currentActive.id);
-
-      const itineraryForRouting = currentActive;
-      const t0 = performance.now();
-      console.log(
-        '[BRouter] local patch START hash=',
-        brfHash,
-        'climbing=',
-        climbing,
-        'start=',
-        `${pendingRoutePatch.start.lon},${pendingRoutePatch.start.lat}`,
-        'end=',
-        `${pendingRoutePatch.end.lon},${pendingRoutePatch.end.lat}`,
-        'via=',
-        pendingRoutePatch.via.length,
-      );
-
-      const target = {
-        itineraryId: itineraryForRouting.id,
-        pendingKey: editPlan.pendingKey,
-      };
-      unresolvedEdits.set(itineraryForRouting.id, { kind: 'patch', pendingKey: editPlan.pendingKey });
-
-      resolveElasticRoutePatch(pendingRoutePatch, existingRoutePoints, ctrl.signal, (patch) => resolveRouteRequest({
-        itinerary: itineraryForRouting,
-        signal: ctrl.signal,
-        requestBase: {
-          // Bornes intermédiaires prises sur le tracé stocké : la jonction s'y fait.
-          start: anchorRoutePatchBound(patch.start, existingRoutePoints),
-          end: anchorRoutePatchBound(patch.end, existingRoutePoints),
-          via: patch.via,
-          polygons: forbiddenPolygons,
-          signal: ctrl.signal,
-        },
-        setRouteWarnings,
-      }))
-        .then(({ route, resolvedWarnings, patch: routedPatch }) => {
-          if (ctrl.signal.aborted) return;
-          setRouteWarnings(resolvedWarnings);
-          // Render route immediately with native BRouter elevation data
-          const refinementBase: { current: RouteRefinementBase | null } = { current: null };
-          setProject((project) => {
-            const next = applyPendingRoutePatch(project, target, route, null, routedPatch);
-            refinementBase.current = captureRouteRefinementBase(project, next, target.itineraryId);
-            return next;
-          });
-          resolveUnresolvedEdit(itineraryForRouting.id, target.pendingKey);
-          routedInputKeys.set(itineraryForRouting.id, routingInputKey);
-          setRouteLoading(false);
-          console.log(
-            '[BRouter] local patch OK in',
-            Math.round(performance.now() - t0),
-            'ms | dist=',
-            (route.distanceM / 1000).toFixed(2),
-            'km | pts=',
-            route.coordinates.length,
-          );
-          refineRouteInBackground(
-            target.itineraryId,
-            route,
-            refinementBase,
-            (project, profile) => applyPendingRoutePatch(project, target, route, profile, routedPatch),
-            'local patch',
-          );
-        })
-        .catch((error: unknown) => {
-          if ((error as { name?: string }).name === 'AbortError') return;
-          if (isRouteSeamError(error)) {
-            recomputeUnjoinableEdit(itineraryForRouting.id, error);
-            return;
-          }
-          console.error('[BRouter local patch fail]', error);
-          setRouteError(formatBrouterErrorMessage(error));
-        })
-        .finally(() => {
-          releaseCompute();
-          if (!ctrl.signal.aborted) setRouteLoading(false);
-        });
-
-      return () => {
-        ctrl.abort();
-        releaseCompute();
-      };
+      // Requête portée par un job par itinéraire, pas par cet effet : elle
+      // survit à un changement de sélection (cf. ensurePatchJob).
+      ensurePatchJob(currentActive, editPlan.pendingKey);
+      return;
     }
 
     if (
@@ -771,6 +839,7 @@ export function useItineraryBrouterRouting({
       releaseCompute?.();
     };
   }, [
+    abortPatchJob,
     activeId,
     beginRouteRequest,
     brfHash,
@@ -778,6 +847,7 @@ export function useItineraryBrouterRouting({
     endKey,
     forbiddenPolygons,
     deferRouteState,
+    ensurePatchJob,
     gate,
     gateRetryNonce,
     gpxRoutePointCount,
@@ -798,6 +868,24 @@ export function useItineraryBrouterRouting({
     startKey,
     routingViaKey,
   ]);
+
+  // Éditions locales des itinéraires non sélectionnés (point glissé sur un
+  // autre itinéraire, sélection changée pendant le calcul) : routées aussi.
+  // Déclaré après l'effet principal : un undo / redo y a déjà vidé les
+  // éditions en vol quand celui-ci relance celles de l'état restauré.
+  useEffect(() => {
+    if (!map || !isMapLoaded) return;
+    for (const itinerary of itineraries) {
+      if (itinerary.id === activeId) continue;
+      const plan = planPendingRouteEdit(itinerary, unresolvedEditsRef.current.get(itinerary.id));
+      if (plan.mode === 'patch') {
+        ensurePatchJob(itinerary, plan.pendingKey);
+      } else if (plan.mode === 'full') {
+        // Recalcul complet : fait à la sélection de l'itinéraire (effet principal).
+        abortPatchJob(itinerary.id);
+      }
+    }
+  }, [abortPatchJob, activeId, ensurePatchJob, historyRevision, isMapLoaded, itineraries, map]);
 
   return {
     cancelRouteRequest,

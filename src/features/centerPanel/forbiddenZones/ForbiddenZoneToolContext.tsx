@@ -16,6 +16,8 @@ import {
   setForbiddenZoneDraft,
 } from '@/features/itineraryPanel/lib/route-layer';
 import { translateAppText } from '@/shared/i18n';
+import { isTypingTarget } from '@/shared/lib/isTypingTarget';
+import { shouldExitModeOnEscape } from '@/shared/lib/escapeToExit';
 
 type DraftPoint = { lat: number; lon: number };
 type DraftSnapshot = DraftPoint[];
@@ -222,7 +224,9 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      // Une touche déjà prise (menu, champ de saisie) ne pilote pas l'outil.
+      if (event.defaultPrevented || isTypingTarget(event.target)) return;
+      if (shouldExitModeOnEscape(event)) {
         event.preventDefault();
         deactivate();
       } else if (event.key === 'Enter') {

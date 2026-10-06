@@ -30,8 +30,9 @@
   ],
   // Fixture du bench POI : dépendance du package séparé server/poi-server.
   "ignoreDependencies": ["better-sqlite3"],
-  // Outils système lancés par les scripts de dev (BRouter, arrêt des services).
-  "ignoreBinaries": ["java", "netstat"],
+  // Outils système lancés par les scripts de dev (BRouter, arrêt des services)
+  // et par bench:server (mémoire du serveur sous Windows).
+  "ignoreBinaries": ["java", "netstat", "tasklist"],
   // Bloquants : fichiers, dépendances, imports non résolus. Exports et types
   // inutilisés : signalés seulement, à résorber au fil de l'eau.
   "rules": {

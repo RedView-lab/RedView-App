@@ -9,6 +9,8 @@
 // une limite mémoire : un cache sans borne en octets finit en OOM).
 // ---------------------------------------------------------------------------
 
+import { createOldestKeyTaker } from './oldest-key.mjs';
+
 /**
  * @template V
  * @typedef {object} ByteLru
@@ -32,6 +34,8 @@
 export function createByteLru({ maxBytes, sizeOf, ttlMs, maxEntryBytes = maxBytes / 4 }) {
   /** @type {Map<string, { value: V, bytes: number, expiresAt: number }>} */
   const entries = new Map();
+  // Éviction en tête en O(1) amorti (server/oldest-key.mjs).
+  const takeOldestKey = createOldestKeyTaker(entries);
   let bytes = 0;
 
   /** @param {string} key */
@@ -60,7 +64,7 @@ export function createByteLru({ maxBytes, sizeOf, ttlMs, maxEntryBytes = maxByte
       const entryBytes = sizeOf(value) + key.length;
       if (entryBytes > maxEntryBytes) return false;
       while (bytes + entryBytes > maxBytes && entries.size > 0) {
-        drop(/** @type {string} */ (entries.keys().next().value));
+        drop(/** @type {string} */ (takeOldestKey()));
       }
       entries.set(key, { value, bytes: entryBytes, expiresAt: ttlMs ? Date.now() + ttlMs : Infinity });
       bytes += entryBytes;

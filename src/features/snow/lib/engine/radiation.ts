@@ -115,6 +115,9 @@ export function computeHorizons(
     d = d < 8 * step0 ? d + step0 : d * 1.12;
   }
   const curvature = (1 - REFRACTION_K) / (2 * EARTH_RADIUS_M);
+  const ray = Float64Array.from(distances);
+  // Earth curvature + refraction drop at each distance.
+  const drops = Float64Array.from(distances, (dist) => dist * dist * curvature);
   const tan: Float32Array[] = [];
   for (const azTrue of azimuthsDeg) {
     const azGrid = (azTrue - gridNorthBearingDeg) * RAD;
@@ -123,18 +126,7 @@ export function computeHorizons(
     const out = new Float32Array(w * h);
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
-        const xm = x * cellX;
-        const ym = y * cellY;
-        const zc = z[y * w + x];
-        let best = -1;
-        for (let k = 0; k < distances.length; k++) {
-          const dist = distances[k];
-          const zs = sampler.at(xm + ux * dist, ym + uy * dist);
-          if (!Number.isFinite(zs)) break;
-          const t = (zs - zc - dist * dist * curvature) / dist;
-          if (t > best) best = t;
-        }
-        out[y * w + x] = best;
+        out[y * w + x] = sampler.maxRaySlope(x * cellX, y * cellY, ux, uy, ray, drops, z[y * w + x], -1);
       }
     }
     tan.push(out);

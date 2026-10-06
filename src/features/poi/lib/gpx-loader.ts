@@ -3,7 +3,7 @@ import { parseGpxText } from './gpx-parse';
 import {
   cleanAndInterpolateElevations,
   isValidElevation,
-} from '../../itineraryPanel/lib/route-metrics';
+} from '../../itineraryPanel/lib/route-metrics/elevationSanitizer';
 
 interface GpxParseWorkerSuccess {
   ok: true;

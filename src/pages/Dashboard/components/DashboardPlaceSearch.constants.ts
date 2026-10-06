@@ -35,19 +35,6 @@ export const SEARCH_SATELLITE_FAR_RESTORE_MS = 900;
 export const VIEWPORT_POI_MIN_ZOOM = 5;
 export const VIEWPORT_POI_FETCH_DEBOUNCE_MS = 160;
 export const POI_MENU_CLOSE_MS = 150;
-/*
- * Widths (logical px, panel toggle included) of the search bar's density
- * steps; the row never wraps, labels shrink with an ellipsis in between
- * (dashboard-place-search.css).
- *
- * TIGHT: regular chips with 22 px label stubs — toggle 40 + gap 12 + search
- * field at its 96 px minimum + 5 chips (1 × 121 with a chevron, 4 × 100) and
- * their gaps. Below it the chips tighten (--tight: 87 + 4 × 71, search field
- * down to its magnifier), which holds down to ~465 px.
- * ICONS: below that, the labels go (tooltip only).
- */
-export const PLACE_SEARCH_TIGHT_WIDTH = 700;
-export const PLACE_SEARCH_ICONS_WIDTH = 480;
 
 export const DROPDOWN_VIEWPORT_POI_ICON_URLS: Partial<Record<PoiCategory, string>> = {
   drinking_water: '/svgv2/poi/dropdown-maps/water.svg',
@@ -88,6 +75,30 @@ export const DASHBOARD_FILTER_OPTIONS: readonly DashboardFilterOption[] = [
   { id: 'alertes', label: 'Alertes', icon: 'search-filter-alertes.svg' },
   { id: 'pente', label: 'Pente', slopeSwatch: true },
 ] as const;
+
+/*
+ * Widths (logical px, panel toggle included) of the search bar's density
+ * steps; the row never wraps, labels shrink with an ellipsis in between
+ * (dashboard-place-search.css). Computed from the chips above with the
+ * minimum widths of that CSS, so a new chip moves the steps with it: they
+ * were once written for five chips, and the sixth (« Pente ») pushed the row
+ * under the right panel on 1280–1600 px screens.
+ *
+ * TIGHT: regular chips with 22 px label stubs — toggle 40 + gap 12 + search
+ * field at its 96 px minimum, then the chips (121 with a chevron, 100
+ * otherwise), 4 px apart. Below it the chips tighten (--tight: 87 / 71, 3 px
+ * apart, search field down to its 32 px magnifier).
+ * ICONS: below that, the labels go (tooltip only).
+ */
+function placeSearchRowWidth(searchMin: number, chipMin: number, menuChipMin: number, gap: number): number {
+  const menus = DASHBOARD_FILTER_OPTIONS.filter((option) => option.hasDropdown).length;
+  const chips = DASHBOARD_FILTER_OPTIONS.length;
+  // Toggle + PANEL_PADDING, search field, then the chips; 10 px of slack.
+  return 40 + 12 + searchMin + menus * menuChipMin + (chips - menus) * chipMin + chips * gap + 10;
+}
+
+export const PLACE_SEARCH_TIGHT_WIDTH = placeSearchRowWidth(96, 100, 121, 4);
+export const PLACE_SEARCH_ICONS_WIDTH = placeSearchRowWidth(32, 71, 87, 3);
 
 /** Cases du menu « POI », au-dessus des catégories. */
 export const DASHBOARD_POI_SOURCE_OPTIONS: readonly DashboardPoiSourceOption[] = [

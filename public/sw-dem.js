@@ -22,7 +22,13 @@
 // ---------------------------------------------------------------------------
 // Cache stamp — bumped on every cache-invalidating change so the browser
 // detects a byte diff in this file and triggers install→activate→purge.
-// Current: dem-tiles-v53-video-final / radar-v3 / dem-negative-v30 / slope-tiles-v3-aligned / vhr-tiles-v1 / altitude-stale-v1
+// Current: dem-tiles-v53-video-final / radar-v3 / dem-negative-v30 / slope-tiles-v3-rle / vhr-tiles-v1 / altitude-stale-v1
+// 2026-10-06 slope-rle: the opaque gray slope tile (buildGrayPng) is
+// compressed by zlibDeflateRle (core/terrain-rgb.js: distance-1 matches +
+// dynamic Huffman, zlib's Z_RLE) instead of CompressionStream's level 6,
+// whose match search cost 20-33 ms per 512² tile in Chromium for the same
+// size; the whole slope tile build went from 24 to 11 ms. Same pixels,
+// different PNG bytes: cached tiles stay valid — MAP_CACHE_EPOCH not bumped.
 // 2026-10-04 video-final: the LiDAR HD WMS rasters are dispatched under a
 // bytes-in-flight budget (ign-scheduler.js) instead of up to 64 at once — on
 // a ~2 MB/s line they crossed the 15 s fetch timeout and the tiles fell back

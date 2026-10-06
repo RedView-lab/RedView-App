@@ -275,24 +275,30 @@ function averageDistanceMetricOverInterval(
   const spanM = endDistanceM - startDistanceM;
   if (spanM <= 0) return Number.NaN;
 
-  const breakpoints = [startDistanceM];
-  for (const sample of samples) {
-    if (sample.distanceM > startDistanceM && sample.distanceM < endDistanceM) {
-      breakpoints.push(sample.distanceM);
-    }
+  // Samples are sorted by distance: the ones inside the interval are a
+  // contiguous run, found by bisection. Scanning every sample for every 500 m
+  // interval cost ~0.2-1 s on a 1 200 km prediction (100 000 points).
+  let first = 0;
+  let last = samples.length;
+  while (first < last) {
+    const mid = (first + last) >> 1;
+    if (samples[mid].distanceM > startDistanceM) last = mid;
+    else first = mid + 1;
   }
-  breakpoints.push(endDistanceM);
 
   let integral = 0;
-  let prevDistanceM = breakpoints[0] ?? startDistanceM;
+  let prevDistanceM = startDistanceM;
   let prevValue = interpolateDistanceMetricValue(samples, prevDistanceM);
-  for (let index = 1; index < breakpoints.length; index += 1) {
-    const currentDistanceM = breakpoints[index] ?? prevDistanceM;
+  const accumulate = (currentDistanceM: number) => {
     const currentValue = interpolateDistanceMetricValue(samples, currentDistanceM);
     integral += ((prevValue + currentValue) / 2) * (currentDistanceM - prevDistanceM);
     prevDistanceM = currentDistanceM;
     prevValue = currentValue;
+  };
+  for (let index = first; index < samples.length && samples[index].distanceM < endDistanceM; index += 1) {
+    accumulate(samples[index].distanceM);
   }
+  accumulate(endDistanceM);
 
   return integral / spanM;
 }

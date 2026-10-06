@@ -6,7 +6,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from 'react';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
-import { hasProjectTracedContent } from '@/features/itineraryPanel/lib/project';
+import { hasProjectTracedContent } from '@/features/itineraryPanel/lib/project/defaultState';
 import { DEFAULT_VIEW } from '@/features/map3d/lib/mapbox.config';
 import type { MapViewport } from '@/features/map3d/lib/viewport-persist';
 import { readAppScaleViewport, watchAppScaleViewport } from '@/shared/lib/appScale';

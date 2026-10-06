@@ -16,6 +16,8 @@ export type ProfilePoint = {
 
 export interface UseItineraryBrouterRoutingArgs {
   active: ItineraryProject['itineraries'][number] | null;
+  /** Tous les itinéraires : les éditions locales des non actifs sont routées aussi. */
+  itineraries: ItineraryProject['itineraries'];
   /** Révision d'historique du ProjectStore (undo / redo / rollback). */
   historyRevision: number;
   isMapLoaded: boolean;

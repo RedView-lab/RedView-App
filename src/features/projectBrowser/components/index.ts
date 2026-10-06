@@ -1,4 +1,3 @@
-export { BillingActionModal } from '../billing/components/BillingActionModal/BillingActionModal';
 export type {
   BillingModalCompletion,
   BillingModalState,

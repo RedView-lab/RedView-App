@@ -27,6 +27,7 @@ export {
   removeRouteLayer,
   raiseRouteLayer,
   setRouteLayerVisibility,
+  stackActiveRouteOnTop,
   upsertRouteLayer,
 } from './itineraryLayers';
 

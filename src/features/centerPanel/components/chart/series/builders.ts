@@ -137,9 +137,6 @@ function buildSeriesFromRouteProfile(
   detailZoom = 0,
 ): ChartPoint[] | null {
   const sampleSpacingM = getAdaptiveRouteProfileSampleSpacingM(routePoints, detailZoom);
-  const profile = sampleNormalizedRouteProfile(routePoints, sampleSpacingM);
-  if (!profile) return null;
-
   const routeSignature = routePoints ? buildRouteContentSignature(routePoints) : '';
 
   const routeCache = routePoints
@@ -156,10 +153,16 @@ function buildSeriesFromRouteProfile(
         sampleSpacingM,
       )
     : null;
+  // Looked up before sampling the profile (5-10 ms on a 100 000-point route,
+  // paid at every chart recomputation even when the series was cached). A
+  // cached series only exists for a profile that was sampled successfully.
   if (routeCache && routeCacheKey) {
     const cached = routeCache.get(routeCacheKey);
     if (cached !== undefined) return cached;
   }
+
+  const profile = sampleNormalizedRouteProfile(routePoints, sampleSpacingM);
+  if (!profile) return null;
 
   const timeline = xMode === 'distance' ? null : getPredictionTimeline(prediction);
   const FALLBACK_SPEED_MS = 20 / 3.6; // 20 km/h default

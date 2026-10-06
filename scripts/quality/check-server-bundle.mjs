@@ -6,7 +6,8 @@
  * 1. `scripts/build-server.mjs` (dist-server/) et `scripts/precompress-dist.mjs` (dist/) ;
  * 2. `node dist-server/server.mjs` sur un port libre : /health, le plus gros
  *    chunk servi depuis sa variante brotli (octets identiques après
- *    décompression), une route API sans dépendance externe, une route inconnue ;
+ *    décompression), une route API sans dépendance externe (brute et brotli),
+ *    une route inconnue ;
  * 3. `node dist-server/multiplayer.mjs` (stockage fichier, dossier temporaire) :
  *    /health répond `{"ok":true}`.
  * Échoue (code ≠ 0) au premier écart : un bundle cassé ne doit pas atteindre Coolify.
@@ -126,6 +127,13 @@ async function checkAppServer() {
   if (api.status !== 200 || !String(api.headers['content-type']).includes('json')) {
     fail(`/api/app-translations : attendu 200 JSON, reçu ${api.status} ${api.headers['content-type']}`);
   }
+  // Réponses API compressées par le serveur (server/api-compression.mjs) : mêmes octets une fois décompressés.
+  const apiBr = await get(port, '/api/app-translations?lang=en', { 'Accept-Encoding': 'br, gzip' });
+  if (apiBr.status !== 200 || apiBr.headers['content-encoding'] !== 'br' || !String(apiBr.headers.vary).includes('Accept-Encoding')) {
+    fail(`/api/app-translations : attendu 200 + brotli + Vary, reçu ${apiBr.status} ${apiBr.headers['content-encoding'] ?? 'identité'} (Vary ${apiBr.headers.vary})`);
+  }
+  if (!zlib.brotliDecompressSync(apiBr.body).equals(api.body)) fail('/api/app-translations : corps brotli différent du corps brut');
+  log(`server.mjs : /api/app-translations ${(api.body.length / 1024).toFixed(0)} Ko → brotli ${(apiBr.body.length / 1024).toFixed(0)} Ko`);
   const unknown = await get(port, '/api/does-not-exist');
   if (unknown.status !== 404) fail(`/api/does-not-exist : attendu 404, reçu ${unknown.status}`);
   log('server.mjs : /health, statiques précompressés et routes API OK');

@@ -1,4 +1,4 @@
-import { describeRedviewImportError, importRedviewFile } from '@/features/redviewFile';
+import { describeRedviewImportError } from '@/features/redviewFile/lib/messages';
 import { translateAppText } from '@/shared/i18n';
 import type { ProjectSummary } from '@/shared/utils/projects';
 
@@ -20,6 +20,8 @@ export async function importProjectFiles(
   files: File[],
   { folderId, siblingNames }: { folderId: string | null; siblingNames: string[] },
 ): Promise<ProjectImportResult> {
+  // Reader (ZIP, sanitizer, uploads) loaded on use, off the project browser's initial load.
+  const { importRedviewFile } = await import('@/features/redviewFile/lib/importProject');
   const names = [...siblingNames];
   const imported: ProjectSummary[] = [];
   const failures: string[] = [];

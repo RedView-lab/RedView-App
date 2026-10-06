@@ -183,14 +183,16 @@ export function normalizeRouteProfile(
 ): NormalizedRoutePoint[] | null {
   if (!routePoints || routePoints.length < 2) return null;
 
+  // Cached under the route itself, looked up before the corruption scan: a
+  // route with corrupted altitudes is cleaned into a new array every time, so
+  // keyed by that copy the profile was rebuilt at every chart recomputation.
+  const signature = buildRouteContentSignature(routePoints);
+  const cached = normalizedRouteProfileCache.get(routePoints);
+  if (cached !== undefined && cached.signature === signature) return cached.value;
+
   const pointsToUse = hasCorruptedElevations(routePoints)
     ? cleanAndInterpolateElevations(routePoints)
     : routePoints;
-
-  const signature = buildRouteContentSignature(pointsToUse);
-
-  const cached = normalizedRouteProfileCache.get(pointsToUse);
-  if (cached !== undefined && cached.signature === signature) return cached.value;
 
   const samples: Array<{ distanceM: number; elevationM: number; gradientPct?: number | null }> = [];
   let cumulativeDistanceM = 0;

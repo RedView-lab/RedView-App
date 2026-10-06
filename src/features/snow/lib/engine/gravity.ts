@@ -41,6 +41,50 @@ const NX = [1, 1, 0, -1, -1, -1, 0, 1];
 const NY = [0, 1, 1, 1, 0, -1, -1, -1];
 
 /**
+ * `order` (cell indices) sorted by decreasing `keys`, ties in increasing
+ * index: exactly the permutation of a stable `order.sort((a, b) => keys[b] -
+ * keys[a])` on the identity (for doubles, a − b = 0 only when a = b), from a
+ * stable LSD radix sort of the IEEE-754 bits — 4-6× faster than the
+ * comparator sort, which cost ~85 ms per pass on a 640² grid.
+ */
+function sortByDecreasingKey(keys: Float64Array, order: Int32Array, scratch: RadixScratch): void {
+  const n = keys.length;
+  const { hi, lo, tmp, count } = scratch;
+  const f64 = new Float64Array(1);
+  const u32 = new Uint32Array(f64.buffer);
+  const hiWord = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1 ? 1 : 0;
+  for (let i = 0; i < n; i++) {
+    f64[0] = keys[i] + 0; // −0 → +0: the comparator ties them
+    let h = u32[hiWord];
+    let l = u32[1 - hiWord];
+    // Order-preserving unsigned key, then complemented for a decreasing order.
+    if (h & 0x80000000) { h = ~h >>> 0; l = ~l >>> 0; } else h = (h | 0x80000000) >>> 0;
+    hi[i] = ~h >>> 0;
+    lo[i] = ~l >>> 0;
+  }
+  let src = order;
+  let dst = tmp;
+  for (let i = 0; i < n; i++) src[i] = i;
+  for (let pass = 0; pass < 4; pass++) {
+    const digits = pass < 2 ? lo : hi;
+    const shift = (pass & 1) * 16;
+    count.fill(0);
+    for (let i = 0; i < n; i++) count[(digits[src[i]] >>> shift) & 0xffff]++;
+    let sum = 0;
+    for (let b = 0; b < 65536; b++) { const c = count[b]; count[b] = sum; sum += c; }
+    for (let i = 0; i < n; i++) { const j = src[i]; dst[count[(digits[j] >>> shift) & 0xffff]++] = j; }
+    const t = src; src = dst; dst = t;
+  }
+  // Four passes: the result is back in `order`.
+}
+
+interface RadixScratch { hi: Uint32Array; lo: Uint32Array; tmp: Int32Array; count: Uint32Array }
+
+function radixScratch(n: number): RadixScratch {
+  return { hi: new Uint32Array(n), lo: new Uint32Array(n), tmp: new Int32Array(n), count: new Uint32Array(65536) };
+}
+
+/**
  * Debris cones: the snow deposited during the pass (`gain`) slumps until no
  * deposit stands steeper than the angle of repose above a neighbour (sandpile
  * relaxation, mass-conserving). Only the fresh deposit moves, never the
@@ -48,25 +92,29 @@ const NY = [0, 1, 1, 1, 0, -1, -1, -1];
  */
 function relaxDeposits(hs: Float32Array, gain: Float32Array, z: Float32Array, w: number, h: number, dist: number[], tanRepose: number): void {
   const n = w * h;
-  const queue: number[] = [];
+  // LIFO work list: a cell is in it at most once (`queued`), so n slots suffice.
+  const queue = new Int32Array(n);
+  let top = 0;
   const queued = new Uint8Array(n);
-  for (let i = 0; i < n; i++) if (gain[i] > 50) { queue.push(i); queued[i] = 1; }
+  for (let i = 0; i < n; i++) if (gain[i] > 50) { queue[top++] = i; queued[i] = 1; }
+  const reposeDrop = dist.map((d) => d * tanRepose);
+  const excess = new Float64Array(8);
   let budget = 40 * n;
-  while (queue.length > 0 && budget-- > 0) {
-    const i = queue.pop() as number;
+  while (top > 0 && budget-- > 0) {
+    const i = queue[--top];
     queued[i] = 0;
     if (gain[i] <= 1) continue;
     const x = i % w;
     const y = (i - x) / w;
     const si = z[i] + hs[i] / 100;
     let total = 0;
-    const excess = [0, 0, 0, 0, 0, 0, 0, 0];
     for (let k = 0; k < 8; k++) {
+      excess[k] = 0;
       const nx = x + NX[k];
       const ny = y + NY[k];
       if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
       const j = ny * w + nx;
-      const e = si - (z[j] + hs[j] / 100) - dist[k] * tanRepose;
+      const e = si - (z[j] + hs[j] / 100) - reposeDrop[k];
       if (e > 0.01) { excess[k] = e; total += e; }
     }
     if (total <= 0) continue;
@@ -83,9 +131,9 @@ function relaxDeposits(hs: Float32Array, gain: Float32Array, z: Float32Array, w:
       const share = (amount * excess[k]) / total;
       hs[j] += share;
       gain[j] += share;
-      if (!queued[j]) { queue.push(j); queued[j] = 1; }
+      if (!queued[j]) { queue[top++] = j; queued[j] = 1; }
     }
-    if (!queued[i]) { queue.push(i); queued[i] = 1; }
+    if (!queued[i]) { queue[top++] = i; queued[i] = 1; }
   }
 }
 
@@ -119,16 +167,17 @@ export function snowSlide(hs: Float32Array, grid: WorkGrid, config: SnowEngineCo
   const weights = new Float64Array(8);
   const gain = new Float32Array(n);
   const tanRepose = Math.tan((config.debrisReposeDeg * Math.PI) / 180);
+  const scratch = radixScratch(n);
 
   for (let pass = 0; pass < passes; pass++) {
-    for (let i = 0; i < n; i++) { surf[i] = z[i] + hs[i] / 100; order[i] = i; }
+    for (let i = 0; i < n; i++) surf[i] = z[i] + hs[i] / 100;
     // Slopes and flow directions come from the snow surface at the start of
     // the pass: read on the fly, the not-yet-processed cells below (loaded with
     // what they already received) would flatten the slope or even rise above
     // the cell and stop the release. The holding slope is read at the scale
     // the curves were calibrated at (`gravitySlopeScaleM`).
     const radius = Math.floor(config.gravitySlopeScaleM / (dx + dy));
-    const surfSlope = radius >= 1 ? boxMean(Float32Array.from(surf), w, h, radius) : surf;
+    const surfSlope = radius >= 1 ? boxMean(new Float32Array(surf), w, h, radius) : surf;
     const step = Math.max(1, radius);
     for (let y = 0; y < h; y++) {
       const ym = Math.max(0, y - step), yp = Math.min(h - 1, y + step);
@@ -139,8 +188,7 @@ export function snowSlide(hs: Float32Array, grid: WorkGrid, config: SnowEngineCo
         slopeOf[y * w + x] = Math.atan(Math.hypot(sxv, syv)) * (180 / Math.PI);
       }
     }
-    const keys = surf;
-    order.sort((a, b) => keys[b] - keys[a]);
+    sortByDecreasingKey(surf, order, scratch);
     flux.fill(0);
     energy.fill(0);
     gain.fill(0);

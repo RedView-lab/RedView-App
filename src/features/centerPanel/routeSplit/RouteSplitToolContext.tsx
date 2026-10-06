@@ -12,6 +12,7 @@ import { queryPoiAtPoint } from '@/features/poi/lib/poi-markers';
 
 import { useProjectStoreOptional } from '@/features/itineraryPanel/context/ProjectStore/hooks';
 import { translateAppText } from '@/shared/i18n';
+import { useEscapeToExit } from '@/shared/hooks/useEscapeToExit';
 import { useRouteHoverPreview } from '../hooks/useRouteHoverPreview';
 import { findSplitIndexForMapClick } from './routeSnap';
 import {
@@ -88,6 +89,8 @@ export function RouteSplitToolProvider({ children, map }: RouteSplitToolProvider
     if (canSplit) return;
     setArmed(false);
   }, [canSplit]);
+
+  useEscapeToExit(armed, deactivate);
 
   useEffect(() => {
     if (!armed || !map || !store || !activeItinerary || !routePoints || routePoints.length < 4) {

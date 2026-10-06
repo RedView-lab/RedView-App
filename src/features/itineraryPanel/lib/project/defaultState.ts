@@ -12,8 +12,11 @@ import { normalizeDiscipline } from '@/shared/lib/discipline';
 import { createDefaultControlPanelPersistedState } from '../../../controlPanel/lib/persistedState';
 import { DEFAULT_VIEW } from '../../../map3d/lib/mapbox.config';
 import { createDefaultExpertState } from '../../expert/defaults';
-import { cleanAndInterpolateElevations, hasCorruptedElevations } from '../route-metrics';
-import { buildImportedRouteMetrics } from '../routes';
+// Concrete module, not the route-metrics barrel: defaultState is on the project
+// browser's initial load, and the barrel chained surfaceAnalysis → brouter (BRF
+// profiles, error messages) and terrain tiles into it.
+import { cleanAndInterpolateElevations, hasCorruptedElevations } from '../route-metrics/elevationSanitizer';
+import { buildImportedRouteMetrics } from '../routes/imported-route';
 import { HIDDEN_PANEL_POI_CATEGORIES } from './poiRows';
 import { createDocumentId } from './ids';
 import { repairRouteEndpointArtifacts } from './repair-route-endpoints';

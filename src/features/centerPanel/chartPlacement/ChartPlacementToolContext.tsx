@@ -16,6 +16,7 @@ import {
 import { dispatchItineraryMapAction } from '@/features/itineraryPanel/lib/mapActionBridge';
 import { reverseGeocodeSettlement } from '@/features/itineraryPanel/lib/geocoding';
 import { translateAppText } from '@/shared/i18n';
+import { useEscapeToExit } from '@/shared/hooks/useEscapeToExit';
 
 /** Confirmation shown in the toolbar after a placement, then cleared. */
 const DONE_MESSAGE_MS = 4_000;
@@ -170,17 +171,8 @@ export function ChartPlacementToolProvider({ children }: { children: ReactNode }
     return () => window.clearTimeout(timer);
   }, [doneMessage, statusMessage]);
 
-  // Échap annule le placement en attente (et seulement lui : capture).
-  useEffect(() => {
-    if (!armedKind) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.stopPropagation();
-      deactivate();
-    };
-    window.addEventListener('keydown', handleKeyDown, true);
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [armedKind, deactivate]);
+  // Échap annule le placement en attente.
+  useEscapeToExit(armedKind != null, deactivate);
 
   const value = useMemo<ChartPlacementToolContextValue>(
     () => ({

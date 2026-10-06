@@ -15,20 +15,37 @@ const ACTION_BY_CODE: Readonly<Record<string, FreeCamAction>> = {
   ArrowLeft: 'left',
   KeyD: 'right',
   ArrowRight: 'right',
+  Space: 'ascend',
   ShiftLeft: 'ascend',
   ShiftRight: 'ascend',
-  // Fn n'atteint jamais le navigateur sous Windows (géré par le firmware
-  // clavier) : Ctrl est la descente universelle, Fn en bonus quand émis (macOS).
+  // Cmd (Meta ; OSLeft/OSRight dans les anciens Firefox) descend sur Mac.
+  // Ctrl reste la descente universelle (sous Windows Meta = touche Windows,
+  // dont le menu Démarrer n'est pas annulable) ; Fn en bonus quand émis (macOS).
+  MetaLeft: 'descend',
+  MetaRight: 'descend',
+  OSLeft: 'descend',
+  OSRight: 'descend',
   ControlLeft: 'descend',
   ControlRight: 'descend',
   Fn: 'descend',
 };
+
+/** Actions portées par des touches non modificatrices (voir `isMetaKeyCode`). */
+export const FREECAM_NON_MODIFIER_ACTIONS: readonly FreeCamAction[] = ['forward', 'backward', 'left', 'right'];
 
 export function resolveFreeCamAction(event: KeyboardEvent): FreeCamAction | null {
   const byCode = ACTION_BY_CODE[event.code];
   if (byCode) return byCode;
   if (event.key === 'Fn') return 'descend';
   return null;
+}
+
+/**
+ * macOS n'émet pas le `keyup` d'une touche relâchée pendant que Cmd est
+ * enfoncé : au relâché de Cmd, les déplacements doivent être relâchés à la main.
+ */
+export function isMetaKeyCode(code: string): boolean {
+  return code === 'MetaLeft' || code === 'MetaRight' || code === 'OSLeft' || code === 'OSRight';
 }
 
 export function isFreeCamToggleKey(event: KeyboardEvent): boolean {

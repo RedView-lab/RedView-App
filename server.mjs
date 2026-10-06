@@ -24,7 +24,8 @@ import {
 } from './server/http-security.mjs';
 import { captureServerError, flushServerObservability, initServerObservability } from './server/observability.mjs';
 import { createRequestLogger, normalizeRoutePath } from './server/request-logging.mjs';
-import { VARIANT_SUFFIX, isCompressible } from './server/static-compression.mjs';
+import { VARIANT_SUFFIX, acceptedEncodings, isCompressible } from './server/static-compression.mjs';
+import { API_COMPRESS_SYNC_MAX_BYTES, compressApiBody, compressApiBodySync, pickApiEncoding, withVary } from './server/api-compression.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -149,32 +150,6 @@ function looksLikeStaticAsset(pathname) {
   if (pathname.startsWith('/project/')) return false;
   const lastSegment = pathname.slice(pathname.lastIndexOf('/') + 1);
   return /\.[a-z0-9]+$/i.test(lastSegment);
-}
-
-/**
- * Encodages acceptés d'après Accept-Encoding (q-values respectées, `*`
- * compris), du préféré au moins préféré : brotli d'abord à poids égal.
- * Liste vide : identité seulement.
- */
-function acceptedEncodings(acceptEncoding) {
-  if (!acceptEncoding) return [];
-  const weights = new Map();
-  for (const part of String(acceptEncoding).split(',')) {
-    const [rawToken, ...params] = part.split(';');
-    const token = rawToken.trim().toLowerCase();
-    if (!token) continue;
-    let q = 1;
-    for (const param of params) {
-      const m = /^\s*q\s*=\s*([0-9.]+)\s*$/i.exec(param);
-      if (m) q = Number(m[1]);
-    }
-    weights.set(token, Number.isFinite(q) ? q : 0);
-  }
-  const weightOf = (encoding) => weights.get(encoding) ?? weights.get('*') ?? 0;
-  const br = weightOf('br');
-  const gzip = weightOf('gzip');
-  const ordered = br > 0 && br >= gzip ? ['br', 'gzip'] : ['gzip', 'br'];
-  return ordered.filter((encoding) => (encoding === 'br' ? br : gzip) > 0);
 }
 
 /**
@@ -548,6 +523,42 @@ async function handleApiRoute(apiRoute, parsedUrl, req, res) {
     },
   });
 
+  // Corps d'un handler : compressé si le client l'accepte (server/api-compression.mjs).
+  // Un gros corps se compresse hors de la boucle d'événements : la réponse part
+  // alors après le retour du handler (`bodyPending`).
+  let bodyPending = false;
+  function endApiBody(body) {
+    const raw = typeof body === 'string' ? Buffer.from(body, 'utf8') : body;
+    const encoding = res.headersSent ? null : pickApiEncoding({
+      acceptEncoding: req.headers['accept-encoding'],
+      contentType: res.getHeader('Content-Type'),
+      contentEncoding: res.getHeader('Content-Encoding'),
+      statusCode: res.statusCode,
+      method: req.method,
+      size: raw.length,
+    });
+    if (!encoding) {
+      res.end(raw);
+      return;
+    }
+    res.setHeader('Vary', withVary(res.getHeader('Vary'), 'Accept-Encoding'));
+    const sendEncoded = (packed) => {
+      if (res.writableEnded || res.destroyed) return;
+      res.setHeader('Content-Encoding', encoding);
+      res.setHeader('Content-Length', packed.length);
+      res.end(packed);
+    };
+    if (raw.length <= API_COMPRESS_SYNC_MAX_BYTES) {
+      sendEncoded(compressApiBodySync(raw, encoding));
+      return;
+    }
+    bodyPending = true;
+    compressApiBody(raw, encoding).then(sendEncoded, (err) => {
+      req.log.warn({ err }, 'api response compression failed');
+      if (!res.writableEnded && !res.destroyed) res.end(raw);
+    });
+  }
+
   // Build ApiResponse
   const apiRes = Object.assign(res, {
     status(code) {
@@ -558,17 +569,17 @@ async function handleApiRoute(apiRoute, parsedUrl, req, res) {
       if (!res.headersSent) {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
       }
-      res.end(JSON.stringify(data));
+      endApiBody(JSON.stringify(data));
       return apiRes;
     },
     send(data) {
       if (Buffer.isBuffer(data)) {
-        res.end(data);
+        endApiBody(data);
       } else if (typeof data === 'string') {
         if (!res.headersSent && !res.getHeader('Content-Type')) {
           res.setHeader('Content-Type', 'text/plain; charset=utf-8');
         }
-        res.end(data);
+        endApiBody(data);
       } else {
         apiRes.json(data);
       }
@@ -598,7 +609,7 @@ async function handleApiRoute(apiRoute, parsedUrl, req, res) {
   } catch (err) {
     req.log.error({ err, route: req.redviewRoute }, 'api handler error');
     captureServerError(err, { route: req.redviewRoute, requestId: req.id, method: req.method });
-    if (!res.headersSent) {
+    if (!res.headersSent && !bodyPending) {
       res.statusCode = 500;
       res.setHeader('Content-Type', 'application/json');
       const safeMessage = process.env.NODE_ENV === 'production'

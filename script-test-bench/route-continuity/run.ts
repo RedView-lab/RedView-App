@@ -320,9 +320,29 @@ async function main() {
       const trkpts = (pts: Pt[]) => pts.map((p) => `<trkpt lat="${p.lat.toFixed(6)}" lon="${p.lon.toFixed(6)}"></trkpt>`).join('');
       const gpxText = `<gpx creator="bench"><trk><trkseg>${trkpts(basePoints.slice(0, holeFrom + 1))}</trkseg><trkseg>${trkpts(basePoints.slice(holeTo))}</trkseg></trk></gpx>`;
       const parsed = gpxParse.parseGpxText(gpxText);
-      const bridged = await gaps.bridgeImportedGpxGaps(parsed);
-      // Référence : le même raccord demandé ici (BRouter est déterministe).
-      await route(defaults.createDefaultItinerary(), { start: parsed.points[holeFrom], end: parsed.points[holeFrom + 1], via: [] });
+      // Sources : les tracés que BRouter a réellement renvoyés au raccord. Le
+      // redemander ici ne suffit pas : le raccord met à jour l'échelle de coût
+      // observée du profil, donc le coefficient A* du second appel, et BRouter
+      // rend alors un autre itinéraire (faux « ligne droite » dans un passage
+      // complet, où le profil a déjà servi à Grenoble → Briançon).
+      const shimFetch = globalThis.fetch;
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const res = await shimFetch(input, init);
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        if (res.ok && url.startsWith('/api/brouter') && (init?.method ?? 'GET').toUpperCase() === 'GET') {
+          try {
+            const coordinates = (await res.clone().json())?.features?.[0]?.geometry?.coordinates as [number, number][] | undefined;
+            if (coordinates?.length) routed.push(coordinates.map(([lon, lat]) => ({ lat, lon })));
+          } catch { /* réponse non GeoJSON : ignorée */ }
+        }
+        return res;
+      }) as typeof fetch;
+      let bridged: any;
+      try {
+        bridged = await gaps.bridgeImportedGpxGaps(parsed);
+      } finally {
+        globalThis.fetch = shimFetch;
+      }
       checks += 1;
       const gpxSources = new SourceIndex();
       gpxSources.add(parsed.points.slice(0, holeFrom + 1));

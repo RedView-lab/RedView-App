@@ -60,14 +60,14 @@ function wholeRoutePatch(points: RoutePoints): ItineraryPendingRoutePatch {
 }
 
 describe('narrowRoutePatchToEdit', () => {
-  it('reroutes only ±80 km of stored route around an edit in a long section', () => {
+  it('reroutes only ±12 km of stored route around an edit in a long section', () => {
     const route = meridianRoute([400]);
     const patch = wholeRoutePatch(route);
     const narrowed = narrowRoutePatchToEdit(patch, route, { fromM: 200_000, toM: 201_000, projected: false });
 
-    expect(narrowed.start).toMatchObject({ kind: 'waypoint', distanceM: 119_000 });
-    expect(narrowed.end).toMatchObject({ kind: 'waypoint', distanceM: 281_000 });
-    expect(narrowed.start.lat).toBeCloseTo(route[119]!.lat, 9);
+    expect(narrowed.start).toMatchObject({ kind: 'waypoint', distanceM: 187_000 });
+    expect(narrowed.end).toMatchObject({ kind: 'waypoint', distanceM: 213_000 });
+    expect(narrowed.start.lat).toBeCloseTo(route[187]!.lat, 9);
     // The real bounds stay in the window, for widenUnjoinedRoutePatchWindow.
     expect(narrowed.window).toEqual({
       start: patch.start,
@@ -81,16 +81,16 @@ describe('narrowRoutePatchToEdit', () => {
   it('keeps the real start when the window would spare less than 20 km before the edit', () => {
     const route = meridianRoute([400]);
     const patch = wholeRoutePatch(route);
-    const narrowed = narrowRoutePatchToEdit(patch, route, { fromM: 90_000, toM: 90_500, projected: false });
+    const narrowed = narrowRoutePatchToEdit(patch, route, { fromM: 30_000, toM: 30_500, projected: false });
 
     expect(narrowed.start).toBe(patch.start);
-    expect(narrowed.end).toMatchObject({ kind: 'waypoint', distanceM: 171_000 });
+    expect(narrowed.end).toMatchObject({ kind: 'waypoint', distanceM: 43_000 });
   });
 
   it('returns the patch unchanged on a section too short to gain anything', () => {
-    const route = meridianRoute([150]);
+    const route = meridianRoute([50]);
     const patch = wholeRoutePatch(route);
-    const narrowed = narrowRoutePatchToEdit(patch, route, { fromM: 75_000, toM: 75_000, projected: false });
+    const narrowed = narrowRoutePatchToEdit(patch, route, { fromM: 25_000, toM: 25_000, projected: false });
 
     expect(narrowed).toEqual({ start: patch.start, end: patch.end, via: patch.via });
     expect(narrowed.window).toBeUndefined();
@@ -250,13 +250,16 @@ describe('widenUnjoinedRoutePatchWindow', () => {
       toM: 201_000,
       projected: false,
     });
-    const along = route.slice(119, 282).map((point): [number, number] => [point.lon, point.lat]);
+    const along = route.slice(187, 214).map((point): [number, number] => [point.lon, point.lat]);
 
     expect(widenUnjoinedRoutePatchWindow(narrowed, route, along)).toBeNull();
     const widened = widenUnjoinedRoutePatchWindow(narrowed, route, along, { start: true });
-    // Next step (200 km before km 200) reaches the real start.
-    expect(widened?.start).toEqual(narrowed.window!.start);
+    // Next step: 80 km before the edit; the joined end keeps its bound.
+    expect(widened?.start).toMatchObject({ kind: 'waypoint', distanceM: 119_000 });
     expect(widened?.end).toEqual(narrowed.end);
+    // Then 200 km before km 200: the real start.
+    const widenedAgain = widenUnjoinedRoutePatchWindow(widened!, route, along, { start: true });
+    expect(widenedAgain?.start).toEqual(narrowed.window!.start);
   });
 });
 

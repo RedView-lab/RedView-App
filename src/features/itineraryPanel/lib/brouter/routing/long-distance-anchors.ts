@@ -11,8 +11,10 @@
  * itinéraire plausible tout en laissant chaque tronçon explorer ses variantes.
  *
  * Même méthode pour les éditions : le tracé stocké est le résultat de cet
- * ancrage, une édition ne recalcule qu'une fenêtre de `LOCAL_EDIT_WINDOW_KM`
- * de part et d'autre (cf. narrowRoutePatchToEdit) au lieu de tout le tronçon.
+ * ancrage, une édition ne recalcule qu'une fenêtre locale (quelques km, élargie
+ * jusqu'à `LOCAL_EDIT_WINDOW_KM` de part et d'autre puis au-delà si le nouveau
+ * tracé ne rejoint pas l'ancien ; cf. narrowRoutePatchToEdit) au lieu de tout
+ * le tronçon.
  */
 import type { BrouterPoint } from '../types';
 

@@ -14,6 +14,8 @@ import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 
+import { createOldestKeyTaker } from './oldest-key.mjs';
+
 export class HttpError extends Error {
   constructor(status, message) {
     super(message);
@@ -234,6 +236,7 @@ export function rateLimitKeyForIp(ip) {
  */
 export function createRateLimiter({ windowMs = 60_000, maxKeys = 50_000 } = {}) {
   const records = new Map();
+  const takeOldestKey = createOldestKeyTaker(records);
 
   const sweep = setInterval(() => {
     const now = Date.now();
@@ -251,7 +254,7 @@ export function createRateLimiter({ windowMs = 60_000, maxKeys = 50_000 } = {}) 
       record = { count: 0, resetTime: now + windowMs };
       records.set(key, record);
       while (records.size > maxKeys) {
-        records.delete(records.keys().next().value);
+        records.delete(takeOldestKey());
       }
     }
     record.count += 1;

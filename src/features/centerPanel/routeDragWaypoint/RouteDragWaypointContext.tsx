@@ -28,6 +28,7 @@ import {
   createRouteEditPointer,
   type RouteEditPoint,
   type RouteEditPointerController,
+  type RouteEditTarget,
 } from './routeEditPointer';
 
 interface RouteDragWaypointContextValue {
@@ -49,9 +50,11 @@ function getPreviewRadius(traceWidthPx: number): number {
 
 /**
  * Gestes d'édition du tracé sur la carte :
- *   - en mode Tracer, saisie de la trace active : cliquer dessus insère un
- *     point de passage, la glisser en dépose un là où on relâche. Toute la
- *     logique pointeur (survol, curseur, clic, drag) vit dans `routeEditPointer` ;
+ *   - en mode Tracer, saisie de la trace de n'importe quel itinéraire visible :
+ *     la glisser dépose un point de passage là où on relâche (et sélectionne
+ *     l'itinéraire) ; un clic insère un point sur la trace sélectionnée, et ne
+ *     fait que sélectionner une autre trace. Toute la logique pointeur
+ *     (survol, curseur, clic, drag) vit dans `routeEditPointer` ;
  *   - avec ou sans Tracer, clic / glisser des points eux-mêmes (départ,
  *     arrivée, étapes : `useTracePointDrag`), sauf quand un autre outil
  *     consomme les clics de la carte.
@@ -80,32 +83,50 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
   // curseur au milieu d'un survol).
   const active = Boolean(map) && Boolean(traceTool?.armed) && !otherBlockingToolArmed;
 
-  const activeItinerary = store?.project.itineraries.find(
-    (itinerary) => itinerary.id === store.project.activeItineraryId,
-  );
-  const routePoints = activeItinerary?.gpxRoute?.points ?? null;
+  const itineraries = store?.project.itineraries;
+  const activeItineraryId = store?.project.activeItineraryId;
+  // Traces saisissables, la sélectionnée en premier (prioritaire là où elles
+  // se superposent).
+  const routes = useMemo<RouteEditTarget[]>(() => {
+    const out: RouteEditTarget[] = [];
+    for (const itinerary of itineraries ?? []) {
+      const points = itinerary.gpxRoute?.points;
+      if (itinerary.visible === false || !points || points.length < 2) continue;
+      const target = { id: itinerary.id, points, color: itinerary.color };
+      if (itinerary.id === activeItineraryId) out.unshift(target);
+      else out.push(target);
+    }
+    return out;
+  }, [activeItineraryId, itineraries]);
 
   const [isDragging, setIsDragging] = useState(false);
 
   const storeRef = useRef(store);
-  const activeItineraryIdRef = useRef(activeItinerary?.id);
-  const routePointsRef = useRef(routePoints);
-  const routeColorRef = useRef(activeItinerary?.color);
+  const routesRef = useRef(routes);
   const routeTraceWidthRef = useRef(store?.project.controlPanel?.routes?.traceWidthPx ?? DEFAULT_ROUTE_TRACE_WIDTH_PX);
 
   useEffect(() => {
     storeRef.current = store;
-    activeItineraryIdRef.current = activeItinerary?.id;
-    routePointsRef.current = routePoints;
-    routeColorRef.current = activeItinerary?.color;
+    routesRef.current = routes;
     routeTraceWidthRef.current = store?.project.controlPanel?.routes?.traceWidthPx ?? DEFAULT_ROUTE_TRACE_WIDTH_PX;
   });
 
   const commitWaypoint = useCallback(
-    (anchor: RouteEditPoint, drop: RouteEditPoint, asVariant: boolean) => {
+    (
+      itineraryId: string,
+      anchor: RouteEditPoint,
+      drop: RouteEditPoint,
+      { asVariant, dragged }: { asVariant: boolean; dragged: boolean },
+    ) => {
       const currentStore = storeRef.current;
-      const itineraryId = activeItineraryIdRef.current;
-      if (!currentStore || !itineraryId) return;
+      if (!currentStore) return;
+      if (!dragged && itineraryId !== currentStore.project.activeItineraryId) {
+        // Clic sur la trace d'un autre itinéraire : on le sélectionne seulement.
+        currentStore.setProject((project) => (
+          project.activeItineraryId === itineraryId ? project : { ...project, activeItineraryId: itineraryId }
+        ));
+        return;
+      }
 
       const variantBox: { current: { createdItineraryId: string; createdItineraryName: string } | null } = {
         current: null,
@@ -148,6 +169,8 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
         }
         delete targetItinerary.pendingTraceExtension;
         delete targetItinerary.routeAudit;
+        // L'itinéraire édité devient le sélectionné (dessiné au-dessus, panneau).
+        draft.activeItineraryId = targetItinerary.id;
         return true;
       });
 
@@ -185,11 +208,8 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
     if (!active || !map) return;
 
     const controller = createRouteEditPointer(map, {
-      getRoutePoints: () => routePointsRef.current,
-      getPreviewStyle: () => ({
-        color: routeColorRef.current,
-        radius: getPreviewRadius(routeTraceWidthRef.current),
-      }),
+      getRoutes: () => routesRef.current,
+      getPreviewRadius: () => getPreviewRadius(routeTraceWidthRef.current),
       onCommit: commitWaypoint,
       onDraggingChange: setIsDragging,
     });
@@ -201,10 +221,10 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
     };
   }, [active, commitWaypoint, map]);
 
-  // Trace recalculée sous un pointeur immobile : on réévalue le survol.
+  // Traces recalculées sous un pointeur immobile : on réévalue le survol.
   useEffect(() => {
     controllerRef.current?.refresh();
-  }, [routePoints]);
+  }, [routes]);
 
   const value = useMemo<RouteDragWaypointContextValue>(
     () => ({ dragging: isDragging }),

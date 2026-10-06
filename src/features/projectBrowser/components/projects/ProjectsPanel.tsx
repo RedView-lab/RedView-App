@@ -7,7 +7,7 @@ import {
   IconPlusCircle,
   IconSearch,
 } from '@/features/itineraryPanel/components/icons';
-import { REDVIEW_FILE_EXTENSION } from '@/features/redviewFile';
+import { REDVIEW_FILE_EXTENSION } from '@/features/redviewFile/lib/format';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { useAppI18n } from '@/shared/i18n';
 import type { ProjectFolderSummary, ProjectSummary } from '@/shared/utils/projects';

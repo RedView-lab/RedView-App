@@ -73,7 +73,8 @@ async function main() {
       const e = acc.get(key) ?? { km: 0, real: 0, pred: 0 };
       e.km += (b.distance_m - a.distance_m) / 1000;
       e.real += realTimeAt(track, b.distance_m) - realTimeAt(track, a.distance_m);
-      e.pred += a.segment_time_s;
+      // Temps prédit du tronçon (les points du moteur v2 n'ont pas de segment_time_s : le cumul valait NaN).
+      e.pred += b.elapsed_time_s - a.elapsed_time_s;
       acc.set(key, e);
     }
   }

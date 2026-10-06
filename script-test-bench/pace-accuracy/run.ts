@@ -339,7 +339,7 @@ function s12() {
   const prof = (d: number) => 400 + 80 * Math.sin(d / 3000);
   const route = straight(600_000, prof, { step: 100 });
   const res = predict(route, { rider: JO });
-  const mid = res.points.find((p: any) => p.distance_m >= 300_000);
+  const mid = res.points.find((p: any) => p.distance_m >= 300_000)!;
   const a1 = mid.elapsed_time_s;
   const a2 = res.total_time_s - mid.elapsed_time_s;
   record('S12', 'P', '600 km d\'une traite : fatigue d\'endurance', a2 > a1 * 1.05,

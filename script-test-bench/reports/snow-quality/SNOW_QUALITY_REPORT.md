@@ -1,6 +1,6 @@
 # Moteur neige v2 — banc de qualité
 
-Généré le 2026-10-04T11:39:21.337Z par `npm run bench:snow` (script-test-bench/snow-quality).
+Généré le 2026-10-06T16:14:07.417Z par `npm run bench:snow` (script-test-bench/snow-quality).
 
 **Portée.** La vérité terrain est synthétique : un modèle de référence écrit dans le banc, avec des formulations et des paramètres différents de ceux du moteur (manteau degré-jour sans terme radiatif, vent statistique type Winstral, rétention exponentielle 20·e^(−0,065·S), routage ∝ pente⁴, fonte par exposition sans ombres portées, bruit corrélé de 12 %). Le banc vérifie la descente d’échelle, l’assimilation, la conservation de la masse et le sens des processus ; il ne mesure pas la justesse réelle des congères fines (pas encore de cartes de hauteur mesurées).
 
@@ -25,10 +25,10 @@ Généré le 2026-10-04T11:39:21.337Z par `npm run bench:snow` (script-test-benc
 
 | Scénario | Date | Vérité moy. | RMSE v1 → v2 (cm) | Biais v1 → v2 (cm) | r v1 → v2 | Masse v1 → v2 | Biais/altitude v1 → v2 (cm) | SSIM 30 m v1 → v2 | κ neige v1 → v2 | Temps v1 / v2 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| hiver-nw | 2026-02-15 | 146.6 cm | 135.0 → **77.7** | -35.3 → **-10.9** | 0.08 → **0.59** | 0.76 → **0.93** | 47.4 → **12.9** | 0.13 → **0.64** | 0.00 → **0.00** | 3.6 s / 6.6 s |
-| hiver-arome-biaise+stations | 2026-02-20 | 114.7 cm | 104.9 → **69.6** | -58.6 → **-5.5** | 0.28 → **0.61** | 0.49 → **0.95** | 61.8 → **9.2** | 0.20 → **0.68** | 0.01 → **0.03** | 3.5 s / 6.4 s |
-| printemps-fonte | 2026-04-12 | 82.2 cm | 108.6 → **69.9** | -7.4 → **11.9** | 0.31 → **0.71** | 0.91 → **1.14** | 59.0 → **11.9** | 0.33 → **0.68** | 0.02 → **0.38** | 3.6 s / 6.4 s |
-| debut-saison-vent | 2026-12-10 | 27.9 cm | 36.9 → **16.6** | -0.4 → **4.9** | 0.30 → **0.85** | 0.99 → **1.18** | 9.1 → **5.0** | 0.29 → **0.73** | 0.06 → **0.26** | 3.5 s / 3.6 s |
+| hiver-nw | 2026-02-15 | 146.6 cm | 135.0 → **77.7** | -35.3 → **-10.9** | 0.08 → **0.59** | 0.76 → **0.93** | 47.4 → **12.9** | 0.13 → **0.64** | 0.00 → **0.00** | 3.5 s / 5.1 s |
+| hiver-arome-biaise+stations | 2026-02-20 | 114.7 cm | 104.9 → **69.6** | -58.6 → **-5.5** | 0.28 → **0.61** | 0.49 → **0.95** | 61.8 → **9.2** | 0.20 → **0.68** | 0.01 → **0.03** | 3.5 s / 5.0 s |
+| printemps-fonte | 2026-04-12 | 82.2 cm | 108.6 → **69.9** | -7.4 → **11.9** | 0.31 → **0.71** | 0.91 → **1.14** | 59.0 → **11.9** | 0.33 → **0.68** | 0.02 → **0.38** | 3.6 s / 4.9 s |
+| debut-saison-vent | 2026-12-10 | 27.9 cm | 36.9 → **16.6** | -0.4 → **4.9** | 0.30 → **0.85** | 0.99 → **1.18** | 9.1 → **5.0** | 0.29 → **0.73** | 0.06 → **0.26** | 3.4 s / 2.5 s |
 
 ### Par échelle d’agrégation (corrélation r et NSE)
 

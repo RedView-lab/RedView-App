@@ -109,7 +109,9 @@ export function TimelineKindMenu({
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose?.();
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      onClose?.();
     };
 
     document.addEventListener('mousedown', handlePointerDown);

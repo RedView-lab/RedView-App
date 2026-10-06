@@ -32,6 +32,7 @@ import {
   haversineRouteDistanceM,
 } from '@/features/itineraryPanel/lib/routes';
 import { translateAppText } from '@/shared/i18n';
+import { useEscapeToExit } from '@/shared/hooks/useEscapeToExit';
 
 interface RouteMergeToolContextValue {
   armed: boolean;
@@ -265,6 +266,9 @@ export function RouteMergeToolProvider({ children }: RouteMergeToolProviderProps
   useEffect(() => {
     setSelectedIds((current) => current.filter((id) => mergeableIds.has(id)));
   }, [mergeableIds]);
+
+  // Pas pendant la fusion : `toggle` ne l'interrompt pas non plus.
+  useEscapeToExit(armed && !isMerging, deactivate);
 
   const value = useMemo<RouteMergeToolContextValue>(
     () => ({

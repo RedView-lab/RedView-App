@@ -188,19 +188,26 @@ function selectAnchorIndices(points: RoutePoint[], maxPoints: number): number[] 
   return selected.sort((left, right) => left - right);
 }
 
-function douglasPeuckerIndices(points: RoutePoint[], toleranceM: number): number[] {
-  if (points.length <= 2) return points.map((_, index) => index);
+/**
+ * Douglas–Peucker split tree of `points`, built once for every tolerance: the
+ * point a sub-range splits at (its farthest point) never depends on the
+ * tolerance, only whether the recursion goes on. At tolerance τ a point is
+ * kept when its own deviation and those of every split above it exceed τ, so
+ * `retainSq[i]` holds the smallest of these squared deviations (0: never a
+ * split, +∞: the endpoints). The tolerance search below used to rerun the
+ * whole recursion ~30 times per segment (0.55 s for a 100 000-point route).
+ */
+function douglasPeuckerRetention(points: RoutePoint[]): Float64Array {
+  const retainSq = new Float64Array(points.length);
+  retainSq[0] = Infinity;
+  retainSq[points.length - 1] = Infinity;
+  if (points.length <= 2) return retainSq;
 
   const projected = projectRoutePoints(points);
-  const keep = new Array<boolean>(points.length).fill(false);
-  keep[0] = true;
-  keep[points.length - 1] = true;
-
-  const stack: Array<[number, number]> = [[0, points.length - 1]];
-  const toleranceSq = toleranceM * toleranceM;
+  const stack: Array<[number, number, number]> = [[0, points.length - 1, Infinity]];
 
   while (stack.length > 0) {
-    const [startIndex, endIndex] = stack.pop() as [number, number];
+    const [startIndex, endIndex, boundSq] = stack.pop() as [number, number, number];
     let maxDistanceSq = -1;
     let splitIndex = -1;
 
@@ -216,13 +223,25 @@ function douglasPeuckerIndices(points: RoutePoint[], toleranceM: number): number
       }
     }
 
-    if (splitIndex > startIndex && maxDistanceSq > toleranceSq) {
-      keep[splitIndex] = true;
-      stack.push([startIndex, splitIndex], [splitIndex, endIndex]);
+    if (splitIndex > startIndex) {
+      const splitRetainSq = Math.min(maxDistanceSq, boundSq);
+      retainSq[splitIndex] = splitRetainSq;
+      stack.push([startIndex, splitIndex, splitRetainSq], [splitIndex, endIndex, splitRetainSq]);
     }
   }
 
-  return keep.flatMap((value, index) => (value ? [index] : []));
+  return retainSq;
+}
+
+/** Indices Douglas–Peucker keeps at `toleranceM`, from the split tree. */
+function douglasPeuckerIndices(retainSq: Float64Array, toleranceM: number): number[] {
+  const toleranceSq = toleranceM * toleranceM;
+  const last = retainSq.length - 1;
+  const indices: number[] = [];
+  for (let index = 0; index <= last; index++) {
+    if (index === 0 || index === last || retainSq[index] > toleranceSq) indices.push(index);
+  }
+  return indices;
 }
 
 function simplifyIndicesToMaxPoints(points: RoutePoint[], maxPoints: number): number[] {
@@ -233,18 +252,19 @@ function simplifyIndicesToMaxPoints(points: RoutePoint[], maxPoints: number): nu
     return points.map((_, index) => index);
   }
 
+  const retainSq = douglasPeuckerRetention(points);
   let lowToleranceM = 0;
   let highToleranceM = 1;
-  let bestIndices = douglasPeuckerIndices(points, highToleranceM);
+  let bestIndices = douglasPeuckerIndices(retainSq, highToleranceM);
 
   while (bestIndices.length > clampedMaxPoints) {
     highToleranceM *= 2;
-    bestIndices = douglasPeuckerIndices(points, highToleranceM);
+    bestIndices = douglasPeuckerIndices(retainSq, highToleranceM);
   }
 
   for (let iteration = 0; iteration < 24; iteration++) {
     const midToleranceM = (lowToleranceM + highToleranceM) / 2;
-    const nextIndices = douglasPeuckerIndices(points, midToleranceM);
+    const nextIndices = douglasPeuckerIndices(retainSq, midToleranceM);
     if (nextIndices.length > clampedMaxPoints) {
       lowToleranceM = midToleranceM;
     } else {

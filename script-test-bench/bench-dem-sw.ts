@@ -13,16 +13,11 @@
  * 4. Health guard — stats du parent : ancien chemin (overzoom Catmull-Rom +
  *    encodage PNG) vs sous-rectangle du parent en cache (findCachedParentStats).
  */
-import fs from 'node:fs';
-import path from 'node:path';
-import vm from 'node:vm';
 import zlib from 'node:zlib';
-import { fileURLToPath } from 'node:url';
 import { BenchmarkSuite } from './core/harness.ts';
 import { printSuiteHeader, printSuiteResults } from './core/reporter.ts';
+import { loadSwModules, readSwConstant, type SwContext } from './core/sw-context.ts';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SW_DIR = path.resolve(__dirname, '../public/sw-dem');
 const SIZE = 256;
 
 const SW_MODULES = [
@@ -42,35 +37,16 @@ const SW_MODULES = [
   'runtime/dem-health.js',
 ];
 
-type SwContext = Record<string, unknown>;
-
-// The SW modules are classic scripts. They are evaluated in THIS realm
-// (runInThisContext), not in a vm.createContext sandbox: a contextified
-// global routes every `Math` / `Float32Array` lookup through interceptors,
-// which made sandboxed code look 10-30x slower than the in-realm legacy
-// copies and invalidated the comparison.
-let swContext: SwContext | null = null;
+// The SW modules are classic scripts evaluated in THIS realm, once per
+// process (core/sw-context.ts): a contextified vm global made sandboxed code
+// look 10-30x slower than the in-realm legacy copies.
 function loadSwContext(): SwContext {
-  if (swContext) return swContext;
   const g = globalThis as unknown as SwContext;
-  g.self = globalThis;
   // Other national pipelines are out of scope for this bench.
   g.tileOverlapsSwitzerland = () => false;
   g.tileOverlapsNorway = () => false;
   g.tileOverlapsSpain = () => false;
-  // The SW builds cache keys from origin-relative URLs (`new Request('/dem-tiles/…')`).
-  const NativeRequest = globalThis.Request;
-  g.Request = class extends NativeRequest {
-    constructor(input: string | URL, init?: RequestInit) {
-      super(typeof input === 'string' ? new URL(input, 'http://localhost') : input, init);
-    }
-  };
-  for (const mod of SW_MODULES) {
-    const file = path.join(SW_DIR, mod);
-    vm.runInThisContext(fs.readFileSync(file, 'utf8'), { filename: file });
-  }
-  swContext = g;
-  return g;
+  return loadSwModules(SW_MODULES);
 }
 
 // ── Synthetic data ────────────────────────────────────────────────────
@@ -144,8 +120,8 @@ async function legacyEncodeTerrainRGBPng(elevations: Float32Array, ctx: SwContex
 function legacyMnsWmsResample(raw: Float32Array, srcWidth: number, srcHeight: number, ctx: SwContext): Float32Array {
   // Top-level `const`s of classic scripts live in the context's lexical scope,
   // not on the global object — read them through the context.
-  const MIN = vm.runInThisContext('MIN_VALID_ELEVATION_M') as number;
-  const MAX = vm.runInThisContext('MAX_VALID_ELEVATION_M') as number;
+  const MIN = readSwConstant<number>('MIN_VALID_ELEVATION_M');
+  const MAX = readSwConstant<number>('MAX_VALID_ELEVATION_M');
   const out = new Float32Array(SIZE * SIZE);
   const sx = srcWidth / SIZE;
   const sy = srcHeight / SIZE;
@@ -221,7 +197,9 @@ export async function runDemSwBenchmark(options: { quick?: boolean } = {}): Prom
   const encode = ctx.encodeTerrainRGBPng as (e: Float32Array) => Promise<Blob>;
   const decodedGet = ctx.decodedTerrainRgbGet as (b: Blob) => Float32Array | null;
   const resample = ctx.mnsWmsResampleToTile as (r: Float32Array, w: number, h: number) => Float32Array;
-  const overzoom = ctx.overzoomDemElevations as (...a: number[] | Float32Array[]) => Float32Array | null;
+  const overzoom = ctx.overzoomDemElevations as (
+    parent: Float32Array, parentZ: number, parentX: number, parentY: number, z: number, x: number, y: number,
+  ) => Float32Array | null;
   const summarize = ctx.summarizeDemElevations as (e: Float32Array) => { min: number; max: number; mean: number };
   const findCachedParentStats = ctx.findCachedParentStats as (
     cache: unknown, z: number, x: number, y: number, profile?: string,

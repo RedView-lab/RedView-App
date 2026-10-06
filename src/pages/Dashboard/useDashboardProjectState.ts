@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
-import {
-  classifyProjectChange,
-  extractProjectView,
-  normalizeItineraryProject,
-} from '@/features/itineraryPanel/lib/project';
+// Concrete modules, not the lib/project barrel (merge-itinerary → geocoder on the initial load).
+import { normalizeItineraryProject } from '@/features/itineraryPanel/lib/project/defaultState';
+import { classifyProjectChange, extractProjectView } from '@/features/itineraryPanel/lib/project/layers';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import {
   flushProjectViews,

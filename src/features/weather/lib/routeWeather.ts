@@ -128,7 +128,12 @@ export function sampleRouteForWeather(
     while (pointIdx < points.length - 1 && (points[pointIdx + 1]?.distanceM ?? 0) < targetDistanceM) {
       pointIdx++;
     }
-    const pt = points[pointIdx]!;
+    // The nearer of the two points around the target: the last station is the
+    // finish itself, not the point before it.
+    const next = points[pointIdx + 1];
+    const pt = next && Math.abs((next.distanceM ?? 0) - targetDistanceM) < Math.abs((points[pointIdx]!.distanceM ?? 0) - targetDistanceM)
+      ? next
+      : points[pointIdx]!;
     result.push({
       lat: pt.lat,
       lng: pt.lon,

@@ -387,6 +387,7 @@ export interface FakeMapOptions {
 }
 
 type Listener = (event: Record<string, unknown>) => void;
+type MapPadding = { top: number; right: number; bottom: number; left: number };
 
 /**
  * Ce que le code de présence utilise de `mapboxgl.Map` : caméra, projection
@@ -403,7 +404,7 @@ export class FakeMap {
     isPointAboveHorizon: () => false,
   };
   private camera: CameraValues;
-  private padding = { top: 0, right: 0, bottom: 0, left: 0 };
+  private padding: MapPadding = { top: 0, right: 0, bottom: 0, left: 0 };
   private readonly listeners = new Map<string, Set<Listener>>();
   private readonly container: FakeElement & { clientWidth: number; clientHeight: number };
   private readonly canvasContainer = fakeElement();
@@ -440,7 +441,7 @@ export class FakeMap {
   }
 
   fire(event: string | Record<string, unknown>, data?: Record<string, unknown>): this {
-    const payload = typeof event === 'string' ? { type: event, ...data, target: this } : { ...event, target: this };
+    const payload: Record<string, unknown> = typeof event === 'string' ? { type: event, ...data, target: this } : { ...event, target: this };
     for (const listener of [...(this.listeners.get(payload.type as string) ?? [])]) listener(payload);
     return this;
   }
@@ -509,7 +510,7 @@ export class FakeMap {
   }
 
   /** Caméra posée par l'application (pas d'animation) : événements comme Mapbox, puis une image. */
-  jumpTo(options: Partial<{ center: [number, number]; zoom: number; bearing: number; pitch: number; padding: typeof this.padding }>, eventData: Record<string, unknown> = {}): this {
+  jumpTo(options: Partial<{ center: [number, number]; zoom: number; bearing: number; pitch: number; padding: MapPadding }>, eventData: Record<string, unknown> = {}): this {
     if (options.center) {
       this.camera.lng = options.center[0];
       this.camera.lat = options.center[1];

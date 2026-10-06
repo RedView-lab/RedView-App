@@ -31,6 +31,7 @@ import {
 } from '@/features/itineraryPanel/components/ItineraryPanelContainer/timelineMutations';
 import { translateAppText } from '@/shared/i18n';
 import { isVariantModifierPressed } from '@/shared/lib/platform';
+import { useEscapeToExit } from '@/shared/hooks/useEscapeToExit';
 import { useCommentToolOptional } from '@/features/comments/context/commentTool';
 import { useRouteSplitToolOptional } from '../routeSplit';
 import { useRouteMergeToolOptional } from '../routeMerge';
@@ -244,6 +245,9 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
             target.rowId,
           );
         }
+        // L'itinéraire dont on déplace un point devient le sélectionné : il
+        // passe au-dessus des autres et son panneau s'affiche.
+        draft.activeItineraryId = targetItinerary.id;
         return true;
       });
 
@@ -320,6 +324,9 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
     appendPointAtRef.current = appendPointAt;
     deactivateRef.current = deactivate;
   });
+
+  // Échap quitte l'outil ; un glisser de point en cours l'annule d'abord (capture).
+  useEscapeToExit(armed, deactivate);
 
   useEffect(() => {
     if (!armed || !map) return;

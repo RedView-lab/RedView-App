@@ -10,6 +10,7 @@ import {
   removeAllRouteLayers,
   removeRouteLayer,
   setForbiddenZones,
+  stackActiveRouteOnTop,
   type RouteSlopeBand,
   upsertRouteLayer,
 } from '../lib/route-layer';
@@ -118,8 +119,8 @@ export function useItineraryRouteLayerSync({
         ].join(':');
       })
       .join('|');
-    return `${routesEnabled ? 1 : 0}::${itinerarySignature}::bands:${routeSlopeBandSignature}::surface:${surfaceFilter}::quality:${routeDisplayPreset}`;
-  }, [itineraries, routeDisplayPreset, routeSlopeBandSignature, routeTraceWidthPx, routesEnabled, slopeItineraryId, surfaceFilter]);
+    return `${routesEnabled ? 1 : 0}::active:${active?.id ?? ''}::${itinerarySignature}::bands:${routeSlopeBandSignature}::surface:${surfaceFilter}::quality:${routeDisplayPreset}`;
+  }, [active?.id, itineraries, routeDisplayPreset, routeSlopeBandSignature, routeTraceWidthPx, routesEnabled, slopeItineraryId, surfaceFilter]);
 
   // Ref bag so the stable map listeners always read the latest values without
   // having to re-subscribe on every project mutation. Synced in a layout
@@ -199,6 +200,15 @@ export function useItineraryRouteLayerSync({
       if (!stillWanted) {
         removeRouteLayer(currentMap, mountedId);
       }
+    }
+
+    // Le tracé sélectionné par-dessus les autres (variantes superposées).
+    if (currentActive) {
+      stackActiveRouteOnTop(
+        currentMap,
+        currentActive.id,
+        currentItineraries.filter((it) => (it.gpxRoute?.points.length ?? 0) >= 2).map((it) => it.id),
+      );
     }
 
     clearRouteAuditFindings(currentMap);

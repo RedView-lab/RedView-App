@@ -239,6 +239,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     skipNextRouteRecompute,
   } = useItineraryBrouterRouting({
     active,
+    itineraries,
     historyRevision,
     isMapLoaded,
     map,

@@ -63,14 +63,17 @@ describe('resolveElasticRoutePatch', () => {
       via: [],
     };
     const narrowed = narrowRoutePatchToEdit(whole, stored, { fromM: 200_000, toM: 201_000, projected: false });
-    const routePatch = vi.fn(async (current: ItineraryPendingRoutePatch) => (current.start.kind === 'start'
-      ? resolved(along(stored, 0, 281))
-      // The provisional start (km 119) snaps 400 m away: seam refused.
-      : resolved([[6.005, stored[119]!.lat], ...along(stored, 125, 281)])));
+    const routePatch = vi.fn(async (current: ItineraryPendingRoutePatch) => {
+      if (current.start.kind === 'start') return resolved(along(stored, 0, 213));
+      // Every provisional start (km 187, then km 119) snaps 400 m away: seam refused.
+      const startKm = Math.round((current.start.distanceM ?? 0) / 1000);
+      return resolved([[6.005, stored[startKm]!.lat], ...along(stored, startKm + 6, 213)]);
+    });
 
     const result = await resolveElasticRoutePatch(narrowed, stored, new AbortController().signal, routePatch);
 
-    expect(routePatch).toHaveBeenCalledTimes(2);
+    // ±12 km, then ±80 km, then the real start.
+    expect(routePatch).toHaveBeenCalledTimes(3);
     expect(result.patch.start.kind).toBe('start');
     expect(result.patch.end).toEqual(narrowed.end);
   });

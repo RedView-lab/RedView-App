@@ -82,6 +82,7 @@ export function MapPoiDraftCard({
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        event.preventDefault();
         onAction({ action: 'close', draft });
       }
     };

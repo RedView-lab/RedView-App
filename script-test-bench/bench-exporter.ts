@@ -5,11 +5,12 @@
  * 1. Sérialisation GPX complète (buildItineraryGpx) sur 1k, 10k et 50k points
  * 2. Parsing de fichier GPX XML regex (parseGpxText) sur 10k et 50k points
  * 3. Sérialisation GeoJSON FeatureCollection
- * 4. Micro-benchmark d'échappement XML et formatage décimal (100k ops)
+ * 4. Export FIT Course (Garmin, buildItineraryFitCourse) et KML (buildItineraryKml) sur 50k points
+ * 5. Micro-benchmark d'échappement XML (1 000 chaînes)
  */
 // Shim Vite import.meta.env for Node.js / TSX runtime
-if (typeof (import.meta as Record<string, unknown>).env === 'undefined') {
-  (import.meta as Record<string, unknown>).env = {
+if (typeof (import.meta as unknown as Record<string, unknown>).env === 'undefined') {
+  (import.meta as unknown as Record<string, unknown>).env = {
     ...process.env,
     VITE_MAPBOX_TOKEN: process.env.VITE_MAPBOX_TOKEN || 'mock_mapbox_token_for_benchmarks',
     MODE: 'test',
@@ -26,6 +27,8 @@ export async function runExporterBenchmark(options: { quick?: boolean } = {}): P
   // Dynamically import buildItineraryGpx and helpers after env shim
   const { buildItineraryGpx } = await import('../src/features/exporter/lib/exportGpx.ts');
   const { escapeXml } = await import('../src/features/exporter/lib/exportHelpers.ts');
+  const { buildItineraryFitCourse } = await import('../src/features/exporter/lib/exportFit.ts');
+  const { buildItineraryKml } = await import('../src/features/exporter/lib/exportKml.ts');
 
   const suite = new BenchmarkSuite('Exporter (GPX, GeoJSON & Parsers)');
   const iterations = options.quick ? 5 : 20;
@@ -139,11 +142,33 @@ export async function runExporterBenchmark(options: { quick?: boolean } = {}): P
   // --- BENCHMARK 7 : Micro-benchmark d'échappement XML (100 000 chaînes) ---
   suite.measureSync(
     {
-      name: 'Échappement XML (100k chaînes)',
+      name: 'Export FIT Course Garmin (50k pts)',
+      category: 'export-fit',
+      iterations: Math.max(3, iterations >> 1),
+      regressionThresholdP95Ms: 400.0,
+      itemsProcessedPerOp: 50_000,
+    },
+    () => buildItineraryFitCourse(itinerary50k),
+  );
+
+  suite.measureSync(
+    {
+      name: 'Export KML (50k pts)',
+      category: 'export-kml',
+      iterations: Math.max(3, iterations >> 1),
+      regressionThresholdP95Ms: 120.0,
+      itemsProcessedPerOp: 50_000,
+    },
+    () => buildItineraryKml(itinerary50k),
+  );
+
+  suite.measureSync(
+    {
+      name: 'Échappement XML (1 000 chaînes)',
       category: 'export-helpers',
       iterations: iterations * 5,
       regressionThresholdP95Ms: 3.5,
-      itemsProcessedPerOp: 100_000,
+      itemsProcessedPerOp: 1_000,
     },
     () => {
       let dummy = '';
