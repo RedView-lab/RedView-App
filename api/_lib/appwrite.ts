@@ -119,8 +119,17 @@ export async function requireAuthenticatedUser(
       email: user.email || null,
     };
   } catch (error) {
-    console.warn('[auth] JWT verification failed:', error);
-    res.status(401).json({ error: 'Invalid or expired session' });
+    // Jeton refusé par Appwrite : session expirée. Une panne d'Appwrite (réseau,
+    // 5xx, 429) n'en est pas une : 503, le client réessaie (un 401 lui faisait
+    // afficher « Session expirée » et recréer un JWT pour rien).
+    const code = (error as { code?: unknown } | null)?.code;
+    if (code === 400 || code === 401 || code === 403) {
+      console.warn('[auth] JWT verification failed:', error);
+      res.status(401).json({ error: 'Invalid or expired session' });
+    } else {
+      console.error('[auth] JWT verification unavailable:', error);
+      res.status(503).json({ retryable: true });
+    }
     return null;
   }
 }

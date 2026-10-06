@@ -4,7 +4,9 @@
  *
  *  1. tracé en segments : découpage, fenêtre modifiée (octets envoyés, temps),
  *     références gardées chez l'autre éditeur ;
- *  2. document distant recomposé avec la vue et le travail local ;
+ *  2. document distant recomposé avec la vue et le travail local, et ce que
+ *     coûte cette recomposition au ProjectStore (compose + normalise +
+ *     partage) sur un tracé de 100 000 points, à chaque lot reçu ;
  *  3. simulateur déterministe sur de nombreuses graines (réseau perturbé,
  *     coupures, arrêts brutaux du serveur, onglets rechargés qui modifient
  *     pendant la connexion et reprennent leurs lots non écrits) :
@@ -21,7 +23,9 @@ import {
   toProjectDocument,
   type ProjectDocument,
 } from '../src/features/itineraryPanel/lib/project/layers.ts';
-import type { Itinerary } from '../src/features/itineraryPanel/types/index.ts';
+import { normalizeItineraryProject } from '../src/features/itineraryPanel/lib/project/defaultState.ts';
+import { shareProjectStructure } from '../src/features/itineraryPanel/context/ProjectStore/historyDocument.ts';
+import type { Itinerary, ItineraryProject } from '../src/features/itineraryPanel/types/index.ts';
 import { CollabClient } from '../src/features/collab/client/collabClient.ts';
 import type { ClientMessage, ServerMessage } from '../src/features/collab/protocol.ts';
 import { Room } from '../src/features/collab/room/room.ts';
@@ -128,6 +132,21 @@ function session(document: ProjectDocument, names: string[]) {
   assert(getItinerary(after, 'it-1')!.gpxRoute!.points === getItinerary(before, 'it-1')!.gpxRoute!.points, 'renommage distant : les points du tracé gardent leur référence');
   assert(getItinerary(after, 'it-2') === getItinerary(before, 'it-2'), 'itinéraire non touché : même objet');
   assert(remoteMs < 50, `renommage : envoi, application serveur et rematérialisation chez B en ${remoteMs.toFixed(1)} ms (< 50)`);
+
+  // Ce que fait ensuite le ProjectStore de B à chaque lot reçu (jusqu'à 30 par seconde et par éditeur).
+  let project = normalizeItineraryProject(composeProject(b.getDocument(), null, null) as ItineraryProject);
+  const times: number[] = [];
+  for (let index = 0; index < 100; index += 1) {
+    a.pushLocalDocument(mapItinerary(a.getDocument(), 'it-1', (it) => ({ ...it, name: `Renommé ${index}` })), 'user');
+    settle();
+    const start = performance.now();
+    const composed = composeProject(b.getDocument(), extractProjectView(project), extractProjectLocalWork(project));
+    project = shareProjectStructure(project, normalizeItineraryProject(composed));
+    times.push(performance.now() - start);
+  }
+  const p95 = [...times].sort((x, y) => x - y)[Math.floor(0.95 * (times.length - 1))];
+  // Avant le 06/10/2026 : ≈ 6 ms (altitudes du tracé revérifiées point par point à chaque fois).
+  assert(p95 < 1, `lot reçu, tracé de 100 000 points : recomposition du projet en ${p95.toFixed(2)} ms p95 (< 1)`);
 }
 
 // ── 2. Document distant recomposé avec la vue et le travail local ───────────

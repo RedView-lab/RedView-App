@@ -218,6 +218,32 @@ describe('client : synchro et annuler par éditeur', () => {
     expect((b.getDocument().itineraries[1] as Itinerary).color).toBe('#111111');
   });
 
+  it('glisser continu (actions rapprochées) : annuler n’envoie qu’une écriture par propriété', () => {
+    const { clients: [a, b], room, settle, scheduler } = directSetup(['a', 'b']);
+    const before = room.state.seq;
+    for (let index = 0; index < 300; index += 1) {
+      scheduler.runUntil(scheduler.now() + 16);
+      a.pushLocalDocument(mapIt(a.getDocument(), 'it-1', (it) => ({ ...it, name: `glisser ${index}`, color: index % 2 ? '#101010' : '#202020' })), 'user');
+    }
+    settle();
+    const seqBeforeUndo = room.state.seq;
+    expect(seqBeforeUndo).toBeGreaterThan(before);
+    let undoOps = 0;
+    const handle = room.handle.bind(room);
+    room.handle = (clientId, message, peer) => {
+      if (message.type === 'batch') undoOps += message.ops.length;
+      handle(clientId, message, peer);
+    };
+    a.undo();
+    settle();
+    expect(undoOps).toBe(2);
+    expect((b.getDocument().itineraries[1] as Itinerary).name).toBe('Principal');
+    expect((b.getDocument().itineraries[1] as Itinerary).color).toBe('#c50000');
+    a.redo();
+    settle();
+    expect((b.getDocument().itineraries[1] as Itinerary).name).toBe('glisser 299');
+  });
+
   it('annuler une suppression recrée l’élément avec toutes ses propriétés', () => {
     const { clients: [a, b], settle } = directSetup(['a', 'b']);
     const original = a.getDocument();

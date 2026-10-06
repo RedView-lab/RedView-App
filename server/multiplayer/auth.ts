@@ -32,6 +32,12 @@ const TOKEN_CACHE_MS = 60_000;
 const MEMBERSHIP_CACHE_MS = 60_000;
 const DEV_TOKEN = /^dev:([A-Za-z0-9_-]{1,64})$/;
 
+/** Réponse d'Appwrite qui refuse le jeton lui-même (et non une panne). */
+function isTokenRejection(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  return code === 400 || code === 401 || code === 403;
+}
+
 export function createAuthenticator(options: AuthOptions): Authenticator {
   const tokens = new Map<string, { userId: string | null; at: number }>();
   const memberships = new Map<string, { member: boolean; at: number }>();
@@ -52,7 +58,12 @@ export function createAuthenticator(options: AuthOptions): Authenticator {
     try {
       const client = new Client().setEndpoint(options.appwrite.endpoint).setProject(options.appwrite.projectId).setJWT(token);
       userId = (await new Account(client).get()).$id;
-    } catch {
+    } catch (error) {
+      // Jeton refusé (expiré, révoqué, mal formé) : refus, gardé en cache. Une
+      // panne d'Appwrite (réseau, 5xx, 429) n'en est pas un : l'erreur remonte
+      // (fermeture 1011, le client réessaie) — un refus mis en cache éjectait
+      // l'éditeur de la session au troisième essai.
+      if (!isTokenRejection(error)) throw error;
       userId = null;
     }
     tokens.set(token, { userId, at: Date.now() });

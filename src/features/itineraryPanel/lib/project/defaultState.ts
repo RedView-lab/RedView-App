@@ -219,6 +219,22 @@ export function normalizeItineraryRhythmState(rhythm?: Partial<RhythmState> | nu
   };
 }
 
+/**
+ * Tableaux de points déjà vérifiés sans altitude corrompue. Les points d'un
+ * tracé sont immuables (remplacés, jamais modifiés en place) : la
+ * normalisation de chaque modification — locale, ou reçue d'un autre éditeur
+ * jusqu'à 30 fois par seconde — ne reparcourt plus un tracé de 100 000 points
+ * (≈ 6 ms à chaque fois).
+ */
+const elevationCheckedPoints = new WeakSet<object>();
+
+function hasCorruptedElevationsOnce(points: NonNullable<ItineraryProject['itineraries'][number]['gpxRoute']>['points']): boolean {
+  if (elevationCheckedPoints.has(points)) return false;
+  const corrupted = hasCorruptedElevations(points);
+  if (!corrupted) elevationCheckedPoints.add(points);
+  return corrupted;
+}
+
 export function normalizeItineraryProject(project: ItineraryProject): ItineraryProject {
   const itineraries = project.itineraries.map((sourceItinerary) => {
     // Lignes droites laissées en bout de tracé par d'anciennes éditions.
@@ -228,8 +244,8 @@ export function normalizeItineraryProject(project: ItineraryProject): ItineraryP
 
     if (gpxRoute && gpxRoute.points.length > 0) {
       const needsCleaning =
-        hasCorruptedElevations(gpxRoute.points) ||
-        (gpxRoute.originalPoints != null && hasCorruptedElevations(gpxRoute.originalPoints));
+        hasCorruptedElevationsOnce(gpxRoute.points) ||
+        (gpxRoute.originalPoints != null && hasCorruptedElevationsOnce(gpxRoute.originalPoints));
 
       if (needsCleaning) {
         const cleanedPoints = cleanAndInterpolateElevations(gpxRoute.points);

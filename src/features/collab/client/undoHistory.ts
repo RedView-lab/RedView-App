@@ -85,6 +85,33 @@ function recordWrites(step: Step, ops: readonly Op[]): void {
   }
 }
 
+/**
+ * Inverse d'une étape qui grossit (actions rapprochées regroupées, résultat
+ * d'arrière-plan rattaché) : dans une suite d'écritures (`s`), seule la
+ * dernière sur une même propriété compte (l'inverse s'applique dans l'ordre).
+ * Un glisser continu ne garde ainsi qu'une écriture par propriété au lieu
+ * d'une par événement — sinon annuler renvoyait des centaines d'opérations
+ * redondantes à tous les éditeurs. Une création, suppression ou un
+ * déplacement coupe la suite (l'ordre compte alors).
+ */
+function compactInverse(ops: readonly Op[]): Op[] {
+  const kept: Array<Op | null> = [];
+  const lastInRun = new Map<string, number>();
+  for (const op of ops) {
+    if (op.t !== 's') {
+      lastInRun.clear();
+      kept.push(op);
+      continue;
+    }
+    const key = propKey(op.id, op.k);
+    const previous = lastInRun.get(key);
+    if (previous !== undefined) kept[previous] = null;
+    lastInRun.set(key, kept.length);
+    kept.push(op);
+  }
+  return kept.filter((op): op is Op => op !== null);
+}
+
 /** Opérations de l'inverse encore applicables : rien de ce qu'un autre a changé depuis. */
 function applicableInverse(step: Step, store: ObjectStore): Op[] {
   return step.inverse.filter((op) => {
@@ -133,7 +160,7 @@ export class UndoHistory {
       for (let index = this.undoStack.length - 1; index >= 0; index -= 1) {
         const step = this.undoStack[index];
         if ([...itineraries].some((id) => step.itineraries.has(id))) {
-          step.inverse = [...inverse, ...step.inverse];
+          step.inverse = compactInverse([...inverse, ...step.inverse]);
           recordWrites(step, ops);
           return;
         }
@@ -144,7 +171,7 @@ export class UndoHistory {
     this.redoStack = [];
     const top = this.undoStack[this.undoStack.length - 1];
     if (change === 'user' && top?.coalescable && now - top.at < USER_COALESCE_MS) {
-      top.inverse = [...inverse, ...top.inverse];
+      top.inverse = compactInverse([...inverse, ...top.inverse]);
       recordWrites(top, ops);
       top.at = now;
       return;

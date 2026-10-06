@@ -498,3 +498,16 @@ collab/client/connection.test.ts, shared/services/jwtCache.test.ts) :
 - Serveur : auteurs des itinéraires supprimés oubliés (la table ne grandit
   plus pendant une longue session) ; mesures connectionsReplaced et
   rateLimited.
+- Annuler un glisser continu (actions rapprochées regroupées) renvoyait une
+  écriture par événement à tous (600 opérations pour 300 événements) : l'inverse
+  d'une étape ne garde plus qu'une écriture par propriété (2 opérations).
+- Chaque lot reçu (et chaque modification locale) faisait revérifier toutes
+  les altitudes du tracé par la normalisation du projet : ≈ 6 ms par lot sur
+  un tracé de 100 000 points, jusqu'à 30 fois par seconde. Vérification
+  gardée par tableau de points (immuable) : 0,06 ms (bench:collab le garde).
+- Panne passagère d'Appwrite (réseau, 5xx, 429) à la vérification du jeton :
+  le serveur temps réel la prenait pour un jeton refusé, gardé 60 s en cache,
+  et au troisième refus le client se croyait exclu de la session pour de bon.
+  Désormais seul un refus d'Appwrite (400/401/403) refuse ; une panne ferme
+  en 1011 (le client réessaie). Même chose pour l'API (partage, facturation) :
+  503 au lieu d'un 401 « session expirée ».
