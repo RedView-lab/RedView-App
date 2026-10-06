@@ -52,9 +52,14 @@ jobs:
 
       - run: npx playwright install --with-deps chromium firefox
 
+      # Un vrai serveur X et Mesa (llvmpipe) : Firefox headless n'a aucun
+      # pilote GL sur le runner (« Exhausted GL driver options »), alors
+      # qu'un bureau Linux lui donne celui du système.
+      - run: sudo apt-get install -y --no-install-recommends xvfb libgl1-mesa-dri libegl-mesa0 libegl1
+
       - run: npm run build:vite
 
-      - run: npm run bench:lidar-engines -- --expect-auto webgl
+      - run: xvfb-run -a --server-args="-screen 0 1920x1080x24" npm run bench:lidar-engines -- --expect-auto webgl --headed
 
       - if: failure()
         uses: actions/upload-artifact@v4
