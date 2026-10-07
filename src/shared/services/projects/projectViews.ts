@@ -116,7 +116,7 @@ function markCloudViewsUnavailable(error: unknown): void {
   if (cloudViewsUnavailable) return;
   cloudViewsUnavailable = true;
   logger.projects.warn(
-    `Collection Appwrite « ${PROJECT_VIEWS_COLLECTION_ID} » introuvable : la vue des projets reste sur cet appareil (scripts/setup-appwrite-schema.mjs)`,
+    `Collection Appwrite « ${PROJECT_VIEWS_COLLECTION_ID} » introuvable : la vue des projets reste sur cet appareil (scripts/appwrite/setup-appwrite-schema.mjs)`,
     error,
   );
 }

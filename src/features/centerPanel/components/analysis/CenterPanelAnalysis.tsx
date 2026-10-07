@@ -3,9 +3,9 @@ import { useFlyoverSeek, useFlyoverSessionActive } from '../../flyover';
 import { xValueFromDistance } from '../../flyover/playback';
 import { useLivePresenceOptional } from '@/features/livePresence/context';
 import { RemoteChartCursors } from '@/features/livePresence/components/RemoteChartCursors';
-import { useRouteSplitToolOptional } from '../../routeSplit';
-import { useTraceToolOptional } from '../../tracer';
-import { useChartPlacementToolOptional } from '../../chartPlacement';
+import { useRouteSplitToolOptional } from '../../tools/routeSplit';
+import { useTraceToolOptional } from '../../tools/tracer';
+import { useChartPlacementToolOptional } from '../../tools/chartPlacement';
 import {
   axis2Options,
   axisOptions,

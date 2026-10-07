@@ -19,8 +19,8 @@ import {
 } from '../../lib/schedule';
 import { useProjectStore } from '../../context/ProjectStore';
 import { cloneItineraryForMutation } from '../../context/ProjectStore/historyClone';
-import { useTraceToolOptional } from '@/features/centerPanel/tracer';
-import { useForbiddenZoneToolOptional } from '@/features/centerPanel/forbiddenZones';
+import { useTraceToolOptional } from '@/features/centerPanel/tools/tracer';
+import { useForbiddenZoneToolOptional } from '@/features/centerPanel/tools/forbiddenZones';
 import { usePredictionStoreOptional } from '../../context/PredictionStore';
 import { useItineraryUndoRedoShortcut } from '../../hooks/useItineraryUndoRedoShortcut';
 import { useRouteDistanceLabels } from '../../hooks/useRouteDistanceLabels';

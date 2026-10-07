@@ -6,7 +6,7 @@ import {
   useCallback,
 } from 'react';
 import { useAppI18n } from '@/shared/i18n';
-import { useRouteMergeToolOptional } from '@/features/centerPanel/routeMerge';
+import { useRouteMergeToolOptional } from '@/features/centerPanel/tools/routeMerge';
 import { IconMaximize } from '@/features/mapViewportControls/components/MapViewportControlIcons';
 import {
   useProjectStoreOptional,

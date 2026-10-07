@@ -12,7 +12,7 @@ import { useProjectStoreOptional } from '@/features/itineraryPanel/context/Proje
 import { translateAppText } from '@/shared/i18n';
 import { useEscapeToExit } from '@/shared/hooks/useEscapeToExit';
 import { useHasChanged } from '@/shared/hooks/useHasChanged';
-import { useRouteHoverPreview } from '../hooks/useRouteHoverPreview';
+import { useRouteHoverPreview } from '../../hooks/useRouteHoverPreview';
 import { findSplitIndexForMapClick } from './routeSnap';
 import {
   handlePointPanelMousedown,

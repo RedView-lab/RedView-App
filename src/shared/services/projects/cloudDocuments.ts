@@ -43,7 +43,7 @@ const PROJECT_META_FIELDS = [
 
 /**
  * `team_id` (co-édition) n'existe qu'après la migration du schéma
- * (scripts/setup-appwrite-schema.mjs) : tant qu'Appwrite le refuse (400), les
+ * (scripts/appwrite/setup-appwrite-schema.mjs) : tant qu'Appwrite le refuse (400), les
  * lectures repartent sans lui, une fois pour toute la session.
  */
 let teamFieldAvailable = true;

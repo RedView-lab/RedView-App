@@ -5,10 +5,10 @@
  * valeurs arrondies, plus un contexte de compte grossier (formule, ancienneté
  * par tranche) ; le garde vie privée et le before-send (beforeSend.ts) filtrent
  * tout ce qui part. La rétention par compte se lit dans la base, sans suivre
- * personne : `npx tsx --env-file=.env scripts/activation-report.ts`.
+ * personne : `npx tsx --env-file=.env scripts/analytics/activation-report.ts`.
  *
  * Ajouter un événement : son type dans events.ts, l'appel au point de passage,
- * et (s'il compte dans un entonnoir) scripts/umami/spec.ts. Voir docs/ANALYTICS.md.
+ * et (s'il compte dans un entonnoir) scripts/analytics/umami/spec.ts. Voir docs/ANALYTICS.md.
  */
 
 import type { AnalyticsEvent } from './events';

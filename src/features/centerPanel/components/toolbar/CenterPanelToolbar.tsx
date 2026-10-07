@@ -6,11 +6,11 @@ import { useHorizontalScrollOverflow } from '@/shared/hooks/useHorizontalScrollO
 import { useAppI18n } from '@/shared/i18n';
 import { trackAnalyticsEvent, type MapTool } from '@/shared/lib/analytics';
 import { variantModifierLabel } from '@/shared/lib/platform';
-import { useRouteMergeToolOptional } from '../../routeMerge';
-import { useRouteSplitToolOptional } from '../../routeSplit';
-import { useTraceToolOptional } from '../../tracer';
-import { useForbiddenZoneToolOptional } from '../../forbiddenZones';
-import { useChartPlacementToolOptional } from '../../chartPlacement';
+import { useRouteMergeToolOptional } from '../../tools/routeMerge';
+import { useRouteSplitToolOptional } from '../../tools/routeSplit';
+import { useTraceToolOptional } from '../../tools/tracer';
+import { useForbiddenZoneToolOptional } from '../../tools/forbiddenZones';
+import { useChartPlacementToolOptional } from '../../tools/chartPlacement';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { IconChevronDown } from '../CenterPanelIcons';
 import { useAnalysisFlyover } from '../../flyover';

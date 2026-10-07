@@ -29,12 +29,12 @@ import {
 } from '@/features/controlPanel';
 import { CenterPanel, CenterPanelToolbar } from '@/features/centerPanel';
 import { AnalysisFlyoverProvider } from '@/features/centerPanel/flyover';
-import { RouteMergeToolProvider, useRouteMergeToolOptional } from '@/features/centerPanel/routeMerge';
-import { RouteSplitToolProvider, useRouteSplitToolOptional } from '@/features/centerPanel/routeSplit';
-import { ChartPlacementToolProvider, useChartPlacementToolOptional } from '@/features/centerPanel/chartPlacement';
-import { RouteDragWaypointProvider } from '@/features/centerPanel/routeDragWaypoint';
-import { TraceToolProvider, useTraceToolOptional } from '@/features/centerPanel/tracer';
-import { ForbiddenZoneToolProvider, useForbiddenZoneToolOptional } from '@/features/centerPanel/forbiddenZones';
+import { RouteMergeToolProvider, useRouteMergeToolOptional } from '@/features/centerPanel/tools/routeMerge';
+import { RouteSplitToolProvider, useRouteSplitToolOptional } from '@/features/centerPanel/tools/routeSplit';
+import { ChartPlacementToolProvider, useChartPlacementToolOptional } from '@/features/centerPanel/tools/chartPlacement';
+import { RouteDragWaypointProvider } from '@/features/centerPanel/tools/routeDragWaypoint';
+import { TraceToolProvider, useTraceToolOptional } from '@/features/centerPanel/tools/tracer';
+import { ForbiddenZoneToolProvider, useForbiddenZoneToolOptional } from '@/features/centerPanel/tools/forbiddenZones';
 import {
   CommentShortcuts,
   CommentsPanel,

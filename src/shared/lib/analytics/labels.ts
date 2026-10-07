@@ -3,7 +3,7 @@
  * propriété et chaque valeur en français courant (« Parcours exporté vers le
  * GPS — format : GPX » plutôt que `route_exported {format: gpx}`). Le code garde
  * ses noms typés (events.ts) ; la traduction se fait au départ, dans le
- * before-send, et les rapports versionnés (scripts/umami/spec.ts) passent par
+ * before-send, et les rapports versionnés (scripts/analytics/umami/spec.ts) passent par
  * les mêmes tables. Changer un libellé = un nouvel événement pour Umami
  * (l'historique de l'ancien nom ne s'y rattache pas) : à éviter une fois en prod.
  *

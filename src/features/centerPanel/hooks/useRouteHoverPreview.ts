@@ -9,7 +9,7 @@ import { haversineRouteDistanceM } from '@/features/itineraryPanel/lib/routes';
 import {
   findSplitProjectionForMapHover,
   type RouteSnapPoint,
-} from '../routeSplit/routeSnap';
+} from '../tools/routeSplit/routeSnap';
 
 /**
  * Hover-preview marker shared by the central-panel tools.

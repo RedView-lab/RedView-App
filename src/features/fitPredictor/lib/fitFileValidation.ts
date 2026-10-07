@@ -24,7 +24,7 @@ export type FitFileProblem =
   | 'too-large'
   | 'planned-course';
 
-/** Taille max du bucket Appwrite des FIT (scripts/setup-appwrite-schema.mjs : 30 000 000 octets). */
+/** Taille max du bucket Appwrite des FIT (scripts/appwrite/setup-appwrite-schema.mjs : 30 000 000 octets). */
 export const MAX_FIT_FILE_BYTES = 30_000_000;
 
 const FIT_SIGNATURE = [0x2e, 0x46, 0x49, 0x54]; // ".FIT"

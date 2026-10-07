@@ -3,7 +3,7 @@
  * `objet_action` au passé, propriétés en snake_case ; valeurs = catégories,
  * tranches (`countBucket`…) ou nombres arrondis (`roundTo`) — jamais un nom,
  * un e-mail, un id ou des coordonnées. Dictionnaire et rapports :
- * docs/ANALYTICS.md ; entonnoirs et objectifs : scripts/umami/spec.ts.
+ * docs/ANALYTICS.md ; entonnoirs et objectifs : scripts/analytics/umami/spec.ts.
  */
 
 import type { ProjectAgeBucket } from './buckets';
