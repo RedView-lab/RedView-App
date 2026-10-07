@@ -1,0 +1,14 @@
+[Unit]
+Description=RedView : contrôle du service rendu (app, temps réel, API, VPS) et alertes
+Documentation=file:///usr/local/share/doc/redview-watch/README.md
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/redview-watch run
+Nice=5
+MemoryMax=256M
+TimeoutStartSec=4min
+NoNewPrivileges=yes
+PrivateTmp=yes

@@ -49,6 +49,13 @@ Google Drive chaque nuit, exercice de restauration chaque semaine, alertes
 par e-mail, runbook pour reconstruire sur un serveur neuf). Voir
 `backup/README.md`.
 
+**Surveillance du service** : `watch/` (timer toutes les 5 min : app, temps
+réel, routage, météo et sa fraîcheur, POI, Appwrite, Umami, GlitchTip, TLS,
+conteneurs `unhealthy`, âge des sauvegardes, disque, plancher mémoire ; e-mail
+« PANNE » après 2 échecs d'affilée, rappel 6 h, « Rétabli » ; ping
+`HEARTBEAT_URL` pour qu'un VPS arrêté soit vu de l'extérieur). Voir
+`watch/README.md`.
+
 Toujours : sauvegarde horodatée de la cible (`<fichier>.bak-<date>`), application,
 vérification, et commande de rollback prête (remettre la sauvegarde, recharger).
 **`systemctl daemon-reload` applique tout de suite les nouvelles limites

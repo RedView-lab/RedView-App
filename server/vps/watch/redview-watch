@@ -1,0 +1,335 @@
+#!/usr/bin/env bash
+# redview-watch — surveillance du service rendu par RedView, toutes les 5 min.
+# Source : server/vps/watch/ du dépôt redview-app ; mode d'emploi dans README.md.
+#
+#   redview-watch run          contrôles + alertes (timer, toutes les 5 min)
+#   redview-watch check        contrôles affichés, sans alerte ni état ; code 1 si un échoue
+#   redview-watch status       état courant (contrôles en échec, depuis quand, alertes)
+#   redview-watch test-alert   envoie un e-mail de test
+#
+# Les contrôles passent par les URL publiques (DNS, TLS, nginx de l'hôte, app,
+# API, services du VPS) : ce qu'un utilisateur voit. Ils ont été écrits après
+# le 06/10/2026, où deux pannes sont restées 24 h sans que personne le sache
+# (serveur temps réel « unhealthy », « Partagés avec moi » vide).
+#
+# Un contrôle n'alerte qu'après FAIL_THRESHOLD échecs d'affilée (pas d'e-mail
+# pour un redémarrage de conteneur), rappelle toutes les REMIND_HOURS tant que
+# la panne dure, et envoie un e-mail « rétabli » à la fin. HEARTBEAT_URL (type
+# healthchecks.io) reçoit un ping à chaque passage : c'est lui qui voit le seul
+# cas que ce script ne peut pas signaler, le VPS lui-même arrêté ou isolé.
+
+set -Eeuo pipefail
+umask 077
+
+readonly CONFIG_DIR=${REDVIEW_WATCH_CONFIG_DIR:-/etc/redview-watch}
+readonly STATE_DIR=${REDVIEW_WATCH_STATE_DIR:-/var/lib/redview-watch}
+readonly STATE_FILE=$STATE_DIR/state.json
+readonly LOCK_FILE=/run/redview-watch.lock
+
+# watch.env (root, 0600), sans écraser une variable déjà posée dans
+# l'environnement : `sudo env MEM_MIN_PCT=95 redview-watch check` teste un seuil.
+if [[ -r $CONFIG_DIR/watch.env ]]; then
+  while IFS= read -r line || [[ -n $line ]]; do
+    [[ $line =~ ^([A-Z_][A-Z0-9_]*)= ]] || continue
+    key=${BASH_REMATCH[1]}
+    [[ -n ${!key+x} ]] && continue
+    eval "export $line"
+  done < "$CONFIG_DIR/watch.env"
+fi
+
+APP_URL=${APP_URL:-https://app.redview.tech}
+APPWRITE_URL=${APPWRITE_URL:-https://appwrite.redview.tech}
+ANALYTICS_URL=${ANALYTICS_URL:-https://analytics.redview.tech}
+ERRORS_URL=${ERRORS_URL:-https://errors.redview.tech}
+TLS_HOSTS=${TLS_HOSTS:-"app.redview.tech appwrite.redview.tech analytics.redview.tech errors.redview.tech redview.tech"}
+TLS_MIN_DAYS=${TLS_MIN_DAYS:-14}
+# Prévision Open-Meteo : la donnée doit couvrir au moins ces heures à venir
+# (ARPEGE va à 4 jours ; une synchro arrêtée raccourcit l'horizon chaque heure).
+WEATHER_MIN_AHEAD_H=${WEATHER_MIN_AHEAD_H:-48}
+BACKUP_STATUS_FILE=${BACKUP_STATUS_FILE:-/var/lib/redview-backup/status.json}
+BACKUP_MAX_AGE_H=${BACKUP_MAX_AGE_H:-30}
+DISK_MAX_PCT=${DISK_MAX_PCT:-90}
+# Plancher « Always Free » : Oracle récupère une instance A1 dont CPU, réseau
+# ET mémoire restent sous 20 % pendant 7 jours (server/vps/README.md).
+MEM_MIN_PCT=${MEM_MIN_PCT:-25}
+FAIL_THRESHOLD=${FAIL_THRESHOLD:-2}
+REMIND_HOURS=${REMIND_HOURS:-6}
+ALERT_EMAIL_FROM=${ALERT_EMAIL_FROM:-"RedView VPS <noreply@redview.tech>"}
+
+log() { printf '%s\n' "$*"; }
+warn() { printf 'ATTENTION : %s\n' "$*" >&2; }
+
+# ---------------------------------------------------------------- e-mail
+
+# Même règle que redview-backup : clé Resend de l'app lue dans son conteneur à
+# l'envoi, copie locale en secours quand l'app est arrêtée.
+resend_key() {
+  local c k
+  if [[ -n ${APP_CONTAINER_PREFIX:-} ]] \
+    && c=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -m1 "^${APP_CONTAINER_PREFIX}") \
+    && k=$(docker exec "$c" printenv RESEND_API_KEY 2>/dev/null) && [[ -n $k ]]; then
+    if [[ ! -s $CONFIG_DIR/resend.key ]] || [[ $(<"$CONFIG_DIR/resend.key") != "$k" ]]; then
+      printf '%s' "$k" > "$CONFIG_DIR/resend.key.tmp" && mv -f "$CONFIG_DIR/resend.key.tmp" "$CONFIG_DIR/resend.key"
+    fi
+    printf '%s' "$k"
+    return 0
+  fi
+  [[ -s $CONFIG_DIR/resend.key ]] && { cat "$CONFIG_DIR/resend.key"; return 0; }
+  return 1
+}
+
+send_mail() { # sujet corps
+  local subject=$1 body=$2 key payload
+  [[ -n ${ALERT_EMAIL_TO:-} ]] || { warn "ALERT_EMAIL_TO vide : pas d'e-mail ($subject)"; return 1; }
+  key=$(resend_key) || { warn "aucune clé Resend disponible : pas d'e-mail ($subject)"; return 1; }
+  payload=$(jq -n --arg from "$ALERT_EMAIL_FROM" --arg to "$ALERT_EMAIL_TO" --arg s "$subject" --arg t "$body" \
+    '{from: $from, to: [$to], subject: $s, text: $t}')
+  # Clé passée par un descripteur, jamais sur la ligne de commande (visible dans ps).
+  curl -fsS --max-time 30 --retry 3 --retry-delay 5 https://api.resend.com/emails \
+    -H @<(printf 'Authorization: Bearer %s\n' "$key") \
+    -H 'Content-Type: application/json' --data-binary "$payload" > /dev/null
+}
+
+heartbeat() { # ok|fail
+  [[ -n ${HEARTBEAT_URL:-} ]] || return 0
+  local url=$HEARTBEAT_URL
+  [[ $1 == fail ]] && url=$url/fail
+  curl -fsS --max-time 15 --retry 2 "$url" > /dev/null || warn "heartbeat injoignable"
+}
+
+# ---------------------------------------------------------------- contrôles
+
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+
+# GET → code HTTP sur stdout, corps dans $WORK/body, en-têtes dans $WORK/headers.
+http_get() {
+  curl -sS --max-time 25 -o "$WORK/body" -D "$WORK/headers" -w '%{http_code}' \
+    -H 'User-Agent: redview-watch' "$1" 2> "$WORK/curl.err" || true
+}
+
+# Chaque contrôle écrit la raison de l'échec sur stdout et rend 1.
+expect_json_field() { # url filtre-jq valeur-attendue
+  local code
+  code=$(http_get "$1")
+  [[ $code == 200 ]] || { echo "HTTP ${code:-000} $(head -c 160 "$WORK/curl.err" 2> /dev/null)"; return 1; }
+  [[ $(jq -r "$2" "$WORK/body" 2> /dev/null) == "$3" ]] || { echo "réponse inattendue : $(head -c 160 "$WORK/body")"; return 1; }
+}
+
+check_app_health() { expect_json_field "$APP_URL/health" .status ok; }
+
+check_app_page() {
+  local code
+  code=$(http_get "$APP_URL/")
+  [[ $code == 200 ]] || { echo "HTTP ${code:-000}"; return 1; }
+  grep -q 'rv-boot' "$WORK/body" || { echo "page sans l'écran de démarrage (.rv-boot) : mauvais index.html ?"; return 1; }
+}
+
+# Sans le service, nginx renvoie l'index.html de l'app avec 200 : seul {"ok":true} compte.
+check_multiplayer() { expect_json_field "$APP_URL/multiplayer/health" .ok true; }
+
+check_poi() { expect_json_field "$APP_URL/api/poi?op=health" .status ok; }
+
+check_brouter() {
+  # Points décalés de quelques mètres à chaque passage : le cache de routes de
+  # l'API ne répond pas à la place de BRouter. Profil de base : ce contrôle ne
+  # teste que la disponibilité du moteur, pas un itinéraire de l'app.
+  local j code
+  j=$(printf '%03d' $((RANDOM % 1000)))
+  code=$(http_get "$APP_URL/api/brouter?lonlats=2.3488${j},48.8534%7C2.3522${j},48.8566&profile=trekking&format=geojson")
+  [[ $code == 200 ]] || { echo "HTTP ${code:-000} $(head -c 160 "$WORK/body" 2> /dev/null)"; return 1; }
+  [[ $(jq -r '.features[0].geometry.coordinates | length' "$WORK/body" 2> /dev/null) -gt 1 ]] \
+    || { echo "pas de tracé : $(head -c 160 "$WORK/body")"; return 1; }
+}
+
+check_weather() {
+  local code src ahead
+  code=$(http_get "$APP_URL/api/openmeteo/v1/forecast?latitude=45.92&longitude=6.87&hourly=temperature_2m&models=meteofrance_seamless&forecast_days=4&timezone=UTC")
+  [[ $code == 200 ]] || { echo "HTTP ${code:-000} $(head -c 160 "$WORK/body" 2> /dev/null)"; return 1; }
+  src=$(grep -i '^x-weather-source:' "$WORK/headers" | tr -d '\r' | awk '{print $2}')
+  [[ $src == self-hosted-vps ]] || { echo "source « ${src:-aucune} » au lieu de l'Open-Meteo du VPS"; return 1; }
+  # Heures de prévision non nulles au-delà de maintenant.
+  ahead=$(jq -r --arg now "$(date -u +%Y-%m-%dT%H:00)" '
+    [.hourly.time, .hourly.temperature_2m] | transpose
+    | map(select(.[0] >= $now and .[1] != null)) | length' "$WORK/body" 2> /dev/null || echo 0)
+  ((ahead >= WEATHER_MIN_AHEAD_H)) || { echo "prévision sur ${ahead} h seulement (< ${WEATHER_MIN_AHEAD_H} h) : synchro Open-Meteo arrêtée ?"; return 1; }
+}
+
+check_analytics_tracker() {
+  local code
+  code=$(http_get "$APP_URL/s/x.js")
+  [[ $code == 200 ]] && [[ -s $WORK/body ]] || { echo "traceur /s/x.js : HTTP ${code:-000}"; return 1; }
+}
+
+check_appwrite() {
+  local code
+  code=$(http_get "$APPWRITE_URL/v1/health/version")
+  [[ $code == 200 ]] && jq -e .version "$WORK/body" > /dev/null 2>&1 || { echo "HTTP ${code:-000} $(head -c 160 "$WORK/body" 2> /dev/null)"; return 1; }
+}
+
+check_umami() { expect_json_field "$ANALYTICS_URL/api/heartbeat" .ok true; }
+
+check_glitchtip() {
+  local code
+  code=$(http_get "$ERRORS_URL/_health/")
+  [[ $code == 200 ]] && grep -q ok "$WORK/body" || { echo "HTTP ${code:-000}"; return 1; }
+}
+
+check_tls() {
+  local host bad=()
+  for host in $TLS_HOSTS; do
+    if ! timeout 20 openssl s_client -connect "$host:443" -servername "$host" < /dev/null 2> /dev/null \
+      | openssl x509 -noout -checkend $((TLS_MIN_DAYS * 86400)) > /dev/null 2>&1; then
+      bad+=("$host")
+    fi
+  done
+  ((${#bad[@]} == 0)) || { echo "certificat illisible ou expirant dans moins de ${TLS_MIN_DAYS} j : ${bad[*]} (certbot-renew.timer ?)"; return 1; }
+}
+
+check_containers() {
+  local bad
+  # Deux filtres de clés différentes se combinent en ET : une requête chacun.
+  docker info > /dev/null 2>&1 || { echo "Docker injoignable"; return 1; }
+  bad=$({
+    docker ps --filter health=unhealthy --format '{{.Names}} ({{.Status}})'
+    docker ps --filter status=restarting --format '{{.Names}} ({{.Status}})'
+  } 2> /dev/null | sort -u | sed '/^$/d' | paste -sd ',' -)
+  [[ -z $bad ]] || { echo "conteneurs en défaut : $bad"; return 1; }
+}
+
+check_backup() {
+  [[ -r $BACKUP_STATUS_FILE ]] || { echo "$BACKUP_STATUS_FILE illisible"; return 1; }
+  local last age drill
+  last=$(jq -r '.last_backup.time // empty' "$BACKUP_STATUS_FILE")
+  [[ -n $last ]] || { echo "aucune sauvegarde enregistrée"; return 1; }
+  age=$((($(date -u +%s) - $(date -u -d "$last" +%s)) / 3600))
+  ((age < BACKUP_MAX_AGE_H)) || { echo "dernière sauvegarde il y a ${age} h ($last)"; return 1; }
+  drill=$(jq -r '.last_drill.ok // empty' "$BACKUP_STATUS_FILE")
+  [[ $drill != false ]] || { echo "le dernier exercice de restauration a échoué"; return 1; }
+}
+
+check_disk() {
+  local used
+  used=$(df -P / | awk 'NR == 2 { sub("%", "", $5); print $5 }')
+  ((used < DISK_MAX_PCT)) || { echo "disque / plein à ${used} %"; return 1; }
+}
+
+check_memory_floor() {
+  local pct
+  pct=$(awk '/^MemTotal:/ { t = $2 } /^MemAvailable:/ { a = $2 } END { printf "%d", (t - a) * 100 / t }' /proc/meminfo)
+  ((pct >= MEM_MIN_PCT)) || { echo "mémoire utilisée ${pct} % < ${MEM_MIN_PCT} % : risque de récupération de l'instance Always Free"; return 1; }
+}
+
+readonly CHECKS=(
+  "app_health|Application (/health)|check_app_health"
+  "app_page|Page d'accueil de l'app|check_app_page"
+  "multiplayer|Serveur temps réel (/multiplayer/health)|check_multiplayer"
+  "brouter|Calcul d'itinéraire (BRouter via /api/brouter)|check_brouter"
+  "weather|Météo (Open-Meteo du VPS, fraîcheur)|check_weather"
+  "poi|POI (/api/poi)|check_poi"
+  "appwrite|Appwrite (comptes, projets)|check_appwrite"
+  "tracker|Traceur d'audience (/s/x.js)|check_analytics_tracker"
+  "umami|Umami|check_umami"
+  "glitchtip|GlitchTip (erreurs)|check_glitchtip"
+  "tls|Certificats TLS|check_tls"
+  "containers|Conteneurs Docker|check_containers"
+  "backup|Sauvegardes|check_backup"
+  "disk|Disque|check_disk"
+  "memory|Plancher mémoire Always Free|check_memory_floor"
+)
+
+# Lance tous les contrôles ; écrit « id<TAB>libellé<TAB>raison » de chaque échec
+# dans $WORK/failures et l'affiche ; `verbose` affiche aussi les réussites (le
+# timer n'écrit qu'une ligne par passage dans le journal).
+run_checks() {
+  : > "$WORK/failures"
+  local verbose=${1:-} entry id label fn reason ok=0
+  for entry in "${CHECKS[@]}"; do
+    IFS='|' read -r id label fn <<< "$entry"
+    if reason=$($fn 2>&1); then
+      ok=$((ok + 1))
+      if [[ -n $verbose ]]; then log "ok      $label"; fi
+    else
+      reason=${reason//$'\n'/ }
+      log "ÉCHEC   $label : $reason"
+      printf '%s\t%s\t%s\n' "$id" "$label" "$reason" >> "$WORK/failures"
+    fi
+  done
+  log "$ok/${#CHECKS[@]} contrôles OK"
+}
+
+# ---------------------------------------------------------------- commandes
+
+cmd_check() {
+  run_checks verbose
+  [[ ! -s $WORK/failures ]]
+}
+
+cmd_run() {
+  exec 9> "$LOCK_FILE"
+  flock -n 9 || { warn "un passage est déjà en cours"; return 0; }
+  mkdir -p "$STATE_DIR"
+  [[ -s $STATE_FILE ]] || echo '{}' > "$STATE_FILE"
+  run_checks
+
+  local now failures new_state
+  now=$(date -u +%FT%TZ)
+  failures=$(jq -R -s 'split("\n") | map(select(length > 0) | split("\t") | {key: .[0], value: {label: .[1], reason: .[2]}}) | from_entries' "$WORK/failures")
+  # Nouvel état : compte d'échecs consécutifs, début de la panne, dernière alerte.
+  new_state=$(jq --argjson f "$failures" --arg now "$now" '
+    . as $prev
+    | $f | with_entries(.value += {
+        count: (($prev[.key].count // 0) + 1),
+        since: ($prev[.key].since // $now),
+        alerted: ($prev[.key].alerted // null)
+      })' "$STATE_FILE")
+
+  # Pannes confirmées à signaler : jamais signalées, ou dernier rappel trop ancien.
+  local due recovered body subject
+  due=$(jq -r --argjson n "$FAIL_THRESHOLD" --argjson remind $((REMIND_HOURS * 3600)) --arg now "$now" '
+    to_entries | map(select(.value.count >= $n and (.value.alerted == null
+      or (($now | fromdateiso8601) - (.value.alerted | fromdateiso8601)) >= $remind))) | length' <<< "$new_state")
+  recovered=$(jq -r --argjson f "$failures" 'to_entries | map(select(.value.alerted != null and ($f[.key] == null)))
+    | map("  - \(.value.label) (en panne depuis \(.value.since))") | join("\n")' "$STATE_FILE")
+
+  if ((due > 0)); then
+    body=$(jq -r --argjson n "$FAIL_THRESHOLD" 'to_entries | map(select(.value.count >= $n))
+      | map("  - \(.value.label) : \(.value.reason)\n    en échec depuis \(.value.since) (\(.value.count) contrôles d'"'"'affilée)") | join("\n")' <<< "$new_state")
+    subject="[RedView] PANNE : $(jq -r --argjson n "$FAIL_THRESHOLD" 'to_entries | map(select(.value.count >= $n) | .value.label) | join(", ")' <<< "$new_state")"
+    if send_mail "$subject" "Contrôle de $(hostname) le $now UTC :
+
+$body
+
+Détail : sudo /usr/local/sbin/redview-watch check ; journal : journalctl -u redview-watch -n 200
+Rappel toutes les $REMIND_HOURS h tant que la panne dure, e-mail « rétabli » à la fin."; then
+      new_state=$(jq --argjson n "$FAIL_THRESHOLD" --arg now "$now" 'map_values(if .count >= $n then .alerted = $now else . end)' <<< "$new_state")
+      log "alerte envoyée à $ALERT_EMAIL_TO"
+    fi
+  fi
+  if [[ -n $recovered ]]; then
+    send_mail "[RedView] Rétabli" "Contrôle de $(hostname) le $now UTC : de nouveau en service
+
+$recovered" && log "e-mail « rétabli » envoyé" || true
+  fi
+
+  printf '%s\n' "$new_state" > "$STATE_FILE.tmp" && mv -f "$STATE_FILE.tmp" "$STATE_FILE"
+  if jq -e --argjson n "$FAIL_THRESHOLD" 'any(.[]; .count >= $n)' "$STATE_FILE" > /dev/null; then heartbeat fail; else heartbeat ok; fi
+}
+
+cmd_status() {
+  if [[ ! -s $STATE_FILE ]] || [[ $(jq length "$STATE_FILE") == 0 ]]; then
+    local last
+    last=$(systemctl show redview-watch.service -p ExecMainExitTimestamp --value 2> /dev/null || true)
+    log "Aucun contrôle en échec (dernier passage : ${last:-inconnu})."
+    return 0
+  fi
+  jq -r 'to_entries[] | "\(.value.label) : \(.value.reason)\n  depuis \(.value.since), \(.value.count) échec(s) d'"'"'affilée, alerte : \(.value.alerted // "pas encore")"' "$STATE_FILE"
+}
+
+case ${1:-} in
+  run) cmd_run ;;
+  check) cmd_check ;;
+  status) cmd_status ;;
+  test-alert) send_mail "[RedView] Test d'alerte de la surveillance" "Envoyé par redview-watch test-alert depuis $(hostname) le $(date -u '+%F %T') UTC. Si tu lis ceci, les alertes de panne arrivent." && log "e-mail de test envoyé à $ALERT_EMAIL_TO" ;;
+  *) sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac
