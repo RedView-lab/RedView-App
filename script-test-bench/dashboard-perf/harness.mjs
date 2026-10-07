@@ -71,11 +71,11 @@ export async function startAppServer(root, { port: fixedPort = null } = {}) {
   if (!fs.existsSync(path.join(root, 'dist', 'index.html'))) throw new Error(`${root}/dist absent : lancer \`npm run build:vite\` d'abord`);
   const bundle = path.join(root, 'dist-server', 'server.mjs');
   if (!fs.existsSync(bundle)) {
-    const built = spawnSync(process.execPath, ['scripts/build-server.mjs'], { cwd: root, stdio: 'inherit' });
+    const built = spawnSync(process.execPath, ['scripts/build/build-server.mjs'], { cwd: root, stdio: 'inherit' });
     if (built.status !== 0) throw new Error('build-server a échoué');
   }
   if (!fs.readdirSync(path.join(root, 'dist', 'assets')).some((name) => name.endsWith('.br'))) {
-    const packed = spawnSync(process.execPath, ['scripts/precompress-dist.mjs', 'dist'], { cwd: root, stdio: 'inherit' });
+    const packed = spawnSync(process.execPath, ['scripts/build/precompress-dist.mjs', 'dist'], { cwd: root, stdio: 'inherit' });
     if (packed.status !== 0) throw new Error('precompress-dist a échoué');
   }
   const port = fixedPort ?? await freePort();

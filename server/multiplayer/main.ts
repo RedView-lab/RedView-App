@@ -8,7 +8,7 @@ import type { RoomStorage } from './storage.ts';
 
 /**
  * Serveur temps réel de co-édition (service Coolify séparé, Dockerfile.multiplayer ;
- * en dev, lancé par scripts/start-dev-services.mjs et servi par Vite sous
+ * en dev, lancé par scripts/dev/start-dev-services.mjs et servi par Vite sous
  * `/multiplayer`).
  *
  *   MULTIPLAYER_PORT          port d'écoute public (17790 ; /health et WebSocket)

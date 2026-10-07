@@ -40,7 +40,7 @@ if (sentryDsn && !sentryDsn.includes('placeholder')) {
     beforeBreadcrumb: (breadcrumb) => scrubBreadcrumb(breadcrumb),
     beforeSend(event) {
       // VITE_SENTRY_ALLOW_LOCAL=1 au build : envoi depuis localhost (vérifier
-      // les sourcemaps d'un build local, cf. scripts/upload-sourcemaps.mjs).
+      // les sourcemaps d'un build local, cf. scripts/build/upload-sourcemaps.mjs).
       const allowLocal = import.meta.env.VITE_SENTRY_ALLOW_LOCAL === '1'
       if (!allowLocal && typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
         return null

@@ -3,7 +3,7 @@
  * à côté de chaque fichier compressible de dist/ (server/static-compression.mjs).
  *
  * Lancé par le Dockerfile (stage builder) après l'upload des sourcemaps :
- *   node scripts/precompress-dist.mjs [dist]
+ *   node scripts/build/precompress-dist.mjs [dist]
  *
  * server.mjs sert ces variantes par négociation (Accept-Encoding) : la prod ne
  * compresse plus rien à l'exécution, ni CPU au premier visiteur d'un
@@ -18,7 +18,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import zlib from 'node:zlib';
 
-import { VARIANT_SUFFIX, isCompressible } from '../server/static-compression.mjs';
+import { VARIANT_SUFFIX, isCompressible } from '../../server/static-compression.mjs';
 
 const brotliCompressAsync = promisify(zlib.brotliCompress);
 const gzipAsync = promisify(zlib.gzip);

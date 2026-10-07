@@ -1,6 +1,6 @@
 /**
- * Coolify sur le VPS de prod, piloté par SSH : partagé par scripts/deploy.mjs
- * (déploiement de HEAD) et scripts/rollback.mjs (retour à une image déjà
+ * Coolify sur le VPS de prod, piloté par SSH : partagé par scripts/release/deploy.mjs
+ * (déploiement de HEAD) et scripts/release/rollback.mjs (retour à une image déjà
  * construite). Coolify n'expose pas son API publiquement : on appelle sa
  * fonction `queue_application_deployment` dans son conteneur, comme son
  * interface, et on suit la file `application_deployment_queues`.

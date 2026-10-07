@@ -9,7 +9,7 @@
 //
 //   node --env-file=.env script-test-bench/collab-e2e/prod-two-accounts.mjs [--skip-redeploy]
 //
-// Le redéploiement passe par SSH (même méthode que scripts/deploy.mjs).
+// Le redéploiement passe par SSH (même méthode que scripts/release/deploy.mjs).
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import os from 'node:os';

@@ -310,12 +310,12 @@ async function startServer(root: string) {
     ...fs.readdirSync(path.join(root, 'server')).filter((name) => name.endsWith('.mjs')).map((name) => fs.statSync(path.join(root, 'server', name)).mtimeMs),
   );
   if (!fs.existsSync(bundle) || fs.statSync(bundle).mtimeMs < newestSource) {
-    const built = spawnSync(process.execPath, ['scripts/build-server.mjs'], { cwd: root, stdio: 'inherit' });
+    const built = spawnSync(process.execPath, ['scripts/build/build-server.mjs'], { cwd: root, stdio: 'inherit' });
     if (built.status !== 0) throw new Error('build-server a échoué');
   }
   const assets = path.join(root, 'dist', 'assets');
   if (!fs.readdirSync(assets).some((name) => name.endsWith('.br'))) {
-    const packed = spawnSync(process.execPath, ['scripts/precompress-dist.mjs', 'dist'], { cwd: root, stdio: 'inherit' });
+    const packed = spawnSync(process.execPath, ['scripts/build/precompress-dist.mjs', 'dist'], { cwd: root, stdio: 'inherit' });
     if (packed.status !== 0) throw new Error('precompress-dist a échoué');
   }
   const port = await freePort();

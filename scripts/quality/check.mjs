@@ -1,9 +1,9 @@
 /**
- * Gate qualité, bloquant avant chaque déploiement (scripts/deploy.mjs) et en CI.
+ * Gate qualité, bloquant avant chaque déploiement (scripts/release/deploy.mjs) et en CI.
  *
  *   npm run check                  types, lint, tests unitaires, knip, cycles (en parallèle)
  *   npm run check:full             + couverture (planchers), build de prod, régressions hors ligne
- *   node scripts/check.mjs --only=lint,test
+ *   node scripts/quality/check.mjs --only=lint,test
  *
  * Chaque étape est un script npm (une seule définition des commandes). Les
  * sorties sont mises en tampon et seules celles des étapes en échec sont
@@ -18,7 +18,7 @@ import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 
-const PACKAGE_SCRIPTS = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).scripts ?? {};
+const PACKAGE_SCRIPTS = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).scripts ?? {};
 
 /** Étapes indépendantes, lancées en parallèle. */
 const FAST_STEPS = [

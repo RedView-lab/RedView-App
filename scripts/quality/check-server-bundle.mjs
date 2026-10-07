@@ -3,7 +3,7 @@
  *
  *   npm run server:check     (étape de check:full, après `vite build`)
  *
- * 1. `scripts/build-server.mjs` (dist-server/) et `scripts/precompress-dist.mjs` (dist/) ;
+ * 1. `scripts/build/build-server.mjs` (dist-server/) et `scripts/build/precompress-dist.mjs` (dist/) ;
  * 2. `node dist-server/server.mjs` sur un port libre : /health, le plus gros
  *    chunk servi depuis sa variante brotli (octets identiques après
  *    décompression), une route API sans dépendance externe (brute et brotli),
@@ -160,8 +160,8 @@ async function checkMultiplayerServer() {
   }
 }
 
-runScript('scripts/build-server.mjs');
-runScript('scripts/precompress-dist.mjs', 'dist');
+runScript('scripts/build/build-server.mjs');
+runScript('scripts/build/precompress-dist.mjs', 'dist');
 await checkAppServer();
 stopChildren();
 await checkMultiplayerServer();

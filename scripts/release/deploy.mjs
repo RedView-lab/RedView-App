@@ -11,11 +11,11 @@
  * description (c5824fb : 397 fichiers). Commiter par sujet
  * (`git commit -- <fichiers>`), puis déployer.
  *
- * Le gate qualité (scripts/check.mjs --full) tourne ensuite sur l'arbre — donc
+ * Le gate qualité (scripts/quality/check.mjs --full) tourne ensuite sur l'arbre — donc
  * exactement sur ce qui part —, puis la vérification du schéma Appwrite de
  * prod : en cas d'échec, rien n'est commité ni poussé.
  *
- * Retour arrière : `npm run rollback` (scripts/rollback.mjs).
+ * Retour arrière : `npm run rollback` (scripts/release/rollback.mjs).
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import path from 'node:path';
@@ -40,9 +40,9 @@ import {
 const SKIP_CHECKS_FLAG = '--skip-checks';
 const COMMIT_ALL_FLAG = '--commit-all';
 const SCRIPTS_DIR = path.dirname(fileURLToPath(import.meta.url));
-const CHECK_SCRIPT = path.join(SCRIPTS_DIR, 'check.mjs');
-const SCHEMA_SCRIPT = path.join(SCRIPTS_DIR, 'setup-appwrite-schema.mjs');
-const ENV_FILE = path.join(SCRIPTS_DIR, '..', '.env');
+const CHECK_SCRIPT = path.join(SCRIPTS_DIR, '..', 'quality', 'check.mjs');
+const SCHEMA_SCRIPT = path.join(SCRIPTS_DIR, '..', 'setup-appwrite-schema.mjs');
+const ENV_FILE = path.join(SCRIPTS_DIR, '..', '..', '.env');
 
 // Fichiers qui ne doivent JAMAIS partir sur GitHub, même si le .gitignore
 // venait à les rater.

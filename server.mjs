@@ -32,7 +32,7 @@ const __dirname = path.dirname(__filename);
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
 // Image de prod : server.mjs et les routes api/ sont bundlés dans dist-server/
-// (scripts/build-server.mjs), les routes en `.mjs`, sans tsx. La constante est
+// (scripts/build/build-server.mjs), les routes en `.mjs`, sans tsx. La constante est
 // remplacée à la compilation ; non bundlé (`npm start`, tests), le serveur
 // charge les sources `.ts`.
 const BUNDLED = process.env.REDVIEW_SERVER_BUNDLE === '1';
@@ -69,7 +69,7 @@ const brotliCompressAsync = promisify(zlib.brotliCompress);
 const gzipAsync = promisify(zlib.gzip);
 
 /**
- * Variantes précompressées du build (scripts/precompress-dist.mjs, lancé dans
+ * Variantes précompressées du build (scripts/build/precompress-dist.mjs, lancé dans
  * l'image) : chemin de la variante → taille et date. Lues une fois, le build
  * est immuable ; la prod ne compresse donc rien à l'exécution (ni CPU, ni
  * cache mémoire). Un fichier sans variante y est servi tel quel : trop petit,

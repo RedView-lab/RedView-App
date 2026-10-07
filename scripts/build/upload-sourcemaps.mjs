@@ -2,7 +2,7 @@
  * Sourcemaps du build → GlitchTip, puis suppression des `.map` de dist/.
  *
  * Lancé par le Dockerfile (stage builder) après `npm run build` :
- *   node scripts/upload-sourcemaps.mjs [dist]
+ *   node scripts/build/upload-sourcemaps.mjs [dist]
  *
  * GlitchTip n'implémente pas l'upload par morceaux de sentry-cli : on passe par
  * glitchtip-cli (binaire statique, SHA-256 épinglé). Chaque bundle reçoit un
@@ -26,7 +26,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { resolveBuildId } from '../server/build-id.mjs';
+import { resolveBuildId } from '../../server/build-id.mjs';
 
 const CLI_VERSION = 'v1.0.0';
 const CLI_BINARIES = {

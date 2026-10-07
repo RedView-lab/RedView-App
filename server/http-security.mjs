@@ -59,7 +59,7 @@ const API_ROUTE_RE = /^[a-z0-9][a-z0-9-]*(\/[a-z0-9][a-z0-9-]*)*$/i;
  * Retourne `{ route, file, isAuth }` ou `null` si la route n'existe pas.
  *
  * `extension` : `.ts` (sources, dev et `npm start`) ou `.mjs` (build de prod,
- * `scripts/build-server.mjs`). `routes` : routes connues d'avance
+ * `scripts/build/build-server.mjs`). `routes` : routes connues d'avance
  * (`listApiRoutes`) ; sans elles, l'existence du fichier est testée à chaque appel.
  *
  * @param {string} apiDir

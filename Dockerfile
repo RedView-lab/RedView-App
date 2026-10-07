@@ -19,8 +19,8 @@ ENV SOURCE_COMMIT=${SOURCE_COMMIT}
 
 ENV NODE_ENV=production
 # Front (dist/) puis serveur bundlé (dist-server/ : server.mjs et les routes
-# api/ en .mjs, sans tsx à l'exécution — scripts/build-server.mjs).
-RUN npm run build && node scripts/build-server.mjs --app
+# api/ en .mjs, sans tsx à l'exécution — scripts/build/build-server.mjs).
+RUN npm run build && node scripts/build/build-server.mjs --app
 
 # Sourcemaps → GlitchTip (release = identifiant de build), puis suppression des
 # .map de dist/ : jamais dans l'image. Sans configuration, l'upload est ignoré
@@ -32,11 +32,11 @@ ARG SENTRY_ORG=""
 ARG SENTRY_PROJECT=""
 ARG SENTRY_AUTH_TOKEN=""
 RUN --mount=type=secret,id=SENTRY_AUTH_TOKEN \
-    node scripts/upload-sourcemaps.mjs dist
+    node scripts/build/upload-sourcemaps.mjs dist
 
 # Variantes .br/.gz des statiques, servies par négociation : la prod ne
 # compresse rien à l'exécution (ni CPU, ni cache mémoire).
-RUN node scripts/precompress-dist.mjs dist
+RUN node scripts/build/precompress-dist.mjs dist
 
 FROM node:22-alpine AS runner
 WORKDIR /app

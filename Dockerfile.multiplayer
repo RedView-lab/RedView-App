@@ -23,12 +23,12 @@ RUN --mount=type=cache,target=/root/.npm npm ci
 
 # Le moteur de co-édition (src/features/collab) est partagé avec l'application :
 # esbuild le bundle depuis les sources (alias `@/` de tsconfig.multiplayer.json)
-# dans dist-server/multiplayer.mjs, lancé sans tsx (scripts/build-server.mjs).
+# dans dist-server/multiplayer.mjs, lancé sans tsx (scripts/build/build-server.mjs).
 COPY tsconfig.json tsconfig.multiplayer.json ./
-COPY scripts/build-server.mjs ./scripts/
+COPY scripts/build/build-server.mjs ./scripts/build/
 COPY src ./src
 COPY server ./server
-RUN node scripts/build-server.mjs --multiplayer
+RUN node scripts/build/build-server.mjs --multiplayer
 
 FROM node:22-alpine
 

@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 import fs from 'fs'
 // @ts-expect-error JS module without declarations
-import { applyVpsTunnel, startDevServices, startVpsTunnel } from './scripts/start-dev-services.mjs'
+import { applyVpsTunnel, startDevServices, startVpsTunnel } from './scripts/dev/start-dev-services.mjs'
 // @ts-expect-error JS module without declarations
 import { parseApiBody, parseApiQuery } from './server/api-request.mjs'
 import {
@@ -40,7 +40,7 @@ function redviewDevApiPlugin(): Plugin {
       const translationsDataFile = path.resolve(__dirname, 'api/_lib/translations-data.ts')
       if (!fs.existsSync(translationsDataFile)) {
         try {
-          const prebuildScript = path.resolve(__dirname, 'scripts/prebuild-api-i18n.mjs')
+          const prebuildScript = path.resolve(__dirname, 'scripts/build/prebuild-api-i18n.mjs')
           if (fs.existsSync(prebuildScript)) {
             import('child_process').then((cp) => cp.execSync(`node "${prebuildScript}"`))
           }
@@ -55,7 +55,7 @@ function redviewDevApiPlugin(): Plugin {
         console.warn('[redview-dev-api] Error starting dev services:', err)
       })
       // Amonts du .env sur le VPS : son nginx refuse les postes de dev (403),
-      // on passe par un tunnel SSH (cf. scripts/start-dev-services.mjs).
+      // on passe par un tunnel SSH (cf. scripts/dev/start-dev-services.mjs).
       void startVpsTunnel(process.env)
 
       server.middlewares.use(async (req, res, next) => {
@@ -261,7 +261,7 @@ export default defineConfig({
   build: {
     // Maps produites sans commentaire `sourceMappingURL` : uploadées sur
     // GlitchTip puis supprimées de dist/ au build Docker
-    // (scripts/upload-sourcemaps.mjs) ; server.mjs ne sert jamais un `.map`.
+    // (scripts/build/upload-sourcemaps.mjs) ; server.mjs ne sert jamais un `.map`.
     sourcemap: 'hidden',
     chunkSizeWarningLimit: 2500,
     rollupOptions: {

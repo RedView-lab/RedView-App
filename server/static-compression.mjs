@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // Statiques compressibles : une seule règle pour la précompression du build
-// (scripts/precompress-dist.mjs, dans l'image) et pour le serveur qui sert les
+// (scripts/build/precompress-dist.mjs, dans l'image) et pour le serveur qui sert les
 // variantes (server.mjs). La négociation `Accept-Encoding` sert aussi aux
 // réponses API (server/api-compression.mjs).
 // ---------------------------------------------------------------------------

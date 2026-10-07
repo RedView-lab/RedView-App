@@ -4,7 +4,7 @@
  * toast/confirm messages) and checks each one against the { fr, en } pairs in
  * src/shared/i18n/config/translations/*.ts.
  *
- * Run: node scripts/i18n-audit.mjs [--json out.json] [--list]
+ * Run: node scripts/quality/i18n-audit.mjs [--json out.json] [--list]
  *   --json <file>  write the missing strings (with locations) as JSON
  *   --list         print every missing string with its first location
  *
@@ -20,7 +20,7 @@ import { fileURLToPath } from 'url';
 import ts from 'typescript';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const root = join(__dirname, '..');
+const root = join(__dirname, '..', '..');
 const srcDir = join(root, 'src');
 const translationsDir = join(srcDir, 'shared', 'i18n', 'config', 'translations');
 

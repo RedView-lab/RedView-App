@@ -13,7 +13,7 @@ import { mapTranslationPairs } from './map';
 import { projectBrowserTranslationPairs } from './projectBrowser';
 
 // Order matters on a duplicate key (the later pair wins); keep the same order
-// as LEADING_FILES + alphabetical in scripts/prebuild-api-i18n.mjs.
+// as LEADING_FILES + alphabetical in scripts/build/prebuild-api-i18n.mjs.
 export const APP_TRANSLATION_PAIRS: ReadonlyArray<AppTranslationPair> = [
   ...globalTranslationPairs,
   ...projectBrowserTranslationPairs,

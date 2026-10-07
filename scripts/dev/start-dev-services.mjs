@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const rootDir = path.resolve(__dirname, '..');
+const rootDir = path.resolve(__dirname, '../..');
 
 const spawnedProcesses = [];
 
@@ -360,7 +360,7 @@ export async function startDevServices() {
   console.log('\x1b[1m\x1b[35m=============================================\x1b[0m\n');
 }
 
-// If executed directly: node scripts/start-dev-services.mjs
+// If executed directly: node scripts/dev/start-dev-services.mjs
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   startDevServices()
     .then(() => {

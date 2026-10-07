@@ -1,4 +1,4 @@
-# Même gate que `npm run deploy` (scripts/check.mjs --full) : types, lint,
+# Même gate que `npm run deploy` (scripts/quality/check.mjs --full) : types, lint,
 # tests unitaires, knip, cycles, build de prod, régressions hors ligne.
 # Le déploiement reste manuel ; la CI donne le verdict sur chaque push et PR.
 name: CI

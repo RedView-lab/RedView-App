@@ -1,8 +1,8 @@
 /**
  * Bundles du serveur de prod (esbuild) → dist-server/, lancés par `node` sans tsx :
- *   node scripts/build-server.mjs                  app + temps réel
- *   node scripts/build-server.mjs --app            server.mjs et les routes api/
- *   node scripts/build-server.mjs --multiplayer    serveur de co-édition
+ *   node scripts/build/build-server.mjs                  app + temps réel
+ *   node scripts/build/build-server.mjs --app            server.mjs et les routes api/
+ *   node scripts/build/build-server.mjs --multiplayer    serveur de co-édition
  *
  * - app : dist-server/server.mjs et une entrée par route (dist-server/api/<route>.mjs,
  *   même règle de nom que resolveApiRoute), code partagé dans dist-server/chunks/.
@@ -22,9 +22,9 @@ import path from 'node:path';
 
 import { build } from 'esbuild';
 
-import { listApiRoutes } from '../server/http-security.mjs';
+import { listApiRoutes } from '../../server/http-security.mjs';
 
-const ROOT = path.resolve(import.meta.dirname, '..');
+const ROOT = path.resolve(import.meta.dirname, '../..');
 const OUT_DIR = path.join(ROOT, 'dist-server');
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 const runtimeDependencies = Object.keys(pkg.dependencies ?? {});
