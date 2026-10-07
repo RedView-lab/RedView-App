@@ -28,11 +28,16 @@
  * le contexte commun et le tag de release, et aucun e-mail, nom de projet, id
  * ou chemin de projet dans une seule charge utile (src/shared/lib/analytics/).
  *
+ * Accessibilité : chaque écran du parcours (connexion, projets, éditeur avec
+ * l'itinéraire, compte, suppression du compte) audité par axe-core (WCAG A/AA),
+ * comparé au cliquet a11y-baseline.json (cf. a11y.ts) ; après une correction,
+ * `--update-a11y-baseline` le fait redescendre.
+ *
  * Contrôles globaux : aucune erreur de page, aucun appel Appwrite non simulé,
  * aucune violation CSP, aucune erreur envoyée à GlitchTip.
  *
  * Usage : `npm run build:vite` puis
- *   npx tsx script-test-bench/user-journey/run.ts [--channel msedge|chromium] [--headed] [--keep]
+ *   npx tsx script-test-bench/user-journey/run.ts [--channel msedge|chromium] [--headed] [--keep] [--update-a11y-baseline]
  * (chromium par défaut en CI, Edge sinon). Rapport : script-test-bench/reports/user-journey/.
  * Sortie non nulle au premier contrôle en échec (capture d'écran jointe).
  */
@@ -43,6 +48,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium, type BrowserContext, type Page } from 'playwright';
 
 import { installBackend, startAppServer } from '../dashboard-perf/harness.mjs';
+import { auditScreen, buildBaseline, compareWithBaseline, readBaseline, type A11yFinding } from './a11y.ts';
 import { openZip, readZipEntry } from '../../src/features/redviewFile/lib/zip/zipReader.ts';
 import { EVENT_LABELS } from '../../src/shared/lib/analytics/labels.ts';
 
@@ -51,6 +57,8 @@ const REPORT_DIR = path.join(REPO, 'script-test-bench', 'reports', 'user-journey
 const argv = process.argv.slice(2);
 const CHANNEL = argv.includes('--channel') ? argv[argv.indexOf('--channel') + 1] : process.env.CI ? 'chromium' : 'msedge';
 const HEADED = argv.includes('--headed');
+const UPDATE_A11Y_BASELINE = argv.includes('--update-a11y-baseline');
+const A11Y_BASELINE = path.join(REPO, 'script-test-bench', 'user-journey', 'a11y-baseline.json');
 const PROJECT_NAME = 'Tour E2E';
 const ITINERARY_NAME = 'Boucle E2E';
 const TRACK_POINTS = 1001;
@@ -99,6 +107,15 @@ async function stubVpsServices(context: BrowserContext, origin: string) {
   for (const route of ['brouter', 'poi', 'openmeteo', 'weather', 'meteofrance', 'overpass', 'geocode-iconic', 'snow-context']) {
     await context.route(new RegExp(`^${origin}/api/${route}(?:[/?]|$)`), (request) => request.fulfill(unavailable));
   }
+}
+
+/** Défauts d'accessibilité relevés écran par écran (cf. a11y.ts). */
+const a11yFindings: A11yFinding[] = [];
+const a11yScreens: string[] = [];
+
+async function auditA11y(page: Page, screen: string) {
+  a11yFindings.push(...await auditScreen(page, screen));
+  a11yScreens.push(screen);
 }
 
 /** Messages d'erreur de la console (ressources en échec exclues) : affichés en cas d'échec, pour le diagnostic. */
@@ -186,10 +203,13 @@ async function main() {
 
     await step('connexion', async () => {
       await p.goto(server.origin);
+      await p.getByPlaceholder('Saisissez votre e-mail').waitFor({ timeout: 30_000 });
+      await auditA11y(p, 'connexion');
       await p.getByPlaceholder('Saisissez votre e-mail').fill('bench@redview.test');
       await p.getByPlaceholder('••••••••').fill('mot-de-passe-e2e');
       await p.getByRole('button', { name: 'Se connecter', exact: true }).click();
       await p.getByRole('button', { name: 'Créer un projet' }).waitFor({ timeout: 30_000 });
+      await auditA11y(p, 'projets');
     });
 
     await step('création et renommage du projet', async () => {
@@ -207,6 +227,7 @@ async function main() {
       await p.getByText('Uploader un fichier gpx').click();
       await (await chooser).setFiles(gpxPath);
       await expectItineraryDistance(p);
+      await auditA11y(p, 'editeur');
       return '25,2 km';
     });
 
@@ -260,6 +281,8 @@ async function main() {
     await step('« Télécharger mes données »', async () => {
       await p.getByRole('button', { name: 'Retour au gestionnaire de projet' }).click();
       await p.getByRole('button', { name: 'Compte', exact: true }).click();
+      await p.getByRole('button', { name: 'Télécharger', exact: true }).waitFor({ timeout: 30_000 });
+      await auditA11y(p, 'compte');
       const { name, bytes } = await readDownload(p, () => p.getByRole('button', { name: 'Télécharger', exact: true }).click());
       check(/^redview-donnees-\d{4}-\d{2}-\d{2}\.zip$/.test(name), `nom d'archive inattendu : ${name}`);
       const entries = await zipEntries(bytes);
@@ -291,6 +314,7 @@ async function main() {
       await p.getByRole('button', { name: 'Supprimer mon compte' }).click();
       const dialog = p.getByRole('dialog', { name: 'Supprimer votre compte' });
       await dialog.waitFor();
+      await auditA11y(p, 'suppression-compte');
       const send = dialog.getByRole('button', { name: 'Recevoir le code' });
       check(await send.isDisabled(), 'le code part sans le mot de confirmation');
       await dialog.getByRole('textbox').fill('supprimer');
@@ -360,6 +384,19 @@ async function main() {
       return `${sent.length} envois, ${[...new Set(screens)].length} écrans, ${new Set(names).size} sortes d’événements`;
     });
 
+    await step('accessibilité (axe, WCAG A/AA)', async () => {
+      const elements = a11yFindings.reduce((sum, finding) => sum + finding.targets.length, 0);
+      const summary = `${a11yScreens.length} écrans, ${a11yFindings.length} règle(s) en défaut, ${elements} élément(s)`;
+      if (UPDATE_A11Y_BASELINE) {
+        fs.writeFileSync(A11Y_BASELINE, `${JSON.stringify(buildBaseline(a11yFindings), null, 2)}\n`);
+        return `${summary} — référence réécrite`;
+      }
+      const { regressions, stale } = compareWithBaseline(a11yFindings, readBaseline(A11Y_BASELINE), a11yScreens);
+      check(regressions.length === 0, `défauts d'accessibilité nouveaux :\n  ${regressions.join('\n  ')}`);
+      check(stale.length === 0, `défauts corrigés, la référence doit redescendre (--update-a11y-baseline) :\n  ${stale.join('\n  ')}`);
+      return summary;
+    });
+
     await step('contrôles globaux', async () => {
       check(pageErrors.length === 0, `erreurs de page : ${pageErrors.slice(0, 5).join(' | ')}`);
       check(appwrite.state.unhandled.length === 0, `appels Appwrite non simulés : ${appwrite.state.unhandled.slice(0, 5).join(', ')}`);
@@ -379,7 +416,7 @@ async function main() {
     if (!argv.includes('--keep')) fs.rmSync(workDir, { recursive: true, force: true });
   }
 
-  const report = { date: new Date().toISOString(), channel: CHANNEL, ok: !failed, steps: results, analytics: analyticsSent };
+  const report = { date: new Date().toISOString(), channel: CHANNEL, ok: !failed, steps: results, analytics: analyticsSent, a11y: a11yFindings };
   fs.writeFileSync(path.join(REPORT_DIR, `user-journey-${report.date.replace(/[:.]/g, '-')}.json`), JSON.stringify(report, null, 2));
   console.log(failed ? `\nParcours en échec (capture : ${path.relative(REPO, path.join(REPORT_DIR, 'failure.png'))})` : '\nParcours principal : OK');
   process.exitCode = failed ? 1 : 0;

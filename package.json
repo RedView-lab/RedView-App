@@ -117,6 +117,7 @@
     "@vitest/coverage-v8": "^5.0.3",
     "@webgpu/types": "^0.1.74",
     "appwrite": "^26.2.0",
+    "axe-core": "^4.14.0",
     "copc": "^0.0.8",
     "esbuild": "^0.27.0",
     "eslint": "^9.39.4",
