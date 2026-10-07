@@ -1,7 +1,7 @@
 /**
  * Full catalog of BRouter parameters exposed in Expert Mode.
  *
- * Sources:
+ * Sources (BRouter repository, github.com/abrensch/brouter):
  *   - `misc/profiles2/trekking.brf` (every `assign foo = bar # %foo% | desc | type`)
  *   - `docs/developers/profile_developers_guide.md`
  *

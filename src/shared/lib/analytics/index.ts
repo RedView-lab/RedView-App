@@ -8,7 +8,7 @@
  * personne : `npx tsx --env-file=.env scripts/analytics/activation-report.ts`.
  *
  * Ajouter un événement : son type dans events.ts, l'appel au point de passage,
- * et (s'il compte dans un entonnoir) scripts/analytics/umami/spec.ts. Voir docs/ANALYTICS.md.
+ * et (s'il compte dans un entonnoir) scripts/analytics/umami/spec.ts. Voir docs/analytics/measurement.md.
  */
 
 import type { AnalyticsEvent } from './events';

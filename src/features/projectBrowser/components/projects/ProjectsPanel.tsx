@@ -142,7 +142,7 @@ export function ProjectsPanel({
     : [];
   const visibleCount = visibleFolders.length + visibleProjects.length + visibleSharedProjects.length;
   const [menuState, setMenuState] = useState<MenuState>(null);
-  // Retour sur un projet : étape « project_opened » de l'entonnoir (anonyme, docs/ANALYTICS.md).
+  // Retour sur un projet : étape « project_opened » de l'entonnoir (anonyme, docs/analytics/measurement.md).
   const openProject = (project: ProjectSummary, id: string) => {
     trackAnalyticsEvent({
       name: 'project_opened',
