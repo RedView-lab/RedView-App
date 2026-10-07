@@ -10,6 +10,8 @@ export type MapboxStyleDefinition = Record<string, unknown>;
 export const prefetchedStyleCache = new Map<string, MapboxStyleDefinition>();
 
 export const STYLE_PREFETCH_TIMEOUT_MS = 6000;
+/** Second, unhurried attempt for a RedView theme (see `resolveStyleInput`). */
+export const THEMED_STYLE_RETRY_TIMEOUT_MS = 20000;
 
 export function createEmptyBootstrapStyle(): MapboxStyleDefinition {
   return { version: 8, sources: {}, layers: [] };
@@ -43,12 +45,15 @@ export function shouldPrefetchMapboxStyle(styleUrl: string): boolean {
   return true;
 }
 
-export async function fetchMapboxStyleDefinition(styleUrl: string): Promise<MapboxStyleDefinition> {
+export async function fetchMapboxStyleDefinition(
+  styleUrl: string,
+  timeoutMs = STYLE_PREFETCH_TIMEOUT_MS,
+): Promise<MapboxStyleDefinition> {
   const cached = prefetchedStyleCache.get(styleUrl);
   if (cached) return cloneStyleDefinition(cached);
 
   if (isRedviewThemedStyleUrl(styleUrl)) {
-    const baseStyle = await fetchMapboxStyleDefinition(getBaseStyleUrl(styleUrl));
+    const baseStyle = await fetchMapboxStyleDefinition(getBaseStyleUrl(styleUrl), timeoutMs);
     const themed = applyBasemapTheme(styleUrl, baseStyle);
     prefetchedStyleCache.set(styleUrl, themed);
     return cloneStyleDefinition(themed);
@@ -58,7 +63,7 @@ export async function fetchMapboxStyleDefinition(styleUrl: string): Promise<Mapb
   if (!apiUrl) throw new Error(`Unsupported style URL: ${styleUrl}`);
 
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), STYLE_PREFETCH_TIMEOUT_MS);
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(apiUrl, {
       signal: controller.signal,
@@ -78,12 +83,25 @@ export async function fetchMapboxStyleDefinition(styleUrl: string): Promise<Mapb
 
 /**
  * Résout le style Mapbox soit sous forme d'objet JSON préchargé, soit en URL brute.
+ *
+ * Un thème RedView n'existe que recoloré : son URL de base afficherait l'Outdoors
+ * clair d'origine sous le thème sombre, et Mapbox retéléchargerait ce même style.
+ * Il a donc droit à un second essai sans hâte avant ce repli.
  */
 export async function resolveStyleInput(styleUrl: string): Promise<string | MapboxStyleDefinition> {
   if (!shouldPrefetchMapboxStyle(styleUrl)) return styleUrl;
   try {
     return await fetchMapboxStyleDefinition(styleUrl);
   } catch (error) {
+    if (isRedviewThemedStyleUrl(styleUrl)) {
+      console.warn('[map3d] themed style prefetch failed, retrying', error);
+      try {
+        return await fetchMapboxStyleDefinition(styleUrl, THEMED_STYLE_RETRY_TIMEOUT_MS);
+      } catch (retryError) {
+        console.warn('[map3d] themed style unavailable, falling back to its untouched base style', retryError);
+        return getBaseStyleUrl(styleUrl);
+      }
+    }
     console.warn('[map3d] style prefetch failed, falling back to URL', error);
     return getBaseStyleUrl(styleUrl);
   }
