@@ -69,7 +69,7 @@ export function TimelineTableSettings({
               className="rvi-tl-table__auto-value-btn"
               onClick={() => setField('distanceBetweenWaypoints', !value.distanceBetweenWaypoints)}
               aria-pressed={value.distanceBetweenWaypoints}
-              aria-label={t('Distance entre waypoints (km)')}
+              aria-label={t('Distance entre waypoints : {{value}} km', { value: value.distanceKm })}
             >
               <span>{value.distanceKm} km</span>
               <IconChevronDown size={14} />

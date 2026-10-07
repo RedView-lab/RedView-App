@@ -183,25 +183,27 @@ export function TimelineSheetView({
   if (useCompactListLayout) {
     const typeDirection = sort?.columnId === 'typeText' ? sort.direction : null;
     const distanceDirection = sort?.columnId === 'distance' ? sort.direction : null;
+    // Le sens du tri est lu dans le nom du bouton (libellé visible en tête).
+    const sortButtonLabel = (label: string, direction: 'asc' | 'desc' | null) => (
+      direction === 'asc'
+        ? t('{{label}}, tri croissant', { label })
+        : direction === 'desc'
+          ? t('{{label}}, tri décroissant', { label })
+          : label
+    );
 
     return (
       <div className="rvi-tl-table-wrap" aria-label={t('Liste des étapes')}>
-        <div className="rvi-tl-list" role="table">
-          <div className="rvi-tl-list__header" role="row" ref={attachHeader}>
+        {/* Liste (pas un tableau : chaque étape est une rangée flex, sans cellules). */}
+        <div className="rvi-tl-list">
+          <div className="rvi-tl-list__header" ref={attachHeader}>
             <span className="rvi-tl-list__col-check" aria-hidden>
               <span className="rvi-tl-list__col-checkbox" />
             </span>
 
             <button
               type="button"
-              role="columnheader"
-              aria-sort={
-                typeDirection === 'asc'
-                  ? 'ascending'
-                  : typeDirection === 'desc'
-                    ? 'descending'
-                    : 'none'
-              }
+              aria-label={sortButtonLabel(t('Type'), typeDirection)}
               className={`rvi-tl-list__sort rvi-tl-list__col-type${typeDirection ? ' is-sorted' : ''}`}
               onClick={() => handleHeaderClick('typeText')}
               title={t('Type')}
@@ -214,14 +216,7 @@ export function TimelineSheetView({
 
             <button
               type="button"
-              role="columnheader"
-              aria-sort={
-                distanceDirection === 'asc'
-                  ? 'ascending'
-                  : distanceDirection === 'desc'
-                    ? 'descending'
-                    : 'none'
-              }
+              aria-label={sortButtonLabel(t('Distance'), distanceDirection)}
               className={`rvi-tl-list__sort rvi-tl-list__col-distance${distanceDirection ? ' is-sorted' : ''}`}
               onClick={() => handleHeaderClick('distance')}
               title={t('Distance')}
@@ -237,7 +232,7 @@ export function TimelineSheetView({
             </span>
           </div>
 
-          <div className="rvi-tl-list__items" ref={attachRowsRoot}>
+          <div className="rvi-tl-list__items" role="list" ref={attachRowsRoot}>
             {topSpacerPx > 0 ? (
               <div aria-hidden style={{ height: topSpacerPx, flexShrink: 0 }} />
             ) : null}
@@ -250,7 +245,7 @@ export function TimelineSheetView({
                   className="rvi-tl-list__item"
                   data-timeline-id={item.id}
                   data-vrow={item.id}
-                  role="row"
+                  role="listitem"
                   style={{ animationDelay: `${Math.min(rowIndex * 18, 240)}ms` }}
                 >
                   <TimelineRow

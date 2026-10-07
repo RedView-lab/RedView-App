@@ -399,8 +399,8 @@ export const MapViewportControls = memo(function MapViewportControls({
       <button
         type="button"
         className={`rvmvc-map-tools__button rvmvc-map-tools__button--label rvmvc-map-tools__slot-dimension${is3DView ? ' is-active' : ' is-inactive'}`}
-        aria-label={is3DView ? t('Passer en vue 2D') : t('Passer en vue 3D')}
-        aria-pressed={is3DView}
+        // Nom = vue affichée (texte visible) puis l'action : l'état y est déjà.
+        aria-label={is3DView ? t('Vue 3D : passer en 2D') : t('Vue 2D : passer en 3D')}
         title={is3DView ? t('Passer en 2D') : t('Passer en 3D')}
         onClick={handleToggleDimension}
         disabled={disabled}

@@ -209,6 +209,7 @@ export const itineraryTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Surface minimale', en: 'Minimum surface' },
   { fr: 'Surface maximale', en: 'Maximum surface' },
   { fr: 'Hors plage', en: 'Off-range' },
+  { fr: 'Hors plage : {{value}}%', en: 'Off-range: {{value}}%' },
   { fr: 'Part du parcours autorisée hors de la plage de surfaces choisie (0 % = strict)', en: 'Share of the route allowed outside the chosen surface range (0% = strict)' },
   { fr: 'Paramètres additionnels', en: 'Additional settings' },
   { fr: 'Bois (protection vent et soleil)', en: 'Woods (shelter from wind and sun)' },

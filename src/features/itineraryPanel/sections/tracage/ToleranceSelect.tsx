@@ -28,7 +28,7 @@ export function ToleranceSelect({ currentTolerance, onSelect }: ToleranceSelectP
           className={`rvi-tracage__tolerance-btn${toleranceOpen ? ' is-open' : ''}`}
           onClick={() => setToleranceOpen((prev) => !prev)}
           aria-expanded={toleranceOpen}
-          aria-label={t('Hors plage')}
+          aria-label={t('Hors plage : {{value}}%', { value: currentTolerance })}
           title={t('Part du parcours autorisée hors de la plage de surfaces choisie (0 % = strict)')}
         >
           <span>{`${currentTolerance}%`}</span>

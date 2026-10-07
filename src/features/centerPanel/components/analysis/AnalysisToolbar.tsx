@@ -87,7 +87,7 @@ export function AnalysisToolbar({
     <div ref={toolbarRef} className="rvc-center-analysis__toolbar">
       <div className="rvc-center-analysis__label">{t('Analyse')}</div>
 
-      <div className="rvc-center-analysis__segmented" role="tablist" aria-label={t("Mode d'analyse")}>
+      <div className="rvc-center-analysis__segmented" role="group" aria-label={t("Mode d'analyse")}>
         {(
           [
             { mode: 'distance' as const, label: t('Distance') },
@@ -130,6 +130,7 @@ export function AnalysisToolbar({
                   if (!isDisabled) onXModeChange(mode);
                 }}
                 aria-label={label}
+                aria-pressed={isActive}
                 aria-describedby={showHint ? `rvc-analysis-xmode-hint-${mode}` : undefined}
                 title={isDisabled ? undefined : label}
               >
