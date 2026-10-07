@@ -56,12 +56,10 @@ vendor/redviewalgo/target/
 public/france-border.json
 public/poi-icons/
 public/images/
-public/landing/
-public/svgv2/
+public/flags/
+public/brand/
+public/icons/
 public/sw-dem/
-public/project-browser/
-public/control-panel/
-public/right-click-icons/
 
 
 # ───────────────────────────────────────────────
