@@ -1,5 +1,5 @@
 import proj4 from 'proj4';
-import type { JapanZoneNumber, JapanTileCoord, JapanMapSheetInfo, JapanTertiaryMeshInfo } from './types';
+import type { JapanZoneNumber, JapanTileCoord } from './types';
 import type { Jgd2011ZoneCrs } from '../../types';
 
 /**
@@ -51,7 +51,7 @@ for (let z = 1; z <= 19; z++) {
 }
 
 // Bounding box covering all territory of Japan
-export const JAPAN_BBOX_WGS84 = { west: 122.0, south: 20.0, east: 154.5, north: 46.0 };
+const JAPAN_BBOX_WGS84 = { west: 122.0, south: 20.0, east: 154.5, north: 46.0 };
 
 /** Check if coordinates are inside Japan territory */
 export function isInJapanCoverage(lon: number, lat: number): boolean {
@@ -64,7 +64,7 @@ export function isInJapanCoverage(lon: number, lat: number): boolean {
 }
 
 /** Automatically detect official JGD2011 zone (1..19) for given WGS84 coordinates */
-export function detectJapanZone(lon: number, lat: number): JapanZoneNumber {
+function detectJapanZone(lon: number, lat: number): JapanZoneNumber {
   // Nansei Islands / Okinawa / Remote
   if (lat < 28.0) {
     if (lon > 150.0) return 19; // Minamitorishima
@@ -185,92 +185,9 @@ export function getJapanTileBounds(coord: JapanTileCoord): {
   };
 }
 
-/** Closed WGS84 ring (5 vertices) describing the 1km² tile footprint */
-export function japanTileCoordToWgs84Polygon(coord: JapanTileCoord): [number, number][] {
-  const { minE, minN, maxE, maxN } = getJapanTileBounds(coord);
-  const sw = japanToWgs84(minE, minN, coord.zone);
-  const se = japanToWgs84(maxE, minN, coord.zone);
-  const ne = japanToWgs84(maxE, maxN, coord.zone);
-  const nw = japanToWgs84(minE, maxN, coord.zone);
-  return [sw, se, ne, nw, sw];
-}
-
-/** Centre of the tile in WGS84 [lon, lat] */
-export function japanTileCenterWgs84(coord: JapanTileCoord): [number, number] {
-  const { minE, minN } = getJapanTileBounds(coord);
-  return japanToWgs84(minE + 500, minN + 500, coord.zone);
-}
-
 /** Stable string key for Japan tile cache / dedup */
 export function japanTileKey(coord: JapanTileCoord): string {
   return `JP_Z${String(coord.zone).padStart(2, '0')}_E${coord.eastKm}_N${coord.northKm}`;
 }
 
-/** JIS X 0410 Tertiary Regional Mesh (3次メッシュ) 8-digit code */
-export function wgs84ToTertiaryMesh(lon: number, lat: number): JapanTertiaryMeshInfo {
-  const p = Math.floor(lat * 1.5);
-  const u = Math.floor(lon - 100);
-  const q = Math.floor((lat * 1.5 - p) * 8);
-  const v = Math.floor((lon - 100 - u) * 8);
-  const latRem = lat * 1.5 - p - q / 8;
-  const lonRem = lon - 100 - u - v / 8;
-  const r = Math.floor(latRem * 80);
-  const w = Math.floor(lonRem * 80);
 
-  const mesh1st = `${String(p).padStart(2, '0')}${String(u).padStart(2, '0')}`;
-  const mesh2nd = `${q}${v}`;
-  const mesh3rd = `${r}${w}`;
-  const fullCode = `${mesh1st}${mesh2nd}${mesh3rd}`;
-
-  return { mesh1st, mesh2nd, mesh3rd, fullCode };
-}
-
-const SHEET_ROW_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-const SHEET_COL_LETTERS = 'ABCDEFGH';
-/** Zone extent covered by the 1:50,000 sheet grid (metres from the zone origin). */
-const SHEET_GRID_NORTH_M = 300_000;
-const SHEET_GRID_WEST_M = -160_000;
-
-function sheetCell(offsetM: number, sizeM: number, count: number): number {
-  return Math.min(count - 1, Math.max(0, Math.floor(offsetM / sizeM)));
-}
-
-/**
- * Convert native JGD2011 coordinates to Japanese Public Survey Standard Map Sheet info (公共測量標準図郭).
- * 1:50,000 sheets are 30 km (N-S) × 40 km (E-W): rows A.. from X = +300 km
- * southwards (Tokyo's Izu islands reach row U), columns A..H from Y = −160 km eastwards. Each splits into 10×10
- * 1:5,000 sheets (3 km × 4 km), each into 10×10 level-500 sheets
- * (300 m × 400 m); both numbered row-from-north then column-from-west.
- * Checked against the real file names of `japanLazIndex` (e.g. Izu-Ōshima,
- * ~140 km south of the zone 9 origin, is row O).
- */
-export function japanCoordsToStandardSheet(eastM: number, northM: number, zone: JapanZoneNumber): JapanMapSheetInfo {
-  const zoneStr = String(zone).padStart(2, '0');
-
-  const rowIdx = sheetCell(SHEET_GRID_NORTH_M - northM, 30_000, SHEET_ROW_LETTERS.length);
-  const colIdx = sheetCell(eastM - SHEET_GRID_WEST_M, 40_000, SHEET_COL_LETTERS.length);
-  const rowLetter = SHEET_ROW_LETTERS[rowIdx]!;
-  const colLetter = SHEET_COL_LETTERS[colIdx]!;
-  const sheetNorth = SHEET_GRID_NORTH_M - rowIdx * 30_000;
-  const sheetWest = SHEET_GRID_WEST_M + colIdx * 40_000;
-
-  const sub5kRow = sheetCell(sheetNorth - northM, 3_000, 10);
-  const sub5kCol = sheetCell(eastM - sheetWest, 4_000, 10);
-  const sheet5k = `${sub5kRow}${sub5kCol}`;
-
-  const subRow = sheetCell(sheetNorth - sub5kRow * 3_000 - northM, 300, 10);
-  const subCol = sheetCell(eastM - (sheetWest + sub5kCol * 4_000), 400, 10);
-  const subSheet = `${subRow}${subCol}`;
-
-  const sheetCode = `${zoneStr}${rowLetter}${colLetter}${sheet5k}${subSheet}`;
-
-  return {
-    zone,
-    zoneStr,
-    rowLetter,
-    colLetter,
-    sheet5k,
-    subSheet,
-    sheetCode,
-  };
-}

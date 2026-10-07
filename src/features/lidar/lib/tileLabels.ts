@@ -40,7 +40,7 @@ export function loadLidarTileLabels(): LabelMap {
   return {};
 }
 
-export function saveLidarTileLabels(labels: LabelMap): void {
+function saveLidarTileLabels(labels: LabelMap): void {
   const storage = safeGetStorage();
   if (!storage) return;
   try {

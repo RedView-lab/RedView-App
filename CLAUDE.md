@@ -15,7 +15,7 @@ npm run check        # quality gate, in parallel: typecheck, typecheck:bench (sc
 npm run check:full   # + `vite build` + bundled prod servers started for real (server:check) + offline correctness regressions (bench:redview, project-layers, collab, flyover) — run by `npm run deploy` and CI
 npm run test         # vitest run (test:watch = watch mode)
 npm run lint         # eslint (flat config, TS/TSX + server.mjs/server/*.mjs), cached; lint:prune after fixing a frozen error
-npm run knip         # unused files / dependencies / unresolved imports (blocking); unused exports/types reported only
+npm run knip         # unused files / dependencies / unresolved imports / exports / types / duplicates — all blocking (exceptions named in knip.jsonc `ignoreIssues`: frozen billing, two intentional aliases); an export nobody imports gets its `export` removed, and the code that leaves dead gets deleted
 npm run cycles       # madge: runtime import cycles in src (type-only and dynamic imports ignored) — must stay at zero
 npm start            # tsx server.mjs — production server from sources: serves dist/ + api/*.ts on $PORT (default 3000); the images run the esbuild bundles instead (`npm run build:server` → dist-server/)
 npm run services     # / services:stop — start/stop local BRouter (17777) and POI server (17778) manually

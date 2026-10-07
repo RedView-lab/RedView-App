@@ -33,7 +33,7 @@ export function holdingDepthCm(slopeDeg: number, config: SnowEngineConfig): numb
 }
 
 /** Share of the moving snow a cell of that slope can take, cm (Gruber 2007). */
-export function depositCapacityCm(slopeDeg: number, config: SnowEngineConfig): number {
+function depositCapacityCm(slopeDeg: number, config: SnowEngineConfig): number {
   return slopeDeg >= config.depositLimitDeg ? 0 : config.depositMaxCm * (1 - slopeDeg / config.depositLimitDeg);
 }
 

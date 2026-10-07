@@ -9,8 +9,8 @@ import { projectPointToSegment } from '../routeSplit/routeSnap';
  * et s'éloigner au-delà de EXIT pour revenir au crayon. Un pointeur qui longe
  * la bordure ne peut donc pas faire alterner les deux curseurs.
  */
-export const ROUTE_GRAB_ENTER_PX = 44;
-export const ROUTE_GRAB_EXIT_PX = 72;
+const ROUTE_GRAB_ENTER_PX = 44;
+const ROUTE_GRAB_EXIT_PX = 72;
 
 /**
  * Aux deux extrémités, la zone se referme en pointe : juste après un clic de
@@ -23,9 +23,9 @@ export const ROUTE_GRAB_EXIT_PX = 72;
  * s'ouvre en continu jusqu'à sa pleine largeur sur TAPER px — sans marche, donc
  * sans bascule brutale en longeant la ligne.
  */
-export const ROUTE_GRAB_END_DEAD_ENTER_PX = 20;
-export const ROUTE_GRAB_END_DEAD_EXIT_PX = 12;
-export const ROUTE_GRAB_END_TAPER_PX = 140;
+const ROUTE_GRAB_END_DEAD_ENTER_PX = 20;
+const ROUTE_GRAB_END_DEAD_EXIT_PX = 12;
+const ROUTE_GRAB_END_TAPER_PX = 140;
 const ROUTE_GRAB_END_MEASURE_PX = ROUTE_GRAB_END_DEAD_ENTER_PX + ROUTE_GRAB_END_TAPER_PX;
 
 export type RouteGrabMode = 'enter' | 'exit';
@@ -236,13 +236,5 @@ export function findRouteGrabHit(
 }
 
 /** Re-exported tolerance so the drag tool shares the split tool's hit radius. */
-export {
-  findSplitProjectionForMapHover,
-} from '../routeSplit/routeSnap';
+;
 
-export interface RouteAnchorPoint {
-  /** Cumulative distance along the route, in metres. */
-  distanceM: number;
-  lat: number;
-  lon: number;
-}

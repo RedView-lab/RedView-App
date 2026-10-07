@@ -17,82 +17,16 @@ export interface LocalProjectCacheEntry {
   project: ItineraryProject;
 }
 
-export const LOCAL_PROJECT_CACHE_MAX_ENTRY_BYTES = 900_000;
-export const LOCAL_PROJECT_CACHE_TOTAL_BUDGET_BYTES = 2_500_000;
-export const LOCAL_PROJECT_CACHE_MAX_ENTRIES = 3;
+const LOCAL_PROJECT_CACHE_MAX_ENTRY_BYTES = 900_000;
+const LOCAL_PROJECT_CACHE_TOTAL_BUDGET_BYTES = 2_500_000;
+const LOCAL_PROJECT_CACHE_MAX_ENTRIES = 3;
 
-let projectCacheStorageCompacted = false;
-
-export function estimateSerializedBytes(value: string): number {
+function estimateSerializedBytes(value: string): number {
   try {
     return new Blob([value]).size;
   } catch {
     return value.length * 2;
   }
-}
-
-export function buildLocalProjectCachePayload(project: ItineraryProject): {
-  compacted: boolean;
-  serialized: string;
-} | null {
-  const payload: LocalProjectCacheEntry = {
-    ownerId: getCachedCurrentUserIdSync(),
-    cachedAt: new Date().toISOString(),
-    project: structuredClone(project),
-  };
-
-  let compacted = false;
-  let serialized = JSON.stringify(payload);
-  if (estimateSerializedBytes(serialized) <= LOCAL_PROJECT_CACHE_MAX_ENTRY_BYTES) {
-    return { compacted, serialized };
-  }
-
-  const compactionSteps: Array<(draft: ItineraryProject) => void> = [
-    (draft) => {
-      for (const itinerary of draft.itineraries) {
-        if (itinerary.gpxRoute?.originalPoints) {
-          delete itinerary.gpxRoute.originalPoints;
-        }
-      }
-    },
-    (draft) => {
-      for (const itinerary of draft.itineraries) {
-        delete itinerary.poiFeatures;
-      }
-    },
-    (draft) => {
-      for (const itinerary of draft.itineraries) {
-        delete itinerary.metrics;
-        delete itinerary.routeAudit;
-      }
-    },
-    (draft) => {
-      for (const itinerary of draft.itineraries) {
-        delete itinerary.prediction;
-        delete itinerary.fitUploads;
-      }
-    },
-    (draft) => {
-      for (const itinerary of draft.itineraries) {
-        delete itinerary.pendingTraceExtension;
-        delete itinerary.pendingRoutePatch;
-      }
-    },
-  ];
-
-  for (const compact of compactionSteps) {
-    compact(payload.project);
-    const nextSerialized = JSON.stringify(payload);
-    if (nextSerialized !== serialized) {
-      compacted = true;
-      serialized = nextSerialized;
-    }
-    if (estimateSerializedBytes(serialized) <= LOCAL_PROJECT_CACHE_MAX_ENTRY_BYTES) {
-      return { compacted, serialized };
-    }
-  }
-
-  return null;
 }
 
 export function compactProjectCacheStorage(projectIdToKeep?: string | null): void {
@@ -160,39 +94,8 @@ export function compactProjectCacheStorage(projectIdToKeep?: string | null): voi
   }
 }
 
-export function getProjectCacheKey(projectId: string): string {
+function getProjectCacheKey(projectId: string): string {
   return `${PROJECT_CACHE_KEY_PREFIX}${projectId}`;
-}
-
-export function readProjectCache(projectId: string): LocalProjectCacheEntry | null {
-  try {
-    if (!projectCacheStorageCompacted) {
-      compactProjectCacheStorage(projectId);
-      projectCacheStorageCompacted = true;
-    }
-
-    const raw = window.localStorage.getItem(getProjectCacheKey(projectId));
-    if (!raw) return null;
-
-    if (estimateSerializedBytes(raw) > LOCAL_PROJECT_CACHE_MAX_ENTRY_BYTES) {
-      window.localStorage.removeItem(getProjectCacheKey(projectId));
-      return null;
-    }
-
-    const parsed = JSON.parse(raw) as Partial<LocalProjectCacheEntry>;
-    if (!parsed || typeof parsed.cachedAt !== 'string' || !parsed.project) {
-      window.localStorage.removeItem(getProjectCacheKey(projectId));
-      return null;
-    }
-    if (parsed.ownerId !== getCachedCurrentUserIdSync()) return null;
-    return {
-      ownerId: parsed.ownerId,
-      cachedAt: parsed.cachedAt,
-      project: parsed.project as ItineraryProject,
-    };
-  } catch {
-    return null;
-  }
 }
 
 /**

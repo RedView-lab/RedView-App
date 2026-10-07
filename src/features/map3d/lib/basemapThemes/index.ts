@@ -1,6 +1,6 @@
 import { applyBasemapPalette } from './engine';
 import { TOPO_DARK_PALETTE, TOPO_LIGHT_PALETTE } from './palettes';
-import type { BasemapPalette, BasemapTone } from './types';
+import type { BasemapPalette } from './types';
 import {
   REDVIEW_TOPO_DARK_STYLE_URL,
   REDVIEW_TOPO_LIGHT_STYLE_URL,
@@ -12,7 +12,7 @@ export {
   REDVIEW_TOPO_LIGHT_STYLE_URL,
   isRedviewThemedStyleUrl,
 };
-export type { BasemapPalette, BasemapTone };
+;
 
 interface BasemapTheme {
   /** Real Mapbox style the theme recolours (fetched through the Styles API). */

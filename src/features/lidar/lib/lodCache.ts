@@ -53,7 +53,7 @@ export function lodCacheKey(lazFileName: string): string {
 }
 
 /** Version 1 cache of the same tile and colours (see `upgradeLegacyLodTile`). */
-export function legacyLodCacheKey(lazFileName: string): string {
+function legacyLodCacheKey(lazFileName: string): string {
   return lazFileName.replace(/(\.copc)?\.laz$/, `.lod_v1${colourRevisionSuffix(lazFileName)}`);
 }
 

@@ -2,7 +2,7 @@ export {
   buildCyclingConfig,
   buildCyclingRiderSpec,
   buildCyclingRouteInput,
-  buildPredictionConfigFromRhythm,
+  
   buildRunPredictionConfigFromRhythm,
   buildRouteGpxFile,
   hasUsableRouteElevation,
@@ -24,7 +24,7 @@ export {
   deserializeLegacyFitUploads,
   buildFitUploadsSignature,
 } from './persisted-fit-files';
-export { poiFeaturesToTimelineItems, FEATURE_TO_PANEL_POI, isAutoHotelOption } from './poi-to-timeline';
+export { poiFeaturesToTimelineItems, FEATURE_TO_PANEL_POI,  } from './poi-to-timeline';
 export {
   buildPoiAutoSortSignature,
   buildPoiSearchSignature,
@@ -35,5 +35,5 @@ export {
   toPoiAutoSortPickRefs,
   upsertPoiTimelineRow,
 } from './poiAutoSort';
-export type { PoiAutoSortRun } from './poiAutoSort';
+;
 export { buildPoiRouteSignature, resetPoisForRouteChange } from './poiRouteReset';

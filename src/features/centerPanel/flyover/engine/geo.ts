@@ -5,7 +5,7 @@
  */
 
 /** Rayon terrestre utilisé par Mapbox pour l'échelle Mercator. */
-export const EARTH_RADIUS_M = 6_371_008.8;
+const EARTH_RADIUS_M = 6_371_008.8;
 export const EARTH_CIRCUMFERENCE_M = 2 * Math.PI * EARTH_RADIUS_M;
 
 const DEG = Math.PI / 180;
@@ -30,7 +30,7 @@ export function latFromMercatorY(y: number): number {
 }
 
 /** Mètres par unité Mercator à une latitude (inverse de `mercatorZfromAltitude` de Mapbox). */
-export function metersPerMercatorUnit(lat: number): number {
+function metersPerMercatorUnit(lat: number): number {
   return EARTH_CIRCUMFERENCE_M * Math.cos(lat * DEG);
 }
 
@@ -44,11 +44,6 @@ export function haversineM(lat1: number, lon1: number, lat2: number, lon2: numbe
   const dLon = (lon2 - lon1) * DEG;
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * DEG) * Math.cos(lat2 * DEG) * Math.sin(dLon / 2) ** 2;
   return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
-}
-
-/** Cap (radians, horaire depuis le nord) d'un déplacement Mercator. */
-export function bearingFromMercatorDelta(dx: number, dy: number): number {
-  return Math.atan2(dx, -dy);
 }
 
 /** Ramène un angle (radians) dans ]-π, π]. */

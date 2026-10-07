@@ -75,10 +75,10 @@ const HIT_TOLERANCE_PX = 3;
 const FALLBACK_HALF_EXTENT_PX = 11;
 const POI_CURSOR_OWNER = 'poi-hover';
 export const POI_GPU_SOURCE_ID = 'rv-poi-gpu-source';
-export const POI_GPU_LAYER_ID = 'rv-poi-gpu-symbols';
-export const POI_GPU_HOVER_LAYER_ID = 'rv-poi-gpu-hover';
+const POI_GPU_LAYER_ID = 'rv-poi-gpu-symbols';
+const POI_GPU_HOVER_LAYER_ID = 'rv-poi-gpu-hover';
 
-export function getMarkerKey(feature: PoiFeature): string {
+function getMarkerKey(feature: PoiFeature): string {
   return `${feature.category}:${feature.id}`;
 }
 

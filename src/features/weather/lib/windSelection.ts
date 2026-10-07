@@ -12,7 +12,7 @@ export function snapWindMinutes(totalMinutes: number): number {
   return Math.floor(clamped / WIND_TIME_STEP_MINUTES) * WIND_TIME_STEP_MINUTES;
 }
 
-export function minutesToWindTime(totalMinutes: number): string {
+function minutesToWindTime(totalMinutes: number): string {
   const snapped = snapWindMinutes(totalMinutes);
   const hours = String(Math.floor(snapped / 60)).padStart(2, '0');
   const minutes = String(snapped % 60).padStart(2, '0');

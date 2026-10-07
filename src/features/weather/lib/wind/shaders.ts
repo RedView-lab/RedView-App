@@ -2,7 +2,7 @@ import type { ParticleProgram, SavedGLState } from './types';
 
 // ── GLSL Vertex Shader ─────────────────────────────────────────────────
 
-export const VERTEX_SHADER = `
+const VERTEX_SHADER = `
 precision highp float;
 
 attribute vec3 a_position;
@@ -22,7 +22,7 @@ void main() {
 
 // ── GLSL Fragment Shader ───────────────────────────────────────────────
 
-export const FRAGMENT_SHADER = `
+const FRAGMENT_SHADER = `
 precision mediump float;
 
 varying vec4 v_color;

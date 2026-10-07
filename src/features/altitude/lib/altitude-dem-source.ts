@@ -25,7 +25,7 @@ import type { Map as MapboxMap } from 'mapbox-gl';
  */
 
 /** Mapbox Terrain-RGB: elevation = -10000 + (R·65536 + G·256 + B) · 0.1. */
-export const ALTITUDE_DEM_ENCODING = 'mapbox' as const;
+const ALTITUDE_DEM_ENCODING = 'mapbox' as const;
 
 /** How long a tile the terrain is not loading may wait before the fallbacks. */
 const UNREQUESTED_TILE_GRACE_MS = 400;

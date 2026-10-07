@@ -18,15 +18,14 @@ import {
 export const SUNLIGHT_MAP_SOURCE_ID = 'sunlight-map-image';
 export const SUNLIGHT_MAP_LAYER_ID = 'sunlight-map-image';
 
-export const SAMPLE_DEBOUNCE_MS = 120;
 export const COMPUTE_DEBOUNCE_MS = 40;
 
-export const GRID_MIN_W = 384;
-export const GRID_MIN_H = 288;
-export const GRID_MAX_W = 1024;
-export const GRID_MAX_H = 768;
-export const DEM_MIN_SAMPLE_ZOOM = 4;
-export const DEM_MAX_SAMPLE_ZOOM = 13;
+const GRID_MIN_W = 384;
+const GRID_MIN_H = 288;
+const GRID_MAX_W = 1024;
+const GRID_MAX_H = 768;
+const DEM_MIN_SAMPLE_ZOOM = 4;
+const DEM_MAX_SAMPLE_ZOOM = 13;
 export const BOUNDS_OVERSHOOT = 0.10;
 export const BLOB_REVOKE_DELAY_MS = 1500;
 
@@ -45,14 +44,14 @@ export const PARTIAL_SAMPLE_RETRY_DELAY_MS = 1200;
 export const MAX_PARTIAL_SAMPLE_RETRIES = 3;
 
 export type BoundsTuple = [number, number, number, number];
-export type ComputeQuality = 'preview' | 'full';
+type ComputeQuality = 'preview' | 'full';
 
 /**
  * Analysis-zone restriction for the sunshine overlays: the DEM grid is
  * sampled over `bounds` (the polygon bbox + adaptive overshoot for shadows
  * cast from outside the zone) and the output PNG is alpha-masked to `ring`.
  */
-export interface SunlightAnalysisZone {
+interface SunlightAnalysisZone {
   /** Stable key — changes force a full re-sample. */
   key: string;
   /** [west, south, east, north] polygon bbox. */
@@ -112,7 +111,7 @@ export interface SmComputeAck {
   totalSteps: number;
 }
 
-export interface SmComputeProgress {
+interface SmComputeProgress {
   id: number;
   type: 'sm-progress';
   stepsDone: number;
@@ -132,7 +131,7 @@ export interface SmComputeEmpty {
   type: 'sm-compute-empty';
 }
 
-export interface SmResetAck {
+interface SmResetAck {
   id: number;
   type: 'sm-reset-ok';
 }

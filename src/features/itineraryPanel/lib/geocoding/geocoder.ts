@@ -91,7 +91,7 @@ const FORWARD_CACHE_MAX = 64;
 const RETRY_MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 350;
 
-export class GeocoderError extends Error {
+class GeocoderError extends Error {
   readonly status: number;
   readonly retryable: boolean;
   constructor(message: string, status: number, retryable: boolean) {

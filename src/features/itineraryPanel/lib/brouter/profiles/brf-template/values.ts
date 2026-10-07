@@ -462,7 +462,7 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
  * « tranquillité » de fond et de grimpe compris (ce dernier atténué : les
  * montées en mode grimpe coûtent moins cher).
  */
-export function searchCostNetwork(values: BrfProfileValues): number {
+function searchCostNetwork(values: BrfProfileValues): number {
   const tranquil =
     (values.considerForest ? values.forestReliefByClass[0] : 1) *
     (values.considerRiver ? values.riverReliefByClass[0] : 1);

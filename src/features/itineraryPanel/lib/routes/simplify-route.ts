@@ -2,25 +2,14 @@ import type { GpxQualityMode, GpxQualityPreset, Itinerary } from '../../types';
 
 type RoutePoint = NonNullable<Itinerary['gpxRoute']>['points'][number];
 
-export interface GpxQualityStats {
-  quality: GpxQualityMode;
-  originalPointCount: number;
-  renderedPointCount: number;
-  targetPointCount: number;
-  distanceKm: number;
-  renderedPointsPerKm: number;
-  targetPointsPerKm: number;
-  reductionPercent: number;
-}
-
-export const GPX_QUALITY_PRESET_POINTS_PER_KM: Record<GpxQualityPreset, number> = {
+const GPX_QUALITY_PRESET_POINTS_PER_KM: Record<GpxQualityPreset, number> = {
   default: 12,
   balanced: 28,
   max: 60,
 };
 
-export const GPX_QUALITY_EXPERT_MIN_POINTS_PER_KM = 5;
-export const GPX_QUALITY_EXPERT_MAX_POINTS_PER_KM = 160;
+const GPX_QUALITY_EXPERT_MIN_POINTS_PER_KM = 5;
+const GPX_QUALITY_EXPERT_MAX_POINTS_PER_KM = 160;
 
 const EARTH_RADIUS_M = 6_371_008.8;
 const MIN_SEGMENT_LENGTH_FOR_TURN_ANCHOR_M = 6;
@@ -103,10 +92,6 @@ function computeRouteDistanceM(points: RoutePoint[]): number {
     distanceM += haversineM(points[index - 1]!, points[index]!);
   }
   return distanceM;
-}
-
-function roundDistanceKm(distanceM: number): number {
-  return Math.round((distanceM / 1000) * 10) / 10;
 }
 
 function scoreRouteAnchors(points: RoutePoint[]): Array<{ index: number; score: number }> {
@@ -346,7 +331,7 @@ function createQualityCacheKey(quality: GpxQualityMode, pointsPerKm: number, tar
   return `${quality}:${pointsPerKm}:${targetPointCount}`;
 }
 
-export function resolveGpxQualityPointsPerKm(
+function resolveGpxQualityPointsPerKm(
   quality: GpxQualityMode,
   customPointsPerKm?: number | null,
 ): number {
@@ -378,33 +363,6 @@ export function computeGpxQualityTargetPointCount(
       Math.round(Math.max(routeDistanceKm, 0.25) * pointsPerKm),
     ),
   );
-}
-
-export function buildGpxQualityStats(
-  currentPoints: RoutePoint[],
-  originalPoints: RoutePoint[],
-  quality: GpxQualityMode,
-  customPointsPerKm?: number | null,
-): GpxQualityStats {
-  const distanceM = computeRouteDistanceM(originalPoints);
-  const distanceKm = roundDistanceKm(distanceM);
-  const targetPointsPerKm = resolveGpxQualityPointsPerKm(quality, customPointsPerKm);
-  const targetPointCount = computeGpxQualityTargetPointCount(originalPoints, quality, customPointsPerKm);
-  const renderedPointsPerKm = distanceKm > 0 ? Math.round((currentPoints.length / distanceKm) * 10) / 10 : currentPoints.length;
-  const reductionPercent = originalPoints.length > 0
-    ? Math.round((1 - currentPoints.length / originalPoints.length) * 100)
-    : 0;
-
-  return {
-    quality,
-    originalPointCount: originalPoints.length,
-    renderedPointCount: currentPoints.length,
-    targetPointCount,
-    distanceKm,
-    renderedPointsPerKm,
-    targetPointsPerKm,
-    reductionPercent: clamp(reductionPercent, 0, 100),
-  };
 }
 
 export function applyGpxQuality(
@@ -472,13 +430,6 @@ function rebuildRoutePoints(points: RoutePoint[], indices: number[]): RoutePoint
       distanceM: cumulativeDistanceM,
     };
   });
-}
-
-export function simplifyRouteToMaxPoints(
-  points: RoutePoint[],
-  maxPoints: number,
-): RoutePoint[] {
-  return simplifyRouteWithAnchors(points, maxPoints);
 }
 
 export function simplifyPointsByQuality(

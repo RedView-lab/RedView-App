@@ -24,4 +24,3 @@ export type Measurement = MeasurementBase & (
   | { kind: 'pin'; at: ScenePick }
 );
 
-export type MeasurementKind = Measurement['kind'];

@@ -1,76 +1,9 @@
 import type { GeoJSONSource, Map as MapboxMap } from 'mapbox-gl';
 
-import {
-  ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID,
-  ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID,
-  ANALYSIS_FLYOVER_PROGRESS_SOURCE_ID,
-  ANALYSIS_HOVER_POINT_LAYER_ID,
-  ANALYSIS_HOVER_SOURCE_ID,
-  ANALYSIS_SELECTION_LINE_LAYER_ID,
-  ANALYSIS_SELECTION_SOURCE_ID,
-  FORBIDDEN_ZONE_DRAFT_FILL_LAYER_ID,
-  FORBIDDEN_ZONE_DRAFT_LINE_LAYER_ID,
-  FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID,
-  FORBIDDEN_ZONE_DRAFT_SOURCE_ID,
-  FORBIDDEN_ZONE_DRAFT_VERTEX_HALO_LAYER_ID,
-  FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID,
-  FORBIDDEN_ZONE_DRAFT_VERTEX_LAYER_ID,
-  FORBIDDEN_ZONE_FILL_LAYER_ID,
-  FORBIDDEN_ZONE_LINE_LAYER_ID,
-  FORBIDDEN_ZONE_SOURCE_ID,
-  ROUTE_AUDIT_GLOW_LAYER_ID,
-  ROUTE_AUDIT_LINE_LAYER_ID,
-  ROUTE_AUDIT_SOURCE_ID,
-  ROUTE_HOVER_PREVIEW_HALO_LAYER_ID,
-  ROUTE_HOVER_PREVIEW_POINT_LAYER_ID,
-  ROUTE_HOVER_PREVIEW_SOURCE_ID,
-  canMutateStyle,
-} from './constants';
+import { ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID, ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID, ANALYSIS_FLYOVER_PROGRESS_SOURCE_ID, ANALYSIS_SELECTION_LINE_LAYER_ID, ANALYSIS_SELECTION_SOURCE_ID, FORBIDDEN_ZONE_DRAFT_FILL_LAYER_ID, FORBIDDEN_ZONE_DRAFT_LINE_LAYER_ID, FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID, FORBIDDEN_ZONE_DRAFT_SOURCE_ID, FORBIDDEN_ZONE_DRAFT_VERTEX_HALO_LAYER_ID, FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID, FORBIDDEN_ZONE_DRAFT_VERTEX_LAYER_ID, FORBIDDEN_ZONE_FILL_LAYER_ID, FORBIDDEN_ZONE_LINE_LAYER_ID, FORBIDDEN_ZONE_SOURCE_ID, ROUTE_AUDIT_GLOW_LAYER_ID, ROUTE_AUDIT_LINE_LAYER_ID, ROUTE_AUDIT_SOURCE_ID, ROUTE_HOVER_PREVIEW_HALO_LAYER_ID, ROUTE_HOVER_PREVIEW_POINT_LAYER_ID, ROUTE_HOVER_PREVIEW_SOURCE_ID, canMutateStyle } from './constants';
 import { LINE_CLEARANCE_M, ROUTE_SELECTION_CLEARANCE_M } from './routeElevation';
-import {
-  buildAnalysisFlyoverProgressGeoJson,
-  buildAnalysisHoverGeoJson,
-  buildAnalysisSelectionGeoJson,
-  buildForbiddenZoneDraftGeoJson,
-  buildForbiddenZoneGeoJson,
-  buildRouteAuditGeoJson,
-  buildRouteHoverPreviewGeoJson,
-} from './geojson';
+import { buildAnalysisFlyoverProgressGeoJson, buildAnalysisSelectionGeoJson, buildForbiddenZoneDraftGeoJson, buildForbiddenZoneGeoJson, buildRouteAuditGeoJson, buildRouteHoverPreviewGeoJson } from './geojson';
 import { getMountedSourceRequiresLineMetrics } from './itineraryLayers';
-
-export function ensureAnalysisHoverLayers(map: MapboxMap): GeoJSONSource | null {
-  if (!canMutateStyle(map)) return null;
-  const existing = map.getSource(ANALYSIS_HOVER_SOURCE_ID) as GeoJSONSource | undefined;
-  if (existing) return existing;
-
-  map.addSource(ANALYSIS_HOVER_SOURCE_ID, {
-    type: 'geojson',
-    data: buildAnalysisHoverGeoJson(null),
-  });
-
-
-
-  map.addLayer({
-    id: ANALYSIS_HOVER_POINT_LAYER_ID,
-    type: 'circle',
-    source: ANALYSIS_HOVER_SOURCE_ID,
-    slot: 'top',
-    layout: { visibility: 'none' },
-    paint: {
-      'circle-radius': 8,
-      'circle-color': '#ffffff',
-      'circle-stroke-width': 3,
-      'circle-stroke-color': ['coalesce', ['get', 'color'], '#ff4d4f'],
-      'circle-opacity': 1,
-      'circle-stroke-opacity': 0.96,
-      'circle-pitch-alignment': 'viewport',
-      'circle-pitch-scale': 'viewport',
-      'circle-emissive-strength': 1.2,
-    },
-  });
-
-  return map.getSource(ANALYSIS_HOVER_SOURCE_ID) as GeoJSONSource | null;
-}
 
 export function ensureRouteHoverPreviewLayers(map: MapboxMap): GeoJSONSource | null {
   if (!canMutateStyle(map)) return null;

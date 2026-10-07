@@ -16,7 +16,7 @@ export interface ScreenPoint {
 export type LngLatPair = [number, number];
 
 /** Taille minimale (px) d'un rectangle de zone : en dessous, c'est un clic. */
-export const MIN_ZONE_DRAG_PX = 12;
+const MIN_ZONE_DRAG_PX = 12;
 /** Points par côté du rectangle (4 côtés : 4 × 8 = 32 sommets). */
 const POINTS_PER_SIDE = 8;
 
@@ -25,7 +25,7 @@ export function isZoneDrag(start: ScreenPoint, end: ScreenPoint): boolean {
 }
 
 /** Points du contour d'un rectangle écran, sens horaire depuis le coin haut-gauche. */
-export function screenRectOutline(start: ScreenPoint, end: ScreenPoint, pointsPerSide = POINTS_PER_SIDE): ScreenPoint[] {
+function screenRectOutline(start: ScreenPoint, end: ScreenPoint, pointsPerSide = POINTS_PER_SIDE): ScreenPoint[] {
   const left = Math.min(start.x, end.x);
   const right = Math.max(start.x, end.x);
   const top = Math.min(start.y, end.y);
@@ -95,17 +95,3 @@ export function zoneFromPolygon(points: readonly LngLatPair[]): ProjectCommentZo
   return { ring: Array.from({ length: MAX_COMMENT_ZONE_VERTICES }, (_, index) => ring[Math.floor(index * step)]) };
 }
 
-/** Emprise d'une zone : [[ouest, sud], [est, nord]]. */
-export function zoneBounds(zone: ProjectCommentZone): [LngLatPair, LngLatPair] {
-  let west = Infinity;
-  let south = Infinity;
-  let east = -Infinity;
-  let north = -Infinity;
-  for (const [lng, lat] of zone.ring) {
-    west = Math.min(west, lng);
-    east = Math.max(east, lng);
-    south = Math.min(south, lat);
-    north = Math.max(north, lat);
-  }
-  return [[west, south], [east, north]];
-}

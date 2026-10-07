@@ -14,7 +14,7 @@ interface NavigatorWithUserAgentData extends Navigator {
 let cachedIsMacLike: boolean | null = null;
 
 /** `true` sur macOS / iOS (y compris iPadOS qui se déclare « MacIntel »). */
-export function isMacLikePlatform(): boolean {
+function isMacLikePlatform(): boolean {
   if (cachedIsMacLike !== null) return cachedIsMacLike;
   if (typeof navigator === 'undefined') return false;
 

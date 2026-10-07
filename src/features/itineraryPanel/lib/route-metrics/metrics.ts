@@ -1,47 +1,8 @@
 import type { BrouterRoute } from '../brouter';
-import {
-  buildElevationSamplesFromPoints,
-  computeAscentDescent,
-  computeAscentDescentFromElevations,
-  haversineM,
-  smoothElevationValues,
-  smoothElevations,
-} from './elevation';
+import { buildElevationSamplesFromPoints, computeAscentDescentFromElevations, haversineM, smoothElevationValues } from './elevation';
 import { parseMessages } from './parser';
 import { isOffroadSurface, isPavedSurface } from './surface';
-import type {
-  ParsedRow,
-  RouteElevationMetrics,
-  RouteMetrics,
-  RoutePointInput,
-  RouteSurfaceMetrics,
-} from './types';
-
-function aggregate(rows: ParsedRow[], totalDistFallback: number): RouteMetrics {
-  const smoothed = smoothElevations(rows, 5);
-  const { ascent, descent } = computeAscentDescent(smoothed, 1);
-
-  let totalDist = 0;
-  let tarmacDist = 0;
-  let offroadDist = 0;
-  for (let i = 1; i < rows.length; i++) {
-    const distance = rows[i].segDistM;
-    totalDist += distance;
-    if (isPavedSurface(rows[i].surface)) tarmacDist += distance;
-    else if (isOffroadSurface(rows[i].surface)) offroadDist += distance;
-  }
-  if (totalDist === 0) totalDist = totalDistFallback;
-
-  const classifiedDist = tarmacDist + offroadDist;
-  return {
-    distanceM: totalDist,
-    ascentM: ascent,
-    descentM: descent,
-    avgSlopePercent: totalDist > 0 ? (ascent / totalDist) * 100 : 0,
-    tarmacPercent: classifiedDist > 0 ? (tarmacDist / classifiedDist) * 100 : 0,
-    offroadPercent: classifiedDist > 0 ? (offroadDist / classifiedDist) * 100 : 0,
-  };
-}
+import type { RouteElevationMetrics, RoutePointInput, RouteSurfaceMetrics } from './types';
 
 export function computeRouteElevationMetrics(
   points: RoutePointInput[],
@@ -61,12 +22,6 @@ export function computeRouteElevationMetrics(
     descentM: Math.round(descent),
     avgSlopePercent: totalDistanceM > 0 ? (ascent / totalDistanceM) * 100 : 0,
   };
-}
-
-export function computeRouteMetricsFromBrouter(route: BrouterRoute): RouteMetrics | null {
-  const rows = parseMessages(route);
-  if (rows.length < 2) return null;
-  return aggregate(rows, route.distanceM);
 }
 
 export function computeRouteSurfaceMetricsFromBrouter(
@@ -132,22 +87,3 @@ export function computeRouteSurfaceMetricsFromPoints(
   };
 }
 
-export function refineMetricsWithTerrain(
-  route: BrouterRoute,
-  queryEle: (lng: number, lat: number) => number | null | undefined,
-): RouteMetrics | null {
-  const rows = parseMessages(route);
-  if (rows.length < 2) return null;
-
-  let coverage = 0;
-  for (const row of rows) {
-    const elevation = queryEle(row.lon, row.lat);
-    if (elevation != null && Number.isFinite(elevation)) {
-      row.ele = elevation;
-      coverage++;
-    }
-  }
-  if (coverage / rows.length < 0.6) return null;
-
-  return aggregate(rows, route.distanceM);
-}

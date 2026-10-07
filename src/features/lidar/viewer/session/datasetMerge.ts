@@ -34,7 +34,7 @@ export function unionBounds(boundsList: PointCloudBounds[]): PointCloudBounds {
   }), first);
 }
 
-export function fillMissingHeightSamples(heightGrid: Float32Array, gridWidth: number, gridHeight: number): void {
+function fillMissingHeightSamples(heightGrid: Float32Array, gridWidth: number, gridHeight: number): void {
   const queue: number[] = [];
 
   for (let index = 0; index < heightGrid.length; index += 1) {
@@ -69,7 +69,7 @@ export function fillMissingHeightSamples(heightGrid: Float32Array, gridWidth: nu
  * merged centre altitude. Each merged cell is bilinearly resampled from the
  * tile covering it, so tiles whose grid steps differ slightly still merge.
  */
-export function mergeHeightGrid(tiles: LoadedViewerTile[], mergedBounds: PointCloudBounds): {
+function mergeHeightGrid(tiles: LoadedViewerTile[], mergedBounds: PointCloudBounds): {
   heightGrid: Float32Array;
   gridWidth: number;
   gridHeight: number;

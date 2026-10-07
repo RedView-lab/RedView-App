@@ -129,7 +129,7 @@ export function subscribeMapEnvironment(listener: () => void): () => void {
   return () => { listeners.delete(listener); };
 }
 
-export function buildMapEnvironmentLights(
+function buildMapEnvironmentLights(
   environment: MapEnvironment,
   sun: SunLightOverride | null,
 ): LightsSpecification[] {
@@ -158,7 +158,7 @@ export function buildMapEnvironmentLights(
   ];
 }
 
-export function getMapEnvironmentFog(environment: MapEnvironment): FogSpecification {
+function getMapEnvironmentFog(environment: MapEnvironment): FogSpecification {
   return ENVIRONMENTS[environment].fog;
 }
 

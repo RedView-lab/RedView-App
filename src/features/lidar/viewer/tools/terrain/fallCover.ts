@@ -11,7 +11,7 @@ import type { SlideCover } from './fallSlide';
 import type { TerrainField } from './terrainField';
 
 /** Cell of the cover grid, m. */
-export const COVER_CELL_M = 2;
+const COVER_CELL_M = 2;
 /** A return of the high-vegetation class this high above the ground is a tree (m). */
 const TREE_MIN_HEIGHT_M = 3;
 const BUILDING_MIN_HEIGHT_M = 2;

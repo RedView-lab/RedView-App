@@ -29,7 +29,7 @@ import type { ItineraryProject, ProjectRow } from './types';
  * `$permissions` dit si la ligne est vraiment à l'utilisateur ou partagée
  * avec lui (access.ts).
  */
-export const PROJECT_META_FIELDS = [
+const PROJECT_META_FIELDS = [
   '$id',
   '$permissions',
   'name',

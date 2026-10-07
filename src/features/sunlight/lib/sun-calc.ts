@@ -335,7 +335,7 @@ export function getSunTimes(date: Date, lat: number, lon: number): SunTimes {
   return { sunrise: fromJulian(Jrise), sunset: fromJulian(Jset) };
 }
 
-export function zonedLocalDateTimeToDate(
+function zonedLocalDateTimeToDate(
   dateIso: string,
   time: string,
   timeZone?: string | null,
@@ -350,7 +350,7 @@ export function zonedLocalDateTimeToDate(
   }, timeZone);
 }
 
-export function zonedLocalDateMinutesToDate(
+function zonedLocalDateMinutesToDate(
   dateIso: string,
   minutesSinceMidnight: number,
   timeZone?: string | null,

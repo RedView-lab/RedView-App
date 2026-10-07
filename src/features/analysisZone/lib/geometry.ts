@@ -16,7 +16,7 @@ export interface AnalysisZone {
 }
 
 /** [west, south, east, north] in degrees. */
-export type BoundsTuple = [number, number, number, number];
+type BoundsTuple = [number, number, number, number];
 
 const LNG_MIN = -180;
 const LNG_MAX = 180;
@@ -38,7 +38,7 @@ export function isValidAnalysisZone(zone: AnalysisZone | null | undefined): zone
 }
 
 /** Ring of [lng, lat] pairs, closed (first point repeated at the end). */
-export function analysisZoneRing(zone: AnalysisZone): [number, number][] {
+function analysisZoneRing(zone: AnalysisZone): [number, number][] {
   const ring = zone.points.map((point) => [point.lon, point.lat] as [number, number]);
   const first = ring[0];
   const last = ring[ring.length - 1];

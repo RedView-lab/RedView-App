@@ -53,8 +53,8 @@ const MAX_AUTHOR_NAME_CHARS = 200;
 const MAX_DATE_CHARS = 64;
 const MAX_REACTION_KEY_CHARS = 300;
 /** Plafonds anti-abus (les limites d'un fichier `.redview` sont plus basses : comments/lib/limits.ts). */
-export const MAX_SHARED_COMMENT_THREADS = 2_000;
-export const MAX_SHARED_COMMENT_MESSAGES = 500;
+const MAX_SHARED_COMMENT_THREADS = 2_000;
+const MAX_SHARED_COMMENT_MESSAGES = 500;
 
 type CommentObjectKind = 'thread' | 'message';
 

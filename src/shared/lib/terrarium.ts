@@ -5,7 +5,7 @@
 // profil d'altitude des tracés hors de France (l'IGN couvre la France).
 // ============================================================================
 
-export const TERRARIUM_BASE = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium';
+const TERRARIUM_BASE = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium';
 export const TERRARIUM_TILE_SIZE = 256;
 
 export function lonToTileX(lon: number, zoom: number): number {
@@ -23,7 +23,7 @@ export function terrariumSupported(): boolean {
 }
 
 /** Altitudes d'une tuile PNG Terrarium, 256 × 256 en ligne. */
-export async function decodeTerrariumTile(blob: Blob): Promise<Float32Array> {
+async function decodeTerrariumTile(blob: Blob): Promise<Float32Array> {
   const size = TERRARIUM_TILE_SIZE;
   const bitmap = await createImageBitmap(blob, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
   const canvas = new OffscreenCanvas(size, size);

@@ -70,24 +70,6 @@ export function getNzTileBounds(coord: NzTileCoord): {
   };
 }
 
-/** Closed WGS84 ring (5 vertices) describing the tile footprint. */
-export function nzTileCoordToWgs84Polygon(
-  coord: NzTileCoord
-): [number, number][] {
-  const { minE, minN, maxE, maxN } = getNzTileBounds(coord);
-  const sw = nzToWgs84(minE, minN);
-  const se = nzToWgs84(maxE, minN);
-  const ne = nzToWgs84(maxE, maxN);
-  const nw = nzToWgs84(minE, maxN);
-  return [sw, se, ne, nw, sw];
-}
-
-/** Centre of the tile in WGS84 [lon, lat]. */
-export function nzTileCenterWgs84(coord: NzTileCoord): [number, number] {
-  const { minE, minN } = getNzTileBounds(coord);
-  return nzToWgs84(minE + 500, minN + 500);
-}
-
 /** Stable string key for caches / dedup. */
 export function nzTileKey(coord: NzTileCoord): string {
   return `${coord.eastKm}-${coord.northKm}`;

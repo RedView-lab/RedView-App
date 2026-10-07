@@ -29,7 +29,7 @@ export interface FlyoverVideoRequest {
 
 export type FlyoverVideoPhase = 'preparing' | 'rendering' | 'finalizing';
 
-export interface FlyoverVideoProgress {
+interface FlyoverVideoProgress {
   phase: FlyoverVideoPhase;
   frame: number;
   totalFrames: number;
@@ -55,7 +55,7 @@ export interface FlyoverVideoCallbacks {
   onProgress?: (progress: FlyoverVideoProgress) => void;
 }
 
-export class FlyoverVideoUnsupportedError extends Error {
+class FlyoverVideoUnsupportedError extends Error {
   constructor() {
     super("Ce navigateur ne sait pas encoder de vidéo H.264 (WebCodecs). Utilisez Chrome, Edge ou Safari récent.");
     this.name = 'FlyoverVideoUnsupportedError';

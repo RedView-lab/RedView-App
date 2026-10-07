@@ -147,7 +147,7 @@ export function buildImportedRouteMetrics(
   };
 }
 
-export function sampleImportedTimelineWaypoints(
+function sampleImportedTimelineWaypoints(
   points: NonNullable<Itinerary['gpxRoute']>['points'],
 ): TimelineItem[] {
   if (points.length < 4) return [];

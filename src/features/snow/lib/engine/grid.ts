@@ -93,7 +93,7 @@ export function resampleNodeGrid(src: Float32Array, sw: number, sh: number, w: n
 }
 
 /** Replace non-finite cells by the mean of the finite ones (a DTM hole must not poison the filters). */
-export function fillNonFinite(src: Float32Array): Float32Array {
+function fillNonFinite(src: Float32Array): Float32Array {
   let sum = 0;
   let n = 0;
   for (let i = 0; i < src.length; i++) {

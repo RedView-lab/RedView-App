@@ -1,31 +1,7 @@
 import type { PoiCategory } from '../types';
 import type { ProjectedPoi } from './refinePoiProjection';
-export const CLUSTER_BONUS_PER_EXTRA_CATEGORY = 0.18;
-export const CLUSTER_BONUS_MAX = 1.6;
-
-export const DEFAULT_MIN_SPACING_SEC: Partial<Record<PoiCategory, number>> = {
-  drinking_water: 45 * 60,
-  bakery: 2 * 3600,
-  convenience: 2 * 3600,
-  supermarket: 2 * 3600,
-  restaurant: 4 * 3600,
-  fast_food: 4 * 3600,
-  cafe: 4 * 3600,
-  bar: 4 * 3600,
-  hotel: 12 * 3600,
-  alpine_hut: 12 * 3600,
-  camp_site: 12 * 3600,
-  shelter: 6 * 3600,
-};
-
-export const NON_CADENCED_CATEGORIES: ReadonlySet<PoiCategory> = new Set<PoiCategory>([
-  'toilets',
-  'bicycle',
-  'bicycle_repair',
-  'pharmacy',
-  'hospital',
-  'fuel',
-]);
+const CLUSTER_BONUS_PER_EXTRA_CATEGORY = 0.18;
+const CLUSTER_BONUS_MAX = 1.6;
 
 export interface Cluster {
   id: number;

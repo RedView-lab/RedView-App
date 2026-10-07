@@ -5,6 +5,6 @@ export {
 } from './geocoder';
 export type {
   GeocodeSuggestion,
-  GeocodeOptions,
-  ReverseGeocodeOptions,
+  
+  
 } from './geocoder';

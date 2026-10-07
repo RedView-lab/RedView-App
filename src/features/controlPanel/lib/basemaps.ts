@@ -4,9 +4,9 @@ import {
 } from '@/features/map3d/lib/basemapThemes/urls';
 import type { Basemap, BasemapId } from '../types';
 
-export type BasemapVisualFamily = 'mapbox-standard-v3' | 'mapbox-classic-v12';
-export type BasemapTerrainContract = 'unified-dem-v1';
-export type BasemapLightPreset = 'dawn' | 'day' | 'dusk' | 'night';
+type BasemapVisualFamily = 'mapbox-standard-v3' | 'mapbox-classic-v12';
+type BasemapTerrainContract = 'unified-dem-v1';
+type BasemapLightPreset = 'dawn' | 'day' | 'dusk' | 'night';
 
 export interface BasemapRenderConfig {
   id: BasemapId;
@@ -23,7 +23,7 @@ type BasemapOption = BasemapRenderConfig;
 // map usage it already has, without introducing custom Styles API churn. The
 // two "Standard" entries are RedView themes: Mapbox Outdoors v12 recoloured
 // client-side (see `features/map3d/lib/basemapThemes`).
-export const MAPBOX_BASEMAPS: readonly BasemapOption[] = [
+const MAPBOX_BASEMAPS: readonly BasemapOption[] = [
   {
     id: 'standard',
     label: 'Standard (clair)',

@@ -207,8 +207,8 @@ export function flyToLocation(
  * [POI_FOCUS_MIN_ZOOM, POI_FOCUS_MAX_ZOOM] — jamais plus proche que
  * POI_FOCUS_MAX_ZOOM, pour garder le contexte autour du point.
  */
-export const POI_FOCUS_MIN_ZOOM = 10.5;
-export const POI_FOCUS_MAX_ZOOM = 12;
+const POI_FOCUS_MIN_ZOOM = 10.5;
+const POI_FOCUS_MAX_ZOOM = 12;
 
 /**
  * Centre la vue sur un POI sans plonger dessus : zoom borné (cf. constantes

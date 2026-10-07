@@ -11,14 +11,14 @@
  * La dépression de la Mer Morte se situe à -430 m. Une marge de sécurité à -500 m
  * couvre la totalité des surfaces émergées de la planète.
  */
-export const MIN_VALID_TERRESTRIAL_ELEVATION_M = -500;
+const MIN_VALID_TERRESTRIAL_ELEVATION_M = -500;
 
 /**
  * Altitude terrestre maximale physiquement plausible (m).
  * L'Everest culmine à 8 848 m. Une marge de sécurité à 9 000 m
  * couvre l'ensemble des sommets mondiaux.
  */
-export const MAX_VALID_TERRESTRIAL_ELEVATION_M = 9_000;
+const MAX_VALID_TERRESTRIAL_ELEVATION_M = 9_000;
 
 /**
  * Codes sentinelles fréquents dans les puces GPS, fichiers GPX/FIT corrompus
@@ -50,7 +50,7 @@ export function isValidElevation(ele: unknown): ele is number {
 /**
  * Nettoie une valeur d'altitude individuelle : retourne le nombre valide ou null.
  */
-export function sanitizeRawElevation(ele: unknown): number | null {
+function sanitizeRawElevation(ele: unknown): number | null {
   return isValidElevation(ele) ? (typeof ele === 'number' ? ele : Number(ele)) : null;
 }
 
@@ -93,8 +93,6 @@ export type ElevationPointInput = {
   elevationM?: number | null;
   distanceM?: number | null;
 };
-
-export type RoutePointWithElevation = ElevationPointInput;
 
 /**
  * Nettoie, dé-bruite et interpole une série de points de route :

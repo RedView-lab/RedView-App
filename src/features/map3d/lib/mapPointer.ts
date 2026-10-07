@@ -49,11 +49,6 @@ export function unprojectClientPoint(
   ] as PointLike);
 }
 
-/** Même conversion, à partir d'un événement souris DOM. */
-export function unprojectMouseEvent(map: MapboxMap, event: MouseEvent): LngLat {
-  return unprojectClientPoint(map, event.clientX, event.clientY);
-}
-
 /**
  * Convertit des coordonnées écran client (clientX, clientY) dans le système de
  * coordonnées interne du conteneur de canvas Mapbox (identique aux coordonnées

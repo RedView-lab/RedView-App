@@ -225,19 +225,6 @@ export function hasRouteLayer(map: MapboxMap, itineraryId: string): boolean {
   }
 }
 
-export function isAnyRouteOnMap(map: MapboxMap): boolean {
-  try {
-    const style = map.getStyle();
-    if (!style?.sources) return false;
-    for (const key of Object.keys(style.sources)) {
-      if (key.startsWith(SOURCE_PREFIX)) return true;
-    }
-  } catch {
-    /* noop */
-  }
-  return false;
-}
-
 /**
  * Mounts or updates one itinerary's trace. Returns false when the map could
  * not take it (style being replaced, map tearing down): the caller must retry,
@@ -533,7 +520,7 @@ export function upsertRouteLayer(
   return true;
 }
 
-export function raiseRouteLayer(map: MapboxMap, itineraryId: string): void {
+function raiseRouteLayer(map: MapboxMap, itineraryId: string): void {
   const {
     outline: outlineId,
     casing: casingId,

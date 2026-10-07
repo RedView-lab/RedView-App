@@ -27,12 +27,12 @@ import {
 
 export type TerrainGrid = Pick<AnalysisGrid, 'width' | 'height' | 'cell' | 'altitude' | 'slopeDeg'>;
 
-export function cauchy(x: number, p: CauchyParams): number {
+function cauchy(x: number, p: CauchyParams): number {
   return 1 / (1 + Math.pow(Math.abs((x - p.c) / p.a), 2 * p.b));
 }
 
 /** Werners' fuzzy AND of three memberships (monotone in each of them). */
-export function fuzzyAnd(slope: number, wind: number, forest: number): number {
+function fuzzyAnd(slope: number, wind: number, forest: number): number {
   const m = Math.min(slope, wind, forest);
   return (1 - m) * m + (m * (slope + wind + forest)) / 3;
 }

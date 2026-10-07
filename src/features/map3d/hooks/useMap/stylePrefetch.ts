@@ -9,7 +9,7 @@ export type MapboxStyleDefinition = Record<string, unknown>;
 
 export const prefetchedStyleCache = new Map<string, MapboxStyleDefinition>();
 
-export const STYLE_PREFETCH_TIMEOUT_MS = 6000;
+const STYLE_PREFETCH_TIMEOUT_MS = 6000;
 /** Second, unhurried attempt for a RedView theme (see `resolveStyleInput`). */
 export const THEMED_STYLE_RETRY_TIMEOUT_MS = 20000;
 
@@ -17,14 +17,14 @@ export function createEmptyBootstrapStyle(): MapboxStyleDefinition {
   return { version: 8, sources: {}, layers: [] };
 }
 
-export function getMapboxStyleApiUrl(styleUrl: string): string | null {
+function getMapboxStyleApiUrl(styleUrl: string): string | null {
   const prefix = 'mapbox://styles/';
   if (!styleUrl.startsWith(prefix)) return null;
   const stylePath = styleUrl.slice(prefix.length);
   return `https://api.mapbox.com/styles/v1/${stylePath}?access_token=${encodeURIComponent(MAPBOX_TOKEN)}`;
 }
 
-export function cloneStyleDefinition(style: MapboxStyleDefinition): MapboxStyleDefinition {
+function cloneStyleDefinition(style: MapboxStyleDefinition): MapboxStyleDefinition {
   if (typeof structuredClone === 'function') {
     return structuredClone(style) as MapboxStyleDefinition;
   }
@@ -45,7 +45,7 @@ export function shouldPrefetchMapboxStyle(styleUrl: string): boolean {
   return true;
 }
 
-export async function fetchMapboxStyleDefinition(
+async function fetchMapboxStyleDefinition(
   styleUrl: string,
   timeoutMs = STYLE_PREFETCH_TIMEOUT_MS,
 ): Promise<MapboxStyleDefinition> {

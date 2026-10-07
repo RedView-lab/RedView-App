@@ -31,7 +31,7 @@ import { buildRouteGeometrySignature } from '@/features/itineraryPanel/lib/route
 import '../styles/floating-markers.css';
 
 // Re-exported so existing consumers keep importing from the hook module.
-export type { PoiPopupState, UsePoiPopupActions } from '../lib/poi-popup';
+export type {  UsePoiPopupActions } from '../lib/poi-popup';
 
 function deduplicateFeatures(features: PoiFeature[] | null): PoiFeature[] {
   if (!features || features.length === 0) return [];

@@ -9,7 +9,7 @@ export type OpenStatus = 'open' | 'closed' | 'unknown';
 
 export type RouteSide = 'right' | 'left' | 'on';
 
-export interface AutoSortStopAnchor {
+interface AutoSortStopAnchor {
   rideElapsedSeconds: number;
   durationMin: number;
 }
@@ -69,7 +69,7 @@ export interface AutoSortWarning {
   hours: number;
 }
 
-export interface AutoSortStats {
+interface AutoSortStats {
   candidates: number;
   manual: number;
   byReason: Record<AutoSortReason, number>;

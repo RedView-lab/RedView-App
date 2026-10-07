@@ -10,17 +10,16 @@ import {
 
 export const SOURCE_ID = 'shadow-image';
 export const LAYER_ID = 'shadow-image';
-export const SAMPLE_DEBOUNCE_MS = 80;
-export const GRID_MIN_W = 768;
-export const GRID_MIN_H = 576;
-export const GRID_MAX_W = 1600;
-export const GRID_MAX_H = 1200;
-export const DEM_MIN_SAMPLE_ZOOM = 4;
-export const DEM_MAX_SAMPLE_ZOOM = 14;
+const GRID_MIN_W = 768;
+const GRID_MIN_H = 576;
+const GRID_MAX_W = 1600;
+const GRID_MAX_H = 1200;
+const DEM_MIN_SAMPLE_ZOOM = 4;
+const DEM_MAX_SAMPLE_ZOOM = 14;
 export const BOUNDS_OVERSHOOT = 0.15;
 export const BLOB_REVOKE_DELAY_MS = 1500;
 
-export type ComputeQuality = 'preview' | 'full';
+type ComputeQuality = 'preview' | 'full';
 
 export interface UseShadowImageOptions {
   enabled: boolean;
@@ -36,7 +35,7 @@ export interface UseShadowImageOptions {
   analysisZone?: ShadowAnalysisZone | null;
 }
 
-export interface ShadowAnalysisZone {
+interface ShadowAnalysisZone {
   /** Stable key — changes force a full re-sample. */
   key: string;
   /** [west, south, east, north] polygon bbox. */
@@ -75,7 +74,7 @@ export interface ComputeEmpty {
   type: 'compute-empty';
 }
 
-export interface ResetAck {
+interface ResetAck {
   id: number;
   type: 'reset-ok';
 }

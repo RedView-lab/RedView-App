@@ -51,7 +51,7 @@ const MIN_VIEW_DISTANCE = 0.05;
 /** Tile bounds are widened by this much (m) before clipping the octree cubes. */
 const TILE_BOUNDS_EPSILON = 0.01;
 
-export type SceneNodeState = 'idle' | 'loading' | 'resident' | 'failed';
+type SceneNodeState = 'idle' | 'loading' | 'resident' | 'failed';
 
 export interface SceneNode {
   id: number;

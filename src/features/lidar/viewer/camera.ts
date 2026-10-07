@@ -56,8 +56,8 @@ const ORBIT_FOV_Y = Math.PI / 4;
 const DEG = Math.PI / 180;
 /** Look-around limits: no gimbal flip at the zenith/nadir, binoculars to wide angle. */
 const LOOK_MAX_PITCH = 85 * DEG;
-export const LOOK_MIN_FOV_X = 3 * DEG;
-export const LOOK_MAX_FOV_X = 120 * DEG;
+const LOOK_MIN_FOV_X = 3 * DEG;
+const LOOK_MAX_FOV_X = 120 * DEG;
 
 /** Zoom per wheel pixel (log scale): ≈ ×1.1 per 100 px notch. */
 const WHEEL_ZOOM_PER_PX = 0.001;

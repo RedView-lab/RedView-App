@@ -69,18 +69,6 @@ export function getSwissTileBounds(coord: SwissTileCoord): {
   };
 }
 
-/** Closed WGS84 ring (5 vertices) describing the tile footprint. */
-export function swissTileCoordToWgs84Polygon(
-  coord: SwissTileCoord
-): [number, number][] {
-  const { minE, minN, maxE, maxN } = getSwissTileBounds(coord);
-  const sw = swissToWgs84(minE, minN);
-  const se = swissToWgs84(maxE, minN);
-  const ne = swissToWgs84(maxE, maxN);
-  const nw = swissToWgs84(minE, maxN);
-  return [sw, se, ne, nw, sw];
-}
-
 /** Centre of the tile in WGS84 [lon, lat]. */
 export function swissTileCenterWgs84(coord: SwissTileCoord): [number, number] {
   const { minE, minN } = getSwissTileBounds(coord);

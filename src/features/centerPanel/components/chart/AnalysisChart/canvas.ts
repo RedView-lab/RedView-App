@@ -253,7 +253,7 @@ interface SlopeBand {
  * Les tronçons arrivent déjà moyennés au niveau de détail du zoom (≥ ~6 px) :
  * la colonne ne sert qu'à absorber les rares tronçons sous le pixel.
  */
-export function buildSlopeBands(
+function buildSlopeBands(
   segments: ReadonlyArray<ChartSlopeSegment>,
   xDomain: AxisDomain,
   width: number,

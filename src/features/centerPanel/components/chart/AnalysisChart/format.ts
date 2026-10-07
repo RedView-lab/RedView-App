@@ -145,7 +145,7 @@ export function formatAxisLabel(value: number, metric: ChartMetricId): string {
   return unit ? `${txt}${unit}` : txt;
 }
 
-export function formatXTick(
+function formatXTick(
   value: number,
   xMode: AxisMode,
   density: 'full' | 'compact' | 'tight' = 'full',

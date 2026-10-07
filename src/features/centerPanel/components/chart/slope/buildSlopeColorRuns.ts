@@ -28,7 +28,7 @@ const SLOPE_DETAIL_LEVELS: ReadonlyArray<{ minLengthM: number; toleranceM: numbe
 /** Largeur minimale visée d'un tronçon à l'écran (px) : fixe le niveau de détail. */
 const MIN_SEGMENT_PX = 6;
 
-export interface SlopeRun {
+interface SlopeRun {
   startM: number;
   endM: number;
   classIndex: number;
@@ -36,13 +36,13 @@ export interface SlopeRun {
   avgPct: number;
 }
 
-export interface SlopeProfileLevel {
+interface SlopeProfileLevel {
   /** Longueur minimale d'un tronçon à ce niveau (m). */
   minLengthM: number;
   runs: SlopeRun[];
 }
 
-export interface SlopeProfile {
+interface SlopeProfile {
   /** Niveaux de détail, du plus fin au plus grossier. */
   levels: SlopeProfileLevel[];
 }
@@ -53,7 +53,7 @@ const slopeProfileCache = new WeakMap<object, SlopeProfile | null>();
  * Découpe le tracé en tronçons de pente moyenne homogène, à chaque niveau de
  * détail. Résultat mis en cache par tableau de points (immutable).
  */
-export function detectSlopeProfile(
+function detectSlopeProfile(
   routePoints: RouteChartPoint[] | null | undefined,
 ): SlopeProfile | null {
   if (!routePoints || routePoints.length < 2) return null;
@@ -248,7 +248,7 @@ function mergeShortSpans(
 }
 
 /** Distance (m) parcourue dans chaque classe de `SLOPE_COLOR_CLASSES`. */
-export function summarizeSlopeDistribution(runs: ReadonlyArray<SlopeRun>): number[] {
+function summarizeSlopeDistribution(runs: ReadonlyArray<SlopeRun>): number[] {
   const distribution = SLOPE_COLOR_CLASSES.map(() => 0);
   for (const run of runs) {
     distribution[run.classIndex] = (distribution[run.classIndex] ?? 0) + (run.endM - run.startM);

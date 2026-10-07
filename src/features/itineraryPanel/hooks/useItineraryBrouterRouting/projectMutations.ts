@@ -394,7 +394,7 @@ export interface RouteRefinementBase {
 }
 
 /** Signature de la géométrie (lat/lon) d'un tracé, indépendante des altitudes. */
-export function buildRouteGeometryKey(
+function buildRouteGeometryKey(
   points: ReadonlyArray<{ lat: number; lon: number }> | null | undefined,
 ): string {
   if (!points || points.length === 0) return 'empty';

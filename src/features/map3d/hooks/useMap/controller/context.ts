@@ -17,9 +17,9 @@ import { PENDING_TILE_MAX_AGE_MS, TRACKED_SOURCE_TYPES } from '../constants';
 import { styleHasUsableContent } from './styleContent';
 import type { VisibleTimer } from './visibleClock';
 
-export type BasemapVisualFamily = 'mapbox-standard-v3' | 'mapbox-classic-v12';
-export type TerrainBootstrapContract = 'unified-dem-v1';
-export type BasemapLightPreset = 'dawn' | 'day' | 'dusk' | 'night';
+type BasemapVisualFamily = 'mapbox-standard-v3' | 'mapbox-classic-v12';
+type TerrainBootstrapContract = 'unified-dem-v1';
+type BasemapLightPreset = 'dawn' | 'day' | 'dusk' | 'night';
 // Event-driven style readiness — the bootstrap waits for Mapbox to parse
 // the style (styleBootstrapReadiness.ts). This constant only gates a
 // periodic telemetry warning, counted in visible time, so a genuinely stuck
@@ -56,7 +56,7 @@ export interface MapLifecycleController {
   cleanup: () => void;
 }
 
-export type ReportStatusFn = (
+type ReportStatusFn = (
   state: 'loading' | 'ready' | 'error',
   progress: number,
   detail?: string,

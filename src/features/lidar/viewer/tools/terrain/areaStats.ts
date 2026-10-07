@@ -30,7 +30,7 @@ const MIN_ASPECT_CONSISTENCY = 0.35;
 
 type PlanPoint = { projX: number; projY: number };
 
-export function polygonPlanArea(vertices: readonly PlanPoint[]): number {
+function polygonPlanArea(vertices: readonly PlanPoint[]): number {
   let sum = 0;
   for (let k = 0; k < vertices.length; k++) {
     const a = vertices[k]!;

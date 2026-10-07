@@ -117,7 +117,7 @@ export function buildSlopeColorExpression(
 // ── Helpers ───────────────────────────────────────────────────────────
 
 /** Convert degrees to approximate percentage (tan). Caps at 90° → ∞ */
-export function degToPercent(deg: number): string {
+function degToPercent(deg: number): string {
   if (deg >= 90) return '∞';
   return String(Math.round(Math.tan((deg * Math.PI) / 180) * 100));
 }
@@ -224,7 +224,7 @@ function roundBreakpointDeg(value: number): number {
  * Returns an array of length `count - 1` (the boundaries between bands).
  * The implicit boundaries are 0° on the left and 90° on the right.
  */
-export function generateBreakpointsForCount(count: number): number[] {
+function generateBreakpointsForCount(count: number): number[] {
   const preset = DEFAULT_DEGREE_BREAKPOINTS_BY_COUNT[count];
   if (preset) return [...preset];
 

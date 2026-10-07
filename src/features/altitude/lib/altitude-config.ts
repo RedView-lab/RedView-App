@@ -117,7 +117,7 @@ export function altitudeBandCountFromSetting(setting: AltitudeScaleSettingKey | 
   return match ? Number(match[1]) : 4;
 }
 
-export function generateAltitudeBreakpointsForCount(count: number): number[] {
+function generateAltitudeBreakpointsForCount(count: number): number[] {
   const defaults = ALTITUDE_STOPS[`${count} couleurs` as AltitudeScaleSettingKey];
   if (defaults) return defaults.slice(1);
 

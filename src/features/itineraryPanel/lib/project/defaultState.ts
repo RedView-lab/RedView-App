@@ -21,7 +21,7 @@ import { HIDDEN_PANEL_POI_CATEGORIES } from './poiRows';
 import { createDocumentId } from './ids';
 import { repairRouteEndpointArtifacts } from './repair-route-endpoints';
 
-export const ALL_POI_CATEGORIES: PoiCategory[] = [
+const ALL_POI_CATEGORIES: PoiCategory[] = [
   'fountains',
   'toilets',
   'supermarkets',
@@ -47,7 +47,7 @@ export const DEFAULT_POI_DISTANCE_M = 20;
  */
 const LEGACY_DEFAULT_POI_DISTANCE_M = 40;
 
-export function createDefaultPoiState(): PoiState {
+function createDefaultPoiState(): PoiState {
   const distanceM = DEFAULT_POI_DISTANCE_M;
   return {
     fountains: { enabled: true, distanceM },
@@ -80,7 +80,7 @@ export function createImportedPoiState(): PoiState {
   return state;
 }
 
-export function normalizeItineraryPoiState(poi?: Partial<PoiState> | null): PoiState {
+function normalizeItineraryPoiState(poi?: Partial<PoiState> | null): PoiState {
   const base = createDefaultPoiState();
   if (!poi || typeof poi !== 'object') return base;
   const normalized: PoiState = { ...base };
@@ -125,7 +125,7 @@ export const ITINERARY_COLORS = [
   '#9b59ff',
 ] as const;
 
-export { DEFAULT_PROFILES, ROUTE_PROFILE_PRESETS } from './profilePresets';
+export { DEFAULT_PROFILES,  } from './profilePresets';
 import { ROUTE_PROFILE_PRESETS } from './profilePresets';
 
 const DEFAULT_TIMELINE_START: TimelineItem = {

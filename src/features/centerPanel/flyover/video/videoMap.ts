@@ -146,7 +146,7 @@ function abortError(): DOMException {
  * système ou le navigateur — Safari le fait sous pression mémoire) : les
  * images suivantes seraient noires, l'export s'arrête.
  */
-export class FlyoverVideoContextLostError extends Error {
+class FlyoverVideoContextLostError extends Error {
   constructor() {
     super("La mémoire graphique a manqué pendant le rendu de la vidéo. Fermez d'autres onglets ou applications, puis relancez l'export.");
     this.name = 'FlyoverVideoContextLostError';

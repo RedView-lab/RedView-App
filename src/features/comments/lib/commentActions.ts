@@ -54,7 +54,7 @@ export const COMMENT_REACTIONS = ['👍', '❤️', '😂', '🎉', '👀', '✅
 
 const REACTION_SEPARATOR = '~';
 
-export function reactionKey(emoji: string, userId: string): string {
+function reactionKey(emoji: string, userId: string): string {
   return `${emoji}${REACTION_SEPARATOR}${userId}`;
 }
 

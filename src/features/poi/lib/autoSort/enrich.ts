@@ -99,7 +99,7 @@ interface Pass {
  * aller-retour ou en boucle peut frôler le même POI plusieurs fois, dans des
  * sens opposés) : un passage par groupe de segments contigus en progression.
  */
-export function findRoutePasses(
+function findRoutePasses(
   feature: PoiFeature,
   route: readonly ProjectedRoutePoint[],
   maxLateralM: number,

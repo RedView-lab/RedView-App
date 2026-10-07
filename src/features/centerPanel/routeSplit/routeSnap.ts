@@ -7,7 +7,7 @@ import type { Map as MapboxMap } from 'mapbox-gl';
  */
 
 /** Max pixel distance from the trace for a click/hover to count as "on it". */
-export const MAX_ROUTE_CLICK_DISTANCE_PX = 20;
+const MAX_ROUTE_CLICK_DISTANCE_PX = 20;
 
 export interface RouteSnapPoint {
   lat: number;

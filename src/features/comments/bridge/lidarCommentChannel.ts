@@ -16,8 +16,8 @@ import { sanitizeCommentThreads } from '../lib/sanitize';
  *    dernière copie en lecture seule ; `CLOSED` : projet fermé dans l'app.
  */
 
-export const LIDAR_COMMENTS_CHANNEL = 'redview:lidar:comments';
-export const LIDAR_COMMENTS_STORAGE_KEY = 'redview:lidar:comments';
+const LIDAR_COMMENTS_CHANNEL = 'redview:lidar:comments';
+const LIDAR_COMMENTS_STORAGE_KEY = 'redview:lidar:comments';
 
 export interface LidarCommentState {
   version: 1;

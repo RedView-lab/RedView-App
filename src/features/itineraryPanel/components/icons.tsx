@@ -12,8 +12,8 @@ export {
   IconChevronDown,
   IconCheck,
   IconPlusCircle,
-  IconCalendar,
-  IconClock,
+  
+  
   IconEye,
   IconEyeOff,
   IconTrash,
@@ -76,10 +76,6 @@ const ITINERARY_ICON_ASSETS = {
   tent: PROVIDED_POI_SVG.refugeGlyph,
 } as const;
 
-export const IconArrowLeft = ({ size = 16, ...p }: AssetGlyphProps) => (
-  <SvgV2Icon name="arrow-left.svg" size={size} {...p} />
-);
-
 export const IconFolder = ({ size = 20, className, style, ...rest }: AssetGlyphProps) => (
   <SvgV2Icon name="folder.svg" size={size} className={className} style={style} {...rest} />
 );
@@ -92,28 +88,8 @@ export const IconSave = ({ size = 14, ...p }: AssetGlyphProps) => (
   <AssetIcon src={ITINERARY_ICON_ASSETS.save} size={size} {...p} />
 );
 
-export const IconSettingsCog = ({ size = 16, ...p }: AssetGlyphProps) => (
-  <AssetIcon src={ITINERARY_ICON_ASSETS.settingsCog} size={size} {...p} />
-);
-
-export const IconSettingsSliders = ({ size = 16, ...p }: AssetGlyphProps) => (
-  <AssetIcon src={ITINERARY_ICON_ASSETS.settingsSliders} size={size} {...p} />
-);
-
-export const IconDownload = ({ size = 16, ...p }: AssetGlyphProps) => (
-  <AssetIcon src={ITINERARY_ICON_ASSETS.download} size={size} {...p} />
-);
-
-export const IconDownloadCircle = ({ size = 16, ...p }: AssetGlyphProps) => (
-  <AssetIcon src={ITINERARY_ICON_ASSETS.downloadCircle} size={size} {...p} />
-);
-
 export const IconShare = ({ size = 16, ...p }: AssetGlyphProps) => (
   <AssetIcon src={ITINERARY_ICON_ASSETS.share} size={size} {...p} />
-);
-
-export const IconUpload = ({ size = 12, ...p }: AssetGlyphProps) => (
-  <AssetIcon src={ITINERARY_ICON_ASSETS.upload} size={size} {...p} />
 );
 
 export const IconRoute = ({ size = 16, ...p }: AssetGlyphProps) => (
@@ -128,24 +104,8 @@ export const IconMapPin = ({ size = 16, ...p }: AssetGlyphProps) => (
   <AssetIcon src={ITINERARY_ICON_ASSETS.mapPin} size={size} {...p} />
 );
 
-export const IconNutrition = ({ size = 16, ...p }: AssetGlyphProps) => (
-  <SvgV2Icon name="nutrition.svg" size={size} {...p} />
-);
-
-export const IconCornerUpLeft = ({ size = 16, ...p }: AssetGlyphProps) => (
-  <SvgV2Icon name="corner-up-left.svg" size={size} {...p} />
-);
-
-export const IconCornerUpRight = ({ size = 16, ...p }: AssetGlyphProps) => (
-  <SvgV2Icon name="corner-up-right.svg" size={size} {...p} />
-);
-
 export const IconSearch = ({ size = 14, ...p }: AssetGlyphProps) => (
   <SvgV2Icon name="magnifyingglass.svg" size={size} {...p} />
-);
-
-export const IconUploadCloud = ({ size = 24, ...p }: AssetGlyphProps) => (
-  <AssetIcon src={ITINERARY_ICON_ASSETS.uploadCloud} size={size} {...p} />
 );
 
 export const IconUploadCircle = ({ size = 20, ...p }: AssetGlyphProps) => (
@@ -221,46 +181,12 @@ export const IconRepeat = ({ size = 14, ...p }: AssetGlyphProps) => (
   <AssetIcon src={ITINERARY_ICON_ASSETS.repeat} size={size} {...p} />
 );
 
-export const IconCheckpointFlag = ({ size = 20, ...p }: AssetGlyphProps) => (
-  <AssetIcon src={ITINERARY_ICON_ASSETS.checkpointFlag} size={size} {...p} />
-);
-
-export const IconCheckpointEnd = ({ size = 20, ...p }: AssetGlyphProps) => (
-  <FullColorSvgIcon src="/svgv2/icone/checkpoint-end.svg" size={size} {...p} />
-);
-
 export const IconDroplet = ({ size = 12, ...p }: AssetGlyphProps) => (
   <AssetIcon src={PROVIDED_POI_SVG.water} size={size} {...p} />
 );
 
 export const IconShoppingCart = ({ size = 12, ...p }: AssetGlyphProps) => (
   <AssetIcon src={PROVIDED_POI_SVG.shop} size={size} {...p} />
-);
-
-export const IconPauseCircle = ({ size = 12, ...p }: AssetGlyphProps) => (
-  <AssetIcon src={ITINERARY_ICON_ASSETS.pauseCircle} size={size} {...p} />
-);
-
-/**
- * Teardrop pin shape — rounded top + pointed bottom, designed to be filled
- * with the kind color. Used as the background of the Eau / Supermarché / Fin
- * badges in the Feuille de route.
- */
-export const IconPinShape = ({ size = 22, ...p }: AssetGlyphProps) => (
-  <SvgV2Icon name="marker-pin-02.svg" size={size} {...p} />
-);
-
-/** Tiny checkered flag used inside the "Fin" pin. */
-export const IconFlagCheckered = ({ size = 10, ...p }: AssetGlyphProps) => (
-  <SvgV2Icon name="flag-02.svg" size={size} {...p} />
-);
-
-/**
- * Untitled-UI "magnifying glass" — matches Figma node 855:22699
- * (`Icon / magnifyingglass`). 14×14, 1.6 stroke.
- */
-export const IconMagnifyingGlass = ({ size = 14, ...p }: AssetGlyphProps) => (
-  <AssetIcon src={ITINERARY_ICON_ASSETS.magnifyingGlass} size={size} {...p} />
 );
 
 /**
@@ -393,56 +319,6 @@ export const IconTent = ({ size = 10, ...p }: AssetGlyphProps) => (
 
 export const IconMountain = ({ size = 10, ...p }: AssetGlyphProps) => (
   <SvgV2Icon name="mountain.svg" size={size} {...p} />
-);
-
-export const IconExpand04 = ({ size = 16, ...p }: AssetGlyphProps) => (
-  <span
-    style={{ width: size, height: size, display: 'inline-flex', flex: '0 0 auto' }}
-    {...p}
-  >
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden
-      focusable="false"
-    >
-      <path
-        d="M9 3H3V9M15 3H21V9M21 15V21H15M9 21H3V15"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  </span>
-);
-
-export const IconMinimize04 = ({ size = 16, ...p }: AssetGlyphProps) => (
-  <span
-    style={{ width: size, height: size, display: 'inline-flex', flex: '0 0 auto' }}
-    {...p}
-  >
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden
-      focusable="false"
-    >
-      <path
-        d="M9 9H3V3M15 9H21V3M21 15V21H15M9 15H3V21"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  </span>
 );
 
 export const IconNiceManYellow = ({ size = 15, className, style, ...p }: AssetGlyphProps) => {

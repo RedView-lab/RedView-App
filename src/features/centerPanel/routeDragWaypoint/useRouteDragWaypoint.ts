@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext } from 'react';
 
 export interface RouteDragWaypointContextValue {
   /** True while a route point is actively being dragged. */
@@ -7,6 +7,3 @@ export interface RouteDragWaypointContextValue {
 
 export const RouteDragWaypointContext = createContext<RouteDragWaypointContextValue | null>(null);
 
-export function useRouteDragWaypointOptional(): RouteDragWaypointContextValue | null {
-  return useContext(RouteDragWaypointContext);
-}

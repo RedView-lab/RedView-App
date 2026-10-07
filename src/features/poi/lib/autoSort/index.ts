@@ -8,8 +8,8 @@ import { selectAutoSortPicks } from './select';
 import type { AutoSortInput, AutoSortPick, AutoSortReason, AutoSortResult } from './types';
 
 export * from './types';
-export { DEFAULT_AUTO_SORT_RULES, type AutoSortRules } from './rules';
-export { evaluateOpeningHoursAt } from './openingHours';
+export { DEFAULT_AUTO_SORT_RULES,  } from './rules';
+;
 
 const DEFAULT_MAX_LATERAL_M = 200;
 

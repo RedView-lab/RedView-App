@@ -37,7 +37,7 @@ export function approachExponential(current: number, target: number, halfLifeS: 
   return target + (current - target) * Math.exp((-LN2 * dt) / halfLifeS);
 }
 
-export function clamp01(x: number): number {
+function clamp01(x: number): number {
   return x <= 0 ? 0 : x >= 1 ? 1 : x;
 }
 

@@ -56,7 +56,7 @@ export interface TimelineColumnContext {
   discipline: SportDiscipline;
 }
 
-export interface TimelineColumnCell {
+interface TimelineColumnCell {
   display: string;
   sortKey: number | string | null;
 }

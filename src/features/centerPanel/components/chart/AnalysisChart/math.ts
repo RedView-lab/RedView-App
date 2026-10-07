@@ -224,7 +224,7 @@ function upperBoundPointIndex(points: { x: number; y: number }[], xValue: number
   return lo;
 }
 
-export function downsampleLTTB(
+function downsampleLTTB(
   points: { x: number; y: number }[],
   targetPoints: number,
 ): { x: number; y: number }[] {

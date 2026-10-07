@@ -1,6 +1,6 @@
 export type OverlayStatusId = 'map' | 'weather' | 'wind' | 'shadow' | 'sunlight-map' | 'itinerary' | 'slope' | 'altitude';
 
-export type OverlayStatusState = 'loading' | 'ready' | 'error';
+type OverlayStatusState = 'loading' | 'ready' | 'error';
 
 export interface OverlayStatusSnapshot {
   id: OverlayStatusId;
@@ -17,7 +17,7 @@ export type OverlayStatusReporter = (status: OverlayStatusSnapshot | null) => vo
 
 export type OverlayReloadRegistrar = (reload: (() => void) | null) => void;
 
-export function clampOverlayProgress(value: number): number {
+function clampOverlayProgress(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(100, Math.round(value)));
 }

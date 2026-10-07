@@ -23,8 +23,8 @@ import type { FieldAuthor } from './roomState';
 export const LEASE_TTL_MS = 20_000;
 export const AUTHOR_PRIORITY_MS = 5_000;
 /** Détention maximale d'un bail (un très long routage dure ≈ 2 min). */
-export const LEASE_MAX_HOLD_MS = 5 * 60_000;
-export const LEASE_PENALTY_MS = 60_000;
+const LEASE_MAX_HOLD_MS = 5 * 60_000;
+const LEASE_PENALTY_MS = 60_000;
 
 export interface LeaseRequester {
   clientId: string;

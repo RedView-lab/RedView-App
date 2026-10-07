@@ -13,7 +13,7 @@ import { resolvePanelArea, type MapOverlayInsets } from '@/features/map3d/compon
  */
 
 /** Taille de la bulle repliée (CommentPin). */
-export const COMMENT_PIN_SIZE_PX = 36;
+const COMMENT_PIN_SIZE_PX = 36;
 const GAP = 8;
 const EDGE = 8;
 

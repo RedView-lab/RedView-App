@@ -2,7 +2,7 @@ import type { MapContextMenuActionPayload, MapPoiDraftActionPayload } from '@/fe
 import type { PoiFeature } from '@/features/poi/types';
 import type { TimelineAddItemKind } from '../types';
 
-export const ITINERARY_MAP_ACTION_EVENT = 'redview:itinerary-map-action';
+const ITINERARY_MAP_ACTION_EVENT = 'redview:itinerary-map-action';
 
 /**
  * Point placed on the active route from the analysis chart (toolbar « Ajouter »).

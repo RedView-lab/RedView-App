@@ -14,12 +14,12 @@ import { latToMercY, lngLatToMercTile } from './shadowWorkerEncoding';
 import { computeShadowSweep } from './shadowSweep';
 import { SW_TILE_CACHE_EPOCH } from '../../map3d/lib/mapCacheEpoch';
 
-export const DEM_TILE_SIZE = 256;
-export const DEM_NODATA_THRESHOLD = -10000;
+const DEM_TILE_SIZE = 256;
+const DEM_NODATA_THRESHOLD = -10000;
 // Même nom que le cache écrit par le SW (sinon chaque lecture rate).
-export const DEM_CACHE_NAME = `dem-tiles-${SW_TILE_CACHE_EPOCH}`;
-export const MAX_SAMPLE_TILE_COUNT = 256;
-export const MIN_SAMPLE_DEM_ZOOM = 4;
+const DEM_CACHE_NAME = `dem-tiles-${SW_TILE_CACHE_EPOCH}`;
+const MAX_SAMPLE_TILE_COUNT = 256;
+const MIN_SAMPLE_DEM_ZOOM = 4;
 const MAX_PARENT_WALK = 4;
 
 export type BoundsTuple = [number, number, number, number];
@@ -163,7 +163,7 @@ interface CachedTile {
   elev: Float32Array;
 }
 
-export function getTileCoverage(
+function getTileCoverage(
   bounds: BoundsTuple,
   zoom: number,
 ): { xMin: number; xMax: number; yMin: number; yMax: number; tileCount: number } {
@@ -277,7 +277,7 @@ async function decodeTerrainRGB(blob: Blob): Promise<Float32Array> {
   return out;
 }
 
-export function bilinearSample(
+function bilinearSample(
   src: Float32Array,
   W: number,
   H: number,

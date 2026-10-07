@@ -16,7 +16,7 @@ export interface RouteProfilePreset {
 }
 
 /** Built-in activity presets, in dropdown order (bike first, then foot). */
-export const ACTIVITY_PRESET_IDS: readonly ActivityType[] = ['road', 'gravel-default', 'mtb', 'running', 'trail'];
+const ACTIVITY_PRESET_IDS: readonly ActivityType[] = ['road', 'gravel-default', 'mtb', 'running', 'trail'];
 
 export function isActivityPresetId(id: string | null | undefined): id is ActivityType {
   return id != null && (ACTIVITY_PRESET_IDS as readonly string[]).includes(id);
@@ -89,7 +89,7 @@ export function getProfilePreset(profileId: string): RouteProfilePreset | undefi
  * - `tracingMode` is excluded (switching Vitesse / Aventure / Comfort is not a custom profile)
  * - `applyToAllItineraries` is excluded (batch checkbox must never affect profile state)
  */
-export const CUSTOMIZABLE_ROAD_TYPE_KEYS: (keyof RoadTypesState)[] = [
+const CUSTOMIZABLE_ROAD_TYPE_KEYS: (keyof RoadTypesState)[] = [
   // Surface sliders & tolerance
   'surfaceMin',
   'surfaceMax',
@@ -126,18 +126,7 @@ export function isRoadTypesCustomized(
   return false;
 }
 
-/**
- * Compares current road types with a target set of road types.
- * Returns true if all customizable keys match.
- */
-export function isRoadTypesMatching(
-  current: Partial<RoadTypesState>,
-  target: Partial<RoadTypesState>,
-): boolean {
-  return !isRoadTypesCustomized(current, target);
-}
-
-export function matchesProfilePreset(
+function matchesProfilePreset(
   profileId: string,
   _priorities: PrioritiesState,
   roadTypes: RoadTypesState,

@@ -51,7 +51,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /** Profils valides d'une valeur stockée (localStorage, préférences du compte, fichier). */
-export function sanitizeSavedCustomProfiles(raw: unknown): SavedCustomProfile[] {
+function sanitizeSavedCustomProfiles(raw: unknown): SavedCustomProfile[] {
   if (!Array.isArray(raw)) return [];
   const seen = new Set<string>();
   const out: SavedCustomProfile[] = [];
@@ -270,7 +270,7 @@ async function runSync(): Promise<void> {
  * Récupère la bibliothèque du compte et y envoie les modifications locales en
  * attente. Un seul échange à la fois ; sans session, ne fait rien.
  */
-export function syncCustomProfilesWithAccount(): Promise<void> {
+function syncCustomProfilesWithAccount(): Promise<void> {
   if (inFlight) return inFlight;
   inFlight = runSync()
     .catch((error: unknown) => {

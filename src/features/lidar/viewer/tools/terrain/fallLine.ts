@@ -48,15 +48,15 @@ export const FALL_SCENARIOS: readonly FallScenarioSpec[] = [
   { id: 'rock', mode: 'energyLine', range: [28.5, 33.5, 37], color: '#a9a9a9' },
 ];
 
-export const DEFAULT_FALL_SCENARIO: FallScenarioId = 'firm';
+const DEFAULT_FALL_SCENARIO: FallScenarioId = 'firm';
 
-export type FallEnd = 'noSlide' | 'runout' | 'trap' | 'water' | 'edge' | 'maxLength';
+type FallEnd = 'noSlide' | 'runout' | 'trap' | 'water' | 'edge' | 'maxLength';
 /** Toponeige exposure (consequence of a fall), `none` when nothing slides. */
 export type FallExposure = 'none' | 'E1' | 'E2' | 'E3' | 'E4';
 
-export type FallHazardKind = 'cliff' | 'trees' | 'building' | 'rough' | 'water';
+type FallHazardKind = 'cliff' | 'trees' | 'building' | 'rough' | 'water';
 
-export interface FallHazard {
+interface FallHazard {
   kind: FallHazardKind;
   /** Horizontal distance from the start, m. */
   distanceM: number;
@@ -66,7 +66,7 @@ export interface FallHazard {
   heightM?: number;
 }
 
-export interface FallQuantiles {
+interface FallQuantiles {
   p10: number;
   p50: number;
   p90: number;
@@ -104,7 +104,7 @@ export interface FallScenarioResult {
   corridor: Map<number, number>;
 }
 
-export interface FallCorridorLattice {
+interface FallCorridorLattice {
   /** CRS centre of cell (0, 0). */
   originX: number;
   originY: number;

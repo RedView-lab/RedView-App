@@ -3,9 +3,9 @@ export {
   PROJECT_BROWSER_SETTINGS_STORAGE_KEY,
   canonicalizeAppText,
   createAppTranslationBundle,
-  detectNavigatorAppLocale,
+  
   interpolateAppTranslation,
-  isAppLocale,
+  
   readDocumentAppLocale,
   readStoredAppLocale,
   resolveAppLocale,
@@ -13,6 +13,6 @@ export {
   writeStoredAppLocale,
   type AppLocale,
   type AppTranslationBundle,
-  type AppTranslationValue,
+  
   type AppTranslationVars,
 } from './config/index';

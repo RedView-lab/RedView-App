@@ -44,7 +44,7 @@ function percentile(sorted: Float64Array, q: number): number {
 }
 
 /** Snaps a measured period to a common refresh rate when it is close to one. */
-export function snapRefreshPeriod(ms: number): number {
+function snapRefreshPeriod(ms: number): number {
   for (const hz of COMMON_REFRESH_HZ) {
     const period = 1000 / hz;
     if (Math.abs(ms - period) <= period * SNAP_TOLERANCE) return period;
@@ -53,7 +53,7 @@ export function snapRefreshPeriod(ms: number): number {
 }
 
 /** Shortest multiple of the refresh period that is at least `MIN_TARGET_INTERVAL_MS`. */
-export function targetIntervalFor(refreshMs: number): number {
+function targetIntervalFor(refreshMs: number): number {
   return refreshMs * Math.max(1, Math.ceil(MIN_TARGET_INTERVAL_MS / refreshMs - 1e-6));
 }
 

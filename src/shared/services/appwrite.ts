@@ -1,17 +1,4 @@
-import {
-  Account,
-  AppwriteException,
-  Client,
-  Databases,
-  ID,
-  ImageFormat,
-  OAuthProvider,
-  Permission,
-  Query,
-  Role,
-  Storage,
-  type Models,
-} from 'appwrite';
+import { Account, AppwriteException, Client, Databases, ID, OAuthProvider, Permission, Query, Role, Storage, type Models } from 'appwrite';
 
 import { createJwtCache } from './jwtCache';
 
@@ -27,14 +14,12 @@ export const PROJECTS_COLLECTION_ID = 'projects';
 /** Vue de chaque utilisateur sur chaque projet (projectViews.ts), à part du document partagé. */
 export const PROJECT_VIEWS_COLLECTION_ID = 'project_views';
 export const FOLDERS_COLLECTION_ID = 'project_folders';
-export const CUSTOMERS_COLLECTION_ID = 'customers';
-export const SUBSCRIPTIONS_COLLECTION_ID = 'subscriptions';
 export const THUMBNAILS_BUCKET_ID = 'project-thumbnails';
 export const FIT_FILES_BUCKET_ID = 'itinerary-fit-files';
 /** Charges utiles des gros projets (gzip), trop lourdes pour l'attribut `projects.data`. */
 export const PROJECT_PAYLOADS_BUCKET_ID = 'project-payloads';
 
-export const APPWRITE_AUTH_STORAGE_KEY = 'redview:appwrite-session';
+const APPWRITE_AUTH_STORAGE_KEY = 'redview:appwrite-session';
 
 export interface StoredAppwriteSessionSnapshot {
   user: {
@@ -51,7 +36,7 @@ export const account = new Account(client);
 export const databases = new Databases(client);
 export const storage = new Storage(client);
 
-export { AppwriteException, ID, OAuthProvider, Permission, Query, Role, ImageFormat };
+export { AppwriteException, ID, OAuthProvider, Permission, Query, Role,  };
 
 export function hasStoredAppwriteSession(): boolean {
   return readStoredAppwriteSession() !== null;
@@ -77,14 +62,7 @@ export function readStoredAppwriteSession(): StoredAppwriteSessionSnapshot | nul
 // 401 ni déconnexion ne l'invalide. Une coupure réseau ne l'efface jamais.
 let cachedSessionUserId: string | null = null;
 
-/**
- * Événement DOM émis sur `window` quand la session Appwrite est réellement
- * expirée (401 confirmé par GET /account, jamais sur une erreur réseau).
- * Contrat avec App.tsx : `detail = { reason: 'unauthorized', userId }`.
- */
-export const APPWRITE_SESSION_EXPIRED_EVENT = 'redview:session-expired';
-
-export interface AppwriteSessionExpiredDetail {
+interface AppwriteSessionExpiredDetail {
   reason: 'unauthorized';
   /** Identifiant de l'utilisateur dont la session a expiré. */
   userId: string | null;
@@ -94,22 +72,10 @@ type SessionExpiredListener = (detail: AppwriteSessionExpiredDetail) => void;
 const sessionExpiredListeners = new Set<SessionExpiredListener>();
 
 /**
- * S'abonne à l'expiration de session (401 sur account.get(), y compris après un
- * 401 renvoyé par une écriture de projet). Renvoie la fonction de désabonnement.
- * L'événement DOM `APPWRITE_SESSION_EXPIRED_EVENT` est aussi émis sur `window`.
- */
-export function onAppwriteSessionExpired(listener: SessionExpiredListener): () => void {
-  sessionExpiredListeners.add(listener);
-  return () => {
-    sessionExpiredListeners.delete(listener);
-  };
-}
-
-/**
  * Invalide la session locale (instantané + cache mémoire) et notifie l'app.
  * N'émet rien s'il n'y avait aucune session connue (visiteur non connecté).
  */
-export function markAppwriteSessionExpired(): void {
+function markAppwriteSessionExpired(): void {
   const userId = cachedSessionUserId ?? readStoredAppwriteSession()?.user.id ?? null;
   clearStoredAppwriteSession();
   if (!userId) return;

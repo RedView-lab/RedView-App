@@ -4,13 +4,13 @@ import type { PauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule'
 import { resolveRideElapsedSecondsAtScheduledElapsed } from '@/features/itineraryPanel/sections/timeline/TimelineTimelineView/utils';
 import type { AxisMode } from '../series';
 
-export interface ChartDayNightWindow {
+interface ChartDayNightWindow {
   id: string;
   startX: number;
   endX: number;
 }
 
-export interface ChartDayNightMoonMarker {
+interface ChartDayNightMoonMarker {
   id: string;
   x: number;
 }

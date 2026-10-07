@@ -44,7 +44,7 @@ function quantizeSampleSpacingM(spacingM: number): number {
   );
 }
 
-export function haversineM(a: RouteChartPoint, b: RouteChartPoint): number {
+function haversineM(a: RouteChartPoint, b: RouteChartPoint): number {
   const toRad = (degrees: number) => (degrees * Math.PI) / 180;
   const dLat = toRad(b.lat - a.lat);
   const dLon = toRad(b.lon - a.lon);
@@ -57,7 +57,7 @@ export function haversineM(a: RouteChartPoint, b: RouteChartPoint): number {
 }
 
 /** Moyenne glissante centrée sur `windowSize` valeurs (fenêtre tronquée aux bords). */
-export function smoothValues(values: ArrayLike<number>, windowSize = 5): number[] {
+function smoothValues(values: ArrayLike<number>, windowSize = 5): number[] {
   const out = new Array<number>(values.length);
   const half = Math.floor(windowSize / 2);
   for (let i = 0; i < values.length; i++) {

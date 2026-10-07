@@ -11,8 +11,8 @@ import type { CameraController } from '../camera';
 import type { HoverReticleInfo, InsertGhostHandle } from './routeHandlesOverlay';
 import type { LidarRouteOverlayPoint, ViewerRouteSceneParams } from './types';
 
-export const POINT_PICK_THRESHOLD_PX = 14;
-export const SEGMENT_PICK_THRESHOLD_PX = 12;
+const POINT_PICK_THRESHOLD_PX = 14;
+const SEGMENT_PICK_THRESHOLD_PX = 12;
 
 export function raycastAtScreen(
   screenX: number,

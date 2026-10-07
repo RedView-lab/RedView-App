@@ -210,7 +210,7 @@ function grown<T extends Int8Array | Uint8Array | Int32Array | Float64Array>(arr
  * energy line of slope `tanAlpha` (any path, any heading); Infinity where even
  * the 270 m cap is not enough.
  */
-export function energyToReach(grid: FlowPyGrid, terrain: FlowPyTerrain, targetCells: Int32Array, tanAlpha: number): Float32Array {
+function energyToReach(grid: FlowPyGrid, terrain: FlowPyTerrain, targetCells: Int32Array, tanAlpha: number): Float32Array {
   const { width, cell, altitude } = grid;
   const count = altitude.length;
   const need = new Float32Array(count).fill(Infinity);

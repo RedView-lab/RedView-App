@@ -2,9 +2,9 @@ import type { FootDiscipline, SportDiscipline } from '@/shared/lib/discipline';
 
 export type FitPanelMode = 'route' | 'compare';
 
-export type RiderType = 'elite' | 'trained' | 'recreational';
+type RiderType = 'elite' | 'trained' | 'recreational';
 
-export type Gender = 'male' | 'female' | 'unspecified';
+type Gender = 'male' | 'female' | 'unspecified';
 
 export interface PredictionConfig {
   ftp_w?: number;
@@ -211,7 +211,7 @@ export interface CyclingTimeBreakdown {
   physio_loss_s?: number;
 }
 
-export interface CyclingCalibrationRide {
+interface CyclingCalibrationRide {
   index: number;
   distance_km: number;
   moving_h: number;
@@ -247,7 +247,7 @@ export interface CyclingCalibration {
   report: CyclingCalibrationReport;
 }
 
-export interface ActualSpeedPoint {
+interface ActualSpeedPoint {
   distance_m: number;
   speed_kmh: number;
   elapsed_time_s: number;

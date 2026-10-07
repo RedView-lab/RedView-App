@@ -1,4 +1,4 @@
-export const GOOGLE_MAPS_TILE_CENTER_ZOOM = 16;
+const GOOGLE_MAPS_TILE_CENTER_ZOOM = 16;
 
 function formatCoordinate(value: number): string {
   return value.toFixed(6);

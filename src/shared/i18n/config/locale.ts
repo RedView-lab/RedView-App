@@ -7,10 +7,6 @@ const LEGACY_LANGUAGE_TO_LOCALE: Record<string, AppLocale> = {
   Français: 'fr',
 };
 
-export function isAppLocale(value: unknown): value is AppLocale {
-  return value === 'fr' || value === 'en';
-}
-
 export function resolveAppLocale(value: unknown): AppLocale {
   if (Array.isArray(value)) {
     return resolveAppLocale(value[0]);
@@ -23,7 +19,7 @@ export function resolveAppLocale(value: unknown): AppLocale {
   return LEGACY_LANGUAGE_TO_LOCALE[value] ?? (value.toLowerCase().startsWith('en') ? 'en' : 'fr');
 }
 
-export function detectNavigatorAppLocale(): AppLocale {
+function detectNavigatorAppLocale(): AppLocale {
   if (typeof navigator === 'undefined') {
     return 'fr';
   }

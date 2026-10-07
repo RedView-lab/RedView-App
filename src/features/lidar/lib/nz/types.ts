@@ -3,15 +3,6 @@ export interface NzTileCoord {
   northKm: number;
 }
 
-export interface NzTileStacItem {
-  id: string;
-  coord: NzTileCoord;
-  href: string;
-  contentType?: string;
-  collectionId?: string;
-  datetime?: string;
-}
-
 /**
  * Dossier de nuages de points LINZ indexé (`nzLazIndex.ts`, généré par
  * `npm run lidar:index`), servi par OpenTopography.

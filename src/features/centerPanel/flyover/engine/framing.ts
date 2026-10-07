@@ -55,7 +55,3 @@ export function portraitFraming(): FlyoverFraming {
   };
 }
 
-/** Clé de cache d'un rail : seul l'écart latéral de la ligne visée entre dans sa construction. */
-export function railFramingKey(framing: FlyoverFraming): string {
-  return framing.centerlineMaxOffsetPerDistance.toFixed(4);
-}

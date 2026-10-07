@@ -15,7 +15,7 @@
 
 /** Taille minimale, moyenne visée et maximale d'un segment (en points). */
 export const ROUTE_CHUNK_MIN_POINTS = 64;
-export const ROUTE_CHUNK_AVG_POINTS = 256;
+const ROUTE_CHUNK_AVG_POINTS = 256;
 export const ROUTE_CHUNK_MAX_POINTS = 1024;
 
 export interface RouteChunk {
@@ -30,7 +30,7 @@ interface RoutePointLike {
 }
 
 /** Hachage 53 bits (cyrb53) d'une chaîne. */
-export function hash53(value: string, seed = 0): number {
+function hash53(value: string, seed = 0): number {
   let h1 = 0xdeadbeef ^ seed;
   let h2 = 0x41c6ce57 ^ seed;
   for (let i = 0; i < value.length; i += 1) {

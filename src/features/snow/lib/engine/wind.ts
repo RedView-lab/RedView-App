@@ -26,7 +26,7 @@ import type { FarDem } from './types';
 const RAD = Math.PI / 180;
 const SECTOR_DEG = 22.5;
 
-export interface WindSector {
+interface WindSector {
   fromTrueDeg: number;
   weight: number;
   speedMs: number;
@@ -34,7 +34,7 @@ export interface WindSector {
 }
 
 /** Sectors carrying at least `minWeight` of the transport, renormalised. */
-export function activeSectors(rose: WindRose, minWeight = 0.04): WindSector[] {
+function activeSectors(rose: WindRose, minWeight = 0.04): WindSector[] {
   const out: WindSector[] = [];
   for (let s = 0; s < rose.weights.length; s++) {
     if (rose.weights[s] < minWeight) continue;
@@ -62,7 +62,7 @@ function scaledInPlace(a: Float32Array): Float32Array {
   return a;
 }
 
-export function windCurvatures(grid: WorkGrid, config: SnowEngineConfig): CurvaturePair {
+function windCurvatures(grid: WorkGrid, config: SnowEngineConfig): CurvaturePair {
   const ps = grid.ps;
   const small = config.curvatureSmallM >= 2 * ps
     ? scaledInPlace(curvatureAtScale(grid, config.curvatureSmallM, boxMean(grid.z, grid.width, grid.height, Math.max(1, Math.round(config.curvatureSmallM / ps / 3)))))
@@ -206,7 +206,7 @@ function farAsGrid(far: FarDem): WorkGrid {
  * smooth at that scale): the terrain terms use the DTM smoothed to
  * `windSmoothM`.
  */
-export function windTerrain(grid: WorkGrid, config: SnowEngineConfig): { grid: WorkGrid; terrain: TerrainFields } {
+function windTerrain(grid: WorkGrid, config: SnowEngineConfig): { grid: WorkGrid; terrain: TerrainFields } {
   const sigmaPx = config.windSmoothM / grid.ps;
   if (sigmaPx < 0.5) return { grid, terrain: terrainGradients(grid) };
   const smoothed: WorkGrid = { ...grid, z: gaussianSmooth(grid.z, grid.width, grid.height, sigmaPx) };

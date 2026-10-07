@@ -79,16 +79,6 @@ export interface UploadedProfile {
   error?: string;
 }
 
-/** Logical preset that maps to either a server profile or a tweaked one. */
-export type RedviewProfileId =
-  | 'gravel-default'
-  | 'road'
-  | 'mtb'
-  | 'running'
-  | 'trail'
-  | 'touring'
-  | 'custom';
-
 export const DEFAULT_PROFILE = 'trekking';
 
 /** Stock pedestrian profile shipped with BRouter (present on the VPS). */

@@ -56,7 +56,7 @@ export function canMutateStyle(map: MapboxMap): boolean {
   }
 }
 
-export function sanitizeId(id: string): string {
+function sanitizeId(id: string): string {
   return id.replace(/[^a-zA-Z0-9_-]/g, '_');
 }
 

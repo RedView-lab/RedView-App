@@ -57,7 +57,7 @@ export function beamNormal(sun: SunPosition, altitudeM: number, transmissivity: 
 }
 
 /** cos of the incidence angle on a slope (deg) of a given aspect (deg true). */
-export function incidenceCos(sun: SunPosition, slopeDeg: number, aspectTrueDeg: number): number {
+function incidenceCos(sun: SunPosition, slopeDeg: number, aspectTrueDeg: number): number {
   const el = sun.elevationDeg * RAD;
   const s = slopeDeg * RAD;
   return Math.max(0, Math.cos(s) * Math.sin(el) + Math.sin(s) * Math.cos(el) * Math.cos((sun.azimuthDeg - aspectTrueDeg) * RAD));

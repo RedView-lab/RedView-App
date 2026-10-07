@@ -60,9 +60,9 @@ export type MergeSpec =
 export type RecordSpec = Extract<MergeSpec, { kind: 'record' }>;
 export type ListSpec = Extract<MergeSpec, { kind: 'list' }>;
 
-export const ATOMIC: MergeSpec = { kind: 'atomic' };
+const ATOMIC: MergeSpec = { kind: 'atomic' };
 /** Objet de réglages : chaque clé est une valeur atomique. */
-export const SETTINGS: MergeSpec = { kind: 'record', other: ATOMIC };
+const SETTINGS: MergeSpec = { kind: 'record', other: ATOMIC };
 const ROUTE: MergeSpec = { kind: 'route' };
 
 function stringKey(value: unknown): string | null {
@@ -70,7 +70,7 @@ function stringKey(value: unknown): string | null {
 }
 
 /** Clé `id` (lignes de feuille de route, zones, pauses, itinéraires). */
-export const byId = (item: unknown): string | null =>
+const byId = (item: unknown): string | null =>
   item !== null && typeof item === 'object' ? stringKey((item as { id?: unknown }).id) : null;
 
 /** Fichier .fit : chemin dans le bucket, sinon nom + date (anciens projets). */
@@ -116,7 +116,7 @@ type ProjectFieldSpecs = Partial<Record<keyof ProjectDocument, MergeSpec>>;
 const COMMENT_MESSAGE_SPEC: RecordSpec = { kind: 'record', other: ATOMIC, fields: { reactions: SETTINGS } };
 
 /** Fil de commentaires : ses messages sont une liste (deux réponses simultanées sont gardées). */
-export const COMMENT_THREAD_SPEC: RecordSpec = {
+const COMMENT_THREAD_SPEC: RecordSpec = {
   kind: 'record',
   other: ATOMIC,
   fields: { messages: list(byId, COMMENT_MESSAGE_SPEC) },

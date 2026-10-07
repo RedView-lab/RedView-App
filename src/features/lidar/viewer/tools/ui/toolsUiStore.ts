@@ -8,7 +8,7 @@ import type { SlopeSample } from '../terrain/terrainField';
 import type { DetectedCrs } from '../../../types';
 import type { ScenePick, ToolId } from '../types';
 
-export type RoutePlacement = 'start' | 'waypoint' | 'end';
+type RoutePlacement = 'start' | 'waypoint' | 'end';
 
 export type ContextMenuAction =
   | { type: 'tool'; tool: ToolId }

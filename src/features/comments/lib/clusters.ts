@@ -19,7 +19,7 @@ export interface PinCluster {
 }
 
 /** Écart (px) en dessous duquel deux bulles se regroupent. */
-export const CLUSTER_RADIUS_PX = 28;
+const CLUSTER_RADIUS_PX = 28;
 
 export function clusterPins(pins: readonly ScreenPin[], radiusPx = CLUSTER_RADIUS_PX): PinCluster[] {
   const radiusSq = radiusPx * radiusPx;

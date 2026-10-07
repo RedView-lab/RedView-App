@@ -5,7 +5,7 @@ import type { DashboardPoiOptionId } from '@/pages/Dashboard/components/Dashboar
  * Mapping between Dashboard POI Option IDs (from the top bar filter menu)
  * and panel PoiCategory IDs (used by TimelineItem and the corridor search).
  */
-export const DASHBOARD_TO_PANEL_CATEGORY_MAP: Record<DashboardPoiOptionId, PanelPoiCategory[]> = {
+const DASHBOARD_TO_PANEL_CATEGORY_MAP: Record<DashboardPoiOptionId, PanelPoiCategory[]> = {
   drinking_water: ['fountains'],
   toilets: ['toilets'],
   supermarket: ['supermarkets'],
@@ -21,7 +21,7 @@ export const DASHBOARD_TO_PANEL_CATEGORY_MAP: Record<DashboardPoiOptionId, Panel
   bicycle: ['bikeShops'],
 };
 
-export const PANEL_TO_DASHBOARD_CATEGORY_MAP: Partial<Record<PanelPoiCategory, DashboardPoiOptionId>> = {
+const PANEL_TO_DASHBOARD_CATEGORY_MAP: Partial<Record<PanelPoiCategory, DashboardPoiOptionId>> = {
   fountains: 'drinking_water',
   toilets: 'toilets',
   supermarkets: 'supermarket',
@@ -37,7 +37,7 @@ export const PANEL_TO_DASHBOARD_CATEGORY_MAP: Partial<Record<PanelPoiCategory, D
   passes: 'pass',
 };
 
-export const FEATURE_TO_DASHBOARD_CATEGORY: Partial<Record<string, DashboardPoiOptionId>> = {
+const FEATURE_TO_DASHBOARD_CATEGORY: Partial<Record<string, DashboardPoiOptionId>> = {
   drinking_water: 'drinking_water',
   water_point: 'drinking_water',
   water_tap: 'drinking_water',

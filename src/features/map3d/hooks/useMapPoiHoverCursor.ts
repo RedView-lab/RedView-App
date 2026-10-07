@@ -58,7 +58,7 @@ const POI_LAYER_PATTERNS = [
   /symbol/i,
 ];
 
-export function getFeatureName(feature: MapboxGeoJSONFeature): string | null {
+function getFeatureName(feature: MapboxGeoJSONFeature): string | null {
   const props = (feature.properties ?? {}) as Record<string, unknown>;
   const candidateKeys = [
     'name_fr',
@@ -88,7 +88,7 @@ export function getFeatureName(feature: MapboxGeoJSONFeature): string | null {
   return null;
 }
 
-export function isPoiFeatureCandidate(feature: MapboxGeoJSONFeature): boolean {
+function isPoiFeatureCandidate(feature: MapboxGeoJSONFeature): boolean {
   const layerId = feature.layer?.id ?? '';
   if (IGNORED_LAYER_PREFIXES.some((prefix) => layerId.startsWith(prefix))) {
     return false;
@@ -121,7 +121,7 @@ export function isPoiFeatureCandidate(feature: MapboxGeoJSONFeature): boolean {
   return true;
 }
 
-export function scorePoiFeature(feature: MapboxGeoJSONFeature): number {
+function scorePoiFeature(feature: MapboxGeoJSONFeature): number {
   let score = 0;
   const layerId = feature.layer?.id?.toLowerCase() ?? '';
   const sourceLayer = ((feature as unknown as { sourceLayer?: string }).sourceLayer ?? '').toLowerCase();
@@ -147,7 +147,7 @@ export function scorePoiFeature(feature: MapboxGeoJSONFeature): number {
   return score;
 }
 
-export function findNamedPoiFeature(
+function findNamedPoiFeature(
   features: MapboxGeoJSONFeature[],
 ): { name: string; feature: MapboxGeoJSONFeature } | null {
   const candidates = features.filter(isPoiFeatureCandidate);

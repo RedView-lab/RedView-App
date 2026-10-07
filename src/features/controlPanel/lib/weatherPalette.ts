@@ -79,7 +79,7 @@ export function weatherPaletteMetricSpec(key: WeatherLayerKey): WeatherPaletteMe
   return getWeatherPaletteMetricDefinition(key);
 }
 
-export function weatherPaletteScaleCount(setting: WeatherPaletteScaleSetting): number {
+function weatherPaletteScaleCount(setting: WeatherPaletteScaleSetting): number {
   const match = /^(\d+)/.exec(setting);
   return match ? Number(match[1]) : 4;
 }

@@ -106,7 +106,7 @@ function buildPredictedUrl(year: number, coord: SwissTileCoord): string {
  * caller can then use predicted URLs. An empty array means the API answered
  * and swisstopo definitively has no item for this tile.
  */
-export async function fetchSwissTileItems(
+async function fetchSwissTileItems(
   coord: SwissTileCoord
 ): Promise<SwissTileStacItem[] | null> {
   const key = swissTileKey(coord);
@@ -177,7 +177,3 @@ export async function resolveSwissDownloadUrls(
   return items.map(i => i.href);
 }
 
-/** Test hook — clears in-memory STAC cache. */
-export function clearSwissStacCache(): void {
-  itemCache.clear();
-}

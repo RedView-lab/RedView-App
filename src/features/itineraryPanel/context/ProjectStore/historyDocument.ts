@@ -26,7 +26,7 @@ export function withLiveItineraryView(restored: Itinerary, live: Itinerary): Iti
   return copy ?? restored;
 }
 
-export { deepEqual };
+;
 
 export interface HistoryDocumentChange {
   /** Itinéraire concerné quand un seul a changé (sinon ''). */

@@ -8,7 +8,7 @@ import type { BrouterPoint, BrouterRoute } from '../types';
  * au-delà, le tracé est découpé en tronçons consécutifs au lieu de perdre
  * silencieusement les points suivants.
  */
-export const MAX_BROUTER_VIA_PER_REQUEST = 14;
+const MAX_BROUTER_VIA_PER_REQUEST = 14;
 
 export interface BrouterLeg {
   start: BrouterPoint;

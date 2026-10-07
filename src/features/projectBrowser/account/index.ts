@@ -3,14 +3,14 @@ export {
   formatAccountDisplayName,
   formatLastConnection,
   loadAccountProfile,
-  saveAccountIdentity,
-  saveAccountPractice,
+  
+  
   signOutAccount,
   UnsyncedProjectsError,
-  updateAccountPassword,
+  
 } from './lib';
 export type {
-  AccountIdentityForm,
-  AccountPracticeForm,
+  
+  
   AccountProfile,
 } from './types';

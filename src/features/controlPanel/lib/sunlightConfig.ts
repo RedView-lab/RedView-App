@@ -10,7 +10,7 @@ export const SUPPORTED_SUNLIGHT_SCALE_SETTINGS = [
   '12 couleurs',
 ] as const;
 
-export const DEFAULT_SUNLIGHT_COLORS = [
+const DEFAULT_SUNLIGHT_COLORS = [
   '#2DBF8C',
   '#5FD37A',
   '#9EE364',
@@ -25,11 +25,11 @@ export const DEFAULT_SUNLIGHT_COLORS = [
   '#8B0000',
 ] as const;
 
-export const DEFAULT_SUNLIGHT_MAX_MINUTES = 240; // 4 heures par défaut
+const DEFAULT_SUNLIGHT_MAX_MINUTES = 240; // 4 heures par défaut
 
 export const DEFAULT_SUNLIGHT_SCALE_SETTING: SunlightScaleSetting = '4 couleurs';
 
-export function sunlightScaleCount(setting: SunlightScaleSetting): number {
+function sunlightScaleCount(setting: SunlightScaleSetting): number {
   const match = /^(\d+)/u.exec(setting);
   const parsed = match ? Number(match[1]) : 4;
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 4;
@@ -86,7 +86,7 @@ export function parseDurationInput(input: string): number | null {
   return null;
 }
 
-export function buildBandLabel(minMinutes: number, maxMinutes: number): string {
+function buildBandLabel(minMinutes: number, maxMinutes: number): string {
   return `${formatDurationShort(minMinutes)} - ${formatDurationShort(maxMinutes)}`;
 }
 
@@ -99,7 +99,7 @@ function lerpColor(a: string, b: string, t: number): string {
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${bl.toString(16).padStart(2, '0')}`.toUpperCase();
 }
 
-export function colorAt(index: number, count: number): string {
+function colorAt(index: number, count: number): string {
   if (count <= 1) return DEFAULT_SUNLIGHT_COLORS[0];
   const maxIdx = DEFAULT_SUNLIGHT_COLORS.length - 1;
   const pos = (index / (count - 1)) * maxIdx;

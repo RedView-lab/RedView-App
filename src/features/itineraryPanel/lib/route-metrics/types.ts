@@ -16,15 +16,6 @@ export interface RouteProfilePoint {
   surface?: Surface;
 }
 
-export interface RouteMetrics {
-  distanceM: number;
-  ascentM: number;
-  descentM: number;
-  avgSlopePercent: number;
-  tarmacPercent: number;
-  offroadPercent: number;
-}
-
 export interface RouteElevationMetrics {
   distanceM: number;
   ascentM: number;

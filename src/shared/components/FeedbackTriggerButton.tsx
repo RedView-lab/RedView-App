@@ -1,7 +1,7 @@
 import { trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { readDocumentAppLocale } from '../i18n';
 
-export function buildFeedbackUrl(): string {
+function buildFeedbackUrl(): string {
   const landingUrl =
     (import.meta.env.VITE_LANDING_URL as string | undefined) || 'https://redview.tech';
   const base = `${landingUrl.replace(/\/$/, '')}/`;

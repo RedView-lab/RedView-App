@@ -70,7 +70,7 @@ export interface SlideCover {
   isForest(projX: number, projY: number): boolean;
 }
 
-export type SlideStop = 'stopped' | 'edge' | 'maxLength';
+type SlideStop = 'stopped' | 'edge' | 'maxLength';
 
 export interface SlideSample {
   projX: number;
@@ -90,7 +90,7 @@ export interface SlideSample {
   airborne: boolean;
 }
 
-export interface SlideFlight {
+interface SlideFlight {
   /** Indices of the take-off and landing samples. */
   from: number;
   to: number;

@@ -1,10 +1,5 @@
 import type { SlopeBand, SlopeColorization } from '@/features/controlPanel/types';
 
-export interface SlopeRampOptions {
-  bands: SlopeBand[];
-  colorization: SlopeColorization; // 'gradient' | 'stepped'
-}
-
 interface RgbaColor {
   r: number;
   g: number;

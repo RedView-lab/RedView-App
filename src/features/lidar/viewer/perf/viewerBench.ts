@@ -28,7 +28,7 @@ export interface ViewerBenchFrame {
   renderScale: number;
 }
 
-export interface ViewerBenchSegmentReport {
+interface ViewerBenchSegmentReport {
   segment: string;
   frames: number;
   fps: number;

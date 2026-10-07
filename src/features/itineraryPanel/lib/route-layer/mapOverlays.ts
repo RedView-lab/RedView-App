@@ -22,17 +22,7 @@ import {
   ROUTE_HOVER_PREVIEW_SOURCE_ID,
   canMutateStyle,
 } from './constants';
-import {
-  FLYOVER_PROGRESS_GLOW_OPACITY,
-  FLYOVER_PROGRESS_LINE_OPACITY,
-  ensureAnalysisFlyoverProgressLayers,
-  ensureAnalysisHoverLayers,
-  ensureAnalysisSelectionLayers,
-  ensureForbiddenZoneDraftLayers,
-  ensureForbiddenZoneLayers,
-  ensureRouteAuditLayers,
-  ensureRouteHoverPreviewLayers,
-} from './auxiliaryLayers';
+import { FLYOVER_PROGRESS_GLOW_OPACITY, FLYOVER_PROGRESS_LINE_OPACITY, ensureAnalysisFlyoverProgressLayers, ensureAnalysisSelectionLayers, ensureForbiddenZoneDraftLayers, ensureForbiddenZoneLayers, ensureRouteAuditLayers, ensureRouteHoverPreviewLayers } from './auxiliaryLayers';
 import {
   buildAnalysisFlyoverProgressGeoJson,
   buildAnalysisHoverGeoJson,
@@ -49,30 +39,6 @@ import { setLayoutPropertyIfChanged, setPaintPropertyIfChanged } from './itinera
 
 const analysisHoverVisibilityState = new WeakMap<MapboxMap, boolean>();
 const routeHoverPreviewVisibilityState = new WeakMap<MapboxMap, boolean>();
-
-export function setRouteAuditFindings(
-  map: MapboxMap,
-  findings: Array<{ id: string; coordinates: [number, number][]; title: string; detail: string }>,
-  visible: boolean,
-): void {
-  if (!canMutateStyle(map)) return;
-
-  const source = ensureRouteAuditLayers(map);
-  if (!source) return;
-
-  try {
-    source.setData(buildRouteAuditGeoJson(findings));
-    const visibility = visible && findings.length > 0 ? 'visible' : 'none';
-    if (map.getLayer(ROUTE_AUDIT_GLOW_LAYER_ID)) {
-      map.setLayoutProperty(ROUTE_AUDIT_GLOW_LAYER_ID, 'visibility', visibility);
-    }
-    if (map.getLayer(ROUTE_AUDIT_LINE_LAYER_ID)) {
-      map.setLayoutProperty(ROUTE_AUDIT_LINE_LAYER_ID, 'visibility', visibility);
-    }
-  } catch {
-    /* noop */
-  }
-}
 
 export function clearRouteAuditFindings(map: MapboxMap): void {
   if (!canMutateStyle(map)) return;
@@ -195,26 +161,6 @@ export function clearForbiddenZoneDraft(map: MapboxMap): void {
     }
     if (map.getLayer(FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID)) {
       map.setLayoutProperty(FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID, 'visibility', 'none');
-    }
-  } catch {
-    /* noop */
-  }
-}
-
-export function setAnalysisHoverPoint(
-  map: MapboxMap,
-  point: { lon: number; lat: number; color?: string },
-): void {
-  try {
-    const source = ensureAnalysisHoverLayers(map);
-    if (!source) return;
-    source.setData(buildAnalysisHoverGeoJson(point));
-    if (!analysisHoverVisibilityState.get(map)) {
-      if (map.getLayer(ANALYSIS_HOVER_POINT_LAYER_ID)) {
-        map.setLayoutProperty(ANALYSIS_HOVER_POINT_LAYER_ID, 'visibility', 'visible');
-        map.moveLayer(ANALYSIS_HOVER_POINT_LAYER_ID);
-      }
-      analysisHoverVisibilityState.set(map, true);
     }
   } catch {
     /* noop */

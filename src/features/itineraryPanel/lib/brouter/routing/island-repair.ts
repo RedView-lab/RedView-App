@@ -42,7 +42,7 @@ function nudge(p: BrouterPoint, toward: BrouterPoint, meters: number, perpendicu
 }
 
 /** Index du point en cause d'après le message d'erreur BRouter (null : inconnu). */
-export function islandPointIndex(error: unknown, pointCount: number): number | null {
+function islandPointIndex(error: unknown, pointCount: number): number | null {
   const message = error instanceof Error ? error.message : String(error);
   const section = /island detected for section (\d+)/i.exec(message);
   if (section) {

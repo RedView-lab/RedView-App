@@ -8,7 +8,7 @@
 
 import { computePointFilterBitmasks, type ViewerPointFilterState } from '../pointFilter';
 
-export { ViewerToolsController, type ViewerToolsOptions } from './controller';
+export { ViewerToolsController,  } from './controller';
 
 /** Class visibility predicate matching the renderer's point filter. */
 export function pointFilterClassPredicate(state: ViewerPointFilterState): (classification: number) => boolean {

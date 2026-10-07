@@ -20,7 +20,7 @@ export type RedviewFileErrorKind =
   /** Fichiers .fit du projet introuvables ou injoignables au moment de l'export. */
   | 'fit-unavailable';
 
-export const REDVIEW_FILE_ERROR_MESSAGES: Record<RedviewFileErrorKind, string> = {
+const REDVIEW_FILE_ERROR_MESSAGES: Record<RedviewFileErrorKind, string> = {
   'not-redview': 'Ce fichier n’est pas un projet RedView (.redview).',
   corrupted: 'Le fichier .redview est endommagé ou incomplet. Demandez à l’expéditeur de l’exporter à nouveau.',
   'newer-version': 'Ce projet a été exporté par une version plus récente de RedView. Rechargez la page pour mettre l’application à jour, puis réessayez.',

@@ -15,56 +15,6 @@ import type {
 } from '../types';
 import { addDays, getMinuteOfDay, minuteToCanvasTopPx, resolveVisualDurationMin, toDayKey } from './format';
 
-export function buildVisibleMinuteBounds(
-  filteredPrimaryItems: TimedTimelineItem[],
-  filteredPauseItems: TimedTimelineItem[],
-  unattachedAutoPauseItems: PauseAttachmentState['unattachedPauses'],
-  pauseAttachment: PauseAttachmentState,
-  displayDays: Date[],
-  reference: StartReference,
-): number[] {
-  const bounds: number[] = [];
-
-  filteredPrimaryItems.forEach((entry, index) => {
-    const attachedPauses = pauseAttachment.attachedByEventId.get(entry.item.id) ?? [];
-    const spanToNextSeconds = resolveSecondsToNextCheckpoint(filteredPrimaryItems, index);
-    const durationMin = resolveEventDisplayDurationMin(entry.item, attachedPauses, spanToNextSeconds);
-    collectVisibleMinuteBounds(
-      bounds,
-      entry.date,
-      entry.minuteOfDay,
-      durationMin,
-      displayDays,
-      reference.hasRealDate,
-    );
-  });
-
-  filteredPauseItems.forEach((entry) => {
-    collectVisibleMinuteBounds(
-      bounds,
-      entry.date,
-      entry.minuteOfDay,
-      resolveVisualDurationMin(entry.item.durationMin ?? 0),
-      displayDays,
-      reference.hasRealDate,
-    );
-  });
-
-  unattachedAutoPauseItems.forEach((entry) => {
-    collectVisibleMinuteBounds(
-      bounds,
-      entry.date,
-      entry.minuteOfDay,
-      resolveVisualDurationMin(entry.durationMin),
-      displayDays,
-      reference.hasRealDate,
-    );
-  });
-
-  const finiteBounds = bounds.filter((value) => Number.isFinite(value));
-  return finiteBounds.length > 0 ? finiteBounds : [reference.startMinutes];
-}
-
 export function buildScheduledEvents(
   filteredPrimaryItems: TimedTimelineItem[],
   pauseAttachment: PauseAttachmentState,
@@ -198,39 +148,6 @@ function resolveEventDisplayDurationMin(
   }
 
   return resolveVisualDurationMin(durationMin);
-}
-
-function collectVisibleMinuteBounds(
-  bounds: number[],
-  startDate: Date | null,
-  minuteOfDay: number,
-  durationMin: number,
-  displayDays: Date[],
-  hasRealDate: boolean,
-) {
-  bounds.push(minuteOfDay);
-  if (durationMin <= 0) return;
-
-  if (!hasRealDate || !startDate) {
-    bounds.push(minuteOfDay + durationMin);
-    return;
-  }
-
-  const endDate = new Date(startDate.getTime() + durationMin * 60_000);
-  displayDays.forEach((day) => {
-    const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0, 0);
-    const dayEnd = addDays(dayStart, 1);
-    const overlapStartMs = Math.max(startDate.getTime(), dayStart.getTime());
-    const overlapEndMs = Math.min(endDate.getTime(), dayEnd.getTime());
-    if (overlapEndMs <= overlapStartMs) return;
-
-    bounds.push(getMinuteOfDay(new Date(overlapStartMs)));
-    bounds.push(
-      overlapEndMs === dayEnd.getTime()
-        ? MINUTES_PER_DAY
-        : getMinuteOfDay(new Date(overlapEndMs)),
-    );
-  });
 }
 
 /**

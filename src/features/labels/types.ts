@@ -1,20 +1,17 @@
 // ── Label categories for toggling map labels ──────────────────────────
 
-export const LABEL_CATEGORIES = [
-  'poi',
-  'roads',
-  'places',
-  'states',
-  'naturalParks',
-  'countries',
-  'waterBody',
-] as const;
-
-export type LabelCategory = (typeof LABEL_CATEGORIES)[number];
+export type LabelCategory =
+  | 'poi'
+  | 'roads'
+  | 'places'
+  | 'states'
+  | 'naturalParks'
+  | 'countries'
+  | 'waterBody';
 
 // ── How a category maps to the Mapbox API ─────────────────────────────
 
-export type LabelCategoryKind =
+type LabelCategoryKind =
   | { type: 'config'; configKey: string | string[] }
   | { type: 'layers'; pattern: RegExp }
   | {

@@ -14,7 +14,7 @@ import {
 } from './exportHelpers';
 import { translateAppText } from '@/shared/i18n/config';
 
-export function mapPoiCategoryToGpxSym(anchor: ExportAnchor): string {
+function mapPoiCategoryToGpxSym(anchor: ExportAnchor): string {
   if (anchor.kind === 'start') return 'Flag, Green';
   if (anchor.kind === 'end') return 'Flag, Red';
   if (anchor.kind === 'waypoint') return 'Flag, Blue';
@@ -24,14 +24,14 @@ export function mapPoiCategoryToGpxSym(anchor: ExportAnchor): string {
   return 'Waypoint';
 }
 
-export function buildGpxWaypointType(anchor: ExportAnchor): string {
+function buildGpxWaypointType(anchor: ExportAnchor): string {
   if (anchor.kind === 'start') return 'start';
   if (anchor.kind === 'end') return 'finish';
   if (anchor.kind === 'waypoint') return 'checkpoint';
   return anchor.poiCategory ?? 'poi';
 }
 
-export function buildWaypointDescription(anchor: ExportAnchor): string {
+function buildWaypointDescription(anchor: ExportAnchor): string {
   if (anchor.kind === 'waypoint') return translateAppText('Point de passage exporté depuis la feuille de route.');
   if (anchor.kind === 'poi') return buildPoiExportDescription(anchor);
   if (anchor.kind === 'start') return translateAppText('Départ du parcours.');

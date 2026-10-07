@@ -34,7 +34,7 @@ export const FOV_PRESETS: readonly FovPreset[] = [
   { id: 'binoculars', fovDeg: 7.5 },
 ];
 
-export const DEFAULT_FOV_PRESET: FovPresetId = 'eye';
+const DEFAULT_FOV_PRESET: FovPresetId = 'eye';
 /** People look slightly down when they walk and scan terrain. */
 const INITIAL_PITCH_DEG = -5;
 /** Radius around the feet searched for the highest ground, m. */

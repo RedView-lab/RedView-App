@@ -309,7 +309,7 @@ export function cacheRecoloredBlob(signature: string, blobUrl: string): void {
 }
 
 /** L'URL est-elle encore détenue par le cache recoloré ? */
-export function isRecoloredBlobUrlCached(url: string): boolean {
+function isRecoloredBlobUrlCached(url: string): boolean {
   for (const cachedUrl of recoloredBlobCache.values()) {
     if (cachedUrl === url) return true;
   }

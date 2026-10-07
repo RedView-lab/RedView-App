@@ -1,5 +1,3 @@
-import type { BrouterRoute } from '../types';
-
 export const WATCHDOG_RETRY_DELAYS_MS = [250, 700, 1500];
 
 export function num(value: unknown): number {
@@ -36,34 +34,3 @@ export function delay(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-export function isExpectedDetourCandidateFailure(error: Error): boolean {
-  return /via\d+-position not mapped|error re-tracking track/i.test(error.message);
-}
-
-export function computeClimbEfficiency(
-  route: BrouterRoute,
-  baseline: BrouterRoute,
-): { addedDistanceKm: number; addedAscentM: number; gainPerAddedKm: number } {
-  const addedDistanceKm = (route.distanceM - baseline.distanceM) / 1000;
-  const addedAscentM = route.ascentM - baseline.ascentM;
-  const gainPerAddedKm = addedAscentM / Math.max(0.5, addedDistanceKm);
-  return { addedDistanceKm, addedAscentM, gainPerAddedKm };
-}
-
-export function scoreMinDistanceMaxAscent(route: BrouterRoute, baseline: BrouterRoute): number {
-  const distanceKm = route.distanceM / 1000;
-  const baseDistanceKm = baseline.distanceM / 1000;
-  const addedDistanceKm = Math.max(0, distanceKm - baseDistanceKm);
-  const addedAscentM = Math.max(0, route.ascentM - baseline.ascentM);
-  const gainPerAddedKm = addedAscentM / Math.max(2.2, addedDistanceKm);
-  const climbDensity = route.ascentM / Math.max(1, distanceKm);
-  const softBudgetKm = Math.max(7, baseDistanceKm * 0.08);
-  const overBudgetKm = Math.max(0, addedDistanceKm - softBudgetKm);
-  return (
-    gainPerAddedKm * 6400
-    + addedAscentM * 7
-    + climbDensity * 220
-    - addedDistanceKm * 120
-    - overBudgetKm * overBudgetKm * 320
-  );
-}

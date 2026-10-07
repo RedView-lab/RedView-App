@@ -4,15 +4,15 @@ import type { DetectedCrs, AltitudeRef, TileCoord, TileFootprint } from '../../t
 import { MAX_VIEWER_SCENE_TILES } from '../../lib/viewerUrl';
 import { parseViewerEngineParam, VIEWER_ENGINE_PARAM, type ViewerEngineRequest } from './viewerEngine';
 
-export function buildPanelTileLabel(x: number, y: number, projection: DetectedCrs): string {
+function buildPanelTileLabel(x: number, y: number, projection: DetectedCrs): string {
   return translateAppText('Tuile {{x}}/{{y}} ({{projection}})', { x, y, projection });
 }
 
-export function tileCoordKey(coord: Pick<TileCoord, 'xKm' | 'yKm' | 'projection' | 'altRef' | 'footprint'>): string {
+function tileCoordKey(coord: Pick<TileCoord, 'xKm' | 'yKm' | 'projection' | 'altRef' | 'footprint'>): string {
   return `${coord.xKm}_${coord.yKm}_${coord.projection}_${coord.altRef}${tileFootprintSuffix(coord)}`;
 }
 
-export function parseSceneTileCoords(params: URLSearchParams, primaryTile: TileCoord): TileCoord[] {
+function parseSceneTileCoords(params: URLSearchParams, primaryTile: TileCoord): TileCoord[] {
   const tiles: TileCoord[] = [primaryTile];
   const seen = new Set<string>([tileCoordKey(primaryTile)]);
 

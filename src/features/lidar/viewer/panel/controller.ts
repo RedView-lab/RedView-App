@@ -3,21 +3,21 @@ import type { ViewerEngineKey } from '../session/viewerEngine';
 import { ensureViewerPanel } from './template';
 
 export type SnowModeKey = 'off' | 'cover' | 'thickness';
-export type PointColorModeKey = 'rgb' | 'grey' | 'intensity' | 'classification';
+type PointColorModeKey = 'rgb' | 'grey' | 'intensity' | 'classification';
 
 export const POINT_SIZE_MIN = 0.02;
 export const POINT_SIZE_MAX = 1.0;
-export const DENSITY_SCALE_MIN = 0.01;
-export const DENSITY_SCALE_MAX = 1.0;
-export const ELEVATION_EXAGGERATION_MIN = 0.5;
-export const ELEVATION_EXAGGERATION_MAX = 3.0;
+const DENSITY_SCALE_MIN = 0.01;
+const DENSITY_SCALE_MAX = 1.0;
+const ELEVATION_EXAGGERATION_MIN = 0.5;
+const ELEVATION_EXAGGERATION_MAX = 3.0;
 
-export const LEFT_PANEL_STORAGE_WIDTH_KEY = 'rv-viewer-left-panel-width-v2';
-export const LEFT_PANEL_STORAGE_COLLAPSED_KEY = 'rv-viewer-left-panel-collapsed-v2';
-export const LEFT_PANEL_WIDTH_DEFAULT = 300;
-export const LEFT_PANEL_WIDTH_MIN = 280;
-export const LEFT_PANEL_WIDTH_MAX = 460;
-export const LEFT_PANEL_COLLAPSE_DRAG_THRESHOLD = 48;
+const LEFT_PANEL_STORAGE_WIDTH_KEY = 'rv-viewer-left-panel-width-v2';
+const LEFT_PANEL_STORAGE_COLLAPSED_KEY = 'rv-viewer-left-panel-collapsed-v2';
+const LEFT_PANEL_WIDTH_DEFAULT = 300;
+const LEFT_PANEL_WIDTH_MIN = 280;
+const LEFT_PANEL_WIDTH_MAX = 460;
+const LEFT_PANEL_COLLAPSE_DRAG_THRESHOLD = 48;
 
 export interface ViewerEngineOption {
   key: ViewerEngineKey;
@@ -145,7 +145,7 @@ export function percentToEdlStrength(percent: number): number {
   return toSliderPercent(percent) / 50;
 }
 
-export function elevationPercentToFactor(percent: number): number {
+function elevationPercentToFactor(percent: number): number {
   const normalized = (toSliderPercent(percent) - 1) / 99;
   return ELEVATION_EXAGGERATION_MIN + normalized * (ELEVATION_EXAGGERATION_MAX - ELEVATION_EXAGGERATION_MIN);
 }

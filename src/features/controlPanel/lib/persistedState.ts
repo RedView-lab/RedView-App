@@ -33,12 +33,12 @@ export type ControlPanelSectionKey =
 
 export type ControlPanelSectionsOpenState = Record<ControlPanelSectionKey, boolean>;
 
-export interface ControlPanelLabelsPersistedState {
+interface ControlPanelLabelsPersistedState {
   backend: Record<LabelCategory, boolean>;
   statesUiEnabled: boolean;
 }
 
-export interface ControlPanelSlopePersistedState {
+interface ControlPanelSlopePersistedState {
   state: SlopeState;
   scale: SlopeScale;
   scaleSetting: SlopeScaleSetting;
@@ -47,28 +47,28 @@ export interface ControlPanelSlopePersistedState {
   breakpoints: PersistedBreakpoints;
 }
 
-export interface ControlPanelAltitudePersistedState {
+interface ControlPanelAltitudePersistedState {
   state: AltitudeState;
   breakpoints: PersistedAltitudeBreakpoints;
 }
 
-export interface ControlPanelContourLinesPersistedState {
+interface ControlPanelContourLinesPersistedState {
   interval: ContourIntervalSetting;
   opacity: number;
 }
 
-export interface ControlPanelRoutesPersistedState {
+interface ControlPanelRoutesPersistedState {
   traceWidthPx: number;
   /** Finesse des traces dessinées ; absente = `auto` (suit la 2D / 3D et le relief). */
   quality?: RouteDisplayQuality;
 }
 
-export type ControlPanelSunlightPersistedState = Omit<
+type ControlPanelSunlightPersistedState = Omit<
   SunlightState,
   'enabled' | 'sunriseTime' | 'sunsetTime'
 >;
 
-export type ControlPanelWindPersistedState = Pick<
+type ControlPanelWindPersistedState = Pick<
   WindPanelState,
   'date' | 'time' | 'forecastDay' | 'particlesEnabled' | 'terrainOverlayEnabled'
 >;

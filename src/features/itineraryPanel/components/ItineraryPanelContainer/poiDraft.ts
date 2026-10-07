@@ -30,7 +30,7 @@ export function resolveDraftFeatureId(draft: MapPoiDraft): number {
   return Number.isFinite(parsed) ? -parsed : -Date.now();
 }
 
-export function buildDraftPoiFeature(draft: MapPoiDraft): PoiFeature | null {
+function buildDraftPoiFeature(draft: MapPoiDraft): PoiFeature | null {
   if (!draft.category) return null;
 
   return {
@@ -44,7 +44,7 @@ export function buildDraftPoiFeature(draft: MapPoiDraft): PoiFeature | null {
   };
 }
 
-export function buildTimelineRowFromPoiFeature(
+function buildTimelineRowFromPoiFeature(
   itinerary: Itinerary,
   feature: PoiFeature,
 ): Itinerary['timeline'][number] | null {

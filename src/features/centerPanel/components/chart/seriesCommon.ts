@@ -110,10 +110,6 @@ export function unitForMetric(metric: ChartMetricId): string {
   }
 }
 
-export function isIntervalAverageMetric(metric: ChartMetricId): boolean {
-  return metric === 'Vitesse moyenne' || metric === 'Allure moyenne' || metric === 'Puissance moyenne';
-}
-
 /** Running pace, stored in the series as decimal minutes per km. */
 export function isPaceMetric(metric: ChartMetricId): boolean {
   return metric === 'Allure' || metric === 'Allure moyenne';

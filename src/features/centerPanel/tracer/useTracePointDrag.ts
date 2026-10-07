@@ -10,7 +10,6 @@ import {
   type TracePointControls,
   type TracePointHandle,
 } from '@/features/itineraryPanel/lib/tracer/tracePointDataset';
-import type { TracePointKind } from '@/features/itineraryPanel/lib/tracer/traceEdits';
 import {
   beginTracePointPress,
   draggedAnchorPoint,
@@ -43,9 +42,9 @@ export function isWithinTracePointGesture(now: number = performance.now()): bool
   return now - lastGestureEndAt < GESTURE_CLICK_GUARD_MS;
 }
 
-export type { TracePointKind };
+;
 
-export type TracePointDragTarget = TracePointHandle;
+type TracePointDragTarget = TracePointHandle;
 
 export interface TracePointDragCommit {
   target: TracePointDragTarget;

@@ -3,9 +3,9 @@ import { translateAppText } from '@/shared/i18n/config';
 import { tileCoordFileName } from '../../lib/coordConvert';
 import type { ViewerStatusReporter } from '../runtime';
 
-export const TILE_LOAD_COMPLETE_PROGRESS = 0.92;
-export const SCENE_LOAD_START_PCT = 4;
-export const SCENE_LOAD_END_PCT = 80;
+const TILE_LOAD_COMPLETE_PROGRESS = 0.92;
+const SCENE_LOAD_START_PCT = 4;
+const SCENE_LOAD_END_PCT = 80;
 
 export interface ViewerSceneLoadOptions {
   deviceMemoryGiB?: number;
@@ -16,7 +16,7 @@ interface SceneTileProgressState {
   detail: string;
 }
 
-export function clamp(value: number, min: number, max: number): number {
+function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 

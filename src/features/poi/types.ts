@@ -6,12 +6,7 @@
 // compilation que les libellés, icônes et mappings du panneau couvrent bien
 // toutes les catégories réellement indexées en base.
 
-import {
-  POI_TAXONOMY,
-  POI_TAXONOMY_ICON,
-  POI_TAXONOMY_LABELS,
-  POI_TAXONOMY_GROUP,
-} from './poi-taxonomy';
+import { POI_TAXONOMY_ICON, POI_TAXONOMY_LABELS } from './poi-taxonomy';
 
 export const POI_CATEGORIES = [
   // Eau
@@ -71,18 +66,6 @@ export const POI_CATEGORIES = [
 ] as const;
 
 export type PoiCategory = (typeof POI_CATEGORIES)[number];
-
-/** Visual grouping for the UI panel */
-export interface PoiGroup {
-  label: string;
-  categories: PoiCategory[];
-}
-
-/** Groupes dérivés de la taxonomie (ordre du fichier source). */
-export const POI_GROUPS: PoiGroup[] = POI_TAXONOMY.groups.map((group) => ({
-  label: group.label,
-  categories: POI_CATEGORIES.filter((key) => POI_TAXONOMY_GROUP[key] === group.key),
-})).filter((group) => group.categories.length > 0);
 
 /**
  * Human-readable labels (FR).

@@ -50,7 +50,7 @@ const MOBILE_VENDOR_RE = /qualcomm|adreno|arm|mali|imagination|powervr|samsung|b
  * `probeWebglRenderer`. An adapter that stays unidentified is treated as
  * integrated: the safe budget then grows from measured GPU time.
  */
-export function resolveGpuTier(vendor: string, arch: string, desc: string): GpuTier {
+function resolveGpuTier(vendor: string, arch: string, desc: string): GpuTier {
   const haystack = `${vendor} ${arch} ${desc}`;
   if (haystack.includes('apple')) return 'apple';
   if (vendor.includes('nvidia')) return 'discrete';
@@ -68,7 +68,7 @@ export function resolveGpuTier(vendor: string, arch: string, desc: string): GpuT
  * graphics …)"), which browsers still expose when WebGPU's adapter info
  * leaves `description` empty. Empty string when unavailable.
  */
-export function probeWebglRenderer(): string {
+function probeWebglRenderer(): string {
   try {
     if (typeof document === 'undefined') return '';
     const canvas = document.createElement('canvas');

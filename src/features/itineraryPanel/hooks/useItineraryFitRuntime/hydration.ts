@@ -28,7 +28,7 @@ export interface HydratedFitRuntimeData {
   invalidUploads?: InvalidFitUpload[];
 }
 
-export interface InvalidFitUpload {
+interface InvalidFitUpload {
   upload: ItineraryFitUpload;
   problem: FitFileProblem;
 }

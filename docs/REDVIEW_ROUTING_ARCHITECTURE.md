@@ -102,7 +102,9 @@ Le template s'assure que :
 *   Le `uphillcostfactor` d'une "Major route" est extrêmement haut (`6.0`).
 Ainsi, le moteur se met soudainement à percevoir les ascensions sur les chemins secondaires comme virtuellement moins coûteuses que la route plate.
 
-### 5.3 `fetchBrouterRouteBestOfN` (Client Frontend)
+### 5.3 `fetchBrouterRouteBestOfN` (Client Frontend) — retiré
+> Historique : plus appelé depuis le 02/10/2026 (f2adbb8, routage toujours en profil généré, une requête), code supprimé le 07/10/2026 avec l'optimiseur de détours (`brouterDetourOptimizer.ts`, `brouterGeometry.ts`) et `profile-overrides.ts`. Voir §7.5.
+
 Malgré les modifications du BRF, la première route calculée n'est pas toujours la plus montante. RedView implémente alors une stratégie "Best-of-N" via la fonction `fetchBrouterRouteBestOfN` (dans `client.ts`).
 1.  Le client lance **jusqu'à 4 requêtes HTTP simultanées** vers le proxy.
 2.  Chaque requête contient un index alternatif différent (`alternativeidx=0`, `1`, `2`, `3`). BRouter expose en effet jusqu'à 4 routes alternatives basées sur le même profil.
@@ -124,8 +126,7 @@ Pour résumer, voici ce qu'il se passe, en quelques centaines de millisecondes, 
     *   Le VPS répond `{ profileid: 'custom_123...' }`.
     *   L'application met en cache l'association Hash -> ID.
 5.  **Recherche de Route** :
-    *   Si mode "Dénivelé", exécution de `fetchBrouterRouteBestOfN` (lance 4 requêtes GET).
-    *   Sinon, exécution classique de `fetchBrouterRoute` (1 requête GET).
+    *   Une requête GET avec le profil généré, quel que soit le mode (le « Best-of-N » du §5.3 est retiré) ; au-delà de ~180 km, ancres puis raffinement (§7).
 6.  **Proxying** : Le Proxy Vercel assemble l'URL (`http://<VPS_IP>/brouter?lonlats=...&profile=custom_123...`) et relaie vers Nginx sur le Droplet DigitalOcean.
 7.  **Résolution** : Le VPS exécute l'algorithme A* en se basant sur le graphe rd5 en RAM et le profil `custom_123...`.
 8.  **Retour** : Le GeoJSON (contenant les coordonnées, la distance, l'ascent/descent et les temps estimés) traverse le proxy, arrive dans le client, est casté selon l'interface `BrouterRoute`, puis injecté dans la Mapbox et la Timeline.
@@ -162,7 +163,7 @@ BRouter accroche un point à la voie la plus proche même si elle n'est pas reli
 - `api/brouter.ts` compresse le GeoJSON (brotli ou gzip) : `server.mjs` ne compresse que les fichiers statiques, et un tracé de 1 000 km pèse ~5 Mo.
 
 ### 7.5 Best-of-N
-Les stratégies multi-alternatives (§5.3) ne servaient qu'aux profils stock : tout itinéraire utilise désormais son profil personnalisé, routé en une requête (les fonctions `fetchBrouterRouteBest*` ne sont plus appelées par le routage).
+Les stratégies multi-alternatives (§5.3) ne servaient qu'aux profils stock : tout itinéraire utilise désormais son profil personnalisé, routé en une requête. Les fonctions `fetchBrouterRouteBest*`, l'optimiseur de détours et `profile-overrides.ts` (curseurs → paramètres d'un profil stock) n'étaient plus appelés : supprimés le 07/10/2026 avec le reste du code mort signalé par knip.
 
 ### 7.6 Corrections du profil BRF
 - **Mode grimpe** (remplace §5.2) : `uphillcostfactor = costfactor × relief` par catégorie (gravier 0,4 … axes majeurs 1,0), avec la sentinelle 10000 conservée. Les anciennes valeurs fixes faisaient ignorer en montée les choix « Éviter / Interdire », les sens interdits et les pénalités d'accès.

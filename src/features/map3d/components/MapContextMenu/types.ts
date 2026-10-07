@@ -24,7 +24,7 @@ export interface MapContextMenuPoint {
   pickToleranceM?: number;
 }
 
-export type MapContextMenuOverlayDetailKind = 'sunlight' | 'weather' | 'wind';
+type MapContextMenuOverlayDetailKind = 'sunlight' | 'weather' | 'wind';
 
 export interface MapContextMenuOverlayDetail {
   id: string;

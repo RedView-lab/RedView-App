@@ -253,7 +253,3 @@ export function cacheDownloadUrl(coord: TileCoord, url: string): void {
   tileUrlCache.set(cacheKey, url);
 }
 
-export function clearZonesCache(): void {
-  zonesCache = null;
-  tileUrlCache.clear();
-}

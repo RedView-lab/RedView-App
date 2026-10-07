@@ -20,15 +20,6 @@ export type SlopeColorMode = 'gradient' | 'step';
 
 // ── Persisted user state ──────────────────────────────────────────────
 
-/**
- * Explicit slope calculation source.
- *
- * SURFACE uses the visible LiDAR surface model (MNS / DSM).
- * TERRAIN uses the bare-earth IGN terrain model (MNT / DTM) for slope
- * calculation while keeping the visual LiDAR surface rendering elsewhere.
- */
-export type SlopeResolutionKey = '0.40m (LIDAR SURFACE)' | '1m (LIDAR TERRAIN)' | string;
-
 export type SlopeDemProfile = 'default' | 'terrain';
 
 export interface SlopeState {

@@ -3,13 +3,13 @@ export {
   PROJECT_BROWSER_SETTINGS_STORAGE_KEY,
   type AppLocale,
   type AppTranslationBundle,
-  type AppTranslationPair,
-  type AppTranslationValue,
+  
+  
   type AppTranslationVars,
 } from './types';
 export {
-  detectNavigatorAppLocale,
-  isAppLocale,
+  
+  
   readDocumentAppLocale,
   readStoredAppLocale,
   resolveAppLocale,

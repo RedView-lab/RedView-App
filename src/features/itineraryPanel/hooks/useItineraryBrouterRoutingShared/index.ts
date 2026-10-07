@@ -1,6 +1,6 @@
 export type {
-  ProfilePoint,
-  RoutePoint,
+  
+  
   RoutePoints,
   UseItineraryBrouterRoutingArgs,
 } from './types';
@@ -23,7 +23,7 @@ export {
   roundRouteDistanceKm,
   routePointsEqual,
   widenUnjoinedRoutePatchWindow,
-  type RoutePatchEdit,
+  
 } from './routeSegments';
 export {
   isBrouterUnmappedPointError,

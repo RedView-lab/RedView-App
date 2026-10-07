@@ -5,7 +5,7 @@ import type {
   MapContextMenuOverlayDetail,
 } from './types';
 
-export interface ForecastPointResponse {
+interface ForecastPointResponse {
   hourly?: {
     temperature_2m?: Array<number | null>;
     relative_humidity_2m?: Array<number | null>;
@@ -22,28 +22,28 @@ export interface ForecastPointResponse {
   };
 }
 
-export function formatTemperature(value: number | null | undefined): string | null {
+function formatTemperature(value: number | null | undefined): string | null {
   if (!Number.isFinite(value)) return null;
   return `${Math.round(Number(value))}°C`;
 }
 
-export function formatRain(value: number | null | undefined): string | null {
+function formatRain(value: number | null | undefined): string | null {
   if (!Number.isFinite(value)) return null;
   if (Number(value) <= 0) return '0 mm';
   return `${Number(value).toFixed(Number(value) >= 10 ? 0 : 1)} mm`;
 }
 
-export function formatHumidity(value: number | null | undefined): string | null {
+function formatHumidity(value: number | null | undefined): string | null {
   if (!Number.isFinite(value)) return null;
   return translateAppText('{{value}}% humidité', { value: Math.round(Number(value)) });
 }
 
-export function formatCloudCover(value: number | null | undefined): string | null {
+function formatCloudCover(value: number | null | undefined): string | null {
   if (!Number.isFinite(value)) return null;
   return translateAppText('{{value}}% nuages', { value: Math.round(Number(value)) });
 }
 
-export function formatWindDirection(degrees: number): string {
+function formatWindDirection(degrees: number): string {
   const headings = readDocumentAppLocale() === 'en'
     ? ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
     : ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
@@ -51,7 +51,7 @@ export function formatWindDirection(degrees: number): string {
   return headings[index];
 }
 
-export function formatWindLabel(
+function formatWindLabel(
   speed: number | null | undefined,
   direction: number | null | undefined,
   gusts?: number | null | undefined,
@@ -64,13 +64,13 @@ export function formatWindLabel(
   return `${speedKmh} km/h${dirLabel}${gustsLabel}`;
 }
 
-export function formatIsoTime(value: string | null | undefined): string | null {
+function formatIsoTime(value: string | null | undefined): string | null {
   if (!value) return null;
   const match = /T(\d{2}:\d{2})/.exec(value);
   return match ? match[1] : null;
 }
 
-export function buildOverlayForecastUrl(
+function buildOverlayForecastUrl(
   lat: number,
   lng: number,
   overlayContext: MapContextMenuOverlayContext,

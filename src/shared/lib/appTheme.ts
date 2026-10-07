@@ -25,7 +25,7 @@ export function isAppThemePreference(value: unknown): value is AppThemePreferenc
   return value === 'system' || value === 'light' || value === 'dark';
 }
 
-export function readAppThemePreference(): AppThemePreference {
+function readAppThemePreference(): AppThemePreference {
   if (typeof window === 'undefined') return DEFAULT_APP_THEME_PREFERENCE;
   try {
     const raw = window.localStorage.getItem(PROJECT_BROWSER_SETTINGS_STORAGE_KEY);
@@ -42,7 +42,7 @@ function systemPrefersLight(): boolean {
     : false;
 }
 
-export function resolveAppTheme(preference: AppThemePreference): AppTheme {
+function resolveAppTheme(preference: AppThemePreference): AppTheme {
   if (preference === 'system') return systemPrefersLight() ? 'light' : 'dark';
   return preference;
 }
@@ -69,11 +69,11 @@ export function setAppThemePreference(next: AppThemePreference): void {
   apply(resolveAppTheme(next));
 }
 
-export function getAppTheme(): AppTheme {
+function getAppTheme(): AppTheme {
   return theme;
 }
 
-export function subscribeAppTheme(listener: () => void): () => void {
+function subscribeAppTheme(listener: () => void): () => void {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);

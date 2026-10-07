@@ -24,7 +24,7 @@ import { translateAppText } from '@/shared/i18n';
 import { notify } from '@/shared/ui/notify';
 
 /** Taille maximale d'un fichier GPX importé (protection mémoire du parseur). */
-export const MAX_GPX_IMPORT_BYTES = 50 * 1024 * 1024;
+const MAX_GPX_IMPORT_BYTES = 50 * 1024 * 1024;
 
 export class GpxFileTooLargeError extends Error {
   constructor() {

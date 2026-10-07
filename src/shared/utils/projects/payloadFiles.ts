@@ -30,7 +30,7 @@ export function isPayloadFilePointer(data: unknown): data is string {
   return typeof data === 'string' && data.startsWith(FILE_POINTER_PREFIX);
 }
 
-export function toPayloadFilePointer(fileId: string): string {
+function toPayloadFilePointer(fileId: string): string {
   return `${FILE_POINTER_PREFIX}${fileId}`;
 }
 

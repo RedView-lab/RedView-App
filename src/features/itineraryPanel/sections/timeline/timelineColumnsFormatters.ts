@@ -3,7 +3,7 @@ import type { SportDiscipline } from '@/shared/lib/discipline';
 import { formatSpeedOrPace, kmhToPaceSecPerKm } from '@/shared/lib/pace';
 import type { StartReference } from './TimelineTimelineView/types';
 
-export const DASH = '—';
+const DASH = '—';
 
 export function fmtDistanceKm(km: number | null | undefined): string {
   if (km == null || !Number.isFinite(km)) return DASH;

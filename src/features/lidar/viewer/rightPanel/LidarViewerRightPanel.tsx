@@ -120,7 +120,7 @@ export interface LidarViewerRightPanelProps {
   photo?: ViewerPhotoModeProps;
 }
 
-export function LidarViewerRightPanelContent({
+function LidarViewerRightPanelContent({
   onPointFilterChange,
   onSlopeChange,
   onAltitudeChange,

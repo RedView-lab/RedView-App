@@ -32,19 +32,19 @@ export interface Basemap {
 
 export type Basemap3dQualityId = 'slow-040' | 'terrain-1m' | 'fast-30m' | string;
 
-export interface Basemap3dQualityOption {
+interface Basemap3dQualityOption {
   value: Basemap3dQualityId;
   label: string;
 }
 
-export interface Basemap3dQualityControl {
+interface Basemap3dQualityControl {
   value: Basemap3dQualityId;
   options: Basemap3dQualityOption[];
 }
 
 export type MapEnvironmentId = MapEnvironment;
 
-export interface MapEnvironmentControl {
+interface MapEnvironmentControl {
   value: MapEnvironmentId;
   options: Array<{ value: MapEnvironmentId; label: string }>;
 }
@@ -82,7 +82,7 @@ export interface RouteItem {
   visible: boolean;
 }
 
-export interface RoutesSectionState {
+interface RoutesSectionState {
   enabled: boolean;
   items: RouteItem[];
   /** Global route line width in px. */
@@ -127,7 +127,7 @@ export interface AltitudeBand {
   maxMeters: number;
 }
 
-export interface AltitudeState {
+interface AltitudeState {
   colorization: AltitudeColorization;
   scaleSetting: AltitudeScaleSetting;
   opacity: number;
@@ -206,7 +206,7 @@ export interface ToggleOnlySection {
   enabled: boolean;
 }
 
-export interface ContourLinesState extends ToggleOnlySection {
+interface ContourLinesState extends ToggleOnlySection {
   interval: ContourIntervalSetting;
   /** 0..100 */
   opacity: number;

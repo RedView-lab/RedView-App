@@ -16,11 +16,11 @@
 import type { GpxRoute, PoiFeature } from '../types';
 import type { OpenStatus } from './refinePoiOpeningHours';
 
-export const METERS_PER_DEG_LAT = 110_540;
-export const METERS_PER_DEG_LON = 111_320;
-export const PROXIMITY_FULL_FALLOFF_M = 500;
+const METERS_PER_DEG_LAT = 110_540;
+const METERS_PER_DEG_LON = 111_320;
+const PROXIMITY_FULL_FALLOFF_M = 500;
 
-export const RICH_TAG_KEYS = [
+const RICH_TAG_KEYS = [
   'phone', 'website', 'opening_hours', 'wheelchair',
   'cuisine', 'operator', 'email', 'addr:street',
 ];

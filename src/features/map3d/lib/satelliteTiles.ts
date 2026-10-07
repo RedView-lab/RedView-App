@@ -14,7 +14,7 @@
  */
 const SATELLITE_TILE_RE = /(\/v4\/mapbox\.satellite\/\d+\/\d+\/\d+)(\.(?:webp|jpg\d*|png\d*))(?=[?#]|$)/;
 
-export function toRetinaSatelliteTileUrl(url: string): string {
+function toRetinaSatelliteTileUrl(url: string): string {
   if (url.includes('@2x')) return url;
   return url.replace(SATELLITE_TILE_RE, '$1@2x$2');
 }

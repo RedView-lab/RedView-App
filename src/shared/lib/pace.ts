@@ -1,7 +1,7 @@
 import { isFootDiscipline, type SportDiscipline } from './discipline';
 
 /** Slower than this is shown as '—' (standing still, very steep scrambles). */
-export const MAX_DISPLAY_PACE_S_PER_KM = 30 * 60;
+const MAX_DISPLAY_PACE_S_PER_KM = 30 * 60;
 
 /** Pace in seconds per km, or null when the speed is too low to be meaningful. */
 export function kmhToPaceSecPerKm(kmh: number | null | undefined): number | null {
@@ -24,7 +24,7 @@ export function formatPaceSeconds(
   return opts.unit === false ? text : `${text} /km`;
 }
 
-export function formatPace(kmh: number | null | undefined, opts: { unit?: boolean } = {}): string {
+function formatPace(kmh: number | null | undefined, opts: { unit?: boolean } = {}): string {
   return formatPaceSeconds(kmhToPaceSecPerKm(kmh), opts);
 }
 

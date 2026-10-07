@@ -7,7 +7,7 @@ import { getAppwriteJwt } from '@/shared/services/appwrite';
  * éditeur ; le propriétaire invite et retire, un éditeur peut quitter.
  */
 
-export interface ProjectShareMember {
+interface ProjectShareMember {
   userId: string;
   name: string;
   email: string;

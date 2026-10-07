@@ -39,7 +39,7 @@ export type Territory = 'FXX' | 'REU' | 'CH' | 'NZ' | 'JP' | 'NL' | 'BE';
 export type AltitudeRef = 'IGN69' | 'IGN78' | 'REUN89' | 'LN02' | 'NZVD2016' | 'TP' | 'NAP' | 'TAW';
 
 /** Status of a LiDAR tile in the pipeline */
-export type LidarTileStatus =
+type LidarTileStatus =
   | 'available'
   | 'downloading'
   | 'parsing'
@@ -146,17 +146,8 @@ export interface CachedTileInfo {
   cachedAt: number;
 }
 
-/** GPU buffer set for one loaded tile (typed loosely to avoid WebGPU dep in shared types) */
-export interface GpuTileBuffers {
-  coord: TileCoord;
-  vertexBuffer: unknown;
-  pointCount: number;
-  bounds: PointCloudBounds;
-  crs: DetectedCrs;
-}
-
 /** LiDAR manager event types */
-export type LidarEventType = 'progress' | 'tileLoaded' | 'tileRemoved' | 'error' | 'cancelled';
+type LidarEventType = 'progress' | 'tileLoaded' | 'tileRemoved' | 'error' | 'cancelled';
 
 export interface LidarEvent {
   type: LidarEventType;

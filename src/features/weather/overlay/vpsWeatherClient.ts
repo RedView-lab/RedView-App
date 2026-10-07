@@ -7,7 +7,7 @@
 import { setForecastHorizonEnd } from '../lib/forecastTime';
 
 /** Au-delà de cet écart, l'heure demandée n'est pas couverte : pas de tuile. */
-export const MAX_FORECAST_HOUR_GAP_MS = 90 * 60 * 1000;
+const MAX_FORECAST_HOUR_GAP_MS = 90 * 60 * 1000;
 
 export interface WeatherMetaBbox {
   west: number;
@@ -16,7 +16,7 @@ export interface WeatherMetaBbox {
   north: number;
 }
 
-export interface WeatherMetaVariable {
+interface WeatherMetaVariable {
   unit: string;
   min: number;
   max: number;
@@ -36,7 +36,7 @@ export interface WeatherMeta {
 
 export type ImageCoords = [[number, number], [number, number], [number, number], [number, number]];
 
-export const DEFAULT_WEATHER_BBOX: WeatherMetaBbox = {
+const DEFAULT_WEATHER_BBOX: WeatherMetaBbox = {
   west: -18.0,
   south: 34.0,
   east: 32.0,

@@ -32,7 +32,7 @@ export interface RouteLayerOptions {
   surfaceFilter?: RouteSurfaceFilter;
 }
 
-export interface RoutePatternLayerSpec {
+interface RoutePatternLayerSpec {
   colorPaint: string | unknown[] | null;
   widthPx: number;
   dasharray: number[] | null;

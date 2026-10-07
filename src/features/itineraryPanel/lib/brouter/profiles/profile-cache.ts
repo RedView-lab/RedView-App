@@ -113,7 +113,3 @@ export function clearProfileCache(): void {
   cache.clear();
 }
 
-/** Number of cached profiles (mostly useful in tests / debug). */
-export function profileCacheSize(): number {
-  return cache.size;
-}

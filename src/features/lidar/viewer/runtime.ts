@@ -17,7 +17,7 @@ import {
 import { detectCrs } from '../lib/coordConvert';
 import { loadTileByFileName } from '../lib/storage';
 
-export { getLazWasmModule };
+;
 
 export interface ViewerDomElements {
   canvas: HTMLCanvasElement;

@@ -23,7 +23,7 @@ import { DECODE_BYTES_PER_POINT, getSceneMemoryBudgetBytes, readLasPointCount, T
 
 export type { ViewerSceneLoadOptions } from './datasetPointCap';
 
-export interface CacheWriteTask {
+interface CacheWriteTask {
   label: string;
   task: () => Promise<void>;
 }

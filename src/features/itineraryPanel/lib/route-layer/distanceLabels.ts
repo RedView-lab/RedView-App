@@ -20,7 +20,7 @@ export interface RouteDistanceLabel {
 }
 
 /** Jusqu'à cette longueur la trace est bornée tous les 25 km, au-delà tous les 50 km. */
-export const DISTANCE_LABEL_SHORT_ROUTE_MAX_KM = 300;
+const DISTANCE_LABEL_SHORT_ROUTE_MAX_KM = 300;
 /** Une borne trop proche de l'arrivée cacherait son drapeau. */
 const END_CLEARANCE_RATIO = 0.3;
 

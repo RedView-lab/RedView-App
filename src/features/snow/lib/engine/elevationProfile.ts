@@ -44,7 +44,7 @@ export function profileAt(p: ElevationProfile, z: number): number {
 }
 
 /** Lowest altitude where the profile reaches `hs` (cm); the profile is non-decreasing. */
-export function profileInverse(p: ElevationProfile, hs: number): number {
+function profileInverse(p: ElevationProfile, hs: number): number {
   const v = p.values;
   if (hs <= v[0]) return p.zMin;
   for (let k = 1; k < v.length; k++) {

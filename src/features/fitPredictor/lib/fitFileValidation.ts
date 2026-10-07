@@ -55,7 +55,7 @@ export async function validateFitFile(file: File): Promise<FitFileProblem | null
 }
 
 /** `file` enum FIT (profil Garmin) d'un parcours planifié. */
-export const FIT_FILE_TYPE_COURSE = 6;
+const FIT_FILE_TYPE_COURSE = 6;
 /** Le message file_id ouvre le fichier : quelques Ko suffisent, on borne la lecture. */
 const FIT_FILE_ID_SCAN_BYTES = 64 * 1024;
 const FIT_FILE_ID_SCAN_MAX_RECORDS = 64;
@@ -73,7 +73,7 @@ function validateFitFileType(bytes: Uint8Array): FitFileProblem | null {
  * trouvé dans la zone lue ou si la structure est inattendue : le moteur garde
  * alors le dernier mot.
  */
-export function readFitFileType(bytes: Uint8Array): number | null {
+function readFitFileType(bytes: Uint8Array): number | null {
   if (bytes.length < 12) return null;
   const headerSize = bytes[0]!;
   if (headerSize !== 12 && headerSize !== 14) return null;

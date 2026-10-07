@@ -7,7 +7,7 @@
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent';
 
-export const LOG_LEVELS: Record<string, number> = Object.freeze({
+const LOG_LEVELS: Record<string, number> = Object.freeze({
   DEBUG: 0,
   INFO: 1,
   WARN: 2,
@@ -80,7 +80,7 @@ export function syncLogLevelToServiceWorker(levelStr: LogLevel): void {
   }
 }
 
-export function setLogLevel(level: LogLevel): void {
+function setLogLevel(level: LogLevel): void {
   _currentLevel = parseLogLevel(level);
   try {
     if (typeof window !== 'undefined') {
@@ -104,7 +104,7 @@ export function getLogLevel(): LogLevel {
   return 'info';
 }
 
-export function createLogger(namespace: string, customColor?: string): ScopedLogger {
+function createLogger(namespace: string, customColor?: string): ScopedLogger {
   const color = customColor || BADGE_COLORS[namespace] || '#475569';
   const badgeStyle = `background:${color};color:#ffffff;font-weight:bold;padding:1px 5px;border-radius:3px;font-size:10px;`;
   const resetStyle = '';

@@ -1,5 +1,5 @@
 export type AppLocale = 'fr' | 'en';
-export type AppTranslationValue = string | number;
+type AppTranslationValue = string | number;
 export type AppTranslationVars = Record<string, AppTranslationValue>;
 
 export type AppTranslationBundle = {

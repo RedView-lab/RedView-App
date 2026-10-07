@@ -40,7 +40,7 @@ export interface AvalancheTerrainInput {
   projY: number;
 }
 
-export interface AvalancheScenarioReach {
+interface AvalancheScenarioReach {
   reached: boolean;
   /** Largest flow-path travel angle at the point, degrees. */
   travelAngleDeg: number | null;

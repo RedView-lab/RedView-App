@@ -42,8 +42,6 @@ export function buildAccountCountryOptions(locale = 'fr') {
     .sort((left, right) => left.label.localeCompare(right.label, locale, { sensitivity: 'base' }));
 }
 
-export const ACCOUNT_COUNTRY_OPTIONS = buildAccountCountryOptions('fr');
-
 export const ACCOUNT_SPORT_OPTIONS = [
   'Velo de route',
   'Gravel',

@@ -17,7 +17,7 @@ import { patchProject } from './projectLibraryCache';
  * mutations TanStack Query. Un partage confirmé met aussi à jour la liste des
  * projets (pastille « Partagé », section « Partagés avec moi »).
  */
-export const projectShareKeys = {
+const projectShareKeys = {
   state: (projectId: string) => ['project-share', projectId] as const,
   mutation: (name: string) => [...projectLibraryKeys.all, 'share', name] as const,
 };

@@ -9,7 +9,7 @@ import {
 } from './types';
 import { clamp, MIN_VISIBLE_FRACTION, normalizeUnitInterval } from './math';
 
-export function getPoiDistanceKm(annotation: VisiblePoiAnnotation): number {
+function getPoiDistanceKm(annotation: VisiblePoiAnnotation): number {
   if (typeof annotation.distanceKm === 'number' && Number.isFinite(annotation.distanceKm)) {
     return annotation.distanceKm;
   }
@@ -107,7 +107,7 @@ export function shouldRenderPoiCluster(
   );
 }
 
-export function shouldExpandPoiCluster(
+function shouldExpandPoiCluster(
   group: PoiMarkerGroup,
   visibleFraction: number,
   expandedPoiClusterId: string | null,

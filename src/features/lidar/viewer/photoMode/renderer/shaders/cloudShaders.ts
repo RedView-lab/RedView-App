@@ -811,7 +811,7 @@ fn main(@builtin(global_invocation_id) gid0: vec3<u32>) {
 `;
 
 /** Order in which the pixels of a block are traced by the still accumulation (1, 2 or 4 per block). */
-export const WGSL_CLOUD_STILL_PATTERN = /* wgsl */ `
+const WGSL_CLOUD_STILL_PATTERN = /* wgsl */ `
 fn stillPhase(p: vec2<u32>, k: u32) -> u32 {
   if (k <= 1u) { return 0u; }
   if (k == 2u) { return (p.x + p.y) & 1u; }

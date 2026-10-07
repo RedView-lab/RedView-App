@@ -21,8 +21,8 @@ export interface SelectPoiOnChartPayload {
   source?: 'map' | 'timeline' | 'chart';
 }
 
-export const SELECT_POI_ON_CHART_EVENT = 'redview:select-poi-on-chart';
-export const OPEN_POI_ON_MAP_EVENT = 'redview:open-poi-on-map';
+const SELECT_POI_ON_CHART_EVENT = 'redview:select-poi-on-chart';
+const OPEN_POI_ON_MAP_EVENT = 'redview:open-poi-on-map';
 
 export function dispatchSelectPoiOnChart(payload: SelectPoiOnChartPayload): void {
   if (typeof window === 'undefined') return;

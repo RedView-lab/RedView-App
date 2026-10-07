@@ -65,7 +65,7 @@ export const POI_CATEGORY_TO_KML_COLOR: Record<string, string> = {
 };
 
 /** Source (FR) labels; translated into the user's locale at export time (`resolvePoiCategoryExportLabel`). */
-export const POI_CATEGORY_LABEL_FR: Record<string, string> = {
+const POI_CATEGORY_LABEL_FR: Record<string, string> = {
   fountains: "Point d'eau",
   toilets: 'Toilettes',
   supermarkets: 'Supermarché',
@@ -84,7 +84,7 @@ export const POI_CATEGORY_LABEL_FR: Record<string, string> = {
 };
 
 /** Category label written into exported files, in the user's locale. */
-export function resolvePoiCategoryExportLabel(poiCategory: string | undefined): string {
+function resolvePoiCategoryExportLabel(poiCategory: string | undefined): string {
   const label = poiCategory ? POI_CATEGORY_LABEL_FR[poiCategory] : undefined;
   return label ? translateAppText(label) : 'POI';
 }

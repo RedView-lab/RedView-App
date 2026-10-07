@@ -16,7 +16,7 @@ import { observedCostScale, resolveSearchCoefficient } from './searchCoefficient
 
 const BROUTER_PROXY_URL = '/api/brouter';
 
-export function formatLonlats(points: BrouterPoint[]): string {
+function formatLonlats(points: BrouterPoint[]): string {
   return points
     .map((p) => `${p.lon.toFixed(6)},${p.lat.toFixed(6)}`)
     .join('|');

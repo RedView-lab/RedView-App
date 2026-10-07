@@ -41,7 +41,7 @@ export interface UseControlPanelOverlayStateArgs {
   onSunlightMapOverlayReloadChange?: OverlayReloadRegistrar;
 }
 
-export interface OverlayHandlers {
+interface OverlayHandlers {
   onLabelsEnabledChange: (enabled: boolean) => void;
   onLabelToggle: (key: LabelKey, checked: boolean) => void;
   onWeatherEnabledChange: (enabled: boolean) => void;

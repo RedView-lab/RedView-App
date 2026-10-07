@@ -1,7 +1,7 @@
 import type { WeatherOverlayMetric } from '../types';
 
-export const SOURCE_PREFIX = 'weather-overlay-source';
-export const LAYER_PREFIX = 'weather-overlay-layer';
+const SOURCE_PREFIX = 'weather-overlay-source';
+const LAYER_PREFIX = 'weather-overlay-layer';
 export const SUPPORTED_KEYS: WeatherOverlayMetric[] = ['temperature', 'feelsLike', 'rain', 'cloudCover', 'humidity'];
 export const MOVE_DEBOUNCE_MS = 220;
 export const SCRUB_DEBOUNCE_MS = 60;

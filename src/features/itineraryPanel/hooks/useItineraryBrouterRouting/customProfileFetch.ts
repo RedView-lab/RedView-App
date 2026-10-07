@@ -16,13 +16,13 @@ const CUSTOM_PROFILE_TIMEOUT_MAX_MS = 45_000;
  * grossier puis ancres, cf. resolveRouteRequest) : un tracé de 1 000 km
  * demande légitimement plus qu'un tracé de 100 km.
  */
-export function customProfileTimeoutMs(beelineKm: number): number {
+function customProfileTimeoutMs(beelineKm: number): number {
   const extra = Math.max(0, beelineKm - 150) * 40;
   return Math.round(Math.min(CUSTOM_PROFILE_TIMEOUT_MAX_MS, CUSTOM_PROFILE_TIMEOUT_MS + extra));
 }
 
 /** Recherche restée sans réponse dans le délai accordé. */
-export class BrouterSearchTimeoutError extends Error {
+class BrouterSearchTimeoutError extends Error {
   constructor(timeoutMs: number) {
     super(`BRouter: search timed out after ${timeoutMs} ms`);
     this.name = 'BrouterSearchTimeoutError';
@@ -37,7 +37,7 @@ export class BrouterSearchTimeoutError extends Error {
  */
 const HEDGE_SEARCH_WEIGHT = 1.7;
 
-export function hedgeDelayMs(beelineKm: number): number {
+function hedgeDelayMs(beelineKm: number): number {
   return Math.round(Math.min(8_000, 3_000 + beelineKm * 8));
 }
 

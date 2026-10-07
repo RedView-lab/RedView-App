@@ -60,7 +60,7 @@ export function boundsIntersect(a: TileBounds, b: TileBounds): boolean {
   return a.maxE > b.minE && a.minE < b.maxE && a.maxN > b.minN && a.minN < b.maxN;
 }
 
-export function sameBounds(a: TileBounds, b: TileBounds): boolean {
+function sameBounds(a: TileBounds, b: TileBounds): boolean {
   return a.minE === b.minE && a.minN === b.minN && a.maxE === b.maxE && a.maxN === b.maxN;
 }
 

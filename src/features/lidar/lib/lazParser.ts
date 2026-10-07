@@ -118,7 +118,7 @@ function compareCopcKeys(a: string, b: string): number {
  * which the root page only references) and returns the non-empty nodes,
  * coarse levels first.
  */
-export async function loadCopcNodes(getter: Getter, rootPage: Hierarchy.Page): Promise<CopcNodeEntry[]> {
+async function loadCopcNodes(getter: Getter, rootPage: Hierarchy.Page): Promise<CopcNodeEntry[]> {
   const { Copc } = await import('copc');
   const entries: CopcNodeEntry[] = [];
   const pages: Hierarchy.Page[] = [rootPage];
@@ -374,7 +374,7 @@ export async function parseLazBuffer(
  * dans l'ordre du fichier — l'ordre spatial des dalles garde une densité
  * homogène (≥ 30 pts/m² sur une sous-dalle AHN de 1,3 km²).
  */
-export const LAS_POINT_BUDGET = 40_000_000;
+const LAS_POINT_BUDGET = 40_000_000;
 
 interface LasRecordLayout {
   classOffset: number;

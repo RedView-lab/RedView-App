@@ -6,9 +6,8 @@ import {
   IconEye,
   IconEyeOff,
 } from '@/features/controlPanel/icons';
-import { IconMinus, IconPlus, IconSettingsSliders } from '@/features/itineraryPanel/components/icons';
 
-export { IconCheck, IconChevronDown, IconEye, IconEyeOff, IconMinus, IconPlus, IconSettingsSliders };
+export { IconCheck, IconChevronDown, IconEye, IconEyeOff,    };
 
 export const IconDotsVertical = ({ size = 16, ...rest }: AssetIconProps) => (
   <SvgV2Icon name="dots-vertical.svg" size={size} {...rest} />

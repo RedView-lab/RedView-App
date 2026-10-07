@@ -50,7 +50,7 @@ const FOREST_LOOKUP: Record<Exclude<CanopyClass, 'open'>, { release: AtesClass[]
   dense: { release: [0, 1, 1, 1, 2], runout: [0, 1, 1, 1, 3] },
 };
 
-export function canopyClassOf(canopyPct: number): CanopyClass {
+function canopyClassOf(canopyPct: number): CanopyClass {
   const { tree1, tree2, tree3 } = ATES_CANOPY_THRESHOLDS_PCT;
   if (canopyPct <= tree1) return 'open';
   if (canopyPct <= tree2) return 'sparse';

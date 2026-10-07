@@ -18,16 +18,16 @@
 import rawTaxonomy from './poi-taxonomy.json';
 
 /** Une condition de tag : égalité (`v`) ou appartenance (`in`). */
-export interface PoiTagCondition {
+interface PoiTagCondition {
   k: string;
   v?: string;
   in?: string[];
 }
 
 /** Un tableau de conditions = un AND. */
-export type PoiTagRule = PoiTagCondition[];
+type PoiTagRule = PoiTagCondition[];
 
-export interface PoiTaxonomyCategory {
+interface PoiTaxonomyCategory {
   key: string;
   label: string;
   group: string;
@@ -40,19 +40,19 @@ export interface PoiTaxonomyCategory {
   rules: PoiTagRule[];
 }
 
-export interface PoiTaxonomyGroup {
+interface PoiTaxonomyGroup {
   key: string;
   label: string;
 }
 
-export interface PoiTaxonomy {
+interface PoiTaxonomy {
   version: number;
   groups: PoiTaxonomyGroup[];
   categories: PoiTaxonomyCategory[];
   keepTags: string[];
 }
 
-export const POI_TAXONOMY = rawTaxonomy as unknown as PoiTaxonomy;
+const POI_TAXONOMY = rawTaxonomy as unknown as PoiTaxonomy;
 
 /** Libellé FR par clé de catégorie. */
 export const POI_TAXONOMY_LABELS: Record<string, string> = Object.fromEntries(
@@ -64,7 +64,3 @@ export const POI_TAXONOMY_ICON: Record<string, string> = Object.fromEntries(
   POI_TAXONOMY.categories.map((c) => [c.key, c.icon]),
 );
 
-/** Groupe d'appartenance par clé de catégorie. */
-export const POI_TAXONOMY_GROUP: Record<string, string> = Object.fromEntries(
-  POI_TAXONOMY.categories.map((c) => [c.key, c.group]),
-);

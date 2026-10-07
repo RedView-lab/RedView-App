@@ -19,7 +19,7 @@ export function haversineM(
   return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h));
 }
 
-export function buildCumulativeDistances(points: RoutePointInput[]): number[] {
+function buildCumulativeDistances(points: RoutePointInput[]): number[] {
   const distances = new Array<number>(points.length).fill(0);
 
   for (let i = 1; i < points.length; i++) {
@@ -210,13 +210,6 @@ export function smoothElevations(
     rows.map((row) => row.ele),
     windowSize,
   );
-}
-
-export function computeAscentDescent(
-  elevations: number[],
-  thresholdM = 1,
-): { ascent: number; descent: number } {
-  return computeAscentDescentFromElevations(elevations, thresholdM);
 }
 
 export function buildRouteProfileFromSamples(samples: ElevationSample[]): RouteProfilePoint[] {

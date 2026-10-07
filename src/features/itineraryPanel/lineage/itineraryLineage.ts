@@ -19,12 +19,12 @@ export function getItineraryStartDistanceKm(itinerary: Itinerary): number {
   return itinerary.splitRelation?.startDistanceKm ?? 0;
 }
 
-export function getItineraryDepth(itinerary: Itinerary): number {
+function getItineraryDepth(itinerary: Itinerary): number {
   if (isSplitItineraryName(itinerary.name)) return 0;
   return itinerary.splitRelation?.depth ?? 0;
 }
 
-export function getItineraryLocalDistanceKm(itinerary: Itinerary): number {
+function getItineraryLocalDistanceKm(itinerary: Itinerary): number {
   if (Number.isFinite(itinerary.metrics?.distanceKm)) return itinerary.metrics?.distanceKm as number;
 
   const originalPoints = itinerary.gpxRoute?.originalPoints;

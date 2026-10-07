@@ -56,7 +56,7 @@ export async function compressProjectPayload(project: ItineraryProject, serializ
 }
 
 /** Plafond de la taille décompressée d'un projet (protection contre les bombes gzip). */
-export const MAX_DECOMPRESSED_PROJECT_BYTES = 200 * 1024 * 1024;
+const MAX_DECOMPRESSED_PROJECT_BYTES = 200 * 1024 * 1024;
 
 /**
  * Lit un flux décompressé en comptant les octets produits et abandonne dès que
@@ -126,7 +126,3 @@ export async function decompressProjectBytes(bytes: Uint8Array<ArrayBuffer>): Pr
   return JSON.parse(text) as ItineraryProject;
 }
 
-/** Indique si un payload est déjà compressé. */
-export function isCompressedPayload(payload: unknown): boolean {
-  return typeof payload === 'string' && payload.startsWith(GZ_PREFIX);
-}

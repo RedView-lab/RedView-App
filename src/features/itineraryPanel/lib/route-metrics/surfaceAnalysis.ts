@@ -4,7 +4,7 @@ import { isOffroadSurface, isPavedSurface } from './surface';
 import type { RoutePointInput, RouteSurfaceMetrics, Surface } from './types';
 import { haversineM } from './elevation';
 
-export interface SurfaceAnalysisProgress {
+interface SurfaceAnalysisProgress {
   completedChunks: number;
   totalChunks: number;
   progress01: number;

@@ -19,7 +19,7 @@ import { resolveDem3dSelection } from './dem3dSelection';
 
 export type Dem3dQuality = 'hd' | 'fast-30m';
 
-export const DEFAULT_DEM3D_QUALITY: Dem3dQuality = 'fast-30m';
+const DEFAULT_DEM3D_QUALITY: Dem3dQuality = 'fast-30m';
 
 const VALID_QUALITIES: ReadonlySet<string> = new Set(['hd', 'fast-30m']);
 
@@ -28,7 +28,7 @@ const VALID_QUALITIES: ReadonlySet<string> = new Set(['hd', 'fast-30m']);
  * value. The ControlPanel stores values like 'slow-040' (HD surface),
  * 'terrain-1m' (HD terrain), or 'fast-30m'.
  */
-export function normalizeDem3dQuality(value: string | null | undefined): Dem3dQuality {
+function normalizeDem3dQuality(value: string | null | undefined): Dem3dQuality {
   return resolveDem3dSelection(value).quality;
 }
 

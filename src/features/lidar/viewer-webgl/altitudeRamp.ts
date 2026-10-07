@@ -34,7 +34,7 @@ function lerp(a: number, b: number, t: number): number {
  * Index 0 maps to 0 metres.
  * Index 511 maps to maxAltitude metres (default 5000m).
  */
-export function buildAltitudeRampData(
+function buildAltitudeRampData(
   bands: AltitudeBand[],
   colorization: AltitudeColorization,
   maxAltitude = DEFAULT_MAX_ALTITUDE_M,

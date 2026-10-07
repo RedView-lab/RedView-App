@@ -132,7 +132,7 @@ export function buildRadarTileUrl(
 /**
  * Formats a local Date to YYYY-MM-DD.
  */
-export function formatLocalDateIso(date: Date = new Date()): string {
+function formatLocalDateIso(date: Date = new Date()): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');

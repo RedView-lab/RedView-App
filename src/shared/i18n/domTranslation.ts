@@ -7,7 +7,7 @@ import { canonicalizeAppText, interpolateAppTranslation, type AppTranslationVars
  * standalone LiDAR viewer (`viewer.html`, `document.body`).
  */
 
-export const TRANSLATABLE_ATTRIBUTES = ['aria-label', 'placeholder', 'title'] as const;
+const TRANSLATABLE_ATTRIBUTES = ['aria-label', 'placeholder', 'title'] as const;
 const SKIP_TRANSLATION_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA']);
 const NO_TRANSLATE_SELECTOR = '[data-rv-no-translate="true"]';
 

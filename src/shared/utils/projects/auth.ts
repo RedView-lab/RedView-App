@@ -19,7 +19,7 @@ export function toCloudFailure(operation: string, cause: unknown): ProjectCloudE
 }
 
 /** Identifiant utilisé hors session Appwrite, en développement local uniquement. */
-export const LOCAL_FALLBACK_USER_ID = 'dev-user-001';
+const LOCAL_FALLBACK_USER_ID = 'dev-user-001';
 
 /**
  * Utilisateur propriétaire des projets.

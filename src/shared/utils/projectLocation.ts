@@ -18,7 +18,7 @@ function normaliseProjectSlug(name: string): string {
     .slice(0, 80);
 }
 
-export function buildProjectPath(project: ProjectRouteTarget): string {
+function buildProjectPath(project: ProjectRouteTarget): string {
   const slug = normaliseProjectSlug(project.name);
   return slug
     ? `${PROJECT_ROUTE_PREFIX}${slug}--${encodeURIComponent(project.id)}`

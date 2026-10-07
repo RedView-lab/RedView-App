@@ -15,7 +15,7 @@
 
 import type { BrouterParamOverrides } from '../types';
 
-export type ParamPrimitive = string | number | boolean;
+type ParamPrimitive = string | number | boolean;
 
 /**
  * Parameters declared as `assign` in the global section of the stock
@@ -23,7 +23,7 @@ export type ParamPrimitive = string | number | boolean;
  * the `profile:<id>=value` URL syntax. Everything else must go through
  * a custom BRF upload (Expert Mode → "Téléverser le profil complet").
  */
-export const URL_SAFE_PARAMETER_IDS: ReadonlySet<string> = new Set([
+const URL_SAFE_PARAMETER_IDS: ReadonlySet<string> = new Set([
   // Behaviour switches
   'allow_steps',
   'allow_ferries',
@@ -60,7 +60,7 @@ export const URL_SAFE_PARAMETER_IDS: ReadonlySet<string> = new Set([
 ]);
 
 /** Encode any primitive into the BRouter URL wire format. */
-export function encodeParamValue(value: ParamPrimitive): string {
+function encodeParamValue(value: ParamPrimitive): string {
   if (typeof value === 'boolean') return value ? '1' : '0';
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) return '0';
@@ -84,7 +84,7 @@ export function encodeParamValue(value: ParamPrimitive): string {
  * `out` is mutated in place — this is the intended ergonomic in
  * basicStateToOverrides where we build the bag incrementally.
  */
-export function safeOverride(
+function safeOverride(
   out: BrouterParamOverrides,
   id: string,
   value: ParamPrimitive | null | undefined,

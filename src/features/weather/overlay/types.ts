@@ -1,7 +1,7 @@
 export type WeatherOverlayMetric = 'temperature' | 'feelsLike' | 'rain' | 'cloudCover' | 'humidity';
 export type WeatherOverlayMode = 'gradient' | 'fill';
 
-export interface WeatherOverlayLayer {
+interface WeatherOverlayLayer {
   key: string;
   enabled: boolean;
   mode: string;

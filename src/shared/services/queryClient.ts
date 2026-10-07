@@ -31,12 +31,12 @@ function errorMessage(error: unknown): string | null {
 }
 
 /** Erreur 4xx (AppwriteException.code, réponse HTTP) : réessayer ne sert à rien. */
-export function isClientError(error: unknown): boolean {
+function isClientError(error: unknown): boolean {
   const status = (error as { code?: unknown; status?: unknown } | null)?.code ?? (error as { status?: unknown } | null)?.status;
   return typeof status === 'number' && status >= 400 && status < 500;
 }
 
-export function createAppQueryClient(): QueryClient {
+function createAppQueryClient(): QueryClient {
   return new QueryClient({
     queryCache: new QueryCache({
       onError: (error, query) => {

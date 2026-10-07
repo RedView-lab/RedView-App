@@ -59,9 +59,9 @@ export const ITINERARY_LOCAL_WORK_KEYS = [
   'pendingFitRecompute',
 ] as const satisfies readonly (keyof Itinerary)[];
 
-export type ProjectViewKey = (typeof PROJECT_VIEW_KEYS)[number];
-export type ItineraryViewKey = (typeof ITINERARY_VIEW_KEYS)[number];
-export type ItineraryLocalWorkKey = (typeof ITINERARY_LOCAL_WORK_KEYS)[number];
+type ProjectViewKey = (typeof PROJECT_VIEW_KEYS)[number];
+type ItineraryViewKey = (typeof ITINERARY_VIEW_KEYS)[number];
+type ItineraryLocalWorkKey = (typeof ITINERARY_LOCAL_WORK_KEYS)[number];
 
 const PROJECT_VIEW_KEY_SET: ReadonlySet<string> = new Set(PROJECT_VIEW_KEYS);
 const ITINERARY_VIEW_KEY_SET: ReadonlySet<string> = new Set(ITINERARY_VIEW_KEYS);
@@ -70,9 +70,9 @@ const ITINERARY_LOCAL_WORK_KEY_SET: ReadonlySet<string> = new Set(ITINERARY_LOCA
 /** Version du format du document stocké (`projects.data`). */
 export const PROJECT_DOCUMENT_SCHEMA = 2;
 
-export type ItineraryDocument = Omit<Itinerary, ItineraryViewKey | ItineraryLocalWorkKey>;
-export type ItineraryViewState = Partial<Pick<Itinerary, ItineraryViewKey>>;
-export type ItineraryLocalWork = Partial<Pick<Itinerary, ItineraryLocalWorkKey>>;
+type ItineraryDocument = Omit<Itinerary, ItineraryViewKey | ItineraryLocalWorkKey>;
+type ItineraryViewState = Partial<Pick<Itinerary, ItineraryViewKey>>;
+type ItineraryLocalWork = Partial<Pick<Itinerary, ItineraryLocalWorkKey>>;
 
 /**
  * Document partagé. Ses clés de premier niveau restent celles
@@ -151,7 +151,7 @@ const ITINERARY_LOCAL_KEY_SET: ReadonlySet<string> = new Set([
 const itineraryDocuments = new WeakMap<Itinerary, ItineraryDocument>();
 
 /** Itinéraire du document : sans affichage ni travail local (copie superficielle, mémorisée). */
-export function toItineraryDocument(itinerary: Itinerary): ItineraryDocument {
+function toItineraryDocument(itinerary: Itinerary): ItineraryDocument {
   let document = itineraryDocuments.get(itinerary);
   if (!document) {
     document = withoutKeys(itinerary, ITINERARY_LOCAL_KEY_SET) as ItineraryDocument;
@@ -268,7 +268,7 @@ export function applyProjectView(project: ItineraryProject, view: ProjectViewSta
 }
 
 /** Réapplique le travail en attente de cet appareil (itinéraires encore présents). */
-export function applyProjectLocalWork(
+function applyProjectLocalWork(
   project: ItineraryProject,
   work: ProjectLocalWork | null | undefined,
 ): ItineraryProject {

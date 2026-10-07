@@ -14,7 +14,7 @@ import {
  */
 
 /** Au-delà, la bulle n'est pas « sur » l'itinéraire. */
-export const ROUTE_CONTEXT_MAX_OFFSET_M = 500;
+const ROUTE_CONTEXT_MAX_OFFSET_M = 500;
 
 export interface CommentRouteContext {
   distanceKm: number;

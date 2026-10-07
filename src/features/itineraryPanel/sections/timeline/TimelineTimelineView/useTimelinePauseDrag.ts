@@ -47,7 +47,7 @@ function toDayKey(date: Date): string {
   ].join('-');
 }
 
-export function resolvePauseDragTarget(
+function resolvePauseDragTarget(
   clientX: number,
   clientY: number,
   dragState: PauseDragState,

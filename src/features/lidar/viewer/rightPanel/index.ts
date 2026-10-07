@@ -60,5 +60,5 @@ export function createViewerRightPanel(opts: ViewerRightPanelOptions = {}): View
   };
 }
 
-export { LidarViewerRightPanel };
-export type { ViewerSlopeState, ViewerAltitudeState, SunlightState, ViewerPointFilterState };
+;
+;

@@ -34,7 +34,7 @@ interface MapContainerInternals {
 }
 
 /** Product of the CSS `zoom` applied to `element` and its ancestors. */
-export function readEffectiveCssZoom(element: Element): number {
+function readEffectiveCssZoom(element: Element): number {
   const native = (element as Element & { currentCSSZoom?: unknown }).currentCSSZoom;
   if (typeof native === 'number') return Number.isFinite(native) && native > 0 ? native : 1;
   let zoom = 1;

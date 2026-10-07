@@ -7,7 +7,6 @@ import proj4 from 'proj4';
  */
 
 export const PROJ_RD_NEW = 'EPSG:28992';
-const PROJ_WGS84 = 'EPSG:4326';
 
 proj4.defs(
   PROJ_RD_NEW,
@@ -15,12 +14,3 @@ proj4.defs(
     '+ellps=bessel +towgs84=565.4171,50.3319,465.5524,1.9342,-1.6677,9.1019,4.0725 +units=m +no_defs +type=crs',
 );
 
-/** Convert RD New (x, y) in metres to WGS84 [lon, lat]. */
-export function rdToWgs84(x: number, y: number): [number, number] {
-  return proj4(PROJ_RD_NEW, PROJ_WGS84, [x, y]) as [number, number];
-}
-
-/** Convert WGS84 [lon, lat] to RD New [x, y] in metres. */
-export function wgs84ToRd(lon: number, lat: number): [number, number] {
-  return proj4(PROJ_WGS84, PROJ_RD_NEW, [lon, lat]) as [number, number];
-}

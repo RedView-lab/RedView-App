@@ -21,14 +21,6 @@ export function resolveTotalDistanceM(
   return Math.max(prediction?.total_distance_m ?? 0, itemDistanceM);
 }
 
-export function buildTimedItems(
-  items: TimelineItem[],
-  prediction: PredictionResult | null | undefined,
-  reference: StartReference,
-): TimedTimelineItem[] {
-  return buildScheduledTimelineState(items, prediction, reference).timedItems;
-}
-
 export function buildScheduledTimelineState(
   items: TimelineItem[],
   prediction: PredictionResult | null | undefined,

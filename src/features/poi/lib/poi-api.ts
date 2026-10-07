@@ -133,7 +133,7 @@ export async function fetchPoisInBbox(
 // ── CORRIDOR ──────────────────────────────────────────────────────────
 
 /** Bornes acceptées par le serveur POI (au-delà : HTTP 400). */
-export const POI_CORRIDOR_MIN_RADIUS_M = 1;
+const POI_CORRIDOR_MIN_RADIUS_M = 1;
 export const POI_CORRIDOR_MAX_RADIUS_M = 10_000;
 export const POI_CORRIDOR_MAX_POINTS = 10_000;
 const POI_CORRIDOR_DEFAULT_RADIUS_M = 1_000;
@@ -155,7 +155,7 @@ function capCorridorPoints<T>(points: T[]): T[] {
   return out;
 }
 
-export async function fetchPoisAlongRoute(
+async function fetchPoisAlongRoute(
   points: { lat: number; lon: number }[],
   radiusM: number,
   categories: PoiCategory[],

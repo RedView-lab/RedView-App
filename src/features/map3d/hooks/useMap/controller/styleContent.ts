@@ -4,7 +4,7 @@ type StyleLike = {
   imports?: Array<{ data?: unknown }>;
 } | null | undefined;
 
-export interface StyleContentStats {
+interface StyleContentStats {
   layerCount: number;
   sourceCount: number;
   importCount: number;
@@ -12,7 +12,7 @@ export interface StyleContentStats {
   hasContent: boolean;
 }
 
-export function getStyleContentStats(style: StyleLike): StyleContentStats {
+function getStyleContentStats(style: StyleLike): StyleContentStats {
   const layerCount = style?.layers?.length ?? 0;
   const sourceCount = Object.keys(style?.sources ?? {}).length;
   const imports = style?.imports;

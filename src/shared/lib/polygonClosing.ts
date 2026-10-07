@@ -13,7 +13,7 @@ export interface ScreenXY {
 }
 
 /** Rayon de prise d'un sommet à l'écran (px CSS). */
-export const POLYGON_CLOSE_HIT_PX = 10;
+const POLYGON_CLOSE_HIT_PX = 10;
 
 /**
  * Sommet sous le clic : le plus proche dans `tolerancePx` (à égalité, le

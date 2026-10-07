@@ -28,7 +28,7 @@ export interface ProjectedScreenPoint {
 /**
  * Invert a 4x4 column-major matrix
  */
-export function invertMatrix4(out: Float32Array, m: Float32Array): boolean {
+function invertMatrix4(out: Float32Array, m: Float32Array): boolean {
   const m00 = m[0], m01 = m[1], m02 = m[2], m03 = m[3];
   const m10 = m[4], m11 = m[5], m12 = m[6], m13 = m[7];
   const m20 = m[8], m21 = m[9], m22 = m[10], m23 = m[11];

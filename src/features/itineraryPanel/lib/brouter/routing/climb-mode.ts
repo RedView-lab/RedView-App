@@ -13,7 +13,7 @@
 import type { PrioritiesState } from '../../../types';
 
 /** Slider threshold above which we switch to multi-alternative routing. */
-export const CLIMBING_SLIDER_THRESHOLD = 70;
+const CLIMBING_SLIDER_THRESHOLD = 70;
 
 /**
  * `true` when the elevation slider is high enough that we should:

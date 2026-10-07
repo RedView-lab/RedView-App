@@ -8,8 +8,8 @@ import type { AABB } from './types';
 export type FrustumPlanes = Float64Array; // 24 floats (6 × 4)
 
 export const OUTSIDE = 0;
-export const INTERSECT = 1;
-export const INSIDE = 2;
+const INTERSECT = 1;
+const INSIDE = 2;
 
 const _planesBuffer = new Float64Array(24);
 

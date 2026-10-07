@@ -37,7 +37,7 @@ export interface UseControlPanelTerrainStateArgs {
   onAltitudeOverlayStatusChange?: OverlayStatusReporter;
 }
 
-export interface TerrainHandlers {
+interface TerrainHandlers {
   onContourLinesEnabledChange: (enabled: boolean) => void;
   onContourLinesIntervalChange: (value: ContourIntervalSetting) => void;
   onContourLinesOpacityChange: (value: number) => void;

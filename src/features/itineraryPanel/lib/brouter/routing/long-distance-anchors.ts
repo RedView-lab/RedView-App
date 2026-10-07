@@ -19,9 +19,9 @@
 import type { BrouterPoint } from '../types';
 
 /** Tronçon (vol d'oiseau, km) au-delà duquel on ancre. */
-export const ANCHOR_SECTION_KM = 180;
+const ANCHOR_SECTION_KM = 180;
 /** Espacement visé des ancres le long du tracé grossier (km de tracé). */
-export const ANCHOR_SPACING_KM = 160;
+const ANCHOR_SPACING_KM = 160;
 /**
  * Espacement resserré : tronçon plus court dont la recherche fine n'a pas
  * abouti (réseau très dense, profil très restrictif). Même méthode, ancres

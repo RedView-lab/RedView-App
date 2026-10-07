@@ -9,7 +9,7 @@
 import { ALL_PARAMETERS } from './parameters';
 import type { ExpertProfileState, ParameterValue } from './types';
 
-export function createDefaultExpertValues(): Record<string, ParameterValue> {
+function createDefaultExpertValues(): Record<string, ParameterValue> {
   const out: Record<string, ParameterValue> = {};
   for (const p of ALL_PARAMETERS) out[p.id] = p.default;
   return out;

@@ -37,7 +37,7 @@ export function buildSlopeSourceKey(options: SlopeTileSourceOptions | undefined)
   return `${resolved.demProfile}:${resolved.resolutionFactor}${sourceDemKey}${zoneKey}`;
 }
 
-export function resolveSlopeMaxZoom(options: SlopeTileSourceOptions): number {
+function resolveSlopeMaxZoom(options: SlopeTileSourceOptions): number {
   // 30m resolution (fast-30m / 30m): capped at z13 (~13.5m/px at lat 45°) to prevent stair-step oversampling
   if (options.sourceDem === 'fast-30m' || options.sourceDem === '30m') {
     return 13;

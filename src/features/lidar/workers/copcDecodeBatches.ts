@@ -3,7 +3,7 @@
  * decoded, so this bounds what a decode worker holds at once (its WASM memory
  * never shrinks) — 1 M points ≈ 15 MB of decoded arrays.
  */
-export const COPC_DECODE_BATCH_POINTS = 1_000_000;
+const COPC_DECODE_BATCH_POINTS = 1_000_000;
 
 /**
  * Splits chunks, in order, into runs of whole chunks of at most

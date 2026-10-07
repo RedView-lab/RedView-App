@@ -6,7 +6,7 @@ import type { FitEngineRejection, FitFileProblem } from '@/features/fitPredictor
 
 import type { ItineraryFitUpload, ItineraryProject } from '../../types';
 
-export type FitRuntimeStatus = 'idle' | 'ready' | 'running' | 'success' | 'error';
+type FitRuntimeStatus = 'idle' | 'ready' | 'running' | 'success' | 'error';
 
 export interface ItineraryFitRuntime {
   fitFiles: File[];

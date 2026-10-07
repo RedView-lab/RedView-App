@@ -16,7 +16,7 @@ const CONTOUR_COLORS: Record<ContourTone, { casing: string; line: string }> = {
   dark: { casing: '#141a24', line: '#c9a677' },
 };
 
-export function buildContourFilter(intervalMeters: number): FilterSpecification {
+function buildContourFilter(intervalMeters: number): FilterSpecification {
   return [
     'all',
     ['>=', ['coalesce', ['get', 'index'], 0], 0],

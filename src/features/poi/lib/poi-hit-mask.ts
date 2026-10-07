@@ -20,7 +20,7 @@ const CHAMFER_DIAG = 4;
 const DISTANCE_STEPS_PER_PX = 4;
 const DISTANCE_CAP = 255;
 
-export interface PoiHitBounds {
+interface PoiHitBounds {
   minX: number;
   minY: number;
   maxX: number;
@@ -160,7 +160,7 @@ export function poiHitDistancePx(mask: PoiHitMask, localX: number, localY: numbe
 }
 
 /** Where a candidate is drawn: its anchor on screen and its scale (icon-size). */
-export interface PoiHitPlacement {
+interface PoiHitPlacement {
   x: number;
   y: number;
   scale: number;

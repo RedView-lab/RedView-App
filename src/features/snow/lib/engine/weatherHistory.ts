@@ -50,13 +50,13 @@ export function bulkDensity(timeMs: number, latDeg: number): number {
   return table[month];
 }
 
-export function snowFraction(tempC: number, config: SnowEngineConfig): number {
+function snowFraction(tempC: number, config: SnowEngineConfig): number {
   if (tempC <= config.snowTempC) return 1;
   if (tempC >= config.rainTempC) return 0;
   return (config.rainTempC - tempC) / (config.rainTempC - config.snowTempC);
 }
 
-export function thresholdWind(tempC: number, fresh: boolean, wet: boolean): number {
+function thresholdWind(tempC: number, fresh: boolean, wet: boolean): number {
   if (wet) return 11;
   const t = Math.min(0, tempC);
   const dry = 9.43 + 0.18 * t + 0.0033 * t * t;

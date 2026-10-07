@@ -3,7 +3,7 @@ import type { WeatherOverlayMetric } from '../overlay/types';
 type Color = readonly [number, number, number];
 type ColorStop = readonly [number, Color];
 
-export type WeatherPaletteScaleSettingValue = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 couleurs';
+type WeatherPaletteScaleSettingValue = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 couleurs';
 
 export interface WeatherPaletteMetricDefinition {
   minLimit: number;

@@ -18,7 +18,7 @@ interface StyleLayerLike {
  * Id of the style layer drawing Mapbox Satellite, or null when the active
  * basemap has no satellite imagery (the overlay is then skipped).
  */
-export function findSatelliteRasterLayerId(
+function findSatelliteRasterLayerId(
   layers: readonly StyleLayerLike[],
   sources: Record<string, StyleSourceLike>,
 ): string | null {

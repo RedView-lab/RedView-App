@@ -1,10 +1,5 @@
 import type { SlopeBand, SlopeColorization } from '@/features/controlPanel/types';
 
-export interface SlopeRampOptions {
-  bands: SlopeBand[];
-  colorization: SlopeColorization; // 'gradient' | 'stepped'
-}
-
 interface RgbaColor {
   r: number;
   g: number;
@@ -37,7 +32,7 @@ function lerp(a: number, b: number, t: number): number {
  * Index 0 maps to 0 degrees (flat horizontal terrain).
  * Index 255 maps to 90 degrees (vertical wall / cliff).
  */
-export function buildSlopeRampData(
+function buildSlopeRampData(
   bands: SlopeBand[],
   colorization: SlopeColorization,
   lutSize = 256,

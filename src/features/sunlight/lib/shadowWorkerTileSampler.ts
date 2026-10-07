@@ -80,7 +80,7 @@ export async function loadTileWithParents(
   return { leafX: x, leafY: y, dataX: x, dataY: y, dataZ: z, elev: null };
 }
 
-export async function cacheMatchAny(cache: Cache, url: string): Promise<Response | null> {
+async function cacheMatchAny(cache: Cache, url: string): Promise<Response | null> {
   try {
     const resp = await cache.match(url, { ignoreSearch: true });
     if (resp && resp.status === 200) return resp;
@@ -90,7 +90,7 @@ export async function cacheMatchAny(cache: Cache, url: string): Promise<Response
   return null;
 }
 
-export async function safeDecode(resp: Response): Promise<Float32Array | null> {
+async function safeDecode(resp: Response): Promise<Float32Array | null> {
   try {
     const blob = await resp.clone().blob();
     const elev = await decodeTerrainRGB(blob);
@@ -100,7 +100,7 @@ export async function safeDecode(resp: Response): Promise<Float32Array | null> {
   }
 }
 
-export async function decodeTerrainRGB(blob: Blob): Promise<Float32Array> {
+async function decodeTerrainRGB(blob: Blob): Promise<Float32Array> {
   const img = await createImageBitmap(blob, {
     colorSpaceConversion: 'none',
     premultiplyAlpha: 'none',

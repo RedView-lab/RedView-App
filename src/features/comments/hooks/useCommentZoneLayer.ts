@@ -19,7 +19,7 @@ import { closedRing } from '../lib/zoneGeometry';
  * image et viderait le cache de drapage du relief.
  */
 
-export const COMMENT_ZONE_SOURCE_ID = 'rv-comment-zones';
+const COMMENT_ZONE_SOURCE_ID = 'rv-comment-zones';
 const FILL_LAYER_ID = 'rv-comment-zones-fill';
 const LINE_LAYER_ID = 'rv-comment-zones-line';
 const DRAFT_LINE_LAYER_ID = 'rv-comment-zones-draft-line';

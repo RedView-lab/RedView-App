@@ -5,7 +5,7 @@
  */
 export type ColorRamp = string | ReadonlyArray<readonly [number, string]>;
 
-export type BasemapTone = 'light' | 'dark';
+type BasemapTone = 'light' | 'dark';
 
 /**
  * Every colour decision of a RedView basemap. One palette = one theme: the

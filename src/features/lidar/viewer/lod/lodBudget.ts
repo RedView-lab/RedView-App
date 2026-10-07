@@ -89,7 +89,7 @@ export interface LodBudgetState {
 }
 
 /** True when the frame came at least half a refresh period later than the target interval. */
-export function missedTarget(intervalMs: number, targetIntervalMs: number, refreshMs: number): boolean {
+function missedTarget(intervalMs: number, targetIntervalMs: number, refreshMs: number): boolean {
   return intervalMs > targetIntervalMs + refreshMs * 0.5;
 }
 
@@ -99,7 +99,7 @@ export function missedTarget(intervalMs: number, targetIntervalMs: number, refre
  * weak GPU never stays seconds per frame (Windows TDR → device lost).
  * The first frame of a run (`intervalMs` 0) carries no information.
  */
-export function updateAdaptiveBudget(state: LodBudgetState, sample: BudgetSample): LodBudgetState {
+function updateAdaptiveBudget(state: LodBudgetState, sample: BudgetSample): LodBudgetState {
   const target = sample.targetIntervalMs;
   const cooldown = Math.max(0, state.emergencyCooldown - 1);
   if (sample.intervalMs <= 0) {

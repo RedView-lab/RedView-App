@@ -39,7 +39,7 @@ const DRAPE_LIFT_M = 0.4;
 /** Points drawn per draped line at most. */
 const MAX_PATH_POINTS = 300;
 
-export const TOOL_COLORS = {
+const TOOL_COLORS = {
   vertex: '#ff2a1f',
   distance: '#ffffff',
   height: '#4fc3f7',

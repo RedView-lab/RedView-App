@@ -18,16 +18,16 @@
 
 export type ParameterValue = boolean | number | string;
 
-export type ParameterKind = 'boolean' | 'number' | 'enum';
+type ParameterKind = 'boolean' | 'number' | 'enum';
 
-export type ParameterGroup =
+type ParameterGroup =
   | 'comportement'
   | 'elevation'
   | 'cinematique'
   | 'instructions'
   | 'moteur';
 
-export interface ParameterChoice {
+interface ParameterChoice {
   value: string | number;
   label: string;
 }
@@ -73,8 +73,3 @@ export interface ExpertProfileState {
   uploadedHash?: string;
 }
 
-export interface GroupMeta {
-  id: ParameterGroup;
-  label: string;
-  description?: string;
-}

@@ -90,7 +90,7 @@ class Schedule {
   }
 }
 
-export function inClockWindow(clockMin: number, window: ClockWindow): boolean {
+function inClockWindow(clockMin: number, window: ClockWindow): boolean {
   const m = ((clockMin % DAY_MIN) + DAY_MIN) % DAY_MIN;
   return (m >= window.startMin && m < window.endMin)
     || (m + DAY_MIN >= window.startMin && m + DAY_MIN < window.endMin);

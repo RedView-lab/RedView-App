@@ -1,7 +1,7 @@
 import { detectCrs } from '../lib/coordConvert';
 import type { PointCloudBounds, DetectedCrs } from '../types';
 
-export type DeviceTier = 'masterpiece' | 'high' | 'medium' | 'low' | 'minimal';
+type DeviceTier = 'masterpiece' | 'high' | 'medium' | 'low' | 'minimal';
 
 export interface QualityProfile {
   tier: DeviceTier;

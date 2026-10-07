@@ -31,7 +31,7 @@ import { isZoneDrag, zoneFromPolygon, zoneFromScreenRect, type LngLatPair, type 
  * même forme que l'icône et les bulles posées) ; le point chaud est ce coin,
  * là où la bulle sera posée.
  */
-export const COMMENT_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(
+const COMMENT_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">'
   + '<path d="M3 11.5a8.5 8.5 0 1 1 8.5 8.5H4.25A1.25 1.25 0 0 1 3 18.75Z" fill="#fff" stroke="#111114" stroke-width="1.25" stroke-linejoin="round"/></svg>',
 )}") 3 20, crosshair`;

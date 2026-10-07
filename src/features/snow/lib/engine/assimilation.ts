@@ -33,14 +33,14 @@ export interface StationSample {
   distanceKm: number;
 }
 
-export interface ProfileCorrection {
+interface ProfileCorrection {
   /** Precipitation factor. */
   ratio: number;
   /** Altitude shift of the background profile, m (read the background at z + shiftM). */
   shiftM: number;
 }
 
-export const NO_CORRECTION: ProfileCorrection = { ratio: 1, shiftM: 0 };
+const NO_CORRECTION: ProfileCorrection = { ratio: 1, shiftM: 0 };
 
 export interface LargeScaleAnalysis {
   correction: ProfileCorrection;
@@ -53,7 +53,7 @@ export interface LargeScaleAnalysis {
   braUsed: boolean;
 }
 
-export function sigmaBackground(b: number, config: SnowEngineConfig): number {
+function sigmaBackground(b: number, config: SnowEngineConfig): number {
   return Math.max(config.backgroundErrorMinCm, config.backgroundErrorRel * Math.max(0, b));
 }
 
@@ -62,12 +62,12 @@ function sigmaObs(o: SnowObservation, config: SnowEngineConfig): number {
   return Math.hypot(e, config.obsRepresentativenessRel * Math.max(0, o.hsCm));
 }
 
-export function horizontalCorrelation(rKm: number, lKm: number): number {
+function horizontalCorrelation(rKm: number, lKm: number): number {
   const x = rKm / lKm;
   return (1 + x) * Math.exp(-x);
 }
 
-export function verticalCorrelation(dz: number, hM: number): number {
+function verticalCorrelation(dz: number, hM: number): number {
   return Math.exp(-((dz / hM) ** 2));
 }
 

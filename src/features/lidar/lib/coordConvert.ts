@@ -195,21 +195,11 @@ export function isCorsica(xLamb93: number, yLamb93: number): boolean {
          yLamb93 >= 6_050_000 && yLamb93 <= 6_300_000;
 }
 
-export function formatKmCoordinate(val: number): string {
+function formatKmCoordinate(val: number): string {
   if (val < 0) {
     return `m${String(Math.abs(val)).padStart(4, '0')}`;
   }
   return `p${String(val).padStart(4, '0')}`;
-}
-
-export function parseKmCoordinate(str: string): number {
-  if (str.startsWith('m')) {
-    return -parseInt(str.slice(1), 10);
-  }
-  if (str.startsWith('p')) {
-    return parseInt(str.slice(1), 10);
-  }
-  return parseInt(str, 10);
 }
 
 export function buildTileFileName(xKm: number, yKm: number, crs: DetectedCrs, altRef?: AltitudeRef): string {

@@ -2,8 +2,8 @@ import type { DetectedCrs, PointCloudBounds } from '../../types';
 import type { LidarRouteOverlayItem } from '../../lib/routeOverlaySync';
 import type { RouteEditTool } from './routeEditorController';
 
-export type { LidarRouteOverlayItem, LidarRouteOverlayPoint, LidarRouteOverlayState, LidarRouteSyncMessage } from '../../lib/routeOverlaySync';
-export type { RouteEditTool, RouteEditorState } from './routeEditorController';
+export type { LidarRouteOverlayItem, LidarRouteOverlayPoint,   } from '../../lib/routeOverlaySync';
+;
 
 export interface LidarRouteMeshGeometry {
   /** Interleaved or separate position buffer: x, y, z (local viewer space) */

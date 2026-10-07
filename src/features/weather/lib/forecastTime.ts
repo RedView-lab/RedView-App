@@ -87,7 +87,7 @@ function floorToStep(minutes: number, stepMinutes: number): number {
   return Math.floor(minutes / stepMinutes) * stepMinutes;
 }
 
-export function getForecastWindowStart(now: Date = new Date()): Date {
+function getForecastWindowStart(now: Date = new Date()): Date {
   const start = new Date(now);
   start.setSeconds(0, 0);
   const roundedMinutes = floorToStep((start.getHours() * 60) + start.getMinutes(), FORECAST_TIME_STEP_MINUTES);

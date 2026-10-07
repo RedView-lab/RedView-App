@@ -2,7 +2,7 @@ import type { Map as MapboxMap, MapboxGeoJSONFeature, PointLike } from 'mapbox-g
 import { POI_LABELS, type PoiCategory } from '@/features/poi/types';
 import type { MapContextMenuPoint } from './types';
 
-export const FEATURE_CATEGORY_LABELS: Record<string, string> = {
+const FEATURE_CATEGORY_LABELS: Record<string, string> = {
   // Toutes les catégories POI indexées par le serveur, plus les couches
   // Mapbox natives que le menu contextuel sait nommer.
   ...POI_LABELS,
@@ -12,7 +12,7 @@ export const FEATURE_CATEGORY_LABELS: Record<string, string> = {
   road: 'Route',
 };
 
-export const SURFACE_LABELS: Record<string, string> = {
+const SURFACE_LABELS: Record<string, string> = {
   asphalt: 'Bitume',
   asphalted: 'Bitume',
   chipseal: 'Bitume',
@@ -69,7 +69,7 @@ export function sampleSlopePct(map: MapboxMap, lng: number, lat: number): number
   return Math.round(Math.hypot(slopeX, slopeY) * 100);
 }
 
-export function getFeatureString(
+function getFeatureString(
   properties: Record<string, unknown>,
   keys: string[],
 ): string | null {
@@ -82,7 +82,7 @@ export function getFeatureString(
   return null;
 }
 
-export function humanizeToken(value: string): string {
+function humanizeToken(value: string): string {
   return value
     .replace(/[_-]+/g, ' ')
     .replace(/\s+/g, ' ')
@@ -90,7 +90,7 @@ export function humanizeToken(value: string): string {
     .replace(/(^|\s)\p{L}/gu, (match) => match.toLocaleUpperCase('fr-FR'));
 }
 
-export function normalizeCategoryLabel(value: string | null): string | null {
+function normalizeCategoryLabel(value: string | null): string | null {
   if (!value) return null;
 
   const normalized = value.toLowerCase().replace(/[\s-]+/g, '_');
@@ -101,13 +101,13 @@ export function normalizeCategoryLabel(value: string | null): string | null {
   return FEATURE_CATEGORY_LABELS[normalized] ?? humanizeToken(value);
 }
 
-export function normalizeSurfaceLabel(value: string | null): string | null {
+function normalizeSurfaceLabel(value: string | null): string | null {
   if (!value) return null;
   const normalized = value.toLowerCase().replace(/[\s-]+/g, '_');
   return SURFACE_LABELS[normalized] ?? humanizeToken(value);
 }
 
-export function scoreFeature(feature: MapboxGeoJSONFeature): number {
+function scoreFeature(feature: MapboxGeoJSONFeature): number {
   const properties = (feature.properties ?? {}) as Record<string, unknown>;
   const layerId = feature.layer?.id?.toLowerCase() ?? '';
 

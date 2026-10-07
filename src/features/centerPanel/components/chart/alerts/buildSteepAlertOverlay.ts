@@ -5,7 +5,7 @@ import { resampleRouteElevations } from '../series/routeProfile';
 import { locateRoutePointAtX } from '../series/builders';
 import { buildItineraryXProjector } from '../series/itineraryXProjector';
 
-export interface SteepAlertRule {
+interface SteepAlertRule {
   /** Pente moyenne minimale (%) tenue sur toute la fenêtre. */
   minGradientPct: number;
   /** Longueur minimale de la fenêtre (m). */
@@ -19,7 +19,7 @@ export interface SteepAlertRule {
  *  - pente moyenne ≥ 12 % tenue sur au moins 500 m ;
  *  - « mur » : pente moyenne ≥ 18 % tenue sur au moins 200 m.
  */
-export const STEEP_ALERT_RULES: ReadonlyArray<SteepAlertRule> = [
+const STEEP_ALERT_RULES: ReadonlyArray<SteepAlertRule> = [
   { minGradientPct: 12, minLengthM: 500 },
   { minGradientPct: 18, minLengthM: 200 },
 ];
@@ -33,7 +33,7 @@ const MAX_GRADIENT_WINDOW_M = 100;
 /** Deux alertes séparées de moins que ça sont fusionnées en une seule colonne. */
 const MERGE_GAP_M = 40;
 
-export interface SteepAlertSegment {
+interface SteepAlertSegment {
   startM: number;
   endM: number;
   avgGradientPct: number;
@@ -68,7 +68,7 @@ export interface ItinerarySteepAlert {
   kind: SteepAlertKind;
 }
 
-export function steepAlertKey(lat: number, lon: number): string {
+function steepAlertKey(lat: number, lon: number): string {
   return `${lat.toFixed(4)},${lon.toFixed(4)}`;
 }
 
@@ -79,7 +79,7 @@ export function steepAlertKey(lat: number, lon: number): string {
  * segments continus (puis fusionnés s'ils sont séparés de ≤ MERGE_GAP_M),
  * dont les bords plats sont rognés.
  */
-export function detectSteepAlertSegments(
+function detectSteepAlertSegments(
   routePoints: RouteChartPoint[] | null | undefined,
 ): SteepAlertSegment[] {
   if (!routePoints || routePoints.length < 2) return [];

@@ -9,11 +9,7 @@ import { buildItineraryFitCourse } from './exportFit';
 
 export type ItineraryExportFormat = 'gpx' | 'fit' | 'kml';
 
-export {
-  buildItineraryGpx,
-  buildItineraryKml,
-  buildItineraryFitCourse,
-};
+;
 
 /**
  * Exporte et déclenche le téléchargement d'un itinéraire au format GPX, KML ou FIT.

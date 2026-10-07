@@ -132,7 +132,7 @@ const PROVIDED_TIMELINE_FAVORITE_BADGE_URLS: Partial<Record<PoiCategory, string>
  * - Pointed pin ("le truc avec la pointe") for favorite POIs
  * - Pause symbol with pause duration when associated with pauses
  */
-export function PoiBadge({
+function PoiBadge({
   category,
   size = 20,
   hideGlyph = false,

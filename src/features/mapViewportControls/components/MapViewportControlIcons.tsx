@@ -43,8 +43,3 @@ export function IconPanelLayers({ size = 18, ...rest }: AssetIconProps) {
   );
 }
 
-export function IconPolygonZone({ size = 18, ...rest }: AssetIconProps) {
-  return (
-    <AssetIcon src="/svgv2/icone/polygon-zone.svg" size={size} {...rest} />
-  );
-}

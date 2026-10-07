@@ -1,10 +1,10 @@
 import { computeShadowSweep } from './shadowSweep';
 import { DEM_NODATA_THRESHOLD } from './shadowWorkerTileSampler';
 
-export const MIN_RELIEF_RANGE_FOR_FALLBACK_M = 40;
-export const MIN_CAST_SHADOW_COVERAGE = 0.025;
-export const PREVIEW_MAX_W = 320;
-export const PREVIEW_MAX_H = 224;
+const MIN_RELIEF_RANGE_FOR_FALLBACK_M = 40;
+const MIN_CAST_SHADOW_COVERAGE = 0.025;
+const PREVIEW_MAX_W = 320;
+const PREVIEW_MAX_H = 224;
 
 export type ComputeQuality = 'preview' | 'full';
 

@@ -33,7 +33,7 @@ import { createWriteCoalescer } from './writeCoalescer.ts';
  * sait interpréter (un refus HTTP ne lui donnerait aucun code).
  */
 
-export interface ConnectionLimits {
+interface ConnectionLimits {
   /** Connexions WebSocket ouvertes par IP (un /64 en IPv6). */
   perIp: number;
   /** Ouvertures par IP et par minute. */
@@ -44,7 +44,7 @@ export interface ConnectionLimits {
   pendingAuth: number;
 }
 
-export const DEFAULT_CONNECTION_LIMITS: ConnectionLimits = { perIp: 32, upgradesPerIpPerMinute: 60, perUser: 16, pendingAuth: 256 };
+const DEFAULT_CONNECTION_LIMITS: ConnectionLimits = { perIp: 32, upgradesPerIpPerMinute: 60, perUser: 16, pendingAuth: 256 };
 
 export interface MultiplayerServerOptions {
   storage: RoomStorage;

@@ -4,7 +4,7 @@ import { buildPauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule'
 import type { AxisMode } from '../series';
 import { projectElapsedHoursToX } from '../seriesPredictionMath';
 
-export interface ChartPauseWindow {
+interface ChartPauseWindow {
   id: string;
   startX: number;
   endX: number;

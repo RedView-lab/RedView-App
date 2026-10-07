@@ -35,7 +35,7 @@ interface SummaryRowProps extends SummaryRowMenuHandlers {
   onSelectItinerary?: (id: string) => void;
 }
 
-export function SummaryRow({
+function SummaryRow({
   node,
   childCount,
   expanded,

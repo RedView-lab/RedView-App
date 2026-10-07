@@ -8,10 +8,9 @@ import type {
   SlopeScaleSetting,
   SunlightState,
 } from '@/features/controlPanel/types';
-import type { ViewerRouteState } from '../route/types';
 import type { ViewerPointFilterState } from '../pointFilter';
 
-export type { SunlightState, ViewerRouteState, ViewerPointFilterState };
+export type { SunlightState,  ViewerPointFilterState };
 
 export interface ViewerSlopeState {
   enabled: boolean;

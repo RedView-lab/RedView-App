@@ -14,7 +14,7 @@ function getSlopeSource(map: MapboxMap): { tiles?: string[]; maxzoom?: number } 
   }
 }
 
-export function getSlopeTileQuery(map: MapboxMap): string {
+function getSlopeTileQuery(map: MapboxMap): string {
   const template = getSlopeSource(map)?.tiles?.[0];
   if (!template) return '';
   const queryStart = template.indexOf('?');
