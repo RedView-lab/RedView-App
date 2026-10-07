@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import type { OverlayStatusSnapshot } from '@/features/map3d';
+import { useLatestRef } from '@/shared/hooks/useLatestRef';
 import { sunAltitudeOvershootBucket } from '@/features/sunlight/lib/shadowSweep';
 import type {
   BoundsTuple,
@@ -10,7 +11,6 @@ import type {
 import {
   effectiveOverlayOpacity,
   removeShadowSourceAndLayer,
-  SAMPLE_DEBOUNCE_MS,
   setShadowLayerOpacity,
 } from '../useShadowImageShared';
 import { useShadowWorkerBridge } from './useShadowWorkerBridge';
@@ -27,17 +27,12 @@ export function useShadowImage(
   runtimeOptions: UseShadowImageRuntimeOptions = {},
 ): void {
   const { statusReporter, registerReload } = runtimeOptions;
-  const optsRef = useRef(opts);
-  optsRef.current = opts;
+  const optsRef = useLatestRef(opts);
 
   const sampleGenRef = useRef(0);
   const sampledRef = useRef(false);
   const sampledBoundsRef = useRef<BoundsTuple | null>(null);
   const sunRecomputeFrameRef = useRef<number | null>(null);
-  const scheduleSampleRef = useRef<(() => void) | null>(null);
-  const requestResampleRef = useRef<(() => void) | null>(null);
-  const recomputeRef = useRef<(() => void) | null>(null);
-  const setLayerOpacityRef = useRef<((opacity: number) => void) | null>(null);
 
   const publishStatus = (status: OverlayStatusSnapshot | null) => {
     statusReporter?.(status);
@@ -92,8 +87,7 @@ export function useShadowImage(
     isCancelled: () => isCancelledRef.current,
   });
 
-  requestResampleRef.current = requestResample;
-  setLayerOpacityRef.current = setLayerOpacity;
+  const requestResampleRef = useLatestRef(requestResample);
 
   const recompute = () => {
     if (!sampledRef.current || !sampledBoundsRef.current) return;
@@ -105,26 +99,15 @@ export function useShadowImage(
     }
     requestCompute(sampledBoundsRef.current, sampleGenRef.current, () => isCancelledRef.current);
   };
-  recomputeRef.current = recompute;
+  const recomputeRef = useLatestRef(recompute);
 
-  const scheduleSunRecompute = () => {
+  const scheduleSunRecompute = useCallback(() => {
     if (sunRecomputeFrameRef.current !== null) return;
     sunRecomputeFrameRef.current = requestAnimationFrame(() => {
       sunRecomputeFrameRef.current = null;
-      recomputeRef.current?.();
+      recomputeRef.current();
     });
-  };
-
-  const scheduleSample = () => {
-    let timer: number | null = null;
-    timer = (setTimeout(() => {
-      if (!isCancelledRef.current) requestResampleRef.current?.();
-    }, SAMPLE_DEBOUNCE_MS) as unknown) as number;
-    return () => {
-      if (timer !== null) clearTimeout(timer);
-    };
-  };
-  scheduleSampleRef.current = scheduleSample;
+  }, [recomputeRef]);
 
   useEffect(() => {
     if (!map || !isMapLoaded) return;
@@ -151,12 +134,12 @@ export function useShadowImage(
       cancelTimers();
       map.off('moveend', onMoveEnd);
     };
-  }, [map, isMapLoaded, opts.enabled, opts.analysisZone]);
+  }, [map, isMapLoaded, optsRef, opts.enabled, opts.analysisZone]);
 
   useEffect(() => {
     if (!opts.enabled) return;
     scheduleSunRecompute();
-  }, [opts.sunAzimuthDeg, opts.sunAltitudeDeg, opts.enabled]);
+  }, [opts.sunAzimuthDeg, opts.sunAltitudeDeg, opts.enabled, scheduleSunRecompute]);
 
   useEffect(() => {
     applyVisibleOpacity();
@@ -165,7 +148,7 @@ export function useShadowImage(
   useEffect(() => {
     if (!registerReload) return;
     registerReload(() => {
-      requestResampleRef.current?.();
+      requestResampleRef.current();
     });
-  }, [registerReload]);
+  }, [registerReload, requestResampleRef]);
 }

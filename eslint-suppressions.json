@@ -54,16 +54,6 @@
       "count": 2
     }
   },
-  "src/features/sunlight/hooks/useShadowImage/hook.ts": {
-    "react-hooks/refs": {
-      "count": 5
-    }
-  },
-  "src/features/sunlight/hooks/useSunlightMap/hook.ts": {
-    "react-hooks/refs": {
-      "count": 6
-    }
-  },
   "src/features/weather/hooks/useWind.ts": {
     "react-hooks/immutability": {
       "count": 1

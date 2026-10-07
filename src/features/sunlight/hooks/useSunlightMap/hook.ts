@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
+import { useLatestRef } from '@/shared/hooks/useLatestRef';
 import { getSunPositionForLocalMinutes } from '@/features/sunlight/lib/sun-calc';
 import { sunAltitudeOvershootBucket } from '@/features/sunlight/lib/shadowSweep';
 import {
@@ -8,7 +9,6 @@ import {
   hashBandPayload,
   parseTimeToMinutes,
   removeSunlightMapSourceAndLayer,
-  SAMPLE_DEBOUNCE_MS,
   serializeBands,
   setSunlightMapLayerOpacity,
   type BoundsTuple,
@@ -30,26 +30,19 @@ export function useSunlightMap(
 ): void {
   const { statusReporter, registerReload } = runtimeOptions;
 
-  const optsRef = useRef(opts);
-  optsRef.current = opts;
+  const optsRef = useLatestRef(opts);
 
   const bandsPayload = useMemo(() => serializeBands(opts.bands), [opts.bands]);
   const bandsHash = useMemo(() => hashBandPayload(bandsPayload), [bandsPayload]);
-  const bandsPayloadRef = useRef(bandsPayload);
-  bandsPayloadRef.current = bandsPayload;
+  const bandsPayloadRef = useLatestRef(bandsPayload);
 
-  const statusReporterRef = useRef(statusReporter);
-  statusReporterRef.current = statusReporter;
+  const statusReporterRef = useLatestRef(statusReporter);
 
   const sampleGenRef = useRef(0);
   const sampledRef = useRef(false);
   const sampledBoundsRef = useRef<BoundsTuple | null>(null);
   const computeTimerRef = useRef<number | null>(null);
   const isCancelledRef = useRef(false);
-
-  const scheduleSampleRef = useRef<(() => void) | null>(null);
-  const requestResampleRef = useRef<(() => void) | null>(null);
-  const scheduleComputeRef = useRef<(() => void) | null>(null);
 
   const publishStatus = (status: Parameters<NonNullable<typeof statusReporter>>[0]) => {
     statusReporterRef.current?.(status);
@@ -113,7 +106,7 @@ export function useSunlightMap(
     isCancelled: () => isCancelledRef.current,
   });
 
-  requestResampleRef.current = requestResample;
+  const requestResampleRef = useLatestRef(requestResample);
 
   const scheduleCompute = () => {
     if (computeTimerRef.current !== null) clearTimeout(computeTimerRef.current);
@@ -122,18 +115,6 @@ export function useSunlightMap(
       enqueueCompute();
     }, COMPUTE_DEBOUNCE_MS) as unknown) as number;
   };
-  scheduleComputeRef.current = scheduleCompute;
-
-  const scheduleSample = () => {
-    let timer: number | null = null;
-    timer = (setTimeout(() => {
-      if (!isCancelledRef.current) requestResampleRef.current?.();
-    }, SAMPLE_DEBOUNCE_MS) as unknown) as number;
-    return () => {
-      if (timer !== null) clearTimeout(timer);
-    };
-  };
-  scheduleSampleRef.current = scheduleSample;
 
   useEffect(() => {
     if (!map || !isMapLoaded) return;
@@ -164,7 +145,7 @@ export function useSunlightMap(
       }
       map.off('moveend', onMoveEnd);
     };
-  }, [map, isMapLoaded, opts.enabled, opts.analysisZone]);
+  }, [map, isMapLoaded, optsRef, opts.enabled, opts.analysisZone]);
 
   useEffect(() => {
     if (!opts.enabled) return;
@@ -199,7 +180,7 @@ export function useSunlightMap(
   useEffect(() => {
     if (!registerReload) return;
     registerReload(() => {
-      requestResampleRef.current?.();
+      requestResampleRef.current();
     });
-  }, [registerReload]);
+  }, [registerReload, requestResampleRef]);
 }
