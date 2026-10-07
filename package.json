@@ -77,7 +77,8 @@
     "preview": "vite preview",
     "start": "tsx server.mjs",
     "push": "node scripts/deploy.mjs",
-    "deploy": "node scripts/deploy.mjs"
+    "deploy": "node scripts/deploy.mjs",
+    "rollback": "node scripts/rollback.mjs"
   },
   "dependencies": {
     "@mattnucc/gribberish": "^0.30.2",
