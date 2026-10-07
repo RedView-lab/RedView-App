@@ -8,6 +8,14 @@ const API_KEY = process.env.APPWRITE_API_KEY || '';
  */
 const ONLY_ARG = process.argv.find((arg) => arg.startsWith('--only='));
 const ONLY = ONLY_ARG ? new Set(ONLY_ARG.slice('--only='.length).split(',').filter(Boolean)) : null;
+/**
+ * `--check` : lecture seule — compare la base à ce schéma (collections,
+ * attributs, index, buckets, réglages de sécurité), n'écrit rien, sort en 1
+ * au moindre écart. À lancer avant un déploiement qui suppose une collection
+ * (account_deletions a manqué en prod le 07/10 : le code partait sans registre).
+ */
+const CHECK = process.argv.includes('--check');
+const drift = [];
 
 const headers = {
   'Content-Type': 'application/json',
@@ -31,10 +39,60 @@ async function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+const sameSet = (a = [], b = []) => a.length === b.length && [...a].sort().join('\n') === [...b].sort().join('\n');
+
+async function checkCollection(col) {
+  const res = await api(`/databases/${DATABASE_ID}/collections/${col.id}`);
+  if (!res.ok) {
+    drift.push(`collection ${col.id} absente (${res.status})`);
+    return;
+  }
+  const live = res.data;
+  if (live.documentSecurity !== col.documentSecurity) drift.push(`${col.id}.documentSecurity = ${live.documentSecurity}, attendu ${col.documentSecurity}`);
+  if (!sameSet(live.$permissions, col.permissions)) drift.push(`${col.id}.$permissions = ${JSON.stringify(live.$permissions)}, attendu ${JSON.stringify(col.permissions)}`);
+  const attrs = new Map((live.attributes ?? []).map((a) => [a.key, a]));
+  for (const attr of col.attributes) {
+    const a = attrs.get(attr.key);
+    if (!a) { drift.push(`${col.id}.${attr.key} absent`); continue; }
+    if (a.type !== attr.type) drift.push(`${col.id}.${attr.key} type ${a.type}, attendu ${attr.type}`);
+    if (a.status !== 'available') drift.push(`${col.id}.${attr.key} statut ${a.status}`);
+    if (a.required !== attr.required) drift.push(`${col.id}.${attr.key} required ${a.required}, attendu ${attr.required}`);
+    // Une taille plus grande en prod est un relèvement volontaire (projects.data) : seul un attribut trop petit casse.
+    if (attr.type === 'string' && a.size < attr.size) drift.push(`${col.id}.${attr.key} taille ${a.size} < ${attr.size}`);
+  }
+  const indexes = new Map((live.indexes ?? []).map((i) => [i.key, i]));
+  for (const idx of col.indexes) {
+    const i = indexes.get(idx.key);
+    if (!i) { drift.push(`${col.id} index ${idx.key} absent`); continue; }
+    if (i.type !== idx.type || i.attributes.join(',') !== idx.attributes.join(',')) drift.push(`${col.id} index ${idx.key} = ${i.type}(${i.attributes}), attendu ${idx.type}(${idx.attributes})`);
+    if (i.status !== 'available') drift.push(`${col.id} index ${idx.key} statut ${i.status}`);
+  }
+  console.log(`Collection ${col.id} vérifiée`);
+}
+
+async function checkBucket(b) {
+  const res = await api(`/storage/buckets/${b.id}`);
+  if (!res.ok) {
+    drift.push(`bucket ${b.id} absent (${res.status})`);
+    return;
+  }
+  const live = res.data;
+  if (live.fileSecurity !== b.fileSecurity) drift.push(`bucket ${b.id}.fileSecurity = ${live.fileSecurity}, attendu ${b.fileSecurity}`);
+  if (!sameSet(live.$permissions, b.permissions)) drift.push(`bucket ${b.id}.$permissions = ${JSON.stringify(live.$permissions)}, attendu ${JSON.stringify(b.permissions)}`);
+  if (live.maximumFileSize < b.maxFileSize) drift.push(`bucket ${b.id}.maximumFileSize ${live.maximumFileSize} < ${b.maxFileSize}`);
+  if (!sameSet(live.allowedFileExtensions, b.allowedFileExtensions)) drift.push(`bucket ${b.id}.allowedFileExtensions = ${JSON.stringify(live.allowedFileExtensions)}, attendu ${JSON.stringify(b.allowedFileExtensions)}`);
+  if (b.compression && live.compression !== b.compression) drift.push(`bucket ${b.id}.compression = ${live.compression}, attendu ${b.compression}`);
+  console.log(`Bucket ${b.id} vérifié`);
+}
+
 async function main() {
-  console.log('=== Step 1: Create Database ===');
+  if (!API_KEY) throw new Error('APPWRITE_API_KEY manquante (node --env-file=.env …)');
+  if (CHECK) console.log(`=== Vérification du schéma (lecture seule) : ${ENDPOINT} / ${PROJECT_ID} / ${DATABASE_ID} ===`);
+  else console.log('=== Step 1: Create Database ===');
   const dbCheck = await api(`/databases/${DATABASE_ID}`);
-  if (!dbCheck.ok) {
+  if (CHECK) {
+    if (!dbCheck.ok) drift.push(`base ${DATABASE_ID} absente (${dbCheck.status})`);
+  } else if (!dbCheck.ok) {
     const dbCreate = await api('/databases', 'POST', {
       databaseId: DATABASE_ID,
       name: 'RedView Production Database',
@@ -44,7 +102,7 @@ async function main() {
     console.log('Database redview-db already exists');
   }
 
-  console.log('\n=== Step 2: Create Collections ===');
+  if (!CHECK) console.log('\n=== Step 2: Create Collections ===');
   const collections = [
     {
       id: 'projects',
@@ -187,6 +245,10 @@ async function main() {
 
   for (const col of collections) {
     if (ONLY && !ONLY.has(col.id)) continue;
+    if (CHECK) {
+      await checkCollection(col);
+      continue;
+    }
     console.log(`Checking collection ${col.id}...`);
     const check = await api(`/databases/${DATABASE_ID}/collections/${col.id}`);
     if (!check.ok) {
@@ -248,7 +310,7 @@ async function main() {
     }
   }
 
-  console.log('\n=== Step 3: Create Storage Buckets ===');
+  if (!CHECK) console.log('\n=== Step 3: Create Storage Buckets ===');
   const buckets = [
     {
       id: 'project-thumbnails',
@@ -291,6 +353,10 @@ async function main() {
 
   for (const b of buckets) {
     if (ONLY && !ONLY.has(b.id)) continue;
+    if (CHECK) {
+      await checkBucket(b);
+      continue;
+    }
     console.log(`Checking bucket ${b.id}...`);
     const check = await api(`/storage/buckets/${b.id}`);
     if (!check.ok) {
@@ -309,7 +375,19 @@ async function main() {
     }
   }
 
+  if (CHECK) {
+    if (drift.length) {
+      console.error(`\n${drift.length} écart(s) avec le schéma :\n${drift.map((d) => `  - ${d}`).join('\n')}`);
+      process.exitCode = 1;
+    } else {
+      console.log('\nSchéma conforme.');
+    }
+    return;
+  }
   console.log('\n=== Setup Complete! ===');
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

@@ -7,7 +7,8 @@
  *   node scripts/deploy.mjs --skip-checks "fix: hotfix"   (urgence : gate qualité sauté)
  *
  * Le gate qualité (scripts/check.mjs --full) tourne d'abord, sur l'arbre qui
- * va être commité : en cas d'échec, rien n'est commité ni poussé.
+ * va être commité, puis la vérification du schéma Appwrite de prod : en cas
+ * d'échec, rien n'est commité ni poussé.
  */
 import { execFileSync, execSync, spawnSync } from 'node:child_process';
 import path from 'node:path';
@@ -16,7 +17,10 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const SKIP_CHECKS_FLAG = '--skip-checks';
-const CHECK_SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'check.mjs');
+const SCRIPTS_DIR = path.dirname(fileURLToPath(import.meta.url));
+const CHECK_SCRIPT = path.join(SCRIPTS_DIR, 'check.mjs');
+const SCHEMA_SCRIPT = path.join(SCRIPTS_DIR, 'setup-appwrite-schema.mjs');
+const ENV_FILE = path.join(SCRIPTS_DIR, '..', '.env');
 
 const VPS_HOST = '141.145.220.99';
 const VPS_USER = 'opc';
@@ -61,6 +65,22 @@ function runQualityGate() {
   return result.status === 0;
 }
 
+/**
+ * Schéma Appwrite de prod comparé à scripts/setup-appwrite-schema.mjs, en
+ * lecture seule : un code qui suppose une collection absente ne part pas
+ * (account_deletions a manqué le 07/10). Corriger avec le même script sans
+ * `--check`.
+ */
+function runProdSchemaCheck() {
+  log('Checking the production Appwrite schema (read only)...');
+  if (!fs.existsSync(ENV_FILE)) {
+    error(`No .env at ${ENV_FILE}: the schema check needs APPWRITE_API_KEY.`);
+    return false;
+  }
+  const result = spawnSync(process.execPath, [`--env-file=${ENV_FILE}`, SCHEMA_SCRIPT, '--check'], { stdio: 'inherit' });
+  return result.status === 0;
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const skipChecks = args.includes(SKIP_CHECKS_FLAG);
@@ -79,6 +99,13 @@ async function main() {
     process.exit(1);
   } else {
     success('Quality gate passed.');
+  }
+  if (!skipChecks) {
+    if (!runProdSchemaCheck()) {
+      error('Production schema differs from scripts/setup-appwrite-schema.mjs: nothing was committed or pushed. Apply it (node --env-file=.env scripts/setup-appwrite-schema.mjs --only=<ids>), then deploy again.');
+      process.exit(1);
+    }
+    success('Production schema matches.');
   }
 
   // 1. Check git status
