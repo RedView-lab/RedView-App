@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react';
 import { locateRoutePointAtX } from '@/features/centerPanel/components/chart/series/builders';
 import { useProjectStore } from '@/features/itineraryPanel/context/ProjectStore/hooks';
 
-import { useLivePresenceOptional } from '../context';
+import { useLivePresenceOptional } from '../context/LivePresenceContext';
 
 /**
  * Pont entre la présence en direct et le projet (monté dans le ProjectProvider,

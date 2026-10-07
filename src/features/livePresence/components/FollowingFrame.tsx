@@ -4,7 +4,7 @@ import { UserAvatar } from '@/shared/components/UserAvatar/UserAvatar';
 import { userAvatarColor } from '@/shared/components/UserAvatar/avatarColor';
 import { useAppI18n } from '@/shared/i18n';
 
-import { useLivePresenceOptional } from '../context';
+import { useLivePresenceOptional } from '../context/LivePresenceContext';
 import '../styles/livePresence.css';
 
 interface FollowingFrameProps {

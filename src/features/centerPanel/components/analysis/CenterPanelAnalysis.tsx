@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useFlyoverSeek, useFlyoverSessionActive } from '../../flyover';
 import { xValueFromDistance } from '../../flyover/playback';
-import { useLivePresenceOptional } from '@/features/livePresence/context';
+import { useLivePresenceOptional } from '@/features/livePresence/context/LivePresenceContext';
 import { RemoteChartCursors } from '@/features/livePresence/components/RemoteChartCursors';
 import { useRouteSplitToolOptional } from '../../tools/routeSplit';
 import { useTraceToolOptional } from '../../tools/tracer';

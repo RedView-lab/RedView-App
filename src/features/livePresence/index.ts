@@ -13,8 +13,8 @@
  *  - components/ : cadre et bandeau du suivi, survol des autres sur le
  *    graphique, pont avec le projet (itinéraire actif).
  */
-export { LivePresenceContext, useLivePresenceOptional } from './context';
-export type { FollowState, LivePeer, LivePresenceValue } from './context';
+export { LivePresenceContext, useLivePresenceOptional } from './context/LivePresenceContext';
+export type { FollowState, LivePeer, LivePresenceValue } from './context/LivePresenceContext';
 export { useLivePresence } from './hooks/useLivePresence';
 export { FollowingFrame } from './components/FollowingFrame';
 export { LivePresenceBridge } from './components/LivePresenceBridge';

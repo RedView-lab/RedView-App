@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, type CSSProperties } from 'react';
 
-import { useLivePresenceOptional, type LivePeer } from '../context';
+import { useLivePresenceOptional, type LivePeer } from '../context/LivePresenceContext';
 import '../styles/livePresence.css';
 
 interface RemoteChartCursorsProps {

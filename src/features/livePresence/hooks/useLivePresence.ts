@@ -4,7 +4,7 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import type { CollabState } from '@/features/collab/client/collabClient';
 import type { CollabRealtime } from '@/features/collab/realtime';
 
-import type { LivePresenceValue } from '../context';
+import type { LivePresenceValue } from '../context/LivePresenceContext';
 import { LivePresenceSession, type CollabPresenceInput } from '../engine/LivePresenceSession';
 
 /**

@@ -1,7 +1,7 @@
 import { createContext, useContext } from 'react';
 
-import type { MotionStore } from './engine/MotionStore';
-import type { ChartPointResolver } from './engine/PeerCursorsOverlay';
+import type { MotionStore } from '../engine/MotionStore';
+import type { ChartPointResolver } from '../engine/PeerCursorsOverlay';
 
 /** Un autre éditeur présent, tel que l'interface le montre. */
 export interface LivePeer {

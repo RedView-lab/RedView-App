@@ -8,7 +8,7 @@ import { trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { notify } from '@/shared/lib/notify';
 
 import { FOLLOW_GRACE_MS, SPOTLIGHT_COUNTDOWN_MS, SPOTLIGHT_SPAM_DECLINES, SPOTLIGHT_SPAM_WINDOW_MS } from '../config';
-import type { FollowState, LivePeer } from '../context';
+import type { FollowState, LivePeer } from '../context/LivePresenceContext';
 import { pickClientOfUser, resolveFollowTarget, type FollowPeer } from '../lib/followChain';
 import { FollowController } from './FollowController';
 import { MotionStore } from './MotionStore';
