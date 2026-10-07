@@ -1,14 +1,19 @@
 /// <reference lib="webworker" />
 
 // Decodes a contiguous group of COPC chunks. Several of these run in parallel
-// (see `decodeCopcInParallel` in viewer/runtime.ts); results are concatenated
-// in chunk order so the point order matches a sequential decode. The RedView
-// LAZ decoder (lib/laz/) is used when its module is given, laz-perf otherwise
-// or if it fails: same output.
+// (see `decodeCopcInParallel` in viewer/runtime.ts). The group is decoded in
+// batches of whole chunks, each posted as soon as it is ready: the page copies
+// it into place in the tile's arrays and drops it, so a tile never holds its
+// points twice (the parts and the assembled arrays) and a worker's WASM memory
+// — which never shrinks — stays bounded by one batch instead of its whole group.
+// Points come out in chunk order, exactly as a single decode of the group. The
+// RedView LAZ decoder (lib/laz/) is used when its module is given, laz-perf
+// otherwise or once it fails: same output.
 
 import { decodeCopcChunksWithRedviewLaz, initRedviewLaz } from '../lib/laz/redviewLaz';
-import { decodeCopcChunks, getLazPerf, type CopcDecodeHeader, type DecodedCopcChunks } from '../lib/lazParser';
+import { decodeCopcChunks, getLazPerf, type CopcChunk, type CopcDecodeHeader, type DecodedCopcChunks } from '../lib/lazParser';
 import type { PointCloudBounds, PointCloudOrigin } from '../types';
+import { splitChunkBatches } from './copcDecodeBatches';
 
 const workerScope = self as unknown as DedicatedWorkerGlobalScope;
 
@@ -29,7 +34,8 @@ export type CopcDecodeRequest = {
 export type CopcDecodeResponse =
   | { type: 'progress'; done: number; total: number }
   | {
-      type: 'done';
+      /** The next points of the group, in order (batches arrive in sequence). */
+      type: 'part';
       positions: Float32Array;
       classifications: Uint8Array;
       intensities: Uint16Array;
@@ -38,6 +44,7 @@ export type CopcDecodeResponse =
       count: number;
       bounds: PointCloudBounds;
     }
+  | { type: 'done'; count: number }
   | { type: 'error'; message: string };
 
 workerScope.onmessage = async (e: MessageEvent<CopcDecodeRequest>) => {
@@ -46,28 +53,44 @@ workerScope.onmessage = async (e: MessageEvent<CopcDecodeRequest>) => {
     const { header, origin, bytes, pointCounts, byteLengths, wasmModule, redviewLazModule } = e.data;
     const all = new Uint8Array(bytes);
     let offset = 0;
-    const chunks = pointCounts.map((pointCount, index) => {
+    const chunks: CopcChunk[] = pointCounts.map((pointCount, index) => {
       const length = byteLengths[index]!;
       const chunk = { pointCount, bytes: all.subarray(offset, offset + length) };
       offset += length;
       return chunk;
     });
-    const progress = (done: number, total: number) => {
-      workerScope.postMessage({ type: 'progress', done, total } satisfies CopcDecodeResponse);
-    };
-    let decoded: DecodedCopcChunks | null = null;
+    let useRedviewLaz = !!redviewLazModule;
     if (redviewLazModule) {
       try {
         initRedviewLaz(redviewLazModule);
-        decoded = decodeCopcChunksWithRedviewLaz(header, chunks, origin, progress);
       } catch (error) {
-        console.warn('[LiDAR] LAZ decoder failed, decoding with laz-perf:', error);
+        console.warn('[LiDAR] LAZ decoder unavailable, decoding with laz-perf:', error);
+        useRedviewLaz = false;
       }
     }
-    decoded ??= decodeCopcChunks(await getLazPerf(wasmModule), header, chunks, origin, progress);
-    const transfer: Transferable[] = [decoded.positions.buffer, decoded.classifications.buffer, decoded.intensities.buffer];
-    if (decoded.colors) transfer.push(decoded.colors.buffer);
-    workerScope.postMessage({ type: 'done', ...decoded } satisfies CopcDecodeResponse, transfer);
+    let total = 0;
+    let chunksDone = 0;
+    for (const batch of splitChunkBatches(chunks)) {
+      const progress = (done: number) => {
+        workerScope.postMessage({ type: 'progress', done: chunksDone + done, total: chunks.length } satisfies CopcDecodeResponse);
+      };
+      let decoded: DecodedCopcChunks | null = null;
+      if (useRedviewLaz) {
+        try {
+          decoded = decodeCopcChunksWithRedviewLaz(header, batch, origin, progress);
+        } catch (error) {
+          console.warn('[LiDAR] LAZ decoder failed, decoding with laz-perf:', error);
+          useRedviewLaz = false;
+        }
+      }
+      decoded ??= decodeCopcChunks(await getLazPerf(wasmModule), header, batch, origin, progress);
+      chunksDone += batch.length;
+      total += decoded.count;
+      const transfer: Transferable[] = [decoded.positions.buffer, decoded.classifications.buffer, decoded.intensities.buffer];
+      if (decoded.colors) transfer.push(decoded.colors.buffer);
+      workerScope.postMessage({ type: 'part', ...decoded } satisfies CopcDecodeResponse, transfer);
+    }
+    workerScope.postMessage({ type: 'done', count: total } satisfies CopcDecodeResponse);
   } catch (err: unknown) {
     workerScope.postMessage({ type: 'error', message: (err as Error)?.message || String(err) } satisfies CopcDecodeResponse);
   }

@@ -177,8 +177,41 @@ function splitContiguous<T extends { pointDataLength: number }>(nodes: T[], grou
   return result;
 }
 
+/** A tile file handed over to the decoder, which empties the box once it no longer needs the bytes. */
+export interface TileFileHolder {
+  buffer: ArrayBuffer | null;
+}
+
+/**
+ * Copies each group's compressed chunks out of the tile file, then drops the
+ * file: the decode never holds the compressed tile twice (the file and the
+ * copies sent to the workers). Its own frame, so nothing keeps the bytes alive.
+ */
+function takeGroupBytes(file: TileFileHolder, groups: Array<Array<{ pointDataOffset: number; pointDataLength: number }>>): Uint8Array[] {
+  const fileBytes = new Uint8Array(file.buffer!);
+  const copies = groups.map((group) => {
+    const bytes = new Uint8Array(group.reduce((sum, node) => sum + node.pointDataLength, 0));
+    let offset = 0;
+    for (const node of group) {
+      bytes.set(fileBytes.subarray(node.pointDataOffset, node.pointDataOffset + node.pointDataLength), offset);
+      offset += node.pointDataLength;
+    }
+    return bytes;
+  });
+  file.buffer = null;
+  return copies;
+}
+
+/**
+ * Decodes a COPC tile on several workers. Each worker posts its points in
+ * batches, copied at once into place in the tile's arrays (sized from the
+ * hierarchy's point counts) and dropped; a worker is stopped as soon as it is
+ * done, which frees its WASM memory. The tile thus peaks at its decoded arrays
+ * plus a few batches, instead of every part, the assembled arrays and the
+ * workers' memory at once (≈ 73 B/point measured on a 55.8 M-point tile).
+ */
 async function decodeCopcInParallel(
-  buffer: ArrayBuffer,
+  file: TileFileHolder,
   layout: Awaited<ReturnType<typeof readCopcLayout>>,
   wasmModule: WebAssembly.Module,
   redviewLazModule: WebAssembly.Module | null,
@@ -196,83 +229,97 @@ async function decodeCopcInParallel(
 }> {
   const origin = computeLocalOrigin(layout.header.min);
   const groups = splitContiguous(layout.nodes, Math.max(1, Math.min(workerCount, layout.nodes.length)));
-  const fileBytes = new Uint8Array(buffer);
+  const groupBytes: Array<Uint8Array | null> = takeGroupBytes(file, groups);
   const totalChunks = layout.nodes.length;
   const doneByGroup = new Array<number>(groups.length).fill(0);
+  const groupStarts: number[] = [];
+  let count = 0;
+  for (const group of groups) {
+    groupStarts.push(count);
+    count += group.reduce((sum, node) => sum + node.pointCount, 0);
+  }
+
+  const positions = new Float32Array(count * 3);
+  const classifications = new Uint8Array(count);
+  const intensities = new Uint16Array(count);
+  let colors: Uint8Array | null = null;
+  let everyPartHasColors = true;
+  let maxRgb = 0;
+  const bounds: PointCloudBounds = {
+    minX: Infinity, minY: Infinity, minZ: Infinity,
+    maxX: -Infinity, maxY: -Infinity, maxZ: -Infinity,
+  };
   const workers: Worker[] = [];
 
   try {
-    const parts = await Promise.all(groups.map((group, groupIndex) => {
-      const byteLength = group.reduce((sum, node) => sum + node.pointDataLength, 0);
-      const bytes = new Uint8Array(byteLength);
-      let offset = 0;
-      for (const node of group) {
-        bytes.set(fileBytes.subarray(node.pointDataOffset, node.pointDataOffset + node.pointDataLength), offset);
-        offset += node.pointDataLength;
-      }
-
+    await Promise.all(groups.map((group, groupIndex) => new Promise<void>((resolve, reject) => {
+      const groupStart = groupStarts[groupIndex]!;
+      const groupEnd = groupStarts[groupIndex + 1] ?? count;
+      let cursor = groupStart;
       const worker = new Worker(new URL('../workers/copcDecodeWorker.ts', import.meta.url), { type: 'module' });
       workers.push(worker);
-      return new Promise<Extract<CopcDecodeResponse, { type: 'done' }>>((resolve, reject) => {
-        worker.onmessage = (e: MessageEvent<CopcDecodeResponse>) => {
-          const msg = e.data;
-          if (msg.type === 'progress') {
-            doneByGroup[groupIndex] = msg.done;
-            const done = doneByGroup.reduce((sum, value) => sum + value, 0);
-            setStatus(
-              translateAppText('Analyse : {{step}}', {
-                step: translateAppText('Lecture COPC {{done}}/{{total}}...', { done, total: totalChunks }),
-              }),
-              15 + (10 + (done / totalChunks) * 50) * 0.35,
-            );
-          } else if (msg.type === 'done') {
-            resolve(msg);
-          } else {
-            reject(new Error(msg.message));
+      worker.onmessage = (e: MessageEvent<CopcDecodeResponse>) => {
+        const msg = e.data;
+        if (msg.type === 'progress') {
+          doneByGroup[groupIndex] = msg.done;
+          const done = doneByGroup.reduce((sum, value) => sum + value, 0);
+          setStatus(
+            translateAppText('Analyse : {{step}}', {
+              step: translateAppText('Lecture COPC {{done}}/{{total}}...', { done, total: totalChunks }),
+            }),
+            15 + (10 + (done / totalChunks) * 50) * 0.35,
+          );
+        } else if (msg.type === 'part') {
+          if (cursor + msg.count > groupEnd) {
+            reject(new Error(`COPC: more points decoded than the hierarchy announces (${groupEnd - groupStart})`));
+            return;
           }
-        };
-        worker.onerror = (err) => reject(new Error(err.message));
-        const request: CopcDecodeRequest = {
-          type: 'decode',
-          header: layout.header,
-          origin,
-          bytes: bytes.buffer,
-          pointCounts: group.map((node) => node.pointCount),
-          byteLengths: group.map((node) => node.pointDataLength),
-          wasmModule,
-          redviewLazModule,
-        };
-        worker.postMessage(request, [bytes.buffer]);
-      });
-    }));
+          positions.set(msg.positions, cursor * 3);
+          classifications.set(msg.classifications, cursor);
+          intensities.set(msg.intensities, cursor);
+          if (msg.colors) {
+            colors ??= new Uint8Array(count * 3);
+            colors.set(msg.colors, cursor * 3);
+          } else {
+            everyPartHasColors = false;
+          }
+          cursor += msg.count;
+          maxRgb = Math.max(maxRgb, msg.maxRgb);
+          bounds.minX = Math.min(bounds.minX, msg.bounds.minX);
+          bounds.minY = Math.min(bounds.minY, msg.bounds.minY);
+          bounds.minZ = Math.min(bounds.minZ, msg.bounds.minZ);
+          bounds.maxX = Math.max(bounds.maxX, msg.bounds.maxX);
+          bounds.maxY = Math.max(bounds.maxY, msg.bounds.maxY);
+          bounds.maxZ = Math.max(bounds.maxZ, msg.bounds.maxZ);
+        } else if (msg.type === 'done') {
+          worker.terminate();
+          if (cursor !== groupEnd) {
+            reject(new Error(`COPC: ${cursor - groupStart} points decoded out of ${groupEnd - groupStart}`));
+          } else {
+            resolve();
+          }
+        } else {
+          reject(new Error(msg.message));
+        }
+      };
+      worker.onerror = (err) => reject(new Error(err.message));
+      const bytes = groupBytes[groupIndex]!;
+      groupBytes[groupIndex] = null;
+      const request: CopcDecodeRequest = {
+        type: 'decode',
+        header: layout.header,
+        origin,
+        bytes: bytes.buffer as ArrayBuffer,
+        pointCounts: group.map((node) => node.pointCount),
+        byteLengths: group.map((node) => node.pointDataLength),
+        wasmModule,
+        redviewLazModule,
+      };
+      worker.postMessage(request, [bytes.buffer]);
+    })));
 
-    const count = parts.reduce((sum, part) => sum + part.count, 0);
-    const positions = new Float32Array(count * 3);
-    const classifications = new Uint8Array(count);
-    const intensities = new Uint16Array(count);
-    const maxRgb = parts.reduce((max, part) => Math.max(max, part.maxRgb), 0);
-    const colors = parts.every((part) => part.colors !== null) && hasUsableEmbeddedRgb(maxRgb)
-      ? new Uint8Array(count * 3)
-      : null;
-    const bounds: PointCloudBounds = {
-      minX: Infinity, minY: Infinity, minZ: Infinity,
-      maxX: -Infinity, maxY: -Infinity, maxZ: -Infinity,
-    };
-    let pointOffset = 0;
-    for (const part of parts) {
-      positions.set(part.positions, pointOffset * 3);
-      classifications.set(part.classifications, pointOffset);
-      intensities.set(part.intensities, pointOffset);
-      if (colors && part.colors) colors.set(part.colors, pointOffset * 3);
-      pointOffset += part.count;
-      bounds.minX = Math.min(bounds.minX, part.bounds.minX);
-      bounds.minY = Math.min(bounds.minY, part.bounds.minY);
-      bounds.minZ = Math.min(bounds.minZ, part.bounds.minZ);
-      bounds.maxX = Math.max(bounds.maxX, part.bounds.maxX);
-      bounds.maxY = Math.max(bounds.maxY, part.bounds.maxY);
-      bounds.maxZ = Math.max(bounds.maxZ, part.bounds.maxZ);
-    }
-    return { positions, classifications, intensities, colors, count, bounds, origin };
+    const embedded = everyPartHasColors && hasUsableEmbeddedRgb(maxRgb) ? colors : null;
+    return { positions, classifications, intensities, colors: embedded, count, bounds, origin };
   } finally {
     for (const worker of workers) worker.terminate();
   }
@@ -285,7 +332,7 @@ async function decodeCopcInParallel(
  * single-worker path.
  */
 export async function processPointCloudInWorker(
-  buffer: ArrayBuffer,
+  file: TileFileHolder,
   setStatus: ViewerStatusReporter,
   crs?: DetectedCrs,
   options?: { decodeWorkers?: number },
@@ -296,10 +343,12 @@ export async function processPointCloudInWorker(
   ]);
   const workerCount = options?.decodeWorkers ?? getDefaultDecodeWorkerCount();
   const layout = wasmModule && workerCount > 1
-    ? await readCopcLayout(buffer).catch(() => null)
+    ? await readCopcLayout(file.buffer!).catch(() => null)
     : null;
 
   if (!wasmModule || !layout || layout.nodes.length < 2 || !canFastDecodeCopc(layout.header)) {
+    const buffer = file.buffer!;
+    file.buffer = null;
     return runProcessWorker(
       createProcessWorker(),
       { type: 'process', buffer, crs, wasmModule: wasmModule || undefined, redviewLazModule },
@@ -322,7 +371,7 @@ export async function processPointCloudInWorker(
       } satisfies WorkerRequest);
     }
 
-    const decoded = await decodeCopcInParallel(buffer, layout, wasmModule, redviewLazModule, workerCount, setStatus);
+    const decoded = await decodeCopcInParallel(file, layout, wasmModule, redviewLazModule, workerCount, setStatus);
     const resolvedCrs = crs ?? detectCrs(decoded.bounds.minY, decoded.bounds.maxY, decoded.bounds.minX, decoded.bounds.maxX);
     const copc = toCopcHierarchyInfo(layout.nodes, layout.cube, layout.spacing);
     if (decoded.colors) {

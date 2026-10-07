@@ -19,7 +19,7 @@ import {
   type ViewerSceneLoadOptions,
 } from './datasetPointCap';
 import { mergeTerrainMeshes, unionBounds, type LoadedViewerTile, type SceneTerrain } from './datasetMerge';
-import { getScenePointBudget, PointBudgetGate, readLasPointCount } from './sceneMemoryBudget';
+import { DECODE_BYTES_PER_POINT, getSceneMemoryBudgetBytes, readLasPointCount, TileLoadPipeline } from './sceneMemoryBudget';
 
 export type { ViewerSceneLoadOptions } from './datasetPointCap';
 
@@ -52,6 +52,17 @@ interface PendingViewerTile {
   shouldSaveTerrainCache: boolean;
 }
 
+/** A tile after the decode stage, waiting for its LOD build. */
+interface DecodedViewerTile {
+  pointCloud: PointCloudData;
+  terrainMesh: Promise<TerrainCache>;
+}
+
+interface SceneLoadMemory {
+  pipeline: TileLoadPipeline;
+  budgetBytes: number;
+}
+
 /**
  * Orthophoto colourisation leaves points it could not colour mid-grey
  * (128,128,128); a mostly grey tile means the imagery failed to load and
@@ -82,7 +93,7 @@ async function storedTilePointCount(fileNames: string[]): Promise<number | null>
 async function loadViewerTile(
   coord: TileCoord,
   onProgress: (detail: string, progress: number) => void,
-  memory: { gate: PointBudgetGate; budget: number },
+  memory: SceneLoadMemory,
 ): Promise<PendingViewerTile> {
   const { fileName, legacyFileName } = buildTileFileCandidates(coord);
   const tileVars = { x: coord.xKm, y: coord.yKm };
@@ -108,49 +119,63 @@ async function loadViewerTile(
   }
 
   // First visit (or stale cache): decode + colourise once, then store the LOD
-  // octree — under the scene's memory budget, sized by the header's point count.
-  const pointCount = (await storedTilePointCount([fileName, legacyFileName])) ?? memory.budget;
-  return memory.gate.run(pointCount, async (tilesRunning) => {
-    // The decode workers are shared by the tiles loading at this moment.
-    const decodeWorkers = Math.max(1, Math.floor(getDefaultDecodeWorkerCount() / tilesRunning));
-    return decodeViewerTile(coord, fileName, legacyFileName, cachedTerrain, onProgress, decodeWorkers);
-  });
+  // octree — in the scene's load pipeline, sized by the header's point count
+  // (unknown: the whole budget, so the tile runs alone).
+  const pointCount = (await storedTilePointCount([fileName, legacyFileName]))
+    ?? Math.ceil(memory.budgetBytes / DECODE_BYTES_PER_POINT);
+  return memory.pipeline.run(
+    pointCount,
+    () => decodeViewerTile(coord, fileName, legacyFileName, cachedTerrain, onProgress),
+    (decoded) => buildViewerTile(coord, fileName, decoded, !cachedTerrain, onProgress),
+  );
 }
 
+/** Decode stage: one tile at a time, on every decode worker. */
 async function decodeViewerTile(
   coord: TileCoord,
   fileName: string,
   legacyFileName: string,
   cachedTerrain: TerrainCache | null,
   onProgress: (detail: string, progress: number) => void,
-  decodeWorkers: number,
-): Promise<PendingViewerTile> {
+): Promise<DecodedViewerTile> {
   const tileVars = { x: coord.xKm, y: coord.yKm };
   onProgress(translateAppText('Lecture OPFS {{x}}/{{y}}', tileVars), 0.12);
-  const fileBuffer = await loadTileFromOPFS([fileName, legacyFileName]);
+  // Handed over: the decoder drops the compressed file as soon as its chunks are copied out.
+  const file = { buffer: await loadTileFromOPFS([fileName, legacyFileName]) as ArrayBuffer | null };
   onProgress(translateAppText('Décompression LAS {{x}}/{{y}}', tileVars), 0.2);
   const pointCloud = await processPointCloudInWorker(
-    fileBuffer,
+    file,
     (detail, progress = 0) => {
       onProgress(`${detail} ${coord.xKm}/${coord.yKm}`, 0.2 + (progress / 100) * 0.5);
     },
     coord.projection,
-    { decodeWorkers },
+    { decodeWorkers: getDefaultDecodeWorkerCount() },
   );
 
   onProgress(translateAppText('Génération du relief {{x}}/{{y}}', tileVars), 0.72);
   // generateHeightmap copies the ground points synchronously, before the
-  // arrays are handed over (detached) to the LOD worker below.
+  // arrays are handed over (detached) to the LOD worker in the build stage.
   const terrainMesh = cachedTerrain ? Promise.resolve(cachedTerrain) : generateHeightmap(pointCloud, 1.0);
   terrainMesh.catch(() => undefined);
+  return { pointCloud, terrainMesh };
+}
 
+/** Build stage: the LOD octree of one tile at a time (one worker), written to OPFS. */
+async function buildViewerTile(
+  coord: TileCoord,
+  fileName: string,
+  { pointCloud, terrainMesh }: DecodedViewerTile,
+  shouldSaveTerrainCache: boolean,
+  onProgress: (detail: string, progress: number) => void,
+): Promise<PendingViewerTile> {
+  const tileVars = { x: coord.xKm, y: coord.yKm };
   onProgress(translateAppText('Index LOD {{x}}/{{y}}', tileVars), 0.8);
   const persist = !looksUncolourised(pointCloud);
   if (!persist) console.warn(`[Viewer] Tile ${coord.xKm}/${coord.yKm} looks uncolourised; LOD cache kept in memory only.`);
   const lod = await buildLodTileInWorker(fileName, pointCloud, { persist });
 
   onProgress(translateAppText('Tuile prête {{x}}/{{y}}', tileVars), 0.92);
-  return { coord, fileName, lod, terrainMesh, shouldSaveTerrainCache: !cachedTerrain };
+  return { coord, fileName, lod, terrainMesh, shouldSaveTerrainCache };
 }
 
 /**
@@ -172,8 +197,8 @@ export async function loadViewerSceneData(
 
   reporter.updateSceneProgress(translateAppText('Chargement des tuiles LiDAR...'), 0.05);
 
-  const budget = getScenePointBudget(options?.deviceMemoryGiB);
-  const memory = { gate: new PointBudgetGate(budget), budget };
+  const budgetBytes = getSceneMemoryBudgetBytes(options?.deviceMemoryGiB);
+  const memory: SceneLoadMemory = { pipeline: new TileLoadPipeline(budgetBytes), budgetBytes };
   const pendingTiles = await mapWithConcurrency(tileCoords, concurrency, (coord, index) => {
     return loadViewerTile(coord, (detail, progress) => {
       reporter.updateTileProgress(index, detail, progress);

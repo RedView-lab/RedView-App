@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { FIRST_LOAD_BYTES_PER_POINT, getScenePointBudget, PointBudgetGate, readLasPointCount } from './sceneMemoryBudget';
+import {
+  DECODE_BYTES_PER_POINT,
+  getSceneMemoryBudgetBytes,
+  LOD_BUILD_BYTES_PER_POINT,
+  readLasPointCount,
+  TileLoadPipeline,
+} from './sceneMemoryBudget';
 
 function lasHeader(minor: number, legacyCount: number, count64?: bigint): ArrayBuffer {
   const size = minor >= 4 ? 375 : 227;
@@ -31,65 +37,103 @@ describe('readLasPointCount', () => {
   });
 });
 
-describe('getScenePointBudget', () => {
-  it('gives 40 % of the device memory to decoded tiles, 8 GiB when unknown', () => {
-    expect(getScenePointBudget(8)).toBe(Math.floor((8 * 2 ** 30 * 0.4) / FIRST_LOAD_BYTES_PER_POINT));
-    expect(getScenePointBudget(undefined)).toBe(getScenePointBudget(8));
-    expect(getScenePointBudget(2)).toBe(Math.floor((2 * 2 ** 30 * 0.4) / FIRST_LOAD_BYTES_PER_POINT));
-    expect(getScenePointBudget(NaN)).toBe(getScenePointBudget(8));
+describe('getSceneMemoryBudgetBytes', () => {
+  it('gives 40 % of the device memory to tiles being loaded, 8 GiB when unknown', () => {
+    expect(getSceneMemoryBudgetBytes(8)).toBe(Math.floor(8 * 2 ** 30 * 0.4));
+    expect(getSceneMemoryBudgetBytes(undefined)).toBe(getSceneMemoryBudgetBytes(8));
+    expect(getSceneMemoryBudgetBytes(16)).toBe(getSceneMemoryBudgetBytes(8));
+    expect(getSceneMemoryBudgetBytes(2)).toBe(Math.floor(2 * 2 ** 30 * 0.4));
+    expect(getSceneMemoryBudgetBytes(NaN)).toBe(getSceneMemoryBudgetBytes(8));
   });
 });
 
-describe('PointBudgetGate', () => {
-  /** A task the test finishes by hand; records the tasks running with it. */
-  function controlled() {
+describe('TileLoadPipeline', () => {
+  /** Tiles whose two stages the test finishes by hand; logs every stage start. */
+  function harness(budgetPoints: number) {
+    const pipeline = new TileLoadPipeline(budgetPoints * Math.max(DECODE_BYTES_PER_POINT, LOD_BUILD_BYTES_PER_POINT));
     const log: string[] = [];
-    const done = new Map<string, () => void>();
-    const start = (gate: PointBudgetGate, name: string, weight: number) => gate.run(weight, (running) => {
-      log.push(`${name}:${running}`);
-      return new Promise<string>((resolve) => done.set(name, () => resolve(name)));
+    const finishers = new Map<string, () => void>();
+    const failers = new Map<string, (error: Error) => void>();
+    const stage = (name: string) => new Promise<string>((resolve, reject) => {
+      log.push(name);
+      finishers.set(name, () => resolve(name));
+      failers.set(name, reject);
     });
+    const tile = (name: string, points: number) => pipeline.run(points, () => stage(`${name}.decode`), () => stage(`${name}.build`));
+    const tick = () => new Promise((r) => setTimeout(r, 0));
     const finish = async (name: string) => {
-      done.get(name)!();
-      await new Promise((r) => setTimeout(r, 0));
+      finishers.get(name)!();
+      await tick();
     };
-    return { log, start, finish };
+    const fail = async (name: string) => {
+      failers.get(name)!(new Error(`${name} failed`));
+      await tick();
+    };
+    return { pipeline, log, tile, tick, finish, fail };
   }
 
-  it('runs tasks together while their weights fit, then in arrival order', async () => {
-    const gate = new PointBudgetGate(100);
-    const { log, start, finish } = controlled();
-    const a = start(gate, 'a', 60);
-    const b = start(gate, 'b', 30);
-    const c = start(gate, 'c', 50); // does not fit next to a + b
-    const d = start(gate, 'd', 5); // would fit, but waits behind c (no starvation)
-    await new Promise((r) => setTimeout(r, 0));
-    expect(log).toEqual(['a:1', 'b:2']);
-    await finish('a');
-    expect(log).toEqual(['a:1', 'b:2', 'c:2', 'd:3']);
-    await finish('b');
-    await finish('c');
-    await finish('d');
-    await expect(Promise.all([a, b, c, d])).resolves.toEqual(['a', 'b', 'c', 'd']);
+  it('decodes the next tile while the previous one builds its LOD, one tile per stage', async () => {
+    const { log, tile, tick, finish } = harness(100);
+    const a = tile('a', 40);
+    const b = tile('b', 40);
+    const c = tile('c', 10);
+    await tick();
+    expect(log).toEqual(['a.decode']);
+    await finish('a.decode');
+    expect(log).toEqual(['a.decode', 'a.build', 'b.decode']);
+    await finish('b.decode'); // the build stage is busy: b waits, and keeps c out of the decode stage
+    expect(log).toEqual(['a.decode', 'a.build', 'b.decode']);
+    await finish('a.build');
+    expect(log).toEqual(['a.decode', 'a.build', 'b.decode', 'b.build', 'c.decode']);
+    await finish('c.decode');
+    await finish('b.build');
+    await finish('c.build');
+    await expect(Promise.all([a, b, c])).resolves.toEqual(['a.build', 'b.build', 'c.build']);
   });
 
-  it('runs a task heavier than the whole budget alone', async () => {
-    const gate = new PointBudgetGate(100);
-    const { log, start, finish } = controlled();
-    start(gate, 'small', 10);
-    start(gate, 'huge', 500);
-    start(gate, 'after', 10);
-    await new Promise((r) => setTimeout(r, 0));
-    expect(log).toEqual(['small:1']);
-    await finish('small');
-    expect(log).toEqual(['small:1', 'huge:1']);
-    await finish('huge');
-    expect(log).toEqual(['small:1', 'huge:1', 'after:1']);
+  it('waits for the build to finish when both stages would not fit, and keeps arrival order', async () => {
+    const { pipeline, log, tile, tick, finish } = harness(100);
+    tile('a', 70);
+    tile('b', 50);
+    tile('c', 5);
+    await tick();
+    await finish('a.decode');
+    expect(log).toEqual(['a.decode', 'a.build']); // 70 + 50 > 100; c (5) stays behind b
+    expect(pipeline.held).toBe(70 * LOD_BUILD_BYTES_PER_POINT);
+    await finish('a.build');
+    expect(log).toEqual(['a.decode', 'a.build', 'b.decode']);
+    await finish('b.decode');
+    expect(log).toEqual(['a.decode', 'a.build', 'b.decode', 'b.build', 'c.decode']);
+    await finish('b.build');
+    await finish('c.decode');
+    await finish('c.build');
+    expect(pipeline.held).toBe(0);
   });
 
-  it('frees the budget of a failed task', async () => {
-    const gate = new PointBudgetGate(100);
-    await expect(gate.run(90, () => Promise.reject(new Error('decode failed')))).rejects.toThrow('decode failed');
-    await expect(gate.run(90, (running) => Promise.resolve(running))).resolves.toBe(1);
+  it('runs a tile heavier than the whole budget alone', async () => {
+    const { log, tile, tick, finish } = harness(100);
+    tile('small', 10);
+    tile('huge', 500);
+    await tick();
+    await finish('small.decode');
+    expect(log).toEqual(['small.decode', 'small.build']);
+    await finish('small.build');
+    expect(log).toEqual(['small.decode', 'small.build', 'huge.decode']);
+    await finish('huge.decode');
+    expect(log.at(-1)).toBe('huge.build');
+  });
+
+  it('frees the stage and memory of a failed tile', async () => {
+    const { pipeline, log, tile, tick, finish, fail } = harness(100);
+    const a = expect(tile('a', 60)).rejects.toThrow('a.decode failed');
+    const b = expect(tile('b', 60)).rejects.toThrow('b.build failed');
+    await tick();
+    await fail('a.decode');
+    await a;
+    expect(log).toEqual(['a.decode', 'b.decode']);
+    await finish('b.decode');
+    await fail('b.build');
+    await b;
+    expect(pipeline.held).toBe(0);
   });
 });
