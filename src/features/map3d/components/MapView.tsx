@@ -5,6 +5,7 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import { useMap } from '../hooks/useMap';
 import { useMapPoiHoverCursor } from '../hooks/useMapPoiHoverCursor';
 import { useCinematicIdleRotate } from '../hooks/useCinematicIdleRotate';
+import { useGoogleEarthShortcut } from '../hooks/useGoogleEarthShortcut';
 import { useLidarSelection } from '@/features/lidar/components/useLidarSelection';
 import { useFreeCam } from '@/features/freeCam';
 import { MapContextMenu } from './MapContextMenu/MapContextMenu';
@@ -102,6 +103,7 @@ export default memo(function MapView({
   useMapPoiHoverCursor(isLoaded ? map.current : null);
   useCinematicIdleRotate(isLoaded ? map.current : null, isLoaded);
   useFreeCam(isLoaded ? map.current : null);
+  useGoogleEarthShortcut(isLoaded ? map.current : null);
 
   useEffect(() => {
     if (isLoaded && map.current && onMapReady) {

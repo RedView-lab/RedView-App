@@ -51,6 +51,9 @@ import { ViewerComments } from './comments/viewerComments';
 import { zoneFromPolygon } from '@/features/comments/lib/zoneGeometry';
 import { pointFilterClassPredicate, ViewerToolsController } from './tools';
 import { sampleElevationAtProj } from './route/terrainRaycaster';
+import { googleEarthViewFromViewer } from './googleEarth';
+import { isGoogleEarthShortcut, openGoogleEarthView } from '@/shared/lib/googleEarthView';
+import { isTypingTarget } from '@/shared/lib/isTypingTarget';
 import type { ViewerRouteSceneParams } from './route/types';
 import { FrameClock } from './perf/frameClock';
 import { ViewerBench } from './perf/viewerBench';
@@ -819,6 +822,15 @@ function recoverFromGpuFailure(reason: string, running: ViewerEngineKey): void {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!renderer) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) {
+        return;
+      }
+      if (isGoogleEarthShortcut(e)) {
+        if (isTypingTarget(e.target)) return;
+        const view = googleEarthViewFromViewer(camera, heightSceneParams);
+        if (view) {
+          e.preventDefault();
+          openGoogleEarthView(view);
+        }
         return;
       }
       if (e.key === 'e' || e.key === 'E') {
