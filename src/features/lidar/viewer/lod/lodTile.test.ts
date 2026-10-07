@@ -160,7 +160,7 @@ function referenceFilter(tile: LodTile): Map<number, Uint8Array> {
     const out = new Uint8Array(node.count * 4);
     for (let k = 0; k < node.count; k++) {
       const s = sums.get(cellOf(node, node.byteOffset + k * LOD_POINT_STRIDE))!;
-      out.set([s[0]! / s[4]!, s[1]! / s[4]!, s[2]! / s[4]!, s[3]! / s[4]!].map(Math.round), k * 4);
+      for (let c = 0; c < 4; c++) out[k * 4 + c] = Math.round(s[c]! / s[4]!);
     }
     expected.set(i, out);
   }
@@ -241,15 +241,17 @@ describe('buildLodTile', () => {
     const tile = buildLodTile(makeInput());
     const expected = referenceFilter(tile);
     expect(expected.size).toBeGreaterThan(0);
-    for (const [index, values] of expected) expect(filteredOf(tile, index)).toEqual(values);
-    // Leaves keep their own values.
+    for (const [index, values] of expected) expect(filteredOf(tile, index), `node ${index}`).toEqual(values);
+    // Leaves keep their own values (counted: one `expect` per point cost seconds on the CI runner).
     tile.nodes.forEach((node, index) => {
       if (expected.has(index)) return;
+      let differing = 0;
       for (let k = 0; k < node.count; k++) {
         const at = node.byteOffset + k * LOD_POINT_STRIDE;
-        expect(tile.packed[at + LOD_RECORD.filteredRgb]).toBe(tile.packed[at + LOD_RECORD.rgb]);
-        expect(tile.packed[at + LOD_RECORD.filteredIntensity]).toBe(tile.packed[at + LOD_RECORD.intensity]);
+        for (let c = 0; c < 3; c++) if (tile.packed[at + LOD_RECORD.filteredRgb + c] !== tile.packed[at + LOD_RECORD.rgb + c]) differing++;
+        if (tile.packed[at + LOD_RECORD.filteredIntensity] !== tile.packed[at + LOD_RECORD.intensity]) differing++;
       }
+      expect(differing, `leaf ${index}`).toBe(0);
     });
   });
 });
