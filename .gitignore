@@ -1,4 +1,17 @@
-# Logs
+# ── Dependencies ───────────────────────────────────────────────
+node_modules
+
+# ── Build outputs ──────────────────────────────────────────────
+dist
+dist-ssr
+dist-verify
+dist-*
+coverage
+# Rust crates (vendor/*)
+target/
+**/target/
+
+# ── Logs ───────────────────────────────────────────────────────
 logs
 *.log
 npm-debug.log*
@@ -7,19 +20,14 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-dist-verify
-coverage
-dist-*
+# ── Environment and operations secrets ─────────────────────────
 *.local
 .env
 .env.*
 !.env.example
 COOLIFY.txt
 
-# Editor directories and files
+# ── Editors and OS ─────────────────────────────────────────────
 .vscode/*
 !.vscode/extensions.json
 .idea
@@ -30,78 +38,24 @@ COOLIFY.txt
 *.sln
 *.sw?
 Untitled*.txt
-
-# Rust / Cargo build outputs
-target/
-**/target/
-vendor/redviewalgo/target/
-
-# Local IDE plans
-.zcode/plans/
-.workbuddy-ai/
-
-# Local development / test scripts
-scripts/benchmark-stac-index.mjs
-scripts/benchmark-zone-pipeline.mjs
-scripts/check-auckland-keys.ts
-scripts/check-ba32.ts
-scripts/debug-missing-tiles.ts
-scripts/discover-nz-s3.mjs
-scripts/find-real-laz-tile.mjs
-scripts/generate-japan-index.mjs
-scripts/generate-nz-index.mjs
-scripts/get-folder-samples.mjs
-scripts/grep-ot-html.mjs
-scripts/index-real-laz.mjs
-scripts/init-poi-db.mjs
-scripts/inspect-folders.mjs
-scripts/inspect-real-laz-header.mjs
-scripts/inspect-stac-items.mjs
-scripts/inspect-tiff-tags.mjs
-scripts/inspect-tiff.mjs
-scripts/list-bx17-laz.mjs
-scripts/list-indexed-sheets.ts
-scripts/list-nz-prefixes.mjs
-scripts/parse-ot-page.mjs
-scripts/print-ot-html.mjs
-scripts/probe-item.mjs
-scripts/probe-ot-bulk.mjs
-scripts/probe-ot.mjs
-scripts/probe-s3-bulk.mjs
-scripts/probe-stac.mjs
-scripts/search-missing-sheets.mjs
-scripts/test-asset-urls.mjs
-scripts/test-auckland-sky.ts
-scripts/test-brouter-spawn.mjs
-scripts/test-fast-laz.ts
-scripts/test-fast-match.mjs
-scripts/test-formula-s3.mjs
-scripts/test-item-names.mjs
-scripts/test-japan-colorization.ts
-scripts/test-japan-lidar-pipeline.ts
-scripts/test-japan-real-las.ts
-scripts/test-las-generator.ts
-scripts/test-mns-subtiles.mjs
-scripts/test-nz-end-to-end.ts
-scripts/test-nz-lidar.mjs
-scripts/test-nz-resolver.mjs
-scripts/test-ot-datasets.mjs
-scripts/test-real-laz-pipeline.mjs
-scripts/test-real-laz-pipeline.ts
-scripts/test-real-laz-resolve.ts
-scripts/test-real-laz.mjs
-scripts/test-resolve-nz.mjs
-scripts/test-s3-list.mjs
-scripts/test-slope-zone.mjs
-scripts/test-stac-mapping.mjs
-scripts/test-topo50-formula.mjs
-scripts/test-topo50-grid.mjs
-scripts/test-user-reported-tiles.ts
-scripts/test-user-tile-color.ts
-scripts/test-zone-mns-skip.mjs
 start-dev.bat
 
-# Test bench json reports
+# ── Local tooling (assistants, design caches, scratch files) ───
+.claude-temp/
+.figma-cache/
+.workbuddy-ai/
+.zcode/
+
+# ── Local development data ─────────────────────────────────────
+# Real-time server file storage (server/multiplayer/fileStorage.ts)
+.multiplayer-data/
+.multiplayer-data-*/
+# Crawl caches of the LiDAR index (scripts/lidar-index) and design workbench outputs
+scripts/lidar-index/.cache/
+scripts/design-workbench/.cache/
+scripts/design-workbench/out/
+
+# ── Benchmark reports (regenerated on every run) ───────────────
 script-test-bench/reports/*.json
 script-test-bench/reports/routing-quality/*.json
 script-test-bench/reports/routing-quality/*.html
@@ -118,16 +72,3 @@ script-test-bench/reports/snow-quality/*.html
 script-test-bench/reports/snow-quality/*.png
 script-test-bench/reports/snow-quality/cache/
 script-test-bench/routing-quality/vps/dist/
-
-# Cache des crawls S3 de l'index LiDAR Japon / NZ (scripts/lidar-index)
-scripts/lidar-index/.cache/
-scripts/design-workbench/.cache/
-scripts/design-workbench/out/
-
-# Claude temp files
-.claude-temp/
-.figma-cache/
-
-# Stockage de développement du serveur temps réel (server/multiplayer/fileStorage.ts)
-.multiplayer-data/
-.multiplayer-data-*/
