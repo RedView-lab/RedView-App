@@ -28,6 +28,7 @@ import {
   hasEditableRoute,
 } from '@/features/itineraryPanel/components/ItineraryPanelContainer/timelineMutations';
 import { translateAppText } from '@/shared/i18n';
+import { useHasChanged } from '@/shared/hooks/useHasChanged';
 import { isVariantModifierPressed } from '@/shared/lib/platform';
 import { useEscapeToExit } from '@/shared/hooks/useEscapeToExit';
 import { useCommentToolOptional } from '@/features/comments/context/commentTool';
@@ -277,15 +278,14 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
     setStatusMessage(buildTracePrompt());
   }, [buildTracePrompt, commentTool, mergeTool, splitTool]);
 
-  useEffect(() => {
-    if (canTrace) return;
-    setArmed(false);
-  }, [canTrace]);
-
-  useEffect(() => {
-    if (!armed) return;
-    setStatusMessage(buildTracePrompt());
-  }, [armed, buildTracePrompt]);
+  // Ajustements pendant le rendu (pas d'effet qui remet l'état après coup) :
+  // plus de tracé possible → l'outil se désarme et le reste ; outil armé →
+  // l'invite suit le départ / l'arrivée posés (elle remplace « Départ ajouté »).
+  const canTraceChanged = useHasChanged(canTrace);
+  const armedChanged = useHasChanged(armed);
+  const promptStepChanged = useHasChanged(`${hasStartPoint}|${hasEndPoint}`);
+  if (canTraceChanged && !canTrace && armed) setArmed(false);
+  if (armed && (armedChanged || promptStepChanged)) setStatusMessage(buildTracePrompt());
 
   // Refs : l'effet d'écoute ci-dessous ne doit dépendre que de `armed`/`map`,
   // sinon chaque mutation du projet le ré-exécuterait (listeners et curseur

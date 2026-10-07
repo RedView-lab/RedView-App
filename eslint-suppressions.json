@@ -14,21 +14,6 @@
       "count": 1
     }
   },
-  "src/features/centerPanel/forbiddenZones/ForbiddenZoneToolContext.tsx": {
-    "react-hooks/set-state-in-effect": {
-      "count": 2
-    }
-  },
-  "src/features/centerPanel/routeSplit/RouteSplitToolContext.tsx": {
-    "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
-  "src/features/centerPanel/tracer/TraceToolContext.tsx": {
-    "react-hooks/set-state-in-effect": {
-      "count": 2
-    }
-  },
   "src/features/itineraryPanel/components/ItineraryPanelContainer/useItineraryMapActions.ts": {
     "react-hooks/preserve-manual-memoization": {
       "count": 2

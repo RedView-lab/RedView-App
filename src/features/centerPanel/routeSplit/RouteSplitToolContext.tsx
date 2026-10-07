@@ -11,6 +11,7 @@ import { queryPoiAtPoint } from '@/features/poi/lib/poi-markers';
 import { useProjectStoreOptional } from '@/features/itineraryPanel/context/ProjectStore/hooks';
 import { translateAppText } from '@/shared/i18n';
 import { useEscapeToExit } from '@/shared/hooks/useEscapeToExit';
+import { useHasChanged } from '@/shared/hooks/useHasChanged';
 import { useRouteHoverPreview } from '../hooks/useRouteHoverPreview';
 import { findSplitIndexForMapClick } from './routeSnap';
 import {
@@ -73,10 +74,10 @@ export function RouteSplitToolProvider({ children, map }: RouteSplitToolProvider
     });
   }, [canSplit]);
 
-  useEffect(() => {
-    if (canSplit) return;
-    setArmed(false);
-  }, [canSplit]);
+  // Plus de tracé découpable (itinéraire changé, points retirés) : l'outil se
+  // désarme et le reste, même si le tracé redevient découpable.
+  const canSplitChanged = useHasChanged(canSplit);
+  if (canSplitChanged && !canSplit && armed) setArmed(false);
 
   useEscapeToExit(armed, deactivate);
 

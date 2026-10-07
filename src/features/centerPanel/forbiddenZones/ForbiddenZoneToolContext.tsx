@@ -16,6 +16,7 @@ import {
   setForbiddenZoneDraft,
 } from '@/features/itineraryPanel/lib/route-layer';
 import { translateAppText } from '@/shared/i18n';
+import { useHasChanged } from '@/shared/hooks/useHasChanged';
 import { isTypingTarget } from '@/shared/lib/isTypingTarget';
 import { shouldExitModeOnEscape } from '@/shared/lib/escapeToExit';
 
@@ -162,7 +163,9 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     }
 
     setArmed(true);
-  }, [activeItinerary, armed, canEdit, resetDraftSession, store]);
+    // Nouveau brouillon vide (historique annuler/rétablir compris).
+    if (draftHistoryIndexRef.current < 0) startDraftSession();
+  }, [activeItinerary, armed, canEdit, resetDraftSession, startDraftSession, store]);
 
   const undoDraft = useCallback(() => {
     const nextIndex = draftHistoryIndexRef.current - 1;
@@ -191,16 +194,22 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     applyDraftSnapshot(nextPoints);
   }, [applyDraftSnapshot, map, pushDraftSnapshot]);
 
+  // Plus d'itinéraire actif : l'outil se désarme et son brouillon est jeté.
+  // L'état s'ajuste pendant le rendu ; la carte et les miroirs synchrones de
+  // l'historique (lus par les gestionnaires) suivent dans l'effet.
+  const canEditChanged = useHasChanged(canEdit);
+  if (canEditChanged && !canEdit) {
+    setArmed(false);
+    setStatusMessage(null);
+    setDraftHistory([]);
+    setDraftHistoryIndex(-1);
+  }
   useEffect(() => {
     if (canEdit) return;
-    deactivate();
-  }, [canEdit, deactivate]);
-
-  useEffect(() => {
-    if (!armed) return;
-    if (draftHistoryIndexRef.current >= 0) return;
-    startDraftSession();
-  }, [armed, startDraftSession]);
+    clearDraftOverlay();
+    draftHistoryRef.current = [];
+    draftHistoryIndexRef.current = -1;
+  }, [canEdit, clearDraftOverlay]);
 
   // Click & contextmenu listeners for forbidden zone vertices
   useEffect(() => {
