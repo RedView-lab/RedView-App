@@ -264,7 +264,7 @@ export function ProjectsPanel({
             </button>
           )}
 
-          <div className="rvpb-view-toggle" role="tablist" aria-label={t('Affichage des projets')}>
+          <div className="rvpb-view-toggle" role="group" aria-label={t('Affichage des projets')}>
             <button
               type="button"
               className={`rvpb-view-toggle__item${view === 'grid' ? ' is-active' : ''}`}

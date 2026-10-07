@@ -35,7 +35,8 @@
   grid-column: 1 / -1;
   padding: 48px 24px;
   text-align: center;
-  color: rgb(var(--rv-ink) / 0.55);
+  /* 0.6 : contraste 4,95:1 sur le panneau blanc (0.55 donnait 4,16, sous l'AA). */
+  color: rgb(var(--rv-ink) / 0.6);
   font-size: var(--rv-font-size-lg);
   font-weight: 500;
 }
