@@ -1,84 +1,37 @@
-# Suite de Test-Bench & Détection de Régression RedView
+# script-test-bench/
 
-Bienvenue dans la suite d'ingénierie **DevOps & Performance Test-Bench** de RedView App.
-Ce dossier regroupe un ensemble complet de benchmarks, d'assertions de non-régression et d'analyses de scalabilité couvrant 100% des domaines fonctionnels de l'écosystème RedView.
+Benchmarks, end-to-end journeys and regression suites that are too heavy, too
+slow or too data-hungry for the Vitest unit tests (those live next to the code,
+`foo.ts` → `foo.test.ts`). Everything runs from the repository root through an
+`npm run` command; type-checked by `npm run typecheck:bench` (`tsconfig.bench.json`).
 
----
+## Layout
 
-## 🚀 Démarrage Rapide
+| Folder | What it checks | Commands |
+|---|---|---|
+| `run-all-benchmarks.ts`, [`core/`](core), [`suites/`](suites) | Performance suites per domain (weather, slopes, altitude, snow, BRouter profiles, pace engine, LiDAR, POI, exporters, chart series, server, flyover) with thresholds; each run is compared with the previous report and the machine state | `npm run bench` (`bench:quick`), `npm run bench:<suite>` |
+| [`regression/`](regression) | Offline correctness regressions on real code paths: `.redview` files, project layers, co-editing simulator, POI auto-sort, route elevation | `npm run bench:redview`, `bench:project-layers`, `bench:collab`, `bench:poi-autosort` (the first three run in `check:full`) |
+| [`flyover/`](flyover), [`follow/`](follow) | 3D route playback camera, live-presence follow playout (pure) and frame-by-frame replay in a virtual browser | `npm run bench:flyover`, `bench:follow`, `bench:follow-frames` |
+| [`avalanche/`](avalanche), [`lidar-lod/`](lidar-lod), [`snow-quality/`](snow-quality) | LiDAR viewer analyses and level of detail, snow depth engine against physics checks and the frozen v1 engine | `npm run bench:avalanche`, `bench:lidar-lod`, `bench:snow` |
+| [`pace-accuracy/`](pace-accuracy) | Moving-time engine against real FIT rides, synthetic physics scenarios and public references | `npm run bench:pace`, `bench:pace:prep`, `bench:pace:realism` |
+| [`routing-quality/`](routing-quality), [`route-continuity/`](route-continuity) | ~660 routing scenarios against production BRouter; no straight line in stored routes | `npm run bench:routing` (+ `:sweep`, `:compare`, `:report`) |
+| [`collab-load/`](collab-load), [`collab-e2e/`](collab-e2e) | Real-time server under load and across restarts; two-user journeys in a real browser (dev server or production test accounts) | `npm run bench:collab-load`, `bench:collab-e2e`, `bench:collab-prod` |
+| [`user-journey/`](user-journey), [`dashboard-perf/`](dashboard-perf), [`screen-audit/`](screen-audit) | Production build in a headless browser against an in-memory Appwrite: main user journey, load / smoothness / leaks on throttled networks, layout on 15 screen sizes | `npm run e2e:journey`, `bench:dashboard`, `bench:screens` |
+| [`lidar-viewer-engines/`](lidar-viewer-engines), [`lidar-viewer-perf/`](lidar-viewer-perf), [`lidar-viewer-shots/`](lidar-viewer-shots) | LiDAR viewer on WebGPU and WebGL 2 in Chromium / Firefox / WebKit, frame rate and fixed-view captures | `npm run bench:lidar-engines`, `bench:lidar-fps`, `bench:lidar-shots` |
+| [`audit/`](audit) | Reproduction scripts of dated audits (each exits non-zero while its bug reproduces) — see [`docs/audits/`](../docs/audits) | `npx tsx script-test-bench/audit/<file>` |
+| [`poi-external/`](poi-external) | Data study for completing the POI base from external sources (Overture, ATP, SIRENE) | see `docs/audits/REDVIEW_POI_EXTERNAL_SOURCES.md` |
+| `reports/` | Outputs; JSON and run artefacts are git-ignored, only the curated Markdown reports are kept | — |
 
-Depuis le dossier `redview-app` :
+`CLAUDE.md` describes what each suite measures, its thresholds and its latest
+reference numbers.
 
-```bash
-# 1. Lancer l'intégralité des test-benches (Génère le rapport Markdown & JSON)
-npm run bench
+## Conventions
 
-# 2. Mode rapide (CI/CD ou pré-commit, moins d'itérations)
-npm run bench:quick
-
-# 3. Lancer un test-bench spécifique par fonctionnalité
-npm run bench:meteo     # Météorologie & Radar Doppler
-npm run bench:pente     # Pente & Filtre Horn 3x3
-npm run bench:alti      # Altitude, MNT & D+/D-
-npm run bench:neige     # Nivologie Universitaire 7 phases
-npm run bench:brouter   # BRouter, Profils BRF & No-Go
-npm run bench:fit       # FIT Predictor & Simulation Physique
-npm run bench:lidar     # LiDAR IGN, Reprojection & Soleil/Ombres 3D
-npm run bench:poi       # Points d'Intérêt & Corridor Overpass
-npm run bench:exporter  # Exporter GPX, GeoJSON & Parsers
-npm run bench:chart     # Graphiques Multi-Axes & Timeline
-npm run bench:server    # Serveur Node.js, Rate Limiting & Cache LRU
-```
-
-Depuis la racine du projet (`REDVIEWproduction`) :
-
-```bash
-node script-test-bench/run.mjs --quick
-```
-
----
-
-## 📊 Fonctionnalités Testées & Couverture
-
-| Fichier | Domaine Fonctionnel | Opérations & Algorithmes Évalués |
-| :--- | :--- | :--- |
-| **`bench-meteo.ts`** | Météo & Radar | Parsing JSON Open-Meteo (168h), interpolation trace spatio-temporelle, grille de vent régularisée GPU, recoloration binaire PNG RainViewer Doppler (`recolorRadarPng`). |
-| **`bench-pente.ts`** | Pente & MNT | Noyau différentiel Horn 3x3 (128x128 à 512x512), encodage sqrt-gamma, tuiles raster serveur (`generateSlopeTile`), lissage gradient trace. |
-| **`bench-alti.ts`** | Altitude & Relief | Conversion Terrarium vers Terrain-RGB, échantillonnage bilinéaire (1k, 10k, 50k pts), calcul D+/D- avec seuillage anti-bruit (5m). |
-| **`bench-neige.ts`** | Nivologie Universitaire | Modélisation physique 7 phases : López-Moreno, SnowSlide gravitationnel, indice d'abri au vent Winstral ($S_x$), écoulement Tarboton D-infinity, conservation de masse. |
-| **`bench-brouter.ts`** | BRouter & Routage | Compilation dynamique du profil BRF (`buildBrfProfile`), validation polygones No-Go Areas, découpage (`routeSplit`) et fusion (`routeMerge`) sur 50k points. |
-| **`bench-fit-predictor.ts`** | Simulation Physique | Bilan de puissance (gravité, roulement, aéro $C_d A$, chaîne), densité d'air dynamique $\rho(h, T)$, fatigue exponentielle $\lambda$, convergence vitesse Newton-Raphson. |
-| **`bench-lidar.ts`** | LiDAR IGN & Soleil | Reprojection Lambert-93/WGS84 via `proj4`, empaquetage GPU Float32Array, **simulation soleil dans le nuage de points** (éphéméride, éclairage direct $N \cdot L$, ombres portées ray-casting). |
-| **`bench-poi.ts`** | POI & Overpass | Filtrage spatial de corridor (2 500 POIs), projection orthogonale sur trace, clustering spatial (`buildPoiClusters`). |
-| **`bench-exporter.ts`** | Export / Import | Sérialisation GPX complète (1k, 10k, 50k pts), parsing GPX XML Regex, FeatureCollection GeoJSON, micro-benchmark d'échappement XML. |
-| **`bench-center-panel.ts`** | Graphiques & Roadbook | Cache des séries (`buildSeriesFromPrediction`) sur 14 variables, downsampling LTTB 60 FPS (24k pts → 1 200 pts), recherche dichotomique curseur hover. |
-| **`bench-server-api.ts`** | Serveur & Infra | Débit rate-limiter IP sous burst, cache LRU 10k opérations, résolution IP (Traefik/Cloudflare), protection anti-traversal, endpoint `/health`. |
-
----
-
-## 📈 Rapports & Métriques Produites
-
-À chaque exécution de `run-all-benchmarks.ts`, deux livrables sont automatiquement générés dans `reports/` :
-
-1. **`reports/LATEST_BENCHMARK_REPORT.md`** :
-   - Tableau synthétique de toutes les opérations avec percentiles p50, p95, ops/sec et différentiel mémoire heap.
-   - Bilan des régressions détectées (dépassements de seuils).
-   - Recommandations d'optimisation d'architecture pour chaque composant.
-2. **`reports/benchmarks-<timestamp>.json`** :
-   - Fichier JSON brut avec les métadonnées complètes pour ingestion dans un tableau de bord Datadog, Prometheus ou GitHub Actions.
-
----
-
-## ⚙️ Paramètres CLI Disponibles
-
-- `--quick` : Réduit le nombre d'itérations pour une exécution ultra-rapide (<3 secondes).
-- `--feature=<id>` : Exécute uniquement le module ciblé (`meteo`, `pente`, `alti`, `neige`, `brouter`, `fit`, `lidar`, `poi`, `exporter`, `chart`, `server`).
-- `--no-report` : N'écrit pas de fichiers sur le disque (affichage console uniquement).
-
----
-
-## 🛠️ Architecture du Moteur (`core/`)
-
-- **`core/harness.ts`** : Moteur de calcul statistique de haute précision (`performance.now()`), calcul de percentiles (p50, p95, p99), détection de jitter et régression.
-- **`core/reporter.ts`** : Formateur console ANSI avec codes couleur et badges de statut (`PASS`, `WARN`, `REGRESSION`), générateur Markdown & JSON.
-- **`core/synthetic-data.ts`** : Générateur déterministe de traces alpines (Cols mythiques), de grilles MNT avec relief fractal, de données AROME et de jeux de POIs.
+- A suite fails with a non-zero exit code on a regression; a threshold is
+  re-measured once before it counts.
+- Suites in `suites/` export a `run…Benchmark()` function used by
+  `run-all-benchmarks.ts` and can also be run alone (`npm run bench:<suite>`).
+- Benchmarks that need production data or credentials (real FIT files, test
+  accounts, an SSH tunnel) read them from outside the repository and say so in
+  their header.
+- Timings taken on a laptop on battery are noise: compare interleaved A/B runs.

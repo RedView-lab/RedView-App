@@ -13,32 +13,32 @@
  *     convergence, journal relu = mémoire, aucune modification perdue ;
  *  4. débit de la salle (lots par seconde, un seul fil).
  *
- *   npx tsx script-test-bench/test-collab.ts [--seeds=10] [--workers=N]   (40 graines pour une passe profonde)
+ *   npx tsx script-test-bench/regression/collab.ts [--seeds=10] [--workers=N]   (40 graines pour une passe profonde)
  */
 import { fork } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { canonicalJson } from '../src/features/itineraryPanel/lib/project/canonicalJson.ts';
+import { canonicalJson } from '../../src/features/itineraryPanel/lib/project/canonicalJson.ts';
 import {
   composeProject,
   extractProjectLocalWork,
   extractProjectView,
   toProjectDocument,
   type ProjectDocument,
-} from '../src/features/itineraryPanel/lib/project/layers.ts';
-import { normalizeItineraryProject } from '../src/features/itineraryPanel/lib/project/defaultState.ts';
-import { shareProjectStructure } from '../src/features/itineraryPanel/context/ProjectStore/historyDocument.ts';
-import type { Itinerary, ItineraryProject } from '../src/features/itineraryPanel/types/index.ts';
-import { CollabClient } from '../src/features/collab/client/collabClient.ts';
-import type { ClientMessage, ServerMessage } from '../src/features/collab/protocol.ts';
-import { Room } from '../src/features/collab/room/room.ts';
-import { RoomState } from '../src/features/collab/room/roomState.ts';
-import { routeChunkBounds, ROUTE_CHUNK_MAX_POINTS, ROUTE_CHUNK_MIN_POINTS } from '../src/features/collab/routeChunks.ts';
-import { routePoints, sampleDocument } from '../src/features/collab/sim/fixtures.ts';
-import { Scheduler } from '../src/features/collab/sim/scheduler.ts';
-import { runSimulation, type SimulationOptions, type SimulationReport } from '../src/features/collab/sim/simulator.ts';
+} from '../../src/features/itineraryPanel/lib/project/layers.ts';
+import { normalizeItineraryProject } from '../../src/features/itineraryPanel/lib/project/defaultState.ts';
+import { shareProjectStructure } from '../../src/features/itineraryPanel/context/ProjectStore/historyDocument.ts';
+import type { Itinerary, ItineraryProject } from '../../src/features/itineraryPanel/types/index.ts';
+import { CollabClient } from '../../src/features/collab/client/collabClient.ts';
+import type { ClientMessage, ServerMessage } from '../../src/features/collab/protocol.ts';
+import { Room } from '../../src/features/collab/room/room.ts';
+import { RoomState } from '../../src/features/collab/room/roomState.ts';
+import { routeChunkBounds, ROUTE_CHUNK_MAX_POINTS, ROUTE_CHUNK_MIN_POINTS } from '../../src/features/collab/routeChunks.ts';
+import { routePoints, sampleDocument } from '../../src/features/collab/sim/fixtures.ts';
+import { Scheduler } from '../../src/features/collab/sim/scheduler.ts';
+import { runSimulation, type SimulationOptions, type SimulationReport } from '../../src/features/collab/sim/simulator.ts';
 
 let failures = 0;
 function assert(condition: boolean, message: string): void {

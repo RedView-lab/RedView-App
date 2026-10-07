@@ -15,15 +15,15 @@
  *    même tuile ne mesurait que le cache LRU (0,002 ms jusqu'au 2026-10-01).
  * 5. Construction des palettes d'altitude (buildAltitudeCategories).
  */
-import { BenchmarkSuite } from './core/harness.ts';
-import { printSuiteHeader, printSuiteResults } from './core/reporter.ts';
-import { generateSyntheticDemGrid, generateSyntheticRoute } from './core/synthetic-data.ts';
-import { loadSwModules } from './core/sw-context.ts';
-import { encodeTerrariumPng, withTerrariumFetch } from './core/terrarium-mock.ts';
-import { buildAltitudeCategories } from '../src/features/altitude/lib/altitude-config.ts';
-import { computeRouteElevationMetrics } from '../src/features/itineraryPanel/lib/route-metrics/metrics.ts';
-import { extractRouteProfileFromPoints } from '../src/features/itineraryPanel/lib/route-metrics/profile.ts';
-import { generateAltitudeTile } from '../server/terrain-tiles.mjs';
+import { BenchmarkSuite } from '../core/harness.ts';
+import { printSuiteHeader, printSuiteResults } from '../core/reporter.ts';
+import { generateSyntheticDemGrid, generateSyntheticRoute } from '../core/synthetic-data.ts';
+import { loadSwModules } from '../core/sw-context.ts';
+import { encodeTerrariumPng, withTerrariumFetch } from '../core/terrarium-mock.ts';
+import { buildAltitudeCategories } from '../../src/features/altitude/lib/altitude-config.ts';
+import { computeRouteElevationMetrics } from '../../src/features/itineraryPanel/lib/route-metrics/metrics.ts';
+import { extractRouteProfileFromPoints } from '../../src/features/itineraryPanel/lib/route-metrics/profile.ts';
+import { generateAltitudeTile } from '../../server/terrain-tiles.mjs';
 
 type AltitudeSw = {
   encodeAltitudePng: (elevations: Float32Array, zoneMask: Uint8Array | null) => Promise<Blob>;
@@ -48,7 +48,7 @@ export async function runAltiBenchmark(options: { quick?: boolean } = {}): Promi
 
   const g = globalThis as unknown as { ImageData?: unknown };
   g.ImageData ??= NodeImageData;
-  const { encodeDem } = await import('../src/features/altitude/lib/altitude-dem-source.ts');
+  const { encodeDem } = await import('../../src/features/altitude/lib/altitude-dem-source.ts');
   const sw = loadSwModules([
     'core/config.js',
     'core/geo.js',
@@ -166,7 +166,7 @@ export async function runAltiBenchmark(options: { quick?: boolean } = {}): Promi
 }
 
 // Standalone execution
-if (process.argv[1]?.endsWith('bench-alti.ts')) {
+if (process.argv[1]?.replaceAll('\\', '/').endsWith('/suites/alti.ts')) {
   const quick = process.argv.includes('--quick');
   runAltiBenchmark({ quick }).then((suite) => {
     printSuiteHeader(suite.title);

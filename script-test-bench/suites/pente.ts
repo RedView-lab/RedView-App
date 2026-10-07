@@ -14,14 +14,14 @@
  *    cache (0,002 ms dans les rapports jusqu'au 2026-10-01).
  * 4. Compilation des expressions Mapbox raster-color (buildSlopeColorExpression).
  */
-import { BenchmarkSuite } from './core/harness.ts';
-import { printSuiteHeader, printSuiteResults } from './core/reporter.ts';
-import { generateSyntheticDemGrid } from './core/synthetic-data.ts';
-import { loadSwModules } from './core/sw-context.ts';
-import { encodeTerrariumPng, withTerrariumFetch } from './core/terrarium-mock.ts';
-import { buildSlopeColorExpression } from '../src/features/slope/lib/slope-config.ts';
-import { generateSlopeTile } from '../server/terrain-tiles.mjs';
-import type { SlopeCategory } from '../src/features/slope/types.ts';
+import { BenchmarkSuite } from '../core/harness.ts';
+import { printSuiteHeader, printSuiteResults } from '../core/reporter.ts';
+import { generateSyntheticDemGrid } from '../core/synthetic-data.ts';
+import { loadSwModules } from '../core/sw-context.ts';
+import { encodeTerrariumPng, withTerrariumFetch } from '../core/terrarium-mock.ts';
+import { buildSlopeColorExpression } from '../../src/features/slope/lib/slope-config.ts';
+import { generateSlopeTile } from '../../server/terrain-tiles.mjs';
+import type { SlopeCategory } from '../../src/features/slope/types.ts';
 
 type Neighbours = { north?: Float32Array; east?: Float32Array; south?: Float32Array; west?: Float32Array };
 type SlopeSw = {
@@ -241,7 +241,7 @@ export async function runSlopeBenchmark(options: { quick?: boolean } = {}): Prom
 }
 
 // Standalone execution
-if (process.argv[1]?.endsWith('bench-pente.ts')) {
+if (process.argv[1]?.replaceAll('\\', '/').endsWith('/suites/pente.ts')) {
   const quick = process.argv.includes('--quick');
   runSlopeBenchmark({ quick }).then((suite) => {
     printSuiteHeader(suite.title);

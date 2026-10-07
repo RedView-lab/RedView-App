@@ -5,10 +5,10 @@ import {
   LINE_CLEARANCE_M,
   ROUTE_ELEVATED_MIN_ZOOM,
   getRouteElevationContext,
-} from '../src/features/itineraryPanel/lib/route-layer/routeElevation';
-import type { RouteLayerPoint } from '../src/features/itineraryPanel/lib/route-layer/routeStyle';
-import { upsertRouteLayer } from '../src/features/itineraryPanel/lib/route-layer/itineraryLayers';
-import { ids } from '../src/features/itineraryPanel/lib/route-layer/constants';
+} from '../../src/features/itineraryPanel/lib/route-layer/routeElevation';
+import type { RouteLayerPoint } from '../../src/features/itineraryPanel/lib/route-layer/routeStyle';
+import { upsertRouteLayer } from '../../src/features/itineraryPanel/lib/route-layer/itineraryLayers';
+import { ids } from '../../src/features/itineraryPanel/lib/route-layer/constants';
 
 // Contract: every route line reads its altitude from the terrain itself
 // (`line-elevation-reference: ground`), i.e. the very DEM tile the 3D mesh is
@@ -17,7 +17,7 @@ import { ids } from '../src/features/itineraryPanel/lib/route-layer/constants';
 // visible trace depending on the zoom level.
 
 const require = createRequire(import.meta.url);
-const { validate } = require('../node_modules/mapbox-gl/dist/style-spec/index.cjs');
+const { validate } = require('../../node_modules/mapbox-gl/dist/style-spec/index.cjs');
 const options = { color: '#ff0000', opacity01: 1, visible: true, traceWidthPx: 8 };
 let passed = 0;
 function test(name: string, run: () => void) {

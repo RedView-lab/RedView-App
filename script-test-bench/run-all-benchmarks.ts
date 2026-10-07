@@ -29,18 +29,18 @@ import {
 } from './core/reporter.ts';
 
 // Feature suites
-import { runMeteoBenchmark } from './bench-meteo.ts';
-import { runSlopeBenchmark } from './bench-pente.ts';
-import { runAltiBenchmark } from './bench-alti.ts';
-import { runSnowBenchmark } from './bench-neige.ts';
-import { runBrouterBenchmark } from './bench-brouter.ts';
-import { runFitPredictorBenchmark } from './bench-fit-predictor.ts';
-import { runLidarBenchmark } from './bench-lidar.ts';
-import { runPoiBenchmark } from './bench-poi.ts';
-import { runExporterBenchmark } from './bench-exporter.ts';
-import { runCenterPanelBenchmark } from './bench-center-panel.ts';
-import { runServerApiBenchmark } from './bench-server-api.ts';
-import { runFlyoverBenchmark } from './bench-flyover.ts';
+import { runMeteoBenchmark } from './suites/meteo.ts';
+import { runSlopeBenchmark } from './suites/pente.ts';
+import { runAltiBenchmark } from './suites/alti.ts';
+import { runSnowBenchmark } from './suites/neige.ts';
+import { runBrouterBenchmark } from './suites/brouter.ts';
+import { runFitPredictorBenchmark } from './suites/fit-predictor.ts';
+import { runLidarBenchmark } from './suites/lidar.ts';
+import { runPoiBenchmark } from './suites/poi.ts';
+import { runExporterBenchmark } from './suites/exporter.ts';
+import { runCenterPanelBenchmark } from './suites/center-panel.ts';
+import { runServerApiBenchmark } from './suites/server-api.ts';
+import { runFlyoverBenchmark } from './flyover/run.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

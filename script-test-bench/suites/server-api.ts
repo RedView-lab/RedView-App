@@ -26,13 +26,13 @@ import path from 'node:path';
 
 import { pathToFileURL } from 'node:url';
 
-import type * as ByteLruModule from '../server/byte-lru.mjs';
-import type * as HttpSecurityModule from '../server/http-security.mjs';
-import type * as RequestLoggingModule from '../server/request-logging.mjs';
-import { BenchmarkSuite } from './core/harness.ts';
-import { printSuiteHeader, printSuiteResults } from './core/reporter.ts';
+import type * as ByteLruModule from '../../server/byte-lru.mjs';
+import type * as HttpSecurityModule from '../../server/http-security.mjs';
+import type * as RequestLoggingModule from '../../server/request-logging.mjs';
+import { BenchmarkSuite } from '../core/harness.ts';
+import { printSuiteHeader, printSuiteResults } from '../core/reporter.ts';
 
-const REPO = path.resolve(import.meta.dirname, '..');
+const REPO = path.resolve(import.meta.dirname, '../..');
 
 /** Modules serveur de la copie mesurée (`--root`) : HEAD et arbre de travail passent par leur propre code. */
 type ServerModules = {
@@ -488,7 +488,7 @@ export async function runServerApiBenchmark(options: { quick?: boolean; http?: b
 }
 
 // Standalone execution
-if (process.argv[1]?.endsWith('bench-server-api.ts')) {
+if (process.argv[1]?.replaceAll('\\', '/').endsWith('/suites/server-api.ts')) {
   const args = process.argv.slice(2);
   const valueOf = (flag: string) => {
     const index = args.indexOf(flag);

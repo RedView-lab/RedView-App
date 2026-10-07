@@ -8,18 +8,18 @@
  * 4. Algorithme de clustering spatial (buildPoiClusters)
  * 5. Parsing et déduplication de payloads Overpass OSM
  */
-import { BenchmarkSuite } from './core/harness.ts';
-import { printSuiteHeader, printSuiteResults } from './core/reporter.ts';
-import { generateSyntheticRoute, generateSyntheticPois } from './core/synthetic-data.ts';
+import { BenchmarkSuite } from '../core/harness.ts';
+import { printSuiteHeader, printSuiteResults } from '../core/reporter.ts';
+import { generateSyntheticRoute, generateSyntheticPois } from '../core/synthetic-data.ts';
 import {
   projectRoutePoints,
   projectPoiOntoRoute,
   type ProjectedRoutePoint,
   type ProjectedPoi,
-} from '../src/features/poi/lib/refinePoiProjection.ts';
-import { buildPoiClusters } from '../src/features/poi/lib/refinePoiClustering.ts';
-import { poiFeaturesToTimelineItems } from '../src/features/itineraryPanel/lib/schedule/poi-to-timeline.ts';
-import type { PoiFeature, PoiCategory } from '../src/features/poi/types.ts';
+} from '../../src/features/poi/lib/refinePoiProjection.ts';
+import { buildPoiClusters } from '../../src/features/poi/lib/refinePoiClustering.ts';
+import { poiFeaturesToTimelineItems } from '../../src/features/itineraryPanel/lib/schedule/poi-to-timeline.ts';
+import type { PoiFeature, PoiCategory } from '../../src/features/poi/types.ts';
 
 export async function runPoiBenchmark(options: { quick?: boolean } = {}): Promise<BenchmarkSuite> {
   const suite = new BenchmarkSuite('POI (Points d’Intérêt & Corridor Overpass)');
@@ -128,7 +128,7 @@ export async function runPoiBenchmark(options: { quick?: boolean } = {}): Promis
 }
 
 // Standalone execution
-if (process.argv[1]?.endsWith('bench-poi.ts')) {
+if (process.argv[1]?.replaceAll('\\', '/').endsWith('/suites/poi.ts')) {
   const quick = process.argv.includes('--quick');
   runPoiBenchmark({ quick }).then((suite) => {
     printSuiteHeader(suite.title);

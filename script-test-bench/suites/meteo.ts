@@ -15,16 +15,16 @@
  * Jusqu'au 2026-10-06, 1 et 2 mesuraient des copies écrites dans le bench
  * (JSON.parse d'une station, interpolation simplifiée).
  */
-import { BenchmarkSuite } from './core/harness.ts';
-import { printSuiteHeader, printSuiteResults } from './core/reporter.ts';
-import { computeWindGrid } from '../src/features/weather/lib/wind-grid.ts';
+import { BenchmarkSuite } from '../core/harness.ts';
+import { printSuiteHeader, printSuiteResults } from '../core/reporter.ts';
+import { computeWindGrid } from '../../src/features/weather/lib/wind-grid.ts';
 import {
   fetchRouteWeatherDataset,
   getRouteWeatherAtDistanceAndTime,
   type RouteWeatherDataset,
-} from '../src/features/weather/lib/routeWeather.ts';
-import type { RouteChartPoint } from '../src/features/centerPanel/components/chart/seriesCommon.ts';
-import { recolorRadarPng } from '../server/radar-recolor.mjs';
+} from '../../src/features/weather/lib/routeWeather.ts';
+import type { RouteChartPoint } from '../../src/features/centerPanel/components/chart/seriesCommon.ts';
+import { recolorRadarPng } from '../../server/radar-recolor.mjs';
 import { deflateSync, crc32 } from 'node:zlib';
 
 const ROUTE_KM = 1200;
@@ -252,7 +252,7 @@ function createSynthetic512x512Png(): Buffer {
 }
 
 // Standalone execution
-if (process.argv[1]?.endsWith('bench-meteo.ts')) {
+if (process.argv[1]?.replaceAll('\\', '/').endsWith('/suites/meteo.ts')) {
   const quick = process.argv.includes('--quick');
   runMeteoBenchmark({ quick }).then((suite) => {
     printSuiteHeader(suite.title);

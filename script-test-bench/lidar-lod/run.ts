@@ -43,15 +43,15 @@
  *
  * Usage : npm run bench:lidar-lod   (LIDAR_TILE=... npm run bench:lidar-lod)
  */
-import { runBudgetCheck, runFrameClockCheck } from './lidar-lod/frameBudgetCheck.ts';
-import { notes, results } from './lidar-lod/harness.ts';
-import { runLodTileCheck } from './lidar-lod/lodTileCheck.ts';
-import { runPrecisionCheck } from './lidar-lod/precisionCheck.ts';
-import { runRealTile } from './lidar-lod/realTileCheck.ts';
-import { runRenderQualityCheck } from './lidar-lod/renderQualityCheck.ts';
-import { runScreenSizeCheck } from './lidar-lod/screenSizeCheck.ts';
-import { runSelectionCheck } from './lidar-lod/selectionCheck.ts';
-import { runStreamingCheck } from './lidar-lod/streamingCheck.ts';
+import { runBudgetCheck, runFrameClockCheck } from './frameBudgetCheck.ts';
+import { notes, results } from './harness.ts';
+import { runLodTileCheck } from './lodTileCheck.ts';
+import { runPrecisionCheck } from './precisionCheck.ts';
+import { runRealTile } from './realTileCheck.ts';
+import { runRenderQualityCheck } from './renderQualityCheck.ts';
+import { runScreenSizeCheck } from './screenSizeCheck.ts';
+import { runSelectionCheck } from './selectionCheck.ts';
+import { runStreamingCheck } from './streamingCheck.ts';
 
 runPrecisionCheck();
 runScreenSizeCheck();

@@ -228,7 +228,7 @@ async function main() {
     }
   }
 
-  // Vrais POI GT20 déjà récupérés par test-poi-autosort.ts (échantillonnage à
+  // Vrais POI GT20 déjà récupérés par regression/poi-autosort.ts (échantillonnage à
   // 1,4·r SANS plafond longueur/8000) : combien la requête frontend (pas
   // plafonné) en renverrait-elle ? (hors ligne, cache dans os.tmpdir()).
   const cacheDir = path.join((await import('node:os')).tmpdir(), 'redview-poi-autosort');

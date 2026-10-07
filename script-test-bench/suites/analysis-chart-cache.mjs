@@ -1,4 +1,4 @@
-import { buildSeriesFromPrediction } from '../src/features/centerPanel/components/chart/series.ts';
+import { buildSeriesFromPrediction } from '../../src/features/centerPanel/components/chart/series.ts';
 
 function createRoutePoints(pointCount) {
   return Array.from({ length: pointCount }, (_, index) => {

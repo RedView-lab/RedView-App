@@ -12,7 +12,7 @@
  *   D. FIT enregistrés en « cycling » → doivent être ignorés
  * Plus des contrôles de cohérence sans FIT (10 km, marathon, monotonie).
  *
- * Usage : node script-test-bench/audit-run-predictor.mjs [dossier-pkg]
+ * Usage : node script-test-bench/audit/run-predictor.mjs [dossier-pkg]
  */
 import fs from 'node:fs';
 import path from 'node:path';

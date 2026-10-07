@@ -10,19 +10,19 @@
  * 6. Pipeline complet computeSnowDistribution
  * La qualité (v1 contre v2, vérité synthétique) est dans `npm run bench:snow`.
  */
-import { BenchmarkSuite } from './core/harness.ts';
-import { printSuiteHeader, printSuiteResults } from './core/reporter.ts';
-import { generateSyntheticDemGrid } from './core/synthetic-data.ts';
-import { DEFAULT_SNOW_ENGINE_CONFIG } from '../src/features/snow/lib/engine/config.ts';
-import { fitElevationProfile } from '../src/features/snow/lib/engine/elevationProfile.ts';
-import { snowSlide } from '../src/features/snow/lib/engine/gravity.ts';
-import { buildWorkGrid, SceneFrame } from '../src/features/snow/lib/engine/grid.ts';
-import { computeSnowDistribution } from '../src/features/snow/lib/engine/pipeline.ts';
-import { computeHorizons, dailyRadiationField, daySunPath, surfaceGeometry } from '../src/features/snow/lib/engine/radiation.ts';
-import { AltitudeSampler, shelterIndex, terrainGradients } from '../src/features/snow/lib/engine/terrain.ts';
-import type { CoarseSnowGrid, SnowEngineInput } from '../src/features/snow/lib/engine/types.ts';
-import { defaultWindRose } from '../src/features/snow/lib/engine/weatherHistory.ts';
-import { computeWindPattern } from '../src/features/snow/lib/engine/wind.ts';
+import { BenchmarkSuite } from '../core/harness.ts';
+import { printSuiteHeader, printSuiteResults } from '../core/reporter.ts';
+import { generateSyntheticDemGrid } from '../core/synthetic-data.ts';
+import { DEFAULT_SNOW_ENGINE_CONFIG } from '../../src/features/snow/lib/engine/config.ts';
+import { fitElevationProfile } from '../../src/features/snow/lib/engine/elevationProfile.ts';
+import { snowSlide } from '../../src/features/snow/lib/engine/gravity.ts';
+import { buildWorkGrid, SceneFrame } from '../../src/features/snow/lib/engine/grid.ts';
+import { computeSnowDistribution } from '../../src/features/snow/lib/engine/pipeline.ts';
+import { computeHorizons, dailyRadiationField, daySunPath, surfaceGeometry } from '../../src/features/snow/lib/engine/radiation.ts';
+import { AltitudeSampler, shelterIndex, terrainGradients } from '../../src/features/snow/lib/engine/terrain.ts';
+import type { CoarseSnowGrid, SnowEngineInput } from '../../src/features/snow/lib/engine/types.ts';
+import { defaultWindRose } from '../../src/features/snow/lib/engine/weatherHistory.ts';
+import { computeWindPattern } from '../../src/features/snow/lib/engine/wind.ts';
 
 const LON0 = 6.9;
 const LAT0 = 45.95;
@@ -118,7 +118,7 @@ export async function runSnowBenchmark(options: { quick?: boolean } = {}): Promi
 }
 
 // Standalone execution
-if (process.argv[1]?.endsWith('bench-neige.ts')) {
+if (process.argv[1]?.replaceAll('\\', '/').endsWith('/suites/neige.ts')) {
   const quick = process.argv.includes('--quick');
   runSnowBenchmark({ quick }).then((suite) => {
     printSuiteHeader(suite.title);

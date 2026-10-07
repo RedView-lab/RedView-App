@@ -3,7 +3,7 @@
 > **Date** : 22 septembre 2026
 > **Périmètre** : `vendor/redviewalgo` (moteur Rust/WASM), `src/features/fitPredictor`, `src/features/itineraryPanel`
 > **Méthode** : lecture exhaustive du pipeline + **expérience contrôlée exécutant le vrai moteur WASM**
-> (harnais : `script-test-bench/audit-predictor-nopower.mjs`, sortie brute : `audit-predictor-nopower-output.txt`)
+> (harnais : `script-test-bench/audit/predictor-nopower.mjs`, sortie brute : `audit/predictor-nopower-output.txt`)
 
 ---
 
@@ -210,7 +210,7 @@ Le moteur expose déjà tout le nécessaire (`predict_vs_actual`, `lib.rs:172`).
 1. **Backtest automatique** : à chaque calcul, retenir 1 FIT de l'historique comme validation et entraîner sur les autres, puis comparer temps prédit / temps réel. Afficher le MAPE glissant.
 2. **Segmentation par enveloppe** : mesurer l'erreur séparément pour (a) cible ≤ plus longue sortie, (b) cible > 1,5×. Ce sont deux régimes différents (mesuré : +1,5 % vs +54 %).
 3. **Jeu de référence** : constituer un jeu de FIT réels anonymisés (avec et sans capteur de puissance, avec et sans FC) et figer les résultats dans `script-test-bench/reports/`.
-4. **Non-régression** : brancher `script-test-bench/audit-predictor-nopower.mjs` sur `npm run bench` comme garde-fou.
+4. **Non-régression** : brancher `script-test-bench/audit/predictor-nopower.mjs` sur `npm run bench` comme garde-fou.
 
 ---
 
@@ -227,7 +227,7 @@ Le moteur expose déjà tout le nécessaire (`predict_vs_actual`, `lib.rs:172`).
 
 ```bash
 # depuis redview-app/
-node script-test-bench/audit-predictor-nopower.mjs
+node script-test-bench/audit/predictor-nopower.mjs
 ```
 
 Le harnais encode lui-même les FIT (CRC-16 FIT), construit le GPX, simule le coureur et exécute le WASM de production (`src/features/fitPredictor/engine/pkg`). Sortie brute conservée dans `script-test-bench/audit-predictor-nopower-output.txt`.

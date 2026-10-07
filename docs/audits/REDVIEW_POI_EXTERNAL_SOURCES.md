@@ -460,7 +460,7 @@ node import-overture.mjs --db data/pois.db --dry-run
 
    À noter : **6 590 marqueurs est déjà le régime actuel**, et le commentaire du code qualifie déjà ce volume d'« untenable ». L'enrichissement ne crée pas le problème, il le double.
 
-   **Ce qui existe déjà mais n'est pas branché** : `src/features/poi/lib/refinePoiClustering.ts` fournit `buildPoiClusters()` et `capPoisPerCategory()` — exactement le « top N per km » qui a été retiré. Ces fonctions ne sont appelées **que par le benchmark** `script-test-bench/bench-poi.ts`, jamais par l'application. Les rebrancher (ou ajouter une mise en grappe à bas zoom) est la piste naturelle si le curseur 1 000 m devient un usage courant.
+   **Ce qui existe déjà mais n'est pas branché** : `src/features/poi/lib/refinePoiClustering.ts` fournit `buildPoiClusters()` et `capPoisPerCategory()` — exactement le « top N per km » qui a été retiré. Ces fonctions ne sont appelées **que par le benchmark** `script-test-bench/suites/poi.ts`, jamais par l'application. Les rebrancher (ou ajouter une mise en grappe à bas zoom) est la piste naturelle si le curseur 1 000 m devient un usage courant.
 
    **Coût incompressible** : le serveur renvoie 6 590 → 11 959 features sur cette route (+81 %), et le client déduplique et filtre latéralement sur l'ensemble — indépendamment de ce qui est finalement rendu.
 

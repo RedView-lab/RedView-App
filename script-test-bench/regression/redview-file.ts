@@ -8,35 +8,35 @@
  *  4. Contenu hostile : coordonnées, identifiants, `__proto__`, .fit factices.
  *  5. Repli gzip quand `deflate-raw` manque, noms de fichiers, performance.
  *
- *   npx tsx script-test-bench/test-redview-file.ts
+ *   npx tsx script-test-bench/regression/redview-file.ts
  */
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { createDefaultControlPanelPersistedState } from '../src/features/controlPanel/lib/persistedState.ts';
+import { createDefaultControlPanelPersistedState } from '../../src/features/controlPanel/lib/persistedState.ts';
 import {
   createDefaultAnalysisPanelState,
   createDefaultItinerary,
   createDefaultProject,
   normalizeItineraryProject,
-} from '../src/features/itineraryPanel/lib/project/defaultState.ts';
-import type { SavedCustomProfile } from '../src/features/itineraryPanel/lib/project/customProfiles.ts';
-import type { ItineraryProject } from '../src/features/itineraryPanel/types/index.ts';
-import { withEffectiveControlPanel } from '../src/features/redviewFile/lib/effectiveControlPanel.ts';
-import { RedviewFileError, type RedviewFileErrorKind } from '../src/features/redviewFile/lib/errors.ts';
+} from '../../src/features/itineraryPanel/lib/project/defaultState.ts';
+import type { SavedCustomProfile } from '../../src/features/itineraryPanel/lib/project/customProfiles.ts';
+import type { ItineraryProject } from '../../src/features/itineraryPanel/types/index.ts';
+import { withEffectiveControlPanel } from '../../src/features/redviewFile/lib/effectiveControlPanel.ts';
+import { RedviewFileError, type RedviewFileErrorKind } from '../../src/features/redviewFile/lib/errors.ts';
 import {
   buildRedviewFileName,
   REDVIEW_MIME_TYPE,
   type RedviewContent,
-} from '../src/features/redviewFile/lib/format.ts';
-import { buildImportedProjectName } from '../src/features/redviewFile/lib/naming.ts';
-import { readRedviewFile } from '../src/features/redviewFile/lib/readRedviewFile.ts';
-import { writeRedviewFile } from '../src/features/redviewFile/lib/writeRedviewFile.ts';
-import { crc32 } from '../src/features/redviewFile/lib/zip/crc32.ts';
-import { deflateRaw, wrapRawDeflateInGzip } from '../src/features/redviewFile/lib/zip/deflate.ts';
-import { writeZip } from '../src/features/redviewFile/lib/zip/zipWriter.ts';
+} from '../../src/features/redviewFile/lib/format.ts';
+import { buildImportedProjectName } from '../../src/features/redviewFile/lib/naming.ts';
+import { readRedviewFile } from '../../src/features/redviewFile/lib/readRedviewFile.ts';
+import { writeRedviewFile } from '../../src/features/redviewFile/lib/writeRedviewFile.ts';
+import { crc32 } from '../../src/features/redviewFile/lib/zip/crc32.ts';
+import { deflateRaw, wrapRawDeflateInGzip } from '../../src/features/redviewFile/lib/zip/deflate.ts';
+import { writeZip } from '../../src/features/redviewFile/lib/zip/zipWriter.ts';
 
 let failures = 0;
 function assert(condition: boolean, message: string): void {

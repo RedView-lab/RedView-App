@@ -11,16 +11,16 @@
  *  6. Undo/redo : la vue n'entre jamais dans l'historique ni dans une restauration.
  *  7. Identifiants du document : uniques entre éditeurs simultanés.
  *
- *   npx tsx script-test-bench/test-project-layers.ts
+ *   npx tsx script-test-bench/regression/project-layers.ts
  */
-import { createDefaultControlPanelPersistedState } from '../src/features/controlPanel/lib/persistedState.ts';
+import { createDefaultControlPanelPersistedState } from '../../src/features/controlPanel/lib/persistedState.ts';
 import {
   createDefaultAnalysisPanelState,
   createDefaultItinerary,
   createDefaultProject,
   normalizeItineraryProject,
-} from '../src/features/itineraryPanel/lib/project/defaultState.ts';
-import { createDocumentId } from '../src/features/itineraryPanel/lib/project/ids.ts';
+} from '../../src/features/itineraryPanel/lib/project/defaultState.ts';
+import { createDocumentId } from '../../src/features/itineraryPanel/lib/project/ids.ts';
 import {
   applyProjectView,
   classifyProjectChange,
@@ -36,17 +36,17 @@ import {
   splitProject,
   stripLocalWork,
   toProjectDocument,
-} from '../src/features/itineraryPanel/lib/project/layers.ts';
+} from '../../src/features/itineraryPanel/lib/project/layers.ts';
 import {
   diffHistoryDocument,
   restoreHistoryDocument,
   shareProjectStructure,
-} from '../src/features/itineraryPanel/context/ProjectStore/historyDocument.ts';
+} from '../../src/features/itineraryPanel/context/ProjectStore/historyDocument.ts';
 import type {
   Itinerary,
   ItineraryProject,
   SavedCustomProfile,
-} from '../src/features/itineraryPanel/types/index.ts';
+} from '../../src/features/itineraryPanel/types/index.ts';
 
 let failures = 0;
 function assert(condition: boolean, message: string): void {

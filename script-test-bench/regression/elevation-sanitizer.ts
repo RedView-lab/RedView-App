@@ -2,13 +2,13 @@ import {
   cleanAndInterpolateElevations,
   hasCorruptedElevations,
   isValidElevation,
-} from '../src/features/itineraryPanel/lib/route-metrics/elevationSanitizer.ts';
-import { parseGpxText } from '../src/features/poi/lib/gpx-parse.ts';
-import { buildImportedRouteMetrics } from '../src/features/itineraryPanel/lib/routes/imported-route.ts';
-import { createDefaultItinerary, createDefaultProject, normalizeItineraryProject } from '../src/features/itineraryPanel/lib/project/defaultState.ts';
-import type { ItineraryProject } from '../src/features/itineraryPanel/types/index.ts';
-import { normalizeMetricDomain, computeCumulativeElevationAtX } from '../src/features/centerPanel/components/chart/AnalysisChart/math.ts';
-import { computeDomain } from '../src/features/centerPanel/components/chart/series/builders.ts';
+} from '../../src/features/itineraryPanel/lib/route-metrics/elevationSanitizer.ts';
+import { parseGpxText } from '../../src/features/poi/lib/gpx-parse.ts';
+import { buildImportedRouteMetrics } from '../../src/features/itineraryPanel/lib/routes/imported-route.ts';
+import { createDefaultItinerary, createDefaultProject, normalizeItineraryProject } from '../../src/features/itineraryPanel/lib/project/defaultState.ts';
+import type { ItineraryProject } from '../../src/features/itineraryPanel/types/index.ts';
+import { normalizeMetricDomain, computeCumulativeElevationAtX } from '../../src/features/centerPanel/components/chart/AnalysisChart/math.ts';
+import { computeDomain } from '../../src/features/centerPanel/components/chart/series/builders.ts';
 
 function assert(condition: boolean, msg: string) {
   if (!condition) {

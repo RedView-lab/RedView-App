@@ -13,7 +13,7 @@
  * POI et prédiction sont mis en cache (dossier temp) : `--refresh` pour refaire.
  *
  * Usage :
- *   npx tsx script-test-bench/test-poi-autosort.ts <trace.gpx>
+ *   npx tsx script-test-bench/regression/poi-autosort.ts <trace.gpx>
  *     [--level=intermediaire] [--start=07:30] [--date=2026-10-03]
  *     [--x=40] [--x-hotel=40] [--pause] [--refresh] [--quiet]
  */
@@ -22,15 +22,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import type { PredictionResult } from '../src/features/fitPredictor/types.ts';
-import { CYCLING_ENGINE_VERSION } from '../src/features/fitPredictor/engine/version.ts';
-import { DEFAULT_AUTO_SORT_RULES } from '../src/features/poi/lib/autoSort/index.ts';
-import type { PoiCategory as FeaturePoiCategory, PoiFeature } from '../src/features/poi/types.ts';
-import { createDefaultItinerary } from '../src/features/itineraryPanel/lib/project/defaultState.ts';
+import type { PredictionResult } from '../../src/features/fitPredictor/types.ts';
+import { CYCLING_ENGINE_VERSION } from '../../src/features/fitPredictor/engine/version.ts';
+import { DEFAULT_AUTO_SORT_RULES } from '../../src/features/poi/lib/autoSort/index.ts';
+import type { PoiCategory as FeaturePoiCategory, PoiFeature } from '../../src/features/poi/types.ts';
+import { createDefaultItinerary } from '../../src/features/itineraryPanel/lib/project/defaultState.ts';
 import {
   buildPredictionConfigFromRhythm,
   buildRouteGpxFile,
-} from '../src/features/itineraryPanel/lib/schedule/container-prediction.ts';
+} from '../../src/features/itineraryPanel/lib/schedule/container-prediction.ts';
 import {
   clearPoiAutoSortFavorites,
   computePoiAutoSort,
@@ -38,9 +38,9 @@ import {
   keepsTimelineItemWithPoiAutoSort,
   toPoiAutoSortPickRefs,
   type PoiAutoSortRun,
-} from '../src/features/itineraryPanel/lib/schedule/poiAutoSort.ts';
-import { FEATURE_TO_PANEL_POI, poiFeaturesToTimelineItems } from '../src/features/itineraryPanel/lib/schedule/poi-to-timeline.ts';
-import type { Itinerary, PoiCategory as PanelPoiCategory } from '../src/features/itineraryPanel/types/index.ts';
+} from '../../src/features/itineraryPanel/lib/schedule/poiAutoSort.ts';
+import { FEATURE_TO_PANEL_POI, poiFeaturesToTimelineItems } from '../../src/features/itineraryPanel/lib/schedule/poi-to-timeline.ts';
+import type { Itinerary, PoiCategory as PanelPoiCategory } from '../../src/features/itineraryPanel/types/index.ts';
 
 // ── Arguments ─────────────────────────────────────────────────────────
 const args = process.argv.slice(2);

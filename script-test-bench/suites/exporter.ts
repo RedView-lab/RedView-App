@@ -17,18 +17,18 @@ if (typeof (import.meta as unknown as Record<string, unknown>).env === 'undefine
   };
 }
 
-import { BenchmarkSuite } from './core/harness.ts';
-import { printSuiteHeader, printSuiteResults } from './core/reporter.ts';
-import { generateSyntheticRoute, type TrackPoint } from './core/synthetic-data.ts';
-import { parseGpxText } from '../src/features/poi/lib/gpx-parse.ts';
-import type { Itinerary } from '../src/features/itineraryPanel/types/index.ts';
+import { BenchmarkSuite } from '../core/harness.ts';
+import { printSuiteHeader, printSuiteResults } from '../core/reporter.ts';
+import { generateSyntheticRoute, type TrackPoint } from '../core/synthetic-data.ts';
+import { parseGpxText } from '../../src/features/poi/lib/gpx-parse.ts';
+import type { Itinerary } from '../../src/features/itineraryPanel/types/index.ts';
 
 export async function runExporterBenchmark(options: { quick?: boolean } = {}): Promise<BenchmarkSuite> {
   // Dynamically import buildItineraryGpx and helpers after env shim
-  const { buildItineraryGpx } = await import('../src/features/exporter/lib/exportGpx.ts');
-  const { escapeXml } = await import('../src/features/exporter/lib/exportHelpers.ts');
-  const { buildItineraryFitCourse } = await import('../src/features/exporter/lib/exportFit.ts');
-  const { buildItineraryKml } = await import('../src/features/exporter/lib/exportKml.ts');
+  const { buildItineraryGpx } = await import('../../src/features/exporter/lib/exportGpx.ts');
+  const { escapeXml } = await import('../../src/features/exporter/lib/exportHelpers.ts');
+  const { buildItineraryFitCourse } = await import('../../src/features/exporter/lib/exportFit.ts');
+  const { buildItineraryKml } = await import('../../src/features/exporter/lib/exportKml.ts');
 
   const suite = new BenchmarkSuite('Exporter (GPX, GeoJSON & Parsers)');
   const iterations = options.quick ? 5 : 20;
@@ -221,7 +221,7 @@ function createMockItinerary(name: string, routePoints: TrackPoint[]): Itinerary
 }
 
 // Standalone execution
-if (process.argv[1]?.endsWith('bench-exporter.ts')) {
+if (process.argv[1]?.replaceAll('\\', '/').endsWith('/suites/exporter.ts')) {
   const quick = process.argv.includes('--quick');
   runExporterBenchmark({ quick }).then((suite) => {
     printSuiteHeader(suite.title);

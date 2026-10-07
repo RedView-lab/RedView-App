@@ -12,9 +12,9 @@
  *   3. comptage base RedView via `/bbox` par catégorie.
  *
  * Usage :
- *   node script-test-bench/audit-poi-db.mjs                # audit complet
- *   node script-test-bench/audit-poi-db.mjs --quick        # 3 zones
- *   node script-test-bench/audit-poi-db.mjs --no-overpass  # taginfo seul
+ *   node script-test-bench/audit/poi-db.mjs                # audit complet
+ *   node script-test-bench/audit/poi-db.mjs --quick        # 3 zones
+ *   node script-test-bench/audit/poi-db.mjs --no-overpass  # taginfo seul
  *
  * Sortie : rapport markdown dans script-test-bench/reports/ + JSON brut.
  */

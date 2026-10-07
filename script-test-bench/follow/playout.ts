@@ -28,7 +28,7 @@
  *
  * Usage : npm run bench:follow
  */
-import { PlayoutClock, SampleTrack, normalizeAngle } from '../src/features/livePresence/lib/playout.ts';
+import { PlayoutClock, SampleTrack, normalizeAngle } from '../../src/features/livePresence/lib/playout.ts';
 
 type Camera = [number, number, number, number, number]; // lng, lat, zoom, cap, inclinaison
 

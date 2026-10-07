@@ -14,11 +14,11 @@
  * `npm run bench:lidar-lod` (LIDAR_TILE=…) ; l'ouverture à froid de bout en
  * bout dans Edge dans `npm run bench:lidar-fps -- --cold`.
  */
-import { BenchmarkSuite } from './core/harness.ts';
-import { printSuiteHeader, printSuiteResults } from './core/reporter.ts';
-import { toWgs84, wgs84ToTile } from '../src/features/lidar/lib/coordConvert.ts';
-import { ORTHO_TILE_SIZE, sampleOrthoColors, type OrthoTileGrid } from '../src/features/lidar/lib/orthoSampling.ts';
-import { buildLodTile, type LodTileInput } from '../src/features/lidar/viewer/lod/lodTile.ts';
+import { BenchmarkSuite } from '../core/harness.ts';
+import { printSuiteHeader, printSuiteResults } from '../core/reporter.ts';
+import { toWgs84, wgs84ToTile } from '../../src/features/lidar/lib/coordConvert.ts';
+import { ORTHO_TILE_SIZE, sampleOrthoColors, type OrthoTileGrid } from '../../src/features/lidar/lib/orthoSampling.ts';
+import { buildLodTile, type LodTileInput } from '../../src/features/lidar/viewer/lod/lodTile.ts';
 
 function mulberry32(seed: number): () => number {
   return () => {
@@ -159,7 +159,7 @@ export async function runLidarBenchmark(options: { quick?: boolean } = {}): Prom
 }
 
 // Standalone execution
-if (process.argv[1]?.endsWith('bench-lidar.ts')) {
+if (process.argv[1]?.replaceAll('\\', '/').endsWith('/suites/lidar.ts')) {
   const quick = process.argv.includes('--quick');
   runLidarBenchmark({ quick }).then((suite) => {
     printSuiteHeader(suite.title);

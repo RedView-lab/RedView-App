@@ -33,12 +33,12 @@ import {
   computeAvalancheTerrain,
   computeAvalancheTerrainWith,
   type AvalancheGridInput,
-} from '../src/features/lidar/viewer/tools/terrain/avalanche/exposure.ts';
-import { runFlowPyInPool, type FlowPyPort, type FlowPyWorkerResponse } from '../src/features/lidar/viewer/tools/terrain/avalanche/flowPyPool.ts';
-import { prepareFlowPyTerrain, runFlowPyToTarget } from '../src/features/lidar/viewer/tools/terrain/avalanche/flowPy.ts';
-import { AVALANCHE_SCENARIOS } from '../src/features/lidar/viewer/tools/terrain/avalanche/params.ts';
-import { computeReleaseAreas, WindShelterField } from '../src/features/lidar/viewer/tools/terrain/avalanche/releaseArea.ts';
-import { BenchmarkSuite } from './core/harness.ts';
+} from '../../src/features/lidar/viewer/tools/terrain/avalanche/exposure.ts';
+import { runFlowPyInPool, type FlowPyPort, type FlowPyWorkerResponse } from '../../src/features/lidar/viewer/tools/terrain/avalanche/flowPyPool.ts';
+import { prepareFlowPyTerrain, runFlowPyToTarget } from '../../src/features/lidar/viewer/tools/terrain/avalanche/flowPy.ts';
+import { AVALANCHE_SCENARIOS } from '../../src/features/lidar/viewer/tools/terrain/avalanche/params.ts';
+import { computeReleaseAreas, WindShelterField } from '../../src/features/lidar/viewer/tools/terrain/avalanche/releaseArea.ts';
+import { BenchmarkSuite } from '../core/harness.ts';
 
 const CELL = 10;
 const DEG = Math.PI / 180;
@@ -213,7 +213,7 @@ function exactnessChecks(): void {
 /** The viewer's Flow-Py pool on worker_threads (same handler as the Web Workers). */
 function nodeFlowPyPool(size: number): { ports: FlowPyPort[]; close: () => Promise<void> } {
   // tsx's loader is per thread: the .mjs entry registers it in the worker.
-  const workers = Array.from({ length: size }, () => new Worker(new URL('./avalanche/flowPyNodeWorker.mjs', import.meta.url)));
+  const workers = Array.from({ length: size }, () => new Worker(new URL('./flowPyNodeWorker.mjs', import.meta.url)));
   const ports = workers.map((worker): FlowPyPort => ({
     postMessage: (message) => worker.postMessage(message),
     listen(onMessage, onError) {

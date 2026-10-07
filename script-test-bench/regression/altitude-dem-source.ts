@@ -13,7 +13,7 @@ class NodeImageData {
 }
 (globalThis as unknown as { ImageData: unknown }).ImageData = NodeImageData;
 
-const { encodeDem } = await import('../src/features/altitude/lib/altitude-dem-source');
+const { encodeDem } = await import('../../src/features/altitude/lib/altitude-dem-source');
 type Dem = Parameters<typeof encodeDem>[0];
 
 let passed = 0;

@@ -13,11 +13,11 @@
  * La justesse des temps est jugée par `npm run bench:pace`, pas ici.
  */
 import fs from 'node:fs';
-import { BenchmarkSuite } from './core/harness.ts';
-import { printSuiteHeader, printSuiteResults } from './core/reporter.ts';
-import { loadPkg, predictV2, silenceConsole, type V2Route } from './pace-accuracy/lib/engine.ts';
-import { straight } from './pace-accuracy/lib/synthetic.ts';
-import { FIT_DIR, loadRides } from './pace-accuracy/lib/rides.ts';
+import { BenchmarkSuite } from '../core/harness.ts';
+import { printSuiteHeader, printSuiteResults } from '../core/reporter.ts';
+import { loadPkg, predictV2, silenceConsole, type V2Route } from '../pace-accuracy/lib/engine.ts';
+import { straight } from '../pace-accuracy/lib/synthetic.ts';
+import { FIT_DIR, loadRides } from '../pace-accuracy/lib/rides.ts';
 
 const RIDER = { preset: { level: 'intermediaire', gender: 'female' } };
 
@@ -95,7 +95,7 @@ export async function runFitPredictorBenchmark(options: { quick?: boolean } = {}
 }
 
 // Standalone execution
-if (process.argv[1]?.endsWith('bench-fit-predictor.ts')) {
+if (process.argv[1]?.replaceAll('\\', '/').endsWith('/suites/fit-predictor.ts')) {
   const quick = process.argv.includes('--quick');
   runFitPredictorBenchmark({ quick }).then((suite) => {
     printSuiteHeader(suite.title);

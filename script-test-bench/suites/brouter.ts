@@ -15,13 +15,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BenchmarkSuite } from './core/harness.ts';
-import { printSuiteHeader, printSuiteResults } from './core/reporter.ts';
-import { buildBrfProfile } from '../src/features/itineraryPanel/lib/brouter/profiles/brf-template.ts';
-import { cumulativeRouteLengthsM, projectPointAlongRoute } from '../src/features/itineraryPanel/lib/routes/route-distance.ts';
-import { simplifyPointsByQuality } from '../src/features/itineraryPanel/lib/routes/simplify-route.ts';
-import { cleanGpxGlitches } from '../src/features/itineraryPanel/lib/routes/clean-gpx-glitches.ts';
-import type { PrioritiesState, RoadTypesState } from '../src/features/itineraryPanel/types/index.ts';
+import { BenchmarkSuite } from '../core/harness.ts';
+import { printSuiteHeader, printSuiteResults } from '../core/reporter.ts';
+import { buildBrfProfile } from '../../src/features/itineraryPanel/lib/brouter/profiles/brf-template.ts';
+import { cumulativeRouteLengthsM, projectPointAlongRoute } from '../../src/features/itineraryPanel/lib/routes/route-distance.ts';
+import { simplifyPointsByQuality } from '../../src/features/itineraryPanel/lib/routes/simplify-route.ts';
+import { cleanGpxGlitches } from '../../src/features/itineraryPanel/lib/routes/clean-gpx-glitches.ts';
+import type { PrioritiesState, RoadTypesState } from '../../src/features/itineraryPanel/types/index.ts';
 
 export async function runBrouterBenchmark(options: { quick?: boolean } = {}): Promise<BenchmarkSuite> {
   const suite = new BenchmarkSuite('BRouter (Routing Engine & BRF)');
@@ -320,7 +320,7 @@ function getBrouterUpstream(): string {
     const candidates = [
       path.resolve(cwd, '.env'),
       path.resolve(cwd, '../.env'),
-      path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.env'),
+      path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.env'),
     ];
     for (const cand of candidates) {
       if (fs.existsSync(cand)) {
@@ -403,7 +403,7 @@ async function fetchBrouterRoute(
 }
 
 // Standalone execution
-if (process.argv[1]?.endsWith('bench-brouter.ts')) {
+if (process.argv[1]?.replaceAll('\\', '/').endsWith('/suites/brouter.ts')) {
   const quick = process.argv.includes('--quick');
   runBrouterBenchmark({ quick }).then((suite) => {
     printSuiteHeader(suite.title);

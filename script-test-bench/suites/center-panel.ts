@@ -14,18 +14,18 @@
  * mesurés sur un tableau vide), passait la prédiction à la place de x au
  * curseur (null immédiat) et mesurait une copie locale du LTTB.
  */
-import { BenchmarkSuite } from './core/harness.ts';
-import { printSuiteHeader, printSuiteResults } from './core/reporter.ts';
+import { BenchmarkSuite } from '../core/harness.ts';
+import { printSuiteHeader, printSuiteResults } from '../core/reporter.ts';
 import {
   buildSeriesFromPrediction,
   computeDomain,
   locateRoutePointAtX,
   type ChartPoint,
   type RouteChartPoint,
-} from '../src/features/centerPanel/components/chart/series.ts';
-import { fitChartPointBudget } from '../src/features/centerPanel/components/chart/seriesPredictionMath.ts';
-import type { PredictionResult } from '../src/features/fitPredictor/types.ts';
-import type { RouteWeatherDataset } from '../src/features/weather/lib/routeWeather.ts';
+} from '../../src/features/centerPanel/components/chart/series.ts';
+import { fitChartPointBudget } from '../../src/features/centerPanel/components/chart/seriesPredictionMath.ts';
+import type { PredictionResult } from '../../src/features/fitPredictor/types.ts';
+import type { RouteWeatherDataset } from '../../src/features/weather/lib/routeWeather.ts';
 
 function routeAndPrediction(pointCount: number): { routePoints: RouteChartPoint[]; prediction: PredictionResult } {
   const routePoints = Array.from({ length: pointCount }, (_, index) => {
@@ -243,7 +243,7 @@ export async function runCenterPanelBenchmark(options: { quick?: boolean } = {})
 }
 
 // Standalone execution
-if (process.argv[1]?.endsWith('bench-center-panel.ts')) {
+if (process.argv[1]?.replaceAll('\\', '/').endsWith('/suites/center-panel.ts')) {
   const quick = process.argv.includes('--quick');
   runCenterPanelBenchmark({ quick }).then((suite) => {
     printSuiteHeader(suite.title);

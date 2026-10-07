@@ -46,41 +46,41 @@ import {
   ORBIT_PERIOD_S,
   PITCH_MAX_DEG,
   PITCH_MIN_DEG,
-} from '../src/features/centerPanel/flyover/config.ts';
-import { buildCameraRail, RailClock, type CameraRail } from '../src/features/centerPanel/flyover/engine/cameraRail.ts';
+} from '../../src/features/centerPanel/flyover/config.ts';
+import { buildCameraRail, RailClock, type CameraRail } from '../../src/features/centerPanel/flyover/engine/cameraRail.ts';
 import {
   computeRailFrame,
   createRailFrame,
   liftCameraPose,
   requiredLift,
   type GroundSampler,
-} from '../src/features/centerPanel/flyover/engine/cameraPose.ts';
-import { sampleAt } from '../src/features/centerPanel/flyover/engine/filters.ts';
+} from '../../src/features/centerPanel/flyover/engine/cameraPose.ts';
+import { sampleAt } from '../../src/features/centerPanel/flyover/engine/filters.ts';
 import {
   haversineM,
   metersPerMercatorUnitAtY,
   toRadians,
   wrapPi,
-} from '../src/features/centerPanel/flyover/engine/geo.ts';
+} from '../../src/features/centerPanel/flyover/engine/geo.ts';
 import {
   buildRouteTrack,
   createTrackPosition,
   TrackCursor,
   type FlyoverRoutePoint,
-} from '../src/features/centerPanel/flyover/engine/routeTrack.ts';
-import { landscapeFraming, portraitFraming, type FlyoverFraming } from '../src/features/centerPanel/flyover/engine/framing.ts';
-import { headingBlendDurationS } from '../src/features/centerPanel/flyover/engine/laws.ts';
-import { framingScaleProfile, projectToScreen } from '../src/features/centerPanel/flyover/engine/screenGuard.ts';
-import { approachExponential, smootherstep } from '../src/features/centerPanel/flyover/engine/springs.ts';
-import { PlaybackTransport } from '../src/features/centerPanel/flyover/engine/transport.ts';
-import { zoomForCameraDistance } from '../src/features/centerPanel/flyover/engine/approach.ts';
-import { EARTH_CIRCUMFERENCE_M, latFromMercatorY, toDegrees } from '../src/features/centerPanel/flyover/engine/geo.ts';
-import type { CameraPose } from '../src/features/centerPanel/flyover/engine/cameraPose.ts';
-import { FlyoverVideoDirector, type DirectorMap, type VideoSegment } from '../src/features/centerPanel/flyover/video/director.ts';
-import type { MapView } from '../src/features/centerPanel/flyover/video/flight.ts';
-import { BenchmarkSuite } from './core/harness.ts';
+} from '../../src/features/centerPanel/flyover/engine/routeTrack.ts';
+import { landscapeFraming, portraitFraming, type FlyoverFraming } from '../../src/features/centerPanel/flyover/engine/framing.ts';
+import { headingBlendDurationS } from '../../src/features/centerPanel/flyover/engine/laws.ts';
+import { framingScaleProfile, projectToScreen } from '../../src/features/centerPanel/flyover/engine/screenGuard.ts';
+import { approachExponential, smootherstep } from '../../src/features/centerPanel/flyover/engine/springs.ts';
+import { PlaybackTransport } from '../../src/features/centerPanel/flyover/engine/transport.ts';
+import { zoomForCameraDistance } from '../../src/features/centerPanel/flyover/engine/approach.ts';
+import { EARTH_CIRCUMFERENCE_M, latFromMercatorY, toDegrees } from '../../src/features/centerPanel/flyover/engine/geo.ts';
+import type { CameraPose } from '../../src/features/centerPanel/flyover/engine/cameraPose.ts';
+import { FlyoverVideoDirector, type DirectorMap, type VideoSegment } from '../../src/features/centerPanel/flyover/video/director.ts';
+import type { MapView } from '../../src/features/centerPanel/flyover/video/flight.ts';
+import { BenchmarkSuite } from '../core/harness.ts';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 interface View {
   framing: FlyoverFraming;
   /** Largeur / hauteur de l'image. */

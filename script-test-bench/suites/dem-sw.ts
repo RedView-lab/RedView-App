@@ -14,9 +14,9 @@
  *    encodage PNG) vs sous-rectangle du parent en cache (findCachedParentStats).
  */
 import zlib from 'node:zlib';
-import { BenchmarkSuite } from './core/harness.ts';
-import { printSuiteHeader, printSuiteResults } from './core/reporter.ts';
-import { loadSwModules, readSwConstant, type SwContext } from './core/sw-context.ts';
+import { BenchmarkSuite } from '../core/harness.ts';
+import { printSuiteHeader, printSuiteResults } from '../core/reporter.ts';
+import { loadSwModules, readSwConstant, type SwContext } from '../core/sw-context.ts';
 
 const SIZE = 256;
 
@@ -305,7 +305,7 @@ export async function runDemSwBenchmark(options: { quick?: boolean } = {}): Prom
 }
 
 // Standalone execution
-if (process.argv[1]?.endsWith('bench-dem-sw.ts')) {
+if (process.argv[1]?.replaceAll('\\', '/').endsWith('/suites/dem-sw.ts')) {
   const quick = process.argv.includes('--quick');
   runDemSwBenchmark({ quick }).then((suite) => {
     printSuiteHeader(suite.title);

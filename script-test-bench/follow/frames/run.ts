@@ -1,7 +1,7 @@
 /**
  * RedView Test-Bench : suivre un éditeur, image par image, avec le vrai code
  * des deux côtés (présence en direct), dans un navigateur virtuel
- * (virtualBrowser.ts) — ce que bench-follow.ts ne voit pas (il rejoue des
+ * (virtualBrowser.ts) — ce que follow/playout.ts ne voit pas (il rejoue des
  * échantillons parfaits avec une horloge unique) :
  *
  *  - émetteur : sa carte rend à 60 Hz (rendu de 3 à 7 ms, longues tâches façon
@@ -37,12 +37,12 @@
  *   --verbose (une ligne par graine) --only=<début du nom> --seed=<n> --seeds=<nombre, 5 par défaut>
  *   --profile=nominal|dégradé --trace (vitesse de lecture de la 1re passe)
  */
-import { MotionStore } from '../../src/features/livePresence/engine/MotionStore.ts';
-import { FollowController } from '../../src/features/livePresence/engine/FollowController.ts';
-import { PeerCursorsOverlay } from '../../src/features/livePresence/engine/PeerCursorsOverlay.ts';
-import { PresenceBroadcaster } from '../../src/features/livePresence/engine/PresenceBroadcaster.ts';
-import { normalizeAngle } from '../../src/features/livePresence/lib/playout.ts';
-import type { MotionFields } from '../../src/features/collab/protocol.ts';
+import { MotionStore } from '../../../src/features/livePresence/engine/MotionStore.ts';
+import { FollowController } from '../../../src/features/livePresence/engine/FollowController.ts';
+import { PeerCursorsOverlay } from '../../../src/features/livePresence/engine/PeerCursorsOverlay.ts';
+import { PresenceBroadcaster } from '../../../src/features/livePresence/engine/PresenceBroadcaster.ts';
+import { normalizeAngle } from '../../../src/features/livePresence/lib/playout.ts';
+import type { MotionFields } from '../../../src/features/collab/protocol.ts';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { FakeMap, Sim, Tab, installGlobals, type CameraValues, type FakeElement } from './virtualBrowser.ts';
 
