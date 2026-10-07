@@ -15,7 +15,7 @@ import { RV_FONT_SANS } from '@/shared/lib/typography';
 import { buildPoiHitMask, type PoiHitMask } from './poi-hit-mask';
 import { getPoiIconUrl, hasDedicatedFavoritePoiIcon } from './poi-icons';
 
-const FAVORITE_BADGE_ICON_URL = '/svgv2/icone/star-01.svg';
+const FAVORITE_BADGE_ICON_URL = '/icons/ui/star-01.svg';
 const PAUSE_FONT_FAMILY = RV_FONT_SANS;
 
 // Base (icon-size = 1) geometry, from floating-markers.css.

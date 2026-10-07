@@ -5,7 +5,7 @@ import type { Itinerary } from '@/features/itineraryPanel/types';
 import { translateAppText } from '@/shared/i18n';
 import { listItinerarySteepAlerts, type ItinerarySteepAlert } from '../chart';
 
-const ALERT_ICON_SRC = '/svgv2/icone/search-filter-alertes.svg';
+const ALERT_ICON_SRC = '/icons/ui/search-filter-alertes.svg';
 
 interface UseAnalysisAlertMapMarkersArgs {
   map: MapboxMap | null;

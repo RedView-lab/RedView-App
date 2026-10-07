@@ -1,4 +1,4 @@
-const RIGHT_CLICK_ICON_BASE = '/right-click-icons';
+const RIGHT_CLICK_ICON_BASE = '/icons/context-menu';
 
 /**
  * Icône du menu clic droit. Les glyphes monochromes sont des masques peints à

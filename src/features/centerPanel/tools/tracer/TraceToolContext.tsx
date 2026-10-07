@@ -42,7 +42,7 @@ import {
 } from '@/features/map3d/lib/pointPanelDismiss';
 import { TraceToolContext, type TraceToolContextValue } from './useTraceTool';
 
-const TRACE_CURSOR = 'url("/svgv2/icone/edit-04.svg") 3 17, crosshair';
+const TRACE_CURSOR = 'url("/icons/ui/edit-04.svg") 3 17, crosshair';
 
 /** Propriétaires des curseurs déclarés par l'outil auprès de l'arbitre (`setMapCursor`). */
 const TRACE_TOOL_CURSOR_OWNER = 'trace-tool';

@@ -37,18 +37,18 @@ export const VIEWPORT_POI_FETCH_DEBOUNCE_MS = 160;
 export const POI_MENU_CLOSE_MS = 150;
 
 export const DROPDOWN_VIEWPORT_POI_ICON_URLS: Partial<Record<PoiCategory, string>> = {
-  drinking_water: '/svgv2/poi/dropdown-maps/water.svg',
-  toilets: '/svgv2/poi/dropdown-maps/toilets.svg',
-  supermarket: '/svgv2/poi/dropdown-maps/supermarket.svg',
-  bakery: '/svgv2/poi/dropdown-maps/bakery.svg',
-  fuel: '/svgv2/poi/dropdown-maps/fuel.svg',
-  bar: '/svgv2/poi/dropdown-maps/bar.svg',
-  cafe: '/svgv2/poi/dropdown-maps/cafe.svg',
-  restaurant: '/svgv2/poi/dropdown-maps/restaurant.svg',
-  convenience: '/svgv2/poi/dropdown-maps/bakery.svg',
-  hotel: '/svgv2/poi/dropdown-maps/hotel.svg',
-  alpine_hut: '/svgv2/poi/dropdown-maps/refuge.svg',
-  bicycle: '/svgv2/poi/dropdown-maps/bicycle.svg',
+  drinking_water: '/icons/poi/dropdown-maps/water.svg',
+  toilets: '/icons/poi/dropdown-maps/toilets.svg',
+  supermarket: '/icons/poi/dropdown-maps/supermarket.svg',
+  bakery: '/icons/poi/dropdown-maps/bakery.svg',
+  fuel: '/icons/poi/dropdown-maps/fuel.svg',
+  bar: '/icons/poi/dropdown-maps/bar.svg',
+  cafe: '/icons/poi/dropdown-maps/cafe.svg',
+  restaurant: '/icons/poi/dropdown-maps/restaurant.svg',
+  convenience: '/icons/poi/dropdown-maps/bakery.svg',
+  hotel: '/icons/poi/dropdown-maps/hotel.svg',
+  alpine_hut: '/icons/poi/dropdown-maps/refuge.svg',
+  bicycle: '/icons/poi/dropdown-maps/bicycle.svg',
 };
 
 export const DASHBOARD_POI_OPTIONS: readonly DashboardPoiOption[] = [

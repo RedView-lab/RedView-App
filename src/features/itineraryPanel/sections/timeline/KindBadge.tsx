@@ -96,19 +96,19 @@ const WAYPOINT_DISC_RATIO = 16.5 / 20;
 const ROUND_BADGE_ART_SCALE = WAYPOINT_DISC_RATIO / (19.6 / 33);
 
 const PROVIDED_TIMELINE_ROUND_BADGE_URLS: Partial<Record<PoiCategory, string>> = {
-  fountains: '/svgv2/poi/dropdown-maps/water.svg',
-  toilets: '/svgv2/poi/dropdown-maps/toilets.svg',
-  supermarkets: '/svgv2/poi/dropdown-maps/supermarket.svg',
-  gasStations: '/svgv2/poi/dropdown-maps/fuel.svg',
-  bakeries: '/svgv2/poi/dropdown-maps/bakery.svg',
-  fastFood: '/svgv2/poi/dropdown-maps/fast-food.svg',
-  cafes: '/svgv2/poi/dropdown-maps/cafe.svg',
-  bars: '/svgv2/poi/dropdown-maps/bar.svg',
-  restaurants: '/svgv2/poi/dropdown-maps/restaurant.svg',
-  bikeShops: '/svgv2/poi/dropdown-maps/bicycle.svg',
-  hotels: '/svgv2/poi/dropdown-maps/hotel.svg',
-  refuges: '/svgv2/poi/dropdown-maps/refuge.svg',
-  passes: '/svgv2/poi/dropdown-maps/refuge.svg',
+  fountains: '/icons/poi/dropdown-maps/water.svg',
+  toilets: '/icons/poi/dropdown-maps/toilets.svg',
+  supermarkets: '/icons/poi/dropdown-maps/supermarket.svg',
+  gasStations: '/icons/poi/dropdown-maps/fuel.svg',
+  bakeries: '/icons/poi/dropdown-maps/bakery.svg',
+  fastFood: '/icons/poi/dropdown-maps/fast-food.svg',
+  cafes: '/icons/poi/dropdown-maps/cafe.svg',
+  bars: '/icons/poi/dropdown-maps/bar.svg',
+  restaurants: '/icons/poi/dropdown-maps/restaurant.svg',
+  bikeShops: '/icons/poi/dropdown-maps/bicycle.svg',
+  hotels: '/icons/poi/dropdown-maps/hotel.svg',
+  refuges: '/icons/poi/dropdown-maps/refuge.svg',
+  passes: '/icons/poi/dropdown-maps/refuge.svg',
 };
 
 const PROVIDED_TIMELINE_FAVORITE_BADGE_URLS: Partial<Record<PoiCategory, string>> = {
@@ -169,7 +169,7 @@ function PoiBadge({
         </span>
       ) : null}
       <img
-        src="/svgv2/icone/star-01.svg"
+        src="/icons/ui/star-01.svg"
         alt=""
         style={{
           position: 'absolute',
@@ -272,7 +272,7 @@ function ProvidedPoiSvgBadge({
       />
       {showStarBadge && (
         <img
-          src="/svgv2/icone/star-01.svg"
+          src="/icons/ui/star-01.svg"
           alt=""
           style={{
             position: 'absolute',
@@ -359,7 +359,7 @@ export function KindBadge({
       >
         <IconTeardropPin size={size} color="#FDB022" />
         <img
-          src="/svgv2/icone/star-01.svg"
+          src="/icons/ui/star-01.svg"
           alt=""
           style={{
             position: 'absolute',
@@ -382,7 +382,7 @@ export function KindBadge({
   }
 
   if (kind === 'poi' || kind === 'water') {
-    const url = favorite ? PROVIDED_POI_SVG.favoriteWater : '/svgv2/poi/dropdown-maps/water.svg';
+    const url = favorite ? PROVIDED_POI_SVG.favoriteWater : '/icons/poi/dropdown-maps/water.svg';
     return (
       <span className="rvi-poi-pause-wrap" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
         <ProvidedPoiSvgBadge
@@ -401,7 +401,7 @@ export function KindBadge({
   }
 
   if (kind === 'supermarket') {
-    const url = favorite ? PROVIDED_POI_SVG.favoriteSupermarket : '/svgv2/poi/dropdown-maps/supermarket.svg';
+    const url = favorite ? PROVIDED_POI_SVG.favoriteSupermarket : '/icons/poi/dropdown-maps/supermarket.svg';
     return (
       <span className="rvi-poi-pause-wrap" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
         <ProvidedPoiSvgBadge

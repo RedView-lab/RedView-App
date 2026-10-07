@@ -51,7 +51,7 @@ export type DashboardFilterChipId = 'favoris' | 'pois' | 'waypoints' | 'pauses' 
 export interface DashboardFilterOption {
   id: DashboardFilterChipId;
   label: string;
-  /** Fichier de `/svgv2/icone/`. */
+  /** Fichier de `/icons/ui/`. */
   icon?: string;
   /** Pastille dégradée de l'échelle de pente à la place d'une icône. */
   slopeSwatch?: boolean;

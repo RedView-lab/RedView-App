@@ -63,12 +63,12 @@ const DEFAULT_POPUP_STATE: PoiPopupState = {
 const PAUSE_DURATION_OPTIONS = [5, 10, 15, 20, 30] as const;
 
 const UI_ICON_URLS = {
-  rightClick: '/right-click-icons',
-  star: '/svgv2/icone/star-01.svg',
-  globe: '/right-click-icons/globe-06.svg',
-  chevron: '/svgv2/icone/chevron-down.svg',
-  check: '/svgv2/icone/check.svg',
-  trash: '/right-click-icons/trash-01.svg',
+  rightClick: '/icons/context-menu',
+  star: '/icons/ui/star-01.svg',
+  globe: '/icons/context-menu/globe-06.svg',
+  chevron: '/icons/ui/chevron-down.svg',
+  check: '/icons/ui/check.svg',
+  trash: '/icons/context-menu/trash-01.svg',
 } as const;
 
 /**

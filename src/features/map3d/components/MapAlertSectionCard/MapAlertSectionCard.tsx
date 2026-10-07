@@ -11,11 +11,11 @@ import { copyTextToClipboard } from '../MapContextMenu/utils';
 import type { MapAlertSection, MapAlertSectionActionPayload } from './types';
 
 const ICONS = {
-  alert: '/svgv2/icone/search-filter-alertes.svg',
-  globe: '/right-click-icons/globe-06.svg',
-  chevron: '/svgv2/icone/chevron-down.svg',
-  removeFromRoute: '/svgv2/icone/corner-up-right.svg',
-  ignore: '/svgv2/icone/x.svg',
+  alert: '/icons/ui/search-filter-alertes.svg',
+  globe: '/icons/context-menu/globe-06.svg',
+  chevron: '/icons/ui/chevron-down.svg',
+  removeFromRoute: '/icons/ui/corner-up-right.svg',
+  ignore: '/icons/ui/x.svg',
 } as const;
 
 const KIND_OPTIONS: Array<{ value: SteepAlertKind; label: string }> = [

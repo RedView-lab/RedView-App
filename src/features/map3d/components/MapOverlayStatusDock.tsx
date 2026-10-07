@@ -148,7 +148,7 @@ export default function MapOverlayStatusDock({
 
 function RefreshIcon() {
   return (
-    <AssetIcon src="/svgv2/icone/refresh-cw-05.svg" size={18} />
+    <AssetIcon src="/icons/ui/refresh-cw-05.svg" size={18} />
   );
 }
 

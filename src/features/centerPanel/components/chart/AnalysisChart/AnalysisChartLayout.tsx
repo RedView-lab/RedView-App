@@ -282,7 +282,7 @@ const ChartAlertIconLayer = memo(function ChartAlertIconLayer({
               handlerRef.current?.(id);
             }}
           >
-            <img src="/svgv2/icone/search-filter-alertes.svg" alt="" draggable={false} />
+            <img src="/icons/ui/search-filter-alertes.svg" alt="" draggable={false} />
           </button>
         );
       })}

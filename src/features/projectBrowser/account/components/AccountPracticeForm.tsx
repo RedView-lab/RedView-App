@@ -19,7 +19,7 @@ type AccountPracticeFormProps = {
   onAddSport: () => void;
 };
 
-const COUNTRY_FLAG_BASE_PATH = '/landing/svg';
+const COUNTRY_FLAG_BASE_PATH = '/flags';
 
 function findCountryOption(countryCode: string, options: readonly AccountSelectOption[]) {
   return options.find((option) => option.value === countryCode);

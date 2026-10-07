@@ -49,15 +49,15 @@ type DisplayOption = {
 const DISPLAY_OPTION_ASSETS = [
   {
     id: 'system' as const,
-    imageSrc: '/project-browser/settings/display-system.png',
+    imageSrc: '/images/settings/display-system.png',
   },
   {
     id: 'light' as const,
-    imageSrc: '/project-browser/settings/display-light.png',
+    imageSrc: '/images/settings/display-light.png',
   },
   {
     id: 'dark' as const,
-    imageSrc: '/project-browser/settings/display-dark.png',
+    imageSrc: '/images/settings/display-dark.png',
   },
 ];
 

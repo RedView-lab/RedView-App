@@ -2,7 +2,7 @@ import { RedViewLogo } from '@/shared/components/RedViewLogo';
 
 export type BillingPaymentMethod = 'card' | 'paypal';
 
-export const COUNTRY_FLAG_BASE_PATH = '/landing/svg';
+export const COUNTRY_FLAG_BASE_PATH = '/flags';
 
 export function CardMethodIcon() {
   return (

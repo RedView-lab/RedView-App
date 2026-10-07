@@ -15,7 +15,7 @@
 import { POI_ICON_NAMES, type PoiCategory } from '../types';
 import { PROVIDED_POI_SVG } from './providedPoiSvg';
 
-const FALLBACK_POI_ICON_URL = '/svgv2/icone/x.svg';
+const FALLBACK_POI_ICON_URL = '/icons/ui/x.svg';
 
 /** Résolution d'un nom d'icône logique → URL d'asset. */
 const LOGICAL_ICON_URLS: Record<string, string> = {
@@ -33,36 +33,36 @@ const LOGICAL_ICON_URLS: Record<string, string> = {
   toilets: PROVIDED_POI_SVG.toilet,
   fuel: PROVIDED_POI_SVG.fuel,
   waypoint: PROVIDED_POI_SVG.waypoint,
-  medical: '/svgv2/icone/plus-circle.svg',
-  police: '/svgv2/icone/flag-02.svg',
-  transport: '/svgv2/icone/marker-pin-02.svg',
-  cash: '/svgv2/icone/credit-card-02.svg',
-  mail: '/svgv2/icone/mail-02.svg',
+  medical: '/icons/ui/plus-circle.svg',
+  police: '/icons/ui/flag-02.svg',
+  transport: '/icons/ui/marker-pin-02.svg',
+  cash: '/icons/ui/credit-card-02.svg',
+  mail: '/icons/ui/mail-02.svg',
   scenic: PROVIDED_POI_SVG.refugePin,
 };
 
 /** Variantes « rond » (carte, itinéraire standard), par nom d'icône logique. */
 const LOGICAL_ROUND_ICON_URLS: Record<string, string> = {
-  drinking_water: '/svgv2/poi/dropdown-maps/water.svg',
-  supermarket: '/svgv2/poi/dropdown-maps/supermarket.svg',
-  shop: '/svgv2/poi/dropdown-maps/bakery.svg',
-  bakery: '/svgv2/poi/dropdown-maps/bakery.svg',
-  restaurant: '/svgv2/poi/dropdown-maps/restaurant.svg',
-  fast_food: '/svgv2/poi/dropdown-maps/fast-food.svg',
-  cafe: '/svgv2/poi/dropdown-maps/cafe.svg',
-  bar: '/svgv2/poi/dropdown-maps/bar.svg',
-  hotel: '/svgv2/poi/dropdown-maps/hotel.svg',
-  refuge: '/svgv2/poi/dropdown-maps/refuge.svg',
-  bicycle: '/svgv2/poi/dropdown-maps/bicycle.svg',
-  toilets: '/svgv2/poi/dropdown-maps/toilets.svg',
-  fuel: '/svgv2/poi/dropdown-maps/fuel.svg',
-  waypoint: '/svgv2/icone/checkpoint-waypoint.svg',
-  medical: '/svgv2/icone/plus-circle.svg',
-  police: '/svgv2/icone/flag-02.svg',
-  transport: '/svgv2/icone/marker-pin-02.svg',
-  cash: '/svgv2/icone/credit-card-02.svg',
-  mail: '/svgv2/icone/mail-02.svg',
-  scenic: '/svgv2/poi/dropdown-maps/refuge.svg',
+  drinking_water: '/icons/poi/dropdown-maps/water.svg',
+  supermarket: '/icons/poi/dropdown-maps/supermarket.svg',
+  shop: '/icons/poi/dropdown-maps/bakery.svg',
+  bakery: '/icons/poi/dropdown-maps/bakery.svg',
+  restaurant: '/icons/poi/dropdown-maps/restaurant.svg',
+  fast_food: '/icons/poi/dropdown-maps/fast-food.svg',
+  cafe: '/icons/poi/dropdown-maps/cafe.svg',
+  bar: '/icons/poi/dropdown-maps/bar.svg',
+  hotel: '/icons/poi/dropdown-maps/hotel.svg',
+  refuge: '/icons/poi/dropdown-maps/refuge.svg',
+  bicycle: '/icons/poi/dropdown-maps/bicycle.svg',
+  toilets: '/icons/poi/dropdown-maps/toilets.svg',
+  fuel: '/icons/poi/dropdown-maps/fuel.svg',
+  waypoint: '/icons/ui/checkpoint-waypoint.svg',
+  medical: '/icons/ui/plus-circle.svg',
+  police: '/icons/ui/flag-02.svg',
+  transport: '/icons/ui/marker-pin-02.svg',
+  cash: '/icons/ui/credit-card-02.svg',
+  mail: '/icons/ui/mail-02.svg',
+  scenic: '/icons/poi/dropdown-maps/refuge.svg',
 };
 
 /** Variantes « pointe / favori » disponibles, par nom d'icône logique. */

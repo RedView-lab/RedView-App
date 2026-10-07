@@ -20,7 +20,7 @@ import {
 } from '@/features/map3d/lib/pointPanelDismiss';
 import { RouteSplitToolContext, type RouteSplitToolContextValue } from './useRouteSplitTool';
 
-const SPLIT_CURSOR = 'url("/svgv2/icone/scissors.svg") 4 4, crosshair';
+const SPLIT_CURSOR = 'url("/icons/ui/scissors.svg") 4 4, crosshair';
 
 interface RouteSplitToolProviderProps {
   children: ReactNode;

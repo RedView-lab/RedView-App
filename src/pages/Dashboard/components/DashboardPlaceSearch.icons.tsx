@@ -56,12 +56,12 @@ export function FilterChipIcon({ name }: { name: string }) {
   if (ALERT_FILTER_ICONS.has(name)) {
     return (
       <span className="rvd-place-search__filter-alert-badge" aria-hidden="true">
-        <img src={`/svgv2/icone/${name}`} alt="" draggable="false" />
+        <img src={`/icons/ui/${name}`} alt="" draggable="false" />
       </span>
     );
   }
   if (MONOCHROME_FILTER_ICONS.has(name)) {
-    const mask = `url(/svgv2/icone/${name}) center / contain no-repeat`;
+    const mask = `url(/icons/ui/${name}) center / contain no-repeat`;
     return (
       <span
         className="rvd-place-search__filter-marker-image"
@@ -73,7 +73,7 @@ export function FilterChipIcon({ name }: { name: string }) {
   return (
     <img
       className="rvd-place-search__filter-marker-image"
-      src={`/svgv2/icone/${name}`}
+      src={`/icons/ui/${name}`}
       alt=""
       draggable="false"
     />

@@ -208,7 +208,7 @@ export function HoverCardGroup({
               ) : null}
               {group.alertLabel ? (
                 <div className="rvchart__card-metric rvchart__card-metric--alert">
-                  <img src="/svgv2/icone/search-filter-alertes.svg" alt="" width={12} height={12} />
+                  <img src="/icons/ui/search-filter-alertes.svg" alt="" width={12} height={12} />
                   {group.alertLabel}
                 </div>
               ) : null}

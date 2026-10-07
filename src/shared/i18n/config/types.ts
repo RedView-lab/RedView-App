@@ -18,13 +18,13 @@ export const APP_LOCALE_OPTIONS = [
   {
     value: 'en',
     label: 'English (US)',
-    flag: '/landing/svg/US.svg',
+    flag: '/flags/US.svg',
     flagCode: 'US',
   },
   {
     value: 'fr',
     label: 'Français',
-    flag: '/landing/svg/FR.svg',
+    flag: '/flags/FR.svg',
     flagCode: 'FR',
   },
 ] as const;

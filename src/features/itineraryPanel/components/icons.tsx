@@ -46,32 +46,32 @@ function FullColorSvgIcon({
 }
 
 const ITINERARY_ICON_ASSETS = {
-  save: '/svgv2/icone/save-01.svg',
-  settingsCog: '/svgv2/icone/settings-01.svg',
-  settingsSliders: '/svgv2/icone/sliders-03.svg',
-  download: '/svgv2/icone/download-01.svg',
-  downloadCircle: '/svgv2/icone/download-03.svg',
-  share: '/svgv2/icone/share-07.svg',
-  upload: '/svgv2/icone/upload-01.svg',
-  uploadCloud: '/svgv2/icone/upload-03.svg',
-  route: '/svgv2/icone/route.svg',
-  stopwatch: '/svgv2/icone/speedometer-03.svg',
-  mapPin: '/svgv2/icone/marker-pin-02.svg',
-  search: '/svgv2/icone/search-sm.svg',
-  uploadCircle: '/svgv2/icone/upload-03.svg',
-  copy: '/svgv2/icone/copy-04.svg',
-  close: '/svgv2/icone/x-close.svg',
-  layoutGrid: '/svgv2/icone/layers-three-02.svg',
-  list: '/svgv2/icone/list.svg',
-  star: '/svgv2/icone/star-01.svg',
-  info: '/svgv2/icone/info-circle.svg',
-  plus: '/svgv2/icone/plus.svg',
-  repeat: '/svgv2/icone/refresh-cw-05.svg',
-  pauseCircle: '/svgv2/icone/pause-circle.svg',
-  checkpointFlag: '/svgv2/icone/flag-02.svg',
-  magnifyingGlass: '/svgv2/icone/search-sm.svg',
-  settings04: '/svgv2/icone/settings-04.svg',
-  plusCircle: '/svgv2/icone/plus-circle.svg',
+  save: '/icons/ui/save-01.svg',
+  settingsCog: '/icons/ui/settings-01.svg',
+  settingsSliders: '/icons/ui/sliders-03.svg',
+  download: '/icons/ui/download-01.svg',
+  downloadCircle: '/icons/ui/download-03.svg',
+  share: '/icons/ui/share-07.svg',
+  upload: '/icons/ui/upload-01.svg',
+  uploadCloud: '/icons/ui/upload-03.svg',
+  route: '/icons/ui/route.svg',
+  stopwatch: '/icons/ui/speedometer-03.svg',
+  mapPin: '/icons/ui/marker-pin-02.svg',
+  search: '/icons/ui/search-sm.svg',
+  uploadCircle: '/icons/ui/upload-03.svg',
+  copy: '/icons/ui/copy-04.svg',
+  close: '/icons/ui/x-close.svg',
+  layoutGrid: '/icons/ui/layers-three-02.svg',
+  list: '/icons/ui/list.svg',
+  star: '/icons/ui/star-01.svg',
+  info: '/icons/ui/info-circle.svg',
+  plus: '/icons/ui/plus.svg',
+  repeat: '/icons/ui/refresh-cw-05.svg',
+  pauseCircle: '/icons/ui/pause-circle.svg',
+  checkpointFlag: '/icons/ui/flag-02.svg',
+  magnifyingGlass: '/icons/ui/search-sm.svg',
+  settings04: '/icons/ui/settings-04.svg',
+  plusCircle: '/icons/ui/plus-circle.svg',
   bed: PROVIDED_POI_SVG.hotelGlyph,
   tent: PROVIDED_POI_SVG.refugeGlyph,
 } as const;
@@ -210,7 +210,7 @@ export const IconPlusCircleFilled = ({ size = 16, ...p }: AssetGlyphProps) => (
  * with a white play-triangle inside, used as the "Départ" marker.
  */
 export const IconCheckpointStart = ({ size = 20, ...p }: AssetGlyphProps) => (
-  <FullColorSvgIcon src="/svgv2/icone/checkpoint-start.svg" size={size} {...p} />
+  <FullColorSvgIcon src="/icons/ui/checkpoint-start.svg" size={size} {...p} />
 );
 
 /**
@@ -218,7 +218,7 @@ export const IconCheckpointStart = ({ size = 20, ...p }: AssetGlyphProps) => (
  * White/black grid pattern on a flag pole in a rounded square.
  */
 export const IconCheckpointEndMarker = ({ size = 20, ...p }: AssetGlyphProps) => (
-  <FullColorSvgIcon src="/svgv2/icone/checkpoint-end.svg" size={size} {...p} />
+  <FullColorSvgIcon src="/icons/ui/checkpoint-end.svg" size={size} {...p} />
 );
 
 /**

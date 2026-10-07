@@ -1,13 +1,13 @@
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 
-/** Icônes des commentaires : jeu svgv2 (masques peints en `currentColor`) + trois glyphes absents du jeu. */
+/** Icônes des commentaires : jeu public/icons/ui (masques peints en `currentColor`) + trois glyphes absents du jeu. */
 
 type IconProps = { size?: number };
 
 /**
  * Bulle de commentaire de Figma : un rond dont le coin bas-gauche est carré
  * (la pointe qui désigne le point) — même forme que les bulles posées sur la
- * carte et que le curseur du mode commentaire. Trait du jeu svgv2 (1,33).
+ * carte et que le curseur du mode commentaire. Trait du jeu public/icons/ui (1,33).
  */
 export const IconComment = ({ size = 16 }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">

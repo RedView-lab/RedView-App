@@ -22,28 +22,28 @@ import {
 const SPRITE_PAD_PX = 24;
 export const POI_HOVER_SCALE = 1.15;
 
-const STAR_URL = '/svgv2/icone/star-01.svg';
-const PAUSE_URL = '/svgv2/icone/checkpoint-pause.svg';
-const WAYPOINT_URL = '/svgv2/icone/checkpoint-waypoint.svg';
-const TEARDROP_URL = '/svgv2/icone/marker-pin-02.svg';
-const CLUSTER_URL = '/multiPOI.svg';
+const STAR_URL = '/icons/ui/star-01.svg';
+const PAUSE_URL = '/icons/ui/checkpoint-pause.svg';
+const WAYPOINT_URL = '/icons/ui/checkpoint-waypoint.svg';
+const TEARDROP_URL = '/icons/ui/marker-pin-02.svg';
+const CLUSTER_URL = '/icons/poi/multiPOI.svg';
 const FALLBACK_BADGE_COLOR = '#5a5a5a';
 
 // Same asset tables as `PoiBadge` (itineraryPanel/sections/timeline/KindBadge).
 const ROUND_BADGE_URLS: Partial<Record<PoiCategory, string>> = {
-  fountains: '/svgv2/poi/dropdown-maps/water.svg',
-  toilets: '/svgv2/poi/dropdown-maps/toilets.svg',
-  supermarkets: '/svgv2/poi/dropdown-maps/supermarket.svg',
-  gasStations: '/svgv2/poi/dropdown-maps/fuel.svg',
-  bakeries: '/svgv2/poi/dropdown-maps/bakery.svg',
-  fastFood: '/svgv2/poi/dropdown-maps/fast-food.svg',
-  cafes: '/svgv2/poi/dropdown-maps/cafe.svg',
-  bars: '/svgv2/poi/dropdown-maps/bar.svg',
-  restaurants: '/svgv2/poi/dropdown-maps/restaurant.svg',
-  bikeShops: '/svgv2/poi/dropdown-maps/bicycle.svg',
-  hotels: '/svgv2/poi/dropdown-maps/hotel.svg',
-  refuges: '/svgv2/poi/dropdown-maps/refuge.svg',
-  passes: '/svgv2/poi/dropdown-maps/refuge.svg',
+  fountains: '/icons/poi/dropdown-maps/water.svg',
+  toilets: '/icons/poi/dropdown-maps/toilets.svg',
+  supermarkets: '/icons/poi/dropdown-maps/supermarket.svg',
+  gasStations: '/icons/poi/dropdown-maps/fuel.svg',
+  bakeries: '/icons/poi/dropdown-maps/bakery.svg',
+  fastFood: '/icons/poi/dropdown-maps/fast-food.svg',
+  cafes: '/icons/poi/dropdown-maps/cafe.svg',
+  bars: '/icons/poi/dropdown-maps/bar.svg',
+  restaurants: '/icons/poi/dropdown-maps/restaurant.svg',
+  bikeShops: '/icons/poi/dropdown-maps/bicycle.svg',
+  hotels: '/icons/poi/dropdown-maps/hotel.svg',
+  refuges: '/icons/poi/dropdown-maps/refuge.svg',
+  passes: '/icons/poi/dropdown-maps/refuge.svg',
 };
 
 const FAVORITE_BADGE_URLS: Partial<Record<PoiCategory, string>> = {

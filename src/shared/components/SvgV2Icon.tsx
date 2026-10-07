@@ -142,7 +142,7 @@ function isSvgV2IconAvailable(name: string) {
 
 function resolveSvgV2IconSrc(name: string) {
   const resolvedName = isSvgV2IconAvailable(name) ? name : SVGV2_FALLBACK_ICON;
-  return `/svgv2/icone/${resolvedName}`;
+  return `/icons/ui/${resolvedName}`;
 }
 
 export function SvgV2Icon({

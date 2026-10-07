@@ -271,7 +271,7 @@ export function createViewportPoiMarkerElement(feature: PoiFeature): HTMLButtonE
     badge.setAttribute('aria-hidden', 'true');
     const badgeIcon = document.createElement('img');
     badgeIcon.className = 'rvd-viewport-poi-marker__fav-icon';
-    badgeIcon.src = '/svgv2/icone/star-01.svg';
+    badgeIcon.src = '/icons/ui/star-01.svg';
     badgeIcon.alt = '';
     badge.appendChild(badgeIcon);
     element.appendChild(badge);
