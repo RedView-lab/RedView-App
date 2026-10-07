@@ -44,7 +44,7 @@ Four deployable pieces, all self-hosted:
 | Piece | Code | Notes |
 |---|---|---|
 | Frontend | `src/` | Two entries: `index.html` (app) and `viewer.html` (LiDAR viewer). Feature-sliced: `src/features/*` with a public `index.ts`, cross-cutting code in `src/shared/`. |
-| API + static server | `api/*.ts`, `server.mjs`, `server/` | Vercel-style handlers run by `server.mjs` in production (bundled with esbuild, precompressed assets, CSP, rate limits, request logs) and by a Vite plugin in development. |
+| API + static server | `api/*.ts`, `server.mjs`, `server/lib/` | Vercel-style handlers run by `server.mjs` in production (bundled with esbuild, precompressed assets, CSP, rate limits, request logs) and by a Vite plugin in development. |
 | Co-editing server | `server/multiplayer/`, `src/features/collab/` | Server-authoritative document model, journal + checkpoints in Appwrite, deterministic simulator in the test suite. |
 | VPS services | `server/poi-server/`, `server/weather-daemon/`, `server/vps/` | BRouter, POI and weather behind nginx, reached only through the API proxies. Host configuration is versioned in `server/vps/`. |
 
@@ -117,6 +117,9 @@ The deploy script runs `check:full` first and stops on any failure.
 
 - [`CLAUDE.md`](CLAUDE.md) — the working reference: commands, architecture, conventions.
 - [`docs/`](docs/README.md) — architecture notes, runbooks and dated audits.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — repository layout, how a change gets into `main`, commit conventions.
+- [`SECURITY.md`](SECURITY.md) — reporting a vulnerability.
+- Folder maps: [`server/`](server/README.md), [`scripts/`](scripts/README.md), [`script-test-bench/`](script-test-bench/README.md).
 
 ## License
 
