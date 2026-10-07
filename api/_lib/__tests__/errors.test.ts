@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ApiResponse } from '../types';
 
 const { captureServerError } = vi.hoisted(() => ({ captureServerError: vi.fn() }));
-vi.mock('../../../server/observability.mjs', () => ({ captureServerError }));
+vi.mock('../../../server/lib/observability.mjs', () => ({ captureServerError }));
 
 const { PublicError, sendSafeError } = await import('../errors');
 

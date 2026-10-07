@@ -8,7 +8,7 @@
  *    zone d'analyse (gris + alpha).
  * 2. PNG gris 512 : encodeur actuel (zlibDeflateRle) vs l'ancien
  *    (CompressionStream, zlib niveau 6), même scanlines Paeth.
- * 3. Route de secours serveur /slope-tiles (server/terrain-tiles.mjs) À FROID :
+ * 3. Route de secours serveur /slope-tiles (server/lib/terrain-tiles.mjs) À FROID :
  *    une tuile différente par itération, Terrarium simulé (sans réseau). Ces
  *    tuiles sont en cache LRU : remesurer la même tuile ne mesurait que le
  *    cache (0,002 ms dans les rapports jusqu'au 2026-10-01).
@@ -20,7 +20,7 @@ import { generateSyntheticDemGrid } from '../core/synthetic-data.ts';
 import { loadSwModules } from '../core/sw-context.ts';
 import { encodeTerrariumPng, withTerrariumFetch } from '../core/terrarium-mock.ts';
 import { buildSlopeColorExpression } from '../../src/features/slope/lib/slope-config.ts';
-import { generateSlopeTile } from '../../server/terrain-tiles.mjs';
+import { generateSlopeTile } from '../../server/lib/terrain-tiles.mjs';
 import type { SlopeCategory } from '../../src/features/slope/types.ts';
 
 type Neighbours = { north?: Float32Array; east?: Float32Array; south?: Float32Array; west?: Float32Array };

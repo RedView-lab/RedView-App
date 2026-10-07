@@ -27,7 +27,7 @@
  */
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
 import { GribMessageFactory, parseMessagesFromBuffer } from '@mattnucc/gribberish';
-import { createByteLru } from '../server/byte-lru.mjs';
+import { createByteLru } from '../server/lib/byte-lru.mjs';
 
 // ────────────────────────────── Constants ──────────────────────────────
 

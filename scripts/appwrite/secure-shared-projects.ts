@@ -7,7 +7,7 @@
  *
  * Rapport (ids seulement, jamais de contenu) :
  *  - lignes partagées dont les permissions ne sont pas canoniques
- *    (server/project-access.mjs : lecture/écriture/suppression au
+ *    (server/lib/project-access.mjs : lecture/écriture/suppression au
  *    propriétaire, LECTURE seule à l'équipe `p<projet>`) — l'ancien format
  *    donnait l'écriture à l'équipe : tout éditeur pouvait réécrire `user_id`,
  *    `team_id`, `data` et les permissions ;
@@ -39,7 +39,7 @@ import {
   isTeamShared,
   projectTeamId,
   samePermissions,
-} from '../../server/project-access.mjs';
+} from '../../server/lib/project-access.mjs';
 import { documentOps } from '../../src/features/collab/model/diff.ts';
 import { ObjectStore } from '../../src/features/collab/model/objects.ts';
 import { checkBatch } from '../../src/features/collab/model/validate.ts';

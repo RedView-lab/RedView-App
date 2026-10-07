@@ -4,7 +4,7 @@ import { constants as zlibConstants, deflateRaw, deflateRawSync, inflateRaw } fr
 
 import type { WebSocket } from 'ws';
 
-import { createByteLru } from '../byte-lru.mjs';
+import { createByteLru } from '../lib/byte-lru.mjs';
 import {
   PROTOCOL_VERSION,
   type ClientMessage,

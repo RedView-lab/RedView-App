@@ -22,7 +22,7 @@ import {
   sanitizeRangeHeader,
 } from '../http-security.mjs';
 
-const API_DIR = path.resolve(import.meta.dirname, '../../api');
+const API_DIR = path.resolve(import.meta.dirname, '../../../api');
 const SLOPE_TILE_RE = /^\/slope-tiles\/(\d+)\/(\d+)\/(\d+)/;
 
 function fakeRequest(options: {

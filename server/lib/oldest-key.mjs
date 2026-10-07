@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // Plus ancienne clé d'une Map (ordre d'insertion) en O(1) amorti, pour les
-// structures bornées qui évincent en tête : rate limiter (server/http-security.mjs),
-// caches LRU en octets (server/byte-lru.mjs).
+// structures bornées qui évincent en tête : rate limiter (server/lib/http-security.mjs),
+// caches LRU en octets (server/lib/byte-lru.mjs).
 //
 // `map.keys().next()` repart du début de la table à chaque appel, et V8 y
 // garde les entrées supprimées (des trous) jusqu'au prochain rehash :

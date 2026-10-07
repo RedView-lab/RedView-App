@@ -13,7 +13,7 @@ import {
   projectPayloadFileName,
   projectSnapshotFileName,
   projectTeamId,
-} from '../project-access.mjs';
+} from '../lib/project-access.mjs';
 
 import { readStoredProject } from '../../src/features/itineraryPanel/lib/project/layers.ts';
 import type { SequencedBatch } from '../../src/features/collab/protocol.ts';
@@ -52,7 +52,7 @@ import {
  * projet. Charge utile `file:` : nommée `<projet>.json.gz` et lisible par le
  * propriétaire ou l'équipe ; point de sauvegarde : nommé `<projet>.collab.gz`
  * et sans aucune permission (écrit par ce serveur seulement). Propriétaire et
- * équipe : server/project-access.mjs.
+ * équipe : server/lib/project-access.mjs.
  */
 
 const gzipAsync = promisify(gzip);

@@ -1,6 +1,6 @@
 import { Query } from 'node-appwrite';
 
-import { corroboratedOwnerId, permission, projectTeamId } from '../../server/project-access.mjs';
+import { corroboratedOwnerId, permission, projectTeamId } from '../../server/lib/project-access.mjs';
 import {
   APPWRITE_DATABASE_ID,
   CUSTOMERS_COLLECTION_ID,

@@ -10,7 +10,7 @@
  * 3. D+/D- et profil de pente d'une trace de 50 000 points
  *    (src/features/itineraryPanel/lib/route-metrics), calculés à chaque
  *    routage / import GPX.
- * 4. Route de secours serveur /altitude-tiles (server/terrain-tiles.mjs) À FROID,
+ * 4. Route de secours serveur /altitude-tiles (server/lib/terrain-tiles.mjs) À FROID,
  *    une tuile différente par itération, Terrarium simulé (sans réseau) — la
  *    même tuile ne mesurait que le cache LRU (0,002 ms jusqu'au 2026-10-01).
  * 5. Construction des palettes d'altitude (buildAltitudeCategories).
@@ -23,7 +23,7 @@ import { encodeTerrariumPng, withTerrariumFetch } from '../core/terrarium-mock.t
 import { buildAltitudeCategories } from '../../src/features/altitude/lib/altitude-config.ts';
 import { computeRouteElevationMetrics } from '../../src/features/itineraryPanel/lib/route-metrics/metrics.ts';
 import { extractRouteProfileFromPoints } from '../../src/features/itineraryPanel/lib/route-metrics/profile.ts';
-import { generateAltitudeTile } from '../../server/terrain-tiles.mjs';
+import { generateAltitudeTile } from '../../server/lib/terrain-tiles.mjs';
 
 type AltitudeSw = {
   encodeAltitudePng: (elevations: Float32Array, zoneMask: Uint8Array | null) => Promise<Blob>;

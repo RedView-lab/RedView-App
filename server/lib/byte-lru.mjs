@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // Cache LRU borné en octets, partagé par `server.mjs`, les tuiles de secours
-// (`server/terrain-tiles.mjs`) et les routes `api/` (BRouter, météo,
+// (`server/lib/terrain-tiles.mjs`) et les routes `api/` (BRouter, météo,
 // Météo-France).
 //
 // Une borne en nombre d'entrées ne suffit pas : une entrée va de quelques Ko
@@ -34,7 +34,7 @@ import { createOldestKeyTaker } from './oldest-key.mjs';
 export function createByteLru({ maxBytes, sizeOf, ttlMs, maxEntryBytes = maxBytes / 4 }) {
   /** @type {Map<string, { value: V, bytes: number, expiresAt: number }>} */
   const entries = new Map();
-  // Éviction en tête en O(1) amorti (server/oldest-key.mjs).
+  // Éviction en tête en O(1) amorti (server/lib/oldest-key.mjs).
   const takeOldestKey = createOldestKeyTaker(entries);
   let bytes = 0;
 

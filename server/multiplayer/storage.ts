@@ -52,7 +52,7 @@ export type LoadedRoom = {
 );
 
 export interface ProjectAccess {
-  /** Propriétaire établi (server/project-access.mjs), '' si aucun ne l'est. */
+  /** Propriétaire établi (server/lib/project-access.mjs), '' si aucun ne l'est. */
   ownerId: string;
   /** Équipe du projet partagé (`p<projectId>`), null s'il ne l'est pas. */
   teamId: string | null;

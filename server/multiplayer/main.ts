@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import { captureServerError, flushServerObservability, initServerObservability } from '../observability.mjs';
+import { captureServerError, flushServerObservability, initServerObservability } from '../lib/observability.mjs';
 import { createAppwriteStorage } from './appwriteStorage.ts';
 import { createFileStorage } from './fileStorage.ts';
 import { createMultiplayerServer } from './server.ts';

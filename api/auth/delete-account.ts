@@ -1,6 +1,6 @@
 import type { ApiRequest, ApiResponse } from '../_lib/types.js';
 
-import { captureServerError } from '../../server/observability.mjs';
+import { captureServerError } from '../../server/lib/observability.mjs';
 import { deleteAccount } from '../_lib/accountDeletion.js';
 import { getAppwriteUsers, requireAuthenticatedUser } from '../_lib/appwrite.js';
 import { PublicError, sendSafeError } from '../_lib/errors.js';

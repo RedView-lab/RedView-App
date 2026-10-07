@@ -13,7 +13,7 @@
  *     quand `contextmenu` arrive à l'appui (ordre Linux) ; glisser droit =
  *     déplacement sans menu ; molette en lignes (Firefox) = zoom ;
  *   - aucune exception, aucune erreur WebGL (`getError`, console) ;
- *   - CSP de production (server/csp.mjs) sur les pages et les scripts de
+ *   - CSP de production (server/lib/csp.mjs) sur les pages et les scripts de
  *     workers : WebAssembly compilé et `eval` refusé dans la page comme dans
  *     un worker, et aucune violation rapportée (le `report-uri` pointe sur ce
  *     serveur local) pendant tout le parcours.
@@ -40,7 +40,7 @@ import { tmpdir } from 'node:os';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, firefox, webkit } from 'playwright';
-import { buildCspHeader } from '../../server/csp.mjs';
+import { buildCspHeader } from '../../server/lib/csp.mjs';
 import { buildSyntheticLas } from './syntheticTile.mjs';
 import { coverage, decodePng, meanDifference } from './png.mjs';
 

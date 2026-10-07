@@ -11,7 +11,7 @@
 //  - /radar-tiles : tuile RainViewer relayée (hôte et chemin en liste blanche),
 //    recolorée si la palette `p` est donnée ;
 //  - /slope-tiles, /altitude-tiles : calculées sur le serveur
-//    (server/terrain-tiles.mjs).
+//    (server/lib/terrain-tiles.mjs).
 // Une tuile absente répond 204 jamais mis en cache : une panne passagère ne
 // doit pas être mémorisée comme une vraie tuile.
 // ---------------------------------------------------------------------------

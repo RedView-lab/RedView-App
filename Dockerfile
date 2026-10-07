@@ -11,7 +11,7 @@ RUN --mount=type=cache,target=/root/.npm npm ci
 COPY . .
 
 # Commit déployé, injecté par Coolify (option « Include Source Commit in
-# Build ») : identifiant de build (server/build-id.mjs : release GlitchTip,
+# Build ») : identifiant de build (server/lib/build-id.mjs : release GlitchTip,
 # tag des sourcemaps, APP_CACHE_EPOCH). Déclaré après COPY pour ne pas
 # invalider le cache npm ci.
 ARG SOURCE_COMMIT=""
@@ -54,7 +54,7 @@ RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/dist-server ./dist-server
 
-# Release des erreurs serveur (server/build-id.mjs), même valeur que le front ;
+# Release des erreurs serveur (server/lib/build-id.mjs), même valeur que le front ;
 # après npm ci pour ne pas invalider son cache à chaque commit.
 ARG SOURCE_COMMIT=""
 ENV SOURCE_COMMIT=${SOURCE_COMMIT}

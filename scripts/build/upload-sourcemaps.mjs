@@ -7,7 +7,7 @@
  * GlitchTip n'implémente pas l'upload par morceaux de sentry-cli : on passe par
  * glitchtip-cli (binaire statique, SHA-256 épinglé). Chaque bundle reçoit un
  * debug ID (`sourcemaps inject`) qui relie une erreur à sa map quelle que soit
- * l'URL ; la release est l'identifiant de build (server/build-id.mjs), la même
+ * l'URL ; la release est l'identifiant de build (server/lib/build-id.mjs), la même
  * que celle du SDK (src/main.tsx).
  *
  * Configuration (build Coolify) :
@@ -26,7 +26,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { resolveBuildId } from '../../server/build-id.mjs';
+import { resolveBuildId } from '../../server/lib/build-id.mjs';
 
 const CLI_VERSION = 'v1.0.0';
 const CLI_BINARIES = {

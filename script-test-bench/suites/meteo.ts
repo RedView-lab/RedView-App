@@ -24,7 +24,7 @@ import {
   type RouteWeatherDataset,
 } from '../../src/features/weather/lib/routeWeather.ts';
 import type { RouteChartPoint } from '../../src/features/centerPanel/components/chart/seriesCommon.ts';
-import { recolorRadarPng } from '../../server/radar-recolor.mjs';
+import { recolorRadarPng } from '../../server/lib/radar-recolor.mjs';
 import { deflateSync, crc32 } from 'node:zlib';
 
 const ROUTE_KM = 1200;

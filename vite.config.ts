@@ -5,7 +5,7 @@ import fs from 'fs'
 // @ts-expect-error JS module without declarations
 import { applyVpsTunnel, startDevServices, startVpsTunnel } from './scripts/dev/start-dev-services.mjs'
 // @ts-expect-error JS module without declarations
-import { parseApiBody, parseApiQuery } from './server/api-request.mjs'
+import { parseApiBody, parseApiQuery } from './server/lib/api-request.mjs'
 import {
   HttpError,
   bodyLimitFor,
@@ -13,11 +13,11 @@ import {
   readBodyLimited,
   resolveApiRoute,
   // @ts-expect-error JS module without declarations
-} from './server/http-security.mjs'
+} from './server/lib/http-security.mjs'
 // @ts-expect-error JS module without declarations
-import { serveTileFallback, tileFallbackFamily } from './server/tile-fallbacks.mjs'
+import { serveTileFallback, tileFallbackFamily } from './server/lib/tile-fallbacks.mjs'
 // @ts-expect-error JS module without declarations
-import { resolveBuildId } from './server/build-id.mjs'
+import { resolveBuildId } from './server/lib/build-id.mjs'
 
 // Identifiant de build (release GlitchTip, tag des sourcemaps, APP_CACHE_EPOCH).
 const redviewBuildId: string = resolveBuildId()

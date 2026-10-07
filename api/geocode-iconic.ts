@@ -1,5 +1,5 @@
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
-import { createByteLru } from '../server/byte-lru.mjs';
+import { createByteLru } from '../server/lib/byte-lru.mjs';
 
 const NOMINATIM_ENDPOINT = 'https://nominatim.openstreetmap.org/search';
 const TIMEOUT_MS = 12_000;

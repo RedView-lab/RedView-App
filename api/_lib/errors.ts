@@ -1,4 +1,4 @@
-import { captureServerError } from '../../server/observability.mjs';
+import { captureServerError } from '../../server/lib/observability.mjs';
 import type { ApiResponse } from './types.js';
 
 /**

@@ -176,7 +176,7 @@ vi.mock('../multiplayerNotify.js', () => ({
 }));
 
 const { deleteAccount, DELETION_PENDING_LABEL } = await import('../accountDeletion.ts');
-const { projectTeamId } = await import('../../../server/project-access.mjs');
+const { projectTeamId } = await import('../../../server/lib/project-access.mjs');
 
 const own = (userId: string) => [`read("user:${userId}")`, `update("user:${userId}")`, `delete("user:${userId}")`];
 const ALICE = 'alice';

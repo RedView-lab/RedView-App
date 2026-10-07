@@ -15,7 +15,7 @@
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,
-    /* server/*.mjs imported by handlers and tests: types inferred, not checked */
+    /* server/lib/*.mjs imported by handlers and tests: types inferred, not checked */
     "allowJs": true,
     "checkJs": false,
 
@@ -27,5 +27,5 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["api", "server/__tests__"]
+  "include": ["api", "server/lib/__tests__", "test"]
 }

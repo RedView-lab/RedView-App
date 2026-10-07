@@ -2,7 +2,7 @@ import { gunzipSync } from 'node:zlib';
 
 import { Query, type Models } from 'node-appwrite';
 
-import { corroboratedOwnerId } from '../../server/project-access.mjs';
+import { corroboratedOwnerId } from '../../server/lib/project-access.mjs';
 import {
   APPWRITE_DATABASE_ID,
   getAppwriteDatabases,

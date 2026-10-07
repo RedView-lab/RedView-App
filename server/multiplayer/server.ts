@@ -5,7 +5,7 @@ import type { Duplex } from 'node:stream';
 
 import { WebSocketServer, type WebSocket } from 'ws';
 
-import { createRateLimiter, getClientIp, rateLimitKeyForIp } from '../http-security.mjs';
+import { createRateLimiter, getClientIp, rateLimitKeyForIp } from '../lib/http-security.mjs';
 import { SOCKET_PROTOCOL, tokenFromProtocols, type ServerErrorCode } from '../../src/features/collab/protocol.ts';
 import { WIRE_MAX_MESSAGE_BYTES } from '../../src/features/collab/wire.ts';
 import { createAuthenticator, type AuthOptions, type Authenticator, type Identity } from './auth.ts';

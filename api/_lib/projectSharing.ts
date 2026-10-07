@@ -2,7 +2,7 @@ import { gunzipSync } from 'node:zlib';
 
 import { Query } from 'node-appwrite';
 
-import { createRateLimiter } from '../../server/http-security.mjs';
+import { createRateLimiter } from '../../server/lib/http-security.mjs';
 import {
   APPWRITE_ID_PATTERN,
   canonicalSharedPermissions,
@@ -14,7 +14,7 @@ import {
   projectPayloadFileName,
   projectTeamId,
   samePermissions,
-} from '../../server/project-access.mjs';
+} from '../../server/lib/project-access.mjs';
 import {
   APPWRITE_DATABASE_ID,
   FIT_FILES_BUCKET_ID,
@@ -42,7 +42,7 @@ import { notifyProjectAccessChanged } from './multiplayerNotify.js';
  * et toutes les 15 s, et tout de suite quand on retire un éditeur
  * (server/multiplayer/auth.ts).
  *
- * Qui est propriétaire, quelle équipe : server/project-access.mjs — jamais
+ * Qui est propriétaire, quelle équipe : server/lib/project-access.mjs — jamais
  * les attributs `user_id` / `team_id` seuls, que le client écrit.
  *
  * Supprimer un projet partagé passe par ici (`deleteSharedProject`) : son
@@ -166,7 +166,7 @@ async function membershipOf(teamId: string, userId: string): Promise<Membership 
 
 /**
  * Propriétaire du projet, ou null s'il n'est pas établi. `user_id` doit être
- * corroboré par les permissions de la ligne (server/project-access.mjs). Une
+ * corroboré par les permissions de la ligne (server/lib/project-access.mjs). Une
  * ligne de l'ancien format, qui donnait l'écriture à l'équipe, a pu être
  * réécrite par un éditeur : il faut en plus le rôle `owner` dans l'équipe,
  * donné par ce serveur au premier partage.

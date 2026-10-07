@@ -1,12 +1,12 @@
 import { Account, Client, Query, Teams } from 'node-appwrite';
 
-import { createOldestKeyTaker } from '../oldest-key.mjs';
+import { createOldestKeyTaker } from '../lib/oldest-key.mjs';
 import type { RoomStorage } from './storage.ts';
 
 /**
  * Qui peut entrer dans une salle : le propriétaire du projet ou un membre
  * (confirmé) de son équipe — tels que les établit le stockage
- * (server/project-access.mjs : jamais les attributs de la ligne seuls). Le
+ * (server/lib/project-access.mjs : jamais les attributs de la ligne seuls). Le
  * jeton est le JWT Appwrite de l'utilisateur, vérifié comme
  * `requireAuthenticatedUser` (api/_lib/appwrite.ts) à l'ouverture de la
  * WebSocket, puis à chaque relève (`auth`) : une connexion ne survit pas à

@@ -22,7 +22,7 @@ import path from 'node:path';
 
 import { build } from 'esbuild';
 
-import { listApiRoutes } from '../../server/http-security.mjs';
+import { listApiRoutes } from '../../server/lib/http-security.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const OUT_DIR = path.join(ROOT, 'dist-server');

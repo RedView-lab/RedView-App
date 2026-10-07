@@ -15,7 +15,7 @@
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createByteLru } from '../server/byte-lru.mjs';
+import { createByteLru } from '../server/lib/byte-lru.mjs';
 
 const TIMEOUT_MS = 15_000;
 

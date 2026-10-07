@@ -3,7 +3,7 @@
  *
  *   GET|HEAD /api/pointcloud?url=<URL amont encodée>
  *
- * Seules les URL de `resolvePointcloudUpstream` (server/http-security.mjs)
+ * Seules les URL de `resolvePointcloudUpstream` (server/lib/http-security.mjs)
  * passent : sous-dalles AHN de GeoTiles (Pays-Bas) et morceaux de bandes DHMV
  * II d'EODaS OpenLidar (Flandre). Le corps est relayé en flux (jamais
  * bufferisé : une sous-dalle AHN pèse 50 Mio à 1 Gio) et l'en-tête `Range`
@@ -13,7 +13,7 @@
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream as NodeWebReadableStream } from 'node:stream/web';
-import { getClientIp, rateLimitKeyForIp, resolvePointcloudUpstream, sanitizeRangeHeader } from '../server/http-security.mjs';
+import { getClientIp, rateLimitKeyForIp, resolvePointcloudUpstream, sanitizeRangeHeader } from '../server/lib/http-security.mjs';
 import { sendMethodNotAllowed } from './_lib/http.js';
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
 

@@ -16,7 +16,8 @@ export default defineConfig({
     include: [
       'src/**/*.test.{ts,tsx}',
       'api/**/__tests__/**/*.test.ts',
-      'server/__tests__/**/*.test.ts',
+      'server/lib/__tests__/**/*.test.ts',
+      'test/**/*.test.ts',
       'server/multiplayer/**/*.test.ts',
     ],
     environment: 'node',
@@ -61,7 +62,7 @@ export default defineConfig({
         // unitaires d'abord pour elles).
         'src/features/collab/**': { statements: 81, branches: 75, functions: 80, lines: 85 },
         'server/multiplayer/**': { statements: 77, branches: 65, functions: 78, lines: 81 },
-        'server/{http-security,project-access}.mjs': { statements: 92, branches: 86, functions: 92, lines: 93 },
+        'server/lib/{http-security,project-access}.mjs': { statements: 92, branches: 86, functions: 92, lines: 93 },
         'api/_lib/{accountDeletion,projectSharing}.ts': { statements: 86, branches: 74, functions: 96, lines: 89 },
         'src/features/comments/lib/**': { statements: 75, branches: 71, functions: 84, lines: 78 },
         'src/features/livePresence/lib/**': { statements: 87, branches: 78, functions: 83, lines: 90 },

@@ -211,7 +211,7 @@ Authentification (auth.ts, server.ts) — détails en section 14 :
     avec le projet dans l'URL. Jeton, droits, origine et plafonds sont vérifiés
     AVANT d'accepter la connexion : rien n'est lu d'un inconnu.
   - Droits : propriétaire (corroboré par les permissions de la ligne) ou
-    membre de l'équipe « p<projectId> » (server/project-access.mjs).
+    membre de l'équipe « p<projectId> » (server/lib/project-access.mjs).
   - Revérifiés sans cache à la connexion, puis toutes les 15 s, et tout de
     suite quand l'API de partage retire quelqu'un (route signée).
   - Le jeton est relevé toutes les 4 min ; un jeton expiré sans relève ferme
@@ -321,7 +321,7 @@ Format sur le fil (src/features/collab/wire.ts) : JSON en trame texte ; un
   simulateur). server/multiplayer ne fait que brancher WebSocket et Appwrite.
 - Sécurité (section 14) : ne JAMAIS autoriser d'après un attribut de la
   ligne projects (user_id, team_id, collab, data : le client les écrit) —
-  passer par server/project-access.mjs ; ne jamais suivre, avec la clé admin,
+  passer par server/lib/project-access.mjs ; ne jamais suivre, avec la clé admin,
   un id de fichier venu du client sans vérifier qu'il appartient au projet ;
   ne jamais redonner à l'équipe l'écriture sur la ligne ; toute nouvelle
   règle de validation doit accepter tout ce qu'un client honnête produit
@@ -565,7 +565,7 @@ collab/client/connection.test.ts, shared/services/jwtCache.test.ts) :
 ========================================================================
 Principe : le serveur ne croit que ce que le client ne peut pas forger.
 
-Qui possède, qui partage (server/project-access.mjs, commun à l'API et au
+Qui possède, qui partage (server/lib/project-access.mjs, commun à l'API et au
 serveur temps réel) :
   - Les attributs d'une ligne « projects » (user_id, team_id, collab, data)
     sont écrits par le client : ils ne prouvent rien. Appwrite interdit en

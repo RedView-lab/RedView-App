@@ -46,7 +46,7 @@ export default defineConfig([
   },
   {
     // Serveur de prod (livré dans l'image Docker).
-    files: ['server.mjs', 'server/*.mjs'],
+    files: ['server.mjs', 'server/lib/*.mjs'],
     extends: [js.configs.recommended],
     languageOptions: {
       ecmaVersion: 2024,

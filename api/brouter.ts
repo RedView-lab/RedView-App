@@ -28,7 +28,7 @@
 import crypto from 'node:crypto';
 import { promisify } from 'node:util';
 import zlib from 'node:zlib';
-import { createByteLru } from '../server/byte-lru.mjs';
+import { createByteLru } from '../server/lib/byte-lru.mjs';
 import { resolvePass1Coefficient } from './_lib/brouter-search.js';
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
 

@@ -1,6 +1,6 @@
 /**
  * Précompression des statiques du build : `<fichier>.br` et `<fichier>.gz`
- * à côté de chaque fichier compressible de dist/ (server/static-compression.mjs).
+ * à côté de chaque fichier compressible de dist/ (server/lib/static-compression.mjs).
  *
  * Lancé par le Dockerfile (stage builder) après l'upload des sourcemaps :
  *   node scripts/build/precompress-dist.mjs [dist]
@@ -18,7 +18,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import zlib from 'node:zlib';
 
-import { VARIANT_SUFFIX, isCompressible } from '../../server/static-compression.mjs';
+import { VARIANT_SUFFIX, isCompressible } from '../../server/lib/static-compression.mjs';
 
 const brotliCompressAsync = promisify(zlib.brotliCompress);
 const gzipAsync = promisify(zlib.gzip);

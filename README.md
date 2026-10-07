@@ -87,7 +87,7 @@ The full list, with the purpose of each benchmark, is in [`CLAUDE.md`](CLAUDE.md
 - **Types**: strict TypeScript (`noUnused*`, `verbatimModuleSyntax`, `erasableSyntaxOnly`),
   checked for the app, the API, the servers and the benchmarks.
 - **Tests**: unit tests next to the code they cover (`foo.ts` → `foo.test.ts`);
-  server and API tests in `server/__tests__`, `server/multiplayer` and `api/_lib/__tests__`.
+  server and API tests in `server/lib/__tests__`, `server/multiplayer` and `api/_lib/__tests__`; Service Worker tests in `test/service-worker`.
   Business rules, security boundaries, persistence and routing math are covered first.
 - **Regression benchmarks** on real data in `script-test-bench/`: routing quality
   (~660 scenarios), prediction accuracy, co-editing under load and across server restarts,

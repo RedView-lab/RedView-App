@@ -24,7 +24,7 @@ import { createInterface } from 'node:readline';
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
 import { OPENMETEO_DEFAULT_MODEL, OPENMETEO_MAX_HISTORY_DAYS, openMeteoUpstream } from './_lib/openMeteo.js';
 import { BRA_MASSIFS } from './_lib/snow/braMassifs.js';
-import { createOldestKeyTaker } from '../server/oldest-key.mjs';
+import { createOldestKeyTaker } from '../server/lib/oldest-key.mjs';
 
 const FETCH_TIMEOUT_MS = 20_000;
 const MF_PARSE_BUDGET_MS = 45_000;

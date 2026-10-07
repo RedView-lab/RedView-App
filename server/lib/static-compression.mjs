@@ -2,7 +2,7 @@
 // Statiques compressibles : une seule règle pour la précompression du build
 // (scripts/build/precompress-dist.mjs, dans l'image) et pour le serveur qui sert les
 // variantes (server.mjs). La négociation `Accept-Encoding` sert aussi aux
-// réponses API (server/api-compression.mjs).
+// réponses API (server/lib/api-compression.mjs).
 // ---------------------------------------------------------------------------
 
 const COMPRESSIBLE_EXTENSIONS = new Set(['.html', '.js', '.mjs', '.css', '.json', '.svg', '.wasm', '.txt', '.brf']);

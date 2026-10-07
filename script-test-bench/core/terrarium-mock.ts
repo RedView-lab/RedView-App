@@ -1,6 +1,6 @@
 /**
  * Tuiles Terrarium simulées pour mesurer les routes de secours du serveur
- * (/slope-tiles, /altitude-tiles : server/terrain-tiles.mjs) sans réseau.
+ * (/slope-tiles, /altitude-tiles : server/lib/terrain-tiles.mjs) sans réseau.
  *
  * Ces routes gardent chaque tuile produite (et chaque Terrarium décodé) dans
  * un cache LRU : mesurer deux fois la même tuile ne mesure que le cache. Les

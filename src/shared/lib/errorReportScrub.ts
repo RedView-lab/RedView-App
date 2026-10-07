@@ -6,7 +6,7 @@
 // (retiré de la barre d'adresse au chargement, mais le SDK garde ce
 // `replaceState` en breadcrumb de navigation pour toute la session), erreur
 // OAuth, coordonnées des requêtes météo / POI / BRouter. Seuls l'origine et le
-// chemin sont envoyés — comme côté serveur (server/observability.mjs).
+// chemin sont envoyés — comme côté serveur (server/lib/observability.mjs).
 // ---------------------------------------------------------------------------
 
 /** URL sans query ni fragment ; une valeur qui n'est pas une URL est rendue telle quelle. */

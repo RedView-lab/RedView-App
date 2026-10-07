@@ -127,7 +127,7 @@ async function checkAppServer() {
   if (api.status !== 200 || !String(api.headers['content-type']).includes('json')) {
     fail(`/api/app-translations : attendu 200 JSON, reçu ${api.status} ${api.headers['content-type']}`);
   }
-  // Réponses API compressées par le serveur (server/api-compression.mjs) : mêmes octets une fois décompressés.
+  // Réponses API compressées par le serveur (server/lib/api-compression.mjs) : mêmes octets une fois décompressés.
   const apiBr = await get(port, '/api/app-translations?lang=en', { 'Accept-Encoding': 'br, gzip' });
   if (apiBr.status !== 200 || apiBr.headers['content-encoding'] !== 'br' || !String(apiBr.headers.vary).includes('Accept-Encoding')) {
     fail(`/api/app-translations : attendu 200 + brotli + Vary, reçu ${apiBr.status} ${apiBr.headers['content-encoding'] ?? 'identité'} (Vary ${apiBr.headers.vary})`);

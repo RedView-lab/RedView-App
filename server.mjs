@@ -4,8 +4,8 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { promisify } from 'node:util';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { parseApiBody, parseApiQuery } from './server/api-request.mjs';
-import { createByteLru } from './server/byte-lru.mjs';
+import { parseApiBody, parseApiQuery } from './server/lib/api-request.mjs';
+import { createByteLru } from './server/lib/byte-lru.mjs';
 import {
   HttpError,
   applyBaseSecurityHeaders,
@@ -18,13 +18,13 @@ import {
   rateLimitKeyForIp,
   readBodyLimited,
   resolveApiRoute,
-} from './server/http-security.mjs';
-import { serveTileFallback, tileFallbackFamily, tileFallbackHitsUpstream } from './server/tile-fallbacks.mjs';
-import { captureServerError, flushServerObservability, initServerObservability } from './server/observability.mjs';
-import { createRequestLogger, normalizeRoutePath } from './server/request-logging.mjs';
-import { VARIANT_SUFFIX, acceptedEncodings, isCompressible } from './server/static-compression.mjs';
-import { REDVIEW_CSP_HEADER } from './server/csp.mjs';
-import { API_COMPRESS_SYNC_MAX_BYTES, compressApiBody, compressApiBodySync, pickApiEncoding, withVary } from './server/api-compression.mjs';
+} from './server/lib/http-security.mjs';
+import { serveTileFallback, tileFallbackFamily, tileFallbackHitsUpstream } from './server/lib/tile-fallbacks.mjs';
+import { captureServerError, flushServerObservability, initServerObservability } from './server/lib/observability.mjs';
+import { createRequestLogger, normalizeRoutePath } from './server/lib/request-logging.mjs';
+import { VARIANT_SUFFIX, acceptedEncodings, isCompressible } from './server/lib/static-compression.mjs';
+import { REDVIEW_CSP_HEADER } from './server/lib/csp.mjs';
+import { API_COMPRESS_SYNC_MAX_BYTES, compressApiBody, compressApiBodySync, pickApiEncoding, withVary } from './server/lib/api-compression.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -280,7 +280,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     // 2b. Tuiles servies normalement par le Service Worker, la page n'est pas
-    // (encore) contrôlée (server/tile-fallbacks.mjs). Celles qui sollicitent
+    // (encore) contrôlée (server/lib/tile-fallbacks.mjs). Celles qui sollicitent
     // un amont ont un quota PAR famille, pour qu'une rafale pente ne prive pas
     // l'altitude ou le radar (et inversement) ; les 204 immédiats sont hors quota.
     const tileFamily = tileFallbackFamily(pathname);
@@ -459,7 +459,7 @@ async function handleApiRoute(apiRoute, parsedUrl, req, res) {
     },
   });
 
-  // Corps d'un handler : compressé si le client l'accepte (server/api-compression.mjs).
+  // Corps d'un handler : compressé si le client l'accepte (server/lib/api-compression.mjs).
   // Un gros corps se compresse hors de la boucle d'événements : la réponse part
   // alors après le retour du handler (`bodyPending`).
   let bodyPending = false;

@@ -2,8 +2,8 @@
  * RedView Test-Bench : serveur de prod (server.mjs) et ses primitives de sécurité.
  *
  * Tout passe par le vrai code :
- * 1. primitives partagées par les deux adaptateurs (server/http-security.mjs,
- *    server/byte-lru.mjs, server/request-logging.mjs) : chaîne de sécurité d'une
+ * 1. primitives partagées par les deux adaptateurs (server/lib/http-security.mjs,
+ *    server/lib/byte-lru.mjs, server/lib/request-logging.mjs) : chaîne de sécurité d'une
  *    requête API (chemin, route, IP client, clé et quota de rate limit), flot
  *    d'IP distinctes (Map bornée), cache de tuiles borné en octets, tuiles et
  *    upstream LiDAR — avec leurs invariants vérifiés avant de mesurer ;
@@ -26,9 +26,9 @@ import path from 'node:path';
 
 import { pathToFileURL } from 'node:url';
 
-import type * as ByteLruModule from '../../server/byte-lru.mjs';
-import type * as HttpSecurityModule from '../../server/http-security.mjs';
-import type * as RequestLoggingModule from '../../server/request-logging.mjs';
+import type * as ByteLruModule from '../../server/lib/byte-lru.mjs';
+import type * as HttpSecurityModule from '../../server/lib/http-security.mjs';
+import type * as RequestLoggingModule from '../../server/lib/request-logging.mjs';
 import { BenchmarkSuite } from '../core/harness.ts';
 import { printSuiteHeader, printSuiteResults } from '../core/reporter.ts';
 
@@ -46,9 +46,9 @@ async function loadServerModules(root: string): Promise<ServerModules> {
   const load = (relative: string) => import(pathToFileURL(path.join(root, relative)).href);
   return {
     apiDir: path.join(root, 'api'),
-    security: await load('server/http-security.mjs'),
-    lru: await load('server/byte-lru.mjs'),
-    logging: await load('server/request-logging.mjs'),
+    security: await load('server/lib/http-security.mjs'),
+    lru: await load('server/lib/byte-lru.mjs'),
+    logging: await load('server/lib/request-logging.mjs'),
   };
 }
 
@@ -149,7 +149,7 @@ function runPrimitives(m: ServerModules, suite: BenchmarkSuite, iterations: numb
   );
 
   // Flot d'IP toutes différentes : la Map du rate limiter reste bornée (maxKeys), éviction en tête en O(1)
-  // amorti (server/oldest-key.mjs ; avec `keys().next()`, 250-410 ms ici : ~10 µs par éviction à 50k clés).
+  // amorti (server/lib/oldest-key.mjs ; avec `keys().next()`, 250-410 ms ici : ~10 µs par éviction à 50k clés).
   suite.measureSync(
     {
       name: 'Rate limit, 100k IP distinctes (borne 50k)',

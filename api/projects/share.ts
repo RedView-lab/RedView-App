@@ -1,6 +1,6 @@
 import type { ApiRequest, ApiResponse } from '../_lib/types.js';
 
-import { createRateLimiter, getClientIp, rateLimitKeyForIp } from '../../server/http-security.mjs';
+import { createRateLimiter, getClientIp, rateLimitKeyForIp } from '../../server/lib/http-security.mjs';
 import { requireAuthenticatedUser } from '../_lib/appwrite.js';
 import { PublicError, sendSafeError } from '../_lib/errors.js';
 import { readJsonBody, sendMethodNotAllowed } from '../_lib/http.js';

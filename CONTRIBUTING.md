@@ -17,9 +17,9 @@ npm run dev
 
 | Path | Contents |
 |---|---|
-| `src/` | Frontend (React + TypeScript). `features/<domain>/` with a public `index.ts`, cross-cutting code in `shared/`, the composition root in `pages/Dashboard/`. |
+| `src/` | Frontend (React + TypeScript): `features/<domain>/`, cross-cutting code in `shared/`, the composition root in `pages/Dashboard/` — conventions in [`docs/STRUCTURE_REFACTOR_PLAN.md`](docs/STRUCTURE_REFACTOR_PLAN.md). |
 | `api/` | HTTP route handlers (`api/<name>.ts` → `/api/<name>`); shared server-side code in `api/_lib/`. |
-| `server/` | Node servers and their modules: production HTTP adapter helpers, real-time co-editing server (`multiplayer/`), VPS services (`poi-server/`, `poi-ingest/`, `weather-daemon/`) and host configuration (`vps/`). |
+| `server/` | Shared server modules (`lib/`), real-time co-editing server (`multiplayer/`), VPS services (`poi-server/`, `poi-ingest/`, `weather-daemon/`) and host configuration (`vps/`) — see [`server/README.md`](server/README.md). Production entry point: `server.mjs`. |
 | `scripts/` | Build, deploy, quality gate and operations tooling (see [`scripts/README.md`](scripts/README.md)). |
 | `script-test-bench/` | Benchmarks, end-to-end journeys and regression suites on real data (see its [`README.md`](script-test-bench/README.md)). |
 | `vendor/` | Rust crates compiled to WebAssembly (outputs committed). |
@@ -34,7 +34,7 @@ npm run dev
    what CI and `npm run deploy` run.
 2. **Tests next to the code.** `foo.ts` → `foo.test.ts` (Vitest, explicit
    `import { describe, it, expect } from 'vitest'`); server tests in
-   `server/__tests__/`, API tests in `api/_lib/__tests__/`.
+   `server/lib/__tests__/`, API tests in `api/_lib/__tests__/`.
 3. **No new lint error.** Pre-existing ones are frozen in `eslint-suppressions.json`;
    fix errors rather than suppressing them, and run `npm run lint:prune` after
    fixing a frozen one.
