@@ -1,5 +1,5 @@
 // E2E co-édition EN PRODUCTION (https://app.redview.tech) avec deux vrais
-// comptes (scripts/collab-test-accounts.mjs) dans deux contextes de navigation
+// comptes (scripts/appwrite/collab-test-accounts.mjs) dans deux contextes de navigation
 // isolés : invitation par e-mail, « Partagés avec moi », pastilles, synchro,
 // seul l'auteur route, annuler par utilisateur, latence mesurée, rechargement
 // (modification faite pendant la connexion, onglet fermé avant l'état du

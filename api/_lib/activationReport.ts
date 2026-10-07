@@ -15,7 +15,7 @@ import {
  * Activation par cohorte d'inscription, calculée depuis la base (la source
  * de vérité) plutôt qu'en suivant les personnes dans l'outil d'audience :
  * Umami reste anonyme (src/shared/lib/analytics/, docs/ANALYTICS.md), ce rapport ne sort que
- * des agrégats. Lancé à la main : scripts/activation-report.ts.
+ * des agrégats. Lancé à la main : scripts/analytics/activation-report.ts.
  *
  * Étapes, par compte :
  *  1. inscrit (cohorte = semaine ISO de l'inscription, lundi UTC) ;

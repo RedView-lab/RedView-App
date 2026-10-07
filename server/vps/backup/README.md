@@ -214,7 +214,7 @@ instantané. Le registre `account_deletions` restauré connaît les suppressions
 antérieures. Lancer depuis un poste qui a la clé API :
 
 ```bash
-npx tsx --env-file=.env scripts/account-deletions.ts --reapply
+npx tsx --env-file=.env scripts/appwrite/account-deletions.ts --reapply
 ```
 
 Les suppressions faites entre l'instantané et le sinistre (moins de 24 h)

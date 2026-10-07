@@ -1,6 +1,6 @@
 /**
  * Audit A — LECTURE SEULE (GET uniquement) du schéma Appwrite + stats de taille.
- * - taille réelle de l'attribut `projects.data` (vs scripts/setup-appwrite-schema.mjs)
+ * - taille réelle de l'attribut `projects.data` (vs scripts/appwrite/setup-appwrite-schema.mjs)
  * - index présents (user_id, folder_id, parent_folder_id)
  * - distribution de `size_bytes` des projets existants (aucun contenu lu : Query.select)
  * - motifs de permissions des documents subscriptions / customers (un user peut-il modifier son abonnement ?)

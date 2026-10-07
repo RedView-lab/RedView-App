@@ -66,7 +66,7 @@ actuelle le fait tuer par le noyau.
 ## Mesurer
 
 ```bash
-bash scripts/vps-perf-snapshot.sh <libellé> [--with-db] [--with-weather]
+bash scripts/vps/perf-snapshot.sh <libellé> [--with-db] [--with-weather]
 ```
 
 Lecture seule ; écrit `script-test-bench/reports/server-perf/snapshot-<date>-<libellé>.md`

@@ -7,7 +7,7 @@ Deux sources, deux rôles :
 
 | Source | Ce qu'elle mesure | Où |
 |---|---|---|
-| **Umami** (auto-hébergé, `analytics.redview.tech`) | Comportement anonyme par session : écrans, parcours, adoption des fonctions, entonnoirs dans une séance, temps de chargement (Web Vitals + carte 3D), acquisition (UTM, referrer), appareils | `src/shared/lib/analytics/`, rapports versionnés dans `scripts/umami/spec.ts` |
+| **Umami** (auto-hébergé, `analytics.redview.tech`) | Comportement anonyme par session : écrans, parcours, adoption des fonctions, entonnoirs dans une séance, temps de chargement (Web Vitals + carte 3D), acquisition (UTM, referrer), appareils | `src/shared/lib/analytics/`, rapports versionnés dans `scripts/analytics/umami/spec.ts` |
 | **Base Appwrite** | Ce que les comptes ont vraiment fait : cohortes d'inscription, activation, retour à J+7, payants, usage (projets, km planifiés, fonctions utilisées) | `api/_lib/activationReport.ts`, `npm run analytics:report` |
 
 Umami ne suit personne : une session = hash(site, IP, navigateur, **sel mensuel**),
@@ -32,7 +32,7 @@ dans la base.
 - Contexte ajouté à chaque événement : `surface` (app/viewer), `plan` (formule :
   demo, founder, patron), `account_age` (d0, d1_7, d8_30, d30_plus), `lang`, `theme`.
 - Comptes de l'équipe et de test : libellé Appwrite `internal`
-  (`scripts/analytics-internal-accounts.ts`) → rien n'est envoyé, et ils sortent
+  (`scripts/analytics/internal-accounts.ts`) → rien n'est envoyé, et ils sortent
   du rapport d'activation.
 - Respect de « Ne pas suivre » (`data-do-not-track`).
 - Géolocalisation à la ville au plus fin (Umami), IP jamais stockée.
@@ -70,7 +70,7 @@ Le code garde des noms typés (`route_exported`, `layer: 'slopes'`) ; le
 before-send les traduit au départ avec `labels.ts` : Umami reçoit « Parcours
 exporté vers le GPS » avec « format : GPX », « Couche de carte allumée ou
 éteinte » avec « couche : Pentes, allumé : oui », les durées en secondes, les
-booléens en oui/non. Les rapports (`scripts/umami/spec.ts`) citent les noms du
+booléens en oui/non. Les rapports (`scripts/analytics/umami/spec.ts`) citent les noms du
 code et passent par les mêmes tables : impossible qu'un entonnoir cherche un nom
 qu'Umami ne reçoit pas. **Changer un libellé crée un nouvel événement pour
 Umami** (l'historique de l'ancien nom ne s'y rattache pas) : à éviter en prod.
@@ -118,7 +118,7 @@ Web Vitals (LCP, INP, CLS, FCP, TTFB) : collectés par le tracker
   inscription → export GPS ; première session des comptes du jour ;
   planification ; co-édition ; LiDAR ; flyover ; monétisation), 6 objectifs,
   5 segments (anglophones, Instagram, landing, campagnes UTM, mobile).
-- **5 tableaux de bord** (`scripts/umami/boards.ts`, même synchro ; composants
+- **5 tableaux de bord** (`scripts/analytics/umami/boards.ts`, même synchro ; composants
   et mise en page lus dans le code d'Umami 3.4 : lignes de 1 à 4 colonnes, blocs
   texte, entonnoirs/objectifs cités par nom) : 1 · L'essentiel, 2 · Nouveaux
   utilisateurs, 3 · Fonctions utilisées, 4 · Qui et sur quoi, 5 · Vitesse et
@@ -136,7 +136,7 @@ Web Vitals (LCP, INP, CLS, FCP, TTFB) : collectés par le tracker
 2. L'appel `trackAnalyticsEvent` au point de passage le plus central (un
    réducteur, un store, un contrôleur) plutôt qu'à chaque bouton ; pour un simple
    clic, `analyticsAttrs()` sur l'élément.
-3. S'il compte dans un entonnoir ou un objectif : `scripts/umami/spec.ts`, puis
+3. S'il compte dans un entonnoir ou un objectif : `scripts/analytics/umami/spec.ts`, puis
    `npm run analytics:sync`.
 4. `npm run e2e:journey` vérifie les écrans et événements du parcours principal
    et qu'aucune charge utile ne porte de donnée personnelle.

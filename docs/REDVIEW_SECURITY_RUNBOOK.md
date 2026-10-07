@@ -20,11 +20,11 @@ déconnexion.
 Le nouveau frontend crée les miniatures en `Role.user` et les affiche via le
 SDK authentifié. Ensuite seulement :
 ```bash
-node scripts/audit-appwrite-permissions.mjs            # état avant
-node scripts/patch-security-schema.mjs                 # buckets → create("users") seulement
-node scripts/migrate-thumbnail-permissions.mjs         # dry-run
-node scripts/migrate-thumbnail-permissions.mjs --apply # read("any") → read("user:<owner>")
-node scripts/audit-appwrite-permissions.mjs            # doit afficher « Aucune permission trop large »
+node scripts/appwrite/audit-appwrite-permissions.mjs            # état avant
+node scripts/appwrite/patch-security-schema.mjs                 # buckets → create("users") seulement
+node scripts/appwrite/migrate-thumbnail-permissions.mjs         # dry-run
+node scripts/appwrite/migrate-thumbnail-permissions.mjs --apply # read("any") → read("user:<owner>")
+node scripts/appwrite/audit-appwrite-permissions.mjs            # doit afficher « Aucune permission trop large »
 ```
 
 ## 3. VPS (141.145.220.99) — `ssh -i ~/.ssh/oracle_brouter.key opc@141.145.220.99`
@@ -92,7 +92,7 @@ Détail des failles et des règles : section 14 de `REDVIEW_COLLAB_TEMPS_REEL.tx
    protocole 3 voient « rechargez la page »).
 2. Mettre en conformité les projets partagés (l'ancien format donnait
    l'écriture de la ligne à l'équipe) :
-   `npx tsx --env-file=.env scripts/secure-shared-projects.ts` (à sec), puis
+   `npx tsx --env-file=.env scripts/appwrite/secure-shared-projects.ts` (à sec), puis
    `--apply`, puis `--check-documents --all` (chaque document passe la
    validation du serveur). Rollback d'une ligne : remettre
    `update("team:p<projet>")` à ses permissions (console Appwrite).

@@ -34,13 +34,13 @@ interface DeleteAccountBody {
 
 const CONFIRMATION = 'delete-my-account';
 const CODE_PATTERN = /^\d{6}$/;
-/** Reprises d'une purge interrompue, dans ce processus ; ensuite scripts/account-deletions.ts --resume. */
+/** Reprises d'une purge interrompue, dans ce processus ; ensuite scripts/appwrite/account-deletions.ts --resume. */
 const RETRY_DELAYS_MS = [30_000, 2 * 60_000, 10 * 60_000];
 
 function finishDeletionLater(userId: string, email: string, name: string, attempt = 0): void {
   const delay = RETRY_DELAYS_MS[attempt];
   if (delay === undefined) {
-    console.error('[auth/delete-account] suppression toujours incomplète : scripts/account-deletions.ts --resume', userId);
+    console.error('[auth/delete-account] suppression toujours incomplète : scripts/appwrite/account-deletions.ts --resume', userId);
     return;
   }
   const timer = setTimeout(() => {

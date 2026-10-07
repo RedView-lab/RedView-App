@@ -41,7 +41,7 @@ const SKIP_CHECKS_FLAG = '--skip-checks';
 const COMMIT_ALL_FLAG = '--commit-all';
 const SCRIPTS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const CHECK_SCRIPT = path.join(SCRIPTS_DIR, '..', 'quality', 'check.mjs');
-const SCHEMA_SCRIPT = path.join(SCRIPTS_DIR, '..', 'setup-appwrite-schema.mjs');
+const SCHEMA_SCRIPT = path.join(SCRIPTS_DIR, '..', 'appwrite', 'setup-appwrite-schema.mjs');
 const ENV_FILE = path.join(SCRIPTS_DIR, '..', '..', '.env');
 
 // Fichiers qui ne doivent JAMAIS partir sur GitHub, même si le .gitignore
@@ -56,7 +56,7 @@ function runQualityGate() {
 }
 
 /**
- * Schéma Appwrite de prod comparé à scripts/setup-appwrite-schema.mjs, en
+ * Schéma Appwrite de prod comparé à scripts/appwrite/setup-appwrite-schema.mjs, en
  * lecture seule : un code qui suppose une collection absente ne part pas
  * (account_deletions a manqué le 07/10). Corriger avec le même script sans
  * `--check`.
@@ -106,7 +106,7 @@ async function main() {
   }
   if (!skipChecks) {
     if (!runProdSchemaCheck()) {
-      error('Production schema differs from scripts/setup-appwrite-schema.mjs: nothing was committed or pushed. Apply it (node --env-file=.env scripts/setup-appwrite-schema.mjs --only=<ids>), then deploy again.');
+      error('Production schema differs from scripts/appwrite/setup-appwrite-schema.mjs: nothing was committed or pushed. Apply it (node --env-file=.env scripts/appwrite/setup-appwrite-schema.mjs --only=<ids>), then deploy again.');
       process.exit(1);
     }
     success('Production schema matches.');

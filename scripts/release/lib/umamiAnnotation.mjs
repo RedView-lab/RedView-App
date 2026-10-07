@@ -2,7 +2,7 @@
  * Note sur les courbes d'Umami (annotations 3.4) — « Déploiement <sha> »,
  * « Retour arrière à <sha> » : une variation d'audience, de Web Vitals ou d'un
  * entonnoir se lit face au changement qui l'a causée. Best-effort et
- * silencieux sans clé API (~/.redview/umami.json, voir scripts/umami/client.ts).
+ * silencieux sans clé API (~/.redview/umami.json, voir scripts/analytics/umami/client.ts).
  */
 import fs from 'node:fs';
 import os from 'node:os';

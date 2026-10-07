@@ -16,7 +16,7 @@
 // écrit par le serveur temps réel (clé admin). Avec un droit d'écriture,
 // n'importe quel éditeur pouvait réécrire `user_id`, `team_id`, `data` et les
 // permissions, donc se déclarer propriétaire (ancien format, nettoyé par
-// scripts/secure-shared-projects.mjs).
+// scripts/appwrite/secure-shared-projects.mjs).
 // ---------------------------------------------------------------------------
 import { createHash } from 'node:crypto';
 

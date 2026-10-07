@@ -326,7 +326,7 @@ Format sur le fil (src/features/collab/wire.ts) : JSON en trame texte ; un
   ne jamais redonner à l'équipe l'écriture sur la ligne ; toute nouvelle
   règle de validation doit accepter tout ce qu'un client honnête produit
   (validate.test.ts, bench:collab : 0 lot refusé, et
-  scripts/secure-shared-projects.ts --check-documents --all sur la prod).
+  scripts/appwrite/secure-shared-projects.ts --check-documents --all sur la prod).
 
 ========================================================================
 9. TESTS ET BANCS
@@ -637,7 +637,7 @@ Lots (src/features/collab/model/validate.ts, commentRules.ts) :
     plus proposé après 3 refus du même éditeur en 2 min.
   - Preuve qu'aucun client honnête n'est refusé : validate.test.ts
     (10 000 modifications aléatoires), bench:collab (0 lot refusé), et les
-    116 documents de la prod rejoués (scripts/secure-shared-projects.ts
+    116 documents de la prod rejoués (scripts/appwrite/secure-shared-projects.ts
     --check-documents --all : 116 acceptés le 06/10/2026).
 
 Client :
@@ -668,7 +668,7 @@ compilé des validations, amorti sur les salles : +16 Ko à 20 salles, +9 Ko à
 
 Exploitation :
   - Audit / mise en conformité de la prod :
-      npx tsx --env-file=.env scripts/secure-shared-projects.ts [--apply] [--check-documents [--all]]
+      npx tsx --env-file=.env scripts/appwrite/secure-shared-projects.ts [--apply] [--check-documents [--all]]
   - nginx de l'hôte : limit_conn / limit_req sur /multiplayer
     (server/vps/nginx-multiplayer.conf).
   - Variables : MULTIPLAYER_INTERNAL_SECRET (≥ 32 car., sur les DEUX services
