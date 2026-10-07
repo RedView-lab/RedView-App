@@ -13,7 +13,7 @@ import {
   PROJECT_CLOUD_ERROR_MESSAGES,
   queueProjectViewSave,
   isSharedProject,
-} from '@/shared/utils/projects';
+} from '@/shared/services/projects';
 import { replaceProjectLocation } from '@/shared/lib/projectLocation';
 import { readFullProjectCacheAsync } from './dashboardProjectCache';
 import { useDashboardProjectSync } from './useDashboardProjectSync';

@@ -149,7 +149,7 @@ useCollabSession (hook React)
       l'appareil (externalRevision augmente) ;
     * en session, l'historique d'annulation est celui de la session.
 - Un projet partagé est « possédé par le serveur »
-  (shared/utils/projects/liveSessions.ts, isServerOwnedDocument) :
+  (shared/services/projects/liveSessions.ts, isServerOwnedDocument) :
     * l'autosave n'écrit jamais le cloud (copie locale seulement, jamais
       « dirty ») ;
     * jamais de conflit ni de copie « version d'un autre appareil ».
@@ -644,7 +644,7 @@ Client :
   - « Mes projets » / « Partagés avec moi » / ouverture : seulement les lignes
     vraiment à moi (user_id + permission sur mon rôle) ou partagées par leur
     équipe « p<projet> » dont je suis membre
-    (src/shared/utils/projects/access.ts). Avant, n'importe quel compte
+    (src/shared/services/projects/access.ts). Avant, n'importe quel compte
     pouvait glisser une ligne lisible par tous dans la bibliothèque d'un
     autre (et lire ce qu'il y saisissait).
   - Vues par utilisateur (project_views) : un document à l'id deviné par un

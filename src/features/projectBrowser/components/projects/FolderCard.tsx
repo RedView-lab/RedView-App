@@ -6,7 +6,7 @@ import {
   IconFolder,
   IconSave,
 } from '@/features/itineraryPanel/components/icons';
-import type { ProjectFolderSummary } from '@/shared/utils/projects';
+import type { ProjectFolderSummary } from '@/shared/services/projects';
 
 import { formatSavedAt, formatSize, privacyLabel } from '../../lib';
 

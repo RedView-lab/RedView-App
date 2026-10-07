@@ -4,7 +4,7 @@
  * celui de l'enregistrement automatique (« modifications conservées sur cet
  * appareil ») n'a pas de sens pour un projet qui n'a pas été créé.
  */
-import { isProjectCloudError, type ProjectCloudErrorKind } from '@/shared/utils/projects';
+import { isProjectCloudError, type ProjectCloudErrorKind } from '@/shared/services/projects';
 
 import { isRedviewFileError } from './errors';
 

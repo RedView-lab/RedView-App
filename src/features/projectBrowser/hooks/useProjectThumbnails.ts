@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
-import { getProjectThumbnailUrls } from '@/shared/utils/projects';
+import { getProjectThumbnailUrls } from '@/shared/services/projects';
 
 type ThumbnailMap = Record<string, string | null>;
 

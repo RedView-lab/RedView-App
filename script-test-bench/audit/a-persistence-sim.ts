@@ -2,10 +2,10 @@
  * Audit A — Simulation hors-ligne de la persistance projet (pistes C1, C2, C4, C5, R2, P1, P2).
  *
  * Bundle avec esbuild le VRAI code :
- *   src/shared/utils/projects/{projectRows,folders,compression}.ts + src/shared/services/appwrite.ts
+ *   src/shared/services/projects/{projectRows,folders,compression}.ts + src/shared/services/appwrite.ts
  * en remplaçant uniquement :
  *   - le paquet `appwrite` (SDK web)        → a-mock-appwrite-sdk.ts (data ≤ 16 M car., proxy nginx 502 au-delà, limit 25 par défaut)
- *   - shared/utils/storage/idbProjectStore  → a-mock-idb.ts (IndexedDB en mémoire)
+ *   - shared/services/storage/idbProjectStore  → a-mock-idb.ts (IndexedDB en mémoire)
  * `window.localStorage` est simulé. Aucun accès réseau.
  *
  * Usage : npx tsx script-test-bench/audit/a-persistence-sim.ts
@@ -58,19 +58,19 @@ async function loadBundle() {
   const esbuild = await import('esbuild');
   const outFile = path.join(os.tmpdir(), `rv-audit-persist-${process.pid}.mjs`);
   const entry = `
-    export * from ${JSON.stringify(path.join(SRC, 'shared/utils/projects/projectRows.ts'))};
-    export * from ${JSON.stringify(path.join(SRC, 'shared/utils/projects/projectViews.ts'))};
-    export * from ${JSON.stringify(path.join(SRC, 'shared/utils/projects/folders.ts'))};
+    export * from ${JSON.stringify(path.join(SRC, 'shared/services/projects/projectRows.ts'))};
+    export * from ${JSON.stringify(path.join(SRC, 'shared/services/projects/projectViews.ts'))};
+    export * from ${JSON.stringify(path.join(SRC, 'shared/services/projects/folders.ts'))};
     export { getSavedCustomProfiles, saveCustomProfileToStorage, deleteCustomProfileFromStorage, syncCustomProfilesWithAccount } from ${JSON.stringify(path.join(SRC, 'features/itineraryPanel/lib/project/customProfiles.ts'))};
     export { extractProjectView, toProjectDocument, isProjectDocument } from ${JSON.stringify(path.join(SRC, 'features/itineraryPanel/lib/project/layers.ts'))};
-    export { compressProjectPayload, decompressProjectPayload } from ${JSON.stringify(path.join(SRC, 'shared/utils/projects/compression.ts'))};
+    export { compressProjectPayload, decompressProjectPayload } from ${JSON.stringify(path.join(SRC, 'shared/services/projects/compression.ts'))};
     export { readStoredAppwriteSession, saveStoredAppwriteSession, clearStoredAppwriteSession, getAppwriteUser, onAppwriteSessionExpired } from ${JSON.stringify(path.join(SRC, 'shared/services/appwrite.ts'))};
     export { createDefaultProject, createDefaultItinerary } from ${JSON.stringify(path.join(SRC, 'features/itineraryPanel/lib/project/index.ts'))};
     export { useDashboardProjectSync } from ${JSON.stringify(path.join(SRC, 'pages/Dashboard/useDashboardProjectSync.ts'))};
     export { signOutAccount } from ${JSON.stringify(path.join(SRC, 'features/projectBrowser/account/lib/profile.ts'))};
-    export { getProjectSyncStatus } from ${JSON.stringify(path.join(SRC, 'shared/utils/projects/syncStatus.ts'))};
+    export { getProjectSyncStatus } from ${JSON.stringify(path.join(SRC, 'shared/services/projects/syncStatus.ts'))};
     export { __mock } from 'appwrite';
-    export { __idb } from '@/shared/utils/storage/idbProjectStore';
+    export { __idb } from '@/shared/services/storage/idbProjectStore';
   `;
   await esbuild.build({
     stdin: { contents: entry, resolveDir: ROOT, loader: 'ts' },

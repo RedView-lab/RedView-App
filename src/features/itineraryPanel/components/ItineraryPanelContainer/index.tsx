@@ -29,7 +29,7 @@ import { DEFAULT_ROUTE_TRACE_WIDTH_PX } from '../../lib/route-layer/constants';
 import type { TimelineFilterState } from '../../sections/timeline/TimelineFilters';
 import type { GpxRoute, PoiFeature } from '@/features/poi/types';
 import { dispatchSelectPoiOnChart } from '@/features/poi/lib/chartPoiSyncBridge';
-import { deleteProjectItineraryFitFiles } from '@/shared/utils/projects';
+import { deleteProjectItineraryFitFiles } from '@/shared/services/projects';
 import type { CollaboratorAction, Itinerary, ItineraryProject, PanelMode, PrioritiesState, RhythmState, ProjectCollaborator, ProjectSessionStatus } from '../../types';
 
 import { useItineraryPoiHandlers } from './useItineraryPoiHandlers';

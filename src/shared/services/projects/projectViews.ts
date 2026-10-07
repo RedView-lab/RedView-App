@@ -28,7 +28,7 @@ import {
   idbGetProjectView,
   idbSaveProjectView,
   type IdbProjectViewEntry,
-} from '@/shared/utils/storage/idbProjectStore';
+} from '@/shared/services/storage/idbProjectStore';
 
 import { isOwnDocument, loadAccessQueries } from './access';
 import { getCachedCurrentUserIdSync, isLocalFallbackUser } from './auth';

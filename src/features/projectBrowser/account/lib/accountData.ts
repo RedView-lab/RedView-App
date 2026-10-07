@@ -8,7 +8,7 @@ import { translateAppText } from '@/shared/i18n';
 import { countBucket, trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { APP_BUILD_ID } from '@/shared/lib/appCacheEpoch';
 import { account, getAppwriteJwt } from '@/shared/services/appwrite';
-import { getProject, listProjectBrowserSnapshot } from '@/shared/utils/projects';
+import { getProject, listProjectBrowserSnapshot } from '@/shared/services/projects';
 
 async function deleteAccountRequest<T>(body: Record<string, unknown>): Promise<{ status: number; data: T }> {
   const send = async (fresh: boolean) => {

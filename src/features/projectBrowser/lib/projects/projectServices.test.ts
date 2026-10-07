@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Couche Appwrite / IndexedDB et fichier .redview remplacées : seule la
 // logique d'orchestration (noms, rollback, échecs par fichier) est testée.
-vi.mock('@/shared/utils/projects', () => ({
+vi.mock('@/shared/services/projects', () => ({
   createProject: vi.fn(),
   deleteProject: vi.fn(),
   deleteProjectFitFiles: vi.fn(),
@@ -20,9 +20,9 @@ vi.mock('@/features/redviewFile/lib/messages', () => ({
   describeRedviewImportError: (error: unknown) => (error instanceof Error ? error.message : 'Fichier illisible'),
 }));
 
-import * as projectsApi from '@/shared/utils/projects';
+import * as projectsApi from '@/shared/services/projects';
 import * as redviewFile from '@/features/redviewFile/lib/importProject';
-import type { ProjectRow } from '@/shared/utils/projects';
+import type { ProjectRow } from '@/shared/services/projects';
 
 import { duplicateProjectWithAssets } from './duplicateProject';
 import { importProjectFiles } from './importProjects';

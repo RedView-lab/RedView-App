@@ -21,7 +21,7 @@ import {
   normalizeImportedRoutePoints,
 } from '../../src/features/itineraryPanel/lib/routes/imported-route.ts';
 import { simplifyPointsByQuality } from '../../src/features/itineraryPanel/lib/routes/simplify-route.ts';
-import { MAX_CLOUD_PROJECT_PAYLOAD_CHARS } from '../../src/shared/utils/projects/limits.ts';
+import { MAX_CLOUD_PROJECT_PAYLOAD_CHARS } from '../../src/shared/services/projects/limits.ts';
 import type { Itinerary, ItineraryProject, TimelineItem } from '../../src/features/itineraryPanel/types/index.ts';
 import type { PoiCategory, PoiFeature } from '../../src/features/poi/types.ts';
 import type { PredictionResult } from '../../src/features/fitPredictor/types.ts';

@@ -11,7 +11,7 @@ import { REDVIEW_FILE_EXTENSION } from '@/features/redviewFile/lib/format';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { useAppI18n } from '@/shared/i18n';
 import { projectAgeBucket, trackAnalyticsEvent } from '@/shared/lib/analytics';
-import type { ProjectFolderSummary, ProjectSummary } from '@/shared/utils/projects';
+import type { ProjectFolderSummary, ProjectSummary } from '@/shared/services/projects';
 
 import { useFileDropImport } from '../../hooks/useFileDropImport';
 import { buildFolderPathLabel, collectFolderDescendantIds } from '../../lib';

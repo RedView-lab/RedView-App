@@ -1,4 +1,4 @@
-import type { ProjectFolderSummary } from '@/shared/utils/projects';
+import type { ProjectFolderSummary } from '@/shared/services/projects';
 import { useAppI18n } from '@/shared/i18n';
 
 type BrowserBreadcrumbProps = {

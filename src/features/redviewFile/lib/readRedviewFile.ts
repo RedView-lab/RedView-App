@@ -7,7 +7,7 @@
  * octets. Toute erreur sort en `RedviewFileError`.
  */
 import { MAX_FIT_FILE_BYTES, validateFitHeader } from '@/features/fitPredictor/lib/fitFileValidation';
-import { MAX_PROJECT_SIZE_BYTES } from '@/shared/utils/projects/limits';
+import { MAX_PROJECT_SIZE_BYTES } from '@/shared/services/projects/limits';
 
 import { RedviewFileError } from './errors';
 import {

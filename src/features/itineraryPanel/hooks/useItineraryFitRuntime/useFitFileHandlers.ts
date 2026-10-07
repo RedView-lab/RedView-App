@@ -1,7 +1,7 @@
 import { countBucket, trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { useCallback, useRef, type ChangeEvent, type Dispatch, type SetStateAction } from 'react';
 import { translateAppText } from '@/shared/i18n';
-import { deleteFitUploads, uploadProjectItineraryFitFiles } from '@/shared/utils/projects';
+import { deleteFitUploads, uploadProjectItineraryFitFiles } from '@/shared/services/projects';
 import { validateFitFile, type FitFileProblem } from '@/features/fitPredictor/lib/fitFileValidation';
 import { buildFitUploadsSignature } from '../../lib/schedule';
 import { MAX_FIT_FILES } from '../../lib/rhythm/profile';

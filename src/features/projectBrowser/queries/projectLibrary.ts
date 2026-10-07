@@ -17,7 +17,7 @@ import {
   renameProject,
   renameProjectFolder,
   type ProjectBrowserSnapshot,
-} from '@/shared/utils/projects';
+} from '@/shared/services/projects';
 
 import { duplicateProjectWithAssets } from '../lib/projects/duplicateProject';
 import { importProjectFiles } from '../lib/projects/importProjects';

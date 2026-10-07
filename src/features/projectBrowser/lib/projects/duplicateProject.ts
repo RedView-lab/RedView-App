@@ -9,7 +9,7 @@ import {
   getProject,
   saveProject,
   type ProjectRow,
-} from '@/shared/utils/projects';
+} from '@/shared/services/projects';
 
 import { buildCopiedName } from './naming';
 

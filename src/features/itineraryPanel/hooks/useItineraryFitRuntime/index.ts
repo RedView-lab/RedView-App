@@ -4,7 +4,7 @@ import {
   useState,
 } from 'react';
 
-import { deleteFitUploads } from '@/shared/utils/projects';
+import { deleteFitUploads } from '@/shared/services/projects';
 import { useKeyedValue } from '@/shared/hooks/useKeyedValue';
 import { useLatestRef } from '@/shared/hooks/useLatestRef';
 import { normalizeDiscipline } from '@/shared/lib/discipline';

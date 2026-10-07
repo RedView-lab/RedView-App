@@ -61,7 +61,7 @@ const gunzipAsync = promisify(gunzip);
 const PROJECTS_COLLECTION_ID = 'projects';
 const JOURNAL_COLLECTION_ID = 'project_journal';
 const PAYLOADS_BUCKET_ID = 'project-payloads';
-/** Limite du nginx devant Appwrite pour un attribut (cf. shared/utils/projects/limits.ts). */
+/** Limite du nginx devant Appwrite pour un attribut (cf. shared/services/projects/limits.ts). */
 const MAX_INLINE_PAYLOAD_CHARS = 12_000_000;
 const MAX_JOURNAL_INLINE_CHARS = 10_000_000;
 const MAX_DECOMPRESSED_BYTES = 200 * 1024 * 1024;

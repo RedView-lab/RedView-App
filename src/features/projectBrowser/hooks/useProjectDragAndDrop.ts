@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 
 import { translateAppText } from '@/shared/i18n';
-import type { ProjectFolderSummary, ProjectSummary } from '@/shared/utils/projects';
+import type { ProjectFolderSummary, ProjectSummary } from '@/shared/services/projects';
 
 import { resolveDropAction, type DraggedBrowserItem } from '../lib/projects/dropAction';
 

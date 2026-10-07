@@ -1,7 +1,7 @@
 import type { PredictionResult } from '@/features/fitPredictor';
 import {
   downloadProjectItineraryFitFileEntries,
-} from '@/shared/utils/projects';
+} from '@/shared/services/projects';
 
 import {
   buildFitUploadsSignature,

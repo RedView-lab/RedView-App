@@ -38,7 +38,7 @@ import {
   idbListProjectMetas,
   idbSaveProject,
   idbUpdateProjectMeta,
-} from '@/shared/utils/storage/idbProjectStore';
+} from '@/shared/services/storage/idbProjectStore';
 
 import { getCurrentUserId, isLocalFallbackUser, isOwnedBy, toCloudFailure } from './auth';
 import { listAllCloudDocuments } from './cloudList';

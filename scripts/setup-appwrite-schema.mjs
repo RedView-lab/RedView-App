@@ -152,7 +152,7 @@ async function main() {
     },
     {
       // Vue de chaque utilisateur sur chaque projet (itinéraire et mode actifs,
-      // panneaux, vue carte, panneau de droite, graphe — src/shared/utils/
+      // panneaux, vue carte, panneau de droite, graphe — src/shared/services/
       // projects/projectViews.ts), à part du document partagé `projects.data` :
       // la modifier ne crée jamais de version du projet. Id du document =
       // hachage (projet, utilisateur) ; `data` = JSON { updatedAt, view }.
@@ -337,7 +337,7 @@ async function main() {
     {
       // Gros projets dont le JSON gzip dépasse ce que le document `projects.data`
       // accepte (≈12 M car. derrière nginx) : `<projectId>.json.gz`, pointé par
-      // `data = "file:<fileId>"` (src/shared/utils/projects/payloadFiles.ts).
+      // `data = "file:<fileId>"` (src/shared/services/projects/payloadFiles.ts).
       id: 'project-payloads',
       name: 'Project Payloads',
       // Collection/bucket : création seulement. Lecture/écriture accordées

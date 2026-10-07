@@ -12,7 +12,7 @@ import { deserializeLegacyFitUploads } from '@/features/itineraryPanel/lib/sched
 import type { ItineraryFitUpload, ItineraryProject } from '@/features/itineraryPanel/types';
 import { APP_BUILD_ID } from '@/shared/lib/appCacheEpoch';
 import { logger } from '@/shared/lib/logger';
-import { downloadProjectItineraryFitFileEntries, loadProjectThumbnailBlob } from '@/shared/utils/projects';
+import { downloadProjectItineraryFitFileEntries, loadProjectThumbnailBlob } from '@/shared/services/projects';
 
 import { withEffectiveControlPanel } from './effectiveControlPanel';
 import { RedviewFileError } from './errors';

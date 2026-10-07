@@ -1,13 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { markSharedProject, sharedProjectTeamId } from '@/shared/utils/projects/liveSessions';
+import { markSharedProject, sharedProjectTeamId } from '@/shared/services/projects/liveSessions';
 import {
   fetchProjectShare,
   inviteProjectEditor,
   leaveSharedProject,
   removeProjectEditor,
   type ProjectShareState,
-} from '@/shared/utils/projects/sharing';
+} from '@/shared/services/projects/sharing';
 
 import { projectLibraryKeys, type ProjectLibrarySnapshot } from './projectLibrary';
 import { patchProject } from './projectLibraryCache';

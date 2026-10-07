@@ -8,7 +8,7 @@ import {
   storage,
   THUMBNAILS_BUCKET_ID,
 } from '@/shared/services/appwrite';
-import { idbSaveThumbnail, idbGetThumbnail } from '@/shared/utils/storage/idbProjectStore';
+import { idbSaveThumbnail, idbGetThumbnail } from '@/shared/services/storage/idbProjectStore';
 
 import { isSharedProject, sharedProjectOwner, sharedProjectTeamId } from './liveSessions';
 

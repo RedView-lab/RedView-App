@@ -12,8 +12,8 @@ import {
 import { APP_CACHE_EPOCH_STORAGE_KEY } from '@/shared/lib/appCacheEpoch';
 import { errorMessage } from '@/shared/lib/errors';
 import { clearAnalyticsContext, trackAnalyticsEvent } from '@/shared/lib/analytics';
-import { syncDirtyProjects } from '@/shared/utils/projects';
-import { clearProjectStore } from '@/shared/utils/storage/idbProjectStore';
+import { syncDirtyProjects } from '@/shared/services/projects';
+import { clearProjectStore } from '@/shared/services/storage/idbProjectStore';
 
 import {
   DEFAULT_COUNTRY,

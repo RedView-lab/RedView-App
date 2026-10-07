@@ -22,7 +22,7 @@ import {
   uploadProjectItineraryFitFiles,
   uploadProjectThumbnail,
   type ProjectRow,
-} from '@/shared/utils/projects';
+} from '@/shared/services/projects';
 
 import { REDVIEW_FILE_EXTENSION, type RedviewFitFile } from './format';
 import { buildImportedProjectName, nextFreeName } from './naming';

@@ -5,10 +5,10 @@ import { useAppI18n } from '@/shared/i18n';
 import {
   IconSave,
 } from '@/features/itineraryPanel/components/icons';
-import type { ProjectSummary } from '@/shared/utils/projects';
+import type { ProjectSummary } from '@/shared/services/projects';
 
 import { formatSavedAt, formatSize, privacyLabel } from '../../lib';
-import { idbGetThumbnail } from '@/shared/utils/storage/idbProjectStore';
+import { idbGetThumbnail } from '@/shared/services/storage/idbProjectStore';
 
 type ProjectCardProps = {
   project: ProjectSummary;

@@ -3,7 +3,7 @@
  * aucun accès réseau ni stockage, utilisable sous Node (bancs de test).
  */
 import type { ItineraryFitUpload, ItineraryProject } from '@/features/itineraryPanel/types';
-import { MAX_PROJECT_SIZE_BYTES } from '@/shared/utils/projects/limits';
+import { MAX_PROJECT_SIZE_BYTES } from '@/shared/services/projects/limits';
 
 import { RedviewFileError } from './errors';
 import {

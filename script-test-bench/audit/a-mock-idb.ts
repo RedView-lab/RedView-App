@@ -1,20 +1,20 @@
 /**
- * Audit A — substitut en mémoire de src/shared/utils/storage/idbProjectStore.ts
+ * Audit A — substitut en mémoire de src/shared/services/storage/idbProjectStore.ts
  * (même API, structuredClone comme IndexedDB). Utilisé par a-persistence-sim.ts.
  *
  * Comme le vrai store, une ligne projet ne garde que le document partagé et le
  * travail en attente (la vue de l'utilisateur va dans `views`) : `data` relu
  * est recomposé par les mêmes fonctions que l'application.
  */
-import type { ProjectRow, ProjectRowMeta } from '../../src/shared/utils/projects/types.ts';
+import type { ProjectRow, ProjectRowMeta } from '../../src/shared/services/projects/types.ts';
 import type { ItineraryProject } from '../../src/features/itineraryPanel/types/index.ts';
 import {
   parseStoredLocalWork,
   parseStoredProject,
   serializeProjectForStorage,
   type SerializedProject,
-} from '../../src/shared/utils/projects/storedProject.ts';
-import type { IdbProjectViewEntry } from '../../src/shared/utils/storage/idbProjectStore.ts';
+} from '../../src/shared/services/projects/storedProject.ts';
+import type { IdbProjectViewEntry } from '../../src/shared/services/storage/idbProjectStore.ts';
 
 type StoredRow = ProjectRowMeta & { data_json: string; work_json?: string };
 

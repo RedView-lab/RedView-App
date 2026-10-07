@@ -1,4 +1,4 @@
-import type { ProjectSummary } from '@/shared/utils/projects';
+import type { ProjectSummary } from '@/shared/services/projects';
 import { readDocumentAppLocale, translateAppText } from '@/shared/i18n';
 
 export function formatSavedAt(iso: string): string {

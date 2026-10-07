@@ -7,7 +7,7 @@
  *     buildImportedRouteMetrics (features/itineraryPanel/lib/routes) — même chaîne que
  *     useItineraryGpxImport.addItineraryFromGpxFile (sans l'appel réseau IGN)
  *   - createDefaultProject / createDefaultItinerary / normalizeItineraryProject
- *   - compressProjectPayload / decompressProjectPayload (shared/utils/projects/compression.ts)
+ *   - compressProjectPayload / decompressProjectPayload (shared/services/projects/compression.ts)
  *   - computeProjectSizeBytes / isProjectTooLarge / MAX_PROJECT_SIZE_BYTES (limits.ts)
  *   - buildLocalProjectCachePayload (pages/Dashboard/dashboardProjectCache.ts)
  *
@@ -40,14 +40,14 @@ import {
 import {
   compressProjectPayload,
   decompressProjectPayload,
-} from '../../src/shared/utils/projects/compression.ts';
+} from '../../src/shared/services/projects/compression.ts';
 import {
   computeProjectSizeBytes,
   isProjectTooLarge,
   MAX_CLOUD_PROJECT_PAYLOAD_CHARS,
   MAX_PROJECT_SIZE_BYTES,
   utf8ByteLength,
-} from '../../src/shared/utils/projects/limits.ts';
+} from '../../src/shared/services/projects/limits.ts';
 import type { Itinerary, ItineraryProject, TimelineItem } from '../../src/features/itineraryPanel/types/index.ts';
 import type { PoiCategory, PoiFeature } from '../../src/features/poi/types.ts';
 import type { PredictionResult } from '../../src/features/fitPredictor/types.ts';

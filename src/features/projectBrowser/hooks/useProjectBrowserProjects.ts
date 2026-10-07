@@ -4,7 +4,7 @@ import { translateAppText } from '@/shared/i18n';
 import { countBucket, trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { readStoredAppwriteSession } from '@/shared/services/appwrite';
 import { notify } from '@/shared/lib/notify';
-import type { ProjectFolderSummary, ProjectSummary } from '@/shared/utils/projects';
+import type { ProjectFolderSummary, ProjectSummary } from '@/shared/services/projects';
 
 import {
   useCreateFolder,

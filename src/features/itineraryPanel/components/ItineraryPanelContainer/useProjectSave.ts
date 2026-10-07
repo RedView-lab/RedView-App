@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppI18n } from '@/shared/i18n';
-import { isProjectCloudError } from '@/shared/utils/projects';
+import { isProjectCloudError } from '@/shared/services/projects';
 import { useProjectSyncStatus } from '@/shared/hooks/useProjectSyncStatus';
 import type { ItineraryProject, ProjectSaveStatus } from '../../types';
 

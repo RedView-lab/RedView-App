@@ -3,7 +3,7 @@ import {
   idbGetProjectMeta,
   idbSaveProject,
   idbUpdateProjectMeta,
-} from '@/shared/utils/storage/idbProjectStore';
+} from '@/shared/services/storage/idbProjectStore';
 import { getCurrentUserId, isLocalFallbackUser, isOwnedBy } from './auth';
 import { utf8ByteLength } from './limits';
 import { isServerOwnedDocument } from './liveSessions';

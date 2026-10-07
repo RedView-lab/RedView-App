@@ -11,7 +11,7 @@ const projects = vi.hoisted(() => ({
   deleteFitUploads: vi.fn(),
   uploadProjectItineraryFitFiles: vi.fn(),
 }));
-vi.mock('@/shared/utils/projects', () => projects);
+vi.mock('@/shared/services/projects', () => projects);
 vi.mock('@/features/fitPredictor/engine/api', () => ({
   FitPredictionCancelledError: class extends Error {},
   createFitPredictionEngine: () => ({ terminate: () => {} }),

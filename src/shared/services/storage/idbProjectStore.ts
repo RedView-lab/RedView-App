@@ -12,8 +12,8 @@ import {
   parseStoredProject,
   serializeProjectForStorage,
   type SerializedProject,
-} from '@/shared/utils/projects/storedProject';
-import type { ProjectRow, ProjectRowMeta } from '@/shared/utils/projects/types';
+} from '@/shared/services/projects/storedProject';
+import type { ProjectRow, ProjectRowMeta } from '@/shared/services/projects/types';
 
 const DB_NAME = 'redview_storage_v1';
 /**
@@ -164,7 +164,7 @@ export async function migrateFromLocalStorageIfNeeded(): Promise<void> {
 // ── Projects Store ────────────────────────────────────────────────────────
 
 /**
- * Contenu d'un projet (cf. shared/utils/projects/storedProject.ts), dans le
+ * Contenu d'un projet (cf. shared/services/projects/storedProject.ts), dans le
  * store `project_data` : le document partagé en JSON (`data_json`, la charge
  * utile cloud déjà sérialisée par l'autosave) et le travail en attente sur cet
  * appareil (`work_json`). Cloner une chaîne est bien moins coûteux que le

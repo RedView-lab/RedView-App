@@ -8,7 +8,7 @@ import { countBucket, trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { logger } from '@/shared/lib/logger';
 import { getAppwriteJwt, getSessionUserIdSync, readStoredAppwriteSession } from '@/shared/services/appwrite';
 import { notify } from '@/shared/lib/notify';
-import { registerLiveSession } from '@/shared/utils/projects/liveSessions';
+import { registerLiveSession } from '@/shared/services/projects/liveSessions';
 
 import type { CollabState } from './client/collabClient';
 import type { CollabSession } from './client/session';

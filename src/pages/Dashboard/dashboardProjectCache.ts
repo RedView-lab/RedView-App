@@ -1,7 +1,7 @@
 import { PROJECT_CACHE_KEY_PREFIX } from '@/features/map3d/lib/mapCacheEpoch';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
-import { idbGetProjectCache } from '@/shared/utils/storage/idbProjectStore';
-import { getCachedCurrentUserIdSync } from '@/shared/utils/projects/auth';
+import { idbGetProjectCache } from '@/shared/services/storage/idbProjectStore';
+import { getCachedCurrentUserIdSync } from '@/shared/services/projects/auth';
 
 /**
  * Caches de reprise écrits par les versions précédentes (store IndexedDB

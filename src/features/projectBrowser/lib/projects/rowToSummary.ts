@@ -1,4 +1,4 @@
-import type { ProjectRow, ProjectSummary } from '@/shared/utils/projects';
+import type { ProjectRow, ProjectSummary } from '@/shared/services/projects';
 
 /** Ligne de projet (création, import, duplication) → entrée de la liste du gestionnaire. */
 export function rowToSummary(row: ProjectRow): ProjectSummary {

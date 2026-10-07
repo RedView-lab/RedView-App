@@ -1,4 +1,4 @@
-import type { ProjectFolderSummary, ProjectSummary } from '@/shared/utils/projects';
+import type { ProjectFolderSummary, ProjectSummary } from '@/shared/services/projects';
 
 import { computeFolderAggregateSize } from './tree';
 

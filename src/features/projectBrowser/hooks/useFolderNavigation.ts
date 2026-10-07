@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-import type { ProjectFolderSummary, ProjectSummary } from '@/shared/utils/projects';
+import type { ProjectFolderSummary, ProjectSummary } from '@/shared/services/projects';
 
 import { buildFolderBreadcrumbs } from '../lib/projects/tree';
 import { resolveCurrentFolderId, selectVisibleItems } from '../lib/projects/visibility';

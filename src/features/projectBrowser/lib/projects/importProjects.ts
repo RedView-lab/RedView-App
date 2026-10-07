@@ -1,6 +1,6 @@
 import { describeRedviewImportError } from '@/features/redviewFile/lib/messages';
 import { translateAppText } from '@/shared/i18n';
-import type { ProjectSummary } from '@/shared/utils/projects';
+import type { ProjectSummary } from '@/shared/services/projects';
 
 import { rowToSummary } from './rowToSummary';
 

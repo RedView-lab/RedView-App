@@ -1,8 +1,8 @@
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDefaultProject } from '@/features/itineraryPanel/lib/project/defaultState';
-import { serializeProjectForStorage } from '@/shared/utils/projects/storedProject';
-import type { ProjectRow, ProjectRowMeta } from '@/shared/utils/projects/types';
+import { serializeProjectForStorage } from '@/shared/services/projects/storedProject';
+import type { ProjectRow, ProjectRowMeta } from '@/shared/services/projects/types';
 
 const DB_NAME = 'redview_storage_v1';
 

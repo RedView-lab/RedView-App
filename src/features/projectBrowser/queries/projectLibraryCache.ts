@@ -1,4 +1,4 @@
-import type { ProjectBrowserSnapshot, ProjectFolderSummary, ProjectSummary } from '@/shared/utils/projects';
+import type { ProjectBrowserSnapshot, ProjectFolderSummary, ProjectSummary } from '@/shared/services/projects';
 
 /**
  * Mises à jour de la liste en cache après une mutation confirmée (fonctions

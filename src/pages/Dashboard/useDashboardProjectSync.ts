@@ -12,10 +12,10 @@ import {
   toProjectCloudError,
   uploadProjectThumbnail,
   utf8ByteLength,
-} from '@/shared/utils/projects';
+} from '@/shared/services/projects';
 import { replaceProjectLocation } from '@/shared/lib/projectLocation';
 import { captureMapThumbnail } from '@/shared/lib/mapThumbnail';
-import { idbSaveThumbnail } from '@/shared/utils/storage/idbProjectStore';
+import { idbSaveThumbnail } from '@/shared/services/storage/idbProjectStore';
 
 import { logger } from '@/shared/lib/logger';
 

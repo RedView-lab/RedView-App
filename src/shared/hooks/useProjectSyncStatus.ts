@@ -4,7 +4,7 @@ import {
   getProjectSyncStatus,
   subscribeProjectSyncStatus,
   type ProjectSyncStatus,
-} from '@/shared/utils/projects/syncStatus';
+} from '@/shared/services/projects/syncStatus';
 
 /** État de synchronisation cloud du projet ouvert (voir syncStatus.ts). */
 export function useProjectSyncStatus(): ProjectSyncStatus {
