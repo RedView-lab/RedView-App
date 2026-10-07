@@ -27,8 +27,20 @@ const TEAMS_CACHE_MS = 15_000;
 const MAX_TEAM_PAGES = 20;
 let teamsCache: { userId: string; at: number; teams: Promise<ReadonlySet<string>> } | null = null;
 
+/**
+ * `GET /teams` en appel brut. Le SDK web v26 n'ajoute plus `X-Appwrite-Project`
+ * à `client.call` (chaque service le passe lui-même) : sans lui, Appwrite traite
+ * la requête au nom de sa console et répond `Access-Control-Allow-Origin:
+ * https://localhost`, le navigateur la bloque et « Partagés avec moi » restait
+ * vide pour tout le monde (bench:collab-prod, 2026-10-07).
+ */
 function listTeams(queries: string[]): Promise<Models.TeamList<Models.Preferences>> {
-  return client.call('get', new URL(`${client.config.endpoint}/teams`), { 'content-type': 'application/json' }, { queries });
+  return client.call(
+    'get',
+    new URL(`${client.config.endpoint}/teams`),
+    { 'content-type': 'application/json', 'X-Appwrite-Project': client.config.project },
+    { queries },
+  );
 }
 
 /** Équipes de projet (`p…`) dont l'utilisateur est membre ; une erreur remonte (rien n'est alors montré comme partagé). */
