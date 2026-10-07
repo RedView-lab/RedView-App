@@ -271,6 +271,8 @@ const waitInPage = (expression, timeoutMs = 10_000) => `new Promise((resolve) =>
 
 const { session: firstTab, close } = await launch({ port: PORT });
 let projectId = null;
+/** When B clicked « Quitter » (Infinity before): the server's 4403 after it is the expected revocation. */
+let leaveAt = Infinity;
 const benchStart = new Date().toISOString();
 /** Pages ouvertes (diagnostic final, même après une erreur). */
 const pages = {};
@@ -543,6 +545,7 @@ try {
   // ── B quitte le projet ──────────────────────────────────────────────────
   await B.evaluate(click('.rvi-header__share'));
   await waitFor(B, `!!document.querySelector('.rv-share-dialog__leave')`, { timeout: 15_000 });
+  leaveAt = Date.now();
   await B.evaluate(click('.rv-share-dialog__leave'));
   await waitFor(B, `${projectsVisible} && !document.querySelector('.mapboxgl-canvas')`, { timeout: 30_000 }).catch(() => null);
   const memberships = await teams.listMemberships(`p${projectId}`, [Query.limit(100)]);
@@ -559,11 +562,19 @@ try {
     if (unexpected.length > 0) note(`erreurs inattendues ${name}`, unexpected.slice(0, 10));
     check(unexpected.length === 0, `${name} : aucune erreur inattendue (réseau, console, exceptions)`);
   }
-  // Jamais renvoyé hors du projet (accès retiré, projet introuvable, version) pendant la passe.
+  // Jamais renvoyé hors du projet (accès retiré, projet introuvable, version)
+  // pendant la passe. Après son départ, B est fermé en 4403 par la révocation
+  // immédiate (MULTIPLAYER_INTERNAL_SECRET) — attendu, et mesuré ; il peut aussi
+  // avoir fermé sa connexion lui-même en quittant l'éditeur, avant le serveur.
   for (const name of ['A', 'B']) {
     const log = await pages[name].evaluate(READ_SOCKET_LOG).catch(() => []);
-    const denials = log.filter((entry) => entry.event === 'close' && DENIAL_CODES.has(entry.code));
-    check(denials.length === 0, `${name} : aucun refus du serveur temps réel (${denials.map((entry) => `${entry.code} ${entry.reason}`).join(', ') || 'aucun'})`);
+    const leftAt = name === 'B' ? leaveAt : Infinity;
+    const denials = log.filter((entry) => entry.event === 'close' && DENIAL_CODES.has(entry.code) && Date.parse(entry.at) < leftAt);
+    check(denials.length === 0, `${name} : aucun refus du serveur temps réel pendant la passe (${denials.map((entry) => `${entry.code} ${entry.reason}`).join(', ') || 'aucun'})`);
+    if (name === 'B') {
+      const revoked = log.find((entry) => entry.event === 'close' && entry.code === 4403 && Date.parse(entry.at) >= leaveAt);
+      note('B quitte → connexion fermée par le serveur (4403, ms)', revoked ? Date.parse(revoked.at) - leaveAt : 'fermée par le client avant');
+    }
   }
 } catch (error) {
   out.fatal = String(error?.stack ?? error);
