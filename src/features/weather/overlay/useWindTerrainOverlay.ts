@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type { ImageSource, Map as MapboxMap } from 'mapbox-gl';
 import type { WindGridDefinition, WindPoint, WindTimeSelection } from '../types';
 import { computeWindGrid } from '../lib/wind-grid';
@@ -6,6 +6,7 @@ import { fetchWindGridData } from '../lib/open-meteo';
 import { getWindOverlayProjection, isWindProjectionSupported } from '../lib/windProjection';
 import { getOverlayRenderSize } from './renderSize';
 import { windSelectionKey } from '../lib/windSelection';
+import { useLatestRef } from '@/shared/hooks/useLatestRef';
 
 const SOURCE_ID = 'wind-terrain-overlay-source';
 const LAYER_ID = 'wind-terrain-overlay-layer';
@@ -200,8 +201,7 @@ export function useWindTerrainOverlay(
   enabled: boolean,
   selection: WindTimeSelection,
 ): void {
-  const stateRef = useRef({ enabled, selection });
-  stateRef.current = { enabled, selection };
+  const stateRef = useLatestRef({ enabled, selection });
 
   const dataRef = useRef<WindOverlayDataset | null>(null);
   const lastFetchTimeRef = useRef(0);
@@ -210,7 +210,8 @@ export function useWindTerrainOverlay(
   const renderedRef = useRef<RenderedLayerEntry | null>(null);
   const generationRef = useRef(0);
   const scheduleRefreshRef = useRef<((reason: RefreshReason) => void) | null>(null);
-  const selectionKeyMemo = useMemo(() => windSelectionKey(selection), [selection.date, selection.time]);
+  // Chaîne : l'effet ne repart que si la date ou l'heure demandée change.
+  const selectionKey = windSelectionKey(selection);
 
   useEffect(() => {
     if (!map || !isMapLoaded) return;
@@ -471,7 +472,7 @@ export function useWindTerrainOverlay(
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
       clearOverlay();
     };
-  }, [isMapLoaded, map]);
+  }, [isMapLoaded, map, stateRef]);
 
   useEffect(() => {
     if (!map || !isMapLoaded) return;
@@ -489,5 +490,5 @@ export function useWindTerrainOverlay(
       return;
     }
     scheduleRefreshRef.current?.('force');
-  }, [enabled, isMapLoaded, map, selectionKeyMemo]);
+  }, [enabled, isMapLoaded, map, selectionKey]);
 }

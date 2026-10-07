@@ -11,6 +11,7 @@ import {
 } from '../lib/wind-layer';
 import { normaliseWindSelection, windSelectionKey } from '../lib/windSelection';
 import { translateAppText } from '@/shared/i18n';
+import { useLatestRef } from '@/shared/hooks/useLatestRef';
 
 // ── Configuration ─────────────────────────────────────────────────────
 
@@ -81,14 +82,13 @@ export function useWind(
   const lastBoundsRef = useRef<ViewportBounds | null>(null);
   const lastFetchBoundsRef = useRef<{ north: number; south: number; east: number; west: number } | null>(null);
   const lastSelectionRef = useRef<WindTimeSelection | null>(null);
-  const selectionRef = useRef<WindTimeSelection>(normaliseWindSelection(selection));
+  const selectionRef = useLatestRef<WindTimeSelection>(normaliseWindSelection(selection));
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const layerInitRef = useRef(false);
   const lastFetchTimeRef = useRef(0);
 
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectionEffectReadyRef = useRef(false);
-  selectionRef.current = normaliseWindSelection(selection);
 
   const publishStatus = useCallback((status: ReturnType<typeof createOverlayStatus> | null) => {
     statusReporter?.(status);
@@ -111,7 +111,8 @@ export function useWind(
   // ── Fetch regular VPS wind grid → feed particles directly ──
 
   const fetchForViewport = useCallback(
-    async (m: MapboxMap) => {
+    // Nommée : la relance différée ci-dessous rappelle cette même fonction.
+    async function fetchForViewport(m: MapboxMap): Promise<void> {
       const resolvedSelection = selectionRef.current;
       const resolvedSelectionKey = windSelectionKey(resolvedSelection);
       const bounds = getViewportBounds(m);
@@ -153,7 +154,7 @@ export function useWind(
           }));
           retryTimerRef.current = setTimeout(() => {
             retryTimerRef.current = null;
-            fetchForViewport(m);
+            void fetchForViewport(m);
           }, delay);
         }
         return;
@@ -317,7 +318,7 @@ export function useWind(
         }));
       }
     },
-    [particlesEnabled, publishStatus],
+    [particlesEnabled, publishStatus, selectionRef],
   );
 
   useEffect(() => {
