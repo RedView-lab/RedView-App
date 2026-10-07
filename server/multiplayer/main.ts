@@ -12,8 +12,9 @@ import type { RoomStorage } from './storage.ts';
  * `/multiplayer`).
  *
  *   MULTIPLAYER_PORT          port d'écoute public (17790 ; /health et WebSocket)
- *   MULTIPLAYER_HOST          interface d'écoute (production : toutes, pour le port publié
- *                             par Docker ; sinon 127.0.0.1 — jamais le réseau local en dev)
+ *   MULTIPLAYER_HOST          interface d'écoute (production : toutes, IPv6 et IPv4, pour le
+ *                             port publié par Docker ; sinon 127.0.0.1 — jamais le réseau local
+ *                             en dev)
  *   MULTIPLAYER_ALLOWED_ORIGINS  origines de navigateur acceptées, séparées par des virgules
  *                             (production : https://app.redview.tech ; dev : localhost)
  *   MULTIPLAYER_INTERNAL_SECRET  secret partagé avec l'API de partage (≥ 32 car.) : révocation
@@ -55,7 +56,10 @@ const shadowValidationIntervalMs = process.env.MULTIPLAYER_SHADOW_VALIDATION_MS
   : undefined;
 const storageKind = process.env.MULTIPLAYER_STORAGE ?? (production ? 'appwrite' : 'file');
 const devAuth = !production && process.env.MULTIPLAYER_DEV_AUTH === '1';
-const listenHost = process.env.MULTIPLAYER_HOST || (production ? '0.0.0.0' : '127.0.0.1');
+// Production sans hôte : Node écoute `::` (IPv6 et IPv4), ou `0.0.0.0` sans IPv6.
+// Jamais `0.0.0.0` seul : le contrôle de santé de Coolify appelle `localhost`,
+// que l'Alpine du conteneur résout en `::1` — refusé, le service restait « unhealthy ».
+const listenHost = process.env.MULTIPLAYER_HOST || (production ? undefined : '127.0.0.1');
 const allowedOrigins = process.env.MULTIPLAYER_ALLOWED_ORIGINS
   ? process.env.MULTIPLAYER_ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
   : production ? ['https://app.redview.tech'] : [];
@@ -130,7 +134,7 @@ const server = createMultiplayerServer({
 });
 
 server.listen(port, listenHost).then((actual) => {
-  log('info', 'serveur temps réel prêt', { port: actual, host: listenHost, storage: storage.kind, devAuth, internalRoute: Boolean(internalSecret) });
+  log('info', 'serveur temps réel prêt', { port: actual, host: listenHost ?? '::', storage: storage.kind, devAuth, internalRoute: Boolean(internalSecret) });
 }, (error: unknown) => {
   log('error', 'écoute impossible', { port, error: String(error) });
   process.exit(1);
