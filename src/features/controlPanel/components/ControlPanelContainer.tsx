@@ -22,7 +22,6 @@ import {
 import type { BasemapId, ControlPanelState } from '../types';
 import { useControlPanelOverlayState } from '../hooks/useControlPanelOverlayState';
 import { useControlPanelTerrainState } from '../hooks/useControlPanelTerrainState';
-import { useControlPanelZoneGating } from '../hooks/container/useControlPanelZoneGating';
 import { useControlPanelLidarTiles } from '../hooks/container/useControlPanelLidarTiles';
 import { useControlPanelRoutes } from '../hooks/container/useControlPanelRoutes';
 import { publishDem3dSelection } from '@/features/map3d/lib/publishDem3dSelection';
@@ -82,10 +81,11 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
 }: ControlPanelContainerProps) {
   const projectStore = useProjectStoreOptional();
   const setProject = projectStore?.setProject;
-  const initialControlPanelRef = useRef(
-    projectStore?.project.controlPanel ?? createDefaultControlPanelPersistedState(),
+  // Réglages du projet à l'ouverture : chaque sous-état s'en initialise une
+  // fois, puis vit sa vie (les changements repartent par updateProjectControlPanel).
+  const [initialControlPanel] = useState(
+    () => projectStore?.project.controlPanel ?? createDefaultControlPanelPersistedState(),
   );
-  const initialControlPanel = initialControlPanelRef.current;
 
   const updateProjectControlPanel = useCallback(
     (mut: (draft: ControlPanelPersistedState) => void) => {
@@ -231,20 +231,6 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
     updateProjectControlPanel,
   });
 
-  // Temporarily stub zone gating callback ref to avoid cyclic dependency with terrain
-  const terrainHandlersRef = useRef<{
-    onSlopesEnabledChange: (enabled: boolean) => void;
-    onAltitudeEnabledChange: (enabled: boolean) => void;
-  }>({ onSlopesEnabledChange: () => {}, onAltitudeEnabledChange: () => {} });
-
-  const {
-    handleSlopesEnabledChange,
-    handleAltitudeEnabledChange,
-  } = useControlPanelZoneGating({
-    onSlopesEnabledChange: (enabled) => terrainHandlersRef.current.onSlopesEnabledChange(enabled),
-    onAltitudeEnabledChange: (enabled) => terrainHandlersRef.current.onAltitudeEnabledChange(enabled),
-  });
-
   const terrainState = useControlPanelTerrainState({
     map,
     isMapLoaded,
@@ -271,11 +257,6 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
     onSunlightMapOverlayStatusChange,
     onSunlightMapOverlayReloadChange,
   });
-
-  terrainHandlersRef.current = {
-    onSlopesEnabledChange: terrainState.handlers.onSlopesEnabledChange,
-    onAltitudeEnabledChange: terrainState.handlers.onAltitudeEnabledChange,
-  };
 
   const projectControlPanel =
     projectStore?.project.controlPanel ?? createDefaultControlPanelPersistedState();
@@ -408,7 +389,7 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
       className={lidarDownloadModeActive ? 'rvc-panel--lidar-selecting' : undefined}
       sectionsOpen={projectControlPanel.sectionsOpen}
       onSectionOpenChange={handleSectionOpenChange}
-      onAltitudeEnabledChange={handleAltitudeEnabledChange}
+      onAltitudeEnabledChange={terrainState.handlers.onAltitudeEnabledChange}
       onAltitudeColorizationChange={terrainState.handlers.onAltitudeColorizationChange}
       onAltitudeScaleSettingChange={terrainState.handlers.onAltitudeScaleSettingChange}
       onAltitudeOpacityChange={terrainState.handlers.onAltitudeOpacityChange}
@@ -437,7 +418,7 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
       onContourLinesEnabledChange={terrainState.handlers.onContourLinesEnabledChange}
       onContourLinesIntervalChange={terrainState.handlers.onContourLinesIntervalChange}
       onContourLinesOpacityChange={terrainState.handlers.onContourLinesOpacityChange}
-      onSlopesEnabledChange={handleSlopesEnabledChange}
+      onSlopesEnabledChange={terrainState.handlers.onSlopesEnabledChange}
       onSlopeResolutionChange={terrainState.handlers.onSlopeResolutionChange}
       onSlopeColorizationChange={terrainState.handlers.onSlopeColorizationChange}
       onSlopeScaleChange={terrainState.handlers.onSlopeScaleChange}

@@ -29,11 +29,6 @@
       "count": 2
     }
   },
-  "src/features/controlPanel/components/ControlPanelContainer.tsx": {
-    "react-hooks/refs": {
-      "count": 8
-    }
-  },
   "src/features/itineraryPanel/components/ItineraryPanelContainer/useItineraryMapActions.ts": {
     "react-hooks/preserve-manual-memoization": {
       "count": 2
