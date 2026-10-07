@@ -30,6 +30,8 @@ export interface A11yFinding {
   help: string;
   /** Éléments en défaut (sélecteurs CSS d'axe, pour le diagnostic). */
   targets: string[];
+  /** Explication d'axe par élément (contraste mesuré, enfant attendu…), dans le rapport. */
+  details: string[];
 }
 
 /** (écran, règle) → nombre d'éléments en défaut tolérés. */
@@ -41,13 +43,14 @@ export async function auditScreen(page: Page, screen: string): Promise<A11yFindi
   const loaded = await page.evaluate(() => typeof (window as { axe?: unknown }).axe === 'object');
   if (!loaded) await page.evaluate(AXE_SOURCE);
   const violations = await page.evaluate(async (tags) => {
-    const axe = (window as unknown as { axe: { run: (context: unknown, options: unknown) => Promise<{ violations: Array<{ id: string; impact: string | null; help: string; nodes: Array<{ target: unknown[] }> }> }> } }).axe;
+    const axe = (window as unknown as { axe: { run: (context: unknown, options: unknown) => Promise<{ violations: Array<{ id: string; impact: string | null; help: string; nodes: Array<{ target: unknown[]; failureSummary?: string }> }> }> } }).axe;
     const result = await axe.run(document, { runOnly: { type: 'tag', values: tags }, resultTypes: ['violations'] });
     return result.violations.map((violation) => ({
       rule: violation.id,
       impact: violation.impact ?? 'unknown',
       help: violation.help,
       targets: violation.nodes.map((node) => node.target.map(String).join(' ')),
+      details: violation.nodes.map((node) => node.failureSummary ?? ''),
     }));
   }, WCAG_TAGS);
   return violations.map((violation) => ({ screen, ...violation }));
