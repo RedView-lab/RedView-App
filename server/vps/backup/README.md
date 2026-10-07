@@ -48,6 +48,11 @@ ses archives.
 - Fichiers bruts des bases : on sauvegarde les dumps, pas les fichiers en
   cours d'écriture.
 - Tuiles météo (`/var/www/weather`, 1,2 Go) : régénérées par l'ingest.
+- Données Open-Meteo (volume `open-meteo_open-meteo-data`, ~1,9 Go) :
+  retéléchargées par les synchros depuis les données ouvertes Météo-France
+  (`/opt/open-meteo/docker-compose.yml`, sauvegardé, identique à
+  `server/vps/open-meteo/`) ; prévisions de retour en quelques minutes,
+  62 jours d'historique du modèle de neige en quelques heures.
 - Images Docker : le manifeste garde leurs digests, on les retélécharge.
 - Caches (npm, gradle, restic).
 

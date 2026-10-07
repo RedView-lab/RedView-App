@@ -8,6 +8,7 @@
 /opt/redview-weather
 /opt/poi-server
 /opt/brouter
+/opt/open-meteo
 /data/coolify
 /var/lib/docker/volumes/appwrite_appwrite-uploads/_data
 /var/lib/docker/volumes/appwrite_appwrite-config/_data
