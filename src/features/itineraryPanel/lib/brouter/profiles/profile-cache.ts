@@ -13,7 +13,15 @@
 import { uploadCustomProfile } from '../api/client';
 import { hashBrf } from './brf-template';
 
-const PROFILE_UPLOAD_TIMEOUT_MS = 6000;
+/**
+ * Limit of one profile upload attempt. BRouter compiles a profile in ~1 s,
+ * but on a slow link (1 s round trips: mountains, tethering) the ~20 KB
+ * upload plus the compile took 7–10 s; a 6 s limit aborted uploads the
+ * server then completed, twice in a row, and routing failed outright
+ * (bench:collab-prod, 2026-10-07). The second attempt is for a BRouter
+ * restart, which fails fast.
+ */
+export const PROFILE_UPLOAD_TIMEOUT_MS = 20_000;
 
 interface CacheEntry {
   /** custom_<id> returned by the server. */
