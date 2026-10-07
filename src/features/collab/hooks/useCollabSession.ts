@@ -10,10 +10,10 @@ import { getAppwriteJwt, getSessionUserIdSync, readStoredAppwriteSession } from 
 import { notify } from '@/shared/lib/notify';
 import { registerLiveSession } from '@/shared/services/projects/liveSessions';
 
-import type { CollabState } from './client/collabClient';
-import type { CollabSession } from './client/session';
-import { multiplayerSocketUrl } from './queries/multiplayerHealth';
-import type { CollabRealtime } from './realtime';
+import type { CollabState } from '../client/collabClient';
+import type { CollabSession } from '../client/session';
+import { multiplayerSocketUrl } from '../queries/multiplayerHealth';
+import type { CollabRealtime } from '../realtime';
 
 /**
  * Session de co-édition du projet ouvert : connexion au serveur temps réel
@@ -145,7 +145,7 @@ export function useCollabSession(
     };
 
     void (async () => {
-      const { CollabSession: Session } = await import('./client/session');
+      const { CollabSession: Session } = await import('../client/session');
       if (!active) return;
       const created = await Session.start({
         url: multiplayerSocketUrl(),

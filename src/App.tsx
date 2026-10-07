@@ -9,7 +9,7 @@ import {
 } from './shared/services/appwrite'
 import { PROJECT_LOCATION_CHANGE_EVENT, readProjectIdFromPath } from './shared/lib/projectLocation'
 import { LoginScreen, probeSession, SESSION_EXPIRED_EVENT } from './features/auth'
-import { syncAnalyticsAccount } from './features/auth/authAnalytics'
+import { syncAnalyticsAccount } from './features/auth/lib/authAnalytics'
 import { getCurrentAnalyticsScreen, trackScreen, type AnalyticsScreen } from './shared/lib/analytics'
 import type { SessionProbeResult } from './features/auth'
 import { MobileBlockScreen, NarrowViewportOverlay } from './shared/components/MobileBlockScreen'

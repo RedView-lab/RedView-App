@@ -1,4 +1,4 @@
-import { DEV_USER_ID, devTabUserId } from '@/features/collab/useCollabSession';
+import { DEV_USER_ID, devTabUserId } from '@/features/collab/hooks/useCollabSession';
 import { translateAppText } from '@/shared/i18n';
 import { getSessionUserIdSync, readStoredAppwriteSession } from '@/shared/services/appwrite';
 

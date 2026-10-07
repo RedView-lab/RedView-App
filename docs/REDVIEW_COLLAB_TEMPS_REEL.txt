@@ -438,7 +438,7 @@ src/features/collab/client/unsyncedStore.ts   IndexedDB + Web Locks
 src/features/collab/client/connection.ts      WebSocket, reconnexion, refus
 src/features/collab/client/leaseGate.ts       baux des calculs dérivés
 src/features/collab/client/undoHistory.ts     annuler par éditeur
-src/features/collab/useCollabSession.ts       hook React
+src/features/collab/hooks/useCollabSession.ts hook React
 src/features/collab/model/*                   document à plat, ops, différence, matérialisation
 src/features/collab/room/*                    cœur de la salle (sans entrée/sortie)
 src/features/collab/sim/*                     simulateur déterministe

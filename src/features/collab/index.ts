@@ -17,5 +17,5 @@ export { chunkRoutePoints, routeChunkBounds } from './routeChunks';
 export { PROTOCOL_VERSION } from './protocol';
 export type { ClientMessage, ServerMessage, PeerInfo, LeaseInfo, PresenceState } from './protocol';
 export type { CollabState, CollabStatus } from './client/collabClient';
-export { useCollabSession } from './useCollabSession';
-export type { CollabSessionHandle } from './useCollabSession';
+export { useCollabSession } from './hooks/useCollabSession';
+export type { CollabSessionHandle } from './hooks/useCollabSession';

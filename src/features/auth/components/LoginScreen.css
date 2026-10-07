@@ -4,4 +4,4 @@
    See ./styles/index.css for the entry point and import order.
    ========================================================================== */
 
-@import './styles/index.css';
+@import '../styles/index.css';

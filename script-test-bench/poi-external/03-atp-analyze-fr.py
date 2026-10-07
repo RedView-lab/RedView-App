@@ -5,7 +5,7 @@ import shapely
 from shapely.geometry import shape
 
 ZIP = 'C:/Users/simon/AppData/Local/Temp/atp/output.zip'
-TAXO = json.load(open('C:/Users/simon/Documents/REDVIEWproduction/redview-app/src/features/poi/poi-taxonomy.json', encoding='utf-8'))
+TAXO = json.load(open('C:/Users/simon/Documents/REDVIEWproduction/redview-app/src/features/poi/lib/poi-taxonomy.json', encoding='utf-8'))
 FRANCE = shape(json.load(open('C:/Users/simon/Documents/REDVIEWproduction/redview-app/public/france-border.json', encoding='utf-8')))
 
 def cond_ok(tags, cond):

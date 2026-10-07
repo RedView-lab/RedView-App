@@ -31,14 +31,14 @@ export const REPO_ROOT = path.resolve(INGEST_DIR, '../..');
  *   1. `--taxonomy <path>` explicite ;
  *   2. `server/poi-ingest/poi-taxonomy.json` — disposition déployée sur le VPS,
  *      où le JSON est copié à côté de l'importeur ;
- *   3. `src/features/poi/poi-taxonomy.json` — source de vérité du dépôt, ce qui
+ *   3. `src/features/poi/lib/poi-taxonomy.json` — source de vérité du dépôt, ce qui
  *      permet de lancer les importeurs en local sans copie préalable.
  */
 export function loadTaxonomy(explicitPath) {
   const candidates = [
     explicitPath,
     path.resolve(INGEST_DIR, 'poi-taxonomy.json'),
-    path.resolve(REPO_ROOT, 'src/features/poi/poi-taxonomy.json'),
+    path.resolve(REPO_ROOT, 'src/features/poi/lib/poi-taxonomy.json'),
   ].filter(Boolean);
   const found = candidates.find((c) => fs.existsSync(c));
   if (!found) {

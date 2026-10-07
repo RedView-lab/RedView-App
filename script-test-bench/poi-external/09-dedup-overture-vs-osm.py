@@ -6,7 +6,7 @@ con = duckdb.connect(); con.execute("LOAD spatial;")
 F = "C:/tmp/fr_overture.parquet"
 BASE = "http://141.145.220.99/poi/bbox"
 
-TAXO = json.load(open('C:/Users/simon/Documents/REDVIEWproduction/redview-app/src/features/poi/poi-taxonomy.json', encoding='utf-8'))
+TAXO = json.load(open('C:/Users/simon/Documents/REDVIEWproduction/redview-app/src/features/poi/lib/poi-taxonomy.json', encoding='utf-8'))
 ALL = [c['key'] for c in TAXO['categories']]
 
 MAP = [("fast_food", r"(fast_food|casual_eatery|food_truck|sandwich_shop|burger|fried_chicken|hot_dog)"),

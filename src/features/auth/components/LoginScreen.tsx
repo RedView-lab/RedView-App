@@ -1,6 +1,6 @@
 import { useState, useEffect, type FormEvent } from 'react'
 import { trackAnalyticsEvent, trackScreen } from '@/shared/lib/analytics'
-import { authFailureReason, rememberOAuthIntent } from './authAnalytics'
+import { authFailureReason, rememberOAuthIntent } from '../lib/authAnalytics'
 import { RedViewLogo } from '@/shared/components/RedViewLogo'
 import { errorMessage as thrownMessage } from '@/shared/lib/errors'
 import {

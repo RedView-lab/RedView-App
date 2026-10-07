@@ -46,7 +46,7 @@ import {
 import { useProjectShare } from '@/features/projectBrowser/queries/projectSharing';
 import { ItineraryPanel, PredictionProvider, ProjectProvider, useProjectStore } from '@/features/itineraryPanel';
 import { useMultiplayerAvailable } from '@/features/collab/queries/multiplayerHealth';
-import { useCollabSession } from '@/features/collab/useCollabSession';
+import { useCollabSession } from '@/features/collab/hooks/useCollabSession';
 import type {
   CollaboratorAction,
   ItineraryProject,

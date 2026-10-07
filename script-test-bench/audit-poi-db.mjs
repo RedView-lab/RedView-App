@@ -62,14 +62,14 @@ const LEGACY_CATEGORIES = [
 /**
  * En mode `--taxonomy`, on mesure la NOUVELLE taxonomie (46 catégories) au
  * lieu des 18 historiques : les filtres Overpass sont dérivés des règles du
- * fichier `src/features/poi/poi-taxonomy.json`.
+ * fichier `src/features/poi/lib/poi-taxonomy.json`.
  *
  * Approximation assumée : pour les règles AND (ex. distributeur), seule la
  * première condition est utilisée côté Overpass, donc la « vérité » OSM est
  * surestimée pour ces rares catégories.
  */
 function loadTaxonomyCategories() {
-  const raw = JSON.parse(fs.readFileSync('src/features/poi/poi-taxonomy.json', 'utf8'));
+  const raw = JSON.parse(fs.readFileSync('src/features/poi/lib/poi-taxonomy.json', 'utf8'));
   const out = [];
   for (const cat of raw.categories) {
     const filters = [];

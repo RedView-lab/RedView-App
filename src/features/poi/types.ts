@@ -6,7 +6,7 @@
 // compilation que les libellés, icônes et mappings du panneau couvrent bien
 // toutes les catégories réellement indexées en base.
 
-import { POI_TAXONOMY_ICON, POI_TAXONOMY_LABELS } from './poi-taxonomy';
+import { POI_TAXONOMY_ICON, POI_TAXONOMY_LABELS } from './lib/poi-taxonomy';
 
 export const POI_CATEGORIES = [
   // Eau

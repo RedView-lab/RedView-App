@@ -1,7 +1,7 @@
 /**
  * Comptes internes (équipe, comptes de test) : libellé Appwrite `internal`.
  * Un compte libellé n'envoie rien à la mesure d'audience (le before-send coupe
- * tout, src/features/auth/authAnalytics.ts) et sort du rapport d'activation
+ * tout, src/features/auth/lib/authAnalytics.ts) et sort du rapport d'activation
  * (api/_lib/activationReport.ts) — la même population des deux côtés.
  *
  *   npx tsx --env-file=.env scripts/analytics-internal-accounts.ts --list

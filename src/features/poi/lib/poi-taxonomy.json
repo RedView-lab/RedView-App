@@ -1,5 +1,5 @@
 {
-  "$comment": "Source de vérité de la taxonomie POI RedView. Consommée par (1) le client React via src/features/poi/poi-taxonomy.ts et (2) l'importeur OSM déployé sur le VPS (/opt/poi-server/import-osm.mjs). Toute catégorie ajoutée ici doit aussi l'être dans PoiCategory (src/features/poi/types.ts), dans PANEL_TO_FEATURE_POI (src/features/itineraryPanel/hooks/useItineraryPoiMap.ts) et dans FEATURE_TO_PANEL_POI (src/features/itineraryPanel/lib/schedule/poi-to-timeline.ts).",
+  "$comment": "Source de vérité de la taxonomie POI RedView. Consommée par (1) le client React via src/features/poi/lib/poi-taxonomy.ts et (2) l'importeur OSM déployé sur le VPS (/opt/poi-server/import-osm.mjs). Toute catégorie ajoutée ici doit aussi l'être dans PoiCategory (src/features/poi/types.ts), dans PANEL_TO_FEATURE_POI (src/features/itineraryPanel/hooks/useItineraryPoiMap.ts) et dans FEATURE_TO_PANEL_POI (src/features/itineraryPanel/lib/schedule/poi-to-timeline.ts).",
   "version": 2,
   "groups": [
     { "key": "water", "label": "Eau" },

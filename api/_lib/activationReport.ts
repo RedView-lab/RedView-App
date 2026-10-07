@@ -37,7 +37,7 @@ import {
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RETURN_AFTER_DAYS = 7;
 const PAID_STATUSES = new Set(['active', 'trialing', 'lifetime']);
-/** Libellé Appwrite des comptes de l'équipe et de test (aussi exclus de la mesure d'audience, src/features/auth/authAnalytics.ts). */
+/** Libellé Appwrite des comptes de l'équipe et de test (aussi exclus de la mesure d'audience, src/features/auth/lib/authAnalytics.ts). */
 export const INTERNAL_ACCOUNT_LABEL = 'internal';
 
 export interface ActivationUser {
