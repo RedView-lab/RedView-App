@@ -52,11 +52,14 @@ export function useItineraryMapActions({
   addItinerary,
   onSelectAndCenterTimelineRow,
 }: UseItineraryMapActionsArgs) {
+  // Valeurs lues par les gestionnaires : leurs seules dépendances au projet.
+  const itineraryCount = project?.itineraries?.length ?? 0;
+  const activeItineraryId = project?.activeItineraryId;
   const handleExternalMapContextAction = useCallback((payload: MapContextMenuActionPayload) => {
     trackAnalyticsEvent({ name: 'context_menu_action', data: { action: payload.action } });
     switch (payload.action) {
       case 'set-start': {
-        const hasItinerary = (project?.itineraries?.length ?? 0) > 0;
+        const hasItinerary = itineraryCount > 0;
         if (!hasItinerary && addItinerary) {
           trackAnalyticsEvent({ name: 'itinerary_added', data: { method: 'map' } });
           addItinerary({
@@ -149,7 +152,7 @@ export function useItineraryMapActions({
       default:
         break;
     }
-  }, [addItinerary, project?.itineraries?.length, updateActive]);
+  }, [addItinerary, itineraryCount, onSelectAndCenterTimelineRow, updateActive]);
 
   const handleExternalPoiDraftAction = useCallback((payload: MapPoiDraftActionPayload) => {
     switch (payload.action) {
@@ -160,7 +163,7 @@ export function useItineraryMapActions({
         });
         break;
       case 'start-here': {
-        const hasItinerary = (project?.itineraries?.length ?? 0) > 0;
+        const hasItinerary = itineraryCount > 0;
         if (!hasItinerary && addItinerary) {
           trackAnalyticsEvent({ name: 'itinerary_added', data: { method: 'map' } });
           addItinerary({
@@ -257,13 +260,13 @@ export function useItineraryMapActions({
       default:
         break;
     }
-  }, [addItinerary, project?.itineraries?.length, updateActive, updateActiveWithHistory]);
+  }, [addItinerary, itineraryCount, onSelectAndCenterTimelineRow, updateActive, updateActiveWithHistory]);
 
   // Point placed on the active route from the analysis chart: it lies on the
   // trace, so a step adds a row without rerouting; start / finish move like
   // « Démarrer ici » / « Finir ici ».
   const handleRoutePointAdd = useCallback((payload: RoutePointAddPayload) => {
-    if (payload.itineraryId !== project?.activeItineraryId) return;
+    if (payload.itineraryId !== activeItineraryId) return;
     const point = { lat: payload.lat, lon: payload.lon };
     let createdId: string | null = null;
     updateActive((it) => {
@@ -295,7 +298,7 @@ export function useItineraryMapActions({
     if (createdId) {
       onSelectAndCenterTimelineRow?.(createdId);
     }
-  }, [onSelectAndCenterTimelineRow, project?.activeItineraryId, updateActive]);
+  }, [activeItineraryId, onSelectAndCenterTimelineRow, updateActive]);
 
   useEffect(() => listenItineraryMapAction((detail) => {
     if (detail.kind === 'context-menu') {

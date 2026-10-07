@@ -14,11 +14,6 @@
       "count": 1
     }
   },
-  "src/features/itineraryPanel/components/ItineraryPanelContainer/useItineraryMapActions.ts": {
-    "react-hooks/preserve-manual-memoization": {
-      "count": 2
-    }
-  },
   "src/features/itineraryPanel/hooks/useItineraryBrouterRouting/index.ts": {
     "react-hooks/set-state-in-effect": {
       "count": 1
