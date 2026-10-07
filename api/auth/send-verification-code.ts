@@ -1,17 +1,16 @@
 import type { ApiRequest, ApiResponse } from '../_lib/types.js';
+import { parseEmailAddress } from '../_lib/email.js';
+import { bodyFields } from '../_lib/http.js';
 import { Query } from 'node-appwrite';
 import { getAppwriteUsers } from '../_lib/appwrite.js';
 import { sendSafeError } from '../_lib/errors.js';
 import { sendAccountExistsEmail } from '../_lib/mailer.js';
 import {
   consumeVerificationRequestQuota,
-  normalizeVerificationEmail,
   requestVerificationCode,
 } from '../_lib/verificationStore.js';
 
-const MAX_EMAIL_LENGTH = 254;
 const MAX_NAME_LENGTH = 100;
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Réponse identique que l'adresse soit libre ou déjà prise (anti-énumération).
 const NEUTRAL_SUCCESS_MESSAGE =
@@ -22,14 +21,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const { email, name } = req.body || {};
-  const normalizedEmail = typeof email === 'string' ? normalizeVerificationEmail(email) : '';
-
-  if (
-    !normalizedEmail ||
-    normalizedEmail.length > MAX_EMAIL_LENGTH ||
-    !EMAIL_REGEX.test(normalizedEmail)
-  ) {
+  const { email, name } = bodyFields(req);
+  const normalizedEmail = parseEmailAddress(email);
+  if (!normalizedEmail) {
     return res.status(400).json({ error: 'Une adresse e-mail valide est requise.' });
   }
 

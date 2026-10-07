@@ -4,6 +4,7 @@ import type { ProjectCollabLink } from '@/features/itineraryPanel/context/Projec
 import { createDefaultProject } from '@/features/itineraryPanel/lib/project/defaultState';
 import { toProjectDocument } from '@/features/itineraryPanel/lib/project/layers';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
+import { countBucket, trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { logger } from '@/shared/lib/logger';
 import { getAppwriteJwt, getSessionUserIdSync, readStoredAppwriteSession } from '@/shared/services/appwrite';
 import { notify } from '@/shared/ui/notify';
@@ -171,9 +172,14 @@ export function useCollabSession(
       }
       session = created;
       const { client } = created;
+      let joinTracked = false;
       const sync = () => {
         if (!active) return;
         const state = client.getState();
+        if (!joinTracked && state.status === 'online') {
+          joinTracked = true;
+          trackAnalyticsEvent({ name: 'collab_session_joined', data: { peers: countBucket(state.peers.length) } });
+        }
         // Accès retiré ou projet supprimé : plus rien ne pourra être envoyé.
         if (state.status === 'denied' && (state.deniedReason === 'forbidden' || state.deniedReason === 'not-found')) {
           created.discardUnsynced();

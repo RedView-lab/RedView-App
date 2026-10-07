@@ -4,6 +4,8 @@
  * contextuel, flyover) s'en servent pour se mettre en pause pendant le vol.
  */
 
+import { trackAnalyticsEvent } from '@/shared/lib/analytics';
+
 type Listener = (active: boolean) => void;
 
 let active = false;
@@ -24,6 +26,7 @@ export function subscribeFreeCam(listener: Listener): () => void {
 export function setFreeCamActive(next: boolean): void {
   if (active === next) return;
   active = next;
+  if (next) trackAnalyticsEvent({ name: 'freecam_entered' });
   for (const listener of listeners) listener(next);
 }
 

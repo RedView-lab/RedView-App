@@ -1,3 +1,4 @@
+import { trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import {
@@ -223,9 +224,13 @@ export function SettingsPanel({ profile }: SettingsPanelProps = {}) {
     "RedView s'appuie sur de nombreuses rencontres, discussions et observations réalisées avec la communauté cycliste. Si vous voulez contribuer au développement de l'outil, vous pouvez utiliser notre questionnaire de feedback ci-dessous.",
   );
 
-  useEffect(() => {
+  // La langue des réglages suit celle de l'app : à l'ouverture et quand elle
+  // change (autre onglet, autre écran).
+  const [settingsLocale, setSettingsLocale] = useState<AppLocale | null>(null);
+  if (settingsLocale !== locale) {
+    setSettingsLocale(locale);
     setSettings((current) => (current.language === locale ? current : { ...current, language: locale }));
-  }, [locale]);
+  }
 
   useEffect(() => {
     try {
@@ -248,6 +253,7 @@ export function SettingsPanel({ profile }: SettingsPanelProps = {}) {
               const nextLocale = resolveAppLocale(language);
               setSettings((current) => ({ ...current, language: nextLocale }));
               setLocale(nextLocale);
+              trackAnalyticsEvent({ name: 'language_changed', data: { language: nextLocale } });
             }}
             renderValuePrefix={renderFlag}
             renderOptionPrefix={renderFlag}
@@ -307,6 +313,7 @@ export function SettingsPanel({ profile }: SettingsPanelProps = {}) {
                 onClick={() => {
                   setSettings((current) => ({ ...current, displayMode: option.id }));
                   setAppThemePreference(option.id);
+                  trackAnalyticsEvent({ name: 'theme_changed', data: { mode: option.id } });
                 }}
               >
                 <span className="rvpb-settings-display-card__preview">

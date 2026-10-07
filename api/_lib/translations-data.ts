@@ -169,10 +169,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Add a sport"
   },
   {
-    "fr": "Velo de route",
-    "en": "Road cycling"
-  },
-  {
     "fr": "Gravel",
     "en": "Gravel"
   },
@@ -187,18 +183,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Running",
     "en": "Road running"
-  },
-  {
-    "fr": "Debutant",
-    "en": "Beginner"
-  },
-  {
-    "fr": "Intermediaire",
-    "en": "Intermediate"
-  },
-  {
-    "fr": "Avance",
-    "en": "Advanced"
   },
   {
     "fr": "Expert",
@@ -817,10 +801,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Cloud storage"
   },
   {
-    "fr": "Gestionnaire de projet",
-    "en": "Project manager"
-  },
-  {
     "fr": "Gestionnaire de projets",
     "en": "Project manager"
   },
@@ -877,10 +857,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Sunlight & shadow simulation"
   },
   {
-    "fr": "Prévisions et tendances Météo",
-    "en": "Weather forecasts and trends"
-  },
-  {
     "fr": "Prévisions météo & vent direct",
     "en": "Live weather forecasts & wind"
   },
@@ -890,10 +866,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   },
   {
     "fr": "Simulation neige temps réel",
-    "en": "Real-time snow simulation"
-  },
-  {
-    "fr": "Simulation de la neige en temps réel",
     "en": "Real-time snow simulation"
   },
   {
@@ -923,10 +895,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Comparaison d'itinéraire",
     "en": "Route comparison"
-  },
-  {
-    "fr": "Analyse d'itinéraire",
-    "en": "Route analysis"
   },
   {
     "fr": "Graphique customisable",
@@ -1221,6 +1189,18 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "The server rejected the project save."
   },
   {
+    "fr": "Les données de ce projet dans le cloud sont illisibles : il n’a pas été ouvert, pour ne pas les écraser.",
+    "en": "This project’s cloud data is unreadable: it was not opened, so that it is not overwritten."
+  },
+  {
+    "fr": "Connexion au cloud impossible : le projet n’a pas pu être ouvert. Réessayez une fois en ligne.",
+    "en": "Cannot reach the cloud: the project could not be opened. Try again once online."
+  },
+  {
+    "fr": "Impossible d’ouvrir ce projet.",
+    "en": "Unable to open this project."
+  },
+  {
     "fr": "copie locale non synchronisée",
     "en": "unsynced local copy"
   },
@@ -1353,8 +1333,168 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Session expired: sign in again, then export the project again."
   },
   {
+    "fr": "Les données de ce projet dans le cloud sont illisibles : il ne peut pas être exporté.",
+    "en": "This project’s cloud data is unreadable: it cannot be exported."
+  },
+  {
     "fr": "Impossible d’exporter le projet.",
     "en": "Unable to export the project."
+  },
+  {
+    "fr": "Vos données",
+    "en": "Your data"
+  },
+  {
+    "fr": "Télécharger mes données",
+    "en": "Download my data"
+  },
+  {
+    "fr": "Une archive avec votre compte, vos dossiers et chacun de vos projets au format .redview (tracés, POI, fichiers .fit…).",
+    "en": "An archive with your account, your folders and each of your projects as .redview files (routes, POIs, .fit files…)."
+  },
+  {
+    "fr": "Export… {{done}}/{{total}}",
+    "en": "Exporting… {{done}}/{{total}}"
+  },
+  {
+    "fr": "Préparation…",
+    "en": "Preparing…"
+  },
+  {
+    "fr": "Supprimer mon compte",
+    "en": "Delete my account"
+  },
+  {
+    "fr": "Efface définitivement votre compte, vos projets, fichiers et partages, et arrête votre abonnement.",
+    "en": "Permanently erases your account, projects, files and shares, and stops your subscription."
+  },
+  {
+    "fr": "Export terminé, mais {{count}} projet(s) illisible(s) : {{names}}.",
+    "en": "Export finished, but {{count}} project(s) could not be read: {{names}}."
+  },
+  {
+    "fr": "Vos données sont téléchargées ({{count}} projet(s)).",
+    "en": "Your data has been downloaded ({{count}} project(s))."
+  },
+  {
+    "fr": "L’export de vos données a échoué. Réessayez.",
+    "en": "Exporting your data failed. Please try again."
+  },
+  {
+    "fr": "Supprimer votre compte",
+    "en": "Delete your account"
+  },
+  {
+    "fr": "Compte supprimé",
+    "en": "Account deleted"
+  },
+  {
+    "fr": "Sera effacé définitivement",
+    "en": "Will be permanently erased"
+  },
+  {
+    "fr": "Vos projets, avec leurs fichiers .fit et miniatures",
+    "en": "Your projects, with their .fit files and thumbnails"
+  },
+  {
+    "fr": "Vos dossiers, vos réglages et vos profils de tracé",
+    "en": "Your folders, settings and routing profiles"
+  },
+  {
+    "fr": "Vos partages : les projets que vous partagez sont supprimés pour tous leurs éditeurs",
+    "en": "Your shares: projects you share are deleted for all their editors"
+  },
+  {
+    "fr": "Votre abonnement, arrêté immédiatement et sans remboursement",
+    "en": "Your subscription, stopped immediately and without refund"
+  },
+  {
+    "fr": "Vos commentaires et modifications dans les projets que d’autres vous ont partagés y restent. Les sauvegardes chiffrées du service sont effacées par rotation, au plus tard 12 mois après.",
+    "en": "Your comments and edits in projects others shared with you stay there. Encrypted service backups are rotated out within 12 months."
+  },
+  {
+    "fr": "Export en cours…",
+    "en": "Export in progress…"
+  },
+  {
+    "fr": "Télécharger mes données d’abord",
+    "en": "Download my data first"
+  },
+  {
+    "fr": "SUPPRIMER",
+    "en": "DELETE"
+  },
+  {
+    "fr": "Tapez {{word}} pour continuer",
+    "en": "Type {{word}} to continue"
+  },
+  {
+    "fr": "Envoi du code…",
+    "en": "Sending the code…"
+  },
+  {
+    "fr": "Recevoir le code",
+    "en": "Get the code"
+  },
+  {
+    "fr": "Un code à 6 chiffres vient d’être envoyé à {{email}}. Il expire dans 10 minutes.",
+    "en": "A 6-digit code has just been sent to {{email}}. It expires in 10 minutes."
+  },
+  {
+    "fr": "Code reçu par e-mail",
+    "en": "Code received by e-mail"
+  },
+  {
+    "fr": "Renvoyer le code",
+    "en": "Resend the code"
+  },
+  {
+    "fr": "Suppression…",
+    "en": "Deleting…"
+  },
+  {
+    "fr": "Supprimer définitivement",
+    "en": "Delete permanently"
+  },
+  {
+    "fr": "Votre compte est désactivé. La suppression de vos données se termine sur nos serveurs ; vous recevrez un e-mail de confirmation.",
+    "en": "Your account is deactivated. Your data is being deleted on our servers; you will receive a confirmation e-mail."
+  },
+  {
+    "fr": "Votre compte et vos données ont été supprimés. Un e-mail de confirmation vous a été envoyé.",
+    "en": "Your account and your data have been deleted. A confirmation e-mail has been sent to you."
+  },
+  {
+    "fr": "Merci d’avoir utilisé RedView.",
+    "en": "Thank you for using RedView."
+  },
+  {
+    "fr": "La suppression du compte a échoué.",
+    "en": "Deleting the account failed."
+  },
+  {
+    "fr": "Session expirée. Reconnectez-vous pour supprimer votre compte.",
+    "en": "Session expired. Sign in again to delete your account."
+  },
+  {
+    "fr": "Le code a 6 chiffres.",
+    "en": "The code has 6 digits"
+  },
+  {
+    "fr": "Confirmation manquante.",
+    "en": "Missing confirmation"
+  },
+  {
+    "fr": "L’e-mail de confirmation n’a pas pu partir, réessayez plus tard.",
+    "en": "The confirmation email could not be sent, try again later"
+  },
+  {
+    "fr": "Ce compte n’a pas d’adresse e-mail : contactez le support pour le supprimer.",
+    "en": "This account has no email address: contact support to delete it"
+  },
+  {
+    "fr": "Impossible de supprimer le compte.",
+    "en": "Unable to delete the account"
   },
   {
     "fr": "Fonds de carte",
@@ -1637,10 +1777,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Forecast (+4d)"
   },
   {
-    "fr": "Tendances",
-    "en": "Trends"
-  },
-  {
     "fr": "Aujourd'hui",
     "en": "Today"
   },
@@ -1677,10 +1813,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Show weather band"
   },
   {
-    "fr": "Ajouter des alertes",
-    "en": "Add alerts"
-  },
-  {
     "fr": "Choisir une date personnalisée",
     "en": "Choose a custom date"
   },
@@ -1691,10 +1823,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Opacité carte d'ensoleillement",
     "en": "Sunlight map opacity"
-  },
-  {
-    "fr": "Opacité des ombres",
-    "en": "Shadow opacity"
   },
   {
     "fr": "Lever",
@@ -1787,10 +1915,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Supprimer la tuile",
     "en": "Delete tile"
-  },
-  {
-    "fr": "Tuile {{index}} (LIDAR) ({{size}}mo) ({{year}} IGN)",
-    "en": "Tile {{index}} (LIDAR) ({{size}} MB) ({{year}} IGN)"
   },
   {
     "fr": "Filtrage des points",
@@ -3093,10 +3217,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "{{files}} exported from the active route."
   },
   {
-    "fr": "{{files}} exportés depuis l'itinéraire actif.",
-    "en": "{{files}} exported from the active route."
-  },
-  {
     "fr": "Impossible d'exporter l'itinéraire actif.",
     "en": "Unable to export the active route."
   },
@@ -4273,8 +4393,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Too many route calculations in a short time. Please wait a minute and try again."
   },
   {
-    "fr": "Prévisions météo indisponibles pour ce départ (erreur ou date au-delà de 16 jours) : la courbe météo est masquée.",
-    "en": "Weather forecast unavailable for this departure (error or date beyond 16 days): the weather curve is hidden."
+    "fr": "Prévisions météo indisponibles pour ce départ (erreur ou date au-delà de {{days}} jours) : la courbe météo est masquée.",
+    "en": "Weather forecast unavailable for this departure (error or date beyond {{days}} days): the weather curve is hidden."
   },
   {
     "fr": "Panneau central d'analyse en plein écran",
@@ -5019,6 +5139,62 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Erreur lors de la validation du code.",
     "en": "Error while validating the code."
+  },
+  {
+    "fr": "E-mail et code de vérification requis.",
+    "en": "E-mail and verification code are required."
+  },
+  {
+    "fr": "Une adresse e-mail valide est requise.",
+    "en": "A valid e-mail address is required."
+  },
+  {
+    "fr": "Impossible d’envoyer le code de vérification.",
+    "en": "Unable to send the verification code."
+  },
+  {
+    "fr": "Aucun code trouvé pour cet e-mail. Veuillez en demander un nouveau.",
+    "en": "No code found for this e-mail. Please request a new one."
+  },
+  {
+    "fr": "Le code a expiré. Veuillez en redemander un nouveau.",
+    "en": "The code has expired. Please request a new one."
+  },
+  {
+    "fr": "Trop de tentatives incorrectes. Le code a été invalidé par sécurité. Veuillez en demander un nouveau.",
+    "en": "Too many incorrect attempts. The code was invalidated for security. Please request a new one."
+  },
+  {
+    "fr": "Code invalide. Nombre maximal d’essais atteint, code invalidé.",
+    "en": "Invalid code. Maximum number of attempts reached, code invalidated."
+  },
+  {
+    "fr": "Code invalide (4 essai(s) restant(s)).",
+    "en": "Invalid code (4 attempts left)."
+  },
+  {
+    "fr": "Code invalide (3 essai(s) restant(s)).",
+    "en": "Invalid code (3 attempts left)."
+  },
+  {
+    "fr": "Code invalide (2 essai(s) restant(s)).",
+    "en": "Invalid code (2 attempts left)."
+  },
+  {
+    "fr": "Code invalide (1 essai(s) restant(s)).",
+    "en": "Invalid code (1 attempt left)."
+  },
+  {
+    "fr": "Un compte existe déjà avec cette adresse e-mail. Veuillez vous connecter.",
+    "en": "An account already exists with this e-mail address. Please log in."
+  },
+  {
+    "fr": "Ce mot de passe est refusé (trop courant ou proche de vos informations personnelles). Choisissez-en un autre.",
+    "en": "This password is not allowed (too common or too close to your personal information). Please choose another one."
+  },
+  {
+    "fr": "Erreur lors de la création du compte. Veuillez réessayer.",
+    "en": "Error while creating the account. Please try again."
   },
   {
     "fr": "Partager « {{name}} »",
@@ -7879,6 +8055,90 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "{{step}} sans réponse après {{seconds}} s",
     "en": "{{step}} did not answer within {{seconds}} s"
+  },
+  {
+    "fr": "Mode photo",
+    "en": "Photo mode"
+  },
+  {
+    "fr": "mode photo",
+    "en": "photo mode"
+  },
+  {
+    "fr": "Disponible uniquement avec le moteur WebGPU.",
+    "en": "Only available with the WebGPU engine."
+  },
+  {
+    "fr": "Heure de la prise de vue",
+    "en": "Time of the shot"
+  },
+  {
+    "fr": "Aube",
+    "en": "Dawn"
+  },
+  {
+    "fr": "Heure dorée",
+    "en": "Golden hour"
+  },
+  {
+    "fr": "Midi",
+    "en": "Noon"
+  },
+  {
+    "fr": "Ciel dégagé",
+    "en": "Clear sky"
+  },
+  {
+    "fr": "Beau temps",
+    "en": "Fair weather"
+  },
+  {
+    "fr": "Cumulus",
+    "en": "Cumulus"
+  },
+  {
+    "fr": "Couvert",
+    "en": "Overcast"
+  },
+  {
+    "fr": "Orageux",
+    "en": "Stormy"
+  },
+  {
+    "fr": "Couverture",
+    "en": "Cover"
+  },
+  {
+    "fr": "Altitude des nuages",
+    "en": "Cloud altitude"
+  },
+  {
+    "fr": "Brume",
+    "en": "Haze"
+  },
+  {
+    "fr": "Exposition",
+    "en": "Exposure"
+  },
+  {
+    "fr": "Prendre la photo",
+    "en": "Take the photo"
+  },
+  {
+    "fr": "Préparation… {{done}}/{{total}}",
+    "en": "Preparing… {{done}}/{{total}}"
+  },
+  {
+    "fr": "Capture impossible : {{message}}",
+    "en": "Capture failed: {{message}}"
+  },
+  {
+    "fr": "I : masquer l’interface",
+    "en": "I: hide the interface"
+  },
+  {
+    "fr": "nuages {{ms}} ms",
+    "en": "clouds {{ms}} ms"
   },
   {
     "fr": "Désactivé",

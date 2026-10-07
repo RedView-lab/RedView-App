@@ -1,8 +1,28 @@
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
+import { createByteLru } from '../server/byte-lru.mjs';
 
 const NOMINATIM_ENDPOINT = 'https://nominatim.openstreetmap.org/search';
 const TIMEOUT_MS = 12_000;
 const USER_AGENT = 'RedViewPRODUCTION/1.0 (iconic geocoder proxy)';
+const MAX_QUERY_LENGTH = 200;
+
+/**
+ * Politique d'usage de nominatim.openstreetmap.org : une requête par seconde
+ * au plus pour toute l'application, sinon l'IP du serveur est bloquée. Les
+ * appels amont sont donc espacés d'une seconde, toutes requêtes confondues ;
+ * une requête qui devrait attendre plus de `MAX_QUEUE_WAIT_MS` répond 503 (le
+ * client se passe alors des lieux emblématiques, comme sur un échec amont).
+ */
+const UPSTREAM_INTERVAL_MS = 1_000;
+const MAX_QUEUE_WAIT_MS = 2_000;
+let nextUpstreamSlotAt = 0;
+
+/** Réponses gardées une journée : les mêmes saisies reviennent d'un utilisateur à l'autre. */
+const responseCache = createByteLru<Buffer>({
+  maxBytes: 4 * 1024 * 1024,
+  sizeOf: (body) => body.length,
+  ttlMs: 24 * 60 * 60_000,
+});
 
 function readQueryParam(req: ApiRequest, key: string): string {
   const value = req.query[key];
@@ -24,28 +44,45 @@ function sanitizeCountryCodes(raw: string): string | null {
   return parts.length > 0 ? parts.join(',') : null;
 }
 
+/** Code de langue (`fr`, `en`, `pt-BR`…) ; `fr` pour toute autre valeur. */
+function sanitizeLanguage(raw: string): string {
+  const language = raw.trim();
+  return /^[a-z]{2,3}(-[a-z0-9]{2,8})?$/i.test(language) ? language : 'fr';
+}
+
 function previewText(value: string, maxLength = 180): string {
   const compact = value.replace(/\s+/g, ' ').trim();
   if (!compact) return '';
   return compact.length > maxLength ? `${compact.slice(0, maxLength)}...` : compact;
 }
 
-async function fetchWithTimeout(target: string): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+/** Réserve le prochain créneau amont : attente en ms, ou `null` si elle dépasserait `MAX_QUEUE_WAIT_MS`. */
+function reserveUpstreamSlot(now: number): number | null {
+  const slotAt = Math.max(now, nextUpstreamSlotAt);
+  const waitMs = slotAt - now;
+  if (waitMs > MAX_QUEUE_WAIT_MS) return null;
+  nextUpstreamSlotAt = slotAt + UPSTREAM_INTERVAL_MS;
+  return waitMs;
+}
 
-  try {
-    return await fetch(target, {
-      method: 'GET',
-      signal: controller.signal,
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': USER_AGENT,
-      },
-    });
-  } finally {
-    clearTimeout(timer);
-  }
+async function fetchWithTimeout(target: string): Promise<Response> {
+  return fetch(target, {
+    method: 'GET',
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+    headers: {
+      Accept: 'application/json',
+      'User-Agent': USER_AGENT,
+    },
+  });
+}
+
+function sendResults(res: ApiResponse, body: Buffer, cache: 'hit' | 'miss') {
+  res.status(200);
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=900');
+  res.setHeader('X-Geocoder-Source', 'nominatim');
+  res.setHeader('X-Geocoder-Cache', cache);
+  return res.send(body);
 }
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
@@ -59,8 +96,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   }
 
   const query = readQueryParam(req, 'q').trim();
-  if (query.length < 2) {
-    return res.status(400).json({ error: 'Missing query' });
+  if (query.length < 2 || query.length > MAX_QUERY_LENGTH) {
+    return res.status(400).json({ error: 'Missing or invalid query' });
   }
 
   const params = new URLSearchParams({
@@ -69,15 +106,27 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     extratags: '1',
     limit: String(clampLimit(readQueryParam(req, 'limit'))),
   });
-
-  const language = readQueryParam(req, 'language').trim() || 'fr';
-  params.set('accept-language', language);
+  // Le client envoie `accept-language` (nom du paramètre Nominatim).
+  params.set('accept-language', sanitizeLanguage(readQueryParam(req, 'accept-language') || readQueryParam(req, 'language')));
 
   const countryCodes = sanitizeCountryCodes(readQueryParam(req, 'countrycodes'));
   if (countryCodes) params.set('countrycodes', countryCodes);
 
+  const cacheKey = params.toString();
+  const cached = responseCache.get(cacheKey);
+  if (cached) return sendResults(res, cached, 'hit');
+
+  const waitMs = reserveUpstreamSlot(Date.now());
+  if (waitMs === null) {
+    res.setHeader('Retry-After', '2');
+    return res.status(503).json({ error: 'Iconic geocoder busy' });
+  }
+  if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
+  // Saisie remplacée pendant l'attente : le client a fermé la requête.
+  if (req.socket?.destroyed) return;
+
   try {
-    const upstream = await fetchWithTimeout(`${NOMINATIM_ENDPOINT}?${params.toString()}`);
+    const upstream = await fetchWithTimeout(`${NOMINATIM_ENDPOINT}?${cacheKey}`);
     const body = Buffer.from(await upstream.arrayBuffer());
     if (!upstream.ok) {
       // Détail amont uniquement dans les logs serveur.
@@ -88,11 +137,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       return res.status(502).json({ error: 'Iconic geocoder upstream failed' });
     }
 
-    res.status(200);
-    res.setHeader('Content-Type', upstream.headers.get('content-type') ?? 'application/json; charset=utf-8');
-    res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=900');
-    res.setHeader('X-Geocoder-Source', 'nominatim');
-    return res.send(body);
+    responseCache.set(cacheKey, body);
+    return sendResults(res, body, 'miss');
   } catch (error) {
     console.error('[geocode-iconic] request failed:', error);
     return res.status(502).json({ error: 'Iconic geocoder request failed' });

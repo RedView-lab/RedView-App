@@ -9,7 +9,8 @@ struct Camera {
   up: vec4<f32>,
   cameraPos: vec4<f32>,
   pointSize: f32,
-  _unused0: f32,
+  /** 1 in photo mode: the shading pass writes the albedo, lighting is deferred. */
+  photoMode: f32,
   viewportWidth: f32,
   viewportHeight: f32,
   sunDir: vec4<f32>,

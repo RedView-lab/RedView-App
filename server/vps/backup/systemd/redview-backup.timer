@@ -1,0 +1,12 @@
+[Unit]
+Description=RedView : sauvegarde quotidienne
+
+[Timer]
+# 02:30 UTC = 03:30 ou 04:30 à Paris, au creux du trafic. Persistent : une
+# sauvegarde manquée (serveur éteint) part au démarrage suivant.
+OnCalendar=*-*-* 02:30:00 UTC
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

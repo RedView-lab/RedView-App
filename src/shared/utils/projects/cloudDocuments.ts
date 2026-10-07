@@ -1,4 +1,3 @@
-import { createDefaultProject } from '@/features/itineraryPanel/lib/project';
 import { logger } from '@/shared/lib/logger';
 import {
   decompressProjectBytes,
@@ -97,30 +96,41 @@ async function readPayloadFile(pointer: string): Promise<unknown> {
     const code = (error as { code?: unknown } | null)?.code;
     throw code === 404 ? new Error(`Project payload file missing: ${pointer}`, { cause: error }) : error;
   }
-  return decompressProjectBytes(bytes);
+  return decodePayload(() => decompressProjectBytes(bytes));
+}
+
+/** Décodage de la charge utile : un échec la déclare illisible (jamais « cloud injoignable »). */
+async function decodePayload(decode: () => Promise<unknown>): Promise<unknown> {
+  try {
+    return await decode();
+  } catch (error) {
+    throw new ProjectCloudError('unreadable', { cause: error });
+  }
 }
 
 /**
  * Document cloud → ligne projet. `data` est le document partagé (`schema: 2`)
  * ou, pour un projet pas encore réenregistré, le projet composé des versions
  * précédentes : sa vue sert alors de vue par défaut (cf. storedProject.ts).
+ * Des données indécodables lèvent `ProjectCloudError('unreadable')` : un
+ * projet vide ouvert à leur place serait enregistré par-dessus à la première
+ * modification.
  */
 export async function docToProjectRow(doc: CloudProjectDoc): Promise<ProjectRow> {
+  const { data } = doc;
   let raw: unknown;
-  if (isPayloadFilePointer(doc.data)) {
+  if (isPayloadFilePointer(data)) {
     filePayloadProjects.add(doc.$id);
-    raw = await readPayloadFile(doc.data);
-  } else if (typeof doc.data === 'string') {
-    try {
-      raw = await decompressProjectPayload(doc.data);
-    } catch (error) {
-      logger.projects.error('Project payload could not be decoded', doc.$id, error);
-      raw = null;
-    }
+    raw = await readPayloadFile(data);
+  } else if (typeof data === 'string') {
+    raw = await decodePayload(() => decompressProjectPayload(data));
   } else {
-    raw = doc.data;
+    raw = data;
   }
-  const parsedData: ItineraryProject = parseStoredProject(raw)?.project ?? createDefaultProject();
+  const parsedData: ItineraryProject | undefined = parseStoredProject(raw)?.project;
+  if (!parsedData) {
+    throw new ProjectCloudError('unreadable', { cause: new Error(`Project ${doc.$id}: data is not a project`) });
+  }
 
   return withNameSync({
     id: doc.$id,

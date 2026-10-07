@@ -1,0 +1,7 @@
+[Unit]
+Description=RedView : alerte d'échec de %i
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/redview-backup alert %i
+TimeoutStartSec=5min

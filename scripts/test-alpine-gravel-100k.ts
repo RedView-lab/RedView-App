@@ -1,6 +1,14 @@
 import { sampleTerrainElevationsAtPoints } from '../src/features/itineraryPanel/lib/route-metrics/terrainTiles';
 import { computeRouteElevationMetrics } from '../src/features/itineraryPanel/lib/route-metrics/metrics';
-import { applyGpxQuality, buildGpxQualityStats } from '../src/features/itineraryPanel/lib/routes/simplify-route';
+import { applyGpxQuality } from '../src/features/itineraryPanel/lib/routes/simplify-route';
+
+/** Réponse GeoJSON de BRouter (champs lus ici). */
+interface BrouterGeoJson {
+  features: Array<{
+    geometry: { coordinates: [number, number, number][] };
+    properties: Record<string, string | undefined>;
+  }>;
+}
 
 async function runTest() {
   console.log('================================================================================');
@@ -27,14 +35,14 @@ async function runTest() {
   console.log(`   - Étapes : ${waypoints.map(w => w.name).join(' ➔ ')}`);
   
   const startTime = Date.now();
-  let geojson: any;
+  let geojson: BrouterGeoJson;
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`BRouter HTTP ${res.status}: ${await res.text()}`);
-    geojson = await res.json();
+    geojson = await res.json() as BrouterGeoJson;
     console.log(`   - Requête BRouter réussie en ${Date.now() - startTime} ms`);
-  } catch (err: any) {
-    console.error('Erreur BRouter:', err.message);
+  } catch (err) {
+    console.error('Erreur BRouter:', err instanceof Error ? err.message : err);
     return;
   }
 
@@ -96,7 +104,6 @@ async function runTest() {
   for (const q of modes) {
     const res = applyGpxQuality(pointsWithMnt, q);
     const m = computeRouteElevationMetrics(res.points);
-    const stats = buildGpxQualityStats(res.points, pointsWithMnt, q);
     const diff = Number(m?.ascentM) - Number(metricsMntFull?.ascentM);
     const pct = ((diff / Number(metricsMntFull?.ascentM)) * 100).toFixed(1);
     

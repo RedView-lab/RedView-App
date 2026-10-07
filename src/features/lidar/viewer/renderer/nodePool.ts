@@ -48,6 +48,8 @@ export class NodeGpuPool {
   private readonly recordF32 = new Float32Array(this.record);
   private readonly recordU32 = new Uint32Array(this.record);
   private shadingEpoch = 0;
+  private readonly shadowMasks: GPUBuffer[] = [];
+  private shadowMaskData: Uint32Array<ArrayBuffer> | null = null;
   /** Out-of-memory errors reported (asynchronously) for node uploads. */
   outOfMemoryCount = 0;
 
@@ -187,6 +189,50 @@ export class NodeGpuPool {
     }
   }
 
+  /**
+   * Per pool slot, the octants a node of a shadow-caster selection refines
+   * (`SceneNode.shadowChildMask`), read by the photo mode's shadow passes:
+   * one buffer per shadow map drawn in the same frame (`index`), created on
+   * first use.
+   */
+  shadowMaskBuffer(index: number): GPUBuffer {
+    let buffer = this.shadowMasks[index];
+    if (!buffer) {
+      buffer = this.device.createBuffer({
+        size: this.capacity * 4,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      });
+      this.shadowMasks[index] = buffer;
+    }
+    return buffer;
+  }
+
+  /** Uploads the shadow masks of a caster selection (whole buffer: casters span the pool). */
+  writeShadowMasks(index: number, nodes: readonly SceneNode[]): void {
+    const buffer = this.shadowMaskBuffer(index);
+    const masks = this.shadowMaskData ??= new Uint32Array(this.capacity);
+    masks.fill(0);
+    for (const node of nodes) {
+      const entry = this.gpu.get(node.id);
+      if (entry) masks[entry.slot] = node.shadowChildMask;
+    }
+    this.device.queue.writeBuffer(buffer, 0, masks);
+  }
+
+  /** Draws the casters into a shadow map (pipeline and group 0 set; group 1 = node uniform); returns the draw count. */
+  drawShadow(pass: GPURenderPassEncoder, nodes: readonly SceneNode[]): number {
+    let draws = 0;
+    for (const node of nodes) {
+      const entry = this.gpu.get(node.id);
+      if (!entry) continue;
+      pass.setBindGroup(1, this.nodeBindGroup, [entry.slot * NODE_UNIFORM_STRIDE]);
+      pass.setVertexBuffer(0, entry.packed);
+      pass.draw(4, entry.count);
+      draws++;
+    }
+    return draws;
+  }
+
   /** Draws the given nodes (pipeline and groups 0/1 already set); returns the draw count. */
   draw(pass: GPURenderPassEncoder, nodes: readonly SceneNode[]): number {
     let draws = 0;
@@ -210,5 +256,7 @@ export class NodeGpuPool {
     this.gpu.clear();
     this.uniformBuffer.destroy();
     this.childMaskBuffer.destroy();
+    for (const buffer of this.shadowMasks) buffer.destroy();
+    this.shadowMasks.length = 0;
   }
 }

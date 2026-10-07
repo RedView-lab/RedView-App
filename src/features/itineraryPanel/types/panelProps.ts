@@ -2,7 +2,7 @@ import type { SportDiscipline } from '@/shared/lib/discipline';
 import type { PoiAutoSortSummary, PoiCategory, PoiEntry } from './poi';
 import type { ItineraryProject, PanelMode, ProjectSaveStatus } from './project';
 import type { RhythmState } from './rhythm';
-import type { PrioritiesState, RoadTypesState, RouteProfile } from './routing';
+import type { PrioritiesState, RoadTypesState, RouteProfile, SavedCustomProfile } from './routing';
 import type {
   TimelineAddItemKind,
   TimelineAddItemOptions,
@@ -99,7 +99,7 @@ export interface ItineraryPanelProps {
   onRedo?: () => void;
   canUndo?: boolean;
   canRedo?: boolean;
-  onSaveProfile?: (profile?: any) => void;
+  onSaveProfile?: (profile?: SavedCustomProfile) => void;
   onDeleteProfile?: (id: string) => void;
   /** Open the Expert Mode profile editor modal. */
   onOpenExpertEditor?: () => void;

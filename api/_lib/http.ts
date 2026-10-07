@@ -8,6 +8,18 @@ export function sendMethodNotAllowed(
   return res.status(405).json({ error: 'Method not allowed' });
 }
 
+/**
+ * Champs du corps JSON déjà lu, chacun `unknown` : le handler valide le type
+ * de chaque champ qu'il utilise. Tout autre corps (texte, Buffer, tableau,
+ * absent) donne un objet vide.
+ */
+export function bodyFields(req: ApiRequest): Record<string, unknown> {
+  const { body } = req;
+  return body && typeof body === 'object' && !Array.isArray(body) && !Buffer.isBuffer(body)
+    ? body as Record<string, unknown>
+    : {};
+}
+
 export async function readJsonBody<T>(req: ApiRequest): Promise<T> {
   if (req.body && typeof req.body === 'object') {
     return req.body as T;

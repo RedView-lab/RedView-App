@@ -7,7 +7,7 @@ const { clearProfileCache, ensureProfileUploaded, PROFILE_UPLOAD_TIMEOUT_MS } = 
 
 /** An upload answering after `ms` (never when null), or failing when its signal aborts first. */
 function answerAfter(ms: number | null, profileId = 'custom_1') {
-  return (_brf: string, _id: undefined, signal: AbortSignal) => new Promise((resolve, reject) => {
+  return (_brf: string, signal: AbortSignal) => new Promise((resolve, reject) => {
     const timer = ms === null ? undefined : setTimeout(() => resolve({ profileId }), ms);
     signal.addEventListener('abort', () => {
       clearTimeout(timer);

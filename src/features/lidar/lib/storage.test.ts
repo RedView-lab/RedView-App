@@ -117,3 +117,39 @@ describe('LiDAR tile storage', () => {
     expect(fake.persist).toHaveBeenCalledOnce();
   });
 });
+
+describe('parseCachedTileName', () => {
+  const tiles: TileCoord[] = [
+    { xKm: 965, yKm: 6500, territory: 'FXX', projection: 'LAMB93', altRef: 'IGN69' },
+    { xKm: 1210, yKm: 6110, territory: 'FXX', projection: 'LAMB93', altRef: 'IGN78' },
+    { xKm: 340, yKm: 7650, territory: 'REU', projection: 'RGR92UTM40S', altRef: 'REUN89' },
+    { xKm: 2600, yKm: 1200, territory: 'CH', projection: 'CH1903_LV95', altRef: 'LN02' },
+    { xKm: 1750, yKm: 5900, territory: 'NZ', projection: 'NZTM2000', altRef: 'NZVD2016', footprint: { minX: 1750000, minY: 5900000, maxX: 1751200, maxY: 5901500 } },
+    { xKm: -12, yKm: 5, territory: 'JP', projection: 'JGD2011_ZONE_09', altRef: 'TP', footprint: { minX: -12400, minY: 5000, maxX: -11600, maxY: 5600 } },
+    { xKm: 120, yKm: 487, territory: 'NL', projection: 'RD_NEW', altRef: 'NAP' },
+    { xKm: 150, yKm: 170, territory: 'BE', projection: 'BL72', altRef: 'TAW' },
+  ];
+
+  it('reads back every tile name the cache writes', async () => {
+    const { parseCachedTileName } = await import('./storage');
+    for (const tile of tiles) {
+      const name = tileCoordFileName(tile);
+      expect(parseCachedTileName(name, 10, 20), name).toEqual({ coord: tile, fileName: name, sizeBytes: 10, cachedAt: 20 });
+    }
+  });
+
+  it('ignores any other file of the cache folder', async () => {
+    const { parseCachedTileName } = await import('./storage');
+    for (const name of [
+      'notes.txt',
+      'LHD_FXX_0965_6501_PTS_LAMB93_IGN69.copc.laz.tmp',
+      'LHD_XXX_0965_6501_PTS_LAMB93_IGN69.copc.laz',
+      'LHD_FXX_0965_6501_PTS_WGS84_IGN69.copc.laz',
+      'LHD_FXX_0965_6501_PTS_LAMB93_EGM96.copc.laz',
+      'LHD_JP_m12_p5_PTS_JGD2011_ZONE_20_TP~-12400,5000,-11600,5600.copc.laz',
+      'LHD_NZ_1750_5900_PTS_NZTM2000_NZVD2016~1,2,3.copc.laz',
+    ]) {
+      expect(parseCachedTileName(name, 1, 1), name).toBeNull();
+    }
+  });
+});

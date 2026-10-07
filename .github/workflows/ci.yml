@@ -46,7 +46,17 @@ jobs:
           restore-keys: |
             check-${{ runner.os }}-${{ hashFiles('package-lock.json', 'tsconfig*.json', 'eslint.config.js', 'eslint-suppressions.json') }}-
 
+      # Chromium de Playwright : l'E2E du parcours principal (script-test-bench/user-journey,
+      # étape `journey` de check:full) tourne sur le build de prod, sans jeton Mapbox.
+      - run: npx playwright install --with-deps chromium
+
       - run: npm run check:full
+
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: user-journey
+          path: script-test-bench/reports/user-journey/
 
   # Viewer LiDAR sous Linux, comme ses utilisateurs : Firefox n'y a pas
   # WebGPU et Chrome ne l'active que sur certains GPU, le viewer tourne donc

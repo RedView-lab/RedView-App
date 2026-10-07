@@ -4,9 +4,24 @@ import { StorageFullError } from '../storage';
 // Erreurs du téléchargement des dalles LiDAR (annulation, absence de couverture).
 
 export type DownloadFailure = Error & {
+  /** Statut HTTP de la réponse refusée. */
   status?: number;
   code?: string;
+  /** Octets déjà reçus d'un flux interrompu (`ERR_INCOMPLETE_DOWNLOAD`), pour la reprise. */
+  resumeState?: unknown;
 };
+
+/** Erreur HTTP d'un téléchargement : le statut décide de la suite (404 = URL suivante). */
+export function httpStatusError(message: string, status: number): DownloadFailure {
+  const err: DownloadFailure = new Error(message);
+  err.status = status;
+  return err;
+}
+
+/** Une valeur levée vue comme DownloadFailure (statut, code et reprise absents s'ils n'y sont pas). */
+export function asDownloadFailure(err: unknown): DownloadFailure {
+  return err instanceof Error ? err : new Error(String(err));
+}
 
 /** Erreur levée lorsqu'un téléchargement est annulé par l'utilisateur. */
 export class DownloadCancelledError extends Error {

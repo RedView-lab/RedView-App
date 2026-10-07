@@ -1,6 +1,6 @@
 import { translateAppText } from '@/shared/i18n/config';
 import type { PlatformProfile } from '../lod/types';
-import { fitProfileToMemory, resolvePlatformInfo } from './platform';
+import { fitProfileToMemory, resolvePlatformInfo, type GpuAdapterInfoFields } from './platform';
 
 /**
  * Longest wait for `requestAdapter` / `requestDevice`. Some Linux Vulkan
@@ -105,7 +105,7 @@ export async function requestLidarGpu(): Promise<{ device: GPUDevice; profile: P
   const adapter = await requestHighPerformanceAdapter();
   if (!adapter) throw new Error(translateAppText('Pas de GPUAdapter'));
 
-  const platform = resolvePlatformInfo((adapter as unknown as { info?: unknown }).info ?? null);
+  const platform = resolvePlatformInfo((adapter as { info?: GpuAdapterInfoFields }).info ?? null);
   const { vendor, arch, desc } = platform;
   const profile = fitProfileToMemory(platform.profile, (navigator as Navigator & { deviceMemory?: number }).deviceMemory);
   console.log(`[LiDAR GPU] Adapter: vendor=${vendor} arch=${arch} desc=${desc}`);

@@ -55,6 +55,8 @@ export function useDashboardOverlayStatus(): UseDashboardOverlayStatusResult {
     Partial<Record<OverlayStatusId, OverlayStatusSnapshot>>
   >({});
   const overlayReloadersRef = useRef<Partial<Record<OverlayStatusId, () => void>>>({});
+  /** Un rechargeur « carte » est enregistré : son statut est rechargeable par défaut. */
+  const [hasMapReloader, setHasMapReloader] = useState(false);
   const [loadingCycles, setLoadingCycles] = useState<Partial<Record<OverlayStatusId, LoadingCycle>>>({});
   const [guardNow, setGuardNow] = useState(() => Date.now());
 
@@ -101,6 +103,7 @@ export function useDashboardOverlayStatus(): UseDashboardOverlayStatusResult {
   }, [trackLoadingCycle]);
 
   const setOverlayReloader = useCallback((id: OverlayStatusId, reload: (() => void) | null) => {
+    if (id === 'map') setHasMapReloader(Boolean(reload));
     if (reload) {
       overlayReloadersRef.current[id] = reload;
       if (id !== 'map') {
@@ -169,7 +172,7 @@ export function useDashboardOverlayStatus(): UseDashboardOverlayStatusResult {
         ? {
             map: {
               ...mapStatus,
-              reloadable: mapStatus.reloadable ?? Boolean(overlayReloadersRef.current.map),
+              reloadable: mapStatus.reloadable ?? hasMapReloader,
             },
           }
         : {}),
@@ -183,7 +186,7 @@ export function useDashboardOverlayStatus(): UseDashboardOverlayStatusResult {
         if (!cycle || guardNow < loadingCycleDeadline(cycle)) return status;
         return { ...status, state: 'ready' as const, progress: 100 };
       });
-  }, [mapStatus, overlayStatuses, loadingCycles, guardNow]);
+  }, [mapStatus, overlayStatuses, loadingCycles, guardNow, hasMapReloader]);
 
   // Wake up exactly when the next loading cycle expires so the pill flips
   // to "ready" without polling.

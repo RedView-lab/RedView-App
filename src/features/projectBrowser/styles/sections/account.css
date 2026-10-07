@@ -212,3 +212,24 @@
   flex-direction: column;
   gap: 16px;
 }
+/* « Vos données » : export et suppression du compte (AccountDataForm). */
+.rvpb-account-data-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px 32px;
+  align-items: center;
+}
+
+.rvpb-account-data-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rvpb-account-data-hint {
+  margin: 0;
+  color: rgb(var(--rv-ink) / 0.64);
+  font-size: var(--rv-font-size-md);
+  line-height: 1.4;
+}

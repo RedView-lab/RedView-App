@@ -5,7 +5,9 @@ import { APP_BUILD_ID, APP_CACHE_EPOCH, ensureAppCacheEpochReset } from './share
 import { logger } from './shared/lib/logger'
 import { AppI18nProvider } from './shared/i18n'
 import { GlobalErrorBoundary } from './shared/components/GlobalErrorBoundary'
+import { scrubBreadcrumb, scrubErrorEvent } from './shared/lib/errorReportScrub'
 import { initAppTheme } from './shared/lib/appTheme'
+import { initAnalytics } from './shared/lib/analytics'
 import './features/map3d/hooks/useMap/serviceWorker'
 import './shared/styles/typography.css'
 import './shared/styles/theme.css'
@@ -33,6 +35,9 @@ if (sentryDsn && !sentryDsn.includes('placeholder')) {
       'cancelled',
       'Extension context invalidated',
     ],
+    // URLs réduites à leur chemin (jeton de réinitialisation, coordonnées des
+    // requêtes) : shared/lib/errorReportScrub.ts.
+    beforeBreadcrumb: (breadcrumb) => scrubBreadcrumb(breadcrumb),
     beforeSend(event) {
       // VITE_SENTRY_ALLOW_LOCAL=1 au build : envoi depuis localhost (vérifier
       // les sourcemaps d'un build local, cf. scripts/upload-sourcemaps.mjs).
@@ -40,7 +45,7 @@ if (sentryDsn && !sentryDsn.includes('placeholder')) {
       if (!allowLocal && typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
         return null
       }
-      return event
+      return scrubErrorEvent(event)
     },
   })
 }
@@ -64,6 +69,9 @@ window.addEventListener('vite:preloadError', (event) => {
 
 // Avant le premier rendu : pas de flash du mauvais thème.
 initAppTheme()
+
+// Mesure d'audience anonyme (tracker first-party chargé au repos, prod seulement).
+initAnalytics({ surface: 'app', release: APP_BUILD_ID })
 
 async function bootstrap(): Promise<void> {
   const didResetCacheEpoch = await ensureAppCacheEpochReset()

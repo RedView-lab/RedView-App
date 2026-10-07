@@ -35,9 +35,10 @@ export function useLidarRouteSync({
   });
 
   // 1) Outbound sync: When itineraries change in RedView, push to LiDAR overlay
+  // (only when a route itself changed: most project edits leave them alone).
   useEffect(() => {
     if (itineraries) {
-      syncLidarRouteOverlay(itineraries, 'redview_app');
+      syncLidarRouteOverlay(itineraries, 'redview_app', { onlyIfChanged: true });
     }
   }, [itineraries]);
 

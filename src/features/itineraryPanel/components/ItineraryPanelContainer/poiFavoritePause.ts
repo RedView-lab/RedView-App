@@ -1,4 +1,5 @@
 import { DEFAULT_POI_PAUSE_MIN, type PoiFeature } from '@/features/poi/types';
+import { trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { normalizeItineraryRhythmState } from '../../lib/project';
 import { upsertPoiTimelineRow } from '../../lib/schedule';
 import type { Itinerary, PoiCategory, TimelineItem } from '../../types';
@@ -51,6 +52,9 @@ function applyRowFavorite(
   favorite: boolean,
   pauseMin?: number,
 ): void {
+  if (Boolean(row.favorite) !== favorite) {
+    trackAnalyticsEvent({ name: 'poi_favorited', data: { enabled: favorite, category: row.poiCategory ?? 'other' } });
+  }
   row.favorite = favorite;
   setManualFavoriteOrigin(row, favorite);
   if (!favorite) {

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import type { LabelCategory } from '../types';
 
@@ -248,7 +248,10 @@ export function useLabels(
   labelsEnabled: boolean = true,
 ) {
   const stateRef = useRef({ labelState, labelsEnabled });
-  stateRef.current = { labelState, labelsEnabled };
+  // Dernier état commité, pour les réapplications après un rechargement de style.
+  useLayoutEffect(() => {
+    stateRef.current = { labelState, labelsEnabled };
+  }, [labelState, labelsEnabled]);
 
   // Apply label state whenever it changes
   useEffect(() => {

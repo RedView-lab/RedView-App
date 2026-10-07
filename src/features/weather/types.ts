@@ -41,7 +41,7 @@ export interface WindGridDefinition {
   points: WindGridPoint[];
 }
 
-export type WindDataSource = 'self-hosted-vps' | 'public-api' | 'direct' | 'unknown';
+export type WindDataSource = 'self-hosted-vps' | 'unknown';
 
 // ── Hook state returned by useWind ────────────────────────────────────
 

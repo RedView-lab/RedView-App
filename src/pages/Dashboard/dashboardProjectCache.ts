@@ -99,10 +99,15 @@ export function compactProjectCacheStorage(projectIdToKeep?: string | null): voi
   const pinnedKey = projectIdToKeep ? getProjectCacheKey(projectIdToKeep) : null;
   const entries: { key: string; cachedAtMs: number; bytes: number; pinned: boolean }[] = [];
 
+  // Clés relevées d'abord : une suppression pendant un parcours par index
+  // décale les suivantes, et l'entrée qui suit une entrée retirée était sautée.
+  const keys: string[] = [];
   for (let i = 0; i < window.localStorage.length; i++) {
     const key = window.localStorage.key(i);
-    if (!key || !key.startsWith(PROJECT_CACHE_KEY_PREFIX)) continue;
+    if (key?.startsWith(PROJECT_CACHE_KEY_PREFIX)) keys.push(key);
+  }
 
+  for (const key of keys) {
     let cachedAtMs = Number.NEGATIVE_INFINITY;
     let bytes = 0;
     try {

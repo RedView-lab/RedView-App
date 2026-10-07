@@ -27,6 +27,7 @@ import {
   THUMBNAILS_BUCKET_ID,
   type AuthenticatedUser,
 } from './appwrite.js';
+import { parseEmailAddress } from './email.js';
 import { PublicError } from './errors.js';
 import { notifyProjectAccessChanged } from './multiplayerNotify.js';
 
@@ -88,7 +89,6 @@ const JOURNAL_COLLECTION_ID = 'project_journal';
 const PROJECT_VIEWS_COLLECTION_ID = 'project_views';
 /** Garde-fou des purges (pages de 100 lignes). */
 const MAX_PURGE_PAGES = 1_000;
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_MEMBERS = 50;
 /**
  * Invitations : chacune dit si un compte existe pour cet e-mail. Bornées par
@@ -317,11 +317,9 @@ async function ensureShared(row: ProjectRowAccess, ownerId: string): Promise<str
 }
 
 export async function inviteToProject(user: AuthenticatedUser, projectId: string, rawEmail: unknown): Promise<ShareState> {
-  if (typeof rawEmail !== 'string' || rawEmail.length > 320 || !EMAIL_PATTERN.test(rawEmail.trim())) {
-    throw new PublicError('Invalid email', 400);
-  }
+  const email = parseEmailAddress(rawEmail);
+  if (!email) throw new PublicError('Invalid email', 400);
   if (!inviteLimiter(`invite:${user.id}`, MAX_INVITES_PER_USER)) throw new PublicError('Too many invitations, try again later', 429);
-  const email = rawEmail.trim().toLowerCase();
   const row = await readProject(projectId);
   const ownerId = await requireOwner(row, user, 'Only the owner can share this project');
   if (user.email && user.email.toLowerCase() === email) throw new PublicError('You already own this project', 400);

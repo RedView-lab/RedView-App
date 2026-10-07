@@ -51,31 +51,6 @@ interface KindBadgeProps {
   pauseDurationMin?: number | null;
 }
 
-/** French labels for the timeline type column. */
-export function kindLabel(kind: TimelineItemKind, poiCategory?: PoiCategory): string {
-  switch (kind) {
-    case 'start':       return translateAppText('Départ');
-    case 'end':         return translateAppText('Arrivée');
-    case 'waypoint':    return translateAppText('Waypoint');
-    case 'water':       return 'POI';
-    case 'supermarket': return 'POI';
-    case 'poi':         return poiCategory ? poiLabel(poiCategory) : 'POI';
-    case 'pause':       return translateAppText('Pause');
-    default:            return '';
-  }
-}
-
-/** Brand colour driving each badge fill. */
-export const kindColor: Record<TimelineItemKind, string> = {
-  start:       '#0e0e0e',
-  end:         '#0e0e0e',
-  waypoint:    '#c50000',
-  water:       '#1e5fc7',
-  supermarket: '#a85a1a',
-  poi:         '#3a3a3a',
-  pause:       '#3a3a3a',
-};
-
 /* ----------- POI category registry (for future backend wiring) ---------- */
 
 interface PoiBadgeSpec {
@@ -92,7 +67,7 @@ interface PoiBadgeSpec {
  * (`PROVIDED_TIMELINE_BADGE_URLS`), et les catégories santé / transport
  * n'ont pas encore de pictogramme dédié côté design.
  */
-export const POI_BADGE_REGISTRY: Partial<Record<PoiCategory, PoiBadgeSpec>> = {
+const POI_BADGE_REGISTRY: Partial<Record<PoiCategory, PoiBadgeSpec>> = {
   fountains:    { color: '#1e5fc7', Icon: IconDroplet },
   toilets:      { color: '#5a8fc7', Icon: IconToilet },
   supermarkets: { color: '#a85a1a', Icon: IconShoppingCart },
@@ -150,27 +125,6 @@ const PROVIDED_TIMELINE_FAVORITE_BADGE_URLS: Partial<Record<PoiCategory, string>
   refuges: PROVIDED_POI_SVG.favoriteRefugePin,
   passes: PROVIDED_POI_SVG.favoriteRefugePin,
 };
-
-/** POI label (FR). */
-export function poiLabel(category: PoiCategory): string {
-  switch (category) {
-    case 'fountains':    return translateAppText('Eau');
-    case 'toilets':      return translateAppText('Toilettes');
-    case 'supermarkets': return translateAppText('Supermarché');
-    case 'gasStations':  return translateAppText('Carburant');
-    case 'bakeries':     return translateAppText('Boulangerie');
-    case 'fastFood':     return translateAppText('Fast-food');
-    case 'cafes':        return translateAppText('Café');
-    case 'bars':         return translateAppText('Bar');
-    case 'restaurants':  return translateAppText('Restaurant');
-    case 'bikeShops':    return translateAppText('Vélo');
-    case 'hotels':       return translateAppText('Hôtel');
-    case 'refuges':      return translateAppText('Refuge');
-    case 'passes':       return translateAppText('Col');
-    case 'health':       return translateAppText('Santé');
-    case 'transport':    return translateAppText('Transport');
-  }
-}
 
 /**
  * POI badge:

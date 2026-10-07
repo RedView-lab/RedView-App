@@ -9,6 +9,8 @@ import {
 } from './shared/services/appwrite'
 import { PROJECT_LOCATION_CHANGE_EVENT, readProjectIdFromPath } from './shared/utils/projectLocation'
 import { LoginScreen, probeSession, SESSION_EXPIRED_EVENT } from './features/auth'
+import { syncAnalyticsAccount } from './features/auth/authAnalytics'
+import { getCurrentAnalyticsScreen, trackScreen, type AnalyticsScreen } from './shared/lib/analytics'
 import type { SessionProbeResult } from './features/auth'
 import { MobileBlockScreen, NarrowViewportOverlay } from './shared/components/MobileBlockScreen'
 import { useIsMobileDevice } from './shared/hooks/useIsMobileDevice'
@@ -25,25 +27,7 @@ type AuthStatus = 'loading' | 'ready' | 'unreachable'
 
 let initialSessionProbePromise: Promise<SessionProbeResult> | null = null
 
-const ANALYTICS_RECORDER_SRC = 'https://analytics.redview.tech/recorder.js'
-const ANALYTICS_WEBSITE_ID = '794b9933-1d87-4e8c-af69-a09982cc2353'
 const DEV_FALLBACK_USER_ID = 'dev-user-001'
-
-/**
- * Session replay is only loaded for a confirmed, authenticated Appwrite user —
- * never on the login / password-reset screens, so credentials typed there are
- * never recorded. Injected at most once per page.
- */
-function injectAnalyticsRecorder(): void {
-  if (typeof document === 'undefined') return
-  if (document.querySelector(`script[src="${ANALYTICS_RECORDER_SRC}"]`)) return
-
-  const script = document.createElement('script')
-  script.defer = true
-  script.src = ANALYTICS_RECORDER_SRC
-  script.dataset.websiteId = ANALYTICS_WEBSITE_ID
-  document.body.appendChild(script)
-}
 
 /** Tracé du logo de l'écran de démarrage (même valeur que dans index.html). */
 const RV_BOOT_MARK_PATH = 'M19.4062 0C30.1245 4.68511e-07 38.8135 8.68894 38.8135 19.4072C38.8134 30.1255 30.1245 38.8145 19.4062 38.8145H0V19.4072C4.68499e-07 8.68922 8.68835 0.000449258 19.4062 0ZM18.3975 9.5752C16.4695 6.89461 13.0946 6.02423 10.8594 7.63184C8.62427 9.23948 8.37583 12.7159 10.3037 15.3965C10.6901 15.9337 11.1354 16.3968 11.6172 16.7832C8.02224 19.2662 5.54738 23.1551 5.85449 28.0723C10.6499 41.0727 34.9963 36.8349 32.8154 20.3682C30.9355 16.1664 27.0222 14.0922 22.7451 13.7637C24.6583 14.907 25.9403 16.9979 25.9404 19.3887C25.9403 23.0056 23.0075 25.9373 19.3906 25.9375C15.7739 25.9371 12.8419 23.0055 12.8418 19.3887C12.8418 18.7932 12.9223 18.2164 13.0713 17.668C14.6945 18.3774 16.4797 18.3195 17.8418 17.3398C20.077 15.7322 20.3253 12.2558 18.3975 9.5752Z'
@@ -221,26 +205,6 @@ function App() {
     }
   }, [])
 
-  // Session replay: only once Appwrite confirms a real authenticated user
-  // (not the dev/demo fallback session, not the login/reset screens).
-  useEffect(() => {
-    const userId = session?.user?.id
-    if (authStatus !== 'ready' || isPasswordResetUrl || !userId || userId === DEV_FALLBACK_USER_ID) {
-      return
-    }
-
-    let cancelled = false
-    getAppwriteUser()
-      .then((user) => {
-        if (!cancelled && user?.$id === userId) injectAnalyticsRecorder()
-      })
-      .catch(() => {})
-
-    return () => {
-      cancelled = true
-    }
-  }, [authStatus, isPasswordResetUrl, session?.user?.id])
-
   // Aucun état serveur en cache ne passe d'un compte à l'autre (déconnexion,
   // session expirée, autre utilisateur).
   const sessionUserId = session?.user?.id ?? null
@@ -248,7 +212,36 @@ function App() {
     appQueryClient.clear()
   }, [sessionUserId])
 
+  // Mesure d'audience : contexte du compte (ancienneté par tranche, compte
+  // interne exclu) et issue d'un retour OAuth, une fois par session.
+  useEffect(() => {
+    if (!sessionUserId || sessionUserId === DEV_FALLBACK_USER_ID) return
+    let cancelled = false
+    void getAppwriteUser().then((user) => {
+      if (!cancelled && user && user.$id === sessionUserId) syncAnalyticsAccount(user)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [sessionUserId])
+
   const { isMobile, showNarrowViewportOverlay, dismissNarrowViewportOverlay } = useIsMobileDevice()
+
+  // Écrans sans application montée (la connexion et le Dashboard mesurent les leurs).
+  useEffect(() => {
+    if (isMobile) trackScreen('blocked_mobile')
+    else if (authStatus === 'unreachable') trackScreen('unreachable')
+  }, [isMobile, authStatus])
+  const screenBeforeNarrowRef = useRef<AnalyticsScreen | null>(null)
+  useEffect(() => {
+    if (showNarrowViewportOverlay) {
+      screenBeforeNarrowRef.current = getCurrentAnalyticsScreen()
+      trackScreen('blocked_small_window')
+    } else if (screenBeforeNarrowRef.current) {
+      trackScreen(screenBeforeNarrowRef.current)
+      screenBeforeNarrowRef.current = null
+    }
+  }, [showNarrowViewportOverlay])
 
   // Vrai appareil mobile (détecté au chargement) : blocage, l'app n'est pas montée.
   if (isMobile) {

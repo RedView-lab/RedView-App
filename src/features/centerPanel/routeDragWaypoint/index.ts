@@ -1,4 +1,2 @@
-export {
-  RouteDragWaypointProvider,
-  useRouteDragWaypointOptional,
-} from './RouteDragWaypointContext';
+export { RouteDragWaypointProvider } from './RouteDragWaypointContext';
+export { useRouteDragWaypointOptional } from './useRouteDragWaypoint';

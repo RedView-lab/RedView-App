@@ -14,6 +14,7 @@ import { IconClose, IconShare } from '@/features/itineraryPanel/components/icons
 import { UserAvatar } from '@/shared/components/UserAvatar/UserAvatar';
 import { useAppI18n } from '@/shared/i18n';
 import { appScaleStyle, readAppScale } from '@/shared/lib/appScale';
+import { trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { notify } from '@/shared/ui/notify';
 
 import {
@@ -70,6 +71,10 @@ export function ShareProjectDialog({
   const members = share.data?.members ?? [];
 
   useEffect(() => {
+    trackAnalyticsEvent({ name: 'share_dialog_opened' });
+  }, []);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
     };
@@ -91,10 +96,12 @@ export function ShareProjectDialog({
     try {
       if (!wasShared) await onBeforeFirstShare?.();
       const state = await invite.mutateAsync({ id: projectId, email: value });
+      trackAnalyticsEvent({ name: 'share_invite_sent' });
       setEmail('');
       notify.success('{{email}} peut maintenant modifier ce projet.', { email: value });
       if (!wasShared && state.shared) onShared?.();
     } catch (error) {
+      trackAnalyticsEvent({ name: 'share_invite_failed' });
       setInviteError(error instanceof Error ? error.message : t('Le partage du projet a échoué.'));
     }
   };

@@ -26,7 +26,7 @@ import {
   type TimelineColumnDef,
   type TimelineColumnId,
 } from './TimelineColumns';
-import type { TimelineTableSortState } from './TimelineTableSettings';
+import type { TimelineTableSortState } from './timelineTableSettingsState';
 import type { RouteWeatherDataset } from '@/features/weather';
 import {
   parseStartReference,

@@ -1,8 +1,23 @@
 /**
- * R9 — Vent historique (Open-Meteo archive, ERA5) le long d'une sortie,
- * converti en vent de face à hauteur de cycliste. Mis en cache dans .cache/.
+ * R9 — Vent historique (réanalyse ERA5) le long d'une sortie, converti en vent
+ * de face à hauteur de cycliste. Mis en cache dans .cache/ par
+ * `npm run bench:pace:prep` ; ensuite plus aucun accès réseau.
  *
  * Diagnostic uniquement : mesurer la part de l'écart journalier due au vent.
+ *
+ * Source : jamais l'API publique d'Open-Meteo (usage non commercial). Un
+ * serveur Open-Meteo lancé pour l'occasion lit les données ouvertes ERA5
+ * d'Open-Meteo sur AWS (CC BY 4.0, Copernicus) à distance, sans rien stocker ;
+ * l'image du VPS suffit (server/vps/open-meteo/docker-compose.yml) :
+ *
+ *   # VPS — serveur d'archive jetable, supprimé à l'arrêt
+ *   sudo docker run --rm -d --name om-era5 -p 127.0.0.1:8085:8080 \
+ *     -e REMOTE_DATA_DIRECTORY=https://openmeteo.s3.amazonaws.com/data/ \
+ *     ghcr.io/open-meteo/open-meteo:1.6.0 serve
+ *   # poste de dev
+ *   ssh -i ~/.ssh/oracle_brouter.key -N -L 18085:127.0.0.1:8085 opc@<VPS>
+ *   PACE_WIND_ARCHIVE=http://127.0.0.1:18085 npm run bench:pace:prep
+ *   # VPS, une fois fini : sudo docker stop om-era5
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -15,10 +30,20 @@ export const HEIGHT_FACTOR = 0.6;
 
 interface WindSample { d: number; lat: number; lon: number; times: number[]; speedMs: number[]; dirFromDeg: number[] }
 
+/** Vent d'une sortie ni en cache ni téléchargeable (pas de PACE_WIND_ARCHIVE). */
+export class WindDataUnavailableError extends Error {
+  constructor(rideId: string) {
+    super(`vent de ${rideId} absent du cache : npm run bench:pace:prep avec PACE_WIND_ARCHIVE (cf. lib/wind.ts)`);
+    this.name = 'WindDataUnavailableError';
+  }
+}
+
 async function fetchSamples(ride: Ride): Promise<WindSample[]> {
   fs.mkdirSync(CACHE_DIR, { recursive: true });
   const cacheFile = path.join(CACHE_DIR, `wind-${ride.id}.json`);
   if (fs.existsSync(cacheFile)) return JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+  const archive = process.env.PACE_WIND_ARCHIVE?.replace(/\/+$/, '');
+  if (!archive) throw new WindDataUnavailableError(ride.id);
 
   const pts: { d: number; lat: number; lon: number }[] = [];
   for (let d = 0; d <= ride.distanceM; d += SAMPLE_EVERY_M) {
@@ -30,11 +55,11 @@ async function fetchSamples(ride: Ride): Promise<WindSample[]> {
   const day = (epoch: number) => new Date(epoch * 1000).toISOString().slice(0, 10);
   const start = day(ride.startEpoch);
   const end = day(ride.track[ride.track.length - 1]!.epoch);
-  const url = 'https://archive-api.open-meteo.com/v1/archive?'
+  const url = `${archive}/v1/archive?`
     + `latitude=${pts.map((p) => p.lat.toFixed(4)).join(',')}&longitude=${pts.map((p) => p.lon.toFixed(4)).join(',')}`
-    + `&start_date=${start}&end_date=${end}&hourly=wind_speed_10m,wind_direction_10m&wind_speed_unit=ms&timezone=GMT`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Open-Meteo ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    + `&start_date=${start}&end_date=${end}&hourly=wind_speed_10m,wind_direction_10m&wind_speed_unit=ms&timezone=GMT&models=era5`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(300_000) });
+  if (!res.ok) throw new Error(`Open-Meteo archive ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const json = await res.json();
   const list = Array.isArray(json) ? json : [json];
   const samples: WindSample[] = list.map((loc: any, i: number) => ({

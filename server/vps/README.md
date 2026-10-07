@@ -9,14 +9,45 @@ MariaDB, GlitchTip, Umami, Beszel.
 | Fichier | Destination | Appliquer |
 |---|---|---|
 | `brouter.service` | `/etc/systemd/system/brouter.service` | `daemon-reload` puis `restart brouter` (routage coupé ~40 s) |
+| `journald@brouter.conf` | `/etc/systemd/journald@brouter.conf` | avant le redémarrage de BRouter (le journal `brouter` démarre avec lui) ; lecture : `journalctl --namespace=brouter -u brouter` |
 | `poi-server-resources.conf` | `/etc/systemd/system/poi-server.service.d/resources.conf` | `daemon-reload` (limite appliquée à chaud) |
 | `sysctl-90-redview.conf` | `/etc/sysctl.d/90-redview.conf` | `sysctl -p /etc/sysctl.d/90-redview.conf` |
 | `journald-90-redview.conf` | `/etc/systemd/journald.conf.d/90-redview.conf` | `mkdir -p /var/log/journal`, `restart systemd-journald`, `journalctl --flush` |
 | `docker-daemon.json` | `/etc/docker/daemon.json` | `live-restore` d'abord (`kill -HUP` de dockerd), puis `restart docker` : les conteneurs continuent de tourner |
 | `appwrite/docker-compose.override.yml` | `/opt/appwrite/docker-compose.override.yml` | `docker compose config` (vérification à sec), `docker compose stop -t 120 mariadb`, `docker compose up -d` |
+| `umami/docker-compose.yml` (+ `.env` du VPS, modèle `umami/.env.example`) | `/home/opc/services/umami/` | `pg_dump` (umami-db), `docker compose pull && docker compose up -d` (migrations au démarrage) ; retour : remettre l'ancien compose, `up -d`, recharger le dump si besoin. Plan de mesure : `docs/ANALYTICS.md` |
+| `umami/retention.sql` + `umami/systemd/redview-umami-retention.{service,timer}` | `/usr/local/share/redview-umami/retention.sql`, `/etc/systemd/system/` | `install` + `restorecon`, `daemon-reload`, `enable --now redview-umami-retention.timer` (le 1er du mois, purge > 25 mois) |
+| `nginx-stats.conf` | zone en tête de `/etc/nginx/conf.d/app.conf`, `location`s dans le bloc `server` de app.redview.tech | `nginx -t` puis `systemctl reload nginx` ; tracker first-party `/s/x.js` + `/s/api/send` |
 | `nginx-multiplayer.conf` | zones en tête de `/etc/nginx/conf.d/app.conf`, `location`s dans le bloc `server` de app.redview.tech (remplacent `location /multiplayer`) | `nginx -t` puis `systemctl reload nginx` (connexions en cours gardées) |
+| `open-meteo/docker-compose.yml` | `/opt/open-meteo/docker-compose.yml` (`install -D` + `restorecon`) ; route `location /openmeteo/` de `server/weather-daemon/brouter.conf` dans `/etc/nginx/conf.d/brouter.conf` | `docker compose -f /opt/open-meteo/docker-compose.yml up -d` ; nginx : `nginx -t` puis `systemctl reload nginx` |
 
 L'unité de l'ingest météo reste dans `server/weather-daemon/`.
+
+**Open-Meteo** (`open-meteo/`, installé le 07/10/2026) : seule source des
+prévisions par point et de l'historique météo de l'app — jamais l'API publique
+(licence non commerciale). Périmètre : France et pays limitrophes, J+4,
+≤ 5 Go. Modèles Météo-France synchronisés en local (AROME 0,025° 51 h,
+ARPEGE Europe 4 jours, 62 jours d'historique pour le modèle de neige),
+~1,9 Go ; `--execute` supprime les fichiers sortis de la fenêtre. L'app y
+accède par `OPENMETEO_UPSTREAM=http://141.145.220.99/openmeteo` (variable
+Coolify de l'app, nginx réservé au local). Vérifier :
+
+```bash
+curl -s 'http://141.145.220.99/openmeteo/v1/forecast?latitude=45.92&longitude=6.87&hourly=temperature_2m&forecast_days=4&models=meteofrance_seamless' | head -c 300
+sudo du -sh /var/lib/docker/volumes/open-meteo_open-meteo-data/_data   # ≤ 5 Go
+sudo docker logs --tail 5 open-meteo-sync-arpege-history
+```
+
+Ajouter une variable : l'ajouter à la synchro du bon modèle (une variable
+d'un modèle n'est synchronisée qu'une fois : deux `--past-days` différents se
+supprimeraient leurs fichiers), `up -d`, vérifier la taille. Retour
+arrière : `docker compose down` (garder le volume) et retirer la variable
+Coolify — l'app répond alors 503 sur la météo par point.
+
+**Sauvegardes et reprise après sinistre** : `backup/` (restic chiffré vers
+Google Drive chaque nuit, exercice de restauration chaque semaine, alertes
+par e-mail, runbook pour reconstruire sur un serveur neuf). Voir
+`backup/README.md`.
 
 Toujours : sauvegarde horodatée de la cible (`<fichier>.bak-<date>`), application,
 vérification, et commande de rollback prête (remettre la sauvegarde, recharger).
@@ -55,6 +86,8 @@ console OCI (alarme p95 < 25 % sur 24 h).
 - **Swap** : `vm.swappiness=10`, swapfile de 5 Go gardé comme filet.
 - **journald** : sans `/var/log/journal`, le journal vivait dans `/run`
   (tmpfs, donc en RAM) : 458 Mo. Passage sur disque, borné à 300 Mo.
+  BRouter journalise chaque requête avec ses coordonnées : journal à part
+  (`LogNamespace=brouter`), gardé 48 h au lieu de 30 jours.
 - **Docker** : cache de build BuildKit borné à 8 Go (11,6 Go purgés), et
   `live-restore` pour redémarrer dockerd sans couper les conteneurs.
 - **Appwrite** : services inutilisés coupés (Assistant, builds, planificateurs

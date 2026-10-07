@@ -5,18 +5,6 @@ const IGN_ALTIMETRY_MAX_POINTS_PER_REQUEST = 5_000;
 const IGN_ALTIMETRY_MIN_DELAY_MS = 200;
 const IGN_ALTIMETRY_NODATA = -99_999;
 
-const OPEN_METEO_ELEVATION_ENDPOINT = 'https://api.open-meteo.com/v1/elevation';
-/** Limite de l'API : au-delà de 100 coordonnées, HTTP 400 « must not exceed 100 coordinates ». */
-export const OPEN_METEO_MAX_POINTS_PER_REQUEST = 100;
-/** Espacement entre lots : reste sous le quota gratuit (600 appels/min). */
-const OPEN_METEO_MIN_DELAY_MS = 120;
-/**
- * Plafond de points envoyés à Open-Meteo par appel (200 requêtes). Au-delà,
- * les points restent sans altitude MNT : les appelants gardent alors
- * l'altitude du GPX / de BRouter (seuil de couverture) au lieu d'épuiser le
- * quota horaire (5 000 appels) sur un seul tracé.
- */
-const OPEN_METEO_MAX_POINTS_PER_CALL = 20_000;
 
 export interface PointLike {
   lat: number;
@@ -25,10 +13,6 @@ export interface PointLike {
 
 interface IgnElevationResponse {
   elevations?: number[];
-}
-
-interface OpenMeteoElevationResponse {
-  elevation?: number[];
 }
 
 // In-memory cache to avoid duplicate network calls for coordinates already resolved.
@@ -132,52 +116,11 @@ async function requestIgnElevations(
 }
 
 /**
- * Fetch bare-earth MNT from Open-Meteo elevation API (Copernicus DEM 90m/30m global bare-earth).
- */
-async function requestOpenMeteoElevations(
-  points: PointLike[],
-  signal?: AbortSignal,
-): Promise<Array<number | null>> {
-  throwIfAborted(signal);
-  if (points.length === 0) return [];
-
-  const response = await fetch(OPEN_METEO_ELEVATION_ENDPOINT, {
-    method: 'POST',
-    signal,
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      latitude: points.map((p) => p.lat),
-      longitude: points.map((p) => p.lon),
-    }),
-  });
-
-  if (!response.ok) {
-    const detail = await response.text().catch(() => '');
-    throw new Error(
-      `Open-Meteo elevation HTTP ${response.status}${detail ? ` — ${detail.slice(0, 240)}` : ''}`,
-    );
-  }
-
-  const payload = (await response.json()) as OpenMeteoElevationResponse;
-  const elevations = Array.isArray(payload.elevation) ? payload.elevation : null;
-  if (!elevations || elevations.length !== points.length) {
-    throw new Error('Open-Meteo elevation returned unexpected array length');
-  }
-
-  return elevations.map((elevation) => (
-    Number.isFinite(elevation) && elevation > -500 && elevation < 9000
-      ? elevation
-      : null
-  ));
-}
-
-/**
  * Sample true bare-earth terrain (MNT sol nu) elevations for points:
  * 1. France: IGN RGE ALTI (1m/5m MNT sol nu, stripped of buildings & forest)
- * 2. International / Outside France (or IGN fallback): Open-Meteo Elevation API (Copernicus bare-earth DEM)
+ * 2. Outside France (or IGN failure): AWS Terrarium tiles at z12 (~27 m at
+ *    45°N, SRTM / EU-DEM), decoded in the browser — beyond 400 tiles the
+ *    remaining points keep their GPX / BRouter altitude
  * 3. In-memory cache for ultra-fast repeated queries
  */
 export async function sampleTerrainElevationsAtPoints(
@@ -249,36 +192,19 @@ export async function sampleTerrainElevationsAtPoints(
     }
   }
 
-  // 2. Fetch International points + any IGN missing/failed points via Open-Meteo Elevation
-  const needInternational = [...internationalSubIndices, ...ignFailedOrMissingIndices]
-    .slice(0, OPEN_METEO_MAX_POINTS_PER_CALL);
+  // 2. Points outside France + IGN failures: Terrarium tiles
+  const needInternational = [...internationalSubIndices, ...ignFailedOrMissingIndices];
   if (needInternational.length > 0) {
-    for (let offset = 0; offset < needInternational.length; offset += OPEN_METEO_MAX_POINTS_PER_REQUEST) {
-      throwIfAborted(signal);
-      const batchIndices = needInternational.slice(offset, offset + OPEN_METEO_MAX_POINTS_PER_REQUEST);
-      const batchPoints = batchIndices.map((i) => points[i]);
-
-      try {
-        const batchElevations = await requestOpenMeteoElevations(batchPoints, signal);
-        for (let b = 0; b < batchIndices.length; b++) {
-          const originalIdx = batchIndices[b];
-          const ele = batchElevations[b];
-          if (ele != null && Number.isFinite(ele)) {
-            results[originalIdx] = ele;
-            rememberElevation(points[originalIdx].lat, points[originalIdx].lon, ele);
-          }
-        }
-      } catch (err) {
-        if ((err as { name?: string }).name === 'AbortError') throw err;
-        console.warn('[Open-Meteo Elevation] Batch query failed:', err);
-        // Quota atteint : les lots suivants seraient refusés aussi.
-        if (/\bHTTP 429\b/.test(String((err as Error)?.message ?? err))) break;
-      }
-
-      if (offset + OPEN_METEO_MAX_POINTS_PER_REQUEST < needInternational.length) {
-        await delay(OPEN_METEO_MIN_DELAY_MS, signal);
-      }
-    }
+    throwIfAborted(signal);
+    // Chargé à la demande : hors du chemin critique de l'app (tracés en France = IGN seul).
+    const { sampleTerrariumElevations } = await import('@/shared/lib/terrarium');
+    const elevations = await sampleTerrariumElevations(needInternational.map((i) => points[i]), { signal });
+    elevations.forEach((ele, k) => {
+      if (ele == null) return;
+      const originalIdx = needInternational[k];
+      results[originalIdx] = ele;
+      rememberElevation(points[originalIdx].lat, points[originalIdx].lon, ele);
+    });
   }
 
   return results;

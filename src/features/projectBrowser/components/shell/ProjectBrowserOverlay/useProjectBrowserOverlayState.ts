@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useAppI18n } from '@/shared/i18n';
+import { setAnalyticsContext, trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { readStoredAppwriteSession } from '@/shared/services/appwrite';
 
 import {
@@ -227,6 +228,8 @@ export function useProjectBrowserOverlayState({
 
   const applyBillingOverview = useCallback((overview: BillingOverviewResponse) => {
     const activePlanId = resolveActivePlanId(overview.subscription);
+    // Formule (jamais l'abonnement lui-même) : contexte des événements de mesure.
+    setAnalyticsContext({ plan: activePlanId });
 
     setSubscriptionState({
       isLoading: false,
@@ -352,14 +355,12 @@ export function useProjectBrowserOverlayState({
     } catch (nextError) {
       console.warn('[ProjectBrowserOverlay] Failed to sign out cleanly', nextError);
     }
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem('redview:dev-session');
-      window.location.reload();
-    }
+    if (typeof window !== 'undefined') window.location.reload();
   }, [isSigningOut, t]);
 
   const handlePlanSelection = useCallback(
     async (requestedPlanId: ManagedPlanId, amount?: number) => {
+      trackAnalyticsEvent({ name: 'checkout_started', data: { plan: requestedPlanId } });
       logBillingUi('handle-plan-selection-start', {
         requestedPlanId,
         amount,

@@ -202,13 +202,7 @@ export function BillingActionForm({
         subscriptionId: flow.subscriptionId,
       });
 
-      trackAnalyticsEvent({
-        name: 'click_upgrade_pro',
-        data: {
-          plan: 'pro',
-          status: 'success',
-        },
-      });
+      trackAnalyticsEvent({ name: 'checkout_completed', data: { plan: flow.planId ?? 'unknown' } });
     } catch (nextError) {
       logBillingUiError('billing-page-submit-error', nextError, {
         mode: flow.mode,

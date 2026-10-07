@@ -10,6 +10,8 @@ import type {
 import { applyLidarViewerRouteEdit, useProjectStoreOptional } from '@/features/itineraryPanel';
 import { syncLidarRouteOverlay, useLidarRouteSync, type LidarRouteOverlayItem } from '@/features/lidar';
 import { ControlPanel } from './ControlPanel';
+import { diffControlPanelForAnalytics } from '../lib/controlPanelAnalytics';
+import { trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { buildBasemapList, normalizeBasemapId } from '../lib/basemaps';
 import { DEFAULT_CONTROL_PANEL_STATE } from '../lib/defaultState';
 import {
@@ -94,6 +96,8 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
             prev.controlPanel ?? createDefaultControlPanelPersistedState(),
           );
           mut(controlPanel);
+          // Mesure d'audience : couches basculées, fond de carte changé.
+          for (const event of diffControlPanelForAnalytics(prev.controlPanel, controlPanel)) trackAnalyticsEvent(event);
           return { ...prev, controlPanel };
         });
       });
@@ -110,6 +114,7 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
   // A route created in the LiDAR viewer becomes a plain GPX itinerary.
   const addLidarRouteItinerary = useCallback(
     (route: LidarRouteOverlayItem) => {
+      trackAnalyticsEvent({ name: 'itinerary_added', data: { method: 'lidar' } });
       projectStore?.addItinerary({
         id: route.id,
         name: route.name,
@@ -349,7 +354,6 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
     const nextContext: MapContextMenuOverlayContext = {
       weather: {
         enabled: overlayState.slices.weather.enabled,
-        tab: overlayState.slices.weather.tab,
         date: overlayState.slices.weather.date,
         time: overlayState.slices.weather.time,
         forecastDay: overlayState.slices.weather.forecastDay,
@@ -451,7 +455,6 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
       onWeatherPaletteBandColorChange={overlayState.handlers.onWeatherPaletteBandColorChange}
       onWeatherPaletteBandVisibilityToggle={overlayState.handlers.onWeatherPaletteBandVisibilityToggle}
       onWeatherPaletteBandBreakpointChange={overlayState.handlers.onWeatherPaletteBandBreakpointChange}
-      onWeatherAddAlert={overlayState.handlers.onWeatherAddAlert}
       onWindEnabledChange={overlayState.handlers.onWindEnabledChange}
       onWindDateChange={overlayState.handlers.onWindDateChange}
       onSnowEnabledChange={overlayState.handlers.onSnowEnabledChange}

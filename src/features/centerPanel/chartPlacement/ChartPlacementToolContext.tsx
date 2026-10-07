@@ -1,7 +1,5 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useState,
@@ -17,6 +15,11 @@ import { dispatchItineraryMapAction } from '@/features/itineraryPanel/lib/mapAct
 import { reverseGeocodeSettlement } from '@/features/itineraryPanel/lib/geocoding';
 import { translateAppText } from '@/shared/i18n';
 import { useEscapeToExit } from '@/shared/hooks/useEscapeToExit';
+import {
+  ChartPlacementToolContext,
+  type ChartPlacementTarget,
+  type ChartPlacementToolContextValue,
+} from './useChartPlacementTool';
 
 /** Confirmation shown in the toolbar after a placement, then cleared. */
 const DONE_MESSAGE_MS = 4_000;
@@ -39,30 +42,6 @@ const DONE_MESSAGES: Record<TimelineAddItemKind, string> = {
   start: 'Départ placé au km {{km}}',
   end: 'Destination placée au km {{km}}',
 };
-
-/** Point of the active itinerary's route under the chart click. */
-export interface ChartPlacementTarget {
-  lat: number;
-  lon: number;
-  /** Position along the itinerary's own route, from its start. */
-  distanceM: number;
-}
-
-interface ChartPlacementToolContextValue {
-  /** Kind waiting for a click on the analysis chart, null when idle. */
-  armedKind: TimelineAddItemKind | null;
-  /** The active itinerary has a route to place points on. */
-  canPlace: boolean;
-  statusMessage: string | null;
-  arm: (kind: TimelineAddItemKind) => void;
-  deactivate: () => void;
-  /** Adds the armed kind at `target` (one shot: the tool disarms). */
-  placeAt: (target: ChartPlacementTarget) => void;
-  /** Click outside the active itinerary's profile: the tool stays armed. */
-  rejectOutsideRoute: () => void;
-}
-
-const ChartPlacementToolContext = createContext<ChartPlacementToolContextValue | null>(null);
 
 function initialRowLabel(kind: Exclude<TimelineAddItemKind, 'poi'>, target: ChartPlacementTarget): string {
   if (kind === 'pause') return translateAppText('Pause');
@@ -192,8 +171,4 @@ export function ChartPlacementToolProvider({ children }: { children: ReactNode }
       {children}
     </ChartPlacementToolContext.Provider>
   );
-}
-
-export function useChartPlacementToolOptional(): ChartPlacementToolContextValue | null {
-  return useContext(ChartPlacementToolContext);
 }

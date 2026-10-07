@@ -1,0 +1,11 @@
+[Unit]
+Description=RedView : purge des données d'audience de plus de 25 mois (Umami)
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+# Le fichier SQL est lu sur l'hôte et passé au psql du conteneur.
+ExecStart=/bin/sh -c 'docker exec -i umami-db psql -v ON_ERROR_STOP=1 -U umami_user -d umami < /usr/local/share/redview-umami/retention.sql'
+Nice=10
+IOSchedulingClass=idle

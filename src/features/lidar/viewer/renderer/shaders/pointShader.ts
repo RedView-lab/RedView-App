@@ -30,7 +30,7 @@ export const POINT_PARAMS_FLOATS = 12;
 /** Per-node uniform record (bound with a dynamic offset). */
 export const NODE_UNIFORM_BYTES = 32;
 
-const WGSL_NODE_STRUCT = /* wgsl */ `
+export const WGSL_NODE_STRUCT = /* wgsl */ `
 struct NodeParams {
   origin: vec3<f32>,
   size: f32,
@@ -77,6 +77,7 @@ struct VsOut {
   @location(0) @interpolate(flat) color: vec4<f32>,
   @location(1) uv: vec2<f32>,
   @location(2) @interpolate(flat) px: f32,
+  @location(3) @interpolate(flat) cls: f32,
 };
 
 @vertex
@@ -114,6 +115,7 @@ fn vs_main(
   out.color = vec4<f32>(col.rgb, 1.0);
   out.uv = uv;
   out.px = px;
+  out.cls = f32(cls);
   return out;
 }
 
@@ -134,6 +136,29 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
 @fragment
 fn fs_square(in: VsOut) -> @location(0) vec4<f32> {
   return vec4<f32>(in.color.rgb, 1.0);
+}
+
+/** Photo mode G-buffer: albedo (pre-shaded without lighting) and class. */
+struct PhotoGOut {
+  @location(0) albedo: vec4<f32>,
+  @location(1) material: vec4<f32>,
+};
+
+@fragment
+fn fs_photo(in: VsOut) -> PhotoGOut {
+  if (in.px > 2.5 && length(in.uv) > 1.0) { discard; }
+  var out: PhotoGOut;
+  out.albedo = vec4<f32>(in.color.rgb, 1.0);
+  out.material = vec4<f32>(in.cls / 255.0, 0.0, 0.0, 1.0);
+  return out;
+}
+
+@fragment
+fn fs_photo_square(in: VsOut) -> PhotoGOut {
+  var out: PhotoGOut;
+  out.albedo = vec4<f32>(in.color.rgb, 1.0);
+  out.material = vec4<f32>(in.cls / 255.0, 0.0, 0.0, 1.0);
+  return out;
 }
 `;
 
@@ -223,6 +248,11 @@ fn shade_main(@builtin(global_invocation_id) gid: vec3<u32>) {
   c = applySlope(c, terrainNormal);
   c = applyAltitude(c, p);
   c = applySunlightMap(c, p);
+  if (camera.photoMode > 0.5) {
+    // Photo mode lights the G-buffer per pixel (deferred).
+    shadedColors[i] = pack4x8unorm(vec4<f32>(c, f32(cls) / 255.0));
+    return;
+  }
 
   let N = select(vec3<f32>(0.0, 1.0, 0.0), terrainNormal, isGroundPoint(cls, p));
   let lit = shadeSurface(N, c, p);

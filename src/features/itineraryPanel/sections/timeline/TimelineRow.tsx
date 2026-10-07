@@ -14,7 +14,8 @@ import { IconNiceManYellow, IconStar, IconTrash } from '../../components/icons';
 import { useAppI18n } from '@/shared/i18n';
 import { PlaceSearchInput } from './components';
 import type { TimelineItem } from '../../types';
-import { KindBadge, kindLabel } from './KindBadge';
+import { KindBadge } from './KindBadge';
+import { kindLabel } from './timelineKindLabels';
 
 interface TimelineRowProps {
   item: TimelineItem;

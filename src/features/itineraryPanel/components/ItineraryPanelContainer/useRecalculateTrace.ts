@@ -24,6 +24,7 @@ import {
   routeSeamJoins,
 } from '../../lib/routes';
 import { formatForbiddenZonePolygons, type BrouterRoute } from '../../lib/brouter';
+import { logger } from '@/shared/lib/logger';
 
 type GpxRoutePoint = NonNullable<Itinerary['gpxRoute']>['points'][number];
 
@@ -219,8 +220,8 @@ export function useRecalculateTrace({
       const start = anchors[i];
       const end = anchors[i + 1];
 
-      console.log(
-        `[Recalculate] segment ${i + 1}/${segmentCount}:`,
+      logger.brouter.info(
+        `recalculate: segment ${i + 1}/${segmentCount}:`,
         `${start.lon.toFixed(4)},${start.lat.toFixed(4)}`,
         '→',
         `${end.lon.toFixed(4)},${end.lat.toFixed(4)}`,
@@ -344,8 +345,8 @@ export function useRecalculateTrace({
       // overwriting the result with a single end-to-end recompute.
       skipNextRouteRecompute();
 
-      console.log(
-        `[Recalculate] ✔ done: ${segmentCount} segments, ${distanceKm} km total`,
+      logger.brouter.info(
+        `recalculate ✔ done: ${segmentCount} segments, ${distanceKm} km total`,
       );
     } catch (error) {
       if ((error as { name?: string }).name === 'AbortError') return;

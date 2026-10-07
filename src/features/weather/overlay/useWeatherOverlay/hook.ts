@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
-import { clearWeatherOverlayCache } from '../client';
 import { clearWeatherMetaCache } from '../vpsWeatherClient';
 import { clearRecoloredBlobCache } from '../vpsTileRenderer';
 import type { WeatherOverlayMetric, WeatherOverlayState } from '../types';
@@ -14,7 +13,7 @@ import { SUPPORTED_KEYS } from './constants';
 import {
   activeRenderableLayers,
   paletteSignature,
-  selectionFromState,
+  weatherSelectionKey,
   type RenderedLayerEntry,
 } from './helpers';
 import { useWeatherStyleManager } from './useWeatherStyleManager';
@@ -35,7 +34,6 @@ export function useWeatherOverlay(
 ): void {
   const { statusReporter, registerReload } = options;
   const stateRef = useRef(state);
-  stateRef.current = state;
 
   const renderedRef = useRef<Partial<Record<WeatherOverlayMetric, RenderedLayerEntry>>>({});
   const isCancelledRef = useRef(false);
@@ -43,7 +41,11 @@ export function useWeatherOverlay(
 
   const activeLayers = useMemo(() => activeRenderableLayers(state), [state]);
   const activeLayersRef = useRef(activeLayers);
-  activeLayersRef.current = activeLayers;
+  // Valeurs commitées pour les callbacks Mapbox et les effets (avant eux : layout).
+  useLayoutEffect(() => {
+    stateRef.current = state;
+    activeLayersRef.current = activeLayers;
+  }, [state, activeLayers]);
 
   const publishStatus = (status: ReturnType<typeof createOverlayStatus> | null) => {
     statusReporter?.(status);
@@ -53,7 +55,7 @@ export function useWeatherOverlay(
     () => activeLayers.map((layer) => `${layer.key}:${layer.mode}`).join('|'),
     [activeLayers],
   );
-  const selectionKey = useMemo(() => selectionFromState(state).key, [state]);
+  const selectionKey = useMemo(() => weatherSelectionKey(state), [state]);
   const paletteKey = useMemo(
     () => activeLayers
       .map((layer) => `${layer.key}:${paletteSignature(state, layer.key)}`)
@@ -92,10 +94,8 @@ export function useWeatherOverlay(
   });
 
   const {
-    renderFromData,
     scheduleRefresh,
     cancelPipeline,
-    dataRef,
   } = useWeatherDataPipeline({
     map,
     stateRef,
@@ -115,7 +115,9 @@ export function useWeatherOverlay(
     isCancelled: () => isCancelledRef.current,
   });
 
-  scheduleRefreshRef.current = scheduleRefresh;
+  useLayoutEffect(() => {
+    scheduleRefreshRef.current = scheduleRefresh;
+  }, [scheduleRefresh]);
 
   // 1. Map Lifecycle & Mapbox Event Listeners (strictly [map, isMapLoaded])
   useEffect(() => {
@@ -230,11 +232,7 @@ export function useWeatherOverlay(
 
     // Case 1: Palette change (color, band breakpoints, scale) -> Instant recolor (delay = 0, no debounce)
     if (isPaletteChanged && !isSelectionChanged && !isLayersChanged && !isEnabledChanged) {
-      if (dataRef.current) {
-        void renderFromData(dataRef.current);
-      } else {
-        scheduleRefresh('force', false);
-      }
+      scheduleRefresh('force', false);
       return;
     }
 
@@ -260,10 +258,8 @@ export function useWeatherOverlay(
   useEffect(() => {
     if (!registerReload) return;
     registerReload(() => {
-      clearWeatherOverlayCache();
       clearWeatherMetaCache();
       clearRecoloredBlobCache();
-      dataRef.current = null;
       scheduleRefresh('reload');
     });
   }, [registerReload]);

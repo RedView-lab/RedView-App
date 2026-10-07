@@ -1,4 +1,4 @@
-import { OPENMETEO_FORECAST_URL } from './openMeteoConfig';
+import { OPENMETEO_FORECAST_DAYS, OPENMETEO_FORECAST_URL, OPENMETEO_MODEL } from './openMeteoConfig';
 import {
   formatLocalDateIso,
   parseLocalDateIso,
@@ -52,8 +52,6 @@ export interface RouteWeatherValues {
 // ── Cache & In-Flight Management ─────────────────────────────────────
 
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
-/** Horizon de l'API forecast Open-Meteo : aujourd'hui + 15 jours (16 jours). */
-export const ROUTE_WEATHER_FORECAST_HORIZON_DAYS = 16;
 /** Vitesse de repli pour estimer la durée de sortie sans prédiction. */
 const FALLBACK_RIDE_SPEED_KMH = 20;
 const weatherCache = new Map<string, RouteWeatherDataset>();
@@ -82,7 +80,7 @@ export function resolveRouteWeatherDateRange(
 ): { startDate: string; endDate: string } | null {
   const startDay = parseLocalDateIso(startDate);
   if (!startDay) return null;
-  const lastForecastDay = new Date(startOfLocalDay(now).getTime() + (ROUTE_WEATHER_FORECAST_HORIZON_DAYS - 1) * DAY_MS);
+  const lastForecastDay = new Date(startOfLocalDay(now).getTime() + (OPENMETEO_FORECAST_DAYS - 1) * DAY_MS);
   if (startDay.getTime() > lastForecastDay.getTime()) return null;
   const departureMs = startDay.getTime() + timeToMinutes(startTime || '12:00') * 60 * 1000;
   const durationH = Number.isFinite(rideDurationHours) && rideDurationHours > 0 ? rideDurationHours : 0;
@@ -211,7 +209,8 @@ export async function fetchRouteWeatherDataset(
         `${OPENMETEO_FORECAST_URL}?latitude=${lats}&longitude=${lngs}` +
         `&hourly=temperature_2m,apparent_temperature,precipitation,wind_speed_10m,cloud_cover,relative_humidity_2m,sunshine_duration` +
         `&start_date=${range.startDate}&end_date=${range.endDate}` +
-        `&timezone=auto&temperature_unit=celsius&precipitation_unit=mm&wind_speed_unit=kmh&cell_selection=nearest`;
+        `&timezone=auto&temperature_unit=celsius&precipitation_unit=mm&wind_speed_unit=kmh&cell_selection=nearest` +
+        `&models=${OPENMETEO_MODEL}`;
 
       const response = await fetch(url, {
         signal,

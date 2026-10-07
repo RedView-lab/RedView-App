@@ -126,7 +126,6 @@ export interface HoverCardRow {
   itineraryName: string;
   color: string;
   axis: 1 | 2 | null;
-  axisLabel: string;
   metric: ChartMetricId;
   value: number;
   distanceFormatted?: string;

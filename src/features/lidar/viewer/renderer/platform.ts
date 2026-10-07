@@ -122,7 +122,15 @@ export function resolveWebglPlatformInfo(vendorString: string, rendererString: s
   return { vendor, desc, profile: { ...PROFILES[resolveGpuTier(vendor, '', desc)] } };
 }
 
-export function resolvePlatformInfo(adapterInfo: any): {
+/** Champs lus du GPUAdapterInfo de WebGPU (absents selon le navigateur). */
+export interface GpuAdapterInfoFields {
+  vendor?: string;
+  architecture?: string;
+  description?: string;
+  device?: string;
+}
+
+export function resolvePlatformInfo(adapterInfo: GpuAdapterInfoFields | null | undefined): {
   vendor: string;
   arch: string;
   desc: string;

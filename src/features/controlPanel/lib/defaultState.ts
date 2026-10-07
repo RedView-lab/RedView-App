@@ -1,5 +1,4 @@
 import type { ControlPanelState } from '../types';
-import { translateAppText } from '@/shared/i18n';
 import { buildBasemapList, DEFAULT_BASEMAP_ID } from './basemaps';
 import { buildDefaultSunlightBands, DEFAULT_SUNLIGHT_SCALE_SETTING } from './sunlightConfig';
 import { buildDefaultWeatherPalettePresets } from '../weather/defaultPalettes';
@@ -21,8 +20,9 @@ const DEFAULT_SLOPE_BANDS = generateDynamicCategories(10).map((category) => ({
 }));
 
 /**
- * Default state that mirrors the Figma mock data (see node 1407:17211).
- * Useful as a starting point before wiring to real backend state.
+ * Valeurs par défaut du panneau de droite, complétées par les réglages du
+ * projet (ControlPanelContainer). Les listes (tuiles LiDAR, itinéraires)
+ * viennent toujours du projet : elles sont vides ici.
  */
 export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
   basemaps: buildBasemapList(DEFAULT_BASEMAP_ID),
@@ -38,12 +38,7 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
     value: DEFAULT_MAP_ENVIRONMENT,
     options: MAP_ENVIRONMENT_OPTIONS.map((option) => ({ ...option })),
   },
-  lidarTiles: [
-    { id: 'tile-1', label: translateAppText('Tuile {{index}} (LIDAR) ({{size}}mo) ({{year}} IGN)', { index: 1, size: 2102, year: 2026 }), sizeMb: 2102, year: 2026, source: 'LIDAR', visible: true },
-    { id: 'tile-2', label: translateAppText('Tuile {{index}} (LIDAR) ({{size}}mo) ({{year}} IGN)', { index: 2, size: 2102, year: 2026 }), sizeMb: 2102, year: 2026, source: 'LIDAR', visible: true },
-    { id: 'tile-3', label: translateAppText('Tuile {{index}} (LIDAR) ({{size}}mo) ({{year}} IGN)', { index: 3, size: 2102, year: 2026 }), sizeMb: 2102, year: 2026, source: 'LIDAR', visible: true },
-    { id: 'tile-4', label: translateAppText('Tuile {{index}} (LIDAR) ({{size}}mo) ({{year}} IGN)', { index: 4, size: 2102, year: 2026 }), sizeMb: 2102, year: 2026, source: 'LIDAR', visible: true },
-  ],
+  lidarTiles: [],
   labels: {
     enabled: true,
     state: {
@@ -66,11 +61,7 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
     enabled: true,
     traceWidthPx: DEFAULT_ROUTE_TRACE_WIDTH_PX,
     quality: 'auto',
-    items: [
-      { id: 'route-1', label: translateAppText('Itinéraire {{index}}', { index: 1 }), color: '#c50000', mode: 'default', opacity: 100, visible: true },
-      { id: 'route-2', label: translateAppText('Variante 2'), color: '#ffa630', mode: 'slope', opacity: 100, visible: true },
-      { id: 'route-3', label: 'GPX Jerem', color: '#ffcd57', mode: 'speedEst', opacity: 100, visible: true },
-    ],
+    items: [],
   },
   slopes: {
     enabled: true,
@@ -95,14 +86,12 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
   },
   weather: {
     enabled: true,
-    tab: 'forecast',
     customDateEnabled: true,
     ...clampForecastSelection({
       date: getForecastDateForOffset(0),
       time: '12:00',
       forecastDay: 0,
     }),
-    trendMode: 'date',
     layers: [
       { key: 'temperature', enabled: true, mode: 'gradient' },
       { key: 'feelsLike', enabled: false, mode: 'gradient' },

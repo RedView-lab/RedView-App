@@ -16,5 +16,6 @@ export {
   type AppTranslationValue,
   type AppTranslationVars,
 } from './config';
-export { AppI18nProvider, useAppI18n } from './AppI18nProvider';
+export { AppI18nProvider } from './AppI18nProvider';
+export { useAppI18n } from './appI18nContext';
 export { buildTranslationLookup, observeDomTranslation } from './domTranslation';

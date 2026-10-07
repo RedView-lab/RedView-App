@@ -54,9 +54,8 @@ function OpacityPill({ value, onChange }: OpacityPillProps) {
   const [draft, setDraft] = useState(String(value));
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  useEffect(() => {
-    if (!editing) setDraft(String(value));
-  }, [value, editing]);
+  // Hors édition, le brouillon suit la valeur reçue.
+  if (!editing && draft !== String(value)) setDraft(String(value));
 
   useEffect(() => {
     if (editing && inputRef.current) {

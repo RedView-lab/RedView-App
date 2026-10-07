@@ -1,7 +1,5 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -30,13 +28,7 @@ import {
   type RouteEditPointerController,
   type RouteEditTarget,
 } from './routeEditPointer';
-
-interface RouteDragWaypointContextValue {
-  /** True while a route point is actively being dragged. */
-  dragging: boolean;
-}
-
-const RouteDragWaypointContext = createContext<RouteDragWaypointContextValue | null>(null);
+import { RouteDragWaypointContext, type RouteDragWaypointContextValue } from './useRouteDragWaypoint';
 
 interface RouteDragWaypointProviderProps {
   children: ReactNode;
@@ -236,8 +228,4 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
       {children}
     </RouteDragWaypointContext.Provider>
   );
-}
-
-export function useRouteDragWaypointOptional(): RouteDragWaypointContextValue | null {
-  return useContext(RouteDragWaypointContext);
 }

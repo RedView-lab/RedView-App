@@ -1,85 +1,62 @@
 /**
- * Vercel serverless proxy → Open-Meteo upstreams.
+ * Proxy → Open-Meteo auto-hébergé sur le VPS (api/_lib/openMeteo.ts).
  *
- * Why a proxy?
- *   Forecast requests still go through the self-hosted droplet because
- *   it serves HTTP only (no domain, no TLS), and Vercel apps run over
- *   HTTPS. Climate requests are forwarded to the public Open-Meteo
- *   climate API because the self-hosted VPS only mirrors short-range
- *   forecast datasets and does not have CMIP6 archives.
- *
- * Endpoints:
  *   GET /api/openmeteo/v1/forecast?latitude=...&longitude=...&...
- *   GET /api/openmeteo/v1/climate?...
  *
- * Required env var on Vercel for forecast requests:
- *   OPENMETEO_UPSTREAM=http://<DROPLET_IP>:8080
+ * Pourquoi un proxy ? L'Open-Meteo du VPS répond en HTTP simple et seulement
+ * en local (nginx de l'hôte) : le navigateur reste same-origin. La requête est
+ * bornée à ce que le VPS sert (modèles Météo-France, J+4, 3 jours passés,
+ * 200 points) ; aucune autre source, jamais l'API publique.
+ *
+ * Variable d'env serveur (voir .env.example) :
+ *   OPENMETEO_UPSTREAM=http://<VPS_IP>/openmeteo
  */
+import { PublicError, sendSafeError } from './_lib/errors.js';
+import {
+  OPENMETEO_MAX_FORECAST_DAYS,
+  OPENMETEO_MAX_LOCATIONS,
+  OPENMETEO_MAX_PAST_DAYS,
+  openMeteoUpstream,
+  resolveOpenMeteoModel,
+} from './_lib/openMeteo.js';
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
 
 const TIMEOUT_MS = 25_000;
-const PUBLIC_CLIMATE_UPSTREAM = 'https://climate-api.open-meteo.com';
+const FORECAST_PATH = '/v1/forecast';
 
-type WeatherSource = 'self-hosted-vps' | 'public-api';
-
-interface UpstreamPayload {
-  response: Response;
-  body: Buffer;
-  contentType: string;
-  preview: string;
-  isJson: boolean;
+/** Borne un entier de la query (`forecast_days`, `past_days`) ; absent ou illisible : laissé tel quel. */
+function clampDays(params: URLSearchParams, name: string, max: number): void {
+  const raw = params.get(name);
+  if (raw === null) return;
+  const value = Number.parseInt(raw, 10);
+  if (Number.isFinite(value)) params.set(name, String(Math.max(0, Math.min(value, max))));
 }
 
-function previewText(text: string, maxLength = 180): string {
-  const compact = text.replace(/\s+/g, ' ').trim();
-  if (!compact) return '';
-  return compact.length > maxLength ? `${compact.slice(0, maxLength)}...` : compact;
-}
-
-async function readUpstreamPayload(response: Response): Promise<UpstreamPayload> {
-  const body = Buffer.from(await response.arrayBuffer());
-  const contentType = response.headers.get('content-type') ?? '';
-  const text = body.toString('utf-8');
-  const preview = previewText(text);
-  let isJson = false;
-
-  if (text.trim()) {
-    try {
-      JSON.parse(text);
-      isJson = true;
-    } catch {
-      isJson = false;
-    }
+/** Query transmise au VPS : modèle servi, horizon et nombre de points bornés. */
+function buildUpstreamQuery(search: string): URLSearchParams {
+  const params = new URLSearchParams(search);
+  const locations = (params.get('latitude') ?? '').split(',').filter(Boolean).length;
+  if (locations === 0) throw new PublicError('latitude and longitude are required', 400);
+  if (locations > OPENMETEO_MAX_LOCATIONS) {
+    throw new PublicError(`At most ${OPENMETEO_MAX_LOCATIONS} locations per request`, 400);
   }
-
-  return {
-    response,
-    body,
-    contentType,
-    preview,
-    isJson,
-  };
+  params.set('models', resolveOpenMeteoModel(params.get('models')));
+  clampDays(params, 'forecast_days', OPENMETEO_MAX_FORECAST_DAYS);
+  clampDays(params, 'past_days', OPENMETEO_MAX_PAST_DAYS);
+  return params;
 }
 
-async function fetchWithTimeout(target: string): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
+function isJson(text: string): boolean {
+  if (!text.trim()) return false;
   try {
-    return await fetch(target, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timer);
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
   }
 }
 
-export default async function handler(
-  req: ApiRequest,
-  res: ApiResponse,
-) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method === 'OPTIONS') {
     res.setHeader('Allow', 'GET, OPTIONS');
     return res.status(204).end();
@@ -89,119 +66,52 @@ export default async function handler(
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // req.url ressemble à "/api/openmeteo/v1/forecast?lat=...". On le parse
-  // proprement et on n'accepte QUE les chemins exacts connus (pas de
-  // préfixe, pas de "..", pas d'encodage exotique) : la cible amont est
-  // reconstruite à partir d'une constante + la query string.
-  let parsedUrl: URL;
-  try {
-    parsedUrl = new URL(req.url ?? '/', 'http://localhost');
-  } catch {
-    return res.status(404).json({ error: 'Unknown Open-Meteo path' });
-  }
+  // Chemin exact uniquement : la cible amont est une constante + la query.
+  const parsedUrl = new URL(req.url ?? '/', 'http://localhost');
   const subPath = parsedUrl.pathname.replace(/^\/api\/openmeteo(?=\/|$)/, '').replace(/\/$/, '');
-  const ALLOWED_PATHS: Record<string, '/v1/forecast' | '/v1/climate'> = {
-    '/v1/forecast': '/v1/forecast',
-    '/v1/climate': '/v1/climate',
-  };
-  const exactPath = Object.prototype.hasOwnProperty.call(ALLOWED_PATHS, subPath)
-    ? ALLOWED_PATHS[subPath]
-    : null;
-  if (!exactPath) {
+  if (subPath !== FORECAST_PATH) {
     return res.status(404).json({ error: 'Unknown Open-Meteo path' });
   }
-  const isClimate = exactPath === '/v1/climate';
-  const pathAndQuery = `${exactPath}${parsedUrl.search}`;
 
   let target: string;
-  let source: WeatherSource;
-
-  if (isClimate) {
-    target = `${PUBLIC_CLIMATE_UPSTREAM}${pathAndQuery}`;
-    source = 'public-api';
-  } else {
-    const upstream = (process.env.OPENMETEO_UPSTREAM ?? '').trim();
-    if (!upstream) {
-      target = `https://api.open-meteo.com${pathAndQuery}`;
-      source = 'public-api';
-    } else {
-      target = `${upstream.replace(/\/+$/, '')}${pathAndQuery}`;
-      source = 'self-hosted-vps';
-    }
-  }
-
-  let upstreamPayload: UpstreamPayload | null = null;
-  let upstreamError: unknown = null;
   try {
-    upstreamPayload = await readUpstreamPayload(await fetchWithTimeout(target));
-  } catch (err) {
-    upstreamError = err;
+    target = `${openMeteoUpstream()}${FORECAST_PATH}?${buildUpstreamQuery(parsedUrl.search).toString()}`;
+  } catch (error) {
+    return sendSafeError(res, error, 'Weather request refused', 'openmeteo');
   }
 
-  // Le VPS ne miroite qu'une partie des modèles et de l'horizon : tout ce qu'il
-  // ne sert pas (panne, non-JSON, 4xx) est redemandé à l'API publique.
-  if (source === 'self-hosted-vps' && !isSuccess(upstreamPayload)) {
-    console.warn(
-      `[openmeteo-proxy] Self-hosted VPS failed (${describeFailure(upstreamPayload, upstreamError)}), falling back to public Open-Meteo API`,
-    );
-    target = `https://api.open-meteo.com${pathAndQuery}`;
-    source = 'public-api';
-    upstreamPayload = null;
-    upstreamError = null;
-    try {
-      upstreamPayload = await readUpstreamPayload(await fetchWithTimeout(target));
-    } catch (err) {
-      upstreamError = err;
-    }
+  let upstream: Response;
+  let body: Buffer;
+  try {
+    upstream = await fetch(target, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    body = Buffer.from(await upstream.arrayBuffer());
+  } catch (error) {
+    console.error('[openmeteo] VPS unreachable:', error instanceof Error ? error.message : error);
+    return res.status(502).json({ error: 'Weather service unavailable' });
   }
 
-  if (!upstreamPayload || !(isSuccess(upstreamPayload) || isUpstreamClientError(upstreamPayload))) {
-    console.error(`[openmeteo-proxy] upstream fetch failed: ${describeFailure(upstreamPayload, upstreamError)}`);
-    return res.status(502).json({ error: 'Upstream fetch failed' });
+  const text = body.toString('utf-8');
+  const json = isJson(text);
+  // Une réponse JSON 4xx est celle d'Open-Meteo à cette requête (paramètre
+  // refusé, 429) : relayée telle quelle. Tout le reste est une panne du VPS.
+  if (!json || (!upstream.ok && (upstream.status < 400 || upstream.status >= 500))) {
+    console.error(`[openmeteo] VPS answered HTTP ${upstream.status}${json ? '' : ' (non-JSON)'}: ${text.slice(0, 200)}`);
+    return res.status(502).json({ error: 'Weather service unavailable' });
   }
 
-  console.log(
-    `[openmeteo-proxy] ${source === 'public-api' ? 'PUBLIC' : 'SELF-HOSTED'} ${upstreamPayload.response.status} → ${target}`,
-  );
-
-  res.status(upstreamPayload.response.status);
-  const contentType = upstreamPayload.contentType || 'application/json; charset=utf-8';
-  res.setHeader('Content-Type', contentType);
-  // Marker header so the browser can confirm the request was served
-  // by *our* proxy (visible in DevTools → Network → Response Headers).
-  res.setHeader('X-Weather-Source', source);
-  if (isSuccess(upstreamPayload)) {
-    // Browser cache: 5 min fresh, 10 min stale-while-revalidate
-    res.setHeader(
-      'Cache-Control',
-      'public, max-age=300, stale-while-revalidate=600',
-    );
+  res.status(upstream.status);
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('X-Weather-Source', 'self-hosted-vps');
+  if (upstream.ok) {
+    res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=600');
   } else {
-    // 400 (horizon dépassé, paramètre refusé) ou 429 : la réponse d'Open-Meteo
-    // telle quelle — le client lit la raison et applique son backoff sur 429 —,
-    // jamais mise en cache (l'horizon avance chaque jour).
+    // Jamais en cache (l'horizon avance chaque jour) ; Retry-After pour le backoff du client.
     res.setHeader('Cache-Control', 'no-store');
-    const retryAfter = upstreamPayload.response.headers.get('retry-after');
-    if (retryAfter && /^\d{1,6}$/.test(retryAfter.trim())) res.setHeader('Retry-After', retryAfter.trim());
+    const retryAfter = upstream.headers.get('retry-after')?.trim();
+    if (retryAfter && /^\d{1,6}$/.test(retryAfter)) res.setHeader('Retry-After', retryAfter);
   }
-  return res.send(upstreamPayload.body);
-}
-
-function isSuccess(payload: UpstreamPayload | null): boolean {
-  return !!payload && payload.response.ok && payload.isJson;
-}
-
-/** Un 4xx JSON est la réponse d'Open-Meteo à cette requête, pas une panne de l'amont. */
-function isUpstreamClientError(payload: UpstreamPayload): boolean {
-  const { status } = payload.response;
-  return status >= 400 && status < 500 && payload.isJson;
-}
-
-function describeFailure(payload: UpstreamPayload | null, error: unknown): string {
-  if (payload) {
-    const { status, statusText } = payload.response;
-    const kind = payload.isJson ? '' : ' (non-JSON)';
-    return `${status}${statusText ? ` ${statusText}` : ''}${kind}${payload.preview ? `: ${payload.preview}` : ''}`;
-  }
-  return error instanceof Error ? error.message : String(error);
+  return res.send(body);
 }

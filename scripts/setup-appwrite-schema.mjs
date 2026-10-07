@@ -164,6 +164,25 @@ async function main() {
         { key: 'idx_subs_user_id', type: 'key', attributes: ['user_id'] },
       ],
     },
+    {
+      // Registre des suppressions de compte (api/_lib/accountDeletion.ts) :
+      // l'id du compte et des dates, aucune donnée personnelle. Sert à reprendre
+      // une suppression interrompue et à la rejouer après la restauration d'une
+      // sauvegarde (scripts/account-deletions.ts). Clé API du serveur seulement.
+      id: 'account_deletions',
+      name: 'Account Deletions',
+      documentSecurity: true,
+      permissions: [],
+      attributes: [
+        { type: 'string', key: 'user_id', size: 128, required: true },
+        { type: 'string', key: 'status', size: 16, required: true },
+        { type: 'string', key: 'requested_at', size: 64, required: true },
+        { type: 'string', key: 'completed_at', size: 64, required: false },
+      ],
+      indexes: [
+        { key: 'idx_deletions_status', type: 'key', attributes: ['status'] },
+      ],
+    },
   ];
 
   for (const col of collections) {

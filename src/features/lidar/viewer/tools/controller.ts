@@ -16,6 +16,7 @@
 //    already placed closes it on that vertex (`shared/lib/polygonClosing`).
 
 import { translateAppText as t } from '@/shared/i18n/config';
+import { trackAnalyticsEvent, type LidarTool } from '@/shared/lib/analytics';
 import { closePolygonAt, polygonCloseIndex, polygonVertexHit } from '@/shared/lib/polygonClosing';
 import type { OpenedLodTile } from '../../lib/lodCache';
 import type { CameraController } from '../camera';
@@ -43,6 +44,21 @@ import { isDrawingTool, type ScenePick, type ToolId, type Vec3 } from './types';
 import { ToolsUiStore, type ContextMenuAction, type LookAroundModel, type ToolsUiActions } from './ui/toolsUiStore';
 import { mountViewerToolsUi } from './ui/mount';
 
+const LIDAR_TOOL_NAMES: Record<ToolId, LidarTool> = {
+  distance: 'distance',
+  height: 'height',
+  area: 'area',
+  profile: 'profile',
+  fallLine: 'fall_line',
+  avalanche: 'avalanche',
+  viewshed: 'viewshed',
+  pin: 'pin',
+};
+
+/** Mesure d'audience : quel outil du viewer sert (jamais le point visé). */
+function trackLidarTool(tool: ToolId): void {
+  trackAnalyticsEvent({ name: 'lidar_tool_used', data: { tool: LIDAR_TOOL_NAMES[tool] } });
+}
 export interface ViewerToolsOptions {
   canvas: HTMLCanvasElement;
   /** Parent of the scene canvas; receives the overlay canvas. */
@@ -303,6 +319,7 @@ export class ViewerToolsController {
         if (isDrawingTool(action.tool)) {
           this.startTool(action.tool, action.tool === 'height' ? pick : this.picker.toGround(pick) ?? undefined);
         } else {
+          trackLidarTool(action.tool);
           this.runPointTool(action.tool, pick);
         }
         break;
@@ -310,6 +327,7 @@ export class ViewerToolsController {
         this.centerOn(pick);
         break;
       case 'lookAround':
+        trackAnalyticsEvent({ name: 'lidar_tool_used', data: { tool: 'look_around' } });
         this.enterLookAround(pick);
         break;
       case 'faceSlope':
@@ -326,7 +344,7 @@ export class ViewerToolsController {
         this.opts.onComment?.(pick);
         break;
       case 'commentZone':
-        this.startTool('area', this.picker.toGround(pick) ?? undefined);
+        this.startTool('area', this.picker.toGround(pick) ?? undefined, { track: false });
         this.commentZoneDrawing = true;
         this.store.update({ commentZone: true });
         break;
@@ -341,7 +359,8 @@ export class ViewerToolsController {
 
   // ── Tools ──────────────────────────────────────────────────────────────────
 
-  private startTool(tool: ToolId, firstPick?: ScenePick): void {
+  private startTool(tool: ToolId, firstPick?: ScenePick, { track = true }: { track?: boolean } = {}): void {
+    if (track) trackLidarTool(tool);
     const route = this.opts.routeController;
     if (route.getState().editMode) route.setEditMode(false);
     // Backspace would also delete a selected route point.

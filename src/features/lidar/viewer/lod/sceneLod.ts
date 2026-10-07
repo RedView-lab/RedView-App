@@ -27,7 +27,7 @@
 // more and give true distances where a cube is mostly empty air.
 
 import { readLodNodeBlock, type OpenedLodTile } from '../../lib/lodCache';
-import { extractFrustumPlanes, frustumTestAABB, OUTSIDE } from './frustum';
+import { extractFrustumPlanes, frustumTestAABB, OUTSIDE, type FrustumPlanes } from './frustum';
 import { LOD_POINT_STRIDE, lodNodeCube, lodNodeSpacing, type LodNode } from './lodTile';
 
 /** Refine while a node's point spacing projects to more than this (device px). */
@@ -95,6 +95,10 @@ export interface SceneNode {
   viewDistance: number;
   /** Octants (bit = x | y << 1 | z << 2, CRS axes) whose child is drawn this frame. */
   childMask: number;
+  /** Token of the last shadow-caster selection that reached the node (see `selectShadowCasters`). */
+  shadowMark: number;
+  /** Octants refined by a node of the last shadow-caster selection. */
+  shadowChildMask: number;
   /** True for ancestors added because the octree skipped them (no points). */
   virtual: boolean;
 }
@@ -241,6 +245,9 @@ export class SceneLod {
   private readonly maxResidentNodes: number;
   private frustumCulled = 0;
   private uploadedNodes = 0;
+  /** Token and BFS queue of `selectShadowCasters`. */
+  private shadowToken = 0;
+  private readonly shadowQueue: number[] = [];
   private destroyed = false;
   readonly totalPoints: number;
 
@@ -313,6 +320,8 @@ export class SceneLod {
       projectedSpacing: 0,
       viewDistance: 0,
       childMask: 0,
+      shadowMark: 0,
+      shadowChildMask: 0,
       virtual,
     };
     clipNode(node, tileBox);
@@ -373,6 +382,11 @@ export class SceneLod {
   /** Resident nodes to draw this frame, front to back. Valid until the next `update`. */
   getSelectedNodes(): readonly SceneNode[] {
     return this.selected;
+  }
+
+  /** Node blocks uploaded since the scene opened: changes whenever new points become resident. */
+  getUploadedNodes(): number {
+    return this.uploadedNodes;
   }
 
   /** No load is pending or running: the current selection is final. */
@@ -513,6 +527,53 @@ export class SceneLod {
     // Front to back: opaque sprites then reject hidden fragments early.
     selected.sort((a, b) => a.viewDistance - b.viewDistance);
     this.pumpLoads();
+  }
+
+  /**
+   * Resident nodes casting shadows into a light frustum (photo mode), coarse
+   * to fine: a node is kept while `maxPoints` allows and refined while its
+   * cell is larger than `texelM` (finer levels add nothing the shadow map
+   * could show). Only children of kept nodes are visited (a level of the
+   * additive octree is incomplete without its ancestors) and nothing is
+   * loaded: casters off screen are the coarse levels kept resident. Sets the
+   * kept nodes' `shadowChildMask`, as `childMask` for the camera. Returns the
+   * points kept.
+   */
+  selectShadowCasters(planes: FrustumPlanes, texelM: number, maxPoints: number, out: SceneNode[]): number {
+    out.length = 0;
+    const nodes = this.nodes;
+    const token = ++this.shadowToken;
+    const queue = this.shadowQueue;
+    queue.length = 0;
+    for (const rootId of this.roots) {
+      const root = nodes[rootId]!;
+      if (root.state === 'resident' && frustumTestAABB(planes, root) !== OUTSIDE) queue.push(rootId);
+    }
+    let points = 0;
+    for (let head = 0; head < queue.length; head++) {
+      const node = nodes[queue[head]!]!;
+      const count = node.entry.count;
+      if (count > 0) {
+        if (points + count > maxPoints) continue;
+        points += count;
+        out.push(node);
+      }
+      node.shadowMark = token;
+      if (node.cell <= texelM) continue;
+      for (const childId of node.children) {
+        const child = nodes[childId]!;
+        if (child.state === 'resident' && frustumTestAABB(planes, child) !== OUTSIDE) queue.push(childId);
+      }
+    }
+    for (const node of out) {
+      let mask = 0;
+      for (const childId of node.children) {
+        const child = nodes[childId]!;
+        if (child.shadowMark === token) mask |= 1 << octantOf(child.entry);
+      }
+      node.shadowChildMask = mask;
+    }
+    return points;
   }
 
   private pumpLoads(): void {

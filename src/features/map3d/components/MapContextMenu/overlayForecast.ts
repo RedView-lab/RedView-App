@@ -1,4 +1,4 @@
-import { OPENMETEO_FORECAST_URL } from '@/features/weather/lib/openMeteoConfig';
+import { OPENMETEO_FORECAST_URL, OPENMETEO_MODEL } from '@/features/weather/lib/openMeteoConfig';
 import { readDocumentAppLocale, translateAppText } from '@/shared/i18n';
 import type {
   MapContextMenuOverlayContext,
@@ -96,9 +96,7 @@ export function buildOverlayForecastUrl(
   url.searchParams.set('start_hour', `${date}T${time}`);
   url.searchParams.set('end_hour', `${date}T${time}`);
 
-  // European high-definition model selection (AROME HD 1.3km in France, ICON-D2 in Central Europe)
-  const isFrance = lat >= 41 && lat <= 52 && lng >= -6 && lng <= 10;
-  url.searchParams.set('models', isFrance ? 'meteofrance_seamless' : 'best_match');
+  url.searchParams.set('models', OPENMETEO_MODEL);
 
   // Realistic 3D terrain elevation downscaling (adiabatique lapse rate)
   if (elevationMeters != null && Number.isFinite(elevationMeters)) {

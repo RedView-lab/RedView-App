@@ -1,3 +1,4 @@
+import { trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { useAppI18n } from '@/shared/i18n';
@@ -489,6 +490,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   });
 
   const duplicateActiveItinerary = useCallback(() => {
+    trackAnalyticsEvent({ name: 'itinerary_added', data: { method: 'duplicate' } });
     duplicateItinerary(project.activeItineraryId);
   }, [duplicateItinerary, project.activeItineraryId]);
 
@@ -502,6 +504,8 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
    */
   const handleCreateBlankItinerary = useCallback(() => {
     addItinerary();
+    trackAnalyticsEvent({ name: 'itinerary_added', data: { method: 'blank' } });
+    trackAnalyticsEvent({ name: 'map_tool_selected', data: { tool: 'tracer' } });
     traceTool?.activate();
   }, [addItinerary, traceTool]);
 

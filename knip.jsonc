@@ -29,8 +29,11 @@
     "api/_lib/translations-data.ts",
     "script-test-bench/pace-accuracy/.*-pkg/**"
   ],
-  // Fixture du bench POI : dépendance du package séparé server/poi-server.
-  "ignoreDependencies": ["better-sqlite3"],
+  // better-sqlite3 : fixture du bench POI, dépendance du package séparé
+  // server/poi-server. @fontsource-variable/rethink-sans : fichiers de police
+  // référencés par les url() de src/shared/styles/typography.css (knip ne lit
+  // pas les CSS).
+  "ignoreDependencies": ["better-sqlite3", "@fontsource-variable/rethink-sans"],
   // Outils système lancés par les scripts de dev (BRouter, arrêt des services)
   // et par bench:server (mémoire du serveur sous Windows).
   "ignoreBinaries": ["java", "netstat", "tasklist"],

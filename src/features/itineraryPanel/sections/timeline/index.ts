@@ -4,4 +4,5 @@ export { TimelineSheetView } from './TimelineSheetView';
 export { TimelineTimelineView } from './TimelineTimelineView';
 export { TimelineRow } from './TimelineRow';
 export { TimelineAddRow } from './TimelineAddRow';
-export { KindBadge, kindLabel } from './KindBadge';
+export { KindBadge } from './KindBadge';
+export { kindLabel } from './timelineKindLabels';

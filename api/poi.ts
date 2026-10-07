@@ -1,5 +1,5 @@
 /**
- * Vercel serverless proxy → RedView POI server (DigitalOcean droplet).
+ * Proxy → RedView POI server (VPS, port 17778 derrière le nginx de l'hôte).
  *
  * Deux endpoints muxés via `?op=` :
  *
@@ -14,19 +14,18 @@
  *        → forwarde vers `${POI_UPSTREAM}/corridor`
  *
  * Pourquoi un proxy ?
- *   - Vercel sert en HTTPS ; appeler `http://<vps-ip>` depuis le browser
- *     déclencherait un mixed-content block + CORS.
- *   - Avec ce proxy :
- *       • le browser reste same-origin (`/api/poi`),
- *       • l'IP VPS reste cachée dans `POI_UPSTREAM` (env serveur),
- *       • Vercel met en cache les bbox identiques à l'edge.
+ *   - Le serveur POI répond en HTTP simple et seulement en local (le nginx
+ *     du VPS renvoie 403 sinon) : le navigateur reste same-origin
+ *     (`/api/poi`), sans mixed content ni CORS.
+ *   - Les paramètres bbox sont filtrés et le corps corridor est validé puis
+ *     ré-sérialisé : rien d'arbitraire n'atteint le serveur POI.
  *
- * Variable d'env requise :
- *   POI_UPSTREAM=http://<DROPLET_IP>/poi
+ * Variable d'env serveur (voir .env.example) :
+ *   POI_UPSTREAM=http://<VPS_IP>/poi
  */
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
 
-const REQUEST_TIMEOUT_MS = 28_000; // Vercel hobby cap = 30 s
+const REQUEST_TIMEOUT_MS = 28_000;
 const MAX_BODY_BYTES = 512_000; // aligné sur bodyLimit du poi-server (512 Ko)
 
 const ALLOWED_BBOX_PARAMS = new Set([

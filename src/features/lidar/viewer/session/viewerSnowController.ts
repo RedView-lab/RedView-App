@@ -1,3 +1,4 @@
+import { trackAnalyticsEvent } from '@/shared/lib/analytics';
 import type { CanopyGrid } from '@/features/snow';
 import type { DetectedCrs, PointCloudData } from '../../types';
 import type { TerrainCache } from '../../lib/storage';
@@ -118,6 +119,7 @@ export class ViewerSnowController {
         return;
       }
     }
+    if (nextMode !== 'off' && this.snowMode === 'off') trackAnalyticsEvent({ name: 'snow_mode_enabled', data: { mode: nextMode } });
     this.snowMode = nextMode;
     ctx.renderer.setSnowMode(SNOW_MODES[nextMode]);
     onModeUpdate(nextMode);

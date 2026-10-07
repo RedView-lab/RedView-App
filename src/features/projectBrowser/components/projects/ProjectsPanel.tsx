@@ -10,6 +10,7 @@ import {
 import { REDVIEW_FILE_EXTENSION } from '@/features/redviewFile/lib/format';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { useAppI18n } from '@/shared/i18n';
+import { projectAgeBucket, trackAnalyticsEvent } from '@/shared/lib/analytics';
 import type { ProjectFolderSummary, ProjectSummary } from '@/shared/utils/projects';
 
 import { useFileDropImport } from '../../hooks/useFileDropImport';
@@ -141,6 +142,14 @@ export function ProjectsPanel({
     : [];
   const visibleCount = visibleFolders.length + visibleProjects.length + visibleSharedProjects.length;
   const [menuState, setMenuState] = useState<MenuState>(null);
+  // Retour sur un projet : étape « project_opened » de l'entonnoir (anonyme, docs/ANALYTICS.md).
+  const openProject = (project: ProjectSummary, id: string) => {
+    trackAnalyticsEvent({
+      name: 'project_opened',
+      data: { last_saved: projectAgeBucket(project.updatedAt), shared: Boolean(project.sharedWithMe) },
+    });
+    onOpenProject(id);
+  };
   // Partage proposé seulement quand le serveur temps réel répond.
   const multiplayerAvailable = useMultiplayerAvailable();
   const [shareTarget, setShareTarget] = useState<{ project: ProjectSummary; anchorEl: HTMLElement } | null>(null);
@@ -383,7 +392,7 @@ export function ProjectsPanel({
                 thumbnailLoading={thumbnailLoadingIds.has(project.id)}
                 busy={busyIds.has(project.id)}
                 dragActive={draggedItem?.type === 'project' && draggedItem.id === project.id}
-                onOpen={onOpenProject}
+                onOpen={(id) => openProject(project, id)}
                 onRename={handleRenameProject}
                 onOpenMenu={(id, anchorEl) => setMenuState({ kind: 'project', id, anchorEl })}
                 onDragStart={handleDragStart}
@@ -404,7 +413,7 @@ export function ProjectsPanel({
                     thumbnailLoading={thumbnailLoadingIds.has(project.id)}
                     busy={busyIds.has(project.id)}
                     dragActive={false}
-                    onOpen={onOpenProject}
+                    onOpen={(id) => openProject(project, id)}
                     onRename={handleRenameProject}
                     onOpenMenu={(id, anchorEl) => setMenuState({ kind: 'project', id, anchorEl })}
                     onDragStart={handleDragStart}

@@ -17,6 +17,9 @@ Type=simple
 User=opc
 WorkingDirectory=/opt/brouter
 LogsDirectory=brouter
+# Journal à part, gardé 48 h (journald@brouter.conf) : une ligne par requête,
+# avec ses coordonnées. Lecture : journalctl --namespace=brouter -u brouter
+LogNamespace=brouter
 
 # Segments (1,8 Go) lus une fois : ils restent dans le page cache tant que la RAM est libre.
 ExecStartPre=/usr/bin/sh -c 'cat /opt/brouter/segments4/*.rd5 > /dev/null'

@@ -13,6 +13,9 @@ import { SunlightSection } from '../sections/SunlightSection';
 import type { ControlPanelProps } from '../types';
 import '../styles/index.css';
 
+/** Sections Vent et Ensoleillement : masquées pour l'instant, gardées prêtes à réactiver. */
+const SHOW_WIND_AND_SUNLIGHT_SECTIONS = false;
+
 /**
  * Unified left-dock control panel for RedView (Figma frame 1407:17211).
  *
@@ -68,7 +71,6 @@ export function ControlPanel({
   onWeatherPaletteBandColorChange,
   onWeatherPaletteBandVisibilityToggle,
   onWeatherPaletteBandBreakpointChange,
-  onWeatherAddAlert,
   onWindEnabledChange,
   onWindDateChange,
   onAltitudeEnabledChange,
@@ -228,11 +230,9 @@ export function ControlPanel({
         onPaletteBandColorChange={onWeatherPaletteBandColorChange}
         onPaletteBandVisibilityToggle={onWeatherPaletteBandVisibilityToggle}
         onPaletteBandBreakpointChange={onWeatherPaletteBandBreakpointChange}
-        onAddAlert={onWeatherAddAlert}
       />
 
-      {/* Wind & Sunlight masqués et désactivés (code conservé) */}
-      {false && (
+      {SHOW_WIND_AND_SUNLIGHT_SECTIONS && (
         <>
           <WindSection
             state={state.wind}

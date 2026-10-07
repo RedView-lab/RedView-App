@@ -1,3 +1,4 @@
+import { captureServerError } from '../../server/observability.mjs';
 import type { ApiResponse } from './types.js';
 
 /**
@@ -16,9 +17,12 @@ export class PublicError extends Error {
 }
 
 /**
- * Logue l'erreur complète côté serveur et ne renvoie au client que :
- *  - `err.status` / `err.message` si c'est une `PublicError`,
- *  - sinon `500` + `fallbackMessage` (aucune fuite de détail interne).
+ * Répond à une erreur sans rien fuiter d'interne :
+ *  - `PublicError` : son statut et son message (refus attendu : une ligne
+ *    d'avertissement, une erreur seulement à partir de 500) ;
+ *  - toute autre erreur : `500` + `fallbackMessage`, l'erreur complète dans
+ *    les logs et dans GlitchTip (une erreur rattrapée ici ne remonterait
+ *    sinon jamais : server.mjs ne capture que ce qu'un handler laisse passer).
  */
 export function sendSafeError(
   res: ApiResponse,
@@ -26,9 +30,12 @@ export function sendSafeError(
   fallbackMessage: string,
   logTag: string,
 ): ApiResponse {
-  console.error(`[${logTag}] Error:`, err);
   if (err instanceof PublicError) {
+    if (err.status >= 500) console.error(`[${logTag}] ${err.status}:`, err);
+    else console.warn(`[${logTag}] ${err.status}: ${err.message}`);
     return res.status(err.status).json({ error: err.message });
   }
+  console.error(`[${logTag}] Error:`, err);
+  captureServerError(err, { route: logTag });
   return res.status(500).json({ error: fallbackMessage });
 }

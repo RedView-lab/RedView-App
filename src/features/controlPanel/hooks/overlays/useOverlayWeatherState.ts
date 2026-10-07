@@ -56,9 +56,15 @@ export function useOverlayWeatherState({
   onWeatherOverlayReloadChange,
 }: UseOverlayWeatherStateArgs) {
   const [weatherState, setWeatherState] = useState<WeatherState>(() => {
+    // `tab` et `trendMode` : réglages de l'onglet « Tendances », retiré ; les
+    // projets enregistrés avant les portent encore, ils ne sont pas repris.
+    const { tab: _tab, trendMode: _trendMode, ...stored } = (initialControlPanel.weather ?? {}) as Partial<WeatherState> & {
+      tab?: unknown;
+      trendMode?: unknown;
+    };
     const merged: WeatherState = {
       ...DEFAULT_CONTROL_PANEL_STATE.weather,
-      ...(initialControlPanel.weather ?? {}),
+      ...stored,
       enabled: initialControlPanel.toggles.weatherEnabled,
     };
     merged.layers = merged.layers.map(normalizeWeatherLayerMode);
@@ -99,8 +105,6 @@ export function useOverlayWeatherState({
 
     return {
       ...merged,
-      // L'onglet « Tendances » a été retiré : un projet enregistré dessus revient aux prévisions.
-      tab: 'forecast',
       ...clampForecastSelection({
         date: merged.date,
         time: merged.time,
@@ -135,10 +139,9 @@ export function useOverlayWeatherState({
       [],
     ),
     onWeatherDateChange: useCallback(
-      (changes: Partial<Pick<WeatherState, 'customDateEnabled' | 'date' | 'time' | 'forecastDay' | 'trendMode'>>) =>
+      (changes: Partial<Pick<WeatherState, 'customDateEnabled' | 'date' | 'time' | 'forecastDay'>>) =>
         setWeatherState((prev) => {
           const next = { ...prev, ...changes };
-          if (next.tab !== 'forecast') return next;
           const resolvedDate = changes.forecastDay != null
             ? getForecastDateForOffset(changes.forecastDay)
             : next.date;
@@ -275,9 +278,6 @@ export function useOverlayWeatherState({
         }),
       [],
     ),
-    onWeatherAddAlert: useCallback(() => {
-      console.log('[weather] add alert triggered');
-    }, []),
   };
 
   return { weatherSlice: weatherState, handlers };

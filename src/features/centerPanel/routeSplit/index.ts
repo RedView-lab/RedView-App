@@ -1,1 +1,2 @@
-export { RouteSplitToolProvider, useRouteSplitToolOptional } from './RouteSplitToolContext';
+export { RouteSplitToolProvider } from './RouteSplitToolContext';
+export { useRouteSplitToolOptional } from './useRouteSplitTool';

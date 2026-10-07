@@ -4,6 +4,7 @@ import type { PeerInfo, PresenceUpdate } from '@/features/collab/protocol';
 import type { CollabRealtime } from '@/features/collab/realtime';
 import { userAvatarColor, userAvatarInk } from '@/shared/components/UserAvatar/avatarColor';
 import { translateAppText } from '@/shared/i18n';
+import { trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { notify } from '@/shared/ui/notify';
 
 import { FOLLOW_GRACE_MS, SPOTLIGHT_COUNTDOWN_MS, SPOTLIGHT_SPAM_DECLINES, SPOTLIGHT_SPAM_WINDOW_MS } from '../config';
@@ -160,6 +161,9 @@ export class LivePresenceSession {
     if (!clientId) return;
     const peer = this.collab.peers.find((candidate) => candidate.clientId === clientId);
     const name = peer?.presence.name || translateAppText('Éditeur');
+    if (this.follow?.userId !== userId) {
+      trackAnalyticsEvent({ name: 'follow_started', data: { via: options.viaSpotlight ? 'spotlight' : 'avatar' } });
+    }
     this.follow = { userId, clientId, name, color: userAvatarColor(userId), viaSpotlight: !!options.viaSpotlight };
     this.clearGrace();
     this.update();
@@ -175,6 +179,7 @@ export class LivePresenceSession {
   setPresenting(on: boolean): void {
     if (this.presenting === on) return;
     this.presenting = on;
+    if (on) trackAnalyticsEvent({ name: 'spotlight_started' });
     this.update();
   }
 

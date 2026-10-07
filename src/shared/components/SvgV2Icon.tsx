@@ -134,13 +134,13 @@ const SVGV2_ICONE_ASSETS = new Set([
   'zoom-out.svg',
 ]);
 
-export const SVGV2_FALLBACK_ICON = 'x.svg';
+const SVGV2_FALLBACK_ICON = 'x.svg';
 
-export function isSvgV2IconAvailable(name: string) {
+function isSvgV2IconAvailable(name: string) {
   return SVGV2_ICONE_ASSETS.has(name);
 }
 
-export function resolveSvgV2IconSrc(name: string) {
+function resolveSvgV2IconSrc(name: string) {
   const resolvedName = isSvgV2IconAvailable(name) ? name : SVGV2_FALLBACK_ICON;
   return `/svgv2/icone/${resolvedName}`;
 }

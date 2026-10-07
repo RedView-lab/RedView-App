@@ -2,9 +2,12 @@ import type { TileCoord, DownloadProgress } from '../../types';
 import { translateAppText } from '@/shared/i18n/config';
 import { hasValidLasSignature, hasValidZipSignature } from '../storage';
 import {
+  asDownloadFailure,
   DownloadCancelledError,
+  httpStatusError,
   invalidLasSignatureError,
   throwIfCancelled,
+  type DownloadFailure,
 } from './errors';
 
 // Transport HTTP des dalles : délais, limitation de débit partagée (429),
@@ -142,9 +145,7 @@ export async function fetchWithRetry(
 
     if (response.status === 404) {
       console.warn(`[Download] 404 for ${url}`);
-      const err = new Error('Not found') as any;
-      err.status = 404;
-      throw err;
+      throw httpStatusError('Not found', 404);
     }
 
     if (response.status === 429) {
@@ -163,9 +164,7 @@ export async function fetchWithRetry(
         await sleep(delay, signal);
         return fetchWithRetry(url, coord, onProgress, attempt + 1, incompleteRetryCount, resumeState, allowZip, signal);
       }
-      const err = new Error(`HTTP 429 after ${MAX_RETRIES} retries`) as any;
-      err.status = 429;
-      throw err;
+      throw httpStatusError(`HTTP 429 after ${MAX_RETRIES} retries`, 429);
     }
 
     if (response.status >= 500) {
@@ -179,9 +178,7 @@ export async function fetchWithRetry(
     }
 
     if (!response.ok) {
-      const err = new Error(`HTTP ${response.status}`) as any;
-      err.status = response.status;
-      throw err;
+      throw httpStatusError(`HTTP ${response.status}`, response.status);
     }
 
     const contentLength = parseInt(response.headers.get('content-length') || '0', 10);
@@ -242,9 +239,9 @@ export async function fetchWithRetry(
         console.warn(`[Download] No data for ${READ_IDLE_TIMEOUT_MS / 1000}s on ${url}; aborting stalled stream`);
         const err = new Error(
           translateAppText('Téléchargement bloqué : aucune donnée reçue depuis {{seconds}} s.', { seconds: READ_IDLE_TIMEOUT_MS / 1000 })
-        ) as Error & { code?: string; resumeState?: ResumeState };
+        ) as DownloadFailure;
         err.code = 'ERR_INCOMPLETE_DOWNLOAD';
-        err.resumeState = { chunks, bytesDownloaded, totalBytes };
+        err.resumeState = { chunks, bytesDownloaded, totalBytes } satisfies ResumeState;
         throw err;
       }
       const { done, value } = readResult;
@@ -269,13 +266,13 @@ export async function fetchWithRetry(
       cleanup();
       const err = new Error(
         translateAppText('Téléchargement incomplet : {{done}} reçus sur {{total}} attendus.', { done: formatBytesAsMb(bytesDownloaded), total: formatBytesAsMb(totalBytes) })
-      ) as Error & { code?: string; resumeState?: ResumeState };
+      ) as DownloadFailure;
       err.code = 'ERR_INCOMPLETE_DOWNLOAD';
       err.resumeState = {
         chunks,
         bytesDownloaded,
         totalBytes,
-      };
+      } satisfies ResumeState;
       throw err;
     }
 
@@ -295,14 +292,15 @@ export async function fetchWithRetry(
     }
 
     return merged;
-  } catch (err: any) {
+  } catch (err) {
     cleanup();
 
     if (signal?.aborted) {
       throw new DownloadCancelledError();
     }
 
-    if (err.name === 'AbortError') {
+    const failure = asDownloadFailure(err);
+    if (failure.name === 'AbortError') {
       if (attempt < MAX_RETRIES) {
         const delay = RETRY_BASE_DELAY_5XX_MS * Math.pow(2, attempt);
         await sleep(delay, signal);
@@ -311,10 +309,10 @@ export async function fetchWithRetry(
       throw new Error(translateAppText('Download timeout after retries'));
     }
 
-    if (err?.code === 'ERR_INCOMPLETE_DOWNLOAD') {
+    if (failure.code === 'ERR_INCOMPLETE_DOWNLOAD') {
       if (incompleteRetryCount < MAX_INCOMPLETE_DOWNLOAD_RETRIES) {
         const delay = Math.max(1500, RETRY_BASE_DELAY_5XX_MS * Math.pow(2, incompleteRetryCount));
-        const nextResumeState = err.resumeState as ResumeState | undefined;
+        const nextResumeState = failure.resumeState as ResumeState | undefined;
         const willResume = (nextResumeState?.bytesDownloaded ?? 0) > 0;
         console.warn(
           `[Download] Incomplete stream for ${url}; ${willResume ? `resuming from ${formatBytesAsMb(nextResumeState!.bytesDownloaded)}` : 'retrying from zero'} in ${delay}ms (${incompleteRetryCount + 1}/${MAX_INCOMPLETE_DOWNLOAD_RETRIES})`,

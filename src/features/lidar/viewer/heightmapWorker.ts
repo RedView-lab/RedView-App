@@ -28,12 +28,14 @@ const MAX_HOLE_DIST = 16;
 const DEFAULT_MAX_GRID = 1024;
 const DEFAULT_MIN_RES_M = 0.5;
 
-self.onmessage = (e: MessageEvent<WorkerInput>) => {
+const workerScope = self as unknown as DedicatedWorkerGlobalScope;
+
+workerScope.onmessage = (e: MessageEvent<WorkerInput>) => {
   if (e.data.type !== 'generate') return;
   const { positions, colors, classifications, count, bounds, resolution } = e.data;
   const result = generateHeightmap(positions, colors, classifications, count, bounds, resolution);
-  (self as any).postMessage(
-    { type: 'done', ...result } as HeightmapResult,
+  workerScope.postMessage(
+    { type: 'done', ...result } satisfies HeightmapResult,
     [result.vertices.buffer, result.colors.buffer, result.indices.buffer, result.heightGrid.buffer],
   );
 };

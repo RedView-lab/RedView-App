@@ -16,9 +16,13 @@
 
 const READBACK_SLOTS = 3;
 const SAMPLE_BLEND = 0.35;
-/** Timed passes of a frame, in encoding order. */
-export const TIMED_PASS = { shading: 0, scene: 1, edl: 2 } as const;
-const TIMED_PASSES = 3;
+/**
+ * Timed passes of a frame, in encoding order. The photo mode's `photo`
+ * (lighting → final) and `clouds` (march → temporal) are ranges spanning
+ * several passes: begin written by the first, end by the last.
+ */
+export const TIMED_PASS = { shading: 0, scene: 1, edl: 2, photo: 3, clouds: 4 } as const;
+const TIMED_PASSES = 5;
 const QUERY_COUNT = TIMED_PASSES * 2;
 const QUERY_BYTES = QUERY_COUNT * 8;
 
@@ -41,6 +45,7 @@ export class GpuFrameTimer {
   private fallbackPending = false;
   private drawMs = 0;
   private shadeMs = 0;
+  private cloudMs = 0;
   private hasSample = false;
   private destroyed = false;
 
@@ -80,6 +85,11 @@ export class GpuFrameTimer {
     return this.hasSample ? this.shadeMs : 0;
   }
 
+  /** Smoothed GPU cost of the photo mode's clouds per frame in ms (included in `getFrameMs`). */
+  getCloudMs(): number {
+    return this.hasSample ? this.cloudMs : 0;
+  }
+
   /** Starts measuring a frame; returns false when every readback slot is still in flight. */
   beginFrame(): boolean {
     if (!this.querySet) return false;
@@ -88,14 +98,17 @@ export class GpuFrameTimer {
     return this.frameSlot !== null;
   }
 
-  /** Begin/end timestamp writes for pass `passIndex` (see `TIMED_PASS`) of the measured frame. */
-  passTimestamps(passIndex: number): PassTimestampWrites | undefined {
+  /**
+   * Timestamp writes for pass `passIndex` (see `TIMED_PASS`) of the measured
+   * frame: both ends, or only the `begin` / `end` of a range of passes.
+   */
+  passTimestamps(passIndex: number, part: 'both' | 'begin' | 'end' = 'both'): PassTimestampWrites | undefined {
     if (!this.querySet || !this.frameSlot || passIndex < 0 || passIndex >= TIMED_PASSES) return undefined;
-    this.frameSlot.passes |= 1 << passIndex;
+    if (part !== 'begin') this.frameSlot.passes |= 1 << passIndex;
     return {
       querySet: this.querySet,
-      beginningOfPassWriteIndex: passIndex * 2,
-      endOfPassWriteIndex: passIndex * 2 + 1,
+      beginningOfPassWriteIndex: part !== 'end' ? passIndex * 2 : undefined,
+      endOfPassWriteIndex: part !== 'begin' ? passIndex * 2 + 1 : undefined,
     };
   }
 
@@ -123,10 +136,11 @@ export class GpuFrameTimer {
             const end = stamps[pass * 2 + 1]!;
             return end > begin ? Number(end - begin) : 0;
           };
-          const drawNs = passNs(TIMED_PASS.scene) + passNs(TIMED_PASS.edl);
+          const cloudNs = passNs(TIMED_PASS.clouds);
+          const drawNs = passNs(TIMED_PASS.scene) + passNs(TIMED_PASS.edl) + passNs(TIMED_PASS.photo) + cloudNs;
           const shadeNs = passNs(TIMED_PASS.shading);
           slot.buffer.unmap();
-          if (drawNs > 0) this.addSample(drawNs / 1e6, shadeNs / 1e6);
+          if (drawNs > 0) this.addSample(drawNs / 1e6, shadeNs / 1e6, cloudNs / 1e6);
         })
         .catch(() => undefined)
         .finally(() => {
@@ -155,14 +169,16 @@ export class GpuFrameTimer {
     this.resolveBuffer = null;
   }
 
-  private addSample(drawMs: number, shadeMs: number): void {
+  private addSample(drawMs: number, shadeMs: number, cloudMs = 0): void {
     if (!Number.isFinite(drawMs) || drawMs <= 0) return;
     if (this.hasSample) {
       this.drawMs += (drawMs - this.drawMs) * SAMPLE_BLEND;
       this.shadeMs += (shadeMs - this.shadeMs) * SAMPLE_BLEND;
+      this.cloudMs += (cloudMs - this.cloudMs) * SAMPLE_BLEND;
     } else {
       this.drawMs = drawMs;
       this.shadeMs = shadeMs;
+      this.cloudMs = cloudMs;
     }
     this.hasSample = true;
   }

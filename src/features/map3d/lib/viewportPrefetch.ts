@@ -412,9 +412,10 @@ export function installViewportPrefetch(
   // altitude tiles are NOT cancelled either: they read the terrain's own DEM
   // tiles, and a cancelled request answered a transparent tile that Mapbox
   // kept as final (holes after every pan).
-  const cancelOnUserGesture = (e: unknown): void => {
-    const evt = e as { originalEvent?: unknown } | null | undefined;
-    if (!evt || !evt.originalEvent) return;
+  // Only a user gesture carries an `originalEvent` (not flyTo, easeTo…);
+  // Mapbox's types omit it on `zoomstart`, hence the `in` check.
+  const cancelOnUserGesture = (evt: { type: string }): void => {
+    if (!('originalEvent' in evt) || !evt.originalEvent) return;
     if (activeAbort) {
       activeAbort.abort();
       activeAbort = null;
@@ -435,10 +436,8 @@ export function installViewportPrefetch(
       catch { /* SW gone away */ }
     }
   };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  map.on('movestart', cancelOnUserGesture as any);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  map.on('zoomstart', cancelOnUserGesture as any);
+  map.on('movestart', cancelOnUserGesture);
+  map.on('zoomstart', cancelOnUserGesture);
 
   const handle: ViewportPrefetchHandle = {
     dispose: (): void => {
@@ -463,10 +462,8 @@ export function installViewportPrefetch(
       map.off('idle', onIdle);
       map.off('moveend', onMoveEnd);
       map.off('style.load', onStyleLoad);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      map.off('movestart', cancelOnUserGesture as any);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      map.off('zoomstart', cancelOnUserGesture as any);
+      map.off('movestart', cancelOnUserGesture);
+      map.off('zoomstart', cancelOnUserGesture);
       if (currentHandle === handle) currentHandle = null;
     },
     trigger: schedule,

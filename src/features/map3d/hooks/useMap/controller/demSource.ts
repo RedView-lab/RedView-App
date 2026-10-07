@@ -6,6 +6,7 @@ import type { Ctx } from './context';
 import { DEM_SETTILE_VERIFY_MS } from './context';
 import { clearVisibleTimer, setVisibleTimeout, type VisibleTimer } from './visibleClock';
 import { getActiveDem3dQuality } from '../../../lib/dem3dQualityBus';
+import { logger } from '@/shared/lib/logger';
 
 /**
  * DEM source + terrain attachment lifecycle.
@@ -382,10 +383,10 @@ export function attachDemSource(ctx: Ctx): void {
     try {
       terrainRef.current = new TerrainManager(map, awsFallbackDEMSource.id);
       terrainRef.current.init();
-      console.log(
+      logger.map3d.info(
         sourceAlreadyPresent
-          ? '[map3d] AWS Terrarium fallback terrain re-attached'
-          : '[map3d] AWS Terrarium fallback terrain attached',
+          ? 'AWS Terrarium fallback terrain re-attached'
+          : 'AWS Terrarium fallback terrain attached',
       );
     } catch (error) {
       console.warn('[map3d] AWS fallback terrain apply failed', error);
@@ -417,7 +418,7 @@ export function attachDemSource(ctx: Ctx): void {
     try {
       if (hasAwsSource) {
         map.removeSource(awsFallbackDEMSource.id);
-        console.log('[map3d] AWS fallback DEM source removed');
+        logger.map3d.info('AWS fallback DEM source removed');
       }
     } catch (error) {
       console.warn('[map3d] AWS fallback DEM source remove failed', error);
@@ -468,10 +469,10 @@ export function attachDemSource(ctx: Ctx): void {
       } else {
         terrainRef.current.setSource(awsFastDEMSource.id);
       }
-      console.log(
+      logger.map3d.info(
         sourceAlreadyPresent
-          ? '[map3d] fast 30 m terrain re-bound'
-          : '[map3d] fast 30 m terrain attached',
+          ? 'fast 30 m terrain re-bound'
+          : 'fast 30 m terrain attached',
       );
       return true;
     } catch (error) {
@@ -533,7 +534,7 @@ export function attachDemSource(ctx: Ctx): void {
       fns.reportStatus('loading', 25, profile === 'terrain' ? 'Relief 1 m' : 'Relief 0.40 m');
       fns.scheduleDemSettle();
       fns.scheduleSetTilesVerify();
-      console.log('[map3d] HD terrain hot-swapped (unified DEM)');
+      logger.map3d.info('HD terrain hot-swapped (unified DEM)');
       return;
     }
 
@@ -544,7 +545,7 @@ export function attachDemSource(ctx: Ctx): void {
       } else {
         terrainRef.current.setSource(awsFallbackDEMSource.id);
       }
-      console.log('[map3d] HD terrain unavailable — bound to AWS fallback');
+      logger.map3d.info('HD terrain unavailable — bound to AWS fallback');
     }
   };
 }

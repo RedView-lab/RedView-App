@@ -45,7 +45,7 @@ export interface OverlayHandlers {
   onLabelsEnabledChange: (enabled: boolean) => void;
   onLabelToggle: (key: LabelKey, checked: boolean) => void;
   onWeatherEnabledChange: (enabled: boolean) => void;
-  onWeatherDateChange: (changes: Partial<Pick<WeatherState, 'customDateEnabled' | 'date' | 'time' | 'forecastDay' | 'trendMode'>>) => void;
+  onWeatherDateChange: (changes: Partial<Pick<WeatherState, 'customDateEnabled' | 'date' | 'time' | 'forecastDay'>>) => void;
   onWeatherLayerToggle: (key: WeatherLayerKey, enabled: boolean) => void;
   onWeatherLayerModeChange: (key: WeatherLayerKey, mode: WeatherRenderMode) => void;
   onWeatherPaletteOpacityChange: (key: WeatherLayerKey, opacity: number) => void;
@@ -53,7 +53,6 @@ export interface OverlayHandlers {
   onWeatherPaletteBandColorChange: (key: WeatherLayerKey, bandId: string, color: string) => void;
   onWeatherPaletteBandVisibilityToggle: (key: WeatherLayerKey, bandId: string) => void;
   onWeatherPaletteBandBreakpointChange: (key: WeatherLayerKey, bandIndex: number, field: 'min' | 'max', value: number) => void;
-  onWeatherAddAlert: () => void;
   onWindEnabledChange: (enabled: boolean) => void;
   onWindDateChange: (changes: Partial<Pick<ControlPanelState['wind'], 'date' | 'time' | 'forecastDay' | 'particlesEnabled' | 'terrainOverlayEnabled'>>) => void;
   onSnowEnabledChange: (enabled: boolean) => void;

@@ -16,7 +16,7 @@ export {
   BrouterRateLimitError,
   isBrouterRateLimitError,
 } from './api';
-export { buildBrouterUrl, formatLonlats, resolveEndpoint } from './api';
+export { buildBrouterUrl, formatLonlats } from './api';
 export {
   COARSE_SEARCH_WEIGHT,
   DEFAULT_SEARCH_COST_SCALE,

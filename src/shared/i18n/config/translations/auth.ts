@@ -71,4 +71,20 @@ export const authTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Vérifier', en: 'Verify' },
   { fr: 'Chiffre {{index}}', en: 'Digit {{index}}' },
   { fr: 'Erreur lors de la validation du code.', en: 'Error while validating the code.' },
+  // Erreurs renvoyées par /api/auth/* (api/auth/verify-code.ts, api/_lib/verificationStore.ts)
+  { fr: 'E-mail et code de vérification requis.', en: 'E-mail and verification code are required.' },
+  { fr: 'Une adresse e-mail valide est requise.', en: 'A valid e-mail address is required.' },
+  { fr: 'Impossible d’envoyer le code de vérification.', en: 'Unable to send the verification code.' },
+  { fr: 'Aucun code trouvé pour cet e-mail. Veuillez en demander un nouveau.', en: 'No code found for this e-mail. Please request a new one.' },
+  { fr: 'Le code a expiré. Veuillez en redemander un nouveau.', en: 'The code has expired. Please request a new one.' },
+  { fr: 'Trop de tentatives incorrectes. Le code a été invalidé par sécurité. Veuillez en demander un nouveau.', en: 'Too many incorrect attempts. The code was invalidated for security. Please request a new one.' },
+  { fr: 'Code invalide. Nombre maximal d’essais atteint, code invalidé.', en: 'Invalid code. Maximum number of attempts reached, code invalidated.' },
+  // `Code invalide (${n} essai(s) restant(s)).` : n de 1 à 4 (5 essais par code)
+  { fr: 'Code invalide (4 essai(s) restant(s)).', en: 'Invalid code (4 attempts left).' },
+  { fr: 'Code invalide (3 essai(s) restant(s)).', en: 'Invalid code (3 attempts left).' },
+  { fr: 'Code invalide (2 essai(s) restant(s)).', en: 'Invalid code (2 attempts left).' },
+  { fr: 'Code invalide (1 essai(s) restant(s)).', en: 'Invalid code (1 attempt left).' },
+  { fr: 'Un compte existe déjà avec cette adresse e-mail. Veuillez vous connecter.', en: 'An account already exists with this e-mail address. Please log in.' },
+  { fr: 'Ce mot de passe est refusé (trop courant ou proche de vos informations personnelles). Choisissez-en un autre.', en: 'This password is not allowed (too common or too close to your personal information). Please choose another one.' },
+  { fr: 'Erreur lors de la création du compte. Veuillez réessayer.', en: 'Error while creating the account. Please try again.' },
 ];

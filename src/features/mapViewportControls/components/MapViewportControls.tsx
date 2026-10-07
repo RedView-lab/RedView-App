@@ -217,12 +217,15 @@ export const MapViewportControls = memo(function MapViewportControls({
     </div>
   );
 
+  // Sans carte : boussole et bouton 2D/3D reviennent à la vue par défaut.
+  const defaultIs3DView = isThreeDPitch(DEFAULT_VIEW.pitch);
+  if (!map && (bearing !== 0 || is3DView !== defaultIs3DView)) {
+    setBearing(0);
+    setIs3DView(defaultIs3DView);
+  }
+
   useEffect(() => {
-    if (!map) {
-      setBearing(0);
-      setIs3DView(isThreeDPitch(DEFAULT_VIEW.pitch));
-      return;
-    }
+    if (!map) return;
 
     const updateCompassDirect = () => {
       const b = map.getBearing();

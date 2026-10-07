@@ -1,5 +1,6 @@
 import type { TimelineItem } from '../../../types';
-import { KindBadge, kindLabel } from '../KindBadge';
+import { KindBadge } from '../KindBadge';
+import { kindLabel } from '../timelineKindLabels';
 import { PlaceSearchInput } from '../components';
 import type { TimelineColumnDef } from '../TimelineColumns';
 import { TimelineSheetDistanceCell, TimelineSheetDurationCell } from './EditableSheetCells';

@@ -15,7 +15,7 @@ import { TimelinePanel } from '../sections/timeline';
 import {
   DEFAULT_TIMELINE_TABLE_SETTINGS,
   type TimelineTableSettingsState,
-} from '../sections/timeline/TimelineTableSettings';
+} from '../sections/timeline/timelineTableSettingsState';
 import type { ItineraryPanelProps, PanelMode } from '../types';
 import '../styles/index.css';
 

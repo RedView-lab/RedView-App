@@ -65,7 +65,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   res.on('close', onClose);
 
   try {
-    const headers: Record<string, string> = { 'User-Agent': 'RedView/1.0 (+https://redview.app) LiDAR viewer' };
+    const headers: Record<string, string> = { 'User-Agent': 'RedView/1.0 (+https://redview.tech) LiDAR viewer' };
     const range = sanitizeRangeHeader(req.headers.range);
     if (range) headers.Range = range;
 

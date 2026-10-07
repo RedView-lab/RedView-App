@@ -92,7 +92,9 @@ export function ProjectProvider({
   const projectRef = useRef(project);
 
   const onProjectChangeRef = useRef(onProjectChange);
-  onProjectChangeRef.current = onProjectChange;
+  useLayoutEffect(() => {
+    onProjectChangeRef.current = onProjectChange;
+  }, [onProjectChange]);
   // Lu par les écritures (événements, résultats async) : à jour avant elles.
   const collabRef = useRef(collab);
   useEffect(() => {

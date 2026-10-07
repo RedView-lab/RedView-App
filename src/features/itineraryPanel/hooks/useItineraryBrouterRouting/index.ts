@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { trackAnalyticsEvent } from '../../../../shared/lib/analytics';
 import { normalizeDiscipline } from '@/shared/lib/discipline';
 import {
   buildBrfProfile,
@@ -49,6 +48,8 @@ import { resolveRouteRequest } from './resolveRouteRequest';
 import { resolveElasticRoutePatch } from './elasticRoutePatch';
 import type { RouteRequestBase } from './customProfileFetch';
 import { planPendingRouteEdit, type UnresolvedRouteEdit } from './pendingEditPlan';
+import { trackRouteComputed, trackRouteFailed } from './routingAnalytics';
+import { logger } from '@/shared/lib/logger';
 
 /** Marqueur « tracé restauré par undo/redo, à vérifier par estampille ». */
 const VERIFY_STORED_ROUTE = '#verify-stored-route';
@@ -283,8 +284,8 @@ export function useItineraryBrouterRouting({
       const polygons = formatForbiddenZonePolygons(itinerary.forbiddenZones);
       const target = { itineraryId: itinerary.id, pendingKey };
       const t0 = performance.now();
-      console.log(
-        '[BRouter] local patch START itinerary=',
+      logger.brouter.info(
+        'local patch START itinerary=',
         itinerary.id,
         'start=',
         `${pendingRoutePatch.start.lon},${pendingRoutePatch.start.lat}`,
@@ -323,8 +324,9 @@ export function useItineraryBrouterRouting({
           // Le tracé patché porte l'estampille de ses entrées : vérifié par
           // elle au prochain passage de l'effet de routage.
           routedInputKeysRef.current.set(itinerary.id, VERIFY_STORED_ROUTE);
-          console.log(
-            '[BRouter] local patch OK in',
+          trackRouteComputed('patch', itinerary, route, performance.now() - t0);
+          logger.brouter.info(
+            'local patch OK in',
             Math.round(performance.now() - t0),
             'ms | dist=',
             (route.distanceM / 1000).toFixed(2),
@@ -351,6 +353,7 @@ export function useItineraryBrouterRouting({
             return;
           }
           console.error('[BRouter local patch fail]', error);
+          trackRouteFailed('patch', error);
           if (isActive()) setRouteError(formatBrouterErrorMessage(error));
         })
         .finally(() => {
@@ -414,8 +417,8 @@ export function useItineraryBrouterRouting({
 
   useEffect(() => {
     if (!brfProfile) return;
-    console.log(
-      '[BRouter] BRF hash =',
+    logger.brouter.info(
+      'BRF hash =',
       brfHash,
       '| size =',
       brfProfile.length,
@@ -526,8 +529,8 @@ export function useItineraryBrouterRouting({
 
       const itineraryForRouting = currentActive;
       const t0 = performance.now();
-      console.log(
-        '[BRouter] append segment START hash=',
+      logger.brouter.info(
+        'append segment START hash=',
         brfHash,
         'climbing=',
         climbing,
@@ -586,8 +589,9 @@ export function useItineraryBrouterRouting({
           resolveUnresolvedEdit(itineraryForRouting.id, target.pendingKey);
           routedInputKeys.set(itineraryForRouting.id, routingInputKey);
           setRouteLoading(false);
-          console.log(
-            '[BRouter] append segment OK in',
+          trackRouteComputed('extend', itineraryForRouting, route, performance.now() - t0);
+          logger.brouter.info(
+            'append segment OK in',
             Math.round(performance.now() - t0),
             'ms | dist=',
             (route.distanceM / 1000).toFixed(2),
@@ -614,6 +618,7 @@ export function useItineraryBrouterRouting({
             rollbackPendingTraceAppend(currentActive.id);
           }
           console.error('[BRouter append fail]', error);
+          trackRouteFailed('extend', error);
           setRouteError(formatBrouterErrorMessage(error));
         })
         .finally(() => {
@@ -652,7 +657,7 @@ export function useItineraryBrouterRouting({
     // single-request route.
     if (skipRouteRecomputeRef.current) {
       skipRouteRecomputeRef.current = false;
-      console.log('[BRouter] skipping full recompute (recalculate-trace guard)');
+      logger.brouter.info('skipping full recompute (recalculate-trace guard)');
       deferRouteState(null);
       return;
     }
@@ -746,8 +751,8 @@ export function useItineraryBrouterRouting({
       };
 
       const t0 = performance.now();
-      console.log(
-        '[BRouter] recompute START hash=',
+      logger.brouter.info(
+        'recompute START hash=',
         brfHash,
         'climbing=',
         climbing,
@@ -775,8 +780,8 @@ export function useItineraryBrouterRouting({
       })
         .then(({ route, resolvedWarnings, resolved }) => {
           if (activeCtrl.signal.aborted) return;
-          console.log(
-            '[BRouter] profile resolved →',
+          logger.brouter.info(
+            'profile resolved →',
             resolved.profileId,
             '| brf=',
             `${resolved.brf.length}B`,
@@ -784,8 +789,8 @@ export function useItineraryBrouterRouting({
             resolved.roadTypes.warnings.length,
           );
           setRouteWarnings(resolvedWarnings);
-          console.log(
-            '[BRouter] route OK in',
+          logger.brouter.info(
+            'route OK in',
             Math.round(performance.now() - t0),
             'ms | dist=',
             (route.distanceM / 1000).toFixed(2),
@@ -805,14 +810,7 @@ export function useItineraryBrouterRouting({
           routedInputKeys.set(itineraryForRouting.id, routingInputKey);
           setRouteLoading(false);
 
-          trackAnalyticsEvent({
-            name: 'route_calculated',
-            data: {
-              distance_km: Math.round(route.distanceM / 1000),
-              elevation_gain: Math.round(route.ascentM),
-              surface: resolved?.roadTypes?.effective?.gravel === 'prefer' ? 'gravel' : 'road',
-            },
-          });
+          trackRouteComputed('full', itineraryForRouting, route, performance.now() - t0);
 
           refineRouteInBackground(
             target.itineraryId,
@@ -825,6 +823,7 @@ export function useItineraryBrouterRouting({
         .catch((error: unknown) => {
           if ((error as { name?: string }).name === 'AbortError') return;
           console.error('[BRouter fetch fail]', error);
+          trackRouteFailed('full', error);
           setRouteError(formatBrouterErrorMessage(error));
         })
         .finally(() => {

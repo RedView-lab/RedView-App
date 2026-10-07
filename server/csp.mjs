@@ -25,13 +25,13 @@ const NATIONAL_SOURCES = 'https://data.geopf.fr https://*.geopf.fr https://data.
 export function buildCspHeader({ reportUri = CSP_REPORT_URI, upgradeInsecureRequests = true } = {}) {
   return [
     "default-src 'self'",
-    "script-src 'self' 'wasm-unsafe-eval' blob: https://api.mapbox.com https://js.stripe.com https://analytics.redview.tech",
+    "script-src 'self' 'wasm-unsafe-eval' blob: https://api.mapbox.com https://js.stripe.com",
     "worker-src 'self' blob:",
     "child-src 'self' blob:",
-    "style-src 'self' 'unsafe-inline' https://api.mapbox.com https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com data:",
+    "style-src 'self' 'unsafe-inline' https://api.mapbox.com",
+    "font-src 'self' data:",
     `img-src 'self' data: blob: https://appwrite.redview.tech https://*.tilecache.rainviewer.com https://*.rainviewer.com https://*.rainviewer.net https://api.mapbox.com https://*.mapbox.com ${GEO_SOURCES} ${NATIONAL_SOURCES}`,
-    `connect-src 'self' blob: data: wss://app.redview.tech wss://redview.tech https://appwrite.redview.tech https://errors.redview.tech https://api.stripe.com https://api.mapbox.com https://events.mapbox.com https://*.mapbox.com https://*.rainviewer.com https://*.rainviewer.net https://api.open-meteo.com https://climate-api.open-meteo.com https://*.open-meteo.com https://nominatim.openstreetmap.org https://analytics.redview.tech ${GEO_SOURCES} https://opentopography.s3.sdsc.edu ${NATIONAL_SOURCES}`,
+    `connect-src 'self' blob: data: wss://app.redview.tech wss://redview.tech https://appwrite.redview.tech https://errors.redview.tech https://api.stripe.com https://api.mapbox.com https://events.mapbox.com https://*.mapbox.com https://*.rainviewer.com https://*.rainviewer.net https://nominatim.openstreetmap.org ${GEO_SOURCES} https://opentopography.s3.sdsc.edu ${NATIONAL_SOURCES}`,
     'frame-src https://js.stripe.com',
     "object-src 'none'",
     "base-uri 'self'",

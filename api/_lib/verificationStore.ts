@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { PublicError } from './errors.js';
-import { sendVerificationEmail } from './mailer.ts';
+import { sendAccountDeletionCodeEmail, sendVerificationEmail } from './mailer.ts';
 
 interface SecureCodeEntry {
   codeHash: string; // SHA-256(salt:code)
@@ -260,6 +260,41 @@ export function consumeVerificationRequestQuota(email: string): void {
   saveQuota(normalizedEmail, quota);
 }
 
+/** Nouveau code pour `key` (remplace le précédent), rendu en clair pour l'e-mail. */
+function issueCode(key: string, name?: string): string {
+  const now = Date.now();
+  const code = generate6DigitCode();
+  const salt = crypto.randomBytes(16).toString('hex');
+  setCode(key, {
+    codeHash: hashVerificationCode(code, salt),
+    salt,
+    name,
+    expiresAt: now + CODE_TTL_MS,
+    attempts: 0,
+    lastRequestedAt: now,
+  });
+  return code;
+}
+
+/**
+ * Clé des codes de suppression de compte : séparée de celle des codes
+ * d'inscription (même e-mail, autre usage), avec ses propres quotas.
+ */
+export function accountDeletionCodeKey(email: string): string {
+  return `account-deletion:${normalizeVerificationEmail(email)}`;
+}
+
+/**
+ * Code de confirmation d'une suppression de compte, envoyé à l'adresse du
+ * compte. Quota consommé au préalable (`consumeVerificationRequestQuota` sur
+ * `accountDeletionCodeKey`) ; vérifié par `validateVerificationCode` sur la
+ * même clé.
+ */
+export async function requestAccountDeletionCode(email: string, name?: string): Promise<{ sent: boolean }> {
+  const code = issueCode(accountDeletionCodeKey(email), name);
+  return sendAccountDeletionCodeEmail({ to: normalizeVerificationEmail(email), code, name });
+}
+
 /**
  * Génère un nouveau code (remplace le précédent) et l'envoie par e-mail.
  * Le quota doit avoir été consommé au préalable via
@@ -270,20 +305,7 @@ export async function requestVerificationCode(
   name?: string,
 ): Promise<{ sent: boolean }> {
   const normalizedEmail = normalizeVerificationEmail(email);
-  const now = Date.now();
-
-  const code = generate6DigitCode();
-  const salt = crypto.randomBytes(16).toString('hex');
-  const codeHash = hashVerificationCode(code, salt);
-
-  setCode(normalizedEmail, {
-    codeHash,
-    salt,
-    name,
-    expiresAt: now + CODE_TTL_MS,
-    attempts: 0,
-    lastRequestedAt: now,
-  });
+  const code = issueCode(normalizedEmail, name);
 
   const mailResult = await sendVerificationEmail({
     to: normalizedEmail,
@@ -294,10 +316,29 @@ export async function requestVerificationCode(
   return { sent: mailResult.sent };
 }
 
-export function validateVerificationCode(
-  email: string,
-  inputCode: string,
-): { valid: boolean; error?: string; status?: number } {
+type CodeCheck = { valid: boolean; error?: string; status?: number };
+
+/**
+ * Vérifie un code et le consomme s'il est bon (usage unique). Les essais
+ * ratés comptent dans le quota de l'e-mail.
+ */
+export function validateVerificationCode(email: string, inputCode: string): CodeCheck {
+  const check = checkVerificationCode(email, inputCode);
+  if (check.valid) consumeVerificationCode(email);
+  return check;
+}
+
+/** Consomme le code en cours de `email` (après l'action qu'il autorisait). */
+export function consumeVerificationCode(email: string): void {
+  deleteCode(normalizeVerificationEmail(email));
+}
+
+/**
+ * Comme `validateVerificationCode`, sans consommer un code bon : pour une
+ * action qui peut échouer après la vérification (création du compte), le
+ * code reste valable pour un nouvel essai jusqu'à `consumeVerificationCode`.
+ */
+export function checkVerificationCode(email: string, inputCode: string): CodeCheck {
   const normalizedEmail = normalizeVerificationEmail(email);
   const cleanInput = inputCode.trim();
   const now = Date.now();
@@ -370,7 +411,5 @@ export function validateVerificationCode(
     };
   }
 
-  // Code is valid! Consume it immediately (One-Time Token)
-  deleteCode(normalizedEmail);
   return { valid: true };
 }

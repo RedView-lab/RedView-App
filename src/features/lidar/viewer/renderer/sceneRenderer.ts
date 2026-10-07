@@ -16,6 +16,7 @@ import type { ViewerPointFilterState } from '../pointFilter';
 import type { SolarRenderState } from '../../viewer-webgl/sunlightController';
 import type { HeightmapParams, SnowParams } from './types';
 import type { TerrainMeshData } from './terrainLodCore';
+import type { PhotoModeRenderer } from '../photoMode/renderer/types';
 
 type RendererBackend = 'webgpu' | 'webgl';
 
@@ -36,6 +37,11 @@ export interface RenderSceneOptions {
   motion?: boolean;
   /** Index of a still frame of the progressive anti-aliasing (0 restarts the running mean). */
   accumulate?: number;
+  /**
+   * Photo mode: the still view is already accumulated, only what changes by
+   * itself (drifting clouds and their shadows) is drawn again.
+   */
+  reuseScene?: boolean;
 }
 
 export interface RenderStats {
@@ -51,6 +57,8 @@ export interface LidarRenderer extends SceneNodeUploader {
   readonly platform: PlatformProfile | null;
   /** Called once when the GPU context is lost for any reason other than `destroy()`. */
   onDeviceLost: ((info: RendererLostInfo) => void) | null;
+  /** Photo mode (sky, clouds, point-cloud shadows): WebGPU only, null on WebGL 2. */
+  readonly photo: PhotoModeRenderer | null;
 
   /** Scene resolution while the camera moves, as a share of the canvas (1 = off). Set before `resize`. */
   motionScale: number;

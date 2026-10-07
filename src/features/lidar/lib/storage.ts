@@ -1,5 +1,6 @@
-import type { TileCoord, CachedTileInfo } from '../types';
+import type { AltitudeRef, CachedTileInfo, DetectedCrs, Territory, TileCoord } from '../types';
 import { translateAppText } from '@/shared/i18n/config';
+import { errorMessage, errorName } from '@/shared/lib/errors';
 import { parseTileFootprint, tileCoordFileName } from './coordConvert';
 import { LIDAR_OPFS_DIR, colourRevisionSuffix, lodCacheKey } from './lodCache';
 
@@ -21,8 +22,8 @@ async function getLidarDir(): Promise<FileSystemDirectoryHandle | null> {
     const dir = await root.getDirectoryHandle(LIDAR_DIR, { create: true });
     opfsAvailable = true;
     return dir;
-  } catch (err: any) {
-    console.warn(`[LiDAR storage] OPFS unavailable or blocked by browser security (${err?.message || err}), using CacheStorage fallback.`);
+  } catch (err) {
+    console.warn(`[LiDAR storage] OPFS unavailable or blocked by browser security (${errorMessage(err)}), using CacheStorage fallback.`);
     opfsAvailable = false;
     return null;
   }
@@ -270,8 +271,8 @@ export async function deleteTile(coord: TileCoord): Promise<void> {
       await removeLegacyDerivedCaches(dir, fileName);
       await dir.removeEntry(fileName);
     }
-  } catch (err: any) {
-    if (err && err.name !== 'NotFoundError') {
+  } catch (err) {
+    if (errorName(err) !== 'NotFoundError') {
       console.warn(`[LiDAR storage] OPFS delete error for ${fileName}:`, err);
     }
   }
@@ -290,51 +291,67 @@ export async function deleteTile(coord: TileCoord): Promise<void> {
   inMemoryTileCache.delete(fileName);
 }
 
+const TERRITORIES: ReadonlySet<string> = new Set<Territory>(['FXX', 'REU', 'CH', 'NZ', 'JP', 'NL', 'BE']);
+const ALTITUDE_REFS: ReadonlySet<string> = new Set<AltitudeRef>(['IGN69', 'IGN78', 'REUN89', 'LN02', 'NZVD2016', 'TP', 'NAP', 'TAW']);
+const DETECTED_CRS = /^(?:LAMB93|RGR92UTM40S|CH1903_LV95|NZTM2000|RD_NEW|BL72|JGD2011_ZONE_(?:0[1-9]|1[0-9]))$/;
+
+const isTerritory = (value: string): value is Territory => TERRITORIES.has(value);
+const isAltitudeRef = (value: string): value is AltitudeRef => ALTITUDE_REFS.has(value);
+const isDetectedCrs = (value: string): value is DetectedCrs => DETECTED_CRS.test(value);
+
+/**
+ * Dalle d'un fichier du cache (nom écrit par tileCoordFileName), null pour
+ * tout autre fichier du dossier.
+ */
+export function parseCachedTileName(name: string, sizeBytes: number, cachedAt: number): CachedTileInfo | null {
+  // Dalle-fichier (Japon, NZ) : `…_<alt>~minX,minY,maxX,maxY.copc.laz`.
+  const footprintMatch = name.match(/^(.+)~([-\d,]+)\.copc\.laz$/);
+  const footprint = footprintMatch ? parseTileFootprint(footprintMatch[2]) : null;
+  if (footprintMatch && !footprint) return null;
+  const baseName = footprintMatch ? `${footprintMatch[1]}.copc.laz` : name;
+  const match = baseName.match(/^LHD_(\w+)_([-\w]+)_([-\w]+)_PTS_(\w+)_(\w+)\.copc\.laz$/);
+  if (!match) return null;
+
+  const [, territory, xStr, yStr, projection, altRef] = match;
+  const crs = territory === 'CH' ? 'CH1903_LV95' : territory === 'NZ' ? 'NZTM2000' : projection;
+  if (!isTerritory(territory) || !isDetectedCrs(crs) || !isAltitudeRef(altRef)) return null;
+  const isJapan = territory === 'JP';
+  const isSwCorner = territory === 'CH' || territory === 'NZ' || isJapan || territory === 'NL' || territory === 'BE';
+
+  let xKm = parseInt(xStr, 10);
+  let yKm = parseInt(yStr, 10);
+  if (isJapan) {
+    xKm = xStr.startsWith('m') ? -parseInt(xStr.slice(1), 10) : xStr.startsWith('p') ? parseInt(xStr.slice(1), 10) : parseInt(xStr, 10);
+    yKm = yStr.startsWith('m') ? -parseInt(yStr.slice(1), 10) : yStr.startsWith('p') ? parseInt(yStr.slice(1), 10) : parseInt(yStr, 10);
+  }
+
+  return {
+    coord: {
+      xKm,
+      yKm: yKm - (isSwCorner ? 0 : 1),
+      territory,
+      projection: crs,
+      altRef,
+      ...(footprint ? { footprint } : {}),
+    },
+    fileName: name,
+    sizeBytes,
+    cachedAt,
+  };
+}
+
 export async function listCachedTiles(): Promise<CachedTileInfo[]> {
   const tilesMap = new Map<string, CachedTileInfo>();
-
   const parseTileName = (name: string, sizeBytes: number, cachedAt: number) => {
-    // Dalle-fichier (Japon, NZ) : `…_<alt>~minX,minY,maxX,maxY.copc.laz`.
-    const footprintMatch = name.match(/^(.+)~([-\d,]+)\.copc\.laz$/);
-    const footprint = footprintMatch ? parseTileFootprint(footprintMatch[2]) : null;
-    if (footprintMatch && !footprint) return;
-    const baseName = footprintMatch ? `${footprintMatch[1]}.copc.laz` : name;
-    const match = baseName.match(/^LHD_(\w+)_([-\w]+)_([-\w]+)_PTS_(\w+)_(\w+)\.copc\.laz$/);
-    if (!match) return;
-
-    const [, territory, xStr, yStr, projection, altRef] = match;
-    const isSwiss = territory === 'CH';
-    const isNz = territory === 'NZ';
-    const isJapan = territory === 'JP';
-    const isSwCorner = isSwiss || isNz || isJapan || territory === 'NL' || territory === 'BE';
-
-    let xKm = parseInt(xStr, 10);
-    let yKm = parseInt(yStr, 10);
-    if (isJapan) {
-      xKm = xStr.startsWith('m') ? -parseInt(xStr.slice(1), 10) : xStr.startsWith('p') ? parseInt(xStr.slice(1), 10) : parseInt(xStr, 10);
-      yKm = yStr.startsWith('m') ? -parseInt(yStr.slice(1), 10) : yStr.startsWith('p') ? parseInt(yStr.slice(1), 10) : parseInt(yStr, 10);
-    }
-
-    tilesMap.set(name, {
-      coord: {
-        xKm,
-        yKm: yKm - (isSwCorner ? 0 : 1),
-        territory: territory as any,
-        projection: (isSwiss ? 'CH1903_LV95' : isNz ? 'NZTM2000' : projection) as any,
-        altRef: altRef as any,
-        ...(footprint ? { footprint } : {}),
-      },
-      fileName: name,
-      sizeBytes,
-      cachedAt,
-    });
+    const tile = parseCachedTileName(name, sizeBytes, cachedAt);
+    if (tile) tilesMap.set(name, tile);
   };
 
   // 1. Check OPFS
   try {
     const dir = await getLidarDir();
     if (dir) {
-      for await (const [name, handle] of (dir as any).entries()) {
+      for await (const [name, handle] of dir.entries()) {
         if (handle.kind !== 'file') continue;
         if (!name.endsWith('.laz')) continue;
         try {

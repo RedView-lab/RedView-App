@@ -60,8 +60,14 @@ export function useControlPanelLidarTiles({
   }, [lidarManager]);
 
   useEffect(() => {
-    void refreshTiles();
-    return lidarManager.on((evt) => {
+    let active = true;
+    lidarManager.getCachedTiles().then(
+      (tiles) => {
+        if (active) setCachedTiles(tiles);
+      },
+      (err: unknown) => console.warn('[controlPanel] getCachedTiles failed', err),
+    );
+    const unsubscribe = lidarManager.on((evt) => {
       if (evt.type === 'progress' && evt.progress) {
         setLidarDownloadProgress(evt.progress);
         setLidarDownloadError(null);
@@ -81,6 +87,10 @@ export function useControlPanelLidarTiles({
         setLidarDownloadError(evt.error ?? evt.message ?? 'Erreur LiDAR');
       }
     });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, [lidarManager, refreshTiles]);
 
   useEffect(() => {

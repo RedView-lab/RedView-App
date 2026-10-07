@@ -2,7 +2,7 @@
  * Client du serveur POI self-hébergé (`redview-poi-server`).
  *
  * Architecture :
- *   browser → /api/poi  (Vercel Function, masque l'IP du VPS)
+ *   browser → /api/poi  (proxy same-origin, api/poi.ts)
  *           → http://<vps>/poi/{bbox|corridor}
  *           → Fastify → SQLite + R*Tree
  *

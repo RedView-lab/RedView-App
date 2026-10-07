@@ -1,5 +1,6 @@
 import { Account, Client, Query, Teams } from 'node-appwrite';
 
+import { createOldestKeyTaker } from '../oldest-key.mjs';
 import type { RoomStorage } from './storage.ts';
 
 /**
@@ -71,12 +72,15 @@ function tokenExpiry(token: string, now: number): number {
 export function createAuthenticator(options: AuthOptions): Authenticator {
   const tokens = new Map<string, { identity: Identity | null; at: number }>();
   const memberships = new Map<string, { member: boolean; at: number }>();
+  const oldestToken = createOldestKeyTaker(tokens);
+  const oldestMembership = createOldestKeyTaker(memberships);
   const admin = options.appwrite
     ? new Client().setEndpoint(options.appwrite.endpoint).setProject(options.appwrite.projectId).setKey(options.appwrite.apiKey)
     : null;
   const teams = admin ? new Teams(admin) : null;
   /** Équipe de chaque projet vu (révocation : oublier ses appartenances). */
   const teamOfProject = new Map<string, string>();
+  const oldestProject = createOldestKeyTaker(teamOfProject);
 
   async function identityOf(token: string): Promise<Identity | null> {
     if (options.devAuth) {
@@ -101,7 +105,7 @@ export function createAuthenticator(options: AuthOptions): Authenticator {
       identity = null;
     }
     tokens.set(token, { identity, at: Date.now() });
-    if (tokens.size > 10_000) tokens.delete(tokens.keys().next().value!);
+    if (tokens.size > 10_000) tokens.delete(oldestToken()!);
     return identity;
   }
 
@@ -113,7 +117,7 @@ export function createAuthenticator(options: AuthOptions): Authenticator {
     const list = await teams.listMemberships(teamId, [Query.equal('userId', userId), Query.limit(1)]);
     const member = list.memberships.some((membership) => membership.userId === userId && membership.confirm);
     memberships.set(key, { member, at: Date.now() });
-    if (memberships.size > 10_000) memberships.delete(memberships.keys().next().value!);
+    if (memberships.size > 10_000) memberships.delete(oldestMembership()!);
     return member;
   }
 
@@ -130,7 +134,7 @@ export function createAuthenticator(options: AuthOptions): Authenticator {
       if (!access) return 'not-found';
       if (access.teamId) {
         teamOfProject.set(projectId, access.teamId);
-        if (teamOfProject.size > 10_000) teamOfProject.delete(teamOfProject.keys().next().value!);
+        if (teamOfProject.size > 10_000) teamOfProject.delete(oldestProject()!);
       }
       if (access.ownerId && access.ownerId === userId) return 'ok';
       if (access.teamId && await isMember(access.teamId, userId, fresh)) return 'ok';

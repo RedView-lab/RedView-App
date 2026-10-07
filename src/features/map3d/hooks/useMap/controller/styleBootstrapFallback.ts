@@ -8,6 +8,7 @@ import {
   setVisibleTimeout,
   type VisibleTimer,
 } from './visibleClock';
+import { logger } from '@/shared/lib/logger';
 
 interface BootstrapAwsFallbackOptions {
   ctx: Ctx;
@@ -30,7 +31,7 @@ export function bootstrapAwsFallback({
   const FALLBACK_IMPORT_GUARD_WATCH_MS = 15000;
   const FALLBACK_IMPORT_GUARD_PROBE_INTERVAL_MS = 750;
 
-  console.info('[map3d] bootstrapCurrentStyle:branch', {
+  logger.map3d.info('bootstrapCurrentStyle:branch', {
     runId,
     branch: 'aws-fallback',
     swRegistered,
@@ -155,7 +156,7 @@ export function bootstrapAwsFallback({
       return;
     }
 
-    console.log(`[map3d] Late SW recovery (${origin}): upgrading from AWS fallback to full DEM pipeline`);
+    logger.map3d.info(`Late SW recovery (${origin}): upgrading from AWS fallback to full DEM pipeline`);
     clearLateSwUpgradeTimer();
     fns.reportStatus('loading', 50, 'Récupération relief HD');
     fns.detachAwsFallbackTerrain();

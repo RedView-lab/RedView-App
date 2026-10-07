@@ -1,1 +1,3 @@
 *.sh text eol=lf
+# Fichiers posés sur le VPS (scripts sans extension, unités systemd, configs) : LF même sous Windows.
+server/vps/** text eol=lf

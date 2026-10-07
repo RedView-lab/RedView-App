@@ -186,7 +186,7 @@ export async function ensurePoiServerStarted() {
 /* ------------------------------------------------------------------ */
 
 /**
- * Le nginx du VPS n'accepte /brouter, /poi/ et /weather/ que depuis le VPS
+ * Le nginx du VPS n'accepte /brouter, /poi/, /weather/ et /openmeteo/ que depuis le VPS
  * lui-même (server/weather-daemon/brouter.conf) : depuis un poste de dev, les
  * amonts du .env répondent 403. En dev, un tunnel SSH vers son port 80 fait
  * arriver ces requêtes depuis 127.0.0.1, comme celles de l'app en prod.
@@ -196,7 +196,7 @@ export async function ensurePoiServerStarted() {
  *   REDVIEW_DEV_SSH_USER=<user> utilisateur (défaut opc)
  *   REDVIEW_DEV_TUNNEL_PORT=<n> port local (défaut 18080)
  */
-const VPS_UPSTREAM_KEYS = ['BROUTER_UPSTREAM', 'POI_UPSTREAM', 'WEATHER_UPSTREAM'];
+const VPS_UPSTREAM_KEYS = ['BROUTER_UPSTREAM', 'POI_UPSTREAM', 'WEATHER_UPSTREAM', 'OPENMETEO_UPSTREAM'];
 
 /** @type {{ host: string, port: number, ready: Promise<boolean>, active: boolean } | null} */
 let vpsTunnel = null;

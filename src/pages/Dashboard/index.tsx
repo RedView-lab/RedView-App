@@ -12,6 +12,8 @@ import { getDashboardStyles } from './lib/dashboardStyles';
 import { useDashboardChrome } from './useDashboardChrome';
 import { useDashboardProjectState } from './useDashboardProjectState';
 import { formatDisplayName } from './lib/utils';
+import { EditorReadyMeter } from './lib/editorReadyMeter';
+import { countBucket, roundTo, trackAnalyticsEvent, trackScreen } from '@/shared/lib/analytics';
 import { loadDashboardEditor, prefetchDashboardEditor, prefetchDashboardEditorWhenIdle } from './editorLoader';
 
 // Éditeur 3D chargé à la demande : le gestionnaire de projets s'affiche sans
@@ -203,11 +205,13 @@ export default function Dashboard({
   const loadingProject = projectLoading || isClosingProject;
   const projectBrowserVisible = (projectBrowserOpen || activeProjectId == null) && !loadingProject;
 
-  useEffect(() => {
-    if (editorOpen) return;
+  // Éditeur fermé : plus de carte.
+  if (!editorOpen && (mapLoaded || mapInstance)) {
     setMapLoaded(false);
-    mapInstanceRef.current = null;
     setMapInstance(null);
+  }
+  useEffect(() => {
+    if (!editorOpen) mapInstanceRef.current = null;
   }, [editorOpen]);
 
   // Projet en cours d'ouverture (lien direct compris) : l'éditeur se charge
@@ -215,6 +219,43 @@ export default function Dashboard({
   useEffect(() => {
     if (activeProjectId != null) prefetchDashboardEditor();
   }, [activeProjectId]);
+
+  // Mesure d'audience : écran éditeur, et temps jusqu'à la première carte 3D
+  // prête (`editor_ready` ; lien direct mesuré depuis la navigation).
+  const [editorReadyMeter] = useState(() => new EditorReadyMeter());
+  // Projet du lien direct au chargement de la page (la prop suit ensuite l'URL).
+  const [bootProjectId] = useState(initialProjectId ?? null);
+  const firstProjectOpenRef = useRef(true);
+  useEffect(() => {
+    if (activeProjectId == null) {
+      editorReadyMeter.cancel();
+      return;
+    }
+    const cold = firstProjectOpenRef.current && activeProjectId === bootProjectId;
+    firstProjectOpenRef.current = false;
+    editorReadyMeter.start(performance.now(), cold);
+  }, [activeProjectId, bootProjectId, editorReadyMeter]);
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') editorReadyMeter.markHidden();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [editorReadyMeter]);
+  const activeItineraryCount = activeProjectInitial?.itineraries?.length ?? 0;
+  const handleMapLoadStatusChangeMeasured = useCallback<typeof handleMapLoadStatusChange>((status) => {
+    handleMapLoadStatusChange(status);
+    const sample = editorReadyMeter.observe(status?.state, performance.now());
+    if (sample) {
+      trackAnalyticsEvent({
+        name: 'editor_ready',
+        data: { ms: roundTo(sample.ms, 100), cold: sample.cold, itineraries: countBucket(activeItineraryCount) },
+      });
+    }
+  }, [activeItineraryCount, editorReadyMeter, handleMapLoadStatusChange]);
+  useEffect(() => {
+    if (editorOpen && !loadingProject) trackScreen('editor');
+  }, [editorOpen, loadingProject]);
   useEffect(() => {
     if (!projectBrowserVisible) return;
     return prefetchDashboardEditorWhenIdle();
@@ -282,7 +323,7 @@ export default function Dashboard({
               dashboardSearchLeft={dashboardSearchLeft}
               dashboardSearchRight={dashboardSearchRight}
               onMapReady={handleMapReady}
-              onMapLoadStatusChange={handleMapLoadStatusChange}
+              onMapLoadStatusChange={handleMapLoadStatusChangeMeasured}
               onMapReloadChange={handleMapReloadChange}
               onMapViewportChange={handleMapViewportChange}
               onToggleMapFocusMode={handleToggleMapFocusMode}

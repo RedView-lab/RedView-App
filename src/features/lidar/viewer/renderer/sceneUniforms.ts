@@ -37,6 +37,8 @@ export interface SceneUniformState {
   sunDiscRadius: number;
   pointFilterEnabled: number;
   pointFilterMask: [number, number, number, number];
+  /** 1 in photo mode (WebGPU): the shading pass writes albedo only, see photoMode/. */
+  photoMode?: number;
 }
 
 /**
@@ -61,7 +63,7 @@ export function packSceneUniforms(
 
   // 28..31: scalars
   f[28] = s.pointSize;
-  f[29] = 0;
+  f[29] = s.photoMode ?? 0;
   f[30] = s.canvasWidth;
   f[31] = s.canvasHeight;
 

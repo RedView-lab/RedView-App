@@ -18,6 +18,7 @@ import type {
   AccountPracticeForm,
   AccountProfile,
 } from '../types';
+import { AccountDataForm } from './AccountDataForm';
 import { AccountIdentityForm as AccountIdentitySection } from './AccountIdentityForm';
 import { AccountPasswordForm } from './AccountPasswordForm';
 import { AccountPracticeForm as AccountPracticeSection } from './AccountPracticeForm';
@@ -265,6 +266,10 @@ export function AccountPanel({
           void handlePasswordSave();
         }}
       />
+
+      <div className="rvpb-divider" />
+
+      <AccountDataForm email={profile.email} />
     </section>
   );
 }

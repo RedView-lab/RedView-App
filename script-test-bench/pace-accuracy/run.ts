@@ -15,7 +15,7 @@ import { compare, pct } from './lib/metrics';
 import { enrichRide } from './lib/osm-enrich';
 import { extractRide, formatHms, loadRides, realTimeAt, RIDES, type Ride } from './lib/rides';
 import { hairpins, reversed, routeFromXY, straight, subsample, withNoise, type XY } from './lib/synthetic';
-import { headwindAlongRide } from './lib/wind';
+import { headwindAlongRide, WindDataUnavailableError } from './lib/wind';
 
 const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
 const QUICK = process.argv.includes('--quick');
@@ -191,7 +191,14 @@ async function r9() {
   };
   const std = (v: number[]) => { const m = v.reduce((s, x) => s + x, 0) / v.length; return Math.sqrt(v.reduce((s, x) => s + (x - m) ** 2, 0) / v.length); };
   const a = await errs(false);
-  const b = await errs(true);
+  let b: number[];
+  try {
+    b = await errs(true);
+  } catch (error) {
+    if (!(error instanceof WindDataUnavailableError)) throw error;
+    record('R9', 'I', 'Vent historique (ERA5) : part de l’écart journalier', true, `non mesuré — ${error.message}`);
+    return;
+  }
   record('R9', 'I', 'Vent historique (ERA5, ×0,6 à hauteur de cycliste) : part de l\'écart journalier', true,
     `sans vent : ${a.map((v) => pct(v, 0)).join(' ')}  écart-type ${std(a).toFixed(1)} %\navec vent : ${b.map((v) => pct(v, 0)).join(' ')}  écart-type ${std(b).toFixed(1)} %  → ${std(b) < std(a) ? 'le vent explique une partie de l\'écart' : 'le vent n\'explique pas l\'écart journalier'}`);
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { AppI18nProvider, translateAppText } from '@/shared/i18n';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { readRootAppScale } from '@/shared/lib/appScale';
@@ -6,6 +6,8 @@ import { SlopesSection } from '@/features/controlPanel/sections/SlopesSection';
 import { AltitudeSection } from '@/features/controlPanel/sections/AltitudeSection';
 import { SunlightSection } from '@/features/controlPanel/sections/SunlightSection';
 import { RouteSection } from './RouteSection';
+import { PhotoModeSection } from '../photoMode/PhotoModeSection';
+import type { PhotoCaptureStatus, PhotoModeState } from '../photoMode/types';
 import {
   PointFilterSection,
   getDefaultPointFilterCategories,
@@ -91,6 +93,21 @@ function buildAltitudeBands(
   }));
 }
 
+/** Photo mode section (see photoMode/): state lives in the panel, the viewer applies it. */
+export interface ViewerPhotoModeProps {
+  /** False on the WebGL 2 backend: the section shows why it is unavailable. */
+  available: boolean;
+  initialState: PhotoModeState;
+  /** Automatic cloud base (m) and the bounds of its offset for this scene. */
+  cloudBase: { autoAltitudeM: number; minOffsetM: number; maxOffsetM: number };
+  onChange: (state: PhotoModeState) => void;
+  onCapture: () => void;
+  captureStore: { subscribe: (listener: () => void) => () => void; getSnapshot: () => PhotoCaptureStatus };
+}
+
+const IDLE_CAPTURE: PhotoCaptureStatus = { busy: false, done: 0, total: 0, error: null };
+const noSubscription = () => () => undefined;
+
 export interface LidarViewerRightPanelProps {
   onPointFilterChange?: (state: ViewerPointFilterState) => void;
   onSlopeChange?: (state: ViewerSlopeState) => void;
@@ -100,6 +117,7 @@ export interface LidarViewerRightPanelProps {
   centerLon?: number;
   centerLat?: number;
   timeZone?: string;
+  photo?: ViewerPhotoModeProps;
 }
 
 export function LidarViewerRightPanelContent({
@@ -111,6 +129,7 @@ export function LidarViewerRightPanelContent({
   centerLon,
   centerLat,
   timeZone,
+  photo,
 }: LidarViewerRightPanelProps) {
   const [routeState, setRouteState] = useState<ViewerRouteState | null>(() => routeController?.getState() ?? null);
 
@@ -215,18 +234,31 @@ export function LidarViewerRightPanelContent({
   }, []);
 
   const [sectionsOpen, setSectionsOpen] = useState<{
+    photo: boolean;
     route: boolean;
     pointFilter: boolean;
     slopes: boolean;
     altitude: boolean;
     sunlight: boolean;
-  }>({
+  }>(() => ({
+    photo: photo?.initialState.enabled ?? false,
     route: true,
     pointFilter: false,
     slopes: false,
     altitude: false,
     sunlight: true,
-  });
+  }));
+
+  // ── Photo mode ───────────────────────────────────────────────────────────
+  const [photoState, setPhotoState] = useState<PhotoModeState | null>(() => photo?.initialState ?? null);
+  const onPhotoChange = photo?.onChange;
+  useEffect(() => {
+    if (photoState) onPhotoChange?.(photoState);
+  }, [onPhotoChange, photoState]);
+  const captureStatus = useSyncExternalStore(
+    photo?.captureStore.subscribe ?? noSubscription,
+    photo?.captureStore.getSnapshot ?? (() => IDLE_CAPTURE),
+  );
 
   // ── Point Filter State ───────────────────────────────────────────────────
   const [pointFilterEnabled, setPointFilterEnabled] = useState(false);
@@ -424,21 +456,30 @@ export function LidarViewerRightPanelContent({
   });
   const [sunlightMapExpanded, setSunlightMapExpanded] = useState(true);
 
-  useEffect(() => {
-    if (centerLat == null || centerLon == null) return;
-    const times = resolveSunTimesForLocalDay(sunlightState.date, centerLat, centerLon, localTimeZone);
-    if (times.sunriseTime !== sunlightState.sunriseTime || times.sunsetTime !== sunlightState.sunsetTime) {
-      setSunlightState((prev) => ({
-        ...prev,
-        sunriseTime: times.sunriseTime,
-        sunsetTime: times.sunsetTime,
-      }));
-    }
-  }, [sunlightState.date, centerLat, centerLon, localTimeZone, sunlightState.sunriseTime, sunlightState.sunsetTime]);
+  // Lever et coucher du jour choisi au centre de la scène.
+  const sunTimes = useMemo(
+    () => (centerLat == null || centerLon == null
+      ? null
+      : resolveSunTimesForLocalDay(sunlightState.date, centerLat, centerLon, localTimeZone)),
+    [sunlightState.date, centerLat, centerLon, localTimeZone],
+  );
+  if (sunTimes && (sunTimes.sunriseTime !== sunlightState.sunriseTime || sunTimes.sunsetTime !== sunlightState.sunsetTime)) {
+    setSunlightState((prev) => ({
+      ...prev,
+      sunriseTime: sunTimes.sunriseTime,
+      sunsetTime: sunTimes.sunsetTime,
+    }));
+  }
 
   useEffect(() => {
     onSunlightChange?.(sunlightState);
   }, [onSunlightChange, sunlightState]);
+
+  const photoSunTimes = useMemo(() => {
+    if (!photoState || centerLat == null || centerLon == null) return { sunriseTime: '--:--', sunsetTime: '--:--' };
+    const times = resolveSunTimesForLocalDay(photoState.date, centerLat, centerLon, localTimeZone);
+    return { sunriseTime: times.sunriseTime, sunsetTime: times.sunsetTime };
+  }, [photoState, centerLat, centerLon, localTimeZone]);
 
   const handleSunlightStateChange = useCallback((changes: Partial<SunlightState>) => {
     setSunlightState((prev) => {
@@ -487,6 +528,23 @@ export function LidarViewerRightPanelContent({
           aria-label="Redimensionner le panneau"
         />
         <div className="rvc-panel__content">
+          {photo && photoState ? (
+            <PhotoModeSection
+              available={photo.available}
+              state={photoState}
+              open={sectionsOpen.photo}
+              onOpenChange={(open) => setSectionsOpen((prev) => ({ ...prev, photo: open }))}
+              onEnabledChange={(enabled) => {
+                setPhotoState((prev) => (prev ? { ...prev, enabled } : prev));
+                if (enabled) setSectionsOpen((prev) => ({ ...prev, photo: true }));
+              }}
+              onChange={(changes) => setPhotoState((prev) => (prev ? { ...prev, ...changes } : prev))}
+              {...photoSunTimes}
+              cloudBase={photo.cloudBase}
+              capture={captureStatus}
+              onCapture={photo.onCapture}
+            />
+          ) : null}
           {routeState && (
             <RouteSection
               state={routeState}

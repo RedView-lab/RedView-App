@@ -328,7 +328,6 @@ export function DashboardEditor({
   const [contextMenuOverlayContext, setContextMenuOverlayContext] = useState<MapContextMenuOverlayContext>({
     weather: {
       enabled: false,
-      tab: 'forecast',
       date: '',
       time: '',
       forecastDay: 0,

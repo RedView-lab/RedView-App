@@ -1,0 +1,18 @@
+[Unit]
+Description=RedView : contrôle du dépôt, exercice de restauration et rapport hebdomadaire
+Documentation=file:///usr/local/share/doc/redview-backup/README.md
+Wants=network-online.target docker.service
+After=network-online.target docker.service redview-backup.service
+OnFailure=redview-backup-alert@%n.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/redview-backup verify
+Nice=10
+IOSchedulingClass=idle
+CPUWeight=20
+IOWeight=20
+# Les bases restaurées vivent en tmpfs, hors de ce cgroup (conteneurs Docker).
+MemoryHigh=2G
+MemoryMax=3G
+TimeoutStartSec=8h

@@ -34,7 +34,7 @@ export async function fetchRadarMeta(signal?: AbortSignal): Promise<RadarMapsPay
 
     inFlightRadarPromise = (async () => {
       try {
-        // Primary: Local/Vercel serverless proxy with CORS & caching
+        // Primary: same-origin proxy (api/weather.ts), cached server-side
         let res = await fetch('/api/weather/radar.json', { signal: fetchController.signal });
         if (!res.ok) {
           // Fallback: direct public RainViewer endpoint

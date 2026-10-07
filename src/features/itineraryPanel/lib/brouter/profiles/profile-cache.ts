@@ -88,7 +88,7 @@ export async function ensureProfileUploaded(
   }, PROFILE_UPLOAD_TIMEOUT_MS);
   const pending = (async () => {
     try {
-      const result = await uploadCustomProfile(brf, undefined, uploadCtrl.signal);
+      const result = await uploadCustomProfile(brf, uploadCtrl.signal);
       if (result.error) {
         logger.brouter.error('profile compile error', key, result.error);
         throw new Error(`BRouter a refusé le profil : ${result.error}`);

@@ -1,7 +1,9 @@
+import { trackAnalyticsEvent } from '@/shared/lib/analytics';
 import type {
   TileCoord, LidarEvent, LidarEventCallback, CachedTileInfo,
 } from '../types';
 import { translateAppText } from '@/shared/i18n/config';
+import { errorMessage, errorName } from '@/shared/lib/errors';
 import { wgs84ToTileCoord, toWgs84, getTileBounds, tileCoordFileName, tileFootprintSuffix } from './coordConvert';
 import { resolveFileTileCoord } from './fileTiles';
 import { downloadTile, isDownloadCancelledError } from './downloader';
@@ -62,14 +64,17 @@ export class LidarManager {
         this.emit({ type: 'progress', tileCoord: coord, progress });
       }, controller.signal);
 
+      trackAnalyticsEvent({ name: 'lidar_tile_downloaded', data: { territory: coord.territory, outcome: 'ok' } });
       this.emit({ type: 'tileLoaded', tileCoord: coord });
-    } catch (err: any) {
+    } catch (err) {
       if (isDownloadCancelledError(err) || controller.signal.aborted) {
         console.log(`[LiDAR] Tile download cancelled (${coord.xKm}, ${coord.yKm})`);
+        trackAnalyticsEvent({ name: 'lidar_tile_downloaded', data: { territory: coord.territory, outcome: 'cancelled' } });
         this.emit({ type: 'cancelled', tileCoord: coord });
       } else {
         console.error(`[LiDAR] Failed to download tile (${coord.xKm}, ${coord.yKm}):`, err);
-        this.emit({ type: 'error', tileCoord: coord, error: err.message });
+        trackAnalyticsEvent({ name: 'lidar_tile_downloaded', data: { territory: coord.territory, outcome: 'error' } });
+        this.emit({ type: 'error', tileCoord: coord, error: errorMessage(err) });
       }
     } finally {
       signal?.removeEventListener('abort', onExternalAbort);
@@ -96,12 +101,12 @@ export class LidarManager {
     try {
       await deleteTile(coord);
       this.emit({ type: 'tileRemoved', tileCoord: coord });
-    } catch (err: any) {
+    } catch (err) {
       console.error(`[LiDAR] Failed to delete tile (${coord.xKm}, ${coord.yKm}):`, err);
       const hint =
-        err && err.name === 'NoModificationAllowedError'
+        errorName(err) === 'NoModificationAllowedError'
           ? translateAppText("Fichier en cours d'utilisation (ferme le viewer 3D et réessaie).")
-          : err?.message ?? translateAppText('Suppression impossible');
+          : err instanceof Error ? err.message : translateAppText('Suppression impossible');
       this.emit({ type: 'error', tileCoord: coord, error: hint });
     }
   }

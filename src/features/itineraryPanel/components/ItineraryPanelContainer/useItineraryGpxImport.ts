@@ -1,3 +1,4 @@
+import { trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { useCallback } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { parseGpxFile } from '@/features/poi/lib/gpx-loader';
@@ -259,6 +260,7 @@ export function useItineraryGpxImport({
             ...baseTimeline.slice(endIndex),
           ]
           : [...baseTimeline, ...importedWaypoints.poiRows];
+        trackAnalyticsEvent({ name: 'itinerary_added', data: { method: 'gpx' } });
         const id = addItinerary({
           name: route.name?.trim() || file.name.replace(/\.gpx$/i, ''),
           gpxRoute: {

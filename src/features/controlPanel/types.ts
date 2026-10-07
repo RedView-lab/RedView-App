@@ -147,8 +147,6 @@ export interface SlopesState {
   terrainProfile?: 'default' | 'terrain';
 }
 
-export type WeatherTab = 'forecast' | 'trends';
-export type TrendMode = 'date' | 'week';
 export type WeatherLayerKey =
   | 'temperature'
   | 'feelsLike'
@@ -193,7 +191,6 @@ export interface WeatherLayer {
 
 export interface WeatherState {
   enabled: boolean;
-  tab: WeatherTab;
   customDateEnabled: boolean;
   /** ISO yyyy-mm-dd */
   date: string;
@@ -201,8 +198,6 @@ export interface WeatherState {
   time: string;
   /** 0 | 1 | 2 — forecast day offset from today */
   forecastDay: number;
-  /** In trends tab: pick a specific date or a whole week */
-  trendMode: TrendMode;
   layers: WeatherLayer[];
   palettes: Partial<Record<WeatherLayerKey, WeatherPaletteConfig>>;
 }
@@ -324,7 +319,7 @@ export interface ControlPanelHandlers {
   onAltitudeBandBreakpointChange?: (bandIndex: number, field: 'min' | 'max', valueMeters: number) => void;
 
   onWeatherEnabledChange?: (enabled: boolean) => void;
-  onWeatherDateChange?: (dateState: Partial<Pick<WeatherState, 'customDateEnabled' | 'date' | 'time' | 'forecastDay' | 'trendMode'>>) => void;
+  onWeatherDateChange?: (dateState: Partial<Pick<WeatherState, 'customDateEnabled' | 'date' | 'time' | 'forecastDay'>>) => void;
   onWeatherLayerToggle?: (key: WeatherLayerKey, enabled: boolean) => void;
   onWeatherLayerModeChange?: (key: WeatherLayerKey, mode: WeatherRenderMode) => void;
   onWeatherPaletteOpacityChange?: (key: WeatherLayerKey, opacity: number) => void;
@@ -337,7 +332,6 @@ export interface ControlPanelHandlers {
     field: 'min' | 'max',
     value: number,
   ) => void;
-  onWeatherAddAlert?: () => void;
 
   onWindEnabledChange?: (enabled: boolean) => void;
   onWindDateChange?: (changes: Partial<Pick<WindPanelState, 'date' | 'time' | 'forecastDay' | 'particlesEnabled' | 'terrainOverlayEnabled'>>) => void;

@@ -13,6 +13,7 @@ import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import { describeRedviewExportError, exportProjectAsRedview } from '@/features/redviewFile';
 import { useAppI18n } from '@/shared/i18n';
+import { trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { captureMapThumbnail } from '@/shared/utils/mapThumbnail';
 
 import { Checkbox } from './Checkbox';
@@ -120,6 +121,8 @@ export const ExporterPanel = memo(function ExporterPanel({
       throw new Error("Le format sélectionné n'est pas encore pris en charge pour l'itinéraire.");
     }
     const { fileName } = exportItineraryFile(activeItinerary, format);
+    // Moment de valeur : le parcours part vers le GPS / l'appli de navigation.
+    trackAnalyticsEvent({ name: 'route_exported', data: { format, scope: 'itinerary' } });
     return t("{{files}} exporté depuis l'itinéraire actif.", { files: fileName });
   };
 
@@ -129,6 +132,7 @@ export const ExporterPanel = memo(function ExporterPanel({
     // Miniature de la vue actuelle ; à défaut, celle enregistrée du projet.
     const thumbnail = await captureMapThumbnail(map).catch(() => null);
     const result = await exportProjectAsRedview({ project, projectId, thumbnail });
+    trackAnalyticsEvent({ name: 'project_file_exported', data: { from: 'editor' } });
     const exported = t('Projet exporté : {{file}}', { file: result.fileName });
     return result.missingFitFiles.length > 0
       ? `${exported} ${t('{{count}} fichier(s) .fit supprimé(s) du stockage non inclus.', { count: result.missingFitFiles.length })}`

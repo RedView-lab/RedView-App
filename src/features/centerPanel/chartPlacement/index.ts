@@ -1,2 +1,2 @@
-export { ChartPlacementToolProvider, useChartPlacementToolOptional } from './ChartPlacementToolContext';
-export type { ChartPlacementTarget } from './ChartPlacementToolContext';
+export { ChartPlacementToolProvider } from './ChartPlacementToolContext';
+export { useChartPlacementToolOptional, type ChartPlacementTarget } from './useChartPlacementTool';

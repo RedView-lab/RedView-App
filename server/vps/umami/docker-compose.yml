@@ -1,0 +1,46 @@
+# Umami (mesure d'audience anonyme de l'app) — /home/opc/services/umami/
+# Secrets dans le .env voisin (jamais versionné, modèle : .env.example).
+# Version épinglée par digest : une mise à jour = changer tag + digest ici,
+# pg_dump, puis `docker compose pull && docker compose up -d` (migrations
+# Prisma automatiques au démarrage). Plan de mesure : docs/ANALYTICS.md.
+services:
+  umami:
+    image: ghcr.io/umami-software/umami:3.4.0@sha256:85909afc45bdcda1917394594a087421fdbb05610fded0fa9f6fb861abb2f367
+    container_name: umami-app
+    restart: always
+    ports:
+      # Lu par le nginx de l'hôte : analytics.redview.tech (tableau de bord)
+      # et app.redview.tech/s/ (tracker first-party, nginx-stats.conf).
+      - '127.0.0.1:3005:3000'
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      APP_SECRET: ${APP_SECRET}
+      DISABLE_TELEMETRY: '1'
+      # Serveur MCP en lecture seule sur /mcp (clé API « Bearer umami_… »).
+      MCP_ENABLED: '1'
+      REMOVE_TRAILING_SLASH: '1'
+      # IP du visiteur : seulement X-Real-IP, posé par le nginx de l'hôte avec
+      # $remote_addr (un X-Forwarded-For ou CF-Connecting-IP envoyé par le
+      # client ne compte pas).
+      CLIENT_IP_HEADER: x-real-ip
+    depends_on:
+      umami-db:
+        condition: service_healthy
+    init: true
+
+  umami-db:
+    image: postgres:15-alpine
+    # Nom attendu par redview-backup (DUMPS=… postgres:umami-db).
+    container_name: umami-db
+    restart: always
+    environment:
+      POSTGRES_DB: umami
+      POSTGRES_USER: umami_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U umami_user -d umami']
+      interval: 5s
+      timeout: 5s
+      retries: 10

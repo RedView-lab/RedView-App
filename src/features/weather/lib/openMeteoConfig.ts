@@ -1,46 +1,15 @@
-// Centralised Open-Meteo endpoints.
+// Prévisions Open-Meteo de l'app : toujours le proxy same-origin
+// `/api/openmeteo/v1/forecast` (api/openmeteo.ts) vers l'Open-Meteo
+// auto-hébergé sur le VPS — jamais l'API publique (usage non commercial).
 //
-// By default the app calls the Vercel serverless proxy at
-// `/api/openmeteo/v1/...`, which forwards to the self-hosted droplet
-// (`OPENMETEO_UPSTREAM` env var on Vercel — an http://<ip>:8080 URL).
-//
-// You can override the URLs with Vite env vars if you want to point to
-// another self-hosted endpoint, but public Open-Meteo hosts are refused
-// so the app never bypasses the VPS/proxy path.
+// Le VPS sert les modèles Météo-France (AROME France 0,025° puis ARPEGE
+// Europe 0,1°, fusionnés par `meteofrance_seamless`) : France et pays
+// limitrophes, jusqu'à J+4.
 
-import { logger } from '@/shared/lib/logger';
+export const OPENMETEO_FORECAST_URL = '/api/openmeteo/v1/forecast';
 
-const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
+/** Modèle demandé partout : AROME là où il existe (51 h), ARPEGE au-delà. */
+export const OPENMETEO_MODEL = 'meteofrance_seamless';
 
-function isForbiddenPublicEndpoint(url: string): boolean {
-  return /(^|\.)api\.open-meteo\.com(?=[:/]|$)/i.test(url)
-    || /(^|\.)climate-api\.open-meteo\.com(?=[:/]|$)/i.test(url);
-}
-
-function resolveWeatherEndpoint(override: string | undefined, fallback: string): string {
-  const trimmed = override?.trim();
-  if (!trimmed) return fallback;
-  if (isForbiddenPublicEndpoint(trimmed)) {
-    logger.weather.warn(`refused public Open-Meteo override: ${trimmed}. Falling back to ${fallback}.`);
-    return fallback;
-  }
-  return trimmed;
-}
-
-export const OPENMETEO_FORECAST_URL: string =
-  resolveWeatherEndpoint(env.VITE_OPENMETEO_FORECAST_URL, '/api/openmeteo/v1/forecast');
-
-export const OPENMETEO_CLIMATE_URL: string =
-  resolveWeatherEndpoint(env.VITE_OPENMETEO_CLIMATE_URL, '/api/openmeteo/v1/climate');
-
-// Log once at module load so we can confirm in DevTools that we're
-// hitting the self-hosted VPS (via the Vercel proxy) and not a
-// forbidden public Open-Meteo endpoint.
-if (typeof window !== 'undefined') {
-  const isProxy = OPENMETEO_FORECAST_URL.startsWith('/api/openmeteo');
-  const tag = isProxy
-    ? '\u2705 self-hosted VPS (via /api/openmeteo proxy)'
-    : '\uD83D\uDD17 custom override';
-  logger.weather.debug(`forecast endpoint: ${OPENMETEO_FORECAST_URL} — ${tag}`);
-  logger.weather.debug(`climate  endpoint: ${OPENMETEO_CLIMATE_URL}`);
-}
+/** Horizon servi par le VPS (ARPEGE Europe) : aujourd'hui + 3 jours. */
+export const OPENMETEO_FORECAST_DAYS = 4;

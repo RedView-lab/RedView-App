@@ -1,0 +1,18 @@
+[Unit]
+Description=RedView : sauvegarde chiffrée vers Google Drive (restic)
+Documentation=file:///usr/local/share/doc/redview-backup/README.md
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+OnFailure=redview-backup-alert@%n.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/redview-backup run
+# Basse priorité : le site reste prioritaire pendant la sauvegarde.
+Nice=10
+IOSchedulingClass=idle
+CPUWeight=20
+IOWeight=20
+MemoryHigh=2G
+MemoryMax=3G
+TimeoutStartSec=6h

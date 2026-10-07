@@ -1,3 +1,4 @@
+import { countBucket, trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { useCallback, useRef, type ChangeEvent, type Dispatch, type SetStateAction } from 'react';
 import { translateAppText } from '@/shared/i18n';
 import { deleteFitUploads, uploadProjectItineraryFitFiles } from '@/shared/utils/projects';
@@ -73,6 +74,7 @@ export function useFitFileHandlers({
         updateFitRuntime(itineraryId, (prev) => ({ ...prev, uploadNotice: rejectedNotice }));
         return;
       }
+      trackAnalyticsEvent({ name: 'fit_uploaded', data: { files: countBucket(incoming.length) } });
 
       const current = fitRuntimeRef.current[itineraryId] ?? createEmptyFitRuntime();
       const nextFitFiles = mergeFitFiles(current.fitFiles, incoming).slice(0, MAX_FIT_FILES);

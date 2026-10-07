@@ -1,3 +1,4 @@
+import { countBucket, trackAnalyticsEventThrottled } from '@/shared/lib/analytics';
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
 import {
   FitPredictionCancelledError,
@@ -119,6 +120,11 @@ export function usePredictionRun({
     const releaseCompute = computeGateRef.current.beginCompute('prediction', itineraryId);
     const runId = (latestPredictionRunRef.current[itineraryId] ?? 0) + 1;
     latestPredictionRunRef.current[itineraryId] = runId;
+    trackAnalyticsEventThrottled(
+      { name: 'pace_prediction_run', data: { sport: discipline, fit_files: countBucket(itinerary.fitUploads?.length ?? 0) } },
+      `prediction:${itineraryId}`,
+      60_000,
+    );
 
     updateFitRuntime(itineraryId, (current) => ({
       ...current,

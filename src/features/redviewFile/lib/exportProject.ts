@@ -139,7 +139,7 @@ export async function buildRedviewFile(source: RedviewExportSource): Promise<{ b
  * révoquer aussitôt après le clic interrompait parfois l'enregistrement des
  * gros fichiers (Safari, Firefox).
  */
-function downloadBlob(blob: Blob, fileName: string): void {
+export function downloadBlob(blob: Blob, fileName: string): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;

@@ -1,7 +1,7 @@
 /**
- * Vercel serverless proxy → BRouter standalone (DigitalOcean droplet).
+ * Proxy → BRouter standalone (VPS, port 17777 derrière le nginx de l'hôte).
  *
- * Two endpoints muxed on a single function:
+ * Two endpoints muxed on a single handler:
  *
  *   GET  /api/brouter?lonlats=...&profile=trekking[&profile:xxx=...]
  *        → forwards the standard BRouter routing query.
@@ -14,18 +14,16 @@
  *        Use the returned id in subsequent GETs as `profile=custom_<hash>`.
  *
  * Why a proxy?
- *   - Vercel apps run over HTTPS. Calling `http://<vps-ip>` from the
- *     browser triggers a mixed-content block, and we'd also need CORS
- *     headers on every BRouter response.
- *   - With this proxy:
- *       • the browser stays same-origin (`/api/brouter`),
- *       • the VPS IP is hidden in `BROUTER_UPSTREAM` (server-only env var),
- *       • CORS is simply not an issue.
+ *   - BRouter answers plain HTTP and only to local clients (the VPS nginx
+ *     returns 403 otherwise): the browser stays same-origin (`/api/brouter`),
+ *     without mixed content or CORS.
+ *   - Query parameters are whitelisted (no beeline), the A* coefficient is
+ *     bounded server-side and routes are cached compressed.
  *
- * Required env var on Vercel:
- *   BROUTER_UPSTREAM=http://<DROPLET_IP>          (nginx on port 80)
+ * Server env var (see .env.example):
+ *   BROUTER_UPSTREAM=http://<VPS_IP>          (host nginx: /brouter → 127.0.0.1:17777)
  *   # or
- *   BROUTER_UPSTREAM=http://<DROPLET_IP>:17777    (BRouter direct)
+ *   BROUTER_UPSTREAM=http://<VPS_IP>:17777    (BRouter direct)
  */
 import crypto from 'node:crypto';
 import { promisify } from 'node:util';
@@ -54,7 +52,7 @@ const ALLOWED_PARAMS = new Set([
 
 const BEELINE_OVERRIDE = 'profile:add_beeline';
 
-const ROUTE_TIMEOUT_MS = 55_000; // Vercel hobby cap is 60 s.
+const ROUTE_TIMEOUT_MS = 55_000; // Below server.requestTimeout (120 s).
 const UPLOAD_TIMEOUT_MS = 15_000;
 const MAX_PROFILE_BYTES = 100_000;
 const MAX_ERROR_HEADER_CHARS = 200;

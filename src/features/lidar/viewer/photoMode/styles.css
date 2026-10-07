@@ -1,0 +1,99 @@
+/* Photo mode section of the LiDAR viewer's right panel (control panel look). */
+
+.rv-photo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rv-photo__note,
+.rv-photo__hint {
+  margin: 0;
+  color: rgb(var(--rv-ink) / 0.56);
+  font-size: var(--rv-font-size-xs);
+  line-height: 1.4;
+}
+
+.rv-photo__hint {
+  text-align: center;
+}
+
+.rv-photo__presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Slider rows: values carry units ("3 500 m", "25 km/h"), wider than "100 %". */
+.rv-photo .rvc-slopes__opacity-control {
+  width: 172px;
+}
+
+.rv-photo .rvc-slopes__opacity-slider-wrap {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+.rv-photo .rvc-slopes__opacity-value {
+  min-width: 56px;
+  text-align: right;
+}
+
+.rv-photo__chip {
+  all: unset;
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 5px 6px;
+  border-radius: 6px;
+  background: rgb(var(--rv-ink) / 0.06);
+  border: 1px solid rgb(var(--rv-ink) / 0.1);
+  color: var(--rv-text);
+  font-size: var(--rv-font-size-sm);
+  font-weight: 500;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.rv-photo__chip:hover {
+  background: rgb(var(--rv-ink) / 0.12);
+}
+
+.rv-photo__chip:focus-visible {
+  outline: 2px solid rgb(var(--rv-ink) / 0.45);
+  outline-offset: 1px;
+}
+
+.rv-photo__divider {
+  height: 1px;
+  margin: 2px 0;
+  background: rgb(var(--rv-ink) / 0.08);
+}
+
+.rv-photo__capture {
+  margin-top: 4px;
+}
+
+.rv-photo__capture:disabled {
+  cursor: progress;
+  opacity: 0.85;
+}
+
+/* Interface hidden for framing a photo (I). */
+body[data-rv-photo-hide-ui] #viewer-panel,
+body[data-rv-photo-hide-ui] #viewer-right-panel,
+body[data-rv-photo-hide-ui] .lidar-viewer-right-collapsed-rail,
+body[data-rv-photo-hide-ui] #viewer-dock,
+body[data-rv-photo-hide-ui] #stats,
+body[data-rv-photo-hide-ui] #controls,
+body[data-rv-photo-hide-ui] #watermark,
+body[data-rv-photo-hide-ui] .rv-lidar-tools-ui,
+body[data-rv-photo-hide-ui] .rv-lidar-comments-host,
+body[data-rv-photo-hide-ui] .rv-lidar-route-handles-canvas {
+  display: none !important;
+}

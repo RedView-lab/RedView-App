@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { isTypingTarget } from '@/shared/lib/isTypingTarget';
+import { trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { isGoogleEarthShortcut, openGoogleEarthView } from '@/shared/lib/googleEarthView';
 import { googleEarthViewFromMap } from '../lib/googleEarthCamera';
 
@@ -13,6 +14,7 @@ export function useGoogleEarthShortcut(map: MapboxMap | null): void {
       const view = googleEarthViewFromMap(map);
       if (!view) return;
       event.preventDefault();
+      trackAnalyticsEvent({ name: 'google_earth_opened', data: { from: 'map' } });
       openGoogleEarthView(view);
     };
     window.addEventListener('keydown', handleKeyDown);

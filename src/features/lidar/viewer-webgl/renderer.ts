@@ -540,7 +540,7 @@ export class WebGLTerrainRenderer {
         this.gl,
         this.slopeTexture,
         state.bands,
-        state.colorization as any,
+        state.colorization,
       );
     }
   }
@@ -553,7 +553,7 @@ export class WebGLTerrainRenderer {
         this.gl,
         this.altitudeTexture,
         state.bands,
-        state.colorization as any,
+        state.colorization,
         this.maxAltitude || DEFAULT_MAX_ALTITUDE_M,
       );
     }

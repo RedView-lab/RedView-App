@@ -159,16 +159,14 @@ export async function fetchBrouterRoute(
 
 /**
  * Upload a custom BRF profile. The server compiles it and returns a
- * `custom_<timestamp>` id we can pass back as `?profile=...`. If `updateId`
- * is provided, the existing profile is overwritten in place (useful when
- * the user iterates in Expert Mode).
+ * `custom_<hash>` id (derived from the profile content) we can pass back
+ * as `?profile=...`.
  */
 export async function uploadCustomProfile(
   brf: string,
-  updateId?: string,
   signal?: AbortSignal,
 ): Promise<UploadedProfile> {
-  const url = buildProfileUploadUrl(updateId);
+  const url = buildProfileUploadUrl();
   const res = await fetch(url, {
     method: 'POST',
     signal,

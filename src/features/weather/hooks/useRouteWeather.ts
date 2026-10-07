@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Itinerary } from '@/features/itineraryPanel/types';
+import { logger } from '@/shared/lib/logger';
 import {
   fetchRouteWeatherDataset,
   type RouteWeatherDataset,
@@ -23,8 +24,6 @@ interface UseRouteWeatherResult {
   weatherByItinerary: Record<string, RouteWeatherDataset | null>;
   /** Itinéraires pour lesquels aucune prévision n'a pu être obtenue (erreur, hors horizon). */
   unavailableItineraryIds: string[];
-  loading: boolean;
-  error: string | null;
 }
 
 function readTotalTimeHours(prediction: unknown): number | null {
@@ -43,8 +42,6 @@ export function useRouteWeather({
     Record<string, RouteWeatherDataset | null>
   >({});
   const [unavailableItineraryIds, setUnavailableItineraryIds] = useState<string[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -62,8 +59,6 @@ export function useRouteWeather({
     const defaultTime = fallbackTime || minutesToTime(now.getHours() * 60);
 
     let isMounted = true;
-    setLoading(true);
-    setError(null);
 
     async function loadWeatherForRoutes() {
       try {
@@ -102,13 +97,12 @@ export function useRouteWeather({
             return next;
           });
           setUnavailableItineraryIds(entries.filter(([, ds]) => !ds).map(([id]) => id));
-          setLoading(false);
         }
       } catch (err) {
         if (!isMounted || controller.signal.aborted) return;
-        const msg = err instanceof Error ? err.message : String(err);
-        setError(msg);
-        setLoading(false);
+        // fetchRouteWeatherDataset rend null sur un échec attendu (amont, horizon) :
+        // ici, une erreur inattendue ; les données précédentes restent affichées.
+        logger.weather.warn('route weather failed', err);
       }
     }
 
@@ -123,7 +117,5 @@ export function useRouteWeather({
   return {
     weatherByItinerary,
     unavailableItineraryIds,
-    loading,
-    error,
   };
 }

@@ -74,7 +74,7 @@ fi
 end
 
 section 'BRouter — durée des calculs sur 24 h (ms)'
-sudo journalctl -u brouter --since '-24h' -o cat 2>/dev/null \
+sudo journalctl --namespace=brouter -u brouter --since '-24h' -o cat 2>/dev/null \
   | grep -oE 'ms=[0-9]+' | cut -d= -f2 | sort -n \
   | awk 'function q(f,  i) { i = int(NR * f); if (i < NR * f) i++; return v[i < 1 ? 1 : i] }
       { v[NR] = $1 }
@@ -98,6 +98,7 @@ echo
 sudo du -xsh /var/lib/containerd /var/lib/docker /opt/brouter /opt/poi-server/data \
   /var/cache/dnf /var/tmp /var/www/weather /var/backups 2>/dev/null
 sudo journalctl --disk-usage
+sudo journalctl --namespace=brouter --disk-usage
 end
 
 section 'Volumes Docker'

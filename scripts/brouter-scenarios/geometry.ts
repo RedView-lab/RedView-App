@@ -15,23 +15,6 @@ export function haversineKm(a: Point, b: Point): number {
   return 2 * radiusKm * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-function buildDetourPoint(start: Point, end: Point, along: number, offsetKm: number): Point {
-  const meanLatRad = (((start.lat + end.lat) / 2) * Math.PI) / 180;
-  const kmPerDegLon = Math.max(25, 111.32 * Math.cos(meanLatRad));
-  const kmPerDegLat = 110.57;
-  const dxKm = (end.lon - start.lon) * kmPerDegLon;
-  const dyKm = (end.lat - start.lat) * kmPerDegLat;
-  const lengthKm = Math.max(1, Math.hypot(dxKm, dyKm));
-  const perpX = -dyKm / lengthKm;
-  const perpY = dxKm / lengthKm;
-  const baseLat = start.lat + ((end.lat - start.lat) * along);
-  const baseLon = start.lon + ((end.lon - start.lon) * along);
-  return {
-    lat: Math.max(-85, Math.min(85, baseLat + ((perpY * offsetKm) / kmPerDegLat))),
-    lon: Math.max(-180, Math.min(180, baseLon + ((perpX * offsetKm) / kmPerDegLon))),
-  };
-}
-
 export function buildAnchoredDetourPoint(anchor: Point, tangentStart: Point, tangentEnd: Point, offsetKm: number): Point {
   const meanLatRad = (((tangentStart.lat + tangentEnd.lat) / 2) * Math.PI) / 180;
   const kmPerDegLon = Math.max(25, 111.32 * Math.cos(meanLatRad));

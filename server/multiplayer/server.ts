@@ -5,7 +5,7 @@ import type { Duplex } from 'node:stream';
 
 import { WebSocketServer, type WebSocket } from 'ws';
 
-import { getClientIp, rateLimitKeyForIp } from '../http-security.mjs';
+import { createRateLimiter, getClientIp, rateLimitKeyForIp } from '../http-security.mjs';
 import { SOCKET_PROTOCOL, tokenFromProtocols, type ServerErrorCode } from '../../src/features/collab/protocol.ts';
 import { WIRE_MAX_MESSAGE_BYTES } from '../../src/features/collab/wire.ts';
 import { createAuthenticator, type AuthOptions, type Authenticator, type Identity } from './auth.ts';
@@ -149,21 +149,10 @@ function createCounter(max: () => number) {
   };
 }
 
-/** Fenêtre d'une minute par clé (ouvertures par IP), bornée en nombre de clés. */
+/** Fenêtre d'une minute par clé (ouvertures par IP), bornée en nombre de clés (limiteur de l'app). */
 function createMinuteLimiter(max: () => number) {
-  const windows = new Map<string, { count: number; until: number }>();
-  return (key: string): boolean => {
-    const now = Date.now();
-    let window = windows.get(key);
-    if (!window || window.until <= now) {
-      windows.delete(key);
-      window = { count: 0, until: now + 60_000 };
-      windows.set(key, window);
-      if (windows.size > 50_000) windows.delete(windows.keys().next().value!);
-    }
-    window.count += 1;
-    return window.count <= max();
-  };
+  const hit = createRateLimiter({ windowMs: 60_000, maxKeys: 50_000 });
+  return (key: string): boolean => hit(key, max());
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {

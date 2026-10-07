@@ -16,6 +16,7 @@ import {
   type ShadowSweepScratch,
 } from '@/features/sunlight/lib/shadowSweep';
 import { sortSunlightBands, sunlightBandIndex } from '@/features/sunlight/lib/sunlightBands';
+import { sunDirectionFromAzAlt } from '../viewer/photoMode/lib/sunDirection';
 import type { SunlightBand, SunlightState } from '@/features/controlPanel/types';
 import type { PointCloudBounds } from '../types';
 import type { PrecalcResponse, PrecalcError } from './sunlightPrecalcWorker';
@@ -300,15 +301,8 @@ export class SunlightController {
     const sunGridAzimuthDeg = sunAzimuthDeg + this.trueNorthGridBearingDeg;
 
     // 2. Conversion en coordonnées cartésiennes 3D du visualiseur (+X Est, +Y Haut, +Z Sud, -Z Nord)
-    const azRad = (sunGridAzimuthDeg * Math.PI) / 180;
     const altRad = (sunAltitudeDeg * Math.PI) / 180;
-    const cosAlt = Math.cos(altRad);
-
-    const sunDir: [number, number, number] = [
-      cosAlt * Math.sin(azRad),         // +X = Est
-      Math.sin(altRad),                 // +Y = Haut
-      -cosAlt * Math.cos(azRad),        // +Z = Sud, -Z = Nord
-    ];
+    const sunDir = sunDirectionFromAzAlt(sunAzimuthDeg, sunAltitudeDeg, this.trueNorthGridBearingDeg);
 
     // 3. Modélisation physique de la lumière et du ciel
     const isAboveHorizon = sunAltitudeDeg > 0;

@@ -128,6 +128,48 @@ function scheduleStorageWrite(state: LidarRouteOverlayState): void {
   }, 100);
 }
 
+type AppRoutePoints = NonNullable<Itinerary['gpxRoute']>['points'];
+
+const NO_ROUTE_POINTS: AppRoutePoints = [];
+
+/**
+ * Copie viewer de chaque tableau de points de l'app. Le store remplace le
+ * tableau quand la trace change : une trace inchangée garde la même copie
+ * d'un état à l'autre, sans la refaire (un ultra de 1 200 km : ~120 000
+ * points recopiés à chaque modification du projet).
+ */
+const overlayPointsByRoute = new WeakMap<AppRoutePoints, LidarRouteOverlayPoint[]>();
+
+function toOverlayPoints(rawPoints: AppRoutePoints): LidarRouteOverlayPoint[] {
+  let points = overlayPointsByRoute.get(rawPoints);
+  if (!points) {
+    points = rawPoints.map((pt) => ({
+      lat: pt.lat,
+      lon: pt.lon,
+      elevationM: Number.isFinite(pt.elevationM) ? pt.elevationM : null,
+      distanceM: Number.isFinite(pt.distanceM) ? pt.distanceM : undefined,
+    }));
+    overlayPointsByRoute.set(rawPoints, points);
+  }
+  return points;
+}
+
+function sameOverlayRoutes(a: readonly LidarRouteOverlayItem[], b: readonly LidarRouteOverlayItem[]): boolean {
+  return a.length === b.length && a.every((route, i) => {
+    const other = b[i];
+    return other !== undefined
+      && route.id === other.id
+      && route.name === other.name
+      && route.color === other.color
+      && route.opacity === other.opacity
+      && route.visible === other.visible
+      && route.points === other.points;
+  });
+}
+
+/** Traces du dernier état publié par l'app (onglet courant). */
+let lastPublishedRoutes: readonly LidarRouteOverlayItem[] | null = null;
+
 export function extractLidarRouteOverlayState(
   itineraries: readonly Itinerary[] | null | undefined,
   source: 'redview_app' | 'lidar_viewer' = 'redview_app',
@@ -144,22 +186,13 @@ export function extractLidarRouteOverlayState(
   const routes: LidarRouteOverlayItem[] = [];
 
   for (const itinerary of itineraries) {
-    const rawPoints = itinerary.gpxRoute?.points ?? [];
-
-    const points: LidarRouteOverlayPoint[] = rawPoints.map((pt) => ({
-      lat: pt.lat,
-      lon: pt.lon,
-      elevationM: Number.isFinite(pt.elevationM) ? pt.elevationM : null,
-      distanceM: Number.isFinite(pt.distanceM) ? pt.distanceM : undefined,
-    }));
-
     routes.push({
       id: itinerary.id,
       name: itinerary.name || translateAppText('Itinéraire'),
       color: normalizeRouteColor(itinerary.color),
       opacity: normalizeRouteOpacity(itinerary.opacity),
       visible: itinerary.visible !== false,
-      points,
+      points: toOverlayPoints(itinerary.gpxRoute?.points ?? NO_ROUTE_POINTS),
     });
   }
 
@@ -171,11 +204,25 @@ export function extractLidarRouteOverlayState(
   };
 }
 
+/**
+ * Publie les traces au viewer (BroadcastChannel + copie localStorage).
+ * `onlyIfChanged` : rien n'est envoyé quand aucune trace n'a changé depuis la
+ * dernière publication (nom, couleur, opacité, visibilité, points) — la
+ * plupart des modifications du projet (horaires, POI, prédictions…) ne
+ * touchent pas les traces, et chaque envoi clone et sérialise tous leurs
+ * points. Les appels explicites (ouverture du viewer, retour au tracé
+ * stocké) publient toujours.
+ */
 export function syncLidarRouteOverlay(
   itineraries: readonly Itinerary[] | null | undefined,
   source: 'redview_app' | 'lidar_viewer' = 'redview_app',
+  { onlyIfChanged = false }: { onlyIfChanged?: boolean } = {},
 ): LidarRouteOverlayState {
   const state = extractLidarRouteOverlayState(itineraries, source);
+  if (onlyIfChanged && lastPublishedRoutes && sameOverlayRoutes(lastPublishedRoutes, state.routes)) {
+    return state;
+  }
+  lastPublishedRoutes = state.routes;
 
   if (typeof window !== 'undefined') {
     scheduleStorageWrite(state);

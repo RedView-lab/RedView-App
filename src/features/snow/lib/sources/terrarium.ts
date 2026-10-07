@@ -4,14 +4,19 @@
 // Two uses: the model orography of every AROME cell (mean ground height over
 // the cell, slightly widened like the model's smoothed orography) and the
 // far-field DEM around the LiDAR scene (horizons, outlying wind shelter,
-// drift inflow). Terrarium: height = R·256 + G + B/256 − 32768 (m).
+// drift inflow). Tiles are fetched and decoded by shared/lib/terrarium.ts.
 // ============================================================================
 
+import {
+  TERRARIUM_TILE_SIZE as TILE,
+  fetchTerrariumTile,
+  latToTileY as latToY,
+  lonToTileX as lonToX,
+} from '@/shared/lib/terrarium';
 import type { SceneFrame } from '../engine/grid';
 import type { CoarseSnowGrid, FarDem } from '../engine/types';
 
-const TERRARIUM_BASE = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium';
-const TILE = 256;
+export { terrariumSupported } from '@/shared/lib/terrarium';
 
 interface TileMosaic {
   zoom: number;
@@ -21,28 +26,6 @@ interface TileMosaic {
   rows: number;
   /** Heights, (rows·256) × (cols·256), NaN where a tile failed. */
   data: Float32Array;
-}
-
-function lonToX(lon: number, zoom: number): number {
-  return ((lon + 180) / 360) * 2 ** zoom;
-}
-
-function latToY(lat: number, zoom: number): number {
-  const s = Math.sin((lat * Math.PI) / 180);
-  return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * 2 ** zoom;
-}
-
-async function decodeTile(blob: Blob): Promise<Float32Array> {
-  const bitmap = await createImageBitmap(blob, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
-  const canvas = new OffscreenCanvas(TILE, TILE);
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  if (!ctx) throw new Error('2D context unavailable');
-  ctx.drawImage(bitmap, 0, 0);
-  bitmap.close();
-  const px = ctx.getImageData(0, 0, TILE, TILE).data;
-  const out = new Float32Array(TILE * TILE);
-  for (let i = 0; i < out.length; i++) out[i] = px[i * 4] * 256 + px[i * 4 + 1] + px[i * 4 + 2] / 256 - 32768;
-  return out;
 }
 
 async function loadMosaic(lonMin: number, latMin: number, lonMax: number, latMax: number, zoom: number, signal?: AbortSignal): Promise<TileMosaic> {
@@ -58,16 +41,11 @@ async function loadMosaic(lonMin: number, latMin: number, lonMax: number, latMax
   await Promise.all(Array.from({ length: cols * rows }, async (_, k) => {
     const tx = x0 + (k % cols);
     const ty = y0 + Math.floor(k / cols);
-    try {
-      const res = await fetch(`${TERRARIUM_BASE}/${zoom}/${tx}/${ty}.png`, { signal });
-      if (!res.ok) return;
-      const tile = await decodeTile(await res.blob());
-      const ox = (tx - x0) * TILE;
-      const oy = (ty - y0) * TILE;
-      for (let r = 0; r < TILE; r++) data.set(tile.subarray(r * TILE, (r + 1) * TILE), (oy + r) * width + ox);
-    } catch (err) {
-      if (signal?.aborted) throw err;
-    }
+    const tile = await fetchTerrariumTile(zoom, tx, ty, signal);
+    if (!tile) return;
+    const ox = (tx - x0) * TILE;
+    const oy = (ty - y0) * TILE;
+    for (let r = 0; r < TILE; r++) data.set(tile.subarray(r * TILE, (r + 1) * TILE), (oy + r) * width + ox);
   }));
   return { zoom, x0, y0, cols, rows, data };
 }
@@ -87,10 +65,6 @@ function heightAt(m: TileMosaic, lon: number, lat: number): number {
   const a = m.data[i] + (m.data[i + 1] - m.data[i]) * tx;
   const b = m.data[i + w] + (m.data[i + w + 1] - m.data[i + w]) * tx;
   return a + (b - a) * ty;
-}
-
-export function terrariumSupported(): boolean {
-  return typeof OffscreenCanvas !== 'undefined' && typeof createImageBitmap === 'function';
 }
 
 /** Mean ground height of every coarse cell (5 × 5 samples over 1.5 cell), NaN where unknown. */

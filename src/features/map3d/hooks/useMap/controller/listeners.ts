@@ -6,6 +6,7 @@ import { installViewportPrefetch } from '../../../lib/viewportPrefetch';
 import type { Ctx } from './context';
 import { installDemWantedTilesSync } from './demWantedTiles';
 import { clearVisibleTimer } from './visibleClock';
+import { logger } from '@/shared/lib/logger';
 
 /**
  * Tile-tracking listeners + style/idle event hooks. Centralised so the
@@ -187,13 +188,13 @@ export function attachListeners(ctx: Ctx): void {
     if (event.data?.type === 'ZONE_SLOPE_PROGRESS') {
       const { phase, loaded, total, percent } = event.data;
       if (phase === 'low' && (loaded === 0 || loaded === 1)) {
-        console.log(`%c[DEM PENTE]%c 🚀 Démarrage calcul zone : ${total} tuiles z14`, 'background:#e11d48;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px;', '');
+        logger.map3d.info(`zone slopes: start, ${total} z14 tiles`);
       } else if (phase === 'low' && (loaded === total || loaded % 10 === 0)) {
-        console.log(`%c[DEM PENTE]%c ⚡ Phase 1 (Aperçu 30m) : ${loaded}/${total} (${percent}%)`, 'background:#f59e0b;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px;', '');
+        logger.map3d.info(`zone slopes: 30 m preview ${loaded}/${total} (${percent}%)`);
       } else if (phase === 'hd' && (loaded === total || loaded % 5 === 0)) {
-        console.log(`%c[DEM PENTE]%c 🏔️ Phase 2 (LiDAR HD) : ${loaded}/${total} (${percent}%)`, 'background:#3b82f6;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px;', '');
+        logger.map3d.info(`zone slopes: LiDAR HD ${loaded}/${total} (${percent}%)`);
       } else if (phase === 'done') {
-        console.log(`%c[DEM PENTE]%c ✨ Pentes LiDAR HD prêtes à 100% (${total} tuiles)`, 'background:#10b981;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px;', '');
+        logger.map3d.info(`zone slopes: LiDAR HD ready (${total} tiles)`);
         // Safety reload on done
         try {
           const sourceCaches = (map.style as unknown as {

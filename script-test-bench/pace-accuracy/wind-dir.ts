@@ -1,5 +1,5 @@
 /**
- * Vent de face historique moyen (Open-Meteo ERA5) par sortie d'un dossier, et
+ * Vent de face historique moyen (ERA5, cf. lib/wind.ts) par sortie d'un dossier, et
  * effet sur la prédiction (modèle calibré sur les autres sorties).
  *
  *   npx tsx script-test-bench/pace-accuracy/wind-dir.ts <dossier> <préfixe> [id…]

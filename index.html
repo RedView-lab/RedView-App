@@ -25,10 +25,6 @@
     <meta name="twitter:title" content="RedView — Cartographie 3D Haute Résolution & LiDAR Outdoor" />
     <meta name="twitter:description" content="L'environnement 3D géospatial haute résolution (40 cm) et LiDAR (20 cm) pour préparer, explorer et sécuriser vos aventures outdoor." />
     <meta name="twitter:image" content="https://redview.tech/images/og/redview-preview.png?v=2" />
-    <!-- Rethink Sans — the app's only font (token --rv-font-sans,
-         src/shared/styles/typography.css). Without this, system-ui only ships
-         Regular + Bold, so every SemiBold (600) / Medium (500) request
-         renders as full Bold. -->
         <!-- Tile-origin warmup. Each preconnect saves the cold DNS+TCP+TLS
              handshake (~150–400 ms one-shot) on the FIRST tile fetched from
              that origin — multiplied across France/Spain/Norway/Switzerland/
@@ -49,12 +45,6 @@
         <link rel="preconnect" href="https://hoydedata.no" crossorigin />
         <link rel="dns-prefetch" href="https://s3.amazonaws.com" />
         <link rel="preconnect" href="https://s3.amazonaws.com" crossorigin />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Rethink+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500;1,600;1,700;1,800&display=swap"
-    />
     <!-- Écran de démarrage, peint avant le JS (plus de page blanche) puis repris
          tel quel par BootstrapScreen (src/App.tsx). Thème de l'OS tant que
          initAppTheme() n'a pas posé data-rv-theme, puis les jetons de l'app
@@ -130,13 +120,7 @@
         <span class="rv-boot__label">Chargement de RedView…</span>
       </div>
     </div>
-    <script
-      defer
-      src="https://analytics.redview.tech/script.js"
-      data-website-id="794b9933-1d87-4e8c-af69-a09982cc2353"
-      data-performance="true"
-    ></script>
-    <!-- recorder.js (session replay) is injected by src/App.tsx only once an authenticated user is confirmed. -->
+    <!-- Mesure d'audience anonyme et sans cookie : tracker first-party injecté par src/shared/lib/analytics/loader.ts. -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -1,0 +1,541 @@
+#!/usr/bin/env bash
+# redview-backup — sauvegarde chiffrée, vérifiée et surveillée du VPS RedView.
+# Source : server/vps/backup/ du dépôt redview-app ; mode d'emploi et reprise
+# après sinistre dans server/vps/backup/README.md.
+#
+#   redview-backup run            sauvegarde (timer quotidien)
+#   redview-backup verify         prune + contrôle du dépôt + exercice de restauration
+#                                 + rapport hebdomadaire par e-mail (timer hebdomadaire)
+#   redview-backup drill          exercice de restauration seul
+#   redview-backup status         état lisible (âge, tailles, derniers contrôles)
+#   redview-backup snapshots      instantanés du dépôt
+#   redview-backup alert <unité>  e-mail d'échec (appelé par OnFailure= des unités)
+#   redview-backup test-alert     envoie un e-mail de test
+#   redview-backup restic …       restic avec la configuration du dépôt
+#
+# Un instantané = l'état complet du serveur à un instant : dumps logiques des
+# bases (MariaDB d'Appwrite, PostgreSQL de Coolify/GlitchTip/Umami, faits dans
+# leur propre conteneur, sans copier aucun mot de passe), fichiers (volumes
+# Appwrite, configurations, /etc, services) et manifeste système (paquets,
+# conteneurs, images, pare-feu, SELinux) pour reconstruire ailleurs.
+
+set -Eeuo pipefail
+umask 077
+
+readonly CONFIG_DIR=${REDVIEW_BACKUP_CONFIG_DIR:-/etc/redview-backup}
+readonly STATE_DIR=/var/lib/redview-backup
+readonly STAGING_DIR=$STATE_DIR/staging
+readonly MANIFEST_DIR=$STATE_DIR/manifest
+readonly STATUS_FILE=$STATE_DIR/status.json
+readonly LOCK_FILE=/run/redview-backup.lock
+
+[[ -r $CONFIG_DIR/backup.env ]] || { echo "redview-backup: $CONFIG_DIR/backup.env introuvable" >&2; exit 1; }
+set -a
+# shellcheck source=/dev/null
+. "$CONFIG_DIR/backup.env"
+set +a
+
+: "${RESTIC_REPOSITORY:?RESTIC_REPOSITORY manquant dans backup.env}"
+: "${RESTIC_PASSWORD_FILE:?RESTIC_PASSWORD_FILE manquant dans backup.env}"
+RESTIC_HOST=${RESTIC_HOST:-redview-vps}
+KEEP_DAILY=${KEEP_DAILY:-7}
+KEEP_WEEKLY=${KEEP_WEEKLY:-5}
+KEEP_MONTHLY=${KEEP_MONTHLY:-12}
+CHECK_SUBSETS=${CHECK_SUBSETS:-12}
+# Une baisse plus forte que ce seuil (en %) d'un instantané ou d'un dump par
+# rapport au précédent déclenche une alerte : volume vidé, table tronquée…
+ANOMALY_DROP_PCT=${ANOMALY_DROP_PCT:-30}
+# « moteur:conteneur » ; le conteneur fournit lui-même ses identifiants.
+DUMPS=${DUMPS:-"mariadb:appwrite-mariadb postgres:coolify-db postgres:glitchtip-db postgres:umami-db"}
+# Tables MariaDB dont seule la structure est sauvegardée : journaux d'audit
+# (95 % de la base, chaque écriture d'un projet y est recopiée) et compteurs
+# anti-abus, inutiles à une restauration.
+MARIADB_IGNORE_TABLE_DATA=${MARIADB_IGNORE_TABLE_DATA:-"_1_audit _console_audit _1_abuse _console_abuse"}
+# Tables dont le nombre de lignes est relevé à la sauvegarde puis comparé
+# après restauration (motifs SQL LIKE).
+MARIADB_COUNT_TABLES=${MARIADB_COUNT_TABLES:-"_1_users _1_teams _1_memberships _1_database_%"}
+ALERT_EMAIL_FROM=${ALERT_EMAIL_FROM:-"RedView VPS <noreply@redview.tech>"}
+RESTIC_RCLONE_ARGS=${RESTIC_RCLONE_ARGS:-"serve restic --stdio --drive-chunk-size=64M"}
+export RESTIC_REPOSITORY RESTIC_PASSWORD_FILE RESTIC_CACHE_DIR RESTIC_PACK_SIZE RESTIC_COMPRESSION RCLONE_CONFIG
+
+log() { printf '%s\n' "$*"; }
+warn() { printf 'ATTENTION : %s\n' "$*" >&2; }
+die() { printf 'ÉCHEC : %s\n' "$*" >&2; exit 1; }
+trap 'printf "ÉCHEC : commande « %s » (ligne %s, code %s)\n" "$BASH_COMMAND" "$LINENO" "$?" >&2' ERR
+
+restic_() { restic -o rclone.args="$RESTIC_RCLONE_ARGS" "$@"; }
+
+take_lock() {
+  exec 9>"$LOCK_FILE"
+  flock -w "${1:-0}" 9 || die "une autre opération de sauvegarde est en cours"
+}
+
+now_iso() { date -u +%FT%TZ; }
+
+status_update() { # filtre jq + arguments jq
+  local filter=$1 tmp
+  shift
+  tmp=$(mktemp "$STATE_DIR/status.XXXXXX")
+  if [[ -s $STATUS_FILE ]]; then jq "$@" "$filter" "$STATUS_FILE" > "$tmp"; else jq -n "$@" "$filter" > "$tmp"; fi
+  chmod 0644 "$tmp"
+  mv -f "$tmp" "$STATUS_FILE"
+}
+
+human() { numfmt --to=iec-i --suffix=B --format='%.1f' "${1:-0}" 2>/dev/null || echo "${1:-0} o"; }
+
+# ---------------------------------------------------------------- e-mail
+
+# Clé Resend de l'app, lue dans son conteneur au moment de l'envoi (une
+# rotation de clé est suivie d'elle-même) ; copie locale en secours si l'app
+# est arrêtée — c'est justement là qu'une alerte compte.
+resend_key() {
+  local c k
+  if [[ -n ${APP_CONTAINER_PREFIX:-} ]] \
+    && c=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -m1 "^${APP_CONTAINER_PREFIX}") \
+    && k=$(docker exec "$c" printenv RESEND_API_KEY 2>/dev/null) && [[ -n $k ]]; then
+    if [[ ! -s $CONFIG_DIR/resend.key ]] || [[ $(<"$CONFIG_DIR/resend.key") != "$k" ]]; then
+      printf '%s' "$k" > "$CONFIG_DIR/resend.key.tmp" && mv -f "$CONFIG_DIR/resend.key.tmp" "$CONFIG_DIR/resend.key"
+    fi
+    printf '%s' "$k"
+    return 0
+  fi
+  [[ -s $CONFIG_DIR/resend.key ]] && { cat "$CONFIG_DIR/resend.key"; return 0; }
+  return 1
+}
+
+send_mail() { # sujet corps
+  local subject=$1 body=$2 key payload
+  [[ -n ${ALERT_EMAIL_TO:-} ]] || { warn "ALERT_EMAIL_TO vide : pas d'e-mail ($subject)"; return 1; }
+  key=$(resend_key) || { warn "aucune clé Resend disponible : pas d'e-mail ($subject)"; return 1; }
+  payload=$(jq -n --arg from "$ALERT_EMAIL_FROM" --arg to "$ALERT_EMAIL_TO" --arg s "$subject" --arg t "$body" \
+    '{from: $from, to: [$to], subject: $s, text: $t}')
+  # Clé passée par un descripteur, jamais sur la ligne de commande (visible dans ps).
+  curl -fsS --max-time 30 --retry 3 --retry-delay 5 https://api.resend.com/emails \
+    -H @<(printf 'Authorization: Bearer %s\n' "$key") \
+    -H 'Content-Type: application/json' --data-binary "$payload" > /dev/null
+}
+
+heartbeat() { # ok|fail — URL de type healthchecks.io, optionnelle
+  [[ -n ${HEARTBEAT_URL:-} ]] || return 0
+  local url=$HEARTBEAT_URL
+  [[ $1 == fail ]] && url=$url/fail
+  curl -fsS --max-time 15 --retry 3 "$url" > /dev/null || warn "heartbeat injoignable"
+}
+
+# ---------------------------------------------------------------- manifeste
+
+write_manifest() {
+  rm -rf "$MANIFEST_DIR"
+  mkdir -p "$MANIFEST_DIR"
+  local d=$MANIFEST_DIR
+  run_to() { local out=$1; shift; { "$@"; } > "$d/$out" 2>&1 || echo "(code $?)" >> "$d/$out"; }
+  run_to system.txt sh -c 'date -u; hostnamectl; cat /etc/os-release; uname -a; nproc; free -h; timedatectl'
+  run_to packages.txt sh -c "rpm -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n' | sort"
+  run_to systemd-enabled.txt systemctl list-unit-files --state=enabled --no-legend
+  run_to systemd-timers.txt systemctl list-timers --all --no-legend
+  run_to docker.txt sh -c 'docker version; docker info'
+  run_to containers.txt docker ps -a --format '{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
+  run_to images.txt sh -c "docker images --digests --format '{{.Repository}}:{{.Tag}}\t{{.Digest}}\t{{.ID}}' | sort"
+  run_to compose-projects.txt docker compose ls --all
+  run_to volumes.txt docker volume ls
+  run_to networks.txt docker network ls
+  # Contient les variables d'environnement des conteneurs : reste dans le dépôt chiffré.
+  run_to containers-inspect.json sh -c 'docker inspect $(docker ps -aq)'
+  run_to networks-inspect.json sh -c 'docker network inspect $(docker network ls -q)'
+  run_to firewall.txt sh -c 'firewall-cmd --list-all-zones; nft list ruleset'
+  run_to network.txt sh -c 'ip -br addr; ip route; cat /etc/resolv.conf'
+  run_to disks.txt sh -c 'lsblk -f; df -hT; swapon --show'
+  run_to selinux.txt sh -c 'getenforce; semanage fcontext -l -C; semanage port -l -C; semanage boolean -l -C'
+  run_to crontabs.txt sh -c 'for u in root opc; do echo "== $u"; crontab -l -u "$u"; done'
+  run_to sizes.txt du -sh /opt/* /data/coolify /var/lib/docker/volumes /var/www
+  chmod -R go-rwx "$d"
+}
+
+# ---------------------------------------------------------------- dumps
+
+dump_mariadb() { # conteneur fichier
+  local c=$1 out=$2 db counts
+  db=$(docker exec "$c" sh -c 'printf %s "${MARIADB_DATABASE:-${MYSQL_DATABASE:-appwrite}}"')
+  docker exec -e IGNORE_TABLES="$MARIADB_IGNORE_TABLE_DATA" "$c" sh -c '
+    export MYSQL_PWD="${MARIADB_ROOT_PASSWORD:-$MYSQL_ROOT_PASSWORD}"
+    db="${MARIADB_DATABASE:-${MYSQL_DATABASE:-appwrite}}"
+    set --
+    for t in $IGNORE_TABLES; do set -- "$@" "--ignore-table-data=$db.$t"; done
+    exec mariadb-dump -uroot --single-transaction --quick --routines --events --triggers \
+      --hex-blob --max-allowed-packet=1G --default-character-set=utf8mb4 "$@" --databases "$db"
+  ' > "$out"
+  tail -c 512 "$out" | grep -q 'Dump completed' || die "dump MariaDB $c incomplet (pas de « Dump completed »)"
+  # Lignes des tables clés, relevées juste après le dump : l'exercice de
+  # restauration compare la base restaurée à ces nombres.
+  counts=$(docker exec -e COUNT_TABLES="$MARIADB_COUNT_TABLES" "$c" sh -c '
+    export MYSQL_PWD="${MARIADB_ROOT_PASSWORD:-$MYSQL_ROOT_PASSWORD}"
+    db="${MARIADB_DATABASE:-${MYSQL_DATABASE:-appwrite}}"
+    for p in $COUNT_TABLES; do
+      mariadb -uroot -N -B "$db" -e "SHOW TABLES LIKE '"'"'$p'"'"'" | while read -r t; do
+        case "$t" in *_perms) continue ;; esac
+        printf "%s\t%s\n" "$t" "$(mariadb -uroot -N -B "$db" -e "SELECT COUNT(*) FROM \`$t\`")"
+      done
+    done' | jq -R -s 'split("\n") | map(select(length > 0) | split("\t") | {(.[0]): (.[1] | tonumber)}) | add // {}')
+  jq -n --arg engine mariadb --arg c "$c" --arg image "$(docker inspect -f '{{.Image}}' "$c")" \
+    --arg imageRef "$(docker inspect -f '{{.Config.Image}}' "$c")" --arg db "$db" --argjson counts "$counts" \
+    '{engine: $engine, container: $c, image: $image, imageRef: $imageRef, database: $db, counts: $counts}' > "$out.meta.json"
+}
+
+dump_postgres() { # conteneur fichier
+  local c=$1 out=$2 user db
+  user=$(docker exec "$c" sh -c 'printf %s "${POSTGRES_USER:-postgres}"')
+  db=$(docker exec "$c" sh -c 'printf %s "${POSTGRES_DB:-${POSTGRES_USER:-postgres}}"')
+  # Sans propriétaires ni droits : la restauration marche dans n'importe quel
+  # conteneur créé avec le même POSTGRES_USER.
+  docker exec "$c" sh -c 'exec pg_dump -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-${POSTGRES_USER:-postgres}}" --no-owner --no-privileges' > "$out"
+  tail -c 512 "$out" | grep -q 'PostgreSQL database dump complete' || die "dump PostgreSQL $c incomplet"
+  jq -n --arg engine postgres --arg c "$c" --arg image "$(docker inspect -f '{{.Image}}' "$c")" \
+    --arg imageRef "$(docker inspect -f '{{.Config.Image}}' "$c")" --arg user "$user" --arg db "$db" \
+    '{engine: $engine, container: $c, image: $image, imageRef: $imageRef, user: $user, database: $db}' > "$out.meta.json"
+}
+
+dump_databases() {
+  rm -rf "$STAGING_DIR"
+  mkdir -p "$STAGING_DIR"
+  local spec engine c out
+  for spec in $DUMPS; do
+    engine=${spec%%:*}
+    c=${spec#*:}
+    if ! docker inspect -f '{{.State.Running}}' "$c" 2>/dev/null | grep -q true; then
+      die "conteneur $c arrêté : base non sauvegardée"
+    fi
+    out=$STAGING_DIR/$c.sql
+    log "dump $engine $c…"
+    "dump_$engine" "$c" "$out"
+    log "  $(human "$(stat -c %s "$out")")"
+  done
+}
+
+# ---------------------------------------------------------------- commandes
+
+cmd_run() {
+  take_lock 0
+  local started run_id summary snap bytes added prev_bytes anomalies=() spec c size prev_size dumps_json='{}'
+  started=$(date +%s)
+  run_id=$(date -u +%Y%m%dT%H%M%SZ)
+  mkdir -p "$STATE_DIR" "${RESTIC_CACHE_DIR:-/var/cache/redview-backup}"
+
+  log "manifeste système…"
+  write_manifest
+  dump_databases
+
+  for spec in $DUMPS; do
+    c=${spec#*:}
+    size=$(stat -c %s "$STAGING_DIR/$c.sql")
+    dumps_json=$(jq --arg c "$c" --argjson s "$size" '. + {($c): $s}' <<< "$dumps_json")
+    prev_size=$(jq -r --arg c "$c" '.last_backup.dumps[$c] // 0' "$STATUS_FILE" 2>/dev/null || echo 0)
+    if (( prev_size > 0 && size * 100 < prev_size * (100 - ANOMALY_DROP_PCT) )); then
+      anomalies+=("dump $c : $(human "$size") contre $(human "$prev_size") la veille")
+    fi
+  done
+
+  log "restic backup…"
+  summary=$(restic_ backup --json --quiet --host "$RESTIC_HOST" --tag nightly --tag "run:$run_id" \
+    --files-from "$CONFIG_DIR/paths" --exclude-file "$CONFIG_DIR/excludes" --exclude-caches \
+    | jq -c 'select(.message_type == "summary")' | tail -n 1)
+  [[ -n $summary ]] || die "restic n'a pas rendu de résumé"
+  snap=$(jq -r '.snapshot_id' <<< "$summary")
+  bytes=$(jq -r '.total_bytes_processed' <<< "$summary")
+  added=$(jq -r '.data_added_packed // .data_added' <<< "$summary")
+  log "instantané ${snap:0:8} : $(human "$bytes") lus, $(human "$added") envoyés, $(jq -r '.total_files_processed' <<< "$summary") fichiers"
+
+  prev_bytes=$(jq -r '.last_backup.bytes_processed // 0' "$STATUS_FILE" 2>/dev/null || echo 0)
+  if (( prev_bytes > 0 && bytes * 100 < prev_bytes * (100 - ANOMALY_DROP_PCT) )); then
+    anomalies+=("instantané : $(human "$bytes") contre $(human "$prev_bytes") la veille")
+  fi
+
+  log "rétention (forget)…"
+  restic_ forget --quiet --host "$RESTIC_HOST" --tag nightly \
+    --keep-daily "$KEEP_DAILY" --keep-weekly "$KEEP_WEEKLY" --keep-monthly "$KEEP_MONTHLY"
+
+  rm -rf "$STAGING_DIR"
+  status_update '.last_backup = {time: $t, run_id: $r, snapshot: $s, duration_s: ($d | tonumber),
+      bytes_processed: ($b | tonumber), data_added: ($a | tonumber), dumps: $dumps, anomalies: $an}' \
+    --arg t "$(now_iso)" --arg r "$run_id" --arg s "$snap" --arg d "$(( $(date +%s) - started ))" \
+    --arg b "$bytes" --arg a "$added" --argjson dumps "$dumps_json" \
+    --argjson an "$(printf '%s\n' "${anomalies[@]}" | jq -R -s 'split("\n") | map(select(length > 0))')"
+
+  if (( ${#anomalies[@]} )); then
+    heartbeat fail
+    printf 'ANOMALIE : %s\n' "${anomalies[@]}" >&2
+    exit 3
+  fi
+  heartbeat ok
+  log "sauvegarde terminée en $(( $(date +%s) - started )) s"
+}
+
+latest_snapshot() {
+  restic_ snapshots --json --host "$RESTIC_HOST" --tag nightly --latest 1 | jq -r 'sort_by(.time) | last | .id // empty'
+}
+
+DRILL_DIR=
+# Conteneurs de test étiquetés par PID : retrouvés même quand ils ont été
+# lancés dans un sous-shell, et ceux d'un exercice interrompu sont nettoyés au suivant.
+drill_cleanup() {
+  docker ps -aq --filter "label=redview-drill" | xargs -r docker rm -f > /dev/null 2>&1 || true
+  [[ -n $DRILL_DIR ]] && rm -rf "$DRILL_DIR"
+  return 0
+}
+
+wait_for() { # secondes commande…
+  local deadline=$(( $(date +%s) + $1 ))
+  shift
+  until "$@" > /dev/null 2>&1; do
+    (( $(date +%s) < deadline )) || return 1
+    sleep 2
+  done
+}
+
+drill_image() { # meta.json : même image que la base d'origine, sinon son tag
+  local image ref
+  image=$(jq -r '.image' "$1")
+  ref=$(jq -r '.imageRef' "$1")
+  if docker image inspect "$image" > /dev/null 2>&1; then printf '%s' "$image"; else printf '%s' "$ref"; fi
+}
+
+# Les fonctions drill_* tournent dans une substitution de commande (rapport
+# capturé) où `set -e` ne s'applique pas : chaque étape est vérifiée à la main.
+
+drill_mariadb() { # dump meta → lignes de rapport sur stdout, code 1 si écart
+  local dump=$1 meta=$2 c pw db image table expected got diff bad=0
+  c=redview-drill-mariadb-$$
+  pw=$(openssl rand -hex 24)
+  db=$(jq -r '.database' "$meta")
+  image=$(drill_image "$meta")
+  docker run -d --name "$c" --label redview-drill=$$ --network none --tmpfs /var/lib/mysql:rw,size=12g \
+    -e MARIADB_ROOT_PASSWORD="$pw" "$image" \
+    --innodb-buffer-pool-size=256M --max-allowed-packet=1G --skip-log-bin > /dev/null \
+    || { echo "  MariaDB de test : démarrage impossible ($image)"; return 1; }
+  # Le script d'init démarre d'abord un serveur sans réseau (port 0) sur le même
+  # socket : attendre le serveur définitif (port 3306).
+  wait_for 300 sh -c "docker logs $c 2>&1 | grep -q 'Version: .*port: 3306'" \
+    || { echo "  MariaDB de test : jamais prête"; return 1; }
+  docker exec -i -e MYSQL_PWD="$pw" "$c" mariadb -uroot --max-allowed-packet=1G < "$dump" \
+    || { echo "  MariaDB : import du dump en échec"; return 1; }
+  while IFS=$'\t' read -r table expected; do
+    if ! got=$(docker exec -e MYSQL_PWD="$pw" "$c" mariadb -uroot -N -B "$db" -e "SELECT COUNT(*) FROM \`$table\`"); then
+      echo "  ÉCART $table : table illisible après restauration"
+      bad=1
+      continue
+    fi
+    diff=$(( got > expected ? got - expected : expected - got ))
+    # Le relevé suit le dump de quelques secondes : écart toléré 1 % (≥ 5 lignes).
+    if (( diff > 5 && diff * 100 > expected )); then
+      echo "  ÉCART $table : $got lignes restaurées, $expected attendues"
+      bad=1
+    fi
+  done < <(jq -r '.counts | to_entries[] | "\(.key)\t\(.value)"' "$meta")
+  echo "  MariaDB $db : $(jq '.counts | length' "$meta") tables clés comparées ($(jq '[.counts[]] | add // 0' "$meta") lignes)"
+  docker rm -f "$c" > /dev/null 2>&1
+  return "$bad"
+}
+
+drill_postgres() {
+  local dump=$1 meta=$2 c pw user db image table expected got bad=0 tables=0 rows=0
+  c=redview-drill-pg-$(jq -r '.container' "$meta")-$$
+  pw=$(openssl rand -hex 24)
+  user=$(jq -r '.user' "$meta")
+  db=$(jq -r '.database' "$meta")
+  image=$(drill_image "$meta")
+  docker run -d --name "$c" --label redview-drill=$$ --network none --tmpfs /var/lib/postgresql/data:rw,size=4g \
+    -e POSTGRES_PASSWORD="$pw" -e POSTGRES_USER="$user" -e POSTGRES_DB="$db" "$image" > /dev/null \
+    || { echo "  PostgreSQL de test : démarrage impossible ($image)"; return 1; }
+  # Le script d'init démarre un serveur temporaire puis le relance : attendre le second.
+  wait_for 180 sh -c "[ \$(docker logs $c 2>&1 | grep -c 'ready to accept connections') -ge 2 ]" \
+    || { echo "  PostgreSQL de test ($db) : jamais prêt"; return 1; }
+  docker exec -i "$c" psql -q -v ON_ERROR_STOP=1 -U "$user" -d "$db" < "$dump" > /dev/null \
+    || { echo "  PostgreSQL $db : import du dump en échec"; return 1; }
+  # Lignes attendues = lignes des blocs COPY du dump (une ligne par rangée).
+  while read -r table expected; do
+    tables=$(( tables + 1 ))
+    rows=$(( rows + expected ))
+    if ! got=$(docker exec "$c" psql -At -U "$user" -d "$db" -c "SELECT count(*) FROM $table"); then
+      echo "  ÉCART $table : table illisible après restauration"
+      bad=1
+    elif [[ $got != "$expected" ]]; then
+      echo "  ÉCART $table : $got lignes restaurées, $expected dans le dump"
+      bad=1
+    fi
+  done < <(awk '/^COPY .* FROM stdin;$/ { t = $2; n = 0; inb = 1; next }
+                inb && /^\\\.$/ { print t, n; inb = 0; next }
+                inb { n++ }' "$dump")
+  (( tables > 0 )) || { echo "  PostgreSQL $db : aucune table dans le dump"; bad=1; }
+  echo "  PostgreSQL $db : $tables tables, $rows lignes, comptes identiques au dump"
+  docker rm -f "$c" > /dev/null 2>&1
+  return "$bad"
+}
+
+drill_files() { # instantané racine-de-travail
+  local snap=$1 root=$2 vol=/var/lib/docker/volumes/appwrite_appwrite-uploads/_data
+  local listing sample compared=0 bad=0 path mtime must missing=0 includes=()
+  listing=$root/listing.txt
+  restic_ ls "$snap" > "$listing" || { echo "  liste de l'instantané illisible"; return 1; }
+
+  # Échantillon de fichiers Appwrite inchangés depuis l'instantané : leur
+  # contenu restauré doit être identique octet pour octet au disque.
+  sample=$(restic_ ls --json --recursive "$snap" "$vol" \
+    | jq -r 'select(.type == "file") | "\(.mtime)\t\(.path)"' | shuf -n 40) \
+    || { echo "  liste des fichiers Appwrite illisible"; return 1; }
+  while IFS=$'\t' read -r mtime path; do
+    [[ -n $path ]] && includes+=(--include "$path")
+  done <<< "$sample"
+  if (( ${#includes[@]} )); then
+    restic_ restore --quiet "$snap" --target "$root/files" "${includes[@]}" \
+      || { echo "  restauration de l'échantillon en échec"; return 1; }
+    while IFS=$'\t' read -r mtime path; do
+      [[ -f $path && -f $root/files$path ]] || continue
+      (( $(stat -c %Y "$path") == $(date -d "$mtime" +%s) )) || continue
+      compared=$(( compared + 1 ))
+      cmp -s "$path" "$root/files$path" || { echo "  CONTENU DIFFÉRENT : $path"; bad=1; }
+    done <<< "$sample"
+  fi
+  if (( compared > 0 )); then
+    echo "  fichiers Appwrite : $compared restaurés et identiques octet pour octet au disque"
+  else
+    echo "  fichiers Appwrite : aucun fichier comparable"
+    bad=1
+  fi
+
+  # Fichiers sans lesquels une reprise est impossible ou très longue.
+  for must in /opt/appwrite/.env /opt/appwrite/docker-compose.yml /opt/appwrite/docker-compose.override.yml \
+    /data/coolify/source/.env /etc/nginx/conf.d/app.conf /etc/letsencrypt/live \
+    /etc/systemd/system/brouter.service /etc/systemd/system/poi-server.service \
+    /opt/poi-server/data /opt/brouter/segments4 "$MANIFEST_DIR/containers-inspect.json"; do
+    grep -qxF "$must" "$listing" || { echo "  MANQUANT : $must"; missing=1; }
+  done
+  (( missing == 0 )) && echo "  fichiers critiques présents (.env Appwrite et Coolify, nginx, certificats, unités, données POI et BRouter, manifeste)"
+  return $(( bad | missing ))
+}
+
+do_drill() {
+  local snap started report='' failed=0 meta dump engine out
+  started=$(date +%s)
+  drill_cleanup
+  snap=$(latest_snapshot)
+  [[ -n $snap ]] || die "aucun instantané"
+  DRILL_DIR=$(mktemp -d "$STATE_DIR/drill.XXXXXX")
+  trap 'drill_cleanup' EXIT
+  log "exercice de restauration sur ${snap:0:8}…"
+  restic_ restore --quiet "$snap" --target "$DRILL_DIR" --include "$STAGING_DIR"
+  report="instantané ${snap:0:8} du $(restic_ snapshots --json "$snap" | jq -r '.[0].time[0:16]')"$'\n'
+  for meta in "$DRILL_DIR$STAGING_DIR"/*.sql.meta.json; do
+    [[ -e $meta ]] || die "aucun dump dans l'instantané"
+    dump=${meta%.meta.json}
+    engine=$(jq -r '.engine' "$meta")
+    log "  base $(jq -r '.container' "$meta")…"
+    out=$("drill_$engine" "$dump" "$meta" 2>&1) || failed=1
+    report+="$out"$'\n'
+  done
+  log "  fichiers…"
+  out=$(drill_files "$snap" "$DRILL_DIR" 2>&1) || failed=1
+  report+="$out"$'\n'
+  printf '%s' "$report"
+  status_update '.last_drill = {time: $t, snapshot: $s, ok: ($ok == "1"), duration_s: ($d | tonumber), report: $r}' \
+    --arg t "$(now_iso)" --arg s "$snap" --arg ok "$(( failed == 0 ))" \
+    --arg d "$(( $(date +%s) - started ))" --arg r "$report"
+  (( failed == 0 )) || die "exercice de restauration en échec"
+  log "exercice réussi en $(( $(date +%s) - started )) s"
+}
+
+cmd_drill() {
+  take_lock 7200
+  do_drill
+}
+
+cmd_verify() {
+  take_lock 7200
+  local week subset started
+  started=$(date +%s)
+  week=$(( 10#$(date -u +%V) ))
+  subset=$(( week % CHECK_SUBSETS + 1 ))
+  log "prune…"
+  restic_ prune --quiet --max-unused 10%
+  log "check (données : lot $subset/$CHECK_SUBSETS, tout le dépôt relu en $CHECK_SUBSETS semaines)…"
+  restic_ check --read-data-subset "$subset/$CHECK_SUBSETS"
+  status_update '.last_check = {time: $t, subset: $s, duration_s: ($d | tonumber)}' \
+    --arg t "$(now_iso)" --arg s "$subset/$CHECK_SUBSETS" --arg d "$(( $(date +%s) - started ))"
+  do_drill
+  weekly_report
+}
+
+weekly_report() {
+  local body snaps about age remote
+  snaps=$(restic_ snapshots --json --host "$RESTIC_HOST" --tag nightly)
+  remote=${RESTIC_REPOSITORY#rclone:}
+  about=$(rclone about "${remote%%:*}:" 2> /dev/null | grep -E '^(Total|Used|Free):' || true)
+  age=$(( ($(date +%s) - $(date -d "$(jq -r '.last_backup.time' "$STATUS_FILE")" +%s)) / 3600 ))
+  body=$(cat <<EOF
+Sauvegardes du VPS RedView ($RESTIC_HOST) — semaine $(date -u +%V)
+
+Dernière sauvegarde : il y a $age h, $(human "$(jq -r '.last_backup.bytes_processed' "$STATUS_FILE")") sauvegardés
+Instantanés conservés : $(jq 'length' <<< "$snaps") (du $(jq -r 'sort_by(.time) | first | .time[0:10]' <<< "$snaps") au $(jq -r 'sort_by(.time) | last | .time[0:10]' <<< "$snaps"))
+Contrôle du dépôt : OK (lot $(jq -r '.last_check.subset' "$STATUS_FILE") relu)
+
+Exercice de restauration : OK
+$(jq -r '.last_drill.report' "$STATUS_FILE")
+
+7 dernières sauvegardes (données nouvelles envoyées) :
+$(jq -r 'sort_by(.time) | .[-7:][] | "  \(.time[0:16]) \(.short_id)  \(.summary.data_added_packed // .summary.data_added // 0)"' <<< "$snaps" \
+  | while read -r d h id n; do printf '  %s %s %s  %s\n' "$d" "$h" "$id" "$(human "$n")"; done)
+
+Google Drive :
+$about
+
+Si cet e-mail n'arrive plus le lundi, les sauvegardes ne tournent plus : voir
+server/vps/backup/README.md, « Diagnostic ».
+EOF
+)
+  send_mail "[RedView] Sauvegardes OK — semaine $(date -u +%V)" "$body" || warn "rapport non envoyé"
+  log "$body"
+}
+
+cmd_alert() { # unité systemd en échec
+  local unit=${1:?unité} body
+  body=$(cat <<EOF
+L'unité $unit a échoué sur $(hostname) ($RESTIC_HOST) le $(date -u '+%F %T') UTC.
+
+$(systemctl status --no-pager -n 0 "$unit" 2>&1 || true)
+
+--- journal (120 dernières lignes) ---
+$(journalctl -u "$unit" -n 120 --no-pager -o short-iso 2>&1 || true)
+
+Diagnostic : server/vps/backup/README.md du dépôt redview-app.
+Relancer : sudo systemctl start $unit ; état : sudo redview-backup status
+EOF
+)
+  heartbeat fail
+  send_mail "[RedView] ÉCHEC sauvegarde : $unit" "$body"
+}
+
+cmd_status() {
+  [[ -s $STATUS_FILE ]] || { echo "aucune opération enregistrée"; return 0; }
+  local t
+  for t in last_backup last_check last_drill; do
+    if jq -e ".$t" "$STATUS_FILE" > /dev/null; then
+      printf '%-12s %s (il y a %s h)\n' "${t#last_}" "$(jq -r ".$t.time" "$STATUS_FILE")" \
+        "$(( ($(date +%s) - $(date -d "$(jq -r ".$t.time" "$STATUS_FILE")" +%s)) / 3600 ))"
+    fi
+  done
+  jq -r '.last_backup | "instantané   \(.snapshot[0:8]), \(.bytes_processed) octets lus, \(.data_added) envoyés, \(.duration_s) s",
+    (.dumps | to_entries[] | "dump         \(.key) : \(.value) octets"),
+    (.anomalies[]? | "ANOMALIE     \(.)")' "$STATUS_FILE"
+  jq -r '.last_drill | select(.) | "exercice     \(if .ok then "OK" else "ÉCHEC" end)\n\(.report)"' "$STATUS_FILE"
+  systemctl list-timers --no-legend 'redview-backup*' 2> /dev/null || true
+}
+
+case ${1:-} in
+  run) cmd_run ;;
+  verify) cmd_verify ;;
+  drill) cmd_drill ;;
+  status) cmd_status ;;
+  snapshots) restic_ snapshots --host "$RESTIC_HOST" ;;
+  alert) shift; cmd_alert "$@" ;;
+  test-alert) send_mail "[RedView] Test d'alerte des sauvegardes" "Envoyé par redview-backup test-alert depuis $(hostname) le $(date -u '+%F %T') UTC. Si tu lis ceci, les alertes de sauvegarde arrivent." && log "e-mail de test envoyé à $ALERT_EMAIL_TO" ;;
+  restic) shift; restic_ "$@" ;;
+  *) sed -n '2,14p' "$0"; exit 2 ;;
+esac

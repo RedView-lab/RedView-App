@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState, memo, type MouseEvent } from 'react';
+import { useMemo, useRef, useState, memo, type MouseEvent } from 'react';
 import { useProjectStoreOptional, type TimelineAddItemKind } from '@/features/itineraryPanel';
 import { TimelineKindMenu } from '@/features/itineraryPanel/sections/timeline/TimelineKindMenu';
 import { TIMELINE_ADD_MENU_OPTIONS } from '@/features/itineraryPanel/sections/timeline/timelineAddMenuOptions';
 import { useHorizontalScrollOverflow } from '@/shared/hooks/useHorizontalScrollOverflow';
 import { useAppI18n } from '@/shared/i18n';
+import { trackAnalyticsEvent, type MapTool } from '@/shared/lib/analytics';
 import { variantModifierLabel } from '@/shared/lib/platform';
 import { useRouteMergeToolOptional } from '../../routeMerge';
 import { useRouteSplitToolOptional } from '../../routeSplit';
@@ -88,8 +89,10 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
       activeItinerary.prediction
     ),
   );
+  const trackToolSelected = (tool: MapTool) => trackAnalyticsEvent({ name: 'map_tool_selected', data: { tool } });
   const handleDeleteActiveRoute = () => {
     if (!store || !activeItinerary) return;
+    trackAnalyticsEvent({ name: 'route_action', data: { action: 'delete' } });
     store.clearItineraryRoute(activeItinerary.id);
     setToolbarStatus(t('Trace supprimée'));
   };
@@ -118,6 +121,7 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
     traceTool?.deactivate();
     forbiddenZoneTool?.deactivate();
     commentTool?.deactivate();
+    trackToolSelected('chart_placement');
     chartPlacementTool?.arm(kind);
     setToolbarStatus(null);
   };
@@ -163,18 +167,24 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
     toolbarStatus,
   ]);
 
-  useEffect(() => {
+  // Le message de la barre concerne l'itinéraire actif : effacé quand il change.
+  const activeItineraryId = activeItinerary?.id;
+  const [statusItineraryId, setStatusItineraryId] = useState(activeItineraryId);
+  if (statusItineraryId !== activeItineraryId) {
+    setStatusItineraryId(activeItineraryId);
     setToolbarStatus(null);
-  }, [activeItinerary?.id]);
+  }
 
   const handleReverseTrace = () => {
     if (!store || !activeItinerary || !canReverseTrace) return;
     const reversed = store.reverseItineraryGpx(activeItinerary.id);
+    if (reversed) trackAnalyticsEvent({ name: 'route_action', data: { action: 'reverse' } });
     setToolbarStatus(reversed ? t('Sens du GPX inversé') : t('Inversion indisponible pour cette trace'));
   };
 
   const handleToggleRouteSplit = () => {
     if (!splitArmed) {
+      trackToolSelected('split');
       chartPlacementTool?.deactivate();
       routeMergeTool?.deactivate();
       traceTool?.deactivate();
@@ -187,6 +197,7 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
 
   const handleToggleTrace = () => {
     if (!traceArmed) {
+      trackToolSelected('tracer');
       chartPlacementTool?.deactivate();
       routeMergeTool?.deactivate();
       routeSplitTool?.deactivate();
@@ -199,6 +210,7 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
 
   const handleToggleForbiddenZone = () => {
     if (!forbiddenZoneArmed) {
+      trackToolSelected('forbidden_zone');
       chartPlacementTool?.deactivate();
       routeMergeTool?.deactivate();
       routeSplitTool?.deactivate();
@@ -227,6 +239,7 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
       return;
     }
     if (!store?.canUndoTraceEdit) return;
+    trackAnalyticsEvent({ name: 'route_action', data: { action: 'undo' } });
     store.undoTraceEdit();
     setToolbarStatus(null);
   };
@@ -239,6 +252,7 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar({
       return;
     }
     if (!store?.canRedoTraceEdit) return;
+    trackAnalyticsEvent({ name: 'route_action', data: { action: 'redo' } });
     store.redoTraceEdit();
     setToolbarStatus(null);
   };

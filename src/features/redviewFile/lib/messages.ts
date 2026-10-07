@@ -15,6 +15,7 @@ const IMPORT_CLOUD_MESSAGES: Record<ProjectCloudErrorKind, string> = {
   conflict: 'Le serveur a refusé l’import du projet.',
   'not-found': 'Le serveur a refusé l’import du projet.',
   rejected: 'Le serveur a refusé l’import du projet.',
+  unreadable: 'Le serveur a refusé l’import du projet.',
 };
 
 export function describeRedviewImportError(error: unknown): string {
@@ -28,6 +29,7 @@ export function describeRedviewExportError(error: unknown): string {
   if (isProjectCloudError(error)) {
     if (error.kind === 'offline') return 'Connexion au cloud impossible : le projet n’a pas pu être exporté. Réessayez une fois en ligne.';
     if (error.kind === 'unauthorized') return 'Session expirée : reconnectez-vous puis exportez à nouveau le projet.';
+    if (error.kind === 'unreadable') return 'Les données de ce projet dans le cloud sont illisibles : il ne peut pas être exporté.';
   }
   return 'Impossible d’exporter le projet.';
 }

@@ -5,6 +5,7 @@ import { buildDemTilesTemplate } from '../demTiles';
 import { resolveStyleInputSync } from '../stylePrefetch';
 import type { Ctx } from './context';
 import { clearVisibleTimer, setVisibleTimeout } from './visibleClock';
+import { logger } from '@/shared/lib/logger';
 
 // Debounce window for back-to-back DEM profile switches. The profile path
 // is cheap (no cache wipe), but a forceRebuild still removes/re-adds the
@@ -156,7 +157,7 @@ export function attachReload(ctx: Ctx): void {
 
       // Do NOT destroy and re-apply style if tiles are actively in-flight
       if (unifiedPresent && (isSourceBusy || hasTileActivity)) {
-        console.log('[map3d] reload verify: tiles still loading, extending grace window');
+        logger.map3d.info('reload verify: tiles still loading, extending grace window');
         st.reloadVerifyTimer = setVisibleTimeout(() => {
           st.reloadVerifyTimer = null;
           if (isCancelled()) return;

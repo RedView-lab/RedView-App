@@ -1,3 +1,4 @@
+import { trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import mapboxgl, { type Map as MapboxMap } from 'mapbox-gl';
 import type { PoiCategory, PoiFeature } from '@/features/poi/types';
@@ -421,6 +422,7 @@ export function DashboardPlaceSearch({
   const handlePick = useCallback(
     (suggestion: GeocodeSuggestion) => {
       if (!map) return;
+      trackAnalyticsEvent({ name: 'place_selected' });
 
       clearPendingSearchTransition(map);
 
@@ -565,6 +567,7 @@ export function DashboardPlaceSearch({
   };
 
   const handleToggleChip = (chipId: DashboardFilterChipId) => {
+    trackAnalyticsEvent({ name: 'map_filter_toggled', data: { filter: chipId } });
     switch (chipId) {
       case 'pois':
         setFiltersEnabled(['pois_route', 'pois_map'], !isChipActive('pois'));

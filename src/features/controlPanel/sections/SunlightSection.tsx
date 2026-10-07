@@ -81,11 +81,8 @@ function InlineDurationInput({
   const [draft, setDraft] = useState(display);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (!editing) {
-      setDraft(formatDurationShort(valueMinutes));
-    }
-  }, [valueMinutes, editing]);
+  // Hors édition, le brouillon suit la valeur reçue.
+  if (!editing && draft !== display) setDraft(display);
 
   useEffect(() => {
     if (editing && inputRef.current) {

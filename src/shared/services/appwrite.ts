@@ -1,5 +1,6 @@
 import {
   Account,
+  AppwriteException,
   Client,
   Databases,
   ID,
@@ -50,7 +51,7 @@ export const account = new Account(client);
 export const databases = new Databases(client);
 export const storage = new Storage(client);
 
-export { ID, OAuthProvider, Permission, Query, Role, ImageFormat };
+export { AppwriteException, ID, OAuthProvider, Permission, Query, Role, ImageFormat };
 
 export function hasStoredAppwriteSession(): boolean {
   return readStoredAppwriteSession() !== null;
@@ -160,7 +161,6 @@ export function clearStoredAppwriteSession(): void {
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.removeItem(APPWRITE_AUTH_STORAGE_KEY);
-    window.localStorage.removeItem('redview:dev-session');
   } catch {
     // ignore
   }

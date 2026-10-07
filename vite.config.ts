@@ -5,19 +5,17 @@ import fs from 'fs'
 // @ts-expect-error JS module without declarations
 import { applyVpsTunnel, startDevServices, startVpsTunnel } from './scripts/start-dev-services.mjs'
 // @ts-expect-error JS module without declarations
-import { recolorRadarPng } from './server/radar-recolor.mjs'
-// @ts-expect-error JS module without declarations
-import { generateSlopeTile, generateAltitudeTile } from './server/terrain-tiles.mjs'
+import { parseApiBody, parseApiQuery } from './server/api-request.mjs'
 import {
   HttpError,
   bodyLimitFor,
-  buildRadarUpstreamUrl,
   decodeSafePathname,
-  parseTileCoords,
   readBodyLimited,
   resolveApiRoute,
   // @ts-expect-error JS module without declarations
 } from './server/http-security.mjs'
+// @ts-expect-error JS module without declarations
+import { serveTileFallback, tileFallbackFamily } from './server/tile-fallbacks.mjs'
 // @ts-expect-error JS module without declarations
 import { resolveBuildId } from './server/build-id.mjs'
 
@@ -25,8 +23,8 @@ import { resolveBuildId } from './server/build-id.mjs'
 const redviewBuildId: string = resolveBuildId()
 
 /**
- * Vite plugin that serves serverless API routes (`api/*.ts`) and handles
- * rewrites locally without needing `vercel dev`.
+ * Vite plugin that serves the API routes (`api/*.ts`) and the tile
+ * fallbacks in dev — the dev twin of server.mjs (keep both in sync).
  */
 function redviewDevApiPlugin(): Plugin {
   return {
@@ -71,102 +69,12 @@ function redviewDevApiPlugin(): Plugin {
           return next()
         }
 
-        // 2. Bypass /api/lidar which is handled by Vite proxy to IGN
-        if (req.url.startsWith('/api/lidar')) {
-          return next()
-        }
-
-        // 2b. Fallback proxy for /radar-tiles/ when SW is not controlling the page
-        if (req.url.startsWith('/radar-tiles/')) {
-          try {
-            const urlObj = new URL(req.url, 'http://localhost')
-            const coords = parseTileCoords(urlObj.pathname, /^\/radar-tiles\/(\d+)\/(\d+)\/(\d+)/)
-            // Même allowlist d'hôtes / regex de chemin que server.mjs (anti-SSRF).
-            const target: string | null = coords ? buildRadarUpstreamUrl(urlObj.searchParams, coords) : null
-            if (target) {
-              const upstreamRes = await fetch(target, { signal: AbortSignal.timeout(10_000) })
-              if (upstreamRes.ok && (upstreamRes.headers.get('content-type') || '').startsWith('image/')) {
-                res.statusCode = 200
-                res.setHeader('Content-Type', 'image/png')
-                res.setHeader('Cache-Control', 'public, max-age=300')
-                const rawBuf = Buffer.from(await upstreamRes.arrayBuffer())
-                const pStr = urlObj.searchParams.get('p') || ''
-                const finalBuf = pStr ? recolorRadarPng(rawBuf, pStr) : rawBuf
-                return res.end(finalBuf)
-              }
-            }
-          } catch (e) {
-            console.warn('[vite-radar-tiles-fallback] error:', e)
-          }
-          // Pas de tuile : 204 jamais mis en cache (même contrat que server.mjs)
-          res.statusCode = 204
-          res.setHeader('Cache-Control', 'no-store')
-          return res.end()
-        }
-
-        // 2b'. Sans SW : /dem-tiles et /vhr-tiles n'ont pas de repli (la page
-        // non contrôlée utilise AWS Terrarium en direct, Mapbox Satellite reste
-        // visible sans l'ortho très haute résolution) et les préchargements `?pf=1` sont
-        // inutiles → 204 immédiat (même contrat que server.mjs).
-        if (
-          req.url.startsWith('/dem-tiles/')
-          || req.url.startsWith('/vhr-tiles/')
-          || (/^\/(?:radar|slope|altitude)-tiles\//.test(req.url)
-            && new URL(req.url, 'http://localhost').searchParams.get('pf') === '1')
-        ) {
-          res.statusCode = 204
-          res.setHeader('Cache-Control', 'no-store')
-          return res.end()
-        }
-
-        // 2c. Fallback for /slope-tiles/ when SW is not controlling the page
-        if (req.url.startsWith('/slope-tiles/')) {
-          try {
-            const urlObj = new URL(req.url, 'http://localhost')
-            const coords = parseTileCoords(urlObj.pathname, /^\/slope-tiles\/(\d+)\/(\d+)\/(\d+)/)
-            if (coords) {
-              const pngBuf: Buffer | null = await generateSlopeTile(coords.z, coords.x, coords.y)
-              if (pngBuf) {
-                res.statusCode = 200
-                res.setHeader('Content-Type', 'image/png')
-                res.setHeader('Cache-Control', 'public, max-age=604800')
-                res.setHeader('Access-Control-Allow-Origin', '*')
-                res.setHeader('X-Tile-Type', 'slope')
-                return res.end(pngBuf)
-              }
-            }
-          } catch (e) {
-            console.warn('[vite-slope-tiles-fallback] error:', e)
-          }
-          // Pas de tuile : 204 jamais mis en cache (même contrat que server.mjs)
-          res.statusCode = 204
-          res.setHeader('Cache-Control', 'no-store')
-          return res.end()
-        }
-
-        // 2d. Fallback for /altitude-tiles/
-        if (req.url.startsWith('/altitude-tiles/')) {
-          try {
-            const urlObj = new URL(req.url, 'http://localhost')
-            const coords = parseTileCoords(urlObj.pathname, /^\/altitude-tiles\/(\d+)\/(\d+)\/(\d+)/)
-            if (coords) {
-              const pngBuf: Buffer | null = await generateAltitudeTile(coords.z, coords.x, coords.y)
-              if (pngBuf) {
-                res.statusCode = 200
-                res.setHeader('Content-Type', 'image/png')
-                res.setHeader('Cache-Control', 'public, max-age=604800')
-                res.setHeader('Access-Control-Allow-Origin', '*')
-                res.setHeader('X-Tile-Type', 'altitude')
-                return res.end(pngBuf)
-              }
-            }
-          } catch (e) {
-            console.warn('[vite-altitude-tiles-fallback] error:', e)
-          }
-          // Pas de tuile : 204 jamais mis en cache (même contrat que server.mjs)
-          res.statusCode = 204
-          res.setHeader('Cache-Control', 'no-store')
-          return res.end()
+        // 2. Tuiles du Service Worker demandées par une page qu'il ne contrôle
+        // pas (même module que server.mjs ; pas de quota en dev).
+        const tileFamily = tileFallbackFamily(req.url)
+        if (tileFamily) {
+          const tileUrl = new URL(req.url, 'http://localhost')
+          return serveTileFallback(tileFamily, tileUrl.pathname, tileUrl.searchParams, res)
         }
 
         // 3. Match /api/* routes to api/*.ts handlers
@@ -195,22 +103,7 @@ function redviewDevApiPlugin(): Plugin {
           if (apiRoute) {
             const candidateFile = apiRoute.file
             try {
-              // Parse query parameters
-              const query: Record<string, string | string[]> = {}
-              for (const [key, value] of urlObj.searchParams.entries()) {
-                if (key in query) {
-                  const existing = query[key]
-                  if (Array.isArray(existing)) {
-                    existing.push(value)
-                  } else {
-                    query[key] = [existing, value]
-                  }
-                } else {
-                  query[key] = value
-                }
-              }
-
-              // Read and parse request body (plafonné comme en prod)
+              // Corps plafonné comme en prod
               let rawBody: Buffer
               try {
                 rawBody = await readBodyLimited(req, bodyLimitFor(apiRoute.route))
@@ -225,27 +118,11 @@ function redviewDevApiPlugin(): Plugin {
                 }
                 throw err
               }
-              const contentType = (req.headers['content-type'] || '').toLowerCase()
-              let parsedBody: unknown = rawBody
-
-              if (contentType.includes('application/json')) {
-                try {
-                  parsedBody = rawBody.length > 0 ? JSON.parse(rawBody.toString('utf-8')) : {}
-                } catch {
-                  parsedBody = rawBody.toString('utf-8')
-                }
-              } else if (
-                contentType.includes('text/') ||
-                contentType.includes('application/x-www-form-urlencoded')
-              ) {
-                parsedBody = rawBody.toString('utf-8')
-              }
-
-              // Build ApiRequest adapter
+              // Build ApiRequest adapter (même décodage que server.mjs)
               const apiReq = Object.assign(req, {
-                query,
+                query: parseApiQuery(urlObj.searchParams),
                 cookies: {},
-                body: parsedBody,
+                body: parseApiBody(rawBody, req.headers['content-type']),
                 [Symbol.asyncIterator]: async function* () {
                   yield rawBody
                 },
@@ -378,31 +255,6 @@ export default defineConfig({
         // REDVIEW_MULTIPLAYER_DEV_PORT : un second serveur de dev (autre session) avec son propre serveur temps réel.
         target: `ws://127.0.0.1:${process.env.REDVIEW_MULTIPLAYER_DEV_PORT ?? '17790'}`,
         ws: true,
-      },
-      '/api/lidar/wmts': {
-        target: 'https://data.geopf.fr',
-        changeOrigin: true,
-        rewrite: (p) => {
-          // /api/lidar/wmts/19/row/col → /wmts?SERVICE=WMTS&...&TILEMATRIX=19&TILEROW=row&TILECOL=col
-          const match = p.match(/\/api\/lidar\/wmts\/(\d+)\/(\d+)\/(\d+)/)
-          if (match) {
-            const [, zoom, row, col] = match
-            return `/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg&TILEMATRIXSET=PM&TILEMATRIX=${zoom}&TILEROW=${row}&TILECOL=${col}`
-          }
-          return p
-        },
-      },
-      '/api/lidar': {
-        target: 'https://data.geopf.fr',
-        changeOrigin: true,
-        rewrite: (p) => {
-          // /api/lidar/zones?page=N → /telechargement/resource/LiDARHD-NUALID?page=N
-          if (p.startsWith('/api/lidar/zones')) {
-            return p.replace('/api/lidar/zones', '/telechargement/resource/LiDARHD-NUALID')
-          }
-          // /api/lidar/download/ZONE/FILE → /telechargement/download/LiDARHD-NUALID/ZONE/FILE
-          return p.replace('/api/lidar/download/', '/telechargement/download/LiDARHD-NUALID/')
-        },
       },
     },
   },

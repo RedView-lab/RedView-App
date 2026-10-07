@@ -1,0 +1,10 @@
+[Unit]
+Description=RedView : contrôle hebdomadaire des sauvegardes
+
+[Timer]
+# Dimanche 04:30 UTC, après la sauvegarde du jour : le rapport arrive par e-mail.
+OnCalendar=Sun *-*-* 04:30:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,3 +1,4 @@
+import { trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { useCallback } from 'react';
 import type { MutableRefObject } from 'react';
 import { translateAppText } from '@/shared/i18n';
@@ -189,6 +190,7 @@ export function useItineraryPoiHandlers({
   const handlePoiStartHere = useCallback((feature: PoiFeature) => {
     const hasItinerary = (project?.itineraries?.length ?? 0) > 0;
     if (!hasItinerary && addItinerary) {
+      trackAnalyticsEvent({ name: 'itinerary_added', data: { method: 'poi' } });
       addItinerary({
         timeline: [
           {

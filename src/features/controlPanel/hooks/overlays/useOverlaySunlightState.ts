@@ -175,22 +175,17 @@ export function useOverlaySunlightState({
     [sunlightState, sunlightTimes],
   );
 
-  useEffect(() => {
-    if (sunlightState.timeScrubbing) return;
-    const nextSunsetTime = sunlightTimes.sunsetTime;
-    if (!isValidClockTime(nextSunsetTime)) return;
-    if (!isNightTime(sunlightState.time, sunlightTimes.sunriseTime, nextSunsetTime)) return;
-
-    setSunlightState((prev) => {
-      if (prev.timeScrubbing || prev.time === nextSunsetTime) return prev;
-      const next: SunlightState = {
-        ...prev,
-        time: nextSunsetTime,
-      };
-      persistSunlightToProject(next);
-      return next;
-    });
-  }, [persistSunlightToProject, sunlightState.time, sunlightState.timeScrubbing, sunlightTimes.sunriseTime, sunlightTimes.sunsetTime]);
+  // Heure de nuit (hors glissement du curseur) : calée sur le coucher du
+  // soleil dans ce rendu ; l'effet de persistance ci-dessus l'enregistre.
+  const sunsetTime = sunlightTimes.sunsetTime;
+  if (
+    !sunlightState.timeScrubbing
+    && isValidClockTime(sunsetTime)
+    && sunlightState.time !== sunsetTime
+    && isNightTime(sunlightState.time, sunlightTimes.sunriseTime, sunsetTime)
+  ) {
+    setSunlightState((prev) => (prev.timeScrubbing || prev.time === sunsetTime ? prev : { ...prev, time: sunsetTime }));
+  }
 
   const handlers = {
     onSunlightEnabledChange: useCallback(

@@ -133,28 +133,17 @@ const withAssets = (html) => inlineUrls(html).replace(/ src="(\/(?!\/)[^"]+)"/g,
 });
 appCss = inlineUrls(appCss);
 
-// ── 5. Police (même CSS Google Fonts que index.html), embarquée ───────────
-async function fontsCss() {
-  const cacheFile = path.join(CACHE, 'fonts.css');
-  if (fs.existsSync(cacheFile)) return fs.readFileSync(cacheFile, 'utf8');
-  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-  const href = html.match(/href="(https:\/\/fonts\.googleapis\.com\/css2\?[^"]+)"/)[1].replace(/&amp;/g, '&');
-  const css = await (await fetch(href, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36' },
-  })).text();
-  let out = '';
-  for (const block of css.split('/*').slice(1)) {
-    const subset = block.slice(0, block.indexOf('*/')).trim();
-    if (subset !== 'latin' && subset !== 'latin-ext') continue;
-    const face = block.slice(block.indexOf('@font-face'));
-    const url = face.match(/url\((https:[^)]+)\)/)[1];
-    const buf = Buffer.from(await (await fetch(url)).arrayBuffer());
-    out += face.replace(url, `data:font/woff2;base64,${buf.toString('base64')}`) + '\n';
-  }
-  fs.writeFileSync(cacheFile, out);
-  return out;
+// ── 5. Police (mêmes @font-face que typography.css), embarquée ─────────────
+function fontsCss() {
+  const css = fs.readFileSync(path.join(ROOT, 'src/shared/styles/typography.css'), 'utf8');
+  return (css.match(/@font-face\s*\{[^}]*\}/g) ?? [])
+    .map((face) => face.replace(/url\('([^']+\.woff2)'\)/, (_, spec) => {
+      const buf = fs.readFileSync(path.join(ROOT, 'node_modules', spec));
+      return `url(data:font/woff2;base64,${buf.toString('base64')})`;
+    }))
+    .join('\n');
 }
-const fonts = await fontsCss();
+const fonts = fontsCss();
 
 // ── 6. Mise en page : vrais modules de l'app (esbuild) ────────────────────
 const scalePlugin = {

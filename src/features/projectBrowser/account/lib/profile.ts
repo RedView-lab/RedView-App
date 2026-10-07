@@ -10,6 +10,8 @@ import {
   translateAppText,
 } from '@/shared/i18n';
 import { APP_CACHE_EPOCH_STORAGE_KEY } from '@/shared/lib/appCacheEpoch';
+import { errorMessage } from '@/shared/lib/errors';
+import { clearAnalyticsContext, trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { syncDirtyProjects } from '@/shared/utils/projects';
 import { clearProjectStore } from '@/shared/utils/storage/idbProjectStore';
 
@@ -36,7 +38,7 @@ function readString(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback;
 }
 
-function readMetadata(user: any): AccountMetadata {
+function readMetadata(user: { prefs?: unknown } | null | undefined): AccountMetadata {
   return user?.prefs && typeof user.prefs === 'object' ? (user.prefs as AccountMetadata) : {};
 }
 
@@ -176,8 +178,8 @@ export async function saveAccountPractice(form: AccountPracticeForm) {
 export async function updateAccountPassword(password: string) {
   try {
     await account.updatePassword(password);
-  } catch (error: any) {
-    throw new Error(error?.message || 'Impossible de mettre à jour le mot de passe.');
+  } catch (error) {
+    throw new Error(errorMessage(error, 'Impossible de mettre à jour le mot de passe.'));
   }
 }
 
@@ -213,6 +215,32 @@ function clearUserScopedLocalStorage() {
   } catch {
     // ignore storage access errors
   }
+}
+
+function deleteIndexedDb(name: string): Promise<void> {
+  return new Promise((resolve) => {
+    try {
+      const request = indexedDB.deleteDatabase(name);
+      request.onsuccess = request.onerror = request.onblocked = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+
+/**
+ * Après la suppression du compte : tout ce qu'il a laissé sur cet appareil —
+ * session, clés `redview:*` du compte, projets en cache (IndexedDB) et lots de
+ * co-édition non envoyés (`redview-collab`, gardés à la déconnexion pour être
+ * renvoyés à la session suivante du même compte).
+ */
+export async function clearLocalAccountData(): Promise<void> {
+  clearStoredAppwriteSession();
+  clearUserScopedLocalStorage();
+  await Promise.race([
+    Promise.allSettled([clearProjectStore(), deleteIndexedDb('redview-collab')]),
+    new Promise((resolve) => setTimeout(resolve, 3000)),
+  ]);
 }
 
 /**
@@ -272,6 +300,8 @@ export async function signOutAccount({ force = false }: { force?: boolean } = {}
   }
 
   // 2. Puis purger l'état d'authentification local et les données propres à l'utilisateur.
+  trackAnalyticsEvent({ name: 'logout' });
+  clearAnalyticsContext();
   clearStoredAppwriteSession();
   clearUserScopedLocalStorage();
 

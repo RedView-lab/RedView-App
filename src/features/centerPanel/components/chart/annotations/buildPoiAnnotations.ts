@@ -4,7 +4,7 @@ import {
   getPoiAutoSortPicks,
   keepsTimelineItemWithPoiAutoSort,
 } from '@/features/itineraryPanel/lib/schedule';
-import { poiLabel } from '@/features/itineraryPanel/sections/timeline/KindBadge';
+import { poiLabel } from '@/features/itineraryPanel/sections/timeline/timelineKindLabels';
 import { buildScheduledTimelineState, parseStartReference } from '@/features/itineraryPanel/sections/timeline/TimelineTimelineView/utils';
 import type { Itinerary, PoiCategory, TimelineItem } from '@/features/itineraryPanel/types';
 import { translateAppText } from '@/shared/i18n';

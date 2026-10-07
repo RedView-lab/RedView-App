@@ -1,5 +1,5 @@
+import { trackAnalyticsEvent } from '@/shared/lib/analytics';
 import {
-  useEffect,
   useRef,
   useState,
   useMemo,
@@ -81,19 +81,13 @@ export function CenterPanelSummary({ fullscreen = false, onToggleFullscreen }: C
     ? itineraries.find((itinerary) => itinerary.id === editingState.itineraryId) ?? null
     : null;
 
-  useEffect(() => {
-    if (menuState && !selectedItinerary) {
-      setMenuState(null);
-    }
-  }, [menuState, selectedItinerary]);
-
-  useEffect(() => {
-    if (editingState && !editingItinerary) {
-      setEditingState(null);
-    }
-  }, [editingItinerary, editingState]);
-
-  useEffect(() => {
+  // Menu, renommage et repli d'un itinéraire disparu (supprimé, annulé) :
+  // oubliés dans ce rendu.
+  if (menuState && !selectedItinerary) setMenuState(null);
+  if (editingState && !editingItinerary) setEditingState(null);
+  const [collapsedFor, setCollapsedFor] = useState(itineraries);
+  if (collapsedFor !== itineraries) {
+    setCollapsedFor(itineraries);
     const validIds = new Set(itineraries.map((itinerary) => itinerary.id));
     setCollapsedIds((current) => {
       let changed = false;
@@ -104,7 +98,7 @@ export function CenterPanelSummary({ fullscreen = false, onToggleFullscreen }: C
       });
       return changed ? next : current;
     });
-  }, [itineraries]);
+  }
 
   const handleToggleFullscreen = () => {
     // An open menu or rename is placed for the panel being left.
@@ -155,6 +149,7 @@ export function CenterPanelSummary({ fullscreen = false, onToggleFullscreen }: C
   const handleDuplicate = () => {
     if (!selectedItinerary) return;
     store?.duplicateItinerary(selectedItinerary.id);
+    trackAnalyticsEvent({ name: 'itinerary_added', data: { method: 'duplicate' } });
     setMenuState(null);
   };
 

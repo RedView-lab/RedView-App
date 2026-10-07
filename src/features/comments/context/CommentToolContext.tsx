@@ -20,6 +20,7 @@ import type {
 import { flyToLocation } from '@/features/map3d/lib/cameraFlight';
 import { getCameraOwner } from '@/features/map3d/lib/cameraOwnership';
 import { translateAppText } from '@/shared/i18n';
+import { trackAnalyticsEvent } from '@/shared/lib/analytics';
 
 import { useLidarCommentSync } from '../bridge/useLidarCommentSync';
 import {
@@ -29,6 +30,7 @@ import {
   type CommentAuthor,
   type CommentTextInput,
 } from '../lib/commentActions';
+import { trackCommentAction } from '../lib/commentAnalytics';
 import { mergeMentionCandidates } from '../lib/identity';
 import type { MentionCandidate } from '../lib/messageText';
 import { countUnreadThreads, markThreadRead, markThreadUnread, pruneReadMarks } from '../lib/readState';
@@ -98,11 +100,16 @@ export function CommentToolProvider({ children, map, projectId = null, me, membe
     latest.current = { store, threads, view, map, me, openThreadId: visibleOpenThreadId, draft };
   });
 
-  const commit = useCallback((action: CommentAction): boolean => {
+  const commit = useCallback((action: CommentAction, surface: 'map' | 'lidar' = 'map'): boolean => {
     const { store: current, me: author } = latest.current;
     if (!current) return false;
-    return current.commitComments((comments) => applyCommentAction(comments, action, author));
+    const committed = current.commitComments((comments) => applyCommentAction(comments, action, author));
+    if (committed) trackCommentAction(action, surface);
+    return committed;
   }, []);
+  const commitFromViewer = useCallback((action: CommentAction) => {
+    commit(action, 'lidar');
+  }, [commit]);
 
   const updateView = useCallback((update: (view: ProjectCommentsView | undefined) => ProjectCommentsView | undefined) => {
     const current = latest.current.store;
@@ -122,9 +129,13 @@ export function CommentToolProvider({ children, map, projectId = null, me, membe
   const arm = useCallback((next: CommentSubTool = 'point') => {
     setSubTool(next);
     setArmed(true);
+    trackAnalyticsEvent({ name: 'map_tool_selected', data: { tool: 'comment' } });
   }, []);
   const toggle = useCallback(() => {
-    setArmed((current) => !current);
+    setArmed((current) => {
+      if (!current) trackAnalyticsEvent({ name: 'map_tool_selected', data: { tool: 'comment' } });
+      return !current;
+    });
     setSubTool('point');
     setDragZone(null);
     setZoneDrawing(null);
@@ -255,7 +266,7 @@ export function CommentToolProvider({ children, map, projectId = null, me, membe
     members,
     threads,
     reads: view?.reads,
-    onAction: commit,
+    onAction: commitFromViewer,
     onMarkRead: markReadFromViewer,
     onMarkUnread: markUnread,
   });

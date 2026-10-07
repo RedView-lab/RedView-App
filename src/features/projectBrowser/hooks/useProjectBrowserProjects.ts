@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 
 import { translateAppText } from '@/shared/i18n';
+import { countBucket, trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { readStoredAppwriteSession } from '@/shared/services/appwrite';
 import { notify } from '@/shared/ui/notify';
 import type { ProjectFolderSummary, ProjectSummary } from '@/shared/utils/projects';
@@ -30,6 +31,8 @@ const EMPTY_PROJECTS: ProjectSummary[] = [];
 
 /** Une mutation en échec est déjà signalée (toast du MutationCache) : l'appelant s'arrête là. */
 const ignoreHandledFailure = () => undefined;
+/** Mutation aboutie (pour la mesure d'audience) ; l'échec est déjà signalé de même. */
+const succeeded = (pending: Promise<unknown>) => pending.then(() => true, () => false);
 
 /**
  * Onglet « Projets » du gestionnaire : compose les données (TanStack Query,
@@ -76,13 +79,15 @@ export function useProjectBrowserProjects({
   const handleCreateProject = useCallback(async () => {
     if (creatingProject) return;
     const row = await createProject().catch(ignoreHandledFailure);
-    if (row) onOpenProject(row.id);
+    if (!row) return;
+    trackAnalyticsEvent({ name: 'project_created', data: { source: 'blank' } });
+    onOpenProject(row.id);
   }, [createProject, creatingProject, onOpenProject]);
 
   const { currentFolderId } = navigation;
   const handleCreateFolder = useCallback(async () => {
     if (creatingFolder) return;
-    await createFolder(currentFolderId).catch(ignoreHandledFailure);
+    if (await succeeded(createFolder(currentFolderId))) trackAnalyticsEvent({ name: 'folder_created' });
   }, [createFolder, creatingFolder, currentFolderId]);
 
   /**
@@ -99,8 +104,15 @@ export function useProjectBrowserProjects({
         notify.error(message);
         return null;
       });
+      trackAnalyticsEvent({
+        name: 'project_file_imported',
+        data: { outcome: result && result.imported.length > 0 ? 'ok' : 'error', files: countBucket(files.length) },
+      });
       if (!result) return;
       const { imported, failures } = result;
+      for (let index = 0; index < imported.length; index += 1) {
+        trackAnalyticsEvent({ name: 'project_created', data: { source: 'import' } });
+      }
       if (failures.length > 0) {
         setImportError(failures.join(' · '));
         if (imported.length > 0) {
@@ -125,7 +137,9 @@ export function useProjectBrowserProjects({
 
   const handleExportProject = useCallback(
     async (projectId: string) => {
-      await exportProject({ id: projectId }).catch(ignoreHandledFailure);
+      if (await succeeded(exportProject({ id: projectId }))) {
+        trackAnalyticsEvent({ name: 'project_file_exported', data: { from: 'browser' } });
+      }
     },
     [exportProject],
   );
@@ -139,7 +153,7 @@ export function useProjectBrowserProjects({
 
   const handleDeleteProject = useCallback(
     async (id: string) => {
-      await deleteProject({ id }).catch(ignoreHandledFailure);
+      if (await succeeded(deleteProject({ id }))) trackAnalyticsEvent({ name: 'project_deleted' });
     },
     [deleteProject],
   );
@@ -160,7 +174,7 @@ export function useProjectBrowserProjects({
 
   const handleDuplicateProject = useCallback(
     async (projectId: string) => {
-      await duplicateProject({ id: projectId }).catch(ignoreHandledFailure);
+      if (await succeeded(duplicateProject({ id: projectId }))) trackAnalyticsEvent({ name: 'project_duplicated' });
     },
     [duplicateProject],
   );
@@ -181,7 +195,7 @@ export function useProjectBrowserProjects({
 
   const handleLeaveProject = useCallback(
     async (projectId: string) => {
-      await leaveProject({ id: projectId }).catch(ignoreHandledFailure);
+      if (await succeeded(leaveProject({ id: projectId }))) trackAnalyticsEvent({ name: 'shared_project_left' });
     },
     [leaveProject],
   );

@@ -10,20 +10,21 @@
  *     massif holding the scene (DPBRA API, needs METEOFRANCE_API_KEY with the
  *     BRA API subscribed): depth on north/south slopes at 3 altitudes and the
  *     continuous snow cover limits;
- *   - the hourly weather of the past weeks (Open-Meteo: temperature at the
- *     scene altitude, precipitation, snowfall, 10 m wind) for melt and drift;
- *   - with coarse=1, a coarse snow-depth grid (Open-Meteo best match) for
- *     scenes outside the AROME domain.
+ *   - the hourly weather of the past weeks (self-hosted Open-Meteo on the VPS,
+ *     Météo-France models: temperature at the scene altitude, precipitation,
+ *     snowfall, 10 m wind) for melt and drift.
  * Every part is optional: a failing source is reported in `sources`, never
  * fatal.
  *
- * GET /api/snow-context?lat=..&lon=..&elevation=..&radiusKm=50&pastDays=60&coarse=0
+ * GET /api/snow-context?lat=..&lon=..&elevation=..&radiusKm=50&pastDays=60
  */
 import { Readable } from 'node:stream';
 import { createGunzip } from 'node:zlib';
 import { createInterface } from 'node:readline';
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
+import { OPENMETEO_DEFAULT_MODEL, OPENMETEO_MAX_HISTORY_DAYS, openMeteoUpstream } from './_lib/openMeteo.js';
 import { BRA_MASSIFS } from './_lib/snow/braMassifs.js';
+import { createOldestKeyTaker } from '../server/oldest-key.mjs';
 
 const FETCH_TIMEOUT_MS = 20_000;
 const MF_PARSE_BUDGET_MS = 45_000;
@@ -75,6 +76,7 @@ async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs =
 /** Tiny TTL cache that also shares in-flight promises. */
 class TtlCache<T> {
   private readonly map = new Map<string, { value: Promise<T>; expiresAt: number }>();
+  private readonly takeOldestKey = createOldestKeyTaker(this.map);
   private readonly ttlMs: number;
   private readonly maxEntries: number;
 
@@ -87,7 +89,7 @@ class TtlCache<T> {
     const hit = this.map.get(key);
     if (hit && hit.expiresAt > Date.now()) return hit.value;
     while (this.map.size >= this.maxEntries) {
-      const oldest = this.map.keys().next().value;
+      const oldest = this.takeOldestKey();
       if (oldest === undefined) break;
       this.map.delete(oldest);
     }
@@ -370,23 +372,12 @@ interface WeatherOut {
 }
 
 const weatherCache = new TtlCache<WeatherOut>(HOUR_MS, 128);
-const coarseCache = new TtlCache<CoarseOut>(HOUR_MS, 64);
 
-/** Self-hosted Open-Meteo first (OPENMETEO_UPSTREAM), the public API as fallback — as api/openmeteo.ts. */
+/** Open-Meteo auto-hébergé du VPS (api/_lib/openMeteo.ts), sans autre source. */
 async function openMeteo(pathAndQuery: string): Promise<unknown> {
-  const upstream = (process.env.OPENMETEO_UPSTREAM ?? '').trim().replace(/\/+$/, '');
-  const targets = upstream ? [`${upstream}${pathAndQuery}`, `https://api.open-meteo.com${pathAndQuery}`] : [`https://api.open-meteo.com${pathAndQuery}`];
-  let lastError: unknown = null;
-  for (const t of targets) {
-    try {
-      const res = await fetchWithTimeout(t, { headers: { Accept: 'application/json' } });
-      if (!res.ok) throw new Error(`Open-Meteo HTTP ${res.status}`);
-      return await res.json();
-    } catch (err) {
-      lastError = err;
-    }
-  }
-  throw lastError ?? new Error('Open-Meteo unavailable');
+  const res = await fetchWithTimeout(`${openMeteoUpstream()}${pathAndQuery}`, { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`Open-Meteo HTTP ${res.status}`);
+  return res.json();
 }
 
 function cleanSeries(values: unknown, n: number, fallback: number): number[] {
@@ -410,6 +401,7 @@ function weatherHistory(lat: number, lon: number, elevation: number | null, past
       hourly: 'temperature_2m,precipitation,snowfall,wind_speed_10m,wind_direction_10m',
       past_days: String(pastDays),
       forecast_days: '1',
+      models: OPENMETEO_DEFAULT_MODEL,
       wind_speed_unit: 'ms',
       timezone: 'GMT',
     });
@@ -429,43 +421,6 @@ function weatherHistory(lat: number, lon: number, elevation: number | null, past
       windSpeedMs: cleanSeries(json.hourly?.wind_speed_10m, n, 0),
       windDirDeg: cleanSeries(json.hourly?.wind_direction_10m, n, 270),
     };
-  });
-}
-
-interface CoarseOut {
-  width: number;
-  height: number;
-  lonMin: number;
-  latMin: number;
-  dLon: number;
-  dLat: number;
-  hsCm: number[];
-  resolutionM: number;
-}
-
-/** Coarse snow depth on a 9 × 7 lattice (≈ 0.1°), current hour, for scenes outside AROME. */
-function coarseGrid(lat: number, lon: number): Promise<CoarseOut> {
-  const width = 9, height = 7, dLon = 0.1, dLat = 0.1;
-  const lonMin = Math.round((lon - 0.4) * 10) / 10;
-  const latMin = Math.round((lat - 0.3) * 10) / 10;
-  return coarseCache.get(`${lonMin},${latMin}`, async () => {
-    const lats: string[] = [];
-    const lons: string[] = [];
-    for (let j = 0; j < height; j++) for (let i = 0; i < width; i++) { lats.push((latMin + j * dLat).toFixed(3)); lons.push((lonMin + i * dLon).toFixed(3)); }
-    const q = new URLSearchParams({ latitude: lats.join(','), longitude: lons.join(','), hourly: 'snow_depth', past_days: '1', forecast_days: '1', timezone: 'GMT' });
-    const json = (await openMeteo(`/v1/forecast?${q.toString()}`)) as unknown;
-    const list = (Array.isArray(json) ? json : [json]) as Array<{ hourly?: { time?: string[]; snow_depth?: Array<number | null> } }>;
-    if (list.length !== width * height) throw new Error('coarse grid: unexpected location count');
-    const now = Date.now();
-    const hsCm = list.map((loc) => {
-      const times = loc.hourly?.time ?? [];
-      const sd = loc.hourly?.snow_depth ?? [];
-      let k = 0;
-      while (k + 1 < times.length && Date.parse(`${times[k + 1]}Z`) <= now) k++;
-      const v = Number(sd[k]);
-      return Number.isFinite(v) ? Math.max(0, v * 100) : 0;
-    });
-    return { width, height, lonMin, latMin, dLon, dLat, hsCm, resolutionM: 0.1 * 111_000 * Math.cos((lat * Math.PI) / 180) };
   });
 }
 
@@ -495,26 +450,24 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     res.setHeader('Allow', 'GET, OPTIONS');
     return res.status(405).json({ error: 'Method not allowed' });
   }
-  let lat: number, lon: number, elevation: number | null, radiusKm: number, pastDays: number, wantCoarse: boolean;
+  let lat: number, lon: number, elevation: number | null, radiusKm: number, pastDays: number;
   try {
     lat = num(req.query.lat, 'lat', -90, 90);
     lon = num(req.query.lon, 'lon', -180, 180);
     const e = num(req.query.elevation, 'elevation', -500, 9000, Number.NaN);
     elevation = Number.isFinite(e) ? e : null;
     radiusKm = num(req.query.radiusKm, 'radiusKm', 5, 80, 50);
-    pastDays = Math.round(num(req.query.pastDays, 'pastDays', 7, 92, 60));
-    wantCoarse = String(Array.isArray(req.query.coarse) ? req.query.coarse[0] : req.query.coarse ?? '') === '1';
+    pastDays = Math.round(num(req.query.pastDays, 'pastDays', 7, OPENMETEO_MAX_HISTORY_DAYS, OPENMETEO_MAX_HISTORY_DAYS));
   } catch (err) {
     return res.status(400).json({ error: err instanceof BadRequestError ? err.message : 'Invalid query' });
   }
 
   const sources: Record<string, SourceState> = {};
-  const [slf, mf, bra, weather, coarse] = await Promise.allSettled([
+  const [slf, mf, bra, weather] = await Promise.allSettled([
     nearSwitzerland(lat, lon, radiusKm) ? slfStations(lat, lon, radiusKm) : Promise.resolve(null),
     meteoFranceStations(lat, lon, radiusKm),
     braFor(lat, lon),
     weatherHistory(lat, lon, elevation, pastDays),
-    wantCoarse ? coarseGrid(lat, lon) : Promise.resolve(null),
   ]);
 
   let stations: StationOut[] = [];
@@ -542,9 +495,6 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (weather.status === 'fulfilled') { weatherOut = weather.value; sources.weather = 'ok'; }
   else { sources.weather = 'error'; console.warn('[snow-context] weather:', weather.reason); }
 
-  let coarseOut: CoarseOut | null = null;
-  if (coarse.status === 'fulfilled') { coarseOut = coarse.value; sources.coarse = coarse.value ? 'ok' : 'skipped'; }
-  else { sources.coarse = 'error'; console.warn('[snow-context] coarse:', coarse.reason); }
 
   res.setHeader('Cache-Control', 'private, max-age=600');
   return res.status(200).json({
@@ -552,7 +502,6 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     rejectedStations: stations.length - checked.length,
     bra: braOut,
     weather: weatherOut,
-    coarse: coarseOut,
     sources,
   });
 }

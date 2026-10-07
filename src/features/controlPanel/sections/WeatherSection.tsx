@@ -5,9 +5,8 @@ import { ColorSwatch } from '../components/ColorSwatch';
 import { Section } from '../components/Section';
 import { Checkbox } from '../components/Checkbox';
 import { Select } from '../components/Select';
-import { Toggle } from '../components/Toggle';
 import { Slider } from '../components/Slider';
-import { IconChevronDown, IconClock, IconEye, IconEyeOff, IconInfo, IconWeather } from '../icons';
+import { IconChevronDown, IconClock, IconEye, IconEyeOff, IconWeather } from '../icons';
 import type {
   ControlPanelHandlers,
   WeatherPaletteBand,
@@ -45,7 +44,6 @@ interface Props {
   onPaletteBandColorChange: ControlPanelHandlers['onWeatherPaletteBandColorChange'];
   onPaletteBandVisibilityToggle: ControlPanelHandlers['onWeatherPaletteBandVisibilityToggle'];
   onPaletteBandBreakpointChange: ControlPanelHandlers['onWeatherPaletteBandBreakpointChange'];
-  onAddAlert: ControlPanelHandlers['onWeatherAddAlert'];
 }
 
 const FORECAST_HIDDEN_LAYER_KEYS = new Set<WeatherLayerKey>(['wind', 'sunshine']);
@@ -279,7 +277,6 @@ export function WeatherSection({
   onPaletteBandColorChange,
   onPaletteBandVisibilityToggle,
   onPaletteBandBreakpointChange,
-  onAddAlert,
 }: Props) {
   const { locale, t } = useAppI18n();
   const dateLocale = locale === 'fr' ? 'fr-FR' : 'en-US';
@@ -471,13 +468,6 @@ export function WeatherSection({
             </div>
           );
         })}
-      </div>
-
-      {/* Add alert toggle */}
-      <div className="rvc-weather__add-alert">
-        <Toggle checked={false} onChange={onAddAlert} />
-        <span className="rvc-weather__add-alert-text">{t('Ajouter des alertes')}</span>
-        <IconInfo size={16} />
       </div>
     </Section>
   );

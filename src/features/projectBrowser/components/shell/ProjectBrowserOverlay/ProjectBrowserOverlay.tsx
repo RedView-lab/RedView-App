@@ -1,7 +1,8 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 
 import { useAppI18n } from '@/shared/i18n';
 import { RedViewLogo } from '@/shared/components/RedViewLogo';
+import { trackScreen, type AnalyticsScreen } from '@/shared/lib/analytics';
 
 import { AccountPanel } from '../../../account';
 import { SettingsPanel } from '../../../settings';
@@ -21,9 +22,21 @@ const BillingActionModal = lazy(() =>
   import('../../../billing/components/BillingActionModal/BillingActionModal').then((m) => ({ default: m.BillingActionModal })),
 );
 
+const TAB_SCREENS = {
+  projects: 'projects',
+  account: 'projects_account',
+  subscription: 'projects_subscription',
+  settings: 'projects_settings',
+} as const satisfies Record<string, AnalyticsScreen>;
+
 export function ProjectBrowserOverlay(props: ProjectBrowserOverlayProps) {
   const { t } = useAppI18n();
   const state = useProjectBrowserOverlayState(props);
+
+  // Page vue virtuelle de l'onglet affiché (mesure d'audience).
+  useEffect(() => {
+    if (props.open) trackScreen(TAB_SCREENS[state.activeTab]);
+  }, [props.open, state.activeTab]);
 
   if (!props.open) return null;
 

@@ -93,9 +93,6 @@ export const IconClock = ({ size = 12, ...rest }: AssetIconProps) => (
   <SvgV2Icon name="clock-rewind.svg" size={size} {...rest} />
 );
 
-export const IconInfo = ({ size = 16, ...rest }: AssetIconProps) => (
-  <SvgV2Icon name="info-circle.svg" size={size} {...rest} />
-);
 export const IconSunrise = ({ size = 16, ...rest }: AssetIconProps) => (
   <SvgV2Icon name="sunrise.svg" size={size} {...rest} />
 );

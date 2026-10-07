@@ -1,8 +1,11 @@
 import { useState, useEffect, type FormEvent } from 'react'
-import { trackAnalyticsEvent } from '@/shared/lib/analytics'
+import { trackAnalyticsEvent, trackScreen } from '@/shared/lib/analytics'
+import { authFailureReason, rememberOAuthIntent } from './authAnalytics'
 import { RedViewLogo } from '@/shared/components/RedViewLogo'
+import { errorMessage as thrownMessage } from '@/shared/lib/errors'
 import {
   account,
+  AppwriteException,
   ID,
   OAuthProvider,
   saveStoredAppwriteSession,
@@ -69,7 +72,11 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
 
   // Verification modal states
   const [showVerificationModal, setShowVerificationModal] = useState(false)
-  const [verificationDebugCode, setVerificationDebugCode] = useState<string | undefined>()
+
+  // Page vue virtuelle de l'écran affiché (mesure d'audience).
+  useEffect(() => {
+    trackScreen(mode === 'signup' ? 'signup' : mode === 'login' ? 'login' : 'reset_password')
+  }, [mode])
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -96,6 +103,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
           return
         }
 
+        trackAnalyticsEvent({ name: 'password_reset_requested' })
         // Generic anti-enumeration confirmation message
         setSuccessMessage(
           data?.message ||
@@ -143,22 +151,22 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
 
       try {
         await account.updateRecovery(userId, secret, password)
+        trackAnalyticsEvent({ name: 'password_reset_completed' })
         setSuccessMessage('Votre mot de passe a été réinitialisé avec succès ! Vous pouvez maintenant vous connecter.')
         setMode('login')
         setPassword('')
         setConfirmPassword('')
         setRecoveryUserId(null)
         setRecoverySecret(null)
-      } catch (error: any) {
+      } catch (error) {
+        trackAnalyticsEvent({ name: 'auth_failed', data: { method: 'email', step: 'reset', reason: authFailureReason(error) } })
         if (
-          error?.type === 'user_invalid_token' ||
-          error?.code === 401 ||
-          error?.message?.toLowerCase().includes('token') ||
-          error?.message?.toLowerCase().includes('invalid credential')
+          (error instanceof AppwriteException && (error.type === 'user_invalid_token' || error.code === 401)) ||
+          /token|invalid credential/i.test(thrownMessage(error, ''))
         ) {
           setErrorMessage('Ce lien de réinitialisation a expiré ou est invalide. Veuillez refaire une demande.')
         } else {
-          setErrorMessage(error?.message || 'Erreur lors de la réinitialisation du mot de passe.')
+          setErrorMessage(thrownMessage(error, 'Erreur lors de la réinitialisation du mot de passe.'))
         }
       } finally {
         setLoading(false)
@@ -216,12 +224,12 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
           const { ok, data } = await sendVerificationCode(trimmedEmail, trimmedName)
 
           if (!ok) {
+            trackAnalyticsEvent({ name: 'auth_failed', data: { method: 'email', step: 'signup', reason: 'other' } })
             setErrorMessage(data.error || "Impossible d'envoyer le code de vérification.")
             setLoading(false)
             return
           }
 
-          setVerificationDebugCode(data.debugCode)
           setShowVerificationModal(true)
           setLoading(false)
           return
@@ -238,17 +246,17 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
       const user = await account.get()
       saveStoredAppwriteSession({ id: user.$id, email: user.email, name: user.name })
       trackAnalyticsEvent({
-        name: mode === 'signup' ? 'user_signup' : 'user_login',
+        name: mode === 'signup' ? 'signup_completed' : 'login_completed',
         data: { method: 'email' },
       })
-      if (typeof window !== 'undefined' && window.umami && user.email) {
-        window.umami.identify({ email: user.email, userId: user.$id })
-      }
       onLogin?.(user.email)
-    } catch (error: any) {
+    } catch (error) {
       console.warn('[auth] Appwrite action error:', error)
-      const message = error?.message || 'Authentication failed. Please check your credentials.'
-      setErrorMessage(message)
+      trackAnalyticsEvent({
+        name: 'auth_failed',
+        data: { method: 'email', step: mode === 'signup' ? 'signup' : 'login', reason: authFailureReason(error) },
+      })
+      setErrorMessage(thrownMessage(error, 'Authentication failed. Please check your credentials.'))
     } finally {
       setLoading(false)
     }
@@ -260,6 +268,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
     try {
       const { ok, data } = await verifyCodeAndCreateAccount(trimmedEmail, code, resolveSignupName(name, trimmedEmail), password)
       if (!ok) {
+        trackAnalyticsEvent({ name: 'auth_failed', data: { method: 'email', step: 'verification', reason: 'code' } })
         return { success: false, error: data.error || 'Code invalide.' }
       }
 
@@ -267,16 +276,17 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
       await account.createEmailPasswordSession(trimmedEmail, password)
       const user = await account.get()
       saveStoredAppwriteSession({ id: user.$id, email: user.email, name: user.name })
+      trackAnalyticsEvent({ name: 'signup_completed', data: { method: 'email' } })
 
       setShowVerificationModal(false)
       onLogin?.(user.email)
       return { success: true }
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'Erreur lors de la confirmation du compte.' }
+    } catch (err) {
+      return { success: false, error: thrownMessage(err, 'Erreur lors de la confirmation du compte.') }
     }
   }
 
-  const handleResendVerification = async (): Promise<{ success: boolean; debugCode?: string; error?: string }> => {
+  const handleResendVerification = async (): Promise<{ success: boolean; error?: string }> => {
     const trimmedEmail = email.trim()
 
     try {
@@ -284,29 +294,27 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
       if (!ok) {
         return { success: false, error: data.error || 'Impossible de renvoyer le code.' }
       }
-      return { success: true, debugCode: data.debugCode }
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'Erreur lors du renvoi du code.' }
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: thrownMessage(err, 'Erreur lors du renvoi du code.') }
     }
   }
 
   const handleGoogleAuth = () => {
     setErrorMessage(null)
     setLoading(true)
-    if (mode === 'signup') {
-      trackAnalyticsEvent({ name: 'user_signup', data: { method: 'google', provider: 'google' } })
-    } else {
-      trackAnalyticsEvent({ name: 'user_login', data: { method: 'google' } })
-    }
+    // Issue (inscription ou connexion) décidée au retour d'OAuth : authAnalytics.ts.
+    rememberOAuthIntent('google')
     try {
       account.createOAuth2Session(
         OAuthProvider.Google,
         window.location.origin,
         window.location.origin,
       )
-    } catch (error: any) {
+    } catch (error) {
+      trackAnalyticsEvent({ name: 'auth_failed', data: { method: 'google', step: mode === 'signup' ? 'signup' : 'login', reason: authFailureReason(error) } })
       setLoading(false)
-      setErrorMessage(error?.message || 'Failed to initiate Google OAuth.')
+      setErrorMessage(thrownMessage(error, 'Failed to initiate Google OAuth.'))
     }
   }
 
@@ -621,12 +629,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
                 <button
                   type="button"
                   className="rv-login-footer-action"
-                  onClick={() => {
-                    if (typeof window !== 'undefined') {
-                      window.localStorage.setItem('redview:dev-session', 'true')
-                    }
-                    onLogin?.('dev@redview.tech')
-                  }}
+                  onClick={() => onLogin?.('dev@redview.tech')}
                 >
                   Continue with Demo account
                 </button>
@@ -654,8 +657,6 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
       {/* 6-digit Email Verification Modal */}
       <VerificationCodeModal
         isOpen={showVerificationModal}
-        email={email.trim()}
-        debugCode={verificationDebugCode}
         onClose={() => setShowVerificationModal(false)}
         onConfirm={handleConfirmVerification}
         onResend={handleResendVerification}

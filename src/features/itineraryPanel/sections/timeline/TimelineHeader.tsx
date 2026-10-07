@@ -5,6 +5,7 @@
  *        The agenda keeps its historical id `'timeline'` (persisted view).
  * Right: settings, split "add" button, fullscreen toggle.
  */
+import { analyticsAttrs } from '@/shared/lib/analytics';
 import type { MouseEventHandler } from 'react';
 import { useAppI18n } from '@/shared/i18n';
 import { IconMaximize } from '@/features/mapViewportControls/components/MapViewportControlIcons';
@@ -50,6 +51,7 @@ export function TimelineHeader({
           aria-selected={view === 'sheet'}
           className={`rvi-tl-tabs__btn${view === 'sheet' ? ' is-active' : ''}`}
           onClick={() => onChangeView?.('sheet')}
+          {...analyticsAttrs({ name: 'roadbook_tab_opened', data: { tab: 'sheet' } })}
         >
           <span className="rvi-tl-tabs__label">{t('Feuille de route')}</span>
           <IconLayoutGrid size={12} />
@@ -60,6 +62,7 @@ export function TimelineHeader({
           aria-selected={view === 'timeline'}
           className={`rvi-tl-tabs__btn${view === 'timeline' ? ' is-active' : ''}`}
           onClick={() => onChangeView?.('timeline')}
+          {...analyticsAttrs({ name: 'roadbook_tab_opened', data: { tab: 'agenda' } })}
         >
           <span className="rvi-tl-tabs__label">{t('Agenda')}</span>
           <IconClockFastForward size={12} />

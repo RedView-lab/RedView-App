@@ -255,8 +255,8 @@ async function main() {
   if (!PROD) {
     const big = (n) => Buffer.alloc(n, 0x61);
     // Content-Length déclaré > limite → 413 immédiat
-    const fb = await raw('POST', '/api/feedback', { headers: { 'content-type': 'application/json', 'content-length': String(1024 * 1024 + 10) }, body: big(1024 * 1024 + 10) });
-    check(fb.status === 413, 'body.feedback.1MB+', 'POST /api/feedback 1 MiB+10 B → 413', `status=${fb.status} body=${fb.body.toString().slice(0, 60)}`);
+    const fb = await raw('POST', '/api/projects/share', { headers: { 'content-type': 'application/json', 'content-length': String(1024 * 1024 + 10) }, body: big(1024 * 1024 + 10) });
+    check(fb.status === 413, 'body.share.1MB+', 'POST /api/projects/share 1 MiB+10 B → 413', `status=${fb.status} body=${fb.body.toString().slice(0, 60)}`);
     const poi = await raw('POST', '/api/poi', { headers: { 'content-type': 'application/json', 'content-length': String(512 * 1024 + 1) }, body: big(512 * 1024 + 1) });
     check(poi.status === 413, 'body.poi.512K+', 'POST /api/poi 512 KiB+1 → 413', `status=${poi.status}`);
     const brouter = await raw('POST', '/api/brouter/profile', { headers: { 'content-type': 'text/plain', 'content-length': String(600 * 1024) }, body: big(600 * 1024) });
@@ -266,11 +266,11 @@ async function main() {
       for (let i = 0; i < 64; i++) yield big(64 * 1024);
     }
     const t0 = Date.now();
-    const chunked = await raw('POST', '/api/feedback', { headers: { 'content-type': 'application/json', 'transfer-encoding': 'chunked' }, body: chunks() });
+    const chunked = await raw('POST', '/api/projects/share', { headers: { 'content-type': 'application/json', 'transfer-encoding': 'chunked' }, body: chunks() });
     check(chunked.status === 413 || chunked.status === 0, 'body.chunked.4MB', 'POST chunked 4 MiB (no length) → 413', `status=${chunked.status}${chunked.error ? ` err=${chunked.error}` : ''} in ${Date.now() - t0} ms`);
     // Petite requête mal formée : vérifier qu'on n'obtient pas un 500 avec stack
-    const bad = await raw('POST', '/api/feedback', { headers: { 'content-type': 'application/json' }, body: Buffer.from('{not json') });
-    record(bad.status === 500 ? 'WARN' : 'INFO', 'body.badjson', 'POST /api/feedback invalid JSON', `status=${bad.status} body=${bad.body.toString().slice(0, 100)}`);
+    const bad = await raw('POST', '/api/projects/share', { headers: { 'content-type': 'application/json' }, body: Buffer.from('{not json') });
+    record(bad.status === 500 ? 'WARN' : 'INFO', 'body.badjson', 'POST /api/projects/share invalid JSON', `status=${bad.status} body=${bad.body.toString().slice(0, 100)}`);
   }
 
   // ── 7. HEAD / OPTIONS / méthodes ─────────────────────────────────────────

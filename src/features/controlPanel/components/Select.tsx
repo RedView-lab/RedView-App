@@ -54,10 +54,8 @@ export function Select<T extends string = string>({
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  useEffect(() => {
-    if (!disabled) return;
-    setOpen(false);
-  }, [disabled]);
+  // Désactivé : la liste se ferme dans ce rendu.
+  if (disabled && open) setOpen(false);
 
   useLayoutEffect(() => {
     if (!open || !ref.current) return;

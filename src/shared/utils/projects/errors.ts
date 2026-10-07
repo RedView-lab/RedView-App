@@ -20,7 +20,12 @@ export type ProjectCloudErrorKind =
   /** Le document n'existe plus côté cloud (supprimé). */
   | 'not-found'
   /** Autre refus du serveur (validation, 4xx). */
-  | 'rejected';
+  | 'rejected'
+  /**
+   * Données du projet indécodables (charge utile corrompue ou forme inconnue) :
+   * jamais remplacées par un projet vide, qu'une sauvegarde écrirait par-dessus.
+   */
+  | 'unreadable';
 
 export const PROJECT_CLOUD_ERROR_MESSAGES: Record<ProjectCloudErrorKind, string> = {
   offline: 'Connexion au cloud impossible : les modifications sont conservées sur cet appareil et seront synchronisées automatiquement.',
@@ -29,6 +34,7 @@ export const PROJECT_CLOUD_ERROR_MESSAGES: Record<ProjectCloudErrorKind, string>
   conflict: 'Ce projet a été modifié sur un autre appareil.',
   'not-found': 'Ce projet a été supprimé.',
   rejected: 'Le serveur a refusé l’enregistrement du projet.',
+  unreadable: 'Les données de ce projet dans le cloud sont illisibles : il n’a pas été ouvert, pour ne pas les écraser.',
 };
 
 export class ProjectCloudError extends Error {

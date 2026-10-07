@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 // Module précis, pas le barrel controlPanel : le shell du Dashboard ne doit
 // pas tirer les panneaux de l'éditeur (scripts/quality/check-bundle.mjs).
 import {
@@ -48,12 +48,14 @@ export function useDashboardBasemap({
     [effectiveBasemapId],
   );
 
-  useEffect(() => {
-    setSelectedBasemap({
-      projectId: activeProjectId,
-      basemapId: initialBasemapId,
-    });
-  }, [activeProjectId, initialBasemapId]);
+  // Projet ouvert, ou fond de carte enregistré dans le projet : la sélection
+  // repart de celui du projet.
+  const [selectionSource, setSelectionSource] = useState<SelectedBasemapState | null>(null);
+  if (selectionSource?.projectId !== activeProjectId || selectionSource.basemapId !== initialBasemapId) {
+    const source = { projectId: activeProjectId, basemapId: initialBasemapId };
+    setSelectionSource(source);
+    setSelectedBasemap(source);
+  }
 
   const handleBasemapChange = useCallback((id: BasemapId) => {
     setSelectedBasemap({

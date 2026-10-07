@@ -25,6 +25,9 @@
 export const REST_SAMPLES = 16;
 /** GPU time aimed at for a still frame (a few vsyncs: nothing moves). */
 const REST_TARGET_MS = 50;
+/** Photo mode: more frames (soft shadows and clouds converge with them) and a denser still selection. */
+export const PHOTO_REST_SAMPLES = 32;
+export const PHOTO_REST_TARGET_MS = 110;
 /** The budget grows while a complete still frame costs less than this share of the target… */
 const GROW_BELOW = 0.6;
 /** …and shrinks above this one. */
@@ -68,6 +71,10 @@ export class RestRefinement {
   phase: RestPhase = 'moving';
   /** Index of the next accumulated frame (0 = plain frame, replaces the history). */
   sample = 0;
+  /** Frames averaged per still view. */
+  samples = REST_SAMPLES;
+  /** GPU time aimed at for a complete still frame (ms). */
+  private targetMs = REST_TARGET_MS;
   /** Learnt still budget (points, before the density slider); 0 until the first still view. */
   private restBudget = 0;
   private stableFrames = 0;
@@ -77,6 +84,13 @@ export class RestRefinement {
   /** @param enabled false keeps every frame at the moving budget, without accumulation (pinned-budget benches). */
   constructor(enabled: boolean) {
     this.enabled = enabled;
+  }
+
+  /** Still-view quality: frames averaged and GPU time aimed at per frame (photo mode raises both). */
+  setQuality(samples: number, targetMs: number): void {
+    this.samples = Math.max(1, Math.round(samples));
+    this.targetMs = Math.max(10, targetMs);
+    this.invalidate();
   }
 
   /** The camera moves: moving budget, no accumulation. */
@@ -141,7 +155,7 @@ export class RestRefinement {
     if (++this.stableFrames < MEASURE_FRAMES) return;
     this.stableFrames = 0;
     if (frame.gpuMs > 0 && this.adjustments < MAX_ADJUSTMENTS) {
-      const target = REST_TARGET_MS;
+      const target = this.targetMs;
       if (frame.budgetLimited && frame.gpuMs < target * GROW_BELOW && this.restBudget < restCeiling) {
         this.restBudget = Math.min(restCeiling, this.restBudget * Math.min(MAX_GROWTH, (target * 0.85) / frame.gpuMs));
         this.adjustments++;
@@ -172,7 +186,7 @@ export class RestRefinement {
       return;
     }
     this.sample++;
-    if (this.sample >= REST_SAMPLES) this.phase = 'done';
+    if (this.sample >= this.samples) this.phase = 'done';
   }
 
   /** Still frames left to render before the image is final. */

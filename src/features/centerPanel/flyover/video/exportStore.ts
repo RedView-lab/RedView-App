@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { longDurationBucket, trackAnalyticsEvent } from '@/shared/lib/analytics';
 import type { FlyoverVideoOrientation } from './config';
 import type { FlyoverVideoPhase, FlyoverVideoRequest } from './renderFlyoverVideo';
 
@@ -143,6 +144,12 @@ export async function startFlyoverVideoExport(request: FlyoverVideoRequest & { f
   controller = abort;
   window.addEventListener('beforeunload', warnBeforeUnload);
   const releaseScreen = keepScreenAwake();
+  const startedAt = performance.now();
+  const trackOutcome = (outcome: 'done' | 'cancelled' | 'error') =>
+    trackAnalyticsEvent({
+      name: 'flyover_video_exported',
+      data: { format: request.orientation, outcome, duration: longDurationBucket(performance.now() - startedAt) },
+    });
   setState({
     status: 'running',
     orientation: request.orientation,
@@ -164,6 +171,7 @@ export async function startFlyoverVideoExport(request: FlyoverVideoRequest & { f
       },
     });
     downloadBlob(result.blob, request.fileName);
+    trackOutcome('done');
     setState({
       status: 'done',
       fileName: request.fileName,
@@ -173,9 +181,11 @@ export async function startFlyoverVideoExport(request: FlyoverVideoRequest & { f
     });
   } catch (error) {
     if (abort.signal.aborted) {
+      trackOutcome('cancelled');
       setState({ status: 'cancelled' });
     } else {
       console.error('[flyover-video] export failed', error);
+      trackOutcome('error');
       setState({
         status: 'error',
         message: error instanceof Error ? error.message : 'Rendu de la vidéo impossible.',

@@ -1,12 +1,13 @@
 import type { ApiRequest, ApiResponse } from '../_lib/types.js';
+import { bodyFields } from '../_lib/http.js';
 import { ID } from 'node-appwrite';
 import { getAppwriteUsers } from '../_lib/appwrite.js';
+import { parseEmailAddress } from '../_lib/email.js';
 import {
-  normalizeVerificationEmail,
-  validateVerificationCode,
+  checkVerificationCode,
+  consumeVerificationCode,
 } from '../_lib/verificationStore.js';
 
-const MAX_EMAIL_LENGTH = 254;
 const MAX_NAME_LENGTH = 100;
 const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_LENGTH = 256;
@@ -17,15 +18,14 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const { email, code, name, password } = req.body || {};
-  const normalizedEmail = typeof email === 'string' ? normalizeVerificationEmail(email) : '';
+  const { email, code, name, password } = bodyFields(req);
   const trimmedCode = typeof code === 'string' ? code.trim() : '';
-
-  if (!normalizedEmail || !trimmedCode) {
+  if (typeof email !== 'string' || !email.trim() || !trimmedCode) {
     return res.status(400).json({ error: 'E-mail et code de vérification requis.' });
   }
 
-  if (normalizedEmail.length > MAX_EMAIL_LENGTH || !normalizedEmail.includes('@')) {
+  const normalizedEmail = parseEmailAddress(email);
+  if (!normalizedEmail) {
     return res.status(400).json({ error: 'Une adresse e-mail valide est requise.' });
   }
 
@@ -47,8 +47,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return res.status(400).json({ error: 'Le nom ne doit pas dépasser 100 caractères.' });
   }
 
-  // 1. Validate code
-  const validation = validateVerificationCode(normalizedEmail, trimmedCode);
+  // 1. Validate code (consumed only once the account exists: an Appwrite
+  //    failure below leaves it usable for a retry)
+  const validation = checkVerificationCode(normalizedEmail, trimmedCode);
   if (!validation.valid) {
     return res
       .status(validation.status ?? 400)
@@ -72,21 +73,38 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       );
     } catch (createErr) {
       // Atteignable uniquement avec un code valide → pas d'énumération possible.
-      const errInfo = (createErr ?? {}) as { message?: unknown; code?: unknown };
-      const alreadyExists =
-        (typeof errInfo.message === 'string' && errInfo.message.includes('already exists')) ||
-        errInfo.code === 409;
+      const errInfo = (createErr ?? {}) as { message?: unknown; code?: unknown; type?: unknown };
+      const message = typeof errInfo.message === 'string' ? errInfo.message : '';
+      const alreadyExists = message.includes('already exists') || errInfo.code === 409;
       if (alreadyExists) {
+        consumeVerificationCode(normalizedEmail);
         return res.status(409).json({
           error: 'Un compte existe déjà avec cette adresse e-mail. Veuillez vous connecter.',
         });
-      } else {
-        throw createErr;
       }
+      // Politique de mot de passe d'Appwrite (dictionnaire des mots de passe
+      // courants, données personnelles) : refus à expliquer, pas une panne.
+      const passwordRefused =
+        errInfo.code === 400 &&
+        ((typeof errInfo.type === 'string' && errInfo.type.startsWith('password_')) || /password/i.test(message));
+      if (passwordRefused) {
+        return res.status(400).json({
+          error: 'Ce mot de passe est refusé (trop courant ou proche de vos informations personnelles). Choisissez-en un autre.',
+        });
+      }
+      throw createErr;
     }
 
-    // 3. Mark email as verified immediately
-    await users.updateEmailVerification(user.$id, true);
+    consumeVerificationCode(normalizedEmail);
+
+    // 3. Mark the email as verified: the code proved it. The account works
+    //    without the flag, so a failure here must not report the sign-up as
+    //    failed (a retry would only get « account already exists »).
+    try {
+      await users.updateEmailVerification(user.$id, true);
+    } catch (verifyErr) {
+      console.error('[verify-code] Account created but email verification flag not set:', verifyErr);
+    }
 
     return res.status(200).json({
       success: true,

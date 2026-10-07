@@ -3,6 +3,7 @@ import { translateAppText } from '@/shared/i18n/config';
 import { resolveDownloadUrls, cacheDownloadUrl } from '../wfsClient';
 import { saveTileQuietly } from './archiveCandidates';
 import {
+  asDownloadFailure,
   isFinalDownloadError,
   NoCoverageError,
   throwIfCancelled,
@@ -63,8 +64,9 @@ export async function downloadIgnTile(
       cacheDownloadUrl(coord, url);
       await saveTileQuietly(coord, buffer);
       return buffer;
-    } catch (err: any) {
-      if (isFinalDownloadError(err)) throw err;
+    } catch (caught) {
+      if (isFinalDownloadError(caught)) throw caught;
+      const err = asDownloadFailure(caught);
       if (err.status !== 404) allNotFound = false;
       lastError = err;
       if (err.status === 404) {

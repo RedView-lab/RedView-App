@@ -141,7 +141,7 @@ describe('bodyLimitFor', () => {
   it('caps POI and BRouter bodies at 512 KiB, others at 1 MiB', () => {
     expect(bodyLimitFor('poi')).toBe(512 * 1024);
     expect(bodyLimitFor('brouter')).toBe(512 * 1024);
-    expect(bodyLimitFor('feedback')).toBe(1024 * 1024);
+    expect(bodyLimitFor('projects/share')).toBe(1024 * 1024);
   });
 });
 

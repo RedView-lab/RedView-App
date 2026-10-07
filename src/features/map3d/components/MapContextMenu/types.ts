@@ -36,7 +36,6 @@ export interface MapContextMenuOverlayDetail {
 export interface MapContextMenuOverlayContext {
   weather: {
     enabled: boolean;
-    tab: 'forecast' | 'trends';
     date: string;
     time: string;
     forecastDay: number;

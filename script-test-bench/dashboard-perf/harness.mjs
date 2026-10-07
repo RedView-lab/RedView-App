@@ -13,6 +13,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { createFakeAppwrite, transferDelayMs } from './fakeAppwrite.mjs';
 
@@ -140,14 +141,20 @@ export async function launchBrowser({ channel = 'msedge', headless = true, viewp
  * `/api/billing/*` (vérifie le JWT auprès d'Appwrite côté serveur), GlitchTip
  * (erreurs et rapports CSP, gardés pour les contrôles).
  *
+ * Mesure d'audience : coupée par défaut. `analytics: true` force le tracker
+ * first-party (drapeau `rv:analytics-test`), sert la copie figée du vrai
+ * tracker Umami (umami-tracker-3.4.0.js) à la place de `/s/x.js` et garde
+ * chaque envoi de `/s/api/send` dans `telemetry.analytics` (rien ne sort).
+ *
  * @param {import('playwright').BrowserContext} context
- * @param {{ root: string, origin: string, loggedIn?: boolean, network?: { rttMs: number, downKbps: number } | null }} options
+ * @param {{ root: string, origin: string, loggedIn?: boolean, network?: { rttMs: number, downKbps: number } | null, analytics?: boolean }} options
  */
-export async function installBackend(context, { root, origin, loggedIn = true, network = null }) {
+export async function installBackend(context, { root, origin, loggedIn = true, network = null, analytics = false }) {
   const { appwriteEndpoint } = readBuildEnv(root);
   const appwrite = createFakeAppwrite({ endpoint: appwriteEndpoint, user: BENCH_USER, loggedIn, network });
   await appwrite.install(context);
-  const telemetry = { cspReports: [], errors: [] };
+  /** @type {{ cspReports: string[], errors: string[], analytics: Array<{ type: string, payload: Record<string, unknown> }> }} */
+  const telemetry = { cspReports: [], errors: [], analytics: [] };
   await context.route('https://errors.redview.tech/**', async (route) => {
     const body = route.request().postData() ?? '';
     if (/\/security\//.test(route.request().url())) {
@@ -174,12 +181,41 @@ export async function installBackend(context, { root, origin, loggedIn = true, n
   });
   // Mesure d'audience de production : jamais alimentée par un banc.
   await context.route('https://analytics.redview.tech/**', (route) => route.fulfill({ status: 204, body: '' }));
+  await installAnalytics(context, origin, telemetry, analytics);
   await context.route(`${origin}/api/billing/**`, async (route) => {
     const body = JSON.stringify({ subscription: null, plan: 'beta', customer: null, invoices: [], paymentMethods: [] });
     await sleep(transferDelayMs(network, body.length + 400));
     await route.fulfill({ status: 200, contentType: 'application/json', body });
   });
   return { appwrite, telemetry };
+}
+
+const UMAMI_TRACKER = path.join(path.dirname(fileURLToPath(import.meta.url)), 'umami-tracker-3.4.0.js');
+
+/** Tracker first-party de l'app (`/s/`) : coupé, ou vrai tracker local avec envois capturés. */
+async function installAnalytics(context, origin, telemetry, enabled) {
+  if (!enabled) {
+    await context.route(`${origin}/s/**`, (route) => route.fulfill({ status: 204, body: '' }));
+    return;
+  }
+  await context.addInitScript(() => {
+    try {
+      localStorage.setItem('rv:analytics-test', '1');
+    } catch {
+      // Stockage indisponible : pas de mesure, le contrôle le dira.
+    }
+  });
+  const tracker = fs.readFileSync(UMAMI_TRACKER, 'utf8');
+  await context.route(`${origin}/s/x.js`, (route) => route.fulfill({ status: 200, contentType: 'application/javascript; charset=utf-8', body: tracker }));
+  await context.route(`${origin}/s/api/send`, async (route) => {
+    try {
+      const { type, payload } = JSON.parse(route.request().postData() ?? '{}');
+      telemetry.analytics.push({ type: String(type), payload: payload ?? {} });
+    } catch {
+      telemetry.analytics.push({ type: 'invalid', payload: {} });
+    }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  });
 }
 
 /** Médiane et percentiles d'une série. */

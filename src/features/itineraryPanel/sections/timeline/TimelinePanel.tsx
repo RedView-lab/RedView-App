@@ -6,7 +6,7 @@
  * callback props so the parent container can wire them to a backend,
  * optimistic updates, undo/redo etc.
  */
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { useMemo, useRef, useState, type MouseEvent } from 'react';
 import type { PredictionResult } from '@/features/fitPredictor';
 import { useAppI18n } from '@/shared/i18n';
 import type { SportDiscipline } from '@/shared/lib/discipline';
@@ -32,11 +32,11 @@ import {
 import { sameTimelineFilters } from './timelineFilterUtils';
 import { TimelineFilterBar } from './TimelineFilterBar';
 import { matchesPoiCategory } from './poiCategoryMatch';
+import { TimelineTableSettings } from './TimelineTableSettings';
 import {
-  TimelineTableSettings,
-  type TimelineTableSettingsState,
   DEFAULT_TIMELINE_TABLE_SETTINGS,
-} from './TimelineTableSettings';
+  type TimelineTableSettingsState,
+} from './timelineTableSettingsState';
 import { buildScheduledTimelineState, parseStartReference } from './TimelineTimelineView/utils';
 import { indexPoiAutoSortPicks, keepsTimelineItemWithPoiAutoSort } from '../../lib/schedule/poiAutoSort';
 
@@ -165,20 +165,18 @@ export function TimelinePanel({
     setAddMenuAnchor(null);
   };
 
-  useEffect(() => {
-    if (view !== 'timeline') {
-      setTimelineEditOpen(false);
-    }
-  }, [view]);
+  // L'édition de l'agenda n'existe que dans sa vue.
+  if (view !== 'timeline' && timelineEditOpen) setTimelineEditOpen(false);
 
-  useEffect(() => {
-    if (!isFullscreen) return;
-    if (view === 'timeline') {
-      setTimelineEditOpen(true);
-    } else if (view === 'sheet') {
-      setSheetSettingsOpen(true);
-    }
-  }, [isFullscreen, view]);
+  // En plein écran, la vue affichée ouvre ses réglages (à l'entrée et à chaque
+  // changement de vue).
+  const fullscreenView = isFullscreen ? view : null;
+  const [settingsOpenedFor, setSettingsOpenedFor] = useState<typeof fullscreenView>(null);
+  if (settingsOpenedFor !== fullscreenView) {
+    setSettingsOpenedFor(fullscreenView);
+    if (fullscreenView === 'timeline') setTimelineEditOpen(true);
+    else if (fullscreenView === 'sheet') setSheetSettingsOpen(true);
+  }
 
   const handleOpenSettings = () => {
     if (view === 'timeline') {

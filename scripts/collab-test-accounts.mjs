@@ -18,6 +18,7 @@ const ACCOUNTS = [
   { key: 'B', email: 'collab-test-b@redview.tech', name: 'Test co-édition B' },
 ];
 const STORE = path.join(os.homedir(), '.redview', 'collab-test-accounts.json');
+const INTERNAL_LABEL = 'internal';
 
 const apiKey = process.env.APPWRITE_API_KEY;
 if (!apiKey) {
@@ -51,6 +52,8 @@ for (const account of ACCOUNTS) {
   }
   if (!user.emailVerification) await users.updateEmailVerification(user.$id, true);
   if (user.name !== account.name) await users.updateName(user.$id, account.name);
+  // Compte interne : exclu de la mesure d'audience et du rapport d'activation (docs/ANALYTICS.md).
+  if (!(user.labels ?? []).includes(INTERNAL_LABEL)) await users.updateLabels(user.$id, [...(user.labels ?? []), INTERNAL_LABEL]);
   result[account.key] = { userId: user.$id, email: account.email, name: account.name, password };
 }
 

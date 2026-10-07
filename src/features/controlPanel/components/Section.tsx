@@ -34,13 +34,13 @@ export function Section({
   const [fullyOpen, setFullyOpen] = useState(isOpen);
   const translatedTitle = t(title);
 
+  // Fermeture : plus « entièrement ouverte » dès ce rendu ; ouverture : après
+  // la transition CSS.
+  if (!isOpen && fullyOpen) setFullyOpen(false);
   useEffect(() => {
-    if (isOpen) {
-      const timer = setTimeout(() => setFullyOpen(true), 280); // matches CSS transition duration
-      return () => clearTimeout(timer);
-    } else {
-      setFullyOpen(false);
-    }
+    if (!isOpen) return;
+    const timer = setTimeout(() => setFullyOpen(true), 280); // matches CSS transition duration
+    return () => clearTimeout(timer);
   }, [isOpen]);
 
   const toggleOpen = () => {

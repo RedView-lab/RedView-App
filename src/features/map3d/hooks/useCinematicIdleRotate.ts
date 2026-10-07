@@ -45,7 +45,6 @@ export function useCinematicIdleRotate(
   const animFrameRef = useRef<number | null>(null);
   const isRotatingRef = useRef<boolean>(false);
   const lastTimeRef = useRef<number>(0);
-  const lastInteractionRef = useRef<number>(Date.now());
 
   useEffect(() => {
     if (!map || !isLoaded || !enabled) {
@@ -98,8 +97,6 @@ export function useCinematicIdleRotate(
     };
 
     const resetIdleTimer = () => {
-      lastInteractionRef.current = Date.now();
-
       if (isRotatingRef.current) {
         stopRotation();
       }

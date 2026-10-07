@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 /**
  * Smoothly collapses / expands its children using the modern
@@ -29,27 +29,12 @@ export function Collapse({
   // Keep children mounted during the close animation. We unmount only
   // once the wrapper has fully collapsed.
   const [mounted, setMounted] = useState(open);
-  const closeTimer = useRef<number | null>(null);
+  if (open && !mounted) setMounted(true);
 
   useEffect(() => {
-    if (open) {
-      if (closeTimer.current) {
-        window.clearTimeout(closeTimer.current);
-        closeTimer.current = null;
-      }
-      setMounted(true);
-      return;
-    }
-    closeTimer.current = window.setTimeout(() => {
-      setMounted(false);
-      closeTimer.current = null;
-    }, duration);
-    return () => {
-      if (closeTimer.current) {
-        window.clearTimeout(closeTimer.current);
-        closeTimer.current = null;
-      }
-    };
+    if (open) return;
+    const timer = window.setTimeout(() => setMounted(false), duration);
+    return () => window.clearTimeout(timer);
   }, [open, duration]);
 
   return (

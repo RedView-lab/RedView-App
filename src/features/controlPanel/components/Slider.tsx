@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 interface SliderProps {
   /** 0..100 */
@@ -29,11 +29,8 @@ export function Slider({
   const [draftValue, setDraftValue] = useState(value);
   const [interacting, setInteracting] = useState(false);
 
-  useEffect(() => {
-    if (!interacting) {
-      setDraftValue(value);
-    }
-  }, [interacting, value]);
+  // Hors geste, le brouillon suit la valeur reçue.
+  if (!interacting && draftValue !== value) setDraftValue(value);
 
   const clampedValue = Math.max(min, Math.min(max, draftValue));
   const range = Math.max(1, max - min);

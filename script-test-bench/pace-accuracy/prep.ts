@@ -1,6 +1,7 @@
 /**
  * bench:pace:prep — prépare (réseau, une fois) les données dérivées des sorties :
- * tags OSM via BRouter (R8, mode B) et vent historique Open-Meteo (R9).
+ * tags OSM via BRouter (R8, mode B) et vent historique ERA5 (R9, serveur
+ * Open-Meteo auto-hébergé donné par PACE_WIND_ARCHIVE : cf. lib/wind.ts).
  *
  *   npx tsx script-test-bench/pace-accuracy/prep.ts [--refresh]
  */

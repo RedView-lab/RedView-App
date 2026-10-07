@@ -1,3 +1,4 @@
+import { trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { readDocumentAppLocale } from '../i18n';
 
 export function buildFeedbackUrl(): string {
@@ -16,6 +17,7 @@ export function buildFeedbackUrl(): string {
 }
 
 export function openFeedbackPage() {
+  trackAnalyticsEvent({ name: 'feedback_opened' });
   const url = buildFeedbackUrl();
   window.open(url, '_blank', 'noopener,noreferrer');
 }

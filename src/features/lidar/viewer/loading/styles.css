@@ -1,5 +1,5 @@
-/* Rethink Sans comes from viewer.html's <link> (an @import here was a second,
-   render-blocking stylesheet request for the same font). */
+/* Rethink Sans comes from @/shared/styles/typography.css (served by the app,
+   imported first by main.ts): no font @import here. */
 
 #overlay {
   position: fixed;

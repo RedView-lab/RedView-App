@@ -1,30 +1,14 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import {
   createAppTranslationBundle,
   readStoredAppLocale,
   writeStoredAppLocale,
   type AppLocale,
-  type AppTranslationBundle,
   type AppTranslationVars,
 } from './config';
+import { AppI18nContext, type AppI18nContextValue } from './appI18nContext';
 import { buildTranslationLookup, observeDomTranslation, translateString } from './domTranslation';
-
-type AppI18nContextValue = {
-  locale: AppLocale;
-  setLocale: (nextLocale: AppLocale) => void;
-  t: (text: string, vars?: AppTranslationVars) => string;
-  bundle: AppTranslationBundle;
-};
-
-const AppI18nContext = createContext<AppI18nContextValue | null>(null);
 
 export function AppI18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<AppLocale>(readStoredAppLocale);
@@ -75,13 +59,4 @@ export function AppI18nStaticProvider({ children }: { children: ReactNode }) {
     };
   }, []);
   return <AppI18nContext.Provider value={value}>{children}</AppI18nContext.Provider>;
-}
-
-export function useAppI18n(): AppI18nContextValue {
-  const context = useContext(AppI18nContext);
-  if (!context) {
-    throw new Error('useAppI18n must be used within AppI18nProvider');
-  }
-
-  return context;
 }

@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
+import * as Sentry from '@sentry/react';
 // Concrete modules, not the lib/project barrel (merge-itinerary → geocoder on the initial load).
 import { normalizeItineraryProject } from '@/features/itineraryPanel/lib/project/defaultState';
 import { classifyProjectChange, extractProjectView } from '@/features/itineraryPanel/lib/project/layers';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
+import { notify } from '@/shared/ui/notify';
 import {
   flushProjectViews,
   getProject,
+  isProjectCloudError,
+  PROJECT_CLOUD_ERROR_MESSAGES,
   queueProjectViewSave,
   isSharedProject,
 } from '@/shared/utils/projects';
@@ -16,6 +20,15 @@ import { useDashboardProjectSync } from './useDashboardProjectSync';
 
 /** Attente maximale de l'envoi cloud du projet courant avant d'en ouvrir un autre. */
 const FLUSH_BEFORE_SWITCH_MS = 5000;
+
+/** Message du toast quand un projet ne s'ouvre pas (texte source, traduit par `notify`). */
+function describeOpenProjectError(error: unknown): string {
+  if (isProjectCloudError(error)) {
+    if (error.kind === 'offline') return 'Connexion au cloud impossible : le projet n’a pas pu être ouvert. Réessayez une fois en ligne.';
+    if (error.kind === 'unauthorized' || error.kind === 'unreadable') return PROJECT_CLOUD_ERROR_MESSAGES[error.kind];
+  }
+  return 'Impossible d’ouvrir ce projet.';
+}
 
 export type DashboardPersistedMutator = (
   dashboard: NonNullable<ItineraryProject['dashboard']>,
@@ -143,6 +156,7 @@ export function useDashboardProjectState({
 
         if (!chosen) {
           console.error('[Dashboard] project not found', projectId);
+          notify.error('Projet introuvable.');
           return;
         }
 
@@ -168,6 +182,11 @@ export function useDashboardProjectState({
         if (needsSync && !shared) queueProjectSave(normalized);
       } catch (error) {
         console.error('[Dashboard] project loading failed', error);
+        // Données corrompues : l'utilisateur n'y peut rien, nous si.
+        if (isProjectCloudError(error) && error.kind === 'unreadable') {
+          Sentry.captureException(error.originalError ?? error, { tags: { projectId, projectError: 'unreadable' } });
+        }
+        if (!isStale()) notify.error(describeOpenProjectError(error));
       } finally {
         if (!isStale()) setProjectLoading(false);
       }

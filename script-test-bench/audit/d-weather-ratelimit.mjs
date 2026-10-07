@@ -86,11 +86,9 @@ const WIND_MAX_POINTS = Number((windGrid.match(/MAX_POINTS = ([\d_]+)/) || [])[1
 const om = read('src/features/weather/lib/open-meteo.ts');
 const WIND_BATCH = num(om, /BATCH_SIZE = (\d+)/);
 const WIND_RETRIES = num(om, /MAX_RETRIES = (\d+)/);
-const batcher = read('src/features/weather/overlay/openMeteoBatchFetcher.ts');
-const TRENDS_BATCH = num(batcher, /TRENDS_BATCH_SIZE = (\d+)/);
 
 const scrub = (layers, hours) => layers * (hours + PREFETCH);
-const windOneFetch = Math.ceil(WIND_MAX_POINTS / WIND_BATCH) * 2; // France HD + fallback split per batch (worst case at a border)
+const windOneFetch = Math.ceil(WIND_MAX_POINTS / WIND_BATCH); // one model (meteofrance_seamless) per batch
 const windPerPan = windOneFetch * 3; // selection + prefetch +1 h and +24 h (prefetchWindGridData)
 // [label, { bucket: requests }]
 const rows = [
@@ -100,10 +98,9 @@ const rows = [
   ['scrub full slider (~62 h positions -> 48 VPS hours), 3 layers', { weather: scrub(3, 48) }],
   ['scrub 24 h, 5 layers', { weather: scrub(5, 24) }],
   ['scrub full slider, 5 layers, twice within a minute', { weather: 2 * scrub(5, 48) }],
-  [`Tendances tab, one viewport (<=896 pts / ${TRENDS_BATCH})`, { general: Math.ceil(896 / TRENDS_BATCH) }],
   // Dormant: the Wind section is hidden and windEnabled forced off at load
   // (useOverlayWindSnowState) — this row guards its return.
-  [`Wind overlay if re-enabled: one pan at z>=12 (${WIND_MAX_POINTS} pts / ${WIND_BATCH}, x2 models, x3 selections)`, { general: windPerPan }],
+  [`Wind overlay if re-enabled: one pan at z>=12 (${WIND_MAX_POINTS} pts / ${WIND_BATCH}, x3 selections)`, { general: windPerPan }],
 ];
 console.log(`\nmodel (prefetch=${PREFETCH} tiles/layer, wind batch=${WIND_BATCH}, retries on 429=${WIND_RETRIES}):`);
 let over = 0;

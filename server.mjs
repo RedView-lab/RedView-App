@@ -4,24 +4,22 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { promisify } from 'node:util';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { parseApiBody, parseApiQuery } from './server/api-request.mjs';
 import { createByteLru } from './server/byte-lru.mjs';
-import { recolorRadarPng } from './server/radar-recolor.mjs';
-import { generateSlopeTile, generateAltitudeTile } from './server/terrain-tiles.mjs';
 import {
   HttpError,
   applyBaseSecurityHeaders,
   bodyLimitFor,
-  buildRadarUpstreamUrl,
   createRateLimiter,
   decodeSafePathname,
   getClientIp,
   isInsideDir,
   listApiRoutes,
-  parseTileCoords,
   rateLimitKeyForIp,
   readBodyLimited,
   resolveApiRoute,
 } from './server/http-security.mjs';
+import { serveTileFallback, tileFallbackFamily, tileFallbackHitsUpstream } from './server/tile-fallbacks.mjs';
 import { captureServerError, flushServerObservability, initServerObservability } from './server/observability.mjs';
 import { createRequestLogger, normalizeRoutePath } from './server/request-logging.mjs';
 import { VARIANT_SUFFIX, acceptedEncodings, isCompressible } from './server/static-compression.mjs';
@@ -281,38 +279,19 @@ const server = http.createServer(async (req, res) => {
       return await handleApiRoute(apiRoute, parsedUrl, req, res);
     }
 
-    // Tuiles servies normalement par le Service Worker. Arrivées ici, la page
-    // n'est pas (encore) contrôlée :
-    //  - /dem-tiles : le DEM n'existe que côté SW (la page non contrôlée
-    //    utilise AWS Terrarium en direct) → 204 immédiat, hors quota ;
-    //  - /vhr-tiles : l'ortho très haute résolution n'existe que côté SW
-    //    (Mapbox Satellite reste visible dessous) → 204 immédiat, hors quota ;
-    //  - ?pf=1 : préchargement spéculatif sans SW, inutile → 204, hors quota ;
-    //  - sinon un quota PAR famille, pour qu'une rafale pente ne prive pas
-    //    l'altitude ou le radar (et inversement).
-    const tileFamily = /^\/(radar|slope|altitude|dem|vhr)-tiles\//.exec(pathname)?.[1];
+    // 2b. Tuiles servies normalement par le Service Worker, la page n'est pas
+    // (encore) contrôlée (server/tile-fallbacks.mjs). Celles qui sollicitent
+    // un amont ont un quota PAR famille, pour qu'une rafale pente ne prive pas
+    // l'altitude ou le radar (et inversement) ; les 204 immédiats sont hors quota.
+    const tileFamily = tileFallbackFamily(pathname);
     if (tileFamily) {
-      if (tileFamily === 'dem' || tileFamily === 'vhr' || parsedUrl.searchParams.get('pf') === '1') {
-        return sendNoTile(res);
-      }
-      if (!checkRateLimit(req, `tiles:${tileFamily}`, MAX_TILE_REQUESTS)) {
+      if (
+        tileFallbackHitsUpstream(tileFamily, parsedUrl.searchParams)
+        && !checkRateLimit(req, `tiles:${tileFamily}`, MAX_TILE_REQUESTS)
+      ) {
         return sendTooManyRequests(res);
       }
-    }
-
-    // 2b. Fallback proxy for /radar-tiles/* when Service Worker is inactive (e.g. over plain HTTP)
-    if (pathname.startsWith('/radar-tiles/')) {
-      return await handleRadarTileRoute(pathname, parsedUrl, req, res);
-    }
-
-    // 2c. Fallback for /slope-tiles/* when Service Worker is inactive (e.g. over plain HTTP)
-    if (pathname.startsWith('/slope-tiles/')) {
-      return await handleSlopeTileRoute(pathname, parsedUrl, req, res);
-    }
-
-    // 2d. Fallback for /altitude-tiles/* when Service Worker is inactive (e.g. over plain HTTP)
-    if (pathname.startsWith('/altitude-tiles/')) {
-      return await handleAltitudeTileRoute(pathname, parsedUrl, req, res);
+      return await serveTileFallback(tileFamily, pathname, parsedUrl.searchParams, res);
     }
 
     // 3. Serve Static Files from dist (lecture seule : GET/HEAD uniquement)
@@ -454,22 +433,7 @@ const server = http.createServer(async (req, res) => {
 async function handleApiRoute(apiRoute, parsedUrl, req, res) {
   const { route, file: candidateFile } = apiRoute;
 
-  // Parse Query Parameters
-  const query = {};
-  for (const [key, value] of parsedUrl.searchParams.entries()) {
-    if (key in query) {
-      const existing = query[key];
-      if (Array.isArray(existing)) {
-        existing.push(value);
-      } else {
-        query[key] = [existing, value];
-      }
-    } else {
-      query[key] = value;
-    }
-  }
-
-  // Parse Request Body (plafonné : 413 avant d'avoir tout bufferisé)
+  // Corps plafonné : 413 avant d'avoir tout bufferisé.
   let rawBody;
   try {
     rawBody = await readBodyLimited(req, bodyLimitFor(route));
@@ -483,24 +447,11 @@ async function handleApiRoute(apiRoute, parsedUrl, req, res) {
     }
     throw err;
   }
-  const contentType = (req.headers['content-type'] || '').toLowerCase();
-  let parsedBody = rawBody;
-
-  if (contentType.includes('application/json')) {
-    try {
-      parsedBody = rawBody.length > 0 ? JSON.parse(rawBody.toString('utf-8')) : {};
-    } catch {
-      parsedBody = rawBody.toString('utf-8');
-    }
-  } else if (contentType.includes('text/') || contentType.includes('application/x-www-form-urlencoded')) {
-    parsedBody = rawBody.toString('utf-8');
-  }
-
   // Build ApiRequest
   const apiReq = Object.assign(req, {
-    query,
+    query: parseApiQuery(parsedUrl.searchParams),
     cookies: {},
-    body: parsedBody,
+    body: parseApiBody(rawBody, req.headers['content-type']),
     // X-Request-ID de la requête (journal, GlitchTip), à relayer aux services amont.
     requestId: req.id,
     [Symbol.asyncIterator]: async function* () {
@@ -605,88 +556,12 @@ async function handleApiRoute(apiRoute, parsedUrl, req, res) {
   }
 }
 
-/**
- * Pas de tuile (hors couverture, échec amont) : 204 jamais mis en cache, pour
- * qu'une panne passagère ne soit pas mémorisée comme une vraie tuile.
- */
-function sendNoTile(res) {
-  res.statusCode = 204;
-  res.setHeader('Cache-Control', 'no-store');
-  return res.end();
-}
-
-async function handleRadarTileRoute(pathname, parsedUrl, req, res) {
-  const coords = parseTileCoords(pathname, /^\/radar-tiles\/(\d+)\/(\d+)\/(\d+)/);
-  // Hôte forcé dans l'allowlist, chemin de frame strictement alphanumérique.
-  const target = coords ? buildRadarUpstreamUrl(parsedUrl.searchParams, coords) : null;
-  if (!target) {
-    res.statusCode = 400;
-    return res.end('Invalid radar tile request');
-  }
-  try {
-    const pStr = parsedUrl.searchParams.get('p') || '';
-    const upstreamRes = await fetch(target, { signal: AbortSignal.timeout(10_000) });
-    const upstreamType = upstreamRes.headers.get('content-type') || '';
-    if (upstreamRes.ok && upstreamType.startsWith('image/')) {
-      const rawBuf = Buffer.from(await upstreamRes.arrayBuffer());
-      const finalBuf = pStr ? recolorRadarPng(rawBuf, pStr) : rawBuf;
-      res.statusCode = 200;
-      res.setHeader('Content-Type', 'image/png');
-      res.setHeader('Cache-Control', 'public, max-age=300');
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('X-Weather-Source', pStr ? 'server-radar-recolor' : 'server-radar-proxy');
-      return res.end(finalBuf);
-    }
-  } catch (e) {
-    console.warn('[server-radar-tiles] error:', e);
-  }
-  return sendNoTile(res);
-}
-
-async function handleSlopeTileRoute(pathname, parsedUrl, req, res) {
-  try {
-    const coords = parseTileCoords(pathname, /^\/slope-tiles\/(\d+)\/(\d+)\/(\d+)/);
-    if (coords) {
-      const pngBuf = await generateSlopeTile(coords.z, coords.x, coords.y);
-      if (!pngBuf) return sendNoTile(res);
-      res.statusCode = 200;
-      res.setHeader('Content-Type', 'image/png');
-      res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('X-Tile-Type', 'slope');
-      return res.end(pngBuf);
-    }
-  } catch (e) {
-    console.warn('[server-slope-tiles] error:', e);
-  }
-  return sendNoTile(res);
-}
-
-async function handleAltitudeTileRoute(pathname, parsedUrl, req, res) {
-  try {
-    const coords = parseTileCoords(pathname, /^\/altitude-tiles\/(\d+)\/(\d+)\/(\d+)/);
-    if (coords) {
-      const pngBuf = await generateAltitudeTile(coords.z, coords.x, coords.y);
-      if (!pngBuf) return sendNoTile(res);
-      res.statusCode = 200;
-      res.setHeader('Content-Type', 'image/png');
-      res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('X-Tile-Type', 'altitude');
-      return res.end(pngBuf);
-    }
-  } catch (e) {
-    console.warn('[server-altitude-tiles] error:', e);
-  }
-  return sendNoTile(res);
-}
-
 export { server };
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 if (isMain) {
   // Slowloris : en-têtes en 20 s max, requête complète en 120 s max
-  // (les proxies Overpass/BRouter ont leurs propres timeouts < 90 s).
+  // (les proxies amont, BRouter compris, ont leurs propres timeouts < 90 s).
   server.headersTimeout = 20_000;
   server.requestTimeout = 120_000;
   server.listen(PORT, '0.0.0.0', () => {

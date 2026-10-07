@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import handler from '../../openmeteo';
 import type { ApiRequest, ApiResponse } from '../types';
 
@@ -31,42 +31,76 @@ function jsonResponse(status: number, body: unknown, headers: Record<string, str
 const FORECAST = '/api/openmeteo/v1/forecast?latitude=45&longitude=6&hourly=temperature_2m';
 
 describe('api/openmeteo', () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
   beforeEach(() => {
-    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.stubEnv('OPENMETEO_UPSTREAM', 'http://vps.test/openmeteo/');
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
+    fetchMock = vi.fn(async (_target: string | URL | Request) => jsonResponse(200, { hourly: {} }));
+    vi.stubGlobal('fetch', fetchMock);
   });
 
-  it('sert la réponse du VPS et la met en cache', async () => {
-    vi.stubEnv('OPENMETEO_UPSTREAM', 'http://vps.test:8080/');
-    const fetchMock = vi.fn(async (_target: string | URL | Request) => jsonResponse(200, { hourly: {} }));
-    vi.stubGlobal('fetch', fetchMock);
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  const upstreamUrl = () => new URL(String(fetchMock.mock.calls[0]?.[0]));
+
+  it('relaie la prévision au VPS, modèle Météo-France par défaut', async () => {
     const out = await call(FORECAST);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toBe('http://vps.test:8080/v1/forecast?latitude=45&longitude=6&hourly=temperature_2m');
+    const target = upstreamUrl();
+    expect(`${target.origin}${target.pathname}`).toBe('http://vps.test/openmeteo/v1/forecast');
+    expect(target.searchParams.get('models')).toBe('meteofrance_seamless');
+    expect(target.searchParams.get('hourly')).toBe('temperature_2m');
     expect(out.status).toBe(200);
     expect(out.headers['x-weather-source']).toBe('self-hosted-vps');
     expect(out.headers['cache-control']).toContain('max-age=300');
   });
 
-  it('redemande à l’API publique ce que le VPS refuse', async () => {
-    vi.stubEnv('OPENMETEO_UPSTREAM', 'http://vps.test:8080');
-    const fetchMock = vi.fn(async (target: string | URL | Request) => (
-      String(target).startsWith('http://vps.test')
-        ? jsonResponse(400, { error: true, reason: 'Unknown model' })
-        : jsonResponse(200, { hourly: {} })
-    ));
-    vi.stubGlobal('fetch', fetchMock);
-    const out = await call(FORECAST);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(out.status).toBe(200);
-    expect(out.headers['x-weather-source']).toBe('public-api');
+  it('ramène les anciens noms de modèle sur ceux du VPS et refuse les autres', async () => {
+    await call(`${FORECAST}&models=meteofrance_arome_france_hd`);
+    expect(upstreamUrl().searchParams.get('models')).toBe('meteofrance_seamless');
+    fetchMock.mockClear();
+    await call(`${FORECAST}&models=meteofrance_arome_france`);
+    expect(upstreamUrl().searchParams.get('models')).toBe('meteofrance_arome_france');
+    fetchMock.mockClear();
+    const refused = await call(`${FORECAST}&models=ecmwf_ifs025`);
+    expect(refused.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('transmet un 400 d’Open-Meteo (horizon dépassé) au lieu d’un 502, sans cache', async () => {
+  it('borne l’horizon à J+4 et le passé à 3 jours', async () => {
+    await call(`${FORECAST}&forecast_days=16&past_days=92`);
+    expect(upstreamUrl().searchParams.get('forecast_days')).toBe('4');
+    expect(upstreamUrl().searchParams.get('past_days')).toBe('3');
+  });
+
+  it('refuse plus de 200 points par requête', async () => {
+    const lats = Array.from({ length: 201 }, () => '45').join(',');
+    const out = await call(`/api/openmeteo/v1/forecast?latitude=${lats}&longitude=${lats}&hourly=temperature_2m`);
+    expect(out.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('ne sert plus le climat et n’appelle jamais l’API publique', async () => {
+    const out = await call('/api/openmeteo/v1/climate?latitude=45&longitude=6&daily=temperature_2m_mean');
+    expect(out.status).toBe(404);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('répond 503 sans OPENMETEO_UPSTREAM, sans repli', async () => {
     vi.stubEnv('OPENMETEO_UPSTREAM', '');
+    const out = await call(FORECAST);
+    expect(out.status).toBe(503);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('transmet un 400 d’Open-Meteo au lieu d’un 502, sans cache', async () => {
     const reason = 'Parameter \'start_date\' is out of allowed range';
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(400, { error: true, reason })));
+    fetchMock.mockResolvedValueOnce(jsonResponse(400, { error: true, reason }));
     const out = await call(FORECAST);
     expect(out.status).toBe(400);
     expect(out.body).toEqual({ error: true, reason });
@@ -74,28 +108,24 @@ describe('api/openmeteo', () => {
   });
 
   it('transmet un 429 et son Retry-After : le backoff du client doit le voir', async () => {
-    vi.stubEnv('OPENMETEO_UPSTREAM', '');
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(429, { error: true, reason: 'Minutely API request limit exceeded' }, { 'retry-after': '60' })));
+    fetchMock.mockResolvedValueOnce(jsonResponse(429, { error: true, reason: 'Too many requests' }, { 'retry-after': '60' }));
     const out = await call(FORECAST);
     expect(out.status).toBe(429);
     expect(out.headers['retry-after']).toBe('60');
     expect(out.headers['cache-control']).toBe('no-store');
   });
 
-  it('répond 502 quand l’amont est en panne ou ne renvoie pas de JSON', async () => {
-    vi.stubEnv('OPENMETEO_UPSTREAM', 'http://vps.test:8080');
-    vi.stubGlobal('fetch', vi.fn(async (target: string | URL | Request) => {
-      if (String(target).startsWith('http://vps.test')) throw new TypeError('fetch failed');
-      return new Response('<html>Bad gateway</html>', { status: 503, headers: { 'content-type': 'text/html' } });
-    }));
+  it('répond 502 quand le VPS est en panne ou ne renvoie pas de JSON, sans autre essai', async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError('fetch failed'));
+    expect((await call(FORECAST)).status).toBe(502);
+    fetchMock.mockResolvedValueOnce(new Response('<html>Bad gateway</html>', { status: 503, headers: { 'content-type': 'text/html' } }));
     const out = await call(FORECAST);
     expect(out.status).toBe(502);
-    expect(out.body).toEqual({ error: 'Upstream fetch failed' });
+    expect(out.body).toEqual({ error: 'Weather service unavailable' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('ne relaie que les chemins connus', async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
+  it('ne relaie que le chemin de prévision', async () => {
     const out = await call('/api/openmeteo/v1/../../admin');
     expect(out.status).toBe(404);
     expect(fetchMock).not.toHaveBeenCalled();

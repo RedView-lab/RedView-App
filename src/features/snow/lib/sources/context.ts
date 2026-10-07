@@ -3,7 +3,7 @@
 // (/api/snow-context, see api/snow-context.ts)
 // ============================================================================
 
-import type { BraSnowProfile, CoarseSnowGrid, LonLat, SnowObservation, WeatherHistory } from '../engine/types';
+import type { BraSnowProfile, LonLat, SnowObservation, WeatherHistory } from '../engine/types';
 
 interface ContextStation {
   id: string;
@@ -29,16 +29,6 @@ interface ContextResponse {
     windSpeedMs: number[];
     windDirDeg: number[];
   } | null;
-  coarse: {
-    width: number;
-    height: number;
-    lonMin: number;
-    latMin: number;
-    dLon: number;
-    dLat: number;
-    hsCm: number[];
-    resolutionM: number;
-  } | null;
   sources: Record<string, string>;
 }
 
@@ -47,14 +37,13 @@ export interface SnowContext {
   rejectedStations: number;
   bra: BraSnowProfile | null;
   weather: WeatherHistory | null;
-  coarse: CoarseSnowGrid | null;
   sources: Record<string, string>;
 }
 
 export async function fetchSnowContext(
   center: LonLat,
   sceneAltitudeM: number,
-  options: { coarse: boolean; signal?: AbortSignal },
+  signal?: AbortSignal,
 ): Promise<SnowContext> {
   const q = new URLSearchParams({
     lat: center.lat.toFixed(5),
@@ -63,8 +52,7 @@ export async function fetchSnowContext(
     radiusKm: '50',
     pastDays: '60',
   });
-  if (options.coarse) q.set('coarse', '1');
-  const res = await fetch(`/api/snow-context?${q.toString()}`, { signal: options.signal });
+  const res = await fetch(`/api/snow-context?${q.toString()}`, { signal });
   if (!res.ok) throw new Error(`snow-context HTTP ${res.status}`);
   const json = (await res.json()) as ContextResponse;
   const w = json.weather;
@@ -91,20 +79,6 @@ export async function fetchSnowContext(
         snowfallCm: Float32Array.from(w.snowfallCm),
         windSpeedMs: Float32Array.from(w.windSpeedMs),
         windDirDeg: Float32Array.from(w.windDirDeg),
-      }
-      : null,
-    coarse: json.coarse
-      ? {
-        source: 'open-meteo',
-        width: json.coarse.width,
-        height: json.coarse.height,
-        lonMin: json.coarse.lonMin,
-        latMin: json.coarse.latMin,
-        dLon: json.coarse.dLon,
-        dLat: json.coarse.dLat,
-        hsCm: Float32Array.from(json.coarse.hsCm),
-        orographyM: null,
-        resolutionM: json.coarse.resolutionM,
       }
       : null,
     sources: json.sources,

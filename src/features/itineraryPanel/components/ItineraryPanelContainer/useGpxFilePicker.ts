@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
+import { countBucket, trackAnalyticsEvent } from '../../../../shared/lib/analytics';
 import { fitToRoute } from '../../lib/route-layer';
 import type { ItineraryProject } from '../../types';
 import { GpxFileTooLargeError, useItineraryGpxImport } from './useItineraryGpxImport';
@@ -59,6 +60,7 @@ export function useGpxFilePicker({
     setPendingCorridorFor,
     onImportStateChange: setPendingImportName,
     onItineraryImported: (_id, points) => {
+      trackAnalyticsEvent({ name: 'gpx_imported', data: { format: 'gpx', points: countBucket(points.length) } });
       fitMapToImportedRoute(points);
       onRevealCenterPanel?.();
     },

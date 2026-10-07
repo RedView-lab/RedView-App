@@ -1,7 +1,5 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useState,
@@ -33,20 +31,7 @@ import {
 } from '@/features/itineraryPanel/lib/routes';
 import { translateAppText } from '@/shared/i18n';
 import { useEscapeToExit } from '@/shared/hooks/useEscapeToExit';
-
-interface RouteMergeToolContextValue {
-  armed: boolean;
-  canMerge: boolean;
-  isMerging: boolean;
-  statusMessage: string | null;
-  toggle: () => void;
-  deactivate: () => void;
-  selectItinerary: (id: string) => void;
-  canSelectItinerary: (id: string) => boolean;
-  getSelectionOrder: (id: string) => number | null;
-}
-
-const RouteMergeToolContext = createContext<RouteMergeToolContextValue | null>(null);
+import { RouteMergeToolContext, type RouteMergeToolContextValue } from './useRouteMergeTool';
 
 interface RouteMergeToolProviderProps {
   children: ReactNode;
@@ -290,8 +275,4 @@ export function RouteMergeToolProvider({ children }: RouteMergeToolProviderProps
       {children}
     </RouteMergeToolContext.Provider>
   );
-}
-
-export function useRouteMergeToolOptional(): RouteMergeToolContextValue | null {
-  return useContext(RouteMergeToolContext);
 }

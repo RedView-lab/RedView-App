@@ -28,6 +28,8 @@ interface PopoverStyle {
   scale: number;
   /** Portaled into the fullscreen panel, which already renders at `scale`. */
   inScaledLayer: boolean;
+  /** Where the popover is portaled (fullscreen panel or body). */
+  portalTarget: HTMLElement;
 }
 
 function resolvePortalTarget(anchorEl: HTMLElement): HTMLElement {
@@ -40,13 +42,15 @@ function computePopoverStyle(anchorEl: HTMLElement): PopoverStyle {
   const rect = anchorEl.getBoundingClientRect();
   const scale = readAppScale(anchorEl);
   const offset = 4 * scale;
+  const portalTarget = resolvePortalTarget(anchorEl);
 
   return {
     top: rect.bottom + offset,
     left: rect.left,
     width: Math.max(140, rect.width / scale),
     scale,
-    inScaledLayer: resolvePortalTarget(anchorEl) !== anchorEl.ownerDocument.body,
+    inScaledLayer: portalTarget !== anchorEl.ownerDocument.body,
+    portalTarget,
   };
 }
 
@@ -63,11 +67,10 @@ export function TimelineSelect<T extends string | number>({
 
   const selectedOption = options.find((opt) => opt.value === value) ?? options[0];
 
+  // Mesuré avant l'affichage à chaque ouverture : le style d'une ouverture
+  // précédente n'est jamais peint (le popover n'est rendu que si `isOpen`).
   useLayoutEffect(() => {
-    if (!isOpen || !triggerRef.current) {
-      setPopoverStyle(null);
-      return;
-    }
+    if (!isOpen || !triggerRef.current) return;
 
     const update = () => {
       if (triggerRef.current) {
@@ -128,7 +131,7 @@ export function TimelineSelect<T extends string | number>({
         </span>
       </button>
 
-      {isOpen && popoverStyle && triggerRef.current
+      {isOpen && popoverStyle
         ? createPortal(
             <div
               ref={popoverRef}
@@ -156,7 +159,7 @@ export function TimelineSelect<T extends string | number>({
                 );
               })}
             </div>,
-            resolvePortalTarget(triggerRef.current),
+            popoverStyle.portalTarget,
           )
         : null}
     </div>

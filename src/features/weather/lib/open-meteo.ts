@@ -1,7 +1,8 @@
 import type { WindPoint, WindDataSource, WindGridDefinition, WindTimeSelection } from '../types';
 import { coordCacheKey } from './wind-grid';
-import { OPENMETEO_FORECAST_URL } from './openMeteoConfig';
+import { OPENMETEO_FORECAST_URL, OPENMETEO_MODEL } from './openMeteoConfig';
 import { translateAppText } from '@/shared/i18n';
+import { logger } from '@/shared/lib/logger';
 import {
   normaliseWindRequestedHourKey,
   normaliseWindSelection,
@@ -11,7 +12,6 @@ import {
 
 // ── Configuration ─────────────────────────────────────────────────────
 
-const API_BASE = OPENMETEO_FORECAST_URL;
 const CACHE_TTL_MS = 45 * 60 * 1000; // 45 minutes
 // Self-hosted VPS → we can hammer it. Bigger batches, no inter-batch
 // gap, only a tiny safety retry budget for transient errors.
@@ -151,16 +151,8 @@ function normaliseBatchPoint(
   return selectedPoint;
 }
 
-function resolveWindSource(url: string, response: Response): WindDataSource {
-  const header = response.headers.get('X-Weather-Source');
-  if (header === 'self-hosted-vps' || header === 'public-api') return header;
-  if (url.startsWith('/api/openmeteo')) return 'unknown';
-  if (url.includes('api.open-meteo.com') || url.includes('climate-api.open-meteo.com')) return 'public-api';
-  return 'direct';
-}
-
-function supportsFranceHdWind(coord: { lat: number; lng: number }): boolean {
-  return coord.lat >= 41 && coord.lat <= 52 && coord.lng >= -6 && coord.lng <= 10;
+function resolveWindSource(response: Response): WindDataSource {
+  return response.headers.get('X-Weather-Source') === 'self-hosted-vps' ? 'self-hosted-vps' : 'unknown';
 }
 
 function formatDateIso(date: Date): string {
@@ -205,21 +197,19 @@ function shiftSelectionByHours(selection: WindTimeSelection, hoursOffset: number
 async function fetchBatch(
   coords: { lat: number; lng: number }[],
   selection: WindTimeSelection,
-  franceModel: boolean,
   signal?: AbortSignal,
 ): Promise<FetchBatchResult> {
   const lats = coords.map((c) => c.lat.toFixed(4)).join(',');
   const lngs = coords.map((c) => c.lng.toFixed(4)).join(',');
   const forecastIso = normaliseWindRequestedHourKey(selection.date, selection.time);
   const timeParam = encodeURIComponent(forecastIso);
-  const modelParam = franceModel ? '&models=meteofrance_arome_france_hd' : '';
 
   const url =
-    `${API_BASE}?latitude=${lats}&longitude=${lngs}` +
+    `${OPENMETEO_FORECAST_URL}?latitude=${lats}&longitude=${lngs}` +
     `&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m` +
     `&start_hour=${timeParam}&end_hour=${timeParam}` +
     `&wind_speed_unit=ms&timeformat=iso8601&timezone=${encodeURIComponent(WIND_TIMEZONE)}&cell_selection=nearest` +
-    modelParam;
+    `&models=${OPENMETEO_MODEL}`;
 
   let lastError: Error | null = null;
 
@@ -253,8 +243,8 @@ async function fetchBatch(
 
     if (!res.ok) throw new Error(`Open-Meteo ${res.status}: ${res.statusText}`);
 
-    const source = resolveWindSource(url, res);
-    console.info(`[wind] Open-Meteo batch ${coords.length} coords via ${source}${franceModel ? ' (AROME HD)' : ''}`);
+    const source = resolveWindSource(res);
+    logger.weather.debug(`wind batch: ${coords.length} coords via ${source}`);
 
     const json = await res.json();
 
@@ -336,34 +326,14 @@ async function fetchWindGridForSelectionInternal(
 
     const batchIndexes = uncachedIndexes.slice(i, i + BATCH_SIZE);
     const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
-    const franceIndexes: number[] = [];
-    const fallbackIndexes: number[] = [];
-
-    batchIndexes.forEach((pointIndex) => {
-      if (supportsFranceHdWind(grid.points[pointIndex])) franceIndexes.push(pointIndex);
-      else fallbackIndexes.push(pointIndex);
+    const batch = batchIndexes.map((pointIndex) => grid.points[pointIndex]);
+    const { points, source } = await fetchBatch(batch, normalisedSelection, signal);
+    lastSource = source;
+    points.forEach((point, batchIndex) => {
+      const pointIndex = batchIndexes[batchIndex];
+      const gridPoint = grid.points[pointIndex];
+      results[pointIndex] = { ...point, lat: gridPoint.lat, lng: gridPoint.lng };
     });
-
-    const fillBatch = async (pointIndexes: number[], franceModel: boolean): Promise<void> => {
-      if (pointIndexes.length === 0) return;
-      const batch = pointIndexes.map((pointIndex) => grid.points[pointIndex]);
-      const { points, source } = await fetchBatch(batch, normalisedSelection, franceModel, signal);
-      lastSource = source;
-
-      points.forEach((point, batchIndex) => {
-        const pointIndex = pointIndexes[batchIndex];
-        const gridPoint = grid.points[pointIndex];
-        const normalisedPoint: WindPoint = {
-          ...point,
-          lat: gridPoint.lat,
-          lng: gridPoint.lng,
-        };
-        results[pointIndex] = normalisedPoint;
-      });
-    };
-
-    await fillBatch(franceIndexes, true);
-    await fillBatch(fallbackIndexes, false);
 
     onProgress?.({
       completedBatches: batchNumber,

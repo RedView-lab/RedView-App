@@ -16,10 +16,14 @@ import {
 import type { ProjectRow, ProjectRowMeta } from '@/shared/utils/projects/types';
 
 const DB_NAME = 'redview_storage_v1';
-/** v2 : store `views` (vue de l'utilisateur sur chaque projet). */
-const DB_VERSION = 2;
+/**
+ * v2 : store `views` (vue de l'utilisateur sur chaque projet).
+ * v3 : contenu des projets à part (`project_data`), cf. StoredProjectContent.
+ */
+const DB_VERSION = 3;
 
 const STORE_PROJECTS = 'projects';
+const STORE_PROJECT_DATA = 'project_data';
 const STORE_CACHE = 'project_cache';
 const STORE_THUMBNAILS = 'thumbnails';
 const STORE_VIEWS = 'views';
@@ -41,6 +45,11 @@ function getDb(): Promise<IDBDatabase> {
       const db = (event.target as IDBOpenDBRequest).result;
       if (!db.objectStoreNames.contains(STORE_PROJECTS)) {
         db.createObjectStore(STORE_PROJECTS, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(STORE_PROJECT_DATA)) {
+        db.createObjectStore(STORE_PROJECT_DATA, { keyPath: 'id' });
+        // Dans la transaction de mise à niveau : tout ou rien.
+        if (event.oldVersion > 0 && request.transaction) splitProjectContents(request.transaction);
       }
       if (!db.objectStoreNames.contains(STORE_CACHE)) {
         db.createObjectStore(STORE_CACHE, { keyPath: 'projectId' });
@@ -122,8 +131,9 @@ export async function migrateFromLocalStorageIfNeeded(): Promise<void> {
     const legacyProjects = JSON.parse(raw) as ProjectRow[];
     if (Array.isArray(legacyProjects) && legacyProjects.length > 0) {
       const db = await getDb();
-      const tx = db.transaction([STORE_PROJECTS], 'readwrite');
+      const tx = db.transaction([STORE_PROJECTS, STORE_PROJECT_DATA], 'readwrite');
       const store = tx.objectStore(STORE_PROJECTS);
+      const contents = tx.objectStore(STORE_PROJECT_DATA);
 
       // Jamais par-dessus une ligne existante : la clé héritée n'est pas
       // effacée, et la remettre à chaque chargement écrasait la copie locale
@@ -132,7 +142,11 @@ export async function migrateFromLocalStorageIfNeeded(): Promise<void> {
         if (!p?.id) continue;
         const existing = store.getKey(p.id);
         existing.onsuccess = () => {
-          if (existing.result === undefined) store.put(p);
+          if (existing.result !== undefined) return;
+          const legacy = p as StoredProjectRow;
+          store.put(toMeta(legacy));
+          const content = contentOf(legacy);
+          if (content) contents.put(content);
         };
       }
 
@@ -150,14 +164,23 @@ export async function migrateFromLocalStorageIfNeeded(): Promise<void> {
 // ── Projects Store ────────────────────────────────────────────────────────
 
 /**
- * Forme stockée (cf. shared/utils/projects/storedProject.ts) : le document
- * partagé en JSON (`data_json`, la charge utile cloud déjà sérialisée par
- * l'autosave) et le travail en attente sur cet appareil (`work_json`). Cloner
- * une chaîne est bien moins coûteux que le clonage structuré d'un graphe
- * d'objets de plusieurs Mo à chaque sauvegarde. Les anciennes lignes (projet
- * composé en `data_json`, ou champ `data` objet) restent lisibles.
+ * Contenu d'un projet (cf. shared/utils/projects/storedProject.ts), dans le
+ * store `project_data` : le document partagé en JSON (`data_json`, la charge
+ * utile cloud déjà sérialisée par l'autosave) et le travail en attente sur cet
+ * appareil (`work_json`). Cloner une chaîne est bien moins coûteux que le
+ * clonage structuré d'un graphe d'objets de plusieurs Mo à chaque sauvegarde.
+ * Les anciens contenus (projet composé en `data_json`, ou champ `data` objet)
+ * restent lisibles.
+ *
+ * Les métadonnées (store `projects`) sont à part depuis la v3 : les relire ou
+ * les réécrire (version cloud de base, `dirty`, nom, liste des projets) clonait
+ * le document entier — un projet de 61 M car. deux fois par sauvegarde, et la
+ * liste désérialisait tous les contenus.
  */
-type StoredProjectRow = ProjectRowMeta & { data?: ItineraryProject; data_json?: string; work_json?: string };
+type StoredProjectContent = { id: string; data?: ItineraryProject; data_json?: string; work_json?: string };
+
+/** Ligne du store `projects` : métadonnées (le contenu y était avant la v3). */
+type StoredProjectRow = ProjectRowMeta & Omit<StoredProjectContent, 'id'>;
 
 function toMeta(stored: StoredProjectRow): ProjectRowMeta {
   const meta: Partial<StoredProjectRow> = { ...stored };
@@ -167,18 +190,46 @@ function toMeta(stored: StoredProjectRow): ProjectRowMeta {
   return meta as ProjectRowMeta;
 }
 
-function hydrate(stored: StoredProjectRow | undefined | null): ProjectRow | null {
+/** Contenu porté par une ligne antérieure à la v3 (null s'il n'y en a pas). */
+function contentOf(stored: StoredProjectRow): StoredProjectContent | null {
+  if (stored.data === undefined && stored.data_json === undefined && stored.work_json === undefined) return null;
+  const content: StoredProjectContent = { id: stored.id };
+  if (stored.data !== undefined) content.data = stored.data;
+  if (stored.data_json !== undefined) content.data_json = stored.data_json;
+  if (stored.work_json !== undefined) content.work_json = stored.work_json;
+  return content;
+}
+
+/** Mise à niveau v3 : sort le contenu de chaque ligne vers `project_data`. */
+function splitProjectContents(tx: IDBTransaction): void {
+  const contents = tx.objectStore(STORE_PROJECT_DATA);
+  const cursorRequest = tx.objectStore(STORE_PROJECTS).openCursor();
+  cursorRequest.onsuccess = () => {
+    const cursor = cursorRequest.result;
+    if (!cursor) return;
+    const stored = cursor.value as StoredProjectRow;
+    const content = contentOf(stored);
+    if (content) {
+      contents.put(content);
+      cursor.update(toMeta(stored));
+    }
+    cursor.continue();
+  };
+}
+
+function hydrate(stored: StoredProjectRow | undefined | null, content: StoredProjectContent | undefined | null): ProjectRow | null {
   if (!stored) return null;
-  let raw: unknown = stored.data;
-  if (typeof stored.data_json === 'string') {
+  const source = content ?? stored;
+  let raw: unknown = source.data;
+  if (typeof source.data_json === 'string') {
     try {
-      raw = JSON.parse(stored.data_json);
+      raw = JSON.parse(source.data_json);
     } catch (error) {
       console.warn('[idbProjectStore] corrupted project JSON', stored.id, error);
       raw = undefined;
     }
   }
-  const parsed = raw === undefined ? null : parseStoredProject(raw, parseStoredLocalWork(stored.work_json));
+  const parsed = raw === undefined ? null : parseStoredProject(raw, parseStoredLocalWork(source.work_json));
   if (!parsed) return null;
   return { ...toMeta(stored), data: parsed.project };
 }
@@ -197,11 +248,12 @@ export async function idbSaveProject(row: ProjectRow, serialized?: SerializedPro
   const db = await getDb();
   const { data, ...meta } = row;
   const { documentJson, workJson } = serialized ?? serializeProjectForStorage(data);
-  const stored: StoredProjectRow = { ...meta, data_json: documentJson };
-  if (workJson) stored.work_json = workJson;
+  const content: StoredProjectContent = { id: row.id, data_json: documentJson };
+  if (workJson) content.work_json = workJson;
   return new Promise((resolve, reject) => {
-    const tx = db.transaction([STORE_PROJECTS], 'readwrite');
-    tx.objectStore(STORE_PROJECTS).put(stored);
+    const tx = db.transaction([STORE_PROJECTS, STORE_PROJECT_DATA], 'readwrite');
+    tx.objectStore(STORE_PROJECTS).put(meta);
+    tx.objectStore(STORE_PROJECT_DATA).put(content);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(tx.error);
@@ -212,11 +264,21 @@ export async function idbGetProject(id: string): Promise<ProjectRow | null> {
   await migrateFromLocalStorageIfNeeded();
   const db = await getDb();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction([STORE_PROJECTS], 'readonly');
-    const store = tx.objectStore(STORE_PROJECTS);
-    const req = store.get(id);
-    req.onsuccess = () => resolve(hydrate(req.result as StoredProjectRow | undefined));
-    req.onerror = () => reject(req.error);
+    const tx = db.transaction([STORE_PROJECTS, STORE_PROJECT_DATA], 'readonly');
+    const metaRequest = tx.objectStore(STORE_PROJECTS).get(id);
+    const contentRequest = tx.objectStore(STORE_PROJECT_DATA).get(id);
+    tx.oncomplete = () => {
+      try {
+        resolve(hydrate(
+          metaRequest.result as StoredProjectRow | undefined,
+          contentRequest.result as StoredProjectContent | undefined,
+        ));
+      } catch (error) {
+        reject(error);
+      }
+    };
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
   });
 }
 
@@ -282,8 +344,9 @@ export async function idbDeleteProject(id: string): Promise<void> {
   await migrateFromLocalStorageIfNeeded();
   const db = await getDb();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction([STORE_PROJECTS, STORE_CACHE, STORE_THUMBNAILS, STORE_VIEWS], 'readwrite');
+    const tx = db.transaction([STORE_PROJECTS, STORE_PROJECT_DATA, STORE_CACHE, STORE_THUMBNAILS, STORE_VIEWS], 'readwrite');
     tx.objectStore(STORE_PROJECTS).delete(id);
+    tx.objectStore(STORE_PROJECT_DATA).delete(id);
     tx.objectStore(STORE_CACHE).delete(id);
     tx.objectStore(STORE_THUMBNAILS).delete(id);
     tx.objectStore(STORE_VIEWS).delete(id);

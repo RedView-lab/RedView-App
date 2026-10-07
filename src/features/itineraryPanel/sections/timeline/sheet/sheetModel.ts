@@ -5,7 +5,7 @@ import type {
   TimelineColumnDef,
   TimelineColumnId,
 } from '../TimelineColumns';
-import type { TimelineTableSortState } from '../TimelineTableSettings';
+import type { TimelineTableSortState } from '../timelineTableSettingsState';
 
 /** Lignes, tri et gabarit de grille de la feuille de route. */
 

@@ -21,7 +21,7 @@ import { getTimeZoneForCoordinates, toWgs84, trueNorthGridBearingDeg } from '../
 import { resolveTimeZoneAt } from '@/shared/lib/timeZoneAt';
 import { SceneLod, type SceneLodStats } from './lod/sceneLod';
 import { AdaptivePointBudget } from './lod/lodBudget';
-import { REST_SAMPLES, RestRefinement } from './lod/restRefinement';
+import { RestRefinement } from './lod/restRefinement';
 import { LidarManager } from '../lib/lidarManager';
 import { buildViewerUrl } from '../lib/viewerUrl';
 import { syncRootAppScale } from '@/shared/lib/appScale';
@@ -54,6 +54,8 @@ import { sampleElevationAtProj } from './route/terrainRaycaster';
 import { googleEarthViewFromViewer } from './googleEarth';
 import { isGoogleEarthShortcut, openGoogleEarthView } from '@/shared/lib/googleEarthView';
 import { isTypingTarget } from '@/shared/lib/isTypingTarget';
+import { countBucket, initAnalytics, trackAnalyticsEvent, trackScreen } from '@/shared/lib/analytics';
+import { APP_BUILD_ID } from '@/shared/lib/appCacheEpoch';
 import type { ViewerRouteSceneParams } from './route/types';
 import { FrameClock } from './perf/frameClock';
 import { ViewerBench } from './perf/viewerBench';
@@ -65,6 +67,14 @@ import { buildTileFileCandidates } from './session/datasetPointCap';
 import { parseViewerParamsFromUrl } from './session/viewerUrlParams';
 import { fallbackViewerEngine, viewerEngineParamValue, VIEWER_ENGINE_PARAM, type ViewerEngineKey } from './session/viewerEngine';
 import { ViewerSnowController, type SnowSceneContext } from './session/viewerSnowController';
+import { PhotoModeController } from './photoMode/photoModeController';
+import { PHOTO_MODE_ENABLED } from './photoMode/featureFlag';
+import { readPhotoPreferences } from './photoMode/lib/photoPreferences';
+import { parsePhotoUrlOverrides } from './photoMode/lib/photoUrlParams';
+import { cloudBaseOffsetRange, defaultCloudBaseAltitude } from './photoMode/lib/cloudPresets';
+import { defaultPhotoTime } from './photoMode/lib/photoTime';
+import type { PhotoCaptureStatus, PhotoModeState } from './photoMode/types';
+import { resolveSunTimesForLocalDay } from '@/features/sunlight/lib/sun-calc';
 import {
   explainWorkerError,
   launchWebGLFallback,
@@ -86,6 +96,12 @@ observeDomTranslation(document.body, buildTranslationLookup(createAppTranslation
 // panels with `zoom: var(--app-scale)`: the shared control panel renders at
 // the same type size here and in the app.
 syncRootAppScale();
+
+// --- Audience ---
+// Same anonymous measurement as the app (first-party tracker, production only);
+// the account context (plan, account age, internal account) comes from the app's local copy.
+initAnalytics({ surface: 'viewer', release: APP_BUILD_ID });
+trackScreen('viewer');
 
 // --- DOM refs ---
 /** Replaced by the renderer's canvas once created (a fallback engine gets a fresh element, see claimViewerCanvas). */
@@ -130,13 +146,15 @@ function enqueueBackgroundCacheWrite(label: string, task: () => Promise<void>): 
 let renderer: LidarRenderer | null = null;
 /** Lowered by the automatic quality downgrade when the GPU cannot keep up. */
 let resolutionScale = 1;
+/** Pixel-ratio ceiling raised while the photo mode is on (null: the platform's). */
+let photoDprCap: number | null = null;
 const MIN_RESOLUTION_SCALE = 0.55;
 
 function resizeCanvas() {
   const dpr = window.devicePixelRatio || 1;
   const maxDim = Math.max(window.innerWidth, window.innerHeight);
   const maxCanvasDim = renderer?.platform?.maxCanvasDim ?? 4096;
-  const dprCap = renderer?.platform?.dprCap ?? 1.25;
+  const dprCap = Math.max(renderer?.platform?.dprCap ?? 1.25, photoDprCap ?? 0);
   const effectiveDpr = Math.min(dpr, dprCap, maxCanvasDim / maxDim) * resolutionScale;
   canvas.width = Math.floor(window.innerWidth * effectiveDpr);
   canvas.height = Math.floor(window.innerHeight * effectiveDpr);
@@ -163,6 +181,19 @@ const GPU_RETRY_WINDOW_MS = 120_000;
  * same engine once (tiles come back from the OPFS cache), a second one
  * within two minutes moves down the chain WebGPU → WebGL 2 → terrain.
  */
+/** Mean albedo (linear) of the terrain colours, sampled: the photo mode's distant ground and bounce light. */
+function meanTerrainAlbedo(colors: Uint8Array): number {
+  let sum = 0;
+  let count = 0;
+  const step = Math.max(4, Math.floor(colors.length / 4 / 4096) * 4);
+  for (let i = 0; i + 2 < colors.length; i += step) {
+    const l = (0.2126 * colors[i]! + 0.7152 * colors[i + 1]! + 0.0722 * colors[i + 2]!) / 255;
+    sum += l <= 0.04045 ? l / 12.92 : Math.pow((l + 0.055) / 1.055, 2.4);
+    count++;
+  }
+  return count > 0 ? Math.max(0.05, Math.min(0.5, (sum / count) * 0.9)) : 0.18;
+}
+
 function recoverFromGpuFailure(reason: string, running: ViewerEngineKey): void {
   const url = new URL(window.location.href);
   let recentRetry = false;
@@ -227,7 +258,11 @@ function recoverFromGpuFailure(reason: string, running: ViewerEngineKey): void {
       });
     };
 
+    const trackViewerOpened = (engine: ViewerEngineKey) =>
+      trackAnalyticsEvent({ name: 'lidar_viewer_opened', data: { engine, tiles: countBucket(sceneTileCoords.length) } });
+
     if (requestedEngine === 'terrain') {
+      trackViewerOpened('terrain');
       try {
         await startTerrainEngine('?engine=terrain');
       } catch (err: unknown) {
@@ -257,6 +292,7 @@ function recoverFromGpuFailure(reason: string, running: ViewerEngineKey): void {
       // Neither WebGPU nor WebGL 2 started: last resort, the terrain engine.
       const rendererDetail = (rendererErr as Error)?.message || String(rendererErr);
       console.error('[Viewer] No point-cloud renderer:', rendererErr);
+      trackViewerOpened('terrain');
       try {
         await startTerrainEngine(`renderer: ${rendererDetail}`);
       } catch (terrainErr: unknown) {
@@ -273,7 +309,11 @@ function recoverFromGpuFailure(reason: string, running: ViewerEngineKey): void {
     renderer = created.renderer;
     canvas = renderer.canvas;
     const runningEngine: ViewerEngineKey = renderer.backend;
-    renderer.onDeviceLost = (info) => recoverFromGpuFailure(`context lost: ${info.message || info.reason}`, runningEngine);
+    trackViewerOpened(runningEngine);
+    renderer.onDeviceLost = (info) => {
+      trackAnalyticsEvent({ name: 'gpu_context_lost', data: { engine: runningEngine } });
+      recoverFromGpuFailure(`context lost: ${info.message || info.reason}`, runningEngine);
+    };
     renderer.motionScale = motionQuality.scale ?? renderer.platform!.motionScale;
     renderer.motionSquares = motionQuality.squares;
     resizeCanvas();
@@ -378,6 +418,7 @@ function recoverFromGpuFailure(reason: string, running: ViewerEngineKey): void {
       }
     };
     let applyEdlRef: () => void = () => undefined;
+    let handleResizeRef: () => void = () => undefined;
 
     let showLodStats = true;
     let lastCpuFrameMs = 16.6;
@@ -402,8 +443,19 @@ function recoverFromGpuFailure(reason: string, running: ViewerEngineKey): void {
       if (cleanedUp || document.hidden || frameHandle != null) return;
       frameHandle = window.requestAnimationFrame(renderLoop);
     };
+    /** One more frame, the still image kept (photo mode: drifting clouds, capture). */
+    const requestFrame = () => {
+      if (cleanedUp || document.hidden || frameHandle != null) return;
+      frameHandle = window.requestAnimationFrame(renderLoop);
+    };
+    /** Photo mode (WebGPU); created with the panels. */
+    let photo: PhotoModeController | null = null;
 
     const backendLabel = renderer.backend === 'webgpu' ? 'WebGPU' : 'WebGL 2';
+    const cloudStats = (): string => {
+      const ms = renderer?.photo?.getCloudMs() ?? 0;
+      return ms >= 0.05 ? ` · ${translateAppText('nuages {{ms}} ms', { ms: ms.toFixed(1) })}` : '';
+    };
     const formatLodStats = (lodStats: SceneLodStats): string => {
       const cadence = frameClock.getCadence();
       const gpuMs = renderer?.getGpuFrameMs() ?? 0;
@@ -425,8 +477,9 @@ function recoverFromGpuFailure(reason: string, running: ViewerEngineKey): void {
         (restRefinement.phase === 'refine'
           ? ` · ${translateAppText('affinage')}`
           : restRefinement.phase === 'accumulate'
-            ? ` · ${translateAppText('lissage {{done}}/{{total}}', { done: restRefinement.sample, total: REST_SAMPLES })}`
+            ? ` · ${translateAppText('lissage {{done}}/{{total}}', { done: restRefinement.sample, total: restRefinement.samples })}`
             : '') +
+        (photo?.active ? ` · ${translateAppText('mode photo')}${cloudStats()}` : '') +
         ` · ${translateAppText('{{count}} tuile(s)', { count: sceneTileCoords.length })}` +
         ` · ${canvas.width}×${canvas.height}${renderScale < 1 ? ` ×${renderScale.toFixed(2)}` : ''} ${backendLabel} ${platform.tier}`;
     };
@@ -461,8 +514,11 @@ function recoverFromGpuFailure(reason: string, running: ViewerEngineKey): void {
       if (restRefinement.phase === 'moving') {
         // GPU time of the draw passes and the real cadence drive the budget,
         // sized on moving frames (see lodBudget).
+        // The photo mode's clouds are not the points' to pay for: fewer
+        // points would not make them cheaper, and the budget collapsed to
+        // its floor, then the render resolution, for good.
         pointBudget.sample({
-          gpuMs: renderer.getGpuFrameMs(),
+          gpuMs: Math.max(0, renderer.getGpuFrameMs() - (renderer.photo?.getCloudMs() ?? 0)),
           cpuMs: lastCpuFrameMs,
           intervalMs,
           targetIntervalMs: frameClock.getTargetIntervalMs(),
@@ -481,7 +537,23 @@ function recoverFromGpuFailure(reason: string, running: ViewerEngineKey): void {
       // LOD at the canvas resolution in both modes: starting or stopping
       // the camera does not reshuffle the selection.
       sceneLod.update(renderer.lastViewProj, renderer.lastProjScaleY, cpx, cpy, cpz, canvas.height);
-      renderer.renderScene(sceneLod.getSelectedNodes(), { motion, accumulate: accumulating ? restRefinement.sample : undefined });
+      const photoActive = photo?.active ?? false;
+      if (photoActive) {
+        // The detail shadow cascade follows what the camera looks at.
+        if (camera.getMode() === 'look') {
+          const eye = camera.getEye();
+          const [fx, fy, fz] = camera.getForward();
+          renderer.photo?.setFocus([eye[0] + fx * 40, eye[1] + fy * 40, eye[2] + fz * 40], 90);
+        } else {
+          renderer.photo?.setFocus([camera.targetX, camera.targetY, camera.targetZ], camera.radius * 0.9);
+        }
+      }
+      renderer.renderScene(sceneLod.getSelectedNodes(), {
+        motion,
+        accumulate: accumulating ? restRefinement.sample : undefined,
+        // Still image already averaged: only the clouds move.
+        reuseScene: photoActive && !motion && restRefinement.phase === 'done',
+      });
       if (motion) renderRequested = true;
       if (routeOverlayStale) {
         routeOverlayStale = false;
@@ -517,7 +589,9 @@ function recoverFromGpuFailure(reason: string, running: ViewerEngineKey): void {
       const keepSettling = !renderRequested
         && (!budgetSettled || !sceneLod.isIdle() || restRefinement.pending || (!motion && restRefinement.phase === 'moving'))
         && settleFramesLeft > 0;
-      const goingIdle = !renderRequested && !keepSettling;
+      // Photo mode: clouds converging or drifting, tables being built, capture.
+      const photoFrames = !renderRequested && !keepSettling && photoActive && (renderer.photo?.needsFrames() ?? false);
+      const goingIdle = !renderRequested && !keepSettling && !photoFrames;
 
       const now = performance.now();
       // The last frame before idling always refreshes the stats (no stale "loading").
@@ -543,6 +617,8 @@ function recoverFromGpuFailure(reason: string, running: ViewerEngineKey): void {
         // Camera is still, but nodes are still streaming in, the budget is
         // adapting or the still image is being refined.
         settleFramesLeft -= 1;
+        frameHandle = window.requestAnimationFrame(renderLoop);
+      } else if (photoFrames) {
         frameHandle = window.requestAnimationFrame(renderLoop);
       } else {
         frameClock.pause();
@@ -710,11 +786,71 @@ function recoverFromGpuFailure(reason: string, running: ViewerEngineKey): void {
       });
     }
 
+    // ── Photo mode (WebGPU): sky, clouds, shadows of the point cloud ──────
+    let groundMin = Infinity;
+    for (const h of terrainMesh.heightGrid) if (Number.isFinite(h) && h < groundMin) groundMin = h;
+    const sceneMinAltM = Number.isFinite(groundMin) ? cz + groundMin : sceneBounds.minZ;
+    const sceneMaxAltM = sceneBounds.maxZ;
+    const cloudAutoAltM = defaultCloudBaseAltitude(sceneMinAltM, sceneMaxAltM);
+    const cloudOffsetRange = cloudBaseOffsetRange(sceneMinAltM, sceneMaxAltM);
+    if (renderer.photo) {
+      photo = new PhotoModeController({
+        photo: renderer.photo,
+        site: { lat, lon, timeZone: tileTimeZone, trueNorthGridBearingDeg: trueNorthGridBearingDeg(cx, cy, crs) },
+        scene: {
+          bounds: {
+            minX: sceneBounds.minX - cx, maxX: sceneBounds.maxX - cx,
+            minY: sceneBounds.minZ - cz, maxY: sceneBounds.maxZ - cz,
+            minZ: -(sceneBounds.maxY - cy), maxZ: -(sceneBounds.minY - cy),
+          },
+          centerAltitudeM: cz,
+          minAltitudeM: sceneMinAltM,
+          maxAltitudeM: sceneMaxAltM,
+          groundAlbedo: meanTerrainAlbedo(terrainMesh.colors),
+        },
+        casters: {
+          select: (planes, texelM, maxPoints, out) => sceneLod.selectShadowCasters(planes, texelM, maxPoints, out),
+          version: () => sceneLod.getUploadedNodes(),
+        },
+        restRefinement,
+        pointBudget,
+        captureName: panelTileLabel,
+        requestRender,
+        requestFrame,
+        onActiveChange: (active) => {
+          // Retina screens get their full pixel ratio for the photo.
+          photoDprCap = active && platform.tier === 'apple' ? 2 : null;
+          handleResizeRef();
+        },
+      });
+    }
+    const photoToday = new Date().toISOString().slice(0, 10);
+    const photoOverrides = parsePhotoUrlOverrides(new URLSearchParams(window.location.search));
+    const initialPhotoState: PhotoModeState = {
+      date: photoToday,
+      time: defaultPhotoTime(resolveSunTimesForLocalDay(photoToday, lat, lon, tileTimeZone).sunsetTime),
+      ...readPhotoPreferences(),
+      ...photoOverrides,
+      enabled: photo !== null && photoOverrides.enabled === true,
+    };
+    const idleCapture: PhotoCaptureStatus = { busy: false, done: 0, total: 0, error: null };
+
     const rightPanel = createViewerRightPanel({
       centerLon: lon,
       centerLat: lat,
       timeZone: tileTimeZone,
       routeController,
+      // Photo mode frozen (photoMode/featureFlag.ts): no panel section.
+      photo: PHOTO_MODE_ENABLED ? {
+        available: photo !== null,
+        initialState: initialPhotoState,
+        cloudBase: { autoAltitudeM: cloudAutoAltM, minOffsetM: cloudOffsetRange.min, maxOffsetM: cloudOffsetRange.max },
+        onChange: (state) => photo?.apply(state),
+        onCapture: () => void photo?.capture(),
+        captureStore: photo
+          ? { subscribe: photo.subscribeCapture, getSnapshot: photo.getCaptureStatus }
+          : { subscribe: () => () => undefined, getSnapshot: () => idleCapture },
+      } : undefined,
       onPointFilterChange: (pointFilterState) => {
         isClassVisible = pointFilterClassPredicate(pointFilterState);
         if (renderer) {
@@ -817,6 +953,7 @@ function recoverFromGpuFailure(reason: string, running: ViewerEngineKey): void {
       routeOverlayStale = true;
       requestRender();
     };
+    handleResizeRef = handleResize;
     window.addEventListener('resize', handleResize);
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -824,11 +961,21 @@ function recoverFromGpuFailure(reason: string, running: ViewerEngineKey): void {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) {
         return;
       }
+      if (photo?.active && (e.key === 'i' || e.key === 'I') && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        // Interface hidden while framing a photo.
+        photo.setInterfaceHidden(!photo.interfaceHidden);
+        return;
+      }
+      if (e.key === 'Escape' && photo?.interfaceHidden) {
+        photo.setInterfaceHidden(false);
+        return;
+      }
       if (isGoogleEarthShortcut(e)) {
         if (isTypingTarget(e.target)) return;
         const view = googleEarthViewFromViewer(camera, heightSceneParams);
         if (view) {
           e.preventDefault();
+          trackAnalyticsEvent({ name: 'google_earth_opened', data: { from: 'lidar' } });
           openGoogleEarthView(view);
         }
         return;
@@ -887,6 +1034,7 @@ function recoverFromGpuFailure(reason: string, running: ViewerEngineKey): void {
       camera.destroy();
       tileNavigator.destroy();
       lidarManager.destroy();
+      photo?.destroy();
       comments?.destroy();
       tools?.destroy();
       routeController.destroy();

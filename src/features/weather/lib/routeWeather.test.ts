@@ -54,9 +54,10 @@ describe('resolveRouteWeatherDateRange', () => {
     expect(resolveRouteWeatherDateRange('2026-10-06', '06:00', 41, NOW)?.endDate).toBe('2026-10-08');
   });
 
-  it('caps at the 16-day forecast horizon and refuses a departure beyond it', () => {
-    expect(resolveRouteWeatherDateRange('2026-10-21', '06:00', 200, NOW)).toEqual({ startDate: '2026-10-21', endDate: '2026-10-21' });
-    expect(resolveRouteWeatherDateRange('2026-10-22', '06:00', 2, NOW)).toBeNull();
+  it('caps at the 4-day horizon of the self-hosted models and refuses a departure beyond it', () => {
+    expect(resolveRouteWeatherDateRange('2026-10-08', '06:00', 60, NOW)).toEqual({ startDate: '2026-10-08', endDate: '2026-10-09' });
+    expect(resolveRouteWeatherDateRange('2026-10-09', '06:00', 200, NOW)).toEqual({ startDate: '2026-10-09', endDate: '2026-10-09' });
+    expect(resolveRouteWeatherDateRange('2026-10-10', '06:00', 2, NOW)).toBeNull();
     expect(resolveRouteWeatherDateRange('pas une date', '06:00', 2, NOW)).toBeNull();
   });
 });

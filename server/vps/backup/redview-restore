@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+# redview-restore — reprise de RedView depuis les sauvegardes restic, sur ce
+# serveur ou sur un serveur neuf. Pas à pas complet : server/vps/backup/README.md,
+# « Reprise après sinistre ». Rien n'est écrasé sans --force.
+#
+#   redview-restore snapshots                     instantanés disponibles
+#   redview-restore fetch [INSTANTANÉ] [DOSSIER]  restaure tout l'instantané dans DOSSIER
+#                                                 (défaut : latest → /srv/redview-restore)
+#   redview-restore manifest [DOSSIER]            résumé de la machine sauvegardée
+#   redview-restore appwrite [DOSSIER] [--force]  remonte Appwrite : compose + .env, volumes, base
+#   redview-restore postgres DUMP CONTENEUR       importe un dump PostgreSQL (base vidée d'abord)
+#   redview-restore mariadb DUMP CONTENEUR        importe un dump MariaDB
+#   redview-restore files DOSSIER CHEMIN… [--force]  remet des chemins de l'instantané à leur place
+#
+# Configuration : /etc/redview-backup/backup.env (kit de reprise), ou les
+# variables RESTIC_REPOSITORY, RESTIC_PASSWORD_FILE et RCLONE_CONFIG.
+
+set -Eeuo pipefail
+umask 022
+
+CONFIG=${REDVIEW_BACKUP_CONFIG_DIR:-/etc/redview-backup}/backup.env
+if [[ -r $CONFIG ]]; then
+  set -a
+  # shellcheck source=/dev/null
+  . "$CONFIG"
+  set +a
+fi
+RESTIC_HOST=${RESTIC_HOST:-redview-vps}
+RESTIC_RCLONE_ARGS=${RESTIC_RCLONE_ARGS:-"serve restic --stdio --drive-chunk-size=64M"}
+export RESTIC_REPOSITORY RESTIC_PASSWORD_FILE RESTIC_CACHE_DIR RCLONE_CONFIG
+readonly STAGING=/var/lib/redview-backup/staging
+readonly DEFAULT_DIR=/srv/redview-restore
+
+log() { printf '%s\n' "$*"; }
+die() { printf 'ÉCHEC : %s\n' "$*" >&2; exit 1; }
+trap 'printf "ÉCHEC : commande « %s » (ligne %s)\n" "$BASH_COMMAND" "$LINENO" >&2' ERR
+
+restic_() {
+  : "${RESTIC_REPOSITORY:?RESTIC_REPOSITORY non défini (backup.env du kit de reprise)}"
+  if [[ $RESTIC_REPOSITORY == rclone:* ]]; then restic -o rclone.args="$RESTIC_RCLONE_ARGS" "$@"; else restic "$@"; fi
+}
+
+FORCE=0
+ARGS=()
+for a in "$@"; do
+  if [[ $a == --force ]]; then FORCE=1; else ARGS+=("$a"); fi
+done
+set -- "${ARGS[@]}"
+
+wait_mariadb() { # conteneur
+  for _ in $(seq 1 150); do
+    docker exec "$1" sh -c 'MYSQL_PWD="${MARIADB_ROOT_PASSWORD:-$MYSQL_ROOT_PASSWORD}" mariadb -uroot -e "SELECT 1"' > /dev/null 2>&1 \
+      && docker logs "$1" 2>&1 | grep -q 'Version: .*port: 3306' && return 0
+    sleep 2
+  done
+  die "MariaDB ($1) ne répond pas"
+}
+
+import_mariadb() { # dump conteneur
+  local dump=$1 c=$2
+  [[ -s $dump ]] || die "dump introuvable : $dump"
+  wait_mariadb "$c"
+  # Une ligne de projet peut peser ~12 Mo (payload compressé) : paquet maximal relevé.
+  docker exec "$c" sh -c 'MYSQL_PWD="${MARIADB_ROOT_PASSWORD:-$MYSQL_ROOT_PASSWORD}" mariadb -uroot -e "SET GLOBAL max_allowed_packet = 1073741824"'
+  log "import de $(basename "$dump") dans $c ($(du -h "$dump" | cut -f1))…"
+  docker exec -i "$c" sh -c 'MYSQL_PWD="${MARIADB_ROOT_PASSWORD:-$MYSQL_ROOT_PASSWORD}" exec mariadb -uroot --max-allowed-packet=1G' < "$dump"
+  log "import terminé."
+}
+
+import_postgres() { # dump conteneur
+  local dump=$1 c=$2
+  [[ -s $dump ]] || die "dump introuvable : $dump"
+  for _ in $(seq 1 90); do docker exec "$c" sh -c 'pg_isready -U "${POSTGRES_USER:-postgres}"' > /dev/null 2>&1 && break; sleep 2; done
+  # Le dump est sans propriétaires ni droits : il se recharge dans le schéma
+  # public vidé, au nom de l'utilisateur du conteneur.
+  log "schéma public de $c vidé puis rechargé depuis $(basename "$dump")…"
+  docker exec "$c" sh -c 'psql -v ON_ERROR_STOP=1 -q -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-${POSTGRES_USER:-postgres}}" -c "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;"'
+  docker exec -i "$c" sh -c 'exec psql -v ON_ERROR_STOP=1 -q -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-${POSTGRES_USER:-postgres}}"' < "$dump" > /dev/null
+  log "import terminé."
+}
+
+cmd_fetch() {
+  local snap=${1:-latest} dir=${2:-$DEFAULT_DIR}
+  if [[ -e $dir ]] && [[ -n $(ls -A "$dir" 2> /dev/null) ]] && (( ! FORCE )); then
+    die "$dir n'est pas vide (--force pour restaurer par-dessus)"
+  fi
+  mkdir -p "$dir"
+  chmod 0700 "$dir"
+  log "restauration de l'instantané $snap ($RESTIC_HOST) dans $dir…"
+  restic_ restore "$snap" --host "$RESTIC_HOST" --target "$dir"
+  log "fait. Dumps : $dir$STAGING ; manifeste : $dir/var/lib/redview-backup/manifest"
+}
+
+cmd_manifest() {
+  local m=${1:-$DEFAULT_DIR}/var/lib/redview-backup/manifest
+  [[ -d $m ]] || die "manifeste introuvable : $m (lancer d'abord fetch)"
+  sed -n '1,12p' "$m/system.txt"
+  echo "--- conteneurs"
+  cat "$m/containers.txt"
+  echo "--- projets compose"
+  cat "$m/compose-projects.txt"
+  echo "--- unités activées (hors système de base)"
+  grep -E 'brouter|poi-server|redview|nginx|docker|crond|firewalld' "$m/systemd-enabled.txt" || true
+  echo "--- tailles"
+  cat "$m/sizes.txt"
+}
+
+cmd_appwrite() {
+  local dir=${1:-$DEFAULT_DIR} v target
+  local src=$dir/opt/appwrite dump=$dir$STAGING/appwrite-mariadb.sql
+  [[ -f $src/docker-compose.yml && -f $src/.env ]] || die "$src incomplet (docker-compose.yml, .env)"
+  [[ -s $dump ]] || die "dump Appwrite introuvable : $dump"
+  if docker ps -a --format '{{.Names}}' | grep -qx appwrite && (( ! FORCE )); then
+    die "un conteneur « appwrite » existe déjà sur ce serveur (--force pour remplacer ses données)"
+  fi
+  install -d -m 0755 /opt/appwrite
+  cp -a "$src/." /opt/appwrite/
+  chmod 0600 /opt/appwrite/.env
+  cd /opt/appwrite
+  log "images Appwrite…"
+  docker compose pull --quiet
+  # Conteneurs et volumes créés sans démarrer : les volumes reçoivent les
+  # fichiers avant le premier démarrage d'Appwrite.
+  docker compose create
+  for v in uploads config certificates functions; do
+    target=$(docker volume inspect -f '{{.Mountpoint}}' "appwrite_appwrite-$v")
+    if [[ -d $dir/var/lib/docker/volumes/appwrite_appwrite-$v/_data ]]; then
+      log "volume appwrite-$v…"
+      cp -a "$dir/var/lib/docker/volumes/appwrite_appwrite-$v/_data/." "$target/"
+    fi
+  done
+  docker compose up -d mariadb redis
+  import_mariadb "$dump" appwrite-mariadb
+  docker compose up -d
+  log "Appwrite démarré. Contrôle :"
+  sleep 10
+  docker compose exec -T appwrite doctor || true
+  log "Les fichiers ne se lisent qu'avec la même _APP_OPENSSL_KEY_V1 : c'est celle du .env restauré."
+}
+
+cmd_files() { # dossier chemin…
+  local dir=${1:?dossier} p
+  shift
+  (( $# )) || die "aucun chemin"
+  for p in "$@"; do
+    [[ -e $dir$p ]] || die "absent de l'instantané : $p"
+    if [[ -e $p ]] && (( ! FORCE )); then
+      log "existe déjà, ignoré (--force pour remplacer) : $p"
+      continue
+    fi
+    mkdir -p "$(dirname "$p")"
+    cp -a "$dir$p" "$(dirname "$p")/"
+    command -v restorecon > /dev/null && restorecon -RF "$p"
+    log "remis : $p"
+  done
+}
+
+case ${1:-} in
+  snapshots) restic_ snapshots --host "$RESTIC_HOST" ;;
+  fetch) shift; cmd_fetch "$@" ;;
+  manifest) shift; cmd_manifest "$@" ;;
+  appwrite) shift; cmd_appwrite "$@" ;;
+  postgres) shift; import_postgres "$@" ;;
+  mariadb) shift; import_mariadb "$@" ;;
+  files) shift; cmd_files "$@" ;;
+  *) sed -n '2,17p' "$0"; exit 2 ;;
+esac

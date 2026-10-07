@@ -50,7 +50,7 @@ import {
 } from '@/features/itineraryPanel/lib/route-layer';
 import type { PredictionResult } from '@/features/fitPredictor';
 import { buildPauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule';
-import { useRouteWeather } from '@/features/weather';
+import { OPENMETEO_FORECAST_DAYS, useRouteWeather } from '@/features/weather';
 import {
   usePredictionStoreOptional,
   useProjectStoreOptional,
@@ -865,7 +865,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
         ) : null}
         {weatherUnavailable ? (
           <div className="rvc-center-analysis__notice" role="status">
-            {t('Prévisions météo indisponibles pour ce départ (erreur ou date au-delà de 16 jours) : la courbe météo est masquée.')}
+            {t('Prévisions météo indisponibles pour ce départ (erreur ou date au-delà de {{days}} jours) : la courbe météo est masquée.', { days: OPENMETEO_FORECAST_DAYS })}
           </div>
         ) : null}
       </div>

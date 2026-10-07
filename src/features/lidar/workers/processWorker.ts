@@ -104,8 +104,8 @@ workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
     ];
     if (pointCloud.intensities) transfer.push(pointCloud.intensities.buffer);
     workerScope.postMessage(result, transfer);
-  } catch (err: any) {
-    const msg: WorkerResponse = { type: 'error', message: err.message || String(err) };
+  } catch (err) {
+    const msg: WorkerResponse = { type: 'error', message: (err instanceof Error && err.message) || String(err) };
     workerScope.postMessage(msg);
   }
 };

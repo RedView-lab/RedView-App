@@ -78,11 +78,11 @@ export function TimelineKindMenu({
   const menuRef = useRef<HTMLDivElement>(null);
   const [menuStyle, setMenuStyle] = useState<TimelineKindMenuStyle | null>(null);
 
+  // Fermé : plus de position (mesurée de nouveau à la prochaine ouverture).
+  if ((!open || !anchorEl) && menuStyle !== null) setMenuStyle(null);
+
   useLayoutEffect(() => {
-    if (!open || !anchorEl) {
-      setMenuStyle(null);
-      return;
-    }
+    if (!open || !anchorEl) return;
 
     const update = () => {
       setMenuStyle(computeMenuStyle(anchorEl, options.length));

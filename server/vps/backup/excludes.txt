@@ -1,0 +1,10 @@
+/root/.cache
+/root/.npm
+/home/opc/.cache
+/home/opc/.npm
+/home/opc/.gradle
+/home/opc/.duckdb
+/home/opc/services/umami/data
+/home/opc/services/beszel/beszel_socket
+/var/lib/redview-backup/drill.*
+*.sock

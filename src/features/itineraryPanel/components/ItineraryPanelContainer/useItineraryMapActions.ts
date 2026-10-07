@@ -1,3 +1,4 @@
+import { trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { useCallback, useEffect } from 'react';
 import type {
   MapContextMenuActionPayload,
@@ -52,10 +53,12 @@ export function useItineraryMapActions({
   onSelectAndCenterTimelineRow,
 }: UseItineraryMapActionsArgs) {
   const handleExternalMapContextAction = useCallback((payload: MapContextMenuActionPayload) => {
+    trackAnalyticsEvent({ name: 'context_menu_action', data: { action: payload.action } });
     switch (payload.action) {
       case 'set-start': {
         const hasItinerary = (project?.itineraries?.length ?? 0) > 0;
         if (!hasItinerary && addItinerary) {
+          trackAnalyticsEvent({ name: 'itinerary_added', data: { method: 'map' } });
           addItinerary({
             timeline: [
               {
@@ -159,6 +162,7 @@ export function useItineraryMapActions({
       case 'start-here': {
         const hasItinerary = (project?.itineraries?.length ?? 0) > 0;
         if (!hasItinerary && addItinerary) {
+          trackAnalyticsEvent({ name: 'itinerary_added', data: { method: 'map' } });
           addItinerary({
             timeline: [
               {

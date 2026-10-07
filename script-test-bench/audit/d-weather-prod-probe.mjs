@@ -4,8 +4,10 @@
  *   node script-test-bench/audit/d-weather-prod-probe.mjs [https://app.redview.tech]
  * Sends <= 13 requests, >= 3.2 s apart when the target is not localhost
  * (shared 120 req/min/IP bucket on prod).
- * Exit 1 if: route weather beyond the forecast horizon is not a clean 4xx,
- * or the openmeteo proxy reports public-api (non-commercial licence) as source.
+ * Exit 1 if: the openmeteo proxy does not answer from the self-hosted VPS
+ * Open-Meteo (`X-Weather-Source: self-hosted-vps`; the public API is
+ * non-commercial and never used), the CSP still lets the browser reach
+ * open-meteo.com, or route weather beyond the 4-day horizon is not a clean 4xx.
  */
 const BASE = (process.argv[2] || 'http://127.0.0.1:3000').replace(/\/+$/, '');
 const remote = !/127\.0\.0\.1|localhost/.test(BASE);
@@ -15,6 +17,8 @@ let n = 0;
 // Local only: server trusts XFF from loopback, so use our own rate-limit bucket (other audits hammer 127.0.0.1).
 const LOCAL_XFF = `198.51.100.${1 + Math.floor(Math.random() * 250)}`;
 const problems = [];
+/** Model the app requests everywhere (src/features/weather/lib/openMeteoConfig.ts). */
+const MODEL = 'meteofrance_seamless';
 
 async function probe(label, pathOrUrl, { show = [], body = false } = {}) {
   if (n > 0) await sleep(GAP_MS);
@@ -40,7 +44,9 @@ async function probe(label, pathOrUrl, { show = [], body = false } = {}) {
 const root = await probe('GET /', '/', { show: ['strict-transport-security', 'x-frame-options'] });
 if (root) {
   const csp = root.res.headers.get('content-security-policy') || '';
-  console.log(`    CSP present=${Boolean(csp)} rainviewer-connect=${/connect-src[^;]*rainviewer/.test(csp)} open-meteo-connect=${/connect-src[^;]*open-meteo/.test(csp)}`);
+  const openMeteoConnect = /connect-src[^;]*open-meteo/.test(csp);
+  console.log(`    CSP present=${Boolean(csp)} rainviewer-connect=${/connect-src[^;]*rainviewer/.test(csp)} open-meteo-connect=${openMeteoConnect}`);
+  if (openMeteoConnect) problems.push('CSP connect-src still allows open-meteo.com (the browser only talks to /api/openmeteo)');
 }
 
 const meta = await probe('meta.json (cold?)', '/api/weather/meta.json', { show: ['age'] });
@@ -71,7 +77,7 @@ if (radarJson) {
   await probe('radar tile z5 recolor', `/radar-tiles/5/16/11?${q}&p=${p}&sig=x`);
 }
 
-// Route weather — same query as fetchRouteWeatherDataset (src/features/weather/lib/routeWeather.ts L160-172), 26 stations Paris->Lyon
+// Route weather — same query as fetchRouteWeatherDataset (src/features/weather/lib/routeWeather.ts), 26 stations Paris->Lyon
 const stations = Array.from({ length: 26 }, (_, i) => ({ lat: 48.8566 + (45.764 - 48.8566) * (i / 25), lng: 2.3522 + (4.8357 - 2.3522) * (i / 25) }));
 const lats = stations.map((s) => s.lat.toFixed(4)).join(',');
 const lngs = stations.map((s) => s.lng.toFixed(4)).join(',');
@@ -82,20 +88,24 @@ const routeUrl = (start) => {
   return `/api/openmeteo/v1/forecast?latitude=${lats}&longitude=${lngs}`
     + '&hourly=temperature_2m,apparent_temperature,precipitation,wind_speed_10m,cloud_cover,relative_humidity_2m,sunshine_duration'
     + `&start_date=${iso(start)}&end_date=${iso(end)}`
-    + '&timezone=Europe%2FParis&temperature_unit=celsius&precipitation_unit=mm&wind_speed_unit=kmh&cell_selection=nearest';
+    + '&timezone=auto&temperature_unit=celsius&precipitation_unit=mm&wind_speed_unit=kmh&cell_selection=nearest'
+    + `&models=${MODEL}`;
 };
 const route = await probe('openmeteo route 26 stations (today)', routeUrl(today));
-if (route?.res.headers.get('x-weather-source') === 'public-api') problems.push('openmeteo proxy served by PUBLIC api.open-meteo.com (OPENMETEO_UPSTREAM unset or VPS failing)');
+if (route && (!route.res.ok || route.res.headers.get('x-weather-source') !== 'self-hosted-vps')) {
+  problems.push(`openmeteo route -> ${route.res.status} src=${route.res.headers.get('x-weather-source') ?? '-'} (expected 200 from the self-hosted VPS: OPENMETEO_UPSTREAM unset or VPS failing)`);
+}
 const far = await probe('openmeteo route start +30 d (beyond horizon)', routeUrl(new Date(today.getTime() + 30 * 86400000)), { body: true });
 if (far && far.res.status >= 500) problems.push(`route weather beyond horizon -> ${far.res.status} (upstream 400 masked as 5xx; client then shows synthetic estimates)`);
 
-// Wind batch (phantom wind control) — same as fetchBatch (src/features/weather/lib/open-meteo.ts L210-220), 200 coords
+// Wind batch — same as fetchBatch (src/features/weather/lib/open-meteo.ts), 200 coords (the proxy's limit)
 const wc = Array.from({ length: 200 }, (_, i) => ({ lat: 45 + (i % 20) * 0.02, lng: 6 + Math.floor(i / 20) * 0.02 }));
 const hourKey = `${iso(today)}T12:00`;
-await probe('openmeteo wind batch 200 coords AROME HD',
+const wind = await probe(`openmeteo wind batch 200 coords ${MODEL}`,
   `/api/openmeteo/v1/forecast?latitude=${wc.map((c) => c.lat.toFixed(4)).join(',')}&longitude=${wc.map((c) => c.lng.toFixed(4)).join(',')}`
   + `&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m&start_hour=${encodeURIComponent(hourKey)}&end_hour=${encodeURIComponent(hourKey)}`
-  + '&wind_speed_unit=ms&timeformat=iso8601&timezone=Europe%2FParis&cell_selection=nearest&models=meteofrance_arome_france_hd');
+  + `&wind_speed_unit=ms&timeformat=iso8601&timezone=Europe%2FParis&cell_selection=nearest&models=${MODEL}`);
+if (wind && !wind.res.ok) problems.push(`openmeteo wind batch -> ${wind.res.status}`);
 
 console.log(`\nrequests sent: ${n}`);
 if (problems.length) {

@@ -38,6 +38,9 @@ const FULL_STEPS = [
   { id: 'build', script: 'build:vite', label: 'Build de prod (vite build)' },
   { id: 'server', script: 'server:check', label: 'Serveurs de prod bundlés (dist-server, statiques précompressés)' },
   { id: 'bundle', script: 'bundle:check', label: 'Chargement initial (budget, éditeur hors chemin critique)' },
+  // Navigateur réel sur le build ci-dessus, faux backend : connexion, projet,
+  // import et export GPX, cloud, autre appareil, export RGPD, suppression du compte.
+  { id: 'journey', script: 'e2e:journey', label: 'E2E : parcours principal (build de prod, faux backend)' },
   { id: 'redview', script: 'bench:redview', label: 'Régression : fichier .redview' },
   { id: 'project-layers', script: 'bench:project-layers', label: 'Régression : couches du projet' },
   { id: 'collab', script: 'bench:collab', label: 'Régression : co-édition' },

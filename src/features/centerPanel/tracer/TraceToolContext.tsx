@@ -1,7 +1,5 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -41,8 +39,9 @@ import {
   handlePointPanelMousedown,
   shouldIgnoreMapClickAfterPanelDismiss,
 } from '@/features/map3d/lib/pointPanelDismiss';
+import { TraceToolContext, type TraceToolContextValue } from './useTraceTool';
 
-export const TRACE_CURSOR = 'url("/svgv2/icone/edit-04.svg") 3 17, crosshair';
+const TRACE_CURSOR = 'url("/svgv2/icone/edit-04.svg") 3 17, crosshair';
 
 /** Propriétaires des curseurs déclarés par l'outil auprès de l'arbitre (`setMapCursor`). */
 const TRACE_TOOL_CURSOR_OWNER = 'trace-tool';
@@ -54,33 +53,6 @@ const TRACE_MAP_PAN_CURSOR_OWNER = 'trace-map-pan';
  * de tracé y affichent la main « grab » (elles se déplacent au glisser).
  */
 const TRACE_EDITING_CLASS = 'rv-trace-editing';
-
-interface TraceToolContextValue {
-  armed: boolean;
-  canTrace: boolean;
-  statusMessage: string | null;
-  toggle: () => void;
-  /**
-   * Arme l'outil sans passer par `canTrace`.
-   *
-   * Utilisé juste après la création d'un itinéraire : dans ce gestionnaire,
-   * `canTrace` est encore faux (il se réfère au rendu précédent) mais la mise à
-   * jour du store et celle de `armed` sont batchées, donc le rendu suivant voit
-   * déjà le nouvel itinéraire. Si l'armement s'avérait impossible, l'effet de
-   * désarmement le corrige dans la foulée.
-   */
-  activate: () => void;
-  deactivate: () => void;
-  /**
-   * Relâchement d'un point déplacé sur la carte (geste de `useTracePointDrag`,
-   * outil armé ou non). `false` : rien d'enregistré.
-   */
-  commitPointDrag: (commit: TracePointDragCommit) => boolean;
-  /** Curseur « grabbing » pendant le glisser d'un point. */
-  onPointDraggingChange: (dragging: boolean) => void;
-}
-
-const TraceToolContext = createContext<TraceToolContextValue | null>(null);
 
 interface TraceToolProviderProps {
   children: ReactNode;
@@ -419,8 +391,4 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
       {children}
     </TraceToolContext.Provider>
   );
-}
-
-export function useTraceToolOptional(): TraceToolContextValue | null {
-  return useContext(TraceToolContext);
 }

@@ -5,7 +5,6 @@ export const LAYER_PREFIX = 'weather-overlay-layer';
 export const SUPPORTED_KEYS: WeatherOverlayMetric[] = ['temperature', 'feelsLike', 'rain', 'cloudCover', 'humidity'];
 export const MOVE_DEBOUNCE_MS = 220;
 export const SCRUB_DEBOUNCE_MS = 60;
-export const MIN_FETCH_INTERVAL_MS = 800;
 // Style-sync recovery timings.
 //
 // Background: `map.isStyleLoaded()` can stay false for surprisingly long

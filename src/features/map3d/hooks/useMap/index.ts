@@ -7,6 +7,7 @@ import {
 } from '../../lib/mapbox.config';
 import { loadViewport, type MapViewport } from '../../lib/viewport-persist';
 import { installCssZoomAwareMapSizing } from '../../lib/mapContainerZoom';
+import { installStyleLessMapGuards } from '../../lib/styleLessMapGuards';
 import { transformMapboxRequest } from '../../lib/satelliteTiles';
 import { TerrainManager } from '../../lib/terrain';
 import { createMapLifecycleController } from './controller';
@@ -36,10 +37,14 @@ mapboxgl.maxParallelImageRequests = 32;
 // The map lives in the dashboard canvas, scaled with CSS `zoom` (appScale):
 // Mapbox must size itself in the canvas' layout px (lib/mapContainerZoom.ts).
 installCssZoomAwareMapSizing();
+// Style jamais chargé (api.mapbox.com injoignable, jeton refusé) : getSource/getLayer
+// renvoient undefined au lieu de lever (lib/styleLessMapGuards.ts).
+installStyleLessMapGuards();
 
 // Request maximum clock state from Windows D3D11 / AMD graphics driver for APUs
-if ((mapboxgl.supported as any)?.webGLContextAttributes) {
-  (mapboxgl.supported as any).webGLContextAttributes.powerPreference = 'high-performance';
+const supportCheck = mapboxgl.supported as typeof mapboxgl.supported & { webGLContextAttributes?: WebGLContextAttributes };
+if (supportCheck.webGLContextAttributes) {
+  supportCheck.webGLContextAttributes.powerPreference = 'high-performance';
 }
 
 const DEFAULT_BASEMAP_CONFIG = {

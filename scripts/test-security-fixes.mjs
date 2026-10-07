@@ -51,13 +51,12 @@ import { REDVIEW_CSP_HEADER } from '../server.mjs';
 assert.ok(REDVIEW_CSP_HEADER, 'REDVIEW_CSP_HEADER must be defined');
 assert.match(REDVIEW_CSP_HEADER, /worker-src [^;]*blob:/, 'worker-src must allow blob: for Mapbox GL workers');
 assert.match(REDVIEW_CSP_HEADER, /child-src [^;]*blob:/, 'child-src must allow blob: for Safari/legacy worker fallback');
-assert.match(REDVIEW_CSP_HEADER, /script-src [^;]*https:\/\/analytics\.redview\.tech/, 'script-src must include analytics.redview.tech');
+assert.doesNotMatch(REDVIEW_CSP_HEADER, /analytics\.redview\.tech/, 'analytics is first-party (/s/ via the host nginx): no third-party analytics origin');
 assert.match(REDVIEW_CSP_HEADER, /script-src [^;]*'wasm-unsafe-eval'/, 'script-src must allow WebAssembly compilation (wasm-unsafe-eval)');
 assert.doesNotMatch(REDVIEW_CSP_HEADER, /'unsafe-eval'/, 'script-src must not allow JavaScript eval (wasm-unsafe-eval is enough for WebAssembly)');
 assert.match(REDVIEW_CSP_HEADER, /script-src [^;]*'wasm-unsafe-eval'/, 'script-src must include wasm-unsafe-eval for WebAssembly compilation in workers');
 assert.match(REDVIEW_CSP_HEADER, /connect-src [^;]*https:\/\/s3\.amazonaws\.com/, 'connect-src must include S3 for Terrarium elevation tiles');
 assert.match(REDVIEW_CSP_HEADER, /connect-src [^;]*https:\/\/events\.mapbox\.com/, 'connect-src must include events.mapbox.com');
-assert.match(REDVIEW_CSP_HEADER, /connect-src [^;]*https:\/\/analytics\.redview\.tech/, 'connect-src must include analytics.redview.tech');
 console.log('✅ Test 4 Passed: Content-Security-Policy contains required worker-src, connect-src, and script-src.');
 
 console.log('\n🎉 All core security unit checks passed successfully!');

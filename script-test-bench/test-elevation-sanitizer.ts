@@ -5,7 +5,8 @@ import {
 } from '../src/features/itineraryPanel/lib/route-metrics/elevationSanitizer.ts';
 import { parseGpxText } from '../src/features/poi/lib/gpx-parse.ts';
 import { buildImportedRouteMetrics } from '../src/features/itineraryPanel/lib/routes/imported-route.ts';
-import { normalizeItineraryProject } from '../src/features/itineraryPanel/lib/project/defaultState.ts';
+import { createDefaultItinerary, createDefaultProject, normalizeItineraryProject } from '../src/features/itineraryPanel/lib/project/defaultState.ts';
+import type { ItineraryProject } from '../src/features/itineraryPanel/types/index.ts';
 import { normalizeMetricDomain, computeCumulativeElevationAtX } from '../src/features/centerPanel/components/chart/AnalysisChart/math.ts';
 import { computeDomain } from '../src/features/centerPanel/components/chart/series/builders.ts';
 
@@ -129,14 +130,16 @@ assert(
 );
 
 console.log('\n--- 8. Tests d\'auto-guérison d\'un projet existant (normalizeItineraryProject) ---');
-const dummyProject: any = {
-  id: 'test-proj',
+const dummyProject: ItineraryProject = {
+  ...createDefaultProject(),
   name: 'Projet Test',
   itineraries: [
     {
+      ...createDefaultItinerary(),
       id: 'it-1',
       name: 'Itinéraire avec pic',
       gpxRoute: {
+        name: null,
         points: simulatedRoute,
       },
       metrics: {
@@ -144,7 +147,6 @@ const dummyProject: any = {
         ascentM: 300,
         descentM: 11029, // Ancienne valeur erronée stockée
       },
-      rhythm: {},
     },
   ],
 };

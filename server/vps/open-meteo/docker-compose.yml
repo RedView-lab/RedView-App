@@ -1,0 +1,79 @@
+# Open-Meteo auto-hébergé : prévisions et historique météo de l'app
+# (/api/openmeteo, /api/snow-context) — jamais l'API publique
+# api.open-meteo.com, réservée à l'usage non commercial.
+#
+# Périmètre (décision produit) : France et pays limitrophes, prévision J+4,
+# disque ≤ 5 Go. Modèles Météo-France synchronisés depuis le jeu de données
+# ouvert d'Open-Meteo (bucket AWS openmeteo), servis en local :
+#   - AROME France 0,025° (~2,5 km, 51 h) : France et ses abords ;
+#   - ARPEGE Europe 0,1° (~11 km, 4 jours) : le reste de l'horizon et du
+#     domaine. `models=meteofrance_seamless` les fusionne (AROME d'abord).
+# AROME HD 0,01° (~190 Mo par variable et par fichier) ne tient pas dans le
+# budget. Aucune lecture à la demande (REMOTE_DATA_DIRECTORY) : une donnée
+# absente localement est absente, jamais relue sur S3 (≥ 60 s pour un
+# itinéraire de 200 points, mesuré le 07/10).
+#
+# Synchros (`--execute` : les fichiers plus vieux que --past-days sont
+# supprimés, le disque reste borné) :
+#   - sync-arome           AROME, 9 variables, 3 jours            ~0,7–1 Go
+#   - sync-arpege          ARPEGE, 4 variables, 3 jours           ~0,3 Go
+#   - sync-arpege-history  ARPEGE, 5 variables, 62 jours          ~1,8–2 Go
+#     (fonte et transport de la neige : api/snow-context.ts, past_days=60)
+# Une même variable d'un même modèle n'est synchronisée qu'une fois : deux
+# synchros aux --past-days différents se supprimeraient leurs fichiers.
+#
+# Destination : /opt/open-meteo/docker-compose.yml
+# Appliquer   : docker compose -f /opt/open-meteo/docker-compose.yml up -d
+# Vérifier    : server/vps/README.md, section Open-Meteo
+# Exposé à l'app par l'nginx de l'hôte, réservé au local
+# (server/weather-daemon/brouter.conf : location /openmeteo/).
+name: open-meteo
+
+x-image: &image
+  # Version épinglée (tag + digest de l'index multi-architecture : ARM64 ici).
+  image: ghcr.io/open-meteo/open-meteo:1.6.0@sha256:e1517a01a061fd96e2a9017d022c5809bb51725bcd733bcbed435e7ea32dd9da
+  restart: unless-stopped
+  volumes:
+    - open-meteo-data:/app/data
+
+x-sync: &sync
+  <<: *image
+  # Instance Always Free partagée : une synchro télécharge, elle ne calcule pas.
+  mem_limit: 512m
+  cpus: 0.5
+
+services:
+  open-meteo:
+    <<: *image
+    container_name: open-meteo
+    ports:
+      - '127.0.0.1:8080:8080'
+    mem_limit: 2g
+    cpus: 2
+
+  sync-arome:
+    <<: *sync
+    container_name: open-meteo-sync-arome
+    command: >-
+      sync meteofrance_arome_france0025
+      static,temperature_2m,relative_humidity_2m,wind_u_component_10m,wind_v_component_10m,wind_gusts_10m,cloud_cover,precipitation,shortwave_radiation,snowfall_water_equivalent
+      --past-days 3 --repeat-interval 10 --execute
+
+  sync-arpege:
+    <<: *sync
+    container_name: open-meteo-sync-arpege
+    command: >-
+      sync meteofrance_arpege_europe
+      static,relative_humidity_2m,wind_gusts_10m,cloud_cover,shortwave_radiation
+      --past-days 3 --repeat-interval 10 --execute
+
+  sync-arpege-history:
+    <<: *sync
+    container_name: open-meteo-sync-arpege-history
+    command: >-
+      sync meteofrance_arpege_europe
+      temperature_2m,precipitation,snowfall_water_equivalent,wind_u_component_10m,wind_v_component_10m
+      --past-days 62 --repeat-interval 10 --execute
+
+volumes:
+  open-meteo-data:

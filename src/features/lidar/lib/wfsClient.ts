@@ -90,7 +90,6 @@ function containsPoint(bbox: ZoneInfo['bbox'], lon: number, lat: number): boolea
 
 /**
  * Strip <georss:polygon> from XML to reduce parsing overhead.
- * Previously done server-side in the Vercel proxy.
  */
 function stripPolygons(xml: string): string {
   return xml

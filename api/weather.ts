@@ -1,11 +1,12 @@
 /**
- * RedView Weather Proxy (Vercel Serverless & Local Dev)
+ * RedView Weather Proxy (prod server.mjs and dev Vite plugin)
  * Relays weather tiles and metadata to the self-hosted Oracle VPS.
  *
  * Endpoints:
  *   GET /api/weather/meta.json
  *   GET /api/weather/tiles/:variable/:hour.(webp|png)
  *   GET /api/weather/point?lat=...&lon=...
+ *   GET /api/weather/radar.json (images radar RainViewer, relayées et mises en cache)
  *
  * Upstream env var (obligatoire pour le relais VPS ; si absente, seul le
  * fallback local `dist_weather/` est servi, sinon 503) :
@@ -17,6 +18,11 @@ import path from 'node:path';
 import { createByteLru } from '../server/byte-lru.mjs';
 
 const TIMEOUT_MS = 15_000;
+
+/** Liste des images radar RainViewer : une nouvelle image toutes les 10 min, gardée 1 min pour tous les clients. */
+const RADAR_MAPS_URL = 'https://api.rainviewer.com/public/weather-maps.json';
+const RADAR_MAPS_CACHE_KEY = 'radar-maps';
+const RADAR_MAPS_TTL_MS = 60_000;
 
 interface CacheEntry {
   body: Buffer;
@@ -145,66 +151,31 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return res.status(400).json({ error: 'Invalid path parameter' });
   }
 
-  // Live Doppler radar tile proxy (relayed from /radar-tiles/*)
-  const ALLOWED_RADAR_HOSTS = new Set([
-    'https://tilecache.rainviewer.com',
-    'https://tilecache.rainviewer.net',
-  ]);
-
-  if (subPath.startsWith('radar-tile')) {
-    try {
-      const parsed = parsedUrl;
-      const requestedHost = (parsed.searchParams.get('host') || '').trim();
-      const host = ALLOWED_RADAR_HOSTS.has(requestedHost)
-        ? requestedHost
-        : 'https://tilecache.rainviewer.com';
-
-      const rawFramePath = decodeURIComponent(parsed.searchParams.get('path') || '').trim();
-      if (!rawFramePath || !/^\/?[a-zA-Z0-9_\-/]+$/.test(rawFramePath)) {
-        res.status(400);
-        return res.json({ error: 'Invalid frame path parameter' });
-      }
-
-      const match = parsed.pathname.match(/(?:\/radar-tiles?\/|\/)(\d+)\/(\d+)\/(\d+)/);
-      if (match) {
-        const [, z, x, y] = match;
-        const cleanPath = rawFramePath.startsWith('/') ? rawFramePath : `/${rawFramePath}`;
-        const target = `${host}${cleanPath}/512/${encodeURIComponent(z)}/${encodeURIComponent(x)}/${encodeURIComponent(y)}/2/1_1.png`;
-        const tileRes = await fetch(target, {
-          signal: AbortSignal.timeout(10_000),
-        });
-        if (tileRes.ok) {
-          const buf = Buffer.from(await tileRes.arrayBuffer());
-          res.status(200);
-          res.setHeader('Content-Type', 'image/png');
-          res.setHeader('Access-Control-Allow-Origin', '*');
-          res.setHeader('Cache-Control', 'public, max-age=300');
-          res.setHeader('X-Weather-Source', 'rainviewer-tile-proxy');
-          return res.send(buf);
-        }
-      }
-      return res.status(204).end();
-    } catch {
-      return res.status(204).end();
-    }
-  }
-
-  // Dedicated European live Doppler radar endpoint (cached 2 min)
+  // Liste des images radar RainViewer (`/api/weather/radar.json`). Les tuiles
+  // radar passent par `/radar-tiles/*` (Service Worker, sinon server.mjs).
   if (subPath.startsWith('radar')) {
-    try {
-      const radarResponse = await fetch('https://api.rainviewer.com/public/weather-maps.json', {
-        headers: { Accept: 'application/json' },
-      });
-      if (!radarResponse.ok) {
-        throw new Error(`RainViewer HTTP ${radarResponse.status}`);
-      }
-      const radarJson = await radarResponse.json();
+    const sendRadarMaps = (body: Buffer) => {
       res.status(200);
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Cache-Control', 'public, max-age=120, stale-while-revalidate=300');
       res.setHeader('X-Weather-Source', 'radar-nowcast');
-      return res.json(radarJson);
+      return res.send(body);
+    };
+    const cachedMaps = getCached(RADAR_MAPS_CACHE_KEY);
+    if (cachedMaps) return sendRadarMaps(cachedMaps.body);
+    try {
+      const { response, body } = await fetchUpstream(RADAR_MAPS_URL);
+      if (!response.ok) {
+        throw new Error(`RainViewer HTTP ${response.status}`);
+      }
+      setCached(RADAR_MAPS_CACHE_KEY, {
+        body,
+        contentType: 'application/json; charset=utf-8',
+        status: 200,
+        expiresAt: Date.now() + RADAR_MAPS_TTL_MS,
+      });
+      return sendRadarMaps(body);
     } catch (radarErr) {
       console.warn('[weather-proxy] radar fetch failed:', radarErr);
       return res.status(502).json({ error: 'Radar service unavailable' });

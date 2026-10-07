@@ -67,11 +67,11 @@ export function AddItineraryDialog({
   const showDuplicate = Boolean(onPickDuplicate);
   const visibleRowCount = showDuplicate ? 3 : 2;
 
+  // Fermé : plus de position (mesurée de nouveau à la prochaine ouverture).
+  if ((!open || !anchorEl) && menuStyle !== null) setMenuStyle(null);
+
   useLayoutEffect(() => {
-    if (!open || !anchorEl) {
-      setMenuStyle(null);
-      return;
-    }
+    if (!open || !anchorEl) return;
 
     const updatePosition = () => {
       const rect = anchorEl.getBoundingClientRect();

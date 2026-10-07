@@ -1,7 +1,7 @@
 /**
- * Vercel serverless proxy → Météo-France WCS API (AROME snow_depth).
+ * Proxy → Météo-France WCS API (AROME snow_depth).
  *
- * Why a serverless function (vs. browser fetch)?
+ * Why server-side (vs. browser fetch)?
  *   1. The Météo-France WCS endpoint returns GRIB2 — a binary scientific
  *      format that's very heavy to parse in the browser (CCSDS / template
  *      5.42 compression).
@@ -22,7 +22,7 @@
  * Endpoint:
  *   GET /api/meteofrance?lonMin=...&latMin=...&lonMax=...&latMax=...
  *
- * Env var (optional, falls back to v0.1 embedded beta token):
+ * Server env var (required, the route answers 500 without it):
  *   METEOFRANCE_API_KEY=<JWT>
  */
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
@@ -108,6 +108,30 @@ async function findFirstTimeStep(coverageId: string): Promise<string> {
   const begin = /<gml:beginPosition[^>]*>([^<]+)</.exec(xml);
   if (begin) return begin[1].trim();
   return '0';
+}
+
+/**
+ * Dernier run AROME et son pas d'analyse, gardés 10 min (un nouveau run sort
+ * toutes les quelques heures) : sans ce cache, chaque grille non cachée
+ * coûtait trois appels au quota de la clé Météo-France au lieu d'un. Un
+ * échec n'est pas gardé ; les demandes simultanées partagent la même.
+ */
+const LATEST_RUN_TTL_MS = 10 * 60 * 1000;
+let latestRun: { at: number; run: Promise<{ coverageId: string; timeValue: string }> } | null = null;
+
+function resolveLatestRun(): Promise<{ coverageId: string; timeValue: string }> {
+  const now = Date.now();
+  if (latestRun && now - latestRun.at < LATEST_RUN_TTL_MS) return latestRun.run;
+  const run = (async () => {
+    const coverageId = await findSnowCoverage();
+    return { coverageId, timeValue: await findFirstTimeStep(coverageId) };
+  })();
+  const entry = { at: now, run };
+  latestRun = entry;
+  run.catch(() => {
+    if (latestRun === entry) latestRun = null;
+  });
+  return run;
 }
 
 /** Run hour from CoverageId: ...___2026-04-23T06.00.00Z → "06". */
@@ -361,8 +385,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
   try {
     const t0 = Date.now();
-    const coverageId = await findSnowCoverage();
-    const timeValue = await findFirstTimeStep(coverageId);
+    const { coverageId, timeValue } = await resolveLatestRun();
     const gribBytes = await downloadCoverage(
       coverageId,
       timeValue,
@@ -376,9 +399,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const json = JSON.stringify(grid);
     gridCache.set(cacheKey, json);
 
+    // Jamais l'emprise : c'est la position de la scène de l'utilisateur.
     console.log(
       `[meteofrance] ${coverageId} time=${timeValue} ` +
-        `bbox=[${lonMin.toFixed(3)},${latMin.toFixed(3)},${lonMax.toFixed(3)},${latMax.toFixed(3)}] ` +
         `→ ${grid.width}×${grid.height} unit=${grid.units} factor=${grid.unitToCm} ${elapsed}ms`,
     );
 

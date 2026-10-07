@@ -1,23 +1,13 @@
 import type { Map as MapboxMap } from 'mapbox-gl';
+import { logger } from '@/shared/lib/logger';
 import { clampForecastSelection } from '../../lib/forecastTime.ts';
 import type {
   WeatherOverlayMetric,
   WeatherOverlayMode,
   WeatherOverlayState,
-  WeatherSelection,
 } from '../types';
 import type { RefreshReason } from './constants';
 import { SUPPORTED_KEYS } from './constants';
-
-export interface ViewportBounds {
-  north: number;
-  south: number;
-  east: number;
-  west: number;
-  zoom: number;
-  pixelWidth: number;
-  pixelHeight: number;
-}
 
 export type ImageCoords = [[number, number], [number, number], [number, number], [number, number]];
 
@@ -36,49 +26,14 @@ export interface StyleHealth {
   hasImportContent: boolean;
 }
 
-export function getViewportBounds(map: MapboxMap): ViewportBounds {
-  const bounds = map.getBounds();
-  const canvas = map.getCanvas();
-  const pixelWidth = Math.max(320, canvas.clientWidth || canvas.width || 320);
-  const pixelHeight = Math.max(240, canvas.clientHeight || canvas.height || 240);
-  if (!bounds) {
-    return {
-      north: 0,
-      south: 0,
-      east: 0,
-      west: 0,
-      zoom: map.getZoom(),
-      pixelWidth,
-      pixelHeight,
-    };
-  }
-  return {
-    north: bounds.getNorth(),
-    south: bounds.getSouth(),
-    east: bounds.getEast(),
-    west: bounds.getWest(),
-    zoom: map.getZoom(),
-    pixelWidth,
-    pixelHeight,
-  };
-}
-
-export function selectionFromState(state: WeatherOverlayState): WeatherSelection {
-  if (state.tab === 'trends') {
-    const monthIso = state.date.slice(0, 7);
-    return { mode: 'trends', key: `trends:${monthIso}`, monthIso };
-  }
-
+/** Heure de prévision affichée (bornée à l'horizon du VPS) : change quand l'utilisateur fait défiler le temps. */
+export function weatherSelectionKey(state: WeatherOverlayState): string {
   const forecast = clampForecastSelection({
     date: state.date,
     time: state.time,
     forecastDay: state.forecastDay,
   });
-  return {
-    mode: 'forecast',
-    key: `forecast:${forecast.date}T${forecast.time}`,
-    forecastIso: `${forecast.date}T${forecast.time}`,
-  };
+  return `forecast:${forecast.date}T${forecast.time}`;
 }
 
 export function activeRenderableLayers(
@@ -100,10 +55,6 @@ export function imageCoords(bounds: [number, number, number, number]): ImageCoor
     [bounds[2], bounds[1]],
     [bounds[0], bounds[1]],
   ];
-}
-
-export async function preload(url: string): Promise<void> {
-  void url;
 }
 
 export function coordsEqual(left: ImageCoords, right: ImageCoords): boolean {
@@ -131,12 +82,6 @@ export function paletteSignature(state: WeatherOverlayState, key: WeatherOverlay
     }
   }
   return h.toString(36);
-}
-
-export async function canvasToObjectUrl(canvas: HTMLCanvasElement): Promise<string> {
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
-  if (!blob) return canvas.toDataURL('image/png');
-  return URL.createObjectURL(blob);
 }
 
 export function paletteOpacity(state: WeatherOverlayState, key: WeatherOverlayMetric): number {
@@ -175,8 +120,6 @@ export function readStyleHealth(map: MapboxMap): StyleHealth {
     };
   }
 }
-
-import { logger } from '@/shared/lib/logger';
 
 export function logWeatherOverlay(event: string, payload?: Record<string, unknown>): void {
   if (payload) {

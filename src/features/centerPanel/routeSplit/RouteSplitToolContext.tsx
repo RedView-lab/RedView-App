@@ -1,7 +1,5 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useState,
@@ -19,19 +17,9 @@ import {
   handlePointPanelMousedown,
   shouldIgnoreMapClickAfterPanelDismiss,
 } from '@/features/map3d/lib/pointPanelDismiss';
+import { RouteSplitToolContext, type RouteSplitToolContextValue } from './useRouteSplitTool';
 
 const SPLIT_CURSOR = 'url("/svgv2/icone/scissors.svg") 4 4, crosshair';
-
-interface RouteSplitToolContextValue {
-  armed: boolean;
-  canSplit: boolean;
-  statusMessage: string | null;
-  toggle: () => void;
-  deactivate: () => void;
-  splitAtPointIndex: (splitIndex: number) => boolean;
-}
-
-const RouteSplitToolContext = createContext<RouteSplitToolContextValue | null>(null);
 
 interface RouteSplitToolProviderProps {
   children: ReactNode;
@@ -166,8 +154,4 @@ export function RouteSplitToolProvider({ children, map }: RouteSplitToolProvider
       {children}
     </RouteSplitToolContext.Provider>
   );
-}
-
-export function useRouteSplitToolOptional(): RouteSplitToolContextValue | null {
-  return useContext(RouteSplitToolContext);
 }

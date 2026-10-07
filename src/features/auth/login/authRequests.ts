@@ -6,7 +6,7 @@
 interface ApiResult {
   ok: boolean
   status: number
-  data: { error?: string; message?: string; debugCode?: string }
+  data: { error?: string; message?: string }
 }
 
 async function postJson(url: string, body: unknown): Promise<ApiResult> {

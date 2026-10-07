@@ -5,6 +5,8 @@
  */
 import { inflateSync, deflateSync, crc32 } from 'node:zlib';
 
+import { createOldestKeyTaker } from './oldest-key.mjs';
+
 function rainviewerRgbToMm(r, g, b) {
   if (r >= 200 && b < 40) {
     return 5.0 + ((255 - g) / 255.0) * 20.0;
@@ -117,6 +119,7 @@ function buildRadarLookup(bands, mode, valMin = 0, valMax = 20) {
 // permettait de saturer la mémoire avec des palettes toutes différentes.
 const LOOKUP_CACHE_MAX = 64;
 const lookupCache = new Map();
+const takeOldestLookup = createOldestKeyTaker(lookupCache);
 
 // `mode:hex_min_max:hex_min_max…` — tout autre format est refusé.
 const PALETTE_NUM = String.raw`-?[\d.]+(?:e[+-]?\d+)?`;
@@ -137,7 +140,7 @@ function getOrCreateLookup(pStr) {
   const lookup = buildRadarLookup(bands, mode, 0, 20);
   lookupCache.set(pStr, lookup);
   while (lookupCache.size > LOOKUP_CACHE_MAX) {
-    lookupCache.delete(lookupCache.keys().next().value);
+    lookupCache.delete(takeOldestLookup());
   }
   return lookup;
 }

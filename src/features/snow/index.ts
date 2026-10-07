@@ -5,7 +5,8 @@
 //   1. scene geography (corners in WGS84, meridian convergence);
 //   2. in parallel: AROME snow depth (±0.4°), measurements + avalanche bulletin
 //      + weather history (/api/snow-context), far-field DEM (Terrarium);
-//      outside the AROME domain, a coarse global-model grid instead;
+//      without AROME (outside its domain, Météo-France down) there is no
+//      snow field: the self-hosted weather models carry no snow depth;
 //   3. model orography of the coarse cells (Terrarium);
 //   4. snow engine v2 in a worker (lib/engine/pipeline.ts).
 // ============================================================================
@@ -99,27 +100,18 @@ export async function runSnowPipeline(
   const canUseTiles = terrariumSupported();
   const [aromeRes, contextRes, farRes] = await Promise.allSettled([
     fetchAromeSnow(frame.center, signal),
-    fetchSnowContext(frame.center, sceneAltitude, { coarse: false, signal }),
+    fetchSnowContext(frame.center, sceneAltitude, signal),
     canUseTiles ? farFieldDem(frame, sizeX, sizeY, FAR_MARGIN_M, FAR_CELL_M, signal) : Promise.resolve(null),
   ]);
   if (signal?.aborted) throw new DOMException('aborted', 'AbortError');
 
-  let context: SnowContext | null = contextRes.status === 'fulfilled' ? contextRes.value : null;
+  const context: SnowContext | null = contextRes.status === 'fulfilled' ? contextRes.value : null;
   if (!context) console.warn('[snow] context unavailable:', contextRes.status === 'rejected' ? contextRes.reason : '');
-  let coarse: CoarseSnowGrid;
-  let arome: AromeGrid | null = null;
-  if (aromeRes.status === 'fulfilled') {
-    arome = aromeRes.value;
-    coarse = arome.grid;
-  } else {
-    // Outside the AROME domain (or AROME down): a coarse global-model grid.
-    console.warn('[snow] AROME unavailable, coarse fallback:', aromeRes.reason);
-    progress(15, 'AROME indisponible : modèle global…');
-    const fallback = await fetchSnowContext(frame.center, sceneAltitude, { coarse: true, signal }).catch(() => null);
-    if (!fallback?.coarse) throw aromeRes.reason instanceof Error ? aromeRes.reason : new Error('snow data unavailable');
-    coarse = fallback.coarse;
-    context = context ?? fallback;
+  if (aromeRes.status === 'rejected') {
+    throw aromeRes.reason instanceof Error ? aromeRes.reason : new Error('snow data unavailable');
   }
+  const arome: AromeGrid = aromeRes.value;
+  let coarse: CoarseSnowGrid = arome.grid;
 
   progress(25, 'Orographie du modèle…');
   if (canUseTiles) {
@@ -144,12 +136,12 @@ export async function runSnowPipeline(
     observations: [...(context?.observations ?? []), ...(options?.observations ?? [])],
     bra: context?.bra ?? null,
     weather: context?.weather ?? null,
-    analysisTimeMs: arome ? Date.parse(arome.timestamp) || Date.now() : Date.now(),
+    analysisTimeMs: Date.parse(arome.timestamp) || Date.now(),
     config,
   };
   progress(40, 'Répartition de la neige…');
   const result = await runWorker(input, progress, signal);
-  const sources = { ...(context?.sources ?? {}), arome: arome ? 'ok' : 'error', farDem: input.farDem ? 'ok' : 'unavailable', orography: coarse.orographyM ? 'ok' : 'scene-dtm' };
+  const sources = { ...(context?.sources ?? {}), arome: 'ok', farDem: input.farDem ? 'ok' : 'unavailable', orography: coarse.orographyM ? 'ok' : 'scene-dtm' };
 
   return {
     data: result.hsCm,
@@ -158,9 +150,9 @@ export async function runSnowPipeline(
     boundsMeters: [heightmap.bounds.minX, heightmap.bounds.minY, heightmap.bounds.maxX, heightmap.bounds.maxY],
     stats: { ...result.stats, elapsedMs: performance.now() - t0 },
     arome: {
-      timestamp: arome?.timestamp ?? new Date(input.analysisTimeMs).toISOString(),
-      runHour: arome?.runHour ?? '',
-      source: coarse.source === 'arome' ? 'meteofrance-arome' : 'open-meteo',
+      timestamp: arome.timestamp,
+      runHour: arome.runHour,
+      source: 'meteofrance-arome',
     },
     diagnostics: result.diagnostics,
     sources,

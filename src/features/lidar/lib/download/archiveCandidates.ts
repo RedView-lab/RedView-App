@@ -3,7 +3,7 @@ import { translateAppText } from '@/shared/i18n/config';
 import type { TileBounds } from '../tileCandidates';
 import { saveTile, hasValidLasSignature, hasValidZipSignature, StorageFullError } from '../storage';
 import { extractLasFromZip } from '../swiss/zipReader';
-import { isFinalDownloadError, throwIfCancelled } from './errors';
+import { asDownloadFailure, isFinalDownloadError, throwIfCancelled } from './errors';
 import { fetchWithRetry, INTER_REQUEST_DELAY_MS, sleep, waitForRateLimit } from './transport';
 
 /** Emprise du fichier visé par une dalle-fichier (Japon, NZ), au format des index. */
@@ -94,8 +94,9 @@ export async function downloadFirstArchiveCandidate({
       });
       await saveTileQuietly(coord, lasBuffer);
       return { buffer: lasBuffer };
-    } catch (err: any) {
-      if (isFinalDownloadError(err)) throw err;
+    } catch (caught) {
+      if (isFinalDownloadError(caught)) throw caught;
+      const err = asDownloadFailure(caught);
       if (err.status !== 404) allNotFound = false;
       lastError = err;
       if (err.status === 404) {

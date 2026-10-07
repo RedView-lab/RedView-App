@@ -126,12 +126,10 @@ Dockerfile
 # ───────────────────────────────────────────────
 # Docs de recherche / audit (volumineux, rarement utiles)
 # ───────────────────────────────────────────────
-REDVIEW_ANALYSIS.md
-REDVIEW_POI_DB_AUDIT.md
-REDVIEW_POI_EXTERNAL_SOURCES.md
-REDVIEW_PREDICTION_DATA_AUDIT.md
-REDVIEW_ROUTING_ARCHITECTURE.md
-STRUCTURE_REFACTOR_PLAN.md
+docs/REDVIEW_ANALYSIS.md
+docs/audits/
+docs/REDVIEW_ROUTING_ARCHITECTURE.md
+docs/STRUCTURE_REFACTOR_PLAN.md
 
 
 # ───────────────────────────────────────────────

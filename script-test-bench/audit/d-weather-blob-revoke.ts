@@ -3,12 +3,10 @@
  * the module-level `recoloredBlobCache` (src/features/weather/overlay/vpsTileRenderer.ts).
  *
  * Uses the REAL cache module (cacheRecoloredBlob / getCachedRecoloredBlob) and
- * replays, line for line, the three revoke sites of the overlay hooks:
+ * replays, line for line, the revoke sites of the overlay hooks:
  *   A. useWeatherStyleManager.removeAll (L502-505) — runs in the cleanup of the
  *      [map, isMapLoaded] effect of useWeatherOverlay/hook.ts (L178-186), i.e.
  *      when Dashboard sets mapLoaded=false (project close, pages/Dashboard/index.tsx L33, L177).
- *   B. useWeatherDataPipeline.renderFromData (L196-198) — Forecast tab -> Tendances tab
- *      replaces the VPS layer and revokes its (cached) URL.
  *   C. useWeatherDataPipeline.renderVpsForecast (L494-498) — layer toggled off
  *      while its recolor was being encoded: cached THEN revoked.
  * After each, the next forecast render at the same hour/palette reads the cache
@@ -63,21 +61,6 @@ function report(name: string, url: string | undefined) {
   report('A project close/reopen (removeAll)', getCachedRecoloredBlob(sig));
 }
 
-// ── Scenario B: Forecast -> Tendances -> Forecast ──────────────────────
-{
-  const sig = 'vps|2026-10-01T13:00:00Z|gradient|abc';
-  const url = newBlobUrl();
-  cacheRecoloredBlob(sig, url);
-  const rendered: Rendered = { url, signature: sig };
-  // renderFromData (trends) L184-198: new canvas url replaces layer, old rendered.url revoked after 1 s
-  const trendsUrl = newBlobUrl();
-  void trendsUrl;
-  if (rendered?.url.startsWith('blob:')) setTimeout(() => URL.revokeObjectURL(rendered.url), 1_000);
-  await sleep(1_100);
-  // back to forecast: rendered signature (trends) != vps sig -> L443 getCachedRecoloredBlob
-  report('B forecast->trends->forecast (renderFromData)', getCachedRecoloredBlob(sig));
-}
-
 // ── Scenario C: toggle off during encode ───────────────────────────────
 {
   const sig = 'vps|2026-10-01T14:00:00Z|fill|abc';
@@ -95,10 +78,9 @@ const dp = fs.readFileSync(path.join(root, 'src/features/weather/overlay/useWeat
 const removeAllBody = sm.slice(sm.indexOf('const removeAll'), sm.indexOf('const ensureLayer'));
 const staticA = /revokeObjectURL\(rendered\.url\)/.test(removeAllBody) && !/RecoloredBlob/.test(removeAllBody);
 const staticC = /cacheRecoloredBlob\(signature, blobUrl\);[\s\S]{0,400}revokeObjectURL\(blobUrl\)/.test(dp);
-const staticB = /rendered\?\.url\.startsWith\('blob:'\)[\s\S]{0,120}revokeObjectURL\(rendered\.url\)/.test(dp);
-console.log(`static: removeAll revokes cached URLs=${staticA}  renderFromData revokes=${staticB}  cache-then-revoke=${staticC}`);
+console.log(`static: removeAll revokes cached URLs=${staticA}  cache-then-revoke=${staticC}`);
 
-if (failures > 0 && (staticA || staticB || staticC)) {
+if (failures > 0 && (staticA || staticC)) {
   console.error(`\nFAIL: ${failures} scenario(s) hand a revoked blob: URL to Mapbox.`);
   process.exit(1);
 }

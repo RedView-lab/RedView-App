@@ -6,20 +6,49 @@ import { isBrouterRateLimitError } from './client';
  * Normalise et traduit les erreurs BRouter / réseau en messages clairs et
  * conviviaux pour l'utilisateur.
  */
+function rawBrouterMessage(error: unknown): string {
+  return typeof error === 'string'
+    ? error
+    : error instanceof Error
+      ? error.message
+      : typeof (error as { detail?: unknown })?.detail === 'string'
+        ? String((error as { detail?: string }).detail)
+        : String(error);
+}
+
+export type BrouterErrorKind =
+  | 'rate_limited'
+  | 'seam'
+  | 'restricted'
+  | 'not_mapped'
+  | 'no_route'
+  | 'timeout'
+  | 'out_of_zone'
+  | 'network'
+  | 'other';
+
+/** Catégorie d'un échec de routage (mesure d'audience : jamais le message, qui peut porter des coordonnées). */
+export function classifyBrouterError(error: unknown): BrouterErrorKind {
+  if (!error) return 'other';
+  if (isBrouterRateLimitError(error)) return 'rate_limited';
+  if (isRouteSeamError(error)) return 'seam';
+  const lower = rawBrouterMessage(error).toLowerCase();
+  if (/\bhttp 429\b/.test(lower)) return 'rate_limited';
+  if (lower.includes('restricted area') || lower.includes('zone interdite')) return 'restricted';
+  if (lower.includes('not mapped')) return 'not_mapped';
+  if (/no track found|no route found|cannot find route|target not reachable|no path found|aucune trace renvoyée/.test(lower)) return 'no_route';
+  if (/thread-priority-watchdog|timeout|timed out/.test(lower)) return 'timeout';
+  if (lower.includes('france métropolitaine') || lower.includes('hors zone autorisée')) return 'out_of_zone';
+  if (/502|504|upstream unreachable|failed to fetch|networkerror|load failed/.test(lower)) return 'network';
+  return 'other';
+}
+
 export function formatBrouterErrorMessage(error: unknown): string {
   if (!error) {
     return translateAppText('Impossible de calculer l’itinéraire.');
   }
 
-  const rawMessage =
-    typeof error === 'string'
-      ? error
-      : error instanceof Error
-        ? error.message
-        : typeof (error as { detail?: unknown })?.detail === 'string'
-          ? String((error as { detail?: string }).detail)
-          : String(error);
-
+  const rawMessage = rawBrouterMessage(error);
   const lower = rawMessage.toLowerCase();
 
   // 0. Quota de requêtes atteint (HTTP 429) : ni les points ni le profil ne sont en cause.

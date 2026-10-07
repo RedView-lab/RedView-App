@@ -61,7 +61,7 @@ const SIZES = value('--sizes', '200x1,1200x1,1200x3,1200x6').split(',');
 const CHANNEL = value('--channel', 'msedge');
 const HEADED = flag('--headed');
 const PROFILE = flag('--profile');
-/** Hôtes coupés (« et si » : ex. `--block fonts.googleapis.com,fonts.gstatic.com` = police système). */
+/** Hôtes coupés (« et si » : ex. `--block analytics.redview.tech` = sans le script Umami). */
 const BLOCKED_HOSTS = value('--block', '').split(',').filter(Boolean);
 /** `load` réduit à l'écran de connexion (premier rendu), sans ouvrir de projet. */
 const LOGIN_ONLY = flag('--login-only');

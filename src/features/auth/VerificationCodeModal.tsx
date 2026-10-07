@@ -1,14 +1,13 @@
 import { useState, useRef, useEffect, type ChangeEvent, type KeyboardEvent, type ClipboardEvent } from 'react';
 import { useAppI18n } from '@/shared/i18n';
+import { errorMessage as thrownMessage } from '@/shared/lib/errors';
 import './VerificationCodeModal.css';
 
 interface VerificationCodeModalProps {
   isOpen: boolean;
-  email?: string;
-  debugCode?: string;
   onClose: () => void;
   onConfirm: (code: string) => Promise<{ success: boolean; error?: string }>;
-  onResend: () => Promise<{ success: boolean; debugCode?: string; error?: string }>;
+  onResend: () => Promise<{ success: boolean; error?: string }>;
 }
 
 const CODE_LENGTH = 6;
@@ -165,8 +164,8 @@ export default function VerificationCodeModal({
         setErrorMessage(res.error || 'Code invalide.');
         inputsRef.current[0]?.focus();
       }
-    } catch (err: any) {
-      setErrorMessage(err?.message || 'Erreur lors de la validation du code.');
+    } catch (err) {
+      setErrorMessage(thrownMessage(err, 'Erreur lors de la validation du code.'));
       inputsRef.current[0]?.focus();
     } finally {
       setLoading(false);
@@ -187,8 +186,8 @@ export default function VerificationCodeModal({
       } else {
         setErrorMessage(res.error || 'Impossible de renvoyer le code.');
       }
-    } catch (err: any) {
-      setErrorMessage(err?.message || 'Erreur lors du renvoi du code.');
+    } catch (err) {
+      setErrorMessage(thrownMessage(err, 'Erreur lors du renvoi du code.'));
     } finally {
       setResending(false);
     }

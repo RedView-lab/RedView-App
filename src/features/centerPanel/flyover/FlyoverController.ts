@@ -10,6 +10,7 @@ import {
   setRouteLayerVisibility,
 } from '@/features/itineraryPanel/lib/route-layer';
 import { setPoiLayersSuppressed } from '@/features/poi/lib/poi-markers';
+import { percentBucket, roundTo, trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { createRouteDotMarker, setRouteDotMarkerColor } from '../components/analysis/routeDotMarker';
 import {
   APPROACH_CURVE,
@@ -84,6 +85,8 @@ interface Session {
   marker: Marker | null;
   color: string;
   distanceM: number;
+  /** Plus loin atteint (mesure d'audience : part du parcours vue). */
+  maxDistanceM: number;
   layerSignature: string;
   contextTimer: number;
 }
@@ -363,10 +366,12 @@ export class FlyoverController {
       marker: null,
       color: route.color,
       distanceM: 0,
+      maxDistanceM: 0,
       layerSignature: '',
       contextTimer: 0,
     };
     this.session = session;
+    trackAnalyticsEvent({ name: 'flyover_played', data: { distance_km: roundTo(rail.lengthM / 1000, 10) } });
     this.headingTrack = this.speedIndex;
     this.headingOffset = 0;
     this.headingBlendS = Number.POSITIVE_INFINITY;
@@ -386,6 +391,10 @@ export class FlyoverController {
     this.stopLoop();
     this.releaseCamera();
     if (session) {
+      trackAnalyticsEvent({
+        name: 'flyover_finished',
+        data: { completed: percentBucket(session.rail.lengthM > 0 ? session.maxDistanceM / session.rail.lengthM : 0) },
+      });
       window.clearInterval(session.contextTimer);
       session.marker?.remove();
       if (isMapAlive(this.map)) {
@@ -465,6 +474,7 @@ export class FlyoverController {
 
   private updateHead(session: Session, distanceM: number): void {
     session.distanceM = distanceM;
+    if (distanceM > session.maxDistanceM) session.maxDistanceM = distanceM;
     const head = session.cursor.locate(distanceM, this.head);
     if (!isMapAlive(this.map)) return;
     setAnalysisFlyoverProgress(this.map, distanceM >= session.rail.lengthM ? 1 : head.lineProgress);
