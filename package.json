@@ -42,6 +42,7 @@
     "bench:chart": "tsx script-test-bench/bench-center-panel.ts",
     "bench:server": "tsx script-test-bench/bench-server-api.ts",
     "bench:screens": "node script-test-bench/screen-audit/run.mjs",
+    "bench:dashboard": "tsx script-test-bench/dashboard-perf/run.ts",
     "bench:flyover": "tsx script-test-bench/bench-flyover.ts",
     "bench:follow": "tsx script-test-bench/bench-follow.ts && tsx script-test-bench/follow-frames/run.ts",
     "bench:follow-frames": "tsx script-test-bench/follow-frames/run.ts",
