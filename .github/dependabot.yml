@@ -1,0 +1,39 @@
+# Mises à jour de dépendances : une PR groupée par semaine pour les mineures
+# et correctifs, une PR par version majeure (à lire : changements cassants).
+# Chaque PR passe la CI (check:full) ; rien n'est fusionné ni déployé seul.
+# Les alertes de sécurité (Dependabot alerts / security updates) s'activent
+# dans Settings → Code security du dépôt.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore(deps)
+    groups:
+      dependencies-mineures:
+        dependency-type: production
+        update-types: [minor, patch]
+      outils-mineurs:
+        dependency-type: development
+        update-types: [minor, patch]
+    ignore:
+      # Facturation gelée (décision produit) : aucune montée de version Stripe
+      # tant que le gel n'est pas levé.
+      - dependency-name: stripe
+      - dependency-name: "@stripe/*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: chore(ci)
+    groups:
+      actions:
+        patterns: ["*"]
