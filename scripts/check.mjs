@@ -2,7 +2,7 @@
  * Gate qualité, bloquant avant chaque déploiement (scripts/deploy.mjs) et en CI.
  *
  *   npm run check                  types, lint, tests unitaires, knip, cycles (en parallèle)
- *   npm run check:full             + build de prod + régressions de correction hors ligne
+ *   npm run check:full             + couverture (planchers), build de prod, régressions hors ligne
  *   node scripts/check.mjs --only=lint,test
  *
  * Chaque étape est un script npm (une seule définition des commandes). Les
@@ -28,7 +28,9 @@ const FAST_STEPS = [
   // en silence — il mesure un tableau vide ou un `null` sans échouer.
   { id: 'typecheck-bench', script: 'typecheck:bench', label: 'Types des benchs (script-test-bench)' },
   { id: 'lint', script: 'lint', label: 'ESLint (cliquet de suppressions)' },
-  { id: 'test', script: 'test', label: 'Tests unitaires (Vitest)' },
+  // Avec --full (donc en CI et avant un déploiement), les mêmes tests sous
+  // couverture v8 avec ses planchers (vitest.config.ts) : un seul passage.
+  { id: 'test', script: 'test', fullScript: 'test:coverage', label: 'Tests unitaires (Vitest)', fullLabel: 'Tests unitaires (Vitest) + planchers de couverture' },
   { id: 'knip', script: 'knip', label: 'Code et dépendances morts (knip)' },
   { id: 'cycles', script: 'cycles', label: "Cycles d'imports (madge)" },
 ];
@@ -111,7 +113,9 @@ function printFailure(result) {
 async function main() {
   const { full, only } = parseArgs(process.argv.slice(2));
   const select = (steps) => (only ? steps.filter((step) => only.includes(step.id)) : steps);
-  const fastSteps = select(FAST_STEPS);
+  const fastSteps = select(FAST_STEPS).map((step) => (
+    full && step.fullScript ? { ...step, script: step.fullScript, label: step.fullLabel ?? step.label } : step
+  ));
   const fullSteps = (full || only ? select(FULL_STEPS) : []).filter((step) => {
     if (step.script in PACKAGE_SCRIPTS) return true;
     // Bench renommé ou retiré : signalé, pas ignoré en silence.

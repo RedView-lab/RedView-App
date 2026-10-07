@@ -29,6 +29,7 @@ vendor/redviewalgo/target
 **/*.test.tsx
 **/__tests__
 .github
+coverage
 
 # Stockage de développement du serveur temps réel
 .multiplayer-data*
