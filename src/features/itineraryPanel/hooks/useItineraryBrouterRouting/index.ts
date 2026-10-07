@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 
 import { normalizeDiscipline } from '@/shared/lib/discipline';
 import {
@@ -79,6 +79,41 @@ function dispatchRouteLoading(loading: boolean) {
   }
 }
 
+/**
+ * « Calcul en cours » de l'itinéraire actif. C'est l'état du planificateur de
+ * requêtes (minuteur d'anti-rebond, AbortController, jobs de patch : tous hors
+ * React, en refs), pas un état dérivé du rendu : posé quand une requête est
+ * programmée ou lancée — y compris par l'effet de routage — et levé quand elle
+ * aboutit, échoue ou est annulée. Une seule source pour React
+ * (useSyncExternalStore) et pour le curseur de la carte (`rv-route-loading`,
+ * émis à chaque écriture comme avant, même valeur répétée comprise).
+ */
+interface RouteLoadingStore {
+  get: () => boolean;
+  subscribe: (listener: () => void) => () => void;
+  set: (loading: boolean) => void;
+}
+
+function createRouteLoadingStore(): RouteLoadingStore {
+  let loading = false;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => loading,
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    set(next) {
+      dispatchRouteLoading(next);
+      if (next === loading) return;
+      loading = next;
+      for (const listener of listeners) listener();
+    },
+  };
+}
+
 export function useItineraryBrouterRouting({
   active,
   itineraries,
@@ -88,11 +123,9 @@ export function useItineraryBrouterRouting({
   rollbackPendingTraceAppend,
   setProject,
 }: UseItineraryBrouterRoutingArgs) {
-  const [routeLoading, _setRouteLoading] = useState(false);
-  const setRouteLoading = useCallback((loading: boolean) => {
-    _setRouteLoading(loading);
-    dispatchRouteLoading(loading);
-  }, []);
+  const [routeLoadingStore] = useState(createRouteLoadingStore);
+  const routeLoading = useSyncExternalStore(routeLoadingStore.subscribe, routeLoadingStore.get);
+  const setRouteLoading = routeLoadingStore.set;
   const [routeRequestNonce, setRouteRequestNonce] = useState(0);
   const [routeRefreshNonce, setRouteRefreshNonce] = useState(0);
   const [routeError, setRouteError] = useState<string | null>(null);
@@ -864,6 +897,7 @@ export function useItineraryBrouterRouting({
     routingInputKey,
     rollbackPendingTraceAppend,
     setProject,
+    setRouteLoading,
     startKey,
     routingViaKey,
   ]);
