@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useState, type PointerEvent } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { setDprLayoutScale } from '@/features/map3d/hooks/useMap/runtimeProfile';
 import { appScaleStyle, publishRootAppScale } from '@/shared/lib/appScale';
@@ -37,6 +37,15 @@ export default function Dashboard({
   offersUrl,
 }: DashboardProps) {
   const [mapInstance, setMapInstance] = useState<MapboxMap | null>(null);
+  /**
+   * The map for closures (written with the state, read instead of it): no
+   * closure of this component may capture `mapInstance`. V8 gives every
+   * closure of one render a single shared context, so a closure kept by a
+   * child effect whose dependencies did not change (the project browser's
+   * inline `onRequestClose`) held the last removed Mapbox map after the
+   * editor closed (`bench:dashboard -- --scenario leak`).
+   */
+  const mapInstanceRef = useRef<MapboxMap | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
 
   const prepareProjectClose = useCallback(async () => {
@@ -62,7 +71,7 @@ export default function Dashboard({
     getActiveProjectSnapshot,
   } = useDashboardProjectState({
     initialProjectId,
-    mapInstance,
+    mapInstanceRef,
     beforeCloseProject: prepareProjectClose,
   });
 
@@ -129,7 +138,7 @@ export default function Dashboard({
   // appScale changes (proportional window resize), so force a map resize.
   useLayoutEffect(() => {
     setDprLayoutScale(layout.appScale);
-    mapInstance?.resize();
+    mapInstanceRef.current?.resize();
   }, [layout.appScale, mapInstance]);
 
   // Mirror the scale on :root for overlays portaled to <body> (outside the
@@ -138,6 +147,7 @@ export default function Dashboard({
   useLayoutEffect(() => publishRootAppScale(layout.appScale), [layout.appScale]);
 
   const handleMapReady = useCallback((map: MapboxMap) => {
+    mapInstanceRef.current = map;
     setMapInstance(map);
     setMapLoaded(true);
   }, []);
@@ -196,6 +206,7 @@ export default function Dashboard({
   useEffect(() => {
     if (editorOpen) return;
     setMapLoaded(false);
+    mapInstanceRef.current = null;
     setMapInstance(null);
   }, [editorOpen]);
 

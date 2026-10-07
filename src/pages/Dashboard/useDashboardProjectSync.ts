@@ -44,14 +44,20 @@ interface PendingSave {
 }
 
 interface UseDashboardProjectSyncArgs {
-  mapInstance: MapboxMap | null;
+  /**
+   * The editor's map, by ref, never the instance: V8 gives every closure of
+   * one call a single shared context, so the unload/online listeners below
+   * (re-registered per project, not per map) kept the last removed Mapbox map
+   * alive after the editor closed (`bench:dashboard -- --scenario leak`).
+   */
+  mapInstanceRef: React.RefObject<MapboxMap | null>;
   activeProjectId: string | null;
   activeProjectIdRef: React.MutableRefObject<string | null>;
   activeProjectSnapshotRef: React.MutableRefObject<ItineraryProject | null>;
 }
 
 export function useDashboardProjectSync({
-  mapInstance,
+  mapInstanceRef,
   activeProjectId,
   activeProjectIdRef,
   activeProjectSnapshotRef,
@@ -348,9 +354,10 @@ export function useDashboardProjectSync({
 
   const captureThumbnailForProject = useCallback(
     async (projectId: string) => {
-      if (!mapInstance || projectId.startsWith('local-')) return;
+      const map = mapInstanceRef.current;
+      if (!map || projectId.startsWith('local-')) return;
       try {
-        const blob = await captureMapThumbnail(mapInstance);
+        const blob = await captureMapThumbnail(map);
         if (!blob) return;
         // Sauvegarde locale instantanée dans IndexedDB
         await idbSaveThumbnail(projectId, blob);
@@ -360,7 +367,7 @@ export function useDashboardProjectSync({
         console.warn('[Dashboard] project thumbnail capture/upload failed', error);
       }
     },
-    [mapInstance],
+    [mapInstanceRef],
   );
 
   useEffect(() => {

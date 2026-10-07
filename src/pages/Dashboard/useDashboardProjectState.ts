@@ -56,7 +56,8 @@ function readPendingViewport(projectId: string): MapViewport | null {
 
 interface UseDashboardProjectStateArgs {
   initialProjectId?: string | null;
-  mapInstance: MapboxMap | null;
+  /** The editor's map, by ref (see Dashboard: no closure may hold the instance). */
+  mapInstanceRef: React.RefObject<MapboxMap | null>;
   beforeCloseProject?: () => Promise<void> | void;
 }
 
@@ -66,7 +67,7 @@ interface UseDashboardProjectStateArgs {
  */
 export function useDashboardProjectState({
   initialProjectId,
-  mapInstance,
+  mapInstanceRef,
   beforeCloseProject,
 }: UseDashboardProjectStateArgs) {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
@@ -91,7 +92,7 @@ export function useDashboardProjectState({
     captureThumbnailForProject,
     resetSyncState,
   } = useDashboardProjectSync({
-    mapInstance,
+    mapInstanceRef,
     activeProjectId,
     activeProjectIdRef,
     activeProjectSnapshotRef,
