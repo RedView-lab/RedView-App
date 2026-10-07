@@ -143,30 +143,30 @@ async function main() {
     '&daily=temperature_2m_mean,relative_humidity_2m_mean,cloud_cover_mean,rain_sum,precipitation_sum' +
     '&timezone=Europe%2FParis&temperature_unit=celsius&precipitation_unit=mm&cell_selection=nearest';
 
-  console.log(`[test-openmeteo-vps] forecast => ${forecastUrl}`);
+  console.log(`[openmeteo-vps] forecast => ${forecastUrl}`);
   const forecastJson = await fetchJson(forecastUrl);
   const forecastItems = normaliseItems(forecastJson);
   assert(forecastItems.length === 2, `Expected 2 forecast items, got ${forecastItems.length}`);
   forecastItems.forEach(validateForecastItem);
 
-  console.log(`[test-openmeteo-vps] current => ${currentForecastUrl}`);
+  console.log(`[openmeteo-vps] current => ${currentForecastUrl}`);
   const currentForecastJson = await fetchJson(currentForecastUrl);
   validateCurrentForecast(currentForecastJson);
 
-  console.log(`[test-openmeteo-vps] climate => ${climateUrl}`);
+  console.log(`[openmeteo-vps] climate => ${climateUrl}`);
   const climateJson = await fetchJson(climateUrl);
   const climateItems = normaliseItems(climateJson);
   assert(climateItems.length === 2, `Expected 2 climate items, got ${climateItems.length}`);
   climateItems.forEach(validateClimateItem);
 
-  console.log('[test-openmeteo-vps] OK');
-  console.log(`[test-openmeteo-vps] current apparent_temperature sample = ${currentForecastJson.current.apparent_temperature}`);
-  console.log(`[test-openmeteo-vps] forecast apparent_temperature sample = ${forecastItems[0].hourly.apparent_temperature[0]}`);
-  console.log(`[test-openmeteo-vps] climate temperature_2m_mean sample = ${climateItems[0].daily.temperature_2m_mean[0]}`);
+  console.log('[openmeteo-vps] OK');
+  console.log(`[openmeteo-vps] current apparent_temperature sample = ${currentForecastJson.current.apparent_temperature}`);
+  console.log(`[openmeteo-vps] forecast apparent_temperature sample = ${forecastItems[0].hourly.apparent_temperature[0]}`);
+  console.log(`[openmeteo-vps] climate temperature_2m_mean sample = ${climateItems[0].daily.temperature_2m_mean[0]}`);
 }
 
 main().catch((error) => {
-  console.error('[test-openmeteo-vps] FAILED');
+  console.error('[openmeteo-vps] FAILED');
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });

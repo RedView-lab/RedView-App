@@ -90,7 +90,7 @@ La vélocité de chaque segment (segment de 20 ou 50 mètres) est calculée en i
 Le panneau de droite (`ControlPanel`) donne accès aux données environnementales de la plateforme.
 
 ### 4.1 La Redistribution de Neige (Snow Physics)
-C'est l'un des composants les plus spectaculaires techniquement (`src/features/snow/lib/redistribute.ts`). RedView ne se contente pas d'utiliser l'altitude pour peindre les sommets en blanc.
+C'est l'un des composants les plus spectaculaires techniquement (`src/features/snow/lib/engine/`, `wind.ts` et `gravity.ts`). RedView ne se contente pas d'utiliser l'altitude pour peindre les sommets en blanc.
 - **Input AROME** : Le système télécharge les données de précipitations solides (Modèle AROME haute résolution de Météo-France) et génère une grille basse résolution.
 - **7 Phases de Calcul Universitaire** :
   1. *Analyse du Terrain* : Calcul de la pente, de l'exposition, de la courbure du plan (`computePlanCurvature`), de la rugosité (TRI). L'algorithme calcule le `computeShelterIndexMulti` (Sx de Winstral) pour définir quelles zones sont à l'abri du vent, et le `D-infinity Flow` (Tarboton) pour simuler l'écoulement gravitationnel.

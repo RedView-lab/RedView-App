@@ -1,7 +1,7 @@
 /**
  * Comprehensive scenario tests for the BRF generator + upload pipeline.
  *
- *   npx tsx scripts/routing/test-brouter-scenarios.ts
+ *   npx tsx scripts/routing/run-scenarios.ts
  */
 import { failedChecks, runChecks, totalChecks } from './brouter-scenarios/checks';
 import { DEFAULT_ROUTE, MORVAN_ROUTE, UPSTREAM } from './brouter-scenarios/config';

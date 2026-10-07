@@ -1,8 +1,8 @@
 /**
  * Pedestrian (Running / Trail) BRF profiles against the BRouter server.
  *
- *   npx tsx scripts/routing/test-brouter-foot.ts
- *   BROUTER_UPSTREAM=http://<vps> npx tsx scripts/routing/test-brouter-foot.ts
+ *   npx tsx scripts/routing/foot-profile.ts
+ *   BROUTER_UPSTREAM=http://<vps> npx tsx scripts/routing/foot-profile.ts
  *
  * 1. Every Running / Trail preset × tracing mode compiles on the server
  *    (an unknown lookup name/value in the BRF is a compile error).

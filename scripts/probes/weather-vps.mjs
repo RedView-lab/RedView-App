@@ -1,8 +1,8 @@
 // Test script for RedView Weather System on Oracle VPS or local proxy
 // Usage:
-//   node scripts/probes/test-weather-vps.mjs
-//   node scripts/probes/test-weather-vps.mjs --base-url http://141.145.220.99/weather
-//   node scripts/probes/test-weather-vps.mjs --base-url http://localhost:5173/api/weather
+//   node scripts/probes/weather-vps.mjs
+//   node scripts/probes/weather-vps.mjs --base-url http://141.145.220.99/weather
+//   node scripts/probes/weather-vps.mjs --base-url http://localhost:5173/api/weather
 
 const DEFAULT_ENDPOINT = process.env.WEATHER_UPSTREAM || 'http://141.145.220.99/weather';
 

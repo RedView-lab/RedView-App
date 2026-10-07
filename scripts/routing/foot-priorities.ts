@@ -1,10 +1,10 @@
 /**
  * Priority sliders & « Paramètres additionnels » on the pedestrian BRF —
  * the foot counterpart of the E / D / X / T / Q / S groups of
- * scripts/routing/test-brouter-scenarios.ts.
+ * scripts/routing/run-scenarios.ts.
  *
- *   npx tsx scripts/routing/test-brouter-foot-priorities.ts
- *   BROUTER_UPSTREAM=http://<vps> npx tsx scripts/routing/test-brouter-foot-priorities.ts
+ *   npx tsx scripts/routing/foot-priorities.ts
+ *   BROUTER_UPSTREAM=http://<vps> npx tsx scripts/routing/foot-priorities.ts
  *
  * Routes are requested like the app does for custom profiles
  * (routingStrategy.ts → single BRouter query): every priority effect must

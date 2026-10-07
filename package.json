@@ -70,7 +70,7 @@
     "cycles": "madge --circular --no-spinner src",
     "check": "node scripts/quality/check.mjs",
     "check:full": "node scripts/quality/check.mjs --full",
-    "test:openmeteo:vps": "node ./scripts/probes/test-openmeteo-vps.mjs",
+    "test:openmeteo:vps": "node ./scripts/probes/openmeteo-vps.mjs",
     "i18n:audit": "node scripts/quality/i18n-audit.mjs",
     "lidar:index": "node scripts/lidar-index/build.mjs",
     "workbench": "node scripts/design-workbench/build.mjs",

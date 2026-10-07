@@ -15,7 +15,7 @@ their credentials from `.env` (never committed).
 | [`analytics/`](analytics) | Activation report from the database, internal-account labels, Umami boards / funnels as code (`umami/`) | `npm run analytics:report`, `npm run analytics:sync` |
 | [`billing/`](billing) | Stripe products (billing is frozen) | — |
 | [`vps/`](vps) | Host hardening and read-only performance snapshots of the VPS, e-mail DNS check | `bash scripts/vps/perf-snapshot.sh <label>` |
-| [`routing/`](routing) | BRouter scenario runner and routing probes (foot profiles, gravel, GT20) | `npx tsx scripts/routing/test-brouter-scenarios.ts` |
+| [`routing/`](routing) | BRouter scenario runner and routing probes (foot profiles, gravel, GT20) | `npx tsx scripts/routing/run-scenarios.ts` |
 | [`probes/`](probes) | One-off diagnostics against live services (Open-Meteo, POI, weather, swisstopo, IGN WMS) kept for their method | `npm run test:openmeteo:vps` |
 | [`lidar-index/`](lidar-index) | Regenerates the LiDAR file indexes and coverage polygons (JP, NZ, NL, BE, FR, CH) | `npm run lidar:index` |
 | [`design-workbench/`](design-workbench) | Self-contained HTML copy of the dashboard for the designer, with an edit export | `npm run workbench`, `npm run workbench:verify` |

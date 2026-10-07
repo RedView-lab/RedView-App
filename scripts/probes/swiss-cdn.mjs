@@ -2,7 +2,7 @@
 // real concurrency / timeout envelope of the swissSURFACE3D CDN.
 //
 // Usage:
-//   node scripts/probes/test-swiss-cdn.mjs
+//   node scripts/probes/swiss-cdn.mjs
 //
 // What we measure:
 //   1. STAC bbox query latency (single request, warm vs cold)

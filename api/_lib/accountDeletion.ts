@@ -23,7 +23,7 @@ import { getStripeServer } from './stripe.js';
 
 /**
  * Suppression d'un compte et de toutes ses données (RGPD, art. 17) — appelée
- * par api/account/delete.ts après confirmation par code e-mail, et par
+ * par api/auth/delete-account.ts après confirmation par code e-mail, et par
  * scripts/appwrite/account-deletions.ts pour reprendre une suppression interrompue ou
  * la rejouer après la restauration d'une sauvegarde.
  *

@@ -387,7 +387,7 @@ function greetingFor(name?: string): string {
   return cleanName ? `Bonjour ${cleanName},` : 'Bonjour,';
 }
 
-/** Code à 6 chiffres qui confirme la suppression définitive d'un compte (api/account/delete.ts). */
+/** Code à 6 chiffres qui confirme la suppression définitive d'un compte (api/auth/delete-account.ts). */
 export async function sendAccountDeletionCodeEmail({ to, code, name }: { to: string; code: string; name?: string }): Promise<{ sent: boolean }> {
   const greeting = greetingFor(name);
   const subject = `${code} : code de suppression de votre compte RedView`;
