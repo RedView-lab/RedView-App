@@ -2285,12 +2285,12 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Zoom out"
   },
   {
-    "fr": "Passer en vue 2D",
-    "en": "Switch to 2D view"
+    "fr": "Vue 3D : passer en 2D",
+    "en": "3D view: switch to 2D"
   },
   {
-    "fr": "Passer en vue 3D",
-    "en": "Switch to 3D view"
+    "fr": "Vue 2D : passer en 3D",
+    "en": "2D view: switch to 3D"
   },
   {
     "fr": "Passer en 2D",
@@ -3497,6 +3497,14 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Steps list"
   },
   {
+    "fr": "{{label}}, tri croissant",
+    "en": "{{label}}, ascending sort"
+  },
+  {
+    "fr": "{{label}}, tri décroissant",
+    "en": "{{label}}, descending sort"
+  },
+  {
     "fr": "Type",
     "en": "Type"
   },
@@ -3681,8 +3689,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Table"
   },
   {
-    "fr": "Distance entre waypoints (km)",
-    "en": "Distance between waypoints (km)"
+    "fr": "Distance entre waypoints : {{value}} km",
+    "en": "Distance between waypoints: {{value}} km"
   },
   {
     "fr": "Jours de l'agenda",
@@ -6691,6 +6699,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Hors plage",
     "en": "Off-range"
+  },
+  {
+    "fr": "Hors plage : {{value}}%",
+    "en": "Off-range: {{value}}%"
   },
   {
     "fr": "Part du parcours autorisée hors de la plage de surfaces choisie (0 % = strict)",
