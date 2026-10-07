@@ -39,11 +39,6 @@
       "count": 1
     }
   },
-  "src/features/itineraryPanel/hooks/useItineraryFitRuntime/index.ts": {
-    "react-hooks/refs": {
-      "count": 1
-    }
-  },
   "src/features/lidar/viewer/rightPanel/LidarViewerRightPanel.tsx": {
     "react-hooks/preserve-manual-memoization": {
       "count": 1

@@ -1,11 +1,12 @@
 import {
   useCallback,
   useMemo,
-  useRef,
   useState,
 } from 'react';
 
 import { deleteFitUploads } from '@/shared/utils/projects';
+import { useKeyedValue } from '@/shared/hooks/useKeyedValue';
+import { useLatestRef } from '@/shared/hooks/useLatestRef';
 import { normalizeDiscipline } from '@/shared/lib/discipline';
 import { translateAppText } from '@/shared/i18n';
 import { buildFitUploadsSignature } from '../../lib/schedule';
@@ -39,8 +40,8 @@ export function useItineraryFitRuntime({
   const [fitRuntimeByItineraryId, setFitRuntimeByItineraryId] = useState<
     Record<string, ItineraryFitRuntime>
   >({});
-  const fitRuntimeRef = useRef(fitRuntimeByItineraryId);
-  fitRuntimeRef.current = fitRuntimeByItineraryId;
+  // Lu par les gestionnaires et les calculs asynchrones : l'état du dernier rendu validé.
+  const fitRuntimeRef = useLatestRef(fitRuntimeByItineraryId);
 
   const activeFitRuntime = useMemo(
     () =>
@@ -55,21 +56,24 @@ export function useItineraryFitRuntime({
     ? buildFitUploadsSignature(active.fitUploads ?? [])
     : '';
   const activePrediction = active?.prediction ?? null;
-  const activeFitHydrationInput = useMemo(
-    () =>
-      active
-        ? {
-            fitUploads: active.fitUploads ?? [],
-            prediction: activePrediction,
-          }
-        : null,
+  // Même objet tant que l'itinéraire, la liste persistée (par sa signature)
+  // et la prédiction ne changent pas : son identité relance l'hydratation, qui
+  // annulerait et retéléchargerait les .fit à chaque nouveau tableau d'uploads.
+  const activeFitHydrationInput = useKeyedValue(
+    active
+      ? {
+          fitUploads: active.fitUploads ?? [],
+          prediction: activePrediction,
+        }
+      : null,
     [active?.id, activePersistedUploadSignature, activePrediction],
   );
 
-  const activeRhythmSignature = useMemo(() => {
-    if (!active?.rhythm) return '';
-    return JSON.stringify(active.rhythm);
-  }, [active?.rhythm]);
+  const activeRhythm = active?.rhythm;
+  const activeRhythmSignature = useMemo(
+    () => (activeRhythm ? JSON.stringify(activeRhythm) : ''),
+    [activeRhythm],
+  );
 
   const activeDiscipline = normalizeDiscipline(active?.discipline);
 
