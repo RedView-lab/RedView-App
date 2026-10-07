@@ -19,11 +19,6 @@
       "count": 1
     }
   },
-  "src/features/lidar/viewer/rightPanel/LidarViewerRightPanel.tsx": {
-    "react-hooks/preserve-manual-memoization": {
-      "count": 1
-    }
-  },
   "src/features/projectBrowser/billing/components/BillingActionModal/BillingActionForm.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2

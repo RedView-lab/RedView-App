@@ -510,7 +510,7 @@ export function LidarViewerRightPanelContent({
         bands: nextBands,
       };
     });
-  }, [centerLat, centerLon]);
+  }, [centerLat, centerLon, localTimeZone]);
 
 
   return (
