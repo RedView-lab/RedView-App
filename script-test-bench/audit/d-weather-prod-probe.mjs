@@ -7,7 +7,9 @@
  * Exit 1 if: the openmeteo proxy does not answer from the self-hosted VPS
  * Open-Meteo (`X-Weather-Source: self-hosted-vps`; the public API is
  * non-commercial and never used), the CSP still lets the browser reach
- * open-meteo.com, or route weather beyond the 4-day horizon is not a clean 4xx.
+ * open-meteo.com, or route weather beyond the 4-day horizon answers 5xx (the
+ * self-hosted instance answers 200 with null values there, which the client
+ * reads as « no data »).
  */
 const BASE = (process.argv[2] || 'http://127.0.0.1:3000').replace(/\/+$/, '');
 const remote = !/127\.0\.0\.1|localhost/.test(BASE);
@@ -96,7 +98,7 @@ if (route && (!route.res.ok || route.res.headers.get('x-weather-source') !== 'se
   problems.push(`openmeteo route -> ${route.res.status} src=${route.res.headers.get('x-weather-source') ?? '-'} (expected 200 from the self-hosted VPS: OPENMETEO_UPSTREAM unset or VPS failing)`);
 }
 const far = await probe('openmeteo route start +30 d (beyond horizon)', routeUrl(new Date(today.getTime() + 30 * 86400000)), { body: true });
-if (far && far.res.status >= 500) problems.push(`route weather beyond horizon -> ${far.res.status} (upstream 400 masked as 5xx; client then shows synthetic estimates)`);
+if (far && far.res.status >= 500) problems.push(`route weather beyond horizon -> ${far.res.status} (expected 200 with null values or a 4xx, never a 5xx)`);
 
 // Wind batch — same as fetchBatch (src/features/weather/lib/open-meteo.ts), 200 coords (the proxy's limit)
 const wc = Array.from({ length: 200 }, (_, i) => ({ lat: 45 + (i % 20) * 0.02, lng: 6 + Math.floor(i / 20) * 0.02 }));

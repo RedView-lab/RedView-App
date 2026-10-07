@@ -28,6 +28,8 @@ ExecStart=/usr/bin/java -Xms3g -Xmx3g -XX:+AlwaysPreTouch -XX:+UseG1GC -XX:MaxGC
 
 Restart=always
 RestartSec=5
+# La JVM sort en 128 + 15 sur SIGTERM : un arrêt normal, pas un échec.
+SuccessExitStatus=143
 LimitNOFILE=65535
 
 # Garde-fous : tas 3 Go + métaspace, code, piles, structures du GC ≈ 3,5 Go,
