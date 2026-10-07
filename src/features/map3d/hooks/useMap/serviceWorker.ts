@@ -42,11 +42,22 @@ function registrationHasTargetEpoch(
     || getServiceWorkerEpoch(registration.active) === MAP_CACHE_EPOCH;
 }
 
+/**
+ * Reloads the page once the worker of the current epoch controls it, so
+ * nothing loaded through the previous worker survives — only when a worker
+ * of another epoch served this page at load. Any other page has nothing to
+ * drop: uncontrolled (first visit, cleared site data, Ctrl+Shift+R), the new
+ * worker claims it and the map bootstrap picks the controller up (`swReady` /
+ * `swLateReady`); already served by the current worker (every new tab of a
+ * returning user), it is up to date. Both used to reload once anyway, losing
+ * the first seconds of map loading (`bench:dashboard -- --scenario sw`).
+ */
 function scheduleEpochTakeoverReload(
   registration: ServiceWorkerRegistration | null | undefined,
   epochReset: boolean,
+  servedByOtherEpoch: boolean,
 ): void {
-  if (typeof window === 'undefined' || hasReloadedForCurrentEpoch()) return;
+  if (typeof window === 'undefined' || !servedByOtherEpoch || hasReloadedForCurrentEpoch()) return;
 
   const hasTargetRegistration = registrationHasTargetEpoch(registration);
   if (!epochReset && !hasTargetRegistration) return;
@@ -254,6 +265,9 @@ async function recoverServiceWorkerRegistration(maxAttempts: number): Promise<bo
  */
 export const swReady: Promise<boolean> = (async () => {
   if (!('serviceWorker' in navigator)) return false;
+  // Before anything can claim the page: was it served by a worker of another epoch?
+  const controllerAtLoad = navigator.serviceWorker.controller;
+  const servedByOtherEpoch = controllerAtLoad !== null && getServiceWorkerEpoch(controllerAtLoad) !== MAP_CACHE_EPOCH;
   try {
     const epochReset = await ensureMapCacheEpochReset();
     const registration = await navigator.serviceWorker.register(
@@ -268,7 +282,7 @@ export const swReady: Promise<boolean> = (async () => {
       notifyMapCacheReset(navigator.serviceWorker.controller);
     }
 
-    scheduleEpochTakeoverReload(registration, epochReset);
+    scheduleEpochTakeoverReload(registration, epochReset, servedByOtherEpoch);
     requestClaimFromActiveWorker(registration);
 
     const controller = await waitForServiceWorkerController(SW_CONTROLLER_TIMEOUT);
