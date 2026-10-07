@@ -25,6 +25,7 @@ import {
 import { captureServerError, flushServerObservability, initServerObservability } from './server/observability.mjs';
 import { createRequestLogger, normalizeRoutePath } from './server/request-logging.mjs';
 import { VARIANT_SUFFIX, acceptedEncodings, isCompressible } from './server/static-compression.mjs';
+import { REDVIEW_CSP_HEADER } from './server/csp.mjs';
 import { API_COMPRESS_SYNC_MAX_BYTES, compressApiBody, compressApiBodySync, pickApiEncoding, withVary } from './server/api-compression.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -98,23 +99,7 @@ const BROTLI_HIGH_QUALITY_MAX_BYTES = 8 * 1024 * 1024;
 const compressedCache = createByteLru({ maxBytes: 16 * 1024 * 1024, sizeOf: (body) => body.length });
 const compressionsInFlight = new Map();
 
-export const REDVIEW_CSP_HEADER = [
-  "default-src 'self'",
-  // Aucun script inline dans index.html / viewer.html : pas de 'unsafe-inline'.
-  "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://api.mapbox.com https://js.stripe.com https://analytics.redview.tech",
-  "worker-src 'self' blob:",
-  "child-src 'self' blob:",
-  "style-src 'self' 'unsafe-inline' https://api.mapbox.com https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com data:",
-  "img-src 'self' data: blob: https://appwrite.redview.tech https://*.tilecache.rainviewer.com https://*.rainviewer.com https://*.rainviewer.net https://api.mapbox.com https://*.mapbox.com https://s3.amazonaws.com/elevation-tiles-prod/ https://japan-pointcloud.s3.ap-northeast-1.amazonaws.com https://virtual-shizuoka.s3.ap-northeast-1.amazonaws.com https://kanagawa-pointcloud.s3.ap-northeast-1.amazonaws.com https://gsvrg.ipri.aist.go.jp https://data.geopf.fr https://*.geopf.fr https://data.geo.admin.ch https://*.geo.admin.ch https://*.admin.ch https://servicios.idee.es https://*.idee.es https://www.ign.es https://*.ign.es https://hoydedata.no https://*.hoydedata.no https://cyberjapandata.gsi.go.jp https://*.gsi.go.jp https://server.arcgisonline.com https://*.arcgisonline.com https://service.pdok.nl https://geo.api.vlaanderen.be https://remotesensing.vlaanderen.be",
-  "connect-src 'self' blob: data: wss://app.redview.tech wss://redview.tech https://appwrite.redview.tech https://errors.redview.tech https://api.stripe.com https://api.mapbox.com https://events.mapbox.com https://*.mapbox.com https://*.rainviewer.com https://*.rainviewer.net https://api.open-meteo.com https://climate-api.open-meteo.com https://*.open-meteo.com https://nominatim.openstreetmap.org https://analytics.redview.tech https://s3.amazonaws.com/elevation-tiles-prod/ https://japan-pointcloud.s3.ap-northeast-1.amazonaws.com https://virtual-shizuoka.s3.ap-northeast-1.amazonaws.com https://kanagawa-pointcloud.s3.ap-northeast-1.amazonaws.com https://gsvrg.ipri.aist.go.jp https://opentopography.s3.sdsc.edu https://data.geopf.fr https://*.geopf.fr https://data.geo.admin.ch https://*.geo.admin.ch https://*.admin.ch https://servicios.idee.es https://*.idee.es https://www.ign.es https://*.ign.es https://hoydedata.no https://*.hoydedata.no https://cyberjapandata.gsi.go.jp https://*.gsi.go.jp https://server.arcgisonline.com https://*.arcgisonline.com https://service.pdok.nl https://geo.api.vlaanderen.be https://remotesensing.vlaanderen.be",
-  "frame-src https://js.stripe.com",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-  'upgrade-insecure-requests',
-].join('; ');
+export { REDVIEW_CSP_HEADER };
 
 // Rate limiting en mémoire (fenêtre d'une minute, Map bornée).
 const hitRateLimit = createRateLimiter({ windowMs: 60 * 1000 });

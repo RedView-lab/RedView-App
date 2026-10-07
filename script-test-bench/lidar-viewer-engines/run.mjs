@@ -12,7 +12,11 @@
  *   - clic droit : menu des outils au relâchement, menu natif bloqué même
  *     quand `contextmenu` arrive à l'appui (ordre Linux) ; glisser droit =
  *     déplacement sans menu ; molette en lignes (Firefox) = zoom ;
- *   - aucune exception, aucune erreur WebGL (`getError`, console).
+ *   - aucune exception, aucune erreur WebGL (`getError`, console) ;
+ *   - CSP de production (server/csp.mjs) sur les pages et les scripts de
+ *     workers : WebAssembly compilé et `eval` refusé dans la page comme dans
+ *     un worker, et aucune violation rapportée (le `report-uri` pointe sur ce
+ *     serveur local) pendant tout le parcours.
  * Sous Linux (CI), c'est le chemin réel des utilisateurs : Firefox n'a pas
  * WebGPU et Chrome ne l'active que sur certains GPU. Quand le moteur
  * automatique d'un navigateur est déjà WebGL 2, le cas « webgl » forcé
@@ -32,6 +36,7 @@ import { tmpdir } from 'node:os';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, firefox } from 'playwright';
+import { buildCspHeader } from '../../server/csp.mjs';
 import { buildSyntheticLas } from './syntheticTile.mjs';
 import { coverage, decodePng, meanDifference } from './png.mjs';
 
@@ -79,10 +84,44 @@ function parseArgs(argv) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/** Smallest valid WebAssembly module (magic + version): compiles only where CSP allows it. */
+const EMPTY_WASM = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
+/** Same probe in a page and in a worker: [WebAssembly compiles, eval refused]. */
+const CSP_PROBE = `(async () => {
+  let wasm = false;
+  let evalBlocked = false;
+  try { await WebAssembly.compile(new Uint8Array(${JSON.stringify(EMPTY_WASM)})); wasm = true; } catch {}
+  try { (0, eval)('1'); } catch { evalBlocked = true; }
+  return { wasm, evalBlocked };
+})()`;
+
 function startServer(dist, tile) {
   const root = normalize(dist + sep);
+  /** CSP violation reports POSTed by the browsers (pages and workers). */
+  const cspReports = [];
+  let csp = '';
   const server = createServer(async (req, res) => {
     const path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    const dest = String(req.headers['sec-fetch-dest'] ?? '');
+    const isWorker = dest === 'worker' || dest === 'sharedworker' || dest === 'serviceworker';
+    if (path === '/__csp-report') {
+      let body = '';
+      for await (const chunk of req) body += chunk;
+      try {
+        const report = JSON.parse(body)['csp-report'] ?? JSON.parse(body);
+        cspReports.push(`${report['effective-directive'] ?? report['violated-directive']} ← ${report['blocked-uri'] ?? '?'} (${report['source-file'] ?? report['document-uri'] ?? '?'})`);
+      } catch {
+        cspReports.push(`rapport illisible : ${body.slice(0, 200)}`);
+      }
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    if (path === '/__csp-worker.js') {
+      res.writeHead(200, { 'content-type': 'text/javascript', 'content-security-policy': csp });
+      res.end(`${CSP_PROBE}.then((result) => postMessage(result));`);
+      return;
+    }
     if (path === '/__tile') {
       res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': tile.length });
       res.end(tile);
@@ -101,14 +140,22 @@ function startServer(dist, tile) {
     }
     try {
       const body = await readFile(file);
-      res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' });
+      const headers = { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' };
+      // As server.mjs: the policy rides on HTML pages and worker scripts.
+      if (extname(file) === '.html' || isWorker) headers['content-security-policy'] = csp;
+      res.writeHead(200, headers);
       res.end(body);
     } catch {
       res.writeHead(404);
       res.end();
     }
   });
-  return new Promise((r) => server.listen(0, '127.0.0.1', () => r(server)));
+  return new Promise((r) => server.listen(0, '127.0.0.1', () => {
+    // Production policy, reported here instead of GlitchTip, without the https upgrade of a local http origin.
+    csp = buildCspHeader({ reportUri: `http://127.0.0.1:${server.address().port}/__csp-report`, upgradeInsecureRequests: false });
+    server.cspReports = cspReports;
+    r(server);
+  }));
 }
 
 class Checks {
@@ -151,7 +198,8 @@ async function launch(browserName, args, profileDir) {
 }
 
 /** Returns the backend the viewer ran on ('webgl', 'webgpu'), or null when it never got ready. */
-async function runCase(browserName, engine, args, origin, checks) {
+async function runCase(browserName, engine, args, origin, checks, cspReports) {
+  const reportsBefore = cspReports.length;
   const profileDir = await mkdtemp(join(tmpdir(), `rv-viewer-${browserName}-`));
   const context = await launch(browserName, args, profileDir);
   const consoleFaults = [];
@@ -213,6 +261,18 @@ async function runCase(browserName, engine, args, origin, checks) {
       for (const line of consoleTail) console.log(`    ${line}`);
       await page.screenshot({ path: join(outDir, 'echec.png') }).catch(() => undefined);
       return null;
+    }
+
+    // The production CSP really applies, in the page and in a worker: WebAssembly yes, eval no.
+    const pageProbe = await page.evaluate(CSP_PROBE);
+    const workerProbe = await page.evaluate(() => new Promise((done) => {
+      const worker = new Worker('/__csp-worker.js');
+      worker.onmessage = (event) => { done(event.data); worker.terminate(); };
+      worker.onerror = (event) => done({ error: String(event.message ?? 'worker error') });
+      setTimeout(() => done({ error: 'pas de réponse en 10 s' }), 10_000);
+    }));
+    for (const [where, probe] of [['page', pageProbe], ['worker', workerProbe]]) {
+      checks.record(`CSP (${where}) : WebAssembly compilé, eval refusé`, probe.wasm === true && probe.evalBlocked === true, JSON.stringify(probe));
     }
 
     const waitIdle = async () => {
@@ -334,6 +394,17 @@ async function runCase(browserName, engine, args, origin, checks) {
     checks.record('aucune erreur WebGL (getError)', !errors || errors.length === 0, errors?.join(', ') ?? 'contexte illisible');
     checks.record('aucune erreur de rendu en console', consoleFaults.length === 0, consoleFaults.slice(0, 3).join(' | '));
     checks.record('aucune exception', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '));
+    await sleep(1000); // reports leave asynchronously
+    // The probes' own refused eval must have been reported (proof the report
+    // channel works); anything else is a real violation.
+    const reports = cspReports.slice(reportsBefore);
+    const isProbeEval = (line) => /^script-src(-elem)? ← eval /.test(line);
+    const violations = reports.filter((line) => !isProbeEval(line));
+    checks.record(
+      'CSP de production : aucune violation rapportée',
+      violations.length === 0 && reports.some(isProbeEval),
+      violations.length > 0 ? violations.slice(0, 4).join(' | ') : `${reports.length} rapport(s), tous ceux des sondes`,
+    );
     return backend;
   } finally {
     await context.close();
@@ -364,7 +435,7 @@ async function main() {
         }
         const checks = new Checks(label);
         try {
-          const backend = await runCase(browserName, engine, args, origin, checks);
+          const backend = await runCase(browserName, engine, args, origin, checks, server.cspReports);
           if (engine === 'auto' && checks.failed.length === 0) autoBackend = backend;
         } catch (error) {
           checks.record('exécution', false, String(error?.message ?? error).slice(0, 2000));
