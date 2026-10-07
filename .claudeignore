@@ -126,10 +126,10 @@ Dockerfile
 # ───────────────────────────────────────────────
 # Docs de recherche / audit (volumineux, rarement utiles)
 # ───────────────────────────────────────────────
-docs/REDVIEW_ANALYSIS.md
+docs/architecture/overview.md
 docs/audits/
-docs/REDVIEW_ROUTING_ARCHITECTURE.md
-docs/STRUCTURE_REFACTOR_PLAN.md
+docs/architecture/routing.md
+docs/architecture/structure.md
 
 
 # ───────────────────────────────────────────────

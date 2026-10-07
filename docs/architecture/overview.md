@@ -30,7 +30,7 @@ L'état racine de l'application tourne autour de l'objet `ItineraryProject`. Con
 Ce JSON complexe, sérialisable et persistant (via Supabase), contient non seulement les coordonnées GPS (`lat`, `lon`), mais aussi l'intégralité de la configuration du coureur, de l'état des caméras 3D (`mapViewport`), et des réglages des panneaux latéraux (météo, neige, lidar). Cela permet de recharger une session de travail exactement telle qu'elle a été quittée.
 
 ### 1.3 Refactoring Feature-Sliced
-Le projet suit une organisation stricte détaillée dans le fichier `STRUCTURE_REFACTOR_PLAN.md`. Chaque domaine métier (ex: `altitude`, `weather`, `snow`, `poi`) est encapsulé dans son propre dossier contenant :
+Le projet suit une organisation stricte détaillée dans le fichier `docs/architecture/structure.md`. Chaque domaine métier (ex: `altitude`, `weather`, `snow`, `poi`) est encapsulé dans son propre dossier contenant :
 - `index.ts` : API publique.
 - `types.ts` : Contrats de données TypeScript.
 - `components/` : Éléments d'interface utilisateur spécifiques.

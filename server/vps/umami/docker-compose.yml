@@ -2,7 +2,7 @@
 # Secrets dans le .env voisin (jamais versionné, modèle : .env.example).
 # Version épinglée par digest : une mise à jour = changer tag + digest ici,
 # pg_dump, puis `docker compose pull && docker compose up -d` (migrations
-# Prisma automatiques au démarrage). Plan de mesure : docs/ANALYTICS.md.
+# Prisma automatiques au démarrage). Plan de mesure : docs/analytics/measurement.md.
 services:
   umami:
     image: ghcr.io/umami-software/umami:3.4.0@sha256:85909afc45bdcda1917394594a087421fdbb05610fded0fa9f6fb861abb2f367

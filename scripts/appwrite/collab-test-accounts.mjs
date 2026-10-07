@@ -52,7 +52,7 @@ for (const account of ACCOUNTS) {
   }
   if (!user.emailVerification) await users.updateEmailVerification(user.$id, true);
   if (user.name !== account.name) await users.updateName(user.$id, account.name);
-  // Compte interne : exclu de la mesure d'audience et du rapport d'activation (docs/ANALYTICS.md).
+  // Compte interne : exclu de la mesure d'audience et du rapport d'activation (docs/analytics/measurement.md).
   if (!(user.labels ?? []).includes(INTERNAL_LABEL)) await users.updateLabels(user.$id, [...(user.labels ?? []), INTERNAL_LABEL]);
   result[account.key] = { userId: user.$id, email: account.email, name: account.name, password };
 }

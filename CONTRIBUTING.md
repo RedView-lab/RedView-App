@@ -17,7 +17,7 @@ npm run dev
 
 | Path | Contents |
 |---|---|
-| `src/` | Frontend (React + TypeScript): `features/<domain>/`, cross-cutting code in `shared/`, the composition root in `pages/Dashboard/` — conventions in [`docs/STRUCTURE_REFACTOR_PLAN.md`](docs/STRUCTURE_REFACTOR_PLAN.md). |
+| `src/` | Frontend (React + TypeScript): `features/<domain>/`, cross-cutting code in `shared/`, the composition root in `pages/Dashboard/` — conventions in [`docs/architecture/structure.md`](docs/architecture/structure.md). |
 | `api/` | HTTP route handlers (`api/<name>.ts` → `/api/<name>`); shared server-side code in `api/_lib/`. |
 | `server/` | Shared server modules (`lib/`), real-time co-editing server (`multiplayer/`), VPS services (`poi-server/`, `poi-ingest/`, `weather-daemon/`) and host configuration (`vps/`) — see [`server/README.md`](server/README.md). Production entry point: `server.mjs`. |
 | `scripts/` | Build, deploy, quality gate and operations tooling (see [`scripts/README.md`](scripts/README.md)). |

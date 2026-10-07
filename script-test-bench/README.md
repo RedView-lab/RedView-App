@@ -19,7 +19,7 @@ slow or too data-hungry for the Vitest unit tests (those live next to the code,
 | [`user-journey/`](user-journey), [`dashboard-perf/`](dashboard-perf), [`screen-audit/`](screen-audit) | Production build in a headless browser against an in-memory Appwrite: main user journey, load / smoothness / leaks on throttled networks, layout on 15 screen sizes | `npm run e2e:journey`, `bench:dashboard`, `bench:screens` |
 | [`lidar-viewer-engines/`](lidar-viewer-engines), [`lidar-viewer-perf/`](lidar-viewer-perf), [`lidar-viewer-shots/`](lidar-viewer-shots) | LiDAR viewer on WebGPU and WebGL 2 in Chromium / Firefox / WebKit, frame rate and fixed-view captures | `npm run bench:lidar-engines`, `bench:lidar-fps`, `bench:lidar-shots` |
 | [`audit/`](audit) | Reproduction scripts of dated audits (each exits non-zero while its bug reproduces) — see [`docs/audits/`](../docs/audits) | `npx tsx script-test-bench/audit/<file>` |
-| [`poi-external/`](poi-external) | Data study for completing the POI base from external sources (Overture, ATP, SIRENE) | see `docs/audits/REDVIEW_POI_EXTERNAL_SOURCES.md` |
+| [`poi-external/`](poi-external) | Data study for completing the POI base from external sources (Overture, ATP, SIRENE) | see `docs/audits/2026-09-23-poi-external-sources.md` |
 | `reports/` | Outputs; JSON and run artefacts are git-ignored, only the curated Markdown reports are kept | — |
 
 `CLAUDE.md` describes what each suite measures, its thresholds and its latest

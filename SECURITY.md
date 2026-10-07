@@ -14,6 +14,6 @@ real-time server, VPS service), steps to reproduce and the impact you observed.
 - The Content-Security-Policy is built in `server/lib/csp.mjs` (no `unsafe-eval`).
 - Request hardening shared by the development and production adapters lives in
   `server/lib/http-security.mjs`.
-- Operational runbook: [`docs/REDVIEW_SECURITY_RUNBOOK.md`](docs/REDVIEW_SECURITY_RUNBOOK.md);
+- Operational runbook: [`docs/operations/security-runbook.md`](docs/operations/security-runbook.md);
   real-time co-editing threat model: section 14 of
-  [`docs/REDVIEW_COLLAB_TEMPS_REEL.txt`](docs/REDVIEW_COLLAB_TEMPS_REEL.txt).
+  [`docs/architecture/collab-realtime.txt`](docs/architecture/collab-realtime.txt).

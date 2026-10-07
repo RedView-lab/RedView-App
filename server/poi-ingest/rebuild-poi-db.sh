@@ -22,7 +22,7 @@
 #   ./rebuild-poi-db.sh --regions europe/france,europe/belgium
 #   ./rebuild-poi-db.sh --swap                 # bascule le service en fin de course
 #
-# Complétion par les sources externes (voir docs/audits/REDVIEW_POI_EXTERNAL_SOURCES.md) :
+# Complétion par les sources externes (voir docs/audits/2026-09-23-poi-external-sources.md) :
 #   ./rebuild-poi-db.sh --with-external
 #   ./rebuild-poi-db.sh --with-external --atp-zip /tmp/output.zip --skip-overture
 #

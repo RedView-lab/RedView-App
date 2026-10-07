@@ -88,4 +88,4 @@ mesurer sans demander de consentement (règles de la CNIL).
 Dire à l'équipe technique **la question** à laquelle vous voulez répondre
 (« Les gens utilisent-ils la météo avant de partir ? »). Elle ajoute l'action à
 mesurer, son nom en français, et si besoin un entonnoir ou un tableau. Détail
-technique : `docs/ANALYTICS.md`.
+technique : `docs/analytics/measurement.md`.

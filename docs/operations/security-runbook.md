@@ -84,10 +84,10 @@ journalctl -u redview-weather.service -n 50   # vérifier que l'ingest réussit
 - Coolify → variables d'env de l'app : `STRIPE_WEBHOOK_SECRET` réel (le `.env`
   local contient un placeholder) ; `WEATHER_UPSTREAM` défini (plus de valeur
   par défaut codée en dur).
-- Umami : plus de recorder (replay retiré le 2026-10-07) ; mesure anonyme first-party, filtrée par `beforeSend.ts` (docs/ANALYTICS.md).
+- Umami : plus de recorder (replay retiré le 2026-10-07) ; mesure anonyme first-party, filtrée par `beforeSend.ts` (docs/analytics/measurement.md).
 
 ## 5. Co-édition (audit du 2026-10-06)
-Détail des failles et des règles : section 14 de `REDVIEW_COLLAB_TEMPS_REEL.txt`.
+Détail des failles et des règles : section 14 de `docs/architecture/collab-realtime.txt`.
 1. Déployer (serveur temps réel puis app, protocole 4 : les onglets restés en
    protocole 3 voient « rechargez la page »).
 2. Mettre en conformité les projets partagés (l'ancien format donnait

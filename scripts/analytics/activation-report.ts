@@ -13,7 +13,7 @@
  * sont toujours écartés ; `--exclude` ajoute une expression régulière sur l'e-mail
  * — appliquée en mémoire, aucun e-mail n'est affiché. Logique et définitions :
  * api/_lib/activationReport.ts. À lire avec la mesure d'audience Umami
- * (anonyme, par session) : docs/ANALYTICS.md.
+ * (anonyme, par session) : docs/analytics/measurement.md.
  */
 import {
   computeActivation,

@@ -1,6 +1,6 @@
 # Mesure d'audience de RedView App
 
-Guide de lecture pour toute l'équipe (sans jargon) : [GUIDE_STATISTIQUES.md](GUIDE_STATISTIQUES.md).
+Guide de lecture pour toute l'équipe (sans jargon) : [stats-guide.md](stats-guide.md).
 Ce document-ci est la référence technique.
 
 Deux sources, deux rôles :
