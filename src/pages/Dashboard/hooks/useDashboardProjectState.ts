@@ -15,7 +15,7 @@ import {
   isSharedProject,
 } from '@/shared/services/projects';
 import { replaceProjectLocation } from '@/shared/lib/projectLocation';
-import { readFullProjectCacheAsync } from './dashboardProjectCache';
+import { readFullProjectCacheAsync } from '../lib/dashboardProjectCache';
 import { useDashboardProjectSync } from './useDashboardProjectSync';
 
 /** Attente maximale de l'envoi cloud du projet courant avant d'en ouvrir un autre. */

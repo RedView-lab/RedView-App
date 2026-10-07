@@ -66,7 +66,7 @@ async function loadBundle() {
     export { compressProjectPayload, decompressProjectPayload } from ${JSON.stringify(path.join(SRC, 'shared/services/projects/compression.ts'))};
     export { readStoredAppwriteSession, saveStoredAppwriteSession, clearStoredAppwriteSession, getAppwriteUser, onAppwriteSessionExpired } from ${JSON.stringify(path.join(SRC, 'shared/services/appwrite.ts'))};
     export { createDefaultProject, createDefaultItinerary } from ${JSON.stringify(path.join(SRC, 'features/itineraryPanel/lib/project/index.ts'))};
-    export { useDashboardProjectSync } from ${JSON.stringify(path.join(SRC, 'pages/Dashboard/useDashboardProjectSync.ts'))};
+    export { useDashboardProjectSync } from ${JSON.stringify(path.join(SRC, 'pages/Dashboard/hooks/useDashboardProjectSync.ts'))};
     export { signOutAccount } from ${JSON.stringify(path.join(SRC, 'features/projectBrowser/account/lib/profile.ts'))};
     export { getProjectSyncStatus } from ${JSON.stringify(path.join(SRC, 'shared/services/projects/syncStatus.ts'))};
     export { __mock } from 'appwrite';

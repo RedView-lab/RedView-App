@@ -17,9 +17,9 @@ import {
   PANEL_WIDTH_KEY,
   PANEL_PADDING,
   PANEL_WIDTH_MIN_FALLBACK,
-} from './lib/constants';
+} from '../lib/constants';
 
-import { getDashboardLayout, type SidePanelSide } from './lib/layout';
+import { getDashboardLayout, type SidePanelSide } from '../lib/layout';
 import type { DashboardPersistedMutator } from './useDashboardProjectState';
 import {
   clampLeftPanelWidth,
@@ -27,7 +27,7 @@ import {
   readStoredCenterPanelHeight,
   readStoredLeftWidth,
   readStoredWidth,
-} from './lib/utils';
+} from '../lib/utils';
 
 interface UseDashboardChromeArgs {
   activeProjectInitial: ItineraryProject | null;

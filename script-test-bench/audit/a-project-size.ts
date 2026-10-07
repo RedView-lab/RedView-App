@@ -9,7 +9,7 @@
  *   - createDefaultProject / createDefaultItinerary / normalizeItineraryProject
  *   - compressProjectPayload / decompressProjectPayload (shared/services/projects/compression.ts)
  *   - computeProjectSizeBytes / isProjectTooLarge / MAX_PROJECT_SIZE_BYTES (limits.ts)
- *   - buildLocalProjectCachePayload (pages/Dashboard/dashboardProjectCache.ts)
+ *   - buildLocalProjectCachePayload (pages/Dashboard/lib/dashboardProjectCache.ts)
  *
  * Mesure : JSON brut, gzip+base64 ('gz:' + base64) vs attribut Appwrite `projects.data`
  * (string size=16 000 000 depuis 2026-10-01 ; nginx 502 au-delà de ~12 M → limite effective MAX_CLOUD_PROJECT_PAYLOAD_CHARS), vs limite client
@@ -52,7 +52,7 @@ import type { Itinerary, ItineraryProject, TimelineItem } from '../../src/featur
 import type { PoiCategory, PoiFeature } from '../../src/features/poi/types.ts';
 import type { PredictionResult } from '../../src/features/fitPredictor/types.ts';
 
-/** Attribut `projects.data` (scripts/setup-appwrite-schema.mjs, relevé à 16 000 000 en prod le 2026-10-01). */
+/** Attribut `projects.data` (scripts/appwrite/setup-appwrite-schema.mjs, relevé à 16 000 000 en prod le 2026-10-01). */
 const APPWRITE_DATA_MAX_CHARS = MAX_CLOUD_PROJECT_PAYLOAD_CHARS; // limite effective (proxy nginx), < 16 000 000 de l'attribut
 
 const args = process.argv.slice(2);
@@ -334,7 +334,7 @@ async function main() {
   const esbuild = await import('esbuild');
   const outFile = path.join(os.tmpdir(), `rv-audit-dashboardProjectCache-${process.pid}.mjs`);
   await esbuild.build({
-    entryPoints: [path.resolve(import.meta.dirname, '../../src/pages/Dashboard/dashboardProjectCache.ts')],
+    entryPoints: [path.resolve(import.meta.dirname, '../../src/pages/Dashboard/lib/dashboardProjectCache.ts')],
     bundle: true,
     format: 'esm',
     platform: 'node',
