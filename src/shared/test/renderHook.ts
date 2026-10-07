@@ -1,4 +1,4 @@
-import { act, createElement, StrictMode } from 'react';
+import { act, createElement, StrictMode, type ComponentType, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
 /**
@@ -18,9 +18,16 @@ export interface RenderedHook<Props, Result> {
   unmount(): void;
 }
 
+export interface RenderHookOptions<Props> {
+  initialProps: Props;
+  strict?: boolean;
+  /** Providers around the hook; they get the same props as the hook. */
+  wrapper?: ComponentType<{ children: ReactNode; props: Props }>;
+}
+
 export function renderHook<Props, Result>(
   hook: (props: Props) => Result,
-  options: { initialProps: Props; strict?: boolean },
+  options: RenderHookOptions<Props>,
 ): RenderedHook<Props, Result> {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const result = { current: undefined as Result };
@@ -32,8 +39,10 @@ export function renderHook<Props, Result>(
     return null;
   }
   const render = (props: Props) => {
-    const probe = createElement(Probe, { props });
-    act(() => root?.render(options.strict ? createElement(StrictMode, null, probe) : probe));
+    let tree: ReactNode = createElement(Probe, { props });
+    if (options.wrapper) tree = createElement(options.wrapper, { props, children: tree });
+    if (options.strict) tree = createElement(StrictMode, null, tree);
+    act(() => root?.render(tree));
   };
 
   render(options.initialProps);
