@@ -1,14 +1,19 @@
 /**
  * RedView Production Deployment CLI
  * Usage:
- *   npm run push
- *   npm run push "feat: my change"
- *   node scripts/deploy.mjs "fix(weather): update palette"
- *   node scripts/deploy.mjs --skip-checks "fix: hotfix"   (urgence : gate qualité sauté)
+ *   npm run deploy                                   déploie HEAD (arbre propre exigé)
+ *   npm run deploy -- --commit-all "feat: message"   commite TOUT l'arbre puis déploie (ancien comportement)
+ *   npm run deploy -- --skip-checks                  urgence : gate qualité et schéma sautés
  *
- * Le gate qualité (scripts/check.mjs --full) tourne d'abord, sur l'arbre qui
- * va être commité, puis la vérification du schéma Appwrite de prod : en cas
- * d'échec, rien n'est commité ni poussé.
+ * Par défaut seul ce qui est commité part : un arbre modifié arrête tout
+ * avant le gate. Plusieurs sessions travaillent dans ce dépôt ; `git add .`
+ * embarquait le travail en cours de toutes dans un seul commit sans
+ * description (c5824fb : 397 fichiers). Commiter par sujet
+ * (`git commit -- <fichiers>`), puis déployer.
+ *
+ * Le gate qualité (scripts/check.mjs --full) tourne ensuite sur l'arbre — donc
+ * exactement sur ce qui part —, puis la vérification du schéma Appwrite de
+ * prod : en cas d'échec, rien n'est commité ni poussé.
  *
  * Retour arrière : `npm run rollback` (scripts/rollback.mjs).
  */
@@ -33,6 +38,7 @@ import {
 } from './lib/coolify.mjs';
 
 const SKIP_CHECKS_FLAG = '--skip-checks';
+const COMMIT_ALL_FLAG = '--commit-all';
 const SCRIPTS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const CHECK_SCRIPT = path.join(SCRIPTS_DIR, 'check.mjs');
 const SCHEMA_SCRIPT = path.join(SCRIPTS_DIR, 'setup-appwrite-schema.mjs');
@@ -68,12 +74,26 @@ function runProdSchemaCheck() {
 async function main() {
   const args = process.argv.slice(2);
   const skipChecks = args.includes(SKIP_CHECKS_FLAG);
-  const customMessage = args.filter((arg) => arg !== SKIP_CHECKS_FLAG).join(' ').trim();
-  const baseCommitMessage = customMessage || 'fix: update and deploy to production';
+  const commitAll = args.includes(COMMIT_ALL_FLAG);
+  const customMessage = args.filter((arg) => arg !== SKIP_CHECKS_FLAG && arg !== COMMIT_ALL_FLAG).join(' ').trim();
   // Trace dans l'historique d'un déploiement sans gate.
-  const commitMessage = skipChecks ? `${baseCommitMessage}\n\nChecks-Skipped: true` : baseCommitMessage;
+  const commitMessage = skipChecks ? `${customMessage}\n\nChecks-Skipped: true` : customMessage;
 
   log('Starting deployment pipeline...');
+
+  // Pas de trim() en tête : la colonne d'état de la première ligne commence par une espace.
+  const status = execFileSync('git', ['status', '--porcelain'], { encoding: 'utf-8' }).trimEnd();
+  if (status && !commitAll) {
+    const lines = status.split(/\r?\n/);
+    error(`Uncommitted changes (${lines.length}): only committed work is deployed.\n${lines.slice(0, 20).join('\n')}${lines.length > 20 ? '\n…' : ''}`);
+    log('Commit them by topic (git commit -- <files>), or deploy everything with: npm run deploy -- --commit-all "<type(scope): message>"');
+    process.exit(1);
+  }
+  if (commitAll && status && !customMessage) {
+    error('--commit-all needs a commit message describing the change: npm run deploy -- --commit-all "<type(scope): message>"');
+    process.exit(1);
+  }
+  if (customMessage && !commitAll) warn('Message ignored: nothing to commit (only --commit-all commits).');
 
   // 0. Quality gate, before anything is committed or pushed
   if (skipChecks) {
@@ -92,9 +112,8 @@ async function main() {
     success('Production schema matches.');
   }
 
-  // 1. Check git status
-  const status = run('git status --porcelain');
-  if (status) {
+  // 1. --commit-all : tout l'arbre en un commit (l'arbre propre est déjà vérifié sinon).
+  if (commitAll && status) {
     log(`Staging and committing changes with message: "${commitMessage}"`);
     run('git add .');
     const staged = run('git diff --cached --name-only').split(/\r?\n/).filter(Boolean);
@@ -111,7 +130,7 @@ async function main() {
       warn('No new commit created (working tree clean).');
     }
   } else {
-    log('No unstaged changes in working tree.');
+    log(`Deploying ${run('git rev-parse --short=12 HEAD')} (working tree clean).`);
   }
 
   // 2. Git push
