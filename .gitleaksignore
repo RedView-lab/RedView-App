@@ -1,0 +1,6 @@
+# Faux positifs de gitleaks (job « secrets » de la CI), vérifiés le 07/10/2026 :
+# clé publique du DSN GlitchTip du front (déjà servie dans le bundle, destinée aux
+# rapports CSP) — n'ouvre rien d'autre que l'envoi d'événements.
+f469d959668fdd6ad60f3321cbd1075143a583ce:server/csp.mjs:generic-api-key:15
+# Faux secret d'un test : la garde de vie privée des analytics doit le refuser.
+c5824fbd762aad4ddb79e5d5993b38b1113f18f1:src/shared/lib/analytics/analytics.test.ts:generic-api-key:75
