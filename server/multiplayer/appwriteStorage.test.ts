@@ -173,6 +173,8 @@ function newHost(overrides: Partial<ConstructorParameters<typeof RoomHost>[0]> =
     checkpointBatches: 3,
     idleUnloadMs: 60_000,
     shadowValidationIntervalMs: 0,
+    // Entretien fréquent : les tests n'attendent pas le tour d'horloge d'une seconde de la production.
+    maintenanceIntervalMs: 20,
     log: () => undefined,
     ...overrides,
   });
@@ -195,7 +197,8 @@ function join(room: HostedRoom | null, clientId: string) {
 const collabFiles = () => [...fake.files.values()].filter((file) => file.name === `${PROJECT}.collab.gz`);
 
 const waitFor = async (condition: () => boolean, label: string) => {
-  const deadline = Date.now() + 5_000;
+  // Sous le délai du test (5 s) : un échec nomme l'étape qui attendait.
+  const deadline = Date.now() + 4_000;
   while (!condition()) {
     if (Date.now() > deadline) throw new Error(`délai dépassé : ${label}`);
     await new Promise((resolve) => setTimeout(resolve, 5));
@@ -253,6 +256,34 @@ describe('stockage Appwrite de la salle', () => {
     await host.shutdown();
   });
 
+  it('barrière après élagage : un serveur dépassé reste refusé après le point de sauvegarde du nouveau', async () => {
+    const old = newHost();
+    const room = (await old.open(PROJECT))!;
+    const { handle } = join(room, 'a');
+    const base = room.room.state.seq;
+    room.handle(handle, renameBatch(room, 1, 'Un'));
+    await waitFor(() => room.room.durableSeq === base + 1, 'journal de l’ancien serveur');
+
+    // Déploiement : le nouveau serveur reprend la salle, écrit, fait son point de sauvegarde et élague.
+    const next = newHost();
+    const recovered = (await next.open(PROJECT))!;
+    const { handle: other } = join(recovered, 'b');
+    for (let seq = 1; seq <= 3; seq += 1) recovered.handle(other, renameBatch(recovered, seq, `Nouveau ${seq}`));
+    const journalStarts = () => [...(fake.collections.get('project_journal')?.values() ?? [])].map((row) => Number(row.start_seq));
+    await waitFor(() => JSON.parse(String(fake.collections.get('projects')!.get(PROJECT)!.collab)).seq === base + 4, 'point de sauvegarde du nouveau');
+    await waitFor(() => !journalStarts().includes(base + 1), 'journal de l’ancien élagué');
+    // Son premier paquet reste : c'est la barrière.
+    expect(journalStarts()).toContain(base + 2);
+
+    // L'ancien serveur reçoit encore un lot : refusé (409), salle fermée, jamais confirmé durable.
+    room.handle(handle, renameBatch(room, 2, 'Après la reprise'));
+    await waitFor(() => room.closed, 'ancien serveur arrêté par la barrière');
+    expect(old.metrics.fenced).toBe(1);
+    expect(room.room.durableSeq).toBe(base + 1);
+    await next.shutdown();
+    await old.shutdown();
+  });
+
   it('point de sauvegarde après N lots : journal élagué, document lisible par l’application', async () => {
     const host = newHost();
     const room = (await host.open(PROJECT))!;
@@ -291,6 +322,22 @@ describe('stockage Appwrite de la salle', () => {
     const reopened = (await next.open(PROJECT))!;
     expect((reopened.room.state.document().itineraries[1] as { name: string }).name).toBe('En session');
     expect(reopened.room.state.seq).toBe(seq);
+    await next.shutdown();
+  });
+
+  it('point de sauvegarde valable : le document n’est ni téléchargé ni lu (illisible, il ne bloque rien)', async () => {
+    const host = newHost();
+    const room = (await host.open(PROJECT))!;
+    const { handle } = join(room, 'a');
+    room.handle(handle, renameBatch(room, 1, 'Reprise rapide'));
+    await waitFor(() => room.room.durableSeq === room.room.state.seq, 'journal');
+    await host.shutdown();
+    // Document corrompu : avant, la salle ne se rechargeait plus (« données illisibles »).
+    fake.collections.get('projects')!.get(PROJECT)!.data = 'gz:pas-du-gzip';
+
+    const next = newHost();
+    const reopened = (await next.open(PROJECT))!;
+    expect((reopened.room.state.document().itineraries[1] as { name: string }).name).toBe('Reprise rapide');
     await next.shutdown();
   });
 
@@ -367,7 +414,8 @@ describe('stockage Appwrite de la salle', () => {
 
   it('point de sauvegarde en échec : attente exponentielle, salle inactive déchargée dès que le journal est écrit', async () => {
     const logs: LogEntry[] = [];
-    const host = newHost({ checkpointIntervalMs: 20, idleUnloadMs: 2_500, log: (level, message, data) => logs.push({ level, message, data }) });
+    // Attentes réduites (20 ms → 40 ms…) : même loi qu'en production (1 s → 2 s…, 60 s au plus).
+    const host = newHost({ checkpointIntervalMs: 20, checkpointRetryMinMs: 20, idleUnloadMs: 200, log: (level, message, data) => logs.push({ level, message, data }) });
     const room = (await host.open(PROJECT))!;
     const { handle } = join(room, 'a');
     fake.failUpdates = true;
@@ -376,7 +424,7 @@ describe('stockage Appwrite de la salle', () => {
     const failures = logs.filter((entry) => entry.message === 'point de sauvegarde en échec');
     // Première erreur signalée en erreur, les suivantes en avertissement, attente doublée.
     expect(failures.map((entry) => entry.level).slice(0, 2)).toEqual(['error', 'warn']);
-    expect(failures.map((entry) => entry.data?.retryInMs).slice(0, 2)).toEqual([1_000, 2_000]);
+    expect(failures.map((entry) => entry.data?.retryInMs).slice(0, 2)).toEqual([20, 40]);
 
     // Plus personne : déchargée sans attendre un point de sauvegarde réussi.
     room.detach(handle);

@@ -27,10 +27,19 @@ export class Materializer {
   /** Tracé matérialisé par en-tête (même en-tête : même objet, mêmes points). */
   private readonly routeValues = new WeakMap<RouteHeader, PlainRecord>();
   private readonly specs = new Map<string, MergeSpec>();
-  private readonly chunks = new Map<string, readonly unknown[]>();
+  private readonly chunks: Map<string, readonly unknown[]>;
   private readonly routes = new Map<string, unknown[]>();
   /** Segments introuvables rencontrés (document incohérent : jamais attendu). */
   missingBlobs = 0;
+
+  /**
+   * `chunks` : segments décodés partagés entre matérialiseurs (adressés par leur
+   * contenu, ils ne changent jamais) — le vérificateur du simulateur en refait
+   * une neuve après chaque action. Par défaut, propres à ce matérialiseur.
+   */
+  constructor({ chunks }: { chunks?: Map<string, readonly unknown[]> } = {}) {
+    this.chunks = chunks ?? new Map();
+  }
 
   materialize(store: ObjectStore): ProjectDocument {
     return this.object(store, store.root()) as ProjectDocument;

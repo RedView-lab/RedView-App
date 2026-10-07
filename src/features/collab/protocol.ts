@@ -189,6 +189,8 @@ export type ClientMessage =
       presence?: PresenceUpdate;
       /** Développement seulement (projets locaux du compte démo) : document qui crée la salle. */
       seed?: ProjectDocument;
+      /** Ce client lit les messages compressés (trame binaire, voir `wire.ts`) : le serveur compresse les gros pour lui. */
+      compress?: boolean;
     }
   | { type: 'batch'; clientSeq: number; ops: Op[]; blobs: Record<string, string> }
   | { type: 'lease'; action: 'request' | 'renew' | 'release'; kind: DerivedKind; itineraryId: string }
@@ -220,6 +222,8 @@ export type ServerMessage =
       leases: LeaseInfo[];
       /** Dernier état `motion` des autres éditeurs (caméra de départ pour les suivre). */
       motions?: MotionState[];
+      /** Le serveur lit les messages compressés : le client peut compresser ses gros envois (`wire.ts`). */
+      compress?: boolean;
     }
   | { type: 'batch'; batch: SequencedBatch }
   | ({ type: 'motion'; from: string; t: number } & MotionFields)

@@ -19,6 +19,9 @@
 //   `styledata` (cheap `getLayer` guard).
 // - Hover uses `feature-state` + a one-feature highlight layer; a single
 //   shared `Popup` replaces the 800 per-marker instances.
+// - Hit testing is pixel-exact (`poi-hit-mask.ts`), never Mapbox's own: it
+//   tests a symbol on its whole image, padding included, and returns
+//   overlapping symbols in data order rather than drawing order.
 //
 // Per-frame cost is therefore independent of the number of POIs.
 
@@ -30,6 +33,7 @@ import type {
   MapMouseEvent,
 } from 'mapbox-gl';
 import { flyToPoi } from '@/features/map3d/lib/cameraFlight';
+import { MAP_CURSOR_PRIORITY, setMapCursor } from '@/features/map3d/lib/mapCursor';
 import { keepPopupInVisibleMap } from '@/features/map3d/lib/mapPopupSafeArea';
 import { isEventFromDomMarker } from '@/features/map3d/lib/pointPanelDismiss';
 import { buildPopupClearanceOffset } from '@/features/map3d/lib/popupOffset';
@@ -42,8 +46,8 @@ import {
   type PoiPopupState,
   type UsePoiPopupActions,
 } from './poi-popup';
+import { pickPoiHit, type PoiHitCandidate } from './poi-hit-mask';
 import {
-  getPoiSpriteFootprint,
   getPoiSpriteId,
   getPoiSpritePixelRatio,
   getPoiSpriteSpec,
@@ -65,6 +69,11 @@ const MARKER_MAX_SCREEN_SCALE = 1;
 /** Hover lift, identical to the former `.rv-poi-marker:hover` CSS. */
 const HOVER_SCALE = 1.03;
 const HOVER_LIFT_PX = 4;
+/** A click this close (screen px) to a drawn POI still opens it. */
+const HIT_TOLERANCE_PX = 3;
+/** Visible half size of a round POI (icon-size 1), until its sprite is measured. */
+const FALLBACK_HALF_EXTENT_PX = 11;
+const POI_CURSOR_OWNER = 'poi-hover';
 export const POI_GPU_SOURCE_ID = 'rv-poi-gpu-source';
 export const POI_GPU_LAYER_ID = 'rv-poi-gpu-symbols';
 export const POI_GPU_HOVER_LAYER_ID = 'rv-poi-gpu-hover';
@@ -80,20 +89,6 @@ function getIconSizeAtZoom(zoom: number): number {
   const progress = smoothstep(MARKER_MIN_SCALE_ZOOM, MARKER_MAX_SCALE_ZOOM, zoom);
   const scale = lerp(MARKER_MIN_SCREEN_SCALE, MARKER_MAX_SCREEN_SCALE, progress);
   return 0.8 + 0.35 * scale;
-}
-
-/**
- * Popup offset keeping the menu clear of the POI sprite on whichever side
- * Mapbox anchors it (the hovered sprite is scaled and lifted: included).
- */
-function getPopupOffset(feature: PoiFeature, zoom: number) {
-  const size = getIconSizeAtZoom(zoom) * HOVER_SCALE;
-  const footprint = getPoiSpriteFootprint(getPoiSpriteSpec(feature));
-  return buildPopupClearanceOffset({
-    above: footprint.above * size + HOVER_LIFT_PX,
-    below: footprint.below * size,
-    side: footprint.side * size,
-  });
 }
 
 /** Piecewise-linear sampling of the smoothstep curve as a zoom expression. */
@@ -160,6 +155,10 @@ export class PoiMarkerManager {
   private readonly pendingSprites = new Map<string, Promise<void>>();
   private readonly pixelRatio = getPoiSpritePixelRatio();
   private data: PoiFeatureCollection = EMPTY_COLLECTION;
+  /** Index of each rendered POI in `data`, which is also its drawing order. */
+  private readonly drawRankByKey = new Map<string, number>();
+  /** Largest drawn distance from an anchor among the sprites (icon-size 1). */
+  private maxHitExtentPx = FALLBACK_HALF_EXTENT_PX;
   /** Signature of `data` (what should be on screen). */
   private renderedSignature = '';
   /** Signature of what was last uploaded to the source. */
@@ -178,6 +177,9 @@ export class PoiMarkerManager {
   private suppressed = false;
   private zoomFrameId: number | null = null;
   private raiseFrameId: number | null = null;
+  private hoverFrameId: number | null = null;
+  /** Last pointer position on the canvas, resolved on the next frame. */
+  private hoverPoint: { x: number; y: number } | null = null;
 
   constructor(map: MapboxMap, getActions: () => UsePoiPopupActions) {
     this.map = map;
@@ -186,9 +188,9 @@ export class PoiMarkerManager {
     map.on('styledata', this.handleStyleData);
     map.on('zoom', this.handleZoom);
     map.on('mousedown', this.handleMapMouseDown);
-    map.on('click', POI_GPU_LAYER_ID, this.handleLayerClick);
-    map.on('mousemove', POI_GPU_LAYER_ID, this.handleLayerMouseMove);
-    map.on('mouseleave', POI_GPU_LAYER_ID, this.handleLayerMouseLeave);
+    map.on('click', this.handleMapClick);
+    map.on('mousemove', this.handleMapMouseMove);
+    map.on('mouseout', this.handleMapMouseOut);
     this.ensureLayers();
   }
 
@@ -238,12 +240,17 @@ export class PoiMarkerManager {
       window.cancelAnimationFrame(this.raiseFrameId);
       this.raiseFrameId = null;
     }
+    if (this.hoverFrameId != null) {
+      window.cancelAnimationFrame(this.hoverFrameId);
+      this.hoverFrameId = null;
+    }
     this.map.off('styledata', this.handleStyleData);
     this.map.off('zoom', this.handleZoom);
     this.map.off('mousedown', this.handleMapMouseDown);
-    this.map.off('click', POI_GPU_LAYER_ID, this.handleLayerClick);
-    this.map.off('mousemove', POI_GPU_LAYER_ID, this.handleLayerMouseMove);
-    this.map.off('mouseleave', POI_GPU_LAYER_ID, this.handleLayerMouseLeave);
+    this.map.off('click', this.handleMapClick);
+    this.map.off('mousemove', this.handleMapMouseMove);
+    this.map.off('mouseout', this.handleMapMouseOut);
+    setMapCursor(this.map, POI_CURSOR_OWNER, null, MAP_CURSOR_PRIORITY.hover);
     this.popup?.remove();
     this.popup = null;
     this.popupKey = null;
@@ -329,7 +336,7 @@ export class PoiMarkerManager {
     this.applyVisibility();
   }
 
-  /** Nearest rendered POI under / around a canvas point. */
+  /** Topmost POI drawn under a canvas point, else the nearest within `radiusPx` (min 3 px). */
   queryAt(point: { x: number; y: number }, radiusPx: number): PoiFeature | null {
     const key = this.queryKeyAt(point, radiusPx);
     return key ? this.features.get(key) ?? null : null;
@@ -346,39 +353,43 @@ export class PoiMarkerManager {
 
   // ── Internals ──────────────────────────────────────────────────────
 
+  /**
+   * Pixel-exact hit test. Mapbox only supplies the candidates — symbols whose
+   * image intersects a box wide enough for any drawn pixel to reach the
+   * point, terrain occlusion included — then each candidate's mask decides,
+   * at its projected anchor and current icon size (`pickPoiHit`).
+   */
   private queryKeyAt(point: { x: number; y: number }, radiusPx: number): string | null {
     try {
-      if (!this.map.getLayer(POI_GPU_LAYER_ID)) return null;
-      const r = Math.max(0, radiusPx);
+      if (this.suppressed || !this.map.getLayer(POI_GPU_LAYER_ID)) return null;
+      const tolerance = Math.max(HIT_TOLERANCE_PX, radiusPx);
+      const size = getIconSizeAtZoom(this.map.getZoom());
+      const reach = this.maxHitExtentPx * size * HOVER_SCALE + HOVER_LIFT_PX + tolerance;
       const hits = this.map.queryRenderedFeatures(
-        r > 0
-          ? [[point.x - r, point.y - r], [point.x + r, point.y + r]]
-          : [point.x, point.y],
+        [[point.x - reach, point.y - reach], [point.x + reach, point.y + reach]],
         { layers: [POI_GPU_LAYER_ID] },
       );
       if (hits.length === 0) return null;
-      if (hits.length === 1 || r === 0) {
-        // Topmost first: highest sort key wins (favorites / pauses above).
-        let best = hits[0];
-        for (const hit of hits) {
-          if (Number(hit.properties?.sort ?? 0) > Number(best.properties?.sort ?? 0)) best = hit;
-        }
-        return String(best.properties?.key ?? '') || null;
-      }
-      let bestKey: string | null = null;
-      let bestDist = Infinity;
+      const candidates: PoiHitCandidate<string>[] = [];
+      const seen = new Set<string>();
       for (const hit of hits) {
         const key = String(hit.properties?.key ?? '');
+        // A feature straddling tiles comes back once per tile.
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
         const feature = this.features.get(key);
-        if (!feature) continue;
-        const projected = this.map.project([feature.lon, feature.lat]);
-        const dist = Math.hypot(projected.x - point.x, projected.y - point.y);
-        if (dist < bestDist) {
-          bestDist = dist;
-          bestKey = key;
+        const sprite = feature ? this.sprites.get(getPoiSpriteId(getPoiSpriteSpec(feature))) : undefined;
+        if (!feature || !sprite) continue;
+        const anchor = this.map.project([feature.lon, feature.lat]);
+        const placements = [{ x: anchor.x, y: anchor.y, scale: size }];
+        // The hovered POI is drawn lifted and scaled: both places count, so
+        // the lift never moves it out from under the pointer.
+        if (key === this.hoveredKey) {
+          placements.push({ x: anchor.x, y: anchor.y - HOVER_LIFT_PX, scale: size * HOVER_SCALE });
         }
+        candidates.push({ key, mask: sprite.hitMask, drawRank: this.drawRankByKey.get(key) ?? 0, placements });
       }
-      return bestKey;
+      return pickPoiHit(candidates, point, tolerance);
     } catch {
       return null;
     }
@@ -389,7 +400,18 @@ export class PoiMarkerManager {
     if (!pending) {
       pending = rasterizePoiSprite(spec, this.pixelRatio)
         .then((sprite) => {
-          if (sprite) this.sprites.set(id, sprite);
+          if (!sprite) return;
+          this.sprites.set(id, sprite);
+          const bounds = sprite.hitMask.bounds;
+          if (bounds) {
+            this.maxHitExtentPx = Math.max(
+              this.maxHitExtentPx,
+              -bounds.minX,
+              bounds.maxX,
+              -bounds.minY,
+              bounds.maxY,
+            );
+          }
         })
         .catch(() => undefined)
         .finally(() => {
@@ -509,8 +531,16 @@ export class PoiMarkerManager {
         geometry: { type: 'Point', coordinates: [feature.lon, feature.lat] },
         properties: { key, icon, sort, name: poiDisplayName(feature) },
       });
-      signatureParts.push(`${key}|${icon}|${feature.lon}|${feature.lat}`);
     }
+    // Data in drawing order (stable sort on the sort key): favourites and
+    // pauses last, i.e. on top, and the index is the hit-test draw rank.
+    features.sort((a, b) => a.properties.sort - b.properties.sort);
+    this.drawRankByKey.clear();
+    features.forEach((entry, index) => {
+      this.drawRankByKey.set(entry.properties.key, index);
+      const [lon, lat] = entry.geometry.coordinates;
+      signatureParts.push(`${entry.properties.key}|${entry.properties.icon}|${lon}|${lat}`);
+    });
     this.data = { type: 'FeatureCollection', features };
     this.renderedSignature = signatureParts.join(';');
 
@@ -522,7 +552,7 @@ export class PoiMarkerManager {
       } else {
         this.popup.setLngLat([current.lon, current.lat]);
         // The sprite may have changed (favorite / pause toggled from the menu).
-        this.popup.setOffset(getPopupOffset(current, this.map.getZoom()));
+        this.popup.setOffset(this.getPopupOffset(current));
       }
     }
     if (this.hoveredKey && !this.features.has(this.hoveredKey)) {
@@ -547,7 +577,7 @@ export class PoiMarkerManager {
       closeOnClick: true,
       focusAfterOpen: false,
       maxWidth: 'none',
-      offset: getPopupOffset(feature, this.map.getZoom()),
+      offset: this.getPopupOffset(feature),
     });
 
     // Popup DOM is built on open only — a single popup exists at a time.
@@ -576,7 +606,24 @@ export class PoiMarkerManager {
     this.getActions().onSelectPoi?.(feature);
   }
 
+  /**
+   * Popup offset keeping the menu clear of what the sprite really draws, on
+   * whichever side Mapbox anchors it (the hovered sprite is scaled and
+   * lifted: included).
+   */
+  private getPopupOffset(feature: PoiFeature) {
+    const size = getIconSizeAtZoom(this.map.getZoom()) * HOVER_SCALE;
+    const bounds = this.sprites.get(getPoiSpriteId(getPoiSpriteSpec(feature)))?.hitMask.bounds;
+    const fallback = FALLBACK_HALF_EXTENT_PX;
+    return buildPopupClearanceOffset({
+      above: (bounds ? Math.max(0, -bounds.minY) : fallback) * size + HOVER_LIFT_PX,
+      below: (bounds ? Math.max(0, bounds.maxY) : fallback) * size,
+      side: (bounds ? Math.max(-bounds.minX, bounds.maxX, 0) : fallback) * size,
+    });
+  }
+
   private setHovered(key: string | null): void {
+    setMapCursor(this.map, POI_CURSOR_OWNER, key ? 'pointer' : null, MAP_CURSOR_PRIORITY.hover);
     if (key === this.hoveredKey) return;
     const map = this.map;
     try {
@@ -649,7 +696,7 @@ export class PoiMarkerManager {
     this.zoomFrameId = window.requestAnimationFrame(() => {
       this.zoomFrameId = null;
       const feature = this.popupKey ? this.features.get(this.popupKey) : undefined;
-      if (feature) this.popup?.setOffset(getPopupOffset(feature, this.map.getZoom()));
+      if (feature) this.popup?.setOffset(this.getPopupOffset(feature));
     });
   };
 
@@ -657,15 +704,14 @@ export class PoiMarkerManager {
     this.pressedOpenPopupKey = this.popup?.isOpen() ? this.popupKey : null;
   };
 
-  private readonly handleLayerClick = (event: MapMouseEvent): void => {
+  private readonly handleMapClick = (event: MapMouseEvent): void => {
     // Un marqueur DOM (waypoint, pause, départ…) posé sur le POI gère son
     // propre clic : sans ça, les deux panneaux s'ouvraient ensemble.
     if (isEventFromDomMarker(event)) {
       this.pressedOpenPopupKey = null;
       return;
     }
-    const hit = event.features?.[0];
-    const key = hit ? String(hit.properties?.key ?? '') : '';
+    const key = this.queryKeyAt(event.point, 0);
     const feature = key ? this.features.get(key) : undefined;
     const pressedOpenKey = this.pressedOpenPopupKey;
     this.pressedOpenPopupKey = null;
@@ -679,17 +725,28 @@ export class PoiMarkerManager {
     this.openPopup(key, feature);
   };
 
-  private readonly handleLayerMouseMove = (event: MapMouseEvent): void => {
-    if (isEventFromDomMarker(event)) {
+  /** Hover, resolved once per frame on the last pointer position. */
+  private readonly handleMapMouseMove = (event: MapMouseEvent): void => {
+    if (this.destroyed) return;
+    if (this.suppressed || isEventFromDomMarker(event)) {
+      this.hoverPoint = null;
       this.setHovered(null);
       return;
     }
-    const hit = event.features?.[0];
-    const key = hit ? String(hit.properties?.key ?? '') : '';
-    this.setHovered(key || null);
+    // Button held: a pan or a drag owns the pointer, the hover stays as is.
+    if ((event.originalEvent as MouseEvent | undefined)?.buttons) return;
+    this.hoverPoint = { x: event.point.x, y: event.point.y };
+    if (this.hoverFrameId != null) return;
+    this.hoverFrameId = window.requestAnimationFrame(() => {
+      this.hoverFrameId = null;
+      const point = this.hoverPoint;
+      if (!point || this.destroyed || this.map.isMoving()) return;
+      this.setHovered(this.queryKeyAt(point, 0));
+    });
   };
 
-  private readonly handleLayerMouseLeave = (): void => {
+  private readonly handleMapMouseOut = (): void => {
+    this.hoverPoint = null;
     this.setHovered(null);
   };
 }

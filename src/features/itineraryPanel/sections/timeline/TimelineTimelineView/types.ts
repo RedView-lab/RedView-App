@@ -27,7 +27,6 @@ export interface TimelineTimelineViewProps {
   onMovePause?: (id: string, distanceKm: number) => void;
   onChangePauseDuration?: (id: string, durationMin: number) => void;
   onChangeIntervalPauseDuration?: (pauseIntervalId: string, durationMin: number) => void;
-  onChangeFavoritePoiPauseDuration?: (category: PoiCategory, durationMin: number) => void;
   onRegisterPauseInsertionResolver?: (resolver: (() => number | null) | null) => void;
   onToggleFavorite?: (id: string, favorite: boolean) => void;
   onRemove?: (id: string) => void;
@@ -117,6 +116,8 @@ export interface TimelineStandalonePause {
   label: string;
   source: 'manual' | 'interval' | 'favorite-poi';
   poiCategory?: PoiCategory;
+  /** Pause d'un POI favori : la ligne du POI, qui porte sa durée. */
+  attachedToItemId?: string | null;
   distanceKm: number;
   elapsedSeconds: number;
   scheduledTopPx: number;
@@ -131,6 +132,17 @@ export interface TimelineStandalonePause {
   continuations: EventSpanSegment[];
   /** Commencée la veille du premier jour affiché : seule sa suite est dessinée. */
   startsBeforeWindow: boolean;
+}
+
+/**
+ * Durée de pause en cours de saisie dans l'agenda : celle d'une ligne (pause
+ * posée, ou POI — sa durée à lui seul) ou d'une règle d'intervalle.
+ */
+export interface PauseDurationEditState {
+  kind: 'row' | 'interval';
+  targetId: string;
+  draft: string;
+  previousDurationMin: number;
 }
 
 export interface PauseAttachmentState {

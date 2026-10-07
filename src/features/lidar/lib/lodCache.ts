@@ -158,6 +158,47 @@ async function getLidarDirectory(): Promise<FileSystemDirectoryHandle | null> {
   }
 }
 
+/** Sync access handle of OPFS, exposed in dedicated workers only. */
+interface SyncAccessHandle {
+  truncate(size: number): void;
+  write(buffer: Uint8Array, options: { at: number }): number;
+  flush(): void;
+  close(): void;
+}
+
+/**
+ * Writes `parts` back to back. In a worker (where the LOD cache is built) a
+ * sync access handle writes in place: `createWritable` writes a swap file
+ * that `close()` then moves into place, ~2× the time for a 375 MB tile.
+ */
+async function writeOpfsFile(handle: FileSystemFileHandle, parts: Uint8Array[]): Promise<void> {
+  const openSync = (handle as unknown as { createSyncAccessHandle?: () => Promise<SyncAccessHandle> }).createSyncAccessHandle;
+  if (typeof openSync === 'function') {
+    const access = await openSync.call(handle);
+    try {
+      access.truncate(0);
+      let at = 0;
+      for (const part of parts) {
+        const written = access.write(part, { at });
+        if (written !== part.byteLength) throw new Error(`Short OPFS write: ${written}/${part.byteLength} bytes`);
+        at += written;
+      }
+      access.flush();
+    } finally {
+      access.close();
+    }
+    return;
+  }
+  const writable = await handle.createWritable();
+  try {
+    for (const part of parts) await writable.write(part as Uint8Array<ArrayBuffer>);
+    await writable.close();
+  } catch (error) {
+    await writable.abort().catch(() => undefined);
+    throw error;
+  }
+}
+
 /** Writes a tile; returns false when OPFS is unavailable or the write failed. */
 export async function saveLodTile(lazFileName: string, tile: LodTile): Promise<boolean> {
   const dir = await getLidarDirectory();
@@ -165,15 +206,7 @@ export async function saveLodTile(lazFileName: string, tile: LodTile): Promise<b
   const fileName = lodCacheKey(lazFileName);
   try {
     const handle = await dir.getFileHandle(fileName, { create: true });
-    const writable = await handle.createWritable();
-    try {
-      await writable.write(encodeLodTileIndex(tile.header, tile.nodes) as Uint8Array<ArrayBuffer>);
-      await writable.write(tile.packed as Uint8Array<ArrayBuffer>);
-      await writable.close();
-    } catch (error) {
-      await writable.abort().catch(() => undefined);
-      throw error;
-    }
+    await writeOpfsFile(handle, [encodeLodTileIndex(tile.header, tile.nodes), tile.packed]);
     return true;
   } catch (error) {
     console.warn(`[LiDAR LOD cache] Failed to write ${fileName}:`, error);

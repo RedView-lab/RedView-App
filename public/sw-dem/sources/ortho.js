@@ -346,14 +346,12 @@ function buildOrthoTileURL(z, x, y) {
   );
 }
 
+// Same checked 1×1 transparent PNG as runtime/dem-helpers.js (TRANSPARENT_PNG,
+// a global of the classic-script chain): no OffscreenCanvas encode, so a
+// missing ortho tile can never turn into a rejected fetch (audit d-sw-router).
 let _transparentBlob = null;
 async function getTransparentBlob() {
-  if (!_transparentBlob) {
-    const c = new OffscreenCanvas(1, 1);
-    const ctx = c.getContext('2d');
-    ctx.clearRect(0, 0, 1, 1);
-    _transparentBlob = await c.convertToBlob({ type: 'image/png' });
-  }
+  _transparentBlob ??= new Blob([TRANSPARENT_PNG], { type: 'image/png' });
   return _transparentBlob;
 }
 

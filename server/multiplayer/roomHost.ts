@@ -15,9 +15,14 @@ import { ProjectNotFoundError, type LoadedRoom, type RoomStorage } from './stora
 /**
  * Salles chargées en mémoire (une par projet ouvert en co-édition) et leur
  * durabilité :
- *  - journal écrit par paquets toutes les `journalFlushMs` (≈ 250 ms ; les
- *    clients gardent leurs lots tant qu'ils ne sont pas durables) ; en échec,
- *    nouvel essai avec attente exponentielle ;
+ *  - journal écrit au front montant (écriture groupée) : un lot part tout de
+ *    suite si la dernière écriture date d'au moins `journalFlushMs` (100 ms),
+ *    sinon avec ceux qui arrivent jusqu'à cette échéance — une modification
+ *    isolée ne paie que l'écriture, une rafale au plus 10 écritures/s (les
+ *    clients gardent leurs lots tant qu'ils ne sont pas durables). Un
+ *    minuteur fixe de 250 ms faisait attendre chaque lot 125 ms en moyenne
+ *    avant même l'écriture. En échec, nouvel essai avec attente
+ *    exponentielle ;
  *  - point de sauvegarde toutes les `checkpointIntervalMs` ou
  *    `checkpointBatches` lots, et au déchargement de la salle ; en échec,
  *    attente exponentielle (1 s → 60 s) ;
@@ -42,10 +47,15 @@ import { ProjectNotFoundError, type LoadedRoom, type RoomStorage } from './stora
 
 export interface RoomHostOptions {
   storage: RoomStorage;
+  /** Écart minimal entre deux écritures du journal d'une salle (défaut 100 ms). */
   journalFlushMs?: number;
   checkpointIntervalMs?: number;
   checkpointBatches?: number;
   idleUnloadMs?: number;
+  /** Première attente après un point de sauvegarde en échec (doublée ensuite, 60 s au plus ; défaut 1 s). */
+  checkpointRetryMinMs?: number;
+  /** Période de l'entretien d'une salle (points de sauvegarde, déchargement ; défaut 1 s). */
+  maintenanceIntervalMs?: number;
   /** Validation fantôme d'une salle au plus une fois par période (0 : jamais). */
   shadowValidationIntervalMs?: number;
   log?: (level: 'info' | 'warn' | 'error', message: string, data?: Record<string, unknown>) => void;
@@ -68,6 +78,7 @@ const MAINTENANCE_MS = 1_000;
 /** Journal en échec plus longtemps avec des clients connectés : la salle est fermée (ils gardent leurs lots). */
 const MAX_JOURNAL_OUTAGE_MS = 60_000;
 const JOURNAL_RETRY_MAX_MS = 30_000;
+const JOURNAL_SPACING_MS = 100;
 const CHECKPOINT_RETRY_MIN_MS = 1_000;
 const CHECKPOINT_RETRY_MAX_MS = 60_000;
 const DEFAULT_SHADOW_INTERVAL_MS = 10 * 60_000;
@@ -97,6 +108,11 @@ export class HostedRoom {
   private journalQueued = false;
   private journalFailures = 0;
   private nextJournalAt = 0;
+  /** Début de la dernière écriture du journal, et prochaine écriture programmée (scheduleFlush). */
+  private lastJournalAt = 0;
+  /** Début du premier paquet de journal écrit par cette salle : jamais élagué tant qu'elle vit (barrière, storage.ts). */
+  private firstJournalSeq: number | null = null;
+  private flushTimer: NodeJS.Timeout | null = null;
   private flushFailingSince: number | null = null;
   private lastShadowAt = 0;
   private maintenanceQueued = false;
@@ -120,6 +136,7 @@ export class HostedRoom {
         this.unflushed.push(batch);
         this.acceptedAt.set(batch.seq, Date.now());
         host.metrics.batches += 1;
+        this.scheduleFlush();
       },
       onMotion: (outcome) => {
         if (outcome === 'relayed') host.metrics.motionIn += 1;
@@ -127,11 +144,9 @@ export class HostedRoom {
         else host.metrics.motionInvalid += 1;
       },
     });
-    const options = host.options;
     this.timers.push(
       setInterval(() => this.room.tick(), TICK_MS),
-      setInterval(() => this.flush(), options.journalFlushMs ?? 250),
-      setInterval(() => this.maintain(), MAINTENANCE_MS),
+      setInterval(() => this.maintain(), host.options.maintenanceIntervalMs ?? MAINTENANCE_MS),
     );
   }
 
@@ -211,18 +226,37 @@ export class HostedRoom {
     });
   }
 
+  /**
+   * Prochaine écriture du journal : tout de suite (fin du tour : les lots du
+   * même message partent ensemble) si la précédente date d'au moins
+   * `journalFlushMs`, sinon à cette échéance ; après un échec, à l'heure du
+   * nouvel essai. Une écriture en cours reprogramme la suivante en finissant.
+   */
+  private scheduleFlush(): void {
+    if (this.flushTimer || this.journalQueued || this.closed || this.unflushed.length === 0) return;
+    const now = Date.now();
+    const spacing = this.host.options.journalFlushMs ?? JOURNAL_SPACING_MS;
+    const wait = Math.max(0, this.lastJournalAt + spacing - now, this.nextJournalAt - now);
+    this.flushTimer = setTimeout(() => {
+      this.flushTimer = null;
+      this.flush();
+    }, wait);
+  }
+
   private flush(): void {
-    if (this.unflushed.length === 0 || this.closed || this.journalQueued || Date.now() < this.nextJournalAt) return;
+    if (this.unflushed.length === 0 || this.closed || this.journalQueued) return;
     this.journalQueued = true;
     void this.enqueue(() => this.writeJournal())
       .catch((error: unknown) => this.fail('écriture du journal', error))
       .finally(() => {
         this.journalQueued = false;
+        this.scheduleFlush();
       });
   }
 
   private async writeJournal(): Promise<void> {
     if (this.unflushed.length === 0 || this.closed) return;
+    this.lastJournalAt = Date.now();
     const batches = this.unflushed.slice();
     try {
       const result = await this.host.options.storage.appendJournal(this.projectId, batches);
@@ -233,6 +267,7 @@ export class HostedRoom {
         return;
       }
       this.flushFailingSince = null;
+      this.firstJournalSeq ??= batches[0].seq;
       this.journalFailures = 0;
       this.nextJournalAt = 0;
       this.unflushed.splice(0, batches.length);
@@ -315,7 +350,7 @@ export class HostedRoom {
       if (this.journaledSeq < seq) {
         // Journal en échec (déjà signalé) : nouvel essai plus tard.
         this.checkpointFailures += 1;
-        this.nextCheckpointAt = Date.now() + backoff(this.checkpointFailures, CHECKPOINT_RETRY_MIN_MS, CHECKPOINT_RETRY_MAX_MS);
+        this.nextCheckpointAt = Date.now() + backoff(this.checkpointFailures, this.host.options.checkpointRetryMinMs ?? CHECKPOINT_RETRY_MIN_MS, CHECKPOINT_RETRY_MAX_MS);
         return;
       }
       // Relu avant d'écrire le nouveau (qui remplace le précédent), jugé après :
@@ -345,7 +380,7 @@ export class HostedRoom {
       this.nextCheckpointAt = 0;
       this.host.recordCheckpoint(Date.now() - started);
       try {
-        await this.host.options.storage.pruneJournal(this.projectId, seq);
+        await this.host.options.storage.pruneJournal(this.projectId, seq, this.firstJournalSeq ?? undefined);
       } catch (error) {
         // Paquets en trop : relus puis ignorés à la reprise (séquence déjà couverte).
         this.host.log('warn', 'élagage du journal en échec', { projectId: this.projectId, error: String(error) });
@@ -356,7 +391,7 @@ export class HostedRoom {
 
   private checkpointFailed(error: unknown): void {
     this.checkpointFailures += 1;
-    const retryInMs = backoff(this.checkpointFailures, CHECKPOINT_RETRY_MIN_MS, CHECKPOINT_RETRY_MAX_MS);
+    const retryInMs = backoff(this.checkpointFailures, this.host.options.checkpointRetryMinMs ?? CHECKPOINT_RETRY_MIN_MS, CHECKPOINT_RETRY_MAX_MS);
     this.nextCheckpointAt = Date.now() + retryInMs;
     this.host.metrics.checkpointErrors += 1;
     this.host.log(this.checkpointFailures === 1 ? 'error' : 'warn', 'point de sauvegarde en échec', {
@@ -406,6 +441,8 @@ export class HostedRoom {
     if (this.closed) return;
     this.closed = true;
     for (const timer of this.timers) clearInterval(timer);
+    if (this.flushTimer) clearTimeout(this.flushTimer);
+    this.flushTimer = null;
     for (const handle of [...this.peers]) handle.close(code, reason);
     this.peers.clear();
     this.host.forget(this);

@@ -12,6 +12,7 @@ export default defineConfig([
     'dist',
     // Générés (wasm-bindgen, prebuild-api-i18n, npm run lidar:index).
     'src/features/fitPredictor/engine/pkg/**',
+    'src/features/lidar/lib/laz/pkg/**',
     'script-test-bench/pace-accuracy/.*-pkg/**',
     'api/_lib/translations-data.ts',
     'src/features/lidar/lib/japan/japanLazIndex.ts',

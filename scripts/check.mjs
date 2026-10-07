@@ -9,8 +9,9 @@
  * sorties sont mises en tampon et seules celles des étapes en échec sont
  * affichées, à la fin. Code de sortie non nul au premier échec.
  *
- * Exclus volontairement : bench:quick (seuils de perf dépendant de la machine,
- * jamais en échec), bench:snow et bench:avalanche (≈ 2,5 min chacun ;
+ * Exclus volontairement : bench:quick (seuils de perf dépendant de la machine
+ * et de son alimentation : il sort en échec sur un seuil, mais une batterie
+ * suffit à en dépasser), bench:snow et bench:avalanche (≈ 2,5 min chacun ;
  * bench:snow réécrit son rapport versionné), benchs réseau (routing, POI).
  */
 import { spawn } from 'node:child_process';

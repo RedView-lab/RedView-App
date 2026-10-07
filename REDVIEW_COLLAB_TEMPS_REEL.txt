@@ -175,9 +175,13 @@ Cœur sans entrée/sortie (src/features/collab/room/), partagé avec le simulate
     borné à la moitié du document, ≥ 64 Ko), baux, présence.
 
 Hôte (roomHost.ts) :
-  - Journal écrit toutes les ~250 ms (project_journal, document
-    « <projet>_<séquence de début> »). En échec : nouvel essai avec attente
-    exponentielle.
+  - Journal écrit au front montant (project_journal, document
+    « <projet>_<séquence de début> ») : un lot part tout de suite si la
+    dernière écriture date d'au moins 100 ms (journalFlushMs), sinon avec
+    ceux qui arrivent jusqu'à cette échéance (écriture groupée : ≤ 10
+    écritures/s par salle). Jusqu'au 06/10, minuteur fixe de 250 ms : chaque
+    lot attendait 125 ms en moyenne avant même l'écriture. En échec : nouvel
+    essai avec attente exponentielle.
   - Barrière : si un 2e serveur écrit la même séquence, il reçoit un 409 et
     ferme sa salle (déploiements qui se chevauchent).
   - Point de sauvegarde toutes les 60 s / 600 lots, et au déchargement :
@@ -262,6 +266,24 @@ Codes de fermeture :
   1011/1013 erreur/occupé, 1012 redémarrage
 Battement de cœur du serveur (ping WebSocket) toutes les 15 s : une connexion
   morte (pastille, curseur fantômes) tombe en ≤ 30 s.
+Format sur le fil (src/features/collab/wire.ts) : JSON en trame texte ; un
+  message d'au moins 16 Ko (état complet, rattrapage, lot avec segments de
+  tracé) peut partir en trame binaire = JSON compressé en DEFLATE brut.
+  Négocié : hello.compress (le client sait décompresser) → le serveur
+  compresse pour lui ; welcome.compress → le client compresse ses gros
+  envois. Sans le drapeau (ancien onglet, banc), tout reste en texte : pas de
+  changement de version. Le serveur compresse un message une seule fois pour
+  toute la salle (niveau 1, hors du fil) ; il décompresse une trame binaire
+  hors du fil, bornée à 64 Mo (au-delà : 4400), et une trame binaire avant
+  welcome est refusée (4400). Dans chaque sens, un message qui attend une
+  (dé)compression retient les suivants : l'ordre est toujours celui d'envoi.
+  PAS de permessage-deflate : Chromium y compresse chaque message, sans
+  seuil (lots, caméra et curseur à 30 Hz), le serveur décompressait donc
+  chaque message dans la file zlib du processus (4 tâches à la fois) et
+  compressait chaque gros message une fois par destinataire ; en plus, ws
+  n'applique son seuil (« threshold ») qu'avec server_no_context_takeover —
+  tous les messages sortants étaient compressés. Résultat : la charge cible
+  saturait (section 15).
 
 ========================================================================
 8. RÈGLES À RESPECTER EN MODIFIANT LE CODE
@@ -331,6 +353,12 @@ npm run bench:collab-load
   diffusion p95 63–104 ms des deux côtés, mémoire 1,94× ; avec motion (2 100
   à 4 300 messages/s relayés) : 92–94 ms, 1,96×, aucun motion jeté ni sauté.
   Le canal motion ne coûte rien de mesurable au serveur.
+  Depuis le 06/10 au soir (section 15) : clients dans plusieurs processus
+  (--workers, un quart des cœurs) et compressant comme Chromium
+  (--clientDeflate=chrome, défaut) ; CPU du serveur rapporté (cpuPercent).
+  Charge cible complète, sur batterie : diffusion p95 12 ms, motion 9 ms,
+  journal p50/p95 125/188 ms, CPU 85 %, 1,99× (HEAD d'avant : 18 s, 18 s,
+  210/310 ms, 200 %).
 npm run bench:follow
   Suivre un éditeur, hors navigateur : trajectoires (panoramique, zoom,
   rotation ±180°, vol, flyover, arrêt/reprise), réseau avec gigue, pertes et
@@ -646,3 +674,82 @@ Exploitation :
   - Variables : MULTIPLAYER_INTERNAL_SECRET (≥ 32 car., sur les DEUX services
     Coolify), MULTIPLAYER_INTERNAL_URL (app : https://app.redview.tech/multiplayer),
     MULTIPLAYER_ALLOWED_ORIGINS (défaut prod : https://app.redview.tech).
+
+========================================================================
+15. CHARGE DU 06/10/2026 (soir) : compression, écritures, journal
+========================================================================
+Le banc de charge ne ressemblait pas à la production : ses clients (ws de
+Node) ne compressaient que les messages ≥ 1 Ko, alors que Chromium compresse
+CHAQUE message quand permessage-deflate est négocié (code de Chromium :
+WebSocketDeflatePredictorImpl::Predict renvoie toujours DEFLATE), et un seul
+processus générait toute la charge. Rendu fidèle (clients « chrome » dans
+plusieurs processus, CPU du serveur mesuré), il montrait la salle effondrée à
+la charge cible : 18 s de retard de diffusion, des milliers de motion jetés.
+
+Causes et corrections (server/multiplayer, src/features/collab/wire.ts) :
+- permessage-deflate : ws n'applique son seuil (threshold: 1024) qu'avec
+  server_no_context_takeover — tout message sortant était compressé, une
+  fois par destinataire ; chaque message entrant (lots, caméra et curseur à
+  30 Hz) était décompressé ; le tout dans la file zlib du processus (4
+  tâches). Retiré. Les gros messages sont compressés par l'application
+  (section 7, « Format sur le fil ») : une fois pour toute la salle, niveau 1
+  hors du fil (état complet de 4,8 Mo → 0,88 Mo en 24 ms), négocié par
+  hello.compress / welcome.compress, sans changer la version du protocole.
+- Écritures TCP : un writev par trame et par destinataire. Les envois d'un
+  même tour de boucle vers une connexion partent en un seul writev
+  (writeCoalescer.ts : cork, puis uncork en setImmediate ; les trames
+  restent distinctes). 50 lots d'un coup : 101 écritures → 3.
+- Journal : minuteur fixe de 250 ms → écriture au front montant, ≥ 100 ms
+  entre deux écritures (section 6).
+
+Mesuré (portable sur batterie, mesures alternées HEAD / nouveau code,
+50 salles × 5 clients × 20 lots/s + présence 30 Hz) :
+                          avant          après
+  diffusion p95           17,7–18,2 s    11,8–12,8 ms
+  relais motion p95       18,0–18,7 s    8,7–9,5 ms
+  CPU du serveur          197–203 %      84–85 %
+  mémoire (RSS)           560 Mo         313–321 Mo
+  journal p50 / p95       205–219 / 306–315 ms   125–128 / 184–188 ms
+  mémoire par salle       2,0×           1,99×
+Tests : server/multiplayer/multiplayer.test.ts (trames lues sur TCP :
+welcome binaire, pong en texte, lot compressé appliqué, bombe de
+décompression et trame binaire avant welcome refusées ; vrai
+CollabConnection : état complet et tracé compressés dans les deux sens),
+bench:collab-e2e complet, bundle de production démarré (dist-server).
+
+Tempête de reconnexions (07/10/2026, bench:collab-load --storm) : le serveur
+redémarre comme à un déploiement et les 250 clients reviennent ensemble.
+Avec des documents de 5,4 Mo (--route=60000), trois défauts sont apparus :
+- l'état complet de chaque welcome était sérialisé et compressé PAR CLIENT :
+  250 chaînes de 4,7 Mo attendaient le pool de libuv (tas à 3,3 Go, pauses
+  de 1,8 s). Il l'est maintenant une fois par salle et par séquence
+  (welcome.epoch + seq), et chaque welcome est assemblé en segments DEFLATE
+  (début propre au client, état partagé, fin) ; seul le segment compressé
+  est gardé (10 s, 128 Mo au plus) ;
+- une salle rechargée lisait aussi son document (téléchargement, gunzip,
+  JSON.parse) alors que son point de sauvegarde fait foi : il n'est plus lu
+  (LoadedRoom : document seulement sans point de sauvegarde valable) ;
+- le stockage de fichiers (dev, tests, bancs) relisait et réécrivait un
+  room.json de 10 Mo à chaque point de sauvegarde et le relisait à chaque
+  vérification de droits : 43 % du temps du serveur. Il écrit maintenant les
+  JSON tels quels (owner.json, checkpoint.json, document.json), comme Appwrite.
+Mesuré sur batterie (HEAD avec le même stockage de fichiers / nouveau code) :
+                               avant           après
+  tous revenus (5,4 Mo)        22,1 s          5,8–6,0 s
+  retour p95 (5,4 Mo)          14,6 s          5,6–5,8 s
+  welcome sur le fil           4,6 Mo          0,88 Mo
+  pic de tas pendant la tempête 1,39 Go        1,31–1,43 Go
+  tous revenus (135 Ko)        7,5 s           1,6 s
+  arrêt du serveur (135 Ko)    6 s             0,07 s
+Le reste du temps de retour est le JSON.parse des points de sauvegarde
+(50 × 4,7 Mo) : incompressible sans changer de format.
+
+Barrière et élagage (07/10/2026) : la barrière entre serveurs repose sur
+l'identifiant des paquets de journal (<projet>_<séquence de début>). Après
+un point de sauvegarde, le nouveau serveur élaguait aussi son premier paquet :
+un ancien serveur encore vivant (déploiement qui se chevauche) reprenait juste
+avant, écrivait sans conflit et confirmait « durable » des lots que la salle
+courante ne verrait jamais (perdus). Une salle garde désormais son premier
+paquet tant qu'elle vit (pruneJournal(…, keepStartSeq)). Vu par un test qui
+échouait 3 fois sur 5 sous charge ; test déterministe : appwriteStorage.test.ts
+« barrière après élagage ».

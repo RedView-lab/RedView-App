@@ -47,6 +47,7 @@ export type ItineraryMapActionEventDetail =
       feature: PoiFeature;
       extra?: {
         nextEnabled?: boolean;
+        /** Pause : sa durée ; favori : celle de la pause posée avec lui. */
         durationMin?: number;
       };
     };

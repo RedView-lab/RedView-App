@@ -1,7 +1,10 @@
+import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
+import { deflateRawSync, inflateRawSync } from 'node:zlib';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
@@ -14,6 +17,7 @@ import { CollabConnection } from '../../src/features/collab/client/connection.ts
 import { PROTOCOL_VERSION, socketProtocols, type MotionCamera, type MotionViewport } from '../../src/features/collab/protocol.ts';
 import type { MotionEvent } from '../../src/features/collab/realtime.ts';
 import { sampleDocument } from '../../src/features/collab/sim/fixtures.ts';
+import { WIRE_MAX_MESSAGE_BYTES } from '../../src/features/collab/wire.ts';
 import { createFileStorage } from './fileStorage.ts';
 import { createMultiplayerServer, type MultiplayerServer } from './server.ts';
 
@@ -99,6 +103,90 @@ function rawHello(
     });
     socket.on('close', (code) => resolve({ message, code }));
   });
+}
+
+type RawFrame = { opcode: number; payload: Buffer };
+
+/**
+ * Client WebSocket écrit à la main sur TCP (`ws` cache les opcodes) : trames
+ * texte/binaire visibles, extensions offertes au choix, code de fermeture.
+ */
+async function rawTcpClient(token: string, extensions?: string) {
+  const tcp = net.connect(port, '127.0.0.1');
+  await new Promise((resolve) => tcp.once('connect', resolve));
+  tcp.write([
+    'GET /multiplayer?project=local-test HTTP/1.1',
+    `Host: 127.0.0.1:${port}`,
+    'Upgrade: websocket',
+    'Connection: Upgrade',
+    `Sec-WebSocket-Key: ${randomBytes(16).toString('base64')}`,
+    'Sec-WebSocket-Version: 13',
+    ...(extensions ? [`Sec-WebSocket-Extensions: ${extensions}`] : []),
+    `Sec-WebSocket-Protocol: ${socketProtocols(token).join(', ')}`,
+    '', '',
+  ].join('\r\n'));
+  let buffer = Buffer.alloc(0);
+  let response = '';
+  let closeCode: number | null = null;
+  const frames: RawFrame[] = [];
+  tcp.on('data', (chunk: Buffer) => {
+    buffer = Buffer.concat([buffer, chunk]);
+    if (!response) {
+      const end = buffer.indexOf('\r\n\r\n');
+      if (end < 0) return;
+      response = buffer.subarray(0, end).toString();
+      buffer = buffer.subarray(end + 4);
+    }
+    while (buffer.length >= 2) {
+      let length = buffer[1] & 0x7f;
+      let offset = 2;
+      if (length === 126) [length, offset] = [buffer.readUInt16BE(2), 4];
+      else if (length === 127) [length, offset] = [Number(buffer.readBigUInt64BE(2)), 10];
+      if (buffer.length < offset + length) return;
+      const frame = { opcode: buffer[0] & 0x0f, payload: buffer.subarray(offset, offset + length) };
+      if (frame.opcode === 0x8) closeCode = frame.payload.readUInt16BE(0);
+      else frames.push(frame);
+      buffer = buffer.subarray(offset + length);
+    }
+  });
+  tcp.on('close', () => {
+    closeCode ??= -1;
+  });
+  await waitFor(() => response !== '', 'réponse HTTP');
+  let read = 0;
+  return {
+    response,
+    /** Objet : trame texte JSON ; Buffer : trame binaire (masquées, comme un navigateur). */
+    send(message: object | Buffer) {
+      const binary = Buffer.isBuffer(message);
+      const payload = binary ? message : Buffer.from(JSON.stringify(message));
+      const first = binary ? 0x82 : 0x81;
+      let header: Buffer;
+      if (payload.length < 126) header = Buffer.from([first, 0x80 | payload.length]);
+      else if (payload.length < 65_536) header = Buffer.from([first, 0x80 | 126, payload.length >> 8, payload.length & 0xff]);
+      else {
+        header = Buffer.alloc(10);
+        header[0] = first;
+        header[1] = 0x80 | 127;
+        header.writeBigUInt64BE(BigInt(payload.length), 2);
+      }
+      const mask = randomBytes(4);
+      tcp.write(Buffer.concat([header, mask, payload.map((byte, index) => byte ^ mask[index % 4])]));
+    },
+    /** Prochaine trame (qui vérifie `match`). */
+    async next(match: (frame: RawFrame) => boolean = () => true): Promise<RawFrame> {
+      const find = () => frames.findIndex((frame, index) => index >= read && match(frame));
+      await waitFor(() => find() >= 0, 'trame');
+      const index = find();
+      read = index + 1;
+      return frames[index];
+    },
+    async closed(): Promise<number> {
+      await waitFor(() => closeCode !== null, 'fermeture');
+      return closeCode!;
+    },
+    destroy: () => tcp.destroy(),
+  };
 }
 
 beforeEach(async () => {
@@ -206,6 +294,52 @@ describe('serveur temps réel', () => {
     expect(json(a)).toBe(json(b));
   });
 
+  it('compression de bout en bout (vrai client) : état complet et tracé compressés, documents identiques', async () => {
+    // Trames binaires comptées dans les deux sens, sur le vrai CollabConnection.
+    let received = 0;
+    let sent = 0;
+    class CountingWebSocket extends WebSocket {
+      constructor(...args: ConstructorParameters<typeof WebSocket>) {
+        super(...args);
+        this.addEventListener('message', (event) => {
+          if (typeof event.data !== 'string') received += 1;
+        });
+      }
+
+      override send(data: Parameters<WebSocket['send']>[0], ...rest: unknown[]): void {
+        if (typeof data !== 'string') sent += 1;
+        (super.send as (...values: unknown[]) => void)(data, ...rest);
+      }
+    }
+    const open = (user: string, seed?: ProjectDocument) => {
+      const connection = new CollabConnection({
+        url: `ws://127.0.0.1:${port}/multiplayer`,
+        projectId: 'local-test',
+        getToken: async () => `dev:${user}`,
+        seed: () => seed,
+        WebSocketImpl: CountingWebSocket as unknown as typeof globalThis.WebSocket,
+      });
+      connections.push(connection);
+      connection.start();
+      return connection;
+    };
+    const a = open('alice', sampleDocument(1_500));
+    await waitFor(() => a.client.getState().ready, 'a prêt');
+    const b = open('bob');
+    await waitFor(() => b.client.getState().ready, 'b prêt');
+    expect(received).toBeGreaterThanOrEqual(2);
+    expect(json(b)).toBe(json(a));
+
+    // Nouveau tracé de 3 000 points chez A : ses segments partent compressés, B les reçoit compressés.
+    const before = { received, sent };
+    const points = Array.from({ length: 3_000 }, (_, index) => ({ lat: 45.9 + index * 1e-4, lon: 6.87 + index * 7e-5, distanceM: index * 11.3, elevationM: 1_000 + (index % 97) }));
+    edit(a, 'it-2', (it) => ({ ...it, gpxRoute: { name: null, source: 'brouter', points, routedInputsKey: 'k-new' } } as Itinerary));
+    await waitFor(() => (itinerary(b, 'it-2').gpxRoute as { routedInputsKey?: string } | undefined)?.routedInputsKey === 'k-new', 'tracé reçu par B');
+    expect(sent).toBeGreaterThan(before.sent);
+    expect(received).toBeGreaterThan(before.received);
+    expect(json(b)).toBe(json(a));
+  }, 20_000);
+
   it('redémarrage du serveur en pleine édition : rien n’est perdu', async () => {
     const a = connect('alice', sampleDocument(300));
     await waitFor(() => a.client.getState().ready, 'a prêt');
@@ -304,6 +438,56 @@ describe('serveur temps réel', () => {
     edit(a, 'it-1', (it) => ({ ...it, name: 'après la rafale' }));
     await waitFor(() => itinerary(b, 'it-1').name === 'après la rafale', 'modification après la rafale');
   });
+
+  // Une bombe de 64 Mo à produire puis à refuser : délai large, la machine peut être chargée.
+  it('compression négociée (wire.ts) : gros messages en DEFLATE binaire, compressés une fois ; petits en texte ; pas de permessage-deflate', async () => {
+    const alice = await rawTcpClient('dev:alice', 'permessage-deflate; client_max_window_bits');
+    // Offre de Chromium refusée : chaque petit message aurait été compressé.
+    expect(alice.response).toContain('101');
+    expect(alice.response).not.toMatch(/sec-websocket-extensions/i);
+    alice.send({ type: 'hello', v: PROTOCOL_VERSION, clientId: 'c-alice', epoch: null, lastSeq: null, compress: true, seed: sampleDocument(400) });
+    const welcome = await alice.next();
+    expect(welcome.opcode).toBe(0x2);
+    const welcomeJson = inflateRawSync(welcome.payload);
+    expect(JSON.parse(welcomeJson.toString())).toMatchObject({ type: 'welcome', compress: true });
+    expect(welcome.payload.length).toBeLessThan(welcomeJson.length / 3);
+    alice.send({ type: 'ping', t: 1 });
+    expect((await alice.next((frame) => frame.payload.includes('"pong"'))).opcode).toBe(0x1);
+
+    // Client sans `compress` (ancien onglet, banc de charge) : tout en texte.
+    const bob = await rawTcpClient('dev:bob');
+    bob.send({ type: 'hello', v: PROTOCOL_VERSION, clientId: 'c-bob', epoch: null, lastSeq: null });
+    const bobWelcome = await bob.next();
+    expect(bobWelcome.opcode).toBe(0x1);
+    const bobWelcomeMessage = JSON.parse(bobWelcome.payload.toString());
+    expect(bobWelcomeMessage).toMatchObject({ type: 'welcome', compress: true });
+    // Même séquence : même état complet, sérialisé une fois (texte collé / segments DEFLATE enchaînés).
+    expect(bobWelcomeMessage.snapshot).toEqual(JSON.parse(welcomeJson.toString()).snapshot);
+    expect(bobWelcomeMessage.clientId).toBe('c-bob');
+
+    // Gros lot compressé par Alice : appliqué, relayé en texte à Bob, renvoyé compressé à Alice.
+    const name = `Grand tour ${'x'.repeat(40_000)}`;
+    alice.send(deflateRawSync(JSON.stringify({ type: 'batch', clientSeq: 1, ops: [{ t: 's', id: 'p', k: 'name', v: name }], blobs: {} })));
+    const relayed = await bob.next((frame) => frame.payload.includes('"type":"batch"'));
+    expect(relayed.opcode).toBe(0x1);
+    expect(JSON.parse(relayed.payload.toString()).batch.ops[0].v).toBe(name);
+    const ack = await alice.next((frame) => frame.opcode === 0x2);
+    expect(JSON.parse(inflateRawSync(ack.payload).toString()).batch.clientSeq).toBe(1);
+
+    // Bombe de décompression : refusée au-delà de la taille d'une trame (4400).
+    alice.send(deflateRawSync(Buffer.alloc(WIRE_MAX_MESSAGE_BYTES + 1, 0x20)));
+    expect(await alice.closed()).toBe(4400);
+    alice.destroy();
+    // Trame binaire avant `welcome` : refusée.
+    const mallory = await rawTcpClient('dev:mallory');
+    mallory.send(deflateRawSync(JSON.stringify({ type: 'hello', v: PROTOCOL_VERSION, clientId: 'c-m', epoch: null, lastSeq: null })));
+    expect(await mallory.closed()).toBe(4400);
+    mallory.destroy();
+    // Le serveur tient : Bob est toujours servi.
+    bob.send({ type: 'ping', t: 2 });
+    expect((await bob.next((frame) => frame.payload.includes('"pong"'))).opcode).toBe(0x1);
+    bob.destroy();
+  }, 20_000);
 
   it('refus : version du protocole, jeton invalide', async () => {
     const version = await rawHello({ type: 'hello', v: PROTOCOL_VERSION + 1, clientId: 'c-1', epoch: null, lastSeq: null });

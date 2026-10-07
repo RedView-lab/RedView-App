@@ -17,6 +17,7 @@ import {
 import { Room, type RoomPeer } from '../room/room';
 import { RoomState } from '../room/roomState';
 import { incrementCounter, randomEdit, readCounter, sampleDocument, simUserId } from './fixtures';
+import { jsonEqual } from './jsonEqual';
 import { Scheduler, seededRandom } from './scheduler';
 
 /**
@@ -422,9 +423,10 @@ class SimClient {
 
   private checkVisible(context: string): void {
     if (this.mismatch) return;
-    const local = canonicalJson(this.collab.getDocument());
-    const visible = canonicalJson(new Materializer().materialize(this.collab.engine.visible));
-    if (local !== visible) this.mismatch = `${context} : ${firstDifference(local, visible)}`;
+    // Référence indépendante : matérialisation neuve de l'état visible (le client, lui, est incrémental).
+    const local = this.collab.getDocument();
+    const visible = new Materializer({ chunks: this.sim.chunkCache }).materialize(this.collab.engine.visible);
+    if (!jsonEqual(local, visible)) this.mismatch = `${context} : ${firstDifference(canonicalJson(local), canonicalJson(visible))}`;
   }
 
   private scheduleFlush(): void {
@@ -442,6 +444,8 @@ class Simulation {
   readonly random: () => number;
   readonly server: SimServer;
   readonly clients: SimClient[] = [];
+  /** Segments de tracé décodés pour le vérificateur (adressés par leur contenu : même id, mêmes points). */
+  readonly chunkCache = new Map<string, readonly unknown[]>();
   private readonly options: Required<SimulationOptions>;
   faults = true;
   disconnects = 0;

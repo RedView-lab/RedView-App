@@ -22,16 +22,26 @@
  * mémoire par salle ≤ 2 × le document, aucune erreur serveur, aucun écart de
  * validation fantôme, aucun `motion` jeté au débit. Sortie non nulle sinon.
  *
- *   npx tsx script-test-bench/collab-load/run.ts [--rooms=50 --clients=5 --rate=20 --seconds=30 --route=1500 --motion=30 --motionShare=0.2]
+ * Les clients tournent dans `--workers` processus (clients.ts, salles
+ * réparties) et compressent leurs messages comme un navigateur
+ * (`--clientDeflate=chrome`, voir plus bas).
+ *
+ * `--storm` : après la charge, le serveur redémarre comme à un déploiement
+ * (arrêt propre en 1012, nouveau serveur sur le même stockage) et tous les
+ * clients reviennent en même temps, avec l'attente aléatoire du vrai client :
+ * temps de retour (fermeture → `welcome`), taille des `welcome`, retard
+ * maximal de la boucle d'événements et pics de mémoire du nouveau serveur.
+ * Cible : tous revenus, aucune erreur. La mémoire par salle n'est alors pas
+ * jugée (salles rechargées de leur état durable, sans journal de rattrapage).
+ *
+ *   npx tsx script-test-bench/collab-load/run.ts [--rooms=50 --clients=5 --rate=20 --seconds=30 --route=1500 --motion=30 --motionShare=0.2 --workers=4 --clientDeflate=chrome|small|off]
  */
 import { fork, type ChildProcess } from 'node:child_process';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { WebSocket } from 'ws';
-
-import { itineraryObjectId } from '../../src/features/collab/model/paths.ts';
-import { PROTOCOL_VERSION, socketProtocols, type ServerMessage } from '../../src/features/collab/protocol.ts';
+import type { ClientsConfig, ClientsResults, StormStatus } from './clients.ts';
 import { sampleDocument } from '../../src/features/collab/sim/fixtures.ts';
 
 const arg = (name: string, fallback: number) =>
@@ -44,6 +54,26 @@ const ROUTE = arg('route', 1_500);
 const MOTION_HZ = arg('motion', 30);
 /** Part des clients suivis (ou qui présentent) : par défaut un par salle de cinq. */
 const MOTION_SHARE = arg('motionShare', 0.2);
+/**
+ * Processus de clients (salles réparties entre eux) : le générateur de charge
+ * ne doit pas être le goulot. Un quart des cœurs logiques par défaut (le
+ * serveur, son pool zlib et la machine gardent le reste), 1 à 8.
+ */
+const WORKERS = Math.max(1, Math.min(ROOMS, arg('workers', Math.min(8, Math.max(1, Math.floor(os.availableParallelism() / 4))))));
+/**
+ * Compression des messages des clients. `chrome` (défaut) : comme un
+ * navigateur — Chromium compresse chaque message quand `permessage-deflate`
+ * est négocié, sans seuil (`WebSocketDeflatePredictorImpl::Predict` répond
+ * toujours DEFLATE), donc le serveur décompresse chaque lot et chaque
+ * `motion`. `small` : seuil de 1 Ko du client `ws` (ancien comportement du
+ * banc, qui ne mesurait pas cette décompression). `off` : pas d'extension.
+ */
+const CLIENT_DEFLATE = process.argv.find((value) => value.startsWith('--clientDeflate='))?.slice('--clientDeflate='.length) ?? 'chrome';
+const CLIENT_DEFLATE_OPTION: ClientsConfig['deflate'] = CLIENT_DEFLATE === 'off' ? false : CLIENT_DEFLATE === 'small' ? true : { threshold: 0 };
+
+const STORM = process.argv.includes('--storm');
+/** Tempête : délai laissé à tous les clients pour revenir. */
+const STORM_TIMEOUT_MS = 120_000;
 
 const TARGETS = { broadcastP95Ms: 50, journalP95Ms: 600, memoryPerDocument: 2 };
 
@@ -51,11 +81,22 @@ type Metrics = Record<string, number>;
 
 function percentile(values: readonly number[], q: number): number {
   if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
+  const sorted = Float64Array.from(values).sort();
   return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
 }
 
 const round = (value: number, digits = 1) => Math.round(value * 10 ** digits) / 10 ** digits;
+
+function waitFor<T>(process: ChildProcess, reply: string): Promise<T> {
+  return new Promise((resolve) => {
+    const listener = (message: { type: string } & T) => {
+      if (message.type !== reply) return;
+      process.off('message', listener);
+      resolve(message);
+    };
+    process.on('message', listener);
+  });
+}
 
 // ── Serveur ──────────────────────────────────────────────────────────────────
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -65,147 +106,119 @@ const child: ChildProcess = fork(path.join(here, 'server.ts'), [], {
 });
 
 function request<T>(type: string, reply: string): Promise<T> {
-  return new Promise((resolve) => {
-    const listener = (message: { type: string } & T) => {
-      if (message.type !== reply) return;
-      child.off('message', listener);
-      resolve(message);
-    };
-    child.on('message', listener);
-    if (type) child.send({ type });
-  });
+  const answer = waitFor<T>(child, reply);
+  if (type) child.send({ type });
+  return answer;
 }
 
 const { port } = await request<{ port: number }>('', 'ready');
 const measure = () => request<{ metrics: Metrics; errors: string[]; gc: boolean }>('measure', 'metrics');
 const baseline = await measure();
 
-// ── Clients légers ───────────────────────────────────────────────────────────
-const document = sampleDocument(ROUTE);
-const documentBytes = Buffer.byteLength(JSON.stringify(document), 'utf8');
-const sentAt = new Map<string, number>();
-const broadcast: number[] = [];
-const acks: number[] = [];
-/** Relais `motion` : envoi → réception (même processus : horloge commune). */
-const motionRelay: number[] = [];
-let motionSent = 0;
-let rejected = 0;
-let received = 0;
-
-class LoadClient {
-  readonly clientId: string;
-  private readonly projectId: string;
-  private readonly seed: boolean;
-  private socket: WebSocket | null = null;
-  private clientSeq = 0;
-  private timer: ReturnType<typeof setInterval> | null = null;
-  private motionTimer: ReturnType<typeof setInterval> | null = null;
-  /** Ce client est suivi (ou présente) : caméra + pointeur à `MOTION_HZ`. */
-  private readonly sendsMotion: boolean;
-
-  constructor(room: number, index: number) {
-    this.projectId = `load-${room}`;
-    this.clientId = `load-${room}-${index}`;
-    this.seed = index === 0;
-    this.sendsMotion = MOTION_HZ > 0 && index < Math.round(CLIENTS * MOTION_SHARE);
-  }
-
-  open(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const socket = new WebSocket(`ws://127.0.0.1:${port}/multiplayer?project=${this.projectId}`, socketProtocols(`dev:${this.clientId}`));
-      this.socket = socket;
-      socket.on('open', () => socket.send(JSON.stringify({
-        type: 'hello',
-        v: PROTOCOL_VERSION,
-        clientId: this.clientId,
-        epoch: null,
-        lastSeq: null,
-        ...(this.seed ? { seed: document } : {}),
-      })));
-      socket.on('message', (data) => {
-        const now = performance.now();
-        const message = JSON.parse(String(data)) as ServerMessage;
-        received += 1;
-        if (message.type === 'welcome') resolve();
-        else if (message.type === 'batch') {
-          const at = sentAt.get(`${message.batch.clientId}#${message.batch.clientSeq}`);
-          if (at !== undefined) (message.batch.clientId === this.clientId ? acks : broadcast).push(now - at);
-        } else if (message.type === 'motion') motionRelay.push(now - message.t);
-        else if (message.type === 'reject') rejected += 1;
-      });
-      socket.on('error', reject);
-    });
-  }
-
-  start(): void {
-    const ops = ['name', 'color', 'priorities.elevation'];
-    const id = itineraryObjectId(this.clientId.endsWith('-0') ? 'it-1' : 'it-2');
-    // Phase aléatoire : les clients n'envoient pas tous au même instant.
-    setTimeout(() => {
-      this.timer = setInterval(() => {
-        this.clientSeq += 1;
-        const key = ops[this.clientSeq % ops.length];
-        // Valeurs qu'un client honnête écrit (le serveur refuse une couleur qui n'en est pas une).
-        const value = key === 'priorities.elevation'
-          ? this.clientSeq % 100
-          : key === 'color' ? `#${(this.clientSeq * 2654435761 % 0xffffff).toString(16).padStart(6, '0')}` : `${this.clientId}-${this.clientSeq}`;
-        sentAt.set(`${this.clientId}#${this.clientSeq}`, performance.now());
-        this.socket!.send(JSON.stringify({ type: 'batch', clientSeq: this.clientSeq, ops: [{ t: 's', id, k: key, v: value }], blobs: {} }));
-      }, 1000 / RATE);
-    }, Math.random() * (1000 / RATE));
-    if (!this.sendsMotion) return;
-    setTimeout(() => {
-      let step = 0;
-      this.motionTimer = setInterval(() => {
-        step += 1;
-        const x = (step % 600) / 600;
-        motionSent += 1;
-        this.socket!.send(JSON.stringify({
-          type: 'motion',
-          t: Math.round(performance.now() * 10) / 10,
-          cam: [6.9 + 0.05 * x, 45.95 + 0.02 * x, 13, 360 * x - 180, 55, 36.87],
-          vp: [1600, 900, 64, 360, 300, 420, 0, 0, 0, 0],
-          ptr: [6.91 + 0.01 * x, 45.96],
-        }));
-      }, 1000 / MOTION_HZ);
-    }, Math.random() * (1000 / MOTION_HZ));
-  }
-
-  stop(): void {
-    if (this.timer) clearInterval(this.timer);
-    if (this.motionTimer) clearInterval(this.motionTimer);
-  }
-
-  close(): void {
-    this.socket?.close(1000, 'done');
-  }
+// ── Clients légers (processus séparés) ───────────────────────────────────────
+const documentBytes = Buffer.byteLength(JSON.stringify(sampleDocument(ROUTE)), 'utf8');
+const workers = Array.from({ length: WORKERS }, () => fork(path.join(here, 'clients.ts'), [], {
+  execArgv: ['--import', 'tsx'],
+  stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
+}));
+/** Envoie `type` à tous les processus de clients et attend `reply` de chacun. */
+async function all<T>(type: string, reply: string, payload: (index: number) => object = () => ({})): Promise<T[]> {
+  const answers = workers.map((worker) => waitFor<T>(worker, reply));
+  workers.forEach((worker, index) => worker.send({ type, ...payload(index) }));
+  return Promise.all(answers);
 }
-
-const clients: LoadClient[] = [];
-for (let room = 0; room < ROOMS; room += 1) {
-  for (let index = 0; index < CLIENTS; index += 1) {
-    const client = new LoadClient(room, index);
-    clients.push(client);
-    // Le premier client crée la salle (document de départ) avant les autres.
-    if (index === 0) await client.open();
-  }
-}
-await Promise.all(clients.map((client, index) => (index % CLIENTS === 0 ? Promise.resolve() : client.open())));
+const roomsPerWorker = Math.ceil(ROOMS / WORKERS);
+await all('config', 'seeded', (index): { config: ClientsConfig } => ({
+  config: {
+    port,
+    from: Math.min(ROOMS, index * roomsPerWorker),
+    to: Math.min(ROOMS, (index + 1) * roomsPerWorker),
+    clients: CLIENTS,
+    rate: RATE,
+    route: ROUTE,
+    motionHz: MOTION_HZ,
+    motionShare: MOTION_SHARE,
+    deflate: CLIENT_DEFLATE_OPTION,
+  },
+}));
+await all('open', 'opened');
 const loaded = await measure();
 const motionSenders = ROOMS * (MOTION_HZ > 0 ? Math.round(CLIENTS * MOTION_SHARE) : 0);
-console.error(`${ROOMS} salles × ${CLIENTS} clients connectés ; document ${(documentBytes / 1024).toFixed(0)} Ko ; charge ${ROOMS * CLIENTS * RATE} lots/s + ${motionSenders * MOTION_HZ} motion/s (relayés ×${CLIENTS - 1}) pendant ${SECONDS} s…`);
+console.error(`${ROOMS} salles × ${CLIENTS} clients connectés (${WORKERS} processus de clients, compression ${CLIENT_DEFLATE}) ; document ${(documentBytes / 1024).toFixed(0)} Ko ; charge ${ROOMS * CLIENTS * RATE} lots/s + ${motionSenders * MOTION_HZ} motion/s (relayés ×${CLIENTS - 1}) pendant ${SECONDS} s…`);
 
 const started = performance.now();
-for (const client of clients) client.start();
+for (const worker of workers) worker.send({ type: 'start' });
 await new Promise((resolve) => setTimeout(resolve, SECONDS * 1000));
-for (const client of clients) client.stop();
+// Arrêt, puis fin de la diffusion (3 s) dans chaque processus de clients.
+const stopped = all<{ results: ClientsResults }>('stop', 'results');
 const elapsed = (performance.now() - started) / 1000;
-// Fin : journal et diffusion terminés.
-await new Promise((resolve) => setTimeout(resolve, 3_000));
+const parts = (await stopped).map((answer) => answer.results);
+const broadcast = parts.flatMap((part) => part.broadcast);
+const acks = parts.flatMap((part) => part.acks);
+/** Relais `motion` : envoi → réception (même processus : horloge commune). */
+const motionRelay = parts.flatMap((part) => part.motionRelay);
+const sum = (key: 'batchesSent' | 'motionSent' | 'received' | 'rejected') => parts.reduce((total, part) => total + part[key], 0);
+const batchesSent = sum('batchesSent');
+const motionSent = sum('motionSent');
+const received = sum('received');
+const rejected = sum('rejected');
+// Journal terminé.
 const after = await measure();
+
+// ── Tempête de reconnexions (redémarrage du serveur) ─────────────────────────
+let storm: null | {
+  total: number;
+  rejoined: number;
+  durationMs: number;
+  stopMs: number;
+  rejoinMs: { p50: number; p95: number; max: number };
+  welcomeKb: { mean: number; max: number };
+  welcomeCompressed: number;
+  attempts: number;
+  eventLoopDelayMaxMs: number;
+  eventLoopDelayP99Ms: number;
+  peakHeapMb: number;
+  peakRssMb: number;
+  errors: string[];
+} = null;
+if (STORM) {
+  await all('storm-arm', 'armed');
+  const stormStarted = performance.now();
+  const { stoppedMs } = await request<{ stoppedMs: number }>('restart', 'restarted');
+  let statuses: StormStatus[] = [];
+  for (;;) {
+    statuses = (await all<{ storm: StormStatus }>('storm-status', 'storm')).map((answer) => answer.storm);
+    const done = statuses.every((status) => status.rejoined >= status.total);
+    if (done || performance.now() - stormStarted > STORM_TIMEOUT_MS) break;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  const durationMs = performance.now() - stormStarted;
+  const restarted = await measure();
+  const rejoinMs = statuses.flatMap((status) => status.rejoinMs);
+  const welcomeBytes = statuses.flatMap((status) => status.welcomeBytes);
+  storm = {
+    total: statuses.reduce((total, status) => total + status.total, 0),
+    rejoined: statuses.reduce((total, status) => total + status.rejoined, 0),
+    durationMs: round(durationMs, 0),
+    stopMs: round(stoppedMs, 0),
+    rejoinMs: { p50: round(percentile(rejoinMs, 0.5), 0), p95: round(percentile(rejoinMs, 0.95), 0), max: round(rejoinMs.reduce((max, value) => Math.max(max, value), 0), 0) },
+    welcomeKb: {
+      mean: round(welcomeBytes.reduce((total, value) => total + value, 0) / Math.max(1, welcomeBytes.length) / 1024),
+      max: round(welcomeBytes.reduce((max, value) => Math.max(max, value), 0) / 1024),
+    },
+    welcomeCompressed: statuses.reduce((total, status) => total + status.welcomeCompressed, 0),
+    attempts: statuses.reduce((total, status) => total + status.attempts, 0),
+    eventLoopDelayMaxMs: restarted.metrics.event_loop_delay_max_ms,
+    eventLoopDelayP99Ms: restarted.metrics.event_loop_delay_p99_ms,
+    peakHeapMb: round(restarted.metrics.peak_heap_mb),
+    peakRssMb: round(restarted.metrics.peak_rss_mb),
+    errors: restarted.errors,
+  };
+}
 // Clients partis, salles encore chargées (déchargement après 60 s d'inactivité) : mémoire des salles seules.
-for (const client of clients) client.close();
-await new Promise((resolve) => setTimeout(resolve, 2_000));
+await all('close', 'closed');
+for (const worker of workers) worker.kill();
+await new Promise((resolve) => setTimeout(resolve, 1_500));
 const roomsOnly = await measure();
 child.send({ type: 'stop' });
 
@@ -213,10 +226,10 @@ child.send({ type: 'stop' });
 const memoryPerRoom = (roomsOnly.metrics.heap_used_bytes - baseline.metrics.heap_used_bytes) / ROOMS;
 const memoryPerClient = (after.metrics.heap_used_bytes - roomsOnly.metrics.heap_used_bytes) / (ROOMS * CLIENTS);
 const report = {
-  config: { rooms: ROOMS, clients: CLIENTS, rate: RATE, seconds: SECONDS, documentBytes, motionHz: MOTION_HZ, motionSenders },
+  config: { rooms: ROOMS, clients: CLIENTS, rate: RATE, seconds: SECONDS, documentBytes, motionHz: MOTION_HZ, motionSenders, clientDeflate: CLIENT_DEFLATE },
   throughput: {
-    batchesSent: sentAt.size,
-    batchesPerSecond: round(sentAt.size / elapsed, 0),
+    batchesSent,
+    batchesPerSecond: round(batchesSent / elapsed, 0),
     messagesReceived: received,
     rejected,
   },
@@ -236,6 +249,9 @@ const report = {
     checkpointP95Ms: after.metrics.checkpoint_p95_ms,
     eventLoopDelayP99Ms: after.metrics.event_loop_delay_p99_ms,
     eventLoopDelayMaxMs: after.metrics.event_loop_delay_max_ms,
+    /** Temps CPU du serveur pendant la charge (fil principal + pool zlib), en % d'un cœur — robuste là où la latence dépend de la machine. */
+    cpuPercent: round((100 * (after.metrics.cpu_user_ms + after.metrics.cpu_system_ms - loaded.metrics.cpu_user_ms - loaded.metrics.cpu_system_ms)) / (elapsed * 1000 + 3_000)),
+    cpuSystemPercent: round((100 * (after.metrics.cpu_system_ms - loaded.metrics.cpu_system_ms)) / (elapsed * 1000 + 3_000)),
     journalErrors: after.metrics.journalErrors,
     checkpointErrors: after.metrics.checkpointErrors,
     shadowChecks: after.metrics.shadowChecks,
@@ -245,6 +261,7 @@ const report = {
   memory: {
     gc: after.gc,
     heapBaselineMb: round(baseline.metrics.heap_used_bytes / 1e6),
+    rssBaselineMb: round(baseline.metrics.rss_bytes / 1e6),
     heapLoadedMb: round(loaded.metrics.heap_used_bytes / 1e6),
     heapAfterLoadMb: round(after.metrics.heap_used_bytes / 1e6),
     heapRoomsOnlyMb: round(roomsOnly.metrics.heap_used_bytes / 1e6),
@@ -253,6 +270,7 @@ const report = {
     perRoomVsDocument: round(memoryPerRoom / documentBytes, 2),
     perConnectionKb: round(memoryPerClient / 1024, 0),
   },
+  ...(storm ? { storm } : {}),
 };
 console.log(JSON.stringify(report, null, 2));
 
@@ -267,8 +285,12 @@ if (MOTION_HZ > 0) {
   check(report.motion.droppedRate === 0, `aucun motion jeté au débit (${report.motion.droppedRate})`);
 }
 check((report.server.journalP95Ms ?? Infinity) < TARGETS.journalP95Ms, `journal durable p95 ${report.server.journalP95Ms} ms (< ${TARGETS.journalP95Ms})`);
-check(report.memory.perRoomVsDocument <= TARGETS.memoryPerDocument, `mémoire par salle ${report.memory.perRoomKb} Ko = ${report.memory.perRoomVsDocument} × le document (≤ ${TARGETS.memoryPerDocument})`);
+if (!storm) check(report.memory.perRoomVsDocument <= TARGETS.memoryPerDocument, `mémoire par salle ${report.memory.perRoomKb} Ko = ${report.memory.perRoomVsDocument} × le document (≤ ${TARGETS.memoryPerDocument})`);
 check(report.throughput.rejected === 0, `aucun lot refusé (${report.throughput.rejected})`);
 check(report.server.journalErrors === 0 && report.server.checkpointErrors === 0 && report.server.errors.length === 0, 'aucune erreur serveur');
 check(report.server.shadowChecks > 0 && report.server.shadowMismatches === 0, `validation fantôme : ${report.server.shadowChecks} contrôles, ${report.server.shadowMismatches} écart`);
+if (storm) {
+  check(storm.rejoined === storm.total, `tempête : ${storm.rejoined}/${storm.total} clients revenus en ${(storm.durationMs / 1000).toFixed(1)} s (p95 ${storm.rejoinMs.p95} ms, boucle d'événements jusqu'à ${storm.eventLoopDelayMaxMs} ms, tas ${storm.peakHeapMb} Mo)`);
+  check(storm.errors.length === 0, 'tempête : aucune erreur serveur');
+}
 process.exitCode = failures.length > 0 ? 1 : 0;

@@ -9,6 +9,8 @@
  *  - nginx devant Appwrite : corps > `proxyMaxChars` → 502 Bad Gateway (accepte ~12 M, 502 à 16 M)
  *  - listDocuments : limite par défaut 25 si aucune Query.limit, filtre equal / orderDesc / select
  *  - erreurs réseau (TypeError 'Failed to fetch') et latences paramétrables
+ *  - Storage : bucket en mémoire (createFile, listFiles par nom, deleteFile) et
+ *    téléchargement par client.call (charges utiles des gros projets, payloadFiles.ts)
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -46,11 +48,14 @@ export const __mock = {
   missingCollections: new Set<string>(),
   /** Nombre d'appels account.updatePrefs. */
   prefsUpdates: 0,
+  /** Fichiers des buckets (id → contenu). */
+  files: new Map<string, { bucket: string; name: string; bytes: Uint8Array; permissions: string[] }>(),
   reset() {
     this.dataMaxChars = 16_000_000;
     this.proxyRejections = 0;
     this.missingCollections.clear();
     this.prefsUpdates = 0;
+    this.files.clear();
     this.user = { $id: 'user-A', email: 'a@example.test', name: 'A', prefs: {} };
     this.collections.clear();
     this.accountGetMode = 'ok';
@@ -103,6 +108,16 @@ export class Client {
   }
   setProject() {
     return this;
+  }
+  /** Seul usage : téléchargement d'un fichier de bucket (URL de Storage.getFileDownload). */
+  async call(method: string, url: URL, _headers?: unknown, _params?: unknown, responseType?: string) {
+    __mock.calls.push(`client.call:${method}`);
+    if (__mock.dbNetworkDown) throw new TypeError('Failed to fetch');
+    const match = /\/storage\/buckets\/[^/]+\/files\/([^/]+)\/download/.exec(url.pathname);
+    const file = match ? __mock.files.get(match[1]) : undefined;
+    if (!file) throw new AppwriteException('The requested file could not be found.', 404, 'storage_file_not_found');
+    const bytes = file.bytes.slice();
+    return responseType === 'arrayBuffer' ? bytes.buffer : bytes;
   }
 }
 
@@ -208,7 +223,32 @@ export class Databases {
   }
 }
 
-export class Storage {}
+export class Storage {
+  async createFile(bucket: string, fileId: string, file: File, permissions: string[] = []) {
+    netCheck(`createFile:${bucket}`);
+    if (__mock.files.has(fileId)) throw new AppwriteException('A storage file with the requested ID already exists.', 409, 'storage_file_already_exists');
+    __mock.files.set(fileId, { bucket, name: file.name, bytes: new Uint8Array(await file.arrayBuffer()), permissions });
+    return { $id: fileId, bucketId: bucket, name: file.name, sizeOriginal: file.size };
+  }
+  getFileDownload(bucket: string, fileId: string) {
+    return `https://appwrite.mock/v1/storage/buckets/${bucket}/files/${fileId}/download`;
+  }
+  async listFiles(bucket: string, queries: string[] = []) {
+    netCheck(`listFiles:${bucket}`);
+    let files = [...__mock.files.entries()].filter(([, file]) => file.bucket === bucket).map(([id, file]) => ({ $id: id, name: file.name }));
+    let limit = 25;
+    for (const q of parseQueries(queries)) {
+      if (q.method === 'equal') files = files.filter((file) => q.values!.includes((file as Doc)[q.attribute!]));
+      if (q.method === 'limit') limit = q.values![0];
+    }
+    return { total: files.length, files: files.slice(0, limit) };
+  }
+  async deleteFile(bucket: string, fileId: string) {
+    netCheck(`deleteFile:${bucket}`);
+    if (!__mock.files.delete(fileId)) throw new AppwriteException('The requested file could not be found.', 404, 'storage_file_not_found');
+    return {};
+  }
+}
 
 
 export const ID = { unique: () => `doc${String(++idCounter).padStart(4, '0')}` };

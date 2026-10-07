@@ -13,8 +13,13 @@
  *     convergence, journal relu = mémoire, aucune modification perdue ;
  *  4. débit de la salle (lots par seconde, un seul fil).
  *
- *   npx tsx script-test-bench/test-collab.ts [--seeds=10]   (40 pour une passe profonde, ≈ 5 min)
+ *   npx tsx script-test-bench/test-collab.ts [--seeds=10] [--workers=N]   (40 graines pour une passe profonde)
  */
+import { fork } from 'node:child_process';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { canonicalJson } from '../src/features/itineraryPanel/lib/project/canonicalJson.ts';
 import {
   composeProject,
@@ -33,7 +38,7 @@ import { RoomState } from '../src/features/collab/room/roomState.ts';
 import { routeChunkBounds, ROUTE_CHUNK_MAX_POINTS, ROUTE_CHUNK_MIN_POINTS } from '../src/features/collab/routeChunks.ts';
 import { routePoints, sampleDocument } from '../src/features/collab/sim/fixtures.ts';
 import { Scheduler } from '../src/features/collab/sim/scheduler.ts';
-import { runSimulation, type SimulationOptions } from '../src/features/collab/sim/simulator.ts';
+import { runSimulation, type SimulationOptions, type SimulationReport } from '../src/features/collab/sim/simulator.ts';
 
 let failures = 0;
 function assert(condition: boolean, message: string): void {
@@ -47,6 +52,52 @@ function assert(condition: boolean, message: string): void {
 }
 
 const seedCount = Number(process.argv.find((arg) => arg.startsWith('--seeds='))?.slice('--seeds='.length) ?? 10);
+/**
+ * Processus de calcul des graines (déterministes et indépendantes : même
+ * rapport quel que soit le processus). Défaut : cœurs disponibles - 1, 8 au
+ * plus ; `--workers=1` : tout dans ce processus, comme avant.
+ */
+const workerCount = Math.max(1, Number(process.argv.find((arg) => arg.startsWith('--workers='))?.slice('--workers='.length)
+  ?? Math.min(8, Math.max(1, os.availableParallelism() - 1))));
+
+type SeedResult = { report: SimulationReport; ms: number };
+
+/** Rapports des graines, dans l'ordre de `jobs`. */
+async function runSeeds(jobs: SimulationOptions[]): Promise<SeedResult[]> {
+  if (workerCount === 1) {
+    return jobs.map((options) => {
+      const started = performance.now();
+      return { report: runSimulation(options), ms: performance.now() - started };
+    });
+  }
+  const results: SeedResult[] = new Array(jobs.length);
+  let next = 0;
+  const workerPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'collab-sim-worker.ts');
+  await Promise.all(Array.from({ length: Math.min(workerCount, jobs.length) }, () => new Promise<void>((resolve, reject) => {
+    const worker = fork(workerPath, [], { execArgv: ['--import', 'tsx'], stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
+    const dispatch = () => {
+      if (next >= jobs.length) {
+        worker.disconnect();
+        resolve();
+        return;
+      }
+      const job = next;
+      next += 1;
+      worker.send({ type: 'run', job, options: jobs[job] });
+    };
+    worker.on('message', (message: { type: string; job: number; report: SimulationReport; ms: number }) => {
+      if (message.type !== 'report') return;
+      results[message.job] = { report: message.report, ms: message.ms };
+      dispatch();
+    });
+    worker.on('error', reject);
+    worker.on('exit', (code) => {
+      if (code !== 0 && next < jobs.length) reject(new Error(`processus de calcul arrêté (code ${code})`));
+    });
+    dispatch();
+  })));
+  return results;
+}
 const same = (a: unknown, b: unknown) => canonicalJson(a) === canonicalJson(b);
 
 function mapItinerary(doc: ProjectDocument, id: string, fn: (it: Itinerary) => Itinerary): ProjectDocument {
@@ -180,26 +231,33 @@ function session(document: ProjectDocument, names: string[]) {
       options: { clients: 4, durationMs: 30_000, reloadRate: 0.4, disconnectRate: 0.1, crashRate: 0.03, latencyMs: [20, 400] },
     },
   ];
-  for (const profile of profiles) {
+  const jobs = profiles.flatMap((profile, index) => Array.from({ length: seedCount }, (_, seed) => ({ profile: index, options: { seed: seed + 1, ...profile.options } })));
+  const wallStart = performance.now();
+  const results = await runSeeds(jobs.map((job) => job.options));
+  const wallSeconds = (performance.now() - wallStart) / 1000;
+  for (const [index, profile] of profiles.entries()) {
     const totals = { edits: 0, undos: 0, redos: 0, batches: 0, disconnects: 0, crashes: 0, reloads: 0, preWelcomeActions: 0, snapshots: 0, rejections: 0 };
     const failed: string[] = [];
-    const t0 = performance.now();
-    for (let seed = 1; seed <= seedCount; seed += 1) {
-      const report = runSimulation({ seed, ...profile.options });
+    let computeMs = 0;
+    for (const [jobIndex, job] of jobs.entries()) {
+      if (job.profile !== index) continue;
+      const { report, ms } = results[jobIndex];
+      computeMs += ms;
       for (const key of Object.keys(totals) as Array<keyof typeof totals>) totals[key] += report.stats[key];
-      if (report.failures.length > 0) failed.push(`graine ${seed} : ${report.failures.slice(0, 3).join(' | ')}`);
+      if (report.failures.length > 0) failed.push(`graine ${report.seed} : ${report.failures.slice(0, 3).join(' | ')}`);
     }
-    const seconds = (performance.now() - t0) / 1000;
+    const seconds = computeMs / 1000;
     for (const failure of failed.slice(0, 5)) console.error(`   ${failure}`);
     assert(
       failed.length === 0,
-      `${profile.label} — ${seedCount} graines en ${seconds.toFixed(1)} s : ${totals.edits} modifications, ${totals.undos} annuler, ${totals.redos} rétablir, `
+      `${profile.label} — ${seedCount} graines (calcul ${seconds.toFixed(1)} s) : ${totals.edits} modifications, ${totals.undos} annuler, ${totals.redos} rétablir, `
         + `${totals.batches} lots, ${totals.disconnects} coupures, ${totals.crashes} arrêts serveur, ${totals.reloads} rechargements `
         + `(${totals.preWelcomeActions} actions pendant la connexion), ${totals.snapshots} états complets ; `
         + 'convergence, journal = mémoire, aucune modification perdue',
     );
     assert(totals.rejections === 0, `${profile.label} : aucun lot refusé par le serveur (${totals.rejections})`);
   }
+  console.log(`   simulateur : ${jobs.length} graines en ${wallSeconds.toFixed(1)} s sur ${Math.min(workerCount, jobs.length)} processus`);
 }
 
 // ── 4. Débit de la salle ────────────────────────────────────────────────────

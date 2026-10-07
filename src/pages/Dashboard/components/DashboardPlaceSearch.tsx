@@ -185,12 +185,12 @@ export function DashboardPlaceSearch({
     onFinishHere: (feature) => {
       dispatchItineraryMapAction({ kind: 'poi-action', action: 'finish-here', feature });
     },
-    onToggleFavorite: (feature, nextEnabled) => {
+    onToggleFavorite: (feature, nextEnabled, durationMin) => {
       dispatchItineraryMapAction({
         kind: 'poi-action',
         action: 'toggle-favorite',
         feature,
-        extra: { nextEnabled },
+        extra: { nextEnabled, durationMin },
       });
     },
     onTogglePause: (feature, nextEnabled, durationMin) => {

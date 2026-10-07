@@ -13,14 +13,14 @@ export function TimelineScheduleHeader({
   selectedDayKey,
   onSelectDay,
 }: TimelineScheduleHeaderProps) {
-  const { locale } = useAppI18n();
+  const { locale, t } = useAppI18n();
   const headerGridStyle = {
     '--rvi-tl-header-day-count': String(Math.max(1, displayDays.length)),
   } as CSSProperties;
 
   return (
     <>
-      <div className="rvi-tl-schedule__days" role="tablist" aria-label="Jours de la timeline">
+      <div className="rvi-tl-schedule__days" role="tablist" aria-label={t("Jours de l'agenda")}>
         <div className="rvi-tl-schedule__days-grid" style={headerGridStyle}>
           {displayDays.map((day) => {
             const dayKey = toDayKey(day);
@@ -44,10 +44,10 @@ export function TimelineScheduleHeader({
 
       <div className="rvi-tl-schedule__legend" aria-hidden>
         <span className="rvi-tl-schedule__legend-grid">
-          <span className="rvi-tl-schedule__legend-name">Name</span>
-          <span className="rvi-tl-schedule__legend-pause" />
-          <span className="rvi-tl-schedule__legend-metric">From Start</span>
-          <span className="rvi-tl-schedule__legend-next">To next</span>
+          <span className="rvi-tl-schedule__legend-name">{t('Nom')}</span>
+          <span className="rvi-tl-schedule__legend-pause">{t('Pause')}</span>
+          <span className="rvi-tl-schedule__legend-metric">{t('Depuis le départ')}</span>
+          <span className="rvi-tl-schedule__legend-next">{t("Jusqu'au suivant")}</span>
         </span>
       </div>
     </>

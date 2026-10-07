@@ -3,9 +3,9 @@
  *
  * Charge les vrais modules classiques de public/sw-dem/ dans un contexte `vm`
  * (même code que le Service Worker) et mesure / vérifie :
- * 1. Encodage Terrain-RGB PNG — nouvelle version (scanlines directes) vs
- *    ancienne (RGBA intermédiaire + copie octet par octet). Les PNG doivent
- *    être IDENTIQUES octet pour octet.
+ * 1. Encodage Terrain-RGB PNG — nouvelle version (RVB, filtre Up, scanlines
+ *    directes) vs ancienne (RGBA non filtré, intermédiaire + copie). Les PNG
+ *    doivent se décoder en pixels IDENTIQUES ; le nouveau est plus petit.
  * 2. Décodage « seedé » par l'encodeur — la grille Float32 mise en cache doit
  *    être bit-identique à celle décodée depuis le PNG (inflate zlib).
  * 3. Rééchantillonnage WMS 362×256 → 256² — nouvelle vs ancienne version,
@@ -147,28 +147,50 @@ function legacyMnsWmsResample(raw: Float32Array, srcWidth: number, srcHeight: nu
 }
 
 // ── PNG decode (Node) for bit-exact verification ──────────────────────
+/** Elevations of a Terrain-RGB PNG (8-bit RGB or RGBA, any PNG filter), as a decoder reads them. */
 function decodePngTerrainRgb(bytes: Uint8Array): Float32Array {
   let pos = 8;
   const idat: Buffer[] = [];
   let width = 0;
+  let channels = 4;
   while (pos < bytes.length) {
     const len = new DataView(bytes.buffer, bytes.byteOffset + pos).getUint32(0);
     const type = String.fromCharCode(...bytes.subarray(pos + 4, pos + 8));
     const data = bytes.subarray(pos + 8, pos + 8 + len);
-    if (type === 'IHDR') width = new DataView(data.buffer, data.byteOffset).getUint32(0);
+    if (type === 'IHDR') {
+      width = new DataView(data.buffer, data.byteOffset).getUint32(0);
+      channels = data[9] === 6 ? 4 : 3;
+    }
     if (type === 'IDAT') idat.push(Buffer.from(data));
     pos += 12 + len;
   }
   const raw = zlib.inflateSync(Buffer.concat(idat));
-  const rowBytes = 1 + width * 4;
-  const out = new Float32Array(width * width);
+  const stride = width * channels;
+  const pixels = new Uint8Array(width * stride);
   for (let y = 0; y < width; y++) {
-    if (raw[y * rowBytes] !== 0) throw new Error('unexpected PNG filter');
-    for (let x = 0; x < width; x++) {
-      const o = y * rowBytes + 1 + x * 4;
-      const rgb = (raw[o] << 16) | (raw[o + 1] << 8) | raw[o + 2];
-      out[y * width + x] = -10000 + rgb * 0.1;
+    const filter = raw[y * (stride + 1)];
+    for (let i = 0; i < stride; i++) {
+      const a = i >= channels ? pixels[y * stride + i - channels] : 0;
+      const b = y > 0 ? pixels[(y - 1) * stride + i] : 0;
+      const c = i >= channels && y > 0 ? pixels[(y - 1) * stride + i - channels] : 0;
+      let predictor = 0;
+      if (filter === 1) predictor = a;
+      else if (filter === 2) predictor = b;
+      else if (filter === 3) predictor = (a + b) >> 1;
+      else if (filter === 4) {
+        const p = a + b - c;
+        const pa = Math.abs(p - a);
+        const pb = Math.abs(p - b);
+        const pc = Math.abs(p - c);
+        predictor = pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+      }
+      pixels[y * stride + i] = (raw[y * (stride + 1) + 1 + i] + predictor) & 0xff;
     }
+  }
+  const out = new Float32Array(width * width);
+  for (let i = 0; i < width * width; i++) {
+    const rgb = (pixels[i * channels] << 16) | (pixels[i * channels + 1] << 8) | pixels[i * channels + 2];
+    out[i] = -10000 + rgb * 0.1;
   }
   return out;
 }
@@ -210,8 +232,9 @@ export async function runDemSwBenchmark(options: { quick?: boolean } = {}): Prom
   const surface = syntheticSurface(SIZE);
   const newPng = new Uint8Array(await (await encode(surface)).arrayBuffer());
   const oldPng = new Uint8Array(await (await legacyEncodeTerrainRGBPng(surface, ctx)).arrayBuffer());
-  assert(Buffer.compare(Buffer.from(newPng), Buffer.from(oldPng)) === 0,
-    `encoder output byte-identical to legacy (${newPng.length} B)`);
+  assert(sameBits(decodePngTerrainRgb(newPng), decodePngTerrainRgb(oldPng)),
+    `encoder output decodes to the same pixels as legacy (${newPng.length} B vs ${oldPng.length} B, ${Math.round(100 * (1 - newPng.length / oldPng.length))} % smaller)`);
+  assert(newPng.length < oldPng.length, 'RGB + Up filter tile smaller than the legacy RGBA tile');
 
   const blob = await encode(surface);
   const seeded = decodedGet(blob);
@@ -258,7 +281,7 @@ export async function runDemSwBenchmark(options: { quick?: boolean } = {}): Prom
     () => legacyEncodeTerrainRGBPng(surface, ctx),
   );
   await suite.measureAsync(
-    { name: 'Encode Terrain-RGB PNG — scanlines directes + seed', category: 'dem-encode', iterations },
+    { name: 'Encode Terrain-RGB PNG — RVB filtre Up + seed', category: 'dem-encode', iterations },
     () => encode(surface),
   );
   suite.measureSync(

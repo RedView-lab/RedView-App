@@ -13,6 +13,7 @@ export type WorkerRequest =
       buffer: ArrayBuffer;
       crs?: DetectedCrs;
       wasmModule?: WebAssembly.Module;
+      redviewLazModule?: WebAssembly.Module | null;
     }
   /** Start ortho downloads early (from header bounds) while points decode elsewhere. */
   | { type: 'prefetch'; bounds: PointCloudBounds; crs: DetectedCrs }
@@ -64,6 +65,7 @@ workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
           },
           request.crs,
           request.wasmModule,
+          request.redviewLazModule,
         )
       : {
           positions: request.positions,

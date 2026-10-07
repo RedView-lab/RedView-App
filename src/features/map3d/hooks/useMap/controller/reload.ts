@@ -80,18 +80,33 @@ export function attachReload(ctx: Ctx): void {
     // until the user returns to an HD quality.
     if (getActiveDem3dQuality() === 'fast-30m') return;
 
+    // A switch arriving inside the debounce window, or while a heavy reload
+    // runs, is replayed afterwards with the profile active *then* — it used
+    // to be dropped, leaving the terrain on the previous MNT/MNS profile while
+    // the selector showed the new one (audit d-basemap-static).
     const now = Date.now();
-    if (now - lastProfileReloadAt < PROFILE_RELOAD_DEBOUNCE_MS) return;
+    const wait = PROFILE_RELOAD_DEBOUNCE_MS - (now - lastProfileReloadAt);
+    if (wait > 0 || st.reloadInProgress) {
+      if (!st.profileReloadTimer) {
+        st.profileReloadTimer = setVisibleTimeout(() => {
+          st.profileReloadTimer = null;
+          if (!isCancelled()) fns.reloadMapElevationForProfile();
+        }, Math.max(wait, st.reloadInProgress ? RELOAD_READINESS_POLL_MS : 0));
+      }
+      return;
+    }
     lastProfileReloadAt = now;
-
-    // Don't collide with a heavy manual reload already in flight.
-    if (st.reloadInProgress) return;
 
     const profile = fns.getActiveDemProfile();
     const tiles = buildDemTilesTemplate(st.demCacheBust, profile);
     const existingSource = map.getSource(unifiedDEMSource.id) as {
       setTiles?: (tiles: string[]) => unknown;
+      tiles?: string[];
     } | undefined;
+
+    // Replayed switch that ended on the profile already shown: nothing to reload.
+    if (existingSource?.tiles && existingSource.tiles.length === tiles.length
+      && existingSource.tiles.every((url, index) => url === tiles[index])) return;
 
     if (existingSource && typeof existingSource.setTiles === 'function') {
       existingSource.setTiles(tiles);

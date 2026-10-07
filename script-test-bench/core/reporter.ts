@@ -6,7 +6,9 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import type { BenchmarkSuite } from './harness.ts';
+import type { BenchEnvironment } from './environment.ts';
+import { describeEnvironment } from './environment.ts';
+import type { BenchmarkSuite, MetricStatistics } from './harness.ts';
 
 const COLORS = {
   reset: '\x1b[0m',
@@ -69,7 +71,9 @@ export function printSuiteResults(suite: BenchmarkSuite): void {
       `${statusBadge}`
     );
 
-    if (res.warningMessage) {
+    if (res.warningMessage && res.status === 'PASS') {
+      console.log(`    ${COLORS.gray}↳ [INFO] ${res.warningMessage}${COLORS.reset}`);
+    } else if (res.warningMessage) {
       console.log(`    ${COLORS.yellow}↳ [WARNING] ${res.warningMessage}${COLORS.reset}`);
     }
   }
@@ -100,10 +104,21 @@ function pad(str: string, length: number, rightAlign = false): string {
   return truncated.padEnd(length, ' ');
 }
 
+/** What a run saved: enough to compare a later run with it. */
+export interface SavedBenchReport {
+  timestamp: string;
+  /** `quick` or `full` (absent before 2026-10-07). */
+  mode?: 'quick' | 'full';
+  feature?: string | null;
+  environment?: BenchEnvironment;
+  suites: Array<{ title: string; results: MetricStatistics[] }>;
+}
+
 export function saveJsonReport(
   suites: BenchmarkSuite[],
   reportsDir: string,
   filenamePrefix = 'benchmark',
+  meta: { mode?: 'quick' | 'full'; feature?: string | null; environment?: BenchEnvironment } = {},
 ): string {
   if (!fs.existsSync(reportsDir)) {
     fs.mkdirSync(reportsDir, { recursive: true });
@@ -115,6 +130,7 @@ export function saveJsonReport(
 
   const payload = {
     timestamp: new Date().toISOString(),
+    ...meta,
     nodeVersion: process.version,
     platform: process.platform,
     arch: process.arch,
@@ -133,6 +149,7 @@ export function saveJsonReport(
 export function generateMarkdownReport(
   suites: BenchmarkSuite[],
   reportsDir: string,
+  environment?: BenchEnvironment,
 ): string {
   if (!fs.existsSync(reportsDir)) {
     fs.mkdirSync(reportsDir, { recursive: true });
@@ -143,7 +160,9 @@ export function generateMarkdownReport(
 
   let md = `# Rapport de Test-Bench RedView — Performance & Non-Régression\n\n`;
   md += `> **Date d'exécution** : ${now}  \n`;
-  md += `> **Environnement** : Node.js ${process.version} | ${process.platform} (${process.arch})\n\n`;
+  md += environment
+    ? `> **Environnement** : ${describeEnvironment(environment)}\n\n`
+    : `> **Environnement** : Node.js ${process.version} | ${process.platform} (${process.arch})\n\n`;
 
   // Summary KPI Cards
   let totalMetrics = 0;
@@ -164,7 +183,6 @@ export function generateMarkdownReport(
   md += `| Indicateur | Valeur |\n`;
   md += `| :--- | :--- |\n`;
   md += `| **Suites Fonctionnelles Exécutées** | **${suites.length}** |\n`;
-  md += `| **Météo, Pente, Alti, Neige, BRouter, FIT...** | Couverture 100% |\n`;
   md += `| **Total Opérations Évaluées** | **${totalMetrics}** |\n`;
   md += `| **Statut Conforme (PASS)** | **${passCount}** (${totalMetrics > 0 ? ((passCount / totalMetrics) * 100).toFixed(1) : 0}%) |\n`;
   md += `| **Avertissements (WARN - Jitter/Peak)** | **${warnCount}** |\n`;

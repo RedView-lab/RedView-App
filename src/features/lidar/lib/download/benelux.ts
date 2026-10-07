@@ -8,7 +8,7 @@ import { pointcloudProxyUrl } from '../pointcloudProxy';
 import { footprintBounds, saveTileQuietly } from './archiveCandidates';
 import {
   DownloadCancelledError,
-  isDownloadCancelledError,
+  isFinalDownloadError,
   NoCoverageError,
   throwIfCancelled,
 } from './errors';
@@ -64,7 +64,7 @@ export async function downloadNetherlandsTile(
       await saveTileQuietly(coord, buffer);
       return buffer;
     } catch (err: unknown) {
-      if (isDownloadCancelledError(err)) throw err;
+      if (isFinalDownloadError(err)) throw err;
       lastError = err instanceof Error ? err : new Error(String(err));
       console.warn(`[AHN Download] Failed for ${url}: ${lastError.message}`);
       if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS, signal);

@@ -5,6 +5,7 @@ import {
   DEFAULT_START_MINUTES,
   MIN_RENDER_DURATION_MIN,
   MINUTES_PER_DAY,
+  TIMELINE_VIEWPORT_TOP_INSET_PX,
   WEEKDAY_SHORT,
   WEEKDAY_SHORT_EN,
 } from '../constants';
@@ -135,6 +136,16 @@ export function formatHourLabel(hour: number): string {
       hour12: true,
     })
     .replace('\u202f', ' ');
+}
+
+/**
+ * Haut d'une minute sur le canevas de l'agenda. Une seule origine pour les
+ * heures, la grille, les cartes, la ligne « maintenant » et le glisser-déposer
+ * (qui l'inverse) : les cartes partaient 10 px au-dessus de leur heure, et
+ * une pause lâchée se posait 10 px plus bas.
+ */
+export function minuteToCanvasTopPx(minute: number, startMinutes: number, pixelsPerMinute: number): number {
+  return (minute - startMinutes) * pixelsPerMinute + TIMELINE_VIEWPORT_TOP_INSET_PX;
 }
 
 export function getMinuteOfDay(date: Date): number {

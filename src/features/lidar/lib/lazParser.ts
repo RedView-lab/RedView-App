@@ -1,6 +1,7 @@
 import type { Getter, Hierarchy } from 'copc';
 import type { CopcHierarchyInfo, PointCloudData, PointCloudBounds, PointCloudOrigin, DetectedCrs } from '../types';
 import { detectCrs } from './coordConvert';
+import { decodeCopcChunksWithRedviewLaz, initRedviewLaz } from './laz/redviewLaz';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let lazPerfPromise: Promise<any> | null = null;
@@ -273,6 +274,8 @@ export async function parseLazBuffer(
   onProgress?: (phase: string, percent: number) => void,
   hintCrs?: DetectedCrs,
   wasmModule?: WebAssembly.Module,
+  /** RedView LAZ decoder (lib/laz/) for COPC files; laz-perf without it or if it fails. */
+  redviewLazModule?: WebAssembly.Module | null,
 ): Promise<PointCloudData> {
   onProgress?.('Chargement du parser LAZ...', 0);
 
@@ -297,9 +300,19 @@ export async function parseLazBuffer(
         pointCount: node.pointCount,
         bytes: fileView.subarray(node.pointDataOffset, node.pointDataOffset + node.pointDataLength),
       }));
-      const decoded = decodeCopcChunks(lazPerf, copc.header, chunks, origin, (done, total) => {
+      const progress = (done: number, total: number) => {
         onProgress?.(`Lecture COPC ${done}/${total}...`, 10 + (done / total) * 50);
-      });
+      };
+      let decoded: DecodedCopcChunks | null = null;
+      if (redviewLazModule) {
+        try {
+          initRedviewLaz(redviewLazModule);
+          decoded = decodeCopcChunksWithRedviewLaz(copc.header, chunks, origin, progress);
+        } catch (error) {
+          console.warn('[LiDAR] LAZ decoder failed, decoding with laz-perf:', error);
+        }
+      }
+      decoded ??= decodeCopcChunks(lazPerf, copc.header, chunks, origin, progress);
       const crs = hintCrs ?? detectCrs(decoded.bounds.minY, decoded.bounds.maxY, decoded.bounds.minX, decoded.bounds.maxX);
       const embeddedRgb = decoded.colors !== null && hasUsableEmbeddedRgb(decoded.maxRgb);
       onProgress?.('Prêt', 100);

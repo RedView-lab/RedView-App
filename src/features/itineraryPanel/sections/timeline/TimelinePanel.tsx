@@ -1,5 +1,6 @@
 /**
- * Main "Feuille de route" / "Timeline" section — composes the sub-views.
+ * Main "Feuille de route" / "Agenda" section — composes the sub-views
+ * (the agenda is the view id `'timeline'`).
  *
  * This component is purely presentational; all state mutations go through the
  * callback props so the parent container can wire them to a backend,
@@ -11,7 +12,6 @@ import { useAppI18n } from '@/shared/i18n';
 import type { SportDiscipline } from '@/shared/lib/discipline';
 import type {
   PoiAutoSortPickRef,
-  PoiCategory,
   RhythmState,
   TimelineAddItemKind,
   TimelineAddItemOptions,
@@ -64,7 +64,6 @@ interface TimelinePanelProps {
   onMovePause?: (id: string, distanceKm: number) => void;
   onChangePauseDuration?: (id: string, durationMin: number) => void;
   onChangeIntervalPauseDuration?: (pauseIntervalId: string, durationMin: number) => void;
-  onChangeFavoritePoiPauseDuration?: (category: PoiCategory, durationMin: number) => void;
   onFavoriteItem?: (id: string, favorite: boolean) => void;
   onRemoveItem?: (id: string) => void;
   onSelectPlace?: (
@@ -100,7 +99,6 @@ export function TimelinePanel({
   onMovePause,
   onChangePauseDuration,
   onChangeIntervalPauseDuration,
-  onChangeFavoritePoiPauseDuration,
   onFavoriteItem,
   onRemoveItem,
   onSelectPlace,
@@ -343,7 +341,6 @@ export function TimelinePanel({
             onMovePause={onMovePause}
             onChangePauseDuration={onChangePauseDuration}
             onChangeIntervalPauseDuration={onChangeIntervalPauseDuration}
-            onChangeFavoritePoiPauseDuration={onChangeFavoritePoiPauseDuration}
             onRegisterPauseInsertionResolver={(resolver) => {
               pauseInsertionResolverRef.current = resolver;
             }}

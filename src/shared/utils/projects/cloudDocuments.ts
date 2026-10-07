@@ -3,18 +3,15 @@ import { logger } from '@/shared/lib/logger';
 import {
   decompressProjectBytes,
   decompressProjectPayload,
-  encodeGzipPayload,
-  gzipProjectJson,
 } from './compression';
 import { ProjectCloudError } from './errors';
 import {
-  gzipPayloadChars,
   isCloudPayloadTooLarge,
   isProjectTooLarge,
   MAX_CLOUD_PROJECT_FILE_BYTES,
-  MAX_CLOUD_PROJECT_PAYLOAD_CHARS,
   utf8ByteLength,
 } from './limits';
+import { encodeProjectPayloadOffThread } from './payloadEncodingClient';
 import {
   downloadProjectPayloadFile,
   isPayloadFilePointer,
@@ -154,20 +151,21 @@ type CloudPayload =
  * `ProjectCloudError('too-large')` au-delà de la limite du bucket au lieu
  * d'envoyer une requête vouée à l'échec.
  */
-export async function buildCloudPayload(json: string): Promise<CloudPayload> {
-  const sizeBytes = utf8ByteLength(json);
+export async function buildCloudPayload(json: string, sizeBytes: number = utf8ByteLength(json)): Promise<CloudPayload> {
   if (isProjectTooLarge(sizeBytes)) {
     throw new ProjectCloudError('too-large');
   }
-  const gzip = await gzipProjectJson(json);
-  if (!gzip) {
+  // Gzip + base64 in a worker (payloadEncodingClient.ts): ~1 s of main thread on a large project.
+  const encoded = await encodeProjectPayloadOffThread(json);
+  if (!encoded.compressed) {
     // Pas de CompressionStream : JSON brut dans le document s'il tient.
     if (isCloudPayloadTooLarge(json)) throw new ProjectCloudError('too-large');
     return { sizeBytes, data: json };
   }
-  if (gzipPayloadChars(gzip.byteLength) <= MAX_CLOUD_PROJECT_PAYLOAD_CHARS) {
-    return { sizeBytes, data: encodeGzipPayload(gzip) };
+  if (encoded.data !== null) {
+    return { sizeBytes, data: encoded.data };
   }
+  const gzip = encoded.gzip!;
   if (gzip.byteLength > MAX_CLOUD_PROJECT_FILE_BYTES) {
     logger.projects.warn('Cloud payload exceeds file limit', {
       sizeBytes,

@@ -179,7 +179,8 @@ async function main() {
     ]);
   }
 
-  // ── C1e : charge utile compressée > 12 M car. (limite nginx) → refus client explicite ──
+  // ── C1e : charge utile compressée > 12 M car. (limite nginx) → fichier du bucket `project-payloads` ──
+  // (payloadFiles.ts : nouveau fichier à chaque sauvegarde, document pointé dessus, anciens fichiers supprimés.)
   {
     fresh();
     const row = await m.createProject('C1e', named('C1e'));
@@ -189,15 +190,22 @@ async function main() {
     const blob = Array.from({ length: 15 }, (_, i) => chunk.slice(i * 997) + chunk.slice(0, i * 997)).join('');
     const huge = { ...named('C1e énorme'), auditBlob: blob };
     const rawBytes = Buffer.byteLength(JSON.stringify(huge));
-    __mock.calls = [];
     let threw: { kind?: string; message?: string } | null = null;
     try { await m.saveProject(row.id, huge); } catch (e) { threw = e as { kind?: string; message?: string }; }
-    const updates = __mock.calls.filter((c: string) => c === 'updateDocument:projects').length;
-    const idbKept = __idb.projects.get(row.id)?.data?.name === 'C1e énorme';
-    const bad = threw?.kind !== 'too-large' || updates > 0 || __mock.proxyRejections > 0 || !idbKept;
-    report('C1e', 'payload compressé > 12 M car. envoyé quand même (502 nginx, réessais sans fin)', bad, [
-      `brut=${(rawBytes / 1e6).toFixed(2)} Mo (< 16 MiB) ; saveProject : ${threw ? `lève ${threw.kind} « ${threw.message?.slice(0, 60)}… »` : 'RÉSOUT'}`,
-      `updateDocument tentés : ${updates} ; 502 du proxy : ${__mock.proxyRejections} ; copie IndexedDB conservée : ${idbKept ? 'oui' : 'NON'}`,
+    const firstData = __mock.col('projects').get(row.id)?.data;
+    const pointer = typeof firstData === 'string' && firstData.startsWith('file:');
+    // Deuxième sauvegarde : nouveau fichier, puis l'ancien supprimé (aucun orphelin).
+    try { await m.saveProject(row.id, { ...huge, name: 'C1e énorme v2' }); } catch (e) { threw ??= e as { kind?: string; message?: string }; }
+    const files = [...__mock.files.values()].filter((file: { name: string }) => file.name === `${row.id}.json.gz`).length;
+    // Autre appareil (pas de copie IndexedDB) : le projet revient entier du bucket.
+    __idb.clear();
+    const reopened = await m.getProject(row.id);
+    const whole = reopened?.data?.name === 'C1e énorme v2' && reopened?.data?.auditBlob === blob;
+    const bad = threw !== null || !pointer || __mock.proxyRejections > 0 || files !== 1 || !whole;
+    report('C1e', 'gros projet (gzip > 12 M car.) : refusé, perdu, orphelin ou relu incomplet au lieu du bucket', bad, [
+      `brut=${(rawBytes / 1e6).toFixed(2)} Mo ; saveProject : ${threw ? `lève ${threw.kind} « ${threw.message?.slice(0, 60)}… »` : 'résout'} ; document : ${pointer ? 'pointeur file:' : `data inline (${String(firstData).slice(0, 20)}…)`}`,
+      `502 du proxy : ${__mock.proxyRejections} ; fichiers du projet après 2 sauvegardes : ${files} (1 attendu)`,
+      `relu sur un autre appareil : ${whole ? 'entier (nom v2, 15 Mo identiques)' : `INCOMPLET (nom=${reopened?.data?.name})`}`,
     ]);
   }
 

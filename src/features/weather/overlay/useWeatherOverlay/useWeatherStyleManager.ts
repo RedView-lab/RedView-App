@@ -17,11 +17,13 @@ import {
 import { releaseOverlayBlobUrl } from '../vpsTileRenderer';
 import { translateAppText } from '@/shared/i18n';
 import {
+  coordsEqual,
   imageCoords,
   logWeatherOverlay,
   paletteOpacity,
   readStyleHealth,
   styleSyncProgress,
+  type ImageCoords,
   type RenderedLayerEntry,
 } from './helpers';
 import { createOverlayStatus } from '@/features/map3d';
@@ -536,7 +538,10 @@ export function useWeatherStyleManager({
           url,
           coordinates: coords,
         } as never);
-      } else {
+      } else if (existingSource.url !== url || !coordsEqual(existingSource.coordinates as ImageCoords, coords)) {
+        // `styledata` rejoue ensureLayer à chaque salve : sans changement, rien à
+        // recharger (mapbox-gl 3 ne court-circuite pas updateImage : nouveau
+        // téléchargement, décodage et texture GPU par couche à chaque salve).
         existingSource.updateImage({ url, coordinates: coords });
       }
 

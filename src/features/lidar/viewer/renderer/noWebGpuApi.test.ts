@@ -7,7 +7,9 @@ import { describe, expect, it } from 'vitest';
  * included. Node has none of those globals either.
  */
 describe('renderer modules without the WebGPU API', () => {
-  it('evaluate on import', async () => {
+  // Transforms the whole renderer on first import: 1.3 s alone, over the 5 s
+  // default while the gate runs tsc, ESLint, knip and madge beside it.
+  it('evaluate on import', { timeout: 30_000 }, async () => {
     expect((globalThis as { GPUShaderStage?: unknown }).GPUShaderStage).toBeUndefined();
     await expect(import('../renderer')).resolves.toHaveProperty('WebGpuLidarRenderer');
     await expect(import('./createRenderer')).resolves.toHaveProperty('createLidarRenderer');

@@ -12,6 +12,7 @@
 import type { PoiCategory, PoiFeature } from '../types';
 import { RV_FONT_SANS } from '@/shared/lib/typography';
 
+import { buildPoiHitMask, type PoiHitMask } from './poi-hit-mask';
 import { getPoiIconUrl, hasDedicatedFavoritePoiIcon } from './poi-icons';
 
 const FAVORITE_BADGE_ICON_URL = '/svgv2/icone/star-01.svg';
@@ -33,6 +34,8 @@ export interface PoiSprite {
   id: string;
   image: ImageData;
   pixelRatio: number;
+  /** What is really drawn, for pixel-exact hit testing (`poi-hit-mask.ts`). */
+  hitMask: PoiHitMask;
 }
 
 export function getPoiSpriteSpec(feature: PoiFeature): PoiSpriteSpec {
@@ -50,30 +53,14 @@ export function getPoiSpriteId(spec: PoiSpriteSpec): string {
 
 // Pause pill under a round icon: its bottom sits 8px below the 38px box.
 const PAUSE_PILL_ROUND_OVERHANG_PX = 8;
-// Typical pause pill half width ("60 min" label on the 10px font).
-const PAUSE_PILL_MAX_HALF_WIDTH_PX = 30;
 
-/**
- * Visible footprint of a sprite around its geographic anchor at icon-size 1
- * (shadows excluded), mirroring the composition in `rasterizePoiSprite`.
- */
-export function getPoiSpriteFootprint(spec: PoiSpriteSpec): { above: number; below: number; side: number } {
-  if (spec.favorite) {
-    return {
-      above: PIN_BODY_HEIGHT_PX,
-      below: PIN_IMAGE_HEIGHT_PX - PIN_BODY_HEIGHT_PX,
-      side: PIN_WIDTH_PX / 2,
-    };
-  }
-  const half = ROUND_SIZE_PX / 2;
-  if (spec.pauseMin > 0) {
-    return {
-      above: half,
-      below: half + PAUSE_PILL_ROUND_OVERHANG_PX,
-      side: Math.max(half, PAUSE_PILL_MAX_HALF_WIDTH_PX),
-    };
-  }
-  return { above: half, below: half, side: half };
+/** Pause pill label: « 15 min », then « 6 h » / « 1 h 30 » from an hour on. */
+export function formatPoiPauseLabel(pauseMin: number): string {
+  const minutes = Math.max(1, Math.round(pauseMin));
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest > 0 ? `${hours} h ${String(rest).padStart(2, '0')}` : `${hours} h`;
 }
 
 /** Sprite rasterisation density: sharp up to the max icon-size on HiDPI. */
@@ -194,7 +181,7 @@ export async function rasterizePoiSprite(spec: PoiSpriteSpec, pixelRatio: number
 
   // Pause pill.
   const measureCtx = document.createElement('canvas').getContext('2d');
-  const pauseLabel = `${spec.pauseMin} min`;
+  const pauseLabel = formatPoiPauseLabel(spec.pauseMin);
   let pill: { x: number; y: number; w: number; h: number; symbolW: number } | null = null;
   if (spec.pauseMin > 0 && measureCtx) {
     measureCtx.font = `700 8px ${PAUSE_FONT_FAMILY}`;
@@ -274,9 +261,11 @@ export async function rasterizePoiSprite(spec: PoiSpriteSpec, pixelRatio: number
     ctx.fillText(pauseLabel, pill.x + 7 + pill.symbolW + 3, midY);
   }
 
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
   return {
     id: getPoiSpriteId(spec),
-    image: ctx.getImageData(0, 0, canvas.width, canvas.height),
+    image,
     pixelRatio: pr,
+    hitMask: buildPoiHitMask(image.data, canvas.width, canvas.height, pr, halfW, halfH),
   };
 }

@@ -16,7 +16,7 @@ import {
   DEFAULT_TIMELINE_TABLE_SETTINGS,
   type TimelineTableSettingsState,
 } from '../sections/timeline/TimelineTableSettings';
-import type { ItineraryPanelProps, PanelMode, PoiCategory } from '../types';
+import type { ItineraryPanelProps, PanelMode } from '../types';
 import '../styles/index.css';
 
 function resolveVisiblePanelMode(mode: PanelMode): Exclude<PanelMode, 'nutrition'> {
@@ -183,13 +183,6 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
           )),
         );
       },
-      onChangeFavoritePoiPauseDuration: (category: PoiCategory, durationMin: number) => {
-        if (!active || !onChangeRhythm) return;
-        onChangeRhythm('poiPauseDurations', {
-          ...active.rhythm.poiPauseDurations,
-          [category]: Math.max(0, Math.round(durationMin)),
-        });
-      },
       onFavoriteItem: onFavoriteTimelineItem,
       onRemoveItem: onRemoveTimelineItem,
       onSelectPlace: onSelectTimelinePlace,
@@ -234,7 +227,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
           className="rvi-panel rvi-panel--timeline-fullscreen"
           role="dialog"
           aria-modal
-          aria-label={t('Timeline en plein écran')}
+          aria-label={t('Feuille de route en plein écran')}
         >
           <MapCanvasGlassBackdrop
             blur={48}

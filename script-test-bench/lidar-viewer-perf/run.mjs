@@ -21,9 +21,16 @@
  *   LIDAR_TILE=<fichier .copc.laz> [LIDAR_TILE_XY=965,6500] npm run bench:lidar-fps -- \
  *     [--label avant] [--params "budget=1500000&mscale=1"] [--size 1600x900] [--route 20000] [--dist <build>]
  *   npm run bench:lidar-fps -- --compare avant,apres
+ * `--quota <Mo>` force le quota de stockage de l'origine (CDP) : disque plein,
+ * cache LOD impossible à écrire.
+ * `--cold` efface d'abord les caches dérivés des tuiles (LOD, terrain) pour
+ * mesurer une première ouverture (décodage, colorisation, relief, octree) ;
+ * la chronologie des étapes de chargement est imprimée et gardée dans le rapport.
  * `LIDAR_TILES_DIR=<dossier>` (à la place de LIDAR_TILE) ouvre une scène de
  * plusieurs tuiles IGN voisines (jusqu'à 9, centre LIDAR_TILE_XY ou la première) ;
- * le profil Edge et le port HTTP sont alors fixes pour garder tuiles et caches LOD.
+ * profil Edge et port HTTP sont fixes (une origine OPFS par profil) : tuiles et
+ * caches LOD sont gardés d'un run à l'autre (un port aléatoire créait une
+ * origine, donc ~0,5 Go d'OPFS, à chaque run).
  *
  * Les rapports JSON vont dans script-test-bench/reports/lidar-viewer-perf/<label>.json.
  */
@@ -46,7 +53,7 @@ const TYPES = {
 };
 
 function parseArgs(argv) {
-  const args = { label: null, params: '', size: '1600x900', compare: null, route: 0, dist: join(ROOT, 'dist') };
+  const args = { label: null, params: '', size: '1600x900', compare: null, route: 0, dist: join(ROOT, 'dist'), cold: false, quotaMb: null };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--label') args.label = argv[++i];
@@ -55,6 +62,8 @@ function parseArgs(argv) {
     else if (arg === '--compare') args.compare = (argv[++i] ?? '').split(',');
     else if (arg === '--route') args.route = Number(argv[++i] ?? 0);
     else if (arg === '--dist') args.dist = resolve(argv[++i]);
+    else if (arg === '--cold') args.cold = true;
+    else if (arg === '--quota') args.quotaMb = Number(argv[++i]);
   }
   return args;
 }
@@ -104,6 +113,43 @@ function syntheticRouteState(count, xKm, yKm) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const pct = (ratio) => `${(ratio * 100).toFixed(1)} %`;
+
+/**
+ * Load steps of the viewer as the user sees them (the detailed status kept in
+ * the title of `#status`), recorded in the page from its first script on,
+ * plus the moment the loading overlay hides.
+ */
+const LOAD_LOG_SCRIPT = `(() => {
+  const log = window.__rvLoadLog = [];
+  let last = '';
+  const observer = new MutationObserver(() => {
+    const status = document.getElementById('status');
+    const msg = status ? (status.getAttribute('title') || status.textContent || '') : '';
+    if (msg && msg !== last) { last = msg; log.push([Math.round(performance.now()), msg]); }
+    if (document.getElementById('overlay')?.classList.contains('hidden')) {
+      window.__rvReadyAt = Math.round(performance.now());
+      observer.disconnect();
+    }
+  });
+  observer.observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+})();`;
+
+/** Steps with their start and duration; consecutive messages of one step (progress counters) merged. */
+function loadPhases(log, readyAt) {
+  const phases = [];
+  for (const [t, msg] of log) {
+    const step = msg.replace(/\d+\/\d+(\.\.\.)?/g, '#').replace(/\d+([.,]\d+)?\s*%/g, '#');
+    const lastPhase = phases[phases.length - 1];
+    if (lastPhase && lastPhase.step === step) continue;
+    phases.push({ startMs: t, step });
+  }
+  return phases.map((phase, i) => ({ ...phase, durationMs: (phases[i + 1]?.startMs ?? readyAt ?? phase.startMs) - phase.startMs }));
+}
+
+function printLoad(load) {
+  console.log(`\nChargement${load.cold ? ' à froid' : ''} : viewer prêt à ${(load.readyMs / 1000).toFixed(2)} s`);
+  console.table(load.phases.map((p) => ({ 'début s': (p.startMs / 1000).toFixed(2), 'durée s': (p.durationMs / 1000).toFixed(2), 'étape': p.step.slice(0, 90) })));
+}
 
 function printReport(report) {
   console.log(`\n${report.meta.label ?? '(sans label)'} · ${report.meta.size}` +
@@ -208,8 +254,9 @@ async function run(args) {
       res.end();
     }
   });
-  // A multi-tile scene keeps its origin (OPFS is per origin) to reuse the tiles and their caches.
-  await new Promise((r) => server.listen(multi ? Number(process.env.PERF_HTTP_PORT ?? 18972) : 0, '127.0.0.1', r));
+  // Fixed origin (OPFS is per origin): tiles and their caches are reused, and
+  // runs never pile up one origin each in the profile.
+  await new Promise((r) => server.listen(Number(process.env.PERF_HTTP_PORT ?? (multi ? 18972 : 18973)), '127.0.0.1', r));
   const origin = `http://127.0.0.1:${server.address().port}`;
 
   const [width, height] = args.size.split('x').map(Number);
@@ -258,6 +305,11 @@ async function run(args) {
     };
     await send('Runtime.enable');
     await send('Page.enable');
+    if (args.quotaMb) {
+      // A small disk: the tiles may fit, their LOD caches not (the viewer then streams from memory).
+      await send('Storage.overrideQuotaForOrigin', { origin, quotaSize: args.quotaMb * 1024 * 1024 });
+      console.log(`Quota de stockage forcé : ${args.quotaMb} Mo`);
+    }
 
     // 1. Tiles go into OPFS as the app's downloader stores them (kept across runs).
     await send('Page.navigate', { url: `${origin}/favicon.ico` });
@@ -277,6 +329,19 @@ async function run(args) {
       })()`);
       console.log(`Tuile ${tile.name} : ${stored}`);
     }
+    if (args.cold) {
+      // Every derived cache of this profile: the viewer keys them on the tile
+      // name of its own convention (y + 1 km for the IGN names written here).
+      const removed = await evaluate(`(async () => {
+        const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle('lidar-hd', { create: true });
+        const names = [];
+        for await (const name of dir.keys()) names.push(name);
+        const removed = names.filter((name) => /\\.(lod_v|terrain_hd_v|colorized_v)\\d/.test(name));
+        for (const name of removed) await dir.removeEntry(name, { recursive: true });
+        return removed;
+      })()`);
+      console.log(`À froid : ${removed.length} cache(s) dérivé(s) effacé(s)${removed.length ? ` (${removed.join(', ')})` : ''}`);
+    }
     const routeState = args.route > 0 ? JSON.stringify(syntheticRouteState(args.route, xKm, yKm)) : null;
     await evaluate(routeState
       ? `localStorage.setItem('redview:lidar:route_overlay', ${JSON.stringify(routeState)}), 'ok'`
@@ -285,6 +350,7 @@ async function run(args) {
 
     // 2. Viewer with the scripted path.
     const extra = args.params ? `&${args.params}` : '';
+    await send('Page.addScriptToEvaluateOnNewDocument', { source: LOAD_LOG_SCRIPT });
     const t0 = Date.now();
     const tileParams = tiles.slice(1).map((t) => `&tile=${t.x},${t.y}`).join('');
     await send('Page.navigate', { url: `${origin}/viewer.html?x=${xKm}&y=${yKm}&crs=LAMB93&alt=IGN69${tileParams}&bench=orbit${extra}` });
@@ -294,6 +360,9 @@ async function run(args) {
       ready = await evaluate(`document.getElementById('overlay')?.classList.contains('hidden') === true`).catch(() => false);
     }
     if (!ready) throw new Error(`viewer pas prêt après ${((Date.now() - t0) / 1000).toFixed(0)} s`);
+    const loadLog = await evaluate('({ log: window.__rvLoadLog ?? [], readyAt: window.__rvReadyAt ?? null })');
+    const load = { cold: args.cold, readyMs: loadLog.readyAt, phases: loadPhases(loadLog.log, loadLog.readyAt) };
+    printLoad(load);
     console.log(`Viewer prêt en ${((Date.now() - t0) / 1000).toFixed(1)} s, parcours en cours…`);
     let result = null;
     for (let i = 0; i < 240 && !result; i++) {
@@ -313,6 +382,7 @@ async function run(args) {
         params: args.params,
         adapter: logs.find((line) => line.includes('[LiDAR GPU] Tier')) ?? null,
       },
+      load,
       result,
     };
     printReport(report);

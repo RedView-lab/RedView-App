@@ -9,13 +9,21 @@
  *   B. FIT sans puissance          → chemin "KNN seul"
  *   C. FIT sans puissance, 1 seul  → chemin "bins empiriques" (KNN inutilisable)
  * et on compare le temps prédit au temps réellement simulé.
+ *
+ * Depuis le moteur vélo v2 (2026-10-01), ces chemins n'existent plus : la
+ * calibration ajuste le modèle physique sur les temps de déplacement des FIT
+ * et ne lit pas leur flux de puissance (`has_power` ne vaut vrai qu'avec une
+ * FTP saisie). A et B donnent donc le même temps par construction, et C (FIT
+ * trop court pour calibrer) retombe sur le profil par défaut. Le balayage du
+ * volume d'historique et la dérive cumulée restent informatifs ; la justesse
+ * du moteur se mesure avec `npm run bench:pace`.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 
 const PKG = path.resolve('src/features/fitPredictor/engine/pkg');
 const glue = await import(new URL('file://' + path.join(PKG, 'redviewalgo.js').replace(/\\/g, '/')));
-glue.initSync(fs.readFileSync(path.join(PKG, 'redviewalgo_bg.wasm')));
+glue.initSync({ module: fs.readFileSync(path.join(PKG, 'redviewalgo_bg.wasm')) });
 
 // ─────────────────────────── FIT encoder ───────────────────────────
 const B = { SINT8: 0x01, UINT8: 0x02, SINT32: 0x05, UINT16: 0x04, UINT32: 0x06 };

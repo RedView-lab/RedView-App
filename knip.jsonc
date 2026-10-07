@@ -25,6 +25,7 @@
   "ignore": [
     // Générés (wasm-bindgen, prebuild-api-i18n).
     "src/features/fitPredictor/engine/pkg/**",
+    "src/features/lidar/lib/laz/pkg/**",
     "api/_lib/translations-data.ts",
     "script-test-bench/pace-accuracy/.*-pkg/**"
   ],

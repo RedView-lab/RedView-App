@@ -17,14 +17,24 @@
  *  - abri au vent (Plattner) : positif dans un creux, négatif sur une crête ;
  *  - exactitude : l'arrêt anticipé et l'élagage des cellules de départ donnent
  *    exactement le résultat de Flow-Py exhaustif ;
- *  - temps : un point sous une face de 3 km × 3 km (300 × 300 cellules) < 10 s.
+ *  - temps : un point sous une face de 3 km × 3 km (300 × 300 cellules),
+ *    calcul complet (sans atteindre le plafond de Flow-Py) en < 10 s sur le
+ *    pool de workers du viewer (cœurs − 1, au plus 8 ; ici des worker_threads
+ *    avec le même code) ; le temps sur un seul thread est donné pour info.
  *
  * Usage : npm run bench:avalanche [-- --quick]
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
-import { computeAvalancheTerrain, type AvalancheGridInput } from '../src/features/lidar/viewer/tools/terrain/avalanche/exposure.ts';
+import { availableParallelism } from 'node:os';
+import { Worker } from 'node:worker_threads';
+import {
+  computeAvalancheTerrain,
+  computeAvalancheTerrainWith,
+  type AvalancheGridInput,
+} from '../src/features/lidar/viewer/tools/terrain/avalanche/exposure.ts';
+import { runFlowPyInPool, type FlowPyPort, type FlowPyWorkerResponse } from '../src/features/lidar/viewer/tools/terrain/avalanche/flowPyPool.ts';
 import { prepareFlowPyTerrain, runFlowPyToTarget } from '../src/features/lidar/viewer/tools/terrain/avalanche/flowPy.ts';
 import { AVALANCHE_SCENARIOS } from '../src/features/lidar/viewer/tools/terrain/avalanche/params.ts';
 import { computeReleaseAreas, WindShelterField } from '../src/features/lidar/viewer/tools/terrain/avalanche/releaseArea.ts';
@@ -200,7 +210,32 @@ function exactnessChecks(): void {
   }
 }
 
-function timingChecks(suite: BenchmarkSuite, quick: boolean): void {
+/** The viewer's Flow-Py pool on worker_threads (same handler as the Web Workers). */
+function nodeFlowPyPool(size: number): { ports: FlowPyPort[]; close: () => Promise<void> } {
+  // tsx's loader is per thread: the .mjs entry registers it in the worker.
+  const workers = Array.from({ length: size }, () => new Worker(new URL('./avalanche/flowPyNodeWorker.mjs', import.meta.url)));
+  const ports = workers.map((worker): FlowPyPort => ({
+    postMessage: (message) => worker.postMessage(message),
+    listen(onMessage, onError) {
+      const message = (data: FlowPyWorkerResponse) => onMessage(data);
+      const error = (err: Error) => onError(err.message);
+      worker.on('message', message);
+      worker.on('error', error);
+      return () => {
+        worker.off('message', message);
+        worker.off('error', error);
+      };
+    },
+  }));
+  return {
+    ports,
+    close: async () => {
+      await Promise.all(workers.map((worker) => worker.terminate()));
+    },
+  };
+}
+
+async function timingChecks(suite: BenchmarkSuite, quick: boolean): Promise<void> {
   console.log('\n■ Temps de calcul (3 km × 3 km à 10 m)');
   // A 1 200 m high, 3 km wide mountain side with gullies, then a valley floor.
   const grid = makeGrid(300, 300, (x, y) => {
@@ -211,11 +246,30 @@ function timingChecks(suite: BenchmarkSuite, quick: boolean): void {
   const t0 = performance.now();
   const r = computeAvalancheTerrain({ grid, canopyPct: null, projX: 1900, projY: 1500 }, wind)!;
   const ms = performance.now() - t0;
-  check('timing', 'un point sous la face < 15 s (abri au vent compris)', ms < 15_000 && !r.incomplete, `${round(ms, 0)} ms, ATES ${r.ates.atesClass}, ${r.scenarios.infrequent.releaseCellCount} cellules de départ l'atteignent`);
-  suite.measureSync(
-    { name: 'Exposition avalanche (point, 300 × 300)', category: 'avalanche', iterations: quick ? 1 : 3, warmupIterations: 0 },
-    () => computeAvalancheTerrain({ grid, canopyPct: null, projX: 1900, projY: 1500 }, wind),
-  );
+  console.log(`  info un seul thread (sans workers) — ${round(ms, 0)} ms${r.incomplete ? ' (calcul partiel : plafond atteint)' : ''}, ${r.scenarios.infrequent.releaseCellCount} cellules de départ l'atteignent`);
+
+  // The viewer's path: Flow-Py over the worker pool (cores − 1, at most 8).
+  const threads = Math.min(8, availableParallelism() - 1);
+  const pool = nodeFlowPyPool(threads);
+  const input = { grid, canopyPct: null, projX: 1900, projY: 1500 };
+  const pooled = () => computeAvalancheTerrainWith(input, wind, (g, terrain, target, run) => runFlowPyInPool(pool.ports, g, terrain, target, run));
+  try {
+    const t1 = performance.now();
+    const p = (await pooled())!;
+    const pooledMs = performance.now() - t1;
+    check(
+      'timing',
+      `un point sous la face, calcul complet < 10 s (${threads} workers, abri au vent compris)`,
+      pooledMs < 10_000 && !p.incomplete,
+      `${round(pooledMs, 0)} ms${p.incomplete ? ' (INCOMPLET)' : ''}, ATES ${p.ates.atesClass}, ${p.scenarios.infrequent.releaseCellCount} cellules de départ l'atteignent`,
+    );
+    await suite.measureAsync(
+      { name: `Exposition avalanche (point, 300 × 300, ${threads} workers)`, category: 'avalanche', iterations: quick ? 1 : 3, warmupIterations: 0 },
+      pooled,
+    );
+  } finally {
+    await pool.close();
+  }
 }
 
 export async function runAvalancheBenchmark(options: { quick?: boolean } = {}): Promise<BenchmarkSuite> {
@@ -224,7 +278,7 @@ export async function runAvalancheBenchmark(options: { quick?: boolean } = {}): 
   counterSlopeChecks();
   windShelterChecks();
   exactnessChecks();
-  timingChecks(suite, options.quick ?? false);
+  await timingChecks(suite, options.quick ?? false);
   const failed = checks.filter((c) => !c.ok);
   console.log(`\n${checks.length - failed.length}/${checks.length} critères OK`);
   for (const f of failed) suite.addRegressionRisk(`[${f.fixture}] ${f.name} — ${f.detail}`);

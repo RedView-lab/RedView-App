@@ -13,7 +13,7 @@ import type {
   TimedTimelineItem,
   TimelineEvent,
 } from '../types';
-import { addDays, getMinuteOfDay, resolveVisualDurationMin, toDayKey } from './format';
+import { addDays, getMinuteOfDay, minuteToCanvasTopPx, resolveVisualDurationMin, toDayKey } from './format';
 
 export function buildVisibleMinuteBounds(
   filteredPrimaryItems: TimedTimelineItem[],
@@ -80,8 +80,9 @@ export function buildScheduledEvents(
       ...pause,
       heightPx: resolveAttachedPauseHeightPx(pause.durationMin, pixelsPerMinute),
     }));
-    const toNextSeconds = resolveSecondsToNextCheckpoint(filteredPrimaryItems, index);
-    const spanToNextSeconds = toNextSeconds;
+    const toNextSeconds = resolveRideSecondsToNextCheckpoint(filteredPrimaryItems, index);
+    // Une nuit à l'hôtel s'étend jusqu'à l'arrivée suivante, pauses comprises.
+    const spanToNextSeconds = resolveSecondsToNextCheckpoint(filteredPrimaryItems, index);
     const displayDurationMin = resolveEventDisplayDurationMin(
       entry.item,
       rawAttachedPauses,
@@ -99,7 +100,7 @@ export function buildScheduledEvents(
       pixelsPerMinute,
     );
     const firstSegment = spanSegments[0] ?? null;
-    const scheduledTopPx = firstSegment?.topPx ?? (entry.minuteOfDay - startMinutes) * pixelsPerMinute;
+    const scheduledTopPx = firstSegment?.topPx ?? minuteToCanvasTopPx(entry.minuteOfDay, startMinutes, pixelsPerMinute);
     const pauseColumnHeightPx = attachedPauses.reduce(
       (totalHeight, pause, pauseIndex) => (
         totalHeight + pause.heightPx + (pauseIndex > 0 ? TIMELINE_BLOCK_GAP_PX : 0)
@@ -129,21 +130,46 @@ export function buildScheduledEvents(
   }).filter((event) => !event.startsBeforeWindow || event.spanSegments.length > 0);
 }
 
+/**
+ * Point suivant dans le temps : le premier qui arrive après celui-ci, quel
+ * que soit son rang dans la feuille de route (des points importés ou ajoutés
+ * après coup n'y sont pas forcément rangés par distance).
+ */
+export function findNextTimedEntry<T extends Pick<TimedTimelineItem, 'elapsedSeconds'>>(
+  entries: readonly T[],
+  afterElapsedSeconds: number,
+): T | null {
+  let next: T | null = null;
+  for (const candidate of entries) {
+    if (candidate.elapsedSeconds <= afterElapsedSeconds) continue;
+    if (!next || candidate.elapsedSeconds < next.elapsedSeconds) next = candidate;
+  }
+  return next;
+}
+
 function resolveSecondsToNextCheckpoint(
   entries: TimedTimelineItem[],
   currentIndex: number,
 ): number | null {
   const currentEntry = entries[currentIndex];
   if (!currentEntry) return null;
+  const next = findNextTimedEntry(entries, currentEntry.elapsedSeconds);
+  return next ? Math.max(0, next.elapsedSeconds - currentEntry.elapsedSeconds) : null;
+}
 
-  for (let index = currentIndex + 1; index < entries.length; index += 1) {
-    const candidate = entries[index];
-    if (!candidate) continue;
-    if (candidate.elapsedSeconds <= currentEntry.elapsedSeconds) continue;
-    return Math.max(0, candidate.elapsedSeconds - currentEntry.elapsedSeconds);
-  }
-
-  return null;
+/**
+ * « Jusqu'au suivant » : temps de roulage jusqu'au prochain point affiché,
+ * sans la pause prise ici — même définition que la colonne « Temps jusqu'au
+ * prochain élément » de la feuille de route.
+ */
+function resolveRideSecondsToNextCheckpoint(
+  entries: TimedTimelineItem[],
+  currentIndex: number,
+): number | null {
+  const currentEntry = entries[currentIndex];
+  if (!currentEntry) return null;
+  const next = findNextTimedEntry(entries, currentEntry.elapsedSeconds);
+  return next ? Math.max(0, next.rideElapsedSeconds - currentEntry.rideElapsedSeconds) : null;
 }
 
 function resolveAttachedPauseDurationMin(pauses: Array<Pick<AttachedPause, 'durationMin'>>): number {
@@ -226,7 +252,7 @@ export function buildDaySegments(
   if (durationMin <= 0) return [];
 
   if (!hasRealDate || !startDate) {
-    const topPx = (minuteOfDay - startMinutes) * pixelsPerMinute;
+    const topPx = minuteToCanvasTopPx(minuteOfDay, startMinutes, pixelsPerMinute);
     return [{
       dayKey,
       scheduledTopPx: topPx,
@@ -255,7 +281,7 @@ export function buildDaySegments(
       MINUTES_PER_DAY - segmentStartMinute,
     );
     const pauseMin = Math.max(0, (Math.min(pauseEndMs, dayEnd.getTime()) - overlapStartMs) / 60_000);
-    const topPx = (segmentStartMinute - startMinutes) * pixelsPerMinute;
+    const topPx = minuteToCanvasTopPx(segmentStartMinute, startMinutes, pixelsPerMinute);
     segments.push({
       dayKey: currentDayKey,
       scheduledTopPx: topPx,

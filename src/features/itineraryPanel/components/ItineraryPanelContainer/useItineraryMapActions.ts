@@ -327,6 +327,7 @@ export function useItineraryMapActions({
           poiHandlers.handlePoiFavoriteToggle(
             detail.feature,
             detail.extra?.nextEnabled ?? false,
+            detail.extra?.durationMin,
           );
           break;
         case 'toggle-pause':

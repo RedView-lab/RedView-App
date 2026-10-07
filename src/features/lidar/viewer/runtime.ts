@@ -5,6 +5,7 @@ import type { CopcDecodeRequest, CopcDecodeResponse } from '../workers/copcDecod
 import type { LodCacheRequest, LodCacheResponse } from '../workers/lodCacheWorker';
 import type { LodTileInput } from './lod/lodTile';
 import { createInMemoryLodTile, openLodTile, type OpenedLodTile } from '../lib/lodCache';
+import { getRedviewLazModule } from '../lib/laz/redviewLazModule';
 import { getLazWasmModule } from '../lib/lazWasm';
 import {
   canFastDecodeCopc,
@@ -180,6 +181,7 @@ async function decodeCopcInParallel(
   buffer: ArrayBuffer,
   layout: Awaited<ReturnType<typeof readCopcLayout>>,
   wasmModule: WebAssembly.Module,
+  redviewLazModule: WebAssembly.Module | null,
   workerCount: number,
   setStatus: ViewerStatusReporter,
 ): Promise<{
@@ -238,6 +240,7 @@ async function decodeCopcInParallel(
           pointCounts: group.map((node) => node.pointCount),
           byteLengths: group.map((node) => node.pointDataLength),
           wasmModule,
+          redviewLazModule,
         };
         worker.postMessage(request, [bytes.buffer]);
       });
@@ -287,7 +290,10 @@ export async function processPointCloudInWorker(
   crs?: DetectedCrs,
   options?: { decodeWorkers?: number },
 ): Promise<PointCloudData> {
-  const wasmModule = await getLazWasmModule().catch(() => null);
+  const [wasmModule, redviewLazModule] = await Promise.all([
+    getLazWasmModule().catch(() => null),
+    getRedviewLazModule(),
+  ]);
   const workerCount = options?.decodeWorkers ?? getDefaultDecodeWorkerCount();
   const layout = wasmModule && workerCount > 1
     ? await readCopcLayout(buffer).catch(() => null)
@@ -296,7 +302,7 @@ export async function processPointCloudInWorker(
   if (!wasmModule || !layout || layout.nodes.length < 2 || !canFastDecodeCopc(layout.header)) {
     return runProcessWorker(
       createProcessWorker(),
-      { type: 'process', buffer, crs, wasmModule: wasmModule || undefined },
+      { type: 'process', buffer, crs, wasmModule: wasmModule || undefined, redviewLazModule },
       [buffer],
       setStatus,
     );
@@ -316,7 +322,7 @@ export async function processPointCloudInWorker(
       } satisfies WorkerRequest);
     }
 
-    const decoded = await decodeCopcInParallel(buffer, layout, wasmModule, workerCount, setStatus);
+    const decoded = await decodeCopcInParallel(buffer, layout, wasmModule, redviewLazModule, workerCount, setStatus);
     const resolvedCrs = crs ?? detectCrs(decoded.bounds.minY, decoded.bounds.maxY, decoded.bounds.minX, decoded.bounds.maxX);
     const copc = toCopcHierarchyInfo(layout.nodes, layout.cube, layout.spacing);
     if (decoded.colors) {
@@ -379,7 +385,11 @@ export function showFatalError(
 
   // Construit via le DOM (textContent) : les messages peuvent contenir des
   // fragments non maîtrisés (erreurs worker, paramètres d'URL…).
+  // Above #overlay::before like the loader card: that positioned layer's
+  // backdrop blur otherwise covers an unpositioned card (the error was unreadable).
   const card = createStyledElement('div', `
+      position: relative;
+      z-index: 1;
       max-width: 560px;
       padding: 28px 32px;
       background: rgba(20, 24, 40, 0.85);

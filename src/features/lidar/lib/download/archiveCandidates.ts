@@ -1,9 +1,9 @@
 import type { TileCoord, DownloadProgress } from '../../types';
 import { translateAppText } from '@/shared/i18n/config';
 import type { TileBounds } from '../tileCandidates';
-import { saveTile, hasValidLasSignature, hasValidZipSignature } from '../storage';
+import { saveTile, hasValidLasSignature, hasValidZipSignature, StorageFullError } from '../storage';
 import { extractLasFromZip } from '../swiss/zipReader';
-import { isDownloadCancelledError, throwIfCancelled } from './errors';
+import { isFinalDownloadError, throwIfCancelled } from './errors';
 import { fetchWithRetry, INTER_REQUEST_DELAY_MS, sleep, waitForRateLimit } from './transport';
 
 /** Emprise du fichier visé par une dalle-fichier (Japon, NZ), au format des index. */
@@ -12,11 +12,15 @@ export function footprintBounds(coord: TileCoord): TileBounds | undefined {
   return fp ? { minE: fp.minX, minN: fp.minY, maxE: fp.maxX, maxN: fp.maxY } : undefined;
 }
 
-/** Met la dalle en cache local ; un échec d'écriture ne fait pas échouer le téléchargement. */
+/**
+ * Met la dalle en cache local ; un échec d'écriture ne fait pas échouer le
+ * téléchargement, sauf un stockage plein : le viewer n'ouvrirait pas la dalle.
+ */
 export async function saveTileQuietly(coord: TileCoord, buffer: ArrayBuffer): Promise<void> {
   try {
     await saveTile(coord, buffer);
   } catch (saveErr) {
+    if (saveErr instanceof StorageFullError) throw saveErr;
     console.warn(`[LiDAR storage] Failed to cache tile locally:`, saveErr);
   }
 }
@@ -91,7 +95,7 @@ export async function downloadFirstArchiveCandidate({
       await saveTileQuietly(coord, lasBuffer);
       return { buffer: lasBuffer };
     } catch (err: any) {
-      if (isDownloadCancelledError(err)) throw err;
+      if (isFinalDownloadError(err)) throw err;
       if (err.status !== 404) allNotFound = false;
       lastError = err;
       if (err.status === 404) {

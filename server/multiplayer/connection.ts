@@ -1,14 +1,22 @@
+import type { Duplex } from 'node:stream';
+import { promisify } from 'node:util';
+import { constants as zlibConstants, deflateRaw, deflateRawSync, inflateRaw } from 'node:zlib';
+
 import type { WebSocket } from 'ws';
 
+import { createByteLru } from '../byte-lru.mjs';
 import {
   PROTOCOL_VERSION,
   type ClientMessage,
   type ServerErrorCode,
   type ServerMessage,
+  type Snapshot,
 } from '../../src/features/collab/protocol.ts';
 import type { SendOptions } from '../../src/features/collab/room/room.ts';
+import { WIRE_COMPRESS_MIN_CHARS, WIRE_MAX_MESSAGE_BYTES } from '../../src/features/collab/wire.ts';
 import type { Authenticator, Identity } from './auth.ts';
 import type { HostedRoom, PeerHandle, RoomHost } from './roomHost.ts';
+import type { WriteCoalescer } from './writeCoalescer.ts';
 
 /**
  * Une connexion WebSocket déjà authentifiée à l'ouverture (server.ts : jeton,
@@ -31,6 +39,8 @@ export interface ConnectionOptions {
   acceptSeed: boolean;
   log: RoomHost['log'];
   timings?: Partial<ConnectionTimings>;
+  /** Socket TCP de la connexion et regroupement de ses écritures par tour de boucle (writeCoalescer.ts). */
+  writes?: { socket: Duplex; coalescer: WriteCoalescer };
 }
 
 export interface ConnectionTimings {
@@ -65,6 +75,9 @@ const BYTES_PER_SECOND = 16 * 1024 * 1024;
 const BYTES_BURST = 64 * 1024 * 1024;
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 
+const deflateRawAsync = promisify(deflateRaw);
+const inflateRawAsync = promisify(inflateRaw);
+
 /** Un message diffusé à toute la salle n'est sérialisé qu'une fois. */
 const wireCache = new WeakMap<ServerMessage, string>();
 
@@ -75,6 +88,90 @@ function toWire(message: ServerMessage): string {
     wireCache.set(message, wire);
   }
   return wire;
+}
+
+/**
+ * Et un gros message n'est compressé qu'une fois (wire.ts), hors du fil
+ * (pool de libuv). Niveau 1 : un état complet de 4,8 Mo → 0,88 Mo en 24 ms
+ * (niveau 6 : 0,75 Mo en 79 ms) — après un déploiement, tous les clients
+ * reviennent et chaque `welcome` est compressé.
+ */
+const compressedCache = new WeakMap<ServerMessage, Promise<Buffer>>();
+
+function toCompressedWire(message: ServerMessage, wire: string): Promise<Buffer> {
+  let compressed = compressedCache.get(message);
+  if (compressed === undefined) {
+    compressed = deflateRawAsync(wire, { level: 1 });
+    compressedCache.set(message, compressed);
+  }
+  return compressed;
+}
+
+/**
+ * État complet d'une salle à une séquence (`welcome.epoch` + `seq`) :
+ * sérialisé et compressé une seule fois pour tous ceux qui entrent à ce
+ * moment. Après un déploiement, tous les clients reviennent ensemble : avec
+ * un état par client, 250 `welcome` de 4,7 Mo attendaient leur compression
+ * dans le pool de libuv — 1,2 Go de chaînes vivantes, tas à 3,3 Go, pauses de
+ * ramasse-miettes de 1,8 s (`bench:collab-load --storm --route=60000`).
+ * Borné en octets, oublié 10 s après le dernier usage.
+ */
+interface SharedSnapshot {
+  /** Segment DEFLATE de l'état ; null : trop petit pour être compressé. */
+  segment: Promise<Buffer> | null;
+  /** Octets comptés : le segment une fois compressé, une estimation avant. */
+  bytes: number;
+}
+
+// Seul le segment compressé est gardé (≈ 1/5 du JSON, hors du tas) : le JSON
+// n'existe que le temps de sa compression. 128 Mo ≈ 140 états de 5 Mo.
+const snapshotSegments = createByteLru<SharedSnapshot>({
+  maxBytes: 128 * 1024 * 1024,
+  sizeOf: (entry) => entry.bytes,
+  ttlMs: 10_000,
+});
+
+/** Segment DEFLATE brut qui se termine sur une frontière d'octet sans bloc final : d'autres peuvent le suivre. */
+const SEGMENT = { level: 1, finishFlush: zlibConstants.Z_SYNC_FLUSH };
+
+function sharedSegment(epoch: string, snapshot: Snapshot, prefixChars: number): Promise<Buffer> | null {
+  const key = `${epoch}:${snapshot.seq}`;
+  const known = snapshotSegments.get(key);
+  if (known !== undefined) return known.segment;
+  const json = JSON.stringify(snapshot);
+  if (prefixChars + json.length < WIRE_COMPRESS_MIN_CHARS) {
+    snapshotSegments.set(key, { segment: null, bytes: 64 });
+    return null;
+  }
+  const entry: SharedSnapshot = { segment: deflateRawAsync(json, SEGMENT), bytes: Math.ceil(json.length / 4) };
+  // Trop gros pour le cache : compressé pour ce client seulement.
+  snapshotSegments.set(key, entry);
+  entry.segment!.then((buffer) => {
+    // Taille exacte une fois connue (l'entrée est recomptée).
+    if (snapshotSegments.get(key) !== entry) return;
+    entry.bytes = buffer.length;
+    snapshotSegments.set(key, entry);
+  }, () => snapshotSegments.delete(key));
+  return entry.segment;
+}
+
+type WelcomeMessage = Extract<ServerMessage, { type: 'welcome' }>;
+
+/**
+ * `welcome` avec état complet : propre au client (pairs, baux, `clientSeq`…)
+ * autour de l'état partagé. En binaire, trois segments DEFLATE bruts se
+ * suivent (le premier et l'état se terminent par une vidange synchronisée,
+ * le dernier par le bloc final) : un seul flux valide, dont l'état compressé
+ * est partagé. En texte (client sans `compress`), l'état est sérialisé pour
+ * ce client, comme avant.
+ */
+function welcomeWire(message: WelcomeMessage & { snapshot: Snapshot }, compress: boolean): string | Promise<Buffer> {
+  const { snapshot, ...rest } = message;
+  const head = JSON.stringify(rest);
+  const prefix = `${head.slice(0, -1)},"snapshot":`;
+  const segment = compress ? sharedSegment(message.epoch, snapshot, prefix.length) : null;
+  if (!segment) return `${prefix}${JSON.stringify(snapshot)}}`;
+  return segment.then((body) => Buffer.concat([deflateRawSync(prefix, SEGMENT), body, deflateRawSync('}', { level: 1 })]));
 }
 
 export const CLOSE_CODES: Record<ServerErrorCode, number> = {
@@ -103,7 +200,19 @@ export function handleConnection(socket: WebSocket, options: ConnectionOptions):
   let bytesAt = Date.now();
   let unregisterAccess: (() => void) | null = null;
 
+  /** Le client lit les messages compressés (`hello.compress`, wire.ts). */
+  let peerInflates = false;
+  /** Envois en attente d'une compression, dans l'ordre : un message suivant ne la double jamais. */
+  let outbound: Promise<void> | null = null;
+  /** Messages reçus en attente d'une décompression, dans l'ordre. */
+  let inbound: Promise<void> | null = null;
+
   const helloTimer = setTimeout(() => fail('bad-request', 'hello-timeout'), HELLO_TIMEOUT_MS);
+
+  function write(data: string | Buffer): void {
+    options.writes?.coalescer.hold(options.writes.socket);
+    socket.send(data, { binary: typeof data !== 'string' });
+  }
 
   function send(message: ServerMessage, sendOptions?: SendOptions): void {
     if (socket.readyState !== socket.OPEN) return;
@@ -115,7 +224,34 @@ export function handleConnection(socket: WebSocket, options: ConnectionOptions):
       close(4408, 'slow-consumer');
       return;
     }
-    socket.send(toWire(message));
+    // `welcome` (propre à ce client) dit au client qu'il peut compresser ses gros envois.
+    const outgoing = message.type === 'welcome' ? { ...message, compress: true } : message;
+    let payload: string | Promise<Buffer>;
+    if (outgoing.type === 'welcome' && outgoing.snapshot) {
+      payload = welcomeWire(outgoing as WelcomeMessage & { snapshot: Snapshot }, peerInflates);
+    } else {
+      const wire = toWire(outgoing);
+      payload = peerInflates && wire.length >= WIRE_COMPRESS_MIN_CHARS ? toCompressedWire(outgoing, wire) : wire;
+    }
+    if (typeof payload === 'string' && !outbound) {
+      write(payload);
+      return;
+    }
+    const chain = (outbound ?? Promise.resolve()).then(async () => {
+      let data: string | Buffer;
+      try {
+        data = await payload;
+      } catch (error) {
+        // Compression impossible (jamais vu) : le même message en texte.
+        options.log('warn', 'compression impossible : message envoyé en texte', { error: String(error) });
+        data = toWire(outgoing);
+      }
+      if (socket.readyState === socket.OPEN) write(data);
+    }).catch((error: unknown) => options.log('warn', 'envoi impossible', { error: String(error) }));
+    outbound = chain;
+    void chain.finally(() => {
+      if (outbound === chain) outbound = null;
+    });
   }
 
   function close(code: number, reason: string): void {
@@ -175,6 +311,7 @@ export function handleConnection(socket: WebSocket, options: ConnectionOptions):
     clearTimeout(helloTimer);
     if (message.v !== PROTOCOL_VERSION) return fail('version', `protocole ${PROTOCOL_VERSION} attendu`);
     if (typeof message.clientId !== 'string' || !ID_PATTERN.test(message.clientId)) return fail('bad-request', 'ids');
+    peerInflates = message.compress === true;
 
     let room: HostedRoom | null = null;
     for (let attempt = 0; attempt < 2 && (!room || room.closed); attempt += 1) {
@@ -224,12 +361,47 @@ export function handleConnection(socket: WebSocket, options: ConnectionOptions):
       return;
     }
     tokens -= 1;
-    const size = Array.isArray(data) ? data.reduce((total, chunk) => total + chunk.length, 0) : (data as Buffer | ArrayBuffer).byteLength;
-    takeBytes(size);
-    if (isBinary) return fail('bad-request', 'binary');
+    const raw = Array.isArray(data) ? Buffer.concat(data) : Buffer.isBuffer(data) ? data : Buffer.from(data);
+    takeBytes(raw.length);
+    if (!isBinary && !inbound) {
+      receive(raw.toString());
+      return;
+    }
+    // Trame binaire = JSON compressé (wire.ts), seulement après `welcome` ; décompressée hors
+    // du fil, bornée comme une trame texte ; les messages suivants attendent leur tour.
+    if (isBinary && phase !== 'joined') return fail('bad-request', 'binary');
+    const next = (inbound ?? Promise.resolve()).then(async () => {
+      let text: string;
+      if (isBinary) {
+        let inflated: Buffer;
+        try {
+          inflated = await inflateRawAsync(raw, { maxOutputLength: WIRE_MAX_MESSAGE_BYTES });
+        } catch {
+          return fail('bad-request', 'inflate');
+        }
+        if (phase === 'closed') return;
+        // Le JSON décompressé coûte comme une trame texte de cette taille.
+        takeBytes(inflated.length);
+        text = inflated.toString();
+      } else {
+        text = raw.toString();
+      }
+      receive(text);
+    }).catch((error: unknown) => {
+      options.log('error', 'message illisible', { error: String(error), projectId });
+      fail('internal', 'message');
+    });
+    inbound = next;
+    void next.finally(() => {
+      if (inbound === next) inbound = null;
+    });
+  });
+
+  function receive(text: string): void {
+    if (phase === 'closed') return;
     let message: ClientMessage;
     try {
-      message = JSON.parse(data.toString()) as ClientMessage;
+      message = JSON.parse(text) as ClientMessage;
     } catch {
       return fail('bad-request', 'json');
     }
@@ -248,7 +420,7 @@ export function handleConnection(socket: WebSocket, options: ConnectionOptions):
     if (phase !== 'joined' || !hosted || !handle) return;
     if (message.type === 'auth') return reauthenticate(message.token);
     hosted.handle(handle, message);
-  });
+  }
 
   socket.on('close', () => close(1000, 'closed'));
   socket.on('error', () => close(1011, 'socket-error'));

@@ -9,9 +9,17 @@
  *   npx tsx script-test-bench/run-all-benchmarks.ts --quick
  *   npx tsx script-test-bench/run-all-benchmarks.ts --feature=meteo
  *   npx tsx script-test-bench/run-all-benchmarks.ts --feature=lidar
+ *   … --allow-regressions   (code de sortie 0 malgré des dépassements de seuil)
+ *
+ * L'environnement (CPU, alimentation, commit) est enregistré avec le rapport,
+ * le run est comparé au rapport précédent du même mode, et le code de sortie
+ * vaut 1 si une suite plante ou si un seuil reste dépassé après la seconde
+ * mesure (voir core/harness.ts).
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { compareWithReport, findPreviousReport, printComparison } from './core/compare.ts';
+import { captureBenchEnvironment, describeEnvironment } from './core/environment.ts';
 import type { BenchmarkSuite } from './core/harness.ts';
 import {
   printSuiteHeader,
@@ -42,6 +50,7 @@ interface CliOptions {
   quick: boolean;
   feature?: string;
   noReport: boolean;
+  allowRegressions: boolean;
 }
 
 function parseCliArgs(): CliOptions {
@@ -49,6 +58,7 @@ function parseCliArgs(): CliOptions {
   const options: CliOptions = {
     quick: false,
     noReport: false,
+    allowRegressions: false,
   };
 
   for (const arg of args) {
@@ -56,6 +66,8 @@ function parseCliArgs(): CliOptions {
       options.quick = true;
     } else if (arg === '--no-report') {
       options.noReport = true;
+    } else if (arg === '--allow-regressions') {
+      options.allowRegressions = true;
     } else if (arg.startsWith('--feature=')) {
       options.feature = arg.split('=')[1]?.toLowerCase().trim();
     }
@@ -77,7 +89,7 @@ const REGISTRY: FeatureRunner[] = [
   { id: 'neige', name: 'Neige & Nivologie Universitaire', run: runSnowBenchmark },
   { id: 'brouter', name: 'BRouter & Routage Dynamique', run: runBrouterBenchmark },
   { id: 'fit', name: 'FIT Predictor & Simulation Physique', run: runFitPredictorBenchmark },
-  { id: 'lidar', name: 'LiDAR IGN & Soleil/Ombres 3D', run: runLidarBenchmark },
+  { id: 'lidar', name: 'LiDAR — préparation d’une tuile', run: runLidarBenchmark },
   { id: 'poi', name: 'POI & Corridor Overpass OSM', run: runPoiBenchmark },
   { id: 'exporter', name: 'Exporter (GPX, GeoJSON, XML)', run: runExporterBenchmark },
   { id: 'chart', name: 'Center Panel & Graphiques Multi-Axes', run: runCenterPanelBenchmark },
@@ -92,7 +104,13 @@ async function main(): Promise<void> {
   console.log('\n\x1b[1m\x1b[36m╔════════════════════════════════════════════════════════════════════════════╗\x1b[0m');
   console.log('\x1b[1m\x1b[36m║           REDVIEW APP — SUITE DE BENCHMARKS & NON-RÉGRESSION DEVOPS        ║\x1b[0m');
   console.log('\x1b[1m\x1b[36m╚════════════════════════════════════════════════════════════════════════════╝\x1b[0m');
-  console.log(`\x1b[90mMode: ${options.quick ? 'RAPIDE (--quick)' : 'COMPLET (Production)'} | Cible: ${options.feature || 'TOUTES LES FONCTIONNALITÉS'}\x1b[0m\n`);
+  console.log(`\x1b[90mMode: ${options.quick ? 'RAPIDE (--quick)' : 'COMPLET (Production)'} | Cible: ${options.feature || 'TOUTES LES FONCTIONNALITÉS'}\x1b[0m`);
+  const environment = captureBenchEnvironment();
+  console.log(`\x1b[90mMachine: ${describeEnvironment(environment)}\x1b[0m`);
+  if (environment.power === 'battery') {
+    console.log('\x1b[33m⚠ Sur batterie : CPU bridé, durées 1,5 à 100× plus longues et instables — ne comparer qu’à un run sur batterie, ou brancher le secteur.\x1b[0m');
+  }
+  console.log('');
 
   const runnersToExecute = options.feature
     ? REGISTRY.filter((r) => r.id === options.feature || r.id.includes(options.feature!))
@@ -104,6 +122,7 @@ async function main(): Promise<void> {
   }
 
   const executedSuites: BenchmarkSuite[] = [];
+  const crashedSuites: string[] = [];
 
   for (const runner of runnersToExecute) {
     try {
@@ -112,6 +131,7 @@ async function main(): Promise<void> {
       printSuiteResults(suite);
       executedSuites.push(suite);
     } catch (err) {
+      crashedSuites.push(runner.name);
       console.error(`\x1b[31m[ÉCHEC] Erreur lors de l'exécution du test-bench ${runner.name}:\x1b[0m`, err);
     }
   }
@@ -144,11 +164,28 @@ async function main(): Promise<void> {
   console.log(`  • Durée totale d'exécution       : \x1b[1m${elapsedSec}s\x1b[0m`);
   console.log('\x1b[1m\x1b[36m═'.repeat(78) + '\x1b[0m\n');
 
+  const mode = options.quick ? 'quick' : 'full';
+  const feature = options.feature ?? null;
+  const previous = findPreviousReport(REPORTS_DIR, mode, feature);
+  if (previous) printComparison(previous.file, previous.report, environment, compareWithReport(previous.report, executedSuites));
+
   if (!options.noReport && executedSuites.length > 0) {
-    const mdPath = generateMarkdownReport(executedSuites, REPORTS_DIR);
-    const jsonPath = saveJsonReport(executedSuites, REPORTS_DIR, 'benchmarks');
+    const mdPath = generateMarkdownReport(executedSuites, REPORTS_DIR, environment);
+    const jsonPath = saveJsonReport(executedSuites, REPORTS_DIR, 'benchmarks', { mode, feature, environment });
     console.log(`\x1b[32m✔ Rapport Markdown généré : \x1b[0m${mdPath}`);
     console.log(`\x1b[32m✔ Export JSON généré      : \x1b[0m${jsonPath}\n`);
+  }
+
+  const failures = [
+    ...crashedSuites.map((name) => `suite en échec : ${name}`),
+    ...executedSuites.flatMap((suite) => suite.results
+      .filter((r) => r.status === 'REGRESSION' || r.status === 'FAIL')
+      .map((r) => `${suite.title} · ${r.name} — ${r.warningMessage ?? r.status}`)),
+  ];
+  if (failures.length > 0) {
+    console.log(`\x1b[31m\x1b[1m${failures.length} problème(s)${options.allowRegressions && crashedSuites.length === 0 ? ' (tolérés : --allow-regressions)' : ''} :\x1b[0m`);
+    for (const failure of failures) console.log(`  \x1b[31m• ${failure}\x1b[0m`);
+    if (crashedSuites.length > 0 || !options.allowRegressions) process.exitCode = 1;
   }
 }
 

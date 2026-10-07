@@ -565,7 +565,7 @@ export async function saveProject(
     }
     let uploaded: string | null = null;
     try {
-      const cloud = await buildCloudPayload(json);
+      const cloud = await buildCloudPayload(json, sizeBytes);
 
       if (!options.force) {
         const base = knownCloudVersions.get(id)

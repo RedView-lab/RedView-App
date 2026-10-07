@@ -3,6 +3,8 @@ import type { Map as MapboxMap, MapboxGeoJSONFeature, PointLike } from 'mapbox-g
 import { isMapCursorManaged } from '../lib/mapCursor';
 
 const IGNORED_LAYER_PREFIXES = [
+  // Itinerary POIs: their manager hit-tests the drawn pixels and owns the cursor.
+  'rv-poi-',
   'route-',
   'tracer-',
   'draw-',

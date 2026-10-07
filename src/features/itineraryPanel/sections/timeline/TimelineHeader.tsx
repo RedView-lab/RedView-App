@@ -1,7 +1,8 @@
 /**
- * Sticky header of the Feuille-de-route / Timeline panel.
+ * Sticky header of the Feuille de route / Agenda panel.
  *
- * Left:  view switcher (Feuille de route / Timeline) — segmented control.
+ * Left:  view switcher (Feuille de route / Agenda) — segmented control.
+ *        The agenda keeps its historical id `'timeline'` (persisted view).
  * Right: settings, split "add" button, fullscreen toggle.
  */
 import type { MouseEventHandler } from 'react';
@@ -60,7 +61,7 @@ export function TimelineHeader({
           className={`rvi-tl-tabs__btn${view === 'timeline' ? ' is-active' : ''}`}
           onClick={() => onChangeView?.('timeline')}
         >
-          <span className="rvi-tl-tabs__label">{t('Timeline')}</span>
+          <span className="rvi-tl-tabs__label">{t('Agenda')}</span>
           <IconClockFastForward size={12} />
         </button>
       </div>

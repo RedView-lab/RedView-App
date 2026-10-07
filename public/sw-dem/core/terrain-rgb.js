@@ -52,9 +52,10 @@ function _pngChunk(type, data) {
 // one dynamic block per 16 K symbols like zlib. Every tree keeps at least two
 // codes, as zlib's encoder does, so all inflaters accept it (an incomplete
 // code-length code is an error for zlib's inflate).
-// Only for the opaque gray slope tile (buildGrayPng): on Terrain-RGB the RGB
-// triplets repeat at distance 4, and on gray + alpha the pairs at distance 2,
-// so level 6 stays 12-50 % smaller there.
+// Used for the opaque gray slope tile (buildGrayPng) and the Up-filtered RGB
+// DEM tile (encodeTerrainRGBPng). Not for unfiltered rows: Terrain-RGB RGBA
+// triplets repeat at distance 4 and gray + alpha pairs at distance 2, where
+// level 6 stays 12-50 % smaller.
 
 const _ZRLE_BLOCK_SYMBOLS = 16384;
 const _ZRLE_LEN_BASE = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31,
@@ -310,7 +311,7 @@ async function buildRawPng(width, height, rgba) {
 }
 
 // Assemble a PNG from pre-built scanlines (filter byte + row data).
-// `colorType`: 6 = RGBA (default), 4 = gray + alpha.
+// `colorType`: 6 = RGBA (default), 2 = RGB, 4 = gray + alpha.
 async function buildPngFromScanlines(width, height, raw, colorType = 6) {
   // Compress with deflate via CompressionStream
   const cs = new CompressionStream('deflate');
@@ -502,9 +503,19 @@ function getFlatDemTile() {
   return _flatDemTilePromise;
 }
 
-// Writes the Terrain-RGB scanlines directly (filter byte 0 + RGBA) — same
-// deflate input as buildRawPng(rgba), so the PNG bytes are identical, minus
-// one 256 KB intermediate buffer and its copy loop.
+// Writes the Terrain-RGB scanlines directly: RGB (colour type 2, the alpha was
+// always 255) with PNG's Up filter (each byte minus the one above), compressed
+// by zlibDeflateRle. Neighbouring rows of an elevation field differ little,
+// so the residuals are small bytes that Huffman codes well without any match
+// search. Measured in Chromium against the former RGBA unfiltered tile through
+// CompressionStream (level 6): real Terrarium tiles (Mont-Blanc z12, Chamonix
+// z13, Aiguilles z14, Beauce z12) 3.1-4.6 ms / 45-62 KB instead of
+// 5.7-10.2 ms / 60-88 KB; a noisy 0.40 m-like surface 5.1 ms / 88 KB instead
+// of 8.6 ms / 113 KB. Level 6 on the filtered rows is smaller on smooth tiles
+// (26-41 KB) but 84 % slower on noisy ones, where its match search finds
+// nothing. Decoded slightly faster too (createImageBitmap + getImageData).
+// Decoders read any PNG colour type and filter, so tiles already cached in the
+// old format stay valid.
 //
 // The same loop also produces the exact Float32 grid a later decode of this
 // blob would return (`-10000 + val * 0.1`, computed with the same integer
@@ -513,27 +524,40 @@ function getFlatDemTile() {
 // then cost nothing.
 async function encodeTerrainRGBPng(elevations) {
   const size = DEM_TILE_SIZE;
-  const rowBytes = 1 + size * 4;
-  const raw = new Uint8Array(size * rowBytes); // filter bytes stay 0 (None)
+  const rowLen = size * 3;
+  const rowBytes = 1 + rowLen;
+  const raw = new Uint8Array(size * rowBytes);
   const decoded = new Float32Array(size * size);
+  // Bytes of the row above (zeros above the first row: Up = None there).
+  const above = new Uint8Array(rowLen);
 
   for (let y = 0; y < size; y++) {
-    let o = y * rowBytes + 1;
+    const rowOffset = y * rowBytes;
+    raw[rowOffset] = 2; // filter: Up
+    let o = rowOffset + 1;
+    let p = 0;
     const rowStart = y * size;
     for (let x = 0; x < size; x++) {
       const i = rowStart + x;
       const height = sanitizeElevation(elevations[i]);
       const val = Math.max(0, Math.min(16777215, Math.round((height + 10000) * 10)));
-      raw[o]     = (val >> 16) & 0xff;
-      raw[o + 1] = (val >>  8) & 0xff;
-      raw[o + 2] =  val        & 0xff;
-      raw[o + 3] = 255;
-      o += 4;
+      const r = (val >> 16) & 0xff;
+      const g = (val >> 8) & 0xff;
+      const b = val & 0xff;
+      // Uint8Array stores the difference modulo 256, as the filter wants.
+      raw[o] = r - above[p];
+      raw[o + 1] = g - above[p + 1];
+      raw[o + 2] = b - above[p + 2];
+      above[p] = r;
+      above[p + 1] = g;
+      above[p + 2] = b;
+      o += 3;
+      p += 3;
       decoded[i] = -10000 + val * 0.1;
     }
   }
 
-  const blob = await buildPngFromScanlines(size, size, raw);
+  const blob = buildPngFromZlib(size, size, zlibDeflateRle(raw), 2);
   decodedTerrainRgbPut(blob, decoded);
   return blob;
 }

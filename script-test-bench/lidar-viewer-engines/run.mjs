@@ -14,7 +14,9 @@
  *     déplacement sans menu ; molette en lignes (Firefox) = zoom ;
  *   - aucune exception, aucune erreur WebGL (`getError`, console).
  * Sous Linux (CI), c'est le chemin réel des utilisateurs : Firefox n'a pas
- * WebGPU et Chrome ne l'active que sur certains GPU.
+ * WebGPU et Chrome ne l'active que sur certains GPU. Quand le moteur
+ * automatique d'un navigateur est déjà WebGL 2, le cas « webgl » forcé
+ * referait le même chemin : il est sauté (≈ 165 s de SwiftShader en CI).
  *
  * Usage (après `npm run build:vite`) :
  *   node script-test-bench/lidar-viewer-engines/run.mjs
@@ -148,6 +150,7 @@ async function launch(browserName, args, profileDir) {
   });
 }
 
+/** Returns the backend the viewer ran on ('webgl', 'webgpu'), or null when it never got ready. */
 async function runCase(browserName, engine, args, origin, checks) {
   const profileDir = await mkdtemp(join(tmpdir(), `rv-viewer-${browserName}-`));
   const context = await launch(browserName, args, profileDir);
@@ -209,7 +212,7 @@ async function runCase(browserName, engine, args, origin, checks) {
       for (const error of pageErrors) console.log(`    exception : ${error}`);
       for (const line of consoleTail) console.log(`    ${line}`);
       await page.screenshot({ path: join(outDir, 'echec.png') }).catch(() => undefined);
-      return;
+      return null;
     }
 
     const waitIdle = async () => {
@@ -331,6 +334,7 @@ async function runCase(browserName, engine, args, origin, checks) {
     checks.record('aucune erreur WebGL (getError)', !errors || errors.length === 0, errors?.join(', ') ?? 'contexte illisible');
     checks.record('aucune erreur de rendu en console', consoleFaults.length === 0, consoleFaults.slice(0, 3).join(' | '));
     checks.record('aucune exception', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '));
+    return backend;
   } finally {
     await context.close();
     await rm(profileDir, { recursive: true, force: true }).catch(() => undefined);
@@ -350,12 +354,18 @@ async function main() {
   let failures = 0;
   try {
     for (const browserName of args.browsers) {
+      let autoBackend = null;
       for (const engine of args.engines) {
         const label = `${browserName} / ${engine}`;
         console.log(`\n▶ ${label}`);
+        if (engine === 'webgl' && autoBackend === 'webgl') {
+          console.log('  ↷ sauté : le moteur automatique est déjà WebGL 2 dans ce navigateur (même chemin)');
+          continue;
+        }
         const checks = new Checks(label);
         try {
-          await runCase(browserName, engine, args, origin, checks);
+          const backend = await runCase(browserName, engine, args, origin, checks);
+          if (engine === 'auto' && checks.failed.length === 0) autoBackend = backend;
         } catch (error) {
           checks.record('exécution', false, String(error?.message ?? error).slice(0, 2000));
         }

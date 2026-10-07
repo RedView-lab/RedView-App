@@ -2369,8 +2369,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Itinerary panel"
   },
   {
-    "fr": "Timeline en plein écran",
-    "en": "Fullscreen timeline"
+    "fr": "Feuille de route en plein écran",
+    "en": "Fullscreen roadbook"
   },
   {
     "fr": "Redimensionner le panneau",
@@ -2757,8 +2757,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Roadbook"
   },
   {
-    "fr": "Timeline",
-    "en": "Timeline"
+    "fr": "Agenda",
+    "en": "Schedule"
   },
   {
     "fr": "Graphique",
@@ -3293,16 +3293,16 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Open fullscreen"
   },
   {
-    "fr": "Paramètres de la timeline",
-    "en": "Timeline settings"
+    "fr": "Paramètres de l'agenda",
+    "en": "Schedule settings"
   },
   {
     "fr": "Échelle",
     "en": "Scale"
   },
   {
-    "fr": "Échelle de la timeline",
-    "en": "Timeline scale"
+    "fr": "Échelle de l'agenda",
+    "en": "Schedule scale"
   },
   {
     "fr": "Date",
@@ -3317,8 +3317,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Distance marker"
   },
   {
-    "fr": "Zoom de la timeline",
-    "en": "Timeline zoom"
+    "fr": "Zoom de l'agenda",
+    "en": "Schedule zoom"
   },
   {
     "fr": "Réduire le zoom",
@@ -3333,8 +3333,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Zoom"
   },
   {
-    "fr": "Filtres de la timeline",
-    "en": "Timeline filters"
+    "fr": "Filtres de l'agenda",
+    "en": "Schedule filters"
   },
   {
     "fr": "Filtres de la feuille de route",
@@ -3449,6 +3449,18 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "{{duration}} · click to edit"
   },
   {
+    "fr": "{{duration}} · départ {{time}}",
+    "en": "{{duration}} · leave at {{time}}"
+  },
+  {
+    "fr": "{{duration}} · départ {{time}} · cliquer pour modifier",
+    "en": "{{duration}} · leave at {{time}} · click to edit"
+  },
+  {
+    "fr": "Repart à {{time}}",
+    "en": "Leaves at {{time}}"
+  },
+  {
     "fr": "Cliquez sur la carte pour placer le départ",
     "en": "Click on the map to place the start"
   },
@@ -3553,12 +3565,12 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Distance between waypoints (km)"
   },
   {
-    "fr": "Jours de la timeline",
-    "en": "Timeline days"
+    "fr": "Jours de l'agenda",
+    "en": "Schedule days"
   },
   {
-    "fr": "Timeline journaliere",
-    "en": "Daily timeline"
+    "fr": "Agenda journalier",
+    "en": "Daily schedule"
   },
   {
     "fr": "Annuler la modification",
@@ -7055,6 +7067,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Tuile LiDAR corrompue : signature LAS/COPC invalide.",
     "en": "Corrupted LiDAR tile: invalid LAS/COPC signature."
+  },
+  {
+    "fr": "Stockage local plein : supprimez des tuiles LiDAR pour libérer de la place.",
+    "en": "Local storage is full: delete LiDAR tiles to free up space."
   },
   {
     "fr": "Téléchargement annulé",

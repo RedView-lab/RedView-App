@@ -1,7 +1,7 @@
 import { PAUSE_CHIP_MIN_HEIGHT_PX } from '../constants';
 import type { TimedAutoPause, TimedTimelineItem, TimelineStandalonePause } from '../types';
-import { buildDaySegments } from './event-schedule';
-import { resolveVisualDurationMin, toDayKey } from './format';
+import { buildDaySegments, findNextTimedEntry } from './event-schedule';
+import { minuteToCanvasTopPx, resolveVisualDurationMin, toDayKey } from './format';
 
 export function buildScheduledStandalonePauses(
   manualPauseItems: TimedTimelineItem[],
@@ -41,8 +41,8 @@ export function buildScheduledStandalonePauses(
     source: 'manual' as const,
     distanceKm: pause.distanceKm,
     elapsedSeconds: pause.elapsedSeconds,
-    scheduledTopPx: (pause.minuteOfDay - startMinutes) * pixelsPerMinute,
-    topPx: (pause.minuteOfDay - startMinutes) * pixelsPerMinute,
+    scheduledTopPx: minuteToCanvasTopPx(pause.minuteOfDay, startMinutes, pixelsPerMinute),
+    topPx: minuteToCanvasTopPx(pause.minuteOfDay, startMinutes, pixelsPerMinute),
     durationMin: pause.item.durationMin ?? 0,
     toNextSeconds: resolveSecondsToNextCheckpoint(primaryItems, pause.elapsedSeconds),
     visible: pause.item.visible !== false,
@@ -58,10 +58,11 @@ export function buildScheduledStandalonePauses(
     label: pause.label,
     source: pause.source,
     poiCategory: pause.poiCategory,
+    attachedToItemId: pause.attachedToItemId,
     distanceKm: pause.distanceKm,
     elapsedSeconds: pause.elapsedSeconds,
-    scheduledTopPx: (pause.minuteOfDay - startMinutes) * pixelsPerMinute,
-    topPx: (pause.minuteOfDay - startMinutes) * pixelsPerMinute,
+    scheduledTopPx: minuteToCanvasTopPx(pause.minuteOfDay, startMinutes, pixelsPerMinute),
+    topPx: minuteToCanvasTopPx(pause.minuteOfDay, startMinutes, pixelsPerMinute),
     durationMin: pause.durationMin,
     toNextSeconds: resolveSecondsToNextCheckpoint(primaryItems, pause.elapsedSeconds),
     visible: pause.visible,
@@ -89,12 +90,6 @@ function resolveSecondsToNextCheckpoint(
   entries: TimedTimelineItem[],
   currentElapsedSeconds: number,
 ): number | null {
-  for (let index = 0; index < entries.length; index += 1) {
-    const candidate = entries[index];
-    if (!candidate) continue;
-    if (candidate.elapsedSeconds <= currentElapsedSeconds) continue;
-    return Math.max(0, candidate.elapsedSeconds - currentElapsedSeconds);
-  }
-
-  return null;
+  const next = findNextTimedEntry(entries, currentElapsedSeconds);
+  return next ? Math.max(0, next.elapsedSeconds - currentElapsedSeconds) : null;
 }

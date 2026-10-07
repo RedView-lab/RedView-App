@@ -133,7 +133,10 @@ async function sectionValid() {
     const warm = await get(p + '?audit=' + Date.now());
     const info = pngInfo(cold.buf);
     console.log(`      ${name.padEnd(10)} cold=${cold.ms.toFixed(0)}ms warm=${warm.ms.toFixed(0)}ms size=${cold.buf.length}B png=${JSON.stringify(info)} cache=${cold.res.headers.get('cache-control')}`);
-    check(`C.${name} 256px`, info && info.w === 256 && info.h === 256, `status=${cold.res.status}`);
+    // /dem-tiles is SW-only by design (server.mjs): an uncontrolled page reads AWS Terrarium
+    // directly, the server answers 204 at once and outside the tile quota.
+    if (name.startsWith('dem')) check(`C.${name} 204 (DEM is SW-only)`, cold.res.status === 204, `status=${cold.res.status}`);
+    else check(`C.${name} 256px`, info && info.w === 256 && info.h === 256, `status=${cold.res.status}`);
   }
 
   // Slope source maxzoom is 16 (HD) but AWS stops at z14: the fallback

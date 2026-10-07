@@ -1,4 +1,5 @@
 import { translateAppText } from '@/shared/i18n/config';
+import { StorageFullError } from '../storage';
 
 // Erreurs du téléchargement des dalles LiDAR (annulation, absence de couverture).
 
@@ -34,6 +35,15 @@ export function isDownloadCancelledError(err: unknown): boolean {
     err instanceof DownloadCancelledError ||
     (err as { code?: string } | null | undefined)?.code === 'ERR_DOWNLOAD_CANCELLED'
   );
+}
+
+/**
+ * Ends a download at once, without trying the next URL of the tile: a
+ * cancellation, or a full storage (each candidate would be fetched again,
+ * hundreds of MB, to fail the same way).
+ */
+export function isFinalDownloadError(err: unknown): boolean {
+  return isDownloadCancelledError(err) || err instanceof StorageFullError;
 }
 
 export function throwIfCancelled(signal?: AbortSignal): void {

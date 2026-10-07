@@ -1,7 +1,7 @@
 /**
  * Audit D (basemap) — "Qualité 3D" selector bus ordering.
  *
- * ControlPanelContainer.applyDem3dSelection() publishes the quality FIRST and
+ * ControlPanelContainer publishes through publishDem3dSelection(); it used to publish the quality FIRST and
  * the DEM profile SECOND. The map controller's quality listener
  * (useMapSubscriptions → lifecycle.setDem3dQuality → demSource.ts:544-560)
  * reads the profile synchronously from demProfileBus to build the DEM tile
@@ -13,16 +13,12 @@
  * Run:  npx tsx script-test-bench/audit/d-basemap-quality.ts
  * Exit 1 when the stale-profile read reproduces.
  */
-import { setActiveDem3dQuality, subscribeDem3dQuality, getActiveDem3dQuality } from '../../src/features/map3d/lib/dem3dQualityBus.ts';
-import { setActiveDemProfilePreference, subscribeDemProfilePreference, getActiveDemProfilePreference } from '../../src/features/map3d/lib/demProfileBus.ts';
-import { resolveDem3dSelection } from '../../src/features/map3d/lib/dem3dSelection.ts';
+import { subscribeDem3dQuality, getActiveDem3dQuality } from '../../src/features/map3d/lib/dem3dQualityBus.ts';
+import { subscribeDemProfilePreference, getActiveDemProfilePreference } from '../../src/features/map3d/lib/demProfileBus.ts';
+import { publishDem3dSelection } from '../../src/features/map3d/lib/publishDem3dSelection.ts';
 
-// Exact copy of ControlPanelContainer.tsx:294-298.
-function applyDem3dSelection(value: string): void {
-  const next = resolveDem3dSelection(value);
-  setActiveDem3dQuality(next.quality);
-  setActiveDemProfilePreference(next.profile);
-}
+// The real publisher used by ControlPanelContainer (no copy to drift).
+const applyDem3dSelection = (value: string): void => publishDem3dSelection(value);
 
 const events: string[] = [];
 subscribeDem3dQuality((q) => {

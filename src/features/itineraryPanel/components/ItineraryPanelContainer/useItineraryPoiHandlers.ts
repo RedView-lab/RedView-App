@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import type { MutableRefObject } from 'react';
 import { translateAppText } from '@/shared/i18n';
-import { POI_LABELS, type PoiFeature } from '@/features/poi/types';
+import { DEFAULT_POI_PAUSE_MIN, POI_LABELS, type PoiFeature } from '@/features/poi/types';
 import type { PredictionResult } from '@/features/fitPredictor';
 import {
   buildPoiAutoSortSignature,
@@ -10,7 +10,6 @@ import {
   FEATURE_TO_PANEL_POI,
   getPoiAutoSortPicks,
   toPoiAutoSortPickRefs,
-  upsertPoiTimelineRow,
 } from '../../lib/schedule';
 import { normalizeItineraryRhythmState } from '../../lib/project';
 import type { Itinerary, ItineraryProject, PoiAutoSortSummary } from '../../types';
@@ -23,9 +22,26 @@ import {
   setPendingRoutePatchAfterRemoval,
 } from './timelineMutations';
 import { removePoiAndLinkedWaypoints } from './poiDraft';
-import { setManualFavoriteOrigin, setPoiFeatureFavoriteState } from './poiFeatureUtils';
+import {
+  poiRowPauseMin,
+  resolvePoiPauseDefaultMin,
+  setPoiFeatureFavorite,
+  setPoiFeaturePause,
+} from './poiFavoritePause';
 
 const POI_PAUSE_DURATION_STEPS = [5, 10, 15, 20, 30, 45, 60, 90, 120] as const;
+
+/** Distance d'un POI le long de la trace de l'itinéraire, en km (null sans trace). */
+function projectFeatureDistanceKm(itinerary: Itinerary, feature: PoiFeature): number | null {
+  const routePoints = itinerary.gpxRoute?.points ?? [];
+  if (routePoints.length < 2 || feature.lat == null || feature.lon == null) return null;
+  const distM = projectDistanceAlongRouteM(
+    { lat: feature.lat, lon: feature.lon },
+    routePoints,
+    cumulativeRouteLengthsM(routePoints),
+  );
+  return distM != null ? roundDistanceKm(distM) : null;
+}
 
 interface UseItineraryPoiHandlersArgs {
   activeItineraryRef: MutableRefObject<Itinerary | null>;
@@ -64,26 +80,27 @@ export function useItineraryPoiHandlers({
 
   const resolvePoiPopupState = useCallback((feature: PoiFeature) => {
     const itinerary = activeItineraryRef.current;
+    const featurePauseMin = feature.pauseDurationMin && feature.pauseDurationMin > 0
+      ? feature.pauseDurationMin
+      : null;
     if (!itinerary) {
       return {
         favoriteEnabled: Boolean(feature.favorite),
-        pauseEnabled: false,
-        pauseDurationMin: 5,
+        pauseEnabled: featurePauseMin !== null,
+        pauseDurationMin: featurePauseMin ?? DEFAULT_POI_PAUSE_MIN,
       };
     }
 
     const poiRow = itinerary.timeline.find((row) => row.kind === 'poi' && row.osmId === feature.id);
     const panelCategory = poiRow?.poiCategory ?? FEATURE_TO_PANEL_POI[feature.category];
-    const rhythm = normalizeItineraryRhythmState(itinerary.rhythm);
-    const pauseDurationMin =
-      poiRow?.durationMin
-      ?? (feature.pauseDurationMin && feature.pauseDurationMin > 0 ? feature.pauseDurationMin : undefined)
-      ?? (panelCategory ? rhythm.poiPauseDurations[panelCategory] : undefined)
-      ?? 5;
+    // Durée affichée (et posée si l'on coche) : celle du POI, sinon celle de sa catégorie.
+    const pauseDurationMin = (poiRow ? poiRowPauseMin(poiRow) : null)
+      ?? featurePauseMin
+      ?? resolvePoiPauseDefaultMin(itinerary, panelCategory);
 
     const pauseEnabled = poiRow?.durationMin != null
       ? poiRow.durationMin > 0
-      : Boolean(feature.pauseDurationMin && feature.pauseDurationMin > 0);
+      : featurePauseMin !== null;
 
     return {
       favoriteEnabled: Boolean(poiRow?.favorite ?? feature.favorite),
@@ -93,29 +110,16 @@ export function useItineraryPoiHandlers({
     };
   }, [activeItineraryRef]);
 
-  const handlePoiFavoriteToggle = useCallback((feature: PoiFeature, nextEnabled: boolean) => {
+  /**
+   * Favori depuis un popup de la carte : coche et active aussi la pause, à la
+   * durée affichée par le popup (`pauseMin`), sinon celle de la catégorie.
+   */
+  const handlePoiFavoriteToggle = useCallback((feature: PoiFeature, nextEnabled: boolean, pauseMin?: number) => {
     updateActive((it) => {
-      const routePoints = it.gpxRoute?.points ?? [];
-      const cumLengths = routePoints.length >= 2 ? cumulativeRouteLengthsM(routePoints) : null;
-      const calcDistanceKm = (): number | null => {
-        if (routePoints.length >= 2 && cumLengths && feature.lat != null && feature.lon != null) {
-          const distM = projectDistanceAlongRouteM({ lat: feature.lat, lon: feature.lon }, routePoints, cumLengths);
-          if (distM != null) return roundDistanceKm(distM);
-        }
-        return null;
-      };
-
-      const hasRow = it.timeline.some((row) => row.kind === 'poi' && row.osmId === feature.id);
-      if (hasRow || nextEnabled) {
-        const poiRow = upsertPoiTimelineRow(it, feature, calcDistanceKm);
-        poiRow.favorite = nextEnabled;
-        setManualFavoriteOrigin(poiRow, nextEnabled);
-      }
-      it.poiFeatures = setPoiFeatureFavoriteState(it.poiFeatures, feature.id, nextEnabled);
-      if (nextEnabled && (!it.poiFeatures || !it.poiFeatures.some((f) => f.id === feature.id))) {
-        if (!it.poiFeatures) it.poiFeatures = [];
-        it.poiFeatures.push({ ...feature, favorite: true, favoriteSource: 'manual' });
-      }
+      setPoiFeatureFavorite(it, feature, nextEnabled, {
+        distanceKm: () => projectFeatureDistanceKm(it, feature),
+        pauseMin,
+      });
     });
   }, [updateActive]);
 
@@ -273,38 +277,11 @@ export function useItineraryPoiHandlers({
     durationMin: number,
   ) => {
     updateActive((it) => {
-      let poiRow = it.timeline.find((row) => row.kind === 'poi' && row.osmId === feature.id);
-      if (!poiRow && nextEnabled) {
-        handlePoiFavoriteToggle(feature, true);
-        poiRow = it.timeline.find((row) => row.kind === 'poi' && row.osmId === feature.id);
-      }
-      if (poiRow) {
-        poiRow.durationMin = nextEnabled ? Math.max(1, Math.round(durationMin)) : undefined;
-      }
-
-      const currentFavorite = Boolean(poiRow?.favorite ?? feature.favorite);
-      it.poiFeatures = setPoiFeatureFavoriteState(
-        it.poiFeatures,
-        feature.id,
-        currentFavorite,
-        nextEnabled ? Math.max(1, Math.round(durationMin)) : null,
-      );
-
-      if (!nextEnabled) {
-        return;
-      }
-
-      const rhythm = normalizeItineraryRhythmState(it.rhythm);
-      it.rhythm = rhythm;
-      const panelCategory = poiRow?.poiCategory ?? FEATURE_TO_PANEL_POI[feature.category];
-      if (!panelCategory) return;
-
-      const currentDuration = rhythm.poiPauseDurations[panelCategory];
-      if (currentDuration == null || currentDuration <= 0) {
-        rhythm.poiPauseDurations[panelCategory] = Math.max(1, Math.round(durationMin));
-      }
+      setPoiFeaturePause(it, feature, nextEnabled, durationMin, {
+        distanceKm: () => projectFeatureDistanceKm(it, feature),
+      });
     });
-  }, [handlePoiFavoriteToggle, updateActive]);
+  }, [updateActive]);
 
   const handlePoiStreetView = useCallback((feature: PoiFeature) => {
     if (typeof window === 'undefined') return;

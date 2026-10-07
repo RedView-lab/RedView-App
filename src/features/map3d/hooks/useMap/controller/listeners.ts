@@ -492,6 +492,8 @@ export function attachListeners(ctx: Ctx): void {
     st.reloadVerifyTimer = null;
     clearVisibleTimer(st.reloadReadinessTimer);
     st.reloadReadinessTimer = null;
+    clearVisibleTimer(st.profileReloadTimer);
+    st.profileReloadTimer = null;
     clearVisibleTimer(st.setTilesVerifyTimer);
     st.setTilesVerifyTimer = null;
     if (styleDataTerrainRepairTimer) {

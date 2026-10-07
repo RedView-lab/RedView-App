@@ -34,16 +34,22 @@ export interface CheckpointWrite {
   documentJson: string;
 }
 
-export interface LoadedRoom {
-  /** Point de sauvegarde exact, s'il correspond au document enregistré. */
-  checkpoint: RoomCheckpoint | null;
-  /** Document enregistré (repli quand il n'y a pas de point de sauvegarde valable). */
-  document: ProjectDocument;
+/**
+ * Salle relue du stockage : le point de sauvegarde exact s'il est valable —
+ * le document n'est alors ni téléchargé ni lu (après un déploiement, chaque
+ * salle rechargée le décompressait et le parsait pour rien) — sinon le
+ * document enregistré.
+ */
+export type LoadedRoom = {
   /** Séquence de départ quand on repart du document. */
   baseSeq: number;
   /** Lots journalisés au-delà du point de sauvegarde, dans l'ordre. */
   journal: SequencedBatch[];
-}
+} & (
+  | { checkpoint: RoomCheckpoint }
+  /** Document enregistré (repli quand il n'y a pas de point de sauvegarde valable). */
+  | { checkpoint: null; document: ProjectDocument }
+);
 
 export interface ProjectAccess {
   /** Propriétaire établi (server/project-access.mjs), '' si aucun ne l'est. */
@@ -89,8 +95,16 @@ export interface RoomStorage {
    * `ProjectNotFoundError` si le projet a été supprimé.
    */
   saveCheckpoint(projectId: string, write: CheckpointWrite): Promise<void>;
-  /** Retire du journal les paquets entièrement couverts par le point de sauvegarde. */
-  pruneJournal(projectId: string, uptoSeq: number): Promise<void>;
+  /**
+   * Retire du journal les paquets entièrement couverts par le point de
+   * sauvegarde, sauf celui qui commence à `keepStartSeq` : le premier paquet
+   * écrit par la salle. C'est la barrière contre un serveur dépassé (ancien
+   * conteneur pendant un déploiement) : il reprend son journal juste avant ce
+   * paquet et se heurte à son identifiant (409, salle fermée). Élagué, ce
+   * paquet laissait l'ancien serveur écrire sans conflit et confirmer comme
+   * durables des lots que la salle courante ne verrait jamais.
+   */
+  pruneJournal(projectId: string, uptoSeq: number, keepStartSeq?: number): Promise<void>;
   /** Point de sauvegarde et journal tels qu'écrits, en lecture seule ; null sans point de sauvegarde lisible. */
   readDurable(projectId: string): Promise<DurableState | null>;
   /** Projet supprimé : journal et points de sauvegarde de la co-édition effacés. */

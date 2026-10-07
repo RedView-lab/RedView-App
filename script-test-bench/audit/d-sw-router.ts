@@ -211,14 +211,17 @@ async function run() {
 
   netMode = '404';
   origLog('\n== malformed / non-tile URLs ==');
-  const malformed: [string, 'passthrough' | '204'][] = [
+  // 'sanitized' : paramètres aberrants assainis par le SW, tuile normale servie (jamais d'exception) —
+  // zone non hexadécimale ignorée (sanitizeZoneHash), res borné à 1..64 (moyenne par blocs, jamais une
+  // tuile plus grande), profil hors liste = 'default' (resolveDemProfile).
+  const malformed: [string, 'passthrough' | '204' | 'sanitized'][] = [
     ['/dem-tiles/12/2120/1462.png', 'passthrough'],
     ['/dem-tiles/12/2120', 'passthrough'],
     ['/dem-tiles/a/b/c', 'passthrough'],
     ['/dem-tiles/-1/0/0', 'passthrough'],
-    ['/slope-tiles/12/2120/1462?zone=../../x', '204'],
-    ['/slope-tiles/12/2120/1462?res=999999', '204'],
-    ['/slope-tiles/12/2120/1462?rv-dem-profile=<script>', '204'],
+    ['/slope-tiles/12/2120/1462?zone=../../x', 'sanitized'],
+    ['/slope-tiles/12/2120/1462?res=999999', 'sanitized'],
+    ['/slope-tiles/12/2120/1462?rv-dem-profile=<script>', 'sanitized'],
     ['/radar-tiles/5/16/11?path=../../etc', '204'],
     ['/radar-tiles/5/16/11?path=/v2/radar/abc&host=https://evil.example', '204'],
     ['/radar-tiles/5/99/11?path=/v2/radar/abc', '204'],
@@ -228,7 +231,9 @@ async function run() {
   ];
   for (const [u, expect] of malformed) {
     const r: AnyRec = await dispatch(u);
-    const ok = expect === 'passthrough' ? r.kind === 'passthrough' : isNoTile(r);
+    const ok = expect === 'passthrough' ? r.kind === 'passthrough'
+      : expect === 'sanitized' ? r.kind === 'response' && (r.status === 200 || r.status === 204)
+        : isNoTile(r);
     check(`malformed ${u}`, ok, `${r.kind} ${r.status ?? r.error ?? ''} reason=${r.reason ?? '-'}`);
   }
   const nav: AnyRec = await dispatch('/dem-tiles/12/2120/1462', 'navigate');

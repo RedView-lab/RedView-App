@@ -25,8 +25,10 @@ export async function runRealTile(path: string): Promise<void> {
   const file = readFileSync(path);
   const buffer = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength) as ArrayBuffer;
   const wasmModule = await WebAssembly.compile(readFileSync(resolvePath('public/laz-perf.wasm')));
+  // The viewer's decoder (laz-perf stays its fallback).
+  const redviewLazModule = await WebAssembly.compile(readFileSync(resolvePath('src/features/lidar/lib/laz/pkg/redviewlaz_bg.wasm')));
   const t0 = performance.now();
-  const pc: PointCloudData = await parseLazBuffer(buffer, undefined, undefined, wasmModule);
+  const pc: PointCloudData = await parseLazBuffer(buffer, undefined, undefined, wasmModule, redviewLazModule);
   const decodeMs = performance.now() - t0;
   // Neutral colour: orthophoto colourisation needs the network and is not under test.
   pc.colors.fill(128);
@@ -38,7 +40,7 @@ export async function runRealTile(path: string): Promise<void> {
   notes.push(
     `Tuile réelle ${path.split(/[\\/]/).pop()} : ${pc.count.toLocaleString('fr-FR')} pts, ` +
     `${pc.copc ? 'COPC' : 'LAS/LAZ'}, origine ${pc.origin.x}/${pc.origin.y}`,
-    `  décodage ${(decodeMs / 1000).toFixed(1)} s (1 thread) · octree LOD ${(buildMs / 1000).toFixed(2)} s · ` +
+    `  décodage ${(decodeMs / 1000).toFixed(1)} s (1 thread, décodeur RedView LAZ) · octree LOD ${(buildMs / 1000).toFixed(2)} s · ` +
     `${tile.nodes.length} nœuds (${[...depthCounts.entries()].map(([d, n]) => `p${d}:${n}`).join(' ')}) · ` +
     `${(tile.packed.byteLength / 1e6).toFixed(0)} Mo (${LOD_POINT_STRIDE} o/pt, couleurs filtrées incluses)`,
   );

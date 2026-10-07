@@ -7,10 +7,12 @@ import { WebSocketServer, type WebSocket } from 'ws';
 
 import { getClientIp, rateLimitKeyForIp } from '../http-security.mjs';
 import { SOCKET_PROTOCOL, tokenFromProtocols, type ServerErrorCode } from '../../src/features/collab/protocol.ts';
+import { WIRE_MAX_MESSAGE_BYTES } from '../../src/features/collab/wire.ts';
 import { createAuthenticator, type AuthOptions, type Authenticator, type Identity } from './auth.ts';
 import { CLOSE_CODES, handleConnection, type ConnectionTimings } from './connection.ts';
 import { CLOSE_RESTART, RoomHost, type RoomHostOptions } from './roomHost.ts';
 import type { RoomStorage } from './storage.ts';
+import { createWriteCoalescer } from './writeCoalescer.ts';
 
 /**
  * Serveur temps réel : HTTP public (`/health`, seulement `{"ok":true}` : lu
@@ -279,8 +281,12 @@ export function createMultiplayerServer(options: MultiplayerServerOptions): Mult
   const handleProtocols = (protocols: Set<string>) => (protocols.has(SOCKET_PROTOCOL) ? SOCKET_PROTOCOL : false);
   const wss = new WebSocketServer({
     noServer: true,
-    maxPayload: 64 * 1024 * 1024,
-    perMessageDeflate: { threshold: 1024, concurrencyLimit: 4 },
+    maxPayload: WIRE_MAX_MESSAGE_BYTES,
+    // Pas de `permessage-deflate` : Chromium y compresse chaque message (lots, caméra et curseur
+    // à 30 Hz), décompressés un à un dans la file zlib du processus, et chaque gros message était
+    // compressé une fois par destinataire — la charge cible saturait (`bench:collab-load` : 13 s de
+    // retard à 50 salles). Les gros messages sont compressés par l'application, une fois (wire.ts).
+    perMessageDeflate: false,
     handleProtocols,
   });
   /** Connexions refusées : ouvertes le temps de leur donner le code du refus, sans rien lire. */
@@ -359,7 +365,7 @@ export function createMultiplayerServer(options: MultiplayerServerOptions): Mult
         ws.close(CLOSE_RESTART, 'shutdown');
         return;
       }
-      onConnection(ws, verified, projectId);
+      onConnection(ws, verified, projectId, socket);
     });
   }
 
@@ -373,10 +379,11 @@ export function createMultiplayerServer(options: MultiplayerServerOptions): Mult
   // Connexions mortes (réseau coupé sans fermeture) : ping toutes les 15 s (pastille et
   // curseur fantômes ≤ 30 s ; le navigateur répond même dans un onglet en arrière-plan).
   const alive = new WeakSet<object>();
-  function onConnection(socket: WebSocket, identity: Identity, projectId: string): void {
+  const coalescer = createWriteCoalescer();
+  function onConnection(socket: WebSocket, identity: Identity, projectId: string, raw: Duplex): void {
     alive.add(socket);
     socket.on('pong', () => alive.add(socket));
-    handleConnection(socket, { host, auth, identity, projectId, acceptSeed: options.devAuth, log: host.log.bind(host), timings: options.timings });
+    handleConnection(socket, { host, auth, identity, projectId, acceptSeed: options.devAuth, log: host.log.bind(host), timings: options.timings, writes: { socket: raw, coalescer } });
   }
   const heartbeat = setInterval(() => {
     for (const socket of wss.clients) {

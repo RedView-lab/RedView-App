@@ -2,10 +2,9 @@ import type { PointCloudData, DetectedCrs } from '../types';
 import { toWgs84, isJgd2011Crs } from './coordConvert';
 import { fetchEsriImageryTile } from './nz/esriImagery';
 import { beneluxOrthoTileUrl } from './beneluxOrtho';
+import { ORTHO_TILE_SIZE as TILE_SIZE, sampleOrthoColors } from './orthoSampling';
 
 const WMTS_ZOOM = 19;
-const TILE_SIZE = 256;
-const DEFAULT_R = 128, DEFAULT_G = 128, DEFAULT_B = 128;
 
 // IGN — Géoplateforme orthophotos (France).
 const IGN_ORTHO_URL = (z: number, x: number, y: number) =>
@@ -99,18 +98,6 @@ function wgs84ToAbsPixel(lon: number, lat: number, zoom: number): [number, numbe
   const latRad = (lat * Math.PI) / 180;
   const absPy = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n * TILE_SIZE;
   return [absPx, absPy];
-}
-
-/**
- * Slot in the column-major ortho tile array of the tile holding an absolute
- * pixel, or -1 outside the fetched range. Checking col and row separately
- * matters: a flat bound on `col·rows + row` let a row one past the last wrap
- * onto the first tile of the next column.
- */
-function orthoTileSlot(absPx: number, absPy: number, minCol: number, minRow: number, cols: number, rows: number): number {
-  const col = (absPx >> 8) - minCol;
-  const row = (absPy >> 8) - minRow;
-  return col >= 0 && col < cols && row >= 0 && row < rows ? col * rows + row : -1;
 }
 
 const ORTHO_FETCH_CONCURRENCY = 48;
@@ -238,107 +225,12 @@ export async function colorizePointCloud(
 
   const CHUNK = 1_000_000;
   const totalChunks = Math.ceil(count / CHUNK);
+  const mapping = { xMin, yMin, invDx, invDy, px00, py00, px10, py10, px01, py01, px11, py11 };
+  const grid = { minTileCol, minTileRow, cols: tileCols, rows: tileRows, tiles: tileData };
 
   for (let chunk = 0; chunk < totalChunks; chunk++) {
     const start = chunk * CHUNK;
-    const end = Math.min(start + CHUNK, count);
-
-    for (let i = start; i < end; i++) {
-      const x = positions[i * 3];
-      const y = positions[i * 3 + 1];
-
-      const fx = (x - xMin) * invDx;
-      const fy = (y - yMin) * invDy;
-      const fx1 = 1 - fx;
-      const fy1 = 1 - fy;
-
-      const absPx = fx1 * fy1 * px00 + fx * fy1 * px10 + fx1 * fy * px01 + fx * fy * px11;
-      const absPy = fx1 * fy1 * py00 + fx * fy1 * py10 + fx1 * fy * py01 + fx * fy * py11;
-
-      const floorPx = absPx | 0;
-      const floorPy = absPy | 0;
-      const fracX = absPx - floorPx;
-      const fracY = absPy - floorPy;
-
-      const w00 = (1 - fracX) * (1 - fracY);
-      const w10 = fracX * (1 - fracY);
-      const w01 = (1 - fracX) * fracY;
-      const w11 = fracX * fracY;
-
-      let r = 0, g = 0, b = 0, hits = 0;
-
-      // Sample (0,0)
-      const spx0 = floorPx;
-      const spy0 = floorPy;
-      const sIdx0 = orthoTileSlot(spx0, spy0, minTileCol, minTileRow, tileCols, tileRows);
-      if (sIdx0 >= 0) {
-        const sPixels = tileData[sIdx0];
-        if (sPixels) {
-          const pIdx = ((spy0 & 255) * TILE_SIZE + (spx0 & 255)) * 4;
-          r += sPixels[pIdx] * w00;
-          g += sPixels[pIdx + 1] * w00;
-          b += sPixels[pIdx + 2] * w00;
-          hits += w00;
-        }
-      }
-
-      // Sample (1,0)
-      const spx1 = floorPx + 1;
-      const spy1 = floorPy;
-      const sIdx1 = orthoTileSlot(spx1, spy1, minTileCol, minTileRow, tileCols, tileRows);
-      if (sIdx1 >= 0) {
-        const sPixels = tileData[sIdx1];
-        if (sPixels) {
-          const pIdx = ((spy1 & 255) * TILE_SIZE + (spx1 & 255)) * 4;
-          r += sPixels[pIdx] * w10;
-          g += sPixels[pIdx + 1] * w10;
-          b += sPixels[pIdx + 2] * w10;
-          hits += w10;
-        }
-      }
-
-      // Sample (0,1)
-      const spx2 = floorPx;
-      const spy2 = floorPy + 1;
-      const sIdx2 = orthoTileSlot(spx2, spy2, minTileCol, minTileRow, tileCols, tileRows);
-      if (sIdx2 >= 0) {
-        const sPixels = tileData[sIdx2];
-        if (sPixels) {
-          const pIdx = ((spy2 & 255) * TILE_SIZE + (spx2 & 255)) * 4;
-          r += sPixels[pIdx] * w01;
-          g += sPixels[pIdx + 1] * w01;
-          b += sPixels[pIdx + 2] * w01;
-          hits += w01;
-        }
-      }
-
-      // Sample (1,1)
-      const spx3 = floorPx + 1;
-      const spy3 = floorPy + 1;
-      const sIdx3 = orthoTileSlot(spx3, spy3, minTileCol, minTileRow, tileCols, tileRows);
-      if (sIdx3 >= 0) {
-        const sPixels = tileData[sIdx3];
-        if (sPixels) {
-          const pIdx = ((spy3 & 255) * TILE_SIZE + (spx3 & 255)) * 4;
-          r += sPixels[pIdx] * w11;
-          g += sPixels[pIdx + 1] * w11;
-          b += sPixels[pIdx + 2] * w11;
-          hits += w11;
-        }
-      }
-
-      const ci = i * 3;
-      if (hits > 0) {
-        const inv = 1 / hits;
-        colors[ci] = (r * inv + 0.5) | 0;
-        colors[ci + 1] = (g * inv + 0.5) | 0;
-        colors[ci + 2] = (b * inv + 0.5) | 0;
-      } else {
-        colors[ci] = DEFAULT_R;
-        colors[ci + 1] = DEFAULT_G;
-        colors[ci + 2] = DEFAULT_B;
-      }
-    }
+    sampleOrthoColors(positions, colors, start, Math.min(start + CHUNK, count), mapping, grid);
 
     const progress = 50 + Math.round(((chunk + 1) / totalChunks) * 50);
     onProgress?.('Colorisation des points...', progress);

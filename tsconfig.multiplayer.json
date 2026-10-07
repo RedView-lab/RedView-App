@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "incremental": true,
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.multiplayer.tsbuildinfo",
     "target": "ES2023",
     /* Le serveur importe le moteur de co-édition de src/ (et ses types, qui en tirent d'autres de l'app). */

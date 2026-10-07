@@ -8,7 +8,7 @@ import {
   TIMELINE_VIEWPORT_TOP_INSET_PX,
 } from '../constants';
 import type { KmMarker, StartReference, TimelineStopAnchor } from '../types';
-import { getMinuteOfDay, toDayKey } from './format';
+import { getMinuteOfDay, minuteToCanvasTopPx, toDayKey } from './format';
 import { applyStopAnchorsToRideElapsedSeconds, resolveTotalDistanceM } from './schedule-core';
 
 export function resolveMarkerKmStep(
@@ -67,7 +67,7 @@ export function buildKmMarkers(
     const minuteOfDay = markerDate
       ? getMinuteOfDay(markerDate)
       : reference.startMinutes + elapsedSeconds / 60;
-    const topPx = (minuteOfDay - startMinutes) * pixelsPerMinute + TIMELINE_VIEWPORT_TOP_INSET_PX;
+    const topPx = minuteToCanvasTopPx(minuteOfDay, startMinutes, pixelsPerMinute);
     // Hors du canevas : pas de marqueur (avant, ils s'empilaient tous en bas).
     if (topPx < TIMELINE_VIEWPORT_TOP_INSET_PX || topPx > maxTopPx) continue;
     candidates.push({ km, topPx });

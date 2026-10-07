@@ -7,6 +7,7 @@ export {
   formatLegDuration,
   formatPauseDuration,
   getMinuteOfDay,
+  minuteToCanvasTopPx,
   parseDateTime,
   parseDayKey,
   parseStartReference,

@@ -76,11 +76,43 @@ export function hasValidZipSignature(data: ArrayBuffer): boolean {
   }
 }
 
+/** The origin's storage quota is used up: the tile cannot be kept for the viewer. */
+export class StorageFullError extends Error {
+  constructor() {
+    super(translateAppText('Stockage local plein : supprimez des tuiles LiDAR pour libérer de la place.'));
+    this.name = 'StorageFullError';
+  }
+}
+
+function isQuotaExceeded(error: unknown): boolean {
+  return error instanceof DOMException && (error.name === 'QuotaExceededError' || error.code === 22);
+}
+
+let persistenceRequested = false;
+
+/**
+ * Asks once per page for persistent storage: best-effort storage may be
+ * evicted under disk pressure (Chromium) or after 7 days without a visit
+ * (Safari), taking gigabytes of downloaded tiles with it. Chromium decides
+ * without asking, Firefox asks the user — hence on a download, not at load.
+ */
+export function requestPersistentStorage(): void {
+  if (persistenceRequested || typeof navigator === 'undefined' || !navigator.storage?.persist) return;
+  persistenceRequested = true;
+  void navigator.storage.persisted()
+    .then((persisted) => persisted || navigator.storage.persist())
+    .then((granted) => {
+      if (!granted) console.info('[LiDAR storage] Persistent storage not granted: cached tiles may be evicted under storage pressure.');
+    })
+    .catch(() => undefined);
+}
+
 export async function saveTile(coord: TileCoord, data: ArrayBuffer): Promise<void> {
   if (!hasValidLasSignature(data)) {
     throw new Error(translateAppText('Tuile LiDAR corrompue : signature LAS/COPC invalide.'));
   }
   const fileName = tileKey(coord);
+  requestPersistentStorage();
 
   // 1. Try OPFS
   const dir = await getLidarDir();
@@ -92,6 +124,12 @@ export async function saveTile(coord: TileCoord, data: ArrayBuffer): Promise<voi
       await writable.close();
       return;
     } catch (err) {
+      // The viewer (another page) reads tiles from the origin's storage only:
+      // kept in this page's memory, a tile it cannot open is a failed download.
+      if (isQuotaExceeded(err)) {
+        await dir.removeEntry(fileName).catch(() => undefined);
+        throw new StorageFullError();
+      }
       console.warn(`[LiDAR storage] OPFS write failed for ${fileName}, falling back to CacheStorage:`, err);
     }
   }
@@ -166,6 +204,26 @@ export async function loadTileByFileName(fileName: string, coordHint?: TileCoord
   }
 
   return null;
+}
+
+/**
+ * First `byteCount` bytes of a stored tile (its LAS header) without reading
+ * the whole file, from OPFS then CacheStorage; null when absent.
+ */
+export async function readTileHead(fileName: string, byteCount: number): Promise<ArrayBuffer | null> {
+  try {
+    const dir = await getLidarDir();
+    if (dir) return await (await (await dir.getFileHandle(fileName)).getFile()).slice(0, byteCount).arrayBuffer();
+  } catch {
+    // Not in OPFS
+  }
+  try {
+    const match = await (await getLidarCache())?.match(`/lidar-hd/${fileName}`);
+    if (match) return (await match.blob()).slice(0, byteCount).arrayBuffer();
+  } catch {
+    // CacheStorage error
+  }
+  return inMemoryTileCache.get(fileName)?.slice(0, byteCount) ?? null;
 }
 
 export async function hasTile(coord: TileCoord): Promise<boolean> {

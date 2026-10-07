@@ -13,7 +13,7 @@ interface TimelineFilterBarProps {
   isOverridden: boolean;
   onChangeFilters: (next: TimelineFilterState) => void;
   onResetToGlobal?: () => void;
-  /** Titre de la barre (« Filtres du tableau », « Filtres de la timeline »…). */
+  /** Titre de la barre (« Filtres du tableau », « Filtres de l'agenda »…). */
   title: string;
   ariaLabel: string;
 }

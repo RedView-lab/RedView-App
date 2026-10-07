@@ -10,6 +10,7 @@ import {
   type ServerMessage,
 } from '../protocol';
 import type { CollabRealtime, MotionEvent } from '../realtime';
+import { canDeflateWire, canInflateWire, deflateWire, inflateWire, WIRE_COMPRESS_MIN_CHARS } from '../wire';
 import { CollabClient, type CollabDeniedReason } from './collabClient';
 import type { Rejection } from './syncEngine';
 
@@ -105,6 +106,10 @@ export class CollabConnection implements CollabRealtime {
   private readonly WebSocketImpl: typeof WebSocket;
   private socket: WebSocket | null = null;
   private welcomed = false;
+  /** Le serveur de la connexion courante lit les messages compressés (`welcome.compress`, wire.ts). */
+  private serverInflates = false;
+  /** Envois en attente d'une compression, dans l'ordre : un message suivant ne la double jamais. */
+  private outbound: { socket: WebSocket; chain: Promise<void> } | null = null;
   private attempt = 0;
   private unauthorized = 0;
   private started = false;
@@ -239,8 +244,12 @@ export class CollabConnection implements CollabRealtime {
     }
     if (this.stopped) return;
     const socket = new this.WebSocketImpl(projectSocketUrl(this.options.url, this.options.projectId), socketProtocols(token));
+    socket.binaryType = 'arraybuffer';
     this.socket = socket;
     this.welcomed = false;
+    this.serverInflates = false;
+    /** Messages reçus en attente d'une décompression, dans l'ordre (wire.ts). */
+    let inbound: Promise<void> | null = null;
     this.welcomeTimer = setTimeout(() => {
       this.welcomeTimer = null;
       if (socket === this.socket && !this.welcomed) this.restart(0);
@@ -258,29 +267,42 @@ export class CollabConnection implements CollabRealtime {
         presence: this.currentPresence(),
         ...resume,
         ...(seed ? { seed } : {}),
+        ...(canInflateWire() ? { compress: true } : {}),
       });
       this.pingTimer = setInterval(() => this.heartbeat(), PING_INTERVAL_MS);
     };
     socket.onmessage = (event: MessageEvent) => {
       if (socket !== this.socket) return;
       this.received += 1;
-      let message: ServerMessage;
-      try {
-        message = JSON.parse(String(event.data)) as ServerMessage;
-      } catch {
+      const data: unknown = event.data;
+      // Trame texte sans décompression en cours : traitée tout de suite (caméra et curseur à 30 Hz).
+      if (typeof data === 'string' && !inbound) {
+        this.receiveText(socket, data);
         return;
       }
-      if (message.type === 'welcome') {
-        this.welcomed = true;
-        if (this.welcomeTimer) clearTimeout(this.welcomeTimer);
-        this.welcomeTimer = null;
-        this.attempt = 0;
-        this.unauthorized = 0;
-        if (this.authTimer) clearInterval(this.authTimer);
-        this.authTimer = setInterval(() => void this.reauthenticate(socket), REAUTH_INTERVAL_MS);
-      }
-      this.client.receive(message);
-      if (message.type === 'welcome' && this.presenceVersion !== this.helloPresenceVersion) this.sendPresence();
+      const next = (inbound ?? Promise.resolve()).then(async () => {
+        let text: string;
+        try {
+          text = typeof data === 'string' ? data : await inflateWire(data as ArrayBuffer | Blob);
+        } catch {
+          // Trame illisible : l'état n'est plus sûr, on repart d'une connexion neuve.
+          if (socket === this.socket) this.restart(0);
+          return;
+        }
+        if (socket !== this.socket) return;
+        try {
+          this.receiveText(socket, text);
+        } catch (error) {
+          // Comme pour un message traité tout de suite : l'erreur remonte, les suivants passent.
+          setTimeout(() => {
+            throw error;
+          });
+        }
+      });
+      inbound = next;
+      void next.finally(() => {
+        if (inbound === next) inbound = null;
+      });
     };
     socket.onclose = (event: CloseEvent) => {
       if (socket !== this.socket) return;
@@ -436,10 +458,61 @@ export class CollabConnection implements CollabRealtime {
     this.rawSend(message);
   }
 
+  /** Un message du serveur (JSON, décompressé s'il le fallait), dans l'ordre d'arrivée. */
+  private receiveText(socket: WebSocket, text: string): void {
+    let message: ServerMessage;
+    try {
+      message = JSON.parse(text) as ServerMessage;
+    } catch {
+      return;
+    }
+    if (message.type === 'welcome') {
+      this.welcomed = true;
+      this.serverInflates = message.compress === true;
+      if (this.welcomeTimer) clearTimeout(this.welcomeTimer);
+      this.welcomeTimer = null;
+      this.attempt = 0;
+      this.unauthorized = 0;
+      if (this.authTimer) clearInterval(this.authTimer);
+      this.authTimer = setInterval(() => void this.reauthenticate(socket), REAUTH_INTERVAL_MS);
+    }
+    this.client.receive(message);
+    if (message.type === 'welcome' && this.presenceVersion !== this.helloPresenceVersion) this.sendPresence();
+  }
+
+  /**
+   * Envoi : un gros message (segments de tracé) part compressé si le serveur
+   * le lit (wire.ts) ; tant qu'une compression est en cours, les messages
+   * suivants l'attendent (l'ordre des lots est celui du serveur).
+   */
   private rawSend(message: ClientMessage): void {
     const socket = this.socket;
     if (!socket || socket.readyState !== this.WebSocketImpl.OPEN) return;
-    socket.send(JSON.stringify(message));
+    const json = JSON.stringify(message);
+    const compress = this.serverInflates && json.length >= WIRE_COMPRESS_MIN_CHARS && canDeflateWire();
+    const pending = this.outbound?.socket === socket ? this.outbound.chain : null;
+    if (!compress && !pending) {
+      socket.send(json);
+      return;
+    }
+    const work = async () => {
+      let data: string | ArrayBuffer = json;
+      if (compress) {
+        try {
+          data = await deflateWire(json);
+        } catch {
+          // Compression impossible : le texte passe aussi.
+        }
+      }
+      if (socket === this.socket && socket.readyState === this.WebSocketImpl.OPEN) socket.send(data);
+    };
+    // Après un envoi qui a échoué aussi : la file ne s'arrête jamais.
+    const chain = (pending ?? Promise.resolve()).then(work, work);
+    const entry = { socket, chain };
+    this.outbound = entry;
+    void chain.finally(() => {
+      if (this.outbound === entry) this.outbound = null;
+    });
   }
 
   private clearTimers(): void {

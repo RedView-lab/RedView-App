@@ -95,6 +95,12 @@ export const POI_LABELS: Record<PoiCategory, string> = Object.fromEntries(
   POI_CATEGORIES.map((key) => [key, POI_TAXONOMY_LABELS[key] ?? key]),
 ) as Record<PoiCategory, string>;
 
+/**
+ * Durée d'une pause de POI quand rien d'autre ne la fixe (catégorie sans
+ * durée dans la grille Rythme) : celle du popup, et celle posée avec un favori.
+ */
+export const DEFAULT_POI_PAUSE_MIN = 5;
+
 /** Nom logique d'icône par catégorie (résolu en URL par `lib/poi-icons`). */
 export const POI_ICON_NAMES: Record<PoiCategory, string> = Object.fromEntries(
   POI_CATEGORIES.map((key) => [key, POI_TAXONOMY_ICON[key] ?? 'fallback']),

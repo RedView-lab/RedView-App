@@ -1,0 +1,24 @@
+[package]
+name = "redviewlaz"
+version = "0.1.0"
+edition = "2021"
+description = "Décodeur des chunks COPC du viewer LiDAR RedView (laz-rs, décompression sélective)"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+laz = { version = "0.13", default-features = false }
+# Même version que le CLI wasm-bindgen en cache (voir build.ps1).
+wasm-bindgen = "=0.2.117"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

@@ -46,14 +46,14 @@ export function TimelineEditPanel({
   const { t } = useAppI18n();
 
   return (
-    <section className="rvi-tl-edit" aria-label={t('Paramètres de la timeline')}>
+    <section className="rvi-tl-edit" aria-label={t("Paramètres de l'agenda")}>
       <div className="rvi-tl-edit__controls">
         <div className="rvi-tl-edit__field">
           <span className="rvi-tl-edit__field-label">{t('Échelle')}</span>
           <TimelineSelect
             value="Date"
             options={SCALE_OPTIONS}
-            ariaLabel={t('Échelle de la timeline')}
+            ariaLabel={t("Échelle de l'agenda")}
           />
         </div>
 
@@ -67,7 +67,7 @@ export function TimelineEditPanel({
           />
         </div>
 
-        <div className="rvi-tl-edit__zoom" aria-label={t('Zoom de la timeline')}>
+        <div className="rvi-tl-edit__zoom" aria-label={t("Zoom de l'agenda")}>
           <span className="rvi-tl-edit__field-label">{t('Zoom')}</span>
           <div className="rvi-tl-edit__zoom-actions">
             <button
@@ -97,8 +97,8 @@ export function TimelineEditPanel({
         isOverridden={isFiltersOverridden}
         onChangeFilters={onChangeFilters}
         onResetToGlobal={onResetFilters}
-        title={t('Filtres de la timeline')}
-        ariaLabel={t('Filtres de la timeline')}
+        title={t("Filtres de l'agenda")}
+        ariaLabel={t("Filtres de l'agenda")}
       />
 
       <div className="rvi-tl-edit__divider" aria-hidden />

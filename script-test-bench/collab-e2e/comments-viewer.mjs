@@ -77,6 +77,17 @@ async function key(session, keyName) {
   await session.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...params });
   await session.send('Input.dispatchKeyEvent', { type: 'keyUp', ...params });
 }
+
+/**
+ * Tape dans la saisie de commentaire une fois qu'elle a le focus : elle le
+ * prend en s'ouvrant, mais une image du viewer peut être longue (batterie,
+ * GPU lent) — sans attendre, le texte partait dans le vide.
+ */
+async function typeInComposer(session, text) {
+  await waitFor(session, `document.activeElement?.classList?.contains('rv-comment-composer__input') ?? false`, { timeout: 5000 }).catch(() => null);
+  await session.send('Input.insertText', { text });
+}
+
 async function shot(session, name) {
   await session.send('Page.bringToFront').catch(() => null);
   await sleep(300);
@@ -153,7 +164,7 @@ try {
   await V.evaluate(`[...document.querySelectorAll('button')].find((b) => /Commenter ici|Comment here/.test(b.textContent))?.click()`);
   await waitFor(V, `!!document.querySelector('[data-rv-comment-card="draft"] textarea')`, { timeout: 5000 }).catch(() => null);
   check(await V.evaluate(`!!document.querySelector('[data-rv-comment-card="draft"]')`), 'viewer : saisie d’un nouveau commentaire');
-  await V.send('Input.insertText', { text: 'Replat pour la pause' });
+  await typeInComposer(V, 'Replat pour la pause');
   await key(V, 'Enter');
   await waitFor(A, store(`(s.project.comments?.length ?? 0) >= 2`), { timeout: 15000 }).catch(() => null);
   console.error('after create', await A.evaluate(store(`JSON.stringify({ n: s.project.comments?.length, vis: document.visibilityState })`)), await V.evaluate(`JSON.stringify({ draft: !!document.querySelector('[data-rv-comment-card="draft"]'), text: document.querySelector('[data-rv-comment-card="draft"] textarea')?.value ?? null })`));
@@ -182,7 +193,7 @@ try {
   await click(V, zoneClicks[0].x + 2, zoneClicks[0].y + 1);
   await waitFor(V, `!!document.querySelector('[data-rv-comment-card="draft"] .rv-comment-card__draft-context')`, { timeout: 5000 }).catch(() => null);
   check(await V.evaluate(`!!document.querySelector('[data-rv-comment-card="draft"] .rv-comment-card__draft-context')`), 'viewer : zone fermée → saisie d’un commentaire de zone');
-  await V.send('Input.insertText', { text: 'Zone de chutes de pierres' });
+  await typeInComposer(V, 'Zone de chutes de pierres');
   await key(V, 'Enter');
   await waitFor(V, `window.__sentActions.some((a) => a.type === 'create-thread' && a.zone)`, { timeout: 5000 }).catch(() => null);
   const sentRing = await V.evaluate(`window.__sentActions.find((a) => a.type === 'create-thread' && a.zone)?.zone.ring.length ?? 0`);

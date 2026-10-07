@@ -11,25 +11,29 @@ import {
 } from '../../../components/icons';
 import { KindBadge } from '../KindBadge';
 import { CARD_NAME_LINE_HEIGHT_PX, CARD_NAME_MAX_LINES } from './constants';
-import type { PoiCategory, TimelineItem } from '../../../types';
-import type { TimelineEvent } from './types';
-import { formatDistanceLabel, formatLegDuration, formatPauseDuration } from './utils';
+import type { TimelineItem } from '../../../types';
+import type { PauseDurationEditState, TimelineEvent } from './types';
+import {
+  formatDistanceLabel,
+  formatHourLabel,
+  formatLegDuration,
+  formatPauseDuration,
+} from './utils';
 
-interface PauseDurationEditState {
-  kind: 'manual' | 'interval' | 'favorite-poi';
-  targetId: string;
-  draft: string;
-  previousDurationMin: number;
-  poiCategory?: PoiCategory;
-}
+/** Ligne « Repart à … » sous le nom (rôle caption). */
+const CARD_CAPTION_LINE_HEIGHT_PX = 14;
+/** Marges haute et basse de la carte. */
+const CARD_VERTICAL_PADDING_PX = 8;
+/** Ligne d'en-tête de la carte (icône, nom, chiffres). */
+const CARD_HEADER_HEIGHT_PX = 24;
 
 interface TimelineEventCardProps {
   event: TimelineEvent;
   previewEvent: TimelineEvent;
   index: number;
   selected: boolean;
-  canEditFavoritePoiPause: boolean;
-  isEditingFavoritePoiPause: boolean;
+  canEditPoiPause: boolean;
+  isEditingPoiPause: boolean;
   editingPauseDuration: PauseDurationEditState | null;
   pauseDurationInputRef: RefObject<HTMLInputElement | null>;
   dragStateId?: string;
@@ -39,8 +43,9 @@ interface TimelineEventCardProps {
   onToggleVisibility?: (id: string, visible: boolean) => void;
   onToggleFavorite?: (id: string, favorite: boolean) => void;
   onRemove?: (id: string) => void;
-  onFavoritePoiPauseDurationClick: (
-    poiCategory: PoiCategory | undefined,
+  /** Modifier la pause de ce POI (sa durée à lui seul). */
+  onPoiPauseDurationClick: (
+    itemId: string,
     currentDurationMin: number,
     event: ReactMouseEvent<HTMLSpanElement>,
   ) => void;
@@ -55,15 +60,17 @@ function stopEventPropagation(event: ReactMouseEvent<HTMLButtonElement>) {
 }
 
 /**
- * Carte d'événement unitaire dans la vue de planning / feuille de route.
+ * Bloc d'un point dans l'agenda. Son haut est l'heure d'arrivée ; la ligne
+ * d'en-tête (icône, nom, pause, distance, temps jusqu'au suivant, actions,
+ * favori) reste en haut, et la pastille de pause descend sur toute sa durée.
  */
 export function TimelineEventCard({
   event,
   previewEvent,
   index,
   selected,
-  canEditFavoritePoiPause,
-  isEditingFavoritePoiPause,
+  canEditPoiPause,
+  isEditingPoiPause,
   editingPauseDuration,
   pauseDurationInputRef,
   dragStateId,
@@ -72,7 +79,7 @@ export function TimelineEventCard({
   onToggleVisibility,
   onToggleFavorite,
   onRemove,
-  onFavoritePoiPauseDurationClick,
+  onPoiPauseDurationClick,
   onPauseDurationDraftChange,
   onCommitPauseDurationEdit,
   onCancelPauseDurationEdit,
@@ -87,10 +94,23 @@ export function TimelineEventCard({
       ? formatPauseDuration(event.item.durationMin)
       : event.item.label || t('Point sans nom');
 
+  // Heure de départ de chaque pause : arrivée + pauses précédentes + la sienne.
+  const pauseUntilLabels: string[] = [];
+  let pauseEndMinute = event.minuteOfDay;
+  for (const pause of previewEvent.attachedPauses) {
+    pauseEndMinute += Math.max(0, pause.durationMin);
+    pauseUntilLabels.push(formatHourLabel(pauseEndMinute));
+  }
+  const contentHeightPx = previewEvent.cardHeightPx - CARD_VERTICAL_PADDING_PX;
+  // « Repart à … » sous le nom, dès que la pause allonge assez la carte.
+  const departureLabel = hasAttachedPauses
+    && contentHeightPx >= CARD_HEADER_HEIGHT_PX + CARD_CAPTION_LINE_HEIGHT_PX
+    ? pauseUntilLabels[pauseUntilLabels.length - 1] ?? null
+    : null;
   // Carte haute (longue pause attachée) : le nom peut passer sur 2–3 lignes.
   const nameLines = Math.max(1, Math.min(
     CARD_NAME_MAX_LINES,
-    Math.floor((previewEvent.cardHeightPx - 8) / CARD_NAME_LINE_HEIGHT_PX),
+    Math.floor((contentHeightPx - (departureLabel ? CARD_CAPTION_LINE_HEIGHT_PX : 0)) / CARD_NAME_LINE_HEIGHT_PX),
   ));
 
   const eventStyle = {
@@ -121,35 +141,48 @@ export function TimelineEventCard({
       >
         <span className="rvi-tl-schedule__event-main">
           <span className="rvi-tl-schedule__event-icon" aria-hidden>
+            {/* La pause a sa colonne : pas de seconde pastille sur l'icône. */}
             <KindBadge
               kind={event.item.kind}
               poiCategory={event.item.poiCategory}
               favorite={event.item.favorite}
-              pauseDurationMin={event.item.durationMin}
               size={24}
             />
           </span>
-          <span className="rvi-tl-schedule__event-name" title={title}>
-            {title}
+          <span className="rvi-tl-schedule__event-title">
+            <span className="rvi-tl-schedule__event-name" title={title}>
+              {title}
+            </span>
+            {departureLabel ? (
+              <span className="rvi-tl-schedule__event-caption">
+                {t('Repart à {{time}}', { time: departureLabel })}
+              </span>
+            ) : null}
           </span>
           <span className="rvi-tl-schedule__event-pauses">
             {hasAttachedPauses ? (
-              previewEvent.attachedPauses.map((pause) => (
+              previewEvent.attachedPauses.map((pause, pauseIndex) => (
                 <span
                   key={pause.id}
                   className={[
                     'rvi-tl-schedule__pause-chip',
                     pause.visible ? 'is-visible' : '',
-                    canEditFavoritePoiPause ? 'is-editable' : '',
+                    canEditPoiPause ? 'is-editable' : '',
                     dragStateId === pause.id ? 'is-dragging' : '',
                   ].filter(Boolean).join(' ')}
                   style={{
                     minHeight: pause.heightPx,
                     height: pause.heightPx,
                   }}
-                  title={canEditFavoritePoiPause
-                    ? t('{{duration}} · cliquer pour modifier', { duration: formatPauseDuration(pause.durationMin) })
-                    : formatPauseDuration(pause.durationMin)}
+                  title={canEditPoiPause
+                    ? t('{{duration}} · départ {{time}} · cliquer pour modifier', {
+                        duration: formatPauseDuration(pause.durationMin),
+                        time: pauseUntilLabels[pauseIndex] ?? '',
+                      })
+                    : t('{{duration}} · départ {{time}}', {
+                        duration: formatPauseDuration(pause.durationMin),
+                        time: pauseUntilLabels[pauseIndex] ?? '',
+                      })}
                 >
                   <span
                     className="rvi-tl-schedule__pause-chip-icon"
@@ -157,7 +190,7 @@ export function TimelineEventCard({
                   >
                     <KindBadge kind="pause" size={24} />
                   </span>
-                  {isEditingFavoritePoiPause ? (
+                  {isEditingPoiPause ? (
                     <input
                       ref={pauseDurationInputRef}
                       className="rvi-tl-schedule__pause-chip-input"
@@ -185,8 +218,9 @@ export function TimelineEventCard({
                     />
                   ) : (
                     <span
-                      onClick={canEditFavoritePoiPause ? (clickEvent) => onFavoritePoiPauseDurationClick(
-                        event.item.poiCategory,
+                      className="rvi-tl-schedule__pause-chip-text"
+                      onClick={canEditPoiPause ? (clickEvent) => onPoiPauseDurationClick(
+                        event.item.id,
                         pause.durationMin,
                         clickEvent,
                       ) : undefined}

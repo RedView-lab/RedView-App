@@ -135,6 +135,7 @@ export const lidarTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Fichier en cours d\'utilisation (ferme le viewer 3D et réessaie).', en: 'File in use (close the 3D viewer and try again).' },
   { fr: 'Suppression impossible', en: 'Unable to delete' },
   { fr: 'Tuile LiDAR corrompue : signature LAS/COPC invalide.', en: 'Corrupted LiDAR tile: invalid LAS/COPC signature.' },
+  { fr: 'Stockage local plein : supprimez des tuiles LiDAR pour libérer de la place.', en: 'Local storage is full: delete LiDAR tiles to free up space.' },
   { fr: 'Téléchargement annulé', en: 'Download cancelled' },
   { fr: 'Chargement depuis le cache...', en: 'Loading from cache...' },
   { fr: 'Hors couverture swisstopo, recherche IGN LiDAR HD...', en: 'Outside swisstopo coverage, searching IGN LiDAR HD...' },

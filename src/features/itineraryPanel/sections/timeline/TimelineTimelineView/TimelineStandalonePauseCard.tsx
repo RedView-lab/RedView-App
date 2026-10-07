@@ -7,17 +7,8 @@ import {
 import { useAppI18n } from '@/shared/i18n';
 import { IconStar } from '../../../components/icons';
 import { KindBadge } from '../KindBadge';
-import type { PoiCategory } from '../../../types';
-import type { TimelineStandalonePause } from './types';
+import type { PauseDurationEditState, TimelineStandalonePause } from './types';
 import { formatDistanceLabel, formatLegDuration, formatPauseDuration } from './utils';
-
-interface PauseDurationEditState {
-  kind: 'manual' | 'interval' | 'favorite-poi';
-  targetId: string;
-  draft: string;
-  previousDurationMin: number;
-  poiCategory?: PoiCategory;
-}
 
 interface TimelineStandalonePauseCardProps {
   pause: TimelineStandalonePause;

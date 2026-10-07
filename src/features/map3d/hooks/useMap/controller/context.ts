@@ -89,6 +89,8 @@ export interface ControllerState {
 
   reloadVerifyTimer: VisibleTimer | null;
   reloadReadinessTimer: VisibleTimer | null;
+  /** Changement de profil DEM arrivé pendant l'attente ou un rechargement : rejoué ensuite (reload.ts). */
+  profileReloadTimer: VisibleTimer | null;
   reloadInProgress: boolean;
   reloadStyleEscalations: number;
 
@@ -202,6 +204,7 @@ export function createInitialState(): ControllerState {
 
     reloadVerifyTimer: null,
     reloadReadinessTimer: null,
+    profileReloadTimer: null,
     reloadInProgress: false,
     reloadStyleEscalations: 0,
 

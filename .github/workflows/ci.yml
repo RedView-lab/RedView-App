@@ -31,6 +31,21 @@ jobs:
 
       - run: npm ci
 
+      # Caches des outils incrémentaux, restaurés après `npm ci` (qui vide
+      # node_modules) : build info de tsc -b et cache ESLint (stratégie
+      # « content » : un checkout remet toutes les dates à zéro). À froid ils
+      # coûtent ~55 s et ~87 s des étapes parallèles ; seuls les fichiers
+      # modifiés depuis le run en cache sont revérifiés. Clé par commit,
+      # restauration depuis le plus récent.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            node_modules/.tmp
+            node_modules/.cache/eslint
+          key: check-${{ runner.os }}-${{ hashFiles('package-lock.json', 'tsconfig*.json', 'eslint.config.js', 'eslint-suppressions.json') }}-${{ github.sha }}
+          restore-keys: |
+            check-${{ runner.os }}-${{ hashFiles('package-lock.json', 'tsconfig*.json', 'eslint.config.js', 'eslint-suppressions.json') }}-
+
       - run: npm run check:full
 
   # Viewer LiDAR sous Linux, comme ses utilisateurs : Firefox n'y a pas
@@ -59,6 +74,8 @@ jobs:
 
       - run: npm run build:vite
 
+      # Les deux navigateurs choisissent WebGL 2 ici : les cas « webgl »
+      # forcés, même chemin, sont sautés (≈ 165 s de SwiftShader en moins).
       - run: xvfb-run -a --server-args="-screen 0 1920x1080x24" npm run bench:lidar-engines -- --expect-auto webgl --headed
 
       - if: failure()

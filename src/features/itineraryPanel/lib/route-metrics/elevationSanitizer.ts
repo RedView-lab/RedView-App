@@ -70,14 +70,23 @@ export function hasCorruptedElevations(
   return false;
 }
 
-function calculateMedian(values: number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = values.slice().sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  if (sorted.length % 2 !== 0) {
-    return sorted[mid]!;
+/**
+ * Median of the first `size` values, sorted in place (insertion sort: the
+ * window holds at most 9 values, and a per-point array + sort cost most of
+ * the cleaning of a long track).
+ */
+function medianInPlace(values: Float64Array, size: number): number {
+  for (let i = 1; i < size; i++) {
+    const value = values[i]!;
+    let j = i - 1;
+    while (j >= 0 && values[j]! > value) {
+      values[j + 1] = values[j]!;
+      j--;
+    }
+    values[j + 1] = value;
   }
-  return (sorted[mid - 1]! + sorted[mid]!) / 2;
+  const mid = Math.floor(size / 2);
+  return size % 2 !== 0 ? values[mid]! : (values[mid - 1]! + values[mid]!) / 2;
 }
 
 export type ElevationPointInput = {
@@ -127,6 +136,8 @@ export function cleanAndInterpolateElevations<T extends ElevationPointInput>(
   // On ne filtre que si on a suffisamment de points de référence
   if (validCount >= 3) {
     const cleanedElevations = rawElevations.slice();
+    const windowVals = new Float64Array(9);
+    const deviations = new Float64Array(9);
 
     for (let i = 0; i < n; i++) {
       const current = cleanedElevations[i];
@@ -178,20 +189,20 @@ export function cleanAndInterpolateElevations<T extends ElevationPointInput>(
       }
 
       // Cas 3 : Fenêtre locale glissante de 7 points valides
-      const windowVals: number[] = [];
+      let windowSize = 0;
       for (let w = Math.max(0, i - 4); w <= Math.min(n - 1, i + 4); w++) {
-        if (cleanedElevations[w] !== null) {
-          windowVals.push(cleanedElevations[w]!);
-        }
+        const value = cleanedElevations[w];
+        if (value !== null) windowVals[windowSize++] = value;
       }
 
-      if (windowVals.length >= 5) {
-        const localMedian = calculateMedian(windowVals);
+      if (windowSize >= 5) {
+        const localMedian = medianInPlace(windowVals, windowSize);
         const absDiffFromMedian = Math.abs(current - localMedian);
         // Si le point s'écarte de plus de 100m de la médiane locale alors que
         // le relief local est modéré
         if (absDiffFromMedian > 100) {
-          const mediansAbsDev = calculateMedian(windowVals.map((v) => Math.abs(v - localMedian)));
+          for (let k = 0; k < windowSize; k++) deviations[k] = Math.abs(windowVals[k]! - localMedian);
+          const mediansAbsDev = medianInPlace(deviations, windowSize);
           if (absDiffFromMedian > Math.max(70, mediansAbsDev * 4)) {
             cleanedElevations[i] = null;
           }

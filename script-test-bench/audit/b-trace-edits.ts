@@ -83,6 +83,7 @@ async function main() {
   const trace = await loadSrc<any>('src/features/itineraryPanel/lib/tracer/traceEdits.ts');
   const mut = await loadSrc<any>('src/features/itineraryPanel/hooks/useItineraryBrouterRouting/projectMutations.ts');
   const tl = await loadSrc<any>('src/features/itineraryPanel/components/ItineraryPanelContainer/timelineMutations.ts');
+  const inputs = await loadSrc<any>('src/features/itineraryPanel/hooks/useItineraryBrouterRouting/routingInputs.ts');
   // Routing effect's decision for a pending edit, given the previous unapplied one (index.ts).
   const { planPendingRouteEdit } = await loadSrc<any>('src/features/itineraryPanel/hooks/useItineraryBrouterRouting/pendingEditPlan.ts');
 
@@ -139,7 +140,7 @@ async function main() {
     let pp = baseProject();
     const c2 = structuredClone(pp.itineraries[0]);
     trace.moveTracePointInItinerary(c2, 'end', B.lon, B.lat);
-    c2.pendingRoutePatch = tl.buildPendingRoutePatchForEditedRow(c2.timeline, 'end');
+    c2.pendingRoutePatch = tl.buildPendingRoutePatchForEditedRow(c2, 'end');
     pp = { ...pp, itineraries: [c2] };
     const tgt = { itineraryId: 'it-1', pendingKey: JSON.stringify(c2.pendingRoutePatch) };
     const r2 = fakeBrouterRoute([S, B]);
@@ -152,7 +153,7 @@ async function main() {
     const pr = baseProject();
     pr.itineraries[0].gpxRoute.source = 'gpx';
     pr.itineraries[0].timeline.splice(1, 0, { id: 'w', kind: 'waypoint', label: 'w', distanceKm: null, lat: B.lat, lon: B.lon });
-    const sig = mut.getRoutingInputsSignature(pr.itineraries[0]);
+    const sig = inputs.getRoutingInputsSignature(pr.itineraries[0]);
     const r3 = fakeBrouterRoute([S, B, A]);
     const rtgt = { itineraryId: 'it-1', inputsSignature: sig };
     const s1 = mut.applyRecomputedRoute(pr, rtgt, r3, null);
@@ -187,7 +188,7 @@ async function main() {
     const out = mut.applyPendingTraceAppend(project, { itineraryId: 'it-1', pendingKey: plan2.pendingKey ?? JSON.stringify(secondExt) }, route, null);
     const pts = out.itineraries[0].gpxRoute.points;
     const gap = maxGapM(pts);
-    const viaKey = mut.getRoutingEndpointsKey(out.itineraries[0]).viaKey;
+    const viaKey = inputs.getRoutingEndpointsKey(out.itineraries[0]).viaKey;
     console.log(`    final route: ${pts.length} pts, largest gap between consecutive points = ${gap.max.toFixed(0)} m at index ${gap.at} (A→B straight line = ${hav(A, B).toFixed(0)} m)`);
     console.log(`    pendingTraceExtension cleared=${out.itineraries[0].pendingTraceExtension === undefined}; viaKey now "${viaKey}" — index.ts:369 stores routingInputKey for these inputs → no full recompute repairs it`);
     if (gap.max > 1000) failures.push(`B2a: rapid trace clicks leave an unrouted straight segment of ${gap.max.toFixed(0)} m (A→B) marked as routed`);
@@ -211,17 +212,17 @@ async function main() {
     const B2: P = { lat: 45.97, lon: 6.30 };
     const c1 = structuredClone(it0);
     trace.moveTracePointInItinerary(c1, 'wA', A2.lon, A2.lat);
-    c1.pendingRoutePatch = tl.buildPendingRoutePatchForEditedRow(c1.timeline, 'wA');
+    c1.pendingRoutePatch = tl.buildPendingRoutePatchForEditedRow(c1, 'wA');
     const c2 = structuredClone(c1);
     trace.moveTracePointInItinerary(c2, 'end', B2.lon, B2.lat); // 2nd drag before 1st result
-    c2.pendingRoutePatch = tl.buildPendingRoutePatchForEditedRow(c2.timeline, 'end');
+    c2.pendingRoutePatch = tl.buildPendingRoutePatchForEditedRow(c2, 'end');
     project = { ...project, itineraries: [c2] };
     console.log(`B2b patch1=${JSON.stringify(c1.pendingRoutePatch)}\n    patch2=${JSON.stringify(c2.pendingRoutePatch)} (patch1 lost)`);
     const plan1 = planPendingRouteEdit(c1, undefined);
     const plan2 = planPendingRouteEdit(c2, { kind: 'patch', pendingKey: plan1.pendingKey });
     console.log(`    effect plan after 2nd drag = ${plan2.mode}`);
     const out = plan2.mode === 'full'
-      ? mut.applyRecomputedRoute(project, { itineraryId: 'it-1', inputsSignature: mut.getRoutingInputsSignature(c2) }, fakeBrouterRoute([S, A2, B2]), null)
+      ? mut.applyRecomputedRoute(project, { itineraryId: 'it-1', inputsSignature: inputs.getRoutingInputsSignature(c2) }, fakeBrouterRoute([S, A2, B2]), null)
       : mut.applyPendingRoutePatch(project, { itineraryId: 'it-1', pendingKey: JSON.stringify(c2.pendingRoutePatch) }, fakeBrouterRoute([A2, B2]), null);
     if (out.itineraries[0].pendingRoutePatch) failures.push('B2b: pending patch left after the route was recomputed');
     const outPts: P[] = out.itineraries[0].gpxRoute.points;

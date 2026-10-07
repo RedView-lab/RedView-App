@@ -7,8 +7,9 @@
 // marker-creation time.
 
 import type { PoiAutoSortReason, PoiFeature } from '../types';
-import { POI_LABELS } from '../types';
+import { DEFAULT_POI_PAUSE_MIN, POI_LABELS } from '../types';
 import { getPoiIconUrl } from './poi-icons';
+import { formatPoiPauseLabel } from './poi-sprites';
 
 /** Libellés (source FR, traduits par l'observateur DOM d'AppI18nProvider). */
 const AUTO_REASON_LABELS: Record<PoiAutoSortReason, string> = {
@@ -37,7 +38,11 @@ export interface UsePoiPopupActions {
   onFinishHere?: (feature: PoiFeature) => void;
   onCyclePauseDuration?: (feature: PoiFeature) => void;
   onSelectPauseDuration?: (feature: PoiFeature, durationMin: number) => void;
-  onToggleFavorite?: (feature: PoiFeature, nextEnabled: boolean) => void;
+  /**
+   * Favori basculé ; un favori active aussi la pause, à `pauseDurationMin`
+   * (la durée affichée par le popup).
+   */
+  onToggleFavorite?: (feature: PoiFeature, nextEnabled: boolean, pauseDurationMin?: number) => void;
   onTogglePause?: (
     feature: PoiFeature,
     nextEnabled: boolean,
@@ -51,7 +56,7 @@ export interface UsePoiPopupActions {
 const DEFAULT_POPUP_STATE: PoiPopupState = {
   favoriteEnabled: false,
   pauseEnabled: false,
-  pauseDurationMin: 5,
+  pauseDurationMin: DEFAULT_POI_PAUSE_MIN,
   isDurationDropdownOpen: false,
 };
 
@@ -65,6 +70,15 @@ const UI_ICON_URLS = {
   check: '/svgv2/icone/check.svg',
   trash: '/right-click-icons/trash-01.svg',
 } as const;
+
+/**
+ * État affiché juste après un clic sur l'étoile : un favori coche sa pause,
+ * le retirer la décoche (même règle que l'itinéraire, `poiFavoritePause.ts`).
+ */
+export function toggleFavoriteInPopupState(state: PoiPopupState): PoiPopupState {
+  const favoriteEnabled = !state.favoriteEnabled;
+  return { ...state, favoriteEnabled, pauseEnabled: favoriteEnabled, isDurationDropdownOpen: false };
+}
 
 export function resolvePopupState(
   actions: UsePoiPopupActions,
@@ -232,8 +246,8 @@ export function buildPopupContent(
   });
 
   bindClick('[data-action="favorite-toggle"]', () => {
-    const nextState = { ...state, favoriteEnabled: !state.favoriteEnabled, isDurationDropdownOpen: false };
-    actions.onToggleFavorite?.(feature, nextState.favoriteEnabled);
+    const nextState = toggleFavoriteInPopupState(state);
+    actions.onToggleFavorite?.(feature, nextState.favoriteEnabled, nextState.pauseDurationMin);
     refresh(nextState);
   });
 
@@ -296,6 +310,5 @@ function escapeHtml(str: string): string {
 }
 
 function formatPauseDuration(durationMin: number): string {
-  const safeDuration = Math.max(1, Math.round(durationMin || 5));
-  return `${safeDuration} min`;
+  return formatPoiPauseLabel(durationMin || DEFAULT_POI_PAUSE_MIN);
 }

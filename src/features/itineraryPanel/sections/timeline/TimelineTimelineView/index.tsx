@@ -1,5 +1,5 @@
 /**
- * "Timeline" - day schedule view rebuilt from the Figma timeline design.
+ * Agenda (view id `'timeline'`) - day schedule view.
  *
  * Instead of a pure kilometre rail, the view projects itinerary checkpoints
  * onto a day/hour canvas using the FIT prediction when available. Distances
@@ -30,6 +30,7 @@ import {
   buildScheduledEvents,
   buildScheduledStandalonePauses,
   distanceAtElapsedSeconds,
+  minuteToCanvasTopPx,
   parseDayKey,
   parseStartReference,
   positionTimelineBlocks,
@@ -74,7 +75,6 @@ export function TimelineTimelineView({
   onMovePause,
   onChangePauseDuration,
   onChangeIntervalPauseDuration,
-  onChangeFavoritePoiPauseDuration,
   onRegisterPauseInsertionResolver,
   onToggleFavorite,
   onRemove,
@@ -254,7 +254,7 @@ export function TimelineTimelineView({
   const pixelsPerMinute = hourRowHeightPx / 60;
   const canvasBaseHeight = Math.max(visibleDurationMinutes * pixelsPerMinute, 0);
   // Minuit sur le canevas : avec des dates réelles, aucune carte ne le dépasse.
-  const dayEndPx = reference.hasRealDate ? (MINUTES_PER_DAY - startMinutes) * pixelsPerMinute : null;
+  const dayEndPx = reference.hasRealDate ? minuteToCanvasTopPx(MINUTES_PER_DAY, startMinutes, pixelsPerMinute) : null;
 
   const scheduledEvents = useMemo(
     () =>
@@ -425,9 +425,7 @@ export function TimelineTimelineView({
         kmMarkerStep,
         maxDistanceKm,
         stopAnchors,
-        hourLabelMarks.map(
-          (markMinute) => (markMinute - startMinutes) * pixelsPerMinute + TIMELINE_VIEWPORT_TOP_INSET_PX,
-        ),
+        hourLabelMarks.map((markMinute) => minuteToCanvasTopPx(markMinute, startMinutes, pixelsPerMinute)),
       ),
     [
       canvasHeight,
@@ -449,7 +447,7 @@ export function TimelineTimelineView({
     if (!displayDayKeySet.has(toDayKey(now))) return null;
     const minuteOfDay = now.getHours() * 60 + now.getMinutes();
     if (minuteOfDay < startMinutes || minuteOfDay > endMinutes) return null;
-    return (minuteOfDay - startMinutes) * pixelsPerMinute + 10;
+    return minuteToCanvasTopPx(minuteOfDay, startMinutes, pixelsPerMinute);
   }, [displayDayKeySet, endMinutes, now, pixelsPerMinute, reference.hasRealDate, startMinutes]);
   const currentTimeLineDayIndex = useMemo(() => {
     if (!reference.hasRealDate) return null;
@@ -613,7 +611,7 @@ export function TimelineTimelineView({
     lastAutoScrollDayKeyRef.current = daysKey;
     hasInitialAutoScrolledRef.current = true;
 
-    const fallbackTopPx = (reference.startMinutes - startMinutes) * pixelsPerMinute + TIMELINE_VIEWPORT_TOP_INSET_PX;
+    const fallbackTopPx = minuteToCanvasTopPx(reference.startMinutes, startMinutes, pixelsPerMinute);
     const preferredTopPx = currentTimeLineTopPx ?? firstVisibleTopPx ?? fallbackTopPx;
     if (preferredTopPx === null) {
       viewport.scrollTop = 0;
@@ -670,7 +668,7 @@ export function TimelineTimelineView({
       style={scheduleStyle}
       data-layout={dayColumnCount > 1 ? 'multi-day' : 'single-day'}
       data-density={dayColumnCount > 1 ? multiDayCardDensity : singleDayCardDensity}
-      aria-label="Timeline journaliere"
+      aria-label="Agenda journalier"
     >
       <TimelineScheduleHeader
         displayDays={headerDays}
@@ -710,7 +708,6 @@ export function TimelineTimelineView({
         onMovePauseScheduled={handleMovePauseScheduled}
         onChangePauseDuration={onChangePauseDuration}
         onChangeIntervalPauseDuration={onChangeIntervalPauseDuration}
-        onChangeFavoritePoiPauseDuration={onChangeFavoritePoiPauseDuration}
         onToggleFavorite={onToggleFavorite}
         onRemove={onRemove}
         dayEndPx={dayEndPx}

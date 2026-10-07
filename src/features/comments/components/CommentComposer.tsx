@@ -93,13 +93,21 @@ export function CommentComposer({
     }
   }, [text]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!autoFocus && focusRequest === 0) return;
     const textarea = textareaRef.current;
     if (!textarea) return;
-    const frame = window.requestAnimationFrame(() => {
+    const focus = () => {
       textarea.focus({ preventScroll: true });
       textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    };
+    // Tout de suite : ce qui est tapé juste après l'ouverture n'est jamais
+    // perdu (une image du viewer LiDAR peut durer des centaines de ms) ; et
+    // encore à l'image suivante si le clic qui a ouvert la saisie a déplacé
+    // le focus après nous.
+    focus();
+    const frame = window.requestAnimationFrame(() => {
+      if (document.activeElement !== textarea) focus();
     });
     return () => window.cancelAnimationFrame(frame);
   }, [autoFocus, focusRequest]);

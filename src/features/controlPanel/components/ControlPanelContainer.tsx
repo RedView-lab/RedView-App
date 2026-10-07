@@ -23,9 +23,7 @@ import { useControlPanelTerrainState } from '../hooks/useControlPanelTerrainStat
 import { useControlPanelZoneGating } from '../hooks/container/useControlPanelZoneGating';
 import { useControlPanelLidarTiles } from '../hooks/container/useControlPanelLidarTiles';
 import { useControlPanelRoutes } from '../hooks/container/useControlPanelRoutes';
-import { setActiveDem3dQuality } from '@/features/map3d/lib/dem3dQualityBus';
-import { resolveDem3dSelection } from '@/features/map3d/lib/dem3dSelection';
-import { setActiveDemProfilePreference } from '@/features/map3d/lib/demProfileBus';
+import { publishDem3dSelection } from '@/features/map3d/lib/publishDem3dSelection';
 import {
   normalizeMapEnvironment,
   setActiveMapEnvironment,
@@ -343,9 +341,7 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
   );
 
   const applyDem3dSelection = useCallback((value: string | null | undefined) => {
-    const next = resolveDem3dSelection(value);
-    setActiveDem3dQuality(next.quality);
-    setActiveDemProfilePreference(next.profile);
+    publishDem3dSelection(value);
   }, []);
 
   const lastEmittedOverlayContextRef = useRef<string | null>(null);

@@ -99,8 +99,13 @@ function makeHook() {
 }
 
 // ── Garde-fou source : le .catch ignore-t-il toujours runId ? ────────────
-const src = fs.readFileSync('src/features/itineraryPanel/hooks/useItineraryFitRuntime/index.ts', 'utf8');
-const catchBlock = src.slice(src.indexOf('.catch((error: unknown) => {'), src.indexOf('const cancelCalculatePrediction'));
+// Le calcul a quitté index.ts (usePredictionRun.ts) : le fichier qui le porte est cherché dans le dossier du hook.
+const hookDir = 'src/features/itineraryPanel/hooks/useItineraryFitRuntime';
+const src = fs.readdirSync(hookDir).filter((name) => /\.tsx?$/.test(name) && !name.includes('.test.'))
+  .map((name) => fs.readFileSync(`${hookDir}/${name}`, 'utf8'))
+  .find((text) => text.includes('latestPredictionRunRef') && text.includes('.catch((error: unknown) => {')) ?? '';
+const catchStart = src.indexOf('.catch((error: unknown) => {');
+const catchBlock = catchStart >= 0 ? src.slice(catchStart, catchStart + 1_500) : '';
 const catchChecksRunId = /latestPredictionRunRef\.current\[itineraryId\]\s*[!=]==\s*runId/.test(catchBlock);
 const apiSrc = fs.readFileSync('src/features/fitPredictor/engine/api.ts', 'utf8');
 const apiSupersedes = /supersed|abort|cancelPending|pending\.clear\(\)[\s\S]{0,80}postMessage/.test(apiSrc.slice(apiSrc.indexOf('function send')));

@@ -10,7 +10,8 @@ import {
 } from './timelineMutations';
 import { projectDistanceAlongRouteM } from '../../lib/routes';
 import { normalizeItineraryRhythmState } from '../../lib/project';
-import { setManualFavoriteOrigin, setPoiFeatureFavoriteState } from './poiFeatureUtils';
+import { setManualFavoriteOrigin } from './poiFeatureUtils';
+import { setPoiRowFavorite, setPoiRowPauseDuration } from './poiFavoritePause';
 import type { ItineraryProject } from '../../types';
 
 interface UseItineraryTimelineCallbacksArgs {
@@ -71,10 +72,15 @@ export function useItineraryTimelineCallbacks({
     });
   }, [updateActive]);
 
+  /** Durée d'une pause posée, ou de la pause d'un POI (celle de ce POI seul). */
   const handleChangeTimelinePauseDuration = useCallback((id: string, durationMin: number) => {
     updateActive((it) => {
-      const row = it.timeline.find((item) => item.id === id && item.kind === 'pause');
+      const row = it.timeline.find((item) => item.id === id && (item.kind === 'pause' || item.kind === 'poi'));
       if (!row) return;
+      if (row.kind === 'poi') {
+        setPoiRowPauseDuration(it, row, durationMin);
+        return;
+      }
       row.durationMin = Math.max(0, Math.round(durationMin));
     });
   }, [updateActive]);
@@ -106,13 +112,13 @@ export function useItineraryTimelineCallbacks({
     updateActive((it) => {
       const row = it.timeline.find((item) => item.id === id);
       if (!row) return;
-
-
+      // Un POI mis en favori prend aussi sa pause (poiFavoritePause.ts).
+      if (row.kind === 'poi') {
+        setPoiRowFavorite(it, row, favorite);
+        return;
+      }
       row.favorite = favorite;
       setManualFavoriteOrigin(row, favorite);
-      if (row.kind === 'poi' && row.osmId != null) {
-        it.poiFeatures = setPoiFeatureFavoriteState(it.poiFeatures, row.osmId, favorite);
-      }
     });
   }, [updateActive]);
 

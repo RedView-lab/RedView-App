@@ -9,7 +9,15 @@
 // the canopy cover: it runs in a worker (workers/avalancheWorker.ts) or inline.
 
 import { rateAtes, type AtesRating } from './ates';
-import { prepareFlowPyTerrain, runFlowPyToTarget, type FlowPyResult, type FlowPyTarget } from './flowPy';
+import {
+  prepareFlowPyTerrain,
+  runFlowPyToTarget,
+  type FlowPyGrid,
+  type FlowPyResult,
+  type FlowPyRun,
+  type FlowPyTarget,
+  type FlowPyTerrain,
+} from './flowPy';
 import { AVALANCHE_SCENARIOS, type AvalancheScenarioId } from './params';
 import { computeReleaseAreas, WindShelterField, type TerrainGrid } from './releaseArea';
 
@@ -76,13 +84,51 @@ export interface AvalancheTerrainResult {
   computeMs: number;
 }
 
+/** Runs Flow-Py for one scenario (here, or over a pool of workers: see flowPyPool.ts). */
+export type FlowPyRunner = (grid: FlowPyGrid, terrain: FlowPyTerrain, target: FlowPyTarget, run: FlowPyRun) => Promise<FlowPyResult>;
+
+/** Everything of a point's evaluation before the Flow-Py runs. */
+interface AvalanchePreparation {
+  input: AvalancheTerrainInput;
+  started: number;
+  centre: number;
+  target: PointTarget;
+  release: Record<AvalancheScenarioId, ReturnType<typeof computeReleaseAreas>>;
+  terrain: FlowPyTerrain;
+  runs: Record<AvalancheScenarioId, FlowPyRun>;
+}
+
 export function computeAvalancheTerrain(
   input: AvalancheTerrainInput,
   wind: WindShelterField = new WindShelterField(input.grid),
 ): AvalancheTerrainResult | null {
+  const prep = prepareAvalanche(input, wind);
+  if (!prep) return null;
+  const { grid } = input;
+  return assembleAvalanche(prep, {
+    typical: runFlowPyToTarget(grid, prep.terrain, prep.target, prep.runs.typical),
+    infrequent: runFlowPyToTarget(grid, prep.terrain, prep.target, prep.runs.infrequent),
+  });
+}
+
+/** Same evaluation, the Flow-Py runs handed to `runFlowPy` (a worker pool in the viewer). */
+export async function computeAvalancheTerrainWith(
+  input: AvalancheTerrainInput,
+  wind: WindShelterField,
+  runFlowPy: FlowPyRunner,
+): Promise<AvalancheTerrainResult | null> {
+  const prep = prepareAvalanche(input, wind);
+  if (!prep) return null;
+  const { grid } = input;
+  const typical = await runFlowPy(grid, prep.terrain, prep.target, prep.runs.typical);
+  const infrequent = await runFlowPy(grid, prep.terrain, prep.target, prep.runs.infrequent);
+  return assembleAvalanche(prep, { typical, infrequent });
+}
+
+function prepareAvalanche(input: AvalancheTerrainInput, wind: WindShelterField): AvalanchePreparation | null {
   const started = performance.now();
   const { grid, canopyPct } = input;
-  const { width, height, cell, originX, originY, altitude, slopeDeg } = grid;
+  const { width, height, cell, originX, originY, altitude } = grid;
   const col = (input.projX - originX) / cell;
   const row = (input.projY - originY) / cell;
   const centre = Math.round(row) * width + Math.round(col);
@@ -96,11 +142,24 @@ export function computeAvalancheTerrain(
     typical: computeReleaseAreas(grid, wind, canopyPct, AVALANCHE_SCENARIOS.typical),
     infrequent: computeReleaseAreas(grid, wind, canopyPct, AVALANCHE_SCENARIOS.infrequent),
   };
-  const terrain = prepareFlowPyTerrain(grid);
-  const runs = {
-    typical: runFlowPyToTarget(grid, terrain, target, { alphaDeg: AVALANCHE_SCENARIOS.typical.alphaDeg, fsi, release: release.typical.release }),
-    infrequent: runFlowPyToTarget(grid, terrain, target, { alphaDeg: AVALANCHE_SCENARIOS.infrequent.alphaDeg, fsi, release: release.infrequent.release }),
+  return {
+    input,
+    started,
+    centre,
+    target,
+    release,
+    terrain: prepareFlowPyTerrain(grid),
+    runs: {
+      typical: { alphaDeg: AVALANCHE_SCENARIOS.typical.alphaDeg, fsi, release: release.typical.release },
+      infrequent: { alphaDeg: AVALANCHE_SCENARIOS.infrequent.alphaDeg, fsi, release: release.infrequent.release },
+    },
   };
+}
+
+function assembleAvalanche(prep: AvalanchePreparation, runs: Record<AvalancheScenarioId, FlowPyResult>): AvalancheTerrainResult {
+  const { input, started, centre, target, release } = prep;
+  const { grid, canopyPct } = input;
+  const { width, height, cell, originX, originY, slopeDeg } = grid;
 
   const slope = slopeDeg[centre]!;
   const canopy = canopyPct && Number.isFinite(canopyPct[centre]!) ? canopyPct[centre]! : null;

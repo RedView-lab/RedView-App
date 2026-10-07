@@ -274,10 +274,10 @@ export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStor
       if (!row) return null;
       const projectAccess = await access(projectId);
       if (!projectAccess) return null;
-      const stored = readStoredProject(await readData(projectId, row.data, projectAccess));
-      if (!stored) throw new Error(`projet ${projectId} : données illisibles`);
       const meta = parseMeta(row.collab);
       const checkpoint = meta ? await readCheckpoint(projectId, meta) : null;
+      // Point de sauvegarde valable : le document (jusqu'à des dizaines de Mo,
+      // parfois un fichier à télécharger) n'est ni lu ni décompressé.
       if (meta && checkpoint) {
         const dataMatches = typeof row.data === 'string' && sha256(row.data) === meta.dataHash;
         if (!dataMatches) {
@@ -290,10 +290,12 @@ export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStor
           }));
         }
         const batches = await readJournalAfter(projectId, meta.seq);
-        return { checkpoint, document: stored.document, baseSeq: meta.seq, journal: assertContiguous(batches, meta.seq) };
+        return { checkpoint, baseSeq: meta.seq, journal: assertContiguous(batches, meta.seq) };
       }
       // Pas de point de sauvegarde valable (première session, ou document
       // réécrit hors session) : on repart du document, journal précédent écarté.
+      const stored = readStoredProject(await readData(projectId, row.data, projectAccess));
+      if (!stored) throw new Error(`projet ${projectId} : données illisibles`);
       const stale = await listJournal(projectId, []);
       await Promise.all(stale.map((entry) => databases.deleteDocument(db, JOURNAL_COLLECTION_ID, entry.$id)));
       const baseSeq = Math.max(meta?.seq ?? 0, ...stale.map((entry) => entry.end_seq)) + 1;
@@ -358,8 +360,9 @@ export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStor
       await pruneFiles(`${projectId}.json.gz`, data.startsWith(FILE_PREFIX) ? data.slice(FILE_PREFIX.length) : null);
     },
 
-    async pruneJournal(projectId: string, uptoSeq: number): Promise<void> {
-      await deleteJournalRows(await listJournal(projectId, [Query.lessThanEqual('end_seq', uptoSeq)]));
+    async pruneJournal(projectId: string, uptoSeq: number, keepStartSeq?: number): Promise<void> {
+      const covered = await listJournal(projectId, [Query.lessThanEqual('end_seq', uptoSeq)]);
+      await deleteJournalRows(covered.filter((row) => row.start_seq !== keepStartSeq));
     },
 
     async readDurable(projectId: string): Promise<DurableState | null> {
