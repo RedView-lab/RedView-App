@@ -393,7 +393,13 @@ async function main() {
       }
       const { regressions, stale } = compareWithBaseline(a11yFindings, readBaseline(A11Y_BASELINE), a11yScreens);
       check(regressions.length === 0, `défauts d'accessibilité nouveaux :\n  ${regressions.join('\n  ')}`);
-      check(stale.length === 0, `défauts corrigés, la référence doit redescendre (--update-a11y-baseline) :\n  ${stale.join('\n  ')}`);
+      // Un compte plus bas que la référence est signalé, jamais bloquant :
+      // target-size dépend du rendu et varie d'un passage à l'autre (1 ou 2
+      // éléments sur le même build, en Chromium comme en Edge) — l'exiger
+      // faisait échouer la CI au hasard. Un défaut nouveau ou en hausse échoue.
+      if (stale.length) {
+        return `${summary} — moins qu'en référence, à faire redescendre si c'est une correction (--update-a11y-baseline) : ${stale.join(' ; ')}`;
+      }
       return summary;
     });
 

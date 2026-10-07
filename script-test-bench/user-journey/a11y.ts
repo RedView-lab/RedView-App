@@ -9,9 +9,10 @@
  *
  * Cliquet, comme les suppressions ESLint : pour chaque (écran, règle), le
  * nombre d'éléments en défaut ne doit pas dépasser celui de la référence ; une
- * règle nouvelle sur un écran échoue. Après une correction, la référence doit
- * redescendre (`--update-a11y-baseline`), sinon le contrôle échoue aussi : un
- * défaut corrigé ne peut pas revenir en silence.
+ * règle nouvelle sur un écran échoue. Après une correction, faire redescendre la
+ * référence (`--update-a11y-baseline`) : un compte plus bas est signalé dans le
+ * rapport mais ne bloque pas, car target-size dépend du rendu et varie d'un
+ * passage à l'autre sur le même build (la CI échouait au hasard).
  */
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
