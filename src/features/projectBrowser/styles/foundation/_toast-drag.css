@@ -1,4 +1,4 @@
-/* Drag preview (toasts: src/shared/ui/toast.css). */
+/* Drag preview (toasts: src/shared/components/AppToaster/toast.css). */
 
 .rvpb-drag-preview {
   position: fixed;

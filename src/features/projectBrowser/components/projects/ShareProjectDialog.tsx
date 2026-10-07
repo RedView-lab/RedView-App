@@ -15,7 +15,7 @@ import { UserAvatar } from '@/shared/components/UserAvatar/UserAvatar';
 import { useAppI18n } from '@/shared/i18n';
 import { appScaleStyle, readAppScale } from '@/shared/lib/appScale';
 import { trackAnalyticsEvent } from '@/shared/lib/analytics';
-import { notify } from '@/shared/ui/notify';
+import { notify } from '@/shared/lib/notify';
 
 import {
   useInviteProjectEditor,

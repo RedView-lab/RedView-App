@@ -21,7 +21,7 @@ import { reverseGeocodeSettlement } from '../../lib/geocoding';
 import { buildImportedGpxWaypoints, GPX_IMPORT_WAYPOINT_ID_PREFIX } from './importedGpxWaypoints';
 import { bridgeImportedGpxGaps } from './importedGpxGaps';
 import { translateAppText } from '@/shared/i18n';
-import { notify } from '@/shared/ui/notify';
+import { notify } from '@/shared/lib/notify';
 
 /** Taille maximale d'un fichier GPX importé (protection mémoire du parseur). */
 const MAX_GPX_IMPORT_BYTES = 50 * 1024 * 1024;

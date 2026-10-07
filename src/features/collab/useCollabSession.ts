@@ -7,7 +7,7 @@ import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import { countBucket, trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { logger } from '@/shared/lib/logger';
 import { getAppwriteJwt, getSessionUserIdSync, readStoredAppwriteSession } from '@/shared/services/appwrite';
-import { notify } from '@/shared/ui/notify';
+import { notify } from '@/shared/lib/notify';
 import { registerLiveSession } from '@/shared/utils/projects/liveSessions';
 
 import type { CollabState } from './client/collabClient';

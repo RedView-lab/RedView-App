@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { describeRedviewExportError } from '@/features/redviewFile/lib/messages';
-import { notify } from '@/shared/ui/notify';
+import { notify } from '@/shared/lib/notify';
 import {
   createProject,
   createProjectFolder,

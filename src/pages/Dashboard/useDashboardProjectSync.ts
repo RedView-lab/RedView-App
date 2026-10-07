@@ -13,8 +13,8 @@ import {
   uploadProjectThumbnail,
   utf8ByteLength,
 } from '@/shared/utils/projects';
-import { replaceProjectLocation } from '@/shared/utils/projectLocation';
-import { captureMapThumbnail } from '@/shared/utils/mapThumbnail';
+import { replaceProjectLocation } from '@/shared/lib/projectLocation';
+import { captureMapThumbnail } from '@/shared/lib/mapThumbnail';
 import { idbSaveThumbnail } from '@/shared/utils/storage/idbProjectStore';
 
 import { logger } from '@/shared/lib/logger';

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ProjectCommentThread } from '@/features/itineraryPanel/types';
 import { useAppI18n } from '@/shared/i18n';
-import { notify } from '@/shared/ui/notify';
+import { notify } from '@/shared/lib/notify';
 
 import type { CommentToolValue } from '../context/commentTool';
 import { canEditMessage, canManageThread } from '../lib/commentActions';

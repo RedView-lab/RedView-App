@@ -1,7 +1,7 @@
 import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
 
 import { logger } from '@/shared/lib/logger';
-import { notify } from '@/shared/ui/notify';
+import { notify } from '@/shared/lib/notify';
 
 /**
  * État serveur (Appwrite, API) : TanStack Query. Pas pour le document de

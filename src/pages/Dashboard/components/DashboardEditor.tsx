@@ -57,7 +57,7 @@ import { FollowingFrame, LivePresenceBridge, LivePresenceContext, useLivePresenc
 import { ShareProjectDialog } from '@/features/projectBrowser/components/projects/ShareProjectDialog';
 import { useAppI18n } from '@/shared/i18n';
 import { getSessionUserIdSync } from '@/shared/services/appwrite';
-import { notify } from '@/shared/ui/notify';
+import { notify } from '@/shared/lib/notify';
 import { hasProjectTracedContent } from '@/features/itineraryPanel/lib/project';
 import { MapViewportControls } from '@/features/mapViewportControls';
 import type { MapViewport } from '@/features/map3d/lib/viewport-persist';

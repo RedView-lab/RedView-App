@@ -7,7 +7,7 @@ import {
   readStoredAppwriteSession,
   saveStoredAppwriteSession,
 } from './shared/services/appwrite'
-import { PROJECT_LOCATION_CHANGE_EVENT, readProjectIdFromPath } from './shared/utils/projectLocation'
+import { PROJECT_LOCATION_CHANGE_EVENT, readProjectIdFromPath } from './shared/lib/projectLocation'
 import { LoginScreen, probeSession, SESSION_EXPIRED_EVENT } from './features/auth'
 import { syncAnalyticsAccount } from './features/auth/authAnalytics'
 import { getCurrentAnalyticsScreen, trackScreen, type AnalyticsScreen } from './shared/lib/analytics'
@@ -17,7 +17,7 @@ import { useIsMobileDevice } from './shared/hooks/useIsMobileDevice'
 import { useAppI18n } from './shared/i18n'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { appQueryClient } from './shared/services/queryClient'
-import { AppToaster } from './shared/ui/AppToaster'
+import { AppToaster } from './shared/components/AppToaster/AppToaster'
 import './index.css'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))

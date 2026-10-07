@@ -1,4 +1,4 @@
-/* Toasts (src/shared/ui/AppToaster.tsx) : même rendu que l'ancien toast du
+/* Toasts (src/shared/components/AppToaster/AppToaster.tsx) : même rendu que l'ancien toast du
    gestionnaire de projets, valable dans toute l'app. */
 
 .rv-toast-layer {

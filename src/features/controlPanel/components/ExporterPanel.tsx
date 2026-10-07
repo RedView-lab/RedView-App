@@ -14,7 +14,7 @@ import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import { describeRedviewExportError, exportProjectAsRedview } from '@/features/redviewFile';
 import { useAppI18n } from '@/shared/i18n';
 import { trackAnalyticsEvent } from '@/shared/lib/analytics';
-import { captureMapThumbnail } from '@/shared/utils/mapThumbnail';
+import { captureMapThumbnail } from '@/shared/lib/mapThumbnail';
 
 import { Checkbox } from './Checkbox';
 import { Select } from './Select';

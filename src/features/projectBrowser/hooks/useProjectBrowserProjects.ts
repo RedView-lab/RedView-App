@@ -3,7 +3,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { translateAppText } from '@/shared/i18n';
 import { countBucket, trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { readStoredAppwriteSession } from '@/shared/services/appwrite';
-import { notify } from '@/shared/ui/notify';
+import { notify } from '@/shared/lib/notify';
 import type { ProjectFolderSummary, ProjectSummary } from '@/shared/utils/projects';
 
 import {

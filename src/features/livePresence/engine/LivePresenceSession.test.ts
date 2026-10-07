@@ -11,7 +11,7 @@ const notifications = vi.hoisted(() => ({
   prompts: [] as Array<{ text: string; onAction?: () => void; onTimeout?: () => void; cancelled: boolean }>,
 }));
 
-vi.mock('@/shared/ui/notify', () => ({
+vi.mock('@/shared/lib/notify', () => ({
   notify: {
     info: (text: string) => notifications.info.push(text),
     success: () => undefined,

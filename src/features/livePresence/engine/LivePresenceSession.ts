@@ -5,7 +5,7 @@ import type { CollabRealtime } from '@/features/collab/realtime';
 import { userAvatarColor, userAvatarInk } from '@/shared/components/UserAvatar/avatarColor';
 import { translateAppText } from '@/shared/i18n';
 import { trackAnalyticsEvent } from '@/shared/lib/analytics';
-import { notify } from '@/shared/ui/notify';
+import { notify } from '@/shared/lib/notify';
 
 import { FOLLOW_GRACE_MS, SPOTLIGHT_COUNTDOWN_MS, SPOTLIGHT_SPAM_DECLINES, SPOTLIGHT_SPAM_WINDOW_MS } from '../config';
 import type { FollowState, LivePeer } from '../context';

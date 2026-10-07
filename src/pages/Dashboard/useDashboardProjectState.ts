@@ -5,7 +5,7 @@ import * as Sentry from '@sentry/react';
 import { normalizeItineraryProject } from '@/features/itineraryPanel/lib/project/defaultState';
 import { classifyProjectChange, extractProjectView } from '@/features/itineraryPanel/lib/project/layers';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
-import { notify } from '@/shared/ui/notify';
+import { notify } from '@/shared/lib/notify';
 import {
   flushProjectViews,
   getProject,
@@ -14,7 +14,7 @@ import {
   queueProjectViewSave,
   isSharedProject,
 } from '@/shared/utils/projects';
-import { replaceProjectLocation } from '@/shared/utils/projectLocation';
+import { replaceProjectLocation } from '@/shared/lib/projectLocation';
 import { readFullProjectCacheAsync } from './dashboardProjectCache';
 import { useDashboardProjectSync } from './useDashboardProjectSync';
 
