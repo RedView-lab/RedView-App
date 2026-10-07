@@ -1,626 +1,124 @@
-# RedView-App Structure Refactor Plan
+# RedView-App — `src/` structure convention
 
-## Objective
+Where a file goes in `src/`, and why. This replaces the 2025 migration plan
+(`src/lib`, `src/components`, Supabase…): that migration is done, and the last pass
+(2026-10-08, commits `refactor(shared|auth,poi,collab|centerPanel|dashboard)`) brought
+every folder to the convention below. Moves only, no behaviour change.
 
-Reorganize the application into a predictable, scalable folder structure without changing business behavior.
-
-Scope for the future migration:
-- move files and folders
-- normalize barrel exports and import paths
-- group styles coherently
-- clarify feature boundaries
-
-Out of scope for this plan:
-- changing feature behavior
-- rewriting domain logic
-- redesigning UI behavior
-
-## Current Diagnosis
-
-The codebase is not chaotic everywhere, but it mixes several folder conventions that compete with each other.
-
-### What already works
-
-- Most product code is under `src/features`, which is the right top-level boundary.
-- Several features already follow a usable pattern with `components`, `hooks`, `lib`, and `types`.
-- Some heavier UI areas already isolate CSS into feature-level `styles` folders.
-- The `Dashboard` page is now isolated under `src/pages/Dashboard`, which is cleaner than a flat page file.
-
-### What is currently disorganized
-
-#### 1. Multiple feature shapes coexist
-
-Examples:
-- `altitude`, `poi`, `weather`, `slope`, `sunlight` use partially similar shells.
-- `controlPanel` and `itineraryPanel` use `container`, `sections`, `context`, `styles`, plus root components.
-- `centerPanel` contains several tactical modules directly at the feature root: `flyover`, `tracer`, `routeMerge`, `routeSplit`, `forbiddenZones`.
-- `projectBrowser` hides most of its complexity under `overlay`.
-
-Result:
-- impossible to predict where a new file should live
-- hard to know what is public API vs internal implementation
-
-#### 2. CSS organization is inconsistent
-
-Examples:
-- `controlPanel/styles/index.css`
-- `centerPanel/styles/index.css`
-- `itineraryPanel/styles/index.css`
-- many other features still use large blocks of `React.CSSProperties` inside `.tsx`
-
-Result:
-- styling strategy changes from feature to feature
-- visual code is split between CSS files, style constants, and inline objects
-- maintenance cost grows quickly
-
-#### 3. Shared code is mixed into `src/lib`
-
-Current root `src/lib` mixes unrelated concerns:
-- generic utilities
-- service configuration
-- a reusable hook
-
-Example:
-- `useMiddleClickAutoscroll.ts` sits next to `supabase.ts` and project utility files even though they are not the same category.
-
-#### 4. Public exports are not standardized
-
-Examples:
-- some features export only one component from `index.ts`
-- some export container + view + stores + types
-- some sub-features have their own `index.ts`, others do not
-
-Result:
-- consumers import deep internals too often
-- feature boundaries leak into the rest of the app
-
-#### 5. Some folders are placeholders or unclear
-
-Examples:
-- `analysisPanel` is effectively empty
-- `demo` is empty
-
-Result:
-- inventory noise
-- unclear whether these are deprecated, planned, or forgotten
-
-#### 6. Sub-feature boundaries are not explicit enough
-
-Examples:
-- `weather/overlay` behaves like a sub-domain
-- `weather/lib/wind` is also a sub-domain
-- `centerPanel` root contains tool-like modules that are conceptually different from the panel UI
-- `projectBrowser/overlay` is almost a feature inside a feature
-
-Result:
-- folder placement reflects history more than architecture
-
-#### 7. Naming rules are not documented
-
-Current naming mix:
-- domain features: `weather`, `poi`, `slope`, `lidar`
-- panel features: `controlPanel`, `centerPanel`, `itineraryPanel`
-- plural/singular is inconsistent: `labels` vs mostly singular folders
-
-Result:
-- every new folder name becomes an ad hoc decision
-
-## Structural Principles To Apply
-
-### Principle 1: One standard shell per feature
-
-Every feature should use the same default internal layout, even if some folders are absent initially.
-
-Recommended shell:
-
-```text
-featureName/
-  index.ts
-  types.ts
-  constants.ts          optional
-  components/
-  hooks/
-  lib/
-  context/              optional
-  config/               optional
-  styles/               optional, only for complex shared feature styles
-  subfeatures/          optional, only when truly justified
-```
-
-### Principle 2: Keep feature-local code inside the feature
-
-If code exists only for one feature, it must stay inside that feature.
-
-Do not place feature-specific helpers in root shared folders.
-
-### Principle 3: Create a real shared layer
-
-Everything reused across multiple features should move out of `src/lib` and `src/components` into a single explicit shared area.
-
-Recommended shared layout:
-
-```text
-src/shared/
-  components/
-  hooks/
-  services/
-  utils/
-  types/
-```
-
-### Principle 4: Public API only from `index.ts`
-
-Each feature root `index.ts` should expose only the public surface:
-- primary component(s)
-- provider(s)
-- public hooks
-- public types
-
-Everything else remains internal and should not be imported through deep unstable paths unless clearly intentional.
-
-### Principle 5: Sub-features must be explicit, not accidental
-
-If a feature contains a coherent internal product area, group it under `subfeatures/` rather than scattering folders at the root.
-
-Examples that fit this model:
-- `weather/subfeatures/overlay`
-- `weather/subfeatures/wind`
-- `centerPanel/subfeatures/tools/flyover`
-- `projectBrowser/subfeatures/overlay`
-
-### Principle 6: Styling strategy must be singular
-
-Recommended rule:
-- use component-local CSS modules for isolated styling
-- use feature `styles/` only for heavy multi-component shells
-- reserve inline `CSSProperties` for dynamic runtime values only
-
-This repo is currently half CSS, half inline style system. It needs one dominant rule.
-
-## Recommended Target Tree
+## Top level
 
 ```text
 src/
-  App.tsx
-  main.tsx
-  index.css
-  pages/
-    Dashboard/
-      index.tsx
-      components/
-      hooks/
-      lib/
-      types.ts
-  features/
-    altitude/
-      index.ts
-      types.ts
-      components/
-      hooks/
-      lib/
-    centerPanel/
-      index.ts
-      types.ts
-      components/
-      hooks/
-      lib/
-      styles/
-      subfeatures/
-        tools/
-          flyover/
-          forbiddenZones/
-          routeMerge/
-          routeSplit/
-          tracer/
-        analysis/
-          chart/
-    controlPanel/
-      index.ts
-      types.ts
-      components/
-      hooks/
-      lib/
-      styles/
-      subfeatures/
-        sections/
-    itineraryPanel/
-      index.ts
-      types.ts
-      components/
-      hooks/
-      lib/
-      context/
-      styles/
-      subfeatures/
-        expert/
-        timeline/
-    labels/
-      index.ts
-      types.ts
-      components/
-      hooks/
-      lib/
-    lidar/
-      index.ts
-      types.ts
-      components/
-      hooks/
-      lib/
-      subfeatures/
-        viewer/
-        viewerWebgl/
-    map3d/
-      index.ts
-      types.ts
-      components/
-      hooks/
-      lib/
-      styles/
-      subfeatures/
-        overlays/
-    mapViewportControls/
-      index.ts
-      types.ts
-      components/
-      hooks/
-      styles/
-    poi/
-      index.ts
-      types.ts
-      components/
-      hooks/
-      lib/
-    projectBrowser/
-      index.ts
-      types.ts
-      components/
-      hooks/
-      lib/
-      styles/
-      subfeatures/
-        overlay/
-    slope/
-      index.ts
-      types.ts
-      components/
-      hooks/
-      lib/
-    snow/
-      index.ts
-      types.ts
-      components/
-      hooks/
-      lib/
-    sunlight/
-      index.ts
-      types.ts
-      components/
-      hooks/
-      lib/
-    weather/
-      index.ts
-      types.ts
-      components/
-      hooks/
-      lib/
-      config/
-      subfeatures/
-        overlay/
-        wind/
-  shared/
-    components/
-      AssetIcon.tsx
-      MapCanvasGlassBackdrop.tsx
-      PayWall.tsx
-      SvgV2Icon.tsx
-      index.ts
-    hooks/
-      useMiddleClickAutoscroll.ts
-      index.ts
-    services/
-      supabase.ts
-      index.ts
-    utils/
-      mapThumbnail.ts
-      projectLocation.ts
-      projects.ts
-      index.ts
-    types/
-      index.ts
+  main.tsx, App.tsx, index.css   bootstrap (theme, error reporting, session, lazy Dashboard)
+  pages/                         one folder per page (composition roots)
+  features/                      product domains (feature-sliced)
+  shared/                        code used by several features, with no business owner
+  types/                         ambient declarations only (*.d.ts for untyped packages)
 ```
 
-## Folder-By-Folder Recommendations
+Nothing else at the root of `src/`: no `src/lib`, no `src/components`, no `src/utils`.
 
-### `src/pages`
+## `shared/` — seven folders, one role each
 
-Keep page-specific code inside each page folder.
+| Folder | Holds | Examples |
+|---|---|---|
+| `components/` | React components (a folder when it has a CSS file or helpers) | `RedViewLogo.tsx`, `UserAvatar/`, `AppToaster/` |
+| `hooks/` | generic React hooks | `useLatestRef`, `useHorizontalScrollOverflow` |
+| `lib/` | pure functions and small framework-free modules (no I/O to our backend) | `appScale`, `appTheme`, `notify`, `terrarium`, `analytics/` |
+| `services/` | I/O: Appwrite, TanStack Query client, project persistence | `appwrite.ts`, `queryClient.ts`, `projects/`, `storage/idbProjectStore.ts` |
+| `styles/` | global CSS tokens and shared visual layers | `theme.css`, `typography.css`, `dialog.css` |
+| `i18n/` | translation runtime and the `{ fr, en }` pair files | `AppI18nProvider`, `config/translations/*` |
+| `test/` | test helpers shared by several test files | `renderHook.ts` |
 
-For `Dashboard`, move toward:
-- `components/` for page-only UI blocks
-- `hooks/` for page-only hooks
-- `lib/` for layout helpers and page orchestration helpers
+There is no `shared/ui` or `shared/utils`: « ui » was split into `components/`
+(toaster) and `lib/` (`notify`), « utils » into `lib/` (thumbnails, project location)
+and `services/` (project persistence, IndexedDB). A new shared file picks one of the
+seven folders above; if none fits, it probably belongs to a feature.
 
-Current files like `useDashboardChrome.ts`, `useDashboardProjectState.ts`, `dashboardStyles.ts`, and `layout.ts` already indicate this split and should become the page-level convention.
-
-### `src/shared`
-
-Create this folder before any large move.
-
-Move here first:
-- `src/components/*`
-- `src/lib/useMiddleClickAutoscroll.ts`
-- `src/lib/supabase.ts`
-- generic project helpers from `src/lib/*`
-
-This gives the app a real shared foundation and stops root `src/lib` from growing randomly.
-
-### `src/features/centerPanel`
-
-This feature currently mixes:
-- panel shell UI
-- chart UI
-- route and drawing tools
-- flyover tools
-
-It should become one feature with explicit internal subfeatures.
-
-Recommended internal model:
+## Feature shell
 
 ```text
-centerPanel/
-  components/            shell and composed panel UI
-  styles/
-  lib/
-  subfeatures/
-    analysis/
-      chart/
-    tools/
-      flyover/
-      tracer/
-      routeMerge/
-      routeSplit/
-      forbiddenZones/
+features/<name>/
+  index.ts        public API (optional, see below)
+  types.ts        public types (or types/ when large)
+  components/     React components
+  hooks/          React hooks
+  lib/            pure logic, data files (e.g. poi/lib/poi-taxonomy.json), workers' logic
+  context/        React contexts/stores (optional)
+  styles/         feature CSS when several components share it (optional)
+  queries/        TanStack Query hooks for server state (optional)
+  <subdomain>/    a coherent sub-area with its own components/hooks/lib (optional)
 ```
 
-### `src/features/controlPanel`
+Rules:
 
-This is one of the closest features to a reusable structure, but it still needs normalization.
+1. **The root of a feature holds only `index.ts`, `types.ts`/`types/`, `config.ts`
+   and sub-folders.** A component, hook or helper at the root goes into
+   `components/`, `hooks/` or `lib/`.
+2. **Tests sit next to the module** (`foo.ts` → `foo.test.ts`). A test that spans
+   several sub-areas sits in their common parent (`centerPanel/tools/toolDisarm.test.tsx`).
+3. **Sub-domains are named folders, not a generic `subfeatures/`.** A sub-domain is a
+   folder with its own shell, used for a real product area:
+   `centerPanel/flyover`, `centerPanel/tools/<tool>`, `lidar/viewer`,
+   `weather/overlay`, `weather/radar`, `controlPanel/sections`,
+   `projectBrowser/{account,billing,settings}`, `collab/{client,model,room,sim}`,
+   `livePresence/engine`, `comments/bridge`. Several sibling sub-domains of the same
+   kind are grouped (`centerPanel/tools/` holds chartPlacement, forbiddenZones,
+   routeDragWaypoint, routeMerge, routeSplit and tracer).
+4. **Documented exception — a wire contract stays at the root.** `collab/protocol.ts`,
+   `wire.ts`, `schema.ts`, `realtime.ts` and `routeChunks.ts` are imported by
+   `server/multiplayer` and the benches as the protocol between client and server;
+   they stay at the feature root so that contract is visible and stable, with the
+   tests that exercise it end to end (`collab.test.ts`, `presence.test.ts`).
 
-What to keep:
-- `sections/`
-- `styles/`
-- typed public API
+## Public API and barrels
 
-What to improve:
-- convert `container/` into either `hooks/` and `lib/`, or keep it as `containers/` if the project explicitly distinguishes smart/presentational components
-- move root utility files like `basemaps.ts`, `persistedState.ts`, `weatherPalette.ts` into `lib/` or `config/`
+- A feature has an `index.ts` when other features consume a real public surface
+  (providers, a main component, public hooks). Import such a feature through it.
+- **Exception (CLAUDE.md):** a module that the barrel re-exports, directly or
+  transitively, imports concrete modules, never the barrel — otherwise it closes
+  an import cycle (`npm run cycles` must stay at 0).
+- **The shell never imports the `map3d`/`controlPanel` barrels** (`npm run bundle:check`
+  keeps mapbox-gl and the editor off the project-browser critical path).
+- Leaf features with a handful of deep imports (`contourLines`, `labels`, `slope`,
+  `poi`) deliberately have no barrel: a `poi` barrel would put its Mapbox marker
+  layer and CSS on paths that only need `poi/types`, and would create cycles with
+  `map3d`. Their public surface is `types.ts` plus the `lib/` modules named by their
+  importers.
 
-### `src/features/itineraryPanel`
+## `pages/`
 
-This is structurally rich but difficult to read because too many concepts coexist at the root.
-
-Current root contains:
-- container/view duplication
-- context stores
-- sections
-- expert mode
-- timeline internals
-- styles
-- lineage
-- lib
-
-Recommended cleanup:
+A page is a composition root, with the same shell:
 
 ```text
-itineraryPanel/
-  components/
-  context/
-  hooks/
-  lib/
-  styles/
-  subfeatures/
-    expert/
-    timeline/
-    tracing/
+pages/Dashboard/
+  index.tsx        the page
+  editorLoader.ts  lazy entry of the 3D editor (kept at the root: it is the split point)
+  components/      page-only UI (DashboardEditor, place search, loading)
+  hooks/           page-only hooks (useDashboardChrome, useDashboardProjectState, …)
+  lib/             page-only helpers (layout, dashboardProjectCache, editorReadyMeter)
 ```
 
-Not every existing folder must survive as-is. The goal is to reduce root noise.
-
-### `src/features/map3d`
-
-This feature is technically strong but structurally inconsistent in hooks.
-
-Current issue:
-- both `hooks/useMap.ts` and `hooks/useMap/` exist
-
-That is a smell. Choose one convention only:
-- either `hooks/useMap.ts`
-- or `hooks/useMap/index.ts` with colocated support files under `hooks/useMap/`
-
-Do not keep both patterns in the same feature.
-
-### `src/features/weather`
-
-Weather should be treated as a feature with clear internal sub-domains.
-
-Recommended split:
-
-```text
-weather/
-  components/
-  hooks/
-  lib/
-  config/
-  subfeatures/
-    overlay/
-    wind/
-```
-
-This avoids having one sub-domain under `overlay/` and another under `lib/wind/`.
-
-### `src/features/projectBrowser`
-
-This folder is currently conceptually inverted: the interesting part lives under `overlay/`.
-
-You should either:
-- promote `overlay` to the actual feature structure inside `subfeatures/overlay`
-- or flatten it if overlay is the only real UI mode
-
-### Empty or placeholder features
-
-Decide explicitly for:
-- `analysisPanel`
-- `demo`
-
-Each should be either:
-- removed
-- documented as placeholder with a README
-- or populated according to the standard shell
-
-## CSS Refactor Rule Set
-
-To avoid recreating disorder after moving folders, use these rules.
-
-### Rule A
-
-If a component has mostly isolated styling, use a colocated CSS module:
-
-```text
-components/
-  RouteCard.tsx
-  RouteCard.module.css
-```
-
-### Rule B
-
-If many components share a large shell style system, keep a feature-level `styles/` folder:
-
-Examples that justify it:
-- `controlPanel`
-- `itineraryPanel`
-- `centerPanel`
-
-### Rule C
-
-If a style value is dynamic at runtime, keep it inline, but keep static appearance in CSS.
-
-Good inline use:
-- width from state
-- transform from runtime computation
-- chart coordinates from data
-
-Bad inline use:
-- whole panel appearance
-- typography
-- borders
-- colors
-- spacing systems
-
-## Import Policy To Enforce During Migration
-
-When the move happens, import cleanup should follow these rules:
-
-### Allowed
-
-- feature public imports from feature root
-- shared imports from `src/shared/*`
-- local relative imports inside one feature
-
-### Avoid
-
-- deep imports into another feature internals
-- root-level generic dumping grounds like `src/lib` growing further
-- mixed aliases and long relative paths for the same concept
-
-Recommended mental model:
-- cross-feature import goes through the feature public API unless there is a deliberate internal contract
-- feature-local internals stay local
-
-## Migration Order
-
-This should not be done in one large move.
-
-### Phase 1: Foundation
-
-1. Create `src/shared/`
-2. Define the standard feature shell in a repo guideline
-3. Freeze naming conventions
-4. Decide CSS rule set
-
-### Phase 2: Lowest-risk moves
-
-1. Move root shared utilities out of `src/lib`
-2. Move root shared UI out of `src/components`
-3. Clean placeholder folders `demo` and `analysisPanel`
-
-### Phase 3: Normalize simple features
-
-Do first:
-- `altitude`
-- `poi`
-- `snow`
-- `sunlight`
-- `slope`
-- `labels`
-
-These are the least risky templates for the rest.
-
-### Phase 4: Normalize technical heavy features
-
-Then:
-- `map3d`
-- `weather`
-- `lidar`
-
-These need careful handling because they have deeper internals and more runtime coupling.
-
-### Phase 5: Normalize panel features
-
-Last:
-- `controlPanel`
-- `centerPanel`
-- `itineraryPanel`
-- `projectBrowser`
-
-These have the most UI orchestration and the most nested concepts.
-
-## Practical Decision Rules
-
-When you hesitate about file placement, apply these tests.
-
-### Test 1
-
-If the file is used by only one feature, keep it inside that feature.
-
-### Test 2
-
-If the file is reused by several features and has no business ownership, move it to `src/shared`.
-
-### Test 3
-
-If a folder contains a coherent product area with its own UI, hooks, and logic, make it a sub-feature.
-
-### Test 4
-
-If a folder exists only because history produced it, flatten or rename it.
-
-### Test 5
-
-If another feature must import deep internals from it, its public API is incomplete.
-
-## Recommended Next Step
-
-Do not start by moving everything.
-
-Start with a non-destructive structural pass:
-- create `src/shared`
-- define naming and export rules
-- choose one CSS strategy
-- then migrate one feature at a time with import repair and validation
-
-The best pilot candidates are:
-- `altitude`
-- `poi`
-- `controlPanel`
-
-They will reveal whether the convention is practical before touching the heaviest folders.
+## Styles
+
+- Every font size goes through `shared/styles/typography.css` tokens; colours through
+  `shared/styles/theme.css` (see CLAUDE.md « Typography » and « Themes »).
+- A component with its own CSS keeps it next to it (`UserAvatar/UserAvatar.css`);
+  a feature whose components share a shell uses `styles/` with an `index.css`.
+- Inline styles only for values computed at runtime.
+
+## Where does this file go?
+
+1. Used by one feature only → inside that feature.
+2. Used by several features and owned by none → `shared/`, in the folder of its role.
+3. It does I/O with our backend → `shared/services/` (or the feature's `queries/`).
+4. It is a coherent area with its own components, hooks and logic → a named sub-domain folder.
+5. Another feature needs a deep internal of it → either that internal is public
+   (export it from `index.ts`/`types.ts`) or the code is in the wrong feature.
+
+## Moving files
+
+Moves use `git mv` (history kept). Every import is rewritten in the same commit,
+including paths outside `src/` (benches under `script-test-bench/`, `server/`,
+`scripts/`, comments, CLAUDE.md); `npm run check` (typecheck, typecheck:bench, lint,
+test, knip, cycles) must be green on each commit.
