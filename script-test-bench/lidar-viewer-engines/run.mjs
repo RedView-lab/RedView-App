@@ -22,9 +22,13 @@
  * automatique d'un navigateur est déjà WebGL 2, le cas « webgl » forcé
  * referait le même chemin : il est sauté (≈ 165 s de SwiftShader en CI).
  *
+ * `--browsers webkit` (Safari's engine, `npx playwright install webkit`):
+ * no WebGPU, so WebGL 2; on Windows its OPFS writes leave empty files, the
+ * tile then goes to CacheStorage like the app's saveTile does.
+ *
  * Usage (après `npm run build:vite`) :
  *   node script-test-bench/lidar-viewer-engines/run.mjs
- *     [--browsers chromium,firefox] [--engines auto,webgl] [--dist dist]
+ *     [--browsers chromium,firefox,webkit] [--engines auto,webgl] [--dist dist]
  *     [--channel msedge] [--webgpu] [--firefox-no-webgpu] [--headed]
  *     [--expect-auto webgl|webgpu]
  * Captures et résumé : script-test-bench/reports/lidar-viewer-engines/.
@@ -35,7 +39,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium, firefox } from 'playwright';
+import { chromium, firefox, webkit } from 'playwright';
 import { buildCspHeader } from '../../server/csp.mjs';
 import { buildSyntheticLas } from './syntheticTile.mjs';
 import { coverage, decodePng, meanDifference } from './png.mjs';
@@ -185,6 +189,9 @@ async function launch(browserName, args, profileDir) {
       args: ['--enable-unsafe-swiftshader', ...(args.webgpu ? ['--enable-unsafe-webgpu'] : [])],
     });
   }
+  if (browserName === 'webkit') {
+    return webkit.launchPersistentContext(profileDir, { headless: !args.headed, viewport: VIEWPORT, deviceScaleFactor: 1 });
+  }
   return firefox.launchPersistentContext(profileDir, {
     headless: !args.headed,
     viewport: VIEWPORT,
@@ -218,37 +225,52 @@ async function runCase(browserName, engine, args, origin, checks, cspReports) {
     page.on('pageerror', (error) => pageErrors.push(String(error?.stack ?? error).slice(0, 600)));
     page.on('crash', () => pageErrors.push('onglet planté (crash du processus de contenu)'));
     const consoleTail = [];
+    let fatal = null;
     page.on('console', (msg) => {
       consoleTail.push(`[${msg.type()}] ${msg.text().slice(0, 300)}`);
       if (consoleTail.length > 40) consoleTail.shift();
+      if (/\[Viewer\] Fatal/.test(msg.text())) fatal ??= msg.text().slice(0, 300);
     });
 
-    // 1. Tile into OPFS, as the app's downloader stores it.
+    // 1. Tile stored as the app's downloader stores it (lib/storage.ts saveTile):
+    // OPFS, size read back, CacheStorage when OPFS kept less (WebKit on Windows
+    // reports the write and leaves an empty file).
     await page.goto(`${origin}/__blank`);
     const stored = await page.evaluate(async (name) => {
-      const root = await navigator.storage.getDirectory();
-      const dir = await root.getDirectoryHandle('lidar-hd', { create: true });
       const buf = await (await fetch('/__tile')).arrayBuffer();
-      const handle = await dir.getFileHandle(name, { create: true });
-      const writable = await handle.createWritable();
-      await writable.write(buf);
-      await writable.close();
-      return buf.byteLength;
+      try {
+        const root = await navigator.storage.getDirectory();
+        const dir = await root.getDirectoryHandle('lidar-hd', { create: true });
+        const handle = await dir.getFileHandle(name, { create: true });
+        const writable = await handle.createWritable();
+        await writable.write(buf);
+        await writable.close();
+        if ((await handle.getFile()).size === buf.byteLength) return { bytes: buf.byteLength, where: 'OPFS' };
+        await dir.removeEntry(name);
+      } catch {
+        // No OPFS writer in this browser.
+      }
+      const cache = await caches.open('redview-lidar-hd-v1');
+      await cache.put(`/lidar-hd/${name}`, new Response(buf, { headers: { 'Content-Type': 'application/octet-stream' } }));
+      return { bytes: buf.byteLength, where: 'CacheStorage' };
     }, TILE_NAME);
-    checks.record('tuile écrite dans l\'OPFS', stored > 0, `${(stored / 1e6).toFixed(1)} Mo`);
+    checks.record('tuile stockée', stored.bytes > 0, `${(stored.bytes / 1e6).toFixed(1)} Mo · ${stored.where}`);
 
     // 2. Viewer.
     const engineParam = engine === 'webgl' ? '&engine=webgl' : '';
     const startedAt = Date.now();
     await page.goto(`${origin}/viewer.html?x=${TILE.xKm}&y=${TILE.yKm}&crs=LAMB93&alt=IGN69&bench=shots${engineParam}`);
-    await page.waitForFunction(
-      () => document.getElementById('overlay')?.classList.contains('hidden') === true && !!window.__rvLidarShots,
-      undefined,
-      { timeout: LOAD_TIMEOUT_MS, polling: 500 },
-    ).catch(() => undefined);
-    const ready = await page.evaluate(() => !!window.__rvLidarShots);
-    const statusText = await page.evaluate(() => document.getElementById('status-detail')?.textContent ?? '');
-    checks.record('viewer prêt', ready, ready ? `${((Date.now() - startedAt) / 1000).toFixed(1)} s` : `statut : ${statusText}`);
+    // A fatal error ends the wait at once (it used to hold the case for the whole timeout).
+    const loadDeadline = Date.now() + LOAD_TIMEOUT_MS;
+    let ready = false;
+    while (!ready && !fatal && Date.now() < loadDeadline) {
+      ready = await page.evaluate(
+        () => document.getElementById('overlay')?.classList.contains('hidden') === true && !!window.__rvLidarShots,
+      ).catch(() => false);
+      if (!ready) await sleep(500);
+    }
+    const statusText = await page.evaluate(() => document.getElementById('status-detail')?.textContent ?? '').catch(() => '');
+    checks.record('viewer prêt', ready, ready ? `${((Date.now() - startedAt) / 1000).toFixed(1)} s` : fatal ?? `statut : ${statusText}`);
     if (!ready) {
       const state = await page.evaluate(() => ({
         href: location.href,

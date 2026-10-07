@@ -69,6 +69,44 @@ describe('LiDAR tile storage', () => {
     await expect(archive.saveTileQuietly(coord, lasBytes())).resolves.toBeUndefined();
   });
 
+  it('keeps the tile in CacheStorage when OPFS reports a write it did not keep', async () => {
+    // WebKit bug 248719 / Playwright WebKit on Windows: write and close succeed, the file stays empty.
+    const files = new Map<string, number>();
+    const directory = {
+      getFileHandle: vi.fn(async (name: string, options?: { create?: boolean }) => {
+        if (!files.has(name) && !options?.create) throw new DOMException('absent', 'NotFoundError');
+        if (!files.has(name)) files.set(name, 0);
+        return {
+          createWritable: async () => ({ write: async () => undefined, close: async () => undefined }),
+          getFile: async () => new Blob([new Uint8Array(files.get(name) ?? 0)]),
+        };
+      }),
+      removeEntry: vi.fn(async (name: string) => {
+        files.delete(name);
+      }),
+    };
+    const cached = new Map<string, Response>();
+    vi.stubGlobal('navigator', {
+      storage: { getDirectory: async () => ({ getDirectoryHandle: async () => directory }), persisted: async () => true },
+    });
+    vi.stubGlobal('caches', {
+      open: async () => ({
+        put: async (key: string, response: Response) => {
+          cached.set(key, response);
+        },
+        match: async (key: string) => cached.get(key)?.clone(),
+      }),
+    });
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { storage } = await modules();
+    const tile = lasBytes(2048);
+    await storage.saveTile(coord, tile);
+    expect(files.size).toBe(0);
+    const loaded = await storage.loadTile(coord);
+    expect(loaded?.byteLength).toBe(tile.byteLength);
+    expect(await storage.hasTile(coord)).toBe(true);
+  });
+
   it('asks once per page for persistent storage when tiles are stored', async () => {
     const fake = fakeStorage(new Error('disk error'));
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);

@@ -122,7 +122,13 @@ export async function saveTile(coord: TileCoord, data: ArrayBuffer): Promise<voi
       const writable = await fileHandle.createWritable();
       await writable.write(data);
       await writable.close();
-      return;
+      // A write can report success and leave a short file (WebKit bug 248719,
+      // Playwright's WebKit on Windows): read back as corrupted, then deleted,
+      // the tile would be lost to the viewer. Checking the size costs no read.
+      const written = (await fileHandle.getFile()).size;
+      if (written === data.byteLength) return;
+      await dir.removeEntry(fileName).catch(() => undefined);
+      console.warn(`[LiDAR storage] OPFS kept ${written} of ${data.byteLength} bytes for ${fileName}, falling back to CacheStorage.`);
     } catch (err) {
       // The viewer (another page) reads tiles from the origin's storage only:
       // kept in this page's memory, a tile it cannot open is a failed download.
