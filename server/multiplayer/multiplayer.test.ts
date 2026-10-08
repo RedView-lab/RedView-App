@@ -19,7 +19,7 @@ import type { MotionEvent } from '../../src/features/collab/realtime.ts';
 import { sampleDocument } from '../../src/features/collab/sim/fixtures.ts';
 import { WIRE_MAX_MESSAGE_BYTES } from '../../src/features/collab/wire.ts';
 import { createFileStorage } from './fileStorage.ts';
-import { createMultiplayerServer, type MultiplayerServer } from './server.ts';
+import { createMultiplayerServer, type MultiplayerServer, type MultiplayerServerOptions } from './server.ts';
 
 /**
  * Serveur temps réel réel (HTTP + WebSocket, stockage de fichiers) et vrais
@@ -34,15 +34,19 @@ let server: MultiplayerServer | null = null;
 let port = 0;
 const connections: CollabConnection[] = [];
 
-async function start(): Promise<void> {
+async function start(overrides: Partial<MultiplayerServerOptions> = {}): Promise<void> {
   server = createMultiplayerServer({
     storage: createFileStorage(dir),
     appwrite: null,
     devAuth: true,
     host: { journalFlushMs: 20, checkpointIntervalMs: 300, idleUnloadMs: 60_000, log: () => undefined },
+    ...overrides,
   });
   port = await server.listen(port);
 }
+
+/** Plafond d'un message pour le test de la bombe de décompression (le vrai : `WIRE_MAX_MESSAGE_BYTES`). */
+const BOMB_TEST_CAP = 2 * 1024 * 1024;
 
 const rejections: string[] = [];
 
@@ -173,6 +177,15 @@ async function rawTcpClient(token: string, extensions?: string) {
       const mask = randomBytes(4);
       tcp.write(Buffer.concat([header, mask, payload.map((byte, index) => byte ^ mask[index % 4])]));
     },
+    /** En-tête seul d'une trame texte masquée annonçant `length` octets (jamais envoyés). */
+    sendHeaderOnly(length: number) {
+      const header = Buffer.alloc(14);
+      header[0] = 0x81;
+      header[1] = 0x80 | 127;
+      header.writeBigUInt64BE(BigInt(length), 2);
+      randomBytes(4).copy(header, 10);
+      tcp.write(header);
+    },
     /** Prochaine trame (qui vérifie `match`). */
     async next(match: (frame: RawFrame) => boolean = () => true): Promise<RawFrame> {
       const find = () => frames.findIndex((frame, index) => index >= read && match(frame));
@@ -182,8 +195,7 @@ async function rawTcpClient(token: string, extensions?: string) {
       return frames[index];
     },
     async closed(): Promise<number> {
-      // Large : la bombe de 64 Mo se décompresse avant le refus, lente sous charge.
-      await waitFor(() => closeCode !== null, 'fermeture', 30_000);
+      await waitFor(() => closeCode !== null, 'fermeture');
       return closeCode!;
     },
     destroy: () => tcp.destroy(),
@@ -440,8 +452,11 @@ describe('serveur temps réel', () => {
     await waitFor(() => itinerary(b, 'it-1').name === 'après la rafale', 'modification après la rafale');
   });
 
-  // Une bombe de 64 Mo à produire puis à refuser : délai large, la machine peut être chargée.
   it('compression négociée (wire.ts) : gros messages en DEFLATE binaire, compressés une fois ; petits en texte ; pas de permessage-deflate', async () => {
+    // Plafond réduit : la bombe prouve le même refus sans produire ni décompresser 64 Mio
+    // (×12 sous la charge de deux suites de tests en parallèle). Le plafond réel est vérifié à part.
+    await server!.shutdown();
+    await start({ maxMessageBytes: BOMB_TEST_CAP });
     const alice = await rawTcpClient('dev:alice', 'permessage-deflate; client_max_window_bits');
     // Offre de Chromium refusée : chaque petit message aurait été compressé.
     expect(alice.response).toContain('101');
@@ -476,7 +491,7 @@ describe('serveur temps réel', () => {
     expect(JSON.parse(inflateRawSync(ack.payload).toString()).batch.clientSeq).toBe(1);
 
     // Bombe de décompression : refusée au-delà de la taille d'une trame (4400).
-    alice.send(deflateRawSync(Buffer.alloc(WIRE_MAX_MESSAGE_BYTES + 1, 0x20)));
+    alice.send(deflateRawSync(Buffer.alloc(BOMB_TEST_CAP + 1, 0x20)));
     expect(await alice.closed()).toBe(4400);
     alice.destroy();
     // Trame binaire avant `welcome` : refusée.
@@ -488,7 +503,17 @@ describe('serveur temps réel', () => {
     bob.send({ type: 'ping', t: 2 });
     expect((await bob.next((frame) => frame.payload.includes('"pong"'))).opcode).toBe(0x1);
     bob.destroy();
-  }, 60_000);
+  });
+
+  it('plafond réel d’un message : celui du protocole (wire.ts)', async () => {
+    // Trame texte au-delà de 64 Mio annoncée dans l'en-tête : refusée (1009) avant d'être reçue.
+    const alice = await rawTcpClient('dev:alice');
+    alice.send({ type: 'hello', v: PROTOCOL_VERSION, clientId: 'c-alice', epoch: null, lastSeq: null, seed: sampleDocument(10) });
+    expect(JSON.parse((await alice.next()).payload.toString())).toMatchObject({ type: 'welcome' });
+    alice.sendHeaderOnly(WIRE_MAX_MESSAGE_BYTES + 1);
+    expect(await alice.closed()).toBe(1009);
+    alice.destroy();
+  });
 
   it('refus : version du protocole, jeton invalide', async () => {
     const version = await rawHello({ type: 'hello', v: PROTOCOL_VERSION + 1, clientId: 'c-1', epoch: null, lastSeq: null });

@@ -39,6 +39,8 @@ export interface ConnectionOptions {
   acceptSeed: boolean;
   log: RoomHost['log'];
   timings?: Partial<ConnectionTimings>;
+  /** Plafond d'un message décompressé (défaut `WIRE_MAX_MESSAGE_BYTES`). */
+  maxMessageBytes?: number;
   /** Socket TCP de la connexion et regroupement de ses écritures par tour de boucle (writeCoalescer.ts). */
   writes?: { socket: Duplex; coalescer: WriteCoalescer };
 }
@@ -375,7 +377,7 @@ export function handleConnection(socket: WebSocket, options: ConnectionOptions):
       if (isBinary) {
         let inflated: Buffer;
         try {
-          inflated = await inflateRawAsync(raw, { maxOutputLength: WIRE_MAX_MESSAGE_BYTES });
+          inflated = await inflateRawAsync(raw, { maxOutputLength: options.maxMessageBytes ?? WIRE_MAX_MESSAGE_BYTES });
         } catch {
           return fail('bad-request', 'inflate');
         }

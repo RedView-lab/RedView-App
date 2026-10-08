@@ -65,6 +65,11 @@ export interface MultiplayerServerOptions {
   authenticator?: Authenticator;
   /** Tests : délais de revérification raccourcis. */
   timings?: Partial<ConnectionTimings>;
+  /**
+   * Tests : plafond d'un message reçu, en trame ou décompressé (défaut
+   * `WIRE_MAX_MESSAGE_BYTES`) — prouver le refus d'une bombe sans en produire 64 Mio.
+   */
+  maxMessageBytes?: number;
 }
 
 export interface MultiplayerServer {
@@ -180,6 +185,7 @@ export function createMultiplayerServer(options: MultiplayerServerOptions): Mult
   const auth: Authenticator = options.authenticator
     ?? createAuthenticator({ storage: options.storage, appwrite: options.appwrite, devAuth: options.devAuth });
   const limits: ConnectionLimits = { ...DEFAULT_CONNECTION_LIMITS, ...options.limits };
+  const maxMessageBytes = options.maxMessageBytes ?? WIRE_MAX_MESSAGE_BYTES;
   const originAllowed = originChecker(options.allowedOrigins, options.devAuth);
   const takeIpSlot = createCounter(() => limits.perIp);
   const takeUserSlot = createCounter(() => limits.perUser);
@@ -277,7 +283,7 @@ export function createMultiplayerServer(options: MultiplayerServerOptions): Mult
   const handleProtocols = (protocols: Set<string>) => (protocols.has(SOCKET_PROTOCOL) ? SOCKET_PROTOCOL : false);
   const wss = new WebSocketServer({
     noServer: true,
-    maxPayload: WIRE_MAX_MESSAGE_BYTES,
+    maxPayload: maxMessageBytes,
     // Pas de `permessage-deflate` : Chromium y compresse chaque message (lots, caméra et curseur
     // à 30 Hz), décompressés un à un dans la file zlib du processus, et chaque gros message était
     // compressé une fois par destinataire — la charge cible saturait (`bench:collab-load` : 13 s de
@@ -379,7 +385,7 @@ export function createMultiplayerServer(options: MultiplayerServerOptions): Mult
   function onConnection(socket: WebSocket, identity: Identity, projectId: string, raw: Duplex): void {
     alive.add(socket);
     socket.on('pong', () => alive.add(socket));
-    handleConnection(socket, { host, auth, identity, projectId, acceptSeed: options.devAuth, log: host.log.bind(host), timings: options.timings, writes: { socket: raw, coalescer } });
+    handleConnection(socket, { host, auth, identity, projectId, acceptSeed: options.devAuth, log: host.log.bind(host), timings: options.timings, maxMessageBytes, writes: { socket: raw, coalescer } });
   }
   const heartbeat = setInterval(() => {
     for (const socket of wss.clients) {
