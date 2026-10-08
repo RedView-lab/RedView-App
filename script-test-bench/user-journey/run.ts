@@ -172,13 +172,21 @@ async function step(name: string, run: () => Promise<string | void>) {
   }
 }
 
-/** Distance totale de l'itinéraire, lue dans la feuille de route ou le résumé (jamais sur la carte). */
-async function expectItineraryDistance(page: Page) {
+/**
+ * Distance totale de l'itinéraire, lue dans la feuille de route ou le résumé
+ * (jamais sur la carte) ; renvoie le temps mis (ms). Sur un profil neuf
+ * (« autre appareil » : éditeur, carte et Service Worker chargés pour la
+ * première fois), elle arrive en 17 à 21 s : une échéance de 30 s échouait
+ * une fois sur cinq sous charge. 60 s comme l'attente du nom ; le temps
+ * mesuré est affiché pour qu'une dérive se voie.
+ */
+async function expectItineraryDistance(page: Page): Promise<number> {
+  const started = Date.now();
   await page.getByText(ITINERARY_NAME).first().waitFor({ timeout: 60_000 });
-  const deadline = Date.now() + 30_000;
+  const deadline = started + 60_000;
   for (;;) {
     const text = await page.evaluate(() => document.body.innerText);
-    if (/25[.,]2\s?km/.test(text)) return;
+    if (/25[.,]2\s?km/.test(text)) return Date.now() - started;
     check(Date.now() < deadline, `distance de 25,2 km introuvable dans la page (itinéraire « ${ITINERARY_NAME} »)`);
     await sleep(500);
   }
@@ -321,10 +329,10 @@ async function main() {
       pageWatch(second, 'appareil 2', pageErrors);
       await second.goto(server.origin);
       await second.getByRole('button', { name: `Ouvrir ${PROJECT_NAME}` }).click({ timeout: 30_000 });
-      await expectItineraryDistance(second);
+      const shownAfterMs = await expectItineraryDistance(second);
       await other.close();
       contexts.splice(contexts.indexOf(other), 1);
-      return 'itinéraire et 25,2 km retrouvés';
+      return `itinéraire et 25,2 km retrouvés en ${(shownAfterMs / 1000).toFixed(1)} s`;
     });
 
     await step('réglages et dialogue de partage', async () => {
