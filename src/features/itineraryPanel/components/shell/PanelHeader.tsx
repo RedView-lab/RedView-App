@@ -243,7 +243,8 @@ export function PanelHeader({
               className={`rvi-header__save is-${saveStatus}`}
               onClick={onSave}
               disabled={saveStatus === 'saving'}
-              aria-label={t('Enregistrer le projet')}
+              // Nom accessible = texte visible (« Enregistrer », « Enregistré »…) :
+              // un aria-label fixe le cachait (WCAG 2.5.3) ; le détail reste en infobulle.
               title={saveTitle}
             >
               <IconSave size={14} />

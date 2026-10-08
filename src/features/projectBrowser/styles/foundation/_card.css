@@ -80,7 +80,8 @@
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
-  color: rgb(var(--rv-ink) / 0.4);
+  /* 0.64 : 4,5:1 au moins sur le blanc comme sur le fond sombre (WCAG 1.4.3). */
+  color: rgb(var(--rv-ink) / 0.64);
   font-size: var(--rv-font-size-md);
   font-weight: 500;
   line-height: 1.2;

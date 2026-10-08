@@ -2449,10 +2449,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "This project was modified on another device. Replace the cloud version with yours? (Cancel: your changes stay on this device.)"
   },
   {
-    "fr": "Enregistrer le projet",
-    "en": "Save project"
-  },
-  {
     "fr": "Enregistrer le projet (Ctrl+S)",
     "en": "Save project (Ctrl+S)"
   },

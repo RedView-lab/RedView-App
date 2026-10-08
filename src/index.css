@@ -126,3 +126,16 @@ html[data-rv-map-moving] * {
 .mapboxgl-canvas-container.mouse-pointer .mapboxgl-canvas { cursor: pointer !important; }
 .mapboxgl-canvas-container.mouse-move .mapboxgl-canvas { cursor: move !important; }
 
+
+/*
+ * Contour de focus clavier par défaut (WCAG 2.4.7). Beaucoup de contrôles
+ * partent d'un `all: unset`, qui retire le contour du navigateur : sans ce
+ * filet, la position du focus ne se voyait plus au clavier. Même contour que
+ * les pop-in (shared/styles/dialog.css). Spécificité (0,1,1) : passe devant un
+ * `.classe { all: unset }`, derrière un `.classe:focus-visible` qui dessine
+ * son propre état (fond, ombre, `outline: none`).
+ */
+:is(button, a[href], input, select, textarea, summary, [role="button"], [role="tab"], [role="menuitem"], [role="option"], [role="switch"], [role="checkbox"], [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid rgb(var(--rv-ink) / 0.6);
+  outline-offset: 1px;
+}

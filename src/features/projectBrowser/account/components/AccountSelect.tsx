@@ -33,6 +33,10 @@ export function AccountSelect({
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const listboxId = useId();
+  // Nom accessible = libellé + valeur affichée (« Langue Français ») : un
+  // aria-label seul cachait la valeur visible (WCAG 2.5.3).
+  const labelId = useId();
+  const valueId = useId();
   const menuVisible = isOpen && !disabled;
 
   const selectedOption = useMemo(
@@ -166,7 +170,7 @@ export function AccountSelect({
         aria-haspopup="listbox"
         aria-expanded={menuVisible}
         aria-controls={listboxId}
-        aria-label={ariaLabel}
+        aria-labelledby={ariaLabel ? `${labelId} ${valueId}` : undefined}
         disabled={disabled}
         onClick={() => {
           if (disabled) {
@@ -183,7 +187,8 @@ export function AccountSelect({
         onKeyDown={handleTriggerKeyDown}
       >
         {renderValuePrefix ? renderValuePrefix(selectedOption) : null}
-        <span className="rvpb-account-select-value">{selectedOption?.label ?? value}</span>
+        {ariaLabel ? <span id={labelId} className="rvpb-sr-only">{ariaLabel}</span> : null}
+        <span id={valueId} className="rvpb-account-select-value">{selectedOption?.label ?? value}</span>
         <span className="rvpb-account-select-icon" aria-hidden="true">
           <SvgV2Icon name="chevron-down.svg" size={20} />
         </span>
