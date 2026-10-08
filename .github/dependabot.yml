@@ -32,8 +32,8 @@ updates:
       # tant que le gel n'est pas levé.
       - dependency-name: stripe
       - dependency-name: "@stripe/*"
-      # SDK Appwrite épinglés sur la série du serveur de prod (1.6 : node-appwrite
-      # 16, appwrite 17) ; une montée suit celle du serveur
+      # SDK Appwrite épinglés sur la série du serveur de prod (2.3 : node-appwrite
+      # 30, appwrite 28) ; une montée suit celle du serveur
       # (docs/operations/appwrite-sdk.md).
       - dependency-name: node-appwrite
         update-types: ["version-update:semver-major"]

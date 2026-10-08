@@ -346,10 +346,10 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:npm/appwrite@17.0.2",
+      "bom-ref": "pkg:npm/appwrite@28.1.0",
       "name": "appwrite",
-      "version": "17.0.2",
-      "purl": "pkg:npm/appwrite@17.0.2",
+      "version": "28.1.0",
+      "purl": "pkg:npm/appwrite@28.1.0",
       "licenses": [
         {
           "license": {
@@ -360,13 +360,13 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "87c7eb2c3458cc50cb4bdc40dacf194a51ffa6b3c5abf99ae78efb7e04071cb704fedf510f13489a9abd02579151bf4e87560988fe3d1c239bc60493196e4040"
+          "content": "f385c85eeb63a8effafb97b33a7db4d9a4a2e13e3664a429ebbbef95b1b19735e4fd6a60760ac9efa187e7a7c251fe289bae0d899db88cc0f0d40cf82aca6ed9"
         }
       ],
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/appwrite/-/appwrite-17.0.2.tgz"
+          "url": "https://registry.npmjs.org/appwrite/-/appwrite-28.1.0.tgz"
         }
       ]
     },
