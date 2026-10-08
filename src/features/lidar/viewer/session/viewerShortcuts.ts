@@ -3,13 +3,13 @@ import { isTypingTarget } from '@/shared/lib/isTypingTarget';
 import { trackAnalyticsEvent } from '@/shared/lib/analytics';
 import type { CameraController } from '../camera';
 import { googleEarthViewFromViewer } from '../googleEarth';
+import type { SnowModeKey } from '../panel/controller';
 import {
   FIXED_POINT_PX_MAX,
   FIXED_POINT_PX_MIN,
   POINT_SIZE_MAX,
   POINT_SIZE_MIN,
-  type SnowModeKey,
-} from '../panel/controller';
+} from '../panel/sliderScales';
 import type { PhotoModeController } from '../photoMode/photoModeController';
 import type { LidarRenderer } from '../renderer/sceneRenderer';
 import type { ViewerRouteController } from '../route/viewerRouteController';

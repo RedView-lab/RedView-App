@@ -25,8 +25,8 @@ import { RestRefinement } from './lod/restRefinement';
 import { LidarManager } from '../lib/lidarManager';
 import { buildViewerUrl } from '../lib/viewerUrl';
 import { syncRootAppScale } from '@/shared/lib/appScale';
+import { createViewerPanel } from './panel/controller';
 import {
-  createViewerPanel,
   densityScaleToPercent,
   fixedPointPixelsToPercent,
   percentToDensityScale,
@@ -34,7 +34,7 @@ import {
   percentToFixedPointPixels,
   percentToPointSize,
   pointSizeToPercent,
-} from './panel/controller';
+} from './panel/sliderScales';
 import { buildGoogleMapsTileCenterUrl, buildTileLocationLabel } from './panel/location';
 import { exitLidarViewer, switchViewerEngine } from './panel/runtime/navigation';
 import { createViewerTileNavigator } from './tileNavigator/controller';
