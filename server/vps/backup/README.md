@@ -85,7 +85,14 @@ Listes exactes : `paths.txt` et `excludes.txt`.
   3. Le rapport part par e-mail.
 - **Anomalies** : si un instantané ou un dump fond de plus de 30 % d'un jour
   à l'autre (volume vidé, table tronquée, rançongiciel), c'est une alerte, et
-  l'instantané est quand même gardé.
+  l'instantané est quand même gardé. La nouvelle taille devient aussitôt la
+  référence : si la baisse est **voulue** (purge, comme celle de l'historique
+  Umami le 2026-10-07, qui a déclenché l'alerte du 08/10 à 02:31 UTC), vérifier
+  que la base contient bien ce qu'elle doit contenir, puis relancer
+  `sudo /usr/local/sbin/redview-backup run` : il repasse au vert (unité,
+  healthchecks.io) sans attendre la nuit suivante. Si la baisse n'est pas
+  expliquée, ne rien relancer avant d'avoir comparé avec l'instantané de la
+  veille (`redview-restore`), puisque la référence a déjà bougé.
 
 ## Alertes
 
