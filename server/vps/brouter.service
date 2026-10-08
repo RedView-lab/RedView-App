@@ -24,7 +24,11 @@ LogNamespace=brouter
 # Segments (1,8 Go) lus une fois : ils restent dans le page cache tant que la RAM est libre.
 ExecStartPre=/usr/bin/sh -c 'cat /opt/brouter/segments4/*.rd5 > /dev/null'
 
-ExecStart=/usr/bin/java -Xms3g -Xmx3g -XX:+AlwaysPreTouch -XX:+UseG1GC -XX:MaxGCPauseMillis=50 -XX:+ExitOnOutOfMemoryError -Xlog:gc*:file=/var/log/brouter/gc.log:time,uptime,level,tags:filecount=5,filesize=10m -DmaxRunningTime=300 -cp /opt/brouter/brouter-server.jar btools.server.RouteServer /opt/brouter/segments4 /opt/brouter/profiles customprofiles 17777 4
+# maxRunningTime (s) : 60, le défaut de BRouter (300 avant le 2026-10-08). BRouter
+# ne voit jamais qu'un client est parti : un calcul abandonné occupait l'un des
+# 4 fils jusqu'à 5 min, alors que personne n'attend plus de 55 s (délai de
+# api/brouter.ts, proxy_read_timeout de 60 s du nginx de l'hôte).
+ExecStart=/usr/bin/java -Xms3g -Xmx3g -XX:+AlwaysPreTouch -XX:+UseG1GC -XX:MaxGCPauseMillis=50 -XX:+ExitOnOutOfMemoryError -Xlog:gc*:file=/var/log/brouter/gc.log:time,uptime,level,tags:filecount=5,filesize=10m -DmaxRunningTime=60 -cp /opt/brouter/brouter-server.jar btools.server.RouteServer /opt/brouter/segments4 /opt/brouter/profiles customprofiles 17777 4
 
 Restart=always
 RestartSec=5
