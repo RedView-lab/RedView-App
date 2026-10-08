@@ -48,6 +48,9 @@ const FULL_STEPS = [
   { id: 'journey', script: 'e2e:journey', label: 'E2E : parcours principal (build de prod, faux backend)' },
   { id: 'redview', script: 'bench:redview', label: 'Régression : fichier .redview' },
   { id: 'project-layers', script: 'bench:project-layers', label: 'Régression : couches du projet' },
+  // Vrai code de persistance (projectRows, vues, dossiers…) sur un Appwrite et
+  // un IndexedDB simulés : 27 scénarios de perte de données, effacement RGPD des FIT.
+  { id: 'persistence', script: 'bench:persistence', label: 'Régression : persistance des projets' },
   { id: 'collab', script: 'bench:collab', label: 'Régression : co-édition' },
   { id: 'flyover', script: 'bench:flyover', label: 'Régression : flyover' },
 ];

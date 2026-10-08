@@ -60,6 +60,7 @@
     "bench:exporter": "tsx script-test-bench/suites/exporter.ts",
     "bench:redview": "tsx script-test-bench/regression/redview-file.ts",
     "bench:project-layers": "tsx script-test-bench/regression/project-layers.ts",
+    "bench:persistence": "tsx script-test-bench/audit/a-persistence-sim.ts",
     "bench:chart": "tsx script-test-bench/suites/center-panel.ts",
     "bench:analysis-chart": "tsx ./script-test-bench/suites/analysis-chart-cache.mjs",
     "bench:flyover": "tsx script-test-bench/flyover/run.ts",

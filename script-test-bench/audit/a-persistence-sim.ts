@@ -101,7 +101,7 @@ async function loadBundle() {
   });
   const mod = await import(`file:///${outFile.replace(/\\/g, '/')}`);
   fs.rmSync(outFile, { force: true });
-  return mod as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+  return mod as Record<string, any>;  
 }
 
 type Result = { id: string; title: string; reproduced: boolean; details: string[] };
@@ -232,6 +232,27 @@ async function main() {
     report('C1c', 'deleteProject / renameProject : échec cloud silencieux', !threwDel && !threwRen && !!back && back.name === 'Zombie', [
       `rename levé ? ${threwRen ? 'oui' : 'non'} ; delete levé ? ${threwDel ? 'oui (toast d\'erreur, projet conservé)' : 'non (UI : succès, projet retiré de la liste)'}`,
       `au refresh : projet ${back ? `RÉAPPARAÎT, nom="${back.name}"` : 'absent'}`,
+    ]);
+  }
+
+  // ── R1 : suppression d'un projet → ses fichiers FIT (RGPD), et seulement les siens ──
+  {
+    fresh();
+    const fitProject = (name: string, fileId: string) => {
+      const it = m.createDefaultItinerary(1);
+      it.fitUploads = [{ path: fileId, name: `${fileId}.fit`, size: 3, type: 'application/octet-stream', lastModified: 0 }];
+      return { ...m.createDefaultProject(), name, itineraries: [it], activeItineraryId: it.id };
+    };
+    for (const id of ['fitA', 'fitB']) {
+      __mock.files.set(id, { bucket: 'itinerary-fit-files', name: `${id}.fit`, bytes: new Uint8Array(3), permissions: [] });
+    }
+    const a = await m.createProject('Avec FIT', fitProject('Avec FIT', 'fitA'));
+    await m.createProject('Autre', fitProject('Autre', 'fitB'));
+    await m.deleteProject(a.id);
+    const ownGone = !__mock.files.has('fitA');
+    const otherKept = __mock.files.has('fitB');
+    report('R1', 'RGPD : fichiers FIT laissés après la suppression du projet (ou ceux d\'un autre effacés)', !ownGone || !otherKept, [
+      `fichier du projet supprimé : ${ownGone ? 'effacé' : 'TOUJOURS DANS LE BUCKET'} ; fichier d'un autre projet : ${otherKept ? 'gardé' : 'EFFACÉ À TORT'}`,
     ]);
   }
 
@@ -578,7 +599,7 @@ async function main() {
   };
   const cloudView = (projectId: string, userId = 'user-A') => {
     const doc = __mock.col('project_views').get(m.projectViewDocumentId(projectId, userId));
-    return doc ? JSON.parse(doc.data) as { updatedAt: string; view: Record<string, any> } : null; // eslint-disable-line @typescript-eslint/no-explicit-any
+    return doc ? JSON.parse(doc.data) as { updatedAt: string; view: Record<string, any> } : null;  
   };
   const viewport = (zoom: number) => ({ center: [6.8, 45.9] as [number, number], zoom, pitch: 50, bearing: 20 });
 
@@ -765,7 +786,7 @@ async function main() {
 }
 
 /** Écriture directe côté « serveur » (simule un autre appareil). */
-async function __mockUpdate(mock: any, id: string, data: string, name = 'C4 v2') { // eslint-disable-line @typescript-eslint/no-explicit-any
+async function __mockUpdate(mock: any, id: string, data: string, name = 'C4 v2') {  
   const c = mock.col('projects');
   const cur = c.get(id);
   c.set(id, { ...cur, data, name, $updatedAt: new Date(Date.now() + 3_600_000).toISOString() });
