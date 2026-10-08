@@ -26,20 +26,19 @@ import { projectToScreen, type ProjectedScreenPoint } from '../route/terrainRayc
 import type { ViewerRouteSceneParams } from '../route/types';
 import type { ViewerRouteController } from '../route/viewerRouteController';
 import { readLookAround, resolveLookAroundStart } from './lookAround/lookAround';
-import { createMeasurement, MIN_VERTICES, nextMeasurementId } from './measurements/compute';
+import { createMeasurement, MIN_VERTICES } from './measurements/compute';
 import { draftLayer, measurementLayer, measurementMesh } from './measurements/layers';
 import type { Measurement } from './measurements/types';
 import { mergeMeshes, type OverlayMeshData } from './overlay/cellMesh';
 import { ToolsOverlay, type OverlayLayer, type Projector } from './overlay/toolsOverlay';
-import { CanopyGridBuilder } from './terrain/avalanche/canopy';
 import { AvalancheComputer } from './terrain/avalanche/client';
-import { avalancheReadBounds, type AvalancheTerrainResult } from './terrain/avalanche/exposure';
 import { PointCloudPicker } from './picking/pointCloudPicker';
 import { ScenePicker } from './picking/scenePicker';
 import { toolForKey } from './shortcuts';
-import { FallCoverBuilder, type CoverBounds, type FallCover } from './terrain/fallCover';
-import { computeFallLine, displayedFallScenario, fallLineBounds } from './terrain/fallLine';
-import { TerrainField, type AnalysisGrid } from './terrain/terrainField';
+import { centerOnPick, faceSlope } from './cameraMoves';
+import { readSceneCanopy } from './terrain/pointCloudReads';
+import { runAvalancheAnalysis, runFallLineAnalysis, type TerrainAnalysisContext } from './terrain/terrainAnalyses';
+import { TerrainField } from './terrain/terrainField';
 import { isDrawingTool, type ScenePick, type ToolId, type Vec3 } from './types';
 import { ToolsUiStore, type ContextMenuAction, type LookAroundModel, type ToolsUiActions } from './ui/toolsUiStore';
 import { mountViewerToolsUi } from './ui/mount';
@@ -90,10 +89,6 @@ const LEFT_CLICK_MAX_HOLD_MS = 450;
 const NOTICE_MS = 2600;
 /** A click this close to the last vertex (double click) adds none, CSS px. */
 const DUPLICATE_VERTEX_PX = 4;
-/** Baseline of the slope faced by "Face à la pente": the face, not a step in it (m). */
-const FACE_SLOPE_BASELINE_M = 20;
-/** Below this slope "Face à la pente" looks straight down. */
-const FACE_SLOPE_MIN_DEG = 3;
 
 /** Arrow keys of the first-person view: [yaw steps, pitch steps]. */
 const LOOK_KEYS: Readonly<Record<string, [number, number]>> = {
@@ -105,10 +100,6 @@ const LOOK_KEYS: Readonly<Record<string, [number, number]>> = {
 
 /** One analysis of each of these kinds is shown at a time (overlapping zones would mix). */
 const SINGLE_INSTANCE_KINDS = new Set<Measurement['kind']>(['avalanche', 'viewshed', 'profile']);
-/** Ground cover is read this far around the nominal fall lines (the fan spreads), m. */
-const FALL_COVER_MARGIN_M = 60;
-/** Octree spacing the canopy cover is read at (crowns seen in 2 m columns), m. */
-const CANOPY_SPACING_M = 2;
 
 interface PointerPress {
   button: number;
@@ -195,20 +186,8 @@ export class ViewerToolsController {
    * avalanche forest: high-vegetation returns 3 m above the ground). `null`
    * when the cloud carries no ground classification.
    */
-  async readSceneCanopy(cellM: number): Promise<{ data: Float32Array; width: number; height: number } | null> {
-    const field = this.field;
-    const width = Math.max(2, Math.round((field.maxX - field.minX) / cellM) + 1);
-    const cell = (field.maxX - field.minX) / (width - 1);
-    const height = Math.max(2, Math.round((field.maxY - field.minY) / cell) + 1);
-    const grid: AnalysisGrid = {
-      width, height, cell, originX: field.minX, originY: field.minY,
-      altitude: new Float32Array(0), slopeDeg: new Float32Array(0),
-    };
-    const builder = new CanopyGridBuilder(field, grid);
-    await this.pointPicker.forEachPointToSpacing(builder.bounds, CANOPY_SPACING_M, (x, y, z, cls) => builder.add(x, y, z, cls));
-    const cover = builder.finish();
-    if (!cover) return null;
-    return { data: Float32Array.from(cover.canopyPct, (v) => (Number.isFinite(v) ? v / 100 : 0)), width, height };
+  readSceneCanopy(cellM: number): Promise<{ data: Float32Array; width: number; height: number } | null> {
+    return readSceneCanopy(this.field, this.pointPicker, cellM);
   }
 
   // ── Comments (lidar/viewer/comments) ──────────────────────────────────────
@@ -492,109 +471,29 @@ export class ViewerToolsController {
     this.addMeasurement(measurement);
   }
 
-  /**
-   * Fall line: nominal trajectories first (they bound the ground cover read
-   * from the point cloud), then the whole fan over that cover.
-   */
   private async runFallLine(pick: ScenePick): Promise<void> {
-    const field = this.field;
-    const stale = () => this.destroyed;
-    const yieldToPage = () => new Promise<void>((resolve) => window.setTimeout(resolve, 0));
-    this.notify(t('Calcul de la ligne de pente…'));
-    const preview = await computeFallLine(field, pick.projX, pick.projY, { runs: 1 });
-    if (stale()) return;
-    if (!preview) {
-      this.notify(t('Hors de la zone chargée'));
-      return;
-    }
-    const cover = await this.readFallCover(fallLineBounds(preview, FALL_COVER_MARGIN_M));
-    if (stale()) return;
-    const result = await computeFallLine(field, pick.projX, pick.projY, { cover, yieldToPage });
-    if (stale() || !result) return;
-    this.addMeasurement({ id: nextMeasurementId(), kind: 'fallLine', origin: pick, result, scenario: displayedFallScenario(result) });
-    this.notify(result.scenarios.every((s) => s.end === 'noSlide')
-      ? t('Pente trop faible : rien ne glisse ici')
-      : t('Ligne de pente calculée'));
+    const done = await runFallLineAnalysis(this.analysisContext(() => this.destroyed), pick);
+    if (!done) return;
+    this.addMeasurement(done.measurement);
+    this.notify(done.message);
   }
 
-  /**
-   * Avalanche terrain exposure (AutoATES chain, see terrain/avalanche): the
-   * canopy cover is read from the point cloud here, the model runs in a worker.
-   */
   private async runAvalanche(pick: ScenePick): Promise<void> {
     const token = ++this.avalancheToken;
     const stale = () => this.destroyed || token !== this.avalancheToken;
-    const field = this.field;
-    const grid = field.getAvalancheGrid();
-    this.notify(t('Calcul de l’exposition avalanche…'), { persistent: true });
-    const canopy = new CanopyGridBuilder(field, grid);
-    const bounds = avalancheReadBounds(grid, pick.projX, pick.projY);
-    let forestRead = true;
-    try {
-      await this.pointPicker.forEachPointToSpacing(bounds, CANOPY_SPACING_M, (x, y, z, cls) => canopy.add(x, y, z, cls));
-    } catch (error) {
-      console.warn('[LiDAR tools] Canopy read failed:', error);
-      forestRead = false;
-    }
-    if (stale()) return;
-    const cover = forestRead ? canopy.finish() : null;
-    let result: AvalancheTerrainResult | null;
-    try {
-      result = await this.avalanche.compute(`${grid.width}x${grid.height}@${grid.originX},${grid.originY}/${grid.cell}`, {
-        grid: {
-          width: grid.width,
-          height: grid.height,
-          cell: grid.cell,
-          originX: grid.originX,
-          originY: grid.originY,
-          altitude: grid.altitude,
-          slopeDeg: grid.slopeDeg,
-        },
-        canopyPct: cover?.canopyPct ?? null,
-        projX: pick.projX,
-        projY: pick.projY,
-      });
-    } catch (error) {
-      if (stale()) return;
-      console.warn('[LiDAR tools] Avalanche exposure failed:', error);
-      this.notify(t('Calcul de l’exposition avalanche impossible'));
-      return;
-    }
-    if (stale()) return;
-    if (!result) {
-      this.notify(t('Hors de la zone chargée'));
-      return;
-    }
-    this.addMeasurement({ id: nextMeasurementId(), kind: 'avalanche', origin: pick, result });
-    this.notify(t('Exposition avalanche calculée'));
+    const done = await runAvalancheAnalysis(this.analysisContext(stale), this.avalanche, pick);
+    if (!done) return;
+    this.addMeasurement(done.measurement);
+    this.notify(done.message);
   }
 
-  /** Trees, buildings and water around a fall line, from the drawn LiDAR returns; `null` on failure. */
-  private async readFallCover(bounds: CoverBounds): Promise<FallCover | null> {
-    const field = this.field;
-    const clipped: CoverBounds = {
-      minX: Math.max(field.minX, bounds.minX),
-      minY: Math.max(field.minY, bounds.minY),
-      maxX: Math.min(field.maxX, bounds.maxX),
-      maxY: Math.min(field.maxY, bounds.maxY),
+  private analysisContext(isStale: () => boolean): TerrainAnalysisContext {
+    return {
+      field: this.field,
+      pointPicker: this.pointPicker,
+      notify: (message, options) => this.notify(message, options),
+      isStale,
     };
-    const builder = new FallCoverBuilder(field, clipped);
-    try {
-      // Render frame: x east, y up, z = −north.
-      await this.pointPicker.forEachPointInBox(
-        {
-          minX: clipped.minX - field.centerX,
-          maxX: clipped.maxX - field.centerX,
-          minZ: field.centerY - clipped.maxY,
-          maxZ: field.centerY - clipped.minY,
-        },
-        (x, y, z, cls) => builder.add(x + field.centerX, field.centerY - z, y + field.centerZ, cls),
-      );
-    } catch (error) {
-      console.warn('[LiDAR tools] Ground cover read failed:', error);
-      return null;
-    }
-    return builder.finish();
   }
 
   // ── Measurements ───────────────────────────────────────────────────────────
@@ -694,43 +593,11 @@ export class ViewerToolsController {
   }
 
   private centerOn(pick: ScenePick): void {
-    const { camera } = this.opts;
-    const eye = camera.getEye();
-    const distance = Math.hypot(eye[0] - pick.local[0], eye[1] - pick.local[1], eye[2] - pick.local[2]);
-    camera.animateTo({
-      targetX: pick.local[0],
-      targetY: pick.local[1],
-      targetZ: pick.local[2],
-      radius: Math.max(30, Math.min(distance, camera.sceneRadius * 2)),
-    });
+    centerOnPick(this.opts.camera, pick);
   }
 
-  /**
-   * Looks at the slope along its normal: a face seen from below looks
-   * steeper, from above flatter; seen square it shows its true shape.
-   */
   private faceSlope(pick: ScenePick): void {
-    const slope = this.field.slopeAt(pick.projX, pick.projY, FACE_SLOPE_BASELINE_M)
-      ?? this.field.slopeAt(pick.projX, pick.projY);
-    if (!slope) return;
-    const { camera } = this.opts;
-    const ground = this.field.toLocal(pick.projX, pick.projY, pick.groundAltitudeM ?? pick.altitudeM);
-    // Ground normal (−∂z/∂x, −∂z/∂y, 1) in the render frame (x east, y up, z = −north).
-    const nx = -slope.gradX;
-    const ny = 1;
-    const nz = slope.gradY;
-    const length = Math.hypot(nx, ny, nz);
-    const flat = slope.slopeDeg < FACE_SLOPE_MIN_DEG;
-    const eye = camera.getEye();
-    const distance = Math.hypot(eye[0] - ground[0], eye[1] - ground[1], eye[2] - ground[2]);
-    camera.animateTo({
-      targetX: ground[0],
-      targetY: ground[1],
-      targetZ: ground[2],
-      phi: flat ? 0.15 : Math.acos(ny / length),
-      theta: flat ? undefined : Math.atan2(nx / length, nz / length),
-      radius: Math.max(120, Math.min(500, distance)),
-    });
+    faceSlope(this.opts.camera, this.field, pick);
   }
 
   // ── Input ──────────────────────────────────────────────────────────────────
