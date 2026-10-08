@@ -24,6 +24,7 @@ import { captureServerError, flushServerObservability, initServerObservability }
 import { createRequestLogger, normalizeRoutePath } from './server/lib/request-logging.mjs';
 import { VARIANT_SUFFIX, acceptedEncodings, isCompressible } from './server/lib/static-compression.mjs';
 import { REDVIEW_CSP_HEADER } from './server/lib/csp.mjs';
+import { resolveLegacyAssetPath } from './server/lib/legacy-asset-paths.mjs';
 import { API_COMPRESS_SYNC_MAX_BYTES, compressApiBody, compressApiBodySync, pickApiEncoding, withVary } from './server/lib/api-compression.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -323,6 +324,10 @@ const server = http.createServer(async (req, res) => {
       res.setHeader('Cache-Control', 'no-store');
       return res.end('Not Found');
     }
+
+    // Fichiers de public/ déplacés : l'ancienne URL (onglet ouvert avant le
+    // déploiement) sert le nouveau fichier (server/lib/legacy-asset-paths.mjs).
+    pathname = resolveLegacyAssetPath(pathname) ?? pathname;
 
     let filePath = path.join(DIST_DIR, pathname);
 

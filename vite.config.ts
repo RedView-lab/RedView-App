@@ -18,6 +18,8 @@ import {
 import { serveTileFallback, tileFallbackFamily } from './server/lib/tile-fallbacks.mjs'
 // @ts-expect-error JS module without declarations
 import { resolveBuildId } from './server/lib/build-id.mjs'
+// @ts-expect-error JS module without declarations
+import { resolveLegacyAssetPath } from './server/lib/legacy-asset-paths.mjs'
 
 // Identifiant de build (release GlitchTip, tag des sourcemaps, APP_CACHE_EPOCH).
 const redviewBuildId: string = resolveBuildId()
@@ -67,6 +69,18 @@ function redviewDevApiPlugin(): Plugin {
           const query = queryIndex !== -1 ? req.url.slice(queryIndex) : ''
           req.url = '/viewer.html' + query
           return next()
+        }
+
+        // 1b. Fichiers de public/ déplacés : l'ancienne URL sert le nouveau
+        // fichier (même module que server.mjs).
+        {
+          const queryIndex = req.url.indexOf('?')
+          const rawPath = queryIndex !== -1 ? req.url.slice(0, queryIndex) : req.url
+          const legacyPath: string | null = resolveLegacyAssetPath(decodeSafePathname(rawPath) ?? '')
+          if (legacyPath) {
+            req.url = encodeURI(legacyPath) + (queryIndex !== -1 ? req.url.slice(queryIndex) : '')
+            return next()
+          }
         }
 
         // 2. Tuiles du Service Worker demandées par une page qu'il ne contrôle
