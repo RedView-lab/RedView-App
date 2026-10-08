@@ -213,7 +213,7 @@ export function buildPredictionConfigFromRhythm(
   // l'API historique ne porte que les saisies du profil Personnalisé.
   if (!custom) return config;
 
-  // Tire width effect on rolling resistance (Crr)
+  // Effet de la largeur des pneus sur la résistance au roulement (Crr)
   const tiresMm = rhythm.tiresMm;
   if (typeof tiresMm === 'number' && tiresMm > 0) {
     // Route 25-28 mm : ~0,0045, allroad 32-35 mm : ~0,0050, gravel 40-50 mm : ~0,0058

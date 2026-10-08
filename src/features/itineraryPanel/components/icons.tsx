@@ -214,8 +214,8 @@ export const IconCheckpointStart = ({ size = 20, ...p }: AssetGlyphProps) => (
 );
 
 /**
- * "Fin" iOS-style checkered flag map marker — Figma node 855:20564.
- * White/black grid pattern on a flag pole in a rounded square.
+ * Marqueur de carte « Fin » en drapeau à damier façon iOS — nœud Figma 855:20564.
+ * Motif de grille blanc/noir sur un mât de drapeau dans un carré arrondi.
  */
 export const IconCheckpointEndMarker = ({ size = 20, ...p }: AssetGlyphProps) => (
   <FullColorSvgIcon src="/icons/ui/checkpoint-end.svg" size={size} {...p} />

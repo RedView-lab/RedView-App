@@ -93,7 +93,7 @@ export function TimelineFilterBar({
     }
   };
 
-  // Close POI categories menu on outside click
+  // Fermer le menu des catégories de POI au clic extérieur
   useEffect(() => {
     if (!poiMenuOpen) return;
 

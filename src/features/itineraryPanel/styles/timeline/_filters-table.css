@@ -329,7 +329,7 @@
   margin-left: 2px;
 }
 
-/* ── Category dropdown popover (POIs on map style) ── */
+/* ── Popover déroulant des catégories (style des POI sur la carte) ── */
 /* Apparence : shared/styles/dropdown.css (.rv-dropdown) */
 .rvi-tl-sheet-filters__poi-menu {
   position: absolute;

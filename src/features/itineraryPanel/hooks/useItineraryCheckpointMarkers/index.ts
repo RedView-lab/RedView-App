@@ -256,7 +256,7 @@ export function useItineraryCheckpointMarkers({
     };
   }, [map]);
 
-  // Clean up on unmount
+  // Nettoyer au démontage
   useEffect(() => {
     const registry = registryRef.current;
     return () => {

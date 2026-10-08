@@ -17,7 +17,7 @@ export function useGridOverflowEdges(layoutKey: string): (grid: HTMLElement | nu
   useEffect(() => {
     if (!grid) return;
     const update = () => syncHorizontalOverflow(grid);
-    // Initial callback on observe: first state.
+    // Rappel initial à l'observation : premier état.
     const observer = new ResizeObserver(update);
     observer.observe(grid);
     grid.addEventListener('scroll', update, { passive: true });

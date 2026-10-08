@@ -24,8 +24,8 @@ export function syncTracageOnActivityChange(
 ): TracageSyncResult {
   switch (activity) {
     case 'running': {
-      // Road running: sidewalks & car-free paved ways (knob `bikeLanes`),
-      // quiet streets, stabilised paths; dirt only as a connector.
+      // Course sur route : trottoirs et voies revêtues sans voitures (réglage `bikeLanes`),
+      // rues calmes, chemins stabilisés ; la terre seulement en liaison.
       const isComfort = mode === 'comfort';
       const isAventure = mode === 'aventure';
 
