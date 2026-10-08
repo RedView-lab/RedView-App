@@ -39,7 +39,7 @@ interface ToggleRowProps {
   trailingTight?: boolean;
 }
 
-/** Full-width toggle row with trailing info/plus icon slot. */
+/** Ligne d'interrupteur pleine largeur, avec un emplacement d'icône info/plus à droite. */
 export function ToggleRow({
   checked,
   onChange,

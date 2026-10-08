@@ -61,7 +61,7 @@ interface PoiBadgeSpec {
 }
 
 /**
- * Registry of designed teardrop badges, par catégorie de panneau.
+ * Registre des badges en goutte dessinés, par catégorie de panneau.
  *
  * Volontairement partiel : `PoiBadge` résout d'abord un asset fourni
  * (`PROVIDED_TIMELINE_BADGE_URLS`), et les catégories santé / transport

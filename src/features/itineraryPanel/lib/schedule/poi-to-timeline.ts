@@ -18,8 +18,8 @@ import {
 import type { PoiCategory as PanelPoiCategory, TimelineItem } from '../../types';
 
 /**
- * OSM category → panel row. Anything not listed here is dropped from the
- * timeline (but still rendered on the map).
+ * Catégorie OSM → ligne du panneau. Ce qui n'est pas listé ici est écarté de
+ * la feuille de route (mais reste affiché sur la carte).
  *
  * Doit rester l'exact inverse de `PANEL_TO_FEATURE_POI`
  * (itineraryPanel/hooks/useItineraryPoiMap.ts) : une catégorie ajoutée à la

@@ -68,7 +68,7 @@ async function delay(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /**
- * Fetch 1m MNT (sol nu / bare-earth) from IGN Géoplateforme (RGE ALTI).
+ * Récupère le MNT à 1 m (sol nu) de la Géoplateforme IGN (RGE ALTI).
  */
 async function requestIgnElevations(
   points: PointLike[],

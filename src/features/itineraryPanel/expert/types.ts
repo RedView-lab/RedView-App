@@ -47,7 +47,7 @@ export interface ParameterDefinition {
   unit?: string;
   /** Options d'énumération. Requises quand kind === 'enum'. */
   choices?: ParameterChoice[];
-  /** Hidden behind the "Afficher avancés" toggle. */
+  /** Masqué derrière l'interrupteur « Afficher avancés ». */
   advanced?: boolean;
 }
 

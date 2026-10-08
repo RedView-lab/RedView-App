@@ -266,7 +266,7 @@ export interface Itinerary {
   fitUploads?: ItineraryFitUpload[];
   /**
    * Travail local (jamais dans le document partagé, cf. `lib/project/layers.ts`) :
-   * pending tail-segment append produced by the tracer subtool.
+   * prolongement du tracé en attente, produit par l'outil Tracer.
    */
   pendingTraceExtension?: ItineraryPendingTraceExtension;
   /** Travail local : patch de reroutage local en attente pour les modifications/suppressions d'étapes. */

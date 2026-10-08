@@ -296,7 +296,7 @@ export function useRecalculateTrace({
       // puisse pas entrer en concurrence avec le résultat recalculé.
       cancelRouteRequest();
 
-      // Update project with recalculated route (historisé → annulable)
+      // Met à jour le projet avec le tracé recalculé (historisé → annulable)
       const applied = commitTraceMutation(targetId, (draft) => {
         const itinerary = draft.itineraries.find((it) => it.id === targetId);
         if (!itinerary || !routePointsEqual(itinerary.gpxRoute?.points, sourceRoutePoints)) {

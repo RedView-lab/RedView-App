@@ -6,7 +6,7 @@ const IGN_DL_BASE = 'https://data.geopf.fr/telechargement';
 let zonesCache: ZoneInfo[] | null = null;
 const tileUrlCache = new Map<string, string>();
 
-// Auto-generated from IGN Géoplateforme WFS (206 zones)
+// Généré automatiquement depuis le WFS de la Géoplateforme IGN (206 zones)
 const FALLBACK_ZONES_FXX = [
   // Bretagne / Normandie
   'AE_2025-07-22', 'AF_2025-09-11', 'BE_2025-09-22', 'CE_2026-01-22',

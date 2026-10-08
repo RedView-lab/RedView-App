@@ -97,7 +97,7 @@ export const FLOWPY_FOREST_FRICTION = { maxAddedDeg: 10, minAddedDeg: 2, velocit
 /** Détraînement en forêt du flux d'acheminement par cellule (Flow-Py d'AutoATES v2.0). */
 export const FLOWPY_FOREST_DETRAINMENT = { max: 0.0003, min: 0.00001, velocityLimit: 30 } as const;
 
-/** ATES class thresholds of AutoATES v2.0 (Toft et al., 2024, Table 1). */
+/** Seuils de classe ATES d'AutoATES v2.0 (Toft et al., 2024, tableau 1). */
 export const ATES_SLOPE_THRESHOLDS_DEG = { sat01: 15, sat12: 18, sat23: 28, sat34: 39 } as const;
 /** Seuils d'angle de parcours de l'écoulement (AAT) ; tout écoulement peu fréquent (α 18°) est de classe 1. */
 export const ATES_ALPHA_THRESHOLDS_DEG = { aat12: 24, aat23: 33 } as const;
