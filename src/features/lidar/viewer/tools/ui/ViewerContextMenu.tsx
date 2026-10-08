@@ -264,6 +264,7 @@ export function ViewerContextMenu({ model, actions }: ViewerContextMenuProps) {
           <span className="rv-lidar-ctx__title">{title}</span>
           <button
             type="button"
+            role="menuitem"
             className="rv-lidar-ctx__icon-button"
             onClick={() => window.open(buildTopoMapUrl(pick.lon, pick.lat, model.crs), '_blank', 'noopener,noreferrer')}
             aria-label={t('Ouvrir la carte topographique')}
@@ -277,6 +278,7 @@ export function ViewerContextMenu({ model, actions }: ViewerContextMenuProps) {
           <div className="rv-lidar-ctx__meta-row">
             <button
               type="button"
+              role="menuitem"
               className="rv-lidar-ctx__system"
               onClick={cycleFormat}
               title={t('Changer de système de coordonnées')}
@@ -286,6 +288,7 @@ export function ViewerContextMenu({ model, actions }: ViewerContextMenuProps) {
             <span className="rv-lidar-ctx__coords" title={coordinates.clipboard}>{coordinates.value}</span>
             <button
               type="button"
+              role="menuitem"
               className="rv-lidar-ctx__icon-button rv-lidar-ctx__icon-button--small"
               onClick={() => void copyCoordinates()}
               aria-label={t('Copier les coordonnées')}
@@ -314,7 +317,7 @@ export function ViewerContextMenu({ model, actions }: ViewerContextMenuProps) {
           </div>
         </div>
 
-        <div className="rv-lidar-ctx__separator" aria-hidden />
+        <div className="rv-lidar-ctx__separator" role="separator" />
 
         <div className="rv-lidar-ctx__rows">
           <SubmenuTrigger

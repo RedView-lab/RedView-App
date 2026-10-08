@@ -327,6 +327,7 @@ export function WeatherSection({
       <div className="rvc-weather__day-selector">
         <div className="rvc-weather__day-slider-wrapper">
           <Slider
+            label="Jour de la prévision"
             min={0}
             max={forecastMaxDayOffset}
             value={forecastDay}
@@ -353,6 +354,7 @@ export function WeatherSection({
         <span className="rvc-weather__time-bound">{forecastBoundsStart}</span>
         <div style={{ flex: 1, padding: '0 4px', display: 'flex', alignItems: 'center' }}>
           <Slider
+            label="Heure de la prévision"
             min={forecastMinMinutes}
             max={forecastMaxMinutes}
             step={FORECAST_TIME_STEP_MINUTES}
@@ -430,6 +432,7 @@ export function WeatherSection({
                     <div className="rvc-altitude__opacity-control">
                       <div className="rvc-altitude__opacity-slider-wrap">
                         <Slider
+                          label="Opacité"
                           value={palette.opacity}
                           onChange={(value) => onPaletteOpacityChange?.(layer.key, value)}
                           width="100%"

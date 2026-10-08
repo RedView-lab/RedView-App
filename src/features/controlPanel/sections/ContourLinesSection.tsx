@@ -70,6 +70,7 @@ export function ContourLinesSection({
           <div className="rvc-contour-lines__opacity-control">
             <div className="rvc-contour-lines__opacity-slider-wrap">
               <Slider
+                label="Opacité"
                 value={opacity}
                 onChange={onOpacityChange}
                 width="100%"

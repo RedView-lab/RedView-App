@@ -433,6 +433,7 @@ export const RouteSection = memo(function RouteSection({
           <div className="rvc-routes__trace-width-control">
             <div className="rvc-routes__trace-width-slider-wrap">
               <Slider
+                label="Épaisseur des tracés"
                 value={ribbonWidthM}
                 min={1}
                 max={20}

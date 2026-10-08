@@ -6,9 +6,11 @@ interface CheckboxProps {
   onChange?: (next: boolean) => void;
   label?: string;
   id?: string;
+  /** Nom accessible quand le texte visible est hors de la case (sans `label`). */
+  ariaLabel?: string;
 }
 
-export function Checkbox({ checked, onChange, label, id }: CheckboxProps) {
+export function Checkbox({ checked, onChange, label, id, ariaLabel }: CheckboxProps) {
   const { t } = useAppI18n();
 
   return (
@@ -19,6 +21,7 @@ export function Checkbox({ checked, onChange, label, id }: CheckboxProps) {
       <input
         id={id}
         type="checkbox"
+        aria-label={!label && ariaLabel ? t(ariaLabel) : undefined}
         checked={checked}
         onChange={(e) => onChange?.(e.target.checked)}
         className="rvc-cp-checkbox__input"

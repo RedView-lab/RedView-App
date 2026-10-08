@@ -1,6 +1,10 @@
 import { useState } from 'react';
 
+import { useAppI18n } from '@/shared/i18n';
+
 interface SliderProps {
+  /** Nom accessible (texte français ou anglais, traduit) : le libellé visible de la ligne, sinon ce que règle le curseur. */
+  label: string;
   /** 0..100 */
   value: number;
   onChange?: (value: number) => void;
@@ -15,6 +19,7 @@ interface SliderProps {
 }
 
 export function Slider({
+  label,
   value,
   onChange,
   onCommit,
@@ -26,6 +31,7 @@ export function Slider({
   trackHeight = 10,
   disabled = false,
 }: SliderProps) {
+  const { t } = useAppI18n();
   const [draftValue, setDraftValue] = useState(value);
   const [interacting, setInteracting] = useState(false);
 
@@ -58,6 +64,7 @@ export function Slider({
       <input
         className="rvc-slider__input"
         type="range"
+        aria-label={t(label)}
         disabled={disabled}
         min={min}
         max={max}

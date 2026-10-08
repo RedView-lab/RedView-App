@@ -240,6 +240,7 @@ export function SunlightSection({
           <div className="rvc-sunlight__option-main">
             <Checkbox
               id="sunlight-custom-date"
+              ariaLabel="Choisir une date personnalisée"
               checked={state.customDateEnabled}
               onChange={(checked) => onChange?.({ customDateEnabled: checked })}
             />
@@ -272,6 +273,7 @@ export function SunlightSection({
           <span className="rvc-sunlight__time-bound">00:00</span>
           <div className="rvc-sunlight__slider-shell">
             <Slider
+              label="Heure"
               min={0}
               max={1439}
               value={isScrubbingTime ? timeDraftMinutes : getMinutesFromTime(state.time)}
@@ -293,6 +295,7 @@ export function SunlightSection({
                 }
               }}
               className="rvc-sunlight__native-input"
+              aria-label={t('Saisir une heure')}
             />
           </div>
         </div>
@@ -315,6 +318,7 @@ export function SunlightSection({
           <div className="rvc-sunlight__opacity-control">
             <div className="rvc-sunlight__opacity-slider-wrap">
               <Slider
+                label="Opacité ombres"
                 min={0}
                 max={100}
                 value={state.shadowOpacity}
@@ -360,6 +364,7 @@ export function SunlightSection({
               <div className="rvc-sunlight__opacity-control">
                 <div className="rvc-sunlight__opacity-slider-wrap">
                   <Slider
+                    label="Opacité carte d'ensoleillement"
                     min={0}
                     max={100}
                     value={state.sunlightMapOpacity}

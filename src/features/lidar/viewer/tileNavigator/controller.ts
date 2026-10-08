@@ -147,7 +147,6 @@ export function createViewerTileNavigator(options: ViewerTileNavigatorOptions) {
       const label = buildTileNavigatorLabel(cell, { isCurrent, isActiveSecondary, isCached, isPreviewing });
       button.type = 'button';
       button.className = 'viewer-panel__tile-nav-cell';
-      button.setAttribute('role', 'gridcell');
       button.setAttribute('aria-label', label);
       button.title = label;
 

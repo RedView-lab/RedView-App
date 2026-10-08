@@ -228,7 +228,7 @@ export function AltitudeSection({
         <span className="rvc-row__label">{t('Opacité')}</span>
         <div className="rvc-altitude__opacity-control">
           <div className="rvc-altitude__opacity-slider-wrap">
-            <Slider value={state.opacity} onChange={onOpacityChange} width="100%" />
+            <Slider label="Opacité" value={state.opacity} onChange={onOpacityChange} width="100%" />
           </div>
           <span className="rvc-altitude__opacity-value">{state.opacity} %</span>
         </div>

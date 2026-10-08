@@ -192,6 +192,7 @@ export function WindSection({
         <div className="rvc-wind__slider-row">
           <span className="rvc-wind__bound">{formatDateShort(startDateKey, locale)}</span>
           <Slider
+            label="Date du vent"
             width="100%"
             min={0}
             max={maxDateOffset}
@@ -218,6 +219,7 @@ export function WindSection({
         <div className="rvc-wind__slider-row">
           <span className="rvc-wind__bound">{minutesToTime(minSelectableMinutes)}</span>
           <Slider
+            label="Heure du vent"
             width="100%"
             min={minSelectableMinutes}
             max={maxSelectableMinutes}

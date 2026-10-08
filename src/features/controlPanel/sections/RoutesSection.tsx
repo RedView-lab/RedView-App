@@ -181,6 +181,7 @@ export function RoutesSection({
           <div className="rvc-routes__trace-width-control">
             <div className="rvc-routes__trace-width-slider-wrap">
               <Slider
+                label="Épaisseur des tracés"
                 value={traceWidthPx}
                 min={1}
                 max={20}

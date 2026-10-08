@@ -58,15 +58,15 @@ const PANEL_TEMPLATE = `
     </div>
     <div id="panel-point-controls" class="viewer-panel__point-controls">
       <div class="viewer-panel__range-row">
-        <p class="viewer-panel__label">Taille des points</p>
+        <p id="panel-point-size-label" class="viewer-panel__label">Taille des points</p>
         <span class="viewer-panel__range-bound">1</span>
-        <input id="panel-point-size" class="viewer-panel__range" type="range" min="1" max="100" value="50" />
+        <input id="panel-point-size" class="viewer-panel__range" type="range" aria-labelledby="panel-point-size-label" min="1" max="100" value="50" />
         <span class="viewer-panel__range-bound">100</span>
       </div>
       <div class="viewer-panel__range-row">
-        <p class="viewer-panel__label">Densité des points</p>
+        <p id="panel-point-density-label" class="viewer-panel__label">Densité des points</p>
         <span class="viewer-panel__range-bound">1</span>
-        <input id="panel-point-density" class="viewer-panel__range" type="range" min="1" max="100" value="100" />
+        <input id="panel-point-density" class="viewer-panel__range" type="range" aria-labelledby="panel-point-density-label" min="1" max="100" value="100" />
         <span class="viewer-panel__range-bound">100</span>
       </div>
       <div class="viewer-panel__toggle-row">
@@ -86,9 +86,9 @@ const PANEL_TEMPLATE = `
         </label>
       </div>
       <div class="viewer-panel__range-row">
-        <p class="viewer-panel__label">Intensité EDL</p>
+        <p id="panel-edl-strength-label" class="viewer-panel__label">Intensité EDL</p>
         <span class="viewer-panel__range-bound">1</span>
-        <input id="panel-edl-strength" class="viewer-panel__range" type="range" min="1" max="100" value="50" />
+        <input id="panel-edl-strength" class="viewer-panel__range" type="range" aria-labelledby="panel-edl-strength-label" min="1" max="100" value="50" />
         <span class="viewer-panel__range-bound">100</span>
       </div>
       <div class="viewer-panel__select-row viewer-panel__select-row--color">
@@ -115,9 +115,9 @@ const PANEL_TEMPLATE = `
     </div>
     <div id="panel-elevation-controls" class="viewer-panel__elevation-controls" hidden>
       <div class="viewer-panel__range-row">
-        <p class="viewer-panel__label">Exagération d'élévation</p>
+        <p id="panel-elevation-exaggeration-label" class="viewer-panel__label">Exagération d'élévation</p>
         <span class="viewer-panel__range-bound">0.5×</span>
-        <input id="panel-elevation-exaggeration" class="viewer-panel__range" type="range" min="1" max="100" value="25" />
+        <input id="panel-elevation-exaggeration" class="viewer-panel__range" type="range" aria-labelledby="panel-elevation-exaggeration-label" min="1" max="100" value="25" />
         <span class="viewer-panel__range-bound">3.0×</span>
       </div>
     </div>
@@ -152,7 +152,7 @@ const PANEL_TEMPLATE = `
       <p id="viewer-tile-nav-status" class="viewer-panel__sr-only" aria-live="polite">
         Chargement des tuiles voisines.
       </p>
-      <div id="viewer-tile-nav-grid" class="viewer-panel__tile-nav-grid" role="grid"></div>
+      <div id="viewer-tile-nav-grid" class="viewer-panel__tile-nav-grid" role="group" aria-label="Tuiles LiDAR voisines"></div>
     </section>
     <button id="panel-engine-btn" class="viewer-panel__cta" type="button">
       <span class="viewer-panel__cta-icon" aria-hidden="true">

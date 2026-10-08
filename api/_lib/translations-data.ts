@@ -1933,6 +1933,26 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Shadow opacity"
   },
   {
+    "fr": "Saisir une heure",
+    "en": "Enter a time"
+  },
+  {
+    "fr": "Jour de la prévision",
+    "en": "Forecast day"
+  },
+  {
+    "fr": "Heure de la prévision",
+    "en": "Forecast time"
+  },
+  {
+    "fr": "Date du vent",
+    "en": "Wind date"
+  },
+  {
+    "fr": "Heure du vent",
+    "en": "Wind time"
+  },
+  {
     "fr": "Opacité carte d'ensoleillement",
     "en": "Sunlight map opacity"
   },
@@ -7175,6 +7195,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Navigation des tuiles LiDAR",
     "en": "LiDAR tile navigation"
+  },
+  {
+    "fr": "Tuiles LiDAR voisines",
+    "en": "Neighbouring LiDAR tiles"
   },
   {
     "fr": "Chargement des tuiles voisines.",

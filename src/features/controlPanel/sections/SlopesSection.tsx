@@ -378,6 +378,7 @@ export function SlopesSection({
         <div className="rvc-slopes__opacity-control">
           <div className="rvc-slopes__opacity-slider-wrap">
             <Slider
+              label="Opacité"
               min={0}
               max={100}
               value={state.opacity}

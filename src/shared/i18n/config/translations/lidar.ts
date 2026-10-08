@@ -93,6 +93,7 @@ export const lidarTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Couverture neigeuse', en: 'Snow cover' },
   { fr: 'Épaisseur (cm)', en: 'Depth (cm)' },
   { fr: 'Navigation des tuiles LiDAR', en: 'LiDAR tile navigation' },
+  { fr: 'Tuiles LiDAR voisines', en: 'Neighbouring LiDAR tiles' },
   { fr: 'Chargement des tuiles voisines.', en: 'Loading neighbouring tiles.' },
   { fr: 'Quitter le mode LIDAR', en: 'Exit LIDAR mode' },
   { fr: 'Rouvrir le panneau LiDAR', en: 'Reopen the LiDAR panel' },
