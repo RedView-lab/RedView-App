@@ -12,8 +12,9 @@ function compile(gl: WebGL2RenderingContext, type: number, src: string): WebGLSh
 }
 
 /**
- * Compiles and links a program. `verifyLink` throws with the info log when
- * linking fails (the auxiliary programs skip the check, as they always did).
+ * Compile et lie un programme. `verifyLink` lève une erreur avec le journal
+ * quand l'édition de liens échoue (les programmes auxiliaires sautent la
+ * vérification, comme ils l'ont toujours fait).
  */
 export function createProgram(
   gl: WebGL2RenderingContext,
@@ -39,7 +40,7 @@ export function createProgram(
   return prog;
 }
 
-/** 1×1 placeholder texture (clamped), bound to a sampler until real data arrives. */
+/** Texture provisoire 1×1 (bornée), liée à un sampler jusqu'à l'arrivée des vraies données. */
 export function createPlaceholderTexture(
   gl: WebGL2RenderingContext,
   internalFormat: number,

@@ -1,5 +1,6 @@
-// Auxiliary programs: preview mesh (coarse terrain while loading), sun
-// trajectory polyline, GPX route ribbon and the sun disc billboard.
+// Programmes auxiliaires : maillage d'aperçu (terrain grossier pendant le
+// chargement), polyligne de la trajectoire du soleil, ruban du tracé GPX et
+// billboard du disque solaire.
 
 export const PREVIEW_VERTEX_SHADER = /* glsl */ `#version 300 es
 precision highp float;

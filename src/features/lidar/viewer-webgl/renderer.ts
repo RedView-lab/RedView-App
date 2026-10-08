@@ -17,16 +17,16 @@ import { createPlaceholderTexture, createProgram, mustLoc, normalize3 } from './
 import { GlPreviewMesh, GlRouteMesh } from './renderer/overlayMeshes';
 
 // ============================================
-// LiDAR HD — WebGL2 fallback renderer
+// LiDAR HD — renderer de repli WebGL2
 // ============================================
-// Custom WebGL2 engine mirroring the WebGPU terrain pipeline. Renders a
-// single textured + lit heightmap mesh with support for real-time astronomical
-// sun lighting, horizon-sweep cast shadows, cumulative sunlight map,
-// slope ramp, altitude ramp, and 3D celestial sun trajectory.
-// Shaders and GL helpers live in ./renderer/.
+// Moteur WebGL2 sur mesure reprenant le pipeline terrain de WebGPU. Rend un
+// seul maillage heightmap texturé + éclairé, avec l'éclairage solaire
+// astronomique en temps réel, les ombres portées par balayage d'horizon, la
+// carte d'ensoleillement cumulé, la rampe de pentes, la rampe d'altitude et la
+// trajectoire céleste 3D du soleil. Shaders et outils GL dans ./renderer/.
 
 export interface TerrainGPUData {
-  vertices: Float32Array;   // interleaved pos.xyz | normal.xyz | uv.xy
+  vertices: Float32Array;   // entrelacé pos.xyz | normale.xyz | uv.xy
   indices: Uint32Array;
   vertexCount: number;
   indexCount: number;
@@ -63,7 +63,7 @@ export class WebGLTerrainRenderer {
   private centerAltitude = 0;
   private maxAltitude = DEFAULT_MAX_ALTITUDE_M;
 
-  // Sunlight & Shadow state
+  // État de l'ensoleillement et des ombres
   private shadowTexture: WebGLTexture | null = null;
   private shadowEnabled = 0;
   private shadowOpacity = 0.5;
@@ -74,7 +74,7 @@ export class WebGLTerrainRenderer {
   private sunColor: [number, number, number] = [1.0, 0.98, 0.95];
   private sunIntensity = 1.0;
 
-  // Trajectory & Sun Disc
+  // Trajectoire et disque solaire
   private trajectoryProgram!: WebGLProgram;
   private trajectoryVao: WebGLVertexArrayObject | null = null;
   private trajectoryVbo: WebGLBuffer | null = null;
@@ -218,11 +218,11 @@ export class WebGLTerrainRenderer {
     this.uSnowOrigin = mustLoc(gl, prog, 'u_snowOrigin');
     this.uSnowScale  = mustLoc(gl, prog, 'u_snowScale');
 
-    // 1×1 placeholders until the real snow grid / ramps / shadow and sunlight maps arrive
+    // Textures 1×1 provisoires jusqu'à l'arrivée de la vraie grille de neige, des rampes, des cartes d'ombre et d'ensoleillement
     this.snowTexture = createPlaceholderTexture(gl, gl.R32F, gl.RED, gl.FLOAT, new Float32Array([0]), gl.NEAREST);
     this.slopeTexture = createPlaceholderTexture(gl, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]), gl.NEAREST);
     this.altitudeTexture = createPlaceholderTexture(gl, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]), gl.NEAREST);
-    // Shadow map: 0 = lit
+    // Carte d'ombre : 0 = éclairé
     this.shadowTexture = createPlaceholderTexture(gl, gl.R8, gl.RED, gl.UNSIGNED_BYTE, new Uint8Array([0]), gl.LINEAR);
     this.sunlightMapTexture = createPlaceholderTexture(gl, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]), gl.LINEAR);
     gl.bindTexture(gl.TEXTURE_2D, null);
@@ -255,7 +255,7 @@ export class WebGLTerrainRenderer {
     this.routeProgram = rprog;
     this.uRouteViewProj = mustLoc(gl, rprog, 'u_viewProj');
 
-    // Create quad buffer for sun disc billboard
+    // Créer le buffer du quad du billboard du disque solaire
     this.sunDiscVao = gl.createVertexArray();
     this.sunDiscVbo = gl.createBuffer();
     gl.bindVertexArray(this.sunDiscVao);
@@ -286,7 +286,7 @@ export class WebGLTerrainRenderer {
 
     gl.bindVertexArray(vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-    const stride = 8 * 4; // 8 floats × 4 bytes
+    const stride = 8 * 4; // 8 flottants × 4 octets
     // pos
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 3, gl.FLOAT, false, stride, 0);
@@ -446,7 +446,7 @@ export class WebGLTerrainRenderer {
     );
     gl.bindVertexArray(null);
 
-    // Draw preview mesh box (if active)
+    // Dessiner la boîte du maillage d'aperçu (si actif)
     if (this.previewMesh.indexCount > 0 && this.previewMesh.vao) {
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -461,10 +461,10 @@ export class WebGLTerrainRenderer {
       gl.disable(gl.BLEND);
     }
 
-    // Draw 3D Sun Trajectory Arc (if active)
+    // Dessiner l'arc 3D de la trajectoire du soleil (si actif)
     if (this.trajectoryEnabled && this.trajectoryVertexCount > 1 && this.trajectoryVao) {
       gl.enable(gl.BLEND);
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE); // additive glow
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE); // lueur additive
       gl.useProgram(this.trajectoryProgram);
       gl.uniformMatrix4fv(this.uTrajectoryViewProj, false, viewProj);
 
@@ -475,10 +475,10 @@ export class WebGLTerrainRenderer {
       gl.disable(gl.BLEND);
     }
 
-    // Draw 3D Celestial Sun Disc Billboard (if active)
+    // Dessiner le billboard 3D du disque solaire (si actif)
     if (this.trajectoryEnabled && this.sunDiscPos && this.sunDiscVao && viewMatrix) {
       gl.enable(gl.BLEND);
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE); // additive glow
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE); // lueur additive
       gl.disable(gl.DEPTH_TEST);
 
       gl.useProgram(this.sunDiscProgram);
@@ -486,7 +486,7 @@ export class WebGLTerrainRenderer {
       gl.uniform3f(this.uSunDiscPos, this.sunDiscPos[0], this.sunDiscPos[1], this.sunDiscPos[2]);
       gl.uniform1f(this.uSunDiscRadius, this.sunDiscRadius);
 
-      // Extract camera right & up from view matrix
+      // Extraire right et up de la caméra depuis la matrice de vue
       gl.uniform3f(this.uSunDiscCamRight, viewMatrix[0], viewMatrix[4], viewMatrix[8]);
       gl.uniform3f(this.uSunDiscCamUp, viewMatrix[1], viewMatrix[5], viewMatrix[9]);
 
@@ -501,7 +501,7 @@ export class WebGLTerrainRenderer {
       gl.disable(gl.BLEND);
     }
 
-    // Draw 3D GPX Route Ribbon (if active)
+    // Dessiner le ruban 3D du tracé GPX (si actif)
     if (this.routeMesh.indexCount > 0 && this.routeMesh.vao) {
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

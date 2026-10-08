@@ -1,5 +1,5 @@
 // ============================================
-// LiDAR viewer tools — React layer (menu, tool hint, profile card, 360° HUD)
+// Outils du viewer LiDAR — couche React (menu, indication d'outil, carte de profil, HUD 360°)
 // ============================================
 
 import { Fragment, useSyncExternalStore } from 'react';
@@ -23,7 +23,7 @@ const TOOL_NAMES: Record<ToolId, string> = {
   pin: 'Épingler le point',
 };
 
-/** [key, action] pairs of the active tool. */
+/** Paires [touche, action] de l'outil actif. */
 function toolInstructions(tool: ToolId, vertexCount: number): Array<[string, string]> {
   if (!isDrawingTool(tool)) return [[t('Clic'), t('choisir le point')], [t('Échap'), t('annuler')]];
   if (tool === 'height') {

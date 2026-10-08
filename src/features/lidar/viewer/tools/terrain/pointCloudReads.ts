@@ -3,14 +3,14 @@ import { CanopyGridBuilder } from './avalanche/canopy';
 import { FallCoverBuilder, type CoverBounds, type FallCover } from './fallCover';
 import type { AnalysisGrid, TerrainField } from './terrainField';
 
-/** Octree spacing the canopy cover is read at (crowns seen in 2 m columns), m. */
+/** Espacement d'octree auquel le couvert de canopée est lu (couronnes vues en colonnes de 2 m), m. */
 export const CANOPY_SPACING_M = 2;
 
 /**
- * Canopy cover (0–1) of the whole scene on a node grid of about `cellM`
- * spacing over the ground model bounds (snow model input, read like the
- * avalanche forest: high-vegetation returns 3 m above the ground). `null`
- * when the cloud carries no ground classification.
+ * Couvert de canopée (0–1) de toute la scène sur une grille de nœuds d'environ
+ * `cellM` d'espacement sur l'emprise du modèle de sol (entrée du modèle de
+ * neige, lu comme la forêt des avalanches : retours de haute végétation à 3 m
+ * au-dessus du sol). `null` quand le nuage ne porte pas de classification du sol.
  */
 export async function readSceneCanopy(
   field: TerrainField,
@@ -31,7 +31,7 @@ export async function readSceneCanopy(
   return { data: Float32Array.from(cover.canopyPct, (v) => (Number.isFinite(v) ? v / 100 : 0)), width, height };
 }
 
-/** Trees, buildings and water around a fall line, from the drawn LiDAR returns; `null` on failure. */
+/** Arbres, bâtiments et eau autour d'une ligne de chute, d'après les retours LiDAR dessinés ; `null` en cas d'échec. */
 export async function readFallCover(
   field: TerrainField,
   pointPicker: PointCloudPicker,
@@ -45,7 +45,7 @@ export async function readFallCover(
   };
   const builder = new FallCoverBuilder(field, clipped);
   try {
-    // Render frame: x east, y up, z = −north.
+    // Repère de rendu : x est, y haut, z = −nord.
     await pointPicker.forEachPointInBox(
       {
         minX: clipped.minX - field.centerX,

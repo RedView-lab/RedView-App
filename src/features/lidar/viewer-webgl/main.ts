@@ -251,7 +251,7 @@ export async function runWebGLFallback(
           height: mesh.gridHeight,
           bounds: mesh.bounds,
           crs,
-          // The height grid stores altitudes around the scene centre.
+          // La grille de hauteurs stocke les altitudes autour du centre de la scène.
           altitudeOffsetM: mesh.centerZ,
         },
         { progress: () => undefined },

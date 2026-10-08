@@ -1,11 +1,12 @@
 // ============================================
-// LiDAR viewer tools — ground model (DTM) queries
+// Outils du viewer LiDAR — requêtes sur le modèle de sol (MNT)
 // ============================================
 //
-// Wraps the scene height grid (ground returns, ≈ 1 m per cell on a 1 km
-// tile, row 0 = south edge, heights relative to the scene centre) with the
-// queries every terrain tool needs: altitude, slope/aspect, draping and
-// coarser grids for the area-wide models (viewshed 5 m, avalanche 10 m).
+// Enveloppe la grille de hauteurs de la scène (retours sol, ≈ 1 m par cellule
+// sur une tuile de 1 km, ligne 0 = bord sud, hauteurs relatives au centre de
+// la scène) avec les requêtes dont chaque outil de terrain a besoin : altitude,
+// pente/exposition, drapage et grilles plus grossières pour les modèles sur
+// toute une zone (champ de vision 5 m, avalanches 10 m).
 
 import { toWgs84, trueNorthGridBearingDeg } from '../../../lib/coordConvert';
 import type { DetectedCrs } from '../../../types';
@@ -13,34 +14,34 @@ import type { ViewerRouteSceneParams } from '../../route/types';
 import type { Vec3 } from '../types';
 
 /**
- * Baseline (m) of the slope read at a point. Avalanche slope maps use 5–10 m
- * models: a 1 m baseline reads every boulder and step, not the slope a
- * skier or a slab stands on.
+ * Base (m) de la pente lue en un point. Les cartes de pentes avalanche
+ * utilisent des modèles de 5–10 m : une base de 1 m lit chaque bloc et chaque
+ * marche, pas la pente sur laquelle se tient un skieur ou une plaque.
  */
 export const SLOPE_BASELINE_M = 6;
-/** Cell (m) of the analysis grid (viewshed). */
+/** Cellule (m) de la grille d'analyse (champ de vision). */
 const ANALYSIS_TARGET_CELL_M = 5;
-/** Upper bound of analysis cells (memory and overlay mesh size). */
+/** Nombre maximal de cellules d'analyse (mémoire et taille du maillage de surcouche). */
 const ANALYSIS_MAX_CELLS = 160_000;
 /**
- * Cell (m) of the avalanche terrain grid: AutoATES runs on 10 m models
- * (Toft et al., 2024; little gain under 5 m, Sykes et al., 2023), the scale
- * of release areas and avalanche paths rather than of boulders.
+ * Cellule (m) de la grille de terrain avalanche : AutoATES tourne sur des
+ * modèles de 10 m (Toft et al., 2024 ; peu de gain sous 5 m, Sykes et al.,
+ * 2023), l'échelle des zones de départ et des couloirs plutôt que des blocs.
  */
 const AVALANCHE_TARGET_CELL_M = 10;
 const AVALANCHE_MAX_CELLS = 160_000;
 
 export interface SlopeSample {
-  /** Slope angle, degrees. */
+  /** Angle de pente, degrés. */
   slopeDeg: number;
-  /** True azimuth of the downslope direction (aspect), degrees clockwise from north. */
+  /** Azimut vrai de la direction de la ligne de pente (exposition), degrés dans le sens horaire depuis le nord. */
   aspectDeg: number;
-  /** Altitude gradient along the CRS axes (m/m). */
+  /** Gradient d'altitude selon les axes du CRS (m/m). */
   gradX: number;
   gradY: number;
 }
 
-/** Local shape of the ground: altitude, gradient and second derivatives (CRS axes). */
+/** Forme locale du sol : altitude, gradient et dérivées secondes (axes du CRS). */
 export interface SurfaceSample {
   altitudeM: number;
   /** ∂z/∂x, ∂z/∂y (m/m). */
@@ -56,24 +57,24 @@ export interface DrapedSample {
   projX: number;
   projY: number;
   altitudeM: number;
-  /** Cumulative horizontal distance, m. */
+  /** Distance horizontale cumulée, m. */
   distanceM: number;
-  /** Cumulative distance along the ground surface, m. */
+  /** Distance cumulée le long de la surface du sol, m. */
   surfaceDistanceM: number;
 }
 
-/** Coarse resampling of the ground model for area-wide analyses. */
+/** Rééchantillonnage grossier du modèle de sol pour les analyses sur toute une zone. */
 export interface AnalysisGrid {
   width: number;
   height: number;
-  /** Cell edge, m. */
+  /** Côté de cellule, m. */
   cell: number;
-  /** CRS position of the centre of cell (0, 0) (south-west corner cell). */
+  /** Position CRS du centre de la cellule (0, 0) (cellule du coin sud-ouest). */
   originX: number;
   originY: number;
-  /** Absolute altitude per cell, NaN where the scene has no ground. */
+  /** Altitude absolue par cellule, NaN là où la scène n'a pas de sol. */
   altitude: Float32Array;
-  /** Slope angle per cell (degrees), NaN without data. */
+  /** Angle de pente par cellule (degrés), NaN sans données. */
   slopeDeg: Float32Array;
 }
 
@@ -86,16 +87,16 @@ export class TerrainField {
   readonly centerX: number;
   readonly centerY: number;
   readonly centerZ: number;
-  /** Native grid spacing, m. */
+  /** Espacement natif de la grille, m. */
   readonly cellX: number;
   readonly cellY: number;
   private readonly grid: Float32Array;
   private readonly gridWidth: number;
   private readonly gridHeight: number;
   private readonly offsetZ: number;
-  /** Grid bearing of true north at the scene centre (meridian convergence). */
+  /** Gisement du nord vrai au centre de la scène (convergence des méridiens). */
   private readonly northConvergenceDeg: number;
-  /** Altitude range of the ground model, m. */
+  /** Plage d'altitude du modèle de sol, m. */
   readonly minAltitudeM: number;
   readonly maxAltitudeM: number;
   private analysis: AnalysisGrid | null = null;
@@ -136,7 +137,7 @@ export class TerrainField {
     return new TerrainField(params, heightGrid, gridWidth, gridHeight);
   }
 
-  /** Smallest native spacing, m. */
+  /** Plus petit espacement natif, m. */
   get cell(): number {
     return Math.min(this.cellX, this.cellY);
   }
@@ -145,7 +146,7 @@ export class TerrainField {
     return projX >= this.minX && projX <= this.maxX && projY >= this.minY && projY <= this.maxY;
   }
 
-  /** Ground altitude (m, bilinear), `null` outside the scene or on a hole. */
+  /** Altitude du sol (m, bilinéaire), `null` hors de la scène ou sur un trou. */
   altitudeAt(projX: number, projY: number): number | null {
     const gx = (projX - this.minX) / this.cellX;
     const gy = (projY - this.minY) / this.cellY;
@@ -163,8 +164,8 @@ export class TerrainField {
   }
 
   /**
-   * Slope and aspect over `baselineM` (Horn's 3×3 operator on samples
-   * `baselineM / 2` apart). `null` when a sample falls outside the scene.
+   * Pente et exposition sur `baselineM` (opérateur 3×3 de Horn sur des
+   * échantillons espacés de `baselineM / 2`). `null` quand un échantillon tombe hors de la scène.
    */
   slopeAt(projX: number, projY: number, baselineM = SLOPE_BASELINE_M): SlopeSample | null {
     const r = Math.max(this.cell, baselineM / 2);
@@ -181,9 +182,9 @@ export class TerrainField {
   }
 
   /**
-   * Gradient and curvature of the ground over `baselineM` (3×3 samples
-   * `baselineM / 2` apart: Horn's gradient, central second differences),
-   * for the motion of a body on the surface. `null` off the scene.
+   * Gradient et courbure du sol sur `baselineM` (3×3 échantillons espacés de
+   * `baselineM / 2` : gradient de Horn, différences secondes centrées), pour le
+   * mouvement d'un corps sur la surface. `null` hors de la scène.
    */
   surfaceAt(projX: number, projY: number, baselineM: number): SurfaceSample | null {
     const r = Math.max(this.cell, baselineM / 2);
@@ -207,12 +208,12 @@ export class TerrainField {
 
   slopeFromGradient(gradX: number, gradY: number): SlopeSample {
     const slopeDeg = (Math.atan(Math.hypot(gradX, gradY)) * 180) / Math.PI;
-    // Downslope direction (−gradient), as a grid azimuth, then true.
+    // Direction de la ligne de pente (−gradient), en azimut de grille, puis vrai.
     const gridAzimuth = (Math.atan2(-gradX, -gradY) * 180) / Math.PI;
     return { slopeDeg, aspectDeg: this.gridToTrueAzimuth(gridAzimuth), gradX, gradY };
   }
 
-  /** Grid azimuth (clockwise from the CRS +Y axis) → true azimuth. */
+  /** Azimut de grille (sens horaire depuis l'axe +Y du CRS) → azimut vrai. */
   gridToTrueAzimuth(gridAzimuthDeg: number): number {
     return (((gridAzimuthDeg - this.northConvergenceDeg) % 360) + 360) % 360;
   }
@@ -233,16 +234,17 @@ export class TerrainField {
     return toWgs84(projX, projY, this.crs);
   }
 
-  /** Ground altitude under a render-frame position, as a render-frame height. */
+  /** Altitude du sol sous une position du repère de rendu, en hauteur du repère de rendu. */
   localGroundY(x: number, z: number): number | null {
     const altitude = this.altitudeAt(x + this.centerX, this.centerY - z);
     return altitude == null ? null : altitude - this.centerZ;
   }
 
   /**
-   * First crossing of a render-frame ray with the ground model, `null` when
-   * it misses (sky, beyond the scene, or over a hole). Marches at about the
-   * grid spacing (coarser far away, like the pixel footprint), then bisects.
+   * Premier croisement d'un rayon du repère de rendu avec le modèle de sol,
+   * `null` s'il le manque (ciel, au-delà de la scène, ou au-dessus d'un trou).
+   * Avance à peu près au pas de la grille (plus grossier au loin, comme
+   * l'empreinte d'un pixel), puis procède par dichotomie.
    */
   raycast(origin: Vec3, direction: Vec3, maxDistance = Number.POSITIVE_INFINITY): { local: Vec3; distance: number } | null {
     const [ox, oy, oz] = origin;
@@ -271,7 +273,7 @@ export class TerrainField {
     };
     let prevT = t0;
     let prev = above(t0);
-    if (prev != null && prev < 0) return null; // starts under the ground
+    if (prev != null && prev < 0) return null; // commence sous le sol
     const baseStep = this.cell * 0.5;
     for (let t = t0; t < t1;) {
       t = Math.min(t1, t + Math.max(baseStep, t * 0.0015));
@@ -297,8 +299,8 @@ export class TerrainField {
   }
 
   /**
-   * The ground model does not hide `point` from `eye` (render frame). Used to
-   * fade the parts of a measurement behind a ridge; vegetation is ignored.
+   * Le modèle de sol ne cache pas `point` à `eye` (repère de rendu). Sert à
+   * estomper les parties d'une mesure derrière une crête ; la végétation est ignorée.
    */
   isVisibleFrom(point: Vec3, eye: Vec3): boolean {
     const vx = eye[0] - point[0];
@@ -308,12 +310,12 @@ export class TerrainField {
     if (length < 3) return true;
     const topY = this.maxAltitudeM - this.centerZ;
     const samples = Math.min(64, Math.max(8, Math.ceil(length / (this.cell * 4))));
-    // Skip the first metres: the point lies on the ground it is drawn on.
+    // Sauter les premiers mètres : le point repose sur le sol sur lequel il est dessiné.
     const start = Math.min(0.5, 2.5 / length);
     for (let k = 0; k < samples; k++) {
       const s = start + ((1 - start) * (k + 1)) / (samples + 1);
       const y = point[1] + vy * s;
-      if (y > topY) return true; // above every summit from here on
+      if (y > topY) return true; // au-dessus de tous les sommets à partir d'ici
       const ground = this.localGroundY(point[0] + vx * s, point[2] + vz * s);
       if (ground != null && ground > y + 0.3) return false;
     }
@@ -321,8 +323,8 @@ export class TerrainField {
   }
 
   /**
-   * Samples the ground along a CRS polyline every ≤ `stepM` (every vertex
-   * kept). Stretches without ground are skipped; distances keep counting.
+   * Échantillonne le sol le long d'une polyligne CRS tous les ≤ `stepM` (chaque
+   * sommet gardé). Les tronçons sans sol sont sautés ; les distances continuent de compter.
    */
   drape(vertices: ReadonlyArray<{ projX: number; projY: number }>, stepM: number): DrapedSample[] {
     const out: DrapedSample[] = [];
@@ -357,13 +359,13 @@ export class TerrainField {
     return out;
   }
 
-  /** Analysis grid, built on first use (≈ 5 m cells, at most 160 k cells). */
+  /** Grille d'analyse, construite au premier usage (cellules ≈ 5 m, au plus 160 k cellules). */
   getAnalysisGrid(): AnalysisGrid {
     if (!this.analysis) this.analysis = this.buildGrid(ANALYSIS_TARGET_CELL_M, ANALYSIS_MAX_CELLS, CELL_SAMPLES);
     return this.analysis;
   }
 
-  /** Avalanche terrain grid, built on first use (≈ 10 m cells, at most 160 k cells). */
+  /** Grille de terrain avalanche, construite au premier usage (cellules ≈ 10 m, au plus 160 k cellules). */
   getAvalancheGrid(): AnalysisGrid {
     if (!this.avalanche) this.avalanche = this.buildGrid(AVALANCHE_TARGET_CELL_M, AVALANCHE_MAX_CELLS, COARSE_CELL_SAMPLES);
     return this.avalanche;
@@ -378,7 +380,7 @@ export class TerrainField {
     const originX = this.minX + (rangeX - (width - 1) * cell) / 2;
     const originY = this.minY + (rangeY - (height - 1) * cell) / 2;
     const altitude = new Float32Array(width * height);
-    // Mean of several samples per cell: the cell value, not one ground point.
+    // Moyenne de plusieurs échantillons par cellule : la valeur de la cellule, pas un seul point de sol.
     const q = cell / 4;
     for (let row = 0; row < height; row++) {
       const y = originY + row * cell;
@@ -413,13 +415,13 @@ export class TerrainField {
   }
 }
 
-/** Sample offsets in quarter cells: 5 for the analysis grid, 4 × 4 for coarser cells. */
+/** Décalages des échantillons en quarts de cellule : 5 pour la grille d'analyse, 4 × 4 pour les cellules plus grossières. */
 const CELL_SAMPLES: ReadonlyArray<[number, number]> = [[0, 0], [-1, -1], [1, -1], [-1, 1], [1, 1]];
 const COARSE_CELL_SAMPLES: ReadonlyArray<[number, number]> = [-1.5, -0.5, 0.5, 1.5].flatMap((dy) => (
   [-1.5, -0.5, 0.5, 1.5].map((dx): [number, number] => [dx, dy])
 ));
 
-/** Index of the analysis cell holding a CRS point, -1 outside. */
+/** Indice de la cellule d'analyse contenant un point CRS, -1 en dehors. */
 export function analysisCellAt(grid: AnalysisGrid, projX: number, projY: number): number {
   const col = Math.round((projX - grid.originX) / grid.cell);
   const row = Math.round((projY - grid.originY) / grid.cell);

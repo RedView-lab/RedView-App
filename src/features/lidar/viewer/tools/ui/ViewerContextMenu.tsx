@@ -1,13 +1,13 @@
 // ============================================
-// LiDAR viewer — right-click menu
+// Viewer LiDAR — menu du clic droit
 // ============================================
 //
-// Same menu as the RedView map (glass card, point header, coordinates,
-// slope and altitude, route actions). The viewer's tools sit in two
-// submenus ("Mesurer ›", "Analyser le terrain ›") that open beside the
-// menu on hover, with a short intent delay so a diagonal move towards an
-// open submenu does not switch it; the first-person view and the camera
-// actions stay one click away.
+// Même menu que sur la carte RedView (carte en verre, en-tête du point,
+// coordonnées, pente et altitude, actions de tracé). Les outils du viewer sont
+// rangés dans deux sous-menus (« Mesurer › », « Analyser le terrain › ») qui
+// s'ouvrent à côté du menu au survol, avec un court délai d'intention pour
+// qu'un mouvement en diagonale vers un sous-menu ouvert ne le change pas ; la
+// vue à la première personne et les actions de caméra restent à un clic.
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { translateAppText as t } from '@/shared/i18n/config';
@@ -62,12 +62,12 @@ import type { ContextMenuAction, ContextMenuModel, ToolsUiActions } from './tool
 
 const MENU_EDGE_PADDING = 8;
 const SUBMENU_GAP = 4;
-/** A submenu switches only after the pointer rests this long on another trigger (ms). */
+/** Un sous-menu ne change qu'après que le pointeur s'est posé aussi longtemps sur un autre déclencheur (ms). */
 const SUBMENU_INTENT_MS = 140;
 const COORDINATE_FORMAT_STORAGE_KEY = 'rv-lidar-coordinate-format';
-/** A return this far above the ground model gets its height shown, m. */
+/** Un retour à cette hauteur au-dessus du modèle de sol affiche sa hauteur, m. */
 const MIN_SHOWN_HEIGHT_M = 0.5;
-/** Key of the first-person view (handled by the tools controller). */
+/** Touche de la vue à la première personne (gérée par le contrôleur des outils). */
 const LOOK_AROUND_SHORTCUT = 'O';
 
 type SubmenuId = 'measure' | 'terrain';
@@ -76,7 +76,7 @@ interface SubmenuItem {
   tool: ToolId;
   icon: ReactNode;
   label: string;
-  /** Second, dimmed line under the label. */
+  /** Seconde ligne, atténuée, sous le libellé. */
   note?: string;
   title?: string;
 }
@@ -109,7 +109,7 @@ function readStoredFormat(): CoordinateFormat {
     const stored = window.localStorage.getItem(COORDINATE_FORMAT_STORAGE_KEY);
     if (stored && (COORDINATE_FORMATS as readonly string[]).includes(stored)) return stored as CoordinateFormat;
   } catch {
-    /* storage unavailable */
+    /* stockage indisponible */
   }
   return 'dd';
 }
@@ -118,7 +118,7 @@ function storeFormat(format: CoordinateFormat): void {
   try {
     window.localStorage.setItem(COORDINATE_FORMAT_STORAGE_KEY, format);
   } catch {
-    /* storage unavailable */
+    /* stockage indisponible */
   }
 }
 
@@ -140,7 +140,7 @@ export function ViewerContextMenu({ model, actions }: ViewerContextMenuProps) {
   const [copied, setCopied] = useState(false);
   const { pick, slope } = model;
 
-  // Opens beside the click, towards the larger free side, inside the window.
+  // S'ouvre à côté du clic, vers le côté libre le plus grand, dans la fenêtre.
   useLayoutEffect(() => {
     const el = menuRef.current;
     if (!el) return;
@@ -158,13 +158,13 @@ export function ViewerContextMenu({ model, actions }: ViewerContextMenuProps) {
       MENU_EDGE_PADDING,
       placement,
     );
-    // The corner at the click stays square, as on the map.
+    // Le coin au clic reste carré, comme sur la carte.
     const corner = `border${placement.vertical === 'down' ? 'Top' : 'Bottom'}${placement.horizontal === 'right' ? 'Left' : 'Right'}Radius`;
     setPosition({ ...appScaledOverlayStyle({ top: pos.top, left: pos.left, scale }), [corner]: 0 });
     setSubmenu(null);
   }, [model]);
 
-  // The submenu opens on the side with room, its first row level with the trigger.
+  // Le sous-menu s'ouvre du côté où il y a de la place, sa première ligne au niveau du déclencheur.
   useLayoutEffect(() => {
     const trigger = submenu ? triggerRefs.current[submenu] : null;
     const menu = menuRef.current;
@@ -247,7 +247,7 @@ export function ViewerContextMenu({ model, actions }: ViewerContextMenuProps) {
   const title = pick.source === 'points' && pick.classification != null
     ? t(classificationLabel(pick.classification))
     : t('Sol (modèle de terrain)');
-  /** Plain rows close an open submenu after the intent delay. */
+  /** Les lignes simples ferment un sous-menu ouvert après le délai d'intention. */
   const plainRowHover = () => {
     if (submenu) switchSubmenu(null, false);
   };

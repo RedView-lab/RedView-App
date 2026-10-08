@@ -1,10 +1,10 @@
 /**
- * Overlay meshes of the terrain engine (tile preview, route): GL buffers
- * created on first use, refilled on each update, cleared by setting the
- * index count to 0 (the buffers are kept for the next update).
+ * Maillages de surcouche du moteur terrain (aperçu de tuile, tracé) : buffers
+ * GL créés au premier usage, remplis à chaque mise à jour, vidés en mettant le
+ * nombre d'indices à 0 (les buffers sont gardés pour la mise à jour suivante).
  */
 
-/** Tile preview: positions + normals interleaved (6 floats), RGBA8 colours, uint32 indices. */
+/** Aperçu de tuile : positions + normales entrelacées (6 flottants), couleurs RGBA8, indices uint32. */
 export class GlPreviewMesh {
   vao: WebGLVertexArrayObject | null = null;
   private vbo: WebGLBuffer | null = null;
@@ -32,7 +32,7 @@ export class GlPreviewMesh {
     }
     gl.bindVertexArray(this.vao);
 
-    // vertices: stride 6 floats (pos: 3, normal: 3)
+    // sommets : pas de 6 flottants (pos : 3, normale : 3)
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
     gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.DYNAMIC_DRAW);
     gl.enableVertexAttribArray(0);
@@ -40,7 +40,7 @@ export class GlPreviewMesh {
     gl.enableVertexAttribArray(1);
     gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 6 * 4, 3 * 4);
 
-    // colors: stride 4 bytes (RGBA unorm)
+    // couleurs : pas de 4 octets (RGBA unorm)
     gl.bindBuffer(gl.ARRAY_BUFFER, this.cbo);
     gl.bufferData(gl.ARRAY_BUFFER, colors, gl.DYNAMIC_DRAW);
     gl.enableVertexAttribArray(2);
@@ -67,7 +67,7 @@ export class GlPreviewMesh {
   }
 }
 
-/** Route: positions (vec3 float) and RGBA8 colours in separate buffers, uint32 indices. */
+/** Tracé : positions (vec3 float) et couleurs RGBA8 dans des buffers séparés, indices uint32. */
 export class GlRouteMesh {
   vao: WebGLVertexArrayObject | null = null;
   private vboPos: WebGLBuffer | null = null;
@@ -95,13 +95,13 @@ export class GlRouteMesh {
     }
     gl.bindVertexArray(this.vao);
 
-    // Positions (Location 0: vec3 float)
+    // Positions (location 0 : vec3 float)
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vboPos);
     gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.DYNAMIC_DRAW);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
 
-    // Colors (Location 1: vec4 unsigned byte normalized)
+    // Couleurs (location 1 : vec4 unsigned byte normalisé)
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vboCol);
     gl.bufferData(gl.ARRAY_BUFFER, colors, gl.DYNAMIC_DRAW);
     gl.enableVertexAttribArray(1);

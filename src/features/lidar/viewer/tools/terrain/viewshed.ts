@@ -1,26 +1,27 @@
 // ============================================
-// LiDAR viewer tools — viewshed (ground seen from a point)
+// Outils du viewer LiDAR — champ de vision (sol vu depuis un point)
 // ============================================
 //
-// R2 sweep on the analysis grid: one ray from the observer's eye to every
-// border cell; along a ray a cell is seen when its elevation angle is at
-// least the steepest one met before it. Answers "can I see the descent /
-// the couloir / the hut from here", and where a party standing here can be
-// seen from. Ground model only: trees and buildings do not block the view.
+// Balayage R2 sur la grille d'analyse : un rayon de l'œil de l'observateur vers
+// chaque cellule du bord ; le long d'un rayon, une cellule est vue quand son
+// angle d'élévation est au moins le plus raide rencontré avant elle. Répond à
+// « vois-je la descente / le couloir / le refuge d'ici », et d'où un groupe
+// placé ici peut être vu. Modèle de sol seulement : arbres et bâtiments ne
+// bloquent pas la vue.
 
 import { analysisCellAt, type AnalysisGrid, type TerrainField } from './terrainField';
 
-/** Eye height above the ground, m. */
+/** Hauteur de l'œil au-dessus du sol, m. */
 export const OBSERVER_HEIGHT_M = 1.7;
 
 export interface ViewshedResult {
-  /** 1 per analysis cell seen from the observer. */
+  /** 1 par cellule d'analyse vue depuis l'observateur. */
   visible: Uint8Array;
   grid: AnalysisGrid;
   visibleAreaM2: number;
-  /** Share of the loaded ground that is seen. */
+  /** Part du sol chargé qui est vue. */
   visibleRatio: number;
-  /** Farthest ground seen, m. */
+  /** Sol vu le plus lointain, m. */
   farthestM: number;
 }
 

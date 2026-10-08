@@ -1,8 +1,9 @@
 // ============================================
-// LiDAR HD — WebGL Sunlight Precalculation Worker
+// LiDAR HD — worker de précalcul de l'ensoleillement WebGL
 // ============================================
-// Fast background worker that precalculates the entire diurnal solar
-// exposure timeline and snapshots (every 10 minutes) for 60+ FPS zero-latency scrubbing.
+// Worker d'arrière-plan rapide qui précalcule toute la chronologie de
+// l'exposition solaire diurne et des instantanés (toutes les 10 minutes) pour
+// un défilement sans latence à plus de 60 i/s.
 
 import {
   getSunPositionForLocalMinutes,
@@ -26,7 +27,7 @@ export interface PrecalcRequest {
   centerLat: number;
   centerLon: number;
   timeZone: string;
-  /** Added to true sun azimuths to get grid azimuths (meridian convergence). */
+  /** Ajouté aux azimuts vrais du soleil pour obtenir les azimuts de grille (convergence des méridiens). */
   azimuthOffsetDeg?: number;
   stepMinutes?: number;
 }
@@ -96,7 +97,7 @@ ctx.onmessage = (e: MessageEvent<PrecalcRequest>) => {
     const snapshots: Float32Array[] = [];
     const transferBuffers: Transferable[] = [];
 
-    // Pre-seed baseline snapshot before sunrise (all 0)
+    // Instantané de base avant le lever du soleil (tout à 0)
     timeSteps.push(startM);
     const baseSnapshot = new Float32Array(N);
     snapshots.push(baseSnapshot);
@@ -130,7 +131,7 @@ ctx.onmessage = (e: MessageEvent<PrecalcRequest>) => {
 
       t = nextT;
 
-      // Save keyframe snapshot
+      // Enregistrer l'instantané clé
       const snap = new Float32Array(cumulative);
       timeSteps.push(t);
       snapshots.push(snap);

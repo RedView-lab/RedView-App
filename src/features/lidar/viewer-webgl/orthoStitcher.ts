@@ -1,11 +1,11 @@
 // ============================================
-// LiDAR HD — WebGL fallback orthophoto stitcher
+// LiDAR HD — assembleur d'orthophotos du repli WebGL
 // ============================================
-// Downloads IGN ORTHOIMAGERY tiles at WMTS zoom 19 (PM grid) covering the
-// LiDAR tile bounds and stitches them into a single ImageBitmap that the
-// WebGL renderer uploads as one texture. Returns the bitmap together with
-// the four corner UVs (in stitched-texture space [0..1]) so the worker can
-// pre-compute per-vertex UVs.
+// Télécharge les tuiles IGN ORTHOIMAGERY au zoom WMTS 19 (grille PM) couvrant
+// l'emprise de la tuile LiDAR et les assemble en une seule ImageBitmap que le
+// renderer WebGL envoie comme une texture. Renvoie la bitmap avec les UV des
+// quatre coins (dans l'espace de la texture assemblée [0..1]) pour que le
+// worker puisse précalculer les UV par sommet.
 
 import { toWgs84, isJgd2011Crs } from '../lib/coordConvert';
 import { fetchEsriImageryTile } from '../lib/nz/esriImagery';
@@ -36,11 +36,11 @@ function wgs84ToAbsPixel(lon: number, lat: number, zoom: number): AbsPx {
 async function fetchTile(col: number, row: number, crs: DetectedCrs): Promise<ImageBitmap | null> {
   let url: string;
   if (crs === 'CH1903_LV95') {
-    // swisstopo SWISSIMAGE — Web-Mercator (3857) tile grid, public + CORS.
+    // swisstopo SWISSIMAGE — grille de tuiles Web Mercator (3857), publique + CORS.
     const sub = (col + row) % 10;
     url = `https://wmts${sub}.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/${WMTS_ZOOM}/${col}/${row}.jpeg`;
   } else if (isJgd2011Crs(crs)) {
-    // Japan — GSI Seamless Orthophotos (Geospatial Information Authority of Japan)
+    // Japon — orthophotos continues du GSI (Geospatial Information Authority of Japan)
     const gsiCol = col >> (WMTS_ZOOM - 18);
     const gsiRow = row >> (WMTS_ZOOM - 18);
     const subX = (col & 1) * 128;
@@ -62,9 +62,9 @@ async function fetchTile(col: number, row: number, crs: DetectedCrs): Promise<Im
   } else if (crs === 'RD_NEW' || crs === 'BL72') {
     url = beneluxOrthoTileUrl(crs, WMTS_ZOOM, col, row)!;
   } else if (crs === 'NZTM2000') {
-    // New Zealand — Esri World Imagery, falling back to the closest ancestor
-    // where z19 only exists as a "Map data not yet available" placeholder.
-    // The caller draws the bitmap into a full tile cell, which upscales it.
+    // Nouvelle-Zélande — Esri World Imagery, avec repli sur l'ancêtre le plus proche
+    // là où z19 n'existe que sous forme de remplacement « Map data not yet available ».
+    // L'appelant dessine la bitmap dans une cellule de tuile entière, ce qui l'agrandit.
     return fetchEsriImageryTile(WMTS_ZOOM, col, row);
   } else {
     url =
@@ -88,7 +88,7 @@ export async function stitchOrtho(
   maxTextureDim: number,
   onProgress?: (pct: number, label: string) => void,
 ): Promise<StitchedOrtho> {
-  // Project the four bounds corners to Web Mercator absolute pixels at z19
+  // Projeter les quatre coins de l'emprise en pixels Web Mercator absolus à z19
   const c00 = wgs84ToAbsPixel(...toWgs84(bounds.minX, bounds.minY, crs), WMTS_ZOOM);
   const c10 = wgs84ToAbsPixel(...toWgs84(bounds.maxX, bounds.minY, crs), WMTS_ZOOM);
   const c01 = wgs84ToAbsPixel(...toWgs84(bounds.minX, bounds.maxY, crs), WMTS_ZOOM);
@@ -98,7 +98,7 @@ export async function stitchOrtho(
   const allY = [c00.py, c10.py, c01.py, c11.py];
   const minTileCol = Math.floor(Math.min(...allX) / TILE_SIZE);
   const maxTileCol = Math.floor(Math.max(...allX) / TILE_SIZE);
-  // Mercator Y grows southward → upper-left corner uses min(absPy)
+  // Le Y Mercator croît vers le sud → le coin haut-gauche utilise min(absPy)
   const minTileRow = Math.floor(Math.min(...allY) / TILE_SIZE);
   const maxTileRow = Math.floor(Math.max(...allY) / TILE_SIZE);
 
@@ -107,9 +107,9 @@ export async function stitchOrtho(
   const fullW = colsCount * TILE_SIZE;
   const fullH = rowsCount * TILE_SIZE;
 
-  // Some software/older GL drivers cap textures at 4096. Render to a
-  // clamped canvas if the stitched extent exceeds that. We still draw
-  // every tile so detail is preserved (just downsampled in the resize).
+  // Certains pilotes GL logiciels/anciens plafonnent les textures à 4096. Rendre
+  // dans un canvas borné si l'emprise assemblée dépasse cette taille. On dessine
+  // quand même chaque tuile pour garder le détail (juste sous-échantillonné au redimensionnement).
   const cap = Math.max(1024, Math.min(maxTextureDim || 4096, 8192));
   const scale = Math.min(1, cap / Math.max(fullW, fullH));
   const W = Math.max(1, Math.round(fullW * scale));
@@ -150,7 +150,7 @@ export async function stitchOrtho(
     onProgress?.(done / jobs.length, `Orthophotos ${done}/${jobs.length}`);
   }
 
-  // Corner UVs in stitched-texture space [0..1]
+  // UV des coins dans l'espace de la texture assemblée [0..1]
   const stitchOriginPx = minTileCol * TILE_SIZE;
   const stitchOriginPy = minTileRow * TILE_SIZE;
   const toUV = (c: AbsPx) => ({

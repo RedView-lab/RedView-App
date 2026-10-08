@@ -1,7 +1,7 @@
-/* LiDAR viewer tools — right-click menu, tool hint, profile card, 360° HUD,
-   overlay canvas. Sizes are logical px: the menus take the app scale
-   through `appScaledOverlayStyle`, the docked layers through
-   `zoom: var(--app-scale)`. */
+/* Outils du viewer LiDAR — menu du clic droit, indication d'outil, carte de profil,
+   HUD 360°, canvas de surcouche. Les tailles sont en px logiques : les menus
+   prennent l'échelle de l'app via `appScaledOverlayStyle`, les couches ancrées
+   via `zoom: var(--app-scale)`. */
 
 .rv-lidar-tools-overlay {
   position: absolute;
@@ -12,7 +12,7 @@
   z-index: 16;
 }
 
-/* ── Context menu ─────────────────────────────────────────────────────────── */
+/* ── Menu contextuel ──────────────────────────────────────────────────────── */
 
 .rv-lidar-ctx {
   position: fixed;
@@ -163,7 +163,7 @@
   flex-direction: column;
 }
 
-/* Menu item: 24 px icon box, 13/600 label, optional key or chevron (app rows). */
+/* Entrée de menu : boîte d'icône de 24 px, libellé 13/600, touche ou chevron optionnel (lignes de l'app). */
 .rv-lidar-ctx__row {
   display: flex;
   align-items: center;
@@ -213,7 +213,7 @@
   flex: none;
 }
 
-/* Caption under a label (what an analysis is based on). */
+/* Légende sous un libellé (ce sur quoi s'appuie une analyse). */
 .rv-lidar-ctx__row-note {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -242,7 +242,7 @@
   text-align: center;
 }
 
-/* ── Docked layers (top: compass + tool hint, bottom: profile + 360° bar) ── */
+/* ── Couches ancrées (haut : boussole + indication d'outil, bas : profil + barre 360°) ── */
 
 .rv-lidar-tools-top,
 .rv-lidar-tools-bottom {
@@ -310,7 +310,7 @@
   width: 6px;
 }
 
-/* ── Profile card ─────────────────────────────────────────────────────────── */
+/* ── Carte de profil ──────────────────────────────────────────────────────── */
 
 .rv-lidar-profile {
   position: relative;
@@ -434,7 +434,7 @@
   }
 }
 
-/* ── 360° view HUD ────────────────────────────────────────────────────────── */
+/* ── HUD de la vue 360° ───────────────────────────────────────────────────── */
 
 .rv-lidar-look-compass {
   display: flex;

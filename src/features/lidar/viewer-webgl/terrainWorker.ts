@@ -1,14 +1,14 @@
 // ============================================
-// LiDAR HD — WebGL fallback Terrain Worker
+// LiDAR HD — worker du terrain du repli WebGL
 // ============================================
-// Parses the LAZ (no orthophoto colorisation needed — colours come from a
-// stitched ortho texture sampled in the fragment shader) and builds a high
-// resolution textured heightmap mesh.
+// Parse le LAZ (pas de colorisation par orthophoto — les couleurs viennent
+// d'une texture ortho assemblée échantillonnée dans le fragment shader) et
+// construit un maillage heightmap texturé haute résolution.
 //
-// Resolution target = 2× the WebGPU pipeline (MAX_GRID 1024 vs 512). The
-// per-vertex output is { pos:vec3, normal:vec3, uv:vec2 } so the renderer
-// can sample the orthophoto with linear filtering for crisp pixels (no
-// per-cell colour averaging).
+// Résolution visée = 2× le pipeline WebGPU (MAX_GRID 1024 contre 512). La
+// sortie par sommet est { pos:vec3, normal:vec3, uv:vec2 } pour que le renderer
+// puisse échantillonner l'orthophoto avec un filtrage linéaire pour des pixels
+// nets (pas de moyenne des couleurs par cellule).
 
 import { parseLazBuffer } from '../lib/lazParser';
 import type { PointCloudBounds, PointCloudOrigin } from '../types';
@@ -21,7 +21,7 @@ export interface CornerUV {
 }
 
 export interface TerrainMeshWebGL {
-  vertices: Float32Array;   // pos.xyz | normal.xyz | uv.xy → 8 floats / vertex
+  vertices: Float32Array;   // pos.xyz | normale.xyz | uv.xy → 8 flottants / sommet
   indices: Uint32Array;
   vertexCount: number;
   indexCount: number;
@@ -32,9 +32,9 @@ export interface TerrainMeshWebGL {
   extent: number;
   gridWidth: number;
   gridHeight: number;
-  /** Per-cell ground height in metres, row-major SOUTH→NORTH. Same data the
-   *  snow pipeline (runSnowPipeline) needs as input — we transfer it back
-   *  so the WebGL viewer can light up snow without re-parsing the LAZ. */
+  /** Hauteur du sol par cellule en mètres, par lignes SUD→NORD. Les mêmes
+   *  données que le pipeline de neige (runSnowPipeline) prend en entrée — on les
+   *  renvoie pour que le viewer WebGL puisse afficher la neige sans re-parser le LAZ. */
   heightGrid: Float32Array;
 }
 
@@ -57,9 +57,9 @@ type WorkerOutput =
   | { type: 'error'; message: string };
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
-// Defaults if the caller does not specify a tier. 2048 = 4× the WebGPU
-// pipeline (which is 512). The caller should normally pass an explicit
-// maxGrid based on detected device capability.
+// Valeur par défaut si l'appelant ne précise pas de palier. 2048 = 4× le
+// pipeline WebGPU (qui est à 512). L'appelant doit normalement passer un
+// maxGrid explicite selon les capacités détectées de l'appareil.
 const DEFAULT_MAX_GRID = 2048;
 const DEFAULT_MIN_RES_M = 0.25;
 const MAX_HOLE_DIST = 14;
@@ -138,7 +138,7 @@ function post(msg: WorkerOutput, transfer?: Transferable[]) {
 }
 
 interface TerrainPointCloud {
-  /** XYZ relative to `origin` (see PointCloudOrigin). */
+  /** XYZ relatifs à `origin` (voir PointCloudOrigin). */
   positions: Float32Array;
   classifications: Uint8Array;
   count: number;
@@ -157,19 +157,19 @@ function buildTerrain(
   const rangeX = bounds.maxX - bounds.minX;
   const rangeY = bounds.maxY - bounds.minY;
 
-  // Cell size: max( min res, range / maxGrid )
+  // Taille de cellule : max( résolution min, étendue / maxGrid )
   const res = Math.max(minResM, rangeX / maxGrid, rangeY / maxGrid);
   const gridW = Math.max(2, Math.min(maxGrid + 1, Math.ceil(rangeX / res) + 1));
   const gridH = Math.max(2, Math.min(maxGrid + 1, Math.ceil(rangeY / res) + 1));
   const N = gridW * gridH;
-  // Node spacing actually used by the mesh, the ortho UVs and every
-  // heightGrid consumer (nodes span [min, max] exactly): ≤ res, since the
-  // range is rarely a multiple of res. Splatting with `res` instead shifted
-  // the terrain by up to one cell towards the far edges.
+  // Espacement des nœuds réellement utilisé par le maillage, les UV ortho et
+  // chaque consommateur de heightGrid (les nœuds couvrent exactement [min, max]) :
+  // ≤ res, l'étendue étant rarement un multiple de res. Projeter avec `res`
+  // décalait le terrain jusqu'à une cellule vers les bords éloignés.
   const cellX = rangeX > 0 ? rangeX / (gridW - 1) : res;
   const cellY = rangeY > 0 ? rangeY / (gridH - 1) : res;
 
-  // 1) First pass: count ground points to decide fallback
+  // 1) Première passe : compter les points sol pour décider du repli
   let totalCount = 0;
   let groundCount = 0;
   for (const pc of pointClouds) {
@@ -188,7 +188,7 @@ function buildTerrain(
 
   for (const pc of pointClouds) {
     const { positions, classifications, count } = pc;
-    // Grid origin expressed in this cloud's local frame (float64, exact).
+    // Origine de la grille exprimée dans le repère local de ce nuage (float64, exact).
     const gridMinX = bounds.minX - pc.origin.x;
     const gridMinY = bounds.minY - pc.origin.y;
     for (let i = 0; i < count; i++) {
@@ -196,7 +196,7 @@ function buildTerrain(
       if (useStrictGround) {
         if (cls !== 2 && cls !== 9 && cls !== 17) continue;
       } else {
-        if (cls === 7 || cls === 18) continue; // ignore noise
+        if (cls === 7 || cls === 18) continue; // ignorer le bruit
       }
 
       const x = positions[i * 3];
@@ -206,7 +206,7 @@ function buildTerrain(
       const gx = (x - gridMinX) / cellX;
       const gy = (y - gridMinY) / cellY;
 
-      // Points on the max edge splat onto the last cell (f = 1).
+      // Les points sur le bord max sont projetés sur la dernière cellule (f = 1).
       const x0 = Math.min(gridW - 2, Math.floor(gx));
       const y0 = Math.min(gridH - 2, Math.floor(gy));
       const fx = gx - x0;
@@ -241,21 +241,21 @@ function buildTerrain(
   }
   onProgress(0.25);
 
-  // 3) Initial distance BFS fill for large gaps
+  // 3) Remplissage initial des grands trous par BFS de distance
   fillHoles(heights, gridW, gridH);
   onProgress(0.40);
 
-  // Global fallback for fully empty tiles
+  // Repli global pour les tuiles entièrement vides
   let globalMinZ = Infinity;
   for (let i = 0; i < N; i++) if (heights[i] < globalMinZ) globalMinZ = heights[i];
   if (!isFinite(globalMinZ)) globalMinZ = bounds.minZ;
   for (let i = 0; i < N; i++) if (!isFinite(heights[i])) heights[i] = globalMinZ;
 
-  // 4) Harmonic Laplace relaxation on unmeasured cells (smooth C2 boundary blending without altering real points)
+  // 4) Relaxation harmonique de Laplace sur les cellules non mesurées (raccord lisse C2 sans modifier les vrais points)
   relaxHolesLaplacian(heights, hasPoint, gridW, gridH, 20);
   onProgress(0.65);
 
-  // 5) Build interleaved VBO (pos.xyz | normal.xyz | uv.xy) with 100% crisp raw LiDAR elevations
+  // 5) Construire le VBO entrelacé (pos.xyz | normale.xyz | uv.xy) avec les altitudes LiDAR brutes, parfaitement nettes
   const cx = (bounds.minX + bounds.maxX) / 2;
   const cy = (bounds.minY + bounds.maxY) / 2;
   const cz = (bounds.minZ + bounds.maxZ) / 2;
@@ -275,12 +275,12 @@ function buildTerrain(
       const ly = bounds.minY + fy * rangeY;
       const lz = heights[idx] + Z_OFFSET;
 
-      // Renderer space: X east, Y up, Z south (matches the WebGPU viewer).
+      // Espace du renderer : X est, Y haut, Z sud (comme le viewer WebGPU).
       vertices[vi + 0] = lx - cx;
       vertices[vi + 1] = lz - cz;
       vertices[vi + 2] = -(ly - cy);
 
-      // Bilinear-interp UV from the 4 corner pixel anchors.
+      // UV interpolés en bilinéaire à partir des 4 ancrages de pixels des coins.
       const fx1 = 1 - fx, fy1 = 1 - fy;
       const u = fx1 * fy1 * cornerUV.u00 + fx * fy1 * cornerUV.u10
               + fx1 * fy  * cornerUV.u01 + fx * fy  * cornerUV.u11;
@@ -292,7 +292,7 @@ function buildTerrain(
   }
   onProgress(0.75);
 
-  // 6) Per-vertex normal from Horn's 8-neighbor weighted slope gradient (GIS industry standard)
+  // 6) Normale par sommet à partir du gradient de pente pondéré sur 8 voisins de Horn (standard SIG)
   for (let gy = 0; gy < gridH; gy++) {
     const y0 = Math.max(0, gy - 1);
     const y1 = gy;
@@ -306,7 +306,7 @@ function buildTerrain(
       const x1 = gx;
       const x2 = Math.min(gridW - 1, gx + 1);
 
-      // 8 neighboring elevation samples
+      // 8 échantillons d'altitude voisins
       const z00 = heights[y0 * gridW + x0];
       const z10 = heights[y0 * gridW + x1];
       const z20 = heights[y0 * gridW + x2];
@@ -327,7 +327,7 @@ function buildTerrain(
       const dzdx = ((z20 + 2 * z21 + z22) - (z00 + 2 * z01 + z02)) / Math.max(0.0001, scaleX);
       const dzdy = ((z02 + 2 * z12 + z22) - (z00 + 2 * z10 + z20)) / Math.max(0.0001, scaleY);
 
-      // Y up → ground normal = (-dz/dx, 1, +dz/dy) in renderer space
+      // Y haut → normale du sol = (-dz/dx, 1, +dz/dy) dans l'espace du renderer
       const nx = -dzdx, ny = 1.0, nz = dzdy;
       const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
       vertices[vi + 3] = nx / len;
@@ -337,7 +337,7 @@ function buildTerrain(
   }
   onProgress(0.9);
 
-  // 7) Indices (two triangles / quad)
+  // 7) Indices (deux triangles / quad)
   const quadW = gridW - 1;
   const quadH = gridH - 1;
   const indexCount = quadW * quadH * 6;
@@ -377,7 +377,7 @@ function buildTerrain(
 }
 
 /**
- * Initial BFS distance-based flood fill to ensure every cell has an initial value.
+ * Remplissage initial par BFS de distance pour que chaque cellule ait une valeur initiale.
  */
 function fillHoles(heights: Float32Array, w: number, h: number): void {
   const N = w * h;
@@ -386,7 +386,7 @@ function fillHoles(heights: Float32Array, w: number, h: number): void {
   let head = 0, tail = 0;
   const deltas: ReadonlyArray<readonly [number, number]> = [[0, 1], [0, -1], [1, 0], [-1, 0]];
 
-  // Seed: every filled cell adjacent to an empty one
+  // Graine : chaque cellule remplie voisine d'une cellule vide
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const idx = y * w + x;
@@ -422,9 +422,10 @@ function fillHoles(heights: Float32Array, w: number, h: number): void {
 }
 
 /**
- * Smooths unfilled cells using Laplacian harmonic relaxation (Poisson PDE)
- * to eliminate staircases and scanline gaps while strictly preserving measured points.
- * Pre-indexes hole cells to avoid scanning millions of measured vertices on each iteration.
+ * Lisse les cellules non remplies par relaxation harmonique laplacienne (EDP de
+ * Poisson) pour éliminer escaliers et trous de lignes de balayage tout en
+ * préservant strictement les points mesurés. Préindexe les cellules trouées pour
+ * ne pas parcourir des millions de sommets mesurés à chaque itération.
  */
 function relaxHolesLaplacian(
   heights: Float32Array,
@@ -438,7 +439,7 @@ function relaxHolesLaplacian(
   for (let i = 0; i < N; i++) {
     if (hasPoint[i] === 0) holeCount++;
   }
-  if (holeCount === 0) return; // No holes to relax
+  if (holeCount === 0) return; // Pas de trous à relaxer
 
   const holeIndices = new Uint32Array(holeCount);
   let hIdx = 0;

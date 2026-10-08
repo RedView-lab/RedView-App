@@ -48,7 +48,7 @@ import {
 } from './params';
 
 const G = 9.81;
-/** Neighbours in ring order: opposite = k + 4, ring neighbours = k ± 1. */
+/** Voisins dans l'ordre de l'anneau : opposé = k + 4, voisins sur l'anneau = k ± 1. */
 const DC = [1, 1, 0, -1, -1, -1, 0, 1] as const;
 const DR = [0, 1, 1, 1, 0, -1, -1, -1] as const;
 const DS = [1, Math.SQRT2, 1, Math.SQRT2, 1, Math.SQRT2, 1, Math.SQRT2] as const;
@@ -109,7 +109,7 @@ export interface FlowPyResult {
   pathZDelta: Float32Array;
   /** Cellules de départ dont la ligne d'énergie peut atteindre la cible. */
   candidates: number;
-  /** Cells processed over all release cells (cost). */
+  /** Cellules traitées sur l'ensemble des cellules de départ (coût). */
   processed: number;
   /** Le lancement s'est arrêté à son plafond de coût avant les cellules de départ les plus basses. */
   incomplete: boolean;
@@ -289,7 +289,7 @@ export const FLOWPY_BLOCK_STARTS = 64;
 export interface FlowPyBlock {
   from: number;
   to: number;
-  /** Cells processed (cost). */
+  /** Cellules traitées (coût). */
   processed: number;
   /** Cellules de départ qui atteignent la cible, dans l'ordre des départs, et leur angle de parcours à la cible. */
   startCells: Int32Array;

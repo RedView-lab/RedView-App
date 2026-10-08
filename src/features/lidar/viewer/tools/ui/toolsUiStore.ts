@@ -1,5 +1,5 @@
 // ============================================
-// LiDAR viewer tools — UI state (context menu, tool hint, profile card)
+// Outils du viewer LiDAR — état de l'interface (menu contextuel, indication d'outil, carte de profil)
 // ============================================
 
 import type { LookAroundReadout } from '../lookAround/lookAround';
@@ -16,25 +16,25 @@ export type ContextMenuAction =
   | { type: 'faceSlope' }
   | { type: 'lookAround' }
   | { type: 'route'; position: RoutePlacement }
-  /** Comments of the app project (lidar/viewer/comments). */
+  /** Commentaires du projet de l'app (lidar/viewer/comments). */
   | { type: 'comment' }
   | { type: 'commentZone' }
   | { type: 'deleteMeasurement'; id: string }
   | { type: 'clearMeasurements' };
 
 export interface ContextMenuModel {
-  /** Viewport position of the click, CSS px. */
+  /** Position du clic dans la fenêtre, px CSS. */
   clientX: number;
   clientY: number;
   pick: ScenePick;
   slope: SlopeSample | null;
   crs: DetectedCrs;
-  /** Measurement under the cursor (its label or a vertex). */
+  /** Mesure sous le curseur (son étiquette ou un sommet). */
   measurementId: string | null;
   measurementCount: number;
-  /** The active route already has a start (waypoint / finish offered). */
+  /** Le tracé actif a déjà un départ (étape / arrivée proposées). */
   routeHasStart: boolean;
-  /** The app project is open in RedView: comments can be added from here. */
+  /** Le projet de l'app est ouvert dans RedView : des commentaires peuvent être ajoutés d'ici. */
   commentsEnabled: boolean;
 }
 
@@ -43,22 +43,22 @@ export interface ProfileCardModel {
   profile: ProfileResult;
 }
 
-/** First-person view state shown by its HUD. */
+/** État de la vue à la première personne affiché par son HUD. */
 export interface LookAroundModel extends LookAroundReadout {
-  /** Ground altitude under the eye, m. */
+  /** Altitude du sol sous l'œil, m. */
   groundAltitudeM: number;
 }
 
 export interface ToolsUiState {
   menu: ContextMenuModel | null;
   activeTool: ToolId | null;
-  /** Vertices placed by the active drawing tool. */
+  /** Sommets posés par l'outil de dessin actif. */
   vertexCount: number;
   profile: ProfileCardModel | null;
-  /** Short transient message (copied, out of the loaded area…). */
+  /** Court message transitoire (copié, hors de la zone chargée…). */
   notice: string | null;
   lookAround: LookAroundModel | null;
-  /** The area tool outlines a comment zone. */
+  /** L'outil surface délimite une zone de commentaire. */
   commentZone: boolean;
 }
 
@@ -84,16 +84,16 @@ export class ToolsUiStore {
   }
 }
 
-/** Callbacks of the React layer into the tools controller. */
+/** Rappels de la couche React vers le contrôleur des outils. */
 export interface ToolsUiActions {
   onMenuAction(action: ContextMenuAction): void;
   closeMenu(): void;
   cancelTool(): void;
   closeProfile(): void;
-  /** Hovered profile sample (3D marker), `null` when the pointer leaves the chart. */
+  /** Échantillon de profil survolé (marqueur 3D), `null` quand le pointeur quitte le graphique. */
   hoverProfile(sampleIndex: number | null): void;
   notify(message: string): void;
-  /** Horizontal field of view of the first-person view, degrees. */
+  /** Champ de vision horizontal de la vue à la première personne, degrés. */
   setLookFov(fovDeg: number): void;
   exitLookAround(): void;
 }

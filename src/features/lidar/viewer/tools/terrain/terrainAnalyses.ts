@@ -10,26 +10,26 @@ import { computeFallLine, displayedFallScenario, fallLineBounds } from './fallLi
 import { CANOPY_SPACING_M, readFallCover } from './pointCloudReads';
 import type { TerrainField } from './terrainField';
 
-/** Ground cover is read this far around the nominal fall lines (the fan spreads), m. */
+/** Le couvert du sol est lu jusqu'à cette distance autour des lignes de chute nominales (l'éventail s'élargit), m. */
 const FALL_COVER_MARGIN_M = 60;
 
 export interface TerrainAnalysisContext {
   field: TerrainField;
   pointPicker: PointCloudPicker;
   notify: (message: string, options?: { persistent?: boolean }) => void;
-  /** The request was superseded or the viewer closed: drop the result. */
+  /** La requête a été remplacée ou le viewer fermé : abandonner le résultat. */
   isStale: () => boolean;
 }
 
-/** A finished analysis: the measurement to show and the message announcing it. */
+/** Une analyse terminée : la mesure à afficher et le message qui l'annonce. */
 export interface TerrainAnalysisResult {
   measurement: Measurement;
   message: string;
 }
 
 /**
- * Fall line: nominal trajectories first (they bound the ground cover read
- * from the point cloud), then the whole fan over that cover.
+ * Ligne de chute : trajectoires nominales d'abord (elles bornent le couvert du
+ * sol lu dans le nuage de points), puis tout l'éventail sur ce couvert.
  */
 export async function runFallLineAnalysis(ctx: TerrainAnalysisContext, pick: ScenePick): Promise<TerrainAnalysisResult | null> {
   const { field, isStale } = ctx;
@@ -54,8 +54,9 @@ export async function runFallLineAnalysis(ctx: TerrainAnalysisContext, pick: Sce
 }
 
 /**
- * Avalanche terrain exposure (AutoATES chain, see terrain/avalanche): the
- * canopy cover is read from the point cloud here, the model runs in a worker.
+ * Exposition au terrain avalancheux (chaîne AutoATES, voir terrain/avalanche) :
+ * le couvert de canopée est lu ici dans le nuage de points, le modèle tourne
+ * dans un worker.
  */
 export async function runAvalancheAnalysis(
   ctx: TerrainAnalysisContext,

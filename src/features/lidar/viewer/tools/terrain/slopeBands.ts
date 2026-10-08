@@ -1,10 +1,11 @@
 // ============================================
-// LiDAR viewer tools — avalanche slope classes
+// Outils du viewer LiDAR — classes de pente avalanche
 // ============================================
 //
-// Classes of avalanche-terrain slope maps: most slab avalanches release on
-// 30–45° slopes, with a peak at 35–40°; above 45° snow sluffs more than it
-// builds slabs, and the consequence of a slip becomes the main hazard.
+// Classes des cartes de pentes du terrain avalancheux : la plupart des
+// plaques se déclenchent sur des pentes de 30–45°, avec un pic à 35–40° ;
+// au-dessus de 45°, la neige purge plus qu'elle ne forme de plaques, et la
+// conséquence d'une glissade devient le danger principal.
 
 import type { Rgba } from '../types';
 

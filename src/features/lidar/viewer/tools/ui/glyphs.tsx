@@ -1,5 +1,5 @@
 // ============================================
-// LiDAR viewer tools — 16 px tool glyphs (same stroke as the app's menu icons)
+// Outils du viewer LiDAR — glyphes d'outils de 16 px (même trait que les icônes de menu de l'app)
 // ============================================
 
 import type { ReactNode } from 'react';
@@ -161,7 +161,7 @@ export function TerrainAnalysisGlyph() {
   );
 }
 
-/** Eye inside a 360° arc: the first-person look-around. */
+/** Œil dans un arc de 360° : le tour d'horizon à la première personne. */
 export function LookAroundGlyph() {
   return (
     <Glyph>

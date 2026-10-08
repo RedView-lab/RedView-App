@@ -1,10 +1,11 @@
 // ============================================
-// LiDAR viewer — ground profile card
+// Viewer LiDAR — carte du profil du sol
 // ============================================
 //
-// Altitude along the drawn line, filled with the avalanche slope classes.
-// "1:1" draws it at true scale: profile charts usually stretch altitude 5
-// to 20 times, which makes every slope look steeper than it is.
+// Altitude le long de la ligne tracée, remplie avec les classes de pente
+// avalanche. « 1:1 » la dessine à l'échelle réelle : les graphiques de profil
+// étirent d'habitude l'altitude 5 à 20 fois, ce qui fait paraître chaque pente
+// plus raide qu'elle ne l'est.
 
 import { useMemo, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { translateAppText as t } from '@/shared/i18n/config';
@@ -15,16 +16,16 @@ import type { ProfileSample } from '../terrain/profile';
 import { CloseGlyph } from './glyphs';
 import type { ProfileCardModel, ToolsUiActions } from './toolsUiStore';
 
-/** Card width minus its padding: the chart keeps its aspect (true scale). */
+/** Largeur de la carte moins son rembourrage : le graphique garde ses proportions (échelle réelle). */
 const CHART_WIDTH = 536;
 const CHART_HEIGHT = 140;
-/** Columns drawn at most (one sample per column). */
+/** Nombre maximal de colonnes dessinées (un échantillon par colonne). */
 const MAX_COLUMNS = 360;
 
 interface ChartGeometry {
   x: (distanceM: number) => number;
   y: (altitudeM: number) => number;
-  /** Distance at a chart abscissa. */
+  /** Distance à une abscisse du graphique. */
   distanceAt: (x: number) => number;
 }
 

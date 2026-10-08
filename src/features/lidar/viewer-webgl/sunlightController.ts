@@ -1,9 +1,9 @@
 // ============================================
-// LiDAR HD — WebGL Sunlight Controller
+// LiDAR HD — contrôleur d'ensoleillement WebGL
 // ============================================
-// Accurate solar ephemeris, horizon-sweep cast shadows,
-// cumulative sunlight (insolation) map with background precalculation worker,
-// and 3D celestial trajectory.
+// Éphémérides solaires précises, ombres portées par balayage d'horizon, carte
+// d'ensoleillement cumulé (insolation) avec worker de précalcul en arrière-plan,
+// et trajectoire céleste 3D.
 
 import {
   getSunPositionForLocalDateTime,
@@ -28,14 +28,14 @@ export interface SunlightControllerOptions {
   centerZ: number;
   centerLon: number;
   centerLat: number;
-  heightGrid: Float32Array; // row 0 = South, row H-1 = North
+  heightGrid: Float32Array; // ligne 0 = Sud, ligne H-1 = Nord
   gridWidth: number;
   gridHeight: number;
   timeZone?: string;
   /**
-   * Grid bearing of true north at the scene centre (`trueNorthGridBearingDeg`).
-   * The scene axes follow the CRS grid, so true sun azimuths are rotated by
-   * it before any geometry (light, cast shadows, trajectory).
+   * Gisement du nord vrai au centre de la scène (`trueNorthGridBearingDeg`).
+   * Les axes de la scène suivent la grille du CRS : les azimuts vrais du soleil
+   * sont tournés de cette valeur avant toute géométrie (lumière, ombres portées, trajectoire).
    */
   trueNorthGridBearingDeg?: number;
   onRequestRender?: () => void;
@@ -62,7 +62,7 @@ export interface SolarRenderState {
   sunlightMapWidth: number;
   sunlightMapHeight: number;
   trajectoryEnabled: boolean;
-  trajectoryVertices: Float32Array | null; // line strip of pos.xyz + color.rgba
+  trajectoryVertices: Float32Array | null; // line strip de pos.xyz + couleur.rgba
   trajectoryVertexCount: number;
   sunDiscPos: [number, number, number] | null;
   sunDiscRadius: number;
@@ -151,22 +151,22 @@ export class SunlightController {
   readonly cellSizeX: number;
   readonly cellSizeY: number;
   readonly extent: number;
-  /** Added to true azimuths to get scene (grid) azimuths. */
+  /** Ajouté aux azimuts vrais pour obtenir les azimuts de la scène (grille). */
   readonly trueNorthGridBearingDeg: number;
   onRequestRender?: () => void;
 
-  /** Heightmap with row 0 = North, row H-1 = South for horizon sweep */
+  /** Heightmap avec ligne 0 = Nord, ligne H-1 = Sud pour le balayage d'horizon */
   private northSouthElev: Float32Array;
   private shadowScratch: ShadowSweepScratch;
-  /** Reused buffer for exposures interpolated between precalculated snapshots. */
+  /** Buffer réutilisé pour les expositions interpolées entre instantanés précalculés. */
   private blendedExposure: Float32Array | null = null;
 
-  // Caches for shadow and sunlight map
+  // Caches de la carte d'ombre et d'ensoleillement
   private lastShadowAzimuth = -999;
   private lastShadowAltitude = -999;
   private lastShadowResult: Uint8Array | null = null;
 
-  // Background Precalculation Worker
+  // Worker de précalcul en arrière-plan
   private precalcWorker: Worker | null = null;
   private precalcRequestId = 0;
   private precalculatedDate = '';
@@ -177,7 +177,7 @@ export class SunlightController {
     snapshots: Float32Array[];
   } | null = null;
 
-  // Cumulative exposure synchronous fallback cache
+  // Cache synchrone de repli de l'exposition cumulée
   private cachedDate = '';
   private cachedExposure: Float32Array | null = null;
   private cachedExposureMinutes = 0;
@@ -211,7 +211,7 @@ export class SunlightController {
     const N = opts.gridWidth * opts.gridHeight;
     this.northSouthElev = new Float32Array(N);
 
-    // Flip South→North heightGrid into North→South for shadow sweep
+    // Retourner la heightGrid Sud→Nord en Nord→Sud pour le balayage des ombres
     for (let y = 0; y < opts.gridHeight; y++) {
       const srcRow = (opts.gridHeight - 1 - y) * opts.gridWidth;
       const dstRow = y * opts.gridWidth;
@@ -243,7 +243,7 @@ export class SunlightController {
             timeSteps: data.timeSteps,
             snapshots: data.snapshots,
           };
-          this.lastColorizedMinutes = -1; // Force immediate refresh with precalculated data
+          this.lastColorizedMinutes = -1; // Forcer un rafraîchissement immédiat avec les données précalculées
           this.onRequestRender?.();
         }
       };
@@ -260,7 +260,7 @@ export class SunlightController {
     this.precalcRequestId += 1;
     const id = this.precalcRequestId;
 
-    // Send a copy of the elevation grid to the worker
+    // Envoyer une copie de la grille d'altitude au worker
     const elevCopy = new Float32Array(this.northSouthElev);
     this.precalcWorker.postMessage(
       {
@@ -494,10 +494,10 @@ export class SunlightController {
   }
 
   /**
-   * Cumulative exposure at `minutes`. Each precalculated step holds the sun
-   * state constant, so the exposure grows linearly inside it: interpolating
-   * between the two bracketing snapshots gives the integrated value at any
-   * minute (instead of freezing it up to 10 min back).
+   * Exposition cumulée à `minutes`. Chaque pas précalculé garde l'état du soleil
+   * constant, l'exposition croît donc linéairement à l'intérieur : interpoler
+   * entre les deux instantanés encadrants donne la valeur intégrée à toute
+   * minute (au lieu de la figer jusqu'à 10 min en arrière).
    */
   private exposureFromTimeline(
     timeline: { timeSteps: number[]; snapshots: Float32Array[] },
@@ -525,7 +525,7 @@ export class SunlightController {
     return out;
   }
 
-  /** Same legend rule as the map overlay (`sunlightBandIndex`): 0 min is the first band. */
+  /** Même règle de légende que la surcouche de la carte (`sunlightBandIndex`) : 0 min est la première bande. */
   private colorizeExposure(exposure: Float32Array, bands: SunlightBand[]): Uint8Array {
     const N = this.gridWidth * this.gridHeight;
     const rgba = new Uint8Array(N * 4);

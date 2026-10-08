@@ -1,5 +1,6 @@
-// Terrain program: textured + lit heightmap with snow, slope / altitude ramps,
-// cast shadows, cumulative sunlight map and astronomical sun lighting.
+// Programme du terrain : heightmap texturée + éclairée avec neige, rampes de
+// pente / d'altitude, ombres portées, carte d'ensoleillement cumulé et
+// éclairage solaire astronomique.
 
 export const VERTEX_SHADER = /* glsl */ `#version 300 es
 precision highp float;

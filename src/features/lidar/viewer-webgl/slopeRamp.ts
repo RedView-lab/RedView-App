@@ -28,9 +28,9 @@ function lerp(a: number, b: number, t: number): number {
 }
 
 /**
- * Builds a 256x1 RGBA Uint8Array representing the 1D slope LUT ramp.
- * Index 0 maps to 0 degrees (flat horizontal terrain).
- * Index 255 maps to 90 degrees (vertical wall / cliff).
+ * Construit un Uint8Array RGBA de 256x1 représentant la rampe de LUT pente 1D.
+ * L'indice 0 correspond à 0 degré (terrain horizontal plat).
+ * L'indice 255 correspond à 90 degrés (paroi verticale / falaise).
  */
 function buildSlopeRampData(
   bands: SlopeBand[],
@@ -42,7 +42,7 @@ function buildSlopeRampData(
     return data;
   }
 
-  // Sort bands ascending by minDeg to be robust
+  // Tri croissant des bandes sur minDeg, par robustesse
   const sortedBands = [...bands].sort((a, b) => a.minDeg - b.minDeg);
 
   if (colorization === 'stepped') {
@@ -76,7 +76,7 @@ function buildSlopeRampData(
     return data;
   }
 
-  // Gradient mode: Smooth linear interpolation between band stops
+  // Mode dégradé : interpolation linéaire continue entre les paliers des bandes
   interface Stop {
     deg: number;
     color: RgbaColor;
@@ -87,7 +87,7 @@ function buildSlopeRampData(
     color: parseHexColor(band.color, band.visible ? 255 : 0),
   }));
 
-  // Append final anchor at 90 degrees using the last band's color
+  // Ajouter un dernier ancrage à 90 degrés avec la couleur de la dernière bande
   const lastBand = sortedBands[sortedBands.length - 1];
   if (lastBand) {
     stops.push({
@@ -118,7 +118,7 @@ function buildSlopeRampData(
       continue;
     }
 
-    // Find the bounding stops
+    // Trouver les paliers encadrants
     let s0 = stops[0];
     let s1 = stops[1];
     for (let s = 0; s < stops.length - 1; s++) {
@@ -142,7 +142,7 @@ function buildSlopeRampData(
 }
 
 /**
- * Creates or updates a WebGL2 1D/2D LUT texture containing the slope color ramp.
+ * Crée ou met à jour une texture LUT WebGL2 1D/2D contenant la rampe de couleurs des pentes.
  */
 export function updateSlopeRampTexture(
   gl: WebGL2RenderingContext,

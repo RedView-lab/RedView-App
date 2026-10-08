@@ -1,10 +1,10 @@
 // ============================================
-// LiDAR viewer — first-person view HUD
+// Viewer LiDAR — HUD de la vue à la première personne
 // ============================================
 //
-// Compass tape (true heading), centre reticle with what it aims at
-// (distance, altitude, angle above the horizon) and a bottom bar with the
-// field-of-view presets. Everything but the bar lets the pointer through.
+// Bande de boussole (cap vrai), réticule central avec ce qu'il vise (distance,
+// altitude, angle au-dessus de l'horizon) et une barre en bas avec les
+// préréglages de champ de vision. Tout sauf la barre laisse passer le pointeur.
 
 import { translateAppText as t } from '@/shared/i18n/config';
 import { formatAltitude, formatAngle, formatAspect, formatDistance } from '../format';
@@ -14,7 +14,7 @@ import type { LookAroundModel, ToolsUiActions } from './toolsUiStore';
 
 const TAPE_WIDTH = 420;
 const TAPE_HEIGHT = 30;
-/** Headings shown across the tape, degrees. */
+/** Caps affichés sur la largeur de la bande, degrés. */
 const TAPE_SPAN_DEG = 120;
 
 const PRESET_LABELS: Record<FovPresetId, { label: string; title: string }> = {
