@@ -1,28 +1,28 @@
 import type { WindData } from '../wind-gl';
 
-// ── Re-export WindData so consumers don't need wind-gl directly ────────
+// ── Réexporte WindData pour que les consommateurs n'aient pas besoin de wind-gl ──
 export type { WindData };
 
-// ── Geometry constants ─────────────────────────────────────────────────
+// ── Constantes de géométrie ────────────────────────────────────────────
 
 export const LAYER_ID = 'wind-particles';
 export const VERTEX_STRIDE = 7;        // x, y, z, r, g, b, a
 export const EQUATORIAL_CIRCUMFERENCE = 40_075_017;
 
-// ── Trail geometry constants ───────────────────────────────────────────
+// ── Constantes de géométrie des traînées ───────────────────────────────
 
-export const TRAIL_LENGTH = 64;                        // ring buffer size per particle
-export const VERTS_PER_SEGMENT = 6;                    // 2 triangles per trail segment
+export const TRAIL_LENGTH = 64;                        // taille du tampon circulaire par particule
+export const VERTS_PER_SEGMENT = 6;                    // 2 triangles par segment de traînée
 export const MAX_TRAIL_SEGMENTS = TRAIL_LENGTH - 1;    // = 63
 
-// ── Simulation constants ───────────────────────────────────────────────
+// ── Constantes de simulation ───────────────────────────────────────────
 
 export const MAX_DELTA_SECONDS = 0.05;
 export const DIRECTION_SMOOTH = 0.22;
 export const FADE_IN_RATE = 4.5;
-export const WIND_BLEND_DURATION = 1.2; // seconds for prev→current crossfade
-export const DROP_RATE = 0.001;          // base random respawn probability per frame
-export const DROP_RATE_BUMP = 0.001;     // additional respawn rate × speed_t
+export const WIND_BLEND_DURATION = 1.2; // secondes de fondu enchaîné précédent → courant
+export const DROP_RATE = 0.001;          // probabilité de base de renaissance aléatoire par image
+export const DROP_RATE_BUMP = 0.001;     // taux de renaissance supplémentaire × speed_t
 
 // ── Max allocation (avoids re-allocation on zoom) ──────────────────────
 
@@ -75,7 +75,7 @@ export interface WindSample {
   speed: number;
 }
 
-// ── Utility functions ──────────────────────────────────────────────────
+// ── Fonctions utilitaires ──────────────────────────────────────────────
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -85,17 +85,18 @@ export function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
-// ── Adaptive parameter functions ───────────────────────────────────────
-// All visual parameters are continuous functions of zoom/pitch/dpi — no
-// fixed breakpoints. Inspired by Windy.com and earth.nullschool.net.
+// ── Fonctions de paramètres adaptatifs ─────────────────────────────────
+// Tous les paramètres visuels sont des fonctions continues du zoom /
+// de l'inclinaison / de la densité — pas de seuils fixes. Inspiré de Windy.com
+// et earth.nullschool.net.
 
-/** Particle count — screen-density based so coverage stays uniform at all zoom levels. */
+/** Nombre de particules — selon la densité à l'écran, pour une couverture uniforme à tous les zooms. */
 export function adaptiveParticleCount(zoom: number, _viewportWidthDeg: number, _viewportHeightDeg: number): number {
   const zoomT = clamp((zoom - 4) / 12, 0, 1);
   return Math.max(1, Math.round(lerp(1000, MAX_PARTICLE_ALLOC, zoomT * zoomT) / PARTICLE_COUNT_REDUCTION_FACTOR));
 }
 
-/** Trail half-width in screen pixels. Visible streamlines across all zooms. */
+/** Demi-largeur de la traînée en pixels d'écran. Lignes de courant visibles à tous les zooms. */
 export function adaptiveTrailWidth(zoom: number, speed: number, dpr: number): number {
   const zoomT = clamp((zoom - 4) / 12, 0, 1);
   const basePx = lerp(2.0, 3.5, zoomT);
@@ -103,19 +104,19 @@ export function adaptiveTrailWidth(zoom: number, speed: number, dpr: number): nu
   return (basePx + speedBoost) / Math.max(1, dpr * 0.75);
 }
 
-/** Particle lifetime adapts to wind speed (fast = short, slow = long). */
+/** La durée de vie d'une particule s'adapte à la vitesse du vent (rapide = courte, lent = longue). */
 export function adaptiveLifetime(speed: number): number {
   const t = clamp(speed / 25, 0, 1);
-  return lerp(16, 5, t); // calm=16s, gale=5s (longer for flowing trails)
+  return lerp(16, 5, t); // calme = 16 s, coup de vent = 5 s (plus long pour des traînées fluides)
 }
 
-/** Simulation speed scale — exponential so trails stay ~150px across all zoom levels.
- *  1_500_000 * 2^(-zoom) gives ~4.5 screen-px/frame at 60fps for 10 m/s wind. */
+/** Échelle de vitesse de simulation — exponentielle pour que les traînées restent ~150 px à tous les zooms.
+ *  1_500_000 * 2^(-zoom) donne ~4,5 px d'écran par image à 60 fps pour un vent de 10 m/s. */
 export function adaptiveSimulationScale(zoom: number): number {
   return clamp(1_500_000 * Math.pow(2, -zoom), 10, 50_000);
 }
 
-/** Pitch-aware size correction: at high pitch, arrows viewed from side appear smaller. */
+/** Correction de taille selon l'inclinaison : à forte inclinaison, les flèches vues de côté paraissent plus petites. */
 export function pitchSizeCorrection(pitchDeg: number): number {
   const pitchRad = pitchDeg * Math.PI / 180;
   return 1 / Math.max(0.45, Math.cos(pitchRad));

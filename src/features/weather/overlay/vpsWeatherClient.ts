@@ -1,7 +1,8 @@
 /**
- * RedView VPS Weather Client
- * High-performance client for Oracle VPS weather tiles (France + bordering countries, 48h).
- * Replaces the multi-batch 2,000-point JSON queries and 2M-pixel CPU bilinear loops.
+ * Client météo du VPS RedView
+ * Client performant pour les tuiles météo du VPS Oracle (France + pays
+ * frontaliers, 48 h). Remplace les requêtes JSON de 2 000 points par lots et
+ * les boucles bilinéaires CPU de 2 M de pixels.
  */
 
 import { setForecastHorizonEnd } from '../lib/forecastTime';
@@ -64,9 +65,10 @@ export function getCachedWeatherMeta(): WeatherMeta | null {
 }
 
 /**
- * Robust weather metadata fetcher.
- * An individual caller's transient AbortSignal will NOT kill the underlying network fetch,
- * preventing cascading AbortErrors and permanent 20% progress freezes across the app.
+ * Récupération robuste des métadonnées météo.
+ * Le AbortSignal transitoire d'un appelant n'interrompt PAS la requête réseau
+ * sous-jacente, ce qui évite les AbortError en cascade et les blocages
+ * définitifs de la progression à 20 % dans toute l'application.
  */
 export async function fetchWeatherMeta(signal?: AbortSignal, force = false): Promise<WeatherMeta> {
   const now = Date.now();
@@ -93,7 +95,7 @@ export async function fetchWeatherMeta(signal?: AbortSignal, force = false): Pro
       } catch (err) {
         window.clearTimeout(timeoutTimer);
         if (cachedMeta) {
-          // Graceful fallback to existing cached metadata on transient network drops
+          // Repli en douceur sur les métadonnées en cache lors de coupures réseau transitoires
           return cachedMeta;
         }
         throw err;
@@ -103,7 +105,7 @@ export async function fetchWeatherMeta(signal?: AbortSignal, force = false): Pro
     })();
   }
 
-  // If caller provided an abort signal, respect caller cancellation without aborting the background fetch
+  // Si l'appelant a fourni un signal d'annulation, on respecte son annulation sans interrompre la requête de fond
   if (signal) {
     if (signal.aborted) {
       throw new DOMException('Aborted', 'AbortError');
@@ -154,7 +156,7 @@ export function findClosestForecastHour(targetDate: string, targetTime: string, 
   const hour = timeParts[0] || 0;
   const minute = timeParts[1] || 0;
 
-  // Local wall-clock Date converted to UTC timestamp
+  // Date d'horloge locale convertie en horodatage UTC
   const localDate = new Date(year, month, day, hour, minute, 0, 0);
   const targetMs = localDate.getTime();
 
@@ -184,10 +186,11 @@ const inFlightImagePromises = new Map<string, Promise<HTMLImageElement>>();
 const MAX_IMAGE_CACHE_SIZE = 128;
 
 /**
- * Resilient tile image loader.
- * Ensures concurrent callers and prefetching share identical requests without
- * abort cascades (an aborted caller detaches, but the image finishes downloading
- * into tileImageCache for immediate availability on subsequent scrub steps).
+ * Chargeur d'images de tuiles résilient.
+ * Les appelants concurrents et le préchargement partagent des requêtes
+ * identiques sans annulations en cascade (un appelant annulé se détache, mais
+ * l'image finit de se télécharger dans tileImageCache pour être disponible tout
+ * de suite aux pas de glissement suivants).
  */
 export async function loadTileImage(url: string, signal?: AbortSignal): Promise<HTMLImageElement> {
   const cached = tileImageCache.get(url);
@@ -208,7 +211,7 @@ export async function loadTileImage(url: string, signal?: AbortSignal): Promise<
         try {
           await img.decode();
         } catch {
-          // onload is enough
+          // onload suffit
         }
         if (tileImageCache.size >= MAX_IMAGE_CACHE_SIZE) {
           const oldestKey = tileImageCache.keys().next().value;
@@ -264,7 +267,8 @@ export function cancelPrefetch(): void {
 }
 
 /**
- * Prefetches adjacent forecast hours without cancelling foreground tile loads.
+ * Précharge les heures de prévision voisines sans annuler les chargements de
+ * tuiles au premier plan.
  */
 export function prefetchAdjacentHours(
   variable: string,
@@ -299,7 +303,7 @@ export function prefetchAdjacentHours(
 
   if (itemsToPrefetch.length === 0) return;
 
-  // Debounce background prefetch by 100ms so active timeline scrubbing has zero network contention
+  // Anti-rebond de 100 ms sur le préchargement de fond pour qu'un glissement actif de la frise n'ait aucune concurrence réseau
   activePrefetchTimer = window.setTimeout(() => {
     activePrefetchTimer = null;
     for (const item of itemsToPrefetch) {

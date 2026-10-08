@@ -13,20 +13,21 @@ import {
 // ── Configuration ─────────────────────────────────────────────────────
 
 const CACHE_TTL_MS = 45 * 60 * 1000; // 45 minutes
-// Self-hosted VPS → we can hammer it. Bigger batches, no inter-batch
-// gap, only a tiny safety retry budget for transient errors.
-const BATCH_SIZE = 200; // Keep URLs below proxy/browser limits for multi-point requests
+// VPS auto-hébergé → on peut le solliciter fort. Lots plus gros, pas de pause
+// entre les lots, seulement un tout petit budget de nouvel essai de sécurité
+// pour les erreurs transitoires.
+const BATCH_SIZE = 200; // Garde les URL sous les limites du proxy / navigateur pour les requêtes multipoints
 const MAX_RETRIES = 2;
 const INITIAL_BACKOFF_MS = 1_000;
 const MIN_REQUEST_GAP_MS = 0;
 const INTER_BATCH_DELAY_MS = 0;
 
-// ── Global rate-limit cooldown ────────────────────────────────────────
+// ── Refroidissement global après limitation de débit ──────────────────
 
 let rateLimitedUntil = 0;
 let lastRequestTime = 0;
 
-// ── In-memory cache ───────────────────────────────────────────────────
+// ── Cache en mémoire ──────────────────────────────────────────────────
 
 interface WindHourlyCacheEntry {
   hours: Map<string, WindPoint>;
@@ -86,7 +87,7 @@ function gridSelectionCacheKey(grid: WindGridDefinition, selection: WindTimeSele
   ].join('|');
 }
 
-// ── API fetch ─────────────────────────────────────────────────────────
+// ── Appel à l'API ─────────────────────────────────────────────────────
 
 interface OpenMeteoResponse {
   latitude: number | number[];
@@ -192,7 +193,7 @@ function shiftSelectionByHours(selection: WindTimeSelection, hoursOffset: number
 }
 
 /**
- * Fetch a single batch of wind data (up to BATCH_SIZE coordinates).
+ * Récupère un seul lot de données de vent (jusqu'à BATCH_SIZE coordonnées).
  */
 async function fetchBatch(
   coords: { lat: number; lng: number }[],
@@ -216,9 +217,9 @@ async function fetchBatch(
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
-    // Respect global cooldown from previous 429
+    // Respecte le refroidissement global après un 429 précédent
     const cooldownWait = rateLimitedUntil - Date.now();
-    // Respect minimum gap between any two requests
+    // Respecte l'écart minimal entre deux requêtes
     const gapWait = (lastRequestTime + MIN_REQUEST_GAP_MS) - Date.now();
     const waitMs = Math.max(0, cooldownWait, gapWait);
 
@@ -248,7 +249,7 @@ async function fetchBatch(
 
     const json = await res.json();
 
-    // Single coordinate → response is an object; multiple → array
+    // Une seule coordonnée → la réponse est un objet ; plusieurs → un tableau
     const items: OpenMeteoResponse[] = Array.isArray(json) ? json : [json];
 
     if (items.length !== coords.length) {
@@ -265,9 +266,9 @@ async function fetchBatch(
 }
 
 /**
- * Fetch a full regular wind grid from the self-hosted VPS.
- * Results preserve the grid's row-major ordering for direct GPU upload.
- * Supports cancellation via AbortSignal.
+ * Récupère une grille de vent régulière complète depuis le VPS auto-hébergé.
+ * Les résultats gardent l'ordre ligne par ligne de la grille pour un envoi
+ * direct au GPU. Annulable via AbortSignal.
  */
 async function fetchWindGridForSelectionInternal(
   grid: WindGridDefinition,
@@ -279,7 +280,7 @@ async function fetchWindGridForSelectionInternal(
   const results = new Array<WindPoint>(grid.points.length);
   const uncachedIndexes: number[] = [];
 
-  // 1. Check cache first
+  // 1. Regarde d'abord le cache
   for (let index = 0; index < grid.points.length; index += 1) {
     const point = grid.points[index];
     const cached = getCached(point.lat, point.lng, normalisedSelection);
@@ -312,11 +313,11 @@ async function fetchWindGridForSelectionInternal(
     }),
   });
 
-  // 2. Batch fetch uncached coordinates (with inter-batch delay)
+  // 2. Récupère par lots les coordonnées absentes du cache (avec pause entre les lots)
   for (let i = 0; i < uncachedIndexes.length; i += BATCH_SIZE) {
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
-    // Inter-batch delay to avoid 429 on consecutive batches
+    // Pause entre les lots pour éviter un 429 sur des lots consécutifs
     if (i > 0) {
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(resolve, INTER_BATCH_DELAY_MS);
@@ -446,7 +447,7 @@ export async function prefetchWindGridData(
 }
 
 /**
- * Clear the wind data cache.
+ * Vide le cache des données de vent.
  */
 export function clearWindCache(): void {
   cache.clear();

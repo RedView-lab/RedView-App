@@ -31,7 +31,7 @@ const EMPTY_WIND_STATE: WindState = {
   source: null,
 };
 
-// ── Viewport helpers ──────────────────────────────────────────────────
+// ── Aides de vue ──────────────────────────────────────────────────────
 
 interface ViewportBounds {
   north: number;
@@ -108,7 +108,7 @@ export function useWind(
     return initialized;
   }, [particlesEnabled]);
 
-  // ── Fetch regular VPS wind grid → feed particles directly ──
+  // ── Récupère la grille de vent régulière du VPS → alimente directement les particules ──
 
   const fetchForViewport = useCallback(
     // Nommée : la relance différée ci-dessous rappelle cette même fonction.
@@ -119,7 +119,7 @@ export function useWind(
       const selectionChanged = lastSelectionRef.current == null
         || windSelectionKey(lastSelectionRef.current) !== resolvedSelectionKey;
 
-      // Expand bounds by 50% margin to create a data reservoir
+      // Élargit l'emprise de 50 % pour constituer une réserve de données
       const latPad = (bounds.north - bounds.south) * BOUNDS_PADDING;
       const lngPad = (bounds.east - bounds.west) * BOUNDS_PADDING;
       const fetchBounds = {
@@ -132,10 +132,10 @@ export function useWind(
       const grid = computeWindGrid(fetchBounds, bounds, bounds.zoom);
       const selectionCached = grid.points.length > 0 && hasWindGridSelectionCached(grid, resolvedSelection);
 
-      // Rate-limit guard: if too soon, schedule a deferred retry
+      // Garde de limitation de débit : si c'est trop tôt, planifie un nouvel essai différé
       const timeSinceLastFetch = Date.now() - lastFetchTimeRef.current;
       if (timeSinceLastFetch < MIN_FETCH_INTERVAL_MS && !selectionCached && !selectionChanged) {
-        // Schedule retry after cooldown expires (only if not already scheduled)
+        // Planifie un nouvel essai à la fin du délai de refroidissement (seulement s'il n'y en a pas déjà un)
         if (!retryTimerRef.current) {
           const delay = MIN_FETCH_INTERVAL_MS - timeSinceLastFetch + 100;
           setState((s) => ({
@@ -160,7 +160,7 @@ export function useWind(
         return;
       }
 
-      // Check if existing data already covers current viewport
+      // Vérifie si les données existantes couvrent déjà la vue courante
       if (lastFetchBoundsRef.current && lastBoundsRef.current) {
         const fb = lastFetchBoundsRef.current;
         const viewportCovered =
@@ -168,7 +168,7 @@ export function useWind(
           bounds.south >= fb.south && bounds.north <= fb.north;
 
         if (viewportCovered) {
-          // Data covers viewport — only refetch on significant zoom change
+          // Les données couvrent la vue — ne recharge que sur un changement de zoom important
           const zoomDelta = Math.abs(lastBoundsRef.current.zoom - bounds.zoom);
           if (!selectionChanged && zoomDelta < ZOOM_DELTA_THRESHOLD * 2) {
             lastBoundsRef.current = bounds;
@@ -177,7 +177,7 @@ export function useWind(
         }
       }
 
-      // OR gate: refetch if viewport shifted significantly OR zoom changed
+      // Porte OU : recharge si la vue s'est beaucoup déplacée OU si le zoom a changé
       if (lastBoundsRef.current) {
         const shift = viewportShiftRatio(lastBoundsRef.current, bounds);
         const zoomDelta = Math.abs(lastBoundsRef.current.zoom - bounds.zoom);
@@ -402,17 +402,19 @@ export function useWind(
       map.on('moveend', onMoveEnd);
       map.on('zoom', onZoom);
 
-      // Re-add the custom particle layer after every style swap. Mapbox
-      // wipes all custom layers on style.load and there's no built-in
-      // recovery — without this, switching basemaps (or any internal
-      // styledata reload) silently removes the wind layer and the user
-      // sees no particles even though the toggle reads as enabled.
+      // Réajoute la couche de particules personnalisée après chaque changement
+      // de style. Mapbox efface toutes les couches personnalisées au
+      // style.load et ne les restaure pas — sans cela, changer de fond de
+      // carte (ou tout rechargement styledata interne) retire sans bruit la
+      // couche de vent et l'utilisateur ne voit plus de particules alors que
+      // l'interrupteur paraît activé.
       const onStyleLoad = () => {
         try {
           syncParticleLayer(map);
-          // Force a re-fetch so the freshly-initialised GPU texture has
-          // data; clear viewport refs so the "already covered" early
-          // exit in fetchForViewport doesn't skip the re-feed.
+          // Force un nouveau chargement pour que la texture GPU fraîchement
+          // initialisée ait des données ; vide les réfs de vue pour que la
+          // sortie anticipée « déjà couvert » de fetchForViewport ne saute pas
+          // la réalimentation.
           lastBoundsRef.current = null;
           lastFetchBoundsRef.current = null;
           if (debounceRef.current) clearTimeout(debounceRef.current);

@@ -1,8 +1,9 @@
 import type { WindGridDefinition } from '../types';
 
-// ── Zoom → grid spacing mapping ───────────────────────────────────────
-// Uses a viewport-aligned regular grid so the wind field can be fetched
-// directly from the VPS and uploaded to the GPU without any IDW rebuild.
+// ── Correspondance zoom → pas de grille ───────────────────────────────
+// Utilise une grille régulière alignée sur la vue pour que le champ de vent
+// puisse être récupéré directement du VPS et envoyé au GPU sans
+// reconstruction IDW.
 
 const SPACING_TABLE: [number, number][] = [
   [3, 0.6],
@@ -22,9 +23,9 @@ const MIN_POINTS = 576;
 const MAX_POINTS = 3_072;
 
 /**
- * Get grid spacing (degrees) for a given zoom level.
- * Interpolates between table entries and then snaps to the nearest
- * power-of-2 subdivision of 1° to maintain grid alignment.
+ * Pas de grille (degrés) pour un niveau de zoom donné.
+ * Interpole entre les entrées de la table puis s'aligne sur la subdivision de
+ * 1° en puissance de 2 la plus proche, pour garder la grille alignée.
  */
 function spacingForZoom(zoom: number): number {
   if (zoom <= SPACING_TABLE[0][0]) return SPACING_TABLE[0][1];
@@ -40,8 +41,8 @@ function spacingForZoom(zoom: number): number {
     }
   }
 
-  // Snap to nearest power-of-2 fraction of 1° for grid alignment
-  // This ensures e.g. 0.07 → 0.0625, 0.18 → 0.125, etc.
+  // S'aligne sur la fraction de 1° en puissance de 2 la plus proche pour
+  // l'alignement de la grille : p. ex. 0.07 → 0.0625, 0.18 → 0.125, etc.
   if (raw >= 0.01) {
     const log2 = Math.round(Math.log2(1 / raw));
     raw = 1 / Math.pow(2, log2);
@@ -51,7 +52,7 @@ function spacingForZoom(zoom: number): number {
 }
 
 /**
- * Round a coordinate to the nearest grid step.
+ * Arrondit une coordonnée au pas de grille le plus proche.
  */
 function snapToGrid(value: number, step: number): number {
   return Math.round(value / step) * step;
@@ -96,9 +97,9 @@ function maxPointsForZoom(zoom: number): number {
 }
 
 /**
- * Compute a regular wind grid covering the fetched bounds.
- * The returned points are row-major (top=north, left=west) so they can be
- * uploaded directly as a wind texture without a reconstruction pass.
+ * Calcule une grille de vent régulière couvrant l'emprise récupérée.
+ * Les points renvoyés sont ligne par ligne (haut = nord, gauche = ouest) pour
+ * être envoyés directement comme texture de vent, sans passe de reconstruction.
  */
 export function computeWindGrid(
   bounds: { north: number; south: number; east: number; west: number },
@@ -145,7 +146,8 @@ export function computeWindGrid(
 }
 
 /**
- * Create a stable cache key for a coordinate pair (rounded to grid precision).
+ * Crée une clé de cache stable pour une paire de coordonnées (arrondie à la
+ * précision de la grille).
  */
 export function coordCacheKey(lat: number, lng: number): string {
   return `${lat.toFixed(4)},${lng.toFixed(4)}`;

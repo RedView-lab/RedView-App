@@ -18,7 +18,7 @@ export interface RouteWeatherHourly {
   wind_speed_10m: number[];
   cloud_cover: number[];
   relative_humidity_2m: number[];
-  sunshine_duration: number[]; // in minutes (0..60)
+  sunshine_duration: number[]; // en minutes (0..60)
 }
 
 export interface RouteWeatherSample {
@@ -49,7 +49,7 @@ export interface RouteWeatherValues {
   sunshineMin: number;
 }
 
-// ── Cache & In-Flight Management ─────────────────────────────────────
+// ── Cache et requêtes en vol ─────────────────────────────────────────
 
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 /** Vitesse de repli pour estimer la durée de sortie sans prédiction. */
@@ -126,8 +126,8 @@ export function sampleRouteForWeather(
     while (pointIdx < points.length - 1 && (points[pointIdx + 1]?.distanceM ?? 0) < targetDistanceM) {
       pointIdx++;
     }
-    // The nearer of the two points around the target: the last station is the
-    // finish itself, not the point before it.
+    // Le plus proche des deux points autour de la cible : la dernière station
+    // est l'arrivée elle-même, pas le point qui la précède.
     const next = points[pointIdx + 1];
     const pt = next && Math.abs((next.distanceM ?? 0) - targetDistanceM) < Math.abs((points[pointIdx]!.distanceM ?? 0) - targetDistanceM)
       ? next
@@ -269,7 +269,7 @@ export async function fetchRouteWeatherDataset(
 
           const rawSunshine = hourly.sunshine_duration?.[t];
           if (Number.isFinite(rawSunshine)) {
-            // Open-Meteo sunshine_duration is in seconds (0..3600), convert to minutes (0..60)
+            // sunshine_duration d'Open-Meteo est en secondes (0..3600), converti en minutes (0..60)
             sunshineArr[t] = Math.max(0, Math.min(60, Math.round((rawSunshine as number) / 60)));
           } else {
             // Fallback: inverse of cloud cover (NaN si la couverture manque aussi)

@@ -119,7 +119,7 @@ export function useWeatherOverlay(
     scheduleRefreshRef.current = scheduleRefresh;
   }, [scheduleRefresh]);
 
-  // 1. Map Lifecycle & Mapbox Event Listeners (strictly [map, isMapLoaded])
+  // 1. Cycle de vie de la carte et écouteurs d'événements Mapbox (strictement [map, isMapLoaded])
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     isCancelledRef.current = false;
@@ -144,7 +144,7 @@ export function useWeatherOverlay(
 
       if (!canMutateStyle()) return;
 
-      // Re-apply already rendered layers if map style stripped them (e.g. during basemap transition)
+      // Réapplique les couches déjà rendues si le style de la carte les a retirées (p. ex. pendant un changement de fond)
       const rendered = renderedRef.current;
       let hasMissingLayer = false;
       for (const layer of currentActive) {
@@ -156,7 +156,7 @@ export function useWeatherOverlay(
         }
       }
 
-      // Ensure any layer NOT in currentActive is guaranteed hidden
+      // Garantit que toute couche ABSENTE de currentActive est masquée
       for (const key of SUPPORTED_KEYS) {
         if (!currentActive.some((l) => l.key === key)) {
           hideLayerCompletely(key);
@@ -196,7 +196,7 @@ export function useWeatherOverlay(
   });
   const isMountedRef = useRef(false);
 
-  // 2. State Coordinator: Reacts to layer toggles, time scrubbing, and palette changes
+  // 2. Coordinateur d'état : réagit aux bascules de couches, au glissement du temps et aux changements de palette
   useEffect(() => {
     if (!map || !isMapLoaded) return;
 
@@ -208,7 +208,7 @@ export function useWeatherOverlay(
       return;
     }
 
-    // Immediately hide any layers that are no longer active
+    // Masque tout de suite les couches qui ne sont plus actives
     for (const key of SUPPORTED_KEYS) {
       if (!activeLayers.some((layer) => layer.key === key)) {
         hideLayerCompletely(key);
@@ -230,19 +230,19 @@ export function useWeatherOverlay(
 
     prevStateRef.current = { selectionKey, activeLayersKey, paletteKey, enabled: state.enabled };
 
-    // Case 1: Palette change (color, band breakpoints, scale) -> Instant recolor (delay = 0, no debounce)
+    // Cas 1 : changement de palette (couleur, seuils des bandes, échelle) -> recoloration instantanée (délai = 0, sans anti-rebond)
     if (isPaletteChanged && !isSelectionChanged && !isLayersChanged && !isEnabledChanged) {
       scheduleRefresh('force', false);
       return;
     }
 
-    // Case 2: Layer toggle on/off or render mode change -> Instant display (delay = 0)
+    // Cas 2 : couche activée / désactivée ou changement de mode de rendu -> affichage instantané (délai = 0)
     if (isLayersChanged || isEnabledChanged) {
       scheduleRefresh('normal', false);
       return;
     }
 
-    // Case 3: Time scrubbing / date change -> Fast 60ms debounce for rapid drag responsiveness
+    // Cas 3 : glissement du temps / changement de date -> anti-rebond rapide de 60 ms pour un glisser réactif
     if (isSelectionChanged) {
       scheduleRefresh('normal', 'scrub');
     }

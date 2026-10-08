@@ -218,12 +218,12 @@ export function useWindTerrainOverlay(
 
     let cancelled = false;
 
-    // Lenient mutation gate: `isStyleLoaded()` flickers `false` on every
-    // styledata event during heavy DEM/ortho tile churn. Mapbox accepts
-    // `addSource`/`addLayer`/`updateImage` as long as a real style object
-    // exists, so we only require that. The strict-gate version silently
-    // aborted refresh() under load, leaving the wind overlay invisible
-    // ("ne marche pas du tout").
+    // Porte de mutation tolérante : `isStyleLoaded()` repasse à `false` à chaque
+    // événement styledata pendant un fort renouvellement des tuiles DEM / ortho.
+    // Mapbox accepte `addSource`/`addLayer`/`updateImage` tant qu'un vrai objet
+    // style existe, donc on n'exige que cela. La version à porte stricte
+    // abandonnait sans bruit refresh() sous charge, laissant la surcouche de
+    // vent invisible (« ne marche pas du tout »).
     const canMutateStyle = () => {
       if (cancelled) return false;
       try {
@@ -253,7 +253,7 @@ export function useWindTerrainOverlay(
         if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
       } catch {
-        /* no-op */
+        /* rien à faire */
       }
       releaseRenderedUrl();
     };
@@ -262,7 +262,7 @@ export function useWindTerrainOverlay(
       try {
         if (map.getLayer(LAYER_ID)) map.setLayoutProperty(LAYER_ID, 'visibility', 'none');
       } catch {
-        /* no-op */
+        /* rien à faire */
       }
     };
 
@@ -337,9 +337,9 @@ export function useWindTerrainOverlay(
     const refresh = async (reason: RefreshReason) => {
       if (!canMutateStyle()) return;
 
-      // Note: don't reject on projection here — we don't have bounds yet.
-      // The dataset-aware guard inside renderFromData will reject if the
-      // computed grid bounds are unsafe for the current projection.
+      // Note : pas de refus sur la projection ici — on n'a pas encore l'emprise.
+      // La garde qui connaît les données dans renderFromData refusera si
+      // l'emprise de grille calculée n'est pas sûre pour la projection courante.
       if (getWindOverlayProjection(map) === 'other') {
         clearOverlay();
         return;
@@ -408,10 +408,10 @@ export function useWindTerrainOverlay(
     };
 
     const scheduleRefresh = (reason: RefreshReason) => {
-      // Skip all work when overlay is disabled — avoids paying fetch /
-      // canvas / style-mutation cost on every moveend after wind is
-      // turned off. Pairs with the disable-effect below that fully
-      // removes the source/layer.
+      // Saute tout le travail quand la surcouche est désactivée — évite de payer
+      // requête / canvas / mutation de style à chaque moveend une fois le vent
+      // éteint. Va de pair avec l'effet de désactivation ci-dessous qui retire
+      // complètement la source et la couche.
       if (!stateRef.current.enabled) {
         if (debounceRef.current) {
           window.clearTimeout(debounceRef.current);
@@ -477,15 +477,16 @@ export function useWindTerrainOverlay(
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     if (!enabled) {
-      // Full teardown when overlay is disabled. Just hiding the layer left
-      // a stale image source attached, which on globe projection / heavy
-      // basemap switches kept paying styledata + GPU cost on every
-      // map gesture ("carte megalent après avoir utilisé les overlays").
+      // Démontage complet quand la surcouche est désactivée. Masquer seulement
+      // la couche laissait une source image périmée attachée, qui, en projection
+      // globe / lors de gros changements de fond, continuait de coûter du
+      // styledata + du GPU à chaque geste sur la carte (« carte megalent après
+      // avoir utilisé les overlays »).
       try {
         if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
       } catch {
-        /* no-op */
+        /* rien à faire */
       }
       return;
     }

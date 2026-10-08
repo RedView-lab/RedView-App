@@ -119,7 +119,7 @@ export function removeWindParticles(map: MapboxMap): void {
 			map.removeLayer(WIND_LAYER_ID);
 		}
 	} catch {
-		// Ignore style teardown races.
+		// On ignore les courses avec le démontage du style.
 	}
 	setStoredLayer(map, null);
 }

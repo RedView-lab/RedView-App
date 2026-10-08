@@ -228,7 +228,7 @@ export function useWeatherStyleManager({
       return;
     }
 
-    // Safety guard: Never show a layer that is disabled in current state
+    // Garde de sécurité : ne jamais montrer une couche désactivée dans l'état courant
     const currentState = stateRef.current;
     if (!currentState.enabled || !currentState.layers.some((l) => l.key === key && l.enabled)) {
       hideLayerCompletely(key);
@@ -241,12 +241,12 @@ export function useWeatherStyleManager({
         map.setLayoutProperty(layerId(key), 'visibility', 'visible');
       }
     } catch {
-      /* no-op */
+      /* rien à faire */
     }
     try {
       map.triggerRepaint();
     } catch {
-      /* no-op */
+      /* rien à faire */
     }
   };
 
@@ -261,7 +261,7 @@ export function useWeatherStyleManager({
         map.setPaintProperty(RADAR_LAYER_ID, 'raster-opacity', (stateRef.current.palettes?.rain?.opacity ?? 85) / 100);
       }
     } catch {
-      /* no-op */
+      /* rien à faire */
     }
   };
 
@@ -389,12 +389,12 @@ export function useWeatherStyleManager({
         map.setLayoutProperty(RADAR_LAYER_ID, 'visibility', 'visible');
       }
     } catch {
-      /* no-op */
+      /* rien à faire */
     }
     try {
       map.triggerRepaint();
     } catch {
-      /* no-op */
+      /* rien à faire */
     }
   };
 
@@ -442,7 +442,7 @@ export function useWeatherStyleManager({
           tiles: [tileUrl],
           tileSize: 512,
           minzoom: 0,
-          maxzoom: 7, // RainViewer ceiling is 7. Mapbox automatically overscales on zoom 8+
+          maxzoom: 7, // RainViewer plafonne à 7. Mapbox suréchantillonne automatiquement à partir du zoom 8
         } as never);
       }
 
@@ -456,7 +456,7 @@ export function useWeatherStyleManager({
             'raster-opacity': opacity,
             'raster-fade-duration': 150,
             'raster-resampling': 'linear',
-            // Keep true colours under dusk/night scene lighting.
+            // Garde les vraies couleurs sous l'éclairage de crépuscule / nuit.
             'raster-emissive-strength': 1,
           },
         } as never);
@@ -482,7 +482,7 @@ export function useWeatherStyleManager({
     try {
       map?.triggerRepaint();
     } catch {
-      /* no-op */
+      /* rien à faire */
     }
   };
 
@@ -494,14 +494,14 @@ export function useWeatherStyleManager({
         if (map.getLayer(layerId(key))) map.removeLayer(layerId(key));
         if (map.getSource(sourceId(key))) map.removeSource(sourceId(key));
       } catch {
-        /* no-op */
+        /* rien à faire */
       }
     }
     try {
       if (map.getLayer(RADAR_LAYER_ID)) map.removeLayer(RADAR_LAYER_ID);
       if (map.getSource(RADAR_SOURCE_ID)) map.removeSource(RADAR_SOURCE_ID);
     } catch {
-      /* no-op */
+      /* rien à faire */
     }
     // Les URLs détenues par le cache recoloré restent vivantes pour la
     // réouverture du projet ; les autres sont révoquées.
@@ -521,7 +521,7 @@ export function useWeatherStyleManager({
   ): boolean => {
     if (!map || !canMutateStyle()) return false;
 
-    // Strict guard: NEVER render or show a layer that is disabled in state
+    // Garde stricte : ne JAMAIS rendre ni montrer une couche désactivée dans l'état
     const currentState = stateRef.current;
     if (!currentState.enabled || !currentState.layers.some((l) => l.key === key && l.enabled)) {
       hideLayerCompletely(key);
@@ -555,7 +555,7 @@ export function useWeatherStyleManager({
             'raster-opacity': 1,
             'raster-fade-duration': 0,
             'raster-resampling': mode === 'fill' ? 'nearest' : 'linear',
-            // Keep true colours under dusk/night scene lighting.
+            // Garde les vraies couleurs sous l'éclairage de crépuscule / nuit.
             'raster-emissive-strength': 1,
           },
         } as never);

@@ -1,8 +1,9 @@
 import { clamp, lerp, WIND_BLEND_DURATION } from './types';
 import type { WindBounds, WindData, WindSample } from './types';
 
-// ── Wind field bilinear sampler with temporal blending ──────────────────
-// Encapsulates all texture lookups and prev→current data crossfade logic.
+// ── Échantillonneur bilinéaire du champ de vent avec fondu temporel ──────
+// Regroupe toutes les lectures de texture et la logique de fondu enchaîné
+// des données précédentes → courantes.
 
 export class WindSampler {
   private windData: WindData | null = null;
@@ -10,8 +11,8 @@ export class WindSampler {
 
   private prevWindData: WindData | null = null;
   private prevBounds: WindBounds | null = null;
-  private blendT = 1;        // 0→1 crossfade progress
-  private blendStart = 0;    // performance.now() when blend started
+  private blendT = 1;        // progression du fondu enchaîné 0→1
+  private blendStart = 0;    // performance.now() au début du fondu
 
   get hasData(): boolean {
     return this.windData !== null && this.bounds !== null;
@@ -21,7 +22,7 @@ export class WindSampler {
     return this.bounds;
   }
 
-  /** Feed new wind data. Initiates smooth crossfade from previous data. */
+  /** Fournit de nouvelles données de vent. Lance un fondu enchaîné doux depuis les données précédentes. */
   setWindData(windData: WindData, bounds: WindBounds): void {
     if (this.windData && this.bounds) {
       this.prevWindData = this.windData;
@@ -33,7 +34,7 @@ export class WindSampler {
     this.bounds = bounds;
   }
 
-  /** Advance crossfade timer. Call once per frame. */
+  /** Avance le minuteur du fondu enchaîné. À appeler une fois par image. */
   advanceBlend(now: number): void {
     if (this.blendT >= 1) return;
     const elapsed = (now - this.blendStart) / 1000;
@@ -44,7 +45,7 @@ export class WindSampler {
     }
   }
 
-  /** Sample wind at a geographic position with bilinear interpolation + blending. */
+  /** Échantillonne le vent en une position géographique, interpolation bilinéaire + fondu. */
   sample(lng: number, lat: number): WindSample {
     const current = this.sampleFrom(lng, lat, this.windData, this.bounds);
 
@@ -61,7 +62,7 @@ export class WindSampler {
     return current;
   }
 
-  /** Release all references. */
+  /** Libère toutes les références. */
   dispose(): void {
     this.windData = null;
     this.bounds = null;
@@ -69,7 +70,7 @@ export class WindSampler {
     this.prevBounds = null;
   }
 
-  // ── Private sampling ───────────────────────────────────────────────
+  // ── Échantillonnage privé ──────────────────────────────────────────
 
   private sampleFrom(
     lng: number, lat: number,
@@ -91,7 +92,7 @@ export class WindSampler {
     const tx = nx - x0;
     const ty = ny - y0;
 
-    // Bilinear interpolation of U/V components
+    // Interpolation bilinéaire des composantes U/V
     const tl = this.readUV(x0, y0, data);
     const tr = this.readUV(x1, y0, data);
     const bl = this.readUV(x0, y1, data);
@@ -100,7 +101,7 @@ export class WindSampler {
     const u = lerp(lerp(tl.u, tr.u, tx), lerp(bl.u, br.u, tx), ty);
     const v = lerp(lerp(tl.v, tr.v, tx), lerp(bl.v, br.v, tx), ty);
 
-    // Bilinear interpolation of scalar speed (B channel)
+    // Interpolation bilinéaire de la vitesse scalaire (canal B)
     const sTL = this.readSpeed(x0, y0, data);
     const sTR = this.readSpeed(x1, y0, data);
     const sBL = this.readSpeed(x0, y1, data);

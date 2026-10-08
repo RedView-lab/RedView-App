@@ -1,6 +1,6 @@
 import type { ParticleProgram, SavedGLState } from './types';
 
-// ── GLSL Vertex Shader ─────────────────────────────────────────────────
+// ── Vertex shader GLSL ─────────────────────────────────────────────────
 
 const VERTEX_SHADER = `
 precision highp float;
@@ -20,7 +20,7 @@ void main() {
 }
 `;
 
-// ── GLSL Fragment Shader ───────────────────────────────────────────────
+// ── Fragment shader GLSL ───────────────────────────────────────────────
 
 const FRAGMENT_SHADER = `
 precision mediump float;
@@ -32,7 +32,7 @@ void main() {
 }
 `;
 
-// ── Shader compilation ─────────────────────────────────────────────────
+// ── Compilation des shaders ────────────────────────────────────────────
 
 function compileShader(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader {
   const shader = gl.createShader(type);
@@ -75,9 +75,9 @@ export function createWindProgram(gl: WebGL2RenderingContext): ParticleProgram {
   };
 }
 
-// ── GL state save / restore ────────────────────────────────────────────
-// Mapbox shares a single WebGL context — we must restore every piece of
-// state we touch to avoid corrupting map tile rendering.
+// ── Sauvegarde / restauration de l'état GL ─────────────────────────────
+// Mapbox partage un seul contexte WebGL — il faut restaurer chaque élément
+// d'état que l'on touche pour ne pas corrompre le rendu des tuiles.
 
 export function saveGLState(gl: WebGL2RenderingContext, attribs: number[]): SavedGLState {
   return {

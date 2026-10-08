@@ -1,6 +1,7 @@
 /**
- * RedView European Doppler Radar Client
- * Fetches real-time composite radar frames for live precipitation observation (Instant T).
+ * Client du radar Doppler européen de RedView
+ * Récupère les images radar composites en temps réel pour l'observation des
+ * précipitations en direct (instant T).
  */
 
 export interface RadarFrame {
@@ -34,10 +35,10 @@ export async function fetchRadarMeta(signal?: AbortSignal): Promise<RadarMapsPay
 
     inFlightRadarPromise = (async () => {
       try {
-        // Primary: same-origin proxy (api/weather.ts), cached server-side
+        // Principal : proxy de même origine (api/weather.ts), mis en cache côté serveur
         let res = await fetch('/api/weather/radar.json', { signal: fetchController.signal });
         if (!res.ok) {
-          // Fallback: direct public RainViewer endpoint
+          // Repli : point d'accès public RainViewer en direct
           res = await fetch('https://api.rainviewer.com/public/weather-maps.json', { signal: fetchController.signal });
         }
         window.clearTimeout(timeout);
@@ -109,12 +110,12 @@ export function formatRadarPaletteParam(
 }
 
 /**
- * Builds the Mapbox-compatible raster tile URL for the given radar frame path.
- * If the Service Worker is actively controlling the page, routes through
- * /radar-tiles/{z}/{x}/{y} to recolor Doppler radar reflectivity tiles in real time
- * according to the user's custom palette.
- * Otherwise, falls back to the direct upstream RainViewer Slippy CDN URL for zero-latency,
- * rock-solid reliability in any environment (plain HTTP, incognito, non-SW).
+ * Construit l'URL de tuile raster compatible Mapbox pour le chemin d'image
+ * radar donné. Si le Service Worker contrôle la page, passe par
+ * /radar-tiles/{z}/{x}/{y} pour recolorer en temps réel les tuiles de
+ * réflectivité du radar Doppler selon la palette de l'utilisateur.
+ * Sinon, se replie sur l'URL directe du CDN Slippy de RainViewer, sans latence
+ * et fiable dans tout environnement (HTTP simple, navigation privée, sans SW).
  */
 export function buildRadarTileUrl(
   host: string,
@@ -130,7 +131,7 @@ export function buildRadarTileUrl(
 }
 
 /**
- * Formats a local Date to YYYY-MM-DD.
+ * Formate une Date locale en AAAA-MM-JJ.
  */
 function formatLocalDateIso(date: Date = new Date()): string {
   const y = date.getFullYear();
@@ -140,8 +141,9 @@ function formatLocalDateIso(date: Date = new Date()): string {
 }
 
 /**
- * Checks whether the timeline date and time corresponds to "Instant T" (live real-time).
- * Defined as: today's date + within +/- 75 minutes of the current local minute.
+ * Vérifie si la date et l'heure de la frise correspondent à l'« instant T »
+ * (temps réel). Défini comme : la date du jour + à ±75 minutes de la minute
+ * locale actuelle.
  */
 export function isInstantT(targetDate?: string, targetTime?: string): boolean {
   if (!targetDate || !targetTime) return true;

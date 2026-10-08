@@ -1,28 +1,28 @@
-// ── Wind data point returned from Open-Meteo ──────────────────────────
+// ── Point de données de vent renvoyé par Open-Meteo ───────────────────
 
 export interface WindPoint {
   lat: number;
   lng: number;
   /** Wind speed in m/s */
   speed: number;
-  /** Meteorological wind direction in degrees (0–360, where wind comes FROM) */
+  /** Direction météorologique du vent en degrés (0–360, d'où vient le vent) */
   direction: number;
   /** Wind gusts in m/s */
   gusts: number;
 }
 
-// ── Grid configuration for viewport sampling ──────────────────────────
+// ── Configuration de la grille d'échantillonnage de la vue ────────────
 
 export interface WindGridConfig {
-  /** Minimum latitude */
+  /** Latitude minimale */
   south: number;
-  /** Maximum latitude */
+  /** Latitude maximale */
   north: number;
-  /** Minimum longitude */
+  /** Longitude minimale */
   west: number;
-  /** Maximum longitude */
+  /** Longitude maximale */
   east: number;
-  /** Grid spacing in degrees */
+  /** Pas de la grille, en degrés */
   spacing: number;
 }
 
@@ -43,7 +43,7 @@ export interface WindGridDefinition {
 
 export type WindDataSource = 'self-hosted-vps' | 'unknown';
 
-// ── Hook state returned by useWind ────────────────────────────────────
+// ── État du hook renvoyé par useWind ──────────────────────────────────
 
 export interface WindTimeSelection {
   date: string;

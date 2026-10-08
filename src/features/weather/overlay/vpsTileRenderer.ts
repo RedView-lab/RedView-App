@@ -1,7 +1,7 @@
 /**
- * RedView VPS Tile Renderer
- * Hardware-fast 1D lookup table recoloring for weather raster textures.
- * Executes in < 2ms without main thread frame drop.
+ * Rendu des tuiles du VPS RedView
+ * Recoloration très rapide des textures raster météo par table de
+ * correspondance 1D. S'exécute en < 2 ms sans perte d'image sur le fil principal.
  */
 import type { WeatherOverlayMetric, WeatherOverlayMode } from './types';
 import { getWeatherOverlayColorStops } from '../config/paletteMetrics';
@@ -45,18 +45,18 @@ function buildColorLookup(
   const lookup = new Uint32Array(256);
   const span = Math.max(1e-5, valMax - valMin);
 
-  // If custom palette bands exist, use them
+  // S'il existe des bandes de palette personnalisées, on les utilise
   if (paletteBands && paletteBands.length > 0) {
     for (let b = 0; b < 256; b++) {
       const realVal = valMin + (b / 255.0) * span;
 
-      // Precipitation mask: 0 mm or < 0.1 mm (dry land) MUST be completely transparent
+      // Masque de précipitations : 0 mm ou < 0,1 mm (sec) DOIT être entièrement transparent
       if (metric === 'rain' && (realVal < 0.1 || b === 0)) {
         lookup[b] = 0;
         continue;
       }
 
-      // Find band
+      // Trouve la bande
       let matchedIndex = paletteBands.length - 1;
       for (let i = 0; i < paletteBands.length; i++) {
         const band = paletteBands[i]!;
@@ -75,10 +75,10 @@ function buildColorLookup(
 
       if (mode === 'fill') {
         const [r, g, bl] = hexToRgb(matchedBand.color);
-        // Little-endian ABGR for Canvas ImageData
+        // ABGR petit-boutiste pour l'ImageData du canvas
         lookup[b] = (255 << 24) | (bl << 16) | (g << 8) | r;
       } else {
-        // Gradient interpolation across bands
+        // Interpolation en dégradé entre les bandes
         const bandMin = Number.isFinite(matchedBand.minValue) ? matchedBand.minValue! : valMin;
         const bandMax = Number.isFinite(matchedBand.maxValue) ? matchedBand.maxValue! : valMax;
         const bandSpan = Math.max(1e-5, bandMax - bandMin);
@@ -92,7 +92,7 @@ function buildColorLookup(
         const g = Math.round(lerp(currentRgb[1], nextRgb[1], t));
         const bl = Math.round(lerp(currentRgb[2], nextRgb[2], t));
 
-        // Smooth alpha edge ramp for light rain (0.1mm - 0.5mm)
+        // Rampe d'alpha douce en bordure pour la pluie faible (0,1 mm - 0,5 mm)
         let alpha = 255;
         if (metric === 'rain' && realVal < 0.5) {
           alpha = Math.round(lerp(110, 255, clamp((realVal - 0.1) / 0.4, 0, 1)));
@@ -104,12 +104,12 @@ function buildColorLookup(
     return lookup;
   }
 
-  // Default color stops from paletteMetrics
+  // Paliers de couleur par défaut, d'après paletteMetrics
   const defaultStops = getWeatherOverlayColorStops(metric);
   for (let b = 0; b < 256; b++) {
     const realVal = valMin + (b / 255.0) * span;
 
-    // Precipitation mask: 0 mm or < 0.1 mm (dry land) MUST be completely transparent
+    // Masque de précipitations : 0 mm ou < 0,1 mm (sec) DOIT être entièrement transparent
     if (metric === 'rain' && (realVal < 0.1 || b === 0)) {
       lookup[b] = 0;
       continue;
@@ -195,8 +195,9 @@ function getFeatherFactors(width: number, height: number, featherRadius: number 
 }
 
 /**
- * Fast 1D color table recoloring for weather raster textures.
- * Creates an isolated canvas per recolor to avoid race conditions during asynchronous toBlob() encoding.
+ * Recoloration rapide des textures raster météo par table de couleurs 1D.
+ * Crée un canvas isolé par recoloration pour éviter les courses pendant
+ * l'encodage asynchrone toBlob().
  */
 export function recolorTileToCanvas(
   sourceImage: HTMLImageElement | ImageBitmap,
@@ -252,14 +253,14 @@ export function recolorTileToCanvas(
 
 export function canvasToBlobUrl(canvas: HTMLCanvasElement): Promise<string> {
   return new Promise<string>((resolve) => {
-    // WebP hardware encoder is 5x-10x faster than PNG on modern browsers
+    // L'encodeur WebP matériel est 5 à 10× plus rapide que PNG dans les navigateurs récents
     try {
       canvas.toBlob((blob) => {
         if (blob) {
           resolve(URL.createObjectURL(blob));
           return;
         }
-        // Fallback to PNG if WebP fails
+        // Repli sur PNG si WebP échoue
         canvas.toBlob((pngBlob) => {
           if (!pngBlob) {
             resolve(canvas.toDataURL('image/png'));
@@ -293,12 +294,12 @@ export function cacheRecoloredBlob(signature: string, blobUrl: string): void {
     if (oldestKey) {
       const oldUrl = recoloredBlobCache.get(oldestKey);
       if (oldUrl?.startsWith('blob:')) {
-        // Safe 10s delayed revocation so Mapbox has finished reading it during transitions
+        // Révocation différée de 10 s, sans risque : Mapbox a fini de le lire pendant les transitions
         window.setTimeout(() => {
           try {
             URL.revokeObjectURL(oldUrl);
           } catch {
-            /* no-op */
+            /* rien à faire */
           }
         }, 10_000);
       }
@@ -330,7 +331,7 @@ export function releaseOverlayBlobUrl(url: string | undefined, delayMs = 0): voi
     try {
       URL.revokeObjectURL(url);
     } catch {
-      /* no-op */
+      /* rien à faire */
     }
   };
   if (delayMs > 0) window.setTimeout(revoke, delayMs);
@@ -343,7 +344,7 @@ export function clearRecoloredBlobCache(): void {
       try {
         URL.revokeObjectURL(url);
       } catch {
-        /* no-op */
+        /* rien à faire */
       }
     }
   }
@@ -351,8 +352,9 @@ export function clearRecoloredBlobCache(): void {
 }
 
 /**
- * Background pre-recoloring helper for adjacent forecast hours.
- * Runs in idle time to populate recoloredBlobCache ahead of user interaction.
+ * Aide de recoloration en arrière-plan des heures de prévision voisines.
+ * Tourne pendant l'inactivité pour remplir recoloredBlobCache avant l'action
+ * de l'utilisateur.
  */
 export async function preRecolorTile(
   img: HTMLImageElement,

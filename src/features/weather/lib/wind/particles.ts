@@ -9,26 +9,27 @@ import {
 import type { WindBounds } from './types';
 import type { WindSampler } from './sampler';
 
-// ── Particle simulation engine ─────────────────────────────────────────
-// Owns all per-particle SOA arrays. Handles advection, lifecycle,
-// viewport redistribution, and screen-space overlap resolution.
+// ── Moteur de simulation des particules ────────────────────────────────
+// Possède tous les tableaux SOA par particule. Gère l'advection, le cycle de
+// vie, la redistribution selon la vue et la résolution des chevauchements à
+// l'écran.
 
 export class ParticleSystem {
-  // SOA (Structure-of-Arrays) layout for cache-friendly iteration
+  // Disposition SOA (Structure-of-Arrays) pour un parcours favorable au cache
   positions = new Float32Array(MAX_PARTICLE_ALLOC * 2);
   ages = new Float32Array(MAX_PARTICLE_ALLOC);
   lives = new Float32Array(MAX_PARTICLE_ALLOC);
   speeds = new Float32Array(MAX_PARTICLE_ALLOC);
   windU = new Float32Array(MAX_PARTICLE_ALLOC);
   windV = new Float32Array(MAX_PARTICLE_ALLOC);
-  fade = new Float32Array(MAX_PARTICLE_ALLOC);       // 0→1 fade-in
+  fade = new Float32Array(MAX_PARTICLE_ALLOC);       // fondu d'entrée 0→1
 
-  // Trail ring buffers — store Mercator coords directly (avoids fromLngLat in geometry builder)
+  // Tampons circulaires des traînées — stockent directement les coordonnées Mercator (évite fromLngLat dans le constructeur de géométrie)
   trailX = new Float32Array(MAX_PARTICLE_ALLOC * TRAIL_LENGTH);
   trailY = new Float32Array(MAX_PARTICLE_ALLOC * TRAIL_LENGTH);
   trailZ = new Float32Array(MAX_PARTICLE_ALLOC * TRAIL_LENGTH);
-  trailHead = new Uint8Array(MAX_PARTICLE_ALLOC);    // write index into ring buffer
-  trailCount = new Uint8Array(MAX_PARTICLE_ALLOC);   // valid entries (0 → TRAIL_LENGTH)
+  trailHead = new Uint8Array(MAX_PARTICLE_ALLOC);    // indice d'écriture dans le tampon circulaire
+  trailCount = new Uint8Array(MAX_PARTICLE_ALLOC);   // entrées valides (0 → TRAIL_LENGTH)
 
   count = 0;
 
@@ -58,8 +59,8 @@ export class ParticleSystem {
   }
 
   /**
-   * Redistribute particles when the viewport pans or zooms.
-   * Out-of-viewport particles are recycled inside with fade-in.
+   * Redistribue les particules quand la vue se déplace ou zoome.
+   * Les particules hors de la vue sont recyclées à l'intérieur avec un fondu d'entrée.
    */
   redistribute(map: MapboxMap, _bounds: WindBounds): void {
     if (this.count === 0) return;
@@ -88,7 +89,7 @@ export class ParticleSystem {
     this.lastVpCenterLat = vpCenterLat;
     this.lastVpZoom = vpZoom;
 
-    // Adjust count for new zoom level
+    // Ajuste le nombre au nouveau niveau de zoom
     const newCount = adaptiveParticleCount(vpZoom, vpW, vpH);
     if (newCount > this.count) {
       for (let i = this.count; i < newCount; i++) {
@@ -97,7 +98,7 @@ export class ParticleSystem {
     }
     this.count = newCount;
 
-    // Single pass: recycle out-of-viewport + reshuffle on zoom change
+    // Une seule passe : recycle hors de la vue + rebat au changement de zoom
     const mLng = vpW * 0.1;
     const mLat = vpH * 0.1;
     const reshuffleRate = zoomDelta >= 0.3 ? clamp(zoomDelta * 0.6, 0.1, 0.85) : 0;
@@ -110,16 +111,16 @@ export class ParticleSystem {
         lng >= vpWest - mLng && lng <= vpEast + mLng &&
         lat >= vpSouth - mLat && lat <= vpNorth + mLat;
       if (!inVp) {
-        // Out of viewport → always recycle
+        // Hors de la vue → toujours recyclée
         this.respawnInViewport(i, vpWest, vpEast, vpSouth, vpNorth, false);
       } else if (reshuffleRate > 0 && Math.random() < reshuffleRate) {
-        // Zoom changed → reshuffle for even coverage
+        // Zoom changé → rebat pour une couverture uniforme
         this.respawnInViewport(i, vpWest, vpEast, vpSouth, vpNorth, true);
       }
     }
   }
 
-  /** Advance all particles by one time step. */
+  /** Avance toutes les particules d'un pas de temps. */
   advance(now: number, map: MapboxMap, sampler: WindSampler, bounds: WindBounds): void {
     if (this.lastFrameTime === 0) {
       this.lastFrameTime = now;
@@ -138,22 +139,22 @@ export class ParticleSystem {
       let lng = this.positions[pi];
       let lat = this.positions[pi + 1];
 
-      // Smooth fade-in
+      // Fondu d'entrée doux
       if (this.fade[i] < 1) {
         this.fade[i] = Math.min(1, this.fade[i] + dt * FADE_IN_RATE);
       }
 
-      // Age → respawn when expired
+      // Âge → renaissance à expiration
       this.ages[i] += dt;
       if (this.ages[i] >= this.lives[i]) {
         this.respawnFromMap(i, map);
         continue;
       }
 
-      // Sample wind field
+      // Échantillonne le champ de vent
       const wind = sampler.sample(lng, lat);
 
-      // Temporal smoothing to prevent direction jitter
+      // Lissage temporel pour éviter les tremblements de direction
       const prev = this.speeds[i];
       if (prev > 0.01 && this.fade[i] > 0.1) {
         this.speeds[i] = lerp(prev, wind.speed, DIRECTION_SMOOTH);
@@ -165,12 +166,12 @@ export class ParticleSystem {
         this.windV[i] = wind.v;
       }
 
-      // Advect position
+      // Advection de la position
       const mpdLng = Math.max(1, Math.cos(lat * Math.PI / 180) * metersPerDegreeLat);
       lng += (this.windU[i] * dt * simScale) / mpdLng;
       lat += (this.windV[i] * dt * simScale) / metersPerDegreeLat;
 
-      // Out of both data bounds and viewport → recycle
+      // Hors de l'emprise des données et de la vue → recyclée
       if (!isInsideBounds(lng, lat, bounds) && !isInViewport(lng, lat, map)) {
         this.respawnFromMap(i, map);
         continue;
@@ -179,12 +180,12 @@ export class ParticleSystem {
       this.positions[pi] = lng;
       this.positions[pi + 1] = lat;
 
-      // Record trail position as Mercator coords (pre-converted — avoids 30K fromLngLat in geometry)
+      // Enregistre la position de traînée en coordonnées Mercator (préconverties — évite 30 K fromLngLat dans la géométrie)
       const cosLat = Math.cos(lat * Math.PI / 180);
       const metersPerPx = EQUATORIAL_CIRCUMFERENCE * cosLat / (512 * Math.pow(2, map.getZoom()));
       const elev = map.queryTerrainElevation?.([lng, lat]) ?? 0;
       const altitude = elev + clamp(metersPerPx * 3, 10, 40);
-      // Inline Mercator conversion (no object allocation)
+      // Conversion Mercator en ligne (sans allocation d'objet)
       const mcX = (180 + lng) / 360;
       const mcY = (180 - (180 / Math.PI * Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)))) / 360;
       const mcZ = altitude / (EQUATORIAL_CIRCUMFERENCE * Math.max(1e-6, cosLat));
@@ -196,7 +197,7 @@ export class ParticleSystem {
       this.trailHead[i] = (head + 1) % TRAIL_LENGTH;
       if (this.trailCount[i] < TRAIL_LENGTH) this.trailCount[i]++;
 
-      // Drop-rate random respawn (wind-layer style organic flow)
+      // Renaissance aléatoire au taux de chute (écoulement organique à la wind-layer)
       const speedT = clamp(this.speeds[i] / 25, 0, 1);
       if (Math.random() < DROP_RATE + speedT * DROP_RATE_BUMP) {
         this.respawnFromMap(i, map);
@@ -204,7 +205,7 @@ export class ParticleSystem {
     }
   }
 
-  // ── Respawn helpers ────────────────────────────────────────────────
+  // ── Aides de renaissance ───────────────────────────────────────────
 
   private respawnFromMap(index: number, map: MapboxMap): void {
     const b = map.getBounds();
@@ -222,9 +223,9 @@ export class ParticleSystem {
     this.positions[pi] = lerp(west, east, Math.random());
     this.positions[pi + 1] = lerp(south, north, Math.random());
 
-    // Speed-adaptive lifetime (set after first wind sample; default mid-range)
+    // Durée de vie selon la vitesse (fixée après le premier échantillon de vent ; milieu de plage par défaut)
     const baseLife = adaptiveLifetime(this.speeds[i] || 5);
-    // ±20% jitter to prevent synchronized respawn waves
+    // Gigue de ±20 % pour éviter des vagues de renaissance synchronisées
     const jitter = 0.8 + Math.random() * 0.4;
     this.lives[i] = baseLife * jitter;
 
@@ -238,7 +239,7 @@ export class ParticleSystem {
   }
 }
 
-// ── Boundary helpers ───────────────────────────────────────────────────
+// ── Aides de bord ──────────────────────────────────────────────────────
 
 function isInsideBounds(lng: number, lat: number, bounds: WindBounds): boolean {
   return lng >= bounds.west && lng <= bounds.east && lat >= bounds.south && lat <= bounds.north;

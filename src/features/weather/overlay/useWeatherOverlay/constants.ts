@@ -5,24 +5,26 @@ const LAYER_PREFIX = 'weather-overlay-layer';
 export const SUPPORTED_KEYS: WeatherOverlayMetric[] = ['temperature', 'feelsLike', 'rain', 'cloudCover', 'humidity'];
 export const MOVE_DEBOUNCE_MS = 220;
 export const SCRUB_DEBOUNCE_MS = 60;
-// Style-sync recovery timings.
+// Délais de rattrapage de la synchronisation du style.
 //
-// Background: `map.isStyleLoaded()` can stay false for surprisingly long
-// stretches under heavy DEM/slope/altitude tile churn (every styledata event
-// flips the internal flag back to false). The previous 15 s watchdog meant
-// the user could see "Météo · Synchronisation du style 75 %" for up to a
-// quarter of a minute before the fallback path kicked in — feeling stuck.
+// Contexte : `map.isStyleLoaded()` peut rester faux étonnamment longtemps sous
+// un fort renouvellement des tuiles DEM / pente / altitude (chaque événement
+// styledata remet le drapeau interne à faux). L'ancien garde-fou de 15 s
+// faisait que l'utilisateur pouvait voir « Météo · Synchronisation du style
+// 75 % » jusqu'à un quart de minute avant que le chemin de repli ne prenne le
+// relais — impression de blocage.
 //
-// New strategy:
-//   * `canMutateStyle()` (in hook.ts) auto-promotes the source-count-based
-//     fallback inline whenever the strict `isStyleLoaded()` returns false
-//     but the style + sources actually exist. This eliminates the wait
-//     entirely in the common case.
-//   * The watchdog timer below is now a much shorter safety net for the
-//     truly degenerate case (mid-style-swap, totally empty style).
-//   * Retry interval relaxed from 96 ms (status spam) to 250 ms — still
-//     near-instant from the user's perspective, with one tenth the timer
-//     churn.
+// Nouvelle stratégie :
+//   * `canMutateStyle()` (dans hook.ts) bascule directement sur le repli fondé
+//     sur le nombre de sources chaque fois que le strict `isStyleLoaded()`
+//     renvoie faux alors que le style et les sources existent bel et bien.
+//     L'attente disparaît entièrement dans le cas courant.
+//   * Le minuteur de garde ci-dessous n'est plus qu'un filet de sécurité bien
+//     plus court pour le cas vraiment dégénéré (en plein changement de style,
+//     style totalement vide).
+//   * Intervalle de nouvel essai relâché de 96 ms (avalanche de statuts) à
+//     250 ms — toujours quasi instantané pour l'utilisateur, avec dix fois
+//     moins de minuteurs.
 export const STYLE_SYNC_RETRY_MS = 250;
 export const STYLE_SYNC_WATCHDOG_MS = 1_500;
 export const STYLE_SYNC_POLL_MS = 600;

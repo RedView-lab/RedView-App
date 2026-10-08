@@ -6,12 +6,12 @@ import { WindSampler } from './sampler';
 import { ParticleSystem } from './particles';
 import { TrailGeometryBuilder } from './geometry';
 
-// ── Mapbox GL Custom Layer for Wind Arrows ─────────────────────────────
-// Thin orchestrator: composes WindSampler + ParticleSystem + ArrowGeometryBuilder.
-// Owns GPU resources (program + VBO) and the Mapbox lifecycle hooks.
+// ── Couche personnalisée Mapbox GL des flèches de vent ─────────────────
+// Orchestrateur léger : compose WindSampler + ParticleSystem + ArrowGeometryBuilder.
+// Possède les ressources GPU (programme + VBO) et les hooks de cycle de vie Mapbox.
 
-/** Below this zoom Mapbox uses globe projection which distorts custom layers.
- *  Wind trails are hidden and particles reset when zooming back in. */
+/** Sous ce zoom, Mapbox utilise la projection globe qui déforme les couches personnalisées.
+ *  Les traînées de vent sont masquées et les particules réinitialisées au retour en zoom. */
 const MIN_WIND_ZOOM = 3.0;
 
 export class WindCustomLayer implements CustomLayerInterface {
@@ -32,7 +32,7 @@ export class WindCustomLayer implements CustomLayerInterface {
   private initialized = false;
   private vertexCount = 0;
 
-  // ── Mapbox lifecycle ─────────────────────────────────────────────
+  // ── Cycle de vie Mapbox ──────────────────────────────────────────
 
   onAdd(map: MapboxMap, gl: WebGL2RenderingContext): void {
     this.map = map;
@@ -47,7 +47,7 @@ export class WindCustomLayer implements CustomLayerInterface {
 
     this.map.triggerRepaint();
 
-    // Hide wind when zoomed out past the globe projection threshold
+    // Masque le vent quand on dézoome au-delà du seuil de la projection globe
     if (this.map.getZoom() < MIN_WIND_ZOOM) {
       this.vertexCount = 0;
       return;
@@ -55,25 +55,25 @@ export class WindCustomLayer implements CustomLayerInterface {
 
     const bounds = this.sampler.currentBounds!;
 
-    // First-frame init
+    // Initialisation à la première image
     if (!this.initialized) {
       this.particles.configure(this.map, bounds);
       this.initialized = true;
     }
 
-    // Viewport redistribution
+    // Redistribution selon la vue
     this.particles.redistribute(this.map, bounds);
 
     const now = performance.now();
     this.sampler.advanceBlend(now);
     this.particles.advance(now, this.map, this.sampler, bounds);
 
-    // Build trail geometry
+    // Construit la géométrie des traînées
     const vertexCount = this.geometry.build(this.particles, this.map);
     this.vertexCount = vertexCount;
     if (vertexCount === 0) return;
 
-    // Upload to GPU
+    // Envoi au GPU
     const uploadSize = vertexCount * VERTEX_STRIDE;
     const prevBuf = this.gl.getParameter(this.gl.ARRAY_BUFFER_BINDING) as WebGLBuffer | null;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
@@ -110,7 +110,7 @@ export class WindCustomLayer implements CustomLayerInterface {
     gl.disable(gl.STENCIL_TEST);
     gl.disable(gl.CULL_FACE);
 
-    // No polygonOffset — adaptive altitude offset handles terrain clearance properly
+    // Pas de polygonOffset — le décalage d'altitude adaptatif gère correctement le dégagement au-dessus du terrain
     gl.disable(gl.POLYGON_OFFSET_FILL);
 
     gl.drawArrays(gl.TRIANGLES, 0, this.vertexCount);
@@ -129,7 +129,7 @@ export class WindCustomLayer implements CustomLayerInterface {
     this.initialized = false;
   }
 
-  // ── Public API ───────────────────────────────────────────────────
+  // ── API publique ─────────────────────────────────────────────────
 
   setWind(windData: WindData, bounds: WindBounds): void {
     const wasEmpty = !this.sampler.hasData;

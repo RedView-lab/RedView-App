@@ -114,9 +114,10 @@ export function useWeatherDataPipeline({
       return true;
     }
 
-    // 1. ULTRA-FAST INSTANT MEMORY PATH (< 1 ms):
-    // If metadata and all active layer textures/blobs are already in memory, apply them immediately
-    // without ANY network delay or loading flicker (no 20% loading flash).
+    // 1. CHEMIN INSTANTANÉ EN MÉMOIRE (< 1 ms) :
+    // si les métadonnées et toutes les textures / blobs des couches actives sont
+    // déjà en mémoire, on les applique tout de suite, sans AUCUN délai réseau ni
+    // clignotement de chargement (pas de flash de chargement à 20 %).
     const cachedMeta = getCachedWeatherMeta();
     if (cachedMeta && Array.isArray(cachedMeta.hours) && cachedMeta.hours.length > 0) {
       const closestHour = findClosestForecastHour(currentState.date, currentState.time, cachedMeta.hours);
@@ -184,7 +185,7 @@ export function useWeatherDataPipeline({
           }));
           completeStyleRecovery();
 
-          // Background prefetch adjacent hours in idle time
+          // Préchargement en arrière-plan des heures voisines pendant l'inactivité
           for (const activeLayer of currentActiveLayers) {
             if (activeLayer.key !== 'rain' || !(currentState.radarEnabled && isInstantT(currentState.date, currentState.time))) {
               prefetchAdjacentHours(
@@ -214,8 +215,8 @@ export function useWeatherDataPipeline({
       }
     }
 
-    // 2. NETWORK / PROCESSING PATH:
-    // Only emit loading progress if actual async work is needed
+    // 2. CHEMIN RÉSEAU / TRAITEMENT :
+    // n'émet de progression de chargement que si un vrai travail asynchrone est nécessaire
     publishStatus(createOverlayStatus({
       id: STATUS_ID,
       label: 'Météo (VPS)',
@@ -278,7 +279,7 @@ export function useWeatherDataPipeline({
         continue;
       }
 
-      // Real-time Doppler Radar observation at Instant T (only when radarEnabled is toggled on)
+      // Observation radar Doppler en temps réel à l'instant T (seulement quand radarEnabled est activé)
       if (key === 'rain') {
         const isLive = (currentState.radarEnabled ?? true) && isInstantT(currentState.date, currentState.time);
         if (isLive) {
@@ -322,7 +323,7 @@ export function useWeatherDataPipeline({
         continue;
       }
 
-      // Check client recolored blob cache (< 1ms instant display)
+      // Regarde le cache des blobs recolorés côté client (affichage instantané < 1 ms)
       const cachedBlob = getCachedRecoloredBlob(signature);
       if (cachedBlob) {
         if (!ensureLayer(key, activeLayer.mode, cachedBlob, coords)) {
@@ -334,7 +335,7 @@ export function useWeatherDataPipeline({
         continue;
       }
 
-      // Load high-resolution raster tile from VPS (instant memory cache + HTTP/2)
+      // Charge la tuile raster haute résolution du VPS (cache mémoire instantané + HTTP/2)
       const tileUrl = buildVpsTileUrl(key, closestHour, meta.tileFormat || 'png');
       let img: HTMLImageElement;
       try {
@@ -393,7 +394,7 @@ export function useWeatherDataPipeline({
       renderedRef.current[key] = { url: blobUrl, coords, signature };
       renderedCount += 1;
 
-      // Prefetch adjacent hours in background and pre-recolor them
+      // Précharge les heures voisines en arrière-plan et les recolore d'avance
       prefetchAdjacentHours(
         key,
         closestHour,
@@ -454,7 +455,7 @@ export function useWeatherDataPipeline({
         if (!canMutateStyle()) {
           armStyleRecovery(reason, 'vps-style-not-ready');
         } else {
-          // Self-healing: Ensure status never stays frozen at loading/20%
+          // Auto-réparation : le statut ne reste jamais figé sur chargement / 20 %
           publishStatus(createOverlayStatus({
             id: STATUS_ID,
             label: 'Météo (VPS)',

@@ -1,6 +1,6 @@
-/** Wind grid decoded from the VPS weather tiles (consumed by the wind layer). */
+/** Grille de vent décodée depuis les tuiles météo du VPS (utilisée par la couche de vent). */
 export interface WindData {
-  /** Float32 grid: 3 floats per texel [u, v, speed] (row-major, top=north). */
+  /** Grille Float32 : 3 flottants par texel [u, v, vitesse] (ligne par ligne, haut = nord). */
   image: Float32Array;
   width: number;
   height: number;
