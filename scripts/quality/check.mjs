@@ -12,7 +12,7 @@
  * Exclus volontairement : bench:quick (seuils de perf dépendant de la machine
  * et de son alimentation : il sort en échec sur un seuil, mais une batterie
  * suffit à en dépasser), bench:snow et bench:avalanche (≈ 2,5 min chacun ;
- * bench:snow réécrit son rapport versionné), benchs réseau (routing, POI).
+ * bench:snow réécrit son rapport), benchs réseau (routing, POI).
  */
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';

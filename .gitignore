@@ -41,6 +41,9 @@ Untitled*.txt
 start-dev.bat
 
 # ── Local tooling (assistants, design caches, scratch files) ───
+.claude/
+.claudeignore
+skills-lock.json
 .claude-temp/
 .figma-cache/
 .workbuddy-ai/
@@ -55,20 +58,6 @@ scripts/lidar-index/.cache/
 scripts/design-workbench/.cache/
 scripts/design-workbench/out/
 
-# ── Benchmark reports (regenerated on every run) ───────────────
-script-test-bench/reports/*.json
-script-test-bench/reports/routing-quality/*.json
-script-test-bench/reports/routing-quality/*.html
-script-test-bench/reports/lidar-viewer-perf/*.json
-script-test-bench/reports/lidar-viewer-shots/
-script-test-bench/reports/lidar-viewer-engines/
-script-test-bench/reports/dashboard-perf/
-script-test-bench/reports/user-journey/
-script-test-bench/reports/screen-audit/
-script-test-bench/reports/comments-e2e/
-script-test-bench/reports/follow-e2e/
-script-test-bench/reports/snow-quality/*.json
-script-test-bench/reports/snow-quality/*.html
-script-test-bench/reports/snow-quality/*.png
-script-test-bench/reports/snow-quality/cache/
+# ── Benchmark outputs (regenerated on every run) ──────────────
+script-test-bench/reports/
 script-test-bench/routing-quality/vps/dist/

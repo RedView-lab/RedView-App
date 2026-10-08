@@ -69,7 +69,7 @@ actuelle le fait tuer par le noyau.
 bash scripts/vps/perf-snapshot.sh <libellé> [--with-db] [--with-weather]
 ```
 
-Lecture seule ; écrit `script-test-bench/reports/server-perf/snapshot-<date>-<libellé>.md`
+Lecture seule ; écrit `script-test-bench/reports/server-perf/snapshot-<date>-<libellé>.md` (sortie non versionnée ; les instantanés de référence sont archivés dans `docs/operations/server-perf/`)
 (mémoire, swap, processus, conteneurs, tas Java et latence de BRouter sur 24 h,
 mesures du temps réel, disque, tables MariaDB). À lancer avant et après chaque réglage.
 

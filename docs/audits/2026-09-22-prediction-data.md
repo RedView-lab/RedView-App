@@ -3,7 +3,7 @@
 > **Date** : 22 septembre 2026
 > **Périmètre** : `vendor/redviewalgo` (moteur Rust/WASM), `src/features/fitPredictor`, `src/features/itineraryPanel`
 > **Méthode** : lecture exhaustive du pipeline + **expérience contrôlée exécutant le vrai moteur WASM**
-> (harnais : `script-test-bench/audit/predictor-nopower.mjs`, sortie brute : `audit/predictor-nopower-output.txt`)
+> (harnais : `script-test-bench/audit/predictor-nopower.mjs`, sortie brute : [`data/2026-09-22-predictor-nopower-output.txt`](data/2026-09-22-predictor-nopower-output.txt))
 
 ---
 
@@ -230,4 +230,4 @@ Le moteur expose déjà tout le nécessaire (`predict_vs_actual`, `lib.rs:172`).
 node script-test-bench/audit/predictor-nopower.mjs
 ```
 
-Le harnais encode lui-même les FIT (CRC-16 FIT), construit le GPX, simule le coureur et exécute le WASM de production (`src/features/fitPredictor/engine/pkg`). Sortie brute conservée dans `script-test-bench/audit-predictor-nopower-output.txt`.
+Le harnais encode lui-même les FIT (CRC-16 FIT), construit le GPX, simule le coureur et exécute le WASM de production (`src/features/fitPredictor/engine/pkg`). Sortie brute conservée dans [`data/2026-09-22-predictor-nopower-output.txt`](data/2026-09-22-predictor-nopower-output.txt).

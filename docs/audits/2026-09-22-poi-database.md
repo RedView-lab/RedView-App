@@ -111,7 +111,7 @@ Ce script sautait par ailleurs toute catégorie déjà peuplée (`if (existing.c
 | `src/features/poi/types.ts`, `lib/poi-icons.ts` | 46 catégories, libellés dérivés du JSON, vocabulaire d'icônes logiques. |
 | `src/features/itineraryPanel/hooks/useItineraryPoiMap.ts`, `lib/schedule/poi-to-timeline.ts`, `sections/PoiSection.tsx`, `types.ts`, `lib/project/defaultState.ts`, `components/ItineraryPanelContainer/useItineraryGpxImport.ts`, `sections/timeline/KindBadge.tsx` | Câblage complet : chaque ligne du panneau agrège désormais toute sa famille (ex. *Fontaines* → `drinking_water`, `water_point`, `water_tap`, `spring`, `fountain`) ; deux nouvelles lignes **Santé** et **Transport** ; la ligne *Cols* qui ne pointait sur rien est branchée. |
 | `script-test-bench/audit/poi-db.mjs` | Harnais d'audit réutilisable (taginfo France + Overpass `out count` + base live), avec `--taxonomy`. |
-| `script-test-bench/reports/poi-db-audit.{md,json}` | Rapport d'audit brut (état « avant »). |
+| [`data/2026-09-22-poi-db-audit.md`](data/2026-09-22-poi-db-audit.md) | Rapport d'audit brut (état « avant ») ; régénéré par `script-test-bench/audit/poi-db.mjs` dans `script-test-bench/reports/`. |
 
 Scripts dépréciés sur le VPS (`*.deprecated`) pour qu'ils ne puissent plus être relancés par erreur : `parse-pbf.js`, `import-pois.js`, `ingest-all-france.sh`.
 

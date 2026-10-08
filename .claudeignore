@@ -54,7 +54,6 @@ vendor/redviewalgo/target/
 # Données géospatiales & JSON volumineux
 # ───────────────────────────────────────────────
 public/france-border.json
-public/poi-icons/
 public/images/
 public/flags/
 public/brand/
