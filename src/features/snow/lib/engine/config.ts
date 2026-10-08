@@ -96,10 +96,10 @@ export interface SnowEngineConfig {
 
   // ---- Transport gravitaire (SnowSlide) ----
   /**
-   * Vertical holding depth h = mult·S^pow, m, S in degrees: CHM's curve, the
-   * one evaluated against ALS snow-depth maps (Quéno et al. 2024; the original
-   * snowslide.f 45538·S^−2.982 strips steep terrain far more). 3.5 m at 30°,
-   * 2.0 m at 40°, 1.3 m at 50°, 0.9 m at 60°.
+   * Hauteur de rétention verticale h = mult·S^pow, m, S en degrés : la courbe de
+   * CHM, celle évaluée contre les cartes de hauteur de neige ALS (Quéno et al. 2024 ;
+   * le snowslide.f d'origine 45538·S^−2.982 dégarnit bien plus le terrain raide).
+   * 3,5 m à 30°, 2,0 m à 40°, 1,3 m à 50°, 0,9 m à 60°.
    */
   holdingMult: number;
   holdingPow: number;
@@ -140,7 +140,7 @@ export interface SnowEngineConfig {
   snowTempC: number;
   rainTempC: number;
 
-  // ---- Sub-grid variability (Helbig 2015: σ = HS^a·μ^b·exp(−(ξ/L)²), m) ----
+  // ---- Variabilité sous-maille (Helbig 2015 : σ = HS^a·μ^b·exp(−(ξ/L)²), m) ----
   helbigA: number;
   helbigB: number;
   /**

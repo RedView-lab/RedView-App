@@ -24,7 +24,7 @@ export const WIND_BLEND_DURATION = 1.2; // secondes de fondu enchaîné précéd
 export const DROP_RATE = 0.001;          // probabilité de base de renaissance aléatoire par image
 export const DROP_RATE_BUMP = 0.001;     // taux de renaissance supplémentaire × speed_t
 
-// ── Max allocation (avoids re-allocation on zoom) ──────────────────────
+// ── Allocation max (évite de réallouer au zoom) ────────────────────────
 
 export const MAX_PARTICLE_ALLOC = 2000;
 const PARTICLE_COUNT_REDUCTION_FACTOR = 3;

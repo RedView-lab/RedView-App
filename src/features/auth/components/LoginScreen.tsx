@@ -215,7 +215,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
         const trimmedName = resolveSignupName(name, trimmedEmail)
 
         if (ENABLE_EMAIL_VERIFICATION) {
-          // Call API to send 6-digit verification code via Resend.
+          // Appel à l'API pour envoyer un code de vérification à 6 chiffres via Resend.
           // Anti-énumération : l'API répond 200 avec le même message que
           // l'adresse soit libre ou déjà associée à un compte (dans ce cas
           // l'utilisateur reçoit un e-mail « compte existant » au lieu du

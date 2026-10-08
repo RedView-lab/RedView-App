@@ -277,7 +277,7 @@ export function createViewportPoiMarkerElement(feature: PoiFeature): HTMLButtonE
     element.appendChild(badge);
   }
 
-  // Symbol with pause time for POIs associated with pauses
+  // Symbole avec la durée de pause pour les POI associés à des pauses
   // Coercion numérique : la durée vient des données projet (défense en profondeur avant innerHTML).
   const pauseDurationMin = Number(feature.pauseDurationMin);
   if (Number.isFinite(pauseDurationMin) && pauseDurationMin > 0) {

@@ -1,9 +1,9 @@
-// POI icon URL resolution.
+// Résolution des URL d'icônes de POI.
 //
-// Markers are DOM overlays (`lib/poi-markers.ts`) that reference these SVGs
-// directly via `<img src>`, so there is no Mapbox sprite/atlas registration
-// pipeline here — just URL lookups shared by the markers, the POI popup and
-// the Dashboard search dropdowns.
+// Les marqueurs sont des surcouches DOM (`lib/poi-markers.ts`) qui référencent
+// ces SVG directement via `<img src>` : pas de pipeline d'enregistrement de
+// sprite/atlas Mapbox ici — juste des recherches d'URL partagées par les
+// marqueurs, la popup de POI et les menus de recherche du Dashboard.
 //
 // La taxonomie (`poi-taxonomy.json`) déclare pour chaque catégorie un nom
 // d'icône *logique* (`drinking_water`, `shop`, `refuge`, `medical`, …). C'est

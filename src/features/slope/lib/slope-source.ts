@@ -42,7 +42,7 @@ function resolveSlopeMaxZoom(options: SlopeTileSourceOptions): number {
   if (options.sourceDem === 'fast-30m' || options.sourceDem === '30m') {
     return 13;
   }
-  // Analysis zone: pipeline pre-computes at z14, draped seamlessly on GPU beyond
+  // Zone d'analyse : le pipeline précalcule à z14, drapé sans raccord sur le GPU au-delà
   if (options.zone) {
     return 14;
   }

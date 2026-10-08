@@ -12,8 +12,8 @@ import { lidarTranslationPairs } from './lidar';
 import { mapTranslationPairs } from './map';
 import { projectBrowserTranslationPairs } from './projectBrowser';
 
-// Order matters on a duplicate key (the later pair wins); keep the same order
-// as LEADING_FILES + alphabetical in scripts/build/prebuild-api-i18n.mjs.
+// L'ordre compte en cas de clé en double (la paire la plus tardive l'emporte) ;
+// garder le même ordre que LEADING_FILES + alphabétique dans scripts/build/prebuild-api-i18n.mjs.
 export const APP_TRANSLATION_PAIRS: ReadonlyArray<AppTranslationPair> = [
   ...globalTranslationPairs,
   ...projectBrowserTranslationPairs,

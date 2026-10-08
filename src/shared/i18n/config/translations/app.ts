@@ -1,7 +1,7 @@
 import type { AppTranslationPair } from '../types';
 
 export const appTranslationPairs: ReadonlyArray<AppTranslationPair> = [
-  // ── App shell / document ────────────────────────────────────────────────
+  // ── Coquille de l'app / document ────────────────────────────────────────
   { fr: 'RedView — Cartographie 3D Haute Résolution & LiDAR Outdoor', en: 'RedView — High-Resolution 3D Mapping & Outdoor LiDAR' },
   { fr: 'Chargement du projet…', en: 'Loading project…' },
   { fr: 'Afficher le panneau gauche', en: 'Show left panel' },
@@ -10,13 +10,13 @@ export const appTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Carte', en: 'Map' },
   { fr: 'Carte prête', en: 'Map ready' },
 
-  // ── Dev auth screen ─────────────────────────────────────────────────────
+  // ── Écran d'authentification de dev ─────────────────────────────────────
   { fr: "Visualisation 3D haute résolution & calculs d'itinéraires en temps réel.", en: 'High-resolution 3D visualization & real-time route computation.' },
   { fr: "⚡ Accéder à l'application (Accès Démo Immédiat)", en: '⚡ Open the app (instant demo access)' },
   { fr: 'ou', en: 'or' },
   { fr: '← Revenir au site vitrine RedView (', en: '← Back to the RedView website (' },
 
-  // ── Global error boundary ───────────────────────────────────────────────
+  // ── Limite d'erreur globale ─────────────────────────────────────────────
   { fr: "Anomalie d'affichage 3D", en: '3D display issue' },
   { fr: "Une erreur inattendue est survenue dans le moteur graphique ou l'interface. Vous pouvez recharger l'application en toute sécurité.", en: 'An unexpected error occurred in the graphics engine or the interface. You can safely reload the app.' },
   { fr: "Recharger l'application", en: 'Reload the app' },
@@ -31,18 +31,18 @@ export const appTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Donner un avis', en: 'Give feedback' },
   { fr: 'Donner un avis ou signaler un bug', en: 'Give feedback or report a bug' },
 
-  // ── Projects / folders (shared utils) ───────────────────────────────────
+  // ── Projets / dossiers (outils partagés) ────────────────────────────────
   { fr: 'Nouveau dossier', en: 'New folder' },
   { fr: 'Le nom du dossier ne peut pas être vide', en: 'Folder name cannot be empty' },
   { fr: 'Le nom du projet ne peut pas être vide', en: 'Project name cannot be empty' },
   { fr: 'Non authentifié', en: 'Not authenticated' },
   { fr: 'IndexedDB indisponible dans cet environnement', en: 'IndexedDB not available in this environment' },
 
-  // ── Project browser: cards, account ─────────────────────────────────────
+  // ── Navigateur de projets : cartes, compte ──────────────────────────────
   { fr: 'Modifier', en: 'Edit' },
   { fr: 'Impossible de mettre à jour le mot de passe.', en: 'Could not update the password.' },
 
-  // ── Project browser: billing ────────────────────────────────────────────
+  // ── Navigateur de projets : facturation ─────────────────────────────────
   { fr: 'Mécène & Soutien', en: 'Patron & Support' },
   { fr: 'Impossible de mettre à jour le montant.', en: 'Unable to update the amount.' },
   { fr: 'Le montant doit être de 15 € ou plus.', en: 'The amount must be €15 or more.' },
@@ -73,7 +73,7 @@ export const appTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Badge Fondateur officiel', en: 'Official Founder badge' },
   { fr: '3 mois de compte PRO offerts (v1)', en: '3 months of PRO account free (v1)' },
 
-  // ── Weather / wind overlay status ───────────────────────────────────────
+  // ── État de la surcouche météo / vent ───────────────────────────────────
   { fr: 'Météo (VPS)', en: 'Weather (VPS)' },
   { fr: 'Préparation de la grille vent', en: 'Preparing the wind grid' },
   { fr: 'Aucune grille vent disponible', en: 'No wind grid available' },
@@ -108,7 +108,7 @@ export const appTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Open-Meteo 429 : trop de requêtes', en: 'Open-Meteo 429: Too Many Requests' },
   { fr: 'Open-Meteo a renvoyé une réponse vide', en: 'Open-Meteo returned an empty response' },
 
-  // ── Control panel ───────────────────────────────────────────────────────
+  // ── Panneau de contrôle ─────────────────────────────────────────────────
   { fr: 'Choisir une couleur', en: 'Choose a color' },
   { fr: 'Choisir {{color}}', en: 'Choose {{color}}' },
   { fr: 'Choisir la couleur du seuil {{threshold}}', en: 'Choose the color for the {{threshold}} threshold' },

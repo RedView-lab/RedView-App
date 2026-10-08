@@ -1,9 +1,9 @@
 /**
- * IndexedDB Storage Layer for RedView Projects & Cache.
+ * Couche de stockage IndexedDB des projets et du cache de RedView.
  *
  * Élimine définitivement le plafond de 5 Mo de localStorage (QuotaExceededError).
  * Capacité de plusieurs gigaoctets par domaine.
- * Transactionnel, asynchrone, crash-proof.
+ * Transactionnel, asynchrone, résistant aux plantages.
  */
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import type { ProjectViewState } from '@/features/itineraryPanel/lib/project/layers';

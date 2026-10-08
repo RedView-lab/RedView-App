@@ -235,10 +235,10 @@ export function attachDemSource(ctx: Ctx): void {
       if (getActiveDem3dQuality() === 'fast-30m') return;
       if (!fns.canMutateStyle()) return;
       if (!map.getSource(unifiedDEMSource.id)) return;
-      // If terrain isn't actually bound to unified-dem after setTiles,
-      // force a clean rebuild — that's the symptom the user reports
-      // ("la donnée semble là mais les tuiles ne se mettent pas en
-      // relief").
+      // Si le terrain n'est pas réellement lié à unified-dem après setTiles,
+      // forcer une reconstruction propre — c'est le symptôme que signale
+      // l'utilisateur (« la donnée semble là mais les tuiles ne se mettent pas
+      // en relief »).
       if (!fns.isUnifiedTerrainActive()) {
         console.warn('[map3d] setTiles verify: terrain not bound, forcing rebuild');
         fns.refreshDemSource({ forceRebuild: true });

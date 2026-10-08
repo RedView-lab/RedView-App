@@ -313,7 +313,7 @@ class SunRayLayer implements CustomLayerInterface {
   private rebuildVertices(): void {
     if (this.anchorLng == null || this.anchorLat == null) return;
 
-    // Anchor: fixed point on terrain
+    // Ancre : point fixe sur le terrain
     const anchor = mapboxgl.MercatorCoordinate.fromLngLat(
       { lng: this.anchorLng, lat: this.anchorLat },
       this.anchorElevation + SUN_RAY_ANCHOR_LIFT_METERS,

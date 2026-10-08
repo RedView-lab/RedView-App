@@ -338,7 +338,7 @@ export function useWind(
     void fetchForViewport(map);
   }, [enabled, fetchForViewport, map, selection.date, selection.time]);
 
-  // ── Init / destroy on enable toggle ─────────────────────────────
+  // ── Initialisation / destruction à l'activation ─────────────────
 
   useEffect(() => {
     if (!map) {

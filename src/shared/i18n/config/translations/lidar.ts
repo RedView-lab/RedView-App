@@ -196,7 +196,7 @@ export const lidarTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: '{{category}} - km {{km}} (favori)', en: '{{category}} - km {{km}} (favorite)' },
   { fr: 'Refuge / gîte', en: 'Hut / lodge' },
 
-  // Viewer tools: right-click menu, measurements, terrain analyses
+  // Outils du viewer : menu du clic droit, mesures, analyses de terrain
   { fr: 'Menu contextuel du viewer', en: 'Viewer context menu' },
   { fr: 'Sol (modèle de terrain)', en: 'Ground (terrain model)' },
   { fr: 'Ouvrir la carte topographique', en: 'Open the topographic map' },
@@ -341,7 +341,7 @@ export const lidarTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'WebGL 2 indisponible dans ce navigateur', en: 'WebGL 2 unavailable in this browser' },
   { fr: 'Contexte WebGL perdu', en: 'WebGL context lost' },
   { fr: '{{step}} sans réponse après {{seconds}} s', en: '{{step}} did not answer within {{seconds}} s' },
-  // Photo mode (right panel)
+  // Mode photo (panneau de droite)
   { fr: 'Mode photo', en: 'Photo mode' },
   { fr: 'mode photo', en: 'photo mode' },
   { fr: 'Disponible uniquement avec le moteur WebGPU.', en: 'Only available with the WebGPU engine.' },

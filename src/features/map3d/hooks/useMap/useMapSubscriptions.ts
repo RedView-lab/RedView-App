@@ -67,8 +67,9 @@ export function setupMapSubscriptions({
     }
   });
 
-  // Environment (jour / crépuscule / nuit) or sunlight direction changed:
-  // re-apply lights + fog live. Style swaps re-apply via the bootstrap.
+  // Ambiance (jour / crépuscule / nuit) ou direction du soleil changée :
+  // réappliquer lumières + brouillard en direct. Les changements de style les
+  // réappliquent via l'amorçage.
   const unsubscribeMapEnvironment = subscribeMapEnvironment(() => {
     applyMapEnvironment(map);
   });

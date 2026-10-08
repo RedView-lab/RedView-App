@@ -2,15 +2,15 @@
  * Client du serveur POI self-hébergé (`redview-poi-server`).
  *
  * Architecture :
- *   browser → /api/poi  (proxy same-origin, api/poi.ts)
- *           → http://<vps>/poi/{bbox|corridor}
- *           → Fastify → SQLite + R*Tree
+ *   navigateur → /api/poi  (proxy de même origine, api/poi.ts)
+ *              → http://<vps>/poi/{bbox|corridor}
+ *              → Fastify → SQLite + R*Tree
  *
  * Le service backend prend en charge :
- *   - bbox queries
- *   - corridor queries (polyligne + radius) en une seule requête, pas de
- *     chunking côté client (la DB R*Tree est ~50 ms, peu importe la
- *     taille de la GPX, contre 20+ requêtes Overpass séquentielles).
+ *   - les requêtes par emprise (bbox)
+ *   - les requêtes de couloir (polyligne + rayon) en une seule requête, sans
+ *     découpage côté client (la base R*Tree répond en ~50 ms, quelle que soit
+ *     la taille du GPX, contre 20+ requêtes Overpass séquentielles).
  *
  * Pour rester compatible avec le hook existant `usePoi`, on expose une
  * fonction `fetchPoisAlongRouteChunked` qui simule le streaming

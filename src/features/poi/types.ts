@@ -1,4 +1,4 @@
-// ── POI categories relevant to ultra cyclists / outdoor sports ─────────
+// ── Catégories de POI utiles aux ultra-cyclistes / sports outdoor ─────────
 //
 // La liste des catégories est dérivée de `poi-taxonomy.json`, la source de
 // vérité partagée avec l'importeur OSM du serveur POI. Le type `PoiCategory`

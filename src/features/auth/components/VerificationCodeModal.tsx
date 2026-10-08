@@ -42,7 +42,7 @@ export default function VerificationCodeModal({
 
   const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Focus first input on open & start countdown
+  // Focus sur le premier champ à l'ouverture et lancement du compte à rebours
   useEffect(() => {
     if (isOpen) {
       setDigits(emptyDigits());
@@ -102,7 +102,7 @@ export default function VerificationCodeModal({
       inputsRef.current[index + 1]?.focus();
     }
 
-    // Auto submit on last (6th) digit
+    // Envoi automatique au dernier (6e) chiffre
     if (digit && index === CODE_LENGTH - 1 && newDigits.every((d) => d !== '')) {
       verify(newDigits.join(''));
     }
