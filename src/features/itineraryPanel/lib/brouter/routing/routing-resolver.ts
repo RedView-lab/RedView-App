@@ -1,16 +1,16 @@
 /**
- * Top-level orchestrator for the BRouter routing pipeline.
+ * Orchestrateur de haut niveau du pipeline de routage BRouter.
  *
  *   resolveItineraryRouting(itinerary)
- *     → builds a BRF from the itinerary's basic + expert state,
- *     → uploads it (cached by content hash),
- *     → returns the `{ profileId, warnings, brf }` to use in
+ *     → construit un BRF à partir de l'état simple + expert de l'itinéraire,
+ *     → l'envoie (en cache par hachage du contenu),
+ *     → renvoie le `{ profileId, warnings, brf }` à utiliser dans
  *       `fetchBrouterRoute({ profile: profileId })`.
  *
- * Every itinerary is routed with its generated profile (`custom_<id>`), even
- * with neutral sliders: a stock BRouter profile (trekking, hiking-mountain…)
- * would ignore the rider's settings and the RedView cost model. If the upload
- * fails twice, the routing fails with a clear message instead.
+ * Chaque itinéraire est routé avec son profil généré (`custom_<id>`), même avec
+ * des curseurs neutres : un profil BRouter d'origine (trekking, hiking-mountain…)
+ * ignorerait les réglages du cycliste et le modèle de coût de RedView. Si l'envoi
+ * échoue deux fois, le routage échoue avec un message clair à la place.
  */
 import type { Itinerary } from '../../../types';
 import { normalizeDiscipline } from '@/shared/lib/discipline';
@@ -23,11 +23,11 @@ import {
 } from './road-types-resolver';
 
 export interface ResolvedRouting {
-  /** Generated profile id to pass to BRouter (`custom_<id>`). */
+  /** Id du profil généré à passer à BRouter (`custom_<id>`). */
   profileId: string;
-  /** Resolution of the road-type filters (warnings + auto-corrections). */
+  /** Résolution des filtres de types de route (avertissements + corrections automatiques). */
   roadTypes: RoadTypesResolution;
-  /** The generated BRF text. */
+  /** Le texte BRF généré. */
   brf: string;
   /**
    * Coût BRouter au mètre attendu avec ce profil (coefficient A*, voir

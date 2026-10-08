@@ -10,7 +10,7 @@ interface BrfFootWayContextOptions {
   brfNum: (v: number, digits?: number) => string;
 }
 
-/** Base cost per metre of each way family, before the panel multipliers. */
+/** Coût de base par mètre de chaque famille de voies, avant les multiplicateurs du panneau. */
 interface FootBaseCosts {
   footInfraPaved: number;
   footInfraUnpaved: number;
@@ -26,24 +26,24 @@ interface FootBaseCosts {
   trackGrade2: number;
   trackRough: number;
   bridleway: number;
-  /** [with sidewalk, without sidewalk] */
+  /** [avec trottoir, sans trottoir] */
   unclassified: [number, number];
   tertiary: [number, number];
   secondary: [number, number];
   primary: [number, number];
   trunk: [number, number];
   unknown: number;
-  /** Additive penalty for trail_visibility=bad / horrible / no. */
+  /** Pénalité additive pour trail_visibility=bad / horrible / no. */
   visibility: [number, number, number];
-  /** Additive penalty for informal (unofficial) paths. */
+  /** Pénalité additive pour les sentiers informels (non officiels). */
   informal: number;
-  /** Turn cost (scaled by user_turn_factor). */
+  /** Coût de virage (mis à l'échelle par user_turn_factor). */
   turn: number;
 }
 
 const FOOT_BASE_COSTS: Record<BrfFootValues['style'], FootBaseCosts> = {
-  // Road running: smooth, continuous surfaces; sidewalks and car-free
-  // ways first, quiet roads next, dirt paths only as connectors.
+  // Course sur route : revêtements lisses et continus ; trottoirs et voies sans
+  // voitures d'abord, routes calmes ensuite, chemins de terre seulement en liaison.
   running: {
     footInfraPaved: 1.0,
     footInfraUnpaved: 1.3,
@@ -69,8 +69,8 @@ const FOOT_BASE_COSTS: Record<BrfFootValues['style'], FootBaseCosts> = {
     informal: 0.3,
     turn: 15,
   },
-  // Trail: singletracks and mountain paths first, tracks next, tarmac
-  // only to link trail sections.
+  // Trail : singletracks et sentiers de montagne d'abord, pistes ensuite, bitume
+  // seulement pour relier des sections de sentier.
   trail: {
     footInfraPaved: 1.3,
     footInfraUnpaved: 1.1,
@@ -99,10 +99,11 @@ const FOOT_BASE_COSTS: Record<BrfFootValues['style'], FootBaseCosts> = {
 };
 
 /**
- * Additive SAC penalty for grades 0..6 (hiking-mountain.brf progression:
- * ×1.6 per level above the preferred grade, forbidden above the limit).
- * Unlike hiking-mountain, easier grades are free: roads carry no SAC
- * penalty, so penalising easy paths would push the route onto tarmac.
+ * Pénalité SAC additive pour les cotations 0..6 (progression de
+ * hiking-mountain.brf : ×1,6 par niveau au-dessus de la cotation préférée,
+ * interdit au-dessus de la limite). Contrairement à hiking-mountain, les
+ * cotations plus faciles sont gratuites : les routes n'ont pas de pénalité SAC,
+ * pénaliser les sentiers faciles pousserait donc le tracé sur le bitume.
  */
 function buildSacPenalties(limit: number, preferred: number): number[] {
   return [0, 1, 2, 3, 4, 5, 6].map((sac) => {

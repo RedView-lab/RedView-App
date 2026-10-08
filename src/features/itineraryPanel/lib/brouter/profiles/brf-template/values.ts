@@ -50,9 +50,9 @@ function prefToFactor(preference: RoadPreference): number {
 }
 
 /**
- * SAC ceilings per tracing mode (sac_scale T1 = 1 … T6 = 6). Road running
- * stays on T1 at most; trail goes up to T3 (T4 in Aventure: alpine paths,
- * hands occasionally needed), T5+ is never runnable.
+ * Plafonds SAC par mode de traçage (sac_scale T1 = 1 … T6 = 6). La course sur
+ * route reste au plus en T1 ; le trail monte jusqu'en T3 (T4 en Aventure :
+ * sentiers alpins, mains parfois nécessaires), T5+ n'est jamais courable.
  */
 function resolveFootValues(
   style: BrfFootValues['style'],
@@ -110,10 +110,10 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
   const fBikelane = factorFor(roadTypes.bikeLanes);
   const fMajor = factorFor(roadTypes.majorRoads);
   const allowFerries = roadTypes.ferry !== 'forbid';
-  // Steps are part of the pedestrian network; the way context prices them.
+  // Les escaliers font partie du réseau piéton ; le contexte de voie les tarife.
   const allowSteps = foot != null || (roadTypes.bikeLanes !== 'forbid' && fSingletrack < 10000);
 
-  // Surface preferences scaling with tolerance (0% strict ~2.0, 10% default ~1.5, 100% max tolerance ~0.15)
+  // Préférences de surface proportionnelles à la tolérance (0 % strict ~2,0, 10 % par défaut ~1,5, tolérance max 100 % ~0,15)
   const tol = clamp(roadTypes.surfaceTolerance ?? 10, 0, 100);
   const tolFactor = tol <= 10
     ? 2.0 - (tol / 10) * 0.5
@@ -129,7 +129,7 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
   const minIdx = Math.max(0, surfaceOrder.indexOf(surfaceMin));
   const maxIdx = Math.max(minIdx, surfaceOrder.indexOf(surfaceMax));
 
-  // If minIdx === maxIdx (superposition: strictly single surface prioritized absolutely)
+  // Si minIdx === maxIdx (superposition : une seule surface strictement prioritaire, de façon absolue)
   if (minIdx === maxIdx) {
     switch (surfaceMin) {
       case 'tarmac':
@@ -158,14 +158,14 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
         break;
     }
   } else {
-    // Range of surfaces. A surface inside the range is pulled towards
-    // « preferred » only when the user tolerates or prefers it: « Éviter » /
-    // « Interdire » stay as chosen (the range used to lower a gravel preset's
-    // « Éviter la route » 1.15 to 0.9, below its gravel factor).
+    // Plage de surfaces. Une surface dans la plage n'est tirée vers
+    // « préférée » que si l'utilisateur la tolère ou la préfère : « Éviter » /
+    // « Interdire » restent tels que choisis (la plage abaissait le 1,15
+    // « Éviter la route » d'un préréglage gravel à 0,9, sous son facteur gravel).
     const included = (preference: RoadPreference, factor: number, cap: number): number =>
       preference === 'avoid' || preference === 'forbid' ? factor : Math.min(factor, cap);
 
-    // If tarmac (0) excluded
+    // Si le bitume (0) est exclu
     if (minIdx > 0) {
       effectiveFRoad = Math.max(effectiveFRoad, 2.5 * tolFactor);
     } else {
@@ -176,15 +176,15 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
     if (maxIdx < 2) {
       effectiveFGravel = Math.max(effectiveFGravel, 2.5 * tolFactor);
     } else if (minIdx <= 2 && maxIdx >= 2) {
-      // Track base costs (trekking heritage: grade2 2.5, untagged 3.0) outweigh
-      // a ×0.85 preference against a small road (1.0–1.4): « Privilégier » the
-      // gravel must compensate, or a Gravel preset rides 90–97 % tarmac.
+      // Les coûts de base des pistes (héritage trekking : grade2 2,5, sans tag 3,0)
+      // l'emportent sur une préférence ×0,85 contre une petite route (1,0–1,4) :
+      // « Privilégier » le gravier doit compenser, sinon un préréglage Gravel roule à 90–97 % sur le bitume.
       effectiveFGravel = roadTypes.gravel === 'prefer'
         ? Math.min(effectiveFGravel, 0.6)
         : included(roadTypes.gravel, effectiveFGravel, 0.85);
     }
 
-    // Other (3: singletrack & offroad)
+    // Autre (3 : singletrack et hors-piste)
     if (maxIdx < 3) {
       effectiveFSingletrack = Math.max(effectiveFSingletrack, 2.8 * tolFactor);
       effectiveFOffroad = Math.max(effectiveFOffroad, 3.2 * tolFactor);
@@ -202,8 +202,8 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
   const sDur = sign(priorities.duration);
   const sTranq = sign(priorities.tranquility);
 
-  // On foot, « Dénivelé : Privilégier » is the runner's max-D+ control: give
-  // it the full climbing mode of the max elevation priority, not just free climbs.
+  // À pied, « Dénivelé : Privilégier » est le réglage de D+ max du coureur : lui
+  // donner tout le mode grimpeur de la priorité d'altitude max, pas seulement les montées gratuites.
   const climbFocus = foot && roadTypes.elevationPreference === 'prefer'
     ? 1
     : Math.max(0, sElev);
@@ -228,7 +228,7 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
   let climbMul = 1.0;
 
   if (climbFocus <= 0.15) {
-    // Standard BRouter trekking baseline: no uphill penalty in neutral mode so mountains/valleys don't explode search
+    // Base trekking standard de BRouter : pas de pénalité de montée en mode neutre pour que montagnes/vallées ne fassent pas exploser la recherche
     upCost = climbAvoid > 0.1 ? Math.round(climbAvoid * 80) : 0;
     downCost = 60;
     upCutoff = 1.5;
@@ -248,7 +248,7 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
     climbMul = 1.0 + (climbScale * (detourAppetite > 0.7 ? 3.0 : 2.0));
   }
 
-  // Factor in explicit elevationPreference if chosen in panel
+  // Tenir compte de l'elevationPreference explicite si elle est choisie dans le panneau
   if (roadTypes.elevationPreference) {
     switch (roadTypes.elevationPreference) {
       case 'avoid':
@@ -349,9 +349,9 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
     ? buildBonusByClass(1 + (tranquilityFocus * 0.5), clamp(1 - (tranquilityFocus * 0.4), 0.5, 1))
     : buildReliefByClass(1);
 
-  // Foot: BRouter times walking/running with Tobler's function
-  // (maxSpeed · e^(-3.5·|slope + 5 %|) ≈ 0.84 · maxSpeed on the flat); the
-  // bike kinematic knobs below are ignored by the engine in foot mode.
+  // À pied : BRouter chronomètre la marche/la course avec la fonction de Tobler
+  // (maxSpeed · e^(-3.5·|slope + 5 %|) ≈ 0,84 · maxSpeed sur le plat) ; les
+  // réglages cinématiques vélo ci-dessous sont ignorés par le moteur en mode piéton.
   const totalMass = foot ? 70 : expertValue(expert, 'totalMass', defaultFor('totalMass') as number);
   const maxSpeedBase = foot
     ? foot.style === 'running' ? 13 : 10
@@ -370,10 +370,10 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
     roadTypes.woods === 'prefer' ||
     (roadTypes.woods !== 'forbid' && tranquilityFocus >= 0.45);
   const turnInstructionMode = expertValue(expert, 'turnInstructionMode', 1);
-  // Turn restrictions only bind vehicles.
+  // Les restrictions de virage ne concernent que les véhicules.
   const considerTurnRestrictions = foot ? false : expertValue(expert, 'considerTurnRestrictions', true);
 
-  // Apply tracingMode adjustments
+  // Appliquer les ajustements du tracingMode
   if (roadTypes.tracingMode === 'vitesse') {
     turnFactor *= 1.25;
     signalPenalty = Math.max(signalPenalty, 40);

@@ -1,32 +1,32 @@
 /**
- * Smart resolver for the panel's RoadTypesState.
+ * Résolveur intelligent du RoadTypesState du panneau.
  *
- * Detects impossible configurations (e.g. user forbids every rideable
- * surface → BRouter would return "no route") and rewrites them on the
- * fly with a human-readable warning. The corrected state is what's fed
- * into the BRF generator; the panel keeps the user's raw selection so
- * they can see and re-tune it.
+ * Détecte les configurations impossibles (par ex. l'utilisateur interdit toutes
+ * les surfaces praticables → BRouter renverrait « no route ») et les réécrit à
+ * la volée avec un avertissement lisible. L'état corrigé est celui qui alimente
+ * le générateur de BRF ; le panneau garde la sélection brute de l'utilisateur
+ * pour qu'il puisse la voir et la régler à nouveau.
  *
- * Rules
- * ─────
+ * Règles
+ * ──────
  *
- * 1. At least one of {road, gravel, singletrack, offroad, bikeLanes}
- *    must NOT be 'forbid'. If everything is forbidden, we lift the
- *    least restrictive option (in order: bikeLanes → road → gravel →
- *    singletrack → offroad) back up to 'tolerate'.
+ * 1. Au moins une des valeurs {road, gravel, singletrack, offroad, bikeLanes}
+ *    ne doit PAS être 'forbid'. Si tout est interdit, on remonte l'option la
+ *    moins restrictive (dans l'ordre : bikeLanes → road → gravel →
+ *    singletrack → offroad) à 'tolerate'.
  *
- * 2. majorRoads='forbid' is fine on its own (BRouter will route around
- *    primary/trunk). But if road='forbid' AND majorRoads='forbid' AND
- *    bikeLanes='forbid' → we'd cut the entire on-road network. We allow
- *    it, since gravel/singletrack might still suffice in rural France,
- *    and just emit an info-level warning.
+ * 2. majorRoads='forbid' seul ne pose pas de problème (BRouter contournera les
+ *    primary/trunk). Mais si road='forbid' ET majorRoads='forbid' ET
+ *    bikeLanes='forbid' → on couperait tout le réseau routier. On l'autorise,
+ *    puisque gravier/singletrack peuvent suffire dans la France rurale, et on
+ *    émet juste un avertissement de niveau info.
  *
- * 3. Forbidding bikeLanes WHILE preferring them is contradictory; we
- *    drop the prefer to tolerate (defensive — UI shouldn't allow this
- *    but state can be loaded from older projects).
+ * 3. Interdire bikeLanes TOUT EN les préférant est contradictoire ; on ramène la
+ *    préférence à tolérer (défensif — l'interface ne devrait pas le permettre,
+ *    mais l'état peut venir d'anciens projets).
  *
- * 4. maxSlopePercent < 1 is meaningless (no climb allowed = no route).
- *    We clamp to ≥ 3 %.
+ * 4. maxSlopePercent < 1 n'a pas de sens (aucune montée autorisée = pas de
+ *    tracé). On borne à ≥ 3 %.
  */
 import { translateAppText } from '@/shared/i18n';
 import type { RoadTypesState } from '../../../types';
@@ -34,7 +34,7 @@ import type { RoadTypesState } from '../../../types';
 export interface RoadTypesResolution {
   effective: RoadTypesState;
   warnings: string[];
-  /** Truthy when the resolver had to override at least one knob. */
+  /** Vrai quand le résolveur a dû surcharger au moins un réglage. */
   corrected: boolean;
 }
 
@@ -61,10 +61,10 @@ export function resolveRoadTypes(input: RoadTypesState): RoadTypesResolution {
   const warnings: string[] = [];
   let corrected = false;
 
-  // Rule 1 — at least one rideable surface must remain
+  // Règle 1 — au moins une surface praticable doit rester
   const allForbid = RIDEABLE_KEYS.every((k) => out[k] === 'forbid');
   if (allForbid) {
-    // Lift the first key in priority order to 'tolerate'.
+    // Remonter la première clé dans l'ordre de priorité à 'tolerate'.
     for (const k of RIDEABLE_KEYS) {
       if (out[k] === 'forbid') {
         out[k] = 'tolerate';
@@ -80,7 +80,7 @@ export function resolveRoadTypes(input: RoadTypesState): RoadTypesResolution {
     }
   }
 
-  // Rule 2 — if road + bikeLanes + majorRoads all forbid, info warning.
+  // Règle 2 — si road + bikeLanes + majorRoads sont tous interdits, avertissement info.
   if (
     out.road === 'forbid' &&
     out.bikeLanes === 'forbid' &&
@@ -91,11 +91,11 @@ export function resolveRoadTypes(input: RoadTypesState): RoadTypesResolution {
     );
   }
 
-  // Rule 3 — defensive: bikeLanes='forbid' should also clear majorRoads
-  // forbid only if user had simultaneously preferred something
-  // contradictory. Currently nothing to fix — left as no-op for clarity.
+  // Règle 3 — défensive : bikeLanes='forbid' ne devrait lever aussi l'interdiction
+  // de majorRoads que si l'utilisateur avait en même temps préféré quelque chose de
+  // contradictoire. Rien à corriger pour l'instant — laissée sans effet par clarté.
 
-  // Rule 4 — max-slope sanity
+  // Règle 4 — cohérence de la pente max
   if (out.maxSlopePercent != null && out.maxSlopePercent < 3) {
     warnings.push(
       translateAppText(
@@ -107,8 +107,8 @@ export function resolveRoadTypes(input: RoadTypesState): RoadTypesResolution {
     corrected = true;
   }
 
-  // Rule 5 — drop ferries 'prefer' when distances make it unlikely
-  // (no-op — kept for future heuristics).
+  // Règle 5 — abandonner le 'prefer' des ferries quand les distances le rendent
+  // improbable (sans effet — gardée pour de futures heuristiques).
 
   return { effective: out, warnings, corrected };
 }

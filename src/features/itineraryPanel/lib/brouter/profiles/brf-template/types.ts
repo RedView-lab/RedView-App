@@ -6,16 +6,16 @@ export interface BrfBuildInputs {
   priorities: PrioritiesState;
   roadTypes: RoadTypesState;
   expert?: ExpertProfileState | null;
-  /** Trail / Running switch the profile to the pedestrian network. */
+  /** Trail / course basculent le profil sur le réseau piéton. */
   discipline?: SportDiscipline;
 }
 
-/** Pedestrian-only knobs, set when the itinerary is Trail / Running. */
+/** Réglages propres au piéton, posés quand l'itinéraire est en trail / course. */
 export interface BrfFootValues {
   style: FootDiscipline;
-  /** Ways with a SAC grade above this are forbidden (0 = no SAC path). */
+  /** Les voies de cotation SAC supérieure sont interdites (0 = pas de sentier SAC). */
   sacLimit: number;
-  /** SAC grade with no penalty; others cost more (above) or slightly more (below). */
+  /** Cotation SAC sans pénalité ; les autres coûtent plus (au-dessus) ou un peu plus (en dessous). */
   sacPreferred: number;
   /** Cost multiplier on marked hiking / foot routes. */
   hikingRouteFactor: number;
@@ -76,6 +76,6 @@ export interface BrfProfileValues {
   bikerPower: number;
   turnInstructionMode: number;
   considerTurnRestrictions: boolean;
-  /** Non-null → pedestrian profile (validForFoot, foot access, no oneway). */
+  /** Non null → profil piéton (validForFoot, accès piéton, pas de sens unique). */
   foot: BrfFootValues | null;
 }

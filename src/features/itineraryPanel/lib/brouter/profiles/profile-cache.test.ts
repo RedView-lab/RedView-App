@@ -5,7 +5,7 @@ vi.mock('../api/client', () => ({ uploadCustomProfile: (...args: unknown[]) => u
 
 const { clearProfileCache, ensureProfileUploaded, PROFILE_UPLOAD_TIMEOUT_MS } = await import('./profile-cache');
 
-/** An upload answering after `ms` (never when null), or failing when its signal aborts first. */
+/** Un envoi qui répond après `ms` (jamais si null), ou échoue si son signal est annulé avant. */
 function answerAfter(ms: number | null, profileId = 'custom_1') {
   return (_brf: string, signal: AbortSignal) => new Promise((resolve, reject) => {
     const timer = ms === null ? undefined : setTimeout(() => resolve({ profileId }), ms);

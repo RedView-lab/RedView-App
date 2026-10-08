@@ -30,7 +30,7 @@ describe('concatBrouterRoutes', () => {
   it('refuses legs that do not meet: no straight line between them', () => {
     let error: unknown = null;
     try {
-      // Junction moved ~550 m between the two legs (island repair on one side only).
+      // Jonction déplacée d'environ 550 m entre les deux tronçons (réparation d'île d'un seul côté).
       concatBrouterRoutes([leg([[6, 44], [6, 44.01]]), leg([[6, 44.015], [6, 44.02]])]);
     } catch (reason) {
       error = reason;

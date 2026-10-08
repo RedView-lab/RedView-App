@@ -1,6 +1,6 @@
 /**
- * Generate a complete, self-contained BRouter profile (BRF) from the
- * Itinerary Panel's basic + expert state.
+ * Génère un profil BRouter (BRF) complet et autonome à partir de l'état simple
+ * + expert du panneau d'itinéraire.
  */
 import type { BrfBuildInputs } from './brf-template/types';
 import { estimateSearchCostScale, resolveBrfProfileValues } from './brf-template/values';
@@ -145,7 +145,7 @@ export function estimateBrfSearchCostScale(inputs: BrfBuildInputs): number {
   return estimateSearchCostScale(resolveBrfProfileValues(inputs));
 }
 
-/** FNV-1a 32-bit hash → 8-char hex. Plenty of entropy to dedup uploads. */
+/** Hachage FNV-1a 32 bits → 8 caractères hexadécimaux. Bien assez d'entropie pour dédupliquer les envois. */
 export function hashBrf(text: string): string {
   let h = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {

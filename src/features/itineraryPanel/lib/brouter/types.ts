@@ -1,13 +1,13 @@
 /**
- * BRouter HTTP client — public types.
+ * Client HTTP BRouter — types publics.
  *
- * `BrouterRequest` is what callers build; `BrouterRoute` is the
- * normalised result they receive after the GeoJSON is parsed.
+ * `BrouterRequest` est ce que construisent les appelants ; `BrouterRoute` est
+ * le résultat normalisé qu'ils reçoivent après le parse du GeoJSON.
  *
- * `BrouterParamOverrides` is a free-form bag of `profile:xxx` overrides
- * that the panel (or the Expert Mode) appends to the URL. Each value
- * must already be stringified using BRouter's syntax (`true` / `false`
- * for booleans, `1.5` for floats, etc.).
+ * `BrouterParamOverrides` est un sac libre de surcharges `profile:xxx` que le
+ * panneau (ou le mode expert) ajoute à l'URL. Chaque valeur doit déjà être
+ * convertie en texte avec la syntaxe de BRouter (`true` / `false` pour les
+ * booléens, `1.5` pour les flottants, etc.).
  */
 
 export interface BrouterPoint {
@@ -16,43 +16,43 @@ export interface BrouterPoint {
 }
 
 export interface BrouterRoute {
-  /** Decoded GeoJSON LineString coordinates ([lon, lat] pairs). */
+  /** Coordonnées décodées de la LineString GeoJSON (paires [lon, lat]). */
   coordinates: [number, number][];
-  /** Total length in metres. */
+  /** Longueur totale en mètres. */
   distanceM: number;
-  /** Total duration in seconds. */
+  /** Durée totale en secondes. */
   durationS: number;
-  /** Cumulative ascent in metres (filtered, BRouter convention). */
+  /** Dénivelé positif cumulé en mètres (filtré, convention BRouter). */
   ascentM: number;
-  /** Cumulative descent in metres (filtered). */
+  /** Dénivelé négatif cumulé en mètres (filtré). */
   descentM: number;
-  /** Raw FeatureCollection — handy for debugging or richer rendering. */
+  /** FeatureCollection brute — pratique pour le débogage ou un rendu plus riche. */
   raw: GeoJSON.FeatureCollection;
 }
 
-/** Map of `profile:xxx` overrides → stringified values. */
+/** Table des surcharges `profile:xxx` → valeurs converties en texte. */
 export type BrouterParamOverrides = Record<string, string>;
 
 export interface BrouterRequest {
   start: BrouterPoint;
   end: BrouterPoint;
-  /** Optional intermediate via-points. */
+  /** Points de passage intermédiaires optionnels. */
   via?: BrouterPoint[];
-  /** BRouter profile id. Must exist in `profiles2/` on the server,
-   *  OR be a `custom_<id>` returned from `uploadCustomProfile()`. */
+  /** Id de profil BRouter. Doit exister dans `profiles2/` sur le serveur,
+   *  OU être un `custom_<id>` renvoyé par `uploadCustomProfile()`. */
   profile?: string;
-  /** Alternative index (0..3). Defaults to 0. */
+  /** Indice de variante (0..3). 0 par défaut. */
   alternativeIdx?: 0 | 1 | 2 | 3;
-  /** Free-form `profile:xxx` overrides applied on top of the base profile. */
+  /** Surcharges libres `profile:xxx` appliquées par-dessus le profil de base. */
   overrides?: BrouterParamOverrides;
   /**
-    * Optional `polygons` parameter — list of closed polygons encoded for
-    * the URL. In practice RedView uses it for absolute no-go areas.
+   * Paramètre `polygons` optionnel — liste de polygones fermés encodés pour
+   * l'URL. En pratique, RedView s'en sert pour les zones absolument interdites.
    */
   polygons?: string;
   /**
-   * Optional `nogos` parameter — list of forbidden circles.
-   * Format: `lon,lat,radiusM[,weight]|...`.
+   * Paramètre `nogos` optionnel — liste de cercles interdits.
+   * Format : `lon,lat,radiusM[,weight]|...`.
    */
   nogos?: string;
   /**
@@ -70,16 +70,16 @@ export interface BrouterRequest {
   signal?: AbortSignal;
 }
 
-/** Result returned by the profile upload endpoint. */
+/** Résultat renvoyé par le point d'accès d'envoi de profil. */
 export interface UploadedProfile {
-  /** "custom_<timestamp>" — pass back as `profile` param on routing GETs. */
+  /** "custom_<timestamp>" — à repasser comme paramètre `profile` dans les GET de routage. */
   profileId: string;
-  /** Server-side validation error (if any). Truthy → upload technically
-   *  succeeded but the profile won't compile. */
+  /** Erreur de validation côté serveur (s'il y en a une). Vraie → l'envoi a
+   *  techniquement réussi mais le profil ne compilera pas. */
   error?: string;
 }
 
 export const DEFAULT_PROFILE = 'trekking';
 
-/** Stock pedestrian profile shipped with BRouter (present on the VPS). */
+/** Profil piéton d'origine livré avec BRouter (présent sur le VPS). */
 export const FOOT_FALLBACK_PROFILE = 'hiking-mountain';

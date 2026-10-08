@@ -1,32 +1,31 @@
 /**
- * In-memory cache for custom BRouter profiles.
+ * Cache en mémoire des profils BRouter personnalisés.
  *
- * BRouter's `/brouter/profile` POST endpoint compiles each upload and
- * returns a `custom_<id>` handle. We dedup uploads by content-hash so
- * tweaking-and-re-tweaking the same panel never spams the proxy.
+ * Le point d'accès POST `/brouter/profile` de BRouter compile chaque envoi et
+ * renvoie un identifiant `custom_<id>`. On déduplique les envois par hachage du
+ * contenu pour que régler et re-régler le même panneau n'inonde jamais le proxy.
  *
- * Lifetime: the cache lives for the duration of the page. Custom
- * profiles are kept by the BRouter standalone process for ~24 h
- * (configurable server-side) — well beyond what any single browsing
- * session would need.
+ * Durée de vie : le cache vit le temps de la page. Les profils personnalisés
+ * sont gardés par le processus BRouter autonome environ 24 h (réglable côté
+ * serveur) — bien au-delà de ce dont une session de navigation a besoin.
  */
 import { uploadCustomProfile } from '../api/client';
 import { hashBrf } from './brf-template';
 
 /**
- * Limit of one profile upload attempt. BRouter compiles a profile in ~1 s,
- * but on a slow link (1 s round trips: mountains, tethering) the ~20 KB
- * upload plus the compile took 7–10 s; a 6 s limit aborted uploads the
- * server then completed, twice in a row, and routing failed outright
- * (bench:collab-prod, 2026-10-07). The second attempt is for a BRouter
- * restart, which fails fast.
+ * Limite d'une tentative d'envoi de profil. BRouter compile un profil en ~1 s,
+ * mais sur une liaison lente (allers-retours de 1 s : montagne, partage de
+ * connexion) l'envoi de ~20 Ko plus la compilation prenaient 7–10 s ; une
+ * limite de 6 s annulait des envois que le serveur terminait ensuite, deux fois
+ * de suite, et le routage échouait purement et simplement (bench:collab-prod,
+ * 2026-10-07). La seconde tentative sert à un redémarrage de BRouter, qui échoue vite.
  */
 export const PROFILE_UPLOAD_TIMEOUT_MS = 20_000;
 
 interface CacheEntry {
-  /** custom_<id> returned by the server. */
+  /** custom_<id> renvoyé par le serveur. */
   profileId: string;
-  /** In-flight promise for the upload (so concurrent callers share). */
+  /** Promesse de l'envoi en cours (pour que les appelants simultanés la partagent). */
   pending?: Promise<string>;
 }
 
@@ -60,9 +59,9 @@ async function waitForProfileUpload(pending: Promise<string>, signal?: AbortSign
 import { logger } from '@/shared/lib/logger';
 
 /**
- * Upload `brf` custom profile to the BRouter server, returning its `profileId`.
- * Deduplicated in-memory: concurrent/repeated requests for the same profile
- * content share a single upload.
+ * Envoie le profil personnalisé `brf` au serveur BRouter et renvoie son `profileId`.
+ * Dédupliqué en mémoire : les requêtes simultanées/répétées pour le même
+ * contenu de profil partagent un seul envoi.
  */
 export async function ensureProfileUploaded(
   brf: string,
@@ -108,7 +107,7 @@ export async function ensureProfileUploaded(
   return waitForProfileUpload(pending, signal);
 }
 
-/** Clear the in-memory cache (mostly useful in tests). */
+/** Vide le cache en mémoire (surtout utile dans les tests). */
 export function clearProfileCache(): void {
   cache.clear();
 }
