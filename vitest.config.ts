@@ -45,19 +45,19 @@ export default defineConfig({
       ],
       reporter: ['text-summary', 'json-summary'],
       reportsDirectory: 'coverage',
-      // Cliquet : planchers ~2 points sous la mesure (globale : 2026-10-08 ; zones : 2026-10-07 ; 3 pour le
+      // Cliquet : planchers ~2 points sous la mesure (globale et persistance : 2026-10-08 ; autres zones : 2026-10-07 ; 3 pour le
       // serveur temps réel, dont les tests dépendent du timing : ±0,1 point
       // d'un passage à l'autre). Un test supprimé ou un module critique qui
       // grossit sans tests fait échouer `check --full` ; on remonte les
       // planchers quand la couverture progresse, on ne les baisse pas.
-      // Global = tout le code inclus (20,1 % des instructions le 2026-10-08 : l'UI et la
+      // Global = tout le code inclus (22,0 % des instructions le 2026-10-08 : l'UI et la
       // carte comptent, la plupart ne se testent qu'en E2E) ; chaque zone
       // ci-dessous a en plus son propre plancher.
       thresholds: {
-        statements: 18,
-        branches: 15,
-        functions: 17,
-        lines: 18,
+        statements: 20,
+        branches: 17,
+        functions: 19,
+        lines: 20,
         // Frontières de sécurité et de persistance (CLAUDE.md : tests
         // unitaires d'abord pour elles).
         'src/features/collab/**': { statements: 81, branches: 75, functions: 80, lines: 85 },
@@ -66,10 +66,15 @@ export default defineConfig({
         'api/_lib/{accountDeletion,projectSharing}.ts': { statements: 86, branches: 74, functions: 96, lines: 89 },
         'src/features/comments/lib/**': { statements: 75, branches: 71, functions: 84, lines: 78 },
         'src/features/livePresence/lib/**': { statements: 87, branches: 78, functions: 83, lines: 90 },
-        // Persistance des projets (18,1 % le 2026-10-08) : le gros de sa
-        // vérification est la simulation script-test-bench/audit/a-persistence-sim.ts ;
-        // le plancher empêche seulement de perdre les tests unitaires existants.
-        'src/shared/services/projects/**': { statements: 16, branches: 11, functions: 15, lines: 17 },
+        // Persistance des projets (62,1 % le 2026-10-08) : le vrai code sur le
+        // faux SDK Appwrite du banc + fake-indexeddb (src/shared/test/projectPersistence.ts) ;
+        // la simulation script-test-bench/audit/a-persistence-sim.ts garde les gros scénarios.
+        'src/shared/services/projects/**': { statements: 60, branches: 54, functions: 61, lines: 64 },
+        'src/shared/services/storage/**': { statements: 84, branches: 86, functions: 66, lines: 90 },
+        // Ce que sauvegarde une modification, autosave, ouverture, Ctrl+S.
+        'src/features/itineraryPanel/lib/project/layers.ts': { statements: 97, branches: 92, functions: 98, lines: 98 },
+        'src/pages/Dashboard/hooks/useDashboardProject{Sync,State}.ts': { statements: 83, branches: 70, functions: 84, lines: 85 },
+        'src/features/itineraryPanel/components/ItineraryPanelContainer/useProjectSave.ts': { statements: 98, branches: 95, functions: 98, lines: 98 },
       },
     },
   },
