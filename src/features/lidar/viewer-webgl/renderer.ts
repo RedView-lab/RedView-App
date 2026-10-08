@@ -14,6 +14,7 @@ import {
   TRAJECTORY_VERTEX_SHADER,
 } from './renderer/auxShaders';
 import { createPlaceholderTexture, createProgram, mustLoc, normalize3 } from './renderer/glUtils';
+import { GlPreviewMesh, GlRouteMesh } from './renderer/overlayMeshes';
 
 // ============================================
 // LiDAR HD — WebGL2 fallback renderer
@@ -97,11 +98,7 @@ export class WebGLTerrainRenderer {
 
   // 3D GPX Route Ribbon
   private routeProgram!: WebGLProgram;
-  private routeVao: WebGLVertexArrayObject | null = null;
-  private routeVboPos: WebGLBuffer | null = null;
-  private routeVboCol: WebGLBuffer | null = null;
-  private routeIbo: WebGLBuffer | null = null;
-  private routeIndexCount = 0;
+  private readonly routeMesh: GlRouteMesh;
   private uRouteViewProj!: WebGLUniformLocation;
 
   private uViewProj!: WebGLUniformLocation;
@@ -135,11 +132,7 @@ export class WebGLTerrainRenderer {
   private uSnowScale!: WebGLUniformLocation;
 
   private previewProgram!: WebGLProgram;
-  private previewVao: WebGLVertexArrayObject | null = null;
-  private previewVbo: WebGLBuffer | null = null;
-  private previewCbo: WebGLBuffer | null = null;
-  private previewIbo: WebGLBuffer | null = null;
-  private previewIndexCount = 0;
+  private readonly previewMesh: GlPreviewMesh;
   private uPreviewViewProj!: WebGLUniformLocation;
   private uPreviewElevationExaggeration!: WebGLUniformLocation;
   private uPreviewSunDir!: WebGLUniformLocation;
@@ -173,6 +166,8 @@ export class WebGLTerrainRenderer {
     }
     if (!gl) throw new Error('WebGL2 indisponible');
     this.gl = gl;
+    this.previewMesh = new GlPreviewMesh(gl);
+    this.routeMesh = new GlRouteMesh(gl);
 
     this.maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
     const dbg = gl.getExtension('WEBGL_debug_renderer_info');
@@ -452,7 +447,7 @@ export class WebGLTerrainRenderer {
     gl.bindVertexArray(null);
 
     // Draw preview mesh box (if active)
-    if (this.previewIndexCount > 0 && this.previewVao) {
+    if (this.previewMesh.indexCount > 0 && this.previewMesh.vao) {
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
       gl.useProgram(this.previewProgram);
@@ -460,8 +455,8 @@ export class WebGLTerrainRenderer {
       gl.uniform1f(this.uPreviewElevationExaggeration, this.elevationExaggeration);
       gl.uniform3f(this.uPreviewSunDir, this.sunDir[0], this.sunDir[1], this.sunDir[2]);
 
-      gl.bindVertexArray(this.previewVao);
-      gl.drawElements(gl.TRIANGLES, this.previewIndexCount, gl.UNSIGNED_INT, 0);
+      gl.bindVertexArray(this.previewMesh.vao);
+      gl.drawElements(gl.TRIANGLES, this.previewMesh.indexCount, gl.UNSIGNED_INT, 0);
       gl.bindVertexArray(null);
       gl.disable(gl.BLEND);
     }
@@ -507,14 +502,14 @@ export class WebGLTerrainRenderer {
     }
 
     // Draw 3D GPX Route Ribbon (if active)
-    if (this.routeIndexCount > 0 && this.routeVao) {
+    if (this.routeMesh.indexCount > 0 && this.routeMesh.vao) {
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
       gl.useProgram(this.routeProgram);
       gl.uniformMatrix4fv(this.uRouteViewProj, false, viewProj);
 
-      gl.bindVertexArray(this.routeVao);
-      gl.drawElements(gl.TRIANGLES, this.routeIndexCount, gl.UNSIGNED_INT, 0);
+      gl.bindVertexArray(this.routeMesh.vao);
+      gl.drawElements(gl.TRIANGLES, this.routeMesh.indexCount, gl.UNSIGNED_INT, 0);
       gl.bindVertexArray(null);
       gl.disable(gl.BLEND);
     }
@@ -633,81 +628,19 @@ export class WebGLTerrainRenderer {
   }
 
   setPreviewMesh(vertices: Float32Array, colors: Uint8Array, indices: Uint32Array): void {
-    const gl = this.gl;
-    if (indices.length === 0) {
-      this.clearPreviewMesh();
-      return;
-    }
-    if (!this.previewVao) {
-      this.previewVao = gl.createVertexArray();
-      this.previewVbo = gl.createBuffer();
-      this.previewCbo = gl.createBuffer();
-      this.previewIbo = gl.createBuffer();
-    }
-    gl.bindVertexArray(this.previewVao);
-
-    // vertices: stride 6 floats (pos: 3, normal: 3)
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.previewVbo);
-    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.DYNAMIC_DRAW);
-    gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 6 * 4, 0);
-    gl.enableVertexAttribArray(1);
-    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 6 * 4, 3 * 4);
-
-    // colors: stride 4 bytes (RGBA unorm)
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.previewCbo);
-    gl.bufferData(gl.ARRAY_BUFFER, colors, gl.DYNAMIC_DRAW);
-    gl.enableVertexAttribArray(2);
-    gl.vertexAttribPointer(2, 4, gl.UNSIGNED_BYTE, true, 0, 0);
-
-    // indices
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.previewIbo);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.DYNAMIC_DRAW);
-
-    gl.bindVertexArray(null);
-    this.previewIndexCount = indices.length;
+    this.previewMesh.set(vertices, colors, indices);
   }
 
   clearPreviewMesh(): void {
-    this.previewIndexCount = 0;
+    this.previewMesh.clear();
   }
 
   setRouteMesh(vertices: Float32Array, colors: Uint8Array, indices: Uint32Array, count?: number): void {
-    const gl = this.gl;
-    if (indices.length === 0 || vertices.length === 0) {
-      this.clearRouteMesh();
-      return;
-    }
-    if (!this.routeVao) {
-      this.routeVao = gl.createVertexArray();
-      this.routeVboPos = gl.createBuffer();
-      this.routeVboCol = gl.createBuffer();
-      this.routeIbo = gl.createBuffer();
-    }
-    gl.bindVertexArray(this.routeVao);
-
-    // Positions (Location 0: vec3 float)
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.routeVboPos);
-    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.DYNAMIC_DRAW);
-    gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
-
-    // Colors (Location 1: vec4 unsigned byte normalized)
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.routeVboCol);
-    gl.bufferData(gl.ARRAY_BUFFER, colors, gl.DYNAMIC_DRAW);
-    gl.enableVertexAttribArray(1);
-    gl.vertexAttribPointer(1, 4, gl.UNSIGNED_BYTE, true, 0, 0);
-
-    // Indices
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.routeIbo);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.DYNAMIC_DRAW);
-
-    gl.bindVertexArray(null);
-    this.routeIndexCount = count ?? indices.length;
+    this.routeMesh.set(vertices, colors, indices, count);
   }
 
   clearRouteMesh(): void {
-    this.routeIndexCount = 0;
+    this.routeMesh.clear();
   }
 
   destroy(): void {
@@ -715,18 +648,12 @@ export class WebGLTerrainRenderer {
     gl.deleteBuffer(this.vbo);
     gl.deleteBuffer(this.ibo);
     gl.deleteVertexArray(this.vao);
-    if (this.previewVbo) gl.deleteBuffer(this.previewVbo);
-    if (this.previewCbo) gl.deleteBuffer(this.previewCbo);
-    if (this.previewIbo) gl.deleteBuffer(this.previewIbo);
-    if (this.previewVao) gl.deleteVertexArray(this.previewVao);
+    this.previewMesh.destroy();
     if (this.trajectoryVbo) gl.deleteBuffer(this.trajectoryVbo);
     if (this.trajectoryVao) gl.deleteVertexArray(this.trajectoryVao);
     if (this.sunDiscVbo) gl.deleteBuffer(this.sunDiscVbo);
     if (this.sunDiscVao) gl.deleteVertexArray(this.sunDiscVao);
-    if (this.routeVboPos) gl.deleteBuffer(this.routeVboPos);
-    if (this.routeVboCol) gl.deleteBuffer(this.routeVboCol);
-    if (this.routeIbo) gl.deleteBuffer(this.routeIbo);
-    if (this.routeVao) gl.deleteVertexArray(this.routeVao);
+    this.routeMesh.destroy();
     if (this.texture) gl.deleteTexture(this.texture);
     if (this.snowTexture) gl.deleteTexture(this.snowTexture);
     if (this.slopeTexture) gl.deleteTexture(this.slopeTexture);
