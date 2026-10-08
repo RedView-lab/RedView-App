@@ -62,11 +62,16 @@ describe('runFlowPyToTarget', () => {
   const target = { cells: disc(g, 52, 25) };
 
   it('gives the same result as before the hot-loop rewrite', () => {
-    const typical = runFlowPyToTarget(g, terrain, target, { alphaDeg: 30, fsi: null, release });
-    const infrequent = runFlowPyToTarget(g, terrain, target, { alphaDeg: 18, fsi: null, release });
+    // Bande de cellules de départ (rangées 20 à 28) : empreintes calculées par le
+    // code d'avant la réécriture (c608df3) et identiques au code actuel. Sur tout
+    // le versant (3782:9e8d731f, 5930:9f29df7d, mêmes deux codes) le test coûtait
+    // 7× plus et dépassait 5 s sous couverture v8.
+    const band = release.map((value, i) => (Math.floor(i / g.width) >= 20 && Math.floor(i / g.width) <= 28 ? value : 0));
+    const typical = runFlowPyToTarget(g, terrain, target, { alphaDeg: 30, fsi: null, release: band });
+    const infrequent = runFlowPyToTarget(g, terrain, target, { alphaDeg: 18, fsi: null, release: band });
     expect(typical.startCells.length).toBeGreaterThan(0);
     expect(infrequent.startCells.length).toBeGreaterThan(typical.startCells.length);
-    expect([fingerprint(typical), fingerprint(infrequent)]).toEqual(['3782:9e8d731f', '5930:9f29df7d']);
+    expect([fingerprint(typical), fingerprint(infrequent)]).toEqual(['1542:44cc3d3b', '2214:3ccaf88e']);
   });
 
   it('stops early with exactly the exhaustive result, forest included', () => {
