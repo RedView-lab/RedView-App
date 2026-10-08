@@ -1,14 +1,15 @@
 /**
- * RedView Local Dev Services Launcher
+ * Lanceur des services de développement locaux de RedView
  *
- * Automatically checks, starts, and monitors:
- * 1. BRouter Standalone Server (port 17777)
- * 2. RedView POI Server (port 17778)
- * 2b. Serveur temps réel de co-édition (port 17790, server/multiplayer : stockage
- *     de fichiers .multiplayer-data/, authentification de dev ; Vite le sert
- *     sous /multiplayer)
- * 3. SSH tunnel to the VPS nginx when the .env upstreams point at it
- *    (`startVpsTunnel` / `applyVpsTunnel`, used by the Vite dev API)
+ * Vérifie, démarre et surveille automatiquement :
+ * 1. le serveur BRouter autonome (port 17777)
+ * 2. le serveur de POI RedView (port 17778)
+ * 2b. le serveur temps réel de co-édition (port 17790, server/multiplayer :
+ *     stockage de fichiers .multiplayer-data/, authentification de dev ; Vite
+ *     le sert sous /multiplayer)
+ * 3. le tunnel SSH vers le nginx du VPS quand les upstreams du .env pointent
+ *    dessus (`startVpsTunnel` / `applyVpsTunnel`, utilisés par l'API de dev de
+ *    Vite)
  */
 import { spawn } from 'node:child_process';
 import net from 'node:net';
@@ -23,7 +24,7 @@ const rootDir = path.resolve(__dirname, '../..');
 
 const spawnedProcesses = [];
 
-// Helper to check if a TCP port is open
+// Aide : vérifie si un port TCP est ouvert
 export function isPortOpen(port, host = '127.0.0.1', timeoutMs = 800) {
   return new Promise((resolve) => {
     const socket = new net.Socket();
@@ -50,7 +51,7 @@ export function isPortOpen(port, host = '127.0.0.1', timeoutMs = 800) {
   });
 }
 
-// Wait for a port to start listening
+// Attend qu'un port se mette à écouter
 export async function waitForPort(port, maxWaitMs = 15000, intervalMs = 500) {
   const start = Date.now();
   while (Date.now() - start < maxWaitMs) {
@@ -60,7 +61,7 @@ export async function waitForPort(port, maxWaitMs = 15000, intervalMs = 500) {
   return false;
 }
 
-// Find folder candidates across possible directory structures
+// Cherche les dossiers candidats parmi les structures de répertoires possibles
 function findDir(relativeCandidates) {
   for (const rel of relativeCandidates) {
     const p = path.resolve(rootDir, rel);
@@ -360,7 +361,7 @@ export async function startDevServices() {
   console.log('\x1b[1m\x1b[35m=============================================\x1b[0m\n');
 }
 
-// If executed directly: node scripts/dev/start-dev-services.mjs
+// Exécuté directement : node scripts/dev/start-dev-services.mjs
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   startDevServices()
     .then(() => {

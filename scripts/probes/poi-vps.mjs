@@ -1,4 +1,4 @@
-// Test script for RedView POI Server on Oracle VPS
+// Script de test du serveur de POI RedView sur le VPS Oracle
 
 const POI_BASE = process.env.POI_UPSTREAM || 'http://141.145.220.99/poi';
 
@@ -7,7 +7,7 @@ async function runTests() {
   console.log(`🧭 Testing RedView POI Server at: ${POI_BASE}`);
   console.log('='.repeat(60));
 
-  // 1. Health check
+  // 1. Contrôle de santé
   console.log('\n1️⃣ Health Check:');
   const t0 = performance.now();
   const healthRes = await fetch(`${POI_BASE}/health`);
@@ -15,7 +15,7 @@ async function runTests() {
   const healthTime = (performance.now() - t0).toFixed(1);
   console.log(`   Status: ${health.status}, Total POIs indexed: ${health.total_pois} (${healthTime} ms)`);
 
-  // 2. BBox query: Chamonix / Mont-Blanc area (Alps)
+  // 2. Requête par emprise : secteur Chamonix / Mont-Blanc (Alpes)
   console.log('\n2️⃣ BBox Query - Chamonix / Mont-Blanc (Alps):');
   const t1 = performance.now();
   const chamonixRes = await fetch(
@@ -29,7 +29,7 @@ async function runTests() {
     console.log(`   Sample: [${sample.category}] "${sample.name || '(unnamed)'}" at (${sample.lat}, ${sample.lon})`);
   }
 
-  // 3. BBox query: Paris Centre
+  // 3. Requête par emprise : Paris centre
   console.log('\n3️⃣ BBox Query - Paris Centre:');
   const t2 = performance.now();
   const parisRes = await fetch(
@@ -43,7 +43,7 @@ async function runTests() {
     console.log(`   Sample: [${sample.category}] "${sample.name || '(unnamed)'}" at (${sample.lat}, ${sample.lon})`);
   }
 
-  // 4. Corridor query: Paris Seine segment
+  // 4. Requête en corridor : tronçon de Seine à Paris
   console.log('\n4️⃣ Corridor Query (500m buffer along Seine):');
   const points = [
     [48.852, 2.342],

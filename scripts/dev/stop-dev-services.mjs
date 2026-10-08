@@ -1,5 +1,6 @@
 /**
- * Stops local BRouter (17777), POI (17778) and real-time co-editing (17790) server processes on Windows/Linux.
+ * Arrête les processus locaux BRouter (17777), POI (17778) et du serveur temps
+ * réel de co-édition (17790) sous Windows / Linux.
  */
 import { execSync } from 'node:child_process';
 
@@ -7,7 +8,7 @@ console.log('\n\x1b[33mArrêt des services locaux BRouter et POI...\x1b[0m');
 
 if (process.platform === 'win32') {
   try {
-    // Find and kill processes listening on port 17777 and 17778
+    // Trouve et arrête les processus qui écoutent sur les ports 17777 et 17778
     const output = execSync('netstat -ano', { encoding: 'utf-8' });
     const lines = output.split('\n');
     const pids = new Set();

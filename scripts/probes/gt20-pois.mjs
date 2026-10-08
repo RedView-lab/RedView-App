@@ -94,7 +94,7 @@ function parseGpxPoints(xml) {
     }
   }
 
-  // Also check rtept if no trkpt
+  // Regarde aussi les rtept s'il n'y a pas de trkpt
   if (points.length === 0) {
     const rteptRegex = /<rtept\s+lat=["']([^"']+)["']\s+lon=["']([^"']+)["'][^>]*>(?:[\s\S]*?<ele>([^<]+)<\/ele>)?[\s\S]*?<\/rtept>/gi;
     while ((match = rteptRegex.exec(xml)) !== null) {
@@ -119,7 +119,7 @@ function haversineM(p1, p2) {
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-// Subsample points along route so that consecutive points are ~30m apart
+// Sous-échantillonne les points le long de la trace pour qu'ils soient à ~30 m les uns des autres
 function samplePoints(points, targetSpacingM = 30) {
   if (points.length <= 2) return points;
   const sampled = [points[0]];
@@ -148,11 +148,11 @@ async function main() {
   const points = parseGpxPoints(rawXml);
   console.log(`\x1b[32m✔\x1b[0m Parsed ${points.length} track points from GT20.gpx`);
 
-  // Sample for corridor query
+  // Échantillon pour la requête en corridor
   const sampled = samplePoints(points, 35);
   console.log(`\x1b[36m[GT20 POI Test]\x1b[0m Subsampled to ${sampled.length} points for VPS corridor query (spacing ~35m, radius: ${RADIUS_M}m)`);
 
-  // Query VPS in chunks if points count is large (e.g. max 1500 points per request)
+  // Interroge le VPS par morceaux si les points sont nombreux (p. ex. 1500 points au plus par requête)
   const CHUNK_SIZE = 1200;
   const allFeaturesMap = new Map();
 
@@ -193,7 +193,7 @@ async function main() {
   const dedupedPois = Array.from(allFeaturesMap.values());
   console.log(`\x1b[32m✔\x1b[0m Total unique POIs fetched along GT20: ${dedupedPois.length}`);
 
-  // Breakdown by category
+  // Répartition par catégorie
   const byCategory = {};
   for (const poi of dedupedPois) {
     byCategory[poi.category] = (byCategory[poi.category] || 0) + 1;
@@ -203,7 +203,7 @@ async function main() {
     console.log(`   - ${cat.padEnd(20)}: ${cnt}`);
   }
 
-  // Build new GPX with <wpt> for all POIs and <trk> with full original track
+  // Construit un nouveau GPX avec un <wpt> pour chaque POI et un <trk> avec toute la trace d'origine
   console.log(`\x1b[36m[GT20 POI Test]\x1b[0m Generating GT20_POI.gpx...`);
 
   const wptLines = dedupedPois.map((poi) => {

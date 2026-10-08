@@ -1,25 +1,26 @@
 // ---------------------------------------------------------------------------
-// Diagnose IGN WMS row-duplication ("comb") in the DEM rasters that feed the
-// slope / altitude overlays.
+// Diagnostique la duplication de lignes (« peigne ») du WMS IGN dans les
+// rasters DEM qui alimentent les surcouches de pente / d'altitude.
 //
-// Background: the IGN products are stored on a METRE-square grid, which in
-// EPSG:4326 is 1/cos(lat) wider than tall. A degree-square GetMap request
-// (WIDTH === HEIGHT) makes the server nearest-neighbour stretch the rows and
-// duplicate ~(1 - cos(lat)) of them — 29.4 % at 45°N, 33.3 % at 48°N. Horn's
-// ∂z/∂y then alternates between 0 and ~2× the true value on successive rows,
-// which paints the terrain as horizontal dashes instead of a smooth slope
-// field. `mnsWmsRequestSize()` in public/sw-dem/sources/ign-wms-raster.js avoids
-// this by asking for 1/cos(lat) more columns than rows.
+// Contexte : les produits IGN sont stockés sur une grille à mailles carrées
+// en MÈTRES, qui en EPSG:4326 est 1/cos(lat) fois plus large que haute. Une
+// requête GetMap à mailles carrées en degrés (WIDTH === HEIGHT) fait étirer
+// les lignes par le serveur au plus proche voisin et en duplique
+// ~(1 - cos(lat)) — 29,4 % à 45°N, 33,3 % à 48°N. Le ∂z/∂y de Horn alterne
+// alors entre 0 et ~2× la vraie valeur d'une ligne à l'autre, ce qui peint le
+// terrain en tirets horizontaux au lieu d'un champ de pente lisse.
+// `mnsWmsRequestSize()` dans public/sw-dem/sources/ign-wms-raster.js l'évite
+// en demandant 1/cos(lat) fois plus de colonnes que de lignes.
 //
-// Usage:
-//   node scripts/probes/diagnose-wms-row-comb.mjs                 # default sample sites
+// Usage :
+//   node scripts/probes/diagnose-wms-row-comb.mjs                 # sites d'échantillon par défaut
 //   node scripts/probes/diagnose-wms-row-comb.mjs 6.05 45.05 14   # lng lat zoom
 //
-// Reported per layer:
-//   eqY           % of rows bit-identical to the row above (0 is healthy)
-//   distinctRows  distinct rows returned / rows requested
-//   comb          even/odd alternation of |mean row-to-row delta|
-//                 (0 = clean, > 0.3 = visible dashes in the slope overlay)
+// Rapporté par couche :
+//   eqY           % de lignes identiques au bit près à la ligne du dessus (0 = sain)
+//   distinctRows  lignes distinctes renvoyées / lignes demandées
+//   comb          alternance paire / impaire de |écart moyen d'une ligne à l'autre|
+//                 (0 = propre, > 0,3 = tirets visibles dans la surcouche de pente)
 // ---------------------------------------------------------------------------
 
 const WMS = 'https://data.geopf.fr/wms-r/wms';
@@ -62,7 +63,7 @@ function buildUrl(t, layer, width, height) {
   );
 }
 
-// Mirror of mnsWmsRequestSize(): metre-square request geometry.
+// Reflet de mnsWmsRequestSize() : géométrie de requête à mailles carrées en mètres.
 function fixedSize(t, supersample = 1) {
   const b = mercatorTileBounds(t.z, t.x, t.y);
   const midLat = (b.north + b.south) / 2;
@@ -161,13 +162,13 @@ async function main() {
       `  (predicted duplication at degree-square: ${(100 * (1 - cosLat)).toFixed(1)} %)`,
     );
     for (const [label, layer] of Object.entries(LAYERS)) {
-      // Current (degree-square) request
+      // Requête actuelle (mailles carrées en degrés)
       const cur = await fetchRaster(buildUrl(t, layer, TILE, TILE));
       if (cur.error) { console.log(`    ${label}: ${cur.error}`); await sleep(1200); continue; }
       if (cur.bytes === TILE * TILE * 4) report('current', cur.data, TILE, TILE);
       else console.log(`    ${label}: unexpected payload ${cur.bytes} bytes`);
       await sleep(1200);
-      // Fixed (metre-square) request
+      // Requête corrigée (mailles carrées en mètres)
       const fix = await fetchRaster(buildUrl(t, layer, fw, fh));
       if (fix.error) { console.log(`    ${label}: fixed request -> ${fix.error}`); await sleep(1200); continue; }
       if (fix.bytes === fw * fh * 4) report('metre-sq', fix.data, fw, fh);

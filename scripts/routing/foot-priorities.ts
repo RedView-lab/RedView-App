@@ -1,14 +1,14 @@
 /**
- * Priority sliders & « Paramètres additionnels » on the pedestrian BRF —
- * the foot counterpart of the E / D / X / T / Q / S groups of
+ * Curseurs de priorité et « Paramètres additionnels » sur le BRF piéton —
+ * l'équivalent à pied des groupes E / D / X / T / Q / S de
  * scripts/routing/run-scenarios.ts.
  *
  *   npx tsx scripts/routing/foot-priorities.ts
  *   BROUTER_UPSTREAM=http://<vps> npx tsx scripts/routing/foot-priorities.ts
  *
- * Routes are requested like the app does for custom profiles
- * (routingStrategy.ts → single BRouter query): every priority effect must
- * therefore come from the generated BRF itself.
+ * Les routes sont demandées comme le fait l'application pour les profils
+ * personnalisés (routingStrategy.ts → une seule requête BRouter) : tout effet
+ * de priorité doit donc venir du BRF produit lui-même.
  */
 import { buildBrfProfile } from '../../src/features/itineraryPanel/lib/brouter/profiles/brf-template';
 import { syncTracageOnActivityChange } from '../../src/features/itineraryPanel/lib/project/syncTracageParams';
@@ -68,7 +68,7 @@ interface Stats {
   maxGradePct: number;
 }
 
-/** Vitesse preset of the discipline, with the slider-neutral elevation knob. */
+/** Préréglage Vitesse de la discipline, avec le réglage de dénivelé neutre pour les curseurs. */
 function presetRoadTypes(discipline: FootDiscipline, over: Partial<RoadTypesState> = {}): RoadTypesState {
   const sync = syncTracageOnActivityChange(discipline, 'vitesse', 10);
   const roadTypes = { ...(sync.roadTypes as RoadTypesState), applyToAllItineraries: false };

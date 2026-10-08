@@ -44,7 +44,7 @@ async function testRoute(url) {
 async function main() {
   console.log('🧪 Testing Weather Proxy Path & Tile Fix...\n');
 
-  // Test 1: Tile with colons in ISO timestamp
+  // Test 1 : tuile avec des deux-points dans l'horodatage ISO
   const tileRes = await testRoute('/api/weather/tiles/temperature_2026-09-19T17:00:00Z.png');
   console.log('1. Tile with colons:', tileRes);
   assert.strictEqual(tileRes.status, 200, 'Tile with colons must return HTTP 200');
@@ -52,26 +52,26 @@ async function main() {
   assert.strictEqual(tileRes.contentType, 'image/png', 'Content-Type must be image/png');
   console.log('   ✅ Tile with ISO timestamp colons loaded successfully!\n');
 
-  // Test 2: Tile with URL-encoded colons %3A
+  // Test 2 : tuile avec des deux-points encodés en URL %3A
   const tileEncodedRes = await testRoute('/api/weather/tiles/temperature_2026-09-19T17%3A00%3A00Z.png');
   console.log('2. Tile with %3A:', tileEncodedRes);
   assert.strictEqual(tileEncodedRes.status, 200, 'Tile with %3A must return HTTP 200');
   assert.ok(tileEncodedRes.isBuffer, 'Tile body must be a Buffer');
   console.log('   ✅ URL-encoded tile loaded successfully!\n');
 
-  // Test 3: meta.json
+  // Test 3 : meta.json
   const metaRes = await testRoute('/api/weather/meta.json');
   console.log('3. Metadata (meta.json):', { status: metaRes.status, isBuffer: metaRes.isBuffer, length: metaRes.length });
   assert.strictEqual(metaRes.status, 200, 'meta.json must return HTTP 200');
   console.log('   ✅ Metadata loaded successfully!\n');
 
-  // Test 4: Path traversal attempt ..%2F..%2Fetc%2Fpasswd
+  // Test 4 : tentative de traversée de chemin ..%2F..%2Fetc%2Fpasswd
   const traversalRes = await testRoute('/api/weather/..%2F..%2Fetc%2Fpasswd');
   console.log('4. Path traversal attempt (..%2F):', traversalRes);
   assert.strictEqual(traversalRes.status, 400, 'Path traversal must be rejected with 400');
   console.log('   ✅ Traversal attempt rejected with 400!\n');
 
-  // Test 5: Path traversal attempt tiles/../../../etc/passwd
+  // Test 5 : tentative de traversée de chemin tiles/../../../etc/passwd
   const deepTraversalRes = await testRoute('/api/weather/tiles/../../../etc/passwd');
   console.log('5. Deep path traversal attempt (tiles/../):', deepTraversalRes);
   assert.strictEqual(deepTraversalRes.status, 400, 'Deep path traversal must be rejected with 400');

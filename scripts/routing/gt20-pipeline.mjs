@@ -11,7 +11,7 @@ const outputPath = path.join(BENCH_DATA_DIR, 'GT20_POI.gpx');
 console.log(`\x1b[36m[RedView Real Test]\x1b[0m 1. Reading ${inputPath}...`);
 const rawXml = fs.readFileSync(inputPath, 'utf-8');
 
-// Parse points using RedView regex parser
+// Analyse les points avec l'analyseur à regex de RedView
 const trkptRegex = /<trkpt\s+lat=["']([^"']+)["']\s+lon=["']([^"']+)["'][^>]*>(?:[\s\S]*?<ele>([^<]+)<\/ele>)?[\s\S]*?<\/trkpt>/gi;
 const points = [];
 let m;
@@ -25,7 +25,7 @@ while ((m = trkptRegex.exec(rawXml)) !== null) {
 }
 console.log(`\x1b[32m✔\x1b[0m Parsed ${points.length} points from GT20.gpx`);
 
-// Compute cumulative distances
+// Calcule les distances cumulées
 let totalDistM = 0;
 const R = 6371008.8;
 for (let i = 0; i < points.length; i++) {
@@ -45,7 +45,7 @@ for (let i = 0; i < points.length; i++) {
 }
 console.log(`\x1b[32m✔\x1b[0m Total course distance: ${(totalDistM / 1000).toFixed(1)} km`);
 
-// 2. Fetch real POIs from the Oracle VPS with radius 40m
+// 2. Récupère les vrais POI du VPS Oracle avec un rayon de 40 m
 const VPS_POI_URL = 'http://141.145.220.99/poi/corridor';
 const ALL_CATEGORIES = [
   'drinking_water', 'water_point', 'water_tap', 'spring', 'fountain',
@@ -59,7 +59,7 @@ const ALL_CATEGORIES = [
   'pass', 'viewpoint', 'picnic_site',
 ];
 
-// Sample points every ~35m so corridor coverage is complete without sending 16k coords in 1 hit
+// Échantillonne un point tous les ~35 m pour une couverture complète du corridor sans envoyer 16 k coordonnées d'un coup
 const sampled = [points[0]];
 let last = points[0];
 let acc = 0;
@@ -120,10 +120,10 @@ for (const p of realPois) {
 }
 console.log(`\x1b[32m✔\x1b[0m Marked ${favCount} water points & passes as favorite (to test favorite inclusion)`);
 
-// 3. Build RedView Itinerary object and test RedView's own export functions
+// 3. Construit l'objet Itinéraire de RedView et teste les propres fonctions d'export de RedView
 console.log(`\x1b[36m[RedView Real Test]\x1b[0m 3. Invoking RedView exporter (exportGpx / exportKml)...`);
 
-// Import the actual compiled RedView export functions
+// Importe les vraies fonctions d'export compilées de RedView
 const { buildItineraryGpx } = await import('../../src/features/exporter/lib/exportGpx.ts');
 const { buildItineraryKml } = await import('../../src/features/exporter/lib/exportKml.ts');
 const { collectExportAnchors } = await import('../../src/features/exporter/lib/exportHelpers.ts');
@@ -143,7 +143,7 @@ const itinerary = {
   },
 };
 
-// Test A: With favoritesOnly: true (only the 101 favorite water points & cols)
+// Test A : avec favoritesOnly: true (seulement les 101 points d'eau et cols favoris)
 const favAnchors = collectExportAnchors(itinerary, points, { favoritesOnly: true });
 console.log(`\x1b[32m✔\x1b[0m collectExportAnchors with favoritesOnly=true: ${favAnchors.length} anchors (including Depart/Arrivee)`);
 const sampleFav = favAnchors.find(a => a.kind === 'poi');
@@ -151,7 +151,7 @@ if (sampleFav) {
   console.log(`   Sample favorite POI: [${sampleFav.poiCategory}] "${sampleFav.name}" at km ${(sampleFav.distanceM / 1000).toFixed(1)}`);
 }
 
-// Test B: With favoritesOnly: false (ALL 624 real POIs)
+// Test B : avec favoritesOnly: false (TOUS les 624 vrais POI)
 const allAnchors = collectExportAnchors(itinerary, points, { favoritesOnly: false });
 console.log(`\x1b[32m✔\x1b[0m collectExportAnchors with favoritesOnly=false: ${allAnchors.length} anchors`);
 
@@ -160,13 +160,13 @@ const gpxAllPois = buildItineraryGpx(itinerary, { favoritesOnly: false });
 fs.writeFileSync(outputPath, gpxAllPois, 'utf-8');
 console.log(`\x1b[32m✔\x1b[0m Generated and saved GPX: ${outputPath} (${(fs.statSync(outputPath).size / 1024).toFixed(1)} KB)`);
 
-// Also save KML for verification
+// Enregistre aussi le KML pour vérification
 const kmlOutputPath = path.join(BENCH_DATA_DIR, 'GT20_POI.kml');
 const kmlAllPois = buildItineraryKml(itinerary, { favoritesOnly: false });
 fs.writeFileSync(kmlOutputPath, kmlAllPois, 'utf-8');
 console.log(`\x1b[32m✔\x1b[0m Generated and saved KML: ${kmlOutputPath} (${(fs.statSync(kmlOutputPath).size / 1024).toFixed(1)} KB)`);
 
-// 4. Validate output GPX
+// 4. Valide le GPX de sortie
 console.log(`\x1b[36m[RedView Real Test]\x1b[0m 4. Validating output file...`);
 const outputText = fs.readFileSync(outputPath, 'utf-8');
 const wptMatches = outputText.match(/<wpt\b/g);

@@ -1,10 +1,10 @@
-// Sanity-check the TIFF LZW decoder against a real swissSURFACE3D Raster COG.
-// Run: node scripts/probes/swiss-lzw.mjs
+// Contrôle du décodeur TIFF LZW sur un vrai COG raster swissSURFACE3D.
+// Lancement : node scripts/probes/swiss-lzw.mjs
 import fs from 'node:fs';
 import https from 'node:https';
 
 const src = fs.readFileSync('public/sw-dem/swiss/swiss-cog.js', 'utf8');
-// Find decodeTIFFLZW by brace-balanced extraction
+// Trouve decodeTIFFLZW par extraction équilibrée des accolades
 const start = src.indexOf('function decodeTIFFLZW');
 if (start < 0) { console.error('decoder marker not found'); process.exit(1); }
 let i = src.indexOf('{', start);

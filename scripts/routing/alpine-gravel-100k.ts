@@ -111,7 +111,7 @@ async function runTest() {
   }
   console.log('   └───────────┴────────────┴─────────────┴─────────────┴──────────────┴─────────────┘');
 
-  // 5. Test Cross-Border (Italie / Suisse) Fallback Open-Meteo
+  // 5. Test du repli Open-Meteo transfrontalier (Italie / Suisse)
   console.log('\n5. TEST DE COUVERTURE HORS FRANCE / TRANSFRONTALIER (OPEN-METEO COPERNICUS DEM) :');
   const crossBorderPoints = [
     { name: 'Col du Petit Saint-Bernard (FR)', lat: 45.6806, lon: 6.8833 },

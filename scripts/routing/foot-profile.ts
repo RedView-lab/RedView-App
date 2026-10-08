@@ -1,15 +1,17 @@
 /**
- * Pedestrian (Running / Trail) BRF profiles against the BRouter server.
+ * Profils BRF piétons (Course à pied / Trail) contre le serveur BRouter.
  *
  *   npx tsx scripts/routing/foot-profile.ts
  *   BROUTER_UPSTREAM=http://<vps> npx tsx scripts/routing/foot-profile.ts
  *
- * 1. Every Running / Trail preset × tracing mode compiles on the server
- *    (an unknown lookup name/value in the BRF is a compile error).
- * 2. The stock pedestrian fallback profile exists on the server.
- * 3. Scenario routes land on the expected network (sidewalks & car-free
- *    ways in town, paths in the mountains) and respect the SAC ceiling.
- * 4. Bike presets never emit pedestrian directives.
+ * 1. Chaque préréglage Course à pied / Trail × mode de tracé compile sur le
+ *    serveur (un nom / une valeur de lookup inconnus dans le BRF sont une
+ *    erreur de compilation).
+ * 2. Le profil piéton de repli standard existe sur le serveur.
+ * 3. Les routes des scénarios passent par le réseau attendu (trottoirs et
+ *    voies sans voitures en ville, sentiers en montagne) et respectent le
+ *    plafond SAC.
+ * 4. Les préréglages vélo n'émettent jamais de directive piétonne.
  */
 import { buildBrfProfile } from '../../src/features/itineraryPanel/lib/brouter/profiles/brf-template';
 import { FOOT_FALLBACK_PROFILE } from '../../src/features/itineraryPanel/lib/brouter/types';
@@ -46,7 +48,7 @@ const SAC_GRADES: Record<string, number> = {
   difficult_alpine_hiking: 6,
 };
 
-/** SAC ceilings mirrored from brf-template/values.ts (resolveFootValues). */
+/** Plafonds SAC reflétés de brf-template/values.ts (resolveFootValues). */
 function sacLimitFor(activity: 'running' | 'trail', mode: TracingModeType): number {
   if (activity === 'running') return mode === 'aventure' ? 2 : 1;
   return mode === 'comfort' ? 2 : mode === 'aventure' ? 4 : 3;
@@ -94,11 +96,11 @@ interface RouteStats {
   distanceKm: number;
   ascentM: number;
   durationMin: number;
-  /** Share of distance (0..1) per highway=* value. */
+  /** Part de la distance (0..1) par valeur highway=*. */
   highwayShare: Record<string, number>;
-  /** Highest SAC grade met along the route. */
+  /** Plus haut degré SAC rencontré le long de la route. */
   maxSac: number;
-  /** Share of distance tagged foot=no / access=no without foot override. */
+  /** Part de la distance marquée foot=no / access=no sans exception piétonne. */
   footForbiddenShare: number;
 }
 
@@ -177,7 +179,7 @@ const SCENARIOS: Scenario[] = [
     activity: 'running',
     points: [{ lat: 48.8674, lon: 2.3634 }, { lat: 48.8531, lon: 2.3692 }],
     assert: (s, mode) => {
-      // Aventure trades sidewalks for scenic quays (river relief), by design.
+      // Aventure échange les trottoirs contre des quais pittoresques (relief de rivière), par conception.
       if (mode !== 'aventure') check('pedestrian ways ≥ 50 %', share(s, FOOT_WAYS) >= 0.5, fmtShares(s));
       check('no motorway / trunk', share(s, MOTOR_WAYS) === 0);
       check('primary / secondary ≤ 10 %', share(s, BUSY_WAYS) <= 0.1, fmtShares(s));

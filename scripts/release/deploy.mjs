@@ -95,7 +95,7 @@ async function main() {
   }
   if (customMessage && !commitAll) warn('Message ignored: nothing to commit (only --commit-all commits).');
 
-  // 0. Quality gate, before anything is committed or pushed
+  // 0. Porte qualité, avant tout commit ou push
   if (skipChecks) {
     warn('QUALITY GATE SKIPPED (--skip-checks): deploying unverified code.');
   } else if (!runQualityGate()) {
@@ -133,7 +133,7 @@ async function main() {
     log(`Deploying ${run('git rev-parse --short=12 HEAD')} (working tree clean).`);
   }
 
-  // 2. Git push
+  // 2. Push git
   log('Pushing to GitHub origin/main...');
   try {
     const pushOutput = run('git push origin main');

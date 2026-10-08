@@ -1,18 +1,19 @@
-// Stress-test data.geo.admin.ch range-fetch capacity to understand the
-// real concurrency / timeout envelope of the swissSURFACE3D CDN.
+// Test de charge de la capacité de requêtes par plage de data.geo.admin.ch,
+// pour connaître l'enveloppe réelle de concurrence / délais du CDN
+// swissSURFACE3D.
 //
-// Usage:
+// Usage :
 //   node scripts/probes/swiss-cdn.mjs
 //
-// What we measure:
-//   1. STAC bbox query latency (single request, warm vs cold)
-//   2. COG header range fetch latency (32 KB from each of N COGs in parallel)
-//   3. COG tile range fetch latency (~300-800 KB ranges in parallel at
-//      varying concurrency: 4, 8, 12, 16, 24, 32). Reports p50/p95/max
-//      and timeout rate per concurrency level.
+// Ce qu'on mesure :
+//   1. la latence d'une requête STAC par emprise (requête unique, à chaud / à froid)
+//   2. la latence de lecture par plage des en-têtes COG (32 Ko de chacun de N COG en parallèle)
+//   3. la latence de lecture par plage des tuiles COG (plages de ~300 à 800 Ko
+//      en parallèle à une concurrence variable : 4, 8, 12, 16, 24, 32).
+//      Rapporte p50 / p95 / max et le taux de délais dépassés par niveau.
 //
-// Targets a busy alpine area near Sion (the area the user is browsing).
-// All requests use 20 s timeout and report failure cause.
+// Vise une zone alpine chargée près de Sion (la zone que parcourt l'utilisateur).
+// Toutes les requêtes ont un délai de 20 s et rapportent la cause d'échec.
 
 import https from 'node:https';
 import { performance } from 'node:perf_hooks';
@@ -24,7 +25,7 @@ const STAC_BBOX = '7.20,46.15,7.45,46.30';
 
 const TIMEOUT_MS = 20_000;
 const HEADER_BYTES = 32_768;
-const TILE_BYTES = 524_288; // typical compressed LZW Float32 tile
+const TILE_BYTES = 524_288; // tuile Float32 typique compressée en LZW
 
 const agent = new https.Agent({ keepAlive: true, maxSockets: 64 });
 
@@ -89,7 +90,7 @@ async function inFlight(items, concurrency, fn) {
   return results;
 }
 
-// ─── 1. STAC query ────────────────────────────────────────────────────────
+// ─── 1. Requête STAC ──────────────────────────────────────────────────────
 console.log('═══ STAC ════════════════════════════════════════════════════════════════');
 const stacUrl = `${STAC_BASE}?bbox=${STAC_BBOX}&limit=200`;
 const stacRuns = [];
@@ -99,7 +100,7 @@ for (let i = 0; i < 3; i++) {
   console.log(`  STAC run ${i + 1}: status=${r.status} bytes=${r.bytes} ms=${r.ms.toFixed(0)} ${r.err || ''}`);
 }
 
-// Pull COG urls from the STAC response
+// Récupère les URL des COG dans la réponse STAC
 let cogUrls = [];
 {
   const r = await new Promise((resolve) => {
@@ -123,7 +124,7 @@ if (cogUrls.length === 0) {
   process.exit(1);
 }
 
-// ─── 2. COG headers in parallel ───────────────────────────────────────────
+// ─── 2. En-têtes COG en parallèle ─────────────────────────────────────────
 console.log('\n═══ COG HEADERS (32 KB range) ═══════════════════════════════════════════');
 for (const conc of [4, 8, 16, 24]) {
   const sample = cogUrls.slice(0, Math.min(24, cogUrls.length));
@@ -133,12 +134,12 @@ for (const conc of [4, 8, 16, 24]) {
   summarize(`headers conc=${conc} wall=${wall.toFixed(0)}ms`, results);
 }
 
-// ─── 3. COG tile ranges in parallel (deeper into the file) ────────────────
+// ─── 3. Plages de tuiles COG en parallèle (plus loin dans le fichier) ─────
 console.log('\n═══ COG TILE RANGES (~512 KB at offset 65536) ═══════════════════════════');
 for (const conc of [4, 8, 12, 16, 24, 32]) {
   const sample = cogUrls.slice(0, Math.min(32, cogUrls.length));
   const t0 = performance.now();
-  // Deep offset to skip the IFD region and hit a real tile body.
+  // Décalage profond pour sauter la zone des IFD et tomber sur un vrai corps de tuile.
   const results = await inFlight(sample, conc, (u) => fetchRange(u, 65_536, TILE_BYTES));
   const wall = performance.now() - t0;
   summarize(`ranges  conc=${conc} wall=${wall.toFixed(0)}ms`, results);

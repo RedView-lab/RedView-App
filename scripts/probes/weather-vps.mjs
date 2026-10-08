@@ -1,5 +1,5 @@
-// Test script for RedView Weather System on Oracle VPS or local proxy
-// Usage:
+// Script de test du système météo RedView sur le VPS Oracle ou un proxy local
+// Usage :
 //   node scripts/probes/weather-vps.mjs
 //   node scripts/probes/weather-vps.mjs --base-url http://141.145.220.99/weather
 //   node scripts/probes/weather-vps.mjs --base-url http://localhost:5173/api/weather
@@ -23,7 +23,7 @@ async function runWeatherTests() {
   console.log(`🌦️ Testing RedView Weather Service at: ${baseUrl}`);
   console.log('='.repeat(70));
 
-  // 1. Fetch meta.json
+  // 1. Récupère meta.json
   console.log('\n1️⃣ Fetching Metadata (meta.json):');
   const t0 = performance.now();
   const metaUrl = baseUrl.endsWith('.json') ? baseUrl : `${baseUrl}/meta.json`;
@@ -58,7 +58,7 @@ async function runWeatherTests() {
     return;
   }
 
-  // 2. Fetch Sample Tiles for All Variables
+  // 2. Récupère des tuiles d'exemple pour toutes les variables
   console.log('\n2️⃣ Testing 2D Raster Tiles for First Hour:');
   const firstHour = meta.hours[0];
   const variables = Object.keys(meta.variables || { temperature: {}, rain: {} });
@@ -79,7 +79,7 @@ async function runWeatherTests() {
     }
   }
 
-  // 3. Test Multi-Hour Scrubbing Latency (Simulating time slider)
+  // 3. Teste la latence d'un glissement sur plusieurs heures (simule le curseur de temps)
   console.log('\n3️⃣ Testing Time-Scrubbing Latency (Next 6 Hours Temperature):');
   const testHours = meta.hours.slice(0, 6);
   for (let i = 0; i < testHours.length; i++) {

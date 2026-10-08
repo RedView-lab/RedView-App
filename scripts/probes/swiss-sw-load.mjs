@@ -1,9 +1,9 @@
-// Simulate the SW load pattern: 16 mercator tiles requested simultaneously,
-// each spawning ~50 internal-tile range fetches → ~800 concurrent ranges
-// fanned out through a 12-slot semaphore.
+// Simule le schéma de charge du SW : 16 tuiles Mercator demandées en même
+// temps, chacune lançant ~50 lectures par plage de tuiles internes → ~800
+// plages simultanées réparties à travers un sémaphore de 12 places.
 //
-// This is the actual scenario the browser SW runs when the user pans into
-// a fresh viewport over Switzerland.
+// C'est le scénario réel que joue le SW du navigateur quand l'utilisateur se
+// déplace vers une nouvelle vue au-dessus de la Suisse.
 
 import https from 'node:https';
 import { performance } from 'node:perf_hooks';
@@ -30,13 +30,13 @@ function fetchRange(url, offset, length) {
   });
 }
 
-// Single global semaphore — same as SWISS_CONCURRENCY in the SW
+// Un seul sémaphore global — comme SWISS_CONCURRENCY dans le SW
 function makeSemaphore(slots) {
   let active = 0;
   const queue = [];
   function drain() {
     while (active < slots && queue.length > 0) {
-      const { fn, resolve } = queue.pop(); // LIFO like SW
+      const { fn, resolve } = queue.pop(); // LIFO comme le SW
       active++;
       fn().then(resolve).finally(() => { active--; drain(); });
     }
@@ -65,16 +65,16 @@ async function simulate(numBursts, fetchesPerBurst, semaphoreSlots) {
   const sem = makeSemaphore(semaphoreSlots);
   const t0 = performance.now();
 
-  // Each "burst" is one buildSwissTile() call requesting fetchesPerBurst ranges.
-  // All bursts kick off at t=0 (worst case: user pans, 16 mercator tiles arrive
-  // in the same animation frame).
+  // Chaque « rafale » est un appel buildSwissTile() qui demande fetchesPerBurst
+  // plages. Toutes les rafales partent à t=0 (pire cas : l'utilisateur se
+  // déplace, 16 tuiles Mercator arrivent dans la même image d'animation).
   const bursts = [];
   for (let b = 0; b < numBursts; b++) {
     bursts.push((async () => {
       const fetches = [];
       for (let i = 0; i < fetchesPerBurst; i++) {
         const url = cogUrls[(b * fetchesPerBurst + i) % cogUrls.length];
-        // Different offset per fetch so server doesn't just dedup
+        // Un décalage différent par requête pour que le serveur ne se contente pas de dédoublonner
         const offset = 32_768 + (i % 8) * 65_536;
         fetches.push(sem(() => fetchRange(url, offset, TILE_BYTES)));
       }
@@ -103,7 +103,7 @@ for (const cfg of [
   { bursts: 4,  perBurst: 25, sem: 12 },
   { bursts: 8,  perBurst: 25, sem: 12 },
   { bursts: 16, perBurst: 25, sem: 12 },
-  { bursts: 16, perBurst: 50, sem: 12 },  // realistic: 16 mercator tiles × 50 internals
+  { bursts: 16, perBurst: 50, sem: 12 },  // réaliste : 16 tuiles Mercator × 50 internes
   { bursts: 16, perBurst: 50, sem: 8 },
   { bursts: 16, perBurst: 50, sem: 24 },
 ]) {

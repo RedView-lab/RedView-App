@@ -263,7 +263,7 @@ async function main() {
       console.log(`Collection ${col.id} exists`);
     }
 
-    // Add attributes
+    // Ajoute les attributs
     for (const attr of col.attributes) {
       let attrPath = `/databases/${DATABASE_ID}/collections/${col.id}/attributes/${attr.type}`;
       const payload = {
@@ -290,11 +290,11 @@ async function main() {
       await sleep(100);
     }
 
-    // Wait for attributes to be in 'available' status before adding indexes
+    // Attend que les attributs soient au statut 'available' avant d'ajouter les index
     console.log(`Waiting for attributes in ${col.id} to be processed...`);
     await sleep(1500);
 
-    // Add indexes
+    // Ajoute les index
     for (const idx of col.indexes) {
       const idxRes = await api(`/databases/${DATABASE_ID}/collections/${col.id}/indexes`, 'POST', {
         key: idx.key,
@@ -345,7 +345,7 @@ async function main() {
       // read("users") ici exposerait les données de TOUS les utilisateurs.
       permissions: ['create("users")'],
       fileSecurity: true,
-      maxFileSize: 30000000, // 30MB = MAX_CLOUD_PROJECT_FILE_BYTES (≤ _APP_STORAGE_LIMIT)
+      maxFileSize: 30000000, // 30 Mo = MAX_CLOUD_PROJECT_FILE_BYTES (≤ _APP_STORAGE_LIMIT)
       allowedFileExtensions: ['gz'],
       compression: 'none', // déjà gzip côté client
     },

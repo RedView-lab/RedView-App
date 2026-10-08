@@ -52,8 +52,8 @@ export function wantsGroup(key: string): boolean {
 }
 
 /**
- * Best-of-N alternative routing — EE3D recipe. Run BRouter with
- * alternativeidx 0..N-1 in parallel, keep whichever climbs the most.
+ * Routage alternatif « meilleur de N » — recette EE3D. Lance BRouter avec
+ * alternativeidx 0..N-1 en parallèle et garde celui qui grimpe le plus.
  */
 async function fetchRouteBestOfN(
   profile: string,

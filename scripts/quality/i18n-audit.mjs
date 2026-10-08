@@ -1,24 +1,25 @@
 /**
- * i18n audit: extracts user-visible strings from src/ (JSX text, translatable
- * JSX attributes, t()/translateAppText() arguments, UI-ish object properties,
- * toast/confirm messages) and checks each one against the { fr, en } pairs in
+ * Audit i18n : extrait les chaînes visibles par l'utilisateur dans src/ (texte
+ * JSX, attributs JSX traduisibles, arguments de t()/translateAppText(),
+ * propriétés d'objet d'allure UI, messages de toast / confirmation) et les
+ * vérifie une à une contre les paires { fr, en } de
  * src/shared/i18n/config/translations/*.ts.
  *
- * Run: node scripts/quality/i18n-audit.mjs [--json out.json] [--list] [--strict]
- *   --json <file>  write the missing strings (with locations) as JSON
- *   --list         print every missing string with its first location
- *   --strict       exit 1 on any missing string, conflicting pair or dynamic
- *                  template (quality gate: npm run i18n:check, part of check)
+ * Lancement : node scripts/quality/i18n-audit.mjs [--json out.json] [--list] [--strict]
+ *   --json <file>  écrit les chaînes manquantes (avec leur emplacement) en JSON
+ *   --list         affiche chaque chaîne manquante avec son premier emplacement
+ *   --strict       sort en 1 sur toute chaîne manquante, paire en conflit ou
+ *                  gabarit dynamique (porte qualité : npm run i18n:check, dans check)
  *
- * Tests, the co-editing simulator and the files of NOT_UI_FILES are not
- * scanned; TECHNICAL_STRINGS lists the few strings in UI-looking positions
- * that never reach the screen (each with its reason).
+ * Les tests, le simulateur de co-édition et les fichiers de NOT_UI_FILES ne
+ * sont pas analysés ; TECHNICAL_STRINGS liste les quelques chaînes en position
+ * d'allure UI qui n'atteignent jamais l'écran (chacune avec sa raison).
  *
- * Coverage = translated / (translated + missing) over unique strings.
- * Language-neutral strings (units, acronyms, brand names, numbers) are counted
- * apart and excluded from the ratio. Template literals with static words in
- * a UI position are reported as "dynamic" (they can't be matched by the
- * DOM translator and need t('… {{var}} …', { var })).
+ * Couverture = traduites / (traduites + manquantes) sur les chaînes uniques.
+ * Les chaînes neutres en langue (unités, sigles, marques, nombres) sont
+ * comptées à part et exclues du ratio. Les gabarits littéraux avec des mots
+ * statiques en position UI sont signalés « dynamiques » (le traducteur du DOM
+ * ne peut pas les reconnaître : il leur faut t('… {{var}} …', { var })).
  */
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'fs';
 import { join, relative, dirname } from 'path';
@@ -35,25 +36,25 @@ const jsonOut = args.includes('--json') ? args[args.indexOf('--json') + 1] : nul
 const listMissing = args.includes('--list');
 const strict = args.includes('--strict');
 
-/** Not UI: tests and fixtures, data with proper nouns, labels that are French by design. */
+/** Pas de l'UI : tests et données de test, données à noms propres, libellés français par conception. */
 const NOT_UI_FILES = [
   /\.test\.tsx?$/,
   /[\\/]src[\\/]shared[\\/]test[\\/]/,
-  /[\\/]features[\\/]collab[\\/]sim[\\/]/, // co-editing simulator fixtures
-  /[\\/]features[\\/]lidar[\\/]lib[\\/]japan[\\/]/, // prefecture and dataset names (proper nouns)
+  /[\\/]features[\\/]collab[\\/]sim[\\/]/, // données de test du simulateur de co-édition
+  /[\\/]features[\\/]lidar[\\/]lib[\\/]japan[\\/]/, // noms de préfectures et de jeux de données (noms propres)
   /[\\/]shared[\\/]lib[\\/]analytics[\\/]labels\.ts$/, // Umami labels, plain French on purpose (docs/analytics)
-  /[\\/]shared[\\/]i18n[\\/]config[\\/]types\.ts$/, // language names, each written in its own language
+  /[\\/]shared[\\/]i18n[\\/]config[\\/]types\.ts$/, // noms de langues, chacun écrit dans sa propre langue
 ];
 
-/** Strings in UI-looking positions that never reach the screen. */
+/** Chaînes en position d'allure UI qui n'atteignent jamais l'écran. */
 const TECHNICAL_STRINGS = new Set([
-  'Flow-Py block without its job', // worker protocol error (lidar avalanche pool)
-  'WebGPU', 'WebGL 2', // renderer names in the viewer's debug line
+  'Flow-Py block without its job', // erreur de protocole de worker (pool avalanche du LiDAR)
+  'WebGPU', 'WebGL 2', // noms des moteurs de rendu dans la ligne de débogage du visualiseur
 ]);
-/** Same, for template literals: a prefix of their static text. */
+/** Idem, pour les gabarits littéraux : un préfixe de leur texte statique. */
 const TECHNICAL_TEMPLATE_PREFIXES = [
-  'Cache terrain ', // label of a background cache-write task (logs)
-  'BRouter HTTP ', 'BRouter upload HTTP ', // raw upstream error, mapped to a translated message by brouterErrorMessage
+  'Cache terrain ', // libellé d'une tâche d'écriture de cache en arrière-plan (journaux)
+  'BRouter HTTP ', 'BRouter upload HTTP ', // erreur amont brute, traduite en message par brouterErrorMessage
 ];
 
 // --- helpers ---------------------------------------------------------------
@@ -95,9 +96,9 @@ const NEUTRAL_WORDS = new Set([
   'hillshade', 'zoom', 'info', 'stop', 'start', 'sport', 'description', 'surface', 'type', 'total', 'distance',
 ]);
 
-/** Strings identical in both languages (units, acronyms, numbers, brand names). */
+/** Chaînes identiques dans les deux langues (unités, sigles, nombres, marques). */
 function isNeutral(text) {
-  if (!/[A-Za-zÀ-ÿ]{2,}/.test(text)) return true; // no real word
+  if (!/[A-Za-zÀ-ÿ]{2,}/.test(text)) return true; // pas de vrai mot
   const words = text
     .toLowerCase()
     .split(/[\s·•|,;:()[\]{}<>/=+×→←↑↓–—\-!?…."'«»]+/)
@@ -107,18 +108,18 @@ function isNeutral(text) {
   return words.every((w) => NEUTRAL_WORDS.has(w) || /^\d/.test(w) || /^[a-z]$/.test(w));
 }
 
-/** Looks like an identifier, CSS class, path, URL, key… rather than prose. */
+/** Ressemble à un identifiant, une classe CSS, un chemin, une URL, une clé… plutôt qu'à de la prose. */
 function looksTechnical(text) {
   if (/^https?:\/\//.test(text) || /^\/[\w\-/.]*$/.test(text) || /^[.#]?[\w-]+\.(svg|png|jpg|webp|css|js|ts)$/.test(text)) return true;
-  if (/^[a-z0-9]+([_\-.:/]+[a-z0-9]+)+$/i.test(text) && !/\s/.test(text)) return true; // kebab/snake/dotted/BEM ids
-  if (/^[\s.]*[a-z0-9]+(\.[a-z0-9]+)+$/i.test(text) && !/\s\w/.test(text.trim())) return true; // ".json.gz" file suffixes
+  if (/^[a-z0-9]+([_\-.:/]+[a-z0-9]+)+$/i.test(text) && !/\s/.test(text)) return true; // identifiants kebab / snake / pointés / BEM
+  if (/^[\s.]*[a-z0-9]+(\.[a-z0-9]+)+$/i.test(text) && !/\s\w/.test(text.trim())) return true; // suffixes de fichier « .json.gz »
   if (/^[a-z]+[A-Z][A-Za-z0-9]*$/.test(text)) return true; // camelCase
   if (/^[A-Z0-9_]{2,}$/.test(text) && text.includes('_')) return true; // CONST_CASE
   if (/^(rgba?|hsla?|var|calc|url|translate|scale|rotate|linear-gradient)\(/.test(text)) return true;
   if (/^#[0-9a-f]{3,8}$/i.test(text)) return true;
-  if (/^[\d.\s%a-z-]+$/.test(text) && /\d/.test(text) && !/\s[a-z]{3,}/i.test(text)) return true; // CSS values "4px 2px"
-  if (/[{};]\s*$/.test(text) && /:/.test(text)) return true; // css blobs
-  if (!/\s/.test(text) && /^[a-z][a-z0-9]*$/.test(text)) return true; // single lowercase token: almost always a key
+  if (/^[\d.\s%a-z-]+$/.test(text) && /\d/.test(text) && !/\s[a-z]{3,}/i.test(text)) return true; // valeurs CSS « 4px 2px »
+  if (/[{};]\s*$/.test(text) && /:/.test(text)) return true; // blocs CSS
+  if (!/\s/.test(text) && /^[a-z][a-z0-9]*$/.test(text)) return true; // un seul mot en minuscules : presque toujours une clé
   return false;
 }
 
@@ -130,7 +131,7 @@ const DOM_TEXT_PROPERTIES = new Set(['textContent', 'innerText', 'title', 'place
 const LABEL_FUNCTION = /(label|title|text|message|caption|description|tooltip|hint|summary|name|wording|phrase)/i;
 const UI_CALLS = new Set(['t', 'translateAppText', 'showToast', 'notify', 'confirm', 'alert', 'tr', 'translate']);
 
-// --- translation pairs ----------------------------------------------------
+// --- paires de traduction -------------------------------------------------
 
 function readPairs() {
   const pairs = [];
@@ -161,8 +162,8 @@ function readPairs() {
 
 // --- extraction -------------------------------------------------------------
 
-const found = new Map(); // canonical text -> { text, kind, locations: [] }
-const dynamic = []; // template literals in UI positions
+const found = new Map(); // texte canonique -> { text, kind, locations: [] }
+const dynamic = []; // gabarits littéraux en position UI
 
 function record(text, kind, sf, node) {
   const canonical = canonicalize(text);
@@ -180,7 +181,7 @@ function record(text, kind, sf, node) {
 }
 
 function recordDynamic(node, sf, kind) {
-  if (/^---context:/m.test(node.head.text) || /brf-template/.test(sf.fileName)) return; // BRouter profile source, not UI
+  if (/^---context:/m.test(node.head.text) || /brf-template/.test(sf.fileName)) return; // source de profil BRouter, pas de l'UI
   if (TECHNICAL_TEMPLATE_PREFIXES.some((prefix) => node.head.text.startsWith(prefix))) return;
   const staticText = [node.head.text, ...node.templateSpans.map((s) => s.literal.text)].join(' ');
   if (!/[A-Za-zÀ-ÿ]{3,}/.test(staticText) || isNeutral(canonicalize(staticText))) return;
@@ -194,7 +195,7 @@ function recordDynamic(node, sf, kind) {
   });
 }
 
-/** Collects string literals reachable as "values" of an expression (ternaries, ||, ??, parens). */
+/** Collecte les littéraux de chaîne atteignables comme « valeurs » d'une expression (ternaires, ||, ??, parenthèses). */
 function collectValueStrings(expr, sf, kind) {
   if (!expr) return;
   if (ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr)) {
@@ -212,7 +213,7 @@ function collectValueStrings(expr, sf, kind) {
   }
 }
 
-/** Text nodes and translatable attributes inside an HTML string / template (innerHTML templates). */
+/** Nœuds texte et attributs traduisibles dans une chaîne / un gabarit HTML (gabarits innerHTML). */
 function recordHtml(node, sf) {
   const raw = ts.isTemplateExpression(node)
     ? [node.head.text, ...node.templateSpans.map((span) => span.literal.text)].join(' ')
@@ -243,7 +244,7 @@ function isInsideNoTranslate(node, sf) {
   return false;
 }
 
-/** Return statements inside functions named like label/text formatters. */
+/** Instructions return dans les fonctions nommées comme des formateurs de libellé / texte. */
 function isLabelFunction(node) {
   for (let p = node.parent; p; p = p.parent) {
     if (ts.isFunctionDeclaration(p) || ts.isMethodDeclaration(p)) {
@@ -326,8 +327,9 @@ missing.sort((a, b) => a.locations[0].localeCompare(b.locations[0]));
 const total = translated + missing.length;
 const coverage = total === 0 ? 100 : (translated / total) * 100;
 
-// Pair hygiene: a key (either side) mapped to two different translations.
-// Within one language the later pair wins, so one of them is silently lost.
+// Hygiène des paires : une clé (d'un côté ou de l'autre) associée à deux
+// traductions différentes. Dans une même langue la dernière paire l'emporte,
+// donc l'une des deux est perdue sans bruit.
 const conflicts = [];
 for (const side of ['fr', 'en']) {
   const other = side === 'fr' ? 'en' : 'fr';

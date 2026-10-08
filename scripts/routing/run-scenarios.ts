@@ -1,5 +1,5 @@
 /**
- * Comprehensive scenario tests for the BRF generator + upload pipeline.
+ * Tests de scénarios complets du générateur de BRF + du pipeline d'envoi.
  *
  *   npx tsx scripts/routing/run-scenarios.ts
  */

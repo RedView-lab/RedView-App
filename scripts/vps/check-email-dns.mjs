@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
- * Diagnostic & Validation Script for Resend Email DNS (redview.tech)
- * Usage: node scripts/vps/check-email-dns.mjs
+ * Script de diagnostic et de validation du DNS d'e-mail Resend (redview.tech)
+ * Usage : node scripts/vps/check-email-dns.mjs
  */
 
 import dns from 'node:dns/promises';
 import fs from 'node:fs';
 import path from 'node:path';
 
-// Read from env or .env file
+// Lecture depuis l'environnement ou le fichier .env
 let RESEND_API_KEY = process.env.RESEND_API_KEY;
 if (!RESEND_API_KEY) {
   const envPath = path.resolve(process.cwd(), '.env');
@@ -36,7 +36,7 @@ async function main() {
   console.log(`${ANSI.bold}🔍 Diagnostic DNS & Validation Resend — ${DOMAIN_NAME}${ANSI.reset}`);
   console.log(`${ANSI.cyan}====================================================${ANSI.reset}\n`);
 
-  // 1. Fetch domain from Resend
+  // 1. Récupère le domaine chez Resend
   console.log(`${ANSI.gray}[1/4] Interrogation de l'API Resend...${ANSI.reset}`);
   let domainInfo;
   try {
@@ -66,14 +66,14 @@ async function main() {
   console.log(`ID Domaine Resend : ${domainInfo.id}`);
   console.log(`Statut global Resend : ${domainInfo.status === 'verified' ? ANSI.green + '✅ VERIFIED' : ANSI.yellow + '⏳ ' + domainInfo.status.toUpperCase()}${ANSI.reset}\n`);
 
-  // 2. Fetch full record specifications
+  // 2. Récupère les spécifications complètes des enregistrements
   const getRes = await fetch(`https://api.resend.com/domains/${domainInfo.id}`, {
     headers: { Authorization: `Bearer ${RESEND_API_KEY}` },
   });
   const fullDomain = await getRes.json();
   const records = fullDomain.records || [];
 
-  // Also check DMARC
+  // Vérifie aussi DMARC
   const allExpected = [
     ...records,
     {
