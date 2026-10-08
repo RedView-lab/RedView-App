@@ -16,7 +16,7 @@ import type { HeightmapParams } from './renderer';
 import type { LidarRenderer } from './renderer/sceneRenderer';
 import { createLidarRenderer, type CreatedRenderer } from './renderer/createRenderer';
 import { claimViewerCanvas } from './renderer/canvas';
-import { CameraController, type CameraPose } from './camera';
+import { CameraController } from './camera';
 import { getTimeZoneForCoordinates, toWgs84, trueNorthGridBearingDeg } from '../lib/coordConvert';
 import { resolveTimeZoneAt } from '@/shared/lib/timeZoneAt';
 import { SceneLod, type SceneLodStats } from './lod/sceneLod';
@@ -28,17 +28,12 @@ import { syncRootAppScale } from '@/shared/lib/appScale';
 import {
   createViewerPanel,
   densityScaleToPercent,
-  FIXED_POINT_PX_MAX,
-  FIXED_POINT_PX_MIN,
   fixedPointPixelsToPercent,
   percentToDensityScale,
   percentToEdlStrength,
   percentToFixedPointPixels,
   percentToPointSize,
-  POINT_SIZE_MAX,
-  POINT_SIZE_MIN,
   pointSizeToPercent,
-  type SnowModeKey,
 } from './panel/controller';
 import { buildGoogleMapsTileCenterUrl, buildTileLocationLabel } from './panel/location';
 import { exitLidarViewer, switchViewerEngine } from './panel/runtime/navigation';
@@ -50,31 +45,26 @@ import { ViewerRouteController } from './route/viewerRouteController';
 import { ViewerComments } from './comments/viewerComments';
 import { zoneFromPolygon } from '@/features/comments/lib/zoneGeometry';
 import { pointFilterClassPredicate, ViewerToolsController } from './tools';
-import { sampleElevationAtProj } from './route/terrainRaycaster';
-import { googleEarthViewFromViewer } from './googleEarth';
-import { isGoogleEarthShortcut, openGoogleEarthView } from '@/shared/lib/googleEarthView';
-import { isTypingTarget } from '@/shared/lib/isTypingTarget';
 import { countBucket, initAnalytics, trackAnalyticsEvent, trackScreen } from '@/shared/lib/analytics';
 import { APP_BUILD_ID } from '@/shared/lib/appCacheEpoch';
 import type { ViewerRouteSceneParams } from './route/types';
 import { FrameClock } from './perf/frameClock';
-import { ViewerBench } from './perf/viewerBench';
+import type { ViewerBench } from './perf/viewerBench';
+import { installViewerBenchHooks } from './perf/benchHooks';
+import { formatLodStatsLine } from './perf/lodStatsLine';
 import { SunlightController } from '../viewer-webgl/sunlightController';
 import { buildTilePreviewMesh } from './preview/tilePreview';
 import { createViewerLoadingOverlay } from './loading/controller';
 import { loadViewerSceneData } from './session/dataset';
 import { buildTileFileCandidates } from './session/datasetPointCap';
 import { parseViewerParamsFromUrl } from './session/viewerUrlParams';
-import { fallbackViewerEngine, viewerEngineParamValue, VIEWER_ENGINE_PARAM, type ViewerEngineKey } from './session/viewerEngine';
+import type { ViewerEngineKey } from './session/viewerEngine';
+import { recoverFromGpuFailure } from './session/gpuRecovery';
+import { enqueueBackgroundCacheWrite } from './session/backgroundCacheWrites';
+import { setUpPhotoMode } from './session/photoModeSetup';
+import { createViewerKeyDownHandler } from './session/viewerShortcuts';
 import { ViewerSnowController, type SnowSceneContext } from './session/viewerSnowController';
-import { PhotoModeController } from './photoMode/photoModeController';
-import { PHOTO_MODE_ENABLED } from './photoMode/featureFlag';
-import { readPhotoPreferences } from './photoMode/lib/photoPreferences';
-import { parsePhotoUrlOverrides } from './photoMode/lib/photoUrlParams';
-import { cloudBaseOffsetRange, defaultCloudBaseAltitude } from './photoMode/lib/cloudPresets';
-import { defaultPhotoTime } from './photoMode/lib/photoTime';
-import type { PhotoCaptureStatus, PhotoModeState } from './photoMode/types';
-import { resolveSunTimesForLocalDay } from '@/features/sunlight/lib/sun-calc';
+import type { PhotoModeController } from './photoMode/photoModeController';
 import {
   explainWorkerError,
   launchWebGLFallback,
@@ -111,36 +101,12 @@ const statsEl = document.getElementById('stats')!;
 const loadingOverlay = createViewerLoadingOverlay(overlay);
 const { statusEl, detailEl, barFill, percentEl } = loadingOverlay;
 
-type IdleSchedulerWindow = Window & {
-  requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
-};
-
 type MemoryAwareNavigator = Navigator & {
   deviceMemory?: number;
 };
 
-let cacheWriteQueue = Promise.resolve();
-
 function setStatus(msg: string, pct?: number) {
   setViewerStatus(statusEl, barFill, msg, pct, { percentEl, detailEl });
-}
-
-function enqueueBackgroundCacheWrite(label: string, task: () => Promise<void>): void {
-  cacheWriteQueue = cacheWriteQueue
-    .then(async () => {
-      await new Promise<void>((resolve) => {
-        const idleWindow = window as IdleSchedulerWindow;
-        if (typeof idleWindow.requestIdleCallback === 'function') {
-          idleWindow.requestIdleCallback(() => resolve(), { timeout: 1500 });
-          return;
-        }
-        window.setTimeout(resolve, 250);
-      });
-      await task();
-    })
-    .catch((error) => {
-      console.warn(`[Viewer] Background cache write failed (${label})`, error);
-    });
 }
 
 let renderer: LidarRenderer | null = null;
@@ -171,47 +137,6 @@ const EDL_DEFAULT_PERCENT = 50;
 /** EDL neighbour radius: 1.4 CSS px (Potree default), in canvas pixels. */
 function edlRadiusPx(): number {
   return 1.4 * (canvas.width / Math.max(1, window.innerWidth));
-}
-const GPU_RETRY_STORAGE_KEY = 'redview-lidar-webgpu-retry-at';
-const GPU_RETRY_WINDOW_MS = 120_000;
-
-/**
- * Leaves an engine whose GPU context was lost. The canvas keeps its context
- * type, so the next engine needs a fresh page: the first loss reloads the
- * same engine once (tiles come back from the OPFS cache), a second one
- * within two minutes moves down the chain WebGPU → WebGL 2 → terrain.
- */
-/** Mean albedo (linear) of the terrain colours, sampled: the photo mode's distant ground and bounce light. */
-function meanTerrainAlbedo(colors: Uint8Array): number {
-  let sum = 0;
-  let count = 0;
-  const step = Math.max(4, Math.floor(colors.length / 4 / 4096) * 4);
-  for (let i = 0; i + 2 < colors.length; i += step) {
-    const l = (0.2126 * colors[i]! + 0.7152 * colors[i + 1]! + 0.0722 * colors[i + 2]!) / 255;
-    sum += l <= 0.04045 ? l / 12.92 : Math.pow((l + 0.055) / 1.055, 2.4);
-    count++;
-  }
-  return count > 0 ? Math.max(0.05, Math.min(0.5, (sum / count) * 0.9)) : 0.18;
-}
-
-function recoverFromGpuFailure(reason: string, running: ViewerEngineKey): void {
-  const url = new URL(window.location.href);
-  let recentRetry = false;
-  try {
-    const last = Number(window.sessionStorage.getItem(GPU_RETRY_STORAGE_KEY) || 0);
-    recentRetry = Date.now() - last < GPU_RETRY_WINDOW_MS;
-    window.sessionStorage.setItem(GPU_RETRY_STORAGE_KEY, String(Date.now()));
-  } catch {
-    recentRetry = true;
-  }
-  if (recentRetry) {
-    const next = fallbackViewerEngine(running);
-    console.warn(`[Viewer] ${running} failure (${reason}), switching to the ${next} engine.`);
-    url.searchParams.set(VIEWER_ENGINE_PARAM, viewerEngineParamValue(next) ?? next);
-  } else {
-    console.warn(`[Viewer] ${running} failure (${reason}), reloading once.`);
-  }
-  window.location.replace(url.toString());
 }
 
 (async () => {
@@ -452,37 +377,19 @@ function recoverFromGpuFailure(reason: string, running: ViewerEngineKey): void {
     let photo: PhotoModeController | null = null;
 
     const backendLabel = renderer.backend === 'webgpu' ? 'WebGPU' : 'WebGL 2';
-    const cloudStats = (): string => {
-      const ms = renderer?.photo?.getCloudMs() ?? 0;
-      return ms >= 0.05 ? ` · ${translateAppText('nuages {{ms}} ms', { ms: ms.toFixed(1) })}` : '';
-    };
-    const formatLodStats = (lodStats: SceneLodStats): string => {
-      const cadence = frameClock.getCadence();
-      const gpuMs = renderer?.getGpuFrameMs() ?? 0;
-      const shadeMs = renderer?.getGpuShadeMs() ?? 0;
-      const renderStats = renderer?.getLastRenderStats();
-      const drawCalls = renderStats?.drawCalls ?? 0;
-      const terrainTriangles = renderStats?.terrainTriangles ?? 0;
-      const renderScale = renderer?.getLastRenderScale() ?? 1;
-      return (cadence.samples > 0 ? `${cadence.fps} fps · p95 ${cadence.p95Ms.toFixed(0)} ms` : '— fps') +
-        (gpuMs > 0 ? ` · GPU ${gpuMs.toFixed(1)} ms` : '') +
-        (shadeMs >= 0.05 ? ` + ${translateAppText('ombrage {{ms}} ms', { ms: shadeMs.toFixed(1) })}` : '') +
-        ` · CPU ${lastCpuFrameMs.toFixed(1)} ms` +
-        ` · ${lodStats.selectedPoints.toLocaleString()} / ${lodStats.totalPoints.toLocaleString()} pts` +
-        ` · budget ${(lodStats.pointBudget / 1e6).toFixed(1)}M` +
-        ` · ${lodStats.selectedNodes}/${lodStats.totalNodes} nodes · draws ${drawCalls}` +
-        (terrainTriangles > 0 ? ` · terrain ${(terrainTriangles / 1e6).toFixed(2)}M △` : '') +
-        ` · GPU ${(lodStats.residentPoints / 1e6).toFixed(1)}/${(lodStats.poolBudget / 1e6).toFixed(0)}M pts` +
-        (lodStats.pendingLoads > 0 ? ` · ${translateAppText('chargement {{count}}', { count: lodStats.pendingLoads })}` : '') +
-        (restRefinement.phase === 'refine'
-          ? ` · ${translateAppText('affinage')}`
-          : restRefinement.phase === 'accumulate'
-            ? ` · ${translateAppText('lissage {{done}}/{{total}}', { done: restRefinement.sample, total: restRefinement.samples })}`
-            : '') +
-        (photo?.active ? ` · ${translateAppText('mode photo')}${cloudStats()}` : '') +
-        ` · ${translateAppText('{{count}} tuile(s)', { count: sceneTileCoords.length })}` +
-        ` · ${canvas.width}×${canvas.height}${renderScale < 1 ? ` ×${renderScale.toFixed(2)}` : ''} ${backendLabel} ${platform.tier}`;
-    };
+    const formatLodStats = (lodStats: SceneLodStats): string => formatLodStatsLine({
+      lodStats,
+      frameClock,
+      renderer,
+      cpuFrameMs: lastCpuFrameMs,
+      restRefinement,
+      photoActive: photo?.active ?? false,
+      tileCount: sceneTileCoords.length,
+      canvasWidth: canvas.width,
+      canvasHeight: canvas.height,
+      backendLabel,
+      platformTier: platform.tier,
+    });
 
     const renderLoop = (frameTime: number) => {
       frameHandle = null;
@@ -787,70 +694,37 @@ function recoverFromGpuFailure(reason: string, running: ViewerEngineKey): void {
     }
 
     // ── Photo mode (WebGPU): sky, clouds, shadows of the point cloud ──────
-    let groundMin = Infinity;
-    for (const h of terrainMesh.heightGrid) if (Number.isFinite(h) && h < groundMin) groundMin = h;
-    const sceneMinAltM = Number.isFinite(groundMin) ? cz + groundMin : sceneBounds.minZ;
-    const sceneMaxAltM = sceneBounds.maxZ;
-    const cloudAutoAltM = defaultCloudBaseAltitude(sceneMinAltM, sceneMaxAltM);
-    const cloudOffsetRange = cloudBaseOffsetRange(sceneMinAltM, sceneMaxAltM);
-    if (renderer.photo) {
-      photo = new PhotoModeController({
-        photo: renderer.photo,
-        site: { lat, lon, timeZone: tileTimeZone, trueNorthGridBearingDeg: trueNorthGridBearingDeg(cx, cy, crs) },
-        scene: {
-          bounds: {
-            minX: sceneBounds.minX - cx, maxX: sceneBounds.maxX - cx,
-            minY: sceneBounds.minZ - cz, maxY: sceneBounds.maxZ - cz,
-            minZ: -(sceneBounds.maxY - cy), maxZ: -(sceneBounds.minY - cy),
-          },
-          centerAltitudeM: cz,
-          minAltitudeM: sceneMinAltM,
-          maxAltitudeM: sceneMaxAltM,
-          groundAlbedo: meanTerrainAlbedo(terrainMesh.colors),
-        },
-        casters: {
-          select: (planes, texelM, maxPoints, out) => sceneLod.selectShadowCasters(planes, texelM, maxPoints, out),
-          version: () => sceneLod.getUploadedNodes(),
-        },
-        restRefinement,
-        pointBudget,
-        captureName: panelTileLabel,
-        requestRender,
-        requestFrame,
-        onActiveChange: (active) => {
-          // Retina screens get their full pixel ratio for the photo.
-          photoDprCap = active && platform.tier === 'apple' ? 2 : null;
-          handleResizeRef();
-        },
-      });
-    }
-    const photoToday = new Date().toISOString().slice(0, 10);
-    const photoOverrides = parsePhotoUrlOverrides(new URLSearchParams(window.location.search));
-    const initialPhotoState: PhotoModeState = {
-      date: photoToday,
-      time: defaultPhotoTime(resolveSunTimesForLocalDay(photoToday, lat, lon, tileTimeZone).sunsetTime),
-      ...readPhotoPreferences(),
-      ...photoOverrides,
-      enabled: photo !== null && photoOverrides.enabled === true,
-    };
-    const idleCapture: PhotoCaptureStatus = { busy: false, done: 0, total: 0, error: null };
+    const photoSetup = setUpPhotoMode({
+      renderer,
+      sceneBounds,
+      terrainMesh,
+      cx,
+      cy,
+      cz,
+      crs,
+      lat,
+      lon,
+      timeZone: tileTimeZone,
+      sceneLod,
+      restRefinement,
+      pointBudget,
+      captureName: panelTileLabel,
+      requestRender,
+      requestFrame,
+      onActiveChange: (active) => {
+        // Retina screens get their full pixel ratio for the photo.
+        photoDprCap = active && platform.tier === 'apple' ? 2 : null;
+        handleResizeRef();
+      },
+    });
+    photo = photoSetup.photo;
 
     const rightPanel = createViewerRightPanel({
       centerLon: lon,
       centerLat: lat,
       timeZone: tileTimeZone,
       routeController,
-      // Photo mode frozen (photoMode/featureFlag.ts): no panel section.
-      photo: PHOTO_MODE_ENABLED ? {
-        available: photo !== null,
-        initialState: initialPhotoState,
-        cloudBase: { autoAltitudeM: cloudAutoAltM, minOffsetM: cloudOffsetRange.min, maxOffsetM: cloudOffsetRange.max },
-        onChange: (state) => photo?.apply(state),
-        onCapture: () => void photo?.capture(),
-        captureStore: photo
-          ? { subscribe: photo.subscribeCapture, getSnapshot: photo.getCaptureStatus }
-          : { subscribe: () => () => undefined, getSnapshot: () => idleCapture },
-      } : undefined,
+      photo: photoSetup.panelSection,
       onPointFilterChange: (pointFilterState) => {
         isClassVisible = pointFilterClassPredicate(pointFilterState);
         if (renderer) {
@@ -911,39 +785,18 @@ function recoverFromGpuFailure(reason: string, running: ViewerEngineKey): void {
     };
     requestRender();
 
-    if (benchMode === 'orbit') {
-      void (async () => {
-        // Start from a settled scene: the first pass then measures streaming
-        // driven by the motion only.
-        const deadline = performance.now() + 30_000;
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        while (!sceneLod.isIdle() && performance.now() < deadline) {
-          await new Promise((resolve) => setTimeout(resolve, 250));
-        }
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        benchRun = new ViewerBench({
-          camera,
-          extent,
-          groundAt: (x, z) => sampleElevationAtProj(x + cx, cy - z, heightSceneParams),
-          getRefreshMs: () => frameClock.getRefreshMs(),
-          onDone: (result) => {
-            (window as unknown as { __rvLidarBench?: unknown }).__rvLidarBench = result;
-            console.log(`[LiDAR bench] ${JSON.stringify(result)}`);
-          },
-        });
-        benchRun.start();
-      })();
-    } else if (benchMode === 'shots') {
-      // Still views for visual A/B captures (script-test-bench/lidar-viewer-shots):
-      // the script sets a pose, waits until the loop goes idle (the image has
-      // reached its resting quality), then takes a screenshot.
-      (window as unknown as { __rvLidarShots?: unknown }).__rvLidarShots = {
-        extent,
-        setPose: (pose: Partial<CameraPose>) => camera.setPose(pose),
-        groundAt: (x: number, z: number) => sampleElevationAtProj(x + cx, cy - z, heightSceneParams),
-        state: () => ({ rendering: frameHandle !== null, idle: sceneLod.isIdle(), stats: sceneLod.getStats() }),
-      };
-    }
+    installViewerBenchHooks({
+      mode: benchMode,
+      camera,
+      extent,
+      cx,
+      cy,
+      heightSceneParams,
+      sceneLod,
+      frameClock,
+      onBenchRun: (run) => { benchRun = run; },
+      isRendering: () => frameHandle !== null,
+    });
 
     const handleResize = () => {
       if (!renderer) return;
@@ -956,55 +809,19 @@ function recoverFromGpuFailure(reason: string, running: ViewerEngineKey): void {
     handleResizeRef = handleResize;
     window.addEventListener('resize', handleResize);
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!renderer) return;
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) {
-        return;
-      }
-      if (photo?.active && (e.key === 'i' || e.key === 'I') && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        // Interface hidden while framing a photo.
-        photo.setInterfaceHidden(!photo.interfaceHidden);
-        return;
-      }
-      if (e.key === 'Escape' && photo?.interfaceHidden) {
-        photo.setInterfaceHidden(false);
-        return;
-      }
-      if (isGoogleEarthShortcut(e)) {
-        if (isTypingTarget(e.target)) return;
-        const view = googleEarthViewFromViewer(camera, heightSceneParams);
-        if (view) {
-          e.preventDefault();
-          trackAnalyticsEvent({ name: 'google_earth_opened', data: { from: 'lidar' } });
-          openGoogleEarthView(view);
-        }
-        return;
-      }
-      if (e.key === 'e' || e.key === 'E') {
-        const curState = routeController.getState();
-        routeController.setEditMode(!curState.editMode);
-        return;
-      }
-      const sizeStep = e.key === '+' || e.key === '=' ? 1.2 : e.key === '-' || e.key === '_' ? 1 / 1.2 : 1;
-      if (renderer.fixedPointPixels > 0) {
-        renderer.fixedPointPixels = Math.max(FIXED_POINT_PX_MIN, Math.min(FIXED_POINT_PX_MAX, renderer.fixedPointPixels * sizeStep));
-      } else {
-        renderer.pointSize = Math.max(POINT_SIZE_MIN, Math.min(POINT_SIZE_MAX, renderer.pointSize * sizeStep));
-      }
-      if (e.key === 't' || e.key === 'T') renderer.terrainVisible = !renderer.terrainVisible;
-      if (e.key === 'l' || e.key === 'L') renderer.adaptivePointSize = !renderer.adaptivePointSize;
-      if (e.key === 'q' || e.key === 'Q') showLodStats = !showLodStats;
-      if (e.key === 'n' || e.key === 'N') {
-        const nextMode: SnowModeKey = snowController.getMode() === 'off'
-          ? 'cover'
-          : snowController.getMode() === 'cover'
-            ? 'thickness'
-            : 'off';
-        void snowController.handleSnowModeChange(nextMode, snowContext(), (next) => panel.setSnowMode(next));
-      }
-      panel.setPointSizePercent(pointSizeSliderPercent(renderer));
-      requestRender();
-    };
+    const handleKeyDown = createViewerKeyDownHandler({
+      getRenderer: () => renderer,
+      getPhoto: () => photo,
+      camera,
+      heightSceneParams,
+      routeController,
+      snowController,
+      snowContext,
+      panel,
+      pointSizeSliderPercent,
+      toggleLodStats: () => { showLodStats = !showLodStats; },
+      requestRender,
+    });
     window.addEventListener('keydown', handleKeyDown);
 
     const handleVisibilityChange = () => {
