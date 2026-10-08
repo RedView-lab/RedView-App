@@ -81,6 +81,16 @@ export function sanitizeReferrer(referrer: string | undefined, origin: string): 
   return url.origin;
 }
 
+/**
+ * Mesure du traceur (Web Vitals : lcp, inp, cls…) arrondie : 3 décimales sous 1,
+ * l'unité au-delà. Un flottant à 17 chiffres (« 0.00025900000000000006 »)
+ * n'apporte rien et ressemble à un identifiant.
+ */
+function roundMetric(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.abs(value) >= 1 ? Math.round(value) : Math.round(value * 1000) / 1000;
+}
+
 export function prepareUmamiPayload(
   type: string,
   payload: UmamiPayload | null | undefined,
@@ -112,6 +122,9 @@ export function prepareUmamiPayload(
     // Page vue ou Web Vitals : pas de données libres.
     delete next.data;
     delete next.name;
+  }
+  for (const [key, value] of Object.entries(next)) {
+    if (typeof value === 'number' && !Number.isInteger(value)) next[key] = roundMetric(value);
   }
   return next;
 }

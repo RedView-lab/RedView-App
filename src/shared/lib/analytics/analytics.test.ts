@@ -122,6 +122,12 @@ describe('before-send', () => {
     expect(prepareUmamiPayload('event', { url: `${ORIGIN}/viewer?tile=0965_6500` }, context({ screen: 'viewer' }))?.url).toBe('/viewer-lidar');
   });
 
+  it('arrondit les mesures du traceur (Web Vitals) : pas de flottant à 17 chiffres', () => {
+    const out = prepareUmamiPayload('event', { url: `${ORIGIN}/`, cls: 0.00025900000000000006, lcp: 1234.5678, inp: 48, fcp: 0.4567 }, context({ screen: 'login' }));
+    expect(out).toMatchObject({ cls: 0, lcp: 1235, inp: 48, fcp: 0.457 });
+    expect(JSON.stringify(out)).not.toMatch(/[0-9]{8}/);
+  });
+
   it('referrer : origine externe seulement', () => {
     expect(sanitizeReferrer('https://l.instagram.com/?u=https%3A%2F%2Fapp.redview.tech&e=AT0', ORIGIN)).toBe('https://l.instagram.com');
     expect(sanitizeReferrer('https://redview.tech/pricing?email=a@b.fr', ORIGIN)).toBe('https://redview.tech');
