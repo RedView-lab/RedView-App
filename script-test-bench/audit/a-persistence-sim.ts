@@ -64,7 +64,7 @@ async function loadBundle() {
     export { getSavedCustomProfiles, saveCustomProfileToStorage, deleteCustomProfileFromStorage, syncCustomProfilesWithAccount } from ${JSON.stringify(path.join(SRC, 'features/itineraryPanel/lib/project/customProfiles.ts'))};
     export { extractProjectView, toProjectDocument, isProjectDocument } from ${JSON.stringify(path.join(SRC, 'features/itineraryPanel/lib/project/layers.ts'))};
     export { compressProjectPayload, decompressProjectPayload } from ${JSON.stringify(path.join(SRC, 'shared/services/projects/compression.ts'))};
-    export { readStoredAppwriteSession, saveStoredAppwriteSession, clearStoredAppwriteSession, getAppwriteUser, onAppwriteSessionExpired } from ${JSON.stringify(path.join(SRC, 'shared/services/appwrite.ts'))};
+    export { readStoredAppwriteSession, saveStoredAppwriteSession, clearStoredAppwriteSession, getAppwriteUser } from ${JSON.stringify(path.join(SRC, 'shared/services/appwrite.ts'))};
     export { createDefaultProject, createDefaultItinerary } from ${JSON.stringify(path.join(SRC, 'features/itineraryPanel/lib/project/index.ts'))};
     export { useDashboardProjectSync } from ${JSON.stringify(path.join(SRC, 'pages/Dashboard/hooks/useDashboardProjectSync.ts'))};
     export { signOutAccount } from ${JSON.stringify(path.join(SRC, 'features/projectBrowser/account/lib/profile.ts'))};
@@ -88,6 +88,14 @@ async function loadBundle() {
         build.onResolve({ filter: /idbProjectStore$/ }, () => ({ path: path.join(import.meta.dirname, 'a-mock-idb.ts') }));
         build.onResolve({ filter: /^@\// }, (args) =>
           build.resolve('./' + args.path.slice(2), { resolveDir: SRC, kind: args.kind }));
+        // La synchronisation attendable des profils est interne au module (l'app ne
+        // passe que par ensureCustomProfilesSynced, sans attente) : exposée ici, dans
+        // le bundle du harnais seulement, pour que le scénario PR1 puisse l'attendre.
+        build.onLoad({ filter: /[\\/]customProfiles\.ts$/ }, (args) => ({
+          contents: `${fs.readFileSync(args.path, 'utf8')}\nexport { syncCustomProfilesWithAccount };\n`,
+          loader: 'ts',
+          resolveDir: path.dirname(args.path),
+        }));
       },
     }],
   });
@@ -259,7 +267,10 @@ async function main() {
   {
     fresh();
     const expired: unknown[] = [];
-    const off = m.onAppwriteSessionExpired((d: unknown) => expired.push(d));
+    // Canal écouté par l'app (App.tsx) : l'événement window « redview:session-expired ».
+    const onExpired = (ev: unknown) => expired.push((ev as { detail?: unknown }).detail);
+    (g.addEventListener as (type: string, fn: (ev: unknown) => void) => void)('redview:session-expired', onExpired);
+    const off = () => (g.removeEventListener as (type: string, fn: (ev: unknown) => void) => void)('redview:session-expired', onExpired);
     __mock.accountGetMode = 'network'; __mock.accountGetFailures = -1;
     await m.getAppwriteUser();
     const keptAfterNetwork = !!m.readStoredAppwriteSession();

@@ -9,7 +9,6 @@
  *   - createDefaultProject / createDefaultItinerary / normalizeItineraryProject
  *   - compressProjectPayload / decompressProjectPayload (shared/services/projects/compression.ts)
  *   - computeProjectSizeBytes / isProjectTooLarge / MAX_PROJECT_SIZE_BYTES (limits.ts)
- *   - buildLocalProjectCachePayload (pages/Dashboard/lib/dashboardProjectCache.ts)
  *
  * Mesure : JSON brut, gzip+base64 ('gz:' + base64) vs attribut Appwrite `projects.data`
  * (string size=16 000 000 depuis 2026-10-01 ; nginx 502 au-delà de ~12 M → limite effective MAX_CLOUD_PROJECT_PAYLOAD_CHARS), vs limite client
@@ -23,6 +22,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { performance } from 'node:perf_hooks';
+
+import { BENCH_DATA_DIR } from '../core/data-paths.ts';
 
 import {
   createDefaultItinerary,
@@ -60,7 +61,7 @@ const argVal = (k: string) => {
   const i = args.indexOf(k);
   return i >= 0 ? args[i + 1] : undefined;
 };
-const GPX_DIR = argVal('--gpx-dir') ?? path.join(os.homedir(), 'Downloads');
+const GPX_DIR = argVal('--gpx-dir') ?? BENCH_DATA_DIR;
 const JSON_OUT = argVal('--json');
 
 type RoutePoint = NonNullable<Itinerary['gpxRoute']>['points'][number];
@@ -328,25 +329,6 @@ async function timeItAsync(fn: () => Promise<unknown>, iters = 5): Promise<numbe
 }
 
 async function main() {
-  // dashboardProjectCache.ts tire appwrite.ts (import.meta.env.*) et appCacheEpoch.ts
-  // (__REDVIEW_BUILD_ID__, define Vite) : on bundle le VRAI module avec esbuild en
-  // fournissant ces defines, puis on l'importe.
-  const esbuild = await import('esbuild');
-  const outFile = path.join(os.tmpdir(), `rv-audit-dashboardProjectCache-${process.pid}.mjs`);
-  await esbuild.build({
-    entryPoints: [path.resolve(import.meta.dirname, '../../src/pages/Dashboard/lib/dashboardProjectCache.ts')],
-    bundle: true,
-    format: 'esm',
-    platform: 'node',
-    outfile: outFile,
-    logLevel: 'error',
-    alias: { '@': path.resolve(import.meta.dirname, '../../src') },
-    define: { 'import.meta.env': '{"DEV":false}', __REDVIEW_BUILD_ID__: '"audit"' },
-  });
-  const { buildLocalProjectCachePayload } = (await import(`file:///${outFile.replace(/\\/g, '/')}`)) as {
-    buildLocalProjectCachePayload: (p: ItineraryProject) => { compacted: boolean; serialized: string } | null;
-  };
-  fs.rmSync(outFile, { force: true });
   console.log(`\n=== Audit A — taille de persistance projet (node ${process.version}) ===`);
   console.log(`Limite client MAX_PROJECT_SIZE_BYTES = ${MAX_PROJECT_SIZE_BYTES} octets JSON (limits.ts:3)`);
   console.log(`Limite Appwrite projects.data       = ${APPWRITE_DATA_MAX_CHARS} caractères (gz+base64)\n`);
@@ -459,7 +441,8 @@ async function main() {
     const before: Record<string, number> = {};
     before['flushSave JSON.stringify'] = timeIt(() => JSON.stringify(p));
     before['flushSave new Blob([serialized]).size'] = timeIt(blobSize) - before['flushSave JSON.stringify'];
-    before['writeProjectCache → buildLocalProjectCachePayload'] = timeIt(() => buildLocalProjectCachePayload(p));
+    // writeProjectCache → buildLocalProjectCachePayload n'existe plus (copie localStorage retirée,
+    // code supprimé le 07/10) : la ligne « avant » est sous-estimée d'autant.
     before['idbSaveProjectCache structured clone'] = timeIt(() => structuredClone(p));
     before['saveProject computeProjectSizeBytes localRow (Blob)'] = timeIt(blobSize);
     before['saveProject idbSaveProject structured clone'] = timeIt(() => structuredClone(p));
@@ -479,8 +462,6 @@ async function main() {
     const totalAfter = Object.values(after).reduce((a, b) => a + b, 0);
     for (const [k, v] of Object.entries(after)) console.log(`    ${k.padEnd(70)} ${v.toFixed(1)} ms`);
     console.log(`    ${'TOTAL après (hors réseau ; GET $updatedAt select pour le contrôle de conflit)'.padEnd(70)} ${totalAfter.toFixed(1)} ms`);
-    const cache = buildLocalProjectCachePayload(p);
-    console.log(`  buildLocalProjectCachePayload (plus appelé par l'autosave) → ${cache ? `compacted=${cache.compacted}, ${(cache.serialized.length / 1e6).toFixed(2)} Mo` : 'null (trop gros)'}`);
     Object.assign(timings, Object.fromEntries(Object.entries(before).map(([k, v]) => [`avant: ${k}`, v])));
     Object.assign(timings, Object.fromEntries(Object.entries(after).map(([k, v]) => [`après: ${k}`, v])));
     timings.totalBefore = totalBefore;

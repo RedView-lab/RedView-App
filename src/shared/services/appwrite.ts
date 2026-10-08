@@ -68,9 +68,6 @@ interface AppwriteSessionExpiredDetail {
   userId: string | null;
 }
 
-type SessionExpiredListener = (detail: AppwriteSessionExpiredDetail) => void;
-const sessionExpiredListeners = new Set<SessionExpiredListener>();
-
 /**
  * Invalide la session locale (instantané + cache mémoire) et notifie l'app.
  * N'émet rien s'il n'y avait aucune session connue (visiteur non connecté).
@@ -80,13 +77,6 @@ function markAppwriteSessionExpired(): void {
   clearStoredAppwriteSession();
   if (!userId) return;
   const detail: AppwriteSessionExpiredDetail = { reason: 'unauthorized', userId };
-  for (const listener of [...sessionExpiredListeners]) {
-    try {
-      listener(detail);
-    } catch (error) {
-      console.warn('[appwrite] session-expired listener failed', error);
-    }
-  }
   if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof CustomEvent !== 'undefined') {
     window.dispatchEvent(new CustomEvent<AppwriteSessionExpiredDetail>('redview:session-expired', { detail }));
   }
