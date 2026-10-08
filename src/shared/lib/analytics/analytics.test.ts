@@ -224,12 +224,12 @@ describe('file, anti-doublon, contexte', () => {
 
   it('contexte : formule + ancienneté + langue + thème, persisté, effacé à la déconnexion', () => {
     setAnalyticsContext({ account_age: 'd0' });
-    setAnalyticsContext({ plan: 'founder' });
+    setAnalyticsContext({ plan: 'annual' });
     expect(getBeforeSendContext()).toMatchObject({
-      superProps: { surface: 'app', plan: 'founder', account_age: 'd0', lang: 'en', theme: 'light' },
+      superProps: { surface: 'app', plan: 'annual', account_age: 'd0', lang: 'en', theme: 'light' },
       excluded: false,
     });
-    expect(JSON.parse(store.get('rv:analytics-context') ?? '{}')).toEqual({ account_age: 'd0', plan: 'founder' });
+    expect(JSON.parse(store.get('rv:analytics-context') ?? '{}')).toEqual({ account_age: 'd0', plan: 'annual' });
     setAnalyticsContext({ internal: true });
     expect(getBeforeSendContext().excluded).toBe(true);
     clearAnalyticsContext();

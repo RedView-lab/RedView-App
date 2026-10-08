@@ -1,104 +1,68 @@
-import { getStripeServer } from '../stripe.js';
 import { PublicError } from '../errors.js';
-import { buildBillingOverview } from './overview.js';
-import { getCurrentManagedStripeSubscription } from './subscriptions.js';
+import { getStripeServer } from '../stripe.js';
 import { getOrCreateStripeCustomer, getStripeCustomerId } from './customers.js';
-import type { SetupIntentWithPaymentMethod } from './types.js';
+import { setupIntentPaymentMethodParams } from './paymentMethodConfig.js';
+import { buildBillingOverview, type BillingOverview } from './overview.js';
+import { getLiveStripeSubscription } from './subscriptions.js';
+
+// Ajout / remplacement du moyen de paiement dans l'app (SetupIntent + Payment
+// Element). Le nouveau moyen devient celui du client et de l'abonnement vivant :
+// la prochaine échéance est prélevée dessus.
 
 export async function createPaymentMethodSetupIntent(
   userId: string,
-  email: string | null,
+  accountEmail: string | null,
 ): Promise<{ clientSecret: string }> {
-  const stripeCustomerId = await getOrCreateStripeCustomer(userId, email);
+  const customerId = await getOrCreateStripeCustomer(userId, accountEmail);
   const setupIntent = await getStripeServer().setupIntents.create({
-    customer: stripeCustomerId,
+    customer: customerId,
     usage: 'off_session',
-    payment_method_types: ['card'],
-    metadata: {
-      user_id: userId,
-    },
+    ...(await setupIntentPaymentMethodParams()),
+    metadata: { purpose: 'redview_payment_method', user_id: userId },
   });
-
-  if (!setupIntent.client_secret) {
-    throw new Error('Unable to create a Stripe setup intent.');
-  }
-
-  return {
-    clientSecret: setupIntent.client_secret,
-  };
+  if (!setupIntent.client_secret) throw new Error('Stripe returned a SetupIntent without client secret.');
+  return { clientSecret: setupIntent.client_secret };
 }
 
-export async function applySetupIntentPaymentMethod(userId: string, setupIntentId: string) {
-  const stripeCustomerId = await getStripeCustomerId(userId);
-  if (!stripeCustomerId) {
-    throw new PublicError('No Stripe customer found for this account.', 404);
+async function makeDefaultPaymentMethod(userId: string, customerId: string, paymentMethodId: string): Promise<void> {
+  const stripe = getStripeServer();
+  await stripe.customers.update(customerId, { invoice_settings: { default_payment_method: paymentMethodId } });
+  const subscription = await getLiveStripeSubscription(userId);
+  if (subscription) {
+    await stripe.subscriptions.update(subscription.id, { default_payment_method: paymentMethodId });
   }
+}
 
-  const setupIntent = (await getStripeServer().setupIntents.retrieve(setupIntentId, {
-    expand: ['payment_method'],
-  })) as SetupIntentWithPaymentMethod;
+export async function applySetupIntentPaymentMethod(userId: string, setupIntentId: string): Promise<BillingOverview> {
+  const customerId = await getStripeCustomerId(userId);
+  if (!customerId) throw new PublicError('No billing profile found for this account.', 404);
 
-  const setupIntentCustomer =
-    typeof setupIntent.customer === 'string' ? setupIntent.customer : setupIntent.customer?.id;
-
-  if (setupIntentCustomer !== stripeCustomerId) {
-    throw new PublicError('This setup intent does not belong to the current user.', 403);
+  const setupIntent = await getStripeServer().setupIntents.retrieve(setupIntentId);
+  const setupCustomer = typeof setupIntent.customer === 'string' ? setupIntent.customer : setupIntent.customer?.id;
+  if (setupCustomer !== customerId) {
+    throw new PublicError('This payment setup does not belong to the current user.', 403);
   }
-
-  const paymentMethod = setupIntent.payment_method;
+  if (setupIntent.status !== 'succeeded') {
+    throw new PublicError('The payment method is not confirmed yet.', 409);
+  }
   const paymentMethodId =
-    typeof paymentMethod === 'string' ? paymentMethod : paymentMethod?.id ?? null;
+    typeof setupIntent.payment_method === 'string' ? setupIntent.payment_method : setupIntent.payment_method?.id;
+  if (!paymentMethodId) throw new Error('Stripe did not return a saved payment method.');
 
-  if (!paymentMethodId) {
-    throw new Error('Stripe did not return a saved payment method.');
-  }
-
-  await getStripeServer().customers.update(stripeCustomerId, {
-    invoice_settings: {
-      default_payment_method: paymentMethodId,
-    },
-  });
-
-  const currentSubscription = await getCurrentManagedStripeSubscription(userId);
-  if (currentSubscription) {
-    await getStripeServer().subscriptions.update(currentSubscription.id, {
-      default_payment_method: paymentMethodId,
-    });
-  }
-
+  await makeDefaultPaymentMethod(userId, customerId, paymentMethodId);
   return buildBillingOverview(userId);
 }
 
-export async function setDefaultPaymentMethod(userId: string, paymentMethodId: string) {
-  const stripeCustomerId = await getStripeCustomerId(userId);
-  if (!stripeCustomerId) {
-    throw new PublicError('No Stripe customer found for this account.', 404);
-  }
+export async function setDefaultPaymentMethod(userId: string, paymentMethodId: string): Promise<BillingOverview> {
+  const customerId = await getStripeCustomerId(userId);
+  if (!customerId) throw new PublicError('No billing profile found for this account.', 404);
 
   const paymentMethod = await getStripeServer().paymentMethods.retrieve(paymentMethodId);
-  const paymentMethodCustomer =
-    typeof paymentMethod.customer === 'string' ? paymentMethod.customer : paymentMethod.customer?.id ?? null;
-
-  if (paymentMethodCustomer !== stripeCustomerId) {
+  const owner = typeof paymentMethod.customer === 'string' ? paymentMethod.customer : paymentMethod.customer?.id ?? null;
+  if (owner !== customerId) {
     throw new PublicError('This payment method does not belong to the current user.', 403);
   }
 
-  if (paymentMethod.type !== 'card') {
-    throw new PublicError('Only card payment methods can be set as default.', 400);
-  }
-
-  await getStripeServer().customers.update(stripeCustomerId, {
-    invoice_settings: {
-      default_payment_method: paymentMethodId,
-    },
-  });
-
-  const currentSubscription = await getCurrentManagedStripeSubscription(userId);
-  if (currentSubscription) {
-    await getStripeServer().subscriptions.update(currentSubscription.id, {
-      default_payment_method: paymentMethodId,
-    });
-  }
-
+  await makeDefaultPaymentMethod(userId, customerId, paymentMethodId);
   return buildBillingOverview(userId);
 }

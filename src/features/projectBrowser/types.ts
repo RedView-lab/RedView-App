@@ -7,12 +7,19 @@ export interface ProjectBrowserOverlayProps {
 }
 
 export type OverlayTab = 'projects' | 'account' | 'subscription' | 'settings';
-export type SubscriptionPlanId = 'demo' | 'founder' | 'patron';
+/** Durée de l'abonnement RedView (un seul abonnement, trois durées). */
+export type SubscriptionPlanId = 'monthly' | 'semiannual' | 'annual';
 
 export type SubscriptionSnapshot = {
+  /** Identifiant Stripe : référence du contrat montrée à la résiliation. */
+  subscriptionId: string | null;
+  /** Abonnement qui donne accès : en essai ou payé à jour. */
   isSubscribed: boolean;
-  status: string | null;
+  /** Statut Stripe (`trialing`, `active`, `past_due`…), ou `none`. */
+  status: string;
+  planId: SubscriptionPlanId | null;
   priceId: string | null;
+  /** Fin de l'échéance en cours — fin de l'essai quand `status` = `trialing`. */
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
 };
@@ -21,14 +28,19 @@ export type SubscriptionState = {
   isLoading: boolean;
   error: string | null;
   snapshot: SubscriptionSnapshot | null;
+  /** L'essai gratuit est encore disponible (jamais deux fois par compte). */
+  trialEligible: boolean;
 };
 
 export type PaymentMethodSummary = {
   id: string;
+  /** Type Stripe (`card`, `paypal`, `sepa_debit`…). */
+  type: string;
   brand: string;
+  /** Vide pour les moyens sans numéro (PayPal). */
   last4: string;
-  expMonth: number;
-  expYear: number;
+  expMonth: number | null;
+  expYear: number | null;
   isDefault: boolean;
 };
 
@@ -37,20 +49,3 @@ export type BillingContactPreference = {
   alternativeEmail: string;
 };
 
-export type SubscriptionPlan = {
-  id: SubscriptionPlanId;
-  name: string;
-  priceLabel: string;
-  tags: string[];
-  iconBadges: Array<{
-    id: string;
-    label: string;
-    icon: string;
-    tone: 'gold' | 'brown' | 'blue' | 'teal' | 'green' | 'purple' | 'black' | 'gray';
-    featureItems: Array<{
-      icon: string;
-      label: string;
-    }>;
-  }>;
-  description: string;
-};

@@ -1,23 +1,22 @@
 import type { ApiRequest, ApiResponse } from '../_lib/types.js';
 
-import type { BillingContactPreference } from '../_lib/billing.js';
-import { saveBillingContactPreference } from '../_lib/billing.js';
+import { saveBillingContactPreference, toBillingError, type BillingContactPreference } from '../_lib/billing.js';
 import { sendMethodNotAllowed, readJsonBody } from '../_lib/http.js';
 import { requireAuthenticatedUser } from '../_lib/appwrite.js';
-import { PublicError, sendSafeError } from '../_lib/errors.js';
+import { sendSafeError } from '../_lib/errors.js';
 
-function isValidPreference(value: BillingContactPreference): boolean {
-  if (value.mode !== 'account' && value.mode !== 'alternative') {
-    return false;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function parsePreference(value: Record<string, unknown>): BillingContactPreference | null {
+  const alternativeEmail = typeof value.alternativeEmail === 'string' ? value.alternativeEmail.trim() : '';
+  if (value.mode === 'account') return { mode: 'account', alternativeEmail };
+  if (value.mode === 'alternative' && alternativeEmail.length <= 254 && EMAIL_PATTERN.test(alternativeEmail)) {
+    return { mode: 'alternative', alternativeEmail };
   }
-
-  if (value.mode === 'alternative' && !value.alternativeEmail.trim()) {
-    return false;
-  }
-
-  return true;
+  return null;
 }
 
+/** E-mail où partent reçus et factures (copié sur le client Stripe). */
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== 'POST') {
     return sendMethodNotAllowed(res, ['POST']);
@@ -25,27 +24,14 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
   try {
     const user = await requireAuthenticatedUser(req, res);
-    if (!user) {
-      return;
-    }
+    if (!user) return;
 
-    const body = await readJsonBody<BillingContactPreference>(req);
-    if (!isValidPreference(body)) {
-      return res.status(400).json({ error: 'Invalid billing contact payload' });
-    }
+    const preference = parsePreference(await readJsonBody<Record<string, unknown>>(req));
+    if (!preference) return res.status(400).json({ error: 'Invalid billing contact payload' });
 
-    const preference = await saveBillingContactPreference(user.id, body);
-    return res.status(200).json({ contactPreference: preference });
+    const saved = await saveBillingContactPreference(user.id, user.email, preference);
+    return res.status(200).json({ contactPreference: saved });
   } catch (error) {
-    // Schéma Appwrite pas encore migré (attribut manquant) → 409 explicite,
-    // sans relayer le message brut de l'erreur.
-    const rawMessage = error instanceof Error ? error.message : '';
-    const safeError = rawMessage.includes('migration')
-      ? new PublicError('Billing contact storage is not available yet.', 409)
-      : error;
-    if (safeError !== error) {
-      console.error('[billing/contact] Error:', error);
-    }
-    return sendSafeError(res, safeError, 'Unable to save billing contact', 'billing/contact');
+    return sendSafeError(res, toBillingError(error), 'Unable to save billing contact', 'billing/contact');
   }
 }

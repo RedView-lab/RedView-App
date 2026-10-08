@@ -1,8 +1,6 @@
 import type { ApiRequest } from './types.js';
 import { PublicError } from './errors.js';
 
-export type BillingPlanId = 'founder' | 'patron';
-
 export function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) {
@@ -11,29 +9,6 @@ export function requireEnv(name: string): string {
     throw new PublicError('Service temporarily unavailable.', 503);
   }
   return value;
-}
-
-export function isBillingPlanId(value: string): value is BillingPlanId {
-  return value === 'founder' || value === 'patron';
-}
-
-export function getConfiguredPriceId(planId: BillingPlanId): string | null {
-  if (planId === 'founder') {
-    return process.env.STRIPE_PRICE_ID_FOUNDER?.trim() || null;
-  }
-  if (planId === 'patron') {
-    return process.env.STRIPE_PRICE_ID_PATRON?.trim() || null;
-  }
-  return null;
-}
-
-export function requireConfiguredPriceId(planId: BillingPlanId): string {
-  const priceId = getConfiguredPriceId(planId);
-  if (!priceId) {
-    console.error(`[config] Missing Stripe price ID for plan ${planId}`);
-    throw new PublicError('This plan is temporarily unavailable.', 503);
-  }
-  return priceId;
 }
 
 export function getAppBaseUrl(req: ApiRequest): string {

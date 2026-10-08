@@ -453,22 +453,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Pause"
   },
   {
-    "fr": "Basculer sur cette offre",
-    "en": "Switch to this plan"
-  },
-  {
-    "fr": "Choisir cette offre",
-    "en": "Choose this plan"
-  },
-  {
-    "fr": "Pas encore disponible",
-    "en": "Not yet available"
-  },
-  {
-    "fr": "Offres payantes pas encore disponibles",
-    "en": "Paid plans not yet available"
-  },
-  {
     "fr": "Choisir une offre payante",
     "en": "Choose a paid plan"
   },
@@ -491,10 +475,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Aucun moyen de paiement par défaut",
     "en": "No default payment method"
-  },
-  {
-    "fr": "Plan Demo sans paiement",
-    "en": "Demo plan without payment"
   },
   {
     "fr": "Ajoutez ou remplacez votre carte directement dans RedView App.",
@@ -701,84 +681,12 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Explore plans"
   },
   {
-    "fr": "Bêta Ouverte & Accès Fondateur",
-    "en": "Open Beta & Founder Access"
-  },
-  {
-    "fr": "Explorez gratuitement le moteur 3D RedView sur le Web. Devenez Membre Fondateur pour financer l'application mobile et débloquer vos avantages à vie.",
-    "en": "Explore the RedView 3D engine on the Web for free. Become a Founder Member to fund the mobile app and unlock lifetime perks."
-  },
-  {
-    "fr": "Accès Bêta Web",
-    "en": "Web Beta Access"
-  },
-  {
-    "fr": "0 €",
-    "en": "0 €"
-  },
-  {
-    "fr": "Gratuit sur le web pendant la Bêta",
-    "en": "Free on the web during Beta"
-  },
-  {
-    "fr": "Pass Fondateur",
-    "en": "Founder Pass"
-  },
-  {
-    "fr": "5 €",
-    "en": "5 €"
-  },
-  {
-    "fr": "10 €",
-    "en": "10 €"
-  },
-  {
-    "fr": "Paiement unique · avantages à vie",
-    "en": "One-time payment · lifetime perks"
-  },
-  {
     "fr": "Recommandé",
     "en": "Recommended"
   },
   {
-    "fr": "Mécène & Soutien Majeur",
-    "en": "Patron & Major Support"
-  },
-  {
-    "fr": "dès 15 €",
-    "en": "from €15"
-  },
-  {
-    "fr": "dès 30 €",
-    "en": "from €30"
-  },
-  {
-    "fr": "Don libre de soutien",
-    "en": "Open support donation"
-  },
-  {
-    "fr": "Don libre",
-    "en": "Open donation"
-  },
-  {
     "fr": "Accès Bêta",
     "en": "Beta Access"
-  },
-  {
-    "fr": "Membre Fondateur",
-    "en": "Founder Member"
-  },
-  {
-    "fr": "Mécène",
-    "en": "Patron"
-  },
-  {
-    "fr": "Votre statut Fondateur est actif.",
-    "en": "Your Founder status is active."
-  },
-  {
-    "fr": "Votre compte bénéficie de l'accès complet à la Bêta Web. Devenez Membre Fondateur pour débloquer vos avantages à vie.",
-    "en": "Your account has full access to the Web Beta. Become a Founder Member to unlock your lifetime perks."
   },
   {
     "fr": "Informations de paiement",
@@ -913,100 +821,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Web Access & Projects"
   },
   {
-    "fr": "Accès sans carte bancaire",
-    "en": "No credit card required"
-  },
-  {
-    "fr": "Accès complet sans carte bancaire",
-    "en": "Full access with no credit card required"
-  },
-  {
-    "fr": "Avantages Fondateur",
-    "en": "Founder Perks"
-  },
-  {
     "fr": "Accès anticipé App Mobile",
     "en": "Early Mobile App access"
-  },
-  {
-    "fr": "Statut Fondateur : -50% à vie",
-    "en": "Founder status: -50% lifetime"
-  },
-  {
-    "fr": "Accès prioritaire à la future App Mobile (iOS TestFlight & Android)",
-    "en": "Priority access to upcoming Mobile App (iOS TestFlight & Android)"
-  },
-  {
-    "fr": "Statut Fondateur : -50% à vie sur les futurs abonnements",
-    "en": "Founder status: -50% lifetime on future subscriptions"
-  },
-  {
-    "fr": "Communauté & Soutien",
-    "en": "Community & Support"
-  },
-  {
-    "fr": "Vote sur les prochains massifs 3D",
-    "en": "Vote on upcoming 3D massifs"
-  },
-  {
-    "fr": "Discord privé & contact direct dev",
-    "en": "Private Discord & direct dev contact"
-  },
-  {
-    "fr": "Soutien direct dev indépendant",
-    "en": "Support indie development"
-  },
-  {
-    "fr": "Droit de vote sur les prochains massifs 3D modélisés",
-    "en": "Voting rights on upcoming 3D modeled massifs"
-  },
-  {
-    "fr": "Salon Discord privé & échanges directs avec le développeur",
-    "en": "Private Discord channel & direct chats with the developer"
-  },
-  {
-    "fr": "Soutenez directement le développement indépendant",
-    "en": "Directly support independent development"
-  },
-  {
-    "fr": "Privilèges Mécène",
-    "en": "Patron Privileges"
-  },
-  {
-    "fr": "1 An de compte PRO offert (v1)",
-    "en": "1 Year free PRO account (v1)"
-  },
-  {
-    "fr": "Accès VIP ultra-prioritaire mobile",
-    "en": "VIP ultra-priority mobile access"
-  },
-  {
-    "fr": "1 An de compte PRO offert au lancement de la v1",
-    "en": "1 Year free PRO account at v1 launch"
-  },
-  {
-    "fr": "Accès VIP ultra-prioritaire aux premières versions mobiles",
-    "en": "Ultra-priority VIP access to early mobile versions"
-  },
-  {
-    "fr": "Cercle des Soutiens",
-    "en": "Supporters Circle"
-  },
-  {
-    "fr": "Nom sur la page des Soutiens",
-    "en": "Name on Supporters page"
-  },
-  {
-    "fr": "Propositions de zones & features",
-    "en": "Direct input on new areas & features"
-  },
-  {
-    "fr": "Votre nom ou pseudo sur la page officielle des Soutiens",
-    "en": "Your name or handle on the official Supporters page"
-  },
-  {
-    "fr": "Contact direct pour proposer de nouvelles zones ou fonctionnalités",
-    "en": "Direct contact to suggest new areas or features"
   },
   {
     "fr": "Gestion des Points d'Intérêts",
@@ -1607,6 +1423,386 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Accord retiré : vous ne pourrez plus ajouter de fichiers .fit.",
     "en": "Consent withdrawn: you will no longer be able to add .fit files."
+  },
+  {
+    "fr": "Abonnement RedView",
+    "en": "RedView subscription"
+  },
+  {
+    "fr": "Un seul abonnement, toutes les fonctionnalités : moteur 3D et LiDAR, météo, neige, routage, export GPX et co-édition. Seule la durée change le prix.",
+    "en": "One subscription, every feature: 3D engine and LiDAR, weather, snow, routing, GPX export and co-editing. Only the duration changes the price."
+  },
+  {
+    "fr": "1 mois",
+    "en": "1 month"
+  },
+  {
+    "fr": "6 mois",
+    "en": "6 months"
+  },
+  {
+    "fr": "1 an",
+    "en": "1 year"
+  },
+  {
+    "fr": "Formule {{plan}} : {{price}}",
+    "en": "{{plan}} plan: {{price}}"
+  },
+  {
+    "fr": "Soit {{price}} par mois",
+    "en": "That is {{price}} per month"
+  },
+  {
+    "fr": "Sans engagement",
+    "en": "No commitment"
+  },
+  {
+    "fr": "{{days}} jours d’essai gratuit inclus",
+    "en": "{{days}}-day free trial included"
+  },
+  {
+    "fr": "Choisir",
+    "en": "Choose"
+  },
+  {
+    "fr": "Essai en cours",
+    "en": "Trial in progress"
+  },
+  {
+    "fr": "Votre formule",
+    "en": "Your plan"
+  },
+  {
+    "fr": "Formule actuelle",
+    "en": "Current plan"
+  },
+  {
+    "fr": "Passer à cette formule",
+    "en": "Switch to this plan"
+  },
+  {
+    "fr": "Reprenez d’abord votre abonnement pour changer de formule.",
+    "en": "Resume your subscription first to change plans."
+  },
+  {
+    "fr": "Reprendre mon abonnement",
+    "en": "Resume my subscription"
+  },
+  {
+    "fr": "Résilier votre contrat",
+    "en": "Cancel your contract"
+  },
+  {
+    "fr": "Factures et reçus",
+    "en": "Invoices and receipts"
+  },
+  {
+    "fr": "Le changement de formule s’applique tout de suite : la différence est calculée au prorata et facturée par Stripe, qui vous montre le montant avant de confirmer.",
+    "en": "Plan changes apply immediately: the difference is prorated and billed by Stripe, which shows you the amount before you confirm."
+  },
+  {
+    "fr": "Prix TTC. Aucun prélèvement pendant les 7 jours d’essai : le premier a lieu à la fin de l’essai, puis à chaque échéance. Renouvellement automatique, résiliable à tout moment depuis cet onglet, avec effet à la fin de la période en cours. Paiement sécurisé par Stripe.",
+    "en": "Prices include VAT. No charge during the 7-day trial: the first charge happens when the trial ends, then at each renewal. Renews automatically, cancel anytime from this tab, effective at the end of the current period. Secure payment by Stripe."
+  },
+  {
+    "fr": "Prix TTC, prélevés à la souscription puis à chaque échéance. Renouvellement automatique, résiliable à tout moment depuis cet onglet, avec effet à la fin de la période en cours. Paiement sécurisé par Stripe.",
+    "en": "Prices include VAT, charged at signup then at each renewal. Renews automatically, cancel anytime from this tab, effective at the end of the current period. Secure payment by Stripe."
+  },
+  {
+    "fr": "Les prochains prélèvements utilisent le moyen de paiement par défaut.",
+    "en": "Upcoming charges use the default payment method."
+  },
+  {
+    "fr": "Enregistrer un moyen de paiement",
+    "en": "Save a payment method"
+  },
+  {
+    "fr": "E-mail de facturation",
+    "en": "Billing email"
+  },
+  {
+    "fr": "Reçus, factures et e-mails de l’abonnement.",
+    "en": "Receipts, invoices and subscription emails."
+  },
+  {
+    "fr": "E-mail de facturation alternatif",
+    "en": "Alternative billing email"
+  },
+  {
+    "fr": "Essai gratuit",
+    "en": "Free trial"
+  },
+  {
+    "fr": "Abonné RedView",
+    "en": "RedView subscriber"
+  },
+  {
+    "fr": "Le dernier paiement a échoué. Mettez à jour votre moyen de paiement pour garder votre accès.",
+    "en": "The last payment failed. Update your payment method to keep your access."
+  },
+  {
+    "fr": "Résilié : votre essai prend fin le {{date}}, aucun prélèvement ne sera effectué.",
+    "en": "Cancelled: your trial ends on {{date}}, you will not be charged."
+  },
+  {
+    "fr": "Résilié : votre abonnement prend fin le {{date}}. Vous gardez l’accès jusqu’à cette date.",
+    "en": "Cancelled: your subscription ends on {{date}}. You keep access until then."
+  },
+  {
+    "fr": "Essai gratuit jusqu’au {{date}}. Premier prélèvement ce jour-là, sauf résiliation avant.",
+    "en": "Free trial until {{date}}. First charge on that day unless you cancel before."
+  },
+  {
+    "fr": "Formule {{plan}}, renouvelée automatiquement le {{date}}.",
+    "en": "{{plan}} plan, renews automatically on {{date}}."
+  },
+  {
+    "fr": "Renouvellement automatique le {{date}}.",
+    "en": "Renews automatically on {{date}}."
+  },
+  {
+    "fr": "Compte",
+    "en": "Account"
+  },
+  {
+    "fr": "Formule",
+    "en": "Plan"
+  },
+  {
+    "fr": "Abonnement RedView · {{plan}}",
+    "en": "RedView subscription · {{plan}}"
+  },
+  {
+    "fr": "Référence du contrat",
+    "en": "Contract reference"
+  },
+  {
+    "fr": "Fin du contrat",
+    "en": "Contract end"
+  },
+  {
+    "fr": "Votre essai prendra fin le {{date}} et aucun prélèvement ne sera effectué.",
+    "en": "Your trial will end on {{date}} and you will not be charged."
+  },
+  {
+    "fr": "Votre abonnement prendra fin le {{date}}. Vous gardez l’accès jusqu’à cette date et ne serez plus prélevé.",
+    "en": "Your subscription will end on {{date}}. You keep access until then and will not be charged again."
+  },
+  {
+    "fr": "Une confirmation vous sera envoyée par e-mail. Vous pourrez reprendre votre abonnement jusqu’à cette date.",
+    "en": "A confirmation will be emailed to you. You can resume your subscription until that date."
+  },
+  {
+    "fr": "Garder mon abonnement",
+    "en": "Keep my subscription"
+  },
+  {
+    "fr": "Résiliation…",
+    "en": "Cancelling…"
+  },
+  {
+    "fr": "Confirmer la résiliation",
+    "en": "Confirm cancellation"
+  },
+  {
+    "fr": "Démarrer votre essai gratuit",
+    "en": "Start your free trial"
+  },
+  {
+    "fr": "Aucun prélèvement aujourd’hui. {{price}} seront prélevés le {{date}}, puis {{cadence}}, sauf résiliation avant cette date.",
+    "en": "No charge today. {{price}} will be charged on {{date}}, then {{cadence}}, unless you cancel before that date."
+  },
+  {
+    "fr": "{{price}} prélevés aujourd’hui, puis {{cadence}}.",
+    "en": "{{price}} charged today, then {{cadence}}."
+  },
+  {
+    "fr": "Ce moyen de paiement devient celui par défaut : les prochains prélèvements l’utiliseront.",
+    "en": "This payment method becomes the default: upcoming charges will use it."
+  },
+  {
+    "fr": "Démarrer l’essai gratuit · puis {{price}} {{cadence}}",
+    "en": "Start free trial · then {{price}} {{cadence}}"
+  },
+  {
+    "fr": "S’abonner et payer {{price}}",
+    "en": "Subscribe and pay {{price}}"
+  },
+  {
+    "fr": "Enregistrer ce moyen de paiement",
+    "en": "Save this payment method"
+  },
+  {
+    "fr": "Cochez la case pour confirmer votre abonnement.",
+    "en": "Tick the box to confirm your subscription."
+  },
+  {
+    "fr": "Stripe n’a pas confirmé le moyen de paiement.",
+    "en": "Stripe did not confirm the payment method."
+  },
+  {
+    "fr": "{{days}} jours d’essai gratuit",
+    "en": "{{days}}-day free trial"
+  },
+  {
+    "fr": "Renouvelé {{cadence}}",
+    "en": "Renewed {{cadence}}"
+  },
+  {
+    "fr": "chaque mois",
+    "en": "every month"
+  },
+  {
+    "fr": "tous les 6 mois",
+    "en": "every 6 months"
+  },
+  {
+    "fr": "chaque année",
+    "en": "every year"
+  },
+  {
+    "fr": "Prix TTC. Renouvellement automatique {{cadence}}, résiliable à tout moment depuis Compte → Abonnement, avec effet à la fin de la période en cours.",
+    "en": "Price includes VAT. Renews automatically {{cadence}}; cancel anytime from Account → Subscription, effective at the end of the current period."
+  },
+  {
+    "fr": "J’autorise RedView à prélever {{price}} {{cadence}} à partir du {{date}}, jusqu’à résiliation. Je demande l’accès immédiat au service : si j’exerce mon droit de rétractation de 14 jours, seule la période payante déjà utilisée me sera facturée.",
+    "en": "I authorise RedView to charge {{price}} {{cadence}} from {{date}} until I cancel. I request immediate access to the service: if I exercise my 14-day right of withdrawal, I will only be charged for the paid period already used."
+  },
+  {
+    "fr": "J’autorise RedView à prélever {{price}} aujourd’hui puis {{cadence}}, jusqu’à résiliation. Je demande l’accès immédiat au service : si j’exerce mon droit de rétractation de 14 jours, seule la période déjà utilisée me sera facturée.",
+    "en": "I authorise RedView to charge {{price}} today then {{cadence}} until I cancel. I request immediate access to the service: if I exercise my 14-day right of withdrawal, I will only be charged for the period already used."
+  },
+  {
+    "fr": "La confirmation Stripe a échoué.",
+    "en": "Stripe confirmation failed."
+  },
+  {
+    "fr": "Impossible de lancer la souscription.",
+    "en": "Unable to start the subscription."
+  },
+  {
+    "fr": "Impossible d’ouvrir l’espace de facturation Stripe.",
+    "en": "Unable to open the Stripe billing portal."
+  },
+  {
+    "fr": "Résiliation confirmée. Vous recevrez une confirmation par e-mail.",
+    "en": "Cancellation confirmed. You will receive a confirmation email."
+  },
+  {
+    "fr": "La résiliation a échoué. Réessayez.",
+    "en": "Cancellation failed. Please try again."
+  },
+  {
+    "fr": "Votre abonnement continue.",
+    "en": "Your subscription continues."
+  },
+  {
+    "fr": "Impossible de reprendre l’abonnement.",
+    "en": "Unable to resume the subscription."
+  },
+  {
+    "fr": "Impossible d’ouvrir le formulaire de paiement.",
+    "en": "Unable to open the payment form."
+  },
+  {
+    "fr": "Moyen de paiement enregistré.",
+    "en": "Payment method saved."
+  },
+  {
+    "fr": "Votre essai gratuit a commencé. Bienvenue sur RedView !",
+    "en": "Your free trial has started. Welcome to RedView!"
+  },
+  {
+    "fr": "Abonnement activé. Merci !",
+    "en": "Subscription activated. Thank you!"
+  },
+  {
+    "fr": "Le paiement n’a pas abouti. Aucun montant n’a été prélevé ; vous pouvez réessayer.",
+    "en": "The payment did not go through. Nothing was charged; you can try again."
+  },
+  {
+    "fr": "Impossible de finaliser le paiement.",
+    "en": "Unable to complete the payment."
+  },
+  {
+    "fr": "Ce compte a déjà un abonnement.",
+    "en": "This account already has a subscription."
+  },
+  {
+    "fr": "Les abonnements sont momentanément indisponibles.",
+    "en": "Subscriptions are temporarily unavailable."
+  },
+  {
+    "fr": "Ce moyen de paiement ne correspond pas à votre compte.",
+    "en": "This payment setup does not belong to the current user."
+  },
+  {
+    "fr": "Cette demande ne démarre pas d’abonnement.",
+    "en": "This payment setup does not start a subscription."
+  },
+  {
+    "fr": "Le moyen de paiement n’est pas encore confirmé.",
+    "en": "The payment method is not confirmed yet."
+  },
+  {
+    "fr": "L’essai gratuit a déjà été utilisé sur ce compte.",
+    "en": "The free trial has already been used on this account."
+  },
+  {
+    "fr": "Aucun profil de facturation pour ce compte.",
+    "en": "No billing profile found for this account."
+  },
+  {
+    "fr": "Cet abonnement n’appartient pas à votre compte.",
+    "en": "This subscription does not belong to the current user."
+  },
+  {
+    "fr": "Aucun abonnement pour ce compte.",
+    "en": "No subscription found for this account."
+  },
+  {
+    "fr": "Cette formule est déjà active.",
+    "en": "This plan is already active."
+  },
+  {
+    "fr": "Élément de facturation introuvable.",
+    "en": "Billing object not found."
+  },
+  {
+    "fr": "Formule invalide.",
+    "en": "Invalid plan selection."
+  },
+  {
+    "fr": "Ce moyen de paiement n’appartient pas à votre compte.",
+    "en": "This payment method does not belong to the current user."
+  },
+  {
+    "fr": "Impossible de mettre à jour l’abonnement.",
+    "en": "Unable to update the subscription"
+  },
+  {
+    "fr": "Impossible d’ouvrir le portail de facturation.",
+    "en": "Unable to open the billing portal"
+  },
+  {
+    "fr": "Impossible de mettre à jour le moyen de paiement.",
+    "en": "Unable to update the payment method"
+  },
+  {
+    "fr": "Impossible de charger la facturation.",
+    "en": "Unable to load billing overview"
+  },
+  {
+    "fr": "Impossible d’enregistrer le contact de facturation.",
+    "en": "Unable to save billing contact"
+  },
+  {
+    "fr": "E-mail de facturation invalide.",
+    "en": "Invalid billing contact payload"
+  },
+  {
+    "fr": "Service momentanément indisponible.",
+    "en": "Service temporarily unavailable."
   },
   {
     "fr": "Fonds de carte",
@@ -4669,64 +4865,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Could not update the password."
   },
   {
-    "fr": "Mécène & Soutien",
-    "en": "Patron & Support"
-  },
-  {
-    "fr": "Impossible de mettre à jour le montant.",
-    "en": "Unable to update the amount."
-  },
-  {
-    "fr": "Le montant doit être de 15 € ou plus.",
-    "en": "The amount must be €15 or more."
-  },
-  {
-    "fr": "Payer {{price}}",
-    "en": "Pay {{price}}"
-  },
-  {
-    "fr": "Payer 5 €",
-    "en": "Pay €5"
-  },
-  {
-    "fr": "Confirmez votre accord pour valider le paiement unique de {{price}}.",
-    "en": "Please confirm your consent to validate the one-time payment of {{price}}."
-  },
-  {
-    "fr": "Confirmez votre accord pour valider le paiement unique de 5 €.",
-    "en": "Please confirm your consent to validate the one-time payment of €5."
-  },
-  {
-    "fr": "Paiement unique · À vie",
-    "en": "One-time payment · Lifetime"
-  },
-  {
     "fr": "Finaliser votre paiement",
     "en": "Complete your payment"
-  },
-  {
-    "fr": "Paiement unique de {{price}} · {{plan}} avec avantages à vie.",
-    "en": "One-time payment of {{price}} · {{plan}} with lifetime benefits."
-  },
-  {
-    "fr": "Montant de votre don / soutien",
-    "en": "Your donation / support amount"
-  },
-  {
-    "fr": "(15 € ou plus)",
-    "en": "(€15 or more)"
-  },
-  {
-    "fr": "Mise à jour du paiement Stripe...",
-    "en": "Updating Stripe payment..."
-  },
-  {
-    "fr": "J'autorise RedView à prélever le paiement unique de {{price}} pour mon soutien Mécène et l'accès à mes avantages à vie.",
-    "en": "I authorize RedView to charge the one-time payment of {{price}} for my Patron support and access to my lifetime benefits."
-  },
-  {
-    "fr": "J'autorise RedView à prélever le paiement unique de 5 € pour débloquer mon Pass Fondateur et mes avantages à vie.",
-    "en": "I authorize RedView to charge the one-time payment of €5 to unlock my Founder Pass and my lifetime benefits."
   },
   {
     "fr": "Validation...",
@@ -4757,32 +4897,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Set as default"
   },
   {
-    "fr": "Toute carte confirmée pendant la souscription ou via le formulaire Stripe apparaît ici automatiquement et peut devenir votre carte par défaut.",
-    "en": "Any card confirmed during subscription or through the Stripe form appears here automatically and can become your default card."
-  },
-  {
-    "fr": "Quand vous passez à une offre payante, la carte validée pendant la souscription sera enregistrée ici automatiquement.",
-    "en": "When you switch to a paid plan, the card validated during subscription will be saved here automatically."
-  },
-  {
-    "fr": "Ajouter une nouvelle carte",
-    "en": "Add a new card"
-  },
-  {
     "fr": "CARTE",
     "en": "CARD"
-  },
-  {
-    "fr": "Accès Bêta App iOS (TestFlight)",
-    "en": "iOS app beta access (TestFlight)"
-  },
-  {
-    "fr": "Badge Fondateur officiel",
-    "en": "Official Founder badge"
-  },
-  {
-    "fr": "3 mois de compte PRO offerts (v1)",
-    "en": "3 months of PRO account free (v1)"
   },
   {
     "fr": "Météo (VPS)",

@@ -1,168 +1,87 @@
-import { useState } from 'react';
-
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { useAppI18n } from '@/shared/i18n';
 
-import { logBillingUi } from '../../lib';
-import type { SubscriptionPlanId, SubscriptionPlan } from '../../types';
+import {
+  TRIAL_DAYS,
+  discountPercent,
+  formatEuroAmount,
+  formatEuros,
+  monthlyEquivalentCents,
+  type DisplayPlan,
+} from '../../lib';
 
 type SubscriptionPlanCardProps = {
-  plan: SubscriptionPlan;
-  selected: boolean;
-  active: boolean;
-  onSelect: (planId: SubscriptionPlanId) => void;
-  ctaLabel?: string;
-  ctaTone?: 'danger' | 'neutral';
-  ctaDisabled?: boolean;
-  onCtaClick?: () => void | Promise<void>;
+  plan: DisplayPlan;
+  /** Formule de l'abonnement en cours. */
+  current: boolean;
+  /** Mention d'essai gratuit (essai encore disponible pour le compte). */
+  showTrial: boolean;
+  /** Pastille sous le séparateur quand ce n'est pas l'essai (état de la formule en cours). */
+  statusLabel?: string;
+  ctaLabel: string;
+  ctaDisabled: boolean;
+  ctaTitle?: string;
+  onCta: () => void;
 };
 
+/** Carte d'une durée d'abonnement : durée, prix, réduction, essai, bouton. */
 export function SubscriptionPlanCard({
   plan,
-  selected,
-  active,
-  onSelect,
+  current,
+  showTrial,
+  statusLabel,
   ctaLabel,
-  ctaTone = 'neutral',
-  ctaDisabled = false,
-  onCtaClick,
+  ctaDisabled,
+  ctaTitle,
+  onCta,
 }: SubscriptionPlanCardProps) {
   const { t } = useAppI18n();
-  const [openBadgeId, setOpenBadgeId] = useState<string | null>(null);
-  const hasMetadata = plan.tags.length > 0 || plan.iconBadges.length > 0;
-
-  const isNestedInteractiveTarget = (target: EventTarget | null, currentTarget: EventTarget | null) => {
-    if (!(target instanceof HTMLElement) || !(currentTarget instanceof HTMLElement)) {
-      return false;
-    }
-
-    const interactiveTarget = target.closest('button, a, input, select, textarea, [role="button"]');
-    return interactiveTarget !== null && interactiveTarget !== currentTarget;
-  };
-
-  const selectPlan = () => {
-    logBillingUi('select-plan-card', {
-      planId: plan.id,
-      selected,
-      active,
-    });
-    onSelect(plan.id);
-  };
+  const discount = discountPercent(plan);
+  const durationLabel = t(plan.durationLabel);
 
   return (
     <article
-      className={`rvpb-subscription-card${selected ? ' is-selected' : ''}${active ? ' is-active' : ''}${plan.id === 'demo' ? ' is-demo' : ''}${openBadgeId ? ' has-open-popover' : ''}`}
-      onClick={(event) => {
-        if (isNestedInteractiveTarget(event.target, event.currentTarget)) {
-          return;
-        }
-        selectPlan();
-      }}
-      onKeyDown={(event) => {
-        if (isNestedInteractiveTarget(event.target, event.currentTarget) || (event.key !== 'Enter' && event.key !== ' ')) {
-          return;
-        }
-        event.preventDefault();
-        selectPlan();
-      }}
-      aria-pressed={selected}
-      role="button"
-      tabIndex={0}
+      className={`rvpb-plan-card${current ? ' is-current' : ''}`}
+      aria-label={t('Formule {{plan}} : {{price}}', { plan: durationLabel, price: formatEuros(plan.amountCents) })}
     >
-      <div className="rvpb-subscription-card__select">
-        <div className="rvpb-subscription-card__top">
-          <span className={`rvpb-radio${selected ? ' is-selected' : ''}`} aria-hidden="true" />
-          <div className="rvpb-subscription-card__copy">
-            <div className="rvpb-subscription-card__title-row">
-              <strong>{t(plan.name)}</strong>
-              <span>{t(plan.priceLabel)}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="rvpb-subscription-card__details">
-        {hasMetadata ? (
-          <div className="rvpb-subscription-card__chips">
-            {plan.tags.map((tag) => (
-              <span key={tag} className="rvpb-chip">
-                {t(tag)}
+      <div className="rvpb-plan-card__head">
+        <span className="rvpb-plan-card__duration">{durationLabel}</span>
+        <span className="rvpb-plan-card__price" aria-hidden="true">
+          <span className="rvpb-plan-card__amount">{formatEuroAmount(plan.amountCents)}</span>
+          <span className="rvpb-plan-card__currency">€</span>
+        </span>
+        <span className="rvpb-plan-card__offer">
+          {discount > 0 ? (
+            <>
+              <span className="rvpb-plan-card__badge">-{discount}%</span>
+              <span className="rvpb-plan-card__per-month">
+                {t('Soit {{price}} par mois', { price: formatEuros(monthlyEquivalentCents(plan)) })}
               </span>
-            ))}
-            {plan.iconBadges.map((badge) => {
-              const isOpen = openBadgeId === badge.id;
-
-              return (
-                <span
-                  key={`${plan.id}-${badge.id}`}
-                  className={`rvpb-icon-chip-wrap is-${badge.tone}${isOpen ? ' is-open' : ''}`}
-                  onMouseEnter={() => setOpenBadgeId(badge.id)}
-                  onMouseLeave={() => setOpenBadgeId((current) => (current === badge.id ? null : current))}
-                >
-                  <button
-                    type="button"
-                    className={`rvpb-icon-chip is-${badge.tone}`}
-                    aria-label={t(badge.label)}
-                    aria-expanded={isOpen}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      selectPlan();
-                      setOpenBadgeId((current) => (current === badge.id ? null : badge.id));
-                    }}
-                    onFocus={() => setOpenBadgeId(badge.id)}
-                    onBlur={(event) => {
-                      if (event.currentTarget.parentElement?.contains(event.relatedTarget as Node | null)) {
-                        return;
-                      }
-                      setOpenBadgeId((current) => (current === badge.id ? null : current));
-                    }}
-                  >
-                    <SvgV2Icon name={badge.icon} size={20} />
-                  </button>
-
-                  <span className="rvpb-feature-popover" role="tooltip" aria-hidden={!isOpen}>
-                    {badge.featureItems.map((item) => (
-                      <span key={`${badge.id}-${item.label}`} className="rvpb-feature-popover__item">
-                        <SvgV2Icon name={item.icon} size={20} />
-                        <span>{t(item.label)}</span>
-                      </span>
-                    ))}
-                  </span>
-                </span>
-              );
-            })}
-          </div>
-        ) : null}
-
-        {plan.description ? (
-          <span className="rvpb-subscription-card__description">{t(plan.description)}</span>
-        ) : null}
-
-        {ctaLabel ? (
-          <button
-            type="button"
-            className={`rvpb-inline-cta${ctaTone === 'danger' ? ' is-danger' : ''}`}
-            disabled={ctaDisabled}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              logBillingUi('subscription-cta-click', {
-                planId: plan.id,
-                ctaLabel,
-                ctaTone,
-                ctaDisabled,
-                selected,
-                active,
-                hasHandler: Boolean(onCtaClick),
-              });
-              void onCtaClick?.();
-            }}
-          >
-            {t(ctaLabel)}
-          </button>
-        ) : null}
+            </>
+          ) : (
+            <span className="rvpb-plan-card__badge rvpb-plan-card__badge--note">{t('Sans engagement')}</span>
+          )}
+        </span>
       </div>
+
+      <div className="rvpb-plan-card__divider" />
+
+      {showTrial || statusLabel ? (
+        <span className={`rvpb-plan-card__pill${statusLabel ? ' is-status' : ''}`}>
+          {statusLabel ?? t('{{days}} jours d’essai gratuit inclus', { days: TRIAL_DAYS })}
+        </span>
+      ) : null}
+
+      <button
+        type="button"
+        className="rvpb-plan-card__cta"
+        disabled={ctaDisabled}
+        title={ctaTitle}
+        onClick={onCta}
+      >
+        <span>{ctaLabel}</span>
+        {ctaDisabled ? null : <SvgV2Icon name="arrow-right.svg" size={16} />}
+      </button>
     </article>
   );
 }

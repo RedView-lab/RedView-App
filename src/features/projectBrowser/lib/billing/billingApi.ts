@@ -11,6 +11,7 @@ import type {
 
 type BillingOverviewResponse = {
   subscription: SubscriptionSnapshot;
+  trialEligible: boolean;
   contactPreference: BillingContactPreference;
   customerEmail: string | null;
   paymentMethod: PaymentMethodSummary | null;
@@ -20,9 +21,12 @@ type BillingOverviewResponse = {
 export type SubscriptionActionResponse = {
   subscriptionId: string;
   subscription: SubscriptionSnapshot;
-  clientSecret: string | null;
-  requiresPaymentConfirmation: boolean;
 };
+
+/** Ce que le Payment Element doit confirmer pour souscrire. */
+export type SubscriptionStartResponse =
+  | { intent: 'setup'; clientSecret: string; setupIntentId: string; planId: SubscriptionPlanId; trialDays: number }
+  | { intent: 'payment'; clientSecret: string; subscriptionId: string; planId: SubscriptionPlanId };
 
 type PaymentMethodSetupResponse = {
   clientSecret: string;
@@ -34,7 +38,7 @@ function summarizeResponse(data: Record<string, unknown>) {
     error: typeof data.error === 'string' ? data.error : null,
     subscriptionId: typeof data.subscriptionId === 'string' ? data.subscriptionId : null,
     hasClientSecret: typeof data.clientSecret === 'string' && data.clientSecret.length > 0,
-    requiresPaymentConfirmation: data.requiresPaymentConfirmation === true,
+    intent: typeof data.intent === 'string' ? data.intent : null,
     subscriptionStatus:
       data.subscription && typeof data.subscription === 'object' && data.subscription
         ? (data.subscription as Record<string, unknown>).status ?? null
@@ -110,29 +114,17 @@ export async function fetchBillingOverview(): Promise<BillingOverviewResponse> {
   });
 }
 
-export async function createSubscriptionIntent(
-  planId: Exclude<SubscriptionPlanId, 'demo'>,
-  amount?: number,
-): Promise<SubscriptionActionResponse> {
-  return apiRequest<SubscriptionActionResponse>('/api/billing/subscription', {
+export async function startSubscription(planId: SubscriptionPlanId): Promise<SubscriptionStartResponse> {
+  return apiRequest<SubscriptionStartResponse>('/api/billing/subscription', {
     method: 'POST',
-    body: JSON.stringify({
-      action: 'subscribe',
-      planId,
-      ...(amount ? { amount } : {}),
-    }),
+    body: JSON.stringify({ action: 'start', planId }),
   });
 }
 
-export async function changeSubscriptionPlan(
-  planId: Exclude<SubscriptionPlanId, 'demo'>,
-): Promise<SubscriptionActionResponse> {
+export async function activateTrialSubscription(setupIntentId: string): Promise<SubscriptionActionResponse> {
   return apiRequest<SubscriptionActionResponse>('/api/billing/subscription', {
     method: 'POST',
-    body: JSON.stringify({
-      action: 'change',
-      planId,
-    }),
+    body: JSON.stringify({ action: 'activate', setupIntentId }),
   });
 }
 
@@ -150,16 +142,20 @@ export async function resumeManagedSubscription(): Promise<SubscriptionActionRes
   });
 }
 
-export async function syncManagedSubscription(
-  subscriptionId: string,
-): Promise<SubscriptionActionResponse> {
+export async function syncManagedSubscription(subscriptionId: string): Promise<SubscriptionActionResponse> {
   return apiRequest<SubscriptionActionResponse>('/api/billing/subscription', {
     method: 'POST',
-    body: JSON.stringify({
-      action: 'sync',
-      subscriptionId,
-    }),
+    body: JSON.stringify({ action: 'sync', subscriptionId }),
   });
+}
+
+/** URL du portail client Stripe ; avec `planId`, la confirmation du passage à cette durée. */
+export async function openBillingPortal(planId?: SubscriptionPlanId): Promise<string> {
+  const data = await apiRequest<{ url: string }>('/api/billing/portal', {
+    method: 'POST',
+    body: JSON.stringify(planId ? { planId } : {}),
+  });
+  return data.url;
 }
 
 export async function createPaymentMethodSetupIntent(): Promise<PaymentMethodSetupResponse> {

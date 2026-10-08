@@ -1,11 +1,15 @@
+import { useState } from 'react';
+
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { useAppI18n } from '@/shared/i18n';
 
 import {
-  isDemoPlan,
-  resolveActivePlanId,
-  SUBSCRIPTION_PLANS,
+  DISPLAY_PLANS,
+  hasLiveSubscription,
+  hasPaymentIssue,
+  subscriptionStatusLine,
 } from '../../lib';
+import { CancelSubscriptionDialog } from './CancelSubscriptionDialog';
 import { SubscriptionPlanCard } from './SubscriptionPlanCard';
 import type {
   BillingContactPreference,
@@ -14,22 +18,23 @@ import type {
   SubscriptionState,
 } from '../../types';
 
-type ManagedPlanId = Exclude<SubscriptionPlanId, 'demo'>;
-
 type SubscriptionPanelProps = {
   subscriptionState: SubscriptionState;
-  selectedPlanId: SubscriptionPlanId;
-  setSelectedPlanId: (planId: SubscriptionPlanId) => void;
   contactPreference: BillingContactPreference;
   setContactPreference: React.Dispatch<React.SetStateAction<BillingContactPreference>>;
   accountEmail: string;
-  paymentMethod: PaymentMethodSummary | null;
   paymentMethods: PaymentMethodSummary[];
   billingActionBusy: boolean;
   billingActionError: string | null;
   contactStatusMessage: string | null;
-  onSelectPlan: (planId: ManagedPlanId, amount?: number) => void;
-  onToggleManagedSubscription: () => void;
+  /** Souscrire à une durée (pas d'abonnement en cours). */
+  onChoosePlan: (planId: SubscriptionPlanId) => void;
+  /** Passer l'abonnement en cours à une autre durée (portail Stripe). */
+  onSwitchPlan: (planId: SubscriptionPlanId) => void;
+  /** Résiliation confirmée ; true quand elle a abouti. */
+  onCancelSubscription: () => Promise<boolean>;
+  onResumeSubscription: () => void;
+  onOpenPortal: () => void;
   onManagePaymentMethod: () => void;
   onSetDefaultPaymentMethod: (paymentMethodId: string) => void;
 };
@@ -40,7 +45,10 @@ function formatDisplayedPaymentBrand(brand: string): string {
   if (normalized === 'visa') return 'VISA';
   if (normalized === 'mastercard') return 'Mastercard';
   if (normalized === 'american express' || normalized === 'amex') return 'AMEX';
-  if (normalized === 'cartes bancaires') return 'CB';
+  if (normalized === 'cartes bancaires' || normalized === 'cartes_bancaires') return 'CB';
+  if (normalized === 'paypal') return 'PayPal';
+  if (normalized === 'sepa_debit') return 'SEPA';
+  if (normalized === 'link') return 'Link';
   if (!normalized) return 'CARD';
 
   return normalized.replace(/_/g, ' ').toUpperCase();
@@ -58,91 +66,62 @@ function paymentBrandTone(brand: string): 'visa' | 'mastercard' | 'amex' | 'gene
 
 export function SubscriptionPanel({
   subscriptionState,
-  selectedPlanId,
-  setSelectedPlanId,
   contactPreference,
   setContactPreference,
   accountEmail,
-  paymentMethod,
   paymentMethods,
   billingActionBusy,
   billingActionError,
   contactStatusMessage,
-  onSelectPlan,
-  onToggleManagedSubscription,
+  onChoosePlan,
+  onSwitchPlan,
+  onCancelSubscription,
+  onResumeSubscription,
+  onOpenPortal,
   onManagePaymentMethod,
   onSetDefaultPaymentMethod,
 }: SubscriptionPanelProps) {
   const { t } = useAppI18n();
-  const showDemoUpsell = isDemoPlan(subscriptionState.snapshot);
-  const activePlanId = resolveActivePlanId(subscriptionState.snapshot);
-  const hasManagedSubscription = !showDemoUpsell;
-  const visiblePlans = hasManagedSubscription
-    ? SUBSCRIPTION_PLANS.filter((plan) => plan.id !== 'demo')
-    : SUBSCRIPTION_PLANS;
-  const effectiveSelectedPlanId: SubscriptionPlanId =
-    hasManagedSubscription && selectedPlanId === 'demo' ? activePlanId : selectedPlanId;
-  const selectedPlan =
-    SUBSCRIPTION_PLANS.find((plan) => plan.id === effectiveSelectedPlanId) ?? SUBSCRIPTION_PLANS[2];
-  const savedPaymentMethods = paymentMethods.length > 0 ? paymentMethods : paymentMethod ? [paymentMethod] : [];
-  const paymentMethodLabel = paymentMethod
-    ? t('{{brand}} se terminant par {{last4}}', {
-        brand: formatDisplayedPaymentBrand(paymentMethod.brand),
-        last4: paymentMethod.last4,
-      })
-    : hasManagedSubscription
-      ? t('Aucun moyen de paiement par défaut')
-      : t('Plan Demo sans paiement');
-  const paymentMethodHelper = paymentMethod
-    ? t('Expire {{date}}.', {
-        date: `${String(paymentMethod.expMonth).padStart(2, '0')}/${paymentMethod.expYear}`,
-      })
-    : hasManagedSubscription
-      ? t('Ajoutez ou remplacez votre carte directement dans RedView App.')
-      : t('Le plan Demo ne requiert aucun paiement. Ajoutez un moyen de paiement uniquement lorsque vous passez à une offre payante.');
+  // Bouton qui a ouvert la pop-in de résiliation (le focus y revient) ; null = fermée.
+  const [cancelAnchor, setCancelAnchor] = useState<HTMLElement | null>(null);
+  const snapshot = subscriptionState.snapshot;
+  const live = hasLiveSubscription(snapshot);
+  const loading = subscriptionState.isLoading && !snapshot;
+  // Changer de durée : seulement un abonnement à jour et non résilié.
+  const canSwitch = live && !snapshot?.cancelAtPeriodEnd && !hasPaymentIssue(snapshot);
   const panelError = billingActionError ?? subscriptionState.error;
-  const subscriptionOffersContent = (
-    <div className="rvpb-subscription-section__content rvpb-subscription-section__content--stacked">
-      {visiblePlans.map((plan) => {
-        const isActivePlan = activePlanId === plan.id;
-        const isSelectedPlan = selectedPlan.id === plan.id;
-        const isDemoSelection = plan.id === 'demo';
-        const isPaidPlan = plan.id === 'founder' || plan.id === 'patron';
 
-        return (
-          <SubscriptionPlanCard
-            key={plan.id}
-            plan={plan}
-            selected={isSelectedPlan}
-            active={Boolean(isActivePlan)}
-            onSelect={setSelectedPlanId}
-            ctaLabel={
-              isActivePlan && !isDemoSelection
-                ? subscriptionState.snapshot?.cancelAtPeriodEnd
-                  ? 'Reprendre'
-                  : 'Interrompre'
-                : isPaidPlan
-                  ? 'Pas encore disponible'
-                  : isSelectedPlan && !isDemoSelection
-                    ? hasManagedSubscription
-                      ? 'Basculer sur cette offre'
-                      : 'Choisir cette offre'
-                    : undefined
-            }
-            ctaTone={isActivePlan && !isDemoSelection ? 'danger' : 'neutral'}
-            ctaDisabled={isPaidPlan || billingActionBusy}
-            onCtaClick={
-              isPaidPlan || isDemoSelection
-                ? undefined
-                : isActivePlan
-                  ? onToggleManagedSubscription
-                  : () => onSelectPlan(plan.id as ManagedPlanId)
-            }
-          />
-        );
-      })}
-    </div>
-  );
+  const planCards = DISPLAY_PLANS.map((plan) => {
+    const current = live && snapshot?.planId === plan.id;
+    if (!live) {
+      return (
+        <SubscriptionPlanCard
+          key={plan.id}
+          plan={plan}
+          current={false}
+          showTrial={subscriptionState.trialEligible}
+          ctaLabel={t('Choisir')}
+          ctaDisabled={billingActionBusy || loading || Boolean(subscriptionState.error && !snapshot)}
+          onCta={() => onChoosePlan(plan.id)}
+        />
+      );
+    }
+    return (
+      <SubscriptionPlanCard
+        key={plan.id}
+        plan={plan}
+        current={current}
+        showTrial={false}
+        statusLabel={current ? (snapshot?.status === 'trialing' ? t('Essai en cours') : t('Votre formule')) : undefined}
+        ctaLabel={current ? t('Formule actuelle') : t('Passer à cette formule')}
+        ctaDisabled={current || !canSwitch || billingActionBusy}
+        ctaTitle={!current && !canSwitch ? t('Reprenez d’abord votre abonnement pour changer de formule.') : undefined}
+        onCta={() => onSwitchPlan(plan.id)}
+      />
+    );
+  });
+
+  const showPaymentSection = live || paymentMethods.length > 0;
 
   return (
     <section className="rvpb-subscription-panel" aria-label={t('Gestion de l’abonnement')}>
@@ -154,134 +133,128 @@ export function SubscriptionPanel({
 
       <div className="rvpb-subscription-layout">
         <div className="rvpb-subscription-layout__main">
-            <div className="rvpb-subscription-section">
-              <div className="rvpb-subscription-section__label">
-                <h2>{t('Bêta Ouverte & Accès Fondateur')}</h2>
-                <p>{t('Explorez gratuitement le moteur 3D RedView sur le Web. Devenez Membre Fondateur pour financer l\'application mobile et débloquer vos avantages à vie.')}</p>
-              </div>
-
-              {subscriptionOffersContent}
-            </div>
-
-          <div className="rvpb-divider" />
-
           <div className="rvpb-subscription-section">
             <div className="rvpb-subscription-section__label">
-              <h2>{t('Informations de paiement')}</h2>
+              <h2>{t('Abonnement RedView')}</h2>
+              <p>
+                {t('Un seul abonnement, toutes les fonctionnalités : moteur 3D et LiDAR, météo, neige, routage, export GPX et co-édition. Seule la durée change le prix.')}
+              </p>
             </div>
 
             <div className="rvpb-subscription-section__content">
-              <div className="rvpb-payment-methods">
-                {savedPaymentMethods.length > 0 ? (
-                  savedPaymentMethods.map((method) => (
-                    <div
-                      key={method.id}
-                      className={`rvpb-payment-card${method.isDefault ? ' is-default' : ''}`}
-                    >
-                      <div className={`rvpb-payment-card__icon rvpb-payment-card__icon--${paymentBrandTone(method.brand)}`}>
-                        <span className="rvpb-payment-card__brand-mark">
-                          {formatDisplayedPaymentBrand(method.brand)}
-                        </span>
-                      </div>
-
-                      <div className="rvpb-payment-card__copy">
-                        <div className="rvpb-payment-card__headline">
-                          <strong>
-                            {t('{{brand}} se terminant par {{last4}}', {
-                              brand: formatDisplayedPaymentBrand(method.brand),
-                              last4: method.last4,
-                            })}
-                          </strong>
-                          {method.isDefault ? (
-                            <span className="rvpb-payment-card__badge">{t('Par défaut')}</span>
-                          ) : null}
-                        </div>
-
-                        <span>
-                          {t('Expire {{date}}.', {
-                            date: `${String(method.expMonth).padStart(2, '0')}/${method.expYear}`,
-                          })}
-                        </span>
-
-                        <div className="rvpb-link-row">
-                          {!method.isDefault ? (
-                            <button
-                              type="button"
-                              className="rvpb-text-link"
-                              onClick={() => onSetDefaultPaymentMethod(method.id)}
-                              disabled={billingActionBusy}
-                            >
-                              {t('Définir par défaut')}
-                            </button>
-                          ) : null}
-                          <button
-                            type="button"
-                            className="rvpb-text-link"
-                            onClick={onManagePaymentMethod}
-                            disabled={billingActionBusy}
-                          >
-                            {t('Modifier')}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="rvpb-payment-card">
-                    <div className="rvpb-payment-card__icon rvpb-payment-card__icon--generic">
-                      <SvgV2Icon name="credit-card-02.svg" size={18} />
-                    </div>
-                    <div className="rvpb-payment-card__copy">
-                      <strong>{paymentMethodLabel}</strong>
-                      <span>{paymentMethodHelper}</span>
-                      <div className="rvpb-link-row">
-                        <button
-                          type="button"
-                          className="rvpb-text-link"
-                          onClick={showDemoUpsell ? undefined : onManagePaymentMethod}
-                          disabled={billingActionBusy || showDemoUpsell}
-                        >
-                          {showDemoUpsell
-                            ? t('Pas encore disponible')
-                            : paymentMethod
-                              ? t('Remplacer mon moyen de paiement')
-                              : t('Ajouter un moyen de paiement')}
-                        </button>
-                      </div>
-                    </div>
+              {live && snapshot ? (
+                <div className={`rvpb-subscription-status${hasPaymentIssue(snapshot) ? ' is-warning' : ''}`} role="status">
+                  <p>{subscriptionStatusLine(snapshot)}</p>
+                  <div className="rvpb-subscription-status__actions">
+                    {snapshot.cancelAtPeriodEnd ? (
+                      <button type="button" className="rvpb-inline-cta" onClick={onResumeSubscription} disabled={billingActionBusy}>
+                        {t('Reprendre mon abonnement')}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="rvpb-inline-cta is-danger"
+                        onClick={(event) => setCancelAnchor(event.currentTarget)}
+                        disabled={billingActionBusy}
+                      >
+                        {t('Résilier votre contrat')}
+                      </button>
+                    )}
+                    <button type="button" className="rvpb-inline-cta" onClick={onOpenPortal} disabled={billingActionBusy}>
+                      {t('Factures et reçus')}
+                    </button>
                   </div>
-                )}
+                </div>
+              ) : null}
+
+              <div className="rvpb-plan-grid" aria-busy={loading}>
+                {planCards}
               </div>
 
               <p className="rvpb-inline-note">
-                {hasManagedSubscription
-                  ? t('Toute carte confirmée pendant la souscription ou via le formulaire Stripe apparaît ici automatiquement et peut devenir votre carte par défaut.')
-                  : t('Quand vous passez à une offre payante, la carte validée pendant la souscription sera enregistrée ici automatiquement.')}
+                {live
+                  ? t('Le changement de formule s’applique tout de suite : la différence est calculée au prorata et facturée par Stripe, qui vous montre le montant avant de confirmer.')
+                  : subscriptionState.trialEligible
+                    ? t('Prix TTC. Aucun prélèvement pendant les 7 jours d’essai : le premier a lieu à la fin de l’essai, puis à chaque échéance. Renouvellement automatique, résiliable à tout moment depuis cet onglet, avec effet à la fin de la période en cours. Paiement sécurisé par Stripe.')
+                    : t('Prix TTC, prélevés à la souscription puis à chaque échéance. Renouvellement automatique, résiliable à tout moment depuis cet onglet, avec effet à la fin de la période en cours. Paiement sécurisé par Stripe.')}
               </p>
-
-              <button
-                type="button"
-                className="rvpb-add-row"
-                onClick={showDemoUpsell ? undefined : onManagePaymentMethod}
-                disabled={billingActionBusy || showDemoUpsell}
-              >
-                <SvgV2Icon name="plus.svg" size={16} />
-                <span>
-                  {showDemoUpsell
-                    ? t('Offres payantes pas encore disponibles')
-                    : savedPaymentMethods.length > 0
-                      ? t('Ajouter une nouvelle carte')
-                      : t('Ajouter un moyen de paiement')}
-                </span>
-              </button>
             </div>
           </div>
+
+          {showPaymentSection ? (
+            <>
+              <div className="rvpb-divider" />
+
+              <div className="rvpb-subscription-section">
+                <div className="rvpb-subscription-section__label">
+                  <h2>{t('Informations de paiement')}</h2>
+                </div>
+
+                <div className="rvpb-subscription-section__content">
+                  <div className="rvpb-payment-methods">
+                    {paymentMethods.map((method) => (
+                      <div key={method.id} className={`rvpb-payment-card${method.isDefault ? ' is-default' : ''}`}>
+                        <div className={`rvpb-payment-card__icon rvpb-payment-card__icon--${paymentBrandTone(method.brand)}`}>
+                          <span className="rvpb-payment-card__brand-mark">{formatDisplayedPaymentBrand(method.brand)}</span>
+                        </div>
+
+                        <div className="rvpb-payment-card__copy">
+                          <div className="rvpb-payment-card__headline">
+                            <strong>
+                              {method.last4
+                                ? t('{{brand}} se terminant par {{last4}}', {
+                                    brand: formatDisplayedPaymentBrand(method.brand),
+                                    last4: method.last4,
+                                  })
+                                : formatDisplayedPaymentBrand(method.brand)}
+                            </strong>
+                            {method.isDefault ? <span className="rvpb-payment-card__badge">{t('Par défaut')}</span> : null}
+                          </div>
+
+                          {method.expMonth && method.expYear ? (
+                            <span>
+                              {t('Expire {{date}}.', {
+                                date: `${String(method.expMonth).padStart(2, '0')}/${method.expYear}`,
+                              })}
+                            </span>
+                          ) : null}
+
+                          {!method.isDefault ? (
+                            <div className="rvpb-link-row">
+                              <button
+                                type="button"
+                                className="rvpb-text-link"
+                                onClick={() => onSetDefaultPaymentMethod(method.id)}
+                                disabled={billingActionBusy}
+                              >
+                                {t('Définir par défaut')}
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <p className="rvpb-inline-note">
+                    {t('Les prochains prélèvements utilisent le moyen de paiement par défaut.')}
+                  </p>
+
+                  <button type="button" className="rvpb-add-row" onClick={onManagePaymentMethod} disabled={billingActionBusy}>
+                    <SvgV2Icon name="plus.svg" size={16} />
+                    <span>{paymentMethods.length > 0 ? t('Ajouter un moyen de paiement') : t('Enregistrer un moyen de paiement')}</span>
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : null}
 
           <div className="rvpb-divider" />
 
           <div className="rvpb-subscription-section">
             <div className="rvpb-subscription-section__label">
-              <h2>{t('E-mail de contact')}</h2>
+              <h2>{t('E-mail de facturation')}</h2>
+              <p>{t('Reçus, factures et e-mails de l’abonnement.')}</p>
             </div>
 
             <div className="rvpb-subscription-section__content rvpb-subscription-section__content--stacked">
@@ -292,12 +265,7 @@ export function SubscriptionPanel({
                   type="radio"
                   name="billing-contact"
                   checked={contactPreference.mode === 'account'}
-                  onChange={() =>
-                    setContactPreference((prev) => ({
-                      ...prev,
-                      mode: 'account',
-                    }))
-                  }
+                  onChange={() => setContactPreference((prev) => ({ ...prev, mode: 'account' }))}
                 />
                 <span className="rvpb-radio-faux" aria-hidden="true" />
                 <span className="rvpb-contact-option__copy">
@@ -312,12 +280,7 @@ export function SubscriptionPanel({
                     type="radio"
                     name="billing-contact"
                     checked={contactPreference.mode === 'alternative'}
-                    onChange={() =>
-                      setContactPreference((prev) => ({
-                        ...prev,
-                        mode: 'alternative',
-                      }))
-                    }
+                    onChange={() => setContactPreference((prev) => ({ ...prev, mode: 'alternative' }))}
                   />
                   <span className="rvpb-radio-faux" aria-hidden="true" />
                   <span className="rvpb-contact-option__copy">
@@ -333,11 +296,9 @@ export function SubscriptionPanel({
                     type="email"
                     value={contactPreference.alternativeEmail}
                     placeholder={t('billing@votre-domaine.com')}
+                    aria-label={t('E-mail de facturation alternatif')}
                     onChange={(event) =>
-                      setContactPreference({
-                        mode: 'alternative',
-                        alternativeEmail: event.target.value,
-                      })
+                      setContactPreference({ mode: 'alternative', alternativeEmail: event.target.value })
                     }
                   />
                 </label>
@@ -346,6 +307,16 @@ export function SubscriptionPanel({
           </div>
         </div>
       </div>
+
+      {cancelAnchor && snapshot ? (
+        <CancelSubscriptionDialog
+          snapshot={snapshot}
+          accountEmail={accountEmail}
+          anchorEl={cancelAnchor}
+          onConfirm={onCancelSubscription}
+          onClose={() => setCancelAnchor(null)}
+        />
+      ) : null}
     </section>
   );
 }

@@ -36,17 +36,12 @@
   "ignoreDependencies": ["better-sqlite3", "@fontsource-variable/rethink-sans"],
   // Outils système lancés par les scripts de dev (BRouter, arrêt des services)
   // et par bench:server (mémoire du serveur sous Windows).
-  "ignoreBinaries": ["java", "netstat", "tasklist"],
+  "ignoreBinaries": ["java", "netstat", "tasklist", "where"],
   // Tout est bloquant, exports et types inutilisés compris (642 exports et 226
   // types résorbés le 07/10/2026 : `knip --fix`, puis le code mort que tsc a
   // révélé, supprimé). Un export sans utilisateur se retire, il ne s'accumule
   // plus. Exceptions nommées ci-dessous, une raison chacune.
   "ignoreIssues": {
-    // Facturation gelée (décision produit) : pas une ligne touchée avant la
-    // reprise de Stripe, exports inutilisés compris.
-    "src/features/projectBrowser/billing/**": ["exports", "types"],
-    "src/features/projectBrowser/lib/billing/**": ["exports", "types"],
-    "src/features/projectBrowser/components/subscription/**": ["exports", "types"],
     // Alias voulus : même valeur, sens différent (largeur mini du panneau
     // gauche / repli générique ; marge / espacement de la pile centrale).
     "src/pages/Dashboard/lib/constants.ts": ["duplicates"],

@@ -14,6 +14,7 @@ documents ci-dessous approfondissent un sujet.
 | Vous repérer dans le code | [Structure de `src/`](architecture/structure.md), puis les cartes de dossiers : [`server/`](../server/README.md) · [`scripts/`](../scripts/README.md) · [`script-test-bench/`](../script-test-bench/README.md) |
 | Comprendre le produit et ses moteurs | [Vue d'ensemble du produit et des moteurs](architecture/overview.md) |
 | Travailler sur le routage | [Architecture du routage](architecture/routing.md) |
+| Travailler sur l'abonnement et les paiements | [Facturation Stripe](architecture/billing.md) |
 | Travailler sur la co-édition, les commentaires ou la présence en direct | [Co-édition en temps réel](architecture/collab-realtime.txt) |
 | Exploiter la production | [Configuration de l'hôte du VPS](../server/vps/README.md) · [Sauvegardes et reprise après sinistre](../server/vps/backup/README.md) · [Surveillance des services](../server/vps/watch/README.md) |
 | Lire les statistiques du produit | [Guide des statistiques](analytics/stats-guide.md) (sans jargon) |
@@ -25,6 +26,7 @@ documents ci-dessous approfondissent un sujet.
 | [structure.md](architecture/structure.md) | Où va un fichier dans `src/` : les rôles de `shared/`, la forme d'une feature, les sous-domaines, les barrels et les cycles d'import |
 | [overview.md](architecture/overview.md) | Le produit et ses moteurs : physique, météo, neige, LiDAR |
 | [routing.md](architecture/routing.md) | La pile de routage : BRouter, profils BRF produits, services du VPS |
+| [billing.md](architecture/billing.md) | Facturation Stripe : grille, essai, portail, résiliation, webhook et e-mails, mise en place d'un compte |
 | [collab-realtime.txt](architecture/collab-realtime.txt) | Co-édition en temps réel et présence en direct : modèle, règles de modification, sécurité (section 14), tests — texte brut à mise en page alignée |
 
 ## Exploitation — [`operations/`](operations)

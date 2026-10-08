@@ -14,11 +14,13 @@ function serializeError(error: unknown): Record<string, unknown> {
   };
 }
 
+/** Trace du parcours de paiement, en développement seulement. */
 export function logBillingUi(
   event: string,
   payload: BillingDebugPayload = {},
   summary?: string,
 ) {
+  if (!import.meta.env.DEV) return;
   if (summary) {
     console.info('[billing-ui]', event, summary, payload);
     return;

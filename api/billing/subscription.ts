@@ -1,26 +1,26 @@
 import type { ApiRequest, ApiResponse } from '../_lib/types.js';
 
 import {
-  changeManagedSubscriptionPlan,
-  createManagedSubscription,
-  getSubscriptionSnapshot,
-  hasPaidSubscription,
-  normalizeRequestedPlanId,
-  setManagedSubscriptionCancellation,
-  syncManagedSubscription,
+  activateTrialForUser,
+  isBillingPlanId,
+  setSubscriptionCancellation,
+  startSubscription,
+  syncSubscription,
+  toBillingError,
 } from '../_lib/billing.js';
-import { isBillingPlanId } from '../_lib/config.js';
 import { readJsonBody, sendMethodNotAllowed } from '../_lib/http.js';
 import { requireAuthenticatedUser } from '../_lib/appwrite.js';
 import { sendSafeError } from '../_lib/errors.js';
 
-type SubscriptionActionRequestBody = {
-  action?: 'subscribe' | 'change' | 'cancel' | 'resume' | 'sync';
-  planId?: string;
-  subscriptionId?: string;
-  amount?: number;
-};
-
+/**
+ * Actions sur l'abonnement du compte connecté :
+ *  - `start` { planId } : lance la souscription (essai ou premier paiement) ;
+ *  - `activate` { setupIntentId } : crée l'abonnement en essai une fois le
+ *    moyen de paiement confirmé ;
+ *  - `sync` { subscriptionId } : relit l'abonnement après un paiement ;
+ *  - `cancel` / `resume` : résiliation à la fin de l'échéance, et son annulation.
+ * Le changement de durée passe par le portail Stripe (`/api/billing/portal`).
+ */
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== 'POST') {
     return sendMethodNotAllowed(res, ['POST']);
@@ -28,66 +28,36 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
   try {
     const user = await requireAuthenticatedUser(req, res);
-    if (!user) {
-      return;
+    if (!user) return;
+
+    const body = await readJsonBody<Record<string, unknown>>(req);
+    const action = body.action;
+
+    if (action === 'start') {
+      if (!isBillingPlanId(body.planId)) return res.status(400).json({ error: 'Invalid plan selection.' });
+      return res.status(200).json(await startSubscription(user.id, user.email, body.planId));
     }
 
-    const body = await readJsonBody<SubscriptionActionRequestBody>(req);
-    if (!body.action) {
-      return res.status(400).json({ error: 'Missing billing action.' });
-    }
-
-    if (body.action === 'sync') {
-      if (!body.subscriptionId) {
-        return res.status(400).json({ error: 'Missing Stripe subscription id.' });
+    if (action === 'activate') {
+      if (typeof body.setupIntentId !== 'string' || !body.setupIntentId.startsWith('seti_')) {
+        return res.status(400).json({ error: 'Missing payment setup id.' });
       }
-
-      const result = await syncManagedSubscription(user.id, body.subscriptionId);
-      return res.status(200).json(result);
+      return res.status(200).json(await activateTrialForUser(user.id, body.setupIntentId));
     }
 
-    if (body.action === 'cancel' || body.action === 'resume') {
-      const result = await setManagedSubscriptionCancellation(user.id, body.action === 'cancel');
-      return res.status(200).json(result);
-    }
-
-    if (!body.planId || !isBillingPlanId(body.planId)) {
-      return res.status(400).json({ error: 'Invalid plan selection.' });
-    }
-
-    const requestedPlanId = normalizeRequestedPlanId(body.planId);
-    const snapshot = await getSubscriptionSnapshot(user.id);
-
-    if (body.action === 'subscribe') {
-      if (hasPaidSubscription(snapshot)) {
-        return res.status(409).json({
-          error: 'This account already has a paid subscription. Use the in-app plan change flow instead.',
-        });
+    if (action === 'sync') {
+      if (typeof body.subscriptionId !== 'string' || !body.subscriptionId.startsWith('sub_')) {
+        return res.status(400).json({ error: 'Missing subscription id.' });
       }
-
-      const result = await createManagedSubscription(user.id, user.email, requestedPlanId, body.amount);
-      return res.status(200).json(result);
+      return res.status(200).json(await syncSubscription(user.id, body.subscriptionId));
     }
 
-    if (body.action === 'change') {
-      if (!hasPaidSubscription(snapshot)) {
-        return res.status(409).json({
-          error: 'No paid subscription is active on this account yet.',
-        });
-      }
-
-      const result = await changeManagedSubscriptionPlan(user.id, requestedPlanId);
-      return res.status(200).json(result);
+    if (action === 'cancel' || action === 'resume') {
+      return res.status(200).json(await setSubscriptionCancellation(user.id, action === 'cancel'));
     }
 
     return res.status(400).json({ error: 'Unsupported billing action.' });
   } catch (error) {
-    // Price ID manquant → PublicError 503 levée par requireConfiguredPriceId.
-    return sendSafeError(
-      res,
-      error,
-      'Unable to update the subscription',
-      'billing/subscription',
-    );
+    return sendSafeError(res, toBillingError(error), 'Unable to update the subscription', 'billing/subscription');
   }
 }

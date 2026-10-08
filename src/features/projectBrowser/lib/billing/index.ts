@@ -1,26 +1,37 @@
 export {
+  activateTrialSubscription,
   applyPaymentMethodSetup,
   cancelManagedSubscription,
-  changeSubscriptionPlan,
   createPaymentMethodSetupIntent,
-  createSubscriptionIntent,
   fetchBillingOverview,
+  openBillingPortal,
   persistBillingContactPreference,
   resumeManagedSubscription,
   setDefaultBillingPaymentMethod,
+  startSubscription,
   syncManagedSubscription,
 } from './billingApi';
 export type { BillingOverviewResponse } from './billingApi';
 export { logBillingUi, logBillingUiError } from './debug';
 export {
+  DISPLAY_PLANS,
+  TRIAL_DAYS,
+  discountPercent,
+  formatEuroAmount,
+  formatEuros,
+  formatLongDate,
+  getDisplayPlan,
+  monthlyEquivalentCents,
+  trialEndDate,
+} from './plans';
+export type { DisplayPlan } from './plans';
+export {
   accountTierLabel,
-  buildSubscriptionHeadline,
-  hasPaidSubscription,
-  isDemoPlan,
+  analyticsPlanOf,
+  hasLiveSubscription,
+  hasPaymentIssue,
   LANDING_URL,
   readBillingContactPreference,
-  resolveActivePlanId,
-  statusLabel,
-  SUBSCRIPTION_PLANS,
+  subscriptionStatusLine,
   writeBillingContactPreference,
 } from './subscription';

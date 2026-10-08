@@ -122,18 +122,18 @@ export function ProjectBrowserOverlay(props: ProjectBrowserOverlayProps) {
           {state.activeTab === 'subscription' ? (
             <SubscriptionPanel
               subscriptionState={state.subscriptionState}
-              selectedPlanId={state.selectedPlanId}
-              setSelectedPlanId={state.setSelectedPlanId}
               contactPreference={state.contactPreference}
               setContactPreference={state.setContactPreference}
               accountEmail={state.accountEmail}
-              paymentMethod={state.paymentMethod}
               paymentMethods={state.paymentMethods}
               billingActionBusy={state.billingActionBusy}
               billingActionError={state.billingActionError}
               contactStatusMessage={state.contactStatusMessage}
-              onSelectPlan={state.handlePlanSelection}
-              onToggleManagedSubscription={state.handleManagedSubscriptionToggle}
+              onChoosePlan={state.handleChoosePlan}
+              onSwitchPlan={state.handleSwitchPlan}
+              onCancelSubscription={state.handleCancelSubscription}
+              onResumeSubscription={state.handleResumeSubscription}
+              onOpenPortal={state.handleOpenPortal}
               onManagePaymentMethod={state.handlePaymentMethodAction}
               onSetDefaultPaymentMethod={state.handleSetDefaultPaymentMethod}
             />
@@ -162,7 +162,6 @@ export function ProjectBrowserOverlay(props: ProjectBrowserOverlayProps) {
               flow={state.billingModal}
               onClose={state.closeBillingModal}
               onComplete={state.handleBillingModalComplete}
-              onUpdateAmount={state.handleUpdateBillingModalAmount}
             />
           </Suspense>
         ) : null}

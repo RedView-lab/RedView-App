@@ -6,203 +6,161 @@ import {
   getAppwriteDatabases,
 } from '../appwrite.js';
 import { getStripeServer } from '../stripe.js';
+import { billingEmailFor, getCustomerRow, getValidatedStripeCustomerId, isStripeCustomer } from './customers.js';
 import {
-  getCustomerRow,
-  isStripeCustomer,
-  getValidatedStripeCustomerId,
-} from './customers.js';
-import { getSubscriptionSnapshot } from './subscriptions.js';
-import type {
-  BillingContactPreference,
-  CustomerRow,
-  PaymentMethodSummary,
-} from './types.js';
+  NO_SUBSCRIPTION,
+  getSubscriptionSnapshot,
+  listCustomerSubscriptions,
+  snapshotFromStripeSubscription,
+  upsertSubscription,
+} from './subscriptions.js';
 import {
   DEFAULT_CONTACT_PREFERENCE,
-  MANAGED_SUBSCRIPTION_STATUSES,
+  LIVE_SUBSCRIPTION_STATUSES,
+  isTrialEligible,
+  type BillingContactPreference,
+  type CustomerRow,
+  type PaymentMethodSummary,
+  type SubscriptionSnapshot,
 } from './types.js';
+
+export type BillingOverview = {
+  subscription: SubscriptionSnapshot;
+  /** L'essai gratuit est encore disponible pour ce compte. */
+  trialEligible: boolean;
+  contactPreference: BillingContactPreference;
+  customerEmail: string | null;
+  paymentMethod: PaymentMethodSummary | null;
+  paymentMethods: PaymentMethodSummary[];
+};
 
 function toContactPreference(row: CustomerRow | null): BillingContactPreference {
   if (!row) return DEFAULT_CONTACT_PREFERENCE;
-
   return {
     mode: row.billing_email_mode === 'alternative' ? 'alternative' : 'account',
     alternativeEmail: row.billing_email ?? '',
   };
 }
 
-async function getPaymentMethodSummary(
-  stripeCustomerId: string | null,
-): Promise<{
+export function summarizePaymentMethod(method: Stripe.PaymentMethod, defaultId: string | null): PaymentMethodSummary {
+  const card = method.type === 'card' ? method.card : null;
+  return {
+    id: method.id,
+    type: method.type,
+    brand: card?.brand ?? method.type,
+    last4: card?.last4 ?? (method.type === 'sepa_debit' ? method.sepa_debit?.last4 ?? '' : ''),
+    expMonth: card?.exp_month ?? null,
+    expYear: card?.exp_year ?? null,
+    isDefault: method.id === defaultId,
+  };
+}
+
+function paymentMethodIdOf(value: string | Stripe.PaymentMethod | null | undefined): string | null {
+  if (!value) return null;
+  return typeof value === 'string' ? value : value.id;
+}
+
+async function loadStripeBillingState(customerId: string): Promise<{
   customerEmail: string | null;
-  paymentMethod: PaymentMethodSummary | null;
   paymentMethods: PaymentMethodSummary[];
+  trialEligible: boolean;
+  liveSubscription: Stripe.Subscription | null;
 }> {
-  if (!stripeCustomerId) {
-    return { customerEmail: null, paymentMethod: null, paymentMethods: [] };
-  }
-
-  let customer: Stripe.Customer | Stripe.DeletedCustomer;
-  try {
-    customer = await getStripeServer().customers.retrieve(stripeCustomerId, {
-      expand: ['invoice_settings.default_payment_method'],
-    });
-  } catch {
-    const validatedCustomerId = await getValidatedStripeCustomerId(stripeCustomerId);
-    if (!validatedCustomerId) {
-      return { customerEmail: null, paymentMethod: null, paymentMethods: [] };
-    }
-
-    customer = await getStripeServer().customers.retrieve(validatedCustomerId, {
-      expand: ['invoice_settings.default_payment_method'],
-    });
-  }
-
+  const stripe = getStripeServer();
+  const [customer, methods, subscriptions] = await Promise.all([
+    stripe.customers.retrieve(customerId),
+    stripe.customers.listPaymentMethods(customerId, { limit: 20 }),
+    listCustomerSubscriptions(customerId),
+  ]);
   if (!isStripeCustomer(customer)) {
-    return { customerEmail: null, paymentMethod: null, paymentMethods: [] };
+    return { customerEmail: null, paymentMethods: [], trialEligible: true, liveSubscription: null };
   }
 
-  let paymentMethod = null as Stripe.PaymentMethod | null;
-  const customerDefaultPaymentMethod = customer.invoice_settings.default_payment_method;
+  // Le moyen par défaut : celui du client, sinon celui de l'abonnement vivant.
+  const liveSubscription = subscriptions.find((subscription) => LIVE_SUBSCRIPTION_STATUSES.has(subscription.status)) ?? null;
+  const defaultId =
+    paymentMethodIdOf(customer.invoice_settings?.default_payment_method) ??
+    paymentMethodIdOf(liveSubscription?.default_payment_method);
 
-  if (customerDefaultPaymentMethod) {
-    paymentMethod =
-      typeof customerDefaultPaymentMethod === 'string'
-        ? await getStripeServer().paymentMethods.retrieve(customerDefaultPaymentMethod)
-        : customerDefaultPaymentMethod;
-  }
-
-  if (!paymentMethod) {
-    const subscriptions = await getStripeServer().subscriptions.list({
-      customer: stripeCustomerId,
-      status: 'all',
-      limit: 5,
-      expand: ['data.default_payment_method'],
-    });
-
-    const managedSubscription = subscriptions.data.find((subscription) =>
-      MANAGED_SUBSCRIPTION_STATUSES.has(subscription.status),
-    );
-
-    const subscriptionPaymentMethod = managedSubscription?.default_payment_method ?? null;
-    if (subscriptionPaymentMethod) {
-      paymentMethod =
-        typeof subscriptionPaymentMethod === 'string'
-          ? await getStripeServer().paymentMethods.retrieve(subscriptionPaymentMethod)
-          : subscriptionPaymentMethod;
-    }
-  }
-
-  const savedPaymentMethods = await getStripeServer().paymentMethods.list({
-    customer: customer.id,
-    type: 'card',
-    limit: 10,
-  });
-
-  const cardPaymentMethods = savedPaymentMethods.data.filter(
-    (entry): entry is Stripe.PaymentMethod & { card: NonNullable<Stripe.PaymentMethod['card']> } =>
-      entry.type === 'card' && entry.card !== null,
-  );
-
-  if (
-    paymentMethod &&
-    paymentMethod.type === 'card' &&
-    paymentMethod.card &&
-    !cardPaymentMethods.some((entry) => entry.id === paymentMethod.id)
-  ) {
-    cardPaymentMethods.unshift(paymentMethod as Stripe.PaymentMethod & {
-      card: NonNullable<Stripe.PaymentMethod['card']>;
-    });
-  }
-
-  const defaultPaymentMethodId = paymentMethod?.id ?? null;
-  const paymentMethods = cardPaymentMethods
-    .map<PaymentMethodSummary>((entry) => ({
-      id: entry.id,
-      brand: entry.card.brand,
-      last4: entry.card.last4,
-      expMonth: entry.card.exp_month,
-      expYear: entry.card.exp_year,
-      isDefault: entry.id === defaultPaymentMethodId,
-    }))
+  const paymentMethods = methods.data
+    .map((method) => summarizePaymentMethod(method, defaultId))
     .sort((left, right) => Number(right.isDefault) - Number(left.isDefault));
 
-  if (paymentMethods.length === 0) {
+  return {
+    customerEmail: customer.email ?? null,
+    paymentMethods,
+    trialEligible: isTrialEligible(subscriptions),
+    liveSubscription,
+  };
+}
+
+/**
+ * Vue d'ensemble de la facturation. Avec un client Stripe, l'abonnement est lu
+ * chez Stripe (jamais en retard sur un webhook, au retour du portail par
+ * exemple) et la copie Appwrite est remise à jour au passage.
+ */
+export async function buildBillingOverview(userId: string): Promise<BillingOverview> {
+  const customerRow = await getCustomerRow(userId);
+  const customerId = customerRow?.stripe_customer_id
+    ? await getValidatedStripeCustomerId(customerRow.stripe_customer_id)
+    : null;
+
+  if (!customerId) {
     return {
-      customerEmail: customer.email ?? null,
+      subscription: await getSubscriptionSnapshot(userId),
+      trialEligible: true,
+      contactPreference: toContactPreference(customerRow),
+      customerEmail: null,
       paymentMethod: null,
       paymentMethods: [],
     };
   }
 
-  const resolvedDefaultPaymentMethod =
-    paymentMethods.find((entry) => entry.isDefault) ?? paymentMethods[0] ?? null;
+  const stripeState = await loadStripeBillingState(customerId);
+  if (stripeState.liveSubscription) await upsertSubscription(stripeState.liveSubscription, userId);
 
   return {
-    customerEmail: customer.email ?? null,
-    paymentMethod: resolvedDefaultPaymentMethod,
-    paymentMethods,
-  };
-}
-
-export async function buildBillingOverview(userId: string) {
-  const [subscription, customerRow] = await Promise.all([
-    getSubscriptionSnapshot(userId),
-    getCustomerRow(userId),
-  ]);
-
-  const payment = await getPaymentMethodSummary(customerRow?.stripe_customer_id ?? null);
-
-  return {
-    subscription,
+    subscription: stripeState.liveSubscription ? snapshotFromStripeSubscription(stripeState.liveSubscription) : NO_SUBSCRIPTION,
+    trialEligible: stripeState.trialEligible,
     contactPreference: toContactPreference(customerRow),
-    customerEmail: payment.customerEmail,
-    paymentMethod: payment.paymentMethod,
-    paymentMethods: payment.paymentMethods,
+    customerEmail: stripeState.customerEmail,
+    paymentMethod: stripeState.paymentMethods.find((method) => method.isDefault) ?? stripeState.paymentMethods[0] ?? null,
+    paymentMethods: stripeState.paymentMethods,
   };
 }
 
+/**
+ * Enregistre l'e-mail de facturation et le reporte sur le client Stripe : c'est
+ * là que Stripe envoie reçus et factures.
+ */
 export async function saveBillingContactPreference(
   userId: string,
+  accountEmail: string | null,
   preference: BillingContactPreference,
 ): Promise<BillingContactPreference> {
   const db = getAppwriteDatabases();
   const payload = {
     billing_email_mode: preference.mode,
     billing_email:
-      preference.mode === 'alternative' && preference.alternativeEmail.trim()
-        ? preference.alternativeEmail.trim()
-        : null,
+      preference.mode === 'alternative' && preference.alternativeEmail.trim() ? preference.alternativeEmail.trim() : null,
   };
 
-  try {
+  const row = await getCustomerRow(userId);
+  if (row) {
     await db.updateDocument(APPWRITE_DATABASE_ID, CUSTOMERS_COLLECTION_ID, userId, payload);
-  } catch (error: any) {
-    if (error?.code === 404) {
-      await db.createDocument(APPWRITE_DATABASE_ID, CUSTOMERS_COLLECTION_ID, userId, {
-        user_id: userId,
-        stripe_customer_id: '',
-        ...payload,
-      });
-    } else {
-      throw error;
-    }
+  } else {
+    await db.createDocument(APPWRITE_DATABASE_ID, CUSTOMERS_COLLECTION_ID, userId, {
+      user_id: userId,
+      stripe_customer_id: '',
+      ...payload,
+    });
   }
 
-  return {
-    mode: preference.mode,
-    alternativeEmail: payload.billing_email ?? '',
-  };
-}
+  const customerId = row?.stripe_customer_id ? await getValidatedStripeCustomerId(row.stripe_customer_id) : null;
+  const email = billingEmailFor({ stripe_customer_id: customerId, ...payload }, accountEmail);
+  if (customerId && email) {
+    await getStripeServer().customers.update(customerId, { email });
+  }
 
-export async function createPortalSession(
-  stripeCustomerId: string,
-  returnUrl: string,
-): Promise<string> {
-  const portalSession = await getStripeServer().billingPortal.sessions.create({
-    customer: stripeCustomerId,
-    return_url: returnUrl,
-  });
-
-  return portalSession.url;
+  return { mode: preference.mode, alternativeEmail: payload.billing_email ?? '' };
 }

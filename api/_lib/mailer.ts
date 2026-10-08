@@ -455,3 +455,94 @@ export async function sendAccountDeletedEmail({ to, name }: { to: string; name?:
   });
   return sendTransactionalEmail('ACCOUNT-DELETED', { to, subject, text, html });
 }
+
+// ─────────────────────────── Abonnement ───────────────────────────
+// Envoyés par le webhook Stripe (api/stripe/webhook.ts) : ils couvrent les
+// actions faites dans l'app comme dans le portail client Stripe. Reçus et
+// factures restent envoyés par Stripe.
+
+function subscriptionLinkHtml(url: string, label: string): string {
+  return `
+              <p style="margin: 0 0 24px;">
+                <a href="${escapeHtml(url)}" style="display: inline-block; padding: 11px 20px; border-radius: 10px; background-color: #890000; color: #ffffff; font-size: 14px; font-weight: 600; text-decoration: none;">${escapeHtml(label)}</a>
+              </p>`;
+}
+
+function subscriptionParagraphHtml(text: string): string {
+  return `
+              <p class="text-body" style="margin: 0 0 20px; font-size: 14px; line-height: 22px; color: #475569;">${text}</p>`;
+}
+
+type SubscriptionEmailBase = { to: string; name?: string; planLabel: string; manageUrl: string };
+
+/** Confirmation de résiliation sur support durable (art. L.215-1-1 du Code de la consommation). */
+export async function sendSubscriptionCanceledEmail({ to, name, planLabel, endDate, manageUrl }: SubscriptionEmailBase & { endDate: string }): Promise<{ sent: boolean }> {
+  const greeting = greetingFor(name);
+  const subject = 'Résiliation de votre abonnement RedView confirmée';
+  const text =
+    `${greeting}\n\n` +
+    `Nous confirmons la résiliation de votre abonnement RedView (${planLabel}). ` +
+    `Votre contrat prend fin le ${endDate} : vous gardez l'accès jusqu'à cette date et aucun autre prélèvement ne sera effectué.\n\n` +
+    `Vous avez changé d'avis ? Vous pouvez reprendre votre abonnement avant cette date : ${manageUrl}\n\n` +
+    '---\n' +
+    `Your RedView subscription (${planLabel}) is cancelled. It ends on ${endDate}; you keep access until then and will not be charged again.`;
+  const html = accountEmailHtml({
+    title: 'Résiliation confirmée',
+    preheader: `Votre abonnement RedView prend fin le ${endDate}.`,
+    bodyHtml:
+      subscriptionParagraphHtml(
+        `${escapeHtml(greeting)}<br>Nous confirmons la résiliation de votre abonnement RedView (${escapeHtml(planLabel)}). ` +
+          `Votre contrat prend fin le <strong>${escapeHtml(endDate)}</strong> : vous gardez l'accès jusqu'à cette date et aucun autre prélèvement ne sera effectué.`,
+      ) + subscriptionLinkHtml(manageUrl, 'Reprendre mon abonnement'),
+  });
+  return sendTransactionalEmail('SUBSCRIPTION-CANCELED', { to, subject, text, html });
+}
+
+/** Rappel avant la fin de l'essai gratuit (évènement Stripe `trial_will_end`, 3 jours avant). */
+export async function sendTrialEndingEmail({ to, name, planLabel, amount, chargeDate, manageUrl }: SubscriptionEmailBase & { amount: string; chargeDate: string }): Promise<{ sent: boolean }> {
+  const greeting = greetingFor(name);
+  const subject = `Votre essai RedView se termine le ${chargeDate}`;
+  const text =
+    `${greeting}\n\n` +
+    `Votre essai gratuit de RedView se termine le ${chargeDate}. Sauf résiliation avant cette date, ${amount} seront prélevés ` +
+    `ce jour-là pour votre abonnement (${planLabel}), puis à chaque échéance.\n\n` +
+    `Résilier votre contrat ou changer de formule : ${manageUrl}\n\n` +
+    '---\n' +
+    `Your RedView free trial ends on ${chargeDate}. Unless you cancel before then, you will be charged ${amount} (${planLabel}).`;
+  const html = accountEmailHtml({
+    title: 'Votre essai se termine bientôt',
+    preheader: `${amount} seront prélevés le ${chargeDate}, sauf résiliation.`,
+    bodyHtml:
+      subscriptionParagraphHtml(
+        `${escapeHtml(greeting)}<br>Votre essai gratuit de RedView se termine le <strong>${escapeHtml(chargeDate)}</strong>. ` +
+          `Sauf résiliation avant cette date, <strong>${escapeHtml(amount)}</strong> seront prélevés ce jour-là pour votre abonnement (${escapeHtml(planLabel)}), puis à chaque échéance.`,
+      ) + subscriptionLinkHtml(manageUrl, 'Gérer mon abonnement'),
+  });
+  return sendTransactionalEmail('TRIAL-ENDING', { to, subject, text, html });
+}
+
+/**
+ * Information avant reconduction tacite des formules 6 mois et 1 an
+ * (art. L.215-1 : entre 3 mois et 1 mois avant la fin de la période).
+ */
+export async function sendRenewalReminderEmail({ to, name, planLabel, amount, renewalDate, manageUrl }: SubscriptionEmailBase & { amount: string; renewalDate: string }): Promise<{ sent: boolean }> {
+  const greeting = greetingFor(name);
+  const subject = `Votre abonnement RedView sera reconduit le ${renewalDate}`;
+  const text =
+    `${greeting}\n\n` +
+    `Votre abonnement RedView (${planLabel}) sera reconduit automatiquement le ${renewalDate} pour ${amount}. ` +
+    'Vous pouvez choisir de ne pas le reconduire : il suffit de le résilier avant cette date, depuis votre compte.\n\n' +
+    `Résilier votre contrat : ${manageUrl}\n\n` +
+    '---\n' +
+    `Your RedView subscription (${planLabel}) renews on ${renewalDate} for ${amount}. You can cancel it before that date from your account.`;
+  const html = accountEmailHtml({
+    title: 'Reconduction de votre abonnement',
+    preheader: `Reconduction le ${renewalDate} pour ${amount}.`,
+    bodyHtml:
+      subscriptionParagraphHtml(
+        `${escapeHtml(greeting)}<br>Votre abonnement RedView (${escapeHtml(planLabel)}) sera reconduit automatiquement le <strong>${escapeHtml(renewalDate)}</strong> pour <strong>${escapeHtml(amount)}</strong>. ` +
+          'Vous pouvez choisir de ne pas le reconduire : il suffit de le résilier avant cette date, depuis votre compte.',
+      ) + subscriptionLinkHtml(manageUrl, 'Résilier votre contrat'),
+  });
+  return sendTransactionalEmail('RENEWAL-REMINDER', { to, subject, text, html });
+}

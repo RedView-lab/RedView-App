@@ -28,7 +28,7 @@ declare global {
 export type AnalyticsSurface = 'app' | 'viewer';
 
 export interface AnalyticsAccountContext {
-  /** Formule (`demo`, `founder`, `patron`…), jamais un id d'abonnement. */
+  /** Formule (`demo`, `monthly`, `semiannual`, `annual`), jamais un id d'abonnement. */
   plan?: string;
   account_age?: AccountAgeBucket;
   /** Compte de l'équipe ou de test (libellé Appwrite `internal`) : rien ne part. */

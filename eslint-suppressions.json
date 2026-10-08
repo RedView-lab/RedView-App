@@ -1,25 +1,2 @@
 {
-  "api/_lib/billing/customers.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    }
-  },
-  "api/_lib/billing/overview.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "api/_lib/billing/subscriptions.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/features/projectBrowser/billing/components/BillingActionModal/BillingActionForm.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
-    "react-hooks/set-state-in-effect": {
-      "count": 2
-    }
-  }
 }

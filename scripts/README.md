@@ -35,7 +35,7 @@ lancent que délibérément, jamais au sein d'un changement (voir
 | [`dev/`](dev) | Serveurs locaux BRouter, POI et temps réel, et tunnel SSH vers le VPS (`npm run dev` les démarre) | `npm run services`, `npm run services:stop` |
 | [`appwrite/`](appwrite) | Opérations sur la base de production : schéma (vérifié par deploy), audits et migrations de permissions, audit de sécurité des projets partagés, suppressions de compte interrompues, comptes de test de co-édition | `node --env-file=.env scripts/appwrite/setup-appwrite-schema.mjs --check` |
 | [`analytics/`](analytics) | Rapport d'activation tiré de la base, étiquettes des comptes internes, tableaux et entonnoirs Umami sous forme de code (`umami/`) | `npm run analytics:report`, `npm run analytics:sync` |
-| [`billing/`](billing) | Produits Stripe. La facturation est gelée. | — |
+| [`billing/`](billing) | Compte Stripe d'accord avec la grille (`api/_lib/billing/plans.ts`) : produit, prix par `lookup_key`, portail client, webhook — bac à sable par défaut, `--live` exprès | `npm run billing:setup` |
 | [`vps/`](vps) | Durcissement du VPS, instantanés de performance en lecture seule, vérification du DNS d'e-mail | `bash scripts/vps/perf-snapshot.sh <libellé>` |
 | [`routing/`](routing) | Lanceur de scénarios BRouter et sondes de routage (profils piétons, gravel, GT20) | `npx tsx scripts/routing/run-scenarios.ts` |
 | [`probes/`](probes) | Diagnostics ponctuels contre les services réels (Open-Meteo, POI, météo, swisstopo, WMS IGN), gardés pour leur méthode | `npm run test:openmeteo:vps` |

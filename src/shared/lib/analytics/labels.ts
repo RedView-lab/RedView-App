@@ -134,7 +134,7 @@ const BOOLEAN_LABELS = { true: 'oui', false: 'non' } as const;
 /** Valeurs affichées, par propriété ; une valeur absente de la table passe telle quelle. */
 export const VALUE_LABELS: Record<string, Record<string, string>> = {
   surface: { app: 'Application', viewer: 'Viewer LiDAR' },
-  plan: { demo: 'Bêta gratuite', founder: 'Fondateur', patron: 'Mécène', unknown: 'Inconnue' },
+  plan: { demo: 'Bêta gratuite', monthly: 'Abonnement 1 mois', semiannual: 'Abonnement 6 mois', annual: 'Abonnement 1 an', unknown: 'Inconnue' },
   account_age: { d0: 'Jour de l’inscription', d1_7: 'Première semaine', d8_30: 'Premier mois', d30_plus: 'Plus d’un mois' },
   lang: { fr: 'Français', en: 'Anglais' },
   language: { fr: 'Français', en: 'Anglais' },

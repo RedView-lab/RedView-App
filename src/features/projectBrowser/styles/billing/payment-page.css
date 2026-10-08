@@ -302,143 +302,23 @@ body.rvpb-billing-page-open {
   color: var(--rv-on-accent);
 }
 
-/* Amount selector styles */
-.rvpb-billing-page__amount-selector {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  background: rgb(var(--rv-ink) / 0.04);
-  border: 1px solid rgb(var(--rv-ink) / 0.12);
-  border-radius: 12px;
-  padding: 14px 16px;
-  backdrop-filter: blur(12px);
-}
-
-.rvpb-billing-page__amount-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: var(--rv-font-size-md);
-  font-weight: 500;
-  color: rgb(var(--rv-ink) / 0.85);
-}
-
-.rvpb-billing-page__amount-subtext {
+/* Conditions sous le Payment Element (information précontractuelle). */
+.rvpb-billing-page__terms {
+  margin: 4px 0 0;
   font-size: var(--rv-font-size-sm);
-  color: rgb(var(--rv-ink) / 0.5);
+  line-height: 1.45;
+  color: rgb(var(--rv-ink) / 0.62);
 }
 
-.rvpb-billing-page__amount-presets {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr) 1.25fr;
-  gap: 8px;
-}
-
-.rvpb-billing-page__amount-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 9px 0;
-  border-radius: 8px;
-  background: rgb(var(--rv-ink) / 0.06);
-  border: 1px solid rgb(var(--rv-ink) / 0.12);
-  color: var(--rv-text);
-  font-size: var(--rv-font-size-lg);
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.rvpb-billing-page__amount-btn:hover:not(:disabled) {
-  background: rgb(var(--rv-ink) / 0.12);
-  border-color: rgb(var(--rv-ink) / 0.25);
-}
-
-.rvpb-billing-page__amount-btn.is-active {
-  background: rgb(var(--rv-ink) / 0.08);
-  border-color: #e02b2b;
-  color: var(--rv-text);
-  box-shadow: none;
-}
-
-.rvpb-billing-page__amount-custom-field {
-  position: relative;
-  display: flex;
-  align-items: center;
-  background: rgb(var(--rv-ink) / 0.06);
-  border: 1px solid rgb(var(--rv-ink) / 0.12);
-  border-radius: 8px;
-  padding: 0 8px;
-  transition: all 0.15s ease;
-}
-
-.rvpb-billing-page__amount-custom-field:hover {
-  background: rgb(var(--rv-ink) / 0.1);
-  border-color: rgb(var(--rv-ink) / 0.25);
-}
-
-.rvpb-billing-page__amount-custom-field.is-active {
-  border-color: #e02b2b;
-  background: rgb(var(--rv-ink) / 0.08);
-  box-shadow: none;
-}
-
-.rvpb-billing-page__amount-custom-field input::-webkit-outer-spin-button,
-.rvpb-billing-page__amount-custom-field input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-.rvpb-billing-page__amount-custom-field input[type='number'] {
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
-
-.rvpb-billing-page__amount-custom-field input {
-  width: 100%;
-  border: none;
-  background: transparent;
-  color: var(--rv-text);
-  font-size: var(--rv-font-size-lg);
-  font-weight: 600;
-  outline: none;
-  padding: 8px 0;
-  min-width: 0;
+/* Page de paiement qui n'a pas pu se charger (ErrorBoundary). */
+.rvpb-billing-page--failed {
+  padding: 40px;
   text-align: center;
 }
 
-.rvpb-billing-page__amount-custom-field input::placeholder {
-  color: rgb(var(--rv-ink) / 0.45);
-  font-weight: 400;
-  font-size: var(--rv-font-size-md);
-}
-
-.rvpb-billing-page__amount-custom-unit {
-  color: rgb(var(--rv-ink) / 0.6);
-  font-size: var(--rv-font-size-lg);
-  font-weight: 600;
-  margin-left: 2px;
-}
-
-.rvpb-billing-page__amount-error {
-  margin: 4px 0 0;
-  font-size: var(--rv-font-size-sm);
-  color: light-dark(#d92d20, #ff8e8e);
-}
-
-.rvpb-billing-page__amount-loading {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--rv-font-size-sm);
-  color: rgb(var(--rv-ink) / 0.75);
-  margin-top: 4px;
-}
-
-.rvpb-billing-page__stripe-container.is-updating {
-  opacity: 0.35;
-  pointer-events: none;
-  transition: opacity 0.2s ease;
+.rvpb-billing-page__failure {
+  margin: 16px 0;
+  color: light-dark(#b42318, #ff8e8e);
 }
 
 @media (max-width: 900px) {

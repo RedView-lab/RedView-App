@@ -38,9 +38,9 @@ class BillingModalErrorBoundary extends Component<
   render() {
     if (this.state.hasError) {
       return (
-        <div className="rvpb-billing-page rv-fixed-viewport" style={{ padding: '40px', textAlign: 'center' }}>
+        <div className="rvpb-billing-page rvpb-billing-page--failed rv-fixed-viewport">
           <h2>{translateAppText('Une erreur est survenue lors du chargement de la page de paiement')}</h2>
-          <p style={{ color: '#ff8e8e', margin: '16px 0' }}>
+          <p className="rvpb-billing-page__failure">
             {translateAppText(this.state.error?.message || 'Erreur inattendue')}
           </p>
           <button
@@ -61,17 +61,16 @@ export type BillingActionModalProps = {
   flow: BillingModalState;
   onClose: () => void;
   onComplete: (completion: BillingModalCompletion) => Promise<void>;
-  onUpdateAmount?: (amount: number) => Promise<void>;
 };
 
 /**
- * Modale d'action Stripe Billing (abonnement ou mise à jour de moyen de paiement).
+ * Page de paiement (Stripe Payment Element) : essai, première échéance ou
+ * ajout d'un moyen de paiement.
  */
 export function BillingActionModal({
   flow,
   onClose,
   onComplete,
-  onUpdateAmount,
 }: BillingActionModalProps) {
   useEffect(() => {
     document.body.classList.add('rvpb-billing-page-open');
@@ -105,7 +104,6 @@ export function BillingActionModal({
             flow={flow}
             onClose={onClose}
             onComplete={onComplete}
-            onUpdateAmount={onUpdateAmount}
           />
         </Elements>
       </div>

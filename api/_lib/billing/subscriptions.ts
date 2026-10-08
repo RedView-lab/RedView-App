@@ -1,394 +1,337 @@
 import type Stripe from 'stripe';
 import { Query } from 'node-appwrite';
 
-import { requireConfiguredPriceId, type BillingPlanId } from '../config.js';
 import {
   APPWRITE_DATABASE_ID,
   SUBSCRIPTIONS_COLLECTION_ID,
   getAppwriteDatabases,
 } from '../appwrite.js';
-import { getStripeServer } from '../stripe.js';
 import { PublicError } from '../errors.js';
+import { getStripeServer } from '../stripe.js';
+import { getOrCreateStripeCustomer, getStripeCustomerId } from './customers.js';
+import { isBillingPlanId, TRIAL_DAYS, type BillingPlanId } from './plans.js';
+import { setupIntentPaymentMethodParams, subscriptionPaymentMethodTypes } from './paymentMethodConfig.js';
+import { getPlanPrice, planIdForPrice, planIdForPriceId } from './prices.js';
 import {
-  getOrCreateStripeCustomer,
-  getStripeCustomerId,
-} from './customers.js';
-import type {
-  ExpandedInvoice,
-  StoredSubscriptionRow,
-  SubscriptionActionResult,
-  SubscriptionSnapshot,
+  ENTITLED_SUBSCRIPTION_STATUSES,
+  LIVE_SUBSCRIPTION_STATUSES,
+  isTrialEligible,
+  pickCurrentSubscription,
+  type ExpandedInvoice,
+  type StoredSubscriptionRow,
+  type SubscriptionActionResult,
+  type SubscriptionSnapshot,
+  type SubscriptionStartResult,
 } from './types.js';
-import { MANAGED_SUBSCRIPTION_STATUSES } from './types.js';
 
-/** Plafond du montant libre (10 000 €) — évite les montants absurdes/rejetés par Stripe. */
-const MAX_CUSTOM_AMOUNT_CENTS = 10_000 * 100;
+// ---------------------------------------------------------------------------
+// Cycle de vie de l'abonnement.
+//
+//  - Première souscription (essai) : un SetupIntent enregistre le moyen de
+//    paiement sans rien prélever, puis l'abonnement est créé en essai de
+//    7 jours avec ce moyen par défaut (`activateTrialSubscription`, appelé
+//    par l'app après confirmation et par le webhook `setup_intent.succeeded`
+//    en secours — même clé d'idempotence, donc un seul abonnement). Un essai
+//    n'existe jamais sans moyen de paiement enregistré.
+//  - Souscriptions suivantes (essai déjà consommé) : l'abonnement est créé
+//    `default_incomplete` et l'app paie sa première facture.
+//  - Changement de durée, factures : portail client Stripe (`portal.ts`).
+//
+// Stripe fait foi : les lignes `subscriptions` d'Appwrite en sont une copie
+// tenue à jour par le webhook et par chaque action.
+// ---------------------------------------------------------------------------
 
-function toSnapshotFromStoredSubscription(
-  row: Pick<
-    StoredSubscriptionRow,
-    'status' | 'price_id' | 'current_period_end' | 'cancel_at_period_end'
-  > | null,
-): SubscriptionSnapshot {
-  const status = row?.status ?? 'demo';
-  const isSubscribed = status === 'active' || status === 'trialing' || status === 'lifetime';
+/** Métadonnée `purpose` des SetupIntents qui ouvrent un essai. */
+export const TRIAL_SETUP_PURPOSE = 'redview_trial';
 
-  return {
-    isSubscribed,
-    status,
-    priceId: row?.price_id ?? null,
-    currentPeriodEnd: row?.current_period_end ?? null,
-    cancelAtPeriodEnd: row?.cancel_at_period_end ?? false,
-  };
+function customerIdOf(value: string | Stripe.Customer | Stripe.DeletedCustomer | null): string | null {
+  if (!value) return null;
+  return typeof value === 'string' ? value : value.id;
 }
 
-async function getSubscriptionSnapshotFromStoredSubscriptions(
-  userId: string,
-): Promise<SubscriptionSnapshot> {
-  const rows = await listStoredSubscriptions(userId);
-  const candidates = rows.filter((row) => MANAGED_SUBSCRIPTION_STATUSES.has(row.status ?? ''));
-
-  candidates.sort((left, right) => {
-    const leftTime = left.current_period_end ? Date.parse(left.current_period_end) : 0;
-    const rightTime = right.current_period_end ? Date.parse(right.current_period_end) : 0;
-    return rightTime - leftTime;
-  });
-
-  return toSnapshotFromStoredSubscription(candidates[0] ?? null);
+function toIso(seconds: number | null | undefined): string | null {
+  return seconds ? new Date(seconds * 1000).toISOString() : null;
 }
 
-export async function getSubscriptionSnapshot(userId: string): Promise<SubscriptionSnapshot> {
-  return getSubscriptionSnapshotFromStoredSubscriptions(userId);
-}
-
-function toSnapshotFromStripeSubscription(subscription: Stripe.Subscription): SubscriptionSnapshot {
-  const firstItem = subscription.items.data[0];
-
-  return {
-    isSubscribed: subscription.status === 'active' || subscription.status === 'trialing',
-    status: subscription.status,
-    priceId: firstItem?.price?.id ?? null,
-    currentPeriodEnd: firstItem?.current_period_end
-      ? new Date(firstItem.current_period_end * 1000).toISOString()
-      : null,
-    cancelAtPeriodEnd: subscription.cancel_at_period_end,
-  };
-}
-
-function getLatestInvoicePaymentIntent(
-  subscription: Stripe.Subscription,
-): Stripe.PaymentIntent | null {
-  const latestInvoice = subscription.latest_invoice as ExpandedInvoice | string | null;
-  if (!latestInvoice || typeof latestInvoice === 'string') {
-    return null;
-  }
-
-  const paymentIntent = latestInvoice.payment_intent;
-  if (!paymentIntent || typeof paymentIntent === 'string') {
-    return null;
-  }
-
-  return paymentIntent;
-}
-
-function getLatestInvoiceClientSecret(subscription: Stripe.Subscription): string | null {
-  const paymentIntent = getLatestInvoicePaymentIntent(subscription);
-  if (paymentIntent?.client_secret) {
-    return paymentIntent.client_secret;
-  }
-
-  const latestInvoice = subscription.latest_invoice as ExpandedInvoice | string | null;
-  if (!latestInvoice || typeof latestInvoice === 'string') {
-    return null;
-  }
-
-  return latestInvoice.confirmation_secret?.client_secret ?? null;
-}
-
-function buildSubscriptionActionResult(
-  subscription: Stripe.Subscription,
-): SubscriptionActionResult {
-  const paymentIntent = getLatestInvoicePaymentIntent(subscription);
-  const paymentIntentStatus = paymentIntent?.status ?? null;
-  const clientSecret = getLatestInvoiceClientSecret(subscription);
-  const hasClientSecret = Boolean(clientSecret);
-  const requiresPaymentConfirmation =
-    hasClientSecret &&
-    (subscription.status === 'incomplete' ||
-      paymentIntentStatus === 'requires_action' ||
-      paymentIntentStatus === 'requires_confirmation' ||
-      paymentIntentStatus === 'requires_payment_method');
-
+export function snapshotFromStripeSubscription(subscription: Stripe.Subscription): SubscriptionSnapshot {
+  const item = subscription.items.data[0];
   return {
     subscriptionId: subscription.id,
-    subscription: toSnapshotFromStripeSubscription(subscription),
-    clientSecret,
-    requiresPaymentConfirmation,
+    isSubscribed: ENTITLED_SUBSCRIPTION_STATUSES.has(subscription.status),
+    status: subscription.status,
+    planId: planIdForPrice(item?.price),
+    priceId: item?.price?.id ?? null,
+    currentPeriodEnd: toIso(item?.current_period_end),
+    cancelAtPeriodEnd: subscription.cancel_at_period_end || subscription.cancel_at != null,
   };
 }
 
-function getStripeCustomerIdFromSubscription(subscription: Stripe.Subscription): string | null {
-  const customer = subscription.customer;
-  if (!customer) {
-    return null;
-  }
-
-  return typeof customer === 'string' ? customer : customer.id;
-}
+export const NO_SUBSCRIPTION: SubscriptionSnapshot = {
+  subscriptionId: null,
+  isSubscribed: false,
+  status: 'none',
+  planId: null,
+  priceId: null,
+  currentPeriodEnd: null,
+  cancelAtPeriodEnd: false,
+};
 
 async function listStoredSubscriptions(userId: string): Promise<StoredSubscriptionRow[]> {
-  const db = getAppwriteDatabases();
-  try {
-    const res = await db.listDocuments(APPWRITE_DATABASE_ID, SUBSCRIPTIONS_COLLECTION_ID, [
-      Query.equal('user_id', userId),
-      Query.limit(100),
-    ]);
-
-    return res.documents.map((doc) => ({
-      id: doc.$id,
-      status: (doc.status as string) ?? null,
-      price_id: (doc.price_id as string) ?? null,
-      cancel_at_period_end: Boolean(doc.cancel_at_period_end),
-      current_period_end: (doc.current_period_end as string) ?? null,
-    }));
-  } catch (error) {
-    console.warn('[subscriptions] listStoredSubscriptions error', error);
-    return [];
-  }
-}
-
-export async function getCurrentManagedSubscriptionRow(
-  userId: string,
-): Promise<StoredSubscriptionRow | null> {
-  const rows = await listStoredSubscriptions(userId);
-  const candidates = rows.filter((row) => MANAGED_SUBSCRIPTION_STATUSES.has(row.status ?? ''));
-
-  candidates.sort((left, right) => {
-    const leftTime = left.current_period_end ? Date.parse(left.current_period_end) : 0;
-    const rightTime = right.current_period_end ? Date.parse(right.current_period_end) : 0;
-    return rightTime - leftTime;
-  });
-
-  return candidates[0] ?? null;
-}
-
-export async function getCurrentManagedStripeSubscription(
-  userId: string,
-  expand: string[] = [],
-): Promise<Stripe.Subscription | null> {
-  const row = await getCurrentManagedSubscriptionRow(userId);
-  if (!row) {
-    return null;
-  }
-
-  return getStripeServer().subscriptions.retrieve(row.id, { expand });
-}
-
-export async function createManagedSubscription(
-  userId: string,
-  email: string | null,
-  planId: BillingPlanId,
-  customAmount?: number,
-): Promise<SubscriptionActionResult> {
-  const stripeCustomerId = await getOrCreateStripeCustomer(userId, email);
-  const defaultPriceId = requireConfiguredPriceId(planId);
-
-  // Clean up any dangling incomplete subscription for this user
-  const existingRow = await getCurrentManagedSubscriptionRow(userId);
-  if (existingRow && existingRow.status === 'incomplete') {
-    try {
-      await getStripeServer().subscriptions.cancel(existingRow.id);
-    } catch (cancelErr) {
-      console.warn('[createManagedSubscription] Cleaned up previous incomplete subscription warning:', cancelErr);
-    }
-  }
-
-  let itemsPayload: Stripe.SubscriptionCreateParams.Item[] = [{ price: defaultPriceId }];
-
-  // Flux « payez ce que vous voulez ≥ minimum » : le montant client ne peut
-  // qu'AUGMENTER le prix. Le plancher est le max entre le minimum produit
-  // (5 € / 15 €) et le prix Stripe configuré pour le plan ; devise et
-  // récurrence sont reprises du prix configuré, jamais du client.
-  if (
-    typeof customAmount === 'number' &&
-    Number.isFinite(customAmount) &&
-    customAmount > 0
-  ) {
-    const defaultPrice = await getStripeServer().prices.retrieve(defaultPriceId);
-    const configuredCents = defaultPrice.unit_amount ?? 0;
-    const productFloorCents = (planId === 'founder' ? 5 : 15) * 100;
-    const minCents = Math.max(productFloorCents, configuredCents);
-    const requestedCents = Math.round(customAmount) * 100;
-    const finalCents = Math.min(MAX_CUSTOM_AMOUNT_CENTS, Math.max(minCents, requestedCents));
-
-    if (finalCents > configuredCents && defaultPrice.recurring) {
-      const productId =
-        typeof defaultPrice.product === 'string'
-          ? defaultPrice.product
-          : (defaultPrice.product as Stripe.Product).id;
-
-      itemsPayload = [
-        {
-          price_data: {
-            currency: defaultPrice.currency,
-            product: productId,
-            unit_amount: finalCents,
-            recurring: {
-              interval: defaultPrice.recurring.interval,
-              interval_count: defaultPrice.recurring.interval_count,
-            },
-          },
-        },
-      ];
-    }
-  }
-
-  const isLifetimePass = planId === 'founder' || planId === 'patron';
-
-  const subscription = await getStripeServer().subscriptions.create({
-    customer: stripeCustomerId,
-    items: itemsPayload,
-    payment_behavior: 'default_incomplete',
-    cancel_at_period_end: isLifetimePass,
-    payment_settings: {
-      payment_method_types: ['card', 'paypal'],
-      save_default_payment_method: 'on_subscription',
-    },
-    expand: ['latest_invoice.payment_intent', 'latest_invoice.confirmation_secret'],
-    metadata: {
-      user_id: userId,
-      plan_id: planId,
-      is_lifetime: isLifetimePass ? 'true' : 'false',
-    },
-  });
-
-  await upsertSubscription(subscription, userId);
-  return buildSubscriptionActionResult(subscription);
-}
-
-export async function changeManagedSubscriptionPlan(
-  userId: string,
-  planId: BillingPlanId,
-): Promise<SubscriptionActionResult> {
-  const currentSubscription = await getCurrentManagedStripeSubscription(userId, [
-    'latest_invoice.payment_intent',
-    'latest_invoice.confirmation_secret',
+  const res = await getAppwriteDatabases().listDocuments(APPWRITE_DATABASE_ID, SUBSCRIPTIONS_COLLECTION_ID, [
+    Query.equal('user_id', userId),
+    Query.limit(100),
   ]);
-
-  if (!currentSubscription) {
-    throw new PublicError('No managed subscription found for this account.', 404);
-  }
-
-  const currentItem = currentSubscription.items.data[0];
-  if (!currentItem) {
-    throw new Error('No Stripe subscription item found for this account.');
-  }
-
-  const nextPriceId = requireConfiguredPriceId(planId);
-  if (currentItem.price?.id === nextPriceId && !currentSubscription.cancel_at_period_end) {
-    return buildSubscriptionActionResult(currentSubscription);
-  }
-
-  const updatedSubscription = await getStripeServer().subscriptions.update(currentSubscription.id, {
-    cancel_at_period_end: false,
-    items: [
-      {
-        id: currentItem.id,
-        price: nextPriceId,
-      },
-    ],
-    payment_behavior: 'default_incomplete',
-    payment_settings: {
-      payment_method_types: ['card', 'paypal'],
-      save_default_payment_method: 'on_subscription',
-    },
-    proration_behavior: 'always_invoice',
-    expand: ['latest_invoice.payment_intent', 'latest_invoice.confirmation_secret'],
-    metadata: {
-      ...currentSubscription.metadata,
-      user_id: userId,
-      plan_id: planId,
-    },
-  });
-
-  await upsertSubscription(updatedSubscription, userId);
-  return buildSubscriptionActionResult(updatedSubscription);
+  return res.documents.map((doc) => ({
+    id: doc.$id,
+    status: typeof doc.status === 'string' ? doc.status : null,
+    price_id: typeof doc.price_id === 'string' ? doc.price_id : null,
+    cancel_at_period_end: Boolean(doc.cancel_at_period_end),
+    current_period_end: typeof doc.current_period_end === 'string' ? doc.current_period_end : null,
+  }));
 }
 
-export async function setManagedSubscriptionCancellation(
-  userId: string,
-  cancelAtPeriodEnd: boolean,
-): Promise<SubscriptionActionResult> {
-  const currentSubscription = await getCurrentManagedStripeSubscription(userId);
-  if (!currentSubscription) {
-    throw new PublicError('No managed subscription found for this account.', 404);
-  }
-
-  const updatedSubscription = await getStripeServer().subscriptions.update(currentSubscription.id, {
-    cancel_at_period_end: cancelAtPeriodEnd,
-  });
-
-  await upsertSubscription(updatedSubscription, userId);
-  return buildSubscriptionActionResult(updatedSubscription);
+/** État de l'abonnement d'un compte, lu dans la copie Appwrite (aucun appel Stripe). */
+export async function getSubscriptionSnapshot(userId: string): Promise<SubscriptionSnapshot> {
+  const row = pickCurrentSubscription(await listStoredSubscriptions(userId));
+  if (!row?.status) return NO_SUBSCRIPTION;
+  return {
+    subscriptionId: row.id,
+    isSubscribed: ENTITLED_SUBSCRIPTION_STATUSES.has(row.status),
+    status: row.status,
+    planId: await planIdForPriceId(row.price_id),
+    priceId: row.price_id,
+    currentPeriodEnd: row.current_period_end,
+    cancelAtPeriodEnd: Boolean(row.cancel_at_period_end),
+  };
 }
 
-export async function syncManagedSubscription(
-  userId: string,
-  subscriptionId: string,
-): Promise<SubscriptionActionResult> {
-  const expectedStripeCustomerId = await getStripeCustomerId(userId);
-  if (!expectedStripeCustomerId) {
-    throw new PublicError('No Stripe customer found for this account.', 404);
-  }
-
-  const subscription = await getStripeServer().subscriptions.retrieve(subscriptionId, {
-    expand: ['latest_invoice.payment_intent', 'latest_invoice.confirmation_secret'],
-  });
-
-  if (getStripeCustomerIdFromSubscription(subscription) !== expectedStripeCustomerId) {
-    throw new PublicError('This Stripe subscription does not belong to the current user.', 403);
-  }
-
-  await upsertSubscription(subscription, userId);
-  return buildSubscriptionActionResult(subscription);
+/** Tous les abonnements d'un client Stripe, terminés compris (Stripe les garde). */
+export async function listCustomerSubscriptions(customerId: string): Promise<Stripe.Subscription[]> {
+  const result = await getStripeServer().subscriptions.list({ customer: customerId, status: 'all', limit: 100 });
+  return result.data;
 }
 
-export async function upsertSubscription(
-  subscription: Stripe.Subscription,
-  userId: string,
-): Promise<void> {
-  const firstItem = subscription.items.data[0];
-  const priceId = firstItem?.price?.id ?? null;
-  const periodStart = firstItem?.current_period_start;
-  const periodEnd = firstItem?.current_period_end;
+/** Abonnement vivant du compte, lu chez Stripe (pas dans la copie). */
+export async function getLiveStripeSubscription(userId: string): Promise<Stripe.Subscription | null> {
+  const customerId = await getStripeCustomerId(userId);
+  if (!customerId) return null;
+  const subscriptions = await listCustomerSubscriptions(customerId);
+  return subscriptions.find((subscription) => LIVE_SUBSCRIPTION_STATUSES.has(subscription.status)) ?? null;
+}
 
-  const db = getAppwriteDatabases();
+export async function upsertSubscription(subscription: Stripe.Subscription, userId: string): Promise<void> {
+  const item = subscription.items.data[0];
   const payload = {
     user_id: userId,
     status: subscription.status,
-    price_id: priceId,
-    current_period_start: periodStart ? new Date(periodStart * 1000).toISOString() : null,
-    current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
-    cancel_at_period_end: subscription.cancel_at_period_end,
+    price_id: item?.price?.id ?? null,
+    current_period_start: toIso(item?.current_period_start),
+    current_period_end: toIso(item?.current_period_end),
+    cancel_at_period_end: subscription.cancel_at_period_end || subscription.cancel_at != null,
   };
 
+  const db = getAppwriteDatabases();
   try {
     await db.createDocument(APPWRITE_DATABASE_ID, SUBSCRIPTIONS_COLLECTION_ID, subscription.id, payload);
-  } catch (error: any) {
-    if (error?.code === 409) {
-      await db.updateDocument(APPWRITE_DATABASE_ID, SUBSCRIPTIONS_COLLECTION_ID, subscription.id, payload);
-    } else {
-      throw error;
-    }
+  } catch (error) {
+    if ((error as { code?: unknown } | null)?.code !== 409) throw error;
+    await db.updateDocument(APPWRITE_DATABASE_ID, SUBSCRIPTIONS_COLLECTION_ID, subscription.id, payload);
   }
 }
 
-export function getSubscriptionIdFromInvoice(invoice: Stripe.Invoice): string | null {
-  const parent = invoice.parent;
-  if (parent?.type === 'subscription_details' && parent.subscription_details?.subscription) {
-    const subscription = parent.subscription_details.subscription;
-    return typeof subscription === 'string' ? subscription : subscription.id;
+function actionResult(subscription: Stripe.Subscription): SubscriptionActionResult {
+  return { subscriptionId: subscription.id, subscription: snapshotFromStripeSubscription(subscription) };
+}
+
+/**
+ * Lance une souscription. Refusée (409) si le compte a déjà un abonnement
+ * vivant ; les tentatives de paiement abandonnées sont annulées.
+ */
+export async function startSubscription(
+  userId: string,
+  accountEmail: string | null,
+  planId: BillingPlanId,
+): Promise<SubscriptionStartResult> {
+  const stripe = getStripeServer();
+  const customerId = await getOrCreateStripeCustomer(userId, accountEmail);
+  const [price, subscriptions] = await Promise.all([getPlanPrice(planId), listCustomerSubscriptions(customerId)]);
+
+  if (subscriptions.some((subscription) => LIVE_SUBSCRIPTION_STATUSES.has(subscription.status))) {
+    throw new PublicError('This account already has a subscription.', 409);
   }
 
-  return null;
+  // Une souscription relancée remplace la tentative restée sans paiement.
+  for (const subscription of subscriptions) {
+    if (subscription.status !== 'incomplete') continue;
+    try {
+      await stripe.subscriptions.cancel(subscription.id);
+    } catch (error) {
+      console.warn('[billing] Unable to cancel an abandoned incomplete subscription', error);
+    }
+  }
+
+  if (isTrialEligible(subscriptions)) {
+    const setupIntent = await stripe.setupIntents.create({
+      customer: customerId,
+      usage: 'off_session',
+      ...(await setupIntentPaymentMethodParams()),
+      metadata: { purpose: TRIAL_SETUP_PURPOSE, user_id: userId, plan_id: planId },
+    });
+    if (!setupIntent.client_secret) throw new Error('Stripe returned a SetupIntent without client secret.');
+    return {
+      intent: 'setup',
+      clientSecret: setupIntent.client_secret,
+      setupIntentId: setupIntent.id,
+      planId,
+      trialDays: TRIAL_DAYS,
+    };
+  }
+
+  const paymentMethodTypes = await subscriptionPaymentMethodTypes();
+  const subscription = await stripe.subscriptions.create({
+    customer: customerId,
+    items: [{ price: price.id }],
+    payment_behavior: 'default_incomplete',
+    payment_settings: {
+      save_default_payment_method: 'on_subscription',
+      ...(paymentMethodTypes ? { payment_method_types: paymentMethodTypes } : {}),
+    },
+    expand: ['latest_invoice.confirmation_secret'],
+    metadata: { user_id: userId, plan_id: planId },
+  });
+  await upsertSubscription(subscription, userId);
+
+  const clientSecret = (subscription.latest_invoice as ExpandedInvoice | null)?.confirmation_secret?.client_secret;
+  if (!clientSecret) throw new Error('Stripe returned a subscription without payment to confirm.');
+  return { intent: 'payment', clientSecret, subscriptionId: subscription.id, planId };
+}
+
+function isIdempotencyConflict(error: unknown): boolean {
+  const candidate = error as { type?: unknown; statusCode?: unknown } | null;
+  return candidate?.type === 'StripeIdempotencyError' || candidate?.statusCode === 409;
+}
+
+/**
+ * Crée l'abonnement en essai à partir d'un SetupIntent confirmé. Idempotent :
+ * l'app et le webhook peuvent l'appeler tous les deux, dans n'importe quel
+ * ordre, et un seul abonnement existe.
+ */
+export async function activateTrialSubscription(
+  setupIntentId: string,
+  owner: { userId: string; customerId: string },
+): Promise<SubscriptionActionResult> {
+  const stripe = getStripeServer();
+  const setupIntent = await stripe.setupIntents.retrieve(setupIntentId);
+
+  if (customerIdOf(setupIntent.customer) !== owner.customerId) {
+    throw new PublicError('This payment setup does not belong to the current user.', 403);
+  }
+  if (setupIntent.metadata?.purpose !== TRIAL_SETUP_PURPOSE || setupIntent.metadata.user_id !== owner.userId) {
+    throw new PublicError('This payment setup does not start a subscription.', 400);
+  }
+  if (setupIntent.status !== 'succeeded') {
+    throw new PublicError('The payment method is not confirmed yet.', 409);
+  }
+  const planId = setupIntent.metadata.plan_id;
+  const paymentMethodId =
+    typeof setupIntent.payment_method === 'string' ? setupIntent.payment_method : setupIntent.payment_method?.id;
+  if (!isBillingPlanId(planId) || !paymentMethodId) {
+    throw new Error(`SetupIntent ${setupIntent.id} misses its plan or payment method.`);
+  }
+
+  const findExisting = async () => {
+    const subscriptions = await listCustomerSubscriptions(owner.customerId);
+    return {
+      subscriptions,
+      fromThisSetup: subscriptions.find((subscription) => subscription.metadata?.setup_intent === setupIntent.id) ?? null,
+      live: subscriptions.find((subscription) => LIVE_SUBSCRIPTION_STATUSES.has(subscription.status)) ?? null,
+    };
+  };
+
+  const existing = await findExisting();
+  const already = existing.fromThisSetup ?? existing.live;
+  if (already) {
+    await upsertSubscription(already, owner.userId);
+    return actionResult(already);
+  }
+  if (!isTrialEligible(existing.subscriptions)) {
+    throw new PublicError('The free trial has already been used on this account.', 409);
+  }
+
+  const price = await getPlanPrice(planId);
+  await stripe.customers.update(owner.customerId, {
+    invoice_settings: { default_payment_method: paymentMethodId },
+  });
+
+  let subscription: Stripe.Subscription;
+  try {
+    subscription = await stripe.subscriptions.create(
+      {
+        customer: owner.customerId,
+        items: [{ price: price.id }],
+        default_payment_method: paymentMethodId,
+        trial_period_days: TRIAL_DAYS,
+        // Moyen de paiement retiré pendant l'essai : l'abonnement s'arrête
+        // au lieu de passer en impayé.
+        trial_settings: { end_behavior: { missing_payment_method: 'cancel' } },
+        payment_settings: { save_default_payment_method: 'on_subscription' },
+        metadata: { user_id: owner.userId, plan_id: planId, setup_intent: setupIntent.id },
+      },
+      { idempotencyKey: `redview-trial-${setupIntent.id}` },
+    );
+  } catch (error) {
+    // L'autre appelant (app ou webhook) crée le même abonnement au même instant.
+    if (!isIdempotencyConflict(error)) throw error;
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const retry = await findExisting();
+    if (!retry.fromThisSetup) throw error;
+    subscription = retry.fromThisSetup;
+  }
+
+  await upsertSubscription(subscription, owner.userId);
+  return actionResult(subscription);
+}
+
+/** Version « compte » de l'activation, pour l'API : le client est celui du compte. */
+export async function activateTrialForUser(userId: string, setupIntentId: string): Promise<SubscriptionActionResult> {
+  const customerId = await getStripeCustomerId(userId);
+  if (!customerId) throw new PublicError('No billing profile found for this account.', 404);
+  return activateTrialSubscription(setupIntentId, { userId, customerId });
+}
+
+/** Relit un abonnement du compte chez Stripe et met la copie à jour. */
+export async function syncSubscription(userId: string, subscriptionId: string): Promise<SubscriptionActionResult> {
+  const customerId = await getStripeCustomerId(userId);
+  if (!customerId) throw new PublicError('No billing profile found for this account.', 404);
+
+  const subscription = await getStripeServer().subscriptions.retrieve(subscriptionId);
+  if (customerIdOf(subscription.customer) !== customerId) {
+    throw new PublicError('This subscription does not belong to the current user.', 403);
+  }
+  await upsertSubscription(subscription, userId);
+  return actionResult(subscription);
+}
+
+/** Résiliation à la fin de l'échéance (ou de l'essai), et son annulation. */
+export async function setSubscriptionCancellation(
+  userId: string,
+  cancelAtPeriodEnd: boolean,
+): Promise<SubscriptionActionResult> {
+  const current = await getLiveStripeSubscription(userId);
+  if (!current) throw new PublicError('No subscription found for this account.', 404);
+
+  // Stripe refuse `cancel_at_period_end` et `cancel_at` ensemble ; en mode de
+  // facturation `flexible` (défaut de l'API dahlia), `cancel_at_period_end:
+  // false` lève aussi une date de fin posée seule par le portail.
+  const updated = await getStripeServer().subscriptions.update(current.id, {
+    cancel_at_period_end: cancelAtPeriodEnd,
+  });
+  await upsertSubscription(updated, userId);
+  return actionResult(updated);
+}
+
+export function getSubscriptionIdFromInvoice(invoice: Stripe.Invoice): string | null {
+  const subscription = invoice.parent?.subscription_details?.subscription;
+  if (!subscription) return null;
+  return typeof subscription === 'string' ? subscription : subscription.id;
 }

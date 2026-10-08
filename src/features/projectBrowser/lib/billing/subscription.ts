@@ -1,152 +1,11 @@
 import { translateAppText } from '@/shared/i18n';
-import { formatShortDate } from '../formatting';
-import type {
-  BillingContactPreference,
-  SubscriptionPlan,
-  SubscriptionPlanId,
-  SubscriptionSnapshot,
-} from '../../types';
 
-export const LANDING_URL = import.meta.env.VITE_LANDING_URL || 'http://localhost:3000';
+import type { BillingContactPreference, SubscriptionSnapshot } from '../../types';
+import { formatLongDate, getDisplayPlan } from './plans';
 
-const PLAN_PRICE_IDS: Partial<Record<SubscriptionPlanId, string>> = {
-  founder: import.meta.env.VITE_STRIPE_PRICE_ID_FOUNDER,
-  patron: import.meta.env.VITE_STRIPE_PRICE_ID_PATRON,
-};
+export const LANDING_URL = import.meta.env.VITE_LANDING_URL || 'https://redview.tech';
 
-const FEATURE_BADGES = {
-  mapping3d: {
-    id: 'mapping-3d',
-    label: 'Moteur 3D & LiDAR',
-    icon: 'diamond.svg',
-    tone: 'gold' as const,
-    featureItems: [
-      { icon: 'diamond.svg', label: 'Moteur 3D temps réel illimité' },
-      { icon: 'cube-outline.svg', label: 'LiDAR HD 20 cm sur le web' },
-    ],
-  },
-  meteoSunlight: {
-    id: 'meteo-sunlight',
-    label: 'Météo et ensoleillement',
-    icon: 'weather.svg',
-    tone: 'blue' as const,
-    featureItems: [
-      { icon: 'sun.svg', label: 'Simulation ensoleillement & ombres' },
-      { icon: 'cloud-sun-02.svg', label: 'Prévisions météo & vent direct' },
-      { icon: 'snowflake.svg', label: 'Simulation neige temps réel' },
-    ],
-  },
-  routePlanning: {
-    id: 'route-planning',
-    label: 'Routage & GPX',
-    icon: 'route.svg',
-    tone: 'teal' as const,
-    featureItems: [
-      { icon: 'route.svg', label: 'Routage intelligent' },
-      { icon: 'share-07.svg', label: 'Export GPX illimité' },
-    ],
-  },
-  cloudStorage: {
-    id: 'cloud-storage',
-    label: 'Accès Web & Projets',
-    icon: 'folder.svg',
-    tone: 'gray' as const,
-    featureItems: [
-      { icon: 'folder.svg', label: 'Gestionnaire de projets' },
-      { icon: 'check.svg', label: 'Accès sans carte bancaire' },
-    ],
-  },
-  founderPrivileges: {
-    id: 'founder-privileges',
-    label: 'Avantages Fondateur',
-    icon: 'multi-layer.svg',
-    tone: 'brown' as const,
-    featureItems: [
-      { icon: 'navigation-pointer-01.svg', label: 'Accès Bêta App iOS (TestFlight)' },
-      { icon: 'star-01.svg', label: 'Badge Fondateur officiel' },
-    ],
-  },
-  communitySupport: {
-    id: 'community-support',
-    label: 'Communauté & Soutien',
-    icon: 'poi-pin.svg',
-    tone: 'purple' as const,
-    featureItems: [
-      { icon: 'check-circle.svg', label: 'Vote sur les prochains massifs 3D' },
-      { icon: 'heart.svg', label: 'Soutien direct dev indépendant' },
-    ],
-  },
-  proYear: {
-    id: 'pro-year',
-    label: 'Privilèges Mécène',
-    icon: 'line-chart.svg',
-    tone: 'green' as const,
-    featureItems: [
-      { icon: 'diamond.svg', label: '3 mois de compte PRO offerts (v1)' },
-      { icon: 'star-01.svg', label: 'Accès VIP ultra-prioritaire mobile' },
-    ],
-  },
-  patronCircle: {
-    id: 'patron-circle',
-    label: 'Cercle des Soutiens',
-    icon: 'stopwatch.svg',
-    tone: 'black' as const,
-    featureItems: [
-      { icon: 'user-circle.svg', label: 'Nom sur la page des Soutiens' },
-      { icon: 'mail-02.svg', label: 'Propositions de zones & features' },
-    ],
-  },
-};
-
-export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
-  {
-    id: 'demo',
-    name: 'Accès Bêta Web',
-    priceLabel: '0 €',
-    tags: [],
-    iconBadges: [
-      FEATURE_BADGES.mapping3d,
-      FEATURE_BADGES.meteoSunlight,
-      FEATURE_BADGES.routePlanning,
-      FEATURE_BADGES.cloudStorage,
-    ],
-    description: 'Gratuit sur le web pendant la Bêta',
-  },
-  {
-    id: 'founder',
-    name: 'Pass Fondateur',
-    priceLabel: '5 €',
-    tags: [],
-    iconBadges: [
-      FEATURE_BADGES.mapping3d,
-      FEATURE_BADGES.meteoSunlight,
-      FEATURE_BADGES.routePlanning,
-      FEATURE_BADGES.cloudStorage,
-      FEATURE_BADGES.founderPrivileges,
-      FEATURE_BADGES.communitySupport,
-    ],
-    description: 'Paiement unique · avantages à vie',
-  },
-  {
-    id: 'patron',
-    name: 'Mécène & Soutien Majeur',
-    priceLabel: 'dès 15 €',
-    tags: [],
-    iconBadges: [
-      FEATURE_BADGES.mapping3d,
-      FEATURE_BADGES.meteoSunlight,
-      FEATURE_BADGES.routePlanning,
-      FEATURE_BADGES.cloudStorage,
-      FEATURE_BADGES.founderPrivileges,
-      FEATURE_BADGES.communitySupport,
-      FEATURE_BADGES.proYear,
-      FEATURE_BADGES.patronCircle,
-    ],
-    description: 'Don libre de soutien',
-  },
-];
-
-export const DEFAULT_CONTACT_PREFERENCE: BillingContactPreference = {
+const DEFAULT_CONTACT_PREFERENCE: BillingContactPreference = {
   mode: 'account',
   alternativeEmail: '',
 };
@@ -155,9 +14,7 @@ function getBillingContactStorageKey(userId: string | null | undefined): string 
   return userId ? `redview:billing-contact:${userId}` : null;
 }
 
-export function readBillingContactPreference(
-  userId: string | null | undefined,
-): BillingContactPreference {
+export function readBillingContactPreference(userId: string | null | undefined): BillingContactPreference {
   const key = getBillingContactStorageKey(userId);
   if (!key) return DEFAULT_CONTACT_PREFERENCE;
 
@@ -167,8 +24,7 @@ export function readBillingContactPreference(
     const parsed = JSON.parse(raw) as Partial<BillingContactPreference>;
     return {
       mode: parsed.mode === 'alternative' ? 'alternative' : 'account',
-      alternativeEmail:
-        typeof parsed.alternativeEmail === 'string' ? parsed.alternativeEmail : '',
+      alternativeEmail: typeof parsed.alternativeEmail === 'string' ? parsed.alternativeEmail : '',
     };
   } catch {
     return DEFAULT_CONTACT_PREFERENCE;
@@ -185,65 +41,60 @@ export function writeBillingContactPreference(
   try {
     window.localStorage.setItem(key, JSON.stringify(preference));
   } catch {
-    // Best effort only.
+    // Confort seulement : la préférence fait foi côté serveur.
   }
 }
 
-export function isDemoPlan(snapshot: SubscriptionSnapshot | null): boolean {
-  if (!snapshot) return true;
-  return snapshot.status === 'demo' || (!snapshot.isSubscribed && snapshot.status == null);
+/** Statuts Stripe d'un abonnement encore en cours (même en impayé). */
+const LIVE_STATUSES = new Set(['active', 'trialing', 'past_due', 'unpaid', 'paused']);
+
+/** Le compte a un abonnement en cours : on gère, on ne souscrit plus. */
+export function hasLiveSubscription(snapshot: SubscriptionSnapshot | null): boolean {
+  return Boolean(snapshot && LIVE_STATUSES.has(snapshot.status));
 }
 
-export function hasPaidSubscription(snapshot: SubscriptionSnapshot | null): boolean {
-  if (!snapshot) return false;
-  return snapshot.isSubscribed && !isDemoPlan(snapshot);
+function isTrialing(snapshot: SubscriptionSnapshot | null): boolean {
+  return snapshot?.status === 'trialing';
 }
 
+/** Impayé que Stripe relance : le moyen de paiement doit être remplacé. */
+export function hasPaymentIssue(snapshot: SubscriptionSnapshot | null): boolean {
+  return snapshot?.status === 'past_due' || snapshot?.status === 'unpaid';
+}
+
+/** Libellé du compte dans l'en-tête du gestionnaire de projets. */
 export function accountTierLabel(snapshot: SubscriptionSnapshot | null, isLoading: boolean): string {
   if (isLoading) return translateAppText('Compte');
-  if (!hasPaidSubscription(snapshot)) return translateAppText('Accès Bêta');
-
-  const activePlanId = resolveActivePlanId(snapshot);
-  if (activePlanId === 'patron') {
-    return translateAppText('Mécène');
-  }
-  return translateAppText('Membre Fondateur');
+  if (!hasLiveSubscription(snapshot)) return translateAppText('Accès Bêta');
+  if (isTrialing(snapshot)) return translateAppText('Essai gratuit');
+  return translateAppText('Abonné RedView');
 }
 
-export function resolveActivePlanId(snapshot: SubscriptionSnapshot | null): SubscriptionPlanId {
-  if (!snapshot || !hasPaidSubscription(snapshot)) return 'demo';
-
-  const matchedPlan = (
-    Object.entries(PLAN_PRICE_IDS) as Array<[SubscriptionPlanId, string | undefined]>
-  ).find(([, priceId]) => priceId && snapshot.priceId === priceId);
-
-  return matchedPlan?.[0] ?? 'demo';
+/** Formule pour le contexte des statistiques (jamais l'abonnement lui-même). */
+export function analyticsPlanOf(snapshot: SubscriptionSnapshot | null): string {
+  if (!hasLiveSubscription(snapshot)) return 'demo';
+  return snapshot?.planId ?? 'unknown';
 }
 
-export function buildSubscriptionHeadline(snapshot: SubscriptionSnapshot | null): string {
-  if (!snapshot || isDemoPlan(snapshot)) {
-    return translateAppText('Votre compte bénéficie de l\'accès complet à la Bêta Web. Devenez Membre Fondateur pour débloquer vos avantages à vie.');
-  }
+/** Phrase d'état de l'abonnement en cours. */
+export function subscriptionStatusLine(snapshot: SubscriptionSnapshot | null): string {
+  if (!snapshot || !hasLiveSubscription(snapshot)) return '';
+  const date = formatLongDate(snapshot.currentPeriodEnd);
+  const plan = snapshot.planId ? getDisplayPlan(snapshot.planId) : null;
+  const durationLabel = plan ? translateAppText(plan.durationLabel) : '';
 
+  if (hasPaymentIssue(snapshot)) {
+    return translateAppText('Le dernier paiement a échoué. Mettez à jour votre moyen de paiement pour garder votre accès.');
+  }
   if (snapshot.cancelAtPeriodEnd) {
-    return translateAppText('Votre abonnement se terminera le {{date}}.', {
-      date: formatShortDate(snapshot.currentPeriodEnd),
-    });
+    return snapshot.status === 'trialing'
+      ? translateAppText('Résilié : votre essai prend fin le {{date}}, aucun prélèvement ne sera effectué.', { date })
+      : translateAppText('Résilié : votre abonnement prend fin le {{date}}. Vous gardez l’accès jusqu’à cette date.', { date });
   }
-
-  if (snapshot.currentPeriodEnd) {
-    return translateAppText('Votre abonnement se renouvelle automatiquement le {{date}}.', {
-      date: formatShortDate(snapshot.currentPeriodEnd),
-    });
+  if (snapshot.status === 'trialing') {
+    return translateAppText('Essai gratuit jusqu’au {{date}}. Premier prélèvement ce jour-là, sauf résiliation avant.', { date });
   }
-
-  return translateAppText('Votre statut Fondateur est actif.');
-}
-
-export function statusLabel(snapshot: SubscriptionSnapshot | null): string {
-  if (!snapshot?.status) return translateAppText('Statut indisponible');
-  if (snapshot.status === 'demo') return translateAppText('Accès Bêta');
-  if (snapshot.status === 'active') return translateAppText('Actif');
-  if (snapshot.status === 'trialing') return translateAppText('Essai');
-  return snapshot.status;
+  return plan
+    ? translateAppText('Formule {{plan}}, renouvelée automatiquement le {{date}}.', { plan: durationLabel, date })
+    : translateAppText('Renouvellement automatique le {{date}}.', { date });
 }

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useHasChanged } from '@/shared/hooks/useHasChanged';
 import { useAppI18n } from '@/shared/i18n';
 import { setAnalyticsContext, trackAnalyticsEvent } from '@/shared/lib/analytics';
+import { notify } from '@/shared/lib/notify';
 import { readStoredAppwriteSession } from '@/shared/services/appwrite';
 
 import {
@@ -15,27 +16,26 @@ import {
 } from '../../../account';
 import {
   accountTierLabel,
-  hasPaidSubscription,
-  isDemoPlan,
-  LANDING_URL,
-  readBillingContactPreference,
-  resolveActivePlanId,
-  writeBillingContactPreference,
-} from '../../../lib';
-import {
+  activateTrialSubscription,
+  analyticsPlanOf,
   applyPaymentMethodSetup,
   cancelManagedSubscription,
-  changeSubscriptionPlan,
   createPaymentMethodSetupIntent,
-  createSubscriptionIntent,
   fetchBillingOverview,
+  hasLiveSubscription,
+  LANDING_URL,
+  logBillingUi,
+  logBillingUiError,
+  openBillingPortal,
   persistBillingContactPreference,
+  readBillingContactPreference,
   resumeManagedSubscription,
   setDefaultBillingPaymentMethod,
+  startSubscription,
   syncManagedSubscription,
+  writeBillingContactPreference,
   type BillingOverviewResponse,
 } from '../../../lib';
-import { logBillingUi, logBillingUiError } from '../../../lib';
 import type {
   BillingContactPreference,
   PaymentMethodSummary,
@@ -49,8 +49,6 @@ import type {
   BillingModalCompletion,
   BillingModalState,
 } from '../../../billing/components/BillingActionModal/BillingActionModal';
-
-type ManagedPlanId = Exclude<SubscriptionPlanId, 'demo'>;
 
 const PROJECT_BROWSER_ACTIVE_TAB_STORAGE_KEY = 'redview:project-browser:active-tab';
 
@@ -117,29 +115,15 @@ export function useProjectBrowserOverlayState({
     isLoading: open && userId !== null,
     error: null,
     snapshot: null,
+    trialEligible: true,
   }));
   const [accountProfile, setAccountProfile] = useState<AccountProfile | null>(null);
   const [accountLoading, setAccountLoading] = useState(open);
   const [accountError, setAccountError] = useState<string | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [selectedPlanId, setSelectedPlanId] = useState<SubscriptionPlanId>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const params = new URLSearchParams(window.location.search);
-        const tierParam = params.get('tier') || params.get('upgrade');
-        if (tierParam === 'founder' || tierParam === 'patron') {
-          return tierParam;
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-    return 'founder';
-  });
   const [contactPreference, setContactPreference] = useState<BillingContactPreference>(() =>
     readBillingContactPreference(userId),
   );
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodSummary | null>(null);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodSummary[]>([]);
   const [billingActionBusy, setBillingActionBusy] = useState(false);
   const [billingActionError, setBillingActionError] = useState<string | null>(null);
@@ -147,7 +131,7 @@ export function useProjectBrowserOverlayState({
   const [contactStatusMessage, setContactStatusMessage] = useState<string | null>(null);
   const syncedContactPreferenceRef = useRef<string | null>(null);
   const contactHydratedRef = useRef(false);
-  const hasManualPlanSelectionRef = useRef(false);
+  const billingReturnHandledRef = useRef(false);
   const projects = useProjectBrowserProjects({
     open,
     onOpenProject,
@@ -182,14 +166,7 @@ export function useProjectBrowserOverlayState({
   useEffect(() => {
     syncedContactPreferenceRef.current = null;
     contactHydratedRef.current = false;
-    hasManualPlanSelectionRef.current = false;
   }, [userId]);
-
-  useEffect(() => {
-    if (open) {
-      hasManualPlanSelectionRef.current = false;
-    }
-  }, [open]);
 
   useEffect(() => {
     writeBillingContactPreference(userId, contactPreference);
@@ -226,28 +203,23 @@ export function useProjectBrowserOverlayState({
   }, [contactPreference, open, t, userId]);
 
   const applyBillingOverview = useCallback((overview: BillingOverviewResponse) => {
-    const activePlanId = resolveActivePlanId(overview.subscription);
     // Formule (jamais l'abonnement lui-même) : contexte des événements de mesure.
-    setAnalyticsContext({ plan: activePlanId });
+    setAnalyticsContext({ plan: analyticsPlanOf(overview.subscription) });
 
+    // Réponse lue telle quelle (bancs : faux /api/billing minimal) : chaque champ a son repli.
+    const contact = overview.contactPreference ?? readBillingContactPreference(null);
     setSubscriptionState({
       isLoading: false,
       error: null,
-      snapshot: overview.subscription,
+      snapshot: overview.subscription ?? null,
+      trialEligible: overview.trialEligible === true,
     });
-    setSelectedPlanId((current) => (hasManualPlanSelectionRef.current ? current : activePlanId));
-    setPaymentMethod(overview.paymentMethod);
-    setPaymentMethods(overview.paymentMethods);
-    setContactPreference(overview.contactPreference);
-    syncedContactPreferenceRef.current = JSON.stringify(overview.contactPreference);
+    setPaymentMethods(Array.isArray(overview.paymentMethods) ? overview.paymentMethods : []);
+    setContactPreference(contact);
+    syncedContactPreferenceRef.current = JSON.stringify(contact);
     contactHydratedRef.current = true;
     setContactStatusMessage(null);
     setBillingActionError(null);
-  }, []);
-
-  const handleSelectedPlanIdChange = useCallback((planId: SubscriptionPlanId) => {
-    hasManualPlanSelectionRef.current = true;
-    setSelectedPlanId(planId);
   }, []);
 
   const refreshBillingOverview = useCallback(async () => {
@@ -275,8 +247,8 @@ export function useProjectBrowserOverlayState({
               ? t(nextError.message)
               : t('Impossible de charger les informations d’abonnement.'),
           snapshot: null,
+          trialEligible: false,
         });
-        setPaymentMethod(null);
         setPaymentMethods([]);
       }
     })();
@@ -349,219 +321,181 @@ export function useProjectBrowserOverlayState({
     if (typeof window !== 'undefined') window.location.reload();
   }, [isSigningOut, t]);
 
-  const handlePlanSelection = useCallback(
-    async (requestedPlanId: ManagedPlanId, amount?: number) => {
-      trackAnalyticsEvent({ name: 'checkout_started', data: { plan: requestedPlanId } });
-      logBillingUi('handle-plan-selection-start', {
-        requestedPlanId,
-        amount,
-        currentStatus: subscriptionState.snapshot?.status ?? null,
-        currentPriceId: subscriptionState.snapshot?.priceId ?? null,
-        hasPaidSubscription: hasPaidSubscription(subscriptionState.snapshot),
-      });
+  /** Erreur d'une action de facturation, traduite pour l'onglet Abonnement. */
+  const failBillingAction = useCallback(
+    (event: string, nextError: unknown, fallback: string) => {
+      logBillingUiError(event, nextError);
+      setBillingActionError(nextError instanceof Error ? t(nextError.message) : t(fallback));
+    },
+    [t],
+  );
 
+  const handleChoosePlan = useCallback(
+    async (planId: SubscriptionPlanId) => {
+      trackAnalyticsEvent({ name: 'checkout_started', data: { plan: planId } });
       setBillingActionBusy(true);
       setBillingActionError(null);
-
       try {
-        const result = hasPaidSubscription(subscriptionState.snapshot)
-          ? await changeSubscriptionPlan(requestedPlanId)
-          : await createSubscriptionIntent(requestedPlanId, amount);
-
-        logBillingUi('handle-plan-selection-result', {
-          requestedPlanId,
-          subscriptionId: result.subscriptionId,
-          subscriptionStatus: result.subscription.status,
-          hasClientSecret: Boolean(result.clientSecret),
-          requiresPaymentConfirmation: result.requiresPaymentConfirmation,
-        });
-
-        if (result.clientSecret) {
-          logBillingUi('handle-plan-selection-open-modal', {
-            requestedPlanId,
-            subscriptionId: result.subscriptionId,
-            mode: 'subscription',
-          });
-          const isFounder = requestedPlanId === 'founder';
-          const defaultPrice = isFounder ? 5 : 15;
-          const currentAmount = amount ?? defaultPrice;
-          const planName = isFounder ? t('Pass Fondateur') : t('Mécène & Soutien');
-          const planPrice = `${currentAmount} €`;
-          setBillingModal({
-            mode: 'subscription',
-            clientSecret: result.clientSecret,
-            subscriptionId: result.subscriptionId,
-            planId: requestedPlanId,
-            amount: currentAmount,
-            title: t('Finaliser votre paiement'),
-            description: t('Paiement unique de {{price}} · {{plan}} avec avantages à vie.', { price: planPrice, plan: planName }),
-            submitLabel: t('Payer {{price}}', { price: planPrice }),
-          });
-          return;
-        }
-
-        logBillingUi('handle-plan-selection-refresh-overview', {
-          requestedPlanId,
-          reason: 'missing-client-secret',
-        });
-        await refreshBillingOverview();
-      } catch (nextError) {
-        logBillingUiError('handle-plan-selection-error', nextError, {
-          requestedPlanId,
-        });
-        setBillingActionError(
-          nextError instanceof Error
-            ? t(nextError.message)
-            : t('Impossible de lancer cette action de facturation.'),
+        const result = await startSubscription(planId);
+        logBillingUi('start-subscription-result', { planId, intent: result.intent });
+        setBillingModal(
+          result.intent === 'setup'
+            ? { mode: 'trial', clientSecret: result.clientSecret, setupIntentId: result.setupIntentId, planId }
+            : { mode: 'subscription', clientSecret: result.clientSecret, subscriptionId: result.subscriptionId, planId },
         );
+      } catch (nextError) {
+        failBillingAction('start-subscription-error', nextError, 'Impossible de lancer la souscription.');
+        // Un abonnement existe peut-être déjà (autre onglet, autre appareil) : l'écran se remet à jour.
+        void refreshBillingOverview().catch(() => undefined);
       } finally {
         setBillingActionBusy(false);
       }
     },
-    [refreshBillingOverview, subscriptionState.snapshot, t],
+    [failBillingAction, refreshBillingOverview],
   );
 
-  const handleUpdateBillingModalAmount = useCallback(
-    async (newAmount: number) => {
-      if (!billingModal || billingModal.mode !== 'subscription' || !billingModal.planId) {
-        return;
-      }
-      const planId = billingModal.planId;
-      const minAmount = planId === 'founder' ? 5 : 15;
-      const validAmount = Math.max(minAmount, Math.round(newAmount));
-
-      const result = await createSubscriptionIntent(planId, validAmount);
-      if (result.clientSecret) {
-        const isFounder = planId === 'founder';
-        const planName = isFounder ? t('Pass Fondateur') : t('Mécène & Soutien');
-        const planPrice = `${validAmount} €`;
-        setBillingModal((prev) =>
-          prev
-            ? {
-                ...prev,
-                clientSecret: result.clientSecret!,
-                subscriptionId: result.subscriptionId,
-                amount: validAmount,
-                description: t('Paiement unique de {{price}} · {{plan}} avec avantages à vie.', { price: planPrice, plan: planName }),
-                submitLabel: t('Payer {{price}}', { price: planPrice }),
-              }
-            : null,
-        );
+  /** Portail Stripe : factures, ou passage à une autre durée avec `planId`. */
+  const goToBillingPortal = useCallback(
+    async (planId?: SubscriptionPlanId) => {
+      setBillingActionBusy(true);
+      setBillingActionError(null);
+      try {
+        window.location.assign(await openBillingPortal(planId));
+      } catch (nextError) {
+        failBillingAction('billing-portal-error', nextError, 'Impossible d’ouvrir l’espace de facturation Stripe.');
+        setBillingActionBusy(false);
       }
     },
-    [billingModal, t],
+    [failBillingAction],
   );
-  const handleManagedSubscriptionToggle = useCallback(async () => {
-    if (!hasPaidSubscription(subscriptionState.snapshot)) {
-      return;
-    }
 
+  const handleSwitchPlan = useCallback((planId: SubscriptionPlanId) => void goToBillingPortal(planId), [goToBillingPortal]);
+  const handleOpenPortal = useCallback(() => void goToBillingPortal(), [goToBillingPortal]);
+
+  const handleCancelSubscription = useCallback(async (): Promise<boolean> => {
+    setBillingActionError(null);
+    try {
+      await cancelManagedSubscription();
+      await refreshBillingOverview();
+      notify.success('Résiliation confirmée. Vous recevrez une confirmation par e-mail.');
+      return true;
+    } catch (nextError) {
+      logBillingUiError('cancel-subscription-error', nextError);
+      notify.error(nextError instanceof Error ? nextError.message : 'La résiliation a échoué. Réessayez.');
+      return false;
+    }
+  }, [refreshBillingOverview]);
+
+  const handleResumeSubscription = useCallback(async () => {
     setBillingActionBusy(true);
     setBillingActionError(null);
-
     try {
-      if (subscriptionState.snapshot?.cancelAtPeriodEnd) {
-        await resumeManagedSubscription();
-      } else {
-        await cancelManagedSubscription();
-      }
-
+      await resumeManagedSubscription();
       await refreshBillingOverview();
+      notify.success('Votre abonnement continue.');
     } catch (nextError) {
-      setBillingActionError(
-        nextError instanceof Error
-          ? t(nextError.message)
-          : t('Impossible de mettre à jour le renouvellement automatique.'),
-      );
+      failBillingAction('resume-subscription-error', nextError, 'Impossible de reprendre l’abonnement.');
     } finally {
       setBillingActionBusy(false);
     }
-  }, [refreshBillingOverview, subscriptionState.snapshot, t]);
+  }, [failBillingAction, refreshBillingOverview]);
 
   const handlePaymentMethodAction = useCallback(async () => {
-    if (!hasPaidSubscription(subscriptionState.snapshot)) {
-      const targetPlanId: ManagedPlanId =
-        selectedPlanId !== 'demo' ? selectedPlanId : 'founder';
-      await handlePlanSelection(targetPlanId);
-      return;
-    }
-
     setBillingActionBusy(true);
     setBillingActionError(null);
-
     try {
       const result = await createPaymentMethodSetupIntent();
-      logBillingUi('handle-payment-method-result', {
-        hasClientSecret: Boolean(result.clientSecret),
-      });
-      setBillingModal({
-        mode: 'payment-method',
-        clientSecret: result.clientSecret,
-        title: 'Mettre à jour votre moyen de paiement',
-        description:
-          'Ajoutez ou remplacez votre carte sans sortir de RedView. Les prochains prélèvements utiliseront ce moyen de paiement.',
-        submitLabel: 'Enregistrer cette carte',
-      });
+      setBillingModal({ mode: 'payment-method', clientSecret: result.clientSecret });
     } catch (nextError) {
-      logBillingUiError('handle-payment-method-error', nextError);
-      setBillingActionError(
-        nextError instanceof Error
-          ? t(nextError.message)
-          : t('Impossible d’ouvrir le formulaire de carte.'),
-      );
+      failBillingAction('payment-method-error', nextError, 'Impossible d’ouvrir le formulaire de paiement.');
     } finally {
       setBillingActionBusy(false);
     }
-  }, [handlePlanSelection, selectedPlanId, subscriptionState.snapshot, t]);
+  }, [failBillingAction]);
 
   const handleBillingModalComplete = useCallback(
     async (completion: BillingModalCompletion) => {
-      logBillingUi(
-        'billing-modal-complete',
-        completion.mode === 'payment-method'
-          ? {
-              mode: completion.mode,
-              setupIntentId: completion.setupIntentId,
-            }
-          : {
-              mode: completion.mode,
-              subscriptionId: completion.subscriptionId,
-            },
-      );
+      logBillingUi('billing-modal-complete', { mode: completion.mode });
 
       if (completion.mode === 'payment-method') {
-        const overview = await applyPaymentMethodSetup(completion.setupIntentId);
-        applyBillingOverview(overview);
+        applyBillingOverview(await applyPaymentMethodSetup(completion.setupIntentId));
         setBillingModal(null);
+        notify.success('Moyen de paiement enregistré.');
         return;
       }
 
-      await syncManagedSubscription(completion.subscriptionId);
+      if (completion.mode === 'trial') {
+        await activateTrialSubscription(completion.setupIntentId);
+        notify.success('Votre essai gratuit a commencé. Bienvenue sur RedView !');
+      } else {
+        await syncManagedSubscription(completion.subscriptionId);
+        notify.success('Abonnement activé. Merci !');
+      }
       await refreshBillingOverview();
       setBillingModal(null);
     },
     [applyBillingOverview, refreshBillingOverview],
   );
 
+  // Retour d'un moyen de paiement à redirection (PayPal…) : Stripe ramène sur
+  // `/?tab=subscription&billing_return=…` avec l'intent confirmé ; on finit le
+  // parcours (le webhook le finit aussi si l'onglet ne revient jamais).
+  useEffect(() => {
+    if (!open || !userId || billingReturnHandledRef.current || typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    const flow = url.searchParams.get('billing_return');
+    if (!flow) return;
+    billingReturnHandledRef.current = true;
+
+    const status = url.searchParams.get('redirect_status');
+    const setupIntentId = url.searchParams.get('setup_intent');
+    const subscriptionId = url.searchParams.get('subscription');
+    for (const key of ['billing_return', 'redirect_status', 'setup_intent', 'setup_intent_client_secret', 'payment_intent', 'payment_intent_client_secret', 'subscription']) {
+      url.searchParams.delete(key);
+    }
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+
+    if (status === 'failed') {
+      notify.error('Le paiement n’a pas abouti. Aucun montant n’a été prélevé ; vous pouvez réessayer.');
+      return;
+    }
+    if (status !== 'succeeded' && status !== 'pending') return;
+
+    const completion: BillingModalCompletion | null =
+      flow === 'trial' && setupIntentId
+        ? { mode: 'trial', setupIntentId }
+        : flow === 'subscription' && subscriptionId
+          ? { mode: 'subscription', subscriptionId }
+          : flow === 'payment-method' && setupIntentId
+            ? { mode: 'payment-method', setupIntentId }
+            : null;
+    if (!completion) return;
+
+    void (async () => {
+      setBillingActionBusy(true);
+      try {
+        await handleBillingModalComplete(completion);
+      } catch (nextError) {
+        failBillingAction('billing-return-error', nextError, 'Impossible de finaliser le paiement.');
+      } finally {
+        setBillingActionBusy(false);
+      }
+    })();
+  }, [failBillingAction, handleBillingModalComplete, open, userId]);
+
   const handleSetDefaultPaymentMethod = useCallback(
     async (paymentMethodId: string) => {
       setBillingActionBusy(true);
       setBillingActionError(null);
-
       try {
-        const overview = await setDefaultBillingPaymentMethod(paymentMethodId);
-        applyBillingOverview(overview);
+        applyBillingOverview(await setDefaultBillingPaymentMethod(paymentMethodId));
       } catch (nextError) {
-        setBillingActionError(
-          nextError instanceof Error
-            ? t(nextError.message)
-            : t('Impossible de définir ce moyen de paiement par défaut.'),
-        );
+        failBillingAction('default-payment-method-error', nextError, 'Impossible de définir ce moyen de paiement par défaut.');
       } finally {
         setBillingActionBusy(false);
       }
     },
-    [applyBillingOverview, t],
+    [applyBillingOverview, failBillingAction],
   );
 
   const closeBillingModal = useCallback(() => {
@@ -576,7 +510,7 @@ export function useProjectBrowserOverlayState({
     ? t('Chargement du compte...')
     : formatLastConnection(accountProfile?.lastSignInAt ?? null);
   const tierLabel = accountTierLabel(subscriptionState.snapshot, subscriptionState.isLoading);
-  const showDemoRail = Boolean(subscriptionState.snapshot) && isDemoPlan(subscriptionState.snapshot);
+  const showDemoRail = Boolean(subscriptionState.snapshot) && !hasLiveSubscription(subscriptionState.snapshot);
   const offersUrl = `${LANDING_URL.replace(/\/$/, '')}/#offres`;
 
   return {
@@ -617,13 +551,16 @@ export function useProjectBrowserOverlayState({
     handleDuplicateProject: projects.handleDuplicateProject,
     handleExportProject: projects.handleExportProject,
     handleImportProjects: projects.handleImportProjects,
-    handleManagedSubscriptionToggle,
+    handleCancelSubscription,
+    handleChoosePlan,
+    handleOpenPortal,
+    handleResumeSubscription,
+    handleSwitchPlan,
     handleMoveFolder: projects.handleMoveFolder,
     handleMoveProject: projects.handleMoveProject,
     handleNavigateToFolder: projects.handleNavigateToFolder,
     handleOpenFolder: projects.handleOpenFolder,
     handlePaymentMethodAction,
-    handlePlanSelection,
     handleRenameFolder: projects.handleRenameFolder,
     handleRenameProject: projects.handleRenameProject,
     handleSetDefaultPaymentMethod,
@@ -632,17 +569,14 @@ export function useProjectBrowserOverlayState({
     isSigningOut,
     loading: projects.loading,
     offersUrl,
-    paymentMethod,
     paymentMethods,
     q: projects.q,
     search: projects.search,
-    selectedPlanId,
     setActiveTab,
     setAccountError,
     setAccountProfile,
     setContactPreference,
     setSearch: projects.setSearch,
-    setSelectedPlanId: handleSelectedPlanIdChange,
     setShowSearch: projects.setShowSearch,
     setView: projects.setView,
     showDemoRail,
@@ -658,6 +592,5 @@ export function useProjectBrowserOverlayState({
     projectsUserId: projects.userId,
     handleLeaveProject: projects.handleLeaveProject,
     closeBillingModal,
-    handleUpdateBillingModalAmount,
   };
 }

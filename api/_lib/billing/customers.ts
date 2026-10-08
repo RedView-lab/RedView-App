@@ -9,21 +9,17 @@ import {
 import { getStripeServer } from '../stripe.js';
 import type { CustomerRow } from './types.js';
 
+function appwriteCode(error: unknown): number | null {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === 'number' ? code : null;
+}
+
 function isMissingStripeCustomerError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') {
-    return false;
-  }
-
-  const candidate = error as {
-    code?: string;
-    param?: string;
-    message?: string;
-  };
-
+  const candidate = error as { code?: unknown; param?: unknown; message?: unknown } | null;
   return (
-    candidate.code === 'resource_missing' &&
+    candidate?.code === 'resource_missing' &&
     (candidate.param === 'customer' ||
-      candidate.message?.toLowerCase().includes('no such customer') === true)
+      (typeof candidate.message === 'string' && candidate.message.toLowerCase().includes('no such customer')))
   );
 }
 
@@ -33,11 +29,28 @@ export function isStripeCustomer(
   return !customer.deleted;
 }
 
-async function createAndStoreStripeCustomer(userId: string, email: string | null): Promise<string> {
-  const customer = await getStripeServer().customers.create({
-    ...(email ? { email } : {}),
-    metadata: { appwrite_user_id: userId },
-  });
+/** E-mail où Stripe envoie reçus et factures : l'adresse choisie, sinon celle du compte. */
+export function billingEmailFor(row: CustomerRow | null, accountEmail: string | null): string | null {
+  if (row?.billing_email_mode === 'alternative' && row.billing_email?.trim()) return row.billing_email.trim();
+  return accountEmail?.trim() || null;
+}
+
+async function createAndStoreStripeCustomer(
+  userId: string,
+  email: string | null,
+  replacedCustomerId: string | null,
+): Promise<string> {
+  const customer = await getStripeServer().customers.create(
+    {
+      ...(email ? { email } : {}),
+      preferred_locales: ['fr'],
+      metadata: { appwrite_user_id: userId },
+    },
+    // Deux requêtes simultanées ne créent qu'un client (sinon l'abonnement
+    // pourrait naître sur celui que la ligne Appwrite ne retient pas). La clé
+    // change avec le client remplacé : un client supprimé n'est jamais rendu.
+    { idempotencyKey: `redview-customer-${userId}-${replacedCustomerId ?? 'none'}` },
+  );
 
   const db = getAppwriteDatabases();
   try {
@@ -45,14 +58,11 @@ async function createAndStoreStripeCustomer(userId: string, email: string | null
       user_id: userId,
       stripe_customer_id: customer.id,
     });
-  } catch (error: any) {
-    if (error?.code === 409) {
-      await db.updateDocument(APPWRITE_DATABASE_ID, CUSTOMERS_COLLECTION_ID, userId, {
-        stripe_customer_id: customer.id,
-      });
-    } else {
-      throw error;
-    }
+  } catch (error) {
+    if (appwriteCode(error) !== 409) throw error;
+    await db.updateDocument(APPWRITE_DATABASE_ID, CUSTOMERS_COLLECTION_ID, userId, {
+      stripe_customer_id: customer.id,
+    });
   }
 
   return customer.id;
@@ -65,35 +75,9 @@ export async function getValidatedStripeCustomerId(
     const customer = await getStripeServer().customers.retrieve(stripeCustomerId);
     return customer.deleted ? null : customer.id;
   } catch (error) {
-    if (isMissingStripeCustomerError(error)) {
-      return null;
-    }
-
+    if (isMissingStripeCustomerError(error)) return null;
     throw error;
   }
-}
-
-export async function getOrCreateStripeCustomer(
-  userId: string,
-  email: string | null,
-): Promise<string> {
-  const db = getAppwriteDatabases();
-
-  try {
-    const existing = await db.getDocument(APPWRITE_DATABASE_ID, CUSTOMERS_COLLECTION_ID, userId);
-    if (existing?.stripe_customer_id && typeof existing.stripe_customer_id === 'string') {
-      const validatedCustomerId = await getValidatedStripeCustomerId(existing.stripe_customer_id);
-      if (validatedCustomerId) {
-        return validatedCustomerId;
-      }
-    }
-  } catch (error: any) {
-    if (error?.code !== 404) {
-      throw error;
-    }
-  }
-
-  return createAndStoreStripeCustomer(userId, email);
 }
 
 export async function getCustomerRow(userId: string): Promise<CustomerRow | null> {
@@ -101,39 +85,49 @@ export async function getCustomerRow(userId: string): Promise<CustomerRow | null
   try {
     const doc = await db.getDocument(APPWRITE_DATABASE_ID, CUSTOMERS_COLLECTION_ID, userId);
     return {
-      stripe_customer_id: (doc.stripe_customer_id as string) ?? null,
-      billing_email_mode: (doc.billing_email_mode as string) ?? null,
-      billing_email: (doc.billing_email as string) ?? null,
+      stripe_customer_id: typeof doc.stripe_customer_id === 'string' && doc.stripe_customer_id ? doc.stripe_customer_id : null,
+      billing_email_mode: typeof doc.billing_email_mode === 'string' ? doc.billing_email_mode : null,
+      billing_email: typeof doc.billing_email === 'string' ? doc.billing_email : null,
     };
-  } catch (error: any) {
-    if (error?.code === 404) {
-      return null;
-    }
+  } catch (error) {
+    if (appwriteCode(error) === 404) return null;
     throw error;
   }
 }
 
+/**
+ * Client Stripe du compte, créé au besoin. Un client supprimé côté Stripe (ou
+ * d'un autre compte Stripe : bac à sable ↔ production) est remplacé.
+ */
+export async function getOrCreateStripeCustomer(
+  userId: string,
+  accountEmail: string | null,
+): Promise<string> {
+  const row = await getCustomerRow(userId);
+  if (row?.stripe_customer_id) {
+    const validated = await getValidatedStripeCustomerId(row.stripe_customer_id);
+    if (validated) return validated;
+  }
+  return createAndStoreStripeCustomer(userId, billingEmailFor(row, accountEmail), row?.stripe_customer_id ?? null);
+}
+
 export async function getStripeCustomerId(userId: string): Promise<string | null> {
   const row = await getCustomerRow(userId);
-  if (!row?.stripe_customer_id) {
-    return null;
-  }
-
+  if (!row?.stripe_customer_id) return null;
   return getValidatedStripeCustomerId(row.stripe_customer_id);
 }
 
+/**
+ * Compte RedView d'un client Stripe. Lève sur une erreur d'Appwrite : le
+ * webhook répond alors 500 et Stripe relivre l'évènement, au lieu de le
+ * perdre.
+ */
 export async function getUserIdFromCustomer(stripeCustomerId: string): Promise<string | null> {
   const db = getAppwriteDatabases();
-  try {
-    const result = await db.listDocuments(APPWRITE_DATABASE_ID, CUSTOMERS_COLLECTION_ID, [
-      Query.equal('stripe_customer_id', stripeCustomerId),
-      Query.limit(1),
-    ]);
-
-    const first = result.documents[0];
-    return (first?.user_id as string) ?? null;
-  } catch (error) {
-    console.warn('[customers] getUserIdFromCustomer failed', error);
-    return null;
-  }
+  const result = await db.listDocuments(APPWRITE_DATABASE_ID, CUSTOMERS_COLLECTION_ID, [
+    Query.equal('stripe_customer_id', stripeCustomerId),
+    Query.limit(1),
+  ]);
+  const userId = result.documents[0]?.user_id;
+  return typeof userId === 'string' && userId ? userId : null;
 }

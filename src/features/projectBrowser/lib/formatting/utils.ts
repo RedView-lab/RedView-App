@@ -25,15 +25,3 @@ export function formatSize(bytes: number): string {
 export function privacyLabel(privacy: ProjectSummary['privacy']): string {
   return privacy === 'public' ? translateAppText('Public') : translateAppText('Privé');
 }
-
-export function formatShortDate(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-  const locale = readDocumentAppLocale();
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const yy = String(d.getFullYear()).slice(-2);
-  const yyyy = String(d.getFullYear());
-  return locale === 'fr' ? `${dd}/${mm}/${yy}` : `${mm}/${dd}/${yyyy}`;
-}

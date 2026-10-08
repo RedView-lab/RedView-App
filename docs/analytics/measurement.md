@@ -30,7 +30,7 @@ dans la base.
   (`privacy.ts`), et le before-send (`beforeSend.ts`) filtre **tout** ce que le
   tracker envoie, Web Vitals et clics automatiques compris.
 - Contexte ajouté à chaque événement : `surface` (app/viewer), `plan` (formule :
-  demo, founder, patron), `account_age` (d0, d1_7, d8_30, d30_plus), `lang`, `theme`.
+  demo, monthly, semiannual, annual), `account_age` (d0, d1_7, d8_30, d30_plus), `lang`, `theme`.
 - Comptes de l'équipe et de test : libellé Appwrite `internal`
   (`scripts/analytics/internal-accounts.ts`) → rien n'est envoyé, et ils sortent
   du rapport d'activation.
