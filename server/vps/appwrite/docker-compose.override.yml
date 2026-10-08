@@ -35,3 +35,57 @@ services:
       --innodb-flush-method=O_DIRECT
       --innodb-buffer-pool-size=2G
       --innodb-log-file-size=256M
+
+  # ClickHouse (statistiques d'usage d'Appwrite 2.x, lues par la console
+  # seulement ; `_APP_USAGE_STATS=disabled` dans /opt/appwrite/.env arrête de les
+  # collecter). Mesure du 2026-10-08 au repos : 13,7 % d'un cœur, le premier
+  # conteneur de l'hôte — 1 003 des 1 024 fusions en 30 min (120 s sur 122)
+  # portaient sur ses propres journaux système, contre 1,6 s pour les tables
+  # d'Appwrite ; contrôle de santé = clickhouse-client (~90 ms de CPU) toutes
+  # les 5 s ; journal texte au niveau trace dans la couche du conteneur
+  # (~69 Mo/h, rotation 10 × 1 000 Mo). Sous charge (banc vps-load, 100
+  # utilisateurs) : 0,89 cœur, encore le premier. query_log et part_log restent
+  # pour le diagnostic.
+  clickhouse:
+    configs:
+      - source: clickhouse-low-overhead
+        target: /etc/clickhouse-server/config.d/z_redview_low_overhead.xml
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8123/ping >/dev/null"]
+      interval: 60s
+      start_interval: 5s
+      retries: 3
+
+  # Contrôles de santé en PHP (~80 ms de CPU chacun) : presque tout leur CPU au
+  # repos (1,7 % et 0,8 % d'un cœur). Rapides au démarrage (start_interval),
+  # lents ensuite ; `appwrite` ne dépend d'appwrite-geo que par service_started
+  # et aucun service ne dépend d'appwrite-mqtt.
+  appwrite-mqtt:
+    healthcheck:
+      interval: 60s
+      start_interval: 5s
+      retries: 3
+  appwrite-geo:
+    healthcheck:
+      interval: 60s
+      start_interval: 5s
+      retries: 3
+
+# Injecté dans le conteneur par compose (pas de montage depuis l'hôte, donc pas
+# de contexte SELinux à poser).
+configs:
+  clickhouse-low-overhead:
+    content: |
+      <clickhouse>
+        <logger><level>warning</level></logger>
+        <asynchronous_metrics_update_period_s>60</asynchronous_metrics_update_period_s>
+        <asynchronous_metric_log remove="1"/>
+        <metric_log remove="1"/>
+        <histogram_metric_log remove="1"/>
+        <trace_log remove="1"/>
+        <text_log remove="1"/>
+        <processors_profile_log remove="1"/>
+        <query_views_log remove="1"/>
+        <asynchronous_insert_log remove="1"/>
+        <background_schedule_pool_log remove="1"/>
+      </clickhouse>
