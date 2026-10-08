@@ -157,4 +157,39 @@ describe('idbProjectStore', () => {
     expect((await store.idbGetProject('kept'))?.data.name).toBe('Version à jour');
     expect(await store.idbGetProjectMeta('legacy')).toEqual(meta('legacy'));
   });
+
+  it('deleting a project also deletes its thumbnail and view', async () => {
+    const store = await loadStore();
+    await store.idbSaveProject({ ...meta('p1'), data: project('A') });
+    await store.idbSaveProject({ ...meta('p2'), data: project('B') });
+    await store.idbSaveThumbnail('p1', new Blob(['png']));
+    await store.idbSaveThumbnail('p2', new Blob(['png']));
+    await store.idbSaveProjectView({ projectId: 'p1', ownerId: 'u1', updatedAt: '2026-10-01T00:00:00.000Z', view: { itineraries: {} } });
+
+    await store.idbDeleteProject('p1');
+    expect(await store.idbGetThumbnail('p1')).toBeNull();
+    expect(await store.idbGetProjectView('p1')).toBeNull();
+    expect(await store.idbGetThumbnail('p2')).not.toBeNull();
+    expect(await store.idbGetProject('p2')).not.toBeNull();
+  });
+
+  it('a meta update on a missing project writes nothing', async () => {
+    const store = await loadStore();
+    expect(await store.idbUpdateProjectMeta('absent', { dirty: true })).toBe(false);
+    expect(await store.idbListProjectMetas()).toEqual([]);
+  });
+
+  it('sign-out wipes everything, even while another tab holds the database open', async () => {
+    const otherTab = await loadStore();
+    await otherTab.idbSaveProject({ ...meta('p1'), data: project('A') });
+    await otherTab.idbSaveThumbnail('p1', new Blob(['png']));
+    const store = await loadStore();
+    expect(await store.idbGetProject('p1')).not.toBeNull();
+
+    await store.clearProjectStore();
+    expect(await store.idbGetProject('p1')).toBeNull();
+    expect(await store.idbGetThumbnail('p1')).toBeNull();
+    // The other tab released its handle and reopens a fresh database.
+    expect(await otherTab.idbListProjectMetas()).toEqual([]);
+  });
 });
