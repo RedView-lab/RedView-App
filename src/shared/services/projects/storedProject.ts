@@ -9,12 +9,14 @@ import {
   type ProjectLocalWork,
   type ProjectViewState,
 } from '@/features/itineraryPanel/lib/project/layers';
+import { packStoredDocument } from '@/features/itineraryPanel/lib/project/storedRoutes';
 import type { ItineraryProject } from './types';
 
 /**
  * Formes stockées d'un projet (cf. `lib/project/layers.ts`) :
  *  - `projects.data` (cloud) et `data_json` de la copie IndexedDB : le
- *    document partagé seul (`schema: 2`) ;
+ *    document partagé seul (`schema: 2`, un `originalPoints` identique à
+ *    `points` remplacé par une marque : `lib/project/storedRoutes.ts`) ;
  *  - `work_json` de la copie IndexedDB : le travail en attente sur cet
  *    appareil ;
  *  - la vue de l'utilisateur à part (projectViews.ts).
@@ -47,7 +49,7 @@ export interface SerializedProject {
 export function serializeProjectForStorage(project: ItineraryProject, documentJson?: string): SerializedProject {
   const work = extractProjectLocalWork(project);
   return {
-    documentJson: documentJson ?? JSON.stringify(buildProjectDocument(project)),
+    documentJson: documentJson ?? JSON.stringify(packStoredDocument(buildProjectDocument(project))),
     workJson: hasLocalWork(work) ? JSON.stringify(work) : null,
   };
 }

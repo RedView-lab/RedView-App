@@ -4,6 +4,7 @@ import type {
   SavedCustomProfile,
 } from '../../types';
 import { deepEqual } from './deepEqual';
+import { unpackStoredDocument } from './storedRoutes';
 
 /**
  * Couches d'un projet.
@@ -335,7 +336,7 @@ export function readStoredProject(value: unknown): {
   legacyView: ProjectViewState | null;
   legacyWork: ProjectLocalWork | null;
 } | null {
-  if (isProjectDocument(value)) return { document: value, legacyView: null, legacyWork: null };
+  if (isProjectDocument(value)) return { document: unpackStoredDocument(value), legacyView: null, legacyWork: null };
   if (!isRecord(value) || !Array.isArray(value.itineraries)) return null;
   const legacy = value as unknown as ItineraryProject;
   const work = extractProjectLocalWork(legacy);
