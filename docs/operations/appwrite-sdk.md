@@ -6,6 +6,9 @@
 ## Constat
 
 - Serveur de production : **Appwrite 1.6.0** (`GET /v1/health/version`, 2026-10-08).
+  **Mis à jour le même jour en 2.3.0** ([appwrite-montee.md](appwrite-montee.md)) : les
+  SDK passent à `node-appwrite` 30.0.0 et `appwrite` 28.1.0 (format 2.3.0) ; ce
+  document décrit l'épinglage 1.6 qui précédait.
 - SDK avant ce changement : `node-appwrite` 29.1.0 (serveur, API, scripts, serveur
   temps réel) et `appwrite` 26.2.0 (client web). Ils envoient
   `X-Appwrite-Response-Format` 2.0.0 et 1.9.5 : le serveur 1.6 répondait avec

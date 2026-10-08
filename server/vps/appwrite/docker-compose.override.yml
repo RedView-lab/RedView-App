@@ -8,9 +8,10 @@
 # jamais activé, donc jamais démarrés. Aucun autre service n'en dépend.
 # openruntimes-executor et appwrite-worker-functions restent : le second
 # dépend du premier et consomme la file functions.
+# Appwrite 2.3.0 (montée du 2026-10-08, docs/operations/appwrite-montee.md) :
+# appwrite-assistant n'existe plus ; appwrite-embedding (1,5 Gio) est derrière
+# le profil compose `embedding`, jamais activé ici.
 services:
-  appwrite-assistant:
-    profiles: [disabled]
   appwrite-worker-builds:
     profiles: [disabled]
   appwrite-task-scheduler-functions:

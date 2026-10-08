@@ -32,6 +32,7 @@ documents ci-dessous approfondissent un sujet.
 | Document | Contenu |
 |---|---|
 | [security-runbook.md](operations/security-runbook.md) | Ordre de mise en place du durcissement de sécurité d'octobre 2026 |
+| [appwrite-montee.md](operations/appwrite-montee.md) | Montée du serveur Appwrite 1.6.0 → 2.3.0 : chemin, pièges trouvés en répétition, étapes, contrôles, retour arrière |
 | [appwrite-sdk.md](operations/appwrite-sdk.md) | SDK Appwrite épinglés sur la série du serveur de prod (1.6) : versions, vérifications contre la prod, risques |
 | [memoire-conteneurs.md](operations/memoire-conteneurs.md) | Limites mémoire des conteneurs Coolify (app, temps réel, site vitrine) : relevé du 2026-10-08 et proposition |
 | [licences.md](operations/licences.md) + [sbom/](operations/sbom) | Licences des dépendances livrées (serveur, navigateur) et SBOM CycloneDX 1.5, produits par `npm run sbom` après un build |
