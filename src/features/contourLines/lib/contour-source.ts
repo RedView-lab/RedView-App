@@ -8,7 +8,7 @@ export const CONTOUR_LAYER_PREFIX = 'rv-contour-lines-';
 const CONTOUR_TILESET_URL = 'mapbox://mapbox.mapbox-terrain-v2';
 const CONTOUR_SOURCE_LAYER = 'contour';
 
-/** Ground tone of the active basemap: the casing is a halo cut out of it. */
+/** Ton du sol du fond de carte actif : la bordure est un halo découpé dedans. */
 export type ContourTone = 'light' | 'dark';
 
 const CONTOUR_COLORS: Record<ContourTone, { casing: string; line: string }> = {

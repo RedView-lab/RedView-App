@@ -74,8 +74,8 @@ export function getLayerCategory(
   const isSymbol = layer.type === 'symbol';
   if (!isSymbol && !/(admin|boundary|border|disputed)/i.test(id)) return null;
 
-  // 1. Countries (Country names & country boundaries)
-  // E.g. "country-label", "country-label-sm", "admin-0-boundary", "admin-0-line", "boundary-land", etc.
+  // 1. Pays (noms de pays et frontières nationales)
+  // P. ex. "country-label", "country-label-sm", "admin-0-boundary", "admin-0-line", "boundary-land", etc.
   if (
     /(country|admin[-_]?0|boundary[-_]?(land|water)|border|disputed)/i.test(id) &&
     !/(state|province|admin[-_]?1)/i.test(id)
@@ -83,40 +83,40 @@ export function getLayerCategory(
     return 'countries';
   }
 
-  // 2. States / Regions (State / province names & admin-1 boundaries)
-  // E.g. "state-label", "state-label-sm", "province-label", "admin-1-boundary", etc.
+  // 2. États / régions (noms d'États / de provinces et limites admin-1)
+  // P. ex. "state-label", "state-label-sm", "province-label", "admin-1-boundary", etc.
   if (/(state|province|admin[-_]?1)/i.test(id)) {
     return 'states';
   }
 
   if (!isSymbol) return null;
 
-  // 3. Water body labels
+  // 3. Étiquettes des plans d'eau
   if (/(water.*label|waterway.*label|marine.*label|water-point-label|water-line-label)/i.test(id)) {
     return 'waterBody';
   }
 
-  // 4. Natural parks / protected areas
+  // 4. Parcs naturels / espaces protégés
   if (/(natural|park|protected|national-park)/i.test(id) && !/(water|marine)/i.test(id)) {
     return 'naturalParks';
   }
 
-  // 5. POI labels
+  // 5. Étiquettes des POI
   if (
     /(poi|point[-_ ]?of[-_ ]?interest|airport|aerodrome|airfield|airstrip|heliport|terminal|gate|station|transit|rail|metro|subway|tram|bus|attraction|lodging|food|hospital|school)/i.test(id)
   ) {
     return 'poi';
   }
 
-  // 6. Roads / routes
+  // 6. Routes / itinéraires
   if (
     /(road|street|highway|motorway|trunk|primary|secondary|tertiary|pedestrian|path|track|junction|shield|tunnel|bridge|traffic|railway|aerialway|aeroway|runway|taxiway)/i.test(id)
   ) {
     return 'roads';
   }
 
-  // 7. Places (Cities, towns, villages, hamlets, suburbs, neighbourhoods)
-  // E.g. "settlement-major-label", "settlement-minor-label", "place-city-lg", "place-town", etc.
+  // 7. Lieux (villes, bourgs, villages, hameaux, faubourgs, quartiers)
+  // P. ex. "settlement-major-label", "settlement-minor-label", "place-city-lg", "place-town", etc.
   if (
     /(settlement|locality|city|town|village|hamlet|suburb|neighbou?rhood|district|place[-_](city|town|village|hamlet|suburb|neighbourhood|other|island|islet|locality))/i.test(id) ||
     (id.startsWith('place-') && !/(country|state|province|admin)/i.test(id))
@@ -124,7 +124,7 @@ export function getLayerCategory(
     return 'places';
   }
 
-  // Fallback for source-layer "place_label"
+  // Repli pour la source-layer "place_label"
   const layerRecord = layer as Record<string, unknown>;
   const sourceLayer = typeof layerRecord['source-layer'] === 'string' ? layerRecord['source-layer'] : '';
   if (sourceLayer === 'place_label' || sourceLayer === 'place') {
@@ -136,14 +136,14 @@ export function getLayerCategory(
   return null;
 }
 
-// ── Master hide all labels, roads, and boundaries ─────────────────────
+// ── Masque global de toutes les étiquettes, routes et frontières ──────
 
 function applyMasterDisable(map: MapboxMap) {
   const mapWithConfig = map as MapboxMap & {
     getConfigProperty?: (importId: string, configKey: string) => unknown;
   };
 
-  // 1. Turn off all standard style configs
+  // 1. Désactive toutes les configurations du style Standard
   for (const key of STANDARD_CONFIG_KEYS) {
     try {
       const current = mapWithConfig.getConfigProperty?.('basemap', key);
@@ -151,11 +151,11 @@ function applyMasterDisable(map: MapboxMap) {
         map.setConfigProperty('basemap', key, false);
       }
     } catch {
-      // Ignore if not standard style
+      // Ignoré si ce n'est pas le style Standard
     }
   }
 
-  // 2. Turn off all style symbol layers and all overlay vector layers
+  // 2. Désactive toutes les couches symbol du style et toutes les couches vectorielles en surcouche
   try {
     const style = map.getStyle();
     if (!style?.layers) return;
@@ -171,11 +171,11 @@ function applyMasterDisable(map: MapboxMap) {
       }
     }
   } catch {
-    // Style may be loading
+    // Le style est peut-être en chargement
   }
 }
 
-// ── Apply all categories at once ──────────────────────────────────────
+// ── Application de toutes les catégories d'un coup ────────────────────
 
 function applyAll(
   map: MapboxMap,
@@ -191,7 +191,7 @@ function applyAll(
     getConfigProperty?: (importId: string, configKey: string) => unknown;
   };
 
-  // 1. Sync Mapbox Standard basemap configuration properties
+  // 1. Synchronise les propriétés de configuration du fond Mapbox Standard
   const hasPlaceLabels = Boolean(state.places);
   const hasAdminBoundaries = Boolean(state.countries || state.states);
   const hasPoi = Boolean(state.poi);
@@ -203,7 +203,7 @@ function applyAll(
       if (current === value) return;
       map.setConfigProperty('basemap', key, value);
     } catch {
-      // Config property may not exist on current style variant
+      // La propriété de configuration n'existe peut-être pas sur cette variante de style
     }
   };
 
@@ -217,7 +217,7 @@ function applyAll(
   setConfigSafe('showRoadsAndTransit', true);
   setConfigSafe('showPedestrianRoads', true);
 
-  // 2. Enumerate all style layers and apply visibility per category
+  // 2. Énumère toutes les couches du style et applique la visibilité par catégorie
   try {
     const style = map.getStyle();
     if (!style?.layers) return;
@@ -235,7 +235,7 @@ function applyAll(
       }
     }
   } catch {
-    // Style may be loading
+    // Le style est peut-être en chargement
   }
 }
 
@@ -253,14 +253,15 @@ export function useLabels(
     stateRef.current = { labelState, labelsEnabled };
   }, [labelState, labelsEnabled]);
 
-  // Apply label state whenever it changes
+  // Applique l'état des étiquettes à chaque changement
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     applyAll(map, labelState, labelsEnabled);
   }, [map, isMapLoaded, labelState, labelsEnabled]);
 
-  // Re-apply after style rebuilds. Some basemap variants keep emitting
-  // styledata while imported label layers are still being attached.
+  // Réapplique après les reconstructions du style. Certaines variantes de fond
+  // continuent d'émettre styledata pendant que les couches d'étiquettes
+  // importées sont encore en cours d'attachement.
   useEffect(() => {
     if (!map || !isMapLoaded) return;
 

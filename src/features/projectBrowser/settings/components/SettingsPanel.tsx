@@ -236,7 +236,7 @@ export function SettingsPanel({ profile }: SettingsPanelProps = {}) {
     try {
       window.localStorage.setItem(PROJECT_BROWSER_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
     } catch {
-      // Best effort only.
+      // Au mieux seulement.
     }
   }, [settings]);
 

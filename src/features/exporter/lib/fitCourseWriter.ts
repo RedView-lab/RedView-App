@@ -1,25 +1,27 @@
 import { CrcCalculator, Profile, Utils } from '@garmin/fitsdk';
 
 /**
- * FIT file writer for the course export: the same bytes as @garmin/fitsdk's
- * `Encoder` (checked byte for byte against it by fitCourseWriter.test.ts),
- * ~50× faster. The SDK rebuilds the definition of every message, scanning
- * the ~100 fields of the RECORD profile for each of its fields: 1 s for a
- * 50 000-point course, and an ultra counts twice as many. Here a definition is
- * built once per message shape and reused; the field profiles, enum values,
- * date conversion and CRC still come from the SDK.
+ * Rédacteur de fichier FIT pour l'export de parcours : les mêmes octets que
+ * l'`Encoder` de @garmin/fitsdk (vérifiés octet par octet contre lui par
+ * fitCourseWriter.test.ts), ~50× plus vite. Le SDK reconstruit la définition de
+ * chaque message en parcourant les ~100 champs du profil RECORD pour chacun de
+ * ses champs : 1 s pour un parcours de 50 000 points, et un ultra en compte
+ * deux fois plus. Ici, une définition est construite une fois par forme de
+ * message et réutilisée ; les profils de champs, valeurs d'énumération,
+ * conversion des dates et CRC viennent toujours du SDK.
  */
 
 interface BaseType {
-  /** Base type byte of the field definition (endian flag included). */
+  /** Octet de type de base de la définition du champ (drapeau d'endianness compris). */
   id: number;
   size: number;
   mask?: number;
   set?: (view: DataView, offset: number, value: number) => void;
 }
 
-// FIT protocol base types (§ 4.2) used by the course messages. Enum fields
-// are declared uint8, as the SDK's `FieldTypeToBaseType` does.
+// Types de base du protocole FIT (§ 4.2) utilisés par les messages de parcours.
+// Les champs d'énumération sont déclarés uint8, comme le fait le
+// `FieldTypeToBaseType` du SDK.
 const BASE_TYPES: Record<string, BaseType> = {
   enum: { id: 0x02, size: 1, mask: 0xff, set: (v, o, x) => v.setUint8(o, x) },
   sint8: { id: 0x01, size: 1, mask: 0xff, set: (v, o, x) => v.setInt8(o, x) },
@@ -47,7 +49,7 @@ interface FieldPlan {
   num: number;
   size: number;
   base: BaseType;
-  /** Profile field type: numeric, `dateTime`, `string` or a FIT enum type. */
+  /** Type de champ du profil : numérique, `dateTime`, `string` ou un type d'énumération FIT. */
   type: string;
   scale: number;
   offset: number;
@@ -71,7 +73,7 @@ interface FieldProfile {
 const fieldsByName = new Map<number, Map<string, FieldProfile>>();
 const enumValues = new Map<string, Map<string, number>>();
 
-/** First profile field of that name, as the SDK's `Object.entries(...).find`. */
+/** Premier champ du profil portant ce nom, comme le `Object.entries(...).find` du SDK. */
 function fieldProfile(mesgNum: number, name: string): FieldProfile | undefined {
   let byName = fieldsByName.get(mesgNum);
   if (!byName) {
@@ -98,7 +100,7 @@ function enumValue(type: string, value: string): number {
   return resolved;
 }
 
-/** Field order, numbers, sizes and base types exactly as `MesgDefinition`. */
+/** Ordre, numéros, tailles et types de base des champs, exactement comme `MesgDefinition`. */
 function buildDefinition(mesgNum: number, mesg: Record<string, unknown>): Definition {
   const fields: FieldPlan[] = [];
   for (const name of Object.keys(mesg)) {
@@ -119,13 +121,13 @@ function buildDefinition(mesgNum: number, mesg: Record<string, unknown>): Defini
   return { mesgNum, fields };
 }
 
-/** `MesgDefinition.equals`: same fields (number, size, base type), any order. */
+/** `MesgDefinition.equals` : mêmes champs (numéro, taille, type de base), dans n'importe quel ordre. */
 function sameDefinition(a: Definition, b: Definition): boolean {
   if (a.mesgNum !== b.mesgNum || a.fields.length !== b.fields.length) return false;
   return a.fields.every((lhs) => b.fields.some((rhs) => lhs.num === rhs.num && lhs.size === rhs.size && lhs.base.id === rhs.base.id));
 }
 
-/** Value written for a field, as the SDK's `#transformValue`. */
+/** Valeur écrite pour un champ, comme le `#transformValue` du SDK. */
 function encodeValue(value: unknown, field: FieldPlan): number | string {
   if (NUMERIC_TYPES.has(field.type)) {
     const number = typeof value === 'string' ? Number(value) : (value as number);
@@ -146,7 +148,7 @@ export class FitCourseWriter {
   private nextLocal = 0;
   private readonly shapes = new Map<string, Definition>();
 
-  /** Appends one message (same contract as `Encoder.onMesg`). */
+  /** Ajoute un message (même contrat que `Encoder.onMesg`). */
   write(mesgNum: number, mesg: Record<string, unknown>): this {
     const definition = this.definitionFor(mesgNum, mesg);
     let local = this.slots.findIndex((slot) => slot != null && sameDefinition(slot, definition));
@@ -176,11 +178,11 @@ export class FitCourseWriter {
     return this;
   }
 
-  /** The complete file: header, messages, CRC. */
+  /** Le fichier complet : en-tête, messages, CRC. */
   close(): Uint8Array {
     const header = new DataView(this.bytes.buffer, 0, HEADER_SIZE);
     header.setUint8(0, HEADER_SIZE);
-    header.setUint8(1, 2); // protocol version
+    header.setUint8(1, 2); // version du protocole
     header.setUint16(2, Profile.version.major * 1000 + Profile.version.minor, true);
     header.setUint32(4, this.length - HEADER_SIZE, true);
     this.bytes.set([0x2e, 0x46, 0x49, 0x54], 8); // ".FIT"
@@ -209,9 +211,9 @@ export class FitCourseWriter {
   private writeDefinition(definition: Definition, local: number): void {
     this.reserve(6 + definition.fields.length * 3);
     const at = this.length;
-    this.bytes[at] = 0x40 | local; // definition message
+    this.bytes[at] = 0x40 | local; // message de définition
     this.bytes[at + 1] = 0; // reserved
-    this.bytes[at + 2] = 0; // little endian
+    this.bytes[at + 2] = 0; // petit-boutiste
     this.view.setUint16(at + 3, definition.mesgNum, true);
     this.bytes[at + 5] = definition.fields.length;
     let offset = at + 6;

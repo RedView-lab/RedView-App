@@ -64,7 +64,7 @@ export const POI_CATEGORY_TO_KML_COLOR: Record<string, string> = {
   transport: 'ff646464',
 };
 
-/** Source (FR) labels; translated into the user's locale at export time (`resolvePoiCategoryExportLabel`). */
+/** Libellés source (FR) ; traduits dans la langue de l'utilisateur au moment de l'export (`resolvePoiCategoryExportLabel`). */
 const POI_CATEGORY_LABEL_FR: Record<string, string> = {
   fountains: "Point d'eau",
   toilets: 'Toilettes',
@@ -83,13 +83,13 @@ const POI_CATEGORY_LABEL_FR: Record<string, string> = {
   transport: 'Transport',
 };
 
-/** Category label written into exported files, in the user's locale. */
+/** Libellé de catégorie écrit dans les fichiers exportés, dans la langue de l'utilisateur. */
 function resolvePoiCategoryExportLabel(poiCategory: string | undefined): string {
   const label = poiCategory ? POI_CATEGORY_LABEL_FR[poiCategory] : undefined;
   return label ? translateAppText(label) : 'POI';
 }
 
-/** "<category> - km 12.3" (+ favourite marker) description of an exported POI. */
+/** Description « <catégorie> - km 12.3 » (+ marque de favori) d'un POI exporté. */
 export function buildPoiExportDescription(anchor: ExportAnchor): string {
   const vars = {
     category: resolvePoiCategoryExportLabel(anchor.poiCategory),
@@ -258,7 +258,7 @@ export function collectExportAnchors(
     });
   }
 
-  // Also collect POIs from itinerary.poiFeatures (features marked as favorite or loaded along corridor)
+  // Récupère aussi les POI de itinerary.poiFeatures (objets marqués favoris ou chargés le long du corridor)
   if (Array.isArray(itinerary.poiFeatures) && itinerary.poiFeatures.length > 0) {
     for (const f of itinerary.poiFeatures) {
       if (favoritesOnly && !isKeptPoi(f.favorite, f.id)) continue;

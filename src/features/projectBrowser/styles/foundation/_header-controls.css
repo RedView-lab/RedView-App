@@ -1,7 +1,7 @@
-/* Header and toolbar controls: view toggle, logout / feedback / icon buttons, top tabs, breadcrumb, create button. */
+/* Contrôles d'en-tête et de barre d'outils : bascule de vue, boutons déconnexion / avis / icônes, onglets du haut, fil d'Ariane, bouton de création. */
 
-/* Search sits on the far left of the actions cluster; the view toggle (and
-   everything after it) is pushed to the right edge. */
+/* La recherche est tout à gauche du groupe d'actions ; la bascule de vue (et
+   tout ce qui suit) est poussée contre le bord droit. */
 .rvpb-view-toggle {
   margin-left: auto;
 }

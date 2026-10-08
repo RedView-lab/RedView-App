@@ -55,7 +55,7 @@ export default function VerificationCodeModal({
     }
   }, [isOpen]);
 
-  // Resend countdown timer
+  // Minuteur du compte à rebours de renvoi
   useEffect(() => {
     if (!isOpen || countdown <= 0) return;
     const interval = setInterval(() => {
@@ -70,10 +70,10 @@ export default function VerificationCodeModal({
     const val = e.target.value;
     setErrorMessage(null);
 
-    // Filter only numeric characters
+    // Ne garde que les chiffres
     const cleaned = val.replace(/\D/g, '');
 
-    // Handle paste inside single box or normal input
+    // Gère le collage dans une seule case ou une saisie normale
     if (cleaned.length > 1) {
       const chars = cleaned.slice(0, CODE_LENGTH).split('');
       const newDigits = [...digits];
@@ -86,7 +86,7 @@ export default function VerificationCodeModal({
       const nextFocus = Math.min(index + chars.length, CODE_LENGTH - 1);
       inputsRef.current[nextFocus]?.focus();
 
-      // If all 6 digits reached, auto submit
+      // Les 6 chiffres saisis : envoi automatique
       if (newDigits.every((d) => d !== '')) {
         verify(newDigits.join(''));
       }
@@ -195,14 +195,14 @@ export default function VerificationCodeModal({
 
   return (
     <div className="rv-modal-backdrop rv-fixed-viewport" role="dialog" aria-modal="true">
-      {/* Background overlay */}
+      {/* Fond de la surcouche */}
       <div className="rv-modal-overlay" onClick={onClose} />
 
-      {/* Modal Card */}
+      {/* Carte de la fenêtre */}
       <div className="rv-modal-card" data-rv-no-translate="true" translate="no">
-        {/* Modal header */}
+        {/* En-tête de la fenêtre */}
         <header className="rv-modal-header">
-          {/* Featured icon */}
+          {/* Icône mise en avant */}
           <div className="rv-modal-featured-icon">
             <svg
               width="24"
@@ -219,7 +219,7 @@ export default function VerificationCodeModal({
             </svg>
           </div>
 
-          {/* Close button X */}
+          {/* Bouton de fermeture X */}
           <button
             type="button"
             className="rv-modal-close-btn"
@@ -241,7 +241,7 @@ export default function VerificationCodeModal({
             </svg>
           </button>
 
-          {/* Text and supporting text */}
+          {/* Texte et texte d'accompagnement */}
           <div className="rv-modal-text-group">
             <h2 className="rv-modal-title">{t('Vérifiez vos e-mails.')}</h2>
             <p className="rv-modal-supporting-text">
@@ -252,10 +252,10 @@ export default function VerificationCodeModal({
 
         {/* Content */}
         <div className="rv-modal-content">
-          {/* Error Message */}
+          {/* Message d'erreur */}
           {errorMessage && <div className="rv-modal-error">{t(errorMessage)}</div>}
 
-          {/* 6 Mega inputs row */}
+          {/* Rangée de 6 grands champs */}
           <div className="rv-modal-digits-row" style={DIGITS_ROW_STYLE}>
             {digits.map((digit, idx) => (
               <input
@@ -280,7 +280,7 @@ export default function VerificationCodeModal({
             ))}
           </div>
 
-          {/* Hint text / Resend */}
+          {/* Texte d'aide / renvoi */}
           <div className="rv-modal-hint-row">
             <span className="rv-modal-hint-label">{t("Vous n'avez rien reçu ?")}</span>
             {countdown > 0 ? (
@@ -300,7 +300,7 @@ export default function VerificationCodeModal({
           </div>
         </div>
 
-        {/* Modal actions */}
+        {/* Actions de la fenêtre */}
         <div className="rv-modal-actions">
           {/* Cancel */}
           <button

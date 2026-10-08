@@ -71,8 +71,9 @@ export function ProjectBrowserCardMenu({
 
   useLayoutEffect(() => {
     const updatePosition = () => {
-      // Portaled to <body>, outside the scaled dashboard canvas: read the
-      // canvas scale on the anchor so the menu keeps the browser's density.
+      // Rendu en portail dans <body>, hors du canvas mis à l'échelle du tableau
+      // de bord : on lit l'échelle du canvas sur l'ancre pour que le menu garde
+      // la densité du gestionnaire de projets.
       const scale = readAppScale(anchorEl);
       const scaledWidth = MENU_WIDTH * scale;
       const rect = anchorEl.getBoundingClientRect();

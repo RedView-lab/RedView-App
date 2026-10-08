@@ -18,7 +18,7 @@ async function ensureInit(): Promise<void> {
   }
 
   if (!initPromise) {
-    // Use absolute path to public/ — avoids import.meta.url resolution issues in workers
+    // Chemin absolu vers public/ — évite les problèmes de résolution de import.meta.url dans les workers
     initPromise = init({ module_or_path: '/redviewalgo_bg.wasm' }).then(
       () => {
         wasmReady = true;

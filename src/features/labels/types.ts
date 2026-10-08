@@ -1,4 +1,4 @@
-// ── Label categories for toggling map labels ──────────────────────────
+// ── Catégories d'étiquettes pour basculer les étiquettes de la carte ──
 
 export type LabelCategory =
   | 'poi'
@@ -9,7 +9,7 @@ export type LabelCategory =
   | 'countries'
   | 'waterBody';
 
-// ── How a category maps to the Mapbox API ─────────────────────────────
+// ── Correspondance d'une catégorie avec l'API Mapbox ──────────────────
 
 type LabelCategoryKind =
   | { type: 'config'; configKey: string | string[] }

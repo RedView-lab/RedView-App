@@ -1,9 +1,9 @@
 /* ==========================================================================
-   Login Screen — Card header & tabs
-   Title, subtitle, and the Sign up / Log in segmented control.
+   Écran de connexion — en-tête de carte et onglets
+   Titre, sous-titre et le contrôle segmenté Inscription / Connexion.
    ========================================================================== */
 
-/* Card Header */
+/* En-tête de carte */
 .rv-login-card-header {
   display: flex;
   flex-direction: column;
@@ -20,7 +20,7 @@
   flex-grow: 0;
 }
 
-/* Text and supporting text */
+/* Texte et texte d'accompagnement */
 .rv-login-title-group {
   display: flex;
   flex-direction: column;
@@ -37,7 +37,7 @@
   flex-grow: 0;
 }
 
-/* Title Text */
+/* Texte du titre */
 .rv-login-title {
   width: 100%;
   margin: 0;
@@ -57,7 +57,7 @@
   flex-grow: 0;
 }
 
-/* Supporting text */
+/* Texte d'accompagnement */
 .rv-login-subtitle {
   width: 100%;
   margin: 0;
@@ -80,7 +80,7 @@
   flex-grow: 0;
 }
 
-/* Horizontal tabs */
+/* Onglets horizontaux */
 .rv-login-tabs {
   display: flex;
   flex-direction: row;
@@ -103,7 +103,7 @@
   flex-grow: 0;
 }
 
-/* Tab button base */
+/* Base d'un bouton d'onglet */
 .rv-login-tab-btn {
   display: flex;
   flex-direction: row;
@@ -131,7 +131,7 @@
   transition: all 0.15s ease;
 }
 
-/* Active Tab (Log in) */
+/* Onglet actif (Connexion) */
 .rv-login-tab-btn.rv-active {
   padding: 7px 16px;
   gap: 16px;

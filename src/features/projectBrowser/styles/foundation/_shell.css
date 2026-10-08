@@ -1,8 +1,9 @@
 /*
- * The overlay is rendered inside the scaled dashboard canvas, so it must carry
- * the shared `rv-fixed-viewport` class (src/index.css) to land on the real
- * screen bounds: a bare `inset: 0` would resolve against the scaled canvas and
- * leave the app showing through at the right/bottom edges.
+ * La surcouche est rendue dans le canvas mis à l'échelle du tableau de bord :
+ * elle doit donc porter la classe partagée `rv-fixed-viewport` (src/index.css)
+ * pour tomber sur les vraies limites de l'écran. Un simple `inset: 0` se
+ * résoudrait par rapport au canvas mis à l'échelle et laisserait l'application
+ * transparaître sur les bords droit et bas.
  */
 .rvpb-overlay {
   z-index: 60;

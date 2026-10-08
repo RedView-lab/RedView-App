@@ -40,7 +40,7 @@
   cursor: default;
 }
 
-/* Activated / engaged control: same glass, brighter outline. */
+/* Contrôle activé / engagé : même verre, contour plus lumineux. */
 .rvmvc-map-tools__button.is-active {
   background: var(--rv-glass-tint);
   color: var(--rv-text);
@@ -52,7 +52,7 @@
   box-shadow: inset 0 0 0 1px var(--rv-glass-border-hover), var(--rv-float-shadow);
 }
 
-/* Pending / not engaged control: red, to draw the eye back to it. */
+/* Contrôle en attente / non engagé : rouge, pour ramener l'œil dessus. */
 .rvmvc-map-tools__button.is-inactive {
   background: rgba(137, 0, 0, 0.82);
   color: var(--rv-on-accent);
@@ -65,7 +65,7 @@
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14), 0 16px 38px light-dark(rgba(77, 0, 0, 0.24), rgba(77, 0, 0, 0.46));
 }
 
-/* Panel SHOWN: engaged, same glass as the rest of the map chrome. */
+/* Panneau AFFICHÉ : engagé, même verre que le reste de l'habillage de la carte. */
 .rvmvc-map-tools__button--panel.is-panel-shown {
   background: var(--rv-glass-tint);
   color: var(--rv-text);
@@ -77,7 +77,7 @@
   box-shadow: inset 0 0 0 1px var(--rv-glass-border-hover), var(--rv-float-shadow);
 }
 
-/* Right settings panel HIDDEN: red, to draw the eye back to the control. */
+/* Panneau de réglages de droite MASQUÉ : rouge, pour ramener l'œil sur le contrôle. */
 .rvmvc-map-tools__button--panel.is-panel-hidden {
   background: rgba(137, 0, 0, 0.82);
   color: var(--rv-on-accent);
@@ -106,11 +106,12 @@
 }
 
 /*
- * Short canvas (pages/Dashboard/lib/layout.ts, MAP_VIEWPORT_CONTROLS_COMPACT_*):
- * 2 columns of 32 px buttons (68 × 140 px) so the map stage stays usable at
- * 1:1 on a 1366×768 or 1080p-at-150 % screen. View toggles stay in the right
- * column, zoom and 2D/3D on the left. Icons (MapViewportControls `iconSize`)
- * and the 2D/3D label scale with the button, same ratio as the 40 px column.
+ * Canvas court (pages/Dashboard/lib/layout.ts, MAP_VIEWPORT_CONTROLS_COMPACT_*) :
+ * 2 colonnes de boutons de 32 px (68 × 140 px) pour que la scène de carte reste
+ * utilisable à 1:1 sur un écran 1366×768 ou 1080p à 150 %. Les bascules de vue
+ * restent dans la colonne de droite, le zoom et 2D/3D à gauche. Les icônes
+ * (`iconSize` de MapViewportControls) et le libellé 2D/3D suivent la taille du
+ * bouton, dans le même rapport que la colonne de 40 px.
  */
 .rvmvc-map-tools--compact {
   display: grid;

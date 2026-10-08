@@ -1,7 +1,7 @@
 /* ==========================================================================
-   RedView Login Screen
-   The stylesheet is split into focused sub-files under ./styles/.
-   See ./styles/index.css for the entry point and import order.
+   Écran de connexion RedView
+   La feuille de style est découpée en sous-fichiers ciblés sous ./styles/.
+   Voir ./styles/index.css pour le point d'entrée et l'ordre d'import.
    ========================================================================== */
 
 @import '../styles/index.css';

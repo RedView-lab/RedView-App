@@ -1,12 +1,13 @@
 import type { LabelCategoryDef } from '../types';
 
-// ── Label categories with Mapbox API mapping ──────────────────────────
+// ── Catégories d'étiquettes et correspondance avec l'API Mapbox ───────
 //
-// "config" categories use:
+// Les catégories « config » utilisent :
 //   map.setConfigProperty('basemap', configKey, boolean)
 //
-// "layers" categories enumerate style layers matching the regex pattern
-//   and toggle visibility via map.setLayoutProperty(id, 'visibility', …)
+// Les catégories « layers » énumèrent les couches du style qui correspondent
+//   au motif regex et basculent leur visibilité via
+//   map.setLayoutProperty(id, 'visibility', …)
 
 export const LABEL_CATEGORIES: LabelCategoryDef[] = [
   {

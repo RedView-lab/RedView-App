@@ -24,7 +24,7 @@ const KML_STYLE_COLORS: Record<string, string> = {
   'rv-end': 'ff0000ff', // red
   'rv-waypoint': 'ffff7800', // orange
   'rv-poi': 'ffffffff',
-  'rv-track': 'ff00aaff', // bright orange-red line
+  'rv-track': 'ff00aaff', // ligne rouge-orangé vif
   ...Object.fromEntries(
     Object.entries(POI_CATEGORY_TO_KML_COLOR).map(([cat, color]) => [`rv-poi-${cat}`, color]),
   ),

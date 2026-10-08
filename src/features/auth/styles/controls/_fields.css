@@ -1,6 +1,6 @@
 /* ==========================================================================
-   Login Screen — Form fields
-   Form wrapper, labels, text inputs, and the password toggle.
+   Écran de connexion — champs de formulaire
+   Enveloppe du formulaire, libellés, champs texte et bascule du mot de passe.
    ========================================================================== */
 
 /* Form */
@@ -20,7 +20,7 @@
   flex-grow: 0;
 }
 
-/* Input field */
+/* Champ de saisie */
 .rv-login-input-field {
   display: flex;
   flex-direction: column;
@@ -36,7 +36,7 @@
   flex-grow: 0;
 }
 
-/* Label wrapper */
+/* Enveloppe du libellé */
 .rv-login-label-wrapper {
   display: flex;
   flex-direction: row;
@@ -113,7 +113,7 @@
   color: rgb(var(--rv-ink) / 0.35);
 }
 
-/* Input wrapper for password toggle */
+/* Enveloppe du champ pour la bascule du mot de passe */
 .rv-login-input-wrapper {
   position: relative;
   width: 100%;
@@ -128,7 +128,7 @@
   padding-right: 44px;
 }
 
-/* Eye button toggle */
+/* Bouton œil (bascule) */
 .rv-login-password-toggle {
   position: absolute;
   right: 10px;
@@ -159,7 +159,7 @@
   outline: 1px solid rgb(var(--rv-ink) / 0.5);
 }
 
-/* Hint text */
+/* Texte d'aide */
 .rv-login-hint-text {
   width: 100%;
   max-width: 480px;
@@ -174,7 +174,7 @@
   order: 2;
 }
 
-/* Hint error text */
+/* Texte d'aide en erreur */
 .rv-login-hint-error {
   width: 100%;
   max-width: 480px;
@@ -188,7 +188,7 @@
   order: 2;
 }
 
-/* Row: Checkbox + Forgot password */
+/* Ligne : case à cocher + mot de passe oublié */
 .rv-login-row {
   display: flex;
   flex-direction: row;
@@ -206,7 +206,7 @@
   flex-grow: 0;
 }
 
-/* Checkbox container */
+/* Conteneur de la case à cocher */
 .rv-login-checkbox-label {
   display: flex;
   flex-direction: row;
@@ -221,7 +221,7 @@
   flex-grow: 1;
 }
 
-/* Checkbox base */
+/* Base de la case à cocher */
 .rv-login-checkbox {
   box-sizing: border-box;
   width: 16px;
@@ -235,7 +235,7 @@
   accent-color: #890000;
 }
 
-/* Checkbox text */
+/* Texte de la case à cocher */
 .rv-login-checkbox-text {
   height: 20px;
 
@@ -254,7 +254,7 @@
   flex-grow: 1;
 }
 
-/* Forgot password button */
+/* Bouton mot de passe oublié */
 .rv-login-forgot-btn {
   display: flex;
   flex-direction: row;

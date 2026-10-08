@@ -1,6 +1,6 @@
 /* ==========================================================================
-   Login Screen — Action buttons
-   Primary submit, social sign-in, and the footer action link.
+   Écran de connexion — boutons d'action
+   Envoi principal, connexion sociale et lien d'action du pied de page.
    ========================================================================== */
 
 /* Actions */
@@ -20,7 +20,7 @@
   flex-grow: 0;
 }
 
-/* Primary Submit Button */
+/* Bouton d'envoi principal */
 .rv-login-submit-btn {
   box-sizing: border-box;
 
@@ -63,7 +63,7 @@
   transform: scale(0.99);
 }
 
-/* Social Button Groups */
+/* Groupes de boutons sociaux */
 .rv-login-social-group {
   display: flex;
   flex-direction: column;
@@ -82,7 +82,7 @@
   flex-grow: 0;
 }
 
-/* Social Button (Google) */
+/* Bouton social (Google) */
 .rv-login-social-btn {
   box-sizing: border-box;
 
@@ -122,7 +122,7 @@
   border-color: rgb(var(--rv-ink) / 0.2);
 }
 
-/* Social Icon */
+/* Icône sociale */
 .rv-login-social-icon {
   width: 24px;
   height: 24px;
@@ -135,7 +135,7 @@
   flex-grow: 0;
 }
 
-/* Bottom Action: Continue with one-time e-mail */
+/* Action du bas : continuer avec un e-mail à usage unique */
 .rv-login-footer-action {
   display: flex;
   flex-direction: row;

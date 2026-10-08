@@ -1,9 +1,9 @@
 /* ==========================================================================
-   Login Screen — Header chrome
-   Top navigation bar: logo link and the "Sign up / Log in" switch.
+   Écran de connexion — habillage d'en-tête
+   Barre de navigation du haut : lien du logo et bascule « Inscription / Connexion ».
    ========================================================================== */
 
-/* Header navigation */
+/* Navigation d'en-tête */
 .rv-login-header-nav {
   display: flex;
   flex-direction: column;
@@ -20,7 +20,7 @@
   flex-grow: 0;
 }
 
-/* Header Container */
+/* Conteneur d'en-tête */
 .rv-login-header-container {
   display: flex;
   flex-direction: row;
@@ -38,7 +38,7 @@
   flex-grow: 0;
 }
 
-/* Frame 36468 — Logo */
+/* Frame 36468 — logo */
 .rv-login-logo-link {
   display: flex;
   flex-direction: row;
@@ -66,7 +66,7 @@
   display: block;
 }
 
-/* Header Row (Right) */
+/* Ligne d'en-tête (droite) */
 .rv-login-header-row {
   display: flex;
   flex-direction: row;
@@ -82,7 +82,7 @@
   flex-grow: 0;
 }
 
-/* Header Prompt Text */
+/* Texte d'invite de l'en-tête */
 .rv-login-header-text {
   height: 20px;
 
@@ -102,7 +102,7 @@
   flex-grow: 0;
 }
 
-/* Header Sign Up Button */
+/* Bouton d'inscription de l'en-tête */
 .rv-login-header-btn {
   display: flex;
   flex-direction: row;

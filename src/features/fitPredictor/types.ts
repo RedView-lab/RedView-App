@@ -29,24 +29,24 @@ export interface PredictionConfig {
   gender?: Gender;
 }
 
-/** Config of the running / trail-running engine (`predict_run`). */
+/** Configuration du moteur course à pied / trail (`predict_run`). */
 export interface RunPredictionConfig {
   discipline: FootDiscipline;
-  /** Practice level id: debutant | intermediaire | avance | expert. */
+  /** Identifiant du niveau de pratique : debutant | intermediaire | avance | expert. */
   level?: string;
   vma_kmh?: number;
   ref_distance_m?: number;
   ref_time_s?: number;
-  /** Runner weight including pack (kg). */
+  /** Poids du coureur, sac compris (kg). */
   mass_kg?: number;
-  /** Terrain technicality 0..1 (trail only). */
+  /** Technicité du terrain 0..1 (trail seulement). */
   technicality?: number;
   start_time_h?: number;
   gender?: Gender;
   max_route_points?: number;
 }
 
-/** Runner parameters resolved by the running engine. */
+/** Paramètres du coureur résolus par le moteur de course à pied. */
 export interface RunnerProfile {
   v_ref_kmh: number;
   v_ref_source: 'fit' | 'chrono' | 'vma' | 'level';
@@ -111,11 +111,11 @@ export interface PredictionResult {
   elevation_loss_m: number;
   segments: SegmentSummary[];
   points: PredictionPoint[];
-  /** Cycling engine only. */
+  /** Moteur vélo seulement. */
   rider_profile?: RiderProfile;
-  /** Running engine only. */
+  /** Moteur course à pied seulement. */
   runner_profile?: RunnerProfile;
-  /** Engine that produced the result; absent on (older) cycling predictions. */
+  /** Moteur qui a produit le résultat ; absent sur les (anciennes) prédictions vélo. */
   discipline?: SportDiscipline;
   total_time_low_s?: number;
   total_time_high_s?: number;

@@ -44,7 +44,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
-  // Recovery token states held in memory (sanitized from URL immediately)
+  // États des jetons de récupération gardés en mémoire (retirés de l'URL immédiatement)
   const [recoveryUserId, setRecoveryUserId] = useState<string | null>(null)
   const [recoverySecret, setRecoverySecret] = useState<string | null>(null)
   const [resendCooldown, setResendCooldown] = useState(0)
@@ -61,7 +61,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
     onUrlError: setErrorMessage,
   })
 
-  // Cooldown timer for recovery resend button
+  // Minuteur de délai du bouton de renvoi de récupération
   useEffect(() => {
     if (resendCooldown <= 0) return
     const timer = setInterval(() => {
@@ -70,7 +70,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
     return () => clearInterval(timer)
   }, [resendCooldown])
 
-  // Verification modal states
+  // États de la fenêtre de vérification
   const [showVerificationModal, setShowVerificationModal] = useState(false)
 
   // Page vue virtuelle de l'écran affiché (mesure d'audience).
@@ -86,7 +86,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
 
     const trimmedEmail = email.trim()
 
-    // 1. Forgot password mode: request recovery email via secure backend endpoint (Anti-enumeration)
+    // 1. Mode mot de passe oublié : demande l'e-mail de récupération via un point d'accès serveur sécurisé (anti-énumération)
     if (mode === 'forgot-password') {
       if (!trimmedEmail || !trimmedEmail.includes('@')) {
         setErrorMessage('Veuillez fournir une adresse e-mail valide.')
@@ -104,14 +104,14 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
         }
 
         trackAnalyticsEvent({ name: 'password_reset_requested' })
-        // Generic anti-enumeration confirmation message
+        // Message de confirmation générique (anti-énumération)
         setSuccessMessage(
           data?.message ||
             'Si un compte est associé à cette adresse e-mail, un lien de réinitialisation vous a été envoyé.'
         )
         setResendCooldown(60)
       } catch {
-        // Defensive anti-enumeration: always display confirmation card
+        // Anti-énumération défensive : on affiche toujours la carte de confirmation
         setSuccessMessage(
           'Si un compte est associé à cette adresse e-mail, un lien de réinitialisation vous a été envoyé.'
         )
@@ -122,7 +122,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
       return
     }
 
-    // 2. Reset password mode: update password with token from memory or URL
+    // 2. Mode réinitialisation : met à jour le mot de passe avec le jeton en mémoire ou dans l'URL
     if (mode === 'reset-password') {
       if (!password || !confirmPassword) {
         setErrorMessage('Veuillez renseigner et confirmer le nouveau mot de passe.')
@@ -204,11 +204,11 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
     }
 
     try {
-      // In case an old session remains active
+      // Au cas où une ancienne session serait encore active
       try {
         await account.deleteSession('current')
       } catch {
-        // Ignore if no active session
+        // Ignoré s'il n'y a pas de session active
       }
 
       if (mode === 'signup') {
@@ -239,7 +239,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
         await account.create(ID.unique(), trimmedEmail, password, trimmedName)
         await account.createEmailPasswordSession(trimmedEmail, password)
       } else {
-        // Mode login
+        // Mode connexion
         await account.createEmailPasswordSession(trimmedEmail, password)
       }
 
@@ -272,7 +272,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
         return { success: false, error: data.error || 'Code invalide.' }
       }
 
-      // Account created with email verified -> establish session
+      // Compte créé avec e-mail vérifié -> ouvre la session
       await account.createEmailPasswordSession(trimmedEmail, password)
       const user = await account.get()
       saveStoredAppwriteSession({ id: user.$id, email: user.email, name: user.name })
@@ -324,10 +324,10 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
     <div className="rv-login-page">
       {!showVerificationModal && (
         <>
-          {/* Header navigation */}
+          {/* Navigation d'en-tête */}
           <header className="rv-login-header-nav">
             <div className="rv-login-header-container">
-              {/* Frame 36468 — Logo */}
+              {/* Frame 36468 — logo */}
               <a href={landingUrl} className="rv-login-logo-link" aria-label="RedView">
                 <RedViewLogo className="rv-login-logo-img" />
               </a>
@@ -358,7 +358,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
         <div className="rv-login-content">
           {/* Header */}
           <div className="rv-login-card-header">
-            {/* Text and supporting text */}
+            {/* Texte et texte d'accompagnement */}
             <div className="rv-login-title-group">
               <h1 className="rv-login-title">
                 {mode === 'forgot-password'
@@ -380,7 +380,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
               </p>
             </div>
 
-            {/* Horizontal tabs */}
+            {/* Onglets horizontaux */}
             {(mode === 'login' || mode === 'signup') && (
               <div className="rv-login-tabs" role="tablist">
                 <button
@@ -415,9 +415,9 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
             )}
           </div>
 
-          {/* Content Body */}
+          {/* Corps du contenu */}
           <div className="rv-login-body">
-            {/* Success Message banner (for reset-password, login, signup) */}
+            {/* Bandeau de message de succès (réinitialisation, connexion, inscription) */}
             {successMessage && mode !== 'forgot-password' && (
               <div
                 style={{
@@ -435,7 +435,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
               </div>
             )}
 
-            {/* Error Message banner */}
+            {/* Bandeau de message d'erreur */}
             {errorMessage && (
               <div
                 style={{
@@ -453,7 +453,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
               </div>
             )}
 
-            {/* If in forgot-password mode and email has been sent, show dedicated confirmation card */}
+            {/* En mode mot de passe oublié, une fois l'e-mail envoyé, affiche une carte de confirmation dédiée */}
             {mode === 'forgot-password' && successMessage ? (
               <RecoveryEmailSent
                 email={email.trim()}
@@ -468,7 +468,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
             ) : (
               /* Form */
               <form onSubmit={handleSubmit} className="rv-login-form">
-              {/* Name Input Field (Sign up only) */}
+              {/* Champ nom (inscription seulement) */}
               {mode === 'signup' && (
                 <div className="rv-login-input-field">
                   <div className="rv-login-label-wrapper">
@@ -490,7 +490,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
                 </div>
               )}
 
-              {/* Email Input Field (all modes except reset-password) */}
+              {/* Champ e-mail (tous les modes sauf réinitialisation) */}
               {mode !== 'reset-password' && (
                 <div className="rv-login-input-field">
                   <div className="rv-login-label-wrapper">
@@ -512,7 +512,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
                 </div>
               )}
 
-              {/* Password Input Field (all modes except forgot-password) */}
+              {/* Champ mot de passe (tous les modes sauf mot de passe oublié) */}
               {mode !== 'forgot-password' && (
                 <PasswordField
                   id="rv-password"
@@ -525,7 +525,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
                 />
               )}
 
-              {/* Confirm Password Input Field (Sign up and Reset password only) */}
+              {/* Champ de confirmation du mot de passe (inscription et réinitialisation seulement) */}
               {(mode === 'signup' || mode === 'reset-password') && (
                 <PasswordField
                   id="rv-confirm-password"
@@ -542,7 +542,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
                 />
               )}
 
-              {/* Row: Checkbox & Forgot Password (Log in only) */}
+              {/* Ligne : case à cocher et mot de passe oublié (connexion seulement) */}
               {isLogin && (
                 <div className="rv-login-row">
                   <label className="rv-login-checkbox-label">
@@ -571,7 +571,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
 
               {/* Actions */}
               <div className="rv-login-actions">
-                {/* Primary Button */}
+                {/* Bouton principal */}
                 <button type="submit" className="rv-login-submit-btn" disabled={loading}>
                   {loading
                     ? 'Processing...'
@@ -584,7 +584,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
                     : 'Get started'}
                 </button>
 
-                {/* Social Button: Google (only in login/signup) */}
+                {/* Bouton social : Google (connexion / inscription seulement) */}
                 {(mode === 'login' || mode === 'signup') && (
                   <div className="rv-login-social-group">
                     <button
@@ -604,7 +604,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
             </form>
             )}
 
-            {/* Footer Action */}
+            {/* Action de pied de page */}
             {mode === 'forgot-password' || mode === 'reset-password' ? (
               !(mode === 'forgot-password' && successMessage) && (
                 <button
@@ -654,7 +654,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
         </>
       )}
 
-      {/* 6-digit Email Verification Modal */}
+      {/* Fenêtre de vérification de l'e-mail à 6 chiffres */}
       <VerificationCodeModal
         isOpen={showVerificationModal}
         onClose={() => setShowVerificationModal(false)}

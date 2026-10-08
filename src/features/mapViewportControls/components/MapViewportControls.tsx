@@ -22,14 +22,14 @@ interface MapViewportControlsProps {
   immersiveMode: boolean;
   onToggleImmersiveMode: () => void;
   /**
-   * Visibility of the right settings panel (only panel this control drives).
-   * The dedicated toggle button is rendered only when `onToggleRightPanel` is
-   * provided.
+   * Visibilité du panneau de réglages de droite (seul panneau que ce contrôle
+   * pilote). Le bouton de bascule dédié n'est affiché que si
+   * `onToggleRightPanel` est fourni.
    */
   isRightPanelVisible?: boolean;
   onToggleRightPanel?: () => void;
   routeColor?: string | null;
-  /** Short canvas: 2-column grid of 32 px buttons (pages/Dashboard/lib/layout.ts reserves its size). */
+  /** Canvas court : grille de 2 colonnes de boutons de 32 px (pages/Dashboard/lib/layout.ts réserve sa taille). */
   compact?: boolean;
 }
 
@@ -57,7 +57,7 @@ function SurfacePatternPreview({ type, color = '#ff3b30' }: { type: SurfaceType;
       className="rvmvc-route-legend-popover__sample"
       aria-hidden="true"
     >
-      {/* Casing halo for high contrast */}
+      {/* Halo de bordure pour un fort contraste */}
       <line
         x1="5"
         y1="8"
@@ -68,7 +68,7 @@ function SurfacePatternPreview({ type, color = '#ff3b30' }: { type: SurfaceType;
         strokeLinecap="round"
         strokeOpacity="0.9"
       />
-      {/* Route main colored line */}
+      {/* Ligne colorée principale de la trace */}
       <line
         x1="5"
         y1="8"
@@ -78,7 +78,7 @@ function SurfacePatternPreview({ type, color = '#ff3b30' }: { type: SurfaceType;
         strokeWidth="4"
         strokeLinecap="round"
       />
-      {/* Overlay patterns matching Mapbox layer styles */}
+      {/* Motifs de surcouche correspondant aux styles des couches Mapbox */}
       {type === 'paved' && (
         <line
           x1="5"
@@ -139,7 +139,7 @@ function clampZoom(map: MapboxMap, delta: number) {
   return Math.min(map.getMaxZoom(), Math.max(map.getMinZoom(), target));
 }
 
-// memo: the dashboard shell re-renders on every panel-resize frame.
+// memo : la coque du tableau de bord se redessine à chaque image de redimensionnement des panneaux.
 export const MapViewportControls = memo(function MapViewportControls({
   map,
   isMapLoaded,
@@ -258,13 +258,13 @@ export const MapViewportControls = memo(function MapViewportControls({
 
   const disabled = !isMapLoaded || map == null;
 
-  // Drives the right settings panel ONLY — never the left drawer.
+  // Pilote UNIQUEMENT le panneau de réglages de droite — jamais le tiroir de gauche.
   const showRightPanelToggle = onToggleRightPanel != null;
   const rightPanelToggleLabel = isRightPanelVisible
     ? t('Masquer le panneau droit')
     : t('Afficher le panneau droit');
 
-  // Close the legend popover when clicking anywhere outside of it.
+  // Ferme la bulle de légende sur un clic n'importe où en dehors.
   useEffect(() => {
     if (!isLegendOpen) return;
     const handlePointerDown = (event: PointerEvent) => {
@@ -325,7 +325,7 @@ export const MapViewportControls = memo(function MapViewportControls({
     });
   };
 
-  // 32 px buttons of the compact grid: icons shrink with them (40 → 32 px).
+  // Boutons de 32 px de la grille compacte : les icônes rétrécissent avec eux (40 → 32 px).
   const iconSize = (regular: number) => (compact ? Math.round(regular * 0.8) : regular);
 
   return (

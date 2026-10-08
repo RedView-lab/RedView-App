@@ -1,7 +1,7 @@
 /**
- * Geometry helpers for the analysis zone (single user-drawn polygon that
- * focuses the terrain widgets — slopes / altitude / sunlight — on a bounded
- * area instead of the whole viewport).
+ * Aides géométriques de la zone d'analyse (polygone unique dessiné par
+ * l'utilisateur qui concentre les widgets de terrain — pentes / altitude /
+ * ensoleillement — sur une zone bornée plutôt que sur toute la vue).
  */
 
 export interface AnalysisZonePoint {
@@ -15,7 +15,7 @@ export interface AnalysisZone {
   createdAt: string;
 }
 
-/** [west, south, east, north] in degrees. */
+/** [ouest, sud, est, nord] en degrés. */
 type BoundsTuple = [number, number, number, number];
 
 const LNG_MIN = -180;
@@ -37,7 +37,7 @@ export function isValidAnalysisZone(zone: AnalysisZone | null | undefined): zone
   );
 }
 
-/** Ring of [lng, lat] pairs, closed (first point repeated at the end). */
+/** Anneau de paires [lng, lat], fermé (premier point répété à la fin). */
 function analysisZoneRing(zone: AnalysisZone): [number, number][] {
   const ring = zone.points.map((point) => [point.lon, point.lat] as [number, number]);
   const first = ring[0];
@@ -68,15 +68,17 @@ export function analysisZoneBBox(zone: AnalysisZone): BoundsTuple {
 }
 
 /**
- * Mapbox raster-source `bounds` for the zone. Tiles outside these bounds are
- * never requested, which is what keeps the slope / altitude tile fan-out
- * proportional to the zone size instead of the viewport size.
+ * `bounds` de la source raster Mapbox pour la zone. Les tuiles hors de ces
+ * limites ne sont jamais demandées : c'est ce qui garde le nombre de tuiles de
+ * pente / d'altitude proportionnel à la taille de la zone plutôt qu'à celle de
+ * la vue.
  */
 export function analysisZoneSourceBounds(zone: AnalysisZone): [number, number, number, number] {
   const [w, s, e, n] = analysisZoneBBox(zone);
-  // Shrink slightly inside the bbox so neighbouring tiles that only touch the
-  // bbox edge are not requested when the polygon strictly excludes them. The
-  // Service Worker applies the exact per-pixel polygon mask on top of this.
+  // Rétrécit légèrement à l'intérieur de l'emprise pour que les tuiles voisines
+  // qui ne font que toucher le bord de l'emprise ne soient pas demandées quand
+  // le polygone les exclut strictement. Le Service Worker applique par-dessus
+  // le masque exact du polygone, pixel par pixel.
   const padX = Math.min(0.0025, (e - w) * 0.01);
   const padY = Math.min(0.0025, (n - s) * 0.01);
   return [
@@ -88,10 +90,11 @@ export function analysisZoneSourceBounds(zone: AnalysisZone): [number, number, n
 }
 
 /**
- * Compact stable hash (FNV-1a 32-bit, hex) of the ring, quantised to 1e-6 deg
- * (~0.1 m) so floating point noise never changes the key. Used as the
- * `?zone=` cache-busting token in tile URLs and as the Service Worker
- * registry key: same polygon → same tiles, edited polygon → fresh tiles.
+ * Empreinte stable et compacte (FNV-1a 32 bits, hexadécimal) de l'anneau,
+ * quantifiée à 1e-6 degré (~0,1 m) pour que le bruit des flottants ne change
+ * jamais la clé. Sert de jeton d'invalidation `?zone=` dans les URL de tuiles
+ * et de clé de registre du Service Worker : même polygone → mêmes tuiles,
+ * polygone modifié → nouvelles tuiles.
  */
 export function hashAnalysisZone(zone: AnalysisZone): string {
   let hash = 0x811c9dc5;
@@ -106,7 +109,7 @@ export function hashAnalysisZone(zone: AnalysisZone): string {
   return hash.toString(16).padStart(8, '0');
 }
 
-/** Flat [lng, lat, lng, lat, …] ring payload for workers / Service Worker. */
+/** Anneau à plat [lng, lat, lng, lat, …] pour les workers / le Service Worker. */
 export function analysisZoneRingPayload(zone: AnalysisZone): number[] {
   const out: number[] = [];
   for (const [lng, lat] of analysisZoneRing(zone)) {

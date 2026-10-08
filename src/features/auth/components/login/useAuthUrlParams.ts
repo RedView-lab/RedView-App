@@ -22,14 +22,14 @@ export function useAuthUrlParams({ onRecoveryLink, onUrlError }: UseAuthUrlParam
         if (uid && sec) {
           onRecoveryLink({ userId: uid, secret: sec, email: params.get('email') })
 
-          // SECURITY: Purge pre-existing local session artifacts (Anti-Session Fixation)
+          // SÉCURITÉ : purge les traces de session locale préexistantes (anti-fixation de session)
           clearStoredAppwriteSession()
           try {
             account.deleteSession('current').catch(() => {})
           } catch {}
 
-          // SECURITY: Immediately strip sensitive recovery tokens from browser address bar
-          // and history to prevent token leakage via referrers, history or shoulder surfing
+          // SÉCURITÉ : retire immédiatement les jetons de récupération sensibles de la barre
+          // d'adresse et de l'historique, contre les fuites par referrer, historique ou regard indiscret
           window.history.replaceState({}, document.title, window.location.pathname)
         }
       } else if (params.has('error') || params.has('message')) {

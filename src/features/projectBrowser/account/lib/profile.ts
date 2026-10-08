@@ -213,7 +213,7 @@ function clearUserScopedLocalStorage() {
     }
     keysToRemove.forEach((k) => window.localStorage.removeItem(k));
   } catch {
-    // ignore storage access errors
+    // on ignore les erreurs d'accès au stockage
   }
 }
 

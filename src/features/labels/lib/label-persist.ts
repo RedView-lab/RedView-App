@@ -3,7 +3,7 @@ import { LABEL_CATEGORIES } from './label-config';
 
 const STORAGE_KEY = 'redview_label_prefs';
 
-// ── Build default state from category definitions ─────────────────────
+// ── Construction de l'état par défaut à partir des définitions de catégories ──
 
 function defaults(): Record<LabelCategory, boolean> {
   const state = {} as Record<LabelCategory, boolean>;
@@ -13,7 +13,7 @@ function defaults(): Record<LabelCategory, boolean> {
   return state;
 }
 
-// ── Load persisted label state from localStorage ──────────────────────
+// ── Chargement de l'état persisté des étiquettes depuis localStorage ──
 
 export function loadLabelState(): Record<LabelCategory, boolean> {
   try {

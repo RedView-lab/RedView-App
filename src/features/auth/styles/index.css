@@ -1,7 +1,7 @@
 /* ==========================================================================
-   RedView Login Screen — Styles entry point
-   Split into sub-files by concern; import order matters (layout -> chrome ->
-   controls -> actions -> responsive).
+   Écran de connexion RedView — point d'entrée des styles
+   Découpé en sous-fichiers par sujet ; l'ordre d'import compte (layout ->
+   chrome -> controls -> actions -> responsive).
    ========================================================================== */
 
 @import './layout/index.css';

@@ -52,7 +52,7 @@ export const ACCOUNT_SPORT_OPTIONS = [
 
 export const ACCOUNT_LEVEL_OPTIONS = ['Debutant', 'Intermediaire', 'Avance', 'Expert'] as const;
 
-/** Display labels for the persisted (unaccented) sport/level values. */
+/** Libellés d'affichage des valeurs sport / niveau persistées (sans accents). */
 const ACCOUNT_OPTION_DISPLAY_LABELS: Readonly<Record<string, string>> = {
   'Velo de route': 'Cyclisme sur route',
   Debutant: 'Débutant',

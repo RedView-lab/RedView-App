@@ -15,9 +15,10 @@ import { useProjectBrowserOverlayState } from './useProjectBrowserOverlayState';
 
 import '../../../styles/index.css';
 
-// Loaded when a payment flow opens: the module starts Stripe.js (`loadStripe`)
-// as soon as it is evaluated — on the initial load it cost every user 4
-// requests and ~250 KiB from js.stripe.com, plus ~7 KiB brotli of the shell.
+// Chargé à l'ouverture d'un parcours de paiement : le module démarre Stripe.js
+// (`loadStripe`) dès qu'il est évalué — au chargement initial, cela coûtait à
+// chaque utilisateur 4 requêtes et ~250 Kio depuis js.stripe.com, plus ~7 Kio
+// brotli de la coque.
 const BillingActionModal = lazy(() =>
   import('../../../billing/components/BillingActionModal/BillingActionModal').then((m) => ({ default: m.BillingActionModal })),
 );

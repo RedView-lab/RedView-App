@@ -20,7 +20,7 @@ export async function importProjectFiles(
   files: File[],
   { folderId, siblingNames }: { folderId: string | null; siblingNames: string[] },
 ): Promise<ProjectImportResult> {
-  // Reader (ZIP, sanitizer, uploads) loaded on use, off the project browser's initial load.
+  // Lecteur (ZIP, assainissement, envois) chargé à l'usage, hors du chargement initial du gestionnaire de projets.
   const { importRedviewFile } = await import('@/features/redviewFile/lib/importProject');
   const names = [...siblingNames];
   const imported: ProjectSummary[] = [];

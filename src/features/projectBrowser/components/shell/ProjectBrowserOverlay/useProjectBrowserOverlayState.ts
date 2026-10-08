@@ -68,7 +68,7 @@ function readStoredActiveTab(userId: string | null): OverlayTab | null {
       return raw;
     }
   } catch {
-    /* ignore storage failures */
+    /* échecs de stockage ignorés */
   }
 
   return null;
@@ -80,7 +80,7 @@ function writeStoredActiveTab(userId: string | null, tab: OverlayTab): void {
   try {
     window.sessionStorage.setItem(getProjectBrowserActiveTabStorageKey(userId), tab);
   } catch {
-    /* ignore storage failures */
+    /* échecs de stockage ignorés */
   }
 }
 

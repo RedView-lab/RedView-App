@@ -1,9 +1,9 @@
 /* ==========================================================================
-   Login Screen — Page shell
-   Root wrapper, background, and overall page framing.
+   Écran de connexion — coque de page
+   Enveloppe racine, fond et cadrage général de la page.
    ========================================================================== */
 
-/* Root Page Wrapper: Log in */
+/* Enveloppe racine de la page : connexion */
 .rv-login-page {
   display: flex;
   flex-direction: column;
@@ -29,7 +29,7 @@
   color: var(--rv-text);
 }
 
-/* Main Container — centered regardless of viewport width */
+/* Conteneur principal — centré quelle que soit la largeur de la fenêtre */
 .rv-login-main-container {
   display: flex;
   flex-direction: column;
@@ -49,7 +49,7 @@
   flex-grow: 0;
 }
 
-/* Content Box — the 480px column that holds the whole auth card */
+/* Boîte de contenu — la colonne de 480 px qui contient toute la carte d'authentification */
 .rv-login-content {
   display: flex;
   flex-direction: column;
@@ -65,7 +65,7 @@
   flex-grow: 0;
 }
 
-/* Form Body / Content */
+/* Corps du formulaire / contenu */
 .rv-login-body {
   display: flex;
   flex-direction: column;

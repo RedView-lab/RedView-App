@@ -210,7 +210,7 @@ export function useExportProject() {
     mutationFn: async ({ id }: { id: string }) => {
       const row = await getProject(id);
       if (!row) throw new Error('Project not found');
-      // Writer (ZIP, FIT copies, thumbnail) loaded on use, off the initial load.
+      // Rédacteur (ZIP, copies FIT, miniature) chargé à l'usage, hors du chargement initial.
       const { exportProjectAsRedview } = await import('@/features/redviewFile/lib/exportProject');
       return exportProjectAsRedview({ project: row.data, projectId: id });
     },

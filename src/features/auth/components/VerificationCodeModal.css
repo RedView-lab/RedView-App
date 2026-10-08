@@ -1,10 +1,10 @@
-/* Verification Code Modal - 100% Pixel Perfect to Figma Reference */
+/* Fenêtre de code de vérification — fidèle au pixel près à la référence Figma */
 
 .rv-modal-backdrop {
   position: fixed;
-  /* Handled by .rv-fixed-viewport (src/index.css): this overlay is rendered
-       inside the scaled dashboard canvas, where `inset: 0` would span the
-       canvas box instead of the real viewport. */
+  /* Géré par .rv-fixed-viewport (src/index.css) : cette surcouche est rendue
+       dans le canvas mis à l'échelle du tableau de bord, où `inset: 0`
+       couvrirait la boîte du canvas au lieu de la vraie fenêtre. */
   width: 100vw;
   height: 100vh;
   display: flex;
@@ -17,7 +17,7 @@
   background: light-dark(#f4f4f5, #131313);
 }
 
-/* Background overlay */
+/* Fond de la surcouche */
 .rv-modal-overlay {
   position: absolute;
   inset: 0;
@@ -25,7 +25,7 @@
   z-index: 0;
 }
 
-/* Modal Card */
+/* Carte de la fenêtre */
 .rv-modal-card {
   position: relative;
   display: flex;
@@ -69,7 +69,7 @@
   z-index: 1;
 }
 
-/* Featured icon */
+/* Icône mise en avant */
 .rv-modal-featured-icon {
   width: 48px;
   height: 48px;
@@ -83,7 +83,7 @@
   box-shadow: inset 0 0 0 1px rgb(var(--rv-ink) / 0.1);
 }
 
-/* Close button X */
+/* Bouton de fermeture X */
 .rv-modal-close-btn {
   position: absolute;
   right: 16px;
@@ -107,7 +107,7 @@
   background: rgb(var(--rv-ink) / 0.08);
 }
 
-/* Title & supporting text */
+/* Titre et texte d'accompagnement */
 .rv-modal-text-group {
   display: flex;
   flex-direction: column;
@@ -143,7 +143,7 @@
   color: rgb(var(--rv-ink) / 0.6);
 }
 
-/* Content & Verification code input field */
+/* Contenu et champ de saisie du code de vérification */
 .rv-modal-content {
   display: flex;
   flex-direction: column;
@@ -155,7 +155,7 @@
   z-index: 1;
 }
 
-/* 4 Mega inputs row */
+/* Rangée de 4 grands champs */
 .rv-modal-digits-row {
   display: flex;
   flex-direction: row;
@@ -168,7 +168,7 @@
   box-sizing: border-box;
 }
 
-/* Mega input field base */
+/* Base d'un grand champ */
 .rv-mega-input {
   box-sizing: border-box;
   width: 80px;
@@ -200,7 +200,7 @@
   background: rgb(var(--rv-ink) / 0.09);
 }
 
-/* Exact Figma focus ring: 2px white inner ring + 4px/5px #9E77ED purple ring */
+/* Anneau de focus exact de Figma : anneau intérieur blanc de 2 px + anneau violet #9E77ED de 4 px / 5 px */
 .rv-mega-input:focus,
 .rv-mega-input.is-focused {
   border-color: rgb(var(--rv-ink) / 0.6);
@@ -215,7 +215,7 @@
   box-shadow: 0px 0px 0px 2px #f87171, 0px 0px 0px 4px rgba(248, 113, 113, 0.25) !important;
 }
 
-/* Hint text & Resend */
+/* Texte d'aide et renvoi */
 .rv-modal-hint-row {
   display: flex;
   flex-direction: row;
@@ -257,7 +257,7 @@
   text-decoration: none;
 }
 
-/* Error message banner */
+/* Bandeau de message d'erreur */
 .rv-modal-error {
   width: 100%;
   max-width: 356px;
@@ -284,7 +284,7 @@
   z-index: 1;
 }
 
-/* Cancel Button */
+/* Bouton Annuler */
 .rv-modal-btn-cancel {
   box-sizing: border-box;
   display: flex;
@@ -316,7 +316,7 @@
   border-color: rgb(var(--rv-ink) / 0.25);
 }
 
-/* Confirm Button - RedView Crimson */
+/* Bouton Confirmer — cramoisi RedView */
 .rv-modal-btn-confirm {
   box-sizing: border-box;
   display: flex;
@@ -354,7 +354,7 @@
   cursor: not-allowed;
 }
 
-/* Spinner inside button */
+/* Indicateur de chargement dans le bouton */
 .rv-modal-spinner {
   width: 16px;
   height: 16px;

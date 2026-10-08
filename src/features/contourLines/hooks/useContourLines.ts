@@ -32,7 +32,7 @@ function hideNativeContourLayers(map: MapboxMap) {
     try {
       map.setLayoutProperty(layerId, 'visibility', 'none');
     } catch {
-      /* style may still be transitioning */
+      /* le style est peut-être encore en transition */
     }
   }
 }
@@ -57,7 +57,7 @@ function addContourLayers(map: MapboxMap, opacity: number, intervalMeters: numbe
       );
     }
   } catch {
-    /* style may be transitioning */
+    /* le style est peut-être en transition */
   }
 }
 
@@ -67,7 +67,7 @@ function removeContourLayers(map: MapboxMap) {
     if (map.getLayer(CONTOUR_CASING_LAYER_ID)) map.removeLayer(CONTOUR_CASING_LAYER_ID);
     if (map.getSource(CONTOUR_SOURCE_ID)) map.removeSource(CONTOUR_SOURCE_ID);
   } catch {
-    /* style may be transitioning */
+    /* le style est peut-être en transition */
   }
 }
 
@@ -78,7 +78,7 @@ function setContourVisibility(map: MapboxMap, visible: boolean) {
         map.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none');
       }
     } catch {
-      /* layer may not exist yet */
+      /* la couche n'existe peut-être pas encore */
     }
   }
 }
@@ -103,7 +103,7 @@ function updateContourPaint(map: MapboxMap, opacity: number, intervalMeters: num
       map.setPaintProperty(CONTOUR_LINE_LAYER_ID, 'line-width', lineWidth);
     }
   } catch {
-    /* style may be transitioning */
+    /* le style est peut-être en transition */
   }
 }
 
@@ -177,7 +177,7 @@ export function useContourLines(
       try {
         if (map.getStyle && map.getStyle()) removeContourLayers(map);
       } catch {
-        /* map already destroyed */
+        /* carte déjà détruite */
       }
       mountedRef.current = false;
     };
