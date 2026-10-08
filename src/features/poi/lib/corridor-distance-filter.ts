@@ -29,9 +29,10 @@ import type { GpxRoute, PoiCategory, PoiFeature } from '../types';
 import { projectPoiOntoRoute, projectRoutePoints, type ProjectedRoutePoint } from './refinePoiProjection';
 
 /**
- * Projected route per points array: the map re-filters on every toggle /
- * search tick with the same route, and projecting 20-30k points (plus the
- * chunk index built lazily on the result) each time was pure waste.
+ * Trace projetée par tableau de points : la carte refiltre à chaque bascule /
+ * tick de recherche avec la même trace, et projeter 20 à 30 k points (plus
+ * l'index de morceaux construit à la demande sur le résultat) à chaque fois
+ * était du pur gâchis.
  */
 const projectedRouteCache = new WeakMap<GpxRoute['points'], ProjectedRoutePoint[]>();
 
@@ -45,14 +46,14 @@ function getProjectedRoute(routePoints: GpxRoute['points']): ProjectedRoutePoint
 }
 
 /**
- * Keep every feature whose lateral distance to the route is within the
- * distance configured for its category.
+ * Garde chaque objet dont la distance latérale à la trace reste dans la
+ * distance réglée pour sa catégorie.
  *
- * @param maxLateralDistanceByCategory Per-category X (metres). Categories
- *   absent from the map are kept untouched.
- * @param fallbackMaxLateralDistanceM Optional global X used for categories
- *   missing from the map. When omitted (the default), those categories are
- *   kept untouched — the corridor radius is the only bound.
+ * @param maxLateralDistanceByCategory X par catégorie (mètres). Les catégories
+ *   absentes de la table sont gardées telles quelles.
+ * @param fallbackMaxLateralDistanceM X global optionnel pour les catégories
+ *   absentes de la table. Omis (par défaut), ces catégories sont gardées telles
+ *   quelles — le rayon du corridor est la seule borne.
  */
 export function filterPoisByLateralDistance(
   features: PoiFeature[],

@@ -136,7 +136,7 @@ export function buildCorridorSamples(
     total += len;
   }
   const spare = budget - simplified.length;
-  // sum(ceil(len/spacing)) <= total/spacing + segments <= spare + simplified.length - 1 < budget
+  // somme(ceil(len/spacing)) <= total/spacing + segments <= spare + simplified.length - 1 < budget
   const spacing = Math.max(1.4 * queryRadiusM, spare > 0 ? total / spare : Infinity);
   const samples: LatLon[] = [{ lat: simplified[0].lat, lon: simplified[0].lon }];
   for (let i = 1; i < simplified.length; i++) {

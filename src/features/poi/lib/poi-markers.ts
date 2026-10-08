@@ -1,29 +1,32 @@
-// 3D POI markers — GPU `symbol` layer pipeline.
+// Marqueurs 3D des POI — pipeline par couche `symbol` GPU.
 //
-// POIs used to be one DOM `mapboxgl.Marker` each. With exhaustive corridor
-// searches (800+ POIs on a GR20-like route) that meant thousands of DOM nodes,
-// ~3 200 map listeners, one terrain projection + one occlusion raycast per
-// marker on every camera frame, and 800 CSS drop-shadows repainted per frame.
+// Chaque POI était autrefois un `mapboxgl.Marker` DOM. Avec les recherches
+// exhaustives en corridor (800+ POI sur un parcours type GR20), cela faisait
+// des milliers de nœuds DOM, ~3 200 écouteurs sur la carte, une projection sur
+// le terrain + un lancer de rayon d'occlusion par marqueur à chaque image de
+// caméra, et 800 drop-shadows CSS repeintes par image.
 //
-// They are now drawn by ONE Mapbox symbol layer fed by ONE GeoJSON source:
+// Ils sont maintenant dessinés par UNE couche symbol Mapbox alimentée par UNE
+// source GeoJSON :
 //
-// - Sprites are composed once per visual variant (category × favorite ×
-//   pause) by `poi-sprites.ts` — same SVGs, same badges, shadows baked in —
-//   and registered with `addImage` at a HiDPI pixel ratio.
-// - The historical failure modes of the old symbol-layer implementation are
-//   neutralised explicitly: `icon-allow-overlap` + `icon-ignore-placement`
-//   (placement never drops a POI), `icon-occlusion-opacity` (terrain
-//   occlusion handled by the GPU depth test, same result as the former
-//   `occludedOpacity: 0`), viewport pitch/rotation alignment.
-// - Style reloads are handled by re-installing source/images/layers on
-//   `styledata` (cheap `getLayer` guard).
-// - Hover uses `feature-state` + a one-feature highlight layer; a single
-//   shared `Popup` replaces the 800 per-marker instances.
-// - Hit testing is pixel-exact (`poi-hit-mask.ts`), never Mapbox's own: it
-//   tests a symbol on its whole image, padding included, and returns
-//   overlapping symbols in data order rather than drawing order.
+// - Les sprites sont composés une fois par variante visuelle (catégorie ×
+//   favori × pause) par `poi-sprites.ts` — mêmes SVG, mêmes badges, ombres
+//   intégrées — et enregistrés avec `addImage` à une densité HiDPI.
+// - Les défaillances historiques de l'ancienne couche symbol sont neutralisées
+//   explicitement : `icon-allow-overlap` + `icon-ignore-placement` (le
+//   placement n'écarte jamais un POI), `icon-occlusion-opacity` (occlusion par
+//   le relief gérée par le test de profondeur GPU, même résultat que l'ancien
+//   `occludedOpacity: 0`), alignement inclinaison / rotation sur la vue.
+// - Les rechargements de style sont gérés en réinstallant source / images /
+//   couches sur `styledata` (garde `getLayer` peu coûteuse).
+// - Le survol utilise `feature-state` + une couche de surbrillance d'un seul
+//   objet ; une seule `Popup` partagée remplace les 800 instances par marqueur.
+// - Le test de clic est au pixel près (`poi-hit-mask.ts`), jamais celui de
+//   Mapbox : il teste un symbole sur toute son image, marge comprise, et
+//   renvoie les symboles qui se chevauchent dans l'ordre des données plutôt
+//   que dans l'ordre de dessin.
 //
-// Per-frame cost is therefore independent of the number of POIs.
+// Le coût par image ne dépend donc pas du nombre de POI.
 
 import mapboxgl from 'mapbox-gl';
 import type {
@@ -56,22 +59,23 @@ import {
   type PoiSpriteSpec,
 } from './poi-sprites';
 
-// ── Visual tuning ─────────────────────────────────────────────────────
+// ── Réglages visuels ──────────────────────────────────────────────────
 
 const MARKER_MIN_SCALE_ZOOM = 8.25;
 const MARKER_MAX_SCALE_ZOOM = 15.1;
 const MARKER_MIN_SCREEN_SCALE = 0.42;
 const MARKER_MAX_SCREEN_SCALE = 1;
-// Terrain occlusion: `icon-occlusion-opacity` is deliberately NOT set. Absent,
-// Mapbox fully hides icons behind the relief only (same result as the former
-// DOM `occludedOpacity: 0`). Setting it switches to a generic depth test, and
-// the route line — elevated in 3D via `line-z-offset` — then hid the icons.
-/** Hover lift, identical to the former `.rv-poi-marker:hover` CSS. */
+// Occlusion par le relief : `icon-occlusion-opacity` n'est volontairement PAS
+// défini. Absent, Mapbox masque entièrement les icônes derrière le relief
+// seulement (même résultat que l'ancien `occludedOpacity: 0` du DOM). Le
+// définir passe à un test de profondeur générique, et la ligne de trace —
+// surélevée en 3D via `line-z-offset` — masquait alors les icônes.
+/** Soulèvement au survol, identique à l'ancien CSS `.rv-poi-marker:hover`. */
 const HOVER_SCALE = 1.03;
 const HOVER_LIFT_PX = 4;
-/** A click this close (screen px) to a drawn POI still opens it. */
+/** Un clic aussi proche (px d'écran) d'un POI dessiné l'ouvre encore. */
 const HIT_TOLERANCE_PX = 3;
-/** Visible half size of a round POI (icon-size 1), until its sprite is measured. */
+/** Demi-taille visible d'un POI rond (icon-size 1), en attendant que son sprite soit mesuré. */
 const FALLBACK_HALF_EXTENT_PX = 11;
 const POI_CURSOR_OWNER = 'poi-hover';
 export const POI_GPU_SOURCE_ID = 'rv-poi-gpu-source';
@@ -82,16 +86,16 @@ function getMarkerKey(feature: PoiFeature): string {
   return `${feature.category}:${feature.id}`;
 }
 
-// ── Zoom-responsive sizing ────────────────────────────────────────────
+// ── Taille selon le zoom ──────────────────────────────────────────────
 
-/** Former CSS: box = base * (0.8 + 0.35 * scale), scale = smoothstep(zoom). */
+/** Ancien CSS : boîte = base * (0.8 + 0.35 * scale), scale = smoothstep(zoom). */
 function getIconSizeAtZoom(zoom: number): number {
   const progress = smoothstep(MARKER_MIN_SCALE_ZOOM, MARKER_MAX_SCALE_ZOOM, zoom);
   const scale = lerp(MARKER_MIN_SCREEN_SCALE, MARKER_MAX_SCREEN_SCALE, progress);
   return 0.8 + 0.35 * scale;
 }
 
-/** Piecewise-linear sampling of the smoothstep curve as a zoom expression. */
+/** Échantillonnage linéaire par morceaux de la courbe smoothstep en expression de zoom. */
 function buildIconSizeExpression(multiplier = 1): ExpressionSpecification {
   const stops: number[] = [];
   const steps = 10;
@@ -119,19 +123,20 @@ function poiDisplayName(feature: PoiFeature): string {
   return feature.name?.trim() || POI_LABELS[feature.category];
 }
 
-// ── Hit-testing registry (used by map tools that used to look for DOM markers) ──
+// ── Registre de test de clic (utilisé par les outils de carte qui cherchaient des marqueurs DOM) ──
 
 const managersByMap = new WeakMap<MapboxMap, PoiMarkerManager>();
 
 /**
- * Hides every POI while another feature needs a clean map (flyover: the
- * route alone). Survives style reloads; popup and hover are dropped.
+ * Masque tous les POI pendant qu'une autre fonction a besoin d'une carte nette
+ * (survol 3D : la trace seule). Survit aux rechargements de style ; la popup
+ * et le survol sont abandonnés.
  */
 export function setPoiLayersSuppressed(map: MapboxMap, suppressed: boolean): void {
   managersByMap.get(map)?.setSuppressed(suppressed);
 }
 
-/** POI rendered under (or within `radiusPx` of) a canvas point, nearest first. */
+/** POI rendu sous un point du canvas (ou à moins de `radiusPx`), le plus proche d'abord. */
 export function queryPoiAtPoint(
   map: MapboxMap,
   point: { x: number; y: number },
@@ -143,9 +148,9 @@ export function queryPoiAtPoint(
 // ── Manager ───────────────────────────────────────────────────────────
 
 /**
- * Owns the POI GPU layer for one map instance: sprite registration,
- * diffed `setData`, hover/click, the shared popup and teardown.
- * Public API kept identical to the former DOM marker manager.
+ * Possède la couche GPU des POI d'une instance de carte : enregistrement des
+ * sprites, `setData` différentiel, survol / clic, popup partagée et démontage.
+ * API publique identique à celle de l'ancien gestionnaire de marqueurs DOM.
  */
 export class PoiMarkerManager {
   private readonly map: MapboxMap;
@@ -155,13 +160,13 @@ export class PoiMarkerManager {
   private readonly pendingSprites = new Map<string, Promise<void>>();
   private readonly pixelRatio = getPoiSpritePixelRatio();
   private data: PoiFeatureCollection = EMPTY_COLLECTION;
-  /** Index of each rendered POI in `data`, which is also its drawing order. */
+  /** Indice de chaque POI rendu dans `data`, qui est aussi son ordre de dessin. */
   private readonly drawRankByKey = new Map<string, number>();
-  /** Largest drawn distance from an anchor among the sprites (icon-size 1). */
+  /** Plus grande distance dessinée depuis un ancrage parmi les sprites (icon-size 1). */
   private maxHitExtentPx = FALLBACK_HALF_EXTENT_PX;
-  /** Signature of `data` (what should be on screen). */
+  /** Signature de `data` (ce qui doit être à l'écran). */
   private renderedSignature = '';
-  /** Signature of what was last uploaded to the source. */
+  /** Signature de ce qui a été envoyé en dernier à la source. */
   private dataSignature = '';
   private syncToken = 0;
   private destroyed = false;
@@ -178,7 +183,7 @@ export class PoiMarkerManager {
   private zoomFrameId: number | null = null;
   private raiseFrameId: number | null = null;
   private hoverFrameId: number | null = null;
-  /** Last pointer position on the canvas, resolved on the next frame. */
+  /** Dernière position du pointeur sur le canvas, résolue à l'image suivante. */
   private hoverPoint: { x: number; y: number } | null = null;
 
   constructor(map: MapboxMap, getActions: () => UsePoiPopupActions) {
@@ -194,15 +199,15 @@ export class PoiMarkerManager {
     this.ensureLayers();
   }
 
-  /** Currently rendered feature count. */
+  /** Nombre d'objets actuellement rendus. */
   get size(): number {
     return this.features.size;
   }
 
   /**
-   * Reconcile rendered POIs against `features`. Missing sprite variants are
-   * rasterised first (async, once per variant); the GeoJSON source is only
-   * re-uploaded when the rendered set actually changed.
+   * Réconcilie les POI rendus avec `features`. Les variantes de sprite
+   * manquantes sont d'abord rastérisées (asynchrone, une fois par variante) ;
+   * la source GeoJSON n'est renvoyée que si l'ensemble rendu a vraiment changé.
    */
   sync(features: PoiFeature[]): void {
     this.features.clear();
@@ -229,7 +234,7 @@ export class PoiMarkerManager {
     });
   }
 
-  /** Remove the layer, the popup and every listener. */
+  /** Retire la couche, la popup et tous les écouteurs. */
   destroy(): void {
     this.destroyed = true;
     if (this.zoomFrameId != null) {
@@ -263,13 +268,13 @@ export class PoiMarkerManager {
         if (this.map.hasImage(id)) this.map.removeImage(id);
       }
     } catch {
-      // Map already torn down.
+      // Carte déjà démontée.
     }
     this.features.clear();
   }
 
   /**
-   * Opens the popup for a POI and centers the map on it.
+   * Ouvre la popup d'un POI et centre la carte dessus.
    */
   openPoi(poiId: number | string, category?: string, coords?: { lat: number; lon: number }): boolean {
     const idStr = String(poiId);
@@ -336,13 +341,13 @@ export class PoiMarkerManager {
     this.applyVisibility();
   }
 
-  /** Topmost POI drawn under a canvas point, else the nearest within `radiusPx` (min 3 px). */
+  /** POI le plus haut dessiné sous un point du canvas, sinon le plus proche à moins de `radiusPx` (3 px min). */
   queryAt(point: { x: number; y: number }, radiusPx: number): PoiFeature | null {
     const key = this.queryKeyAt(point, radiusPx);
     return key ? this.features.get(key) ?? null : null;
   }
 
-  /** Open the POI under / around a canvas point. */
+  /** Ouvre le POI sous / autour d'un point du canvas. */
   activateAt(point: { x: number; y: number }, radiusPx: number): boolean {
     const key = this.queryKeyAt(point, radiusPx);
     const feature = key ? this.features.get(key) : undefined;
@@ -354,10 +359,11 @@ export class PoiMarkerManager {
   // ── Internals ──────────────────────────────────────────────────────
 
   /**
-   * Pixel-exact hit test. Mapbox only supplies the candidates — symbols whose
-   * image intersects a box wide enough for any drawn pixel to reach the
-   * point, terrain occlusion included — then each candidate's mask decides,
-   * at its projected anchor and current icon size (`pickPoiHit`).
+   * Test de clic au pixel près. Mapbox ne fournit que les candidats — symboles
+   * dont l'image coupe une boîte assez large pour qu'un pixel dessiné puisse
+   * atteindre le point, occlusion par le relief comprise — puis le masque de
+   * chaque candidat décide, à son ancrage projeté et à sa taille d'icône
+   * actuelle (`pickPoiHit`).
    */
   private queryKeyAt(point: { x: number; y: number }, radiusPx: number): string | null {
     try {
@@ -374,7 +380,7 @@ export class PoiMarkerManager {
       const seen = new Set<string>();
       for (const hit of hits) {
         const key = String(hit.properties?.key ?? '');
-        // A feature straddling tiles comes back once per tile.
+        // Un objet à cheval sur plusieurs tuiles revient une fois par tuile.
         if (!key || seen.has(key)) continue;
         seen.add(key);
         const feature = this.features.get(key);
@@ -382,8 +388,8 @@ export class PoiMarkerManager {
         if (!feature || !sprite) continue;
         const anchor = this.map.project([feature.lon, feature.lat]);
         const placements = [{ x: anchor.x, y: anchor.y, scale: size }];
-        // The hovered POI is drawn lifted and scaled: both places count, so
-        // the lift never moves it out from under the pointer.
+        // Le POI survolé est dessiné soulevé et agrandi : les deux positions
+        // comptent, pour que le soulèvement ne le sorte jamais de sous le pointeur.
         if (key === this.hoveredKey) {
           placements.push({ x: anchor.x, y: anchor.y - HOVER_LIFT_PX, scale: size * HOVER_SCALE });
         }
@@ -513,7 +519,7 @@ export class PoiMarkerManager {
         }
       }
     } catch {
-      // Style swapping: re-applied by ensureLayers on the next styledata.
+      // Changement de style : réappliqué par ensureLayers au prochain styledata.
     }
   }
 
@@ -532,8 +538,9 @@ export class PoiMarkerManager {
         properties: { key, icon, sort, name: poiDisplayName(feature) },
       });
     }
-    // Data in drawing order (stable sort on the sort key): favourites and
-    // pauses last, i.e. on top, and the index is the hit-test draw rank.
+    // Données dans l'ordre de dessin (tri stable sur la clé de tri) : favoris et
+    // pauses en dernier, donc au-dessus, et l'indice est le rang de dessin du
+    // test de clic.
     features.sort((a, b) => a.properties.sort - b.properties.sort);
     this.drawRankByKey.clear();
     features.forEach((entry, index) => {
@@ -544,14 +551,14 @@ export class PoiMarkerManager {
     this.data = { type: 'FeatureCollection', features };
     this.renderedSignature = signatureParts.join(';');
 
-    // Popup follows its feature; closes if the POI is gone.
+    // La popup suit son objet ; elle se ferme si le POI a disparu.
     if (this.popupKey && this.popup) {
       const current = this.features.get(this.popupKey);
       if (!current) {
         this.popup.remove();
       } else {
         this.popup.setLngLat([current.lon, current.lat]);
-        // The sprite may have changed (favorite / pause toggled from the menu).
+        // Le sprite a pu changer (favori / pause basculé depuis le menu).
         this.popup.setOffset(this.getPopupOffset(current));
       }
     }
@@ -580,7 +587,7 @@ export class PoiMarkerManager {
       offset: this.getPopupOffset(feature),
     });
 
-    // Popup DOM is built on open only — a single popup exists at a time.
+    // Le DOM de la popup n'est construit qu'à l'ouverture — une seule popup existe à la fois.
     const refresh = (nextState?: PoiPopupState) => {
       const actions = this.getActions();
       popup.setDOMContent(buildPopupContent(
@@ -607,9 +614,9 @@ export class PoiMarkerManager {
   }
 
   /**
-   * Popup offset keeping the menu clear of what the sprite really draws, on
-   * whichever side Mapbox anchors it (the hovered sprite is scaled and
-   * lifted: included).
+   * Décalage de la popup qui garde le menu à l'écart de ce que le sprite
+   * dessine vraiment, de quelque côté que Mapbox l'ancre (le sprite survolé est
+   * agrandi et soulevé : pris en compte).
    */
   private getPopupOffset(feature: PoiFeature) {
     const size = getIconSizeAtZoom(this.map.getZoom()) * HOVER_SCALE;
@@ -643,9 +650,10 @@ export class PoiMarkerManager {
   }
 
   /**
-   * Keep the POI layers at the very top of the stack: route lines (and other
-   * overlays) are added / re-added after us and would otherwise paint over
-   * the icons. Only moves when needed, so the `styledata` it triggers is a no-op.
+   * Garde les couches des POI tout en haut de la pile : les lignes de trace (et
+   * d'autres surcouches) sont ajoutées / réajoutées après nous et peindraient
+   * sinon par-dessus les icônes. Ne déplace que si nécessaire, pour que le
+   * `styledata` déclenché soit sans effet.
    */
   private raiseLayers(): void {
     const map = this.map;
@@ -659,7 +667,7 @@ export class PoiMarkerManager {
       map.moveLayer(POI_GPU_LAYER_ID);
       map.moveLayer(POI_GPU_HOVER_LAYER_ID);
     } catch {
-      // Style mid-reload.
+      // Style en cours de rechargement.
     }
   }
 
@@ -683,7 +691,7 @@ export class PoiMarkerManager {
       this.scheduleRaise();
       return;
     }
-    // A style reload wiped source, layers and images: reinstall everything.
+    // Un rechargement de style a effacé source, couches et images : on réinstalle tout.
     this.dataSignature = '';
     if (this.ensureLayers()) {
       (this.map.getSource(POI_GPU_SOURCE_ID) as GeoJSONSource | undefined)?.setData(this.data);
@@ -725,7 +733,7 @@ export class PoiMarkerManager {
     this.openPopup(key, feature);
   };
 
-  /** Hover, resolved once per frame on the last pointer position. */
+  /** Survol, résolu une fois par image sur la dernière position du pointeur. */
   private readonly handleMapMouseMove = (event: MapMouseEvent): void => {
     if (this.destroyed) return;
     if (this.suppressed || isEventFromDomMarker(event)) {
@@ -733,7 +741,7 @@ export class PoiMarkerManager {
       this.setHovered(null);
       return;
     }
-    // Button held: a pan or a drag owns the pointer, the hover stays as is.
+    // Bouton enfoncé : un déplacement ou un glisser possède le pointeur, le survol reste tel quel.
     if ((event.originalEvent as MouseEvent | undefined)?.buttons) return;
     this.hoverPoint = { x: event.point.x, y: event.point.y };
     if (this.hoverFrameId != null) return;
@@ -751,7 +759,7 @@ export class PoiMarkerManager {
   };
 }
 
-// ── Math helpers ──────────────────────────────────────────────────────
+// ── Aides mathématiques ───────────────────────────────────────────────
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));

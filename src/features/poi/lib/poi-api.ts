@@ -79,10 +79,11 @@ async function fetchWithTimeout(
 // ── BBOX ──────────────────────────────────────────────────────────────
 
 /**
- * Spatial sampling for zoomed-out views: at most one POI per category per
- * XYZ tile cell of `level`, and at most `perCell` categories per cell.
- * Without it the server returns the first `limit` rows in R*Tree order,
- * i.e. one clump in a corner of any bbox denser than `limit`.
+ * Échantillonnage spatial pour les vues dézoomées : au plus un POI par
+ * catégorie par cellule de tuile XYZ de niveau `level`, et au plus `perCell`
+ * catégories par cellule. Sans lui, le serveur renvoie les `limit` premières
+ * lignes dans l'ordre du R*Tree, c'est-à-dire un amas dans un coin de toute
+ * emprise plus dense que `limit`.
  */
 export interface PoiBboxSampling {
   level: number;

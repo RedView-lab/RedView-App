@@ -89,7 +89,7 @@ export const POI_ICON_NAMES: Record<PoiCategory, string> = Object.fromEntries(
   POI_CATEGORIES.map((key) => [key, POI_TAXONOMY_ICON[key] ?? 'fallback']),
 ) as Record<PoiCategory, string>;
 
-/** A single POI feature */
+/** Un objet POI */
 export interface PoiFeature {
   id: number;
   lat: number;
@@ -123,12 +123,12 @@ export type PoiAutoSortReason =
   | 'hotel'
   | 'gap6h';
 
-/** Backend response (Fastify /bbox and /corridor) */
+/** Réponse du serveur (Fastify /bbox et /corridor) */
 export interface PoiApiResponse {
   features: PoiFeature[];
 }
 
-/** Parsed GPX route with optional elevation metadata when available. */
+/** Trace GPX analysée, avec les métadonnées d'altitude quand elles existent. */
 export interface GpxRoute {
   name: string | null;
   points: {

@@ -18,8 +18,8 @@ interface GpxParseWorkerFailure {
 type GpxParseWorkerResponse = GpxParseWorkerSuccess | GpxParseWorkerFailure;
 
 /**
- * Parse a .gpx file into a lightweight route.
- * Supports both <trkpt> (tracks) and <rtept> (routes).
+ * Analyse un fichier .gpx en une trace légère.
+ * Gère à la fois <trkpt> (traces) et <rtept> (routes).
  */
 export async function parseGpxFile(file: File): Promise<GpxRoute> {
   try {
@@ -149,11 +149,11 @@ function parseGpxTextWithDomParser(text: string): GpxRoute {
   };
 }
 
-// ── Distance-aware sampling for Overpass corridor queries ─────────────
+// ── Échantillonnage selon la distance pour les requêtes Overpass en corridor ──
 
 const EARTH_RADIUS_M = 6_371_008.8;
 
-/** Great-circle distance in metres between two lat/lon pairs. */
+/** Distance orthodromique en mètres entre deux paires lat/lon. */
 function haversineM(
   a: { lat: number; lon: number },
   b: { lat: number; lon: number },
@@ -169,7 +169,7 @@ function haversineM(
   return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h));
 }
 
-/** Total length of a polyline in metres (sum of segment lengths). */
+/** Longueur totale d'une polyligne en mètres (somme des longueurs de segments). */
 export function routeLengthM(points: { lat: number; lon: number; distanceM?: number | null }[]): number {
   if (points.length <= 1) return 0;
   const last = points[points.length - 1];

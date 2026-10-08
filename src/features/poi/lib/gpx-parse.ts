@@ -1,7 +1,8 @@
 import type { GpxRoute } from '../types';
-// Concrete module, not the route-metrics barrel: this parser runs in the GPX
-// worker, and the barrel pulled 72 modules into it (BRouter, i18n, a React
-// provider whose dev refresh runtime made the worker crash on `window`).
+// Module concret, pas le barrel route-metrics : cet analyseur tourne dans le
+// worker GPX, et le barrel y tirait 72 modules (BRouter, i18n, un provider
+// React dont le runtime de rafraîchissement en dev faisait planter le worker
+// sur `window`).
 import {
   cleanAndInterpolateElevations,
   isValidElevation,

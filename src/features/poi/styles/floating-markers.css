@@ -1,16 +1,17 @@
 .rv-poi-marker {
   --rv-poi-marker-scale: 1;
-  /* CRITICAL: never set `position` here.
+  /* CRITIQUE : ne jamais définir `position` ici.
    *
-   * Mapbox drives the marker with `.mapboxgl-marker { position: absolute;
-   * left:0; top:0 }` (from mapbox-gl.css) and repositions it every frame
-   * via `transform: translate(x,y) ...`. That transform is correct ONLY
-   * when the element is taken out of the flow — i.e. absolutely
-   * positioned at the canvas origin.
+   * Mapbox pilote le marqueur avec `.mapboxgl-marker { position: absolute;
+   * left:0; top:0 }` (de mapbox-gl.css) et le repositionne à chaque image via
+   * `transform: translate(x,y) ...`. Cette transformation n'est juste QUE si
+   * l'élément est sorti du flux — c'est-à-dire positionné en absolu à
+   * l'origine du canvas.
    *
-   * The container height is set to the exact distance from top to pin tip
-   * (75px * scale), so Mapbox's anchor: 'bottom' translates the pin tip
-   * precisely onto the geographic coordinate with 0px error at any zoom scale. */
+   * La hauteur du conteneur vaut exactement la distance du haut à la pointe de
+   * l'épingle (75px * scale), pour que l'anchor: 'bottom' de Mapbox place la
+   * pointe exactement sur la coordonnée géographique, à 0 px près, à toute
+   * échelle de zoom. */
   display: block;
   width: calc(88px * var(--rv-poi-marker-scale));
   height: calc(75px * var(--rv-poi-marker-scale));
@@ -20,8 +21,9 @@
   cursor: pointer;
   pointer-events: auto;
   z-index: 20;
-  /* No opacity transition: Mapbox rewrites `opacity` every ~60 ms while the
-   * camera moves (terrain occlusion), which kept restarting it. */
+  /* Pas de transition d'opacité : Mapbox réécrit `opacity` toutes les ~60 ms
+   * pendant que la caméra bouge (occlusion par le relief), ce qui la relançait
+   * sans cesse. */
 }
 
 .rv-poi-marker.mapboxgl-marker {

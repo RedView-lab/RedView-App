@@ -86,15 +86,15 @@ function logicalName(category: PoiCategory): string {
   return POI_ICON_NAMES[category] ?? 'fallback';
 }
 
-/** True when the category ships a dedicated "favorite" SVG variant. */
+/** Vrai quand la catégorie a une variante SVG « favori » dédiée. */
 export function hasDedicatedFavoritePoiIcon(category: PoiCategory): boolean {
   return Boolean(LOGICAL_FAVORITE_ICON_URLS[logicalName(category)]);
 }
 
 /**
- * Resolve the SVG URL for a category:
- * - Round icon for standard POIs (!favorite)
- * - Pointed pin icon ("le truc avec la pointe") for favorite POIs
+ * Résout l'URL SVG d'une catégorie :
+ * - icône ronde pour les POI ordinaires (!favorite)
+ * - épingle à pointe (« le truc avec la pointe ») pour les POI favoris
  */
 export function getPoiIconUrl(category: PoiCategory, favorite: boolean = false): string {
   const name = logicalName(category);

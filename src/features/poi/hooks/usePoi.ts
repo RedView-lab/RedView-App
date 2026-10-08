@@ -1,20 +1,21 @@
-// POI engine hook — fetches POIs along the active GPX corridor and renders
-// them on the 3D Mapbox map.
+// Hook du moteur de POI — récupère les POI le long du corridor GPX actif et
+// les affiche sur la carte 3D Mapbox.
 //
-// Rendering is delegated to `PoiMarkerManager` (lib/poi-markers.ts): one GPU
-// symbol layer with pre-rasterised sprites, placement/occlusion culling
-// disabled explicitly, and its own style-reload reinstall. This hook only
-// feeds it the filtered feature list.
+// Le rendu est délégué à `PoiMarkerManager` (lib/poi-markers.ts) : une seule
+// couche symbol GPU avec des sprites prérastérisés, placement / masquage par
+// collision explicitement désactivés, et sa propre réinstallation au
+// rechargement du style. Ce hook ne lui fournit que la liste filtrée.
 //
-// Filtering policy — EXHAUSTIVE BY DESIGN:
-//   The only filter applied is the one the user configures: for each
-//   category, keep every POI whose lateral distance to the track is <= the
-//   X metres set in the POI panel. There is deliberately NO density cap, NO
-//   "top N per km" shortlist, NO opening-hours exclusion and NO zoom-based
-//   culling any more — the map must show *all* the POIs that exist within
-//   the requested distance. See lib/corridor-distance-filter.ts.
-//   Exception, opt-in: `refinedPoiIds` (toggle « Affiner les résultats »)
-//   restricts the display to the POIs kept by the auto sort.
+// Politique de filtrage — EXHAUSTIVE PAR CONCEPTION :
+//   Le seul filtre appliqué est celui que règle l'utilisateur : pour chaque
+//   catégorie, on garde chaque POI dont la distance latérale à la trace est
+//   <= les X mètres réglés dans le panneau POI. Il n'y a volontairement PLUS de
+//   plafond de densité, PLUS de présélection « N meilleurs par km », PLUS
+//   d'exclusion par horaires d'ouverture ni de masquage selon le zoom — la
+//   carte doit montrer *tous* les POI qui existent dans la distance demandée.
+//   Voir lib/corridor-distance-filter.ts.
+//   Exception, sur option : `refinedPoiIds` (bouton « Affiner les résultats »)
+//   restreint l'affichage aux POI retenus par le tri automatique.
 
 import { useEffect, useMemo, useRef, useCallback, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
@@ -30,7 +31,7 @@ import { matchesPoiCategory } from '@/features/itineraryPanel/sections/timeline/
 import { buildRouteGeometrySignature } from '@/features/itineraryPanel/lib/routes';
 import '../styles/floating-markers.css';
 
-// Re-exported so existing consumers keep importing from the hook module.
+// Réexporté pour que les consommateurs existants continuent d'importer depuis le module du hook.
 export type {  UsePoiPopupActions } from '../lib/poi-popup';
 
 function deduplicateFeatures(features: PoiFeature[] | null): PoiFeature[] {
@@ -132,9 +133,9 @@ export function usePoi(
   /** Fin de recherche : POI à enregistrer et trace sur laquelle ils ont été cherchés. */
   onCorridorComplete?: (features: PoiFeature[], routePoints: GpxRoute['points']) => void,
   /**
-   * Pre-loaded POI features to render immediately (e.g. rehydrated from
-   * a saved project). Seeds the marker registry so itinerary switches
-   * restore markers without re-running the corridor search.
+   * Objets POI préchargés à afficher tout de suite (p. ex. réhydratés depuis un
+   * projet enregistré). Amorce le registre des marqueurs pour qu'un changement
+   * d'itinéraire restaure les marqueurs sans relancer la recherche en corridor.
    */
   initialFeatures: PoiFeature[] | null = null,
   popupActions: UsePoiPopupActions = {},
@@ -160,14 +161,14 @@ export function usePoi(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [poiCount, setPoiCount] = useState(0);
-  /** 0..1 progress for corridor fetches; null when not running. */
+  /** Progression 0..1 des requêtes en corridor ; null quand rien ne tourne. */
   const [corridorProgress, setCorridorProgress] = useState<number | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
   const managerRef = useRef<PoiMarkerManager | null>(null);
   const lastCorridorFeatures = useRef<PoiFeature[]>([]);
 
-  // Mirror reactive inputs into refs so stable callbacks read fresh values.
+  // Recopie les entrées réactives dans des réfs pour que les callbacks stables lisent des valeurs fraîches.
   const enabledRef = useRef(enabledCategories);
   enabledRef.current = enabledCategories;
   const searchCategoriesRef = useRef(searchCategories ?? enabledCategories);
@@ -195,7 +196,7 @@ export function usePoi(
   const initialFeaturesRef = useRef<PoiFeature[] | null>(initialFeatures);
   initialFeaturesRef.current = initialFeatures;
 
-  // Stable dependency keys for effects that react to semantic changes.
+  // Clés de dépendance stables pour les effets qui réagissent aux changements de sens.
   const enabledCategoriesKey = Array.from(enabledCategories).sort().join('|');
   const selectedPoiCategoriesKey = selectedPoiCategories
     ? Array.from(selectedPoiCategories).sort().join('|')
@@ -206,10 +207,11 @@ export function usePoi(
       .map(([category, distance]) => `${category}:${distance}`)
       .join('|')
     : 'off';
-  // Identity of the itinerary's saved features: a change signals an
-  // itinerary switch or a favorite toggle and prompts a marker rehydration.
-  // Memoised on the array reference: O(n) only when the features change,
-  // not on every render of the itinerary panel.
+  // Identité des objets enregistrés de l'itinéraire : un changement signale un
+  // changement d'itinéraire ou un favori basculé, et déclenche une
+  // réhydratation des marqueurs. Mémoïsé sur la référence du tableau : O(n)
+  // seulement quand les objets changent, pas à chaque rendu du panneau
+  // d'itinéraire.
   const initialFeaturesKey = useMemo(() => (
     initialFeatures && initialFeatures.length > 0
       ? initialFeatures.map((feature) => [
@@ -223,15 +225,15 @@ export function usePoi(
       : 'empty'
   ), [initialFeatures]);
 
-  // ── Feature filtering ─────────────────────────────────────────────
+  // ── Filtrage des objets ───────────────────────────────────────────
   //
-  // Two passes only, both of them user-controlled:
-  //   1. category is enabled in the POI panel / top filter bar,
-  //   2. lateral distance to the track <= the X metres set for that
-  //      category.
-  // Favorites are rendered ONLY if `favorisEnabled` is true (and category matches).
-  // Non-favorites are rendered ONLY if `poisRouteEnabled` is true (and category matches),
-  // and, with « Affiner les résultats » on, only when kept by the auto sort or paused.
+  // Deux passes seulement, toutes deux réglées par l'utilisateur :
+  //   1. la catégorie est activée dans le panneau POI / la barre de filtres,
+  //   2. la distance latérale à la trace est <= les X mètres réglés pour
+  //      cette catégorie.
+  // Les favoris ne sont affichés QUE si `favorisEnabled` est vrai (et que la catégorie correspond).
+  // Les autres ne sont affichés QUE si `poisRouteEnabled` est vrai (et que la catégorie correspond),
+  // et, avec « Affiner les résultats » activé, seulement s'ils sont retenus par le tri automatique ou en pause.
 
   const buildRenderableFeatures = useCallback((features: PoiFeature[]) => {
     if (features.length === 0) return [];
@@ -308,7 +310,7 @@ export function usePoi(
     setPoiCount(features.length);
   }, []);
 
-  // ── Corridor fetch (along GPX route, chunked & progressive) ───────
+  // ── Requête en corridor (le long de la trace GPX, par morceaux et progressive) ──
 
   const fetchCorridorPois = useCallback(async () => {
     const route = gpxRef.current;
@@ -344,9 +346,10 @@ export function usePoi(
         onProgress: (deduped, { done, total }) => {
           if (controller.signal.aborted) return;
           setCorridorProgress(total > 0 ? done / total : 0);
-          // The empty "request started" tick must NOT wipe the rendered POIs
-          // (it used to clear every marker and rebuild them all on response),
-          // and the final tick is handled once by the completion branch below.
+          // Le tick vide « requête démarrée » ne doit PAS effacer les POI
+          // affichés (il vidait tous les marqueurs et les reconstruisait tous à
+          // la réponse), et le tick final est traité une fois par la branche de
+          // fin ci-dessous.
           if (deduped.length === 0 || done >= total) return;
           const all = mergeCorridorWithSavedFeatures(deduped, initialFeaturesRef.current);
           lastCorridorFeatures.current = all;
@@ -375,7 +378,7 @@ export function usePoi(
     }
   }, [buildRenderableFeatures, buildStoredFeatures, syncRenderedFeatures]);
 
-  // ── Public triggers ───────────────────────────────────────────────
+  // ── Déclencheurs publics ──────────────────────────────────────────
 
   const searchCorridor = useCallback(() => {
     if (managerRef.current && gpxRef.current) {
@@ -391,7 +394,7 @@ export function usePoi(
     setError(null);
   }, []);
 
-  // ── Marker manager lifecycle ──────────────────────────────────────
+  // ── Cycle de vie du gestionnaire de marqueurs ─────────────────────
 
   useEffect(() => {
     if (!map || !isMapLoaded) return;
@@ -413,7 +416,7 @@ export function usePoi(
     };
   }, [map, isMapLoaded, buildRenderableFeatures]);
 
-  // ── Route switch lifecycle ────────────────────────────────────────
+  // ── Cycle de vie au changement de trace ───────────────────────────
 
   useEffect(() => {
     abortRef.current?.abort();
@@ -429,7 +432,7 @@ export function usePoi(
     setPoiCount(seed.length);
   }, [routeId, buildRenderableFeatures, syncRenderedFeatures]);
 
-  // ── React to category / distance / filter changes ─────────────────
+  // ── Réaction aux changements de catégorie / distance / filtre ─────
 
   useEffect(() => {
     if (!managerRef.current) return;
@@ -466,7 +469,7 @@ export function usePoi(
     lastCorridorFeatures.current = [];
   }, [routeGeometryKey]);
 
-  // ── Rehydrate when the active itinerary's saved features change ───
+  // ── Réhydratation quand les objets enregistrés de l'itinéraire actif changent ──
 
   useEffect(() => {
     if (!managerRef.current) return;

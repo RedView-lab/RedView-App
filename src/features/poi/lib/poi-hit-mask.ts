@@ -1,22 +1,23 @@
-// Pixel-exact hit testing of the POI sprites.
+// Test de clic au pixel près sur les sprites des POI.
 //
-// Mapbox hit-tests a symbol on its whole image, and the POI sprites carry
-// transparent padding (baked shadows, a canvas made symmetric around the
-// geographic anchor): a 19 px disc sits in a 66 px image, a favourite pin in
-// an 88×126 px image centred on its tip. A click 30 px below a pin opened it,
-// and the padding of a neighbour covered a favourite drawn on top of it.
+// Mapbox teste un symbole sur toute son image, et les sprites des POI portent
+// une marge transparente (ombres intégrées, canvas rendu symétrique autour de
+// l'ancrage géographique) : un disque de 19 px tient dans une image de 66 px,
+// une épingle de favori dans une image de 88×126 px centrée sur sa pointe. Un
+// clic 30 px sous une épingle l'ouvrait, et la marge d'un voisin couvrait un
+// favori dessiné par-dessus.
 //
-// Each sprite gets a mask of what is really drawn — alpha ≥ 50 %, so the soft
-// shadows (≤ 45 %) are left out — with a chamfer distance field: the map picks
-// the topmost POI whose drawn pixels are under the pointer, else the nearest
-// one within a small tolerance.
+// Chaque sprite reçoit un masque de ce qui est vraiment dessiné — alpha ≥ 50 %,
+// pour laisser de côté les ombres douces (≤ 45 %) — avec un champ de distance
+// de chanfrein : la carte choisit le POI le plus haut dont des pixels dessinés
+// sont sous le pointeur, sinon le plus proche dans une petite tolérance.
 
-/** Alpha from which a sprite pixel counts as drawn (shadows stay below). */
+/** Alpha à partir duquel un pixel de sprite compte comme dessiné (les ombres restent en dessous). */
 const DRAWN_ALPHA_MIN = 128;
-/** Chamfer 3-4 weights (orthogonal, diagonal), in thirds of a cell. */
+/** Poids du chanfrein 3-4 (orthogonal, diagonal), en tiers de cellule. */
 const CHAMFER_ORTHO = 3;
 const CHAMFER_DIAG = 4;
-/** Distances are stored in quarter px, capped (255 = 63.75 px or more). */
+/** Distances stockées en quarts de px, plafonnées (255 = 63,75 px ou plus). */
 const DISTANCE_STEPS_PER_PX = 4;
 const DISTANCE_CAP = 255;
 
@@ -28,22 +29,22 @@ interface PoiHitBounds {
 }
 
 export interface PoiHitMask {
-  /** Grid size, one cell per CSS px at icon-size 1. */
+  /** Taille de la grille, une cellule par px CSS à icon-size 1. */
   width: number;
   height: number;
-  /** Geographic anchor inside the grid (CSS px at icon-size 1). */
+  /** Ancrage géographique dans la grille (px CSS à icon-size 1). */
   anchorX: number;
   anchorY: number;
-  /** Distance of each cell to the nearest drawn cell, in quarter px. */
+  /** Distance de chaque cellule à la cellule dessinée la plus proche, en quarts de px. */
   distance: Uint8Array;
-  /** Drawn extent around the anchor (CSS px at icon-size 1); null when nothing is drawn. */
+  /** Étendue dessinée autour de l'ancrage (px CSS à icon-size 1) ; null quand rien n'est dessiné. */
   bounds: PoiHitBounds | null;
 }
 
 /**
- * Mask of a rasterised sprite. `rgba` is its `ImageData.data`
- * (`imageWidth × imageHeight` device px at `pixelRatio`), the anchor is given
- * in CSS px from the image's top-left corner.
+ * Masque d'un sprite rastérisé. `rgba` est son `ImageData.data`
+ * (`imageWidth × imageHeight` px physiques à `pixelRatio`), l'ancrage est
+ * donné en px CSS depuis le coin haut gauche de l'image.
  */
 export function buildPoiHitMask(
   rgba: ArrayLike<number>,
@@ -88,7 +89,7 @@ export function buildPoiHitMask(
     }
   }
 
-  // Two-pass chamfer distance transform.
+  // Transformée de distance de chanfrein en deux passes.
   for (let cy = 0; cy < height; cy += 1) {
     for (let cx = 0; cx < width; cx += 1) {
       const index = cy * width + cx;
@@ -142,14 +143,14 @@ export function buildPoiHitMask(
 }
 
 /**
- * Distance from a point to the drawn pixels of the sprite, in CSS px at
- * icon-size 1. `localX/Y` are relative to the anchor; 0 = on a drawn pixel.
+ * Distance d'un point aux pixels dessinés du sprite, en px CSS à icon-size 1.
+ * `localX/Y` sont relatifs à l'ancrage ; 0 = sur un pixel dessiné.
  */
 export function poiHitDistancePx(mask: PoiHitMask, localX: number, localY: number): number {
   if (!mask.bounds) return Infinity;
   const gx = localX + mask.anchorX;
   const gy = localY + mask.anchorY;
-  // Outside the image: distance to its edge plus that edge cell's distance.
+  // Hors de l'image : distance à son bord plus la distance de cette cellule de bord.
   const cx = Math.min(mask.width - 1, Math.max(0, Math.floor(gx)));
   const cy = Math.min(mask.height - 1, Math.max(0, Math.floor(gy)));
   const outsideX = gx < 0 ? -gx : gx > mask.width ? gx - mask.width : 0;
@@ -159,7 +160,7 @@ export function poiHitDistancePx(mask: PoiHitMask, localX: number, localY: numbe
   return inside + Math.hypot(outsideX, outsideY);
 }
 
-/** Where a candidate is drawn: its anchor on screen and its scale (icon-size). */
+/** Où un candidat est dessiné : son ancrage à l'écran et son échelle (icon-size). */
 interface PoiHitPlacement {
   x: number;
   y: number;
@@ -169,15 +170,16 @@ interface PoiHitPlacement {
 export interface PoiHitCandidate<K> {
   key: K;
   mask: PoiHitMask;
-  /** Drawing order: a higher rank is drawn above. */
+  /** Ordre de dessin : un rang plus élevé est dessiné au-dessus. */
   drawRank: number;
-  /** One or more placements (the hovered POI: resting and lifted); the closest counts. */
+  /** Un ou plusieurs placements (le POI survolé : au repos et soulevé) ; le plus proche compte. */
   placements: readonly PoiHitPlacement[];
 }
 
 /**
- * POI under a screen point: the topmost one whose drawn pixels contain it,
- * else the nearest one within `tolerancePx` (screen px), the topmost on a tie.
+ * POI sous un point de l'écran : le plus haut dont les pixels dessinés le
+ * contiennent, sinon le plus proche dans `tolerancePx` (px d'écran), le plus
+ * haut en cas d'égalité.
  */
 export function pickPoiHit<K>(
   candidates: readonly PoiHitCandidate<K>[],

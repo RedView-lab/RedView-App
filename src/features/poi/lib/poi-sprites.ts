@@ -1,13 +1,14 @@
-// POI sprite rasteriser — turns the POI SVG assets into GPU-ready bitmaps.
+// Rastériseur des sprites de POI — transforme les SVG des POI en bitmaps prêts
+// pour le GPU.
 //
-// The 3D map draws POIs through a single Mapbox `symbol` layer
-// (`poi-gpu-layer.ts`). Each distinct visual (category × favorite × pause
-// duration) is composed ONCE on a canvas — icon, favorite star badge, pause
-// pill and drop shadow baked in — at a high pixel ratio, then registered with
-// `map.addImage`. The geometry replicates the former DOM marker CSS
-// (`floating-markers.css`) in anchor-relative coordinates so the rendered
-// result is pixel-equivalent, while the per-frame cost no longer depends on
-// the number of POIs.
+// La carte 3D dessine les POI via une seule couche `symbol` Mapbox
+// (`poi-gpu-layer.ts`). Chaque visuel distinct (catégorie × favori × durée de
+// pause) est composé UNE fois sur un canvas — icône, badge étoile du favori,
+// pastille de pause et ombre portée intégrés — à haute densité, puis enregistré
+// avec `map.addImage`. La géométrie reproduit l'ancien CSS des marqueurs DOM
+// (`floating-markers.css`) en coordonnées relatives à l'ancrage, pour un rendu
+// équivalent au pixel près, tandis que le coût par image ne dépend plus du
+// nombre de POI.
 
 import type { PoiCategory, PoiFeature } from '../types';
 import { RV_FONT_SANS } from '@/shared/lib/typography';
@@ -18,7 +19,7 @@ import { getPoiIconUrl, hasDedicatedFavoritePoiIcon } from './poi-icons';
 const FAVORITE_BADGE_ICON_URL = '/icons/ui/star-01.svg';
 const PAUSE_FONT_FAMILY = RV_FONT_SANS;
 
-// Base (icon-size = 1) geometry, from floating-markers.css.
+// Géométrie de base (icon-size = 1), d'après floating-markers.css.
 const ROUND_SIZE_PX = 38;
 const PIN_WIDTH_PX = 52;
 const PIN_BODY_HEIGHT_PX = 44;
@@ -34,7 +35,7 @@ export interface PoiSprite {
   id: string;
   image: ImageData;
   pixelRatio: number;
-  /** What is really drawn, for pixel-exact hit testing (`poi-hit-mask.ts`). */
+  /** Ce qui est vraiment dessiné, pour le test de clic au pixel près (`poi-hit-mask.ts`). */
   hitMask: PoiHitMask;
 }
 
@@ -51,10 +52,10 @@ export function getPoiSpriteId(spec: PoiSpriteSpec): string {
   return `rv-poi:${spec.category}:${spec.favorite ? 'f' : 'r'}:${spec.pauseMin}`;
 }
 
-// Pause pill under a round icon: its bottom sits 8px below the 38px box.
+// Pastille de pause sous une icône ronde : son bas est 8 px sous la boîte de 38 px.
 const PAUSE_PILL_ROUND_OVERHANG_PX = 8;
 
-/** Pause pill label: « 15 min », then « 6 h » / « 1 h 30 » from an hour on. */
+/** Libellé de la pastille de pause : « 15 min », puis « 6 h » / « 1 h 30 » à partir d'une heure. */
 export function formatPoiPauseLabel(pauseMin: number): string {
   const minutes = Math.max(1, Math.round(pauseMin));
   if (minutes < 60) return `${minutes} min`;
@@ -63,13 +64,13 @@ export function formatPoiPauseLabel(pauseMin: number): string {
   return rest > 0 ? `${hours} h ${String(rest).padStart(2, '0')}` : `${hours} h`;
 }
 
-/** Sprite rasterisation density: sharp up to the max icon-size on HiDPI. */
+/** Densité de rastérisation des sprites : net jusqu'à l'icon-size maximale en HiDPI. */
 export function getPoiSpritePixelRatio(): number {
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
   return Math.min(4, Math.max(2, dpr * 1.25));
 }
 
-// ── Asset loading ──────────────────────────────────────────────────────
+// ── Chargement des ressources ──────────────────────────────────────────
 
 const imageCache = new Map<string, Promise<HTMLImageElement | null>>();
 
@@ -95,7 +96,7 @@ function ensurePauseFont(): Promise<void> {
       try {
         await document.fonts?.load(`700 10px ${PAUSE_FONT_FAMILY}`);
       } catch {
-        // Fallback font is fine.
+        // La police de repli convient.
       }
     })();
   }
@@ -113,7 +114,7 @@ function grow(extent: Extent, minX: number, minY: number, maxX: number, maxY: nu
   extent.maxY = Math.max(extent.maxY, maxY);
 }
 
-/** object-fit: contain of an image inside a box. */
+/** object-fit: contain d'une image dans une boîte. */
 function containRect(
   image: HTMLImageElement,
   x: number,
@@ -141,9 +142,10 @@ function roundedRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w:
 }
 
 /**
- * Compose one POI sprite. Coordinates are relative to the geographic anchor
- * (round icon: its centre, pin: its tip). The canvas is made symmetric around
- * that anchor so the symbol layer can use `icon-anchor: center` with no offset.
+ * Compose un sprite de POI. Les coordonnées sont relatives à l'ancrage
+ * géographique (icône ronde : son centre, épingle : sa pointe). Le canvas est
+ * rendu symétrique autour de cet ancrage pour que la couche symbol puisse
+ * utiliser `icon-anchor: center` sans décalage.
  */
 export async function rasterizePoiSprite(spec: PoiSpriteSpec, pixelRatio: number): Promise<PoiSprite | null> {
   const iconUrl = getPoiIconUrl(spec.category, spec.favorite);
@@ -158,11 +160,11 @@ export async function rasterizePoiSprite(spec: PoiSpriteSpec, pixelRatio: number
   const pr = pixelRatio;
   const extent: Extent = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
 
-  // Icon box.
+  // Boîte de l'icône.
   const iconBox: [number, number, number, number] = spec.favorite
     ? [-PIN_WIDTH_PX / 2, -PIN_BODY_HEIGHT_PX, PIN_WIDTH_PX, PIN_IMAGE_HEIGHT_PX]
     : containRect(icon, -ROUND_SIZE_PX / 2, -ROUND_SIZE_PX / 2, ROUND_SIZE_PX, ROUND_SIZE_PX);
-  // Round icons carry `drop-shadow(0 2px 6px rgba(0,0,0,.35))`.
+  // Les icônes rondes portent `drop-shadow(0 2px 6px rgba(0,0,0,.35))`.
   const iconShadowPad = spec.favorite ? 0 : 14;
   grow(
     extent,
@@ -172,14 +174,14 @@ export async function rasterizePoiSprite(spec: PoiSpriteSpec, pixelRatio: number
     iconBox[1] + iconBox[3] + iconShadowPad,
   );
 
-  // Favorite star badge (24px disc, top: 11px, right: 12px of the pin box).
+  // Badge étoile du favori (disque de 24 px, top: 11px, right: 12px de la boîte de l'épingle).
   const badgeCx = PIN_WIDTH_PX / 2 - 12 - 12;
   const badgeCy = -PIN_BODY_HEIGHT_PX + 11 + 12;
   if (needsStarBadge) {
     grow(extent, badgeCx - 12 - 30, badgeCy - 12 - 30, badgeCx + 12 + 30, badgeCy + 12 + 34);
   }
 
-  // Pause pill.
+  // Pastille de pause.
   const measureCtx = document.createElement('canvas').getContext('2d');
   const pauseLabel = formatPoiPauseLabel(spec.pauseMin);
   let pill: { x: number; y: number; w: number; h: number; symbolW: number } | null = null;
@@ -190,7 +192,7 @@ export async function rasterizePoiSprite(spec: PoiSpriteSpec, pixelRatio: number
     const labelW = measureCtx.measureText(pauseLabel).width;
     const w = 6 + symbolW + 3 + labelW + 6 + 2;
     const h = 18;
-    // Round: bottom: -8px under a 38px box. Pin: bottom: 2px above the tip.
+    // Ronde : bottom: -8px sous une boîte de 38 px. Épingle : bottom: 2px au-dessus de la pointe.
     const bottom = spec.favorite ? -2 : ROUND_SIZE_PX / 2 + PAUSE_PILL_ROUND_OVERHANG_PX;
     pill = { x: -w / 2, y: bottom - h, w, h, symbolW };
     grow(extent, pill.x - 18, pill.y - 18, pill.x + w + 18, pill.y + h + 18);
@@ -207,7 +209,7 @@ export async function rasterizePoiSprite(spec: PoiSpriteSpec, pixelRatio: number
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
 
-  // Canvas shadows ignore the transform → scale them by hand.
+  // Les ombres du canvas ignorent la transformation → on les met à l'échelle à la main.
   const setShadow = (color: string, offsetY: number, blur: number) => {
     ctx.shadowColor = color;
     ctx.shadowOffsetX = 0;

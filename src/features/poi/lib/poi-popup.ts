@@ -1,10 +1,11 @@
-// POI map popup: HTML construction, action bindings and state resolution.
+// Popup de POI sur la carte : construction du HTML, liaison des actions et
+// résolution de l'état.
 //
-// The popup is a Mapbox `Popup` attached to each POI marker. Its content is
-// rebuilt on every `open` (and after every toggle) through a `refresh`
-// callback, so the displayed state always reflects the latest itinerary
-// data — actions are resolved lazily via a getter, never captured at
-// marker-creation time.
+// La popup est une `Popup` Mapbox attachée à chaque marqueur de POI. Son
+// contenu est reconstruit à chaque `open` (et après chaque bascule) via un
+// callback `refresh`, pour que l'état affiché reflète toujours les dernières
+// données de l'itinéraire — les actions sont résolues à la demande via un
+// accesseur, jamais capturées à la création du marqueur.
 
 import type { PoiAutoSortReason, PoiFeature } from '../types';
 import { DEFAULT_POI_PAUSE_MIN, POI_LABELS } from '../types';
@@ -212,11 +213,11 @@ function buildPopupHtml(feature: PoiFeature, state: PoiPopupState): string {
 }
 
 /**
- * Build the popup DOM and wire every `[data-action]` button.
+ * Construit le DOM de la popup et branche chaque bouton `[data-action]`.
  *
- * `actions` must be the CURRENT actions object (resolve it through a ref
- * right before calling); `refresh` re-renders the popup with an optimistic
- * next state after a toggle.
+ * `actions` doit être l'objet d'actions COURANT (le résoudre via une réf juste
+ * avant l'appel) ; `refresh` redessine la popup avec un état suivant optimiste
+ * après une bascule.
  */
 export function buildPopupContent(
   feature: PoiFeature,
