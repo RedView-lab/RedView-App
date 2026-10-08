@@ -91,16 +91,16 @@ export const axis2Options: AxisOption[] = [
 const BIKE_ONLY_AXIS_VALUES = new Set(['Vitesse', 'Vitesse moyenne', 'Puissance', 'Puissance moyenne']);
 const FOOT_ONLY_AXIS_VALUES = new Set(['Allure', 'Allure moyenne']);
 
-/** Running shows pace instead of speed and has no power; cycling the reverse. */
+/** La course affiche l'allure au lieu de la vitesse et n'a pas de puissance ; le vélo l'inverse. */
 export function filterAxisOptionsForDiscipline(options: AxisOption[], foot: boolean): AxisOption[] {
   const hidden = foot ? BIKE_ONLY_AXIS_VALUES : FOOT_ONLY_AXIS_VALUES;
   return options.filter((option) => !hidden.has(option.value));
 }
 
 /**
- * Display-time mapping of a persisted axis metric to the active discipline
- * (speed ↔ pace; power has no running equivalent). The stored choice is left
- * untouched so switching back restores it.
+ * Correspondance, à l'affichage, d'une métrique d'axe persistée vers la
+ * discipline active (vitesse ↔ allure ; la puissance n'a pas d'équivalent en
+ * course). Le choix stocké n'est pas modifié : revenir en arrière le restaure.
  */
 export function mapAxisMetricForDiscipline<T extends string | null>(
   metric: T,

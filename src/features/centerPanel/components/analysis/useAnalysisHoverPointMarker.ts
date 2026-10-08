@@ -80,7 +80,7 @@ export function useAnalysisHoverPointMarker({
   const lastEmittedXValueRef = useRef<number | null>(null);
   const pendingEventRef = useRef<MapMouseEvent | null>(null);
   const rafRef = useRef<number | null>(null);
-  /** True once the marker reflects "cursor off the route"; avoids redoing it every frame. */
+  /** Vrai dès que le marqueur reflète « curseur hors du tracé » ; évite de le refaire à chaque image. */
   const mapHoverIdleRef = useRef(false);
 
   const stateRef = useRef({
@@ -120,8 +120,8 @@ export function useAnalysisHoverPointMarker({
 
     if (!activeMap) return;
 
-    // Echo of a map-hover emission (parent re-feeds the x value): marker is
-    // already at the exact projected point, skip the x -> point recomputation.
+    // Écho d'une émission de survol de carte (le parent renvoie la valeur x) : le
+    // marqueur est déjà au point projeté exact, sauter le recalcul x -> point.
     if (xValue != null && xValue === lastEmittedXValueRef.current && domMarkerRef.current) return;
     mapHoverIdleRef.current = false;
 
@@ -237,13 +237,13 @@ export function useAnalysisHoverPointMarker({
 
       if (!activeMap || isDisabled) return;
 
-      // Mouse button pressed -> user is dragging/panning the map or dragging a waypoint
+      // Bouton de souris enfoncé -> l'utilisateur fait glisser la carte ou un point de passage
       if (event.originalEvent && (event.originalEvent.buttons > 0 || event.originalEvent.which > 0)) {
         clearMapHover();
         return;
       }
 
-      // If hovering over interactive overlay elements (popups, controls, buttons)
+      // Si le survol porte sur des éléments interactifs en surcouche (popups, contrôles, boutons)
       const target = event.originalEvent?.target as HTMLElement | null;
       if (
         target?.closest(
@@ -319,11 +319,11 @@ export function useAnalysisHoverPointMarker({
       const color = targetItinerary.color || '#ff4d4f';
       mapHoverIdleRef.current = false;
 
-      // 1. Move or create map marker
+      // 1. Déplacer ou créer le marqueur sur la carte
       renderHoverMarker(activeMap, domMarkerRef, projected.lon, projected.lat, color);
       setLocalChartCursor({ itineraryId: targetItinerary.id, distanceM: projected.distanceM });
 
-      // 2. Compute chart xValue
+      // 2. Calculer la xValue du graphique
       let xValue: number | null = null;
       if (currentXMode === 'distance') {
         xValue = projected.distanceM / 1000 + startDistanceKm;

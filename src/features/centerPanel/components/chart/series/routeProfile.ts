@@ -183,9 +183,9 @@ export function normalizeRouteProfile(
 ): NormalizedRoutePoint[] | null {
   if (!routePoints || routePoints.length < 2) return null;
 
-  // Cached under the route itself, looked up before the corruption scan: a
-  // route with corrupted altitudes is cleaned into a new array every time, so
-  // keyed by that copy the profile was rebuilt at every chart recomputation.
+  // En cache sous le tracé lui-même, cherché avant l'analyse de corruption : un
+  // tracé aux altitudes corrompues est nettoyé dans un nouveau tableau à chaque
+  // fois, donc indexé par cette copie le profil était reconstruit à chaque recalcul du graphique.
   const signature = buildRouteContentSignature(routePoints);
   const cached = normalizedRouteProfileCache.get(routePoints);
   if (cached !== undefined && cached.signature === signature) return cached.value;

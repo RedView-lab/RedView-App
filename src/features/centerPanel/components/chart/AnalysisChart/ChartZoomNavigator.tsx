@@ -3,9 +3,9 @@ import '../ChartZoomNavigator.css';
 
 export interface ChartZoomNavigatorProps {
   orientation: 'horizontal' | 'vertical';
-  /** Fraction of full domain visible in window: [minFraction, 1.0] */
+  /** Part du domaine complet visible dans la fenêtre : [minFraction, 1.0] */
   visibleFraction: number;
-  /** Normalized offset of visible window: [0.0, 1.0] */
+  /** Décalage normalisé de la fenêtre visible : [0.0, 1.0] */
   offset: number;
   onChange: (next: { visibleFraction: number; offset: number }) => void;
   className?: string;
@@ -15,9 +15,9 @@ export interface ChartZoomNavigatorProps {
   endHandleTitle?: string;
   onWheel?: (e: ReactWheelEvent<HTMLDivElement>) => void;
   /**
-   * Double-click handler. When omitted, double-click emits a full view
-   * ({ visibleFraction: 1, offset: 0 }) through `onChange`, which is
-   * indistinguishable from dragging a handle to the edge.
+   * Gestionnaire de double-clic. S'il est omis, le double-clic émet une vue
+   * complète ({ visibleFraction: 1, offset: 0 }) via `onChange`, impossible à
+   * distinguer d'une poignée glissée jusqu'au bord.
    */
   onReset?: () => void;
 }
@@ -25,11 +25,11 @@ export interface ChartZoomNavigatorProps {
 type DragMode = 'body' | 'start' | 'end';
 
 /**
- * Premiere Pro style zoom and pan navigator bar.
- * - Dragging the center body pans the visible window.
- * - Dragging the start/end handles zooms in/out.
- * - Clicking the track centers on that position.
- * - Double-clicking resets to 100% full view.
+ * Barre de zoom et de déplacement façon Premiere Pro.
+ * - Glisser le corps central déplace la fenêtre visible.
+ * - Glisser les poignées de début/fin zoome ou dézoome.
+ * - Cliquer sur la piste centre sur cette position.
+ * - Double-cliquer revient à la vue complète à 100 %.
  */
 export function ChartZoomNavigator({
   orientation,
@@ -64,9 +64,9 @@ export function ChartZoomNavigator({
   const clampedFraction = Math.max(minFraction, Math.min(1, visibleFraction));
   const clampedOffset = Math.max(0, Math.min(1, offset));
 
-  // In normalized [0, 1] range:
-  // For horizontal: start = 0 (left), end = 1 (right)
-  // For vertical: value ratio 0 is bottom (min altitude), 1 is top (max altitude)
+  // Dans l'intervalle normalisé [0, 1] :
+  // À l'horizontale : début = 0 (gauche), fin = 1 (droite)
+  // À la verticale : le rapport 0 est en bas (altitude min), 1 en haut (altitude max)
   const startRatio = clampedOffset * (1 - clampedFraction);
   const endRatio = startRatio + clampedFraction;
 
@@ -94,8 +94,9 @@ export function ChartZoomNavigator({
   useEffect(() => {
     if (!activeDrag) return;
 
-    // Pointer events can fire several times per frame (high-rate mice): emit
-    // at most one viewport change per animation frame, the latest one wins.
+    // Les événements de pointeur peuvent arriver plusieurs fois par image
+    // (souris à haute fréquence) : émettre au plus un changement de vue par
+    // image d'animation, le dernier l'emporte.
     let frameId: number | null = null;
     let pending: { visibleFraction: number; offset: number } | null = null;
     const flush = () => {
@@ -117,7 +118,7 @@ export function ChartZoomNavigator({
       const currentCoord = isH ? e.clientX : e.clientY;
       const deltaPx = currentCoord - session.startCoord;
 
-      // For vertical: downward movement (deltaPx > 0) means decreasing altitude
+      // À la verticale : un mouvement vers le bas (deltaPx > 0) fait baisser l'altitude
       const deltaRatio = isH
         ? deltaPx / session.trackPx
         : -deltaPx / session.trackPx;
@@ -152,7 +153,7 @@ export function ChartZoomNavigator({
     };
 
     const handleWindowPointerUp = () => {
-      // Commit the last position synchronously so the drop is exact.
+      // Valider la dernière position de façon synchrone pour que le lâcher soit exact.
       if (frameId !== null) window.cancelAnimationFrame(frameId);
       flush();
       dragSessionRef.current = null;
@@ -192,19 +193,19 @@ export function ChartZoomNavigator({
       onReset();
       return;
     }
-    // Reset to 100% full view
+    // Revenir à la vue complète à 100 %
     onChange({ visibleFraction: 1, offset: 0 });
   };
 
-  // Geometry calculations
+  // Calculs géométriques
   const thumbStyle: React.CSSProperties = isH
     ? {
         left: `${(startRatio * 100).toFixed(4)}%`,
         width: `${(clampedFraction * 100).toFixed(4)}%`,
       }
     : {
-        // In screen Y: 0 is top, height is bottom
-        // Top of thumb = 1 - endRatio
+        // En Y écran : 0 est en haut, height en bas
+        // Haut du curseur = 1 - endRatio
         top: `${((1 - endRatio) * 100).toFixed(4)}%`,
         height: `${(clampedFraction * 100).toFixed(4)}%`,
       };
@@ -225,21 +226,21 @@ export function ChartZoomNavigator({
         style={thumbStyle}
         onPointerDown={(e) => handlePointerDown('body', e)}
       >
-        {/* Start Handle (Left for H, Bottom for V) */}
+        {/* Poignée de début (gauche en H, bas en V) */}
         <div
           className={`rvc-zoom-bar__handle rvc-zoom-bar__handle--${isH ? 'left' : 'bottom'}`}
           onPointerDown={(e) => handlePointerDown('start', e)}
           title={startHandleTitle ?? (isH ? 'Ajuster début' : 'Ajuster plancher')}
         />
 
-        {/* Center Dots */}
+        {/* Points centraux */}
         <div className="rvc-zoom-bar__dots" aria-hidden="true">
           <span />
           <span />
           <span />
         </div>
 
-        {/* End Handle (Right for H, Top for V) */}
+        {/* Poignée de fin (droite en H, haut en V) */}
         <div
           className={`rvc-zoom-bar__handle rvc-zoom-bar__handle--${isH ? 'right' : 'top'}`}
           onPointerDown={(e) => handlePointerDown('end', e)}

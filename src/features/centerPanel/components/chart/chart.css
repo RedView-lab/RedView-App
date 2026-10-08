@@ -1,11 +1,11 @@
 /* =============================================================
-   Analysis chart — clean, layered design.
-   Single positioning context: .rvchart
-   Stacking model (low → high):
-     1  background (grid, scale labels)
-     2  series   (data plots)
-     3  overlay  (cursor crosshair, hover line, hover cards)
-   The container owns the pointer; all layers have pointer-events: none.
+   Graphique d'analyse — conception propre, en couches.
+   Contexte de positionnement unique : .rvchart
+   Modèle d'empilement (du bas vers le haut) :
+     1  fond     (grille, libellés d'échelle)
+     2  séries   (tracés des données)
+     3  surcouche (réticule du curseur, ligne de survol, cartes de survol)
+   Le conteneur possède le pointeur ; toutes les couches ont pointer-events: none.
    ============================================================= */
 
 .rvchart {
@@ -14,8 +14,8 @@
   flex-direction: column;
   flex: 1 1 auto;
   min-width: 0;
-  /* 190 px in the regular 390 px center panel, down to 110 px in the 220 px
-     one of a short canvas (pages/Dashboard/lib/layout.ts), axis kept visible. */
+  /* 190 px dans le panneau central habituel de 390 px, jusqu'à 110 px dans celui
+     de 220 px d'un canvas bas (pages/Dashboard/lib/layout.ts), axe gardé visible. */
   min-height: clamp(110px, calc(var(--rvc-center-panel-height, 390px) - 200px), 190px);
   background: light-dark(#fff, rgba(0, 0, 0, 0.6));
   cursor: crosshair;
@@ -26,7 +26,7 @@
   padding-top: 14px;
 }
 
-/* Plot area = the chart minus the bottom rows (axis + series + add). */
+/* Zone de tracé = le graphique moins les lignes du bas (axe + séries + ajout). */
 .rvchart__plot {
   position: relative;
   flex: 1 1 auto;
@@ -183,7 +183,7 @@
   color: rgb(var(--rv-ink) / 0.5);
 }
 
-/* ---- Background grid lines ---- */
+/* ---- Lignes de la grille de fond ---- */
 .rvchart__hline,
 .rvchart__vline {
   position: absolute;
@@ -232,17 +232,17 @@
   box-shadow: 0 0 0 2px light-dark(#fff, rgba(0, 0, 0, 0.8));
 }
 
-/* POI markers / clusters: drawn on one canvas (AnalysisChart/PoiCanvasLayer),
- * sprites with their drop-shadows pre-rendered (AnalysisChart/poiSprites).
- * The canvas overflows the plot area so markers anchored near the top edge
- * are not clipped; hit-testing is done in JS on the plot area. */
+/* Marqueurs / amas de POI : dessinés sur un canvas (AnalysisChart/PoiCanvasLayer),
+ * sprites avec leurs ombres pré-rendues (AnalysisChart/poiSprites).
+ * Le canvas déborde de la zone de tracé pour que les marqueurs ancrés près du
+ * bord haut ne soient pas rognés ; le test d'impact se fait en JS sur la zone de tracé. */
 .rvchart__poi-canvas {
   position: absolute;
   display: block;
   pointer-events: none;
 }
 
-/* ---- Hover info cards (Figma Pixel-Perfect node 1894:40694) ---- */
+/* ---- Cartes d'info au survol (Figma Pixel-Perfect, nœud 1894:40694) ---- */
 .rvchart__cards {
   position: absolute;
   top: 8px;
@@ -314,7 +314,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ---- Bottom rows (X axis + series + viewport) ---- */
+/* ---- Lignes du bas (axe X + séries + vue) ---- */
 .rvchart__xaxis,
 .rvchart__series {
   display: grid;
@@ -338,7 +338,7 @@
   background: light-dark(rgb(var(--rv-ink) / 0.025), rgba(0, 0, 0, 0.4));
 }
 
-/* ---- Premiere Pro Zoom & Pan Navigators ---- */
+/* ---- Navigateurs de zoom et de déplacement façon Premiere Pro ---- */
 .rvc-zoom-bar {
   position: relative;
   background: light-dark(rgb(var(--rv-ink) / 0.04), rgba(0, 0, 0, 0.28));
@@ -381,21 +381,21 @@
   cursor: grabbing;
 }
 
-/* Horizontal thumb */
+/* Curseur horizontal */
 .rvc-zoom-bar--horizontal .rvc-zoom-bar__thumb {
   top: 0;
   bottom: 0;
   min-width: 20px;
 }
 
-/* Vertical thumb */
+/* Curseur vertical */
 .rvc-zoom-bar--vertical .rvc-zoom-bar__thumb {
   left: 0;
   right: 0;
   min-height: 20px;
 }
 
-/* Boundary handles (white end bars) */
+/* Poignées de bord (barres blanches aux extrémités) */
 .rvc-zoom-bar__handle {
   position: absolute;
   background: rgb(var(--rv-ink));
@@ -444,7 +444,7 @@
   border-radius: 0 0 1px 1px;
 }
 
-/* Center dots */
+/* Points centraux */
 .rvc-zoom-bar__dots {
   display: flex;
   align-items: center;

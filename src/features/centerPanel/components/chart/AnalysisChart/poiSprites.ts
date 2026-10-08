@@ -1,8 +1,8 @@
-// Chart POI sprites — the former DOM markers (`PoiBadge`, pause / waypoint
-// checkpoints, multi-POI cluster) rasterised once per variant on a canvas,
-// with their stacked CSS drop-shadows baked in. The chart then blits them with
-// `drawImage`, so hundreds of POIs cost one canvas pass instead of hundreds of
-// filtered DOM nodes re-rendered on every pan / zoom frame.
+// Sprites des POI du graphique — les anciens marqueurs DOM (`PoiBadge`, points
+// de contrôle pause / étape, amas multi-POI) rastérisés une fois par variante sur
+// un canvas, avec leurs ombres CSS empilées intégrées. Le graphique les recopie
+// ensuite avec `drawImage` : des centaines de POI coûtent une passe de canvas au
+// lieu de centaines de nœuds DOM filtrés re-rendus à chaque image de déplacement / zoom.
 
 import { PROVIDED_POI_SVG } from '@/features/poi/lib/providedPoiSvg';
 import { loadPoiImage } from '@/features/poi/lib/poi-sprites';
@@ -18,7 +18,7 @@ import {
   type VisiblePoiAnnotation,
 } from './types';
 
-/** Logical padding around the button box, room for the widest (hover) shadow. */
+/** Marge logique autour de la boîte du bouton, la place de l'ombre la plus large (survol). */
 const SPRITE_PAD_PX = 24;
 export const POI_HOVER_SCALE = 1.15;
 
@@ -29,7 +29,7 @@ const TEARDROP_URL = '/icons/ui/marker-pin-02.svg';
 const CLUSTER_URL = '/icons/poi/multiPOI.svg';
 const FALLBACK_BADGE_COLOR = '#5a5a5a';
 
-// Same asset tables as `PoiBadge` (itineraryPanel/sections/timeline/KindBadge).
+// Mêmes tables d'assets que `PoiBadge` (itineraryPanel/sections/timeline/KindBadge).
 const ROUND_BADGE_URLS: Partial<Record<PoiCategory, string>> = {
   fountains: '/icons/poi/dropdown-maps/water.svg',
   toilets: '/icons/poi/dropdown-maps/toilets.svg',
@@ -69,13 +69,13 @@ export type ChartPoiSpriteKind =
 
 export interface ChartPoiSprite {
   canvas: HTMLCanvasElement;
-  /** Logical size of the drawn canvas (button box + padding). */
+  /** Taille logique du canvas dessiné (boîte du bouton + marge). */
   width: number;
   height: number;
-  /** Anchor (the chart point) inside the canvas, logical px. */
+  /** Ancre (le point du graphique) dans le canvas, px logiques. */
   anchorX: number;
   anchorY: number;
-  /** Clickable box relative to the anchor, logical px (former button box). */
+  /** Boîte cliquable relative à l'ancre, px logiques (ancienne boîte du bouton). */
   box: { left: number; top: number; width: number; height: number };
 }
 
@@ -89,8 +89,8 @@ export function getChartPoiSpriteKind(annotation: VisiblePoiAnnotation): ChartPo
 }
 
 /**
- * POI drawn on the chart: a checkpoint, a favourite, or a category with its own
- * icon. The rest would only be an empty grey disc — not shown on the chart.
+ * POI dessiné sur le graphique : un point de contrôle, un favori ou une catégorie
+ * avec sa propre icône. Le reste ne serait qu'un disque gris vide — non affiché sur le graphique.
  */
 export function hasChartPoiIcon(annotation: Pick<VisiblePoiAnnotation, 'kind' | 'favorite' | 'poiCategory'>): boolean {
   if (annotation.kind === 'pause' || annotation.kind === 'waypoint' || annotation.favorite) return true;
@@ -107,7 +107,7 @@ export function getChartPoiSpriteKey(kind: ChartPoiSpriteKind, hover: boolean): 
   }
 }
 
-// ── Canvas helpers ─────────────────────────────────────────────────────
+// ── Outils canvas ──────────────────────────────────────────────────────
 
 interface Shadow { offsetY: number; blur: number; color: string }
 
@@ -131,14 +131,14 @@ function applyShadow(ctx: CanvasRenderingContext2D, shadow: Shadow | null, pr: n
     ctx.shadowOffsetY = 0;
     return;
   }
-  // Shadow parameters ignore the transform: scale them to device pixels.
+  // Les paramètres d'ombre ignorent la transformation : les ramener en pixels physiques.
   ctx.shadowColor = shadow.color;
   ctx.shadowBlur = shadow.blur * pr;
   ctx.shadowOffsetX = 0;
   ctx.shadowOffsetY = shadow.offsetY * pr;
 }
 
-/** CSS `filter: drop-shadow()` on a whole layer = draw it once with a shadow. */
+/** `filter: drop-shadow()` CSS sur toute une couche = la dessiner une fois avec une ombre. */
 function withDropShadow(source: HTMLCanvasElement, width: number, height: number, pr: number, shadow: Shadow): HTMLCanvasElement {
   const layer = createLayer(width, height, pr);
   if (!layer) return source;
@@ -155,7 +155,7 @@ function containRect(image: HTMLImageElement, x: number, y: number, w: number, h
   return [x + (w - iw * scale) / 2, y + (h - ih * scale) / 2, iw * scale, ih * scale];
 }
 
-/** `SvgV2Icon` tints its SVG with `currentColor` (mask) — same here. */
+/** `SvgV2Icon` teinte son SVG avec `currentColor` (masque) — pareil ici. */
 function drawTinted(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: number, y: number, w: number, h: number, color: string, pr: number): void {
   const tint = createLayer(w, h, pr);
   if (!tint) return;
@@ -184,7 +184,7 @@ function currentPixelRatio(hover: boolean): number {
   return Math.min(4, Math.max(1, dpr) * (hover ? POI_HOVER_SCALE : 1));
 }
 
-/** Synchronous cache read — null until `loadChartPoiSprite` resolved. */
+/** Lecture synchrone du cache — null tant que `loadChartPoiSprite` n'est pas résolu. */
 export function getChartPoiSprite(key: string): ChartPoiSprite | null {
   return spriteCache.get(key) ?? null;
 }
@@ -210,7 +210,7 @@ export function loadChartPoiSprite(kind: ChartPoiSpriteKind, hover: boolean): Pr
 async function rasterize(kind: ChartPoiSpriteKind, hover: boolean): Promise<ChartPoiSprite | null> {
   const pr = currentPixelRatio(hover);
 
-  // 1. Button content box (logical px) and the inner layer drawing.
+  // 1. Boîte de contenu du bouton (px logiques) et dessin de la couche intérieure.
   let boxW: number;
   let boxH: number;
   let innerShadow: Shadow | null = null;
@@ -318,7 +318,7 @@ async function rasterize(kind: ChartPoiSpriteKind, hover: boolean): Promise<Char
     outerShadow = { offsetY: 5, blur: 12, color: 'rgba(0, 0, 0, 0.8)' };
   }
 
-  // 2. Compose: content → inner drop-shadow → button drop-shadow.
+  // 2. Composer : contenu → ombre intérieure → ombre du bouton.
   const width = boxW + SPRITE_PAD_PX * 2;
   const height = boxH + SPRITE_PAD_PX * 2;
   const content = createLayer(width, height, pr);

@@ -25,13 +25,13 @@ export function buildPoiMarkerGroups(
 ): PoiMarkerGroup[] {
   if (annotations.length === 0) return [];
 
-  // Isolate favorites so a single favorite doesn't force a whole town of non-favorites to fan out across the chart
+  // Isoler les favoris pour qu'un seul favori ne force pas toute une ville de non-favoris à s'étaler sur le graphique
   const favorites = annotations.filter((a) => Boolean(a.favorite));
   const nonFavorites = annotations.filter((a) => !a.favorite);
 
   const clusterList = (list: VisiblePoiAnnotation[]): PoiMarkerGroup[] => {
     if (list.length === 0) return [];
-    // Sort primarily by distanceKm along route, secondary by xRatio
+    // Tri d'abord sur distanceKm le long du tracé, ensuite sur xRatio
     const sorted = [...list].sort((left, right) => {
       const distA = getPoiDistanceKm(left);
       const distB = getPoiDistanceKm(right);
@@ -52,12 +52,12 @@ export function buildPoiMarkerGroups(
       }
 
       const countInWindow = j - i;
-      // Only group dense clusters with >= 10 POIs within 1.0 km
+      // Ne regrouper que les amas denses d'au moins 10 POI dans 1,0 km
       if (countInWindow >= POI_CLUSTER_MIN_COUNT) {
         rawGroups.push(sorted.slice(i, j));
         i = j;
       } else {
-        // All other POIs are kept as single individual markers
+        // Tous les autres POI restent des marqueurs individuels
         rawGroups.push([sorted[i]]);
         i++;
       }
@@ -68,8 +68,8 @@ export function buildPoiMarkerGroups(
       const avgX = members.reduce((sum, member) => sum + member.xRatio, 0) / count;
       const topY = members.reduce((min, member) => Math.min(min, member.yRatio), members[0].yRatio);
       return {
-        // First member + size identifies a cluster (members are disjoint and
-        // sorted) without concatenating every member id on each pan frame.
+        // Premier membre + taille identifient un amas (les membres sont disjoints
+        // et triés) sans concaténer l'id de chaque membre à chaque image de déplacement.
         id: count === 1
           ? members[0].id
           : `cluster:${members[0].id}:${members[count - 1].id}:${count}`,
@@ -96,11 +96,11 @@ export function shouldRenderPoiCluster(
   if (group.kind !== 'cluster') {
     return false;
   }
-  // If the group contains any favorite, never cluster: show the favorite pin in front of rounds
+  // Si le groupe contient un favori, ne jamais regrouper : afficher l'épingle du favori devant les ronds
   if (group.members.some((m) => m.favorite)) {
     return false;
   }
-  // Only cluster when there are 10 or more co-located non-favorite POIs and not expanded
+  // Ne regrouper que s'il y a 10 POI non favoris ou plus au même endroit et que le groupe n'est pas déplié
   return (
     group.count >= POI_CLUSTER_MIN_COUNT &&
     !shouldExpandPoiCluster(group, visibleFraction, expandedPoiClusterId)

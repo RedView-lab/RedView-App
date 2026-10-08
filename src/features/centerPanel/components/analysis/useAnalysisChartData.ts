@@ -218,10 +218,10 @@ export function useAnalysisChartData({
     return computeXDomain(routeProfiles, xMode);
   }, [preparedChartNodes, xMode]);
 
-  // POI positions only depend on the route, the prediction and the X mode.
-  // Deriving them from `preparedChartNodes` rebuilt every annotation on each
-  // chart zoom step, axis-metric switch or weather update (series LOD depends
-  // on `detailZoom`); this lighter node list keeps them stable.
+  // Les positions des POI ne dépendent que du tracé, de la prédiction et du mode X.
+  // Les dériver de `preparedChartNodes` reconstruisait chaque annotation à chaque
+  // pas de zoom du graphique, changement de métrique d'axe ou mise à jour météo
+  // (le LOD des séries dépend de `detailZoom`) ; cette liste de nœuds plus légère les garde stables.
   const poiSourceNodes = useMemo(() => {
     const result: Array<Pick<PreparedChartNode, 'itinerary' | 'prediction' | 'xOffset'>> = [];
     for (const node of visualNodes) {

@@ -18,7 +18,7 @@ export function metricValueAtPoint(metric: ChartMetricId, point: PredictionPoint
       return point.predicted_speed_kmh;
     case 'Allure':
     case 'Allure moyenne':
-      // Decimal minutes per km, capped so walking / stops don't flatten the axis.
+      // Minutes décimales par km, plafonnées pour que la marche / les arrêts n'écrasent pas l'axe.
       return point.predicted_speed_kmh > 0.5
         ? Math.min(60 / point.predicted_speed_kmh, MAX_PACE_MIN_PER_KM)
         : Number.NaN;
@@ -275,9 +275,9 @@ function averageDistanceMetricOverInterval(
   const spanM = endDistanceM - startDistanceM;
   if (spanM <= 0) return Number.NaN;
 
-  // Samples are sorted by distance: the ones inside the interval are a
-  // contiguous run, found by bisection. Scanning every sample for every 500 m
-  // interval cost ~0.2-1 s on a 1 200 km prediction (100 000 points).
+  // Les échantillons sont triés par distance : ceux dans l'intervalle forment une
+  // suite contiguë, trouvée par dichotomie. Parcourir chaque échantillon pour
+  // chaque intervalle de 500 m coûtait ~0,2-1 s sur une prédiction de 1 200 km (100 000 points).
   let first = 0;
   let last = samples.length;
   while (first < last) {

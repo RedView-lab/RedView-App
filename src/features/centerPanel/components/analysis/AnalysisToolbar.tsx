@@ -39,7 +39,7 @@ interface AnalysisToolbarProps {
    * sans heure de départ).
    */
   disabledXModes?: Partial<Record<AxisMode, string>>;
-  /** Axis choices (defaults to every metric); filtered per discipline by the caller. */
+  /** Choix d'axe (toutes les métriques par défaut) ; filtrés par discipline par l'appelant. */
   axis1Options?: AxisOption[];
   axis2Options?: AxisOption[];
 }

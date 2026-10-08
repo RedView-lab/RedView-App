@@ -128,7 +128,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
     );
   }, [activeItineraryId, itineraries]);
 
-  // Trail / Running: pace instead of speed, no power (display-only mapping).
+  // Trail / course : allure au lieu de vitesse, pas de puissance (correspondance d'affichage seulement).
   const footDiscipline = isFootDiscipline(activeItinerary?.discipline);
   const axis1Value = mapAxisMetricForDiscipline<AxisMetricId>(storedAxis1, footDiscipline, 'Altitude');
   const axis2Value = mapAxisMetricForDiscipline<AxisMetricId | null>(storedAxis2, footDiscipline, null);
@@ -186,7 +186,7 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
     weatherByItinerary,
   });
 
-  // Span of the active itinerary's curve on the X axis (« Ajouter » only places on it).
+  // Étendue de la courbe de l'itinéraire actif sur l'axe X (« Ajouter » ne pose que dessus).
   const activeChartXRange = useMemo(() => {
     let min = Number.POSITIVE_INFINITY;
     let max = Number.NEGATIVE_INFINITY;
@@ -548,9 +548,9 @@ export function CenterPanelAnalysis({ map, globalFilters }: CenterPanelAnalysisP
     [handleSelectAlert, itineraries, map, updateHoverPoint],
   );
 
-  // Latest-closure ref + stable wrapper: a fresh `onPlotClick` on every render
-  // defeated `AnalysisChart`'s memo (re-rendering it on each map-hover /
-  // flyover frame) and re-bound its window pointer listeners.
+  // Ref vers la dernière closure + enveloppe stable : un `onPlotClick` neuf à
+  // chaque rendu annulait le memo d'`AnalysisChart` (rendu à chaque survol de
+  // carte / image du flyover) et réattachait ses écouteurs de pointeur sur window.
   const chartClickImplRef = useRef<(xValue: number) => void>(() => {});
   const handleChartClick = useCallback((xValue: number) => {
     chartClickImplRef.current(xValue);

@@ -1,4 +1,4 @@
-/* Premiere Pro style Zoom & Pan Navigator Bar */
+/* Barre de zoom et de déplacement façon Premiere Pro */
 .rvc-zoom-bar {
   position: relative;
   background: light-dark(rgb(var(--rv-ink) / 0.04), rgba(0, 0, 0, 0.28));
@@ -41,21 +41,21 @@
   cursor: grabbing;
 }
 
-/* Horizontal thumb */
+/* Curseur horizontal */
 .rvc-zoom-bar--horizontal .rvc-zoom-bar__thumb {
   top: 0;
   bottom: 0;
   min-width: 20px;
 }
 
-/* Vertical thumb */
+/* Curseur vertical */
 .rvc-zoom-bar--vertical .rvc-zoom-bar__thumb {
   left: 0;
   right: 0;
   min-height: 20px;
 }
 
-/* Boundary handles (white end bars) */
+/* Poignées de bord (barres blanches aux extrémités) */
 .rvc-zoom-bar__handle {
   position: absolute;
   background: rgb(var(--rv-ink));
@@ -104,7 +104,7 @@
   border-radius: 0 0 1px 1px;
 }
 
-/* Center dots */
+/* Points centraux */
 .rvc-zoom-bar__dots {
   display: flex;
   align-items: center;

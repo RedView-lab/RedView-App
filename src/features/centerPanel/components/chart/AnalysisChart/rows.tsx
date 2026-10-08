@@ -111,7 +111,7 @@ export function HoverCardGroup({
   if (rows.length === 0) return null;
   const transform = hoverRatioX > 0.52 ? 'translateX(-100%)' : 'translateX(0)';
 
-  // Group rows by itineraryName
+  // Grouper les lignes par itineraryName
   const itineraryGroups = rows.reduce<
     Record<
       string,

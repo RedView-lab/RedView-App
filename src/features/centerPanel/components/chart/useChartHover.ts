@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 export interface ChartHoverState {
   x: number;
   y: number;
-  /** Normalized horizontal position in the chart [0, 1]. */
+  /** Position horizontale normalisée dans le graphique [0, 1]. */
   ratioX: number;
 }
 
@@ -20,12 +20,12 @@ function sameHoverState(left: ChartHoverState | null, right: ChartHoverState | n
 }
 
 /**
- * Tracks pointer position over a chart container element.
- * Returns a ref to attach to the container, and the current hover state
- * (or null when the pointer is outside).
+ * Suit la position du pointeur sur un élément conteneur de graphique.
+ * Renvoie une ref à attacher au conteneur, et l'état de survol courant
+ * (ou null quand le pointeur est dehors).
  *
- * The container element is the single source of truth for pointer events:
- * all visual layers above it must use `pointer-events: none`.
+ * L'élément conteneur est la seule source de vérité des événements de pointeur :
+ * toutes les couches visuelles au-dessus doivent avoir `pointer-events: none`.
  */
 export function useChartHover<T extends HTMLElement>() {
   const ref = useRef<T | null>(null);
@@ -36,8 +36,8 @@ export function useChartHover<T extends HTMLElement>() {
     const el = ref.current;
     if (!el) return;
 
-    // Coalesce pointer events to one React commit per frame; the layout read
-    // (getBoundingClientRect) also happens at most once per frame.
+    // Regrouper les événements de pointeur en un commit React par image ; la
+    // lecture de mise en page (getBoundingClientRect) se fait aussi au plus une fois par image.
     let rafId: number | null = null;
     let pendingPointer: { clientX: number; clientY: number } | null = null;
 

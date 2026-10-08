@@ -84,7 +84,7 @@ function buildSeriesFromRouteWeather(
   if (!profile || profile.length === 0) return null;
 
   const timeline = xMode === 'distance' ? null : getPredictionTimeline(prediction);
-  const FALLBACK_SPEED_MS = 20 / 3.6; // 20 km/h default
+  const FALLBACK_SPEED_MS = 20 / 3.6; // 20 km/h par défaut
 
   const points: ChartPoint[] = [];
   for (const sample of profile) {
@@ -153,9 +153,9 @@ function buildSeriesFromRouteProfile(
         sampleSpacingM,
       )
     : null;
-  // Looked up before sampling the profile (5-10 ms on a 100 000-point route,
-  // paid at every chart recomputation even when the series was cached). A
-  // cached series only exists for a profile that was sampled successfully.
+  // Cherché avant d'échantillonner le profil (5-10 ms sur un tracé de 100 000
+  // points, payés à chaque recalcul du graphique même quand la série était en
+  // cache). Une série en cache n'existe que pour un profil échantillonné avec succès.
   if (routeCache && routeCacheKey) {
     const cached = routeCache.get(routeCacheKey);
     if (cached !== undefined) return cached;
@@ -165,7 +165,7 @@ function buildSeriesFromRouteProfile(
   if (!profile) return null;
 
   const timeline = xMode === 'distance' ? null : getPredictionTimeline(prediction);
-  const FALLBACK_SPEED_MS = 20 / 3.6; // 20 km/h default
+  const FALLBACK_SPEED_MS = 20 / 3.6; // 20 km/h par défaut
 
   const points: ChartPoint[] = [];
   for (const sample of profile) {
@@ -250,7 +250,7 @@ export function buildSeriesFromPrediction(
 
   if (!prediction || prediction.points.length === 0) return null;
   if (!metricIsAvailable(metric)) return null;
-  // The running engine has no power model.
+  // Le moteur de course n'a pas de modèle de puissance.
   if (isPowerMetric(metric) && isFootDiscipline(resolvePredictionDiscipline(prediction))) return null;
 
   const predictionCache = getPredictionSeriesCacheMap(prediction);

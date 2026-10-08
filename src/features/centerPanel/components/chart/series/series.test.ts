@@ -5,7 +5,7 @@ import type { PredictionResult } from '@/features/fitPredictor';
 import { buildSeriesFromPrediction, locateRoutePointAtX } from './builders';
 import { normalizeRouteProfile } from './routeProfile';
 
-/** Prediction whose speed grows linearly with distance, at irregular spacing. */
+/** Prédiction dont la vitesse croît linéairement avec la distance, à espacement irrégulier. */
 function linearSpeedPrediction(km: number): PredictionResult {
   let s = 5;
   const rnd = () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
@@ -13,7 +13,7 @@ function linearSpeedPrediction(km: number): PredictionResult {
   let distanceM = 0;
   let elapsedS = 0;
   while (distanceM < km * 1000) {
-    const speed = 15 + distanceM / 1000; // km/h, +1 km/h per km
+    const speed = 15 + distanceM / 1000; // km/h, +1 km/h par km
     points.push({
       distance_m: distanceM,
       elevation_m: 500,
@@ -45,7 +45,7 @@ describe('interval average series', () => {
     const prediction = linearSpeedPrediction(40);
     const series = buildSeriesFromPrediction(prediction, 'Vitesse moyenne', 'distance');
     expect(series).not.toBeNull();
-    // Steps: (start, y), (end, y) per interval; y = speed at the interval midpoint.
+    // Paliers : (début, y), (fin, y) par intervalle ; y = vitesse au milieu de l'intervalle.
     let checked = 0;
     for (let i = 1; i < series!.length; i++) {
       const a = series![i - 1]!;
@@ -68,9 +68,9 @@ describe('route-backed series cache', () => {
     }));
     const first = buildSeriesFromPrediction(null, 'Altitude', 'distance', routePoints, 'gpx');
     expect(first).not.toBeNull();
-    expect(Math.min(...first!.map((p) => p.y))).toBeGreaterThan(600); // spikes cleaned
-    // The cleaned profile itself is cached under the route (it was rebuilt at
-    // every chart recomputation, keyed by a fresh cleaned copy).
+    expect(Math.min(...first!.map((p) => p.y))).toBeGreaterThan(600); // pics nettoyés
+    // Le profil nettoyé lui-même est en cache sous le tracé (il était reconstruit
+    // à chaque recalcul du graphique, indexé par une copie nettoyée neuve).
     expect(normalizeRouteProfile(routePoints)).toBe(normalizeRouteProfile(routePoints));
   });
 });

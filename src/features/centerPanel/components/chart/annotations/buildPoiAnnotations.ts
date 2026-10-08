@@ -223,12 +223,12 @@ export function buildPoiAnnotationsForItinerary(
     );
   }
 
-  // 1b. Extra favorite POIs from itinerary.poiFeatures if not yet in timeline
+  // 1b. POI favoris supplémentaires depuis itinerary.poiFeatures s'ils ne sont pas encore dans la timeline
   if (includeFavoritesAlways && itinerary.poiFeatures && routePoints.length >= 2 && cumLengths) {
     const favoriteFeatures = itinerary.poiFeatures.filter((f) => f.favorite);
-    // Last `::` segment of each annotation id — `id.endsWith('::X')` for an X
-    // without `::` is exactly `lastSegment === X`, so the per-favorite scan of
-    // every annotation becomes a Set lookup.
+    // Dernier segment `::` de chaque id d'annotation — `id.endsWith('::X')` pour
+    // un X sans `::` équivaut exactement à `lastSegment === X` : le parcours de
+    // chaque annotation pour chaque favori devient une recherche dans un Set.
     const presentSegments = new Set(
       result.map((r) => r.id.slice(r.id.lastIndexOf('::') + 2)),
     );
@@ -263,9 +263,9 @@ export function buildPoiAnnotationsForItinerary(
     }
   }
 
-  // 2. Pause rows
+  // 2. Lignes de pause
   if (includePause) {
-    // 2a. Manual timeline pauses
+    // 2a. Pauses manuelles de la timeline
     const pauseRows = itinerary.timeline.filter(
       (row) => row.kind === 'pause' && row.visible !== false && Number.isFinite(row.distanceKm),
     );
@@ -289,7 +289,7 @@ export function buildPoiAnnotationsForItinerary(
       );
     }
 
-    // 2b. Auto-generated interval pauses
+    // 2b. Pauses d'intervalle générées automatiquement
     if (
       itinerary.rhythm?.pauseEveryIntervalEnabled &&
       (prediction || itinerary.prediction)
@@ -327,7 +327,7 @@ export function buildPoiAnnotationsForItinerary(
     }
   }
 
-  // 3. Waypoint rows
+  // 3. Lignes d'étape
   if (includeWaypoint) {
     const waypointRows = itinerary.timeline.filter(
       (row) => row.kind === 'waypoint' && row.visible !== false && Number.isFinite(row.distanceKm),

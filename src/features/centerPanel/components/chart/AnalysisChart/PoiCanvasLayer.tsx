@@ -23,14 +23,15 @@ import {
 import type { PoiMarkerGroup, VisiblePoiAnnotation } from './types';
 
 /**
- * Chart POI layer — ONE canvas instead of one filtered `<button>` per POI.
+ * Couche des POI du graphique — UN canvas au lieu d'un `<button>` filtré par POI.
  *
- * Same visuals as the former DOM markers (sprites from `poiSprites.ts`), same
- * stacking (clusters < POIs < favorites < hovered), same interactions: hover
- * lift + pointer cursor + native tooltip, click to open, cluster click to
- * zoom. Hit-testing runs against the former button boxes. Pan / zoom only
- * re-blits cached bitmaps — no React reconciliation of hundreds of nodes and
- * no stacked CSS drop-shadows repainted per frame.
+ * Même rendu que les anciens marqueurs DOM (sprites de `poiSprites.ts`), même
+ * empilement (amas < POI < favoris < survolé), mêmes interactions : soulèvement
+ * au survol + curseur pointeur + infobulle native, clic pour ouvrir, clic sur
+ * un amas pour zoomer. Le test d'impact se fait sur les boîtes des anciens
+ * boutons. Déplacement / zoom ne font que recopier des bitmaps en cache — pas
+ * de réconciliation React de centaines de nœuds ni d'ombres CSS empilées
+ * repeintes à chaque image.
  */
 
 export interface PoiCanvasHandlers {
@@ -38,7 +39,7 @@ export interface PoiCanvasHandlers {
   onPoiClick?: (annotation: VisiblePoiAnnotation) => void;
 }
 
-/** Room around the plot area: markers stick out above it (anchored at their base). */
+/** Marge autour de la zone de tracé : les marqueurs dépassent au-dessus (ancrés par leur base). */
 const CANVAS_OVERFLOW_PX = 64;
 
 interface DrawItem {
@@ -81,7 +82,7 @@ export const PoiCanvasLayer = memo(function PoiCanvasLayer({
   const hoveredKeyRef = useRef<string | null>(null);
   const pressedKeyRef = useRef<string | null>(null);
 
-  // Draw list in paint order (the former CSS z-index stacking, DOM order as tiebreak).
+  // Liste de dessin dans l'ordre de peinture (l'ancien empilement par z-index CSS, ordre DOM en départage).
   const items = useMemo<DrawItem[]>(() => {
     const list: DrawItem[] = [];
     for (const group of poiMarkerGroups) {
@@ -132,13 +133,13 @@ export const PoiCanvasLayer = memo(function PoiCanvasLayer({
         });
       });
     }
-    // Stable sort keeps DOM order within an equal z-index.
+    // Un tri stable garde l'ordre DOM à z-index égal.
     return list.map((item, index) => ({ item, index }))
       .sort((a, b) => a.item.z - b.item.z || a.index - b.index)
       .map(({ item }) => item);
   }, [expandedPoiClusterId, poiMarkerGroups, t, visibleFraction]);
 
-  // Latest values for the native listeners / draw (synced before paint).
+  // Dernières valeurs pour les écouteurs natifs / le dessin (synchronisées avant la peinture).
   const itemsRef = useRef(items);
   const sizeRef = useRef({ width, height });
   useLayoutEffect(() => {
@@ -146,7 +147,7 @@ export const PoiCanvasLayer = memo(function PoiCanvasLayer({
     sizeRef.current = { width, height };
   }, [items, width, height]);
 
-  // Request missing sprites; redraw once they are ready.
+  // Demander les sprites manquants ; redessiner une fois prêts.
   useEffect(() => {
     let cancelled = false;
     const pending: Promise<unknown>[] = [];
@@ -202,7 +203,7 @@ export const PoiCanvasLayer = memo(function PoiCanvasLayer({
       ctx.drawImage(sprite.canvas, x - sprite.anchorX, y - sprite.anchorY, sprite.width, sprite.height);
     }
 
-    // Hovered marker on top, scaled 1.15 around its box centre (former :hover CSS).
+    // Marqueur survolé au-dessus, agrandi de 1,15 autour du centre de sa boîte (ancien CSS :hover).
     if (hoveredItem) {
       const hoverSprite =
         getChartPoiSprite(getChartPoiSpriteKey(hoveredItem.kind, true))
@@ -227,7 +228,7 @@ export const PoiCanvasLayer = memo(function PoiCanvasLayer({
     draw();
   }, [draw, items, width, height, spriteVersion]);
 
-  // ── Pointer interactions (native listeners on the plot area) ──────────
+  // ── Interactions du pointeur (écouteurs natifs sur la zone de tracé) ──
 
   useEffect(() => {
     const plotArea = plotAreaRef.current;
@@ -261,7 +262,7 @@ export const PoiCanvasLayer = memo(function PoiCanvasLayer({
           && py >= cy - halfH && py <= cy + halfH;
       };
 
-      // Topmost first: the hovered marker, then reverse paint order.
+      // Le plus haut d'abord : le marqueur survolé, puis l'ordre de peinture inverse.
       if (hoveredKey) {
         const hovered = list.find((item) => item.key === hoveredKey);
         if (hovered && contains(hovered, POI_HOVER_SCALE)) return hovered;
@@ -305,8 +306,8 @@ export const PoiCanvasLayer = memo(function PoiCanvasLayer({
       applyHover(null);
     };
 
-    // Capture phase: a press on a POI must not start the plot's drag-select /
-    // click-to-center (the former buttons stopped propagation the same way).
+    // Phase de capture : un appui sur un POI ne doit pas lancer la sélection par
+    // glisser / le clic pour centrer du tracé (les anciens boutons arrêtaient la propagation de la même façon).
     const handlePointerDown = (event: PointerEvent) => {
       if (event.button !== 0) return;
       const hit = hitTest(event.clientX, event.clientY);
@@ -340,7 +341,7 @@ export const PoiCanvasLayer = memo(function PoiCanvasLayer({
     };
   }, [draw, handlersRef, plotAreaRef]);
 
-  // Items changed under a still cursor (pan / zoom): drop a stale hover.
+  // Les éléments ont changé sous un curseur immobile (déplacement / zoom) : abandonner un survol périmé.
   useEffect(() => {
     const hoveredKey = hoveredKeyRef.current;
     if (hoveredKey && !items.some((item) => item.key === hoveredKey)) {

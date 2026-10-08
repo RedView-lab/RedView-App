@@ -10,7 +10,7 @@ import '../styles/index.css';
 interface CenterPanelProps {
   map: MapboxMap | null;
   globalFilters?: TimelineFilterState;
-  /** Short canvas: tighter padding and gaps (the dashboard may give it only 240 px). */
+  /** Canvas bas : padding et espacements plus serrés (le tableau de bord peut ne lui donner que 240 px). */
   compact?: boolean;
 }
 
@@ -19,9 +19,9 @@ export const CenterPanel = memo(function CenterPanel({ map, globalFilters, compa
   const [fullscreen, setFullscreen] = useState(false);
   const dockRef = useRef<HTMLElement>(null);
   const [fullscreenShell, setFullscreenShell] = useState<HTMLElement | null>(null);
-  // Summary + analysis are rendered once, into a node moved between the docked
-  // panel and the fullscreen one: no remount (chart state, selection) and no
-  // second copy of the analysis' map markers.
+  // Résumé + analyse sont rendus une fois, dans un nœud déplacé entre le panneau
+  // ancré et le plein écran : pas de remontage (état du graphique, sélection) ni
+  // seconde copie des marqueurs de carte de l'analyse.
   const [content] = useState(() => {
     const node = document.createElement('div');
     node.className = 'rvc-center-panel__content';
@@ -33,8 +33,8 @@ export const CenterPanel = memo(function CenterPanel({ map, globalFilters, compa
     if (target && content.parentNode !== target) target.appendChild(content);
   }, [content, fullscreen, fullscreenShell]);
 
-  // Same contract as the feuille de route's fullscreen: Escape closes, the page
-  // behind does not scroll. An Escape already used (menu, rename) does not.
+  // Même contrat que le plein écran de la feuille de route : Échap ferme, la page
+  // derrière ne défile pas. Un Échap déjà consommé (menu, renommage) non.
   useEffect(() => {
     if (!fullscreen) return;
 

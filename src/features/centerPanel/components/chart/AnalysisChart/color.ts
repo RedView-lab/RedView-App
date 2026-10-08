@@ -1,4 +1,4 @@
-/** `#rgb` / `#rrggbb` → `rgba(…, alpha)`; any other colour string is returned unchanged. */
+/** `#rgb` / `#rrggbb` → `rgba(…, alpha)` ; toute autre chaîne de couleur est renvoyée telle quelle. */
 export function withAlpha(color: string, alpha: number): string {
   const normalizedAlpha = Math.max(0, Math.min(1, alpha));
   const hex = color.trim();

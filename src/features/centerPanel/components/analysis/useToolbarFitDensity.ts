@@ -1,18 +1,18 @@
 import { useLayoutEffect, type RefObject } from 'react';
 
-/** Highest compaction step defined in styles/analysis/responsive.css. */
+/** Plus haute étape de compaction définie dans styles/analysis/responsive.css. */
 const MAX_DENSITY = 8;
 
-/** Wrapping units: the toolbar's children, and the chips inside the filter group (it wraps on its own). */
+/** Unités de retour à la ligne : les enfants de la barre d'outils, et les puces du groupe de filtres (il revient à la ligne de lui-même). */
 const ITEM_SELECTOR = ':scope > *, :scope > .rvc-center-analysis__filters > *';
 
-/** True when one item starts below the bottom of another, i.e. the row broke. */
+/** Vrai quand un élément commence sous le bas d'un autre, c'est-à-dire que la ligne a cassé. */
 function wrapsOntoSecondRow(items: readonly Element[]): boolean {
   let firstRowBottom = Infinity;
   const tops: number[] = [];
   for (const item of items) {
     const rect = item.getBoundingClientRect();
-    if (rect.width === 0 && rect.height === 0) continue; // display: none at this step
+    if (rect.width === 0 && rect.height === 0) continue; // display: none à cette étape
     firstRowBottom = Math.min(firstRowBottom, rect.bottom);
     tops.push(rect.top);
   }
@@ -20,12 +20,14 @@ function wrapsOntoSecondRow(items: readonly Element[]): boolean {
 }
 
 /**
- * Keeps the analysis toolbar on one row: picks the first compaction step whose
- * layout does not wrap, from the measured content rather than viewport
- * breakpoints, so it holds for any language, axis metric or surface label.
- * Step n is written as `data-density="1 … n"` so CSS matches "at least n" with
- * `[data-density~='n']`. The toolbar still wraps past the last step: its
- * dropdowns are positioned inside it, so it cannot become a scroller.
+ * Garde la barre d'outils de l'analyse sur une ligne : choisit la première étape
+ * de compaction dont la mise en page ne revient pas à la ligne, d'après le
+ * contenu mesuré plutôt que des points de rupture de la fenêtre, pour tenir
+ * quelles que soient la langue, la métrique d'axe ou le libellé de surface.
+ * L'étape n est écrite `data-density="1 … n"` pour que le CSS fasse « au moins
+ * n » avec `[data-density~='n']`. Au-delà de la dernière étape, la barre revient
+ * quand même à la ligne : ses menus déroulants sont positionnés dedans, elle ne
+ * peut pas devenir une zone de défilement.
  */
 export function useToolbarFitDensity(ref: RefObject<HTMLElement | null>): void {
   useLayoutEffect(() => {
@@ -38,11 +40,11 @@ export function useToolbarFitDensity(ref: RefObject<HTMLElement | null>): void {
     };
 
     const fit = () => {
-      if (el.clientWidth === 0) return; // collapsed panel: keep the last step
+      if (el.clientWidth === 0) return; // panneau replié : garder la dernière étape
       const items = Array.from(el.querySelectorAll(ITEM_SELECTOR));
-      // Controls transition their padding: measured mid-transition, a step
-      // would be judged on the previous step's spacing (data-fitting turns
-      // transitions off, responsive.css).
+      // Les contrôles animent leur padding : mesurée en pleine transition, une
+      // étape serait jugée sur l'espacement de l'étape précédente (data-fitting
+      // coupe les transitions, responsive.css).
       el.dataset.fitting = '';
       let level = 0;
       applyDensity(level);
@@ -55,7 +57,7 @@ export function useToolbarFitDensity(ref: RefObject<HTMLElement | null>): void {
 
     fit();
 
-    // Width only: a step change alters the toolbar's height, not its width.
+    // Largeur seulement : un changement d'étape modifie la hauteur de la barre, pas sa largeur.
     let lastWidth = el.clientWidth;
     const resizeObserver = new ResizeObserver(() => {
       if (el.clientWidth === lastWidth) return;
@@ -64,7 +66,7 @@ export function useToolbarFitDensity(ref: RefObject<HTMLElement | null>): void {
     });
     resizeObserver.observe(el);
 
-    // Labels change width on a language switch, an axis metric or a surface choice.
+    // Les libellés changent de largeur avec la langue, la métrique d'axe ou le choix de surface.
     const mutationObserver = new MutationObserver(fit);
     mutationObserver.observe(el, { childList: true, characterData: true, subtree: true });
 

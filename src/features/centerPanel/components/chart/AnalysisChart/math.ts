@@ -388,7 +388,7 @@ export function buildNiceTicks(
 
 const ELEVATION_STEP_LIMIT_M = 300;
 
-/** Prefix sums of D+/D- per point, only built for x-sorted series (else null). */
+/** Sommes cumulées de D+/D- par point, construites seulement pour les séries triées en x (sinon null). */
 const cumulativeElevationCache = new WeakMap<
   { x: number; y: number }[],
   { gain: Float64Array; loss: Float64Array } | null
@@ -433,7 +433,7 @@ export function computeCumulativeElevationAtX(
   const prefix = Number.isFinite(xTarget) ? getCumulativeElevation(points) : null;
   if (prefix) {
     if (points[0].x > xTarget) return { gainM: 0, lossM: 0 };
-    // Last index with x <= xTarget.
+    // Dernier indice avec x <= xTarget.
     let lo = 0;
     let hi = points.length - 1;
     if (points[hi].x <= xTarget) {

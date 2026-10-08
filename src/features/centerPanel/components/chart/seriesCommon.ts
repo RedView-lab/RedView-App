@@ -1,7 +1,7 @@
 import { formatPaceSeconds } from '@/shared/lib/pace';
 
 /**
- * Base route sample used by chart series builders and chart interactions.
+ * Échantillon de tracé de base utilisé par les constructeurs de séries et les interactions du graphique.
  */
 export interface RouteChartPoint {
   lat: number;
@@ -12,8 +12,8 @@ export interface RouteChartPoint {
 }
 
 /**
- * Identifier of an axis option exposed by the analysis dropdowns. Keep in
- * sync with the labels rendered in CenterPanelAnalysis.
+ * Identifiant d'une option d'axe proposée par les menus déroulants de l'analyse.
+ * À garder synchronisé avec les libellés rendus dans CenterPanelAnalysis.
  */
 export type AxisMetricId =
   | 'Altitude'
@@ -38,13 +38,13 @@ export type ChartMetricId = AxisMetricId;
 
 export type AxisMode = 'distance' | 'temps' | 'heure';
 
-/** Single point of a chart series, expressed in axis units (km / s / metric). */
+/** Point unique d'une série du graphique, exprimé dans les unités de l'axe (km / s / métrique). */
 export interface ChartPoint {
   x: number;
   y: number;
 }
 
-/** Plot-ready descriptor: one curve for one itinerary on one axis. */
+/** Descripteur prêt à tracer : une courbe pour un itinéraire sur un axe. */
 export interface ChartSeries {
   id: string;
   itineraryId: string;
@@ -57,8 +57,8 @@ export interface ChartSeries {
 }
 
 /**
- * Soft background profile drawn behind the active metrics. Used for example
- * to show the route elevation profile when the user analyses slope.
+ * Profil de fond discret dessiné derrière les métriques actives. Sert par
+ * exemple à montrer le profil d'altitude du tracé quand l'utilisateur analyse la pente.
  */
 export interface ChartBackdropProfile {
   id: string;
@@ -68,13 +68,13 @@ export interface ChartBackdropProfile {
   points: ChartPoint[];
 }
 
-/** Numeric domain (min/max) used for scaling the chart axes. */
+/** Domaine numérique (min/max) utilisé pour mettre à l'échelle les axes du graphique. */
 export interface AxisDomain {
   min: number;
   max: number;
 }
 
-/** Returns the unit string displayed alongside a metric label. */
+/** Renvoie l'unité affichée à côté du libellé d'une métrique. */
 export function unitForMetric(metric: ChartMetricId): string {
   switch (metric) {
     case 'Vitesse':
@@ -110,7 +110,7 @@ export function unitForMetric(metric: ChartMetricId): string {
   }
 }
 
-/** Running pace, stored in the series as decimal minutes per km. */
+/** Allure de course, stockée dans la série en minutes décimales par km. */
 export function isPaceMetric(metric: ChartMetricId): boolean {
   return metric === 'Allure' || metric === 'Allure moyenne';
 }
@@ -119,7 +119,7 @@ export function isPowerMetric(metric: ChartMetricId): boolean {
   return metric === 'Puissance' || metric === 'Puissance moyenne';
 }
 
-/** "5:32 /km" from decimal minutes per km. */
+/** « 5:32 /km » à partir de minutes décimales par km. */
 export function formatPaceMinutes(minutesPerKm: number, withUnit = true): string {
   return formatPaceSeconds(minutesPerKm * 60, { unit: withUnit });
 }
@@ -128,7 +128,7 @@ export function isInclinationMetric(metric: ChartMetricId): boolean {
   return metric === 'Inclinaison (°)' || metric === 'Inclinaison (%)';
 }
 
-/** Format a tick label according to the metric type. */
+/** Met en forme un libellé de graduation selon le type de métrique. */
 export function formatAxisValue(metric: ChartMetricId, value: number): string {
   if (!Number.isFinite(value)) return '--';
   if (isPaceMetric(metric)) return formatPaceMinutes(value);
@@ -160,9 +160,9 @@ export function isWeatherMetric(metric: ChartMetricId): boolean {
 }
 
 /**
- * Whether a metric's running value can be computed. Returns true for
- * physical model metrics (speed, power, elevation, slope) and for all
- * supported route weather metrics.
+ * Indique si la valeur de course d'une métrique peut être calculée. Vrai pour
+ * les métriques du modèle physique (vitesse, puissance, altitude, pente) et pour
+ * toutes les métriques météo de tracé prises en charge.
  */
 export function metricIsAvailable(metric: ChartMetricId): boolean {
   switch (metric) {
