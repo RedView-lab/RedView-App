@@ -4,6 +4,7 @@ import {
 import {
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -58,6 +59,8 @@ export function ColorPalettePicker({
 }: ColorPalettePickerProps) {
   const { t } = useAppI18n();
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const triggerId = useId();
+  const labelId = useId();
   const popupRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<{ top: number; left: number; scale: number } | null>(null);
@@ -155,11 +158,14 @@ export function ColorPalettePicker({
 
   return (
     <>
+      {/* Nom accessible = libellé + contenu visible du bouton (valeur hex), WCAG 2.5.3. */}
+      <span id={labelId} hidden>{ariaLabel ?? t('Choisir une couleur')}</span>
       <button
         ref={triggerRef}
+        id={triggerId}
         type="button"
         className={`rvc-color-palette__trigger${className ? ` ${className}` : ''}`}
-        aria-label={ariaLabel ?? 'Choisir une couleur'}
+        aria-labelledby={`${labelId} ${triggerId}`}
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >

@@ -82,7 +82,8 @@ export function Section({
       </header>
       <div
         className={`rvc-section__body-wrap${isOpen ? ' is-open' : ''}`}
-        aria-hidden={!isOpen}
+        // Replié : ni focalisable ni lu (aria-hidden seul laissait ses contrôles atteignables au clavier).
+        inert={!isOpen}
       >
         <div className={`rvc-section__body-inner${fullyOpen ? ' is-fully-open' : ''}`}>
           <div className="rvc-section__body">{children}</div>
