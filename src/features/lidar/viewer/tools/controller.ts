@@ -1,19 +1,19 @@
 // ============================================
-// LiDAR viewer tools — controller
+// Outils du viewer LiDAR — contrôleur
 // ============================================
 //
-// Input model (the camera keeps every gesture: left drag orbits, right drag
-// pans, wheel zooms):
-//  - a right click (no drag, short press) opens the context menu on the
-//    point under the cursor; while a drawing tool runs it finishes it, while
-//    the route editor draws it is left to the route editor;
-//  - with a tool active, a left click places a vertex (Alt or Shift: the
-//    ground under the vegetation) or runs the one-point tool;
-//  - keys: M distance, H height/angle, S area, P profile, F fall line,
-//    A avalanche exposure, V viewshed; Enter finishes, Backspace removes the
-//    last vertex, Escape cancels;
-//  - drawing an area (measurement or comment zone), a click on a vertex
-//    already placed closes it on that vertex (`shared/lib/polygonClosing`).
+// Modèle de saisie (la caméra garde tous les gestes : glisser gauche pour
+// tourner, glisser droit pour déplacer, molette pour zoomer) :
+//  - un clic droit (sans glisser, appui bref) ouvre le menu contextuel sur le
+//    point sous le curseur ; pendant qu'un outil de dessin tourne, il le
+//    termine ; pendant que l'éditeur de tracé dessine, il lui est laissé ;
+//  - outil actif, un clic gauche pose un sommet (Alt ou Maj : le sol sous la
+//    végétation) ou lance l'outil à un point ;
+//  - touches : M distance, H hauteur/angle, S surface, P profil, F ligne de
+//    chute, A exposition avalanche, V visibilité ; Entrée termine, Retour
+//    arrière retire le dernier sommet, Échap annule ;
+//  - en dessinant une surface (mesure ou zone de commentaire), un clic sur un
+//    sommet déjà posé la ferme sur ce sommet (`shared/lib/polygonClosing`).
 
 import { translateAppText as t } from '@/shared/i18n/config';
 import { trackAnalyticsEvent, type LidarTool } from '@/shared/lib/analytics';
@@ -60,26 +60,26 @@ function trackLidarTool(tool: ToolId): void {
 }
 export interface ViewerToolsOptions {
   canvas: HTMLCanvasElement;
-  /** Parent of the scene canvas; receives the overlay canvas. */
+  /** Parent du canvas de la scène ; reçoit le canvas de superposition. */
   container: HTMLElement;
   camera: CameraController;
   sceneParams: ViewerRouteSceneParams;
-  /** LOD tiles of the scene, indexed like `SceneNode.tileIndex`. */
+  /** Tuiles LOD de la scène, indexées comme `SceneNode.tileIndex`. */
   tiles: readonly OpenedLodTile[];
-  /** LOD nodes drawn by the last frame. */
+  /** Nœuds LOD dessinés par la dernière image. */
   getDrawnNodes: () => readonly SceneNode[];
-  /** The point filter shows this ASPRS class. */
+  /** Le filtre de points affiche cette classe ASPRS. */
   isClassVisible: (classification: number) => boolean;
   /** Current point diameter, m. */
   getPointSize: () => number;
   routeController: ViewerRouteController;
   setAnalysisMesh: (mesh: OverlayMeshData | null) => void;
   requestRender: () => void;
-  /** Comments of the app project can be written from here (bridge to the app tab live). */
+  /** Les commentaires du projet de l'app peuvent être écrits d'ici (pont vers l'onglet de l'app actif). */
   commentsAvailable?: () => boolean;
-  /** « Commenter ici » on a point of the scene. */
+  /** « Commenter ici » sur un point de la scène. */
   onComment?: (pick: ScenePick) => void;
-  /** « Commenter une zone » drawn like an area: WGS84 ring and its last vertex (bubble anchor). */
+  /** « Commenter une zone » dessinée comme une surface : anneau WGS84 et son dernier sommet (ancre de la bulle). */
   onCommentZone?: (ring: Array<[number, number]>, anchor: ScenePick) => void;
 }
 
@@ -87,10 +87,10 @@ const CLICK_MOVE_TOLERANCE_PX = 6;
 const RIGHT_CLICK_MAX_HOLD_MS = 350;
 const LEFT_CLICK_MAX_HOLD_MS = 450;
 const NOTICE_MS = 2600;
-/** A click this close to the last vertex (double click) adds none, CSS px. */
+/** Un clic aussi proche du dernier sommet (double clic) n'en ajoute pas, px CSS. */
 const DUPLICATE_VERTEX_PX = 4;
 
-/** Arrow keys of the first-person view: [yaw steps, pitch steps]. */
+/** Flèches de la vue à la première personne : [pas de lacet, pas de tangage]. */
 const LOOK_KEYS: Readonly<Record<string, [number, number]>> = {
   ArrowLeft: [-1, 0],
   ArrowRight: [1, 0],
@@ -98,7 +98,7 @@ const LOOK_KEYS: Readonly<Record<string, [number, number]>> = {
   ArrowDown: [0, -1],
 };
 
-/** One analysis of each of these kinds is shown at a time (overlapping zones would mix). */
+/** Une seule analyse de chacun de ces types est affichée à la fois (des zones superposées se mélangeraient). */
 const SINGLE_INSTANCE_KINDS = new Set<Measurement['kind']>(['avalanche', 'viewshed', 'profile']);
 
 interface PointerPress {
@@ -119,7 +119,7 @@ export class ViewerToolsController {
   private readonly unmountUi: () => void;
   private readonly unsubscribeRoute: () => void;
   private readonly avalanche = new AvalancheComputer();
-  /** Bumped by every avalanche request: an older one still running is dropped. */
+  /** Incrémenté à chaque demande d'avalanche : une plus ancienne encore en cours est abandonnée. */
   private avalancheToken = 0;
 
   private measurements: Measurement[] = [];
@@ -127,28 +127,28 @@ export class ViewerToolsController {
   private readonly meshes = new Map<string, OverlayMeshData>();
 
   private activeTool: ToolId | null = null;
-  /** The area being drawn outlines a comment zone, not a measurement. */
+  /** La surface en cours de dessin délimite une zone de commentaire, pas une mesure. */
   private commentZoneDrawing = false;
-  /** Outline of the hovered / open comment zone, draped on the ground model. */
+  /** Contour de la zone de commentaire survolée / ouverte, drapé sur le modèle de terrain. */
   private commentZoneLayer: OverlayLayer | null = null;
   private draft: ScenePick[] = [];
   private hover: ScenePick | null = null;
-  /** Area being drawn: vertex under the cursor a click would close it on, or -1. */
+  /** Surface en cours de dessin : sommet sous le curseur sur lequel un clic la fermerait, ou -1. */
   private closeHoverIndex = -1;
   private profileMarker: Vec3 | null = null;
   private press: PointerPress | null = null;
   private destroyed = false;
-  /** Bumped by every new press: a pick still running for an older one is dropped. */
+  /** Incrémenté à chaque nouvel appui : un picking encore en cours pour un appui plus ancien est abandonné. */
   private pickToken = 0;
   private hoverFrame: number | null = null;
   private hoverPosition: { x: number; y: number } | null = null;
   private noticeTimer: number | null = null;
-  /** Ground under the first-person eye, m. */
+  /** Sol sous l'œil de la vue à la première personne, m. */
   private lookGroundAltitudeM = 0;
-  /** Last HUD state sent to React (JSON), to skip identical updates. */
+  /** Dernier état du HUD envoyé à React (JSON), pour sauter les mises à jour identiques. */
   private lookHudKey = '';
 
-  /** `null` when the scene has no ground model to measure on. */
+  /** `null` quand la scène n'a pas de modèle de terrain sur lequel mesurer. */
   static create(opts: ViewerToolsOptions): ViewerToolsController | null {
     const field = TerrainField.fromSceneParams(opts.sceneParams);
     return field ? new ViewerToolsController(opts, field) : null;
@@ -168,7 +168,7 @@ export class ViewerToolsController {
     this.overlay = new ToolsOverlay(opts.container, opts.canvas);
     this.unmountUi = mountViewerToolsUi(this.store, this.uiActions);
     this.unsubscribeRoute = opts.routeController.onStateChange((state) => {
-      // The route editor and a tool both use the left click: the last one started wins.
+      // L'éditeur de tracé et un outil utilisent tous deux le clic gauche : le dernier lancé l'emporte.
       if (state.editMode && this.activeTool) this.cancelTool();
     });
 
@@ -181,10 +181,11 @@ export class ViewerToolsController {
   }
 
   /**
-   * Canopy cover (0–1) of the whole scene on a node grid of about `cellM`
-   * spacing over the ground model bounds (snow model input, read like the
-   * avalanche forest: high-vegetation returns 3 m above the ground). `null`
-   * when the cloud carries no ground classification.
+   * Couvert de canopée (0–1) de toute la scène sur une grille de nœuds
+   * d'espacement d'environ `cellM` sur les bornes du modèle de terrain (entrée
+   * du modèle de neige, lu comme la forêt de l'avalanche : retours de
+   * végétation haute à plus de 3 m du sol). `null` quand le nuage n'a pas de
+   * classification du sol.
    */
   readSceneCanopy(cellM: number): Promise<{ data: Float32Array; width: number; height: number } | null> {
     return readSceneCanopy(this.field, this.pointPicker, cellM);
@@ -192,7 +193,7 @@ export class ViewerToolsController {
 
   // ── Comments (lidar/viewer/comments) ──────────────────────────────────────
 
-  /** Render-frame point of a WGS84 position (DTM altitude when `altitudeM` is null); null outside the scene. */
+  /** Point du repère de rendu d'une position WGS84 (altitude du MNT quand `altitudeM` est null) ; null hors de la scène. */
   localFromLonLat(lon: number, lat: number, altitudeM: number | null): Vec3 | null {
     const [projX, projY] = fromWgs84(lon, lat, this.field.crs);
     if (!Number.isFinite(projX) || !Number.isFinite(projY) || !this.field.contains(projX, projY)) return null;
@@ -204,12 +205,12 @@ export class ViewerToolsController {
     return this.projector()(local);
   }
 
-  /** The ground model does not hide this point from the camera. */
+  /** Le modèle de terrain ne cache pas ce point à la caméra. */
   isLocalVisible(local: Vec3): boolean {
     return this.field.isVisibleFrom(local, [...this.opts.camera.getEye()]);
   }
 
-  /** Draws (or clears, with null) the outline of a comment zone (WGS84 ring) on the ground. */
+  /** Dessine (ou efface, avec null) au sol le contour d'une zone de commentaire (anneau WGS84). */
   setCommentZone(ring: ReadonlyArray<[number, number]> | null): void {
     if (!ring || ring.length < 3) {
       if (!this.commentZoneLayer) return;
@@ -236,7 +237,7 @@ export class ViewerToolsController {
     camera.animateTo({ targetX: local[0], targetY: local[1], targetZ: local[2], radius: Math.max(60, Math.min(distance, camera.sceneRadius)) });
   }
 
-  /** Reprojects the overlay; call once per rendered frame after a camera move. */
+  /** Reprojette la superposition ; à appeler une fois par image rendue après un mouvement de caméra. */
   updateOverlay(): void {
     const layers: OverlayLayer[] = [...this.layers.values()];
     if (this.commentZoneLayer) layers.push(this.commentZoneLayer);
@@ -342,7 +343,7 @@ export class ViewerToolsController {
     if (track) trackLidarTool(tool);
     const route = this.opts.routeController;
     if (route.getState().editMode) route.setEditMode(false);
-    // Backspace would also delete a selected route point.
+    // Retour arrière supprimerait aussi un point de tracé sélectionné.
     route.setSelectedPointIndex(null);
     this.store.update({ menu: null });
     this.activeTool = tool;
@@ -368,7 +369,7 @@ export class ViewerToolsController {
 
   private addVertex(pick: ScenePick, canvasX: number, canvasY: number): void {
     if (this.activeTool === 'area') {
-      // A click on a placed vertex closes the area there, never adds a duplicate.
+      // Un clic sur un sommet posé ferme la surface à cet endroit, sans jamais ajouter de doublon.
       const click = { x: canvasX, y: canvasY };
       const screen = this.draftScreenPoints();
       const closeIndex = polygonCloseIndex(screen, click, MIN_VERTICES.area);
@@ -402,9 +403,9 @@ export class ViewerToolsController {
   }
 
   /**
-   * Vertex the hover would close the area on. Not the last one: the cursor
-   * sits there right after placing it (a second click still finishes, like a
-   * double click, but the preview would flash at every vertex).
+   * Sommet sur lequel le survol fermerait la surface. Pas le dernier : le
+   * curseur s'y trouve juste après l'avoir posé (un second clic termine
+   * toujours, comme un double clic, mais l'aperçu clignoterait à chaque sommet).
    */
   private closeIndexForHover(position: { x: number; y: number }): number {
     if (this.activeTool !== 'area') return -1;
@@ -412,7 +413,7 @@ export class ViewerToolsController {
     return index === this.draft.length - 1 ? -1 : index;
   }
 
-  /** Draft vertices on screen (canvas CSS px), null behind the camera. */
+  /** Sommets du brouillon à l'écran (px CSS du canvas), null derrière la caméra. */
   private draftScreenPoints(): Array<{ x: number; y: number } | null> {
     const project = this.projector();
     return this.draft.map((vertex) => {
@@ -422,8 +423,9 @@ export class ViewerToolsController {
   }
 
   /**
-   * Ends the drawing with `picks` (the whole draft, or the loop closed on a
-   * vertex); a comment zone's bubble goes on `anchor` (default: last vertex).
+   * Termine le dessin avec `picks` (tout le brouillon, ou la boucle fermée sur
+   * un sommet) ; la bulle d'une zone de commentaire va sur `anchor` (par
+   * défaut : le dernier sommet).
    */
   private finishDrawing(picks: ScenePick[] = this.draft, anchor?: ScenePick): void {
     const tool = this.activeTool;
@@ -527,7 +529,7 @@ export class ViewerToolsController {
     this.updateOverlay();
   }
 
-  /** Removes a measurement without redrawing. */
+  /** Retire une mesure sans redessiner. */
   private dropMeasurement(id: string): void {
     this.measurements = this.measurements.filter((m) => m.id !== id);
     this.layers.delete(id);
@@ -547,7 +549,7 @@ export class ViewerToolsController {
 
   // ── First-person view ──────────────────────────────────────────────────────
 
-  /** Stands at the point, eye 1.7 m above the ground, looking around over 360°. */
+  /** Se place au point, l'œil à 1,7 m au-dessus du sol, et regarde autour à 360°. */
   private enterLookAround(pick: ScenePick): void {
     const start = resolveLookAroundStart(this.field, this.opts.camera, pick);
     if (!start) {
@@ -564,7 +566,7 @@ export class ViewerToolsController {
     this.syncLookAroundHud();
   }
 
-  /** Heading, field of view and reticle target of the first-person HUD (rounded: no churn). */
+  /** Cap, champ de vision et cible du réticule du HUD à la première personne (arrondis : pas de remous). */
   private syncLookAroundHud(): void {
     const { camera } = this.opts;
     if (camera.getMode() !== 'look') {
@@ -624,7 +626,7 @@ export class ViewerToolsController {
       press.moved = true;
     }
     if (event.buttons !== 0 || event.target !== this.opts.canvas) return;
-    // The route editor resets the cursor on every move.
+    // L'éditeur de tracé réinitialise le curseur à chaque mouvement.
     if (this.activeTool) this.opts.canvas.style.cursor = 'crosshair';
     this.hoverPosition = this.canvasPosition(event.clientX, event.clientY);
     if (this.hoverFrame == null) {
@@ -632,7 +634,7 @@ export class ViewerToolsController {
         this.hoverFrame = null;
         const position = this.hoverPosition;
         if (!position) return;
-        // Hovering a measurement expands its label.
+        // Le survol d'une mesure déplie son étiquette.
         const hovered = this.activeTool ? null : this.overlay.hitTest(position.x, position.y);
         const hoverChanged = hovered !== this.overlay.hoveredId;
         this.overlay.hoveredId = hovered;
@@ -671,7 +673,7 @@ export class ViewerToolsController {
   };
 
   private onRightClick(event: PointerEvent): void {
-    // The route editor ends its drawing mode on this click.
+    // L'éditeur de tracé termine son mode de dessin sur ce clic.
     if (this.opts.routeController.getState().editMode) return;
     if (this.activeTool) {
       if (isDrawingTool(this.activeTool)) this.finishDrawing();
@@ -684,8 +686,9 @@ export class ViewerToolsController {
   private async onLeftClick(event: PointerEvent): Promise<void> {
     const token = this.pickToken;
     const { x, y } = this.canvasPosition(event.clientX, event.clientY);
-    // Shift as well as Alt: most Linux window managers (KDE, Xfce, Cinnamon)
-    // take Alt+click to move the window, so the page never sees it.
+    // Maj aussi bien qu'Alt : la plupart des gestionnaires de fenêtres Linux
+    // (KDE, Xfce, Cinnamon) prennent Alt+clic pour déplacer la fenêtre, la page
+    // ne le voit donc jamais.
     const pick = await this.picker.pick(x, y, { groundOnly: event.altKey || event.shiftKey });
     if (token !== this.pickToken || !this.activeTool) return;
     if (!pick) {
@@ -693,8 +696,8 @@ export class ViewerToolsController {
       return;
     }
     if (isDrawingTool(this.activeTool)) {
-      // Distances, profiles and areas are measured on the ground; the
-      // height tool keeps the return itself (tree top, cliff edge).
+      // Distances, profils et surfaces se mesurent au sol ; l'outil de
+      // hauteur garde le retour lui-même (cime d'arbre, bord de falaise).
       const vertex = this.activeTool === 'height' ? pick : this.picker.toGround(pick);
       if (vertex) this.addVertex(vertex, x, y);
       else this.notify(t('Hors de la zone chargée'));
@@ -756,7 +759,7 @@ export class ViewerToolsController {
     }
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (looking && LOOK_KEYS[event.key]) {
-      // Arrows turn the head by a tenth of the field of view.
+      // Les flèches tournent la tête d'un dixième du champ de vision.
       event.preventDefault();
       const [yawSteps, pitchSteps] = LOOK_KEYS[event.key]!;
       const goal = camera.getLookGoal();
@@ -796,7 +799,7 @@ export class ViewerToolsController {
     return (v) => projectToScreen(v[0], v[1], v[2], width, height, view, proj);
   }
 
-  /** Shows a notice; a `persistent` one (work in progress) stays until the next. */
+  /** Affiche un avis ; un avis `persistent` (travail en cours) reste jusqu'au suivant. */
   private notify(message: string, { persistent = false }: { persistent?: boolean } = {}): void {
     if (this.noticeTimer != null) window.clearTimeout(this.noticeTimer);
     this.noticeTimer = null;

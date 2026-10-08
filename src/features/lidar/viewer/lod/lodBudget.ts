@@ -1,63 +1,65 @@
 import type { PlatformProfile } from './types';
 
-// The budget aims at the cadence of the screen, not at a fixed 16.6 ms of
-// GPU work: a frame whose passes take 17 ms misses every other vsync on a
-// 60 Hz screen (30 fps seen), and the compositor, the panels' blur and the
-// streaming also need their share of the interval. The measured cost alone
-// cannot tell: a GPU with slack lowers its clock, so its pass time hovers
-// around 60–75 % of the interval whatever the load (measured on an
-// integrated Radeon). So the cost only bounds the budget (grow below 75 %,
-// shrink above 90 % of the interval) and the real cadence (rAF intervals)
-// decides near the limit: no growth while frames miss the vsync, and a
-// shrink when they keep missing it while the GPU carries a real share of
-// the frame. A shrink also caps the growth just below the budget that was
-// too much, so the budget does not climb back over the limit every second
-// (part of the frame cost is invisible to the timestamps); the cap relaxes
-// slowly while the cadence holds, as the view changes.
-// Still frames are rendered at full resolution while moving ones may be
-// reduced: the budget is sized on moving frames, a still frame may only let
-// it grow (it costs at least as much as a moving one) or cut a pathological
-// frame.
+// Le budget vise la cadence de l'écran, pas 16,6 ms fixes de travail GPU :
+// une image dont les passes prennent 17 ms rate un vsync sur deux sur un
+// écran à 60 Hz (30 i/s perçues), et le compositeur, le flou des panneaux et
+// le chargement en flux ont aussi besoin de leur part de l'intervalle. Le coût
+// mesuré seul ne suffit pas : un GPU qui a de la marge baisse sa fréquence, si
+// bien que la durée de ses passes tourne autour de 60–75 % de l'intervalle
+// quelle que soit la charge (mesuré sur un Radeon intégré). Le coût ne fait
+// donc que borner le budget (croissance sous 75 %, baisse au-dessus de 90 %
+// de l'intervalle) et la cadence réelle (intervalles de rAF) tranche près de
+// la limite : pas de croissance tant que des images ratent le vsync, et une
+// baisse quand elles continuent de le rater alors que le GPU porte une vraie
+// part de l'image. Une baisse plafonne aussi la croissance juste sous le
+// budget qui était de trop, pour que le budget ne repasse pas la limite
+// chaque seconde (une partie du coût de l'image échappe aux horodatages) ; le
+// plafond se relâche lentement tant que la cadence tient, à mesure que la vue
+// change.
+// Les images fixes sont rendues en pleine résolution alors que les images en
+// mouvement peuvent être réduites : le budget est dimensionné sur les images
+// en mouvement ; une image fixe ne peut que le faire croître (elle coûte au
+// moins autant qu'une image en mouvement) ou couper une image pathologique.
 
-/** Frames measured before the budget starts adapting. */
+/** Images mesurées avant que le budget commence à s'adapter. */
 const FRAME_WINDOW = 8;
-/** A single frame slower than this multiple of the target interval halves the budget at once… */
+/** Une seule image plus lente que ce multiple de l'intervalle visé divise aussitôt le budget par deux… */
 const EMERGENCY_FRAME_FACTOR = 3;
-/** …or than this one for a still frame (full resolution, its cadence does not show). */
+/** …ou que celui-ci pour une image fixe (pleine résolution, sa cadence ne se voit pas). */
 const REST_EMERGENCY_FRAME_FACTOR = 6;
 const EMERGENCY_COOLDOWN_FRAMES = 6;
-/** Frames without a budget change before it is considered settled. */
+/** Images sans changement de budget avant qu'il soit considéré comme stabilisé. */
 const SETTLED_FRAMES = 8;
-/** Frames at the budget floor and still slow before render settings are lowered. */
+/** Images au plancher du budget et toujours lentes avant de baisser les réglages de rendu. */
 const STARVED_FRAMES = 20;
-/** Shares of the target interval: the averaged cost shrinks the budget above SLOW, lets it grow below FAST. */
+/** Parts de l'intervalle visé : le coût moyen fait baisser le budget au-dessus de SLOW, le laisse croître sous FAST. */
 const SLOW_COST_SHARE = 0.9;
 const FAST_COST_SHARE = 0.75;
-/** Averaged rate of missed vsyncs that counts as slow (when the GPU is loaded) or blocks growth. */
+/** Taux moyen de vsyncs ratés qui compte comme lent (quand le GPU est chargé) ou bloque la croissance. */
 const MISSED_SLOW_RATE = 0.2;
 const MISSED_GROW_RATE = 0.05;
-/** GPU share of the target interval above which missed vsyncs are blamed on the point count. */
+/** Part GPU de l'intervalle visé au-delà de laquelle les vsyncs ratés sont imputés au nombre de points. */
 const GPU_LOADED_SHARE = 0.45;
 const AVERAGE_ALPHA = 1 / 8;
-/** After a shrink, growth stops at this share of the budget that was too much… */
+/** Après une baisse, la croissance s'arrête à cette part du budget qui était de trop… */
 const CEILING_SHARE = 0.95;
-/** …and that cap rises by CEILING_RELAX every CEILING_RELAX_FRAMES moving frames without a missed vsync. */
+/** …et ce plafond monte de CEILING_RELAX toutes les CEILING_RELAX_FRAMES images en mouvement sans vsync raté. */
 const CEILING_RELAX = 1.01;
 const CEILING_RELAX_FRAMES = 60;
 
-/** Cost of one frame and the cadence it ran at. */
+/** Coût d'une image et la cadence à laquelle elle a tourné. */
 export interface BudgetSample {
-  /** GPU cost of the draw passes (ms); 0 when not measured yet. */
+  /** Coût GPU des passes de dessin (ms) ; 0 tant qu'il n'est pas mesuré. */
   gpuMs: number;
-  /** JS time of the render loop (ms). */
+  /** Temps JS de la boucle de rendu (ms). */
   cpuMs: number;
-  /** Interval since the previous rendered frame (ms); 0 for the first frame of a run. */
+  /** Intervalle depuis l'image rendue précédente (ms) ; 0 pour la première image d'une série. */
   intervalMs: number;
-  /** Frame interval aimed at (ms), a multiple of the refresh period (see FrameClock). */
+  /** Intervalle d'image visé (ms), multiple de la période de rafraîchissement (voir FrameClock). */
   targetIntervalMs: number;
   /** Display refresh period (ms). */
   refreshMs: number;
-  /** Still camera: the frame may let the budget grow, never shrink it (except a pathological frame). */
+  /** Caméra immobile : l'image peut faire croître le budget, jamais le faire baisser (sauf image pathologique). */
   rest?: boolean;
 }
 
@@ -66,38 +68,39 @@ export interface LodBudgetState {
   minBudget: number;
   maxBudget: number;
   /**
-   * False when the GPU figure is the submit→done latency (no
-   * `timestamp-query`): it includes the vsync wait, so only the CPU time
-   * and the cadence are trusted.
+   * Faux quand le chiffre GPU est la latence envoi→fin (pas de
+   * `timestamp-query`) : il inclut l'attente du vsync, donc seuls le temps
+   * CPU et la cadence sont fiables.
    */
   preciseGpu: boolean;
   targetIntervalMs: number;
-  /** Averaged frame cost (max of GPU and CPU time). */
+  /** Coût moyen d'une image (max du temps GPU et du temps CPU). */
   avgCostMs: number;
   avgGpuMs: number;
-  /** Averaged share of frames that missed at least one vsync beyond the target. */
+  /** Part moyenne des images qui ont raté au moins un vsync au-delà de la cible. */
   missedRate: number;
   framesSeen: number;
   slowFrameCount: number;
   fastFrameCount: number;
-  /** Frames left before another emergency cut is allowed (measurements lag by a few frames). */
+  /** Images restantes avant d'autoriser une nouvelle coupe d'urgence (les mesures ont quelques images de retard). */
   emergencyCooldown: number;
-  /** Growth cap learnt from the last shrinks (≤ maxBudget). */
+  /** Plafond de croissance appris des dernières baisses (≤ maxBudget). */
   ceiling: number;
-  /** Moving frames since the last missed vsync or ceiling step. */
+  /** Images en mouvement depuis le dernier vsync raté ou le dernier pas du plafond. */
   cleanFrames: number;
 }
 
-/** True when the frame came at least half a refresh period later than the target interval. */
+/** Vrai quand l'image est arrivée au moins une demi-période de rafraîchissement après l'intervalle visé. */
 function missedTarget(intervalMs: number, targetIntervalMs: number, refreshMs: number): boolean {
   return intervalMs > targetIntervalMs + refreshMs * 0.5;
 }
 
 /**
- * Sustained slow frames scale the budget by ×0.9, a longer run of clearly
- * fast ones by ×1.15; a single pathological frame halves it immediately so a
- * weak GPU never stays seconds per frame (Windows TDR → device lost).
- * The first frame of a run (`intervalMs` 0) carries no information.
+ * Des images lentes en continu multiplient le budget par 0,9, une plus longue
+ * série d'images nettement rapides par 1,15 ; une seule image pathologique le
+ * divise aussitôt par deux, pour qu'un GPU faible ne reste jamais plusieurs
+ * secondes par image (TDR de Windows → device perdu).
+ * La première image d'une série (`intervalMs` 0) n'apporte aucune information.
  */
 function updateAdaptiveBudget(state: LodBudgetState, sample: BudgetSample): LodBudgetState {
   const target = sample.targetIntervalMs;
@@ -137,9 +140,9 @@ function updateAdaptiveBudget(state: LodBudgetState, sample: BudgetSample): LodB
     return { ...measured, emergencyCooldown: cooldown };
   }
 
-  // Asymmetric and slow on purpose: every budget step reshuffles the LOD
-  // selection, so it shrinks after a short run of slow frames and only grows
-  // after a longer run of clearly fast ones.
+  // Asymétrique et lent exprès : chaque pas de budget remanie la sélection du
+  // LOD ; il baisse donc après une courte série d'images lentes et ne croît
+  // qu'après une plus longue série d'images nettement rapides.
   let { pointBudget, slowFrameCount, fastFrameCount } = state;
   if (sample.rest && !isFast(measured)) {
     slowFrameCount = 0;
@@ -167,7 +170,7 @@ function updateAdaptiveBudget(state: LodBudgetState, sample: BudgetSample): LodB
   return { ...measured, pointBudget, slowFrameCount, fastFrameCount, emergencyCooldown: cooldown, ceiling };
 }
 
-/** Missed vsyncs are blamed on the point count only when the GPU carries a real share of the frame. */
+/** Les vsyncs ratés ne sont imputés au nombre de points que quand le GPU porte une vraie part de l'image. */
 function gpuLoaded(state: LodBudgetState): boolean {
   return !state.preciseGpu || state.avgGpuMs >= state.targetIntervalMs * GPU_LOADED_SHARE;
 }
@@ -181,7 +184,7 @@ function isFast(state: LodBudgetState): boolean {
   return state.avgCostMs < state.targetIntervalMs * FAST_COST_SHARE && state.missedRate < MISSED_GROW_RATE;
 }
 
-/** Point budget driven by measured frame cost and cadence, scaled by the user's density slider. */
+/** Budget de points piloté par le coût et la cadence mesurés des images, mis à l'échelle par le curseur de densité de l'utilisateur. */
 export class AdaptivePointBudget {
   private state: LodBudgetState;
   private framesSinceChange = 0;
@@ -214,8 +217,8 @@ export class AdaptivePointBudget {
   sample(sample: BudgetSample): void {
     const rest = sample.rest === true;
     if (rest !== this.lastRest) {
-      // Still and moving frames differ in cost (resolution): neither average
-      // carries over to the other mode.
+      // Les images fixes et en mouvement n'ont pas le même coût (résolution) :
+      // aucune moyenne ne passe d'un mode à l'autre.
       this.lastRest = rest;
       this.state = {
         ...this.state,
@@ -237,14 +240,15 @@ export class AdaptivePointBudget {
   }
 
   /**
-   * The budget sits at its floor and frames are still clearly too slow:
-   * fewer points cannot help any more, the render settings must get cheaper.
+   * Le budget est à son plancher et les images restent nettement trop
+   * lentes : moins de points ne peut plus aider, ce sont les réglages de
+   * rendu qui doivent coûter moins.
    */
   isStarved(): boolean {
     return this.starvedFrames >= STARVED_FRAMES;
   }
 
-  /** Restarts the measurements after a render-settings change. */
+  /** Relance les mesures après un changement des réglages de rendu. */
   resetMeasurements(): void {
     this.starvedFrames = 0;
     this.state = {
@@ -257,7 +261,7 @@ export class AdaptivePointBudget {
     };
   }
 
-  /** Points the LOD may draw this frame. */
+  /** Points que le LOD peut dessiner à cette image. */
   get pointBudget(): number {
     return Math.max(1, Math.floor(this.state.pointBudget * this.userScale));
   }
@@ -266,20 +270,20 @@ export class AdaptivePointBudget {
     return this.state.pointBudget;
   }
 
-  /** Read-only view of the controller (stats, benches). */
+  /** Vue en lecture seule du contrôleur (statistiques, benchs). */
   getState(): Readonly<LodBudgetState> {
     return this.state;
   }
 
-  /** Cost and cadence leave clear headroom and the ceiling is not reached: the budget would grow. */
+  /** Le coût et la cadence laissent une nette marge et le plafond n'est pas atteint : le budget croîtrait. */
   canGrow(): boolean {
     return this.state.pointBudget < this.state.ceiling && isFast(this.state);
   }
 
   /**
-   * No recent change and no pending growth. The render loop keeps drawing
-   * while this is false, otherwise a still camera would freeze the budget
-   * (growth needs a run of measured fast frames).
+   * Aucun changement récent et aucune croissance en attente. La boucle de
+   * rendu continue de dessiner tant que c'est faux, sinon une caméra immobile
+   * figerait le budget (la croissance demande une série d'images rapides mesurées).
    */
   isSettled(): boolean {
     return this.framesSinceChange >= SETTLED_FRAMES && !this.canGrow();

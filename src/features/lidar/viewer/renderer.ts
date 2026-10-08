@@ -53,16 +53,17 @@ import type { PhotoModeRenderer } from './photoMode/renderer/types';
 export type { HeightmapParams } from './renderer/types';
 
 /**
- * WebGPU point-cloud renderer.
+ * Renderer WebGPU du nuage de points.
  *
- * Frame = shading compute pass (drawn nodes that are new, or stale after an
- * overlay change) → scene pass (depth32float reversed-Z, MSAA ×4 on
- * discrete GPUs), straight into the canvas, or with EDL on into an
- * offscreen target that the Eye-Dome Lighting pass resolves to the canvas.
- * Still frames being anti-aliased (`accumulate`, see RestRefinement) are
- * resolved into a linear rgba16float running mean instead, then presented.
- * Point data lives in LOD nodes streamed by `SceneLod`; this class is its
- * GPU residency backend (`SceneNodeUploader`).
+ * Image = passe de calcul d'ombrage (nœuds dessinés nouveaux, ou périmés
+ * après un changement de superposition) → passe de scène (depth32float en
+ * Z inversé, MSAA ×4 sur GPU dédié), directement dans le canvas, ou, EDL
+ * activé, dans une cible hors écran que la passe Eye-Dome Lighting résout
+ * vers le canvas. Les images fixes en cours d'anticrénelage (`accumulate`,
+ * voir RestRefinement) sont plutôt résolues dans une moyenne glissante
+ * rgba16float linéaire, puis présentées.
+ * Les points vivent dans les nœuds LOD chargés par `SceneLod` ; cette classe
+ * est son back-end de résidence GPU (`SceneNodeUploader`).
  */
 export class WebGpuLidarRenderer implements LidarRenderer {
   readonly backend = 'webgpu' as const;
@@ -79,25 +80,25 @@ export class WebGpuLidarRenderer implements LidarRenderer {
   private edlParamsBuffer!: GPUBuffer;
   private sceneBindGroup!: GPUBindGroup;
   private pointParamsBindGroup!: GPUBindGroup;
-  /** Canvas-sized targets (EDL path; without EDL the scene goes straight to the canvas). */
+  /** Cibles à la taille du canvas (chemin EDL ; sans EDL, la scène va directement dans le canvas). */
   private fullTargets: SceneTargets | null = null;
-  /** Reduced targets drawn while the camera moves (`motionScale` < 1), upscaled to the canvas. */
+  /** Cibles réduites dessinées pendant que la caméra bouge (`motionScale` < 1), agrandies vers le canvas. */
   private motionTargets: SceneTargets | null = null;
   private blitSampler!: GPUSampler;
   /**
-   * Scene resolution while the camera moves, as a share of the canvas
-   * (1 = off). Fill rate is what limits integrated GPUs: 0.7 draws half
-   * the pixels. Set before `resize`.
+   * Résolution de la scène pendant que la caméra bouge, en part du canvas
+   * (1 = désactivé). C'est le taux de remplissage qui limite les GPU
+   * intégrés : 0,7 dessine moitié moins de pixels. À fixer avant `resize`.
    */
   motionScale = 1;
-  /** Square sprites (no discard) while the camera moves. */
+  /** Sprites carrés (sans discard) pendant que la caméra bouge. */
   motionSquares = true;
   private lastRenderScale = 1;
-  /** Running mean of the still frames (canvas size, linear light) and its present bind group. */
+  /** Moyenne glissante des images fixes (taille du canvas, lumière linéaire) et son bind group de présentation. */
   private accumTexture: GPUTexture | null = null;
   private accumView: GPUTextureView | null = null;
   private presentBindGroup: GPUBindGroup | null = null;
-  /** Sub-pixel offset (canvas px) of the projection, for the accumulated still frames. */
+  /** Décalage sous-pixel (px du canvas) de la projection, pour les images fixes accumulées. */
   private jitterX = 0;
   private jitterY = 0;
   private readonly jitteredViewProj = new Float32Array(16);
@@ -107,7 +108,7 @@ export class WebGpuLidarRenderer implements LidarRenderer {
   private pointParams = new Float32Array(POINT_PARAMS_FLOATS);
   private edlParams = new Float32Array(EDL_PARAMS_FLOATS);
 
-  /** Overlay and lighting state, shared with the WebGL 2 renderer. */
+  /** État des superpositions et de l'éclairage, partagé avec le renderer WebGL 2. */
   private readonly shading = new SceneShadingState();
 
   private trajectoryBuffer: GPUBuffer | null = null;
@@ -132,27 +133,28 @@ export class WebGpuLidarRenderer implements LidarRenderer {
   private _lastView = new Float32Array(16);
   private _lastProj = new Float32Array(16);
 
-  /** DTM mesh filling the gaps between points, drawn per chunk at the level the view needs. */
+  /** Maillage du MNT qui comble les trous entre les points, dessiné par morceau au niveau dont la vue a besoin. */
   private terrain: TerrainLod | null = null;
   private previewMesh: MeshBuffers | null = null;
   private routeMesh: MeshBuffers | null = null;
-  /** Draped analysis zones of the viewer tools (avalanche reach, viewshed). */
+  /** Zones d'analyse drapées des outils du viewer (portée d'avalanche, visibilité). */
   private analysisMesh: MeshBuffers | null = null;
   private canvasWidth = 1;
   private canvasHeight = 1;
-  /** Point diameter in metres, identical for every point (projected, clamped in pixels). */
+  /** Diamètre des points en mètres, identique pour tous (projeté, borné en pixels). */
   pointSize = 0.3;
   /** Point diameter in device pixels; 0 = adaptive (world size, clamped in pixels). */
   fixedPointPixels = 0;
-  /** Largest projected point diameter (device px); lowered for the eye-level view. */
+  /** Plus grand diamètre de point projeté (px de l'écran) ; abaissé pour la vue à hauteur d'œil. */
   private maxPointPixels = POINT_MAX_PX;
   /**
-   * Coarser LOD levels drawn as the finest on screen grow to their own
-   * spacing (Potree-style adaptive size): no holes where the budget or the
-   * distance stops the refinement.
+   * Les niveaux LOD plus grossiers dessinés comme les plus fins à l'écran
+   * grossissent jusqu'à leur propre espacement (taille adaptative à la
+   * Potree) : pas de trous là où le budget ou la distance arrêtent le
+   * raffinement.
    */
   adaptivePointSize = true;
-  /** Default `pointSize` of the scene; the adaptive size follows the user's changes to it. */
+  /** `pointSize` par défaut de la scène ; la taille adaptative suit les changements que l'utilisateur lui apporte. */
   pointSizeReference = 0;
   terrainVisible = true;
 
@@ -165,18 +167,18 @@ export class WebGpuLidarRenderer implements LidarRenderer {
   lastCamFwd: Float32Array | [number, number, number] = new Float32Array([0, 0, -1]);
 
   deviceLost = false;
-  /** Called once when the device is lost for any reason other than `destroy()`. */
+  /** Appelé une fois quand le device est perdu, pour toute autre raison que `destroy()`. */
   onDeviceLost: ((info: RendererLostInfo) => void) | null = null;
   platform: PlatformProfile | null = null;
-  /** proj[1][1] of the last camera update (LOD screen-size focal). */
+  /** proj[1][1] de la dernière mise à jour de la caméra (focale de la taille écran du LOD). */
   lastProjScaleY = 1;
   private gpuTimer: GpuFrameTimer | null = null;
   private lastDrawCallCount = 0;
-  /** Photo mode (deferred lighting, sky, clouds, point shadows); WebGPU only. */
+  /** Mode photo (éclairage différé, ciel, nuages, ombres des points) ; WebGPU seulement. */
   private photoRenderer: PhotoRenderer | null = null;
-  /** Photo mode state the point shading was last written for. */
+  /** État du mode photo pour lequel l'ombrage des points a été écrit en dernier. */
   private photoShading = false;
-  /** Matrix the last frame was drawn with (jittered while accumulating). */
+  /** Matrice avec laquelle la dernière image a été dessinée (décalée pendant l'accumulation). */
   private readonly drawViewProj = new Float32Array(16);
 
   get photo(): PhotoModeRenderer | null {
@@ -188,7 +190,7 @@ export class WebGpuLidarRenderer implements LidarRenderer {
     const { device, profile } = await requestLidarGpu();
     this.device = device;
     this.platform = profile;
-    // MSAA ×4 (with alpha-to-coverage on point edges) only where fill rate is cheap.
+    // MSAA ×4 (avec alpha-to-coverage sur le bord des points) seulement là où le taux de remplissage ne coûte pas cher.
     this.sampleCount = profile.tier === 'discrete' ? 4 : 1;
     this.gpuTimer = new GpuFrameTimer(this.device);
     console.log(
@@ -259,17 +261,17 @@ export class WebGpuLidarRenderer implements LidarRenderer {
     this.resize(canvas.width, canvas.height);
   }
 
-  /** Smoothed GPU cost of the draw passes per frame in ms (0 until measured), see `GpuFrameTimer`. */
+  /** Coût GPU lissé des passes de dessin par image, en ms (0 avant la première mesure), voir `GpuFrameTimer`. */
   getGpuFrameMs(): number {
     return this.gpuTimer?.getFrameMs() ?? 0;
   }
 
-  /** Smoothed GPU cost of the point shading pass per frame in ms (0 until measured). */
+  /** Coût GPU lissé de la passe d'ombrage des points par image, en ms (0 avant la première mesure). */
   getGpuShadeMs(): number {
     return this.gpuTimer?.getShadeMs() ?? 0;
   }
 
-  /** False when frame cost is only approximated (no `timestamp-query`): includes presentation waits. */
+  /** Faux quand le coût d'une image n'est qu'approché (pas de `timestamp-query`) : il inclut les attentes de présentation. */
   hasPreciseGpuTiming(): boolean {
     return this.gpuTimer?.usesTimestamps ?? false;
   }
@@ -282,7 +284,7 @@ export class WebGpuLidarRenderer implements LidarRenderer {
     };
   }
 
-  /** Max LOD nodes the GPU pool can hold at once (uniform slots). */
+  /** Nombre maximal de nœuds LOD que le pool GPU peut contenir à la fois (emplacements d'uniforms). */
   getNodeCapacity(): number {
     return this.nodePool?.capacity ?? 0;
   }
@@ -292,9 +294,9 @@ export class WebGpuLidarRenderer implements LidarRenderer {
   }
 
   /**
-   * Drops MSAA (first step of the automatic quality downgrade on a GPU that
-   * stays too slow at the minimum point budget). Resolves to false when it
-   * was already off.
+   * Coupe le MSAA (premier pas de la dégradation automatique de qualité sur
+   * un GPU qui reste trop lent au budget de points minimal). Se résout à
+   * false s'il était déjà coupé.
    */
   async disableMsaa(): Promise<boolean> {
     if (this.sampleCount === 1 || !this.device || this.deviceLost) return false;
@@ -317,13 +319,15 @@ export class WebGpuLidarRenderer implements LidarRenderer {
   }
 
   /**
-   * Eye-Dome Lighting: `strength` ≈ 1 matches CloudCompare/Potree defaults,
-   * `radiusPx` is in device pixels (scale it with the canvas pixel ratio).
+   * Eye-Dome Lighting : `strength` ≈ 1 correspond aux valeurs par défaut de
+   * CloudCompare/Potree, `radiusPx` est en pixels de l'écran (à mettre à
+   * l'échelle avec le rapport de pixels du canvas).
    */
   /**
-   * Eye-level view: returns a few metres away would project to 50+ px
-   * discs (a 30 cm point at 3 m); they are capped and the terrain mesh drawn
-   * behind them fills the ground between, as the eye sees a surface.
+   * Vue à hauteur d'œil : des retours situés à quelques mètres se
+   * projetteraient en disques de plus de 50 px (un point de 30 cm à 3 m) ;
+   * ils sont plafonnés et le maillage du terrain dessiné derrière eux comble
+   * le sol entre deux, comme l'œil voit une surface.
    */
   setEyeLevelPoints(enabled: boolean): void {
     this.maxPointPixels = enabled ? EYE_LEVEL_POINT_MAX_PX : POINT_MAX_PX;
@@ -543,7 +547,7 @@ export class WebGpuLidarRenderer implements LidarRenderer {
     this.routeMesh = null;
   }
 
-  /** Translucent coloured triangles in the render frame, drawn like the route (no depth write). */
+  /** Triangles colorés translucides dans le repère de rendu, dessinés comme le tracé (sans écriture de profondeur). */
   setAnalysisMesh(vertices: Float32Array, colors: Uint8Array, indices: Uint32Array): void {
     this.clearAnalysisMesh();
     if (!this.device || vertices.length === 0 || indices.length === 0) return;
@@ -556,22 +560,24 @@ export class WebGpuLidarRenderer implements LidarRenderer {
   }
 
   /**
-   * Sub-pixel offset (canvas px) applied to the projection of the next
-   * `updateCamera` calls, for the accumulated still frames; (0, 0) otherwise.
-   * LOD selection, culling and picking keep the unshifted matrices.
+   * Décalage sous-pixel (px du canvas) appliqué à la projection des prochains
+   * appels à `updateCamera`, pour les images fixes accumulées ; (0, 0) sinon.
+   * La sélection du LOD, l'élimination et le picking gardent les matrices non
+   * décalées.
    */
   setSubpixelJitter(x: number, y: number): void {
     this.jitterX = x;
     this.jitterY = y;
   }
 
-  /** Reversed-Z with an infinite far plane: depth precision needs no near/far range here. */
+  /** Z inversé avec un plan lointain à l'infini : la précision de profondeur n'a pas besoin ici d'une plage proche/lointain. */
   setDepthRange(_near: number, _far: number): void {}
 
   /**
-   * @param projMat render projection (reversed-Z, infinite far: see
-   *   `CameraController.getRenderProjMatrix`). Its row 3 equals the standard
-   *   one, so LOD screen sizes and frustum culling are unaffected.
+   * @param projMat projection de rendu (Z inversé, plan lointain à l'infini :
+   *   voir `CameraController.getRenderProjMatrix`). Sa ligne 3 est celle de la
+   *   projection standard, donc les tailles écran du LOD et l'élimination par
+   *   frustum ne changent pas.
    */
   updateCamera(
     viewMat: Float32Array | number[],
@@ -598,7 +604,7 @@ export class WebGpuLidarRenderer implements LidarRenderer {
     this.lastViewProj.set(this._cachedViewProj);
     let drawViewProj = this._cachedViewProj;
     if (this.jitterX !== 0 || this.jitterY !== 0) {
-      // Clip-space shift by (dx, dy)·w: the whole image moves by the offset in pixels.
+      // Décalage dans l'espace de découpage de (dx, dy)·w : toute l'image se déplace du décalage en pixels.
       const vp = this.jitteredViewProj;
       vp.set(this._cachedViewProj);
       const dx = (2 * this.jitterX) / this.canvasWidth;
@@ -612,7 +618,7 @@ export class WebGpuLidarRenderer implements LidarRenderer {
     this.drawViewProj.set(drawViewProj);
     const photoActive = this.photoRenderer?.active ?? false;
     if (photoActive !== this.photoShading) {
-      // The shading pass writes lit colours, or albedo in photo mode.
+      // La passe d'ombrage écrit des couleurs éclairées, ou l'albédo en mode photo.
       this.photoShading = photoActive;
       this.invalidateShading();
     }
@@ -627,7 +633,7 @@ export class WebGpuLidarRenderer implements LidarRenderer {
     this.device.queue.writeBuffer(this.cameraBuffer, 0, this.uniformCache as Float32Array<ArrayBuffer>);
   }
 
-  /** Per-frame sprite and EDL parameters for scene targets of `width`×`height` (`scale` of the canvas). */
+  /** Paramètres de sprite et d'EDL de l'image pour des cibles de scène de `width`×`height` (`scale` du canvas). */
   private writeFrameParams(width: number, height: number, scale: number): void {
     fillPointParams(this.pointParams, width, height, scale, {
       maxPointPixels: this.maxPointPixels,
@@ -644,18 +650,19 @@ export class WebGpuLidarRenderer implements LidarRenderer {
     this.device.queue.writeBuffer(this.edlParamsBuffer, 0, this.edlParams as Float32Array<ArrayBuffer>);
   }
 
-  /** Share of the canvas resolution the last frame was rendered at. */
+  /** Part de la résolution du canvas à laquelle la dernière image a été rendue. */
   getLastRenderScale(): number {
     return this.lastRenderScale;
   }
 
   /**
-   * Renders the terrain, the given LOD nodes (front to back) and overlays.
-   * `motion`: the camera is moving — reduced resolution (`motionScale`) and
-   * square sprites; the next still frame restores full quality.
-   * `accumulate`: index of a still frame of the progressive anti-aliasing
-   * (0 restarts the running mean); set the frame's sub-pixel jitter before
-   * `updateCamera`.
+   * Rend le terrain, les nœuds LOD donnés (de l'avant vers l'arrière) et les
+   * superpositions.
+   * `motion` : la caméra bouge — résolution réduite (`motionScale`) et sprites
+   * carrés ; la prochaine image fixe rétablit la pleine qualité.
+   * `accumulate` : indice d'une image fixe de l'anticrénelage progressif (0
+   * relance la moyenne glissante) ; fixer le décalage sous-pixel de l'image
+   * avant `updateCamera`.
    */
   renderScene(nodes: readonly SceneNode[], options: RenderSceneOptions = {}): void {
     if (!this.device || this.deviceLost || !this.fullTargets || !this.nodePool) return;
@@ -688,9 +695,9 @@ export class WebGpuLidarRenderer implements LidarRenderer {
     );
 
     const msaa = targets.colorMsView !== null;
-    // At full resolution without EDL the scene goes straight to the canvas
-    // (resolved there with MSAA): no full-screen copy. Depth is only stored
-    // for EDL.
+    // En pleine résolution sans EDL, la scène va directement dans le canvas
+    // (résolue là avec le MSAA) : aucune copie plein écran. La profondeur n'est
+    // stockée que pour l'EDL.
     const direct = !this.edlEnabled && !reduced && accumulateSample < 0;
     const target = direct ? canvasView : targets.colorView;
     const pass = enc.beginRenderPass({
@@ -711,13 +718,13 @@ export class WebGpuLidarRenderer implements LidarRenderer {
     });
     pass.setBindGroup(0, this.sceneBindGroup);
 
-    // Points first (front to back), then the terrain only fills what is left.
+    // Les points d'abord (de l'avant vers l'arrière), puis le terrain ne remplit que ce qui reste.
     pass.setPipeline(options.motion && this.motionSquares ? this.pipelines.pointPipelineSquare : this.pipelines.pointPipeline);
     pass.setBindGroup(1, this.pointParamsBindGroup);
     this.lastDrawCallCount += this.nodePool.draw(pass, nodes);
 
     if (this.terrain && this.terrainVisible) {
-      // Levels picked at the canvas resolution, like the points.
+      // Niveaux choisis à la résolution du canvas, comme les points.
       const focalPx = Math.abs(this.lastProjScaleY) * this.canvasHeight * 0.5;
       this.lastDrawCallCount += this.terrain.draw(pass, this.pipelines.terrainLodPipeline, this.lastViewProj, this.lastCamPos, focalPx);
     }
@@ -756,8 +763,8 @@ export class WebGpuLidarRenderer implements LidarRenderer {
     pass.end();
 
     if (accumulateSample >= 0) {
-      // EDL (or a plain copy) in linear light, blended into the running mean:
-      // weight 1 / (n + 1), the first sample replaces the history.
+      // EDL (ou une simple copie) en lumière linéaire, fondue dans la moyenne
+      // glissante : poids 1 / (n + 1), le premier échantillon remplace l'historique.
       const resolve = enc.beginRenderPass({
         colorAttachments: [{
           view: this.accumView!,
@@ -812,7 +819,7 @@ export class WebGpuLidarRenderer implements LidarRenderer {
     this.gpuTimer?.afterSubmit();
   }
 
-  /** Photo mode frame: the shading pass (albedo) then the photo renderer's passes. */
+  /** Image du mode photo : la passe d'ombrage (albédo), puis les passes du renderer photo. */
   private renderPhoto(nodes: readonly SceneNode[], options: RenderSceneOptions): void {
     const photo = this.photoRenderer!;
     const nodePool = this.nodePool!;

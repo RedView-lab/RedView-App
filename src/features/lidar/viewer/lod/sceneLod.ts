@@ -1,54 +1,60 @@
 // ============================================
-// Scene LOD: multi-tile additive octrees, streamed and budgeted
+// LOD de la scène : octrees additifs multi-tuiles, chargés en flux et sous budget
 // ============================================
 //
-// Every tile is an additive octree (see lodTile.ts) whose node blocks live
-// in the OPFS LOD cache. Each frame:
-//  1. the roots of the visible tiles are always kept (no tile ever goes
-//     blank), then nodes are visited by rank, highest first, and kept while
-//     they fit in the point budget. A node's projected spacing is its point
-//     spacing seen from the closest point of its bounds (device px); the
-//     node is refined while that exceeds `TARGET_SPACING_PX`. Its rank is
-//     that spacing weighted by foreshortening: a flat patch seen at a grazing
-//     angle packs its points into few pixel rows, so under a tight budget it
-//     yields to surfaces seen face-on. With enough budget every node reaches
-//     the same target, whatever the angle;
-//  2. the whole target is selected from the node table, loaded or not, and
-//     counts against the budget: what is on screen converges to it without
-//     reshuffling as deeper levels arrive. Missing nodes are loaded by rank,
-//     coarse to fine (a node waits for its parent's points, which tighten
-//     its bounds), and a node is only drawn below a drawn parent;
-//  3. residency is bounded by a pool budget; least-recently selected nodes
-//     are evicted first, tile roots never (no empty ground when turning).
-// Node bounds start as the octree cube clipped to the tile bounds and shrink
-// to the node's points once it is loaded: those sample every occupied cell
-// of the node grid, so every point of the subtree lies within a cell of them
-// (≤ 1.2 cells measured on IGN COPC tiles; 2 are kept). Tight bounds cull
-// more and give true distances where a cube is mostly empty air.
+// Chaque tuile est un octree additif (voir lodTile.ts) dont les blocs de
+// nœuds vivent dans le cache LOD de l'OPFS. À chaque image :
+//  1. les racines des tuiles visibles sont toujours gardées (aucune tuile ne
+//     devient vide), puis les nœuds sont visités par rang décroissant et
+//     gardés tant qu'ils tiennent dans le budget de points. L'espacement
+//     projeté d'un nœud est l'espacement de ses points vu depuis le point le
+//     plus proche de ses bornes (px de l'écran) ; le nœud est raffiné tant
+//     qu'il dépasse `TARGET_SPACING_PX`. Son rang est cet espacement pondéré
+//     par le raccourci de perspective : une surface plane vue en incidence
+//     rasante tasse ses points sur peu de lignes de pixels, donc sous un
+//     budget serré elle cède la place aux surfaces vues de face. Avec assez
+//     de budget, chaque nœud atteint la même cible, quel que soit l'angle ;
+//  2. toute la cible est sélectionnée dans la table des nœuds, chargés ou
+//     non, et compte dans le budget : ce qui est à l'écran converge vers elle
+//     sans remaniement à l'arrivée des niveaux plus fins. Les nœuds manquants
+//     sont chargés par rang, du grossier au fin (un nœud attend les points de
+//     son parent, qui resserrent ses bornes), et un nœud n'est dessiné que
+//     sous un parent dessiné ;
+//  3. la résidence est bornée par un budget de pool ; les nœuds sélectionnés
+//     le moins récemment sont évincés d'abord, jamais les racines de tuiles
+//     (pas de sol vide en tournant).
+// Les bornes d'un nœud partent du cube de l'octree découpé aux bornes de la
+// tuile et se resserrent sur ses points une fois chargé : ceux-ci
+// échantillonnent chaque cellule occupée de la grille du nœud, donc chaque
+// point du sous-arbre se trouve à moins d'une cellule d'eux (≤ 1,2 cellule
+// mesuré sur les tuiles COPC de l'IGN ; on en garde 2). Des bornes serrées
+// éliminent davantage et donnent les vraies distances là où un cube est
+// surtout de l'air.
 
 import { readLodNodeBlock, type OpenedLodTile } from '../../lib/lodCache';
 import { extractFrustumPlanes, frustumTestAABB, OUTSIDE, type FrustumPlanes } from './frustum';
 import { LOD_POINT_STRIDE, lodNodeCube, lodNodeSpacing, type LodNode } from './lodTile';
 
-/** Refine while a node's point spacing projects to more than this (device px). */
+/** Raffine tant que l'espacement des points d'un nœud se projette au-delà de cette valeur (px de l'écran). */
 const TARGET_SPACING_PX = 1.25;
-/** A refined node only collapses once its spacing drops below this fraction of the target. */
+/** Un nœud raffiné ne se replie que quand son espacement passe sous cette fraction de la cible. */
 const UNREFINE_FACTOR = 0.7;
-/** Nodes kept last frame (drawn or loading) rank higher… */
+/** Les nœuds gardés à l'image précédente (dessinés ou en chargement) passent devant… */
 const KEEP_PRIORITY_BOOST = 1.3;
-/** …and new nodes may only fill this share of the budget, so the two never trade places every frame. */
+/** …et les nouveaux nœuds ne peuvent remplir que cette part du budget : les deux n'échangent jamais leur place d'une image à l'autre. */
 const NEW_NODE_BUDGET_SHARE = 0.97;
 const MAX_CONCURRENT_LOADS = 6;
 /**
- * Floor of the projected-area ratio used by the foreshortening weight
- * (its square root weights the spacing: ≥ 0.39, i.e. at most 2.6× coarser).
+ * Plancher du rapport d'aires projetées utilisé par le poids du raccourci de
+ * perspective (sa racine carrée pondère l'espacement : ≥ 0,39, soit au plus
+ * 2,6× plus grossier).
  */
 const MIN_FORESHORTENING = 0.15;
-/** Content bounds grow by this many grid cells to hold the node's whole subtree. */
+/** Les bornes du contenu s'élargissent de ce nombre de cellules de grille pour contenir tout le sous-arbre du nœud. */
 export const CONTENT_MARGIN_CELLS = 2;
-/** Distance floor (m) of the projected spacing: the camera's near plane. */
+/** Plancher de distance (m) de l'espacement projeté : le plan proche de la caméra. */
 const MIN_VIEW_DISTANCE = 0.05;
-/** Tile bounds are widened by this much (m) before clipping the octree cubes. */
+/** Les bornes de la tuile sont élargies de cette marge (m) avant de découper les cubes de l'octree. */
 const TILE_BOUNDS_EPSILON = 0.01;
 
 type SceneNodeState = 'idle' | 'loading' | 'resident' | 'failed';
@@ -59,47 +65,48 @@ export interface SceneNode {
   entry: LodNode;
   depth: number;
   /**
-   * Conservative render-frame bounds (x east, y up, z = −north) of the node
-   * and its whole subtree, relative to the scene centre; they shrink as
-   * the node and its ancestors are loaded.
+   * Bornes prudentes dans le repère de rendu (x est, y haut, z = −nord) du
+   * nœud et de tout son sous-arbre, relatives au centre de la scène ; elles
+   * se resserrent à mesure que le nœud et ses ancêtres sont chargés.
    */
   minX: number; minY: number; minZ: number;
   maxX: number; maxY: number; maxZ: number;
   /**
-   * Render-frame position of the quantization cube's min corner:
+   * Position dans le repère de rendu du coin minimal du cube de quantification :
    * renderPos = origin + (qx·s, qz·s, −qy·s), q ∈ [0, 1].
    */
   originX: number; originY: number; originZ: number;
   size: number;
-  /** Grid cell of the node's subsampling (nominal level spacing). */
+  /** Cellule de grille du sous-échantillonnage du nœud (espacement nominal du niveau). */
   cell: number;
-  /** Point spacing on a surface, for the projected-spacing test. */
+  /** Espacement des points sur une surface, pour le test d'espacement projeté. */
   spacing: number;
   /**
-   * Spacing the node's points grow to where none of its children is drawn
-   * (adaptive point size); 0 for leaves, whose points are the full density.
+   * Espacement auquel les points du nœud grossissent là où aucun de ses
+   * enfants n'est dessiné (taille de point adaptative) ; 0 pour les feuilles,
+   * dont les points sont à pleine densité.
    */
   adaptiveSpacing: number;
   parent: number;
   children: number[];
   state: SceneNodeState;
   lastSelectedFrame: number;
-  /** Last frame the node was drawn (hysteresis against frame-to-frame swaps). */
+  /** Dernière image où le nœud a été dessiné (hystérésis contre les échanges d'une image à l'autre). */
   lastDrawnFrame: number;
-  /** Last frame the node's children were visited (refinement hysteresis). */
+  /** Dernière image où les enfants du nœud ont été visités (hystérésis du raffinement). */
   refinedFrame: number;
-  /** Last frame the node's region was on screen: drawn, or empty below a covered parent. */
+  /** Dernière image où la zone du nœud était à l'écran : dessinée, ou vide sous un parent couvert. */
   coveredFrame: number;
-  /** Projected spacing (device px) and distance (m) from the last evaluation. */
+  /** Espacement projeté (px de l'écran) et distance (m) de la dernière évaluation. */
   projectedSpacing: number;
   viewDistance: number;
-  /** Octants (bit = x | y << 1 | z << 2, CRS axes) whose child is drawn this frame. */
+  /** Octants (bit = x | y << 1 | z << 2, axes du SCR) dont l'enfant est dessiné à cette image. */
   childMask: number;
-  /** Token of the last shadow-caster selection that reached the node (see `selectShadowCasters`). */
+  /** Jeton de la dernière sélection de projeteurs d'ombre qui a atteint le nœud (voir `selectShadowCasters`). */
   shadowMark: number;
-  /** Octants refined by a node of the last shadow-caster selection. */
+  /** Octants raffinés par un nœud de la dernière sélection de projeteurs d'ombre. */
   shadowChildMask: number;
-  /** True for ancestors added because the octree skipped them (no points). */
+  /** Vrai pour les ancêtres ajoutés parce que l'octree les a sautés (aucun point). */
   virtual: boolean;
 }
 
@@ -109,9 +116,9 @@ export interface SceneFrameCenter {
   z: number;
 }
 
-/** Renderer side of the residency contract. */
+/** Côté renderer du contrat de résidence. */
 export interface SceneNodeUploader {
-  /** Uploads a node block; returns false if the GPU refused it (out of memory). */
+  /** Envoie un bloc de nœud ; renvoie false si le GPU l'a refusé (mémoire épuisée). */
   uploadNode(node: SceneNode, block: ArrayBuffer): boolean;
   releaseNode(node: SceneNode): void;
 }
@@ -119,12 +126,12 @@ export interface SceneNodeUploader {
 export interface SceneLodStats {
   selectedNodes: number;
   selectedPoints: number;
-  /** Points of the target selection, including nodes still loading. */
+  /** Points de la sélection cible, nœuds encore en chargement compris. */
   targetPoints: number;
   residentNodes: number;
   residentPoints: number;
   pendingLoads: number;
-  /** Node blocks uploaded since the scene opened (reloads after eviction included). */
+  /** Blocs de nœuds envoyés depuis l'ouverture de la scène (rechargements après éviction compris). */
   uploadedNodes: number;
   totalPoints: number;
   totalNodes: number;
@@ -133,12 +140,12 @@ export interface SceneLodStats {
   frustumCulled: number;
 }
 
-/** Max-heap of node ids keyed by rank, on typed arrays (no allocation per push). */
+/** Tas max d'identifiants de nœuds indexé par rang, sur tableaux typés (aucune allocation par insertion). */
 class NodeHeap {
   private ids = new Int32Array(256);
   private keys = new Float64Array(256);
   size = 0;
-  /** Key of the id returned by the last `pop()`. */
+  /** Clé de l'identifiant rendu par le dernier `pop()`. */
   topKey = 0;
 
   clear(): void {
@@ -204,7 +211,7 @@ function octantOf(entry: Pick<LodNode, 'x' | 'y' | 'z'>): number {
   return (entry.x & 1) | ((entry.y & 1) << 1) | ((entry.z & 1) << 2);
 }
 
-/** Shrinks `node` to its intersection with `box`; returns whether it changed. */
+/** Réduit `node` à son intersection avec `box` ; indique s'il a changé. */
 function clipNode(node: SceneNode, box: Box): boolean {
   let changed = false;
   if (box.minX > node.minX && box.minX <= node.maxX) { node.minX = box.minX; changed = true; }
@@ -228,16 +235,16 @@ export class SceneLod {
   private targetPoints = 0;
   private readonly heap = new NodeHeap();
   private readonly pending = new Map<number, number>();
-  /** Scratch of `pumpLoads` (no allocation per frame): pending ids, and their rank by node id. */
+  /** Brouillon de `pumpLoads` (aucune allocation par image) : identifiants en attente et leur rang par identifiant de nœud. */
   private readonly loadQueue: number[] = [];
   private pendingRank = new Float64Array(0);
   private inFlight = 0;
   private residentPoints = 0;
   private residentNodes = 0;
-  /** Points/nodes of loads in flight, reserved so concurrent loads cannot overshoot the pool. */
+  /** Points/nœuds des chargements en cours, réservés pour que des chargements simultanés ne dépassent pas le pool. */
   private reservedPoints = 0;
   private reservedNodes = 0;
-  /** Eviction candidates (least recently selected first), built at most once per load pump. */
+  /** Candidats à l'éviction (sélectionnés le moins récemment d'abord), construits au plus une fois par pompe de chargement. */
   private evictionQueue: SceneNode[] | null = null;
   private evictionCursor = 0;
   private pointBudget: number;
@@ -245,7 +252,7 @@ export class SceneLod {
   private readonly maxResidentNodes: number;
   private frustumCulled = 0;
   private uploadedNodes = 0;
-  /** Token and BFS queue of `selectShadowCasters`. */
+  /** Jeton et file BFS de `selectShadowCasters`. */
   private shadowToken = 0;
   private readonly shadowQueue: number[] = [];
   private destroyed = false;
@@ -256,12 +263,12 @@ export class SceneLod {
     center: SceneFrameCenter,
     options: {
       pointBudget: number;
-      /** Points kept resident on the GPU. */
+      /** Points gardés résidents sur le GPU. */
       poolBudget: number;
-      /** Nodes the GPU pool can hold at once. */
+      /** Nœuds que le pool GPU peut contenir à la fois. */
       maxResidentNodes: number;
       uploader: SceneNodeUploader;
-      /** A node finished loading (or failed): the caller should render again. */
+      /** Un nœud a fini de charger (ou a échoué) : l'appelant doit refaire un rendu. */
       onNodeResident: () => void;
     },
   ) {
@@ -306,8 +313,9 @@ export class SceneLod {
       originX: minX, originY: minY, originZ: maxZ,
       size,
       cell,
-      // Leaves keep every remaining point, so they are denser than their
-      // level's nominal spacing: estimate it from the count (surface data).
+      // Les feuilles gardent tous les points restants, elles sont donc plus
+      // denses que l'espacement nominal de leur niveau : on l'estime d'après
+      // le nombre de points (données de surface).
       spacing: entry.count > 0 ? Math.min(cell, size / Math.sqrt(entry.count)) : cell,
       adaptiveSpacing: 0,
       parent: -1,
@@ -342,7 +350,7 @@ export class SceneLod {
     for (const entry of tile.nodes) {
       byKey.set(keyOf(entry.depth, entry.x, entry.y, entry.z), this.createNode(tileIndex, entry, center, tileBox, false));
     }
-    // Link parents, creating empty ancestors the octree may have omitted.
+    // Relie les parents, en créant les ancêtres vides que l'octree a pu omettre.
     const ensure = (d: number, x: number, y: number, z: number): SceneNode => {
       const key = keyOf(d, x, y, z);
       let node = byKey.get(key);
@@ -379,17 +387,17 @@ export class SceneLod {
     this.poolBudget = Math.max(points, this.pointBudget);
   }
 
-  /** Resident nodes to draw this frame, front to back. Valid until the next `update`. */
+  /** Nœuds résidents à dessiner à cette image, de l'avant vers l'arrière. Valables jusqu'au prochain `update`. */
   getSelectedNodes(): readonly SceneNode[] {
     return this.selected;
   }
 
-  /** Node blocks uploaded since the scene opened: changes whenever new points become resident. */
+  /** Blocs de nœuds envoyés depuis l'ouverture de la scène : change dès que de nouveaux points deviennent résidents. */
   getUploadedNodes(): number {
     return this.uploadedNodes;
   }
 
-  /** No load is pending or running: the current selection is final. */
+  /** Aucun chargement en attente ni en cours : la sélection courante est définitive. */
   isIdle(): boolean {
     return this.pending.size === 0 && this.inFlight === 0;
   }
@@ -414,11 +422,12 @@ export class SceneLod {
   }
 
   /**
-   * Sets the node's projected spacing and view distance; returns its rank:
-   * that spacing weighted by the square root of the foreshortening of its
-   * bounds, i.e. their projected area along the view ray over their
-   * footprint (1 seen from above or face-on, → height/width at grazing
-   * angles for a flat patch; boxes as tall as wide stay at 1).
+   * Fixe l'espacement projeté et la distance de vue du nœud ; renvoie son
+   * rang : cet espacement pondéré par la racine carrée du raccourci de
+   * perspective de ses bornes, c'est-à-dire leur aire projetée le long du
+   * rayon de vue rapportée à leur emprise au sol (1 vu d'au-dessus ou de
+   * face, → hauteur/largeur en incidence rasante pour une surface plane ;
+   * les boîtes aussi hautes que larges restent à 1).
    */
   private evaluate(node: SceneNode, camX: number, camY: number, camZ: number, focalPx: number): number {
     const dx = (camX < node.minX ? node.minX : camX > node.maxX ? node.maxX : camX) - camX;
@@ -439,8 +448,8 @@ export class SceneLod {
   }
 
   /**
-   * Selects the nodes to draw for this camera.
-   * @param projScaleY projection `proj[1][1]` (focal), see `screenSpaceSize`.
+   * Choisit les nœuds à dessiner pour cette caméra.
+   * @param projScaleY `proj[1][1]` de la projection (focale), voir `screenSpaceSize`.
    */
   update(viewProj: Float32Array, projScaleY: number, camX: number, camY: number, camZ: number, viewportH: number): void {
     if (this.destroyed) return;
@@ -454,8 +463,9 @@ export class SceneLod {
     this.pending.clear();
     heap.clear();
 
-    // Visible tile roots come first and always fit: whatever the angle and
-    // the budget, every tile on screen shows at least its coarsest level.
+    // Les racines des tuiles visibles passent d'abord et tiennent toujours :
+    // quels que soient l'angle et le budget, chaque tuile à l'écran montre au
+    // moins son niveau le plus grossier.
     for (const rootId of this.roots) {
       const root = nodes[rootId]!;
       if (frustumTestAABB(planes, root) === OUTSIDE) {
@@ -474,7 +484,7 @@ export class SceneLod {
       const id = heap.pop();
       const node = nodes[id]!;
       if (node.state === 'failed') continue;
-      // Drawn only below a drawn parent, so the screen always fills coarse to fine.
+      // Dessiné seulement sous un parent dessiné : l'écran se remplit toujours du grossier au fin.
       const parentCovered = node.parent < 0 || nodes[node.parent]!.coveredFrame === frame;
       const count = node.entry.count;
       if (count > 0) {
@@ -494,7 +504,7 @@ export class SceneLod {
         node.lastSelectedFrame = frame;
         if (parentCovered) node.coveredFrame = frame;
       }
-      // Hysteresis: a refined node stays refined until its spacing is clearly fine enough.
+      // Hystérésis : un nœud raffiné le reste jusqu'à ce que son espacement soit nettement assez fin.
       const threshold = node.refinedFrame === previousFrame ? TARGET_SPACING_PX * UNREFINE_FACTOR : TARGET_SPACING_PX;
       if (node.projectedSpacing <= threshold) continue;
       node.refinedFrame = frame;
@@ -510,8 +520,8 @@ export class SceneLod {
     }
     this.targetPoints = charged;
 
-    // Octants covered by a drawn child (or by an empty child refined further):
-    // the node's own points there are not the finest on screen.
+    // Octants couverts par un enfant dessiné (ou par un enfant vide raffiné
+    // plus loin) : les points propres du nœud n'y sont pas les plus fins à l'écran.
     for (const node of selected) {
       let mask = 0;
       for (const childId of node.children) {
@@ -524,20 +534,21 @@ export class SceneLod {
       node.childMask = mask;
     }
 
-    // Front to back: opaque sprites then reject hidden fragments early.
+    // De l'avant vers l'arrière : les sprites opaques rejettent alors tôt les fragments cachés.
     selected.sort((a, b) => a.viewDistance - b.viewDistance);
     this.pumpLoads();
   }
 
   /**
-   * Resident nodes casting shadows into a light frustum (photo mode), coarse
-   * to fine: a node is kept while `maxPoints` allows and refined while its
-   * cell is larger than `texelM` (finer levels add nothing the shadow map
-   * could show). Only children of kept nodes are visited (a level of the
-   * additive octree is incomplete without its ancestors) and nothing is
-   * loaded: casters off screen are the coarse levels kept resident. Sets the
-   * kept nodes' `shadowChildMask`, as `childMask` for the camera. Returns the
-   * points kept.
+   * Nœuds résidents qui projettent une ombre dans un frustum de lumière (mode
+   * photo), du grossier au fin : un nœud est gardé tant que `maxPoints` le
+   * permet et raffiné tant que sa cellule dépasse `texelM` (les niveaux plus
+   * fins n'apportent rien que la carte d'ombres puisse montrer). Seuls les
+   * enfants des nœuds gardés sont visités (un niveau de l'octree additif est
+   * incomplet sans ses ancêtres) et rien n'est chargé : les projeteurs hors
+   * de l'écran sont les niveaux grossiers gardés résidents. Fixe le
+   * `shadowChildMask` des nœuds gardés, comme `childMask` pour la caméra.
+   * Renvoie le nombre de points gardés.
    */
   selectShadowCasters(planes: FrustumPlanes, texelM: number, maxPoints: number, out: SceneNode[]): number {
     out.length = 0;
@@ -579,8 +590,8 @@ export class SceneLod {
   private pumpLoads(): void {
     if (this.inFlight >= MAX_CONCURRENT_LOADS || this.pending.size === 0) return;
     this.evictionQueue = null;
-    // Highest rank first; the heap mostly pops in that order already, which
-    // the sort exploits.
+    // Rang le plus haut d'abord ; le tas sort déjà le plus souvent dans cet
+    // ordre, ce dont le tri tire parti.
     const queue = this.loadQueue;
     const rank = this.pendingRank;
     queue.length = 0;
@@ -593,7 +604,7 @@ export class SceneLod {
         this.pending.delete(id);
         continue;
       }
-      // Coarse to fine: a node waits for its parent's points, which tighten its bounds.
+      // Du grossier au fin : un nœud attend les points de son parent, qui resserrent ses bornes.
       const parent = node.parent >= 0 ? this.nodes[node.parent]! : null;
       if (parent && parent.entry.count > 0 && parent.state !== 'resident') continue;
       if (!this.makeRoom(node.entry.count)) break;
@@ -607,7 +618,7 @@ export class SceneLod {
       && this.residentNodes + this.reservedNodes < this.maxResidentNodes;
   }
 
-  /** Evicts least-recently selected nodes until one more node of `points` fits in the pool. */
+  /** Évince les nœuds sélectionnés le moins récemment jusqu'à ce qu'un nœud de plus de `points` tienne dans le pool. */
   private makeRoom(points: number): boolean {
     if (this.fits(points)) return true;
     if (!this.evictionQueue) {
@@ -632,7 +643,7 @@ export class SceneLod {
     this.residentNodes--;
   }
 
-  /** Shrinks the bounds of `node` and its subtree to the node's points (plus the margin). */
+  /** Resserre les bornes de `node` et de son sous-arbre sur les points du nœud (plus la marge). */
   private tightenToContent(node: SceneNode, block: ArrayBuffer): void {
     const count = node.entry.count;
     const words = new Uint16Array(block, 0, (count * LOD_POINT_STRIDE) >> 1);
@@ -660,7 +671,7 @@ export class SceneLod {
       maxZ: node.originZ - minQy * s + margin,
     };
     if (!clipNode(node, box)) return;
-    // Every descendant lies inside the node's new bounds too.
+    // Tout descendant se trouve aussi dans les nouvelles bornes du nœud.
     const stack = [...node.children];
     while (stack.length > 0) {
       const child = this.nodes[stack.pop()!]!;
@@ -683,8 +694,8 @@ export class SceneLod {
           this.residentPoints += node.entry.count;
           this.residentNodes++;
           this.uploadedNodes++;
-          // Its children were queued against looser bounds: the next update
-          // ranks them again before any of them is read.
+          // Ses enfants ont été mis en file avec des bornes plus lâches : la
+          // prochaine mise à jour les reclasse avant qu'aucun d'eux ne soit lu.
           for (const childId of node.children) this.pending.delete(childId);
         } else {
           node.state = 'failed';

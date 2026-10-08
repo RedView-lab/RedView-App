@@ -1,37 +1,43 @@
 // ============================================
-// LiDAR viewer tools — Flow-Py avalanche runout, aimed at one point
+// Outils du viewer LiDAR — écoulement avalancheux Flow-Py, visé sur un point
 // ============================================
 //
-// Port of the Flow-Py cell model (D'Amboise et al., 2022; com4FlowPy in
-// AvaFrame): every release cell sends a unit "flux" down the grid.
-//  - Energy line: from a cell to its neighbour n, the kinetic-energy height
-//    zδ_n = zδ + (z − z_n) − tan α · s_n (s_n the plan step) — the flow stops
-//    where the line drawn from the release at angle α meets the ground;
-//    zδ is capped at 270 m (≈ 73 m/s) and stands for the speed (v ≈ √(2 g zδ)).
-//  - Routing: Holmgren (1994) multiple flow direction, T_n ∝ tan(φ_n)^8 with
-//    φ_n = (ψ_n + 90°) / 2 (ψ_n the angle down to n: flat and gentle uphill
-//    steps stay possible), times persistence — the parents' zδ pushed straight
-//    on and, at 0.707, to the two neighbouring directions — so a fast flow
-//    keeps its heading, runs over flats and up counter-slopes.
-//  - Flux under 0.003 is not routed on: it goes to the routed neighbours.
-//  - Forest (FSI = canopy cover / 100): α grows by up to 10°·FSI (at least 2°)
-//    for a slow flow, the effect fading out towards 30 m/s; a small flux
-//    share is detrained in each cell.
-// Cells are processed generation by generation; a cell reached again by an
-// unprocessed generation gathers flux, parents and the larger zδ.
+// Portage du modèle cellulaire Flow-Py (D'Amboise et al., 2022 ; com4FlowPy
+// dans AvaFrame) : chaque cellule de départ envoie un « flux » unitaire vers
+// le bas de la grille.
+//  - Ligne d'énergie : d'une cellule à sa voisine n, la hauteur d'énergie
+//    cinétique zδ_n = zδ + (z − z_n) − tan α · s_n (s_n le pas en plan) —
+//    l'écoulement s'arrête là où la ligne tracée depuis le départ à l'angle α
+//    rencontre le sol ; zδ est plafonnée à 270 m (≈ 73 m/s) et représente la
+//    vitesse (v ≈ √(2 g zδ)).
+//  - Routage : directions d'écoulement multiples de Holmgren (1994),
+//    T_n ∝ tan(φ_n)^8 avec φ_n = (ψ_n + 90°) / 2 (ψ_n l'angle de descente vers
+//    n : les pas plats ou en légère montée restent possibles), multiplié par
+//    la persistance — le zδ des parents poussé tout droit et, à 0,707, vers
+//    les deux directions voisines — si bien qu'un écoulement rapide garde son
+//    cap, traverse les replats et remonte les contre-pentes.
+//  - Un flux inférieur à 0,003 n'est plus routé : il va aux voisines routées.
+//  - Forêt (FSI = couvert / 100) : α augmente jusqu'à 10°·FSI (au moins 2°)
+//    pour un écoulement lent, l'effet s'estompant vers 30 m/s ; une petite
+//    part du flux est retenue dans chaque cellule.
+// Les cellules sont traitées génération par génération ; une cellule atteinte
+// de nouveau par une génération non traitée cumule le flux, les parents et le
+// plus grand zδ.
 //
-// Release cells are run one by one and independently, as in Flow-Py, but
-// only those that can reach the target are run. The energy a flow needs in a
-// cell to still get there, E(x) = max(0, min_n E(n) − (z_x − z_n) + tan α·s),
-// is solved once backwards from the target (any path and heading, forest only
-// raises α: a lower bound); a release cell starts with zδ = 0, so one with
-// E > 0 can never get there. That drops the other gullies and the far side
-// of ridges without changing the result. Inside a run, a cell arriving with
-// zδ < E only feeds cells short of energy too, so the run stops as soon as no
-// pending cell has enough (cells short of energy are still processed until
-// then: their flux, hence routing, merges into cells that may get there).
-// Paths that reach the target are traced back to their release cell
-// (Flow-Py's back-calculation) for display.
+// Les cellules de départ sont lancées une à une et indépendamment, comme dans
+// Flow-Py, mais seules celles qui peuvent atteindre la cible sont lancées.
+// L'énergie dont un écoulement a besoin dans une cellule pour y arriver
+// encore, E(x) = max(0, min_n E(n) − (z_x − z_n) + tan α·s), est résolue une
+// fois à rebours depuis la cible (tout chemin et tout cap ; la forêt ne fait
+// qu'augmenter α : c'est un minorant) ; une cellule de départ commence avec
+// zδ = 0, donc une cellule où E > 0 ne peut jamais y arriver. Cela écarte les
+// autres couloirs et l'autre versant des crêtes sans changer le résultat. Au
+// cours d'un lancement, une cellule qui arrive avec zδ < E n'alimente que des
+// cellules elles aussi à court d'énergie : le lancement s'arrête dès qu'aucune
+// cellule en attente n'en a assez (les cellules à court d'énergie sont tout de
+// même traitées jusque-là : leur flux, donc le routage, rejoint des cellules
+// qui peuvent y arriver). Les chemins qui atteignent la cible sont remontés
+// jusqu'à leur cellule de départ (le rétro-calcul de Flow-Py) pour l'affichage.
 
 import {
   FLOWPY_EXPONENT,
@@ -46,13 +52,14 @@ const G = 9.81;
 const DC = [1, 1, 0, -1, -1, -1, 0, 1] as const;
 const DR = [0, 1, 1, 1, 0, -1, -1, -1] as const;
 const DS = [1, Math.SQRT2, 1, Math.SQRT2, 1, Math.SQRT2, 1, Math.SQRT2] as const;
-/** Flux kept by a cell at least after detrainment (Flow-Py floor). */
+/** Flux minimal qu'une cellule garde après la rétention (plancher de Flow-Py). */
 const MIN_FLUX_AFTER_DETRAINMENT = 0.0003;
-/** Upper bound of cells followed from one release cell (pathological grids). */
+/** Plafond du nombre de cellules suivies depuis une cellule de départ (grilles pathologiques). */
 const MAX_RECORDS_PER_START = 300_000;
 /**
- * Upper bound of cells followed over a whole run (≈ 10 s of one core at
- * ~0.2 µs per cell, 2026-10-06): the lowest release cells are left out.
+ * Plafond du nombre de cellules suivies sur tout un lancement (≈ 10 s d'un
+ * cœur à ~0,2 µs par cellule, 2026-10-06) : les cellules de départ les plus
+ * basses sont laissées de côté.
  */
 export const MAX_RECORDS_PER_RUN = 56_000_000;
 
@@ -63,48 +70,48 @@ export interface FlowPyGrid {
   altitude: Float32Array;
 }
 
-/** Terrain-only terms, shared by every run on a grid. */
+/** Termes ne dépendant que du terrain, partagés par tous les lancements sur une grille. */
 export interface FlowPyTerrain {
-  /** The cell and its 8 neighbours have ground (Flow-Py skips cells next to no-data). */
+  /** La cellule et ses 8 voisines ont du sol (Flow-Py saute les cellules voisines de l'absence de données). */
   interior: Uint8Array;
-  /** Holmgren weight tan(φ)^exp towards each neighbour, 8 per cell. */
+  /** Poids de Holmgren tan(φ)^exp vers chaque voisine, 8 par cellule. */
   routing: Float32Array;
 }
 
 export interface FlowPyTarget {
-  /** Grid cells counted as "the point" (a small disc around it). */
+  /** Cellules de la grille comptées comme « le point » (un petit disque autour). */
   cells: Int32Array;
 }
 
 export interface FlowPyRun {
   alphaDeg: number;
-  /** Follows every run to its end (no early stop): reference for the checks. */
+  /** Suit chaque lancement jusqu'au bout (pas d'arrêt anticipé) : référence pour les contrôles. */
   exhaustive?: boolean;
-  /** Forest structure index per cell (0–1), `null` without forest data. */
+  /** Indice de structure forestière par cellule (0–1), `null` sans données de forêt. */
   fsi: Float32Array | null;
-  /** Release cells (1) of the scenario. */
+  /** Cellules de départ (1) du scénario. */
   release: Uint8Array;
 }
 
 export interface FlowPyResult {
-  /** Release cells whose flow reaches the target. */
+  /** Cellules de départ dont l'écoulement atteint la cible. */
   startCells: Int32Array;
-  /** Flow-path travel angle at the target of each of them, degrees. */
+  /** Angle de parcours du chemin d'écoulement à la cible pour chacune d'elles, en degrés. */
   startTravelAngleDeg: Float32Array;
-  /** Largest flow-path travel angle at the target, degrees (`null`: not reached). */
+  /** Plus grand angle de parcours d'un chemin d'écoulement à la cible, en degrés (`null` : non atteinte). */
   travelAngleDeg: number | null;
-  /** Largest kinetic-energy height at the target, m. */
+  /** Plus grande hauteur d'énergie cinétique à la cible, m. */
   zDeltaM: number | null;
-  /** Largest routing flux summed over the release cells, in a target cell (routFluxSum). */
+  /** Plus grand flux de routage cumulé sur les cellules de départ, dans une cellule de la cible (routFluxSum). */
   routFluxSum: number;
-  /** Cells of the flow paths leading to the target, with their largest zδ (m). */
+  /** Cellules des chemins d'écoulement qui mènent à la cible, avec leur plus grand zδ (m). */
   pathCells: Int32Array;
   pathZDelta: Float32Array;
-  /** Release cells whose energy line can get to the target. */
+  /** Cellules de départ dont la ligne d'énergie peut atteindre la cible. */
   candidates: number;
   /** Cells processed over all release cells (cost). */
   processed: number;
-  /** The run stopped at its cost bound before the lowest release cells. */
+  /** Le lancement s'est arrêté à son plafond de coût avant les cellules de départ les plus basses. */
   incomplete: boolean;
 }
 
@@ -125,7 +132,7 @@ export function prepareFlowPyTerrain(grid: FlowPyGrid): FlowPyTerrain {
           ok = false;
           break;
         }
-        // φ = (ψ + 90°) / 2, ψ the angle down to the neighbour.
+        // φ = (ψ + 90°) / 2, ψ l'angle de descente vers la voisine.
         const phi = (Math.atan((z - zn) / (DS[k]! * cell)) + Math.PI / 2) / 2;
         routing[i * 8 + k] = Math.pow(Math.tan(phi), FLOWPY_EXPONENT);
       }
@@ -135,7 +142,7 @@ export function prepareFlowPyTerrain(grid: FlowPyGrid): FlowPyTerrain {
   return { interior, routing };
 }
 
-/** Growable record storage of one release cell's flow (reused across cells). */
+/** Stockage extensible des enregistrements de l'écoulement d'une cellule de départ (réutilisé d'une cellule à l'autre). */
 class Records {
   capacity = 0;
   cell = new Int32Array(0);
@@ -143,12 +150,12 @@ class Records {
   zDelta = new Float64Array(0);
   minDist = new Float64Array(0);
   firstParent = new Int32Array(0);
-  /** Counted among the pending records with the energy to still reach the target. */
+  /** Compté parmi les enregistrements en attente qui ont encore l'énergie d'atteindre la cible. */
   viable = new Uint8Array(0);
   edgeHead = new Int32Array(0);
   edgeCapacity = 0;
   edgeParent = new Int32Array(0);
-  /** Direction of the step parent → record. */
+  /** Direction du pas parent → enregistrement. */
   edgeDir = new Int8Array(0);
   edgeNext = new Int32Array(0);
   count = 0;
@@ -206,9 +213,10 @@ function grown<T extends Int8Array | Uint8Array | Int32Array | Float64Array>(arr
 }
 
 /**
- * Energy (m of zδ) a flow needs in each cell to still reach the target on an
- * energy line of slope `tanAlpha` (any path, any heading); Infinity where even
- * the 270 m cap is not enough.
+ * Énergie (m de zδ) dont un écoulement a besoin dans chaque cellule pour
+ * atteindre encore la cible sur une ligne d'énergie de pente `tanAlpha`
+ * (tout chemin, tout cap) ; Infinity là où même le plafond de 270 m ne
+ * suffit pas.
  */
 function energyToReach(grid: FlowPyGrid, terrain: FlowPyTerrain, targetCells: Int32Array, tanAlpha: number): Float32Array {
   const { width, cell, altitude } = grid;
@@ -227,8 +235,9 @@ function energyToReach(grid: FlowPyGrid, terrain: FlowPyTerrain, targetCells: In
     need[i] = 0;
     push(i);
   }
-  // Label-correcting search (edge costs may be negative downhill; any cycle
-  // costs tan α · length > 0, so it converges).
+  // Recherche à correction d'étiquettes (les coûts des arêtes peuvent être
+  // négatifs en descente ; tout cycle coûte tan α · longueur > 0, donc elle
+  // converge).
   while (head !== tail) {
     const n = queue[head]!;
     head = head === count ? 0 : head + 1;
@@ -236,7 +245,7 @@ function energyToReach(grid: FlowPyGrid, terrain: FlowPyTerrain, targetCells: In
     const needN = need[n]!;
     const zn = altitude[n]!;
     for (let k = 0; k < 8; k++) {
-      // x → n is the step of direction k from x, i.e. x sits at −k from n.
+      // x → n est le pas de direction k depuis x, c'est-à-dire que x se trouve en −k depuis n.
       const x = n - DR[k]! * width - DC[k]!;
       if (x < 0 || x >= count || !terrain.interior[x]) continue;
       if (Math.abs((x % width) - (n % width)) > 1) continue;
@@ -250,11 +259,11 @@ function energyToReach(grid: FlowPyGrid, terrain: FlowPyTerrain, targetCells: In
   return need;
 }
 
-/** Release cells of a run that may reach the target, and the energy they need on the way. */
+/** Cellules de départ d'un lancement qui peuvent atteindre la cible, et l'énergie dont elles ont besoin en chemin. */
 export interface FlowPyPlan {
-  /** Release cells whose energy line can get to the target, highest first (Flow-Py order). */
+  /** Cellules de départ dont la ligne d'énergie peut atteindre la cible, les plus hautes d'abord (ordre de Flow-Py). */
   starts: Int32Array;
-  /** Energy a flow needs in each cell to still reach the target (see `energyToReach`). */
+  /** Énergie dont un écoulement a besoin dans chaque cellule pour atteindre encore la cible (voir `energyToReach`). */
   need: Float32Array;
 }
 
@@ -269,32 +278,33 @@ export function planFlowPyRun(grid: FlowPyGrid, terrain: FlowPyTerrain, target: 
 }
 
 /**
- * Release cells per block. Every release cell is run on its own, so a block
- * can run anywhere (another worker); blocks are merged in start order, which
- * gives exactly the sequential result whatever ran them.
+ * Cellules de départ par bloc. Chaque cellule de départ est lancée seule, donc
+ * un bloc peut tourner n'importe où (un autre worker) ; les blocs sont
+ * fusionnés dans l'ordre des départs, ce qui donne exactement le résultat
+ * séquentiel, quel que soit ce qui les a exécutés.
  */
 export const FLOWPY_BLOCK_STARTS = 64;
 
-/** What the release cells `starts[from, to)` of a plan add to a run. */
+/** Ce que les cellules de départ `starts[from, to)` d'un plan apportent à un lancement. */
 export interface FlowPyBlock {
   from: number;
   to: number;
   /** Cells processed (cost). */
   processed: number;
-  /** Release cells reaching the target, in start order, and their travel angle there. */
+  /** Cellules de départ qui atteignent la cible, dans l'ordre des départs, et leur angle de parcours à la cible. */
   startCells: Int32Array;
   startAngles: Float64Array;
-  /** Largest zδ of a target record reached (-Infinity: none). */
+  /** Plus grand zδ d'un enregistrement de la cible atteint (-Infinity : aucun). */
   bestZDelta: number;
-  /** Target flux, record by record (summed in this order): cell and flux. */
+  /** Flux à la cible, enregistrement par enregistrement (cumulés dans cet ordre) : cellule et flux. */
   fluxCells: Int32Array;
   fluxValues: Float64Array;
-  /** Path cells in order of first appearance in the block, with their largest zδ. */
+  /** Cellules des chemins dans l'ordre de première apparition dans le bloc, avec leur plus grand zδ. */
   pathCells: Int32Array;
   pathZDelta: Float32Array;
 }
 
-/** Runs blocks of release cells of one plan (keeps its working memory between blocks). */
+/** Exécute des blocs de cellules de départ d'un plan (garde sa mémoire de travail d'un bloc à l'autre). */
 export type FlowPyBlockRunner = (from: number, to: number) => FlowPyBlock;
 
 export function createFlowPyBlockRunner(
@@ -325,7 +335,7 @@ export function createFlowPyBlockRunner(
   const dist = new Float64Array(8);
   const order = new Int8Array(8);
   const reached: number[] = [];
-  // Per direction: index offset to the neighbour and plan step (m).
+  // Par direction : décalage d'indice vers la voisine et pas en plan (m).
   const offset = new Int32Array(8);
   const step = new Float64Array(8);
   for (let k = 0; k < 8; k++) {
@@ -358,8 +368,9 @@ export function createFlowPyBlockRunner(
       let startAngle = -Infinity;
 
       for (let r = 0; r < records.count; r++) {
-        // No pending cell has the energy to get there any more: a cell short of
-        // it only feeds cells short of it, so nothing else can reach the target.
+        // Plus aucune cellule en attente n'a l'énergie d'y arriver : une cellule
+        // à court d'énergie n'alimente que des cellules à court d'énergie, donc
+        // rien d'autre ne peut atteindre la cible.
         if (viable === 0 && !run.exhaustive) break;
         const i = records.cell[r]!;
         if (pendingOf[i] === r) pendingOf[i] = -1;
@@ -368,7 +379,7 @@ export function createFlowPyBlockRunner(
         const zDelta = records.zDelta[r]!;
         const isStart = r === 0;
 
-        // Shortest plan path from the release cell (travel angle).
+        // Plus court chemin en plan depuis la cellule de départ (angle de parcours).
         if (!isStart) {
           let best = Infinity;
           for (let e = records.edgeHead[r]!; e >= 0; e = records.edgeNext[e]!) {
@@ -378,7 +389,7 @@ export function createFlowPyBlockRunner(
           records.minDist[r] = best;
         }
 
-        // Energy line to each neighbour, α raised in forest (never at the release cell).
+        // Ligne d'énergie vers chaque voisine, α augmenté en forêt (jamais à la cellule de départ).
         const forest = fsi ? fsi[i]! : 0;
         let alphaTan = tanAlpha;
         if (!isStart && forest > 0) {
@@ -392,7 +403,7 @@ export function createFlowPyBlockRunner(
           alphaTan = Math.tan(((run.alphaDeg + added) * Math.PI) / 180);
         }
 
-        // Persistence: the flow keeps the heading it came with.
+        // Persistance : l'écoulement garde le cap avec lequel il est arrivé.
         const firstParent = records.firstParent[r]!;
         if (isStart || firstParent === 0) {
           for (let k = 0; k < 8; k++) persistence[k] = 1;
@@ -402,7 +413,7 @@ export function createFlowPyBlockRunner(
           for (let e = records.edgeHead[r]!; e >= 0; e = records.edgeNext[e]!) {
             const ahead = records.edgeDir[e]!;
             const weight = records.zDelta[records.edgeParent[e]!]!;
-            blocked |= 1 << ((ahead + 4) & 7); // never back to a parent
+            blocked |= 1 << ((ahead + 4) & 7); // jamais vers un parent
             persistence[ahead]! += weight;
             persistence[(ahead + 1) & 7]! += 0.707 * weight;
             persistence[(ahead + 7) & 7]! += 0.707 * weight;
@@ -410,8 +421,8 @@ export function createFlowPyBlockRunner(
           for (let k = 0; k < 8; k++) if (blocked & (1 << k)) persistence[k] = 0;
         }
 
-        // Energy height at each neighbour, then terrain routing (Holmgren) times
-        // persistence on the reachable ones.
+        // Hauteur d'énergie à chaque voisine, puis routage selon le terrain
+        // (Holmgren) multiplié par la persistance sur les voisines atteignables.
         let weighted = 0;
         for (let k = 0; k < 8; k++) {
           const value = zDelta + (z - altitude[i + offset[k]!]!) - step[k]! * alphaTan;
@@ -426,7 +437,7 @@ export function createFlowPyBlockRunner(
         let flux = records.flux[r]!;
         if (!isStart) {
           if (fsi) {
-            // Detrainment (every cell of a run with a forest layer, as in Flow-Py).
+            // Rétention (dans chaque cellule d'un lancement qui a une couche de forêt, comme dans Flow-Py).
             const { max, min } = FLOWPY_FOREST_DETRAINMENT;
             const rest = max * forest;
             const slope = (rest - min) / -noDetrainmentZ;
@@ -447,7 +458,7 @@ export function createFlowPyBlockRunner(
           if (zDelta > bestZDelta) bestZDelta = zDelta;
         }
 
-        // Distribution R_n = T_n·P_n / Σ(T·P) · flux; shares under the threshold go to the others.
+        // Répartition R_n = T_n·P_n / Σ(T·P) · flux ; les parts sous le seuil vont aux autres.
         if (weighted <= 0) continue;
         let kept = 0;
         let below = 0;
@@ -456,7 +467,7 @@ export function createFlowPyBlockRunner(
           if (dist[k]! >= FLOWPY_FLUX_THRESHOLD) kept++;
           else below += dist[k]!;
         }
-        if (kept === 0) continue; // everything deposits here
+        if (kept === 0) continue; // tout se dépose ici
         let total = 0;
         for (let k = 0; k < 8; k++) {
           if (dist[k]! >= FLOWPY_FLUX_THRESHOLD) dist[k]! += below / kept;
@@ -468,9 +479,10 @@ export function createFlowPyBlockRunner(
           for (let k = 0; k < 8; k++) if (dist[k]! > 0) dist[k]! += correction;
         }
 
-        // Children, lowest zδ first (Flow-Py order): stable insertion sort of
-        // the directions that receive a share (sorting all 8 then skipping the
-        // others gives the same order: zδ is finite around an interior cell).
+        // Enfants, plus petit zδ d'abord (ordre de Flow-Py) : tri par insertion
+        // stable des directions qui reçoivent une part (trier les 8 puis sauter
+        // les autres donne le même ordre : zδ est fini autour d'une cellule
+        // intérieure).
         let routed = 0;
         for (let k = 0; k < 8; k++) {
           if (dist[k]! < FLOWPY_FLUX_THRESHOLD) continue;
@@ -535,9 +547,10 @@ export function createFlowPyBlockRunner(
 }
 
 /**
- * Merges blocks in start order into a run result. Stops taking blocks once
- * the run reached its cost bound (`full`): the lowest release cells are then
- * left out, at block granularity.
+ * Fusionne les blocs dans l'ordre des départs en un résultat de lancement.
+ * Cesse de prendre des blocs une fois le plafond de coût atteint (`full`) :
+ * les cellules de départ les plus basses sont alors laissées de côté, à la
+ * granularité du bloc.
  */
 export class FlowPyMerger {
   private readonly target: FlowPyTarget;
@@ -562,12 +575,12 @@ export class FlowPyMerger {
     this.pathZDelta = new Float32Array(count);
   }
 
-  /** The next block wanted: none once every start is merged or the cost bound is reached. */
+  /** Le prochain bloc voulu : aucun une fois tous les départs fusionnés ou le plafond de coût atteint. */
   get done(): boolean {
     return this.incomplete || this.next >= this.plan.starts.length;
   }
 
-  /** Index of the first start of the next block to merge. */
+  /** Indice du premier départ du prochain bloc à fusionner. */
   get nextStart(): number {
     return this.next;
   }
@@ -613,7 +626,7 @@ export class FlowPyMerger {
   }
 }
 
-/** Runs Flow-Py from every release cell that may reach the target, here, block after block. */
+/** Lance Flow-Py depuis chaque cellule de départ qui peut atteindre la cible, ici, bloc après bloc. */
 export function runFlowPyToTarget(grid: FlowPyGrid, terrain: FlowPyTerrain, target: FlowPyTarget, run: FlowPyRun): FlowPyResult {
   const plan = planFlowPyRun(grid, terrain, target, run);
   const runBlock = createFlowPyBlockRunner(grid, terrain, target, run, plan);
@@ -625,7 +638,7 @@ export function runFlowPyToTarget(grid: FlowPyGrid, terrain: FlowPyTerrain, targ
   return merger.result();
 }
 
-/** Marks the cells of every path from the release cell to the reached target records. */
+/** Marque les cellules de chaque chemin entre la cellule de départ et les enregistrements de la cible atteints. */
 function traceBack(records: Records, reached: readonly number[], pathZDelta: Float32Array, pathCells: number[]): void {
   const seen = new Uint8Array(records.count);
   const stack = [...reached];

@@ -1,7 +1,7 @@
 // ============================================
-// Standalone LiDAR HD Viewer — Entry Point
+// Viewer LiDAR HD autonome — point d'entrée
 // ============================================
-// Reads tile params from URL, loads from OPFS, parses+colorizes in a Worker, renders with WebGPU.
+// Lit les paramètres de tuile dans l'URL, charge depuis l'OPFS, décode et colorise dans un worker, rend en WebGPU.
 
 import '@/shared/styles/typography.css';
 import '@/shared/styles/theme.css';
@@ -69,26 +69,27 @@ import { launchWebGLFallback, loadTileFromOPFS, setViewerStatus } from './runtim
 import { explainWorkerError, noEngineHint, showFatalError } from './loading/fatalError';
 
 // --- i18n ---
-// No React here: the viewer's DOM (static HTML + imperative panels) is
-// translated by the same observer as the app, in the locale stored by it.
+// Pas de React ici : le DOM du viewer (HTML statique + panneaux impératifs)
+// est traduit par le même observateur que l'app, dans la langue qu'elle a
+// enregistrée.
 const viewerLocale = readStoredAppLocale();
 document.documentElement.lang = viewerLocale;
 observeDomTranslation(document.body, buildTranslationLookup(createAppTranslationBundle(viewerLocale).entries));
 
-// --- UI density ---
-// Same screen-dependent scale as the dashboard canvas, applied to the floating
-// panels with `zoom: var(--app-scale)`: the shared control panel renders at
-// the same type size here and in the app.
+// --- Densité de l'interface ---
+// Même échelle dépendant de l'écran que le canevas du tableau de bord,
+// appliquée aux panneaux flottants avec `zoom: var(--app-scale)` : le panneau
+// de contrôle partagé s'affiche à la même taille de texte ici et dans l'app.
 syncRootAppScale();
 
 // --- Audience ---
-// Same anonymous measurement as the app (first-party tracker, production only);
-// the account context (plan, account age, internal account) comes from the app's local copy.
+// Même mesure anonyme que l'app (traceur interne, en production seulement) ;
+// le contexte du compte (formule, ancienneté, compte interne) vient de la copie locale de l'app.
 initAnalytics({ surface: 'viewer', release: APP_BUILD_ID });
 trackScreen('viewer');
 
 // --- DOM refs ---
-/** Replaced by the renderer's canvas once created (a fallback engine gets a fresh element, see claimViewerCanvas). */
+/** Remplacé par le canvas du renderer une fois créé (un moteur de repli reçoit un élément neuf, voir claimViewerCanvas). */
 let canvas = document.getElementById('canvas') as HTMLCanvasElement;
 const overlay = document.getElementById('overlay')!;
 const statsEl = document.getElementById('stats')!;
@@ -104,9 +105,9 @@ function setStatus(msg: string, pct?: number) {
 }
 
 let renderer: LidarRenderer | null = null;
-/** Lowered by the automatic quality downgrade when the GPU cannot keep up. */
+/** Abaissé par la dégradation automatique de qualité quand le GPU ne suit pas. */
 let resolutionScale = 1;
-/** Pixel-ratio ceiling raised while the photo mode is on (null: the platform's). */
+/** Plafond du rapport de pixels relevé pendant que le mode photo est actif (null : celui de la plateforme). */
 let photoDprCap: number | null = null;
 const MIN_RESOLUTION_SCALE = 0.55;
 
@@ -120,11 +121,11 @@ function resizeCanvas() {
   canvas.height = Math.floor(window.innerHeight * effectiveDpr);
 }
 
-/** Frames rendered after the camera stops so the LOD reaches its resting quality. */
+/** Images rendues après l'arrêt de la caméra pour que le LOD atteigne sa qualité au repos. */
 const MAX_SETTLE_FRAMES = 240;
 /** Stats line refresh period (ms). */
 const STATS_INTERVAL_MS = 250;
-/** Frames keep the moving-camera quality this long after the last camera change (ms). */
+/** Les images gardent la qualité « caméra en mouvement » aussi longtemps après le dernier changement de caméra (ms). */
 const MOTION_HOLD_MS = 150;
 const EDL_DEFAULT_PERCENT = 50;
 
@@ -151,7 +152,7 @@ function edlRadiusPx(): number {
 
     const lidarManager = new LidarManager();
 
-    /** Terrain engine (viewer-webgl): orthophoto-draped DTM without points, on a canvas of its own. */
+    /** Moteur terrain (viewer-webgl) : MNT drapé de l'orthophoto, sans points, sur son propre canvas. */
     const startTerrainEngine = async (reasonForLog: string): Promise<void> => {
       const loadAllBuffers = async (): Promise<ArrayBuffer[]> => {
         const buffers: ArrayBuffer[] = [];
@@ -197,8 +198,9 @@ function edlRadiusPx(): number {
     }
 
     const deviceMemoryGiB = (navigator as MemoryAwareNavigator).deviceMemory;
-    // The renderer (WebGPU, else WebGL 2) starts while the tiles open from
-    // their LOD cache (header + node table) or are decoded once to build it.
+    // Le renderer (WebGPU, sinon WebGL 2) démarre pendant que les tuiles
+    // s'ouvrent depuis leur cache LOD (en-tête + table des nœuds) ou sont
+    // décodées une fois pour le construire.
     setStatus('Préparation du rendu 3D...', 2);
     resizeCanvas();
     const rendererReady = createLidarRenderer(requestedEngine === 'webgl' ? 'webgl' : 'auto');
@@ -208,7 +210,7 @@ function edlRadiusPx(): number {
     try {
       created = await rendererReady;
     } catch (rendererErr: unknown) {
-      // Neither WebGPU nor WebGL 2 started: last resort, the terrain engine.
+      // Ni WebGPU ni WebGL 2 n'ont démarré : dernier recours, le moteur terrain.
       const rendererDetail = (rendererErr as Error)?.message || String(rendererErr);
       console.error('[Viewer] No point-cloud renderer:', rendererErr);
       trackViewerOpened('terrain');
@@ -240,7 +242,7 @@ function edlRadiusPx(): number {
 
     const scene = await sceneReady;
     const sceneBounds = scene.bounds;
-    /** Bounds-only view of the scene for the overlay controllers. */
+    /** Vue de la scène réduite à ses bornes, pour les contrôleurs de superposition. */
     const sceneInfo = { bounds: sceneBounds };
 
     const cx = (sceneBounds.minX + sceneBounds.maxX) / 2;
@@ -250,7 +252,7 @@ function edlRadiusPx(): number {
     setStatus('Initialisation du rendu 3D...', 86);
 
     const terrainMesh = await scene.terrainMesh;
-    /** Scene frame + DTM grid, shared by the route overlay and the ground lookups. */
+    /** Repère de la scène + grille du MNT, partagés par la superposition du tracé et les recherches de sol. */
     const heightSceneParams: ViewerRouteSceneParams = {
       bounds: sceneBounds,
       crs,
@@ -279,8 +281,8 @@ function edlRadiusPx(): number {
     } as HeightmapParams);
 
     const extent = Math.max(rangeX, rangeY, sceneBounds.maxZ - sceneBounds.minZ);
-    // One diameter for every point: ≈ 1.5× the mean ground spacing (≈0.25 m
-    // for an IGN tile) closes the gaps at full density without smearing.
+    // Un seul diamètre pour tous les points : ≈ 1,5× l'espacement moyen au sol
+    // (≈ 0,25 m pour une tuile IGN) comble les trous à pleine densité sans baver.
     const meanSpacing = Math.sqrt((rangeX * rangeY) / Math.max(1, scene.totalPoints));
     renderer.pointSize = Math.min(0.8, Math.max(0.1, meanSpacing * 1.5));
     renderer.pointSizeReference = renderer.pointSize;
@@ -291,15 +293,16 @@ function edlRadiusPx(): number {
     camera.lookAt(0, 0, 0, extent * 0.6);
 
     const platform = renderer.platform!;
-    // `?budget=<points>` pins the budget (A/B benches at equal load).
+    // `?budget=<points>` fixe le budget (benchs A/B à charge égale).
     const pointBudget = new AdaptivePointBudget(
       pinnedBudget
         ? { ...platform, minBudget: pinnedBudget, initialBudget: pinnedBudget, maxBudget: pinnedBudget }
         : platform,
       { preciseGpu: renderer.hasPreciseGpuTiming() },
     );
-    // Still camera: denser selection, then progressive anti-aliasing (off
-    // with a pinned budget: benches compare variants at equal load).
+    // Caméra immobile : sélection plus dense, puis anticrénelage progressif
+    // (désactivé avec un budget fixé : les benchs comparent des variantes à
+    // charge égale).
     const restRefinement = new RestRefinement(!pinnedBudget);
     let requestRenderRef: () => void = () => undefined;
     const sceneLod = new SceneLod(scene.tiles, { x: cx, y: cy, z: cz }, {
@@ -314,8 +317,8 @@ function edlRadiusPx(): number {
       (window as unknown as { __rvLidar?: unknown }).__rvLidar = { sceneLod, pointBudget, renderer };
     }
 
-    // Automatic downgrade for GPUs too slow even at the minimum point budget:
-    // MSAA off first, then the render resolution in steps.
+    // Dégradation automatique pour les GPU trop lents même au budget de
+    // points minimal : d'abord le MSAA, puis la résolution de rendu par paliers.
     let degrading = false;
     const degradeQuality = async (): Promise<void> => {
       if (!renderer) return;
@@ -344,30 +347,30 @@ function edlRadiusPx(): number {
     let frameHandle: number | null = null;
     let renderRequested = true;
     let cleanedUp = false;
-    /** The camera moved since the route handles were last projected (done once per rendered frame). */
+    /** La caméra a bougé depuis la dernière projection des poignées du tracé (faite une fois par image rendue). */
     let routeOverlayStale = true;
     let updateRouteOverlayRef: () => void = () => undefined;
     let lastStatsUpdateTime = 0;
     let settleFramesLeft = MAX_SETTLE_FRAMES;
     const frameClock = new FrameClock();
     let benchRun: ViewerBench | null = null;
-    /** Last time the camera moved (rAF clock); frames stay in motion quality for MOTION_HOLD_MS after it. */
+    /** Dernier mouvement de la caméra (horloge rAF) ; les images restent en qualité « mouvement » MOTION_HOLD_MS après lui. */
     let lastMotionTime = -Infinity;
 
     const requestRender = () => {
       renderRequested = true;
       settleFramesLeft = MAX_SETTLE_FRAMES;
-      // Whatever changed, the averaged still image is stale.
+      // Quoi qu'il ait changé, l'image fixe moyennée est périmée.
       restRefinement.invalidate();
       if (cleanedUp || document.hidden || frameHandle != null) return;
       frameHandle = window.requestAnimationFrame(renderLoop);
     };
-    /** One more frame, the still image kept (photo mode: drifting clouds, capture). */
+    /** Une image de plus en gardant l'image fixe (mode photo : nuages qui dérivent, capture). */
     const requestFrame = () => {
       if (cleanedUp || document.hidden || frameHandle != null) return;
       frameHandle = window.requestAnimationFrame(renderLoop);
     };
-    /** Photo mode (WebGPU); created with the panels. */
+    /** Mode photo (WebGPU) ; créé avec les panneaux. */
     let photo: PhotoModeController | null = null;
 
     const backendLabel = renderer.backend === 'webgpu' ? 'WebGPU' : 'WebGL 2';
@@ -399,8 +402,8 @@ function edlRadiusPx(): number {
         lastMotionTime = frameTime;
         routeOverlayStale = true;
       }
-      // Moving frames trade resolution and round sprites for cadence; the
-      // first still frame after the hold restores full quality.
+      // Les images en mouvement échangent résolution et sprites ronds contre la
+      // cadence ; la première image fixe après le maintien rétablit la pleine qualité.
       const motion = frameTime - lastMotionTime < MOTION_HOLD_MS;
       if (motion) restRefinement.setMoving();
       const accumulating = restRefinement.phase === 'accumulate';
@@ -413,11 +416,11 @@ function edlRadiusPx(): number {
       renderer.updateCamera(camera.getViewMatrix(), camera.getRenderProjMatrix(), camera.getEye());
 
       if (restRefinement.phase === 'moving') {
-        // GPU time of the draw passes and the real cadence drive the budget,
-        // sized on moving frames (see lodBudget).
-        // The photo mode's clouds are not the points' to pay for: fewer
-        // points would not make them cheaper, and the budget collapsed to
-        // its floor, then the render resolution, for good.
+        // Le temps GPU des passes de dessin et la cadence réelle pilotent le
+        // budget, dimensionné sur les images en mouvement (voir lodBudget).
+        // Les nuages du mode photo ne sont pas à la charge des points : moins
+        // de points ne les rendrait pas moins chers, et le budget s'effondrait
+        // à son plancher, puis la résolution de rendu, pour de bon.
         pointBudget.sample({
           gpuMs: Math.max(0, renderer.getGpuFrameMs() - (renderer.photo?.getCloudMs() ?? 0)),
           cpuMs: lastCpuFrameMs,
@@ -429,18 +432,18 @@ function edlRadiusPx(): number {
         if (!pinnedBudget && pointBudget.isStarved() && !degrading) void degradeQuality();
         sceneLod.setPointBudget(pointBudget.pointBudget);
       } else {
-        // Refining a still view: these frames may take a few vsyncs and do
-        // not feed the moving budget.
+        // Affinage d'une vue fixe : ces images peuvent prendre quelques vsyncs
+        // et n'alimentent pas le budget en mouvement.
         const restBudget = restRefinement.budget(pointBudget.rawBudget, platform.restMaxBudget);
         sceneLod.setPointBudget(Math.max(1, Math.floor(restBudget * pointBudget.userScale)));
       }
       const [cpx, cpy, cpz] = renderer.lastCamPos;
-      // LOD at the canvas resolution in both modes: starting or stopping
-      // the camera does not reshuffle the selection.
+      // LOD à la résolution du canvas dans les deux modes : démarrer ou
+      // arrêter la caméra ne remanie pas la sélection.
       sceneLod.update(renderer.lastViewProj, renderer.lastProjScaleY, cpx, cpy, cpz, canvas.height);
       const photoActive = photo?.active ?? false;
       if (photoActive) {
-        // The detail shadow cascade follows what the camera looks at.
+        // La cascade d'ombres de détail suit ce que regarde la caméra.
         if (camera.getMode() === 'look') {
           const eye = camera.getEye();
           const [fx, fy, fz] = camera.getForward();
@@ -452,7 +455,7 @@ function edlRadiusPx(): number {
       renderer.renderScene(sceneLod.getSelectedNodes(), {
         motion,
         accumulate: accumulating ? restRefinement.sample : undefined,
-        // Still image already averaged: only the clouds move.
+        // Image fixe déjà moyennée : seuls les nuages bougent.
         reuseScene: photoActive && !motion && restRefinement.phase === 'done',
       });
       if (motion) renderRequested = true;
@@ -461,12 +464,12 @@ function edlRadiusPx(): number {
         updateRouteOverlayRef();
       }
       const lodStats = sceneLod.getStats();
-      // Budget growth only matters while it limits the selection (new nodes
-      // only fill ~97 % of it, see sceneLod).
+      // La croissance du budget ne compte que tant qu'elle limite la sélection
+      // (les nouveaux nœuds n'en remplissent que ~97 %, voir sceneLod).
       const budgetSettled = pointBudget.isSettled() || lodStats.targetPoints < lodStats.pointBudget * 0.95;
       if (!motion) {
-        // Still view: once the moving budget has settled with its selection
-        // drawn, refine it, then anti-alias it (see RestRefinement).
+        // Vue fixe : une fois le budget en mouvement stabilisé et sa sélection
+        // dessinée, l'affiner, puis l'anticréneler (voir RestRefinement).
         if (restRefinement.phase === 'moving') {
           if (budgetSettled && sceneLod.isIdle()) restRefinement.startRefine();
         } else {
@@ -476,7 +479,7 @@ function edlRadiusPx(): number {
               {
                 lodIdle: sceneLod.isIdle(),
                 gpuMs: stillMs,
-                // New nodes only fill ~97 % of the budget (see sceneLod).
+                // Les nouveaux nœuds ne remplissent que ~97 % du budget (voir sceneLod).
                 budgetLimited: lodStats.targetPoints >= lodStats.pointBudget * 0.95,
               },
               pointBudget.rawBudget,
@@ -490,12 +493,12 @@ function edlRadiusPx(): number {
       const keepSettling = !renderRequested
         && (!budgetSettled || !sceneLod.isIdle() || restRefinement.pending || (!motion && restRefinement.phase === 'moving'))
         && settleFramesLeft > 0;
-      // Photo mode: clouds converging or drifting, tables being built, capture.
+      // Mode photo : nuages qui convergent ou dérivent, tables en construction, capture.
       const photoFrames = !renderRequested && !keepSettling && photoActive && (renderer.photo?.needsFrames() ?? false);
       const goingIdle = !renderRequested && !keepSettling && !photoFrames;
 
       const now = performance.now();
-      // The last frame before idling always refreshes the stats (no stale "loading").
+      // La dernière image avant le repos rafraîchit toujours les statistiques (pas de « chargement » périmé).
       if (now - lastStatsUpdateTime >= STATS_INTERVAL_MS || goingIdle) {
         lastStatsUpdateTime = now;
         const text = showLodStats ? formatLodStats(lodStats) : `${scene.totalPoints.toLocaleString()} pts · ${scene.tileFileLabel}`;
@@ -515,8 +518,8 @@ function edlRadiusPx(): number {
       if (renderRequested) {
         requestRender();
       } else if (keepSettling) {
-        // Camera is still, but nodes are still streaming in, the budget is
-        // adapting or the still image is being refined.
+        // La caméra est immobile, mais des nœuds arrivent encore, le budget
+        // s'adapte ou l'image fixe est en cours d'affinage.
         settleFramesLeft -= 1;
         frameHandle = window.requestAnimationFrame(renderLoop);
       } else if (photoFrames) {
@@ -529,7 +532,7 @@ function edlRadiusPx(): number {
 
     const [lon, lat] = toWgs84(cx, cy, crs);
     const snowController = new ViewerSnowController();
-    // Read when the snow is first computed (the panel and the tools exist by then).
+    // Lu au premier calcul de la neige (le panneau et les outils existent alors).
     const snowContext = (): SnowSceneContext => ({
       renderer,
       pointCloud: sceneInfo,
@@ -544,8 +547,8 @@ function edlRadiusPx(): number {
     });
 
     let lastFixedPointPixels = 2;
-    // EDL darkens every depth step (outlines around points and against the
-    // sky); it stays available but off by default.
+    // L'EDL assombrit chaque marche de profondeur (contours autour des points
+    // et contre le ciel) ; il reste disponible mais désactivé par défaut.
     let edlEnabled = false;
     let edlStrengthPercent = EDL_DEFAULT_PERCENT;
     const applyEdl = () => renderer?.setEdl(edlEnabled, percentToEdlStrength(edlStrengthPercent), edlRadiusPx());
@@ -648,9 +651,9 @@ function edlRadiusPx(): number {
       onRequestRender: () => requestRender(),
     });
 
-    /** Point-filter visibility of an ASPRS class (picking skips hidden returns). */
+    /** Visibilité d'une classe ASPRS dans le filtre de points (le picking saute les retours masqués). */
     let isClassVisible: (classification: number) => boolean = () => true;
-    /** Comments of the app project (bubbles on the scene), created once the tools give the ground model. */
+    /** Commentaires du projet de l'app (bulles sur la scène), créés une fois que les outils fournissent le modèle de terrain. */
     let comments: ViewerComments | null = null;
     const tools = ViewerToolsController.create({
       canvas,
@@ -687,7 +690,7 @@ function edlRadiusPx(): number {
       });
     }
 
-    // ── Photo mode (WebGPU): sky, clouds, shadows of the point cloud ──────
+    // ── Mode photo (WebGPU) : ciel, nuages, ombres du nuage de points ──────
     const photoSetup = setUpPhotoMode({
       renderer,
       sceneBounds,
@@ -706,7 +709,7 @@ function edlRadiusPx(): number {
       requestRender,
       requestFrame,
       onActiveChange: (active) => {
-        // Retina screens get their full pixel ratio for the photo.
+        // Les écrans Retina reçoivent leur plein rapport de pixels pour la photo.
         photoDprCap = active && platform.tier === 'apple' ? 2 : null;
         handleResizeRef();
       },

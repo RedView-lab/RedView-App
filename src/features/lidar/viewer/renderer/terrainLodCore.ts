@@ -1,30 +1,34 @@
 // ============================================
-// Terrain mesh LOD: chunked geomipmapping over the tiles' DTM grids
+// LOD du maillage de terrain : geomipmapping par morceaux sur les grilles MNT des tuiles
 // ============================================
 //
-// The DTM mesh (≈1 m grid, 2.1 M triangles per tile) only fills the gaps
-// between the points, yet drawn whole it cost more than the points: 19 M
-// triangles for 9 tiles held the point budget of an integrated GPU at
-// 1.5 M points instead of 6 M. Each tile grid is cut into chunks of
-// CHUNK_QUADS quads; every frame a visible chunk takes the coarsest stride
-// (1…32 grid steps) whose height error projects under ERROR_PX and whose
-// quads stay under MAX_QUAD_PX, neighbouring chunks (across tiles too)
-// differ by one level at most, and an edge facing a coarser neighbour snaps
-// its in-between vertices onto the coarse edge: no T-junction cracks.
-// A coarse chunk is pushed back along the view rays by its height error
-// (`pushBack`, read by the terrain vertex shader), so it never hides a point
-// lying on the true surface; a move along the view ray keeps every vertex
-// on the same pixel, so chunks pushed by different amounts still join on
-// screen. Vertices stay the full-resolution buffers (each kept vertex keeps
-// its own normal and colour); a chunk is one indexed draw of an index
-// pattern shared by every chunk of that shape, relative to its first vertex.
+// Le maillage du MNT (grille d'≈1 m, 2,1 M triangles par tuile) ne fait que
+// combler les trous entre les points, et pourtant, dessiné en entier, il
+// coûtait plus que les points : 19 M triangles pour 9 tuiles retenaient le
+// budget de points d'un GPU intégré à 1,5 M points au lieu de 6 M. Chaque
+// grille de tuile est découpée en morceaux de CHUNK_QUADS quads ; à chaque
+// image, un morceau visible prend le pas le plus grossier (1…32 pas de
+// grille) dont l'erreur de hauteur projetée reste sous ERROR_PX et dont les
+// quads restent sous MAX_QUAD_PX ; deux morceaux voisins (y compris d'une
+// tuile à l'autre) diffèrent d'un niveau au plus, et un bord face à un voisin
+// plus grossier aligne ses sommets intermédiaires sur le bord grossier : pas
+// de fissures en T.
+// Un morceau grossier est repoussé le long des rayons de vue de son erreur de
+// hauteur (`pushBack`, lu par le vertex shader du terrain) : il ne cache
+// jamais un point posé sur la vraie surface ; un déplacement le long du rayon
+// de vue garde chaque sommet sur le même pixel, donc des morceaux repoussés
+// de valeurs différentes se raccordent toujours à l'écran. Les sommets restent
+// les buffers en pleine résolution (chaque sommet gardé garde sa normale et
+// sa couleur) ; un morceau est un dessin indexé d'un motif d'indices partagé
+// par tous les morceaux de cette forme, relatif à son premier sommet.
 //
-// This module is the GPU-API-free part (chunks, levels, patterns), shared by
-// the WebGPU (`terrainLod.ts`) and WebGL 2 (`webgl/glTerrainLod.ts`) drawers.
+// Ce module est la partie indépendante de l'API GPU (morceaux, niveaux,
+// motifs), partagée par les dessinateurs WebGPU (`terrainLod.ts`) et WebGL 2
+// (`webgl/glTerrainLod.ts`).
 
 import { extractFrustumPlanes, frustumTestAABB, OUTSIDE } from '../lod/frustum';
 
-/** Vertex grid of one tile inside the merged terrain buffers (rows of `gridWidth` vertices). */
+/** Grille de sommets d'une tuile dans les buffers de terrain fusionnés (lignes de `gridWidth` sommets). */
 export interface TerrainPart {
   vertexOffset: number;
   gridWidth: number;
@@ -43,18 +47,19 @@ const CHUNK_QUADS = 128;
 /** Strides 1, 2, 4 … 32 grid steps. */
 const LEVELS = 6;
 /**
- * Largest height error of a coarser level, projected (device px). The mesh
- * sits behind the points (pushed back by that error), so it only shapes the
- * holes and silhouettes the points leave open.
+ * Plus grande erreur de hauteur d'un niveau plus grossier, projetée (px de
+ * l'écran). Le maillage se tient derrière les points (repoussé de cette
+ * erreur), il ne dessine donc que les trous et les silhouettes que les points
+ * laissent ouverts.
  */
 const ERROR_PX = 6;
-/** Largest quad of a coarser level, projected (device px): shading and silhouettes stay smooth. */
+/** Plus grand quad d'un niveau plus grossier, projeté (px de l'écran) : ombrage et silhouettes restent lisses. */
 const MAX_QUAD_PX = 32;
-/** Extra push-back (m) of every chunk drawn below full resolution. */
+/** Recul supplémentaire (m) de chaque morceau dessiné sous la pleine résolution. */
 const PUSH_BACK_MARGIN = 0.05;
 export const TERRAIN_VERTEX_FLOATS = 6;
 
-/** Sides of a chunk, as bits of the stitching mask. */
+/** Côtés d'un morceau, en bits du masque de raccord. */
 const ROW_MIN = 1;
 const COL_MAX = 2;
 const ROW_MAX = 4;
@@ -65,30 +70,30 @@ export interface TerrainChunk {
   quadsW: number;
   quadsH: number;
   gridWidth: number;
-  /** First vertex of the chunk in the merged buffers; pattern indices are relative to it. */
+  /** Premier sommet du morceau dans les buffers fusionnés ; les indices du motif lui sont relatifs. */
   baseVertex: number;
   minX: number; minY: number; minZ: number;
   maxX: number; maxY: number; maxZ: number;
-  /** World size of one grid step. */
+  /** Taille dans le monde d'un pas de grille. */
   cell: number;
-  /** Largest height error of each level (metres), non-decreasing; Infinity above `maxLevel`. */
+  /** Plus grande erreur de hauteur de chaque niveau (mètres), croissante ; Infinity au-delà de `maxLevel`. */
   errors: Float32Array;
-  /** Coarsest level the chunk's size allows. */
+  /** Niveau le plus grossier que permet la taille du morceau. */
   maxLevel: number;
-  /** Neighbour chunk per side (ROW_MIN, COL_MAX, ROW_MAX, COL_MIN order), −1 at the scene edge. */
+  /** Morceau voisin par côté (ordre ROW_MIN, COL_MAX, ROW_MAX, COL_MIN), −1 au bord de la scène. */
   neighbours: [number, number, number, number];
-  /** World (x, z) direction of growing grid columns and rows. */
+  /** Direction (x, z) dans le monde des colonnes et lignes croissantes de la grille. */
   colAxis: [number, number];
   rowAxis: [number, number];
 }
 
-/** Index list of one chunk shape, keyed by `patternKey`. */
+/** Liste d'indices d'une forme de morceau, indexée par `patternKey`. */
 export interface TerrainIndexPattern {
   key: string;
   indices: Uint32Array<ArrayBuffer>;
 }
 
-/** Grid positions of a level along one chunk axis: multiples of the stride, then the end. */
+/** Positions de grille d'un niveau le long d'un axe du morceau : multiples du pas, puis la fin. */
 function levelPositions(quads: number, stride: number): number[] {
   const out: number[] = [];
   for (let p = 0; p < quads; p += stride) out.push(p);
@@ -96,7 +101,7 @@ function levelPositions(quads: number, stride: number): number[] {
   return out;
 }
 
-/** Largest position of `coarse` (sorted, starting at 0) not above `p`. */
+/** Plus grande position de `coarse` (triée, commençant à 0) qui ne dépasse pas `p`. */
 function snapDown(p: number, coarse: number[]): number {
   let best = 0;
   for (const c of coarse) {
@@ -107,11 +112,12 @@ function snapDown(p: number, coarse: number[]): number {
 }
 
 /**
- * Index list of a chunk of `quadsW`×`quadsH` quads at `stride`, relative to
- * its first vertex in a grid of `gridWidth` vertices per row. Edges in
- * `stitch` face a neighbour one level coarser: their vertices snap down to
- * that level's positions (degenerate triangles dropped). Same winding as the
- * heightmap mesh (tl, tr, bl / tr, br, bl).
+ * Liste d'indices d'un morceau de `quadsW`×`quadsH` quads au pas `stride`,
+ * relative à son premier sommet dans une grille de `gridWidth` sommets par
+ * ligne. Les bords de `stitch` font face à un voisin d'un niveau plus
+ * grossier : leurs sommets s'alignent sur les positions de ce niveau (les
+ * triangles dégénérés sont écartés). Même sens d'enroulement que le maillage
+ * de la carte d'altitude (tl, tr, bl / tr, br, bl).
  */
 export function buildChunkIndices(
   gridWidth: number,
@@ -150,7 +156,7 @@ export function buildChunkIndices(
   return new Uint32Array(out);
 }
 
-/** Largest height error of each level over the chunk: bilinear coarse surface against the full grid. */
+/** Plus grande erreur de hauteur de chaque niveau sur le morceau : surface grossière bilinéaire contre la grille complète. */
 function chunkErrors(
   vertices: Float32Array,
   base: number,
@@ -190,14 +196,14 @@ function chunkErrors(
   return errors;
 }
 
-/** Chunks of the terrain grids and the level each one is drawn at for the current camera. */
+/** Morceaux des grilles de terrain et niveau auquel chacun est dessiné pour la caméra courante. */
 export class TerrainLodSelector {
   readonly chunks: TerrainChunk[] = [];
-  /** Level per chunk (stride 2^level), set by `select`. */
+  /** Niveau par morceau (pas 2^level), fixé par `select`. */
   readonly levels: Int32Array;
-  /** 1 where the chunk intersects the frustum, set by `select`. */
+  /** 1 là où le morceau coupe le frustum, fixé par `select`. */
   readonly visible: Uint8Array;
-  /** Push-back (m) per chunk along the view rays, set by `select`. */
+  /** Recul (m) par morceau le long des rayons de vue, fixé par `select`. */
   readonly pushBack: Float32Array<ArrayBuffer>;
 
   constructor(mesh: TerrainMeshData) {
@@ -233,7 +239,7 @@ export class TerrainLodSelector {
             if (z > maxZ) maxZ = z;
           }
         }
-        // Strides up to the chunk's smaller side (partial chunks at a grid edge).
+        // Pas jusqu'au plus petit côté du morceau (morceaux partiels au bord d'une grille).
         const maxLevel = Math.max(0, Math.min(LEVELS - 1, Math.floor(Math.log2(Math.min(quadsW, quadsH)))));
         const corner = (r: number, c: number): [number, number] => {
           const at = (baseVertex + r * gridWidth + c) * TERRAIN_VERTEX_FLOATS;
@@ -260,8 +266,9 @@ export class TerrainLodSelector {
   }
 
   /**
-   * Neighbours by shared edges: overlapping along the edge and touching
-   * across it (within half a grid step), so tiles join as well.
+   * Voisins par arête commune : chevauchement le long de l'arête et contact
+   * au travers (à moins d'un demi-pas de grille), pour que les tuiles se
+   * raccordent aussi.
    */
   private linkNeighbours(): void {
     const chunks = this.chunks;
@@ -285,7 +292,7 @@ export class TerrainLodSelector {
     }
   }
 
-  /** Index of the chunk side (ROW_MIN, COL_MAX, ROW_MAX, COL_MIN order) facing world direction (dx, dz). */
+  /** Indice du côté du morceau (ordre ROW_MIN, COL_MAX, ROW_MAX, COL_MIN) tourné vers la direction (dx, dz) du monde. */
   private sideOf(chunk: TerrainChunk, dx: number, dz: number): number {
     const alongCols = dx * chunk.colAxis[0] + dz * chunk.colAxis[1];
     const alongRows = dx * chunk.rowAxis[0] + dz * chunk.rowAxis[1];
@@ -298,9 +305,10 @@ export class TerrainLodSelector {
   }
 
   /**
-   * Every pattern of the full-size chunks (each level, each stitched-side
-   * combination; ~8 MB per grid width), one list per grid width: drawers
-   * upload them once, so no buffer is created while drawing.
+   * Tous les motifs des morceaux de taille pleine (chaque niveau, chaque
+   * combinaison de côtés raccordés ; ~8 Mo par largeur de grille), une liste
+   * par largeur de grille : les dessinateurs les envoient une fois, aucun
+   * buffer n'est donc créé pendant le dessin.
    */
   sharedPatterns(): TerrainIndexPattern[][] {
     const widths = new Set(this.chunks.filter((c) => c.quadsW === CHUNK_QUADS && c.quadsH === CHUNK_QUADS).map((c) => c.gridWidth));
@@ -308,7 +316,7 @@ export class TerrainLodSelector {
     for (const gridWidth of widths) {
       const lists: TerrainIndexPattern[] = [];
       for (let level = 0; level < LEVELS; level++) {
-        // The coarsest level never meets a coarser neighbour.
+        // Le niveau le plus grossier ne rencontre jamais de voisin plus grossier.
         const stitches = level < LEVELS - 1 ? 16 : 1;
         for (let stitch = 0; stitch < stitches; stitch++) {
           lists.push({
@@ -322,17 +330,17 @@ export class TerrainLodSelector {
     return groups;
   }
 
-  /** Key of the pattern a chunk is drawn with at `level` (see `sharedPatterns`). */
+  /** Clé du motif avec lequel un morceau est dessiné au niveau `level` (voir `sharedPatterns`). */
   static chunkPatternKey(chunk: TerrainChunk, level: number, stitch: number): string {
     return TerrainLodSelector.patternKey(chunk.gridWidth, chunk.quadsW, chunk.quadsH, level, stitch);
   }
 
-  /** Index list of a chunk at `level`: partial chunks (grid edges) are not in `sharedPatterns`. */
+  /** Liste d'indices d'un morceau au niveau `level` : les morceaux partiels (bords de grille) ne sont pas dans `sharedPatterns`. */
   static chunkPatternIndices(chunk: TerrainChunk, level: number, stitch: number): Uint32Array<ArrayBuffer> {
     return buildChunkIndices(chunk.gridWidth, chunk.quadsW, chunk.quadsH, 1 << level, stitch);
   }
 
-  /** Sides of chunk `index` facing a neighbour one level coarser (stitching mask). */
+  /** Côtés du morceau `index` face à un voisin d'un niveau plus grossier (masque de raccord). */
   stitchOf(index: number): number {
     const chunk = this.chunks[index]!;
     const level = this.levels[index]!;
@@ -345,9 +353,9 @@ export class TerrainLodSelector {
   }
 
   /**
-   * Picks each chunk's level and visibility for this camera. `focalPx` =
-   * proj[1][1] × viewport height / 2 (device px at the canvas resolution,
-   * as the points).
+   * Choisit le niveau et la visibilité de chaque morceau pour cette caméra.
+   * `focalPx` = proj[1][1] × hauteur du viewport / 2 (px de l'écran à la
+   * résolution du canvas, comme les points).
    */
   select(viewProj: Float32Array, camX: number, camY: number, camZ: number, focalPx: number): void {
     const planes = extractFrustumPlanes(viewProj);
@@ -369,8 +377,8 @@ export class TerrainLodSelector {
       }
       levels[i] = level;
     }
-    // Neighbours differ by one level at most (the finer one wins), so a
-    // stitched edge only ever meets the next level.
+    // Deux voisins diffèrent d'un niveau au plus (le plus fin l'emporte) : un
+    // bord raccordé ne rencontre donc jamais que le niveau suivant.
     for (let pass = 0; pass < LEVELS; pass++) {
       let changed = false;
       for (let i = 0; i < chunks.length; i++) {

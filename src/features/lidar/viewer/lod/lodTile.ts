@@ -1,27 +1,30 @@
 // ============================================
-// LiDAR LOD tile: additive octree + packed point blocks
+// Tuile LOD LiDAR : octree additif + blocs de points compactés
 // ============================================
 //
-// A tile is an *additive* octree (as in COPC/Potree): every node holds a
-// spatially uniform subset of its cube's points and its children add the
-// rest, so a node is always drawn in full and no point is stored twice.
-// COPC files already are such an octree; other LAS/LAZ files get one built
-// here (first point per 128³ grid cell stays in the node).
+// Une tuile est un octree *additif* (comme dans COPC/Potree) : chaque nœud
+// contient un sous-ensemble spatialement uniforme des points de son cube et
+// ses enfants ajoutent le reste, donc un nœud est toujours dessiné en entier
+// et aucun point n'est stocké deux fois. Les fichiers COPC sont déjà un tel
+// octree ; les autres fichiers LAS/LAZ en reçoivent un construit ici (le
+// premier point de chaque cellule d'une grille 128³ reste dans le nœud).
 //
-// Points are packed per node in 16 bytes:
-//   [0..5] x, y, z as u16, quantized in the node cube (≤ 1.5 cm at the root
-//          of a 1 km tile, sub-centimetre below; LiDAR HD scale is 1 cm)
-//   [6] classification  [7] intensity (8-bit, tile percentile-scaled)
+// Les points sont compactés par nœud sur 16 octets :
+//   [0..5] x, y, z en u16, quantifiés dans le cube du nœud (≤ 1,5 cm à la
+//          racine d'une tuile de 1 km, sous le centimètre en dessous ;
+//          l'échelle du LiDAR HD est de 1 cm)
+//   [6] classification  [7] intensité (8 bits, mise à l'échelle par centiles de la tuile)
 //   [8..10] r, g, b
-//   [11] filtered intensity  [12..14] filtered r, g, b  [15] 0
-// so a node block is read from disk and uploaded to the GPU as is.
+//   [11] intensité filtrée  [12..14] r, g, b filtrés  [15] 0
+// si bien qu'un bloc de nœud est lu sur le disque et envoyé au GPU tel quel.
 //
-// Filtered values (see `filterLodAttributes`) are the mean over the point's
-// cell of the node grid (node size / 128) of every point of the subtree. Where
-// a node is the finest level drawn, each of its points stands for its whole
-// cell, as a texel of a texture mip level does; drawn with its own colour it
-// would be one sample of a 20 cm orthophoto, and far away the coarse levels
-// turned into salt-and-pepper noise. Leaves keep their own values.
+// Les valeurs filtrées (voir `filterLodAttributes`) sont la moyenne, sur la
+// cellule du point dans la grille du nœud (taille du nœud / 128), de tous les
+// points du sous-arbre. Là où un nœud est le niveau le plus fin dessiné,
+// chacun de ses points représente toute sa cellule, comme un texel d'un
+// niveau de mipmap ; dessiné avec sa propre couleur, il ne serait qu'un
+// échantillon d'une orthophoto à 20 cm, et au loin les niveaux grossiers
+// tournaient au bruit poivre et sel. Les feuilles gardent leurs propres valeurs.
 
 import type {
   CopcHierarchyInfo,
@@ -31,7 +34,7 @@ import type {
 } from '../../types';
 
 export const LOD_POINT_STRIDE = 16;
-/** Byte offsets of the attributes inside a packed point record. */
+/** Décalages en octets des attributs dans un point compacté. */
 export const LOD_RECORD = {
   classification: 6,
   intensity: 7,
@@ -39,9 +42,9 @@ export const LOD_RECORD = {
   filteredIntensity: 11,
   filteredRgb: 12,
 } as const;
-/** Grid resolution of the additive subsampling (spacing = node size / 128). */
+/** Résolution de la grille du sous-échantillonnage additif (espacement = taille du nœud / 128). */
 export const LOD_GRID = 128;
-/** u16 position → cell of the node grid (65536 / LOD_GRID = 2^9). */
+/** Position u16 → cellule de la grille du nœud (65536 / LOD_GRID = 2^9). */
 const CELL_SHIFT = 9;
 const CELL_BITS = 7;
 const CELL_MASK = LOD_GRID - 1;
@@ -54,7 +57,7 @@ export interface LodNode {
   y: number;
   z: number;
   count: number;
-  /** Byte offset of the node's block in the packed data. */
+  /** Décalage en octets du bloc du nœud dans les données compactées. */
   byteOffset: number;
 }
 
@@ -65,19 +68,19 @@ export interface LodTileHeader {
   bounds: PointCloudBounds;
   /** Absolute km-aligned origin (see PointCloudOrigin). */
   origin: PointCloudOrigin;
-  /** Octree cube relative to `origin`: min corner and edge length. */
+  /** Cube de l'octree relatif à `origin` : coin minimal et longueur d'arête. */
   cubeMinX: number;
   cubeMinY: number;
   cubeMinZ: number;
   cubeSize: number;
-  /** Point spacing of the root node; halves at each level. */
+  /** Espacement des points du nœud racine ; il est divisé par deux à chaque niveau. */
   rootSpacing: number;
   crs: DetectedCrs;
   embeddedRgb: boolean;
 }
 
 export interface LodTileInput {
-  /** XYZ relative to `origin`. */
+  /** XYZ relatifs à `origin`. */
   positions: Float32Array;
   /** RGB per point. */
   colors: Uint8Array;
@@ -94,11 +97,11 @@ export interface LodTileInput {
 export interface LodTile {
   header: LodTileHeader;
   nodes: LodNode[];
-  /** `pointCount * LOD_POINT_STRIDE` bytes, node blocks back to back. */
+  /** `pointCount * LOD_POINT_STRIDE` octets, blocs de nœuds bout à bout. */
   packed: Uint8Array;
 }
 
-/** Node cube (relative to the tile origin) from its octree key. */
+/** Cube du nœud (relatif à l'origine de la tuile) d'après sa clé d'octree. */
 export function lodNodeCube(header: LodTileHeader, node: Pick<LodNode, 'depth' | 'x' | 'y' | 'z'>): {
   minX: number; minY: number; minZ: number; size: number;
 } {
@@ -116,9 +119,10 @@ export function lodNodeSpacing(header: LodTileHeader, depth: number): number {
 }
 
 /**
- * Maps raw intensities to 8 bits with the 1st–99th percentile range of the
- * tile (sensor ranges vary: 12-bit, 16-bit, with rare saturated outliers),
- * as a lookup table indexed by the raw value; null when every point gets 0.
+ * Ramène les intensités brutes sur 8 bits avec la plage du 1er au 99e
+ * centile de la tuile (les plages des capteurs varient : 12 bits, 16 bits,
+ * avec de rares valeurs aberrantes saturées), sous forme de table indexée
+ * par la valeur brute ; null quand tous les points reçoivent 0.
  */
 function buildIntensityTable(intensities: Uint16Array | undefined, count: number): Uint8Array | null {
   if (!intensities || count === 0) return null;
@@ -159,12 +163,13 @@ function parseKey(key: string): [number, number, number, number] {
 }
 
 /**
- * Quantizes `count` points into `packed` from point slot `firstSlot` on:
- * input point `indices[from + k]`, or `from + k` without `indices`. One
- * monomorphic loop per node (a call per point through a DataView and a
- * closure cost 80 ns/point, most of the build on a 23 M point tile).
- * Positions are written as u16 words: the packed format is little-endian
- * and so is every platform with WebGPU/WebGL (see `filterLodAttributes`).
+ * Quantifie `count` points dans `packed` à partir de l'emplacement
+ * `firstSlot` : point d'entrée `indices[from + k]`, ou `from + k` sans
+ * `indices`. Une boucle monomorphe par nœud (un appel par point via une
+ * DataView et une fermeture coûtait 80 ns/point, l'essentiel de la
+ * construction d'une tuile de 23 M points). Les positions sont écrites en
+ * mots u16 : le format compacté est petit-boutiste, comme toute plateforme
+ * dotée de WebGPU/WebGL (voir `filterLodAttributes`).
  */
 function packPoints(
   packed: Uint8Array,
@@ -201,7 +206,7 @@ function packPoints(
     packed[byteOffset + 8] = r;
     packed[byteOffset + 9] = g;
     packed[byteOffset + 10] = b;
-    // Filtered copies, replaced by the cell means for nodes with children.
+    // Copies filtrées, remplacées par les moyennes de cellule pour les nœuds qui ont des enfants.
     packed[byteOffset + 11] = intensity;
     packed[byteOffset + 12] = r;
     packed[byteOffset + 13] = g;
@@ -235,7 +240,7 @@ function makeHeader(
   };
 }
 
-/** COPC: points are already grouped per node, in `copc.nodes` order. */
+/** COPC : les points sont déjà regroupés par nœud, dans l'ordre de `copc.nodes`. */
 function buildFromCopc(input: LodTileInput, copc: CopcHierarchyInfo): LodTile | null {
   const total = copc.nodes.reduce((sum, node) => sum + node.pointCount, 0);
   if (total !== input.count) return null;
@@ -263,9 +268,9 @@ function buildFromCopc(input: LodTileInput, copc: CopcHierarchyInfo): LodTile | 
 }
 
 /**
- * Additive octree for plain LAS/LAZ: the first point of each occupied
- * 128³ cell stays in the node, the others are partitioned into the octants;
- * nodes under `LEAF_MAX_POINTS` (or at `MAX_DEPTH`) keep everything.
+ * Octree additif pour les LAS/LAZ ordinaires : le premier point de chaque
+ * cellule 128³ occupée reste dans le nœud, les autres sont répartis entre
+ * les octants ; les nœuds sous `LEAF_MAX_POINTS` (ou à `MAX_DEPTH`) gardent tout.
  */
 function buildAdditive(input: LodTileInput): LodTile {
   const n = input.count;
@@ -318,7 +323,7 @@ function buildAdditive(input: LodTileInput): LodTile {
     }
     emitted.push({ node: { depth: item.depth, x: item.x, y: item.y, z: item.z, count: keep }, start: item.start });
 
-    // Partition the remaining points into octants (stable counting sort).
+    // Répartit les points restants entre les octants (tri par comptage stable).
     const restStart = item.start + keep;
     const half = cube.size / 2;
     const midX = cube.minX + half, midY = cube.minY + half, midZ = cube.minZ + half;
@@ -372,16 +377,16 @@ function buildAdditive(input: LodTileInput): LodTile {
   return { header, nodes, packed };
 }
 
-/** Builds the LOD tile, reusing the COPC octree when the file has one. */
+/** Construit la tuile LOD, en réutilisant l'octree COPC quand le fichier en a un. */
 export function buildLodTile(input: LodTileInput): LodTile {
   const tile = (input.copc ? buildFromCopc(input, input.copc) : null) ?? buildAdditive(input);
   filterLodAttributes(tile);
   return tile;
 }
 
-/** Occupied cells of a node grid with the attribute sums of the points they hold. */
+/** Cellules occupées d'une grille de nœud, avec les sommes d'attributs des points qu'elles contiennent. */
 interface CellSums {
-  /** Cell keys: x | y << 7 | z << 14 in the node grid. */
+  /** Clés de cellule : x | y << 7 | z << 14 dans la grille du nœud. */
   keys: Uint32Array;
   /** Per cell: r, g, b, intensity, point count. */
   sums: Uint32Array;
@@ -391,15 +396,16 @@ interface CellSums {
 const SUM_FIELDS = 5;
 
 /**
- * Writes the filtered attributes of every node that has children: each
- * point gets the mean colour and intensity of all the points of its subtree
- * lying in its cell of the node grid (box filter of the node spacing, cells
- * in 3D so a canopy and the ground under it stay apart). Cell sums are built
- * bottom-up, a node merging its children's cells into its own twice coarser
- * grid (child cubes nest exactly in their parent's), so the whole tile costs
- * one pass over the points plus one over the occupied cells per level.
- * Nodes without points are skipped: their children feed the nearest
- * ancestor that has points.
+ * Écrit les attributs filtrés de chaque nœud qui a des enfants : chaque point
+ * reçoit la couleur et l'intensité moyennes de tous les points de son
+ * sous-arbre situés dans sa cellule de la grille du nœud (filtre boîte de
+ * l'espacement du nœud, cellules en 3D pour qu'une canopée et le sol dessous
+ * restent séparés). Les sommes de cellules sont construites de bas en haut,
+ * un nœud fusionnant les cellules de ses enfants dans sa propre grille deux
+ * fois plus grossière (les cubes enfants s'emboîtent exactement dans celui
+ * du parent), si bien que toute la tuile coûte un passage sur les points plus
+ * un sur les cellules occupées par niveau. Les nœuds sans points sont
+ * sautés : leurs enfants alimentent l'ancêtre le plus proche qui a des points.
  */
 export function filterLodAttributes(tile: LodTile): void {
   const { nodes, packed } = tile;
@@ -430,14 +436,15 @@ export function filterLodAttributes(tile: LodTile): void {
   const cellCount = 1 << (3 * CELL_BITS);
   const slotOfCell = new Int32Array(cellCount).fill(-1);
   const summaries: (CellSums | null)[] = new Array(count).fill(null);
-  // Scratch of the node being merged (merges never nest), grown on demand: a
-  // node grid has at most `cellCount` occupied cells. Its summary is copied
-  // out trimmed and the used sums zeroed again.
+  // Brouillon du nœud en cours de fusion (les fusions ne s'imbriquent jamais),
+  // agrandi à la demande : une grille de nœud a au plus `cellCount` cellules
+  // occupées. Son résumé est recopié à la taille juste et les sommes utilisées
+  // sont remises à zéro.
   let keys = new Uint32Array(0);
   let sums = new Uint32Array(0);
   let pointSlots = new Int32Array(0);
 
-  /** Cell sums of an internal node's subtree in its grid; writes its filtered attributes. */
+  /** Sommes de cellules du sous-arbre d'un nœud interne dans sa grille ; écrit ses attributs filtrés. */
   const merge = (index: number): CellSums => {
     const node = nodes[index]!;
     const kids = children[index]!;
@@ -506,9 +513,10 @@ export function filterLodAttributes(tile: LodTile): void {
         }
         continue;
       }
-      // A leaf (most of the points): its filtered values are never drawn,
-      // so its points go straight into this grid instead of through a
-      // summary of their own (same integer sums, half the work).
+      // Une feuille (la plupart des points) : ses valeurs filtrées ne sont
+      // jamais dessinées, ses points vont donc directement dans cette grille
+      // au lieu de passer par un résumé à elle (mêmes sommes entières, moitié
+      // moins de travail).
       const childWord = child.byteOffset >> 1;
       for (let k = 0; k < child.count; k++) {
         const w = childWord + k * wordStride;
@@ -542,15 +550,16 @@ export function filterLodAttributes(tile: LodTile): void {
     }
 
     for (let e = 0; e < size; e++) slotOfCell[keys[e]!] = -1;
-    // Trimmed: a summary waits for its parent while the siblings are merged.
+    // À la taille juste : un résumé attend son parent pendant que ses frères et sœurs sont fusionnés.
     const summary: CellSums = { keys: keys.slice(0, size), sums: sums.slice(0, size * SUM_FIELDS), size };
     sums.fill(0, 0, size * SUM_FIELDS);
     return summary;
   };
 
-  // Post-order, depth first: only the summaries of the current path's
-  // siblings are alive at once (tens of MB, not one per node of a level).
-  // Leaves get no summary: their parent reads their points.
+  // Ordre postfixe, en profondeur d'abord : seuls les résumés des frères et
+  // sœurs du chemin courant sont vivants à la fois (des dizaines de Mo, pas
+  // un par nœud d'un niveau). Les feuilles n'ont pas de résumé : leur parent
+  // lit leurs points.
   for (const root of roots) {
     const stack: Array<{ index: number; next: number }> = [{ index: root, next: 0 }];
     while (stack.length > 0) {
@@ -568,7 +577,7 @@ export function filterLodAttributes(tile: LodTile): void {
   }
 }
 
-/** Decodes the position of one packed point (relative to the tile origin). */
+/** Décode la position d'un point compacté (relative à l'origine de la tuile). */
 export function unpackLodPosition(
   view: DataView,
   byteOffset: number,

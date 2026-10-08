@@ -1,20 +1,20 @@
 // ============================================
-// Standalone LiDAR HD Viewer — Camera (orbit + look-around)
+// Viewer LiDAR HD autonome — caméra (orbite + regard circulaire)
 // ============================================
 //
-// Two modes share the matrices every consumer reads (renderer, LOD,
-// picking, overlays):
-//  - orbit: the camera circles a target (left drag orbits, right/middle
-//    drag or Shift pans, wheel zooms);
-//  - look: the eye stays at one spot (a person standing on the terrain)
-//    and the view turns around it over 360° (drag), the wheel narrows or
-//    widens the field of view like binoculars.
-// Mouse and wheel input move a goal pose; `update()` (once per rendered
-// frame) eases the camera towards it. The motion stays continuous when the
-// input arrives unevenly or a frame is late. Matrices and picking use the
-// current pose.
+// Deux modes partagent les matrices que lit chaque consommateur (renderer,
+// LOD, picking, superpositions) :
+//  - orbite : la caméra tourne autour d'une cible (glisser gauche pour
+//    tourner, glisser droit/milieu ou Maj pour déplacer, molette pour zoomer) ;
+//  - regard : l'œil reste en un point (une personne debout sur le terrain) et
+//    la vue tourne autour sur 360° (glisser), la molette resserre ou élargit
+//    le champ de vision comme des jumelles.
+// Souris et molette déplacent une pose visée ; `update()` (une fois par
+// image rendue) amène la caméra vers elle en douceur. Le mouvement reste
+// continu quand la saisie arrive de façon irrégulière ou qu'une image est en
+// retard. Les matrices et le picking utilisent la pose courante.
 
-/** Orbit pose: angles from the +Z axis (theta) and the vertical (phi), distance to the target. */
+/** Pose en orbite : angles par rapport à l'axe +Z (theta) et à la verticale (phi), distance à la cible. */
 export interface CameraPose {
   theta: number;
   phi: number;
@@ -25,9 +25,9 @@ export interface CameraPose {
 }
 
 /**
- * Look-around pose: eye position (render frame), heading `yaw` (radians,
- * clockwise from the grid north, −Z), `pitch` above the horizon, and the
- * horizontal field of view `fovX` (radians).
+ * Pose du regard circulaire : position de l'œil (repère de rendu), cap `yaw`
+ * (radians, sens horaire depuis le nord de la grille, −Z), `pitch` au-dessus
+ * de l'horizon, et champ de vision horizontal `fovX` (radians).
  */
 export interface LookPose {
   eyeX: number;
@@ -40,36 +40,37 @@ export interface LookPose {
 
 export type CameraMode = 'orbit' | 'look';
 
-/** Time constants (ms) of the easing towards the goal pose. */
+/** Constantes de temps (ms) du lissage vers la pose visée. */
 const ORBIT_SMOOTHING_MS = 45;
 const ZOOM_SMOOTHING_MS = 80;
-/** The eye flies to (or back from) a look-around spot over a few hundred ms. */
+/** L'œil vole vers un point de regard circulaire (ou en revient) en quelques centaines de ms. */
 const FLY_SMOOTHING_MS = 220;
-/** The camera snaps to its goal once this close (rad, or share of the radius for distances). */
+/** La caméra se cale sur la pose visée une fois aussi proche (rad, ou part du rayon pour les distances). */
 const SNAP_EPSILON = 1e-4;
-/** Frame step assumed when the camera starts moving (no previous frame). */
+/** Pas d'image supposé quand la caméra commence à bouger (pas d'image précédente). */
 const DEFAULT_STEP_MS = 1000 / 60;
 const MIN_PHI = 0.05;
 const MAX_PHI = Math.PI - 0.05;
-/** Vertical field of view of the orbit camera. */
+/** Champ de vision vertical de la caméra en orbite. */
 const ORBIT_FOV_Y = Math.PI / 4;
 const DEG = Math.PI / 180;
-/** Look-around limits: no gimbal flip at the zenith/nadir, binoculars to wide angle. */
+/** Limites du regard circulaire : pas de retournement au zénith/nadir, des jumelles au grand angle. */
 const LOOK_MAX_PITCH = 85 * DEG;
 const LOOK_MIN_FOV_X = 3 * DEG;
 const LOOK_MAX_FOV_X = 120 * DEG;
 
 /** Zoom per wheel pixel (log scale): ≈ ×1.1 per 100 px notch. */
 const WHEEL_ZOOM_PER_PX = 0.001;
-/** Pixels of one `DOM_DELTA_LINE` step: Firefox reports mouse wheels in lines (3 per notch). */
+/** Pixels d'un pas `DOM_DELTA_LINE` : Firefox exprime la molette en lignes (3 par cran). */
 const WHEEL_LINE_PX = 40;
-/** Largest step taken from one wheel event: a page-mode notch or a fling stays a gentle zoom. */
+/** Plus grand pas tiré d'un événement de molette : un cran en mode page ou un lancer reste un zoom doux. */
 const WHEEL_MAX_STEP_PX = 300;
 
 /**
- * Vertical wheel delta in pixels, whatever the event's unit: Chrome and
- * Safari send pixels (100–120 per notch, ≈ 53 on Linux X11), Firefox lines
- * (3 per notch, on Linux too), some mice pages.
+ * Delta vertical de la molette en pixels, quelle que soit l'unité de
+ * l'événement : Chrome et Safari envoient des pixels (100–120 par cran, ≈ 53
+ * sous Linux X11), Firefox des lignes (3 par cran, sous Linux aussi),
+ * certaines souris des pages.
  */
 export function wheelDeltaPixels(event: Pick<WheelEvent, 'deltaY' | 'deltaMode'>, pageHeightPx: number): number {
   const unit = event.deltaMode === 1 ? WHEEL_LINE_PX : event.deltaMode === 2 ? Math.max(1, pageHeightPx) : 1;
@@ -99,12 +100,12 @@ export class CameraController {
   sceneRadius = 500;
   onChange: (() => void) | null = null;
 
-  /** Pose the input asks for; the current pose eases to it in `update`. */
+  /** Pose que demande la saisie ; la pose courante la rejoint en douceur dans `update`. */
   private readonly goal: CameraPose = { theta: Math.PI / 4, phi: Math.PI / 4, radius: 500, targetX: 0, targetY: 0, targetZ: 0 };
   private mode: CameraMode = 'orbit';
   private readonly look: LookPose = { eyeX: 0, eyeY: 0, eyeZ: 0, yaw: 0, pitch: 0, fovX: 90 * DEG };
   private readonly lookGoal: LookPose = { eyeX: 0, eyeY: 0, eyeZ: 0, yaw: 0, pitch: 0, fovX: 90 * DEG };
-  /** Orbit goal to return to when the look-around ends. */
+  /** Pose d'orbite visée à retrouver quand le regard circulaire se termine. */
   private savedOrbit: CameraPose | null = null;
   private lastUpdateTime = -1;
   private isDragging = false;
@@ -169,7 +170,7 @@ export class CameraController {
     return { ...this.look };
   }
 
-  /** Changes whenever the rendered view changes (projection caches key on it). */
+  /** Change chaque fois que la vue rendue change (les caches de projection s'y indexent). */
   getViewKey(): number[] {
     const aspect = this.canvas.width / Math.max(this.canvas.height, 1);
     if (this.mode === 'look') {
@@ -179,14 +180,14 @@ export class CameraController {
     return [0, this.theta, this.phi, this.radius, this.targetX, this.targetY, this.targetZ, aspect];
   }
 
-  /** Vertical field of view of the current projection (radians). */
+  /** Champ de vision vertical de la projection courante (radians). */
   getFovY(): number {
     if (this.mode === 'orbit') return ORBIT_FOV_Y;
     const aspect = this.canvas.width / Math.max(this.canvas.height, 1);
     return 2 * Math.atan(Math.tan(this.look.fovX / 2) / aspect);
   }
 
-  /** Jumps to a pose (current and goal), as for scripted paths and benchmarks. */
+  /** Saute à une pose (courante et visée), comme pour les parcours scriptés et les benchs. */
   setPose(pose: Partial<CameraPose>): void {
     this.mode = 'orbit';
     this.savedOrbit = null;
@@ -206,7 +207,7 @@ export class CameraController {
     this.notifyChange();
   }
 
-  /** Eases to an orbit pose (sets the goal only), like a mouse gesture would; ends a look-around. */
+  /** Rejoint en douceur une pose d'orbite (fixe seulement la pose visée), comme le ferait un geste de souris ; termine un regard circulaire. */
   animateTo(pose: Partial<CameraPose>): void {
     if (this.mode === 'look') this.orbitFromLook();
     this.savedOrbit = null;
@@ -223,8 +224,8 @@ export class CameraController {
   // ── Look-around ─────────────────────────────────────────────────────────────
 
   /**
-   * Flies the eye to `eye` (render frame) and turns into look-around mode.
-   * The flight starts from the current view, so the move reads as one.
+   * Fait voler l'œil vers `eye` (repère de rendu) et passe en mode regard
+   * circulaire. Le vol part de la vue courante : le mouvement se lit comme un seul.
    */
   enterLook(eye: [number, number, number], pose: { yaw: number; pitch: number; fovX: number }): void {
     if (this.mode === 'orbit') {
@@ -249,7 +250,7 @@ export class CameraController {
     this.setLookGoal(pose);
   }
 
-  /** Eases the look-around orientation / field of view (look mode only). */
+  /** Amène en douceur l'orientation / le champ de vision du regard circulaire (mode regard seulement). */
   setLookGoal(pose: Partial<Pick<LookPose, 'yaw' | 'pitch' | 'fovX'>>): void {
     if (this.mode !== 'look') return;
     const goal = this.lookGoal;
@@ -259,12 +260,12 @@ export class CameraController {
     this.notifyChange();
   }
 
-  /** Target of the look-around (eye, heading, pitch, field of view) once eased. */
+  /** Cible du regard circulaire (œil, cap, tangage, champ de vision) une fois le lissage fini. */
   getLookGoal(): LookPose {
     return { ...this.lookGoal };
   }
 
-  /** Ends the look-around and flies back to the orbit view it started from. */
+  /** Termine le regard circulaire et revient en vol à la vue d'orbite de départ. */
   exitLook(): void {
     if (this.mode !== 'look') return;
     const saved = this.savedOrbit;
@@ -274,11 +275,11 @@ export class CameraController {
     this.notifyChange();
   }
 
-  /** Switches to orbit with a pose that reproduces the current look-around view (no jump). */
+  /** Passe en orbite avec une pose qui reproduit la vue courante du regard circulaire (sans saut). */
   private orbitFromLook(): void {
     const l = this.look;
     const [fx, fy, fz] = forwardOf(l.yaw, l.pitch);
-    // Orbit around a point ahead, at the distance the saved view had.
+    // Orbite autour d'un point devant, à la distance qu'avait la vue enregistrée.
     const radius = Math.max(5, this.savedOrbit?.radius ?? 100);
     this.mode = 'orbit';
     this.targetX = l.eyeX + fx * radius;
@@ -293,8 +294,9 @@ export class CameraController {
   // ── Frame update ────────────────────────────────────────────────────────────
 
   /**
-   * Eases the current pose towards the goal; call once per rendered frame
-   * with its timestamp (ms). Returns true while the camera still moves.
+   * Amène en douceur la pose courante vers la pose visée ; à appeler une fois
+   * par image rendue avec son horodatage (ms). Renvoie vrai tant que la
+   * caméra bouge encore.
    */
   update(now: number): boolean {
     const step = this.lastUpdateTime >= 0 ? Math.min(100, Math.max(0, now - this.lastUpdateTime)) : DEFAULT_STEP_MS;
@@ -324,7 +326,7 @@ export class CameraController {
       this.targetX = ease(this.targetX, goal.targetX, orbit, panEpsilon);
       this.targetY = ease(this.targetY, goal.targetY, orbit, panEpsilon);
       this.targetZ = ease(this.targetZ, goal.targetZ, orbit, panEpsilon);
-      // Zoom eases in log space: the same speed per wheel notch at any distance.
+      // Le zoom se lisse en échelle logarithmique : même vitesse par cran de molette à toute distance.
       const logRadius = ease(Math.log(this.radius), Math.log(goal.radius), zoom, SNAP_EPSILON);
       this.radius = Math.exp(logRadius);
     }
@@ -339,7 +341,7 @@ export class CameraController {
     this.lastX = e.clientX;
     this.lastY = e.clientY;
     if (this.mode === 'look') {
-      // Every button turns the head; there is nothing to pan around.
+      // Tous les boutons tournent la tête ; il n'y a rien à déplacer.
       this.isDragging = true;
     } else if (e.button === 0) {
       if (e.shiftKey) {
@@ -366,8 +368,8 @@ export class CameraController {
     this.lastY = e.clientY;
 
     if (this.mode === 'look') {
-      // The scene follows the cursor: one pixel turns the view by one
-      // pixel's worth of field of view, whatever the zoom.
+      // La scène suit le curseur : un pixel tourne la vue d'un pixel de champ
+      // de vision, quel que soit le zoom.
       const g = this.lookGoal;
       const perPixelX = g.fovX / Math.max(1, this.canvas.clientWidth);
       const perPixelY = this.getFovY() / Math.max(1, this.canvas.clientHeight);
@@ -478,11 +480,12 @@ export class CameraController {
   private _renderProjMatrix = new Float32Array(16);
 
   /**
-   * Projection used for rendering: reversed-Z with an infinite far plane
-   * (depth = near / viewDistance, cleared to 0, compared with `greater`).
-   * With a depth32float target this keeps precision at every distance, so a
-   * tiny near plane no longer causes z-fighting between ground points and
-   * the terrain mesh. Picking/overlays keep using `getProjMatrix()`.
+   * Projection utilisée pour le rendu : Z inversé avec un plan lointain à
+   * l'infini (profondeur = near / distance de vue, effacée à 0, comparée avec
+   * `greater`). Avec une cible depth32float, la précision est conservée à
+   * toute distance : un plan proche minuscule ne provoque plus de z-fighting
+   * entre les points du sol et le maillage du terrain. Le picking et les
+   * superpositions continuent d'utiliser `getProjMatrix()`.
    */
   getRenderProjMatrix(): Float32Array {
     const aspect = this.canvas.width / Math.max(this.canvas.height, 1);
@@ -498,9 +501,9 @@ export class CameraController {
   }
 
   /**
-   * Near/far planes of the current view: those of `getProjMatrix`, also
-   * the depth range of renderers that cannot use the infinite reversed-Z
-   * projection (WebGL 2).
+   * Plans proche/lointain de la vue courante : ceux de `getProjMatrix`, aussi
+   * la plage de profondeur des renderers qui ne peuvent pas utiliser la
+   * projection en Z inversé à l'infini (WebGL 2).
    */
   getDepthRange(): { near: number; far: number } {
     if (this.mode === 'look') return { near: 0.05, far: this.sceneRadius * 8 + 1000 };

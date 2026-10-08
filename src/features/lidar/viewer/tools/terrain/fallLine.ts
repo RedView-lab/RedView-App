@@ -1,31 +1,36 @@
 // ============================================
-// LiDAR viewer tools — fall line: where a slip or a released rock goes
+// Outils du viewer LiDAR — ligne de chute : où va une glissade ou un bloc lâché
 // ============================================
 //
-// Not only the line of steepest descent: what a body actually does on it.
-// A person who slips is simulated as a sliding body (`fallSlide`) on four
-// kinds of ground, a released rock with the empirical energy-line model:
+// Pas seulement la ligne de plus grande pente : ce qu'un corps y fait
+// vraiment. Une personne qui glisse est simulée comme un corps qui glisse
+// (`fallSlide`) sur quatre types de sol, un bloc lâché avec le modèle
+// empirique de la ligne d'énergie :
 //
-//  - ice / very hard snow     μ 0.08–0.18 (≈ 5–10°): a slip barely slows;
-//  - firm snow, wet grass     μ 0.20–0.36 (≈ 11–20°): ski clothing on snow
-//    measured at μ 0.19–0.48 ("Kinetic Friction of Sport Fabrics on
-//    Snow", Lubricants 2016); wet grass flattens downhill under the body;
-//  - dry grass, soft snow,    μ 0.40–0.62 (≈ 22–32°): the body digs in or
-//    scree                      rides loose stones, scree's angle of repose;
-//  - rock (energy line)       28.5–37°, median 33.5°: share of blocks stopped
-//    beyond 28.5° / 32° / 33.5° = 100 / 72 / 50 % (Onofri & Candian 1979);
-//    energy-line angles of forested slopes run 37–44° against ≈ 36° bare
-//    (Rockyfor3D studies), hence +6° in forest. Cone models use 27–37°
-//    (Jaboyedoff & Labiouse 2011).
+//  - glace / neige très dure  μ 0,08–0,18 (≈ 5–10°) : une glissade ralentit à peine ;
+//  - neige ferme, herbe       μ 0,20–0,36 (≈ 11–20°) : vêtements de ski sur
+//    mouillée                   neige mesurés à μ 0,19–0,48 (« Kinetic
+//                               Friction of Sport Fabrics on Snow »,
+//                               Lubricants 2016) ; l'herbe mouillée se couche
+//                               vers l'aval sous le corps ;
+//  - herbe sèche, neige       μ 0,40–0,62 (≈ 22–32°) : le corps s'enfonce ou
+//    molle, éboulis             roule sur les pierres instables, angle de
+//                               repos des éboulis ;
+//  - rocher (ligne d'énergie) 28,5–37°, médiane 33,5° : part des blocs arrêtés
+//    au-delà de 28,5° / 32° / 33,5° = 100 / 72 / 50 % (Onofri & Candian 1979) ;
+//    les angles de ligne d'énergie des versants boisés vont de 37 à 44°
+//    contre ≈ 36° sans forêt (études Rockyfor3D), d'où +6° en forêt. Les
+//    modèles en cône utilisent 27–37° (Jaboyedoff & Labiouse 2011).
 //
-// Each case runs as a fan of trajectories (Monte Carlo: start point within
-// the picking and DTM accuracy, friction and drag across their range,
-// random heading noise standing for micro-relief and tumbling), so the
-// result says where a fall goes *and* how sure that is: a start on a convex
-// rib splits between two couloirs, a fall above a cliff band goes over it
-// in 90 % of the runs or in 10 %. Consequences follow the Toponeige
-// exposure scale used in French ski-touring guides (E1 the slope itself,
-// E2 obstacles, E3 a cliff — death likely, E4 death certain).
+// Chaque cas est lancé comme un éventail de trajectoires (Monte-Carlo :
+// point de départ dans la précision du picking et du MNT, frottement et
+// traînée sur toute leur plage, bruit de cap aléatoire représentant le
+// micro-relief et les culbutes), si bien que le résultat dit où va une chute
+// *et* avec quelle certitude : un départ sur une côte convexe se partage
+// entre deux couloirs, une chute au-dessus d'une barre rocheuse la franchit
+// dans 90 % des lancers ou dans 10 %. Les conséquences suivent l'échelle
+// d'exposition Toponeige des topos de ski de randonnée français (E1 la pente
+// elle-même, E2 des obstacles, E3 une barre — mort probable, E4 mort certaine).
 
 import { createRng, simulateSlide, type SlideMode, type SlideParams, type SlideRun, type SlideSample } from './fallSlide';
 import type { FallCover } from './fallCover';
@@ -51,18 +56,18 @@ export const FALL_SCENARIOS: readonly FallScenarioSpec[] = [
 const DEFAULT_FALL_SCENARIO: FallScenarioId = 'firm';
 
 type FallEnd = 'noSlide' | 'runout' | 'trap' | 'water' | 'edge' | 'maxLength';
-/** Toponeige exposure (consequence of a fall), `none` when nothing slides. */
+/** Exposition Toponeige (conséquence d'une chute), `none` quand rien ne glisse. */
 export type FallExposure = 'none' | 'E1' | 'E2' | 'E3' | 'E4';
 
 type FallHazardKind = 'cliff' | 'trees' | 'building' | 'rough' | 'water';
 
 interface FallHazard {
   kind: FallHazardKind;
-  /** Horizontal distance from the start, m. */
+  /** Distance horizontale depuis le départ, m. */
   distanceM: number;
-  /** Speed when reaching it (cliff: at impact), m/s. */
+  /** Vitesse en l'atteignant (barre : à l'impact), m/s. */
   speed: number;
-  /** Height of the fall (cliff), m. */
+  /** Hauteur de la chute (barre), m. */
   heightM?: number;
 }
 
@@ -81,31 +86,31 @@ export interface FallScenarioResult {
   lengthM: number;
   dropM: number;
   maxSpeed: number;
-  /** Steepest slope held over 10 m of the path, degrees. */
+  /** Pente la plus raide tenue sur 10 m du parcours, en degrés. */
   maxSlopeDeg: number;
-  /** Mean angle of the whole path (Fahrböschung), degrees. */
+  /** Angle moyen de tout le parcours (Fahrböschung), en degrés. */
   pathAngleDeg: number;
-  /** Hazards met by the nominal trajectory, in path order. */
+  /** Dangers rencontrés par la trajectoire nominale, dans l'ordre du parcours. */
   hazards: FallHazard[];
-  /** Horizontal length of the fan's runs. */
+  /** Longueur horizontale des lancers de l'éventail. */
   runoutM: FallQuantiles;
   runs: number;
-  /** Share of runs leaving the loaded area (or the length limit): runout unknown. */
+  /** Part des lancers qui sortent de la zone chargée (ou de la limite de longueur) : arrêt inconnu. */
   shareBeyond: number;
-  /** Share of runs falling over ≥ 3 / 10 / 30 m. */
+  /** Part des lancers qui chutent de ≥ 3 / 10 / 30 m. */
   shareFall3: number;
   shareFall10: number;
   shareFall30: number;
-  /** Share of runs hitting trees, a building or blocks at ≥ 20 km/h. */
+  /** Part des lancers qui heurtent des arbres, un bâtiment ou des blocs à ≥ 20 km/h. */
   shareObstacle: number;
   shareWater: number;
   exposure: FallExposure;
-  /** Runs crossing each corridor cell (index in `FallLineResult.corridor`). */
+  /** Lancers qui traversent chaque cellule du couloir (indice dans `FallLineResult.corridor`). */
   corridor: Map<number, number>;
 }
 
 interface FallCorridorLattice {
-  /** CRS centre of cell (0, 0). */
+  /** Centre de la cellule (0, 0) dans le SCR. */
   originX: number;
   originY: number;
   cell: number;
@@ -114,53 +119,53 @@ interface FallCorridorLattice {
 
 export interface FallLineResult {
   origin: { projX: number; projY: number; altitudeM: number };
-  /** Slope at the start (6 m baseline), degrees. */
+  /** Pente au départ (base de 6 m), en degrés. */
   startSlopeDeg: number;
   startAspectDeg: number;
   scenarios: FallScenarioResult[];
   corridor: FallCorridorLattice;
-  /** Cover read from the point cloud (trees, buildings, water) — `false` when unavailable. */
+  /** Couvert lu dans le nuage de points (arbres, bâtiments, eau) — `false` quand indisponible. */
   coverRead: boolean;
-  /** `false`: the cloud has no ground class, the ground model includes vegetation. */
+  /** `false` : le nuage n'a pas de classe sol, le modèle de terrain inclut la végétation. */
   groundClassified: boolean | null;
 }
 
-/** Trajectories per surface (the nominal one included). */
+/** Trajectoires par surface (la nominale comprise). */
 const RUNS_PER_SCENARIO = 48;
-/** Start points spread over this radius (picking + DTM position accuracy), m. */
+/** Points de départ répartis sur ce rayon (précision de position du picking + du MNT), m. */
 const START_JITTER_M = 1.5;
-/** Heading noise of the fan, rad per √m. */
+/** Bruit de cap de l'éventail, rad par √m. */
 const HEADING_NOISE = 0.04;
 const MAX_LENGTH_M = 5000;
-/** Air drag of a person per unit mass, ρ·Cd·A / 2m with ρ 1.0, Cd·A 0.25–0.6 m², 75 kg (1/m). */
+/** Traînée aérodynamique d'une personne par unité de masse, ρ·Cd·A / 2m avec ρ 1,0, Cd·A 0,25–0,6 m², 75 kg (1/m). */
 const BODY_DRAG: readonly [number, number, number] = [0.0017, 0.0027, 0.004];
-/** A forest raises the rock energy line by this much, degrees. */
+/** Une forêt relève la ligne d'énergie des blocs de cette valeur, en degrés. */
 const FOREST_ENERGY_LINE_DEG = 6;
 const CORRIDOR_CELL_M = 2;
-/** Obstacles count from this speed (m/s ≈ 20 km/h). */
+/** Les obstacles comptent à partir de cette vitesse (m/s ≈ 20 km/h). */
 const OBSTACLE_SPEED = 5.5;
-/** Trees met slower than this are not reported (m/s). */
+/** Les arbres rencontrés plus lentement ne sont pas signalés (m/s). */
 const REPORT_SPEED = 2;
-/** Residual relief (m RMS around the local plane over 2 m) of block fields and rock steps. */
+/** Relief résiduel (m RMS autour du plan local sur 2 m) des champs de blocs et des ressauts rocheux. */
 const ROUGH_RMS_M = 0.3;
 const CLIFF_SLOPE_DEG = 55;
 const CLIFF_MIN_DROP_M = 5;
-/** Around a fall, relief is the cliff edge, not blocks (m of path). */
+/** Autour d'une chute, le relief est le bord de la barre, pas des blocs (m de parcours). */
 const FALL_EDGE_M = 8;
 const STEEP_WINDOW_M = 10;
-/** A run shorter than this did not slide, m. */
+/** Un lancer plus court que ceci n'a pas glissé, m. */
 const NO_SLIDE_M = 3;
-/** Share of the fan from which a consequence counts. */
+/** Part de l'éventail à partir de laquelle une conséquence compte. */
 const LIKELY_SHARE = 0.2;
 const MOST_SHARE = 0.5;
-/** Time budget between two yields to the page, ms. */
+/** Budget de temps entre deux rendus de la main à la page, ms. */
 const SLICE_MS = 24;
 
 export interface FallLineOptions {
   cover?: FallCover | null;
-  /** Trajectories per scenario (`RUNS_PER_SCENARIO` by default; 1 = nominal only). */
+  /** Trajectoires par scénario (`RUNS_PER_SCENARIO` par défaut ; 1 = la nominale seule). */
   runs?: number;
-  /** Lets the page breathe between runs; resolve to go on. */
+  /** Laisse respirer la page entre deux lancers ; se résoudre pour continuer. */
   yieldToPage?: () => Promise<void>;
 }
 
@@ -220,9 +225,9 @@ export async function computeFallLine(
 }
 
 /**
- * Ground type drawn in 3D: firm snow / wet grass, the common bad case, unless
- * nothing slides on it — then the most slippery one that does (a 7° slope
- * stays put on firm snow but runs on ice).
+ * Type de sol dessiné en 3D : neige ferme / herbe mouillée, le cas
+ * défavorable courant, sauf si rien n'y glisse — alors le plus glissant sur
+ * lequel ça glisse (une pente de 7° tient sur neige ferme mais part sur la glace).
  */
 export function displayedFallScenario(result: FallLineResult): FallScenarioId {
   const slides = (id: FallScenarioId) => result.scenarios.some((s) => s.id === id && s.end !== 'noSlide');
@@ -230,7 +235,7 @@ export function displayedFallScenario(result: FallLineResult): FallScenarioId {
   return (['ice', 'rough', 'rock'] as const).find(slides) ?? DEFAULT_FALL_SCENARIO;
 }
 
-/** Plan box of the nominal trajectories of every scenario, grown by `marginM`. */
+/** Emprise en plan des trajectoires nominales de tous les scénarios, agrandie de `marginM`. */
 export function fallLineBounds(result: FallLineResult, marginM: number) {
   let minX = result.origin.projX;
   let maxX = minX;
@@ -296,12 +301,12 @@ function hashId(id: string): number {
 interface RunStats {
   end: FallEnd;
   lengthM: number;
-  /** Highest fall (flight or cliff band), m. */
+  /** Plus haute chute (vol ou barre rocheuse), m. */
   maxFallM: number;
-  /** Trees, a building or blocks hit at ≥ OBSTACLE_SPEED. */
+  /** Arbres, bâtiment ou blocs heurtés à ≥ OBSTACLE_SPEED. */
   obstacle: boolean;
   water: boolean;
-  /** Nominal run only. */
+  /** Lancer nominal seulement. */
   hazards: FallHazard[];
 }
 
@@ -314,7 +319,7 @@ function runStatistics(field: TerrainField, run: SlideRun, cover: FallCover | nu
   let obstacle = false;
   let water = false;
 
-  /** Path stretches of falls: their edges are no block field. */
+  /** Tronçons de parcours en chute : leurs bords ne sont pas un champ de blocs. */
   const falls: Array<[number, number]> = [];
   for (const flight of run.flights) {
     maxFallM = Math.max(maxFallM, flight.dropM);
@@ -352,7 +357,7 @@ function runStatistics(field: TerrainField, run: SlideRun, cover: FallCover | nu
         if ((tree || building) && s.speed >= OBSTACLE_SPEED) obstacle = true;
       }
     }
-    // Block fields and rock steps: read where the body is fast (cost).
+    // Champs de blocs et ressauts rocheux : lus là où le corps va vite (coût).
     if (s.speed >= (detailed ? REPORT_SPEED : OBSTACLE_SPEED) && !nearFall(s.distanceM)
       && roughness(field, s.projX, s.projY) >= ROUGH_RMS_M) {
       report('rough');
@@ -378,7 +383,7 @@ interface CliffBand {
   speed: number;
 }
 
-/** Rock bands crossed on the ground (steep and high enough; flights are counted apart). */
+/** Barres rocheuses franchies au sol (assez raides et hautes ; les vols sont comptés à part). */
 function cliffBands(samples: readonly SlideSample[]): CliffBand[] {
   const out: CliffBand[] = [];
   let top: SlideSample | null = null;
@@ -399,7 +404,7 @@ function cliffBands(samples: readonly SlideSample[]): CliffBand[] {
   return out;
 }
 
-/** RMS distance (m) of the ground to its local plane over ±1 m: blocks, steps. */
+/** Distance RMS (m) du sol à son plan local sur ±1 m : blocs, ressauts. */
 function roughness(field: TerrainField, x: number, y: number): number {
   const r = Math.max(1, field.cell);
   const z: number[] = [];
@@ -410,7 +415,7 @@ function roughness(field: TerrainField, x: number, y: number): number {
       z.push(v);
     }
   }
-  // Least-squares plane on the 3 × 3 stencil: mean + separable slopes.
+  // Plan des moindres carrés sur le pochoir 3 × 3 : moyenne + pentes séparables.
   const mean = z.reduce((a, b) => a + b, 0) / 9;
   const sx = (z[2]! + z[5]! + z[8]! - z[0]! - z[3]! - z[6]!) / 6;
   const sy = (z[6]! + z[7]! + z[8]! - z[0]! - z[1]! - z[2]!) / 6;
@@ -425,7 +430,7 @@ function roughness(field: TerrainField, x: number, y: number): number {
   return Math.sqrt(sum / 9);
 }
 
-/** The ground rises around the point in (almost) every direction: a closed hollow. */
+/** Le sol remonte autour du point dans (presque) toutes les directions : une cuvette fermée. */
 function isClosedHollow(field: TerrainField, x: number, y: number, z: number): boolean {
   const directions = 16;
   let closed = 0;
@@ -517,7 +522,7 @@ function summarise(
   };
 }
 
-/** Steepest mean slope over `window` metres of horizontal distance. */
+/** Plus forte pente moyenne sur `window` mètres de distance horizontale. */
 export function steepestHeldSlope(
   samples: ReadonlyArray<{ distanceM: number; altitudeM: number }>,
   window: number,
