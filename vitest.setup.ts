@@ -1,11 +1,12 @@
 import { expect } from 'vitest'
 
 /**
- * Typed arrays compared in one flat loop. Vitest's generic deep equality walks
- * them element by element (~1.4 µs per element: 1.35 s for 1 MB, a 130 000-point
- * LiDAR tile timed the CI runner out at 5 s). Same verdict as the generic path:
- * same type, same length, `Object.is` per element (NaN equals NaN, +0 ≠ −0);
- * anything else (DataView, Buffer against Uint8Array, mixed types) is left to it.
+ * Tableaux typés comparés en une seule boucle à plat. L'égalité profonde
+ * générique de Vitest les parcourt élément par élément (~1,4 µs par élément :
+ * 1,35 s pour 1 Mo ; une tuile LiDAR de 130 000 points faisait dépasser le délai
+ * de 5 s au runner de CI). Même verdict que le chemin générique : même type,
+ * même longueur, `Object.is` par élément (NaN égale NaN, +0 ≠ −0) ; tout le
+ * reste (DataView, Buffer contre Uint8Array, types mélangés) lui est laissé.
  */
 function typedArraysEqual(a: unknown, b: unknown): boolean | undefined {
   if (!ArrayBuffer.isView(a) || !ArrayBuffer.isView(b)) return undefined

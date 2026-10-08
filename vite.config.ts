@@ -23,20 +23,20 @@ import { resolveBuildId } from './server/lib/build-id.mjs'
 const redviewBuildId: string = resolveBuildId()
 
 /**
- * Vite plugin that serves the API routes (`api/*.ts`) and the tile
- * fallbacks in dev — the dev twin of server.mjs (keep both in sync).
+ * Plugin Vite qui sert les routes d'API (`api/*.ts`) et les tuiles de repli en
+ * dev — le jumeau de dev de server.mjs (garder les deux synchronisés).
  */
 function redviewDevApiPlugin(): Plugin {
   return {
     name: 'redview-dev-api',
     configResolved(config) {
-      // Ensure .env and .env.local variables are available in process.env for API handlers
+      // Rend les variables de .env et .env.local disponibles dans process.env pour les gestionnaires d'API
       const env = loadEnv(config.mode, process.cwd(), '')
       for (const [key, value] of Object.entries(env)) {
         process.env[key] = value
       }
 
-      // Auto-generate translations data if not present
+      // Produit automatiquement les données de traduction si elles sont absentes
       const translationsDataFile = path.resolve(__dirname, 'api/_lib/translations-data.ts')
       if (!fs.existsSync(translationsDataFile)) {
         try {
@@ -50,7 +50,7 @@ function redviewDevApiPlugin(): Plugin {
       }
     },
     configureServer(server: ViteDevServer) {
-      // Auto-start BRouter (17777) and POI server (17778)
+      // Démarre automatiquement BRouter (17777) et le serveur de POI (17778)
       startDevServices().catch((err: unknown) => {
         console.warn('[redview-dev-api] Error starting dev services:', err)
       })
@@ -61,7 +61,7 @@ function redviewDevApiPlugin(): Plugin {
       server.middlewares.use(async (req, res, next) => {
         if (!req.url) return next()
 
-        // 1. Rewrite /viewer to /viewer.html
+        // 1. Réécrit /viewer en /viewer.html
         if (req.url === '/viewer' || req.url.startsWith('/viewer?') || req.url.startsWith('/viewer/')) {
           const queryIndex = req.url.indexOf('?')
           const query = queryIndex !== -1 ? req.url.slice(queryIndex) : ''
@@ -77,9 +77,9 @@ function redviewDevApiPlugin(): Plugin {
           return serveTileFallback(tileFamily, tileUrl.pathname, tileUrl.searchParams, res)
         }
 
-        // 3. Match /api/* routes to api/*.ts handlers
+        // 3. Associe les routes /api/* aux gestionnaires api/*.ts
         if (req.url.startsWith('/api/')) {
-          // Keep process.env fresh with latest .env changes in dev
+          // Garde process.env à jour avec les derniers changements de .env en dev
           try {
             const devEnv = loadEnv(server.config.mode, __dirname, '')
             for (const [key, value] of Object.entries(devEnv)) {
@@ -128,7 +128,7 @@ function redviewDevApiPlugin(): Plugin {
                 },
               })
 
-              // Build ApiResponse adapter
+              // Adaptateur ApiResponse
               const apiRes = Object.assign(res, {
                 status(code: number) {
                   res.statusCode = code
@@ -162,7 +162,7 @@ function redviewDevApiPlugin(): Plugin {
                 },
               })
 
-              // Invalidate candidate module in dev so updates are reflected without wiping entire dev graph
+              // Invalide le module candidat en dev pour que les modifications soient prises en compte sans vider tout le graphe de dev
               const modNode = server.moduleGraph.getModuleById(candidateFile)
               if (modNode) {
                 server.moduleGraph.invalidateModule(modNode)

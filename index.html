@@ -25,14 +25,15 @@
     <meta name="twitter:title" content="RedView — Cartographie 3D Haute Résolution & LiDAR Outdoor" />
     <meta name="twitter:description" content="L'environnement 3D géospatial haute résolution (40 cm) et LiDAR (20 cm) pour préparer, explorer et sécuriser vos aventures outdoor." />
     <meta name="twitter:image" content="https://app.redview.tech/images/og/redview-preview.png?v=2" />
-        <!-- Tile-origin warmup. Each preconnect saves the cold DNS+TCP+TLS
-             handshake (~150–400 ms one-shot) on the FIRST tile fetched from
-             that origin — multiplied across France/Spain/Norway/Switzerland/
-             AWS at app boot, this is the single biggest first-paint win on
-             fibre (where the bottleneck is RTT, not bandwidth). All origins
-             below are public CORS-enabled CDNs already used by the SW DEM
-             pipeline. crossorigin is required so the warmed connection is
-             actually reused by `fetch(..., {mode:'cors'})` (the SW default).-->
+        <!-- Préchauffage des origines de tuiles. Chaque preconnect économise la
+             poignée de main DNS + TCP + TLS à froid (~150–400 ms, une fois) sur la
+             PREMIÈRE tuile récupérée depuis cette origine — multiplié par
+             France / Espagne / Norvège / Suisse / AWS au démarrage, c'est le plus
+             gros gain de premier affichage sur la fibre (où le goulot est
+             l'aller-retour réseau, pas le débit). Toutes les origines ci-dessous
+             sont des CDN publics avec CORS déjà utilisés par le pipeline DEM du
+             SW. crossorigin est nécessaire pour que la connexion préchauffée soit
+             vraiment réutilisée par `fetch(..., {mode:'cors'})` (le défaut du SW).-->
         <link rel="dns-prefetch" href="https://api.mapbox.com" />
         <link rel="preconnect" href="https://api.mapbox.com" crossorigin />
         <link rel="dns-prefetch" href="https://data.geopf.fr" />

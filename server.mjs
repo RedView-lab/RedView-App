@@ -240,19 +240,19 @@ const server = http.createServer(async (req, res) => {
       return res.end('Bad Request');
     }
 
-    // 0. Health check endpoint for uptime monitoring & Docker
+    // 0. Point d'accès de santé pour la surveillance de disponibilité et Docker
     if (pathname === '/health' || pathname === '/healthz' || pathname === '/api/health') {
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       return res.end(JSON.stringify({ status: 'ok', uptime: Math.round(process.uptime()), timestamp: Date.now() }));
     }
 
-    // 1. Rewrite /viewer to /viewer.html
+    // 1. Réécrit /viewer en /viewer.html
     if (pathname === '/viewer') {
       pathname = '/viewer.html';
     }
 
-    // 2. Handle /api/* routes with rate limiting
+    // 2. Gère les routes /api/* avec limitation de débit
     if (pathname.startsWith('/api/')) {
       const apiRoute = resolveApiRoute(API_DIR, pathname, API_ROUTE_OPTIONS);
       req.redviewRoute = normalizeRoutePath(pathname, apiRoute?.route);
@@ -294,7 +294,7 @@ const server = http.createServer(async (req, res) => {
       return await serveTileFallback(tileFamily, pathname, parsedUrl.searchParams, res);
     }
 
-    // 3. Serve Static Files from dist (lecture seule : GET/HEAD uniquement)
+    // 3. Sert les fichiers statiques de dist (lecture seule : GET/HEAD uniquement)
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       res.statusCode = 405;
       res.setHeader('Allow', 'GET, HEAD');
@@ -338,7 +338,7 @@ const server = http.createServer(async (req, res) => {
         res.setHeader('Cache-Control', 'no-store');
         return res.end('Not Found');
       }
-      // Navigation -> SPA fallback to dist/index.html
+      // Navigation -> repli SPA sur dist/index.html
       filePath = path.join(DIST_DIR, 'index.html');
       try {
         stat = await fs.promises.stat(filePath);
@@ -348,7 +348,7 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    // Set cache headers
+    // En-têtes de cache
     const ext = path.extname(filePath).toLowerCase();
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
     res.setHeader('Content-Type', contentType);
@@ -447,7 +447,7 @@ async function handleApiRoute(apiRoute, parsedUrl, req, res) {
     }
     throw err;
   }
-  // Build ApiRequest
+  // Construit l'ApiRequest
   const apiReq = Object.assign(req, {
     query: parseApiQuery(parsedUrl.searchParams),
     cookies: {},
@@ -495,7 +495,7 @@ async function handleApiRoute(apiRoute, parsedUrl, req, res) {
     });
   }
 
-  // Build ApiResponse
+  // Construit l'ApiResponse
   const apiRes = Object.assign(res, {
     status(code) {
       res.statusCode = code;
