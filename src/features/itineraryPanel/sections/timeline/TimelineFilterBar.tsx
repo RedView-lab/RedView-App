@@ -69,7 +69,7 @@ export function TimelineFilterBar({
     } else {
       next.add(catId);
     }
-    // If all categories are selected, we can store empty set (which means all)
+    // Si toutes les catégories sont sélectionnées, on peut stocker un ensemble vide (qui signifie tout)
     const nextCategories = next.size === totalCategoriesCount ? undefined : (new Set(next) as Set<string>);
     onChangeFilters({
       ...filters,
@@ -79,13 +79,13 @@ export function TimelineFilterBar({
 
   const handleToggleAllCategories = () => {
     if (isAllCategoriesSelected) {
-      // Uncheck all
+      // Tout décocher
       onChangeFilters({
         ...filters,
         categories: new Set<string>(),
       });
     } else {
-      // Check all
+      // Tout cocher
       onChangeFilters({
         ...filters,
         categories: undefined,
@@ -167,7 +167,7 @@ export function TimelineFilterBar({
         role="group"
         aria-label={ariaLabel}
       >
-        {/* POIs chip with category dropdown */}
+        {/* Puce POI avec menu déroulant des catégories */}
         <div
           className={`rvi-tl-sheet-filters__chip-group${
             filters.poi ? ' is-on' : ''
@@ -251,7 +251,7 @@ export function TimelineFilterBar({
           ) : null}
         </div>
 
-        {/* Favoris chip */}
+        {/* Puce Favoris */}
         <button
           type="button"
           className={`rvi-tl-sheet-filters__chip${filters.favorite ? ' is-on' : ''}`}
@@ -269,7 +269,7 @@ export function TimelineFilterBar({
           <span className="rvi-tl-sheet-filters__chip-label">{t('Favoris')}</span>
         </button>
 
-        {/* Pauses chip */}
+        {/* Puce Pauses */}
         <button
           type="button"
           className={`rvi-tl-sheet-filters__chip${filters.pause ? ' is-on' : ''}`}
@@ -285,7 +285,7 @@ export function TimelineFilterBar({
           <span className="rvi-tl-sheet-filters__chip-label">{t('Pauses')}</span>
         </button>
 
-        {/* Waypoints chip */}
+        {/* Puce Étapes */}
         <button
           type="button"
           className={`rvi-tl-sheet-filters__chip${filters.waypoint ? ' is-on' : ''}`}

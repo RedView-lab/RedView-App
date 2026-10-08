@@ -24,13 +24,13 @@ export interface TimelineTableSortState {
 }
 
 export interface TimelineTableSettingsState {
-  /** When true, route is sliced into segments every `distanceKm`. */
+  /** À true, le tracé est découpé en segments tous les `distanceKm`. */
   distanceBetweenWaypoints: boolean;
-  /** Distance between auto-waypoints, in km. Default 10. */
+  /** Distance entre points de passage automatiques, en km. 10 par défaut. */
   distanceKm: number;
-  /** Per-column visibility map. */
+  /** Table de visibilité par colonne. */
   columns: Record<TimelineColumnId, boolean>;
-  /** Current sort, or null for source order. */
+  /** Tri courant, ou null pour l'ordre d'origine. */
   sort: TimelineTableSortState | null;
 }
 

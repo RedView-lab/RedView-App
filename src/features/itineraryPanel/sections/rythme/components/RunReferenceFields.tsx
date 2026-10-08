@@ -8,7 +8,7 @@ type RhythmChange = <K extends keyof RhythmState>(key: K, value: RhythmState[K])
 
 const NAV_KEYS = ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
 
-/** Card input holding a positive number (integers, or one decimal when `decimals`). */
+/** Champ carte contenant un nombre positif (entiers, ou une décimale avec `decimals`). */
 function NumericCardInput({
   value,
   unit,
@@ -27,7 +27,7 @@ function NumericCardInput({
   onCommit: (value: number | null) => void;
 }) {
   const [draft, setDraft] = useState(value ? String(value) : '');
-  // Resync the draft when the stored value changes elsewhere (render-time adjustment).
+  // Resynchroniser le brouillon quand la valeur stockée change ailleurs (ajustement pendant le rendu).
   const [syncedValue, setSyncedValue] = useState(value);
   if (value !== syncedValue) {
     setSyncedValue(value);
@@ -123,8 +123,8 @@ function RaceTimeInput({
 type ReferenceChoice = 'vma' | number;
 
 /**
- * Trail / Running replacement of the FTP / Poids / Pneus columns:
- * reference (VMA or a race distance), its value, and runner weight with pack.
+ * Remplacement trail / course des colonnes FTP / Poids / Pneus : référence (VMA
+ * ou une distance de course), sa valeur, et le poids du coureur avec son sac.
  */
 export function RunReferenceFields({
   rhythm,
@@ -250,7 +250,7 @@ const TECHNICALITY_OPTIONS = [
   { value: 0.8, label: 'Technique' },
 ] as const;
 
-/** Trail only: how technical the terrain is (slows flats and descents). */
+/** Trail seulement : technicité du terrain (ralentit le plat et les descentes). */
 export function TerrainTechnicalityRow({
   value,
   onChange,

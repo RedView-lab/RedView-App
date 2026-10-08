@@ -1,10 +1,10 @@
 /**
- * Main "Feuille de route" / "Agenda" section — composes the sub-views
- * (the agenda is the view id `'timeline'`).
+ * Section principale « Feuille de route » / « Agenda » — compose les sous-vues
+ * (l'agenda est la vue d'id `'timeline'`).
  *
- * This component is purely presentational; all state mutations go through the
- * callback props so the parent container can wire them to a backend,
- * optimistic updates, undo/redo etc.
+ * Ce composant est purement présentationnel ; toutes les modifications d'état
+ * passent par les props de rappel pour que le conteneur parent puisse les
+ * relier à un backend, des mises à jour optimistes, l'annulation/le rétablissement, etc.
  */
 import { useMemo, useRef, useState, type MouseEvent } from 'react';
 import type { PredictionResult } from '@/features/fitPredictor';
@@ -46,7 +46,7 @@ interface TimelinePanelProps {
   poiAutoSortPicks?: readonly PoiAutoSortPickRef[] | null;
   rhythm?: RhythmState;
   prediction?: PredictionResult | null;
-  /** Itinerary sport: Trail / Running show paces and hide power columns. */
+  /** Sport de l'itinéraire : trail / course affichent des allures et masquent les colonnes de puissance. */
   discipline?: SportDiscipline;
   view: TimelineView;
   railConfig?: Partial<TimelineRailConfig>;
@@ -73,7 +73,7 @@ interface TimelinePanelProps {
 
   selectedIds?: string[];
   onSelectRow?: (id: string, item: TimelineItem) => void;
-  /** Optional multi-select callback. */
+  /** Rappel de sélection multiple optionnel. */
   onSelectionChange?: (selectedIds: string[]) => void;
 }
 
@@ -119,8 +119,8 @@ export function TimelinePanel({
   const [timelineZoomLevel, setTimelineZoomLevel] = useState(1);
   const pauseInsertionResolverRef = useRef<(() => number | null) | null>(null);
 
-  // Table-settings state — local for now; the wiring to backend
-  // will move these into the project state once persistence lands.
+  // État des réglages du tableau — local pour l'instant ; le branchement au
+  // backend le déplacera dans l'état du projet quand la persistance arrivera.
   const [localTableSettings, setLocalTableSettings] = useState<TimelineTableSettingsState>(
     DEFAULT_TIMELINE_TABLE_SETTINGS,
   );

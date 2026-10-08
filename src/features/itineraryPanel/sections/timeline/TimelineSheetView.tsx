@@ -1,15 +1,16 @@
 /**
- * "Feuille de route" — sortable tabular sheet layout.
+ * « Feuille de route » — disposition en tableau triable.
  *
- * The table is column-driven (see TimelineColumns.ts):
- *   - Headers reflect the user's column-visibility settings;
- *   - Hovering a header reveals a sort icon; clicking cycles
- *     asc → desc → off;
- *   - Custom columns (type picto, type text, name) render bespoke cells
- *     because they embed React content (badges, place search, action menu).
+ * Le tableau est piloté par les colonnes (voir TimelineColumns.ts) :
+ *   - les en-têtes reflètent les réglages de visibilité des colonnes de l'utilisateur ;
+ *   - survoler un en-tête révèle une icône de tri ; cliquer fait tourner
+ *     croissant → décroissant → désactivé ;
+ *   - les colonnes personnalisées (picto de type, texte du type, nom) rendent des
+ *     cellules sur mesure car elles embarquent du contenu React (badges,
+ *     recherche de lieu, menu d'actions).
  *
- * The component is fully stateless: selection / visibility / favorite /
- * sort all flow through callbacks.
+ * Le composant est entièrement sans état : sélection / visibilité / favori / tri
+ * passent tous par des rappels.
  */
 import { useCallback, useMemo, type MouseEventHandler } from 'react';
 import type { PredictionResult } from '@/features/fitPredictor';
@@ -284,7 +285,7 @@ export function TimelineSheetView({
         ref={attachGrid}
         style={{ gridTemplateColumns: gridTemplate }}
       >
-        {/* ── Header row ─────────────────────────────────────────── */}
+        {/* ── Ligne d'en-tête ────────────────────────────────────── */}
         <div className="rvi-tl-thead" role="row">
           <div
             className="rvi-tl-th rvi-tl-th--sticky-left rvi-tl-th--check"
@@ -342,7 +343,7 @@ export function TimelineSheetView({
           </div>
         </div>
 
-        {/* ── Body rows ──────────────────────────────────────────── */}
+        {/* ── Lignes du corps ────────────────────────────────────── */}
         {topSpacerPx > 0 ? (
           <div aria-hidden style={{ gridColumn: '1 / -1', height: topSpacerPx }} />
         ) : null}

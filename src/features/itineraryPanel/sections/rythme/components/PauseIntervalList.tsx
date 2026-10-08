@@ -9,16 +9,16 @@ interface PauseIntervalListProps {
 }
 
 /**
- * Renders the list of "pause par interval" rows displayed under the
- * matching toggle in the Rythme section. Each row exposes:
- *   - a flexible name pill ("Pause 1", "Pause 2", …),
- *   - a fixed-width "Durée" chip (minutes),
- *   - a fixed-width "Interval" chip (minutes),
- *   - a small minus button that removes the row.
+ * Affiche la liste des lignes « pause par intervalle » sous la bascule
+ * correspondante de la section Rythme. Chaque ligne présente :
+ *   - une pastille de nom extensible (« Pause 1 », « Pause 2 », …),
+ *   - une puce « Durée » de largeur fixe (minutes),
+ *   - une puce « Intervalle » de largeur fixe (minutes),
+ *   - un petit bouton moins qui supprime la ligne.
  *
- * The component is fully controlled — the parent owns the array of rows
- * and the `pauseEveryIntervalEnabled` toggle that decides whether the
- * routing engine should consider these pauses.
+ * Le composant est entièrement contrôlé — le parent possède le tableau des
+ * lignes et la bascule `pauseEveryIntervalEnabled` qui décide si le moteur de
+ * routage doit tenir compte de ces pauses.
  */
 export function PauseIntervalList({ rows, onChange }: PauseIntervalListProps) {
   const { t } = useAppI18n();

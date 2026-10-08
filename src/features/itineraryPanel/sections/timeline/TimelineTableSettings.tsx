@@ -1,12 +1,13 @@
 /**
- * "Tableau" section of the Feuille de route — Figma node 855:22688.
+ * Section « Tableau » de la feuille de route — nœud Figma 855:22688.
  *
- * Renders a single horizontal control bar:
+ * Affiche une seule barre de contrôles horizontale :
  *   Points de passages automatiques  [10 km ▾]   ⊕ Ajouter des colonnes ▾
  *
- * Like the filters above, the component is fully controlled. Inputs live
- * in the parent (or in the ItineraryPanelContainer once wired) so we can
- * persist user preferences alongside the rest of the project state.
+ * Comme les filtres au-dessus, le composant est entièrement contrôlé. Les
+ * valeurs vivent dans le parent (ou dans ItineraryPanelContainer une fois
+ * branché) pour pouvoir persister les préférences de l'utilisateur avec le
+ * reste de l'état du projet.
  */
 import { useState, type MouseEvent } from 'react';
 import { IconChevronDown, IconPlusCircle } from '../../components/icons';
@@ -17,7 +18,7 @@ import { TimelineColumnsMenu } from './TimelineColumnsMenu.tsx';
 import { DEFAULT_TIMELINE_TABLE_SETTINGS, type TimelineTableSettingsState } from './timelineTableSettingsState';
 
 interface TimelineTableSettingsProps {
-  /** Trail / Running: pace labels, no power columns. */
+  /** Trail / course : libellés d'allure, pas de colonnes de puissance. */
   discipline?: SportDiscipline;
   value?: TimelineTableSettingsState;
   onChange?: (next: TimelineTableSettingsState) => void;
@@ -44,7 +45,7 @@ export function TimelineTableSettings({
       ...value.columns,
       [id]: on,
     };
-    // If the user hid the column currently being sorted, drop the sort.
+    // Si l'utilisateur a masqué la colonne en cours de tri, abandonner le tri.
     let nextSort = value.sort;
     if (!on && value.sort?.columnId === id) nextSort = null;
     onChange?.({ ...value, columns: nextColumns, sort: nextSort });

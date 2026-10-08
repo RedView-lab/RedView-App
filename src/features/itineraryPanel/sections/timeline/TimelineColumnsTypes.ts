@@ -52,7 +52,7 @@ export interface TimelineColumnContext {
   pointPrev: PredictionPoint | null;
   pointNext: PredictionPoint | null;
   weather?: RouteWeatherValues | null;
-  /** Trail / Running show paces (min/km) instead of km/h. */
+  /** Trail / course affichent des allures (min/km) au lieu de km/h. */
   discipline: SportDiscipline;
 }
 
@@ -71,10 +71,10 @@ export interface TimelineColumnDef {
   defaultWidth?: number;
   pinned?: boolean;
   custom?: boolean;
-  /** Header labels used for Trail / Running (pace columns). */
+  /** Libellés d'en-tête utilisés en trail / course (colonnes d'allure). */
   footLabel?: string;
   footShortLabel?: string;
-  /** Hidden for Trail / Running (no power model). */
+  /** Masquée en trail / course (pas de modèle de puissance). */
   bikeOnly?: boolean;
   getCell: (ctx: TimelineColumnContext) => TimelineColumnCell;
 }
@@ -88,6 +88,6 @@ export interface BuildContextArgs {
   rhythm: RhythmState | undefined;
   reference: StartReference;
   weatherDataset?: RouteWeatherDataset | null;
-  /** Itinerary discipline, used when there is no prediction yet. */
+  /** Discipline de l'itinéraire, utilisée quand il n'y a pas encore de prédiction. */
   discipline?: SportDiscipline;
 }

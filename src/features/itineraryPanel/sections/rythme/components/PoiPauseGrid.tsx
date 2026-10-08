@@ -6,30 +6,30 @@ import { DEFAULT_POI_PAUSE_DURATIONS, PANEL_POI_ROWS } from '../../../lib/projec
 import type { PoiCategory } from '../../../types';
 
 /**
- * 2-column grid of POI-category pause durations, shown under the
- * "Ajouter des pauses à chaque POI favori" toggle when it is enabled.
+ * Grille de 2 colonnes des durées de pause par catégorie de POI, affichée sous
+ * la bascule « Ajouter des pauses à chaque POI favori » quand elle est activée.
  *
- * Pixel-perfect implementation of Figma node 1695:22638 (PacingBreaksExt —
- * Variant2). Each cell is an auto-layout [checkbox · label · chip]:
- *   • checkbox 16×16 (see .rvi-checkbox)
- *   • label 13px Medium, opacity .64, flex:1, min-w 32, ellipsis
- *   • chip max-w 104 / min-w 64, radius 6, padding 6/8; inner text 14 SemiBold
- * A `null` duration means the user unchecked the row — the whole cell
- * dims to opacity .5 and the chip shows "-".
+ * Implémentation au pixel près du nœud Figma 1695:22638 (PacingBreaksExt —
+ * Variant2). Chaque cellule est une mise en page automatique [case · libellé · puce] :
+ *   • case 16×16 (voir .rvi-checkbox)
+ *   • libellé 13px Medium, opacité .64, flex:1, min-w 32, points de suspension
+ *   • puce max-w 104 / min-w 64, rayon 6, padding 6/8 ; texte intérieur 14 SemiBold
+ * Une durée `null` signifie que l'utilisateur a décoché la ligne — toute la
+ * cellule passe à l'opacité .5 et la puce affiche « - ».
  *
- * This component is fully controlled: the parent owns the durations map
- * and decides how to persist it (e.g. RhythmState.poiPauseDurations).
+ * Ce composant est entièrement contrôlé : le parent possède la table des
+ * durées et décide comment la persister (par ex. RhythmState.poiPauseDurations).
  */
 export interface PoiPauseGridProps {
   durations: Record<PoiCategory, number | null>;
   onChange: (next: Record<PoiCategory, number | null>) => void;
 }
 
-/** Categories that never carry a pause (hidden from this grid). */
+/** Catégories qui n'ont jamais de pause (masquées de cette grille). */
 const NO_PAUSE_CATEGORIES: ReadonlySet<PoiCategory> = new Set<PoiCategory>(['health']);
 const FALLBACK_PAUSE_MIN = 15;
 
-/** Display order + French labels, mirroring the POI section grid. */
+/** Ordre d'affichage + libellés français, comme la grille de la section POI. */
 const ROWS: ReadonlyArray<[PoiCategory, string, number]> = PANEL_POI_ROWS
   .filter((row) => !NO_PAUSE_CATEGORIES.has(row.key))
   .map((row) => [row.key, row.label, DEFAULT_POI_PAUSE_DURATIONS[row.key] ?? FALLBACK_PAUSE_MIN]);
@@ -134,7 +134,7 @@ function PoiPauseCell({
   );
 }
 
-/** Group the rows into [2, 2, 2, 2] pairs matching the Figma 2-col grid. */
+/** Groupe les lignes en paires [2, 2, 2, 2] conformes à la grille de 2 colonnes de Figma. */
 function pairs<T>(list: readonly T[]): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < list.length; i += 2) out.push(list.slice(i, i + 2));

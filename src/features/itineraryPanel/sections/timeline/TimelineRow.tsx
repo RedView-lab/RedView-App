@@ -1,13 +1,13 @@
 /**
- * A single timeline item card — used in both Sheet and Timeline views.
+ * Carte d'un élément de timeline — utilisée dans les vues Feuille et Timeline.
  *
- * Layout (reading left → right, all driven by flexbox auto-layout):
- *   [✓] [KindBadge] [Kind label]  [Name (flex)]  [Distance]  [Actions]
+ * Disposition (de gauche à droite, entièrement pilotée par la mise en page flexbox) :
+ *   [✓] [KindBadge] [Libellé du type]  [Nom (flex)]  [Distance]  [Actions]
  *
- * Actions are three utility buttons: visibility toggle (eye), favorite
- * (star), delete (trash). Their state is controlled by the parent via
- * callbacks, never inferred locally — so the component stays stateless and
- * ready to wire to any backend.
+ * Les actions sont trois boutons utilitaires : bascule de visibilité (œil),
+ * favori (étoile), suppression (corbeille). Leur état est contrôlé par le parent
+ * via des rappels, jamais déduit localement — le composant reste donc sans état
+ * et prêt à être relié à n'importe quel backend.
  */
 import { memo, useEffect, useRef, useState } from 'react';
 import { IconNiceManYellow, IconStar, IconTrash } from '../../components/icons';
@@ -19,9 +19,9 @@ import { kindLabel } from './timelineKindLabels';
 
 interface TimelineRowProps {
   item: TimelineItem;
-  /** When true, the row is rendered in "compact" mode (Timeline rail). */
+  /** À true, la ligne est rendue en mode « compact » (rail de la timeline). */
   compact?: boolean;
-  /** Optional inline style — used by the Timeline view to absolutely-position. */
+  /** Style en ligne optionnel — utilisé par la vue Timeline pour le positionnement absolu. */
   style?: React.CSSProperties;
   selected?: boolean;
   onSelectRow?: (id: string, item: TimelineItem) => void;
@@ -29,7 +29,7 @@ interface TimelineRowProps {
   onToggleVisibility?: (id: string, visible: boolean) => void;
   onToggleFavorite?: (id: string, favorite: boolean) => void;
   onRemove?: (id: string) => void;
-  /** When provided, start/end placeholder rows render an inline place search. */
+  /** Quand il est fourni, les lignes provisoires de départ/arrivée affichent une recherche de lieu en place. */
   onSelectPlace?: (
     id: string,
     place: { name: string; fullName: string; lat: number; lon: number },

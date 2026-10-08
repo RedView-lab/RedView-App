@@ -37,13 +37,13 @@ export function fmtClock(elapsedS: number | null, reference: StartReference): st
   return `${hh}:${mm}`;
 }
 
-/** Sort key of a speed cell: speed for cycling, pace (s/km) for Trail / Running. */
+/** Clé de tri d'une cellule de vitesse : la vitesse à vélo, l'allure (s/km) en trail / course. */
 export function speedSortKey(kmh: number | null, discipline: SportDiscipline): number | null {
   if (kmh == null) return null;
   return discipline === 'bike' ? kmh : kmhToPaceSecPerKm(kmh);
 }
 
-/** km/h for cycling, min/km for Trail / Running. */
+/** km/h à vélo, min/km en trail / course. */
 export function fmtSpeedOrPace(kmh: number | null | undefined, discipline: SportDiscipline): string {
   if (kmh == null || !Number.isFinite(kmh) || kmh <= 0) return DASH;
   return formatSpeedOrPace(kmh, discipline);
@@ -79,7 +79,7 @@ export function fmtCloudCover(pct: number | null | undefined): string {
   return `${Math.round(pct)}%`;
 }
 
-/** Binary-search the nearest prediction point + linear interpolation. */
+/** Recherche dichotomique du point de prédiction le plus proche + interpolation linéaire. */
 export function pointAtDistanceM(
   prediction: PredictionResult | null | undefined,
   distanceM: number | null,
@@ -112,7 +112,7 @@ export function pointAtDistanceM(
   };
 }
 
-/** Cumulative elevation gain / loss between two distances along the prediction. */
+/** Dénivelé positif / négatif cumulé entre deux distances le long de la prédiction. */
 export function gainLossBetween(
   prediction: PredictionResult | null | undefined,
   fromM: number | null,

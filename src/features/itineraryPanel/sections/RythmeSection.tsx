@@ -16,7 +16,7 @@ type RhythmChange = <K extends keyof RhythmState>(key: K, value: RhythmState[K])
 
 interface RythmeSectionProps {
   rhythm: RhythmState;
-  /** Trail / Running swap FTP, weight and tyres for running references. */
+  /** Trail / course remplacent FTP, poids et pneus par des références de course. */
   discipline?: SportDiscipline;
   onChange?: RhythmChange;
   onUploadFit?: () => void;

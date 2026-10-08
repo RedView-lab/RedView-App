@@ -1,10 +1,10 @@
 /**
- * Portal-based dropdown for the "+ Colonnes" button in the Feuille de route.
+ * Menu déroulant en portail du bouton « + Colonnes » de la feuille de route.
  *
- * Mirrors the {@link TimelineKindMenu} pattern: positioned against the anchor
- * with `--app-scale` awareness, dismissed on outside click / Escape, rendered
- * in a portal target that stays inside the fullscreen shell when needed so it
- * can escape clipping ancestors without dropping behind the fullscreen overlay.
+ * Reprend le schéma de {@link TimelineKindMenu} : positionné par rapport à
+ * l'ancre en tenant compte de `--app-scale`, fermé au clic extérieur / à Échap,
+ * rendu dans une cible de portail qui reste dans le shell plein écran au besoin,
+ * pour échapper aux ancêtres qui rognent sans passer derrière la surcouche plein écran.
  */
 import {
   useEffect,
@@ -52,7 +52,7 @@ function computeStyle(anchorEl: HTMLElement, rowCount: number): MenuStyle {
 
   const menuWidthPx = MENU_WIDTH * scale;
   const maxLeft = Math.max(8, window.innerWidth - menuWidthPx - 8);
-  // Right-align against the trigger button.
+  // Aligner à droite sur le bouton déclencheur.
   const desiredLeft = rect.right - menuWidthPx;
   const left = Math.min(Math.max(8, desiredLeft), maxLeft);
   const top = placeBelow ? rect.bottom + offset : rect.top - Math.min(fullHeight, maxHeight) - offset;

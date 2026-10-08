@@ -1,7 +1,7 @@
 import { translateAppText } from '@/shared/i18n';
 import type { PoiCategory, TimelineItemKind } from '../../types';
 
-/** French labels for the timeline type column. */
+/** Libellés français de la colonne de type de la timeline. */
 export function kindLabel(kind: TimelineItemKind, poiCategory?: PoiCategory): string {
   switch (kind) {
     case 'start':       return translateAppText('Départ');
@@ -15,7 +15,7 @@ export function kindLabel(kind: TimelineItemKind, poiCategory?: PoiCategory): st
   }
 }
 
-/** POI label (FR). */
+/** Libellé de POI (FR). */
 export function poiLabel(category: PoiCategory): string {
   switch (category) {
     case 'fountains':    return translateAppText('Eau');

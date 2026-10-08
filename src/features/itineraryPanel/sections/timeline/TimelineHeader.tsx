@@ -1,9 +1,9 @@
 /**
- * Sticky header of the Feuille de route / Agenda panel.
+ * En-tête collant du panneau Feuille de route / Agenda.
  *
- * Left:  view switcher (Feuille de route / Agenda) — segmented control.
- *        The agenda keeps its historical id `'timeline'` (persisted view).
- * Right: settings, split "add" button, fullscreen toggle.
+ * Gauche : sélecteur de vue (Feuille de route / Agenda) — contrôle segmenté.
+ *          L'agenda garde son id historique `'timeline'` (vue persistée).
+ * Droite : réglages, bouton « ajouter » scindé, bascule plein écran.
  */
 import { analyticsAttrs } from '@/shared/lib/analytics';
 import type { MouseEventHandler } from 'react';

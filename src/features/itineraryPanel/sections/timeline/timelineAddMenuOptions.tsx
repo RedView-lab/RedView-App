@@ -2,8 +2,9 @@ import { KindBadge } from './KindBadge';
 import type { TimelineKindMenuOption } from './TimelineKindMenu';
 
 /**
- * Types offered by the feuille de route's "+" menu, also used by the center
- * toolbar's "Ajouter" (placed on the chart). Labels are translated by the menu.
+ * Types proposés par le menu « + » de la feuille de route, utilisés aussi par
+ * « Ajouter » de la barre d'outils centrale (posé sur le graphique). Les
+ * libellés sont traduits par le menu.
  */
 export const TIMELINE_ADD_MENU_OPTIONS: readonly TimelineKindMenuOption[] = [
   {

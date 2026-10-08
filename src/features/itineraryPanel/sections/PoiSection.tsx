@@ -14,20 +14,20 @@ interface PoiSectionProps {
   onChangeEntry?: (category: PoiCategory, next: PoiEntry) => void;
   onLoad?: () => void;
   onCancelLoad?: () => void;
-  /** Map-level POI loading state. */
+  /** État de chargement des POI au niveau de la carte. */
   loading?: boolean;
-  /** 0..1 progress of the corridor search (chunks completed / total). */
+  /** Progression 0..1 de la recherche dans le couloir (morceaux terminés / total). */
   progress?: number | null;
-  /** Number of POIs currently rendered on the map (0 when none). */
+  /** Nombre de POI actuellement affichés sur la carte (0 s'il n'y en a pas). */
   poiCount?: number;
-  /** Last error from the POI engine (Overpass / network). */
+  /** Dernière erreur du moteur de POI (Overpass / réseau). */
   error?: string | null;
   /**
-   * When true, the "Charger" button is greyed out — typically because no
-   * GPX route is attached to the active itinerary or no category is on.
+   * À true, le bouton « Charger » est grisé — en général parce qu'aucun tracé
+   * GPX n'est attaché à l'itinéraire actif ou qu'aucune catégorie n'est activée.
    */
   disabled?: boolean;
-  /** Optional helper text shown when the button is disabled. */
+  /** Texte d'aide optionnel affiché quand le bouton est désactivé. */
   disabledReason?: string | null;
   /** POI chargés avec d'autres catégories / distances : proposer de relancer. */
   searchStale?: boolean;
@@ -49,7 +49,7 @@ function pairRows<T>(list: readonly T[]): T[][] {
   return out;
 }
 
-/** Parses a `"40m"`-style string into a positive integer or null. */
+/** Parse une chaîne du type `"40m"` en entier positif ou null. */
 function parseDistance(raw: string): number | null {
   const n = parseInt(raw, 10);
   if (!Number.isFinite(n) || n < 0) return null;

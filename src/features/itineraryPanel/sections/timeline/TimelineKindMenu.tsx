@@ -10,7 +10,7 @@ import { useAppI18n } from '@/shared/i18n';
 import { appScaledOverlayStyle, readAppScale } from '@/shared/lib/appScale';
 import type { TimelineAddItemKind } from '../../types';
 
-/** Fits « Point de passage » / « Destination » with their icon, untruncated. */
+/** Fait tenir « Point de passage » / « Destination » avec leur icône, sans troncature. */
 const MENU_WIDTH = 168;
 
 interface TimelineKindMenuStyle {

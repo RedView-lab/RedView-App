@@ -23,12 +23,12 @@ interface TimelineSelectProps<T extends string | number> {
 interface PopoverStyle {
   top: number;
   left: number;
-  /** Unscaled px — the popover itself is scaled by `--app-scale`. */
+  /** Px non mis à l'échelle — le popover lui-même est mis à l'échelle par `--app-scale`. */
   width: number;
   scale: number;
-  /** Portaled into the fullscreen panel, which already renders at `scale`. */
+  /** Portalé dans le panneau plein écran, qui est déjà rendu à `scale`. */
   inScaledLayer: boolean;
-  /** Where the popover is portaled (fullscreen panel or body). */
+  /** Où le popover est portalé (panneau plein écran ou body). */
   portalTarget: HTMLElement;
 }
 

@@ -2,11 +2,11 @@ import type { MouseEventHandler } from 'react';
 import { useAppI18n } from '@/shared/i18n';
 
 /**
- * "Ajouter un élément" row — ends the sheet view.
+ * Ligne « Ajouter un élément » — termine la vue feuille.
  *
- * Matches Figma node 855:20479: a single rounded bar with a plain "+"
- * glyph + label on the left and a chevron on the right (no divider).
- * The whole row opens the kind picker.
+ * Conforme au nœud Figma 855:20479 : une seule barre arrondie avec un glyphe
+ * « + » simple + un libellé à gauche et un chevron à droite (sans séparateur).
+ * Toute la ligne ouvre le sélecteur de type.
  */
 import { IconChevronDown, IconPlus } from '../../components/icons';
 

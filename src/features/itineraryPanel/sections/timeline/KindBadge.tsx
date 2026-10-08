@@ -1,20 +1,20 @@
 /**
- * Kind badge — pixel-perfect match for Figma node 1694:18364
- * (Itinerary panel · "Feuille de route" results pane).
+ * Badge de type — conforme au pixel près au nœud Figma 1694:18364
+ * (panneau d'itinéraire · volet de résultats « Feuille de route »).
  *
- * Each `TimelineItemKind` resolves to a 20×20 SVG composed exactly the
- * way Figma exports it:
- *   - start       → IconCheckpointStart    (filled black circle + play ▶)
- *   - end         → IconCheckpointEndMarker (rounded square w/ checker grid)
- *   - waypoint    → IconWaypointDot         (red dot inside dark ring)
- *   - water       → blue   IconTeardropPin + droplet
- *   - supermarket → orange IconTeardropPin + cart
- *   - pause       → IconPauseBadge          (dark circle + pause icon)
+ * Chaque `TimelineItemKind` donne un SVG de 20×20 composé exactement comme
+ * Figma l'exporte :
+ *   - start       → IconCheckpointStart     (cercle noir plein + lecture ▶)
+ *   - end         → IconCheckpointEndMarker (carré arrondi avec damier)
+ *   - waypoint    → IconWaypointDot         (point rouge dans un anneau sombre)
+ *   - water       → IconTeardropPin bleue + goutte
+ *   - supermarket → IconTeardropPin orange + chariot
+ *   - pause       → IconPauseBadge          (cercle sombre + icône pause)
  *
- * The design also shows POI badges (water/supermarket pattern reused with
- * different colors + icons). When backend wiring lands and rows can carry a
- * concrete `PoiCategory`, the `<PoiBadge>` helper exported below renders
- * the matching teardrop pin.
+ * La maquette montre aussi des badges de POI (motif eau/supermarché réutilisé
+ * avec d'autres couleurs + icônes). Quand le branchement backend arrivera et que
+ * les lignes pourront porter une vraie `PoiCategory`, l'outil `<PoiBadge>`
+ * exporté plus bas affichera l'épingle en goutte correspondante.
  */
 import React from 'react';
 import {
@@ -43,20 +43,20 @@ import { PROVIDED_POI_SVG } from '@/features/poi/lib/providedPoiSvg';
 
 interface KindBadgeProps {
   kind: TimelineItemKind | 'favorite';
-  /** Pixel size — defaults to the 20px Figma value. */
+  /** Taille en pixels — 20px par défaut, la valeur de Figma. */
   size?: number;
-  /** Required when `kind === 'poi'` — selects the teardrop pin color/icon. */
+  /** Requis quand `kind === 'poi'` — choisit la couleur/l'icône de l'épingle en goutte. */
   poiCategory?: PoiCategory;
   favorite?: boolean;
   pauseDurationMin?: number | null;
 }
 
-/* ----------- POI category registry (for future backend wiring) ---------- */
+/* ----------- Registre des catégories de POI (pour le futur branchement backend) ---------- */
 
 interface PoiBadgeSpec {
-  /** Hex color used to fill the teardrop pin head + tip. */
+  /** Couleur hexadécimale de remplissage de la tête + de la pointe de l'épingle. */
   color: string;
-  /** White glyph rendered centred in the pin head. */
+  /** Glyphe blanc centré dans la tête de l'épingle. */
   Icon: React.ComponentType<{ size?: number }>;
 }
 
@@ -127,10 +127,10 @@ const PROVIDED_TIMELINE_FAVORITE_BADGE_URLS: Partial<Record<PoiCategory, string>
 };
 
 /**
- * POI badge:
- * - Round circle for standard (non-favorite) POIs
- * - Pointed pin ("le truc avec la pointe") for favorite POIs
- * - Pause symbol with pause duration when associated with pauses
+ * Badge de POI :
+ * - cercle rond pour les POI standard (non favoris)
+ * - épingle pointue (« le truc avec la pointe ») pour les POI favoris
+ * - symbole pause avec sa durée quand il est associé à des pauses
  */
 function PoiBadge({
   category,
@@ -290,7 +290,7 @@ function ProvidedPoiSvgBadge({
   );
 }
 
-/* ------------------------------ Main badge ------------------------------ */
+/* ------------------------------ Badge principal ------------------------------ */
 
 export function KindBadge({
   kind,
@@ -376,7 +376,7 @@ export function KindBadge({
     );
   }
 
-  // Generic POI row injected by corridor search → use the typed badge
+  // Ligne de POI générique injectée par la recherche dans le couloir → utiliser le badge typé
   if (kind === 'poi' && poiCategory) {
     return <PoiBadge category={poiCategory} size={size} favorite={favorite} pauseDurationMin={pauseDurationMin} />;
   }

@@ -346,8 +346,8 @@ export const TIMELINE_COLUMNS: TimelineColumnDef[] = [
 ];
 
 /**
- * Columns for a discipline: Trail / Running drop the power columns and use
- * pace labels on the speed columns.
+ * Colonnes d'une discipline : trail / course retirent les colonnes de puissance
+ * et utilisent des libellés d'allure sur les colonnes de vitesse.
  */
 export function resolveTimelineColumns(discipline: SportDiscipline): TimelineColumnDef[] {
   if (discipline === 'bike') return TIMELINE_COLUMNS;

@@ -1,8 +1,9 @@
 /**
- * Roadbook "Feuille de route" — column registry.
+ * Roadbook « Feuille de route » — registre des colonnes.
  *
- * Single source of truth for every column the user can toggle in the sheet
- * view. Each column knows how to render its header label and compute its cell value.
+ * Source unique de vérité de chaque colonne que l'utilisateur peut afficher ou
+ * masquer dans la vue feuille. Chaque colonne sait rendre son libellé d'en-tête
+ * et calculer la valeur de sa cellule.
  */
 
 import { elapsedSecondsAtDistance } from '@/features/itineraryPanel/lib/schedule/predictionElapsed';

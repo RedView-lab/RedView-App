@@ -50,7 +50,7 @@ export function compareSortKeys(
   b: number | string | null,
   direction: 'asc' | 'desc',
 ): number {
-  // Always push nulls to the end, regardless of direction.
+  // Toujours repousser les null à la fin, quel que soit le sens.
   if (a == null && b == null) return 0;
   if (a == null) return 1;
   if (b == null) return -1;
@@ -64,10 +64,10 @@ export function buildGridTemplate(
   cols: TimelineColumnDef[],
   widths: Partial<Record<TimelineColumnId, number>> = {},
 ): string {
-  // Sticky check (left) + N data columns + filler + sticky actions (right).
-  // The filler takes the width the columns leave (wide panel, full screen):
-  // every row spans the table, actions on its right edge as in the list view.
-  // It shrinks to 0 once the columns overflow (horizontal scroll).
+  // Case collante (gauche) + N colonnes de données + bourrage + actions collantes (droite).
+  // Le bourrage prend la largeur que laissent les colonnes (panneau large, plein
+  // écran) : chaque ligne couvre le tableau, actions sur son bord droit comme dans
+  // la vue liste. Il retombe à 0 dès que les colonnes débordent (défilement horizontal).
   const middle = cols
     .map((c) => {
       const customW = widths[c.id];
