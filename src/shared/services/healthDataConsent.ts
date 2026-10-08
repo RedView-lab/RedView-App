@@ -24,8 +24,13 @@ const PREFS_KEY = 'healthDataConsent';
 
 type Prefs = Record<string, unknown>;
 
-/** Dernier état connu, par compte (évite de relire le compte à chaque envoi). */
-let cached: { userId: string; consent: HealthDataConsent | null } | null = null;
+/**
+ * Dernier état connu, par compte (évite de relire le compte à chaque envoi).
+ * Relu au-delà de CACHE_TTL_MS : un retrait fait sur un autre appareil est vu
+ * sans recharger la page.
+ */
+let cached: { userId: string; consent: HealthDataConsent | null; at: number } | null = null;
+const CACHE_TTL_MS = 5 * 60_000;
 
 function readPrefs(user: Models.User<Models.Preferences> | null): Prefs {
   return user?.prefs && typeof user.prefs === 'object' ? (user.prefs as Prefs) : {};
@@ -43,7 +48,7 @@ export async function loadHealthDataConsent(): Promise<HealthDataConsent | null>
     mirror: readHealthDataConsentMirror(userId),
   });
   if (user) writeHealthDataConsentMirror(userId, consent);
-  cached = { userId, consent };
+  cached = { userId, consent, at: Date.now() };
   return consent;
 }
 
@@ -53,7 +58,7 @@ async function writeAccountConsent(consent: HealthDataConsent | null): Promise<v
   // Les préférences sont remplacées en bloc : partir de celles du compte.
   await account.updatePrefs({ ...readPrefs(user), [PREFS_KEY]: consent });
   writeHealthDataConsentMirror(user.$id, consent);
-  cached = { userId: user.$id, consent };
+  cached = { userId: user.$id, consent, at: Date.now() };
 }
 
 /** Enregistre l'accord (version courante) dans le compte. */
@@ -116,7 +121,8 @@ function requestFromUser(): Promise<boolean> {
  */
 export async function ensureHealthDataConsent(): Promise<boolean> {
   const userId = getSessionUserIdSync();
-  const consent = cached && cached.userId === userId ? cached.consent : await loadHealthDataConsent();
+  const fresh = cached && cached.userId === userId && Date.now() - cached.at < CACHE_TTL_MS;
+  const consent = fresh ? cached!.consent : await loadHealthDataConsent();
   if (isHealthDataConsentValid(consent)) return true;
   const accepted = await requestFromUser();
   if (!accepted) return false;

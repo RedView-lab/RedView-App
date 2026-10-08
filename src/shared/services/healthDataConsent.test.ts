@@ -98,6 +98,20 @@ describe('retrait', () => {
     await expect(consentService.ensureHealthDataConsent()).resolves.toBe(false);
   });
 
+  it('un retrait fait sur un autre appareil est vu sans recharger, une fois le cache périmé', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      answerNextRequest(true);
+      await consentService.ensureHealthDataConsent();
+      state.user!.prefs = { country: 'FR' };
+      vi.setSystemTime(Date.now() + 6 * 60_000);
+      answerNextRequest(false);
+      await expect(consentService.ensureHealthDataConsent()).resolves.toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('un retrait fait sur un autre appareil l’emporte sur le miroir local', async () => {
     answerNextRequest(true);
     await consentService.ensureHealthDataConsent();
