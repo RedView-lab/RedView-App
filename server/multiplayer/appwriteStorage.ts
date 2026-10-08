@@ -229,6 +229,24 @@ export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStor
     }
   }
 
+  /**
+   * `data` réécrit par quelqu'un d'autre que la salle depuis son dernier point
+   * de sauvegarde (client d'une ancienne version) : signalé, jamais pris en
+   * compte (le point de sauvegarde fait foi). Lu hors du chemin du `welcome`.
+   */
+  function warnIfDataRewritten(projectId: string, meta: CollabMeta): void {
+    void readRow(projectId, [Query.select(['$id', 'data'])]).then((row) => {
+      if (!row || (typeof row.data === 'string' && sha256(row.data) === meta.dataHash)) return;
+      console.warn(JSON.stringify({
+        level: 'warn',
+        service: 'multiplayer',
+        message: 'document réécrit hors de la salle : ignoré, le point de sauvegarde fait foi',
+        projectId,
+        seq: meta.seq,
+      }));
+    }, () => undefined);
+  }
+
   /** Lots journalisés au-delà de `seq`, triés. */
   async function readJournalAfter(projectId: string, seq: number): Promise<SequencedBatch[]> {
     const rows = await listJournal(projectId, [Query.greaterThan('end_seq', seq)]);
@@ -269,32 +287,32 @@ export function createAppwriteStorage(options: AppwriteStorageOptions): RoomStor
     kind: 'appwrite',
     access,
 
+    /**
+     * Chemin critique de l'entrée dans une salle (le `welcome` attend) :
+     * ligne réduite à `collab` (+ droits, souvent en cache depuis l'ouverture)
+     * → point de sauvegarde (fichier vérifié, puis téléchargé) et journal en
+     * parallèle — trois allers-retours vers Appwrite au lieu de cinq, sans
+     * télécharger le document (`data`, jusqu'à 12 M car.) : il n'est relu
+     * qu'après coup, pour signaler un document réécrit hors de la salle.
+     */
     async loadRoom(projectId: string): Promise<LoadedRoom | null> {
-      const row = await readRow(projectId);
-      if (!row) return null;
-      const projectAccess = await access(projectId);
-      if (!projectAccess) return null;
+      const [row, projectAccess] = await Promise.all([readRow(projectId, [Query.select(['$id', 'collab'])]), access(projectId)]);
+      if (!row || !projectAccess) return null;
       const meta = parseMeta(row.collab);
-      const checkpoint = meta ? await readCheckpoint(projectId, meta) : null;
-      // Point de sauvegarde valable : le document (jusqu'à des dizaines de Mo,
-      // parfois un fichier à télécharger) n'est ni lu ni décompressé.
-      if (meta && checkpoint) {
-        const dataMatches = typeof row.data === 'string' && sha256(row.data) === meta.dataHash;
-        if (!dataMatches) {
-          console.warn(JSON.stringify({
-            level: 'warn',
-            service: 'multiplayer',
-            message: 'document réécrit hors de la salle : ignoré, le point de sauvegarde fait foi',
-            projectId,
-            seq: meta.seq,
-          }));
+      if (meta) {
+        const [checkpoint, batches] = await Promise.all([readCheckpoint(projectId, meta), readJournalAfter(projectId, meta.seq)]);
+        // Point de sauvegarde valable : le document (jusqu'à des dizaines de Mo,
+        // parfois un fichier à télécharger) n'est ni lu ni décompressé.
+        if (checkpoint) {
+          warnIfDataRewritten(projectId, meta);
+          return { checkpoint, baseSeq: meta.seq, journal: assertContiguous(batches, meta.seq) };
         }
-        const batches = await readJournalAfter(projectId, meta.seq);
-        return { checkpoint, baseSeq: meta.seq, journal: assertContiguous(batches, meta.seq) };
       }
       // Pas de point de sauvegarde valable (première session, ou document
       // réécrit hors session) : on repart du document, journal précédent écarté.
-      const stored = readStoredProject(await readData(projectId, row.data, projectAccess));
+      const full = await readRow(projectId, [Query.select(['$id', 'data'])]);
+      if (!full) return null;
+      const stored = readStoredProject(await readData(projectId, full.data, projectAccess));
       if (!stored) throw new Error(`projet ${projectId} : données illisibles`);
       const stale = await listJournal(projectId, []);
       await Promise.all(stale.map((entry) => databases.deleteDocument(db, JOURNAL_COLLECTION_ID, entry.$id)));

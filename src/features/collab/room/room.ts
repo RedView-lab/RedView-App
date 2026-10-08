@@ -67,6 +67,8 @@ export interface JoinRequest {
   lastSeq: number | null;
   /** Telle qu'envoyée par le client (`hello`) : nettoyée par la salle. */
   presence?: unknown;
+  /** Le client garde les segments de ses propres lots (`hello.leanEcho`) : son acquittement part sans eux. */
+  leanEcho?: boolean;
 }
 
 const DEFAULT_CATCH_UP_LIMIT = 2_000;
@@ -81,6 +83,7 @@ interface Member {
   /** Dernier état `motion` (caméra, pointeur, graphique), donné aux arrivants. */
   motion: MotionState | null;
   motionBucket: MotionBucket;
+  leanEcho: boolean;
 }
 
 export class Room {
@@ -143,7 +146,7 @@ export class Room {
     const previous = this.members.get(peer.clientId);
     if (previous && previous.peer !== peer) this.leave(peer.clientId);
     const motions = this.motionList(peer.clientId);
-    const member: Member = { peer, presence: {}, motion: null, motionBucket: new MotionBucket() };
+    const member: Member = { peer, presence: {}, motion: null, motionBucket: new MotionBucket(), leanEcho: request.leanEcho === true };
     member.presence = this.sanitizePresence(request.presence, member);
     this.members.set(peer.clientId, member);
     const catchUp = this.catchUpFor(request);
@@ -245,8 +248,31 @@ export class Room {
     this.recentTotalBytes += bytes;
     this.trimRecent();
     this.options.onBatch?.(batch);
-    this.broadcast({ type: 'batch', batch });
+    this.broadcastBatch(batch);
     this.dropLeasesOfDeletedItineraries(batch);
+  }
+
+  /**
+   * Lot accepté, à tous ; pour son émetteur c'est l'acquittement. Un émetteur
+   * qui garde ses segments (`leanEcho`) le reçoit sans eux : un tracé modifié
+   * ne lui revient pas en entier (des centaines de Ko sur son lien, devant
+   * tout ce qui le suit), le message complet reste partagé par les autres.
+   */
+  private broadcastBatch(batch: SequencedBatch): void {
+    const message: ServerMessage = { type: 'batch', batch };
+    let lean: ServerMessage | null = null;
+    let hasBlobs: boolean | null = null;
+    for (const { peer, leanEcho } of this.members.values()) {
+      if (leanEcho && peer.clientId === batch.clientId) {
+        hasBlobs ??= Object.keys(batch.blobs).length > 0;
+        if (hasBlobs) {
+          lean ??= { type: 'batch', batch: { ...batch, blobs: {} } };
+          peer.send(lean);
+          continue;
+        }
+      }
+      peer.send(message);
+    }
   }
 
   private handleLease(peer: RoomPeer, message: Extract<ClientMessage, { type: 'lease' }>): void {

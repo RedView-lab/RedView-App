@@ -192,6 +192,11 @@ Hôte (roomHost.ts) :
   - Reprise après un arrêt : point de sauvegarde exact + journal au-delà.
     Un point de sauvegarde valable gagne toujours sur un « data » réécrit
     hors salle.
+  - Chargement d'une salle (le welcome l'attend) : ligne réduite à
+    « collab » → fiche du point de sauvegarde vérifiée (nom, aucune
+    permission) → téléchargé, journal lu en même temps : 3 allers-retours
+    vers Appwrite. « data » n'est relu qu'après coup, pour signaler un
+    document réécrit hors de la salle (section 16).
   - Salle inactive : déchargée dès que son journal est durable, même si le
     point de sauvegarde échoue.
   - Projet supprimé (404 au point de sauvegarde, ou « not-found » à la
@@ -214,6 +219,13 @@ Authentification (auth.ts, server.ts) — détails en section 14 :
     membre de l'équipe « p<projectId> » (server/lib/project-access.mjs).
   - Revérifiés sans cache à la connexion, puis toutes les 15 s, et tout de
     suite quand l'API de partage retire quelqu'un (route signée).
+  - Entrée rapide (section 16) : les droits de l'utilisateur que le jeton
+    DÉCLARE (charge du JWT, non vérifiée) sont lus pendant que le jeton est
+    vérifié, la ligne du projet et l'appartenance à « p<projectId> » en
+    même temps ; ils ne servent que si le jeton vérifié désigne le même
+    utilisateur, et un jeton refusé l'est sans les attendre. Une fois les
+    droits établis, la salle commence à se charger pendant l'aller-retour du
+    hello.
   - Le jeton est relevé toutes les 4 min ; un jeton expiré sans relève ferme
     la connexion (4401) — une session fermée ne la garde pas ouverte.
 
@@ -277,6 +289,13 @@ Format sur le fil (src/features/collab/wire.ts) : JSON en trame texte ; un
   hors du fil, bornée à 64 Mo (au-delà : 4400), et une trame binaire avant
   welcome est refusée (4400). Dans chaque sens, un message qui attend une
   (dé)compression retient les suivants : l'ordre est toujours celui d'envoi.
+Écho allégé : hello.leanEcho (le client garde les segments de ses propres
+  lots) → le serveur lui renvoie ses lots sans « blobs » ; les autres
+  reçoivent le lot complet (un seul message partagé). Le client reprend les
+  segments dans sa bibliothèque (SyncEngine.applyServerBatch). Un tracé
+  modifié ne repasse plus en entier sur le lien de son auteur (accusé de
+  22,5 Ko → 0,5 Ko, section 16). Sans le drapeau (ancien onglet) : lot
+  complet ; pas de changement de version.
   PAS de permessage-deflate : Chromium y compresse chaque message, sans
   seuil (lots, caméra et curseur à 30 Hz), le serveur décompressait donc
   chaque message dans la file zlib du processus (4 tâches à la fois) et
@@ -359,6 +378,16 @@ npm run bench:collab-load
   Charge cible complète, sur batterie : diffusion p95 12 ms, motion 9 ms,
   journal p50/p95 125/188 ms, CPU 85 %, 1,99× (HEAD d'avant : 18 s, 18 s,
   210/310 ms, 200 %).
+npm run bench:collab-join  (script-test-bench/collab-join/)
+  Entrée dans une salle et accusés, la part du serveur seule : vrai serveur,
+  vrai stockage Appwrite et vraie vérification des jetons / droits contre un
+  faux Appwrite HTTP à latence log-normale (--p50 / --p95 par appel, défaut
+  150 / 650 ms = Appwrite à 100 utilisateurs), clients sur la boucle locale
+  qui entrent comme l'app (--rtt avant le hello). Par vague : redémarrage
+  (salles froides), --rooms × --users arrivent sur --ramp ms, --edit s de
+  réglages et de tracés, reconnexion (salle chargée). --roots a,b : deux
+  versions du code (copie « git archive » de HEAD, arbre de travail), vagues
+  entrelacées. Rapport dans reports/collab-join/.
 npm run bench:follow
   Suivre un éditeur, hors navigateur : trajectoires (panoramique, zoom,
   rotation ±180°, vol, flyover, arrêt/reprise), réseau avec gigue, pertes et
@@ -753,3 +782,42 @@ courante ne verrait jamais (perdus). Une salle garde désormais son premier
 paquet tant qu'elle vit (pruneJournal(…, keepStartSeq)). Vu par un test qui
 échouait 3 fois sur 5 sous charge ; test déterministe : appwriteStorage.test.ts
 « barrière après élagage ».
+
+========================================================================
+16. ENTRÉE DANS UNE SALLE SOUS CHARGE (08/10/2026)
+========================================================================
+Banc de charge du VPS (vps-load, prod) à 50 / 100 utilisateurs : « entrée
+dans une salle » p95 6,3 / 11,2 s, accusé d'un lot p95 0,75 s (6,7 s en
+rafale), alors que le serveur temps réel restait à 0,15 cœur. Deux causes :
+
+- côté serveur, l'entrée enchaînait des appels Appwrite : jeton (compte par
+  JWT) → ligne du projet → appartenance à l'équipe, puis, salle froide,
+  ligne ENTIÈRE (« data » compris, jusqu'à 12 M car.) → droits → fiche du
+  point de sauvegarde → téléchargement → journal. Appwrite répondant en
+  p50 ≈ 150 / p95 ≈ 650 ms à 100 utilisateurs, la somme fait des secondes.
+  Maintenant : jeton ∥ ligne ∥ appartenance (1 aller-retour), salle chargée
+  pendant le hello, ligne sans « data » ∥ droits → fiche → téléchargement ∥
+  journal (3) ;
+- l'accusé d'un lot est le lot lui-même, diffusé à tous : un tracé modifié
+  (morceaux de route, des dizaines de Ko compressés) revenait en entier à son
+  auteur. Le serveur le traite en ~5 ms : la lenteur était le lien de
+  l'auteur (ici, celui du portable qui jouait 100 utilisateurs). Écho allégé
+  (section 7).
+
+bench:collab-join, A/B entrelacé (HEAD ab837ca / correctif), secteur, 9
+salles × 3 éditeurs, document de 0,79 Mo (projet de calibrage vps-load),
+Appwrite p50 150 / p95 650 ms, aller-retour client 60 ms, 108 entrées par
+version :
+                                         avant            après
+  entrée, salle froide p50 / p95         1 240 / 2 612    799 / 1 532 ms
+  entrée, salle chargée p50 / p95          619 / 1 646    340 /   912 ms
+  accusé d'un tracé sur le fil            22,5 Ko          0,5 Ko
+  traitement d'un lot de tracé             5 ms             4 ms
+Le reste du temps mesuré en prod (welcome p50 4,1 s à 100 utilisateurs)
+n'est pas le serveur : welcome de ≈ 230 Ko sur une connexion TCP neuve (démarrage
+lent) dans un lien descendant occupé à 75 %. Pour trancher en prod,
+/metrics.json donne l'entrée étape par étape (latency.ts) : entry_auth
+(jeton + droits), entry_room_load, entry_welcome (hello → welcome remis à
+la socket), entry_total (demande d'ouverture → welcome) ; chacune en
+p50 / p95 / max récents et en histogramme cumulé (<nom>_count, _sum_ms,
+_le_<ms>) — la différence entre deux relevés donne une fenêtre.

@@ -71,6 +71,7 @@
     "bench:follow-frames": "tsx script-test-bench/follow/frames/run.ts",
     "bench:collab": "tsx script-test-bench/regression/collab.ts",
     "bench:collab-load": "tsx script-test-bench/collab-load/run.ts",
+    "bench:collab-join": "tsx script-test-bench/collab-join/run.ts",
     "bench:collab-e2e": "node script-test-bench/collab-e2e/run.mjs",
     "bench:comments-viewer": "node script-test-bench/collab-e2e/comments-viewer.mjs",
     "bench:collab-prod": "node --env-file=.env script-test-bench/collab-e2e/prod-two-accounts.mjs",

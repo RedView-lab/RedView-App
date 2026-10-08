@@ -31,6 +31,13 @@ import { createWriteCoalescer } from './writeCoalescer.ts';
  * la connexion : un refus passe par un second serveur WebSocket (messages ≤
  * 1 Ko, rien n'est lu) qui ferme aussitôt avec le code du refus, que le client
  * sait interpréter (un refus HTTP ne lui donnerait aucun code).
+ *
+ * Entrée rapide : les droits de l'utilisateur que le jeton déclare sont lus
+ * PENDANT la vérification du jeton (un seul aller-retour vers Appwrite au lieu
+ * de trois), et ne servent que si le jeton vérifié désigne bien cet
+ * utilisateur ; un jeton refusé l'est sans attendre cette lecture (aucune
+ * réponse ne dépend d'elle). Une fois les droits établis, la salle commence à
+ * se charger pendant l'aller-retour du `hello`.
  */
 
 interface ConnectionLimits {
@@ -312,6 +319,7 @@ export function createMultiplayerServer(options: MultiplayerServerOptions): Mult
   }
 
   async function upgrade(req: http.IncomingMessage, socket: Duplex, head: Buffer): Promise<void> {
+    const receivedAt = performance.now();
     socket.on('error', () => socket.destroy());
     const url = new URL(req.url ?? '/', 'http://localhost');
     if (!SOCKET_PATHS.has(url.pathname)) return rejectHttp(socket, 404, 'Not Found');
@@ -345,19 +353,38 @@ export function createMultiplayerServer(options: MultiplayerServerOptions): Mult
 
     let identity: Identity | null;
     pendingAuth += 1;
+    // Droits de l'utilisateur déclaré, lus en même temps que le jeton est vérifié (résultat
+    // ou erreur gardés) ; la place d'authentification n'est rendue qu'une fois cette lecture finie.
+    const claimed = auth.claimedUserId?.(token) ?? null;
+    const early = claimed
+      ? auth.checkAccess(claimed, projectId, { fresh: true }).then((access) => ({ access }), (error: unknown) => ({ error }))
+      : null;
+    const authStarted = performance.now();
     try {
       identity = await withTimeout(auth.verifyToken(token), UPGRADE_AUTH_TIMEOUT_MS);
       if (!identity) return deny(req, socket, head, CLOSE_CODES.unauthorized, 'unauthorized', { ip, projectId });
-      const access = await withTimeout(auth.checkAccess(identity.userId, projectId, { fresh: true }), UPGRADE_AUTH_TIMEOUT_MS);
-      if (access !== 'ok') return deny(req, socket, head, CLOSE_CODES[access], access, { ip, projectId, userId: identity.userId });
+      const userId = identity.userId;
+      const checked = early && userId === claimed
+        ? early.then((outcome) => {
+            if ('error' in outcome) throw outcome.error;
+            return outcome.access;
+          })
+        : auth.checkAccess(userId, projectId, { fresh: true });
+      const access = await withTimeout(checked, UPGRADE_AUTH_TIMEOUT_MS);
+      if (access !== 'ok') return deny(req, socket, head, CLOSE_CODES[access], access, { ip, projectId, userId });
+      host.latency.auth.record(performance.now() - authStarted);
     } catch (error) {
       // Appwrite injoignable ou trop lent : à réessayer (jamais un refus de jeton).
       const busy = error instanceof Error && error.message === 'busy';
       return deny(req, socket, head, busy ? CLOSE_CODES.busy : CLOSE_CODES.internal, busy ? 'busy' : 'auth-unavailable', { ip, projectId, error: String(error) });
     } finally {
-      pendingAuth -= 1;
+      if (early) void early.finally(() => (pendingAuth -= 1));
+      else pendingAuth -= 1;
     }
     if (socket.destroyed) return;
+    // Droits établis : la salle se charge pendant que le client reçoit la réponse et envoie son
+    // `hello`. Pas en développement (un projet inconnu y est créé par le document du `hello`).
+    if (!options.devAuth) host.prefetch(projectId);
     const releaseUser = takeUserSlot(identity.userId);
     if (!releaseUser) return deny(req, socket, head, CLOSE_CODES.busy, 'too-many-connections', { ip, userId: identity.userId });
     socket.once('close', releaseUser);
@@ -367,7 +394,7 @@ export function createMultiplayerServer(options: MultiplayerServerOptions): Mult
         ws.close(CLOSE_RESTART, 'shutdown');
         return;
       }
-      onConnection(ws, verified, projectId, socket);
+      onConnection(ws, verified, projectId, socket, receivedAt);
     });
   }
 
@@ -382,10 +409,21 @@ export function createMultiplayerServer(options: MultiplayerServerOptions): Mult
   // curseur fantômes ≤ 30 s ; le navigateur répond même dans un onglet en arrière-plan).
   const alive = new WeakSet<object>();
   const coalescer = createWriteCoalescer();
-  function onConnection(socket: WebSocket, identity: Identity, projectId: string, raw: Duplex): void {
+  function onConnection(socket: WebSocket, identity: Identity, projectId: string, raw: Duplex, receivedAt: number): void {
     alive.add(socket);
     socket.on('pong', () => alive.add(socket));
-    handleConnection(socket, { host, auth, identity, projectId, acceptSeed: options.devAuth, log: host.log.bind(host), timings: options.timings, maxMessageBytes, writes: { socket: raw, coalescer } });
+    handleConnection(socket, {
+      host,
+      auth,
+      identity,
+      projectId,
+      acceptSeed: options.devAuth,
+      log: host.log.bind(host),
+      timings: options.timings,
+      maxMessageBytes,
+      writes: { socket: raw, coalescer },
+      receivedAt,
+    });
   }
   const heartbeat = setInterval(() => {
     for (const socket of wss.clients) {

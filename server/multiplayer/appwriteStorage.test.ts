@@ -29,13 +29,19 @@ const fake = vi.hoisted(() => ({
   failUpdates: false,
   /** Appwrite arrêté derrière son Traefik : tout appel répond 404 sans type (« 404 page not found »). */
   proxyNotFound: false,
+  /** Appels reçus, dans l'ordre (`getDocument:<collection>:<attributs lus>`, `getFileDownload`…). */
+  calls: [] as string[],
+  /** Durée de chaque appel (ms) : un aller-retour vers Appwrite. */
+  delayMs: 0,
 }));
 
 vi.mock('node-appwrite', async (importActual) => {
   const actual = await importActual<typeof import('node-appwrite')>();
   // Comme AppwriteException : un 404 d'Appwrite porte son type (`document_not_found`…), celui d'un proxy non.
   const error = (code: number, type = '') => Object.assign(new Error(`appwrite ${code}`), { code, type });
-  const gate = () => {
+  const gate = async (call: string) => {
+    fake.calls.push(call);
+    if (fake.delayMs > 0) await new Promise((resolve) => setTimeout(resolve, fake.delayMs));
     if (fake.proxyNotFound) throw error(404);
   };
   const collection = (id: string) => {
@@ -57,14 +63,16 @@ vi.mock('node-appwrite', async (importActual) => {
     }
   };
   class Databases {
-    async getDocument(_db: string, col: string, id: string) {
-      gate();
+    async getDocument(_db: string, col: string, id: string, queries: string[] = []) {
+      // Comme Appwrite : `Query.select` ne renvoie que les attributs demandés.
+      const select = queries.map((raw) => JSON.parse(raw) as { method: string; values?: string[] }).find((query) => query.method === 'select')?.values;
+      await gate(`getDocument:${col}:${select ? select.join(',') : '*'}`);
       const doc = collection(col).get(id);
       if (!doc) throw error(404, 'document_not_found');
-      return { ...doc };
+      return select ? Object.fromEntries(Object.entries(doc).filter(([key]) => key === '$id' || select.includes(key))) : { ...doc };
     }
     async listDocuments(_db: string, col: string, queries: string[] = []) {
-      gate();
+      await gate(`listDocuments:${col}`);
       const parsed = queries.map((raw) => JSON.parse(raw) as { method: string; attribute?: string; values?: unknown[] });
       let docs = [...collection(col).values()].filter((doc) => queries.every((raw) => matches(doc, raw)));
       const order = parsed.find((query) => query.method === 'orderAsc');
@@ -76,13 +84,13 @@ vi.mock('node-appwrite', async (importActual) => {
       return { total: docs.length, documents: docs.map((doc) => ({ ...doc })) };
     }
     async createDocument(_db: string, col: string, id: string, data: Record<string, unknown>) {
-      gate();
+      await gate(`createDocument:${col}`);
       if (collection(col).has(id)) throw error(409);
       collection(col).set(id, { ...data, $id: id });
       return { ...data, $id: id };
     }
     async updateDocument(_db: string, col: string, id: string, data: Record<string, unknown>) {
-      gate();
+      await gate(`updateDocument:${col}`);
       if (fake.failUpdates) throw error(500);
       const doc = collection(col).get(id);
       if (!doc) throw error(404, 'document_not_found');
@@ -90,32 +98,32 @@ vi.mock('node-appwrite', async (importActual) => {
       return { ...doc };
     }
     async deleteDocument(_db: string, col: string, id: string) {
-      gate();
+      await gate(`deleteDocument:${col}`);
       if (!collection(col).delete(id)) throw error(404, 'document_not_found');
       return {};
     }
   }
   class Storage {
     async createFile(_bucket: string, _id: string, file: { name: string; bytes: Uint8Array }, permissions: string[] = []) {
-      gate();
+      await gate('createFile');
       const $id = `file${(fake.nextFile += 1)}`;
       fake.files.set($id, { name: file.name, bytes: file.bytes, permissions: [...permissions] });
       return { $id };
     }
     async getFile(_bucket: string, id: string) {
-      gate();
+      await gate('getFile');
       const file = fake.files.get(id);
       if (!file) throw error(404, 'storage_file_not_found');
       return { $id: id, name: file.name, $permissions: [...file.permissions] };
     }
     async getFileDownload(_bucket: string, id: string) {
-      gate();
+      await gate('getFileDownload');
       const file = fake.files.get(id);
       if (!file) throw error(404, 'storage_file_not_found');
       return file.bytes.buffer.slice(file.bytes.byteOffset, file.bytes.byteOffset + file.bytes.byteLength);
     }
     async deleteFile(_bucket: string, id: string) {
-      gate();
+      await gate('deleteFile');
       if (!fake.files.delete(id)) throw error(404, 'storage_file_not_found');
       return {};
     }
@@ -126,7 +134,7 @@ vi.mock('node-appwrite', async (importActual) => {
   }
   class Teams {
     async listMemberships(teamId: string, queries: string[] = []) {
-      gate();
+      await gate('listMemberships');
       const team = fake.teams.get(teamId);
       if (!team) throw error(404, 'team_not_found');
       const userId = (JSON.parse(queries[0] ?? '{}') as { values?: string[] }).values?.[0];
@@ -218,6 +226,8 @@ beforeEach(() => {
   fake.teams.clear();
   fake.failUpdates = false;
   fake.proxyNotFound = false;
+  fake.calls = [];
+  fake.delayMs = 0;
   seedProjectRow(sampleDocument(300));
 });
 
@@ -318,10 +328,49 @@ describe('stockage Appwrite de la salle', () => {
     (external.itineraries[1] as { name: string }).name = 'Réécrit ailleurs';
     fake.collections.get('projects')!.get(PROJECT)!.data = `gz:${gzipSync(JSON.stringify(external)).toString('base64')}`;
 
+    const warnings: string[] = [];
+    const warn = vi.spyOn(console, 'warn').mockImplementation((line: unknown) => {
+      warnings.push(String(line));
+    });
+    try {
+      const next = newHost();
+      const reopened = (await next.open(PROJECT))!;
+      expect((reopened.room.state.document().itineraries[1] as { name: string }).name).toBe('En session');
+      expect(reopened.room.state.seq).toBe(seq);
+      // Signalé après coup (le document est relu hors du chemin du `welcome`).
+      await waitFor(() => warnings.some((line) => line.includes('document réécrit hors de la salle')), 'avertissement');
+      await next.shutdown();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('entrée dans une salle : trois allers-retours vers Appwrite, le document n’est relu qu’après coup', async () => {
+    const host = newHost();
+    const room = (await host.open(PROJECT))!;
+    const { handle } = join(room, 'a');
+    room.handle(handle, renameBatch(room, 1, 'Entrée rapide'));
+    await waitFor(() => room.room.durableSeq === room.room.state.seq, 'journal');
+    await host.shutdown();
+
+    fake.calls = [];
+    fake.delayMs = 100;
     const next = newHost();
+    const started = performance.now();
     const reopened = (await next.open(PROJECT))!;
-    expect((reopened.room.state.document().itineraries[1] as { name: string }).name).toBe('En session');
-    expect(reopened.room.state.seq).toBe(seq);
+    const elapsed = performance.now() - started;
+    expect((reopened.room.state.document().itineraries[1] as { name: string }).name).toBe('Entrée rapide');
+    // Ligne (sans `data`) ∥ droits → fichier du point de sauvegarde vérifié → téléchargé ∥ journal :
+    // 3 × 100 ms ; l'ancien chemin en enchaînait 5 (ligne entière, droits, fichier, téléchargement, journal).
+    expect(elapsed).toBeLessThan(450);
+    const critical = fake.calls.slice(0, fake.calls.indexOf('getFileDownload') + 1);
+    expect(critical.filter((call) => call.startsWith('getDocument:projects:'))).toEqual([
+      'getDocument:projects:$id,collab',
+      'getDocument:projects:$id,$permissions,user_id',
+    ]);
+    // Le document n'est lu qu'après le point de sauvegarde, pour le signalement seulement.
+    expect(fake.calls.indexOf('getDocument:projects:$id,data')).toBeGreaterThan(fake.calls.indexOf('getFileDownload'));
+    fake.delayMs = 0;
     await next.shutdown();
   });
 

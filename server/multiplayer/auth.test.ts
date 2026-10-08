@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createAuthenticator } from './auth.ts';
-import type { RoomStorage } from './storage.ts';
+import type { ProjectAccess, RoomStorage } from './storage.ts';
 
 /**
  * Vérification du jeton (JWT Appwrite) : un jeton refusé (401) n'entre pas,
@@ -9,36 +9,70 @@ import type { RoomStorage } from './storage.ts';
  * sinon le client, après trois refus, se croit exclu de la session pour de bon.
  */
 
-const fake = vi.hoisted(() => ({ outcomes: [] as Array<{ userId?: string; code?: number }>, calls: 0 }));
+const fake = vi.hoisted(() => ({
+  outcomes: [] as Array<{ userId?: string; code?: number }>,
+  calls: 0,
+  /** Membres confirmés par équipe ; une équipe absente répond 404 (projet jamais partagé). */
+  teams: new Map<string, string[]>(),
+  membershipCalls: 0,
+  membershipError: 0,
+  /** Durée d'un aller-retour vers Appwrite (ms). */
+  delayMs: 0,
+}));
 
 vi.mock('node-appwrite', async (importActual) => {
   const actual = await importActual<typeof import('node-appwrite')>();
+  const error = (code: number) => Object.assign(new Error(`appwrite ${code}`), { code });
   class Account {
     async get() {
       fake.calls += 1;
       const outcome = fake.outcomes.shift() ?? { userId: 'u1' };
-      if (outcome.code) throw Object.assign(new Error(`appwrite ${outcome.code}`), { code: outcome.code });
+      if (outcome.code) throw error(outcome.code);
       return { $id: outcome.userId, name: outcome.userId === 'u1' ? 'Alice' : '', email: `${outcome.userId}@example.test` };
     }
   }
-  return { ...actual, Account };
+  class Teams {
+    async listMemberships(teamId: string, queries: string[] = []) {
+      fake.membershipCalls += 1;
+      if (fake.delayMs > 0) await new Promise((resolve) => setTimeout(resolve, fake.delayMs));
+      if (fake.membershipError) throw error(fake.membershipError);
+      const members = fake.teams.get(teamId);
+      if (!members) throw error(404);
+      const userId = (JSON.parse(queries[0] ?? '{}') as { values?: string[] }).values?.[0];
+      return { total: 1, memberships: members.filter((member) => member === userId).map((member) => ({ userId: member, confirm: true })) };
+    }
+  }
+  return { ...actual, Account, Teams };
 });
 
-const storage = { kind: 'appwrite', access: async () => ({ ownerId: 'u1', teamId: null }) } as unknown as RoomStorage;
+/** Ligne du projet telle que l'établit le stockage (propriétaire, équipe `p<projet>` si partagé). */
+let projectAccess: ProjectAccess | null = { ownerId: 'u1', teamId: null };
+const storage = {
+  kind: 'appwrite',
+  access: async () => {
+    if (fake.delayMs > 0) await new Promise((resolve) => setTimeout(resolve, fake.delayMs));
+    return projectAccess;
+  },
+} as unknown as RoomStorage;
 
-function authenticator() {
-  return createAuthenticator({ storage, appwrite: { endpoint: 'http://appwrite.test/v1', projectId: 'p', apiKey: 'k' }, devAuth: false });
+function authenticator({ devAuth = false } = {}) {
+  return createAuthenticator({ storage, appwrite: { endpoint: 'http://appwrite.test/v1', projectId: 'p', apiKey: 'k' }, devAuth });
 }
 
 beforeEach(() => {
   fake.outcomes = [];
   fake.calls = 0;
+  fake.teams = new Map();
+  fake.membershipCalls = 0;
+  fake.membershipError = 0;
+  fake.delayMs = 0;
+  projectAccess = { ownerId: 'u1', teamId: null };
 });
 
 /** JWT de forme valide (signature non vérifiée ici : c'est Appwrite qui juge), expirant à `exp` (s). */
-function jwt(label: string, exp = 2_000_000_000): string {
+function jwt(label: string, exp = 2_000_000_000, userId: unknown = 'u1'): string {
   const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
-  return `${part({ alg: 'HS256' })}.${part({ userId: 'u1', sessionId: label, exp })}.${Buffer.from(label).toString('base64url')}`;
+  return `${part({ alg: 'HS256' })}.${part({ userId, sessionId: label, exp })}.${Buffer.from(label).toString('base64url')}`;
 }
 
 describe('serveur temps réel : jeton', () => {
@@ -77,5 +111,56 @@ describe('serveur temps réel : jeton', () => {
     await expect(auth.verifyToken(token)).rejects.toThrow('429');
     // Appwrite revenu : le même jeton passe tout de suite.
     expect(await auth.verifyToken(token)).toMatchObject({ userId: 'u1' });
+  });
+});
+
+describe('serveur temps réel : droits à l’entrée dans une salle', () => {
+  it('utilisateur déclaré par le jeton : lu sans vérification, rien pour un jeton illisible ou déjà refusé', async () => {
+    const auth = authenticator();
+    expect(auth.claimedUserId!(jwt('a', 2_000_000_000, 'u7'))).toBe('u7');
+    expect(auth.claimedUserId!(jwt('b', 2_000_000_000, '../u7'))).toBeNull();
+    expect(auth.claimedUserId!(jwt('c', 2_000_000_000, 42))).toBeNull();
+    expect(auth.claimedUserId!('pas-un-jwt')).toBeNull();
+    expect(auth.claimedUserId!('dev:u1')).toBeNull();
+    const refused = jwt('d', 2_000_000_000, 'u8');
+    fake.outcomes = [{ code: 401 }];
+    expect(await auth.verifyToken(refused)).toBeNull();
+    expect(auth.claimedUserId!(refused)).toBeNull();
+    expect(fake.calls).toBe(1);
+    expect(authenticator({ devAuth: true }).claimedUserId!('dev:u9')).toBe('u9');
+  });
+
+  it('membre de l’équipe, sans cache : ligne et appartenance lues en même temps (un aller-retour)', async () => {
+    projectAccess = { ownerId: 'owner', teamId: 'pproj1' };
+    fake.teams.set('pproj1', ['u2']);
+    fake.delayMs = 80;
+    const auth = authenticator();
+    const started = performance.now();
+    expect(await auth.checkAccess('u2', 'proj1', { fresh: true })).toBe('ok');
+    expect(performance.now() - started).toBeLessThan(150);
+    expect(await auth.checkAccess('u3', 'proj1', { fresh: true })).toBe('forbidden');
+  });
+
+  it('l’appartenance lue d’avance ne compte que si la ligne partage le projet avec cette équipe', async () => {
+    // Équipe `pproj1` existante (n'importe qui peut en créer une), mais la ligne ne la nomme pas : refusé.
+    fake.teams.set('pproj1', ['u2']);
+    projectAccess = { ownerId: 'owner', teamId: null };
+    const auth = authenticator();
+    expect(await auth.checkAccess('u2', 'proj1', { fresh: true })).toBe('forbidden');
+    // Projet jamais partagé : l'équipe n'existe pas (404) — le propriétaire entre, l'erreur ne compte pas.
+    fake.teams.clear();
+    projectAccess = { ownerId: 'u1', teamId: null };
+    expect(await auth.checkAccess('u1', 'proj1', { fresh: true })).toBe('ok');
+    expect(await auth.checkAccess('u2', 'proj1', { fresh: true })).toBe('forbidden');
+    // Projet partagé et Appwrite en panne pour l'appartenance : erreur (à réessayer), jamais un refus.
+    projectAccess = { ownerId: 'owner', teamId: 'pproj1' };
+    fake.membershipError = 503;
+    await expect(auth.checkAccess('u2', 'proj1', { fresh: true })).rejects.toThrow('503');
+  });
+
+  it('revérification périodique (avec cache) : rien de lu d’avance, le propriétaire ne coûte pas d’appartenance', async () => {
+    const auth = authenticator();
+    expect(await auth.checkAccess('u1', 'proj1')).toBe('ok');
+    expect(fake.membershipCalls).toBe(0);
   });
 });

@@ -8,6 +8,7 @@ import { materializeJson } from '../../src/features/collab/model/materialize.ts'
 import { deserializeCheckedStore, type ClientMessage, type SequencedBatch } from '../../src/features/collab/protocol.ts';
 import { Room, type JoinRequest, type RoomPeer } from '../../src/features/collab/room/room.ts';
 import { RoomState } from '../../src/features/collab/room/roomState.ts';
+import { LatencyTrack } from './latency.ts';
 import { CheckpointSerializer } from './serialize.ts';
 import { storeDigest, verifyDurable, type ShadowResult } from './shadow.ts';
 import { ProjectNotFoundError, type LoadedRoom, type RoomStorage } from './storage.ts';
@@ -85,7 +86,6 @@ const DEFAULT_SHADOW_INTERVAL_MS = 10 * 60_000;
 const MIN_CATCH_UP_BYTES = 64 * 1024;
 /** Au-delà de cette part du tas, aucune nouvelle salle n'est chargée (1013, le client réessaie). */
 const ROOM_LOAD_HEAP_RATIO = 0.7;
-const LATENCY_SAMPLES = 1_000;
 
 const backoff = (failures: number, minMs: number, maxMs: number) => Math.min(maxMs, minMs * 2 ** Math.max(0, failures - 1));
 
@@ -277,7 +277,7 @@ export class HostedRoom {
       for (const batch of batches) {
         const at = this.acceptedAt.get(batch.seq);
         this.acceptedAt.delete(batch.seq);
-        if (at !== undefined) this.host.recordJournalLatency(now - at);
+        if (at !== undefined) this.host.latency.journal.record(now - at);
       }
       this.room.markDurable(last);
     } catch (error) {
@@ -378,7 +378,7 @@ export class HostedRoom {
       this.lastCheckpointAt = Date.now();
       this.checkpointFailures = 0;
       this.nextCheckpointAt = 0;
-      this.host.recordCheckpoint(Date.now() - started);
+      this.host.latency.checkpoint.record(Date.now() - started);
       try {
         await this.host.options.storage.pruneJournal(this.projectId, seq, this.firstJournalSeq ?? undefined);
       } catch (error) {
@@ -473,8 +473,21 @@ export class RoomHost {
   private readonly loading = new Map<string, Promise<HostedRoom | null>>();
   /** Connexions à prévenir quand les accès d'un projet changent (révocation signalée par l'API). */
   private readonly accessListeners = new Map<string, Set<() => void>>();
-  private readonly journalLatencies: number[] = [];
-  private readonly checkpointDurations: number[] = [];
+  /**
+   * Durées suivies : journal durable (lot accepté → écrit), point de
+   * sauvegarde, et l'entrée dans une salle, étape par étape — jeton + droits à
+   * l'ouverture (`auth`), chargement de la salle (`room_load`), `hello` →
+   * `welcome` remis à la socket (`welcome`), demande d'ouverture → `welcome`
+   * remis (`entry`, aller-retour du `hello` compris).
+   */
+  readonly latency = {
+    journal: new LatencyTrack(),
+    checkpoint: new LatencyTrack(),
+    auth: new LatencyTrack(),
+    roomLoad: new LatencyTrack(),
+    welcome: new LatencyTrack(),
+    entry: new LatencyTrack(),
+  };
   private readonly eventLoopDelay = monitorEventLoopDelay({ resolution: 20 });
   private shuttingDown = false;
   readonly metrics = {
@@ -524,6 +537,7 @@ export class RoomHost {
     if (!pending) {
       pending = (async () => {
         this.metrics.loads += 1;
+        const started = performance.now();
         const loaded = await this.options.storage.loadRoom(projectId, seed);
         if (!loaded) return null;
         const hosted = new HostedRoom(this, projectId, loaded);
@@ -536,7 +550,9 @@ export class RoomHost {
           }
         }
         this.rooms.set(projectId, hosted);
-        this.log('info', 'salle chargée', { projectId, seq: hosted.room.state.seq, journal: loaded.journal.length });
+        const ms = Math.round(performance.now() - started);
+        this.latency.roomLoad.record(ms);
+        this.log('info', 'salle chargée', { projectId, seq: hosted.room.state.seq, journal: loaded.journal.length, ms });
         return hosted;
       })();
       this.loading.set(projectId, pending);
@@ -545,6 +561,15 @@ export class RoomHost {
       }).finally(() => this.loading.delete(projectId));
     }
     return pending;
+  }
+
+  /**
+   * Chargement commencé dès que les droits d'une connexion sont vérifiés,
+   * pendant l'aller-retour de son `hello` (qui retrouve ce chargement en
+   * cours, ou la salle chargée). Un échec est oublié : le `hello` recommence.
+   */
+  prefetch(projectId: string): void {
+    this.open(projectId).catch(() => undefined);
   }
 
   /** Part du tas utilisée (0–1) : soupape des nouvelles salles et connexions. */
@@ -582,16 +607,6 @@ export class RoomHost {
     await Promise.allSettled([...this.rooms.values()].map((hosted) => hosted.shutdown()));
   }
 
-  recordJournalLatency(ms: number): void {
-    this.journalLatencies.push(ms);
-    if (this.journalLatencies.length > LATENCY_SAMPLES) this.journalLatencies.shift();
-  }
-
-  recordCheckpoint(ms: number): void {
-    this.checkpointDurations.push(ms);
-    if (this.checkpointDurations.length > LATENCY_SAMPLES) this.checkpointDurations.shift();
-  }
-
   /** Mesures du serveur ; le retard de la boucle d'événements repart de zéro à chaque lecture. */
   snapshotMetrics(): Record<string, number> {
     let clients = 0;
@@ -604,21 +619,19 @@ export class RoomHost {
       rooms: this.rooms.size,
       clients,
       ...this.metrics,
-      journal_latency_p50_ms: percentile(this.journalLatencies, 0.5),
-      journal_latency_p95_ms: percentile(this.journalLatencies, 0.95),
-      checkpoint_p95_ms: percentile(this.checkpointDurations, 0.95),
+      journal_latency_p50_ms: this.latency.journal.percentile(0.5),
+      journal_latency_p95_ms: this.latency.journal.percentile(0.95),
+      checkpoint_p95_ms: this.latency.checkpoint.percentile(0.95),
+      ...this.latency.auth.metrics('entry_auth'),
+      ...this.latency.roomLoad.metrics('entry_room_load'),
+      ...this.latency.welcome.metrics('entry_welcome'),
+      ...this.latency.entry.metrics('entry_total'),
       event_loop_delay_p99_ms: Math.round(loopP99 * 10) / 10,
       event_loop_delay_max_ms: Math.round(loopMax * 10) / 10,
       rss_bytes: memory.rss,
       heap_used_bytes: memory.heapUsed,
     };
   }
-}
-
-function percentile(values: readonly number[], q: number): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
 }
 
 function defaultLog(level: 'info' | 'warn' | 'error', message: string, data?: Record<string, unknown>): void {

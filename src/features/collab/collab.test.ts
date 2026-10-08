@@ -127,14 +127,30 @@ describe('baux de calcul', () => {
   });
 });
 
-/** Salle + clients reliés sans latence (ordre exact des messages). */
-function directSetup(clientIds: string[], document = sampleDocument(300)) {
+/**
+ * Salle + clients reliés sans latence (ordre exact des messages). Les clients
+ * entrent comme l'application (`helloFields` : `leanEcho`), sauf ceux de
+ * `oldClients` (client d'avant, lots complets) ; `received` garde tout ce que
+ * chacun a reçu.
+ */
+function directSetup(clientIds: string[], document = sampleDocument(300), { oldClients = [] as string[] } = {}) {
   const scheduler = new Scheduler();
   const room = new Room(RoomState.fromDocument(document, 0), { epoch: 'e1', now: () => scheduler.now() });
+  const received = new Map<string, ServerMessage[]>();
   const clients = clientIds.map((clientId) => {
     let online = false;
     const inbox: ServerMessage[] = [];
-    const peer: RoomPeer = { clientId, userId: `u-${clientId}`, send: (message) => inbox.push(JSON.parse(JSON.stringify(message)) as ServerMessage) };
+    const log: ServerMessage[] = [];
+    received.set(clientId, log);
+    const peer: RoomPeer = {
+      clientId,
+      userId: `u-${clientId}`,
+      send: (message) => {
+        const copy = JSON.parse(JSON.stringify(message)) as ServerMessage;
+        inbox.push(copy);
+        log.push(copy);
+      },
+    };
     const client = new CollabClient({
       clientId,
       clock: scheduler,
@@ -152,7 +168,8 @@ function directSetup(clientIds: string[], document = sampleDocument(300)) {
         client.receive(message);
       }
     };
-    room.join(peer, { epoch: null, lastSeq: null });
+    const { leanEcho } = client.helloFields();
+    room.join(peer, { epoch: null, lastSeq: null, leanEcho: oldClients.includes(clientId) ? undefined : leanEcho });
     deliver();
     return { client, deliver };
   });
@@ -163,7 +180,7 @@ function directSetup(clientIds: string[], document = sampleDocument(300)) {
       for (const { deliver } of clients) deliver();
     }
   };
-  return { room, clients: clients.map(({ client }) => client), deliver: clients.map(({ deliver }) => deliver), settle, scheduler };
+  return { room, clients: clients.map(({ client }) => client), deliver: clients.map(({ deliver }) => deliver), settle, scheduler, received };
 }
 
 describe('client : synchro et annuler par éditeur', () => {
@@ -269,6 +286,36 @@ describe('client : synchro et annuler par éditeur', () => {
     settle();
     expect(same(a.getDocument(), original)).toBe(true);
     expect(a.canUndo()).toBe(false);
+  });
+
+  it('son propre tracé revient sans segments (leanEcho) : les autres les reçoivent, tous ont le même document', () => {
+    const { clients: [a, b, c], settle, room, received } = directSetup(['a', 'b', 'c'], sampleDocument(300), { oldClients: ['c'] });
+    const routed = mapIt(a.getDocument(), 'it-1', (it) => ({
+      ...it,
+      gpxRoute: { ...it.gpxRoute!, points: it.gpxRoute!.points.map((point) => ({ ...point, lat: point.lat + 1e-4 })), routedInputsKey: 'k-lean' },
+    }));
+    a.pushLocalDocument(routed, 'step');
+    settle();
+    const routeBatch = (clientId: string) => received.get(clientId)!
+      .filter((message): message is Extract<ServerMessage, { type: 'batch' }> => message.type === 'batch')
+      .find((message) => message.batch.clientId === 'a')!.batch;
+    expect(routeBatch('a').blobs).toEqual({});
+    expect(Object.keys(routeBatch('b').blobs).length).toBeGreaterThan(0);
+    // Un client d'avant (sans `leanEcho`) reçoit toujours ses lots complets : ici, ceux des autres.
+    expect(routeBatch('c').blobs).toEqual(routeBatch('b').blobs);
+    // Une modification distante reconstruit l'état visible de « a » depuis son état confirmé :
+    // les segments de son tracé y sont (repris de sa bibliothèque).
+    b.pushLocalDocument(mapIt(b.getDocument(), 'it-2', (it) => ({ ...it, name: 'Après le tracé' })), 'step');
+    settle();
+    for (const id of Object.keys(routeBatch('b').blobs)) expect(a.engine.visible.hasBlob(id)).toBe(true);
+    const expected = room.state.document();
+    expect((expected.itineraries as Itinerary[]).find((it) => it.id === 'it-1')!.gpxRoute!.routedInputsKey).toBe('k-lean');
+    for (const client of [a, b, c]) expect(same(client.getDocument(), expected)).toBe(true);
+    // Annuler (à partir de l'état confirmé) remet l'ancien tracé chez tous.
+    a.undo();
+    settle();
+    expect(same(a.getDocument(), b.getDocument())).toBe(true);
+    expect((a.getDocument().itineraries as Itinerary[]).find((it) => it.id === 'it-1')!.gpxRoute!.routedInputsKey).not.toBe('k-lean');
   });
 
   it('suite d’actions puis tout annuler = document de départ ; tout rétablir = document final', () => {

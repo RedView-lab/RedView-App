@@ -85,7 +85,10 @@ export function projectSocketUrl(url: string, projectId: string): string {
   return `${url}${url.includes('?') ? '&' : '?'}project=${encodeURIComponent(projectId)}`;
 }
 
-/** Lot numéroté par le serveur (diffusé à tous ; pour son émetteur, c'est l'acquittement). */
+/**
+ * Lot numéroté par le serveur (diffusé à tous ; pour son émetteur, c'est
+ * l'acquittement — sans `blobs` s'il l'a demandé, `hello.leanEcho`).
+ */
 export interface SequencedBatch {
   seq: number;
   clientId: string;
@@ -191,6 +194,12 @@ export type ClientMessage =
       seed?: ProjectDocument;
       /** Ce client lit les messages compressés (trame binaire, voir `wire.ts`) : le serveur compresse les gros pour lui. */
       compress?: boolean;
+      /**
+       * Ce client garde les segments de tracé de ses propres lots : leur
+       * acquittement (le lot diffusé) lui revient sans `blobs`. Absent (ancien
+       * client) : lot complet.
+       */
+      leanEcho?: boolean;
     }
   | { type: 'batch'; clientSeq: number; ops: Op[]; blobs: Record<string, string> }
   | { type: 'lease'; action: 'request' | 'renew' | 'release'; kind: DerivedKind; itineraryId: string }

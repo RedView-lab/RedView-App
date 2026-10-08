@@ -1,6 +1,7 @@
 import { Account, Client, Query, Teams } from 'node-appwrite';
 
 import { createOldestKeyTaker } from '../lib/oldest-key.mjs';
+import { APPWRITE_ID_PATTERN, projectTeamId } from '../lib/project-access.mjs';
 import type { RoomStorage } from './storage.ts';
 
 /**
@@ -13,7 +14,11 @@ import type { RoomStorage } from './storage.ts';
  * l'expiration de son jeton (une session fermée ne peut plus en produire).
  * Les droits sont revérifiés sans cache à la connexion, puis toutes les 15 s
  * (cache 10 s), et tout de suite quand l'API de partage signale un retrait
- * (`forgetProject`).
+ * (`forgetProject`). Sans cache, la ligne du projet et l'appartenance à son
+ * équipe (`p<projectId>`, connue d'avance) sont lues en parallèle : un
+ * aller-retour vers Appwrite au lieu de deux à l'entrée dans une salle.
+ * L'appartenance ne compte que si la ligne partage bien le projet avec cette
+ * équipe.
  *
  * Développement seulement (`devAuth`, jamais en production) : jeton
  * `dev:<utilisateur>`, accès à tous les projets du stockage de fichiers.
@@ -32,6 +37,13 @@ export interface Identity {
 export interface Authenticator {
   /** Utilisateur du jeton, null s'il est invalide ou expiré ; lève si Appwrite est injoignable. */
   verifyToken(token: string): Promise<Identity | null>;
+  /**
+   * Utilisateur que le jeton DÉCLARE, sans rien vérifier (null : illisible,
+   * ou déjà refusé) : sert seulement à lire ses droits pendant que le jeton
+   * est vérifié — jamais à décider (server.ts n'utilise ces droits que si le
+   * jeton vérifié désigne le même utilisateur). Absent : rien n'est préparé.
+   */
+  claimedUserId?(token: string): string | null;
   /** `fresh` : sans cache (connexion, révocation signalée). */
   checkAccess(userId: string, projectId: string, options?: { fresh?: boolean }): Promise<AccessResult>;
   /** Oublie ce qui est gardé des droits d'un projet (retrait signalé par l'API de partage). */
@@ -67,6 +79,16 @@ function tokenExpiry(token: string, now: number): number {
     // Charge illisible : durée de vie par défaut.
   }
   return now + DEFAULT_TOKEN_LIFETIME_MS;
+}
+
+/** `userId` de la charge d'un JWT Appwrite (non vérifié), null s'il n'y en a pas. */
+function claimedJwtUser(token: string): string | null {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8')) as { userId?: unknown };
+    return typeof payload.userId === 'string' && APPWRITE_ID_PATTERN.test(payload.userId) ? payload.userId : null;
+  } catch {
+    return null;
+  }
 }
 
 export function createAuthenticator(options: AuthOptions): Authenticator {
@@ -127,9 +149,28 @@ export function createAuthenticator(options: AuthOptions): Authenticator {
       return identityOf(token);
     },
 
+    claimedUserId(token: string): string | null {
+      if (typeof token !== 'string' || token.length === 0 || token.length > 4096) return null;
+      if (options.devAuth) {
+        const dev = DEV_TOKEN.exec(token);
+        if (dev) return dev[1];
+      }
+      if (!options.appwrite || !JWT_SHAPE.test(token)) return null;
+      // Jeton déjà refusé (gardé en cache) : rien à préparer.
+      const cached = tokens.get(token);
+      if (cached && cached.identity === null && Date.now() - cached.at < TOKEN_CACHE_MS) return null;
+      return claimedJwtUser(token);
+    },
+
     async checkAccess(userId: string, projectId: string, { fresh = false } = {}): Promise<AccessResult> {
       if (options.devAuth && options.storage.kind === 'file') return 'ok';
       if (fresh) options.storage.forgetAccess?.(projectId);
+      // Sans cache : l'appartenance à l'équipe du projet est lue en même temps que la ligne
+      // (résultat ou erreur gardés pour plus tard), utilisée seulement si la ligne la demande.
+      const teamId = projectTeamId(projectId);
+      const membership = fresh && teams
+        ? isMember(teamId, userId, true).then((member) => ({ member }), (error: unknown) => ({ error }))
+        : null;
       const access = await options.storage.access(projectId);
       if (!access) return 'not-found';
       if (access.teamId) {
@@ -137,8 +178,13 @@ export function createAuthenticator(options: AuthOptions): Authenticator {
         if (teamOfProject.size > 10_000) teamOfProject.delete(oldestProject()!);
       }
       if (access.ownerId && access.ownerId === userId) return 'ok';
-      if (access.teamId && await isMember(access.teamId, userId, fresh)) return 'ok';
-      return 'forbidden';
+      if (!access.teamId) return 'forbidden';
+      if (membership && access.teamId === teamId) {
+        const outcome = await membership;
+        if ('error' in outcome) throw outcome.error;
+        return outcome.member ? 'ok' : 'forbidden';
+      }
+      return await isMember(access.teamId, userId, fresh) ? 'ok' : 'forbidden';
     },
 
     forgetProject(projectId: string): void {

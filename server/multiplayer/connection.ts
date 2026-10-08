@@ -43,6 +43,8 @@ export interface ConnectionOptions {
   maxMessageBytes?: number;
   /** Socket TCP de la connexion et regroupement de ses écritures par tour de boucle (writeCoalescer.ts). */
   writes?: { socket: Duplex; coalescer: WriteCoalescer };
+  /** Arrivée de la demande d'ouverture (`performance.now()`) : durée totale de l'entrée dans les mesures. */
+  receivedAt?: number;
 }
 
 export interface ConnectionTimings {
@@ -208,12 +210,23 @@ export function handleConnection(socket: WebSocket, options: ConnectionOptions):
   let outbound: Promise<void> | null = null;
   /** Messages reçus en attente d'une décompression, dans l'ordre. */
   let inbound: Promise<void> | null = null;
+  /** Réception du `hello` (`performance.now()`), jusqu'à ce que le `welcome` parte. */
+  let helloAt: number | null = null;
 
   const helloTimer = setTimeout(() => fail('bad-request', 'hello-timeout'), HELLO_TIMEOUT_MS);
 
   function write(data: string | Buffer): void {
     options.writes?.coalescer.hold(options.writes.socket);
     socket.send(data, { binary: typeof data !== 'string' });
+  }
+
+  /** `welcome` remis à la socket : durées de l'entrée dans les mesures. */
+  function welcomeWritten(): void {
+    if (helloAt === null) return;
+    const now = performance.now();
+    options.host.latency.welcome.record(now - helloAt);
+    if (options.receivedAt !== undefined) options.host.latency.entry.record(now - options.receivedAt);
+    helloAt = null;
   }
 
   function send(message: ServerMessage, sendOptions?: SendOptions): void {
@@ -235,8 +248,10 @@ export function handleConnection(socket: WebSocket, options: ConnectionOptions):
       const wire = toWire(outgoing);
       payload = peerInflates && wire.length >= WIRE_COMPRESS_MIN_CHARS ? toCompressedWire(outgoing, wire) : wire;
     }
+    const welcome = outgoing.type === 'welcome';
     if (typeof payload === 'string' && !outbound) {
       write(payload);
+      if (welcome) welcomeWritten();
       return;
     }
     const chain = (outbound ?? Promise.resolve()).then(async () => {
@@ -248,7 +263,9 @@ export function handleConnection(socket: WebSocket, options: ConnectionOptions):
         options.log('warn', 'compression impossible : message envoyé en texte', { error: String(error) });
         data = toWire(outgoing);
       }
-      if (socket.readyState === socket.OPEN) write(data);
+      if (socket.readyState !== socket.OPEN) return;
+      write(data);
+      if (welcome) welcomeWritten();
     }).catch((error: unknown) => options.log('warn', 'envoi impossible', { error: String(error) }));
     outbound = chain;
     void chain.finally(() => {
@@ -311,6 +328,7 @@ export function handleConnection(socket: WebSocket, options: ConnectionOptions):
 
   async function hello(message: Extract<ClientMessage, { type: 'hello' }>): Promise<void> {
     clearTimeout(helloTimer);
+    helloAt = performance.now();
     if (message.v !== PROTOCOL_VERSION) return fail('version', `protocole ${PROTOCOL_VERSION} attendu`);
     if (typeof message.clientId !== 'string' || !ID_PATTERN.test(message.clientId)) return fail('bad-request', 'ids');
     peerInflates = message.compress === true;
@@ -327,7 +345,13 @@ export function handleConnection(socket: WebSocket, options: ConnectionOptions):
       peer: { clientId: message.clientId, userId, ...(identity.name ? { name: identity.name } : {}), send },
       close: (code, reason) => close(code, reason),
     };
-    if (!room.attach(peerHandle, { epoch: message.epoch ?? null, lastSeq: message.lastSeq ?? null, presence: message.presence })) {
+    const joinRequest = {
+      epoch: message.epoch ?? null,
+      lastSeq: message.lastSeq ?? null,
+      presence: message.presence,
+      leanEcho: message.leanEcho === true,
+    };
+    if (!room.attach(peerHandle, joinRequest)) {
       return fail('bad-request', 'client-id');
     }
     hosted = room;

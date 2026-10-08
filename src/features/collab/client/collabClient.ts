@@ -184,8 +184,9 @@ export class CollabClient implements ProjectCollabLink {
   // ── Transport ─────────────────────────────────────────────────────────────
 
   /** `hello` : reprise depuis l'état confirmé. */
-  helloFields(): { clientId: string; epoch: string | null; lastSeq: number | null } {
-    return { clientId: this.clientId, ...this.engine.resumePoint() };
+  /** Champs de `hello` : client, reprise ; ses propres lots lui reviennent sans segments (SyncEngine les garde). */
+  helloFields(): { clientId: string; epoch: string | null; lastSeq: number | null; leanEcho: true } {
+    return { clientId: this.clientId, ...this.engine.resumePoint(), leanEcho: true };
   }
 
   /**

@@ -136,6 +136,40 @@ describe('serveur temps réel : ouverture des connexions', () => {
     expect(server!.host.metrics.connectionsRefused).toBeGreaterThanOrEqual(6);
   });
 
+  it('droits lus pendant la vérification du jeton : seulement pour le même utilisateur, jamais attendus par un refus', async () => {
+    // Jetons dont la charge (non vérifiée) déclare alice, qui a accès.
+    const claims = new Map([['tok-eve', 'alice'], ['tok-forge', 'alice']]);
+    identities.set('tok-eve', { userId: 'eve', expiresAt: Date.now() + 15 * 60_000 });
+    access.set('eve', 'forbidden');
+    const checked: string[] = [];
+    let slowFor: string | null = null;
+    await server!.shutdown();
+    await start({
+      authenticator: {
+        ...fakeAuth,
+        claimedUserId: (token) => claims.get(token) ?? identities.get(token)?.userId ?? null,
+        async checkAccess(userId, projectId, options) {
+          checked.push(userId);
+          if (userId === slowFor) await new Promise((resolve) => setTimeout(resolve, 3_000));
+          return fakeAuth.checkAccess(userId, projectId, options);
+        },
+      },
+    });
+    // Le jeton d'eve déclare alice : la décision porte sur eve (vérifiée), refusée.
+    expect(await open('tok-eve').closed).toBe(4403);
+    expect(checked).toEqual(['alice', 'eve']);
+    // Jeton refusé dont l'utilisateur déclaré a des droits lents à lire : refusé sans les attendre.
+    slowFor = 'alice';
+    const started = Date.now();
+    expect(await open('tok-forge').closed).toBe(4401);
+    expect(Date.now() - started).toBeLessThan(1_500);
+    // Jeton valide : les droits ne sont lus qu'une fois.
+    slowFor = null;
+    checked.length = 0;
+    await join('tok-bob', 'bob-1');
+    expect(checked).toEqual(['bob']);
+  });
+
   it('connexion refusée qui envoie quand même un gros message : rien n’est lu, le serveur reste debout', async () => {
     const raw = open('tok-inconnu');
     raw.socket.on('open', () => raw.socket.send('x'.repeat(200_000)));

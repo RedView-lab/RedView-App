@@ -353,6 +353,15 @@ export class SyncEngine {
       this.library.set(id, json);
       this.confirmed.putBlob(id, json);
     }
+    // Son propre lot revient sans segments (`hello.leanEcho`) : ce client les a envoyés, ils
+    // sont dans sa bibliothèque (le serveur a vérifié leur empreinte, qui est leur identifiant).
+    if (batch.clientId === this.clientId) {
+      for (const id of referencedBlobs(batch.ops)) {
+        if (this.confirmed.hasBlob(id)) continue;
+        const json = this.library.get(id);
+        if (json !== undefined) this.confirmed.putBlob(id, json);
+      }
+    }
     applyOps(this.confirmed, batch.ops);
     this.confirmedSeq = batch.seq;
     if (batch.clientId === this.clientId) {
