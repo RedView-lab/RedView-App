@@ -1,15 +1,15 @@
 use crate::math::haversine_distance;
 use crate::types::{ActivitySummary, DataPoint};
 
-// ─── Point post-processing and activity summary ─────────────────────────────
+// ─── Post-traitement des points et résumé d'activité ────────────────────────
 
-/// FIT stores lat/lon as semicircles. Convert to degrees.
+/// FIT stocke lat / lon en semicercles. Conversion en degrés.
 pub(super) fn semicircles_to_degrees(semicircles: f64) -> f64 {
     semicircles * (180.0 / 2_147_483_648.0)
 }
 
-/// If FIT-reported distance is missing or zero, recompute from GPS.
-/// Also recomputes speed from GPS dt/distance if speed is missing across the activity.
+/// Si la distance rapportée par le FIT manque ou vaut zéro, la recalcule depuis le GPS.
+/// Recalcule aussi la vitesse depuis le dt / la distance GPS si la vitesse manque sur toute l'activité.
 pub(super) fn recompute_distance_if_needed(points: &mut [DataPoint]) {
     let last_dist = points.last().map(|p| p.distance_m).unwrap_or(0.0);
     if last_dist <= 100.0 {
@@ -30,7 +30,7 @@ pub(super) fn recompute_distance_if_needed(points: &mut [DataPoint]) {
         }
     }
 
-    // Resiliency: if speed was not recorded in FIT, derive from distance and dt
+    // Robustesse : si la vitesse n'a pas été enregistrée dans le FIT, on la déduit de la distance et du dt
     let has_speed = points.iter().any(|p| p.speed_ms > 0.5);
     if !has_speed {
         for i in 1..points.len() {
@@ -47,9 +47,9 @@ pub(super) fn compute_summary(points: &[DataPoint]) -> ActivitySummary {
     let duration_s = points.last().map(|p| p.timestamp_s).unwrap_or(0.0);
     let distance_m = points.last().map(|p| p.distance_m).unwrap_or(0.0);
 
-    // Despike altitudes before integrating D+ — raw per-sample barometric
-    // noise otherwise inflates elevation gain by hundreds of metres on
-    // long rides (same median filter as the GPX route path).
+    // Supprime les pics d'altitude avant d'intégrer le D+ — sinon le bruit
+    // barométrique brut par échantillon gonfle le dénivelé de centaines de
+    // mètres sur les longues sorties (même filtre médian que pour la route GPX).
     let raw_altitudes: Vec<f64> = points.iter().map(|p| p.altitude_m).collect();
     let altitudes = crate::math::median_filter_elevations(&raw_altitudes, 5);
     let mut elevation_gain = 0.0;

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-// ─── Gender / sex (physiological model) ──────────────────────────────────────
+// ─── Genre / sexe (modèle physiologique) ─────────────────────────────────────
 
 /// Genre du cycliste / coureur : choisit le gabarit des préréglages
 /// (masse, puissance absolue, traînée), jamais un coefficient de vitesse.
@@ -19,18 +19,18 @@ impl Default for Gender {
     }
 }
 
-// ─── Surface type (from OpenStreetMap data) ─────────────────────────────────
+// ─── Type de surface (d'après les données OpenStreetMap) ────────────────────
 
-/// Surface type detected from OSM data.
-/// Affects rolling resistance (Crr) and speed penalty.
+/// Type de surface détecté dans les données OSM.
+/// Influe sur la résistance au roulement (Crr) et la pénalité de vitesse.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum SurfaceType {
-    /// Paved road (asphalt, concrete, paving_stones)
+    /// Route revêtue (asphalte, béton, pavés)
     Road,
-    /// Unpaved surface (gravel, dirt, grass, sand, compacted)
+    /// Surface non revêtue (gravier, terre, herbe, sable, stabilisé)
     Gravel,
-    /// Unknown — no OSM data available, use conservative defaults
+    /// Inconnue — pas de donnée OSM, valeurs par défaut prudentes
     Unknown,
 }
 
@@ -40,20 +40,20 @@ impl Default for SurfaceType {
     }
 }
 
-// ─── Stop / sleep strategy for ultra-distance races ─────────────────────────
+// ─── Stratégie d'arrêts / de sommeil pour les épreuves d'ultra-distance ─────
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum StopStrategy {
-    /// No stops predicted (legacy behaviour)
+    /// Aucun arrêt prédit (comportement hérité)
     None,
-    /// Auto-detect based on route distance (>200km → Ultra)
+    /// Détection automatique selon la distance de la route (> 200 km → Ultra)
     Auto,
-    /// Ultra-distance: micro-stops + food stops + optional sleep stops
+    /// Ultra-distance : micro-arrêts + arrêts ravitaillement + arrêts sommeil optionnels
     Ultra,
-    /// Custom: caller provides exact stop cadence
+    /// Personnalisé : l'appelant fournit la cadence exacte des arrêts
     Custom {
-        /// Minutes of stop per riding hour
+        /// Minutes d'arrêt par heure de selle
         stop_min_per_hour: f64,
     },
 }
@@ -67,11 +67,11 @@ impl Default for StopStrategy {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum SleepStrategy {
-    /// No sleep modelling
+    /// Pas de modélisation du sommeil
     None,
-    /// Rider takes micro-naps (10-20 min) — mild circadian compounding
+    /// Le cycliste fait des micro-siestes (10-20 min) — cumul circadien léger
     MicroNaps,
-    /// Rider takes scheduled sleep stops (60-90 min) — moderate recovery
+    /// Le cycliste fait des arrêts sommeil planifiés (60-90 min) — récupération modérée
     SleepStops,
 }
 
@@ -81,27 +81,27 @@ impl Default for SleepStrategy {
     }
 }
 
-// ─── Raw data point from a FIT file ─────────────────────────────────────────
+// ─── Point de données brut d'un fichier FIT ─────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataPoint {
-    /// Seconds since activity start
+    /// Secondes depuis le début de l'activité
     pub timestamp_s: f64,
     pub lat: f64,
     pub lon: f64,
-    /// Metres
+    /// Mètres
     pub altitude_m: f64,
     /// m/s
     pub speed_ms: f64,
-    /// Watts (0 if no power meter)
+    /// Watts (0 sans capteur de puissance)
     pub power_w: f64,
-    /// RPM
+    /// tr/min
     pub cadence_rpm: f64,
-    /// BPM
+    /// bpm
     pub heart_rate_bpm: f64,
-    /// Celsius
+    /// Degrés Celsius
     pub temperature_c: f64,
-    /// Cumulative distance in metres from activity start
+    /// Distance cumulée en mètres depuis le début de l'activité
     pub distance_m: f64,
 }
 
@@ -115,20 +115,20 @@ pub struct ActivitySummary {
     pub avg_hr_bpm: f64,
     pub has_power: bool,
     pub has_hr: bool,
-    /// FIT `sport` enum from the Session/Sport message, when recorded
-    /// (1 running, 2 cycling, 11 walking, 17 hiking — see FIT_SPORT_*).
+    /// Énumération FIT `sport` du message Session / Sport, quand elle est enregistrée
+    /// (1 course à pied, 2 vélo, 11 marche, 17 randonnée — voir FIT_SPORT_*).
     #[serde(default)]
     pub sport: Option<u8>,
 }
 
-/// FIT profile `sport` codes used to route activities to the right engine.
+/// Codes `sport` du profil FIT utilisés pour orienter les activités vers le bon moteur.
 pub const FIT_SPORT_RUNNING: u8 = 1;
 pub const FIT_SPORT_CYCLING: u8 = 2;
 pub const FIT_SPORT_WALKING: u8 = 11;
 pub const FIT_SPORT_HIKING: u8 = 17;
 
 impl ActivitySummary {
-    /// On-foot activity (running, walking, hiking).
+    /// Activité à pied (course, marche, randonnée).
     pub fn is_foot_sport(&self) -> bool {
         matches!(
             self.sport,
@@ -147,25 +147,25 @@ pub struct ActivityData {
     pub summary: ActivitySummary,
 }
 
-// ─── GPX route ───────────────────────────────────────────────────────────────
+// ─── Route GPX ───────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoutePoint {
     pub lat: f64,
     pub lon: f64,
-    /// Smoothed elevation (metres)
+    /// Altitude lissée (mètres)
     pub elevation_m: f64,
-    /// Cumulative distance from route start (metres)
+    /// Distance cumulée depuis le départ de la route (mètres)
     pub distance_m: f64,
-    /// Gradient to next point (%)
+    /// Pente jusqu'au point suivant (%)
     pub gradient_pct: f64,
-    /// Segment length to next point (metres)
+    /// Longueur du segment jusqu'au point suivant (mètres)
     pub segment_length_m: f64,
-    /// Road curvature density (degrees of heading change per km).
-    /// Higher = more technical/twisty. 0 = straight road.
+    /// Densité de courbure de la route (degrés de changement de cap par km).
+    /// Plus élevé = plus technique / sinueux. 0 = route droite.
     pub curvature_deg_per_km: f64,
-    /// Surface type from OSM (road, gravel, unknown).
-    /// Affects rolling resistance and speed penalty.
+    /// Type de surface d'après OSM (route, gravier, inconnu).
+    /// Influe sur la résistance au roulement et la pénalité de vitesse.
     #[serde(default)]
     pub surface_type: SurfaceType,
 }
@@ -178,40 +178,40 @@ pub struct Route {
     pub total_elevation_loss_m: f64,
 }
 
-// ─── Prediction output ──────────────────────────────────────────────────────
+// ─── Sortie de prédiction ───────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PredictionPoint {
-    /// Cumulative distance (m)
+    /// Distance cumulée (m)
     pub distance_m: f64,
-    /// Elevation at this point (m)
+    /// Altitude en ce point (m)
     pub elevation_m: f64,
-    /// Local gradient (%)
+    /// Pente locale (%)
     pub gradient_pct: f64,
-    /// Predicted speed (km/h)
+    /// Vitesse prédite (km/h)
     pub predicted_speed_kmh: f64,
-    /// Predicted power output (W) — 0 if no power model
+    /// Puissance prédite (W) — 0 sans modèle de puissance
     pub predicted_power_w: f64,
-    /// Elapsed time from start (s)
+    /// Temps écoulé depuis le départ (s)
     pub elapsed_time_s: f64,
-    /// Time for this segment only (s)
+    /// Temps de ce seul segment (s)
     pub segment_time_s: f64,
-    /// Fatigue factor at this point [0-1]
+    /// Facteur de fatigue en ce point [0-1]
     #[serde(default)]
     pub fatigue_factor: f64,
-    /// Circadian rhythm factor [0-1]
+    /// Facteur de rythme circadien [0-1]
     #[serde(default)]
     pub circadian_factor: f64,
-    /// Distance efficiency factor [0-1]
+    /// Facteur d'efficacité selon la distance [0-1]
     #[serde(default)]
     pub distance_eff_factor: f64,
-    /// KNN confidence at this point [0-1]
+    /// Confiance du KNN en ce point [0-1]
     #[serde(default)]
     pub knn_confidence: f64,
-    /// Predicted speed lower bound (km/h) — 90% confidence interval
+    /// Borne basse de la vitesse prédite (km/h) — intervalle de confiance à 90 %
     #[serde(default)]
     pub predicted_speed_low_kmh: f64,
-    /// Predicted speed upper bound (km/h) — 90% confidence interval
+    /// Borne haute de la vitesse prédite (km/h) — intervalle de confiance à 90 %
     #[serde(default)]
     pub predicted_speed_high_kmh: f64,
 }
@@ -227,96 +227,96 @@ pub struct SegmentSummary {
     pub avg_speed_kmh: f64,
     pub time_s: f64,
     pub segment_type: String, // "climb", "descent", "flat"
-    /// VAM (Velocità Ascensionale Media) in m/h — only meaningful for climb segments
+    /// VAM (Velocità Ascensionale Media) en m/h — n'a de sens que sur les segments de montée
     #[serde(default)]
     pub vam_mh: f64,
 }
 
-// ─── Config from JS ─────────────────────────────────────────────────────────
+// ─── Configuration venue du JS ──────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PredictionConfig {
-    /// Override FTP in watts. When provided, takes priority over auto-estimated FTP.
-    /// Must be the rider's known FTP (from lab test, Zwift, TrainingPeaks, etc.).
+    /// Forçage de la FTP en watts. Quand elle est fournie, elle prime sur la FTP estimée.
+    /// Doit être la FTP connue du cycliste (test en laboratoire, Zwift, TrainingPeaks, etc.).
     #[serde(default)]
     pub ftp_w: Option<f64>,
-    /// Rider body weight only (kg). Used with bike_weight_kg to compute total mass
-    /// and W/kg ratio. Takes priority over mass_kg.
+    /// Poids du cycliste seul (kg). Utilisé avec bike_weight_kg pour calculer la masse
+    /// totale et le rapport W/kg. Prime sur mass_kg.
     #[serde(default)]
     pub rider_weight_kg: Option<f64>,
-    /// Bike + bags + equipment weight (kg). Combined with rider_weight_kg.
-    /// Default: 10kg if rider_weight_kg is provided but this is missing.
+    /// Poids du vélo + sacoches + équipement (kg). Combiné avec rider_weight_kg.
+    /// Par défaut : 10 kg si rider_weight_kg est fourni mais pas celui-ci.
     #[serde(default)]
     pub bike_weight_kg: Option<f64>,
-    /// Override rider+bike+equipment mass (kg). If None, auto-estimated.
-    /// LEGACY: prefer rider_weight_kg + bike_weight_kg for accurate W/kg.
+    /// Forçage de la masse cycliste + vélo + équipement (kg). Si None, estimée.
+    /// HÉRITÉ : préférer rider_weight_kg + bike_weight_kg pour un W/kg juste.
     #[serde(default)]
     pub mass_kg: Option<f64>,
-    /// Override CdA (m²). If None, auto-estimated or default.
+    /// Forçage du CdA (m²). Si None, estimé ou valeur par défaut.
     #[serde(default)]
     pub cda: Option<f64>,
-    /// Override Crr. If None, default 0.005.
+    /// Forçage du Crr. Si None, 0,005 par défaut.
     #[serde(default)]
     pub crr: Option<f64>,
-    /// Pacing strategy factor (0.8 = conservative, 1.0 = normal, 1.1 = aggressive)
+    /// Facteur de stratégie d'allure (0,8 = prudent, 1,0 = normal, 1,1 = agressif)
     #[serde(default = "default_pacing")]
     pub pacing_factor: f64,
-    /// Race mode: use upper percentile of speed bins instead of median
+    /// Mode course : utilise le percentile haut des classes de vitesse au lieu de la médiane
     #[serde(default)]
     pub race_mode: bool,
-    /// Smoothing window distance in metres (default: 50). Larger = smoother elevation profile.
+    /// Distance de la fenêtre de lissage en mètres (par défaut : 50). Plus grand = profil d'altitude plus lisse.
     #[serde(default)]
     pub smoothing_window_m: Option<f64>,
-    /// Maximum route points after downsampling (default: 15000).
-    /// Lower = faster but less resolution. Set to 0 to disable downsampling.
+    /// Nombre maximal de points de route après sous-échantillonnage (par défaut : 15000).
+    /// Plus bas = plus rapide mais moins de résolution. 0 désactive le sous-échantillonnage.
     #[serde(default)]
     pub max_route_points: Option<usize>,
-    /// Override fatigue floor (0.0-1.0). Lower = more fatigue for ultra events.
+    /// Forçage du plancher de fatigue (0,0-1,0). Plus bas = plus de fatigue pour les épreuves d'ultra.
     #[serde(default)]
     pub fatigue_floor: Option<f64>,
-    /// Override fatigue decay lambda. Higher = faster fatigue onset.
+    /// Forçage du lambda de décroissance de la fatigue. Plus haut = fatigue plus précoce.
     #[serde(default)]
     pub fatigue_lambda: Option<f64>,
-    /// Stop time per hour of riding (seconds). Default auto-estimated based on event duration.
-    /// Typical: 180-300s/h (3-5 min/h) for ultra events. Set to 0 to disable.
-    /// DEPRECATED: Stop time is no longer computed. Kept for backward config compat.
+    /// Temps d'arrêt par heure de selle (secondes). Estimé par défaut selon la durée de l'épreuve.
+    /// Typique : 180-300 s/h (3-5 min/h) pour les épreuves d'ultra. 0 le désactive.
+    /// DÉPRÉCIÉ : le temps d'arrêt n'est plus calculé. Gardé pour la compatibilité des anciennes configurations.
     #[serde(default)]
     pub stop_time_per_hour_s: Option<f64>,
-    /// Drivetrain efficiency (0.90-1.0). Default: 0.97. Reduces effective power
-    /// reaching the rear wheel. Lower for older/dirtier drivetrains.
+    /// Rendement de la transmission (0,90-1,0). Par défaut : 0,97. Réduit la puissance
+    /// effective qui atteint la roue arrière. Plus bas pour une transmission ancienne / sale.
     #[serde(default)]
     pub drivetrain_efficiency: Option<f64>,
-    /// Race aggressiveness factor (0.0-1.0). Default: 0.5.
-    /// 0.0 = conservative (use median speed), 1.0 = aggressive (use upper percentile).
-    /// Replaces the old boolean race_mode with a continuous scale.
+    /// Facteur d'agressivité en course (0,0-1,0). Par défaut : 0,5.
+    /// 0,0 = prudent (vitesse médiane), 1,0 = agressif (percentile haut).
+    /// Remplace l'ancien booléen race_mode par une échelle continue.
     #[serde(default)]
     pub race_aggressiveness: Option<f64>,
-    /// Start time of day (0.0-24.0, hours). When set, enables circadian rhythm
-    /// modulation — models the 5-15% performance dip between 2-6 AM.
-    /// Example: 8.0 = 8:00 AM start.
+    /// Heure de départ dans la journée (0,0-24,0, heures). Quand elle est fournie, active la
+    /// modulation du rythme circadien — modélise la baisse de performance de 5 à 15 % entre 2 h et 6 h.
+    /// Exemple : 8.0 = départ à 8 h.
     #[serde(default)]
     pub start_time_h: Option<f64>,
-    /// Stop/rest strategy for the event.
+    /// Stratégie d'arrêts / de repos de l'épreuve.
     #[serde(default)]
     pub stop_strategy: StopStrategy,
-    /// Sleep strategy — affects circadian compounding across multiple nights.
+    /// Stratégie de sommeil — influe sur le cumul circadien sur plusieurs nuits.
     #[serde(default)]
     pub sleep_strategy: SleepStrategy,
-    /// Surface type data from OpenStreetMap, one per route point.
-    /// Encoded as u8: 0=Road, 1=Gravel, 2=Unknown.
-    /// If None or empty, all points default to Unknown.
+    /// Types de surface d'après OpenStreetMap, un par point de route.
+    /// Encodés en u8 : 0=Route, 1=Gravier, 2=Inconnu.
+    /// Si None ou vide, tous les points valent Inconnu.
     #[serde(default)]
     pub surface_types: Option<Vec<u8>>,
-    /// Ambient temperature (°C) — affects thermal stress model.
-    /// Default: 18.0 (thermoneutral). Set to actual forecast for better accuracy.
+    /// Température ambiante (°C) — influe sur le modèle de stress thermique.
+    /// Par défaut : 18,0 (thermoneutre). Mettre la prévision réelle pour plus de justesse.
     #[serde(default)]
     pub ambient_temperature_c: Option<f64>,
-    /// Headwind speed (m/s) — positive = headwind, negative = tailwind.
-    /// Default: 0.0 (no wind). Average expected wind for the route.
+    /// Vitesse du vent de face (m/s) — positive = vent de face, négative = vent arrière.
+    /// Par défaut : 0,0 (pas de vent). Vent moyen attendu sur la route.
     #[serde(default)]
     pub headwind_ms: Option<f64>,
-    /// Rider gender for physiological adjustments.
-    /// Affects speed prediction via VO2max/power-to-speed differences.
+    /// Genre du cycliste pour les ajustements physiologiques.
+    /// Influe sur la prédiction de vitesse via les différences VO2max / puissance-vitesse.
     #[serde(default)]
     pub gender: Gender,
 }

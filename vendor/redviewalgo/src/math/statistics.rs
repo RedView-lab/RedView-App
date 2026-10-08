@@ -1,4 +1,4 @@
-/// Compute median of a mutable slice (sorts in-place).
+/// Calcule la médiane d'une tranche modifiable (trie sur place).
 pub fn median(values: &mut [f64]) -> f64 {
     if values.is_empty() {
         return 0.0;
@@ -12,7 +12,7 @@ pub fn median(values: &mut [f64]) -> f64 {
     }
 }
 
-/// Simple linear regression: returns (slope, intercept).
+/// Régression linéaire simple : renvoie (pente, ordonnée à l'origine).
 pub fn linear_regression(xs: &[f64], ys: &[f64]) -> (f64, f64) {
     let n = xs.len() as f64;
     if n < 2.0 {

@@ -1,36 +1,36 @@
-//! Lightweight 8-dimensional k-d tree for fast nearest-neighbor search.
-//! Designed for WASM: no external deps, no threads, no allocator tricks.
-//! Build is O(N log N), query is O(log N) average case.
+//! Arbre k-d léger à 8 dimensions pour une recherche rapide des plus proches voisins.
+//! Conçu pour le WASM : sans dépendance externe, sans threads, sans astuce d'allocateur.
+//! Construction en O(N log N), requête en O(log N) en moyenne.
 
 use super::features::N_FEATURES;
 
-/// A node in the k-d tree. Stores index into the original sample array.
+/// Un nœud de l'arbre k-d. Stocke un indice dans le tableau d'échantillons d'origine.
 #[derive(Debug, Clone)]
 struct KdNode {
-    /// Index into the original NormalizedSample array.
+    /// Indice dans le tableau NormalizedSample d'origine.
     idx: usize,
-    /// Split dimension (0..N_FEATURES).
+    /// Dimension de coupe (0..N_FEATURES).
     split_dim: usize,
-    /// Split value (feature value at split_dim).
+    /// Valeur de coupe (valeur de la caractéristique à split_dim).
     split_val: f64,
-    /// Left child (points with feature[split_dim] < split_val).
+    /// Enfant gauche (points avec feature[split_dim] < split_val).
     left: Option<Box<KdNode>>,
-    /// Right child.
+    /// Enfant droit.
     right: Option<Box<KdNode>>,
 }
 
-/// Pre-built k-d tree index over normalized feature vectors.
-/// Enables O(log N) nearest-neighbor queries instead of O(N) brute force.
+/// Index en arbre k-d préconstruit sur les vecteurs de caractéristiques normalisés.
+/// Permet des requêtes de plus proches voisins en O(log N) au lieu d'une force brute en O(N).
 #[derive(Debug, Clone)]
 pub struct KdTree {
     root: Option<Box<KdNode>>,
-    /// Flat array of (features, speed_ms) for indexed access.
+    /// Tableau à plat de (caractéristiques, speed_ms) pour un accès indexé.
     data: Vec<([f64; N_FEATURES], f64)>,
 }
 
 impl KdTree {
-    /// Build a k-d tree from normalized samples.
-    /// O(N log N) construction time.
+    /// Construit un arbre k-d à partir d'échantillons normalisés.
+    /// Construction en O(N log N).
     pub fn build(features: &[[f64; N_FEATURES]], speeds: &[f64]) -> Self {
         let n = features.len();
         assert_eq!(n, speeds.len());
@@ -58,10 +58,10 @@ impl KdTree {
 
         let dim = depth % N_FEATURES;
 
-        // Partition around the median of the split dimension. O(N) average
-        // via quickselect instead of a full O(N log N) sort per level; the
-        // resulting tree is equivalent (subtree membership is all that
-        // matters, not intra-subtree order).
+        // Partitionne autour de la médiane de la dimension de coupe. O(N) en
+        // moyenne par quickselect au lieu d'un tri complet en O(N log N) à chaque
+        // niveau ; l'arbre obtenu est équivalent (seule l'appartenance aux
+        // sous-arbres compte, pas l'ordre à l'intérieur d'un sous-arbre).
         let mid = indices.len() / 2;
         indices.select_nth_unstable_by(mid, |&a, &b| {
             data[a].0[dim]
@@ -72,7 +72,7 @@ impl KdTree {
         let median_idx = indices[mid];
 
         let (left_indices, right_part) = indices.split_at_mut(mid);
-        // right_part[0] is the median; right_part[1..] is the right subtree
+        // right_part[0] est la médiane ; right_part[1..] est le sous-arbre droit
         let right_indices = if right_part.len() > 1 {
             &mut right_part[1..]
         } else {
@@ -88,8 +88,8 @@ impl KdTree {
         }))
     }
 
-    /// Find the k nearest neighbors to query point.
-    /// Returns Vec<(distance_sq, speed_ms)> sorted by distance.
+    /// Trouve les k plus proches voisins du point de requête.
+    /// Renvoie Vec<(distance_sq, speed_ms)> trié par distance.
     pub fn knn_query(&self, query: &[f64; N_FEATURES], k: usize) -> Vec<(f64, f64)> {
         let mut best = BoundedHeap::new(k);
         if let Some(ref root) = self.root {
@@ -102,11 +102,11 @@ impl KdTree {
         let point = &self.data[node.idx].0;
         let speed = self.data[node.idx].1;
 
-        // Compute distance to this node
+        // Distance à ce nœud
         let d = dist_sq_inline(query, point);
         best.push(d, speed);
 
-        // Determine which subtree to search first (the side query falls on)
+        // Détermine le sous-arbre à explorer d'abord (le côté où tombe la requête)
         let diff = query[node.split_dim] - node.split_val;
         let (first, second) = if diff < 0.0 {
             (&node.left, &node.right)
@@ -114,13 +114,13 @@ impl KdTree {
             (&node.right, &node.left)
         };
 
-        // Always search the closer subtree
+        // Explore toujours le sous-arbre le plus proche
         if let Some(ref child) = first {
             self.search(child, query, best);
         }
 
-        // Only search the farther subtree if the splitting plane is closer
-        // than the current worst neighbor (pruning)
+        // N'explore le sous-arbre le plus éloigné que si le plan de coupe est plus
+        // proche que le pire voisin actuel (élagage)
         let plane_dist_sq = diff * diff;
         if plane_dist_sq < best.worst_dist() {
             if let Some(ref child) = second {
@@ -130,11 +130,11 @@ impl KdTree {
     }
 }
 
-/// Max-heap of size K for tracking nearest neighbors.
-/// Maintains the K smallest distances seen so far.
+/// Tas max de taille K pour suivre les plus proches voisins.
+/// Garde les K plus petites distances vues jusqu'ici.
 struct BoundedHeap {
     capacity: usize,
-    /// Sorted by distance ascending. Last element = worst (farthest).
+    /// Trié par distance croissante. Dernier élément = le pire (le plus éloigné).
     items: Vec<(f64, f64)>,
 }
 
@@ -166,7 +166,7 @@ impl BoundedHeap {
             }
         } else if dist < self.items[self.capacity - 1].0 {
             self.items[self.capacity - 1] = (dist, speed);
-            // Insertion sort to maintain order
+            // Tri par insertion pour garder l'ordre
             let mut i = self.capacity - 1;
             while i > 0 && self.items[i].0 < self.items[i - 1].0 {
                 self.items.swap(i, i - 1);
@@ -184,11 +184,11 @@ impl BoundedHeap {
     }
 }
 
-/// Inline distance squared for 8D feature vectors.
+/// Distance au carré en ligne pour les vecteurs de caractéristiques 8D.
 #[inline(always)]
 fn dist_sq_inline(a: &[f64; N_FEATURES], b: &[f64; N_FEATURES]) -> f64 {
     let mut sum = 0.0;
-    // Unrolled for 8 dimensions — compiler will vectorize
+    // Déroulé pour 8 dimensions — le compilateur vectorisera
     sum += (a[0] - b[0]) * (a[0] - b[0]);
     sum += (a[1] - b[1]) * (a[1] - b[1]);
     sum += (a[2] - b[2]) * (a[2] - b[2]);
@@ -216,7 +216,7 @@ mod tests {
         let query = [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05];
         let result = tree.knn_query(&query, 2);
         assert_eq!(result.len(), 2);
-        // Closest should be [0,0,...] or [0.1,0.1,...] — both near query
+        // Le plus proche doit être [0,0,...] ou [0.1,0.1,...] — tous deux près de la requête
         assert!(result[0].1 == 5.0 || result[0].1 == 6.0);
     }
 }

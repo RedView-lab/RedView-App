@@ -10,13 +10,13 @@ mod types;
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
-/// Log a message to the browser console.
+/// Écrit un message dans la console du navigateur.
 #[allow(dead_code)]
 fn log(msg: &str) {
     web_sys::console::log_1(&JsValue::from_str(msg));
 }
 
-/// Log with timing: returns elapsed ms since a given start.
+/// Journal chronométré : renvoie les ms écoulées depuis un départ donné.
 #[allow(dead_code)]
 fn log_timed(msg: &str, start: f64) -> f64 {
     let now = js_sys::Date::now();
@@ -25,25 +25,25 @@ fn log_timed(msg: &str, start: f64) -> f64 {
     now
 }
 
-/// Initialize panic hook for better error messages in the browser console.
+/// Initialise le hook de panique pour de meilleurs messages d'erreur dans la console du navigateur.
 #[wasm_bindgen(start)]
 pub fn init() {
     console_error_panic_hook::set_once();
 }
 
-/// Main prediction function.
+/// Fonction principale de prédiction.
 ///
 /// # Arguments
-/// * `fit_files` - Array of FIT file contents as `Uint8Array`
-/// * `gpx_data` - GPX file content as `Uint8Array`
-/// * `config`   - JSON config object `{ mass_kg?, cda?, crr?, pacing_factor? }`
+/// * `fit_files` - tableau de contenus de fichiers FIT en `Uint8Array`
+/// * `gpx_data` - contenu du fichier GPX en `Uint8Array`
+/// * `config`   - objet de configuration JSON `{ mass_kg?, cda?, crr?, pacing_factor? }`
 ///
-/// # Returns
-/// A JS object (serialised `PredictionResult`) containing:
+/// # Retour
+/// Un objet JS (`PredictionResult` sérialisé) contenant :
 /// - `total_time_s`, `total_distance_m`, `avg_speed_kmh`
-/// - `segments` — array of segment summaries
-/// - `points`   — point-by-point predictions (for graphs)
-/// - `rider_profile` — detected rider stats
+/// - `segments` — tableau de résumés de segments
+/// - `points`   — prédictions point par point (pour les graphiques)
+/// - `rider_profile` — caractéristiques du cycliste détectées
 #[wasm_bindgen]
 pub fn predict(
     fit_files: Vec<js_sys::Uint8Array>,
@@ -63,7 +63,7 @@ pub fn predict(
 
     progress("Démarrage...");
 
-    // 1. Parse config
+    // 1. Analyse la configuration
     let cfg: types::PredictionConfig = if config.is_undefined() || config.is_null() {
         types::PredictionConfig::default()
     } else {
@@ -71,20 +71,20 @@ pub fn predict(
             .map_err(|e| JsValue::from_str(&format!("Invalid config: {e}")))?
     };
 
-    // 2. Parse FIT files
+    // 2. Analyse les fichiers FIT
     progress(&format!("Lecture de {} fichier(s) FIT...", fit_files.len()));
     let fit_buffers: Vec<Vec<u8>> = fit_files.iter().map(|f| f.to_vec()).collect();
     let fit_slices: Vec<&[u8]> = fit_buffers.iter().map(|b| b.as_slice()).collect();
 
     let parsed = fit_parser::parse_fit_batch(&fit_slices)
         .map_err(|e| JsValue::from_str(&e))?;
-    // Running / hiking recordings would teach the cycling model walking speeds.
+    // Les enregistrements de course à pied / randonnée apprendraient au modèle vélo des vitesses de marche.
     let (activities, ignored) = split_by_sport(parsed, |s| !s.is_foot_sport());
     if ignored > 0 {
         progress(&format!("{} fichier(s) ignoré(s) (autre sport)", ignored));
     }
 
-    // 3. Parse GPX (points bruts : le moteur v2 fait son propre traitement)
+    // 3. Analyse le GPX (points bruts : le moteur v2 fait son propre traitement)
     let raw = gpx_parser::parse_gpx_points(gpx_data).map_err(|e| JsValue::from_str(&e))?;
     let input = cycling::input::CourseInput {
         lat: raw.iter().map(|p| p.0).collect(),
@@ -110,7 +110,7 @@ pub fn predict(
     let result = cycling::predict_with_model(&input, &model, &v2_cfg).map_err(|e| JsValue::from_str(&e))?;
     progress(&format!("Terminé ! Temps de déplacement prédit : {}", format_duration(result.total_time_s)));
 
-    // 6. Serialize result
+    // 6. Sérialise le résultat
     result
         .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
         .map_err(|e| JsValue::from_str(&format!("Serialization error: {e}")))
@@ -228,7 +228,7 @@ pub fn calibrate_cycling_tracks(tracks: JsValue, config: JsValue) -> Result<JsVa
         .map_err(|e| JsValue::from_str(&format!("Serialization error: {e}")))
 }
 
-/// Keep activities whose summary passes `keep`; returns (kept, dropped count).
+/// Garde les activités dont le résumé passe `keep` ; renvoie (gardées, nombre écarté).
 fn split_by_sport(
     activities: Vec<types::ActivityData>,
     keep: impl Fn(&types::ActivitySummary) -> bool,
@@ -240,12 +240,12 @@ fn split_by_sport(
     (kept, dropped)
 }
 
-/// Running / trail-running prediction.
+/// Prédiction course à pied / trail.
 ///
-/// Same inputs as [`predict`]; `config` is a `RunPredictionConfig`
+/// Mêmes entrées que [`predict`] ; `config` est une `RunPredictionConfig`
 /// `{ discipline: "running"|"trail", level?, vma_kmh?, ref_distance_m?,
 /// ref_time_s?, mass_kg?, technicality?, start_time_h?, gender?, max_route_points? }`.
-/// FIT files recorded as cycling are ignored.
+/// Les fichiers FIT enregistrés en vélo sont ignorés.
 #[wasm_bindgen]
 pub fn predict_run(
     fit_files: Vec<js_sys::Uint8Array>,
@@ -312,9 +312,9 @@ fn format_duration(seconds: f64) -> String {
     format!("{}h{:02}m{:02}s", h, m, s)
 }
 
-// ─── Comparison / Validation mode ───────────────────────────────────────────
+// ─── Mode comparaison / validation ──────────────────────────────────────────
 
-/// An actual speed point from a FIT file, used for comparison.
+/// Un point de vitesse réelle d'un fichier FIT, utilisé pour la comparaison.
 #[derive(serde::Serialize)]
 struct ActualSpeedPoint {
     distance_m: f64,
@@ -323,7 +323,7 @@ struct ActualSpeedPoint {
     elevation_m: f64,
 }
 
-/// Result of a "predict vs actual" comparison.
+/// Résultat d'une comparaison « prédit contre réel ».
 #[derive(serde::Serialize)]
 struct ComparisonResult {
     prediction: cycling::output::CyclingResult,

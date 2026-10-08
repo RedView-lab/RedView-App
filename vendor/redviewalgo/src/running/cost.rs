@@ -1,20 +1,22 @@
-//! Grade → effort model for running and power-hiking.
+//! Modèle pente → effort pour la course à pied et la marche rapide.
 //!
-//! Sources:
-//! - Ultrapacer grade model (same shape as Strava's heart-rate based GAP,
-//!   Robb 2017): relative effort `f(g) = 1 + 0.034·g + 0.0021·g²`, g in %,
-//!   fitted on −22 %…+16 %. It gives far less credit to descents than the
-//!   metabolic Minetti (2002) curve, which matches what runners can actually
-//!   hold on real downhills.
-//! - Minetti et al. 2002 / Giovanelli et al. 2016: above ~15 % walking is as
-//!   cheap as running, so steep climbs are power-hiked at a vertical rate.
-//! - Altitude VO₂max impairment polynomial (trail digital-twin, Sensors 2026).
+//! Sources :
+//! - modèle de pente d'Ultrapacer (même forme que la GAP fondée sur la
+//!   fréquence cardiaque de Strava, Robb 2017) : effort relatif
+//!   `f(g) = 1 + 0.034·g + 0.0021·g²`, g en %, ajusté sur −22 %…+16 %. Il
+//!   crédite bien moins les descentes que la courbe métabolique de Minetti
+//!   (2002), ce qui correspond à ce que les coureurs tiennent réellement dans
+//!   les vraies descentes.
+//! - Minetti et al. 2002 / Giovanelli et al. 2016 : au-delà de ~15 %, marcher
+//!   coûte autant que courir, donc les montées raides se font en marche
+//!   rapide à une vitesse verticale.
+//! - Polynôme de perte de VO₂max avec l'altitude (jumeau numérique du trail, Sensors 2026).
 
-/// Validity range of the Ultrapacer fit (grade %).
+/// Domaine de validité de l'ajustement Ultrapacer (pente en %).
 const EFFORT_MIN_GRADE_PCT: f64 = -22.0;
 const EFFORT_MAX_GRADE_PCT: f64 = 16.0;
 
-/// Maximum sustained horizontal power-hiking speed (m/s) ≈ 6 km/h.
+/// Vitesse horizontale maximale tenable en marche rapide (m/s) ≈ 6 km/h.
 pub const MAX_WALK_SPEED_MS: f64 = 6.0 / 3.6;
 
 fn effort_poly(g: f64) -> f64 {
@@ -25,9 +27,9 @@ fn effort_slope(g: f64) -> f64 {
     0.034 + 0.0042 * g
 }
 
-/// Relative effort of running at `grade_pct` versus flat ground (1.0 on the
-/// flat). Outside the fitted range the curve continues along its tangent so
-/// it stays monotonic on both sides.
+/// Effort relatif de la course à `grade_pct` par rapport au plat (1,0 sur le
+/// plat). Hors du domaine ajusté, la courbe continue le long de sa tangente
+/// pour rester monotone des deux côtés.
 pub fn effort_factor(grade_pct: f64) -> f64 {
     let f = if grade_pct < EFFORT_MIN_GRADE_PCT {
         effort_poly(EFFORT_MIN_GRADE_PCT)
@@ -41,8 +43,8 @@ pub fn effort_factor(grade_pct: f64) -> f64 {
     f.max(0.5)
 }
 
-/// Horizontal speed (m/s) of a power-hike holding `vam_mh` metres of
-/// ascent per hour, capped at a brisk walking pace.
+/// Vitesse horizontale (m/s) d'une marche rapide qui tient `vam_mh` mètres de
+/// montée par heure, plafonnée à une allure de marche soutenue.
 pub fn walk_speed_ms(grade_pct: f64, vam_mh: f64) -> f64 {
     if grade_pct <= 0.5 {
         return MAX_WALK_SPEED_MS;
@@ -51,7 +53,7 @@ pub fn walk_speed_ms(grade_pct: f64, vam_mh: f64) -> f64 {
     (vertical_ms / (grade_pct / 100.0)).min(MAX_WALK_SPEED_MS)
 }
 
-/// Aerobic capacity loss with altitude (fraction of sea-level performance).
+/// Perte de capacité aérobie avec l'altitude (fraction de la performance au niveau de la mer).
 pub fn altitude_factor(altitude_m: f64) -> f64 {
     let a = altitude_m.max(0.0);
     (1.0 - 11.7e-9 * a * a - 4.01e-6 * a).clamp(0.7, 1.0)

@@ -1,4 +1,4 @@
-/// Gradient in percent given horizontal distance and elevation difference.
+/// Pente en pourcentage à partir de la distance horizontale et de la différence d'altitude.
 pub fn gradient_pct(horizontal_distance_m: f64, elevation_diff_m: f64) -> f64 {
     if horizontal_distance_m < 0.1 {
         return 0.0;

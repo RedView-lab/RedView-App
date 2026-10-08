@@ -2,7 +2,7 @@ use super::summary::{compute_summary, recompute_distance_if_needed};
 use super::{merge_sport, FIT_FILE_TYPE_COURSE, NOT_AN_ACTIVITY_ERR};
 use crate::types::{ActivityData, DataPoint};
 
-/// FIT global message number for File Id messages, and its `type` field.
+/// Numéro de message global FIT des messages File Id, et son champ `type`.
 const MSG_FILE_ID: u16 = 0;
 const FILE_ID_TYPE_FIELD: u16 = 0;
 fn decode_file_type(payload: &[u8], def: &LocalDef) -> Option<u8> {
@@ -13,29 +13,30 @@ fn decode_file_type(payload: &[u8], def: &LocalDef) -> Option<u8> {
         .map(|v| v as u8)
 }
 
-// ─── Fast streaming FIT reader ──────────────────────────────────────────────
+// ─── Lecteur FIT rapide en flux ─────────────────────────────────────────────
 //
-// The reference parser materialises every message of every type (laps,
-// events, sessions…) into owned structs with per-field name strings and
-// enum conversions. On long FIT files that dominates total prediction time.
-// This reader understands just enough of the FIT binary format to:
-//   * walk definition/data message pairs (incl. compressed timestamps),
-//   * skip non-Record messages in O(1) via their computed length,
-//   * decode the handful of Record fields we use, with correct
-//     scale/offset and FIT invalid-value sentinels.
-// Anything unexpected returns Err and `parse_fit` falls back to the
-// reference parser.
+// L'analyseur de référence matérialise chaque message de chaque type (tours,
+// événements, sessions…) en structures possédées avec des chaînes de nom par
+// champ et des conversions d'énumérations. Sur les longs fichiers FIT, cela
+// domine le temps total de prédiction. Ce lecteur comprend juste assez du
+// format binaire FIT pour :
+//   * parcourir les paires de messages de définition / de données (horodatages compressés compris),
+//   * sauter les messages autres que Record en O(1) grâce à leur longueur calculée,
+//   * décoder la poignée de champs Record utilisés, avec les bons
+//     échelle / décalage et les sentinelles de valeur invalide de FIT.
+// Tout ce qui est inattendu renvoie Err et `parse_fit` se replie sur
+// l'analyseur de référence.
 
-/// FIT global message number for Record messages.
+/// Numéro de message global FIT des messages Record.
 const MSG_RECORD: u16 = 20;
-/// FIT global message numbers carrying the activity sport (field `sport`).
+/// Numéros de message globaux FIT qui portent le sport de l'activité (champ `sport`).
 const MSG_SESSION: u16 = 18;
 const MSG_SPORT: u16 = 12;
-/// `sport` field number in Session (5) and Sport (0) messages.
+/// Numéro du champ `sport` dans les messages Session (5) et Sport (0).
 const SESSION_SPORT_FIELD: u16 = 5;
 const SPORT_SPORT_FIELD: u16 = 0;
 
-/// Base type identifiers (FIT protocol §3.3.1).
+/// Identifiants de type de base (protocole FIT §3.3.1).
 const BASE_ENUM: u8 = 0x00;
 pub(super) const BASE_SINT8: u8 = 0x01;
 pub(super) const BASE_UINT8: u8 = 0x02;
@@ -51,9 +52,9 @@ const BASE_UINT32Z: u8 = 0x0C;
 const BASE_SINT64: u8 = 0x0E;
 const BASE_UINT64: u8 = 0x0F;
 
-/// A definition message: field layout + total payload length. The length is
-/// used to skip any message in O(1); the field layout only matters for
-/// Record messages.
+/// Un message de définition : disposition des champs + longueur totale de la
+/// charge utile. La longueur sert à sauter tout message en O(1) ; la
+/// disposition des champs ne compte que pour les messages Record.
 struct LocalDef {
     global_msg_num: u16,
     big_endian: bool,
@@ -62,7 +63,7 @@ struct LocalDef {
     total_size: usize,
 }
 
-/// Decoded values of one Record message (scale/offset applied).
+/// Valeurs décodées d'un message Record (échelle / décalage appliqués).
 #[derive(Default)]
 struct RecordValues {
     lat_semi: Option<i32>,
@@ -81,7 +82,7 @@ struct RecordValues {
 }
 
 impl RecordValues {
-    /// Enhanced fields win over their standard equivalents when present.
+    /// Les champs « enhanced » l'emportent sur leurs équivalents standard quand ils sont présents.
     fn altitude(&self) -> Option<f64> {
         self.alt_enh.or(self.alt_std)
     }
@@ -90,8 +91,8 @@ impl RecordValues {
     }
 }
 
-/// Read one numeric field value, applying FIT invalid-value sentinels.
-/// Returns None for invalid/unsupported values.
+/// Lit la valeur d'un champ numérique, en appliquant les sentinelles de valeur invalide de FIT.
+/// Renvoie None pour les valeurs invalides / non prises en charge.
 fn read_scalar(d: &[u8], off: usize, size: u8, base: u8, be: bool) -> Option<f64> {
     let end = off.checked_add(size as usize)?;
     if end > d.len() {
@@ -166,7 +167,7 @@ fn read_scalar(d: &[u8], off: usize, size: u8, base: u8, be: bool) -> Option<f64
     }
 }
 
-/// Decode a Record message payload using its definition.
+/// Décode la charge utile d'un message Record à l'aide de sa définition.
 fn decode_record_message(payload: &[u8], def: &LocalDef) -> RecordValues {
     let mut v = RecordValues::default();
     let be = def.big_endian;
@@ -174,7 +175,7 @@ fn decode_record_message(payload: &[u8], def: &LocalDef) -> RecordValues {
         let off = off as usize;
         let s = read_scalar(payload, off, size, base, be);
         match fnum {
-            // scale/offset per the FIT profile (Record message).
+            // échelle / décalage selon le profil FIT (message Record).
             0 => v.lat_semi = s.map(|x| x as i32),
             1 => v.lon_semi = s.map(|x| x as i32),
             2 => v.alt_std = s.map(|x| x / 5.0 - 500.0),
@@ -194,7 +195,7 @@ fn decode_record_message(payload: &[u8], def: &LocalDef) -> RecordValues {
     v
 }
 
-/// Read the FIT `sport` enum from a Session or Sport message payload.
+/// Lit l'énumération FIT `sport` dans la charge utile d'un message Session ou Sport.
 fn decode_sport_message(payload: &[u8], def: &LocalDef) -> Option<u8> {
     let wanted = match def.global_msg_num {
         MSG_SESSION => SESSION_SPORT_FIELD,
@@ -208,10 +209,10 @@ fn decode_sport_message(payload: &[u8], def: &LocalDef) -> Option<u8> {
         .map(|v| v as u8)
 }
 
-/// Build a DataPoint from decoded Record values.
-/// Returns None when GPS position or timestamp is missing/invalid
-/// (same skip rule as the reference parser). Altitude carries forward the
-/// last valid value instead of dropping to 0 on invalid samples.
+/// Construit un DataPoint à partir des valeurs Record décodées.
+/// Renvoie None quand la position GPS ou l'horodatage manque / est invalide
+/// (même règle d'exclusion que l'analyseur de référence). L'altitude reprend la
+/// dernière valeur valide au lieu de tomber à 0 sur les échantillons invalides.
 fn build_point(
     v: &RecordValues,
     first_timestamp: &mut Option<f64>,
@@ -247,18 +248,18 @@ fn build_point(
     })
 }
 
-/// Parse a definition message starting at `pos` (just after its header
-/// byte). `has_dev_fields` is the 0x20 bit of the definition header, which
-/// is how the FIT protocol marks definitions that carry developer fields
-/// (same signal the reference parser uses). Returns the definition and the
-/// position right after it.
+/// Analyse un message de définition qui commence à `pos` (juste après son
+/// octet d'en-tête). `has_dev_fields` est le bit 0x20 de l'en-tête de
+/// définition, par lequel le protocole FIT marque les définitions qui portent
+/// des champs développeur (même signal que celui de l'analyseur de référence).
+/// Renvoie la définition et la position juste après elle.
 fn parse_definition(
     data: &[u8],
     pos: usize,
     end: usize,
     has_dev_fields: bool,
 ) -> Result<(LocalDef, usize), String> {
-    // reserved(1) + architecture(1) + global msg num(2) + field count(1)
+    // réservé(1) + architecture(1) + n° de message global(2) + nombre de champs(1)
     if pos + 6 > end {
         return Err("FIT: truncated definition message".into());
     }
@@ -285,10 +286,10 @@ fn parse_definition(
         p += 3;
     }
 
-    // FIT protocol ≥ 2.0 definition messages may carry a developer field
-    // count byte (possibly zero) followed by 3-byte developer field
-    // definitions. We skip them but must account for their size in data
-    // messages.
+    // Les messages de définition du protocole FIT ≥ 2.0 peuvent porter un octet
+    // de nombre de champs développeur (éventuellement nul) suivi de définitions
+    // de champs développeur de 3 octets. On les saute, mais il faut compter
+    // leur taille dans les messages de données.
     if has_dev_fields {
         if p >= end {
             return Err("FIT: truncated developer field count".into());
@@ -299,7 +300,7 @@ fn parse_definition(
             if p + 3 > end {
                 return Err("FIT: truncated developer field definition".into());
             }
-            // Second byte is the size in the field-definition layout.
+            // Le second octet est la taille dans la disposition de la définition de champ.
             total += data[p + 1] as usize;
             p += 3;
         }
@@ -316,9 +317,9 @@ fn parse_definition(
     ))
 }
 
-/// Fast streaming FIT parse. Errors trigger the reference-parser fallback.
+/// Analyse FIT rapide en flux. Les erreurs déclenchent le repli sur l'analyseur de référence.
 pub(super) fn parse_fit_fast(data: &[u8]) -> Result<ActivityData, String> {
-    // ── File header ──
+    // ── En-tête du fichier ──
     if data.len() < 12 {
         return Err("FIT: file too short".into());
     }
@@ -341,7 +342,7 @@ pub(super) fn parse_fit_fast(data: &[u8]) -> Result<ActivityData, String> {
             data.len()
         };
 
-    // Rough capacity hint: records are ≥ ~30 bytes in practice.
+    // Indication grossière de capacité : les records font ≥ ~30 octets en pratique.
     let mut points: Vec<DataPoint> = Vec::with_capacity((body_end - body_start) / 30 + 16);
 
     let mut local_defs: Vec<Option<LocalDef>> = (0..16).map(|_| None).collect();
@@ -356,8 +357,8 @@ pub(super) fn parse_fit_fast(data: &[u8]) -> Result<ActivityData, String> {
             let header_byte = data[pos];
 
             if header_byte & 0x80 != 0 {
-                // ── Compressed timestamp data message ──
-                // bits 5-6: local message type (0-3), bits 0-4: time offset
+                // ── Message de données à horodatage compressé ──
+                // bits 5-6 : type de message local (0-3), bits 0-4 : décalage temporel
                 let local = ((header_byte >> 5) & 0x03) as usize;
                 let offset = (header_byte & 0x1F) as u32;
                 pos += 1;
@@ -365,7 +366,7 @@ pub(super) fn parse_fit_fast(data: &[u8]) -> Result<ActivityData, String> {
                     .as_ref()
                     .ok_or("FIT: compressed message without definition")?;
 
-                // Advance the timestamp reference (32 s rollover counter).
+                // Avance la référence d'horodatage (compteur à bouclage de 32 s).
                 if last_timestamp != 0 {
                     let mut ts = (last_timestamp & !0x1F) | offset;
                     if (last_timestamp & 0x1F) > offset {
@@ -396,15 +397,15 @@ pub(super) fn parse_fit_fast(data: &[u8]) -> Result<ActivityData, String> {
                 }
                 pos = payload_end;
             } else if header_byte & 0x40 != 0 {
-                // ── Definition message ──
+                // ── Message de définition ──
                 pos += 1;
-                // Bit 0x20 marks definitions carrying developer fields.
+                // Le bit 0x20 marque les définitions qui portent des champs développeur.
                 let has_dev = header_byte & 0x20 != 0;
                 let (def, new_pos) = parse_definition(data, pos, body_end, has_dev)?;
                 local_defs[(header_byte & 0x0F) as usize] = Some(def);
                 pos = new_pos;
             } else {
-                // ── Normal data message ──
+                // ── Message de données normal ──
                 pos += 1;
                 let local = (header_byte & 0x0F) as usize;
                 let def = local_defs[local]
@@ -434,9 +435,10 @@ pub(super) fn parse_fit_fast(data: &[u8]) -> Result<ActivityData, String> {
             }
         }
 
-        // After this segment's 2-byte file CRC, a chained FIT file may hold
-        // another header+data segment (activity pools). Keep parsing while a
-        // valid header follows; local definitions carry over.
+        // Après le CRC de fichier de 2 octets de ce segment, un fichier FIT
+        // chaîné peut contenir un autre segment en-tête + données (groupes
+        // d'activités). On continue tant qu'un en-tête valide suit ; les
+        // définitions locales sont conservées.
         let next = body_end + 2;
         if next + 12 <= data.len()
             && (data[next] == 12 || data[next] == 14)

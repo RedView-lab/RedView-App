@@ -1,6 +1,6 @@
-//! FIT file parsing: a fast streaming reader (`fast`) with the `fitparser`
-//! crate as fallback (`reference`); both share the point post-processing and
-//! activity summary (`summary`).
+//! Analyse des fichiers FIT : un lecteur rapide en flux (`fast`) avec la crate
+//! `fitparser` en repli (`reference`) ; tous deux partagent le post-traitement
+//! des points et le résumé d'activité (`summary`).
 
 mod fast;
 mod reference;
@@ -12,13 +12,14 @@ use crate::types::ActivityData;
 use fast::parse_fit_fast;
 use reference::parse_fit_reference;
 
-/// Parse a single FIT file from raw bytes into `ActivityData`.
+/// Analyse un fichier FIT à partir d'octets bruts en `ActivityData`.
 ///
-/// Primary path: a fast streaming reader that only decodes Record messages
-/// and skips every other message by computed length (no per-message
-/// allocation, no field-name strings). Falls back to the reference
-/// `fitparser` crate when the fast reader hits anything unexpected, so
-/// unusual files keep the exact legacy behaviour.
+/// Chemin principal : un lecteur rapide en flux qui ne décode que les messages
+/// Record et saute tous les autres grâce à leur longueur calculée (pas
+/// d'allocation par message, pas de chaînes de nom de champ). Se replie sur la
+/// crate de référence `fitparser` quand le lecteur rapide rencontre quoi que ce
+/// soit d'inattendu, pour que les fichiers inhabituels gardent exactement
+/// l'ancien comportement.
 pub fn parse_fit(data: &[u8]) -> Result<ActivityData, String> {
     match parse_fit_fast(data) {
         Ok(activity) => Ok(activity),
@@ -28,7 +29,7 @@ pub fn parse_fit(data: &[u8]) -> Result<ActivityData, String> {
     }
 }
 
-/// `file` enum value for a Course (parcours planifié, vitesse synthétique).
+/// Valeur de l'énumération `file` d'un Course (parcours planifié, vitesse synthétique).
 const FIT_FILE_TYPE_COURSE: u8 = 6;
 
 /// Un fichier « course » (parcours exporté d'un planificateur) a des
@@ -37,7 +38,7 @@ const FIT_FILE_TYPE_COURSE: u8 = 6;
 pub const NOT_AN_ACTIVITY_ERR: &str =
     "Not an activity: this FIT file is a planned course (synthetic timing), not a recorded ride";
 
-/// Parse multiple FIT files.
+/// Analyse plusieurs fichiers FIT.
 pub fn parse_fit_batch(files: &[&[u8]]) -> Result<Vec<ActivityData>, String> {
     let mut results = Vec::with_capacity(files.len());
     for (i, data) in files.iter().enumerate() {
@@ -49,8 +50,8 @@ pub fn parse_fit_batch(files: &[&[u8]]) -> Result<Vec<ActivityData>, String> {
     Ok(results)
 }
 
-/// Keep the Session sport over the Sport message one (a Session is the
-/// authoritative summary of what was recorded).
+/// Garde le sport du message Session plutôt que celui du message Sport (une
+/// Session est le résumé qui fait foi de ce qui a été enregistré).
 fn merge_sport(current: &mut Option<u8>, from_session: bool, value: Option<u8>) {
     if let Some(v) = value {
         if from_session || current.is_none() {

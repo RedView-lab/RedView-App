@@ -4,19 +4,19 @@
 use crate::types::SleepStrategy;
 
 
-/// Circadian rhythm performance factor with multi-night sleep debt compounding.
-/// Models the well-established 5-15% performance dip between 2-6 AM.
-/// Based on Halson 2014, Atkinson & Reilly 1996, Van Dongen et al. 2003.
+/// Facteur de performance du rythme circadien avec cumul de la dette de sommeil sur plusieurs nuits.
+/// Modélise la baisse de performance bien établie de 5 à 15 % entre 2 h et 6 h.
+/// D'après Halson 2014, Atkinson & Reilly 1996, Van Dongen et al. 2003.
 ///
-/// For multi-day events, sleep debt compounds across nights:
-///   - Night 1: base dip (~8%)
-///   - Night 2: base dip × 1.32 (~10.6%) — cumulative cognitive impairment
-///   - Night 3: base dip × 1.72 (~13.7%)
+/// Pour les épreuves de plusieurs jours, la dette de sommeil se cumule d'une nuit à l'autre :
+///   - nuit 1 : baisse de base (~8 %)
+///   - nuit 2 : baisse de base × 1,32 (~10,6 %) — dégradation cognitive cumulée
+///   - nuit 3 : baisse de base × 1,72 (~13,7 %)
 ///
-/// `sleep_strategy` modulates severity:
-///   - MicroNaps: 70% of full debt (rider takes 10-20min naps)
-///   - SleepStops: 50% of full debt (rider sleeps 60-90min blocks)
-///   - None: full sleep debt effect
+/// `sleep_strategy` module la sévérité :
+///   - MicroNaps : 70 % de la dette complète (le cycliste fait des siestes de 10-20 min)
+///   - SleepStops : 50 % de la dette complète (le cycliste dort par blocs de 60-90 min)
+///   - None : effet complet de la dette de sommeil
 pub fn circadian_factor(
     start_time_h: f64,
     elapsed_h: f64,
@@ -24,18 +24,18 @@ pub fn circadian_factor(
 ) -> f64 {
     let hour = (start_time_h + elapsed_h) % 24.0;
 
-    // Count how many complete nights have passed (0-indexed)
+    // Nombre de nuits complètes écoulées (à partir de 0)
     let night_count = (elapsed_h / 24.0).floor() as u32;
 
-    // Base dip at nadir (3-4 AM)
+    // Baisse de base au creux (3-4 h)
     let base_dip = 0.08;
 
-    // Sleep debt compounding: polynomial growth (Van Dongen et al. 2003)
-    // Reduced coefficient: RAAM data shows sleep deprivation is self-limiting
-    // (riders forced to sleep when cognitive decline exceeds safe threshold)
+    // Cumul de la dette de sommeil : croissance polynomiale (Van Dongen et al. 2003)
+    // Coefficient réduit : les données de la RAAM montrent que la privation de sommeil
+    // s'autolimite (les coureurs sont forcés de dormir quand le déclin cognitif dépasse un seuil sûr)
     let debt_multiplier = if night_count > 0 {
         let raw_debt = 1.0 + 0.05 * (night_count as f64).powi(2);
-        // Modulate by sleep strategy
+        // Module selon la stratégie de sommeil
         let strategy_factor = match sleep_strategy {
             SleepStrategy::None => 1.0,
             SleepStrategy::MicroNaps => 0.70,
@@ -46,17 +46,17 @@ pub fn circadian_factor(
         1.0
     };
 
-    // Cap maximum dip at 25% for ultra events (severely sleep-deprived athletes)
-    // Research: ultra riders show 15-25% performance decline at nadir vs rested state
+    // Baisse maximale plafonnée à 25 % pour les épreuves d'ultra (athlètes en grave manque de sommeil)
+    // Recherche : les ultra-cyclistes montrent 15 à 25 % de baisse de performance au creux face à l'état reposé
     let effective_dip = (base_dip * debt_multiplier).min(0.25);
 
-    // Night window: performance dips between 0-6.5 AM
+    // Fenêtre de nuit : la performance baisse entre 0 h et 6 h 30
     if hour < 6.5 {
         let phase = std::f64::consts::PI * (hour - 3.25) / 3.25;
         let dip = effective_dip * (0.5 * (1.0 + phase.cos()));
         1.0 - dip
     } else if hour > 22.0 {
-        // Late night ramp-down into the dip (22:00 → 00:00)
+        // Descente en fin de soirée vers le creux (22:00 → 00:00)
         let phase = std::f64::consts::PI * (hour - 22.0) / 5.25;
         let dip = effective_dip * (0.5 * (1.0 - phase.cos()));
         1.0 - dip
@@ -87,7 +87,7 @@ mod tests {
 
     #[test]
     fn test_circadian_multi_night_compounds() {
-        // Night 1 dip vs Night 3 dip should be deeper
+        // La baisse de la nuit 3 doit être plus profonde que celle de la nuit 1
         let f_night1 = circadian_factor(22.0, 5.0, &SleepStrategy::None); // 3AM, night 1
         let f_night3 = circadian_factor(22.0, 53.0, &SleepStrategy::None); // 3AM, night 3
         assert!(f_night3 < f_night1, "Night 3 dip ({f_night3}) should be deeper than night 1 ({f_night1})");

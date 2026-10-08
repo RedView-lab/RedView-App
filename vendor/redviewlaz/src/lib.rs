@@ -216,7 +216,7 @@ mod tests {
         let scale = [0.01, 0.01, 0.01];
         let offset = [-965_000.0, -6_499_000.0, 0.0];
         let mut decoder = CopcDecoder::new(format, base_record_length(format).unwrap(), &scale, &offset).unwrap();
-        // Two chunks back to back: points are appended.
+        // Deux chunks à la suite : les points sont ajoutés à la fin.
         decoder.decode_chunk(&chunk, records.len()).unwrap();
         decoder.decode_chunk(&chunk, records.len()).unwrap();
         let positions = decoder.take_positions();

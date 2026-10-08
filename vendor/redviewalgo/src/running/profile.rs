@@ -1,5 +1,5 @@
-//! Runner profile: defaults per practice level, user references (VMA or a
-//! race time) and parameters learnt from running FIT files.
+//! Profil du coureur : valeurs par défaut par niveau de pratique, références de
+//! l'utilisateur (VMA ou un temps de course) et paramètres appris des fichiers FIT de course.
 
 use super::cost::effort_factor;
 use super::{RunDiscipline, RunPredictionConfig, RunnerProfile};
@@ -7,29 +7,29 @@ use crate::math::statistics::linear_regression;
 use crate::math::{median, median_filter_elevations};
 use crate::types::{ActivityData, Gender};
 
-/// Riegel endurance exponent used to convert a reference race to the 1 h
-/// reference speed (Riegel 1981).
+/// Exposant d'endurance de Riegel utilisé pour convertir une course de
+/// référence en vitesse de référence sur 1 h (Riegel 1981).
 const RIEGEL_EXPONENT: f64 = 1.06;
-/// Sustainable fraction of VMA over ~1 h (half-marathon to 1 h race pace).
+/// Fraction de la VMA tenable sur ~1 h (allure de semi-marathon à course d'1 h).
 const VMA_TO_HOUR_FRACTION: f64 = 0.85;
 
-/// Distance-resampling step used to read FIT files (m).
+/// Pas de rééchantillonnage en distance utilisé pour lire les fichiers FIT (m).
 const CHUNK_M: f64 = 100.0;
-/// Below this per-leg cadence (strides/min, FIT `cadence` field) a runner is walking.
+/// Sous cette cadence par jambe (foulées/min, champ FIT `cadence`), un coureur marche.
 const WALK_CADENCE_SPM: f64 = 70.0;
 
-/// Practice level presets: debutant, intermediaire, avance, expert.
+/// Préréglages des niveaux de pratique : debutant, intermediaire, avance, expert.
 #[derive(Debug, Clone, Copy)]
 pub struct LevelPreset {
-    /// Flat speed sustainable for ~1 h (km/h).
+    /// Vitesse sur le plat tenable ~1 h (km/h).
     pub v_ref_kmh: f64,
-    /// Grade (%) above which the runner power-hikes.
+    /// Pente (%) au-delà de laquelle le coureur passe en marche rapide.
     pub walk_threshold_pct: f64,
-    /// Sustainable power-hiking vertical rate (m/h).
+    /// Vitesse verticale tenable en marche rapide (m/h).
     pub walk_vam_mh: f64,
-    /// Instantaneous Riegel-like decay exponent (road running).
+    /// Exposant de décroissance instantané façon Riegel (course sur route).
     pub riegel_k: f64,
-    /// Downhill skill multiplier on the technical descent cap.
+    /// Multiplicateur d'habileté en descente sur le plafond de descente technique.
     pub descent_skill: f64,
 }
 
@@ -40,8 +40,8 @@ const LEVELS: [LevelPreset; 4] = [
     LevelPreset { v_ref_kmh: 14.5, walk_threshold_pct: 18.0, walk_vam_mh: 1100.0, riegel_k: 0.08, descent_skill: 1.10 },
 ];
 
-/// Extra decay on trail: ultra-trail finishers slow far more than road
-/// runners (Riegel exponent 1.08-1.10 for ultras; ~17 % second-half drop at UTMB).
+/// Décroissance supplémentaire en trail : les finishers d'ultra-trail ralentissent bien plus que
+/// les coureurs sur route (exposant de Riegel 1,08-1,10 pour les ultras ; ~17 % de baisse en seconde moitié à l'UTMB).
 const TRAIL_EXTRA_K: f64 = 0.02;
 
 pub fn level_preset(level: Option<&str>) -> LevelPreset {
@@ -59,18 +59,18 @@ pub fn level_preset(level: Option<&str>) -> LevelPreset {
     }
 }
 
-/// Speed sustainable for one hour from a reference race (Riegel).
+/// Vitesse tenable une heure d'après une course de référence (Riegel).
 pub fn hour_speed_from_race(distance_m: f64, time_s: f64) -> Option<f64> {
     if !(distance_m >= 1000.0 && time_s >= 180.0) {
         return None;
     }
-    // Distance D covered in 3600 s: T1·(D/D1)^1.06 = 3600.
+    // Distance D parcourue en 3600 s : T1·(D/D1)^1.06 = 3600.
     let d_hour = distance_m * (3600.0 / time_s).powf(1.0 / RIEGEL_EXPONENT);
     let v = d_hour / 3600.0;
     (v > 1.0 && v < 7.5).then_some(v)
 }
 
-/// A 100 m slice of a FIT activity.
+/// Une tranche de 100 m d'une activité FIT.
 struct Chunk {
     start_h: f64,
     dt_s: f64,
@@ -86,7 +86,7 @@ impl Chunk {
     }
 }
 
-/// Cut an activity into ~100 m moving slices (pauses removed).
+/// Découpe une activité en tranches de ~100 m en mouvement (pauses retirées).
 fn chunk_activity(activity: &ActivityData) -> Vec<Chunk> {
     let pts = &activity.points;
     if pts.len() < 20 {
@@ -106,7 +106,7 @@ fn chunk_activity(activity: &ActivityData) -> Vec<Chunk> {
     for i in 1..pts.len() {
         let dt = pts[i].timestamp_s - pts[i - 1].timestamp_s;
         let dd = pts[i].distance_m - pts[i - 1].distance_m;
-        // Skip pauses (auto-pause gaps or standing still).
+        // Saute les pauses (trous d'auto-pause ou arrêt sur place).
         if dt <= 0.0 || dt > 30.0 || dd < 0.0 || dd / dt < 0.4 {
             start = i;
             acc_dt = 0.0;
@@ -148,8 +148,8 @@ fn chunk_activity(activity: &ActivityData) -> Vec<Chunk> {
     chunks
 }
 
-/// Best rolling average of grade-adjusted running speed over `window_s` of
-/// moving time, within the first 3 h of the activity.
+/// Meilleure moyenne glissante de la vitesse de course ajustée à la pente sur
+/// `window_s` de temps en mouvement, dans les 3 premières heures de l'activité.
 fn best_gap_speed(chunks: &[Chunk], window_s: f64) -> Option<f64> {
     let running: Vec<(f64, f64)> = chunks
         .iter()
@@ -174,7 +174,7 @@ fn best_gap_speed(chunks: &[Chunk], window_s: f64) -> Option<f64> {
     best
 }
 
-/// Everything learnt from FIT files; None fields keep the preset value.
+/// Tout ce qui est appris des fichiers FIT ; les champs None gardent la valeur du préréglage.
 #[derive(Default)]
 pub struct LearntParams {
     pub v_ref_ms: Option<f64>,
@@ -193,7 +193,7 @@ pub fn learn_from_activities(
     let per_activity: Vec<Vec<Chunk>> = activities.iter().map(chunk_activity).collect();
     let mut learnt = LearntParams::default();
 
-    // ── Reference speed: best 30 min GAP, ~4 % above 1 h pace ──
+    // ── Vitesse de référence : meilleure GAP sur 30 min, ~4 % au-dessus de l'allure sur 1 h ──
     let mut v_ref: Option<f64> = None;
     for chunks in &per_activity {
         let candidate = best_gap_speed(chunks, 1800.0)
@@ -205,7 +205,7 @@ pub fn learn_from_activities(
     }
     learnt.v_ref_ms = v_ref.filter(|v| *v > 1.2 && *v < 7.0);
 
-    // ── Endurance decay: log-log regression of 30 min blocks on long runs ──
+    // ── Décroissance d'endurance : régression log-log des blocs de 30 min sur les sorties longues ──
     let mut xs = Vec::new();
     let mut ys = Vec::new();
     for chunks in &per_activity {
@@ -245,7 +245,7 @@ pub fn learn_from_activities(
 
     let all: Vec<&Chunk> = per_activity.iter().flatten().collect();
 
-    // ── Walk threshold: first 2 % grade bin where most slices are walked ──
+    // ── Seuil de marche : première classe de pente de 2 % où la plupart des tranches sont marchées ──
     let uphill: Vec<&&Chunk> = all.iter().filter(|c| c.grade_pct > 3.0).collect();
     if uphill.len() >= 30 {
         let mut threshold = None;
@@ -267,7 +267,7 @@ pub fn learn_from_activities(
         learnt.walk_threshold_pct = threshold.map(|t: f64| t.clamp(5.0, 30.0));
     }
 
-    // ── Power-hiking vertical rate on steep walked slices ──
+    // ── Vitesse verticale en marche rapide sur les tranches raides marchées ──
     let mut vams: Vec<f64> = all
         .iter()
         .filter(|c| c.walking && c.grade_pct >= 10.0)
@@ -277,7 +277,7 @@ pub fn learn_from_activities(
         learnt.walk_vam_mh = Some(median(&mut vams).clamp(250.0, 1800.0));
     }
 
-    // ── Descent skill: actual downhill speed vs the default model ──
+    // ── Habileté en descente : vitesse réelle en descente face au modèle par défaut ──
     if let Some(v_ref) = learnt.v_ref_ms {
         let mut ratios: Vec<f64> = all
             .iter()
@@ -301,8 +301,8 @@ pub fn learn_from_activities(
     learnt
 }
 
-/// Resolve the runner profile from, in order: FIT files, a reference race,
-/// VMA, then the level preset alone.
+/// Résout le profil du coureur à partir, dans l'ordre : des fichiers FIT, d'une
+/// course de référence, de la VMA, puis du seul préréglage de niveau.
 pub fn build_runner_profile(
     activities: &[ActivityData],
     cfg: &RunPredictionConfig,
@@ -323,13 +323,13 @@ pub fn build_runner_profile(
     } else if let Some(vma) = cfg.vma_kmh.filter(|v| (6.0..=30.0).contains(v)) {
         (vma / 3.6 * VMA_TO_HOUR_FRACTION, "vma")
     } else {
-        // Population prior only: women run ~10 % slower on average at the
-        // same practice level; an explicit reference already reflects it.
+        // A priori de population seulement : les femmes courent en moyenne ~10 %
+        // plus lentement à niveau de pratique égal ; une référence explicite le reflète déjà.
         let gender = if cfg.gender == Gender::Female { 0.90 } else { 1.0 };
         (preset.v_ref_kmh / 3.6 * gender, "level")
     };
 
-    // Power-hiking ability scales with running fitness when it is not learnt.
+    // L'aptitude à la marche rapide suit la forme en course quand elle n'est pas apprise.
     let fitness_ratio = (v_ref_ms * 3.6 / preset.v_ref_kmh).clamp(0.7, 1.4);
     let walk_vam_mh = learnt.walk_vam_mh.unwrap_or(preset.walk_vam_mh * fitness_ratio);
 
@@ -362,7 +362,7 @@ mod tests {
 
     #[test]
     fn riegel_hour_speed_from_10k() {
-        // 10 km in 50 min → ~11.6 km/h for one hour.
+        // 10 km en 50 min → ~11,6 km/h pendant une heure.
         let v = hour_speed_from_race(10_000.0, 3000.0).unwrap() * 3.6;
         assert!(v > 11.3 && v < 11.9, "{v}");
     }

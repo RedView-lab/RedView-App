@@ -4,10 +4,10 @@ use crate::types::{ActivityData, DataPoint};
 use fitparser::profile::MesgNum;
 use fitparser::{from_bytes, Value};
 
-// ─── Reference parser (fitparser crate) — fallback path ────────────────────
+// ─── Analyseur de référence (crate fitparser) — chemin de repli ────────────
 
-/// Reference FIT parse using the `fitparser` crate (kept as the fallback
-/// for files the fast reader cannot handle).
+/// Analyse FIT de référence avec la crate `fitparser` (gardée en repli pour
+/// les fichiers que le lecteur rapide ne sait pas traiter).
 pub(super) fn parse_fit_reference(data: &[u8]) -> Result<ActivityData, String> {
     let messages = from_bytes(data).map_err(|e| format!("FIT parse error: {e}"))?;
 
@@ -111,7 +111,7 @@ pub(super) fn parse_fit_reference(data: &[u8]) -> Result<ActivityData, String> {
             }
         }
 
-        // Skip points without GPS position
+        // Saute les points sans position GPS
         let (lat_v, lon_v) = match (lat, lon) {
             (Some(la), Some(lo)) => (la, lo),
             _ => continue,
@@ -154,8 +154,8 @@ pub(super) fn parse_fit_reference(data: &[u8]) -> Result<ActivityData, String> {
     Ok(ActivityData { points, summary })
 }
 
-/// The reference parser names profile enums ("running"); map the ones the
-/// engines care about back to their FIT numeric codes.
+/// L'analyseur de référence nomme les énumérations du profil (« running ») ;
+/// on ramène celles qui intéressent les moteurs à leurs codes numériques FIT.
 fn sport_from_value(value: &Value) -> Option<u8> {
     match value {
         Value::Enum(v) | Value::UInt8(v) => Some(*v),
@@ -171,7 +171,7 @@ fn sport_from_value(value: &Value) -> Option<u8> {
     }
 }
 
-/// Try to extract an f64 from a FIT field value.
+/// Tente d'extraire un f64 de la valeur d'un champ FIT.
 fn extract_f64(value: &Value) -> Option<f64> {
     match value {
         Value::Float64(v) => Some(*v),

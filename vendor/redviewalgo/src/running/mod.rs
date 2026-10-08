@@ -1,13 +1,14 @@
-//! Running / trail-running time prediction.
+//! Prédiction du temps en course à pied / trail.
 //!
-//! Model, per route point:
-//!   flat speed  = v_ref · endurance(t) · altitude · night · terrain
-//!   running     = flat speed / effort(grade)            (Ultrapacer / Strava-HR GAP)
-//!   uphill      → power-hike above the walk threshold, at a vertical rate (VAM)
-//!   downhill    → capped by a technical descent limit, degraded by eccentric damage
-//! The reference speed comes from FIT files, a reference race, VMA or the
-//! practice level; FIT files also personalise the walk threshold, hiking VAM,
-//! descent skill and endurance decay, and feed a KNN blended with the model.
+//! Modèle, par point de route :
+//!   vitesse sur le plat = v_ref · endurance(t) · altitude · nuit · terrain
+//!   course              = vitesse sur le plat / effort(pente)     (GAP Ultrapacer / Strava-FC)
+//!   montée              → marche rapide au-delà du seuil de marche, à une vitesse verticale (VAM)
+//!   descente            → plafonnée par une limite de descente technique, dégradée par les dégâts excentriques
+//! La vitesse de référence vient des fichiers FIT, d'une course de référence,
+//! de la VMA ou du niveau de pratique ; les fichiers FIT personnalisent aussi le
+//! seuil de marche, la VAM en marche, l'habileté en descente et la décroissance
+//! d'endurance, et alimentent un KNN mélangé au modèle.
 
 pub mod cost;
 pub mod profile;
@@ -22,25 +23,25 @@ use cost::{altitude_factor, effort_factor, walk_speed_ms};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
-/// Hard floor on predicted speed (m/s) ≈ 2 km/h (very steep scrambling).
+/// Plancher strict de la vitesse prédite (m/s) ≈ 2 km/h (passages très raides).
 const MIN_SPEED_MS: f64 = 0.55;
-/// Hard ceiling on predicted speed (m/s) ≈ 28 km/h.
+/// Plafond strict de la vitesse prédite (m/s) ≈ 28 km/h.
 const MAX_SPEED_MS: f64 = 7.8;
-/// Floor of the combined altitude × night × eccentric penalty (anti-stacking).
+/// Plancher de la pénalité combinée altitude × nuit × excentrique (anti-cumul).
 const MICRO_FLOOR: f64 = 0.65;
-/// Width (grade %) of the run → hike transition around the walk threshold.
+/// Largeur (pente en %) de la transition course → marche autour du seuil de marche.
 const WALK_BLEND_WIDTH_PCT: f64 = 4.0;
-/// KNN base weight in the model/KNN blend (lower than cycling: running FIT
-/// files mix many terrains and paces, so the model stays the anchor).
+/// Poids de base du KNN dans le mélange modèle / KNN (plus bas qu'à vélo : les
+/// fichiers FIT de course mélangent beaucoup de terrains et d'allures, donc le modèle reste l'ancre).
 const KNN_BASE_WEIGHT: f64 = 0.6;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum RunDiscipline {
-    /// Road running.
+    /// Course sur route.
     #[default]
     Running,
-    /// Trail running (technical terrain, power-hiking, long descents).
+    /// Trail (terrain technique, marche rapide, longues descentes).
     Trail,
 }
 
@@ -57,24 +58,24 @@ impl RunDiscipline {
 pub struct RunPredictionConfig {
     #[serde(default)]
     pub discipline: RunDiscipline,
-    /// Practice level id: debutant | intermediaire | avance | expert.
+    /// Identifiant du niveau de pratique : debutant | intermediaire | avance | expert.
     #[serde(default)]
     pub level: Option<String>,
-    /// Maximal aerobic speed (km/h).
+    /// Vitesse maximale aérobie (km/h).
     #[serde(default)]
     pub vma_kmh: Option<f64>,
-    /// Reference race distance (m) and finish time (s).
+    /// Distance (m) et temps final (s) de la course de référence.
     #[serde(default)]
     pub ref_distance_m: Option<f64>,
     #[serde(default)]
     pub ref_time_s: Option<f64>,
-    /// Runner weight including pack (kg).
+    /// Poids du coureur, sac compris (kg).
     #[serde(default)]
     pub mass_kg: Option<f64>,
-    /// Terrain technicality 0 (smooth) … 1 (very technical). Trail only.
+    /// Technicité du terrain 0 (roulant) … 1 (très technique). Trail seulement.
     #[serde(default)]
     pub technicality: Option<f64>,
-    /// Start time of day (h) — enables the night performance dip.
+    /// Heure de départ dans la journée (h) — active la baisse de performance de nuit.
     #[serde(default)]
     pub start_time_h: Option<f64>,
     #[serde(default)]
@@ -86,7 +87,7 @@ pub struct RunPredictionConfig {
 }
 
 impl RunPredictionConfig {
-    /// Technicality only applies to trail; road running is smooth by definition.
+    /// La technicité ne s'applique qu'au trail ; la course sur route est roulante par définition.
     pub fn effective_technicality(&self) -> f64 {
         match self.discipline {
             RunDiscipline::Trail => self.technicality.unwrap_or(0.5).clamp(0.0, 1.0),
@@ -97,20 +98,20 @@ impl RunPredictionConfig {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct RunnerProfile {
-    /// Flat speed sustainable for ~1 h (km/h).
+    /// Vitesse sur le plat tenable ~1 h (km/h).
     pub v_ref_kmh: f64,
-    /// Where v_ref comes from: fit | chrono | vma | level.
+    /// Origine de v_ref : fit | chrono | vma | level.
     pub v_ref_source: String,
-    /// Endurance decay exponent: speed ∝ t^(−k) beyond the first hour.
+    /// Exposant de décroissance d'endurance : vitesse ∝ t^(−k) au-delà de la première heure.
     pub riegel_k: f64,
     pub walk_threshold_pct: f64,
     pub walk_vam_mh: f64,
-    /// Learnt downhill speed ratio vs the default descent model (1 = default).
+    /// Rapport de vitesse en descente appris face au modèle de descente par défaut (1 = par défaut).
     pub descent_ratio: f64,
     pub descent_skill: f64,
     pub technicality: f64,
     pub n_activities: usize,
-    /// FIT files dropped because they were recorded for another sport.
+    /// Fichiers FIT écartés car enregistrés pour un autre sport.
     pub n_ignored: usize,
     pub knn_samples: usize,
 }
@@ -132,7 +133,7 @@ pub struct RunPredictionResult {
     pub total_time_high_s: f64,
 }
 
-/// Flat-ground terrain factor: technical trail slows even the flat sections.
+/// Facteur de terrain sur le plat : un trail technique ralentit même les sections plates.
 pub fn terrain_factor(technicality: f64, discipline: RunDiscipline) -> f64 {
     match discipline {
         RunDiscipline::Running => 1.0,
@@ -140,10 +141,11 @@ pub fn terrain_factor(technicality: f64, discipline: RunDiscipline) -> f64 {
     }
 }
 
-/// Downhill running speed (m/s) from the (terrain-adjusted) flat speed:
-/// grade-adjusted pace, capped by what footing and skill allow. Steep
-/// technical descents are where levels differ most (~18 % between top and
-/// bottom finishers vs ~5 % on climbs).
+/// Vitesse de course en descente (m/s) à partir de la vitesse sur le plat
+/// (ajustée au terrain) : allure ajustée à la pente, plafonnée par ce que
+/// permettent l'appui et l'habileté. Les descentes techniques raides sont là où
+/// les niveaux diffèrent le plus (~18 % entre les premiers et les derniers
+/// finishers contre ~5 % en montée).
 pub fn descent_speed_ms(
     v_flat_ms: f64,
     grade_pct: f64,
@@ -173,7 +175,7 @@ pub fn descent_speed_ms(
     model.min(cap)
 }
 
-/// Instantaneous endurance factor: speed ∝ (t/1h)^(−k) after the first hour.
+/// Facteur d'endurance instantané : vitesse ∝ (t/1h)^(−k) après la première heure.
 fn endurance_factor(elapsed_h: f64, k: f64) -> f64 {
     if elapsed_h <= 1.0 {
         1.0
@@ -182,13 +184,13 @@ fn endurance_factor(elapsed_h: f64, k: f64) -> f64 {
     }
 }
 
-/// Eccentric muscle damage from cumulated descent: downhill speeds keep
-/// dropping through ultra-trails.
+/// Dégâts musculaires excentriques dus au dénivelé négatif cumulé : les
+/// vitesses en descente continuent de baisser tout au long des ultra-trails.
 fn eccentric_factor(cum_descent_m: f64) -> f64 {
     1.0 - 0.10 * cum_descent_m / (cum_descent_m + 4000.0)
 }
 
-/// Load effect on climbs (heavier runner or pack): mild, bounded.
+/// Effet de la charge en montée (coureur ou sac plus lourds) : léger, borné.
 fn load_factor(mass_kg: Option<f64>, gender: Gender) -> f64 {
     let reference = if gender == Gender::Female { 58.0 } else { 70.0 };
     match mass_kg {
@@ -202,7 +204,7 @@ fn smoothstep(x: f64) -> f64 {
     t * t * (3.0 - 2.0 * t)
 }
 
-/// Run the prediction on already-parsed inputs.
+/// Exécute la prédiction sur des entrées déjà analysées.
 pub fn predict_run(
     activities: &[ActivityData],
     n_ignored: usize,
@@ -245,7 +247,7 @@ pub fn predict_run(
             }
         }
 
-        // 500 m gradient context, blended with the local grade to tame GPX noise.
+        // Contexte de pente sur 500 m, mélangé à la pente locale pour dompter le bruit du GPX.
         recent.push_back((rp.distance_m, rp.gradient_pct));
         recent_sum += rp.gradient_pct;
         while recent.len() > 1 && recent[0].0 < rp.distance_m - 500.0 {
@@ -269,7 +271,7 @@ pub fn predict_run(
 
         let model_speed = if grade >= 0.0 {
             let run = v_flat / effort_factor(grade) * if grade > 2.0 { load } else { 1.0 };
-            // Hiking is barely affected by footing; apply half the terrain penalty.
+            // La marche est à peine affectée par l'appui ; on applique la moitié de la pénalité de terrain.
             let hike_terrain = 1.0 - 0.5 * (1.0 - terrain);
             let vam = runner.walk_vam_mh * endurance * micro * load * hike_terrain;
             let hike = walk_speed_ms(grade, vam);
@@ -278,14 +280,14 @@ pub fn predict_run(
                     / WALK_BLEND_WIDTH_PCT,
             );
             let blended = (1.0 - w) * run + w * hike;
-            // Power-hiking is chosen whenever it is simply faster.
+            // La marche rapide est choisie dès qu'elle est simplement plus rapide.
             if grade > 3.0 {
                 blended.max(hike)
             } else {
                 blended
             }
         } else {
-            // Eccentric damage mostly shows on descents.
+            // Les dégâts excentriques se voient surtout en descente.
             descent_speed_ms(v_flat * eccentric, grade, technicality, descent_skill, discipline)
         };
         let model_speed = if grade >= 0.0 {
@@ -304,7 +306,7 @@ pub fn predict_run(
                 rp.elevation_m,
                 rp.distance_m,
             );
-            // KNN trust fades beyond the longest training effort (3× → ~0).
+            // La confiance dans le KNN s'estompe au-delà du plus long effort d'entraînement (3× → ~0).
             let beyond = if knn_max_h > 0.5 && elapsed_h > knn_max_h {
                 let over = (elapsed_h - knn_max_h) / (2.0 * knn_max_h);
                 (1.0 - over).clamp(0.0, 1.0)
@@ -344,7 +346,7 @@ pub fn predict_run(
         elapsed_s += segment_time;
     }
 
-    // Uncertainty band: ±7 % with good personal data, up to ±17 % without.
+    // Bande d'incertitude : ±7 % avec de bonnes données personnelles, jusqu'à ±17 % sans.
     let mean_conf = if points.is_empty() {
         0.0
     } else {

@@ -6,33 +6,33 @@ use features::{FeatureNorm, NormalizedSample, TrainingSample, DEFAULT_WEIGHTS};
 use kdtree::KdTree;
 use serde::{Deserialize, Serialize};
 
-/// Minimum number of training samples needed for KNN to be used.
+/// Nombre minimal d'échantillons d'entraînement pour utiliser le KNN.
 const MIN_SAMPLES: usize = 50;
 
-/// Maximum training samples — with efficient distance search, we can use more data.
+/// Nombre maximal d'échantillons d'entraînement — avec une recherche de distance efficace, on peut utiliser plus de données.
 const MAX_SAMPLES: usize = 50_000;
 
-/// KNN prediction result with confidence metric.
+/// Résultat de prédiction du KNN avec un indicateur de confiance.
 pub struct KnnPrediction {
     pub speed_ms: f64,
-    /// Confidence in [0, 1]. Higher = closer neighbors, more reliable prediction.
+    /// Confiance dans [0, 1]. Plus élevée = voisins plus proches, prédiction plus fiable.
     pub confidence: f64,
 }
 
-/// The complete KNN model with pre-normalized samples for fast distance computation.
+/// Le modèle KNN complet avec des échantillons prénormalisés pour un calcul de distance rapide.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KnnModel {
-    /// Raw training samples (kept for serialisation / debugging)
+    /// Échantillons d'entraînement bruts (gardés pour la sérialisation / le débogage)
     pub samples: Vec<TrainingSample>,
-    /// Normalization params: [gradient, elapsed_h, cum_climb, recent_grad, elevation, cum_dist, hr_zone, temp]
+    /// Paramètres de normalisation : [pente, elapsed_h, dénivelé cumulé, pente récente, altitude, distance cumulée, zone FC, température]
     pub norms: Vec<FeatureNorm>,
-    /// Optimized feature weights from LOO-CV (defaults if optimization skipped).
+    /// Poids des caractéristiques optimisés par validation croisée (par défaut si l'optimisation est sautée).
     #[serde(default = "default_weights")]
     pub weights: [f64; features::N_FEATURES],
-    /// Pre-normalized & weighted feature vectors — NOT serialised, rebuilt on demand.
+    /// Vecteurs de caractéristiques prénormalisés et pondérés — NON sérialisés, reconstruits à la demande.
     #[serde(skip)]
     precomputed: Vec<NormalizedSample>,
-    /// K-d tree spatial index — NOT serialised, rebuilt on demand.
+    /// Index spatial en arbre k-d — NON sérialisé, reconstruit à la demande.
     #[serde(skip)]
     kdtree: Option<KdTree>,
 }
@@ -47,7 +47,7 @@ impl KnnModel {
         self.precomputed.len() >= MIN_SAMPLES
     }
 
-    /// Maximum elapsed_h seen in training data.
+    /// elapsed_h maximal vu dans les données d'entraînement.
     pub fn max_elapsed_h(&self) -> f64 {
         self.samples
             .iter()
@@ -55,7 +55,7 @@ impl KnnModel {
             .fold(0.0_f64, f64::max)
     }
 
-    /// Create an empty model (used as fallback when no training data exists).
+    /// Crée un modèle vide (utilisé en repli quand il n'existe aucune donnée d'entraînement).
     pub fn empty() -> Self {
         KnnModel {
             samples: vec![],
@@ -66,9 +66,9 @@ impl KnnModel {
         }
     }
 
-    /// FIX: Rebuild precomputed samples after deserialization.
-    /// Called lazily on first use if precomputed is empty but samples exist.
-    /// Also builds the k-d tree index for O(log N) queries.
+    /// CORRECTIF : reconstruit les échantillons précalculés après désérialisation.
+    /// Appelé à la demande au premier usage si precomputed est vide mais que des échantillons existent.
+    /// Construit aussi l'index en arbre k-d pour des requêtes en O(log N).
     pub fn ensure_precomputed(&mut self) {
         if self.precomputed.is_empty() && !self.samples.is_empty() && !self.norms.is_empty() {
             let weights = &self.weights;
@@ -92,7 +92,7 @@ impl KnnModel {
                 })
                 .collect();
         }
-        // Build k-d tree if needed
+        // Construit l'arbre k-d si nécessaire
         if self.kdtree.is_none() && !self.precomputed.is_empty() {
             let feats: Vec<[f64; features::N_FEATURES]> =
                 self.precomputed.iter().map(|s| s.features).collect();
@@ -102,12 +102,12 @@ impl KnnModel {
     }
 }
 
-/// Extract training samples from multiple activities and build the KNN model.
-/// Includes LOO-CV weight optimization for maximum prediction accuracy.
+/// Extrait les échantillons d'entraînement de plusieurs activités et construit le modèle KNN.
+/// Comprend l'optimisation des poids par validation croisée pour une précision de prédiction maximale.
 pub fn build_knn_model(activities: &[ActivityData]) -> KnnModel {
     let mut samples = features::extract_training_samples(activities);
 
-    // Subsample if needed — keep every Nth sample uniformly
+    // Sous-échantillonne si nécessaire — garde un échantillon sur N, uniformément
     if samples.len() > MAX_SAMPLES {
         let step = samples.len() as f64 / MAX_SAMPLES as f64;
         let mut kept = Vec::with_capacity(MAX_SAMPLES);
@@ -121,7 +121,7 @@ pub fn build_knn_model(activities: &[ActivityData]) -> KnnModel {
 
     let norms = features::compute_norms(&samples);
 
-    // Optimize feature weights via LOO-CV if enough samples
+    // Optimise les poids des caractéristiques par validation croisée s'il y a assez d'échantillons
     let weights = if samples.len() >= 200 {
         features::optimize_feature_weights(&samples, &norms)
     } else {
@@ -147,7 +147,7 @@ pub fn build_knn_model(activities: &[ActivityData]) -> KnnModel {
         })
         .collect();
 
-    // Build k-d tree index for O(log N) nearest-neighbor queries
+    // Construit l'index en arbre k-d pour des requêtes de plus proches voisins en O(log N)
     let feats: Vec<[f64; features::N_FEATURES]> =
         precomputed.iter().map(|s| s.features).collect();
     let speeds: Vec<f64> = precomputed.iter().map(|s| s.speed_ms).collect();
@@ -162,11 +162,11 @@ pub fn build_knn_model(activities: &[ActivityData]) -> KnnModel {
     }
 }
 
-/// Predict speed (m/s) using KNN for a single route point.
-/// Returns KnnPrediction with speed and confidence metric.
+/// Prédit la vitesse (m/s) d'un point de route avec le KNN.
+/// Renvoie une KnnPrediction avec la vitesse et un indicateur de confiance.
 ///
-/// Uses k-d tree index for O(log N) nearest-neighbor queries.
-/// Confidence combines proximity, Gaussian weight, and neighbor speed variance.
+/// Utilise l'index en arbre k-d pour des requêtes de plus proches voisins en O(log N).
+/// La confiance combine proximité, poids gaussien et variance de vitesse des voisins.
 pub fn knn_predict_speed(
     model: &mut KnnModel,
     gradient_pct: f64,
@@ -199,19 +199,19 @@ pub fn knn_predict_speed(
         &model.weights,
     );
 
-    // Adaptive K: scale with data size, raised cap for large datasets
+    // K adaptatif : suit la taille des données, plafond relevé pour les gros jeux de données
     let adaptive_k = ((precomputed.len() as f64).sqrt() as usize).clamp(7, 50);
     let k = adaptive_k.min(precomputed.len());
 
-    // Use k-d tree for O(log N) nearest-neighbor search
+    // Arbre k-d pour une recherche de plus proches voisins en O(log N)
     let top_k = model.kdtree.as_ref().unwrap().knn_query(&q, k);
 
-    // Gaussian-based inverse-distance weighting — smoother falloff than 1/d
+    // Pondération par l'inverse de la distance à noyau gaussien — décroissance plus douce que 1/d
     let mut weight_sum = 0.0;
     let mut value_sum = 0.0;
     let mut dist_sum = 0.0;
 
-    // Compute bandwidth from median neighbor distance for adaptive Gaussian width
+    // Largeur de bande tirée de la distance médiane des voisins, pour une largeur gaussienne adaptative
     let median_d2 = if top_k.len() >= 3 {
         let mid = top_k.len() / 2;
         top_k[mid].0.max(1e-12)
@@ -221,7 +221,7 @@ pub fn knn_predict_speed(
 
     for &(d, speed) in &top_k {
         let r = d.sqrt();
-        // Gaussian kernel: w = exp(-d / (2·σ²))
+        // Noyau gaussien : w = exp(-d / (2·σ²))
         let w = (-d / (2.0 * median_d2)).exp();
         weight_sum += w;
         value_sum += w * speed;
@@ -234,7 +234,7 @@ pub fn knn_predict_speed(
         5.56
     };
 
-    // Confidence: combines mean distance, Gaussian weight, and speed variance
+    // Confiance : combine distance moyenne, poids gaussien et variance de vitesse
     let mean_dist = if !top_k.is_empty() {
         dist_sum / top_k.len() as f64
     } else {
@@ -246,7 +246,7 @@ pub fn knn_predict_speed(
         0.0
     };
 
-    // Variance-weighted confidence: penalize when neighbors disagree on speed
+    // Confiance pondérée par la variance : pénalise quand les voisins ne s'accordent pas sur la vitesse
     let speed_variance = if weight_sum > 0.0 && !top_k.is_empty() {
         let mean_spd = value_sum / weight_sum;
         let var: f64 = top_k.iter()
@@ -266,7 +266,7 @@ pub fn knn_predict_speed(
     KnnPrediction { speed_ms: speed, confidence }
 }
 
-/// Squared Euclidean distance between two feature vectors.
+/// Distance euclidienne au carré entre deux vecteurs de caractéristiques.
 #[inline]
 fn dist_sq(a: &[f64; features::N_FEATURES], b: &[f64; features::N_FEATURES]) -> f64 {
     let mut sum = 0.0;
@@ -355,10 +355,10 @@ mod tests {
         );
         assert!(pred.confidence > 0.0, "Confidence should be > 0");
 
-        // Query INSIDE the synthetic training range (±5% gradient, see
-        // make_activity — grad_cycle = sin(t*0.01)*5). Negative gradient
-        // → model should predict a speed >= flat baseline because the
-        // training data follows speed = base - 0.3*grad_cycle.
+        // Requête DANS la plage d'entraînement synthétique (pente ±5 %, voir
+        // make_activity — grad_cycle = sin(t*0.01)*5). Pente négative → le
+        // modèle doit prédire une vitesse >= la base sur le plat car les
+        // données d'entraînement suivent speed = base - 0.3*grad_cycle.
         let pred_down = knn_predict_speed(&mut model, -4.0, 0.5, 100.0, -3.0, 400.0, 5000.0);
         let pred_up = knn_predict_speed(&mut model, 4.0, 0.5, 100.0, 3.0, 600.0, 5000.0);
         assert!(
@@ -381,16 +381,16 @@ mod tests {
         let activities = vec![make_activity(2000, 7.0, false)];
         let mut model = build_knn_model(&activities);
 
-        // Within training range
+        // Dans la plage d'entraînement
         let pred_normal = knn_predict_speed(&mut model, 0.0, 0.3, 100.0, 0.0, 500.0, 3000.0);
-        // Far outside training range (50h elapsed = way beyond training data)
+        // Très loin hors de la plage d'entraînement (50 h écoulées = bien au-delà des données)
         let pred_extrap = knn_predict_speed(&mut model, 0.0, 50.0, 50000.0, 0.0, 500.0, 500000.0);
 
-        // Far-extrapolation neighbours are so distant the Gaussian
-        // weighting collapses confidence to ~0. We just verify it's a
-        // tiny number, well below typical in-range confidences.
-        // (Relative ordering between two near-zero values is not stable
-        // due to the variance term — see audit item #15.)
+        // En extrapolation lointaine, les voisins sont si éloignés que la
+        // pondération gaussienne ramène la confiance à ~0. On vérifie juste
+        // que c'est un tout petit nombre, bien sous les confiances typiques
+        // dans la plage. (L'ordre relatif entre deux valeurs proches de zéro
+        // n'est pas stable à cause du terme de variance — voir l'élément d'audit n° 15.)
         assert!(
             pred_extrap.confidence < 0.01,
             "Extrapolated confidence ({}) should be ~0",

@@ -1,9 +1,9 @@
-/// Median filter on elevations to remove single-sample DEM/GPS glitches
-/// before any further smoothing. Uses a small odd window (typically 5)
-/// over the elevation index space (cheap, no distance lookup needed). A
-/// median is robust to single isolated outliers \u2014 e.g. a +500\u00a0m GPS
-/// glitch on one sample \u2014 unlike Gaussian smoothing which would only
-/// attenuate and spread the spike across neighbours.
+/// Filtre médian sur les altitudes pour retirer les erreurs de DEM / GPS d'un
+/// seul échantillon avant tout autre lissage. Utilise une petite fenêtre impaire
+/// (en général 5) sur l'espace des indices d'altitude (peu coûteux, sans
+/// recherche de distance). Une médiane résiste aux valeurs aberrantes isolées —
+/// p. ex. une erreur GPS de +500 m sur un échantillon — contrairement au
+/// lissage gaussien, qui ne ferait qu'atténuer le pic et l'étaler sur les voisins.
 pub fn median_filter_elevations(elevations: &[f64], window: usize) -> Vec<f64> {
     let n = elevations.len();
     if n == 0 {
@@ -27,9 +27,9 @@ pub fn median_filter_elevations(elevations: &[f64], window: usize) -> Vec<f64> {
     out
 }
 
-/// O(n) sliding-window Gaussian-weighted moving average on elevations.
-/// Uses two-pointer approach for efficient windowed smoothing.
-/// `window_distance_m` controls the smoothing radius along cumulative distance.
+/// Moyenne glissante pondérée par une gaussienne en O(n) sur les altitudes.
+/// Approche à deux pointeurs pour un lissage par fenêtre efficace.
+/// `window_distance_m` règle le rayon de lissage le long de la distance cumulée.
 pub fn smooth_elevations(
     elevations: &[f64],
     distances: &[f64],

@@ -1,6 +1,6 @@
 use crate::types::{PredictionPoint, RoutePoint, SegmentSummary};
 
-/// Classify terrain and group consecutive points into meaningful segments.
+/// Classe le terrain et regroupe les points consécutifs en segments significatifs.
 pub fn build_segments(
     pred_points: &[PredictionPoint],
     _route_points: &[RoutePoint],
@@ -85,8 +85,8 @@ fn build_one_segment(
 
     let seg_type = classify_gradient(avg_gradient).to_string();
 
-    // VAM (Velocità Ascensionale Media): vertical ascent rate in m/h
-    // Only meaningful for climb segments
+    // VAM (Velocità Ascensionale Media) : vitesse d'ascension verticale en m/h
+    // N'a de sens que pour les segments de montée
     let vam_mh = if seg_type == "climb" && time_s > 0.0 && gain > 0.0 {
         gain / (time_s / 3600.0)
     } else {
