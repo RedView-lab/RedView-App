@@ -32,6 +32,25 @@ describe('useHasChanged', () => {
     expect(seen).toEqual([false]);
   });
 
+  it('accepts a function as the value without calling it', () => {
+    const first = () => 'a';
+    const second = () => 'b';
+    const seen: boolean[] = [];
+    const { rerender } = renderHook(
+      (value: () => string) => {
+        const changed = useHasChanged(value);
+        seen.push(changed);
+        return changed;
+      },
+      { initialProps: first },
+    );
+    rerender(first);
+    expect(seen).toEqual([false, false]);
+    seen.length = 0;
+    rerender(second);
+    expect(seen).toEqual([true, false]);
+  });
+
   it('compares with Object.is', () => {
     const { result, rerender } = renderHook((value: number) => useHasChanged(value), { initialProps: Number.NaN });
     rerender(Number.NaN);

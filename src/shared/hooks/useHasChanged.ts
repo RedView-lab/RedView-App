@@ -16,8 +16,10 @@ import { useState } from 'react';
  * le rendu, avant les enfants, et le rendu suivant ne voit plus de changement.
  */
 export function useHasChanged<T>(value: T): boolean {
-  const [previous, setPrevious] = useState(value);
+  // Initialiseur et mise à jour fléchés : une fonction passée en valeur (p. ex.
+  // `t`) serait sinon appelée par useState comme initialiseur / mise à jour.
+  const [previous, setPrevious] = useState(() => value);
   if (Object.is(previous, value)) return false;
-  setPrevious(value);
+  setPrevious(() => value);
   return true;
 }
