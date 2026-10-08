@@ -143,8 +143,8 @@ export function usePredictionRun({
         status: 'running',
       }));
     };
-    // Running / trail use their own engine; the result is stamped with the
-    // discipline so displays (pace vs km/h) always match the engine used.
+    // Course / trail utilisent leur propre moteur ; le résultat est tamponné avec
+    // la discipline pour que les affichages (allure ou km/h) correspondent toujours au moteur utilisé.
     // Les .fit ne comptent qu'en profil "Personalisé". Vélo : moteur v2
     // (calibration .fit mise en cache, tracé complet).
     const fitFiles = isCustomRhythmProfile(itinerary.rhythm) ? runtime.fitFiles : [];

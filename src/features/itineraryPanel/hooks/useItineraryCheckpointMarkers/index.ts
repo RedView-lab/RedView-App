@@ -61,7 +61,7 @@ export function useItineraryCheckpointMarkers({
 } {
   const registryRef = useRef<Map<string, MarkerRegistryEntry>>(new Map());
 
-  // Keep latest callbacks in ref for stable popup handlers
+  // Garder les derniers rappels dans une ref pour des gestionnaires de popup stables
   const callbacksRef = useRef({
     onChangePauseDuration,
     onDeletePause,
@@ -114,7 +114,7 @@ export function useItineraryCheckpointMarkers({
 
     const currentKeys = new Set(currentCheckpoints.map((cp) => cp.key));
 
-    // Remove deleted / inactive markers
+    // Retirer les marqueurs supprimés / inactifs
     for (const [key, entry] of registry.entries()) {
       if (!currentKeys.has(key)) {
         entry.marker.remove();
@@ -122,7 +122,7 @@ export function useItineraryCheckpointMarkers({
       }
     }
 
-    // Add or update markers
+    // Ajouter ou mettre à jour les marqueurs
     for (const cp of currentCheckpoints) {
       const existing = registry.get(cp.key);
       if (existing) {
@@ -216,11 +216,11 @@ export function useItineraryCheckpointMarkers({
     }
   }, [itineraries, isMapLoaded, map, pausesEnabled, routesEnabled, waypointsEnabled, poisRouteEnabled, favorisEnabled, selectedPoiCategories, closeOtherPopups]);
 
-  // Handle map zoom changes in real-time
+  // Suivre les changements de zoom de la carte en temps réel
   useEffect(() => {
     if (!map) return;
 
-    // rAF-coalesced: `zoom` fires several times per frame during wheel zooms.
+    // Regroupé par rAF : `zoom` se déclenche plusieurs fois par image pendant un zoom à la molette.
     let frameId: number | null = null;
     const handleZoom = () => {
       if (frameId !== null) return;
@@ -240,7 +240,7 @@ export function useItineraryCheckpointMarkers({
     };
   }, [map]);
 
-  // Re-anchor on terrain idle (identical to classic POIs)
+  // Réancrer au repos du terrain (comme les POI classiques)
   useEffect(() => {
     if (!map) return;
 

@@ -1,10 +1,9 @@
 /**
- * Defaults for Expert Mode.
+ * Valeurs par défaut du mode expert.
  *
- * `createDefaultExpertState()` returns the same values as the stock
- * `trekking.brf` would: turning the toggle on without changing anything
- * yields the same route as basic mode (modulo the basic-mode mapping
- * heuristics).
+ * `createDefaultExpertState()` renvoie les mêmes valeurs que le `trekking.brf`
+ * d'origine : activer la bascule sans rien changer donne le même tracé que le
+ * mode simple (aux heuristiques de correspondance du mode simple près).
  */
 import { ALL_PARAMETERS } from './parameters';
 import type { ExpertProfileState, ParameterValue } from './types';

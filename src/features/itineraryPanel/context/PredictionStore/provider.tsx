@@ -10,22 +10,23 @@ interface PredictionProviderProps {
 }
 
 /**
- * Holds the latest FIT prediction per itinerary so non-itinerary panels
- * (center analysis chart, etc.) can read prediction time-series without
- * having to be wired through props or duplicate the worker call.
+ * Garde la dernière prédiction FIT par itinéraire pour que les panneaux hors
+ * itinéraire (graphique d'analyse central, etc.) puissent lire les séries
+ * temporelles de prédiction sans passer par les props ni dupliquer l'appel au worker.
  *
- * Predictions are also mirrored into the project store so the Dashboard
- * autosaver persists them to Appwrite. On mount we hydrate from any
- * predictions previously saved on the project itineraries — that way the
- * analysis chart instantly re-appears when reopening a saved project.
+ * Les prédictions sont aussi recopiées dans le store de projet pour que
+ * l'enregistrement automatique du Dashboard les persiste dans Appwrite. Au
+ * montage, on hydrate depuis les prédictions déjà enregistrées sur les
+ * itinéraires du projet — le graphique d'analyse réapparaît ainsi
+ * instantanément à la réouverture d'un projet enregistré.
  */
 export function PredictionProvider({ children }: PredictionProviderProps) {
   const projectStore = useProjectStoreOptional();
   const itineraries = projectStore?.project.itineraries;
 
-  // Lazy-initialise from any predictions persisted on the project. The
-  // Dashboard remounts the provider with a fresh `key` whenever the user
-  // opens a different project, so we always start from the loaded payload.
+  // Initialisation paresseuse depuis les prédictions persistées sur le projet.
+  // Le Dashboard remonte le provider avec une `key` neuve chaque fois que
+  // l'utilisateur ouvre un autre projet : on part donc toujours des données chargées.
   const [predictions, setPredictions] = useState<PredictionMap>(() => projectPredictions(itineraries));
 
   // Le projet fait foi (followProjectPredictions) : suivi pendant le rendu,
@@ -51,8 +52,9 @@ export function PredictionProvider({ children }: PredictionProviderProps) {
         if (prev[itineraryId] === result) return prev;
         return { ...prev, [itineraryId]: result };
       });
-      // Mirror into the project so the Dashboard autosaver pushes the
-      // prediction to Appwrite. Derived data: written outside undo history.
+      // Recopier dans le projet pour que l'enregistrement automatique du
+      // Dashboard pousse la prédiction vers Appwrite. Donnée dérivée : écrite hors
+      // de l'historique d'annulation.
       const setProjectWithoutHistory = projectStore?.setProjectWithoutHistory;
       if (setProjectWithoutHistory) {
         setProjectWithoutHistory((project) => {

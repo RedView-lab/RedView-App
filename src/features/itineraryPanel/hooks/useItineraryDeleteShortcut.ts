@@ -3,31 +3,32 @@ import { isTypingTarget } from '@/shared/lib/isTypingTarget';
 import { isFreeCamActive } from '@/features/freeCam';
 
 /**
- * Keyboard accelerators that act on the currently active itinerary.
+ * Raccourcis clavier qui agissent sur l'itinéraire actif.
  *
- * Listens at the window level so the shortcut works regardless of focus —
- * whether the user has just clicked an itinerary tab in the left panel, or a
- * row in the central synthesis panel. The active itinerary is the single
- * source of truth shared by both panels, so deleting it is consistent from
- * either surface.
+ * Écoute au niveau de la fenêtre pour que le raccourci marche quel que soit le
+ * focus — que l'utilisateur vienne de cliquer sur un onglet d'itinéraire du
+ * panneau de gauche ou sur une ligne du panneau de synthèse central.
+ * L'itinéraire actif est la seule source de vérité partagée par les deux
+ * panneaux : le supprimer est donc cohérent depuis l'un ou l'autre.
  *
- * Guards:
- *  - ignores key presses while typing in inputs / textareas / contentEditable
- *    fields (so editing an itinerary name, a search box, etc. never triggers a
- *    deletion);
- *  - ignores presses that include modifier keys (so OS / browser combos such
- *    as Shift+Delete or Ctrl+Shift+Delete keep their native behavior);
- *  - no-ops when there is nothing to delete, or only a single itinerary
- *    remains (matching the `removeItinerary` store rule).
+ * Garde-fous :
+ *  - ignore les touches pendant la saisie dans des champs input / textarea /
+ *    contentEditable (éditer un nom d'itinéraire, une recherche, etc. ne
+ *    déclenche donc jamais de suppression) ;
+ *  - ignore les appuis qui comportent des touches de modification (les
+ *    combinaisons de l'OS / du navigateur comme Maj+Suppr ou Ctrl+Maj+Suppr
+ *    gardent leur comportement natif) ;
+ *  - ne fait rien quand il n'y a rien à supprimer, ou qu'il ne reste qu'un seul
+ *    itinéraire (conforme à la règle `removeItinerary` du store).
  */
 export interface UseItineraryDeleteShortcutArgs {
-  /** Currently active itinerary, or null when none is selected. */
+  /** Itinéraire actif, ou null quand aucun n'est sélectionné. */
   activeItineraryId: string | null;
-  /** Total number of itineraries; deletion is disabled when ≤ 1. */
+  /** Nombre total d'itinéraires ; la suppression est désactivée quand il est ≤ 1. */
   itineraryCount: number;
-  /** Removes the itinerary with the given id. Returns true if it was removed. */
+  /** Supprime l'itinéraire d'id donné. Renvoie true s'il a été supprimé. */
   onRemove: (id: string) => boolean;
-  /** When false, the listener is detached entirely. */
+  /** À false, l'écouteur est entièrement détaché. */
   enabled?: boolean;
 }
 
@@ -41,12 +42,12 @@ export function useItineraryDeleteShortcut({
     if (!enabled) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Only react to the bare Delete / Backspace keys. Any held modifier
-      // (Ctrl, Alt, Shift, Meta) defers to the browser / OS.
+      // Ne réagir qu'aux touches Suppr / Retour arrière seules. Toute touche de
+      // modification maintenue (Ctrl, Alt, Maj, Méta) laisse la main au navigateur / à l'OS.
       if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
       if (event.key !== 'Delete' && event.key !== 'Backspace') return;
 
-      // Never hijack text entry.
+      // Ne jamais détourner la saisie de texte.
       if (isTypingTarget(event.target)) return;
       if (isFreeCamActive()) return;
 

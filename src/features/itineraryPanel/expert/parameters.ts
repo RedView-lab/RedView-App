@@ -1,19 +1,19 @@
 /**
- * Full catalog of BRouter parameters exposed in Expert Mode.
+ * Catalogue complet des paramètres BRouter exposés dans le mode expert.
  *
- * Sources (BRouter repository, github.com/abrensch/brouter):
- *   - `misc/profiles2/trekking.brf` (every `assign foo = bar # %foo% | desc | type`)
+ * Sources (dépôt BRouter, github.com/abrensch/brouter) :
+ *   - `misc/profiles2/trekking.brf` (chaque `assign foo = bar # %foo% | desc | type`)
  *   - `docs/developers/profile_developers_guide.md`
  *
- * Each entry maps 1-to-1 with a `profile:<id>` URL override that the
- * BRouter standalone server understands without requiring a custom
- * profile upload — the trekking profile defines all of these as
- * `assign` in its `---context:global` section.
+ * Chaque entrée correspond 1 pour 1 à une surcharge d'URL `profile:<id>` que le
+ * serveur BRouter autonome comprend sans envoi de profil personnalisé — le
+ * profil trekking les définit toutes en `assign` dans sa section
+ * `---context:global`.
  *
- * If you add a parameter here, double-check it appears as `assign` in
- * the chosen base profile (see `panelProfileToBrouter` in
- * `lib/brouter/profiles/profile-overrides.ts`); otherwise the override is
- * silently ignored by BRouter.
+ * Si vous ajoutez un paramètre ici, vérifiez qu'il apparaît en `assign` dans le
+ * profil de base choisi (voir `panelProfileToBrouter` dans
+ * `lib/brouter/profiles/profile-overrides.ts`) ; sinon BRouter ignore la
+ * surcharge sans rien dire.
  */
 import type { ParameterDefinition } from './types';
 

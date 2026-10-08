@@ -4,11 +4,11 @@ import type { PredictionMap } from './projectPredictions';
 import type { PredictionResult } from '@/features/fitPredictor';
 
 export interface PredictionStoreValue {
-  /** Map of itineraryId → latest successful prediction result. */
+  /** Table itineraryId → dernier résultat de prédiction réussi. */
   predictions: PredictionMap;
-  /** Persist (or clear, when null) the prediction for a given itinerary. */
+  /** Persiste (ou efface, si null) la prédiction d'un itinéraire donné. */
   setPrediction: (itineraryId: string, result: PredictionResult | null) => void;
-  /** Drop every stored prediction (used when the active project changes). */
+  /** Abandonne toutes les prédictions stockées (quand le projet actif change). */
   clearPredictions: () => void;
 }
 

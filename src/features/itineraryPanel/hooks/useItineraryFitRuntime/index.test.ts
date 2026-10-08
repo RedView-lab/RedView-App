@@ -26,7 +26,7 @@ function upload(name: string): ItineraryFitUpload {
 }
 
 function itinerary(fitUploads: ItineraryFitUpload[]): Itinerary {
-  // No route: the auto prediction has nothing to compute, only the hydration runs.
+  // Pas de tracé : la prédiction automatique n'a rien à calculer, seule l'hydratation tourne.
   return { id: 'it-1', name: 'Boucle', fitUploads } as unknown as Itinerary;
 }
 
@@ -39,7 +39,7 @@ function renderRuntime(active: Itinerary) {
   return { ...rendered, setProject };
 }
 
-/** Lets the hydration's promises settle and React commit their updates. */
+/** Laisse les promesses de l'hydratation se régler et React valider leurs mises à jour. */
 async function flush() {
   await act(async () => {
     for (let i = 0; i < 5; i += 1) await Promise.resolve();
@@ -63,7 +63,7 @@ describe('useItineraryFitRuntime — .fit hydration', () => {
   it('does not download again when the itinerary is re-created with the same uploads', async () => {
     const { result, rerender } = renderRuntime(itinerary([upload('ride.fit')]));
     await flush();
-    // Same content, new objects (collab materialisation, undo, project reload).
+    // Même contenu, nouveaux objets (matérialisation collab, annulation, rechargement du projet).
     rerender(itinerary([upload('ride.fit')]));
     await flush();
     rerender({ ...itinerary([upload('ride.fit')]), name: 'Boucle renommée' } as Itinerary);

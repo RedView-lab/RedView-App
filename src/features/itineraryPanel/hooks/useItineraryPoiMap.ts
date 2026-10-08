@@ -16,14 +16,14 @@ import type {
 } from '../types';
 
 /**
- * Mapping from the panel's per-row POI keys (Figma taxonomy) to the
- * underlying OSM categories used by the POI engine.
+ * Correspondance entre les clés de POI par ligne du panneau (taxonomie Figma) et
+ * les catégories OSM sous-jacentes utilisées par le moteur de POI.
  *
- * Each row now aggregates every category the base indexes for that need, so
- * a single checkbox surfaces the whole family instead of one narrow OSM tag.
- * The engine no longer filters anything else out (see
- * `src/features/poi/lib/corridor-distance-filter.ts`), which means a checked
- * row really does return *all* matching POI within the row's distance.
+ * Chaque ligne regroupe désormais toutes les catégories que la base indexe pour
+ * ce besoin : une seule case fait apparaître toute la famille au lieu d'une
+ * étiquette OSM étroite. Le moteur ne filtre plus rien d'autre (voir
+ * `src/features/poi/lib/corridor-distance-filter.ts`) : une ligne cochée renvoie
+ * vraiment *tous* les POI correspondants dans la distance de la ligne.
  */
 const PANEL_TO_FEATURE_POI: Record<PanelPoiCategory, FeaturePoiCategory[]> = {
   fountains: ['drinking_water', 'water_point', 'water_tap', 'spring', 'fountain'],
@@ -44,22 +44,22 @@ const PANEL_TO_FEATURE_POI: Record<PanelPoiCategory, FeaturePoiCategory[]> = {
 };
 
 const DEFAULT_RADIUS_M = 1000;
-/** Legacy keys kept so projects saved with the removed refine toggle still load. */
+/** Anciennes clés gardées pour que les projets enregistrés avec l'ancienne bascule d'affinage se chargent encore. */
 const POI_NON_ENTRY_KEYS = new Set(['refineResults', 'refineLimitPerKm']);
 
 export interface UseItineraryPoiMapResult {
   loading: boolean;
   error: string | null;
   poiCount: number;
-  /** 0..1 corridor-search progress; null while idle. */
+  /** Progression 0..1 de la recherche dans le couloir ; null au repos. */
   corridorProgress: number | null;
-  /** Trigger a corridor search along the active itinerary's GPX route. */
+  /** Lance une recherche dans le couloir le long du tracé GPX de l'itinéraire actif. */
   searchCorridor: () => void;
-  /** Abort the in-flight corridor search, if any. */
+  /** Interrompt la recherche dans le couloir en cours, s'il y en a une. */
   cancelSearchCorridor: () => void;
   hasGpxRoute: boolean;
   hasEnabledCategories: boolean;
-  /** Effective radius (max of enabled rows) used by the corridor search. */
+  /** Rayon effectif (maximum des lignes activées) utilisé par la recherche dans le couloir. */
   radiusM: number;
   openPoiMarker: (
     poiId: number | string,
@@ -69,14 +69,14 @@ export interface UseItineraryPoiMapResult {
 }
 
 /**
- * Bridges the left-dock Itinerary Panel's POI editor with the Mapbox map:
+ * Relie l'éditeur de POI du panneau d'itinéraire du dock de gauche à la carte Mapbox :
  *
- * - Renders the active itinerary's GPX track as a styled line.
- * - Translates the panel's POI rows into Overpass categories.
- * - Forwards loading / count / error state back to the panel.
+ * - Affiche la trace GPX de l'itinéraire actif comme une ligne stylée.
+ * - Traduit les lignes de POI du panneau en catégories Overpass.
+ * - Renvoie l'état de chargement / de comptage / d'erreur au panneau.
  *
- * The hook is intentionally side-effect-only on the map; it never owns
- * UI state beyond what `usePoi` already exposes.
+ * Le hook n'a volontairement que des effets de bord sur la carte ; il ne
+ * possède aucun état d'interface au-delà de ce que `usePoi` expose déjà.
  */
 import { matchesPoiCategory } from '../sections/timeline/poiCategoryMatch';
 import { isPanelPoiCategoryHidden } from '../lib/project/poiRows';
@@ -92,7 +92,7 @@ export function useItineraryPoiMap(
   favorisEnabled: boolean = true,
   selectedPoiCategories?: Set<string>,
 ): UseItineraryPoiMapResult {
-  // ── Derive enabled OSM categories from the panel POI rows ─────────
+  // ── Catégories OSM activées, dérivées des lignes de POI du panneau ──
   const enabledCategories = useMemo<Set<FeaturePoiCategory>>(() => {
     const set = new Set<FeaturePoiCategory>();
     if (!active?.poi || !poisRouteEnabled) return set;
@@ -130,14 +130,14 @@ export function useItineraryPoiMap(
     return set;
   }, [active]);
 
-  // ── Effective corridor radius: max of enabled rows ────────────────
+  // ── Rayon effectif du couloir : maximum des lignes activées ───────
   //
-  // The POI server takes a single radius for the whole corridor query, so
-  // we query with the widest X any enabled row asks for, then narrow each
-  // category down to its own X on the client
-  // (`maxLateralDistanceByCategory` below). Querying with the max — instead
-  // of a fixed default — is what makes "all POIs within X" actually true
-  // for the widest row.
+  // Le serveur de POI prend un seul rayon pour toute la requête du couloir : on
+  // interroge donc avec le X le plus large demandé par une ligne activée, puis
+  // on resserre chaque catégorie sur son propre X côté client
+  // (`maxLateralDistanceByCategory` plus bas). Interroger avec le maximum — au
+  // lieu d'une valeur fixe par défaut — est ce qui rend « tous les POI dans X »
+  // vraiment exact pour la ligne la plus large.
   const radiusM = useMemo(() => {
     if (!active?.poi) return DEFAULT_RADIUS_M;
     let max = 0;

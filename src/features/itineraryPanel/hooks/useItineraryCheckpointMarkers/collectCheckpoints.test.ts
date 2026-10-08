@@ -80,7 +80,7 @@ describe('collectItineraryCheckpoints', () => {
     ]);
     expect(checkpoint(withStep, 'start')!.removable).toBe(true);
     expect(checkpoint(withStep, 'end')!.removable).toBe(true);
-    // The popup is refreshed when this changes.
+    // La popup est rafraîchie quand ceci change.
     expect(checkpoint(withStep, 'end')!.signature).not.toBe(checkpoint(alone, 'end')!.signature);
   });
 });

@@ -17,11 +17,11 @@ interface ItineraryTabsProps {
   profiles: RouteProfile[];
   activeId: string;
   /**
-   * Name of a GPX file currently being parsed. While set, a non-interactive
-   * "loading" row is rendered after the real itineraries and before the add
-   * button, so the user sees the import in flight in the same list that will
-   * hold the result. The row is replaced by the actual itinerary row as soon as
-   * `addItineraryFromGpxFile` resolves.
+   * Nom d'un fichier GPX en cours de parse. Tant qu'il est posé, une ligne de
+   * « chargement » non interactive est rendue après les vrais itinéraires et
+   * avant le bouton d'ajout, pour que l'utilisateur voie l'import en cours dans
+   * la liste même qui contiendra le résultat. La ligne est remplacée par la vraie
+   * ligne d'itinéraire dès que `addItineraryFromGpxFile` se résout.
    */
   pendingImportName?: string | null;
   onSelect?: (id: string) => void;
@@ -31,10 +31,10 @@ interface ItineraryTabsProps {
   onDuplicate?: (id: string) => void;
   onRemove?: (id: string) => void;
   /**
-    * Inline-rename handler. When provided, the overflow menu can switch the
-    * current row into edit mode.
-   * Confirmed values propagate to every consumer of the project store
-   * (center panel synth, right-panel "Itinéraires" section, etc.).
+   * Gestionnaire de renommage en place. Quand il est fourni, le menu de débordement
+   * peut passer la ligne courante en mode édition. Les valeurs confirmées se
+   * propagent à chaque consommateur du store de projet (synthèse du panneau
+   * central, section « Itinéraires » du panneau de droite, etc.).
    */
   onRename?: (id: string, name: string) => void;
 }
@@ -262,9 +262,9 @@ export function ItineraryTabs({
             </div>
           );
         })}
-        {/* GPX import in flight: a non-interactive row in the same list that
-            will receive the parsed itinerary, so the result lands where the
-            user is already looking. */}
+        {/* Import GPX en cours : une ligne non interactive dans la liste même qui
+            recevra l'itinéraire parsé, pour que le résultat arrive là où
+            l'utilisateur regarde déjà. */}
         {pendingImportName ? (
           <div className="rvi-itin-wrap rvi-itin-wrap--pending" aria-live="polite">
             <div className="rvi-itin rvi-itin--pending">

@@ -29,8 +29,9 @@ function getPoiMarkerVisualState(zoom: number): { scale: number } {
 }
 
 /**
- * Pause pin (`.rv-poi-marker`, anchor 'bottom'): the pin and its duration
- * badge stand 75px × scale above the tip, ~30px × scale each side (time badge included).
+ * Épingle de pause (`.rv-poi-marker`, ancre 'bottom') : l'épingle et son badge
+ * de durée se dressent à 75px × échelle au-dessus de la pointe, ~30px × échelle
+ * de chaque côté (badge d'heure compris).
  */
 export function getPausePopupOffset(scale: number) {
   return buildPopupClearanceOffset({ above: 75 * scale, below: 0, side: 30 * scale });

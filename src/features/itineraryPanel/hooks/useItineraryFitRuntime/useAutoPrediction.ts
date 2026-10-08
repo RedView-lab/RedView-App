@@ -62,7 +62,7 @@ export function useAutoPrediction({
       return;
     }
 
-    // If this is the initial load for this itinerary and we already have a matching prediction
+    // S'il s'agit du chargement initial de cet itinéraire et qu'on a déjà une prédiction correspondante
     if (!lastSig) {
       const lastPointDistM = active.gpxRoute?.points[active.gpxRoute.points.length - 1]?.distanceM ?? 0;
       const predDistM = active.prediction?.total_distance_m ?? 0;
@@ -118,9 +118,9 @@ export function useAutoPrediction({
       return;
     }
 
-    // No automatic prediction until the user has touched the "Rythme" mode.
-    // Legacy projects (saved before the flag) count as configured when they
-    // already carry a prediction or FIT uploads.
+    // Pas de prédiction automatique tant que l'utilisateur n'a pas touché au mode
+    // « Rythme ». Les anciens projets (enregistrés avant le drapeau) comptent comme
+    // configurés quand ils portent déjà une prédiction ou des envois FIT.
     const rhythmConfigured =
       active.rhythmConfigured === true
       || active.prediction != null

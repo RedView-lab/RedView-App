@@ -11,8 +11,8 @@ import type { MergeItineraryConnectorSegment, MergeItineraryProjectResult, Split
 import type { DerivedComputeGate, ProjectCollabLink } from './collab';
 
 /**
- * Identity of a copy already made elsewhere (LiDAR viewer), so both sides keep
- * referring to the same itinerary.
+ * Identité d'une copie déjà faite ailleurs (viewer LiDAR), pour que les deux
+ * côtés continuent de désigner le même itinéraire.
  */
 export interface DuplicateItineraryOverrides {
   id?: string;

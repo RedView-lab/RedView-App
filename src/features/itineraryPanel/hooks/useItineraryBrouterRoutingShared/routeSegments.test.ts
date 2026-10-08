@@ -37,8 +37,8 @@ function parallelPiece(base: RoutePoints, fromKm: number, toKm: number, offsetM:
 }
 
 /**
- * Route along the 6°E meridian, one point per km. `legsKm` alternate north
- * (positive) and south (negative): `[200, -200]` is an out-and-back.
+ * Tracé le long du méridien 6°E, un point par km. `legsKm` alternent nord
+ * (positif) et sud (négatif) : `[200, -200]` est un aller-retour.
  */
 function meridianRoute(legsKm: number[], startLat = 44): RoutePoints {
   const points: RoutePoints = [{ lat: startLat, lon: 6, distanceM: 0 }];
@@ -72,7 +72,7 @@ describe('narrowRoutePatchToEdit', () => {
     expect(narrowed.start).toMatchObject({ kind: 'waypoint', distanceM: 187_000 });
     expect(narrowed.end).toMatchObject({ kind: 'waypoint', distanceM: 213_000 });
     expect(narrowed.start.lat).toBeCloseTo(route[187]!.lat, 9);
-    // The real bounds stay in the window, for widenUnjoinedRoutePatchWindow.
+    // Les vraies bornes restent dans la fenêtre, pour widenUnjoinedRoutePatchWindow.
     expect(narrowed.window).toEqual({
       start: patch.start,
       end: patch.end,
@@ -113,9 +113,9 @@ describe('narrowRoutePatchToEdit', () => {
     const patch = wholeRoutePatch(route);
     const edit = { fromM: 100_000, toM: 100_000 };
 
-    // Km 100 and km 300 are the same place: the projection may be on the other pass.
+    // Le km 100 et le km 300 sont au même endroit : la projection peut tomber sur l'autre passage.
     expect(narrowRoutePatchToEdit(patch, route, { ...edit, projected: true }).window).toBeUndefined();
-    // A position taken on the route itself is unambiguous.
+    // Une position prise sur le tracé lui-même est sans ambiguïté.
     expect(narrowRoutePatchToEdit(patch, route, { ...edit, projected: false }).window).toBeDefined();
   });
 });
@@ -128,7 +128,7 @@ describe('replaceRouteSegment', () => {
       end: { lat: base[6]!.lat, lon: base[6]!.lon, kind: 'waypoint', distanceM: 6000 },
       via: [],
     };
-    // Detour 1 km east between km 3 and km 6.
+    // Détour de 1 km vers l'est entre le km 3 et le km 6.
     const detour: RoutePoints = [
       { lat: base[3]!.lat, lon: 6 },
       { lat: base[4]!.lat, lon: 6.0127 },
@@ -142,7 +142,7 @@ describe('replaceRouteSegment', () => {
     expect(result.slice(0, 4).map((point) => point.lat)).toEqual(base.slice(0, 4).map((point) => point.lat));
     expect(result.some((point) => point.lon > 6.01)).toBe(true);
     expect(result[result.length - 1]!.lat).toBeCloseTo(base[10]!.lat, 9);
-    // Km 0–3, detour (its first point is the km 3 junction, kept once), km 7–10.
+    // Km 0–3, détour (son premier point est la jonction du km 3, gardée une fois), km 7–10.
     expect(result).toHaveLength(4 + 3 + 4);
     for (let index = 1; index < result.length; index += 1) {
       expect(result[index]!.distanceM!).toBeGreaterThan(result[index - 1]!.distanceM!);
@@ -157,7 +157,7 @@ describe('replaceRouteSegment', () => {
 
   it('drops the old start when the start moved (« Démarrer ici »): no straight line from it', () => {
     const base = meridianRoute([100]);
-    // New start at km 30, routed back onto the stored route at km 60.
+    // Nouveau départ au km 30, routé pour rejoindre le tracé stocké au km 60.
     const replacement = base.slice(30, 61).map((point) => ({ lat: point.lat, lon: point.lon }));
     const patch: ItineraryPendingRoutePatch = {
       start: { lat: base[30]!.lat, lon: base[30]!.lon, kind: 'start' },
@@ -191,7 +191,7 @@ describe('replaceRouteSegment', () => {
 
   it('refuses a routed piece that does not join the stored route at an intermediate bound', () => {
     const base = meridianRoute([20]);
-    // Starts 300 m east of the stored route (step snapped far off a GPX track) and never comes back.
+    // Part 300 m à l'est du tracé stocké (étape accrochée loin d'une trace GPX) et n'y revient jamais.
     const replacement = parallelPiece(base, 5, 15, 300);
     const patch: ItineraryPendingRoutePatch = {
       start: { lat: base[5]!.lat, lon: base[5]!.lon, kind: 'waypoint', distanceM: 5_000 },
@@ -206,7 +206,7 @@ describe('replaceRouteSegment', () => {
   it('joins where the routed piece rejoins the stored route, a few points after its snapped start', () => {
     const base = meridianRoute([20]);
     const offRoad = parallelPiece(base, 5, 5, 120)[0]!;
-    // Snapped 120 m east, then back on the stored route from km 6 on.
+    // Accroché 120 m à l'est, puis de retour sur le tracé stocké à partir du km 6.
     const replacement = [offRoad, ...base.slice(6, 16).map((point) => ({ lat: point.lat, lon: point.lon }))];
     const patch: ItineraryPendingRoutePatch = {
       start: { lat: base[5]!.lat, lon: base[5]!.lon, kind: 'waypoint', distanceM: 5_000 },
@@ -225,7 +225,7 @@ describe('replaceRouteSegment', () => {
     const base = meridianRoute([200, -200]);
     const replacement = base.slice(100, 111).map((point) => ({ lat: point.lat, lon: point.lon }));
     const patch: ItineraryPendingRoutePatch = {
-      // Start hinted on the way back (km 300 = same place as km 100), end on the way out.
+      // Départ indiqué sur le retour (km 300 = même endroit que le km 100), arrivée sur l'aller.
       start: { lat: base[100]!.lat, lon: base[100]!.lon, kind: 'waypoint', distanceM: 300_000 },
       end: { lat: base[110]!.lat, lon: base[110]!.lon, kind: 'waypoint', distanceM: 110_000 },
       via: [],
@@ -258,10 +258,10 @@ describe('widenUnjoinedRoutePatchWindow', () => {
 
     expect(widenUnjoinedRoutePatchWindow(narrowed, route, along)).toBeNull();
     const widened = widenUnjoinedRoutePatchWindow(narrowed, route, along, { start: true });
-    // Next step: 80 km before the edit; the joined end keeps its bound.
+    // Étape suivante : 80 km avant l'édition ; l'arrivée rejointe garde sa borne.
     expect(widened?.start).toMatchObject({ kind: 'waypoint', distanceM: 119_000 });
     expect(widened?.end).toEqual(narrowed.end);
-    // Then 200 km before km 200: the real start.
+    // Puis 200 km avant le km 200 : le vrai départ.
     const widenedAgain = widenUnjoinedRoutePatchWindow(widened!, route, along, { start: true });
     expect(widenedAgain?.start).toEqual(narrowed.window!.start);
   });
@@ -300,7 +300,7 @@ describe('cropRoutePoints', () => {
 
   it('cuts at the pass given by the hint on an out-and-back', () => {
     const base = meridianRoute([50, -50]);
-    // Km 20 and km 80 are the same place.
+    // Le km 20 et le km 80 sont au même endroit.
     const cropped = cropRoutePoints(base, base[20]!, 'before', { toleranceM: 15, hintM: 80_000 })!;
 
     expect(cropped.cutM).toBeCloseTo(80_000, -1);

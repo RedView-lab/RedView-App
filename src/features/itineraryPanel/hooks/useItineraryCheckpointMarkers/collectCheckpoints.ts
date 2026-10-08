@@ -133,7 +133,7 @@ export function collectItineraryCheckpoints(
   // du départ / de l'arrivée supprimé(e).
   const endpointRemovable = itinerary.timeline.some((row) => row.kind === 'waypoint' && hasPlacedCoord(row));
 
-  // 1. Start checkpoint
+  // 1. Point de contrôle de départ
   let startCoord: [number, number] | null = null;
   let startLabel = '';
   const startRow = itinerary.timeline.find((row) => row.kind === 'start');
@@ -166,7 +166,7 @@ export function collectItineraryCheckpoints(
     });
   }
 
-  // 2. End checkpoint
+  // 2. Point de contrôle d'arrivée
   let endCoord: [number, number] | null = null;
   let endLabel = '';
   const endRow = itinerary.timeline.find((row) => row.kind === 'end');
@@ -205,7 +205,7 @@ export function collectItineraryCheckpoints(
     });
   }
 
-  // 3. Pauses (if enabled in top bar, or if favorite)
+  // 3. Pauses (si activées dans la barre du haut, ou si favorites)
   const pauseRows = itinerary.timeline.filter(
     (row) =>
       row.kind === 'pause' &&
@@ -242,7 +242,7 @@ export function collectItineraryCheckpoints(
     }
   }
 
-  // 3b. Auto-generated interval pauses
+  // 3b. Pauses d'intervalle générées automatiquement
   if (pausesEnabled && itinerary.rhythm?.pauseEveryIntervalEnabled && schedule) {
     for (const autoPause of schedule.autoPauses) {
       if (autoPause.visible === false) continue;
@@ -272,7 +272,7 @@ export function collectItineraryCheckpoints(
     }
   }
 
-  // 4. Waypoints (if enabled in top bar, or if favorite)
+  // 4. Étapes (si activées dans la barre du haut, ou si favorites)
   const waypointRows = itinerary.timeline.filter(
     (row) =>
       row.kind === 'waypoint' &&

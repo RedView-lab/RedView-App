@@ -15,9 +15,9 @@ interface ModeTabsProps {
   controlsId?: string;
   onChange?: (mode: VisiblePanelMode) => void;
   /**
-   * When true the whole mode menu is inert: no tab is selected, every tab is
-   * disabled and the settings below are collapsed. Used on a brand-new project
-   * that has no itinerary yet — there is nothing to edit.
+   * À true, tout le menu des modes est inerte : aucun onglet sélectionné, chaque
+   * onglet désactivé et les réglages dessous repliés. Utilisé sur un tout
+   * nouveau projet qui n'a pas encore d'itinéraire — il n'y a rien à éditer.
    */
   disabled?: boolean;
 }

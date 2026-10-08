@@ -1,19 +1,19 @@
 /**
- * Expert Mode — types & parameter metadata.
+ * Mode expert — types et métadonnées des paramètres.
  *
- * The Expert Mode lets a power-user tweak EVERY exposed BRouter
- * parameter without leaving the panel. Each parameter has:
+ * Le mode expert permet à un utilisateur avancé de régler CHAQUE paramètre
+ * BRouter exposé sans quitter le panneau. Chaque paramètre a :
  *
- *   - id          → BRF variable name (used for `profile:<id>=<value>` URL
- *                   override and inside the generated BRF body).
- *   - label       → French UI label.
- *   - hint        → short tooltip / helper text.
- *   - group       → which collapsible section it belongs to.
+ *   - id          → nom de variable BRF (utilisé pour la surcharge d'URL
+ *                   `profile:<id>=<value>` et dans le corps BRF généré).
+ *   - label       → libellé d'interface en français.
+ *   - hint        → courte infobulle / texte d'aide.
+ *   - group       → la section repliable à laquelle il appartient.
  *   - kind        → boolean | number | enum.
- *   - bounds      → numeric min / max / step (UI sliders).
- *   - choices     → enum options (UI selects).
- *   - default     → starting value when the user opts into Expert Mode.
- *   - advanced    → when true, hidden behind "Afficher tous les paramètres".
+ *   - bounds      → min / max / pas numériques (curseurs de l'interface).
+ *   - choices     → options d'énumération (listes de l'interface).
+ *   - default     → valeur de départ quand l'utilisateur passe en mode expert.
+ *   - advanced    → à true, masqué derrière « Afficher tous les paramètres ».
  */
 
 export type ParameterValue = boolean | number | string;
@@ -39,37 +39,37 @@ export interface ParameterDefinition {
   group: ParameterGroup;
   kind: ParameterKind;
   default: ParameterValue;
-  /** Numeric bounds. Required when kind === 'number'. */
+  /** Bornes numériques. Requises quand kind === 'number'. */
   min?: number;
   max?: number;
   step?: number;
-  /** Suffix shown after the input ("m", "%", "km/h", …). */
+  /** Suffixe affiché après la saisie (« m », « % », « km/h », …). */
   unit?: string;
-  /** Enum options. Required when kind === 'enum'. */
+  /** Options d'énumération. Requises quand kind === 'enum'. */
   choices?: ParameterChoice[];
   /** Hidden behind the "Afficher avancés" toggle. */
   advanced?: boolean;
 }
 
 /**
- * The Expert profile state lives on each `Itinerary`. When `enabled`
- * is false we ignore `values` entirely and fall back to the basic
- * Traçage controls. When true, the values are sent as URL overrides on
- * top of the active preset.
+ * L'état du profil expert vit sur chaque `Itinerary`. Quand `enabled` est faux,
+ * on ignore entièrement `values` et on se rabat sur les réglages de Traçage
+ * simples. Quand il est vrai, les valeurs sont envoyées en surcharges d'URL
+ * par-dessus le préréglage actif.
  */
 export interface ExpertProfileState {
   enabled: boolean;
-  /** id → user-set value. Missing keys = use parameter `default`. */
+  /** id → valeur choisie par l'utilisateur. Clés absentes = `default` du paramètre. */
   values: Record<string, ParameterValue>;
   /**
-   * Optional: raw BRF text the user pasted in the editor. When set,
-   * uploading takes precedence over `values` and produces a `custom_<id>`
-   * profile that's used in subsequent route requests.
+   * Optionnel : texte BRF brut collé par l'utilisateur dans l'éditeur. Quand il
+   * est posé, l'envoi l'emporte sur `values` et produit un profil `custom_<id>`
+   * utilisé dans les requêtes de tracé suivantes.
    */
   rawBrf?: string;
-  /** Last successfully uploaded custom profile id (cached). */
+  /** Id du dernier profil personnalisé envoyé avec succès (en cache). */
   uploadedProfileId?: string;
-  /** Hash of the last uploaded BRF — used to skip duplicate uploads. */
+  /** Hachage du dernier BRF envoyé — sert à sauter les envois en double. */
   uploadedHash?: string;
 }
 
