@@ -51,7 +51,7 @@ for (const col of ['projects', 'project_folders', 'subscriptions', 'customers'])
   for (const i of c.indexes ?? []) console.log(`  index ${i.key}: ${i.type} [${i.attributes.join(',')}] status=${i.status}`);
 }
 
-// size_bytes distribution (no data content fetched)
+// distribution de size_bytes (aucun contenu de données récupéré)
 const projects = await all(`/databases/${DB}/collections/projects/documents`, 'documents', [
   { method: 'select', values: ['$id', 'user_id', 'size_bytes', '$updatedAt'] },
 ]);

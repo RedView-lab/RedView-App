@@ -33,7 +33,7 @@ export function encodeTerrariumPng(elevations: Float32Array, size = 256): Buffer
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(size, 0);
   ihdr.writeUInt32BE(size, 4);
-  ihdr[8] = 8; // bit depth
+  ihdr[8] = 8; // profondeur de bits
   ihdr[9] = 2; // RGB
   return Buffer.concat([
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),

@@ -1,26 +1,29 @@
 /**
- * Audit B1 + B2 — routing-effect races, reproduced with the app's REAL pure
- * functions (traceEdits, timelineMutations, projectMutations, routeSegments).
+ * Audit B1 + B2 — courses de l'effet de routage, reproduites avec les VRAIES
+ * fonctions pures de l'application (traceEdits, timelineMutations,
+ * projectMutations, routeSegments).
  *
  *   npx tsx script-test-bench/audit/b-trace-edits.ts
  *
- * The React effect in hooks/useItineraryBrouterRouting/index.ts is simulated
- * faithfully: its dependency list includes `pendingRoutePatchKey`,
- * `pendingTraceExtensionKey`, `gpxRoutePointCount`, `gpxRouteSource`; any change
- * re-runs the effect, whose cleanup calls `ctrl.abort()` on the request (and the
- * IGN refinement that awaits the same signal).
+ * L'effet React de hooks/useItineraryBrouterRouting/index.ts est simulé
+ * fidèlement : sa liste de dépendances comprend `pendingRoutePatchKey`,
+ * `pendingTraceExtensionKey`, `gpxRoutePointCount`, `gpxRouteSource` ; tout
+ * changement relance l'effet, dont le nettoyage appelle `ctrl.abort()` sur la
+ * requête (et sur l'affinage IGN qui attend le même signal).
  *
- * Scenarios
- *  B1  "IGN refinement never lands": after the first (BRouter-elevation) apply,
- *      the deps change → cleanup aborts the refinement; and even if it weren't
- *      aborted, the 2nd apply is a no-op because the pending field is cleared.
- *  B2a "rapid trace clicks": click B then C before B's segment resolves →
- *      pendingTraceExtension is overwritten, A→B is never routed and the final
- *      route contains a straight unrouted jump A→B.
- *  B2b "two quick drags of adjacent points": the 2nd pendingRoutePatch replaces
- *      the 1st; the segment around the 1st moved point is never re-routed.
+ * Scénarios
+ *  B1  « l'affinage IGN n'arrive jamais » : après la première application (avec
+ *      l'altitude de BRouter), les dépendances changent → le nettoyage annule
+ *      l'affinage ; et même sans annulation, la 2e application est sans effet
+ *      car le champ en attente est vidé.
+ *  B2a « clics de tracé rapides » : clic sur B puis C avant que le segment de B
+ *      soit résolu → pendingTraceExtension est écrasé, A→B n'est jamais routé
+ *      et la route finale contient un saut en ligne droite non routé A→B.
+ *  B2b « deux glissers rapides de points voisins » : le 2e pendingRoutePatch
+ *      remplace le 1er ; le segment autour du 1er point déplacé n'est jamais
+ *      reroutée.
  *
- * Exit 1 when any defect reproduces.
+ * Sortie 1 dès qu'un défaut se reproduit.
  */
 import { loadSrc, closeLoader } from './b-loader';
 
@@ -34,7 +37,7 @@ function hav(a: P, b: P) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-/** Synthetic but well-formed BRouter route (geojson + messages) through the given points. */
+/** Route BRouter synthétique mais bien formée (geojson + messages) passant par les points donnés. */
 function fakeBrouterRoute(points: P[], stepM = 40, eleBase = 800) {
   const coords: [number, number, number][] = [];
   for (let s = 0; s < points.length - 1; s++) {
@@ -42,7 +45,7 @@ function fakeBrouterRoute(points: P[], stepM = 40, eleBase = 800) {
     const n = Math.max(2, Math.ceil(hav(a, b) / stepM));
     for (let i = s === 0 ? 0 : 1; i <= n; i++) {
       const t = i / n;
-      // small lateral wiggle so the geometry is "road-like" and not a straight line
+      // petite ondulation latérale pour que la géométrie fasse « route » et ne soit pas une ligne droite
       const wig = Math.sin(t * Math.PI * 6) * 0.0004;
       const lat = a.lat + (b.lat - a.lat) * t + wig, lon = a.lon + (b.lon - a.lon) * t - wig;
       coords.push([lon, lat, eleBase + 100 * Math.sin(coords.length / 50)]);
@@ -63,7 +66,7 @@ function fakeBrouterRoute(points: P[], stepM = 40, eleBase = 800) {
   };
 }
 
-/** The subset of the routing effect's deps that project mutations can change. */
+/** Le sous-ensemble des dépendances de l'effet de routage que les mutations de projet peuvent changer. */
 function effectDeps(it: any) {
   return JSON.stringify([
     it?.pendingRoutePatch ? JSON.stringify(it.pendingRoutePatch) : '',
@@ -84,7 +87,7 @@ async function main() {
   const mut = await loadSrc<any>('src/features/itineraryPanel/hooks/useItineraryBrouterRouting/projectMutations.ts');
   const tl = await loadSrc<any>('src/features/itineraryPanel/components/ItineraryPanelContainer/timelineMutations.ts');
   const inputs = await loadSrc<any>('src/features/itineraryPanel/hooks/useItineraryBrouterRouting/routingInputs.ts');
-  // Routing effect's decision for a pending edit, given the previous unapplied one (index.ts).
+  // Décision de l'effet de routage pour une modification en attente, compte tenu de la précédente non appliquée (index.ts).
   const { planPendingRouteEdit } = await loadSrc<any>('src/features/itineraryPanel/hooks/useItineraryBrouterRouting/pendingEditPlan.ts');
 
   const S: P = { lat: 45.90, lon: 6.10 };
@@ -110,7 +113,7 @@ async function main() {
     return { id: 'p', name: 'p', activeItineraryId: 'it-1', itineraries: [itinerary] } as any;
   };
 
-  // ---------------- B1: refinement after a trace append -----------------
+  // ---------------- B1 : affinage après un ajout de tracé -----------------
   {
     let project = baseProject();
     const copy = structuredClone(project.itineraries[0]);
@@ -120,14 +123,14 @@ async function main() {
     const target = { itineraryId: 'it-1', pendingKey: JSON.stringify(pending) };
     const route = fakeBrouterRoute([A, B]);
     const depsBefore = effectDeps(project.itineraries[0]);
-    // index.ts:368 — first apply with BRouter-native elevation
+    // index.ts:368 — première application avec l'altitude native de BRouter
     const p1 = mut.applyPendingTraceAppend(project, target, route, null);
     const depsAfter = effectDeps(p1.itineraries[0]);
-    const effectReruns = depsBefore !== depsAfter; // → cleanup at index.ts:399 aborts ctrl
-    // Refinement (index.ts refineRouteInBackground): own AbortController keyed on the
-    // itinerary — an effect re-run does not abort it — and applied through
-    // applyRefinedRouteProfile, matched on the refined route's geometry (the pending
-    // field is already cleared by the 1st apply).
+    const effectReruns = depsBefore !== depsAfter; // → le nettoyage à index.ts:399 annule ctrl
+    // Affinage (refineRouteInBackground d'index.ts) : son propre AbortController
+    // indexé sur l'itinéraire — une relance de l'effet ne l'annule pas — et
+    // appliqué via applyRefinedRouteProfile, apparié sur la géométrie de la route
+    // affinée (le champ en attente est déjà vidé par la 1re application).
     const fakeRefinedProfile = route.coordinates.map((c: any, i: number) => ({ lat: c[1], lon: c[0], distanceM: i * 40, elevationM: 1234, gradientPct: 0 }));
     const refinedLanded = (before: any, after: any) => after !== before
       && after.itineraries[0].gpxRoute.points.some((pt: any) => Math.abs((pt.elevationM ?? 0) - 1234) < 1);
@@ -136,7 +139,7 @@ async function main() {
     console.log(`B1 append: effect deps change after 1st apply=${effectReruns} (refinement has its own controller); refined elevations applied=${refinedLanded(p1, p2)}`);
     if (!refinedLanded(p1, p2)) failures.push('B1: IGN altimetry refinement not applied after a trace append');
 
-    // same for drag patch
+    // idem pour un correctif de glisser
     let pp = baseProject();
     const c2 = structuredClone(pp.itineraries[0]);
     trace.moveTracePointInItinerary(c2, 'end', B.lon, B.lat);
@@ -149,7 +152,7 @@ async function main() {
     console.log(`B1 patch : refined elevations applied=${refinedLanded(q1, q2)}`);
     if (!refinedLanded(q1, q2)) failures.push('B1: IGN altimetry refinement not applied after a drag patch');
 
-    // full recompute
+    // recalcul complet
     const pr = baseProject();
     pr.itineraries[0].gpxRoute.source = 'gpx';
     pr.itineraries[0].timeline.splice(1, 0, { id: 'w', kind: 'waypoint', label: 'w', distanceKm: null, lat: B.lat, lon: B.lon });
@@ -161,13 +164,13 @@ async function main() {
     console.log(`B1 recompute: refined elevations applied=${refinedLanded(s1, s2)}`);
     if (!refinedLanded(s1, s2)) failures.push('B1: IGN altimetry refinement not applied after a full recompute');
 
-    // stale refinement (route replaced meanwhile) must be ignored
+    // un affinage périmé (route remplacée entre-temps) doit être ignoré
     const replaced = mut.applyRecomputedRoute(pr, rtgt, fakeBrouterRoute([S, { lat: 45.95, lon: 6.0 }, B, A]), null);
     const stale = mut.applyRefinedRouteProfile(replaced, mut.captureRouteRefinementBase(pr, s1, 'it-1'), (bp: any) => mut.applyRecomputedRoute(bp, rtgt, r3, fakeRefinedProfile));
     if (stale !== replaced) failures.push('B1: stale refinement applied over a newer route');
   }
 
-  // ---------------- B2a: rapid clicks (append) -----------------
+  // ---------------- B2a : clics rapides (ajout) -----------------
   {
     let project = baseProject();
     const c1 = structuredClone(project.itineraries[0]);
@@ -175,11 +178,11 @@ async function main() {
     project = { ...project, itineraries: [c1] };
     const firstExt = c1.pendingTraceExtension;
     const c2 = structuredClone(project.itineraries[0]);
-    trace.applyTraceAppend(c2, { ...C, label: 'C' }); // click 2 before segment A→B resolves
+    trace.applyTraceAppend(c2, { ...C, label: 'C' }); // clic 2 avant que le segment A→B soit résolu
     project = { ...project, itineraries: [c2] };
     const secondExt = c2.pendingTraceExtension;
     console.log(`B2a pending after click1 = ${JSON.stringify(firstExt)}\n    pending after click2 = ${JSON.stringify(secondExt)}`);
-    // effect ran for click 1 (request A→B, still unresolved), then re-runs for click 2
+    // l'effet a tourné pour le clic 1 (requête A→B, encore non résolue), puis se relance pour le clic 2
     const plan1 = planPendingRouteEdit(c1, undefined);
     const unresolved = { kind: 'append', pendingKey: plan1.pendingKey, append: { from: plan1.from, via: plan1.via, to: plan1.to } };
     const plan2 = planPendingRouteEdit(c2, unresolved);
@@ -194,10 +197,10 @@ async function main() {
     if (gap.max > 1000) failures.push(`B2a: rapid trace clicks leave an unrouted straight segment of ${gap.max.toFixed(0)} m (A→B) marked as routed`);
   }
 
-  // ---------------- B2b: two quick drags of adjacent points -----------------
+  // ---------------- B2b : deux glissers rapides de points voisins -----------------
   {
     let project = baseProject();
-    // route S → A → B with A a waypoint
+    // route S → A → B avec A comme point de passage
     const r = fakeBrouterRoute([S, A, B]);
     const it0 = project.itineraries[0];
     const pts = r.coordinates.map((c: any) => ({ lat: c[1], lon: c[0], elevationM: c[2] }));
@@ -208,13 +211,13 @@ async function main() {
       { id: 'wA', kind: 'waypoint', label: 'A', distanceKm: 6, lat: A.lat, lon: A.lon, onRoute: true },
       { id: 'end', kind: 'end', label: 'B', distanceKm: d / 1000, lat: B.lat, lon: B.lon },
     ];
-    const A2: P = { lat: 45.90, lon: 6.20 }; // A dragged far south-east
+    const A2: P = { lat: 45.90, lon: 6.20 }; // A tiré loin vers le sud-est
     const B2: P = { lat: 45.97, lon: 6.30 };
     const c1 = structuredClone(it0);
     trace.moveTracePointInItinerary(c1, 'wA', A2.lon, A2.lat);
     c1.pendingRoutePatch = tl.buildPendingRoutePatchForEditedRow(c1, 'wA');
     const c2 = structuredClone(c1);
-    trace.moveTracePointInItinerary(c2, 'end', B2.lon, B2.lat); // 2nd drag before 1st result
+    trace.moveTracePointInItinerary(c2, 'end', B2.lon, B2.lat); // 2e glisser avant le 1er résultat
     c2.pendingRoutePatch = tl.buildPendingRoutePatchForEditedRow(c2, 'end');
     project = { ...project, itineraries: [c2] };
     console.log(`B2b patch1=${JSON.stringify(c1.pendingRoutePatch)}\n    patch2=${JSON.stringify(c2.pendingRoutePatch)} (patch1 lost)`);
@@ -226,7 +229,7 @@ async function main() {
       : mut.applyPendingRoutePatch(project, { itineraryId: 'it-1', pendingKey: JSON.stringify(c2.pendingRoutePatch) }, fakeBrouterRoute([A2, B2]), null);
     if (out.itineraries[0].pendingRoutePatch) failures.push('B2b: pending patch left after the route was recomputed');
     const outPts: P[] = out.itineraries[0].gpxRoute.points;
-    // does the final route pass near the NEW position of A (A2)? and near the OLD one (A)?
+    // la route finale passe-t-elle près de la NOUVELLE position de A (A2) ? et près de l'ANCIENNE (A) ?
     const near = (p: P) => Math.min(...outPts.map((q) => hav(p, q)));
     const gap = maxGapM(outPts);
     console.log(`    final route: min dist to new A2 = ${near(A2).toFixed(0)} m, to old A = ${near(A).toFixed(0)} m, largest gap ${gap.max.toFixed(0)} m`);

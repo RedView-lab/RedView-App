@@ -1,19 +1,22 @@
 /**
- * Audit D / LIDAR — bundle weight of the NZ / Japan LAZ indices.
+ * Audit D / LIDAR — poids dans le bundle des index LAZ de Nouvelle-Zélande / du Japon.
  *
- *   node script-test-bench/audit/d-lidar-bundle.mjs        (needs a fresh `dist/`)
+ *   node script-test-bench/audit/d-lidar-bundle.mjs        (nécessite un `dist/` récent)
  *
- * 1. dist/: which chunk embeds the NZ index (opentopography pc-bulk URLs) and
- *    the Japan index (virtual-shizuoka prefixes), its raw/gzip size, and which
- *    entry chunks / HTML pages import or modulepreload it statically.
- * 2. esbuild what-if (no source change): bundling the real modules with
- *    `./nz/stacClient` + `./japan/stacClient` marked external shows that those
- *    two imports in downloader.ts are the ONLY edges that pull the indices into
- *    the Dashboard graph (coordConvert's `./japan` barrel is tree-shaken).
- * 3. CSP: every LIDAR host used by src/features/lidar is allowed by the CSP the
- *    local prod server (127.0.0.1:3000) actually sends on `/` and `/viewer`.
+ * 1. dist/ : quel chunk embarque l'index NZ (URL pc-bulk d'opentopography) et
+ *    l'index Japon (préfixes virtual-shizuoka), sa taille brute / gzip, et quels
+ *    chunks d'entrée / pages HTML l'importent ou le préchargent (modulepreload)
+ *    statiquement.
+ * 2. Hypothèse esbuild (sans changer le source) : empaqueter les vrais modules
+ *    avec `./nz/stacClient` + `./japan/stacClient` marqués externes montre que
+ *    ces deux imports de downloader.ts sont les SEULES arêtes qui tirent les
+ *    index dans le graphe du Dashboard (le barrel `./japan` de coordConvert est
+ *    éliminé par le tree-shaking).
+ * 3. CSP : chaque hôte LIDAR utilisé par src/features/lidar est autorisé par la
+ *    CSP que le serveur de prod local (127.0.0.1:3000) envoie réellement sur
+ *    `/` et `/viewer`.
  *
- * Exit code = number of checks that reproduce a problem.
+ * Code de sortie = nombre de contrôles qui reproduisent un problème.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -27,7 +30,7 @@ const JP_MARK = 'virtual-shizuoka.s3.ap-northeast-1.amazonaws.com/2019/LP/Ground
 let problems = 0;
 const mb = (n) => (n / 1048576).toFixed(2) + ' MB';
 
-// ── 1. dist analysis ────────────────────────────────────────────────────
+// ── 1. analyse de dist ──────────────────────────────────────────────────
 const assets = fs.readdirSync(path.join(DIST, 'assets')).filter((f) => f.endsWith('.js'));
 const heavy = [];
 for (const f of assets) {
@@ -50,7 +53,7 @@ for (const h of heavy) {
 }
 if (!heavy.length) console.log('[dist] no chunk embeds the NZ/JP indices (fixed?)');
 
-// ── 2. esbuild what-if ──────────────────────────────────────────────────
+// ── 2. hypothèse esbuild ────────────────────────────────────────────────
 const cssStub = { name: 'stub-assets', setup(b) { b.onLoad({ filter: /\.(css|png|svg|wasm)$/ }, () => ({ contents: '', loader: 'js' })); } };
 const externalStac = {
   name: 'external-stac',
@@ -75,7 +78,7 @@ console.log(`[esbuild] same with nz|japan/stacClient external (= dynamic import 
 console.log(`[esbuild] coordConvert.ts alone (imports './japan' barrel): ${mb(ccOnly.size)} (NZ=${ccOnly.nz}, JP=${ccOnly.jp})`);
 if (now.nz || now.jp) problems++;
 
-// ── 3. CSP coverage ─────────────────────────────────────────────────────
+// ── 3. couverture par la CSP ────────────────────────────────────────────
 const hosts = new Set();
 function walk(dir) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -87,12 +90,12 @@ function walk(dir) {
   }
 }
 walk(path.join(ROOT, 'src/features/lidar'));
-hosts.add('opentopography.s3.sdsc.edu'); // NZ index
-hosts.add('virtual-shizuoka.s3.ap-northeast-1.amazonaws.com'); // JP index
-hosts.add('japan-pointcloud.s3.ap-northeast-1.amazonaws.com'); // JP index
-hosts.add('kanagawa-pointcloud.s3.ap-northeast-1.amazonaws.com'); // JP index
-hosts.add('gsvrg.ipri.aist.go.jp'); // JP index (COPC AIST 3DDB)
-hosts.delete('www.google.com'); // plain <a href>, not fetched
+hosts.add('opentopography.s3.sdsc.edu'); // index NZ
+hosts.add('virtual-shizuoka.s3.ap-northeast-1.amazonaws.com'); // index JP
+hosts.add('japan-pointcloud.s3.ap-northeast-1.amazonaws.com'); // index JP
+hosts.add('kanagawa-pointcloud.s3.ap-northeast-1.amazonaws.com'); // index JP
+hosts.add('gsvrg.ipri.aist.go.jp'); // index JP (COPC AIST 3DDB)
+hosts.delete('www.google.com'); // simple <a href>, pas récupéré
 function allowed(directive, host) {
   return directive.split(/\s+/).some((src) => {
     const m = src.match(/^https:\/\/([^/]+)/);
@@ -120,7 +123,7 @@ console.log(`\n${problems} problem(s)`);
 await stop();
 process.exitCode = problems;
 
-// ── 4. Evaluation cost of the heavy chunk's indices (node/V8, desktop CPU) ──
+// ── 4. Coût d'évaluation des index du gros chunk (node/V8, processeur de bureau) ──
 {
   const { transform } = await import('esbuild');
   for (const rel of ['src/features/lidar/lib/nz/nzLazIndex.ts', 'src/features/lidar/lib/japan/japanLazIndex.ts']) {

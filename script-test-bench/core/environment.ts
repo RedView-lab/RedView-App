@@ -1,7 +1,8 @@
 /**
- * Machine state of a bench run, saved with its report: timings are only
- * comparable on the same CPU, power source and code. A laptop on battery
- * runs the same bench 1.5–100× slower (2026-10-06: 48 ms → 9 s).
+ * État de la machine pendant une exécution du banc, enregistré avec son
+ * rapport : les temps ne sont comparables qu'à processeur, alimentation et code
+ * identiques. Un portable sur batterie exécute le même banc 1,5 à 100× plus
+ * lentement (2026-10-06 : 48 ms → 9 s).
  */
 import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -17,7 +18,7 @@ export interface BenchEnvironment {
   platform: string;
   power: PowerSource;
   gitSha: string | null;
-  /** Uncommitted changes in the working tree. */
+  /** Modifications non commitées dans l'arbre de travail. */
   gitDirty: boolean | null;
 }
 
@@ -30,7 +31,7 @@ function run(command: string, args: string[]): string | null {
   }
 }
 
-/** Best effort per OS; `unknown` when the machine has no battery or the probe fails. */
+/** Au mieux selon l'OS ; `unknown` quand la machine n'a pas de batterie ou que la sonde échoue. */
 export function detectPowerSource(): PowerSource {
   if (process.platform === 'win32') {
     // Win32_Battery.BatteryStatus: 1 = discharging, 2 = on AC; nothing on a desktop.
@@ -52,7 +53,7 @@ export function detectPowerSource(): PowerSource {
       if (type === 'Mains') return readFileSync(`/sys/class/power_supply/${name}/online`, 'utf8').trim() === '1' ? 'ac' : 'battery';
     }
   } catch {
-    // no power_supply class (container, VM)
+    // pas de classe power_supply (conteneur, VM)
   }
   return 'unknown';
 }
@@ -77,7 +78,7 @@ export function describeEnvironment(env: BenchEnvironment): string {
   return `${env.cpu} (${env.cores} threads, ${env.memoryGiB} Gio) · ${power} · Node ${env.node} · ${env.platform} · ${code}`;
 }
 
-/** Why two runs' timings may not be comparable (empty: same machine state). */
+/** Pourquoi les temps de deux exécutions peuvent ne pas être comparables (vide : même état de machine). */
 export function environmentDifferences(a: BenchEnvironment, b: BenchEnvironment): string[] {
   const out: string[] = [];
   if (a.cpu !== b.cpu || a.cores !== b.cores) out.push(`CPU ${a.cpu} → ${b.cpu}`);

@@ -1,10 +1,11 @@
 /**
- * Audit D (basemap) — static regression checks on the basemap switch / style
- * bootstrap code paths (no browser available, so these assert the exact code
- * shapes that cause the issues documented in findings-D-basemap.md).
+ * Audit D (fond de carte) — contrôles de régression statiques sur les chemins
+ * de code du changement de fond de carte / de l'amorçage du style (pas de
+ * navigateur disponible : on vérifie donc la forme exacte du code qui cause les
+ * problèmes documentés dans findings-D-basemap.md).
  *
- * Run:  node script-test-bench/audit/d-basemap-static.mjs
- * Exit 1 if any issue still reproduces.
+ * Lancement :  node script-test-bench/audit/d-basemap-static.mjs
+ * Sortie 1 si un problème se reproduit encore.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -16,8 +17,9 @@ let failures = 0;
 const fail = (id, msg) => { failures += 1; console.log(`FAIL ${id}: ${msg}`); };
 const pass = (id, msg) => console.log(`ok   ${id}: ${msg}`);
 
-// DB-init-race: stuck-shell watchdog (4 s) armed BEFORE awaiting the themed
-// style prefetch (timeout 6 s) → on a slow Styles API the map loads twice.
+// DB-init-race : le garde-fou de coque bloquée (4 s) est armé AVANT d'attendre
+// le préchargement du style thématisé (délai 6 s) → avec une API Styles lente,
+// la carte se charge deux fois.
 {
   const useMap = read('src/features/map3d/hooks/useMap/index.ts');
   const prefetch = read('src/features/map3d/hooks/useMap/stylePrefetch.ts');
@@ -30,8 +32,8 @@ const pass = (id, msg) => console.log(`ok   ${id}: ${msg}`);
   } else pass('init-double-load', 'watchdog no longer races the prefetch');
 }
 
-// DB-theme-fallback: a failed prefetch silently renders the UNTHEMED Outdoors
-// style under the "Standard (clair/sombre)" label.
+// DB-theme-fallback : un préchargement raté affiche sans bruit le style
+// Outdoors NON thématisé sous le libellé « Standard (clair/sombre) ».
 {
   const prefetch = read('src/features/map3d/hooks/useMap/stylePrefetch.ts');
   if (/catch \(error\) \{\s*console\.warn\('\[map3d\] style prefetch failed, falling back to URL', error\);\s*return getBaseStyleUrl\(styleUrl\);/.test(prefetch)) {
@@ -39,8 +41,8 @@ const pass = (id, msg) => console.log(`ok   ${id}: ${msg}`);
   } else pass('theme-fallback', 'themed fallback handled');
 }
 
-// DB-weather-updateImage: every `styledata` re-runs ensureLayer → ImageSource.updateImage(sameUrl),
-// which mapbox-gl 3.x does not short-circuit (re-fetch + decode + texture upload per burst).
+// DB-weather-updateImage : chaque `styledata` relance ensureLayer → ImageSource.updateImage(sameUrl),
+// que mapbox-gl 3.x ne court-circuite pas (nouvelle requête + décodage + envoi de texture à chaque rafale).
 {
   const sm = read('src/features/weather/overlay/useWeatherOverlay/useWeatherStyleManager.ts');
   const hook = read('src/features/weather/overlay/useWeatherOverlay/hook.ts');
@@ -54,17 +56,18 @@ const pass = (id, msg) => console.log(`ok   ${id}: ${msg}`);
   } else pass('weather-updateImage', 'no redundant image reload');
 }
 
-// DB-overlays-isMapLoaded: Dashboard's mapLoaded (fed to every ControlPanel /
-// Itinerary overlay hook) never drops on a basemap switch → overlays must and do
-// rely on style.load/styledata listeners. Informational (exit unaffected).
+// DB-overlays-isMapLoaded : le mapLoaded du Dashboard (passé à chaque hook de
+// surcouche du ControlPanel / de l'itinéraire) ne retombe jamais lors d'un
+// changement de fond → les surcouches doivent compter, et comptent, sur les
+// écouteurs style.load / styledata. Informatif (sans effet sur la sortie).
 {
   const dash = read('src/pages/Dashboard/index.tsx');
   const falses = (dash.match(/setMapLoaded\(false\)/g) ?? []).length;
   console.log(`info overlays-isMapLoaded: Dashboard setMapLoaded(false) occurs ${falses}× (project close / editor close only) → isMapLoaded stays true across basemap switches`);
 }
 
-// DB-quality-profile-throttle: profile reload is a leading-edge throttle with no
-// trailing call and is dropped while a reload is in progress.
+// DB-quality-profile-throttle : le rechargement de profil est un étranglement
+// sur front montant sans appel final, abandonné pendant un rechargement en cours.
 {
   const reload = read('src/features/map3d/hooks/useMap/controller/reload.ts');
   if (/if \(now - lastProfileReloadAt < PROFILE_RELOAD_DEBOUNCE_MS\) return;/.test(reload) && /if \(st\.reloadInProgress\) return;/.test(reload)) {

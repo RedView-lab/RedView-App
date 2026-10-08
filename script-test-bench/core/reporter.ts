@@ -1,8 +1,9 @@
 /**
- * RedView DevOps Test-Bench Reporter
- * 
- * Formats results as ANSI color terminal tables, exports machine-readable JSON,
- * and generates clean Markdown reports for CI/CD or documentation.
+ * Rapporteur du banc d'essai RedView
+ *
+ * Met les résultats en forme de tableaux colorés ANSI pour le terminal,
+ * exporte du JSON lisible par machine et produit des rapports Markdown propres
+ * pour la CI ou la documentation.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -104,10 +105,10 @@ function pad(str: string, length: number, rightAlign = false): string {
   return truncated.padEnd(length, ' ');
 }
 
-/** What a run saved: enough to compare a later run with it. */
+/** Ce qu'une exécution a enregistré : de quoi lui comparer une exécution ultérieure. */
 export interface SavedBenchReport {
   timestamp: string;
-  /** `quick` or `full` (absent before 2026-10-07). */
+  /** `quick` ou `full` (absent avant le 2026-10-07). */
   mode?: 'quick' | 'full';
   feature?: string | null;
   environment?: BenchEnvironment;
@@ -164,7 +165,7 @@ export function generateMarkdownReport(
     ? `> **Environnement** : ${describeEnvironment(environment)}\n\n`
     : `> **Environnement** : Node.js ${process.version} | ${process.platform} (${process.arch})\n\n`;
 
-  // Summary KPI Cards
+  // Cartes de synthèse des indicateurs
   let totalMetrics = 0;
   let passCount = 0;
   let warnCount = 0;
@@ -188,7 +189,7 @@ export function generateMarkdownReport(
   md += `| **Avertissements (WARN - Jitter/Peak)** | **${warnCount}** |\n`;
   md += `| **Régressions / Dépassements Seuil** | **${regressionCount}** |\n\n`;
 
-  // Each Suite Table
+  // Un tableau par suite
   for (const suite of suites) {
     md += `## Domaine : ${suite.title}\n\n`;
     md += `| Opération / Fonctionnalité | Iter | p50 (ms) | p95 (ms) | Débit (ops/s) | Mémoire Δ | Statut |\n`;

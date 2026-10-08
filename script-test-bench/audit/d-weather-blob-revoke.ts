@@ -1,24 +1,28 @@
 /**
- * Audit D / DW1 — weather overlay: blob URLs revoked while still referenced by
- * the module-level `recoloredBlobCache` (src/features/weather/overlay/vpsTileRenderer.ts).
+ * Audit D / DW1 — surcouche météo : URL de blob révoquées alors qu'elles sont
+ * encore référencées par le `recoloredBlobCache` de niveau module
+ * (src/features/weather/overlay/vpsTileRenderer.ts).
  *
- * Uses the REAL cache module (cacheRecoloredBlob / getCachedRecoloredBlob) and
- * replays, line for line, the revoke sites of the overlay hooks:
- *   A. useWeatherStyleManager.removeAll (L502-505) — runs in the cleanup of the
- *      [map, isMapLoaded] effect of useWeatherOverlay/hook.ts (L178-186), i.e.
- *      when Dashboard sets mapLoaded=false (project close, pages/Dashboard/index.tsx L33, L177).
- *   C. useWeatherDataPipeline.renderVpsForecast (L494-498) — layer toggled off
- *      while its recolor was being encoded: cached THEN revoked.
- * After each, the next forecast render at the same hour/palette reads the cache
- * (L290 instant path / L443 network path) and hands Mapbox a dead blob: URL.
+ * Utilise le VRAI module de cache (cacheRecoloredBlob / getCachedRecoloredBlob)
+ * et rejoue, ligne pour ligne, les sites de révocation des hooks de surcouche :
+ *   A. useWeatherStyleManager.removeAll (L502-505) — s'exécute dans le
+ *      nettoyage de l'effet [map, isMapLoaded] de useWeatherOverlay/hook.ts
+ *      (L178-186), c'est-à-dire quand le Dashboard pose mapLoaded=false
+ *      (fermeture du projet, pages/Dashboard/index.tsx L33, L177).
+ *   C. useWeatherDataPipeline.renderVpsForecast (L494-498) — couche décochée
+ *      pendant l'encodage de sa recoloration : mise en cache PUIS révoquée.
+ * Après chacun, le rendu de prévision suivant à la même heure / palette lit le
+ * cache (chemin instantané L290 / chemin réseau L443) et passe à Mapbox une
+ * URL blob: morte.
  *
- * Node's resolveObjectURL() returns undefined for a revoked blob URL, which is
- * exactly what the browser's image loader sees (net::ERR_FILE_NOT_FOUND).
+ * resolveObjectURL() de Node renvoie undefined pour une URL de blob révoquée,
+ * exactement ce que voit le chargeur d'images du navigateur
+ * (net::ERR_FILE_NOT_FOUND).
  *
- * Also verifies (static) that the revoke sites are still present in the source,
- * so this script stops failing once the code is fixed.
+ * Vérifie aussi (statiquement) que les sites de révocation sont toujours dans
+ * le source, pour que ce script cesse d'échouer une fois le code corrigé.
  *
- * Exit code 1 = bug reproduces.   Run: npx tsx script-test-bench/audit/d-weather-blob-revoke.ts
+ * Code de sortie 1 = le bogue se reproduit.   Lancement : npx tsx script-test-bench/audit/d-weather-blob-revoke.ts
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -45,7 +49,7 @@ function report(name: string, url: string | undefined) {
   if (!alive) failures += 1;
 }
 
-// ── Scenario A: removeAll on project close, then reopen ────────────────
+// ── Scénario A : removeAll à la fermeture du projet, puis réouverture ──
 {
   const sig = 'vps|2026-10-01T12:00:00Z|gradient|abc';
   const url = newBlobUrl();
@@ -61,18 +65,18 @@ function report(name: string, url: string | undefined) {
   report('A project close/reopen (removeAll)', getCachedRecoloredBlob(sig));
 }
 
-// ── Scenario C: toggle off during encode ───────────────────────────────
+// ── Scénario C : décocher pendant l'encodage ───────────────────────────
 {
   const sig = 'vps|2026-10-01T14:00:00Z|fill|abc';
   const blobUrl = newBlobUrl();
   cacheRecoloredBlob(sig, blobUrl);               // L494
-  const stillActive = false;                     // L496-497 user unticked the layer meanwhile
+  const stillActive = false;                     // L496-497 l'utilisateur a décoché la couche entre-temps
   if (!stillActive && blobUrl.startsWith('blob:')) URL.revokeObjectURL(blobUrl); // L498
-  // user re-ticks the layer at the same hour -> L443
+  // l'utilisateur recoche la couche à la même heure -> L443
   report('C toggle-off during encode (renderVpsForecast L494-498)', getCachedRecoloredBlob(sig));
 }
 
-// ── Static guard: are the revoke sites still in the source? ────────────
+// ── Garde statique : les sites de révocation sont-ils encore dans le source ? ──
 const sm = fs.readFileSync(path.join(root, 'src/features/weather/overlay/useWeatherOverlay/useWeatherStyleManager.ts'), 'utf8');
 const dp = fs.readFileSync(path.join(root, 'src/features/weather/overlay/useWeatherOverlay/useWeatherDataPipeline.ts'), 'utf8');
 const removeAllBody = sm.slice(sm.indexOf('const removeAll'), sm.indexOf('const ensureLayer'));

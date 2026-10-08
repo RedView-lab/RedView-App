@@ -1,23 +1,26 @@
 /**
- * Audit B5 — GPX import pipeline on real files (no live network: fetch mocked).
+ * Audit B5 — pipeline d'import GPX sur de vrais fichiers (pas de réseau réel :
+ * fetch simulé).
  *
  *   npx tsx script-test-bench/audit/b-gpx-import.ts
  *
- * 1. Parses every real GPX with the app parser (parseGpxText — same code as
- *    gpxParseWorker), times it, reports points / km / D+ / <wpt> present but
- *    dropped by the import.
- * 2. Runs the real import enrichment steps that hit the network with a mocked
- *    fetch that COUNTS requests per host:
- *      refineImportedRoutePointsWithIgnAltimetry → data.geopf.fr (France), AWS
- *                                                  Terrarium tiles elsewhere
- *                                                  (decoder stubbed under Node)
- *      analyzeGpxSurfaces                        → /api/brouter (rate-limited
- *                                                  by server.mjs 120 req/min/IP)
- *    in two modes: upstream OK, and /api/brouter answering 429 (rate limit hit).
+ * 1. Analyse chaque vrai GPX avec l'analyseur de l'application (parseGpxText —
+ *    même code que gpxParseWorker), le chronomètre, rapporte points / km / D+ /
+ *    <wpt> présents mais abandonnés par l'import.
+ * 2. Exécute les vraies étapes d'enrichissement de l'import qui touchent au
+ *    réseau, avec un fetch simulé qui COMPTE les requêtes par hôte :
+ *      refineImportedRoutePointsWithIgnAltimetry → data.geopf.fr (France), tuiles
+ *                                                  AWS Terrarium ailleurs
+ *                                                  (décodeur remplacé sous Node)
+ *      analyzeGpxSurfaces                        → /api/brouter (limité en débit
+ *                                                  par server.mjs, 120 req/min/IP)
+ *    en deux modes : amont en bon état, et /api/brouter qui répond 429 (limite
+ *    de débit atteinte).
  *
- * Exit 1 when a single import can exceed the 120 /api req/min budget, when
- * the 429 path amplifies requests, or when anything still calls Open-Meteo
- * (public API: non-commercial licence; elevation comes from IGN / Terrarium).
+ * Sortie 1 quand un seul import peut dépasser le budget de 120 req /api par
+ * minute, quand le chemin 429 amplifie les requêtes, ou quand quoi que ce soit
+ * appelle encore Open-Meteo (API publique : licence non commerciale ;
+ * l'altitude vient de l'IGN / de Terrarium).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -30,8 +33,9 @@ const failures: string[] = [];
 const TERRARIUM_HOST = 's3.amazonaws.com';
 
 /**
- * Terrarium decoding needs OffscreenCanvas + createImageBitmap (browser only):
- * stubbed with a flat 500 m tile so the import really requests its tiles.
+ * Le décodage Terrarium a besoin d'OffscreenCanvas + createImageBitmap
+ * (navigateur seulement) : remplacé par une tuile plate à 500 m pour que
+ * l'import demande vraiment ses tuiles.
  */
 function installTerrariumDecoderStub() {
   const g = globalThis as any;
@@ -114,7 +118,7 @@ async function main() {
   const wptFiles = FILES.filter((f) => { const p = path.join(DOWNLOADS, f); return fs.existsSync(p) && /<wpt\b/.test(fs.readFileSync(p, 'utf8')); });
   if (wptFiles.length) console.log(`NOTE: <wpt> present in: ${wptFiles.join(', ')}`);
 
-  // B8 — re-importing RedView's own export must keep its POIs (<wpt>).
+  // B8 — réimporter l'export de RedView lui-même doit garder ses POI (<wpt>).
   const poiExport = path.join(DOWNLOADS, 'GT20_POI.gpx');
   if (fs.existsSync(poiExport)) {
     const { buildImportedGpxWaypoints } = await loadSrc<any>('src/features/itineraryPanel/components/ItineraryPanelContainer/importedGpxWaypoints.ts');
@@ -132,8 +136,9 @@ async function main() {
     if (favImported !== favInFile) failures.push(`GT20_POI.gpx: favorites ${favImported} != ${favInFile} marked in file`);
   }
 
-  // Synthetic 1000 km route: concatenate GT20 + UTMB + TdF stage translated end-to-end is unrealistic for
-  // geography; instead densify a straight-ish 1000 km line across France with 20 m spacing (typical export).
+  // Route synthétique de 1000 km : concaténer GT20 + UTMB + étape du TdF translatés bout à bout n'est pas
+  // réaliste géographiquement ; on densifie plutôt une ligne presque droite de 1000 km à travers la France,
+  // avec un espacement de 20 m (export typique).
   const long: any[] = [];
   const N = 50_000; let d = 0;
   for (let i = 0; i < N; i++) {
@@ -143,10 +148,10 @@ async function main() {
     long.push({ lat, lon, distanceM: d, elevationM: 200 + 300 * Math.sin(t * 30) });
   }
   parsedAll.push({ file: `synthetic ${Math.round(d / 1000)} km / ${N} pts`, points: long });
-  // Same line moved to Italy (Dolomites → Campania, outside France): elevation from Terrarium tiles, not IGN.
+  // Même ligne déplacée en Italie (Dolomites → Campanie, hors de France) : altitude depuis les tuiles Terrarium, pas l'IGN.
   parsedAll.push({ file: 'synthetic line in Italy (Terrarium)', points: long.map((p) => ({ ...p, lat: p.lat - 2.3, lon: p.lon + 9.4 })) });
-  // Real-geometry long route: GT20 followed by UTMB, shifted so it is contiguous (only the
-  // chunk count matters here: it depends on length and bearing changes).
+  // Longue route à géométrie réelle : le GT20 suivi de l'UTMB, décalé pour être contigu (seul le
+  // nombre de morceaux compte ici : il dépend de la longueur et des changements de cap).
   const gt = parsedAll.find((x) => x.file === 'GT20.gpx')?.points, ut = parsedAll.find((x) => x.file === 'UTMB 2024.gpx')?.points;
   if (gt && ut) {
     const last = gt[gt.length - 1], first = ut[0];
@@ -160,7 +165,7 @@ async function main() {
   installTerrariumDecoderStub();
   console.log('file | mode | IGN (geopf) | Terrarium tiles | /api/brouter | max concurrent | ms');
   for (const { file, points } of parsedAll) {
-    // 429 first: fetchBrouterRoute keeps a module-level URL cache that would hide requests
+    // 429 d'abord : fetchBrouterRoute garde un cache d'URL au niveau du module qui masquerait des requêtes
     for (const mode of ['429', 'ok'] as Mode[]) {
       const mock = installMockFetch(mode);
       const t0 = performance.now();
@@ -174,7 +179,7 @@ async function main() {
       console.log(`${file} | ${mode} | ${mock.counts['data.geopf.fr'] ?? 0} | ${mock.counts[TERRARIUM_HOST] ?? 0} | ${api} | ${mock.maxInflight} | ${ms.toFixed(0)}`);
       const openMeteo = Object.keys(mock.counts).filter((host) => host.includes('open-meteo'));
       if (openMeteo.length) failures.push(`${file}: the import still calls ${openMeteo.join(', ')} (public Open-Meteo API, non-commercial)`);
-      if (mode === 'ok' && api + 1 /* POI corridor */ > API_BUDGET_PER_MIN) failures.push(`${file}: one import issues ${api}+1 /api requests (> ${API_BUDGET_PER_MIN}/min budget)`);
+      if (mode === 'ok' && api + 1 /* corridor de POI */ > API_BUDGET_PER_MIN) failures.push(`${file}: one import issues ${api}+1 /api requests (> ${API_BUDGET_PER_MIN}/min budget)`);
       (globalThis as any).__last = { ...(globalThis as any).__last, [`${file}|${mode}`]: api };
     }
     const okN = (globalThis as any).__last[`${file}|ok`], badN = (globalThis as any).__last[`${file}|429`];

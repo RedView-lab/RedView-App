@@ -1,21 +1,22 @@
 /**
- * Audit B3 — undo history cost (ProjectStore/useTraceHistory.ts).
+ * Audit B3 — coût de l'historique d'annulation (ProjectStore/useTraceHistory.ts).
  *
  *   node --expose-gc --import tsx script-test-bench/audit/b-history-memory.ts
  *
- * `commitTraceMutation` (used by every Tracer drag / Alt-variant / split /
- * merge…) does `structuredClone(projectRef.current)` of the WHOLE project and
- * keeps the previous state in `past` (MAX_HISTORY_STEPS = 100). Since the clone
- * shares nothing with the previous state, each step retains a full copy of
- * every variant's points/originalPoints/timeline.
+ * `commitTraceMutation` (utilisé par chaque glisser du Tracer / variante Alt /
+ * découpe / fusion…) fait un `structuredClone(projectRef.current)` de TOUT le
+ * projet et garde l'état précédent dans `past` (MAX_HISTORY_STEPS = 100).
+ * Comme le clone ne partage rien avec l'état précédent, chaque pas retient une
+ * copie complète des points / originalPoints / frise de chaque variante.
  *
- * This script builds a realistic project from real GPX files (GT20 593 km,
- * imported like the app does: simplified `points` + full `originalPoints`),
- * with 1..3 variants, and replays 100 drag-like commits with the same
- * algorithm (clone → small mutation → push previous state, cap 100).
+ * Ce script construit un projet réaliste à partir de vrais fichiers GPX (GT20
+ * 593 km, importé comme le fait l'application : `points` simplifiés +
+ * `originalPoints` complets), avec 1 à 3 variantes, et rejoue 100 commits façon
+ * glisser avec le même algorithme (clone → petite mutation → empile l'état
+ * précédent, plafond 100).
  *
- * Exit 1 if retained history for 3 variants exceeds 500 MB or one commit
- * blocks the main thread > 100 ms.
+ * Sortie 1 si l'historique retenu pour 3 variantes dépasse 500 Mo ou si un
+ * commit bloque le fil principal plus de 100 ms.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -29,7 +30,7 @@ async function main() {
   if (!gc) console.warn('WARNING: run with `node --expose-gc --import tsx` for accurate heap numbers');
   const { parseGpxText } = await loadSrc<any>('src/features/poi/lib/gpx-parse.ts');
   const routes = await loadSrc<any>('src/features/itineraryPanel/lib/routes/index.ts');
-  // Draft clone actually used by commitTraceMutation (useTraceHistory.ts).
+  // Clone de brouillon réellement utilisé par commitTraceMutation (useTraceHistory.ts).
   const { cloneProjectForMutation } = await loadSrc<any>('src/features/itineraryPanel/context/ProjectStore/historyClone.ts');
 
   const text = fs.readFileSync(path.join(DOWNLOADS, 'GT20.gpx'), 'utf8');
@@ -58,7 +59,7 @@ async function main() {
       const after = cloneProjectForMutation(current); // useTraceHistory.ts commitTraceMutation
       times.push(performance.now() - t0);
       const wp = after.itineraries[0].timeline.find((r: any) => r.kind === 'waypoint');
-      if (wp) wp.lat += 0.0001; // moveTracePointInItinerary-like edit
+      if (wp) wp.lat += 0.0001; // modification façon moveTracePointInItinerary
       if (wp && current.itineraries[0].timeline.find((r: any) => r.id === wp.id)?.lat === wp.lat) failures.push('draft edit leaked into the previous history state');
       past = [...past, current].slice(-100); // pushSnapshot
       current = after;

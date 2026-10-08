@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-// Node has no ImageData: the encoder only needs width/height/data.
+// Node n'a pas d'ImageData : l'encodeur n'a besoin que de width / height / data.
 class NodeImageData {
   readonly width: number;
   readonly height: number;
@@ -23,7 +23,7 @@ function test(name: string, run: () => void) {
   console.log(`PASS ${name}`);
 }
 
-/** DEMData-shaped grid (1 px border) filled by f(x, y) in DEM pixel coordinates. */
+/** Grille au format DEMData (bordure de 1 px) remplie par f(x, y) en coordonnées de pixels DEM. */
 function dem(dim: number, f: (x: number, y: number) => number): Dem {
   const stride = dim + 2;
   const floatView = new Float32Array(stride * stride);
@@ -50,7 +50,7 @@ test('every pixel is opaque (alpha is not part of the decode)', () => {
   for (let i = 3; i < image.data.length; i += 4) assert.equal(image.data[i], 255);
 });
 test('ancestor crop lands on the right quadrant (bilinear, pixel-centre aligned)', () => {
-  // Planar DEM: a crop must reproduce the plane at the child's pixel centres.
+  // DEM plan : un découpage doit reproduire le plan aux centres de pixels de l'enfant.
   const plane = (x: number, y: number) => 1000 + 2 * x - 3 * y;
   const d = dem(256, plane);
   for (const [dz, qx, qy] of [[1, 1, 0], [1, 0, 1], [2, 3, 2], [3, 5, 7]]) {

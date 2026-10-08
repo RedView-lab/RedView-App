@@ -1,13 +1,14 @@
 /**
- * Audit D — Service Worker router / handlers under miss, out-of-coverage and
- * malformed URLs. Loads the REAL public/sw-dem.js import chain (classic
- * scripts) into this realm with minimal SW globals (in-memory CacheStorage,
- * mocked network), dispatches synthetic fetch events and checks that every
- * tile request resolves to 204 (or a real tile) — never a throw, never a
- * hang, never a synthesised flat tile.
+ * Audit D — routeur / gestionnaires du Service Worker face aux absences, aux
+ * zones hors couverture et aux URL mal formées. Charge la VRAIE chaîne
+ * d'import de public/sw-dem.js (scripts classiques) dans ce royaume avec un
+ * minimum de globales de SW (CacheStorage en mémoire, réseau simulé), envoie
+ * des événements fetch synthétiques et vérifie que chaque requête de tuile se
+ * résout en 204 (ou en une vraie tuile) — jamais une exception, jamais un
+ * blocage, jamais une tuile plate synthétisée.
  *
- * Usage: npx tsx script-test-bench/audit/d-sw-router.ts
- * Exit 1 if any regression check fails.
+ * Usage : npx tsx script-test-bench/audit/d-sw-router.ts
+ * Sortie 1 si un contrôle de régression échoue.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -21,7 +22,7 @@ const ORIGIN = 'https://app.redview.test';
 type AnyRec = Record<string, any>;
 const g = globalThis as unknown as AnyRec;
 
-// ── network mock ─────────────────────────────────────────────────────────
+// ── simulation du réseau ─────────────────────────────────────────────────
 let netMode: 'offline' | '404' | 'html200' = '404';
 const fetchLog: string[] = [];
 g.fetch = async (input: any) => {
@@ -35,7 +36,7 @@ g.fetch = async (input: any) => {
   return new Response('not found', { status: 404 });
 };
 
-// ── CacheStorage mock (persistent-like, no eviction — same as browsers) ──
+// ── simulation de CacheStorage (quasi persistant, sans éviction — comme les navigateurs) ──
 class MemCache {
   store = new Map<string, { body: ArrayBuffer; status: number; headers: [string, string][] }>();
   key(r: any) { return typeof r === 'string' ? new URL(r, ORIGIN).href : r.url; }
@@ -65,7 +66,7 @@ g.caches = {
   async match() { return undefined; },
 };
 
-// ── SW globals ───────────────────────────────────────────────────────────
+// ── globales du SW ───────────────────────────────────────────────────────
 const listeners: Record<string, ((e: any) => void)[]> = {};
 g.self = globalThis;
 g.addEventListener = (t: string, fn: any) => { (listeners[t] ||= []).push(fn); };
@@ -86,9 +87,10 @@ g.importScripts = (...urls: string[]) => {
     vm.runInThisContext(fs.readFileSync(file, 'utf8'), { filename: file });
   }
 };
-// Browser image APIs: createImageBitmap REJECTS like a browser does on
-// non-image bytes (captive portal HTML, truncated body). OffscreenCanvas is a
-// permissive stub so module-level / mask code paths can run.
+// API d'image du navigateur : createImageBitmap REJETTE comme un navigateur
+// sur des octets qui ne sont pas une image (HTML de portail captif, corps
+// tronqué). OffscreenCanvas est un substitut permissif pour que les chemins
+// de code de niveau module / de masque puissent tourner.
 g.createImageBitmap = async () => { throw new DOMException('The source image could not be decoded.', 'InvalidStateError'); };
 class StubCtx {
   canvas: any; constructor(c: any) { this.canvas = c; }
@@ -116,7 +118,7 @@ function pngValid(buf: Uint8Array): string {
 }
 (globalThis as any).__crc = (await import('node:zlib')).crc32;
 
-// silence SW console noise
+// fait taire le bruit de la console du SW
 const origWarn = console.warn; const origLog = console.log; const origErr = console.error;
 const swLogs: string[] = [];
 console.warn = (...a: any[]) => swLogs.push('W ' + a.join(' '));
@@ -165,7 +167,7 @@ async function dispatch(rel: string, mode: RequestMode = 'cors', timeoutMs = 25_
 
 const isNoTile = (r: AnyRec) => r.kind === 'response' && r.status === 204;
 
-// Single-case probe: AUDIT_ONLY="offline:/dem-tiles/12/2120/1462" AUDIT_TIMEOUT_MS=120000
+// Sonde d'un seul cas : AUDIT_ONLY="offline:/dem-tiles/12/2120/1462" AUDIT_TIMEOUT_MS=120000
 async function runOnly(spec: string) {
   const [mode, url] = [spec.slice(0, spec.indexOf(':')), spec.slice(spec.indexOf(':') + 1)];
   netMode = mode as typeof netMode;
@@ -199,8 +201,8 @@ async function run() {
         const before = fetchLog.length;
         const r: AnyRec = await dispatch(`/${fam}-tiles/${c}`);
         const fetched = fetchLog.slice(before).filter((u) => !u.includes('france-border'));
-        // DEM: only 204 is acceptable (never a fake elevation). Overlays
-        // (slope/altitude/ortho): 204 or a VALID transparent PNG is acceptable.
+        // DEM : seul 204 est acceptable (jamais une fausse altitude). Surcouches
+        // (pente / altitude / ortho) : 204 ou un PNG transparent VALIDE est acceptable.
         const transparentOk = fam !== 'dem' && r.kind === 'response' && r.status === 200 && r.png === 'valid' && r.len < 200;
         const ok = isNoTile(r) || transparentOk;
         check(`${mode} ${fam} ${name}`, ok,
@@ -239,7 +241,7 @@ async function run() {
   const nav: AnyRec = await dispatch('/dem-tiles/12/2120/1462', 'navigate');
   check('navigation bypasses SW', nav.kind === 'passthrough', nav.kind);
 
-  // ── negative-cache pollution by out-of-range coordinates ──
+  // ── pollution du cache négatif par des coordonnées hors plage ──
   let negEntries = 0; let garbageKeys = 0;
   for (const [name, c] of cacheMap) {
     for (const k of c.store.keys()) {
@@ -251,7 +253,7 @@ async function run() {
   origLog(`\ncaches: ${Array.from(cacheMap.entries()).map(([n, c]) => `${n}=${c.store.size}`).join(', ')}`);
   check('no CacheStorage entries for impossible tile coords', garbageKeys === 0, `garbage keys persisted=${garbageKeys}, negative entries=${negEntries}`);
 
-  // ── memory caches: configured caps ──
+  // ── caches mémoire : plafonds configurés ──
   origLog('\nmemory tier caps: ' + ['DEM_HOT_CACHE_MAX', 'DEM_HOT_CACHE_MAX_SLOPE_ACTIVE', 'SLOPE_HOT_CACHE_MAX', 'ALTITUDE_HOT_CACHE_MAX', 'ORTHO_HOT_CACHE_MAX', 'IGN_CACHE_MAX']
     .map((n) => { try { return `${n}=${vm.runInThisContext(n)}`; } catch { return `${n}=?`; } }).join(' '));
 }

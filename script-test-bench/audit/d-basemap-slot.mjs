@@ -1,19 +1,22 @@
 /**
- * Audit D (basemap) — `slot: 'top'` on classic v12 basemaps.
+ * Audit D (fond de carte) — `slot: 'top'` sur les fonds classiques v12.
  *
- * Proves from the shipped mapbox-gl build that a layer whose `slot` names a
- * slot that does not exist in the style is silently treated as un-slotted
- * (appended at its insertion position, no warning, no error), then checks the
- * four RedView basemaps: none of them defines slot layers, so `slot: 'top'`
- * is a no-op. Labels are NOT covered in practice because, with terrain on,
- * Style.updateDrapeFirstLayers() renders every draped layer (raster/line/fill)
- * before non-draped ones (symbols). But the relative z-order of the draped
- * overlays (weather / slope / altitude / routes) is plain insertion order, i.e.
- * whatever order they are re-added in after each setStyle().
+ * Prouve, à partir du build de mapbox-gl livré, qu'une couche dont le `slot`
+ * nomme un slot absent du style est traitée sans bruit comme sans slot
+ * (ajoutée à sa position d'insertion, sans avertissement ni erreur), puis
+ * vérifie les quatre fonds de carte RedView : aucun ne définit de couches de
+ * slot, donc `slot: 'top'` est sans effet. Les étiquettes ne sont PAS
+ * recouvertes en pratique car, avec le terrain activé,
+ * Style.updateDrapeFirstLayers() rend chaque couche drapée (raster / line /
+ * fill) avant les non drapées (symboles). Mais l'ordre en z relatif des
+ * surcouches drapées (météo / pente / altitude / routes) est le simple ordre
+ * d'insertion, c'est-à-dire l'ordre dans lequel elles sont réajoutées après
+ * chaque setStyle().
  *
- * Run:  node script-test-bench/audit/d-basemap-slot.mjs
- * Style JSONs are read from $RV_STYLE_DIR (default <tmp>/rv-audit-styles,
- * populated by d-basemap-theme.ts). Exit 1 while the condition holds.
+ * Lancement :  node script-test-bench/audit/d-basemap-slot.mjs
+ * Les JSON de style sont lus dans $RV_STYLE_DIR (par défaut
+ * <tmp>/rv-audit-styles, rempli par d-basemap-theme.ts). Sortie 1 tant que la
+ * condition tient.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -28,7 +31,7 @@ const lineOf = (needle) => lines.findIndex((l) => l.includes(needle)) + 1;
 let failures = 0;
 console.log(`mapbox-gl ${version}`);
 
-// 1. mergeLayers: unknown slot → unslotted.
+// 1. mergeLayers : slot inconnu → sans slot.
 const mergeIdx = mb.indexOf('  mergeLayers() {');
 const mergeBody = mb.slice(mergeIdx, mergeIdx + 1500);
 const branch = 'if (layer.slot && slots[layer.slot])';
@@ -42,7 +45,7 @@ const drapeLine = lineOf('  updateDrapeFirstLayers() {');
 console.log(`  terrain on → Style.updateDrapeFirstLayers (dev.js:${drapeLine}) draws all draped layers first, then symbols: labels stay above raster overlays.`);
 console.log(`  only slot warning in addLayer/moveLayer is the beforeId-mismatch warnOnce (dev.js:${warnLine}); validator accepts any slot string.`);
 
-// 2. Basemaps: slot layers + symbol tail.
+// 2. Fonds de carte : couches de slot + queue de symboles.
 const styleDir = process.env.RV_STYLE_DIR ?? path.join(os.tmpdir(), 'rv-audit-styles');
 for (const name of ['outdoors-v12', 'satellite-streets-v12']) {
   const file = path.join(styleDir, `${name}.json`);
@@ -55,7 +58,7 @@ for (const name of ['outdoors-v12', 'satellite-streets-v12']) {
   if (slots === 0) failures += 1;
 }
 
-// 3. App overlays that rely on slot:'top' (no beforeId).
+// 3. Surcouches de l'application qui comptent sur slot:'top' (sans beforeId).
 const files = [
   'src/features/slope/lib/slope-source.ts',
   'src/features/altitude/lib/altitude-source.ts',

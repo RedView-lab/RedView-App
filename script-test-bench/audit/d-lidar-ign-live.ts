@@ -1,13 +1,14 @@
 /**
- * Audit D / LIDAR — live probe of IGN LiDAR HD discovery + download
- * (data.geopf.fr), replaying exactly what src/features/lidar/lib/wfsClient.ts
- * does, then HEAD-ing the resolved file (no body download).
+ * Audit D / LIDAR — sonde en direct de la découverte et du téléchargement
+ * LiDAR HD de l'IGN (data.geopf.fr), qui rejoue exactement ce que fait
+ * src/features/lidar/lib/wfsClient.ts, puis fait un HEAD sur le fichier résolu
+ * (sans télécharger le corps).
  *
  *   npx tsx script-test-bench/audit/d-lidar-ign-live.ts [--lon=5.7245 --lat=45.1885]
  *
- * Network budget: <= 3 feed pages + <= 4 HEAD requests, 1 s apart.
- * Exit code 1 if the app's resolution would fail, or if the hard-coded
- * FALLBACK_ZONES list in wfsClient.ts has drifted from the live feed.
+ * Budget réseau : au plus 3 pages de flux + au plus 4 requêtes HEAD, espacées d'1 s.
+ * Code de sortie 1 si la résolution de l'application échouait, ou si la liste
+ * codée en dur FALLBACK_ZONES de wfsClient.ts a dérivé du flux réel.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -25,7 +26,7 @@ const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 type Zone = { name: string; bbox: { west: number; south: number; east: number; north: number }; date: string };
 
-// Same logic as wfsClient.ts:95-133 (DOMParser replaced by regex for node).
+// Même logique que wfsClient.ts:95-133 (DOMParser remplacé par une regex sous Node).
 function parseZones(xml: string): Zone[] {
   const stripped = xml.replace(/<georss:polygon>[\s\S]*?<\/georss:polygon>/g, '').replace(/<georss:polygon\/>/g, '');
   const zones: Zone[] = [];
@@ -65,7 +66,7 @@ async function main() {
   }
   console.log(`feed: pagecount=${maxPages}, zones parsed=${zones.length}, ACAO=${firstHeaders?.get('access-control-allow-origin')}`);
 
-  // Fallback list drift
+  // Dérive de la liste de repli
   const src = fs.readFileSync(path.resolve('src/features/lidar/lib/wfsClient.ts'), 'utf8');
   const fallbackCodes = [...src.matchAll(/'([A-Z]{2,3}_\d{4}-\d{2}-\d{2})'/g)].map((m) => m[1]);
   const liveCodes = new Set(zones.map((z) => z.name.replace(/^NUALHD_1-0__LAZ_[A-Z0-9]+_/, '')));
@@ -76,7 +77,7 @@ async function main() {
   if (missing.length) console.log(`  missing sample: ${missing.slice(0, 8).join(', ')}`);
   if (zones.length && (stale.length || missing.length)) bugs++;
 
-  // Same matching as resolveDownloadUrls (wfsClient.ts:198-250)
+  // Même appariement que resolveDownloadUrls (wfsClient.ts:198-250)
   const [lon, lat] = toWgs84(coord.xKm * 1000 + 500, coord.yKm * 1000 + 500, coord.projection);
   const matching = zones.filter((z) => lon >= z.bbox.west && lon <= z.bbox.east && lat >= z.bbox.south && lat <= z.bbox.north);
   console.log(`tile centre ${lon.toFixed(5)},${lat.toFixed(5)} matches ${matching.length} zone(s): ${matching.map((z) => z.name).join(', ')}`);

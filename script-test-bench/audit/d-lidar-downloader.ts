@@ -1,22 +1,23 @@
 /**
- * Audit D / LIDAR — regression checks on the REAL downloader/storage modules
- * (src/features/lidar/lib/downloader.ts, storage.ts) with a mocked `fetch`.
+ * Audit D / LIDAR — contrôles de régression sur les VRAIS modules de
+ * téléchargement / stockage (src/features/lidar/lib/downloader.ts, storage.ts)
+ * avec un `fetch` simulé.
  *
  *   npx tsx script-test-bench/audit/d-lidar-downloader.ts [--mem-mb=167] [--skip-fanout]
  *
- * No network. Exit code = number of checks that reproduce a bug.
+ * Pas de réseau. Code de sortie = nombre de contrôles qui reproduisent un bogue.
  *
- * Checks
- *  A. Cancel after a 429 retry  -> fetchWithRetry recursion drops `signal`
- *  B. Cancel a Japan download   -> downloadJapanTile never passes `signal`
- *  C. Peak memory of a ~167 MB IGN download (chunks + mergeChunks)
- *  D. WFS failure fan-out       -> number of blind candidate URLs fetched
- *  E. listCachedTiles round-trip of file names for every territory
- *  F. CacheStorage fallback size -> Response(ArrayBuffer) has no content-length
- *  G. Delete while the OPFS file is locked (NoModificationAllowedError)
- *     -> LidarManager.removeTile emits 'tileRemoved', never the error hint
- *  H. Swiss-bbox tile served by IGN (Haute-Savoie): 2nd selection re-downloads
- *     the whole file because downloadIgnTile never checks the LAMB93 cache
+ * Contrôles
+ *  A. Annulation après un nouvel essai sur 429 -> la récursion de fetchWithRetry perd `signal`
+ *  B. Annulation d'un téléchargement au Japon -> downloadJapanTile ne transmet jamais `signal`
+ *  C. Pic mémoire d'un téléchargement IGN d'~167 Mo (morceaux + mergeChunks)
+ *  D. Éventail en cas d'échec du WFS -> nombre d'URL candidates aveugles récupérées
+ *  E. Aller-retour des noms de fichiers de listCachedTiles pour chaque territoire
+ *  F. Taille dans le repli CacheStorage -> Response(ArrayBuffer) n'a pas de content-length
+ *  G. Suppression pendant que le fichier OPFS est verrouillé (NoModificationAllowedError)
+ *     -> LidarManager.removeTile émet 'tileRemoved', jamais l'indication d'erreur
+ *  H. Tuile de l'emprise suisse servie par l'IGN (Haute-Savoie) : une 2e sélection
+ *     retélécharge tout le fichier car downloadIgnTile ne vérifie jamais le cache LAMB93
  */
 import { downloadTile } from '../../src/features/lidar/lib/downloader.ts';
 import { listCachedTiles, deleteTile } from '../../src/features/lidar/lib/storage.ts';
@@ -51,7 +52,7 @@ globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
 
 const LAS_MAGIC = [0x4c, 0x41, 0x53, 0x46]; // "LASF"
 
-/** A body stream that never ends unless the request signal aborts. */
+/** Un flux de corps qui ne se termine jamais, sauf si le signal de la requête est annulé. */
 function hangingResponse(init?: RequestInit, onStart?: () => void): { res: Response; kill: () => void } {
   let ctrl!: ReadableStreamDefaultController<Uint8Array>;
   const stream = new ReadableStream<Uint8Array>({
@@ -78,9 +79,10 @@ function settledWithin<T>(p: Promise<T>, ms: number): Promise<'settled' | 'pendi
   ]);
 }
 
-// A tile in mainland France (Grenoble). WFS is unparseable in node (no
-// DOMParser) so the downloader uses its hard-coded fallback list — the same
-// branch a browser takes when data.geopf.fr/telechargement is down.
+// Une tuile en France métropolitaine (Grenoble). Le WFS n'est pas analysable
+// sous Node (pas de DOMParser), donc le téléchargeur utilise sa liste de repli
+// codée en dur — la même branche qu'un navigateur quand
+// data.geopf.fr/telechargement est indisponible.
 const IGN_COORD: TileCoord = wgs84ToTileCoord(5.7245, 45.1885);
 
 async function checkA() {
@@ -96,8 +98,8 @@ async function checkA() {
     return h.res;
   };
   const ac = new AbortController();
-  const p = downloadTile({ ...IGN_COORD, xKm: IGN_COORD.xKm + 1000 }, undefined, ac.signal); // unique key, no cache
-  // wait until the retry is streaming
+  const p = downloadTile({ ...IGN_COORD, xKm: IGN_COORD.xKm + 1000 }, undefined, ac.signal); // clé unique, pas de cache
+  // attend que le nouvel essai soit en cours de diffusion
   for (let i = 0; i < 100 && downloadCalls < 2; i++) await new Promise((r) => realSetTimeout(r, 20));
   ac.abort();
   const state = await settledWithin(p, 1500);
@@ -109,7 +111,7 @@ async function checkA() {
 }
 
 async function checkB() {
-  // Shizuoka (VIRTUAL SHIZUOKA dataset)
+  // Shizuoka (jeu de données VIRTUAL SHIZUOKA)
   const coord = wgs84ToTileCoord(138.38, 34.97);
   if (!String(coord.projection).startsWith('JGD2011')) {
     result('B', false, `skipped: projection=${coord.projection}`);
@@ -183,7 +185,7 @@ async function checkD() {
     if (url.includes('/resource/LiDARHD-NUALID')) return new Response('', { status: 503 });
     return new Response('', { status: 404 });
   };
-  // fast-forward the 200 ms inter-request sleeps
+  // accélère les pauses de 200 ms entre requêtes
   (globalThis as { setTimeout: unknown }).setTimeout = ((fn: () => void) => realSetTimeout(fn, 0)) as unknown;
   const t0 = performance.now();
   let err = '';
@@ -195,7 +197,7 @@ async function checkD() {
     (globalThis as { setTimeout: unknown }).setTimeout = realSetTimeout;
   }
   const downloads = fetchLog.filter((u) => u.includes('/download/')).length;
-  const wallClockS = (downloads - 1) * 0.2; // real INTER_REQUEST_DELAY_MS, excluding RTT
+  const wallClockS = (downloads - 1) * 0.2; // vrai INTER_REQUEST_DELAY_MS, hors aller-retour réseau
   result('D', downloads > 20,
     `WFS down -> ${downloads} blind GETs on data.geopf.fr for ONE tile (>= ${wallClockS.toFixed(0)} s of sleeps + RTT), `
     + `final error: "${err.slice(0, 90)}..." (${(performance.now() - t0).toFixed(0)} ms with timers fast-forwarded)`);
@@ -226,16 +228,18 @@ async function checkE() {
 }
 
 function checkF() {
-  // storage.ts:102-108 builds the cached Response from an ArrayBuffer;
-  // storage.ts:292 later reads `content-length` to show the size.
+  // storage.ts:102-108 construit la Response en cache à partir d'un
+  // ArrayBuffer ; storage.ts:292 lit plus tard `content-length` pour afficher
+  // la taille.
   const r = new Response(new ArrayBuffer(167 * 1024 * 1024), { headers: { 'Content-Type': 'application/octet-stream' } });
   const cl = r.headers.get('content-length');
   result('F', cl === null, `Response(ArrayBuffer).headers content-length = ${cl} -> CacheStorage-fallback tiles listed as 0 MB`);
 }
 
 async function checkG() {
-  // Fake OPFS whose files are locked (an open writable / sync handle in the
-  // viewer tab makes Chrome throw NoModificationAllowedError on removeEntry).
+  // Faux OPFS dont les fichiers sont verrouillés (une poignée d'écriture /
+  // synchrone ouverte dans l'onglet du visualiseur fait lever
+  // NoModificationAllowedError par Chrome sur removeEntry).
   const locked = () => { throw new DOMException('locked', 'NoModificationAllowedError'); };
   const fakeDir = {
     getFileHandle: async () => ({ getFile: async () => new File([new Uint8Array(4)], 'x') }),

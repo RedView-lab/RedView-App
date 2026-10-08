@@ -1,28 +1,29 @@
 /**
- * Audit D (basemap) — "Qualité 3D" selector bus ordering.
+ * Audit D (fond de carte) — ordre sur le bus du sélecteur « Qualité 3D ».
  *
- * ControlPanelContainer publishes through publishDem3dSelection(); it used to publish the quality FIRST and
- * the DEM profile SECOND. The map controller's quality listener
- * (useMapSubscriptions → lifecycle.setDem3dQuality → demSource.ts:544-560)
- * reads the profile synchronously from demProfileBus to build the DEM tile
- * URL. When the user goes from "30 m" to "1 m Sol Nu (MNT)", the quality
- * listener therefore sees the STALE profile ('default' = 0.40 m MNS surface),
- * binds MNS tiles, and only then the profile listener swaps to MNT tiles
- * (second setTiles + second wave of SW DEM builds).
+ * ControlPanelContainer publie via publishDem3dSelection() ; il publiait la
+ * qualité EN PREMIER et le profil DEM EN SECOND. L'écouteur de qualité du
+ * contrôleur de carte (useMapSubscriptions → lifecycle.setDem3dQuality →
+ * demSource.ts:544-560) lit le profil de façon synchrone dans demProfileBus
+ * pour construire l'URL des tuiles DEM. Quand l'utilisateur passe de « 30 m »
+ * à « 1 m Sol Nu (MNT) », l'écouteur de qualité voit donc le profil PÉRIMÉ
+ * ('default' = surface MNS 0,40 m), attache les tuiles MNS, et seulement
+ * ensuite l'écouteur de profil bascule sur les tuiles MNT (second setTiles +
+ * seconde vague de constructions DEM dans le SW).
  *
- * Run:  npx tsx script-test-bench/audit/d-basemap-quality.ts
- * Exit 1 when the stale-profile read reproduces.
+ * Lancement :  npx tsx script-test-bench/audit/d-basemap-quality.ts
+ * Sortie 1 quand la lecture du profil périmé se reproduit.
  */
 import { subscribeDem3dQuality, getActiveDem3dQuality } from '../../src/features/map3d/lib/dem3dQualityBus.ts';
 import { subscribeDemProfilePreference, getActiveDemProfilePreference } from '../../src/features/map3d/lib/demProfileBus.ts';
 import { publishDem3dSelection } from '../../src/features/map3d/lib/publishDem3dSelection.ts';
 
-// The real publisher used by ControlPanelContainer (no copy to drift).
+// Le vrai éditeur utilisé par ControlPanelContainer (aucune copie qui pourrait diverger).
 const applyDem3dSelection = (value: string): void => publishDem3dSelection(value);
 
 const events: string[] = [];
 subscribeDem3dQuality((q) => {
-  // What demSource.setDem3dQuality('hd') would request: buildDemTilesTemplate(bust, getActiveDemProfile()).
+  // Ce que demanderait demSource.setDem3dQuality('hd') : buildDemTilesTemplate(bust, getActiveDemProfile()).
   events.push(`quality→${q} (controller builds tiles for profile='${getActiveDemProfilePreference()}')`);
 });
 subscribeDemProfilePreference((p) => {

@@ -1,25 +1,26 @@
 /**
- * Audit D — weather endpoints probe (read-only). Default target is the LOCAL
- * prod server; pass a base URL to probe elsewhere:
+ * Audit D — sonde des points d'accès météo (lecture seule). La cible par
+ * défaut est le serveur de prod LOCAL ; passer une URL de base pour sonder
+ * ailleurs :
  *   node script-test-bench/audit/d-weather-prod-probe.mjs [https://app.redview.tech]
- * Sends <= 13 requests, >= 3.2 s apart when the target is not localhost
- * (shared 120 req/min/IP bucket on prod).
- * Exit 1 if: the openmeteo proxy does not answer from the self-hosted VPS
- * Open-Meteo (`X-Weather-Source: self-hosted-vps`; the public API is
- * non-commercial and never used), the CSP still lets the browser reach
- * open-meteo.com, or route weather beyond the 4-day horizon answers 5xx (the
- * self-hosted instance answers 200 with null values there, which the client
- * reads as « no data »).
+ * Envoie au plus 13 requêtes, espacées d'au moins 3,2 s quand la cible n'est
+ * pas localhost (seau partagé de 120 req/min/IP en prod).
+ * Sortie 1 si : le proxy openmeteo ne répond pas depuis l'Open-Meteo
+ * auto-hébergé du VPS (`X-Weather-Source: self-hosted-vps` ; l'API publique est
+ * non commerciale et jamais utilisée), la CSP laisse encore le navigateur
+ * joindre open-meteo.com, ou la météo de route au-delà de l'horizon de 4 jours
+ * répond en 5xx (l'instance auto-hébergée y répond 200 avec des valeurs nulles,
+ * que le client lit comme « pas de données »).
  */
 const BASE = (process.argv[2] || 'http://127.0.0.1:3000').replace(/\/+$/, '');
 const remote = !/127\.0\.0\.1|localhost/.test(BASE);
 const GAP_MS = remote ? 3200 : 0;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let n = 0;
-// Local only: server trusts XFF from loopback, so use our own rate-limit bucket (other audits hammer 127.0.0.1).
+// Local seulement : le serveur fait confiance au XFF venant du loopback, donc on utilise notre propre seau de limitation (d'autres audits martèlent 127.0.0.1).
 const LOCAL_XFF = `198.51.100.${1 + Math.floor(Math.random() * 250)}`;
 const problems = [];
-/** Model the app requests everywhere (src/features/weather/lib/openMeteoConfig.ts). */
+/** Modèle que l'application demande partout (src/features/weather/lib/openMeteoConfig.ts). */
 const MODEL = 'meteofrance_seamless';
 
 async function probe(label, pathOrUrl, { show = [], body = false } = {}) {
@@ -72,14 +73,14 @@ if (radarJson) {
   const frames = radarJson.radar?.past ?? [];
   const last = frames.at(-1);
   console.log(`    radar: host=${radarJson.host} frames=${frames.length} last=${last?.path} age=${last ? Math.round(Date.now() / 1000 - last.time) : '?'}s`);
-  // exactly what buildRadarTileUrl() produces (src/features/weather/radar/radarClient.ts L125-136)
+  // exactement ce que produit buildRadarTileUrl() (src/features/weather/radar/radarClient.ts L125-136)
   const q = `host=${encodeURIComponent(radarJson.host)}&path=${encodeURIComponent(last.path)}`;
   await probe('radar tile z5 raw', `/radar-tiles/5/16/11?${q}`);
   const p = encodeURIComponent('gradient:a0d8ff_0.1_1:3a7bd5_1_5:ff3b30_5_20');
   await probe('radar tile z5 recolor', `/radar-tiles/5/16/11?${q}&p=${p}&sig=x`);
 }
 
-// Route weather — same query as fetchRouteWeatherDataset (src/features/weather/lib/routeWeather.ts), 26 stations Paris->Lyon
+// Météo de route — même requête que fetchRouteWeatherDataset (src/features/weather/lib/routeWeather.ts), 26 stations Paris->Lyon
 const stations = Array.from({ length: 26 }, (_, i) => ({ lat: 48.8566 + (45.764 - 48.8566) * (i / 25), lng: 2.3522 + (4.8357 - 2.3522) * (i / 25) }));
 const lats = stations.map((s) => s.lat.toFixed(4)).join(',');
 const lngs = stations.map((s) => s.lng.toFixed(4)).join(',');
@@ -100,7 +101,7 @@ if (route && (!route.res.ok || route.res.headers.get('x-weather-source') !== 'se
 const far = await probe('openmeteo route start +30 d (beyond horizon)', routeUrl(new Date(today.getTime() + 30 * 86400000)), { body: true });
 if (far && far.res.status >= 500) problems.push(`route weather beyond horizon -> ${far.res.status} (expected 200 with null values or a 4xx, never a 5xx)`);
 
-// Wind batch — same as fetchBatch (src/features/weather/lib/open-meteo.ts), 200 coords (the proxy's limit)
+// Lot de vent — comme fetchBatch (src/features/weather/lib/open-meteo.ts), 200 coordonnées (la limite du proxy)
 const wc = Array.from({ length: 200 }, (_, i) => ({ lat: 45 + (i % 20) * 0.02, lng: 6 + Math.floor(i / 20) * 0.02 }));
 const hourKey = `${iso(today)}T12:00`;
 const wind = await probe(`openmeteo wind batch 200 coords ${MODEL}`,

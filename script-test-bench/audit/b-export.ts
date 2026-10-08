@@ -1,19 +1,22 @@
 /**
- * Audit B6 — Export (GPX / KML / FIT) on a real long route.
+ * Audit B6 — export (GPX / KML / FIT) sur une vraie longue route.
  *
  *   npx tsx script-test-bench/audit/b-export.ts
  *
- * - Imports "Tour de France 2026.gpx" with the app's real parser + import
- *   normalisation, adds N POI anchors, runs the real exporters.
- * - Re-decodes the FIT with @garmin/fitsdk Decoder: integrity, errors, and
- *   checks that record/course-point positions land on the route
- *   (FIT stores positions in *semicircles*: deg * 2^31 / 180).
- * - Checks GPX/KML well-formedness (stack-based tag matcher) and round-trips
- *   the GPX through the app parser.
- * - Times collectExportAnchors / buildItineraryFitCourse with many anchors
- *   (estimateAnchorElevation & findNearestRecordMessage are O(anchors×points)).
+ * - Importe « Tour de France 2026.gpx » avec le vrai analyseur de
+ *   l'application + la normalisation d'import, ajoute N ancres de POI, lance
+ *   les vrais exporteurs.
+ * - Redécode le FIT avec le Decoder de @garmin/fitsdk : intégrité, erreurs, et
+ *   vérifie que les positions des record / course-point tombent sur la route
+ *   (FIT stocke les positions en *semicercles* : deg * 2^31 / 180).
+ * - Vérifie que le GPX / KML est bien formé (appariement des balises par
+ *   pile) et fait faire un aller-retour au GPX dans l'analyseur de
+ *   l'application.
+ * - Chronomètre collectExportAnchors / buildItineraryFitCourse avec beaucoup
+ *   d'ancres (estimateAnchorElevation et findNearestRecordMessage sont en
+ *   O(ancres×points)).
  *
- * Exit code 1 when a defect reproduces (FIT positions off-route, malformed XML…).
+ * Code de sortie 1 quand un défaut se reproduit (positions FIT hors route, XML mal formé…).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -105,7 +108,7 @@ async function main() {
   if (gpxErr) failures.push(`GPX malformed: ${gpxErr}`);
   if (re.points.length !== stored.length) failures.push(`GPX round-trip point count ${re.points.length} != ${stored.length}`);
 
-  // Control characters in a label (e.g. pasted POI name) → invalid XML 1.0
+  // Caractères de contrôle dans un libellé (p. ex. nom de POI collé) → XML 1.0 invalide
   const itCtl = makeItinerary(1);
   (itCtl.poiFeatures[0] as any).name = 'Fontaine\u0007 du col';
   const gpxCtl = buildItineraryGpx(itCtl) as string;
@@ -121,7 +124,7 @@ async function main() {
   console.log(`KML: ${(kml.length / 1024).toFixed(0)} KB in ${kmlMs.toFixed(0)} ms, well-formed=${kmlErr ?? 'yes'}`);
   if (kmlErr) failures.push(`KML malformed: ${kmlErr}`);
 
-  // --- anchors × points scaling -----------------------------------------
+  // --- passage à l'échelle ancres × points --------------------------------
   const routePoints = getExportRoutePoints(makeItinerary(0));
   for (const n of [100, 1000, 5000]) {
     const it = makeItinerary(n);

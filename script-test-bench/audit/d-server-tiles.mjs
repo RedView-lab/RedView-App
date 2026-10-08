@@ -1,9 +1,9 @@
-// Audit D — tile routes, headers, CSP and rate limiting of the local prod server.
+// Audit D — routes de tuiles, en-têtes, CSP et limitation de débit du serveur de prod local.
 //
-// Usage:  npx tsx script-test-bench/audit/d-server-tiles.mjs [--base http://127.0.0.1:3000] [--no-ratelimit]
+// Usage :  npx tsx script-test-bench/audit/d-server-tiles.mjs [--base http://127.0.0.1:3000] [--no-ratelimit]
 //
-// Exits non-zero when one of the regression checks marked BUG reproduces.
-// The rate-limit section hammers the LOCAL server only (cheap 204 routes).
+// Sort avec un code non nul quand l'un des contrôles de régression marqués BUG se reproduit.
+// La section de limitation de débit ne martèle que le serveur LOCAL (routes 204 peu coûteuses).
 import { inflateSync, crc32 } from 'node:zlib';
 
 const args = process.argv.slice(2);
@@ -31,7 +31,7 @@ function pngInfo(buf) {
   return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20), depth: buf[24], colorType: buf[25] };
 }
 
-// Strict structural validation (chunk CRCs, mandatory IDAT).
+// Validation structurelle stricte (CRC des morceaux, IDAT obligatoire).
 function pngValidate(buf) {
   const errors = [];
   if (buf.length < 8 || buf.readUInt32BE(0) !== 0x89504e47) return ['bad signature'];
@@ -61,7 +61,7 @@ function pngIdat(buf) {
   return inflateSync(Buffer.concat(parts));
 }
 
-// ── A. Headers / CSP ────────────────────────────────────────────────────
+// ── A. En-têtes / CSP ───────────────────────────────────────────────────
 async function sectionHeaders() {
   console.log('\n== A. headers / CSP ==');
   for (const p of ['/', '/viewer', '/viewer.html', '/some/spa/route', '/sw-dem.js', '/sw-dem/core/config.js', '/sw-dem/workers/slope-pool.worker.js']) {
@@ -72,7 +72,7 @@ async function sectionHeaders() {
   const { res: r } = await get('/');
   const csp = r.headers.get('content-security-policy') || '';
   const connect = (csp.split(';').find((d) => d.trim().startsWith('connect-src')) || '');
-  // Every external host the browser (page or SW) talks to for map layers.
+  // Chaque hôte externe auquel le navigateur (page ou SW) parle pour les couches de carte.
   const required = [
     'https://api.mapbox.com', 'https://events.mapbox.com', 'https://a.tiles.mapbox.com',
     'https://api.rainviewer.com', 'https://tilecache.rainviewer.com', 'https://tilecache.rainviewer.net',
@@ -100,7 +100,7 @@ async function sectionHeaders() {
   check('A.base-headers on tile route', tile.headers.get('x-content-type-options') === 'nosniff', `nosniff=${tile.headers.get('x-content-type-options')} hsts=${!!tile.headers.get('strict-transport-security')}`);
 }
 
-// ── B. invalid coordinates ──────────────────────────────────────────────
+// ── B. coordonnées invalides ────────────────────────────────────────────
 async function sectionInvalid() {
   console.log('\n== B. invalid coordinates ==');
   const bad = ['-1/0/0', '23/0/0', '99999999999999999999/0/0', '1/2/0', '1/0/2', '3/8/1', 'a/b/c', '1.5/0/0', '%2e%2e/%2e%2e/x', '..%2f..%2fetc/passwd/1', '0/0', '12/2100/1460/extra'];
@@ -110,20 +110,20 @@ async function sectionInvalid() {
       const { res, buf } = await get(p);
       const ct = res.headers.get('content-type') || '';
       let ok;
-      if (prefix === '/ortho-tiles/') ok = res.status < 500; // no server route: SPA fallback expected
+      if (prefix === '/ortho-tiles/') ok = res.status < 500; // pas de route serveur : repli SPA attendu
       else ok = res.status === 204 || res.status === 400;
-      // trailing garbage after valid coords: server regex has no `$`
+      // déchets en fin d'URL après des coordonnées valides : la regex du serveur n'a pas de `$`
       if (c === '12/2100/1460/extra' && prefix !== '/ortho-tiles/' && prefix !== '/radar-tiles/') ok = true;
       check(`B ${p.slice(0, 60)}`, ok, `status=${res.status} type=${ct} len=${buf.length}`, { bug: res.status >= 500 });
     }
   }
-  // ortho-tiles has no server fallback: SPA index.html is returned with 200
+  // ortho-tiles n'a pas de repli serveur : l'index.html de la SPA est renvoyé avec 200
   const { res, buf } = await get('/ortho-tiles/12/2100/1460');
   check('B.ortho-tiles server fallback', !(res.status === 200 && (res.headers.get('content-type') || '').includes('text/html')),
     `GET /ortho-tiles/12/2100/1460 without SW -> ${res.status} ${res.headers.get('content-type')} (${buf.length} B, SPA index.html)`, { bug: false });
 }
 
-// ── C. valid tiles: latency, size, cache headers ────────────────────────
+// ── C. tuiles valides : latence, taille, en-têtes de cache ──────────────
 async function sectionValid() {
   console.log('\n== C. valid tiles (Mont Blanc area) ==');
   const tiles = [['slope', '/slope-tiles/12/2120/1462'], ['altitude', '/altitude-tiles/12/2120/1462'], ['dem', '/dem-tiles/12/2120/1462'],
@@ -133,14 +133,14 @@ async function sectionValid() {
     const warm = await get(p + '?audit=' + Date.now());
     const info = pngInfo(cold.buf);
     console.log(`      ${name.padEnd(10)} cold=${cold.ms.toFixed(0)}ms warm=${warm.ms.toFixed(0)}ms size=${cold.buf.length}B png=${JSON.stringify(info)} cache=${cold.res.headers.get('cache-control')}`);
-    // /dem-tiles is SW-only by design (server.mjs): an uncontrolled page reads AWS Terrarium
-    // directly, the server answers 204 at once and outside the tile quota.
+    // /dem-tiles est réservé au SW par conception (server.mjs) : une page non contrôlée lit AWS Terrarium
+    // directement, le serveur répond 204 tout de suite et hors du quota de tuiles.
     if (name.startsWith('dem')) check(`C.${name} 204 (DEM is SW-only)`, cold.res.status === 204, `status=${cold.res.status}`);
     else check(`C.${name} 256px`, info && info.w === 256 && info.h === 256, `status=${cold.res.status}`);
   }
 
-  // Slope source maxzoom is 16 (HD) but AWS stops at z14: the fallback
-  // answers z15/z16 with a 1x1 transparent PNG, 200 + immutable 7 days.
+  // Le maxzoom de la source de pente est 16 (HD) mais AWS s'arrête à z14 : le
+  // repli répond en z15 / z16 avec un PNG transparent 1x1, 200 + immuable 7 jours.
   const s15 = await get('/slope-tiles/15/16965/11701');
   const i15 = pngInfo(s15.buf);
   check('C.slope z15 not a cached 1x1 placeholder', !(s15.res.status === 200 && i15?.w === 1 && /immutable|max-age=604800/.test(s15.res.headers.get('cache-control') || '')),
@@ -149,7 +149,7 @@ async function sectionValid() {
   const v15 = pngValidate(s15.buf);
   check('C.placeholder PNG is a valid image', v15.length === 0, `TRANSPARENT_1X1_PNG: ${v15.join('; ') || 'ok'} (browsers reject it -> Mapbox tile error, cached 7 days)`);
 
-  // DEM z15 (DEM_SOURCE_MAXZOOM=17): placeholder instead of 204 (SW contract: never fake a tile).
+  // DEM z15 (DEM_SOURCE_MAXZOOM=17) : substitut au lieu de 204 (contrat du SW : ne jamais simuler une tuile).
   const d15 = await get('/dem-tiles/15/16965/11701');
   const di = pngInfo(d15.buf);
   check('C.dem z15 answers 204, not a placeholder', d15.res.status === 204,
@@ -157,7 +157,7 @@ async function sectionValid() {
   const okTile = await get('/slope-tiles/12/2120/1462');
   check('C.generated slope PNG valid', pngValidate(okTile.buf).length === 0, pngValidate(okTile.buf).join('; ') || 'ok');
 
-  // Slope fallback ignores ?zone / rv-dem-profile / source-dem: identical bytes.
+  // Le repli de pente ignore ?zone / rv-dem-profile / source-dem : octets identiques.
   const a = await get('/slope-tiles/12/2120/1462');
   const b = await get('/slope-tiles/12/2120/1462?zone=deadbeef&rv-dem-profile=terrain&source-dem=fast-30m&res=2');
   check('C.slope fallback honours zone mask', !a.buf.equals(b.buf) || a.buf.length < 100,
@@ -202,7 +202,7 @@ async function sectionRadar() {
   check('D.radar SSRF path rejected', evil.res.status === 400, `status=${evil.res.status}`);
 }
 
-// ── E. rate limiting (tiles bucket) ─────────────────────────────────────
+// ── E. limitation de débit (seau des tuiles) ────────────────────────────
 async function sectionRateLimit() {
   console.log('\n== E. rate limit (tiles bucket) ==');
   let first429 = -1; let retryAfter = null;

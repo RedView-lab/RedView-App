@@ -1,21 +1,22 @@
 /**
- * Audit D / DW — weather traffic vs the /api rate-limit buckets.
+ * Audit D / DW — trafic météo face aux seaux de limitation de débit de /api.
  *
- * server.mjs picks the bucket from the RESOLVED route: auth/* (15/min),
- * weather = VPS tiles/meta (/api/weather/*, MAX_WEATHER_REQUESTS), pointcloud,
- * and the general bucket (MAX_API_REQUESTS) shared by BRouter, POI and
- * Open-Meteo (/api/openmeteo/*). A 429 in the general bucket blocks routing and
- * POI for up to 60 s, so a single weather action must never reach it.
+ * server.mjs choisit le seau d'après la route RÉSOLUE : auth/* (15/min),
+ * weather = tuiles / métadonnées du VPS (/api/weather/*, MAX_WEATHER_REQUESTS),
+ * pointcloud, et le seau général (MAX_API_REQUESTS) partagé par BRouter, les
+ * POI et Open-Meteo (/api/openmeteo/*). Un 429 dans le seau général bloque le
+ * routage et les POI jusqu'à 60 s : une action météo ne doit donc jamais
+ * l'atteindre.
  *
- * 1. LIVE (local server only): exhausts the general bucket from a private
- *    X-Forwarded-For (the server trusts XFF from loopback, so this does not
- *    disturb other audits on 127.0.0.1), checks the 429 lands exactly at
- *    MAX_API_REQUESTS + 1, and that the weather and tile routes of the same IP
- *    still answer (separate buckets).
- * 2. MODEL: request counts of the weather features per bucket, with the
- *    constants read from the source, for typical user actions.
- * Exit 1 if a plausible single-user action exceeds its bucket.
- *   node script-test-bench/audit/d-weather-ratelimit.mjs [base URL, default http://127.0.0.1:3000]
+ * 1. EN DIRECT (serveur local seulement) : épuise le seau général depuis un
+ *    X-Forwarded-For privé (le serveur fait confiance au XFF venant du
+ *    loopback, donc cela ne gêne pas les autres audits sur 127.0.0.1), vérifie
+ *    que le 429 tombe exactement à MAX_API_REQUESTS + 1, et que les routes
+ *    météo et de tuiles de la même IP répondent encore (seaux séparés).
+ * 2. MODÈLE : nombre de requêtes des fonctions météo par seau, avec les
+ *    constantes lues dans le source, pour des actions typiques d'utilisateur.
+ * Sortie 1 si une action plausible d'un seul utilisateur dépasse son seau.
+ *   node script-test-bench/audit/d-weather-ratelimit.mjs [URL de base, par défaut http://127.0.0.1:3000]
  */
 import fs from 'node:fs';
 
@@ -36,7 +37,7 @@ for (const [name, value] of Object.entries(LIMITS)) {
   }
 }
 
-// ── 1. live check ──────────────────────────────────────────────────────
+// ── 1. contrôle en direct ──────────────────────────────────────────────
 const xff = `192.0.2.${1 + Math.floor(Math.random() * 250)}`;
 const headers = { 'X-Forwarded-For': xff };
 const statuses = {};
@@ -48,9 +49,9 @@ for (let i = 1; i <= LIMITS.general + 5; i++) {
   if (res.status === 429 && first429 === null) { first429 = i; retryAfter = res.headers.get('retry-after'); }
   await res.arrayBuffer();
 }
-// Same IP, general bucket exhausted: the weather route ('..' in the query is
-// refused by the handler with 400, before any upstream fetch) and a tile route
-// must still pass the rate limiter.
+// Même IP, seau général épuisé : la route météo ('..' dans la requête est
+// refusé par le gestionnaire avec un 400, avant toute requête amont) et une
+// route de tuiles doivent encore passer le limiteur de débit.
 const weatherRes = await fetch(`${BASE}/api/weather/meta.json?probe=..`, { headers });
 await weatherRes.arrayBuffer();
 const tileRes = await fetch(`${BASE}/radar-tiles/5/16/11?path=/v2/radar/x`, { headers });
@@ -88,9 +89,9 @@ const WIND_BATCH = num(om, /BATCH_SIZE = (\d+)/);
 const WIND_RETRIES = num(om, /MAX_RETRIES = (\d+)/);
 
 const scrub = (layers, hours) => layers * (hours + PREFETCH);
-const windOneFetch = Math.ceil(WIND_MAX_POINTS / WIND_BATCH); // one model (meteofrance_seamless) per batch
-const windPerPan = windOneFetch * 3; // selection + prefetch +1 h and +24 h (prefetchWindGridData)
-// [label, { bucket: requests }]
+const windOneFetch = Math.ceil(WIND_MAX_POINTS / WIND_BATCH); // un modèle (meteofrance_seamless) par lot
+const windPerPan = windOneFetch * 3; // sélection + préchargement +1 h et +24 h (prefetchWindGridData)
+// [libellé, { seau: requêtes }]
 const rows = [
   ['open project: meta + 1 tile/layer + prefetch, 3 layers, 3 route variants', { weather: 1 + 3 * (1 + PREFETCH), general: 3 + 1 }],
   ['scrub 24 h, 1 layer', { weather: scrub(1, 24) }],
@@ -98,8 +99,8 @@ const rows = [
   ['scrub full slider (~62 h positions -> 48 VPS hours), 3 layers', { weather: scrub(3, 48) }],
   ['scrub 24 h, 5 layers', { weather: scrub(5, 24) }],
   ['scrub full slider, 5 layers, twice within a minute', { weather: 2 * scrub(5, 48) }],
-  // Dormant: the Wind section is hidden and windEnabled forced off at load
-  // (useOverlayWindSnowState) — this row guards its return.
+  // En sommeil : la section Vent est masquée et windEnabled forcé à faux au
+  // chargement (useOverlayWindSnowState) — cette ligne garde son retour.
   [`Wind overlay if re-enabled: one pan at z>=12 (${WIND_MAX_POINTS} pts / ${WIND_BATCH}, x3 selections)`, { general: windPerPan }],
 ];
 console.log(`\nmodel (prefetch=${PREFETCH} tiles/layer, wind batch=${WIND_BATCH}, retries on 429=${WIND_RETRIES}):`);

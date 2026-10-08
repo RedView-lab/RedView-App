@@ -1,18 +1,21 @@
 /**
- * Audit B7 — silent via-point truncation in the full BRouter recompute.
+ * Audit B7 — troncature silencieuse des points de passage dans le recalcul
+ * BRouter complet.
  *
  *   npx tsx script-test-bench/audit/b-via-limit.ts
  *
- * hooks/useItineraryBrouterRouting/index.ts:458 does `userVia.slice(0, 14)`
- * with no warning. Every Tracer click after the 2nd turns the previous end into
- * a `waypoint` WITHOUT `onRoute` (traceEdits.ts:114-119), so it counts as a via
- * in getRoutingEndpointsKey. A traced route with >15 clicks is fine while it is
- * built segment by segment (pendingTraceExtension), but the first FULL
- * recompute (profile slider / road-type change, discipline switch, forbidden
- * zone, undo to a stale stamp…) routes only start + 14 vias + end: every later
- * click is silently skipped and the route shortcuts straight to the end.
+ * hooks/useItineraryBrouterRouting/index.ts:458 fait `userVia.slice(0, 14)`
+ * sans avertissement. Chaque clic du Tracer après le 2e transforme la fin
+ * précédente en `waypoint` SANS `onRoute` (traceEdits.ts:114-119), donc il
+ * compte comme via dans getRoutingEndpointsKey. Une route tracée avec plus de
+ * 15 clics tient tant qu'elle est construite segment par segment
+ * (pendingTraceExtension), mais le premier recalcul COMPLET (curseur de profil
+ * / changement de type de route, changement de discipline, zone interdite,
+ * annulation vers un tampon périmé…) ne route que départ + 14 via + arrivée :
+ * chaque clic suivant est sauté sans bruit et la route coupe tout droit vers
+ * l'arrivée.
  *
- * Exit 1 when vias are dropped without the user being told.
+ * Sortie 1 quand des via sont abandonnés sans que l'utilisateur en soit informé.
  */
 import { loadSrc, closeLoader } from './b-loader';
 
@@ -32,13 +35,13 @@ async function main() {
   for (let i = 0; i < clicks; i++) {
     const p = { lat: 45 + i * 0.02, lon: 6 + (i % 2) * 0.02, label: `c${i}` };
     trace.applyTraceAppend(it, p);
-    // after the first routed segment the route source is brouter (segment-by-segment appends)
+    // après le premier segment routé, la source de la route est brouter (ajouts segment par segment)
     if (i === 1) it.gpxRoute = { points: [{ lat: 45, lon: 6 }, { lat: 45.02, lon: 6.02 }], source: 'brouter' };
   }
   const { startKey, endKey, viaKey } = mut.getRoutingEndpointsKey(it);
   const toPoint = (s: string) => ({ lon: +s.split(',')[0], lat: +s.split(',')[1] });
   const userVia = viaKey ? viaKey.split('|').map(toPoint) : [];
-  // Full recompute (index.ts → resolveRouteRequest): legs of <= MAX_BROUTER_VIA_PER_REQUEST via.
+  // Recalcul complet (index.ts → resolveRouteRequest) : tronçons d'au plus MAX_BROUTER_VIA_PER_REQUEST via.
   const legs = splitRouteIntoLegs(toPoint(startKey), userVia, toPoint(endKey));
   const routed = [legs[0].start, ...legs.flatMap((leg: any) => [...leg.via, leg.end])];
   const expected = [toPoint(startKey), ...userVia, toPoint(endKey)];

@@ -1,17 +1,18 @@
 /**
- * Audit B5c — does IGN Géoplateforme altimetry accept the 5000-point POST batch
- * that terrainTiles.ts:79-122 sends (IGN_ALTIMETRY_MAX_POINTS_PER_REQUEST = 5000)?
- * Also shows what it returns for points just outside France (Aosta valley, on the
- * UTMB course, which isInsideFranceLoose() classifies as "France").
+ * Audit B5c — l'altimétrie de la Géoplateforme IGN accepte-t-elle le lot POST
+ * de 5000 points qu'envoie terrainTiles.ts:79-122
+ * (IGN_ALTIMETRY_MAX_POINTS_PER_REQUEST = 5000) ? Montre aussi ce qu'elle
+ * renvoie pour des points juste hors de France (val d'Aoste, sur le parcours
+ * de l'UTMB, que isInsideFranceLoose() classe comme « France »).
  *
- *   npx tsx script-test-bench/audit/b-ign-elevation.ts      (ONE real request)
+ *   npx tsx script-test-bench/audit/b-ign-elevation.ts      (UNE vraie requête)
  *
- * Exit 1 when the batch is rejected / length mismatches.
+ * Sortie 1 quand le lot est refusé / que les longueurs ne concordent pas.
  */
 const N = 5000;
 const lat: number[] = [], lon: number[] = [];
 for (let i = 0; i < N - 2; i++) { lat.push(+(45.0 + i * 0.0001).toFixed(6)); lon.push(+(6.0 + i * 0.0001).toFixed(6)); }
-lat.push(45.79, 45.86); lon.push(6.98, 7.10); // Courmayeur / Grand Col Ferret (Italy/Switzerland)
+lat.push(45.79, 45.86); lon.push(6.98, 7.10); // Courmayeur / Grand Col Ferret (Italie / Suisse)
 const t0 = performance.now();
 const res = await fetch('https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json', {
   method: 'POST',

@@ -10,11 +10,12 @@ import type { RouteLayerPoint } from '../../src/features/itineraryPanel/lib/rout
 import { upsertRouteLayer } from '../../src/features/itineraryPanel/lib/route-layer/itineraryLayers';
 import { ids } from '../../src/features/itineraryPanel/lib/route-layer/constants';
 
-// Contract: every route line reads its altitude from the terrain itself
-// (`line-elevation-reference: ground`), i.e. the very DEM tile the 3D mesh is
-// drawn with. The former absolute (`sea`) profile, built from bare-earth
-// route altitudes, sank under the HD surface model and hid up to half the
-// visible trace depending on the zoom level.
+// Contrat : chaque ligne de route lit son altitude sur le terrain lui-même
+// (`line-elevation-reference: ground`), c'est-à-dire la tuile DEM même avec
+// laquelle le maillage 3D est dessiné. L'ancien profil absolu (`sea`),
+// construit à partir des altitudes de sol nu de la route, s'enfonçait sous le
+// modèle de surface HD et masquait jusqu'à la moitié de la trace visible selon
+// le niveau de zoom.
 
 const require = createRequire(import.meta.url);
 const { validate } = require('../../node_modules/mapbox-gl/dist/style-spec/index.cjs');
@@ -53,7 +54,7 @@ class FakeMap {
     this.layers.set(layer.id, layer);
   }
   removeLayer(id: string) { this.layers.delete(id); }
-  moveLayer() { /* order is irrelevant here */ }
+  moveLayer() { /* l'ordre n'a pas d'importance ici */ }
   getPaintProperty(id: string, name: string) { return this.layers.get(id)!.paint[name]; }
   setPaintProperty(id: string, name: string, value: unknown) { this.layers.get(id)!.paint[name] = value; }
   getLayoutProperty(id: string, name: string) { return this.layers.get(id)!.layout[name]; }
@@ -134,8 +135,8 @@ test('a refused layer is reported and rebuilt by the next replay', () => {
   assert.equal(upsertRouteLayer(map, 'test', route, options), false);
   assert.equal(fake.layers.has(lineId), false);
   fake.rejectLayers = false;
-  // Same inputs: the signature was not recorded, so the line layer is added
-  // even though the source already exists.
+  // Mêmes entrées : la signature n'a pas été enregistrée, donc la couche de
+  // ligne est ajoutée alors que la source existe déjà.
   assert.equal(upsertRouteLayer(map, 'test', route, options), true);
   assert.ok(fake.layers.has(lineId));
   assertAllLayers('ground', LINE_CLEARANCE_M);

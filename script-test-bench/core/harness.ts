@@ -1,8 +1,9 @@
 /**
- * RedView DevOps Test-Bench Core Harness
- * 
- * Provides high-precision measurement, memory tracking, statistical analysis
- * (p50, p95, p99, stddev), regression thresholds and assertion validation.
+ * Cœur du banc d'essai RedView
+ *
+ * Fournit des mesures de haute précision, le suivi de la mémoire, l'analyse
+ * statistique (p50, p95, p99, écart type), les seuils de régression et la
+ * validation des assertions.
  */
 import { performance } from 'node:perf_hooks';
 
@@ -35,15 +36,16 @@ export interface MetricStatistics {
   heapUsedFinalMb: number;
   status: 'PASS' | 'WARN' | 'REGRESSION' | 'FAIL';
   warningMessage?: string;
-  /** p95 of the first sampling when it broke the threshold and was measured again. */
+  /** p95 du premier échantillonnage quand il a franchi le seuil et a été remesuré. */
   firstP95Ms?: number;
 }
 
 /**
- * A sampling above its threshold is measured again (twice the samples, at
- * least 10) and the better of the two kept: with a handful of samples the
- * p95 is the worst one, and a single GC pause or frequency drop made a
- * "regression". A real one stays above on the second sampling.
+ * Un échantillonnage au-dessus de son seuil est remesuré (deux fois plus
+ * d'échantillons, au moins 10) et le meilleur des deux est gardé : avec une
+ * poignée d'échantillons, le p95 est le pire, et une seule pause du GC ou
+ * baisse de fréquence faisait une « régression ». Une vraie reste au-dessus
+ * au second échantillonnage.
  */
 function confirmationIterations(iterations: number): number {
   return Math.max(10, iterations * 2);
@@ -78,7 +80,7 @@ export class BenchmarkSuite {
   }
 
   /**
-   * Run a synchronous benchmark function
+   * Exécute une fonction de banc synchrone
    */
   measureSync<T>(
     options: BenchMetricOptions,
@@ -87,7 +89,7 @@ export class BenchmarkSuite {
     const warmup = options.warmupIterations ?? 2;
     const iterations = options.iterations ?? 10;
 
-    // Warmup phase (allows JIT optimization and inline caching)
+    // Phase de chauffe (laisse le JIT optimiser et les caches en ligne se remplir)
     for (let i = 0; i < warmup; i++) {
       fn(i);
     }
@@ -96,7 +98,7 @@ export class BenchmarkSuite {
       try {
         global.gc();
       } catch {
-        // GC not exposed via --expose-gc, ignore
+        // GC non exposé via --expose-gc, on ignore
       }
     }
 
@@ -121,7 +123,7 @@ export class BenchmarkSuite {
   }
 
   /**
-   * Run an asynchronous benchmark function
+   * Exécute une fonction de banc asynchrone
    */
   async measureAsync<T>(
     options: BenchMetricOptions,
@@ -138,7 +140,7 @@ export class BenchmarkSuite {
       try {
         global.gc();
       } catch {
-        // GC not exposed
+        // GC non exposé
       }
     }
 
@@ -188,7 +190,7 @@ function calculateStats(
   const p95Ms = getPercentile(sorted, 95);
   const p99Ms = getPercentile(sorted, 99);
 
-  // Standard deviation
+  // Écart type
   let varianceSum = 0;
   for (let i = 0; i < n; i++) {
     const diff = sorted[i] - meanMs;
@@ -196,13 +198,13 @@ function calculateStats(
   }
   const stdDevMs = Math.sqrt(varianceSum / n);
 
-  // Ops per second
+  // Opérations par seconde
   const opsPerSec = meanMs > 0 ? 1000 / meanMs : 0;
   const throughputItemsPerSec = options.itemsProcessedPerOp
     ? options.itemsProcessedPerOp * opsPerSec
     : undefined;
 
-  // Status & Regression detection
+  // État et détection de régression
   let status: 'PASS' | 'WARN' | 'REGRESSION' | 'FAIL' = 'PASS';
   let warningMessage: string | undefined;
 

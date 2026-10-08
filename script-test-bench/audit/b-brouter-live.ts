@@ -1,18 +1,22 @@
 /**
- * Audit B4 — BRouter through the PUBLIC prod proxy (https://app.redview.tech/api/brouter)
- * using the app's real routing pipeline:
- *   createDefaultItinerary → resolveItineraryRouting (BRF build + upload via
- *   profile-cache) → fetchCustomProfileRoute (custom profile only, 14 s+
- *   timeout + hedge) → fetchBrouterRoute (api/url.ts URL builder).
+ * Audit B4 — BRouter à travers le proxy PUBLIC de prod
+ * (https://app.redview.tech/api/brouter), avec le vrai pipeline de routage de
+ * l'application :
+ *   createDefaultItinerary → resolveItineraryRouting (construction du BRF +
+ *   envoi via profile-cache) → fetchCustomProfileRoute (profil personnalisé
+ *   seulement, délai de 14 s et plus + requête de couverture) →
+ *   fetchBrouterRoute (constructeur d'URL de api/url.ts).
  *
  *   npx tsx script-test-bench/audit/b-brouter-live.ts
  *
- * Budget: hard cap of 14 live requests, >= 3.1 s apart (shared 120 req/min/IP).
- * Reports latency, payload size, content-encoding, cache HIT and D+ coherence
- * (BRouter "filtered ascend" vs the app's computeRouteElevationMetrics vs the
- * GPX the route was derived from).
+ * Budget : plafond strict de 14 requêtes réelles, espacées d'au moins 3,1 s
+ * (seau partagé de 120 req/min/IP). Rapporte la latence, la taille de la
+ * réponse, le content-encoding, les HIT du cache et la cohérence du D+
+ * (« filtered ascend » de BRouter contre computeRouteElevationMetrics de
+ * l'application contre le GPX dont la route est tirée).
  *
- * Exit 1 when a route fails (timeout included: there is no stock fallback).
+ * Sortie 1 quand une route échoue (délai dépassé compris : il n'y a pas de
+ * profil standard de repli).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -64,7 +68,7 @@ async function main() {
   await run('short custom', custom(mk()), valloire, galibier, []);
   await run('short foot (trail)', mk({ discipline: 'trail' }), valloire, galibier, []);
 
-  // 2. ~200 km: re-route the Tour de France 2026 stage through 12 of its own track points
+  // 2. ~200 km : reroute l'étape du Tour de France 2026 par 12 de ses propres points de trace
   const gpx = parseGpxText(fs.readFileSync(path.join(DOWNLOADS, 'Tour de France 2026.gpx'), 'utf8'));
   const stored = routes.normalizeImportedRoutePoints(gpx.points, { includeGradient: false });
   const m = routes.buildImportedRouteMetrics(stored);
@@ -72,13 +76,13 @@ async function main() {
   await run('TdF stage default', mk(), stored[0], stored[stored.length - 1], via, { km: m.distanceKm, dplus: m.ascentM });
   await run('TdF stage custom', custom(mk()), stored[0], stored[stored.length - 1], via, { km: m.distanceKm, dplus: m.ascentM });
 
-  // 3. Long ~1000 km: Paris → Bordeaux → Toulouse → Montpellier
+  // 3. Long ~1000 km : Paris → Bordeaux → Toulouse → Montpellier
   const paris = { lat: 48.8566, lon: 2.3522 }, bordeaux = { lat: 44.8378, lon: -0.5792 }, toulouse = { lat: 43.6047, lon: 1.4442 }, montpellier = { lat: 43.6108, lon: 3.8767 };
   await run('long default', mk(), paris, montpellier, [bordeaux, toulouse]);
   await run('long custom', custom(mk()), paris, montpellier, [bordeaux, toulouse]);
 
-  // 4. Server cache: same URL again after clearing the client-side cache module? The client
-  //    cache (client.ts MAX_CLIENT_CACHE) would answer locally, so hit the URL directly.
+  // 4. Cache serveur : même URL après avoir vidé le module de cache client ? Le cache client
+  //    (MAX_CLIENT_CACHE de client.ts) répondrait localement, donc on appelle l'URL directement.
   const url = brouter.buildBrouterUrl({ start: valloire, end: galibier, profile: 'trekking' });
   const r = await fetch(url);
   console.log(`\n[repeat short default, raw] ${r.status} x-route-cache=${r.headers.get('x-route-cache')} cache-control=${r.headers.get('cache-control')}`);

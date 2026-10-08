@@ -1,8 +1,8 @@
 /**
- * Compares a run with the previous saved report of the same mode: the
- * metrics whose median moved by a quarter or more, slowest first. Timings
- * only compare on the same machine state, so the differences of environment
- * (power source, CPU, Node) are printed with them.
+ * Compare une exécution au précédent rapport enregistré du même mode : les
+ * mesures dont la médiane a bougé d'un quart ou plus, les plus lentes d'abord.
+ * Les temps ne se comparent qu'à état de machine identique : les différences
+ * d'environnement (alimentation, processeur, Node) sont donc affichées avec.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,7 +20,7 @@ export interface MetricChange {
   ratio: number;
 }
 
-/** Latest `<prefix>-*.json` of the same mode (and feature filter), or null. */
+/** Dernier `<prefix>-*.json` du même mode (et du même filtre de fonction), ou null. */
 export function findPreviousReport(
   reportsDir: string,
   mode: 'quick' | 'full',
@@ -38,7 +38,7 @@ export function findPreviousReport(
       const report = JSON.parse(fs.readFileSync(path.join(reportsDir, file), 'utf8')) as SavedBenchReport;
       if (report.mode === mode && (report.feature ?? null) === feature) return { file, report };
     } catch {
-      // unreadable report: skip it
+      // rapport illisible : on le saute
     }
   }
   return null;
@@ -51,7 +51,7 @@ export function compareWithReport(previous: SavedBenchReport, suites: readonly B
   for (const suite of suites) {
     for (const r of suite.results) {
       const p50 = before.get(`${suite.title}\u0000${r.name}`);
-      // Under 0.1 ms a median is a few timer ticks: its ratio means nothing.
+      // Sous 0,1 ms, une médiane ne fait que quelques tics de minuteur : son rapport ne veut rien dire.
       if (p50 === undefined || p50 <= 0 || r.p50Ms <= 0 || Math.max(p50, r.p50Ms) < MIN_COMPARABLE_MS) continue;
       const ratio = r.p50Ms / p50;
       if (ratio >= 1 + threshold || ratio <= 1 / (1 + threshold)) {

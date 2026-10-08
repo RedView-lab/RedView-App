@@ -24,7 +24,7 @@ const quiet = console.log;
 console.log = () => {};
 const out = (...a) => quiet(...a);
 
-// ─────────────────────────── FIT encoder ───────────────────────────
+// ─────────────────────────── Encodeur FIT ───────────────────────────
 const B = { SINT8: 0x01, UINT8: 0x02, UINT16: 0x04, SINT32: 0x05, UINT32: 0x06, ENUM: 0x00 };
 const CRC_TABLE = [
   0x0000, 0xcc01, 0xd801, 0x1400, 0xf001, 0x3c00, 0x2800, 0xe401,
@@ -48,7 +48,7 @@ const RECORD_FIELDS = [
   [3, 1, B.UINT8], [4, 1, B.UINT8], [5, 4, B.UINT32], [6, 2, B.UINT16],
 ];
 
-/** FIT sport codes: 1 running, 2 cycling. */
+/** Codes de sport FIT : 1 course à pied, 2 vélo. */
 function encodeFit(samples, sport) {
   const body = [];
   const u8 = (v) => body.push(v & 0xff);
@@ -76,7 +76,7 @@ function encodeFit(samples, sport) {
     u16(Math.round(p.speed * 1000));
   }
 
-  // Session (local 2): timestamp + sport
+  // Session (local 2) : horodatage + sport
   u8(0x42); u8(0); u8(0); u16(18); u8(2);
   body.push(253, 4, B.UINT32, 5, 1, B.ENUM);
   u8(0x02); u32(samples[samples.length - 1].ts); u8(sport);
@@ -121,7 +121,7 @@ const effort = (g) => {
   return f + slope * (g - c);
 };
 
-/** Simulate a run over `route`; returns FIT samples (1 per route step) and moving time. */
+/** Simule une course sur `route` ; renvoie les échantillons FIT (1 par pas de route) et le temps en mouvement. */
 function simulate(route, seed) {
   let s = seed;
   const noise = () => 1 + ((s = (s * 1103515245 + 12345) % 2147483648) / 2147483648 - 0.5) * 0.08;

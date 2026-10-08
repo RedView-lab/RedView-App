@@ -1,17 +1,20 @@
 /**
- * Audit D (basemap) — RedView "Standard (clair/sombre)" theme pipeline,
- * label-category classifier and getStyle()-like serialisation cost.
+ * Audit D (fond de carte) — pipeline du thème RedView « Standard
+ * (clair/sombre) », classeur des catégories d'étiquettes et coût d'une
+ * sérialisation façon getStyle().
  *
- * Run:  npx tsx script-test-bench/audit/d-basemap-theme.ts
+ * Lancement :  npx tsx script-test-bench/audit/d-basemap-theme.ts
  *
- * Needs the Mapbox outdoors-v12 style JSON. Looked up in $RV_STYLE_DIR
- * (default: OS temp dir /rv-audit-styles). If missing and VITE_MAPBOX_TOKEN is
- * in .env, it is fetched ONCE (1 request) and cached.
+ * A besoin du JSON du style Mapbox outdoors-v12. Cherché dans $RV_STYLE_DIR
+ * (par défaut : dossier temporaire de l'OS /rv-audit-styles). S'il manque et
+ * que VITE_MAPBOX_TOKEN est dans .env, il est récupéré UNE fois (1 requête) et
+ * mis en cache.
  *
- * Exit code 1 when a regression reproduces:
- *   - themed style does not validate against the Mapbox style-spec,
- *   - basemap layers that are NOT labels/POIs get classified as 'poi' (hidden
- *     by the "POI" label toggle), or app layers get classified at all.
+ * Code de sortie 1 quand une régression se reproduit :
+ *   - le style thématisé ne passe pas la validation du style-spec Mapbox,
+ *   - des couches du fond qui ne sont PAS des étiquettes / POI sont classées
+ *     'poi' (masquées par la bascule d'étiquettes « POI »), ou des couches de
+ *     l'application sont classées tout court.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -53,8 +56,8 @@ async function loadOutdoors(): Promise<Style> {
   return json as Style;
 }
 
-// Mapbox `clone()` (deep copy of arrays / plain objects), what
-// Layout/Transitionable.getValue() apply on every serialize().
+// `clone()` de Mapbox (copie profonde des tableaux / objets simples), ce
+// qu'appliquent Layout/Transitionable.getValue() à chaque serialize().
 function mbClone<T>(input: T): T {
   if (Array.isArray(input)) return input.map(mbClone) as T;
   if (input && typeof input === 'object') {
@@ -65,7 +68,7 @@ function mbClone<T>(input: T): T {
   return input;
 }
 
-/** Shape of `Style.serialize()` → `_serializeLayers()` (paint/layout deep-cloned). */
+/** Forme de `Style.serialize()` → `_serializeLayers()` (paint / layout copiés en profondeur). */
 function getStyleLike(style: Style): Style {
   return {
     ...style,
@@ -95,7 +98,7 @@ const ok = (msg: string) => console.log(`  ok   ${msg}`);
 const base = await loadOutdoors();
 console.log(`outdoors-v12: ${base.layers.length} layers, ${(JSON.stringify(base).length / 1024).toFixed(1)} KiB JSON`);
 
-// ── 1. Theme pipeline ───────────────────────────────────────────────────
+// ── 1. Pipeline du thème ─────────────────────────────────────────────────
 console.log('\n[1] RedView themes (applyBasemapTheme on outdoors-v12)');
 const baseIds = new Set(base.layers.map((l) => l.id));
 const overrideIds = Object.keys(buildThemeOverrides(TOPO_LIGHT_PALETTE));
@@ -151,8 +154,9 @@ const APP_LAYER_IDS = [
   'weather-overlay-layer-rain-radar', 'wind-particles', 'sunlight-map-image', 'shadow-image', 'sun-disk',
 ];
 const OVERLAY_RE = /(road|street|highway|motorway|trunk|primary|secondary|tertiary|pedestrian|path|track|junction|shield|tunnel|bridge|traffic|railway|rail|transit|ferry|aerialway|aeroway|runway|taxiway|admin|boundary|border|country|state|province|poi|place|settlement|locality|natural|park|protected|water.*label|waterway.*label|marine.*label)/i;
-// useLabels.isAppCustomLayer (now exported): protected app layers are skipped
-// by applyAll / applyMasterDisable before any pattern matching.
+// useLabels.isAppCustomLayer (désormais exporté) : les couches protégées de
+// l'application sont sautées par applyAll / applyMasterDisable avant toute
+// correspondance de motif.
 for (const id of APP_LAYER_IDS) {
   if (isAppCustomLayer(id)) continue;
   const cat = getLayerCategory({ id, type: 'circle', slot: 'top' } as never);
@@ -166,10 +170,10 @@ if (fs.existsSync(satFile)) {
   console.log(`  satellite-streets-v12 (${sat.layers.length} layers): non-symbol layers classified 'poi': ${satPoi.join(', ') || 'none'}`);
 }
 
-// ── 3. getStyle()-like cost (lead 7) ─────────────────────────────────────
+// ── 3. Coût façon getStyle() (piste 7) ───────────────────────────────────
 console.log('\n[3] getStyle() cost model (Style.serialize deep-clones paint/layout of every layer)');
 const themed = applyBasemapTheme(REDVIEW_TOPO_LIGHT_STYLE_URL, structuredClone(base)) as Style;
-// Add ~40 app layers (routes x3 variants, overlays) to mimic a loaded project.
+// Ajoute ~40 couches d'application (routes ×3 variantes, surcouches) pour imiter un projet chargé.
 for (let i = 0; i < 40; i++) {
   themed.layers.push({ id: `brouter-route-line-${i}`, type: 'line', source: `s${i}`, paint: { 'line-color': '#f00', 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 2, 16, 6] } } as unknown as Layer);
 }

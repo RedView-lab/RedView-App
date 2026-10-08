@@ -25,7 +25,7 @@ const PKG = path.resolve('src/features/fitPredictor/engine/pkg');
 const glue = await import(new URL('file://' + path.join(PKG, 'redviewalgo.js').replace(/\\/g, '/')));
 glue.initSync({ module: fs.readFileSync(path.join(PKG, 'redviewalgo_bg.wasm')) });
 
-// ─────────────────────────── FIT encoder ───────────────────────────
+// ─────────────────────────── Encodeur FIT ───────────────────────────
 const B = { SINT8: 0x01, UINT8: 0x02, SINT32: 0x05, UINT16: 0x04, UINT32: 0x06 };
 const CRC_TABLE = [
   0x0000, 0xcc01, 0xd801, 0x1400, 0xf001, 0x3c00, 0x2800, 0xe401,
@@ -60,12 +60,12 @@ function encodeFit(samples, { withPower, withHr = true }) {
   const u32 = (v) => body.push(v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >> 24) & 0xff);
   const i32 = (v) => u32(v < 0 ? v + 4294967296 : v);
 
-  // FileId definition (local 1) + data
+  // Définition FileId (local 1) + données
   u8(0x41); u8(0); u8(0); u16(0); u8(2);
   body.push(253, 4, B.UINT32, 0, 1, B.UINT8);
   u8(0x01); u32(samples[0].ts); u8(4);
 
-  // Record definition (local 0)
+  // Définition Record (local 0)
   u8(0x40); u8(0); u8(0); u16(20); u8(RECORD_FIELDS.length);
   for (const [n, s, b] of RECORD_FIELDS) body.push(n, s, b);
 
@@ -111,7 +111,7 @@ function requiredPower(v, gradePct, alt, r = RIDER) {
   const fg = r.mass * G * Math.sin(theta);
   const fr = r.crr * r.mass * G * Math.cos(theta);
   const fa = 0.5 * rho * r.cda * v * v;
-  // Signed: negative when gravity assists (descent) — required to solve coasting.
+  // Signé : négatif quand la gravité aide (descente) — nécessaire pour résoudre la roue libre.
   return ((fg + fr + fa) * v) / DRIVETRAIN;
 }
 function speedForPower(power, gradePct, alt, r = RIDER) {

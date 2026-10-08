@@ -1,10 +1,11 @@
 /**
- * Audit B — helper: load app modules (src/**) through Vite SSR so that
- * `@/` aliases and `import.meta.env` work exactly as in the app build.
- * Also provides a guarded `fetch` shim for live calls against prod:
- *   - relative `/api/...` URLs are rewritten to PROD_BASE,
- *   - every live request is counted and spaced by >= MIN_GAP_MS,
- *   - a hard cap (MAX_LIVE) prevents runaway request storms.
+ * Audit B — aide : charge les modules de l'application (src/**) via le SSR de
+ * Vite pour que les alias `@/` et `import.meta.env` fonctionnent exactement
+ * comme dans le build de l'application. Fournit aussi un substitut de `fetch`
+ * protégé pour les appels réels contre la prod :
+ *   - les URL relatives `/api/...` sont réécrites vers PROD_BASE,
+ *   - chaque requête réelle est comptée et espacée d'au moins MIN_GAP_MS,
+ *   - un plafond strict (MAX_LIVE) empêche les avalanches de requêtes.
  */
 import { createServer, type ViteDevServer } from 'vite';
 import path from 'node:path';
