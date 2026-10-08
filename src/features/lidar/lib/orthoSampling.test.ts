@@ -16,7 +16,7 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-/** Per-sample reference: each of the four bilinear samples looks its tile up. */
+/** Référence par échantillon : chacun des quatre échantillons bilinéaires cherche sa tuile. */
 function referenceColors(positions: Float32Array, count: number, m: OrthoPixelMapping, grid: OrthoTileGrid): Uint8Array {
   const colors = new Uint8Array(count * 3);
   for (let i = 0; i < count; i++) {
@@ -65,13 +65,13 @@ describe('sampleOrthoColors', () => {
     const minTileCol = 265_000;
     const minTileRow = 180_000;
     const tiles = Array.from({ length: cols * rows }, (_, slot) => {
-      if (slot === 5) return null; // a tile that failed to download
+      if (slot === 5) return null; // une tuile dont le téléchargement a échoué
       const pixels = new Uint8Array(ORTHO_TILE_SIZE * ORTHO_TILE_SIZE * 4);
       for (let i = 0; i < pixels.length; i++) pixels[i] = Math.floor(rand() * 256);
       return pixels;
     });
     const grid: OrthoTileGrid = { minTileCol, minTileRow, cols, rows, tiles };
-    // A slightly rotated, sheared extent whose corners overhang the fetched tiles.
+    // Une emprise légèrement tournée et cisaillée dont les coins débordent des tuiles chargées.
     const x0 = minTileCol * 256 - 40;
     const y0 = minTileRow * 256 - 30;
     const mapping: OrthoPixelMapping = {
@@ -88,13 +88,13 @@ describe('sampleOrthoColors', () => {
       positions[i * 3 + 1] = rand() * 1000;
       positions[i * 3 + 2] = rand() * 100;
     }
-    // Points landing exactly on pixel 255 of a tile (both paths of the sampler).
+    // Points tombant exactement sur le pixel 255 d'une tuile (les deux chemins de l'échantillonneur).
     for (let i = 0; i < 2000; i++) positions[i * 3] = ((255 + 256 * (i % 3)) + 40 + rand() * 0.99) / (cols * 256 + 70) * 1000;
 
     const colors = new Uint8Array(count * 3);
     sampleOrthoColors(positions, colors, 0, count, mapping, grid);
     expect(colors).toEqual(referenceColors(positions, count, mapping, grid));
-    // Grey where no sample has imagery (outside the tiles or on the missing one).
+    // Gris là où aucun échantillon n'a d'image (hors des tuiles ou sur celle qui manque).
     let grey = 0;
     for (let i = 0; i < count; i++) if (colors[i * 3] === 128 && colors[i * 3 + 1] === 128 && colors[i * 3 + 2] === 128) grey++;
     expect(grey).toBeGreaterThan(count * 0.05);

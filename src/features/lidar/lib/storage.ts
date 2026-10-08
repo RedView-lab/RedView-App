@@ -43,7 +43,7 @@ async function removeFileIfPresent(dir: FileSystemDirectoryHandle | null, fileNa
   try {
     await dir.removeEntry(fileName);
   } catch {
-    /* file absent, ignore */
+    /* fichier absent, ignorer */
   }
 }
 
@@ -77,7 +77,7 @@ export function hasValidZipSignature(data: ArrayBuffer): boolean {
   }
 }
 
-/** The origin's storage quota is used up: the tile cannot be kept for the viewer. */
+/** Le quota de stockage de l'origine est épuisé : la tuile ne peut pas être gardée pour le viewer. */
 export class StorageFullError extends Error {
   constructor() {
     super(translateAppText('Stockage local plein : supprimez des tuiles LiDAR pour libérer de la place.'));
@@ -92,10 +92,11 @@ function isQuotaExceeded(error: unknown): boolean {
 let persistenceRequested = false;
 
 /**
- * Asks once per page for persistent storage: best-effort storage may be
- * evicted under disk pressure (Chromium) or after 7 days without a visit
- * (Safari), taking gigabytes of downloaded tiles with it. Chromium decides
- * without asking, Firefox asks the user — hence on a download, not at load.
+ * Demande une fois par page le stockage persistant : un stockage best-effort
+ * peut être évincé sous pression disque (Chromium) ou après 7 jours sans visite
+ * (Safari), emportant des gigaoctets de tuiles téléchargées. Chromium décide
+ * sans demander, Firefox demande à l'utilisateur — d'où la demande au
+ * téléchargement, pas au chargement.
  */
 export function requestPersistentStorage(): void {
   if (persistenceRequested || typeof navigator === 'undefined' || !navigator.storage?.persist) return;
@@ -115,7 +116,7 @@ export async function saveTile(coord: TileCoord, data: ArrayBuffer): Promise<voi
   const fileName = tileKey(coord);
   requestPersistentStorage();
 
-  // 1. Try OPFS
+  // 1. Essayer l'OPFS
   const dir = await getLidarDir();
   if (dir) {
     try {
@@ -123,16 +124,16 @@ export async function saveTile(coord: TileCoord, data: ArrayBuffer): Promise<voi
       const writable = await fileHandle.createWritable();
       await writable.write(data);
       await writable.close();
-      // A write can report success and leave a short file (WebKit bug 248719,
-      // Playwright's WebKit on Windows): read back as corrupted, then deleted,
-      // the tile would be lost to the viewer. Checking the size costs no read.
+      // Une écriture peut annoncer un succès et laisser un fichier tronqué (bug
+      // WebKit 248719, WebKit de Playwright sous Windows) : relue comme corrompue
+      // puis supprimée, la tuile serait perdue pour le viewer. Vérifier la taille ne coûte aucune lecture.
       const written = (await fileHandle.getFile()).size;
       if (written === data.byteLength) return;
       await dir.removeEntry(fileName).catch(() => undefined);
       console.warn(`[LiDAR storage] OPFS kept ${written} of ${data.byteLength} bytes for ${fileName}, falling back to CacheStorage.`);
     } catch (err) {
-      // The viewer (another page) reads tiles from the origin's storage only:
-      // kept in this page's memory, a tile it cannot open is a failed download.
+      // Le viewer (une autre page) ne lit les tuiles que dans le stockage de
+      // l'origine : gardée dans la mémoire de cette page, une tuile qu'il ne peut pas ouvrir est un téléchargement raté.
       if (isQuotaExceeded(err)) {
         await dir.removeEntry(fileName).catch(() => undefined);
         throw new StorageFullError();
@@ -141,7 +142,7 @@ export async function saveTile(coord: TileCoord, data: ArrayBuffer): Promise<voi
     }
   }
 
-  // 2. Try CacheStorage
+  // 2. Essayer CacheStorage
   const cache = await getLidarCache();
   if (cache) {
     try {
@@ -158,7 +159,7 @@ export async function saveTile(coord: TileCoord, data: ArrayBuffer): Promise<voi
     }
   }
 
-  // 3. Fallback: In-memory
+  // 3. Repli : en mémoire
   inMemoryTileCache.set(fileName, data);
 }
 
@@ -167,7 +168,7 @@ export async function loadTile(coord: TileCoord): Promise<ArrayBuffer | null> {
 }
 
 export async function loadTileByFileName(fileName: string, coordHint?: TileCoord): Promise<ArrayBuffer | null> {
-  // 1. Try OPFS
+  // 1. Essayer l'OPFS
   try {
     const dir = await getLidarDir();
     if (dir) {
@@ -182,10 +183,10 @@ export async function loadTileByFileName(fileName: string, coordHint?: TileCoord
       return data;
     }
   } catch {
-    // Not in OPFS or OPFS error
+    // Absent de l'OPFS ou erreur OPFS
   }
 
-  // 2. Try CacheStorage
+  // 2. Essayer CacheStorage
   try {
     const cache = await getLidarCache();
     if (cache) {
@@ -201,10 +202,10 @@ export async function loadTileByFileName(fileName: string, coordHint?: TileCoord
       }
     }
   } catch {
-    // CacheStorage error
+    // Erreur CacheStorage
   }
 
-  // 3. Try In-memory
+  // 3. Essayer la mémoire
   const mem = inMemoryTileCache.get(fileName);
   if (mem && hasValidLasSignature(mem)) {
     return mem;
@@ -214,21 +215,21 @@ export async function loadTileByFileName(fileName: string, coordHint?: TileCoord
 }
 
 /**
- * First `byteCount` bytes of a stored tile (its LAS header) without reading
- * the whole file, from OPFS then CacheStorage; null when absent.
+ * Premiers `byteCount` octets d'une tuile stockée (son en-tête LAS) sans lire
+ * tout le fichier, depuis l'OPFS puis CacheStorage ; null si absente.
  */
 export async function readTileHead(fileName: string, byteCount: number): Promise<ArrayBuffer | null> {
   try {
     const dir = await getLidarDir();
     if (dir) return await (await (await dir.getFileHandle(fileName)).getFile()).slice(0, byteCount).arrayBuffer();
   } catch {
-    // Not in OPFS
+    // Absent de l'OPFS
   }
   try {
     const match = await (await getLidarCache())?.match(`/lidar-hd/${fileName}`);
     if (match) return (await match.blob()).slice(0, byteCount).arrayBuffer();
   } catch {
-    // CacheStorage error
+    // Erreur CacheStorage
   }
   return inMemoryTileCache.get(fileName)?.slice(0, byteCount) ?? null;
 }
@@ -243,7 +244,7 @@ export async function hasTile(coord: TileCoord): Promise<boolean> {
       return true;
     }
   } catch {
-    // not in OPFS
+    // absent de l'OPFS
   }
 
   try {
@@ -262,7 +263,7 @@ export async function deleteTile(coord: TileCoord): Promise<void> {
   const companion = lodCacheKey(fileName);
   const terrain = terrainKey(fileName);
 
-  // 1. Delete from OPFS
+  // 1. Supprimer de l'OPFS
   try {
     const dir = await getLidarDir();
     if (dir) {
@@ -277,7 +278,7 @@ export async function deleteTile(coord: TileCoord): Promise<void> {
     }
   }
 
-  // 2. Delete from CacheStorage
+  // 2. Supprimer de CacheStorage
   try {
     const cache = await getLidarCache();
     if (cache) {
@@ -287,7 +288,7 @@ export async function deleteTile(coord: TileCoord): Promise<void> {
     }
   } catch {}
 
-  // 3. Delete from in-memory
+  // 3. Supprimer de la mémoire
   inMemoryTileCache.delete(fileName);
 }
 
@@ -347,7 +348,7 @@ export async function listCachedTiles(): Promise<CachedTileInfo[]> {
     if (tile) tilesMap.set(name, tile);
   };
 
-  // 1. Check OPFS
+  // 1. Vérifier l'OPFS
   try {
     const dir = await getLidarDir();
     if (dir) {
@@ -364,7 +365,7 @@ export async function listCachedTiles(): Promise<CachedTileInfo[]> {
     console.warn('[LiDAR storage] listCachedTiles OPFS error:', err);
   }
 
-  // 2. Check CacheStorage
+  // 2. Vérifier CacheStorage
   try {
     const cache = await getLidarCache();
     if (cache) {
@@ -389,7 +390,7 @@ export async function listCachedTiles(): Promise<CachedTileInfo[]> {
     console.warn('[LiDAR storage] listCachedTiles CacheStorage error:', err);
   }
 
-  // 3. Check inMemory
+  // 3. Vérifier la mémoire
   for (const [name, buf] of inMemoryTileCache.entries()) {
     if (!tilesMap.has(name)) {
       parseTileName(name, buf.byteLength, Date.now());
@@ -424,18 +425,19 @@ export async function clearAllTiles(): Promise<void> {
   inMemoryTileCache.clear();
 }
 
-// --- Derived caches ---
+// --- Caches dérivés ---
 
-// Superseded per-tile caches: v3 stored absolute float32 positions (northings
-// quantised to 0.5 m), v4 whole decoded clouds; the LOD cache (lodCache.ts)
-// replaces both. Terrain v2 meshes were built from quantised points, v3 ones
-// splatted the points with a step that did not match the mesh node spacing.
-// LOD v1 had no filtered colours (normally upgraded on open, see
-// `upgradeLegacyLodTile`; dropped here when the tile is deleted or rebuilt).
+// Caches par tuile remplacés : la v3 stockait des positions float32 absolues
+// (ordonnées quantifiées à 0,5 m), la v4 des nuages décodés entiers ; le cache
+// LOD (lodCache.ts) remplace les deux. Les maillages terrain v2 étaient construits
+// à partir de points quantifiés, les v3 projetaient les points avec un pas qui ne
+// correspondait pas à l'espacement des nœuds du maillage. Le LOD v1 n'avait pas
+// de couleurs filtrées (normalement mis à niveau à l'ouverture, voir
+// `upgradeLegacyLodTile` ; supprimé ici quand la tuile est supprimée ou reconstruite).
 const LEGACY_DERIVED_SUFFIXES = ['.colorized_v3', '.colorized_v4', '.terrain_hd_v2', '.terrain_hd_v3', '.lod_v1'] as const;
 
-// A tile whose colours were revised (`colourRevisionSuffix`) also drops its
-// unrevised terrain cache and its revised LOD v1.
+// Une tuile dont les couleurs ont été révisées (`colourRevisionSuffix`) supprime
+// aussi son cache terrain non révisé et son LOD v1 révisé.
 function legacyDerivedKeys(baseName: string): string[] {
   const suffixes: string[] = [...LEGACY_DERIVED_SUFFIXES];
   const revision = colourRevisionSuffix(baseName);
@@ -449,7 +451,7 @@ async function removeLegacyDerivedCaches(dir: FileSystemDirectoryHandle | null, 
   }
 }
 
-// --- Terrain mesh cache ---
+// --- Cache des maillages terrain ---
 
 function terrainKey(baseName: string): string {
   return baseName.replace(/\.copc\.laz$/, `.terrain_hd_v4${colourRevisionSuffix(baseName)}`);
@@ -544,7 +546,7 @@ export async function loadTerrainData(lazFileName: string): Promise<TerrainCache
   }
 }
 
-// --- Normals cache ---
+// --- Cache des normales ---
 
 function normalsKey(baseName: string): string {
   return baseName.replace(/\.copc\.laz$/, '.normals');

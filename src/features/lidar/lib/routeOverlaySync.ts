@@ -46,8 +46,8 @@ export interface LidarRouteCreateMessage {
 }
 
 /**
- * A copy made in the viewer: the app duplicates `sourceRouteId` itself (profile,
- * timeline…) under `route.id`, or adds `route` as is when it has no such source.
+ * Une copie faite dans le viewer : l'app duplique elle-même `sourceRouteId`
+ * (profil, timeline…) sous `route.id`, ou ajoute `route` tel quel sans source.
  */
 export interface LidarRouteDuplicateMessage {
   type: 'DUPLICATE_ROUTE';
@@ -256,7 +256,7 @@ export function broadcastLidarRouteEdit(
     actionName,
   };
 
-  // 1) Update local storage routes state
+  // 1) Mettre à jour l'état des tracés en stockage local
   try {
     const raw = window.localStorage.getItem(LIDAR_ROUTE_OVERLAY_STORAGE_KEY);
     if (raw) {
@@ -275,7 +275,7 @@ export function broadcastLidarRouteEdit(
     console.warn('[LiDAR] Failed to update localStorage on route edit:', err);
   }
 
-  // 2) Broadcast edit message
+  // 2) Diffuser le message d'édition
   try {
     const bc = getSharedBroadcastChannel();
     bc?.postMessage(msg);
@@ -366,7 +366,7 @@ export function broadcastLidarRouteRename(
     name,
   };
 
-  // 1) Update localStorage
+  // 1) Mettre à jour le localStorage
   try {
     const raw = window.localStorage.getItem(LIDAR_ROUTE_OVERLAY_STORAGE_KEY);
     if (raw) {
@@ -408,7 +408,7 @@ export function broadcastLidarRouteDelete(
     routeId,
   };
 
-  // 1) Update localStorage
+  // 1) Mettre à jour le localStorage
   try {
     const raw = window.localStorage.getItem(LIDAR_ROUTE_OVERLAY_STORAGE_KEY);
     if (raw) {

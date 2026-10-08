@@ -2,18 +2,18 @@ import proj4 from 'proj4';
 import type { SwissTileCoord } from './types';
 
 /**
- * Coordinate helpers for swissSURFACE3D tiles in CH1903+ / LV95 (EPSG:2056).
+ * Outils de coordonnées pour les tuiles swissSURFACE3D en CH1903+ / LV95 (EPSG:2056).
  *
- * LV95 origin is at (E=2 600 000 m, N=1 200 000 m) of the projection center
- * (Bern observatory). Switzerland spans roughly:
- *   E: 2 480 000 .. 2 840 000 m
- *   N: 1 070 000 .. 1 300 000 m
+ * Origine LV95 en (E=2 600 000 m, N=1 200 000 m) au centre de projection
+ * (observatoire de Berne). La Suisse s'étend à peu près sur :
+ *   E : 2 480 000 .. 2 840 000 m
+ *   N : 1 070 000 .. 1 300 000 m
  */
 
 const PROJ_LV95 = 'EPSG:2056';
 const PROJ_WGS84 = 'EPSG:4326';
 
-// CH1903+ / LV95 — official swisstopo definition.
+// CH1903+ / LV95 — définition officielle swisstopo.
 proj4.defs(
   PROJ_LV95,
   '+proj=somerc +lat_0=46.95240555555556 +lon_0=7.439583333333333 +k_0=1 ' +
@@ -21,21 +21,21 @@ proj4.defs(
     '+towgs84=674.374,15.056,405.346,0,0,0,0 +units=m +no_defs +type=crs'
 );
 
-// Conservative bbox covering Switzerland + Liechtenstein (with margin).
-// Used for fast "is this point in CH coverage?" checks.
+// Emprise prudente couvrant la Suisse + le Liechtenstein (avec marge).
+// Sert aux tests rapides « ce point est-il dans la couverture CH ? ».
 const CH_BBOX_WGS84 = { west: 5.85, south: 45.75, east: 10.55, north: 47.85 };
 
-/** Convert LV95 (E, N) in metres to WGS84 [lon, lat]. */
+/** Convertit un LV95 (E, N) en mètres en WGS84 [lon, lat]. */
 export function swissToWgs84(eastM: number, northM: number): [number, number] {
   return proj4(PROJ_LV95, PROJ_WGS84, [eastM, northM]) as [number, number];
 }
 
-/** Convert WGS84 [lon, lat] to LV95 [east, north] in metres. */
+/** Convertit un WGS84 [lon, lat] en LV95 [est, nord] en mètres. */
 export function wgs84ToSwiss(lon: number, lat: number): [number, number] {
   return proj4(PROJ_WGS84, PROJ_LV95, [lon, lat]) as [number, number];
 }
 
-/** Quick bbox check: is (lon, lat) inside Switzerland LiDAR coverage? */
+/** Test rapide d'emprise : (lon, lat) est-il dans la couverture LiDAR suisse ? */
 export function isInSwissCoverage(lon: number, lat: number): boolean {
   return (
     lon >= CH_BBOX_WGS84.west &&
@@ -45,7 +45,7 @@ export function isInSwissCoverage(lon: number, lat: number): boolean {
   );
 }
 
-/** Convert a WGS84 point to the SW-corner of its 1 km swissSURFACE3D tile. */
+/** Convertit un point WGS84 en coin SO de sa tuile swissSURFACE3D de 1 km. */
 export function wgs84ToSwissTileCoord(lon: number, lat: number): SwissTileCoord {
   const [east, north] = wgs84ToSwiss(lon, lat);
   return {
@@ -54,7 +54,7 @@ export function wgs84ToSwissTileCoord(lon: number, lat: number): SwissTileCoord 
   };
 }
 
-/** Native LV95 bounds (metres) of the 1 km × 1 km tile. */
+/** Emprise LV95 native (mètres) de la tuile de 1 km × 1 km. */
 export function getSwissTileBounds(coord: SwissTileCoord): {
   minE: number;
   minN: number;
@@ -69,13 +69,13 @@ export function getSwissTileBounds(coord: SwissTileCoord): {
   };
 }
 
-/** Centre of the tile in WGS84 [lon, lat]. */
+/** Centre de la tuile en WGS84 [lon, lat]. */
 export function swissTileCenterWgs84(coord: SwissTileCoord): [number, number] {
   const { minE, minN } = getSwissTileBounds(coord);
   return swissToWgs84(minE + 500, minN + 500);
 }
 
-/** Stable string key for caches / dedup. */
+/** Clé texte stable pour les caches / la déduplication. */
 export function swissTileKey(coord: SwissTileCoord): string {
   return `${coord.eastKm}-${coord.northKm}`;
 }

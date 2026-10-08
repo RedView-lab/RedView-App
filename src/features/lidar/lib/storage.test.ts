@@ -4,14 +4,14 @@ import { tileCoordFileName } from './coordConvert';
 
 const coord = { xKm: 965, yKm: 6500, projection: 'LAMB93' } as TileCoord;
 
-/** A minimal LAS file: the signature is all saveTile checks. */
+/** Un fichier LAS minimal : la signature est tout ce que vérifie saveTile. */
 function lasBytes(size = 1024): ArrayBuffer {
   const bytes = new Uint8Array(size);
   bytes.set([0x4c, 0x41, 0x53, 0x46]);
   return bytes.buffer;
 }
 
-/** OPFS whose writes fail with `writeError`, and a storage manager recording persistence requests. */
+/** OPFS dont les écritures échouent avec `writeError`, et un storage manager qui enregistre les demandes de persistance. */
 function fakeStorage(writeError: unknown) {
   const removed: string[] = [];
   const persist = vi.fn(async () => true);
@@ -38,7 +38,7 @@ function fakeStorage(writeError: unknown) {
   return { removed, persist };
 }
 
-/** Fresh module instances: storage keeps per-page state (OPFS probe, persistence request). */
+/** Instances de module neuves : storage garde un état par page (sonde OPFS, demande de persistance). */
 async function modules() {
   vi.resetModules();
   return {
@@ -56,9 +56,9 @@ describe('LiDAR tile storage', () => {
     const { storage, archive, errors } = await modules();
     const error = await archive.saveTileQuietly(coord, lasBytes()).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(storage.StorageFullError);
-    // No other URL is tried: it would download the tile again to fail the same way.
+    // Aucune autre URL n'est essayée : elle retéléchargerait la tuile pour échouer de la même façon.
     expect(errors.isFinalDownloadError(error)).toBe(true);
-    // The partly written file is not left behind.
+    // Le fichier écrit en partie n'est pas laissé.
     expect(fake.removed).toEqual([tileCoordFileName(coord)]);
   });
 
@@ -70,7 +70,7 @@ describe('LiDAR tile storage', () => {
   });
 
   it('keeps the tile in CacheStorage when OPFS reports a write it did not keep', async () => {
-    // WebKit bug 248719 / Playwright WebKit on Windows: write and close succeed, the file stays empty.
+    // Bug WebKit 248719 / Playwright WebKit sous Windows : écriture et fermeture réussissent, le fichier reste vide.
     const files = new Map<string, number>();
     const directory = {
       getFileHandle: vi.fn(async (name: string, options?: { create?: boolean }) => {

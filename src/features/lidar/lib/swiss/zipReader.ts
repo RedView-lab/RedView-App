@@ -1,14 +1,14 @@
 /**
- * Minimal ZIP reader for swissSURFACE3D `.las.zip` archives.
+ * Lecteur ZIP minimal pour les archives `.las.zip` de swissSURFACE3D.
  *
- * Only the bits we need:
- *   - read End-Of-Central-Directory (EOCD)
- *   - locate the first non-directory entry
- *   - decompress (stored or DEFLATE) using the browser's DecompressionStream
+ * Seulement ce qu'il faut :
+ *   - lire l'End-Of-Central-Directory (EOCD)
+ *   - trouver la première entrée qui n'est pas un répertoire
+ *   - décompresser (stockée ou DEFLATE) avec le DecompressionStream du navigateur
  *
- * No external dependency. Designed for ZIPs with a single LAS/LAZ entry but
- * tolerates archives with several files (we pick the first one whose name
- * ends with `.las` or `.laz`).
+ * Sans dépendance externe. Pensé pour des ZIP à une seule entrée LAS/LAZ mais
+ * tolère des archives à plusieurs fichiers (on prend le premier dont le nom
+ * finit par `.las` ou `.laz`).
  */
 
 const SIG_EOCD = 0x06054b50;
@@ -26,7 +26,7 @@ interface CentralEntry {
 }
 
 function findEocd(view: DataView): number {
-  // EOCD is at the end of the file; comment may follow (max 65535 bytes).
+  // L'EOCD est à la fin du fichier ; un commentaire peut suivre (65535 octets au plus).
   const maxBack = Math.min(view.byteLength, 22 + 0xffff);
   const start = view.byteLength - maxBack;
   for (let i = view.byteLength - 22; i >= start; i--) {
@@ -54,12 +54,12 @@ function readEocd64(view: DataView, eocdOffset: number): {
   cdOffset: number;
   totalEntries: number;
 } {
-  // EOCD64 locator sits 20 bytes before EOCD.
+  // Le localisateur EOCD64 se trouve 20 octets avant l'EOCD.
   const locOffset = eocdOffset - 20;
   if (locOffset < 0 || view.getUint32(locOffset, true) !== SIG_EOCD64_LOC) {
     throw new Error('ZIP: ZIP64 locator missing');
   }
-  // EOCD64 absolute offset (8 bytes, little-endian).
+  // Décalage absolu de l'EOCD64 (8 octets, little-endian).
   const eocd64Offset = Number(view.getBigUint64(locOffset + 8, true));
   if (view.getUint32(eocd64Offset, true) !== SIG_EOCD64) {
     throw new Error('ZIP: EOCD64 signature missing');
@@ -148,14 +148,14 @@ function readCentralDirectory(
   return entries;
 }
 
-/** Zip-bomb guards: max declared inflated size and max inflate ratio. */
+/** Garde-fous anti zip-bomb : taille décompressée déclarée maximale et taux de décompression maximal. */
 const MAX_UNCOMPRESSED_ENTRY_BYTES = 2 * 1024 * 1024 * 1024;
 const MAX_COMPRESSION_RATIO = 200;
 
 async function inflateRaw(data: Uint8Array, expectedSize: number): Promise<Uint8Array> {
-  // `deflate-raw` decompresses raw DEFLATE streams (no zlib header), which is
-  // what ZIP entries with method=8 contain. The output is streamed into a
-  // buffer of the declared size and aborted as soon as it would overflow it.
+  // `deflate-raw` décompresse des flux DEFLATE bruts (sans en-tête zlib), ce que
+  // contiennent les entrées ZIP de méthode 8. La sortie est versée dans un
+  // tampon de la taille déclarée et interrompue dès qu'elle le dépasserait.
   const ds = new DecompressionStream('deflate-raw');
   const stream = new Blob([data as unknown as BlobPart]).stream().pipeThrough(ds);
   const reader = stream.getReader();
@@ -181,10 +181,10 @@ async function inflateRaw(data: Uint8Array, expectedSize: number): Promise<Uint8
 }
 
 /**
- * Extract the inner LAS/LAZ payload from a swisstopo `.las.zip` archive.
+ * Extrait la charge LAS/LAZ interne d'une archive `.las.zip` de swisstopo.
  *
- * Returns the decompressed bytes ready to be fed to the LAS/LAZ parser.
- * Throws if no LAS/LAZ entry is found or the compression is unsupported.
+ * Renvoie les octets décompressés, prêts pour le parseur LAS/LAZ.
+ * Lève une erreur si aucune entrée LAS/LAZ n'est trouvée ou si la compression n'est pas prise en charge.
  */
 export async function extractLasFromZip(zipBytes: ArrayBuffer): Promise<ArrayBuffer> {
   const view = new DataView(zipBytes);
@@ -205,7 +205,7 @@ export async function extractLasFromZip(zipBytes: ArrayBuffer): Promise<ArrayBuf
     throw new Error(`ZIP: no LAS/LAZ entry found (got ${entries.map(e => e.fileName).join(', ') || 'none'})`);
   }
 
-  // Local file header — re-read sizes/extra to find data offset.
+  // En-tête de fichier local — relire tailles/champ extra pour trouver le début des données.
   const lfh = lasEntry.localHeaderOffset;
   if (view.getUint32(lfh, true) !== SIG_LFH) {
     throw new Error(`ZIP: invalid local file header @${lfh}`);
@@ -225,7 +225,7 @@ export async function extractLasFromZip(zipBytes: ArrayBuffer): Promise<ArrayBuf
   const compressed = new Uint8Array(zipBytes, dataOffset, lasEntry.compressedSize);
 
   if (lasEntry.compressionMethod === 0) {
-    // Stored — copy out so the slice doesn't pin the original buffer.
+    // Stockée — copier pour que la tranche ne retienne pas le tampon d'origine.
     const copy = new Uint8Array(compressed.byteLength);
     copy.set(compressed);
     return copy.buffer as ArrayBuffer;

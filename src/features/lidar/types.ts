@@ -1,4 +1,4 @@
-/** JGD2011 Plane Rectangular Coordinate System Zones (1 to 19) */
+/** Zones des systèmes de coordonnées planes rectangulaires JGD2011 (1 à 19) */
 export type Jgd2011ZoneCrs =
   | 'JGD2011_ZONE_01'
   | 'JGD2011_ZONE_02'
@@ -20,7 +20,7 @@ export type Jgd2011ZoneCrs =
   | 'JGD2011_ZONE_18'
   | 'JGD2011_ZONE_19';
 
-/** Detected Coordinate Reference System */
+/** Système de référence de coordonnées détecté */
 export type DetectedCrs =
   | 'LAMB93'
   | 'RGR92UTM40S'
@@ -32,13 +32,13 @@ export type DetectedCrs =
   | 'BL72'
   | Jgd2011ZoneCrs;
 
-/** Territory code for IGN/Swiss/NZ/Japan tile naming */
+/** Code de territoire pour le nommage des tuiles IGN/Suisse/NZ/Japon */
 export type Territory = 'FXX' | 'REU' | 'CH' | 'NZ' | 'JP' | 'NL' | 'BE';
 
-/** Altitude reference system */
+/** Système de référence altimétrique */
 export type AltitudeRef = 'IGN69' | 'IGN78' | 'REUN89' | 'LN02' | 'NZVD2016' | 'TP' | 'NAP' | 'TAW';
 
-/** Status of a LiDAR tile in the pipeline */
+/** État d'une tuile LiDAR dans le pipeline */
 type LidarTileStatus =
   | 'available'
   | 'downloading'
@@ -48,7 +48,7 @@ type LidarTileStatus =
   | 'cached'
   | 'error';
 
-/** LiDAR HD zone info from WFS discovery */
+/** Informations de zone LiDAR HD issues de la découverte WFS */
 export interface ZoneInfo {
   name: string;
   bbox: { west: number; south: number; east: number; north: number };
@@ -63,7 +63,7 @@ export interface TileFootprint {
   maxY: number;
 }
 
-/** 1km x 1km tile coordinate in Lambert93 km grid */
+/** Coordonnée d'une tuile de 1 km x 1 km dans la grille kilométrique Lambert 93 */
 export interface TileCoord {
   xKm: number;
   yKm: number;
@@ -80,16 +80,16 @@ export interface TileCoord {
   footprint?: TileFootprint;
 }
 
-/** Bounding box of a point cloud in native CRS */
+/** Emprise d'un nuage de points dans son CRS natif */
 export interface PointCloudBounds {
   minX: number; minY: number; minZ: number;
   maxX: number; maxY: number; maxZ: number;
 }
 
 /**
- * Local origin (CRS units, float64) that `PointCloudData.positions` are
- * relative to. Absolute Lambert-93 northings (~6.5e6 m) stored as float32 are
- * quantised to 0.5 m; relative to a km-aligned origin they keep ~0.1 mm.
+ * Origine locale (unités du CRS, float64) à laquelle `PointCloudData.positions`
+ * sont relatives. Des ordonnées Lambert 93 absolues (~6,5e6 m) stockées en float32
+ * sont quantifiées à 0,5 m ; relatives à une origine alignée sur le km, elles gardent ~0,1 mm.
  */
 export interface PointCloudOrigin {
   x: number;
@@ -98,37 +98,37 @@ export interface PointCloudOrigin {
 }
 
 /**
- * COPC octree of a decoded tile: `nodes` are listed in the order their points
- * appear in `PointCloudData.positions` (coarse levels first).
+ * Octree COPC d'une tuile décodée : `nodes` sont listés dans l'ordre où leurs
+ * points apparaissent dans `PointCloudData.positions` (niveaux grossiers d'abord).
  */
 export interface CopcHierarchyInfo {
   nodes: { key: string; pointCount: number }[];
-  /** Absolute octree cube [minX, minY, minZ, maxX, maxY, maxZ]. */
+  /** Cube absolu de l'octree [minX, minY, minZ, maxX, maxY, maxZ]. */
   cube: number[];
-  /** Point spacing of the root node (halves at each level). */
+  /** Espacement des points du nœud racine (divisé par deux à chaque niveau). */
   spacing: number;
 }
 
-/** Data returned from LAZ parsing (transferable buffers) */
+/** Données renvoyées par le parse LAZ (tampons transférables) */
 export interface PointCloudData {
-  /** XYZ relative to `origin` (never absolute CRS coordinates). */
+  /** XYZ relatifs à `origin` (jamais des coordonnées CRS absolues). */
   positions: Float32Array;
   colors: Uint8Array;
   classifications: Uint8Array;
   count: number;
-  /** Absolute CRS bounds (float64). */
+  /** Emprise CRS absolue (float64). */
   bounds: PointCloudBounds;
   origin: PointCloudOrigin;
   crs: DetectedCrs;
-  /** `colors` come from the file's own RGB (PDRF 7/8); orthophoto colourisation is skipped. */
+  /** `colors` viennent du RVB du fichier lui-même (PDRF 7/8) ; la colorisation par orthophoto est sautée. */
   embeddedRgb?: boolean;
-  /** Raw LAS intensity per point, when decoded. */
+  /** Intensité LAS brute par point, quand elle est décodée. */
   intensities?: Uint16Array;
-  /** Present for COPC files: lets the viewer use the file's own octree as LOD. */
+  /** Présent pour les fichiers COPC : permet au viewer d'utiliser l'octree du fichier comme LOD. */
   copc?: CopcHierarchyInfo;
 }
 
-/** Download progress event */
+/** Événement de progression du téléchargement */
 export interface DownloadProgress {
   tileCoord: TileCoord;
   bytesDownloaded: number;
@@ -138,7 +138,7 @@ export interface DownloadProgress {
   percent?: number;
 }
 
-/** Stored tile metadata in OPFS */
+/** Métadonnées d'une tuile stockée dans l'OPFS */
 export interface CachedTileInfo {
   coord: TileCoord;
   fileName: string;
@@ -146,7 +146,7 @@ export interface CachedTileInfo {
   cachedAt: number;
 }
 
-/** LiDAR manager event types */
+/** Types d'événements du gestionnaire LiDAR */
 type LidarEventType = 'progress' | 'tileLoaded' | 'tileRemoved' | 'error' | 'cancelled';
 
 export interface LidarEvent {

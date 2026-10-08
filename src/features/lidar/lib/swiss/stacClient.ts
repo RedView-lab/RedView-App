@@ -6,29 +6,29 @@ import {
 } from './coordConvert';
 
 /**
- * STAC client for the swisstopo swissSURFACE3D point cloud collection.
+ * Client STAC pour la collection de nuages de points swissSURFACE3D de swisstopo.
  *
- * Public, no-auth STAC API:
+ * API STAC publique, sans authentification :
  *   https://data.geo.admin.ch/api/stac/v1/collections/ch.swisstopo.swisssurface3d
  *
- * Tile URL is fully predictable from (year, eastKm, northKm), e.g.:
+ * L'URL d'une tuile se déduit entièrement de (année, eastKm, northKm), par ex. :
  *   https://data.geo.admin.ch/ch.swisstopo.swisssurface3d/
  *     swisssurface3d_2015_2494-1140/
  *     swisssurface3d_2015_2494-1140_2056_5728.las.zip
  *
- * The acquisition year varies per tile, so we resolve the actual asset href
- * via STAC item lookup (item id = `swisssurface3d_<year>_<E>-<N>`).
+ * L'année d'acquisition varie selon la tuile : on résout donc le vrai href de
+ * l'asset par une recherche d'item STAC (id d'item = `swisssurface3d_<year>_<E>-<N>`).
  *
- * Files are LASzip (.las.zip), height reference LN02 (EPSG:5728).
+ * Fichiers LASzip (.las.zip), référence altimétrique LN02 (EPSG:5728).
  */
 
 const STAC_BASE =
   'https://data.geo.admin.ch/api/stac/v1/collections/ch.swisstopo.swisssurface3d';
 const ASSET_BASE = 'https://data.geo.admin.ch/ch.swisstopo.swisssurface3d';
 
-// Years known to be published on data.geo.admin.ch.
-// Used by buildFallbackUrls() when the STAC items query fails (offline / blocked).
-// Most-recent first so the freshest acquisition wins.
+// Années connues comme publiées sur data.geo.admin.ch.
+// Utilisées par buildFallbackUrls() quand la requête d'items STAC échoue (hors ligne / bloquée).
+// La plus récente d'abord, pour que l'acquisition la plus fraîche l'emporte.
 const FALLBACK_YEARS = [2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017, 2016, 2015];
 
 const itemCache = new Map<string, SwissTileStacItem[]>();
@@ -63,7 +63,7 @@ function parseItemId(id: string): { year: number; coord: SwissTileCoord } | null
 
 function pickLazAsset(item: StacItem): StacAsset | null {
   if (!item.assets) return null;
-  // Prefer .las.zip (LASzip) assets; tolerate .laz / .copc.laz if ever added.
+  // Préférer les assets .las.zip (LASzip) ; tolérer .laz / .copc.laz s'il en apparaît.
   const entries = Object.entries(item.assets);
   const preferred = entries.find(([k]) => /\.las\.zip$/i.test(k));
   if (preferred) return preferred[1];
@@ -88,8 +88,8 @@ function itemToStacItem(item: StacItem): SwissTileStacItem | null {
 }
 
 /**
- * Build the predictable .las.zip URL for a given year + tile, without
- * hitting the STAC API. Used as last-resort fallback.
+ * Construit l'URL .las.zip prévisible pour une année + une tuile, sans
+ * interroger l'API STAC. Sert de dernier recours.
  */
 function buildPredictedUrl(year: number, coord: SwissTileCoord): string {
   const tileId = `swisssurface3d_${year}_${coord.eastKm}-${coord.northKm}`;
@@ -97,14 +97,14 @@ function buildPredictedUrl(year: number, coord: SwissTileCoord): string {
 }
 
 /**
- * Query the STAC API for every available item that matches the tile id stem
- * `swisssurface3d_<year>_<E>-<N>`. We filter by a tiny bbox around the tile
- * centre to keep the response small.
+ * Interroge l'API STAC pour chaque item disponible correspondant au préfixe
+ * d'id de tuile `swisssurface3d_<year>_<E>-<N>`. On filtre sur une toute petite
+ * emprise autour du centre de la tuile pour garder une réponse courte.
  *
- * Returns one entry per acquisition year (sorted newest first), or `null`
- * when the STAC API itself could not be reached (offline / blocked) — the
- * caller can then use predicted URLs. An empty array means the API answered
- * and swisstopo definitively has no item for this tile.
+ * Renvoie une entrée par année d'acquisition (la plus récente d'abord), ou
+ * `null` quand l'API STAC elle-même est injoignable (hors ligne / bloquée) —
+ * l'appelant peut alors utiliser les URL prévues. Un tableau vide signifie que
+ * l'API a répondu et que swisstopo n'a définitivement aucun item pour cette tuile.
  */
 async function fetchSwissTileItems(
   coord: SwissTileCoord
@@ -119,7 +119,7 @@ async function fetchSwissTileItems(
     return [];
   }
 
-  // Tight bbox (~10 m around tile centre) — STAC bbox is in WGS84 lon/lat.
+  // Emprise serrée (~10 m autour du centre de la tuile) — l'emprise STAC est en lon/lat WGS84.
   const eps = 0.0001;
   const bbox = `${lon - eps},${lat - eps},${lon + eps},${lat + eps}`;
   const url = `${STAC_BASE}/items?bbox=${bbox}&limit=50`;
@@ -141,32 +141,32 @@ async function fetchSwissTileItems(
     );
     return items;
   } catch (err) {
-    // STAC unreachable: do NOT cache — a later retry may succeed.
+    // STAC injoignable : NE PAS mettre en cache — un nouvel essai pourra réussir.
     console.warn(`[Swiss STAC] Lookup failed for tile ${key}:`, err);
     return null;
   }
 }
 
 /**
- * Resolve the list of candidate download URLs for a swissSURFACE3D tile.
+ * Résout la liste des URL de téléchargement candidates d'une tuile swissSURFACE3D.
  *
- * Strategy:
- *   1. Ask the STAC API for the actual published item(s) — gives the exact
- *      acquisition year and asset href.
- *   2. If the API answers with no item for this tile, swisstopo definitively
- *      has no coverage here: return [] so the caller can fall back to another
- *      provider (e.g. IGN LiDAR HD across the border) without wasting
- *      requests on predicted URLs.
- *   3. If the STAC call itself fails, fall back to predicted URLs built from
- *      FALLBACK_YEARS. Caller is expected to try them in order and stop on
- *      the first 200.
+ * Stratégie :
+ *   1. Demander à l'API STAC le ou les items réellement publiés — donne l'année
+ *      d'acquisition exacte et le href de l'asset.
+ *   2. Si l'API répond sans item pour cette tuile, swisstopo n'a définitivement
+ *      pas de couverture ici : renvoyer [] pour que l'appelant se rabatte sur un
+ *      autre fournisseur (par ex. IGN LiDAR HD de l'autre côté de la frontière)
+ *      sans gaspiller de requêtes sur des URL prévues.
+ *   3. Si l'appel STAC lui-même échoue, se rabattre sur des URL prévues construites
+ *      à partir de FALLBACK_YEARS. L'appelant doit les essayer dans l'ordre et
+ *      s'arrêter au premier 200.
  */
 export async function resolveSwissDownloadUrls(
   coord: SwissTileCoord
 ): Promise<string[]> {
   const items = await fetchSwissTileItems(coord);
   if (items === null) {
-    // STAC unreachable — best effort with predicted URLs.
+    // STAC injoignable — au mieux avec des URL prévues.
     const [lon, lat] = swissTileCenterWgs84(coord);
     if (!isInSwissCoverage(lon, lat)) return [];
     console.log(

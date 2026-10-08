@@ -1,11 +1,11 @@
 /**
- * Persistent custom labels for cached LiDAR tiles.
+ * Libellés personnalisés persistants des tuiles LiDAR en cache.
  *
- * Stored in `localStorage` (per browser profile) so a renamed tile keeps its
- * label across page reloads, browser restarts and OS reboots. The OPFS-cached
- * tiles themselves live in the same browser profile, so this scope matches
- * naturally — a tile cannot exist without its profile, so its name cannot
- * outlive the storage that holds it.
+ * Stockés dans `localStorage` (par profil de navigateur) pour qu'une tuile
+ * renommée garde son libellé après un rechargement de page, un redémarrage du
+ * navigateur ou de l'OS. Les tuiles en cache OPFS vivent dans le même profil de
+ * navigateur, donc la portée coïncide naturellement — une tuile ne peut exister
+ * sans son profil, son nom ne peut donc pas survivre au stockage qui la contient.
  */
 
 const STORAGE_KEY = 'redview.lidarTileLabels.v1';
@@ -35,7 +35,7 @@ export function loadLidarTileLabels(): LabelMap {
       return out;
     }
   } catch {
-    /* corrupt JSON, fall through */
+    /* JSON corrompu, on continue */
   }
   return {};
 }
@@ -46,7 +46,7 @@ function saveLidarTileLabels(labels: LabelMap): void {
   try {
     storage.setItem(STORAGE_KEY, JSON.stringify(labels));
   } catch {
-    /* quota or privacy mode, ignore */
+    /* quota ou navigation privée, ignorer */
   }
 }
 

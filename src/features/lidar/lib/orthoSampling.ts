@@ -1,10 +1,10 @@
-// Orthophoto sampling of point colours (pure: no DOM, no network), used by
-// `colorizePointCloud` once the WMTS tiles of the tile extent are decoded.
+// Échantillonnage orthophoto des couleurs des points (pur : ni DOM ni réseau),
+// utilisé par `colorizePointCloud` une fois décodées les tuiles WMTS de l'emprise de la tuile.
 
 export const ORTHO_TILE_SIZE = 256;
 const DEFAULT_GREY = 128;
 
-/** Decoded RGBA tiles of the extent, column-major: slot = col · rows + row. */
+/** Tuiles RGBA décodées de l'emprise, par colonnes : slot = col · rows + row. */
 export interface OrthoTileGrid {
   minTileCol: number;
   minTileRow: number;
@@ -14,8 +14,8 @@ export interface OrthoTileGrid {
 }
 
 /**
- * Point (relative to the cloud origin) → absolute WMTS pixel: bilinear
- * interpolation of the pixel positions of the extent's four corners.
+ * Point (relatif à l'origine du nuage) → pixel WMTS absolu : interpolation
+ * bilinéaire des positions en pixels des quatre coins de l'emprise.
  */
 export interface OrthoPixelMapping {
   xMin: number;
@@ -29,10 +29,10 @@ export interface OrthoPixelMapping {
 }
 
 /**
- * Slot in the column-major ortho tile array of the tile holding an absolute
- * pixel, or -1 outside the fetched range. Checking col and row separately
- * matters: a flat bound on `col·rows + row` let a row one past the last wrap
- * onto the first tile of the next column.
+ * Slot, dans le tableau par colonnes des tuiles ortho, de la tuile contenant
+ * un pixel absolu, ou -1 hors de la plage chargée. Tester col et row
+ * séparément compte : une borne unique sur `col·rows + row` laissait une ligne
+ * juste après la dernière retomber sur la première tuile de la colonne suivante.
  */
 export function orthoTileSlot(absPx: number, absPy: number, minCol: number, minRow: number, cols: number, rows: number): number {
   const col = (absPx >> 8) - minCol;
@@ -41,11 +41,12 @@ export function orthoTileSlot(absPx: number, absPy: number, minCol: number, minR
 }
 
 /**
- * Colours points [start, end) by bilinear sampling of the ortho tiles;
- * samples outside the fetched tiles are left out of the weights, and a point
- * with none gets mid-grey. When the 2×2 footprint lies in one tile (all but
- * the last row/column of each tile's pixels) the tile is looked up once: same
- * arithmetic in the same order, so the same bytes as the per-sample path.
+ * Colore les points [start, end) par échantillonnage bilinéaire des tuiles
+ * ortho ; les échantillons hors des tuiles chargées sont exclus des poids, et un
+ * point sans aucun échantillon reçoit un gris moyen. Quand l'empreinte 2×2 tient
+ * dans une tuile (tous les pixels de chaque tuile sauf la dernière ligne/colonne),
+ * la tuile n'est cherchée qu'une fois : même arithmétique dans le même ordre,
+ * donc les mêmes octets que le chemin par échantillon.
  */
 export function sampleOrthoColors(
   positions: Float32Array,

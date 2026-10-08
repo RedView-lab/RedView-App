@@ -28,21 +28,21 @@ export function useLidarRouteSync({
   itineraries,
   ...handlers
 }: UseLidarRouteSyncOptions): void {
-  // Latest handlers, read by the long-lived channel subscription below.
+  // Derniers gestionnaires, lus par l'abonnement au canal ci-dessous, qui dure.
   const handlersRef = useRef(handlers);
   useEffect(() => {
     handlersRef.current = handlers;
   });
 
-  // 1) Outbound sync: When itineraries change in RedView, push to LiDAR overlay
-  // (only when a route itself changed: most project edits leave them alone).
+  // 1) Synchro sortante : quand les itinéraires changent dans RedView, pousser vers la couche LiDAR
+  // (seulement quand un tracé lui-même a changé : la plupart des éditions du projet n'y touchent pas).
   useEffect(() => {
     if (itineraries) {
       syncLidarRouteOverlay(itineraries, 'redview_app', { onlyIfChanged: true });
     }
   }, [itineraries]);
 
-  // 2) Inbound sync: Listen to edits from LiDAR viewer
+  // 2) Synchro entrante : écouter les éditions venant du viewer LiDAR
   useEffect(() => {
     const unsubscribe = subscribeToLidarRouteOverlay((msg: LidarRouteSyncMessage) => {
       if ('type' in msg) {

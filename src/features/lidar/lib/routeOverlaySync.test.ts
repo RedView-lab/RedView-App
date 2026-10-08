@@ -51,11 +51,11 @@ describe('syncLidarRouteOverlay', () => {
     syncLidarRouteOverlay([itinerary('a', points), itinerary('b', other)], 'redview_app', { onlyIfChanged: true });
     expect(posted).toHaveLength(1);
 
-    // New itinerary objects (timeline, POI, prediction edit), same routes: nothing sent.
+    // Nouveaux objets itinéraire (timeline, POI, édition de prédiction), mêmes tracés : rien n'est envoyé.
     syncLidarRouteOverlay([itinerary('a', points, { timeline: [] } as Partial<Itinerary>), itinerary('b', other)], 'redview_app', { onlyIfChanged: true });
     expect(posted).toHaveLength(1);
 
-    // Each displayed property, the points and the route list count as a change.
+    // Chaque propriété affichée, les points et la liste des tracés comptent comme un changement.
     syncLidarRouteOverlay([itinerary('a', points, { color: '#00ff00' }), itinerary('b', other)], 'redview_app', { onlyIfChanged: true });
     syncLidarRouteOverlay([itinerary('a', points, { color: '#00ff00', visible: false }), itinerary('b', other)], 'redview_app', { onlyIfChanged: true });
     syncLidarRouteOverlay([itinerary('a', [...points], { color: '#00ff00', visible: false }), itinerary('b', other)], 'redview_app', { onlyIfChanged: true });
