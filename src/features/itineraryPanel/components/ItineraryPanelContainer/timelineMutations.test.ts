@@ -5,12 +5,9 @@ import { createDefaultItinerary } from '../../lib/project';
 import { haversineRouteDistanceM } from '../../lib/routes';
 import type { Itinerary } from '../../types';
 
-import {
-  buildPendingRoutePatchForEditedRow,
-  buildTimelineAfterRemoval,
-  placeRouteEndpoint,
-  setPendingRoutePatchAfterRemoval,
-} from './timelineMutations';
+import { buildTimelineAfterRemoval } from './timelineMutations';
+import { buildPendingRoutePatchForEditedRow, setPendingRoutePatchAfterRemoval } from './timelineRoutePatch';
+import { placeRouteEndpoint } from './routeEndpointPlacement';
 
 const KM_PER_DEGREE = (12_742 * Math.PI) / 360;
 const at = (km: number, eastM = 0) => ({

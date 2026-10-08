@@ -15,13 +15,13 @@ import {
 import { normalizeItineraryRhythmState } from '../../lib/project';
 import type { Itinerary, ItineraryProject, PoiAutoSortSummary } from '../../types';
 import { cumulativeRouteLengthsM, projectDistanceAlongRouteM, roundDistanceKm } from '../../lib/routes';
+import { insertWaypointIntoTimeline } from './timelineMutations';
 import {
   hasEditableRoute,
-  insertWaypointIntoTimeline,
-  placeRouteEndpoint,
   setPendingRouteEditForPlacedRow,
   setPendingRoutePatchAfterRemoval,
-} from './timelineMutations';
+} from './timelineRoutePatch';
+import { placeRouteEndpoint } from './routeEndpointPlacement';
 import { removePoiAndLinkedWaypoints } from './poiDraft';
 import {
   poiRowPauseMin,

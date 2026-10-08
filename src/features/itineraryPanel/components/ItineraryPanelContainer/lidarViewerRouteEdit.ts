@@ -17,14 +17,16 @@ import { applyTraceAppend } from '../../lib/tracer/traceEdits';
 import type { Itinerary } from '../../types';
 
 import {
-  buildPendingRoutePatchForEditedRow,
   buildTimelineAfterRemoval,
   insertWaypointAtRoutePosition,
   insertWaypointIntoTimeline,
-  placeRouteEndpoint,
+} from './timelineMutations';
+import {
+  buildPendingRoutePatchForEditedRow,
   setPendingRouteEditForPlacedRow,
   setPendingRoutePatchAfterRemoval,
-} from './timelineMutations';
+} from './timelineRoutePatch';
+import { placeRouteEndpoint } from './routeEndpointPlacement';
 
 type ViewerPoint = { lat: number; lon: number };
 

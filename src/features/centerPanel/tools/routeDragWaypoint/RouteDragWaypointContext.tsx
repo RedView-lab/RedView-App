@@ -9,10 +9,8 @@ import {
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
-import {
-  buildPendingRoutePatchForEditedRow,
-  insertWaypointAtRoutePosition,
-} from '@/features/itineraryPanel/components/ItineraryPanelContainer/timelineMutations';
+import { insertWaypointAtRoutePosition } from '@/features/itineraryPanel/components/ItineraryPanelContainer/timelineMutations';
+import { buildPendingRoutePatchForEditedRow } from '@/features/itineraryPanel/components/ItineraryPanelContainer/timelineRoutePatch';
 import { addItineraryVariantInPlace } from '@/features/itineraryPanel/lib/project';
 import { reverseGeocodeSettlement } from '@/features/itineraryPanel/lib/geocoding';
 import { DEFAULT_ROUTE_TRACE_WIDTH_PX } from '@/features/itineraryPanel/lib/route-layer/constants';

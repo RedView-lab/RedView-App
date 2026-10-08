@@ -6,14 +6,13 @@ import type {
 } from '@/features/map3d';
 import { translateAppText } from '@/shared/i18n';
 import type { Itinerary, ItineraryProject } from '../../types';
+import { insertTimelineItem, insertWaypointIntoTimeline } from './timelineMutations';
 import {
   hasEditableRoute,
-  insertTimelineItem,
-  insertWaypointIntoTimeline,
-  placeRouteEndpoint,
   setPendingRouteEditForPlacedRow,
   setPendingRoutePatchAfterRemoval,
-} from './timelineMutations';
+} from './timelineRoutePatch';
+import { placeRouteEndpoint } from './routeEndpointPlacement';
 import { pointInPolygon } from '../../context/ProjectStore/forbiddenZonePatch';
 import {
   resolveMapContextPointTitle,

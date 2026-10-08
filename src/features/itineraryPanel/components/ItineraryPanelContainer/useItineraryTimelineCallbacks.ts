@@ -2,12 +2,14 @@ import { useCallback } from 'react';
 import type { TimelineAddItemKind, TimelineAddItemOptions, TimelineView } from '../../types';
 import {
   buildTimelineAfterRemoval,
-  hasEditableRoute,
   insertTimelineItem,
   moveTimelinePauseItem,
+} from './timelineMutations';
+import {
+  hasEditableRoute,
   setPendingRouteEditForPlacedRow,
   setPendingRoutePatchAfterRemoval,
-} from './timelineMutations';
+} from './timelineRoutePatch';
 import { projectDistanceAlongRouteM } from '../../lib/routes';
 import { normalizeItineraryRhythmState } from '../../lib/project';
 import { setManualFavoriteOrigin } from './poiFeatureUtils';

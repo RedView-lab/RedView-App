@@ -23,10 +23,7 @@ import {
   moveTracePointInItinerary,
   resolveTraceAppendKind,
 } from '@/features/itineraryPanel/lib/tracer/traceEdits';
-import {
-  buildPendingRoutePatchForEditedRow,
-  hasEditableRoute,
-} from '@/features/itineraryPanel/components/ItineraryPanelContainer/timelineMutations';
+import { buildPendingRoutePatchForEditedRow, hasEditableRoute } from '@/features/itineraryPanel/components/ItineraryPanelContainer/timelineRoutePatch';
 import { translateAppText } from '@/shared/i18n';
 import { useHasChanged } from '@/shared/hooks/useHasChanged';
 import { isVariantModifierPressed } from '@/shared/lib/platform';
