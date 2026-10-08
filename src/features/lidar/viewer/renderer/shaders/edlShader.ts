@@ -1,19 +1,20 @@
 // ============================================
-// WGSL Shader Components — Eye-Dome Lighting (EDL) resolve pass
+// Composants de shaders WGSL — passe de résolution de l'Eye-Dome Lighting (EDL)
 // ============================================
 //
-// Screen-space shading used by CloudCompare and Potree: each pixel is
-// darkened by how much closer its 8 neighbours are (in log depth). It brings
-// out edges, roofs, canopies and terrain relief without any normals. Depth
-// comes from the reversed-Z, infinite-far projection: d = near / viewDist,
-// so log2(viewDist) = log2(near) - log2(d) and the constant cancels out.
-// Background pixels are left untouched (no dark halo around the cloud).
-// Optional (off by default): it also outlines individual large points.
-// While the camera moves the scene may be rendered smaller than the canvas
-// (`scale` < 1): the pass then reads the texel under each canvas pixel.
-// `edl_accumulate_fs` is the same pass for the progressive anti-aliasing of
-// still frames: it outputs linear light, blended into the accumulation
-// target with a constant weight of 1 / (n + 1) (a running mean).
+// Ombrage en espace écran utilisé par CloudCompare et Potree : chaque pixel est
+// assombri selon à quel point ses 8 voisins sont plus proches (en profondeur
+// logarithmique). Il fait ressortir arêtes, toits, canopées et relief sans
+// aucune normale. La profondeur vient de la projection en Z inversé à lointain
+// infini : d = near / viewDist, donc log2(viewDist) = log2(near) - log2(d) et
+// la constante s'élimine. Les pixels du fond ne sont pas touchés (pas de halo
+// sombre autour du nuage). En option (désactivé par défaut) : il détoure aussi
+// les gros points isolés. Pendant que la caméra bouge, la scène peut être
+// rendue plus petite que le canvas (`scale` < 1) : la passe lit alors le texel
+// sous chaque pixel du canvas. `edl_accumulate_fs` est la même passe pour
+// l'anticrénelage progressif des images fixes : elle sort de la lumière
+// linéaire, mélangée dans la cible d'accumulation avec un poids constant de
+// 1 / (n + 1) (une moyenne courante).
 
 export const EDL_PARAMS_FLOATS = 4;
 

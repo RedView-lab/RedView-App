@@ -1,19 +1,19 @@
 // ============================================
-// WGSL Shader Components — Point Cloud Shaders
+// Composants de shaders WGSL — shaders du nuage de points
 // ============================================
 //
-// Points are streamed per LOD node as 16-byte records (see lod/lodTile.ts):
-// u16×3 position quantized in the node cube, class, intensity, RGB, and the
-// cell-filtered intensity and RGB. They are shaded once per point by a
-// compute pass (colour mode, overlays, DTM lighting) when a node arrives,
-// when that state changes or when the node's drawn children change; the
-// per-frame vertex shader only decodes the position, projects a
-// screen-aligned sprite and reads the pre-shaded colour — no texture fetch
-// per vertex.
+// Les points arrivent en flux par nœud LOD sous forme d'enregistrements de 16
+// octets (voir lod/lodTile.ts) : position u16×3 quantifiée dans le cube du nœud,
+// classe, intensité, RVB, et l'intensité et le RVB filtrés par cellule. Ils sont
+// ombrés une fois par point par une passe de calcul (mode de couleur, surcouches,
+// éclairage du MNT) quand un nœud arrive, quand cet état change ou quand les
+// enfants dessinés du nœud changent ; le vertex shader de chaque image ne fait
+// que décoder la position, projeter un sprite aligné sur l'écran et lire la
+// couleur pré-ombrée — aucune lecture de texture par sommet.
 //
-// Each point is one instance of a 4-vertex strip. Vertex pulling (one
-// indexed draw per node reading storage buffers) was measured ~20 % slower
-// on an integrated Radeon (bench:lidar-fps), so the instanced path stays.
+// Chaque point est une instance d'un strip de 4 sommets. Le vertex pulling (un
+// draw indexé par nœud lisant des storage buffers) a été mesuré ~20 % plus
+// lent sur un Radeon intégré (bench:lidar-fps) : le chemin instancié reste.
 
 import {
   WGSL_CAMERA_BINDING,
@@ -25,9 +25,9 @@ import {
   WGSL_SCENE_BINDINGS,
 } from './common';
 
-/** Group 1 of the point pipeline: per-frame sprite parameters. */
+/** Groupe 1 du pipeline des points : paramètres des sprites par image. */
 export const POINT_PARAMS_FLOATS = 12;
-/** Per-node uniform record (bound with a dynamic offset). */
+/** Enregistrement d'uniforms par nœud (lié avec un décalage dynamique). */
 export const NODE_UNIFORM_BYTES = 32;
 
 export const WGSL_NODE_STRUCT = /* wgsl */ `
@@ -165,16 +165,17 @@ fn fs_photo_square(in: VsOut) -> PhotoGOut {
 export const POINT_SHADING_WORKGROUP_SIZE = 256;
 
 /**
- * Writes one pre-shaded RGBA8 word per point: rgb = final colour (colour
- * mode, overlays, lighting), a = classification. Ground points (classes 2/9,
- * or unclassified points lying on the DTM) get the DTM hillshade; everything
- * else (trees, buildings, wires) gets flat-ground lighting, since the ground
- * normal under a roof or a canopy says nothing about its own orientation.
- * Eye-Dome Lighting then brings out the 3D structure in screen space.
- * Where no child of the node is drawn (octant mask, as for the adaptive
- * size) its points are the finest on screen and take the colour and
- * intensity filtered over their cell: a coarse level then looks like a
- * downsampled image of the full one, not like scattered samples of it.
+ * Écrit un mot RGBA8 pré-ombré par point : rgb = couleur finale (mode de
+ * couleur, surcouches, éclairage), a = classification. Les points sol (classes
+ * 2/9, ou points non classés posés sur le MNT) reçoivent l'ombrage du relief du
+ * MNT ; tout le reste (arbres, bâtiments, câbles) reçoit l'éclairage d'un sol
+ * plat, car la normale du sol sous un toit ou une canopée ne dit rien de leur
+ * propre orientation. L'Eye-Dome Lighting fait ensuite ressortir la structure 3D
+ * en espace écran. Là où aucun enfant du nœud n'est dessiné (masque d'octants,
+ * comme pour la taille adaptative), ses points sont les plus fins à l'écran et
+ * prennent la couleur et l'intensité filtrées sur leur cellule : un niveau
+ * grossier ressemble alors à une image sous-échantillonnée du niveau complet,
+ * pas à des échantillons épars de celui-ci.
  */
 export const POINT_SHADING_SHADER = /* wgsl */ `
 ${WGSL_CAMERA_STRUCT}

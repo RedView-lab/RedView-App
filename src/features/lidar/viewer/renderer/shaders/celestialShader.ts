@@ -1,5 +1,5 @@
 // ============================================
-// WGSL Shader Components — Celestial & Trajectory Shaders
+// Composants de shaders WGSL — shaders célestes et de trajectoire
 // ============================================
 
 import { WGSL_CAMERA_STRUCT } from './common';

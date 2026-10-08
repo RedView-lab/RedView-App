@@ -1,10 +1,10 @@
 // ============================================
-// WGSL Shader Components — Upscale pass
+// Composants de shaders WGSL — passe d'agrandissement
 // ============================================
 //
-// While the camera moves, the scene may be rendered at a fraction of the
-// canvas resolution (fill rate is what limits integrated GPUs); this pass
-// stretches it over the canvas with bilinear filtering.
+// Pendant que la caméra bouge, la scène peut être rendue à une fraction de la
+// résolution du canvas (c'est le fill-rate qui limite les GPU intégrés) ; cette
+// passe l'étire sur le canvas avec un filtrage bilinéaire.
 
 export const BLIT_SHADER = /* wgsl */ `
 @group(0) @binding(0) var colorTex: texture_2d<f32>;
@@ -30,16 +30,16 @@ fn blit_fs(in: BlitVsOut) -> @location(0) vec4<f32> {
 }
 `;
 
-/** Strength of the sharpening of accumulated still frames (0 = off, 1 = AMD CAS maximum). */
+/** Force de l'accentuation des images fixes accumulées (0 = désactivée, 1 = maximum d'AMD CAS). */
 const PRESENT_SHARPNESS = 0.3;
 
 /**
- * Shows the progressive anti-aliasing of still frames: the accumulation
- * target (running mean in linear light, rgba16float, canvas size) encoded
- * back to sRGB on the canvas. The jittered samples spread over one pixel
- * act as a 1 px box filter that softens the image a little: a light
- * contrast-adaptive sharpening (AMD FidelityFX CAS, cross neighbourhood)
- * gives the detail back without halos, weaker where local contrast is high.
+ * Affiche l'anticrénelage progressif des images fixes : la cible d'accumulation
+ * (moyenne courante en lumière linéaire, rgba16float, taille du canvas) réencodée
+ * en sRGB sur le canvas. Les échantillons décalés répartis sur un pixel agissent
+ * comme un filtre boîte de 1 px qui adoucit un peu l'image : une légère
+ * accentuation adaptative au contraste (AMD FidelityFX CAS, voisinage en croix)
+ * rend le détail sans halo, plus faible là où le contraste local est fort.
  */
 export const PRESENT_SHADER = /* wgsl */ `
 @group(0) @binding(0) var accumTex: texture_2d<f32>;

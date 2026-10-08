@@ -1,5 +1,5 @@
 // ============================================
-// WGSL Shader Components — Terrain Mesh Shader
+// Composants de shaders WGSL — shader du maillage du terrain
 // ============================================
 
 import {

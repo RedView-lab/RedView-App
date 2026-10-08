@@ -1,5 +1,5 @@
 // ============================================
-// WGSL Shader Components — Common Types & Functions
+// Composants de shaders WGSL — types et fonctions communs
 // ============================================
 
 export const WGSL_CAMERA_STRUCT = /* wgsl */ `
@@ -51,8 +51,9 @@ struct Camera {
 `;
 
 /**
- * Group 0, shared by every scene pipeline (terrain, points, overlays) and by
- * the point shading compute pass. Shaders declare only what they use.
+ * Groupe 0, partagé par chaque pipeline de scène (terrain, points, surcouches)
+ * et par la passe de calcul d'ombrage des points. Les shaders ne déclarent que
+ * ce qu'ils utilisent.
  */
 export const WGSL_SCENE_BINDINGS = /* wgsl */ `
 @group(0) @binding(0) var<uniform> camera: Camera;
@@ -235,7 +236,7 @@ fn computeSobelNormal(worldPos: vec3<f32>) -> vec3<f32> {
 }
 `;
 
-/** Shared lighting: sun model when the sunlight panel is on, soft hillshade otherwise. */
+/** Éclairage partagé : modèle solaire quand le panneau d'ensoleillement est actif, ombrage doux du relief sinon. */
 export const WGSL_LIGHTING_HELPERS = /* wgsl */ `
 fn shadeSurface(N: vec3<f32>, baseColorSrgb: vec3<f32>, worldPos: vec3<f32>) -> vec3<f32> {
   let baseColor = srgbToLinear(baseColorSrgb);

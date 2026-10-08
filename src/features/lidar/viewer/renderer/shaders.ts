@@ -1,5 +1,5 @@
 // ============================================
-// WGSL Shaders — Modular Facade
+// Shaders WGSL — façade modulaire
 // ============================================
 
 export * from './shaders/index';

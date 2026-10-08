@@ -1,7 +1,7 @@
-/** Floats of the scene (camera + overlays) uniform block, see `packSceneUniforms`. */
+/** Flottants du bloc d'uniforms de la scène (caméra + surcouches), voir `packSceneUniforms`. */
 export const SCENE_UNIFORM_FLOATS = 80;
 
-/** Overlay and lighting state written after the camera in the scene uniform block. */
+/** État de surcouche et d'éclairage écrit après la caméra dans le bloc d'uniforms de la scène. */
 export interface SceneUniformState {
   pointSize: number;
   canvasWidth: number;
@@ -37,13 +37,14 @@ export interface SceneUniformState {
   sunDiscRadius: number;
   pointFilterEnabled: number;
   pointFilterMask: [number, number, number, number];
-  /** 1 in photo mode (WebGPU): the shading pass writes albedo only, see photoMode/. */
+  /** 1 en mode photo (WebGPU) : la passe d'ombrage n'écrit que l'albédo, voir photoMode/. */
   photoMode?: number;
 }
 
 /**
- * Packs the scene uniform block (layout shared with the WGSL `Scene` struct):
- * view-projection, camera basis and position, then the overlay state.
+ * Empaquette le bloc d'uniforms de la scène (disposition partagée avec la
+ * struct WGSL `Scene`) : view-projection, base et position de la caméra, puis
+ * l'état des surcouches.
  */
 export function packSceneUniforms(
   f: Float32Array,
@@ -56,7 +57,7 @@ export function packSceneUniforms(
   // 0..15: viewProj
   f.set(viewProj, 0);
 
-  // 16..19: right, 20..23: up, 24..27: cameraPos
+  // 16..19 : right, 20..23 : up, 24..27 : cameraPos
   f[16] = view[0]!; f[17] = view[4]!; f[18] = view[8]!; f[19] = 0;
   f[20] = view[1]!; f[21] = view[5]!; f[22] = view[9]!; f[23] = 0;
   f[24] = camPos[0]; f[25] = camPos[1]; f[26] = camPos[2]; f[27] = 1;
@@ -74,20 +75,20 @@ export function packSceneUniforms(
   f[34] = s.sunDir[2] / sunLen;
   f[35] = 0;
 
-  // 36..39: heightmap params
+  // 36..39 : paramètres de la heightmap
   f[36] = s.hmOriginX; f[37] = s.hmOriginZ; f[38] = s.hmScaleX; f[39] = s.hmScaleZ;
 
-  // 40..43: density, altitude params, colour mode
+  // 40..43 : densité, paramètres d'altitude, mode de couleur
   f[40] = s.density; f[41] = s.centerAltitude; f[42] = s.maxAltitude; f[43] = s.colorModeIndex;
 
-  // 44..48: snow params
+  // 44..48 : paramètres de neige
   f[44] = s.snowMode;
   f[45] = s.snowOriginX; f[46] = s.snowOriginZ; f[47] = s.snowScaleX; f[48] = s.snowScaleZ;
 
-  // 49..52: slope and altitude state
+  // 49..52 : état des pentes et de l'altitude
   f[49] = s.slopeEnabled; f[50] = s.slopeOpacity; f[51] = s.altitudeEnabled; f[52] = s.altitudeOpacity;
 
-  // 53..59: sunlight params
+  // 53..59 : paramètres d'ensoleillement
   f[53] = s.sunlightEnabled;
   f[54] = s.shadowEnabled;
   f[55] = s.shadowOpacity;
@@ -96,18 +97,18 @@ export function packSceneUniforms(
   f[58] = s.sunIntensity;
   f[59] = s.exposure;
 
-  // 60..67: sun & sky colours
+  // 60..67 : couleurs du soleil et du ciel
   f[60] = s.sunColor[0]; f[61] = s.sunColor[1]; f[62] = s.sunColor[2]; f[63] = 1.0;
   f[64] = s.skyColor[0]; f[65] = s.skyColor[1]; f[66] = s.skyColor[2]; f[67] = 1.0;
 
-  // 68..71: sun disc
+  // 68..71 : disque solaire
   if (s.sunDiscPos) {
     f[68] = s.sunDiscPos[0]; f[69] = s.sunDiscPos[1]; f[70] = s.sunDiscPos[2]; f[71] = s.sunDiscRadius;
   } else {
     f[68] = 0; f[69] = 0; f[70] = 0; f[71] = 0;
   }
 
-  // 72..75: point filter params, 76..79: bitmask (u32 words)
+  // 72..75 : paramètres du filtre de points, 76..79 : masque de bits (mots u32)
   f[72] = s.pointFilterEnabled; f[73] = 0; f[74] = 0; f[75] = 0;
   u32[76] = s.pointFilterMask[0] >>> 0;
   u32[77] = s.pointFilterMask[1] >>> 0;

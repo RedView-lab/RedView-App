@@ -1,10 +1,10 @@
 import { SCENE_DEPTH_FORMAT, type RendererPipelines } from './rendererPipeline';
 
-/** Offscreen scene render targets of one size. */
+/** Cibles de rendu hors écran de la scène, d'une même taille. */
 export interface SceneTargets {
   width: number;
   height: number;
-  /** Single-sample colour (MSAA resolve target), read by the EDL or upscale pass. */
+  /** Couleur mono-échantillon (cible de résolution du MSAA), lue par la passe EDL ou d'agrandissement. */
   colorTexture: GPUTexture;
   colorView: GPUTextureView;
   colorMsTexture: GPUTexture | null;

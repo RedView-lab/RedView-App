@@ -1,5 +1,5 @@
 // ============================================
-// WGSL Shader Components — Index
+// Composants de shaders WGSL — index
 // ============================================
 
 export * from './common';

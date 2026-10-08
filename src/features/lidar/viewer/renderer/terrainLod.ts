@@ -1,12 +1,12 @@
 // ============================================
-// Terrain mesh LOD — WebGPU drawer
+// LOD du maillage du terrain — dessin WebGPU
 // ============================================
 //
-// Levels, stitching and push-back come from `TerrainLodSelector` (see
-// terrainLodCore.ts). Here: the merged vertex buffers, every full-size index
-// pattern packed in one buffer per grid width, and the push-back of each
-// chunk in a storage buffer read by `terrain_lod_vs` through the instance
-// index of the chunk's draw.
+// Niveaux, couture et recul viennent de `TerrainLodSelector` (voir
+// terrainLodCore.ts). Ici : les vertex buffers fusionnés, chaque motif
+// d'indices pleine taille empaqueté dans un buffer par largeur de grille, et le
+// recul de chaque chunk dans un storage buffer lu par `terrain_lod_vs` via
+// l'indice d'instance du draw du chunk.
 
 import {
   TerrainLodSelector,
@@ -25,13 +25,13 @@ export class TerrainLod {
   private readonly selector: TerrainLodSelector;
   private readonly vertexBuffer: GPUBuffer;
   private readonly colorBuffer: GPUBuffer;
-  /** Push-back (m) per chunk, indexed by the draw's instance index. */
+  /** Recul (m) par chunk, indexé par l'indice d'instance du draw. */
   private readonly pushBackBuffer: GPUBuffer;
   readonly bindGroup: GPUBindGroup;
-  /** Index patterns: key → range of a packed buffer. */
+  /** Motifs d'indices : clé → plage d'un buffer empaqueté. */
   private readonly patterns = new Map<string, IndexPattern>();
   private readonly ownedBuffers: GPUBuffer[] = [];
-  /** Triangles drawn last frame (stats). */
+  /** Triangles dessinés à la dernière image (statistiques). */
   lastTriangles = 0;
 
   constructor(device: GPUDevice, mesh: TerrainMeshData, bindGroupLayout: GPUBindGroupLayout) {
@@ -53,7 +53,7 @@ export class TerrainLod {
     this.uploadSharedPatterns();
   }
 
-  /** Every full-size pattern of a grid width in one index buffer, uploaded once. */
+  /** Tous les motifs pleine taille d'une largeur de grille dans un seul index buffer, envoyé une fois. */
   private uploadSharedPatterns(): void {
     for (const lists of this.selector.sharedPatterns()) {
       const total = lists.reduce((sum, list) => sum + list.indices.length, 0);
@@ -70,7 +70,7 @@ export class TerrainLod {
     }
   }
 
-  /** Pattern of a chunk; partial chunks (grid edges not a multiple of the chunk size) get theirs on first use. */
+  /** Motif d'un chunk ; les chunks partiels (bords de grille qui ne sont pas un multiple de la taille de chunk) reçoivent le leur au premier usage. */
   private pattern(chunk: TerrainChunk, level: number, stitch: number): IndexPattern {
     const key = TerrainLodSelector.chunkPatternKey(chunk, level, stitch);
     let pattern = this.patterns.get(key);
@@ -86,8 +86,8 @@ export class TerrainLod {
   }
 
   /**
-   * Draws the visible chunks with `pipeline` (`terrain_lod_vs`; bind group 0
-   * already set, group 1 = this.bindGroup); returns the draw count.
+   * Dessine les chunks visibles avec `pipeline` (`terrain_lod_vs` ; bind group 0
+   * déjà posé, groupe 1 = this.bindGroup) ; renvoie le nombre de draws.
    */
   draw(
     pass: GPURenderPassEncoder,
@@ -116,7 +116,7 @@ export class TerrainLod {
         pass.setIndexBuffer(pattern.buffer, 'uint32');
         boundIndices = pattern.buffer;
       }
-      // The instance index carries the chunk index (push-back lookup).
+      // L'indice d'instance porte l'indice du chunk (recherche du recul).
       pass.drawIndexed(pattern.count, 1, pattern.firstIndex, chunk.baseVertex, i);
       draws++;
       triangles += pattern.count / 3;
@@ -126,9 +126,10 @@ export class TerrainLod {
   }
 
   /**
-   * Draws every chunk at the level whose quads are closest to `quadSizeM`
-   * (photo mode's shadow maps and surface model: one fixed level, no
-   * push-back, positions only in vertex buffer 0); returns the draw count.
+   * Dessine chaque chunk au niveau dont les quads sont les plus proches de
+   * `quadSizeM` (cartes d'ombre et modèle de surface du mode photo : un seul
+   * niveau fixe, sans recul, positions seules dans le vertex buffer 0) ;
+   * renvoie le nombre de draws.
    */
   drawFixedLevel(pass: GPURenderPassEncoder, pipeline: GPURenderPipeline, quadSizeM: number): number {
     const chunks = this.selector.chunks;
