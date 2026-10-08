@@ -34,11 +34,16 @@
   background: light-dark(rgb(var(--rv-ink) / 0.06), rgba(0, 0, 0, 0.4));
 }
 
+/* Cible de 24 × 24 px (WCAG 2.2, critère 2.5.8) pour un dessin de 18 px : la
+ * marge négative garde la mise en page, le fond de survol reste à 18 px. */
 .rvi-itin__eye {
   all: unset;
   display: inline-flex;
   width: 18px;
   height: 18px;
+  padding: 3px;
+  margin: -3px;
+  background-clip: content-box;
   flex-shrink: 0;
   color: rgb(var(--rv-ink) / 0.8);
   align-items: center;

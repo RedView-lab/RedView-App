@@ -199,10 +199,16 @@
   color: rgb(var(--rv-ink) / 0.72);
 }
 
+/* Cible de 24 × 24 px (WCAG 2.2, critère 2.5.8) pour une icône de 14 px : la
+ * marge négative garde la mise en page. */
 .rvc-center-summary__eye-button {
   border: 0;
   background: transparent;
-  padding: 0;
+  box-sizing: content-box;
+  min-width: 14px;
+  min-height: 14px;
+  padding: 5px;
+  margin: -5px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
