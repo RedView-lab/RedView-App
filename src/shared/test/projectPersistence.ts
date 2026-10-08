@@ -4,17 +4,17 @@ import { vi } from 'vitest';
 /**
  * Persistance des projets sous Vitest : le vrai code de
  * shared/services/projects sur le faux SDK Appwrite en mémoire du banc de
- * persistance (script-test-bench/audit/a-mock-appwrite-sdk.ts) et une vraie
+ * persistance (mockAppwriteSdk.ts, aussi celui du banc a-persistence-sim) et une vraie
  * IndexedDB (fake-indexeddb), session de `userId` ouverte.
  *
  * Le fichier de test déclare lui-même le remplacement du SDK (vi.mock est
  * remonté en tête de fichier) :
  *
- *   vi.mock('appwrite', () => import('../../../../script-test-bench/audit/a-mock-appwrite-sdk'));
+ *   vi.mock('appwrite', () => import('@/shared/test/mockAppwriteSdk'));
  *
  * Chaque appel repart d'un état vide (modules rechargés, IndexedDB neuve).
  */
-export type MockAppwriteSdk = typeof import('../../../script-test-bench/audit/a-mock-appwrite-sdk');
+export type MockAppwriteSdk = typeof import('./mockAppwriteSdk');
 
 export async function loadProjectPersistence(userId = 'user-A') {
   vi.resetModules();

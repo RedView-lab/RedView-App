@@ -11,7 +11,7 @@ import { loadProjectPersistence } from '@/shared/test/projectPersistence';
  * sans rien bloquer.
  */
 
-vi.mock('appwrite', () => import('../../../../script-test-bench/audit/a-mock-appwrite-sdk'));
+vi.mock('appwrite', () => import('@/shared/test/mockAppwriteSdk'));
 
 const ME = 'user-A';
 

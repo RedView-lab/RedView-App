@@ -6,14 +6,14 @@ import { loadProjectPersistence, reloadProjectSession as reloadTab, type MockApp
 /**
  * Règles de persistance des projets (projectRows.ts) sur le vrai code : faux
  * SDK Appwrite en mémoire du banc de persistance
- * (script-test-bench/audit/a-mock-appwrite-sdk.ts), vraie copie IndexedDB
+ * (src/shared/test/mockAppwriteSdk.ts), vraie copie IndexedDB
  * (fake-indexeddb). Un « autre appareil » écrit directement dans le faux
  * Appwrite.
  */
 
 const limits = vi.hoisted(() => ({ payloadChars: 12_000_000 }));
 
-vi.mock('appwrite', () => import('../../../../script-test-bench/audit/a-mock-appwrite-sdk'));
+vi.mock('appwrite', () => import('@/shared/test/mockAppwriteSdk'));
 vi.mock('./limits', async (importOriginal) => {
   const original = await importOriginal<typeof import('./limits')>();
   return {

@@ -4,7 +4,7 @@
  * Bundle avec esbuild le VRAI code :
  *   src/shared/services/projects/{projectRows,folders,compression}.ts + src/shared/services/appwrite.ts
  * en remplaçant uniquement :
- *   - le paquet `appwrite` (SDK web)        → a-mock-appwrite-sdk.ts (data ≤ 16 M car., proxy nginx 502 au-delà, limit 25 par défaut)
+ *   - le paquet `appwrite` (SDK web)        → src/shared/test/mockAppwriteSdk.ts (data ≤ 16 M car., proxy nginx 502 au-delà, limit 25 par défaut)
  *   - shared/services/storage/idbProjectStore  → a-mock-idb.ts (IndexedDB en mémoire)
  * `window.localStorage` est simulé. Aucun accès réseau.
  *
@@ -83,7 +83,7 @@ async function loadBundle() {
     plugins: [{
       name: 'audit-mocks',
       setup(build) {
-        build.onResolve({ filter: /^appwrite$/ }, () => ({ path: path.join(import.meta.dirname, 'a-mock-appwrite-sdk.ts') }));
+        build.onResolve({ filter: /^appwrite$/ }, () => ({ path: path.join(import.meta.dirname, '..', '..', 'src', 'shared', 'test', 'mockAppwriteSdk.ts') }));
         build.onResolve({ filter: /^react$/ }, () => ({ path: path.join(import.meta.dirname, 'a-mock-react.ts') }));
         build.onResolve({ filter: /idbProjectStore$/ }, () => ({ path: path.join(import.meta.dirname, 'a-mock-idb.ts') }));
         build.onResolve({ filter: /^@\// }, (args) =>

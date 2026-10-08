@@ -5,6 +5,8 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
+const BENCH_IMPORT_MESSAGE = 'script-test-bench/ est absent de l’image de prod : déplacer le code partagé dans src/ (p. ex. src/shared/test/).'
+
 // Erreurs existantes figées dans eslint-suppressions.json (cliquet) : toute
 // nouvelle erreur échoue ; `npx eslint . --prune-suppressions` après correction.
 export default defineConfig([
@@ -42,6 +44,20 @@ export default defineConfig([
       'no-empty': ['error', { allowEmptyCatch: true }],
       // `let { a, b } = …` dont seul `b` est réaffecté : pas d'erreur.
       'prefer-const': ['error', { destructuring: 'all' }],
+    },
+  },
+  {
+    // Code livré (et ses tests) : jamais de dépendance vers les bancs. script-test-bench/
+    // est hors de l'image Docker (.dockerignore) : un import y passait en local et
+    // cassait `tsc -b` au build de prod (2026-10-08).
+    files: ['src/**/*.{ts,tsx}', 'api/**/*.ts', 'server/**/*.{ts,mjs}'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [{ group: ['**/script-test-bench/**'], message: BENCH_IMPORT_MESSAGE }] }],
+      // `import('…')` (vi.mock) et `typeof import('…')` échappent à la règle précédente.
+      'no-restricted-syntax': ['error',
+        { selector: 'ImportExpression[source.value=/script-test-bench/]', message: BENCH_IMPORT_MESSAGE },
+        { selector: 'TSImportType Literal[value=/script-test-bench/]', message: BENCH_IMPORT_MESSAGE },
+      ],
     },
   },
   {

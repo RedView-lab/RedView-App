@@ -9,7 +9,7 @@ import { loadProjectPersistence } from '@/shared/test/projectPersistence';
  * coupure réseau), et une copie de projet a ses propres fichiers.
  */
 
-vi.mock('appwrite', () => import('../../../../script-test-bench/audit/a-mock-appwrite-sdk'));
+vi.mock('appwrite', () => import('@/shared/test/mockAppwriteSdk'));
 
 const ME = 'user-A';
 
