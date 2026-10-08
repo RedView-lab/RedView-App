@@ -1,14 +1,11 @@
 // @vitest-environment happy-dom
-import { act, createElement, type ReactNode } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import { createElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ProjectStoreContext } from '@/features/itineraryPanel/context/ProjectStore/context';
 import type { ProjectStoreValue } from '@/features/itineraryPanel/context/ProjectStore/types';
 import type { Itinerary } from '@/features/itineraryPanel/types';
-import { AppI18nContext, type AppI18nContextValue } from '@/shared/i18n/appI18nContext';
-import { createAppTranslationBundle } from '@/shared/i18n/config';
-import { buildTranslationLookup, translateString } from '@/shared/i18n/domTranslation';
+import { renderComponent, type RenderedComponent } from '@/shared/test/renderComponent';
 import { AnalysisFlyoverContext } from '../../flyover/context';
 import type { AnalysisFlyoverContextValue } from '../../flyover/types';
 import { CenterPanelToolbar } from './CenterPanelToolbar';
@@ -18,19 +15,6 @@ import { CenterPanelToolbar } from './CenterPanelToolbar';
  * l'itinéraire actif et le store, ce que déclenchent Supprimer, Inverser,
  * Annuler/Rétablir et la lecture du flyover, et le message d'état.
  */
-
-declare global {
-  var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
-}
-
-const bundle = createAppTranslationBundle('fr');
-const lookup = buildTranslationLookup(bundle.entries);
-const i18n: AppI18nContextValue = {
-  locale: 'fr',
-  setLocale: () => {},
-  t: (text, vars) => translateString(text, lookup, vars),
-  bundle,
-};
 
 type ItineraryShape = Partial<Itinerary> & { id: string };
 
@@ -78,48 +62,36 @@ function flyover(overrides: Partial<AnalysisFlyoverContextValue> = {}): Analysis
   };
 }
 
-let root: Root | null = null;
-let container: HTMLDivElement | null = null;
+let view: RenderedComponent | null = null;
 
 function render(store: ProjectStoreValue, flyoverValue: AnalysisFlyoverContextValue, props: { isPanelVisible?: boolean; onTogglePanel?: () => void } = {}) {
-  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-  if (!container) {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = createRoot(container);
-  }
-  const tree: ReactNode = createElement(
-    AppI18nContext.Provider,
-    { value: i18n },
-    createElement(
-      ProjectStoreContext.Provider,
-      { value: store },
-      createElement(AnalysisFlyoverContext.Provider, { value: flyoverValue }, createElement(CenterPanelToolbar, props)),
-    ),
+  const tree = createElement(
+    ProjectStoreContext.Provider,
+    { value: store },
+    createElement(AnalysisFlyoverContext.Provider, { value: flyoverValue }, createElement(CenterPanelToolbar, props)),
   );
-  act(() => root?.render(tree));
-  return container;
+  if (view) view.rerender(tree);
+  else view = renderComponent(tree);
+  return view.container;
 }
 
 function button(label: string): HTMLButtonElement {
-  const found = container?.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+  const found = view?.container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
   if (!found) throw new Error(`bouton « ${label} » absent`);
   return found;
 }
 
 function click(target: HTMLElement): void {
-  act(() => target.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+  view?.click(target);
 }
 
 function statusText(): string | null {
-  return container?.querySelector('[role="status"]')?.textContent ?? null;
+  return view?.container.querySelector('[role="status"]')?.textContent ?? null;
 }
 
 afterEach(() => {
-  act(() => root?.unmount());
-  container?.remove();
-  root = null;
-  container = null;
+  view?.unmount();
+  view = null;
 });
 
 describe('CenterPanelToolbar', () => {
@@ -192,7 +164,7 @@ describe('CenterPanelToolbar', () => {
 
   it('le bouton du panneau central n\'apparaît qu\'avec onTogglePanel et reflète sa visibilité', () => {
     render(fakeStore([itinerary('a', 3)], 'a'), flyover());
-    expect(container?.querySelector('button[aria-label="Masquer le panneau central"]')).toBeNull();
+    expect(view?.container.querySelector('button[aria-label="Masquer le panneau central"]')).toBeNull();
 
     const onTogglePanel = vi.fn();
     render(fakeStore([itinerary('a', 3)], 'a'), flyover(), { isPanelVisible: false, onTogglePanel });
