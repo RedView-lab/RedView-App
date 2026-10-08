@@ -12,19 +12,22 @@ export {
 } from './routePoints';
 export {
   anchorRoutePatchBound,
-  appendRoutePoints,
   cropRoutePoints,
+  planRouteSplice,
+} from './routeSplice';
+export {
+  appendRoutePoints,
   getRoutePointTotalDistanceM,
   mergeSurfaceMetrics,
-  narrowRoutePatchToEdit,
-  planRouteSplice,
   recomputeApproxSurfaceMetrics,
   replaceRouteSegment,
   roundRouteDistanceKm,
   routePointsEqual,
-  widenUnjoinedRoutePatchWindow,
-  
 } from './routeSegments';
+export {
+  narrowRoutePatchToEdit,
+  widenUnjoinedRoutePatchWindow,
+} from './routePatchWindow';
 export {
   isBrouterUnmappedPointError,
   projectTimelineLocationDistances,

@@ -5,14 +5,18 @@ import type { ItineraryPendingRoutePatch } from '../../types/itinerary';
 
 import {
   anchorRoutePatchBound,
-  appendRoutePoints,
   cropRoutePoints,
-  narrowRoutePatchToEdit,
   planRouteSplice,
+} from './routeSplice';
+import {
+  appendRoutePoints,
   replaceRouteSegment,
   routePointsEqual,
-  widenUnjoinedRoutePatchWindow,
 } from './routeSegments';
+import {
+  narrowRoutePatchToEdit,
+  widenUnjoinedRoutePatchWindow,
+} from './routePatchWindow';
 import type { RoutePoints } from './types';
 
 const KM_PER_DEGREE = (12_742 * Math.PI) / 360;
