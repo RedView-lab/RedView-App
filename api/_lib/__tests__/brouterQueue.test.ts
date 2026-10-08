@@ -64,17 +64,17 @@ function call(handler: Handler, query: Record<string, string>, method = 'GET', b
 
 /** Faux BRouter : chaque requête attend qu'on la termine à la main. */
 function fakeBrouter() {
-  const inFlight: Array<{ url: string; finish(): void }> = [];
+  const inFlight: Array<{ url: string; finish(body?: string, contentType?: string): void }> = [];
   let maxInFlight = 0;
   const fetchMock = vi.fn((target: string | URL | Request, init?: RequestInit) => new Promise<Response>((resolve, reject) => {
     const url = String(target);
     const entry = {
       url,
-      finish: () => {
+      finish: (body?: string, contentType = 'application/json') => {
         inFlight.splice(inFlight.indexOf(entry), 1);
-        resolve(new Response(url.includes('/profile/')
+        resolve(new Response(body ?? (url.includes('/profile/')
           ? JSON.stringify({ profileid: 'custom_x' })
-          : JSON.stringify({ type: 'FeatureCollection', features: [] }), { status: 200, headers: { 'content-type': 'application/json' } }));
+          : JSON.stringify({ type: 'FeatureCollection', features: [] })), { status: 200, headers: { 'content-type': contentType } }));
       },
     };
     init?.signal?.addEventListener('abort', () => {
@@ -168,12 +168,56 @@ describe('api/brouter — file d’attente vers BRouter', () => {
     await Promise.all(uploads.map((captured) => captured.done));
     expect(brouter.fetchMock).toHaveBeenCalledTimes(1);
     expect(uploads.every((captured) => captured.status === 200)).toBe(true);
-    // Une fois terminé, un nouvel envoi repart vers BRouter (rien n'est gardé en cache).
-    const again = call(handler, { upload: '1' }, 'POST', profile);
+  });
+
+  it('un profil déjà accepté n’est jamais renvoyé à BRouter (≥ 1 s d’un de ses fils)', async () => {
+    const profile = 'assign turnInstructionMode = 2\n';
+    const first = call(handler, { upload: '1' }, 'POST', profile);
     await flush();
-    brouter.inFlight[0]!.finish();
+    const id = new URL(brouter.inFlight[0]!.url).pathname.split('/').pop()!;
+    brouter.inFlight[0]!.finish(JSON.stringify({ profileid: id }));
+    await first.done;
+    const again = call(handler, { upload: '1' }, 'POST', profile);
     await again.done;
+    expect(brouter.fetchMock).toHaveBeenCalledTimes(1);
+    expect(again.headers['x-profile-cache']).toBe('HIT');
+    expect(again.body).toEqual({ profileid: id });
+  });
+
+  it('un profil refusé à la compilation est renvoyé à chaque fois', async () => {
+    const profile = 'assign broken = \n';
+    for (let round = 0; round < 2; round += 1) {
+      const upload = call(handler, { upload: '1' }, 'POST', profile);
+      await flush();
+      brouter.inFlight[0]!.finish(JSON.stringify({ profileid: 'x', error: 'Profile error: syntax' }));
+      await upload.done;
+    }
     expect(brouter.fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('un profil accepté dont BRouter a perdu le fichier est renvoyé, puis le tracé rejoué', async () => {
+    const profile = 'assign turnInstructionMode = 3\n';
+    const upload = call(handler, { upload: '1' }, 'POST', profile);
+    await flush();
+    const id = new URL(brouter.inFlight[0]!.url).pathname.split('/').pop()!;
+    brouter.inFlight[0]!.finish(JSON.stringify({ profileid: id }));
+    await upload.done;
+
+    const routed = call(handler, { lonlats: '6.1,45.1|6.1,45.2', profile: id });
+    await flush();
+    const hash = id.slice('custom_'.length);
+    brouter.inFlight[0]!.finish(`error: profile ${hash}.brf does not exist`, 'text/plain');
+    await flush();
+    await flush();
+    expect(brouter.inFlight[0]!.url).toContain(`/profile/${id}`);
+    brouter.inFlight[0]!.finish(JSON.stringify({ profileid: id }));
+    await flush();
+    await flush();
+    expect(brouter.inFlight[0]!.url).toContain('lonlats=');
+    brouter.inFlight[0]!.finish();
+    await routed.done;
+    expect(routed.status).toBe(200);
+    expect(brouter.fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it('une réponse du cache ne passe pas par la file', async () => {

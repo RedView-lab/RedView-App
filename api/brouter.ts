@@ -96,6 +96,23 @@ async function acquireBrouterSlot(res: ApiResponse, signal: AbortSignal, clientG
 const MAX_PROFILE_BYTES = 100_000;
 const MAX_ERROR_HEADER_CHARS = 200;
 
+/**
+ * Profils que BRouter a déjà acceptés (compilés sans erreur), par id : texte
+ * gardé pour les renvoyer si son fichier venait à manquer. Un envoi coûte
+ * ≥ 1 s d'un des 4 fils de BRouter quoi qu'il arrive (ProfileUploadHandler
+ * lit le corps jusqu'à `ready() == false`, puis dort 1 000 ms avant de
+ * conclure) et compte dans ses `maxthreads` : au-delà, BRouter tue son calcul
+ * le plus ancien. Or l'id est l'empreinte du contenu et BRouter ne supprime
+ * jamais un profil personnalisé : le renvoyer ne change rien. Banc vps-load du
+ * 08/10 : POST /api/brouter = 1 011–1 019 ms à 1 utilisateur, un tiers des
+ * requêtes vers BRouter à 100 utilisateurs.
+ */
+const KNOWN_PROFILES = createByteLru<string>({
+  maxBytes: 16 * 1024 * 1024,
+  sizeOf: (text) => text.length * 2,
+});
+const CUSTOM_PROFILE_PREFIX = 'custom_';
+
 /** Valeur d'en-tête sûre : ASCII imprimable uniquement, tronquée. */
 function sanitizeHeaderValue(value: string): string {
   return value
@@ -255,37 +272,43 @@ async function handleRouteQuery(
   };
   res.once('close', onClientClose);
 
-  const slot = await acquireBrouterSlot(res, controller.signal, () => clientGone);
-  if (!slot) {
-    res.off('close', onClientClose);
-    return;
-  }
-  const computeBudgetMs = Math.max(ROUTE_MIN_COMPUTE_MS, ROUTE_TIMEOUT_MS - slot.waitedMs);
-  const timer = setTimeout(() => controller.abort(), computeBudgetMs);
-  let upstreamRes: Response;
-  let body: string;
-  try {
-    upstreamRes = await fetch(url, {
-      method: 'GET',
-      signal: controller.signal,
-      headers: { Accept: 'application/json,application/geo+json,text/plain' },
-    });
-    body = await upstreamRes.text();
-  } catch (err) {
+  const startedAt = Date.now();
+  let upstreamRes!: Response;
+  let body!: string;
+  for (let attempt = 0; ; attempt += 1) {
+    const slot = await acquireBrouterSlot(res, controller.signal, () => clientGone);
+    if (!slot) {
+      res.off('close', onClientClose);
+      return;
+    }
+    const computeBudgetMs = Math.max(ROUTE_MIN_COMPUTE_MS, ROUTE_TIMEOUT_MS - (Date.now() - startedAt));
+    const timer = setTimeout(() => controller.abort(), computeBudgetMs);
+    try {
+      upstreamRes = await fetch(url, {
+        method: 'GET',
+        signal: controller.signal,
+        headers: { Accept: 'application/json,application/geo+json,text/plain' },
+      });
+      body = await upstreamRes.text();
+    } catch (err) {
+      clearTimeout(timer);
+      slot.release();
+      res.off('close', onClientClose);
+      if (clientGone) return;
+      const isAbort = (err as { name?: string } | undefined)?.name === 'AbortError';
+      if (!isAbort) console.error('[brouter] upstream unreachable:', err);
+      return res.status(isAbort ? 504 : 502).json({
+        error: isAbort
+          ? `BRouter upstream timeout after ${computeBudgetMs}ms`
+          : 'BRouter upstream unreachable',
+      });
+    }
     clearTimeout(timer);
     slot.release();
-    res.off('close', onClientClose);
-    if (clientGone) return;
-    const isAbort = (err as { name?: string } | undefined)?.name === 'AbortError';
-    if (!isAbort) console.error('[brouter] upstream unreachable:', err);
-    return res.status(isAbort ? 504 : 502).json({
-      error: isAbort
-        ? `BRouter upstream timeout after ${computeBudgetMs}ms`
-        : 'BRouter upstream unreachable',
-    });
+    // Un profil accepté plus tôt dont BRouter n'a plus le fichier : renvoyé
+    // une fois, puis la même requête rejouée.
+    if (attempt > 0 || clientGone || !(await restoreMissingProfile(base, params.get('profile'), body))) break;
   }
-  clearTimeout(timer);
-  slot.release();
   res.off('close', onClientClose);
 
   const contentType =
@@ -337,7 +360,8 @@ const PROFILE_UPLOADS_IN_FLIGHT = new Map<string, Promise<UploadOutcome>>();
  * compilation en double. Il passe par la file (_lib/upstreamGate.ts) et va à
  * son terme même si un demandeur part : les autres l'attendent.
  */
-async function uploadProfileOnce(url: string, profileText: string): Promise<UploadOutcome> {
+async function uploadProfileOnce(base: string, profileId: string, profileText: string): Promise<UploadOutcome> {
+  const url = `${base}/brouter/profile/${encodeURIComponent(profileId)}`;
   let slot: UpstreamSlot;
   try {
     slot = await brouterGate.acquire();
@@ -358,6 +382,7 @@ async function uploadProfileOnce(url: string, profileText: string): Promise<Uplo
       body: profileText,
     });
     const text = await upstreamRes.text();
+    if (upstreamRes.ok && compiledCleanly(text, profileId)) KNOWN_PROFILES.set(profileId, profileText);
     return { kind: 'ok', upstreamRes, text, waitedMs: slot.waitedMs };
   } catch (err) {
     const isAbort = (err as { name?: string } | undefined)?.name === 'AbortError';
@@ -367,6 +392,46 @@ async function uploadProfileOnce(url: string, profileText: string): Promise<Uplo
     clearTimeout(timer);
     slot.release();
   }
+}
+
+/** Réponse d'envoi de BRouter sans erreur de compilation, sous l'id demandé. */
+function compiledCleanly(text: string, profileId: string): boolean {
+  try {
+    const json = JSON.parse(text) as { profileid?: unknown; error?: unknown };
+    return !json.error && (json.profileid === undefined || json.profileid === profileId);
+  } catch {
+    return false;
+  }
+}
+
+/** Mêmes réglages = même profil = même id : des envois simultanés partagent un seul envoi vers BRouter. */
+function uploadProfile(base: string, profileId: string, profileText: string): Promise<UploadOutcome> {
+  let job = PROFILE_UPLOADS_IN_FLIGHT.get(profileId);
+  if (!job) {
+    job = uploadProfileOnce(base, profileId, profileText).finally(() => PROFILE_UPLOADS_IN_FLIGHT.delete(profileId));
+    PROFILE_UPLOADS_IN_FLIGHT.set(profileId, job);
+  }
+  return job;
+}
+
+/**
+ * Erreur de routage due au fichier manquant d'un profil déjà accepté (dossier
+ * des profils de BRouter vidé, autre instance) : le profil est renvoyé depuis
+ * KNOWN_PROFILES. Vrai quand la requête peut être rejouée.
+ */
+async function restoreMissingProfile(base: string, profile: string | null, body: string): Promise<boolean> {
+  if (!profile?.startsWith(CUSTOM_PROFILE_PREFIX)) return false;
+  // Erreur en texte court, jamais un tracé (GeoJSON).
+  if (body.length > 4_000 || body.trimStart().startsWith('{')) return false;
+  // BExpressionContext.parseFile : « profile <empreinte>.brf does not exist ».
+  const hash = profile.slice(CUSTOM_PROFILE_PREFIX.length);
+  if (!/^[A-Za-z0-9_-]+$/.test(hash) || !new RegExp(`${hash}(?:\\.brf)? does not exist`).test(body)) return false;
+  const profileText = KNOWN_PROFILES.get(profile);
+  if (profileText === undefined) return false;
+  KNOWN_PROFILES.delete(profile);
+  console.warn(`[brouter] profile ${profile} missing upstream, uploading it again`);
+  const outcome = await uploadProfile(base, profile, profileText);
+  return outcome.kind === 'ok' && KNOWN_PROFILES.get(profile) !== undefined;
 }
 
 async function handleProfileUpload(
@@ -420,17 +485,16 @@ async function handleProfileUpload(
   // peut plus écraser le profil d'un autre en devinant/réutilisant son id.
   // Même contenu → même id (dédup naturelle côté BRouter). Le `?id=`
   // éventuellement envoyé par le client est ignoré.
-  const profileId = `custom_${crypto.createHash('sha256').update(profileText, 'utf8').digest('hex').slice(0, 16)}`;
-  const url = `${base}/brouter/profile/${encodeURIComponent(profileId)}`;
+  const profileId = `${CUSTOM_PROFILE_PREFIX}${crypto.createHash('sha256').update(profileText, 'utf8').digest('hex').slice(0, 16)}`;
 
-  // Mêmes réglages = même profil = même id : des envois simultanés partagent
-  // un seul envoi vers BRouter (voir uploadProfileOnce).
-  let job = PROFILE_UPLOADS_IN_FLIGHT.get(profileId);
-  if (!job) {
-    job = uploadProfileOnce(url, profileText).finally(() => PROFILE_UPLOADS_IN_FLIGHT.delete(profileId));
-    PROFILE_UPLOADS_IN_FLIGHT.set(profileId, job);
+  // Déjà accepté par BRouter : rien à renvoyer (voir KNOWN_PROFILES).
+  if (KNOWN_PROFILES.get(profileId) !== undefined) {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Profile-Cache', 'HIT');
+    return res.status(200).json({ profileid: profileId });
   }
-  const outcome = await job;
+
+  const outcome = await uploadProfile(base, profileId, profileText);
   if (outcome.waitedMs !== undefined) res.setHeader('X-Upstream-Wait-Ms', String(Math.round(outcome.waitedMs)));
   if (outcome.kind === 'busy') {
     res.setHeader('Retry-After', '5');
