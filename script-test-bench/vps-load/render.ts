@@ -14,7 +14,9 @@ if (!dir) {
   console.error('usage : render.ts <dossier de la passe>');
   process.exit(1);
 }
-const data = JSON.parse(readFileSync(path.join(dir, 'resultats.json'), 'utf8')) as { meta: RunMeta; results: PhaseResult[]; idle: VpsWindow | null };
-const meta: RunMeta = { link: null, waves: 3, ...data.meta };
+// Les passes d'avant la mesure du lien n'ont ni `link` ni `waves`.
+type StoredMeta = Omit<RunMeta, 'link' | 'waves'> & Partial<Pick<RunMeta, 'link' | 'waves'>>;
+const data = JSON.parse(readFileSync(path.join(dir, 'resultats.json'), 'utf8')) as { meta: StoredMeta; results: PhaseResult[]; idle: VpsWindow | null };
+const meta: RunMeta = { ...data.meta, link: data.meta.link ?? null, waves: data.meta.waves ?? 3 };
 writeFileSync(path.join(dir, 'rapport.md'), renderMarkdown(meta, data.results, data.idle));
 console.log(path.join(dir, 'rapport.md'));
