@@ -18,9 +18,10 @@ export const ANALYSIS_HOVER_HALO_LAYER_ID = 'brouter-analysis-hover-halo-layer';
 export const ANALYSIS_HOVER_POINT_LAYER_ID = 'brouter-analysis-hover-point-layer';
 
 /**
- * Hover-preview marker shown while a central-panel tool (split / trace) is
- * armed. Distinct from ANALYSIS_HOVER_* so a chart-driven hover and a
- * tool-driven hover can coexist without clobbering each other.
+ * Marqueur d'aperçu au survol affiché pendant qu'un outil du panneau central
+ * (découpe / tracé) est armé. Distinct d'ANALYSIS_HOVER_* pour qu'un survol
+ * piloté par le graphique et un survol piloté par un outil puissent coexister
+ * sans s'écraser.
  */
 export const ROUTE_HOVER_PREVIEW_SOURCE_ID = 'brouter-route-hover-preview-source';
 export const ROUTE_HOVER_PREVIEW_HALO_LAYER_ID = 'brouter-route-hover-preview-halo-layer';
@@ -46,10 +47,10 @@ export const FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID = 'brouter-forbidden-zone
 
 export function canMutateStyle(map: MapboxMap): boolean {
   try {
-    // Mapbox 3.x can keep isStyleLoaded() false during repeated styledata
-    // churn even though the style object is already usable for addSource /
-    // addLayer / setData. Route replay runs on styledata specifically to
-    // survive those transitions, so use the same lenient gate here.
+    // Mapbox 3.x peut garder isStyleLoaded() à false pendant des rafales répétées
+    // de styledata alors que l'objet style est déjà utilisable pour addSource /
+    // addLayer / setData. Le rejeu des tracés tourne justement sur styledata pour
+    // survivre à ces transitions : même porte tolérante ici.
     return Boolean(map.getStyle());
   } catch {
     return false;

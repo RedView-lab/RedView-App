@@ -1,11 +1,11 @@
 /**
- * Convert POI corridor results into Timeline rows.
+ * Convertit les résultats de POI du couloir en lignes de timeline.
  *
- * - Maps OSM/Overpass categories back onto the panel's POI taxonomy
- *   (Figma rows: Eau, Boulangerie, Supermarché, …).
- * - Projects each POI onto the active GPX route to derive a
- *   `distanceKm` from the start, so the rows can be inserted in
- *   physical order between the Départ and Fin checkpoints.
+ * - Fait correspondre les catégories OSM/Overpass à la taxonomie des POI du
+ *   panneau (lignes Figma : Eau, Boulangerie, Supermarché, …).
+ * - Projette chaque POI sur le tracé GPX actif pour en déduire une `distanceKm`
+ *   depuis le départ, afin d'insérer les lignes dans l'ordre physique entre les
+ *   points de contrôle Départ et Fin.
  */
 import type { PoiFeature, PoiCategory as FeaturePoiCategory } from '@/features/poi/types';
 import { POI_LABELS } from '@/features/poi/types';
@@ -74,7 +74,7 @@ export const FEATURE_TO_PANEL_POI: Partial<Record<FeaturePoiCategory, PanelPoiCa
   doctors: 'health',
   defibrillator: 'health',
   police: 'health',
-  // Transport & services
+  // Transport et services
   train_station: 'transport',
   bus_station: 'transport',
   ferry_terminal: 'transport',
@@ -93,10 +93,10 @@ export function isAutoHotelOption(item: Pick<TimelineItem, 'favoriteSource' | 'a
 }
 
 /**
- * Convert POI features into ordered TimelineItems with `kind: 'poi'`.
+ * Convertit des éléments POI en TimelineItems ordonnés avec `kind: 'poi'`.
  *
- * Items are sorted by their projected distance along the route so they
- * fall in physical order when inserted between Départ and Fin.
+ * Les éléments sont triés par leur distance projetée le long du tracé pour
+ * tomber dans l'ordre physique une fois insérés entre Départ et Fin.
  */
 export function poiFeaturesToTimelineItems(
   features: PoiFeature[],

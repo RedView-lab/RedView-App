@@ -5,18 +5,18 @@ import type { TimelineAddItemKind } from '../types';
 const ITINERARY_MAP_ACTION_EVENT = 'redview:itinerary-map-action';
 
 /**
- * Point placed on the active route from the analysis chart (toolbar « Ajouter »).
- * A POI goes through the map's draft card instead.
+ * Point posé sur le tracé actif depuis le graphique d'analyse (« Ajouter » de la barre d'outils).
+ * Un POI passe par la carte de brouillon de la carte à la place.
  */
 export interface RoutePointAddPayload {
-  /** Itinerary active when the point was placed; ignored if another one is active by then. */
+  /** Itinéraire actif au moment de la pose ; ignoré si un autre est actif entre-temps. */
   itineraryId: string;
   kind: Exclude<TimelineAddItemKind, 'poi'>;
   lat: number;
   lon: number;
-  /** Position along the itinerary's route, from its start. */
+  /** Position le long du tracé de l'itinéraire, depuis son départ. */
   distanceM: number;
-  /** Row label until the place name resolves. */
+  /** Libellé de la ligne jusqu'à la résolution du nom du lieu. */
   label: string;
 }
 

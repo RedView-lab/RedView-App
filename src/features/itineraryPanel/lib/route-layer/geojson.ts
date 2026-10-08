@@ -23,12 +23,12 @@ export interface RouteHoverPreviewPoint {
   lat: number;
   color?: string;
   /**
-   * When true the marker renders dimmed, signalling that a click at this
-   * position would be ignored (e.g. the cursor is too far from the trace in
-   * split mode). False ⇒ full-strength "clickable" marker.
+   * À true, le marqueur est atténué, signalant qu'un clic à cette position
+   * serait ignoré (par ex. le curseur est trop loin de la trace en mode
+   * découpe). False ⇒ marqueur « cliquable » à pleine intensité.
    */
   dimmed?: boolean;
-  /** Radius of the preview circle in pixels. */
+  /** Rayon du cercle d'aperçu en pixels. */
   radius?: number;
 }
 

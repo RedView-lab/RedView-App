@@ -174,13 +174,14 @@ function selectAnchorIndices(points: RoutePoint[], maxPoints: number): number[] 
 }
 
 /**
- * Douglas–Peucker split tree of `points`, built once for every tolerance: the
- * point a sub-range splits at (its farthest point) never depends on the
- * tolerance, only whether the recursion goes on. At tolerance τ a point is
- * kept when its own deviation and those of every split above it exceed τ, so
- * `retainSq[i]` holds the smallest of these squared deviations (0: never a
- * split, +∞: the endpoints). The tolerance search below used to rerun the
- * whole recursion ~30 times per segment (0.55 s for a 100 000-point route).
+ * Arbre de découpe Douglas–Peucker de `points`, construit une fois pour toutes
+ * les tolérances : le point où se coupe une sous-plage (son point le plus
+ * éloigné) ne dépend jamais de la tolérance, seulement le fait que la récursion
+ * continue. À la tolérance τ, un point est gardé quand sa propre déviation et
+ * celles de chaque découpe au-dessus de lui dépassent τ : `retainSq[i]` contient
+ * donc le plus petit de ces carrés de déviation (0 : jamais une découpe, +∞ :
+ * les extrémités). La recherche de tolérance ci-dessous relançait toute la
+ * récursion ~30 fois par segment (0,55 s pour un tracé de 100 000 points).
  */
 function douglasPeuckerRetention(points: RoutePoint[]): Float64Array {
   const retainSq = new Float64Array(points.length);
@@ -218,7 +219,7 @@ function douglasPeuckerRetention(points: RoutePoint[]): Float64Array {
   return retainSq;
 }
 
-/** Indices Douglas–Peucker keeps at `toleranceM`, from the split tree. */
+/** Indices que Douglas–Peucker garde à `toleranceM`, d'après l'arbre de découpe. */
 function douglasPeuckerIndices(retainSq: Float64Array, toleranceM: number): number[] {
   const toleranceSq = toleranceM * toleranceM;
   const last = retainSq.length - 1;

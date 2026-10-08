@@ -186,9 +186,10 @@ export function buildPredictionConfigFromRhythm(
   // par défaut s'en tiennent au niveau choisi.
   const custom = isCustomRhythmProfile(rhythm);
 
-  // Only override FTP if explicitly entered as a positive number by the user.
-  // When left blank (null / undefined / empty), config.ftp_w remains undefined
-  // so the prediction engine automatically uses the virtual FTP derived from the .fit files!
+  // Ne surcharger la FTP que si l'utilisateur l'a saisie explicitement comme un
+  // nombre positif. Laissée vide (null / undefined / chaîne vide), config.ftp_w
+  // reste undefined pour que le moteur de prédiction utilise automatiquement la
+  // FTP virtuelle tirée des fichiers .fit !
   if (custom && typeof rhythm.ftp === 'number' && rhythm.ftp > 0) {
     config.ftp_w = rhythm.ftp;
   }
@@ -215,7 +216,7 @@ export function buildPredictionConfigFromRhythm(
   // Tire width effect on rolling resistance (Crr)
   const tiresMm = rhythm.tiresMm;
   if (typeof tiresMm === 'number' && tiresMm > 0) {
-    // 25-28mm road: ~0.0045, 32-35mm allroad: ~0.0050, 40-50mm gravel: ~0.0058
+    // Route 25-28 mm : ~0,0045, allroad 32-35 mm : ~0,0050, gravel 40-50 mm : ~0,0058
     config.crr = 0.0035 + (tiresMm * 0.000045);
   }
 
@@ -223,9 +224,10 @@ export function buildPredictionConfigFromRhythm(
 }
 
 /**
- * Config of the running / trail engine. The level drives the defaults
- * (reference pace, walk threshold, descent skill…); an explicit VMA or race
- * time replaces the level's reference pace, and FIT files override both.
+ * Configuration du moteur course / trail. Le niveau pilote les valeurs par
+ * défaut (allure de référence, seuil de marche, aisance en descente…) ; une VMA
+ * ou un temps de course explicites remplacent l'allure de référence du niveau,
+ * et les fichiers FIT l'emportent sur les deux.
  */
 export function buildRunPredictionConfigFromRhythm(
   rhythm: RhythmState,

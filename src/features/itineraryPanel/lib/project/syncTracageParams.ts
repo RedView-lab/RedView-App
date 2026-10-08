@@ -10,12 +10,12 @@ export interface TracageSyncResult {
 }
 
 /**
- * Returns synchronized parameters when the user changes "Type d'activité".
- * Automatically updates:
- * - surface knob (Tarmac / Paved / Gravel / Other)
- * - all 8 "Paramètres additionnels" (Dénivelé, Pente max, Axes majeurs, Voies cyclables,
+ * Renvoie les paramètres synchronisés quand l'utilisateur change « Type d'activité ».
+ * Met automatiquement à jour :
+ * - le curseur de surface (Bitume / Revêtu / Gravier / Autre)
+ * - les 8 « Paramètres additionnels » (Dénivelé, Pente max, Axes majeurs, Voies cyclables,
  *   Bois, Intersections, Ferry, Villes)
- * - routing priorities (duration, distance, elevation, tranquility)
+ * - les priorités de routage (durée, distance, dénivelé, tranquillité)
  */
 export function syncTracageOnActivityChange(
   activity: ActivityType,
@@ -59,8 +59,8 @@ export function syncTracageOnActivityChange(
     }
 
     case 'trail': {
-      // Trail: singletracks and mountain paths; SAC ceiling set per mode
-      // by the BRF generator (T2 comfort / T3 vitesse / T4 aventure).
+      // Trail : singletracks et sentiers de montagne ; plafond SAC fixé par mode
+      // par le générateur de BRF (T2 confort / T3 vitesse / T4 aventure).
       const isComfort = mode === 'comfort';
       const isAventure = mode === 'aventure';
 
@@ -94,7 +94,7 @@ export function syncTracageOnActivityChange(
     }
 
     case 'mtb': {
-      // Matches Figma node 5918:112682 and user's reference screenshot
+      // Conforme au nœud Figma 5918:112682 et à la capture de référence de l'utilisateur
       const isComfort = mode === 'comfort';
       const isAventure = mode === 'aventure';
 
@@ -197,8 +197,8 @@ export function syncTracageOnActivityChange(
 }
 
 /**
- * Returns synchronized parameters when the user changes "Mode de traçage".
- * Dynamically updates:
+ * Renvoie les paramètres synchronisés quand l'utilisateur change « Mode de traçage ».
+ * Met à jour dynamiquement :
  * - Dénivelé (elevationPreference)
  * - Pente max (maxSlopePercent)
  * - Intersections (turns)
@@ -206,7 +206,7 @@ export function syncTracageOnActivityChange(
  * - Voies cyclables (bikeLanes)
  * - Axes majeurs (majorRoads)
  * - Villes (cities)
- * - routing priorities
+ * - les priorités de routage
  */
 export function syncTracageOnTracingModeChange(
   newMode: TracingModeType,
@@ -225,11 +225,12 @@ const SURFACE_INDEX: Record<SurfaceType, number> = {
 const ORDERED_SURFACES: SurfaceType[] = ['tarmac', 'paved', 'gravel', 'other'];
 
 /**
- * Returns synchronized parameters when the user modifies the dual-knob surface range [surfaceMin, surfaceMax].
- * Supports:
- * - Excluding tarmac (surfaceMin > 'tarmac')
- * - Excluding other (surfaceMax < 'other')
- * - Superposition (surfaceMin === surfaceMax) to strictly prioritize a single surface type
+ * Renvoie les paramètres synchronisés quand l'utilisateur modifie la plage de
+ * surface à deux curseurs [surfaceMin, surfaceMax].
+ * Prend en charge :
+ * - l'exclusion du bitume (surfaceMin > 'tarmac')
+ * - l'exclusion de l'autre (surfaceMax < 'other')
+ * - la superposition (surfaceMin === surfaceMax) pour prioriser strictement un seul type de surface
  */
 export function syncTracageOnSurfaceRangeChange(
   surfaceMin: SurfaceType,
@@ -298,8 +299,8 @@ export function syncTracageOnSurfaceRangeChange(
     return { roadTypes: updates };
   }
 
-  // Range of surfaces:
-  // Tarmac / Road
+  // Plage de surfaces :
+  // Bitume / route
   if (minIdx === 0) {
     updates.road = currentActivity === 'road' ? 'prefer' : 'tolerate';
     if (maxIdx <= 1) {
@@ -310,7 +311,7 @@ export function syncTracageOnSurfaceRangeChange(
     updates.road = 'avoid';
     updates.majorRoads = 'forbid';
   } else {
-    // minIdx >= 2 (only gravel or other)
+    // minIdx >= 2 (gravier ou autre seulement)
     updates.road = 'forbid';
     updates.majorRoads = 'forbid';
   }
@@ -325,7 +326,7 @@ export function syncTracageOnSurfaceRangeChange(
     updates.woods = 'prefer';
   }
 
-  // Singletrack / offroad ('other')
+  // Singletrack / hors-piste ('other')
   if (maxIdx < 3) {
     updates.singletrack = 'forbid';
     updates.offroad = 'forbid';

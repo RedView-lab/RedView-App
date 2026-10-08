@@ -46,14 +46,15 @@ export function projectDistanceAlongRouteM(
   return projected?.distanceM ?? null;
 }
 
-/** Segments per bounding-box chunk of the projection index. */
+/** Segments par morceau à boîte englobante de l'index de projection. */
 const PROJECTION_CHUNK_SIZE = 32;
 
 /**
- * Per-route acceleration structure for {@link projectPointAlongRoute}:
- * per-segment cos(midLat) and per-chunk lon/lat bounding boxes. Lets the
- * nearest-segment search skip whole chunks with an exact lower bound, so a
- * 50k-point route costs ~N/32 box tests + a few chunks instead of N cos() calls.
+ * Structure d'accélération par tracé pour {@link projectPointAlongRoute} :
+ * cos(latMoyenne) par segment et boîtes englobantes lon/lat par morceau.
+ * Permet à la recherche du segment le plus proche de sauter des morceaux
+ * entiers grâce à un minorant exact : un tracé de 50 k points coûte ~N/32 tests
+ * de boîte + quelques morceaux au lieu de N appels à cos().
  */
 interface RouteProjectionIndex {
   segmentCos: Float64Array;
@@ -115,9 +116,10 @@ export function projectPointAlongRoute(
   const chunkCount = index.chunkMinLon.length;
   const segmentCount = routePoints.length - 1;
 
-  // Lower bound of the (segment-metric) squared distance from the query to any
-  // segment in a chunk: distance to the chunk's lon/lat box, lon scaled by the
-  // smallest cos in the chunk (segment metric scales lon by cos >= that).
+  // Minorant du carré de la distance (métrique du segment) de la requête à tout
+  // segment d'un morceau : distance à la boîte lon/lat du morceau, lon mise à
+  // l'échelle par le plus petit cos du morceau (la métrique du segment met lon à
+  // l'échelle par un cos >= celui-ci).
   const chunkBoundSq = new Float64Array(chunkCount);
   let firstChunk = 0;
   for (let chunk = 0; chunk < chunkCount; chunk += 1) {
@@ -157,7 +159,7 @@ export function projectPointAlongRoute(
       const projectedY = ay + t * dy;
       const distanceSq = ((px - projectedX) * (px - projectedX)) + ((py - projectedY) * (py - projectedY));
       if (distanceSq > bestDistanceSq) continue;
-      // Ties keep the earliest segment, as a plain in-order scan would.
+      // À égalité, garder le premier segment, comme le ferait un parcours dans l'ordre.
       if (distanceSq === bestDistanceSq && segment >= bestSegmentStart) continue;
       bestDistanceSq = distanceSq;
       bestSegmentStart = segment;
@@ -165,7 +167,7 @@ export function projectPointAlongRoute(
     }
   };
 
-  // Seed with the closest chunk to get a tight bound, then prune the rest.
+  // Partir du morceau le plus proche pour avoir une borne serrée, puis élaguer le reste.
   scanChunk(firstChunk);
   for (let chunk = 0; chunk < chunkCount; chunk += 1) {
     if (chunk === firstChunk || chunkBoundSq[chunk] > bestDistanceSq) continue;

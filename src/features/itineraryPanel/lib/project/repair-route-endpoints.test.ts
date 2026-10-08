@@ -34,7 +34,7 @@ function routedItinerary(fromKm: number, toKm: number, extraPoints: { head?: { l
 
 describe('repairRouteEndpointArtifacts', () => {
   it('removes the old start left before the new one (straight line)', () => {
-    // Start moved from km 0 to km 30: the old start (km 0) stayed as first point.
+    // Départ déplacé du km 0 au km 30 : l'ancien départ (km 0) est resté en premier point.
     const broken = routedItinerary(30, 60, { head: at(0) });
 
     const repaired = repairRouteEndpointArtifacts(broken);
@@ -72,7 +72,7 @@ describe('repairRouteEndpointArtifacts', () => {
   });
 
   it('keeps a start snapped onto the network away from the clicked point', () => {
-    // Start clicked 80 m west of the road: the route starts at its projection.
+    // Départ cliqué à 80 m à l'ouest de la route : le tracé démarre à sa projection.
     const itinerary = routedItinerary(0, 10);
     const clicked = { lat: at(0).lat, lon: 6 - 80 / (111_320 * Math.cos((44 * Math.PI) / 180)) };
     itinerary.timeline[0] = { ...itinerary.timeline[0]!, ...clicked };

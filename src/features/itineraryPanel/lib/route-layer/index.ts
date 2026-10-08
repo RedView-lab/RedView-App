@@ -1,5 +1,5 @@
 /**
- * Public route-layer barrel.
+ * Barrel public de la couche des tracés.
  */
 
 export {

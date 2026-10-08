@@ -1,46 +1,46 @@
 /**
- * Lightweight wrapper around the Mapbox Geocoding v5 "places" endpoint.
+ * Enveloppe légère autour du point d'accès « places » de Mapbox Geocoding v5.
  *
- * We only need forward search (text → list of suggestions) for the
- * itinerary's Départ / Fin search inputs. No reverse lookup, no session
- * tokens — keep it small.
+ * On n'a besoin que de la recherche directe (texte → liste de suggestions) pour
+ * les champs de recherche Départ / Fin de l'itinéraire. Pas de recherche
+ * inverse, pas de jetons de session — rester petit.
  */
 
 import { MAPBOX_TOKEN } from '@/features/map3d/lib/mapbox.config';
 
 export interface GeocodeSuggestion {
-  /** Mapbox feature id (used as React key). */
+  /** Id de l'élément Mapbox (utilisé comme clé React). */
   id: string;
-  /** Primary label, e.g. "Annecy". */
+  /** Libellé principal, par ex. « Annecy ». */
   name: string;
-  /** Full place_name, e.g. "Annecy, Haute-Savoie, France". */
+  /** place_name complet, par ex. « Annecy, Haute-Savoie, France ». */
   fullName: string;
-  /** WGS84 longitude. */
+  /** Longitude WGS84. */
   lon: number;
-  /** WGS84 latitude. */
+  /** Latitude WGS84. */
   lat: number;
 }
 
 export interface GeocodeOptions {
-  /** Bias results around this lon/lat (current map center). */
+  /** Oriente les résultats autour de ce lon/lat (centre actuel de la carte). */
   proximity?: { lon: number; lat: number };
-  /** Max number of results (Mapbox cap = 10). */
+  /** Nombre maximal de résultats (plafond Mapbox = 10). */
   limit?: number;
-  /** ISO-639 language. Defaults to fr. */
+  /** Langue ISO-639. fr par défaut. */
   language?: string;
-  /** ISO-3166 country filter, comma-separated, e.g. "fr,be,ch". */
+  /** Filtre de pays ISO-3166, séparés par des virgules, par ex. « fr,be,ch ». */
   countries?: string;
   signal?: AbortSignal;
 }
 
 export interface ReverseGeocodeOptions {
-  /** Max number of candidate features to inspect. */
+  /** Nombre maximal d'éléments candidats à examiner. */
   limit?: number;
-  /** ISO-639 language. Defaults to fr. */
+  /** Langue ISO-639. fr par défaut. */
   language?: string;
-  /** ISO-3166 country filter, comma-separated, e.g. "fr,be,ch". */
+  /** Filtre de pays ISO-3166, séparés par des virgules, par ex. « fr,be,ch ». */
   countries?: string;
-  /** Maximum distance from the query point to accept a settlement label. */
+  /** Distance maximale au point de requête pour accepter un libellé de localité. */
   maxDistanceMeters?: number;
   signal?: AbortSignal;
 }
@@ -81,9 +81,10 @@ const ENDPOINT = 'https://api.mapbox.com/geocoding/v5/mapbox.places';
 const ICONIC_FALLBACK_ENDPOINT = '/api/geocode-iconic';
 
 // ---------------------------------------------------------------------------
-// Production hardening: small in-memory LRU cache + in-flight dedup + bounded
-// retry on transient errors (429 / 5xx / network). Keeps the public API
-// unchanged so callers (PlaceSearchInput, etc.) require no edits.
+// Durcissement pour la production : petit cache LRU en mémoire + déduplication
+// des requêtes en cours + nouvel essai borné sur les erreurs passagères
+// (429 / 5xx / réseau). L'API publique reste inchangée : les appelants
+// (PlaceSearchInput, etc.) n'ont rien à modifier.
 // ---------------------------------------------------------------------------
 
 const FORWARD_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min
@@ -130,7 +131,7 @@ function readForwardCache(key: string): GeocodeSuggestion[] | null {
     forwardCache.delete(key);
     return null;
   }
-  // LRU touch
+  // Rafraîchissement LRU
   forwardCache.delete(key);
   forwardCache.set(key, entry);
   return entry.value;
@@ -370,19 +371,19 @@ async function fetchWithRetry(url: string, signal?: AbortSignal): Promise<Respon
       }
       lastError = err;
     }
-    // Exponential backoff with light jitter; bail out cleanly on abort.
+    // Recul exponentiel avec un léger aléa ; sortie propre en cas d'annulation.
     const delay = RETRY_BASE_DELAY_MS * 2 ** (attempt - 1) + Math.floor(Math.random() * 100);
     await sleep(delay, signal);
   }
-  // Unreachable, but keeps TypeScript happy.
+  // Inatteignable, mais satisfait TypeScript.
   throw lastError instanceof Error ? lastError : new GeocoderError('Unknown geocoder error', 0, true);
 }
 
 export { formatGpsCoordinateLabel } from './coordinateLabel';
 
 /**
- * Forward-geocode a free-text query. Returns an empty array for empty
- * inputs or when the Mapbox token is missing.
+ * Géocode en direct une requête en texte libre. Renvoie un tableau vide pour
+ * une saisie vide ou quand le jeton Mapbox manque.
  */
 export async function geocodePlaces(
   query: string,
@@ -401,11 +402,11 @@ export async function geocodePlaces(
   const cached = readForwardCache(cacheKey);
   if (cached) return cached;
 
-  // Coalesce concurrent identical requests so rapid typing or
-  // simultaneous mounts cannot hammer the Mapbox endpoint.
+  // Regrouper les requêtes identiques simultanées pour qu'une frappe rapide ou
+  // des montages simultanés ne puissent pas marteler le point d'accès Mapbox.
   const existing = inFlight.get(cacheKey);
   if (existing) {
-    // Honor caller cancellation without aborting the shared request.
+    // Respecter l'annulation de l'appelant sans interrompre la requête partagée.
     if (opts.signal) {
       return new Promise<GeocodeSuggestion[]>((resolve, reject) => {
         const onAbort = () => reject(new DOMException('Aborted', 'AbortError'));
@@ -488,7 +489,7 @@ export async function geocodePlaces(
   try {
     return await promise;
   } finally {
-    // Defer eviction so any other consumer awaiting the same key still sees it.
+    // Différer l'éviction pour qu'un autre consommateur qui attend la même clé la voie encore.
     queueMicrotask(() => {
       if (inFlight.get(cacheKey) === promise) inFlight.delete(cacheKey);
     });
@@ -516,10 +517,10 @@ export async function reverseGeocodeSettlement(
   const json = (await res.json()) as MapboxResponse;
   const features = json.features ?? [];
 
-  // First pass: find the closest precise feature (address / neighborhood)
-  // within the distance cap, and use its enclosing settlement context for
-  // the label. These features have a real point geometry, so the cap is
-  // meaningful.
+  // Première passe : trouver l'élément précis le plus proche (adresse / quartier)
+  // dans la limite de distance, et utiliser le contexte de localité qui l'englobe
+  // pour le libellé. Ces éléments ont une vraie géométrie ponctuelle, la limite
+  // a donc un sens.
   for (const feature of features) {
     const placeType = feature.place_type ?? [];
     const isPrecise =
@@ -548,10 +549,11 @@ export async function reverseGeocodeSettlement(
     };
   }
 
-  // Second pass: fall back to any enclosing settlement feature. Its center
-  // is a city centroid which can be several kilometers from the query
-  // point, so we do NOT apply the distance cap here — Mapbox only returns
-  // the `place` / `locality` whose polygon contains the query coordinates.
+  // Seconde passe : se rabattre sur n'importe quel élément de localité
+  // englobant. Son centre est le centroïde d'une ville, qui peut être à
+  // plusieurs kilomètres du point de requête : on n'applique donc PAS la limite
+  // de distance ici — Mapbox ne renvoie que le `place` / `locality` dont le
+  // polygone contient les coordonnées de la requête.
   for (const feature of features) {
     const placeType = feature.place_type ?? [];
     if (!placeType.includes('place') && !placeType.includes('locality')) continue;

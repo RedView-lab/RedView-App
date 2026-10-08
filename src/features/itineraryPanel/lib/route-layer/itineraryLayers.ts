@@ -32,10 +32,11 @@ import { planActiveRouteRestack } from './routeStacking';
 const ROUTE_LINE_OCCLUSION_OPACITY = 0;
 
 const routeLineMetricsState = new WeakMap<MapboxMap, Map<string, boolean>>();
-// Per-map signature cache: sourceId -> last applied option+content signature.
-// Lets upsertRouteLayer skip setData / paint-property churn when nothing
-// (geometry, color, width, opacity, render mode, slope bands) has changed —
-// which is the common case during styledata/sourcedata storms.
+// Cache de signatures par carte : sourceId -> dernière signature d'options +
+// contenu appliquée. Permet à upsertRouteLayer de sauter setData / les
+// modifications de propriétés de peinture quand rien (géométrie, couleur,
+// largeur, opacité, mode de rendu, bandes de pente) n'a changé — le cas
+// courant pendant les rafales styledata/sourcedata.
 const routeAppliedSignatureState = new WeakMap<MapboxMap, Map<string, string>>();
 
 function getRouteAppliedSignatureRegistry(map: MapboxMap): Map<string, string> {
@@ -116,7 +117,7 @@ export function setPaintPropertyIfChanged(
       map.setPaintProperty(layerId, property, value as never);
     }
   } catch {
-    /* map may be tearing down */
+    /* la carte est peut-être en cours de destruction */
   }
 }
 
@@ -131,7 +132,7 @@ export function setLayoutPropertyIfChanged(
       map.setLayoutProperty(layerId, property, value as never);
     }
   } catch {
-    /* map may be tearing down */
+    /* la carte est peut-être en cours de destruction */
   }
 }
 
@@ -139,7 +140,7 @@ function removeLayerIfPresent(map: MapboxMap, layerId: string): void {
   try {
     if (map.getLayer(layerId)) map.removeLayer(layerId);
   } catch {
-    /* map may be tearing down */
+    /* la carte est peut-être en cours de destruction */
   }
 }
 
@@ -226,9 +227,10 @@ export function hasRouteLayer(map: MapboxMap, itineraryId: string): boolean {
 }
 
 /**
- * Mounts or updates one itinerary's trace. Returns false when the map could
- * not take it (style being replaced, map tearing down): the caller must retry,
- * the applied signature is only recorded once every layer is in place.
+ * Monte ou met à jour la trace d'un itinéraire. Renvoie false quand la carte
+ * n'a pas pu la prendre (style en cours de remplacement, carte en cours de
+ * destruction) : l'appelant doit réessayer, la signature appliquée n'est
+ * enregistrée qu'une fois toutes les couches en place.
  */
 export function upsertRouteLayer(
   map: MapboxMap,
@@ -257,7 +259,7 @@ export function upsertRouteLayer(
 
   let existing = map.getSource(srcId) as GeoJSONSource | undefined;
 
-  // If the route is hidden:
+  // Si le tracé est masqué :
   if (!opts.visible) {
     if (existing || map.getLayer(lineId)) {
       setRouteLayerVisibility(map, itineraryId, false);
@@ -266,7 +268,7 @@ export function upsertRouteLayer(
     return true;
   }
 
-  // Short-circuit: if the trace is mounted and nothing changed, do nothing.
+  // Court-circuit : si la trace est montée et que rien n'a changé, ne rien faire.
   if (
     existing
     && map.getLayer(lineId)
@@ -276,7 +278,7 @@ export function upsertRouteLayer(
     try {
       raiseRouteLayer(map, itineraryId);
     } catch {
-      /* map may be tearing down */
+      /* la carte est peut-être en cours de destruction */
     }
     return true;
   }
@@ -512,8 +514,8 @@ export function upsertRouteLayer(
     lineMetricsRegistry.set(itineraryId, renderSpec.requiresLineMetrics);
     raiseRouteLayer(map, itineraryId);
   } catch {
-    // Style being replaced / map tearing down: leave the signature unset so
-    // the next replay rebuilds whatever is missing.
+    // Style en cours de remplacement / carte en cours de destruction : laisser la
+    // signature vide pour que le prochain rejeu reconstruise ce qui manque.
     return false;
   }
   appliedSignatureRegistry.set(itineraryId, optionSignature);
@@ -542,7 +544,7 @@ function raiseRouteLayer(map: MapboxMap, itineraryId: string): void {
     if (map.getLayer(dirtPatternId)) map.moveLayer(dirtPatternId);
     if (map.getLayer(sandPatternId)) map.moveLayer(sandPatternId);
   } catch {
-    /* map may be tearing down */
+    /* la carte est peut-être en cours de destruction */
   }
 }
 
@@ -667,7 +669,7 @@ export function stackActiveRouteOnTop(map: MapboxMap, activeItineraryId: string,
       map.moveLayer(layerId, beforeId);
     }
   } catch {
-    /* style being replaced: the next replay restacks */
+    /* style en cours de remplacement : le prochain rejeu réempile */
   }
 }
 

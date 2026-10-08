@@ -71,9 +71,9 @@ export function hasCorruptedElevations(
 }
 
 /**
- * Median of the first `size` values, sorted in place (insertion sort: the
- * window holds at most 9 values, and a per-point array + sort cost most of
- * the cleaning of a long track).
+ * Médiane des `size` premières valeurs, triées sur place (tri par insertion : la
+ * fenêtre contient au plus 9 valeurs, et un tableau + un tri par point coûtaient
+ * l'essentiel du nettoyage d'une longue trace).
  */
 function medianInPlace(values: Float64Array, size: number): number {
   for (let i = 1; i < size; i++) {

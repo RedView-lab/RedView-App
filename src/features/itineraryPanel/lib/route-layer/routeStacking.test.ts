@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { planActiveRouteRestack } from './routeStacking';
 
-/** Applies the moves like Mapbox's `moveLayer(layerId, beforeId)`. */
+/** Applique les déplacements comme `moveLayer(layerId, beforeId)` de Mapbox. */
 function applyMoves(order: string[], moves: ReturnType<typeof planActiveRouteRestack>): string[] {
   const next = [...order];
   for (const { layerId, beforeId } of moves) {

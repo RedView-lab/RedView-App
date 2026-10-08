@@ -1,9 +1,9 @@
 import { routeLengthM } from '@/features/poi/lib/gpx-loader';
 import { translateAppText } from '@/shared/i18n';
 
-// Concrete modules, not the geocoding / route-metrics barrels: this module is
-// on the project browser's initial load (project normalisation), and the
-// barrels pulled the Mapbox geocoder and the BRouter client into it.
+// Modules concrets, pas les barrels geocoding / route-metrics : ce module est
+// sur le chargement initial du navigateur de projets (normalisation du projet),
+// et les barrels y tiraient le géocodeur Mapbox et le client BRouter.
 import { formatGpsCoordinateLabel } from '../geocoding/coordinateLabel';
 import { cleanAndInterpolateElevations } from '../route-metrics/elevationSanitizer';
 import { computeRouteElevationMetrics, computeRouteSurfaceMetricsFromPoints } from '../route-metrics/metrics';

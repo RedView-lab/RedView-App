@@ -12,9 +12,9 @@ import { normalizeDiscipline } from '@/shared/lib/discipline';
 import { createDefaultControlPanelPersistedState } from '../../../controlPanel/lib/persistedState';
 import { DEFAULT_VIEW } from '../../../map3d/lib/mapbox.config';
 import { createDefaultExpertState } from '../../expert/defaults';
-// Concrete module, not the route-metrics barrel: defaultState is on the project
-// browser's initial load, and the barrel chained surfaceAnalysis → brouter (BRF
-// profiles, error messages) and terrain tiles into it.
+// Module concret, pas le barrel route-metrics : defaultState est sur le
+// chargement initial du navigateur de projets, et le barrel y enchaînait
+// surfaceAnalysis → brouter (profils BRF, messages d'erreur) et les tuiles de terrain.
 import { cleanAndInterpolateElevations, hasCorruptedElevations } from '../route-metrics/elevationSanitizer';
 import { buildImportedRouteMetrics } from '../routes/imported-route';
 import { HIDDEN_PANEL_POI_CATEGORIES } from './poiRows';
@@ -104,16 +104,16 @@ function normalizeItineraryPoiState(poi?: Partial<PoiState> | null): PoiState {
 }
 
 /**
- * Defaults for a brand-new session ("début d'utilisation").
+ * Valeurs par défaut d'une toute nouvelle session (« début d'utilisation »).
  *
- * Rules applied (inferred from the Figma dev notes):
- * - No project has been saved yet → `savedAt` & `sizeBytes` are null.
- * - Title placeholder is "Nouveau projet".
- * - A single default itinerary exists ("Itinéraire 1") with empty data.
- * - Priorities are centered (50 / 100).
- * - Road-type selects match the Figma defaults (Éviter / Prioriser / …).
- * - Rhythm is empty: no date / no time, checkboxes off, inputs empty.
- * - Timeline only contains a Départ and Fin placeholder row.
+ * Règles appliquées (déduites des notes de développement Figma) :
+ * - Aucun projet n'a encore été enregistré → `savedAt` et `sizeBytes` sont null.
+ * - Le texte indicatif du titre est « Nouveau projet ».
+ * - Un seul itinéraire par défaut existe (« Itinéraire 1 ») avec des données vides.
+ * - Les priorités sont centrées (50 / 100).
+ * - Les listes de types de route reprennent les valeurs par défaut de Figma (Éviter / Prioriser / …).
+ * - Le rythme est vide : pas de date / pas d'heure, cases décochées, champs vides.
+ * - La timeline ne contient qu'une ligne Départ et une ligne Fin provisoires.
  */
 
 export const ITINERARY_COLORS = [
@@ -333,8 +333,8 @@ export function createDefaultItinerary(
 export function createDefaultAnalysisPanelState(): AnalysisPanelState {
   return {
     xMode: 'distance',
-    // Default to a plain elevation profile with Axis 2 disabled.
-    // Users can enable Axis 2 (speed, power, temp, etc.) from the chart toolbar.
+    // Par défaut, un simple profil d'altitude avec l'axe 2 désactivé.
+    // Les utilisateurs peuvent activer l'axe 2 (vitesse, puissance, température, etc.) depuis la barre d'outils du graphique.
     axis1: 'Altitude',
     axis2: null,
     filters: {
@@ -355,19 +355,19 @@ export function createDefaultAnalysisPanelState(): AnalysisPanelState {
 }
 
 /**
- * Default project for a freshly created project.
+ * Projet par défaut d'un projet fraîchement créé.
  *
- * Product rules for a brand-new project:
- * - The itinerary list starts EMPTY: the user creates their own
- *   itineraries / variants / imports from the itinerary menu.
- * - Consequently the itinerary menu below it (tracage / rythme / POI) has
- *   nothing to edit, so it is disabled, collapsed and unselected (see
- *   `activeMode` below and the `disabled` handling in the panel).
- * - The central panel stays hidden until the first trace lands.
- * - The map camera is seeded with DEFAULT_VIEW (wide France overview).
- *   `useDashboardChrome.resolveProjectViewport` re-applies the same
- *   wide-France fallback for any project without a saved viewport, so a new
- *   project can never inherit the camera of the previously opened one.
+ * Règles produit pour un tout nouveau projet :
+ * - La liste des itinéraires commence VIDE : l'utilisateur crée ses propres
+ *   itinéraires / variantes / imports depuis le menu des itinéraires.
+ * - Par conséquent, le menu d'itinéraire dessous (traçage / rythme / POI) n'a
+ *   rien à éditer : il est désactivé, replié et sans sélection (voir
+ *   `activeMode` plus bas et la gestion de `disabled` dans le panneau).
+ * - Le panneau central reste masqué jusqu'à l'arrivée du premier tracé.
+ * - La caméra de la carte part de DEFAULT_VIEW (vue large de la France).
+ *   `useDashboardChrome.resolveProjectViewport` réapplique le même repli sur la
+ *   France entière pour tout projet sans vue enregistrée : un nouveau projet ne
+ *   peut donc jamais hériter de la caméra du projet ouvert précédemment.
  */
 export function createDefaultProject(): ItineraryProject {
   return {
@@ -393,10 +393,10 @@ export function createDefaultProject(): ItineraryProject {
 }
 
 /**
- * True if a project already contains traced content — i.e. the user has started
- * drawing (the active itinerary's start point is placed) or has loaded a route
- * (gpxRoute with points). Used to decide whether the analysis table / docked
- * panels should start expanded or collapsed.
+ * Vrai si un projet contient déjà un tracé — c'est-à-dire que l'utilisateur a
+ * commencé à dessiner (le point de départ de l'itinéraire actif est posé) ou a
+ * chargé un tracé (gpxRoute avec des points). Sert à décider si le tableau
+ * d'analyse / les panneaux ancrés doivent démarrer dépliés ou repliés.
  */
 export function hasProjectTracedContent(project: ItineraryProject | null | undefined): boolean {
   if (!project) return false;

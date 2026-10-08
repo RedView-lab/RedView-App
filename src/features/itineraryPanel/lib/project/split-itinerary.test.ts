@@ -31,7 +31,7 @@ describe('splitItineraryProject', () => {
     const [left, right] = result.project.itineraries;
     expect(left!.gpxRoute!.points).toHaveLength(9);
     expect(right!.gpxRoute!.points).toHaveLength(13);
-    // The GPX export reads originalPoints: never the whole former route.
+    // L'export GPX lit originalPoints : jamais tout l'ancien tracé.
     expect(left!.gpxRoute!.originalPoints).toHaveLength(9);
     expect(right!.gpxRoute!.originalPoints).toHaveLength(13);
     for (const half of [left!, right!]) {

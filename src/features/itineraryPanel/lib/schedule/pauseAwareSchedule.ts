@@ -22,9 +22,10 @@ export interface PauseAwareSchedule {
 }
 
 /**
- * Memo keyed on the (immutable) prediction, then on the itinerary inputs actually
- * read (`timeline`, `rhythm`). Hover handlers call this every frame; recomputing
- * the scheduled timeline each time was the main hover cost in time/hour modes.
+ * Memo indexé sur la prédiction (immuable), puis sur les entrées de l'itinéraire
+ * réellement lues (`timeline`, `rhythm`). Les gestionnaires de survol l'appellent
+ * à chaque image ; recalculer la timeline planifiée à chaque fois était le
+ * principal coût du survol dans les modes temps/heure.
  */
 const scheduleCache = new WeakMap<
   PredictionResult,

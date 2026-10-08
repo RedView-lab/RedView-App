@@ -3,7 +3,7 @@ import { cleanAndInterpolateElevations, hasCorruptedElevations, isValidElevation
 
 type Point = { lat: number; lon: number; distanceM?: number; elevationM: number | null };
 
-/** Seeded track: relief, GPS noise, holes, sentinels, spikes, cliffs, a long gap. */
+/** Trace tirée d'une graine : relief, bruit GPS, trous, sentinelles, pics, falaises, un long trou. */
 function messyTrack(count: number, seed: number, withDistance = true): Point[] {
   const rand = () => {
     seed = (seed * 1103515245 + 12345) >>> 0;
@@ -48,7 +48,7 @@ describe('cleanAndInterpolateElevations', () => {
     }));
     const cleaned = cleanAndInterpolateElevations(points);
     expect(cleaned[4]!.elevationM).toBe(1008);
-    expect(cleaned[3]).toBe(points[3]); // untouched points keep their identity
+    expect(cleaned[3]).toBe(points[3]); // les points intacts gardent leur identité
   });
 
   it('keeps a 2D track 2D', () => {

@@ -15,8 +15,8 @@ interface IgnElevationResponse {
   elevations?: number[];
 }
 
-// In-memory cache to avoid duplicate network calls for coordinates already resolved.
-// Key format: "lat:lon" quantized to ~1m precision (5 decimals).
+// Cache en mémoire pour éviter les appels réseau en double pour des coordonnées déjà résolues.
+// Format de clé : « lat:lon » quantifié à ~1 m de précision (5 décimales).
 const elevationMemoryCache = new Map<string, number>();
 const MAX_CACHE_SIZE = 100_000;
 
@@ -26,7 +26,7 @@ function toCacheKey(lat: number, lon: number): string {
 
 function rememberElevation(lat: number, lon: number, ele: number): void {
   if (elevationMemoryCache.size >= MAX_CACHE_SIZE) {
-    // Evict oldest 20%
+    // Évincer les 20 % les plus anciens
     const keysToDelete = Array.from(elevationMemoryCache.keys()).slice(0, 20_000);
     for (const key of keysToDelete) {
       elevationMemoryCache.delete(key);
@@ -116,12 +116,12 @@ async function requestIgnElevations(
 }
 
 /**
- * Sample true bare-earth terrain (MNT sol nu) elevations for points:
- * 1. France: IGN RGE ALTI (1m/5m MNT sol nu, stripped of buildings & forest)
- * 2. Outside France (or IGN failure): AWS Terrarium tiles at z12 (~27 m at
- *    45°N, SRTM / EU-DEM), decoded in the browser — beyond 400 tiles the
- *    remaining points keep their GPX / BRouter altitude
- * 3. In-memory cache for ultra-fast repeated queries
+ * Échantillonne les vraies altitudes du terrain sol nu (MNT) pour des points :
+ * 1. France : IGN RGE ALTI (MNT sol nu à 1 m/5 m, sans bâtiments ni forêt)
+ * 2. Hors de France (ou échec de l'IGN) : tuiles AWS Terrarium à z12 (~27 m à
+ *    45°N, SRTM / EU-DEM), décodées dans le navigateur — au-delà de 400 tuiles,
+ *    les points restants gardent leur altitude GPX / BRouter
+ * 3. Cache en mémoire pour des requêtes répétées ultra-rapides
  */
 export async function sampleTerrainElevationsAtPoints(
   points: PointLike[],
@@ -147,7 +147,7 @@ export async function sampleTerrainElevationsAtPoints(
     return results;
   }
 
-  // Partition uncached points into France candidates vs International candidates
+  // Répartir les points hors cache entre candidats France et candidats internationaux
   const franceSubIndices: number[] = [];
   const internationalSubIndices: number[] = [];
 
@@ -160,7 +160,7 @@ export async function sampleTerrainElevationsAtPoints(
     }
   }
 
-  // 1. Fetch France points via IGN RGE ALTI
+  // 1. Points de France via l'IGN RGE ALTI
   const ignFailedOrMissingIndices: number[] = [];
   if (franceSubIndices.length > 0) {
     for (let offset = 0; offset < franceSubIndices.length; offset += IGN_ALTIMETRY_MAX_POINTS_PER_REQUEST) {
@@ -192,7 +192,7 @@ export async function sampleTerrainElevationsAtPoints(
     }
   }
 
-  // 2. Points outside France + IGN failures: Terrarium tiles
+  // 2. Points hors de France + échecs de l'IGN : tuiles Terrarium
   const needInternational = [...internationalSubIndices, ...ignFailedOrMissingIndices];
   if (needInternational.length > 0) {
     throwIfAborted(signal);

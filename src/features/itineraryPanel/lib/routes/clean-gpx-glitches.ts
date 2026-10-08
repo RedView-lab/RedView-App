@@ -104,9 +104,9 @@ function collapseStationarySpiderwebs(points: RoutePoint[]): RoutePoint[] {
     const clusterPathM = segmentLengthM(points, index, clusterEnd);
     const netDriftM = haversineM(points[index], points[clusterEnd]);
 
-    // Check vertical relief in this cluster:
-    // If altitude changes significantly (span >= 3.5m), it is a climb, descent,
-    // or mountain switchback, NOT a stationary pause with GPS jitter!
+    // Vérifier le relief vertical de ce groupe :
+    // si l'altitude change nettement (écart >= 3,5 m), c'est une montée, une
+    // descente ou un lacet de montagne, PAS une pause à l'arrêt avec du bruit GPS !
     const clusterElevations = points
       .slice(index, clusterEnd + 1)
       .map((point) => point.elevationM)
@@ -190,14 +190,14 @@ function smoothLateralDriftSpikes(points: RoutePoint[]): RoutePoint[] {
     const dNext = haversineM(curr, after);
     const dDirect = haversineM(prev, after);
 
-    // Only process short local segments where a single vertex kicks out
+    // Ne traiter que les segments locaux courts où un seul sommet s'écarte
     if (dPrev > 45 || dNext > 45 || dDirect > 70 || dDirect < 1) continue;
 
-    // Detour ratio: path through curr vs direct line
+    // Rapport de détour : chemin par curr contre ligne directe
     const detourRatio = (dPrev + dNext) / dDirect;
     if (detourRatio < 1.22) continue;
 
-    // Project curr onto the prev -> after chord in local Mercator meters
+    // Projeter curr sur la corde prev -> after en mètres Mercator locaux
     const avgLat = (prev.lat + after.lat) / 2;
     const latScale = 111319.5;
     const lonScale = Math.cos(toRad(avgLat)) * latScale;
@@ -215,7 +215,7 @@ function smoothLateralDriftSpikes(points: RoutePoint[]): RoutePoint[] {
     const projY = t * yC;
 
     const perpDistSq = (xB - projX) ** 2 + (yB - projY) ** 2;
-    // Lateral drift between 2m (sidewalk/wall edge) and 18m (property/roof edge)
+    // Dérive latérale entre 2 m (bord de trottoir/mur) et 18 m (bord de propriété/toit)
     if (perpDistSq >= 4 && perpDistSq <= 324) {
       curr.lon = prev.lon + projX / lonScale;
       curr.lat = prev.lat + projY / latScale;

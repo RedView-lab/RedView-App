@@ -15,14 +15,14 @@ export interface RouteProfilePreset {
   roadTypes: Omit<RoadTypesState, 'applyToAllItineraries'>;
 }
 
-/** Built-in activity presets, in dropdown order (bike first, then foot). */
+/** Préréglages d'activité intégrés, dans l'ordre de la liste (vélo d'abord, puis à pied). */
 const ACTIVITY_PRESET_IDS: readonly ActivityType[] = ['road', 'gravel-default', 'mtb', 'running', 'trail'];
 
 export function isActivityPresetId(id: string | null | undefined): id is ActivityType {
   return id != null && (ACTIVITY_PRESET_IDS as readonly string[]).includes(id);
 }
 
-/** Running / Trail presets route on the pedestrian network. */
+/** Les préréglages course / trail routent sur le réseau piéton. */
 export function isFootActivity(id: string | null | undefined): id is FootDiscipline {
   return id === 'running' || id === 'trail';
 }
@@ -80,22 +80,22 @@ export function getProfilePreset(profileId: string): RouteProfilePreset | undefi
 }
 
 /**
- * Keys representing manual user adjustments:
- * - Surface sliders & tolerance
- * - Additional fields (champs additionnels)
+ * Clés représentant les ajustements manuels de l'utilisateur :
+ * - curseurs de surface et tolérance
+ * - champs additionnels
  *
- * Notice:
- * - `activityType` is excluded (switching Route / Gravel / VTT / Running / Trail is not a custom profile)
- * - `tracingMode` is excluded (switching Vitesse / Aventure / Comfort is not a custom profile)
- * - `applyToAllItineraries` is excluded (batch checkbox must never affect profile state)
+ * Remarque :
+ * - `activityType` est exclu (passer de Route / Gravel / VTT / Course / Trail n'est pas un profil personnalisé)
+ * - `tracingMode` est exclu (passer de Vitesse / Aventure / Confort n'est pas un profil personnalisé)
+ * - `applyToAllItineraries` est exclu (la case de traitement groupé ne doit jamais toucher l'état du profil)
  */
 const CUSTOMIZABLE_ROAD_TYPE_KEYS: (keyof RoadTypesState)[] = [
-  // Surface sliders & tolerance
+  // Curseurs de surface et tolérance
   'surfaceMin',
   'surfaceMax',
   'surfacePreference',
   'surfaceTolerance',
-  // Additional fields (champs additionnels)
+  // Champs additionnels
   'elevationPreference',
   'maxSlopePercent',
   'majorRoads',
@@ -111,8 +111,8 @@ const CUSTOMIZABLE_ROAD_TYPE_KEYS: (keyof RoadTypesState)[] = [
 ];
 
 /**
- * Checks whether current road types differ from a baseline reference
- * on any of the manual customizable parameters (surfaces & additional fields).
+ * Vérifie si les types de route actuels diffèrent d'une référence sur l'un des
+ * paramètres personnalisables à la main (surfaces et champs additionnels).
  */
 export function isRoadTypesCustomized(
   current: Partial<RoadTypesState>,

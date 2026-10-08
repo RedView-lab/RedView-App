@@ -1,4 +1,4 @@
-/** Reference races offered for the running prediction (distance in metres). */
+/** Courses de référence proposées pour la prédiction en course (distance en mètres). */
 export const RACE_DISTANCE_OPTIONS = [
   { distanceM: 5000, label: '5 km' },
   { distanceM: 10000, label: '10 km' },
@@ -7,8 +7,8 @@ export const RACE_DISTANCE_OPTIONS = [
 ] as const;
 
 /**
- * Parse a race time typed as "45:30", "1:45:30", "1h45" or "45" (minutes).
- * Returns seconds, or null when the text is not a plausible race time.
+ * Parse un temps de course saisi comme « 45:30 », « 1:45:30 », « 1h45 » ou « 45 » (minutes).
+ * Renvoie des secondes, ou null quand le texte n'est pas un temps de course plausible.
  */
 export function parseRaceTime(raw: string): number | null {
   const text = raw.trim().toLowerCase().replace(/\s+/g, '');
@@ -36,7 +36,7 @@ export function parseRaceTime(raw: string): number | null {
   return seconds >= 60 ? seconds : null;
 }
 
-/** "45:30" under an hour, "1:45:30" above. */
+/** « 45:30 » sous l'heure, « 1:45:30 » au-delà. */
 export function formatRaceTime(seconds: number | null | undefined): string {
   if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0) return '';
   const total = Math.round(seconds);

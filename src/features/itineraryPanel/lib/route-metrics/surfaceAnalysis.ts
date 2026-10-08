@@ -77,9 +77,9 @@ function bearingDifference(b1: number, b2: number): number {
 }
 
 /**
- * Samples key guiding waypoints along the GPX track based on:
- * - Curvature / turns (direction changes > BEARING_CHANGE_THRESHOLD_DEG)
- * - Maximum distance spacing constraint (preventing BRouter shortcuts)
+ * Échantillonne les points de passage clés le long de la trace GPX selon :
+ * - la courbure / les virages (changements de direction > BEARING_CHANGE_THRESHOLD_DEG)
+ * - une contrainte d'espacement maximal (pour éviter les raccourcis de BRouter)
  */
 function sampleGuidingWaypoints(points: RoutePointInput[], distancesM: number[]): SampledWaypoint[] {
   if (points.length <= 2) {
@@ -318,7 +318,7 @@ async function fetchChunkSurfaces(
     }
     console.warn(`[gpx-surface-analyzer] Chunk ${chunk.chunkIndex} direct route failed, trying sub-segments...`, error);
 
-    // Fallback: if chunk has > 2 waypoints, split into halves
+    // Repli : si le morceau a plus de 2 points de passage, le couper en deux
     if (waypoints.length > 2) {
       const mid = Math.floor(waypoints.length / 2);
       const leftChunk: WaypointChunk = {
@@ -355,7 +355,7 @@ async function fetchChunkSurfaces(
 }
 
 /**
- * Dispatches tasks with bounded concurrency.
+ * Répartit des tâches avec une concurrence bornée.
  */
 async function runWithConcurrencyLimit<T, R>(
   items: T[],
@@ -402,8 +402,8 @@ function resolveSurfaceAtDistance(intervals: SurfaceInterval[], distanceM: numbe
 }
 
 /**
- * Analyzes and qualifies surface types for an arbitrary GPX track of any length.
- * Optimized for ultra-distance routes (e.g. 1500 km Desertus Bikus).
+ * Analyse et qualifie les types de surface d'une trace GPX de n'importe quelle longueur.
+ * Optimisé pour les parcours ultra-distance (par ex. les 1 500 km de la Desertus Bikus).
  */
 export async function analyzeGpxSurfaces(
   points: RoutePointInput[],
