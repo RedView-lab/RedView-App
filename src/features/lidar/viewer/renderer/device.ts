@@ -3,19 +3,19 @@ import type { PlatformProfile } from '../lod/types';
 import { fitProfileToMemory, resolvePlatformInfo, type GpuAdapterInfoFields } from './platform';
 
 /**
- * Longest wait for `requestAdapter` / `requestDevice`. Some Linux Vulkan
- * stacks (and browsers with WebGPU behind a flag) never settle these
- * promises: the viewer then starts on WebGL 2 instead of hanging.
+ * Attente maximale de `requestAdapter` / `requestDevice`. Certaines piles
+ * Vulkan sous Linux (et des navigateurs avec WebGPU derrière un drapeau) ne
+ * résolvent jamais ces promesses : le viewer démarre alors en WebGL 2 au lieu de rester bloqué.
  */
 const ADAPTER_TIMEOUT_MS = 8_000;
 const DEVICE_TIMEOUT_MS = 10_000;
 
-/** CPU implementations of WebGPU: WebGL 2 is faster there. */
+/** Implémentations CPU de WebGPU : WebGL 2 y est plus rapide. */
 const SOFTWARE_ADAPTER_SIGNATURES = ['swiftshader', 'llvmpipe', 'lavapipe', 'microsoft basic', 'basic render', 'warp'];
 
 /**
- * Settles with `promise`, or rejects after `ms`. A value arriving late is
- * handed to `onLate` (e.g. a device to destroy).
+ * Se résout avec `promise`, ou rejette après `ms`. Une valeur arrivée en
+ * retard est passée à `onLate` (par ex. un device à détruire).
  */
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string, onLate?: (value: T) => void): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -48,7 +48,7 @@ function requestHighPerformanceAdapter(): Promise<GPUAdapter | null> {
   return withTimeout(navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }), ADAPTER_TIMEOUT_MS, 'requestAdapter');
 }
 
-/** `isFallbackAdapter` moved from the adapter to `adapter.info` (Chrome 136+). */
+/** `isFallbackAdapter` est passé de l'adaptateur à `adapter.info` (Chrome 136+). */
 function isFallbackAdapter(adapter: GPUAdapter): boolean {
   const legacy = (adapter as unknown as { isFallbackAdapter?: boolean }).isFallbackAdapter;
   const info = (adapter as unknown as { info?: { isFallbackAdapter?: boolean } }).info;
@@ -60,10 +60,10 @@ export type PreflightResult =
   | { ok: false; code: 'no-webgpu' | 'no-adapter' | 'fallback-adapter' | 'software-adapter'; detail: string };
 
 /**
- * Can WebGPU run the viewer here? No API (Firefox on Linux, Safari < 26),
- * no adapter (Chrome on Linux outside the GPUs it enables, blocklisted
- * driver, hardware acceleration off), or a software adapter: the WebGL 2
- * backend takes over.
+ * WebGPU peut-il faire tourner le viewer ici ? Pas d'API (Firefox sous Linux,
+ * Safari < 26), pas d'adaptateur (Chrome sous Linux hors des GPU qu'il active,
+ * pilote en liste noire, accélération matérielle désactivée), ou un adaptateur
+ * logiciel : le backend WebGL 2 prend le relais.
  */
 export async function preflightWebGPU(): Promise<PreflightResult> {
   if (!('gpu' in navigator) || !navigator.gpu) {
@@ -97,8 +97,8 @@ export async function preflightWebGPU(): Promise<PreflightResult> {
 }
 
 /**
- * High-performance adapter + device (with `timestamp-query` when offered)
- * and the platform profile that drives MSAA and the point budget.
+ * Adaptateur + device haute performance (avec `timestamp-query` quand il est
+ * proposé) et le profil de plateforme qui pilote le MSAA et le budget de points.
  */
 export async function requestLidarGpu(): Promise<{ device: GPUDevice; profile: PlatformProfile }> {
   if (!navigator.gpu) throw new Error(translateAppText('WebGPU non supporté'));
@@ -125,7 +125,7 @@ export async function requestLidarGpu(): Promise<{ device: GPUDevice; profile: P
   return { device, profile };
 }
 
-/** Viewer overlay message after a GPU device loss (the page must be reloaded). */
+/** Message de la surcouche du viewer après une perte du device GPU (la page doit être rechargée). */
 export function showDeviceLostNotice(info: GPUDeviceLostInfo): void {
   const statusEl = document.getElementById('status');
   const overlay = document.getElementById('overlay');

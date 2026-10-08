@@ -9,14 +9,14 @@ export interface LodStatsLineInput {
   lodStats: SceneLodStats;
   frameClock: FrameClock;
   renderer: LidarRenderer | null;
-  /** CPU time of the last frame (ms). */
+  /** Temps CPU de la dernière image (ms). */
   cpuFrameMs: number;
   restRefinement: RestRefinement;
   photoActive: boolean;
   tileCount: number;
   canvasWidth: number;
   canvasHeight: number;
-  /** « WebGPU » or « WebGL 2 ». */
+  /** « WebGPU » ou « WebGL 2 ». */
   backendLabel: string;
   platformTier: PlatformProfile['tier'];
 }
@@ -26,7 +26,7 @@ function cloudStats(renderer: LidarRenderer | null): string {
   return ms >= 0.05 ? ` · ${translateAppText('nuages {{ms}} ms', { ms: ms.toFixed(1) })}` : '';
 }
 
-/** The detailed stats line of the viewer (key Q toggles it). */
+/** La ligne de statistiques détaillées du viewer (la touche Q l'affiche ou la masque). */
 export function formatLodStatsLine(input: LodStatsLineInput): string {
   const { lodStats, renderer, restRefinement } = input;
   const cadence = input.frameClock.getCadence();

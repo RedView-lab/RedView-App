@@ -1,4 +1,4 @@
-/** Slider positions (1–100) of the viewer panel and the values they stand for. */
+/** Positions des curseurs (1–100) du panneau du viewer et les valeurs qu'elles représentent. */
 
 export const POINT_SIZE_MIN = 0.02;
 export const POINT_SIZE_MAX = 1.0;
@@ -59,7 +59,7 @@ export function fixedPointPixelsToPercent(pixels: number): number {
   return toSliderPercent(1 + normalized * 99);
 }
 
-/** EDL strength: slider 50 ≈ 1.0, the CloudCompare/Potree default. */
+/** Force de l'EDL : curseur à 50 ≈ 1,0, la valeur par défaut de CloudCompare/Potree. */
 export function percentToEdlStrength(percent: number): number {
   return toSliderPercent(percent) / 50;
 }

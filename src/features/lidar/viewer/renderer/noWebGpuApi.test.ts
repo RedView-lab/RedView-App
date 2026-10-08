@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 /**
- * Firefox on Linux (and Safari before 26) has no WebGPU API at all: not even
- * `GPUShaderStage` or `GPUBufferUsage`. A WebGPU constant read at module
- * level threw on import there and took the whole viewer down, WebGL 2
- * included. Node has none of those globals either.
+ * Firefox sous Linux (et Safari avant 26) n'a aucune API WebGPU : pas même
+ * `GPUShaderStage` ni `GPUBufferUsage`. Une constante WebGPU lue au niveau du
+ * module levait une erreur à l'import et faisait tomber tout le viewer, WebGL 2
+ * compris. Node n'a aucune de ces globales non plus.
  */
 describe('renderer modules without the WebGPU API', () => {
-  // Transforms the whole renderer on first import: 1.3 s alone, over the 5 s
-  // default while the gate runs tsc, ESLint, knip and madge beside it.
+  // Transforme tout le renderer au premier import : 1,3 s à lui seul, au-delà
+  // des 5 s par défaut pendant que le contrôle lance tsc, ESLint, knip et madge à côté.
   it('evaluate on import', { timeout: 30_000 }, async () => {
     expect((globalThis as { GPUShaderStage?: unknown }).GPUShaderStage).toBeUndefined();
     await expect(import('../renderer')).resolves.toHaveProperty('WebGpuLidarRenderer');

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { resolveWebglPlatformInfo, webglVendorOf } from './platform';
 
-/** Unmasked vendor/renderer pairs as browsers report them (Chrome = ANGLE, Firefox = native/sanitised). */
+/** Paires vendor/renderer démasquées telles que les navigateurs les rapportent (Chrome = ANGLE, Firefox = natif/assaini). */
 const tierOf = (vendor: string, renderer: string) => resolveWebglPlatformInfo(vendor, renderer).profile.tier;
 
 describe('resolveWebglPlatformInfo', () => {
@@ -37,7 +37,7 @@ describe('resolveWebglPlatformInfo', () => {
 
   it('keeps Apple and unknown GPUs on safe profiles', () => {
     expect(tierOf('Google Inc. (Apple)', 'ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)')).toBe('apple');
-    // Renderer hidden (privacy settings): integrated, the budget grows from the cadence.
+    // Renderer masqué (réglages de confidentialité) : intégré, le budget grandit d'après la cadence.
     expect(tierOf('', '')).toBe('integrated');
     expect(tierOf('Mozilla', 'Mozilla')).toBe('integrated');
   });

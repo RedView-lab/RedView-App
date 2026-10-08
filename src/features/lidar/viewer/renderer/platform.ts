@@ -1,11 +1,11 @@
 import type { GpuTier, PlatformProfile } from '../lod/types';
 
-// Budgets start low and are raised by the adaptive budget only when measured
-// GPU time leaves headroom; `maxBudget` is a hard ceiling per class for
-// moving frames, `restMaxBudget` for still frames (refined once the camera
-// stops). The pool holds the still selection plus a margin for turning
-// back: 20 B per point on the GPU (16 B record + 4 B shaded colour), e.g.
-// 480 MB for 24 M points.
+// Les budgets partent bas et ne sont relevés par le budget adaptatif que
+// quand le temps GPU mesuré laisse de la marge ; `maxBudget` est un plafond
+// strict par classe pour les images en mouvement, `restMaxBudget` pour les
+// images fixes (raffinées une fois la caméra arrêtée). Le pool contient la
+// sélection fixe plus une marge pour se retourner : 20 o par point sur le GPU
+// (enregistrement de 16 o + couleur ombrée de 4 o), par ex. 480 Mo pour 24 M points.
 const PROFILES: Record<GpuTier, PlatformProfile> = {
   apple: {
     tier: 'apple', minBudget: 1_000_000, initialBudget: 4_000_000, maxBudget: 9_000_000, restMaxBudget: 22_000_000,
@@ -19,9 +19,9 @@ const PROFILES: Record<GpuTier, PlatformProfile> = {
     tier: 'discrete', minBudget: 1_500_000, initialBudget: 6_000_000, maxBudget: 32_000_000, restMaxBudget: 48_000_000,
     poolBudget: 56_000_000, maxCanvasDim: 8192, dprCap: 2.0, isApple: false, motionScale: 0.75,
   },
-  // CPU rasteriser (a Linux VM or a machine whose GPU driver the browser
-  // blocks): every pixel and point costs CPU time, so few points, 1:1
-  // pixels and a half-resolution image while moving.
+  // Rastériseur CPU (une VM Linux ou une machine dont le navigateur bloque le
+  // pilote GPU) : chaque pixel et chaque point coûtent du temps CPU, donc peu de
+  // points, des pixels 1:1 et une image en demi-résolution pendant le mouvement.
   software: {
     tier: 'software', minBudget: 100_000, initialBudget: 300_000, maxBudget: 1_500_000, restMaxBudget: 4_000_000,
     poolBudget: 8_000_000, maxCanvasDim: 2048, dprCap: 1.0, isApple: false, motionScale: 0.5,
@@ -29,8 +29,8 @@ const PROFILES: Record<GpuTier, PlatformProfile> = {
 };
 
 /**
- * Machines reporting little memory (`navigator.deviceMemory` ≤ 4 GiB; integrated
- * GPUs share it) keep half the still budget and pool.
+ * Les machines annonçant peu de mémoire (`navigator.deviceMemory` ≤ 4 Gio ; les GPU
+ * intégrés la partagent) gardent la moitié du budget fixe et du pool.
  */
 export function fitProfileToMemory(profile: PlatformProfile, deviceMemoryGiB: number | undefined): PlatformProfile {
   if (deviceMemoryGiB === undefined || deviceMemoryGiB > 4) return profile;
@@ -43,12 +43,12 @@ const AMD_APU_RE = /radeon\(tm\) graphics|radeon graphics|vega \d+ graphics|\b(6
 const MOBILE_VENDOR_RE = /qualcomm|adreno|arm|mali|imagination|powervr|samsung|broadcom/;
 
 /**
- * Classifies the adapter. Chrome exposes `vendor`/`architecture` (e.g.
- * "intel"/"gen-12lp", "amd"/"rdna-3") but usually not `description`, and an
- * AMD architecture is shared by desktop cards and APUs (RX 7800 XT and
- * Radeon 860M are both "rdna-3"): `desc` should then come from
- * `probeWebglRenderer`. An adapter that stays unidentified is treated as
- * integrated: the safe budget then grows from measured GPU time.
+ * Classe l'adaptateur. Chrome expose `vendor`/`architecture` (par ex.
+ * "intel"/"gen-12lp", "amd"/"rdna-3") mais en général pas `description`, et une
+ * architecture AMD est partagée par cartes de bureau et APU (RX 7800 XT et
+ * Radeon 860M sont toutes deux "rdna-3") : `desc` doit alors venir de
+ * `probeWebglRenderer`. Un adaptateur qui reste non identifié est traité comme
+ * intégré : le budget prudent grandit alors d'après le temps GPU mesuré.
  */
 function resolveGpuTier(vendor: string, arch: string, desc: string): GpuTier {
   const haystack = `${vendor} ${arch} ${desc}`;
@@ -64,9 +64,9 @@ function resolveGpuTier(vendor: string, arch: string, desc: string): GpuTier {
 }
 
 /**
- * GPU model as reported by WebGL (e.g. "angle (amd, amd radeon(tm) 860m
- * graphics …)"), which browsers still expose when WebGPU's adapter info
- * leaves `description` empty. Empty string when unavailable.
+ * Modèle de GPU tel que WebGL le rapporte (par ex. "angle (amd, amd radeon(tm) 860m
+ * graphics …)"), que les navigateurs exposent encore quand les infos
+ * d'adaptateur de WebGPU laissent `description` vide. Chaîne vide si indisponible.
  */
 function probeWebglRenderer(): string {
   try {
@@ -83,16 +83,16 @@ function probeWebglRenderer(): string {
   }
 }
 
-/** CPU rasterisers behind a WebGL context: Mesa llvmpipe/softpipe/lavapipe, SwiftShader, Windows WARP. */
+/** Rastériseurs CPU derrière un contexte WebGL : Mesa llvmpipe/softpipe/lavapipe, SwiftShader, Windows WARP. */
 const SOFTWARE_RENDERER_RE = /swiftshader|llvmpipe|lavapipe|softpipe|basic render driver|microsoft basic render|\bwarp\b/;
 
 /**
- * GPU vendor named by a WebGL vendor/renderer string, in the vocabulary of
- * WebGPU's `adapter.info.vendor`. Covers ANGLE ("ANGLE (NVIDIA Corporation,
- * NVIDIA GeForce RTX 3060/PCIe/SSE2, OpenGL 4.5.0 NVIDIA 535.54.03)"), the
- * native Mesa strings Firefox reports on Linux ("Mesa Intel(R) UHD Graphics
- * 620 (KBL GT2)", "AMD Radeon RX 6700 XT (radeonsi, navi22, …)") and its
- * sanitised ones ("GeForce GTX 980, or similar").
+ * Fabricant de GPU nommé par une chaîne vendor/renderer WebGL, dans le
+ * vocabulaire de `adapter.info.vendor` de WebGPU. Couvre ANGLE ("ANGLE (NVIDIA Corporation,
+ * NVIDIA GeForce RTX 3060/PCIe/SSE2, OpenGL 4.5.0 NVIDIA 535.54.03)"), les
+ * chaînes Mesa natives que Firefox rapporte sous Linux ("Mesa Intel(R) UHD Graphics
+ * 620 (KBL GT2)", "AMD Radeon RX 6700 XT (radeonsi, navi22, …)") et ses
+ * chaînes assainies ("GeForce GTX 980, or similar").
  */
 export function webglVendorOf(text: string): string {
   if (/nvidia|geforce|quadro|\brtx\b|\bgtx\b/.test(text)) return 'nvidia';
@@ -104,9 +104,9 @@ export function webglVendorOf(text: string): string {
 }
 
 /**
- * Platform profile of a WebGL 2 context, from its unmasked vendor/renderer
- * strings (`WEBGL_debug_renderer_info`; empty when the browser hides them:
- * the profile then stays `integrated` and the budget grows from the cadence).
+ * Profil de plateforme d'un contexte WebGL 2, d'après ses chaînes vendor/renderer
+ * démasquées (`WEBGL_debug_renderer_info` ; vides quand le navigateur les cache :
+ * le profil reste alors `integrated` et le budget grandit d'après la cadence).
  */
 export function resolveWebglPlatformInfo(vendorString: string, rendererString: string): {
   vendor: string;
@@ -141,8 +141,8 @@ export function resolvePlatformInfo(adapterInfo: GpuAdapterInfoFields | null | u
   const arch = (adapterInfo?.architecture ?? '').toLowerCase();
   let desc = (adapterInfo?.description ?? adapterInfo?.device ?? '').toLowerCase();
   if (!desc && vendor) {
-    // Only trust the WebGL string when it names the same vendor (a laptop's
-    // WebGL context may run on the other GPU).
+    // Ne faire confiance à la chaîne WebGL que si elle nomme le même fabricant
+    // (le contexte WebGL d'un portable peut tourner sur l'autre GPU).
     const webglRenderer = probeWebglRenderer();
     if (webglRenderer.includes(vendor)) desc = webglRenderer;
   }

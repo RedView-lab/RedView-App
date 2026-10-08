@@ -1,38 +1,38 @@
 // ============================================
-// Real frame cadence of the viewer (rAF intervals)
+// Cadence réelle des images du viewer (intervalles rAF)
 // ============================================
 //
-// GPU timestamps only measure the passes of a frame. What the user sees also
-// depends on the vsync, the compositor and the main thread: on a 60 Hz
-// screen a frame of 17 ms of GPU work misses every other vsync and the
-// viewer runs at 30 fps. This clock measures the interval between
-// consecutive rendered frames while the viewer renders continuously, and
-// estimates the display refresh period from the shortest of them.
+// Les horodatages GPU ne mesurent que les passes d'une image. Ce que voit
+// l'utilisateur dépend aussi de la vsync, du compositeur et du thread
+// principal : sur un écran 60 Hz, une image de 17 ms de travail GPU rate une
+// vsync sur deux et le viewer tourne à 30 i/s. Cette horloge mesure
+// l'intervalle entre images rendues consécutives tant que le viewer rend en
+// continu, et estime la période de rafraîchissement de l'écran à partir des plus courts.
 
-/** Display refresh rates (Hz) the period estimate snaps to. */
+/** Fréquences de rafraîchissement (Hz) sur lesquelles s'aligne l'estimation de période. */
 const COMMON_REFRESH_HZ = [60, 75, 90, 100, 120, 144, 165, 180, 240];
 const SNAP_TOLERANCE = 0.08;
-/** Intervals of the cadence window (≈ 1 s at 60 Hz). */
+/** Intervalles de la fenêtre de cadence (≈ 1 s à 60 Hz). */
 const WINDOW = 60;
-/** Intervals kept for the refresh estimate. */
+/** Intervalles gardés pour l'estimation du rafraîchissement. */
 const HISTORY = 300;
 const REFRESH_MIN_SAMPLES = 30;
-/** Slowest display assumed: a GPU that never reaches the vsync must not pass for a 30 Hz screen. */
+/** Écran le plus lent supposé : un GPU qui n'atteint jamais la vsync ne doit pas passer pour un écran 30 Hz. */
 const MAX_REFRESH_MS = 1000 / 60;
 const MIN_REFRESH_MS = 1000 / 240;
-/** Shortest frame interval aimed at (≈ 90 fps): faster screens get a multiple of their period. */
+/** Intervalle d'image le plus court visé (≈ 90 i/s) : les écrans plus rapides reçoivent un multiple de leur période. */
 const MIN_TARGET_INTERVAL_MS = 11;
-/** An interval longer than this multiple of the refresh period missed at least one vsync. */
+/** Un intervalle plus long que ce multiple de la période de rafraîchissement a raté au moins une vsync. */
 const MISSED_FACTOR = 1.5;
-/** Longer gaps are pauses (tab switch, debugger, long task), not frames. */
+/** Les écarts plus longs sont des pauses (changement d'onglet, débogueur, tâche longue), pas des images. */
 const MAX_INTERVAL_MS = 1000;
 
 export interface FrameCadence {
-  /** Frames per second over the recent window (0 before two continuous frames). */
+  /** Images par seconde sur la fenêtre récente (0 avant deux images continues). */
   fps: number;
   p50Ms: number;
   p95Ms: number;
-  /** Share of the recent intervals that missed at least one vsync. */
+  /** Part des intervalles récents qui ont raté au moins une vsync. */
   missedRatio: number;
   samples: number;
 }
@@ -43,7 +43,7 @@ function percentile(sorted: Float64Array, q: number): number {
   return sorted[index]!;
 }
 
-/** Snaps a measured period to a common refresh rate when it is close to one. */
+/** Aligne une période mesurée sur une fréquence de rafraîchissement courante quand elle en est proche. */
 function snapRefreshPeriod(ms: number): number {
   for (const hz of COMMON_REFRESH_HZ) {
     const period = 1000 / hz;
@@ -52,7 +52,7 @@ function snapRefreshPeriod(ms: number): number {
   return ms;
 }
 
-/** Shortest multiple of the refresh period that is at least `MIN_TARGET_INTERVAL_MS`. */
+/** Plus petit multiple de la période de rafraîchissement d'au moins `MIN_TARGET_INTERVAL_MS`. */
 function targetIntervalFor(refreshMs: number): number {
   return refreshMs * Math.max(1, Math.ceil(MIN_TARGET_INTERVAL_MS / refreshMs - 1e-6));
 }
@@ -69,15 +69,15 @@ export class FrameClock {
   private refreshMs = MAX_REFRESH_MS;
   private cadence: FrameCadence | null = null;
   /**
-   * Interval before the last frame of the run, long ones included (0 for
-   * the first frame). Within a continuous run a long gap is a slow frame,
-   * not a pause: the cost of still frames when the GPU is not timed.
+   * Intervalle avant la dernière image de la série, longs compris (0 pour la
+   * première image). Dans une série continue, un long écart est une image
+   * lente, pas une pause : le coût des images fixes quand le GPU n'est pas chronométré.
    */
   lastIntervalMs = 0;
 
   /**
-   * A frame is rendered at rAF time `now` (ms). Returns the interval since
-   * the previous one, or 0 for the first frame of a run.
+   * Une image est rendue au temps rAF `now` (ms). Renvoie l'intervalle depuis
+   * la précédente, ou 0 pour la première image d'une série.
    */
   frame(now: number): number {
     let interval = 0;
@@ -92,22 +92,22 @@ export class FrameClock {
     return interval;
   }
 
-  /** Rendering stopped (idle, hidden tab): the next frame starts a new run. */
+  /** Le rendu s'est arrêté (repos, onglet masqué) : l'image suivante commence une nouvelle série. */
   pause(): void {
     this.lastTime = -1;
   }
 
-  /** Estimated display refresh period (ms), 60 Hz until measured. */
+  /** Période de rafraîchissement estimée de l'écran (ms), 60 Hz tant que non mesurée. */
   getRefreshMs(): number {
     return this.refreshMs;
   }
 
-  /** Frame interval the viewer aims at: 60 fps on 60/120 Hz, 72 fps on 144 Hz… */
+  /** Intervalle d'image visé par le viewer : 60 i/s sur 60/120 Hz, 72 i/s sur 144 Hz… */
   getTargetIntervalMs(): number {
     return targetIntervalFor(this.refreshMs);
   }
 
-  /** Cadence of the last continuous frames (kept while the viewer idles). */
+  /** Cadence des dernières images continues (gardée pendant que le viewer est au repos). */
   getCadence(): FrameCadence {
     if (this.cadence) return this.cadence;
     const count = this.windowCount;
@@ -138,8 +138,8 @@ export class FrameClock {
     this.cadence = null;
     if (++this.sinceRefreshUpdate >= REFRESH_MIN_SAMPLES && this.historyCount >= REFRESH_MIN_SAMPLES) {
       this.sinceRefreshUpdate = 0;
-      // Frames that met the vsync are the shortest ones: a low percentile
-      // ignores the odd early callback but not a run of missed vsyncs.
+      // Les images qui ont tenu la vsync sont les plus courtes : un percentile bas
+      // ignore un rappel précoce isolé mais pas une série de vsyncs ratées.
       const sorted = this.history.slice(0, this.historyCount).sort();
       const estimate = snapRefreshPeriod(percentile(sorted, 0.1));
       this.refreshMs = Math.min(MAX_REFRESH_MS, Math.max(MIN_REFRESH_MS, estimate));

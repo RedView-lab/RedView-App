@@ -58,9 +58,9 @@ function pushFace(
 }
 
 /**
- * `heightGridOffsetZ`: subtracted from heightGrid samples to get renderer Y —
- * 0 for a grid centred on the scene altitude (WebGPU viewer), the scene centre
- * altitude for absolute altitudes (WebGL viewer).
+ * `heightGridOffsetZ` : soustrait des échantillons de heightGrid pour obtenir le Y
+ * du renderer — 0 pour une grille centrée sur l'altitude de la scène (viewer
+ * WebGPU), l'altitude du centre de la scène pour des altitudes absolues (viewer WebGL).
  */
 export function buildTilePreviewMesh(
   coord: TileCoord,

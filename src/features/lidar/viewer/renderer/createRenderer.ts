@@ -1,23 +1,23 @@
 // ============================================
-// Rendering backend selection
+// Choix du backend de rendu
 // ============================================
 //
-// WebGPU when the browser offers a hardware adapter and the device starts;
-// otherwise WebGL 2, which draws the same viewer (see sceneRenderer.ts).
-// On Linux in 2026 that is the common case: Firefox ships WebGPU on
-// Windows and macOS only, and Chrome enables it for Intel Gen12+ and
-// NVIDIA on Wayland, behind flags elsewhere.
+// WebGPU quand le navigateur offre un adaptateur matériel et que le device
+// démarre ; sinon WebGL 2, qui dessine le même viewer (voir sceneRenderer.ts).
+// Sous Linux en 2026 c'est le cas courant : Firefox ne livre WebGPU que sous
+// Windows et macOS, et Chrome l'active pour Intel Gen12+ et NVIDIA sous
+// Wayland, derrière des drapeaux ailleurs.
 
 import { claimViewerCanvas } from './canvas';
 import { preflightWebGPU } from './device';
 import type { LidarRenderer } from './sceneRenderer';
 
-/** `auto`: WebGPU, else WebGL 2; `webgl`: WebGL 2 only (`?engine=webgl`, or after a WebGPU failure). */
+/** `auto` : WebGPU, sinon WebGL 2 ; `webgl` : WebGL 2 seulement (`?engine=webgl`, ou après un échec de WebGPU). */
 export type RendererRequest = 'auto' | 'webgl';
 
 export interface CreatedRenderer {
   renderer: LidarRenderer;
-  /** Why WebGPU is not the backend (null when it is, or when WebGL 2 was requested). */
+  /** Pourquoi WebGPU n'est pas le backend (null quand il l'est, ou quand WebGL 2 a été demandé). */
   webgpuUnavailable: string | null;
 }
 
@@ -26,17 +26,17 @@ function describe(error: unknown): string {
 }
 
 /**
- * Creates the renderer on the viewer canvas (a fresh element when a
- * previous attempt took the canvas, see `claimViewerCanvas`).
- * @throws when neither backend can start (no WebGL 2, or a driver failure).
+ * Crée le renderer sur le canvas du viewer (un élément neuf quand une
+ * tentative précédente a pris le canvas, voir `claimViewerCanvas`).
+ * @throws quand aucun backend ne peut démarrer (pas de WebGL 2, ou échec du pilote).
  */
 export async function createLidarRenderer(request: RendererRequest): Promise<CreatedRenderer> {
   let webgpuUnavailable: string | null = null;
   if (request === 'auto') {
     const preflight = await preflightWebGPU();
     if (preflight.ok) {
-      // Each backend is its own chunk, loaded only when chosen: no WebGPU
-      // module is evaluated in a browser without the API.
+      // Chaque backend est son propre chunk, chargé seulement quand il est
+      // choisi : aucun module WebGPU n'est évalué dans un navigateur sans l'API.
       const { WebGpuLidarRenderer } = await import('../renderer');
       const renderer = new WebGpuLidarRenderer();
       try {
@@ -52,7 +52,7 @@ export async function createLidarRenderer(request: RendererRequest): Promise<Cre
       console.info(`[Viewer] WebGPU unavailable (${webgpuUnavailable}): WebGL 2 backend.`);
     }
   }
-  // Loaded on demand: WebGPU sessions never fetch it.
+  // Chargé à la demande : les sessions WebGPU ne le téléchargent jamais.
   const { WebGlLidarRenderer } = await import('./webgl/glRenderer');
   return { renderer: new WebGlLidarRenderer(claimViewerCanvas()), webgpuUnavailable };
 }

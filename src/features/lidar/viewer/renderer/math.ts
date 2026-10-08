@@ -15,7 +15,7 @@ export function vec3Of(v: ArrayLike<number>): [number, number, number] {
   return [v[0]!, v[1]!, v[2]!];
 }
 
-/** Camera position in world space from a rigid view matrix (−Rᵀ·t). */
+/** Position de la caméra en espace monde à partir d'une matrice de vue rigide (−Rᵀ·t). */
 export function cameraPositionFromView(view: Float32Array): [number, number, number] {
   return [
     -(view[0]! * view[12]! + view[1]! * view[13]! + view[2]! * view[14]!),
@@ -24,7 +24,7 @@ export function cameraPositionFromView(view: Float32Array): [number, number, num
   ];
 }
 
-/** Camera forward (−Z of the view basis) in world space. */
+/** Direction avant de la caméra (−Z de la base de vue) en espace monde. */
 export function cameraForwardFromView(view: Float32Array): [number, number, number] {
   return [-view[8]!, -view[9]!, -view[10]!];
 }

@@ -1,6 +1,6 @@
-/** GPU buffers, textures and samplers created by `LidarRenderer`. */
+/** Buffers, textures et samplers GPU créés par `LidarRenderer`. */
 
-/** Vertex/colour/index buffers of an indexed overlay mesh (terrain, preview, route). */
+/** Buffers de sommets/couleurs/indices d'un maillage indexé de surcouche (terrain, aperçu, tracé). */
 export interface MeshBuffers {
   vertBuf: GPUBuffer;
   colBuf: GPUBuffer;
@@ -48,7 +48,7 @@ export function createRgbaTexture(device: GPUDevice, width: number, height: numb
   return texture;
 }
 
-/** `width`×1 colour ramp, transparent until the first `writeRampTexture`. */
+/** Rampe de couleurs `width`×1, transparente jusqu'au premier `writeRampTexture`. */
 export function createRampTexture(device: GPUDevice, width: number): GPUTexture {
   return createRgbaTexture(device, width, 1, new Uint8Array(width * 4));
 }
@@ -94,7 +94,7 @@ export function destroyMeshBuffers(mesh: MeshBuffers | null): void {
   mesh.idxBuf.destroy();
 }
 
-/** Draws an indexed mesh with `pipeline` (bind group 0 already set). */
+/** Dessine un maillage indexé avec `pipeline` (bind group 0 déjà posé). */
 export function drawMesh(pass: GPURenderPassEncoder, pipeline: GPURenderPipeline, mesh: MeshBuffers): void {
   pass.setPipeline(pipeline);
   pass.setVertexBuffer(0, mesh.vertBuf);
@@ -103,7 +103,7 @@ export function drawMesh(pass: GPURenderPassEncoder, pipeline: GPURenderPipeline
   pass.drawIndexed(mesh.count);
 }
 
-/** Heightmap rows bottom-up (texture row 0 = last grid row). */
+/** Lignes de la heightmap de bas en haut (ligne 0 de la texture = dernière ligne de la grille). */
 export function flipRows(data: Float32Array, width: number, height: number): Float32Array {
   const flipped = new Float32Array(data.length);
   for (let y = 0; y < height; y++) {
@@ -116,7 +116,7 @@ export function flipRows(data: Float32Array, width: number, height: number): Flo
   return flipped;
 }
 
-/** First `count` bytes mapped to [0, 1] (8-bit shadow map → r32float texture). */
+/** Premiers `count` octets ramenés dans [0, 1] (carte d'ombre 8 bits → texture r32float). */
 export function unitFloatsFromBytes(bytes: ArrayLike<number>, count: number): Float32Array {
   const out = new Float32Array(count);
   for (let i = 0; i < count; i++) {

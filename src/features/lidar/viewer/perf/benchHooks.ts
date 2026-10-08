@@ -9,25 +9,25 @@ export interface ViewerBenchHooksDeps {
   mode: 'orbit' | 'shots' | null;
   camera: CameraController;
   extent: number;
-  /** Scene centre in the tile CRS. */
+  /** Centre de la scène dans le CRS de la tuile. */
   cx: number;
   cy: number;
   heightSceneParams: ViewerRouteSceneParams;
   sceneLod: SceneLod;
   frameClock: FrameClock;
-  /** The orbit bench started: the render loop records its frames. */
+  /** Le bench orbit a démarré : la boucle de rendu enregistre ses images. */
   onBenchRun: (run: ViewerBench) => void;
-  /** A frame is scheduled (the loop has not gone idle). */
+  /** Une image est programmée (la boucle n'est pas au repos). */
   isRendering: () => boolean;
 }
 
-/** `?bench=orbit` and `?bench=shots`: the hooks the viewer benchmarks drive. */
+/** `?bench=orbit` et `?bench=shots` : les points d'accroche que pilotent les benchs du viewer. */
 export function installViewerBenchHooks(deps: ViewerBenchHooksDeps): void {
   const { camera, extent, cx, cy, heightSceneParams, sceneLod, frameClock } = deps;
   if (deps.mode === 'orbit') {
     void (async () => {
-      // Start from a settled scene: the first pass then measures streaming
-      // driven by the motion only.
+      // Partir d'une scène stabilisée : la première passe mesure alors le flux
+      // déclenché par le seul mouvement.
       const deadline = performance.now() + 30_000;
       await new Promise((resolve) => setTimeout(resolve, 500));
       while (!sceneLod.isIdle() && performance.now() < deadline) {
@@ -48,9 +48,9 @@ export function installViewerBenchHooks(deps: ViewerBenchHooksDeps): void {
       benchRun.start();
     })();
   } else if (deps.mode === 'shots') {
-    // Still views for visual A/B captures (script-test-bench/lidar-viewer-shots):
-    // the script sets a pose, waits until the loop goes idle (the image has
-    // reached its resting quality), then takes a screenshot.
+    // Vues fixes pour les captures A/B visuelles (script-test-bench/lidar-viewer-shots) :
+    // le script pose une vue, attend que la boucle soit au repos (l'image a
+    // atteint sa qualité au repos), puis prend une capture d'écran.
     (window as unknown as { __rvLidarShots?: unknown }).__rvLidarShots = {
       extent,
       setPose: (pose: Partial<CameraPose>) => camera.setPose(pose),

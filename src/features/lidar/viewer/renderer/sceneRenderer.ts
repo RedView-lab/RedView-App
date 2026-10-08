@@ -1,13 +1,13 @@
 // ============================================
-// Scene renderer contract, implemented by the WebGPU and WebGL 2 backends
+// Contrat du renderer de scène, implémenté par les backends WebGPU et WebGL 2
 // ============================================
 //
-// The viewer (LOD streaming, tools, comments, route editing, overlays)
-// only talks to this interface. `WebGpuLidarRenderer` (renderer.ts) is the
-// reference; `WebGlLidarRenderer` (webgl/glRenderer.ts) draws the same
-// frame with WebGL 2 where WebGPU is missing — Firefox and most Chrome
-// builds on Linux, blocklisted drivers — with the same shading, LOD, EDL
-// and progressive anti-aliasing. `createLidarRenderer` picks the backend.
+// Le viewer (flux LOD, outils, commentaires, édition de tracé, surcouches) ne
+// parle qu'à cette interface. `WebGpuLidarRenderer` (renderer.ts) est la
+// référence ; `WebGlLidarRenderer` (webgl/glRenderer.ts) dessine la même image
+// en WebGL 2 là où WebGPU manque — Firefox et la plupart des builds de Chrome
+// sous Linux, pilotes en liste noire — avec le même ombrage, LOD, EDL et
+// anticrénelage progressif. `createLidarRenderer` choisit le backend.
 
 import type { PlatformProfile } from '../lod/types';
 import type { SceneNode, SceneNodeUploader } from '../lod/sceneLod';
@@ -20,26 +20,26 @@ import type { PhotoModeRenderer } from '../photoMode/renderer/types';
 
 type RendererBackend = 'webgpu' | 'webgl';
 
-/** Point colouring: orthophoto/embedded RGB, uniform grey (relief only), LiDAR intensity, or classification. */
+/** Coloration des points : orthophoto/RVB intégré, gris uniforme (relief seul), intensité LiDAR ou classification. */
 export type PointColorMode = 'rgb' | 'grey' | 'intensity' | 'classification';
 
-/** Shader index of each colour mode (scene uniform `colorMode`). */
+/** Indice shader de chaque mode de couleur (uniform de scène `colorMode`). */
 export const COLOR_MODE_INDEX: Record<PointColorMode, number> = { rgb: 0, intensity: 1, classification: 2, grey: 3 };
 
-/** Why the GPU context went away (WebGPU device lost, WebGL context lost). */
+/** Pourquoi le contexte GPU a disparu (device WebGPU perdu, contexte WebGL perdu). */
 export interface RendererLostInfo {
   reason: string;
   message: string;
 }
 
 export interface RenderSceneOptions {
-  /** The camera is moving: reduced resolution (`motionScale`) and square sprites. */
+  /** La caméra bouge : résolution réduite (`motionScale`) et sprites carrés. */
   motion?: boolean;
-  /** Index of a still frame of the progressive anti-aliasing (0 restarts the running mean). */
+  /** Indice d'une image fixe de l'anticrénelage progressif (0 relance la moyenne courante). */
   accumulate?: number;
   /**
-   * Photo mode: the still view is already accumulated, only what changes by
-   * itself (drifting clouds and their shadows) is drawn again.
+   * Mode photo : la vue fixe est déjà accumulée, seul ce qui change de
+   * lui-même (nuages qui dérivent et leurs ombres) est redessiné.
    */
   reuseScene?: boolean;
 }
@@ -52,49 +52,49 @@ export interface RenderStats {
 
 export interface LidarRenderer extends SceneNodeUploader {
   readonly backend: RendererBackend;
-  /** Canvas drawn on: a canvas keeps its first context type, so a fallback backend gets a fresh element. */
+  /** Canvas de dessin : un canvas garde son premier type de contexte, un backend de repli reçoit donc un élément neuf. */
   readonly canvas: HTMLCanvasElement;
   readonly platform: PlatformProfile | null;
-  /** Called once when the GPU context is lost for any reason other than `destroy()`. */
+  /** Appelé une fois quand le contexte GPU est perdu pour toute autre raison que `destroy()`. */
   onDeviceLost: ((info: RendererLostInfo) => void) | null;
-  /** Photo mode (sky, clouds, point-cloud shadows): WebGPU only, null on WebGL 2. */
+  /** Mode photo (ciel, nuages, ombres du nuage de points) : WebGPU seulement, null en WebGL 2. */
   readonly photo: PhotoModeRenderer | null;
 
-  /** Scene resolution while the camera moves, as a share of the canvas (1 = off). Set before `resize`. */
+  /** Résolution de la scène pendant que la caméra bouge, en part du canvas (1 = désactivé). À poser avant `resize`. */
   motionScale: number;
-  /** Square sprites (no discard) while the camera moves. */
+  /** Sprites carrés (sans discard) pendant que la caméra bouge. */
   motionSquares: boolean;
   centerAltitude: number;
-  /** Point diameter in metres, identical for every point (projected, clamped in pixels). */
+  /** Diamètre des points en mètres, identique pour tous les points (projeté, borné en pixels). */
   pointSize: number;
-  /** Default `pointSize` of the scene; the adaptive size follows the user's changes to it. */
+  /** `pointSize` par défaut de la scène ; la taille adaptative suit les changements que l'utilisateur y apporte. */
   pointSizeReference: number;
-  /** Point diameter in device pixels; 0 = adaptive (world size, clamped in pixels). */
+  /** Diamètre des points en pixels physiques ; 0 = adaptatif (taille monde, bornée en pixels). */
   fixedPointPixels: number;
-  /** Coarser LOD levels drawn as the finest on screen grow to their own spacing. */
+  /** Les niveaux LOD plus grossiers dessinés comme les plus fins à l'écran grossissent jusqu'à leur propre espacement. */
   adaptivePointSize: boolean;
   terrainVisible: boolean;
 
-  /** View-projection of the last `updateCamera` (unjittered; LOD selection and culling). */
+  /** View-projection du dernier `updateCamera` (sans jitter ; sélection LOD et élagage). */
   readonly lastViewProj: Float32Array;
   readonly lastCamPos: Float32Array | [number, number, number];
-  /** proj[1][1] of the last camera update (LOD screen-size focal). */
+  /** proj[1][1] de la dernière mise à jour de caméra (focale de taille écran du LOD). */
   readonly lastProjScaleY: number;
 
   resize(width: number, height: number): void;
   /**
-   * Near/far distances of the current view. The WebGPU backend renders with
-   * reversed-Z and an infinite far plane and ignores them; WebGL 2 has no
-   * standard clip control (absent from Firefox), so it builds a finite
-   * projection from them.
+   * Distances proche/lointaine de la vue courante. Le backend WebGPU rend en
+   * Z inversé avec un plan lointain à l'infini et les ignore ; WebGL 2 n'a pas
+   * de clip control standard (absent de Firefox), il en construit donc une
+   * projection finie.
    */
   setDepthRange(near: number, far: number): void;
-  /** @param projMat reversed-Z, infinite-far render projection (`CameraController.getRenderProjMatrix`). */
+  /** @param projMat projection de rendu en Z inversé, lointain à l'infini (`CameraController.getRenderProjMatrix`). */
   updateCamera(viewMat: Float32Array, projMat: Float32Array, camPos: [number, number, number] | Float32Array): void;
-  /** Sub-pixel offset (canvas px) of the next `updateCamera` calls, for the accumulated still frames. */
+  /** Décalage sous-pixel (px du canvas) des prochains appels à `updateCamera`, pour les images fixes accumulées. */
   setSubpixelJitter(x: number, y: number): void;
   setEyeLevelPoints(enabled: boolean): void;
-  /** Renders the terrain, the given LOD nodes (front to back) and the overlays. */
+  /** Rend le terrain, les nœuds LOD donnés (de l'avant vers l'arrière) et les surcouches. */
   renderScene(nodes: readonly SceneNode[], options?: RenderSceneOptions): void;
 
   setEdl(enabled: boolean, strength: number, radiusPx: number): void;
@@ -112,22 +112,22 @@ export interface LidarRenderer extends SceneNodeUploader {
   clearPreviewMesh(): void;
   setRouteMesh(vertices: Float32Array, colors: Uint8Array, indices: Uint32Array, count?: number): void;
   clearRouteMesh(): void;
-  /** Translucent coloured triangles in the render frame, drawn like the route (no depth write). */
+  /** Triangles colorés translucides dans le repère de rendu, dessinés comme le tracé (sans écriture de profondeur). */
   setAnalysisMesh(vertices: Float32Array, colors: Uint8Array, indices: Uint32Array): void;
   clearAnalysisMesh(): void;
 
-  /** Drops MSAA (first step of the automatic quality downgrade); false when it was already off. */
+  /** Coupe le MSAA (première étape de la baisse de qualité automatique) ; false s'il était déjà coupé. */
   disableMsaa(): Promise<boolean>;
-  /** Max LOD nodes the GPU pool can hold at once. */
+  /** Nombre maximal de nœuds LOD que le pool GPU peut contenir à la fois. */
   getNodeCapacity(): number;
-  /** Smoothed GPU cost of the draw passes per frame in ms (0 until measured). */
+  /** Coût GPU lissé des passes de dessin par image en ms (0 tant que non mesuré). */
   getGpuFrameMs(): number;
-  /** Smoothed GPU cost of the point shading pass per frame in ms (0 until measured). */
+  /** Coût GPU lissé de la passe d'ombrage des points par image en ms (0 tant que non mesuré). */
   getGpuShadeMs(): number;
-  /** False when frame cost is not measured on the GPU (no timestamp / timer queries). */
+  /** False quand le coût d'image n'est pas mesuré sur le GPU (pas de requêtes timestamp / timer). */
   hasPreciseGpuTiming(): boolean;
   getLastRenderStats(): RenderStats;
-  /** Share of the canvas resolution the last frame was rendered at. */
+  /** Part de la résolution du canvas à laquelle la dernière image a été rendue. */
   getLastRenderScale(): number;
   destroy(): void;
 }

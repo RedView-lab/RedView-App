@@ -6,7 +6,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  /* Same density as the dashboard: --app-scale (shared/lib/appScale.ts). */
+  /* Même densité que le tableau de bord : --app-scale (shared/lib/appScale.ts). */
   zoom: var(--app-scale, 1);
   width: min(var(--viewer-panel-width, 300px), calc(100vw / var(--app-scale, 1) - 32px));
   max-height: calc((100vh - 32px) / var(--app-scale, 1));
@@ -82,7 +82,7 @@
   background: rgba(255, 255, 255, 0.14);
 }
 
-/* Floating Collapsed Rail for Left Panel */
+/* Rail flottant du panneau de gauche replié */
 .viewer-left-collapsed-rail {
   position: fixed;
   top: 50%;

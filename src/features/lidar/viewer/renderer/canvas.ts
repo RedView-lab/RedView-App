@@ -1,15 +1,15 @@
-/** Id of the viewer's canvas in viewer.html. */
+/** Id du canvas du viewer dans viewer.html. */
 const VIEWER_CANVAS_ID = 'canvas';
 
-/** Canvases an engine already took (and so a context type). */
+/** Canvas déjà pris par un moteur (et donc par un type de contexte). */
 const claimed = new WeakSet<HTMLCanvasElement>();
 
 /**
- * The viewer canvas, ready for a new rendering context. A canvas keeps the
- * first context type created on it (`webgpu`, `webgl2`), so an engine that
- * takes over from another one gets a fresh copy of the element, swapped in
- * place (same id, attributes and size). Call before any listener is
- * attached to the canvas.
+ * Le canvas du viewer, prêt pour un nouveau contexte de rendu. Un canvas garde
+ * le premier type de contexte créé dessus (`webgpu`, `webgl2`) : un moteur qui
+ * prend le relais d'un autre reçoit donc une copie neuve de l'élément,
+ * substituée sur place (même id, attributs et taille). À appeler avant
+ * d'attacher le moindre écouteur au canvas.
  */
 export function claimViewerCanvas(): HTMLCanvasElement {
   const current = document.getElementById(VIEWER_CANVAS_ID);

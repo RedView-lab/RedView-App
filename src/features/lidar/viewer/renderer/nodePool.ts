@@ -1,17 +1,19 @@
 // ============================================
-// GPU residency of streamed LOD nodes
+// Résidence GPU des nœuds LOD chargés en flux
 // ============================================
 //
-// Each resident node owns its packed point buffer (16 B/point, uploaded
-// as read from the LOD cache) and a pre-shaded colour buffer (4 B/point)
-// written by the shading compute pass. Per-node parameters live in one
-// uniform buffer, one 256-byte slot per node; the child masks of every slot
-// (adaptive point size, filtered colours) live in one storage buffer written
-// once per frame. Shading is lazy: a change of colour mode, overlay or
-// lighting only bumps an epoch, and a node is re-shaded the next time it is
-// drawn, so a slider drag costs the visible points, not the whole pool. A
-// node is also re-shaded when its drawn children change (its points switch
-// between their own and their cell-filtered colours).
+// Chaque nœud résident possède son buffer de points empaquetés (16 o/point,
+// envoyé tel que lu dans le cache LOD) et un buffer de couleurs pré-ombrées
+// (4 o/point) écrit par la passe de calcul d'ombrage. Les paramètres par nœud
+// vivent dans un seul uniform buffer, un emplacement de 256 octets par nœud ;
+// les masques d'enfants de chaque emplacement (taille de point adaptative,
+// couleurs filtrées) vivent dans un seul storage buffer écrit une fois par image.
+// L'ombrage est paresseux : un changement de mode de couleur, de surcouche ou
+// d'éclairage ne fait qu'incrémenter une époque, et un nœud est ré-ombré la
+// prochaine fois qu'il est dessiné : faire glisser un curseur coûte les points
+// visibles, pas tout le pool. Un nœud est aussi ré-ombré quand ses enfants
+// dessinés changent (ses points basculent entre leurs propres couleurs et
+// celles filtrées par cellule).
 
 import type { SceneNode } from '../lod/sceneLod';
 import { LOD_POINT_STRIDE } from '../lod/lodTile';
@@ -25,9 +27,9 @@ interface NodeGpu {
   slot: number;
   count: number;
   shadingBindGroup: GPUBindGroup;
-  /** Shading epoch the colours were written for (−1: never shaded). */
+  /** Époque d'ombrage pour laquelle les couleurs ont été écrites (−1 : jamais ombré). */
   shadedEpoch: number;
-  /** Child mask the colours were written for. */
+  /** Masque d'enfants pour lequel les couleurs ont été écrites. */
   shadedMask: number;
 }
 
@@ -36,7 +38,7 @@ export class NodeGpuPool {
   private readonly shadingLayout: GPUBindGroupLayout;
   private readonly uniformBuffer: GPUBuffer;
   readonly nodeBindGroup: GPUBindGroup;
-  /** `childMasks[slot]`, bound in group 1 of the point pipeline. */
+  /** `childMasks[slot]`, lié dans le groupe 1 du pipeline des points. */
   readonly childMaskBuffer: GPUBuffer;
   private readonly childMasks: Uint32Array<ArrayBuffer>;
   private dirtyMaskMin = Infinity;
@@ -50,7 +52,7 @@ export class NodeGpuPool {
   private shadingEpoch = 0;
   private readonly shadowMasks: GPUBuffer[] = [];
   private shadowMaskData: Uint32Array<ArrayBuffer> | null = null;
-  /** Out-of-memory errors reported (asynchronously) for node uploads. */
+  /** Erreurs de mémoire insuffisante signalées (de façon asynchrone) pour les envois de nœuds. */
   outOfMemoryCount = 0;
 
   constructor(device: GPUDevice, nodeLayout: GPUBindGroupLayout, shadingLayout: GPUBindGroupLayout, capacity: number) {
@@ -81,7 +83,7 @@ export class NodeGpuPool {
     return this.freeSlots.length > 0;
   }
 
-  /** Every node must be re-shaded (colour mode, overlay, lighting or heightmap change). */
+  /** Chaque nœud doit être ré-ombré (changement de mode de couleur, de surcouche, d'éclairage ou de heightmap). */
   invalidateShading(): void {
     this.shadingEpoch++;
   }
@@ -150,11 +152,11 @@ export class NodeGpuPool {
   }
 
   /**
-   * Prepares the nodes about to be drawn: uploads the child masks that
-   * changed (one write for the dirty range, queued before the frame's
-   * submit, so this frame's shading reads them) and encodes the shading of
-   * those whose colours are stale (new nodes, every node after
-   * `invalidateShading`, nodes whose drawn children changed).
+   * Prépare les nœuds sur le point d'être dessinés : envoie les masques
+   * d'enfants qui ont changé (une écriture pour la plage modifiée, mise en file
+   * avant le submit de l'image, pour que l'ombrage de cette image les lise) et
+   * encode l'ombrage de ceux dont les couleurs sont périmées (nouveaux nœuds,
+   * tous les nœuds après `invalidateShading`, nœuds dont les enfants dessinés ont changé).
    */
   prepareFrame(
     encoder: GPUCommandEncoder,
@@ -190,10 +192,10 @@ export class NodeGpuPool {
   }
 
   /**
-   * Per pool slot, the octants a node of a shadow-caster selection refines
-   * (`SceneNode.shadowChildMask`), read by the photo mode's shadow passes:
-   * one buffer per shadow map drawn in the same frame (`index`), created on
-   * first use.
+   * Par emplacement du pool, les octants qu'un nœud d'une sélection de
+   * projeteurs d'ombre raffine (`SceneNode.shadowChildMask`), lus par les passes
+   * d'ombre du mode photo : un buffer par carte d'ombre dessinée dans la même
+   * image (`index`), créé au premier usage.
    */
   shadowMaskBuffer(index: number): GPUBuffer {
     let buffer = this.shadowMasks[index];
@@ -207,7 +209,7 @@ export class NodeGpuPool {
     return buffer;
   }
 
-  /** Uploads the shadow masks of a caster selection (whole buffer: casters span the pool). */
+  /** Envoie les masques d'ombre d'une sélection de projeteurs (buffer entier : les projeteurs couvrent le pool). */
   writeShadowMasks(index: number, nodes: readonly SceneNode[]): void {
     const buffer = this.shadowMaskBuffer(index);
     const masks = this.shadowMaskData ??= new Uint32Array(this.capacity);
@@ -219,7 +221,7 @@ export class NodeGpuPool {
     this.device.queue.writeBuffer(buffer, 0, masks);
   }
 
-  /** Draws the casters into a shadow map (pipeline and group 0 set; group 1 = node uniform); returns the draw count. */
+  /** Dessine les projeteurs dans une carte d'ombre (pipeline et groupe 0 posés ; groupe 1 = uniform du nœud) ; renvoie le nombre de draws. */
   drawShadow(pass: GPURenderPassEncoder, nodes: readonly SceneNode[]): number {
     let draws = 0;
     for (const node of nodes) {
@@ -233,7 +235,7 @@ export class NodeGpuPool {
     return draws;
   }
 
-  /** Draws the given nodes (pipeline and groups 0/1 already set); returns the draw count. */
+  /** Dessine les nœuds donnés (pipeline et groupes 0/1 déjà posés) ; renvoie le nombre de draws. */
   draw(pass: GPURenderPassEncoder, nodes: readonly SceneNode[]): number {
     let draws = 0;
     for (const node of nodes) {

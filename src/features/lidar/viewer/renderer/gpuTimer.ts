@@ -1,38 +1,39 @@
 // ============================================
-// GPU frame timing for the adaptive point budget
+// Chronométrage GPU des images pour le budget de points adaptatif
 // ============================================
 //
-// The budget used to be driven by the JS encoding time of a frame (1–3 ms),
-// which says nothing about GPU load: it grew to the ceiling on every GPU.
-// With the optional `timestamp-query` feature, each pass of the frame writes
-// its own begin/end timestamps and only the pass durations are summed: the
-// gap between the offscreen scene pass and the canvas pass contains the wait
-// for the swap-chain image (≈ one vsync), which is not rendering cost — timed
-// as one interval it made every frame look ~20 ms and starved the budget.
-// The shading compute pass (new or stale nodes) is reported apart: the point
-// budget controls the draw passes, not the streaming.
-// Without the feature, the latency of `queue.onSubmittedWorkDone()` is used
-// as a coarse proxy (see `usesTimestamps`).
+// Le budget était piloté par le temps d'encodage JS d'une image (1–3 ms), qui
+// ne dit rien de la charge GPU : il montait au plafond sur tous les GPU.
+// Avec la fonctionnalité optionnelle `timestamp-query`, chaque passe de l'image
+// écrit ses propres horodatages de début/fin et seules les durées des passes
+// sont additionnées : l'écart entre la passe de scène hors écran et la passe du
+// canvas contient l'attente de l'image de la swap-chain (≈ une vsync), qui
+// n'est pas un coût de rendu — chronométré d'un seul tenant, il faisait paraître
+// chaque image à ~20 ms et affamait le budget.
+// La passe de calcul d'ombrage (nœuds nouveaux ou périmés) est comptée à part :
+// le budget de points pilote les passes de dessin, pas le flux.
+// Sans la fonctionnalité, la latence de `queue.onSubmittedWorkDone()` sert
+// d'approximation grossière (voir `usesTimestamps`).
 
 const READBACK_SLOTS = 3;
 const SAMPLE_BLEND = 0.35;
 /**
- * Timed passes of a frame, in encoding order. The photo mode's `photo`
- * (lighting → final) and `clouds` (march → temporal) are ranges spanning
- * several passes: begin written by the first, end by the last.
+ * Passes chronométrées d'une image, dans l'ordre d'encodage. Les `photo`
+ * (éclairage → final) et `clouds` (marche → temporel) du mode photo sont des
+ * plages couvrant plusieurs passes : début écrit par la première, fin par la dernière.
  */
 export const TIMED_PASS = { shading: 0, scene: 1, edl: 2, photo: 3, clouds: 4 } as const;
 const TIMED_PASSES = 5;
 const QUERY_COUNT = TIMED_PASSES * 2;
 const QUERY_BYTES = QUERY_COUNT * 8;
 
-/** Begin/end writes of one pass; the same shape for render and compute passes. */
+/** Écritures de début/fin d'une passe ; même forme pour les passes de rendu et de calcul. */
 export type PassTimestampWrites = GPURenderPassTimestampWrites & GPUComputePassTimestampWrites;
 
 interface ReadbackSlot {
   buffer: GPUBuffer;
   busy: boolean;
-  /** Passes (bit per index) that wrote timestamps in the frame it holds. */
+  /** Passes (un bit par indice) qui ont écrit des horodatages dans l'image qu'il contient. */
   passes: number;
 }
 
@@ -70,27 +71,27 @@ export class GpuFrameTimer {
     }
   }
 
-  /** True when frame cost comes from GPU timestamps (false: submit→done latency, includes presentation waits). */
+  /** Vrai quand le coût d'image vient des horodatages GPU (faux : latence soumission→fin, attentes de présentation comprises). */
   get usesTimestamps(): boolean {
     return this.querySet !== null;
   }
 
-  /** Smoothed GPU cost of the draw passes (scene, EDL) in ms, or 0 before the first sample. */
+  /** Coût GPU lissé des passes de dessin (scène, EDL) en ms, ou 0 avant le premier échantillon. */
   getFrameMs(): number {
     return this.hasSample ? this.drawMs : 0;
   }
 
-  /** Smoothed GPU cost of the shading compute pass per frame in ms (0 without timestamps). */
+  /** Coût GPU lissé de la passe de calcul d'ombrage par image en ms (0 sans horodatages). */
   getShadeMs(): number {
     return this.hasSample ? this.shadeMs : 0;
   }
 
-  /** Smoothed GPU cost of the photo mode's clouds per frame in ms (included in `getFrameMs`). */
+  /** Coût GPU lissé des nuages du mode photo par image en ms (compris dans `getFrameMs`). */
   getCloudMs(): number {
     return this.hasSample ? this.cloudMs : 0;
   }
 
-  /** Starts measuring a frame; returns false when every readback slot is still in flight. */
+  /** Commence la mesure d'une image ; renvoie false quand tous les emplacements de relecture sont encore en vol. */
   beginFrame(): boolean {
     if (!this.querySet) return false;
     this.frameSlot = this.slots.find((slot) => !slot.busy) ?? null;
@@ -99,8 +100,8 @@ export class GpuFrameTimer {
   }
 
   /**
-   * Timestamp writes for pass `passIndex` (see `TIMED_PASS`) of the measured
-   * frame: both ends, or only the `begin` / `end` of a range of passes.
+   * Écritures d'horodatage de la passe `passIndex` (voir `TIMED_PASS`) de
+   * l'image mesurée : les deux bouts, ou seulement le `begin` / `end` d'une plage de passes.
    */
   passTimestamps(passIndex: number, part: 'both' | 'begin' | 'end' = 'both'): PassTimestampWrites | undefined {
     if (!this.querySet || !this.frameSlot || passIndex < 0 || passIndex >= TIMED_PASSES) return undefined;
@@ -112,14 +113,14 @@ export class GpuFrameTimer {
     };
   }
 
-  /** Records the query resolve; call after the last pass, before `finish()`. */
+  /** Enregistre la résolution des requêtes ; à appeler après la dernière passe, avant `finish()`. */
   encodeResolve(encoder: GPUCommandEncoder): void {
     if (!this.querySet || !this.resolveBuffer || !this.frameSlot) return;
     encoder.resolveQuerySet(this.querySet, 0, QUERY_COUNT, this.resolveBuffer, 0);
     encoder.copyBufferToBuffer(this.resolveBuffer, 0, this.frameSlot.buffer, 0, QUERY_BYTES);
   }
 
-  /** Call right after `queue.submit()`. */
+  /** À appeler juste après `queue.submit()`. */
   afterSubmit(): void {
     if (this.destroyed) return;
     if (this.querySet) {

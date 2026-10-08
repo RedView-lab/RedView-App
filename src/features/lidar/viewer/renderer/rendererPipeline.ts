@@ -13,34 +13,34 @@ import {
   TRAJECTORY_SHADER,
 } from './shaders';
 
-/** Reversed-Z (cleared to 0, `greater`): float depth keeps precision at every distance. */
+/** Z inversé (effacé à 0, `greater`) : la profondeur flottante garde sa précision à toute distance. */
 export const SCENE_DEPTH_FORMAT: GPUTextureFormat = 'depth32float';
-/** Running mean of the still frames (linear light), see RestRefinement. */
+/** Moyenne courante des images fixes (lumière linéaire), voir RestRefinement. */
 export const ACCUMULATION_FORMAT: GPUTextureFormat = 'rgba16float';
 
 export interface RendererPipelines {
   pointPipeline: GPURenderPipeline;
-  /** Same sprites as plain squares (no discard), drawn while the camera moves. */
+  /** Mêmes sprites en carrés simples (sans discard), dessinés pendant que la caméra bouge. */
   pointPipelineSquare: GPURenderPipeline;
-  /** Chunked terrain (TerrainLod): group 1 = per-chunk push-back. */
+  /** Terrain par chunks (TerrainLod) : groupe 1 = recul par chunk. */
   terrainLodPipeline: GPURenderPipeline;
   previewPipeline: GPURenderPipeline;
   trajectoryPipeline: GPURenderPipeline;
   sunDiscPipeline: GPURenderPipeline;
   routePipeline: GPURenderPipeline;
   edlPipeline: GPURenderPipeline;
-  /** Upscales a scene rendered below the canvas resolution. */
+  /** Agrandit une scène rendue sous la résolution du canvas. */
   blitPipeline: GPURenderPipeline;
-  /** EDL (or plain copy) of a still frame blended into the accumulation target (blend constant = weight). */
+  /** EDL (ou copie simple) d'une image fixe mélangée dans la cible d'accumulation (constante de mélange = poids). */
   accumulatePipeline: GPURenderPipeline;
-  /** Accumulation target → canvas. */
+  /** Cible d'accumulation → canvas. */
   presentPipeline: GPURenderPipeline;
   shadingPipeline: GPUComputePipeline;
   sceneBindGroupLayout: GPUBindGroupLayout;
   pointParamsBindGroupLayout: GPUBindGroupLayout;
-  /** Group 2 of the point pipeline: per-node uniform, dynamic offset. */
+  /** Groupe 2 du pipeline des points : uniform par nœud, décalage dynamique. */
   nodeBindGroupLayout: GPUBindGroupLayout;
-  /** Group 1 of the terrain pipeline: push-back per chunk. */
+  /** Groupe 1 du pipeline du terrain : recul par chunk. */
   terrainLodBindGroupLayout: GPUBindGroupLayout;
   shadingBindGroupLayout: GPUBindGroupLayout;
   edlBindGroupLayout: GPUBindGroupLayout;
@@ -75,11 +75,12 @@ function depthState(compare: GPUCompareFunction, write: boolean): GPUDepthStenci
 }
 
 /**
- * Slope-scaled depth bias of the terrain mesh (reversed-Z: negative pushes
- * it back). The mesh is a smoothed ground model lying a few centimetres
- * above some ground returns; seen at a grazing angle (eye-level view, low
- * orbit) it would hide them. Pushed back where the triangle is steep in
- * depth, it only fills the holes between points, as intended.
+ * Biais de profondeur proportionnel à la pente pour le maillage du terrain
+ * (Z inversé : négatif le repousse). Le maillage est un modèle de sol lissé situé
+ * quelques centimètres au-dessus de certains retours sol ; vu en incidence
+ * rasante (vue à hauteur d'œil, orbite basse), il les cacherait. Repoussé là
+ * où le triangle est pentu en profondeur, il ne fait que boucher les trous
+ * entre les points, comme voulu.
  */
 const TERRAIN_DEPTH_SLOPE_BIAS = -4;
 
@@ -89,8 +90,8 @@ type SharedLayouts = Pick<
 >;
 
 /**
- * @param reuse layouts of a previous set (e.g. when MSAA is switched off at
- *   runtime) so bind groups created against them stay valid.
+ * @param reuse layouts d'un jeu précédent (par ex. quand le MSAA est coupé
+ *   à l'exécution) pour que les bind groups créés avec eux restent valides.
  */
 export async function createRendererPipelines(
   device: GPUDevice,
@@ -98,9 +99,9 @@ export async function createRendererPipelines(
   sampleCount: number,
   reuse?: SharedLayouts,
 ): Promise<RendererPipelines> {
-  // Read here, never at module level: browsers without WebGPU (Firefox on
-  // Linux) have no `GPUShaderStage`, and evaluating it on import broke the
-  // whole viewer there, WebGL 2 included.
+  // Lu ici, jamais au niveau du module : les navigateurs sans WebGPU (Firefox
+  // sous Linux) n'ont pas `GPUShaderStage`, et l'évaluer à l'import cassait
+  // tout le viewer là-bas, WebGL 2 compris.
   const ALL_STAGES = GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE;
   const sceneBindGroupLayout = reuse?.sceneBindGroupLayout ?? device.createBindGroupLayout({
     entries: [
@@ -119,7 +120,7 @@ export async function createRendererPipelines(
   const pointParamsBindGroupLayout = reuse?.pointParamsBindGroupLayout ?? device.createBindGroupLayout({
     entries: [
       { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
-      // Child masks of every pool slot (adaptive point size).
+      // Masques d'enfants de chaque emplacement du pool (taille de point adaptative).
       { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
     ],
   });
@@ -139,7 +140,7 @@ export async function createRendererPipelines(
       { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
       { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
       { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform', minBindingSize: NODE_UNIFORM_BYTES } },
-      // Child masks of every pool slot (filtered colours where no child is drawn).
+      // Masques d'enfants de chaque emplacement du pool (couleurs filtrées là où aucun enfant n'est dessiné).
       { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
     ],
   });
@@ -177,9 +178,9 @@ export async function createRendererPipelines(
   device.pushErrorScope('validation');
 
   const pointShader = device.createShaderModule({ code: POINT_SHADER });
-  // Opaque sprites: no blending, so no halo of half-transparent edges that
-  // write depth over the points behind them (unsorted). With MSAA the soft
-  // edge goes through alpha-to-coverage, which stays order-independent.
+  // Sprites opaques : pas de mélange, donc pas de halo de bords semi-transparents
+  // qui écrivent la profondeur par-dessus les points derrière eux (non triés).
+  // Avec le MSAA, le bord doux passe par l'alpha-to-coverage, qui reste indépendant de l'ordre.
   const pointDescriptor: GPURenderPipelineDescriptor = {
     layout: device.createPipelineLayout({
       bindGroupLayouts: [sceneBindGroupLayout, pointParamsBindGroupLayout, nodeBindGroupLayout],
@@ -188,9 +189,9 @@ export async function createRendererPipelines(
       module: pointShader,
       entryPoint: 'vs_main',
       buffers: [
-        // Packed record: u16×3 quantized position (+ class|intensity), see lodTile.ts.
+        // Enregistrement empaqueté : position quantifiée u16×3 (+ classe|intensité), voir lodTile.ts.
         { arrayStride: LOD_POINT_STRIDE, stepMode: 'instance', attributes: [{ shaderLocation: 0, offset: 0, format: 'unorm16x4' }] },
-        // Pre-shaded colour written by the shading pass.
+        // Couleur pré-ombrée écrite par la passe d'ombrage.
         { arrayStride: 4, stepMode: 'instance', attributes: [{ shaderLocation: 1, offset: 0, format: 'unorm8x4' }] },
       ],
     },

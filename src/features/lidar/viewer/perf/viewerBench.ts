@@ -1,29 +1,29 @@
 // ============================================
-// Scripted camera path measuring the real frame cadence (?bench=orbit)
+// Trajet de caméra scripté mesurant la vraie cadence d'images (?bench=orbit)
 // ============================================
 //
-// The viewer is driven along a fixed path (overview orbit, zoom + pan down
-// to the ground, grazing view) twice: the first pass streams the nodes in
-// (cold), the second finds most of them resident (warm). Every rendered
-// frame is recorded with its rAF interval, so the report shows what the
-// user sees (fps, p95, missed vsyncs) next to the measured GPU/CPU costs.
-// The camera moves through `setPose`, i.e. through the same change
-// notification as mouse input. Results land in `window.__rvLidarBench` and
-// in the console (`[LiDAR bench] {json}`), read by
+// Le viewer suit deux fois un trajet fixe (orbite d'ensemble, zoom + panoramique
+// jusqu'au sol, vue rasante) : la première passe charge les nœuds en flux
+// (à froid), la seconde en trouve la plupart résidents (à chaud). Chaque image
+// rendue est enregistrée avec son intervalle rAF, pour que le rapport montre ce
+// que voit l'utilisateur (i/s, p95, vsyncs ratées) à côté des coûts GPU/CPU mesurés.
+// La caméra bouge via `setPose`, c'est-à-dire via la même notification de
+// changement que les entrées souris. Les résultats arrivent dans
+// `window.__rvLidarBench` et dans la console (`[LiDAR bench] {json}`), lus par
 // script-test-bench/lidar-viewer-perf.
 
 import type { CameraController, CameraPose } from '../camera';
 
 export interface ViewerBenchFrame {
-  /** Smoothed GPU cost of the draw passes (ms). */
+  /** Coût GPU lissé des passes de dessin (ms). */
   drawMs: number;
-  /** Smoothed GPU cost of the shading pass (ms). */
+  /** Coût GPU lissé de la passe d'ombrage (ms). */
   shadeMs: number;
-  /** JS time of the render loop (ms). */
+  /** Temps JS de la boucle de rendu (ms). */
   cpuMs: number;
   selectedPoints: number;
   pointBudget: number;
-  /** Cumulative node uploads (see SceneLodStats.uploadedNodes). */
+  /** Envois de nœuds cumulés (voir SceneLodStats.uploadedNodes). */
   uploadedNodes: number;
   renderScale: number;
 }
@@ -35,7 +35,7 @@ interface ViewerBenchSegmentReport {
   p50Ms: number;
   p95Ms: number;
   maxMs: number;
-  /** Share of the intervals longer than 1.5 refresh periods. */
+  /** Part des intervalles plus longs que 1,5 période de rafraîchissement. */
   missedRatio: number;
   drawMs: number;
   shadeMs: number;
@@ -71,8 +71,8 @@ function smooth(t: number): number {
 }
 
 /**
- * Path over a scene of size `extent` centred on the origin; the target
- * follows the ground (`groundAt`, render frame) so the zoom ends above it.
+ * Trajet sur une scène de taille `extent` centrée sur l'origine ; la cible
+ * suit le sol (`groundAt`, repère de rendu) pour que le zoom finisse au-dessus.
  */
 function buildSegments(extent: number, groundAt: (x: number, z: number) => number): Segment[] {
   const overview = extent * 0.72;
@@ -157,7 +157,7 @@ export class ViewerBench {
   private startTime = -1;
   private lastFrameTime = -1;
   private running = false;
-  /** Frames per pass and segment. */
+  /** Images par passe et par segment. */
   private readonly frames: FrameRecord[][][];
   private readonly uploadsAtStart: number[][];
 
@@ -186,7 +186,7 @@ export class ViewerBench {
     return this.running;
   }
 
-  /** Called by the render loop after each rendered frame. */
+  /** Appelé par la boucle de rendu après chaque image rendue. */
   recordFrame(now: number, frame: ViewerBenchFrame): void {
     if (!this.running || this.startTime < 0) return;
     const position = this.locate(now);

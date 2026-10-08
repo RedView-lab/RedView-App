@@ -5,28 +5,28 @@ import type { SolarRenderState } from '../../viewer-webgl/sunlightController';
 import { COLOR_MODE_INDEX, type PointColorMode } from './sceneRenderer';
 import type { SceneUniformState } from './sceneUniforms';
 
-/** Projected point diameter bounds (device pixels) for the metre-sized mode. */
+/** Bornes du diamètre projeté des points (pixels physiques) pour le mode en mètres. */
 const POINT_MIN_PX = 1.0;
 export const POINT_MAX_PX = 64;
-/** Point diameter cap of the eye-level (first-person) view, device px. */
+/** Plafond du diamètre des points en vue à hauteur d'œil (première personne), px physiques. */
 export const EYE_LEVEL_POINT_MAX_PX = 14;
 /**
- * Adaptive size of the finest points on screen, per metre of their node's
- * surface spacing: the same 1.5 × spacing the default point size gives the
- * full-density points (see `pointSizeReference`).
+ * Taille adaptative des points les plus fins à l'écran, par mètre d'espacement
+ * en surface de leur nœud : les mêmes 1,5 × espacement que la taille de point
+ * par défaut donne aux points en pleine densité (voir `pointSizeReference`).
  */
 const ADAPTIVE_SPACING_FACTOR = 1.5;
-/** Uniform slots of the node pool (one per resident LOD node). */
+/** Emplacements d'uniform du pool de nœuds (un par nœud LOD résident). */
 export const NODE_POOL_CAPACITY = 16384;
 
-/** Filtering of an overlay colour ramp: smooth gradient, or hard steps between bands. */
+/** Filtrage de la rampe de couleurs d'une surcouche : dégradé continu, ou paliers francs entre bandes. */
 export type RampFilter = 'linear' | 'nearest';
 
 /**
- * Overlay and lighting state shared by the WebGPU and WebGL 2 renderers:
- * written by the viewer's setters, packed into the `Scene` uniform block
- * (`packSceneUniforms`). The GPU resources (textures, samplers) stay in each
- * backend; this holds only what both read the same way.
+ * État de surcouche et d'éclairage partagé par les renderers WebGPU et WebGL 2 :
+ * écrit par les setters du viewer, empaqueté dans le bloc d'uniforms `Scene`
+ * (`packSceneUniforms`). Les ressources GPU (textures, samplers) restent dans
+ * chaque backend ; ceci ne contient que ce que les deux lisent de la même façon.
  */
 export class SceneShadingState {
   hmOriginX = 0;
@@ -64,7 +64,7 @@ export class SceneShadingState {
   pointFilterMask: [number, number, number, number] = [0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff];
   colorMode: PointColorMode = 'rgb';
 
-  /** Placement of the DTM grid in the render frame. */
+  /** Placement de la grille du MNT dans le repère de rendu. */
   setHeightmapFrame(params: { originX: number; originZ: number; scaleX: number; scaleZ: number }): void {
     this.hmOriginX = params.originX;
     this.hmOriginZ = params.originZ;
@@ -72,7 +72,7 @@ export class SceneShadingState {
     this.hmScaleZ = params.scaleZ;
   }
 
-  /** Placement of the snow grid in the render frame. */
+  /** Placement de la grille de neige dans le repère de rendu. */
   setSnowFrame(params: { originX: number; originZ: number; scaleX: number; scaleZ: number }): void {
     this.snowOriginX = params.originX;
     this.snowOriginZ = params.originZ;
@@ -80,21 +80,21 @@ export class SceneShadingState {
     this.snowScaleZ = params.scaleZ;
   }
 
-  /** Visibility and opacity of the slope overlay; returns the ramp filter the colorization asks for. */
+  /** Visibilité et opacité de la surcouche des pentes ; renvoie le filtre de rampe que demande la colorisation. */
   applySlope(state: ViewerSlopeState): RampFilter {
     this.slopeEnabled = state.enabled ? 1 : 0;
     this.slopeOpacity = (state.opacity ?? 50) / 100;
     return state.colorization === 'stepped' ? 'nearest' : 'linear';
   }
 
-  /** Visibility and opacity of the altitude overlay; returns the ramp filter the colorization asks for. */
+  /** Visibilité et opacité de la surcouche d'altitude ; renvoie le filtre de rampe que demande la colorisation. */
   applyAltitude(state: ViewerAltitudeState): RampFilter {
     this.altitudeEnabled = state.enabled ? 1 : 0;
     this.altitudeOpacity = (state.opacity ?? 50) / 100;
     return state.colorization === 'stepped' ? 'nearest' : 'linear';
   }
 
-  /** Scalar part of the sunlight state (the shadow and sunlight maps are textures of each backend). */
+  /** Partie scalaire de l'état d'ensoleillement (les cartes d'ombre et d'ensoleillement sont des textures de chaque backend). */
   applySunlight(renderState: SolarRenderState): void {
     this.sunlightEnabled = renderState.enabled ? 1 : 0;
     this.sunDir = renderState.sunDir;
@@ -116,14 +116,14 @@ export class SceneShadingState {
     this.pointFilterMask = computePointFilterBitmasks(state.enabled, state.categories);
   }
 
-  /** Background of the scene: the sky colour with sunlight on, else the viewer's light blue. */
+  /** Fond de la scène : la couleur du ciel avec l'ensoleillement activé, sinon le bleu clair du viewer. */
   clearColor(): [number, number, number] {
     return this.sunlightEnabled
       ? [this.skyColor[0], this.skyColor[1], this.skyColor[2]]
       : [0.76, 0.87, 0.96];
   }
 
-  /** The `Scene` uniform block contents for this frame. */
+  /** Contenu du bloc d'uniforms `Scene` pour cette image. */
   uniformState(frame: {
     pointSize: number;
     canvasWidth: number;
@@ -172,11 +172,11 @@ export class SceneShadingState {
   }
 }
 
-/** Sprite sizing of the point passes, shared by both backends (layout of the `PointParams` block). */
+/** Dimensionnement des sprites des passes de points, partagé par les deux backends (disposition du bloc `PointParams`). */
 export interface PointSizing {
   maxPointPixels: number;
   fixedPointPixels: number;
-  /** proj[1][1] of the last camera update. */
+  /** proj[1][1] de la dernière mise à jour de caméra. */
   projScaleY: number;
   pointSize: number;
   adaptivePointSize: boolean;
@@ -184,9 +184,9 @@ export interface PointSizing {
   msaa: boolean;
 }
 
-/** Fills the `PointParams` block for scene targets of `width`×`height` (`scale` of the canvas). */
+/** Remplit le bloc `PointParams` pour des cibles de scène de `width`×`height` (`scale` du canvas). */
 export function fillPointParams(p: Float32Array, width: number, height: number, scale: number, s: PointSizing): void {
-  // Pixel sizes follow the target, so the upscaled image keeps the same point sizes.
+  // Les tailles en pixels suivent la cible : l'image agrandie garde les mêmes tailles de points.
   p[0] = POINT_MIN_PX;
   p[1] = s.maxPointPixels * scale;
   p[2] = s.fixedPointPixels * scale;
@@ -200,7 +200,7 @@ export function fillPointParams(p: Float32Array, width: number, height: number, 
     : 0;
 }
 
-/** Fills the EDL parameters (strength, radius in target px, enabled, scale). */
+/** Remplit les paramètres de l'EDL (force, rayon en px de la cible, activé, échelle). */
 export function fillEdlParams(e: Float32Array, edl: { enabled: boolean; strength: number; radiusPx: number }, scale: number): void {
   e[0] = edl.strength;
   e[1] = Math.max(1, edl.radiusPx * scale);

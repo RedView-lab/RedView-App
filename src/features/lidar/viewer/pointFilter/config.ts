@@ -87,15 +87,15 @@ export function getDefaultPointFilterCategories(): PointFilterCategoryVisibility
 }
 
 /**
- * Computes 4x 32-bit bitmasks representing classes 0..127.
- * Bit is 1 if class is visible, 0 if hidden.
+ * Calcule 4 masques de 32 bits représentant les classes 0..127.
+ * Bit à 1 si la classe est visible, à 0 si elle est masquée.
  */
 export function computePointFilterBitmasks(
   enabled: boolean,
   categories: PointFilterCategoryVisibility,
 ): [number, number, number, number] {
   if (!enabled) {
-    // All classes 0..127 enabled (all bits 1)
+    // Toutes les classes 0..127 activées (tous les bits à 1)
     return [0xffffffff >>> 0, 0xffffffff >>> 0, 0xffffffff >>> 0, 0xffffffff >>> 0];
   }
 
