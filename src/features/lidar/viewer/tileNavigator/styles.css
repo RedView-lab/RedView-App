@@ -102,7 +102,7 @@
   }
 }
 
-/* Bottom-right overlay status dock matching Figma 3047:115802 & MapOverlayStatusDock */
+/* Dock d'état en surcouche en bas à droite, conforme à Figma 3047:115802 et à MapOverlayStatusDock */
 .viewer-dock {
   position: fixed;
   right: 16px;

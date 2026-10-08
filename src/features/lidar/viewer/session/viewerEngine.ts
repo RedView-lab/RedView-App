@@ -1,18 +1,18 @@
 // ============================================
-// Viewer engine selection (`?engine=`)
+// Choix du moteur du viewer (`?engine=`)
 // ============================================
 //
-// The point-cloud viewer draws with WebGPU or WebGL 2 (same features, see
-// renderer/sceneRenderer.ts); the terrain engine (viewer-webgl/) is the
-// older orthophoto-draped DTM without points, kept as the last resort.
-//   (absent) / webgpu  → WebGPU, else WebGL 2
-//   webgl              → WebGL 2 only
-//   terrain            → terrain engine
+// Le viewer de nuage de points dessine en WebGPU ou en WebGL 2 (mêmes
+// fonctions, voir renderer/sceneRenderer.ts) ; le moteur terrain (viewer-webgl/)
+// est l'ancien MNT drapé d'orthophoto sans points, gardé en dernier recours.
+//   (absent) / webgpu  → WebGPU, sinon WebGL 2
+//   webgl              → WebGL 2 seulement
+//   terrain            → moteur terrain
 
-/** Engine of the panel's selector. */
+/** Moteur du sélecteur du panneau. */
 export type ViewerEngineKey = 'webgpu' | 'webgl' | 'terrain';
 
-/** What the URL asks for: `auto` tries WebGPU first. */
+/** Ce que demande l'URL : `auto` essaie WebGPU d'abord. */
 export type ViewerEngineRequest = 'auto' | 'webgl' | 'terrain';
 
 export const VIEWER_ENGINE_PARAM = 'engine';
@@ -23,14 +23,14 @@ export function parseViewerEngineParam(raw: string | null): ViewerEngineRequest 
   return 'auto';
 }
 
-/** `?engine=` value selecting `key` (null: no parameter, automatic choice). */
+/** Valeur de `?engine=` qui sélectionne `key` (null : pas de paramètre, choix automatique). */
 export function viewerEngineParamValue(key: ViewerEngineKey): string | null {
   return key === 'webgpu' ? null : key;
 }
 
 /**
- * Engine to reopen the viewer with after the GPU context of `running` was
- * lost twice in a row: WebGPU → WebGL 2 → terrain.
+ * Moteur avec lequel rouvrir le viewer après deux pertes consécutives du
+ * contexte GPU de `running` : WebGPU → WebGL 2 → terrain.
  */
 export function fallbackViewerEngine(running: ViewerEngineKey): ViewerEngineKey {
   return running === 'webgpu' ? 'webgl' : 'terrain';

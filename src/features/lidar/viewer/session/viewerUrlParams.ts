@@ -79,19 +79,19 @@ export function parseViewerParamsFromUrl(): {
   yKm: number;
   crs: DetectedCrs;
   altRef: AltitudeRef;
-  /** `?engine=` (see viewerEngine.ts). */
+  /** `?engine=` (voir viewerEngine.ts). */
   engine: ViewerEngineRequest;
   /**
-   * `?bench=orbit`: scripted camera path that reports the real frame cadence (see perf/viewerBench);
-   * `?bench=shots`: still poses set by a capture script (`window.__rvLidarShots`).
+   * `?bench=orbit` : trajet de caméra scripté qui rapporte la vraie cadence d'images (voir perf/viewerBench) ;
+   * `?bench=shots` : poses fixes posées par un script de capture (`window.__rvLidarShots`).
    */
   bench: 'orbit' | 'shots' | null;
-  /** `?budget=<points>`: fixed point budget (benches comparing variants at equal load), else null. */
+  /** `?budget=<points>` : budget de points fixe (benchs comparant des variantes à charge égale), sinon null. */
   pinnedBudget: number | null;
   /**
-   * Quality while the camera moves, for A/B benches: `?mscale=<0.3–1>`
-   * overrides the platform's render scale (null: platform default),
-   * `?msquare=0` keeps round sprites.
+   * Qualité pendant que la caméra bouge, pour les benchs A/B : `?mscale=<0.3–1>`
+   * remplace l'échelle de rendu de la plateforme (null : défaut de la plateforme),
+   * `?msquare=0` garde des sprites ronds.
    */
   motionQuality: { scale: number | null; squares: boolean };
   tileFileName: string;

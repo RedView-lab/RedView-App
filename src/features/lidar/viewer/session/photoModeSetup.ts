@@ -36,13 +36,13 @@ export interface PhotoModeSetupInput {
 }
 
 export interface PhotoModeSetup {
-  /** Null when the renderer has no photo mode (WebGL 2). */
+  /** Null quand le renderer n'a pas de mode photo (WebGL 2). */
   photo: PhotoModeController | null;
-  /** The right panel's photo section; undefined while the mode is frozen (photoMode/featureFlag.ts). */
+  /** La section photo du panneau de droite ; undefined tant que le mode est gelé (photoMode/featureFlag.ts). */
   panelSection: ViewerPhotoModeProps | undefined;
 }
 
-/** Photo mode (WebGPU): sky, clouds, shadows of the point cloud. */
+/** Mode photo (WebGPU) : ciel, nuages, ombres du nuage de points. */
 export function setUpPhotoMode(input: PhotoModeSetupInput): PhotoModeSetup {
   const { renderer, sceneBounds, terrainMesh, cx, cy, cz, crs, lat, lon, timeZone, sceneLod } = input;
   let groundMin = Infinity;
@@ -90,7 +90,7 @@ export function setUpPhotoMode(input: PhotoModeSetupInput): PhotoModeSetup {
   };
   const idleCapture: PhotoCaptureStatus = { busy: false, done: 0, total: 0, error: null };
 
-  // Photo mode frozen (photoMode/featureFlag.ts): no panel section.
+  // Mode photo gelé (photoMode/featureFlag.ts) : pas de section dans le panneau.
   const panelSection: ViewerPhotoModeProps | undefined = PHOTO_MODE_ENABLED ? {
     available: photo !== null,
     initialState: initialPhotoState,

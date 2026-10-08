@@ -31,7 +31,7 @@ export function buildTileNavigatorCells(center: TileCoord): TileNavigatorCell[] 
   return cells;
 }
 
-/** Neighbour tile labels, keyed by `<vertical>-<horizontal>` offset. */
+/** Libellés des tuiles voisines, indexés par le décalage `<vertical>-<horizontal>`. */
 const NEIGHBOUR_TILE_LABELS: Record<string, string> = {
   'north-west': 'Tuile nord-ouest {{x}}/{{y}}',
   'north-center': 'Tuile nord {{x}}/{{y}}',

@@ -1,4 +1,4 @@
-/** Mean albedo (linear) of the terrain colours, sampled: the photo mode's distant ground and bounce light. */
+/** Albédo moyen (linéaire) des couleurs du terrain, échantillonné : le sol lointain et la lumière rebondie du mode photo. */
 export function meanTerrainAlbedo(colors: Uint8Array): number {
   let sum = 0;
   let count = 0;

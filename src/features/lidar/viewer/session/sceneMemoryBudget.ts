@@ -1,33 +1,36 @@
 // ============================================
-// LiDAR viewer — memory budget of a first scene load
+// Viewer LiDAR — budget mémoire d'un premier chargement de scène
 // ============================================
 //
-// A tile seen for the first time goes through two stages: (1) read, decode
-// (every core), colourise and copy its ground points for the relief, then
-// (2) build its LOD octree and write it to OPFS (one core). Both hold the
-// tile's points in memory. Loading tiles one after the other left fifteen
-// cores idle for most of a tile (colourisation and LOD are single-threaded:
-// 133 s for the 9-tile test scene, 2026-10-07), three at once took 7.65 GB.
-// The pipeline below decodes the next tile while the previous one builds its
-// LOD — one tile per stage, and only when both stages' memory fits a budget
-// drawn from the device memory; a tile alone always runs.
+// Une tuile vue pour la première fois passe par deux étapes : (1) lecture,
+// décodage (tous les cœurs), colorisation et copie de ses points sol pour le
+// relief, puis (2) construction de son octree LOD et écriture dans l'OPFS (un
+// cœur). Les deux gardent les points de la tuile en mémoire. Charger les
+// tuiles l'une après l'autre laissait quinze cœurs inactifs pendant l'essentiel
+// d'une tuile (colorisation et LOD sont mono-thread : 133 s pour la scène de
+// test de 9 tuiles, 2026-10-07), trois à la fois prenaient 7,65 Go.
+// Le pipeline ci-dessous décode la tuile suivante pendant que la précédente
+// construit son LOD — une tuile par étape, et seulement quand la mémoire des
+// deux étapes tient dans un budget tiré de la mémoire de l'appareil ; une tuile
+// seule passe toujours.
 
 /**
- * Bytes per point a tile adds to the tab in each stage, measured in Edge on
- * the IGN LiDAR HD 9-tile scene (2026-10-07, peak over the tab before the
- * tile; decode in batches, see workers/copcDecodeWorker.ts): 38 B while
- * decoding (its arrays, the compressed chunks in the decode workers, their
- * WASM memory, the orthophotos), 36 B while building its LOD (input arrays
- * and the 16 B packed records) — 38 B kept for both.
+ * Octets par point qu'une tuile ajoute à l'onglet dans chaque étape, mesurés
+ * dans Edge sur la scène IGN LiDAR HD de 9 tuiles (2026-10-07, pic de l'onglet
+ * avant la tuile ; décodage par lots, voir workers/copcDecodeWorker.ts) : 38 o
+ * pendant le décodage (ses tableaux, les chunks compressés dans les workers de
+ * décodage, leur mémoire WASM, les orthophotos), 36 o pendant la construction de
+ * son LOD (tableaux d'entrée et enregistrements empaquetés de 16 o) — 38 o
+ * retenus pour les deux.
  */
 export const DECODE_BYTES_PER_POINT = 38;
 export const LOD_BUILD_BYTES_PER_POINT = 38;
-/** Share of the device memory a scene load may hold in tiles being loaded. */
+/** Part de la mémoire de l'appareil qu'un chargement de scène peut occuper en tuiles en cours de chargement. */
 const BUDGET_SHARE_OF_DEVICE_MEMORY = 0.4;
-/** `navigator.deviceMemory` is capped at 8 GiB and missing outside Chromium. */
+/** `navigator.deviceMemory` plafonne à 8 Gio et manque hors de Chromium. */
 const DEFAULT_DEVICE_MEMORY_GIB = 8;
 
-/** Bytes the tiles being loaded for the first time may hold at once. */
+/** Octets que les tuiles chargées pour la première fois peuvent occuper à la fois. */
 export function getSceneMemoryBudgetBytes(deviceMemoryGiB?: number): number {
   const gib = deviceMemoryGiB !== undefined && Number.isFinite(deviceMemoryGiB) && deviceMemoryGiB > 0
     ? Math.min(deviceMemoryGiB, DEFAULT_DEVICE_MEMORY_GIB)
@@ -36,9 +39,10 @@ export function getSceneMemoryBudgetBytes(deviceMemoryGiB?: number): number {
 }
 
 /**
- * Point count of a LAS/LAZ file from its public header (first 375 bytes are
- * enough): the 64-bit count of LAS 1.4 when present, else the legacy 32-bit
- * one; null when the bytes are not a LAS header.
+ * Nombre de points d'un fichier LAS/LAZ d'après son en-tête public (les 375
+ * premiers octets suffisent) : le nombre 64 bits du LAS 1.4 quand il est
+ * présent, sinon l'ancien nombre 32 bits ; null quand les octets ne sont pas
+ * un en-tête LAS.
  */
 export function readLasPointCount(header: ArrayBuffer): number | null {
   if (header.byteLength < 227) return null;
@@ -54,17 +58,18 @@ export function readLasPointCount(header: ArrayBuffer): number | null {
 }
 
 /**
- * Two-stage pipeline of first tile loads: at most one tile decoding and one
- * building its LOD. A tile enters the decode stage, in arrival order, once
- * the stage is free and its decode bytes fit next to the LOD build in
- * progress; it then waits for the build stage and swaps its decode bytes for
- * its build bytes. The build stage never waits on anything, so the pipeline
- * cannot deadlock; a tile heavier than the budget runs alone.
+ * Pipeline à deux étapes des premiers chargements de tuiles : au plus une tuile
+ * en décodage et une en construction de LOD. Une tuile entre dans l'étape de
+ * décodage, dans l'ordre d'arrivée, dès que l'étape est libre et que ses octets
+ * de décodage tiennent à côté de la construction de LOD en cours ; elle attend
+ * ensuite l'étape de construction et échange ses octets de décodage contre ses
+ * octets de construction. L'étape de construction n'attend jamais rien : le
+ * pipeline ne peut pas se bloquer ; une tuile plus lourde que le budget passe seule.
  */
 export class TileLoadPipeline {
   private readonly budgetBytes: number;
   private heldBytes = 0;
-  /** The decode stage is taken from admission until the tile enters the build stage. */
+  /** L'étape de décodage est prise de l'admission jusqu'à l'entrée de la tuile dans l'étape de construction. */
   private decodeBusy = false;
   private buildBusy = false;
   private readonly waitingDecode: Array<{ bytes: number; start: () => void }> = [];
@@ -74,7 +79,7 @@ export class TileLoadPipeline {
     this.budgetBytes = budgetBytes;
   }
 
-  /** Bytes held by the tiles in the pipeline (for tests and diagnostics). */
+  /** Octets occupés par les tuiles dans le pipeline (pour les tests et le diagnostic). */
   get held(): number {
     return this.heldBytes;
   }

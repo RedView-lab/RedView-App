@@ -4,10 +4,10 @@ const GPU_RETRY_STORAGE_KEY = 'redview-lidar-webgpu-retry-at';
 const GPU_RETRY_WINDOW_MS = 120_000;
 
 /**
- * Leaves an engine whose GPU context was lost. The canvas keeps its context
- * type, so the next engine needs a fresh page: the first loss reloads the
- * same engine once (tiles come back from the OPFS cache), a second one
- * within two minutes moves down the chain WebGPU → WebGL 2 → terrain.
+ * Quitte un moteur dont le contexte GPU a été perdu. Le canvas garde son type
+ * de contexte, le moteur suivant a donc besoin d'une page neuve : la première
+ * perte recharge une fois le même moteur (les tuiles reviennent du cache OPFS),
+ * une seconde dans les deux minutes descend la chaîne WebGPU → WebGL 2 → terrain.
  */
 export function recoverFromGpuFailure(reason: string, running: ViewerEngineKey): void {
   const url = new URL(window.location.href);

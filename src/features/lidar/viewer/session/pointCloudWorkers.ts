@@ -69,13 +69,13 @@ function createProcessWorker(): Worker {
   return new Worker(new URL('../../workers/processWorker.ts', import.meta.url), { type: 'module' });
 }
 
-/** Default decode parallelism: leave one core for the UI thread. */
+/** Parallélisme de décodage par défaut : laisser un cœur au thread de l'interface. */
 export function getDefaultDecodeWorkerCount(): number {
   const threads = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 4 : 4;
   return Math.max(1, Math.min(8, threads - 1));
 }
 
-/** Splits nodes into `groups` contiguous runs of roughly equal compressed size. */
+/** Découpe les nœuds en `groups` séries contiguës de taille compressée à peu près égale. */
 function splitContiguous<T extends { pointDataLength: number }>(nodes: T[], groups: number): T[][] {
   const total = nodes.reduce((sum, node) => sum + node.pointDataLength, 0);
   const target = total / groups;
@@ -95,15 +95,16 @@ function splitContiguous<T extends { pointDataLength: number }>(nodes: T[], grou
   return result;
 }
 
-/** A tile file handed over to the decoder, which empties the box once it no longer needs the bytes. */
+/** Un fichier de tuile transmis au décodeur, qui vide la boîte dès qu'il n'a plus besoin des octets. */
 export interface TileFileHolder {
   buffer: ArrayBuffer | null;
 }
 
 /**
- * Copies each group's compressed chunks out of the tile file, then drops the
- * file: the decode never holds the compressed tile twice (the file and the
- * copies sent to the workers). Its own frame, so nothing keeps the bytes alive.
+ * Copie les chunks compressés de chaque groupe hors du fichier de la tuile,
+ * puis libère le fichier : le décodage ne garde jamais la tuile compressée en
+ * double (le fichier et les copies envoyées aux workers). Dans sa propre
+ * frame, pour que rien ne garde les octets en vie.
  */
 function takeGroupBytes(file: TileFileHolder, groups: Array<Array<{ pointDataOffset: number; pointDataLength: number }>>): Uint8Array[] {
   const fileBytes = new Uint8Array(file.buffer!);
@@ -121,12 +122,13 @@ function takeGroupBytes(file: TileFileHolder, groups: Array<Array<{ pointDataOff
 }
 
 /**
- * Decodes a COPC tile on several workers. Each worker posts its points in
- * batches, copied at once into place in the tile's arrays (sized from the
- * hierarchy's point counts) and dropped; a worker is stopped as soon as it is
- * done, which frees its WASM memory. The tile thus peaks at its decoded arrays
- * plus a few batches, instead of every part, the assembled arrays and the
- * workers' memory at once (≈ 73 B/point measured on a 55.8 M-point tile).
+ * Décode une tuile COPC sur plusieurs workers. Chaque worker envoie ses points
+ * par lots, copiés aussitôt à leur place dans les tableaux de la tuile
+ * (dimensionnés d'après les nombres de points de la hiérarchie) puis libérés ;
+ * un worker est arrêté dès qu'il a fini, ce qui libère sa mémoire WASM. La tuile
+ * plafonne ainsi à ses tableaux décodés plus quelques lots, au lieu de toutes
+ * les parties, des tableaux assemblés et de la mémoire des workers à la fois
+ * (≈ 73 o/point mesurés sur une tuile de 55,8 M points).
  */
 async function decodeCopcInParallel(
   file: TileFileHolder,
@@ -139,7 +141,7 @@ async function decodeCopcInParallel(
   positions: Float32Array;
   classifications: Uint8Array;
   intensities: Uint16Array;
-  /** Embedded RGB when the file carries usable (16-bit scaled) colour, else null. */
+  /** RVB intégré quand le fichier porte une couleur utilisable (à l'échelle 16 bits), sinon null. */
   colors: Uint8Array | null;
   count: number;
   bounds: PointCloudBounds;
@@ -244,10 +246,10 @@ async function decodeCopcInParallel(
 }
 
 /**
- * Decodes + colorizes a LAZ/COPC tile off the main thread.
- * COPC tiles are decoded by several workers in parallel while the ortho
- * imagery for the header extent is already downloading; other files use the
- * single-worker path.
+ * Décode + colorise une tuile LAZ/COPC hors du thread principal.
+ * Les tuiles COPC sont décodées par plusieurs workers en parallèle pendant que
+ * l'imagerie ortho de l'emprise de l'en-tête se télécharge déjà ; les autres
+ * fichiers prennent le chemin à un seul worker.
  */
 export async function processPointCloudInWorker(
   file: TileFileHolder,
@@ -279,8 +281,8 @@ export async function processPointCloudInWorker(
   try {
     const [minX, minY, minZ] = layout.header.min as [number, number, number];
     const [maxX, maxY, maxZ] = layout.header.max as [number, number, number];
-    // Formats with RGB usually carry real colour: only prefetch orthophotos
-    // when the file cannot provide it.
+    // Les formats avec RVB portent en général une vraie couleur : ne précharger
+    // les orthophotos que si le fichier ne peut pas la fournir.
     if (!fileFormatHasRgb(layout.header.pointDataRecordFormat)) {
       colorWorker.postMessage({
         type: 'prefetch',
@@ -334,9 +336,9 @@ function fileFormatHasRgb(pointDataRecordFormat: number): boolean {
 }
 
 /**
- * Builds the tile's LOD octree in a worker and stores it in the OPFS LOD
- * cache, then reopens it for streaming. The point arrays of `pointCloud` are
- * transferred (detached): take any copy you need (heightmap) before.
+ * Construit l'octree LOD de la tuile dans un worker et le stocke dans le cache
+ * LOD OPFS, puis le rouvre pour le flux. Les tableaux de points de `pointCloud`
+ * sont transférés (détachés) : faire avant toute copie nécessaire (heightmap).
  */
 export function buildLodTileInWorker(
   lazFileName: string,
@@ -391,9 +393,9 @@ export function buildLodTileInWorker(
 }
 
 /**
- * Upgrades an older LOD cache of the tile in a worker (no decoding, see
- * `upgradeLegacyLodTile`) and opens the result; null when there is no
- * older cache to upgrade, so the caller rebuilds from the LAZ.
+ * Met à niveau un ancien cache LOD de la tuile dans un worker (sans décodage,
+ * voir `upgradeLegacyLodTile`) et ouvre le résultat ; null quand il n'y a pas
+ * d'ancien cache à mettre à niveau, l'appelant reconstruit alors depuis le LAZ.
  */
 export function upgradeLodTileInWorker(lazFileName: string): Promise<OpenedLodTile | null> {
   return new Promise((resolve) => {
@@ -415,7 +417,7 @@ export function upgradeLodTileInWorker(lazFileName: string): Promise<OpenedLodTi
   });
 }
 
-/** A buffer may back several views (e.g. cache reads); transfer each only once. */
+/** Un buffer peut porter plusieurs vues (par ex. lectures du cache) : ne transférer chacun qu'une fois. */
 function uniqueBuffers(transfer: Transferable[]): Transferable[] {
   return Array.from(new Set(transfer));
 }

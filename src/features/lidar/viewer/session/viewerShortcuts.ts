@@ -33,7 +33,7 @@ export interface ViewerShortcutsDeps {
   requestRender: () => void;
 }
 
-/** Keyboard shortcuts of the viewer (photo interface, Google Earth, route edit, point size, terrain, snow…). */
+/** Raccourcis clavier du viewer (interface photo, Google Earth, édition de tracé, taille des points, terrain, neige…). */
 export function createViewerKeyDownHandler(deps: ViewerShortcutsDeps): (e: KeyboardEvent) => void {
   const { camera, heightSceneParams, routeController, snowController, panel } = deps;
   return (e: KeyboardEvent) => {
@@ -44,7 +44,7 @@ export function createViewerKeyDownHandler(deps: ViewerShortcutsDeps): (e: Keybo
     }
     const photo = deps.getPhoto();
     if (photo?.active && (e.key === 'i' || e.key === 'I') && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      // Interface hidden while framing a photo.
+      // Interface masquée pendant le cadrage d'une photo.
       photo.setInterfaceHidden(!photo.interfaceHidden);
       return;
     }

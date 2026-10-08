@@ -30,13 +30,13 @@ interface CacheWriteTask {
 export interface ViewerSceneData {
   /** One streamed LOD octree per tile (header + node table; blocks read on demand). */
   tiles: OpenedLodTile[];
-  /** Absolute union bounds of the scene. */
+  /** Emprise absolue réunie de la scène. */
   bounds: PointCloudBounds;
   totalPoints: number;
   crs: DetectedCrs;
   /**
-   * Resolves once the terrain mesh is ready. Kept as a promise so the caller
-   * can initialise the GPU while the heightmap is still being generated.
+   * Se résout une fois le maillage du terrain prêt. Gardé en promesse pour que
+   * l'appelant puisse initialiser le GPU pendant que la heightmap se génère encore.
    */
   terrainMesh: Promise<SceneTerrain>;
   cacheWrites: CacheWriteTask[];
@@ -51,7 +51,7 @@ interface PendingViewerTile {
   shouldSaveTerrainCache: boolean;
 }
 
-/** A tile after the decode stage, waiting for its LOD build. */
+/** Une tuile après l'étape de décodage, en attente de la construction de son LOD. */
 interface DecodedViewerTile {
   pointCloud: PointCloudData;
   terrainMesh: Promise<TerrainCache>;
@@ -63,9 +63,9 @@ interface SceneLoadMemory {
 }
 
 /**
- * Orthophoto colourisation leaves points it could not colour mid-grey
- * (128,128,128); a mostly grey tile means the imagery failed to load and
- * must not be frozen into the cache.
+ * La colorisation par orthophoto laisse en gris moyen (128,128,128) les points
+ * qu'elle n'a pas pu colorer ; une tuile surtout grise signifie que l'imagerie
+ * n'a pas pu se charger et ne doit pas être figée dans le cache.
  */
 function looksUncolourised(pc: PointCloudData): boolean {
   if (pc.embeddedRgb || pc.count < 100) return false;
@@ -80,7 +80,7 @@ function looksUncolourised(pc: PointCloudData): boolean {
   return grey > samples * 0.5;
 }
 
-/** Point count from the stored tile's LAS header, without reading the file. */
+/** Nombre de points d'après l'en-tête LAS de la tuile stockée, sans lire le fichier. */
 async function storedTilePointCount(fileNames: string[]): Promise<number | null> {
   for (const name of fileNames) {
     const head = await readTileHead(name, 375);
@@ -101,8 +101,8 @@ async function loadViewerTile(
   const [openedLod, cachedTerrain] = await Promise.all([openLodTile(fileName), loadTerrainData(fileName)]);
   let cachedLod = openedLod;
   if (!cachedLod && cachedTerrain) {
-    // A cache from the previous format is upgraded in a second or two;
-    // rebuilding it would decode and colourise the whole tile again.
+    // Un cache de l'ancien format est mis à niveau en une ou deux secondes ;
+    // le reconstruire décoderait et coloriserait à nouveau toute la tuile.
     onProgress(translateAppText('Mise à niveau du cache LOD {{x}}/{{y}}', tileVars), 0.3);
     cachedLod = await upgradeLodTileInWorker(fileName);
   }
@@ -117,9 +117,9 @@ async function loadViewerTile(
     };
   }
 
-  // First visit (or stale cache): decode + colourise once, then store the LOD
-  // octree — in the scene's load pipeline, sized by the header's point count
-  // (unknown: the whole budget, so the tile runs alone).
+  // Première visite (ou cache périmé) : décoder + coloriser une fois, puis stocker
+  // l'octree LOD — dans le pipeline de chargement de la scène, dimensionné par le
+  // nombre de points de l'en-tête (inconnu : tout le budget, la tuile passe donc seule).
   const pointCount = (await storedTilePointCount([fileName, legacyFileName]))
     ?? Math.ceil(memory.budgetBytes / DECODE_BYTES_PER_POINT);
   return memory.pipeline.run(
@@ -129,7 +129,7 @@ async function loadViewerTile(
   );
 }
 
-/** Decode stage: one tile at a time, on every decode worker. */
+/** Étape de décodage : une tuile à la fois, sur chaque worker de décodage. */
 async function decodeViewerTile(
   coord: TileCoord,
   fileName: string,
@@ -139,7 +139,7 @@ async function decodeViewerTile(
 ): Promise<DecodedViewerTile> {
   const tileVars = { x: coord.xKm, y: coord.yKm };
   onProgress(translateAppText('Lecture OPFS {{x}}/{{y}}', tileVars), 0.12);
-  // Handed over: the decoder drops the compressed file as soon as its chunks are copied out.
+  // Transmis : le décodeur libère le fichier compressé dès que ses chunks sont copiés.
   const file = { buffer: await loadTileFromOPFS([fileName, legacyFileName]) as ArrayBuffer | null };
   onProgress(translateAppText('Décompression LAS {{x}}/{{y}}', tileVars), 0.2);
   const pointCloud = await processPointCloudInWorker(
@@ -152,14 +152,14 @@ async function decodeViewerTile(
   );
 
   onProgress(translateAppText('Génération du relief {{x}}/{{y}}', tileVars), 0.72);
-  // generateHeightmap copies the ground points synchronously, before the
-  // arrays are handed over (detached) to the LOD worker in the build stage.
+  // generateHeightmap copie les points sol de façon synchrone, avant que les
+  // tableaux soient transmis (détachés) au worker LOD dans l'étape de construction.
   const terrainMesh = cachedTerrain ? Promise.resolve(cachedTerrain) : generateHeightmap(pointCloud, 1.0);
   terrainMesh.catch(() => undefined);
   return { pointCloud, terrainMesh };
 }
 
-/** Build stage: the LOD octree of one tile at a time (one worker), written to OPFS. */
+/** Étape de construction : l'octree LOD d'une tuile à la fois (un worker), écrit dans l'OPFS. */
 async function buildViewerTile(
   coord: TileCoord,
   fileName: string,
@@ -214,7 +214,7 @@ export async function loadViewerSceneData(
     }));
     return mergeTerrainMeshes(tiles, bounds);
   })();
-  // Avoid an unhandled rejection before the caller awaits it.
+  // Éviter un rejet non géré avant que l'appelant ne l'attende.
   terrainMesh.catch(() => undefined);
 
   const cacheWrites: CacheWriteTask[] = [];

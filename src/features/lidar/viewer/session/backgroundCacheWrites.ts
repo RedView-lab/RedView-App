@@ -4,7 +4,7 @@ type IdleSchedulerWindow = Window & {
 
 let cacheWriteQueue = Promise.resolve();
 
-/** Runs cache writes one after the other, each when the page is idle; a failure is logged, never thrown. */
+/** Exécute les écritures de cache l'une après l'autre, chacune quand la page est inactive ; un échec est journalisé, jamais levé. */
 export function enqueueBackgroundCacheWrite(label: string, task: () => Promise<void>): void {
   cacheWriteQueue = cacheWriteQueue
     .then(async () => {

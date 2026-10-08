@@ -3,18 +3,18 @@ import type { TerrainCache } from '../../lib/storage';
 import type { TerrainPart } from '../renderer/terrainLodCore';
 
 /**
- * Scene terrain: the tiles' meshes concatenated, without an index list (the
- * renderer draws each tile grid per chunk, see TerrainLod), and the merged
- * height grid.
+ * Terrain de la scène : les maillages des tuiles concaténés, sans liste
+ * d'indices (le renderer dessine la grille de chaque tuile par chunk, voir
+ * TerrainLod), et la grille de hauteurs fusionnée.
  */
 export interface SceneTerrain extends TerrainCache {
-  /** Vertex grid of each tile inside `vertices`. */
+  /** Grille de sommets de chaque tuile dans `vertices`. */
   parts: TerrainPart[];
 }
 
 export interface LoadedViewerTile {
   coord: TileCoord;
-  /** Absolute CRS bounds of the tile's points. */
+  /** Emprise CRS absolue des points de la tuile. */
   bounds: PointCloudBounds;
   terrainMesh: TerrainCache;
 }
@@ -64,10 +64,11 @@ function fillMissingHeightSamples(heightGrid: Float32Array, gridWidth: number, g
 }
 
 /**
- * Merges the tiles' height grids (rows south→north, heights relative to each
- * tile's centre altitude) into one grid over `mergedBounds`, relative to the
- * merged centre altitude. Each merged cell is bilinearly resampled from the
- * tile covering it, so tiles whose grid steps differ slightly still merge.
+ * Fusionne les grilles de hauteurs des tuiles (lignes sud→nord, hauteurs
+ * relatives à l'altitude du centre de chaque tuile) en une grille sur
+ * `mergedBounds`, relative à l'altitude du centre fusionné. Chaque cellule
+ * fusionnée est rééchantillonnée en bilinéaire depuis la tuile qui la couvre :
+ * des tuiles aux pas de grille légèrement différents fusionnent quand même.
  */
 function mergeHeightGrid(tiles: LoadedViewerTile[], mergedBounds: PointCloudBounds): {
   heightGrid: Float32Array;
@@ -92,8 +93,8 @@ function mergeHeightGrid(tiles: LoadedViewerTile[], mergedBounds: PointCloudBoun
   const rangeY = mergedBounds.maxY - mergedBounds.minY;
   const gridWidth = Math.max(2, Math.round(rangeX / step) + 1);
   const gridHeight = Math.max(2, Math.round(rangeY / step) + 1);
-  // Consumers place node i at min + i·range/(n − 1): sample at that spacing,
-  // not at `step`, which the rounding above leaves up to half a step off.
+  // Les consommateurs placent le nœud i à min + i·range/(n − 1) : échantillonner
+  // à cet espacement, pas à `step`, que l'arrondi ci-dessus laisse jusqu'à un demi-pas à côté.
   const stepX = rangeX / (gridWidth - 1);
   const stepY = rangeY / (gridHeight - 1);
   const heightGrid = new Float32Array(gridWidth * gridHeight).fill(Number.NaN);
@@ -129,12 +130,12 @@ function mergeHeightGrid(tiles: LoadedViewerTile[], mergedBounds: PointCloudBoun
   return { heightGrid, gridWidth, gridHeight };
 }
 
-/** Grid of a tile mesh (vertices row-major, `gridWidth` per row). */
+/** Grille d'un maillage de tuile (sommets par lignes, `gridWidth` par ligne). */
 function tilePart(terrain: TerrainCache, vertexOffset: number): TerrainPart {
   return { vertexOffset, gridWidth: terrain.gridWidth, gridHeight: terrain.gridHeight };
 }
 
-/** Concatenates the tiles' terrain meshes in the merged (centred) frame. */
+/** Concatène les maillages de terrain des tuiles dans le repère fusionné (centré). */
 export function mergeTerrainMeshes(tiles: LoadedViewerTile[], mergedBounds: PointCloudBounds): SceneTerrain {
   if (tiles.length === 1) {
     const terrain = tiles[0]!.terrainMesh;

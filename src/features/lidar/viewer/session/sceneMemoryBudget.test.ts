@@ -48,7 +48,7 @@ describe('getSceneMemoryBudgetBytes', () => {
 });
 
 describe('TileLoadPipeline', () => {
-  /** Tiles whose two stages the test finishes by hand; logs every stage start. */
+  /** Tuiles dont le test termine les deux étapes à la main ; journalise chaque début d'étape. */
   function harness(budgetPoints: number) {
     const pipeline = new TileLoadPipeline(budgetPoints * Math.max(DECODE_BYTES_PER_POINT, LOD_BUILD_BYTES_PER_POINT));
     const log: string[] = [];
@@ -81,7 +81,7 @@ describe('TileLoadPipeline', () => {
     expect(log).toEqual(['a.decode']);
     await finish('a.decode');
     expect(log).toEqual(['a.decode', 'a.build', 'b.decode']);
-    await finish('b.decode'); // the build stage is busy: b waits, and keeps c out of the decode stage
+    await finish('b.decode'); // l'étape de construction est occupée : b attend, et garde c hors de l'étape de décodage
     expect(log).toEqual(['a.decode', 'a.build', 'b.decode']);
     await finish('a.build');
     expect(log).toEqual(['a.decode', 'a.build', 'b.decode', 'b.build', 'c.decode']);
@@ -98,7 +98,7 @@ describe('TileLoadPipeline', () => {
     tile('c', 5);
     await tick();
     await finish('a.decode');
-    expect(log).toEqual(['a.decode', 'a.build']); // 70 + 50 > 100; c (5) stays behind b
+    expect(log).toEqual(['a.decode', 'a.build']); // 70 + 50 > 100 ; c (5) reste derrière b
     expect(pipeline.held).toBe(70 * LOD_BUILD_BYTES_PER_POINT);
     await finish('a.build');
     expect(log).toEqual(['a.decode', 'a.build', 'b.decode']);

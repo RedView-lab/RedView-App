@@ -38,9 +38,9 @@ function lerp(a: number, b: number, t: number): number {
 }
 
 /**
- * Builds a 256x1 RGBA Uint8Array representing the 1D slope LUT ramp.
- * Index 0 maps to 0 degrees (flat horizontal terrain).
- * Index 255 maps to 90 degrees (vertical wall / cliff).
+ * Construit un Uint8Array RGBA de 256x1 représentant la rampe de LUT pente 1D.
+ * L'indice 0 correspond à 0 degré (terrain horizontal plat).
+ * L'indice 255 correspond à 90 degrés (paroi verticale / falaise).
  */
 export function buildSlopeRampData(
   bands: SlopeBand[],
@@ -52,7 +52,7 @@ export function buildSlopeRampData(
     return data;
   }
 
-  // Sort bands ascending by minDeg for robust interpolation
+  // Tri croissant des bandes sur minDeg pour une interpolation robuste
   const sortedBands = [...bands].sort((a, b) => a.minDeg - b.minDeg);
 
   if (colorization === 'stepped') {
@@ -86,7 +86,7 @@ export function buildSlopeRampData(
     return data;
   }
 
-  // Gradient mode: Smooth linear interpolation between band stops
+  // Mode dégradé : interpolation linéaire continue entre les paliers des bandes
   interface Stop {
     deg: number;
     color: RgbaColor;
@@ -97,7 +97,7 @@ export function buildSlopeRampData(
     color: parseHexColor(band.color, band.visible ? 255 : 0),
   }));
 
-  // Append final anchor at 90 degrees using the last band's color
+  // Ajouter un dernier ancrage à 90 degrés avec la couleur de la dernière bande
   const lastBand = sortedBands[sortedBands.length - 1];
   if (lastBand) {
     stops.push({
@@ -128,7 +128,7 @@ export function buildSlopeRampData(
       continue;
     }
 
-    // Find the bounding stops
+    // Trouver les paliers encadrants
     let s0 = stops[0]!;
     let s1 = stops[1]!;
     for (let s = 0; s < stops.length - 1; s++) {

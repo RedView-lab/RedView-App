@@ -21,10 +21,11 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 /**
- * Tiles processed at once. A first visit holds a whole decoded tile in
- * memory (~18 B/point, 35 M points for a dense IGN tile) while its LOD cache
- * is built, so low-memory machines take tiles one at a time; cached tiles
- * only cost a header read either way.
+ * Tuiles traitées à la fois. Une première visite garde toute une tuile décodée
+ * en mémoire (~18 o/point, 35 M points pour une tuile IGN dense) pendant la
+ * construction de son cache LOD : les machines à peu de mémoire prennent donc
+ * les tuiles une par une ; les tuiles en cache ne coûtent qu'une lecture
+ * d'en-tête dans tous les cas.
  */
 export function getSceneLoadConcurrency(totalTiles: number, deviceMemoryGiB?: number): number {
   const hardwareThreads = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 4 : 4;

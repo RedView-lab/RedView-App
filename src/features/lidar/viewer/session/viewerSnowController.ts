@@ -11,7 +11,7 @@ const SNOW_MODES: Record<SnowModeKey, 0 | 1 | 2> = {
   thickness: 2,
 };
 
-/** Canopy grid spacing read for the snow model, m. */
+/** Espacement de la grille de canopée lue pour le modèle de neige, m. */
 const SNOW_CANOPY_CELL_M = 10;
 
 export interface SnowSceneContext {
@@ -19,11 +19,11 @@ export interface SnowSceneContext {
   pointCloud: Pick<PointCloudData, 'bounds'>;
   terrainMesh: TerrainCache;
   crs: DetectedCrs;
-  /** Scene centre in the CRS; the height grid stores altitudes minus `cz`. */
+  /** Centre de la scène dans le CRS ; la grille de hauteurs stocke les altitudes moins `cz`. */
   cx: number;
   cy: number;
   cz: number;
-  /** Canopy cover of the scene from the point cloud (forest snow interception). */
+  /** Couvert de canopée de la scène d'après le nuage de points (interception de la neige en forêt). */
   readCanopy?: (cellM: number) => Promise<CanopyGrid | null>;
   onProgressState: (loading: boolean) => void;
   requestRender: () => void;

@@ -237,7 +237,7 @@ export function createViewerTileNavigator(options: ViewerTileNavigatorOptions) {
     const targetKey = tileCoordKey(coord);
     if (loadingTileKey || sameTile(currentTile, coord)) return;
 
-    // If tile is already active in scene, clicking removes it
+    // Si la tuile est déjà active dans la scène, le clic la retire
     if (activeTileKeys.has(targetKey)) {
       if (previewTileKey) {
         previewTileKey = null;
@@ -262,7 +262,7 @@ export function createViewerTileNavigator(options: ViewerTileNavigatorOptions) {
       return;
     }
 
-    // 2nd click on the same previewed tile: confirm and proceed!
+    // 2e clic sur la même tuile en aperçu : confirmer et continuer !
     previewTileKey = null;
     options.onPreviewTile?.(null);
 
@@ -272,14 +272,14 @@ export function createViewerTileNavigator(options: ViewerTileNavigatorOptions) {
       return;
     }
 
-    // If tile is already in cache (OPFS), assemble immediately
+    // Si la tuile est déjà en cache (OPFS), assembler tout de suite
     if (cachedTileKeys.has(targetKey)) {
       setStatus(translateAppText('Assemblage {{count}}/{{max}} tuiles en cours...', { count: activeTiles.length + 1, max: MAX_VIEWER_SCENE_TILES }));
       options.onSelectTiles([...activeTiles, coord]);
       return;
     }
 
-    // If not in cache, start download and assemble once downloaded
+    // Sinon, lancer le téléchargement et assembler une fois téléchargée
     loadingTileKey = targetKey;
     dock.setProgress(0);
     dock.show();
