@@ -315,6 +315,33 @@ async function main() {
       return `Tracer en ${tabsToTrace} tabulations, Commenter ${tabsToComment} plus loin`;
     });
 
+    await step('fichiers .fit : accord demandé avant toute lecture', async () => {
+      // Données de santé (RGPD art. 9) : la pop-in d'accord s'ouvre avant le
+      // sélecteur de fichiers ; refusée, aucun sélecteur ne s'ouvre et rien
+      // n'est écrit dans le compte.
+      await p.getByRole('button', { name: 'Rythme', exact: true }).click();
+      // Les .fit ne servent qu'au profil de rythme « Personnalisé ».
+      await p.getByRole('button', { name: /^Profil de rythme/ }).click();
+      await p.getByRole('option', { name: 'Personnalisé', exact: true }).click();
+      const prefsWrites = () => appwrite.state.calls.filter((call: { method: string; path: string }) => call.method !== 'GET' && call.path.includes('/account/prefs')).length;
+      const prefsWritesBefore = prefsWrites();
+      let choosers = 0;
+      const onChooser = () => { choosers += 1; };
+      p.on('filechooser', onChooser);
+      await p.getByRole('button', { name: /Ajouter des fichiers .fit/ }).first().click();
+      const consent = p.getByRole('dialog', { name: 'Vos fichiers .fit et vos données de santé' });
+      await consent.waitFor({ timeout: 10_000 });
+      await auditA11y(p, 'consentement-fit');
+      await consent.getByRole('button', { name: 'Refuser', exact: true }).click();
+      await consent.waitFor({ state: 'detached', timeout: 10_000 });
+      await sleep(1_000);
+      p.off('filechooser', onChooser);
+      check(choosers === 0, 'sélecteur de fichiers ouvert malgré le refus');
+      check(prefsWrites() === prefsWritesBefore, 'préférences du compte écrites malgré le refus');
+      await p.getByRole('button', { name: 'Traçage', exact: true }).click();
+      return 'pop-in d’accord, refus : aucun fichier lu';
+    });
+
     // ── Appareil 2 : profil vierge, même compte ─────────────────────────
     await step('ouverture sur un autre appareil (depuis le cloud)', async () => {
       const other = await launch(path.join(workDir, 'profile-2'));
