@@ -1,31 +1,32 @@
-# Security policy
+# Politique de sécurité
 
-[← Repository](README.md) · [Contributing](CONTRIBUTING.md) · [Docs index](docs/README.md)
+[← Dépôt](README.md) · [Contribuer](CONTRIBUTING.md) · [Index de la documentation](docs/README.md)
 
-## Reporting a vulnerability
+## Signaler une vulnérabilité
 
-Please report security issues **privately** through
+Merci de signaler les problèmes de sécurité **en privé** via les
 [GitHub Security Advisories](https://github.com/RedView-lab/RedView-App/security/advisories/new),
-not in a public issue.
+pas dans une issue publique.
 
-Include:
+Indiquer :
 
-- the affected component (app, API, real-time server, VPS service);
-- the steps to reproduce;
-- the impact you observed.
+- le composant concerné (application, API, serveur temps réel, service du VPS) ;
+- les étapes pour reproduire ;
+- l'impact observé.
 
-## How the code is protected
+## Comment le code est protégé
 
-| Area | Where it lives |
+| Domaine | Où il se trouve |
 |---|---|
-| Rights on shared projects, always checked on the server; attributes the client writes are never trusted | [`server/lib/project-access.mjs`](server/lib/project-access.mjs) |
-| Content-Security-Policy of every page and worker script (no `unsafe-eval`) | [`server/lib/csp.mjs`](server/lib/csp.mjs) |
-| Request hardening shared by the development and production adapters: path normalisation, body limits, rate-limit keys, upstream allowlists | [`server/lib/http-security.mjs`](server/lib/http-security.mjs) |
-| Errors sent to GlitchTip with URLs, headers and bodies scrubbed | [`server/lib/observability.mjs`](server/lib/observability.mjs), `src/shared/lib/errorReportScrub.ts` |
+| Droits sur les projets partagés, toujours vérifiés côté serveur ; les attributs écrits par le client ne font jamais foi | [`server/lib/project-access.mjs`](server/lib/project-access.mjs) |
+| Content-Security-Policy de chaque page et script de worker (sans `unsafe-eval`) | [`server/lib/csp.mjs`](server/lib/csp.mjs) |
+| Durcissement des requêtes partagé par les adaptateurs de développement et de production : normalisation des chemins, limites de corps, clés de limitation de débit, listes blanches des services amont | [`server/lib/http-security.mjs`](server/lib/http-security.mjs) |
+| Erreurs envoyées à GlitchTip avec URL, en-têtes et corps nettoyés | [`server/lib/observability.mjs`](server/lib/observability.mjs), `src/shared/lib/errorReportScrub.ts` |
+| Aucun secret dans l'historique git : gitleaks sur tous les commits, en CI | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) |
 
-## Further reading
+## Pour aller plus loin
 
-- Rollout of the October 2026 hardening:
+- Mise en place du durcissement d'octobre 2026 :
   [`docs/operations/security-runbook.md`](docs/operations/security-runbook.md)
-- Threat model of real-time co-editing: section 14 of
+- Modèle de menace de la co-édition en temps réel : section 14 de
   [`docs/architecture/collab-realtime.txt`](docs/architecture/collab-realtime.txt)

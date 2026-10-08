@@ -1,65 +1,65 @@
-name: Bug report
-description: Something in RedView does not work as it should.
-title: "[Bug] "
+name: Signaler un bogue
+description: Quelque chose dans RedView ne fonctionne pas comme prévu.
+title: "[Bogue] "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to report this. Please **do not paste personal data**:
-        no e-mail address, no project name, no exact home coordinates, no reset link.
+        Merci de prendre le temps de le signaler. **Ne collez aucune donnée personnelle** :
+        pas d'adresse e-mail, pas de nom de projet, pas de coordonnées exactes de domicile, pas de lien de réinitialisation.
 
   - type: dropdown
     id: area
     attributes:
-      label: Area
+      label: Domaine
       options:
-        - 3D map and overlays (slopes, altitude, weather, snow, sunlight)
-        - Routing and route editing
-        - Moving-time prediction and schedule
-        - POI and roadbook
-        - LiDAR viewer
-        - Co-editing, comments, live presence
-        - Project browser, account, sharing
-        - Export (GPX, FIT, .redview, flyover video)
-        - Other
+        - Carte 3D et surcouches (pentes, altitude, météo, neige, ensoleillement)
+        - Routage et édition d'itinéraire
+        - Prédiction du temps en mouvement et horaire
+        - POI et roadbook
+        - Visualiseur LiDAR
+        - Co-édition, commentaires, présence en direct
+        - Gestionnaire de projets, compte, partage
+        - Export (GPX, FIT, .redview, vidéo de survol)
+        - Autre
     validations:
       required: true
 
   - type: textarea
     id: what-happened
     attributes:
-      label: What happened
-      description: What you saw, and what you expected instead.
+      label: Ce qui s'est passé
+      description: Ce que vous avez vu, et ce que vous attendiez à la place.
     validations:
       required: true
 
   - type: textarea
     id: steps
     attributes:
-      label: Steps to reproduce
+      label: Étapes pour reproduire
       placeholder: |
-        1. Open a project with …
-        2. Click …
-        3. See …
+        1. Ouvrir un projet avec …
+        2. Cliquer sur …
+        3. Constater …
     validations:
       required: true
 
   - type: input
     id: environment
     attributes:
-      label: Browser and system
-      placeholder: e.g. Chrome 141 on Windows 11, Firefox on Ubuntu, Safari on macOS
+      label: Navigateur et système
+      placeholder: p. ex. Chrome 141 sous Windows 11, Firefox sous Ubuntu, Safari sous macOS
     validations:
       required: true
 
   - type: input
     id: request-id
     attributes:
-      label: Request ID or time of the error (optional)
-      description: An `X-Request-ID` from the browser's network tab, or the time it happened, helps find the server log.
+      label: Identifiant de requête ou heure de l'erreur (facultatif)
+      description: Un `X-Request-ID` relevé dans l'onglet réseau du navigateur, ou l'heure de l'erreur, aide à retrouver le journal du serveur.
 
   - type: textarea
     id: screenshots
     attributes:
-      label: Screenshots or console output (optional)
+      label: Captures d'écran ou sortie de la console (facultatif)

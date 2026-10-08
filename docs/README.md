@@ -1,70 +1,69 @@
-# RedView documentation
+# Documentation de RedView
 
-[← Repository](../README.md) · [Contributing](../CONTRIBUTING.md) · [Security](../SECURITY.md)
+[← Dépôt](../README.md) · [Contribuer](../CONTRIBUTING.md) · [Sécurité](../SECURITY.md)
 
-Everything written about RedView beyond the code, in one place. The day-to-day
-technical reference (commands, architecture, the rules each subsystem relies on)
-is [`CLAUDE.md`](../CLAUDE.md) at the repository root. The documents below go
-deeper on one subject.
+Tout ce qui est écrit sur RedView au-delà du code, au même endroit. La référence
+technique du quotidien (commandes, architecture, règles sur lesquelles repose
+chaque sous-système) est [`CLAUDE.md`](../CLAUDE.md) à la racine du dépôt. Les
+documents ci-dessous approfondissent un sujet.
 
-> **Language.** Folder maps and conventions are in English. Most in-depth notes,
-> runbooks and audits are in French (marked **FR**).
+## Par où commencer
 
-## Where to start
-
-| You want to… | Read |
+| Vous voulez… | Lire |
 |---|---|
-| Find your way in the code | [Structure of `src/`](architecture/structure.md), then the folder maps: [`server/`](../server/README.md) · [`scripts/`](../scripts/README.md) · [`script-test-bench/`](../script-test-bench/README.md) |
-| Understand the product and its engines | [Product and engine overview](architecture/overview.md) |
-| Work on routing | [Routing architecture](architecture/routing.md) |
-| Work on co-editing, comments or live presence | [Real-time co-editing](architecture/collab-realtime.txt) |
-| Operate production | [VPS host configuration](../server/vps/README.md) · [Backups and disaster recovery](../server/vps/backup/README.md) · [Service watch](../server/vps/watch/README.md) |
-| Read the product statistics | [Stats guide](analytics/stats-guide.md) (no jargon) |
+| Vous repérer dans le code | [Structure de `src/`](architecture/structure.md), puis les cartes de dossiers : [`server/`](../server/README.md) · [`scripts/`](../scripts/README.md) · [`script-test-bench/`](../script-test-bench/README.md) |
+| Comprendre le produit et ses moteurs | [Vue d'ensemble du produit et des moteurs](architecture/overview.md) |
+| Travailler sur le routage | [Architecture du routage](architecture/routing.md) |
+| Travailler sur la co-édition, les commentaires ou la présence en direct | [Co-édition en temps réel](architecture/collab-realtime.txt) |
+| Exploiter la production | [Configuration de l'hôte du VPS](../server/vps/README.md) · [Sauvegardes et reprise après sinistre](../server/vps/backup/README.md) · [Surveillance des services](../server/vps/watch/README.md) |
+| Lire les statistiques du produit | [Guide des statistiques](analytics/stats-guide.md) (sans jargon) |
 
 ## Architecture — [`architecture/`](architecture)
 
-| Document | Lang | What it covers |
-|---|---|---|
-| [structure.md](architecture/structure.md) | EN | Where a file goes in `src/`: the roles of `shared/`, the shape of a feature, sub-domains, barrels and import cycles |
-| [overview.md](architecture/overview.md) | FR | The product and its engines: physics, weather, snow, LiDAR |
-| [routing.md](architecture/routing.md) | FR | Routing stack: BRouter, generated BRF profiles, VPS services |
-| [collab-realtime.txt](architecture/collab-realtime.txt) | FR | Real-time co-editing and live presence: model, rules for changes, security (section 14), tests — plain text with an aligned layout |
+| Document | Contenu |
+|---|---|
+| [structure.md](architecture/structure.md) | Où va un fichier dans `src/` : les rôles de `shared/`, la forme d'une feature, les sous-domaines, les barrels et les cycles d'import |
+| [overview.md](architecture/overview.md) | Le produit et ses moteurs : physique, météo, neige, LiDAR |
+| [routing.md](architecture/routing.md) | La pile de routage : BRouter, profils BRF produits, services du VPS |
+| [collab-realtime.txt](architecture/collab-realtime.txt) | Co-édition en temps réel et présence en direct : modèle, règles de modification, sécurité (section 14), tests — texte brut à mise en page alignée |
 
-## Operations — [`operations/`](operations)
+## Exploitation — [`operations/`](operations)
 
-| Document | Lang | What it covers |
-|---|---|---|
-| [security-runbook.md](operations/security-runbook.md) | FR | Rollout order of the October 2026 security hardening |
-| [server-perf/](operations/server-perf) | FR | Reference performance snapshots of the VPS, taken before and after each tuning step (`bash scripts/vps/perf-snapshot.sh <label>`) |
-| [VPS host configuration](../server/vps/README.md) | FR | Where each host file goes, how to apply and roll back, the Always Free memory floor |
-| [Backups](../server/vps/backup/README.md) | FR | Nightly encrypted backups (restic), weekly restore drill, disaster recovery |
-| [Service watch](../server/vps/watch/README.md) | FR | Checks run every 5 minutes through the public URLs, alert rules |
+| Document | Contenu |
+|---|---|
+| [security-runbook.md](operations/security-runbook.md) | Ordre de mise en place du durcissement de sécurité d'octobre 2026 |
+| [server-perf/](operations/server-perf) | Instantanés de performance de référence du VPS, pris avant et après chaque réglage (`bash scripts/vps/perf-snapshot.sh <libellé>`) |
+| [Configuration de l'hôte du VPS](../server/vps/README.md) | Où va chaque fichier de l'hôte, comment appliquer et revenir en arrière, le plancher mémoire Always Free |
+| [Sauvegardes](../server/vps/backup/README.md) | Sauvegardes chiffrées nocturnes (restic), exercice de restauration hebdomadaire, reprise après sinistre |
+| [Surveillance des services](../server/vps/watch/README.md) | Contrôles lancés toutes les 5 minutes par les URL publiques, règles d'alerte |
 
-## Analytics — [`analytics/`](analytics)
+## Statistiques — [`analytics/`](analytics)
 
-| Document | Lang | What it covers |
-|---|---|---|
-| [stats-guide.md](analytics/stats-guide.md) | FR | Plain-language guide to the statistics for the whole team: where to look, glossary, the questions to ask each week |
-| [measurement.md](analytics/measurement.md) | FR | Technical reference: anonymous first-party Umami + database reports, privacy rules, event dictionary, funnels, boards |
+| Document | Contenu |
+|---|---|
+| [stats-guide.md](analytics/stats-guide.md) | Guide des statistiques en langage simple pour toute l'équipe : où regarder, glossaire, les questions à se poser chaque semaine |
+| [measurement.md](analytics/measurement.md) | Référence technique : Umami first-party anonyme + rapports issus de la base, règles de confidentialité, dictionnaire des événements, entonnoirs, tableaux de bord |
 
-## Dated audits — [`audits/`](audits)
+## Audits datés — [`audits/`](audits)
 
-Point-in-time studies, kept for their method and their measurements. The code
-may have changed since; file names start with the audit date. Raw outputs they
-refer to are in [`audits/data/`](audits/data).
+Études ponctuelles, gardées pour leur méthode et leurs mesures. Le code a pu
+changer depuis ; les noms de fichiers commencent par la date de l'audit. Les
+sorties brutes auxquelles ils renvoient sont dans [`audits/data/`](audits/data).
 
-| Date | Document | Lang |
-|---|---|---|
-| 2026-09-22 | [POI database audit and rebuild](audits/2026-09-22-poi-database.md) | FR |
-| 2026-09-22 | [Use of rider data in the pace engine](audits/2026-09-22-prediction-data.md) | FR |
-| 2026-09-23 | [Completing the POI base with four external sources](audits/2026-09-23-poi-external-sources.md) | FR |
-| 2026-10-01 | [Pre-launch audit of the signed-in user journey](audits/2026-10-01-launch.md) | FR |
+| Date | Document |
+|---|---|
+| 2026-09-22 | [Audit et reconstruction de la base de POI](audits/2026-09-22-poi-database.md) |
+| 2026-09-22 | [Usage des données du cycliste dans le moteur d'allure](audits/2026-09-22-prediction-data.md) |
+| 2026-09-23 | [Compléter la base de POI avec quatre sources externes](audits/2026-09-23-poi-external-sources.md) |
+| 2026-10-01 | [Audit avant lancement du parcours de l'utilisateur connecté](audits/2026-10-01-launch.md) |
 
-## Writing a new document
+## Écrire un nouveau document
 
-- Put it in the folder of its subject: `architecture/`, `operations/` or
-  `analytics/`. A point-in-time study goes in `audits/` as `YYYY-MM-DD-<subject>.md`.
-- Use lowercase, hyphenated file names, with no `REDVIEW_` prefix.
-- Add a row to this index.
-- Use relative links, and check that they resolve.
-- If the document changes a rule the code relies on, update `CLAUDE.md` in the same commit.
+- En français, comme le reste du dépôt.
+- Le placer dans le dossier de son sujet : `architecture/`, `operations/` ou
+  `analytics/`. Une étude ponctuelle va dans `audits/` sous le nom `AAAA-MM-JJ-<sujet>.md`.
+- Noms de fichiers en minuscules, avec des tirets, sans préfixe `REDVIEW_`.
+- Ajouter une ligne à cet index.
+- Liens relatifs, en vérifiant qu'ils aboutissent.
+- Si le document change une règle sur laquelle le code repose, mettre à jour
+  `CLAUDE.md` dans le même commit.

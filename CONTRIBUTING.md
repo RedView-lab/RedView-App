@@ -1,82 +1,88 @@
-# Contributing to RedView
+# Contribuer à RedView
 
-[← Repository](README.md) · [Docs index](docs/README.md) · [Security](SECURITY.md)
+[← Dépôt](README.md) · [Index de la documentation](docs/README.md) · [Sécurité](SECURITY.md)
 
-This page is the short path from a fresh clone to a change merged in `main`.
-[`CLAUDE.md`](CLAUDE.md) is the detailed reference: the architecture, the rules
-each subsystem relies on, and every command.
+Cette page est le chemin court d'un clone neuf à un changement fusionné dans `main`.
+[`CLAUDE.md`](CLAUDE.md) est la référence détaillée : l'architecture, les règles
+sur lesquelles repose chaque sous-système, et toutes les commandes.
 
-## 1. Set up
+## 1. Installer
 
 ```bash
-nvm use               # Node 22 (.nvmrc), the version of the production image
+nvm use               # Node 22 (.nvmrc), la version de l'image de production
 npm ci
-cp .env.example .env  # Appwrite, Mapbox and upstream values
+cp .env.example .env  # valeurs Appwrite, Mapbox et des services amont
 npm run dev
 ```
 
-## 2. Find where the code goes
+## 2. Trouver où va le code
 
-| Path | Contents |
+| Chemin | Contenu |
 |---|---|
-| [`src/`](src) | Frontend (React + TypeScript): one folder per domain in `features/`, cross-cutting code in `shared/`, the composition root in `pages/Dashboard/`. Conventions: [`docs/architecture/structure.md`](docs/architecture/structure.md). |
-| [`api/`](api) | HTTP route handlers (`api/<name>.ts` → `/api/<name>`); shared server-side code in `api/_lib/`. |
-| [`server/`](server/README.md) | Shared server modules (`lib/`), real-time co-editing server (`multiplayer/`), VPS services and host configuration. Production entry point: [`server.mjs`](server.mjs). |
-| [`public/`](public) | Static assets and the tile Service Worker (`sw-dem.js` + `sw-dem/`). |
-| [`vendor/`](vendor) | Rust crates compiled to WebAssembly; their outputs are committed. |
-| [`scripts/`](scripts/README.md) | Build, quality gate, release and operations tooling. |
-| [`script-test-bench/`](script-test-bench/README.md) | Benchmarks, end-to-end journeys and regression suites on real data. |
-| [`test/`](test) | Tests of code that cannot host its own (the Service Worker in `public/`). |
-| [`docs/`](docs/README.md) | Architecture notes, runbooks and dated audits. |
+| [`src/`](src) | Frontend (React + TypeScript) : un dossier par domaine dans `features/`, le code transverse dans `shared/`, la racine de composition dans `pages/Dashboard/`. Conventions : [`docs/architecture/structure.md`](docs/architecture/structure.md). |
+| [`api/`](api) | Gestionnaires de routes HTTP (`api/<nom>.ts` → `/api/<nom>`) ; le code serveur partagé dans `api/_lib/`. |
+| [`server/`](server/README.md) | Modules serveur partagés (`lib/`), serveur de co-édition en temps réel (`multiplayer/`), services du VPS et configuration de l'hôte. Point d'entrée de production : [`server.mjs`](server.mjs). |
+| [`public/`](public) | Ressources statiques et Service Worker des tuiles (`sw-dem.js` + `sw-dem/`). |
+| [`vendor/`](vendor) | Crates Rust compilées en WebAssembly ; leurs sorties sont commitées. |
+| [`scripts/`](scripts/README.md) | Outils de build, porte qualité, mise en production et exploitation. |
+| [`script-test-bench/`](script-test-bench/README.md) | Bancs de performance, parcours de bout en bout et suites de régression sur données réelles. |
+| [`test/`](test) | Tests du code qui ne peut pas héberger les siens (le Service Worker de `public/`). |
+| [`docs/`](docs/README.md) | Notes d'architecture, procédures d'exploitation et audits datés. |
 
-## 3. Make the change
+## 3. Faire le changement
 
-- **Tests sit next to the code.** `foo.ts` → `foo.test.ts`, with an explicit
-  `import { describe, it, expect } from 'vitest'`. Server tests go in
-  `server/lib/__tests__/`, API tests in `api/_lib/__tests__/`. Cover business
-  rules, security boundaries, persistence and routing math first.
-- **Every user-visible string is translated.** Add a `{ fr, en }` pair in
-  `src/shared/i18n/config/translations/`, then check with `npm run i18n:audit`.
-- **New external host?** Add it to the Content-Security-Policy in
-  [`server/lib/csp.mjs`](server/lib/csp.mjs), or the browser will block it.
-- **Changed anything under `public/sw-dem*`?** Add a dated line to the cache stamp
-  in the header of `public/sw-dem.js`.
+- **Le code, ses commentaires et la documentation sont en français.** Les
+  identifiants restent en anglais, comme les noms de l'écosystème.
+- **Les tests sont à côté du code.** `foo.ts` → `foo.test.ts`, avec un
+  `import { describe, it, expect } from 'vitest'` explicite. Les tests serveur
+  vont dans `server/lib/__tests__/`, les tests d'API dans `api/_lib/__tests__/`.
+  Couvrir d'abord les règles métier, les frontières de sécurité, la persistance et
+  les calculs de routage.
+- **Chaque texte visible par l'utilisateur est traduit.** Ajouter une paire
+  `{ fr, en }` dans `src/shared/i18n/config/translations/` ; `npm run check` échoue
+  sur un texte sans traduction (`npm run i18n:audit -- --list` pour le détail).
+- **Nouvel hôte externe ?** L'ajouter à la Content-Security-Policy de
+  [`server/lib/csp.mjs`](server/lib/csp.mjs), sinon le navigateur le bloquera.
+- **Modifié quoi que ce soit sous `public/sw-dem*` ?** Ajouter une ligne datée au
+  tampon de cache dans l'en-tête de `public/sw-dem.js`.
 
-## 4. Check it
+## 4. Vérifier
 
-| Command | When |
+| Commande | Quand |
 |---|---|
-| `npm run check` | Before every commit: types, ESLint, unit tests, knip, import cycles (about a minute cold, much less warm) |
-| `npm run check:full` | Before a pull request: adds the production build, the bundle budget, the bundled servers started for real, the end-to-end journey and the regression suites. CI runs the same. |
-| `npm run bench:<suite>` | When a change touches a measured area: see [`script-test-bench/`](script-test-bench/README.md) |
+| `npm run check` | Avant chaque commit : types, ESLint, tests unitaires, knip, cycles d'import, traductions (environ une minute à froid, bien moins à chaud) |
+| `npm run check:full` | Avant une pull request : ajoute le build de production, le budget du bundle, les serveurs bundlés réellement démarrés, le parcours de bout en bout et les suites de régression. La CI lance la même chose. |
+| `npm run bench:<suite>` | Quand un changement touche une zone mesurée : voir [`script-test-bench/`](script-test-bench/README.md) |
 
-The gate is strict on purpose:
+La porte est stricte à dessein :
 
-- **ESLint ratchet.** Pre-existing errors are frozen in `eslint-suppressions.json`
-  and no new error can be added. Fix errors rather than suppressing them; after
-  fixing a frozen one, run `npm run lint:prune`.
-- **No dead code.** knip fails on an unused file, dependency or export; delete
-  what a change leaves unused.
-- **No import cycle.** madge fails on any runtime cycle in `src/`.
+- **Cliquet ESLint.** Les erreurs préexistantes sont figées dans
+  `eslint-suppressions.json` et aucune nouvelle erreur ne peut entrer. Corriger les
+  erreurs plutôt que les masquer ; après avoir corrigé une erreur figée, lancer
+  `npm run lint:prune`.
+- **Pas de code mort.** knip échoue sur un fichier, une dépendance ou un export
+  inutilisé ; supprimer ce qu'un changement laisse sans usage.
+- **Pas de cycle d'import.** madge échoue sur tout cycle à l'exécution dans `src/`.
 
-## 5. Commit
+## 5. Commiter
 
-[Conventional Commits](https://www.conventionalcommits.org/), with a scope and
-one topic per commit:
+[Conventional Commits](https://www.conventionalcommits.org/), avec une portée et
+un sujet par commit :
 
 ```text
-fix(chart,map): keep the hover cursor on the route after a reroute
-refactor(scripts): group operations tooling by domain
-docs(readme): link the folder maps
+fix(chart,map): garder le curseur de survol sur la route après un reroutage
+refactor(scripts): regrouper les outils d'exploitation par domaine
+docs(readme): relier les cartes de dossiers
 ```
 
-Several sessions can share one working tree. Stage and commit only your own
-paths (`git commit -- <paths>`); never `git add .`, `git stash` or
-`git checkout .`.
+Plusieurs sessions peuvent partager un même arbre de travail. N'indexer et ne
+commiter que ses propres chemins (`git commit -- <chemins>`) ; jamais
+`git add .`, `git stash` ni `git checkout .`.
 
-## 6. Ship
+## 6. Livrer
 
-Open a pull request against `main` using the template, and wait for CI.
-Deployment is a separate, deliberate step: `npm run deploy` deploys committed
-work only, after the full gate and a production schema check. See `CLAUDE.md`
-before running it, and never run it as part of a change.
+Ouvrir une pull request vers `main` avec le modèle, et attendre la CI.
+Le déploiement est une étape distincte et délibérée : `npm run deploy` ne déploie
+que le travail commité, après la porte complète et une vérification du schéma de
+production. Lire `CLAUDE.md` avant de le lancer, et ne jamais le lancer au sein
+d'un changement.

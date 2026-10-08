@@ -5,198 +5,202 @@
   <img alt="RedView" src="public/brand/redview-logo-dark.svg" width="260">
 </picture>
 
-### Plan, analyse and ride long routes on high-resolution 3D terrain
+### Préparer, analyser et rouler de longs parcours sur un relief 3D haute résolution
 
-Route planning and terrain analysis for ultra-cycling, bikepacking and trail running,
-on 40 cm relief and 20 cm LiDAR point clouds.
+Planification d'itinéraires et analyse du terrain pour l'ultra-cyclisme, le bikepacking et le trail,
+sur un relief à 40 cm et des nuages de points LiDAR à 20 cm.
 
 [![CI](https://github.com/RedView-lab/RedView-App/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/RedView-lab/RedView-App/actions/workflows/ci.yml)
 ![Node 22](https://img.shields.io/badge/node-22-339933?logo=node.js&logoColor=white)
 ![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![React 19](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)
-![Rust to WebAssembly](https://img.shields.io/badge/Rust-WebAssembly-B7410E?logo=rust&logoColor=white)
-![License: proprietary](https://img.shields.io/badge/license-proprietary-lightgrey)
+![Rust vers WebAssembly](https://img.shields.io/badge/Rust-WebAssembly-B7410E?logo=rust&logoColor=white)
+![Licence : propriétaire](https://img.shields.io/badge/licence-propri%C3%A9taire-lightgrey)
 
-[**Open the app**](https://app.redview.tech) · [Documentation](docs/README.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
+[**Ouvrir l'application**](https://app.redview.tech) · [Documentation](docs/README.md) · [Contribuer](CONTRIBUTING.md) · [Sécurité](SECURITY.md)
 
 </div>
 
 <br>
 
 <p align="center">
-  <img src="docs/assets/dashboard.jpg" alt="The RedView editor: a 124 km route in the Alps on the map, its elevation profile with alerts, and the roadbook" width="100%">
+  <img src="docs/assets/dashboard.jpg" alt="L'éditeur RedView : un parcours de 124 km dans les Alpes sur la carte, son profil d'altitude avec alertes, et le roadbook" width="100%">
 </p>
 
-## Contents
+## Sommaire
 
-- [What RedView does](#what-redview-does)
+- [Ce que fait RedView](#ce-que-fait-redview)
 - [Architecture](#architecture)
-- [Tech stack](#tech-stack)
-- [Repository layout](#repository-layout)
-- [Getting started](#getting-started)
-- [Everyday commands](#everyday-commands)
-- [Quality](#quality)
-- [Production and operations](#production-and-operations)
+- [Technologies](#technologies)
+- [Organisation du dépôt](#organisation-du-dépôt)
+- [Démarrer](#démarrer)
+- [Commandes courantes](#commandes-courantes)
+- [Qualité](#qualité)
+- [Production et exploitation](#production-et-exploitation)
 - [Documentation](#documentation)
 
-## What RedView does
+## Ce que fait RedView
 
 | | |
 |---|---|
-| **Routing** | Routes on [BRouter](https://github.com/abrensch/brouter) with a profile generated from the rider's settings on every change. A local edit reroutes only a window around it, and a stored route never contains a straight line. |
-| **Moving-time prediction** | A physics and behaviour engine written in Rust and compiled to WebAssembly: power by gradient, cornering, descents, surface, fatigue. It is calibrated on the rider's own FIT files; pauses and the schedule are planned on top of it. |
-| **Terrain analysis** | Slopes, altitude, weather along the route, snow depth (forecast model + stations + avalanche bulletins, redistributed by wind, gravity and forest), sunlight and shadows, avalanche terrain exposure (AutoATES). |
-| **LiDAR viewer** | National LiDAR tiles (France, Switzerland, Netherlands, Flanders, Japan, New Zealand) streamed from the browser's storage. WebGPU, with a WebGL 2 fallback for Linux. Measurement tools and route editing in 3D. |
-| **Real-time co-editing** | Figma-style shared projects: presence, following another editor's view, comments pinned on the map and in the LiDAR viewer. |
-| **Exports** | GPX, KML, FIT course, a self-contained `.redview` project file, and a flyover video (MP4) rendered offline. |
+| **Routage** | Itinéraires calculés par [BRouter](https://github.com/abrensch/brouter) avec un profil produit à partir des réglages du cycliste, à chaque changement. Une modification locale ne reroute qu'une fenêtre autour d'elle, et une route enregistrée ne contient jamais de ligne droite. |
+| **Prédiction du temps en mouvement** | Un moteur de physique et de comportement écrit en Rust et compilé en WebAssembly : puissance selon la pente, virages, descentes, surface, fatigue. Il est calibré sur les fichiers FIT du cycliste ; les pauses et l'horaire sont planifiés par-dessus. |
+| **Analyse du terrain** | Pentes, altitude, météo le long du parcours, hauteur de neige (modèle de prévision + stations + bulletins d'avalanche, redistribuée par le vent, la gravité et la forêt), ensoleillement et ombres, exposition au terrain avalancheux (AutoATES). |
+| **Visualiseur LiDAR** | Tuiles LiDAR nationales (France, Suisse, Pays-Bas, Flandre, Japon, Nouvelle-Zélande) diffusées depuis le stockage du navigateur. WebGPU, avec un repli WebGL 2 pour Linux. Outils de mesure et édition d'itinéraire en 3D. |
+| **Co-édition en temps réel** | Projets partagés à la Figma : présence, suivi de la vue d'un autre éditeur, commentaires épinglés sur la carte et dans le visualiseur LiDAR. |
+| **Exports** | GPX, KML, parcours FIT, un fichier de projet `.redview` autonome, et une vidéo de survol (MP4) rendue hors ligne. |
 
 <p align="center">
-  <img src="docs/assets/lidar-viewer.jpg" alt="A mountain summit rendered by the LiDAR viewer from IGN LiDAR HD points" width="100%">
+  <img src="docs/assets/lidar-viewer.jpg" alt="Un sommet de montagne rendu par le visualiseur LiDAR à partir des points LiDAR HD de l'IGN" width="100%">
 </p>
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  subgraph Browser
+  subgraph Navigateur
     SPA["SPA<br/>React 19 · TypeScript · Vite<br/>Mapbox GL JS v3 · Web Workers · WASM"]
-    SW["Service Worker<br/>DEM, slope, ortho tiles"]
+    SW["Service Worker<br/>tuiles DEM, pente, ortho"]
   end
-  SPA -->|/api/*| API["App server<br/>static files + API routes"]
-  SPA <-->|WebSocket /multiplayer| MP["Real-time<br/>co-editing server"]
-  SPA --> AW[("Appwrite<br/>auth, database, storage")]
+  SPA -->|/api/*| API["Serveur de l'application<br/>fichiers statiques + routes d'API"]
+  SPA <-->|WebSocket /multiplayer| MP["Serveur de co-édition<br/>en temps réel"]
+  SPA --> AW[("Appwrite<br/>comptes, base, stockage")]
   API --> AW
   MP --> AW
-  API --> VPS["VPS services<br/>BRouter · POI · weather · Open-Meteo"]
-  SW --> GEO["Public elevation and imagery<br/>IGN, swisstopo, AWS Terrarium…"]
+  API --> VPS["Services du VPS<br/>BRouter · POI · météo · Open-Meteo"]
+  SW --> GEO["Altimétrie et imagerie publiques<br/>IGN, swisstopo, AWS Terrarium…"]
 ```
 
-Four deployable pieces, all self-hosted:
+Quatre éléments déployables, tous auto-hébergés :
 
-| Piece | Code | Role |
+| Élément | Code | Rôle |
 |---|---|---|
-| **Frontend** | [`src/`](src) | Two Vite entries: `index.html` (the app) and `viewer.html` (the LiDAR viewer). One folder per domain in `src/features/`, cross-cutting code in `src/shared/`. |
-| **App server** | [`api/`](api), [`server.mjs`](server.mjs), [`server/lib/`](server/lib) | Route handlers run by `server.mjs` in production (esbuild bundle, precompressed assets, CSP, rate limits, structured logs) and by a Vite plugin in development. |
-| **Co-editing server** | [`server/multiplayer/`](server/multiplayer), [`src/features/collab/`](src/features/collab) | Server-authoritative document model, journal and checkpoints in Appwrite, a deterministic simulator in the test suite. |
-| **VPS services** | [`server/poi-server/`](server/poi-server), [`server/weather-daemon/`](server/weather-daemon), [`server/vps/`](server/vps) | BRouter, POI search and weather behind nginx, reached only through the API. Host configuration is versioned. |
+| **Frontend** | [`src/`](src) | Deux entrées Vite : `index.html` (l'application) et `viewer.html` (le visualiseur LiDAR). Un dossier par domaine dans `src/features/`, le code transverse dans `src/shared/`. |
+| **Serveur de l'application** | [`api/`](api), [`server.mjs`](server.mjs), [`server/lib/`](server/lib) | Gestionnaires de routes exécutés par `server.mjs` en production (bundle esbuild, ressources précompressées, CSP, limitation de débit, journaux structurés) et par un plugin Vite en développement. |
+| **Serveur de co-édition** | [`server/multiplayer/`](server/multiplayer), [`src/features/collab/`](src/features/collab) | Modèle de document dont le serveur fait autorité, journal et points de reprise dans Appwrite, simulateur déterministe dans la suite de tests. |
+| **Services du VPS** | [`server/poi-server/`](server/poi-server), [`server/weather-daemon/`](server/weather-daemon), [`server/vps/`](server/vps) | BRouter, recherche de POI et météo derrière nginx, joints uniquement via l'API. La configuration de l'hôte est versionnée. |
 
-Heavy computation stays off the main thread: Web Workers for tiles, FIT parsing,
-payload compression and LiDAR decoding, and two Rust crates compiled to
-WebAssembly ([`vendor/redviewalgo`](vendor/redviewalgo): pace engine;
-[`vendor/redviewlaz`](vendor/redviewlaz): LAZ decoder).
+Les calculs lourds restent hors du fil principal : Web Workers pour les tuiles,
+l'analyse des FIT, la compression des données et le décodage LiDAR, et deux crates
+Rust compilées en WebAssembly ([`vendor/redviewalgo`](vendor/redviewalgo) : moteur
+d'allure ; [`vendor/redviewlaz`](vendor/redviewlaz) : décodeur LAZ).
 
-## Tech stack
+## Technologies
 
-| Layer | Technologies |
+| Couche | Technologies |
 |---|---|
-| Frontend | React 19, TypeScript (strict), Vite, Mapbox GL JS v3, TanStack Query, WebGPU and WebGL 2, Web Workers |
-| Compute | Rust → WebAssembly (wasm-bindgen), Service Worker tile pipeline |
-| Servers | Node.js 22, esbuild bundles, `ws` for real-time, Fastify + SQLite R\*Tree (POI), Python (weather ingest) |
-| Data and auth | Appwrite (accounts, database, file storage) |
-| Routing and weather | BRouter, self-hosted Open-Meteo (Météo-France AROME / ARPEGE) |
-| Infrastructure | Docker on Coolify, Oracle Cloud VPS, nginx, GitHub Actions |
-| Observability | GlitchTip (errors, Sentry protocol), pino logs, Umami (anonymous, first-party analytics) |
-| Quality | Vitest, Playwright, ESLint, knip, madge |
+| Frontend | React 19, TypeScript (strict), Vite, Mapbox GL JS v3, TanStack Query, WebGPU et WebGL 2, Web Workers |
+| Calcul | Rust → WebAssembly (wasm-bindgen), pipeline de tuiles dans un Service Worker |
+| Serveurs | Node.js 22, bundles esbuild, `ws` pour le temps réel, Fastify + SQLite R\*Tree (POI), Python (ingestion météo) |
+| Données et comptes | Appwrite (comptes, base de données, stockage de fichiers) |
+| Routage et météo | BRouter, Open-Meteo auto-hébergé (AROME / ARPEGE de Météo-France) |
+| Infrastructure | Docker sur Coolify, VPS Oracle Cloud, nginx, GitHub Actions |
+| Observabilité | GlitchTip (erreurs, protocole Sentry), journaux pino, Umami (statistiques anonymes, first-party) |
+| Qualité | Vitest, Playwright, ESLint, knip, madge |
 
-## Repository layout
+## Organisation du dépôt
 
 ```text
 .
 ├── src/                    Frontend (React + TypeScript)
-│   ├── features/           One folder per domain: map3d, itineraryPanel, lidar, collab, …
-│   ├── shared/             components, hooks, lib, services, styles, i18n, test
-│   └── pages/Dashboard/    Composition root of the editor
-├── api/                    HTTP route handlers (api/<name>.ts → /api/<name>), shared code in _lib/
-├── server/                 Shared server modules (lib/), real-time server, VPS services, host config
-├── public/                 Static assets and the tile Service Worker (sw-dem.js + sw-dem/)
-├── vendor/                 Rust crates compiled to WebAssembly (outputs committed)
-├── scripts/                Build, quality gate, release and operations tooling
-├── script-test-bench/      Benchmarks, end-to-end journeys and regression suites
-├── test/                   Tests of code that cannot host its own (Service Worker)
-├── docs/                   Architecture notes, runbooks, dated audits
-├── server.mjs              Production entry point (static files + API)
-└── CLAUDE.md               Detailed technical reference
+│   ├── features/           Un dossier par domaine : map3d, itineraryPanel, lidar, collab, …
+│   ├── shared/             composants, hooks, lib, services, styles, i18n, test
+│   └── pages/Dashboard/    Racine de composition de l'éditeur
+├── api/                    Gestionnaires de routes HTTP (api/<nom>.ts → /api/<nom>), code partagé dans _lib/
+├── server/                 Modules serveur partagés (lib/), serveur temps réel, services du VPS, config de l'hôte
+├── public/                 Ressources statiques et Service Worker des tuiles (sw-dem.js + sw-dem/)
+├── vendor/                 Crates Rust compilées en WebAssembly (sorties commitées)
+├── scripts/                Outils de build, porte qualité, mise en production et exploitation
+├── script-test-bench/      Bancs de performance, parcours de bout en bout et suites de régression
+├── test/                   Tests du code qui ne peut pas héberger les siens (Service Worker)
+├── docs/                   Notes d'architecture, procédures, audits datés
+├── server.mjs              Point d'entrée de production (fichiers statiques + API)
+└── CLAUDE.md               Référence technique détaillée
 ```
 
-Each top-level folder with more than one role has its own map:
+Chaque dossier de premier niveau qui a plus d'un rôle a sa propre carte :
 [`server/`](server/README.md) · [`scripts/`](scripts/README.md) · [`script-test-bench/`](script-test-bench/README.md) ·
-[`docs/`](docs/README.md). Conventions inside `src/` are in
+[`docs/`](docs/README.md). Les conventions à l'intérieur de `src/` sont dans
 [`docs/architecture/structure.md`](docs/architecture/structure.md).
 
-## Getting started
+## Démarrer
 
-**Requirements:** Node.js 22 (see [`.nvmrc`](.nvmrc)) and npm.
-Optional: a Java runtime and a sibling `../redview-brouter` checkout for a local
-BRouter; the Rust toolchain only to rebuild the WebAssembly crates, whose outputs
-are committed.
+**Prérequis :** Node.js 22 (voir [`.nvmrc`](.nvmrc)) et npm.
+En option : un environnement Java et un dépôt `../redview-brouter` voisin pour un
+BRouter local ; la chaîne Rust seulement pour recompiler les crates WebAssembly,
+dont les sorties sont commitées.
 
 ```bash
 npm ci
-cp .env.example .env   # Appwrite, Mapbox and upstream values
-npm run dev            # Vite + API routes + real-time server + local services
+cp .env.example .env   # valeurs Appwrite, Mapbox et des services amont
+npm run dev            # Vite + routes d'API + serveur temps réel + services locaux
 ```
 
-`npm run dev` starts BRouter and the POI server locally when they are available,
-and opens an SSH tunnel to the VPS for the upstreams that only answer local
-requests (see [`.env.example`](.env.example)).
+`npm run dev` démarre BRouter et le serveur de POI en local quand ils sont
+disponibles, et ouvre un tunnel SSH vers le VPS pour les services amont qui ne
+répondent qu'aux requêtes locales (voir [`.env.example`](.env.example)).
 
-## Everyday commands
+## Commandes courantes
 
-| Command | What it does |
+| Commande | Rôle |
 |---|---|
-| `npm run dev` | Development server: app, API routes, real-time server, local services |
-| `npm run build` | Type-check and production build of the frontend |
-| `npm start` | Production server from sources |
-| `npm run check` | Quality gate, in parallel: types, ESLint, unit tests, knip, import cycles |
-| `npm run check:full` | Gate + production build, bundle budget, bundled servers started for real, end-to-end journey, regression suites — what CI runs |
-| `npm test` | Unit tests (Vitest) |
-| `npm run bench` | Performance suites with thresholds ([`script-test-bench/`](script-test-bench/README.md)) |
-| `npm run deploy` | Deploy committed work to production, after the full gate |
+| `npm run dev` | Serveur de développement : application, routes d'API, serveur temps réel, services locaux |
+| `npm run build` | Vérification des types et build de production du frontend |
+| `npm start` | Serveur de production depuis les sources |
+| `npm run check` | Porte qualité, en parallèle : types, ESLint, tests unitaires, knip, cycles d'import, traductions |
+| `npm run check:full` | Porte + build de production, budget du bundle, serveurs bundlés réellement démarrés, parcours de bout en bout, suites de régression — ce que lance la CI |
+| `npm test` | Tests unitaires (Vitest) |
+| `npm run bench` | Suites de performance avec seuils ([`script-test-bench/`](script-test-bench/README.md)) |
+| `npm run deploy` | Met en production le travail commité, après la porte complète |
 
-Every command, with the purpose of each benchmark, is listed in [`CLAUDE.md`](CLAUDE.md).
+Toutes les commandes, avec le rôle de chaque banc, sont listées dans [`CLAUDE.md`](CLAUDE.md).
 
-## Quality
+## Qualité
 
-- **Types.** Strict TypeScript (`noUnused*`, `verbatimModuleSyntax`, `erasableSyntaxOnly`)
-  for the app, the API, the servers and the benchmarks.
-- **Tests.** Unit tests next to the code they cover (`foo.ts` → `foo.test.ts`),
-  security boundaries, persistence and routing math first. Server tests in
-  `server/lib/__tests__/` and `server/multiplayer/`, API tests in `api/_lib/__tests__/`.
-- **Regression suites on real data.** Routing quality (~660 scenarios), pace
-  accuracy against real rides, co-editing under load and across server restarts,
-  dashboard load on throttled networks, the LiDAR viewer in Chromium, Firefox and
-  WebKit, layout on 15 screen sizes.
-- **Static analysis.** An ESLint ratchet (no new error can be added), knip (no
-  unused file, dependency or export), madge (no runtime import cycle), a 300 KiB
-  budget on the initial load.
-- **CI.** GitHub Actions runs `check:full` and the LiDAR viewer suite on Linux for
-  every push and pull request to `main`.
+- **Types.** TypeScript strict (`noUnused*`, `verbatimModuleSyntax`, `erasableSyntaxOnly`)
+  pour l'application, l'API, les serveurs et les bancs.
+- **Tests.** Tests unitaires à côté du code qu'ils couvrent (`foo.ts` → `foo.test.ts`),
+  frontières de sécurité, persistance et calculs de routage d'abord ; tests de
+  composants pour les barres d'outils et onglets principaux. Tests serveur dans
+  `server/lib/__tests__/` et `server/multiplayer/`, tests d'API dans `api/_lib/__tests__/`.
+- **Suites de régression sur données réelles.** Qualité du routage (~660 scénarios),
+  justesse de l'allure face à de vraies sorties, co-édition sous charge et à travers
+  les redémarrages du serveur, chargement du tableau de bord sur réseaux bridés,
+  visualiseur LiDAR dans Chromium, Firefox et WebKit, mise en page sur 15 tailles d'écran.
+- **Analyse statique.** Un cliquet ESLint (aucune nouvelle erreur ne peut entrer),
+  knip (aucun fichier, dépendance ou export inutilisé), madge (aucun cycle d'import
+  à l'exécution), un budget de 300 Kio sur le chargement initial, 100 % des textes
+  d'interface traduits (FR / EN).
+- **CI.** GitHub Actions lance `check:full` et la suite du visualiseur LiDAR sous Linux
+  à chaque push et pull request vers `main`.
 
-## Production and operations
+## Production et exploitation
 
-Production runs in Docker on Coolify, on an Oracle Cloud VPS behind the host's
-nginx. `npm run deploy` refuses a dirty tree, runs `check:full`, checks the
-production database schema, pushes, then triggers the deployment.
+La production tourne dans Docker sur Coolify, sur un VPS Oracle Cloud derrière le
+nginx de l'hôte. `npm run deploy` refuse un arbre de travail modifié, lance
+`check:full`, vérifie le schéma de la base de production, pousse, puis déclenche le
+déploiement.
 
-- **Errors** go to a self-hosted GlitchTip, from the frontend and the servers, with
-  hidden source maps uploaded at build time; CSP violations are reported there too.
-- **Logs** are one structured JSON line per request, with a request id propagated
-  to the POI service.
-- **Backups** are encrypted restic snapshots stored off-site, with a weekly
-  automated restore drill — see [`server/vps/backup/`](server/vps/backup/README.md).
-- **Security**: strict Content-Security-Policy (no `unsafe-eval`), server-side
-  rights checks for shared projects, byte-bounded caches, rate limits — see
-  [`SECURITY.md`](SECURITY.md).
+- **Erreurs** : envoyées à un GlitchTip auto-hébergé, depuis le frontend et les
+  serveurs, avec des source maps cachées envoyées au build ; les violations de CSP y
+  sont aussi rapportées.
+- **Journaux** : une ligne JSON structurée par requête, avec un identifiant de requête
+  propagé jusqu'au service de POI.
+- **Sauvegardes** : instantanés restic chiffrés stockés hors site, avec un exercice de
+  restauration automatique chaque semaine — voir [`server/vps/backup/`](server/vps/backup/README.md).
+- **Sécurité** : Content-Security-Policy stricte (sans `unsafe-eval`), contrôle des
+  droits côté serveur pour les projets partagés, caches bornés en octets, limitation
+  de débit — voir [`SECURITY.md`](SECURITY.md).
 
 ## Documentation
 
-| Document | For |
+| Document | Pour |
 |---|---|
-| [`CLAUDE.md`](CLAUDE.md) | The detailed technical reference: every command, the architecture, the rules each subsystem relies on |
-| [`docs/`](docs/README.md) | Architecture notes, runbooks and dated audits |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | How a change gets into `main`: setup, gate, tests, commit conventions |
-| [`SECURITY.md`](SECURITY.md) | Reporting a vulnerability |
+| [`CLAUDE.md`](CLAUDE.md) | La référence technique détaillée : chaque commande, l'architecture, les règles sur lesquelles repose chaque sous-système |
+| [`docs/`](docs/README.md) | Notes d'architecture, procédures d'exploitation et audits datés |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Comment un changement arrive dans `main` : installation, porte qualité, tests, conventions de commit |
+| [`SECURITY.md`](SECURITY.md) | Signaler une vulnérabilité |
 
-## License
+## Licence
 
-Private project. No license is granted to use, copy or distribute this code.
+Projet privé. Aucune licence n'est accordée pour utiliser, copier ou distribuer ce code.

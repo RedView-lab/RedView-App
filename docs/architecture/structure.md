@@ -1,151 +1,155 @@
-# Code structure
+# Structure du code
 
-[← Docs index](../README.md) · [Repository](../../README.md)
+[← Index de la documentation](../README.md) · [Dépôt](../../README.md)
 
-Where a file goes in `src/` and `public/`, and why. The rules below apply to
-every folder today. [`npm run check`](../../scripts/README.md) enforces the
-parts a tool can check: no unused file or export (knip), no import cycle (madge).
+Où va un fichier dans `src/` et `public/`, et pourquoi. Les règles ci-dessous
+s'appliquent aujourd'hui à chaque dossier. [`npm run check`](../../scripts/README.md)
+fait respecter ce qu'un outil peut vérifier : aucun fichier ni export inutilisé
+(knip), aucun cycle d'import (madge).
 
-## Where does this file go?
+## Où va ce fichier ?
 
-Ask these questions in order:
+Se poser ces questions dans l'ordre :
 
-1. **Is it used by one feature only?** Put it inside that feature.
-2. **Is it used by several features and owned by none?** Put it in `shared/`, in
-   the folder of its role ([see below](#shared--seven-folders-one-role-each)).
-3. **Does it do I/O with our backend?** Put it in `shared/services/`, or in the
-   feature's `queries/` for TanStack Query hooks.
-4. **Is it a coherent area with its own components, hooks and logic?** Give it a
-   named sub-domain folder inside its feature.
-5. **Does another feature need a deep internal of it?** Then either that internal
-   is public (export it from `index.ts` or `types.ts`), or the code sits in the
-   wrong feature.
+1. **N'est-il utilisé que par une feature ?** Le placer dans cette feature.
+2. **Est-il utilisé par plusieurs features sans appartenir à aucune ?** Le placer
+   dans `shared/`, dans le dossier de son rôle ([voir plus bas](#shared--sept-dossiers-un-rôle-chacun)).
+3. **Fait-il des entrées / sorties avec notre backend ?** Le placer dans
+   `shared/services/`, ou dans le `queries/` de la feature pour les hooks TanStack Query.
+4. **Est-ce une zone cohérente avec ses propres composants, hooks et logique ?**
+   Lui donner un dossier de sous-domaine nommé dans sa feature.
+5. **Une autre feature a-t-elle besoin de l'un de ses rouages internes ?** Alors
+   soit ce rouage est public (l'exporter depuis `index.ts` ou `types.ts`), soit le
+   code est dans la mauvaise feature.
 
-## Top level of `src/`
+## Premier niveau de `src/`
 
 ```text
 src/
-  main.tsx, App.tsx, index.css   bootstrap: theme, error reporting, session, lazy Dashboard
-  pages/                         one folder per page (composition roots)
-  features/                      product domains, feature-sliced
-  shared/                        code used by several features, with no business owner
-  types/                         ambient declarations only (*.d.ts for untyped packages)
+  main.tsx, App.tsx, index.css   amorçage : thème, rapport d'erreurs, session, Dashboard chargé à la demande
+  pages/                         un dossier par page (racines de composition)
+  features/                      domaines du produit, découpés par feature
+  shared/                        code utilisé par plusieurs features, sans propriétaire métier
+  types/                         déclarations ambiantes seulement (*.d.ts des paquets non typés)
 ```
 
-Nothing else lives at the root of `src/`. There is no `src/lib`, `src/components` or `src/utils`.
+Rien d'autre ne vit à la racine de `src/`. Il n'y a ni `src/lib`, ni `src/components`, ni `src/utils`.
 
-## `shared/` — seven folders, one role each
+## `shared/` — sept dossiers, un rôle chacun
 
-| Folder | Holds | Examples |
+| Dossier | Contient | Exemples |
 |---|---|---|
-| `components/` | React components (a folder when there is a CSS file or helpers) | `RedViewLogo.tsx`, `UserAvatar/`, `AppToaster/` |
-| `hooks/` | Generic React hooks | `useLatestRef`, `useHorizontalScrollOverflow` |
-| `lib/` | Pure functions and small framework-free modules, with no I/O to our backend | `appScale`, `appTheme`, `notify`, `terrarium`, `analytics/` |
-| `services/` | I/O: Appwrite, the TanStack Query client, project persistence | `appwrite.ts`, `queryClient.ts`, `projects/`, `storage/idbProjectStore.ts` |
-| `styles/` | Global CSS tokens and shared visual layers | `theme.css`, `typography.css`, `dialog.css` |
-| `i18n/` | Translation runtime and the `{ fr, en }` pair files | `AppI18nProvider`, `config/translations/` |
-| `test/` | Test helpers shared by several test files | `renderHook.ts` |
+| `components/` | Composants React (un dossier quand il y a un fichier CSS ou des aides) | `RedViewLogo.tsx`, `UserAvatar/`, `AppToaster/` |
+| `hooks/` | Hooks React génériques | `useLatestRef`, `useHorizontalScrollOverflow` |
+| `lib/` | Fonctions pures et petits modules sans framework, sans entrée / sortie vers notre backend | `appScale`, `appTheme`, `notify`, `terrarium`, `analytics/` |
+| `services/` | Entrées / sorties : Appwrite, le client TanStack Query, la persistance des projets | `appwrite.ts`, `queryClient.ts`, `projects/`, `storage/idbProjectStore.ts` |
+| `styles/` | Jetons CSS globaux et couches visuelles partagées | `theme.css`, `typography.css`, `dialog.css` |
+| `i18n/` | Moteur de traduction et fichiers de paires `{ fr, en }` | `AppI18nProvider`, `config/translations/` |
+| `test/` | Aides de test partagées par plusieurs fichiers de test | `renderHook.ts`, `renderComponent.ts` |
 
-There is no `shared/ui` and no `shared/utils`. A new shared file goes in one of
-the seven folders above. If none fits, it probably belongs to a feature.
+Il n'y a ni `shared/ui` ni `shared/utils`. Un nouveau fichier partagé va dans
+l'un des sept dossiers ci-dessus. Si aucun ne convient, il appartient
+probablement à une feature.
 
-## Shape of a feature
+## Forme d'une feature
 
 ```text
-features/<name>/
-  index.ts        public API (optional, see "Public API and barrels")
-  types.ts        public types (types/ when large)
-  components/     React components
-  hooks/          React hooks
-  lib/            pure logic, data files (e.g. poi/lib/poi-taxonomy.json), the logic run by workers
-  context/        React contexts and stores (optional)
-  styles/         feature CSS shared by several components (optional)
-  queries/        TanStack Query hooks for server state (optional)
-  <subdomain>/    a coherent sub-area with its own components/, hooks/, lib/ (optional)
+features/<nom>/
+  index.ts        API publique (facultative, voir « API publique et barrels »)
+  types.ts        types publics (types/ quand ils sont nombreux)
+  components/     composants React
+  hooks/          hooks React
+  lib/            logique pure, fichiers de données (p. ex. poi/lib/poi-taxonomy.json), la logique exécutée par les workers
+  context/        contextes et stores React (facultatif)
+  styles/         CSS de la feature partagé par plusieurs composants (facultatif)
+  queries/        hooks TanStack Query pour l'état serveur (facultatif)
+  <sous-domaine>/ une sous-zone cohérente avec ses propres components/, hooks/, lib/ (facultatif)
 ```
 
-1. **The root of a feature holds only `index.ts`, `types.ts` or `types/`,
-   `config.ts`, and sub-folders.** A component, hook or helper found at the root
-   moves into `components/`, `hooks/` or `lib/`.
-2. **Tests sit next to their module:** `foo.ts` → `foo.test.ts`. A test that
-   spans several sub-areas sits in their common parent, for example
+1. **La racine d'une feature ne contient que `index.ts`, `types.ts` ou `types/`,
+   `config.ts`, et des sous-dossiers.** Un composant, un hook ou une aide trouvé à
+   la racine part dans `components/`, `hooks/` ou `lib/`.
+2. **Les tests sont à côté de leur module :** `foo.ts` → `foo.test.ts`. Un test qui
+   couvre plusieurs sous-zones se place dans leur parent commun, par exemple
    `centerPanel/tools/toolDisarm.test.tsx`.
-3. **Sub-domains get a real name, never a generic `subfeatures/`.** Examples:
-   `centerPanel/flyover`, `centerPanel/tools/<tool>`, `lidar/viewer`,
+3. **Les sous-domaines portent un vrai nom, jamais un `subfeatures/` générique.**
+   Exemples : `centerPanel/flyover`, `centerPanel/tools/<outil>`, `lidar/viewer`,
    `weather/overlay`, `weather/radar`, `controlPanel/sections`,
    `projectBrowser/{account,billing,settings}`, `collab/{client,model,room,sim}`,
-   `livePresence/engine`, `comments/bridge`. Sibling sub-domains of the same
-   kind are grouped together: `centerPanel/tools/` holds `chartPlacement`,
-   `forbiddenZones`, `routeDragWaypoint`, `routeMerge`, `routeSplit` and `tracer`.
-4. **One documented exception: a wire contract stays at the root.**
-   `collab/protocol.ts`, `wire.ts`, `schema.ts`, `realtime.ts` and
-   `routeChunks.ts` form the protocol between client and server. `server/multiplayer`
-   and the benches import them. They stay at the feature root, with the tests that
-   exercise them end to end (`collab.test.ts`, `presence.test.ts`), so that the
-   contract stays visible and stable.
+   `livePresence/engine`, `comments/bridge`. Les sous-domaines frères de même
+   nature sont regroupés : `centerPanel/tools/` contient `chartPlacement`,
+   `forbiddenZones`, `routeDragWaypoint`, `routeMerge`, `routeSplit` et `tracer`.
+4. **Une exception documentée : un contrat d'échange reste à la racine.**
+   `collab/protocol.ts`, `wire.ts`, `schema.ts`, `realtime.ts` et `routeChunks.ts`
+   forment le protocole entre client et serveur. `server/multiplayer` et les bancs
+   les importent. Ils restent à la racine de la feature, avec les tests qui les
+   exercent de bout en bout (`collab.test.ts`, `presence.test.ts`), pour que le
+   contrat reste visible et stable.
 
-## Public API and barrels
+## API publique et barrels
 
-- **When there is an `index.ts`, import the feature through it.** A feature has
-  one when other features consume a real public surface: providers, a main
-  component, public hooks.
-- **Inside a feature, never import its own barrel.** A module that the barrel
-  re-exports, directly or transitively, imports concrete modules. Otherwise it
-  closes an import cycle, and `npm run cycles` must stay at zero.
-- **Keep the project browser light.** The shell never imports the `map3d` or
-  `controlPanel` barrels: `npm run bundle:check` keeps mapbox-gl and the 3D
-  editor off its critical path.
-- **Some small features have no barrel on purpose:** `contourLines`, `labels`,
-  `slope` and `poi`. A `poi` barrel would pull its Mapbox marker layer and CSS
-  into modules that only need `poi/types`, and would create cycles with `map3d`.
-  Their public surface is `types.ts` plus the `lib/` modules their importers name.
+- **Quand il existe un `index.ts`, importer la feature par lui.** Une feature en a
+  un quand d'autres features consomment une vraie surface publique : providers,
+  un composant principal, des hooks publics.
+- **À l'intérieur d'une feature, ne jamais importer son propre barrel.** Un module
+  que le barrel réexporte, directement ou transitivement, importe des modules
+  concrets. Sinon il ferme un cycle d'import, et `npm run cycles` doit rester à zéro.
+- **Garder le gestionnaire de projets léger.** La coque n'importe jamais les barrels
+  `map3d` ou `controlPanel` : `npm run bundle:check` garde mapbox-gl et l'éditeur 3D
+  hors de son chemin critique.
+- **Certaines petites features n'ont volontairement pas de barrel :**
+  `contourLines`, `labels`, `slope` et `poi`. Un barrel `poi` tirerait sa couche de
+  marqueurs Mapbox et son CSS dans des modules qui n'ont besoin que de `poi/types`,
+  et créerait des cycles avec `map3d`. Leur surface publique est `types.ts` plus les
+  modules de `lib/` que nomment leurs importateurs.
 
 ## `pages/`
 
-A page is a composition root, with the same shape as a feature:
+Une page est une racine de composition, avec la même forme qu'une feature :
 
 ```text
 pages/Dashboard/
-  index.tsx        the page
-  editorLoader.ts  lazy entry of the 3D editor (kept at the root: it is the code-split point)
-  components/      page-only UI (DashboardEditor, place search, loading screen)
-  hooks/           page-only hooks (useDashboardChrome, useDashboardProjectState, …)
-  lib/             page-only helpers (layout, dashboardProjectCache, editorReadyMeter)
+  index.tsx        la page
+  editorLoader.ts  entrée à la demande de l'éditeur 3D (gardée à la racine : c'est le point de découpage du code)
+  components/      interface propre à la page (DashboardEditor, recherche de lieu, écran de chargement)
+  hooks/           hooks propres à la page (useDashboardChrome, useDashboardProjectState, …)
+  lib/             aides propres à la page (layout, dashboardProjectCache, editorReadyMeter)
 ```
 
 ## Styles
 
-- **Font sizes and colours come from tokens.** Every font size goes through the
-  tokens of `shared/styles/typography.css`, every colour through those of
-  `shared/styles/theme.css`. The rules are in [`CLAUDE.md`](../../CLAUDE.md),
-  under « Typography » and « Themes ».
-- **Component CSS sits next to its component**, as in `UserAvatar/UserAvatar.css`.
-  When several components of a feature share a stylesheet, it goes in the
-  feature's `styles/` folder, with an `index.css`.
-- **Inline styles are for runtime values only:** values computed while the app runs.
+- **Tailles de police et couleurs viennent des jetons.** Chaque taille de police
+  passe par les jetons de `shared/styles/typography.css`, chaque couleur par ceux
+  de `shared/styles/theme.css`. Les règles sont dans [`CLAUDE.md`](../../CLAUDE.md),
+  aux rubriques « Typographie » et « Thèmes ».
+- **Le CSS d'un composant est à côté de lui**, comme `UserAvatar/UserAvatar.css`.
+  Quand plusieurs composants d'une feature partagent une feuille de style, elle va
+  dans le dossier `styles/` de la feature, avec un `index.css`.
+- **Les styles en ligne sont réservés aux valeurs d'exécution :** des valeurs
+  calculées pendant que l'application tourne.
 
-## `public/` — static files served as-is
+## `public/` — fichiers statiques servis tels quels
 
-| Path | Holds |
+| Chemin | Contient |
 |---|---|
-| `icons/ui/` | Interface icons, drawn as masks in `currentColor` through `SvgV2Icon` |
-| `icons/poi/` | POI glyphs, pins and badges, the POI cluster icon of the analysis chart |
-| `icons/context-menu/` | Icons of the map and POI context menus |
-| `flags/` | Country flags of the country and language selectors |
-| `brand/` | The RedView logo, in its two colour variants |
-| `images/` | Raster images (settings previews, link-preview image `images/og/`) |
-| `sw-dem.js`, `sw-dem/` | The tile Service Worker. Any change needs a bump of the cache stamp in the header of `sw-dem.js`. |
-| root files | Favicons, app icons, `robots.txt`, the WebAssembly binaries, `france-border.json` |
+| `icons/ui/` | Icônes d'interface, dessinées en masques `currentColor` via `SvgV2Icon` |
+| `icons/poi/` | Glyphes, épingles et badges des POI, l'icône de groupe de POI du graphique d'analyse |
+| `icons/context-menu/` | Icônes des menus contextuels de la carte et des POI |
+| `flags/` | Drapeaux des sélecteurs de pays et de langue |
+| `brand/` | Le logo RedView, dans ses deux variantes de couleur |
+| `images/` | Images matricielles (aperçus des réglages, image d'aperçu de lien `images/og/`) |
+| `sw-dem.js`, `sw-dem/` | Le Service Worker des tuiles. Tout changement demande une ligne datée dans le tampon de cache de l'en-tête de `sw-dem.js`. |
+| fichiers racine | Favicons, icônes d'application, `robots.txt`, les binaires WebAssembly, `france-border.json` |
 
-The code refers to these files by absolute URL (`/icons/ui/…`). Knip does not
-see them, so after moving or deleting a file, build the app and check that every
-URL the code uses still exists in `dist/`.
+Le code désigne ces fichiers par URL absolue (`/icons/ui/…`). Knip ne les voit pas :
+après avoir déplacé ou supprimé un fichier, construire l'application et vérifier
+que chaque URL utilisée par le code existe encore dans `dist/`.
 
-## Moving files
+## Déplacer des fichiers
 
-- Move files with `git mv`, so their history is kept.
-- Rewrite every import in the same commit, including references outside `src/`:
-  benches, `server/`, `scripts/`, comments, `CLAUDE.md`.
-- `npm run check` must be green on each commit.
-- Several sessions can share one working tree. Commit an explicit file list
-  (`git commit -- <files>`), never a whole folder.
+- Déplacer avec `git mv`, pour garder l'historique.
+- Réécrire chaque import dans le même commit, références hors de `src/` comprises :
+  bancs, `server/`, `scripts/`, commentaires, `CLAUDE.md`.
+- `npm run check` doit être vert à chaque commit.
+- Plusieurs sessions peuvent partager un même arbre de travail. Commiter une liste
+  explicite de fichiers (`git commit -- <fichiers>`), jamais un dossier entier.

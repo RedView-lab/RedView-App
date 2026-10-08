@@ -1,38 +1,38 @@
-name: Feature request
-description: Suggest an improvement or a new capability.
-title: "[Feature] "
+name: Proposer une amélioration
+description: Suggérer une amélioration ou une nouvelle possibilité.
+title: "[Idée] "
 labels: ["enhancement"]
 body:
   - type: textarea
     id: problem
     attributes:
-      label: The problem
-      description: What are you trying to do, and what gets in the way today?
+      label: Le problème
+      description: Qu'essayez-vous de faire, et qu'est-ce qui vous en empêche aujourd'hui ?
     validations:
       required: true
 
   - type: textarea
     id: proposal
     attributes:
-      label: What you would like
-      description: How it could work. Sketches and examples from other tools are welcome.
+      label: Ce que vous aimeriez
+      description: Comment cela pourrait fonctionner. Croquis et exemples tirés d'autres outils bienvenus.
     validations:
       required: true
 
   - type: dropdown
     id: activity
     attributes:
-      label: For which activity
+      label: Pour quelle activité
       multiple: true
       options:
-        - Ultra-cycling / road
+        - Ultra-cyclisme / route
         - Bikepacking / gravel
-        - Trail running / hiking
-        - Mountain / ski touring
-        - Any
+        - Trail / randonnée
+        - Montagne / ski de randonnée
+        - Toutes
 
   - type: textarea
     id: alternatives
     attributes:
-      label: Alternatives (optional)
-      description: Workarounds you use today, or other options you considered.
+      label: Alternatives (facultatif)
+      description: Solutions de contournement utilisées aujourd'hui, ou autres options envisagées.
