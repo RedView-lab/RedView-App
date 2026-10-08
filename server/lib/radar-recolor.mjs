@@ -1,7 +1,8 @@
 /**
- * Server-side Doppler Radar Tile Recolorer
- * Decompresses RainViewer Scheme 2 (512x512 RGBA) PNG tiles and recolors
- * precipitation intensity in ~3 ms using node:zlib without external dependencies.
+ * Recoloration des tuiles radar Doppler côté serveur
+ * Décompresse les tuiles PNG RainViewer Scheme 2 (512x512 RGBA) et recolore
+ * l'intensité des précipitations en ~3 ms avec node:zlib, sans dépendance
+ * externe.
  */
 import { inflateSync, deflateSync, crc32 } from 'node:zlib';
 
@@ -157,8 +158,8 @@ function makeChunk(typeStr, dataBuf) {
 }
 
 /**
- * Recolors a RainViewer Doppler radar PNG Buffer according to palette parameter string `pStr`.
- * Returns the recolored PNG Buffer in ~3 milliseconds.
+ * Recolore un Buffer PNG de radar Doppler RainViewer selon la chaîne de
+ * paramètres de palette `pStr`. Renvoie le Buffer PNG recoloré en ~3 ms.
  */
 export function recolorRadarPng(rawPngBuffer, pStr) {
   if (!pStr || !isValidRadarPaletteParam(pStr)) return rawPngBuffer;
@@ -179,7 +180,7 @@ export function recolorRadarPng(rawPngBuffer, pStr) {
 
     // Tuile 512×512 RGBA ≈ 1 Mo décompressée : 8 Mo de marge suffisent.
     const raw = inflateSync(Buffer.concat(idatParts), { maxOutputLength: 8 * 1024 * 1024 });
-    // Verify 512x512 RGBA scanline size: 512 * 2049 = 1,049,088 bytes
+    // Vérifie la taille des lignes RGBA 512x512 : 512 * 2049 = 1 049 088 octets
     if (raw.length !== 1049088) return rawPngBuffer;
 
     const lookup = getOrCreateLookup(pStr);
@@ -211,7 +212,7 @@ export function recolorRadarPng(rawPngBuffer, pStr) {
           raw[idx] = c.r;
           raw[idx + 1] = c.g;
           raw[idx + 2] = c.b;
-          // preserve alpha
+          // alpha préservé
         }
       }
     }

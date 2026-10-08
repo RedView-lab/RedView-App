@@ -1,29 +1,31 @@
 /**
- * Proxy → BRouter standalone (VPS, port 17777 derrière le nginx de l'hôte).
+ * Proxy → BRouter autonome (VPS, port 17777 derrière le nginx de l'hôte).
  *
- * Two endpoints muxed on a single handler:
+ * Deux points d'accès multiplexés sur un seul gestionnaire :
  *
  *   GET  /api/brouter?lonlats=...&profile=trekking[&profile:xxx=...]
- *        → forwards the standard BRouter routing query.
+ *        → transmet la requête de routage BRouter standard.
  *
  *   POST /api/brouter?upload=1
- *        body = full BRF profile text (UTF-8, ≤ 100 000 chars)
- *        → uploads a custom profile, returns { profileid: "custom_<hash>" }.
- *        The id is derived server-side from the profile content
- *        (sha256, 16 hex chars); any client-supplied `?id=` is ignored.
- *        Use the returned id in subsequent GETs as `profile=custom_<hash>`.
+ *        corps = texte complet du profil BRF (UTF-8, ≤ 100 000 caractères)
+ *        → envoie un profil personnalisé, renvoie { profileid: "custom_<hash>" }.
+ *        L'id est dérivé côté serveur du contenu du profil (sha256,
+ *        16 caractères hexadécimaux) ; tout `?id=` fourni par le client est
+ *        ignoré. Utiliser l'id renvoyé dans les GET suivants comme
+ *        `profile=custom_<hash>`.
  *
- * Why a proxy?
- *   - BRouter answers plain HTTP and only to local clients (the VPS nginx
- *     returns 403 otherwise): the browser stays same-origin (`/api/brouter`),
- *     without mixed content or CORS.
- *   - Query parameters are whitelisted (no beeline), the A* coefficient is
- *     bounded server-side and routes are cached compressed.
+ * Pourquoi un proxy ?
+ *   - BRouter répond en HTTP simple et seulement aux clients locaux (sinon le
+ *     nginx du VPS renvoie 403) : le navigateur reste en même origine
+ *     (`/api/brouter`), sans contenu mixte ni CORS.
+ *   - Les paramètres de requête sont en liste blanche (pas de beeline), le
+ *     coefficient A* est borné côté serveur et les routes sont mises en cache
+ *     compressées.
  *
- * Server env var (see .env.example):
- *   BROUTER_UPSTREAM=http://<VPS_IP>          (host nginx: /brouter → 127.0.0.1:17777)
- *   # or
- *   BROUTER_UPSTREAM=http://<VPS_IP>:17777    (BRouter direct)
+ * Variable d'environnement serveur (voir .env.example) :
+ *   BROUTER_UPSTREAM=http://<VPS_IP>          (nginx de l'hôte : /brouter → 127.0.0.1:17777)
+ *   # ou
+ *   BROUTER_UPSTREAM=http://<VPS_IP>:17777    (BRouter en direct)
  */
 import crypto from 'node:crypto';
 import { promisify } from 'node:util';
@@ -88,7 +90,7 @@ export default async function handler(
 }
 
 /* ------------------------------------------------------------------ */
-/* GET → /brouter routing query                                        */
+/* GET → requête de routage /brouter                                   */
 /* ------------------------------------------------------------------ */
 
 interface CachedRoute {
@@ -170,8 +172,9 @@ async function handleRouteQuery(
 ) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(req.query)) {
-    // Allow whitelisted keys + every `profile:xxx` override (BRouter syntax
-    // for tweaking individual `assign` values declared in the base profile).
+    // Accepte les clés en liste blanche + chaque surcharge `profile:xxx`
+    // (syntaxe BRouter pour ajuster une à une les valeurs `assign` déclarées
+    // dans le profil de base).
     const allowed = ALLOWED_PARAMS.has(key) || (key.startsWith('profile:') && key !== BEELINE_OVERRIDE);
     if (!allowed) continue;
     if (Array.isArray(value)) params.set(key, value[0] ?? '');
@@ -242,8 +245,8 @@ async function handleRouteQuery(
   const contentType =
     upstreamRes.headers.get('content-type') ?? 'application/json';
 
-  // BRouter returns plain-text "error: ..." with HTTP 200 on routing
-  // failures. Surface them as 422 so the client can react.
+  // BRouter renvoie du texte brut « error: ... » avec un HTTP 200 sur les
+  // échecs de routage. On les remonte en 422 pour que le client puisse réagir.
   const looksLikeError =
     !contentType.includes('json') ||
     body.trimStart().toLowerCase().startsWith('error');
@@ -251,9 +254,10 @@ async function handleRouteQuery(
   res.setHeader('Content-Type', contentType);
   res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300');
   if (looksLikeError) {
-    // Surface upstream error text in a custom header too, in case the
-    // body is consumed/filtered on the way back to the browser (some
-    // CDNs strip plain-text 422 bodies). Truncate to keep headers small.
+    // Remonte aussi le texte d'erreur amont dans un en-tête dédié, au cas où le
+    // corps serait consommé / filtré sur le chemin du retour vers le
+    // navigateur (certains CDN retirent les corps 422 en texte brut). Tronqué
+    // pour garder des en-têtes petits.
     res.setHeader('x-brouter-upstream-error', sanitizeHeaderValue(body));
     return res.status(422).send(body);
   }
@@ -267,7 +271,7 @@ async function handleRouteQuery(
 }
 
 /* ------------------------------------------------------------------ */
-/* POST → /brouter/profile (custom BRF upload)                         */
+/* POST → /brouter/profile (envoi d'un BRF personnalisé)               */
 /* ------------------------------------------------------------------ */
 
 async function handleProfileUpload(
@@ -275,7 +279,7 @@ async function handleProfileUpload(
   res: ApiResponse,
   base: string,
 ) {
-  // Accept either raw text/plain body OR JSON { profile: "<brf>" } OR Buffer.
+  // Accepte un corps text/plain brut OU du JSON { profile: "<brf>" } OU un Buffer.
   let profileText: string | null = null;
   if (typeof req.body === 'string') {
     profileText = req.body;
@@ -351,7 +355,7 @@ async function handleProfileUpload(
   clearTimeout(timer);
 
   const text = await upstreamRes.text();
-  // Never cache profile uploads.
+  // Jamais de cache pour les envois de profil.
   res.setHeader('Cache-Control', 'no-store');
 
   if (!upstreamRes.ok) {

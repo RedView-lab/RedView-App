@@ -47,8 +47,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return res.status(400).json({ error: 'Le nom ne doit pas dépasser 100 caractères.' });
   }
 
-  // 1. Validate code (consumed only once the account exists: an Appwrite
-  //    failure below leaves it usable for a retry)
+  // 1. Valide le code (consommé seulement une fois le compte créé : un échec
+  //    d'Appwrite plus bas le laisse utilisable pour un nouvel essai)
   const validation = checkVerificationCode(normalizedEmail, trimmedCode);
   if (!validation.valid) {
     return res
@@ -59,7 +59,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   try {
     const users = getAppwriteUsers();
 
-    // 2. Create the Appwrite user
+    // 2. Crée l'utilisateur Appwrite
     const finalName =
       (typeof name === 'string' && name.trim()) || normalizedEmail.split('@')[0] || 'User';
     let user;
@@ -97,9 +97,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
     consumeVerificationCode(normalizedEmail);
 
-    // 3. Mark the email as verified: the code proved it. The account works
-    //    without the flag, so a failure here must not report the sign-up as
-    //    failed (a retry would only get « account already exists »).
+    // 3. Marque l'e-mail comme vérifié : le code l'a prouvé. Le compte
+    //    fonctionne sans le drapeau, donc un échec ici ne doit pas signaler
+    //    l'inscription comme ratée (un nouvel essai n'obtiendrait que « le
+    //    compte existe déjà »).
     try {
       await users.updateEmailVerification(user.$id, true);
     } catch (verifyErr) {

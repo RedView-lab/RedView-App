@@ -84,7 +84,7 @@ function writeDiskStore(data: PersistedStore) {
   try {
     fs.writeFileSync(STORE_FILE, JSON.stringify(data), {
       encoding: 'utf-8',
-      mode: 0o600, // Restrict file access to owner only
+      mode: 0o600, // Restreint l'accès au fichier au seul propriétaire
     });
   } catch (err) {
     console.warn('[verificationStore] Error writing secure store file:', err);
@@ -182,7 +182,7 @@ function saveQuota(email: string, entry: EmailQuotaEntry) {
   scheduleFlush();
 }
 
-// Clean expired entries periodically
+// Nettoie périodiquement les entrées expirées
 const cleanupTimer = setInterval(() => {
   const now = Date.now();
   let changed = false;
@@ -222,7 +222,7 @@ export function normalizeVerificationEmail(email: string): string {
 }
 
 export function generate6DigitCode(): string {
-  // Cryptographically secure random 6 digits (000000 - 999999)
+  // 6 chiffres aléatoires cryptographiquement sûrs (000000 - 999999)
   return crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
 }
 
@@ -365,7 +365,7 @@ export function checkVerificationCode(email: string, inputCode: string): CodeChe
     };
   }
 
-  // Maximum 5 attempts per code to prevent brute-forcing
+  // 5 essais au plus par code, contre la force brute
   if (entry.attempts >= MAX_ATTEMPTS_PER_CODE) {
     deleteCode(normalizedEmail);
     return {
@@ -374,10 +374,10 @@ export function checkVerificationCode(email: string, inputCode: string): CodeChe
     };
   }
 
-  // Compute salted SHA-256 hash
+  // Calcule l'empreinte SHA-256 salée
   const computedHash = hashVerificationCode(cleanInput, entry.salt);
 
-  // Timing-safe constant-time comparison
+  // Comparaison en temps constant (résistante aux attaques temporelles)
   const expectedBuf = Buffer.from(entry.codeHash, 'utf-8');
   const inputBuf = Buffer.from(computedHash, 'utf-8');
 

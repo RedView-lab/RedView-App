@@ -35,7 +35,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     //    aux deux chemins pour qu'ils restent indiscernables.
     consumeVerificationRequestQuota(normalizedEmail);
 
-    // 1. Check if user already exists in Appwrite
+    // 1. Vérifie si l'utilisateur existe déjà dans Appwrite
     const users = getAppwriteUsers();
     const existing = await users.list([Query.equal('email', normalizedEmail)]);
 
@@ -43,7 +43,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       // Pas de 409 : on prévient le propriétaire de la boîte par e-mail.
       await sendAccountExistsEmail({ to: normalizedEmail, name: cleanName });
     } else {
-      // 2. Generate and dispatch verification code
+      // 2. Génère et envoie le code de vérification
       await requestVerificationCode(normalizedEmail, cleanName);
     }
 

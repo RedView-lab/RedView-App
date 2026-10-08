@@ -1,28 +1,28 @@
 /**
- * Proxy → Météo-France WCS API (AROME snow_depth).
+ * Proxy → API WCS de Météo-France (snow_depth d'AROME).
  *
- * Why server-side (vs. browser fetch)?
- *   1. The Météo-France WCS endpoint returns GRIB2 — a binary scientific
- *      format that's very heavy to parse in the browser (CCSDS / template
- *      5.42 compression).
- *   2. The JWT API key shouldn't be exposed to the client.
+ * Pourquoi côté serveur (plutôt qu'une requête du navigateur) ?
+ *   1. Le WCS de Météo-France renvoie du GRIB2 — un format scientifique
+ *      binaire très lourd à analyser dans le navigateur (compression CCSDS /
+ *      gabarit 5.42).
+ *   2. La clé d'API JWT ne doit pas être exposée au client.
  *
- * This is the EXACT same logic as RedView v0.1's
+ * C'est EXACTEMENT la même logique que celle de RedView v0.1
  *   crates/redview-io/src/remote/arome_client/{api,parser,auth,mod}.rs
- * but ported to Node + the @mattnucc/gribberish Rust GRIB2 parser
- * (same `grib` crate family v0.1 used).
+ * mais portée sous Node + l'analyseur GRIB2 Rust @mattnucc/gribberish (même
+ * famille de crates `grib` que celle utilisée par la v0.1).
  *
- * Pipeline:
- *   1. WCS GetCapabilities → list latest SNOW_DEPTH coverages
- *   2. WCS DescribeCoverage → first time step (analysis = 0s)
- *   3. WCS GetCoverage(time, bbox) → GRIB2 bytes (single 2D field)
- *   4. gribberish parses GRIB2 → values + lat/lon arrays
- *   5. Convert to cm, return JSON
+ * Pipeline :
+ *   1. WCS GetCapabilities → liste les dernières couvertures SNOW_DEPTH
+ *   2. WCS DescribeCoverage → premier pas de temps (analyse = 0 s)
+ *   3. WCS GetCoverage(time, bbox) → octets GRIB2 (un seul champ 2D)
+ *   4. gribberish analyse le GRIB2 → valeurs + tableaux lat / lon
+ *   5. Conversion en cm, réponse JSON
  *
- * Endpoint:
+ * Point d'accès :
  *   GET /api/meteofrance?lonMin=...&latMin=...&lonMax=...&latMax=...
  *
- * Server env var (required, the route answers 500 without it):
+ * Variable d'environnement serveur (obligatoire, la route répond 500 sans elle) :
  *   METEOFRANCE_API_KEY=<JWT>
  */
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
@@ -37,7 +37,7 @@ const SNOW_COVERAGE_PREFIX = 'SNOW_DEPTH__GROUND_OR_WATER_SURFACE___';
 
 const FETCH_TIMEOUT_MS = 25_000;
 
-// ────────────────────────────── HTTP helpers ──────────────────────────────
+// ────────────────────────────── Aides HTTP ──────────────────────────────
 
 function getToken(): string {
   const env = (process.env.METEOFRANCE_API_KEY ?? '').trim();
@@ -67,9 +67,9 @@ async function fetchWithApikey(url: string, accept: string, asText: boolean) {
   }
 }
 
-// ────────────────────────────── WCS workflow ──────────────────────────────
+// ────────────────────────────── Déroulé WCS ──────────────────────────────
 
-/** Pulls latest CoverageId starting with SNOW_DEPTH prefix. */
+/** Récupère le dernier CoverageId qui commence par le préfixe SNOW_DEPTH. */
 async function findSnowCoverage(): Promise<string> {
   const url =
     `${AROME_API_BASE}/wcs/${WCS_SERVICE}/GetCapabilities` +
@@ -86,17 +86,17 @@ async function findSnowCoverage(): Promise<string> {
     throw new Error('No SNOW_DEPTH coverage found in WCS GetCapabilities');
   }
   ids.sort();
-  return ids[ids.length - 1]; // latest run
+  return ids[ids.length - 1]; // dernier run
 }
 
-/** First time step from DescribeCoverage (analysis = 0s). */
+/** Premier pas de temps de DescribeCoverage (analyse = 0 s). */
 async function findFirstTimeStep(coverageId: string): Promise<string> {
   const url =
     `${AROME_API_BASE}/wcs/${WCS_SERVICE}/DescribeCoverage` +
     `?service=WCS&version=2.0.1&coverageID=${encodeURIComponent(coverageId)}`;
   const xml = (await fetchWithApikey(url, '*/*', true)) as string;
 
-  // Look for time axis coefficients
+  // Cherche les coefficients de l'axe du temps
   const timeBlock = /gridAxesSpanned>\s*time\s*<[\s\S]*?<gmlrgrid:coefficients>([^<]+)<\/gmlrgrid:coefficients>/.exec(
     xml,
   );
@@ -104,7 +104,7 @@ async function findFirstTimeStep(coverageId: string): Promise<string> {
     const first = timeBlock[1].trim().split(/\s+/)[0];
     if (first) return first;
   }
-  // Fallback: ISO begin position
+  // Repli : position de début ISO
   const begin = /<gml:beginPosition[^>]*>([^<]+)</.exec(xml);
   if (begin) return begin[1].trim();
   return '0';
@@ -134,7 +134,7 @@ function resolveLatestRun(): Promise<{ coverageId: string; timeValue: string }> 
   return run;
 }
 
-/** Run hour from CoverageId: ...___2026-04-23T06.00.00Z → "06". */
+/** Heure du run d'après le CoverageId : ...___2026-04-23T06.00.00Z → "06". */
 function extractRunHour(coverageId: string): string {
   const t = coverageId.lastIndexOf('T');
   return t >= 0 && coverageId.length >= t + 3
@@ -142,7 +142,7 @@ function extractRunHour(coverageId: string): string {
     : '00';
 }
 
-/** GetCoverage → GRIB2 bytes for a bbox subset at the chosen time. */
+/** GetCoverage → octets GRIB2 d'un sous-ensemble bbox à l'instant choisi. */
 async function downloadCoverage(
   coverageId: string,
   timeValue: string,
@@ -172,9 +172,9 @@ async function downloadCoverage(
 interface SnowGridJson {
   width: number;
   height: number;
-  /** snow depth in cm, row-major south→north */
+  /** hauteur de neige en cm, ligne par ligne du sud vers le nord */
   valuesCm: number[];
-  /** WGS84 enclosing bbox of the grid points */
+  /** emprise WGS84 englobant les points de la grille */
   lonMin: number;
   latMin: number;
   lonMax: number;
@@ -188,12 +188,12 @@ interface SnowGridJson {
 }
 
 function pickSnowMessage(buf: Uint8Array) {
-  // Prefer single-message WCS response, else scan for snow-related abbrev.
+  // Préfère une réponse WCS à message unique, sinon cherche une abréviation liée à la neige.
   try {
     const factory = GribMessageFactory.fromBuffer(buf);
     const keys = factory.availableMessages;
     if (keys.length === 1) return factory.getMessage(keys[0]);
-    // Score each: SD (snow depth m) > SDWE (water equivalent) > anything snow
+    // Note chacun : SD (hauteur de neige, m) > SDWE (équivalent en eau) > tout ce qui touche à la neige
     let best: { msg: ReturnType<typeof factory.getMessage>; score: number } | null = null;
     for (const k of keys) {
       const msg = factory.getMessage(k);
@@ -206,7 +206,7 @@ function pickSnowMessage(buf: Uint8Array) {
       if (s > 0 && (!best || s > best.score)) best = { msg, score: s };
     }
     if (best) return best.msg;
-    // Fallback: first message
+    // Repli : premier message
     return factory.getMessage(keys[0]);
   } catch {
     const all = parseMessagesFromBuffer(buf);
@@ -218,11 +218,11 @@ function pickSnowMessage(buf: Uint8Array) {
 function unitFactorToCm(units: string, varAbbrev: string): number {
   const u = (units || '').toLowerCase();
   const ab = (varAbbrev || '').toUpperCase();
-  // Snow depth in metres
+  // Hauteur de neige en mètres
   if (u === 'm' || ab === 'SD') return 100;
-  // SWE in kg/m² (mm water equivalent) → assume snow density ~300 kg/m³
+  // SWE en kg/m² (mm d'équivalent en eau) → masse volumique de la neige supposée ~300 kg/m³
   if (u.includes('kg') || ab === 'SDWE') return 1 / 3;
-  // Default: assume metres (AROME standard)
+  // Par défaut : mètres supposés (standard AROME)
   return 100;
 }
 
@@ -240,10 +240,11 @@ function parseGribToGrid(buf: Uint8Array, coverageId: string): SnowGridJson {
     );
   }
 
-  // gribberish.latlng returns 1D axis arrays for regular grids:
-  //   latitude.length  == rows   (one entry per row, north→south or south→north)
-  //   longitude.length == cols   (one entry per column, west→east normally)
-  // For non-regular grids it may return a flat per-cell array of length rows*cols.
+  // gribberish.latlng renvoie des tableaux d'axe 1D pour les grilles régulières :
+  //   latitude.length  == lignes   (une entrée par ligne, nord→sud ou sud→nord)
+  //   longitude.length == colonnes (une entrée par colonne, ouest→est en général)
+  // Pour les grilles non régulières, il peut renvoyer un tableau à plat par
+  // cellule de longueur lignes*colonnes.
   const latArr = ll.latitude;
   const lonArr = ll.longitude;
   const latIsAxis = latArr.length === height;
@@ -259,14 +260,14 @@ function parseGribToGrid(buf: Uint8Array, coverageId: string): SnowGridJson {
 
   const factor = unitFactorToCm(msg.units, msg.varAbbrev);
 
-  // Detect scan direction (north→south is the AROME default — first row is north).
+  // Détecte le sens de balayage (nord→sud est le défaut d'AROME — la première ligne est au nord).
   const latFirstRow = latIsAxis ? latArr[0] : latArr[0];
   const latLastRow = latIsAxis ? latArr[height - 1] : latArr[(height - 1) * width];
   const scanNorthSouth = latFirstRow > latLastRow;
 
   const valuesCm: number[] = new Array(width * height);
   for (let j = 0; j < height; j++) {
-    // Output row j must correspond to south→north (j=0 = southernmost).
+    // La ligne de sortie j doit aller du sud au nord (j=0 = la plus au sud).
     const srcRow = scanNorthSouth ? height - 1 - j : j;
     for (let i = 0; i < width; i++) {
       const v = data[srcRow * width + i];
@@ -275,7 +276,7 @@ function parseGribToGrid(buf: Uint8Array, coverageId: string): SnowGridJson {
     }
   }
 
-  // Bounding box from latlng (handles both axis and flat layouts)
+  // Emprise d'après latlng (gère les dispositions en axes et à plat)
   let lonMin = Infinity, lonMax = -Infinity, latMin = Infinity, latMax = -Infinity;
   for (let k = 0; k < latArr.length; k++) {
     const lat = latArr[k];

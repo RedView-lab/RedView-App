@@ -1,18 +1,20 @@
 /**
- * Server-Side Elevation, Slope & Altitude Tile Processor
+ * Production côté serveur des tuiles d'altitude, de pente et de DEM
  *
- * Provides raster tiles for:
- *   - /slope-tiles/:z/:x/:y   (Horn 3x3 derivative -> 1-channel sqrt-gamma PNG)
- *   - /altitude-tiles/:z/:x/:y (Terrarium -> Terrain-RGB conversion -> PNG)
- *   - /dem-tiles/:z/:x/:y      (Terrain-RGB fallback for 3D terrain)
+ * Fournit des tuiles raster pour :
+ *   - /slope-tiles/:z/:x/:y   (dérivée de Horn 3x3 -> PNG à 1 canal en gamma racine)
+ *   - /altitude-tiles/:z/:x/:y (conversion Terrarium -> Terrain-RGB -> PNG)
+ *   - /dem-tiles/:z/:x/:y      (repli Terrain-RGB pour le terrain 3D)
  *
- * Operates standalone with node:zlib without external dependencies.
- * Ensures 100% functionality on plain HTTP production environments (where Service Workers are disabled by browsers)
- * as well as during cold-start hydration before Service Worker claims.
+ * Fonctionne seul avec node:zlib, sans dépendance externe. Garantit le
+ * fonctionnement complet en production sur HTTP simple (où les navigateurs
+ * désactivent les Service Workers) ainsi que pendant l'hydratation à froid,
+ * avant que le Service Worker prenne la main.
  *
- * Contract (same as the Service Worker): a tile that cannot be produced
- * resolves to `null` and the HTTP layer answers 204 + no-store. No
- * placeholder image is ever synthesised (it would be cached as a real tile).
+ * Contrat (le même que le Service Worker) : une tuile qui ne peut pas être
+ * produite se résout en `null` et la couche HTTP répond 204 + no-store. Aucune
+ * image de substitution n'est jamais synthétisée (elle serait mise en cache
+ * comme une vraie tuile).
  */
 import { inflateSync, deflateSync, crc32 } from 'node:zlib';
 
@@ -200,9 +202,9 @@ async function getUpsampledElevationGrid(z, x, y) {
 }
 
 /**
- * Generate Slope PNG tile (/slope-tiles/:z/:x/:y)
- * Horn 3x3 algorithm encoded as 1-channel sqrt-gamma PNG.
- * Resolves to `null` when no elevation data is available (→ HTTP 204).
+ * Produit une tuile PNG de pente (/slope-tiles/:z/:x/:y)
+ * Algorithme de Horn 3x3 encodé en PNG à 1 canal en gamma racine.
+ * Se résout en `null` quand aucune donnée d'altitude n'est disponible (→ HTTP 204).
  */
 export async function generateSlopeTile(z, x, y) {
   if (z > SLOPE_UPSAMPLE_MAXZOOM) return null;
@@ -219,17 +221,17 @@ export async function generateSlopeTile(z, x, y) {
       const width = 256;
       const height = 256;
 
-      // Compute Mercator ground pixel size at tile latitude
+      // Calcule la taille au sol d'un pixel Mercator à la latitude de la tuile
       const n = Math.PI - 2 * Math.PI * (y + 0.5) / (1 << z);
       const latRad = Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
       const cellSize = (40075016.686 * Math.abs(Math.cos(latRad))) / (256 * (1 << z));
       const inv8 = 1.0 / (8.0 * cellSize);
 
-      // Raw scanline buffer: filter byte (0) + 256 * 4 RGBA bytes per row
+      // Tampon brut des lignes : octet de filtre (0) + 256 * 4 octets RGBA par ligne
       const outRgba = new Uint8Array(height * (1 + width * 4));
       for (let r = 0; r < height; r++) {
         const rowOff = r * (1 + width * 4);
-        outRgba[rowOff] = 0; // Filter 0 (None)
+        outRgba[rowOff] = 0; // Filtre 0 (None)
         for (let c = 0; c < width; c++) {
           const z_curr = elev[r * width + c];
           const z_n  = r > 0 ? elev[(r - 1) * width + c] : 2 * z_curr - elev[(r + 1) * width + c];
@@ -245,7 +247,7 @@ export async function generateSlopeTile(z, x, y) {
           const dzdy = ((z_sw + 2 * z_s + z_se) - (z_nw + 2 * z_n + z_ne)) * inv8;
           const deg = Math.atan(Math.sqrt(dzdx * dzdx + dzdy * dzdy)) * (180 / Math.PI);
 
-          // Sqrt-gamma perceptual encoding: R = round(sqrt(deg / 90) * 255)
+          // Encodage perceptif en gamma racine : R = round(sqrt(deg / 90) * 255)
           const code = Math.round(Math.sqrt(Math.max(0, Math.min(90, deg)) / 90.0) * 255.0);
 
           const pxOff = rowOff + 1 + c * 4;
@@ -272,9 +274,9 @@ export async function generateSlopeTile(z, x, y) {
 }
 
 /**
- * Generate Altitude / DEM Terrain-RGB PNG tile (/altitude-tiles/:z/:x/:y or /dem-tiles/:z/:x/:y)
- * Converts Terrarium H to Terrain-RGB encoded PNG.
- * Resolves to `null` above z14 (no AWS data) or on upstream failure (→ HTTP 204).
+ * Produit une tuile PNG Terrain-RGB d'altitude / de DEM (/altitude-tiles/:z/:x/:y ou /dem-tiles/:z/:x/:y)
+ * Convertit la hauteur Terrarium H en PNG encodé Terrain-RGB.
+ * Se résout en `null` au-delà de z14 (pas de données AWS) ou sur un échec amont (→ HTTP 204).
  */
 export async function generateAltitudeTile(z, x, y) {
   const cacheKey = `${z}/${x}/${y}`;
@@ -293,11 +295,11 @@ export async function generateAltitudeTile(z, x, y) {
 
       for (let r = 0; r < height; r++) {
         const rowOff = r * (1 + width * 4);
-        outRgba[rowOff] = 0; // Filter 0 (None)
+        outRgba[rowOff] = 0; // Filtre 0 (None)
 
         for (let c = 0; c < width; c++) {
           const H = elev[r * width + c];
-          // Terrain-RGB formula: (H + 10000) * 10
+          // Formule Terrain-RGB : (H + 10000) * 10
           const val = Math.max(0, Math.min(16777215, Math.round((H + 10000) * 10)));
 
           const pxOff = rowOff + 1 + c * 4;

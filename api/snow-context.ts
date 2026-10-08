@@ -1,20 +1,21 @@
 /**
- * Snow context around a scene, for the snow engine (features/snow):
- *   - measured snow depths of flat-field stations:
- *       · SLF IMIS (Switzerland, open, 30 min, last 24 h): measurement-api.slf.ch
- *       · Météo-France climatological hourly data (open, updated every morning
- *         with the night's values): NEIGETOT of every station of the
- *         départements around the scene (meteo.data.gouv.fr, per-département
- *         "latest" files, streamed and cached)
- *   - the snow cover block of the Météo-France avalanche bulletin (BRA) of the
- *     massif holding the scene (DPBRA API, needs METEOFRANCE_API_KEY with the
- *     BRA API subscribed): depth on north/south slopes at 3 altitudes and the
- *     continuous snow cover limits;
- *   - the hourly weather of the past weeks (self-hosted Open-Meteo on the VPS,
- *     Météo-France models: temperature at the scene altitude, precipitation,
- *     snowfall, 10 m wind) for melt and drift.
- * Every part is optional: a failing source is reported in `sources`, never
- * fatal.
+ * Contexte neige autour d'une scène, pour le moteur neige (features/snow) :
+ *   - hauteurs de neige mesurées par les stations de terrain plat :
+ *       · SLF IMIS (Suisse, ouvert, 30 min, dernières 24 h) : measurement-api.slf.ch
+ *       · données climatologiques horaires de Météo-France (ouvertes, mises à
+ *         jour chaque matin avec les valeurs de la nuit) : NEIGETOT de chaque
+ *         station des départements autour de la scène (meteo.data.gouv.fr,
+ *         fichiers « latest » par département, lus en flux et mis en cache)
+ *   - le bloc d'enneigement du bulletin d'avalanche de Météo-France (BRA) du
+ *     massif qui contient la scène (API DPBRA, nécessite METEOFRANCE_API_KEY
+ *     avec l'abonnement à l'API BRA) : hauteur sur les versants nord / sud à
+ *     3 altitudes et les limites d'enneigement continu ;
+ *   - la météo horaire des dernières semaines (Open-Meteo auto-hébergé sur le
+ *     VPS, modèles Météo-France : température à l'altitude de la scène,
+ *     précipitations, chutes de neige, vent à 10 m) pour la fonte et le
+ *     transport par le vent.
+ * Chaque partie est facultative : une source en échec est signalée dans
+ * `sources`, jamais fatale.
  *
  * GET /api/snow-context?lat=..&lon=..&elevation=..&radiusKm=50&pastDays=60
  */
@@ -73,7 +74,7 @@ async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs =
   }
 }
 
-/** Tiny TTL cache that also shares in-flight promises. */
+/** Petit cache à durée de vie qui partage aussi les promesses en cours. */
 class TtlCache<T> {
   private readonly map = new Map<string, { value: Promise<T>; expiresAt: number }>();
   private readonly takeOldestKey = createOldestKeyTaker(this.map);
@@ -95,7 +96,7 @@ class TtlCache<T> {
     }
     const value = load();
     this.map.set(key, { value, expiresAt: Date.now() + this.ttlMs });
-    // A failure is not cached.
+    // Un échec n'est pas mis en cache.
     value.catch(() => { if (this.map.get(key)?.value === value) this.map.delete(key); });
     return value;
   }
@@ -131,7 +132,7 @@ async function slfStations(lat: number, lon: number, radiusKm: number): Promise<
   ]);
   const near = new Map<string, SlfStation>();
   for (const s of stations) {
-    // WIND stations sit on crests: their snow depth is not a flat-field value.
+    // Les stations WIND sont sur les crêtes : leur hauteur de neige n'est pas une valeur de terrain plat.
     if (s.type !== 'SNOW_FLAT') continue;
     if (haversineKm(lat, lon, s.lat, s.lon) <= radiusKm) near.set(s.code, s);
   }
@@ -163,7 +164,7 @@ const mfFilesCache = new TtlCache<Map<string, string>>(24 * HOUR_MS, 1);
 const mfDeptCache = new TtlCache<MfStation[]>(3 * HOUR_MS, 24);
 const deptLookupCache = new TtlCache<string | null>(30 * 24 * HOUR_MS, 2000);
 
-/** Département file code of a point (Corsica is "20" in these files), null outside France. */
+/** Code de fichier départemental d'un point (la Corse est « 20 » dans ces fichiers), null hors de France. */
 function departmentAt(lat: number, lon: number): Promise<string | null> {
   const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
   return deptLookupCache.get(key, async () => {
@@ -192,9 +193,10 @@ function mfLatestFiles(): Promise<Map<string, string>> {
 }
 
 /**
- * Latest NEIGETOT of every station of a département file (stations whose
- * last value is older than 48 h before the file's newest hour are dropped:
- * seasonal ski-resort posts stop reporting in spring).
+ * Dernière NEIGETOT de chaque station d'un fichier départemental (les stations
+ * dont la dernière valeur a plus de 48 h de retard sur l'heure la plus récente
+ * du fichier sont écartées : les postes saisonniers des stations de ski
+ * cessent d'émettre au printemps).
  */
 function mfDepartment(dept: string): Promise<MfStation[]> {
   return mfDeptCache.get(dept, async () => {
@@ -206,8 +208,9 @@ function mfDepartment(dept: string): Promise<MfStation[]> {
     let idx: Record<string, number> | null = null;
     let newest = '';
     const latest = new Map<string, MfStation>();
-    // ~200 columns per line, ~10⁶ lines per file: only the snow depth and the
-    // date are read on every line, by walking the separators (no split).
+    // ~200 colonnes par ligne, ~10⁶ lignes par fichier : seules la hauteur de
+    // neige et la date sont lues à chaque ligne, en parcourant les séparateurs
+    // (pas de split).
     const field = (line: string, k: number): string => {
       let start = 0;
       for (let c = 0; c < k; c++) {
@@ -245,7 +248,7 @@ function mfDepartment(dept: string): Promise<MfStation[]> {
 }
 
 async function meteoFranceStations(lat: number, lon: number, radiusKm: number): Promise<{ stations: StationOut[]; state: SourceState }> {
-  // Départements of the centre and of 8 points on a circle around it.
+  // Départements du centre et de 8 points sur un cercle autour de lui.
   const r = Math.min(radiusKm, 40);
   const probes: Array<[number, number]> = [[lat, lon]];
   for (let k = 0; k < 8; k++) {
@@ -313,7 +316,7 @@ function attr(tag: string, name: string): string | null {
   return m ? m[1] : null;
 }
 
-/** Snow cover block of a BRA XML: the most recent ENNEIGEMENT with its NIVEAU levels. */
+/** Bloc d'enneigement d'un XML de BRA : l'ENNEIGEMENT le plus récent avec ses niveaux NIVEAU. */
 export function parseBraEnneigement(xml: string, massifName: string): BraOut | null {
   const blocks = [...xml.matchAll(/<ENNEIGEMENT\b([^>]*)>([\s\S]*?)<\/ENNEIGEMENT>/g)];
   let best: { date: string; head: string; body: string } | null = null;
@@ -427,9 +430,10 @@ function weatherHistory(lat: number, lon: number, elevation: number | null, past
 // ────────────────────────────── handler ──────────────────────────────
 
 /**
- * Buddy check (as the operational snow analyses): a station far from every
- * neighbour at a similar altitude is dropped — automatic snow-depth sensors
- * report grass, puddles or a parked snowcat as "snow".
+ * Contrôle par les voisines (comme les analyses de neige opérationnelles) :
+ * une station loin de toute voisine d'altitude comparable est écartée — les
+ * capteurs automatiques de hauteur de neige signalent comme « neige » de
+ * l'herbe, des flaques ou une dameuse garée.
  */
 function buddyCheck(stations: StationOut[]): StationOut[] {
   return stations.filter((s) => {

@@ -140,7 +140,7 @@ export async function readBodyLimited(req, limit) {
   return Buffer.concat(chunks, total);
 }
 
-// ── IP client ──────────────────────────────────────────────────────────────
+// ── IP du client ───────────────────────────────────────────────────────────
 
 // Plages publiées sur https://www.cloudflare.com/ips/ — utilisées uniquement
 // pour décider si `CF-Connecting-IP` peut être cru.
@@ -227,7 +227,7 @@ export function rateLimitKeyForIp(ip) {
   return `${full.slice(0, 4).map((part) => part || '0').join(':')}::/64`;
 }
 
-// ── Rate limiting ──────────────────────────────────────────────────────────
+// ── Limitation de débit ────────────────────────────────────────────────────
 
 /**
  * Fenêtre fixe en mémoire, bornée à `maxKeys` entrées (les plus anciennes

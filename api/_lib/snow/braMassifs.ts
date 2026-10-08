@@ -1,8 +1,8 @@
-// Massifs of the Météo-France avalanche bulletins (BRA): outlines from
+// Massifs des bulletins d'avalanche de Météo-France (BRA) : contours issus de
 // snowtools (Météo-France CNRM/CEN, https://github.com/UMR-CNRM/snowtools,
-// snowtools/DATA/massifs.shp, CeCILL-C licence), converted from Lambert 93 to
-// WGS84 (lon, lat, 1e-3°). The id is the DPBRA `id-massif`.
-// Generated once — do not edit by hand.
+// snowtools/DATA/massifs.shp, licence CeCILL-C), convertis de Lambert 93 en
+// WGS84 (lon, lat, 1e-3°). L'id est le `id-massif` de DPBRA.
+// Généré une fois — ne pas modifier à la main.
 
 export interface BraMassif {
   id: number;

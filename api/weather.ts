@@ -182,7 +182,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
   }
 
-  // 1. Check in-memory LRU cache (< 1 ms latency)
+  // 1. Regarde le cache LRU en mémoire (latence < 1 ms)
   const cacheKey = `${subPath}${parsedUrl.search}`;
   const cached = getCached(cacheKey);
   if (cached) {
@@ -220,7 +220,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
        subPath.endsWith('.png') ? 'image/png' :
        'application/json; charset=utf-8');
 
-    // Populate memory cache: 60s for metadata, 1h for immutable raster tiles
+    // Remplit le cache mémoire : 60 s pour les métadonnées, 1 h pour les tuiles raster immuables
     const ttlMs = subPath.includes('tiles/') ? 3_600_000 : 60_000;
     setCached(cacheKey, {
       body,
