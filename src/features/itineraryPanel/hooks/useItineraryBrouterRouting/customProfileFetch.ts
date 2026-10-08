@@ -1,5 +1,6 @@
 import {
   fetchBrouterRoute,
+  isBrouterQueueBusy,
   requestBeelineKm,
   type BrouterRequest,
   type BrouterRoute,
@@ -33,7 +34,9 @@ class BrouterSearchTimeoutError extends Error {
  * Requête de secours : au départ d'un réseau très dense (Paris…), une
  * recherche fine peut explorer longtemps. Passé ce délai, une recherche plus
  * gloutonne — même profil — part en parallèle et la première réponse
- * l'emporte.
+ * l'emporte. Pas de secours quand la file du proxy est chargée
+ * (`isBrouterQueueBusy`) : la lenteur vient alors de l'attente, et un second
+ * calcul ne ferait qu'attendre derrière les autres.
  */
 const HEDGE_SEARCH_WEIGHT = 1.7;
 
@@ -94,7 +97,7 @@ function fetchWithHedge(
     fetchBrouterRoute({ ...request, signal: fineCtrl.signal, onResponseHeaders: computed })
       .then((route) => finish(() => resolve(route)), onError);
     const timer = setTimeout(() => {
-      if (settled) return;
+      if (settled || isBrouterQueueBusy()) return;
       hedgeStarted = true;
       pending += 1;
       fetchBrouterRoute({

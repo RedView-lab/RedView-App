@@ -33,6 +33,7 @@ import zlib from 'node:zlib';
 import { createByteLru } from '../server/lib/byte-lru.mjs';
 import { resolvePass1Coefficient } from './_lib/brouter-search.js';
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
+import { createUpstreamGate, UpstreamBusyError, type UpstreamSlot } from './_lib/upstreamGate.js';
 
 // Jamais de segment en ligne droite (« beeline ») dans un tracé : ni `straight`
 // (via reliés à vol d'oiseau), ni `add_beeline` (départ / arrivée loin du
@@ -54,8 +55,44 @@ const ALLOWED_PARAMS = new Set([
 
 const BEELINE_OVERRIDE = 'profile:add_beeline';
 
-const ROUTE_TIMEOUT_MS = 55_000; // Below server.requestTimeout (120 s).
+// Attente dans la file comprise : sous le proxy_read_timeout de 60 s du nginx de l'hôte.
+const ROUTE_TIMEOUT_MS = 55_000;
+/** Temps de calcul laissé au minimum à une requête sortie tard de la file. */
+const ROUTE_MIN_COMPUTE_MS = 20_000;
 const UPLOAD_TIMEOUT_MS = 15_000;
+
+/**
+ * Calculs envoyés en même temps à BRouter : ses `maxthreads` (4 en
+ * production, server/vps/brouter.service). Au-delà, BRouter tue son calcul
+ * le plus ancien ; ici la requête attend son tour (_lib/upstreamGate.ts).
+ * Les réponses du cache ne passent jamais par la file.
+ */
+const BROUTER_SLOTS = Math.max(1, Number(process.env.BROUTER_MAX_CONCURRENCY) || 4);
+/** Attente au-delà de laquelle on répond 503 + Retry-After (ROUTE_TIMEOUT_MS − ROUTE_MIN_COMPUTE_MS). */
+const QUEUE_MAX_WAIT_MS = 35_000;
+const brouterGate = createUpstreamGate({ slots: BROUTER_SLOTS, maxQueue: 64, maxWaitMs: QUEUE_MAX_WAIT_MS });
+
+/**
+ * Place dans la file de BRouter, ou null quand la réponse est déjà partie
+ * (client parti pendant l'attente : rien n'est envoyé ; file saturée : 503).
+ */
+async function acquireBrouterSlot(res: ApiResponse, signal: AbortSignal, clientGone: () => boolean): Promise<UpstreamSlot | null> {
+  try {
+    const slot = await brouterGate.acquire(signal);
+    // Temps passé dans la file (diagnostic, bancs de charge).
+    res.setHeader('X-Upstream-Wait-Ms', String(Math.round(slot.waitedMs)));
+    return slot;
+  } catch (error) {
+    if (clientGone()) return null;
+    if (error instanceof UpstreamBusyError) {
+      res.setHeader('Retry-After', '5');
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(503).json({ error: 'BRouter busy, retry shortly' });
+      return null;
+    }
+    throw error;
+  }
+}
 const MAX_PROFILE_BYTES = 100_000;
 const MAX_ERROR_HEADER_CHARS = 200;
 
@@ -207,9 +244,9 @@ async function handleRouteQuery(
   const url = `${base}/brouter?${params.toString()}`;
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ROUTE_TIMEOUT_MS);
   // Client parti (nouvelle édition côté app, onglet fermé) : on libère BRouter
-  // au lieu de laisser tourner un calcul de jusqu'à 55 s pour personne.
+  // au lieu de laisser tourner un calcul de jusqu'à 55 s pour personne — et
+  // une requête encore dans la file n'y part jamais.
   let clientGone = false;
   const onClientClose = () => {
     if (res.writableFinished) return;
@@ -218,6 +255,13 @@ async function handleRouteQuery(
   };
   res.once('close', onClientClose);
 
+  const slot = await acquireBrouterSlot(res, controller.signal, () => clientGone);
+  if (!slot) {
+    res.off('close', onClientClose);
+    return;
+  }
+  const computeBudgetMs = Math.max(ROUTE_MIN_COMPUTE_MS, ROUTE_TIMEOUT_MS - slot.waitedMs);
+  const timer = setTimeout(() => controller.abort(), computeBudgetMs);
   let upstreamRes: Response;
   let body: string;
   try {
@@ -229,17 +273,19 @@ async function handleRouteQuery(
     body = await upstreamRes.text();
   } catch (err) {
     clearTimeout(timer);
+    slot.release();
     res.off('close', onClientClose);
     if (clientGone) return;
     const isAbort = (err as { name?: string } | undefined)?.name === 'AbortError';
     if (!isAbort) console.error('[brouter] upstream unreachable:', err);
     return res.status(isAbort ? 504 : 502).json({
       error: isAbort
-        ? `BRouter upstream timeout after ${ROUTE_TIMEOUT_MS}ms`
+        ? `BRouter upstream timeout after ${computeBudgetMs}ms`
         : 'BRouter upstream unreachable',
     });
   }
   clearTimeout(timer);
+  slot.release();
   res.off('close', onClientClose);
 
   const contentType =
@@ -329,9 +375,21 @@ async function handleProfileUpload(
   const url = `${base}/brouter/profile/${encodeURIComponent(profileId)}`;
 
   const controller = new AbortController();
+  let clientGone = false;
+  const onClientClose = () => {
+    if (res.writableFinished) return;
+    clientGone = true;
+    controller.abort();
+  };
+  res.once('close', onClientClose);
+  // La compilation d'un profil occupe aussi un fil de BRouter.
+  const slot = await acquireBrouterSlot(res, controller.signal, () => clientGone);
+  res.off('close', onClientClose);
+  if (!slot) return;
   const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
 
   let upstreamRes: Response;
+  let text: string;
   try {
     upstreamRes = await fetch(url, {
       method: 'POST',
@@ -342,8 +400,10 @@ async function handleProfileUpload(
       },
       body: profileText,
     });
+    text = await upstreamRes.text();
   } catch (err) {
     clearTimeout(timer);
+    slot.release();
     const isAbort = (err as { name?: string } | undefined)?.name === 'AbortError';
     if (!isAbort) console.error('[brouter] profile upload upstream unreachable:', err);
     return res.status(isAbort ? 504 : 502).json({
@@ -353,8 +413,8 @@ async function handleProfileUpload(
     });
   }
   clearTimeout(timer);
+  slot.release();
 
-  const text = await upstreamRes.text();
   // Jamais de cache pour les envois de profil.
   res.setHeader('Cache-Control', 'no-store');
 

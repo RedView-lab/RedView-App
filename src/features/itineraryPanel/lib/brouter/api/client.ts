@@ -46,6 +46,41 @@ export function isBrouterRateLimitError(error: unknown): error is BrouterRateLim
   return error instanceof BrouterRateLimitError;
 }
 
+/**
+ * File du proxy pleine (HTTP 503 + Retry-After, api/_lib/upstreamGate.ts) :
+ * la même requête est rejouée après le délai conseillé, au plus deux fois —
+ * jamais un doublage ni un repli sur d'autres recherches, qui ajouteraient de
+ * la charge à un BRouter déjà occupé.
+ */
+const BUSY_RETRY_LIMIT = 2;
+const BUSY_RETRY_DEFAULT_S = 5;
+const BUSY_RETRY_MAX_S = 15;
+
+function busyRetryDelayMs(res: Response): number {
+  const seconds = parseRetryAfterS(res.headers.get('retry-after')) ?? BUSY_RETRY_DEFAULT_S;
+  return Math.min(BUSY_RETRY_MAX_S, Math.max(1, seconds)) * 1000;
+}
+
+/**
+ * File du proxy chargée : une attente d'au moins QUEUE_BUSY_WAIT_MS observée
+ * il y a moins de QUEUE_BUSY_MEMORY_MS (en-tête `X-Upstream-Wait-Ms`, ou un
+ * 503). BRouter est alors saturé : le secours d'une recherche lente
+ * (customProfileFetch.ts) attendrait derrière les autres et ajouterait un
+ * calcul au pire moment.
+ */
+const QUEUE_BUSY_WAIT_MS = 500;
+const QUEUE_BUSY_MEMORY_MS = 60_000;
+let lastQueueBusyAt = Number.NEGATIVE_INFINITY;
+
+function noteUpstreamQueue(res: Response): void {
+  const waited = Number(res.headers.get('x-upstream-wait-ms'));
+  if (res.status === 503 || (Number.isFinite(waited) && waited >= QUEUE_BUSY_WAIT_MS)) lastQueueBusyAt = Date.now();
+}
+
+export function isBrouterQueueBusy(now = Date.now()): boolean {
+  return now - lastQueueBusyAt < QUEUE_BUSY_MEMORY_MS;
+}
+
 function parseRetryAfterS(value: string | null): number | null {
   if (!value) return null;
   const seconds = Number(value);
@@ -67,12 +102,22 @@ export async function fetchBrouterRoute(
     return clientRouteCache.get(url)!;
   }
   let lastError: Error | null = null;
+  let busyRetries = 0;
   for (let attempt = 0; attempt <= WATCHDOG_RETRY_DELAYS_MS.length; attempt += 1) {
     const res = await fetch(url, {
       method: 'GET',
       signal: req.signal,
       headers: { Accept: 'application/json,application/geo+json,text/plain' },
     });
+    noteUpstreamQueue(res);
+    if (res.status === 503 && busyRetries < BUSY_RETRY_LIMIT) {
+      // Pas encore calculé : les délais de l'appelant (secours, recherche) continuent de courir.
+      await res.body?.cancel().catch(() => undefined);
+      busyRetries += 1;
+      attempt -= 1;
+      await delay(busyRetryDelayMs(res), req.signal);
+      continue;
+    }
     req.onResponseHeaders?.();
 
     if (!res.ok) {
@@ -153,12 +198,20 @@ export async function uploadCustomProfile(
   signal?: AbortSignal,
 ): Promise<UploadedProfile> {
   const url = buildProfileUploadUrl();
-  const res = await fetch(url, {
+  const send = () => fetch(url, {
     method: 'POST',
     signal,
     headers: { 'Content-Type': 'text/plain; charset=UTF-8' },
     body: brf,
   });
+  let res = await send();
+  noteUpstreamQueue(res);
+  for (let busyRetries = 0; res.status === 503 && busyRetries < BUSY_RETRY_LIMIT; busyRetries += 1) {
+    await res.body?.cancel().catch(() => undefined);
+    await delay(busyRetryDelayMs(res), signal);
+    res = await send();
+    noteUpstreamQueue(res);
+  }
   const text = await res.text();
   if (!res.ok) {
     const message = `BRouter upload HTTP ${res.status} ${res.statusText}${text ? ` — ${text.slice(0, 200)}` : ''}`;
