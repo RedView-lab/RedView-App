@@ -11,6 +11,16 @@ body {
   min-height: 100vh;
 }
 
+/*
+ * Les contrôles de formulaire ne reprennent pas la police de la page : sans
+ * `font-family` explicite, un bouton s'affichait en police système (Arial sous
+ * Windows, SF sous macOS, serif dans WebKit hors Mac) — « Ajouter », « Tracer »,
+ * choix du fond de carte… Spécificité minimale : une règle de classe garde la main.
+ */
+button, input, select, textarea {
+  font-family: inherit;
+}
+
 #root {
   min-height: 100vh;
   display: flex;
