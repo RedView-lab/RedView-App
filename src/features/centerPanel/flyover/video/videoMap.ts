@@ -1,16 +1,13 @@
 import mapboxgl from 'mapbox-gl';
 import type { Map as MapboxMap } from 'mapbox-gl';
-import { transformMapboxRequest, withDevicePixelRatio } from '@/features/map3d';
+import { withDevicePixelRatio } from '@/features/map3d';
 import {
-  ANALYSIS_HOVER_SOURCE_ID,
   getRouteElevationContext,
-  ROUTE_HOVER_PREVIEW_SOURCE_ID,
   setAnalysisFlyoverOpacity,
   setAnalysisFlyoverProgress,
   setAnalysisFlyoverRoute,
   setRouteLayerVisibility,
 } from '@/features/itineraryPanel/lib/route-layer';
-import { POI_GPU_SOURCE_ID } from '@/features/poi/lib/poi-markers';
 import { OVERVIEW_PADDING_RATIO, OVERVIEW_PITCH_DEG } from '../config';
 import type { CameraPose } from '../engine/cameraPose';
 import { latFromMercatorY, lngFromMercatorX, mercatorXFromLng, mercatorYFromLat, metersPerMercatorUnitAtY } from '../engine/geo';
@@ -20,109 +17,9 @@ import type { FlyoverRouteInput } from '../types';
 import { FRAME_RETRY_TIMEOUT_MS, FRAME_SETTLE_TIMEOUT_MS, MAP_LOAD_TIMEOUT_MS } from './config';
 import type { DirectorMap, VideoCamera, VideoShot } from './director';
 import type { MapView } from './flight';
+import type { MapInternals, SourceCacheLike, TileIdLike, TileLike, TileSourceLike, TransformLike } from './videoMapInternals';
+import { cloneLiveStyle, videoTransformRequest, type ClonedStyle, type CustomSourceClone, type SourceSpec } from './videoStyle';
 
-/* ── Internes Mapbox utilisés (tous gardés) ───────────────────────────── */
-
-interface TileIdLike {
-  key: number;
-  canonical: { z: number; x: number; y: number; url(urls: string[], scheme?: string): string };
-}
-
-interface TileSourceLike {
-  type?: string;
-  id?: string;
-  tiles?: string[];
-  scheme?: string;
-  tileSize?: number;
-  minzoom?: number;
-  maxzoom?: number;
-  roundZoom?: boolean;
-  reparseOverscaled?: boolean;
-}
-
-interface TileLike {
-  tileID: TileIdLike;
-  state?: string;
-  dem?: unknown;
-  getExpiryTimeout?: () => number | undefined;
-}
-
-interface SourceCacheLike {
-  _source?: TileSourceLike;
-  _sourceLoaded?: boolean;
-  _tiles?: Record<string, TileLike | undefined>;
-  _cache?: { add(id: TileIdLike, tile: TileLike, expiryTimeout?: number): unknown; has(id: TileIdLike): boolean };
-  _preloadTiles?: (transforms: unknown[], callback: () => void) => void;
-  _loadTile?: (tile: TileLike, callback: (error?: unknown) => void) => void;
-  _unloadTile?: (tile: TileLike) => void;
-  _addTile?: (id: TileIdLike) => TileLike | undefined;
-  _backfillDEM?: (tile: TileLike) => void;
-  usedForTerrain?: boolean;
-  reload?: () => void;
-}
-
-interface RequestManagerLike {
-  normalizeTileURL(url: string, use2x?: boolean, rasterTileSize?: number): string;
-  transformRequest(url: string, type: string): { url: string; headers?: Record<string, string>; credentials?: RequestCredentials };
-}
-
-interface TransformLike {
-  clone(): TransformLike;
-  coveringTiles(options: unknown): TileIdLike[];
-  setFreeCameraOptions(options: unknown): void;
-  zoom: number;
-  center: unknown;
-  pitch: number;
-  bearing: number;
-  fov?: number;
-}
-
-interface StyleImageLike {
-  data?: { width: number; height: number; data: Uint8Array | Uint8ClampedArray };
-  pixelRatio?: number;
-  sdf?: boolean;
-  stretchX?: Array<[number, number]>;
-  stretchY?: Array<[number, number]>;
-  content?: [number, number, number, number];
-}
-
-interface MapInternals {
-  _render: (timestamp: number) => void;
-  _triggerFrame: (render: boolean) => void;
-  _renderNextFrame?: boolean | null;
-  _updateAverageElevation?: (timeStamp: number, ignoreTimeout?: boolean) => boolean;
-  _update?: (updateStyle?: boolean) => unknown;
-  _isInitialLoad?: boolean;
-  _requestManager?: RequestManagerLike;
-  painter?: { terrain?: { getScaledDemTileSize(): number } | null };
-  transform: TransformLike;
-  style?: {
-    _mergedSourceCaches?: Record<string, SourceCacheLike>;
-    _sourceCaches?: Record<string, SourceCacheLike>;
-    getImage?: (id: string) => StyleImageLike | null | undefined;
-  };
-}
-
-type StyleSpec = mapboxgl.StyleSpecification;
-type LayerSpec = mapboxgl.LayerSpecification;
-type SourceSpec = mapboxgl.SourceSpecification;
-
-/** Sources custom de la carte vivante à recréer sur la carte vidéo (`cloneForMap`). */
-interface CustomSourceClone {
-  id: string;
-  create: () => unknown;
-  layers: Array<{ layer: LayerSpec; beforeId: string | undefined }>;
-}
-
-interface ClonedStyle {
-  style: StyleSpec;
-  customSources: CustomSourceClone[];
-  /** Calques de ligne surélevés : leur décalage d'origine, pour suivre plat ↔ relief. */
-  elevatedLineLayers: Map<string, number>;
-}
-
-/** Sources de la carte vivante sans place dans la vidéo : POI masqués, survols. */
-const DROPPED_SOURCE_IDS = new Set([POI_GPU_SOURCE_ID, ANALYSIS_HOVER_SOURCE_ID, ROUTE_HOVER_PREVIEW_SOURCE_ID]);
 /** Sources tuilées dont les tuiles à venir sont demandées d'avance (cache HTTP / Service Worker). */
 const PRELOADED_SOURCE_TYPES = new Set(['raster', 'raster-dem', 'vector']);
 /** Requêtes de préchargement simultanées : la carte garde la priorité sur ses propres tuiles. */
@@ -166,98 +63,6 @@ function yieldToPage(): Promise<void> {
     };
     channel.port2.postMessage(null);
   });
-}
-
-function cloneJson<T>(value: T): T {
-  return value == null ? value : (JSON.parse(JSON.stringify(value)) as T);
-}
-
-/**
- * Style de la carte vivante, tel qu'à l'instant de l'export, pour une carte
- * qui tourne image par image : sources custom recréées à part, POI et survols
- * retirés, fondus de tuiles et transitions de style à zéro (une image n'est
- * prise qu'une fois tout chargé), tuiles du relief hors de l'arbitrage du
- * Service Worker (`rv-src=map` : la carte vivante y annonce les seules tuiles
- * qu'elle attend, celles de la vidéo seraient abandonnées).
- */
-function cloneLiveStyle(liveMap: MapboxMap): ClonedStyle {
-  const live = liveMap.getStyle() as StyleSpec;
-  const customSources = new Map<string, CustomSourceClone>();
-  const dropped = new Set<string>();
-  const sources: Record<string, SourceSpec> = {};
-  for (const [id, raw] of Object.entries(live.sources ?? {})) {
-    const source = raw as SourceSpec;
-    if (DROPPED_SOURCE_IDS.has(id)) {
-      dropped.add(id);
-      continue;
-    }
-    // Source JS (`addSource` d'un objet) : sérialisée telle quelle, sans ses méthodes.
-    if ((source as { type: string }).type === 'custom') {
-      dropped.add(id);
-      const implementation = (liveMap.getSource(id) as unknown as { _implementation?: { cloneForMap?: () => unknown } } | undefined)
-        ?._implementation;
-      if (typeof implementation?.cloneForMap === 'function') {
-        customSources.set(id, { id, create: () => implementation.cloneForMap?.(), layers: [] });
-      }
-      continue;
-    }
-    if (source.type === 'geojson') {
-      // Les données GeoJSON sont celles de la carte vivante (même objet) : la carte vidéo n'en écrit aucune.
-      sources[id] = source;
-      continue;
-    }
-    const copy = cloneJson(source) as SourceSpec & { tiles?: string[] };
-    if (copy.type === 'raster-dem' && Array.isArray(copy.tiles)) {
-      copy.tiles = copy.tiles.map((url) => url.replace('rv-src=map', 'rv-src=video'));
-    }
-    sources[id] = copy;
-  }
-
-  const layers: LayerSpec[] = [];
-  const elevatedLineLayers = new Map<string, number>();
-  const liveLayers = (live.layers ?? []) as LayerSpec[];
-  liveLayers.forEach((original, index) => {
-    const sourceId = (original as { source?: unknown }).source;
-    if (typeof sourceId === 'string' && dropped.has(sourceId)) {
-      const custom = customSources.get(sourceId);
-      if (custom) {
-        const next = liveLayers.slice(index + 1).find((candidate) => {
-          const candidateSource = (candidate as { source?: unknown }).source;
-          return !(typeof candidateSource === 'string' && dropped.has(candidateSource));
-        });
-        custom.layers.push({ layer: cloneJson(original), beforeId: next?.id });
-      }
-      return;
-    }
-    const layer = cloneJson(original) as LayerSpec & {
-      paint?: Record<string, unknown>;
-      layout?: Record<string, unknown>;
-    };
-    if (layer.type === 'raster') layer.paint = { ...(layer.paint ?? {}), 'raster-fade-duration': 0 };
-    if (layer.type === 'line' && layer.layout && 'line-elevation-reference' in layer.layout) {
-      const offset = Number(layer.layout['line-z-offset']);
-      elevatedLineLayers.set(layer.id, Number.isFinite(offset) && offset > 0 ? offset : 0);
-    }
-    layers.push(layer);
-  });
-
-  const style: StyleSpec = {
-    ...live,
-    sources,
-    layers,
-    transition: { duration: 0, delay: 0 },
-  };
-  return { style, customSources: [...customSources.values()], elevatedLineLayers };
-}
-
-/** `@2x` pour le sprite : chargé hors rendu, il suivrait le ratio de l'écran et non celui de la vidéo. */
-function videoTransformRequest(pixelRatio: number) {
-  return (url: string, resourceType?: string) => {
-    if (pixelRatio >= 2 && (resourceType === 'SpriteImage' || resourceType === 'SpriteJSON')) {
-      return { url: url.replace(/\/sprite(?!@2x)(?=(\.png|\.json)?(\?|$))(\.png|\.json)?/, '/sprite@2x$3') };
-    }
-    return transformMapboxRequest(url, resourceType);
-  };
 }
 
 export interface VideoMapOptions {
