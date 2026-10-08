@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
+import { useHasChanged } from '@/shared/hooks/useHasChanged';
 import { useAppI18n } from '@/shared/i18n';
 import {
   IconFolder,
@@ -65,9 +66,7 @@ export function FolderCard({
     dragImageRef.current = image;
   }, []);
 
-  useEffect(() => {
-    setDraft(folder.name);
-  }, [folder.name]);
+  if (useHasChanged(folder.name)) setDraft(folder.name);
 
   const commitRename = async () => {
     const next = draft.trim();

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, type ChangeEvent, type KeyboardEvent, type ClipboardEvent } from 'react';
+import { useHasChanged } from '@/shared/hooks/useHasChanged';
 import { useAppI18n } from '@/shared/i18n';
 import { errorMessage as thrownMessage } from '@/shared/lib/errors';
 import './VerificationCodeModal.css';
@@ -42,12 +43,16 @@ export default function VerificationCodeModal({
 
   const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Focus sur le premier champ à l'ouverture et lancement du compte à rebours
+  // Réinitialisation à chaque ouverture (au rendu, l'état initial vaut déjà pour la première)
+  if (useHasChanged(isOpen) && isOpen) {
+    setDigits(emptyDigits());
+    setErrorMessage(null);
+    setCountdown(30);
+  }
+
+  // Focus sur le premier champ à l'ouverture
   useEffect(() => {
     if (isOpen) {
-      setDigits(emptyDigits());
-      setErrorMessage(null);
-      setCountdown(30);
       const timer = setTimeout(() => {
         inputsRef.current[0]?.focus();
       }, 50);

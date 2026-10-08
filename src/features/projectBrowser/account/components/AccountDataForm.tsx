@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { useAppI18n } from '@/shared/i18n';
 import { isHealthDataConsentValid, type HealthDataConsent } from '@/shared/lib/healthDataConsent';
@@ -22,12 +22,11 @@ type AccountDataFormProps = {
 export function AccountDataForm({ email }: AccountDataFormProps) {
   const { t } = useAppI18n();
   const [progress, setProgress] = useState<AccountExportProgress | null>(null);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const deleteButtonRef = useRef<HTMLButtonElement>(null);
+  // Bouton qui a ouvert la pop-in (ancre et retour du focus) ; null = fermée.
+  const [deleteAnchor, setDeleteAnchor] = useState<HTMLButtonElement | null>(null);
   const exporting = progress !== null;
   const [healthConsent, setHealthConsent] = useState<HealthDataConsent | null | undefined>(undefined);
-  const [withdrawOpen, setWithdrawOpen] = useState(false);
-  const withdrawButtonRef = useRef<HTMLButtonElement>(null);
+  const [withdrawAnchor, setWithdrawAnchor] = useState<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,7 +93,7 @@ export function AccountDataForm({ email }: AccountDataFormProps) {
         </div>
         <div className="rvpb-account-actions">
           {consentGiven ? (
-            <button ref={withdrawButtonRef} type="button" className="rvpb-inline-cta" onClick={() => setWithdrawOpen(true)}>
+            <button type="button" className="rvpb-inline-cta" onClick={(event) => setWithdrawAnchor(event.currentTarget)}>
               {t('Retirer mon accord')}
             </button>
           ) : null}
@@ -110,31 +109,30 @@ export function AccountDataForm({ email }: AccountDataFormProps) {
         </div>
         <div className="rvpb-account-actions">
           <button
-            ref={deleteButtonRef}
             type="button"
             className="rvpb-inline-cta is-danger"
-            onClick={() => setDeleteOpen(true)}
+            onClick={(event) => setDeleteAnchor(event.currentTarget)}
           >
             {t('Supprimer mon compte')}
           </button>
         </div>
       </div>
 
-      {withdrawOpen ? (
+      {withdrawAnchor ? (
         <WithdrawHealthConsentDialog
-          anchorEl={withdrawButtonRef.current}
-          onClose={() => setWithdrawOpen(false)}
+          anchorEl={withdrawAnchor}
+          onClose={() => setWithdrawAnchor(null)}
           onWithdrawn={() => setHealthConsent(null)}
         />
       ) : null}
 
-      {deleteOpen ? (
+      {deleteAnchor ? (
         <DeleteAccountDialog
           email={email}
-          anchorEl={deleteButtonRef.current}
+          anchorEl={deleteAnchor}
           exporting={exporting}
           onExport={() => void runExport()}
-          onClose={() => setDeleteOpen(false)}
+          onClose={() => setDeleteAnchor(null)}
         />
       ) : null}
     </AccountSection>

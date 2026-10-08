@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { useHasChanged } from '@/shared/hooks/useHasChanged';
 import { useAppI18n } from '@/shared/i18n';
 import { setAnalyticsContext, trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { readStoredAppwriteSession } from '@/shared/services/appwrite';
@@ -91,7 +92,7 @@ export function useProjectBrowserOverlayState({
   onRequestClose,
   canClose = true,
 }: ProjectBrowserOverlayProps) {
-  const { t } = useAppI18n();
+  const { t, locale } = useAppI18n();
   const storedSession = readStoredAppwriteSession();
   const userId = storedSession?.user.id ?? null;
   const accountEmail = storedSession?.user.email ?? '';
@@ -112,13 +113,13 @@ export function useProjectBrowserOverlayState({
     }
     return readStoredActiveTab(userId) ?? 'projects';
   });
-  const [subscriptionState, setSubscriptionState] = useState<SubscriptionState>({
-    isLoading: false,
+  const [subscriptionState, setSubscriptionState] = useState<SubscriptionState>(() => ({
+    isLoading: open && userId !== null,
     error: null,
     snapshot: null,
-  });
+  }));
   const [accountProfile, setAccountProfile] = useState<AccountProfile | null>(null);
-  const [accountLoading, setAccountLoading] = useState(false);
+  const [accountLoading, setAccountLoading] = useState(open);
   const [accountError, setAccountError] = useState<string | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState<SubscriptionPlanId>(() => {
@@ -152,35 +153,33 @@ export function useProjectBrowserOverlayState({
     onOpenProject,
   });
 
-  useEffect(() => {
+  // Changement de compte : onglet et e-mail de facturation de ce compte (au
+  // premier rendu, les initialiseurs ci-dessus ont déjà lu l'URL puis le stockage).
+  const userIdChanged = useHasChanged(userId);
+  if (userIdChanged) {
     setActiveTab(readStoredActiveTab(userId) ?? 'projects');
-  }, [userId]);
+    setContactPreference(readBillingContactPreference(userId));
+  }
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const tabParam = params.get('tab');
-      if (tabParam === 'subscription' || tabParam === 'projects' || tabParam === 'account' || tabParam === 'settings') {
-        setActiveTab(tabParam);
-      } else if (params.get('action') === 'upgrade' || params.has('upgrade')) {
-        setActiveTab('subscription');
-      }
-      const tierParam = params.get('tier') || params.get('upgrade');
-      if (tierParam === 'founder' || tierParam === 'patron') {
-        setSelectedPlanId(tierParam);
-      }
-    } catch {
-      /* ignore */
-    }
-  }, []);
+  // Chargements relancés par leurs effets plus bas : l'indicateur passe au
+  // rendu où ils repartent, pas après le commit.
+  // t suit la langue : un changement de langue relance aussi les chargements.
+  const localeChanged = useHasChanged(locale);
+  const billingKeyChanged = useHasChanged(open ? userId : null);
+  if ((billingKeyChanged || localeChanged) && open && userId) {
+    setSubscriptionState((prev) => ({ ...prev, isLoading: true, error: null }));
+  }
+  const accountKeyChanged = useHasChanged(open ? `${accountEmail}\u0000${displayName ?? ''}` : null);
+  if ((accountKeyChanged || localeChanged) && open) {
+    setAccountLoading(true);
+    setAccountError(null);
+  }
 
   useEffect(() => {
     writeStoredActiveTab(userId, activeTab);
   }, [activeTab, userId]);
 
   useEffect(() => {
-    setContactPreference(readBillingContactPreference(userId));
     syncedContactPreferenceRef.current = null;
     contactHydratedRef.current = false;
     hasManualPlanSelectionRef.current = false;
@@ -260,12 +259,6 @@ export function useProjectBrowserOverlayState({
     if (!open || !userId) return;
 
     let cancelled = false;
-    setSubscriptionState((prev) => ({
-      ...prev,
-      isLoading: true,
-      error: null,
-    }));
-
     void (async () => {
       try {
         const overview = await fetchBillingOverview();
@@ -297,8 +290,6 @@ export function useProjectBrowserOverlayState({
     if (!open) return;
 
     let cancelled = false;
-    setAccountLoading(true);
-    setAccountError(null);
 
     void (async () => {
       try {

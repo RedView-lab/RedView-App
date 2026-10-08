@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { useHasChanged } from '@/shared/hooks/useHasChanged';
 import { useAppI18n } from '@/shared/i18n';
 
 import {
@@ -90,11 +91,14 @@ export function AccountPanel({
     };
   }, []);
 
-  useEffect(() => {
+  // Nouveau profil : formulaires repartis de lui (au premier rendu, l'état initial en vient déjà).
+  if (useHasChanged(profile)) {
     setIdentityForm(createIdentityForm(profile));
-    const nextPractice = createPracticeForm(profile);
-    setPracticeForm(nextPractice);
-    syncedPracticeRef.current = serializePracticeForm(nextPractice);
+    setPracticeForm(createPracticeForm(profile));
+  }
+
+  useEffect(() => {
+    syncedPracticeRef.current = serializePracticeForm(createPracticeForm(profile));
   }, [profile]);
 
   const profileDisplayName = useMemo(() => {

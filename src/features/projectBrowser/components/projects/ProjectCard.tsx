@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
+import { useHasChanged } from '@/shared/hooks/useHasChanged';
 import { useAppI18n } from '@/shared/i18n';
 import {
   IconSave,
@@ -66,18 +67,20 @@ export function ProjectCard({
     dragImageRef.current = image;
   }, []);
 
-  useEffect(() => {
-    setDraft(project.name);
-  }, [project.name]);
+  if (useHasChanged(project.name)) setDraft(project.name);
+
+  // Nouvelle miniature : aperçu reparti d'elle (au rendu), ancienne URL locale libérée (effet).
+  if (useHasChanged(thumbnailUrl)) {
+    setPreviewSrc(thumbnailUrl);
+    setPreviewReady(false);
+    setPreviewUnavailable(false);
+  }
 
   useEffect(() => {
     if (localBlobUrlRef.current && localBlobUrlRef.current !== thumbnailUrl) {
       URL.revokeObjectURL(localBlobUrlRef.current);
       localBlobUrlRef.current = null;
     }
-    setPreviewSrc(thumbnailUrl);
-    setPreviewReady(false);
-    setPreviewUnavailable(false);
   }, [thumbnailUrl]);
 
   useEffect(() => {
