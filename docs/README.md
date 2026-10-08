@@ -56,6 +56,7 @@ sorties brutes auxquelles ils renvoient sont dans [`audits/data/`](audits/data).
 | 2026-09-22 | [Usage des données du cycliste dans le moteur d'allure](audits/2026-09-22-prediction-data.md) |
 | 2026-09-23 | [Compléter la base de POI avec quatre sources externes](audits/2026-09-23-poi-external-sources.md) |
 | 2026-10-01 | [Audit avant lancement : parcours de l'utilisateur connecté](audits/2026-10-01-launch.md) |
+| 2026-10-08 | [Conformité France / UE : RGPD, traceurs, mentions légales, DSA, accessibilité](audits/2026-10-08-conformite-fr-ue.md) |
 
 ## Écrire un nouveau document
 
