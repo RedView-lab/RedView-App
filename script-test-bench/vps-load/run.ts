@@ -111,13 +111,20 @@ function serverRoutes(from: number, to: number): ServerRoutes | undefined {
     for (const line of out.split('\n')) {
       if (!line.startsWith('{')) continue;
       try {
-        const entry = JSON.parse(line) as { req?: { method?: string }; res?: { statusCode?: number }; responseTime?: number; route?: string };
+        const entry = JSON.parse(line) as { req?: { method?: string }; res?: { statusCode?: number }; responseTime?: number; route?: string; upstream?: { waitMs?: number; computeMs?: number } };
         const key = `${entry.req?.method ?? '?'} ${entry.route ?? '?'}`;
         const bucket = byRoute.get(key) ?? { times: [], statuses: {} };
         if (typeof entry.responseTime === 'number') bucket.times.push(entry.responseTime);
         const status = String(entry.res?.statusCode ?? '?');
         bucket.statuses[status] = (bucket.statuses[status] ?? 0) + 1;
         byRoute.set(key, bucket);
+        // Proxy BRouter (f71524f) : attente dans la file et calcul de BRouter, séparés par requête.
+        for (const [part, value] of [['attente file', entry.upstream?.waitMs], ['calcul amont', entry.upstream?.computeMs]] as const) {
+          if (typeof value !== 'number') continue;
+          const sub = byRoute.get(`${key} · ${part}`) ?? { times: [], statuses: {} };
+          sub.times.push(value);
+          byRoute.set(`${key} · ${part}`, sub);
+        }
       } catch {
         /* ligne coupée */
       }
