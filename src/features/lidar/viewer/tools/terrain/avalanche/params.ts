@@ -1,25 +1,27 @@
 // ============================================
-// LiDAR viewer tools — avalanche terrain model: published parameters
+// Outils du viewer LiDAR — modèle de terrain avalancheux : paramètres publiés
 // ============================================
 //
-// A terrain rating (ATES), not a snow forecast: the result depends on the
-// ground, its slopes and its forest only, never on the snowpack or the
-// weather, exactly like the Avalanche Terrain Exposure Scale it reproduces.
+// Une note du terrain (ATES), pas une prévision nivologique : le résultat ne
+// dépend que du sol, de ses pentes et de sa forêt, jamais du manteau neigeux ni
+// de la météo, exactement comme l'Avalanche Terrain Exposure Scale qu'il reproduit.
 //
-// The chain is AutoATES v2.0 (Toft et al., 2024), run for one point:
-//  1. potential release areas (PRA): fuzzy logic of Veitinger et al. (2016)
-//     on slope, wind shelter (Plattner et al., 2006) and forest density,
-//     combined with the "fuzzy AND" of Werners (1988); roughness left out
-//     (needs a snow depth, unsuited to ≥ 5 m grids — Toft et al., 2024 §4.1.4);
-//  2. runout: Flow-Py (D'Amboise et al., 2022) — energy line of angle α,
-//     Holmgren (1994) multiple-flow routing with persistence, kinetic-energy
-//     height zδ, forest friction and detrainment;
-//  3. ATES class: slope, runout travel angle and forest criteria of
-//     Toft et al. (2024), Tables 1–3.
-// Two scenarios as in autoATES v3.0 (Sykes et al., 2026): "typical" (tighter
-// release, α 30°) and "infrequent" (wider release, α 18°, large avalanches).
+// La chaîne est AutoATES v2.0 (Toft et al., 2024), lancée pour un point :
+//  1. zones de départ potentielles (PRA) : logique floue de Veitinger et al.
+//     (2016) sur la pente, l'abri au vent (Plattner et al., 2006) et la densité
+//     de forêt, combinées par le « ET flou » de Werners (1988) ; rugosité
+//     écartée (elle demande une hauteur de neige, inadaptée aux grilles ≥ 5 m —
+//     Toft et al., 2024 §4.1.4) ;
+//  2. écoulement : Flow-Py (D'Amboise et al., 2022) — ligne d'énergie d'angle α,
+//     acheminement multidirectionnel de Holmgren (1994) avec persistance,
+//     hauteur d'énergie cinétique zδ, frottement et détraînement en forêt ;
+//  3. classe ATES : critères de pente, d'angle de parcours de l'écoulement et
+//     de forêt de Toft et al. (2024), tableaux 1–3.
+// Deux scénarios comme dans autoATES v3.0 (Sykes et al., 2026) : « typique »
+// (départ plus resserré, α 30°) et « peu fréquent » (départ plus large, α 18°,
+// grandes avalanches).
 //
-// References
+// Références
 //  - Toft, H. B., Sykes, J., Schauer, A., Hendrikx, J., Hetland, A. (2024).
 //    AutoATES v2.0: Automated Avalanche Terrain Exposure Scale mapping.
 //    NHESS 24, 1779–1793. doi:10.5194/nhess-24-1779-2024
@@ -30,7 +32,7 @@
 //    release area identification from estimated winter terrain. NHESS 16,
 //    2211–2225. doi:10.5194/nhess-16-2211-2016
 //  - Plattner, C., Braun, L. N., Brenning, A. (2006). The spatial variability of
-//    snow accumulation at Vernagtferner. Geogr. Helv. (wind shelter index).
+//    snow accumulation at Vernagtferner. Geogr. Helv. (indice d'abri au vent).
 //  - Statham, G., Campbell, C. (2025). The Avalanche Terrain Exposure Scale
 //    (ATES) v.2. NHESS 25, 1113–1136. doi:10.5194/nhess-25-1113-2025
 //  - Sykes, J., Knies, D., Haegeli, P., Anthony-Malone, K., Statham, G. (2026).
@@ -39,7 +41,7 @@
 //    modelling in grid based elevation models. Hydrol. Process. 8, 327–334.
 //  - Werners, B. (1988). Aggregation models in mathematical programming.
 
-/** Cauchy (generalised bell) membership 1 / (1 + ((x − c) / a)^(2b)). */
+/** Appartenance de Cauchy (cloche généralisée) 1 / (1 + ((x − c) / a)^(2b)). */
 export interface CauchyParams {
   a: number;
   b: number;
@@ -50,18 +52,19 @@ export type AvalancheScenarioId = 'typical' | 'infrequent';
 
 export interface AvalancheScenarioParams {
   id: AvalancheScenarioId;
-  /** Slope membership of the release-area model (degrees). */
+  /** Appartenance de pente du modèle de zone de départ (degrés). */
   slope: CauchyParams;
-  /** PRA value from which a cell is a potential release area. */
+  /** Valeur PRA à partir de laquelle une cellule est une zone de départ potentielle. */
   praThreshold: number;
-  /** Runout angle α of the Flow-Py energy line, degrees. */
+  /** Angle d'arrêt α de la ligne d'énergie de Flow-Py, degrés. */
   alphaDeg: number;
 }
 
 /**
- * autoATES v3.0 (ISSW 2026) default scenarios. Typical = frequent avalanches
- * from the most likely start zones; infrequent = the envelope of larger,
- * rarer avalanches, including start zones below 30°.
+ * Scénarios par défaut d'autoATES v3.0 (ISSW 2026). Typique = avalanches
+ * fréquentes depuis les zones de départ les plus probables ; peu fréquent =
+ * l'enveloppe des avalanches plus grandes et plus rares, y compris des zones
+ * de départ sous 30°.
  */
 export const AVALANCHE_SCENARIOS: Readonly<Record<AvalancheScenarioId, AvalancheScenarioParams>> = {
   typical: { id: 'typical', slope: { a: 12, b: 4, c: 42.5 }, praThreshold: 0.25, alphaDeg: 30 },
@@ -70,36 +73,36 @@ export const AVALANCHE_SCENARIOS: Readonly<Record<AvalancheScenarioId, Avalanche
 
 /** Wind shelter membership (Veitinger et al., 2016, as in AutoATES v2.0/v3.0). */
 export const WIND_SHELTER_MEMBERSHIP: CauchyParams = { a: 3, b: 10, c: 3 };
-/** Search radius of the wind shelter index (Plattner et al., 2006 optimum), m. */
+/** Rayon de recherche de l'indice d'abri au vent (optimum de Plattner et al., 2006), m. */
 export const WIND_SHELTER_RADIUS_M = 60;
-/** Quantile of the upwind angles taken as the index (median, all directions). */
+/** Quantile des angles au vent retenu comme indice (médiane, toutes directions). */
 export const WIND_SHELTER_QUANTILE = 0.5;
 /** Forest membership on canopy cover 0–100 % (autoATES v3.0, `sen2cc`). */
 export const FOREST_MEMBERSHIP: CauchyParams = { a: 50, b: 3, c: 0 };
-/** Release areas smaller than this are dropped (autoATES v3.0 sieve), m². */
+/** Les zones de départ plus petites que ceci sont écartées (tamis d'autoATES v3.0), m². */
 export const PRA_MIN_AREA_M2 = 1000;
 
-/** Flow-Py routing exponent: lateral spread (8 for snow avalanches). */
+/** Exposant d'acheminement de Flow-Py : étalement latéral (8 pour les avalanches de neige). */
 export const FLOWPY_EXPONENT = 8;
-/** Routing flux below this share is not routed on (limits the spread). */
+/** Le flux d'acheminement sous cette part n'est pas acheminé plus loin (limite l'étalement). */
 export const FLOWPY_FLUX_THRESHOLD = 0.003;
-/** Cap of the kinetic-energy height zδ (≈ 73 m/s), m. */
+/** Plafond de la hauteur d'énergie cinétique zδ (≈ 73 m/s), m. */
 export const FLOWPY_MAX_Z_DELTA_M = 270;
 /**
- * Forest friction (D'Amboise et al.; Flow-Py and AutoATES v2.0 defaults):
- * α grows by up to `maxAddedDeg`·FSI in forest, at least `minAddedDeg`,
- * fading out as the flow speed reaches `velocityLimit`.
+ * Frottement en forêt (D'Amboise et al. ; valeurs par défaut de Flow-Py et
+ * d'AutoATES v2.0) : α augmente jusqu'à `maxAddedDeg`·FSI en forêt, d'au moins
+ * `minAddedDeg`, en s'estompant à mesure que la vitesse de l'écoulement atteint `velocityLimit`.
  */
 export const FLOWPY_FOREST_FRICTION = { maxAddedDeg: 10, minAddedDeg: 2, velocityLimit: 30 } as const;
-/** Forest detrainment of routing flux per cell (AutoATES v2.0 Flow-Py). */
+/** Détraînement en forêt du flux d'acheminement par cellule (Flow-Py d'AutoATES v2.0). */
 export const FLOWPY_FOREST_DETRAINMENT = { max: 0.0003, min: 0.00001, velocityLimit: 30 } as const;
 
 /** ATES class thresholds of AutoATES v2.0 (Toft et al., 2024, Table 1). */
 export const ATES_SLOPE_THRESHOLDS_DEG = { sat01: 15, sat12: 18, sat23: 28, sat34: 39 } as const;
-/** Runout travel-angle thresholds (AAT); any infrequent (α 18°) runout is class 1. */
+/** Seuils d'angle de parcours de l'écoulement (AAT) ; tout écoulement peu fréquent (α 18°) est de classe 1. */
 export const ATES_ALPHA_THRESHOLDS_DEG = { aat12: 24, aat23: 33 } as const;
 /** Canopy cover classes, % (Toft et al., 2024, Table 2): open / sparse / moderate / dense. */
 export const ATES_CANOPY_THRESHOLDS_PCT = { tree1: 20, tree2: 55, tree3: 75 } as const;
 
-/** A return of the high-vegetation class this high above the ground is a tree crown, m. */
+/** Un retour de la classe haute végétation à cette hauteur au-dessus du sol est une couronne d'arbre, m. */
 export const TREE_MIN_HEIGHT_M = 3;

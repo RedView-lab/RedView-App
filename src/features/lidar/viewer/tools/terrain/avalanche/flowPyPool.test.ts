@@ -19,7 +19,7 @@ function seeded(seed: number): () => number {
   };
 }
 
-/** A 36° face with gullies and micro-relief over a valley (several blocks of release cells reach the point). */
+/** Un versant à 36° avec ravines et micro-relief au-dessus d'une vallée (plusieurs blocs de cellules de départ atteignent le point). */
 function faceGrid(): FlowPyGrid {
   const rand = seeded(4);
   const width = 70;
@@ -35,10 +35,10 @@ function faceGrid(): FlowPyGrid {
 }
 
 /**
- * In-process worker double: the real handler, requests handled in arrival
- * order like a worker's, replies delivered after a random delay so blocks
- * from several workers come back out of order; messages copied as a
- * structured clone would.
+ * Doublure de worker dans le processus : le vrai gestionnaire, requêtes
+ * traitées dans l'ordre d'arrivée comme dans un worker, réponses livrées après
+ * un délai aléatoire pour que les blocs de plusieurs workers reviennent dans
+ * le désordre ; messages copiés comme le ferait un clone structuré.
  */
 function fakePort(rand: () => number, options: { failOnBlock?: number } = {}): FlowPyPort {
   const handle = createFlowPyWorkerHandler();
@@ -76,7 +76,7 @@ describe('runFlowPyInPool', () => {
   const target = { cells: Int32Array.of(centre - 1, centre, centre + 1, centre - grid.width, centre + grid.width) };
   const forest = Float32Array.from({ length: grid.altitude.length }, (_, i) => ((i % grid.width) > 38 && (i % grid.width) < 50 ? 0.5 : 0));
 
-  // Single-thread references, computed once for every pool size.
+  // Références mono-thread, calculées une fois pour toutes les tailles de pool.
   const runs = [
     { alphaDeg: 18, fsi: null, release },
     { alphaDeg: 24, fsi: forest, release },
@@ -85,7 +85,7 @@ describe('runFlowPyInPool', () => {
 
   it.each([2, 3, 5])('gives exactly the single-thread result on %i workers, blocks back in any order', async (workers) => {
     for (const [k, run] of runs.entries()) {
-      expect(expected[k]!.candidates).toBeGreaterThan(3 * 64); // several blocks
+      expect(expected[k]!.candidates).toBeGreaterThan(3 * 64); // plusieurs blocs
       expect(expected[k]!.incomplete).toBe(false);
       const rand = seeded(workers * 7 + run.alphaDeg);
       const ports = Array.from({ length: workers }, () => fakePort(rand));

@@ -1,13 +1,14 @@
 // ============================================
-// LiDAR viewer tools — Flow-Py over several workers
+// Outils du viewer LiDAR — Flow-Py sur plusieurs workers
 // ============================================
 //
-// Release cells run independently (flowPy.ts): blocks of them are handed to
-// the workers of a pool as they free up, and merged in start order as soon as
-// the next one is back — exactly the sequential result, whatever the number
-// of workers or the order blocks come back in. Transport-agnostic: a port is
-// anything that posts requests and listens to replies (Web Workers in the viewer,
-// worker_threads in the bench).
+// Les cellules de départ tournent indépendamment (flowPy.ts) : des blocs de
+// cellules sont confiés aux workers d'un pool à mesure qu'ils se libèrent, et
+// fusionnés dans l'ordre de départ dès que le suivant est revenu — exactement
+// le résultat séquentiel, quels que soient le nombre de workers et l'ordre de
+// retour des blocs. Indépendant du transport : un port est tout ce qui envoie
+// des requêtes et écoute des réponses (Web Workers dans le viewer,
+// worker_threads dans le bench).
 
 import {
   createFlowPyBlockRunner,
@@ -43,7 +44,7 @@ export type FlowPyWorkerResponse =
 
 export interface FlowPyPort {
   postMessage(message: FlowPyWorkerRequest): void;
-  /** Listens to the worker's replies and failure; returns the unsubscribe. */
+  /** Écoute les réponses et l'échec du worker ; renvoie la désinscription. */
   listen(onMessage: (message: FlowPyWorkerResponse) => void, onError: (message: string) => void): () => void;
 }
 
@@ -63,7 +64,7 @@ export function webWorkerPort(worker: Worker): FlowPyPort {
   };
 }
 
-/** Worker side: keeps the runner of the current job and runs the blocks asked for. */
+/** Côté worker : garde l'exécuteur de la tâche en cours et lance les blocs demandés. */
 export function createFlowPyWorkerHandler(): (request: FlowPyWorkerRequest) => FlowPyWorkerResponse | null {
   let job = 0;
   let runner: FlowPyBlockRunner | null = null;
@@ -78,15 +79,15 @@ export function createFlowPyWorkerHandler(): (request: FlowPyWorkerRequest) => F
   };
 }
 
-/** Buffers of a block, to transfer instead of copying. */
+/** Buffers d'un bloc, à transférer au lieu de les copier. */
 export function flowPyBlockTransfer(block: FlowPyBlock): ArrayBuffer[] {
   return [block.startCells, block.startAngles, block.fluxCells, block.fluxValues, block.pathCells, block.pathZDelta]
     .map((array) => array.buffer as ArrayBuffer);
 }
 
 /**
- * Cost bound of a run on `threads` threads: the same time budget as one
- * thread with MAX_RECORDS_PER_RUN, up to four threads' worth.
+ * Borne de coût d'une passe sur `threads` threads : le même budget de temps
+ * qu'un thread avec MAX_RECORDS_PER_RUN, jusqu'à l'équivalent de quatre threads.
  */
 export function flowPyRecordBudget(threads: number): number {
   return MAX_RECORDS_PER_RUN * Math.max(1, Math.min(4, threads));
@@ -94,7 +95,7 @@ export function flowPyRecordBudget(threads: number): number {
 
 let nextJob = 1;
 
-/** Runs Flow-Py from every release cell that may reach the target, on the pool's workers. */
+/** Lance Flow-Py depuis chaque cellule de départ qui peut atteindre la cible, sur les workers du pool. */
 export function runFlowPyInPool(
   ports: readonly FlowPyPort[],
   grid: FlowPyGrid,
@@ -115,7 +116,7 @@ export function runFlowPyInPool(
   }
 
   const job = nextJob++;
-  // Only what the workers read (the analysis grid carries more).
+  // Seulement ce que lisent les workers (la grille d'analyse en porte davantage).
   const jobGrid: FlowPyGrid = { width: grid.width, height: grid.height, cell: grid.cell, altitude: grid.altitude };
   const back = new Map<number, FlowPyBlock>();
   let nextFrom = 0;
@@ -158,7 +159,7 @@ export function runFlowPyInPool(
       }, (message) => settle(() => reject(new Error(message)))));
       port.postMessage({ type: 'job', job, grid: jobGrid, terrain, target, run, plan });
     }
-    // Two blocks queued per worker: the next one is there when a block ends.
+    // Deux blocs en file par worker : le suivant est là quand un bloc se termine.
     for (let round = 0; round < 2; round++) for (const port of ports) dispatch(port);
   });
 }

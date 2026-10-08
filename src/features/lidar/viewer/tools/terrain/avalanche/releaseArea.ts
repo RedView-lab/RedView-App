@@ -1,18 +1,19 @@
 // ============================================
-// LiDAR viewer tools — potential avalanche release areas (PRA)
+// Outils du viewer LiDAR — zones de départ potentielles d'avalanche (PRA)
 // ============================================
 //
-// Veitinger et al. (2016) fuzzy-logic PRA as used by AutoATES v2.0/v3.0:
-// Cauchy memberships of slope, wind shelter and forest density combined
-// with Werners' "fuzzy AND"
+// PRA en logique floue de Veitinger et al. (2016) telle qu'utilisée par
+// AutoATES v2.0/v3.0 : appartenances de Cauchy de la pente, de l'abri au vent
+// et de la densité de forêt, combinées par le « ET flou » de Werners
 //
 //   μ = (1 − m)·m + m·mean(μs, μw, μf),   m = min(μs, μw, μf)
 //
-// then thresholded and cleaned of release areas too small to produce an
-// avalanche that runs. Wind shelter is Plattner's index: the median, over a
-// 60 m disc, of the angle from the cell up (or down) to its neighbours —
-// positive in a hollow or below a ridge where wind deposits snow, negative on
-// an exposed crest. Everything here is terrain: no snow depth, no weather.
+// puis seuillées et débarrassées des zones de départ trop petites pour
+// produire une avalanche qui s'écoule. L'abri au vent est l'indice de
+// Plattner : la médiane, sur un disque de 60 m, de l'angle de la cellule vers
+// le haut (ou le bas) de ses voisines — positif dans un creux ou sous une crête
+// où le vent dépose la neige, négatif sur une arête exposée. Tout ici est du
+// terrain : pas de hauteur de neige, pas de météo.
 
 import type { AnalysisGrid } from '../terrainField';
 import {
@@ -31,13 +32,13 @@ function cauchy(x: number, p: CauchyParams): number {
   return 1 / (1 + Math.pow(Math.abs((x - p.c) / p.a), 2 * p.b));
 }
 
-/** Werners' fuzzy AND of three memberships (monotone in each of them). */
+/** ET flou de Werners de trois appartenances (monotone en chacune). */
 function fuzzyAnd(slope: number, wind: number, forest: number): number {
   const m = Math.min(slope, wind, forest);
   return (1 - m) * m + (m * (slope + wind + forest)) / 3;
 }
 
-/** Wind shelter index per cell (radians), NaN where not computed yet. */
+/** Indice d'abri au vent par cellule (radians), NaN là où il n'est pas encore calculé. */
 export class WindShelterField {
   readonly values: Float32Array;
   private readonly grid: TerrainGrid;
@@ -73,7 +74,7 @@ export class WindShelterField {
     this.scratch = new Float64Array(offsets.length);
   }
 
-  /** Index at cell `i`, computed on first use. */
+  /** Indice à la cellule `i`, calculé au premier usage. */
   at(i: number): number {
     const cached = this.values[i]!;
     if (!Number.isNaN(cached)) return cached;
@@ -100,11 +101,11 @@ export class WindShelterField {
       }
       const zn = altitude[i + this.offsets[k]!]!;
       if (!Number.isFinite(zn)) continue;
-      // Monotone in the angle: select on the gradient, take the angle at the end.
+      // Monotone en l'angle : sélectionner sur le gradient, prendre l'angle à la fin.
       values[n++] = (zn - z) / this.offsetDist[k]!;
     }
-    // Plattner's index needs the neighbourhood; a cell on the scene edge
-    // keeps the part of its disc inside the scene.
+    // L'indice de Plattner a besoin du voisinage ; une cellule au bord de la
+    // scène garde la partie de son disque qui est dans la scène.
     if (n === 0) return 0;
     const position = WIND_SHELTER_QUANTILE * (n - 1);
     const k = Math.floor(position);
@@ -113,12 +114,12 @@ export class WindShelterField {
     if (fraction === 0 || k + 1 >= n) return Math.atan(low);
     let high = Infinity;
     for (let j = k + 1; j < n; j++) if (values[j]! < high) high = values[j]!;
-    // Linear interpolation between order statistics of the angles (numpy quantile).
+    // Interpolation linéaire entre statistiques d'ordre des angles (quantile numpy).
     return Math.atan(low) + fraction * (Math.atan(high) - Math.atan(low));
   }
 }
 
-/** k-th smallest of `values[0..n)` (Hoare quickselect, reorders in place). */
+/** k-ième plus petit de `values[0..n)` (quickselect de Hoare, réordonne sur place). */
 function selectKth(values: Float64Array, n: number, k: number): number {
   let lo = 0;
   let hi = n - 1;
@@ -145,15 +146,15 @@ function selectKth(values: Float64Array, n: number, k: number): number {
 }
 
 export interface ReleaseAreas {
-  /** Continuous PRA value 0–1. */
+  /** Valeur PRA continue 0–1. */
   pra: Float32Array;
-  /** 1 on potential release cells (above the threshold, large enough). */
+  /** 1 sur les cellules de départ potentielles (au-dessus du seuil, assez grandes). */
   release: Uint8Array;
 }
 
 /**
- * PRA of one scenario. `canopyPct` (0–100, NaN unknown) is the forest density;
- * `null` maps open terrain only, like AutoATES run without a forest layer.
+ * PRA d'un scénario. `canopyPct` (0–100, NaN inconnu) est la densité de forêt ;
+ * `null` ne cartographie que le terrain ouvert, comme AutoATES lancé sans couche forêt.
  */
 export function computeReleaseAreas(
   grid: TerrainGrid,
@@ -171,8 +172,8 @@ export function computeReleaseAreas(
     const muSlope = cauchy(slope, scenario.slope);
     const canopy = canopyPct ? canopyPct[i]! : 0;
     const muForest = cauchy(Number.isFinite(canopy) ? canopy : 0, FOREST_MEMBERSHIP);
-    // The wind shelter index is the costly term: skip it where even a fully
-    // sheltered cell would stay under the threshold.
+    // L'indice d'abri au vent est le terme coûteux : le sauter là où même une
+    // cellule entièrement abritée resterait sous le seuil.
     if (fuzzyAnd(muSlope, 1, muForest) < scenario.praThreshold) continue;
     const muWind = cauchy(wind.at(i), WIND_SHELTER_MEMBERSHIP);
     const value = fuzzyAnd(muSlope, muWind, muForest);
@@ -183,7 +184,7 @@ export function computeReleaseAreas(
   return { pra, release };
 }
 
-/** Removes the 4-connected groups of 1 smaller than `minCells` (GDAL sieve on the release cells only). */
+/** Retire les groupes 4-connexes de 1 plus petits que `minCells` (tamis GDAL sur les seules cellules de départ). */
 function sieve(mask: Uint8Array, width: number, height: number, minCells: number): void {
   const seen = new Uint8Array(mask.length);
   const stack: number[] = [];

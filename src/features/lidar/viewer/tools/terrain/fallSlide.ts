@@ -1,71 +1,72 @@
 // ============================================
-// LiDAR viewer tools — a body sliding or falling down the ground model
+// Outils du viewer LiDAR — un corps qui glisse ou chute sur le modèle de sol
 // ============================================
 //
-// Point mass on the DTM surface z = h(x, y), integrated in plan coordinates
-// (exact constrained motion of a bead on a height field):
+// Masse ponctuelle sur la surface du MNT z = h(x, y), intégrée en coordonnées
+// planes (mouvement contraint exact d'une perle sur un champ de hauteurs) :
 //
 //   a_plan = −∇h · (g + uᵀHu) / (1 + |∇h|²) − F · u / V
 //
-// u the plan velocity, H the Hessian of h, V the 3D speed and F the
-// resistance per unit mass. The normal force per unit mass is
-// N = (g + uᵀHu) / √(1 + |∇h|²): curvature presses the body into a
-// compression (gully floor, foot of a face) and lifts it off a convex break —
-// N < 0 means it leaves the ground and flies until it hits it again.
+// u la vitesse en plan, H la hessienne de h, V la vitesse 3D et F la
+// résistance par unité de masse. La force normale par unité de masse est
+// N = (g + uᵀHu) / √(1 + |∇h|²) : la courbure plaque le corps dans une
+// compression (fond de ravine, pied de versant) et le décolle d'une rupture
+// convexe — N < 0 signifie qu'il quitte le sol et vole jusqu'à le retoucher.
 //
-// Two resistance models:
-//  - `body` (a person): Coulomb friction μ·N plus air drag k·V² — the
-//    sliding-block model of avalanche dynamics (Perla–Cheng–McClung) with a
-//    person's drag;
-//  - `energyLine` (a falling rock): resistance μ·g per horizontal metre, which
-//    is exactly the empirical energy-line ("Fahrböschung") model of rockfall
-//    runout: the rock stops where the line drawn from its start at
-//    atan(μ) below the horizontal meets the ground.
+// Deux modèles de résistance :
+//  - `body` (une personne) : frottement de Coulomb μ·N plus traînée de l'air
+//    k·V² — le modèle de bloc glissant de la dynamique des avalanches
+//    (Perla–Cheng–McClung) avec la traînée d'une personne ;
+//  - `energyLine` (un rocher qui tombe) : résistance μ·g par mètre horizontal,
+//    ce qui est exactement le modèle empirique de la ligne d'énergie
+//    (« Fahrböschung ») des distances d'arrêt des chutes de pierres : le rocher
+//    s'arrête là où la ligne tirée depuis son départ à atan(μ) sous l'horizontale
+//    rencontre le sol.
 //
-// The speed is carried by the energy balance along the path actually followed
-// (V² changes by 2g·drop − 2·work), so DTM noise cannot create energy; the
-// dynamics only steer the direction. Gravity turns a slow body into the fall
-// line; a fast one carries straight on, rides up the side of a bending gully
-// or takes off at a convex edge.
+// La vitesse est portée par le bilan d'énergie le long de la trajectoire
+// réellement suivie (V² varie de 2g·dénivelé − 2·travail) : le bruit du MNT ne
+// peut pas créer d'énergie ; la dynamique ne fait qu'orienter la direction. La
+// gravité ramène un corps lent dans la ligne de pente ; un rapide file tout
+// droit, remonte le flanc d'une ravine qui tourne ou décolle d'une arête convexe.
 
 import type { TerrainField } from './terrainField';
 
 const G = 9.81;
-/** Baseline of the gradient that steers the body: its own scale, above DTM noise (m). */
+/** Base du gradient qui oriente le corps : sa propre échelle, au-dessus du bruit du MNT (m). */
 const GRADIENT_BASELINE_M = 3;
 /**
- * Baseline of the curvature that presses the body into the ground or lifts it
- * off (m). A fast body feels the shape of the ground over metres; on a 1 m
- * baseline, 10 cm of DTM noise would throw a 30 m/s body into the air.
+ * Base de la courbure qui plaque le corps au sol ou le décolle (m). Un corps
+ * rapide sent la forme du sol sur des mètres ; sur une base de 1 m, 10 cm de
+ * bruit du MNT projetteraient en l'air un corps à 30 m/s.
  */
 const CURVATURE_BASELINE_M = 8;
-/** Plan distance covered per integration step at most (m). */
+/** Distance en plan maximale parcourue par pas d'intégration (m). */
 const STEP_M = 0.5;
-/** Path samples kept about every (m). */
+/** Échantillons de trajectoire gardés environ tous les (m). */
 const RECORD_M = 1;
 const MAX_STEPS = 400_000;
 const MAX_TIME_S = 900;
-/** Below this speed (m/s) a body on ground gentler than its friction angle has stopped. */
+/** Sous cette vitesse (m/s), un corps sur un sol moins raide que son angle de frottement s'est arrêté. */
 const REST_SPEED = 0.05;
-/** A flight is reported from this drop (m): smaller ones are bumps. */
+/** Un vol est signalé à partir de cette chute (m) : les plus petites sont des bosses. */
 const MIN_REPORTED_FLIGHT_DROP_M = 2;
 
 export type SlideMode = 'body' | 'energyLine';
 
 export interface SlideParams {
   mode: SlideMode;
-  /** Friction coefficient (body) or tangent of the energy-line angle (rock). */
+  /** Coefficient de frottement (corps) ou tangente de l'angle de la ligne d'énergie (roche). */
   mu: number;
-  /** Air drag per unit mass k = ρ·Cd·A / 2m (1/m); 0 for the energy line. */
+  /** Traînée de l'air par unité de masse k = ρ·Cd·A / 2m (1/m) ; 0 pour la ligne d'énergie. */
   drag: number;
-  /** Friction in forest cells, when a cover grid is given (rock: trees stop blocks). */
+  /** Frottement dans les cellules de forêt, quand une grille de couvert est fournie (roche : les arbres arrêtent les blocs). */
   muInForest?: number;
-  /** Random turn of the heading, rad per √m of path (micro-topography, tumbling). */
+  /** Rotation aléatoire du cap, rad par √m de trajectoire (micro-topographie, rebonds). */
   headingNoise: number;
   maxLengthM: number;
 }
 
-/** Ground cover queried along the path (from the point cloud). */
+/** Couvert du sol interrogé le long de la trajectoire (d'après le nuage de points). */
 export interface SlideCover {
   isForest(projX: number, projY: number): boolean;
 }
@@ -75,26 +76,26 @@ type SlideStop = 'stopped' | 'edge' | 'maxLength';
 export interface SlideSample {
   projX: number;
   projY: number;
-  /** Altitude of the body (above the ground while it flies), m. */
+  /** Altitude du corps (au-dessus du sol pendant qu'il vole), m. */
   altitudeM: number;
-  /** Ground altitude under the body, m. */
+  /** Altitude du sol sous le corps, m. */
   groundM: number;
-  /** Cumulative horizontal distance, m. */
+  /** Distance horizontale cumulée, m. */
   distanceM: number;
-  /** Time since the release, s. */
+  /** Temps depuis le départ, s. */
   timeS: number;
   /** 3D speed, m/s. */
   speed: number;
-  /** Ground slope under the body, degrees. */
+  /** Pente du sol sous le corps, degrés. */
   slopeDeg: number;
   airborne: boolean;
 }
 
 interface SlideFlight {
-  /** Indices of the take-off and landing samples. */
+  /** Indices des échantillons de décollage et d'atterrissage. */
   from: number;
   to: number;
-  /** Take-off altitude − landing altitude, m. */
+  /** Altitude de décollage − altitude d'atterrissage, m. */
   dropM: number;
   /** Speed at landing, m/s. */
   impactSpeed: number;
@@ -109,11 +110,11 @@ export interface SlideRun {
 
 export interface Rng {
   next(): number;
-  /** Standard normal deviate. */
+  /** Variable normale centrée réduite. */
   gaussian(): number;
 }
 
-/** Deterministic generator (mulberry32): the same click gives the same fan. */
+/** Générateur déterministe (mulberry32) : le même clic donne le même éventail. */
 export function createRng(seed: number): Rng {
   let state = seed >>> 0;
   const next = () => {
@@ -152,11 +153,11 @@ export function simulateSlide(
   let z = z0;
   let ux = 0;
   let uy = 0;
-  /** Vertical velocity while flying. */
+  /** Vitesse verticale pendant le vol. */
   let w = 0;
   let airborne = false;
   let takeoff = { index: 0, z: 0, kinetic: 0, distance: 0 };
-  /** Kinetic energy per unit mass, V²/2. */
+  /** Énergie cinétique par unité de masse, V²/2. */
   let kinetic = 0;
   let distance = 0;
   let time = 0;
@@ -196,7 +197,7 @@ export function simulateSlide(
     }
 
     if (airborne) {
-      // Ballistic flight with drag (the energy line keeps counting distance).
+      // Vol balistique avec traînée (la ligne d'énergie continue de compter la distance).
       const speed = Math.hypot(ux, uy, w);
       const dt = Math.max(minDt, Math.min(0.05, step / Math.max(speed, 1)));
       const dragAcc = params.drag * speed;
@@ -222,8 +223,8 @@ export function simulateSlide(
         record(false);
         continue;
       }
-      // Landing: the normal velocity is lost; Coulomb friction during the
-      // impact takes μ·|v_n| off the tangential speed.
+      // Atterrissage : la vitesse normale est perdue ; le frottement de Coulomb
+      // pendant l'impact retire μ·|v_n| à la vitesse tangentielle.
       const s = field.surfaceAt(x, y, GRADIENT_BASELINE_M);
       if (!s) {
         stop = 'edge';
@@ -236,7 +237,7 @@ export function simulateSlide(
       const vt = Math.hypot(tx, ty, tz);
       const impactSpeed = Math.hypot(ux, uy, w);
       const mu = muAt(x, y);
-      // Energy line: the speed is read on the line, whatever the flight did.
+      // Ligne d'énergie : la vitesse est lue sur la ligne, quoi qu'ait fait le vol.
       const keep = params.mode === 'body'
         ? Math.max(0, vt - mu * Math.abs(vn))
         : Math.sqrt(Math.max(0, 2 * (takeoff.kinetic + G * (takeoff.z - ground) - mu * G * (distance - takeoff.distance))));
@@ -270,7 +271,7 @@ export function simulateSlide(
 
     let speed = Math.sqrt(2 * kinetic);
     if (speed < REST_SPEED) {
-      // At rest: static friction holds below the friction angle.
+      // À l'arrêt : le frottement statique tient sous l'angle de frottement.
       if (Math.sqrt(grad2) <= mu) {
         stop = 'stopped';
         record(true);
@@ -286,7 +287,7 @@ export function simulateSlide(
     const uHu = c.hxx * ux * ux + 2 * c.hxy * ux * uy + c.hyy * uy * uy;
     const pressure = G + uHu;
     if (pressure < 0 && speed > 1) {
-      // Convex edge too sharp for the speed: the body leaves the ground.
+      // Arête convexe trop vive pour la vitesse : le corps quitte le sol.
       airborne = true;
       w = gx * ux + gy * uy;
       takeoff = { index: samples.length, z, kinetic, distance };
@@ -296,7 +297,7 @@ export function simulateSlide(
     const normal = Math.max(0, pressure) / Math.sqrt(q);
 
     const dt = Math.max(minDt, Math.min(0.25, step / Math.max(speed, 0.5)));
-    // Gravity and the surface reaction (frictionless constrained motion).
+    // Gravité et réaction de la surface (mouvement contraint sans frottement).
     let nux = ux - (pressure * gx / q) * dt;
     let nuy = uy - (pressure * gy / q) * dt;
     if (params.headingNoise > 0 && rng) {
@@ -317,7 +318,7 @@ export function simulateSlide(
     }
     const run = Math.hypot(nx - x, ny - y);
     const path3 = Math.hypot(run, nz - z);
-    // Energy balance over the step actually taken.
+    // Bilan d'énergie sur le pas réellement effectué.
     const work = params.mode === 'body'
       ? (mu * normal + params.drag * 2 * kinetic) * path3
       : mu * G * run;
@@ -328,7 +329,7 @@ export function simulateSlide(
     y = ny;
     z = nz;
     if (nextKinetic <= 0) {
-      // Stopped within the step (friction, or climbing a counter-slope).
+      // Arrêté dans le pas (frottement, ou remontée d'une contre-pente).
       kinetic = 0;
       ux = 0;
       uy = 0;
@@ -337,7 +338,7 @@ export function simulateSlide(
     kinetic = nextKinetic;
     const v = Math.sqrt(2 * kinetic);
     maxSpeed = Math.max(maxSpeed, v);
-    // Plan speed of a 3D speed v moving along the surface in this direction.
+    // Vitesse en plan d'une vitesse 3D v se déplaçant le long de la surface dans cette direction.
     const plan = Math.hypot(nux, nuy);
     if (plan < 1e-9) {
       ux = 0;

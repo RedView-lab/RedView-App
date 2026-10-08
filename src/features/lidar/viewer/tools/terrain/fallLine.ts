@@ -41,7 +41,7 @@ export type FallScenarioId = 'ice' | 'firm' | 'rough' | 'rock';
 export interface FallScenarioSpec {
   id: FallScenarioId;
   mode: SlideMode;
-  /** Friction coefficient: low, nominal, high (rock: energy-line angle, degrees). */
+  /** Coefficient de frottement : bas, nominal, haut (roche : angle de la ligne d'énergie, degrés). */
   range: readonly [number, number, number];
   color: string;
 }
@@ -79,10 +79,10 @@ interface FallQuantiles {
 
 export interface FallScenarioResult {
   id: FallScenarioId;
-  /** Nominal trajectory (central parameters, no noise). */
+  /** Trajectoire nominale (paramètres centraux, sans bruit). */
   samples: SlideSample[];
   end: FallEnd;
-  /** Horizontal length, m. */
+  /** Longueur horizontale, m. */
   lengthM: number;
   dropM: number;
   maxSpeed: number;
@@ -296,7 +296,7 @@ function hashId(id: string): number {
   return h >>> 0;
 }
 
-// ── One run ────────────────────────────────────────────────────────────────
+// ── Un lancer ──────────────────────────────────────────────────────────────
 
 interface RunStats {
   end: FallEnd;

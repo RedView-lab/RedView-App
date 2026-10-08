@@ -10,7 +10,7 @@ function grid(width: number, height: number, altitudeAt: (x: number, y: number) 
   return { width, height, cell: CELL, altitude };
 }
 
-/** A 36° face with gullies and seeded micro-relief, then a valley floor. */
+/** Un versant à 36° avec des ravines et un micro-relief tiré d'une graine, puis un fond de vallée. */
 function gulliesGrid(): FlowPyGrid {
   let seed = 9;
   const rand = () => {
@@ -24,7 +24,7 @@ function gulliesGrid(): FlowPyGrid {
   });
 }
 
-/** Release cells: every interior cell steeper than ~30° on the face. */
+/** Cellules de départ : chaque cellule intérieure du versant plus raide que ~30°. */
 function faceRelease(g: FlowPyGrid): Uint8Array {
   const release = new Uint8Array(g.altitude.length);
   for (let r = 1; r < g.height - 1; r++) {
@@ -39,7 +39,7 @@ function disc(g: FlowPyGrid, col: number, row: number): Int32Array {
   return Int32Array.from(cells);
 }
 
-/** FNV-1a over every number of the result (typed arrays and scalars, in key order). */
+/** FNV-1a sur chaque nombre du résultat (tableaux typés et scalaires, dans l'ordre des clés). */
 function fingerprint(result: FlowPyResult): string {
   const values: number[] = [];
   for (const key of Object.keys(result).sort()) {
@@ -70,7 +70,7 @@ describe('runFlowPyToTarget', () => {
   });
 
   it('stops early with exactly the exhaustive result, forest included', () => {
-    // A band of release cells: the exhaustive reference follows every flow to its end.
+    // Une bande de cellules de départ : la référence exhaustive suit chaque écoulement jusqu'au bout.
     const band = release.map((value, i) => (Math.floor(i / g.width) >= 20 && Math.floor(i / g.width) <= 28 ? value : 0));
     const fsi = Float32Array.from({ length: g.altitude.length }, (_, i) => ((i % g.width) > 30 && (i % g.width) < 48 ? 0.6 : 0));
     for (const alphaDeg of [30, 18]) {
@@ -84,9 +84,9 @@ describe('runFlowPyToTarget', () => {
   });
 
   it('stops near the energy line drawn at α from the release cell', () => {
-    // Plane 38° face, then flat: the α 30° line from the top meets the floor
-    // at H / tan 30°; the flow stops a few cells short, its flux spread over
-    // the slope falling under the routing threshold.
+    // Versant plan à 38°, puis plat : la ligne α 30° depuis le haut rencontre le
+    // fond à H / tan 30° ; l'écoulement s'arrête quelques cellules avant, son flux
+    // étalé sur la pente passant sous le seuil d'acheminement.
     const width = 140;
     const plane = grid(width, 9, (x) => (x < 400 ? (400 - x) * Math.tan(38 * DEG) : 0));
     const planeTerrain = prepareFlowPyTerrain(plane);

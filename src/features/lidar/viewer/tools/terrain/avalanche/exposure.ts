@@ -1,12 +1,13 @@
 // ============================================
-// LiDAR viewer tools — avalanche terrain exposure of a point
+// Outils du viewer LiDAR — exposition d'un point au terrain avalancheux
 // ============================================
 //
-// AutoATES v2.0 chain (see params.ts) evaluated for one point P of the
-// scene's analysis grid (≈ 5 m cells): release areas of both scenarios,
-// Flow-Py runout from every release cell whose energy line can reach P, then
-// the ATES class of P. Pure function of the ground model (≈ 10 m grid) and
-// the canopy cover: it runs in a worker (workers/avalancheWorker.ts) or inline.
+// Chaîne AutoATES v2.0 (voir params.ts) évaluée pour un point P de la grille
+// d'analyse de la scène (cellules ≈ 5 m) : zones de départ des deux scénarios,
+// écoulement Flow-Py depuis chaque cellule de départ dont la ligne d'énergie
+// peut atteindre P, puis la classe ATES de P. Fonction pure du modèle de sol
+// (grille ≈ 10 m) et du couvert de canopée : elle tourne dans un worker
+// (workers/avalancheWorker.ts) ou sur place.
 
 import { rateAtes, type AtesRating } from './ates';
 import {
@@ -22,9 +23,9 @@ import { AVALANCHE_SCENARIOS, type AvalancheScenarioId } from './params';
 import { computeReleaseAreas, WindShelterField, type TerrainGrid } from './releaseArea';
 
 const G = 9.81;
-/** "The point" is a disc this wide at least (a person, a skin track), m. */
+/** « Le point » est un disque d'au moins cette largeur (une personne, une trace de montée), m. */
 const TARGET_RADIUS_M = 10;
-/** A slope this steep on the scene edge, above the point's energy line, may continue off the loaded area. */
+/** Une pente aussi raide au bord de la scène, au-dessus de la ligne d'énergie du point, peut se prolonger hors de la zone chargée. */
 const EDGE_SLOPE_DEG = 28;
 
 export interface AvalancheGridInput extends TerrainGrid {
@@ -34,7 +35,7 @@ export interface AvalancheGridInput extends TerrainGrid {
 
 export interface AvalancheTerrainInput {
   grid: AvalancheGridInput;
-  /** Canopy cover per analysis cell (0–100, NaN unknown); `null`: no forest data. */
+  /** Couvert de canopée par cellule d'analyse (0–100, NaN inconnu) ; `null` : pas de données forêt. */
   canopyPct: Float32Array | null;
   projX: number;
   projY: number;
@@ -42,20 +43,20 @@ export interface AvalancheTerrainInput {
 
 interface AvalancheScenarioReach {
   reached: boolean;
-  /** Largest flow-path travel angle at the point, degrees. */
+  /** Plus grand angle de parcours au point, degrés. */
   travelAngleDeg: number | null;
-  /** Largest kinetic-energy height at the point (Flow-Py zδ), m. */
+  /** Plus grande hauteur d'énergie cinétique au point (zδ de Flow-Py), m. */
   zDeltaM: number | null;
-  /** Speed equivalent of `zDeltaM`, √(2 g zδ), m/s. */
+  /** Vitesse équivalente à `zDeltaM`, √(2 g zδ), m/s. */
   speedMs: number | null;
-  /** Release cells whose flow reaches the point. */
+  /** Cellules de départ dont l'écoulement atteint le point. */
   releaseCellCount: number;
   releaseAreaM2: number;
-  /** Release areas (connected groups of release cells) they belong to. */
+  /** Zones de départ (groupes connexes de cellules de départ) auxquelles elles appartiennent. */
   zoneCount: number;
-  /** Release area routed through the point (routFluxSum × cell area), m². */
+  /** Surface de départ acheminée par le point (routFluxSum × surface de cellule), m². */
   contributingAreaM2: number;
-  /** Release cell of the largest travel angle. */
+  /** Cellule de départ du plus grand angle de parcours. */
   source: { projX: number; projY: number; altitudeM: number } | null;
 }
 
@@ -63,31 +64,31 @@ export interface AvalancheTerrainResult {
   ates: AtesRating;
   slopeDeg: number;
   smoothedSlopeDeg: number;
-  /** Canopy cover at the point, % (`null`: unknown). */
+  /** Couvert de canopée au point, % (`null` : inconnu). */
   canopyPct: number | null;
   forestKnown: boolean;
-  /** The point is itself in a potential release area (typical first). */
+  /** Le point est lui-même dans une zone de départ potentielle (scénario typique d'abord). */
   inReleaseArea: AvalancheScenarioId | null;
   scenarios: Record<AvalancheScenarioId, AvalancheScenarioReach>;
-  /** Release cells reaching the point; `releaseTypical` 1 where the typical scenario does too. */
+  /** Cellules de départ qui atteignent le point ; `releaseTypical` à 1 là où le scénario typique l'atteint aussi. */
   releaseCells: Int32Array;
   releaseTypical: Uint8Array;
-  /** Cells of the flow paths to the point, with their largest zδ (m). */
+  /** Cellules des trajectoires d'écoulement jusqu'au point, avec leur plus grand zδ (m). */
   pathCells: Int32Array;
   pathZDelta: Float32Array;
   pathTypical: Uint8Array;
-  /** Steep terrain above the point continues past the edge of the loaded area. */
+  /** Le terrain raide au-dessus du point se prolonge au-delà du bord de la zone chargée. */
   upslopeCut: boolean;
-  /** A runout stopped at its cost bound: the lowest release cells were left out. */
+  /** Un écoulement s'est arrêté à sa borne de coût : les cellules de départ les plus basses ont été laissées de côté. */
   incomplete: boolean;
   lattice: { width: number; height: number; cell: number; originX: number; originY: number };
   computeMs: number;
 }
 
-/** Runs Flow-Py for one scenario (here, or over a pool of workers: see flowPyPool.ts). */
+/** Lance Flow-Py pour un scénario (ici, ou sur un pool de workers : voir flowPyPool.ts). */
 export type FlowPyRunner = (grid: FlowPyGrid, terrain: FlowPyTerrain, target: FlowPyTarget, run: FlowPyRun) => Promise<FlowPyResult>;
 
-/** Everything of a point's evaluation before the Flow-Py runs. */
+/** Tout ce que comporte l'évaluation d'un point avant les passes Flow-Py. */
 interface AvalanchePreparation {
   input: AvalancheTerrainInput;
   started: number;
@@ -111,7 +112,7 @@ export function computeAvalancheTerrain(
   });
 }
 
-/** Same evaluation, the Flow-Py runs handed to `runFlowPy` (a worker pool in the viewer). */
+/** Même évaluation, les passes Flow-Py confiées à `runFlowPy` (un pool de workers dans le viewer). */
 export async function computeAvalancheTerrainWith(
   input: AvalancheTerrainInput,
   wind: WindShelterField,
@@ -175,7 +176,7 @@ function assembleAvalanche(prep: AvalanchePreparation, runs: Record<AvalancheSce
     inReleaseArea: inReleaseArea != null,
   });
 
-  // Display: release cells and paths of both scenarios (typical ⊂ infrequent mostly).
+  // Affichage : cellules de départ et trajectoires des deux scénarios (typique ⊂ peu fréquent le plus souvent).
   const typicalStarts = new Set(runs.typical.startCells);
   const releaseCells = new Set<number>([...runs.infrequent.startCells, ...runs.typical.startCells]);
   const path = new Map<number, { z: number; typical: boolean }>();
@@ -214,9 +215,9 @@ function assembleAvalanche(prep: AvalanchePreparation, runs: Record<AvalancheSce
 }
 
 /**
- * Plan box where the forest matters for a point: the terrain high enough
- * above it to reach it on the infrequent energy line (release areas and
- * their paths), plus a margin around the point.
+ * Boîte en plan où la forêt compte pour un point : le terrain assez haut
+ * au-dessus de lui pour l'atteindre sur la ligne d'énergie peu fréquente (zones
+ * de départ et leurs trajectoires), plus une marge autour du point.
  */
 export function avalancheReadBounds(
   grid: AvalancheGridInput,
@@ -255,7 +256,7 @@ function maxOrNull(a: number | null, b: number | null): number | null {
   return b == null ? a : Math.max(a, b);
 }
 
-/** Cells of "the point" with its position in grid units. */
+/** Cellules du « point » avec sa position en unités de grille. */
 interface PointTarget extends FlowPyTarget {
   col: number;
   row: number;
@@ -279,7 +280,7 @@ function buildTarget(grid: AvalancheGridInput, col: number, row: number): PointT
   return { cells: Int32Array.from(cells), col, row, radiusM };
 }
 
-/** Mean slope of the 3 × 3 cells around `centre` (AutoATES class 4 criterion). */
+/** Pente moyenne des 3 × 3 cellules autour de `centre` (critère de la classe 4 d'AutoATES). */
 function smoothedSlope(grid: AvalancheGridInput, centre: number): number {
   const { width, height, slopeDeg } = grid;
   const col = centre % width;
@@ -325,7 +326,7 @@ function scenarioReach(grid: AvalancheGridInput, run: FlowPyResult, release: Uin
   };
 }
 
-/** Release areas (8-connected groups of release cells) holding at least one of `cells`. */
+/** Zones de départ (groupes 8-connexes de cellules de départ) contenant au moins une des `cells`. */
 function countZones(cells: Int32Array, release: Uint8Array, width: number): number {
   const seen = new Uint8Array(release.length);
   const stack: number[] = [];
@@ -353,9 +354,9 @@ function countZones(cells: Int32Array, release: Uint8Array, width: number): numb
 }
 
 /**
- * Steep ground on the scene edge high enough above the point to reach it on
- * the infrequent energy line: the slope above continues off the loaded area,
- * where release areas are not seen.
+ * Sol raide au bord de la scène assez haut au-dessus du point pour l'atteindre
+ * sur la ligne d'énergie peu fréquente : la pente au-dessus se prolonge hors de
+ * la zone chargée, où les zones de départ ne sont pas vues.
  */
 function isUpslopeCut(grid: AvalancheGridInput, target: PointTarget): boolean {
   const { width, height, cell, altitude, slopeDeg } = grid;
@@ -366,12 +367,12 @@ function isUpslopeCut(grid: AvalancheGridInput, target: PointTarget): boolean {
   for (let row = 0; row < height; row++) {
     for (let col = 0; col < width; col++) {
       if (col >= band && row >= band && col < width - band && row < height - band) {
-        col = width - band - 1; // jump to the right band
+        col = width - band - 1; // sauter à la bonne bande
         continue;
       }
       const i = row * width + col;
       const z = altitude[i]!;
-      // The 3 × 3 slope is undefined on the outer ring: read the cell inside.
+      // La pente 3 × 3 n'est pas définie sur l'anneau extérieur : lire la cellule intérieure.
       const inner = Math.min(height - 2, Math.max(1, row)) * width + Math.min(width - 2, Math.max(1, col));
       if (!Number.isFinite(z) || !(slopeDeg[inner]! >= EDGE_SLOPE_DEG)) continue;
       const d = Math.max(0, Math.hypot(col - target.col, row - target.row) * cell - target.radiusM);

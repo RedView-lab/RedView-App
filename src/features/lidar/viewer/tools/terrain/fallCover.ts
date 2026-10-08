@@ -1,21 +1,22 @@
 // ============================================
-// LiDAR viewer tools — ground cover along a fall line (from the point cloud)
+// Outils du viewer LiDAR — couvert du sol le long d'une ligne de chute (d'après le nuage de points)
 // ============================================
 //
-// The ground model has no trees, buildings or water: they are read from the
-// LiDAR returns themselves (ASPRS classes) on a small grid around the path.
-// Trees and buildings are obstacles hit by a sliding body; a forest also
-// brakes falling rocks; water at the end of a slide is a trap of its own.
+// Le modèle de sol n'a ni arbres, ni bâtiments, ni eau : ils sont lus dans les
+// retours LiDAR eux-mêmes (classes ASPRS) sur une petite grille autour de la
+// trajectoire. Arbres et bâtiments sont des obstacles qu'un corps qui glisse
+// heurte ; une forêt freine aussi les chutes de pierres ; l'eau au bout d'une
+// glissade est un piège à elle seule.
 
 import type { SlideCover } from './fallSlide';
 import type { TerrainField } from './terrainField';
 
-/** Cell of the cover grid, m. */
+/** Cellule de la grille de couvert, m. */
 const COVER_CELL_M = 2;
-/** A return of the high-vegetation class this high above the ground is a tree (m). */
+/** Un retour de la classe haute végétation à cette hauteur au-dessus du sol est un arbre (m). */
 const TREE_MIN_HEIGHT_M = 3;
 const BUILDING_MIN_HEIGHT_M = 2;
-/** Share of tree cells around a cell (3 × 3) from which it is forest. */
+/** Part de cellules d'arbre autour d'une cellule (3 × 3) à partir de laquelle c'est une forêt. */
 const FOREST_MIN_SHARE = 4 / 9;
 
 const TREE = 1;
@@ -35,7 +36,7 @@ export class FallCover implements SlideCover {
   readonly width: number;
   readonly height: number;
   private readonly flags: Uint8Array;
-  /** The cloud has ground returns (class 2): the ground model is a real DTM. */
+  /** Le nuage a des retours sol (classe 2) : le modèle de sol est un vrai MNT. */
   readonly groundClassified: boolean;
 
   constructor(bounds: CoverBounds, flags: Uint8Array, width: number, height: number, groundClassified: boolean) {
@@ -89,7 +90,7 @@ export class FallCover implements SlideCover {
   }
 }
 
-/** Collects classified returns into a cover grid over `bounds`. */
+/** Rassemble les retours classés dans une grille de couvert sur `bounds`. */
 export class FallCoverBuilder {
   private readonly field: TerrainField;
   private readonly bounds: CoverBounds;
@@ -130,8 +131,8 @@ export class FallCoverBuilder {
   }
 
   finish(): FallCover {
-    // Some ground among the returns: the cloud is classified (a handful of
-    // ground returns in a fully unclassified cloud would be noise).
+    // Un peu de sol parmi les retours : le nuage est classé (une poignée de
+    // retours sol dans un nuage entièrement non classé serait du bruit).
     const groundClassified = this.groundCount > 0.02 * (this.groundCount + this.otherCount);
     return new FallCover(this.bounds, this.flags, this.width, this.height, groundClassified);
   }
