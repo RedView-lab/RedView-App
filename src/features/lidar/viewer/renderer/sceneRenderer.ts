@@ -16,7 +16,6 @@ import type { ViewerPointFilterState } from '../pointFilter';
 import type { SolarRenderState } from '../../viewer-webgl/sunlightController';
 import type { HeightmapParams, SnowParams } from './types';
 import type { TerrainMeshData } from './terrainLodCore';
-import type { PhotoModeRenderer } from '../photoMode/renderer/types';
 
 type RendererBackend = 'webgpu' | 'webgl';
 
@@ -37,11 +36,6 @@ export interface RenderSceneOptions {
   motion?: boolean;
   /** Indice d'une image fixe de l'anticrénelage progressif (0 relance la moyenne courante). */
   accumulate?: number;
-  /**
-   * Mode photo : la vue fixe est déjà accumulée, seul ce qui change de
-   * lui-même (nuages qui dérivent et leurs ombres) est redessiné.
-   */
-  reuseScene?: boolean;
 }
 
 export interface RenderStats {
@@ -57,8 +51,6 @@ export interface LidarRenderer extends SceneNodeUploader {
   readonly platform: PlatformProfile | null;
   /** Appelé une fois quand le contexte GPU est perdu pour toute autre raison que `destroy()`. */
   onDeviceLost: ((info: RendererLostInfo) => void) | null;
-  /** Mode photo (ciel, nuages, ombres du nuage de points) : WebGPU seulement, null en WebGL 2. */
-  readonly photo: PhotoModeRenderer | null;
 
   /** Résolution de la scène pendant que la caméra bouge, en part du canvas (1 = désactivé). À poser avant `resize`. */
   motionScale: number;

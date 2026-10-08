@@ -46,9 +46,6 @@ import {
   SceneShadingState,
   type RampFilter,
 } from './renderer/sceneShadingState';
-import { PhotoRenderer } from './photoMode/renderer/photoRenderer';
-import { PHOTO_MODE_ENABLED } from './photoMode/featureFlag';
-import type { PhotoModeRenderer } from './photoMode/renderer/types';
 
 export type { HeightmapParams } from './renderer/types';
 
@@ -174,16 +171,6 @@ export class WebGpuLidarRenderer implements LidarRenderer {
   lastProjScaleY = 1;
   private gpuTimer: GpuFrameTimer | null = null;
   private lastDrawCallCount = 0;
-  /** Mode photo (éclairage différé, ciel, nuages, ombres des points) ; WebGPU seulement. */
-  private photoRenderer: PhotoRenderer | null = null;
-  /** État du mode photo pour lequel l'ombrage des points a été écrit en dernier. */
-  private photoShading = false;
-  /** Matrice avec laquelle la dernière image a été dessinée (décalée pendant l'accumulation). */
-  private readonly drawViewProj = new Float32Array(16);
-
-  get photo(): PhotoModeRenderer | null {
-    return this.photoRenderer;
-  }
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
     this.canvas = canvas;
@@ -218,23 +205,6 @@ export class WebGpuLidarRenderer implements LidarRenderer {
       this.pipelines.shadingBindGroupLayout,
       NODE_POOL_CAPACITY,
     );
-
-    // Mode photo gelé (photoMode/featureFlag.ts) : rien n'est créé.
-    if (PHOTO_MODE_ENABLED) {
-      this.photoRenderer = new PhotoRenderer({
-        device: this.device,
-        canvasFormat: this.format,
-        tier: profile.tier,
-        nodePool: this.nodePool,
-        layouts: {
-          scene: this.pipelines.sceneBindGroupLayout,
-          pointParams: this.pipelines.pointParamsBindGroupLayout,
-          node: this.pipelines.nodeBindGroupLayout,
-          terrainLod: this.pipelines.terrainLodBindGroupLayout,
-        },
-        timer: this.gpuTimer,
-      });
-    }
 
     this.cameraBuffer = createUniformBuffer(this.device, this.uniformCache.byteLength);
     this.pointParamsBuffer = createUniformBuffer(this.device, this.pointParams.byteLength);
@@ -615,20 +585,12 @@ export class WebGpuLidarRenderer implements LidarRenderer {
       }
       drawViewProj = vp;
     }
-    this.drawViewProj.set(drawViewProj);
-    const photoActive = this.photoRenderer?.active ?? false;
-    if (photoActive !== this.photoShading) {
-      // La passe d'ombrage écrit des couleurs éclairées, ou l'albédo en mode photo.
-      this.photoShading = photoActive;
-      this.invalidateShading();
-    }
     packSceneUniforms(this.uniformCache, this.uniformCacheU32, drawViewProj, vArr, pos, this.shading.uniformState({
       pointSize: this.pointSize,
       canvasWidth: this.canvasWidth,
       canvasHeight: this.canvasHeight,
       density,
       centerAltitude: this.centerAltitude,
-      photoMode: photoActive ? 1 : 0,
     }));
     this.device.queue.writeBuffer(this.cameraBuffer, 0, this.uniformCache as Float32Array<ArrayBuffer>);
   }
@@ -666,10 +628,6 @@ export class WebGpuLidarRenderer implements LidarRenderer {
    */
   renderScene(nodes: readonly SceneNode[], options: RenderSceneOptions = {}): void {
     if (!this.device || this.deviceLost || !this.fullTargets || !this.nodePool) return;
-    if (this.photoRenderer?.active) {
-      this.renderPhoto(nodes, options);
-      return;
-    }
 
     const canvasView = this.context.getCurrentTexture().createView();
     this.lastDrawCallCount = 0;
@@ -819,60 +777,7 @@ export class WebGpuLidarRenderer implements LidarRenderer {
     this.gpuTimer?.afterSubmit();
   }
 
-  /** Image du mode photo : la passe d'ombrage (albédo), puis les passes du renderer photo. */
-  private renderPhoto(nodes: readonly SceneNode[], options: RenderSceneOptions): void {
-    const photo = this.photoRenderer!;
-    const nodePool = this.nodePool!;
-    const canvasView = this.context.getCurrentTexture().createView();
-    const enc = this.device.createCommandEncoder();
-    const timed = this.gpuTimer?.beginFrame() ?? false;
-    const reuseScene = options.reuseScene === true;
-    if (!reuseScene) {
-      nodePool.prepareFrame(
-        enc,
-        this.pipelines.shadingPipeline,
-        this.sceneBindGroup,
-        nodes,
-        timed ? () => this.gpuTimer!.passTimestamps(TIMED_PASS.shading) : undefined,
-      );
-    }
-    const accumulate = options.accumulate ?? -1;
-    this.lastDrawCallCount = photo.render({
-      encoder: enc,
-      canvasView,
-      canvasWidth: this.canvasWidth,
-      canvasHeight: this.canvasHeight,
-      motion: options.motion === true,
-      squares: this.motionSquares,
-      motionScale: this.motionScale,
-      accumulate: options.motion ? -1 : accumulate,
-      reuseScene,
-      nodes,
-      drawViewProj: this.drawViewProj,
-      viewProj: this.lastViewProj,
-      camPos: this.lastCamPos,
-      sceneBindGroup: this.sceneBindGroup,
-      pointParamsBindGroup: this.pointParamsBindGroup,
-      terrain: this.terrain,
-      terrainVisible: this.terrainVisible,
-      overlays: { preview: this.previewMesh, route: this.routeMesh, analysis: this.analysisMesh },
-      heightTexture: this.heightTexture,
-      heightmap: [this.shading.hmOriginX, this.shading.hmOriginZ, this.shading.hmScaleX, this.shading.hmScaleZ],
-      pointSizeM: this.pointSize,
-      pointFilter: { enabled: this.shading.pointFilterEnabled > 0.5, mask: this.shading.pointFilterMask },
-      writePointParams: (width, height, scale) => this.writeFrameParams(width, height, scale),
-      timed,
-    });
-    this.lastRenderScale = options.motion && this.motionScale < 1 ? this.motionScale : 1;
-    if (timed) this.gpuTimer!.encodeResolve(enc);
-    this.device.queue.submit([enc.finish()]);
-    this.gpuTimer?.afterSubmit();
-    photo.afterSubmit();
-  }
-
   destroy(): void {
-    this.photoRenderer?.destroy();
-    this.photoRenderer = null;
     this.gpuTimer?.destroy();
     this.gpuTimer = null;
     this.terrain?.destroy();

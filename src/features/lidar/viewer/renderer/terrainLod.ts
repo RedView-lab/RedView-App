@@ -125,33 +125,6 @@ export class TerrainLod {
     return draws;
   }
 
-  /**
-   * Dessine chaque chunk au niveau dont les quads sont les plus proches de
-   * `quadSizeM` (cartes d'ombre et modèle de surface du mode photo : un seul
-   * niveau fixe, sans recul, positions seules dans le vertex buffer 0) ;
-   * renvoie le nombre de draws.
-   */
-  drawFixedLevel(pass: GPURenderPassEncoder, pipeline: GPURenderPipeline, quadSizeM: number): number {
-    const chunks = this.selector.chunks;
-    if (chunks.length === 0) return 0;
-    pass.setPipeline(pipeline);
-    pass.setVertexBuffer(0, this.vertexBuffer);
-    let boundIndices: GPUBuffer | null = null;
-    let draws = 0;
-    for (const chunk of chunks) {
-      const level = Math.max(0, Math.min(chunk.maxLevel, Math.round(Math.log2(Math.max(quadSizeM, 1e-3) / chunk.cell))));
-      const pattern = this.pattern(chunk, level, 0);
-      if (pattern.count === 0) continue;
-      if (pattern.buffer !== boundIndices) {
-        pass.setIndexBuffer(pattern.buffer, 'uint32');
-        boundIndices = pattern.buffer;
-      }
-      pass.drawIndexed(pattern.count, 1, pattern.firstIndex, chunk.baseVertex, 0);
-      draws++;
-    }
-    return draws;
-  }
-
   destroy(): void {
     this.vertexBuffer.destroy();
     this.colorBuffer.destroy();

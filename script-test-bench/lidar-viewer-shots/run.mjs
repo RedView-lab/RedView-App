@@ -51,12 +51,10 @@ const VIEWS = {
   rasant: (e) => ({ theta: 2.5, phi: 1.36, radius: e * 0.2, at: [e * 0.18, e * 0.2] }),
   // Près du sol (pleine densité), en regardant assez vers le bas pour rester au-dessus des pentes raides.
   proche: (e) => ({ theta: 0.4, phi: 0.5, radius: e * 0.075, at: [e * 0.07, -e * 0.05] }),
-  // Presque à l'horizontale, vers l'horizon : ciel et nuages derrière le relief (mode photo).
-  horizon: (e) => ({ theta: 2.6, phi: 1.36, radius: e * 0.55, at: [0, 0] }),
 };
 
 function parseArgs(argv) {
-  const args = { label: null, dist: join(ROOT, 'dist'), size: '1920x1080', params: '', views: Object.keys(VIEWS).filter((v) => v !== 'horizon'), keys: '' };
+  const args = { label: null, dist: join(ROOT, 'dist'), size: '1920x1080', params: '', views: Object.keys(VIEWS), keys: '' };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--label') args.label = argv[++i];

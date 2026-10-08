@@ -32,7 +32,7 @@
 // surtout de l'air.
 
 import { readLodNodeBlock, type OpenedLodTile } from '../../lib/lodCache';
-import { extractFrustumPlanes, frustumTestAABB, OUTSIDE, type FrustumPlanes } from './frustum';
+import { extractFrustumPlanes, frustumTestAABB, OUTSIDE } from './frustum';
 import { LOD_POINT_STRIDE, lodNodeCube, lodNodeSpacing, type LodNode } from './lodTile';
 
 /** Raffine tant que l'espacement des points d'un nœud se projette au-delà de cette valeur (px de l'écran). */
@@ -102,10 +102,6 @@ export interface SceneNode {
   viewDistance: number;
   /** Octants (bit = x | y << 1 | z << 2, axes du SCR) dont l'enfant est dessiné à cette image. */
   childMask: number;
-  /** Jeton de la dernière sélection de projeteurs d'ombre qui a atteint le nœud (voir `selectShadowCasters`). */
-  shadowMark: number;
-  /** Octants raffinés par un nœud de la dernière sélection de projeteurs d'ombre. */
-  shadowChildMask: number;
   /** Vrai pour les ancêtres ajoutés parce que l'octree les a sautés (aucun point). */
   virtual: boolean;
 }
@@ -252,9 +248,6 @@ export class SceneLod {
   private readonly maxResidentNodes: number;
   private frustumCulled = 0;
   private uploadedNodes = 0;
-  /** Jeton et file BFS de `selectShadowCasters`. */
-  private shadowToken = 0;
-  private readonly shadowQueue: number[] = [];
   private destroyed = false;
   readonly totalPoints: number;
 
@@ -328,8 +321,6 @@ export class SceneLod {
       projectedSpacing: 0,
       viewDistance: 0,
       childMask: 0,
-      shadowMark: 0,
-      shadowChildMask: 0,
       virtual,
     };
     clipNode(node, tileBox);
@@ -537,54 +528,6 @@ export class SceneLod {
     // De l'avant vers l'arrière : les sprites opaques rejettent alors tôt les fragments cachés.
     selected.sort((a, b) => a.viewDistance - b.viewDistance);
     this.pumpLoads();
-  }
-
-  /**
-   * Nœuds résidents qui projettent une ombre dans un frustum de lumière (mode
-   * photo), du grossier au fin : un nœud est gardé tant que `maxPoints` le
-   * permet et raffiné tant que sa cellule dépasse `texelM` (les niveaux plus
-   * fins n'apportent rien que la carte d'ombres puisse montrer). Seuls les
-   * enfants des nœuds gardés sont visités (un niveau de l'octree additif est
-   * incomplet sans ses ancêtres) et rien n'est chargé : les projeteurs hors
-   * de l'écran sont les niveaux grossiers gardés résidents. Fixe le
-   * `shadowChildMask` des nœuds gardés, comme `childMask` pour la caméra.
-   * Renvoie le nombre de points gardés.
-   */
-  selectShadowCasters(planes: FrustumPlanes, texelM: number, maxPoints: number, out: SceneNode[]): number {
-    out.length = 0;
-    const nodes = this.nodes;
-    const token = ++this.shadowToken;
-    const queue = this.shadowQueue;
-    queue.length = 0;
-    for (const rootId of this.roots) {
-      const root = nodes[rootId]!;
-      if (root.state === 'resident' && frustumTestAABB(planes, root) !== OUTSIDE) queue.push(rootId);
-    }
-    let points = 0;
-    for (let head = 0; head < queue.length; head++) {
-      const node = nodes[queue[head]!]!;
-      const count = node.entry.count;
-      if (count > 0) {
-        if (points + count > maxPoints) continue;
-        points += count;
-        out.push(node);
-      }
-      node.shadowMark = token;
-      if (node.cell <= texelM) continue;
-      for (const childId of node.children) {
-        const child = nodes[childId]!;
-        if (child.state === 'resident' && frustumTestAABB(planes, child) !== OUTSIDE) queue.push(childId);
-      }
-    }
-    for (const node of out) {
-      let mask = 0;
-      for (const childId of node.children) {
-        const child = nodes[childId]!;
-        if (child.shadowMark === token) mask |= 1 << octantOf(child.entry);
-      }
-      node.shadowChildMask = mask;
-    }
-    return points;
   }
 
   private pumpLoads(): void {

@@ -61,10 +61,8 @@ import { parseViewerParamsFromUrl } from './session/viewerUrlParams';
 import type { ViewerEngineKey } from './session/viewerEngine';
 import { recoverFromGpuFailure } from './session/gpuRecovery';
 import { enqueueBackgroundCacheWrite } from './session/backgroundCacheWrites';
-import { setUpPhotoMode } from './session/photoModeSetup';
 import { createViewerKeyDownHandler } from './session/viewerShortcuts';
 import { ViewerSnowController, type SnowSceneContext } from './session/viewerSnowController';
-import type { PhotoModeController } from './photoMode/photoModeController';
 import { launchWebGLFallback, loadTileFromOPFS, setViewerStatus } from './runtime';
 import { explainWorkerError, noEngineHint, showFatalError } from './loading/fatalError';
 
@@ -107,15 +105,13 @@ function setStatus(msg: string, pct?: number) {
 let renderer: LidarRenderer | null = null;
 /** Abaissé par la dégradation automatique de qualité quand le GPU ne suit pas. */
 let resolutionScale = 1;
-/** Plafond du rapport de pixels relevé pendant que le mode photo est actif (null : celui de la plateforme). */
-let photoDprCap: number | null = null;
 const MIN_RESOLUTION_SCALE = 0.55;
 
 function resizeCanvas() {
   const dpr = window.devicePixelRatio || 1;
   const maxDim = Math.max(window.innerWidth, window.innerHeight);
   const maxCanvasDim = renderer?.platform?.maxCanvasDim ?? 4096;
-  const dprCap = Math.max(renderer?.platform?.dprCap ?? 1.25, photoDprCap ?? 0);
+  const dprCap = renderer?.platform?.dprCap ?? 1.25;
   const effectiveDpr = Math.min(dpr, dprCap, maxCanvasDim / maxDim) * resolutionScale;
   canvas.width = Math.floor(window.innerWidth * effectiveDpr);
   canvas.height = Math.floor(window.innerHeight * effectiveDpr);
@@ -340,7 +336,6 @@ function edlRadiusPx(): number {
       }
     };
     let applyEdlRef: () => void = () => undefined;
-    let handleResizeRef: () => void = () => undefined;
 
     let showLodStats = true;
     let lastCpuFrameMs = 16.6;
@@ -365,13 +360,6 @@ function edlRadiusPx(): number {
       if (cleanedUp || document.hidden || frameHandle != null) return;
       frameHandle = window.requestAnimationFrame(renderLoop);
     };
-    /** Une image de plus en gardant l'image fixe (mode photo : nuages qui dérivent, capture). */
-    const requestFrame = () => {
-      if (cleanedUp || document.hidden || frameHandle != null) return;
-      frameHandle = window.requestAnimationFrame(renderLoop);
-    };
-    /** Mode photo (WebGPU) ; créé avec les panneaux. */
-    let photo: PhotoModeController | null = null;
 
     const backendLabel = renderer.backend === 'webgpu' ? 'WebGPU' : 'WebGL 2';
     const formatLodStats = (lodStats: SceneLodStats): string => formatLodStatsLine({
@@ -380,7 +368,6 @@ function edlRadiusPx(): number {
       renderer,
       cpuFrameMs: lastCpuFrameMs,
       restRefinement,
-      photoActive: photo?.active ?? false,
       tileCount: sceneTileCoords.length,
       canvasWidth: canvas.width,
       canvasHeight: canvas.height,
@@ -418,11 +405,8 @@ function edlRadiusPx(): number {
       if (restRefinement.phase === 'moving') {
         // Le temps GPU des passes de dessin et la cadence réelle pilotent le
         // budget, dimensionné sur les images en mouvement (voir lodBudget).
-        // Les nuages du mode photo ne sont pas à la charge des points : moins
-        // de points ne les rendrait pas moins chers, et le budget s'effondrait
-        // à son plancher, puis la résolution de rendu, pour de bon.
         pointBudget.sample({
-          gpuMs: Math.max(0, renderer.getGpuFrameMs() - (renderer.photo?.getCloudMs() ?? 0)),
+          gpuMs: renderer.getGpuFrameMs(),
           cpuMs: lastCpuFrameMs,
           intervalMs,
           targetIntervalMs: frameClock.getTargetIntervalMs(),
@@ -441,22 +425,9 @@ function edlRadiusPx(): number {
       // LOD à la résolution du canvas dans les deux modes : démarrer ou
       // arrêter la caméra ne remanie pas la sélection.
       sceneLod.update(renderer.lastViewProj, renderer.lastProjScaleY, cpx, cpy, cpz, canvas.height);
-      const photoActive = photo?.active ?? false;
-      if (photoActive) {
-        // La cascade d'ombres de détail suit ce que regarde la caméra.
-        if (camera.getMode() === 'look') {
-          const eye = camera.getEye();
-          const [fx, fy, fz] = camera.getForward();
-          renderer.photo?.setFocus([eye[0] + fx * 40, eye[1] + fy * 40, eye[2] + fz * 40], 90);
-        } else {
-          renderer.photo?.setFocus([camera.targetX, camera.targetY, camera.targetZ], camera.radius * 0.9);
-        }
-      }
       renderer.renderScene(sceneLod.getSelectedNodes(), {
         motion,
         accumulate: accumulating ? restRefinement.sample : undefined,
-        // Image fixe déjà moyennée : seuls les nuages bougent.
-        reuseScene: photoActive && !motion && restRefinement.phase === 'done',
       });
       if (motion) renderRequested = true;
       if (routeOverlayStale) {
@@ -493,9 +464,7 @@ function edlRadiusPx(): number {
       const keepSettling = !renderRequested
         && (!budgetSettled || !sceneLod.isIdle() || restRefinement.pending || (!motion && restRefinement.phase === 'moving'))
         && settleFramesLeft > 0;
-      // Mode photo : nuages qui convergent ou dérivent, tables en construction, capture.
-      const photoFrames = !renderRequested && !keepSettling && photoActive && (renderer.photo?.needsFrames() ?? false);
-      const goingIdle = !renderRequested && !keepSettling && !photoFrames;
+      const goingIdle = !renderRequested && !keepSettling;
 
       const now = performance.now();
       // La dernière image avant le repos rafraîchit toujours les statistiques (pas de « chargement » périmé).
@@ -521,8 +490,6 @@ function edlRadiusPx(): number {
         // La caméra est immobile, mais des nœuds arrivent encore, le budget
         // s'adapte ou l'image fixe est en cours d'affinage.
         settleFramesLeft -= 1;
-        frameHandle = window.requestAnimationFrame(renderLoop);
-      } else if (photoFrames) {
         frameHandle = window.requestAnimationFrame(renderLoop);
       } else {
         frameClock.pause();
@@ -690,38 +657,11 @@ function edlRadiusPx(): number {
       });
     }
 
-    // ── Mode photo (WebGPU) : ciel, nuages, ombres du nuage de points ──────
-    const photoSetup = setUpPhotoMode({
-      renderer,
-      sceneBounds,
-      terrainMesh,
-      cx,
-      cy,
-      cz,
-      crs,
-      lat,
-      lon,
-      timeZone: tileTimeZone,
-      sceneLod,
-      restRefinement,
-      pointBudget,
-      captureName: panelTileLabel,
-      requestRender,
-      requestFrame,
-      onActiveChange: (active) => {
-        // Les écrans Retina reçoivent leur plein rapport de pixels pour la photo.
-        photoDprCap = active && platform.tier === 'apple' ? 2 : null;
-        handleResizeRef();
-      },
-    });
-    photo = photoSetup.photo;
-
     const rightPanel = createViewerRightPanel({
       centerLon: lon,
       centerLat: lat,
       timeZone: tileTimeZone,
       routeController,
-      photo: photoSetup.panelSection,
       onPointFilterChange: (pointFilterState) => {
         isClassVisible = pointFilterClassPredicate(pointFilterState);
         if (renderer) {
@@ -803,12 +743,10 @@ function edlRadiusPx(): number {
       routeOverlayStale = true;
       requestRender();
     };
-    handleResizeRef = handleResize;
     window.addEventListener('resize', handleResize);
 
     const handleKeyDown = createViewerKeyDownHandler({
       getRenderer: () => renderer,
-      getPhoto: () => photo,
       camera,
       heightSceneParams,
       routeController,
@@ -848,7 +786,6 @@ function edlRadiusPx(): number {
       camera.destroy();
       tileNavigator.destroy();
       lidarManager.destroy();
-      photo?.destroy();
       comments?.destroy();
       tools?.destroy();
       routeController.destroy();

@@ -50,8 +50,6 @@ export class NodeGpuPool {
   private readonly recordF32 = new Float32Array(this.record);
   private readonly recordU32 = new Uint32Array(this.record);
   private shadingEpoch = 0;
-  private readonly shadowMasks: GPUBuffer[] = [];
-  private shadowMaskData: Uint32Array<ArrayBuffer> | null = null;
   /** Erreurs de mémoire insuffisante signalées (de façon asynchrone) pour les envois de nœuds. */
   outOfMemoryCount = 0;
 
@@ -191,50 +189,6 @@ export class NodeGpuPool {
     }
   }
 
-  /**
-   * Par emplacement du pool, les octants qu'un nœud d'une sélection de
-   * projeteurs d'ombre raffine (`SceneNode.shadowChildMask`), lus par les passes
-   * d'ombre du mode photo : un buffer par carte d'ombre dessinée dans la même
-   * image (`index`), créé au premier usage.
-   */
-  shadowMaskBuffer(index: number): GPUBuffer {
-    let buffer = this.shadowMasks[index];
-    if (!buffer) {
-      buffer = this.device.createBuffer({
-        size: this.capacity * 4,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-      });
-      this.shadowMasks[index] = buffer;
-    }
-    return buffer;
-  }
-
-  /** Envoie les masques d'ombre d'une sélection de projeteurs (buffer entier : les projeteurs couvrent le pool). */
-  writeShadowMasks(index: number, nodes: readonly SceneNode[]): void {
-    const buffer = this.shadowMaskBuffer(index);
-    const masks = this.shadowMaskData ??= new Uint32Array(this.capacity);
-    masks.fill(0);
-    for (const node of nodes) {
-      const entry = this.gpu.get(node.id);
-      if (entry) masks[entry.slot] = node.shadowChildMask;
-    }
-    this.device.queue.writeBuffer(buffer, 0, masks);
-  }
-
-  /** Dessine les projeteurs dans une carte d'ombre (pipeline et groupe 0 posés ; groupe 1 = uniform du nœud) ; renvoie le nombre de draws. */
-  drawShadow(pass: GPURenderPassEncoder, nodes: readonly SceneNode[]): number {
-    let draws = 0;
-    for (const node of nodes) {
-      const entry = this.gpu.get(node.id);
-      if (!entry) continue;
-      pass.setBindGroup(1, this.nodeBindGroup, [entry.slot * NODE_UNIFORM_STRIDE]);
-      pass.setVertexBuffer(0, entry.packed);
-      pass.draw(4, entry.count);
-      draws++;
-    }
-    return draws;
-  }
-
   /** Dessine les nœuds donnés (pipeline et groupes 0/1 déjà posés) ; renvoie le nombre de draws. */
   draw(pass: GPURenderPassEncoder, nodes: readonly SceneNode[]): number {
     let draws = 0;
@@ -258,7 +212,5 @@ export class NodeGpuPool {
     this.gpu.clear();
     this.uniformBuffer.destroy();
     this.childMaskBuffer.destroy();
-    for (const buffer of this.shadowMasks) buffer.destroy();
-    this.shadowMasks.length = 0;
   }
 }

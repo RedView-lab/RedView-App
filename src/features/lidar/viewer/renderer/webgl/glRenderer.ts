@@ -156,8 +156,6 @@ export class WebGlLidarRenderer implements LidarRenderer {
   /** GPU nommé par le contexte (logs, statistiques). */
   readonly rendererName: string;
   onDeviceLost: ((info: RendererLostInfo) => void) | null = null;
-  /** Le mode photo a besoin de WebGPU (passes de calcul, storage textures). */
-  readonly photo = null;
 
   motionScale = 1;
   motionSquares = true;

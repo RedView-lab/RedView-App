@@ -10,7 +10,6 @@ import {
   POINT_SIZE_MAX,
   POINT_SIZE_MIN,
 } from '../panel/sliderScales';
-import type { PhotoModeController } from '../photoMode/photoModeController';
 import type { LidarRenderer } from '../renderer/sceneRenderer';
 import type { ViewerRouteController } from '../route/viewerRouteController';
 import type { ViewerRouteSceneParams } from '../route/types';
@@ -18,7 +17,6 @@ import type { SnowSceneContext, ViewerSnowController } from './viewerSnowControl
 
 export interface ViewerShortcutsDeps {
   getRenderer: () => LidarRenderer | null;
-  getPhoto: () => PhotoModeController | null;
   camera: CameraController;
   heightSceneParams: ViewerRouteSceneParams;
   routeController: ViewerRouteController;
@@ -33,23 +31,13 @@ export interface ViewerShortcutsDeps {
   requestRender: () => void;
 }
 
-/** Raccourcis clavier du viewer (interface photo, Google Earth, édition de tracé, taille des points, terrain, neige…). */
+/** Raccourcis clavier du viewer (Google Earth, édition de tracé, taille des points, terrain, neige…). */
 export function createViewerKeyDownHandler(deps: ViewerShortcutsDeps): (e: KeyboardEvent) => void {
   const { camera, heightSceneParams, routeController, snowController, panel } = deps;
   return (e: KeyboardEvent) => {
     const renderer = deps.getRenderer();
     if (!renderer) return;
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) {
-      return;
-    }
-    const photo = deps.getPhoto();
-    if (photo?.active && (e.key === 'i' || e.key === 'I') && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      // Interface masquée pendant le cadrage d'une photo.
-      photo.setInterfaceHidden(!photo.interfaceHidden);
-      return;
-    }
-    if (e.key === 'Escape' && photo?.interfaceHidden) {
-      photo.setInterfaceHidden(false);
       return;
     }
     if (isGoogleEarthShortcut(e)) {

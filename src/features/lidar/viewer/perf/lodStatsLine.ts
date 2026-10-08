@@ -12,18 +12,12 @@ export interface LodStatsLineInput {
   /** Temps CPU de la dernière image (ms). */
   cpuFrameMs: number;
   restRefinement: RestRefinement;
-  photoActive: boolean;
   tileCount: number;
   canvasWidth: number;
   canvasHeight: number;
   /** « WebGPU » ou « WebGL 2 ». */
   backendLabel: string;
   platformTier: PlatformProfile['tier'];
-}
-
-function cloudStats(renderer: LidarRenderer | null): string {
-  const ms = renderer?.photo?.getCloudMs() ?? 0;
-  return ms >= 0.05 ? ` · ${translateAppText('nuages {{ms}} ms', { ms: ms.toFixed(1) })}` : '';
 }
 
 /** La ligne de statistiques détaillées du viewer (la touche Q l'affiche ou la masque). */
@@ -51,7 +45,6 @@ export function formatLodStatsLine(input: LodStatsLineInput): string {
       : restRefinement.phase === 'accumulate'
         ? ` · ${translateAppText('lissage {{done}}/{{total}}', { done: restRefinement.sample, total: restRefinement.samples })}`
         : '') +
-    (input.photoActive ? ` · ${translateAppText('mode photo')}${cloudStats(renderer)}` : '') +
     ` · ${translateAppText('{{count}} tuile(s)', { count: input.tileCount })}` +
     ` · ${input.canvasWidth}×${input.canvasHeight}${renderScale < 1 ? ` ×${renderScale.toFixed(2)}` : ''} ${input.backendLabel} ${input.platformTier}`;
 }

@@ -78,21 +78,4 @@ fn terrain_fs(in: TerrainVsOut) -> @location(0) vec4<f32> {
   let colored = applySunlightMap(altituded, in.worldPos);
   return vec4<f32>(shadeSurface(normalize(in.normal), colored, in.worldPos), in.color.a);
 }
-
-struct TerrainPhotoOut {
-  @location(0) albedo: vec4<f32>,
-  @location(1) material: vec4<f32>,
-};
-
-/** Photo mode G-buffer: the same colours without lighting, class 2 (ground). */
-@fragment
-fn terrain_photo_fs(in: TerrainVsOut) -> TerrainPhotoOut {
-  let snowed = applySnow(in.color.rgb, in.worldPos);
-  let sloped = applySlope(snowed, in.normal);
-  let altituded = applyAltitude(sloped, in.worldPos);
-  var out: TerrainPhotoOut;
-  out.albedo = vec4<f32>(applySunlightMap(altituded, in.worldPos), 1.0);
-  out.material = vec4<f32>(2.0 / 255.0, 0.0, 0.0, 1.0);
-  return out;
-}
 `;

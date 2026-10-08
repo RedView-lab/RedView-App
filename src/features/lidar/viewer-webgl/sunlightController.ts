@@ -16,7 +16,7 @@ import {
   type ShadowSweepScratch,
 } from '@/features/sunlight/lib/shadowSweep';
 import { sortSunlightBands, sunlightBandIndex } from '@/features/sunlight/lib/sunlightBands';
-import { sunDirectionFromAzAlt } from '../viewer/photoMode/lib/sunDirection';
+import { sunDirectionFromAzAlt } from './sunDirection';
 import type { SunlightBand, SunlightState } from '@/features/controlPanel/types';
 import type { PointCloudBounds } from '../types';
 import type { PrecalcResponse, PrecalcError } from './sunlightPrecalcWorker';

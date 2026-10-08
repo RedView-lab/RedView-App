@@ -14,7 +14,5 @@ describe('renderer modules without the WebGPU API', () => {
     await expect(import('../renderer')).resolves.toHaveProperty('WebGpuLidarRenderer');
     await expect(import('./createRenderer')).resolves.toHaveProperty('createLidarRenderer');
     await expect(import('./webgl/glRenderer')).resolves.toHaveProperty('WebGlLidarRenderer');
-    await expect(import('../photoMode/renderer/photoRenderer')).resolves.toHaveProperty('PhotoRenderer');
-    await expect(import('../photoMode/photoModeController')).resolves.toHaveProperty('PhotoModeController');
   });
 });

@@ -210,7 +210,6 @@ export const VALUE_LABELS: Record<string, Record<string, string>> = {
     avalanche: 'Exposition aux avalanches',
     pin: 'Repère',
     look_around: 'Vue à 360°',
-    photo: 'Mode photo',
   },
   layer: {
     labels: 'Noms et libellés',

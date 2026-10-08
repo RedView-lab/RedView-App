@@ -25,9 +25,6 @@
 export const REST_SAMPLES = 16;
 /** Temps GPU visé pour une image fixe (quelques vsyncs : rien ne bouge). */
 const REST_TARGET_MS = 50;
-/** Mode photo : plus d'images (les ombres douces et les nuages convergent avec elles) et une sélection fixe plus dense. */
-export const PHOTO_REST_SAMPLES = 32;
-export const PHOTO_REST_TARGET_MS = 110;
 /** Le budget grandit tant qu'une image fixe complète coûte moins que cette part de la cible… */
 const GROW_BELOW = 0.6;
 /** …et diminue au-dessus de celle-ci. */
@@ -84,13 +81,6 @@ export class RestRefinement {
   /** @param enabled false garde chaque image au budget en mouvement, sans accumulation (benchs à budget figé). */
   constructor(enabled: boolean) {
     this.enabled = enabled;
-  }
-
-  /** Qualité de la vue fixe : images moyennées et temps GPU visé par image (le mode photo relève les deux). */
-  setQuality(samples: number, targetMs: number): void {
-    this.samples = Math.max(1, Math.round(samples));
-    this.targetMs = Math.max(10, targetMs);
-    this.invalidate();
   }
 
   /** La caméra bouge : budget en mouvement, pas d'accumulation. */

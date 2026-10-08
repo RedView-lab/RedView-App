@@ -130,7 +130,6 @@ export class SceneShadingState {
     canvasHeight: number;
     density: number;
     centerAltitude: number;
-    photoMode?: number;
   }): SceneUniformState {
     return {
       pointSize: frame.pointSize,
@@ -167,7 +166,6 @@ export class SceneShadingState {
       sunDiscRadius: this.sunDiscRadius,
       pointFilterEnabled: this.pointFilterEnabled,
       pointFilterMask: this.pointFilterMask,
-      photoMode: frame.photoMode,
     };
   }
 }

@@ -17,13 +17,9 @@
 
 const READBACK_SLOTS = 3;
 const SAMPLE_BLEND = 0.35;
-/**
- * Passes chronométrées d'une image, dans l'ordre d'encodage. Les `photo`
- * (éclairage → final) et `clouds` (marche → temporel) du mode photo sont des
- * plages couvrant plusieurs passes : début écrit par la première, fin par la dernière.
- */
-export const TIMED_PASS = { shading: 0, scene: 1, edl: 2, photo: 3, clouds: 4 } as const;
-const TIMED_PASSES = 5;
+/** Passes chronométrées d'une image, dans l'ordre d'encodage. */
+export const TIMED_PASS = { shading: 0, scene: 1, edl: 2 } as const;
+const TIMED_PASSES = 3;
 const QUERY_COUNT = TIMED_PASSES * 2;
 const QUERY_BYTES = QUERY_COUNT * 8;
 
@@ -46,7 +42,6 @@ export class GpuFrameTimer {
   private fallbackPending = false;
   private drawMs = 0;
   private shadeMs = 0;
-  private cloudMs = 0;
   private hasSample = false;
   private destroyed = false;
 
@@ -84,11 +79,6 @@ export class GpuFrameTimer {
   /** Coût GPU lissé de la passe de calcul d'ombrage par image en ms (0 sans horodatages). */
   getShadeMs(): number {
     return this.hasSample ? this.shadeMs : 0;
-  }
-
-  /** Coût GPU lissé des nuages du mode photo par image en ms (compris dans `getFrameMs`). */
-  getCloudMs(): number {
-    return this.hasSample ? this.cloudMs : 0;
   }
 
   /** Commence la mesure d'une image ; renvoie false quand tous les emplacements de relecture sont encore en vol. */
@@ -137,11 +127,10 @@ export class GpuFrameTimer {
             const end = stamps[pass * 2 + 1]!;
             return end > begin ? Number(end - begin) : 0;
           };
-          const cloudNs = passNs(TIMED_PASS.clouds);
-          const drawNs = passNs(TIMED_PASS.scene) + passNs(TIMED_PASS.edl) + passNs(TIMED_PASS.photo) + cloudNs;
+          const drawNs = passNs(TIMED_PASS.scene) + passNs(TIMED_PASS.edl);
           const shadeNs = passNs(TIMED_PASS.shading);
           slot.buffer.unmap();
-          if (drawNs > 0) this.addSample(drawNs / 1e6, shadeNs / 1e6, cloudNs / 1e6);
+          if (drawNs > 0) this.addSample(drawNs / 1e6, shadeNs / 1e6);
         })
         .catch(() => undefined)
         .finally(() => {
@@ -170,16 +159,14 @@ export class GpuFrameTimer {
     this.resolveBuffer = null;
   }
 
-  private addSample(drawMs: number, shadeMs: number, cloudMs = 0): void {
+  private addSample(drawMs: number, shadeMs: number): void {
     if (!Number.isFinite(drawMs) || drawMs <= 0) return;
     if (this.hasSample) {
       this.drawMs += (drawMs - this.drawMs) * SAMPLE_BLEND;
       this.shadeMs += (shadeMs - this.shadeMs) * SAMPLE_BLEND;
-      this.cloudMs += (cloudMs - this.cloudMs) * SAMPLE_BLEND;
     } else {
       this.drawMs = drawMs;
       this.shadeMs = shadeMs;
-      this.cloudMs = cloudMs;
     }
     this.hasSample = true;
   }

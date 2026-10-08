@@ -1,6 +1,6 @@
 import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { LidarViewerRightPanel, type ViewerPhotoModeProps } from './LidarViewerRightPanel';
+import { LidarViewerRightPanel } from './LidarViewerRightPanel';
 import type { ViewerSlopeState, ViewerAltitudeState, SunlightState, ViewerPointFilterState } from './types';
 import type { ViewerRouteController } from '../route/viewerRouteController';
 
@@ -13,7 +13,6 @@ export interface ViewerRightPanelOptions {
   centerLon?: number;
   centerLat?: number;
   timeZone?: string;
-  photo?: ViewerPhotoModeProps;
 }
 
 export interface ViewerRightPanelHandle {
@@ -43,7 +42,6 @@ export function createViewerRightPanel(opts: ViewerRightPanelOptions = {}): View
       centerLon: opts.centerLon,
       centerLat: opts.centerLat,
       timeZone: opts.timeZone,
-      photo: opts.photo,
     }),
   );
 

@@ -42,8 +42,7 @@ export type LidarTool =
   | 'viewshed'
   | 'avalanche'
   | 'pin'
-  | 'look_around'
-  | 'photo';
+  | 'look_around';
 type LidarEngine = 'webgpu' | 'webgl' | 'terrain';
 
 export type AnalyticsEvent =

@@ -37,8 +37,6 @@ export interface SceneUniformState {
   sunDiscRadius: number;
   pointFilterEnabled: number;
   pointFilterMask: [number, number, number, number];
-  /** 1 en mode photo (WebGPU) : la passe d'ombrage n'écrit que l'albédo, voir photoMode/. */
-  photoMode?: number;
 }
 
 /**
@@ -64,7 +62,7 @@ export function packSceneUniforms(
 
   // 28..31: scalars
   f[28] = s.pointSize;
-  f[29] = s.photoMode ?? 0;
+  f[29] = 0; // emplacement libre (unused0)
   f[30] = s.canvasWidth;
   f[31] = s.canvasHeight;
 
