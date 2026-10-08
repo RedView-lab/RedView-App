@@ -1,18 +1,20 @@
 import { getAppwriteUser, getSessionUserIdSync } from '@/shared/services/appwrite';
+import { isSessionRejectedError } from '@/shared/lib/appwriteErrors';
 import { logger } from '@/shared/lib/logger';
 
 import { ProjectCloudError, toProjectCloudError } from './errors';
 
 /**
- * Classe et journalise (warn) l'échec d'une opération cloud. Sur un 401, vérifie
- * la session via GET /account : si elle est réellement expirée, `getAppwriteUser`
+ * Classe et journalise (warn) l'échec d'une opération cloud. Sur un 401 (ou un
+ * compte bloqué, 403 depuis Appwrite 1.9), vérifie la session via GET /account :
+ * si elle est réellement expirée ou refusée, `getAppwriteUser`
  * invalide la session locale et émet l'événement d'expiration (un 401 sur un
  * document peut aussi être un simple refus de permission).
  */
 export function toCloudFailure(operation: string, cause: unknown): ProjectCloudError {
   const error = toProjectCloudError(cause);
   logger.projects.warn(`Appwrite ${operation} failed (${error.kind})`, cause);
-  if (error.kind === 'unauthorized' && error.status === 401) {
+  if (error.kind === 'unauthorized' && (error.status === 401 || isSessionRejectedError(cause))) {
     void getAppwriteUser();
   }
   return error;

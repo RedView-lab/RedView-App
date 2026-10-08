@@ -3,9 +3,11 @@
  *
  * `probeSession` distingue trois issues pour `account.get()` :
  *   - `authenticated`   : session Appwrite valide ;
- *   - `unauthenticated` : 401 confirmé (pas de session / session expirée) → écran de connexion ;
+ *   - `unauthenticated` : 401 confirmé (pas de session / session expirée) ou compte bloqué → écran de connexion ;
  *   - `unreachable`     : timeout, erreur réseau ou 5xx → écran « Réessayer », jamais la connexion.
  */
+
+import { isSessionRejectedError } from '@/shared/lib/appwriteErrors'
 
 /** Délai max d'attente d'Appwrite au démarrage avant d'afficher l'écran de reprise. */
 export const SESSION_PROBE_TIMEOUT_MS = 8000
@@ -39,9 +41,8 @@ export type SessionProbeResult =
 
 type ProbeUser = { $id: string; email?: string }
 
-export function isUnauthorizedError(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 401
-}
+/** Session refusée par Appwrite : 401, ou compte bloqué (403 depuis Appwrite 1.9). */
+export const isUnauthorizedError = isSessionRejectedError
 
 export async function probeSession(
   fetchUser: () => Promise<ProbeUser>,

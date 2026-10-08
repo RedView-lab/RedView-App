@@ -1,5 +1,6 @@
 import { Account, AppwriteException, Client, Databases, ID, OAuthProvider, Permission, Query, Role, Storage, type Models } from 'appwrite';
 
+import { isSessionRejectedError } from '@/shared/lib/appwriteErrors';
 import { createJwtCache } from './jwtCache';
 
 const appwriteEndpoint =
@@ -90,10 +91,6 @@ export function getSessionUserIdSync(): string | null {
   return cachedSessionUserId ?? readStoredAppwriteSession()?.user.id ?? null;
 }
 
-function isAppwriteUnauthorized(error: unknown): boolean {
-  return Boolean(error) && typeof error === 'object' && (error as { code?: unknown }).code === 401;
-}
-
 export function saveStoredAppwriteSession(user: { id: string; email?: string; name?: string }): void {
   cachedSessionUserId = user.id;
   if (typeof window === 'undefined') return;
@@ -138,7 +135,7 @@ export async function getAppwriteUser(): Promise<Models.User<Models.Preferences>
         saveStoredAppwriteSession({ id: user.$id, email: user.email, name: user.name });
         return user;
       } catch (error) {
-        if (isAppwriteUnauthorized(error)) {
+        if (isSessionRejectedError(error)) {
           markAppwriteSessionExpired();
         } else {
           console.warn('[appwrite] account.get failed (session kept)', error);
