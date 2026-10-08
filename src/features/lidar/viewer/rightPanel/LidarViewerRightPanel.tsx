@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { AppI18nProvider, translateAppText } from '@/shared/i18n';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { AppI18nProvider } from '@/shared/i18n';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
-import { readRootAppScale } from '@/shared/lib/appScale';
 import { SlopesSection } from '@/features/controlPanel/sections/SlopesSection';
 import { AltitudeSection } from '@/features/controlPanel/sections/AltitudeSection';
 import { SunlightSection } from '@/features/controlPanel/sections/SunlightSection';
@@ -17,81 +16,16 @@ import {
 } from '../pointFilter';
 import type { ViewerRouteController } from '../route/viewerRouteController';
 import type { ViewerRouteState } from '../route/types';
-import {
-  clampBreakpoints,
-  formatSlopeDegreeLabel,
-  generateDynamicCategories,
-} from '@/features/slope/lib/slope-config';
-import {
-  altitudeBandCountFromSetting,
-  buildAltitudeCategories,
-  clampAltitudeBreakpoints,
-} from '@/features/altitude/lib/altitude-config';
-import {
-  buildDefaultSunlightBands,
-  normalizeSunlightScaleSetting,
-  resampleSunlightBands,
-} from '@/features/controlPanel/lib/sunlightConfig';
 import { resolveSunTimesForLocalDay } from '@/features/sunlight/lib/sun-calc';
-import { getTimeZoneForCoordinates } from '@/features/lidar/lib/coordConvert';
-import type { AltitudeScaleSettingKey } from '@/features/altitude/types';
 import type { ViewerSlopeState, ViewerAltitudeState } from './types';
-import type {
-  AltitudeBand,
-  AltitudeColorization,
-  AltitudeScaleSetting,
-  SlopeBand,
-  SlopeColorization,
-  SlopeResolution,
-  SlopeScale,
-  SlopeScaleSetting,
-  SunlightState,
-} from '@/features/controlPanel/types';
+import type { SunlightState } from '@/features/controlPanel/types';
+import { useRightPanelLayout } from './useRightPanelLayout';
+import { useSlopeLayer } from './useSlopeLayer';
+import { useAltitudeLayer } from './useAltitudeLayer';
+import { useSunlightLayer } from './useSunlightLayer';
 import '@/features/controlPanel/styles/index.css';
 import '@/features/itineraryPanel/styles/overlays/_calendar-popover.css';
 import './styles.css';
-
-const PANEL_STORAGE_WIDTH_KEY = 'rv-viewer-right-panel-width-v2';
-const PANEL_STORAGE_COLLAPSED_KEY = 'rv-viewer-right-panel-collapsed-v2';
-const PANEL_WIDTH_DEFAULT = 380;
-const PANEL_WIDTH_MIN = 350;
-const PANEL_WIDTH_MAX = 600;
-const PANEL_COLLAPSE_DRAG_THRESHOLD = 48;
-
-function bandCountFromSlopeSetting(setting: SlopeScaleSetting): number {
-  const match = /^(\d+)/.exec(setting);
-  return match ? Number(match[1]) : 10;
-}
-
-function buildSlopeBands(
-  categories: ReturnType<typeof generateDynamicCategories>,
-  visibilityById: Record<string, boolean>,
-): SlopeBand[] {
-  return categories.map((category) => ({
-    id: category.id,
-    percentRange: category.displayRange,
-    degreeRange: `${formatSlopeDegreeLabel(category.minDeg)}° - ${formatSlopeDegreeLabel(category.maxDeg)}° (${translateAppText(category.label)})`,
-    label: `${category.displayRange} (${translateAppText(category.label)})`,
-    color: category.color,
-    visible: visibilityById[category.id] ?? true,
-    minDeg: category.minDeg,
-    maxDeg: category.maxDeg,
-  }));
-}
-
-function buildAltitudeBands(
-  categories: ReturnType<typeof buildAltitudeCategories>,
-  hiddenIds: Set<string>,
-): AltitudeBand[] {
-  return categories.map((category) => ({
-    id: category.id,
-    label: category.displayRange,
-    color: category.color,
-    visible: !hiddenIds.has(category.id),
-    minMeters: category.minMeters,
-    maxMeters: category.maxMeters,
-  }));
-}
 
 /** Photo mode section (see photoMode/): state lives in the panel, the viewer applies it. */
 export interface ViewerPhotoModeProps {
@@ -138,100 +72,7 @@ function LidarViewerRightPanelContent({
     return routeController.onStateChange(setRouteState);
   }, [routeController]);
 
-  const [panelWidth, setPanelWidth] = useState<number>(() => {
-    try {
-      const stored = localStorage.getItem(PANEL_STORAGE_WIDTH_KEY);
-      if (stored) {
-        const parsed = parseFloat(stored);
-        if (!Number.isNaN(parsed) && parsed >= PANEL_WIDTH_MIN && parsed <= PANEL_WIDTH_MAX) {
-          return parsed;
-        }
-      }
-    } catch {
-      // ignore
-    }
-    return PANEL_WIDTH_DEFAULT;
-  });
-
-  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem(PANEL_STORAGE_COLLAPSED_KEY) === 'true';
-    } catch {
-      return false;
-    }
-  });
-
-  const [isResizing, setIsResizing] = useState(false);
-  const lastExpandedWidthRef = useRef<number>(panelWidth);
-
-  useEffect(() => {
-    if (!isCollapsed) {
-      lastExpandedWidthRef.current = panelWidth;
-    }
-  }, [isCollapsed, panelWidth]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(PANEL_STORAGE_WIDTH_KEY, String(panelWidth));
-    } catch {
-      // ignore
-    }
-  }, [panelWidth]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(PANEL_STORAGE_COLLAPSED_KEY, String(isCollapsed));
-    } catch {
-      // ignore
-    }
-  }, [isCollapsed]);
-
-  const handleResizeStart = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      setIsResizing(true);
-      const startX = event.clientX;
-      const startWidth = panelWidth;
-      // The panel is zoomed by --app-scale: screen px -> panel px.
-      const uiScale = readRootAppScale();
-
-      const onMove = (nextEvent: MouseEvent) => {
-        const delta = (startX - nextEvent.clientX) / uiScale;
-        const raw = startWidth + delta;
-        const maxAllowed = Math.min(PANEL_WIDTH_MAX, (window.innerWidth - 32) / uiScale);
-        const minAllowed = Math.min(PANEL_WIDTH_MIN, maxAllowed);
-
-        if (raw <= minAllowed - PANEL_COLLAPSE_DRAG_THRESHOLD) {
-          setIsCollapsed(true);
-          return;
-        }
-
-        setIsCollapsed(false);
-        const clamped = Math.max(minAllowed, Math.min(maxAllowed, raw));
-        lastExpandedWidthRef.current = clamped;
-        setPanelWidth(clamped);
-      };
-
-      const onUp = () => {
-        setIsResizing(false);
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-      };
-
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
-    },
-    [panelWidth],
-  );
-
-  const handleRestore = useCallback(() => {
-    const nextWidth = Math.max(
-      PANEL_WIDTH_MIN,
-      Math.min(PANEL_WIDTH_MAX, lastExpandedWidthRef.current || PANEL_WIDTH_DEFAULT),
-    );
-    setPanelWidth(nextWidth);
-    setIsCollapsed(false);
-  }, []);
+  const { panelWidth, isCollapsed, isResizing, handleResizeStart, handleRestore } = useRightPanelLayout();
 
   const [sectionsOpen, setSectionsOpen] = useState<{
     photo: boolean;
@@ -280,238 +121,55 @@ function LidarViewerRightPanelContent({
     setPointFilterCategories((prev) => ({ ...prev, [id]: visible }));
   }, []);
 
-  // ── Slopes State ──────────────────────────────────────────────────────────
-  const [slopesEnabled, setSlopesEnabled] = useState(false);
-  const [slopeResolution, setSlopeResolution] = useState<SlopeResolution>('0.40 m (LiDAR Surface IGN)');
-  const [slopeColorization, setSlopeColorization] = useState<SlopeColorization>('gradient');
-  const [slopeScale, setSlopeScale] = useState<SlopeScale>('degree');
-  const [slopeScaleSetting, setSlopeScaleSetting] = useState<SlopeScaleSetting>('6 couleurs');
-  const [slopeOpacity, setSlopeOpacity] = useState(20);
-  const [slopeCustomColors, setSlopeCustomColors] = useState<Record<string, string>>({});
-  const [slopeBandVisibility, setSlopeBandVisibility] = useState<Record<string, boolean>>({});
-  const [slopeBreakpointsByCount, setSlopeBreakpointsByCount] = useState<Record<number, number[]>>({});
-
-  const slopeBandCount = useMemo(() => bandCountFromSlopeSetting(slopeScaleSetting), [slopeScaleSetting]);
-  const currentSlopeBreakpoints = useMemo(
-    () => slopeBreakpointsByCount[slopeBandCount],
-    [slopeBandCount, slopeBreakpointsByCount],
-  );
-  const dynamicSlopeCategories = useMemo(
-    () => generateDynamicCategories(slopeBandCount, currentSlopeBreakpoints),
-    [slopeBandCount, currentSlopeBreakpoints],
-  );
-  const coloredSlopeCategories = useMemo(
-    () =>
-      dynamicSlopeCategories.map((category) => ({
-        ...category,
-        color: slopeCustomColors[category.id] ?? category.color,
-      })),
-    [dynamicSlopeCategories, slopeCustomColors],
-  );
-  const slopeBands = useMemo(
-    () => buildSlopeBands(coloredSlopeCategories, slopeBandVisibility),
-    [coloredSlopeCategories, slopeBandVisibility],
-  );
-
-  useEffect(() => {
-    onSlopeChange?.({
-      enabled: slopesEnabled,
-      opacity: slopeOpacity,
-      colorization: slopeColorization,
-      scale: slopeScale,
-      scaleSetting: slopeScaleSetting,
-      bands: slopeBands,
-    });
-  }, [
-    onSlopeChange,
+  // ── Slopes, altitude, sunlight ────────────────────────────────────────────
+  const {
     slopesEnabled,
-    slopeOpacity,
+    setSlopesEnabled,
+    slopeResolution,
+    setSlopeResolution,
     slopeColorization,
+    setSlopeColorization,
     slopeScale,
+    setSlopeScale,
     slopeScaleSetting,
+    setSlopeScaleSetting,
+    slopeOpacity,
+    setSlopeOpacity,
+    setSlopeCustomColors,
+    setSlopeBandVisibility,
     slopeBands,
-  ]);
+    handleSlopeBandBreakpointChange,
+  } = useSlopeLayer(onSlopeChange);
 
-  const handleSlopeBandBreakpointChange = useCallback(
-    (bandIndex: number, field: 'min' | 'max', valueDeg: number) => {
-      const count = dynamicSlopeCategories.length;
-      const breakpoints = dynamicSlopeCategories.slice(1).map((cat) => cat.minDeg);
-
-      let breakpointIndex: number;
-      if (field === 'min') {
-        if (bandIndex === 0) return;
-        breakpointIndex = bandIndex - 1;
-      } else {
-        if (bandIndex === count - 1) return;
-        breakpointIndex = bandIndex;
-      }
-
-      if (breakpointIndex < 0 || breakpointIndex >= breakpoints.length) return;
-      breakpoints[breakpointIndex] = valueDeg;
-      const clamped = clampBreakpoints(breakpoints, count);
-      setSlopeBreakpointsByCount((prev) => ({ ...prev, [count]: clamped }));
-    },
-    [dynamicSlopeCategories],
-  );
-
-  // ── Altitude State ────────────────────────────────────────────────────────
-  const [altitudeEnabled, setAltitudeEnabled] = useState(false);
-  const [altitudeColorization, setAltitudeColorization] = useState<AltitudeColorization>('gradient');
-  const [altitudeScaleSetting, setAltitudeScaleSetting] = useState<AltitudeScaleSetting>('4 couleurs');
-  const [altitudeOpacity, setAltitudeOpacity] = useState(20);
-  const [altitudeCustomColors, setAltitudeCustomColors] = useState<Record<string, string>>({});
-  const [altitudeHiddenBandIds, setAltitudeHiddenBandIds] = useState<string[]>([]);
-  const [altitudeBreakpointsByCount, setAltitudeBreakpointsByCount] = useState<Record<number, number[]>>({});
-
-  const altitudeBandCount = useMemo(
-    () => altitudeBandCountFromSetting(altitudeScaleSetting),
-    [altitudeScaleSetting],
-  );
-  const currentAltitudeBreakpoints = useMemo(
-    () => altitudeBreakpointsByCount[altitudeBandCount],
-    [altitudeBandCount, altitudeBreakpointsByCount],
-  );
-  const altitudeCategories = useMemo(
-    () => buildAltitudeCategories(altitudeScaleSetting as AltitudeScaleSettingKey, altitudeCustomColors, currentAltitudeBreakpoints),
-    [altitudeCustomColors, altitudeScaleSetting, currentAltitudeBreakpoints],
-  );
-  const altitudeHiddenIds = useMemo(() => new Set(altitudeHiddenBandIds), [altitudeHiddenBandIds]);
-  const altitudeBands = useMemo(
-    () => buildAltitudeBands(altitudeCategories, altitudeHiddenIds),
-    [altitudeCategories, altitudeHiddenIds],
-  );
-
-  useEffect(() => {
-    onAltitudeChange?.({
-      enabled: altitudeEnabled,
-      opacity: altitudeOpacity,
-      colorization: altitudeColorization,
-      scaleSetting: altitudeScaleSetting,
-      bands: altitudeBands,
-    });
-  }, [
-    onAltitudeChange,
+  const {
     altitudeEnabled,
-    altitudeOpacity,
+    setAltitudeEnabled,
     altitudeColorization,
+    setAltitudeColorization,
     altitudeScaleSetting,
+    setAltitudeScaleSetting,
+    altitudeOpacity,
+    setAltitudeOpacity,
+    setAltitudeCustomColors,
+    setAltitudeHiddenBandIds,
     altitudeBands,
-  ]);
+    handleAltitudeBandBreakpointChange,
+  } = useAltitudeLayer(onAltitudeChange);
 
-  const handleAltitudeBandBreakpointChange = useCallback(
-    (bandIndex: number, field: 'min' | 'max', valueMeters: number) => {
-      const count = altitudeCategories.length;
-      const breakpoints = altitudeCategories.slice(1).map((cat) => cat.minMeters);
-
-      let breakpointIndex: number;
-      if (field === 'min') {
-        if (bandIndex === 0) return;
-        breakpointIndex = bandIndex - 1;
-      } else {
-        if (bandIndex === count - 1) return;
-        breakpointIndex = bandIndex;
-      }
-
-      if (breakpointIndex < 0 || breakpointIndex >= breakpoints.length) return;
-      breakpoints[breakpointIndex] = valueMeters;
-      const clamped = clampAltitudeBreakpoints(breakpoints, count);
-      setAltitudeBreakpointsByCount((prev) => ({ ...prev, [count]: clamped }));
-    },
-    [altitudeCategories],
-  );
-
-  // ── Sunlight State ────────────────────────────────────────────────────────
-  const localTimeZone = useMemo(() => {
-    if (timeZone) return timeZone;
-    if (centerLon != null && centerLat != null) {
-      return getTimeZoneForCoordinates(centerLon, centerLat);
-    }
-    return 'Europe/Paris';
-  }, [timeZone, centerLon, centerLat]);
-
-  const [sunlightState, setSunlightState] = useState<SunlightState>(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    const initialTz =
-      timeZone ?? (centerLon != null && centerLat != null ? getTimeZoneForCoordinates(centerLon, centerLat) : 'Europe/Paris');
-    const times =
-      centerLat != null && centerLon != null
-        ? resolveSunTimesForLocalDay(today, centerLat, centerLon, initialTz)
-        : { sunriseTime: '06:45', sunsetTime: '20:30' };
-    return {
-      enabled: false,
-      customDateEnabled: true,
-      date: today,
-      time: '12:00',
-      timeScrubbing: false,
-      sunriseTime: times.sunriseTime,
-      sunsetTime: times.sunsetTime,
-      shadowEnabled: true,
-      sunlightMapEnabled: true,
-      shadowOpacity: 50,
-      sunlightMapOpacity: 50,
-      scaleSetting: '4 couleurs',
-      bands: buildDefaultSunlightBands('4 couleurs'),
-      trajectoryEnabled: true,
-    };
-  });
-  const [sunlightMapExpanded, setSunlightMapExpanded] = useState(true);
-
-  // Lever et coucher du jour choisi au centre de la scène.
-  const sunTimes = useMemo(
-    () => (centerLat == null || centerLon == null
-      ? null
-      : resolveSunTimesForLocalDay(sunlightState.date, centerLat, centerLon, localTimeZone)),
-    [sunlightState.date, centerLat, centerLon, localTimeZone],
-  );
-  if (sunTimes && (sunTimes.sunriseTime !== sunlightState.sunriseTime || sunTimes.sunsetTime !== sunlightState.sunsetTime)) {
-    setSunlightState((prev) => ({
-      ...prev,
-      sunriseTime: sunTimes.sunriseTime,
-      sunsetTime: sunTimes.sunsetTime,
-    }));
-  }
-
-  useEffect(() => {
-    onSunlightChange?.(sunlightState);
-  }, [onSunlightChange, sunlightState]);
+  const {
+    localTimeZone,
+    sunlightState,
+    setSunlightState,
+    sunlightMapExpanded,
+    setSunlightMapExpanded,
+    handleSunlightStateChange,
+  } = useSunlightLayer(onSunlightChange, centerLon, centerLat, timeZone);
 
   const photoSunTimes = useMemo(() => {
     if (!photoState || centerLat == null || centerLon == null) return { sunriseTime: '--:--', sunsetTime: '--:--' };
     const times = resolveSunTimesForLocalDay(photoState.date, centerLat, centerLon, localTimeZone);
     return { sunriseTime: times.sunriseTime, sunsetTime: times.sunsetTime };
   }, [photoState, centerLat, centerLon, localTimeZone]);
-
-  const handleSunlightStateChange = useCallback((changes: Partial<SunlightState>) => {
-    setSunlightState((prev) => {
-      let nextBands = prev.bands;
-      let nextScaleSetting = prev.scaleSetting;
-
-      if (changes.scaleSetting && changes.scaleSetting !== prev.scaleSetting) {
-        nextScaleSetting = normalizeSunlightScaleSetting(changes.scaleSetting);
-        nextBands = resampleSunlightBands(prev.bands, nextScaleSetting);
-      } else if (changes.bands) {
-        nextBands = changes.bands;
-      }
-
-      let sunriseTime = prev.sunriseTime;
-      let sunsetTime = prev.sunsetTime;
-      if (changes.date && changes.date !== prev.date && centerLat != null && centerLon != null) {
-        const times = resolveSunTimesForLocalDay(changes.date, centerLat, centerLon, localTimeZone);
-        sunriseTime = times.sunriseTime;
-        sunsetTime = times.sunsetTime;
-      }
-
-      return {
-        ...prev,
-        ...changes,
-        sunriseTime,
-        sunsetTime,
-        scaleSetting: nextScaleSetting,
-        bands: nextBands,
-      };
-    });
-  }, [centerLat, centerLon, localTimeZone]);
-
 
   return (
     <>
