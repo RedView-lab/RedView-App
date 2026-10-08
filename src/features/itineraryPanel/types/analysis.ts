@@ -10,9 +10,9 @@ export type GpxQualityMode = GpxQualityPreset | 'expert';
 export type RouteDisplayQuality = 'auto' | GpxQualityPreset;
 
 /**
- * Persisted state of the bottom analysis chart (centerPanel). Stored on
- * the project so axis selections, filter chips and the X-axis mode
- * (distance / elapsed time / clock time) survive across sessions.
+ * État persisté du graphique d'analyse du bas (centerPanel). Stocké sur le
+ * projet pour que les choix d'axes, les puces de filtre et le mode de l'axe X
+ * (distance / temps écoulé / heure) survivent d'une session à l'autre.
  */
 export type AnalysisAxisMetricId =
   | 'Altitude'

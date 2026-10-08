@@ -2,10 +2,10 @@ import type { PoiAutoSortReason } from '../../poi/types';
 
 // Catégories POI recherchées le long du tracé et tri automatique.
 
-/** One POI type row: enabled + search radius (metres, or null when disabled). */
+/** Une ligne de type de POI : activée + rayon de recherche (mètres, ou null quand désactivée). */
 export interface PoiEntry {
   enabled: boolean;
-  /** Search radius in metres. Null when the row is fully disabled. */
+  /** Rayon de recherche en mètres. Null quand la ligne est entièrement désactivée. */
   distanceM: number | null;
 }
 

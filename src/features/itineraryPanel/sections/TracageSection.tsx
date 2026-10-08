@@ -70,21 +70,21 @@ export interface TracageSectionProps {
   onCancelApply?: () => void;
   applyLoading?: boolean;
   resultLabel?: string | null;
-  /** Recalculate entire trace through BRouter using current profile, segment by segment between waypoints. */
+  /** Recalcule toute la trace via BRouter avec le profil courant, segment par segment entre les étapes. */
   onRecalculateTrace?: () => void;
-  /** True while the recalculation is running. */
+  /** Vrai pendant que le recalcul tourne. */
   recalculateLoading?: boolean;
-  /** Progress 0–1 of segment recalculation. */
+  /** Progression 0–1 du recalcul des segments. */
   recalculateProgress?: number | null;
-  /** Whether the recalculate button should be shown (GPX import with waypoints). */
+  /** Indique si le bouton de recalcul doit être affiché (import GPX avec étapes). */
   showRecalculateTrace?: boolean;
-  /** Sport of the itinerary: Trail / Running route on the pedestrian network. */
+  /** Sport de l'itinéraire : trail / course routent sur le réseau piéton. */
   discipline?: SportDiscipline;
   onChangeDiscipline?: (discipline: SportDiscipline) => void;
 }
 
 /**
- * TracageSection — Pixel perfect implementation of Figma nodes 5918:103512 & 5918:112682.
+ * TracageSection — implémentation au pixel près des nœuds Figma 5918:103512 et 5918:112682.
  */
 export function TracageSection({
   priorities,
@@ -128,7 +128,7 @@ export function TracageSection({
     return () => window.removeEventListener(CUSTOM_PROFILES_CHANGED_EVENT, handleUpdate);
   }, []);
 
-  // Base profile id currently active, derived synchronously to avoid 1-frame stale state
+  // Id du profil de base actif, dérivé de façon synchrone pour éviter un état périmé d'une image
   const effectiveBaseId = useMemo(() => {
     const known = (id: string | undefined): id is string =>
       !!id && (!!ROUTE_PROFILE_PRESETS[id] || savedProfiles.some((p) => p.id === id));
@@ -137,19 +137,19 @@ export function TracageSection({
       : known(roadTypes.activityType)
         ? roadTypes.activityType
         : 'road';
-    // The discipline decides the routing network: a built-in preset of the
-    // other family (older projects) falls back to the discipline's preset.
+    // La discipline décide du réseau de routage : un préréglage intégré de l'autre
+    // famille (anciens projets) se rabat sur le préréglage de la discipline.
     if (isActivityPresetId(candidate) && isFootActivity(candidate) !== !!footDiscipline) {
       return footDiscipline ?? 'road';
     }
     return candidate;
   }, [activeProfileId, footDiscipline, roadTypes.activityType, savedProfiles]);
 
-  // Built-in preset behind the active profile
+  // Préréglage intégré derrière le profil actif
   const activeBaseSaved = savedProfiles.find((p) => p.id === effectiveBaseId);
   const basePresetKey = resolveActivityKey(effectiveBaseId, activeBaseSaved, footDiscipline);
 
-  // Active surface preference range [min, max]
+  // Plage de préférence de surface active [min, max]
   const currentSurfaceMin: SurfaceType =
     roadTypes.surfaceMin ??
     (effectiveBaseId === 'mtb' || effectiveBaseId === 'trail'
@@ -170,13 +170,13 @@ export function TracageSection({
   const safeMinIdx = minSurfaceIndex >= 0 ? minSurfaceIndex : 0;
   const safeMaxIdx = maxSurfaceIndex >= 0 ? Math.max(safeMinIdx, maxSurfaceIndex) : safeMinIdx;
 
-  // Active tolerance percent
+  // Pourcentage de tolérance actif
   const currentTolerance = roadTypes.surfaceTolerance ?? 10;
 
-  // Active tracing mode
+  // Mode de traçage actif
   const currentTracingMode: TracingModeType = roadTypes.tracingMode ?? 'vitesse';
 
-  // Compare roadTypes against base profile
+  // Comparer roadTypes au profil de base
   const expectedRoadTypes = useMemo(() => {
     if (activeBaseSaved) {
       return activeBaseSaved.roadTypes;
@@ -186,7 +186,7 @@ export function TracageSection({
 
   const isCustomized = isRoadTypesCustomized(roadTypes, expectedRoadTypes);
 
-  // Resolved active activity name displayed in the top selector
+  // Nom de l'activité active résolu, affiché dans le sélecteur du haut
   const nextProfileName = useMemo(() => {
     const raw = getNextCustomProfileName(savedProfiles);
     return t(raw);
@@ -204,7 +204,7 @@ export function TracageSection({
     <ActivityIcon activity={basePresetKey} size={16} />
   );
 
-  // Built-in preset highlighted in the dropdown (none while a custom profile is active).
+  // Préréglage intégré mis en évidence dans la liste (aucun pendant qu'un profil personnalisé est actif).
   const selectedPresetId = !activeBaseSaved && !isCustomized ? basePresetKey : null;
 
   const applyRoadUpdates = (updates: Partial<RoadTypesState>) => {
@@ -344,7 +344,7 @@ export function TracageSection({
         />
       </div>
 
-      {/* ── Surfaces (Figma 5918:103521 & 5918:112691) ── */}
+      {/* ── Surfaces (Figma 5918:103521 et 5918:112691) ── */}
       <div className="rvi-tracage__surfaces">
         <span className="rvi-tracage__label">{t('Surfaces')}</span>
         <div className="rvi-tracage__surfaces-row">

@@ -94,7 +94,7 @@ export function ActivitySelector({
           </button>
         ))}
 
-        {/* Foot presets: Running (route) & Trail, on the pedestrian network */}
+        {/* Préréglages à pied : course (route) et trail, sur le réseau piéton */}
         <div className="rv-dropdown__divider" />
         {FOOT_ACTIVITIES.map((activity) => (
           <button
@@ -108,7 +108,7 @@ export function ActivitySelector({
           </button>
         ))}
 
-        {/* Current in-progress draft profile before saving */}
+        {/* Brouillon de profil en cours avant enregistrement */}
         {draftProfileName != null && (
           <>
             <div className="rv-dropdown__divider" />
@@ -123,7 +123,7 @@ export function ActivitySelector({
           </>
         )}
 
-        {/* Saved custom profiles if any */}
+        {/* Profils personnalisés enregistrés s'il y en a */}
         {savedProfiles.length > 0 && (
           <>
             <div className="rv-dropdown__divider" />

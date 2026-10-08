@@ -17,7 +17,7 @@ export const ACTIVITY_LABELS: Record<ActivityType, string> = {
 export const BIKE_ACTIVITIES: ActivityType[] = ['road', 'gravel-default', 'mtb'];
 export const FOOT_ACTIVITIES: FootDiscipline[] = ['running', 'trail'];
 
-/** Built-in preset behind the active profile (a saved profile keeps its base preset). */
+/** Préréglage intégré derrière le profil actif (un profil enregistré garde son préréglage de base). */
 export function resolveActivityKey(
   baseId: string,
   saved: SavedCustomProfile | undefined,

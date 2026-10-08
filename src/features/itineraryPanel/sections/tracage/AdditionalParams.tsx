@@ -31,7 +31,7 @@ export function AdditionalParams({ roadTypes, isFoot, onChangeRoadType }: Additi
         </span>
       </button>
 
-      {/* Smooth CSS Grid Accordion */}
+      {/* Accordéon en grille CSS fluide */}
       <div className={`rvi-tracage__params-accordion${paramsOpen ? ' is-open' : ''}`}>
         <div className="rvi-tracage__params-accordion-inner">
           <div className="rvi-tracage__params-grid">
@@ -78,7 +78,7 @@ export function AdditionalParams({ roadTypes, isFoot, onChangeRoadType }: Additi
               />
             </div>
 
-            {/* Row 4: Ferry & Villes */}
+            {/* Ligne 4 : Ferry et Villes */}
             <div className="rvi-tracage__params-row">
               <ParamDropdownItem
                 label={t('Ferry')}

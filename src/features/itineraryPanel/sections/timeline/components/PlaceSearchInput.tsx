@@ -1,11 +1,11 @@
 /**
- * Compact place-search combobox used by Départ / Fin (and any other
- * location-bound timeline rows).
+ * Combobox compacte de recherche de lieu utilisée par Départ / Fin (et toute
+ * autre ligne de timeline liée à un lieu).
  *
- * - Debounced calls to the Mapbox geocoder.
- * - Keyboard-friendly dropdown (↑/↓/Enter/Esc).
- * - Renders inline inside a TimelineRow — visually replaces the
- *   "Rechercher un lieu" placeholder text without breaking row layout.
+ * - Appels au géocodeur Mapbox avec anti-rebond.
+ * - Liste déroulante pilotable au clavier (↑/↓/Entrée/Échap).
+ * - Rendue en place dans une TimelineRow — remplace visuellement le texte
+ *   indicatif « Rechercher un lieu » sans casser la mise en page de la ligne.
  */
 import {
   useCallback,
@@ -26,16 +26,16 @@ import { appScaleStyle, readAppScale } from '@/shared/lib/appScale';
 
 interface PlaceSearchInputProps {
   value: string;
-  /** Called when the user picks a suggestion. */
+  /** Appelé quand l'utilisateur choisit une suggestion. */
   onPick: (suggestion: GeocodeSuggestion) => void;
-  /** Called whenever the visible text changes (incl. while typing). */
+  /** Appelé chaque fois que le texte visible change (y compris pendant la saisie). */
   onChangeText?: (text: string) => void;
   placeholder?: string;
-  /** Bias geocoding around this lon/lat (typically map.getCenter()). */
+  /** Oriente le géocodage autour de ce lon/lat (en général map.getCenter()). */
   proximity?: { lon: number; lat: number };
-  /** ISO-3166 codes, comma-separated. Defaults to 'fr'. */
+  /** Codes ISO-3166, séparés par des virgules. 'fr' par défaut. */
   countries?: string;
-  /** Debounce delay in ms. Defaults to 250. */
+  /** Délai d'anti-rebond en ms. 250 par défaut. */
   debounceMs?: number;
   autoFocus?: boolean;
   className?: string;
@@ -73,12 +73,12 @@ export function PlaceSearchInput({
     scale: number;
   } | null>(null);
 
-  // Keep local text in sync if the parent resets the value (e.g. itinerary switch).
+  // Garder le texte local synchronisé si le parent réinitialise la valeur (par ex. changement d'itinéraire).
   useEffect(() => {
     setText(value);
   }, [value]);
 
-  // Debounced search whenever `text` changes.
+  // Recherche avec anti-rebond chaque fois que `text` change.
   useEffect(() => {
     if (!open) return;
     const trimmed = text.trim();
@@ -120,7 +120,7 @@ export function PlaceSearchInput({
     return () => abortRef.current?.abort();
   }, []);
 
-  // Track the input position so the (portaled, fixed) dropdown follows it.
+  // Suivre la position du champ pour que la liste (portalée, fixe) le suive.
   useLayoutEffect(() => {
     if (!open) return;
 
@@ -238,7 +238,7 @@ export function PlaceSearchInput({
           setOpen(true);
         }}
         onBlur={() => {
-          // Defer close so a click on a suggestion still fires.
+          // Différer la fermeture pour qu'un clic sur une suggestion se déclenche quand même.
           blurTimerRef.current = window.setTimeout(() => setOpen(false), 120);
         }}
         onKeyDown={handleKeyDown}
@@ -268,10 +268,10 @@ export function PlaceSearchInput({
               style={{
                 width: menuRect.width / menuRect.scale,
                 ...appScaleStyle(menuRect.scale),
-                // Transform fallback only (zoom grows the anchor's layout box).
+                // Repli transform seulement (zoom agrandit la boîte de mise en page de l'ancre).
                 transformOrigin: menuRect.placeAbove ? 'bottom left' : 'top left',
               }}
-              onMouseDown={(e) => e.preventDefault() /* keep input focused */}
+              onMouseDown={(e) => e.preventDefault() /* garder le focus dans le champ */}
             >
               <div
                 id={listId}

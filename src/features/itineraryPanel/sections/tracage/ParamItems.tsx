@@ -6,7 +6,7 @@ import { PortalDropdown } from '../../components/controls/PortalDropdown';
 import { ROAD_PREF_OPTIONS } from './activity';
 
 /**
- * 88px Dropdown Item with red border & unclipped Portal positioning.
+ * Élément de liste de 88px avec bordure rouge et positionnement en portail non rogné.
  */
 export function ParamDropdownItem({
   label,
@@ -66,7 +66,7 @@ export function ParamDropdownItem({
 }
 
 /**
- * Slope (Pente max) Picker with red border & unclipped Portal positioning.
+ * Sélecteur de pente (Pente max) avec bordure rouge et positionnement en portail non rogné.
  */
 export function SlopeParamItem({
   label,

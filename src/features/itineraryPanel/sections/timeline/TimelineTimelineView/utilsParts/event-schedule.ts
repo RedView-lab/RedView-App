@@ -58,8 +58,8 @@ export function buildScheduledEvents(
       0,
     );
     const firstSegmentHeightPx = firstSegment?.heightPx ?? 0;
-    // The visible frame (card) is a fixed 32px Figma bar — it never grows with
-    // the event's temporal duration, only to fit attached pauses.
+    // Le cadre visible (carte) est une barre Figma fixe de 32px — elle ne grandit
+    // jamais avec la durée de l'événement, seulement pour contenir les pauses attachées.
     const cardHeightPx = Math.max(RAIL_ITEM_HEIGHT_PX, pauseColumnHeightPx);
     const heightPx = Math.max(cardHeightPx, pauseColumnHeightPx, firstSegmentHeightPx);
 

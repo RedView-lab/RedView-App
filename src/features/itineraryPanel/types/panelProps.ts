@@ -42,9 +42,9 @@ export interface ItineraryPanelProps {
   isResizing?: boolean;
   isReturningToBrowser?: boolean;
 
-  // project-level
+  // niveau projet
   onBackToHome?: () => void;
-  /** Explicit project save (header Save button). */
+  /** Enregistrement explicite du projet (bouton Enregistrer de l'en-tête). */
   onSaveProject?: () => void;
   saveStatus?: ProjectSaveStatus;
   /** Détail (déjà traduit) de l'état d'enregistrement : erreur, attente hors-ligne. */
@@ -64,36 +64,36 @@ export interface ItineraryPanelProps {
   onAddItinerary?: () => void;
   onAddButtonRef?: (element: HTMLButtonElement | null) => void;
   /**
-   * Open the "Nouvel itinéraire" picker (from-scratch vs from-GPX).
-   * If wired, replaces `onAddItinerary` UX in the tab bar.
+   * Ouvre le sélecteur « Nouvel itinéraire » (de zéro ou depuis un GPX).
+   * S'il est branché, remplace l'expérience `onAddItinerary` dans la barre d'onglets.
    */
   onOpenAddItinerary?: () => void;
   /**
-   * Add a brand-new itinerary loaded from a GPX file.
-   * The container is expected to call `parseGpxFile()` and store the route.
+   * Ajoute un tout nouvel itinéraire chargé depuis un fichier GPX.
+   * Le conteneur doit appeler `parseGpxFile()` et stocker le tracé.
    */
   onAddItineraryFromGpx?: (file: File) => Promise<void> | void;
   /**
-   * Name of a GPX file currently being parsed, or null. While set, the
-   * itinerary list shows a loading row in the position the parsed itinerary
-   * will occupy, so the user gets immediate feedback after picking the file.
+   * Nom d'un fichier GPX en cours de parse, ou null. Tant qu'il est posé, la
+   * liste des itinéraires affiche une ligne de chargement à la place qu'occupera
+   * l'itinéraire parsé : l'utilisateur a un retour immédiat après avoir choisi le fichier.
    */
   pendingImportName?: string | null;
-  /** Duplicate an itinerary by id. */
+  /** Duplique un itinéraire par son id. */
   onDuplicateItinerary?: (id: string) => void;
-  /** Remove an itinerary by id. The container should refuse if it's the last one. */
+  /** Supprime un itinéraire par son id. Le conteneur doit refuser si c'est le dernier. */
   onRemoveItinerary?: (id: string) => void;
-  /** Inline-rename an itinerary from its tab. */
+  /** Renomme en place un itinéraire depuis son onglet. */
   onRenameItinerary?: (id: string, name: string) => void;
-  /** Toggle visibility of an itinerary. */
+  /** Bascule la visibilité d'un itinéraire. */
   onToggleItineraryVisibility?: (id: string) => void;
 
-  // mode tabs
+  // onglets de mode
   onChangeMode?: (mode: PanelMode) => void;
 
-  // profile bar
+  // barre de profil
   onChangeProfile?: (profileId: string) => void;
-  /** Change the sport of the active itinerary (bike / trail / running). */
+  /** Change le sport de l'itinéraire actif (vélo / trail / course). */
   onChangeDiscipline?: (discipline: SportDiscipline) => void;
   onUndo?: () => void;
   onRedo?: () => void;
@@ -101,9 +101,9 @@ export interface ItineraryPanelProps {
   canRedo?: boolean;
   onSaveProfile?: (profile?: SavedCustomProfile) => void;
   onDeleteProfile?: (id: string) => void;
-  /** Open the Expert Mode profile editor modal. */
+  /** Ouvre la fenêtre modale d'édition du profil du mode expert. */
   onOpenExpertEditor?: () => void;
-  /** Whether Expert Mode is currently enabled for the active itinerary. */
+  /** Indique si le mode expert est activé pour l'itinéraire actif. */
   expertEnabled?: boolean;
 
   // tracage
@@ -118,13 +118,13 @@ export interface ItineraryPanelProps {
   ) => void;
   onRefreshRoute?: () => void;
   onCancelRoute?: () => void;
-  /** Recalculate the full GPX trace segment-by-segment via BRouter. */
+  /** Recalcule toute la trace GPX segment par segment via BRouter. */
   onRecalculateTrace?: () => void;
-  /** Whether recalculation is running. */
+  /** Indique si le recalcul tourne. */
   recalculateLoading?: boolean;
-  /** Recalculation progress 0–1. */
+  /** Progression du recalcul 0–1. */
   recalculateProgress?: number | null;
-  /** Whether the recalculate button should be shown. */
+  /** Indique si le bouton de recalcul doit être affiché. */
   showRecalculateTrace?: boolean;
 
   // rythme
@@ -148,17 +148,17 @@ export interface ItineraryPanelProps {
   onOpenPoiCategories?: () => void;
   onLoadPois?: () => void;
   onCancelLoadPois?: () => void;
-  /** Map-level POI loading state (corridor / viewport fetch). */
+  /** État de chargement des POI au niveau de la carte (requête couloir / vue). */
   poiLoading?: boolean;
-  /** 0..1 progress for the chunked corridor search (null when idle). */
+  /** Progression 0..1 de la recherche par morceaux dans le couloir (null au repos). */
   poiProgress?: number | null;
-  /** Number of POIs currently rendered on the map. */
+  /** Nombre de POI actuellement affichés sur la carte. */
   poiCount?: number;
-  /** Last error from the POI engine (Overpass / network). */
+  /** Dernière erreur du moteur de POI (Overpass / réseau). */
   poiError?: string | null;
-  /** Disable the "Charger" button (e.g. no GPX route attached). */
+  /** Désactive le bouton « Charger » (par ex. aucun tracé GPX attaché). */
   poiLoadDisabled?: boolean;
-  /** Optional helper text rendered when the load button is disabled. */
+  /** Texte d'aide optionnel affiché quand le bouton de chargement est désactivé. */
   poiLoadDisabledReason?: string | null;
   /** POI chargés avec d'autres catégories / distances que les réglages courants. */
   poiSearchStale?: boolean;
@@ -186,23 +186,23 @@ export interface ItineraryPanelProps {
   globalFilters?: TimelineFilterState;
 
   /**
-   * Called when the user picks a geocoded place for a timeline row
-   * (typically Départ / Fin). The container persists the lon/lat on the
-   * row and triggers a BRouter recompute when both endpoints are set.
+   * Appelé quand l'utilisateur choisit un lieu géocodé pour une ligne de
+   * timeline (en général Départ / Fin). Le conteneur persiste le lon/lat sur la
+   * ligne et déclenche un recalcul BRouter quand les deux extrémités sont posées.
    */
   onSelectTimelinePlace?: (
     id: string,
     place: { name: string; fullName: string; lat: number; lon: number },
   ) => void;
 
-  /** True while a BRouter request is in-flight. */
+  /** Vrai pendant qu'une requête BRouter est en cours. */
   routeLoading?: boolean;
-  /** Last BRouter error, if any. */
+  /** Dernière erreur BRouter, s'il y en a une. */
   routeError?: string | null;
   /**
-   * Smart-validator messages for the active itinerary's road-type
-   * filters (e.g. "tout interdit → on relâche les voies cyclables"). Empty
-   * array when the user's selection is internally consistent.
+   * Messages du validateur intelligent pour les filtres de types de route de
+   * l'itinéraire actif (par ex. « tout interdit → on relâche les voies
+   * cyclables »). Tableau vide quand la sélection de l'utilisateur est cohérente.
    */
   routeWarnings?: string[];
 }

@@ -24,9 +24,9 @@ export type PanelMode = 'tracage' | 'rythme' | 'poi' | 'nutrition';
  */
 export interface ItineraryProject {
   name: string;
-  /** Null when the project has never been saved. */
+  /** Null quand le projet n'a jamais été enregistré. */
   savedAt: string | null;
-  /** Bytes of the saved project, null if not yet saved. */
+  /** Octets du projet enregistré, null s'il ne l'est pas encore. */
   sizeBytes: number | null;
   privacy: 'private' | 'public';
   itineraries: Itinerary[];
@@ -49,11 +49,11 @@ export interface ItineraryProject {
   activeMode: PanelMode;
   /** Vue : feuille de route en tableau ou en frise. */
   timelineView: TimelineView;
-  /** Vue : persisted UI state for the right-side control panel. */
+  /** Vue : état d'interface persisté du panneau de contrôle de droite. */
   controlPanel?: ControlPanelPersistedState;
-  /** Vue : persisted UI state for the bottom analysis chart. */
+  /** Vue : état d'interface persisté du graphique d'analyse du bas. */
   analysis?: AnalysisPanelState;
-  /** Vue : persisted dashboard chrome + map viewport. */
+  /** Vue : habillage du tableau de bord + vue de la carte persistés. */
   dashboard?: {
     rightPanelWidth?: number;
     leftPanelWidth?: number;

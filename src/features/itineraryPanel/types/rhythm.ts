@@ -2,14 +2,14 @@ import type { PoiCategory } from './poi';
 
 // Rythme : départ, profil de prédiction, pauses (vélo, trail, running).
 
-/** A single user-defined pause inserted at a recurring interval. */
+/** Une pause définie par l'utilisateur, insérée à intervalle régulier. */
 export interface PauseIntervalRow {
   id: string;
-  /** Display label ("Pause 1", "Pause 2", …). */
+  /** Libellé affiché (« Pause 1 », « Pause 2 », …). */
   label: string;
-  /** Pause duration in minutes (e.g. 5, 210 → 3h30). */
+  /** Durée de la pause en minutes (par ex. 5, 210 → 3h30). */
   durationMin: number;
-  /** Repetition interval in minutes (e.g. 60 → every hour). */
+  /** Intervalle de répétition en minutes (par ex. 60 → toutes les heures). */
   intervalMin: number;
 }
 
@@ -22,11 +22,11 @@ export type RhythmGender = 'default' | 'male' | 'female';
 export type RhythmProfileMode = 'preset' | 'custom';
 
 export interface RhythmState {
-  /** ISO date (yyyy-mm-dd) or null when empty. */
+  /** Date ISO (yyyy-mm-dd) ou null si vide. */
   startDate: string | null;
-  /** 24h time (HH:MM) or null when empty. */
+  /** Heure sur 24h (HH:MM) ou null si vide. */
   startTime: string | null;
-  /** Prediction engine gender override. `default` lets the backend decide. */
+  /** Surcharge du sexe pour le moteur de prédiction. `default` laisse le backend décider. */
   gender?: RhythmGender;
   usePastActivities: boolean;
   /**
@@ -46,42 +46,42 @@ export interface RhythmState {
   surfacesWeight: number;
   pauseAtFavoritePois: boolean;
   /**
-   * Per-POI pause durations (in minutes). Displayed in the expanded grid
-   * below the "Ajouter des pauses à chaque POI favori" toggle (Figma
-   * 1695:22638 Variant2). A value of `null` means the user has unchecked
-   * that POI category — it still appears in the grid (greyed out) but is
-   * excluded from routing. Keys mirror `PoiCategory`.
+   * Durées de pause par POI (en minutes). Affichées dans la grille dépliée sous
+   * la bascule « Ajouter des pauses à chaque POI favori » (Figma 1695:22638
+   * Variant2). Une valeur `null` signifie que l'utilisateur a décoché cette
+   * catégorie de POI — elle apparaît encore dans la grille (grisée) mais est
+   * exclue du routage. Les clés reprennent `PoiCategory`.
    */
   poiPauseDurations: Record<PoiCategory, number | null>;
   /**
-   * Master toggle for "pauses par interval". When false the rows are kept in
-   * `pauseIntervals` but the routing engine ignores them. When true and the
-   * list is empty, the section auto-creates a single default row.
+   * Bascule principale des « pauses par intervalle ». À false, les lignes sont
+   * gardées dans `pauseIntervals` mais le moteur de routage les ignore. À true
+   * avec une liste vide, la section crée automatiquement une ligne par défaut.
    */
   pauseEveryIntervalEnabled: boolean;
   /**
-   * @deprecated kept for backward compatibility with previously-saved
-   * projects that only stored a single "every N minutes" value. New code
-   * should rely on `pauseIntervals`.
+   * @deprecated gardé pour la compatibilité avec les projets enregistrés
+   * auparavant qui ne stockaient qu'une seule valeur « toutes les N minutes ».
+   * Le nouveau code doit s'appuyer sur `pauseIntervals`.
    */
   pauseEveryIntervalMin: number | null;
-  /** User-defined pause rows displayed when the master toggle is on. */
+  /** Lignes de pause définies par l'utilisateur, affichées quand la bascule principale est activée. */
   pauseIntervals: PauseIntervalRow[];
-  /** Per-generated-pause distance overrides keyed by pause id. */
+  /** Surcharges de distance par pause générée, indexées par id de pause. */
   pausePositionOverridesKm: Record<string, number>;
 
-  // ── Trail / Running (ignored by the cycling engine) ──
-  /** Which reference feeds the running engine: VMA or a race time. */
+  // ── Trail / course (ignorés par le moteur vélo) ──
+  /** Quelle référence alimente le moteur de course : VMA ou un temps de course. */
   runReferenceMode?: RunReferenceMode;
-  /** Maximal aerobic speed (km/h). */
+  /** Vitesse maximale aérobie (km/h). */
   vmaKmh?: number | null;
-  /** Reference race distance (m) for `runReferenceMode === 'chrono'`. */
+  /** Distance de la course de référence (m) pour `runReferenceMode === 'chrono'`. */
   refRaceDistanceM?: number | null;
   /** Reference race finish time (s). */
   refRaceTimeS?: number | null;
-  /** Runner weight including pack (kg) — separate from the bike system weight. */
+  /** Poids du coureur sac compris (kg) — distinct du poids du système vélo. */
   runWeightKg?: number | null;
-  /** Terrain technicality 0 (smooth) … 1 (very technical), trail only. */
+  /** Technicité du terrain de 0 (roulant) … à 1 (très technique), trail seulement. */
   terrainTechnicality?: number | null;
 }
 

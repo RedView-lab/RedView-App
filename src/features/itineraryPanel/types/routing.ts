@@ -1,6 +1,6 @@
 // Réglages de tracé (routage BRouter) d'un itinéraire.
 
-/** Value a routing/road preference slot can take. */
+/** Valeur que peut prendre un emplacement de préférence de routage/de route. */
 export type RoadPreference = 'avoid' | 'prefer' | 'tolerate' | 'forbid';
 
 /** Visual profile applied to routing ("Gravel (défaut)" etc.). */
@@ -29,7 +29,7 @@ export interface SavedCustomProfile {
 }
 
 export interface PrioritiesState {
-  /** Each value ∈ [0, 100]. */
+  /** Chaque valeur ∈ [0, 100]. */
   duration: number;
   elevation: number;
   distance: number;
@@ -45,15 +45,15 @@ export interface RoadTypesState {
   majorRoads: RoadPreference;
   ferry: RoadPreference;
   turns: RoadPreference;
-  /** Max slope in percent (0–100). */
+  /** Pente max en pourcentage (0–100). */
   maxSlopePercent: number;
   cities: RoadPreference;
   /**
-   * When true, the current road-type settings are applied to every itinerary
-   * of the project. Figma 1705:23497 (Appliquer à tout les itinéraires).
+   * À true, les réglages de types de route courants sont appliqués à chaque
+   * itinéraire du projet. Figma 1705:23497 (Appliquer à tout les itinéraires).
    */
   applyToAllItineraries: boolean;
-  /** Figma 5918:103512 / 5918:112682 additions */
+  /** Ajouts Figma 5918:103512 / 5918:112682 */
   elevationPreference?: RoadPreference;
   woods?: RoadPreference;
   surfacePreference?: 'tarmac' | 'paved' | 'gravel' | 'other';

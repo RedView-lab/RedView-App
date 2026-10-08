@@ -11,24 +11,24 @@ import type { TimelineItem } from './timeline';
 
 // Un itinéraire (variante de route) et ses données persistées.
 
-/** How an itinerary's polyline is colorised on the map (right-panel control). */
+/** Comment la polyligne d'un itinéraire est colorée sur la carte (réglage du panneau de droite). */
 export type RouteRenderMode = 'default' | 'slope' | 'speedEst';
 
 /**
- * Computed metrics persisted on the itinerary after a successful BRouter
- * routing run. All values are optional — when absent the synth row
- * displays "--". Distance is also kept on the timeline "end" row for
- * backward compatibility with previously-saved projects.
+ * Métriques calculées persistées sur l'itinéraire après une passe de routage
+ * BRouter réussie. Toutes les valeurs sont optionnelles — absentes, la ligne de
+ * synthèse affiche « -- ». La distance est aussi gardée sur la ligne « end » de
+ * la timeline pour la compatibilité avec les projets enregistrés auparavant.
  */
 export interface ItineraryMetrics {
   distanceKm?: number;
-  /** Moving / cumulative duration in seconds. Not yet wired. */
+  /** Durée en mouvement / cumulée en secondes. Pas encore branchée. */
   durationSec?: number;
   ascentM?: number;
   descentM?: number;
-  /** Average slope in percent (positive). */
+  /** Pente moyenne en pourcentage (positive). */
   avgSlopePercent?: number;
-  /** Tarmac vs off-road share (each 0–100). */
+  /** Part bitume / hors bitume (chacune 0–100). */
   tarmacPercent?: number;
   offroadPercent?: number;
 }
@@ -124,7 +124,7 @@ export interface ItineraryFitUpload {
   lastModified: number;
   size: number;
   path?: string;
-  /** Legacy inline payload kept only so older saved projects still hydrate. */
+  /** Ancienne charge en ligne gardée seulement pour que les anciens projets enregistrés s'hydratent encore. */
   base64?: string;
 }
 
@@ -141,8 +141,8 @@ export interface Itinerary {
   color: string;
   profileId: string;
   /**
-   * Sport of this itinerary: drives the prediction engine, pace display and
-   * the routing network (Trail / Running → pedestrian BRouter profile).
+   * Sport de cet itinéraire : pilote le moteur de prédiction, l'affichage de
+   * l'allure et le réseau de routage (trail / course → profil BRouter piéton).
    */
   discipline?: SportDiscipline;
   priorities: PrioritiesState;
@@ -159,20 +159,21 @@ export interface Itinerary {
   /** Vue (par utilisateur) : right-panel opacity slider (0–100). Defaults to 100. */
   opacity?: number;
   /**
-   * Hierarchical split metadata used to render child traces as a continuation
-   * of their parent on the center summary and analysis chart.
+   * Métadonnées de découpe hiérarchique servant à afficher les traces enfants
+   * comme la suite de leur parent dans le résumé central et le graphique d'analyse.
    */
   splitRelation?: ItinerarySplitRelation;
-  /** Computed metrics shown in the center synth table. */
+  /** Métriques calculées affichées dans le tableau de synthèse central. */
   metrics?: ItineraryMetrics;
   /**
-   * Optional GPX track loaded for this itinerary. When present, the POI
-   * search runs in "corridor" mode along these points instead of bbox mode.
+   * Trace GPX optionnelle chargée pour cet itinéraire. Quand elle est présente,
+   * la recherche de POI tourne en mode « couloir » le long de ces points au lieu
+   * du mode emprise.
    *
-   * `source: 'brouter'` means the polyline was synthesised from a BRouter
-   * computation (no user GPX upload) — in that case the route is already
-   * rendered by the BRouter layer and `useItineraryPoiMap` skips its own
-   * GPX rendering to avoid drawing two stacked lines.
+   * `source: 'brouter'` signifie que la polyligne a été synthétisée par un
+   * calcul BRouter (pas d'envoi de GPX par l'utilisateur) — le tracé est alors
+   * déjà rendu par la couche BRouter et `useItineraryPoiMap` saute son propre
+   * rendu GPX pour éviter de dessiner deux lignes empilées.
    */
   gpxRoute?: {
     name: string | null;
@@ -212,17 +213,17 @@ export interface Itinerary {
     routedInputsKey?: string;
   };
   /**
-   * Expert Mode profile state. When `enabled`, every parameter the user
-   * has changed is sent to BRouter as a `profile:xxx` URL override on top
-   * of the active preset. Defaults to a disabled state with stock values
-   * mirroring `trekking.brf`.
+   * État du profil du mode expert. Quand `enabled`, chaque paramètre modifié par
+   * l'utilisateur est envoyé à BRouter en surcharge d'URL `profile:xxx`
+   * par-dessus le préréglage actif. Par défaut, un état désactivé avec les
+   * valeurs d'origine de `trekking.brf`.
    */
   expertProfile?: ExpertProfileState;
   /**
-   * Latest successful FIT prediction result for this itinerary. Persisted
-   * on the project so reopening it restores the analysis chart without
-   * having to re-run the (expensive) prediction. Null / undefined means
-   * no prediction has been computed yet.
+   * Dernier résultat de prédiction FIT réussi pour cet itinéraire. Persisté sur
+   * le projet pour que sa réouverture restaure le graphique d'analyse sans
+   * relancer la prédiction (coûteuse). Null / undefined signifie qu'aucune
+   * prédiction n'a encore été calculée.
    */
   prediction?: PredictionResult | null;
   /**
@@ -233,10 +234,10 @@ export interface Itinerary {
    */
   predictionInputsKey?: string;
   /**
-   * POI features rendered on the map for this itinerary, persisted so
-   * that closing/reopening the project restores the icons without the
-   * user having to click "Charger" again. Populated by the corridor
-   * search; empty/undefined means no search has been run yet.
+   * Éléments POI affichés sur la carte pour cet itinéraire, persistés pour que
+   * fermer/rouvrir le projet restaure les icônes sans que l'utilisateur ait à
+   * recliquer sur « Charger ». Remplis par la recherche dans le couloir ;
+   * vide/undefined signifie qu'aucune recherche n'a encore été lancée.
    */
   poiFeatures?: PoiFeature[];
   /**
@@ -255,27 +256,28 @@ export interface Itinerary {
   poiAutoSortEnabled?: boolean;
   /** Dernier tri automatique des POI (POI retenus, bilan affiché dans la pop-in). */
   poiAutoSort?: PoiAutoSortState;
-  /** BRouter-backed rideability audit findings for this itinerary. */
+  /** Constats de l'audit de praticabilité de cet itinéraire, appuyé sur BRouter. */
   routeAudit?: ItineraryRouteAuditState;
-  /** Persisted no-go polygons sent to BRouter as absolute forbidden areas. */
+  /** Polygones interdits persistés, envoyés à BRouter comme zones absolument interdites. */
   forbiddenZones?: ItineraryForbiddenZone[];
   /** Alertes pente reclassées ou ignorées par l'utilisateur (clé = `steepAlertKey`). */
   steepAlertOverrides?: Record<string, ItinerarySteepAlertOverride>;
-  /** Persisted FIT uploads used as prediction history for this itinerary. */
+  /** Envois FIT persistés servant d'historique de prédiction pour cet itinéraire. */
   fitUploads?: ItineraryFitUpload[];
   /**
    * Travail local (jamais dans le document partagé, cf. `lib/project/layers.ts`) :
    * pending tail-segment append produced by the tracer subtool.
    */
   pendingTraceExtension?: ItineraryPendingTraceExtension;
-  /** Travail local : pending local reroute patch for waypoint edits/removals. */
+  /** Travail local : patch de reroutage local en attente pour les modifications/suppressions d'étapes. */
   pendingRoutePatch?: ItineraryPendingRoutePatch;
-  /** Travail local : auto-run FIT timing again once the route is ready. */
+  /** Travail local : relancer automatiquement le chronométrage FIT une fois le tracé prêt. */
   pendingFitRecompute?: boolean;
   /**
-   * True once the user has interacted with the "Rythme" mode (edited a field,
-   * uploaded a FIT or clicked "Calculer"). The automatic prediction only runs
-   * after that, so a freshly imported/drawn route has no speed/time estimate.
+   * Vrai dès que l'utilisateur a interagi avec le mode « Rythme » (modifié un
+   * champ, envoyé un FIT ou cliqué sur « Calculer »). La prédiction automatique
+   * ne tourne qu'après : un tracé fraîchement importé/dessiné n'a pas
+   * d'estimation de vitesse/de temps.
    */
   rhythmConfigured?: boolean;
 }

@@ -1,9 +1,9 @@
 /**
- * Types for the left-dock Itinerary Panel (Figma nodes 1539:19209 / 1539:19715).
+ * Types du panneau d'itinéraire du dock de gauche (nœuds Figma 1539:19209 / 1539:19715).
  *
- * The panel hosts an editable project with 1..n itineraries. Each itinerary
- * has four editing modes (Traçage, Rythme, POI, Nutrition) and a shared
- * timeline (Feuille de route) at the bottom.
+ * Le panneau héberge un projet éditable avec 1..n itinéraires. Chaque itinéraire
+ * a quatre modes d'édition (Traçage, Rythme, POI, Nutrition) et une timeline
+ * partagée (Feuille de route) en bas.
  */
 
 export type { SportDiscipline } from '@/shared/lib/discipline';

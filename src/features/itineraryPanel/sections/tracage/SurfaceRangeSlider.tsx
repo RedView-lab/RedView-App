@@ -56,7 +56,7 @@ export function SurfaceRangeSlider({ safeMinIdx, safeMaxIdx, onSelectRange }: Su
 
     startClientXRef.current = e.clientX;
 
-    // Both knobs superposed on same surface
+    // Les deux boutons superposés sur la même surface
     if (safeMinIdx === safeMaxIdx) {
       const distToKnob = Math.abs(clickPct - minPct);
       if (distToKnob < 15) {
@@ -81,7 +81,7 @@ export function SurfaceRangeSlider({ safeMinIdx, safeMaxIdx, onSelectRange }: Su
       }
     }
 
-    // Separate knobs: pick closer knob
+    // Boutons séparés : prendre le plus proche
     if (clickPct <= minPct) {
       setActiveDraggingKnob('min');
       const nearestIndex = Math.min(safeMaxIdx, Math.max(0, Math.round(ratio * (SURFACES.length - 1))));
@@ -187,7 +187,7 @@ export function SurfaceRangeSlider({ safeMinIdx, safeMaxIdx, onSelectRange }: Su
     }
   };
 
-  // Interpolated knob positions and fill range
+  // Positions interpolées des boutons et plage de remplissage
   const effectiveMinPct =
     isDragging && dragMinPct !== null ? dragMinPct : activeMinPct;
   const effectiveMaxPct =
@@ -209,16 +209,16 @@ export function SurfaceRangeSlider({ safeMinIdx, safeMaxIdx, onSelectRange }: Su
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
         >
-          {/* Background track line */}
+          {/* Ligne de piste de fond */}
           <div className="rvi-tracage__slider-track" />
 
-          {/* Active RED line connecting min and max */}
+          {/* Ligne ROUGE active reliant min et max */}
           <div
             className={`rvi-tracage__slider-fill${isDragging ? ' is-dragging' : ''}`}
             style={{ left: fillLeftStyle, width: fillWidthStyle }}
           />
 
-          {/* Discrete 4 Ticks aligned to knob centers */}
+          {/* 4 graduations discrètes alignées sur les centres des boutons */}
           {SURFACES.map((s, idx) => {
             const tickLeft =
               idx === 0
@@ -241,7 +241,7 @@ export function SurfaceRangeSlider({ safeMinIdx, safeMaxIdx, onSelectRange }: Su
             );
           })}
 
-          {/* Knob Min Pill (38px x 24px) */}
+          {/* Pastille du bouton min (38px x 24px) */}
           <div
             className={`rvi-tracage__slider-knob rvi-tracage__slider-knob--min${activeDraggingKnob === 'min' ? ' is-dragging' : ''}`}
             style={{ left: knobMinLeftStyle }}
@@ -264,7 +264,7 @@ export function SurfaceRangeSlider({ safeMinIdx, safeMaxIdx, onSelectRange }: Su
             }}
           />
 
-          {/* Knob Max Pill (38px x 24px) */}
+          {/* Pastille du bouton max (38px x 24px) */}
           <div
             className={`rvi-tracage__slider-knob rvi-tracage__slider-knob--max${activeDraggingKnob === 'max' ? ' is-dragging' : ''}`}
             style={{ left: knobMaxLeftStyle }}
@@ -289,7 +289,7 @@ export function SurfaceRangeSlider({ safeMinIdx, safeMaxIdx, onSelectRange }: Su
         </div>
       </div>
 
-      {/* Ticks labels row */}
+      {/* Ligne des libellés de graduation */}
       <div className="rvi-tracage__ticks-labels">
         {SURFACES.map((s, idx) => {
           const isActive = idx >= safeMinIdx && idx <= safeMaxIdx;

@@ -1,10 +1,11 @@
 /**
- * Agenda (view id `'timeline'`) - day schedule view.
+ * Agenda (vue d'id `'timeline'`) — vue de planning de la journée.
  *
- * Instead of a pure kilometre rail, the view projects itinerary checkpoints
- * onto a day/hour canvas using the FIT prediction when available. Distances
- * still drive placement fallback and km markers, but the user now navigates a
- * date strip and reads the route as scheduled checkpoints.
+ * Au lieu d'un simple rail kilométrique, la vue projette les points de contrôle
+ * de l'itinéraire sur un canevas jour/heure à l'aide de la prédiction FIT quand
+ * elle existe. Les distances pilotent encore le placement de repli et les
+ * repères kilométriques, mais l'utilisateur navigue désormais dans une bande de
+ * dates et lit le parcours comme des points de contrôle planifiés.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {

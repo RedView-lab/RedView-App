@@ -56,8 +56,8 @@ export function positionTimelineBlocks(
       kind: 'event',
       laneKey: event.spanSegments[0]?.dayKey ?? event.dayKey ?? '__single__',
       scheduledTopPx: event.scheduledTopPx,
-      // The visible 32px frame (card) drives stacking so POI frames never
-      // overlap, regardless of the event's temporal span height.
+      // Le cadre visible de 32px (carte) pilote l'empilement pour que les cadres de
+      // POI ne se chevauchent jamais, quelle que soit la hauteur de la durée de l'événement.
       stackHeightPx: clipToDayEnd(event.cardHeightPx, event.scheduledTopPx, RAIL_ITEM_HEIGHT_PX),
       sortIndex: event.sortIndex,
     });
