@@ -1,5 +1,5 @@
 // ============================================
-// LiDAR viewer tools — ASPRS class names
+// Outils du viewer LiDAR — noms des classes ASPRS
 // ============================================
 
 import { POINT_FILTER_CATEGORIES } from '../pointFilter/config';
@@ -9,7 +9,7 @@ for (const category of POINT_FILTER_CATEGORIES) {
   for (const code of category.classCodes) LABEL_BY_CLASS.set(code, category.label);
 }
 
-/** Display name (French source text) of an ASPRS class, as in the point filter. */
+/** Nom affiché (texte source français) d'une classe ASPRS, comme dans le filtre de points. */
 export function classificationLabel(classification: number): string {
   return LABEL_BY_CLASS.get(classification) ?? 'Non classé';
 }

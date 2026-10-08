@@ -1,12 +1,13 @@
 // ============================================
-// LiDAR viewer tools — ray picking on the point cloud (CPU)
+// Outils du viewer LiDAR — lancer de rayon sur le nuage de points (CPU)
 // ============================================
 //
-// Picks the front-most LiDAR return within a few pixels of a screen ray,
-// among the LOD nodes drawn this frame: what the user actually sees (tree
-// crown, cliff, roof), not the ground model under it. Node blocks are read
-// from the LOD cache (the same OPFS slices the GPU was fed) and kept in a
-// small LRU, so successive picks in one area stay instant.
+// Choisit le retour LiDAR le plus en avant à quelques pixels d'un rayon écran,
+// parmi les nœuds LOD dessinés dans cette image : ce que l'utilisateur voit
+// vraiment (couronne d'arbre, falaise, toit), pas le modèle de sol dessous. Les
+// blocs de nœuds sont lus dans le cache LOD (les mêmes tranches OPFS qui ont
+// alimenté le GPU) et gardés dans un petit LRU : des choix successifs dans une
+// même zone restent instantanés.
 
 import { readLodNodeBlock, type OpenedLodTile } from '../../../lib/lodCache';
 import { LOD_POINT_STRIDE, lodNodeCube, lodNodeSpacing } from '../../lod/lodTile';
@@ -15,19 +16,19 @@ import type { Vec3 } from '../types';
 
 export interface PointPickQuery {
   origin: Vec3;
-  /** Unit direction. */
+  /** Direction unitaire. */
   direction: Vec3;
-  /** Pick radius per metre along the ray (pixel cone). */
+  /** Rayon de sélection par mètre le long du rayon (cône de pixels). */
   radiusPerMeter: number;
-  /** Pick radius floor (half a point diameter), m. */
+  /** Plancher du rayon de sélection (un demi-diamètre de point), m. */
   minRadiusM: number;
-  /** Returns beyond this distance are hidden (behind the ground), m. */
+  /** Les retours au-delà de cette distance sont cachés (derrière le sol), m. */
   maxDistance: number;
 }
 
 export interface PointPickHit {
   local: Vec3;
-  /** Distance along the ray, m. */
+  /** Distance le long du rayon, m. */
   distance: number;
   classification: number;
 }
@@ -37,11 +38,11 @@ interface Candidate {
   enter: number;
 }
 
-/** LRU budget of decoded node blocks, bytes. */
+/** Budget LRU des blocs de nœuds décodés, octets. */
 const CACHE_BUDGET_BYTES = 32 * 1024 * 1024;
-/** Upper bound of node blocks scanned per pick. */
+/** Nombre maximal de blocs de nœuds parcourus par sélection. */
 const MAX_NODES_PER_PICK = 96;
-/** ASPRS noise classes (low/high noise) are never picked. */
+/** Les classes de bruit ASPRS (bruit bas/haut) ne sont jamais choisies. */
 const NOISE_CLASSES = new Set([7, 18]);
 
 export class PointCloudPicker {
@@ -76,9 +77,9 @@ export class PointCloudPicker {
   }
 
   /**
-   * Visits every return (noise excluded) of the drawn LOD nodes inside a
-   * render-frame plan box (x east, z = −north), whatever the class filter:
-   * the terrain tools read the ground cover, not what is shown.
+   * Parcourt chaque retour (bruit exclu) des nœuds LOD dessinés dans une boîte
+   * en plan du repère de rendu (x est, z = −nord), quel que soit le filtre de
+   * classes : les outils de terrain lisent le couvert du sol, pas ce qui est affiché.
    */
   async forEachPointInBox(
     box: { minX: number; maxX: number; minZ: number; maxZ: number },
@@ -106,11 +107,11 @@ export class PointCloudPicker {
   }
 
   /**
-   * Visits every return (noise excluded) of the scene inside a CRS plan box,
-   * down to an octree spacing of about `spacingM`, whatever the camera
-   * shows: area analyses must not depend on the view. Positions are
-   * absolute (CRS x east, y north, altitude). Blocks are read straight from
-   * the LOD cache, not kept in the picking LRU.
+   * Parcourt chaque retour (bruit exclu) de la scène dans une boîte en plan du
+   * CRS, jusqu'à un espacement d'octree d'environ `spacingM`, quoi que montre la
+   * caméra : les analyses surfaciques ne doivent pas dépendre de la vue. Les
+   * positions sont absolues (CRS x est, y nord, altitude). Les blocs sont lus
+   * directement dans le cache LOD, pas gardés dans le LRU de sélection.
    */
   async forEachPointToSpacing(
     box: { minX: number; minY: number; maxX: number; maxY: number },
@@ -120,8 +121,8 @@ export class PointCloudPicker {
     for (const tile of this.tiles) {
       const { header } = tile;
       for (const node of tile.nodes) {
-        // Additive octree: a level adds points between its parent's, so the
-        // levels down to the spacing give that density everywhere.
+        // Octree additif : un niveau ajoute des points entre ceux de son parent,
+        // les niveaux jusqu'à l'espacement donnent donc cette densité partout.
         if (node.count === 0 || lodNodeSpacing(header, node.depth) < spacingM * 0.75) continue;
         const cube = lodNodeCube(header, node);
         const x0 = header.origin.x + cube.minX;
@@ -158,7 +159,7 @@ export class PointCloudPicker {
     const out: Candidate[] = [];
     for (const node of this.getDrawnNodes()) {
       if (node.virtual || node.entry.count === 0) continue;
-      // Grow the box by the pick radius at its distance.
+      // Agrandir la boîte du rayon de sélection à sa distance.
       const cx = (node.minX + node.maxX) / 2 - ox;
       const cy = (node.minY + node.maxY) / 2 - oy;
       const cz = (node.minZ + node.maxZ) / 2 - oz;
@@ -177,7 +178,7 @@ export class PointCloudPicker {
     const s = node.size / 65535;
     const [ox, oy, oz] = query.origin;
     const [dx, dy, dz] = query.direction;
-    // Ray origin relative to the node's quantization corner.
+    // Origine du rayon relative au coin de quantification du nœud.
     const rx = ox - node.originX;
     const ry = oy - node.originY;
     const rz = oz - node.originZ;
@@ -185,7 +186,7 @@ export class PointCloudPicker {
     let bestIndex = -1;
     const step = LOD_POINT_STRIDE >> 1;
     for (let p = 0, w = 0; p < count; p++, w += step) {
-      // Quantized CRS axes (east, north, up) → render frame (east, up, −north).
+      // Axes CRS quantifiés (est, nord, haut) → repère de rendu (est, haut, −nord).
       const vx = words[w]! * s - rx;
       const vy = words[w + 2]! * s - ry;
       const vz = -words[w + 1]! * s - rz;
@@ -238,7 +239,7 @@ export class PointCloudPicker {
   }
 }
 
-/** Entry distance of a ray into a box grown by `margin`, `null` when missed. */
+/** Distance d'entrée d'un rayon dans une boîte agrandie de `margin`, `null` s'il la manque. */
 function raySlab(
   ox: number, oy: number, oz: number,
   dx: number, dy: number, dz: number,

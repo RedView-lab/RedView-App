@@ -1,5 +1,5 @@
 // ============================================
-// LiDAR viewer tools — value formatting (distances, angles, coordinates)
+// Outils du viewer LiDAR — mise en forme des valeurs (distances, angles, coordonnées)
 // ============================================
 
 import proj4 from 'proj4';
@@ -23,7 +23,7 @@ function formatNumber(value: number, fractionDigits: number): string {
   return format.format(value);
 }
 
-/** 8.4 m · 124 m · 1.24 km · 12.4 km */
+/** 8,4 m · 124 m · 1,24 km · 12,4 km */
 export function formatDistance(meters: number): string {
   const m = Math.abs(meters);
   if (m < 10) return `${formatNumber(meters, 1)} m`;
@@ -31,7 +31,7 @@ export function formatDistance(meters: number): string {
   return `${formatNumber(meters / 1000, m < 10_000 ? 2 : 1)} km`;
 }
 
-/** Signed elevation difference: +312 m / −40 m. */
+/** Dénivelé signé : +312 m / −40 m. */
 export function formatElevationDelta(meters: number): string {
   const abs = Math.abs(meters);
   const digits = abs < 10 ? 1 : 0;
@@ -51,12 +51,12 @@ export function formatPercent(ratio: number): string {
   return `${formatNumber(ratio * 100, 0)} %`;
 }
 
-/** Speed from m/s, rounded to 5 km/h: 85 km/h. */
+/** Vitesse à partir de m/s, arrondie à 5 km/h : 85 km/h. */
 export function formatSpeed(metersPerSecond: number): string {
   return `${formatNumber(Math.round((metersPerSecond * 3.6) / 5) * 5, 0)} km/h`;
 }
 
-/** 2 430 m² · 2.43 ha · 1.24 km² */
+/** 2 430 m² · 2,43 ha · 1,24 km² */
 export function formatArea(squareMeters: number): string {
   if (squareMeters < 10_000) return `${formatNumber(squareMeters, 0)} m²`;
   if (squareMeters < 1_000_000) return `${formatNumber(squareMeters / 10_000, 2)} ha`;
@@ -66,7 +66,7 @@ export function formatArea(squareMeters: number): string {
 const COMPASS_FR = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'] as const;
 const COMPASS_EN = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as const;
 
-/** 8-point compass label of a true azimuth (French uses O for west). */
+/** Libellé de rose des vents à 8 directions d'un azimut vrai (O pour ouest en français). */
 export function formatAspect(azimuthDeg: number): string {
   const labels = readDocumentAppLocale() === 'fr' ? COMPASS_FR : COMPASS_EN;
   return labels[Math.round((((azimuthDeg % 360) + 360) % 360) / 45) % 8]!;
@@ -74,7 +74,7 @@ export function formatAspect(azimuthDeg: number): string {
 
 // ── Coordinates ────────────────────────────────────────────────────────────
 
-/** Formats cycled by a click on the coordinates of the context menu. */
+/** Formats parcourus par un clic sur les coordonnées du menu contextuel. */
 export type CoordinateFormat = 'dd' | 'dms' | 'utm' | 'native';
 export const COORDINATE_FORMATS: readonly CoordinateFormat[] = ['dd', 'dms', 'utm', 'native'];
 
@@ -105,7 +105,7 @@ function formatDms(value: number, positive: string, negative: string): string {
 const UTM_BANDS = 'CDEFGHJKLMNPQRSTUVWX';
 const utmConverters = new Map<string, proj4.Converter>();
 
-/** UTM zone (Norway/Svalbard exceptions included) and MGRS latitude band. */
+/** Fuseau UTM (exceptions Norvège/Svalbard comprises) et bande de latitude MGRS. */
 function utmZoneOf(lon: number, lat: number): { zone: number; band: string } {
   let zone = Math.floor((lon + 180) / 6) + 1;
   if (lat >= 56 && lat < 64 && lon >= 3 && lon < 12) zone = 32;
@@ -136,7 +136,7 @@ export interface FormattedCoordinates {
   /** System name: WGS84, DMS, UTM, L93, LV95… */
   system: string;
   value: string;
-  /** Text copied to the clipboard (grid systems keep their name). */
+  /** Texte copié dans le presse-papiers (les systèmes de grille gardent leur nom). */
   clipboard: string;
 }
 
@@ -164,8 +164,8 @@ export function formatCoordinates(lon: number, lat: number, format: CoordinateFo
 }
 
 /**
- * Topographic map of the national mapping agency at the point (IGN
- * Géoportail in France, swisstopo in Switzerland), Google terrain elsewhere.
+ * Carte topographique de l'agence de cartographie nationale au point (IGN
+ * Géoportail en France, swisstopo en Suisse), Google relief ailleurs.
  */
 export function buildTopoMapUrl(lon: number, lat: number, crs: DetectedCrs): string {
   if (crs === 'LAMB93' || crs === 'RGR92UTM40S') {

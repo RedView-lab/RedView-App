@@ -1,29 +1,29 @@
 // ============================================
-// LiDAR viewer tools — draped analysis-cell meshes
+// Outils du viewer LiDAR — maillages drapés des cellules d'analyse
 // ============================================
 //
-// Area results (avalanche reach, viewshed) are drawn as translucent quads
-// draped on the ground model, one per analysis cell, through the
-// renderer's analysis mesh: depth-tested, so trees and ridges in front
-// still hide them.
+// Les résultats surfaciques (portée des avalanches, champ de vision) sont
+// dessinés en quads translucides drapés sur le modèle de sol, un par cellule
+// d'analyse, via le maillage d'analyse du renderer : avec test de profondeur,
+// les arbres et les crêtes devant les cachent donc toujours.
 
 import type { AnalysisGrid, TerrainField } from '../terrain/terrainField';
 
-/** Regular cells (centre of cell 0 at origin), with their altitude when known. */
+/** Cellules régulières (centre de la cellule 0 à l'origine), avec leur altitude quand elle est connue. */
 export type CellLattice = Pick<AnalysisGrid, 'width' | 'cell' | 'originX' | 'originY'> & { altitude?: ArrayLike<number> };
 import type { Rgba } from '../types';
 
 export interface OverlayMeshData {
-  /** x, y, z per vertex (render frame). */
+  /** x, y, z par sommet (repère de rendu). */
   vertices: Float32Array;
-  /** RGBA per vertex. */
+  /** RGBA par sommet. */
   colors: Uint8Array;
   indices: Uint32Array;
 }
 
 /**
- * Quads of `cells` (lattice indices), coloured by `colorOf(k)` for
- * the k-th listed cell, lifted above the ground so they do not z-fight it.
+ * Quads de `cells` (indices de grille), colorés par `colorOf(k)` pour la k-ième
+ * cellule listée, soulevés au-dessus du sol pour éviter le z-fighting.
  */
 export function buildCellMesh(
   field: TerrainField,
@@ -36,8 +36,8 @@ export function buildCellMesh(
   const colors = new Uint8Array(count * 4 * 4);
   const indices = new Uint32Array(count * 6);
   const half = grid.cell / 2;
-  // Corners are read on the fine ground model; a coarse quad still sags
-  // between them on convex ground, hence a bias growing with the cell.
+  // Les coins sont lus sur le modèle de sol fin ; un quad grossier s'affaisse
+  // encore entre eux sur un sol convexe, d'où un biais qui croît avec la cellule.
   const bias = 0.3 + 0.12 * grid.cell;
   let v = 0;
   for (let k = 0; k < count; k++) {
@@ -66,7 +66,7 @@ export function buildCellMesh(
 
 const QUAD_CORNERS: ReadonlyArray<[number, number]> = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
 
-/** Concatenates meshes into one draw; `null` when there is nothing to draw. */
+/** Concatène des maillages en un seul draw ; `null` quand il n'y a rien à dessiner. */
 export function mergeMeshes(meshes: readonly OverlayMeshData[]): OverlayMeshData | null {
   const parts = meshes.filter((m) => m.indices.length > 0);
   if (parts.length === 0) return null;

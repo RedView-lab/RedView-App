@@ -1,11 +1,11 @@
 // ============================================
-// LiDAR viewer tools — what each measurement draws
+// Outils du viewer LiDAR — ce que dessine chaque mesure
 // ============================================
 //
-// Overlay primitives (lines, vertices, labels) and draped meshes of a
-// measurement, built once when it is created; the overlay only reprojects
-// them as the camera moves. Each label is one headline; its details show
-// while the measurement is hovered.
+// Primitives de surcouche (lignes, sommets, étiquettes) et maillages drapés
+// d'une mesure, construits une fois à sa création ; la surcouche ne fait que
+// les reprojeter quand la caméra bouge. Chaque étiquette tient en une ligne ;
+// ses détails s'affichent quand la mesure est survolée.
 
 import { translateAppText as t } from '@/shared/i18n/config';
 import { closePolygonAt } from '@/shared/lib/polygonClosing';
@@ -34,9 +34,9 @@ import type { ScenePick, ToolId, Vec3 } from '../types';
 import { FALL_EXPOSURE_TONES, fallExposureTag, fallRunoutText } from './fallLineText';
 import type { Measurement } from './types';
 
-/** Draped lines float this high above the ground model (m). */
+/** Les lignes drapées flottent à cette hauteur au-dessus du modèle de sol (m). */
 const DRAPE_LIFT_M = 0.4;
-/** Points drawn per draped line at most. */
+/** Nombre maximal de points dessinés par ligne drapée. */
 const MAX_PATH_POINTS = 300;
 
 const TOOL_COLORS = {
@@ -88,7 +88,7 @@ function vertexDots(picks: readonly ScenePick[], color: string = TOOL_COLORS.ver
   return picks.map((p) => ({ at: p.local, color, radius: 4 }));
 }
 
-/** Ground distance at horizontal distance `d` along draped samples (linear between samples). */
+/** Distance au sol à la distance horizontale `d` le long d'échantillons drapés (linéaire entre échantillons). */
 function surfaceDistanceAt(samples: readonly DrapedSample[], d: number): number {
   let lo = 0;
   let hi = samples.length - 1;
@@ -109,7 +109,7 @@ function gainLossLine(profile: ProfileResult): string {
   return `↗ ${formatElevationDelta(profile.gainM)}  ↘ ${formatElevationDelta(-profile.lossM)}`;
 }
 
-// ── Per measurement ─────────────────────────────────────────────────────────
+// ── Par mesure ──────────────────────────────────────────────────────────────
 
 export function measurementLayer(m: Measurement, field: TerrainField): OverlayLayer {
   switch (m.kind) {
@@ -132,7 +132,7 @@ export function measurementLayer(m: Measurement, field: TerrainField): OverlayLa
   }
 }
 
-/** Draped surface of a measurement, for the renderer's analysis mesh. */
+/** Surface drapée d'une mesure, pour le maillage d'analyse du renderer. */
 export function measurementMesh(m: Measurement, field: TerrainField): OverlayMeshData | null {
   switch (m.kind) {
     case 'fallLine':
@@ -266,7 +266,7 @@ function profileLayer(m: Measurement & { kind: 'profile' }, field: TerrainField)
   return layer;
 }
 
-/** Corridor cells crossed by fewer runs than this share are not drawn. */
+/** Les cellules du couloir traversées par moins que cette part des trajectoires ne sont pas dessinées. */
 const FALL_CORRIDOR_MIN_SHARE = 0.05;
 
 function fallScenarioColor(id: FallScenarioId): string {
@@ -278,8 +278,8 @@ function fallLineLayer(m: Measurement & { kind: 'fallLine' }, field: TerrainFiel
   const { result } = m;
   const selected = result.scenarios.find((s) => s.id === m.scenario) ?? result.scenarios[0]!;
 
-  // The other surfaces: thin lines (they part from the selected one where
-  // speed carries them elsewhere) and where they stop.
+  // Les autres surfaces : des lignes fines (elles se séparent de celle
+  // sélectionnée là où la vitesse les emporte ailleurs) et l'endroit où elles s'arrêtent.
   for (const scenario of result.scenarios) {
     if (scenario === selected || scenario.lengthM < 1) continue;
     const points = decimate(scenario.samples, MAX_PATH_POINTS).map((s) => draped(field, s));
@@ -287,7 +287,7 @@ function fallLineLayer(m: Measurement & { kind: 'fallLine' }, field: TerrainFiel
     layer.dots.push({ at: points[points.length - 1]!, color: fallScenarioColor(scenario.id), radius: 3.5 });
   }
 
-  // The selected surface: on the ground coloured by slope, in the air dashed.
+  // La surface sélectionnée : au sol colorée par la pente, en l'air en tirets.
   const samples = decimate(selected.samples, MAX_PATH_POINTS);
   let run: typeof samples = [];
   const flush = (airborne: boolean) => {
@@ -305,7 +305,7 @@ function fallLineLayer(m: Measurement & { kind: 'fallLine' }, field: TerrainFiel
     const s = samples[k]!;
     const previous = samples[k - 1];
     if (previous && previous.airborne !== s.airborne) {
-      // Segments share their joint so the line stays continuous.
+      // Les segments partagent leur jonction pour que la ligne reste continue.
       run.push(s);
       flush(previous.airborne);
       run = [previous.airborne ? s : previous];
@@ -326,7 +326,7 @@ function fallLineLayer(m: Measurement & { kind: 'fallLine' }, field: TerrainFiel
   const end = draped(field, selected.samples[selected.samples.length - 1]!);
   layer.dots.push({ at: start, color: '#ffffff', radius: 4 }, { at: end, color: fallScenarioColor(selected.id), radius: 5 });
 
-  // At the clicked point: the end is often far away, or off screen.
+  // Au point cliqué : l'arrivée est souvent loin, ou hors de l'écran.
   layer.labels.push({
     at: start,
     headline: `${t('Ligne de pente')} · ${fallExposureTag(selected.exposure)} · ${fallRunoutText(selected)}`,
@@ -335,7 +335,7 @@ function fallLineLayer(m: Measurement & { kind: 'fallLine' }, field: TerrainFiel
   return layer;
 }
 
-/** Where the fan of the drawn ground type goes: cells shaded by the share of runs crossing them. */
+/** Où va l'éventail du type de sol dessiné : cellules teintées selon la part des trajectoires qui les traversent. */
 function fallCorridorMesh(field: TerrainField, result: FallLineResult, scenarioId: FallScenarioId): OverlayMeshData | null {
   const scenario = result.scenarios.find((s) => s.id === scenarioId);
   if (!scenario || scenario.runs < 2) return null;
@@ -348,11 +348,11 @@ function fallCorridorMesh(field: TerrainField, result: FallLineResult, scenarioI
     shares.push(count / scenario.runs);
   }
   if (cells.length === 0) return null;
-  // Violet: apart from the slope classes drawn on the line and from rock and grass tones.
+  // Violet : à l'écart des classes de pente dessinées sur la ligne et des tons de roche et d'herbe.
   return buildCellMesh(field, result.corridor, cells, (k) => [124, 92, 255, Math.round(70 + 120 * shares[k]!)]);
 }
 
-/** ATES v.2 class names (Statham & Campbell, 2025). */
+/** Noms des classes ATES v.2 (Statham & Campbell, 2025). */
 const ATES_NAMES: Record<AtesClass, string> = {
   0: 'Non avalancheux',
   1: 'Simple',
@@ -361,7 +361,7 @@ const ATES_NAMES: Record<AtesClass, string> = {
   4: 'Extrême',
 };
 
-/** Short reading of each ATES class. */
+/** Lecture courte de chaque classe ATES. */
 const ATES_EXPLANATIONS: Record<AtesClass, string> = {
   0: 'Pas d’avalanche à conséquences attendue',
   1: 'Exposition minime, facile à réduire ou éviter',
@@ -393,7 +393,7 @@ function avalancheLayer(m: Measurement & { kind: 'avalanche' }, field: TerrainFi
   const at = field.toLocal(origin.projX, origin.projY, (origin.groundAltitudeM ?? origin.altitudeM) + DRAPE_LIFT_M);
   layer.dots.push({ at, color: TONE_STROKE[tone], radius: 5 });
 
-  // To the release cell seen at the largest travel angle.
+  // Vers la cellule de départ vue sous le plus grand angle de parcours.
   const reach = scenarios.typical.reached ? scenarios.typical : scenarios.infrequent;
   const source = [scenarios.typical, scenarios.infrequent]
     .filter((s) => s.source && s.travelAngleDeg != null)
@@ -447,8 +447,9 @@ function avalancheLayer(m: Measurement & { kind: 'avalanche' }, field: TerrainFi
 }
 
 /**
- * Release cells reaching the point (red: frequent avalanches, orange: only
- * large rare ones) and the flow paths to it (violet, stronger where faster).
+ * Cellules de départ qui atteignent le point (rouge : avalanches fréquentes,
+ * orange : seulement les grandes avalanches rares) et les trajectoires
+ * d'écoulement jusqu'à lui (violet, plus intense là où c'est plus rapide).
  */
 function avalancheMesh(field: TerrainField, result: AvalancheTerrainResult): OverlayMeshData | null {
   const { lattice, releaseCells, releaseTypical, pathCells, pathZDelta, pathTypical } = result;
@@ -492,14 +493,14 @@ function pinLayer(id: string, at: ScenePick): OverlayLayer {
   return layer;
 }
 
-// ── While drawing ───────────────────────────────────────────────────────────
+// ── Pendant le dessin ───────────────────────────────────────────────────────
 
-/** Vertices placed so far plus the rubber band to the cursor. */
+/** Sommets posés jusqu'ici plus l'élastique vers le curseur. */
 /**
- * Drawing in progress. `closeIndex`: the cursor is on that vertex and a click
- * there closes the area (`shared/lib/polygonClosing`): the closed loop is
- * previewed and the vertex ringed instead of the rubber band to the cursor;
- * vertices left out of the loop (lasso tail) are dashed.
+ * Dessin en cours. `closeIndex` : le curseur est sur ce sommet et un clic à cet
+ * endroit ferme la surface (`shared/lib/polygonClosing`) : la boucle fermée est
+ * prévisualisée et le sommet entouré au lieu de l'élastique vers le curseur ;
+ * les sommets laissés hors de la boucle (queue du lasso) sont en tirets.
  */
 export function draftLayer(tool: ToolId, picks: readonly ScenePick[], hover: ScenePick | null, closeIndex = -1): OverlayLayer {
   const layer = emptyLayer('');

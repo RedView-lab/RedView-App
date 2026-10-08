@@ -1,9 +1,9 @@
 // ============================================
-// LiDAR viewer tools — avalanche terrain exposure, computed in a worker
+// Outils du viewer LiDAR — exposition du terrain aux avalanches, calculée dans un worker
 // ============================================
 //
-// One long-lived worker per viewer (it keeps the wind shelter index of the
-// scene between clicks). Without workers the same computation runs inline.
+// Un worker durable par viewer (il garde l'indice d'abri au vent de la scène
+// entre les clics). Sans workers, le même calcul tourne sur place.
 
 import type { AvalancheWorkerRequest, AvalancheWorkerResponse } from '../../../../workers/avalancheWorker';
 import { computeAvalancheTerrain, type AvalancheTerrainInput, type AvalancheTerrainResult } from './exposure';

@@ -1,31 +1,31 @@
 // ============================================
-// LiDAR viewer tools — terrain statistics of a polygon
+// Outils du viewer LiDAR — statistiques de terrain d'un polygone
 // ============================================
 //
-// Plan and surface area, perimeter and the slope/aspect make-up of an area:
-// the size of a starting zone, how much of a face is above 35°, which way
-// it faces.
+// Surface en plan et réelle, périmètre et répartition pente/exposition d'une
+// zone : la taille d'une zone de départ, quelle part d'un versant dépasse 35°,
+// de quel côté il est tourné.
 
 import { SLOPE_BASELINE_M, type TerrainField } from './terrainField';
 
 export interface AreaStats {
   planAreaM2: number;
-  /** Area of the ground surface (slope-corrected), m². */
+  /** Surface du sol (corrigée de la pente), m². */
   surfaceAreaM2: number;
-  /** Perimeter along the ground, m. */
+  /** Périmètre le long du sol, m. */
   perimeterM: number;
   meanSlopeDeg: number;
-  /** Plan-area share of the polygon at or above 30 / 35 / 40 / 45°. */
+  /** Part de la surface en plan du polygone à 30 / 35 / 40 / 45° ou plus. */
   shareAbove: { 30: number; 35: number; 40: number; 45: number };
-  /** Dominant aspect (true azimuth, degrees), `null` on flat or mixed ground. */
+  /** Exposition dominante (azimut vrai, degrés), `null` sur sol plat ou mélangé. */
   dominantAspectDeg: number | null;
   minAltitudeM: number;
   maxAltitudeM: number;
 }
 
-/** At most this many ground samples per polygon. */
+/** Nombre maximal d'échantillons de sol par polygone. */
 const MAX_SAMPLES = 250_000;
-/** Below this mean resultant length the aspects are too mixed for a dominant one. */
+/** Sous cette longueur résultante moyenne, les expositions sont trop mélangées pour en avoir une dominante. */
 const MIN_ASPECT_CONSISTENCY = 0.35;
 
 type PlanPoint = { projX: number; projY: number };
@@ -70,7 +70,7 @@ export function computeAreaStats(field: TerrainField, vertices: readonly PlanPoi
   let maxAlt = -Infinity;
   const crossings: number[] = [];
 
-  // Scanline fill: sample rows, cell centres between edge crossings.
+  // Remplissage par lignes de balayage : lignes d'échantillons, centres de cellules entre les croisements d'arêtes.
   for (let y = minY + step / 2; y < maxY; y += step) {
     crossings.length = 0;
     for (let k = 0; k < vertices.length; k++) {
@@ -111,7 +111,7 @@ export function computeAreaStats(field: TerrainField, vertices: readonly PlanPoi
   const consistency = aspectWeight > 0 ? Math.hypot(aspectX, aspectY) / aspectWeight : 0;
   return {
     planAreaM2: planArea,
-    // Sampled surface scaled to the exact plan area (edge cells are partial).
+    // Surface échantillonnée ramenée à la surface en plan exacte (les cellules du bord sont partielles).
     surfaceAreaM2: (surface / (samples * cellArea)) * planArea,
     perimeterM: groundPerimeter(field, vertices) ?? perimeter,
     meanSlopeDeg: slopeSum / samples,

@@ -1,10 +1,10 @@
 // ============================================
-// LiDAR viewer tools — screen → scene picking
+// Outils du viewer LiDAR — sélection écran → scène
 // ============================================
 //
-// A pick hits the LiDAR returns drawn under the cursor first (tree crown,
-// rock, roof), then the ground model. `groundOnly` (Alt held) skips the
-// returns: the foot of a tree, the snow-free ground under a forest.
+// Une sélection touche d'abord les retours LiDAR dessinés sous le curseur
+// (couronne d'arbre, rocher, toit), puis le modèle de sol. `groundOnly` (Alt
+// enfoncé) saute les retours : le pied d'un arbre, le sol sans neige sous une forêt.
 
 import type { CameraController } from '../../camera';
 import { unprojectScreenRay, type ScreenRay } from '../../route/terrainRaycaster';
@@ -12,9 +12,9 @@ import type { TerrainField } from '../terrain/terrainField';
 import type { ScenePick, Vec3 } from '../types';
 import type { PointCloudPicker } from './pointCloudPicker';
 
-/** Half-size of the pick window on the point cloud, CSS px. */
+/** Demi-taille de la fenêtre de sélection sur le nuage de points, px CSS. */
 const POINT_PICK_RADIUS_PX = 4;
-/** Returns this far behind the ground model are still pickable (DTM smoothing), m. */
+/** Les retours jusqu'à cette distance derrière le modèle de sol restent sélectionnables (lissage du MNT), m. */
 const BEHIND_GROUND_TOLERANCE_M = 3;
 
 export interface ScenePickerOptions {
@@ -22,7 +22,7 @@ export interface ScenePickerOptions {
   camera: CameraController;
   field: TerrainField;
   pointPicker: PointCloudPicker | null;
-  /** Current point diameter, m. */
+  /** Diamètre actuel des points, m. */
   getPointSize: () => number;
 }
 
@@ -33,7 +33,7 @@ export class ScenePicker {
     this.opts = opts;
   }
 
-  /** Ray through a canvas position (CSS px from the canvas' top-left corner). */
+  /** Rayon passant par une position du canvas (px CSS depuis le coin haut-gauche du canvas). */
   rayAt(screenX: number, screenY: number): ScreenRay | null {
     const { canvas, camera } = this.opts;
     const width = canvas.clientWidth || window.innerWidth;
@@ -41,7 +41,7 @@ export class ScenePicker {
     return unprojectScreenRay(screenX, screenY, width, height, camera.getViewMatrix(), camera.getProjMatrix());
   }
 
-  /** Ground-model pick (synchronous, for hover feedback). */
+  /** Sélection sur le modèle de sol (synchrone, pour le retour au survol). */
   pickTerrain(screenX: number, screenY: number): ScenePick | null {
     const ray = this.rayAt(screenX, screenY);
     if (!ray) return null;
@@ -67,7 +67,7 @@ export class ScenePicker {
     return this.pickAt(hit.local, 'points', hit.classification);
   }
 
-  /** Builds a pick from a render-frame position. */
+  /** Construit une sélection à partir d'une position du repère de rendu. */
   pickAt(local: Vec3, source: ScenePick['source'], classification: number | null): ScenePick {
     const { field } = this.opts;
     const { projX, projY, altitudeM } = field.fromLocal(local);
@@ -85,7 +85,7 @@ export class ScenePicker {
     };
   }
 
-  /** The same position on the ground model (tree top → its foot), `null` off the ground. */
+  /** La même position sur le modèle de sol (cime d'arbre → son pied), `null` hors du sol. */
   toGround(pick: ScenePick): ScenePick | null {
     if (pick.source === 'terrain') return pick;
     if (pick.groundAltitudeM == null) return null;

@@ -1,10 +1,10 @@
 // ============================================
-// LiDAR viewer tools — keyboard shortcuts
+// Outils du viewer LiDAR — raccourcis clavier
 // ============================================
 
 import type { ToolId } from './types';
 
-/** Key (lower case) that starts each tool; also shown in the menu tooltips and the help line. */
+/** Touche (en minuscule) qui lance chaque outil ; affichée aussi dans les infobulles du menu et la ligne d'aide. */
 export const TOOL_SHORTCUTS: Readonly<Partial<Record<ToolId, string>>> = {
   distance: 'm',
   height: 'h',

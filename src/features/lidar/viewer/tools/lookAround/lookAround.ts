@@ -1,19 +1,19 @@
 // ============================================
-// LiDAR viewer tools — 360° view from a point (first person)
+// Outils du viewer LiDAR — vue à 360° depuis un point (première personne)
 // ============================================
 //
-// The camera stands where a person would: eye 1.7 m above the real ground
-// at the point (the highest ground return around the feet, not the
-// smoothed model under them, so a summit stays a summit), and turns around
-// it over 360°. Fields of view:
-//  - eye: ≈ 114°, the human binocular field (both eyes, with depth). The
-//    whole visual field (≈ 200° × 135°) cannot be drawn in a flat
-//    perspective without stretching the edges beyond use;
-//  - natural: 60°, the angle a screen covers at arm's length: the
-//    perspective on screen matches the eye's, nothing looks stretched;
-//  - binoculars ×8: ≈ 7.5° real field of an 8×42.
-// The reticle reads what it aims at on the ground model: distance,
-// altitude and the angle above or below the horizon.
+// La caméra se place là où se tiendrait une personne : l'œil à 1,7 m au-dessus
+// du sol réel au point (le plus haut retour sol autour des pieds, pas le modèle
+// lissé dessous, pour qu'un sommet reste un sommet), et tourne autour sur 360°.
+// Champs de vision :
+//  - œil : ≈ 114°, le champ binoculaire humain (les deux yeux, avec la
+//    profondeur). Le champ visuel entier (≈ 200° × 135°) ne peut pas être
+//    dessiné dans une perspective plane sans étirer les bords à l'excès ;
+//  - naturel : 60°, l'angle que couvre un écran à bout de bras : la perspective
+//    à l'écran correspond à celle de l'œil, rien ne paraît étiré ;
+//  - jumelles ×8 : ≈ 7,5°, le champ réel d'une 8×42.
+// Le réticule lit ce qu'il vise sur le modèle de sol : distance, altitude et
+// angle au-dessus ou au-dessous de l'horizon.
 
 import type { CameraController } from '../../camera';
 import { OBSERVER_HEIGHT_M } from '../terrain/viewshed';
@@ -24,7 +24,7 @@ export type FovPresetId = 'eye' | 'natural' | 'binoculars';
 
 export interface FovPreset {
   id: FovPresetId;
-  /** Horizontal field of view, degrees. */
+  /** Champ de vision horizontal, degrés. */
   fovDeg: number;
 }
 
@@ -35,11 +35,11 @@ export const FOV_PRESETS: readonly FovPreset[] = [
 ];
 
 const DEFAULT_FOV_PRESET: FovPresetId = 'eye';
-/** People look slightly down when they walk and scan terrain. */
+/** On regarde légèrement vers le bas en marchant et en balayant le terrain. */
 const INITIAL_PITCH_DEG = -5;
-/** Radius around the feet searched for the highest ground, m. */
+/** Rayon autour des pieds où l'on cherche le sol le plus haut, m. */
 const FOOTPRINT_RADIUS_M = 0.75;
-/** ASPRS ground class. */
+/** Classe sol ASPRS. */
 const GROUND_CLASS = 2;
 
 export interface LookAroundStart {
@@ -47,11 +47,11 @@ export interface LookAroundStart {
   yaw: number;
   pitch: number;
   fovX: number;
-  /** Ground altitude under the eye, m. */
+  /** Altitude du sol sous l'œil, m. */
   groundAltitudeM: number;
 }
 
-/** Where and how the first-person view starts for a picked point. */
+/** Où et comment la vue à la première personne démarre pour un point choisi. */
 export function resolveLookAroundStart(field: TerrainField, camera: CameraController, pick: ScenePick): LookAroundStart | null {
   let ground = field.altitudeAt(pick.projX, pick.projY);
   if (ground == null) return null;
@@ -60,11 +60,11 @@ export function resolveLookAroundStart(field: TerrainField, camera: CameraContro
     const z = field.altitudeAt(pick.projX + Math.cos(a) * FOOTPRINT_RADIUS_M, pick.projY + Math.sin(a) * FOOTPRINT_RADIUS_M);
     if (z != null) ground = Math.max(ground, z);
   }
-  // A picked ground return is the real surface (the model averages it).
+  // Un retour sol choisi est la vraie surface (le modèle la moyenne).
   if (pick.source === 'points' && pick.classification === GROUND_CLASS) ground = Math.max(ground, pick.altitudeM);
   const eye = field.toLocal(pick.projX, pick.projY, ground + OBSERVER_HEIGHT_M);
 
-  // Keep looking the way the camera looked at the point.
+  // Continuer à regarder dans la direction où la caméra regardait le point.
   const from = camera.getEye();
   let hx = eye[0] - from[0];
   let hz = eye[2] - from[2];
@@ -85,15 +85,15 @@ export function resolveLookAroundStart(field: TerrainField, camera: CameraContro
   };
 }
 
-/** Headings tried around the camera's, and how far a clear view counts (m). */
+/** Caps essayés autour de celui de la caméra, et jusqu'où une vue dégagée compte (m). */
 const HEADING_STEP_DEG = 15;
 const HEADING_SPREAD_STEPS = 6;
 const OPEN_VIEW_M = 20_000;
 
 /**
- * Heading with the farthest view near the camera's own: standing on a
- * slope, the camera's direction often faces the slope itself (a wall a
- * few metres away); the view opens the nearest way to it that sees far.
+ * Cap offrant la vue la plus lointaine près de celui de la caméra : debout dans
+ * une pente, la direction de la caméra fait souvent face à la pente elle-même
+ * (un mur à quelques mètres) ; la vue s'ouvre du côté le plus proche qui voit loin.
  */
 function openestHeading(field: TerrainField, eye: Vec3, cameraYaw: number): number {
   let best = cameraYaw;
@@ -104,9 +104,9 @@ function openestHeading(field: TerrainField, eye: Vec3, cameraYaw: number): numb
     const c = Math.cos(pitch);
     const dir: Vec3 = [Math.sin(yaw) * c, Math.sin(pitch), -Math.cos(yaw) * c];
     const hit = field.raycast(eye, dir);
-    // No ground hit: the view runs to the edge of the loaded data, not beyond.
+    // Pas d'impact au sol : la vue va jusqu'au bord des données chargées, pas au-delà.
     const reach = Math.min(OPEN_VIEW_M, hit?.distance ?? exitDistance(field, eye, dir));
-    // Far views win; ties stay close to the camera's heading.
+    // Les vues lointaines l'emportent ; à égalité, rester près du cap de la caméra.
     const score = Math.log(reach) - 0.004 * Math.abs(k * HEADING_STEP_DEG);
     if (score > bestScore) {
       bestScore = score;
@@ -116,7 +116,7 @@ function openestHeading(field: TerrainField, eye: Vec3, cameraYaw: number): numb
   return best;
 }
 
-/** Horizontal distance from the eye to the edge of the loaded area along `dir`, m. */
+/** Distance horizontale de l'œil au bord de la zone chargée selon `dir`, m. */
 function exitDistance(field: TerrainField, eye: Vec3, dir: Vec3): number {
   const x = eye[0] + field.centerX;
   const y = field.centerY - eye[2];
@@ -128,13 +128,13 @@ function exitDistance(field: TerrainField, eye: Vec3, dir: Vec3): number {
 }
 
 export interface LookAroundReadout {
-  /** True heading of the view, degrees clockwise from north. */
+  /** Cap vrai de la vue, degrés dans le sens horaire depuis le nord. */
   headingDeg: number;
-  /** View angle above (+) or below (−) the horizon, degrees. */
+  /** Angle de vue au-dessus (+) ou au-dessous (−) de l'horizon, degrés. */
   pitchDeg: number;
-  /** Horizontal field of view, degrees. */
+  /** Champ de vision horizontal, degrés. */
   fovDeg: number;
-  /** Ground aimed at by the reticle, `null` for the sky or beyond the loaded area. */
+  /** Sol visé par le réticule, `null` pour le ciel ou au-delà de la zone chargée. */
   target: { distanceM: number; altitudeM: number; elevationDeg: number } | null;
 }
 

@@ -1,5 +1,5 @@
 // ============================================
-// LiDAR viewer tools — measurement records
+// Outils du viewer LiDAR — enregistrements des mesures
 // ============================================
 
 import type { AreaStats } from '../terrain/areaStats';

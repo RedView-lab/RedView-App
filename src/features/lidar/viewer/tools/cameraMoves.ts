@@ -2,12 +2,12 @@ import type { CameraController } from '../camera';
 import type { TerrainField } from './terrain/terrainField';
 import type { ScenePick } from './types';
 
-/** Baseline of the slope faced by "Face à la pente": the face, not a step in it (m). */
+/** Base de la pente visée par « Face à la pente » : le versant, pas une marche dedans (m). */
 const FACE_SLOPE_BASELINE_M = 20;
 /** Below this slope "Face à la pente" looks straight down. */
 const FACE_SLOPE_MIN_DEG = 3;
 
-/** Turns the orbit around the picked point, keeping the distance within reason. */
+/** Tourne l'orbite autour du point choisi, en gardant une distance raisonnable. */
 export function centerOnPick(camera: CameraController, pick: ScenePick): void {
   const eye = camera.getEye();
   const distance = Math.hypot(eye[0] - pick.local[0], eye[1] - pick.local[1], eye[2] - pick.local[2]);
@@ -20,15 +20,15 @@ export function centerOnPick(camera: CameraController, pick: ScenePick): void {
 }
 
 /**
- * Looks at the slope along its normal: a face seen from below looks
- * steeper, from above flatter; seen square it shows its true shape.
+ * Regarde la pente selon sa normale : un versant vu d'en bas paraît plus raide,
+ * d'en haut plus doux ; vu de face, il montre sa vraie forme.
  */
 export function faceSlope(camera: CameraController, field: TerrainField, pick: ScenePick): void {
   const slope = field.slopeAt(pick.projX, pick.projY, FACE_SLOPE_BASELINE_M)
     ?? field.slopeAt(pick.projX, pick.projY);
   if (!slope) return;
   const ground = field.toLocal(pick.projX, pick.projY, pick.groundAltitudeM ?? pick.altitudeM);
-  // Ground normal (−∂z/∂x, −∂z/∂y, 1) in the render frame (x east, y up, z = −north).
+  // Normale du sol (−∂z/∂x, −∂z/∂y, 1) dans le repère de rendu (x est, y haut, z = −nord).
   const nx = -slope.gradX;
   const ny = 1;
   const nz = slope.gradY;

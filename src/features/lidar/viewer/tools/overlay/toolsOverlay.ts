@@ -1,14 +1,15 @@
 // ============================================
-// LiDAR viewer tools — 2D overlay (lines, vertices, labels)
+// Outils du viewer LiDAR — surcouche 2D (lignes, sommets, étiquettes)
 // ============================================
 //
-// Measurements are kept as 3D primitives (render frame) and projected on a
-// transparent canvas above the scene once per rendered frame, like the
-// route handles. Lines stay drawn through vegetation (as in Potree), but
-// the parts the relief hides fade out, so a line behind a ridge reads as
-// behind it. Labels show one line; the measurement under the pointer
-// expands to its details and comes to the front. Labels never overlap:
-// each tries four positions around its anchor, small ones are dropped.
+// Les mesures sont gardées en primitives 3D (repère de rendu) et projetées sur
+// un canvas transparent au-dessus de la scène une fois par image rendue, comme
+// les poignées de tracé. Les lignes restent dessinées à travers la végétation
+// (comme dans Potree), mais les parties que cache le relief s'estompent : une
+// ligne derrière une crête se lit comme derrière. Les étiquettes tiennent en
+// une ligne ; la mesure sous le pointeur se déplie sur ses détails et passe
+// devant. Les étiquettes ne se chevauchent jamais : chacune essaie quatre
+// positions autour de son ancre, les petites sont abandonnées.
 
 import { readRootAppScale } from '@/shared/lib/appScale';
 import { RV_FONT_SANS } from '@/shared/lib/typography';
@@ -17,7 +18,7 @@ import type { Vec3 } from '../types';
 
 export interface OverlayPath {
   points: Vec3[];
-  /** One colour, or one per segment. */
+  /** Une couleur, ou une par segment. */
   color: string | string[];
   width: number;
   dash?: number[];
@@ -35,15 +36,15 @@ export type OverlayLabelTone = 'neutral' | 'ok' | 'warning' | 'danger';
 export interface OverlayLabel {
   at: Vec3;
   headline: string;
-  /** Shown while the measurement is hovered. */
+  /** Affiché pendant que la mesure est survolée. */
   details?: string[];
   tone?: OverlayLabelTone;
-  /** `small`: value on a segment, centred on it, dropped when crowded. */
+  /** `small` : valeur sur un segment, centrée dessus, abandonnée quand c'est encombré. */
   size?: 'small' | 'card';
 }
 
 export interface OverlayLayer {
-  /** Measurement id (hover, hit testing); empty for transient layers. */
+  /** Id de la mesure (survol, test d'impact) ; vide pour les couches transitoires. */
   id: string;
   paths: OverlayPath[];
   dots: OverlayDot[];
@@ -51,7 +52,7 @@ export interface OverlayLayer {
 }
 
 export type Projector = (v: Vec3) => ProjectedScreenPoint;
-/** The relief does not hide this render-frame point from the camera. */
+/** Le relief ne cache pas ce point du repère de rendu à la caméra. */
 export type VisibilityTest = (v: Vec3) => boolean;
 
 const TONE_COLORS: Record<OverlayLabelTone, string> = {
@@ -63,7 +64,7 @@ const TONE_COLORS: Record<OverlayLabelTone, string> = {
 const HIDDEN_ALPHA = 0.28;
 const LABEL_GAP_PX = 10;
 const HIT_SLOP_PX = 6;
-/** Labels whose anchor is farther off screen are not drawn (no pile-up on the edges), CSS px. */
+/** Les étiquettes dont l'ancre est plus loin hors écran ne sont pas dessinées (pas d'empilement sur les bords), px CSS. */
 const LABEL_OFFSCREEN_MARGIN_PX = 24;
 
 interface Rect {
@@ -108,7 +109,7 @@ export class ToolsOverlay {
   private cssWidth = 0;
   private cssHeight = 0;
   private empty = true;
-  /** Measurement shown expanded and on top. */
+  /** Mesure affichée dépliée et au premier plan. */
   hoveredId: string | null = null;
 
   constructor(container: HTMLElement, sceneCanvas: HTMLCanvasElement) {
@@ -148,7 +149,7 @@ export class ToolsOverlay {
     this.empty = false;
     ctx.clearRect(0, 0, this.cssWidth, this.cssHeight);
     const scale = readRootAppScale();
-    // The hovered measurement is drawn last (on top).
+    // La mesure survolée est dessinée en dernier (au-dessus).
     const ordered = [...layers].sort((a, b) => Number(a.id !== '' && a.id === this.hoveredId) - Number(b.id !== '' && b.id === this.hoveredId));
 
     for (const layer of ordered) {
@@ -176,7 +177,7 @@ export class ToolsOverlay {
     }
   }
 
-  /** Measurement under a canvas position (label, vertex or line), if any. */
+  /** Mesure sous une position du canvas (étiquette, sommet ou ligne), s'il y en a une. */
   hitTest(x: number, y: number): string | null {
     for (let k = this.hitRects.length - 1; k >= 0; k--) {
       const { id, rect } = this.hitRects[k]!;
@@ -214,8 +215,8 @@ export class ToolsOverlay {
     const width = path.width + (emphasis ? 1.5 : 0);
     const segmentCount = path.closed ? pts.length : pts.length - 1;
 
-    // Halo first for every segment, then the colours on top; runs of
-    // segments with the same colour and visibility form one stroke.
+    // Halo d'abord pour chaque segment, puis les couleurs par-dessus ; les
+    // suites de segments de même couleur et même visibilité forment un seul trait.
     for (const pass of ['halo', 'color'] as const) {
       let runKey: string | null = null;
       for (let k = 0; k <= segmentCount; k++) {
@@ -285,7 +286,7 @@ export class ToolsOverlay {
     return { w: width + f.padX * 2, h };
   }
 
-  /** Greedy placement: hovered first, then cards (newest first), then segment values. */
+  /** Placement glouton : survolée d'abord, puis les cartes (plus récentes d'abord), puis les valeurs de segment. */
   private placeLabels(layers: readonly OverlayLayer[], project: Projector, isVisible: VisibilityTest, scale: number): PlacedLabel[] {
     const candidates: Array<{ label: OverlayLabel; layerId: string; x: number; y: number; rank: number; hidden: boolean }> = [];
     layers.forEach((layer, layerIndex) => {
@@ -326,13 +327,13 @@ export class ToolsOverlay {
           break;
         }
       }
-      // A crowded card still shows when it is the hovered one.
+      // Une carte encombrée s'affiche quand même si c'est celle survolée.
       if (!rect && expanded) rect = clamp(positions[0]!);
       if (!rect) continue;
       taken.push(rect);
       placed.push({ label: c.label, layerId: c.layerId, rect, expanded, hidden: c.hidden });
     }
-    // Drawn in reverse: the first placed (hovered) ends on top.
+    // Dessiné à l'envers : la première placée (survolée) finit au-dessus.
     return placed.reverse();
   }
 

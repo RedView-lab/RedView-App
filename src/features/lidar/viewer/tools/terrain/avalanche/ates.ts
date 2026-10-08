@@ -1,17 +1,17 @@
 // ============================================
-// LiDAR viewer tools — ATES class of a point (AutoATES v2.0 classifier)
+// Outils du viewer LiDAR — classe ATES d'un point (classifieur AutoATES v2.0)
 // ============================================
 //
-// Avalanche Terrain Exposure Scale v.2 (Statham & Campbell, 2025): 0 non-
-// avalanche, 1 simple, 2 challenging, 3 complex, 4 extreme terrain. A
-// static rating of the terrain, whatever the snow and weather of the day.
+// Avalanche Terrain Exposure Scale v.2 (Statham & Campbell, 2025) : 0 terrain
+// non avalancheux, 1 simple, 2 exigeant, 3 complexe, 4 extrême. Une note
+// statique du terrain, quels que soient la neige et le temps du jour.
 //
-// AutoATES v2.0 (Toft et al., 2024): the class is the highest of
-//  - the slope class (≤ 15° → 0, 18°, 28°, then > 39° on the 3 × 3 mean → 4),
-//  - the runout class: reached by the infrequent (α 18°) runout → 1, with a
-//    flow-path travel angle ≥ 24° → 2, ≥ 33° → 3 (overhead exposure),
-// then lowered by the forest (Table 3): canopy open / sparse / moderate /
-// dense, with release areas lowered less than runout zones.
+// AutoATES v2.0 (Toft et al., 2024) : la classe est la plus haute entre
+//  - la classe de pente (≤ 15° → 0, 18°, 28°, puis > 39° sur la moyenne 3 × 3 → 4),
+//  - la classe d'écoulement : atteint par l'écoulement peu fréquent (α 18°) → 1,
+//    avec un angle de parcours ≥ 24° → 2, ≥ 33° → 3 (exposition par le haut),
+// puis abaissée par la forêt (tableau 3) : canopée ouverte / clairsemée /
+// moyenne / dense, les zones de départ étant moins abaissées que les zones d'écoulement.
 
 import {
   ATES_ALPHA_THRESHOLDS_DEG,
@@ -24,13 +24,13 @@ export type CanopyClass = 'open' | 'sparse' | 'moderate' | 'dense';
 
 export interface AtesInputs {
   slopeDeg: number;
-  /** Slope averaged over 3 × 3 cells (class 4 criterion). */
+  /** Pente moyennée sur 3 × 3 cellules (critère de la classe 4). */
   smoothedSlopeDeg: number;
-  /** Flow-path travel angle of the infrequent runout at the point, `null` if not reached. */
+  /** Angle de parcours de l'écoulement peu fréquent au point, `null` s'il n'est pas atteint. */
   runoutTravelAngleDeg: number | null;
-  /** Canopy cover, %, `null` when the forest is unknown (open terrain assumed). */
+  /** Couvert de canopée, %, `null` quand la forêt est inconnue (terrain ouvert supposé). */
   canopyPct: number | null;
-  /** The point lies in a potential release area. */
+  /** Le point est dans une zone de départ potentielle. */
   inReleaseArea: boolean;
 }
 
@@ -38,12 +38,12 @@ export interface AtesRating {
   atesClass: AtesClass;
   slopeClass: AtesClass;
   runoutClass: AtesClass;
-  /** Class before the forest criteria. */
+  /** Classe avant les critères de forêt. */
   terrainClass: AtesClass;
   canopyClass: CanopyClass | null;
 }
 
-/** Table 3: class after the forest criteria, indexed by the class before (1–4). */
+/** Tableau 3 : classe après les critères de forêt, indexée par la classe avant (1–4). */
 const FOREST_LOOKUP: Record<Exclude<CanopyClass, 'open'>, { release: AtesClass[]; runout: AtesClass[] }> = {
   sparse: { release: [0, 1, 1, 2, 3], runout: [0, 1, 1, 2, 3] },
   moderate: { release: [0, 1, 1, 2, 3], runout: [0, 1, 1, 1, 3] },

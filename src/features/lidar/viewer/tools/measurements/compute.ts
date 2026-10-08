@@ -1,5 +1,5 @@
 // ============================================
-// LiDAR viewer tools — measurements from picked points
+// Outils du viewer LiDAR — mesures à partir des points choisis
 // ============================================
 
 import { computeAreaStats } from '../terrain/areaStats';
@@ -9,7 +9,7 @@ import { computeViewshed } from '../terrain/viewshed';
 import type { ScenePick, ToolId } from '../types';
 import type { Measurement } from './types';
 
-/** Vertices a drawing tool needs before it can be finished. */
+/** Sommets dont un outil de dessin a besoin avant de pouvoir être terminé. */
 export const MIN_VERTICES: Record<'distance' | 'height' | 'area' | 'profile', number> = {
   distance: 2,
   height: 2,
@@ -24,8 +24,9 @@ export function nextMeasurementId(): string {
 }
 
 /**
- * Builds the measurement of `tool` from its picks (one for the point tools).
- * `null` when the picks cannot give one (too few, or off the ground model).
+ * Construit la mesure de `tool` à partir de ses points (un seul pour les outils
+ * ponctuels). `null` quand les points ne permettent pas d'en tirer une (trop
+ * peu, ou hors du modèle de sol).
  */
 export function createMeasurement(tool: ToolId, picks: readonly ScenePick[], field: TerrainField): Measurement | null {
   const id = nextMeasurementId();
@@ -47,7 +48,7 @@ export function createMeasurement(tool: ToolId, picks: readonly ScenePick[], fie
     }
     case 'fallLine':
     case 'avalanche':
-      // Asynchronous (ground cover from the point cloud, seconds of compute): see the controller.
+      // Asynchrone (couvert du sol d'après le nuage de points, des secondes de calcul) : voir le contrôleur.
       return null;
     case 'viewshed': {
       const result = computeViewshed(field, first.projX, first.projY);

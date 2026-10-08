@@ -1,20 +1,20 @@
 // ============================================
-// LiDAR viewer tools — canopy cover from the point cloud (avalanche forest input)
+// Outils du viewer LiDAR — couvert de canopée d'après le nuage de points (entrée forêt des avalanches)
 // ============================================
 //
-// AutoATES takes forest density as percent canopy cover: the share of the
-// ground hidden by tree crowns seen from above. Here it is read from the
-// LiDAR returns themselves: a 2 m column holding a high-vegetation return
-// (ASPRS class 5) at least 3 m above the ground model is under a crown; the
-// cover of a grid cell is the share of its columns under a crown, among the
-// columns holding any return (so a sparser LOD level gives the same share).
-// A cloud without ground classification gives no forest: open terrain is
-// assumed, as AutoATES does without a forest layer.
+// AutoATES prend la densité de forêt en pourcentage de couvert de canopée : la
+// part du sol cachée par les couronnes vue du dessus. Elle est lue ici dans les
+// retours LiDAR eux-mêmes : une colonne de 2 m contenant un retour de haute
+// végétation (classe ASPRS 5) à au moins 3 m au-dessus du modèle de sol est sous
+// une couronne ; le couvert d'une cellule de grille est la part de ses colonnes
+// sous une couronne, parmi les colonnes contenant un retour (un niveau LOD plus
+// clairsemé donne donc la même part). Un nuage sans classification du sol ne
+// donne pas de forêt : terrain ouvert supposé, comme AutoATES sans couche forêt.
 
 import type { AnalysisGrid, TerrainField } from '../terrainField';
 import { TREE_MIN_HEIGHT_M } from './params';
 
-/** Edge of the crown-detection columns, m. */
+/** Côté des colonnes de détection des couronnes, m. */
 const COLUMN_M = 2;
 const HIGH_VEGETATION = 5;
 const GROUND = 2;
@@ -22,7 +22,7 @@ const ANY = 1;
 const CROWN = 2;
 
 export interface CanopyCover {
-  /** Canopy cover per grid cell, 0–100 (NaN: no return in the cell). */
+  /** Couvert de canopée par cellule de grille, 0–100 (NaN : aucun retour dans la cellule). */
   canopyPct: Float32Array;
 }
 
@@ -41,7 +41,7 @@ export class CanopyGridBuilder {
   constructor(field: TerrainField, grid: AnalysisGrid) {
     this.field = field;
     this.grid = grid;
-    // Columns tile the grid cells exactly (a whole number per cell edge).
+    // Les colonnes pavent exactement les cellules de la grille (un nombre entier par côté de cellule).
     const perCell = Math.max(1, Math.round(grid.cell / COLUMN_M));
     this.column = grid.cell / perCell;
     this.minX = grid.originX - grid.cell / 2;
@@ -51,7 +51,7 @@ export class CanopyGridBuilder {
     this.flags = new Uint8Array(this.cols * this.rows);
   }
 
-  /** Plan box of the grid, CRS metres. */
+  /** Boîte en plan de la grille, mètres CRS. */
   get bounds(): { minX: number; minY: number; maxX: number; maxY: number } {
     return {
       minX: this.minX,
@@ -76,9 +76,9 @@ export class CanopyGridBuilder {
     this.flags[i]! |= flag;
   }
 
-  /** `null` when the cloud carries no ground classification (forest unknown). */
+  /** `null` quand le nuage ne porte pas de classification du sol (forêt inconnue). */
   finish(): CanopyCover | null {
-    // A handful of ground returns in an unclassified cloud would be noise.
+    // Une poignée de retours sol dans un nuage non classé serait du bruit.
     if (!(this.groundCount > 0.02 * (this.groundCount + this.otherCount))) return null;
     const { width, height } = this.grid;
     const perCell = this.cols / width;

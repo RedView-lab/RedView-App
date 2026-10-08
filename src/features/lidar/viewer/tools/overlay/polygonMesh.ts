@@ -1,24 +1,24 @@
 // ============================================
-// LiDAR viewer tools — polygon draped on the ground model
+// Outils du viewer LiDAR — polygone drapé sur le modèle de sol
 // ============================================
 //
-// The area tool's fill follows the relief: the polygon is cut by a grid
-// (each cell clipped exactly, Sutherland–Hodgman) and every piece is lifted
-// onto the ground, so the fill hugs ridges and gullies instead of floating
-// as a flat sheet between its vertices.
+// Le remplissage de l'outil surface suit le relief : le polygone est découpé
+// par une grille (chaque cellule détourée exactement, Sutherland–Hodgman) et
+// chaque morceau est posé sur le sol : le remplissage épouse crêtes et ravines
+// au lieu de flotter en nappe plane entre ses sommets.
 
 import type { TerrainField } from '../terrain/terrainField';
 import type { Rgba } from '../types';
 import type { OverlayMeshData } from './cellMesh';
 
-/** Grid cells covering the polygon's bounding box at most. */
+/** Nombre maximal de cellules de grille couvrant l'emprise du polygone. */
 const MAX_CELLS = 30_000;
-/** Lift above the ground (z-fighting), m. */
+/** Hauteur au-dessus du sol (z-fighting), m. */
 const LIFT_M = 0.25;
 
 type Point2 = [number, number];
 
-/** Clips `polygon` to the axis-aligned box (Sutherland–Hodgman, box = convex clip). */
+/** Découpe `polygon` par la boîte alignée sur les axes (Sutherland–Hodgman, boîte = découpe convexe). */
 function clipToBox(polygon: Point2[], minX: number, minY: number, maxX: number, maxY: number): Point2[] {
   let out = polygon;
   const edges: Array<[(p: Point2) => boolean, (a: Point2, b: Point2) => Point2]> = [
@@ -76,8 +76,8 @@ export function buildDrapedPolygonMesh(
       const piece = clipToBox(polygon, x0, y0, x0 + step, y0 + step);
       if (piece.length < 3) continue;
       if (piece.some(([x, y]) => field.altitudeAt(x, y) == null)) continue;
-      // Fan from the centroid: pieces are convex except where a concave
-      // polygon corner falls inside one cell.
+      // Éventail depuis le centroïde : les morceaux sont convexes sauf là où un
+      // coin concave du polygone tombe dans une cellule.
       let cx = 0;
       let cy = 0;
       for (const [x, y] of piece) { cx += x / piece.length; cy += y / piece.length; }

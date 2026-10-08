@@ -14,12 +14,12 @@ export const FALL_EXPOSURE_TONES: Record<FallExposure, OverlayLabelTone> = {
   E4: 'danger',
 };
 
-/** Toponeige exposure (consequence of a fall), "—" when nothing slides. */
+/** Exposition Toponeige (conséquence d'une chute), « — » quand rien ne glisse. */
 export function fallExposureTag(exposure: FallExposure): string {
   return exposure === 'none' ? '—' : exposure;
 }
 
-/** Runout of the nominal trajectory, "> " when it leaves the loaded area. */
+/** Distance d'arrêt de la trajectoire nominale, « > » quand elle sort de la zone chargée. */
 export function fallRunoutText(scenario: FallScenarioResult): string {
   const beyond = scenario.end === 'edge' || scenario.end === 'maxLength';
   const meters = scenario.lengthM;

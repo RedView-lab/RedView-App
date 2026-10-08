@@ -1,16 +1,16 @@
 // ============================================
-// LiDAR viewer tools — public API
+// Outils du viewer LiDAR — API publique
 // ============================================
 //
-// Right-click menu, measurements (distance, height/angle, area, profile) and
-// mountain terrain analyses (fall line, avalanche exposure, viewshed) of the
-// WebGPU viewer. See controller.ts for the input model.
+// Menu du clic droit, mesures (distance, hauteur/angle, surface, profil) et
+// analyses de terrain de montagne (ligne de chute, exposition aux avalanches,
+// champ de vision) du viewer WebGPU. Voir controller.ts pour le modèle d'entrée.
 
 import { computePointFilterBitmasks, type ViewerPointFilterState } from '../pointFilter';
 
 export { ViewerToolsController,  } from './controller';
 
-/** Class visibility predicate matching the renderer's point filter. */
+/** Prédicat de visibilité des classes, conforme au filtre de points du renderer. */
 export function pointFilterClassPredicate(state: ViewerPointFilterState): (classification: number) => boolean {
   if (!state.enabled) return () => true;
   const masks = computePointFilterBitmasks(state.enabled, state.categories);
