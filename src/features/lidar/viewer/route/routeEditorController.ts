@@ -152,7 +152,7 @@ export class RouteEditorController implements RouteEditorHost {
     this.notifyStateChange();
   }
 
-  /** Replaces the active route's points as one undoable edit (context-menu placements). */
+  /** Remplace les points du tracé actif en une seule édition annulable (placements du menu contextuel). */
   public commitPoints(points: LidarRouteOverlayPoint[], actionName: string): void {
     const currentRoute = this.getActiveRoute();
     if (!currentRoute) return;
@@ -249,7 +249,7 @@ export class RouteEditorController implements RouteEditorHost {
     return true;
   }
 
-  /** Handles of the route, rebuilt only when the route or the scene changes. */
+  /** Poignées du tracé, reconstruites seulement quand le tracé ou la scène change. */
   private getHandleCache(points: LidarRouteOverlayPoint[]): RouteHandleCache {
     const sceneParams = this.getSceneParams();
     if (this.handleCache?.points !== points || this.handleCache.sceneParams !== sceneParams) {
@@ -258,7 +258,7 @@ export class RouteEditorController implements RouteEditorHost {
     return this.handleCache;
   }
 
-  /** Screen positions of the route points for the current camera (re-projected once per pose). */
+  /** Positions écran des points du tracé pour la caméra courante (reprojetées une fois par pose). */
   public getProjectedRoutePoints(points: LidarRouteOverlayPoint[]): ProjectedScreenPoint[] {
     const cache = this.getHandleCache(points);
     cache.project(this.canvas, this.camera);
@@ -266,7 +266,7 @@ export class RouteEditorController implements RouteEditorHost {
   }
 
   /**
-   * Recomputes screen projected handles and renders overlay.
+   * Recalcule les poignées projetées à l'écran et rend la surcouche.
    */
   public updateOverlay(): void {
     const activeRoute = this.getActiveRoute();

@@ -3,26 +3,26 @@ import type { CameraController } from '../camera';
 import type { DraggingHandleInfo, RouteHandleInfo } from './routeHandlesOverlay';
 import type { LidarRouteOverlayPoint, ViewerRouteSceneParams } from './types';
 
-/** Route points farther than this share of the scene size outside it get no handle. */
+/** Les points du tracé hors de la scène au-delà de cette part de sa taille n'ont pas de poignée. */
 const SCENE_MARGIN_RATIO = 0.05;
 
 const OFF_SCENE: ProjectedScreenPoint = { screenX: -1e6, screenY: -1e6, inFront: false, distance: Infinity };
 
 /**
- * Handles of one route in one scene. A long itinerary has tens of thousands
- * of points, mostly outside the scene: geo → CRS → DTM (a projection and a
- * heightmap lookup per point) runs once per route edit, then each camera
- * pose only re-projects the points inside the scene, into handle objects
- * that are reused from frame to frame.
+ * Poignées d'un tracé dans une scène. Un long itinéraire a des dizaines de
+ * milliers de points, surtout hors de la scène : géo → CRS → MNT (une projection
+ * et une lecture de heightmap par point) tourne une fois par édition du tracé,
+ * puis chaque pose de caméra ne reprojette que les points dans la scène, dans
+ * des objets poignée réutilisés d'une image à l'autre.
  */
 export class RouteHandleCache {
   readonly points: LidarRouteOverlayPoint[];
   readonly sceneParams: ViewerRouteSceneParams;
-  /** Index-aligned with the route points. */
+  /** Alignées par indice avec les points du tracé. */
   readonly handles: RouteHandleInfo[];
-  /** Screen position of every route point (off-scene points are never in front). */
+  /** Position écran de chaque point du tracé (les points hors scène ne sont jamais devant). */
   readonly projected: ProjectedScreenPoint[];
-  /** Points inside the scene (plus a margin): the only ones with a DTM under them. */
+  /** Points dans la scène (plus une marge) : les seuls qui ont un MNT sous eux. */
   private readonly inScene: number[] = [];
   private poseKey: number[] = [];
   private selected: number | null = null;
@@ -71,7 +71,7 @@ export class RouteHandleCache {
     }
   }
 
-  /** Re-projects the points inside the scene when the camera or the canvas changed. */
+  /** Reprojette les points dans la scène quand la caméra ou le canvas ont changé. */
   project(canvas: HTMLCanvasElement, camera: CameraController): void {
     const width = canvas.clientWidth || window.innerWidth;
     const height = canvas.clientHeight || window.innerHeight;
@@ -88,7 +88,7 @@ export class RouteHandleCache {
     }
   }
 
-  /** Flags the selected and hovered handles. */
+  /** Marque les poignées sélectionnée et survolée. */
   setHighlight(selected: number | null, hovered: number | null): void {
     if (selected !== this.selected) {
       if (this.selected != null && this.handles[this.selected]) this.handles[this.selected]!.isSelected = false;

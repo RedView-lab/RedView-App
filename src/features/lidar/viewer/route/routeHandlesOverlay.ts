@@ -58,7 +58,7 @@ export class RouteHandlesOverlay {
   private ctx: CanvasRenderingContext2D;
 
   private enabled = true;
-  /** The canvas was cleared for an empty render and nothing was drawn since. */
+  /** Le canvas a été effacé pour un rendu vide et rien n'a été dessiné depuis. */
   private clearedEmpty = false;
   public handles: RouteHandleInfo[] = [];
   private ghostHandle: InsertGhostHandle | null = null;
@@ -70,7 +70,7 @@ export class RouteHandlesOverlay {
     this.container = opts.container;
     this.sceneCanvas = opts.sceneCanvas;
 
-    // Create high-DPI canvas overlay
+    // Créer le canvas de surcouche haute densité
     this.overlayCanvas = document.createElement('canvas');
     this.overlayCanvas.className = 'rv-lidar-route-handles-canvas';
     this.overlayCanvas.style.position = 'absolute';
@@ -101,7 +101,7 @@ export class RouteHandlesOverlay {
   }
 
   public setEditMode(_editMode: boolean): void {
-    // Retained for API compatibility
+    // Gardé pour la compatibilité de l'API
   }
 
   public setRouteColor(color: string): void {
@@ -119,7 +119,7 @@ export class RouteHandlesOverlay {
     this.draggingHandle = dragging;
     this.hoverReticle = reticle;
 
-    // Nothing to draw (no route): clear once, not on every camera move.
+    // Rien à dessiner (pas de tracé) : effacer une fois, pas à chaque mouvement de caméra.
     const empty = handles.length === 0 && !ghost && !dragging && !reticle;
     if (empty && this.clearedEmpty) return;
     this.clearedEmpty = empty;
@@ -133,7 +133,7 @@ export class RouteHandlesOverlay {
       return;
     }
 
-    // 1) Render Rubberband Guide when dragging a point
+    // 1) Dessiner le guide élastique pendant qu'un point est glissé
     if (this.draggingHandle) {
       const { currentScreenPoint, prevScreenPoint, nextScreenPoint } = this.draggingHandle;
 
@@ -159,7 +159,7 @@ export class RouteHandlesOverlay {
       this.ctx.restore();
     }
 
-    // 2) Render Route Node Handles
+    // 2) Dessiner les poignées des nœuds du tracé
     const totalPoints = handles.length;
     const stride = totalPoints > 800 ? Math.ceil(totalPoints / 400) : 1;
 
@@ -176,7 +176,7 @@ export class RouteHandlesOverlay {
 
       this.ctx.save();
 
-      // Halo for selected / hovered
+      // Halo pour la sélection / le survol
       if (handle.isSelected) {
         this.ctx.beginPath();
         this.ctx.arc(screenX, screenY, radius + 5, 0, Math.PI * 2);
@@ -195,7 +195,7 @@ export class RouteHandlesOverlay {
         this.ctx.fill();
       }
 
-      // Base Handle Circle
+      // Cercle de base de la poignée
       this.ctx.beginPath();
       this.ctx.arc(screenX, screenY, radius, 0, Math.PI * 2);
 
@@ -231,13 +231,13 @@ export class RouteHandlesOverlay {
 
       this.ctx.save();
 
-      // Soft white halo
+      // Halo blanc doux
       this.ctx.beginPath();
       this.ctx.arc(screenX, screenY, ghostRadius + 3, 0, Math.PI * 2);
       this.ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
       this.ctx.fill();
 
-      // Clean white handle
+      // Poignée blanche nette
       this.ctx.beginPath();
       this.ctx.arc(screenX, screenY, ghostRadius, 0, Math.PI * 2);
       this.ctx.fillStyle = '#FFFFFF';
@@ -249,14 +249,14 @@ export class RouteHandlesOverlay {
       this.ctx.restore();
     }
 
-    // 4) Render guide line to cursor in Drawing/Append mode (draped on the terrain surface)
+    // 4) Dessiner la ligne guide vers le curseur en mode tracé/ajout (drapée sur la surface du terrain)
     if (this.hoverReticle && !this.draggingHandle) {
       const { screenX, screenY, lastPointScreen, groundPoints } = this.hoverReticle;
 
       if (groundPoints && groundPoints.length > 1) {
         this.ctx.save();
 
-        // High-contrast background shadow
+        // Ombre de fond à fort contraste
         this.ctx.beginPath();
         this.ctx.setLineDash([5, 4]);
         this.ctx.lineWidth = 3.2;
@@ -278,7 +278,7 @@ export class RouteHandlesOverlay {
         }
         if (started) this.ctx.stroke();
 
-        // Main colored dotted line clamped to ground
+        // Ligne pointillée colorée principale plaquée au sol
         this.ctx.beginPath();
         this.ctx.setLineDash([5, 4]);
         this.ctx.lineWidth = 1.8;
@@ -302,7 +302,7 @@ export class RouteHandlesOverlay {
 
         this.ctx.restore();
       } else if (lastPointScreen && lastPointScreen.inFront) {
-        // Fallback straight line if ground points not available
+        // Ligne droite de repli si les points du sol ne sont pas disponibles
         this.ctx.save();
         this.ctx.beginPath();
         this.ctx.setLineDash([5, 4]);

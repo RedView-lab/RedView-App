@@ -35,7 +35,7 @@ function buildSlopeBands(
   }));
 }
 
-/** Slope overlay of the viewer: panel state, derived bands, pushed to the renderer on every change. */
+/** Surcouche des pentes du viewer : état du panneau, bandes dérivées, poussées au renderer à chaque changement. */
 export function useSlopeLayer(onSlopeChange: ((state: ViewerSlopeState) => void) | undefined) {
   const [slopesEnabled, setSlopesEnabled] = useState(false);
   const [slopeResolution, setSlopeResolution] = useState<SlopeResolution>('0.40 m (LiDAR Surface IGN)');

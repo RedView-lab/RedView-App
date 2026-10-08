@@ -35,7 +35,7 @@ export interface RouteEditorHost {
   notifyStateChange(): void;
   updateOverlay(): void;
   requestRender(): void;
-  /** Screen positions of the route points for the current camera (cached per pose). */
+  /** Positions écran des points du tracé pour la caméra courante (en cache par pose). */
   getProjectedRoutePoints(points: LidarRouteOverlayPoint[]): ProjectedScreenPoint[];
 }
 
@@ -114,7 +114,7 @@ export class RouteEditorInputManager {
     this.pointerDownScreenY = screenY;
     this.pointerDownTime = performance.now();
 
-    // 1) Test if clicking on an existing point handle
+    // 1) Tester si le clic tombe sur une poignée de point existante
     if (this.host.hoveredPointIndex != null) {
       const idx = this.host.hoveredPointIndex;
       e.preventDefault();
@@ -139,7 +139,7 @@ export class RouteEditorInputManager {
       return;
     }
 
-    // 2) Test if clicking on a ghost insert handle
+    // 2) Tester si le clic tombe sur une poignée fantôme d'insertion
     if (this.host.hoveredGhost != null) {
       e.preventDefault();
       e.stopPropagation();
@@ -187,7 +187,7 @@ export class RouteEditorInputManager {
 
     const sceneParams = this.host.getSceneParams();
 
-    // A) Empty route append hover
+    // A) Survol d'ajout sur un tracé vide
     if (activeRoute.points.length === 0) {
       if (this.host.editMode && this.host.activeTool === 'append') {
         const hit = raycastAtScreen(screenX, screenY, this.host.canvas, this.host.camera, sceneParams);
@@ -211,7 +211,7 @@ export class RouteEditorInputManager {
       return;
     }
 
-    // B) Handle Dragging Point in 3D (Snapping to Terrain in real-time)
+    // B) Glisser un point en 3D (accroché au terrain en temps réel)
     if (this.host.isDragging && this.host.dragPointIndex != null) {
       const hit = raycastAtScreen(screenX, screenY, this.host.canvas, this.host.camera, sceneParams);
       if (hit) {
@@ -231,8 +231,8 @@ export class RouteEditorInputManager {
       return;
     }
 
-    // C) Hover Detection (Handles & Segments). Not while a button drags the
-    // camera: the overlay follows the camera from the render loop.
+    // C) Détection du survol (poignées et segments). Pas pendant qu'un bouton fait
+    // glisser la caméra : la surcouche suit la caméra depuis la boucle de rendu.
     if (e.buttons !== 0) return;
     const points = activeRoute.points;
     const projectedNodes = this.host.getProjectedRoutePoints(points);

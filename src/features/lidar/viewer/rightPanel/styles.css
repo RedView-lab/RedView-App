@@ -12,8 +12,8 @@
   flex-direction: column;
   pointer-events: auto;
   font-family: var(--rv-font-sans);
-  /* Same density as the dashboard: --app-scale (shared/lib/appScale.ts),
-     also read by the control panel's portaled dropdowns. */
+  /* Même densité que le tableau de bord : --app-scale (shared/lib/appScale.ts),
+     lu aussi par les menus déroulants portalés du panneau de contrôle. */
   zoom: var(--app-scale, 1);
 }
 
@@ -104,7 +104,7 @@
   user-select: none !important;
 }
 
-/* Floating Collapsed Rail for Right Panel */
+/* Rail flottant du panneau de droite replié */
 .lidar-viewer-right-collapsed-rail {
   position: fixed;
   top: 50%;
@@ -154,14 +154,14 @@
   transform: scale(0.96);
 }
 
-/* Routes: per-row "⋮" actions menu (rename, duplicate, GPX, delete) */
+/* Tracés : menu d'actions « ⋮ » par ligne (renommer, dupliquer, GPX, supprimer) */
 .lidar-viewer-right-panel-host .rvc-routes__row.rvc-routes__row--actions {
   grid-template-columns:
     auto minmax(0, 1fr) var(--rvc-panel-route-mode-width) var(--rvc-panel-route-opacity-width)
     24px;
 }
 
-/* Block, not flex: `text-overflow: ellipsis` only applies to block text */
+/* Block, pas flex : `text-overflow: ellipsis` ne s'applique qu'à du texte en bloc */
 .lidar-viewer-right-panel-host .rvc-routes__label:not(.rvc-routes__label-input) {
   display: block;
 }
@@ -208,13 +208,13 @@
   border-color: rgba(255, 255, 255, 0.5);
 }
 
-/* Portaled to <body>, like the Select dropdowns */
+/* Portalé dans <body>, comme les menus déroulants Select */
 .rvc-routes__actions-menu {
   position: fixed;
   z-index: 99999;
 }
 
-/* Ensure right-side values and labels have proper alignment */
+/* Alignement correct des valeurs et libellés de droite */
 .lidar-viewer-right-panel-host .rvc-sunlight__opacity-row {
   justify-content: space-between;
 }

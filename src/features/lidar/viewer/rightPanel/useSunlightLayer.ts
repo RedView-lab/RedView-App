@@ -9,8 +9,8 @@ import { getTimeZoneForCoordinates } from '@/features/lidar/lib/coordConvert';
 import type { SunlightState } from '@/features/controlPanel/types';
 
 /**
- * Sunlight layer of the viewer: panel state, sunrise/sunset of the chosen day
- * at the scene centre, pushed to the renderer on every change.
+ * Couche d'ensoleillement du viewer : état du panneau, lever/coucher du soleil
+ * du jour choisi au centre de la scène, poussés au renderer à chaque changement.
  */
 export function useSunlightLayer(
   onSunlightChange: ((state: SunlightState) => void) | undefined,

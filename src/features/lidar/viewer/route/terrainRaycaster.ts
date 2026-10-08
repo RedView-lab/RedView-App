@@ -26,7 +26,7 @@ export interface ProjectedScreenPoint {
 }
 
 /**
- * Invert a 4x4 column-major matrix
+ * Inverse une matrice 4x4 en colonnes
  */
 function invertMatrix4(out: Float32Array, m: Float32Array): boolean {
   const m00 = m[0], m01 = m[1], m02 = m[2], m03 = m[3];
@@ -72,7 +72,7 @@ function invertMatrix4(out: Float32Array, m: Float32Array): boolean {
 }
 
 /**
- * Multiply matrix 4x4 by vector 4
+ * Multiplie une matrice 4x4 par un vecteur 4
  */
 function multiplyMat4Vec4(m: Float32Array, v: [number, number, number, number]): [number, number, number, number] {
   return [
@@ -84,7 +84,7 @@ function multiplyMat4Vec4(m: Float32Array, v: [number, number, number, number]):
 }
 
 /**
- * Unprojects screen pixel coordinates into a 3D ray (origin & normalized direction).
+ * Déprojette des coordonnées pixel écran en un rayon 3D (origine et direction normalisée).
  */
 export function unprojectScreenRay(
   screenX: number,
@@ -96,11 +96,11 @@ export function unprojectScreenRay(
 ): ScreenRay | null {
   if (canvasWidth <= 0 || canvasHeight <= 0) return null;
 
-  // Normalized Device Coordinates (NDC)
+  // Coordonnées normalisées du périphérique (NDC)
   const ndcX = (screenX / canvasWidth) * 2 - 1;
   const ndcY = 1 - (screenY / canvasHeight) * 2;
 
-  // Compute View-Projection Matrix: VP = P * V
+  // Matrice view-projection : VP = P * V
   const vp = new Float32Array(16);
   for (let i = 0; i < 4; i++) {
     for (let j = 0; j < 4; j++) {
@@ -115,7 +115,7 @@ export function unprojectScreenRay(
   const invVp = new Float32Array(16);
   if (!invertMatrix4(invVp, vp)) return null;
 
-  // Near plane in WebGPU is depth 0.0 (or -1.0 in standard clip space)
+  // Le plan proche en WebGPU est à la profondeur 0.0 (ou -1.0 dans l'espace clip standard)
   const nearVec = multiplyMat4Vec4(invVp, [ndcX, ndcY, 0.0, 1.0]);
   const farVec = multiplyMat4Vec4(invVp, [ndcX, ndcY, 1.0, 1.0]);
 
@@ -149,7 +149,7 @@ export function unprojectScreenRay(
 }
 
 /**
- * Projects a local 3D point (x, y, z) into 2D screen coordinates.
+ * Projette un point 3D local (x, y, z) en coordonnées écran 2D.
  */
 export function projectToScreen(
   localX: number,
@@ -160,7 +160,7 @@ export function projectToScreen(
   viewMatrix: Float32Array,
   projMatrix: Float32Array,
 ): ProjectedScreenPoint {
-  // 1) View transform
+  // 1) Transformation de vue
   const vx =
     viewMatrix[0] * localX +
     viewMatrix[4] * localY +
@@ -182,7 +182,7 @@ export function projectToScreen(
     viewMatrix[11] * localZ +
     viewMatrix[15];
 
-  // 2) Proj transform
+  // 2) Transformation de projection
   const cx = projMatrix[0] * vx + projMatrix[4] * vy + projMatrix[8] * vz + projMatrix[12] * vw;
   const cy = projMatrix[1] * vx + projMatrix[5] * vy + projMatrix[9] * vz + projMatrix[13] * vw;
   const cz = projMatrix[2] * vx + projMatrix[6] * vy + projMatrix[10] * vz + projMatrix[14] * vw;
@@ -209,7 +209,7 @@ export function projectToScreen(
 }
 
 /**
- * Samples LiDAR terrain elevation at projected coordinates (projX, projY).
+ * Échantillonne l'altitude du terrain LiDAR aux coordonnées projetées (projX, projY).
  */
 export function sampleElevationAtProj(
   projX: number,
@@ -261,7 +261,7 @@ export function sampleElevationAtProj(
 }
 
 /**
- * Fast & precise Ray-LiDAR terrain intersection with binary bisection.
+ * Intersection rayon-terrain LiDAR rapide et précise par dichotomie.
  */
 export function raycastTerrain(
   ray: ScreenRay,
@@ -270,7 +270,7 @@ export function raycastTerrain(
 ): TerrainHitResult | null {
   const { bounds, centerX, centerY, centerZ, crs } = params;
 
-  // Local bounding box of the tile terrain
+  // Boîte englobante locale du terrain de la tuile
   const minLocalX = bounds.minX - centerX - 50;
   const maxLocalX = bounds.maxX - centerX + 50;
   const minLocalZ = -(bounds.maxY - centerY) - 50;
@@ -281,7 +281,7 @@ export function raycastTerrain(
   const [ox, oy, oz] = ray.origin;
   const [dx, dy, dz] = ray.direction;
 
-  // Ray-AABB intersection bounds
+  // Bornes de l'intersection rayon-AABB
   let tmin = 0.1;
   let tmax = 50000;
 
@@ -311,7 +311,7 @@ export function raycastTerrain(
     return null;
   }
 
-  // March along ray to detect surface crossing
+  // Avancer le long du rayon pour détecter la traversée de la surface
   const totalDist = tmax - tmin;
   const stepCount = Math.min(300, Math.max(40, Math.ceil(totalDist / 2.0)));
   const step = totalDist / stepCount;
@@ -331,7 +331,7 @@ export function raycastTerrain(
     const curDiff = curY - terrY;
 
     if (i > 0 && prevDiff * curDiff <= 0) {
-      // Sign change: root lies in [prevT, curT]
+      // Changement de signe : la racine est dans [prevT, curT]
       let lo = prevT;
       let hi = curT;
 
@@ -386,7 +386,7 @@ export function raycastTerrain(
 }
 
 /**
- * Converts geographic coordinates (lat, lon) to local viewer space (localX, localY, localZ).
+ * Convertit des coordonnées géographiques (lat, lon) dans l'espace local du viewer (localX, localY, localZ).
  */
 export function geoToLocal3D(
   lat: number,

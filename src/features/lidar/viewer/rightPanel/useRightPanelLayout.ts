@@ -8,7 +8,7 @@ const PANEL_WIDTH_MIN = 350;
 const PANEL_WIDTH_MAX = 600;
 const PANEL_COLLAPSE_DRAG_THRESHOLD = 48;
 
-/** Width (stored), collapsed state (stored) and resize drag of the viewer's right panel. */
+/** Largeur (stockée), état replié (stocké) et redimensionnement par glisser du panneau de droite du viewer. */
 export function useRightPanelLayout() {
   const [panelWidth, setPanelWidth] = useState<number>(() => {
     try {
@@ -64,7 +64,7 @@ export function useRightPanelLayout() {
       setIsResizing(true);
       const startX = event.clientX;
       const startWidth = panelWidth;
-      // The panel is zoomed by --app-scale: screen px -> panel px.
+      // Le panneau est zoomé par --app-scale : px écran -> px du panneau.
       const uiScale = readRootAppScale();
 
       const onMove = (nextEvent: MouseEvent) => {

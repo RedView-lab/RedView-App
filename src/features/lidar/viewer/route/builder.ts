@@ -55,7 +55,7 @@ function parseHexColor(colorStr: string): RgbaColor {
     };
   }
 
-  return { r: 229, g: 57, b: 53, a: 255 }; // Default Red
+  return { r: 229, g: 57, b: 53, a: 255 }; // Rouge par défaut
 }
 
 function sampleLocalElevation(
@@ -151,10 +151,10 @@ function densifyAndProjectRoute(
 
     const localY = sampleLocalElevation(x, y, params, elevationBias, fallbackElev);
 
-    // Convert to viewer local coordinates
-    // local X = x - cx
-    // local Y = local elevation above center
-    // local Z = -(y - cy)
+    // Conversion en coordonnées locales du viewer
+    // X local = x - cx
+    // Y local = altitude locale au-dessus du centre
+    // Z local = -(y - cy)
     const localPt: ProjectedPoint = {
       x: x - centerX,
       y: localY,
@@ -164,7 +164,7 @@ function densifyAndProjectRoute(
 
     const last = currentChain[currentChain.length - 1];
     if (last && Math.hypot(last.x - localPt.x, last.z - localPt.z) < 0.2) {
-      return; // Skip duplicate / ultra close vertices
+      return; // Sauter les sommets en double / beaucoup trop proches
     }
 
     currentChain.push(localPt);
@@ -189,7 +189,7 @@ function densifyAndProjectRoute(
     }
   }
 
-  // Push final point
+  // Ajouter le dernier point
   const lastRaw = rawProjected[rawProjected.length - 1]!;
   pushPoint(lastRaw.x, lastRaw.y, lastRaw.elevationM);
 
@@ -233,7 +233,7 @@ export function buildLidarRouteMesh(
 
       const chainVertexStart = vertexOffset;
 
-      // Outer border color (darker for contrast)
+      // Couleur de bordure extérieure (plus sombre pour le contraste)
       const borderR = Math.max(0, Math.round(baseColor.r * 0.25));
       const borderG = Math.max(0, Math.round(baseColor.g * 0.25));
       const borderB = Math.max(0, Math.round(baseColor.b * 0.25));
@@ -242,7 +242,7 @@ export function buildLidarRouteMesh(
       for (let i = 0; i < chain.length; i++) {
         const cur = chain[i];
 
-        // Determine tangent direction in XZ plane
+        // Direction de la tangente dans le plan XZ
         let tanX = 0;
         let tanZ = 0;
 
@@ -261,49 +261,49 @@ export function buildLidarRouteMesh(
         const normTanX = tanX / len;
         const normTanZ = tanZ / len;
 
-        // Normal perpendicular in XZ plane: (-tanZ, 0, tanX)
+        // Normale perpendiculaire dans le plan XZ : (-tanZ, 0, tanX)
         const perpX = -normTanZ;
         const perpZ = normTanX;
 
-        // 4 vertices per slice: Left Outer, Left Inner, Right Inner, Right Outer
-        // Outer width = halfWidth * 1.28
-        // Inner width = halfWidth * 0.90
+        // 4 sommets par tranche : gauche extérieur, gauche intérieur, droite intérieur, droite extérieur
+        // Largeur extérieure = halfWidth * 1.28
+        // Largeur intérieure = halfWidth * 0.90
         const outW = halfWidth * 1.25;
         const inW = halfWidth * 0.85;
 
-        // Left Outer
+        // Gauche extérieur
         allVertices.push(cur.x + perpX * outW, cur.y, cur.z + perpZ * outW);
         allColors.push(borderR, borderG, borderB, borderAlpha);
 
-        // Left Inner
+        // Gauche intérieur
         allVertices.push(cur.x + perpX * inW, cur.y, cur.z + perpZ * inW);
         allColors.push(baseColor.r, baseColor.g, baseColor.b, alpha);
 
-        // Right Inner
+        // Droite intérieur
         allVertices.push(cur.x - perpX * inW, cur.y, cur.z - perpZ * inW);
         allColors.push(baseColor.r, baseColor.g, baseColor.b, alpha);
 
-        // Right Outer
+        // Droite extérieur
         allVertices.push(cur.x - perpX * outW, cur.y, cur.z - perpZ * outW);
         allColors.push(borderR, borderG, borderB, borderAlpha);
 
         vertexOffset += 4;
       }
 
-      // Connect quad strips
+      // Relier les bandes de quads
       for (let i = 0; i < chain.length - 1; i++) {
         const row0 = chainVertexStart + i * 4;
         const row1 = chainVertexStart + (i + 1) * 4;
 
-        // Quad 1: Left Border (Left Outer -> Left Inner)
+        // Quad 1 : bordure gauche (gauche extérieur -> gauche intérieur)
         allIndices.push(row0 + 0, row0 + 1, row1 + 1);
         allIndices.push(row0 + 0, row1 + 1, row1 + 0);
 
-        // Quad 2: Main Center Ribbon (Left Inner -> Right Inner)
+        // Quad 2 : ruban central (gauche intérieur -> droite intérieur)
         allIndices.push(row0 + 1, row0 + 2, row1 + 2);
         allIndices.push(row0 + 1, row1 + 2, row1 + 1);
 
-        // Quad 3: Right Border (Right Inner -> Right Outer)
+        // Quad 3 : bordure droite (droite intérieur -> droite extérieur)
         allIndices.push(row0 + 2, row0 + 3, row1 + 3);
         allIndices.push(row0 + 2, row1 + 3, row1 + 2);
       }

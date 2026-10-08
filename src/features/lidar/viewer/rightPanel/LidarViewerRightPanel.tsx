@@ -27,12 +27,12 @@ import '@/features/controlPanel/styles/index.css';
 import '@/features/itineraryPanel/styles/overlays/_calendar-popover.css';
 import './styles.css';
 
-/** Photo mode section (see photoMode/): state lives in the panel, the viewer applies it. */
+/** Section du mode photo (voir photoMode/) : l'état vit dans le panneau, le viewer l'applique. */
 export interface ViewerPhotoModeProps {
-  /** False on the WebGL 2 backend: the section shows why it is unavailable. */
+  /** False sur le backend WebGL 2 : la section indique pourquoi elle est indisponible. */
   available: boolean;
   initialState: PhotoModeState;
-  /** Automatic cloud base (m) and the bounds of its offset for this scene. */
+  /** Base automatique des nuages (m) et bornes de son décalage pour cette scène. */
   cloudBase: { autoAltitudeM: number; minOffsetM: number; maxOffsetM: number };
   onChange: (state: PhotoModeState) => void;
   onCapture: () => void;
@@ -90,7 +90,7 @@ function LidarViewerRightPanelContent({
     sunlight: true,
   }));
 
-  // ── Photo mode ───────────────────────────────────────────────────────────
+  // ── Mode photo ───────────────────────────────────────────────────────────
   const [photoState, setPhotoState] = useState<PhotoModeState | null>(() => photo?.initialState ?? null);
   const onPhotoChange = photo?.onChange;
   useEffect(() => {
@@ -101,7 +101,7 @@ function LidarViewerRightPanelContent({
     photo?.captureStore.getSnapshot ?? (() => IDLE_CAPTURE),
   );
 
-  // ── Point Filter State ───────────────────────────────────────────────────
+  // ── État du filtre de points ─────────────────────────────────────────────
   const [pointFilterEnabled, setPointFilterEnabled] = useState(false);
   const [pointFilterCategories, setPointFilterCategories] = useState<PointFilterCategoryVisibility>(getDefaultPointFilterCategories);
 
@@ -121,7 +121,7 @@ function LidarViewerRightPanelContent({
     setPointFilterCategories((prev) => ({ ...prev, [id]: visible }));
   }, []);
 
-  // ── Slopes, altitude, sunlight ────────────────────────────────────────────
+  // ── Pentes, altitude, ensoleillement ──────────────────────────────────────
   const {
     slopesEnabled,
     setSlopesEnabled,

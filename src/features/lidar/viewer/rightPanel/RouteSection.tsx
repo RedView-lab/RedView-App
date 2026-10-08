@@ -119,7 +119,7 @@ interface RouteActionsMenuProps {
   onDelete?: () => void;
 }
 
-/** "⋮" menu of a route row — same items and look as the app's itinerary menu. */
+/** Menu « ⋮ » d'une ligne de tracé — mêmes entrées et même apparence que le menu d'itinéraire de l'app. */
 function RouteActionsMenu({ route, trigger, onClose, onRename, onDuplicate, onExportGpx, onDelete }: RouteActionsMenuProps) {
   const { t } = useAppI18n();
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -229,7 +229,7 @@ interface RouteNameInputProps {
   onCancel: () => void;
 }
 
-/** Inline rename: Enter or blur commits, Escape cancels. */
+/** Renommage en place : Entrée ou perte du focus valide, Échap annule. */
 function RouteNameInput({ name, onCommit, onCancel }: RouteNameInputProps) {
   const { t } = useAppI18n();
   const [draft, setDraft] = useState(name);
@@ -258,7 +258,7 @@ function RouteNameInput({ name, onCommit, onCancel }: RouteNameInputProps) {
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => finish(true)}
       onKeyDown={(e) => {
-        // Keep viewer shortcuts (camera, route editor) away from typing.
+        // Tenir les raccourcis du viewer (caméra, éditeur de tracé) à l'écart de la saisie.
         e.stopPropagation();
         if (e.key === 'Enter') {
           e.preventDefault();
@@ -300,10 +300,10 @@ export const RouteSection = memo(function RouteSection({
 
   const handleRouteClick = (routeId: string) => {
     if (activeRoute?.id === routeId && editMode) {
-      // Toggle off if already active
+      // Désactiver si déjà actif
       onToggleEditMode?.(routeId);
     } else {
-      // Select and activate 3D tracing on tiles
+      // Sélectionner et activer le tracé 3D sur les tuiles
       onSelectRouteId?.(routeId);
       onToggleEditMode?.(routeId);
     }

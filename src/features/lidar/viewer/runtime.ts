@@ -13,9 +13,10 @@ export interface ViewerDomElements {
 export type ViewerStatusReporter = (msg: string, pct?: number) => void;
 
 /**
- * Translates a progress label posted by a decode worker. Workers have no
- * document/locale, so they post the French source text; dynamic forms
- * ("LAZ (1/3) : …", "Lecture COPC 4/10...") are re-keyed here.
+ * Traduit un libellé de progression envoyé par un worker de décodage. Les
+ * workers n'ont ni document ni locale : ils envoient le texte source français ;
+ * les formes dynamiques (« LAZ (1/3) : … », « Lecture COPC 4/10... ») sont
+ * réindexées ici.
  */
 export function translateLidarWorkerProgress(message: string): string {
   const laz = /^LAZ \((\d+)\/(\d+)\) : (.*)$/.exec(message);
@@ -76,7 +77,7 @@ export async function loadTileFromOPFS(tileFileNames: string[]): Promise<ArrayBu
       const buffer = await loadTileByFileName(name);
       if (buffer) return buffer;
     } catch {
-      // try next candidate
+      // essayer la candidate suivante
     }
   }
   throw new Error(translateAppText('Tuile introuvable dans le stockage local : {{file}}', {

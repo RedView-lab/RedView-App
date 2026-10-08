@@ -6,26 +6,26 @@ export type { LidarRouteOverlayItem, LidarRouteOverlayPoint,   } from '../../lib
 ;
 
 export interface LidarRouteMeshGeometry {
-  /** Interleaved or separate position buffer: x, y, z (local viewer space) */
+  /** Buffer de positions entrelacé ou séparé : x, y, z (espace local du viewer) */
   vertices: Float32Array;
-  /** RGBA byte colors per vertex: r, g, b, a (0..255) */
+  /** Couleurs RGBA en octets par sommet : r, g, b, a (0..255) */
   colors: Uint8Array;
-  /** Triangle indices */
+  /** Indices des triangles */
   indices: Uint32Array;
-  /** Total vertex count */
+  /** Nombre total de sommets */
   vertexCount: number;
-  /** Total index count (draw count) */
+  /** Nombre total d'indices (nombre à dessiner) */
   indexCount: number;
 }
 
 export interface ViewerRouteRenderOptions {
   /** Ribbon width in meters in 3D world space (default: 3.2m) */
   ribbonWidthM?: number;
-  /** Elevation offset above ground in meters to prevent z-fighting (default: 0.65m) */
+  /** Décalage d'altitude au-dessus du sol en mètres pour éviter le z-fighting (par défaut : 0,65 m) */
   elevationBiasM?: number;
-  /** Global opacity multiplier (0..1) */
+  /** Multiplicateur d'opacité global (0..1) */
   opacityScale?: number;
-  /** Whether the route overlay is enabled */
+  /** Indique si la surcouche des tracés est activée */
   enabled?: boolean;
 }
 
@@ -39,9 +39,9 @@ export interface ViewerRouteSceneParams {
   gridWidth?: number;
   gridHeight?: number;
   /**
-   * Subtracted from heightGrid samples to get renderer Y: 0 when the grid is
-   * already centred on centerZ (WebGPU viewer), centerZ when it holds
-   * absolute altitudes (WebGL viewer).
+   * Soustrait des échantillons de heightGrid pour obtenir le Y du renderer : 0
+   * quand la grille est déjà centrée sur centerZ (viewer WebGPU), centerZ quand
+   * elle contient des altitudes absolues (viewer WebGL).
    */
   heightGridOffsetZ?: number;
 }

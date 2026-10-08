@@ -20,7 +20,7 @@ import type {
   ViewerRouteState,
 } from './types';
 
-/** Equirectangular distance between two route points (m), enough to rank legs. */
+/** Distance équirectangulaire entre deux points du tracé (m), suffisante pour classer les tronçons. */
 function groundDistanceM(a: LidarRouteOverlayPoint, b: LidarRouteOverlayPoint): number {
   const meanLat = ((a.lat + b.lat) / 2) * (Math.PI / 180);
   const dx = (b.lon - a.lon) * Math.cos(meanLat);
@@ -82,7 +82,7 @@ export class ViewerRouteController {
       this.stateChangeListeners.push(opts.onStateChange);
     }
 
-    // Load initial routes from storage
+    // Charger les tracés initiaux depuis le stockage
     const initialOverlay = loadLidarRouteOverlay();
     if (initialOverlay && initialOverlay.routes) {
       this.routes = initialOverlay.routes;
@@ -91,15 +91,15 @@ export class ViewerRouteController {
       }
     }
 
-    // Initialize 3D Route Editor if canvas & camera provided
+    // Initialiser l'éditeur de tracé 3D si le canvas et la caméra sont fournis
     if (opts.canvas && opts.camera) {
       this.attachEditor(opts.canvas, opts.container || document.body, opts.camera);
     }
 
-    // Subscribe to real-time updates across tabs & RedView main window
+    // S'abonner aux mises à jour en temps réel entre onglets et fenêtre principale de RedView
     this.unsubscribeStorage = subscribeToLidarRouteOverlay((msg) => {
       if ('type' in msg) {
-        // Skip self-originating updates
+        // Ignorer les mises à jour émises par soi-même
         if (msg.source === 'lidar_viewer') return;
 
         if (msg.type === 'UPDATE_ROUTE_POINTS') {
@@ -149,7 +149,7 @@ export class ViewerRouteController {
       }
     });
 
-    // Build initial geometry
+    // Construire la géométrie initiale
     this.rebuildAndEmit(false);
   }
 
@@ -180,7 +180,7 @@ export class ViewerRouteController {
         if (active) {
           active.points = points;
           this.rebuildAndEmit(true, true);
-          // Broadcast to RedView main application
+          // Diffuser vers l'application principale RedView
           broadcastLidarRouteEdit(active.id, points, 'lidar_viewer', actionName);
         }
       },
@@ -290,7 +290,7 @@ export class ViewerRouteController {
     this.setEditMode(true);
     this.setActiveTool('append');
 
-    // Broadcast creation to RedView main application & sync storage
+    // Diffuser la création vers l'application principale RedView et synchroniser le stockage
     broadcastLidarRouteCreate(newRoute, 'lidar_viewer');
 
     this.rebuildAndEmit(true);
@@ -338,7 +338,7 @@ export class ViewerRouteController {
     const exists = this.routes.some((r) => r.id === id);
     if (!exists) return false;
 
-    // Stop 3D drawing rather than carry on into the route that takes its place.
+    // Arrêter le dessin 3D plutôt que de continuer dans le tracé qui prend sa place.
     if (this.getActiveRoute()?.id === id) this.setEditMode(false);
     this.routes = this.routes.filter((r) => r.id !== id);
     if (this.selectedRouteId === id) {
@@ -355,7 +355,7 @@ export class ViewerRouteController {
     const source = this.routes.find((r) => r.id === id);
     if (!source) return null;
 
-    // Same naming as the app's duplicate: "Name (copie)", then "… 2", "… 3".
+    // Même nommage que la duplication de l'app : « Nom (copie) », puis « … 2 », « … 3 ».
     const nameBase = translateAppText('{{name}} (copie)', { name: source.name });
     let name = nameBase;
     for (let suffix = 2; this.routes.some((r) => r.name === name); suffix += 1) {
@@ -450,17 +450,17 @@ ${trkpts}
   }
 
   /**
-   * Context-menu placement, as in the app: "Démarrer ici" sets the start,
-   * "Finir ici" the finish (the last point once there are two), "Ajouter une
-   * étape" inserts on the leg it lengthens least. Creates a route if needed.
-   * A start / finish placed on the route crops it there (no straight line
-   * back to the former first / last point).
+   * Placement depuis le menu contextuel, comme dans l'app : « Démarrer ici » pose
+   * le départ, « Finir ici » l'arrivée (le dernier point dès qu'il y en a deux),
+   * « Ajouter une étape » insère sur le tronçon qu'il allonge le moins. Crée un
+   * tracé si besoin. Un départ / une arrivée posés sur le tracé le coupent à cet
+   * endroit (pas de ligne droite vers l'ancien premier / dernier point).
    */
   public placePoint(position: 'start' | 'waypoint' | 'end', point: LidarRouteOverlayPoint): boolean {
     let route = this.getActiveRoute();
     if (!route) {
       route = this.createRoute();
-      // Placement continues from the menu: no click-to-append mode.
+      // Le placement se poursuit depuis le menu : pas de mode d'ajout par clic.
       this.setEditMode(false);
     }
     const points = route.points;

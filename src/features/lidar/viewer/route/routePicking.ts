@@ -162,7 +162,7 @@ export function computeAppendHoverReticle(
     groundPoints3D = [];
     groundPoints = [];
 
-    // Densify along terrain surface between lastPoint and hit for smooth ground draping
+    // Densifier le long de la surface du terrain entre lastPoint et l'impact pour un drapage au sol régulier
     const stepM = 2.0;
     const steps = Math.max(2, Math.min(350, Math.ceil(distM / stepM)));
 

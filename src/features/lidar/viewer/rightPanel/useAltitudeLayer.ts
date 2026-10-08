@@ -22,7 +22,7 @@ function buildAltitudeBands(
   }));
 }
 
-/** Altitude overlay of the viewer: panel state, derived bands, pushed to the renderer on every change. */
+/** Surcouche d'altitude du viewer : état du panneau, bandes dérivées, poussées au renderer à chaque changement. */
 export function useAltitudeLayer(onAltitudeChange: ((state: ViewerAltitudeState) => void) | undefined) {
   const [altitudeEnabled, setAltitudeEnabled] = useState(false);
   const [altitudeColorization, setAltitudeColorization] = useState<AltitudeColorization>('gradient');
